@@ -5,6 +5,7 @@ option(EXAMPLE_LINK_SO "Whether examples are linked dynamically" OFF)
 option(LINK_TCMALLOC "Link tcmalloc if possible" OFF)
 set(BRPC_INCLUDE_PATH "${CMAKE_SOURCE_DIR}/brpc/include")
 set(BRAFT_INCLUDE_PATH "${CMAKE_SOURCE_DIR}/braft/include/")
+set(ROCKSDB_INCLUDE_PATH "${CMAKE_SOURCE_DIR}/rocksdb/include")
 
 execute_process(
     COMMAND bash -c "find ${CMAKE_SOURCE_DIR} -type d -path \"*braft/include/braft\" | xargs dirname | xargs dirname | tr -d '\n'"
@@ -31,6 +32,8 @@ find_path(BRPC_INCLUDE_PATH NAMES brpc/server.h)
 
 set(BRPC_LIB "${CMAKE_SOURCE_DIR}/brpc/lib/libbrpc.a")
 set(BRAFT_LIB "${CMAKE_SOURCE_DIR}/braft/lib/libbraft.a")
+set(ROCKSDB_LIB "${CMAKE_SOURCE_DIR}/rocksdb/lib/librocksdb.a")
+set(SNAPPY_LIB "${CMAKE_SOURCE_DIR}/snappy/lib/libsnappy.a")
 
 if((NOT BRPC_INCLUDE_PATH) OR (NOT BRPC_LIB))
     message(FATAL_ERROR "Fail to find brpc")
@@ -49,6 +52,8 @@ if((NOT GFLAGS_INCLUDE_PATH) OR (NOT GFLAGS_LIBRARY))
     message(FATAL_ERROR "Fail to find gflags")
 endif()
 include_directories(${GFLAGS_INCLUDE_PATH})
+
+include_directories(${ROCKSDB_INCLUDE_PATH})
 
 execute_process(
     COMMAND bash -c "grep \"namespace [_A-Za-z0-9]\\+ {\" ${GFLAGS_INCLUDE_PATH}/gflags/gflags_declare.h | head -1 | awk '{print $2}' | tr -d '\n'"
@@ -108,7 +113,8 @@ endif()
 include_directories(${LEVELDB_INCLUDE_PATH})
 
 add_executable(block_client client.cpp ${PROTO_SRC} ${PROTO_HEADER})
-add_executable(block_server server.cpp ${PROTO_SRC} ${PROTO_HEADER})
+add_executable(block_server server.cpp ${PROTO_SRC} ${PROTO_HEADER} RocksWrapper.h RocksWrapper.cpp)
+
 
 set(DYNAMIC_LIB
     ${GFLAGS_LIBRARY}
@@ -117,6 +123,8 @@ set(DYNAMIC_LIB
     ${LEVELDB_LIB}
     ${BRAFT_LIB}
     ${BRPC_LIB}
+    ${SNAPPY_LIB}
+    ${ROCKSDB_LIB}
     rt
     ssl
     crypto

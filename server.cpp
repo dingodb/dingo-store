@@ -22,6 +22,7 @@
 #include <braft/storage.h>              // braft::SnapshotWriter
 #include <braft/util.h>                 // braft::AsyncClosureGuard
 #include "block.pb.h"                   // BlockService
+#include "RocksWrapper.h"
 
 DEFINE_bool(check_term, true, "Check if the leader changed to another term");
 DEFINE_bool(disable_cli, false, "Don't allow raft_cli access this node");
@@ -84,13 +85,14 @@ public:
             LOG(ERROR) << "Fail to create directory " << FLAGS_data_path;
             return -1;
         }
-        std::string data_path = FLAGS_data_path + "/data";
-        int fd = ::open(data_path.c_str(), O_CREAT | O_RDWR, 0644);
-        if (fd < 0) {
-            PLOG(ERROR) << "Fail to open " << data_path;
+
+        std::string data_path = FLAGS_data_path;
+        rocksWrapper = new RocksWrapper(data_path);
+        if (rocksWrapper == nullptr) {
+            LOG(ERROR) << "Fail to start rocksdb:" << data_path << '\'';
             return -1;
         }
-        _fd = new SharedFD(fd);
+
         butil::EndPoint addr(butil::my_ip(), FLAGS_port);
         braft::NodeOptions node_options;
         if (node_options.initial_conf.parse_from(FLAGS_conf) != 0) {
@@ -132,9 +134,12 @@ public:
         if (term < 0) {
             return redirect(response);
         }
+
         butil::IOBuf log;
+        /*
         const uint32_t meta_size_raw = butil::HostToNet32(request->ByteSize());
         log.append(&meta_size_raw, sizeof(uint32_t));
+        */
         butil::IOBufAsZeroCopyOutputStream wrapper(&log);
         if (!request->SerializeToZeroCopyStream(&wrapper)) {
             LOG(ERROR) << "Fail to serialize request";
@@ -142,13 +147,12 @@ public:
             return;
         }
         log.append(*data);
+
         // Apply this log as a braft::Task
         braft::Task task;
         task.data = &log;
-        // This callback would be iovoked when the task actually excuted or
-        // fail
-        task.done = new BlockClosure(this, request, response,
-                                     data, done_guard.release());
+        // This callback would be iovoked when the task actually excuted or fail
+        task.done = new BlockClosure(this, request, response, data, done_guard.release());
         if (FLAGS_check_term) {
             // ABA problem can be avoid if expected_term is set
             task.expected_term = term;
@@ -156,44 +160,6 @@ public:
         // Now the task is applied to the group, waiting for the result.
         return _node->apply(task);
     }
-
-    void read(const BlockRequest *request, BlockResponse* response,
-              butil::IOBuf* buf) {
-        // In consideration of consistency. GetRequest to follower should be 
-        // rejected.
-        if (!is_leader()) {
-            // This node is a follower or it's not up-to-date. Redirect to
-            // the leader if possible.
-            return redirect(response);
-        }
-
-        if (request->offset() < 0) {
-            response->set_success(false);
-            return;
-        }
-
-        // This is the leader and is up-to-date. It's safe to respond client
-        scoped_fd fd = get_fd();
-        butil::IOPortal portal;
-        const ssize_t nr = braft::file_pread(
-                &portal, fd->fd(), request->offset(), request->size());
-        if (nr < 0) {
-            // Some disk error occurred, shutdown this node and another leader
-            // will be elected
-            PLOG(ERROR) << "Fail to read from fd=" << fd->fd();
-            _node->shutdown(NULL);
-            response->set_success(false);
-            return;
-        }
-        buf->swap(portal);
-        if (buf->length() < (size_t)request->size()) {
-            buf->resize(request->size());
-        }
-        response->set_success(true);
-    }
-
-    bool is_leader() const 
-    { return _leader_term.load(butil::memory_order_acquire) > 0; }
 
     // Shut this node down.
     void shutdown() {
@@ -210,33 +176,6 @@ public:
     }
 
 private:
-    class SharedFD : public butil::RefCountedThreadSafe<SharedFD> {
-    public:
-        explicit SharedFD(int fd) : _fd(fd) {}
-        int fd() const { return _fd; }
-    private:
-    friend class butil::RefCountedThreadSafe<SharedFD>;
-        ~SharedFD() {
-            if (_fd >= 0) {
-                while (true) {
-                    const int rc = ::close(_fd);
-                    if (rc == 0 || errno != EINTR) {
-                        break;
-                    }
-                }
-                _fd = -1;
-            }
-        }
-        
-        int _fd;
-    };
-
-    typedef scoped_refptr<SharedFD> scoped_fd;
-
-    scoped_fd get_fd() const {
-        BAIDU_SCOPED_LOCK(_fd_mutex);
-        return _fd;
-    }
 friend class BlockClosure;
 
     void redirect(BlockResponse* response) {
@@ -258,17 +197,21 @@ friend class BlockClosure;
             // This guard helps invoke iter.done()->Run() asynchronously to
             // avoid that callback blocks the StateMachine
             braft::AsyncClosureGuard closure_guard(iter.done());
+            rocksdb::Status status = rocksdb::Status::OK();
+            std::string key;
+            std::string value;
             butil::IOBuf data;
-            off_t offset = 0;
+
             if (iter.done()) {
                 // This task is applied by this node, get value from this
                 // closure to avoid additional parsing.
                 BlockClosure* c = dynamic_cast<BlockClosure*>(iter.done());
-                offset = c->request()->offset();
                 data.swap(*(c->data()));
                 response = c->response();
             } else {
                 // Have to parse BlockRequest from this log.
+                butil::IOBuf requestInBytes = iter.data();
+                /*
                 uint32_t meta_size = 0;
                 butil::IOBuf saved_log = iter.data();
                 saved_log.cutn(&meta_size, sizeof(uint32_t));
@@ -277,29 +220,28 @@ friend class BlockClosure;
                 meta_size = butil::NetToHost32(meta_size);
                 butil::IOBuf meta;
                 saved_log.cutn(&meta, meta_size);
-                butil::IOBufAsZeroCopyInputStream wrapper(meta);
+                 */
+                butil::IOBufAsZeroCopyInputStream wrapper(requestInBytes);
                 BlockRequest request;
                 CHECK(request.ParseFromZeroCopyStream(&wrapper));
-                data.swap(saved_log);
-                offset = request.offset();
-            }
 
-            const ssize_t nw = braft::file_pwrite(data, _fd->fd(), offset);
-            if (nw < 0) {
-                PLOG(ERROR) << "Fail to write to fd=" << _fd->fd();
-                if (response) {
-                    response->set_success(false);
+                int32_t opType = request.op();
+                if (opType == 1) {
+                    key = request.key();
+                    value = request.value();
+                    status = this->rocksWrapper->Put(key, value);
+                } else {
+                    key = request.key();
+                    status = this->rocksWrapper->Get(key, &value);
                 }
-                // Let raft run this closure.
-                closure_guard.release();
-                // Some disk error occurred, notify raft and never apply any data
-                // ever after
-                iter.set_error_and_rollback();
-                return;
             }
 
-            if (response) {
+            if (status.ok()) {
                 response->set_success(true);
+                response->set_key(key);
+                response->set_value(value);
+            } else {
+                response->set_success(false);
             }
 
             // The purpose of following logs is to help you understand the way
@@ -307,13 +249,11 @@ friend class BlockClosure;
             // Remove these logs in performance-sensitive servers.
             LOG_IF(INFO, FLAGS_log_applied_task) 
                     << "Write " << data.size() << " bytes"
-                    << " from offset=" << offset
                     << " at log_index=" << iter.index();
         }
     }
 
     struct SnapshotArg {
-        scoped_fd fd;
         braft::SnapshotWriter* writer;
         braft::Closure* done;
     };
@@ -335,24 +275,6 @@ friend class BlockClosure;
         // Sync buffered data before
         int rc = 0;
         LOG(INFO) << "Saving snapshot to " << snapshot_path;
-        for (; (rc = ::fdatasync(sa->fd->fd())) < 0 && errno == EINTR;) {}
-        if (rc < 0) {
-            sa->done->status().set_error(EIO, "Fail to sync fd=%d : %m",
-                                         sa->fd->fd());
-            return NULL;
-        }
-        std::string data_path = FLAGS_data_path + "/data";
-        if (link_overwrite(data_path.c_str(), snapshot_path.c_str()) != 0) {
-            sa->done->status().set_error(EIO, "Fail to link data : %m");
-            return NULL;
-        }
-        
-        // Snapshot is a set of files in raft. Add the only file into the
-        // writer here.
-        if (sa->writer->add_file("data") != 0) {
-            sa->done->status().set_error(EIO, "Fail to add file to writer");
-            return NULL;
-        }
         return NULL;
     }
 
@@ -361,7 +283,6 @@ friend class BlockClosure;
         // blocking StateMachine since it's a bit slow to write data to disk
         // file.
         SnapshotArg* arg = new SnapshotArg;
-        arg->fd = _fd;
         arg->writer = writer;
         arg->done = done;
         bthread_t tid;
@@ -369,27 +290,6 @@ friend class BlockClosure;
     }
 
     int on_snapshot_load(braft::SnapshotReader* reader) {
-        // Load snasphot from reader, replacing the running StateMachine
-        CHECK(!is_leader()) << "Leader is not supposed to load snapshot";
-        if (reader->get_file_meta("data", NULL) != 0) {
-            LOG(ERROR) << "Fail to find `data' on " << reader->get_path();
-            return -1;
-        }
-        // reset fd
-        _fd = NULL;
-        std::string snapshot_path = reader->get_path() + "/data";
-        std::string data_path = FLAGS_data_path + "/data";
-        if (link_overwrite(snapshot_path.c_str(), data_path.c_str()) != 0) {
-            PLOG(ERROR) << "Fail to link data";
-            return -1;
-        }
-        // Reopen this file
-        int fd = ::open(data_path.c_str(), O_RDWR, 0644);
-        if (fd < 0) {
-            PLOG(ERROR) << "Fail to open " << data_path;
-            return -1;
-        }
-        _fd = new SharedFD(fd);
         return 0;
     }
 
@@ -423,7 +323,7 @@ private:
     mutable butil::Mutex _fd_mutex;
     braft::Node* volatile _node;
     butil::atomic<int64_t> _leader_term;
-    scoped_fd _fd;
+    RocksWrapper* rocksWrapper;
 };
 
 void BlockClosure::Run() {
@@ -449,14 +349,6 @@ public:
         brpc::Controller* cntl = (brpc::Controller*)controller;
         return _block->write(request, response,
                              &cntl->request_attachment(), done);
-    }
-    void read(::google::protobuf::RpcController* controller,
-              const ::example::BlockRequest* request,
-              ::example::BlockResponse* response,
-              ::google::protobuf::Closure* done) {
-        brpc::Controller* cntl = (brpc::Controller*)controller;
-        brpc::ClosureGuard done_guard(done);
-        return _block->read(request, response, &cntl->response_attachment());
     }
 private:
     Block* _block;

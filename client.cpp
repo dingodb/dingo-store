@@ -23,7 +23,7 @@
 
 DEFINE_bool(log_each_request, false, "Print log for each request");
 DEFINE_bool(use_bthread, false, "Use bthread to send requests");
-DEFINE_int32(block_size, 64 * 1024 * 1024u, "Size of block");
+DEFINE_int32(block_size, 256 * 1024 * 1024u, "Size of block");
 DEFINE_int32(request_size, 1024, "Size of each requst");
 DEFINE_int32(thread_num, 1, "Number of threads sending requests");
 DEFINE_int32(timeout_ms, 500, "Timeout for each request");
@@ -65,17 +65,20 @@ static void* sender(void* arg) {
         // Randomly select which request we want send;
         example::BlockRequest request;
         example::BlockResponse response;
-        request.set_offset(butil::fast_rand_less_than(
-                            FLAGS_block_size - FLAGS_request_size));
+        std::string key = butil::fast_rand_printable(10);
         const char* op = NULL;
         if (butil::fast_rand_less_than(100) < (size_t)FLAGS_write_percentage) {
             op = "write";
-            cntl.request_attachment().resize(FLAGS_request_size, 'a');
+            std::string value = butil::fast_rand_printable(FLAGS_request_size);
+            request.set_op(1);
+            request.set_key(key);
+            request.set_value(value);
             stub.write(&cntl, &request, &response, NULL);
         } else {
             op = "read";
-            request.set_size(FLAGS_request_size);
-            stub.read(&cntl, &request, &response, NULL);
+            request.set_op(2);
+            request.set_key(key);
+            stub.write(&cntl, &request, &response, NULL);
         }
         if (cntl.Failed()) {
             LOG(WARNING) << "Fail to send request to " << leader
@@ -98,7 +101,7 @@ static void* sender(void* arg) {
         if (FLAGS_log_each_request) {
             LOG(INFO) << "Received response from " << leader
                       << " op=" << op
-                      << " offset=" << request.offset()
+                      << " key=" << request.key()
                       << " request_attachment="
                       << cntl.request_attachment().size()
                       << " response_attachment="
