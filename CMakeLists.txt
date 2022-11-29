@@ -3,11 +3,11 @@ project(block C CXX)
 
 option(EXAMPLE_LINK_SO "Whether examples are linked dynamically" OFF)
 option(LINK_TCMALLOC "Link tcmalloc if possible" OFF)
-set(BRPC_INCLUDE_PATH /root/Code/Cplusplus/incubator-brpc/output/include)
-set(BRAFT_INCLUDE_PATH /root/Code/Cplusplus/raft-example/build/output/include/)
+set(BRPC_INCLUDE_PATH "${CMAKE_SOURCE_DIR}/brpc/include")
+set(BRAFT_INCLUDE_PATH "${CMAKE_SOURCE_DIR}/braft/include/")
 
 execute_process(
-    COMMAND bash -c "find ${CMAKE_SOURCE_DIR} -type d -path \"*output/include/braft\" | xargs dirname | xargs dirname | tr -d '\n'"
+    COMMAND bash -c "find ${CMAKE_SOURCE_DIR} -type d -path \"*braft/include/braft\" | xargs dirname | xargs dirname | tr -d '\n'"
     OUTPUT_VARIABLE OUTPUT_PATH
 )
 
@@ -28,15 +28,9 @@ protobuf_generate_cpp(PROTO_SRC PROTO_HEADER block.proto)
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
 find_path(BRPC_INCLUDE_PATH NAMES brpc/server.h)
-if(EXAMPLE_LINK_SO)
-    find_library(BRPC_LIB NAMES brpc)
-    find_library(BRAFT_LIB NAMES braft)
-else()
-    find_library(BRPC_LIB NAMES libbrpc.a brpc)
-    find_library(BRAFT_LIB NAMES libbraft.a braft)
-endif()
 
-message("=============>"${BRAFT_LIB}"========"${EXAMPLE_LINK_SO})
+set(BRPC_LIB "${CMAKE_SOURCE_DIR}/brpc/lib/libbrpc.a")
+set(BRAFT_LIB "${CMAKE_SOURCE_DIR}/braft/lib/libbraft.a")
 
 if((NOT BRPC_INCLUDE_PATH) OR (NOT BRPC_LIB))
     message(FATAL_ERROR "Fail to find brpc")
