@@ -3,17 +3,17 @@ project(block C CXX)
 
 option(EXAMPLE_LINK_SO "Whether examples are linked dynamically" OFF)
 option(LINK_TCMALLOC "Link tcmalloc if possible" OFF)
-set(BRPC_INCLUDE_PATH /Users/sqt/work/Code/huzx/Cplusplush/incubator-brpc/output/include)
-set(BRPC_LIB /Users/sqt/work/Code/huzx/Cplusplush/incubator-brpc/output/lib)
+set(BRPC_INCLUDE_PATH /root/Code/Cplusplus/incubator-brpc/output/include)
+set(BRAFT_INCLUDE_PATH /root/Code/Cplusplus/raft-example/build/output/include/)
 
 execute_process(
     COMMAND bash -c "find ${CMAKE_SOURCE_DIR} -type d -path \"*output/include/braft\" | xargs dirname | xargs dirname | tr -d '\n'"
     OUTPUT_VARIABLE OUTPUT_PATH
 )
 
+set(CMAKE_VERBOSE_MAKEFILE ON)
 set(CMAKE_PREFIX_PATH ${OUTPUT_PATH})
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread")
-
 
 include(FindThreads)
 include(FindProtobuf)
@@ -35,6 +35,8 @@ else()
     find_library(BRPC_LIB NAMES libbrpc.a brpc)
     find_library(BRAFT_LIB NAMES libbraft.a braft)
 endif()
+
+message("=============>"${BRAFT_LIB}"========"${EXAMPLE_LINK_SO})
 
 if((NOT BRPC_INCLUDE_PATH) OR (NOT BRPC_LIB))
     message(FATAL_ERROR "Fail to find brpc")
