@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <gflags/gflags.h>
-#include <bthread/bthread.h>
-#include <brpc/channel.h>
-#include <brpc/controller.h>
-#include <braft/raft.h>
-#include <braft/util.h>
-#include <braft/route_table.h>
-#include "block.pb.h"
+#include "gflags/gflags.h"
+#include "bthread/bthread.h"
+#include "brpc/channel.h"
+#include "brpc/controller.h"
+#include "braft/raft.h"
+#include "braft/util.h"
+#include "braft/route_table.h"
+#include "proto/block.pb.h"
 
 DEFINE_bool(log_each_request, false, "Print log for each request");
 DEFINE_bool(use_bthread, false, "Use bthread to send requests");
@@ -65,11 +65,14 @@ static void* sender(void* arg) {
         // Randomly select which request we want send;
         example::BlockRequest request;
         example::BlockResponse response;
-        std::string key = butil::fast_rand_printable(10);
+        // std::string key = butil::fast_rand_printable(10);
+        std::string key = "Hello";
         const char* op = NULL;
-        if (butil::fast_rand_less_than(100) < (size_t)FLAGS_write_percentage) {
+        // if (butil::fast_rand_less_than(100) < (size_t)FLAGS_write_percentage) {
+        if (key.length() < (size_t)FLAGS_write_percentage) {
             op = "write";
-            std::string value = butil::fast_rand_printable(FLAGS_request_size);
+            // std::string value = butil::fast_rand_printable(FLAGS_request_size);
+            std::string value = "random value";
             request.set_op(1);
             request.set_key(key);
             request.set_value(value);
@@ -113,7 +116,7 @@ static void* sender(void* arg) {
 }
 
 int main(int argc, char* argv[]) {
-    GFLAGS_NS::ParseCommandLineFlags(&argc, &argv, true);
+    google::ParseCommandLineFlags(&argc, &argv, true);
     butil::AtExitManager exit_manager;
 
     // Register configuration of target group to RouteTable

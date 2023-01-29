@@ -23,6 +23,7 @@ class RocksWrapper {
 
         rocksdb::Status Put(const rocksdb::Slice &key,
                             const rocksdb::Slice &value);
+        rocksdb::Status PutBatch(const rocksdb::WriteBatch batch);
     private:
         rocksdb::DB* instance = nullptr;
         std::string dbPath;

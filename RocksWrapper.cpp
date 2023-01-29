@@ -28,4 +28,8 @@ namespace example {
     rocksdb::Status RocksWrapper::Put(const rocksdb::Slice &key,const rocksdb::Slice &value) {
         return this->instance->Put(rocksdb::WriteOptions(), key, value);
     }
+
+    rocksdb::Status RocksWrapper::PutBatch(rocksdb::WriteBatch batch) {
+        return this->instance->Write(rocksdb::WriteOptions(), &batch);
+    }
 }

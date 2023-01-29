@@ -21,13 +21,13 @@
 #include <braft/raft.h>                 // braft::Node braft::StateMachine
 #include <braft/storage.h>              // braft::SnapshotWriter
 #include <braft/util.h>                 // braft::AsyncClosureGuard
-#include "block.pb.h"                   // BlockService
+#include "proto/block.pb.h"                   // BlockService
 #include "RocksWrapper.h"
 
 DEFINE_bool(check_term, true, "Check if the leader changed to another term");
 DEFINE_bool(disable_cli, false, "Don't allow raft_cli access this node");
-DEFINE_bool(log_applied_task, false, "Print notice log when a task is applied");
-DEFINE_int32(election_timeout_ms, 5000, 
+DEFINE_bool(log_applied_task, true, "Print notice log when a task is applied");
+DEFINE_int32(election_timeout_ms, 5000,
             "Start election in such milliseconds if disconnect with the leader");
 DEFINE_int32(port, 8200, "Listen port of this peer");
 DEFINE_int32(snapshot_interval, 30, "Interval between each snapshot");
@@ -73,7 +73,6 @@ public:
     Block()
         : _node(NULL)
         , _leader_term(-1)
-        , _fd(NULL)
     {}
     ~Block() {
         delete _node;
@@ -86,7 +85,7 @@ public:
             return -1;
         }
 
-        std::string data_path = FLAGS_data_path;
+        std::string data_path = FLAGS_data_path + "/db";
         rocksWrapper = new RocksWrapper(data_path);
         if (rocksWrapper == nullptr) {
             LOG(ERROR) << "Fail to start rocksdb:" << data_path << '\'';
@@ -192,6 +191,8 @@ friend class BlockClosure;
     void on_apply(braft::Iterator& iter) {
         // A batch of tasks are committed, which must be processed through 
         // |iter|
+        bool hasWritten = false;
+        rocksdb::WriteBatch writeBatch;
         for (; iter.valid(); iter.next()) {
             BlockResponse* response = NULL;
             // This guard helps invoke iter.done()->Run() asynchronously to
@@ -200,27 +201,22 @@ friend class BlockClosure;
             rocksdb::Status status = rocksdb::Status::OK();
             std::string key;
             std::string value;
+            int32_t opType = 1;
             butil::IOBuf data;
 
             if (iter.done()) {
                 // This task is applied by this node, get value from this
                 // closure to avoid additional parsing.
                 BlockClosure* c = dynamic_cast<BlockClosure*>(iter.done());
+                opType = c->request()->op();
+                key = c->request()->key();
+                value = c->request()->value();
+
                 data.swap(*(c->data()));
                 response = c->response();
             } else {
                 // Have to parse BlockRequest from this log.
                 butil::IOBuf requestInBytes = iter.data();
-                /*
-                uint32_t meta_size = 0;
-                butil::IOBuf saved_log = iter.data();
-                saved_log.cutn(&meta_size, sizeof(uint32_t));
-                // Remember that meta_size is in network order which hould be
-                // covert to host order
-                meta_size = butil::NetToHost32(meta_size);
-                butil::IOBuf meta;
-                saved_log.cutn(&meta, meta_size);
-                 */
                 butil::IOBufAsZeroCopyInputStream wrapper(requestInBytes);
                 BlockRequest request;
                 CHECK(request.ParseFromZeroCopyStream(&wrapper));
@@ -229,27 +225,28 @@ friend class BlockClosure;
                 if (opType == 1) {
                     key = request.key();
                     value = request.value();
-                    status = this->rocksWrapper->Put(key, value);
                 } else {
                     key = request.key();
-                    status = this->rocksWrapper->Get(key, &value);
+                    value = "";
                 }
             }
 
-            if (status.ok()) {
-                response->set_success(true);
-                response->set_key(key);
-                response->set_value(value);
+            if (opType == 1) {
+                // status = this->rocksWrapper->Put(key, value);
+                writeBatch.Put(key, value);
+                hasWritten = true;
             } else {
-                response->set_success(false);
+                status = this->rocksWrapper->Get(key, &value);
             }
 
-            // The purpose of following logs is to help you understand the way
-            // this StateMachine works.
-            // Remove these logs in performance-sensitive servers.
-            LOG_IF(INFO, FLAGS_log_applied_task) 
-                    << "Write " << data.size() << " bytes"
-                    << " at log_index=" << iter.index();
+            if (response) {
+                response->set_success(status.ok() ? true : false);
+                response->set_key(key);
+                response->set_value(value);
+            }
+        }
+        if (hasWritten) {
+            this->rocksWrapper->PutBatch(writeBatch);
         }
     }
 
@@ -257,14 +254,6 @@ friend class BlockClosure;
         braft::SnapshotWriter* writer;
         braft::Closure* done;
     };
-
-    static int link_overwrite(const char* old_path, const char* new_path) {
-        if (::unlink(new_path) < 0 && errno != ENOENT) {
-            PLOG(ERROR) << "Fail to unlink " << new_path;
-            return -1;
-        }
-        return ::link(old_path, new_path);
-    }
 
     static void *save_snapshot(void* arg) {
         SnapshotArg* sa = (SnapshotArg*) arg;
@@ -357,7 +346,7 @@ private:
 }  // namespace example
 
 int main(int argc, char* argv[]) {
-    GFLAGS_NS::ParseCommandLineFlags(&argc, &argv, true);
+    google::ParseCommandLineFlags(&argc, &argv, true);
     butil::AtExitManager exit_manager;
 
     // Generally you only need one Server.
