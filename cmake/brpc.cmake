@@ -27,9 +27,9 @@ ExternalProject_Add(
         extern_brpc
         ${EXTERNAL_PROJECT_LOG_ARGS}
         # DEPENDS ssl crypto zlib protobuf leveldb gflags glog
-#        GIT_REPOSITORY "https://github.com/apache/incubator-brpc"
-#        GIT_TAG "0.9.7"
-        URL "https://github.com/apache/incubator-brpc/archive/0.9.7.tar.gz"
+#        GIT_REPOSITORY "https://github.com/apache/brpc"
+#        GIT_TAG "1.3.0"
+        URL "https://github.com/apache/brpc/archive/1.3.0.tar.gz"
         PREFIX ${BRPC_SOURCES_DIR}
         UPDATE_COMMAND ""
         CMAKE_ARGS -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
@@ -53,7 +53,8 @@ ExternalProject_Add(
         BUILD_COMMAND $(MAKE) -j ${NUM_OF_PROCESSOR} brpc-static
         INSTALL_COMMAND mkdir -p ${BRPC_INSTALL_DIR}/lib/ COMMAND cp ${BRPC_SOURCES_DIR}/src/extern_brpc/output/lib/libbrpc.a ${BRPC_LIBRARIES} COMMAND cp -r ${BRPC_SOURCES_DIR}/src/extern_brpc/output/include ${BRPC_INCLUDE_DIR}/
 )
-ADD_DEPENDENCIES(extern_brpc ssl crypto zlib protobuf leveldb gflags glog)
+# ADD_DEPENDENCIES(extern_brpc ssl crypto zlib protobuf leveldb gflags glog)
+ADD_DEPENDENCIES(extern_brpc zlib protobuf leveldb gflags glog)
 ADD_LIBRARY(brpc STATIC IMPORTED GLOBAL)
 SET_PROPERTY(TARGET brpc PROPERTY IMPORTED_LOCATION ${BRPC_LIBRARIES})
 ADD_DEPENDENCIES(brpc extern_brpc)
