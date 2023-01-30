@@ -53,14 +53,11 @@ include_directories(${BRAFT_INCLUDE_DIR})
 include_directories(${BRPC_INCLUDE_DIR})
 include_directories(${GLOG_INCLUDE_DIR})
 include_directories(${ROCKSDB_INCLUDE_DIR})
-add_executable(block_client client.cpp ${PROTO_SRCS} ${PROTO_HEADER})
-add_executable(block_server server.cpp ${PROTO_SRCS} ${PROTO_HEADER} RocksWrapper.h RocksWrapper.cpp)
-
 
 set(DYNAMIC_LIB
     ${GFLAGS_LIBRARIES}
     ${PROTOBUF_LIBRARY}
-    ${GPERFTOOLS_LIBRARIES}
+    # ${GPERFTOOLS_LIBRARIES}
     ${LEVELDB_LIBRARIES}
     ${BRAFT_LIBRARIES}
     ${BRPC_LIBRARIES}
@@ -73,6 +70,22 @@ set(DYNAMIC_LIB
     dl
     z
     )
+
+set(DEPEND_LIBS
+    gflags
+    protobuf
+    leveldb
+    braft
+    brpc
+    rocksdb
+    snappy
+    glog
+    )
+
+add_executable(block_client client.cpp ${PROTO_SRCS} ${PROTO_HEADER})
+add_executable(block_server server.cpp ${PROTO_SRCS} ${PROTO_HEADER} RocksWrapper.h RocksWrapper.cpp)
+add_dependencies(block_client ${DEPEND_LIBS})
+add_dependencies(block_server ${DEPEND_LIBS})
 
 target_link_libraries(block_client
                       "-Xlinker \"-(\""
