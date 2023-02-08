@@ -29,6 +29,7 @@ ExternalProject_Add(
         extern_gflags
         ${EXTERNAL_PROJECT_LOG_ARGS}
         GIT_REPOSITORY "https://github.com/gflags/gflags.git"
+        DOWNLOAD_EXTRACT_TIMESTAMP ON
         GIT_TAG "v2.2.2"
         PREFIX ${GFLAGS_SOURCES_DIR}
         BUILD_COMMAND ${BUILD_COMMAND}

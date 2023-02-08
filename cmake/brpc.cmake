@@ -30,6 +30,7 @@ ExternalProject_Add(
 #        GIT_REPOSITORY "https://github.com/apache/brpc"
 #        GIT_TAG "1.3.0"
         URL "https://github.com/apache/brpc/archive/1.3.0.tar.gz"
+        DOWNLOAD_EXTRACT_TIMESTAMP ON
         PREFIX ${BRPC_SOURCES_DIR}
         UPDATE_COMMAND ""
         CMAKE_ARGS -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}

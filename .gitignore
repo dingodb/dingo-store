@@ -50,3 +50,5 @@ cmake-build-release
 third-party
 
 # bazel
+
+build/

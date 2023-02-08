@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8.10)
-project(block C CXX)
+project(dingo C CXX)
 
 option(EXAMPLE_LINK_SO "Whether examples are linked dynamically" OFF)
 option(LINK_TCMALLOC "Link tcmalloc if possible" OFF)
@@ -22,7 +22,7 @@ include(rocksdb)
 include(brpc)
 include(braft)
 
-SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread")
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread -std=c++17")
 
 # LIST ALL THE PROTO FILES AND COMPILE IT TO .H AND .CPP
 file(GLOB PROTO_FILES ${CMAKE_SOURCE_DIR}/proto/*.proto)
@@ -46,13 +46,13 @@ endforeach ()
 add_library(PROTO_OBJS OBJECT ${PROTO_SRCS} ${PROTO_HEADER})
 message("Debug Message protoc: ${PROTOBUF_PROTOC_EXECUTABLE}, proto srcs : ${PROTO_SRCS}")
 
-
 # include PROTO_HEADER
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 include_directories(${BRAFT_INCLUDE_DIR})
 include_directories(${BRPC_INCLUDE_DIR})
 include_directories(${GLOG_INCLUDE_DIR})
 include_directories(${ROCKSDB_INCLUDE_DIR})
+include_directories(${PROJECT_SOURCE_DIR}/src/store)
 
 set(DYNAMIC_LIB
     ${GFLAGS_LIBRARIES}
@@ -82,16 +82,23 @@ set(DEPEND_LIBS
     glog
     )
 
-add_executable(block_client client.cpp ${PROTO_SRCS} ${PROTO_HEADER})
-add_executable(block_server server.cpp ${PROTO_SRCS} ${PROTO_HEADER} RocksWrapper.h RocksWrapper.cpp)
-add_dependencies(block_client ${DEPEND_LIBS})
-add_dependencies(block_server ${DEPEND_LIBS})
+# source file
+file(GLOB STORE_SRCS ${PROJECT_SOURCE_DIR}/src/store/*.cc)
+message(STATUS "STORE_SRCS: ${STORE_SRCS}")
 
-target_link_libraries(block_client
+# bin output dir
+set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin)
+
+# set(STORE_SRCS src/store/main.cc src/store/store_service.cc)
+add_executable(dingo_store ${STORE_SRCS} ${PROTO_SRCS} ${PROTO_HEADER})
+add_executable(dingo_store_client src/client/store_client.cc ${PROTO_SRCS} ${PROTO_HEADER})
+add_dependencies(dingo_store ${DEPEND_LIBS})
+add_dependencies(dingo_store_client ${DEPEND_LIBS})
+target_link_libraries(dingo_store
                       "-Xlinker \"-(\""
                       ${DYNAMIC_LIB}
                       "-Xlinker \"-)\"")
-target_link_libraries(block_server
+target_link_libraries(dingo_store_client
                       "-Xlinker \"-(\""
                       ${DYNAMIC_LIB}
                       "-Xlinker \"-)\"")
