@@ -21,6 +21,7 @@ SET(BRAFT_LIBRARIES "${BRAFT_INSTALL_DIR}/lib/libbraft.a" CACHE FILEPATH "braft 
 
 set(prefix_path "${THIRD_PARTY_PATH}/install/brpc|${THIRD_PARTY_PATH}/install/gflags|${THIRD_PARTY_PATH}/install/protobuf|${THIRD_PARTY_PATH}/install/zlib|${THIRD_PARTY_PATH}/install/glog|${THIRD_PARTY_PATH}/install/leveldb")
 
+
 ExternalProject_Add(
         extern_braft
         ${EXTERNAL_PROJECT_LOG_ARGS}
@@ -29,6 +30,7 @@ ExternalProject_Add(
 #        GIT_TAG "v1.1.1"
         # URL "https://github.com/baidu/braft/archive/v1.1.1.tar.gz"
         URL "https://github.com/baidu/braft/archive/master.tar.gz"
+        DOWNLOAD_EXTRACT_TIMESTAMP ON
         PREFIX ${BRAFT_SOURCES_DIR}
         UPDATE_COMMAND ""
         CMAKE_ARGS -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}

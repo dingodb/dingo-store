@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 INCLUDE(ExternalProject)
 # Always invoke `FIND_PACKAGE(Protobuf)` for importing function protobuf_generate_cpp
 #FIND_PACKAGE(Protobuf QUIET)
@@ -136,6 +137,7 @@ FUNCTION(build_protobuf TARGET_NAME)
             URL "https://github.com/protocolbuffers/protobuf/archive/v3.6.1.tar.gz"
             CONFIGURE_COMMAND mv ../config.sh . COMMAND sh config.sh
             CMAKE_CACHE_ARGS
+            DOWNLOAD_EXTRACT_TIMESTAMP ON
             -DCMAKE_INSTALL_PREFIX:PATH=${PROTOBUF_INSTALL_DIR}
             -DCMAKE_BUILD_TYPE:STRING=${THIRD_PARTY_BUILD_TYPE}
             -DCMAKE_VERBOSE_MAKEFILE:BOOL=OFF
