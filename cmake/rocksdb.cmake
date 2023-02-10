@@ -33,7 +33,6 @@ ExternalProject_Add(
 #        GIT_REPOSITORY "https://github.com/facebook/rocksdb.git"
 #        GIT_TAG "v7.8.3"
         URL "https://github.com/facebook/rocksdb/archive/v7.8.3.tar.gz"
-        DOWNLOAD_EXTRACT_TIMESTAMP ON
         UPDATE_COMMAND ""
 #        CONFIGURE_COMMAND ""
 #        BUILD_IN_SOURCE 1
