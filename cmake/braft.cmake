@@ -30,7 +30,6 @@ ExternalProject_Add(
 #        GIT_TAG "v1.1.1"
         # URL "https://github.com/baidu/braft/archive/v1.1.1.tar.gz"
         URL "https://github.com/baidu/braft/archive/master.tar.gz"
-        DOWNLOAD_EXTRACT_TIMESTAMP ON
         PREFIX ${BRAFT_SOURCES_DIR}
         UPDATE_COMMAND ""
         CMAKE_ARGS -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
