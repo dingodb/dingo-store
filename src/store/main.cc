@@ -1,4 +1,4 @@
-// Copyright (c) 2023 dingo.com, Inc. All Rights Reserved
+// Copyright (c) 2023 dingodb.com, Inc. All Rights Reserved
 // 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@
 #include <gflags/gflags.h>
 
 #include "proto/store.pb.h"
-#include "store_service.h"
+#include "store/store_service.h"
 
 
 DEFINE_int32(port, 8200, "Listen port of this peer");
@@ -29,7 +29,7 @@ int main(int argc, char *argv[]) {
   google::ParseCommandLineFlags(&argc, &argv, true);
 
   brpc::Server server;
-  store::StoreServiceImpl store_service;
+  dingodb::StoreServiceImpl store_service;
 
   if (server.AddService(&store_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
     LOG(ERROR) << "Fail to add store service";
