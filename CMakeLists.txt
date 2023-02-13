@@ -3,6 +3,7 @@ project(dingo C CXX)
 
 option(EXAMPLE_LINK_SO "Whether examples are linked dynamically" OFF)
 option(LINK_TCMALLOC "Link tcmalloc if possible" OFF)
+option(BUILD_UNIT_TESTS "Build unit test" ON)
 
 # Avoid warning about DOWNLOAD_EXTRACT_TIMESTAMP in CMake 3.24:
 if (CMAKE_VERSION VERSION_GREATER_EQUAL "3.24.0")
@@ -20,12 +21,14 @@ find_package(OpenSSL REQUIRED)
 include(zlib)
 include(gflags)
 include(glog)
+include(gtest)
 include(snappy)
 include(leveldb)
 include(protobuf)
 include(rocksdb)
 include(brpc)
 include(braft)
+include(yaml-cpp)
 
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread -std=c++17")
 
@@ -57,7 +60,10 @@ include_directories(${BRAFT_INCLUDE_DIR})
 include_directories(${BRPC_INCLUDE_DIR})
 include_directories(${GLOG_INCLUDE_DIR})
 include_directories(${ROCKSDB_INCLUDE_DIR})
-include_directories(${PROJECT_SOURCE_DIR}/src/store)
+include_directories(${YAMLCPP_INCLUDE_DIR})
+include_directories(${PROJECT_SOURCE_DIR}/src)
+
+message(STATUS "===GTEST_LIBRARIES: ${GTEST_LIBRARIES}")
 
 set(DYNAMIC_LIB
     ${GFLAGS_LIBRARIES}
@@ -68,6 +74,7 @@ set(DYNAMIC_LIB
     ${BRPC_LIBRARIES}
     ${ROCKSDB_LIBRARIES}
     ${SNAPPY_LIBRARIES}
+    ${YAMLCPP_LIBRARIES}
     rt
     ssl
     crypto
@@ -85,17 +92,18 @@ set(DEPEND_LIBS
     rocksdb
     snappy
     glog
+    yamlcpp
     )
 
 # source file
+file(GLOB CONFIG_SRCS ${PROJECT_SOURCE_DIR}/src/config/*.cc)
 file(GLOB STORE_SRCS ${PROJECT_SOURCE_DIR}/src/store/*.cc)
-message(STATUS "STORE_SRCS: ${STORE_SRCS}")
 
 # bin output dir
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin)
 
 # set(STORE_SRCS src/store/main.cc src/store/store_service.cc)
-add_executable(dingo_store ${STORE_SRCS} ${PROTO_SRCS} ${PROTO_HEADER})
+add_executable(dingo_store ${STORE_SRCS} ${CONFIG_SRCS} ${PROTO_SRCS} ${PROTO_HEADER})
 add_executable(dingo_store_client src/client/store_client.cc ${PROTO_SRCS} ${PROTO_HEADER})
 add_dependencies(dingo_store ${DEPEND_LIBS})
 add_dependencies(dingo_store_client ${DEPEND_LIBS})
@@ -107,3 +115,8 @@ target_link_libraries(dingo_store_client
                       "-Xlinker \"-(\""
                       ${DYNAMIC_LIB}
                       "-Xlinker \"-)\"")
+
+
+if(BUILD_UNIT_TESTS)
+    add_subdirectory(test)
+endif()

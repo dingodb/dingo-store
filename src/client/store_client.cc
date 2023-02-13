@@ -1,4 +1,4 @@
-// Copyright (c) 2023 dingo.com, Inc. All Rights Reserved
+// Copyright (c) 2023 dingodb.com, Inc. All Rights Reserved
 // 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
