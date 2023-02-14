@@ -15,6 +15,7 @@ foreach(TEST_SRC ${TEST_SRCS})
   add_executable(${TEST_WE}
                  ${TEST_SRC}
                  ${CONFIG_SRCS})
+  add_dependencies(${TEST_WE} ${DEPEND_LIBS})
   target_link_libraries(${TEST_WE}
                         "-Xlinker \"-(\""
                         ${GTEST_MAIN_LIBRARIES}
