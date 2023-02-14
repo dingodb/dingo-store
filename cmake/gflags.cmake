@@ -28,8 +28,9 @@ ENDIF (WIN32)
 ExternalProject_Add(
         extern_gflags
         ${EXTERNAL_PROJECT_LOG_ARGS}
-        GIT_REPOSITORY "https://github.com/gflags/gflags.git"
-        GIT_TAG "v2.2.2"
+        # GIT_REPOSITORY "https://github.com/gflags/gflags.git"
+        # GIT_TAG "v2.2.2"
+        URL "https://github.com/gflags/gflags/archive/v2.2.2.tar.gz"
         PREFIX ${GFLAGS_SOURCES_DIR}
         BUILD_COMMAND ${BUILD_COMMAND}
         INSTALL_COMMAND ${INSTALL_COMMAND}

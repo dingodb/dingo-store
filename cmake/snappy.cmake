@@ -25,8 +25,9 @@ ExternalProject_Add(
         extern_snappy
         ${EXTERNAL_PROJECT_LOG_ARGS}
         DEPENDS gflags
-        GIT_REPOSITORY "https://github.com/google/snappy.git"
-        GIT_TAG "1.1.7"
+        # GIT_REPOSITORY "https://github.com/google/snappy.git"
+        # GIT_TAG "1.1.9"
+        URL "https://github.com/google/snappy/archive/1.1.9.tar.gz"
         PREFIX ${SNAPPY_SOURCES_DIR}
         UPDATE_COMMAND ""
         CMAKE_ARGS -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
@@ -41,6 +42,7 @@ ExternalProject_Add(
         -DCMAKE_INSTALL_LIBDIR=${SNAPPY_INSTALL_DIR}/lib
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON
         -DSNAPPY_BUILD_TESTS=OFF
+        -DSNAPPY_BUILD_BENCHMARKS=OFF
         -DCMAKE_BUILD_TYPE=${THIRD_PARTY_BUILD_TYPE}
         -DCMAKE_PREFIX_PATH=${prefix_path}
         ${EXTERNAL_OPTIONAL_ARGS}

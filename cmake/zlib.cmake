@@ -22,8 +22,9 @@ SET(ZLIB_INCLUDE_DIR "${ZLIB_INSTALL_DIR}/include" CACHE PATH "zlib include dire
 ExternalProject_Add(
         extern_zlib
         ${EXTERNAL_PROJECT_LOG_ARGS}
-        GIT_REPOSITORY  "https://github.com/madler/zlib.git"
-        GIT_TAG         "v1.2.8"
+        # GIT_REPOSITORY  "https://github.com/madler/zlib.git"
+        # GIT_TAG         "v1.2.13"
+        URL "https://github.com/madler/zlib/archive/v1.2.13.tar.gz"
         PREFIX          ${ZLIB_SOURCES_DIR}
         UPDATE_COMMAND  ""
         CMAKE_ARGS      -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}

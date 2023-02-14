@@ -28,17 +28,15 @@ ENDIF (WIN32)
 
 set(prefix_path "${THIRD_PARTY_PATH}/install/gflags")
 
-SET(GLOG_REPOSITORY "https://github.com/google/glog.git")
-SET(GLOG_TAG "v0.4.0")
-
 SET(gflags_BUILD_STATIC_LIBS ON)
 
 ExternalProject_Add(
         extern_glog
         ${EXTERNAL_PROJECT_LOG_ARGS}
         DEPENDS gflags
-        GIT_REPOSITORY ${GLOG_REPOSITORY}
-        GIT_TAG ${GLOG_TAG}
+        # GIT_REPOSITORY "https://github.com/google/glog.git"
+        # GIT_TAG "v0.6.0"
+        URL "https://github.com/google/glog/archive/v0.4.0.tar.gz"
         PREFIX ${GLOG_SOURCES_DIR}
         UPDATE_COMMAND ""
         CMAKE_ARGS -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
