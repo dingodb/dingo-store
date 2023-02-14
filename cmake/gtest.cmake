@@ -26,8 +26,9 @@ ExternalProject_Add(
         extern_gtest
         ${EXTERNAL_PROJECT_LOG_ARGS}
         PREFIX ${GTEST_SOURCES_DIR}
-        GIT_REPOSITORY "https://github.com/google/googletest.git"
-        GIT_TAG "v1.13.0"
+        # GIT_REPOSITORY "https://github.com/google/googletest.git"
+        # GIT_TAG "v1.13.0"
+        URL "https://github.com/google/googletest/archive/v1.13.0.tar.gz"
         BUILD_IN_SOURCE 1
         BUILD_COMMAND $(MAKE) -j ${NUM_OF_PROCESSOR}
         INSTALL_COMMAND mkdir -p ${GTEST_INSTALL_DIR}/lib/ COMMAND cp ${GTEST_SOURCES_DIR}/src/extern_gtest/lib/libgtest.a ${GTEST_LIBRARIES} COMMAND cp ${GTEST_SOURCES_DIR}/src/extern_gtest/lib/libgtest_main.a ${GTEST_MAIN_LIBRARIES} COMMAND cp ${GTEST_SOURCES_DIR}/src/extern_gtest/lib/libgmock.a ${GMOCK_LIBRARIES} COMMAND cp ${GTEST_SOURCES_DIR}/src/extern_gtest/lib/libgmock_main.a ${GMOCK_MAIN_LIBRARIES} COMMAND cp -r ${GTEST_SOURCES_DIR}/src/extern_gtest/googletest/include ${GTEST_INSTALL_DIR} COMMAND cp -r ${GTEST_SOURCES_DIR}/src/extern_gtest/googlemock/include ${GTEST_INSTALL_DIR}/

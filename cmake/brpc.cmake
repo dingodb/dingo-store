@@ -27,8 +27,8 @@ ExternalProject_Add(
         extern_brpc
         ${EXTERNAL_PROJECT_LOG_ARGS}
         # DEPENDS ssl crypto zlib protobuf leveldb gflags glog
-#        GIT_REPOSITORY "https://github.com/apache/brpc"
-#        GIT_TAG "1.3.0"
+        # GIT_REPOSITORY "https://github.com/apache/brpc"
+        # GIT_TAG "1.3.0"
         URL "https://github.com/apache/brpc/archive/1.3.0.tar.gz"
         PREFIX ${BRPC_SOURCES_DIR}
         UPDATE_COMMAND ""

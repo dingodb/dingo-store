@@ -23,8 +23,9 @@ ExternalProject_Add(
         extern_yamlcpp
         ${EXTERNAL_PROJECT_LOG_ARGS}
         PREFIX ${YAMLCPP_SOURCES_DIR}
-        GIT_REPOSITORY "https://github.com/jbeder/yaml-cpp.git"
-        GIT_TAG "1b50109f7bea60bd382d8ea7befce3d2bd67da5f" # Just pick HEAD on 20230214
+        # GIT_REPOSITORY "https://github.com/jbeder/yaml-cpp.git"
+        # GIT_TAG "1b50109f7bea60bd382d8ea7befce3d2bd67da5f" # Just pick HEAD on 20230214
+        URL "https://github.com/jbeder/yaml-cpp/archive/1b50109f7bea60bd382d8ea7befce3d2bd67da5f.tar.gz"
         BUILD_IN_SOURCE 1
         BUILD_COMMAND $(MAKE) -j ${NUM_OF_PROCESSOR}
         INSTALL_COMMAND mkdir -p ${YAMLCPP_INSTALL_DIR}/lib/ COMMAND cp ${YAMLCPP_SOURCES_DIR}/src/extern_yamlcpp/libyaml-cpp.a ${YAMLCPP_LIBRARIES} COMMAND cp -r ${YAMLCPP_SOURCES_DIR}/src/extern_yamlcpp/include ${YAMLCPP_INSTALL_DIR}/

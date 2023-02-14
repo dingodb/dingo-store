@@ -32,7 +32,7 @@ ExternalProject_Add(
         PREFIX ${ROCKSDB_SOURCES_DIR}
 #        GIT_REPOSITORY "https://github.com/facebook/rocksdb.git"
 #        GIT_TAG "v7.8.3"
-        URL "https://github.com/facebook/rocksdb/archive/v7.8.3.tar.gz"
+        URL "https://github.com/facebook/rocksdb/archive/v7.9.2.tar.gz"
         UPDATE_COMMAND ""
 #        CONFIGURE_COMMAND ""
 #        BUILD_IN_SOURCE 1
