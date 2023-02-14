@@ -26,10 +26,10 @@ ExternalProject_Add(
         extern_braft
         ${EXTERNAL_PROJECT_LOG_ARGS}
         DEPENDS brpc
-#        GIT_REPOSITORY "https://github.com/brpc/braft.git"
-#        GIT_TAG "v1.1.1"
+        GIT_REPOSITORY "https://github.com/brpc/braft.git"
+        GIT_TAG "99a12e0181c247cac3156cfcd91983dc30981cf5" # Just pick HEAD on 20230214
         # URL "https://github.com/baidu/braft/archive/v1.1.1.tar.gz"
-        URL "https://github.com/baidu/braft/archive/master.tar.gz"
+        # URL "https://github.com/baidu/braft/archive/master.tar.gz"
         PREFIX ${BRAFT_SOURCES_DIR}
         UPDATE_COMMAND ""
         CMAKE_ARGS -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
