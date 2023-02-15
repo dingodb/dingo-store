@@ -5,6 +5,8 @@ option(EXAMPLE_LINK_SO "Whether examples are linked dynamically" OFF)
 option(LINK_TCMALLOC "Link tcmalloc if possible" OFF)
 option(BUILD_UNIT_TESTS "Build unit test" ON)
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS 1)
+
 # Avoid warning about DOWNLOAD_EXTRACT_TIMESTAMP in CMake 3.24:
 if (CMAKE_VERSION VERSION_GREATER_EQUAL "3.24.0")
     cmake_policy(SET CMP0135 NEW)
@@ -132,15 +134,30 @@ set(DEPEND_LIBS
 # source file
 file(GLOB CONFIG_SRCS ${PROJECT_SOURCE_DIR}/src/config/*.cc)
 file(GLOB STORE_SRCS ${PROJECT_SOURCE_DIR}/src/store/*.cc)
+file(GLOB COORDINATOR_SRCS ${PROJECT_SOURCE_DIR}/src/coordinator/*.cc)
 
 # bin output dir
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin)
 
 # set(STORE_SRCS src/store/main.cc src/store/store_service.cc)
+add_executable(dingo_coordinator ${COORDINATOR_SRCS} ${CONFIG_SRCS} ${PROTO_SRCS} ${PROTO_HEADER})
+add_executable(dingo_coordinator_client src/client/coordinator_client.cc ${PROTO_SRCS} ${PROTO_HEADER} src/client/coordinator_client.cc)
 add_executable(dingo_store ${STORE_SRCS} ${CONFIG_SRCS} ${PROTO_SRCS} ${PROTO_HEADER})
 add_executable(dingo_store_client src/client/store_client.cc ${PROTO_SRCS} ${PROTO_HEADER})
+
+add_dependencies(dingo_coordinator ${DEPEND_LIBS})
+add_dependencies(dingo_coordinator_client ${DEPEND_LIBS})
 add_dependencies(dingo_store ${DEPEND_LIBS})
 add_dependencies(dingo_store_client ${DEPEND_LIBS})
+
+target_link_libraries(dingo_coordinator
+                      "-Xlinker \"-(\""
+                      ${DYNAMIC_LIB}
+                      "-Xlinker \"-)\"")
+target_link_libraries(dingo_coordinator_client
+                      "-Xlinker \"-(\""
+                      ${DYNAMIC_LIB}
+                      "-Xlinker \"-)\"")
 target_link_libraries(dingo_store
                       "-Xlinker \"-(\""
                       ${DYNAMIC_LIB}
