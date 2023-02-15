@@ -14,13 +14,13 @@
 
 INCLUDE(ExternalProject)
 
-SET(BRAFT_SOURCES_DIR ${THIRD_PARTY_PATH}/braft)
+SET(BRAFT_SOURCES_DIR ${CMAKE_SOURCE_DIR}/contrib/braft)
+SET(BRAFT_BINARY_DIR ${THIRD_PARTY_PATH}/build/braft)
 SET(BRAFT_INSTALL_DIR ${THIRD_PARTY_PATH}/install/braft)
 SET(BRAFT_INCLUDE_DIR "${BRAFT_INSTALL_DIR}/include" CACHE PATH "braft include directory." FORCE)
 SET(BRAFT_LIBRARIES "${BRAFT_INSTALL_DIR}/lib/libbraft.a" CACHE FILEPATH "braft library." FORCE)
 
 set(prefix_path "${THIRD_PARTY_PATH}/install/brpc|${THIRD_PARTY_PATH}/install/gflags|${THIRD_PARTY_PATH}/install/protobuf|${THIRD_PARTY_PATH}/install/zlib|${THIRD_PARTY_PATH}/install/glog|${THIRD_PARTY_PATH}/install/leveldb")
-
 
 ExternalProject_Add(
         extern_braft
@@ -28,8 +28,10 @@ ExternalProject_Add(
         DEPENDS brpc
         # GIT_REPOSITORY "https://github.com/brpc/braft.git"
         # GIT_TAG "99a12e0181c247cac3156cfcd91983dc30981cf5" # Just pick HEAD on 20230214
-        URL "https://github.com/baidu/braft/archive/99a12e0181c247cac3156cfcd91983dc30981cf5.tar.gz"
-        PREFIX ${BRAFT_SOURCES_DIR}
+        # URL "https://github.com/baidu/braft/archive/99a12e0181c247cac3156cfcd91983dc30981cf5.tar.gz"
+        SOURCE_DIR ${BRAFT_SOURCES_DIR}
+        BINARY_DIR ${BRAFT_BINARY_DIR}
+        PREFIX ${BRAFT_INSTALL_DIR}
         UPDATE_COMMAND ""
         CMAKE_ARGS -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
         -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
@@ -48,10 +50,11 @@ ExternalProject_Add(
         -DCMAKE_INSTALL_LIBDIR:PATH=${BRAFT_INSTALL_DIR}/lib
         -DCMAKE_POSITION_INDEPENDENT_CODE:BOOL=ON
         -DCMAKE_BUILD_TYPE:STRING=${THIRD_PARTY_BUILD_TYPE}
-        BUILD_IN_SOURCE 1
+        # BUILD_IN_SOURCE 1
         BUILD_COMMAND $(MAKE) -j ${NUM_OF_PROCESSOR} braft-static
-        INSTALL_COMMAND mkdir -p ${BRAFT_INSTALL_DIR}/lib/ COMMAND cp ${BRAFT_SOURCES_DIR}/src/extern_braft/output/lib/libbraft.a ${BRAFT_LIBRARIES} COMMAND cp -r ${BRAFT_SOURCES_DIR}/src/extern_braft/output/include ${BRAFT_INCLUDE_DIR}/
+        INSTALL_COMMAND mkdir -p ${BRAFT_INSTALL_DIR}/lib/ COMMAND cp ${BRAFT_BINARY_DIR}/output/lib/libbraft.a ${BRAFT_LIBRARIES} COMMAND cp -r ${BRAFT_BINARY_DIR}/output/include ${BRAFT_INCLUDE_DIR}/
 )
+
 ADD_DEPENDENCIES(extern_braft brpc)
 ADD_LIBRARY(braft STATIC IMPORTED GLOBAL)
 SET_PROPERTY(TARGET braft PROPERTY IMPORTED_LOCATION ${BRAFT_LIBRARIES})
