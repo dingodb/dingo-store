@@ -14,7 +14,8 @@
 
 INCLUDE(ExternalProject)
 
-SET(GFLAGS_SOURCES_DIR ${THIRD_PARTY_PATH}/gflags)
+SET(GFLAGS_SOURCES_DIR ${CMAKE_SOURCE_DIR}/contrib/gflags)
+SET(GFLAGS_BINARY_DIR ${THIRD_PARTY_PATH}/build/gflags)
 SET(GFLAGS_INSTALL_DIR ${THIRD_PARTY_PATH}/install/gflags)
 SET(GFLAGS_INCLUDE_DIR "${GFLAGS_INSTALL_DIR}/include" CACHE PATH "gflags include directory." FORCE)
 IF (WIN32)
@@ -30,8 +31,10 @@ ExternalProject_Add(
         ${EXTERNAL_PROJECT_LOG_ARGS}
         # GIT_REPOSITORY "https://github.com/gflags/gflags.git"
         # GIT_TAG "v2.2.2"
-        URL "https://github.com/gflags/gflags/archive/v2.2.2.tar.gz"
-        PREFIX ${GFLAGS_SOURCES_DIR}
+        # URL "https://github.com/gflags/gflags/archive/v2.2.2.tar.gz"
+        SOURCE_DIR ${GFLAGS_SOURCES_DIR}
+        BINARY_DIR ${GFLAGS_BINARY_DIR}
+        PREFIX ${GFLAGS_INSTALL_DIR}
         BUILD_COMMAND ${BUILD_COMMAND}
         INSTALL_COMMAND ${INSTALL_COMMAND}
         UPDATE_COMMAND ""

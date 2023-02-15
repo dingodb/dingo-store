@@ -14,7 +14,8 @@
 
 INCLUDE(ExternalProject)
 
-SET(ROCKSDB_SOURCES_DIR ${THIRD_PARTY_PATH}/rocksdb)
+SET(ROCKSDB_SOURCES_DIR ${CMAKE_SOURCE_DIR}/contrib/rocksdb)
+SET(ROCKSDB_BINARY_DIR ${THIRD_PARTY_PATH}/build/rocksdb)
 SET(ROCKSDB_INSTALL_DIR ${THIRD_PARTY_PATH}/install/rocksdb)
 SET(ROCKSDB_INCLUDE_DIR "${ROCKSDB_INSTALL_DIR}/include" CACHE PATH "rocksdb include directory." FORCE)
 SET(ROCKSDB_LIBRARIES "${ROCKSDB_INSTALL_DIR}/lib/librocksdb.a" CACHE FILEPATH "rocksdb library." FORCE)
@@ -29,15 +30,17 @@ ExternalProject_Add(
         extern_rocksdb
         ${EXTERNAL_PROJECT_LOG_ARGS}
         DEPENDS gflags zlib snappy
-        PREFIX ${ROCKSDB_SOURCES_DIR}
-#        GIT_REPOSITORY "https://github.com/facebook/rocksdb.git"
-#        GIT_TAG "v7.8.3"
-        URL "https://github.com/facebook/rocksdb/archive/v7.9.2.tar.gz"
+        SOURCE_DIR ${ROCKSDB_SOURCES_DIR}
+        BINARY_DIR ${ROCKSDB_BINARY_DIR}
+        PREFIX ${ROCKSDB_INSTALL_DIR}
+        # GIT_REPOSITORY "https://github.com/facebook/rocksdb.git"
+        # GIT_TAG "v7.8.3"
+        # URL "https://github.com/facebook/rocksdb/archive/v7.9.2.tar.gz"
         UPDATE_COMMAND ""
-#        CONFIGURE_COMMAND ""
-#        BUILD_IN_SOURCE 1
-#        BUILD_COMMAND mv ../build.sh . COMMAND sh build.sh
-#        INSTALL_COMMAND mkdir -p ${ROCKSDB_INSTALL_DIR}/lib COMMAND cp -r include ${ROCKSDB_INSTALL_DIR}/ COMMAND cp librocksdb.a ${ROCKSDB_LIBRARIES}
+        # CONFIGURE_COMMAND ""
+        # BUILD_IN_SOURCE 1
+        # BUILD_COMMAND mv ../build.sh . COMMAND sh build.sh
+        # INSTALL_COMMAND mkdir -p ${ROCKSDB_INSTALL_DIR}/lib COMMAND cp -r include ${ROCKSDB_INSTALL_DIR}/ COMMAND cp librocksdb.a ${ROCKSDB_LIBRARIES}
         CMAKE_ARGS -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
         -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
         -DCMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}
@@ -57,6 +60,7 @@ ExternalProject_Add(
         -DWITH_RUNTIME_DEBUG=ON
         -DROCKSDB_BUILD_SHARED=OFF
         -DWITH_BENCHMARK_TOOLS=OFF
+        -DWITH_TESTS=OFF
         -DWITH_CORE_TOOLS=OFF
         -DWITH_TOOLS=OFF
         ${EXTERNAL_OPTIONAL_ARGS}

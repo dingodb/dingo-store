@@ -14,7 +14,8 @@
 
 INCLUDE(ExternalProject)
 
-SET(BRPC_SOURCES_DIR ${THIRD_PARTY_PATH}/brpc)
+SET(BRPC_SOURCES_DIR ${CMAKE_SOURCE_DIR}/contrib/brpc)
+SET(BRPC_BINARY_DIR ${THIRD_PARTY_PATH}/build/brpc)
 SET(BRPC_INSTALL_DIR ${THIRD_PARTY_PATH}/install/brpc)
 SET(BRPC_INCLUDE_DIR "${BRPC_INSTALL_DIR}/include" CACHE PATH "brpc include directory." FORCE)
 SET(BRPC_LIBRARIES "${BRPC_INSTALL_DIR}/lib/libbrpc.a" CACHE FILEPATH "brpc library." FORCE)
@@ -29,8 +30,10 @@ ExternalProject_Add(
         # DEPENDS ssl crypto zlib protobuf leveldb gflags glog
         # GIT_REPOSITORY "https://github.com/apache/brpc"
         # GIT_TAG "1.3.0"
-        URL "https://github.com/apache/brpc/archive/1.3.0.tar.gz"
-        PREFIX ${BRPC_SOURCES_DIR}
+        # URL "https://github.com/apache/brpc/archive/1.3.0.tar.gz"
+        SOURCE_DIR ${BRPC_SOURCES_DIR}
+        BINARY_DIR ${BRPC_BINARY_DIR}
+        PREFIX ${BRPC_INSTALL_DIR}
         UPDATE_COMMAND ""
         CMAKE_ARGS -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
         -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
@@ -49,9 +52,9 @@ ExternalProject_Add(
         -DCMAKE_INSTALL_LIBDIR:PATH=${BRPC_INSTALL_DIR}/lib
         -DCMAKE_POSITION_INDEPENDENT_CODE:BOOL=ON
         -DCMAKE_BUILD_TYPE:STRING=${THIRD_PARTY_BUILD_TYPE}
-        BUILD_IN_SOURCE 1
+        # BUILD_IN_SOURCE 1
         BUILD_COMMAND $(MAKE) -j ${NUM_OF_PROCESSOR} brpc-static
-        INSTALL_COMMAND mkdir -p ${BRPC_INSTALL_DIR}/lib/ COMMAND cp ${BRPC_SOURCES_DIR}/src/extern_brpc/output/lib/libbrpc.a ${BRPC_LIBRARIES} COMMAND cp -r ${BRPC_SOURCES_DIR}/src/extern_brpc/output/include ${BRPC_INCLUDE_DIR}/
+        INSTALL_COMMAND mkdir -p ${BRPC_INSTALL_DIR}/lib/ COMMAND cp ${BRPC_BINARY_DIR}/output/lib/libbrpc.a ${BRPC_LIBRARIES} COMMAND cp -r ${BRPC_BINARY_DIR}/output/include ${BRPC_INCLUDE_DIR}/
 )
 # ADD_DEPENDENCIES(extern_brpc ssl crypto zlib protobuf leveldb gflags glog)
 ADD_DEPENDENCIES(extern_brpc zlib protobuf leveldb gflags glog)

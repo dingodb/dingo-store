@@ -14,7 +14,8 @@
 
 INCLUDE(ExternalProject)
 
-SET(ZLIB_SOURCES_DIR ${THIRD_PARTY_PATH}/zlib)
+SET(ZLIB_SOURCES_DIR ${CMAKE_SOURCE_DIR}/contrib/zlib)
+SET(ZLIB_BINARY_DIR ${THIRD_PARTY_PATH}/build/zlib)
 SET(ZLIB_INSTALL_DIR ${THIRD_PARTY_PATH}/install/zlib)
 SET(ZLIB_ROOT ${ZLIB_INSTALL_DIR} CACHE FILEPATH "zlib root directory." FORCE)
 SET(ZLIB_INCLUDE_DIR "${ZLIB_INSTALL_DIR}/include" CACHE PATH "zlib include directory." FORCE)
@@ -24,8 +25,10 @@ ExternalProject_Add(
         ${EXTERNAL_PROJECT_LOG_ARGS}
         # GIT_REPOSITORY  "https://github.com/madler/zlib.git"
         # GIT_TAG         "v1.2.13"
-        URL "https://github.com/madler/zlib/archive/v1.2.13.tar.gz"
-        PREFIX          ${ZLIB_SOURCES_DIR}
+        # URL "https://github.com/madler/zlib/archive/v1.2.13.tar.gz"
+        SOURCE_DIR ${ZLIB_SOURCES_DIR}
+        BINARY_DIR ${ZLIB_BINARY_DIR}
+        PREFIX ${ZLIB_INSTALL_DIR}
         UPDATE_COMMAND  ""
         CMAKE_ARGS      -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
         -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
