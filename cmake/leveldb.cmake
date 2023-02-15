@@ -14,7 +14,8 @@
 
 INCLUDE(ExternalProject)
 
-SET(LEVELDB_SOURCES_DIR ${THIRD_PARTY_PATH}/leveldb)
+SET(LEVELDB_SOURCES_DIR ${CMAKE_SOURCE_DIR}/contrib/leveldb)
+SET(LEVELDB_BINARY_DIR ${THIRD_PARTY_PATH}/build/leveldb)
 SET(LEVELDB_INSTALL_DIR ${THIRD_PARTY_PATH}/install/leveldb)
 SET(LEVELDB_INCLUDE_DIR "${LEVELDB_INSTALL_DIR}/include" CACHE PATH "leveldb include directory." FORCE)
 SET(LEVELDB_LIBRARIES "${LEVELDB_INSTALL_DIR}/lib/libleveldb.a" CACHE FILEPATH "leveldb library." FORCE)
@@ -26,7 +27,10 @@ ExternalProject_Add(
         PREFIX ${leveldb_SOURCES_DIR}
         # GIT_REPOSITORY "https://github.com/google/leveldb"
         # GIT_TAG "1.23"
-        URL "https://github.com/google/leveldb/archive/1.23.tar.gz"
+        # URL "https://github.com/google/leveldb/archive/1.23.tar.gz"
+        SOURCE_DIR ${LEVELDB_SOURCES_DIR}
+        BINARY_DIR ${LEVELDB_BINARY_DIR}
+        PREFIX ${LEVELDB_INSTALL_DIR}
         UPDATE_COMMAND ""
         CMAKE_ARGS -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
         -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}

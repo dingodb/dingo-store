@@ -1,0 +1,33 @@
+[submodule "contrib/braft"]
+	path = contrib/braft
+	url = https://github.com/brpc/braft
+[submodule "contrib/brpc"]
+	path = contrib/brpc
+	url = https://github.com/apache/brpc
+[submodule "contrib/gflags"]
+	path = contrib/gflags
+	url = https://github.com/gflags/gflags
+[submodule "contrib/glog"]
+	path = contrib/glog
+	url = https://github.com/google/glog
+[submodule "contrib/gtest"]
+	path = contrib/gtest
+	url = https://github.com/google/googletest
+[submodule "contrib/leveldb"]
+	path = contrib/leveldb
+	url = https://github.com/google/leveldb
+[submodule "contrib/protobuf"]
+	path = contrib/protobuf
+	url = https://github.com/protocolbuffers/protobuf
+[submodule "contrib/rocksdb"]
+	path = contrib/rocksdb
+	url = https://github.com/facebook/rocksdb
+[submodule "contrib/snappy"]
+	path = contrib/snappy
+	url = https://github.com/google/snappy
+[submodule "contrib/yaml-cpp"]
+	path = contrib/yaml-cpp
+	url = https://github.com/jbeder/yaml-cpp
+[submodule "contrib/zlib"]
+	path = contrib/zlib
+	url = https://github.com/madler/zlib
