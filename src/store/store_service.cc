@@ -19,24 +19,24 @@ namespace dingodb {
 
 
 void StoreServiceImpl::AddRegion(google::protobuf::RpcController* controller,
-                                 const pb::store::AddRegionRequest* request,
-                                 pb::store::AddRegionResponse* response,
+                                 const dingodb::store::AddRegionRequest* request,
+                                 dingodb::store::AddRegionResponse* response,
                                  google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
 }
 
 void StoreServiceImpl::DestroyRegion(google::protobuf::RpcController* controller,
-                                     const pb::store::DestroyRegionRequest* request,
-                                     pb::store::DestroyRegionResponse* response,
+                                     const dingodb::store::DestroyRegionRequest* request,
+                                     dingodb::store::DestroyRegionResponse* response,
                                      google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
 }
 
 void StoreServiceImpl::KvGet(google::protobuf::RpcController* controller,
-                             const pb::store::KvGetRequest* request,
-                             pb::store::KvGetResponse* response,
+                             const dingodb::store::KvGetRequest* request,
+                             dingodb::store::KvGetResponse* response,
                              google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
@@ -47,8 +47,8 @@ void StoreServiceImpl::KvGet(google::protobuf::RpcController* controller,
 }
 
 void StoreServiceImpl::KvPut(google::protobuf::RpcController* controller,
-                             const pb::store::KvPutRequest* request,
-                             pb::store::KvPutResponse* response,
+                             const dingodb::store::KvPutRequest* request,
+                             dingodb::store::KvPutResponse* response,
                              google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
