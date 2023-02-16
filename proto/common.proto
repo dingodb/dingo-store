@@ -14,114 +14,111 @@
 
 syntax="proto3";
 
-package dingodb.common;
+package dingodb.pb.common;
 
 option java_package = "io.dingodb.common";
 option cc_generic_services = true;
 
 message Location {
-    string ip      = 1;
-    int32  port    = 2;
+  string ip      = 1;
+  int32  port    = 2;
 }
 
 message Range {
-    bytes start_key               = 1;
-    bytes end_key                 = 2;
+  bytes start_key               = 1;
+  bytes end_key                 = 2;
 }
 
-/**
- * Define types about SQL.
-*/
+message KeyValue {
+  bytes key                     = 1;
+  bytes value                   = 2;
+}
+
+
+// Define types about SQL.
 enum SqlType {
-   S_BOOLEAN              = 0;
-   S_INTEGER              = 1;
-   S_BIGINT               = 2;
-   S_DOUBLE               = 3;
-   S_FLOAT                = 4;
-   S_DATE                 = 5;
-   S_TIME                 = 6;
-   S_TIMESTAMP            = 7;
-   S_VARCHAR              = 8;
-   S_ARRAY                = 9;
-   S_MULTISET             = 10;
-   S_ANY                  = 11;
+  S_BOOLEAN              = 0;
+  S_INTEGER              = 1;
+  S_BIGINT               = 2;
+  S_DOUBLE               = 3;
+  S_FLOAT                = 4;
+  S_DATE                 = 5;
+  S_TIME                 = 6;
+  S_TIMESTAMP            = 7;
+  S_VARCHAR              = 8;
+  S_ARRAY                = 9;
+  S_MULTISET             = 10;
+  S_ANY                  = 11;
 }
 
-/**
-* Define types about Storage/Serialization about SqlType.
-*/
+
+// Define types about Storage/Serialization about SqlType.
 enum StoreType {
-    ST_DOUBLE              = 0;
-    ST_FLOAT               = 1;
-    ST_INT32               = 2;
-    ST_INT64               = 3;
-    ST_UINT32              = 4;
-    ST_UINT64              = 5;
-    ST_BOOLEAN             = 6;
-    ST_STRING              = 7;
-    ST_BYTES               = 8;
-    ST_FIX32               = 9;
-    ST_FIX64               = 10;
-    ST_SFIX32              = 11;
-    ST_SFIX64              = 12;
+  ST_DOUBLE              = 0;
+  ST_FLOAT               = 1;
+  ST_INT32               = 2;
+  ST_INT64               = 3;
+  ST_UINT32              = 4;
+  ST_UINT64              = 5;
+  ST_BOOLEAN             = 6;
+  ST_STRING              = 7;
+  ST_BYTES               = 8;
+  ST_FIX32               = 9;
+  ST_FIX64               = 10;
+  ST_SFIX32              = 11;
+  ST_SFIX64              = 12;
 }
 
-/**
-* Column Definition.
-*/
+// Column Definition.
 message ColumnDefinition {
-    string                    name                = 1;
-    SqlType                   sqlType             = 2;
-    StoreType                 storeType           = 3;
-    int32                     precision           = 4;
-    int32                     scale               = 5;
-    bool                      nullable            = 6;
-    int32                     indexOfKey          = 7;
-    string                    defaultValue        = 8;
+  string                    name                = 1;
+  SqlType                   sqlType             = 2;
+  StoreType                 storeType           = 3;
+  int32                     precision           = 4;
+  int32                     scale               = 5;
+  bool                      nullable            = 6;
+  int32                     indexOfKey          = 7;
+  string                    defaultValue        = 8;
 }
 
-/**
-* Information about Index.
-*/
+
+// Information about Index.
 message Index {
-   repeated string indexColumns             = 1;
-   bool            isUnique                 = 2;
+  repeated string indexColumns             = 1;
+  bool            isUnique                 = 2;
 }
 
 enum Engine {
-    ROCKSDB                       = 0;
-    INFORMATION_SCHEMA            = 1;
-    XDP_ROCKS                     = 2;
-    CLICKHOUSE                    = 3;
+  ROCKSDB                       = 0;
+  INFORMATION_SCHEMA            = 1;
+  XDP_ROCKS                     = 2;
+  CLICKHOUSE                    = 3;
 };
 
 
-/**
- * compute partition by columns and operand function.
-*/
+
+// compute partition by columns and operand function.
 message TablePartInfo {
-   repeated string partColumns     = 1;
-   repeated string partOperand     = 2;
+  repeated string partColumns     = 1;
+  repeated string partOperand     = 2;
 }
 
 message TableDefinition {
-    string                                 name                   = 1;
-    ColumnDefinition                       columns                = 2;
-    map<string, Index>                     indexes                = 3;
-    uint32                                 version                = 4;
-    uint64                                 ttl                    = 5;
-    TablePartInfo                          tablePartitionInfo     = 6;
-    Engine                                 engine                 = 7;
-    map<string, string>                    properties             = 8;
+  string                                 name                   = 1;
+  ColumnDefinition                       columns                = 2;
+  map<string, Index>                     indexes                = 3;
+  uint32                                 version                = 4;
+  uint64                                 ttl                    = 5;
+  TablePartInfo                          tablePartitionInfo     = 6;
+  Engine                                 engine                 = 7;
+  map<string, string>                    properties             = 8;
 }
 
-/**
- * toDo(will not be needed ?)
- * Define CommonId to identify a region.
- */
+// toDo(will not be needed ?)
+// Define CommonId to identify a region.
 message CommonId {
-     uint32 schema       =  1;
-     uint32 table        =  2;
-     uint32 dataPart     =  3;
-     uint32 region       =  4;
+  uint32 schema       =  1;
+  uint32 table        =  2;
+  uint32 dataPart     =  3;
+  uint32 region       =  4;
 }

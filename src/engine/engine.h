@@ -12,36 +12,41 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DINGODB_RAFT_NODE_H_
-#define DINGODB_RAFT_NODE_H_
+#ifndef DINGODB_ENGINE_ENGINE_H_
+#define DINGODB_ENGINE_ENGINE_H_
 
-#include <memory>
+#include "proto/store.pb.h"
 
-#include <braft/raft.h>
-#include <braft/util.h>
-
-#include "common/context.h"
-#include "raft/message.h"
+#include "common/slice.h"
 
 namespace dingodb {
 
-// Encapsulation braft node
-class RaftNode {
+class Engine {
  public:
-  RaftNode(uint64_t node_id, braft::PeerId & peer_id, braft::StateMachine *fsm);
-  ~RaftNode();
+  enum Type {
+    NONE = 0,
+    RAFT_KV_ENGINE,
+    ROCKS_ENGINE,
+    MEM_ENGINE
+  };
+  
+  virtual ~Engine(){}
 
-  int Init();
-  void Destroy();
+  virtual bool Init() = 0;
+  virtual std::string GetName() = 0;
+  virtual uint32_t GetID() = 0;
 
-  void Commit(std::shared_ptr<Context> ctx, Message &msg);
+  virtual int AddRegion(uint64_t region_id, const dingodb::pb::store::RegionInfo& region) = 0;
+  virtual int DestroyRegion(uint64_t region_id) = 0;
 
-private:
-  uint64_t node_id_;
-  std::unique_ptr<braft::Node> node_;
-  braft::StateMachine* fsm_;
+  virtual Slice KvGet(const Slice& key) = 0;
+  virtual int KvPut(const Slice& key, const Slice& value) = 0;
+
+ protected:
+  Engine(){}
 };
+
 
 } // namespace dingodb
 
-#endif // DINGODB_RAFT_NODE_H_
+#endif // DINGODB_ENGINE_ENGINE_H_

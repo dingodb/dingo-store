@@ -132,37 +132,34 @@ set(DEPEND_LIBS
     )
 
 # source file
+file(GLOB COMMON_SRCS ${PROJECT_SOURCE_DIR}/src/common/*.cc)
 file(GLOB CONFIG_SRCS ${PROJECT_SOURCE_DIR}/src/config/*.cc)
-file(GLOB STORE_SRCS ${PROJECT_SOURCE_DIR}/src/store/*.cc)
-file(GLOB COORDINATOR_SRCS ${PROJECT_SOURCE_DIR}/src/coordinator/*.cc)
+file(GLOB RAFT_SRCS ${PROJECT_SOURCE_DIR}/src/raft/*.cc)
+file(GLOB ENGINE_SRCS ${PROJECT_SOURCE_DIR}/src/engine/*.cc)
+file(GLOB REGION_SRCS ${PROJECT_SOURCE_DIR}/src/region/*.cc)
+file(GLOB SERVER_SRCS ${PROJECT_SOURCE_DIR}/src/server/*.cc)
 
 # bin output dir
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin)
 
-# set(STORE_SRCS src/store/main.cc src/store/store_service.cc)
-add_executable(dingo_coordinator ${COORDINATOR_SRCS} ${CONFIG_SRCS} ${PROTO_SRCS} ${PROTO_HEADER})
-add_executable(dingo_coordinator_client src/client/coordinator_client.cc ${PROTO_SRCS} ${PROTO_HEADER} src/client/coordinator_client.cc)
-add_executable(dingo_store ${STORE_SRCS} ${CONFIG_SRCS} ${PROTO_SRCS} ${PROTO_HEADER})
-add_executable(dingo_store_client src/client/store_client.cc ${PROTO_SRCS} ${PROTO_HEADER})
+add_executable(dingodb_server ${SERVER_SRCS} ${REGION_SRCS} ${ENGINE_SRCS} ${RAFT_SRCS} ${CONFIG_SRCS} ${COMMON_SRCS} ${PROTO_SRCS} ${PROTO_HEADER})
+add_executable(dingodb_client_store src/client/store_client.cc ${PROTO_SRCS} ${PROTO_HEADER})
+add_executable(dingodb_client_coordinator src/client/coordinator_client.cc ${PROTO_SRCS} ${PROTO_HEADER})
 
-add_dependencies(dingo_coordinator ${DEPEND_LIBS})
-add_dependencies(dingo_coordinator_client ${DEPEND_LIBS})
-add_dependencies(dingo_store ${DEPEND_LIBS})
-add_dependencies(dingo_store_client ${DEPEND_LIBS})
+add_dependencies(dingodb_server ${DEPEND_LIBS})
+add_dependencies(dingodb_client_store ${DEPEND_LIBS})
+add_dependencies(dingodb_client_coordinator ${DEPEND_LIBS})
 
-target_link_libraries(dingo_coordinator
+
+target_link_libraries(dingodb_server
                       "-Xlinker \"-(\""
                       ${DYNAMIC_LIB}
                       "-Xlinker \"-)\"")
-target_link_libraries(dingo_coordinator_client
+target_link_libraries(dingodb_client_store
                       "-Xlinker \"-(\""
                       ${DYNAMIC_LIB}
                       "-Xlinker \"-)\"")
-target_link_libraries(dingo_store
-                      "-Xlinker \"-(\""
-                      ${DYNAMIC_LIB}
-                      "-Xlinker \"-)\"")
-target_link_libraries(dingo_store_client
+target_link_libraries(dingodb_client_coordinator
                       "-Xlinker \"-(\""
                       ${DYNAMIC_LIB}
                       "-Xlinker \"-)\"")

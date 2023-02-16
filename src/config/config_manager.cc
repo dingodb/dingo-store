@@ -15,6 +15,7 @@
 
 #include "config/config_manager.h"
 
+#include <memory>
 
 #include "glog/logging.h"
 #include "butil/strings/stringprintf.h"
@@ -34,23 +35,29 @@ ConfigManager* ConfigManager::GetInstance() {
 }
 
 bool ConfigManager::IsExist(const std::string &name) {
+  std::shared_lock<std::shared_mutex> lock(mutex_);
   return configs_.find(name) != configs_.end();
 }
 
 void ConfigManager::Register(const std::string &name, std::shared_ptr<Config> config) {
-  if (!IsExist(name)) {
-    configs_[name] = config;
-  } else {
+  if (IsExist(name)) {
     LOG(WARNING) << butil::StringPrintf("config %s already exist!", name.c_str());
+    return;
   }
+
+  std::unique_lock<std::shared_mutex> lock(mutex_);
+  configs_[name] = config;
 }
 
 std::shared_ptr<Config> ConfigManager::GetConfig(const std::string &name) {
-  if (!IsExist(name)) {
-    throw butil::StringPrintf("config %s not exist!", name.c_str());
+  std::shared_lock<std::shared_mutex> lock(mutex_);
+  auto it = configs_.find(name);
+  if (it == configs_.end()) {
+    LOG(WARNING) << butil::StringPrintf("config %s not exist!", name.c_str());
+    return nullptr;
   }
 
-  return configs_[name];
+  return it->second;
 }
 
 } // namespace dingodb

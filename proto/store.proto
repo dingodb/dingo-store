@@ -16,72 +16,87 @@ syntax="proto3";
 
 import "common.proto";
 
-package dingodb.store;
+package dingodb.pb.store;
 
 option java_package = "io.dingodb.store";
 option cc_generic_services = true;
 
 enum RegionStatus {
-    NONE = 0;
-    IDLE = 1;
-    DOING = 2;
+  NONE = 0;
+  IDLE = 1;
+  DOING = 2;
 }
 
 message RegionInfo {
-    uint64 region_id                            = 1;
-    uint64 region_epoch                         = 2;
-    uint64 table_id                             = 3;
-    string table_name                           = 4;
-    uint64 partition_id                         = 5;
-    uint32 replica_num                          = 6;
-    dingodb.common.Range range                  = 7;
+  uint64 region_id                            = 1;
+  uint64 region_epoch                         = 2;
+  uint64 table_id                             = 3;
+  string table_name                           = 4;
+  uint64 partition_id                         = 5;
+  uint32 replica_num                          = 6;
+  dingodb.pb.common.Range range               = 7;
 
-    repeated string peers                       = 10;
-    string leader                               = 11;
+  repeated string peers                       = 10;
+  string leader                               = 11;
 
-    RegionStatus status                         = 20;
+  RegionStatus status                         = 20;
 
-    uint32 create_time                          = 30;
+  uint32 create_time                          = 30;
 };
 
 message AddRegionRequest {
-    RegionInfo region_info        = 1;
+  RegionInfo region_info        = 1;
 }
 
 message AddRegionResponse {
 }
 
 message DestroyRegionRequest {
-    uint64 region_id               = 1;
+  uint64 region_id               = 1;
 }
 
 message DestroyRegionResponse {
 }
 
 message KvGetRequest {
-    uint64 region_id                = 1;
-    bytes key                       = 2;
+  uint64 region_id                = 1;
+  bytes key                       = 2;
 }
 
 message KvGetResponse {
-    bytes value                     = 2;
+  bytes value                     = 2;
 }
 
 message KvPutRequest {
-    uint64 region_id                = 1;
-    bytes key                       = 2;
-    bytes values                    = 3;
+  uint64 region_id                = 1;
+  bytes key                       = 2;
+  bytes value                     = 3;
 }
 
 message KvPutResponse {
 }
 
-service StoreService {
-    // region
-    rpc AddRegion(AddRegionRequest) returns(AddRegionResponse);
-    rpc DestroyRegion(DestroyRegionRequest) returns(DestroyRegionResponse);
+message KvPutIfAbsentRequest {
+  uint64 region_id                                       = 1;
+  repeated dingodb.pb.common.KeyValue kvs                = 2;
+}
 
-    // kv
-    rpc KvGet(KvGetRequest) returns(KvGetResponse);
-    rpc KvPut(KvPutRequest) returns(KvPutResponse);
+message PutResult {
+  bytes key                       = 1;
+  bool is_successed               = 2;
+}
+
+message KvPutIfAbsentResponse {
+  repeated PutResult results      = 1;
+}
+
+service StoreService {
+  // region
+  rpc AddRegion(AddRegionRequest) returns(AddRegionResponse);
+  rpc DestroyRegion(DestroyRegionRequest) returns(DestroyRegionResponse);
+
+  // kv
+  rpc KvGet(KvGetRequest) returns(KvGetResponse);
+  rpc KvPut(KvPutRequest) returns(KvPutResponse);
+  rpc KvPutIfAbsent(KvPutIfAbsentRequest) returns(KvPutIfAbsentResponse);
 };

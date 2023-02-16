@@ -16,52 +16,52 @@ syntax="proto3";
 
 import "common.proto";
 
-package dingodb.meta;
+package dingodb.pb.meta;
 
 option java_package = "io.dingodb.meta";
 option cc_generic_services = true;
 
 message CreateTableReq {
-   string                        tableName                = 1;
-   dingodb.common.TableDefinition  tableDefinition          = 2;
+  string                        tableName                 = 1;
+  dingodb.pb.common.TableDefinition  tableDefinition      = 2;
 }
 
 message CreateTableRes {
-   int32       status         = 1;
-   string    errorMsg         = 2;
+  int32       status         = 1;
+  string    errorMsg         = 2;
 }
 
 
 message DropTableReq {
-   string tableName            = 1;
+  string tableName            = 1;
 }
 
 message DropTableRes {
-    int32  status     = 1;
-    string errorMsg   = 2;
+  int32  status     = 1;
+  string errorMsg   = 2;
 }
 
 message GetTableDefReq {
-    repeated string tableName = 1;
+  repeated string tableName = 1;
 }
 
 message GetTableDefRes {
-    map<string, dingodb.common.TableDefinition>  tableDefinitions = 1;
+  map<string, dingodb.pb.common.TableDefinition>  tableDefinitions = 1;
 }
 
 message GetTableRegionReq {
-    string tableName         = 1;
+  string tableName         = 1;
 }
 
 message GetTableRegionRes {
-    dingodb.common.Location          leader              = 1;
-    repeated dingodb.common.Location replicates          = 2;
-    dingodb.common.Range             keyRange            = 3;
+  dingodb.pb.common.Location          leader              = 1;
+  repeated dingodb.pb.common.Location replicates          = 2;
+  dingodb.pb.common.Range             keyRange            = 3;
 }
 
 service MetaService {
-    rpc createTable(CreateTableReq) returns (CreateTableRes); 
-    rpc dropTable(DropTableReq) returns (DropTableRes);
-    rpc getTableDefinition(GetTableDefReq) returns (GetTableDefRes);
-    rpc getTableRegions(GetTableRegionReq) returns (GetTableRegionRes);
+  rpc CreateTable(CreateTableReq) returns (CreateTableRes); 
+  rpc DropTable(DropTableReq) returns (DropTableRes);
+  rpc GetTableDefinition(GetTableDefReq) returns (GetTableDefRes);
+  rpc GetTableRegions(GetTableRegionReq) returns (GetTableRegionRes);
 }

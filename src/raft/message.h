@@ -13,36 +13,50 @@
 // limitations under the License.
 
 
-#ifndef DINGODB_RAFT_RAFT_NODE_MANAGER_H_
-#define DINGODB_RAFT_RAFT_NODE_MANAGER_H_
+#ifndef DINGODB_RAFT_MESSAGE_H_
+#define DINGODB_RAFT_MESSAGE_H_
 
-#include <map>
 #include <memory>
-#include <shared_mutex>
 
-#include "raft/raft_node.h"
-
+#include "butil/iobuf.h"
+#include "proto/store.pb.h"
 
 namespace dingodb {
 
-// raft node manager
-class RaftNodeManager {
- public:
-  RaftNodeManager();
-  ~RaftNodeManager();
 
-  bool IsExist(uint64_t node_id);
-  void AddNode(uint64_t node_id, std::shared_ptr<RaftNode> node);
-  std::shared_ptr<RaftNode> GetNode(uint64_t node_id);
+
+class Message {
+ public:
+  // Message type
+  enum Type {
+    NONE_MESSAGE = 0,
+
+    ADD_REGION_MESSAGE,
+    DESTROY_REGION_MESSAGE,
+
+    KV_GET_MESSAGE,
+    KV_PUT_MESSAGE,
+  };
+  Message(Type msg_type, google::protobuf::Message *msg)
+    : type_(msg_type),
+      msg_(msg) {}
+  Message(butil::IOBuf *buf): buf_(buf) {}
+  ~Message();
+
+  butil::IOBuf* SerializeToIOBuf();
+  void Deserialization();
+
 
  private:
-  std::shared_mutex mutex_;
-  std::map<uint64_t, std::shared_ptr<RaftNode> > nodes_;
+  Type type_;
+  std::unique_ptr<google::protobuf::Message> msg_;
+  std::unique_ptr<butil::IOBuf> buf_;
 };
 
 
-} // namespace dingodb 
+
+} // namespace dingodb
 
 
-#endif // DINGODB_RAFT_RAFT_NODE_MANAGER_H_
 
+#endif // DINGODB_RAFT_MESSAGE_H_

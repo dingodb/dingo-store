@@ -41,13 +41,13 @@ void* sender(void* arg) {
         bthread_usleep(FLAGS_timeout_ms * 1000L);
         continue;
       }
-      dingodb::store::StoreService_Stub stub(&channel);
+      dingodb::pb::store::StoreService_Stub stub(&channel);
 
       brpc::Controller cntl;
       cntl.set_timeout_ms(FLAGS_timeout_ms);
       // Randomly select which request we want send;
-      dingodb::store::KvGetRequest request;
-      dingodb::store::KvGetResponse response;
+      dingodb::pb::store::KvGetRequest request;
+      dingodb::pb::store::KvGetResponse response;
       // std::string key = butil::fast_rand_printable(10);
       std::string key = "Hello";
       const char* op = NULL;

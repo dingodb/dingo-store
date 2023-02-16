@@ -42,13 +42,13 @@ void* sender(void* arg) {
             bthread_usleep(FLAGS_timeout_ms * 1000L);
             continue;
         }
-        dingodb::coordinator::CoordinatorService_Stub stub(&channel);
+        dingodb::pb::coordinator::CoordinatorService_Stub stub(&channel);
 
         brpc::Controller cntl;
         cntl.set_timeout_ms(FLAGS_timeout_ms);
         // Randomly select which request we want send;
-        dingodb::coordinator::HelloRequest request;
-        dingodb::coordinator::HelloResponse response;
+        dingodb::pb::coordinator::HelloRequest request;
+        dingodb::pb::coordinator::HelloResponse response;
         // std::string key = butil::fast_rand_printable(10);
         uint64_t hello = 1;
         const char* op = NULL;

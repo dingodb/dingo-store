@@ -13,36 +13,19 @@
 // limitations under the License.
 
 
-#ifndef DINGODB_RAFT_RAFT_NODE_MANAGER_H_
-#define DINGODB_RAFT_RAFT_NODE_MANAGER_H_
+#ifndef DINGODB_COMMON_HELPER_H_
+#define DINGODB_COMMON_HELPER_H_
 
-#include <map>
-#include <memory>
-#include <shared_mutex>
-
-#include "raft/raft_node.h"
-
+#include <string>
 
 namespace dingodb {
 
-// raft node manager
-class RaftNodeManager {
+class Helper {
  public:
-  RaftNodeManager();
-  ~RaftNodeManager();
+  static bool IsIp(const std::string& s);
 
-  bool IsExist(uint64_t node_id);
-  void AddNode(uint64_t node_id, std::shared_ptr<RaftNode> node);
-  std::shared_ptr<RaftNode> GetNode(uint64_t node_id);
-
- private:
-  std::shared_mutex mutex_;
-  std::map<uint64_t, std::shared_ptr<RaftNode> > nodes_;
 };
 
+} // namespace dingodb
 
-} // namespace dingodb 
-
-
-#endif // DINGODB_RAFT_RAFT_NODE_MANAGER_H_
-
+#endif
