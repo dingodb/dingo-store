@@ -1,7 +1,5 @@
 
 
-# include_directories(${PROJECT_SOURCE_DIR}/src)
-
 # add_library(SOURCES_DEBUG_LIB OBJECT ${CONFIG_SRCS} )
 
 enable_testing()

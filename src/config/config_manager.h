@@ -16,7 +16,7 @@
 #define DINGODB_CONFIG_MANAGER_H
 
 #include <map>
-#include <functional>
+#include <shared_mutex>
 
 #include "glog/logging.h"
 // #include "butil/memory/singleton.h"
@@ -43,6 +43,7 @@ class ConfigManager {
   friend struct DefaultSingletonTraits<ConfigManager>;
   DISALLOW_COPY_AND_ASSIGN(ConfigManager);
 
+  std::shared_mutex mutex_;
   std::map<std::string, std::shared_ptr<Config> > configs_; 
 };
 

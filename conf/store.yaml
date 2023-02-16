@@ -1,0 +1,15 @@
+cluster:
+  name: dingo
+
+server:
+  host: node1
+  port: 19191
+
+raft:
+  host: node1
+  port: 19192
+store:
+  dbPath: /opt/dingo/data/executor/db
+
+log:
+  logPath: /opt/dingo/data/executor/log

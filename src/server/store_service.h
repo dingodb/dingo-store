@@ -15,35 +15,40 @@
 #ifndef DINGODB_STORE_SERVICE_H_
 #define DINGODB_STORE_SERVICE_H_
 
-#include <brpc/controller.h>
-#include <brpc/server.h>
+#include "brpc/controller.h"
+#include "brpc/server.h"
 
 #include "proto/store.pb.h"
+#include "engine/storage.h"
 
 namespace dingodb {
 
-class StoreServiceImpl: public dingodb::store::StoreService {
+class StoreServiceImpl: public dingodb::pb::store::StoreService {
  public:
-  StoreServiceImpl() {}
+  StoreServiceImpl(std::shared_ptr<Storage> storage);
+  
   void AddRegion(google::protobuf::RpcController* controller,
-                const dingodb::store::AddRegionRequest* request,
-                dingodb::store::AddRegionResponse* response,
+                const dingodb::pb::store::AddRegionRequest* request,
+                dingodb::pb::store::AddRegionResponse* response,
                 google::protobuf::Closure* done);
 
     void DestroyRegion(google::protobuf::RpcController* controller,
-                       const dingodb::store::DestroyRegionRequest* request,
-                       dingodb::store::DestroyRegionResponse* response,
+                       const dingodb::pb::store::DestroyRegionRequest* request,
+                       dingodb::pb::store::DestroyRegionResponse* response,
                        google::protobuf::Closure* done);
 
     void KvGet(google::protobuf::RpcController* controller,
-                const dingodb::store::KvGetRequest* request,
-                dingodb::store::KvGetResponse* response,
+                const dingodb::pb::store::KvGetRequest* request,
+                dingodb::pb::store::KvGetResponse* response,
                 google::protobuf::Closure* done);
 
     void KvPut(google::protobuf::RpcController* controller,
-                const dingodb::store::KvPutRequest* request,
-                dingodb::store::KvPutResponse* response,
+                const dingodb::pb::store::KvPutRequest* request,
+                dingodb::pb::store::KvPutResponse* response,
                 google::protobuf::Closure* done);
+
+ private:
+  std::shared_ptr<Storage> storage_;
 };
 
 } // namespace dingodb

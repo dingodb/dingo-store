@@ -12,37 +12,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#ifndef DINGODB_ENGINE_STORAGE_H_
+#define DINGODB_ENGINE_STORAGE_H_
 
-#ifndef DINGODB_RAFT_RAFT_NODE_MANAGER_H_
-#define DINGODB_RAFT_RAFT_NODE_MANAGER_H_
+#include "memory"
 
-#include <map>
-#include <memory>
-#include <shared_mutex>
-
-#include "raft/raft_node.h"
-
+#include "engine/engine.h"
 
 namespace dingodb {
 
-// raft node manager
-class RaftNodeManager {
+class Storage {
  public:
-  RaftNodeManager();
-  ~RaftNodeManager();
+  Storage(Engine* engine);
+  ~Storage();
 
-  bool IsExist(uint64_t node_id);
-  void AddNode(uint64_t node_id, std::shared_ptr<RaftNode> node);
-  std::shared_ptr<RaftNode> GetNode(uint64_t node_id);
+  int AddRegion(uint64_t region_id, const dingodb::pb::store::RegionInfo& region);
+  int DestroyRegion(uint64_t region_id);
+
+  Slice KvGet(const Slice& key);
+  int KvPut(const Slice& key, const Slice& value);
 
  private:
-  std::shared_mutex mutex_;
-  std::map<uint64_t, std::shared_ptr<RaftNode> > nodes_;
+  std::shared_ptr<Engine> engine_;
 };
 
+} // namespace dingodb
 
-} // namespace dingodb 
 
-
-#endif // DINGODB_RAFT_RAFT_NODE_MANAGER_H_
-
+#endif // DINGODB_ENGINE_STORAGE_H_

@@ -14,27 +14,27 @@
 
 syntax="proto3";
 
-package dingodb.coordinator;
+package dingodb.pb.coordinator;
 
 option java_package = "org.dingo.coordinator";
 option cc_generic_services = true;
 
 enum CoordinatorStatus {
-    OK = 0;
-    UNHEALTHY = 1;
-    FAILED = 2;
+  OK = 0;
+  UNHEALTHY = 1;
+  FAILED = 2;
 }
 
 message HelloRequest {
-    uint64 hello = 1;
+  uint64 hello = 1;
 }
 
 message HelloResponse {
-    CoordinatorStatus status = 1;
-    string status_detail = 2;
+  CoordinatorStatus status = 1;
+  string status_detail = 2;
 }
 
 service CoordinatorService {
-    // Hello
-    rpc Hello(HelloRequest) returns(HelloResponse);
+  // Hello
+  rpc Hello(HelloRequest) returns(HelloResponse);
 };

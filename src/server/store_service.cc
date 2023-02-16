@@ -12,46 +12,67 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "store/store_service.h"
+#include "server/store_service.h"
+
+#include "region/store_region_manager.h"
 
 
 namespace dingodb {
 
 
+StoreServiceImpl::StoreServiceImpl(std::shared_ptr<Storage> storage)
+  : storage_(storage) {
+}
+
 void StoreServiceImpl::AddRegion(google::protobuf::RpcController* controller,
-                                 const dingodb::store::AddRegionRequest* request,
-                                 dingodb::store::AddRegionResponse* response,
+                                 const dingodb::pb::store::AddRegionRequest* request,
+                                 dingodb::pb::store::AddRegionResponse* response,
                                  google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+  LOG(INFO) << "AddRegion request...";
+
+
+  // todo valiate region
+
+  // Add raft node
+  storage_->AddRegion(request->region_info().region_id(), request->region_info());
+  
+  // Add region to store region manager
+  StoreRegionManager::GetInstance()->AddRegion(request->region_info().region_id(),
+                                               request->region_info());
+
 }
 
 void StoreServiceImpl::DestroyRegion(google::protobuf::RpcController* controller,
-                                     const dingodb::store::DestroyRegionRequest* request,
-                                     dingodb::store::DestroyRegionResponse* response,
+                                     const dingodb::pb::store::DestroyRegionRequest* request,
+                                     dingodb::pb::store::DestroyRegionResponse* response,
                                      google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+  LOG(INFO) << "KvGet request...";
 }
 
 void StoreServiceImpl::KvGet(google::protobuf::RpcController* controller,
-                             const dingodb::store::KvGetRequest* request,
-                             dingodb::store::KvGetResponse* response,
+                             const dingodb::pb::store::KvGetRequest* request,
+                             dingodb::pb::store::KvGetResponse* response,
                              google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
   LOG(INFO) << "KvGet request: " << request->key();
+  // const google::protobuf::Message *msg = static_cast<const google::protobuf::Message*>(request);
 
-  // response->set_value("world");
-  cntl->SetFailed(5000, "key error");
+  response->set_value("KvGetResponse value");
+  // cntl->SetFailed(5000, "key error");
 }
 
 void StoreServiceImpl::KvPut(google::protobuf::RpcController* controller,
-                             const dingodb::store::KvPutRequest* request,
-                             dingodb::store::KvPutResponse* response,
+                             const dingodb::pb::store::KvPutRequest* request,
+                             dingodb::pb::store::KvPutResponse* response,
                              google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+  LOG(INFO) << "KvPut request: " << request->key();
 }
 
 } // namespace dingodb

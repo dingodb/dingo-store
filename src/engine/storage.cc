@@ -12,37 +12,34 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "engine/storage.h"
 
-#ifndef DINGODB_RAFT_RAFT_NODE_MANAGER_H_
-#define DINGODB_RAFT_RAFT_NODE_MANAGER_H_
-
-#include <map>
-#include <memory>
-#include <shared_mutex>
-
-#include "raft/raft_node.h"
-
+#include "proto/store.pb.h"
 
 namespace dingodb {
 
-// raft node manager
-class RaftNodeManager {
- public:
-  RaftNodeManager();
-  ~RaftNodeManager();
+Storage::Storage(Engine* engine)
+  : engine_(engine) {
 
-  bool IsExist(uint64_t node_id);
-  void AddNode(uint64_t node_id, std::shared_ptr<RaftNode> node);
-  std::shared_ptr<RaftNode> GetNode(uint64_t node_id);
+}
 
- private:
-  std::shared_mutex mutex_;
-  std::map<uint64_t, std::shared_ptr<RaftNode> > nodes_;
-};
+Storage::~Storage() {
+}
 
+int Storage::AddRegion(uint64_t region_id, const dingodb::pb::store::RegionInfo& region) {
+  return engine_->AddRegion(region_id, region);
+}
 
-} // namespace dingodb 
+int Storage::DestroyRegion(uint64_t region_id) {
 
+}
 
-#endif // DINGODB_RAFT_RAFT_NODE_MANAGER_H_
+Slice Storage::KvGet(const Slice& key) {
+  return engine_->KvGet(key);
+}
 
+int Storage::KvPut(const Slice& key, const Slice& value) {
+  return engine_->KvPut(key, value);
+}
+
+} // namespace dingodb
