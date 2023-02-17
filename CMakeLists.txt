@@ -5,6 +5,7 @@ option(EXAMPLE_LINK_SO "Whether examples are linked dynamically" OFF)
 option(LINK_TCMALLOC "Link tcmalloc if possible" OFF)
 option(BUILD_UNIT_TESTS "Build unit test" ON)
 
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_EXPORT_COMPILE_COMMANDS 1)
 
 # Avoid warning about DOWNLOAD_EXTRACT_TIMESTAMP in CMake 3.24:
@@ -38,6 +39,7 @@ endif()
 
 #include(FindThreads)
 find_package(OpenSSL REQUIRED)
+find_package(Threads REQUIRED)
 # if (OPENSSL_FOUND)
 #   # Add the include directories for compiling
 #   target_include_directories(${TARGET_SERVER} PUBLIC ${OPENSSL_INCLUDE_DIR})
@@ -63,8 +65,6 @@ include(yaml-cpp)
 include_directories(
         ${OPENSSL_INCLUDE_DIR}
         )
-
-SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread -std=c++17")
 
 # LIST ALL THE PROTO FILES AND COMPILE IT TO .H AND .CPP
 file(GLOB PROTO_FILES ${CMAKE_SOURCE_DIR}/proto/*.proto)
@@ -104,7 +104,6 @@ message(STATUS "===GTEST_LIBRARIES: ${GTEST_LIBRARIES}")
 set(DYNAMIC_LIB
     ${GFLAGS_LIBRARIES}
     ${PROTOBUF_LIBRARY}
-    # ${GPERFTOOLS_LIBRARIES}
     ${LEVELDB_LIBRARIES}
     ${BRAFT_LIBRARIES}
     ${BRPC_LIBRARIES}
@@ -117,6 +116,7 @@ set(DYNAMIC_LIB
     glog
     dl
     z
+    Threads::Threads
     )
 
 set(DEPEND_LIBS
