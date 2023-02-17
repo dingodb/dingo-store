@@ -14,7 +14,7 @@
 
 #include "engine/storage.h"
 
-#include "proto/store.pb.h"
+#include "proto/common.pb.h"
 
 namespace dingodb {
 
@@ -26,7 +26,7 @@ Storage::Storage(Engine* engine)
 Storage::~Storage() {
 }
 
-int Storage::AddRegion(uint64_t region_id, const dingodb::pb::store::RegionInfo& region) {
+int Storage::AddRegion(uint64_t region_id, const dingodb::pb::common::RegionInfo& region) {
   return engine_->AddRegion(region_id, region);
 }
 

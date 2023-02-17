@@ -64,7 +64,7 @@ braft::PeerId HostPortToPeerId(const std::string host, int port) {
   return braft::PeerId(butil::EndPoint(ip, port));
 }
 
-int RaftKvEngine::AddRegion(uint64_t region_id, const dingodb::pb::store::RegionInfo& region) {
+int RaftKvEngine::AddRegion(uint64_t region_id, const dingodb::pb::common::RegionInfo& region) {
   auto config = ConfigManager::GetInstance()->GetConfig("store");
   braft::PeerId peerId = HostPortToPeerId(config->GetString("raft.host"),
                                           config->GetInt("raft.port"));

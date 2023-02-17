@@ -34,7 +34,7 @@ class RaftKvEngine: public Engine {
   std::string GetName();
   uint32_t GetID();
 
-  int AddRegion(uint64_t region_id, const dingodb::pb::store::RegionInfo& region);
+  int AddRegion(uint64_t region_id, const dingodb::pb::common::RegionInfo& region);
   int DestroyRegion(uint64_t region_id);
 
   Slice KvGet(const Slice& key);
