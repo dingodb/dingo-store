@@ -33,17 +33,17 @@ bool StoreRegionManager::IsExist(uint64_t region_id) {
   return regions_.find(region_id) != regions_.end();
 }
 
-void StoreRegionManager::AddRegion(uint64_t region_id, const dingodb::pb::store::RegionInfo& region) {
+void StoreRegionManager::AddRegion(uint64_t region_id, const dingodb::pb::common::RegionInfo& region) {
   if (IsExist(region_id)) {
     LOG(WARNING) << butil::StringPrintf("region %lu already exist!", region_id);
     return;
   }
 
   std::unique_lock<std::shared_mutex> lock(mutex_);
-  regions_.insert(std::make_pair(region_id, std::make_shared<dingodb::pb::store::RegionInfo>(region)));
+  regions_.insert(std::make_pair(region_id, std::make_shared<dingodb::pb::common::RegionInfo>(region)));
 }
 
-std::shared_ptr<dingodb::pb::store::RegionInfo> StoreRegionManager::GetRegion(uint64_t region_id) {
+std::shared_ptr<dingodb::pb::common::RegionInfo> StoreRegionManager::GetRegion(uint64_t region_id) {
   std::shared_lock<std::shared_mutex> lock(mutex_);
   auto it = regions_.find(region_id);
   if (it == regions_.end()) {
@@ -54,10 +54,10 @@ std::shared_ptr<dingodb::pb::store::RegionInfo> StoreRegionManager::GetRegion(ui
   return it->second;
 }
 
-std::vector<std::shared_ptr<dingodb::pb::store::RegionInfo> > StoreRegionManager::GetAllRegion() {
+std::vector<std::shared_ptr<dingodb::pb::common::RegionInfo> > StoreRegionManager::GetAllRegion() {
   std::shared_lock<std::shared_mutex> lock(mutex_);
 
-  std::vector<std::shared_ptr<dingodb::pb::store::RegionInfo> > result;
+  std::vector<std::shared_ptr<dingodb::pb::common::RegionInfo> > result;
   for (auto it = regions_.begin(); it != regions_.end(); ++it) {
     result.push_back(it->second);
   }

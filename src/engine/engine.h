@@ -15,7 +15,7 @@
 #ifndef DINGODB_ENGINE_ENGINE_H_
 #define DINGODB_ENGINE_ENGINE_H_
 
-#include "proto/store.pb.h"
+#include "proto/common.pb.h"
 
 #include "common/slice.h"
 
@@ -36,7 +36,7 @@ class Engine {
   virtual std::string GetName() = 0;
   virtual uint32_t GetID() = 0;
 
-  virtual int AddRegion(uint64_t region_id, const dingodb::pb::store::RegionInfo& region) = 0;
+  virtual int AddRegion(uint64_t region_id, const dingodb::pb::common::RegionInfo& region) = 0;
   virtual int DestroyRegion(uint64_t region_id) = 0;
 
   virtual Slice KvGet(const Slice& key) = 0;

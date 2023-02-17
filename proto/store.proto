@@ -21,31 +21,9 @@ package dingodb.pb.store;
 option java_package = "io.dingodb.store";
 option cc_generic_services = true;
 
-enum RegionStatus {
-  NONE = 0;
-  IDLE = 1;
-  DOING = 2;
-}
-
-message RegionInfo {
-  uint64 region_id                            = 1;
-  uint64 region_epoch                         = 2;
-  uint64 table_id                             = 3;
-  string table_name                           = 4;
-  uint64 partition_id                         = 5;
-  uint32 replica_num                          = 6;
-  dingodb.pb.common.Range range               = 7;
-
-  repeated string peers                       = 10;
-  string leader                               = 11;
-
-  RegionStatus status                         = 20;
-
-  uint32 create_time                          = 30;
-};
 
 message AddRegionRequest {
-  RegionInfo region_info        = 1;
+    dingodb.pb.common.RegionInfo region_info        = 1;
 }
 
 message AddRegionResponse {

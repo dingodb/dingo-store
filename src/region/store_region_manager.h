@@ -21,8 +21,7 @@
 #include <shared_mutex>
 
 #include "butil/macros.h"
-
-#include "proto/store.pb.h"
+#include "proto/common.pb.h"
 
 template <typename T> struct DefaultSingletonTraits;
 
@@ -33,9 +32,9 @@ class StoreRegionManager {
  static StoreRegionManager* GetInstance();
 
   bool IsExist(uint64_t region_id);
-  void AddRegion(uint64_t region_id, const dingodb::pb::store::RegionInfo& region);
-  std::shared_ptr<dingodb::pb::store::RegionInfo> GetRegion(uint64_t region_id);
-  std::vector<std::shared_ptr<dingodb::pb::store::RegionInfo> > GetAllRegion();
+  void AddRegion(uint64_t region_id, const dingodb::pb::common::RegionInfo& region);
+  std::shared_ptr<dingodb::pb::common::RegionInfo> GetRegion(uint64_t region_id);
+  std::vector<std::shared_ptr<dingodb::pb::common::RegionInfo> > GetAllRegion();
 
  private:
   StoreRegionManager();
@@ -44,7 +43,7 @@ class StoreRegionManager {
   DISALLOW_COPY_AND_ASSIGN(StoreRegionManager);
 
   std::shared_mutex mutex_;
-  std::map<uint64_t, std::shared_ptr<dingodb::pb::store::RegionInfo> > regions_;
+  std::map<uint64_t, std::shared_ptr<dingodb::pb::common::RegionInfo> > regions_;
 };
 
 } // namespace dingodb
