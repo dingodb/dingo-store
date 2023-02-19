@@ -14,11 +14,16 @@
 
 INCLUDE(ExternalProject)
 
-SET(ZLIB_SOURCES_DIR ${CMAKE_SOURCE_DIR}/contrib/zlib)
+SET(ZLIB_SOURCES_DIR ${THIRD_PARTY_PATH}/zlib)
 SET(ZLIB_BINARY_DIR ${THIRD_PARTY_PATH}/build/zlib)
 SET(ZLIB_INSTALL_DIR ${THIRD_PARTY_PATH}/install/zlib)
 SET(ZLIB_ROOT ${ZLIB_INSTALL_DIR} CACHE FILEPATH "zlib root directory." FORCE)
 SET(ZLIB_INCLUDE_DIR "${ZLIB_INSTALL_DIR}/include" CACHE PATH "zlib include directory." FORCE)
+
+FILE(WRITE ${ZLIB_SOURCES_DIR}/src/copy_repo.sh
+        "mkdir -p ${ZLIB_SOURCES_DIR}/src/extern_zlib/ && cp -rf ${CMAKE_SOURCE_DIR}/contrib/zlib/* ${ZLIB_SOURCES_DIR}/src/extern_zlib/")
+
+execute_process(COMMAND sh ${ZLIB_SOURCES_DIR}/src/copy_repo.sh)
 
 ExternalProject_Add(
         extern_zlib
@@ -26,7 +31,7 @@ ExternalProject_Add(
         # GIT_REPOSITORY  "https://github.com/madler/zlib.git"
         # GIT_TAG         "v1.2.13"
         # URL "https://github.com/madler/zlib/archive/v1.2.13.tar.gz"
-        SOURCE_DIR ${ZLIB_SOURCES_DIR}
+        SOURCE_DIR ${ZLIB_SOURCES_DIR}/src/extern_zlib/
         BINARY_DIR ${ZLIB_BINARY_DIR}
         PREFIX ${ZLIB_INSTALL_DIR}
         UPDATE_COMMAND  ""
