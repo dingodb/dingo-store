@@ -4,6 +4,7 @@ project(dingo C CXX)
 option(EXAMPLE_LINK_SO "Whether examples are linked dynamically" OFF)
 option(LINK_TCMALLOC "Link tcmalloc if possible" OFF)
 option(BUILD_UNIT_TESTS "Build unit test" ON)
+option(DINGO_BUILD_STATIC "Link libraries statically to generate the DingoDB binary" OFF)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_EXPORT_COMPILE_COMMANDS 1)
@@ -121,6 +122,10 @@ add_dependencies(dingodb_server ${DEPEND_LIBS})
 add_dependencies(dingodb_client_store ${DEPEND_LIBS})
 add_dependencies(dingodb_client_coordinator ${DEPEND_LIBS})
 
+if(DINGO_BUILD_STATIC)
+    message(STATUS "Build DingoDB with static libraries linking")
+    set(CMAKE_EXE_LINKER_FLAGS "-static-libgcc -static-libstdc++")
+endif()
 
 target_link_libraries(dingodb_server
                       "-Xlinker \"-(\""
