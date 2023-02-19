@@ -19,37 +19,9 @@ set(THIRD_PARTY_PATH ${CMAKE_CURRENT_BINARY_DIR}/third-party)
 set(CMAKE_VERBOSE_MAKEFILE ON)
 set(CMAKE_PREFIX_PATH ${OUTPUT_PATH})
 
-# On macOS, search Homebrew for keg-only versions of OpenSSL
-# equivalent of # -DOPENSSL_ROOT_DIR=/usr/local/opt/openssl/ -DOPENSSL_CRYPTO_LIBRARY=/usr/local/opt/openssl/lib/
-if (CMAKE_HOST_SYSTEM_NAME MATCHES "Darwin")
-    execute_process(
-        COMMAND brew --prefix OpenSSL
-        RESULT_VARIABLE BREW_OPENSSL
-        OUTPUT_VARIABLE BREW_OPENSSL_PREFIX
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-    )
-    if (BREW_OPENSSL EQUAL 0 AND EXISTS "${BREW_OPENSSL_PREFIX}")
-        message(STATUS "Found OpenSSL keg installed by Homebrew at ${BREW_OPENSSL_PREFIX}")
-        set(OPENSSL_ROOT_DIR "${BREW_OPENSSL_PREFIX}/")
-        set(OPENSSL_INCLUDE_DIR "${BREW_OPENSSL_PREFIX}/include")
-        set(OPENSSL_LIBRARIES "${BREW_OPENSSL_PREFIX}/lib")
-        set(OPENSSL_CRYPTO_LIBRARY "${BREW_OPENSSL_PREFIX}/lib/libcrypto.dylib")
-    endif()
-endif()
-
-#include(FindThreads)
-find_package(OpenSSL REQUIRED)
 find_package(Threads REQUIRED)
-# if (OPENSSL_FOUND)
-#   # Add the include directories for compiling
-#   target_include_directories(${TARGET_SERVER} PUBLIC ${OPENSSL_INCLUDE_DIR})
-#   # Add the static lib for linking
-#   target_link_libraries(${TARGET_SERVER} OpenSSL::SSL OpenSSL::Crypto)
-#   message(STATUS "Found OpenSSL ${OPENSSL_VERSION}")
-# else()
-#   message(STATUS "OpenSSL Not Found")
-# endif()
 
+include(openssl)
 include(zlib)
 include(gflags)
 include(glog)
@@ -61,10 +33,6 @@ include(rocksdb)
 include(brpc)
 include(braft)
 include(yaml-cpp)
-
-include_directories(
-        ${OPENSSL_INCLUDE_DIR}
-        )
 
 # LIST ALL THE PROTO FILES AND COMPILE IT TO .H AND .CPP
 file(GLOB PROTO_FILES ${CMAKE_SOURCE_DIR}/proto/*.proto)
@@ -97,6 +65,7 @@ include_directories(${GTEST_INCLUDE_DIR})
 include_directories(${GFLAGS_INCLUDE_DIR})
 include_directories(${ROCKSDB_INCLUDE_DIR})
 include_directories(${YAMLCPP_INCLUDE_DIR})
+include_directories(${OPENSSL_INCLUDE_DIR})
 include_directories(${PROJECT_SOURCE_DIR}/src)
 
 message(STATUS "===GTEST_LIBRARIES: ${GTEST_LIBRARIES}")
@@ -110,16 +79,18 @@ set(DYNAMIC_LIB
     ${ROCKSDB_LIBRARIES}
     ${SNAPPY_LIBRARIES}
     ${YAMLCPP_LIBRARIES}
-    rt
-    ssl
-    crypto
-    glog
+    ${ZLIB_LIBRARIES}
+    ${OPENSSL_LIBRARIES}
+    ${CRYPTO_LIBRARIES}
+    ${GLOG_LIBRARIES}
+    # rt
     dl
-    z
     Threads::Threads
     )
 
 set(DEPEND_LIBS
+    openssl
+    zlib
     gflags
     protobuf
     leveldb
