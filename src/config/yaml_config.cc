@@ -15,6 +15,9 @@
 
 #include "config/yaml_config.h"
 
+#include "glog/logging.h"
+#include "butil/strings/string_util.h"
+
 namespace dingodb {
 
 
@@ -41,27 +44,65 @@ int YamlConfig::ReloadFile(const std::string& filename) {
 }
 
 int YamlConfig::GetInt(const std::string& key) {
-  return GetScalar<int>(key);
+  try {
+    return GetScalar<int>(key);
+  } catch (std::exception& e) {
+    LOG(ERROR) << "Config GetInt failed: " << key << " exception: " << e.what();
+  }
+  return -1;
 }
 
 std::string YamlConfig::GetString(const std::string& key) {
-  return GetScalar<std::string>(key);
+  try {
+    const std::string s = GetScalar<std::string>(key);
+    std::string result;
+    butil::TrimWhitespaceASCII(s, butil::TrimPositions::TRIM_ALL, &result);
+    return result;
+  } catch (std::exception& e) {
+    LOG(ERROR) << "Config GetString failed: " << key << " exception: " << e.what();
+  }
+
+  return "";
 }
 
 std::vector<int> YamlConfig::GetIntList(const std::string& key) {
-  return GetList<int>(key);
+  try {
+    return GetList<int>(key);
+  } catch (std::exception& e) {
+    LOG(ERROR) << "Config GetIntList failed: " << key << " exception: " << e.what();
+  }
+
+  return std::vector<int>{};
 }
 
 std::vector<std::string> YamlConfig::GetStringList(const std::string& key) {
-  return GetList<std::string>(key);
+  try {
+    return GetList<std::string>(key);
+  } catch (std::exception& e) {
+    LOG(ERROR) << "Config GetStringList failed: " << key << " exception: " << e.what();
+  }
+
+  return std::vector<std::string>{};
 }
 
 std::map<std::string, int> YamlConfig::GetIntMap(const std::string& key) {
-  return GetMap<int>(key);
+  try {
+    return GetMap<int>(key);
+  } catch (std::exception& e) {
+    LOG(ERROR) << "Config GetIntMap failed: " << key << " exception: " << e.what();
+  }
+
+  return std::map<std::string, int> {};
 }
 
 std::map<std::string, std::string> YamlConfig::GetStringMap(const std::string& key) {
-  return GetMap<std::string>(key);
+  try {
+    return GetMap<std::string>(key);
+  } catch (std::exception& e) {
+    LOG(ERROR) << "Config GetStringMap failed: " << key << " exception: " << e.what();
+  }
+
+  return std::map<std::string, std::string>{};
 }
 
 // Get scalar value

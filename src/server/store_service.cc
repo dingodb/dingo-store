@@ -14,14 +14,19 @@
 
 #include "server/store_service.h"
 
+#include "common/context.h"
 #include "region/store_region_manager.h"
 
 
 namespace dingodb {
 
 
-StoreServiceImpl::StoreServiceImpl(std::shared_ptr<Storage> storage)
-  : storage_(storage) {
+StoreServiceImpl::StoreServiceImpl() {
+}
+
+bool validateAddRegion(const dingodb::pb::store::AddRegionRequest* request,
+                       std::string& error_msg) {
+  return true;
 }
 
 void StoreServiceImpl::AddRegion(google::protobuf::RpcController* controller,
@@ -32,16 +37,25 @@ void StoreServiceImpl::AddRegion(google::protobuf::RpcController* controller,
   brpc::ClosureGuard done_guard(done);
   LOG(INFO) << "AddRegion request...";
 
+  // valiate region
+  std::string error_msg;
+  if (!validateAddRegion(request, error_msg)) {
+    cntl->SetFailed(brpc::EREQUEST, "%s", error_msg.c_str());
+    return;
+  }
 
-  // todo valiate region
+  LOG(INFO) << "here 00001";
 
   // Add raft node
   storage_->AddRegion(request->region_info().region_id(), request->region_info());
+
+  LOG(INFO) << "here 00002";
   
   // Add region to store region manager
   StoreRegionManager::GetInstance()->AddRegion(request->region_info().region_id(),
                                                request->region_info());
 
+  LOG(INFO) << "here 00003";
 }
 
 void StoreServiceImpl::DestroyRegion(google::protobuf::RpcController* controller,
@@ -50,7 +64,12 @@ void StoreServiceImpl::DestroyRegion(google::protobuf::RpcController* controller
                                      google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
-  LOG(INFO) << "KvGet request...";
+  LOG(INFO) << "DestroyRegion request...";
+}
+
+bool validateKvGetRequest(const dingodb::pb::store::KvGetRequest* request,
+                          std::string& error_msg) {
+  return true;
 }
 
 void StoreServiceImpl::KvGet(google::protobuf::RpcController* controller,
@@ -61,9 +80,20 @@ void StoreServiceImpl::KvGet(google::protobuf::RpcController* controller,
   brpc::ClosureGuard done_guard(done);
   LOG(INFO) << "KvGet request: " << request->key();
   // const google::protobuf::Message *msg = static_cast<const google::protobuf::Message*>(request);
+  std::string error_msg;
+  if (!validateKvGetRequest(request, error_msg)) {
+    cntl->SetFailed(brpc::EREQUEST, "%s", error_msg.c_str());
+    return;
+  }
 
-  response->set_value("KvGetResponse value");
-  // cntl->SetFailed(5000, "key error");
+  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
+  ctx->set_region_id(request->region_id());
+  storage_->KvGet(ctx, request->key());
+}
+
+bool validateKvPutRequest(const dingodb::pb::store::KvPutRequest* request,
+                          std::string& error_msg) {
+  return true;
 }
 
 void StoreServiceImpl::KvPut(google::protobuf::RpcController* controller,
@@ -73,6 +103,29 @@ void StoreServiceImpl::KvPut(google::protobuf::RpcController* controller,
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
   LOG(INFO) << "KvPut request: " << request->key();
+  std::string error_msg;
+  if (!validateKvPutRequest(request, error_msg)) {
+    cntl->SetFailed(brpc::EREQUEST, "%s", error_msg.c_str());
+    return;
+  }
+
+  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
+  ctx->set_region_id(request->region_id());
+  storage_->KvPut(ctx, request->key(), request->value());
+}
+
+void StoreServiceImpl::KvBatchPutIfAbsent(
+  google::protobuf::RpcController* controller,
+  const dingodb::pb::store::KvBatchPutIfAbsentRequest* request,
+  dingodb::pb::store::KvBatchPutIfAbsentResponse* response,
+  google::protobuf::Closure* done) {
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(done);
+  LOG(INFO) << "KvBatchPutIfAbsent request: ";
+}
+
+void StoreServiceImpl::set_storage(std::shared_ptr<Storage> storage) {
+  storage_ = storage;
 }
 
 } // namespace dingodb

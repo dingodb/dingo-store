@@ -18,6 +18,8 @@
 #include "proto/common.pb.h"
 
 #include "common/slice.h"
+#include "common/context.h"
+#include "engine/snapshot.h"
 
 namespace dingodb {
 
@@ -36,14 +38,16 @@ class Engine {
   virtual std::string GetName() = 0;
   virtual uint32_t GetID() = 0;
 
-  virtual int AddRegion(uint64_t region_id, const dingodb::pb::common::RegionInfo& region) = 0;
-  virtual int DestroyRegion(uint64_t region_id) = 0;
+  virtual int AddRegion(uint64_t region_id, const dingodb::pb::common::RegionInfo& region) {}
+  virtual int DestroyRegion(uint64_t region_id) {}
 
-  virtual Slice KvGet(const Slice& key) = 0;
-  virtual int KvPut(const Slice& key, const Slice& value) = 0;
+  virtual Snapshot* GetSnapshot(){}
+  virtual void ReleaseSnapshot(){}
 
+  virtual std::shared_ptr<std::string> KvGet(std::shared_ptr<Context> ctx, const std::string& key) = 0;
+  virtual int KvPut(std::shared_ptr<Context> ctx, const std::string& key, const std::string& value) = 0;
  protected:
-  Engine(){}
+  Engine(){};
 };
 
 

@@ -20,19 +20,21 @@
 
 #include "engine/storage.h"
 
-namespace dingodb {
+template <typename T>
+struct DefaultSingletonTraits;
 
+
+namespace dingodb {
 
 class Server {
  public:
-  Server();
-  ~Server();
+  static Server *GetInstance();
 
   // Init config.
-  bool InitConfigs(const std::vector<std::string> filenames);
+  bool InitConfig(const std::string& filename);
 
   // Init log.
-  bool InitLog();
+  bool InitLog(const std::string& role);
 
   // Valiate coordinator is connected and valid.
   bool ValiateCoordinator();
@@ -52,8 +54,25 @@ class Server {
     return storage_;
   }
 
+  butil::EndPoint get_server_endpoint() { server_endpoint_; }
+  void set_server_endpoint(const butil::EndPoint& endpoint) { 
+    server_endpoint_ = endpoint;
+  }
+
+  butil::EndPoint get_raft_endpoint() { raft_endpoint_; }
+  void set_raft_endpoint(const butil::EndPoint& endpoint) { 
+    raft_endpoint_ = endpoint;
+  }
+
  private:
+  Server();
+  ~Server();
+  friend struct DefaultSingletonTraits<Server>;
+  DISALLOW_COPY_AND_ASSIGN(Server);
+
   uint64_t id_;
+  butil::EndPoint server_endpoint_;
+  butil::EndPoint raft_endpoint_;
   std::shared_ptr<Storage> storage_;
 };
 

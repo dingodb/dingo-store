@@ -27,7 +27,7 @@ namespace dingodb {
 
 RaftKvEngine::RaftKvEngine(Engine* engine)
   : engine_(engine),
-    raft_node_manager_(std::make_unique<RaftNodeManager>()) {
+    raft_node_manager_(std::move(std::make_unique<RaftNodeManager>())) {
 }
 
 RaftKvEngine::~RaftKvEngine() {
@@ -45,11 +45,7 @@ uint32_t RaftKvEngine::GetID() {
   return Engine::Type::RAFT_KV_ENGINE;
 }
 
-braft::PeerId HostPortToPeerId(const std::string host, int port) {
-  if (port == 0) {
-    port = 9800;
-  }
-
+butil::EndPoint getRaftEndPoint(const std::string host, int port) {
   butil::ip_t ip;
   if (host.empty()) {
     ip = butil::IP_ANY;
@@ -61,19 +57,34 @@ braft::PeerId HostPortToPeerId(const std::string host, int port) {
     }
   }
 
-  return braft::PeerId(butil::EndPoint(ip, port));
+  return butil::EndPoint(ip, port);
+}
+
+// format peers like 127.0.0.1:8201:0,127.0.0.1:8202:0,127.0.0.1:8203:0
+std::string formatPeers(const google::protobuf::RepeatedPtrField<std::__cxx11::string>& peers) {
+  std::string init_conf;
+  for (int i = 0; i < peers.size(); ++i) {
+    init_conf += peers.Get(i);
+    if (i + 1 < peers.size()) {
+      init_conf += ",";
+    }
+  }
+  return init_conf;
 }
 
 int RaftKvEngine::AddRegion(uint64_t region_id, const dingodb::pb::common::RegionInfo& region) {
   auto config = ConfigManager::GetInstance()->GetConfig("store");
-  braft::PeerId peerId = HostPortToPeerId(config->GetString("raft.host"),
-                                          config->GetInt("raft.port"));
+  butil::EndPoint endpoint = getRaftEndPoint(config->GetString("raft.host"),
+                                             config->GetInt("raft.port"));
 
-  std::shared_ptr<RaftNode> node = std::make_shared<RaftNode>(region_id, peerId, new StoreStateMachine(engine_));
-  if (node->Init() != 0) {
+  std::shared_ptr<RaftNode> node = std::make_shared<RaftNode>(region_id,
+                                                              braft::PeerId(endpoint),
+                                                              new StoreStateMachine(engine_));
+  if (node->Init(formatPeers(region.peers())) != 0) {
     node->Destroy();
     return -1;
   }
+  LOG(INFO) << "here 10001";
   raft_node_manager_->AddNode(region_id, node);
   return 0;
 }
@@ -82,11 +93,21 @@ int RaftKvEngine::DestroyRegion(uint64_t region_id) {
   return 0;
 }
 
-Slice RaftKvEngine::KvGet(const Slice& key) {
-  return Slice();
+std::shared_ptr<std::string> RaftKvEngine::KvGet(std::shared_ptr<Context> ctx, const std::string& key) {
+  return nullptr;
 }
 
-int RaftKvEngine::KvPut(const Slice& key, const Slice& value) {
+int RaftKvEngine::KvPut(std::shared_ptr<Context> ctx, const std::string& key, const std::string& value) {
+  dingodb::pb::raft::RaftCmdRequest raft_cmd;
+  auto request = raft_cmd.add_requests();
+  request->set_cmd_type(dingodb::pb::raft::CmdType::PUT);
+  dingodb::pb::raft::PutRequest put_request;
+  put_request.set_key(key);
+  put_request.set_value(value);
+  request->set_allocated_put(&put_request);
+
+  raft_node_manager_->GetNode(ctx->get_region_id())->Commit(ctx, raft_cmd);
+
   return 0;
 }
 

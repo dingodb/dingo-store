@@ -37,11 +37,7 @@ class RocksEngine {
   RocksEngine();
   ~RocksEngine();
 
-
  private:
-
-
-
 };
 
 } // namespace dingodb

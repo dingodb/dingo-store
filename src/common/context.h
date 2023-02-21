@@ -37,9 +37,16 @@ class Context {
     return *this;
   }
 
+  uint64_t get_region_id() { return region_id_; }
+  Context& set_region_id(uint64_t region_id) {
+    region_id_ = region_id;
+  }
+
  private:
   brpc::Controller* cntl_;
   google::protobuf::Closure* done_;
+
+  uint64_t region_id_;
 };
 
 #endif

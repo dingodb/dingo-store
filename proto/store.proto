@@ -54,18 +54,14 @@ message KvPutRequest {
 message KvPutResponse {
 }
 
-message KvPutIfAbsentRequest {
+message KvBatchPutIfAbsentRequest {
   uint64 region_id                                       = 1;
   repeated dingodb.pb.common.KeyValue kvs                = 2;
 }
 
-message PutResult {
-  bytes key                       = 1;
-  bool is_successed               = 2;
-}
 
-message KvPutIfAbsentResponse {
-  repeated PutResult results      = 1;
+message KvBatchPutIfAbsentResponse {
+  repeated bytes put_keys      = 1;
 }
 
 service StoreService {
@@ -76,5 +72,5 @@ service StoreService {
   // kv
   rpc KvGet(KvGetRequest) returns(KvGetResponse);
   rpc KvPut(KvPutRequest) returns(KvPutResponse);
-  rpc KvPutIfAbsent(KvPutIfAbsentRequest) returns(KvPutIfAbsentResponse);
+  rpc KvBatchPutIfAbsent(KvBatchPutIfAbsentRequest) returns(KvBatchPutIfAbsentResponse);
 };

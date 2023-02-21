@@ -20,21 +20,21 @@
 #include <braft/raft.h>
 #include <braft/util.h>
 
+#include "proto/raft.pb.h"
 #include "common/context.h"
-#include "raft/message.h"
 
 namespace dingodb {
 
 // Encapsulation braft node
 class RaftNode {
  public:
-  RaftNode(uint64_t node_id, braft::PeerId & peer_id, braft::StateMachine *fsm);
+  RaftNode(uint64_t node_id, braft::PeerId peer_id, braft::StateMachine *fsm);
   ~RaftNode();
 
-  int Init();
+  int Init(const std::string& init_conf);
   void Destroy();
 
-  void Commit(std::shared_ptr<Context> ctx, Message &msg);
+  void Commit(std::shared_ptr<Context> ctx, const dingodb::pb::raft::RaftCmdRequest& raft_cmd);
 
 private:
   uint64_t node_id_;

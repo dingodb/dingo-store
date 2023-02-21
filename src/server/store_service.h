@@ -25,8 +25,8 @@ namespace dingodb {
 
 class StoreServiceImpl: public dingodb::pb::store::StoreService {
  public:
-  StoreServiceImpl(std::shared_ptr<Storage> storage);
-  
+  StoreServiceImpl();
+
   void AddRegion(google::protobuf::RpcController* controller,
                 const dingodb::pb::store::AddRegionRequest* request,
                 dingodb::pb::store::AddRegionResponse* response,
@@ -46,6 +46,14 @@ class StoreServiceImpl: public dingodb::pb::store::StoreService {
                 const dingodb::pb::store::KvPutRequest* request,
                 dingodb::pb::store::KvPutResponse* response,
                 google::protobuf::Closure* done);
+    
+    void KvBatchPutIfAbsent(google::protobuf::RpcController* controller,
+                const dingodb::pb::store::KvBatchPutIfAbsentRequest* request,
+                dingodb::pb::store::KvBatchPutIfAbsentResponse* response,
+                google::protobuf::Closure* done);
+
+    
+    void set_storage(std::shared_ptr<Storage> storage);
 
  private:
   std::shared_ptr<Storage> storage_;

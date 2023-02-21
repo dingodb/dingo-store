@@ -25,55 +25,96 @@
 DEFINE_bool(log_each_request, true, "Print log for each request");
 DEFINE_bool(use_bthread, false, "Use bthread to send requests");
 DEFINE_int32(thread_num, 1, "Number of threads sending requests");
+DEFINE_int32(req_num, 1, "Number of requests");
 DEFINE_int32(timeout_ms, 500, "Timeout for each request");
-DEFINE_string(store_addr, "127.0.0.1:8200", "store server addr");
+DEFINE_string(store_addr, "127.0.0.1:19191", "store server addr");
 
 bvar::LatencyRecorder g_latency_recorder("dingo-store");
 
-void* sender(void* arg) {
-  while (!brpc::IsAskedToQuit()) {
-      braft::PeerId leader(FLAGS_store_addr);
+void sendKvGet(brpc::Controller& cntl, dingodb::pb::store::StoreService_Stub& stub) {
+  dingodb::pb::store::KvGetRequest request;
+  dingodb::pb::store::KvGetResponse response;
 
-      // rpc
-      brpc::Channel channel;
-      if (channel.Init(leader.addr, NULL) != 0) {
-        LOG(ERROR) << "Fail to init channel to " << leader;
-        bthread_usleep(FLAGS_timeout_ms * 1000L);
-        continue;
-      }
-      dingodb::pb::store::StoreService_Stub stub(&channel);
-
-      brpc::Controller cntl;
-      cntl.set_timeout_ms(FLAGS_timeout_ms);
-      // Randomly select which request we want send;
-      dingodb::pb::store::KvGetRequest request;
-      dingodb::pb::store::KvGetResponse response;
-      // std::string key = butil::fast_rand_printable(10);
-      std::string key = "Hello";
-      const char* op = NULL;
-      request.set_key(key.data(), key.size());
-      stub.KvGet(&cntl, &request, &response, NULL);
-      if (cntl.Failed()) {
-        LOG(WARNING) << "Fail to send request to " << leader << " : " << cntl.ErrorText();
-        bthread_usleep(FLAGS_timeout_ms * 1000L);
-        continue;
-      }
-
-      g_latency_recorder << cntl.latency_us();
-      if (FLAGS_log_each_request) {
-        LOG(INFO) << "Received response"
-                  << " key=" << request.key()
-                  << " value=" << response.value()
-                  << " request_attachment="
-                  << cntl.request_attachment().size()
-                  << " response_attachment="
-                  << cntl.response_attachment().size()
-                  << " latency=" << cntl.latency_us();
-      }
-
-      bthread_usleep(FLAGS_timeout_ms * 10000L);
+  std::string key = "Hello";
+  const char* op = NULL;
+  request.set_key(key.data(), key.size());
+  stub.KvGet(&cntl, &request, &response, NULL);
+  if (cntl.Failed()) {
+    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    // bthread_usleep(FLAGS_timeout_ms * 1000L);
   }
-  return NULL;
+
+  if (FLAGS_log_each_request) {
+    LOG(INFO) << "Received response"
+              << " key=" << request.key()
+              << " value=" << response.value()
+              << " request_attachment="
+              << cntl.request_attachment().size()
+              << " response_attachment="
+              << cntl.response_attachment().size()
+              << " latency=" << cntl.latency_us();
+  }
+}
+
+void sendAddRegion(brpc::Controller& cntl, dingodb::pb::store::StoreService_Stub& stub) {
+  dingodb::pb::store::AddRegionRequest request;
+  dingodb::pb::store::AddRegionResponse response;
+
+  dingodb::pb::common::RegionInfo* region = request.mutable_region_info();
+  region->set_region_id(10000);
+  region->set_region_epoch(1);
+  region->set_table_id(10);
+  region->set_table_name("test-10");
+  region->set_partition_id(1);
+  region->set_replica_num(1);
+  dingodb::pb::common::Range* range = region->mutable_range();
+  range->set_start_key("0000000");
+  range->set_end_key("11111111");
+  region->add_peers("127.0.0.1:20001:0");
+  region->add_peers("127.0.0.1:20002:0");
+  region->add_peers("127.0.0.1:20003:0");
+
+  stub.AddRegion(&cntl, &request, &response, NULL);
+  if (cntl.Failed()) {
+    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    // bthread_usleep(FLAGS_timeout_ms * 1000L);
+  }
+
+  if (FLAGS_log_each_request) {
+    LOG(INFO) << "Received response"
+              << " request_attachment="
+              << cntl.request_attachment().size()
+              << " response_attachment="
+              << cntl.response_attachment().size()
+              << " latency=" << cntl.latency_us();
+  }
+}
+
+void* sender(void* arg) {
+  for (int i = 0; i < FLAGS_req_num; ++i) {
+    braft::PeerId leader(FLAGS_store_addr);
+
+    // rpc
+    brpc::Channel channel;
+    if (channel.Init(leader.addr, NULL) != 0) {
+      LOG(ERROR) << "Fail to init channel to " << leader;
+      bthread_usleep(FLAGS_timeout_ms * 1000L);
+      continue;
+    }
+    dingodb::pb::store::StoreService_Stub stub(&channel);
+
+    brpc::Controller cntl;
+    cntl.set_timeout_ms(FLAGS_timeout_ms);
+
+    // sendKvGet(cntl, stub);
+    sendAddRegion(cntl, stub);
+
+    g_latency_recorder << cntl.latency_us();
+
+    bthread_usleep(FLAGS_timeout_ms * 10000L);
+  }
+
+  return nullptr;
 }
 
 int main(int argc, char* argv[]) {
