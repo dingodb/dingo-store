@@ -19,7 +19,7 @@
 #include <shared_mutex>
 
 #include "proto/store.pb.h"
-#include "common/slice.h"
+#include "common/context.h"
 #include "engine/engine.h"
 
 namespace dingodb {
@@ -35,8 +35,8 @@ class MemEngine: public Engine {
   int AddRegion(uint64_t region_id, const dingodb::pb::common::RegionInfo& region);
   int DestroyRegion(uint64_t region_id);
 
-  Slice KvGet(const Slice& key);
-  int KvPut(const Slice& key, const Slice& value);
+  std::shared_ptr<std::string> KvGet(std::shared_ptr<Context> ctx, const std::string& key);
+  int KvPut(std::shared_ptr<Context> ctx, const std::string& key, const std::string& value);
 
  private:
   std::shared_mutex mutex_;

@@ -12,37 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DINGODB_ENGINE_STORAGE_H_
-#define DINGODB_ENGINE_STORAGE_H_
 
-#include "memory"
+#ifndef DINGODB_ENGINE_SNAPSHOT_H_
+#define DINGODB_ENGINE_SNAPSHOT_H_
 
-#include "common/context.h"
-#include "engine/engine.h"
-#include "engine/raft_kv_engine.h"
-
+#include <memory>
 
 namespace dingodb {
 
-class Storage {
+class Snapshot {
  public:
-  Storage(Engine* engine);
-  ~Storage();
+  ~Snapshot(){};
 
-  int AddRegion(uint64_t region_id, const dingodb::pb::common::RegionInfo& region);
-  int DestroyRegion(uint64_t region_id);
-
-  Snapshot* GetSnapshot();
-  void ReleaseSnapshot();
-
-  std::shared_ptr<std::string> KvGet(std::shared_ptr<Context> ctx, const std::string& key);
-  int KvPut(std::shared_ptr<Context> ctx, const std::string& key, const std::string& value);
+  virtual std::shared_ptr<std::string> Get(const std::string& key) = 0;
+  virtual std::shared_ptr<std::string> GetCf(const std::string cf_name, const std::string& key) = 0;
 
  private:
-  std::shared_ptr<Engine> engine_;
+  Snapshot(){};
 };
 
 } // namespace dingodb
 
-
-#endif // DINGODB_ENGINE_STORAGE_H_
+#endif // DINGODB_ENGINE_SNAPSHOT_H_

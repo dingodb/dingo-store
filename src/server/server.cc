@@ -17,11 +17,12 @@
 
 #include <vector>
 
+
 #include "butil/files/file_path.h"
+#include "butil/strings/stringprintf.h"
 
 #include "config/config.h"
 #include "config/config_manager.h"
-
 #include "engine/engine.h"
 #include "engine/raft_kv_engine.h"
 #include "engine/mem_engine.h"
@@ -30,28 +31,51 @@ namespace dingodb {
 
 
 Server::Server() {
-
 }
 
 Server::~Server() {
-
 }
 
-bool Server::InitConfigs(const std::vector<std::string> filenames) {
-  for (auto filename : filenames) {
-    std::shared_ptr<Config> config = std::make_shared<YamlConfig>();
-    if (config->LoadFile(filename) != 0) {
-      return false;
-    }
+Server* Server::GetInstance() {
+  return Singleton<Server>::get();
+}
 
-    butil::FilePath filepath(filename);
-    ConfigManager::GetInstance()->Register(filepath.BaseName().RemoveExtension().value(), config);
+bool Server::InitConfig(const std::string& filename) {
+  std::shared_ptr<Config> config = std::make_shared<YamlConfig>();
+  if (config->LoadFile(filename) != 0) {
+    return false;
   }
+
+  butil::FilePath filepath(filename);
+  ConfigManager::GetInstance()->Register(filepath.BaseName().RemoveExtension().value(), config);
 
   return true;
 }
 
-bool Server::InitLog() {
+bool Server::InitLog(const std::string& role) {
+  auto config = ConfigManager::GetInstance()->GetConfig(role);
+  FLAGS_log_dir = config->GetString("log.logPath");
+  LOG(INFO) << "log_dir: " << FLAGS_log_dir;
+
+  const std::string program_name = butil::StringPrintf("./%s", role.c_str());
+  google::InitGoogleLogging(program_name.c_str());
+  google::SetLogDestination(google::GLOG_INFO, 
+                            butil::StringPrintf("%s/%s.info.log.", 
+                                                FLAGS_log_dir.c_str(),
+                                                role.c_str()).c_str());
+  google::SetLogDestination(google::GLOG_WARNING, 
+                            butil::StringPrintf("%s/%s.warn.log.", 
+                                                FLAGS_log_dir.c_str(),
+                                                role.c_str()).c_str());
+  google::SetLogDestination(google::GLOG_ERROR, 
+                            butil::StringPrintf("%s/%s.error.log.", 
+                                                FLAGS_log_dir.c_str(),
+                                                role.c_str()).c_str());
+  google::SetLogDestination(google::GLOG_FATAL, 
+                            butil::StringPrintf("%s/%s.fatal.log.", 
+                                                FLAGS_log_dir.c_str(),
+                                                role.c_str()).c_str());
+
   return true;
 }
 

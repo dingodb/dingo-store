@@ -20,7 +20,6 @@
 #include <shared_mutex>
 
 #include "glog/logging.h"
-// #include "butil/memory/singleton.h"
 
 #include "config/config.h"
 #include "config/yaml_config.h"

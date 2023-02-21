@@ -37,21 +37,22 @@ int MemEngine::DestroyRegion(uint64_t region_id) {
   return 0;
 }
 
-Slice MemEngine::KvGet(const Slice& key) {
-  std::shared_lock<std::shared_mutex> lock(mutex_);
-  auto it = store_.find(key.ToString());
+std::shared_ptr<std::string> MemEngine::KvGet(std::shared_ptr<Context> ctx, const std::string& key) {
+  auto it = store_.find(key);
   if (it == store_.end()) {
-    return Slice();
+    return nullptr;
   }
 
-  return Slice(it->second);
+  return std::make_shared<std::string>(it->second);
 }
 
-int MemEngine::KvPut(const Slice& key, const Slice& value) {
+int MemEngine::KvPut(std::shared_ptr<Context> ctx, const std::string& key, const std::string& value) {
   std::unique_lock<std::shared_mutex> lock(mutex_);
-  store_[key.ToString()] = value.ToString();
+  store_[key] = value;
   return 0;
 }
+
+
 
 
 } // namespace dingodb

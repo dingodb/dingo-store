@@ -18,9 +18,7 @@
 
 namespace dingodb {
 
-Storage::Storage(Engine* engine)
-  : engine_(engine) {
-
+Storage::Storage(Engine* engine): engine_(engine) {
 }
 
 Storage::~Storage() {
@@ -34,12 +32,21 @@ int Storage::DestroyRegion(uint64_t region_id) {
 
 }
 
-Slice Storage::KvGet(const Slice& key) {
-  return engine_->KvGet(key);
+Snapshot* Storage::GetSnapshot() {
+  return nullptr;
 }
 
-int Storage::KvPut(const Slice& key, const Slice& value) {
-  return engine_->KvPut(key, value);
+void Storage::ReleaseSnapshot() {
+
 }
+
+std::shared_ptr<std::string> Storage::KvGet(std::shared_ptr<Context> ctx, const std::string& key) {
+  return engine_->KvGet(ctx, key);
+}
+
+int Storage::KvPut(std::shared_ptr<Context> ctx, const std::string& key, const std::string& value) {
+  return engine_->KvPut(ctx, key, value);
+}
+
 
 } // namespace dingodb

@@ -19,6 +19,7 @@
 #include "brpc/controller.h"
 #include "braft/raft.h"
 
+#include "proto/raft.pb.h"
 #include "engine/engine.h"
 
 
@@ -38,6 +39,7 @@ public:
 private:
   brpc::Controller* cntl_;
   google::protobuf::Closure* done_;
+  uint64_t region_id_;
 };
 
 class StoreStateMachine: public braft::StateMachine {
@@ -54,6 +56,11 @@ class StoreStateMachine: public braft::StateMachine {
   void on_leader_stop(const butil::Status& status);
   void on_error(const ::braft::Error& e);
   void on_configuration_committed(const ::braft::Configuration& conf);
+
+ private:
+  void dispatchRequest(const StoreClosure* done, const dingodb::pb::raft::RaftCmdRequest& raft_cmd);
+  void handlePutRequest(const StoreClosure* done, const dingodb::pb::raft::PutRequest& request);
+  void handleBatchPutIfAbsentRequest(const StoreClosure* done, const dingodb::pb::raft::BatchPutIfAbsentRequest& request);
 
  private:
   std::shared_ptr<Engine> engine_;
