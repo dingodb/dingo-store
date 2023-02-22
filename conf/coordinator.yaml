@@ -1,0 +1,38 @@
+cluster:
+  name: dingodb
+server:
+  host: 127.0.0.1
+  port: 19190
+raft:
+  host: 127.0.0.1
+  port: 20000
+  path: /opt/dingo-poc/data/coordinator/raft
+  electionTimeout: 10 # ms
+  snapshotInterval: 100000 # s
+log:
+  logPath: /opt/dingo-poc/log
+store:
+  dbPath: /opt/dingo-poc/data/coordinator/db
+  dcfConfiguration:
+    tcBlockSize: 131072
+    tcBlockCacheSize: 67108864
+    cfArenaBlockSize: 67108864
+    cfMinWriteBufferNumberToMerge: 4
+    cfMaxWriteBufferNumber: 2
+    cfMaxCompactionBytes: 134217728
+    cfWriteBufferSize: 67108864
+    cfFixedLengthPrefixExtractor: 8
+    cfMaxBytesForLevelBase: 134217728
+    cfTargetFileSizeBase: 67108864
+  icfConfiguration:
+    tcBlockSize: 131072
+    tcBlockCacheSize: 67108864
+    cfArenaBlockSize: 67108864
+    cfMinWriteBufferNumberToMerge: 4
+    cfMaxWriteBufferNumber: 3
+    cfMaxCompactionBytes: 134217728
+    cfWriteBufferSize: 67108864
+    cfFixedLengthPrefixExtractor: 8
+    cfMaxBytesForLevelBase: 134217728
+    cfTargetFileSizeBase: 67108864
+  collectStatsInterval: 5
