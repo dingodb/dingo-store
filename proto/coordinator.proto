@@ -20,9 +20,61 @@ option java_package = "org.dingo.coordinator";
 option cc_generic_services = true;
 
 enum CoordinatorStatus {
-  OK = 0;
-  UNHEALTHY = 1;
-  FAILED = 2;
+  NORMAL = 0;
+  OFFLINE = 1;
+}
+
+enum StoreStatus {
+  NORMAL = 0;
+  NEW = 1; // a new store, wait to startup and join raft
+  OFFLINE = 2;  // miss hearteat
+  OUT = 2; // up but no data will distribute to this store
+}
+
+enum RegionStatus {
+  NORMAL = 0;
+  EXPAND = 1; // start to expand
+  EXPANDING = 2; // leader start to expand region
+  EXPANDED = 3; // new peer joined raft
+  DEGRADED = 4; // region has less than 3 peer
+  DANGER = 5; // region has only one peer
+  // other status add here
+}
+
+message Coordinator {
+  uint64 id;
+  CoordinatorStatu status;
+  dingodb.pb.common.Location location;
+  string resource_tag;
+}
+
+message CoordinatorMap {
+  uint64 epoch;
+  repeated Store store;
+}
+
+message Store {
+  uint64 id;
+  dingodb.pb.common.Location location;
+  StoreStatus status;
+  string resource_tag;
+}
+
+message StoreMap {
+  uint64 epoch;
+  repeated Store store;
+}
+
+message Region {
+  int32 status;
+  int64 leader_store_id
+  repeated Store elector_store_list;
+  repeated Store learner_store_list;
+}
+
+message RegionMap {
+  uint64 epoch;
+  repeated Region region_list;
 }
 
 message HelloRequest {
@@ -34,7 +86,17 @@ message HelloResponse {
   string status_detail = 2;
 }
 
+message GetStoreMapRequest {
+  uint64 hello = 1;
+}
+
+message GetStoreMapResponse {
+  CoordinatorStatus status = 1;
+  string status_detail = 2;
+}
+
 service CoordinatorService {
   // Hello
   rpc Hello(HelloRequest) returns(HelloResponse);
 };
+
