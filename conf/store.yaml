@@ -1,17 +1,18 @@
 cluster:
-  name: dingo
+  name: dingodb
 server:
-  port: 19191
+  host: $SERVER_HOST$
+  port: $SERVER_PORT$
 raft:
-  host: 127.0.0.1
-  port: 20001
-  path: /opt/dingo-poc/data/store/raft
+  host: $RAFT_HOST$
+  port: $RAFT_PORT$
+  path: $BASE_PATH$/data/store/raft
   electionTimeout: 10 # ms
   snapshotInterval: 100000 # s
 log:
-  logPath: /opt/dingo-poc/log
+  logPath: $BASE_PATH$/log
 store:
-  dbPath: /opt/dingo-poc/data/store/db
+  dbPath: $BASE_PATH$/data/store/db
   dcfConfiguration:
     tcBlockSize: 131072
     tcBlockCacheSize: 67108864

@@ -14,6 +14,7 @@
 
 #include "raft/raft_node.h"
 
+#include "butil/strings/stringprintf.h"
 #include "raft/state_machine.h"
 #include "config/config_manager.h"
 
@@ -49,7 +50,7 @@ int RaftNode::Init(const std::string& init_conf) {
   node_options.node_owns_fsm = false;
   node_options.snapshot_interval_s = config->GetInt("raft.snapshotInterval");
 
-  std::string path = config->GetString("raft.path");
+  std::string path = butil::StringPrintf("%s/%ld", config->GetString("raft.path").c_str(), node_id_);
   node_options.log_uri = "local://" + path + "/log";
   node_options.raft_meta_uri = "local://" + path + "/raft_meta";
   node_options.snapshot_uri = "local://" + path + "/snapshot";
@@ -79,6 +80,42 @@ void RaftNode::Commit(std::shared_ptr<Context> ctx, const dingodb::pb::raft::Raf
   task.data = &data;
   task.done = closure;
   node_->apply(task);
+}
+
+bool RaftNode::IsLeader() {
+  return node_->is_leader();
+}
+
+bool RaftNode::IsLeaderLeaseValid() {
+  return node_->is_leader_lease_valid();
+}
+
+braft::PeerId RaftNode::GetLeaderId() {
+  return node_->leader_id();
+}
+
+void RaftNode::shutdown(braft::Closure* done) {
+  node_->shutdown(done);
+}
+
+butil::Status RaftNode::ListPeers(std::vector<braft::PeerId>* peers) {
+  return node_->list_peers(peers);
+}
+
+void RaftNode::AddPeer(const braft::PeerId& peer, braft::Closure* done) {
+  node_->add_peer(peer, done);
+}
+
+void RaftNode::RemovePeer(const braft::PeerId& peer, braft::Closure* done) {
+  node_->remove_peer(peer, done);
+}
+
+void RaftNode::ChangePeers(const braft::Configuration& new_peers, braft::Closure* done) {
+  node_->change_peers(new_peers, done);
+}
+
+butil::Status RaftNode::ResetPeers(const braft::Configuration& new_peers) {
+  node_->reset_peers(new_peers);
 }
 
 

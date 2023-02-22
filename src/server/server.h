@@ -54,12 +54,12 @@ class Server {
     return storage_;
   }
 
-  butil::EndPoint get_server_endpoint() { server_endpoint_; }
+  butil::EndPoint get_server_endpoint() { return server_endpoint_; }
   void set_server_endpoint(const butil::EndPoint& endpoint) { 
     server_endpoint_ = endpoint;
   }
 
-  butil::EndPoint get_raft_endpoint() { raft_endpoint_; }
+  butil::EndPoint get_raft_endpoint() { return raft_endpoint_; }
   void set_raft_endpoint(const butil::EndPoint& endpoint) { 
     raft_endpoint_ = endpoint;
   }

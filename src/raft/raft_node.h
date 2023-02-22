@@ -36,6 +36,18 @@ class RaftNode {
 
   void Commit(std::shared_ptr<Context> ctx, const dingodb::pb::raft::RaftCmdRequest& raft_cmd);
 
+  bool IsLeader();
+  bool IsLeaderLeaseValid();
+  braft::PeerId GetLeaderId();
+
+  void shutdown(braft::Closure* done);
+
+  butil::Status ListPeers(std::vector<braft::PeerId>* peers);
+  void AddPeer(const braft::PeerId& peer, braft::Closure* done);
+  void RemovePeer(const braft::PeerId& peer, braft::Closure* done);
+  void ChangePeers(const braft::Configuration& new_peers, braft::Closure* done);
+  butil::Status ResetPeers(const braft::Configuration& new_peers);
+
 private:
   uint64_t node_id_;
   std::unique_ptr<braft::Node> node_;

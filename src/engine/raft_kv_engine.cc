@@ -20,6 +20,7 @@
 #include "common/helper.h"
 #include "config/config_manager.h"
 #include "raft/state_machine.h"
+#include "server/server.h"
 
 
 namespace dingodb {
@@ -73,18 +74,14 @@ std::string formatPeers(const google::protobuf::RepeatedPtrField<std::__cxx11::s
 }
 
 int RaftKvEngine::AddRegion(uint64_t region_id, const dingodb::pb::common::RegionInfo& region) {
-  auto config = ConfigManager::GetInstance()->GetConfig("store");
-  butil::EndPoint endpoint = getRaftEndPoint(config->GetString("raft.host"),
-                                             config->GetInt("raft.port"));
-
   std::shared_ptr<RaftNode> node = std::make_shared<RaftNode>(region_id,
-                                                              braft::PeerId(endpoint),
+                                                              braft::PeerId(Server::GetInstance()->get_raft_endpoint()),
                                                               new StoreStateMachine(engine_));
   if (node->Init(formatPeers(region.peers())) != 0) {
     node->Destroy();
     return -1;
   }
-  LOG(INFO) << "here 10001";
+
   raft_node_manager_->AddNode(region_id, node);
   return 0;
 }
@@ -102,8 +99,9 @@ int RaftKvEngine::KvPut(std::shared_ptr<Context> ctx, const std::string& key, co
   auto request = raft_cmd.add_requests();
   request->set_cmd_type(dingodb::pb::raft::CmdType::PUT);
   dingodb::pb::raft::PutRequest put_request;
-  put_request.set_key(key);
-  put_request.set_value(value);
+  auto kv = put_request.add_kvs();
+  kv->set_key(key);
+  kv->set_value(value);
   request->set_allocated_put(&put_request);
 
   raft_node_manager_->GetNode(ctx->get_region_id())->Commit(ctx, raft_cmd);
