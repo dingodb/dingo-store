@@ -112,26 +112,35 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  // add raft service
-  if (braft::add_service(&server, dingodb_server->get_raft_endpoint()) != 0) {
+  if (server.Start(dingodb_server->get_server_endpoint(), NULL) != 0) {
+    LOG(ERROR) << "Fail to start server";
+    return -1;
+  }
+  LOG(INFO) << "Server is running on " << server.listen_address();
+
+  // raft server
+  brpc::Server raft_server;
+  if (braft::add_service(&raft_server, dingodb_server->get_raft_endpoint()) != 0) {
     LOG(ERROR) << "Fail to add raft service";
     return -1;
   }
-
-  if (server.Start(dingodb_server->get_server_endpoint(), NULL) != 0) {
-    LOG(ERROR) << "Fail to start Server";
+  if (raft_server.Start(dingodb_server->get_raft_endpoint(), NULL) != 0) {
+    LOG(ERROR) << "Fail to start raft server";
     return -1;
   }
-  LOG(INFO) << "Service is running on " << server.listen_address();
+  LOG(INFO) << "Raft server is running on " << raft_server.listen_address();
 
   // Wait until 'CTRL-C' is pressed. then Stop() and Join() the service
   while (!brpc::IsAskedToQuit()) {
     sleep(1);
   }
-  LOG(INFO) << "Service is going to quit";
-
+  LOG(INFO) << "Server is going to quit";
+  
+  raft_server.Stop(0);
   server.Stop(0);
+  raft_server.Join();
   server.Join();
+
   dingodb_server->Destroy();
 
   return 0;

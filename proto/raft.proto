@@ -29,24 +29,25 @@ enum CmdType {
 }
 
 message PutRequest {
-  bytes key = 2;
-  bytes value = 3;
+  repeated dingodb.pb.common.KeyValue kvs = 1;
 }
 
 message PutResponse {}
 
-message BatchPutIfAbsentRequest {
-  repeated dingodb.pb.common.KeyValue kvs = 2;
+message PutIfAbsentRequest {
+  repeated dingodb.pb.common.KeyValue kvs = 1;
 }
 
-message BatchPutIfAbsentResponse {
-  repeated bytes put_kes = 1;
+message PutIfAbsentResponse {
+  repeated bytes put_keys = 1;
 }
 
 message Request {
   CmdType cmd_type = 1;
-  PutRequest put = 2;
-  BatchPutIfAbsentRequest put_if_absent = 3;
+  oneof cmd_body {
+    PutRequest put = 2;
+    PutIfAbsentRequest put_if_absent = 3;
+  }
 }
 
 message Response {

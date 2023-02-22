@@ -60,7 +60,7 @@ class StoreStateMachine: public braft::StateMachine {
  private:
   void dispatchRequest(const StoreClosure* done, const dingodb::pb::raft::RaftCmdRequest& raft_cmd);
   void handlePutRequest(const StoreClosure* done, const dingodb::pb::raft::PutRequest& request);
-  void handleBatchPutIfAbsentRequest(const StoreClosure* done, const dingodb::pb::raft::BatchPutIfAbsentRequest& request);
+  void handlePutIfAbsentRequest(const StoreClosure* done, const dingodb::pb::raft::PutIfAbsentRequest& request);
 
  private:
   std::shared_ptr<Engine> engine_;

@@ -27,7 +27,7 @@ DEFINE_bool(use_bthread, false, "Use bthread to send requests");
 DEFINE_int32(thread_num, 1, "Number of threads sending requests");
 DEFINE_int32(req_num, 1, "Number of requests");
 DEFINE_int32(timeout_ms, 500, "Timeout for each request");
-DEFINE_string(store_addr, "127.0.0.1:19191", "store server addr");
+DEFINE_string(store_addr, "127.0.0.1:20001", "store server addr");
 
 bvar::LatencyRecorder g_latency_recorder("dingo-store");
 
@@ -70,9 +70,9 @@ void sendAddRegion(brpc::Controller& cntl, dingodb::pb::store::StoreService_Stub
   dingodb::pb::common::Range* range = region->mutable_range();
   range->set_start_key("0000000");
   range->set_end_key("11111111");
-  region->add_peers("127.0.0.1:20001:0");
-  region->add_peers("127.0.0.1:20002:0");
-  region->add_peers("127.0.0.1:20003:0");
+  region->add_peers("127.0.0.1:20101:0");
+  region->add_peers("127.0.0.1:20102:0");
+  region->add_peers("127.0.0.1:20103:0");
 
   stub.AddRegion(&cntl, &request, &response, NULL);
   if (cntl.Failed()) {

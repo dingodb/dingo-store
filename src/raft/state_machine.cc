@@ -47,6 +47,7 @@ void StoreStateMachine::dispatchRequest(
         handlePutRequest(done, req.put());
         break;
       case dingodb::pb::raft::CmdType::PUTIFABSENT:
+        handlePutIfAbsentRequest(done, req.put_if_absent());
         break;
       default:
         LOG(ERROR) << "Unknown raft cmd type " << req.cmd_type();
@@ -60,9 +61,9 @@ void StoreStateMachine::handlePutRequest(
   // todo: write data
 }
 
-void StoreStateMachine::handleBatchPutIfAbsentRequest(
+void StoreStateMachine::handlePutIfAbsentRequest(
   const StoreClosure* done,
-  const dingodb::pb::raft::BatchPutIfAbsentRequest& request) {
+  const dingodb::pb::raft::PutIfAbsentRequest& request) {
     // todo: write data
 }
 
