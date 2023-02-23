@@ -12,14 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-syntax="proto3";
-
+syntax = "proto3";
 
 package dingodb.pb.error;
 
 option java_package = "io.dingodb.error";
 option cc_generic_services = true;
-
 
 enum Errno {
   OK = 0;

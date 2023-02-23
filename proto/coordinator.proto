@@ -12,69 +12,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-syntax="proto3";
+syntax = "proto3";
+
+import "common.proto";
 
 package dingodb.pb.coordinator;
 
 option java_package = "org.dingo.coordinator";
 option cc_generic_services = true;
 
-enum CoordinatorStatus {
-  NORMAL = 0;
-  OFFLINE = 1;
+// Store report self status and region (this node is leader) status
+message StoreHeartbeatRequest {
+  dingodb.pb.common.Epoch self_storemap_epoch =
+      1;  // storemap epoch in this Store
+  dingodb.pb.common.Epoch self_regionmap_epoch =
+      2;                              // regionmap epoch in this Store
+  dingodb.pb.common.Store store = 3;  // self store info
+  repeated dingodb.pb.common.Region regions = 4;  // self region info
 }
 
-enum StoreStatus {
-  NORMAL = 0;
-  NEW = 1; // a new store, wait to startup and join raft
-  OFFLINE = 2;  // miss hearteat
-  OUT = 2; // up but no data will distribute to this store
-}
-
-enum RegionStatus {
-  NORMAL = 0;
-  EXPAND = 1; // start to expand
-  EXPANDING = 2; // leader start to expand region
-  EXPANDED = 3; // new peer joined raft
-  DEGRADED = 4; // region has less than 3 peer
-  DANGER = 5; // region has only one peer
-  // other status add here
-}
-
-message Coordinator {
-  uint64 id;
-  CoordinatorStatu status;
-  dingodb.pb.common.Location location;
-  string resource_tag;
-}
-
-message CoordinatorMap {
-  uint64 epoch;
-  repeated Store store;
-}
-
-message Store {
-  uint64 id;
-  dingodb.pb.common.Location location;
-  StoreStatus status;
-  string resource_tag;
-}
-
-message StoreMap {
-  uint64 epoch;
-  repeated Store store;
-}
-
-message Region {
-  int32 status;
-  int64 leader_store_id
-  repeated Store elector_store_list;
-  repeated Store learner_store_list;
-}
-
-message RegionMap {
-  uint64 epoch;
-  repeated Region region_list;
+message StoreHeartbeatResponse {
+  dingodb.pb.common.Epoch storemap_epoch = 1;   // the lates epoch of storemap
+  dingodb.pb.common.Epoch regionmap_epoch = 2;  // the lates epoch of regionmap
+  dingodb.pb.common.StoreMap storemap = 3;      // new storemap
+  dingodb.pb.common.RegionMap regionmap = 4;    // new regionmap
 }
 
 message HelloRequest {
@@ -82,21 +43,18 @@ message HelloRequest {
 }
 
 message HelloResponse {
-  CoordinatorStatus status = 1;
-  string status_detail = 2;
-}
-
-message GetStoreMapRequest {
-  uint64 hello = 1;
-}
-
-message GetStoreMapResponse {
-  CoordinatorStatus status = 1;
+  dingodb.pb.common.CoordinatorStatus status = 1;
   string status_detail = 2;
 }
 
 service CoordinatorService {
   // Hello
-  rpc Hello(HelloRequest) returns(HelloResponse);
-};
-
+  rpc Hello(HelloRequest) returns (HelloResponse);
+  rpc StoreHearbeat(StoreHeartbeatRequest) returns (HelloResponse);
+  rpc GetRegionMap(dingodb.pb.common.Epoch) returns (
+      dingodb.pb.common.RegionMap);  // the parameter dingodb.pb.common.Epoch is
+                                     // the epoch of map the store has now
+  rpc GetStoreMap(dingodb.pb.common.Epoch) returns (
+      dingodb.pb.common.StoreMap);  // the parameter dingodb.pb.common.Epoch is
+                                    // the epoch of map the store has now
+}
