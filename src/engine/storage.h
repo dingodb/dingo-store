@@ -29,7 +29,7 @@ class Storage {
   Storage(Engine* engine);
   ~Storage();
 
-  int AddRegion(uint64_t region_id, const dingodb::pb::common::RegionInfo& region);
+  int AddRegion(uint64_t region_id, const dingodb::pb::common::Region& region);
   int DestroyRegion(uint64_t region_id);
 
   Snapshot* GetSnapshot();

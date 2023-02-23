@@ -29,7 +29,7 @@ uint32_t MemEngine::GetID() {
   return Engine::Type::MEM_ENGINE;
 }
 
-int MemEngine::AddRegion(uint64_t region_id, const dingodb::pb::common::RegionInfo& region) {
+int MemEngine::AddRegion(uint64_t region_id, const dingodb::pb::common::Region& region) {
   return 0;
 }
 

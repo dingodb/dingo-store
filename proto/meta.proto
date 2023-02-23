@@ -60,7 +60,7 @@ message GetTablesResponse {
 }
 
 message CreateTableRequest {
-  dingodb.pb.common.TableDefinition table_definition;
+  dingodb.pb.common.TableDefinition table_definition = 1;
 }
 
 message CreateTableResponse {

@@ -38,7 +38,7 @@ class Engine {
   virtual std::string GetName() = 0;
   virtual uint32_t GetID() = 0;
 
-  virtual int AddRegion(uint64_t region_id, const dingodb::pb::common::RegionInfo& region) {}
+  virtual int AddRegion(uint64_t region_id, const dingodb::pb::common::Region& region) {}
   virtual int DestroyRegion(uint64_t region_id) {}
 
   virtual Snapshot* GetSnapshot(){}

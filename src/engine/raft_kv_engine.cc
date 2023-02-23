@@ -73,7 +73,7 @@ std::string formatPeers(const google::protobuf::RepeatedPtrField<std::__cxx11::s
   return init_conf;
 }
 
-int RaftKvEngine::AddRegion(uint64_t region_id, const dingodb::pb::common::RegionInfo& region) {
+int RaftKvEngine::AddRegion(uint64_t region_id, const dingodb::pb::common::Region& region) {
   std::shared_ptr<RaftNode> node = std::make_shared<RaftNode>(region_id,
                                                               braft::PeerId(Server::GetInstance()->get_raft_endpoint()),
                                                               new StoreStateMachine(engine_));

@@ -32,9 +32,9 @@ class StoreRegionManager {
  static StoreRegionManager* GetInstance();
 
   bool IsExist(uint64_t region_id);
-  void AddRegion(uint64_t region_id, const dingodb::pb::common::RegionInfo& region);
-  std::shared_ptr<dingodb::pb::common::RegionInfo> GetRegion(uint64_t region_id);
-  std::vector<std::shared_ptr<dingodb::pb::common::RegionInfo> > GetAllRegion();
+  void AddRegion(uint64_t region_id, const dingodb::pb::common::Region& region);
+  std::shared_ptr<dingodb::pb::common::Region> GetRegion(uint64_t region_id);
+  std::vector<std::shared_ptr<dingodb::pb::common::Region> > GetAllRegion();
 
  private:
   StoreRegionManager();
@@ -43,7 +43,7 @@ class StoreRegionManager {
   DISALLOW_COPY_AND_ASSIGN(StoreRegionManager);
 
   std::shared_mutex mutex_;
-  std::map<uint64_t, std::shared_ptr<dingodb::pb::common::RegionInfo> > regions_;
+  std::map<uint64_t, std::shared_ptr<dingodb::pb::common::Region> > regions_;
 };
 
 } // namespace dingodb

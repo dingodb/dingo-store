@@ -23,19 +23,17 @@ option cc_generic_services = true;
 
 // Store report self status and region (this node is leader) status
 message StoreHeartbeatRequest {
-  dingodb.pb.common.Epoch self_storemap_epoch =
-      1;  // storemap epoch in this Store
-  dingodb.pb.common.Epoch self_regionmap_epoch =
-      2;                              // regionmap epoch in this Store
+  uint64 self_storemap_epoch = 1;     // storemap epoch in this Store
+  uint64 self_regionmap_epoch = 2;    // regionmap epoch in this Store
   dingodb.pb.common.Store store = 3;  // self store info
   repeated dingodb.pb.common.Region regions = 4;  // self region info
 }
 
 message StoreHeartbeatResponse {
-  dingodb.pb.common.Epoch storemap_epoch = 1;   // the lates epoch of storemap
-  dingodb.pb.common.Epoch regionmap_epoch = 2;  // the lates epoch of regionmap
-  dingodb.pb.common.StoreMap storemap = 3;      // new storemap
-  dingodb.pb.common.RegionMap regionmap = 4;    // new regionmap
+  uint64 storemap_epoch = 1;                  // the lates epoch of storemap
+  uint64 regionmap_epoch = 2;                 // the lates epoch of regionmap
+  dingodb.pb.common.StoreMap storemap = 3;    // new storemap
+  dingodb.pb.common.RegionMap regionmap = 4;  // new regionmap
 }
 
 message HelloRequest {
@@ -47,14 +45,30 @@ message HelloResponse {
   string status_detail = 2;
 }
 
+message GetRegionMapRequest {
+  uint64 epoch = 1;
+}
+
+message GetRegionMapReponse {
+  uint64 epoch = 1;
+  dingodb.pb.common.RegionMap regionmap = 2;
+}
+
+message GetStoreMapRequest {
+  uint64 epoch = 1;
+}
+
+message GetStoreMapReponse {
+  uint64 epoch = 1;
+  dingodb.pb.common.StoreMap storemap = 2;
+}
+
 service CoordinatorService {
   // Hello
   rpc Hello(HelloRequest) returns (HelloResponse);
+
+  // Store
   rpc StoreHearbeat(StoreHeartbeatRequest) returns (HelloResponse);
-  rpc GetRegionMap(dingodb.pb.common.Epoch) returns (
-      dingodb.pb.common.RegionMap);  // the parameter dingodb.pb.common.Epoch is
-                                     // the epoch of map the store has now
-  rpc GetStoreMap(dingodb.pb.common.Epoch) returns (
-      dingodb.pb.common.StoreMap);  // the parameter dingodb.pb.common.Epoch is
-                                    // the epoch of map the store has now
+  rpc GetRegionMap(GetRegionMapRequest) returns (GetRegionMapReponse);
+  rpc GetStoreMap(GetStoreMapRequest) returns (GetStoreMapReponse);
 }
