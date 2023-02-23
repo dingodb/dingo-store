@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-syntax="proto3";
+syntax = "proto3";
 
 import "common.proto";
 
@@ -21,112 +21,85 @@ package dingodb.pb.meta;
 option java_package = "io.dingodb.meta";
 option cc_generic_services = true;
 
-message CreateTableReq {
-  string                          tableName                = 1;
-  dingodb.pb.common.TableDefinition  tableDefinition          = 2;
-}
+// message MetricStat {
+//   double disk_used_percent = 1;
+//   double mem_used_percent = 2;
+//   double cpu_used_percent = 3;
+//   double disk_io_percent = 4;
+// }
 
-message CreateTableRes {
-  dingodb.pb.common.CommonId    id             = 1;
-}
+// message InstanceInfo {
+//   dingodb.pb.common.Location address = 1;
+//   MetricStat stat = 3;
+// }
 
-message DropTableReq {
-  dingodb.pb.common.CommonId    id             = 1;
-}
+// message AllocateStoreIdRequest {
+//   dingodb.pb.common.Location address = 1;
+//   string resourceTag = 2;
+//   int64 startTime = 3;
+// }
 
-message DropTableRes {
-}
+// message AllocateStoreIdRes {
+//   string storeId = 1;
+// }
 
-message GetTableDefReq {
-  repeated dingodb.pb.common.CommonId    ids             = 1;
-}
-
-message GetTableDefRes {
-  repeated  dingodb.pb.common.CommonId ids                                = 1;
-  repeated  dingodb.pb.common.TableDefinition table_defs           = 2;
-}
-
-message GetTableRegionReq {
-  dingodb.pb.common.CommonId    id             = 1;
-}
-
-message GetTableRegionRes {
-  repeated  dingodb.pb.common.RegionInfo regions = 1;
-}
-
-
-message MetricStat {
-  double  disk_used_percent     = 1;
-  double  mem_used_percent      = 2;
-  double  cpu_used_percent      = 3;
-  double  disk_io_percent       = 4;
-}
-
-message InstanceInfo {
-  dingodb.pb.common.Location          address = 1;
-  MetricStat                       stat    = 3;
-}
-
-message StoreHeartbeatReq {
-  InstanceInfo instanceInfo                         = 1;
-  repeated dingodb.pb.common.RegionInfo    regionInfo  = 2;
-}
-
-message StoreHeartbeatRes {
-}
-
-message AllocateStoreIdReq {
-  dingodb.pb.common.Location          address = 1;
-  string                       resourceTag = 2;
-  int64                          startTime = 3;
-}
-
-message AllocateStoreIdRes {
-  string storeId           = 1;
-}
-
-message GetSchemaReq {
+message GetSchemaRequest {
   dingodb.pb.common.CommonId schema_id = 1;
 }
 
-message GetSchemaRes {
-  repeated dingodb.pb.common.Schema schemas  = 1;
+message GetSchemaResponse {
+  repeated dingodb.pb.common.Schema schemas = 1;
 }
 
-message GetTablesReq {
-  repeated dingodb.pb.common.CommonId  table_id =  1;
+message GetTablesRequest {
+  repeated dingodb.pb.common.CommonId schema_id = 1;
 }
 
-message GetTablesRes {
-  repeated dingodb.pb.common.TableDefinition tables  = 1;
+message GetTablesResponse {
+  repeated dingodb.pb.common.Table tables = 1;
 }
 
-message GetTablePartitionsReq {
+message CreateTableRequest {
+  dingodb.pb.common.TableDefinition table_definition;
+}
+
+message CreateTableResponse {
+  repeated dingodb.pb.common.Table table = 1;
+}
+
+message DropTableRequest {
   dingodb.pb.common.CommonId table_id = 1;
 }
 
-message GetTablePartitionsRes {
-  repeated dingodb.pb.common.TablePartition table_partitions = 1;
-}
+message DropTableResponse {}
 
-message GetRegionsReq {
-  dingodb.pb.common.CommonId table_id = 1;
-}
+// message GetTablePartitionsReq {
+//   dingodb.pb.common.CommonId table_id = 1;
+// }
 
-message GetRegionsRes {
-  dingodb.pb.common.TableRegions table_regions = 1;
-}
+// message GetTablePartitionsRes {
+//   repeated dingodb.pb.common.TablePartition table_partitions = 1;
+// }
+
+// message GetRegionsReq {
+//   dingodb.pb.common.CommonId partition_id = 1;
+// }
+
+// message GetRegionsResponse {
+//   dingodb.pb.common.TableRegions table_regions = 1;
+// }
 
 service MetaService {
   // query schema/table/partition/regions
-  rpc listSchemas(GetSchemaReq) returns (GetSchemaRes);
-  rpc listTables(GetTablesReq) returns (GetTablesRes);
-  rpc listPartitions(GetTablePartitionsReq) returns (GetTablePartitionsRes);
-  rpc listRegions(GetRegionsReq) returns (GetRegionsRes);
+  rpc listSchemas(GetSchemaRequest) returns (GetSchemaResponse);
+  rpc listTables(GetTablesRequest) returns (GetTablesResponse);
 
-  // Table Operation
-  rpc createTable(CreateTableReq) returns (CreateTableRes);
-  rpc dropTable(DropTableReq) returns (DropTableRes);
+  // rpc listPartitions(GetTablePartitionsReq) returns (GetTablePartitionsRes);
+  // rpc listRegions(GetRegionsReq) returns (GetRegionsResponse);
+
+  // Table DDL
+  rpc createTable(CreateTableRequest) returns (CreateTableResponse);
+  rpc dropTable(DropTableRequest) returns (DropTableResponse);
 
   // todo
   // Operation about User, such as create/drop/grant.
@@ -134,10 +107,4 @@ service MetaService {
   // Schema, CreateSchema/DropSchema/ getAllTableFromSchema / getSubSchema
 
   // Operation about Metrics
-}
-
-
-service Store4Serivce {
-  // rpc AllocateId4Store(StoreIdAllocReq) returns (StoreIdAllocRes);
-  rpc HeartbeatFromStore(StoreHeartbeatReq) returns (StoreHeartbeatRes);
 }

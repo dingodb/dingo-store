@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-syntax="proto3";
+syntax = "proto3";
 
 import "common.proto";
 
@@ -20,7 +20,6 @@ package dingodb.pb.raft;
 
 option java_package = "io.dingodb.raft";
 option cc_generic_services = true;
-
 
 enum CmdType {
   NONE = 0;
@@ -63,8 +62,7 @@ message RaftCmdRequest {
   repeated Request requests = 2;
 }
 
-message ResponseHeader {
-}
+message ResponseHeader {}
 
 message RaftCmdResponse {
   ResponseHeader header = 1;

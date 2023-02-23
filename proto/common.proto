@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+// http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-syntax="proto3";
+syntax = "proto3";
 
 package dingodb.pb.common;
 
@@ -20,159 +20,238 @@ option java_package = "io.dingodb.common";
 option cc_generic_services = true;
 
 enum Engine {
-    ENG_ROCKSDB                       = 0;
-    ENG_MEMORY                        = 1;
-    ENG_XDP                           = 2;
-    ENG_CLICKHOUSE                    = 3;
+  ENG_ROCKSDB = 0;
+  ENG_MEMORY = 1;
+  ENG_XDP = 2;
+  ENG_CLICKHOUSE = 3;
 };
 
 message Location {
-  string ip      = 1;
-  int32  port    = 2;
+  string host = 1;
+  int32 port = 2;
 }
-
-message Schema {
-    string name     = 1;
-}
-
 
 message Range {
-  bytes start_key               = 1;
-  bytes end_key                 = 2;
+  bytes start_key = 1;
+  bytes end_key = 2;
 }
 
 message KeyValue {
-  bytes key                     = 1;
-  bytes value                   = 2;
+  bytes key = 1;
+  bytes value = 2;
 }
-
-
-enum RegionStatus {
-    REGION_STATUS_NONE = 0;
-    REGION_STATUS_IDLE = 1;
-    REGION_STATUS_DOING = 2;
-}
-
-message RegionInfo {
-    uint64 region_id                            = 1;
-    uint64 region_epoch                         = 2;
-    uint64 table_id                             = 3;
-    string table_name                           = 4;
-    uint64 partition_id                         = 5;
-    uint32 replica_num                          = 6;
-    Range  range                                = 7;
-
-    repeated string peers                       = 10;
-    string leader                               = 11;
-
-    RegionStatus status                         = 20;
-
-    uint32 create_time                          = 30;
-};
 
 enum IdType {
-    ID_TYPE_SCHEMA            = 0;
-    ID_TYPE_TABLE             = 1;
-    ID_TYPE_INDEX             = 2;
+  ID_TYPE_SCHEMA = 0;
+  ID_TYPE_TABLE = 1;
+  ID_TYPE_INDEX = 2;
 }
 
 message CommonId {
-  IdType type        = 1;
-  uint64 value       = 2;
+  IdType type = 1;
+  uint64 value = 2;
 }
 
 /**
  * Define types about SQL.
-*/
+ */
 enum SqlType {
-  SQL_TYPE_BOOLEAN              = 0;
-  SQL_TYPE_INTEGER              = 1;
-  SQL_TYPE_BIGINT               = 2;
-  SQL_TYPE_DOUBLE               = 3;
-  SQL_TYPE_FLOAT                = 4;
-  SQL_TYPE_DATE                 = 5;
-  SQL_TYPE_TIME                 = 6;
-  SQL_TYPE_TIMESTAMP            = 7;
-  SQL_TYPE_VARCHAR              = 8;
-  SQL_TYPE_ARRAY                = 9;
-  SQL_TYPE_MULTISET             = 10;
-  SQL_TYPE_ANY                  = 11;
+  SQL_TYPE_BOOLEAN = 0;
+  SQL_TYPE_INTEGER = 1;
+  SQL_TYPE_BIGINT = 2;
+  SQL_TYPE_DOUBLE = 3;
+  SQL_TYPE_FLOAT = 4;
+  SQL_TYPE_DATE = 5;
+  SQL_TYPE_TIME = 6;
+  SQL_TYPE_TIMESTAMP = 7;
+  SQL_TYPE_VARCHAR = 8;
+  SQL_TYPE_ARRAY = 9;
+  SQL_TYPE_MULTISET = 10;
+  SQL_TYPE_ANY = 11;
 }
 
 /**
-* Define ElementType about Composite Structure.
-*/
+ * Define ElementType about Composite Structure.
+ */
 enum ElementType {
-    ELEM_TYPE_DOUBLE              = 0;
-    ELEM_TYPE_FLOAT               = 1;
-    ELEM_TYPE_INT32               = 2;
-    ELEM_TYPE_INT64               = 3;
-    ELEM_TYPE_UINT32              = 4;
-    ELEM_TYPE_UINT64              = 5;
-    ELEM_TYPE_BOOLEAN             = 6;
-    ELEM_TYPE_STRING              = 7;
-    ELEM_TYPE_BYTES               = 8;
-    ELEM_TYPE_FIX32               = 9;
-    ELEM_TYPE_FIX64               = 10;
-    ELEM_TYPE_SFIX32              = 11;
-    ELEM_TYPE_SFIX64              = 12;
+  ELEM_TYPE_DOUBLE = 0;
+  ELEM_TYPE_FLOAT = 1;
+  ELEM_TYPE_INT32 = 2;
+  ELEM_TYPE_INT64 = 3;
+  ELEM_TYPE_UINT32 = 4;
+  ELEM_TYPE_UINT64 = 5;
+  ELEM_TYPE_BOOLEAN = 6;
+  ELEM_TYPE_STRING = 7;
+  ELEM_TYPE_BYTES = 8;
+  ELEM_TYPE_FIX32 = 9;
+  ELEM_TYPE_FIX64 = 10;
+  ELEM_TYPE_SFIX32 = 11;
+  ELEM_TYPE_SFIX64 = 12;
 }
 
 /**
-* Column Definition.
-*/
+ * Column Definition.
+ */
 message ColumnDefinition {
-  string                    name                   = 1;
-  SqlType                   sql_type               = 2;
-  ElementType               element_type           = 3;
-  int32                     precision              = 4;
-  int32                     scale                  = 5;
-  bool                      nullable               = 6;
-  int32                     indexOfKey             = 7;
-  bool                      has_default_val        = 8;
-  string                    default_val            = 9;
+  string name = 1;
+  SqlType sql_type = 2;
+  ElementType element_type = 3;
+  int32 precision = 4;
+  int32 scale = 5;
+  bool nullable = 6;
+  int32 indexOfKey = 7;
+  bool has_default_val = 8;
+  string default_val = 9;
 }
 
-
 /**
-* Information about Index.
-*/
+ * Information about Index.
+ */
 message Index {
-  repeated string index_column             = 1;
-  bool            is_unique                = 2;
+  repeated string index_column = 1;
+  bool is_unique = 2;
 }
 
 /**
  * compute partition by columns and operand function.
-*/
+ */
 enum PartitionStrategy {
   PT_STRATEGY_RANGE = 0;
-  PT_STRATEGY_HASH  = 1;
+  PT_STRATEGY_HASH = 1;
 }
 
 message PartitionRange {
-  repeated string range = 1;
+  repeated Range range = 1;
 }
 
-message TablePartition {
-  repeated string           partition_column                    = 1;
-  PartitionStrategy         partition_strategy                  = 2;
-  PartitionRange            partition_range                     = 3;
+message PartitionRule {
+  repeated string partition_column = 1;
+  PartitionStrategy partition_strategy = 2;
+  PartitionRange partition_range = 3;
 }
 
 message TableRegions {
-    CommonId partition_id                = 1;
-    repeated RegionInfo regions          = 2;
+  CommonId partition_id = 1;
+  repeated Region regions = 2;
 }
 
+// TableDefinition is for SQL
 message TableDefinition {
-    CommonId                               id                     = 1;
-    string                                 name                   = 2;
-    repeated ColumnDefinition              columns                = 3;
-    map<string, Index>                     indexes                = 4;
-    uint32                                 version                = 5;
-    uint64                                 ttl                    = 6;
-    TablePartition                         table_partition        = 7;
-    Engine                                 engine                 = 8;
-    map<string, string>                    properties             = 9;
+  string name = 1;
+  repeated ColumnDefinition columns = 2;
+  map<string, Index> indexes = 3;
+  uint32 version = 4;
+  uint64 ttl = 5;
+  PartitionRule table_partition = 6;
+  Engine engine = 7;
+  map<string, string> properties = 8;
+}
+
+message Epoch {
+  uint64 epoch = 1;
+}
+
+enum CoordinatorStatus {
+  COORDINATOR_NORMAL = 0;
+  COORDINATOR_OFFLINE = 1;
+}
+
+enum StoreStatus {
+  STORE_NORMAL = 0;
+  STORE_NEW = 1;      // a new store, wait to startup and join raft
+  STORE_OFFLINE = 2;  // miss hearteat
+  STORE_OUT = 3;      // up but no data will distribute to this store
+}
+
+enum RegionStatus {
+  REGION_NORMAL = 0;
+
+  REGION_NEW = 1;  // create new region
+
+  REGION_DEGRADED = 2;  // region has less than 3 peer
+  REGION_DANGER = 3;    // region has only one peer
+
+  REGION_EXPAND = 4;     // start to expand
+  REGION_EXPANDING = 5;  // leader start to expand region
+  REGION_EXPANDED = 6;   // new peer joined raft
+
+  REGION_SHRINK = 7;      // start to shrink
+  REGION_SHIRINKING = 8;  // leader start to shrink region
+  REGION_SHRANK = 9;      // shrink finish, maybe we don't need this status
+
+  REGION_DELETE = 10;    // region need to delete
+  REGION_DELETING = 11;  // region is deleting
+  REGION_DELETED = 12;   // region is deleted
+  // other status add here
+}
+
+message Coordinator {
+  uint64 id = 1;
+  CoordinatorStatus status = 2;
+  Location location = 3;
+  string resource_tag = 4;
+}
+
+message CoordinatorMap {
+  Epoch epoch = 1;
+  repeated Coordinator coordinators = 2;
+}
+
+message Store {
+  uint64 id = 1;
+  StoreStatus status = 2;
+  Location location = 3;
+  string resource_tag = 4;
+}
+
+message StoreMap {
+  Epoch epoch = 1;
+  repeated Store stores = 2;
+}
+
+message Region {
+  // store info
+  uint64 region_id = 1;
+  string region_name = 2;
+  RegionStatus status = 3;
+  int64 leader_store_id = 4;
+  repeated Store electors = 5;
+  repeated Store learners = 6;
+  Range range = 7;
+
+  // meta info
+  CommonId schema_id = 8;
+  CommonId table_id = 9;
+  CommonId partition_id = 10;
+
+  // other
+  uint64 create_timestamp = 11;
+}
+
+message RegionMap {
+  Epoch epoch = 1;
+  repeated Region regions = 2;
+}
+
+// A TablePart has one or many regions.
+message TablePart {
+  CommonId part_id = 1;
+  Range range = 2;              // the range of this part
+  repeated Region regions = 3;  // Region has range property
+}
+
+// Table is for Coordinator & Store
+// A Table has one or many parts.
+message Table {
+  CommonId table_id = 1;
+  TableDefinition table_def;
+  repeated TablePart = 3;
+}
+
+// Schema
+message Schema {
+  CommonId schema_id = 1;
+  string schema_name = 2;
+  repeated Schema = 3;
+  repeated Table = 4;
 }
