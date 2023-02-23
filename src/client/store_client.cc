@@ -1,25 +1,24 @@
 // Copyright (c) 2023 dingodb.com, Inc. All Rights Reserved
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
-// 
+//
 //     http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "gflags/gflags.h"
-#include "bthread/bthread.h"
+#include "braft/raft.h"
+#include "braft/route_table.h"
+#include "braft/util.h"
 #include "brpc/channel.h"
 #include "brpc/controller.h"
-#include "braft/raft.h"
-#include "braft/util.h"
-#include "braft/route_table.h"
-
+#include "bthread/bthread.h"
+#include "gflags/gflags.h"
 #include "proto/store.pb.h"
 
 DEFINE_bool(log_each_request, true, "Print log for each request");
@@ -31,7 +30,8 @@ DEFINE_string(store_addr, "127.0.0.1:20001", "store server addr");
 
 bvar::LatencyRecorder g_latency_recorder("dingo-store");
 
-void sendKvGet(brpc::Controller& cntl, dingodb::pb::store::StoreService_Stub& stub) {
+void sendKvGet(brpc::Controller& cntl,
+               dingodb::pb::store::StoreService_Stub& stub) {
   dingodb::pb::store::KvGetRequest request;
   dingodb::pb::store::KvGetResponse response;
 
@@ -46,33 +46,31 @@ void sendKvGet(brpc::Controller& cntl, dingodb::pb::store::StoreService_Stub& st
 
   if (FLAGS_log_each_request) {
     LOG(INFO) << "Received response"
-              << " key=" << request.key()
-              << " value=" << response.value()
-              << " request_attachment="
-              << cntl.request_attachment().size()
-              << " response_attachment="
-              << cntl.response_attachment().size()
+              << " key=" << request.key() << " value=" << response.value()
+              << " request_attachment=" << cntl.request_attachment().size()
+              << " response_attachment=" << cntl.response_attachment().size()
               << " latency=" << cntl.latency_us();
   }
 }
 
-void sendAddRegion(brpc::Controller& cntl, dingodb::pb::store::StoreService_Stub& stub) {
+void sendAddRegion(brpc::Controller& cntl,
+                   dingodb::pb::store::StoreService_Stub& stub) {
   dingodb::pb::store::AddRegionRequest request;
   dingodb::pb::store::AddRegionResponse response;
 
-  dingodb::pb::common::RegionInfo* region = request.mutable_region_info();
+  dingodb::pb::common::Region* region = request.mutable_region();
   region->set_region_id(10000);
   region->set_region_epoch(1);
   region->set_table_id(10);
-  region->set_table_name("test-10");
+  // region->set_table_name("test-10");
   region->set_partition_id(1);
-  region->set_replica_num(1);
+  // region->set_replica_num(1);
   dingodb::pb::common::Range* range = region->mutable_range();
   range->set_start_key("0000000");
   range->set_end_key("11111111");
-  region->add_peers("127.0.0.1:20101:0");
-  region->add_peers("127.0.0.1:20102:0");
-  region->add_peers("127.0.0.1:20103:0");
+  // region->add_electors("127.0.0.1:20101:0");
+  // region->add_electors("127.0.0.1:20102:0");
+  // region->add_electors("127.0.0.1:20103:0");
 
   stub.AddRegion(&cntl, &request, &response, NULL);
   if (cntl.Failed()) {
@@ -82,10 +80,8 @@ void sendAddRegion(brpc::Controller& cntl, dingodb::pb::store::StoreService_Stub
 
   if (FLAGS_log_each_request) {
     LOG(INFO) << "Received response"
-              << " request_attachment="
-              << cntl.request_attachment().size()
-              << " response_attachment="
-              << cntl.response_attachment().size()
+              << " request_attachment=" << cntl.request_attachment().size()
+              << " response_attachment=" << cntl.response_attachment().size()
               << " latency=" << cntl.latency_us();
   }
 }
@@ -132,9 +128,9 @@ int main(int argc, char* argv[]) {
 
   while (!brpc::IsAskedToQuit()) {
     LOG_IF(INFO, !FLAGS_log_each_request)
-            << "Sending Request"
-            << " qps=" << g_latency_recorder.qps(1)
-            << " latency=" << g_latency_recorder.latency(1);
+        << "Sending Request"
+        << " qps=" << g_latency_recorder.qps(1)
+        << " latency=" << g_latency_recorder.latency(1);
   }
 
   LOG(INFO) << "Store client is going to quit";

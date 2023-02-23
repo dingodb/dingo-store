@@ -22,7 +22,7 @@ option java_package = "io.dingodb.store";
 option cc_generic_services = true;
 
 message AddRegionRequest {
-  dingodb.pb.common.RegionInfo region_info = 1;
+  dingodb.pb.common.Region region = 1;
 }
 
 message AddRegionResponse {}

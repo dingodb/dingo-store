@@ -23,7 +23,7 @@ void CoordinatorServiceImpl::Hello(google::protobuf::RpcController *controller,
   brpc::ClosureGuard done_guard(done);
   LOG(INFO) << "Hello request: " << request->hello();
 
-  response->set_status(static_cast<dingodb::pb::coordinator::CoordinatorStatus>(0));
+  response->set_status(static_cast<dingodb::pb::common::CoordinatorStatus>(0));
   response->set_status_detail("OK");
 }
 

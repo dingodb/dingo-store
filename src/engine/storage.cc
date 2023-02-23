@@ -24,7 +24,7 @@ Storage::Storage(Engine* engine): engine_(engine) {
 Storage::~Storage() {
 }
 
-int Storage::AddRegion(uint64_t region_id, const dingodb::pb::common::RegionInfo& region) {
+int Storage::AddRegion(uint64_t region_id, const dingodb::pb::common::Region& region) {
   return engine_->AddRegion(region_id, region);
 }
 

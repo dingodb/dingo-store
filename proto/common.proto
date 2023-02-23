@@ -131,7 +131,7 @@ message PartitionRule {
 }
 
 message TableRegions {
-  CommonId partition_id = 1;
+  uint64 partition_id = 1;
   repeated Region regions = 2;
 }
 
@@ -147,7 +147,7 @@ message TableDefinition {
   map<string, string> properties = 8;
 }
 
-message Epoch {
+message uint64 {
   uint64 epoch = 1;
 }
 
@@ -193,7 +193,7 @@ message Coordinator {
 }
 
 message CoordinatorMap {
-  Epoch epoch = 1;
+  uint64 epoch = 1;
   repeated Coordinator coordinators = 2;
 }
 
@@ -205,37 +205,38 @@ message Store {
 }
 
 message StoreMap {
-  Epoch epoch = 1;
+  uint64 epoch = 1;
   repeated Store stores = 2;
 }
 
 message Region {
   // store info
   uint64 region_id = 1;
-  string region_name = 2;
-  RegionStatus status = 3;
-  int64 leader_store_id = 4;
-  repeated Store electors = 5;
-  repeated Store learners = 6;
-  Range range = 7;
+  uint64 region_epoch = 2;
+  string region_name = 3;
+  RegionStatus status = 4;
+  int64 leader_store_id = 5;
+  repeated Store electors = 6;
+  repeated Store learners = 7;
+  Range range = 8;
 
   // meta info
-  CommonId schema_id = 8;
-  CommonId table_id = 9;
-  CommonId partition_id = 10;
+  uint64 schema_id = 9;
+  uint64 table_id = 10;
+  uint64 partition_id = 11;
 
   // other
-  uint64 create_timestamp = 11;
+  uint64 create_timestamp = 12;
 }
 
 message RegionMap {
-  Epoch epoch = 1;
+  uint64 epoch = 1;
   repeated Region regions = 2;
 }
 
 // A TablePart has one or many regions.
 message TablePart {
-  CommonId part_id = 1;
+  uint64 part_id = 1;
   Range range = 2;              // the range of this part
   repeated Region regions = 3;  // Region has range property
 }
@@ -243,15 +244,15 @@ message TablePart {
 // Table is for Coordinator & Store
 // A Table has one or many parts.
 message Table {
-  CommonId table_id = 1;
-  TableDefinition table_def;
-  repeated TablePart = 3;
+  uint64 table_id = 1;
+  TableDefinition table_definition = 2;
+  repeated TablePart table_part = 3;
 }
 
 // Schema
 message Schema {
-  CommonId schema_id = 1;
+  uint64 schema_id = 1;
   string schema_name = 2;
-  repeated Schema = 3;
-  repeated Table = 4;
+  repeated Schema schemas = 3;
+  repeated Table tables = 4;
 }

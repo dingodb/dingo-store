@@ -47,13 +47,13 @@ void StoreServiceImpl::AddRegion(google::protobuf::RpcController* controller,
   LOG(INFO) << "here 00001";
 
   // Add raft node
-  storage_->AddRegion(request->region_info().region_id(), request->region_info());
+  storage_->AddRegion(request->region().region_id(), request->region());
 
   LOG(INFO) << "here 00002";
   
   // Add region to store region manager
-  StoreRegionManager::GetInstance()->AddRegion(request->region_info().region_id(),
-                                               request->region_info());
+  StoreRegionManager::GetInstance()->AddRegion(request->region().region_id(),
+                                               request->region());
 
   LOG(INFO) << "here 00003";
 }
