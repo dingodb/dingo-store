@@ -31,7 +31,7 @@ class Helper {
       const google::protobuf::RepeatedPtrField<pb::common::Store>& stores) {
     std::vector<pb::common::Location> locations;
     for (auto store : stores) {
-      locations.push_back(store.location());
+      locations.push_back(store.raft_location());
     }
     return locations;
   }
