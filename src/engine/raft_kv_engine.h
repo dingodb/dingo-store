@@ -29,7 +29,7 @@ class RaftKvEngine : public Engine {
   RaftKvEngine(Engine* engine);
   ~RaftKvEngine();
 
-  bool Init();
+  bool Init(const std::string& conf_path);
 
   std::string GetName();
   uint32_t GetID();

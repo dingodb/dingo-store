@@ -28,7 +28,9 @@ RaftKvEngine::RaftKvEngine(Engine* engine)
 
 RaftKvEngine::~RaftKvEngine() {}
 
-bool RaftKvEngine::Init() { return true; }
+bool RaftKvEngine::Init([[maybe_unused]] const std::string& conf_path) {
+  return true;
+}
 
 std::string RaftKvEngine::GetName() { return "RAFT_KV_ENGINE"; }
 

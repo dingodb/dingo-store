@@ -18,7 +18,7 @@ namespace dingodb {
 
 MemEngine::MemEngine() {}
 
-bool MemEngine::Init() {}
+bool MemEngine::Init([[maybe_unused]] const std::string& conf_path) {}
 std::string MemEngine::GetName() { return "MEM_ENGINE"; }
 
 uint32_t MemEngine::GetID() { return pb::common::ENG_MEMORY; }

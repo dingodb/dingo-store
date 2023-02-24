@@ -27,14 +27,16 @@ class Engine {
  public:
   virtual ~Engine() {}
 
-  virtual bool Init() = 0;
+  virtual bool Init(const std::string& conf_path) = 0;
   virtual std::string GetName() = 0;
   virtual uint32_t GetID() = 0;
 
-  virtual int AddRegion(uint64_t region_id, const pb::common::Region& region) {}
-  virtual int DestroyRegion(uint64_t region_id) {}
+  virtual int AddRegion(uint64_t region_id, const pb::common::Region& region) {
+    return 0;
+  }
+  virtual int DestroyRegion(uint64_t region_id) { return 0; }
 
-  virtual Snapshot* GetSnapshot() {}
+  virtual Snapshot* GetSnapshot() { return nullptr; }
   virtual void ReleaseSnapshot() {}
 
   virtual std::shared_ptr<std::string> KvGet(std::shared_ptr<Context> ctx,
