@@ -17,20 +17,19 @@
 
 #include "brpc/controller.h"
 #include "brpc/server.h"
-
 #include "proto/coordinator.pb.h"
 
 namespace dingodb {
 
-class CoordinatorServiceImpl: public pb::coordinator::CoordinatorService {
+class CoordinatorServiceImpl : public pb::coordinator::CoordinatorService {
  public:
   CoordinatorServiceImpl() {}
   void Hello(google::protobuf::RpcController* controller,
-                  const pb::coordinator::HelloRequest* request,
-                  pb::coordinator::HelloResponse* response,
-                  google::protobuf::Closure* done);
+             const pb::coordinator::HelloRequest* request,
+             pb::coordinator::HelloResponse* response,
+             google::protobuf::Closure* done);
 };
 
-} // namespace dingodb
+}  // namespace dingodb
 
-#endif // DINGODB_COORDINATOR_SERVICE_H_
+#endif  // DINGODB_COORDINATOR_SERVICE_H_

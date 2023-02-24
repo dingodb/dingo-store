@@ -1,11 +1,8 @@
 
 
-
 #include "common/slice.h"
 
-
 namespace dingodb {
-
 
 // 2 small internal utility functions, for efficient hex conversions
 // and no need for snprintf, toupper etc...
@@ -91,5 +88,4 @@ bool Slice::DecodeHex(std::string* result) const {
   return true;
 }
 
-
-} // namespace dingodb
+}  // namespace dingodb

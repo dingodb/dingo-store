@@ -1,11 +1,11 @@
 // Copyright (c) 2023 dingodb.com, Inc. All Rights Reserved
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
-// 
+//
 //     http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -15,17 +15,16 @@
 #include "raft/raft_node.h"
 
 #include "butil/strings/stringprintf.h"
-#include "raft/state_machine.h"
 #include "config/config_manager.h"
-
+#include "raft/state_machine.h"
 
 namespace dingodb {
 
-RaftNode::RaftNode(uint64_t node_id, braft::PeerId peer_id, braft::StateMachine *fsm)
-  : node_id_(node_id),
-    node_(new braft::Node(std::to_string(node_id), peer_id)),
-    fsm_(fsm) {
-}
+RaftNode::RaftNode(uint64_t node_id, braft::PeerId peer_id,
+                   braft::StateMachine* fsm)
+    : node_id_(node_id),
+      node_(new braft::Node(std::to_string(node_id), peer_id)),
+      fsm_(fsm) {}
 
 RaftNode::~RaftNode() {
   if (fsm_) {
@@ -50,7 +49,8 @@ int RaftNode::Init(const std::string& init_conf) {
   node_options.node_owns_fsm = false;
   node_options.snapshot_interval_s = config->GetInt("raft.snapshotInterval");
 
-  std::string path = butil::StringPrintf("%s/%ld", config->GetString("raft.path").c_str(), node_id_);
+  std::string path = butil::StringPrintf(
+      "%s/%ld", config->GetString("raft.path").c_str(), node_id_);
   node_options.log_uri = "local://" + path + "/log";
   node_options.raft_meta_uri = "local://" + path + "/raft_meta";
   node_options.snapshot_uri = "local://" + path + "/snapshot";
@@ -64,11 +64,12 @@ int RaftNode::Init(const std::string& init_conf) {
   return 0;
 }
 
-void RaftNode::Destroy() {
-}
+void RaftNode::Destroy() {}
 
 // Commit message to raft
-pb::error::Errno RaftNode::Commit(std::shared_ptr<Context> ctx, std::shared_ptr<pb::raft::RaftCmdRequest> raft_cmd) {
+pb::error::Errno RaftNode::Commit(
+    std::shared_ptr<Context> ctx,
+    std::shared_ptr<pb::raft::RaftCmdRequest> raft_cmd) {
   if (!IsLeader()) {
     return pb::error::ERAFT_NOTLEADER;
   }
@@ -84,21 +85,13 @@ pb::error::Errno RaftNode::Commit(std::shared_ptr<Context> ctx, std::shared_ptr<
   return pb::error::OK;
 }
 
-bool RaftNode::IsLeader() {
-  return node_->is_leader();
-}
+bool RaftNode::IsLeader() { return node_->is_leader(); }
 
-bool RaftNode::IsLeaderLeaseValid() {
-  return node_->is_leader_lease_valid();
-}
+bool RaftNode::IsLeaderLeaseValid() { return node_->is_leader_lease_valid(); }
 
-braft::PeerId RaftNode::GetLeaderId() {
-  return node_->leader_id();
-}
+braft::PeerId RaftNode::GetLeaderId() { return node_->leader_id(); }
 
-void RaftNode::shutdown(braft::Closure* done) {
-  node_->shutdown(done);
-}
+void RaftNode::shutdown(braft::Closure* done) { node_->shutdown(done); }
 
 butil::Status RaftNode::ListPeers(std::vector<braft::PeerId>* peers) {
   return node_->list_peers(peers);
@@ -112,7 +105,8 @@ void RaftNode::RemovePeer(const braft::PeerId& peer, braft::Closure* done) {
   node_->remove_peer(peer, done);
 }
 
-void RaftNode::ChangePeers(const braft::Configuration& new_peers, braft::Closure* done) {
+void RaftNode::ChangePeers(const braft::Configuration& new_peers,
+                           braft::Closure* done) {
   node_->change_peers(new_peers, done);
 }
 
@@ -120,5 +114,4 @@ butil::Status RaftNode::ResetPeers(const braft::Configuration& new_peers) {
   node_->reset_peers(new_peers);
 }
 
-
-} // namespace dingodb
+}  // namespace dingodb

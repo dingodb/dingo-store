@@ -16,17 +16,15 @@
 
 #include "brpc/server.h"
 #include "butil/endpoint.h"
-#include "gflags/gflags.h"
-
-#include "proto/store.pb.h"
-#include "proto/coordinator.pb.h"
 #include "common/helper.h"
 #include "config/config.h"
 #include "config/config_manager.h"
-#include "server/store_service.h"
+#include "gflags/gflags.h"
+#include "proto/coordinator.pb.h"
+#include "proto/store.pb.h"
 #include "server/coordinator_service.h"
 #include "server/server.h"
-
+#include "server/store_service.h"
 
 DEFINE_string(conf, "", "server config");
 DEFINE_string(role, "", "server role [store|coordinator]");
@@ -69,7 +67,6 @@ butil::EndPoint getRaftEndPoint(std::shared_ptr<dingodb::Config> config) {
   return butil::EndPoint(ip, port);
 }
 
-
 int main(int argc, char *argv[]) {
   google::ParseCommandLineFlags(&argc, &argv, true);
   if (FLAGS_role != "coordinator" && FLAGS_role != "store") {
@@ -80,21 +77,22 @@ int main(int argc, char *argv[]) {
     LOG(ERROR) << "Missing server config.";
     return -1;
   }
-  
+
   auto dingodb_server = dingodb::Server::GetInstance();
   dingodb_server->InitConfig(FLAGS_conf);
   dingodb_server->InitLog(FLAGS_role);
 
-  dingodb_server->set_server_endpoint(
-    getServerEndPoint(dingodb::ConfigManager::GetInstance()->GetConfig(FLAGS_role)));
-  dingodb_server->set_raft_endpoint(
-    getRaftEndPoint(dingodb::ConfigManager::GetInstance()->GetConfig(FLAGS_role)));
+  dingodb_server->set_server_endpoint(getServerEndPoint(
+      dingodb::ConfigManager::GetInstance()->GetConfig(FLAGS_role)));
+  dingodb_server->set_raft_endpoint(getRaftEndPoint(
+      dingodb::ConfigManager::GetInstance()->GetConfig(FLAGS_role)));
 
   brpc::Server server;
   dingodb::CoordinatorServiceImpl coordinator_service;
   dingodb::StoreServiceImpl store_service;
   if (FLAGS_role == "coordinator") {
-    if (server.AddService(&coordinator_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
+    if (server.AddService(&coordinator_service,
+                          brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
       LOG(ERROR) << "Fail to add coordinator service";
       return -1;
     }
@@ -106,7 +104,8 @@ int main(int argc, char *argv[]) {
     dingodb_server->InitStorage();
 
     store_service.set_storage(dingodb_server->get_storage());
-    if (server.AddService(&store_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
+    if (server.AddService(&store_service, brpc::SERVER_DOESNT_OWN_SERVICE) !=
+        0) {
       LOG(ERROR) << "Fail to add store service";
       return -1;
     }
@@ -120,7 +119,8 @@ int main(int argc, char *argv[]) {
 
   // raft server
   brpc::Server raft_server;
-  if (braft::add_service(&raft_server, dingodb_server->get_raft_endpoint()) != 0) {
+  if (braft::add_service(&raft_server, dingodb_server->get_raft_endpoint()) !=
+      0) {
     LOG(ERROR) << "Fail to add raft service";
     return -1;
   }
@@ -135,7 +135,7 @@ int main(int argc, char *argv[]) {
     sleep(1);
   }
   LOG(INFO) << "Server is going to quit";
-  
+
   raft_server.Stop(0);
   server.Stop(0);
   raft_server.Join();

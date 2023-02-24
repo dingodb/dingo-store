@@ -1,29 +1,27 @@
 // Copyright (c) 2023 dingodb.com, Inc. All Rights Reserved
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
-// 
+//
 //     http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 #include "config/yaml_config.h"
 
-#include "glog/logging.h"
 #include "butil/strings/string_util.h"
+#include "glog/logging.h"
 
 namespace dingodb {
 
-
 // Load config from string
 int YamlConfig::Load(const std::string& data) {
-  int new_active_index_ = active_index_.load() == 0? 1: 0;
+  int new_active_index_ = active_index_.load() == 0 ? 1 : 0;
   configs_[new_active_index_] = YAML::Load(data);
   active_index_.store(new_active_index_);
 
@@ -32,7 +30,7 @@ int YamlConfig::Load(const std::string& data) {
 
 // Load config from file
 int YamlConfig::LoadFile(const std::string& filename) {
-  int new_active_index_ = active_index_.load() == 0? 1: 0;
+  int new_active_index_ = active_index_.load() == 0 ? 1 : 0;
   configs_[new_active_index_] = YAML::LoadFile(filename);
   active_index_.store(new_active_index_);
 
@@ -59,7 +57,8 @@ std::string YamlConfig::GetString(const std::string& key) {
     butil::TrimWhitespaceASCII(s, butil::TrimPositions::TRIM_ALL, &result);
     return result;
   } catch (std::exception& e) {
-    LOG(ERROR) << "Config GetString failed: " << key << " exception: " << e.what();
+    LOG(ERROR) << "Config GetString failed: " << key
+               << " exception: " << e.what();
   }
 
   return "";
@@ -69,7 +68,8 @@ std::vector<int> YamlConfig::GetIntList(const std::string& key) {
   try {
     return GetList<int>(key);
   } catch (std::exception& e) {
-    LOG(ERROR) << "Config GetIntList failed: " << key << " exception: " << e.what();
+    LOG(ERROR) << "Config GetIntList failed: " << key
+               << " exception: " << e.what();
   }
 
   return std::vector<int>{};
@@ -79,7 +79,8 @@ std::vector<std::string> YamlConfig::GetStringList(const std::string& key) {
   try {
     return GetList<std::string>(key);
   } catch (std::exception& e) {
-    LOG(ERROR) << "Config GetStringList failed: " << key << " exception: " << e.what();
+    LOG(ERROR) << "Config GetStringList failed: " << key
+               << " exception: " << e.what();
   }
 
   return std::vector<std::string>{};
@@ -89,24 +90,27 @@ std::map<std::string, int> YamlConfig::GetIntMap(const std::string& key) {
   try {
     return GetMap<int>(key);
   } catch (std::exception& e) {
-    LOG(ERROR) << "Config GetIntMap failed: " << key << " exception: " << e.what();
+    LOG(ERROR) << "Config GetIntMap failed: " << key
+               << " exception: " << e.what();
   }
 
-  return std::map<std::string, int> {};
+  return std::map<std::string, int>{};
 }
 
-std::map<std::string, std::string> YamlConfig::GetStringMap(const std::string& key) {
+std::map<std::string, std::string> YamlConfig::GetStringMap(
+    const std::string& key) {
   try {
     return GetMap<std::string>(key);
   } catch (std::exception& e) {
-    LOG(ERROR) << "Config GetStringMap failed: " << key << " exception: " << e.what();
+    LOG(ERROR) << "Config GetStringMap failed: " << key
+               << " exception: " << e.what();
   }
 
   return std::map<std::string, std::string>{};
 }
 
 // Get scalar value
-template<typename T>
+template <typename T>
 T YamlConfig::GetScalar(const std::string& key) {
   std::vector<std::string> tokens;
   butil::SplitString(key, '.', &tokens);
@@ -121,7 +125,7 @@ T YamlConfig::GetScalar(const std::string& key) {
 }
 
 // Get list value
-template<typename T>
+template <typename T>
 std::vector<T> YamlConfig::GetList(const std::string& key) {
   std::vector<std::string> tokens;
   butil::SplitString(key, '.', &tokens);
@@ -135,7 +139,7 @@ std::vector<T> YamlConfig::GetList(const std::string& key) {
 }
 
 // Get map value
-template<typename T>
+template <typename T>
 std::map<std::string, T> YamlConfig::GetMap(const std::string& key) {
   std::vector<std::string> tokens;
   butil::SplitString(key, '.', &tokens);
@@ -153,5 +157,4 @@ std::map<std::string, T> YamlConfig::GetMap(const std::string& key) {
   return result;
 }
 
-
-} // namespace dingodb
+}  // namespace dingodb

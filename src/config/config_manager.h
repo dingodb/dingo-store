@@ -19,10 +19,9 @@
 #include <mutex>
 #include <shared_mutex>
 
-#include "glog/logging.h"
-
 #include "config/config.h"
 #include "config/yaml_config.h"
+#include "glog/logging.h"
 
 template <typename T>
 struct DefaultSingletonTraits;

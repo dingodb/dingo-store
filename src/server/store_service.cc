@@ -1,11 +1,11 @@
 // Copyright (c) 2023 dingodb.com, Inc. All Rights Reserved
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
-// 
+//
 //     http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -17,22 +17,20 @@
 #include "common/context.h"
 #include "region/store_region_manager.h"
 
-
 namespace dingodb {
 
-
-StoreServiceImpl::StoreServiceImpl() {
-}
+StoreServiceImpl::StoreServiceImpl() {}
 
 bool validateAddRegion(const dingodb::pb::store::AddRegionRequest* request,
                        std::string& error_msg) {
   return true;
 }
 
-void StoreServiceImpl::AddRegion(google::protobuf::RpcController* controller,
-                                 const dingodb::pb::store::AddRegionRequest* request,
-                                 dingodb::pb::store::AddRegionResponse* response,
-                                 google::protobuf::Closure* done) {
+void StoreServiceImpl::AddRegion(
+    google::protobuf::RpcController* controller,
+    const dingodb::pb::store::AddRegionRequest* request,
+    dingodb::pb::store::AddRegionResponse* response,
+    google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
   LOG(INFO) << "AddRegion request...";
@@ -46,16 +44,17 @@ void StoreServiceImpl::AddRegion(google::protobuf::RpcController* controller,
 
   // Add raft node
   storage_->AddRegion(request->region().id(), request->region());
-  
+
   // Add region to store region manager
   StoreRegionManager::GetInstance()->AddRegion(request->region().id(),
                                                request->region());
 }
 
-void StoreServiceImpl::DestroyRegion(google::protobuf::RpcController* controller,
-                                     const dingodb::pb::store::DestroyRegionRequest* request,
-                                     dingodb::pb::store::DestroyRegionResponse* response,
-                                     google::protobuf::Closure* done) {
+void StoreServiceImpl::DestroyRegion(
+    google::protobuf::RpcController* controller,
+    const dingodb::pb::store::DestroyRegionRequest* request,
+    dingodb::pb::store::DestroyRegionResponse* response,
+    google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
   LOG(INFO) << "DestroyRegion request...";
@@ -105,7 +104,8 @@ void StoreServiceImpl::KvPut(google::protobuf::RpcController* controller,
 
   LOG(INFO) << "KvPut request here 01";
 
-  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done_guard.release());
+  std::shared_ptr<Context> ctx =
+      std::make_shared<Context>(cntl, done_guard.release());
   ctx->set_region_id(request->region_id());
   auto errcode = storage_->KvPut(ctx, request->kv());
   if (errcode != pb::error::OK) {
@@ -118,10 +118,10 @@ void StoreServiceImpl::KvPut(google::protobuf::RpcController* controller,
 }
 
 void StoreServiceImpl::KvBatchPutIfAbsent(
-  google::protobuf::RpcController* controller,
-  const dingodb::pb::store::KvBatchPutIfAbsentRequest* request,
-  dingodb::pb::store::KvBatchPutIfAbsentResponse* response,
-  google::protobuf::Closure* done) {
+    google::protobuf::RpcController* controller,
+    const dingodb::pb::store::KvBatchPutIfAbsentRequest* request,
+    dingodb::pb::store::KvBatchPutIfAbsentResponse* response,
+    google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
   LOG(INFO) << "KvBatchPutIfAbsent request: ";
@@ -131,4 +131,4 @@ void StoreServiceImpl::set_storage(std::shared_ptr<Storage> storage) {
   storage_ = storage;
 }
 
-} // namespace dingodb
+}  // namespace dingodb

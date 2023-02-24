@@ -54,7 +54,8 @@ void sendKvGet(brpc::Controller& cntl,
   }
 }
 
-void sendKvPut(brpc::Controller& cntl, dingodb::pb::store::StoreService_Stub& stub) {
+void sendKvPut(brpc::Controller& cntl,
+               dingodb::pb::store::StoreService_Stub& stub) {
   dingodb::pb::store::KvPutRequest request;
   dingodb::pb::store::KvPutResponse response;
 
@@ -70,18 +71,15 @@ void sendKvPut(brpc::Controller& cntl, dingodb::pb::store::StoreService_Stub& st
 
   if (FLAGS_log_each_request) {
     LOG(INFO) << "Received response"
-              << " key=" << kv->key()
-              << " value=" << kv->value()
-              << " request_attachment="
-              << cntl.request_attachment().size()
-              << " response_attachment="
-              << cntl.response_attachment().size()
+              << " key=" << kv->key() << " value=" << kv->value()
+              << " request_attachment=" << cntl.request_attachment().size()
+              << " response_attachment=" << cntl.response_attachment().size()
               << " latency=" << cntl.latency_us();
   }
-
 }
 
-void sendAddRegion(brpc::Controller& cntl, dingodb::pb::store::StoreService_Stub& stub) {
+void sendAddRegion(brpc::Controller& cntl,
+                   dingodb::pb::store::StoreService_Stub& stub) {
   dingodb::pb::store::AddRegionRequest request;
   dingodb::pb::store::AddRegionResponse response;
 
