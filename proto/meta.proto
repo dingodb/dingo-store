@@ -44,7 +44,7 @@ option cc_generic_services = true;
 // }
 
 message GetSchemaRequest {
-  dingodb.pb.common.CommonId schema_id = 1;
+  uint64 schema_id = 1;
 }
 
 message GetSchemaResponse {
@@ -52,7 +52,7 @@ message GetSchemaResponse {
 }
 
 message GetTablesRequest {
-  repeated dingodb.pb.common.CommonId schema_id = 1;
+  repeated uint64 schema_id = 1;
 }
 
 message GetTablesResponse {
@@ -68,13 +68,13 @@ message CreateTableResponse {
 }
 
 message DropTableRequest {
-  dingodb.pb.common.CommonId table_id = 1;
+  uint64 table_id = 1;
 }
 
 message DropTableResponse {}
 
 // message GetTablePartitionsReq {
-//   dingodb.pb.common.CommonId table_id = 1;
+//   uint64 table_id = 1;
 // }
 
 // message GetTablePartitionsRes {
@@ -82,7 +82,7 @@ message DropTableResponse {}
 // }
 
 // message GetRegionsReq {
-//   dingodb.pb.common.CommonId partition_id = 1;
+//   uint64 partition_id = 1;
 // }
 
 // message GetRegionsResponse {

@@ -65,21 +65,23 @@ int RaftNode::Init(const std::string& init_conf) {
 }
 
 void RaftNode::Destroy() {
-
 }
 
 // Commit message to raft
-void RaftNode::Commit(std::shared_ptr<Context> ctx, const dingodb::pb::raft::RaftCmdRequest& raft_cmd) {
-  StoreClosure* closure = new StoreClosure(ctx->get_cntl(), ctx->get_done());
-
+pb::error::Errno RaftNode::Commit(std::shared_ptr<Context> ctx, std::shared_ptr<pb::raft::RaftCmdRequest> raft_cmd) {
+  if (!IsLeader()) {
+    return pb::error::ERAFT_NOTLEADER;
+  }
+  LOG(INFO) << "Commit raft cmd to " << node_id_;
   butil::IOBuf data;
   butil::IOBufAsZeroCopyOutputStream wrapper(&data);
-  raft_cmd.SerializeToZeroCopyStream(&wrapper);
+  raft_cmd->SerializeToZeroCopyStream(&wrapper);
 
   braft::Task task;
   task.data = &data;
-  task.done = closure;
+  task.done = new StoreClosure(ctx->get_cntl(), ctx->get_done());
   node_->apply(task);
+  return pb::error::OK;
 }
 
 bool RaftNode::IsLeader() {

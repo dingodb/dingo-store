@@ -69,7 +69,6 @@ include_directories(${YAMLCPP_INCLUDE_DIR})
 include_directories(${OPENSSL_INCLUDE_DIR})
 include_directories(${PROJECT_SOURCE_DIR}/src)
 
-message(STATUS "===GTEST_LIBRARIES: ${GTEST_LIBRARIES}")
 
 set(DYNAMIC_LIB
     ${GFLAGS_LIBRARIES}

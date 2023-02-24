@@ -43,6 +43,7 @@ class Context {
   }
 
  private:
+  // brpc framework free resource
   brpc::Controller* cntl_;
   google::protobuf::Closure* done_;
 

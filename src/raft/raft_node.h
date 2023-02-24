@@ -20,8 +20,10 @@
 #include <braft/raft.h>
 #include <braft/util.h>
 
+#include "proto/error.pb.h"
 #include "proto/raft.pb.h"
 #include "common/context.h"
+
 
 namespace dingodb {
 
@@ -34,7 +36,7 @@ class RaftNode {
   int Init(const std::string& init_conf);
   void Destroy();
 
-  void Commit(std::shared_ptr<Context> ctx, const dingodb::pb::raft::RaftCmdRequest& raft_cmd);
+  pb::error::Errno Commit(std::shared_ptr<Context> ctx, std::shared_ptr<pb::raft::RaftCmdRequest> raft_cmd);
 
   bool IsLeader();
   bool IsLeaderLeaseValid();

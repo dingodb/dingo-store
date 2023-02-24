@@ -18,6 +18,7 @@ if [ ! -d "$DIST_DIR" ]; then
 fi
 
 SERVER_NUM=3
+INSTANCE_START_ID=1000
 SERVER_HOST=127.0.0.1
 SERVER_START_PORT=20000
 RAFT_HOST=127.0.0.1
@@ -30,6 +31,7 @@ function deploy_store() {
   dstpath=$3
   server_port=$4
   raft_port=$5
+  instance_id=$6
 
   echo "server ${dstpath}"
 
@@ -62,6 +64,7 @@ function deploy_store() {
   cp $srcpath/build/bin/dingodb_server $dstpath/bin/
   cp $srcpath/conf/${role}.yaml $dstpath/conf/
 
+  sed  -i 's,\$INSTANCE_ID\$,'"$instance_id"',g'  $dstpath/conf/${role}.yaml
   sed  -i 's,\$SERVER_HOST\$,'"$SERVER_HOST"',g'  $dstpath/conf/${role}.yaml
   sed  -i 's,\$SERVER_PORT\$,'"$server_port"',g'  $dstpath/conf/${role}.yaml
   sed  -i 's,\$RAFT_HOST\$,'"$RAFT_HOST"',g'  $dstpath/conf/${role}.yaml
@@ -72,7 +75,7 @@ function deploy_store() {
 for ((i=1; i<=$SERVER_NUM; ++i)); do
   program_dir=$BASE_DIR/dist/${FLAGS_role}${i}
 
-  deploy_store ${FLAGS_role} $BASE_DIR $program_dir `expr $SERVER_START_PORT + $i` `expr $RAFT_START_PORT + $i`
+  deploy_store ${FLAGS_role} $BASE_DIR $program_dir `expr $SERVER_START_PORT + $i` `expr $RAFT_START_PORT + $i` `expr $INSTANCE_START_ID + $i`
 done
 
 echo "Finish..."

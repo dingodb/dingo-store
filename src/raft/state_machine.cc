@@ -26,6 +26,7 @@ namespace dingodb {
 
 
 void StoreClosure::Run() {
+  LOG(INFO) << "Closure run...";
   brpc::ClosureGuard done_guard(done_);
   if (!status().ok()) {
     cntl_->SetFailed(status().error_code(), "%s", status().error_cstr());
@@ -40,13 +41,13 @@ StoreStateMachine::StoreStateMachine(std::shared_ptr<Engine> engine)
 
 void StoreStateMachine::dispatchRequest(
   const StoreClosure* done, 
-  const dingodb::pb::raft::RaftCmdRequest& raft_cmd) {
+  const pb::raft::RaftCmdRequest& raft_cmd) {
   for (auto& req : raft_cmd.requests()) {
     switch (req.cmd_type()) {
-      case dingodb::pb::raft::CmdType::PUT:
+      case pb::raft::CmdType::PUT:
         handlePutRequest(done, req.put());
         break;
-      case dingodb::pb::raft::CmdType::PUTIFABSENT:
+      case pb::raft::CmdType::PUTIFABSENT:
         handlePutIfAbsentRequest(done, req.put_if_absent());
         break;
       default:
@@ -57,27 +58,34 @@ void StoreStateMachine::dispatchRequest(
 
 void StoreStateMachine::handlePutRequest(
   const StoreClosure* done,
-  const dingodb::pb::raft::PutRequest& request) {
+  const pb::raft::PutRequest& request) {
+  LOG(INFO) << "handlePutRequest ...";
   // todo: write data
+  std::shared_ptr<Context> ctx = std::make_shared<Context>();
+  for (auto& kv : request.kvs()) {
+    engine_->KvPut(ctx, kv);
+  }
 }
 
 void StoreStateMachine::handlePutIfAbsentRequest(
   const StoreClosure* done,
-  const dingodb::pb::raft::PutIfAbsentRequest& request) {
+  const pb::raft::PutIfAbsentRequest& request) {
     // todo: write data
+    LOG(INFO) << "handlePutIfAbsentRequest ...";
 }
 
 void StoreStateMachine::on_apply(braft::Iterator& iter) {
+  LOG(INFO) << "on_apply...";
   for (; iter.valid(); iter.next()) {
-    braft::AsyncClosureGuard closure_guard(iter.done());
+    brpc::ClosureGuard done_guard(iter.done());
 
-    butil::IOBuf data;
-    butil::IOBufAsZeroCopyInputStream wrapper(data);
-    dingodb::pb::raft::RaftCmdRequest raft_cmd;
+    butil::IOBufAsZeroCopyInputStream wrapper(iter.data());
+    pb::raft::RaftCmdRequest raft_cmd;
     CHECK(raft_cmd.ParseFromZeroCopyStream(&wrapper));
     LOG(INFO) << butil::StringPrintf("raft log %ld:%ld:%ld commited",
       raft_cmd.header().region_id(), iter.term(), iter.index());
 
+    LOG(INFO) << "raft_cmd: " << raft_cmd.ShortDebugString();
     dispatchRequest(dynamic_cast<StoreClosure*>(iter.done()), raft_cmd);
   }
 }

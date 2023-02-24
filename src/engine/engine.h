@@ -15,37 +15,31 @@
 #ifndef DINGODB_ENGINE_ENGINE_H_
 #define DINGODB_ENGINE_ENGINE_H_
 
+#include "proto/error.pb.h"
 #include "proto/common.pb.h"
-
 #include "common/slice.h"
 #include "common/context.h"
 #include "engine/snapshot.h"
+
 
 namespace dingodb {
 
 class Engine {
  public:
-  enum Type {
-    NONE = 0,
-    RAFT_KV_ENGINE,
-    ROCKS_ENGINE,
-    MEM_ENGINE
-  };
-  
   virtual ~Engine(){}
 
   virtual bool Init() = 0;
   virtual std::string GetName() = 0;
   virtual uint32_t GetID() = 0;
 
-  virtual int AddRegion(uint64_t region_id, const dingodb::pb::common::Region& region) {}
+  virtual int AddRegion(uint64_t region_id, const pb::common::Region& region) {}
   virtual int DestroyRegion(uint64_t region_id) {}
 
   virtual Snapshot* GetSnapshot(){}
   virtual void ReleaseSnapshot(){}
 
   virtual std::shared_ptr<std::string> KvGet(std::shared_ptr<Context> ctx, const std::string& key) = 0;
-  virtual int KvPut(std::shared_ptr<Context> ctx, const std::string& key, const std::string& value) = 0;
+  virtual pb::error::Errno KvPut(std::shared_ptr<Context> ctx, const pb::common::KeyValue& kv) = 0;
  protected:
   Engine(){};
 };
