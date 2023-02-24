@@ -16,7 +16,9 @@
 #define DINGODB_ENGINE_MEM_ENGINE_H_
 
 #include <map>
+#include <memory>
 #include <shared_mutex>
+#include <string>
 
 #include "common/context.h"
 #include "engine/engine.h"
@@ -29,17 +31,17 @@ class MemEngine : public Engine {
  public:
   MemEngine();
 
-  bool Init(std::shared_ptr<Config> config);
-  std::string GetName();
-  pb::common::Engine GetID();
+  bool Init(const std::shared_ptr<Config>& config) override;
+  std::string GetName() override;
+  uint32_t GetID() override;
 
-  int AddRegion(uint64_t region_id, const pb::common::Region& region);
-  int DestroyRegion(uint64_t region_id);
+  int AddRegion(uint64_t region_id, const pb::common::Region& region) override;
+  int DestroyRegion(uint64_t region_id) override;
 
   std::shared_ptr<std::string> KvGet(std::shared_ptr<Context> ctx,
-                                     const std::string& key);
+                                     const std::string& key) override;
   pb::error::Errno KvPut(std::shared_ptr<Context> ctx,
-                         const pb::common::KeyValue& kv);
+                         const pb::common::KeyValue& kv) override;
 
  private:
   std::shared_mutex mutex_;

@@ -15,7 +15,7 @@
 #ifndef DINGODB_COMMON_CONTEXT_H_
 #define DINGODB_COMMON_CONTEXT_H_
 
-#include <cstddef>
+#include <string>
 
 #include "brpc/controller.h"
 #include "proto/store.pb.h"
@@ -40,7 +40,13 @@ class Context {
   }
 
   uint64_t get_region_id() { return region_id_; }
-  void set_region_id(uint64_t region_id) { region_id_ = region_id; }
+  Context& set_region_id(uint64_t region_id) {
+    region_id_ = region_id;
+    return *this;
+  }
+
+  void set_cf_name(const std::string& cf_name) { cf_name_ = cf_name; }
+  const std::string& cf_name() const { return cf_name_; }
 
  private:
   // brpc framework free resource
@@ -48,6 +54,7 @@ class Context {
   google::protobuf::Closure* done_;
 
   uint64_t region_id_;
+  std::string cf_name_;
 };
 
 #endif

@@ -26,21 +26,22 @@ namespace dingodb {
 
 class RaftKvEngine : public Engine {
  public:
-  RaftKvEngine(std::shared_ptr<Engine> engine);
-  ~RaftKvEngine();
+  RaftKvEngine(Engine* engine);  // NOLINT
+  ~RaftKvEngine() override;
 
-  bool Init(std::shared_ptr<Config> config);
+  bool Init(const std::shared_ptr<Config>& config) override;
 
-  std::string GetName();
-  pb::common::Engine GetID();
+  std::string GetName() override;
+  uint32_t GetID() override;
 
-  int AddRegion(uint64_t region_id, const pb::common::Region& region);
-  int DestroyRegion(uint64_t region_id);
+  int AddRegion(uint64_t region_id, const pb::common::Region& region) override;
+  int DestroyRegion(uint64_t region_id) override;
 
-  std::shared_ptr<std::string> KvGet(std::shared_ptr<Context> ctx,
-                                     const std::string& key);
+  std::shared_ptr<std::string> KvGet(
+      std::shared_ptr<Context> ctx,
+      const std::string& key) override;  // NOLINT
   pb::error::Errno KvPut(std::shared_ptr<Context> ctx,
-                         const pb::common::KeyValue& kv);
+                         const pb::common::KeyValue& kv) override;
 
  private:
   std::shared_ptr<Engine> engine_;
@@ -49,4 +50,4 @@ class RaftKvEngine : public Engine {
 
 }  // namespace dingodb
 
-#endif  // DINGODB_ENGINE_RAFT_KV_ENGINE_H_
+#endif  // DINGODB_ENGINE_RAFT_KV_ENGINE_H_H  // NOLINT

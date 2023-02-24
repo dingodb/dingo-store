@@ -12,10 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DINGODB_ENGINE_ENGINE_H_
+#ifndef DINGODB_ENGINE_ENGINE_H_  // NOLINT
 #define DINGODB_ENGINE_ENGINE_H_
 
+#include <memory>
+#include <string>
+
 #include "common/context.h"
+<<<<<<< Updated upstream
+=======
+#include "common/slice.h"
+>>>>>>> Stashed changes
 #include "config/config.h"
 #include "engine/snapshot.h"
 #include "proto/common.pb.h"
@@ -23,19 +30,66 @@
 
 namespace dingodb {
 
+enum class EnumEngineIterator {
+  kRocksIterator = 0,
+  kMemoryIterator = 1,
+  kXdpIterator = 2,
+  kRaftStoreIterator = 3,
+  kColumnarIterator = 4,
+};
+
+enum class EnumEngineReader {
+  kRocksReader = 0,
+  kMemoryReader = 1,
+  kXdpReader = 2,
+  kRaftStoreReader = 3,
+  kColumnarReader = 4,
+};
+
+class EngineIterator : public std::enable_shared_from_this<EngineIterator> {
+ public:
+  EngineIterator() = default;
+  virtual ~EngineIterator() = default;
+  std::shared_ptr<EngineIterator> GetSelf() { return shared_from_this(); }
+
+  virtual bool HasNext() = 0;
+  virtual void Next() = 0;
+  virtual void GetKV(std::string& key, std::string& value) = 0;  // NOLINT
+  virtual const std::string& GetName() const = 0;
+  virtual uint32_t GetID() = 0;
+
+ protected:
+ private:
+};
+
+class EngineReader : public std::enable_shared_from_this<EngineReader> {
+ public:
+  EngineReader() = default;
+  virtual ~EngineReader() = default;
+  std::shared_ptr<EngineReader> GetSelf() { return shared_from_this(); }
+  virtual std::shared_ptr<EngineIterator> CreateIterator(
+      const std::string& key_begin, const std::string& key_end) = 0;
+  virtual std::shared_ptr<std::string> KvGet(const std::string& key) = 0;
+  virtual const std::string& GetName() const = 0;
+  virtual uint32_t GetID() = 0;
+
+ protected:
+ private:
+};
+
 class Engine {
  public:
   virtual ~Engine() = default;
 
-  virtual bool Init(std::shared_ptr<Config> config) = 0;
+  virtual bool Init(const std::shared_ptr<Config>& config) = 0;
   virtual std::string GetName() = 0;
   virtual pb::common::Engine GetID() = 0;
 
-  virtual int AddRegion([[maybe_unused]] uint64_t region_id,
-                        [[maybe_unused]] const pb::common::Region& region) {
-    return -1;
+  virtual int AddRegion(uint64_t /*region_id*/,
+                        const pb::common::Region& /*region*/) {
+    return 0;
   }
-  virtual int DestroyRegion([[maybe_unused]] uint64_t region_id) { return -1; }
+  virtual int DestroyRegion(uint64_t /*region_id*/) { return 0; }
 
   virtual Snapshot* GetSnapshot() { return nullptr; }
   virtual void ReleaseSnapshot() {}
@@ -45,11 +99,57 @@ class Engine {
   virtual pb::error::Errno KvPut(std::shared_ptr<Context> ctx,
                                  const pb::common::KeyValue& kv) = 0;
 
+  virtual std::shared_ptr<EngineReader> CreateReader(
+      std::shared_ptr<Context> /*ctx*/) {
+    return {};
+  }
+
+  // compare and replace. support does not exist
+  virtual pb::error::Errno KvBcompareAndSet(std::shared_ptr<Context> ctx,
+                                            const pb::common::KeyValue& kv,
+                                            const std::string& value) {
+    return pb::error::Errno::EKEY_NOTFOUND;
+  }
+
+  virtual pb::error::Errno KvDelete(std::shared_ptr<Context> ctx,
+                                    const std::string& key) {
+    return pb::error::Errno::EKEY_NOTFOUND;
+  }
+
+  virtual pb::error::Errno KvDeleteRange(std::shared_ptr<Context> ctx,
+                                         const std::string& key_begin,
+                                         const std::string& key_endbool,
+                                         bool delete_files_in_range) {
+    return pb::error::Errno::EKEY_NOTFOUND;
+  }
+
+  virtual pb::error::Errno KvWriteBatch(
+      std::shared_ptr<Context> ctx,
+      const std::vector<pb::common::KeyValue>& vt_put) {
+    return pb::error::Errno::EKEY_NOTFOUND;
+  }
+
+  // read range When the amount of data is relatively small.
+  // CreateReader may be better
+  // [key_begin, key_end)
+  virtual pb::error::Errno KvScan(
+      std::shared_ptr<Context> ctx, const std::string& key_begin,
+      const std::string& key_end,
+      std::vector<pb::common::KeyValue>& vt_kv) {  // NOLINT
+    return pb::error::Errno::EKEY_NOTFOUND;
+  }
+
+  // [key_begin, key_end)
+  virtual int64_t KvCount(std::shared_ptr<Context> ctx,
+                          const std::string& key_begin,
+                          const std::string& key_end) {
+    return -1;
+  }
+
  protected:
   Engine() = default;
-  ;
 };
 
 }  // namespace dingodb
 
-#endif  // DINGODB_ENGINE_ENGINE_H_
+#endif  // DINGODB_ENGINE_ENGINE_H_  // NOLINT

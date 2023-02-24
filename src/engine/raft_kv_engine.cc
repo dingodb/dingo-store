@@ -14,6 +14,9 @@
 
 #include "engine/raft_kv_engine.h"
 
+#include <string>
+#include <utility>
+
 #include "butil/endpoint.h"
 #include "common/helper.h"
 #include "config/config_manager.h"
@@ -28,8 +31,8 @@ RaftKvEngine::RaftKvEngine(std::shared_ptr<Engine> engine)
 
 RaftKvEngine::~RaftKvEngine() {}
 
-bool RaftKvEngine::Init(std::shared_ptr<Config> config) {
-  LOG(INFO) << "Init RaftKvEngine...";
+bool RaftKvEngine::Init(
+    [[maybe_unused]] const std::shared_ptr<Config>& config) {
   return true;
 }
 
@@ -37,7 +40,7 @@ std::string RaftKvEngine::GetName() { return "RAFT_KV_ENGINE"; }
 
 pb::common::Engine RaftKvEngine::GetID() { return pb::common::ENG_RAFTSTORE; }
 
-butil::EndPoint getRaftEndPoint(const std::string host, int port) {
+butil::EndPoint GetRaftEndPoint(const std::string host, int port) {
   butil::ip_t ip;
   if (host.empty()) {
     ip = butil::IP_ANY;
@@ -68,14 +71,15 @@ int RaftKvEngine::AddRegion(uint64_t region_id,
   return 0;
 }
 
-int RaftKvEngine::DestroyRegion(uint64_t region_id) { return 0; }
+int RaftKvEngine::DestroyRegion(uint64_t /*region_id*/) { return 0; }
 
-std::shared_ptr<std::string> RaftKvEngine::KvGet(std::shared_ptr<Context> ctx,
-                                                 const std::string& key) {
+std::shared_ptr<std::string> RaftKvEngine::KvGet(
+    std::shared_ptr<Context> ctx,
+    const std::string& key) {
   return nullptr;
 }
 
-std::shared_ptr<pb::raft::RaftCmdRequest> genRaftCmdRequest(
+std::shared_ptr<pb::raft::RaftCmdRequest> GenRaftCmdRequest(
     uint64_t region_id, const pb::common::KeyValue& kv) {
   std::shared_ptr<pb::raft::RaftCmdRequest> raft_cmd =
       std::make_shared<pb::raft::RaftCmdRequest>();
@@ -83,10 +87,10 @@ std::shared_ptr<pb::raft::RaftCmdRequest> genRaftCmdRequest(
   pb::raft::RequestHeader* header = raft_cmd->mutable_header();
   header->set_region_id(region_id);
 
-  auto request = raft_cmd->add_requests();
+  auto* request = raft_cmd->add_requests();
   request->set_cmd_type(pb::raft::CmdType::PUT);
   pb::raft::PutRequest* put_request = request->mutable_put();
-  auto kv_req = put_request->add_kvs();
+  auto* kv_req = put_request->add_kvs();
   *kv_req = kv;
 
   return raft_cmd;
@@ -100,7 +104,7 @@ pb::error::Errno RaftKvEngine::KvPut(std::shared_ptr<Context> ctx,
     return pb::error::ERAFT_NOTNODE;
   }
 
-  return node->Commit(ctx, genRaftCmdRequest(ctx->get_region_id(), kv));
+  return node->Commit(ctx, GenRaftCmdRequest(ctx->get_region_id(), kv));
 }
 
 }  // namespace dingodb

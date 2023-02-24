@@ -16,24 +16,21 @@
 
 namespace dingodb {
 
-MemEngine::MemEngine() {}
+MemEngine::MemEngine() = default;
 
-bool MemEngine::Init(std::shared_ptr<Config> config) {
-  LOG(INFO) << "Init MemEngine...";
-  return true;
-}
-
+bool MemEngine::Init([[maybe_unused]] const std::shared_ptr<Config>& config) {}
 std::string MemEngine::GetName() { return "MEM_ENGINE"; }
 
 pb::common::Engine MemEngine::GetID() { return pb::common::ENG_MEMORY; }
 
-int MemEngine::AddRegion(uint64_t region_id, const pb::common::Region& region) {
+int MemEngine::AddRegion(uint64_t /*region_id*/,
+                         const pb::common::Region& /*region*/) {
   return 0;
 }
 
-int MemEngine::DestroyRegion(uint64_t region_id) { return 0; }
+int MemEngine::DestroyRegion(uint64_t /*region_id*/) { return 0; }
 
-std::shared_ptr<std::string> MemEngine::KvGet(std::shared_ptr<Context> ctx,
+std::shared_ptr<std::string> MemEngine::KvGet(std::shared_ptr<Context> /*ctx*/,
                                               const std::string& key) {
   auto it = store_.find(key);
   if (it == store_.end()) {
@@ -43,7 +40,7 @@ std::shared_ptr<std::string> MemEngine::KvGet(std::shared_ptr<Context> ctx,
   return std::make_shared<std::string>(it->second);
 }
 
-pb::error::Errno MemEngine::KvPut(std::shared_ptr<Context> ctx,
+pb::error::Errno MemEngine::KvPut(std::shared_ptr<Context> /*ctx*/,
                                   const pb::common::KeyValue& kv) {
   LOG(INFO) << "MemEngine::KvPut: " << kv.key() << " : " << kv.value();
   std::unique_lock<std::shared_mutex> lock(mutex_);
