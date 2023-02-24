@@ -44,18 +44,12 @@ void StoreServiceImpl::AddRegion(google::protobuf::RpcController* controller,
     return;
   }
 
-  LOG(INFO) << "here 00001";
-
   // Add raft node
-  storage_->AddRegion(request->region().region_id(), request->region());
-
-  LOG(INFO) << "here 00002";
+  storage_->AddRegion(request->region().id(), request->region());
   
   // Add region to store region manager
-  StoreRegionManager::GetInstance()->AddRegion(request->region().region_id(),
+  StoreRegionManager::GetInstance()->AddRegion(request->region().id(),
                                                request->region());
-
-  LOG(INFO) << "here 00003";
 }
 
 void StoreServiceImpl::DestroyRegion(google::protobuf::RpcController* controller,
@@ -79,7 +73,7 @@ void StoreServiceImpl::KvGet(google::protobuf::RpcController* controller,
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
   LOG(INFO) << "KvGet request: " << request->key();
-  // const google::protobuf::Message *msg = static_cast<const google::protobuf::Message*>(request);
+
   std::string error_msg;
   if (!validateKvGetRequest(request, error_msg)) {
     cntl->SetFailed(brpc::EREQUEST, "%s", error_msg.c_str());
@@ -102,16 +96,25 @@ void StoreServiceImpl::KvPut(google::protobuf::RpcController* controller,
                              google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
-  LOG(INFO) << "KvPut request: " << request->key();
+  LOG(INFO) << "KvPut request: " << request->kv().key();
   std::string error_msg;
   if (!validateKvPutRequest(request, error_msg)) {
     cntl->SetFailed(brpc::EREQUEST, "%s", error_msg.c_str());
     return;
   }
 
-  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
+  LOG(INFO) << "KvPut request here 01";
+
+  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done_guard.release());
   ctx->set_region_id(request->region_id());
-  storage_->KvPut(ctx, request->key(), request->value());
+  auto errcode = storage_->KvPut(ctx, request->kv());
+  if (errcode != pb::error::OK) {
+    LOG(INFO) << "KvPut request here 02";
+    cntl->SetFailed(errcode, "Put failed");
+    brpc::ClosureGuard done_guard(done);
+  }
+
+  LOG(INFO) << "KvPut request here 03";
 }
 
 void StoreServiceImpl::KvBatchPutIfAbsent(

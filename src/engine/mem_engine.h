@@ -18,9 +18,11 @@
 #include <map>
 #include <shared_mutex>
 
+#include "proto/error.pb.h"
 #include "proto/store.pb.h"
 #include "common/context.h"
 #include "engine/engine.h"
+
 
 namespace dingodb {
 
@@ -32,11 +34,11 @@ class MemEngine: public Engine {
   std::string GetName();
   uint32_t GetID();
 
-  int AddRegion(uint64_t region_id, const dingodb::pb::common::Region& region);
+  int AddRegion(uint64_t region_id, const pb::common::Region& region);
   int DestroyRegion(uint64_t region_id);
 
   std::shared_ptr<std::string> KvGet(std::shared_ptr<Context> ctx, const std::string& key);
-  int KvPut(std::shared_ptr<Context> ctx, const std::string& key, const std::string& value);
+  pb::error::Errno KvPut(std::shared_ptr<Context> ctx, const pb::common::KeyValue& kv);
 
  private:
   std::shared_mutex mutex_;

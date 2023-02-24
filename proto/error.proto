@@ -26,6 +26,8 @@ enum Errno {
   EKEY_FORMAT = 5001;
 
   // raft
-  ERAFT_LOG = 5100;
+  ERAFT_NOTNODE = 5100;
+  ERAFT_NOTLEADER = 5101;
+  ERAFT_COMMITLOG = 5102;
 }
 

@@ -17,7 +17,6 @@
 namespace dingodb {
 
 
-
 MemEngine::MemEngine() {}
 
 bool MemEngine::Init() {}
@@ -26,10 +25,10 @@ std::string MemEngine::GetName() {
 }
 
 uint32_t MemEngine::GetID() {
-  return Engine::Type::MEM_ENGINE;
+  return pb::common::ENG_MEMORY;
 }
 
-int MemEngine::AddRegion(uint64_t region_id, const dingodb::pb::common::Region& region) {
+int MemEngine::AddRegion(uint64_t region_id, const pb::common::Region& region) {
   return 0;
 }
 
@@ -46,10 +45,11 @@ std::shared_ptr<std::string> MemEngine::KvGet(std::shared_ptr<Context> ctx, cons
   return std::make_shared<std::string>(it->second);
 }
 
-int MemEngine::KvPut(std::shared_ptr<Context> ctx, const std::string& key, const std::string& value) {
+pb::error::Errno MemEngine::KvPut(std::shared_ptr<Context> ctx, const pb::common::KeyValue& kv) {
+  LOG(INFO) << "MemEngine::KvPut: " << kv.key() << " : " << kv.value();
   std::unique_lock<std::shared_mutex> lock(mutex_);
-  store_[key] = value;
-  return 0;
+  store_[kv.key()] = kv.value();
+  return pb::error::OK;
 }
 
 

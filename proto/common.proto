@@ -23,7 +23,8 @@ enum Engine {
   ENG_ROCKSDB = 0;
   ENG_MEMORY = 1;
   ENG_XDP = 2;
-  ENG_CLICKHOUSE = 3;
+  ENG_RAFTSTORE = 3;
+  ENG_COLUMNAR = 4;
 };
 
 message Location {
@@ -41,20 +42,7 @@ message KeyValue {
   bytes value = 2;
 }
 
-enum IdType {
-  ID_TYPE_SCHEMA = 0;
-  ID_TYPE_TABLE = 1;
-  ID_TYPE_INDEX = 2;
-}
-
-message CommonId {
-  IdType type = 1;
-  uint64 value = 2;
-}
-
-/**
- * Define types about SQL.
- */
+// Define types about SQL.
 enum SqlType {
   SQL_TYPE_BOOLEAN = 0;
   SQL_TYPE_INTEGER = 1;
@@ -70,9 +58,7 @@ enum SqlType {
   SQL_TYPE_ANY = 11;
 }
 
-/**
- * Define ElementType about Composite Structure.
- */
+// Define ElementType about Composite Structure.
 enum ElementType {
   ELEM_TYPE_DOUBLE = 0;
   ELEM_TYPE_FLOAT = 1;
@@ -104,30 +90,30 @@ message ColumnDefinition {
   string default_val = 9;
 }
 
-/**
- * Information about Index.
- */
+// Information about Index.
 message Index {
   repeated string index_column = 1;
   bool is_unique = 2;
 }
 
-/**
- * compute partition by columns and operand function.
- */
+// compute partition by columns and operand function.
 enum PartitionStrategy {
   PT_STRATEGY_RANGE = 0;
   PT_STRATEGY_HASH = 1;
 }
 
-message PartitionRange {
-  repeated Range range = 1;
+message RangePartition {
+  repeated Range ranges = 1;
+}
+
+message HashPartition {
 }
 
 message PartitionRule {
-  repeated string partition_column = 1;
-  PartitionStrategy partition_strategy = 2;
-  PartitionRange partition_range = 3;
+  repeated string columns = 1;
+  PartitionStrategy strategy = 2;
+  RangePartition range_partition = 3;
+  HashPartition hash_partition = 4;
 }
 
 message TableRegions {
@@ -200,8 +186,9 @@ message CoordinatorMap {
 message Store {
   uint64 id = 1;
   StoreStatus status = 2;
-  Location location = 3;
-  string resource_tag = 4;
+  Location server_location = 3;
+  Location raft_location = 4;
+  string resource_tag = 5;
 }
 
 message StoreMap {
@@ -211,9 +198,9 @@ message StoreMap {
 
 message Region {
   // store info
-  uint64 region_id = 1;
-  uint64 region_epoch = 2;
-  string region_name = 3;
+  uint64 id = 1;
+  uint64 epoch = 2;
+  string name = 3;
   RegionStatus status = 4;
   int64 leader_store_id = 5;
   repeated Store electors = 6;
@@ -235,8 +222,8 @@ message RegionMap {
 }
 
 // A TablePart has one or many regions.
-message TablePart {
-  uint64 part_id = 1;
+message Partition  {
+  uint64 id = 1;
   Range range = 2;              // the range of this part
   repeated Region regions = 3;  // Region has range property
 }
@@ -244,15 +231,15 @@ message TablePart {
 // Table is for Coordinator & Store
 // A Table has one or many parts.
 message Table {
-  uint64 table_id = 1;
-  TableDefinition table_definition = 2;
-  repeated TablePart table_part = 3;
+  uint64 id = 1;
+  TableDefinition definition = 2;
+  repeated Partition partitions = 3;
 }
 
 // Schema
 message Schema {
-  uint64 schema_id = 1;
-  string schema_name = 2;
+  uint64 id = 1;
+  string name = 2;
   repeated Schema schemas = 3;
   repeated Table tables = 4;
 }

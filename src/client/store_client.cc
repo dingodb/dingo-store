@@ -27,6 +27,7 @@ DEFINE_int32(thread_num, 1, "Number of threads sending requests");
 DEFINE_int32(req_num, 1, "Number of requests");
 DEFINE_int32(timeout_ms, 500, "Timeout for each request");
 DEFINE_string(store_addr, "127.0.0.1:20001", "store server addr");
+DEFINE_string(method, "KvGet", "Request method");
 
 bvar::LatencyRecorder g_latency_recorder("dingo-store");
 
@@ -38,7 +39,7 @@ void sendKvGet(brpc::Controller& cntl,
   std::string key = "Hello";
   const char* op = NULL;
   request.set_key(key.data(), key.size());
-  stub.KvGet(&cntl, &request, &response, NULL);
+  stub.KvGet(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
     LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
     // bthread_usleep(FLAGS_timeout_ms * 1000L);
@@ -53,14 +54,40 @@ void sendKvGet(brpc::Controller& cntl,
   }
 }
 
-void sendAddRegion(brpc::Controller& cntl,
-                   dingodb::pb::store::StoreService_Stub& stub) {
+void sendKvPut(brpc::Controller& cntl, dingodb::pb::store::StoreService_Stub& stub) {
+  dingodb::pb::store::KvPutRequest request;
+  dingodb::pb::store::KvPutResponse response;
+
+  request.set_region_id(10000);
+  dingodb::pb::common::KeyValue* kv = request.mutable_kv();
+  kv->set_key("hello");
+  kv->set_value("world");
+
+  stub.KvPut(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+  }
+
+  if (FLAGS_log_each_request) {
+    LOG(INFO) << "Received response"
+              << " key=" << kv->key()
+              << " value=" << kv->value()
+              << " request_attachment="
+              << cntl.request_attachment().size()
+              << " response_attachment="
+              << cntl.response_attachment().size()
+              << " latency=" << cntl.latency_us();
+  }
+
+}
+
+void sendAddRegion(brpc::Controller& cntl, dingodb::pb::store::StoreService_Stub& stub) {
   dingodb::pb::store::AddRegionRequest request;
   dingodb::pb::store::AddRegionResponse response;
 
   dingodb::pb::common::Region* region = request.mutable_region();
-  region->set_region_id(10000);
-  region->set_region_epoch(1);
+  region->set_id(10000);
+  region->set_epoch(1);
   region->set_table_id(10);
   // region->set_table_name("test-10");
   region->set_partition_id(1);
@@ -72,7 +99,7 @@ void sendAddRegion(brpc::Controller& cntl,
   // region->add_electors("127.0.0.1:20102:0");
   // region->add_electors("127.0.0.1:20103:0");
 
-  stub.AddRegion(&cntl, &request, &response, NULL);
+  stub.AddRegion(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
     LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
     // bthread_usleep(FLAGS_timeout_ms * 1000L);
@@ -102,12 +129,19 @@ void* sender(void* arg) {
     brpc::Controller cntl;
     cntl.set_timeout_ms(FLAGS_timeout_ms);
 
-    // sendKvGet(cntl, stub);
-    sendAddRegion(cntl, stub);
+    if (FLAGS_method == "AddRegion") {
+      sendAddRegion(cntl, stub);
+
+    } else if (FLAGS_method == "KvPut") {
+      sendKvPut(cntl, stub);
+
+    } else if (FLAGS_method == "KvGet") {
+      sendKvGet(cntl, stub);
+    }
 
     g_latency_recorder << cntl.latency_us();
 
-    bthread_usleep(FLAGS_timeout_ms * 10000L);
+    bthread_usleep(FLAGS_timeout_ms * 1000L);
   }
 
   return nullptr;
@@ -126,14 +160,14 @@ int main(int argc, char* argv[]) {
     }
   }
 
-  while (!brpc::IsAskedToQuit()) {
-    LOG_IF(INFO, !FLAGS_log_each_request)
-        << "Sending Request"
-        << " qps=" << g_latency_recorder.qps(1)
-        << " latency=" << g_latency_recorder.latency(1);
-  }
+  // while (!brpc::IsAskedToQuit()) {
+  //   LOG_IF(INFO, !FLAGS_log_each_request)
+  //           << "Sending Request"
+  //           << " qps=" << g_latency_recorder.qps(1)
+  //           << " latency=" << g_latency_recorder.latency(1);
+  // }
 
-  LOG(INFO) << "Store client is going to quit";
+  // LOG(INFO) << "Store client is going to quit";
   for (int i = 0; i < FLAGS_thread_num; ++i) {
     bthread_join(tids[i], NULL);
   }

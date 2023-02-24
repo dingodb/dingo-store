@@ -14,7 +14,6 @@
 
 #include "engine/storage.h"
 
-#include "proto/common.pb.h"
 
 namespace dingodb {
 
@@ -24,7 +23,7 @@ Storage::Storage(Engine* engine): engine_(engine) {
 Storage::~Storage() {
 }
 
-int Storage::AddRegion(uint64_t region_id, const dingodb::pb::common::Region& region) {
+int Storage::AddRegion(uint64_t region_id, const pb::common::Region& region) {
   return engine_->AddRegion(region_id, region);
 }
 
@@ -44,8 +43,8 @@ std::shared_ptr<std::string> Storage::KvGet(std::shared_ptr<Context> ctx, const 
   return engine_->KvGet(ctx, key);
 }
 
-int Storage::KvPut(std::shared_ptr<Context> ctx, const std::string& key, const std::string& value) {
-  return engine_->KvPut(ctx, key, value);
+pb::error::Errno Storage::KvPut(std::shared_ptr<Context> ctx, const pb::common::KeyValue& kv) {
+  return engine_->KvPut(ctx, kv);
 }
 
 

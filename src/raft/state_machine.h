@@ -37,6 +37,7 @@ public:
   void Run();
 
 private:
+  // brpc framework free resource
   brpc::Controller* cntl_;
   google::protobuf::Closure* done_;
   uint64_t region_id_;

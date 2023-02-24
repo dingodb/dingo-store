@@ -14,16 +14,18 @@
 
 #include "server/coordinator_service.h"
 
+#include "proto/common.pb.h"
+
 namespace dingodb {
 
 void CoordinatorServiceImpl::Hello(google::protobuf::RpcController *controller,
-                              const dingodb::pb::coordinator::HelloRequest *request,
-                              dingodb::pb::coordinator::HelloResponse *response,
+                              const pb::coordinator::HelloRequest *request,
+                              pb::coordinator::HelloResponse *response,
                               google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
   LOG(INFO) << "Hello request: " << request->hello();
 
-  response->set_status(static_cast<dingodb::pb::common::CoordinatorStatus>(0));
+  response->set_status(static_cast<pb::common::CoordinatorStatus>(0));
   response->set_status_detail("OK");
 }
 

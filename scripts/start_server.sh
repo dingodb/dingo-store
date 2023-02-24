@@ -26,6 +26,10 @@ function start_program() {
 
 for ((i=1; i<=$SERVER_NUM; ++i)); do
   program_dir=$BASE_DIR/dist/${FLAGS_role}${i}
+
+  # clean log
+  rm -f ${program_dir}/log/*
+  
   start_program ${FLAGS_role} ${program_dir}
 done
 

@@ -56,6 +56,7 @@ bool Server::InitLog(const std::string& role) {
   auto config = ConfigManager::GetInstance()->GetConfig(role);
   FLAGS_log_dir = config->GetString("log.logPath");
   LOG(INFO) << "log_dir: " << FLAGS_log_dir;
+  FLAGS_logbufsecs = 0;
 
   const std::string program_name = butil::StringPrintf("./%s", role.c_str());
   google::InitGoogleLogging(program_name.c_str());
@@ -97,6 +98,7 @@ bool Server::InitStorage() {
 }
 
 void Server::Destroy() {
+  google::ShutdownGoogleLogging();
 }
 
 

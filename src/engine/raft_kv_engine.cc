@@ -43,7 +43,7 @@ std::string RaftKvEngine::GetName() {
 }
 
 uint32_t RaftKvEngine::GetID() {
-  return Engine::Type::RAFT_KV_ENGINE;
+  return pb::common::ENG_RAFTSTORE;
 }
 
 butil::EndPoint getRaftEndPoint(const std::string host, int port) {
@@ -61,23 +61,13 @@ butil::EndPoint getRaftEndPoint(const std::string host, int port) {
   return butil::EndPoint(ip, port);
 }
 
-// format peers like 127.0.0.1:8201:0,127.0.0.1:8202:0,127.0.0.1:8203:0
-std::string formatPeers(const google::protobuf::RepeatedPtrField<std::__cxx11::string>& peers) {
-  std::string init_conf;
-  for (int i = 0; i < peers.size(); ++i) {
-    init_conf += peers.Get(i);
-    if (i + 1 < peers.size()) {
-      init_conf += ",";
-    }
-  }
-  return init_conf;
-}
 
-int RaftKvEngine::AddRegion(uint64_t region_id, const dingodb::pb::common::Region& region) {
+int RaftKvEngine::AddRegion(uint64_t region_id, const pb::common::Region& region) {
   std::shared_ptr<RaftNode> node = std::make_shared<RaftNode>(region_id,
                                                               braft::PeerId(Server::GetInstance()->get_raft_endpoint()),
                                                               new StoreStateMachine(engine_));
-  if (node->Init(formatPeers(region.peers())) != 0) {
+  
+  if (node->Init(Helper::FormatPeers(Helper::ExtractLocations(region.electors()))) != 0) {
     node->Destroy();
     return -1;
   }
@@ -94,19 +84,30 @@ std::shared_ptr<std::string> RaftKvEngine::KvGet(std::shared_ptr<Context> ctx, c
   return nullptr;
 }
 
-int RaftKvEngine::KvPut(std::shared_ptr<Context> ctx, const std::string& key, const std::string& value) {
-  dingodb::pb::raft::RaftCmdRequest raft_cmd;
-  auto request = raft_cmd.add_requests();
-  request->set_cmd_type(dingodb::pb::raft::CmdType::PUT);
-  dingodb::pb::raft::PutRequest put_request;
-  auto kv = put_request.add_kvs();
-  kv->set_key(key);
-  kv->set_value(value);
-  request->set_allocated_put(&put_request);
 
-  raft_node_manager_->GetNode(ctx->get_region_id())->Commit(ctx, raft_cmd);
+std::shared_ptr<pb::raft::RaftCmdRequest> genRaftCmdRequest(uint64_t region_id, const pb::common::KeyValue& kv) {
+  std::shared_ptr<pb::raft::RaftCmdRequest> raft_cmd = std::make_shared<pb::raft::RaftCmdRequest>();
+  
+  pb::raft::RequestHeader *header = raft_cmd->mutable_header();
+  header->set_region_id(region_id);
 
-  return 0;
+  auto request = raft_cmd->add_requests();
+  request->set_cmd_type(pb::raft::CmdType::PUT);
+  pb::raft::PutRequest* put_request = request->mutable_put();
+  auto kv_req = put_request->add_kvs();
+  *kv_req = kv;
+
+  return raft_cmd;
+}
+
+pb::error::Errno RaftKvEngine::KvPut(std::shared_ptr<Context> ctx, const pb::common::KeyValue& kv) {
+  auto node = raft_node_manager_->GetNode(ctx->get_region_id());
+  if (node == nullptr) {
+    LOG(ERROR) << "Not found raft node " << ctx->get_region_id();
+    return pb::error::ERAFT_NOTNODE;
+  }
+
+  return node->Commit(ctx, genRaftCmdRequest(ctx->get_region_id(), kv));
 }
 
 } // namespace dingodb

@@ -22,12 +22,12 @@
 
 namespace dingodb {
 
-class CoordinatorServiceImpl: public dingodb::pb::coordinator::CoordinatorService {
+class CoordinatorServiceImpl: public pb::coordinator::CoordinatorService {
  public:
   CoordinatorServiceImpl() {}
   void Hello(google::protobuf::RpcController* controller,
-                  const dingodb::pb::coordinator::HelloRequest* request,
-                  dingodb::pb::coordinator::HelloResponse* response,
+                  const pb::coordinator::HelloRequest* request,
+                  pb::coordinator::HelloResponse* response,
                   google::protobuf::Closure* done);
 };
 

@@ -1,5 +1,6 @@
 cluster:
   name: dingodb
+  instance_id: $INSTANCE_ID$
 server:
   host: $SERVER_HOST$
   port: $SERVER_PORT$
@@ -7,8 +8,8 @@ raft:
   host: $RAFT_HOST$
   port: $RAFT_PORT$
   path: $BASE_PATH$/data/store/raft
-  electionTimeout: 10 # ms
-  snapshotInterval: 100000 # s
+  electionTimeout: 1000 # ms
+  snapshotInterval: 3600 # s
 log:
   logPath: $BASE_PATH$/log
 store:

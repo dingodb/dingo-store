@@ -7,8 +7,8 @@ raft:
   host: 127.0.0.1
   port: 20000
   path: /opt/dingo-poc/data/coordinator/raft
-  electionTimeout: 10 # ms
-  snapshotInterval: 100000 # s
+  electionTimeout: 1000 # ms
+  snapshotInterval: 3600 # s
 log:
   logPath: /opt/dingo-poc/log
 store:

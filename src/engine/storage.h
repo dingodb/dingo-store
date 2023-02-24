@@ -17,6 +17,8 @@
 
 #include "memory"
 
+#include "proto/error.pb.h"
+#include "proto/common.pb.h"
 #include "common/context.h"
 #include "engine/engine.h"
 #include "engine/raft_kv_engine.h"
@@ -36,7 +38,7 @@ class Storage {
   void ReleaseSnapshot();
 
   std::shared_ptr<std::string> KvGet(std::shared_ptr<Context> ctx, const std::string& key);
-  int KvPut(std::shared_ptr<Context> ctx, const std::string& key, const std::string& value);
+  pb::error::Errno KvPut(std::shared_ptr<Context> ctx, const pb::common::KeyValue& kv);
 
  private:
   std::shared_ptr<Engine> engine_;

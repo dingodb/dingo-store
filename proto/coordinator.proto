@@ -68,7 +68,7 @@ service CoordinatorService {
   rpc Hello(HelloRequest) returns (HelloResponse);
 
   // Store
-  rpc StoreHearbeat(StoreHeartbeatRequest) returns (HelloResponse);
+  rpc StoreHearbeat(StoreHeartbeatRequest) returns (StoreHeartbeatResponse);
   rpc GetRegionMap(GetRegionMapRequest) returns (GetRegionMapReponse);
   rpc GetStoreMap(GetStoreMapRequest) returns (GetStoreMapReponse);
 }
