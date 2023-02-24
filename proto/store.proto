@@ -90,7 +90,7 @@ service StoreService {
 
   // kv
   rpc KvGet(KvGetRequest) returns (KvGetResponse);
-  rpc KvBatchGet(KvGetRequest) returns (KvGetResponse);
+  rpc KvBatchGet(KvBatchGetRequest) returns (KvBatchGetResponse);
   rpc KvPut(KvPutRequest) returns (KvPutResponse);
   rpc KvBatchPut(KvBatchPutRequest) returns (KvBatchPutResponse);
   rpc KvPutIfAbsent(KvPutIfAbsentRequest) returns (KvPutIfAbsentResponse);

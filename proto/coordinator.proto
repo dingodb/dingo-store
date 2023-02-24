@@ -49,7 +49,7 @@ message GetRegionMapRequest {
   uint64 epoch = 1;
 }
 
-message GetRegionMapReponse {
+message GetRegionMapResponse {
   uint64 epoch = 1;
   dingodb.pb.common.RegionMap regionmap = 2;
 }
@@ -58,7 +58,7 @@ message GetStoreMapRequest {
   uint64 epoch = 1;
 }
 
-message GetStoreMapReponse {
+message GetStoreMapResponse {
   uint64 epoch = 1;
   dingodb.pb.common.StoreMap storemap = 2;
 }
@@ -68,7 +68,7 @@ service CoordinatorService {
   rpc Hello(HelloRequest) returns (HelloResponse);
 
   // Store
-  rpc StoreHearbeat(StoreHeartbeatRequest) returns (StoreHeartbeatResponse);
-  rpc GetRegionMap(GetRegionMapRequest) returns (GetRegionMapReponse);
-  rpc GetStoreMap(GetStoreMapRequest) returns (GetStoreMapReponse);
+  rpc StoreHeartbeat(StoreHeartbeatRequest) returns (StoreHeartbeatResponse);
+  rpc GetRegionMap(GetRegionMapRequest) returns (GetRegionMapResponse);
+  rpc GetStoreMap(GetStoreMapRequest) returns (GetStoreMapResponse);
 }
