@@ -30,4 +30,3 @@ enum Errno {
   ERAFT_NOTLEADER = 5101;
   ERAFT_COMMITLOG = 5102;
 }
-

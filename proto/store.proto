@@ -63,8 +63,7 @@ message KvBatchPutRequest {
   repeated dingodb.pb.common.KeyValue kvs = 2;
 }
 
-message KvBatchPutResponse {
-}
+message KvBatchPutResponse {}
 
 message KvPutIfAbsentRequest {
   uint64 region_id = 1;
@@ -90,10 +89,11 @@ service StoreService {
   rpc DestroyRegion(DestroyRegionRequest) returns (DestroyRegionResponse);
 
   // kv
-  rpc KvGet(KvGetRequest) returns(KvGetResponse);
-  rpc KvBatchGet(KvGetRequest) returns(KvGetResponse);
-  rpc KvPut(KvPutRequest) returns(KvPutResponse);
-  rpc KvBatchPut(KvBatchPutRequest) returns(KvBatchPutResponse);
-  rpc KvPutIfAbsent(KvPutIfAbsentRequest) returns(KvPutIfAbsentResponse);
-  rpc KvBatchPutIfAbsent(KvBatchPutIfAbsentRequest) returns(KvBatchPutIfAbsentResponse);
+  rpc KvGet(KvGetRequest) returns (KvGetResponse);
+  rpc KvBatchGet(KvGetRequest) returns (KvGetResponse);
+  rpc KvPut(KvPutRequest) returns (KvPutResponse);
+  rpc KvBatchPut(KvBatchPutRequest) returns (KvBatchPutResponse);
+  rpc KvPutIfAbsent(KvPutIfAbsentRequest) returns (KvPutIfAbsentResponse);
+  rpc KvBatchPutIfAbsent(KvBatchPutIfAbsentRequest)
+      returns (KvBatchPutIfAbsentResponse);
 };

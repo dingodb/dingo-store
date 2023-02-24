@@ -106,8 +106,7 @@ message RangePartition {
   repeated Range ranges = 1;
 }
 
-message HashPartition {
-}
+message HashPartition {}
 
 message PartitionRule {
   repeated string columns = 1;
@@ -222,7 +221,7 @@ message RegionMap {
 }
 
 // A TablePart has one or many regions.
-message Partition  {
+message Partition {
   uint64 id = 1;
   Range range = 2;              // the range of this part
   repeated Region regions = 3;  // Region has range property

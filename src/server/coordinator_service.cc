@@ -19,9 +19,9 @@
 namespace dingodb {
 
 void CoordinatorServiceImpl::Hello(google::protobuf::RpcController *controller,
-                              const pb::coordinator::HelloRequest *request,
-                              pb::coordinator::HelloResponse *response,
-                              google::protobuf::Closure *done) {
+                                   const pb::coordinator::HelloRequest *request,
+                                   pb::coordinator::HelloResponse *response,
+                                   google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
   LOG(INFO) << "Hello request: " << request->hello();
 
@@ -29,4 +29,4 @@ void CoordinatorServiceImpl::Hello(google::protobuf::RpcController *controller,
   response->set_status_detail("OK");
 }
 
-} // namespace dingodb
+}  // namespace dingodb

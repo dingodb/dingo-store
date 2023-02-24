@@ -26,7 +26,6 @@
 #include <string>
 #include <string_view>  // RocksDB now requires C++17 support
 
-
 namespace dingodb {
 
 class Slice {
@@ -171,4 +170,4 @@ inline size_t Slice::difference_offset(const Slice& b) const {
 
 }  // namespace dingodb
 
-#endif // DINGODB_COMMON_SLICE_H_
+#endif  // DINGODB_COMMON_SLICE_H_
