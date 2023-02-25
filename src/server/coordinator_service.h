@@ -23,11 +23,23 @@ namespace dingodb {
 
 class CoordinatorServiceImpl : public pb::coordinator::CoordinatorService {
  public:
-  CoordinatorServiceImpl() {}
+  CoordinatorServiceImpl() = default;
   void Hello(google::protobuf::RpcController* controller,
              const pb::coordinator::HelloRequest* request,
              pb::coordinator::HelloResponse* response,
-             google::protobuf::Closure* done);
+             google::protobuf::Closure* done) override;
+  void StoreHearbeat(google::protobuf::RpcController* controller,
+                     const pb::coordinator::StoreHeartbeatRequest* request,
+                     pb::coordinator::StoreHeartbeatResponse* response,
+                     google::protobuf::Closure* done) override;
+  void GetRegionMap(google::protobuf::RpcController* controller,
+                    const pb::coordinator::GetRegionMapRequest* request,
+                    pb::coordinator::GetRegionMapResponse* response,
+                    google::protobuf::Closure* done) override;
+  void GetStoreMap(google::protobuf::RpcController* controller,
+                   const pb::coordinator::GetStoreMapRequest* request,
+                   pb::coordinator::GetStoreMapResponse* response,
+                   google::protobuf::Closure* done) override;
 };
 
 }  // namespace dingodb

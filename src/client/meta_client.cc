@@ -21,27 +21,26 @@
 #include "brpc/controller.h"
 #include "bthread/bthread.h"
 #include "gflags/gflags.h"
-#include "proto/coordinator.pb.h"
+#include "proto/meta.pb.h"
 
 DEFINE_bool(log_each_request, true, "Print log for each request");
 DEFINE_bool(use_bthread, false, "Use bthread to send requests");
 DEFINE_int32(thread_num, 1, "Number of threads sending requests");
 DEFINE_int32(timeout_ms, 500, "Timeout for each request");
-DEFINE_string(coordinator_addr, "127.0.0.1:8201", "coordinator server addr");
+DEFINE_string(meta_addr, "127.0.0.1:19190", "meta server addr");
 DEFINE_int32(req_num, 1, "Number of requests");
 DEFINE_string(method, "Hello", "Request method");
 
-bvar::LatencyRecorder g_latency_recorder("dingo-coordinator");
+bvar::LatencyRecorder g_latency_recorder("dingo-meta");
 
-void SendHello(brpc::Controller& cntl,
-               dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
-  dingodb::pb::coordinator::HelloRequest request;
-  dingodb::pb::coordinator::HelloResponse response;
+void SendGetSchemas(brpc::Controller& cntl,
+                    dingodb::pb::meta::MetaService_Stub& stub) {
+  dingodb::pb::meta::GetSchemasRequest request;
+  dingodb::pb::meta::GetSchemasResponse response;
 
-  std::string key = "Hello";
   // const char* op = nullptr;
-  request.set_hello(0);
-  stub.Hello(&cntl, &request, &response, nullptr);
+  request.set_schema_id(0);
+  stub.GetSchemas(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
     LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
     // bthread_usleep(FLAGS_timeout_ms * 1000L);
@@ -49,16 +48,31 @@ void SendHello(brpc::Controller& cntl,
 
   if (FLAGS_log_each_request) {
     LOG(INFO) << "Received response"
-              << " hello=" << request.hello()
+              << " schema_id =" << request.schema_id()
+              << " schema_count =" << response.schemas_size()
               << " request_attachment=" << cntl.request_attachment().size()
               << " response_attachment=" << cntl.response_attachment().size()
               << " latency=" << cntl.latency_us();
+    for (int32_t i = 0; i < response.schemas_size(); i++) {
+      LOG(INFO) << "schema_id=[" << response.schemas(i).id() << "]"
+                << "child_schema_count="
+                << response.schemas(i).schema_ids_size()
+                << "child_table_count=" << response.schemas(i).table_ids_size();
+      for (int32_t j = 0; j < response.schemas(i).schema_ids_size(); j++) {
+        LOG(INFO) << "child schema_id=[" << response.schemas(i).schema_ids(j)
+                  << "]";
+      }
+      for (int32_t j = 0; j < response.schemas(i).table_ids_size(); j++) {
+        LOG(INFO) << "child table_id=[" << response.schemas(i).table_ids(j)
+                  << "]";
+      }
+    }
   }
 }
 
 void* Sender(void* /*arg*/) {
   while (!brpc::IsAskedToQuit()) {
-    braft::PeerId leader(FLAGS_coordinator_addr);
+    braft::PeerId leader(FLAGS_meta_addr);
 
     // rpc
     brpc::Channel channel;
@@ -67,13 +81,13 @@ void* Sender(void* /*arg*/) {
       bthread_usleep(FLAGS_timeout_ms * 1000L);
       continue;
     }
-    dingodb::pb::coordinator::CoordinatorService_Stub stub(&channel);
+    dingodb::pb::meta::MetaService_Stub stub(&channel);
 
     brpc::Controller cntl;
     cntl.set_timeout_ms(FLAGS_timeout_ms);
 
-    if (FLAGS_method == "Hello") {
-      SendHello(cntl, stub);
+    if (FLAGS_method == "GetSchemas") {
+      SendGetSchemas(cntl, stub);
     }
 
     bthread_usleep(FLAGS_timeout_ms * 10000L);
@@ -101,7 +115,7 @@ int main(int argc, char* argv[]) {
         << " latency=" << g_latency_recorder.latency(1);
   }
 
-  LOG(INFO) << "Coordinator client is going to quit";
+  LOG(INFO) << "meta client is going to quit";
   for (int i = 0; i < FLAGS_thread_num; ++i) {
     bthread_join(tids[i], nullptr);
   }
