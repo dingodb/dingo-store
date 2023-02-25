@@ -239,6 +239,6 @@ message Table {
 message Schema {
   uint64 id = 1;
   string name = 2;
-  repeated Schema schemas = 3;
-  repeated Table tables = 4;
+  repeated uint64 schema_ids = 3;
+  repeated uint64 table_ids = 4;
 }

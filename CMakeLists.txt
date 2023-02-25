@@ -120,10 +120,12 @@ set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin)
 add_executable(dingodb_server ${SERVER_SRCS} ${META_SRCS} ${REGION_SRCS} ${ENGINE_SRCS} ${RAFT_SRCS} ${CRONTAB_SRCS} ${CONFIG_SRCS} ${COMMON_SRCS} ${PROTO_SRCS} ${PROTO_HEADER})
 add_executable(dingodb_client_store src/client/store_client.cc ${PROTO_SRCS} ${PROTO_HEADER})
 add_executable(dingodb_client_coordinator src/client/coordinator_client.cc ${PROTO_SRCS} ${PROTO_HEADER})
+add_executable(dingodb_client_meta src/client/meta_client.cc ${PROTO_SRCS} ${PROTO_HEADER})
 
 add_dependencies(dingodb_server ${DEPEND_LIBS})
 add_dependencies(dingodb_client_store ${DEPEND_LIBS})
 add_dependencies(dingodb_client_coordinator ${DEPEND_LIBS})
+add_dependencies(dingodb_client_meta ${DEPEND_LIBS})
 
 if(DINGO_BUILD_STATIC)
     message(STATUS "Build DingoDB with static libraries linking")
@@ -142,7 +144,10 @@ target_link_libraries(dingodb_client_coordinator
                       "-Xlinker \"-(\""
                       ${DYNAMIC_LIB}
                       "-Xlinker \"-)\"")
-
+target_link_libraries(dingodb_client_meta
+                      "-Xlinker \"-(\""
+                      ${DYNAMIC_LIB}
+                      "-Xlinker \"-)\"")
 
 if(BUILD_UNIT_TESTS)
     add_subdirectory(test)

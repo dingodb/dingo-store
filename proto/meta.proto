@@ -43,11 +43,11 @@ option cc_generic_services = true;
 //   string storeId = 1;
 // }
 
-message GetSchemaRequest {
+message GetSchemasRequest {
   uint64 schema_id = 1;
 }
 
-message GetSchemaResponse {
+message GetSchemasResponse {
   repeated dingodb.pb.common.Schema schemas = 1;
 }
 
@@ -60,7 +60,8 @@ message GetTablesResponse {
 }
 
 message CreateTableRequest {
-  dingodb.pb.common.TableDefinition table_definition = 1;
+  uint64 schema_id = 1;
+  dingodb.pb.common.TableDefinition table_definition = 2;
 }
 
 message CreateTableResponse {
@@ -91,15 +92,15 @@ message DropTableResponse {}
 
 service MetaService {
   // query schema/table/partition/regions
-  rpc listSchemas(GetSchemaRequest) returns (GetSchemaResponse);
-  rpc listTables(GetTablesRequest) returns (GetTablesResponse);
+  rpc GetSchemas(GetSchemasRequest) returns (GetSchemasResponse);
+  rpc GetTables(GetTablesRequest) returns (GetTablesResponse);
 
-  // rpc listPartitions(GetTablePartitionsReq) returns (GetTablePartitionsRes);
-  // rpc listRegions(GetRegionsReq) returns (GetRegionsResponse);
+  // rpc GetPartitions(GetTablePartitionsReq) returns (GetTablePartitionsRes);
+  // rpc GetRegions(GetRegionsReq) returns (GetRegionsResponse);
 
   // Table DDL
-  rpc createTable(CreateTableRequest) returns (CreateTableResponse);
-  rpc dropTable(DropTableRequest) returns (DropTableResponse);
+  rpc CreateTable(CreateTableRequest) returns (CreateTableResponse);
+  rpc DropTable(DropTableRequest) returns (DropTableResponse);
 
   // todo
   // Operation about User, such as create/drop/grant.

@@ -23,6 +23,7 @@
 #include "proto/coordinator.pb.h"
 #include "proto/store.pb.h"
 #include "server/coordinator_service.h"
+#include "server/meta_service.h"
 #include "server/server.h"
 #include "server/store_service.h"
 
@@ -91,6 +92,7 @@ int main(int argc, char *argv[]) {
 
   brpc::Server server;
   dingodb::CoordinatorServiceImpl coordinator_service;
+  dingodb::MetaServiceImpl meta_service;
   dingodb::StoreServiceImpl store_service;
   if (FLAGS_role == "coordinator") {
     if (server.AddService(&coordinator_service,
@@ -98,7 +100,11 @@ int main(int argc, char *argv[]) {
       LOG(ERROR) << "Fail to add coordinator service";
       return -1;
     }
-
+    if (server.AddService(&meta_service, brpc::SERVER_DOESNT_OWN_SERVICE) !=
+        0) {
+      LOG(ERROR) << "Fail to add meta service";
+      return -1;
+    }
   } else if (FLAGS_role == "store") {
     dingodb_server->ValiateCoordinator();
     dingodb_server->InitServerID();
