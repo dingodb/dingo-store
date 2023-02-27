@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include <cstdint>
+#include <string>
 
 #include "braft/raft.h"
 #include "braft/route_table.h"
@@ -21,6 +22,7 @@
 #include "brpc/controller.h"
 #include "bthread/bthread.h"
 #include "gflags/gflags.h"
+#include "google/protobuf/port.h"
 #include "proto/meta.pb.h"
 
 DEFINE_bool(log_each_request, true, "Print log for each request");
@@ -53,6 +55,8 @@ void SendGetSchemas(brpc::Controller& cntl,
               << " request_attachment=" << cntl.request_attachment().size()
               << " response_attachment=" << cntl.response_attachment().size()
               << " latency=" << cntl.latency_us();
+    LOG(INFO) << response.DebugString();
+
     for (int32_t i = 0; i < response.schemas_size(); i++) {
       LOG(INFO) << "schema_id=[" << response.schemas(i).id() << "]"
                 << "child_schema_count="
@@ -67,6 +71,127 @@ void SendGetSchemas(brpc::Controller& cntl,
                   << "]";
       }
     }
+  }
+}
+
+void SendGetTables(brpc::Controller& cntl,
+                   dingodb::pb::meta::MetaService_Stub& stub) {
+  dingodb::pb::meta::GetTablesRequest request;
+  dingodb::pb::meta::GetTablesResponse response;
+
+  // const char* op = nullptr;
+  request.set_schema_id(0);
+  stub.GetTables(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    // bthread_usleep(FLAGS_timeout_ms * 1000L);
+  }
+
+  if (FLAGS_log_each_request) {
+    LOG(INFO) << "Received response"
+              << " request schema_id =" << request.schema_id()
+              << " table_count =" << response.tables_size()
+              << " request_attachment=" << cntl.request_attachment().size()
+              << " response_attachment=" << cntl.response_attachment().size()
+              << " latency=" << cntl.latency_us();
+    LOG(INFO) << response.DebugString();
+    // for (int32_t i = 0; i < response.tables_size(); i++) {
+    //   const auto& table = response.tables(i);
+    //   LOG(INFO) << "table_id=[" << table.id() << "]"
+    //             << "partition_count=" << table.partitions_size();
+
+    //   for (int32_t j = 0; j < table.partitions_size(); j++) {
+    //     const auto& partition = table.partitions(j);
+    //     LOG(INFO) << "partition_id=[" << partition.id()
+    //               << "] region_count = " << partition.regions_size()
+    //               << " start_key " << partition.range().start_key()
+    //               << " end_key " << partition.range().end_key();
+
+    //     for (int32_t k = 0; k < partition.regions_size(); k++) {
+    //       const auto& region  = partition.regions(k);
+    //       LOG(INFO) << "region_id = " << region.id() << " region_name = " <<
+    //       region.name() ;
+    //     }
+    //   }
+    // }
+  }
+}
+
+void SendCreateTable(brpc::Controller& cntl,
+                     dingodb::pb::meta::MetaService_Stub& stub) {
+  dingodb::pb::meta::CreateTableRequest request;
+  dingodb::pb::meta::CreateTableResponse response;
+
+  request.set_schema_id(1);
+  // string name = 1;
+  auto* table_definition = request.mutable_table_definition();
+  table_definition->set_name("t_test1");
+  // repeated ColumnDefinition columns = 2;
+  for (int i = 0; i < 10; i++) {
+    auto* column = table_definition->add_columns();
+    std::string column_name("test_columen_");
+    column_name.append(std::to_string(i));
+    column->set_name(column_name);
+    column->set_sql_type(::dingodb::pb::common::SqlType::SQL_TYPE_INTEGER);
+    column->set_element_type(
+        ::dingodb::pb::common::ElementType::ELEM_TYPE_BYTES);
+    column->set_precision(100);
+    column->set_nullable(false);
+    column->set_indexofkey(7);
+    column->set_has_default_val(false);
+    column->set_default_val("0");
+  }
+  // map<string, Index> indexes = 3;
+  // uint32 version = 4;
+  table_definition->set_version(1);
+  // uint64 ttl = 5;
+  table_definition->set_ttl(0);
+  // PartitionRule table_partition = 6;
+  // Engine engine = 7;
+  table_definition->set_engine(::dingodb::pb::common::Engine::ENG_ROCKSDB);
+  // map<string, string> properties = 8;
+  auto* prop = table_definition->mutable_properties();
+  (*prop)["test property"] = "test_property_value";
+
+  stub.CreateTable(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    // bthread_usleep(FLAGS_timeout_ms * 1000L);
+  }
+
+  if (FLAGS_log_each_request) {
+    LOG(INFO) << "Received response"
+              << " request schema_id =" << request.schema_id()
+              << " request_attachment=" << cntl.request_attachment().size()
+              << " response_attachment=" << cntl.response_attachment().size()
+              << " latency=" << cntl.latency_us();
+    LOG(INFO) << request.DebugString();
+    LOG(INFO) << response.DebugString();
+  }
+}
+
+void SendDropTable(brpc::Controller& cntl,
+                   dingodb::pb::meta::MetaService_Stub& stub) {
+  dingodb::pb::meta::DropTableRequest request;
+  dingodb::pb::meta::DropTableResponse response;
+
+  // const char* op = nullptr;
+  request.set_schema_id(1);
+  request.set_table_id(1);
+  stub.DropTable(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    // bthread_usleep(FLAGS_timeout_ms * 1000L);
+  }
+
+  if (FLAGS_log_each_request) {
+    LOG(INFO) << "Received response"
+              << " request schema_id =" << request.schema_id()
+              << " request table_id =" << request.table_id()
+              << " request_attachment=" << cntl.request_attachment().size()
+              << " response_attachment=" << cntl.response_attachment().size()
+              << " latency=" << cntl.latency_us();
+    LOG(INFO) << response.DebugString();
   }
 }
 
@@ -88,6 +213,12 @@ void* Sender(void* /*arg*/) {
 
     if (FLAGS_method == "GetSchemas") {
       SendGetSchemas(cntl, stub);
+    } else if (FLAGS_method == "GetTables") {
+      SendGetTables(cntl, stub);
+    } else if (FLAGS_method == "CreateTable") {
+      SendCreateTable(cntl, stub);
+    } else if (FLAGS_method == "DropTable") {
+      SendDropTable(cntl, stub);
     }
 
     bthread_usleep(FLAGS_timeout_ms * 10000L);

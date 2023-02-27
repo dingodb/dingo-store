@@ -20,10 +20,10 @@
 
 namespace dingodb {
 
-void CoordinatorServiceImpl::Hello(google::protobuf::RpcController *controller,
-                                   const pb::coordinator::HelloRequest *request,
-                                   pb::coordinator::HelloResponse *response,
-                                   google::protobuf::Closure *done) {
+void CoordinatorServiceImpl::Hello(
+    google::protobuf::RpcController * /*controller*/,
+    const pb::coordinator::HelloRequest *request,
+    pb::coordinator::HelloResponse *response, google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
   LOG(INFO) << "Hello request: " << request->hello();
 
@@ -34,7 +34,7 @@ void CoordinatorServiceImpl::Hello(google::protobuf::RpcController *controller,
   // cntl->SetFailed(0, "Error is %s", "Failed");
 }
 
-void CoordinatorServiceImpl::StoreHearbeat(
+void CoordinatorServiceImpl::StoreHeartbeat(
     google::protobuf::RpcController * /*controller*/,
     const pb::coordinator::StoreHeartbeatRequest *request,
     pb::coordinator::StoreHeartbeatResponse *response,

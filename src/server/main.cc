@@ -31,7 +31,7 @@ DEFINE_string(conf, "", "server config");
 DEFINE_string(role, "", "server role [store|coordinator]");
 
 // Get server endpoint from config
-butil::EndPoint getServerEndPoint(std::shared_ptr<dingodb::Config> config) {
+butil::EndPoint GetServerEndPoint(std::shared_ptr<dingodb::Config> config) {
   const std::string host = config->GetString("server.host");
   const int port = config->GetInt("server.port");
 
@@ -50,7 +50,7 @@ butil::EndPoint getServerEndPoint(std::shared_ptr<dingodb::Config> config) {
 }
 
 // Get raft endpoint from config
-butil::EndPoint getRaftEndPoint(std::shared_ptr<dingodb::Config> config) {
+butil::EndPoint GetRaftEndPoint(std::shared_ptr<dingodb::Config> config) {
   const std::string host = config->GetString("raft.host");
   const int port = config->GetInt("raft.port");
 
@@ -85,9 +85,9 @@ int main(int argc, char *argv[]) {
   dingodb_server->InitLog();
   dingodb_server->InitEngines();
 
-  dingodb_server->set_server_endpoint(getServerEndPoint(
+  dingodb_server->set_server_endpoint(GetServerEndPoint(
       dingodb::ConfigManager::GetInstance()->GetConfig(FLAGS_role)));
-  dingodb_server->set_raft_endpoint(getRaftEndPoint(
+  dingodb_server->set_raft_endpoint(GetRaftEndPoint(
       dingodb::ConfigManager::GetInstance()->GetConfig(FLAGS_role)));
 
   brpc::Server server;
@@ -121,7 +121,7 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  if (server.Start(dingodb_server->get_server_endpoint(), NULL) != 0) {
+  if (server.Start(dingodb_server->get_server_endpoint(), nullptr) != 0) {
     LOG(ERROR) << "Fail to start server";
     return -1;
   }
@@ -134,7 +134,7 @@ int main(int argc, char *argv[]) {
     LOG(ERROR) << "Fail to add raft service";
     return -1;
   }
-  if (raft_server.Start(dingodb_server->get_raft_endpoint(), NULL) != 0) {
+  if (raft_server.Start(dingodb_server->get_raft_endpoint(), nullptr) != 0) {
     LOG(ERROR) << "Fail to start raft server";
     return -1;
   }

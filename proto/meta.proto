@@ -52,7 +52,7 @@ message GetSchemasResponse {
 }
 
 message GetTablesRequest {
-  repeated uint64 schema_id = 1;
+  uint64 schema_id = 1;
 }
 
 message GetTablesResponse {
@@ -69,7 +69,8 @@ message CreateTableResponse {
 }
 
 message DropTableRequest {
-  uint64 table_id = 1;
+  uint64 schema_id = 1;
+  uint64 table_id = 2;
 }
 
 message DropTableResponse {}
