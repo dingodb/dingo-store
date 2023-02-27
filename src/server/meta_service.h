@@ -29,6 +29,18 @@ class MetaServiceImpl : public pb::meta::MetaService {
                   const pb::meta::GetSchemasRequest* request,
                   pb::meta::GetSchemasResponse* response,
                   google::protobuf::Closure* done) override;
+  void GetTables(google::protobuf::RpcController* controller,
+                 const pb::meta::GetTablesRequest* request,
+                 pb::meta::GetTablesResponse* response,
+                 google::protobuf::Closure* done) override;
+  void CreateTable(google::protobuf::RpcController* controller,
+                   const pb::meta::CreateTableRequest* request,
+                   pb::meta::CreateTableResponse* response,
+                   google::protobuf::Closure* done) override;
+  void DropTable(google::protobuf::RpcController* controller,
+                 const pb::meta::DropTableRequest* request,
+                 pb::meta::DropTableResponse* response,
+                 google::protobuf::Closure* done) override;
 };
 
 }  // namespace dingodb
