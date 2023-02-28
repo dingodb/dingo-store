@@ -12,34 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DINGODB_RAFT_RAFT_NODE_MANAGER_H_
-#define DINGODB_RAFT_RAFT_NODE_MANAGER_H_
-
-#include <map>
-#include <memory>
-#include <shared_mutex>
-
-#include "raft/raft_node.h"
+#include "meta/meta_writer.h"
 
 namespace dingodb {
 
-// raft node manager
-class RaftNodeManager {
- public:
-  RaftNodeManager();
-  ~RaftNodeManager();
-
-  bool IsExist(uint64_t node_id);
-  void AddNode(uint64_t node_id, std::shared_ptr<RaftNode> node);
-  std::shared_ptr<RaftNode> GetNode(uint64_t node_id);
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(RaftNodeManager);
-
-  std::shared_mutex mutex_;
-  std::map<uint64_t, std::shared_ptr<RaftNode> > nodes_;
-};
+bool MetaWriter::Write(const std::vector<pb::common::KeyValue> kvs) {
+  return true;
+}
 
 }  // namespace dingodb
-
-#endif  // DINGODB_RAFT_RAFT_NODE_MANAGER_H_

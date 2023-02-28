@@ -16,7 +16,7 @@
 #define DINGODB_ENGINE_ENGINE_H_
 
 #include "common/context.h"
-#include "common/slice.h"
+#include "config/config.h"
 #include "engine/snapshot.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
@@ -27,9 +27,9 @@ class Engine {
  public:
   virtual ~Engine() {}
 
-  virtual bool Init() = 0;
+  virtual bool Init(std::shared_ptr<Config> config) = 0;
   virtual std::string GetName() = 0;
-  virtual uint32_t GetID() = 0;
+  virtual pb::common::Engine GetID() = 0;
 
   virtual int AddRegion(uint64_t region_id, const pb::common::Region& region) {}
   virtual int DestroyRegion(uint64_t region_id) {}

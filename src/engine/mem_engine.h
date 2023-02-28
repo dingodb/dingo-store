@@ -29,9 +29,9 @@ class MemEngine : public Engine {
  public:
   MemEngine();
 
-  bool Init();
+  bool Init(std::shared_ptr<Config> config);
   std::string GetName();
-  uint32_t GetID();
+  pb::common::Engine GetID();
 
   int AddRegion(uint64_t region_id, const pb::common::Region& region);
   int DestroyRegion(uint64_t region_id);

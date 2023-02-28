@@ -83,6 +83,8 @@ set(DYNAMIC_LIB
     ${OPENSSL_LIBRARIES}
     ${CRYPTO_LIBRARIES}
     ${GLOG_LIBRARIES}
+    ${GTEST_MAIN_LIBRARIES}
+    ${GTEST_LIBRARIES}
     # rt
     dl
     Threads::Threads
@@ -100,6 +102,7 @@ set(DEPEND_LIBS
     snappy
     glog
     yamlcpp
+    gtest
     )
 
 # source file
@@ -107,13 +110,14 @@ file(GLOB COMMON_SRCS ${PROJECT_SOURCE_DIR}/src/common/*.cc)
 file(GLOB CONFIG_SRCS ${PROJECT_SOURCE_DIR}/src/config/*.cc)
 file(GLOB RAFT_SRCS ${PROJECT_SOURCE_DIR}/src/raft/*.cc)
 file(GLOB ENGINE_SRCS ${PROJECT_SOURCE_DIR}/src/engine/*.cc)
-file(GLOB REGION_SRCS ${PROJECT_SOURCE_DIR}/src/region/*.cc)
+file(GLOB CRONTAB_SRCS ${PROJECT_SOURCE_DIR}/src/crontab/*.cc)
+file(GLOB META_SRCS ${PROJECT_SOURCE_DIR}/src/meta/*.cc)
 file(GLOB SERVER_SRCS ${PROJECT_SOURCE_DIR}/src/server/*.cc)
 
 # bin output dir
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin)
 
-add_executable(dingodb_server ${SERVER_SRCS} ${REGION_SRCS} ${ENGINE_SRCS} ${RAFT_SRCS} ${CONFIG_SRCS} ${COMMON_SRCS} ${PROTO_SRCS} ${PROTO_HEADER})
+add_executable(dingodb_server ${SERVER_SRCS} ${META_SRCS} ${REGION_SRCS} ${ENGINE_SRCS} ${RAFT_SRCS} ${CRONTAB_SRCS} ${CONFIG_SRCS} ${COMMON_SRCS} ${PROTO_SRCS} ${PROTO_HEADER})
 add_executable(dingodb_client_store src/client/store_client.cc ${PROTO_SRCS} ${PROTO_HEADER})
 add_executable(dingodb_client_coordinator src/client/coordinator_client.cc ${PROTO_SRCS} ${PROTO_HEADER})
 

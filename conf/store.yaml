@@ -4,6 +4,7 @@ cluster:
 server:
   host: $SERVER_HOST$
   port: $SERVER_PORT$
+  heartbeatInterval: 10000 # ms
 raft:
   host: $RAFT_HOST$
   port: $RAFT_PORT$

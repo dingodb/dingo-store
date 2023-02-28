@@ -18,10 +18,14 @@ namespace dingodb {
 
 MemEngine::MemEngine() {}
 
-bool MemEngine::Init() {}
+bool MemEngine::Init(std::shared_ptr<Config> config) {
+  LOG(INFO) << "Init MemEngine...";
+  return true;
+}
+
 std::string MemEngine::GetName() { return "MEM_ENGINE"; }
 
-uint32_t MemEngine::GetID() { return pb::common::ENG_MEMORY; }
+pb::common::Engine MemEngine::GetID() { return pb::common::ENG_MEMORY; }
 
 int MemEngine::AddRegion(uint64_t region_id, const pb::common::Region& region) {
   return 0;

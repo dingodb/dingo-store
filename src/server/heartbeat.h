@@ -12,34 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DINGODB_RAFT_RAFT_NODE_MANAGER_H_
-#define DINGODB_RAFT_RAFT_NODE_MANAGER_H_
+#ifndef DINGODB_SERVER_HEARTBEAT_H_
+#define DINGODB_SERVER_HEARTBEAT_H_
 
-#include <map>
-#include <memory>
-#include <shared_mutex>
-
-#include "raft/raft_node.h"
+#include "brpc/channel.h"
+#include "meta/store_meta_manager.h"
+#include "proto/common.pb.h"
+#include "proto/coordinator.pb.h"
+#include "server/server.h"
 
 namespace dingodb {
 
-// raft node manager
-class RaftNodeManager {
+class Heartbeat {
  public:
-  RaftNodeManager();
-  ~RaftNodeManager();
+  Heartbeat();
+  ~Heartbeat();
 
-  bool IsExist(uint64_t node_id);
-  void AddNode(uint64_t node_id, std::shared_ptr<RaftNode> node);
-  std::shared_ptr<RaftNode> GetNode(uint64_t node_id);
+  static void SendStoreHeartbeat(void* arg);
 
- private:
-  DISALLOW_COPY_AND_ASSIGN(RaftNodeManager);
-
-  std::shared_mutex mutex_;
-  std::map<uint64_t, std::shared_ptr<RaftNode> > nodes_;
+  static void HandleStoreHeartbeatResponse(
+      std::shared_ptr<StoreMetaManager> store_meta,
+      const pb::coordinator::StoreHeartbeatResponse& response);
 };
 
 }  // namespace dingodb
 
-#endif  // DINGODB_RAFT_RAFT_NODE_MANAGER_H_
+#endif  // DINGODB_SERVER_HEARTBEAT_H_

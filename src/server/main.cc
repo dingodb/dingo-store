@@ -79,8 +79,10 @@ int main(int argc, char *argv[]) {
   }
 
   auto dingodb_server = dingodb::Server::GetInstance();
+  dingodb_server->set_role(FLAGS_role);
   dingodb_server->InitConfig(FLAGS_conf);
-  dingodb_server->InitLog(FLAGS_role);
+  dingodb_server->InitLog();
+  dingodb_server->InitEngines();
 
   dingodb_server->set_server_endpoint(getServerEndPoint(
       dingodb::ConfigManager::GetInstance()->GetConfig(FLAGS_role)));
@@ -102,6 +104,8 @@ int main(int argc, char *argv[]) {
     dingodb_server->InitServerID();
     dingodb_server->InitRaftNodeManager();
     dingodb_server->InitStorage();
+    dingodb_server->InitStoreMetaManager();
+    dingodb_server->InitCrontabManager();
 
     store_service.set_storage(dingodb_server->get_storage());
     if (server.AddService(&store_service, brpc::SERVER_DOESNT_OWN_SERVICE) !=

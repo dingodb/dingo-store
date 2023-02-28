@@ -22,17 +22,20 @@
 
 namespace dingodb {
 
-RaftKvEngine::RaftKvEngine(Engine* engine)
+RaftKvEngine::RaftKvEngine(std::shared_ptr<Engine> engine)
     : engine_(engine),
       raft_node_manager_(std::move(std::make_unique<RaftNodeManager>())) {}
 
 RaftKvEngine::~RaftKvEngine() {}
 
-bool RaftKvEngine::Init() { return true; }
+bool RaftKvEngine::Init(std::shared_ptr<Config> config) {
+  LOG(INFO) << "Init RaftKvEngine...";
+  return true;
+}
 
 std::string RaftKvEngine::GetName() { return "RAFT_KV_ENGINE"; }
 
-uint32_t RaftKvEngine::GetID() { return pb::common::ENG_RAFTSTORE; }
+pb::common::Engine RaftKvEngine::GetID() { return pb::common::ENG_RAFTSTORE; }
 
 butil::EndPoint getRaftEndPoint(const std::string host, int port) {
   butil::ip_t ip;
