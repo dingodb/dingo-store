@@ -55,3 +55,4 @@ third-party
 
 build/
 dist/
+.vscode/

@@ -15,7 +15,8 @@
 #include "server/store_service.h"
 
 #include "common/context.h"
-#include "region/store_region_manager.h"
+#include "meta/store_meta_manager.h"
+#include "server/server.h"
 
 namespace dingodb {
 
@@ -46,8 +47,8 @@ void StoreServiceImpl::AddRegion(
   storage_->AddRegion(request->region().id(), request->region());
 
   // Add region to store region manager
-  StoreRegionManager::GetInstance()->AddRegion(request->region().id(),
-                                               request->region());
+  Server::GetInstance()->get_store_meta_manager()->AddRegion(request->region().id(),
+                                                             request->region());
 }
 
 void StoreServiceImpl::DestroyRegion(

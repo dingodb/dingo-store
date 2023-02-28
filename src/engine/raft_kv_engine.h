@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DINGODB_ENGINE_RAFT_KV_ENGINE_H_H
-#define DINGODB_ENGINE_RAFT_KV_ENGINE_H_H
+#ifndef DINGODB_ENGINE_RAFT_KV_ENGINE_H_
+#define DINGODB_ENGINE_RAFT_KV_ENGINE_H_
 
 #include <memory>
 
@@ -26,13 +26,13 @@ namespace dingodb {
 
 class RaftKvEngine : public Engine {
  public:
-  RaftKvEngine(Engine* engine);
+  RaftKvEngine(std::shared_ptr<Engine> engine);
   ~RaftKvEngine();
 
-  bool Init();
+  bool Init(std::shared_ptr<Config> config);
 
   std::string GetName();
-  uint32_t GetID();
+  pb::common::Engine GetID();
 
   int AddRegion(uint64_t region_id, const pb::common::Region& region);
   int DestroyRegion(uint64_t region_id);
@@ -49,4 +49,4 @@ class RaftKvEngine : public Engine {
 
 }  // namespace dingodb
 
-#endif  // DINGODB_ENGINE_RAFT_KV_ENGINE_H_H
+#endif  // DINGODB_ENGINE_RAFT_KV_ENGINE_H_

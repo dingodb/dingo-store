@@ -16,7 +16,7 @@
 
 namespace dingodb {
 
-Storage::Storage(Engine* engine) : engine_(engine) {}
+Storage::Storage(std::shared_ptr<Engine> engine) : engine_(engine) {}
 
 Storage::~Storage() {}
 

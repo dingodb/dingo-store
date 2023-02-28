@@ -12,33 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DINGODB_ENGINE_STORAGE_H_
-#define DINGODB_ENGINE_STORAGE_H_
+#ifndef DINGODB_META_META_READER_H_
+#define DINGODB_META_META_READER_H_
 
-#include "common/context.h"
+#include <memory>
+#include <vector>
+
 #include "engine/engine.h"
-#include "engine/raft_kv_engine.h"
-#include "memory"
 #include "proto/common.pb.h"
-#include "proto/error.pb.h"
 
 namespace dingodb {
 
-class Storage {
+class MetaReader {
  public:
-  Storage(std::shared_ptr<Engine> engine);
-  ~Storage();
+  MetaReader(std::shared_ptr<Engine> engine) : engine_(engine) {}
+  ~MetaReader() {}
 
-  int AddRegion(uint64_t region_id, const dingodb::pb::common::Region& region);
-  int DestroyRegion(uint64_t region_id);
-
-  Snapshot* GetSnapshot();
-  void ReleaseSnapshot();
-
-  std::shared_ptr<std::string> KvGet(std::shared_ptr<Context> ctx,
-                                     const std::string& key);
-  pb::error::Errno KvPut(std::shared_ptr<Context> ctx,
-                         const pb::common::KeyValue& kv);
+  std::shared_ptr<pb::common::KeyValue> Get(const std::string& key);
+  std::vector<pb::common::KeyValue> Scan(const std::string& prefix);
 
  private:
   std::shared_ptr<Engine> engine_;
@@ -46,4 +37,4 @@ class Storage {
 
 }  // namespace dingodb
 
-#endif  // DINGODB_ENGINE_STORAGE_H_
+#endif  // DINGODB_META_META_READER_H_

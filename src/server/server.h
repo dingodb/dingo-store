@@ -17,7 +17,10 @@
 
 #include <memory>
 
+#include "brpc/channel.h"
+#include "crontab/crontab.h"
 #include "engine/storage.h"
+#include "meta/store_meta_manager.h"
 
 template <typename T>
 struct DefaultSingletonTraits;
@@ -28,11 +31,13 @@ class Server {
  public:
   static Server* GetInstance();
 
+  void set_role(const std::string& role);
+
   // Init config.
   bool InitConfig(const std::string& filename);
 
   // Init log.
-  bool InitLog(const std::string& role);
+  bool InitLog();
 
   // Valiate coordinator is connected and valid.
   bool ValiateCoordinator();
@@ -40,15 +45,24 @@ class Server {
   // Every server instance has id, the id is allocated by coordinator.
   bool InitServerID();
 
+  // Init storage engines;
+  bool InitEngines();
+
   // Pull region infomation for init current node own region.
   bool InitRaftNodeManager();
 
   // Init storage engine.
   bool InitStorage();
 
+  // Init store meta manager
+  bool InitStoreMetaManager();
+
+  // Init crontab heartbeat
+  bool InitCrontabManager();
+
   void Destroy();
 
-  std::shared_ptr<Storage> get_storage() { return storage_; }
+  uint64_t get_id() { return id_; }
 
   butil::EndPoint get_server_endpoint() { return server_endpoint_; }
   void set_server_endpoint(const butil::EndPoint& endpoint) {
@@ -60,16 +74,43 @@ class Server {
     raft_endpoint_ = endpoint;
   }
 
+  std::shared_ptr<Storage> get_storage() { return storage_; }
+  std::shared_ptr<StoreMetaManager> get_store_meta_manager() {
+    return store_meta_manager_;
+  }
+  std::shared_ptr<CrontabManager> get_crontab_manager() {
+    return crontab_manager_;
+  }
+
  private:
-  Server();
-  ~Server();
+  Server(){};
+  ~Server(){};
   friend struct DefaultSingletonTraits<Server>;
   DISALLOW_COPY_AND_ASSIGN(Server);
 
+  // This is server instance id, every store server has one id, it's unique,
+  // represent store's identity, provided by coordinator.
+  // read from store config file.
   uint64_t id_;
+  // Role, include store/coordinator
+  std::string role_;
+  // Service ip and port.
   butil::EndPoint server_endpoint_;
+  // Raft ip and port.
   butil::EndPoint raft_endpoint_;
+
+  // store invoke coordinator api channel
+  std::shared_ptr<brpc::Channel> channel_;
+
+  // All store engine, include MemEngine/RaftKvEngine/RocksEngine
+  std::map<pb::common::Engine, std::shared_ptr<Engine> > engines_;
+
+  // This is a Storage class, deal with all about storage stuff.
   std::shared_ptr<Storage> storage_;
+  // This is manage store meta data, like store state and region state.
+  std::shared_ptr<StoreMetaManager> store_meta_manager_;
+  // This is manage crontab, like heartbeat.
+  std::shared_ptr<CrontabManager> crontab_manager_;
 };
 
 }  // namespace dingodb
