@@ -31,9 +31,6 @@ void CoordinatorServiceImpl::Hello(
 
   response->set_status(static_cast<pb::common::CoordinatorStatus>(0));
   response->set_status_detail("OK");
-
-  // brpc::Controller *cntl = static_cast<brpc::Controller *>(controller);
-  // cntl->SetFailed(0, "Error is %s", "Failed");
 }
 
 void CoordinatorServiceImpl::StoreHeartbeat(
@@ -46,11 +43,14 @@ void CoordinatorServiceImpl::StoreHeartbeat(
             << request->self_storemap_epoch() << "] regionmap_epoch ["
             << request->self_regionmap_epoch() << "]";
 
+  LOG(INFO) << request->DebugString();
+
   // update store map
   int new_storemap_epoch =
       this->coordinator_control->UpdateStoreMap(request->store());
 
   // update region map
+  LOG(INFO) << " region size = " << request->regions_size();
   std::vector<pb::common::Region> regions;
   regions.resize(request->regions_size());
   for (int i = 0; i < request->regions_size(); i++) {
@@ -59,8 +59,18 @@ void CoordinatorServiceImpl::StoreHeartbeat(
   int new_regionmap_epoch =
       this->coordinator_control->UpdateRegionMapMulti(regions);
 
+  LOG(INFO) << "set epoch id to response " << new_storemap_epoch << " "
+            << new_regionmap_epoch;
   response->set_storemap_epoch(new_storemap_epoch);
   response->set_regionmap_epoch(new_regionmap_epoch);
+
+  auto *new_regionmap = response->mutable_regionmap();
+  new_regionmap->CopyFrom(this->coordinator_control->GetRegionMap());
+
+  auto *new_storemap = response->mutable_storemap();
+  new_storemap->CopyFrom(this->coordinator_control->GetStoreMap());
+
+  LOG(INFO) << "end reponse build " << response->DebugString();
 }
 
 void CoordinatorServiceImpl::GetStoreMap(

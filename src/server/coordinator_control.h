@@ -50,6 +50,7 @@ class CoordinatorControl {
 
   // update region map with new Region info
   // return new epoch
+  bool UpdateOneRegionMap(const pb::common::Region &region);
   uint64_t UpdateRegionMap(const pb::common::Region &region);
   uint64_t UpdateRegionMapMulti(std::vector<pb::common::Region> regions);
 
