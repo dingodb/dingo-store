@@ -14,6 +14,8 @@
 
 #include "server/coordinator_service.h"
 
+#include <vector>
+
 #include "brpc/controller.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
@@ -44,8 +46,21 @@ void CoordinatorServiceImpl::StoreHeartbeat(
             << request->self_storemap_epoch() << "] regionmap_epoch ["
             << request->self_regionmap_epoch() << "]";
 
-  response->set_storemap_epoch(1);
-  response->set_regionmap_epoch(1);
+  // update store map
+  int new_storemap_epoch =
+      this->coordinator_control->UpdateStoreMap(request->store());
+
+  // update region map
+  std::vector<pb::common::Region> regions;
+  regions.resize(request->regions_size());
+  for (int i = 0; i < request->regions_size(); i++) {
+    regions.push_back(request->regions(i));
+  }
+  int new_regionmap_epoch =
+      this->coordinator_control->UpdateRegionMapMulti(regions);
+
+  response->set_storemap_epoch(new_storemap_epoch);
+  response->set_regionmap_epoch(new_regionmap_epoch);
 }
 
 void CoordinatorServiceImpl::GetStoreMap(
@@ -56,7 +71,11 @@ void CoordinatorServiceImpl::GetStoreMap(
   brpc::ClosureGuard done_guard(done);
   LOG(INFO) << "GetStoreMap request: _epoch [" << request->epoch() << "]";
 
-  response->set_epoch(1);
+  pb::common::StoreMap storemap;
+  storemap = this->coordinator_control->GetStoreMap();
+
+  response->mutable_storemap()->CopyFrom(storemap);
+  response->set_epoch(storemap.epoch());
 }
 
 void CoordinatorServiceImpl::GetRegionMap(
@@ -67,7 +86,11 @@ void CoordinatorServiceImpl::GetRegionMap(
   brpc::ClosureGuard done_guard(done);
   LOG(INFO) << "GetRegionMap request: _epoch [" << request->epoch() << "]";
 
-  response->set_epoch(1);
+  pb::common::RegionMap regionmap;
+  regionmap = this->coordinator_control->GetRegionMap();
+
+  response->mutable_regionmap()->CopyFrom(regionmap);
+  response->set_epoch(regionmap.epoch());
 }
 
 }  // namespace dingodb

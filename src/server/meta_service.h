@@ -18,12 +18,17 @@
 #include "brpc/controller.h"
 #include "brpc/server.h"
 #include "proto/meta.pb.h"
+#include "server/coordinator_control.h"
 
 namespace dingodb {
 
 class MetaServiceImpl : public pb::meta::MetaService {
  public:
   MetaServiceImpl() = default;
+
+  void SetControl(CoordinatorControl* coordinator_control) {
+    this->coordinator_control = coordinator_control;
+  };
 
   void GetSchemas(google::protobuf::RpcController* controller,
                   const pb::meta::GetSchemasRequest* request,
@@ -41,6 +46,8 @@ class MetaServiceImpl : public pb::meta::MetaService {
                  const pb::meta::DropTableRequest* request,
                  pb::meta::DropTableResponse* response,
                  google::protobuf::Closure* done) override;
+
+  CoordinatorControl* coordinator_control;
 };
 
 }  // namespace dingodb

@@ -56,6 +56,29 @@ void SendHello(brpc::Controller& cntl,
   }
 }
 
+void SendHello1(brpc::Controller& cntl,
+                dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
+  dingodb::pb::coordinator::HelloRequest request;
+  dingodb::pb::coordinator::HelloResponse response;
+
+  std::string key = "Hello";
+  // const char* op = nullptr;
+  request.set_hello(0);
+  stub.Hello(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    // bthread_usleep(FLAGS_timeout_ms * 1000L);
+  }
+
+  if (FLAGS_log_each_request) {
+    LOG(INFO) << "Received response"
+              << " hello=" << request.hello()
+              << " request_attachment=" << cntl.request_attachment().size()
+              << " response_attachment=" << cntl.response_attachment().size()
+              << " latency=" << cntl.latency_us();
+  }
+}
+
 void* Sender(void* /*arg*/) {
   while (!brpc::IsAskedToQuit()) {
     braft::PeerId leader(FLAGS_coordinator_addr);

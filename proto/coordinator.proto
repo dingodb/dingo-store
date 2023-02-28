@@ -63,6 +63,15 @@ message GetStoreMapResponse {
   dingodb.pb.common.StoreMap storemap = 2;
 }
 
+message CreateStoreRequest {
+  uint64 cluster_id = 1;
+}
+
+message CreateStoreResponse {
+  uint64 store_id = 1;
+  string password = 2;
+}
+
 service CoordinatorService {
   // Hello
   rpc Hello(HelloRequest) returns (HelloResponse);
@@ -71,4 +80,6 @@ service CoordinatorService {
   rpc StoreHeartbeat(StoreHeartbeatRequest) returns (StoreHeartbeatResponse);
   rpc GetRegionMap(GetRegionMapRequest) returns (GetRegionMapResponse);
   rpc GetStoreMap(GetStoreMapRequest) returns (GetStoreMapResponse);
+
+  rpc CreateStore(CreateStoreRequest) returns (CreateStoreResponse);
 }
