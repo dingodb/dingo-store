@@ -22,6 +22,7 @@
 #include "gflags/gflags.h"
 #include "proto/coordinator.pb.h"
 #include "proto/store.pb.h"
+#include "server/coordinator_control.h"
 #include "server/coordinator_service.h"
 #include "server/meta_service.h"
 #include "server/server.h"
@@ -91,10 +92,17 @@ int main(int argc, char *argv[]) {
       dingodb::ConfigManager::GetInstance()->GetConfig(FLAGS_role)));
 
   brpc::Server server;
+  dingodb::CoordinatorControl coordinator_control;
   dingodb::CoordinatorServiceImpl coordinator_service;
   dingodb::MetaServiceImpl meta_service;
   dingodb::StoreServiceImpl store_service;
   if (FLAGS_role == "coordinator") {
+    // init CoordinatorController
+    coordinator_control.Init();
+    coordinator_service.SetControl(&coordinator_control);
+    coordinator_service.SetControl(&coordinator_control);
+
+    // add service to brpc
     if (server.AddService(&coordinator_service,
                           brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
       LOG(ERROR) << "Fail to add coordinator service";

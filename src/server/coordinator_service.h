@@ -18,12 +18,18 @@
 #include "brpc/controller.h"
 #include "brpc/server.h"
 #include "proto/coordinator.pb.h"
+#include "server/coordinator_control.h"
 
 namespace dingodb {
 
 class CoordinatorServiceImpl : public pb::coordinator::CoordinatorService {
  public:
   CoordinatorServiceImpl() = default;
+
+  void SetControl(CoordinatorControl* coordinator_control) {
+    this->coordinator_control = coordinator_control;
+  };
+
   void Hello(google::protobuf::RpcController* controller,
              const pb::coordinator::HelloRequest* request,
              pb::coordinator::HelloResponse* response,
@@ -40,6 +46,8 @@ class CoordinatorServiceImpl : public pb::coordinator::CoordinatorService {
                    const pb::coordinator::GetStoreMapRequest* request,
                    pb::coordinator::GetStoreMapResponse* response,
                    google::protobuf::Closure* done) override;
+
+  CoordinatorControl* coordinator_control;
 };
 
 }  // namespace dingodb
