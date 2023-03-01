@@ -68,6 +68,15 @@ message CreateTableResponse {
   repeated dingodb.pb.common.Table table = 1;
 }
 
+message CreateSchemaRequest {
+  uint64 parent_schema_id = 1;
+  string schema_name = 2;
+}
+
+message CreateSchemaResponse {
+  dingodb.pb.common.Schema schema = 1;
+}
+
 message DropTableRequest {
   uint64 schema_id = 1;
   uint64 table_id = 2;
@@ -102,6 +111,9 @@ service MetaService {
   // Table DDL
   rpc CreateTable(CreateTableRequest) returns (CreateTableResponse);
   rpc DropTable(DropTableRequest) returns (DropTableResponse);
+
+  // Schema DDL
+  rpc CreateSchema(CreateSchemaRequest) returns (CreateSchemaResponse);
 
   // todo
   // Operation about User, such as create/drop/grant.

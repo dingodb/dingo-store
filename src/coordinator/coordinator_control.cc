@@ -16,22 +16,79 @@
 
 #include <cstdint>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "google/protobuf/unknown_field_set.h"
+#include "proto/common.pb.h"
 
 namespace dingodb {
 void CoordinatorControl::Init() {
   next_coordinator_id_ = 1;
   next_store_id_ = 1;
   next_region_id_ = 1;
-  next_schema_id_ = 1;
   next_table_id_ = 1;
   next_partition_id_ = 1;
+
+  // root=0 meta=1 dingo=2, other schema begins from 3
+  next_schema_id_ = 3;
+
+  // init schema_map_ at innocent cluster
+  if (schema_map_.empty()) {
+    pb::common::Schema root_schema;
+    root_schema.set_id(0);
+    root_schema.set_name("root");
+
+    // meta schema
+    pb::common::Schema meta_schema;
+    meta_schema.set_id(1);
+    meta_schema.set_name("meta");
+    root_schema.add_schema_ids(1);
+
+    // dingo schema
+    pb::common::Schema dingo_schema;
+    dingo_schema.set_id(2);
+    dingo_schema.set_name("dingo");
+    root_schema.add_schema_ids(2);
+
+    // add the initial schemas to schema_map_
+    // TODO: data persistence
+    schema_map_.insert(std::make_pair(0, root_schema));
+    schema_map_.insert(std::make_pair(1, meta_schema));
+    schema_map_.insert(std::make_pair(2, dingo_schema));
+
+    LOG(INFO) << "init schema_map_ finished";
+  }
 }
 
 uint64_t CoordinatorControl::CreateCoordinatorId() {
   return next_coordinator_id_++;
+}
+
+// TODO: check name comflicts before create new schema
+int CoordinatorControl::CreateSchema(uint64_t parent_schema_id,
+                                     std::string schema_name,
+                                     uint64_t& new_schema_id) {
+  if (schema_map_.find(parent_schema_id) == schema_map_.end()) {
+    LOG(INFO) << " CreateSchema parent_schema_id is illegal "
+              << parent_schema_id;
+    return -1;
+  }
+
+  if (schema_name.empty()) {
+    LOG(INFO) << " CreateSchema schema_name is illegal " << schema_name;
+    return -1;
+  }
+
+  new_schema_id = CreateSchemaId();
+  schema_map_[parent_schema_id].add_schema_ids(new_schema_id);
+  pb::common::Schema new_schema;
+  new_schema.set_id(new_schema_id);
+  new_schema.set_name(schema_name);
+
+  schema_map_.insert(std::make_pair(new_schema_id, new_schema));
+
+  return 0;
 }
 
 uint64_t CoordinatorControl::CreateStoreId() { return next_store_id_++; }
@@ -152,5 +209,40 @@ int CoordinatorControl::CreateStore(uint64_t cluster_id, uint64_t& store_id,
   } else {
     return -1;
   }
+}
+
+// GetSchemas
+// in: schema_id
+// out: schemas
+void CoordinatorControl::GetSchemas(uint64_t schema_id,
+                                    std::vector<pb::common::Schema>& schemas) {
+  if (schema_id < 0) {
+    LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
+    return;
+  }
+
+  if (!schemas.empty()) {
+    LOG(ERROR) << "ERRROR: vector schemas is not empty , size="
+               << schemas.size();
+    return;
+  }
+
+  if (this->schema_map_.find(schema_id) == schema_map_.end()) {
+    return;
+  }
+
+  auto& schema = schema_map_[schema_id];
+  for (int i = 0; i < schema.schema_ids_size(); i++) {
+    int sub_schema_id = schema.schema_ids(i);
+    if (schema_map_.find(sub_schema_id) == schema_map_.end()) {
+      LOG(ERROR) << "ERRROR: sub_schema_id " << sub_schema_id << " not exists";
+      continue;
+    }
+
+    schemas.push_back(schema_map_[sub_schema_id]);
+  }
+
+  LOG(INFO) << "GetSchemas id=" << schema_id
+            << " sub schema count=" << schema_map_.size();
 }
 }  // namespace dingodb

@@ -15,13 +15,15 @@
 #include "server/meta_service.h"
 
 #include <cstddef>
+#include <cstdint>
 #include <memory>
+#include <vector>
 
+#include "brpc/controller.h"
 #include "proto/common.pb.h"
 #include "proto/meta.pb.h"
 
 namespace dingodb {
-using pb::meta::CreateTableResponse;
 
 void MetaServiceImpl::GetSchemas(
     google::protobuf::RpcController * /*controller*/,
@@ -31,12 +33,13 @@ void MetaServiceImpl::GetSchemas(
   LOG(INFO) << "GetSchemas request:  schema_id = [" << request->schema_id()
             << "]";
 
-  auto *schema = response->add_schemas();
-  schema->set_id(1);
-  schema->set_name("meta");
-  schema->add_table_ids(1);
-  schema->add_table_ids(2);
-  schema->add_schema_ids(2);
+  std::vector<pb::common::Schema> schemas;
+  this->coordinator_control->GetSchemas(request->schema_id(), schemas);
+
+  for (auto &schema : schemas) {
+    auto *new_schema = response->add_schemas();
+    new_schema->CopyFrom(schema);
+  }
 }
 
 void MetaServiceImpl::GetTables(
@@ -98,11 +101,37 @@ void MetaServiceImpl::GetTables(
 void MetaServiceImpl::CreateTable(
     google::protobuf::RpcController * /*controller*/,
     const pb::meta::CreateTableRequest *request,
-    CreateTableResponse * /*response*/, google::protobuf::Closure *done) {
+    pb::meta::CreateTableResponse * /*response*/,
+    google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
   LOG(INFO) << "CreatTable request:  schema_id = [" << request->schema_id()
             << "]";
   LOG(INFO) << request->DebugString();
+}
+
+void MetaServiceImpl::CreateSchema(google::protobuf::RpcController *controller,
+                                   const pb::meta::CreateSchemaRequest *request,
+                                   pb::meta::CreateSchemaResponse *response,
+                                   google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+  LOG(INFO) << "CreatSchema request:  parent_schema_id = ["
+            << request->parent_schema_id() << "]";
+  LOG(INFO) << request->DebugString();
+
+  uint64_t new_schema_id;
+  int ret = this->coordinator_control->CreateSchema(
+      request->parent_schema_id(), request->schema_name(), new_schema_id);
+  if (ret) {
+    LOG(INFO) << "CreateSchema failed ret = " << ret;
+    brpc::Controller *brpc_controller =
+        static_cast<brpc::Controller *>(controller);
+    brpc_controller->SetFailed(ret, "create schema failed");
+    return;
+  }
+
+  auto *schema = response->mutable_schema();
+  schema->set_id(new_schema_id);
+  schema->set_name(request->schema_name());
 }
 
 void MetaServiceImpl::DropTable(

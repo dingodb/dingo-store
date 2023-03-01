@@ -47,6 +47,11 @@ class MetaServiceImpl : public pb::meta::MetaService {
                  pb::meta::DropTableResponse* response,
                  google::protobuf::Closure* done) override;
 
+  void CreateSchema(google::protobuf::RpcController* controller,
+                    const pb::meta::CreateSchemaRequest* request,
+                    pb::meta::CreateSchemaResponse* response,
+                    google::protobuf::Closure* done) override;
+
   CoordinatorControl* coordinator_control;
 };
 

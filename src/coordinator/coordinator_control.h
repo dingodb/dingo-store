@@ -16,12 +16,15 @@
 #define DINGODB_COORDINATOR_COMMON_H_
 
 #include <cstdint>
+#include <map>
+#include <string>
 #include <vector>
 
 #include "brpc/controller.h"
 #include "brpc/server.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
+#include "proto/coordinator_internal.pb.h"
 #include "proto/meta.pb.h"
 
 namespace dingodb {
@@ -41,8 +44,15 @@ class CoordinatorControl {
   // create region
   uint64_t CreateRegion();
 
+  // create schema
+  // in: parent_schema_id
+  // in: schema_name
+  // out: new schema_id
+  int CreateSchema(uint64_t parent_schema_id, std::string schema_name,
+                   uint64_t &new_schema_id);
+
   // create store
-  // in: cluster_out
+  // in: cluster_id
   // out: store_id, password
   int CreateStore(uint64_t cluster_id, uint64_t &store_id,
                   std::string &password);
@@ -63,6 +73,9 @@ class CoordinatorControl {
   // get regionmap
   const pb::common::RegionMap &GetRegionMap();
 
+  // get schemas
+  void GetSchemas(uint64_t schema_id, std::vector<pb::common::Schema> &schemas);
+
  private:
   // global ids
   uint64_t next_coordinator_id_;
@@ -78,6 +91,12 @@ class CoordinatorControl {
   pb::common::RegionMap region_map_;
   uint64_t store_map_epoch_;
   pb::common::StoreMap store_map_;
+
+  // schemas
+  std::map<uint64_t, pb::common::Schema> schema_map_;
+
+  // tables
+  std::map<uint64_t, pb::common::Table> table_map_;
 };
 
 }  // namespace dingodb
