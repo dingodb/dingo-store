@@ -15,6 +15,7 @@
 #include "coordinator/coordinator_control.h"
 
 #include <cstdint>
+#include <string>
 #include <vector>
 
 #include "google/protobuf/unknown_field_set.h"
@@ -138,4 +139,18 @@ const pb::common::RegionMap& CoordinatorControl::GetRegionMap() {
   return this->region_map_;
 }
 
+int CoordinatorControl::CreateStore(uint64_t cluster_id, uint64_t& store_id,
+                                    std::string& password) {
+  if (cluster_id > 0) {
+    store_id = CreateStoreId();
+    password = "TO_BE_CONTINUED";
+
+    auto* store = store_map_.add_stores();
+    store->set_id(store_id);
+
+    return 0;
+  } else {
+    return -1;
+  }
+}
 }  // namespace dingodb

@@ -41,6 +41,12 @@ class CoordinatorControl {
   // create region
   uint64_t CreateRegion();
 
+  // create store
+  // in: cluster_out
+  // out: store_id, password
+  int CreateStore(uint64_t cluster_id, uint64_t &store_id,
+                  std::string &password);
+
   // update store map with new Store info
   // return new epoch
   uint64_t UpdateStoreMap(const pb::common::Store &store);

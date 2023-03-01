@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -56,6 +57,74 @@ void SendHello(brpc::Controller& cntl,
               << " request_attachment=" << cntl.request_attachment().size()
               << " response_attachment=" << cntl.response_attachment().size()
               << " latency=" << cntl.latency_us();
+  }
+}
+
+void SendGetStoreMap(brpc::Controller& cntl,
+                     dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
+  dingodb::pb::coordinator::GetStoreMapRequest request;
+  dingodb::pb::coordinator::GetStoreMapResponse response;
+
+  request.set_epoch(1);
+
+  stub.GetStoreMap(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    // bthread_usleep(FLAGS_timeout_ms * 1000L);
+  }
+
+  if (FLAGS_log_each_request) {
+    LOG(INFO) << "Received response"
+              << " get_store_map=" << request.epoch()
+              << " request_attachment=" << cntl.request_attachment().size()
+              << " response_attachment=" << cntl.response_attachment().size()
+              << " latency=" << cntl.latency_us();
+    LOG(INFO) << response.DebugString();
+  }
+}
+
+void SendGetRegionMap(brpc::Controller& cntl,
+                      dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
+  dingodb::pb::coordinator::GetRegionMapRequest request;
+  dingodb::pb::coordinator::GetRegionMapResponse response;
+
+  request.set_epoch(1);
+
+  stub.GetRegionMap(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    // bthread_usleep(FLAGS_timeout_ms * 1000L);
+  }
+
+  if (FLAGS_log_each_request) {
+    LOG(INFO) << "Received response"
+              << " get_store_map=" << request.epoch()
+              << " request_attachment=" << cntl.request_attachment().size()
+              << " response_attachment=" << cntl.response_attachment().size()
+              << " latency=" << cntl.latency_us();
+    LOG(INFO) << response.DebugString();
+  }
+}
+void SendCreateStore(brpc::Controller& cntl,
+                     dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
+  dingodb::pb::coordinator::CreateStoreRequest request;
+  dingodb::pb::coordinator::CreateStoreResponse response;
+
+  request.set_cluster_id(1);
+  stub.CreateStore(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorCode() << "["
+                 << cntl.ErrorText() << "]";
+    // bthread_usleep(FLAGS_timeout_ms * 1000L);
+  }
+
+  if (FLAGS_log_each_request) {
+    LOG(INFO) << "Received response"
+              << " create store cluster_id =" << request.cluster_id()
+              << " request_attachment=" << cntl.request_attachment().size()
+              << " response_attachment=" << cntl.response_attachment().size()
+              << " latency=" << cntl.latency_us();
+    LOG(INFO) << response.DebugString();
   }
 }
 
@@ -174,6 +243,15 @@ void* Sender(void* /*arg*/) {
       SendHello(cntl, stub);
     } else if (FLAGS_method == "StoreHeartbeat") {
       SendStoreHearbeat(cntl, stub);
+    } else if (FLAGS_method == "CreateStore") {
+      SendCreateStore(cntl, stub);
+    } else if (FLAGS_method == "GetStoreMap") {
+      SendGetStoreMap(cntl, stub);
+    } else if (FLAGS_method == "GetRegionMap") {
+      SendGetRegionMap(cntl, stub);
+    } else {
+      LOG(INFO) << " method illegal , exit";
+      return nullptr;
     }
 
     bthread_usleep(FLAGS_timeout_ms * 10000L);
