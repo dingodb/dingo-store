@@ -22,7 +22,6 @@
 #include "gflags/gflags.h"
 #include "proto/coordinator.pb.h"
 #include "proto/store.pb.h"
-#include "server/coordinator_control.h"
 #include "server/coordinator_service.h"
 #include "server/meta_service.h"
 #include "server/server.h"
@@ -80,7 +79,7 @@ int main(int argc, char *argv[]) {
     return -1;
   }
 
-  auto dingodb_server = dingodb::Server::GetInstance();
+  auto *dingodb_server = dingodb::Server::GetInstance();
   dingodb_server->set_role(FLAGS_role);
   dingodb_server->InitConfig(FLAGS_conf);
   dingodb_server->InitLog();
