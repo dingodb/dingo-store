@@ -195,6 +195,31 @@ void SendDropTable(brpc::Controller& cntl,
   }
 }
 
+void SendCreateSchema(brpc::Controller& cntl,
+                      dingodb::pb::meta::MetaService_Stub& stub) {
+  dingodb::pb::meta::CreateSchemaRequest request;
+  dingodb::pb::meta::CreateSchemaResponse response;
+
+  request.set_parent_schema_id(2);
+  request.set_schema_name("test_create_schema");
+  stub.CreateSchema(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    // bthread_usleep(FLAGS_timeout_ms * 1000L);
+    return;
+  }
+
+  if (FLAGS_log_each_request) {
+    LOG(INFO) << "Received response"
+              << " request parent_schema_id =" << request.parent_schema_id()
+              << " request schema_name=" << request.schema_name()
+              << " request_attachment=" << cntl.request_attachment().size()
+              << " response_attachment=" << cntl.response_attachment().size()
+              << " latency=" << cntl.latency_us();
+    LOG(INFO) << response.DebugString();
+  }
+}
+
 void* Sender(void* /*arg*/) {
   while (!brpc::IsAskedToQuit()) {
     braft::PeerId leader(FLAGS_meta_addr);
@@ -219,6 +244,8 @@ void* Sender(void* /*arg*/) {
       SendCreateTable(cntl, stub);
     } else if (FLAGS_method == "DropTable") {
       SendDropTable(cntl, stub);
+    } else if (FLAGS_method == "CreateSchema") {
+      SendCreateSchema(cntl, stub);
     }
 
     bthread_usleep(FLAGS_timeout_ms * 10000L);

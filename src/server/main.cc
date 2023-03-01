@@ -108,7 +108,7 @@ int main(int argc, char *argv[]) {
     // init CoordinatorController
     coordinator_control.Init();
     coordinator_service.SetControl(&coordinator_control);
-    coordinator_service.SetControl(&coordinator_control);
+    meta_service.SetControl(&coordinator_control);
 
     // add service to brpc
     if (server.AddService(&coordinator_service,
