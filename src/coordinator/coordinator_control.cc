@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "server/coordinator_control.h"
+#include "coordinator/coordinator_control.h"
 
 #include <cstdint>
 #include <vector>

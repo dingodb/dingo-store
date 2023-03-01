@@ -17,8 +17,8 @@
 
 #include "brpc/controller.h"
 #include "brpc/server.h"
+#include "coordinator/coordinator_control.h"
 #include "proto/coordinator.pb.h"
-#include "server/coordinator_control.h"
 
 namespace dingodb {
 
