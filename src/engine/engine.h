@@ -25,16 +25,19 @@ namespace dingodb {
 
 class Engine {
  public:
-  virtual ~Engine() {}
+  virtual ~Engine() = default;
 
   virtual bool Init(std::shared_ptr<Config> config) = 0;
   virtual std::string GetName() = 0;
   virtual pb::common::Engine GetID() = 0;
 
-  virtual int AddRegion(uint64_t region_id, const pb::common::Region& region) {}
-  virtual int DestroyRegion(uint64_t region_id) {}
+  virtual int AddRegion([[maybe_unused]] uint64_t region_id,
+                        [[maybe_unused]] const pb::common::Region& region) {
+    return -1;
+  }
+  virtual int DestroyRegion([[maybe_unused]] uint64_t region_id) { return -1; }
 
-  virtual Snapshot* GetSnapshot() {}
+  virtual Snapshot* GetSnapshot() { return nullptr; }
   virtual void ReleaseSnapshot() {}
 
   virtual std::shared_ptr<std::string> KvGet(std::shared_ptr<Context> ctx,
@@ -43,7 +46,8 @@ class Engine {
                                  const pb::common::KeyValue& kv) = 0;
 
  protected:
-  Engine(){};
+  Engine() = default;
+  ;
 };
 
 }  // namespace dingodb

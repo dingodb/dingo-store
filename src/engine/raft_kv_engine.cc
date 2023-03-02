@@ -58,8 +58,8 @@ int RaftKvEngine::AddRegion(uint64_t region_id,
       region_id, braft::PeerId(Server::GetInstance()->get_raft_endpoint()),
       new StoreStateMachine(engine_));
 
-  if (node->Init(Helper::FormatPeers(
-          Helper::ExtractLocations(region.electors()))) != 0) {
+  if (node->Init(
+          Helper::FormatPeers(Helper::ExtractLocations(region.peers()))) != 0) {
     node->Destroy();
     return -1;
   }

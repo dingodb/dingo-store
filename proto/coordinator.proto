@@ -41,7 +41,7 @@ message HelloRequest {
 }
 
 message HelloResponse {
-  dingodb.pb.common.CoordinatorStatus status = 1;
+  dingodb.pb.common.CoordinatorState state = 1;
   string status_detail = 2;
 }
 

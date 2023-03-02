@@ -106,10 +106,10 @@ uint64_t CoordinatorControl::UpdateStoreMap(const pb::common::Store& store) {
     auto* old_store = store_map_.mutable_stores(i);
     if (old_store->id() == store.id()) {
       // update old store properties
-      if (old_store->status() != store.status()) {
+      if (old_store->state() != store.state()) {
         LOG(INFO) << "STORE STATUS CHANGE store_id = " << store.id()
-                  << " old status = " << old_store->status()
-                  << " new status = " << store.status();
+                  << " old status = " << old_store->state()
+                  << " new status = " << store.state();
         store_map_.set_epoch(store_map_.epoch() + 1);
         need_update_epoch = true;
       }
@@ -136,10 +136,10 @@ bool CoordinatorControl::UpdateOneRegionMap(const pb::common::Region& region) {
   for (int i = 0; i < region_map_.regions_size(); i++) {
     auto* old_region = region_map_.mutable_regions(i);
     if (old_region->id() == region.id()) {
-      if (old_region->status() != region.status()) {
+      if (old_region->state() != region.state()) {
         LOG(INFO) << "REGION STATUS CHANGE region_id = " << region.id()
-                  << " old status = " << old_region->status()
-                  << " new status = " << region.status();
+                  << " old status = " << old_region->state()
+                  << " new status = " << region.state();
       }
       old_region->CopyFrom(region);
       need_to_add_region = false;

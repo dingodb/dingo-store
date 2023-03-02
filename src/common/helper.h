@@ -29,7 +29,8 @@ class Helper {
   static bool IsIp(const std::string& s);
 
   static std::vector<pb::common::Location> ExtractLocations(
-      const google::protobuf::RepeatedPtrField<pb::common::Store>& stores);
+      const google::protobuf::RepeatedPtrField<pb::common::Peer>& peers);
+
   // format: 127.0.0.1:8201:0
   static std::string LocationToString(const pb::common::Location& location);
 
@@ -38,7 +39,7 @@ class Helper {
       const std::vector<pb::common::Location>& locations);
 
   // 127.0.0.1:8201,127.0.0.1:8202,127.0.0.1:8203 to EndPoint
-  static std::vector<butil::EndPoint> StrToEndpoint(const std::string& addrs);
+  static std::vector<butil::EndPoint> StrToEndpoint(const std::string& str);
 };
 
 }  // namespace dingodb

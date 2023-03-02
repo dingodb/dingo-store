@@ -89,7 +89,10 @@ void StoreStateMachine::on_shutdown() {}
 void StoreStateMachine::on_snapshot_save(braft::SnapshotWriter* writer,
                                          braft::Closure* done) {}
 
-int StoreStateMachine::on_snapshot_load(braft::SnapshotReader* reader) {}
+int StoreStateMachine::on_snapshot_load(
+    [[maybe_unused]] braft::SnapshotReader* reader) {
+  return -1;
+}
 
 void StoreStateMachine::on_leader_start() {}
 
