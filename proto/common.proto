@@ -120,19 +120,19 @@ message TableRegions {
   repeated Region regions = 2;
 }
 
-enum CoordinatorStatus {
+enum CoordinatorState {
   COORDINATOR_NORMAL = 0;
   COORDINATOR_OFFLINE = 1;
 }
 
-enum StoreStatus {
+enum StoreState {
   STORE_NORMAL = 0;
   STORE_NEW = 1;      // a new store, wait to startup and join raft
   STORE_OFFLINE = 2;  // miss hearteat
   STORE_OUT = 3;      // up but no data will distribute to this store
 }
 
-enum RegionStatus {
+enum RegionState {
   REGION_NORMAL = 0;
 
   REGION_NEW = 1;  // create new region
@@ -146,17 +146,17 @@ enum RegionStatus {
 
   REGION_SHRINK = 7;      // start to shrink
   REGION_SHIRINKING = 8;  // leader start to shrink region
-  REGION_SHRANK = 9;      // shrink finish, maybe we don't need this status
+  REGION_SHRANK = 9;      // shrink finish, maybe we don't need this state
 
   REGION_DELETE = 10;    // region need to delete
   REGION_DELETING = 11;  // region is deleting
   REGION_DELETED = 12;   // region is deleted
-  // other status add here
+  // other state add here
 }
 
 message Coordinator {
   uint64 id = 1;
-  CoordinatorStatus status = 2;
+  CoordinatorState state = 2;
   Location location = 3;
   string resource_tag = 4;
 }
@@ -168,10 +168,11 @@ message CoordinatorMap {
 
 message Store {
   uint64 id = 1;
-  StoreStatus status = 2;
-  Location server_location = 3;
-  Location raft_location = 4;
-  string resource_tag = 5;
+  uint64 epoch = 2;
+  StoreState state = 3;
+  Location server_location = 4;
+  Location raft_location = 5;
+  string resource_tag = 6;
 }
 
 message StoreMap {
@@ -179,24 +180,34 @@ message StoreMap {
   repeated Store stores = 2;
 }
 
+enum PeerRole {
+  VOTER = 0;
+  LEARNER = 1;
+}
+
+message Peer {
+  uint64 store_id = 1;
+  PeerRole role = 2;
+  Location server_location = 3;
+  Location raft_location = 4;
+}
+
 message Region {
   // store info
   uint64 id = 1;
   uint64 epoch = 2;
   string name = 3;
-  RegionStatus status = 4;
+  RegionState state = 4;
   int64 leader_store_id = 5;
-  repeated Store electors = 6;
-  repeated Store learners = 7;
-  Range range = 8;
+  repeated Peer peers = 6;
+  Range range = 7;
 
   // meta info
-  uint64 schema_id = 9;
-  uint64 table_id = 10;
-  uint64 partition_id = 11;
+  uint64 schema_id = 8;
+  uint64 table_id = 9;
 
   // other
-  uint64 create_timestamp = 12;
+  uint64 create_timestamp = 10;
 }
 
 message RegionMap {

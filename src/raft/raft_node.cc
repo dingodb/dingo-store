@@ -111,7 +111,7 @@ void RaftNode::ChangePeers(const braft::Configuration& new_peers,
 }
 
 butil::Status RaftNode::ResetPeers(const braft::Configuration& new_peers) {
-  node_->reset_peers(new_peers);
+  return node_->reset_peers(new_peers);
 }
 
 }  // namespace dingodb

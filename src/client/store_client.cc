@@ -88,7 +88,7 @@ void sendAddRegion(brpc::Controller& cntl,
   region->set_epoch(1);
   region->set_table_id(10);
   // region->set_table_name("test-10");
-  region->set_partition_id(1);
+  // region->set_partition_id(1);
   // region->set_replica_num(1);
   dingodb::pb::common::Range* range = region->mutable_range();
   range->set_start_key("0000000");

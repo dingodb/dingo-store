@@ -28,10 +28,10 @@ bool Helper::IsIp(const std::string& s) {
 }
 
 std::vector<pb::common::Location> Helper::ExtractLocations(
-    const google::protobuf::RepeatedPtrField<pb::common::Store>& stores) {
+    const google::protobuf::RepeatedPtrField<pb::common::Peer>& peers) {
   std::vector<pb::common::Location> locations;
-  for (auto store : stores) {
-    locations.push_back(store.raft_location());
+  for (const auto& peer : peers) {
+    locations.push_back(peer.raft_location());
   }
   return locations;
 }
@@ -60,7 +60,7 @@ std::vector<butil::EndPoint> Helper::StrToEndpoint(const std::string& str) {
   butil::SplitString(str, ',', &addrs);
 
   std::vector<butil::EndPoint> endpoints;
-  for (auto addr : addrs) {
+  for (const auto& addr : addrs) {
     butil::EndPoint endpoint;
     if (butil::hostname2endpoint(addr.c_str(), &endpoint) != 0 &&
         str2endpoint(addr.c_str(), &endpoint) != 0) {

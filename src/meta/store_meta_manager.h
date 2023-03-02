@@ -30,7 +30,8 @@ namespace dingodb {
 class TransformKvAble {
  public:
   TransformKvAble(const std::string& prefix) : prefix_(prefix){};
-  ~TransformKvAble(){};
+  ~TransformKvAble() = default;
+  ;
 
   virtual std::shared_ptr<pb::common::KeyValue> TransformToKv(
       uint64_t region_id) = 0;
@@ -40,7 +41,7 @@ class TransformKvAble {
   TransformAllToKv() = 0;
 
   virtual void TransformFromKv(
-      const std::vector<std::shared_ptr<pb::common::KeyValue> > kvs) = 0;
+      std::vector<std::shared_ptr<pb::common::KeyValue> > kvs) = 0;
 
  protected:
   const std::string prefix_;
@@ -52,10 +53,10 @@ class StoreServerMeta {
   StoreServerMeta();
   ~StoreServerMeta();
 
-  uint64_t GetEpoch();
+  uint64_t GetEpoch() const;
   StoreServerMeta& SetEpoch(uint64_t epoch);
   StoreServerMeta& SetId(uint64_t id);
-  StoreServerMeta& SetStatus(pb::common::StoreStatus status);
+  StoreServerMeta& SetState(pb::common::StoreState state);
   StoreServerMeta& SetServerLocation(const butil::EndPoint&& endpoint);
   StoreServerMeta& SetRaftLocation(const butil::EndPoint&& endpoint);
 
@@ -71,21 +72,24 @@ class StoreServerMeta {
 class StoreRegionMeta : public TransformKvAble {
  public:
   StoreRegionMeta() : TransformKvAble("META_REGION"){};
-  ~StoreRegionMeta(){};
+  ~StoreRegionMeta() = default;
 
-  uint64_t GetEpoch();
+  uint64_t GetEpoch() const;
   bool IsExist(uint64_t region_id);
   void AddRegion(uint64_t region_id, const pb::common::Region& region);
   std::shared_ptr<pb::common::Region> GetRegion(uint64_t region_id);
   std::vector<std::shared_ptr<pb::common::Region> > GetAllRegion();
 
   uint64_t ParseRegionId(const std::string& str);
-  std::shared_ptr<pb::common::KeyValue> TransformToKv(uint64_t region_id);
-  std::vector<std::shared_ptr<pb::common::KeyValue> > TransformDeltaToKv();
-  std::vector<std::shared_ptr<pb::common::KeyValue> > TransformAllToKv();
+  std::shared_ptr<pb::common::KeyValue> TransformToKv(
+      uint64_t region_id) override;
+  std::vector<std::shared_ptr<pb::common::KeyValue> > TransformDeltaToKv()
+      override;
+  std::vector<std::shared_ptr<pb::common::KeyValue> > TransformAllToKv()
+      override;
 
   void TransformFromKv(
-      const std::vector<std::shared_ptr<pb::common::KeyValue> > kvs);
+      std::vector<std::shared_ptr<pb::common::KeyValue> > kvs) override;
 
  private:
   uint64_t epoch_;

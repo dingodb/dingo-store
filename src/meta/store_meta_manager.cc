@@ -23,9 +23,9 @@ StoreServerMeta::StoreServerMeta() {
   store_ = std::make_shared<pb::common::Store>();
 }
 
-StoreServerMeta::~StoreServerMeta() {}
+StoreServerMeta::~StoreServerMeta() = default;
 
-uint64_t StoreServerMeta::GetEpoch() { return epoch_; }
+uint64_t StoreServerMeta::GetEpoch() const { return epoch_; }
 
 StoreServerMeta& StoreServerMeta::SetEpoch(uint64_t epoch) {
   epoch_ = epoch;
@@ -37,30 +37,32 @@ StoreServerMeta& StoreServerMeta::SetId(uint64_t id) {
   return *this;
 }
 
-StoreServerMeta& StoreServerMeta::SetStatus(pb::common::StoreStatus status) {
-  store_->set_status(status);
+StoreServerMeta& StoreServerMeta::SetState(pb::common::StoreState state) {
+  store_->set_state(state);
   return *this;
 }
 
 StoreServerMeta& StoreServerMeta::SetServerLocation(
     const butil::EndPoint&& endpoint) {
-  auto location = store_->mutable_server_location();
+  auto* location = store_->mutable_server_location();
   location->set_host(butil::ip2str(endpoint.ip).c_str());
   location->set_port(endpoint.port);
+  return *this;
 }
 
 StoreServerMeta& StoreServerMeta::SetRaftLocation(
     const butil::EndPoint&& endpoint) {
-  auto location = store_->mutable_raft_location();
+  auto* location = store_->mutable_raft_location();
   location->set_host(butil::ip2str(endpoint.ip).c_str());
   location->set_port(endpoint.port);
+  return *this;
 }
 
 std::shared_ptr<pb::common::Store> StoreServerMeta::GetStore() {
   return store_;
 }
 
-uint64_t StoreRegionMeta::GetEpoch() { return epoch_; }
+uint64_t StoreRegionMeta::GetEpoch() const { return epoch_; }
 
 bool StoreRegionMeta::IsExist(uint64_t region_id) {
   std::shared_lock<std::shared_mutex> lock(mutex_);

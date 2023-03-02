@@ -139,7 +139,7 @@ void SendStoreHearbeat(
   // mock store
   auto* store = request.mutable_store();
   store->set_id(2);
-  store->set_status(::dingodb::pb::common::StoreStatus::STORE_NORMAL);
+  store->set_state(::dingodb::pb::common::StoreState::STORE_NORMAL);
   auto* server_location = store->mutable_server_location();
   server_location->set_host("127.0.0.1");
   server_location->set_port(19191);
@@ -156,36 +156,34 @@ void SendStoreHearbeat(
     std::string region_name("test_region_");
     region_name.append(std::to_string(i));
     region->set_name(region_name);
-    region->set_status(::dingodb::pb::common::RegionStatus::REGION_NORMAL);
+    region->set_state(::dingodb::pb::common::RegionState::REGION_NORMAL);
     region->set_leader_store_id(1);
 
-    // mock electors
+    // mock peers
     for (int j = 0; j < 3; j++) {
-      auto* store = region->add_electors();
-      store->set_id(j);
-      store->set_status(::dingodb::pb::common::StoreStatus::STORE_NORMAL);
-      auto* server_location = store->mutable_server_location();
+      auto* peer = region->add_peers();
+      peer->set_store_id(1);
+      auto* server_location = peer->mutable_server_location();
       server_location->set_host("127.0.0.1");
       server_location->set_port(19191);
-      auto* raft_location = store->mutable_server_location();
+      auto* raft_location = peer->mutable_server_location();
       raft_location->set_host("127.0.0.1");
       raft_location->set_port(19192);
-      store->set_resource_tag("DINGO_DEFAULT");
     }
 
     // mock learners
-    for (int j = 0; j < 3; j++) {
-      auto* store = region->add_learners();
-      store->set_id(j);
-      store->set_status(::dingodb::pb::common::StoreStatus::STORE_NORMAL);
-      auto* server_location = store->mutable_server_location();
-      server_location->set_host("127.0.0.1");
-      server_location->set_port(19191);
-      auto* raft_location = store->mutable_server_location();
-      raft_location->set_host("127.0.0.1");
-      raft_location->set_port(19192);
-      store->set_resource_tag("DINGO_DEFAULT");
-    }
+    // for (int j = 0; j < 3; j++) {
+    //   auto* store = region->add_learners();
+    //   store->set_id(j);
+    //   store->set_status(::dingodb::pb::common::StoreStatus::STORE_NORMAL);
+    //   auto* server_location = store->mutable_server_location();
+    //   server_location->set_host("127.0.0.1");
+    //   server_location->set_port(19191);
+    //   auto* raft_location = store->mutable_server_location();
+    //   raft_location->set_host("127.0.0.1");
+    //   raft_location->set_port(19192);
+    //   store->set_resource_tag("DINGO_DEFAULT");
+    // }
 
     // mock range
     auto* range = region->mutable_range();
@@ -199,7 +197,6 @@ void SendStoreHearbeat(
     // mock meta
     region->set_schema_id(1);
     region->set_table_id(2);
-    region->set_partition_id(3);
 
     // mock create ts
     region->set_create_timestamp(1677496540);

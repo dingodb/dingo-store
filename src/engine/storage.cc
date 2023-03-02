@@ -24,7 +24,7 @@ int Storage::AddRegion(uint64_t region_id, const pb::common::Region& region) {
   return engine_->AddRegion(region_id, region);
 }
 
-int Storage::DestroyRegion(uint64_t region_id) {}
+int Storage::DestroyRegion([[maybe_unused]] uint64_t region_id) { return -1; }
 
 Snapshot* Storage::GetSnapshot() { return nullptr; }
 

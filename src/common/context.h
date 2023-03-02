@@ -15,6 +15,8 @@
 #ifndef DINGODB_COMMON_CONTEXT_H_
 #define DINGODB_COMMON_CONTEXT_H_
 
+#include <cstddef>
+
 #include "brpc/controller.h"
 #include "proto/store.pb.h"
 
@@ -23,7 +25,7 @@ class Context {
   Context() : cntl_(nullptr), done_(nullptr) {}
   Context(brpc::Controller* cntl, google::protobuf::Closure* done)
       : cntl_(cntl), done_(done) {}
-  ~Context() {}
+  ~Context() = default;
 
   brpc::Controller* get_cntl() { return cntl_; }
   Context& set_cntl(brpc::Controller* cntl) {
@@ -38,7 +40,7 @@ class Context {
   }
 
   uint64_t get_region_id() { return region_id_; }
-  Context& set_region_id(uint64_t region_id) { region_id_ = region_id; }
+  void set_region_id(uint64_t region_id) { region_id_ = region_id; }
 
  private:
   // brpc framework free resource
