@@ -12,26 +12,35 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "engine/storage.h"
+#ifndef DINGODB_STORE_STORE_CONTROL_H_
+#define DINGODB_STORE_STORE_CONTROL_H_
+
+#include <memory>
+
+#include "butil/macros.h"
+#include "proto/common.pb.h"
 
 namespace dingodb {
 
-Storage::Storage(std::shared_ptr<Engine> engine) : engine_(engine) {}
+class StoreControl {
+ public:
+  StoreControl(){};
+  ~StoreControl(){};
 
-Storage::~Storage() {}
+  void AddRegion(std::shared_ptr<pb::common::Region> region);
+  void AddRegions(std::vector<std::shared_ptr<pb::common::Region> > regions);
 
-Snapshot* Storage::GetSnapshot() { return nullptr; }
+  void DeleteRegion(std::shared_ptr<pb::common::Region> region);
 
-void Storage::ReleaseSnapshot() {}
+  // Not support
+  void AddPeer() {}
+  void ChangePeer() {}
+  void TransferLeader() {}
 
-std::shared_ptr<std::string> Storage::KvGet(std::shared_ptr<Context> ctx,
-                                            const std::string& key) {
-  return engine_->KvGet(ctx, key);
-}
-
-pb::error::Errno Storage::KvPut(std::shared_ptr<Context> ctx,
-                                const pb::common::KeyValue& kv) {
-  return engine_->KvPut(ctx, kv);
-}
+ private:
+  DISALLOW_COPY_AND_ASSIGN(StoreControl);
+};
 
 }  // namespace dingodb
+
+#endif  // DINGODB_STORE_STORE_CONTROL_H_

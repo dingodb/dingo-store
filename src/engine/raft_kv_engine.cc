@@ -52,19 +52,18 @@ butil::EndPoint getRaftEndPoint(const std::string host, int port) {
   return butil::EndPoint(ip, port);
 }
 
-int RaftKvEngine::AddRegion(uint64_t region_id,
-                            const pb::common::Region& region) {
+int RaftKvEngine::AddRegion(const std::shared_ptr<pb::common::Region> region) {
   std::shared_ptr<RaftNode> node = std::make_shared<RaftNode>(
-      region_id, braft::PeerId(Server::GetInstance()->get_raft_endpoint()),
+      region->id(), braft::PeerId(Server::GetInstance()->get_raft_endpoint()),
       new StoreStateMachine(engine_));
 
-  if (node->Init(
-          Helper::FormatPeers(Helper::ExtractLocations(region.peers()))) != 0) {
+  if (node->Init(Helper::FormatPeers(
+          Helper::ExtractLocations(region->peers()))) != 0) {
     node->Destroy();
     return -1;
   }
 
-  raft_node_manager_->AddNode(region_id, node);
+  raft_node_manager_->AddNode(region->id(), node);
   return 0;
 }
 

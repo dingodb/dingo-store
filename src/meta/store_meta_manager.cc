@@ -69,19 +69,19 @@ bool StoreRegionMeta::IsExist(uint64_t region_id) {
   return regions_.find(region_id) != regions_.end();
 }
 
-void StoreRegionMeta::AddRegion(uint64_t region_id,
-                                const dingodb::pb::common::Region& region) {
-  if (IsExist(region_id)) {
-    LOG(WARNING) << butil::StringPrintf("region %lu already exist!", region_id);
+void StoreRegionMeta::AddRegion(
+    const std::shared_ptr<pb::common::Region> region) {
+  if (IsExist(region->id())) {
+    LOG(WARNING) << butil::StringPrintf("region %lu already exist!",
+                                        region->id());
     return;
   }
 
   std::unique_lock<std::shared_mutex> lock(mutex_);
-  regions_.insert(std::make_pair(
-      region_id, std::make_shared<dingodb::pb::common::Region>(region)));
+  regions_.insert(std::make_pair(region->id(), region));
 }
 
-std::shared_ptr<dingodb::pb::common::Region> StoreRegionMeta::GetRegion(
+std::shared_ptr<pb::common::Region> StoreRegionMeta::GetRegion(
     uint64_t region_id) {
   std::shared_lock<std::shared_mutex> lock(mutex_);
   auto it = regions_.find(region_id);
@@ -93,16 +93,10 @@ std::shared_ptr<dingodb::pb::common::Region> StoreRegionMeta::GetRegion(
   return it->second;
 }
 
-std::vector<std::shared_ptr<dingodb::pb::common::Region> >
+std::map<uint64_t, std::shared_ptr<pb::common::Region> >
 StoreRegionMeta::GetAllRegion() {
   std::shared_lock<std::shared_mutex> lock(mutex_);
-
-  std::vector<std::shared_ptr<dingodb::pb::common::Region> > result;
-  for (auto it = regions_.begin(); it != regions_.end(); ++it) {
-    result.push_back(it->second);
-  }
-
-  return result;
+  return regions_;
 }
 
 uint64_t StoreRegionMeta::ParseRegionId(const std::string& str) {
@@ -197,14 +191,14 @@ std::shared_ptr<pb::common::Store> StoreMetaManager::GetStore() {
   return server_meta_->GetStore();
 }
 
-std::vector<std::shared_ptr<pb::common::Region> >
+std::map<uint64_t, std::shared_ptr<pb::common::Region> >
 StoreMetaManager::GetAllRegion() {
   return region_meta_->GetAllRegion();
 }
 
-void StoreMetaManager::AddRegion(uint64_t region_id,
-                                 const pb::common::Region& region) {
-  region_meta_->AddRegion(region_id, region);
+void StoreMetaManager::AddRegion(
+    const std::shared_ptr<pb::common::Region> region) {
+  region_meta_->AddRegion(region);
 }
 
 }  // namespace dingodb

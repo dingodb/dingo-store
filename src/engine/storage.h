@@ -29,9 +29,6 @@ class Storage {
   Storage(std::shared_ptr<Engine> engine);
   ~Storage();
 
-  int AddRegion(uint64_t region_id, const dingodb::pb::common::Region& region);
-  int DestroyRegion(uint64_t region_id);
-
   Snapshot* GetSnapshot();
   void ReleaseSnapshot();
 

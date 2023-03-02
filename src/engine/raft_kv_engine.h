@@ -34,7 +34,7 @@ class RaftKvEngine : public Engine {
   std::string GetName();
   pb::common::Engine GetID();
 
-  int AddRegion(uint64_t region_id, const pb::common::Region& region);
+  int AddRegion(const std::shared_ptr<pb::common::Region> region);
   int DestroyRegion(uint64_t region_id);
 
   std::shared_ptr<std::string> KvGet(std::shared_ptr<Context> ctx,

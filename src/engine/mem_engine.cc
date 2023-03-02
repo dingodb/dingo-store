@@ -27,12 +27,6 @@ std::string MemEngine::GetName() { return "MEM_ENGINE"; }
 
 pb::common::Engine MemEngine::GetID() { return pb::common::ENG_MEMORY; }
 
-int MemEngine::AddRegion(uint64_t region_id, const pb::common::Region& region) {
-  return 0;
-}
-
-int MemEngine::DestroyRegion(uint64_t region_id) { return 0; }
-
 std::shared_ptr<std::string> MemEngine::KvGet(std::shared_ptr<Context> ctx,
                                               const std::string& key) {
   auto it = store_.find(key);

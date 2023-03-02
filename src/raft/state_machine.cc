@@ -84,27 +84,52 @@ void StoreStateMachine::on_apply(braft::Iterator& iter) {
   }
 }
 
-void StoreStateMachine::on_shutdown() {}
+void StoreStateMachine::on_shutdown() { LOG(INFO) << "on_shutdown..."; }
 
 void StoreStateMachine::on_snapshot_save(braft::SnapshotWriter* writer,
-                                         braft::Closure* done) {}
+                                         braft::Closure* done) {
+  LOG(INFO) << "on_snapshot_save...";
+}
 
 int StoreStateMachine::on_snapshot_load(
     [[maybe_unused]] braft::SnapshotReader* reader) {
+  LOG(INFO) << "on_snapshot_load...";
   return -1;
 }
 
-void StoreStateMachine::on_leader_start() {}
+void StoreStateMachine::on_leader_start() { LOG(INFO) << "on_leader_start..."; }
 
-void StoreStateMachine::on_leader_start(int64_t term) {}
+void StoreStateMachine::on_leader_start(int64_t term) {
+  LOG(INFO) << "on_leader_start term: " << term;
+}
 
-void StoreStateMachine::on_leader_stop() {}
+void StoreStateMachine::on_leader_stop() { LOG(INFO) << "on_leader_stop..."; }
 
-void StoreStateMachine::on_leader_stop(const butil::Status& status) {}
+void StoreStateMachine::on_leader_stop(const butil::Status& status) {
+  LOG(INFO) << "on_leader_stop: " << status.error_code() << " "
+            << status.error_str();
+}
 
-void StoreStateMachine::on_error(const ::braft::Error& e) {}
+void StoreStateMachine::on_error(const ::braft::Error& e) {
+  LOG(INFO) << butil::StringPrintf("on_error type(%d) %d %s", e.type(),
+                                   e.status().error_code(),
+                                   e.status().error_cstr());
+}
 
 void StoreStateMachine::on_configuration_committed(
-    const ::braft::Configuration& conf) {}
+    const ::braft::Configuration& conf) {
+  LOG(INFO) << "on_configuration_committed...";
+  // std::vector<braft::PeerId> peers;
+  // conf.list_peers(&peers);
+}
+
+void StoreStateMachine::on_start_following(
+    const ::braft::LeaderChangeContext& ctx) {
+  LOG(INFO) << "on_start_following...";
+}
+void StoreStateMachine::on_stop_following(
+    const ::braft::LeaderChangeContext& ctx) {
+  LOG(INFO) << "on_stop_following...";
+}
 
 }  // namespace dingodb

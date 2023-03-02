@@ -22,6 +22,7 @@
 #include "crontab/crontab.h"
 #include "engine/storage.h"
 #include "meta/store_meta_manager.h"
+#include "store/store_control.h"
 
 template <typename T>
 struct DefaultSingletonTraits;
@@ -64,6 +65,9 @@ class Server {
   // Init crontab heartbeat
   bool InitCrontabManager();
 
+  // Init store control
+  bool InitStoreControl();
+
   void Destroy();
 
   uint64_t get_id() { return id_; }
@@ -78,6 +82,15 @@ class Server {
     raft_endpoint_ = endpoint;
   }
 
+  std::shared_ptr<CoordinatorInteraction> get_coordinator_interaction() {
+    return coordinator_interaction_;
+  }
+
+  std::shared_ptr<Engine> get_engine(pb::common::Engine type) {
+    auto it = engines_.find(type);
+    return (it != engines_.end()) ? it->second : nullptr;
+  }
+
   std::shared_ptr<Storage> get_storage() { return storage_; }
   std::shared_ptr<StoreMetaManager> get_store_meta_manager() {
     return store_meta_manager_;
@@ -85,6 +98,8 @@ class Server {
   std::shared_ptr<CrontabManager> get_crontab_manager() {
     return crontab_manager_;
   }
+
+  std::shared_ptr<StoreControl> get_store_control() { return store_control_; }
 
  private:
   Server(){};
@@ -115,6 +130,9 @@ class Server {
   std::shared_ptr<StoreMetaManager> store_meta_manager_;
   // This is manage crontab, like heartbeat.
   std::shared_ptr<CrontabManager> crontab_manager_;
+
+  // This is store control, execute admin operation, like add/del region etc.
+  std::shared_ptr<StoreControl> store_control_;
 };
 
 }  // namespace dingodb

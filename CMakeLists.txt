@@ -113,12 +113,13 @@ file(GLOB ENGINE_SRCS ${PROJECT_SOURCE_DIR}/src/engine/*.cc)
 file(GLOB CRONTAB_SRCS ${PROJECT_SOURCE_DIR}/src/crontab/*.cc)
 file(GLOB META_SRCS ${PROJECT_SOURCE_DIR}/src/meta/*.cc)
 file(GLOB COORDINATOR_SRCS ${PROJECT_SOURCE_DIR}/src/coordinator/*.cc)
+file(GLOB STORE_SRCS ${PROJECT_SOURCE_DIR}/src/store/*.cc)
 file(GLOB SERVER_SRCS ${PROJECT_SOURCE_DIR}/src/server/*.cc)
 
 # bin output dir
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin)
 
-add_executable(dingodb_server ${SERVER_SRCS} ${COORDINATOR_SRCS} ${META_SRCS} ${REGION_SRCS} ${ENGINE_SRCS} ${RAFT_SRCS} ${CRONTAB_SRCS} ${CONFIG_SRCS} ${COMMON_SRCS} ${PROTO_SRCS} ${PROTO_HEADER})
+add_executable(dingodb_server ${SERVER_SRCS} ${STORE_SRCS} ${COORDINATOR_SRCS} ${META_SRCS} ${REGION_SRCS} ${ENGINE_SRCS} ${RAFT_SRCS} ${CRONTAB_SRCS} ${CONFIG_SRCS} ${COMMON_SRCS} ${PROTO_SRCS} ${PROTO_HEADER})
 add_executable(dingodb_client_store src/client/store_client.cc ${PROTO_SRCS} ${PROTO_HEADER})
 add_executable(dingodb_client_coordinator src/client/coordinator_client.cc ${PROTO_SRCS} ${PROTO_HEADER})
 add_executable(dingodb_client_meta src/client/meta_client.cc ${PROTO_SRCS} ${PROTO_HEADER})

@@ -15,6 +15,7 @@
 syntax = "proto3";
 
 import "common.proto";
+import "error.proto";
 
 package dingodb.pb.coordinator;
 
@@ -30,10 +31,11 @@ message StoreHeartbeatRequest {
 }
 
 message StoreHeartbeatResponse {
-  uint64 storemap_epoch = 1;                  // the lates epoch of storemap
-  uint64 regionmap_epoch = 2;                 // the lates epoch of regionmap
-  dingodb.pb.common.StoreMap storemap = 3;    // new storemap
-  dingodb.pb.common.RegionMap regionmap = 4;  // new regionmap
+  dingodb.pb.error.Error error = 1;
+  uint64 storemap_epoch = 2;                  // the lates epoch of storemap
+  uint64 regionmap_epoch = 3;                 // the lates epoch of regionmap
+  dingodb.pb.common.StoreMap storemap = 4;    // new storemap
+  dingodb.pb.common.RegionMap regionmap = 5;  // new regionmap
 }
 
 message HelloRequest {
@@ -41,8 +43,9 @@ message HelloRequest {
 }
 
 message HelloResponse {
-  dingodb.pb.common.CoordinatorState state = 1;
-  string status_detail = 2;
+  dingodb.pb.error.Error error = 1;
+  dingodb.pb.common.CoordinatorState state = 2;
+  string status_detail = 3;
 }
 
 message GetRegionMapRequest {
@@ -50,8 +53,9 @@ message GetRegionMapRequest {
 }
 
 message GetRegionMapResponse {
-  uint64 epoch = 1;
-  dingodb.pb.common.RegionMap regionmap = 2;
+  dingodb.pb.error.Error error = 1;
+  uint64 epoch = 2;
+  dingodb.pb.common.RegionMap regionmap = 3;
 }
 
 message GetStoreMapRequest {
@@ -59,8 +63,9 @@ message GetStoreMapRequest {
 }
 
 message GetStoreMapResponse {
-  uint64 epoch = 1;
-  dingodb.pb.common.StoreMap storemap = 2;
+  dingodb.pb.error.Error error = 1;
+  uint64 epoch = 2;
+  dingodb.pb.common.StoreMap storemap = 3;
 }
 
 message CreateStoreRequest {
@@ -68,8 +73,9 @@ message CreateStoreRequest {
 }
 
 message CreateStoreResponse {
-  uint64 store_id = 1;
-  string password = 2;
+  dingodb.pb.error.Error error = 1;
+  uint64 store_id = 2;
+  string password = 3;
 }
 
 service CoordinatorService {

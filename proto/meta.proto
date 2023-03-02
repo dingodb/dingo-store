@@ -15,6 +15,7 @@
 syntax = "proto3";
 
 import "common.proto";
+import "error.proto";
 
 package dingodb.pb.meta;
 
@@ -26,7 +27,8 @@ message GetSchemasRequest {
 }
 
 message GetSchemasResponse {
-  repeated dingodb.pb.common.Schema schemas = 1;
+  dingodb.pb.error.Error error = 1;
+  repeated dingodb.pb.common.Schema schemas = 2;
 }
 
 message TableDefinitionWithId {
@@ -39,7 +41,8 @@ message GetTablesRequest {
 }
 
 message GetTablesResponse {
-  repeated TableDefinitionWithId table_definition_with_ids = 1;
+  dingodb.pb.error.Error error = 1;
+  repeated TableDefinitionWithId table_definition_with_ids = 2;
 }
 
 message GetTableRequest {
@@ -47,7 +50,8 @@ message GetTableRequest {
 }
 
 message GetTableResponse {
-  dingodb.pb.common.Table table = 1;
+  dingodb.pb.error.Error error = 1;
+  dingodb.pb.common.Table table = 2;
 }
 
 message CreateTableRequest {
@@ -56,7 +60,8 @@ message CreateTableRequest {
 }
 
 message CreateTableResponse {
-  dingodb.pb.common.Table table = 1;
+  dingodb.pb.error.Error error = 1;
+  dingodb.pb.common.Table table = 2;
 }
 
 message CreateSchemaRequest {
@@ -65,7 +70,8 @@ message CreateSchemaRequest {
 }
 
 message CreateSchemaResponse {
-  dingodb.pb.common.Schema schema = 1;
+  dingodb.pb.error.Error error = 1;
+  dingodb.pb.common.Schema schema = 2;
 }
 
 message DropTableRequest {
@@ -73,7 +79,9 @@ message DropTableRequest {
   uint64 table_id = 2;
 }
 
-message DropTableResponse {}
+message DropTableResponse {
+  dingodb.pb.error.Error error = 1;
+}
 
 service MetaService {
   // GetSchema
