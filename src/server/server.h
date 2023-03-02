@@ -18,6 +18,7 @@
 #include <memory>
 
 #include "brpc/channel.h"
+#include "coordinator/coordinator_interaction.h"
 #include "crontab/crontab.h"
 #include "engine/storage.h"
 #include "meta/store_meta_manager.h"
@@ -47,6 +48,9 @@ class Server {
 
   // Init storage engines;
   bool InitEngines();
+
+  // Init coordinator interaction
+  bool InitCoordinatorInteraction();
 
   // Pull region infomation for init current node own region.
   bool InitRaftNodeManager();
@@ -99,8 +103,8 @@ class Server {
   // Raft ip and port.
   butil::EndPoint raft_endpoint_;
 
-  // store invoke coordinator api channel
-  std::shared_ptr<brpc::Channel> channel_;
+  // coordinator interaction
+  std::shared_ptr<CoordinatorInteraction> coordinator_interaction_;
 
   // All store engine, include MemEngine/RaftKvEngine/RocksEngine
   std::map<pb::common::Engine, std::shared_ptr<Engine> > engines_;

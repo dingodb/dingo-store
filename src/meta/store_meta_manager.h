@@ -21,21 +21,29 @@
 
 #include "butil/endpoint.h"
 #include "engine/engine.h"
+#include "meta/meta_reader.h"
+#include "meta/meta_writer.h"
 #include "proto/common.pb.h"
 
 namespace dingodb {
 
-class KvTransformAble {
+class TransformKvAble {
  public:
-  KvTransformAble(){};
-  ~KvTransformAble(){};
+  TransformKvAble(const std::string& prefix) : prefix_(prefix){};
+  ~TransformKvAble(){};
 
-  virtual std::shared_ptr<pb::common::KeyValue> Transform() = 0;
-  virtual std::vector<pb::common::KeyValue> TransformAll() = 0;
-  virtual std::vector<pb::common::KeyValue> TransformDelta() = 0;
+  virtual std::shared_ptr<pb::common::KeyValue> TransformToKv(
+      uint64_t region_id) = 0;
+  virtual std::vector<std::shared_ptr<pb::common::KeyValue> >
+  TransformDeltaToKv() = 0;
+  virtual std::vector<std::shared_ptr<pb::common::KeyValue> >
+  TransformAllToKv() = 0;
+
+  virtual void TransformFromKv(
+      const std::vector<std::shared_ptr<pb::common::KeyValue> > kvs) = 0;
 
  protected:
-  std::string prefix_;
+  const std::string prefix_;
 };
 
 // Manage store server store data
@@ -60,10 +68,10 @@ class StoreServerMeta {
 };
 
 // Manage store server region meta data
-class StoreRegionMeta : public KvTransformAble {
+class StoreRegionMeta : public TransformKvAble {
  public:
-  StoreRegionMeta();
-  ~StoreRegionMeta();
+  StoreRegionMeta() : TransformKvAble("META_REGION"){};
+  ~StoreRegionMeta(){};
 
   uint64_t GetEpoch();
   bool IsExist(uint64_t region_id);
@@ -71,12 +79,18 @@ class StoreRegionMeta : public KvTransformAble {
   std::shared_ptr<pb::common::Region> GetRegion(uint64_t region_id);
   std::vector<std::shared_ptr<pb::common::Region> > GetAllRegion();
 
-  std::shared_ptr<pb::common::KeyValue> Transform();
-  std::vector<pb::common::KeyValue> TransformAll();
-  std::vector<pb::common::KeyValue> TransformDelta();
+  uint64_t ParseRegionId(const std::string& str);
+  std::shared_ptr<pb::common::KeyValue> TransformToKv(uint64_t region_id);
+  std::vector<std::shared_ptr<pb::common::KeyValue> > TransformDeltaToKv();
+  std::vector<std::shared_ptr<pb::common::KeyValue> > TransformAllToKv();
+
+  void TransformFromKv(
+      const std::vector<std::shared_ptr<pb::common::KeyValue> > kvs);
 
  private:
   uint64_t epoch_;
+
+  std::vector<uint64_t> changed_regions_;
   std::shared_mutex mutex_;
   std::map<uint64_t, std::shared_ptr<pb::common::Region> > regions_;
 };
@@ -96,6 +110,9 @@ class StoreMetaManager {
 
  private:
   DISALLOW_COPY_AND_ASSIGN(StoreMetaManager);
+
+  std::shared_ptr<MetaReader> meta_reader_;
+  std::shared_ptr<MetaWriter> meta_writer_;
 
   std::unique_ptr<StoreServerMeta> server_meta_;
   std::unique_ptr<StoreRegionMeta> region_meta_;

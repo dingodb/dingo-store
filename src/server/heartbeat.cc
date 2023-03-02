@@ -14,6 +14,8 @@
 
 #include "server/heartbeat.h"
 
+#include "coordinator/coordinator_interaction.h"
+
 namespace dingodb {
 
 Heartbeat::Heartbeat() {}
@@ -22,33 +24,34 @@ Heartbeat::~Heartbeat() {}
 
 void Heartbeat::SendStoreHeartbeat(void* arg) {
   LOG(INFO) << "SendStoreHeartbeat...";
-  // brpc::Channel* channel = static_cast<brpc::Channel*>(arg);
-  // brpc::Controller cntl;
-  // cntl.set_timeout_ms(500);
-  // pb::coordinator::CoordinatorService_Stub stub(channel);
+  CoordinatorInteraction* coordinator_interaction =
+      static_cast<CoordinatorInteraction*>(arg);
 
-  // pb::coordinator::StoreHeartbeatRequest request;
-  // auto store_meta = Server::GetInstance()->get_store_meta_manager();
+  pb::coordinator::StoreHeartbeatRequest request;
+  auto store_meta = Server::GetInstance()->get_store_meta_manager();
 
-  // request.set_self_storemap_epoch(store_meta->GetServerEpoch());
-  // request.set_self_regionmap_epoch(store_meta->GetRegionEpoch());
-  // auto store = request.mutable_store();
-  // *store = *store_meta->GetStore();
+  request.set_self_storemap_epoch(store_meta->GetServerEpoch());
+  request.set_self_regionmap_epoch(store_meta->GetRegionEpoch());
+  auto store = request.mutable_store();
+  *store = *store_meta->GetStore();
 
-  // for (auto _region : store_meta->GetAllRegion()) {
-  //   auto region = request.add_regions();
-  //   *region = *_region;
-  // }
+  for (auto _region : store_meta->GetAllRegion()) {
+    auto region = request.add_regions();
+    *region = *_region;
+  }
 
-  // pb::coordinator::StoreHeartbeatResponse response;
-  // stub.StoreHearbeat(&cntl, &request, &response, nullptr);
-  // HandleStoreHeartbeatResponse(store_meta, response);
+  pb::coordinator::StoreHeartbeatResponse response;
+  coordinator_interaction->SendRequest<pb::coordinator::StoreHeartbeatRequest,
+                                       pb::coordinator::StoreHeartbeatResponse>(
+      "StoreHearbeat", request, response);
+  HandleStoreHeartbeatResponse(store_meta, response);
 }
 
 void Heartbeat::HandleStoreHeartbeatResponse(
     std::shared_ptr<dingodb::StoreMetaManager> store_meta,
     const pb::coordinator::StoreHeartbeatResponse& response) {
   // check region, if has new region, add region.
+  LOG(INFO) << "HandleStoreHeartbeatResponse...";
 }
 
 }  // namespace dingodb

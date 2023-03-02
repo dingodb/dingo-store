@@ -3,15 +3,19 @@
 
 mydir="${BASH_SOURCE%/*}"
 if [[ ! -d "$mydir" ]]; then mydir="$PWD"; fi
-echo "mydir: ${mydir}"
 . $mydir/shflags
 
 
 DEFINE_string role 'store' 'server role'
 
+# parse the command-line
+FLAGS "$@" || exit 1
+eval set -- "${FLAGS_ARGV}"
+
+echo "role: ${FLAGS_role}"
+
 BASE_DIR=$(dirname $(cd $(dirname $0); pwd))
 DIST_DIR=$BASE_DIR/dist
-echo "DIST_DIR: ${DIST_DIR}"
 
 if [ ! -d "$DIST_DIR" ]; then
   mkdir "$DIST_DIR"
@@ -24,6 +28,10 @@ SERVER_START_PORT=20000
 RAFT_HOST=127.0.0.1
 RAFT_START_PORT=20100
 
+if [ $FLAGS_role == "coordinator" ]; then
+  SERVER_START_PORT=22000
+  RAFT_START_PORT=22100
+fi
 
 function deploy_store() {
   role=$1
@@ -62,7 +70,7 @@ function deploy_store() {
   fi
 
   cp $srcpath/build/bin/dingodb_server $dstpath/bin/
-  cp $srcpath/conf/${role}.yaml $dstpath/conf/
+  cp $srcpath/conf/${role}.template.yaml $dstpath/conf/${role}.yaml
 
   sed  -i 's,\$INSTANCE_ID\$,'"$instance_id"',g'  $dstpath/conf/${role}.yaml
   sed  -i 's,\$SERVER_HOST\$,'"$SERVER_HOST"',g'  $dstpath/conf/${role}.yaml

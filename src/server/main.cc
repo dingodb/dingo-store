@@ -81,9 +81,18 @@ int main(int argc, char *argv[]) {
 
   auto *dingodb_server = dingodb::Server::GetInstance();
   dingodb_server->set_role(FLAGS_role);
-  dingodb_server->InitConfig(FLAGS_conf);
-  dingodb_server->InitLog();
-  dingodb_server->InitEngines();
+  if (!dingodb_server->InitConfig(FLAGS_conf)) {
+    LOG(ERROR) << "InitConfig failed!";
+    return -1;
+  }
+  if (!dingodb_server->InitLog()) {
+    LOG(ERROR) << "InitLog failed!";
+    return -1;
+  }
+  if (!dingodb_server->InitEngines()) {
+    LOG(ERROR) << "InitEngines failed!";
+    return -1;
+  }
 
   dingodb_server->set_server_endpoint(GetServerEndPoint(
       dingodb::ConfigManager::GetInstance()->GetConfig(FLAGS_role)));
@@ -113,12 +122,34 @@ int main(int argc, char *argv[]) {
       return -1;
     }
   } else if (FLAGS_role == "store") {
-    dingodb_server->ValiateCoordinator();
-    dingodb_server->InitServerID();
-    dingodb_server->InitRaftNodeManager();
-    dingodb_server->InitStorage();
-    dingodb_server->InitStoreMetaManager();
-    dingodb_server->InitCrontabManager();
+    if (!dingodb_server->InitCoordinatorInteraction()) {
+      LOG(ERROR) << "InitCoordinatorInteraction failed!";
+      return -1;
+    }
+    if (!dingodb_server->ValiateCoordinator()) {
+      LOG(ERROR) << "ValiateCoordinator failed!";
+      return -1;
+    }
+    if (!dingodb_server->InitServerID()) {
+      LOG(ERROR) << "InitServerID failed!";
+      return -1;
+    }
+    if (!dingodb_server->InitRaftNodeManager()) {
+      LOG(ERROR) << "InitRaftNodeManager failed!";
+      return -1;
+    }
+    if (!dingodb_server->InitStorage()) {
+      LOG(ERROR) << "InitStorage failed!";
+      return -1;
+    }
+    if (!dingodb_server->InitStoreMetaManager()) {
+      LOG(ERROR) << "InitStoreMetaManager failed!";
+      return -1;
+    }
+    if (!dingodb_server->InitCrontabManager()) {
+      LOG(ERROR) << "InitCrontabManager failed!";
+      return -1;
+    }
 
     store_service.set_storage(dingodb_server->get_storage());
     if (server.AddService(&store_service, brpc::SERVER_DOESNT_OWN_SERVICE) !=

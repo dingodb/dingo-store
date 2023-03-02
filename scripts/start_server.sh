@@ -4,9 +4,13 @@ mydir="${BASH_SOURCE%/*}"
 if [[ ! -d "$mydir" ]]; then mydir="$PWD"; fi
 . $mydir/shflags
 
-
-
 DEFINE_string role 'store' 'server role'
+
+# parse the command-line
+FLAGS "$@" || exit 1
+eval set -- "${FLAGS_ARGV}"
+
+echo "role: ${FLAGS_role}"
 
 BASE_DIR=$(dirname $(cd $(dirname $0); pwd))
 DIST_DIR=$BASE_DIR/dist
