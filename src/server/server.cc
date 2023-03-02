@@ -23,7 +23,7 @@
 #include "engine/engine.h"
 #include "engine/mem_engine.h"
 #include "engine/raft_kv_engine.h"
-#include "server/heartbeat.h"
+#include "store/heartbeat.h"
 
 namespace dingodb {
 
@@ -136,6 +136,10 @@ bool Server::InitCrontabManager() {
   crontab_manager_->AddAndRunCrontab(crontab);
 
   return true;
+}
+
+bool Server::InitStoreControl() {
+  store_control_ = std::make_shared<StoreControl>();
 }
 
 void Server::Destroy() {

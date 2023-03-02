@@ -44,11 +44,10 @@ void StoreServiceImpl::AddRegion(
   }
 
   // Add raft node
-  storage_->AddRegion(request->region().id(), request->region());
+  // storage_->AddRegion(request->region().id(), request->region());
 
   // Add region to store region manager
-  Server::GetInstance()->get_store_meta_manager()->AddRegion(request->region().id(),
-                                                             request->region());
+  // Server::GetInstance()->get_store_meta_manager()->AddRegion(request->region());
 }
 
 void StoreServiceImpl::DestroyRegion(

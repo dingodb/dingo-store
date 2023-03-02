@@ -31,7 +31,6 @@ class TransformKvAble {
  public:
   TransformKvAble(const std::string& prefix) : prefix_(prefix){};
   ~TransformKvAble() = default;
-  ;
 
   virtual std::shared_ptr<pb::common::KeyValue> TransformToKv(
       uint64_t region_id) = 0;
@@ -76,9 +75,10 @@ class StoreRegionMeta : public TransformKvAble {
 
   uint64_t GetEpoch() const;
   bool IsExist(uint64_t region_id);
-  void AddRegion(uint64_t region_id, const pb::common::Region& region);
+
+  void AddRegion(const std::shared_ptr<pb::common::Region> region);
   std::shared_ptr<pb::common::Region> GetRegion(uint64_t region_id);
-  std::vector<std::shared_ptr<pb::common::Region> > GetAllRegion();
+  std::map<uint64_t, std::shared_ptr<pb::common::Region> > GetAllRegion();
 
   uint64_t ParseRegionId(const std::string& str);
   std::shared_ptr<pb::common::KeyValue> TransformToKv(
@@ -109,8 +109,8 @@ class StoreMetaManager {
   uint64_t GetServerEpoch();
   uint64_t GetRegionEpoch();
   std::shared_ptr<pb::common::Store> GetStore();
-  std::vector<std::shared_ptr<pb::common::Region> > GetAllRegion();
-  void AddRegion(uint64_t region_id, const pb::common::Region& region);
+  std::map<uint64_t, std::shared_ptr<pb::common::Region> > GetAllRegion();
+  void AddRegion(const std::shared_ptr<pb::common::Region> region);
 
  private:
   DISALLOW_COPY_AND_ASSIGN(StoreMetaManager);

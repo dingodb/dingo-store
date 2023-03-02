@@ -12,15 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "server/heartbeat.h"
+#include "store/heartbeat.h"
 
 #include "coordinator/coordinator_interaction.h"
 
 namespace dingodb {
-
-Heartbeat::Heartbeat() {}
-
-Heartbeat::~Heartbeat() {}
 
 void Heartbeat::SendStoreHeartbeat(void* arg) {
   LOG(INFO) << "SendStoreHeartbeat...";
@@ -35,9 +31,9 @@ void Heartbeat::SendStoreHeartbeat(void* arg) {
   auto store = request.mutable_store();
   *store = *store_meta->GetStore();
 
-  for (auto _region : store_meta->GetAllRegion()) {
+  for (auto& it : store_meta->GetAllRegion()) {
     auto region = request.add_regions();
-    *region = *_region;
+    *region = *(it.second);
   }
 
   pb::coordinator::StoreHeartbeatResponse response;
@@ -47,11 +43,36 @@ void Heartbeat::SendStoreHeartbeat(void* arg) {
   HandleStoreHeartbeatResponse(store_meta, response);
 }
 
+static std::vector<std::shared_ptr<pb::common::Region> > GetNewRegion(
+    std::map<uint64_t, std::shared_ptr<pb::common::Region> > local_regions,
+    const google::protobuf::RepeatedPtrField<dingodb::pb::common::Region>&
+        remote_regions) {
+  std::vector<std::shared_ptr<pb::common::Region> > new_regions;
+  for (auto remote_region : remote_regions) {
+    if (local_regions.find(remote_region.id()) == local_regions.end()) {
+      new_regions.push_back(
+          std::make_shared<pb::common::Region>(remote_region));
+    }
+  }
+
+  return new_regions;
+}
+
 void Heartbeat::HandleStoreHeartbeatResponse(
     std::shared_ptr<dingodb::StoreMetaManager> store_meta,
     const pb::coordinator::StoreHeartbeatResponse& response) {
   // check region, if has new region, add region.
   LOG(INFO) << "HandleStoreHeartbeatResponse...";
+  auto local_regions = store_meta->GetAllRegion();
+
+  // If has new region, add region.
+  auto new_regions =
+      GetNewRegion(local_regions, response.regionmap().regions());
+  if (new_regions.size() > 0) {
+    Server::GetInstance()->get_store_control()->AddRegions(new_regions);
+  }
+
+  // Check for
 }
 
 }  // namespace dingodb

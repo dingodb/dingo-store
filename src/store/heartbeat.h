@@ -25,8 +25,8 @@ namespace dingodb {
 
 class Heartbeat {
  public:
-  Heartbeat();
-  ~Heartbeat();
+  Heartbeat(){};
+  ~Heartbeat(){};
 
   static void SendStoreHeartbeat(void* arg);
 
@@ -34,6 +34,7 @@ class Heartbeat {
       std::shared_ptr<StoreMetaManager> store_meta,
       const pb::coordinator::StoreHeartbeatResponse& response);
 };
+
 
 }  // namespace dingodb
 

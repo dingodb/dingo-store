@@ -31,8 +31,8 @@ class Engine {
   virtual std::string GetName() = 0;
   virtual pb::common::Engine GetID() = 0;
 
-  virtual int AddRegion([[maybe_unused]] uint64_t region_id,
-                        [[maybe_unused]] const pb::common::Region& region) {
+  virtual int AddRegion(
+      [[maybe_unused]] const std::shared_ptr<pb::common::Region> region) {
     return -1;
   }
   virtual int DestroyRegion([[maybe_unused]] uint64_t region_id) { return -1; }

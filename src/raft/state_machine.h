@@ -51,6 +51,8 @@ class StoreStateMachine : public braft::StateMachine {
   void on_leader_stop(const butil::Status& status);
   void on_error(const ::braft::Error& e);
   void on_configuration_committed(const ::braft::Configuration& conf);
+  void on_start_following(const ::braft::LeaderChangeContext& ctx);
+  void on_stop_following(const ::braft::LeaderChangeContext& ctx);
 
  private:
   void dispatchRequest(const StoreClosure* done,

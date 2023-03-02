@@ -33,9 +33,6 @@ class MemEngine : public Engine {
   std::string GetName();
   pb::common::Engine GetID();
 
-  int AddRegion(uint64_t region_id, const pb::common::Region& region);
-  int DestroyRegion(uint64_t region_id);
-
   std::shared_ptr<std::string> KvGet(std::shared_ptr<Context> ctx,
                                      const std::string& key);
   pb::error::Errno KvPut(std::shared_ptr<Context> ctx,

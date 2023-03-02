@@ -15,6 +15,7 @@
 syntax = "proto3";
 
 import "common.proto";
+import "error.proto";
 
 package dingodb.pb.store;
 
@@ -25,13 +26,17 @@ message AddRegionRequest {
   dingodb.pb.common.Region region = 1;
 }
 
-message AddRegionResponse {}
+message AddRegionResponse {
+  dingodb.pb.error.Error error = 1;
+}
 
 message DestroyRegionRequest {
   uint64 region_id = 1;
 }
 
-message DestroyRegionResponse {}
+message DestroyRegionResponse {
+  dingodb.pb.error.Error error = 1;
+}
 
 message KvGetRequest {
   uint64 region_id = 1;
@@ -39,6 +44,7 @@ message KvGetRequest {
 }
 
 message KvGetResponse {
+  dingodb.pb.error.Error error = 1;
   bytes value = 2;
 }
 
@@ -48,7 +54,8 @@ message KvBatchGetRequest {
 }
 
 message KvBatchGetResponse {
-  repeated dingodb.pb.common.KeyValue kvs = 1;
+  dingodb.pb.error.Error error = 1;
+  repeated dingodb.pb.common.KeyValue kvs = 2;
 }
 
 message KvPutRequest {
@@ -56,14 +63,18 @@ message KvPutRequest {
   dingodb.pb.common.KeyValue kv = 2;
 }
 
-message KvPutResponse {}
+message KvPutResponse {
+  dingodb.pb.error.Error error = 1;
+}
 
 message KvBatchPutRequest {
   uint64 region_id = 1;
   repeated dingodb.pb.common.KeyValue kvs = 2;
 }
 
-message KvBatchPutResponse {}
+message KvBatchPutResponse {
+  dingodb.pb.error.Error error = 1;
+}
 
 message KvPutIfAbsentRequest {
   uint64 region_id = 1;
@@ -71,7 +82,8 @@ message KvPutIfAbsentRequest {
 }
 
 message KvPutIfAbsentResponse {
-  bool is_put = 1;
+  dingodb.pb.error.Error error = 1;
+  bool is_put = 2;
 }
 
 message KvBatchPutIfAbsentRequest {
@@ -80,7 +92,8 @@ message KvBatchPutIfAbsentRequest {
 }
 
 message KvBatchPutIfAbsentResponse {
-  repeated bytes put_keys = 1;
+  dingodb.pb.error.Error error = 1;
+  repeated bytes put_keys = 2;
 }
 
 service StoreService {
