@@ -21,28 +21,6 @@ package dingodb.pb.meta;
 option java_package = "io.dingodb.meta";
 option cc_generic_services = true;
 
-// message MetricStat {
-//   double disk_used_percent = 1;
-//   double mem_used_percent = 2;
-//   double cpu_used_percent = 3;
-//   double disk_io_percent = 4;
-// }
-
-// message InstanceInfo {
-//   dingodb.pb.common.Location address = 1;
-//   MetricStat stat = 3;
-// }
-
-// message AllocateStoreIdRequest {
-//   dingodb.pb.common.Location address = 1;
-//   string resourceTag = 2;
-//   int64 startTime = 3;
-// }
-
-// message AllocateStoreIdRes {
-//   string storeId = 1;
-// }
-
 message GetSchemasRequest {
   uint64 schema_id = 1;
 }
@@ -51,12 +29,25 @@ message GetSchemasResponse {
   repeated dingodb.pb.common.Schema schemas = 1;
 }
 
+message TableDefinitionWithId {
+  uint64 table_id = 1;
+  dingodb.pb.common.TableDefinition table_definition = 2;
+}
+
 message GetTablesRequest {
   uint64 schema_id = 1;
 }
 
 message GetTablesResponse {
-  repeated dingodb.pb.common.Table tables = 1;
+  repeated TableDefinitionWithId table_definition_with_ids = 1;
+}
+
+message GetTableRequest {
+  uint64 table_id = 1;
+}
+
+message GetTableResponse {
+  dingodb.pb.common.Table table = 1;
 }
 
 message CreateTableRequest {
@@ -65,7 +56,7 @@ message CreateTableRequest {
 }
 
 message CreateTableResponse {
-  repeated dingodb.pb.common.Table table = 1;
+  dingodb.pb.common.Table table = 1;
 }
 
 message CreateSchemaRequest {
@@ -84,41 +75,39 @@ message DropTableRequest {
 
 message DropTableResponse {}
 
-// message GetTablePartitionsReq {
-//   uint64 table_id = 1;
-// }
-
-// message GetTablePartitionsRes {
-//   repeated dingodb.pb.common.TablePartition table_partitions = 1;
-// }
-
-// message GetRegionsReq {
-//   uint64 partition_id = 1;
-// }
-
-// message GetRegionsResponse {
-//   dingodb.pb.common.TableRegions table_regions = 1;
-// }
-
 service MetaService {
-  // query schema/table/partition/regions
+  // GetSchema
+  // in: schema_id
+  // out: List<Schema>
   rpc GetSchemas(GetSchemasRequest) returns (GetSchemasResponse);
+
+  // GetTables
+  // in: schema_id
+  // out: List<TableDefinitionWithId>
   rpc GetTables(GetTablesRequest) returns (GetTablesResponse);
 
-  // rpc GetPartitions(GetTablePartitionsReq) returns (GetTablePartitionsRes);
-  // rpc GetRegions(GetRegionsReq) returns (GetRegionsResponse);
+  // GetTable
+  // in: table_id
+  // out: Table
+  rpc GetTable(GetTableRequest) returns (GetTableResponse);
 
-  // Table DDL
+  // CreateTable
+  // in: schema_id TableDefinition
+  // out: Table
   rpc CreateTable(CreateTableRequest) returns (CreateTableResponse);
+
+  // DropTable
+  // in: schema_id table_id
+  // out: {}
   rpc DropTable(DropTableRequest) returns (DropTableResponse);
 
-  // Schema DDL
+  // CreateSchema
+  // in: parent_schema_id schema_name
+  // out: Schema
   rpc CreateSchema(CreateSchemaRequest) returns (CreateSchemaResponse);
 
-  // todo
+  // TODO
   // Operation about User, such as create/drop/grant.
-
-  // Schema, CreateSchema/DropSchema/ getAllTableFromSchema / getSubSchema
 
   // Operation about Metrics
 }

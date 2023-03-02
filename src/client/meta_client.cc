@@ -90,7 +90,7 @@ void SendGetTables(brpc::Controller& cntl,
   if (FLAGS_log_each_request) {
     LOG(INFO) << "Received response"
               << " request schema_id =" << request.schema_id()
-              << " table_count =" << response.tables_size()
+              << " table_count =" << response.table_definition_with_ids_size()
               << " request_attachment=" << cntl.request_attachment().size()
               << " response_attachment=" << cntl.response_attachment().size()
               << " latency=" << cntl.latency_us();
