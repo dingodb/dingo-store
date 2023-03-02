@@ -60,9 +60,6 @@ std::shared_ptr<pb::common::Store> StoreServerMeta::GetStore() {
   return store_;
 }
 
-StoreRegionMeta::StoreRegionMeta() {}
-StoreRegionMeta::~StoreRegionMeta() {}
-
 uint64_t StoreRegionMeta::GetEpoch() { return epoch_; }
 
 bool StoreRegionMeta::IsExist(uint64_t region_id) {
@@ -106,10 +103,83 @@ StoreRegionMeta::GetAllRegion() {
   return result;
 }
 
-std::shared_ptr<pb::common::KeyValue> StoreRegionMeta::Transform() {}
-std::vector<pb::common::KeyValue> StoreRegionMeta::TransformAll() {}
+uint64_t StoreRegionMeta::ParseRegionId(const std::string& str) {
+  if (str.size() <= prefix_.size()) {
+    LOG(ERROR) << "Parse region id failed, invalid str " << str;
+    return 0;
+  }
 
-std::vector<pb::common::KeyValue> StoreRegionMeta::TransformDelta() {}
+  std::string s(str.c_str() + prefix_.size());
+  try {
+    return std::stoull(s, nullptr, 10);
+  } catch (std::invalid_argument e) {
+    LOG(ERROR) << "string to uint64_t failed: " << e.what();
+  }
+
+  return 0;
+}
+
+std::shared_ptr<pb::common::KeyValue> StoreRegionMeta::TransformToKv(
+    uint64_t region_id) {
+  std::shared_lock<std::shared_mutex> lock(mutex_);
+  auto it = regions_.find(region_id);
+  if (it == regions_.end()) {
+    return nullptr;
+  }
+  std::shared_ptr<pb::common::KeyValue> kv =
+      std::make_shared<pb::common::KeyValue>();
+  kv->set_key(butil::StringPrintf("%s_%lu", prefix_.c_str(), it->first));
+  kv->set_value(it->second->SerializeAsString());
+
+  return kv;
+}
+
+std::vector<std::shared_ptr<pb::common::KeyValue> >
+StoreRegionMeta::TransformAllToKv() {
+  std::shared_lock<std::shared_mutex> lock(mutex_);
+
+  std::vector<std::shared_ptr<pb::common::KeyValue> > kvs;
+  for (auto it : regions_) {
+    std::shared_ptr<pb::common::KeyValue> kv =
+        std::make_shared<pb::common::KeyValue>();
+    kv->set_key(butil::StringPrintf("%s_%lu", prefix_.c_str(), it.first));
+    kv->set_value(it.second->SerializeAsString());
+    kvs.push_back(kv);
+  }
+
+  return kvs;
+}
+
+std::vector<std::shared_ptr<pb::common::KeyValue> >
+StoreRegionMeta::TransformDeltaToKv() {
+  std::shared_lock<std::shared_mutex> lock(mutex_);
+
+  std::vector<std::shared_ptr<pb::common::KeyValue> > kvs;
+  for (auto region_id : changed_regions_) {
+    auto it = regions_.find(region_id);
+    if (it != regions_.end()) {
+      std::shared_ptr<pb::common::KeyValue> kv =
+          std::make_shared<pb::common::KeyValue>();
+      kv->set_key(butil::StringPrintf("%s_%lu", prefix_.c_str(), it->first));
+      kv->set_value(it->second->SerializeAsString());
+      kvs.push_back(kv);
+    }
+  }
+
+  return kvs;
+}
+
+void StoreRegionMeta::TransformFromKv(
+    const std::vector<std::shared_ptr<pb::common::KeyValue> > kvs) {
+  std::unique_lock<std::shared_mutex> lock(mutex_);
+  for (auto kv : kvs) {
+    uint64_t region_id = ParseRegionId(kv->key());
+    std::shared_ptr<pb::common::Region> region =
+        std::make_shared<pb::common::Region>();
+    region->ParsePartialFromArray(kv->value().data(), kv->value().size());
+    regions_.insert_or_assign(region_id, region);
+  }
+}
 
 StoreMetaManager::StoreMetaManager()
     : server_meta_(std::make_unique<StoreServerMeta>()),

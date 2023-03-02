@@ -42,7 +42,7 @@ class Crontab {
 
   uint32_t id_;
   std::string name_;
-  // uint ms
+  // unit ms
   uint64_t interval_;
   // 0 is no limit
   uint32_t max_times_;

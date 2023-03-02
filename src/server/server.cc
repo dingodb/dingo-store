@@ -81,17 +81,33 @@ bool Server::ValiateCoordinator() { return true; }
 bool Server::InitServerID() {
   auto config = ConfigManager::GetInstance()->GetConfig(role_);
   id_ = config->GetInt("cluster.instance_id");
+
+  return id_ != 0;
 }
 
 bool Server::InitEngines() {
   auto config = ConfigManager::GetInstance()->GetConfig(role_);
   std::shared_ptr<Engine> mem_engine = std::make_shared<MemEngine>();
-  mem_engine->Init(config);
+  if (!mem_engine->Init(config)) {
+    return false;
+  }
   std::shared_ptr<Engine> raft_kv_engine =
       std::make_shared<RaftKvEngine>(mem_engine);
-  raft_kv_engine->Init(config);
+  if (!raft_kv_engine->Init(config)) {
+    return false;
+  }
   engines_.insert(std::make_pair(mem_engine->GetID(), mem_engine));
   engines_.insert(std::make_pair(raft_kv_engine->GetID(), raft_kv_engine));
+
+  return true;
+}
+
+bool Server::InitCoordinatorInteraction() {
+  coordinator_interaction_ = std::make_shared<CoordinatorInteraction>();
+
+  auto config = ConfigManager::GetInstance()->GetConfig(role_);
+  return coordinator_interaction_->Init(
+      config->GetString("cluster.coordinators"));
 }
 
 bool Server::InitRaftNodeManager() { return true; }
@@ -107,7 +123,6 @@ bool Server::InitStoreMetaManager() {
 }
 
 bool Server::InitCrontabManager() {
-  channel_ = std::make_shared<brpc::Channel>();
   crontab_manager_ = std::make_shared<CrontabManager>();
 
   // Add heartbeat crontab
@@ -116,7 +131,7 @@ bool Server::InitCrontabManager() {
   crontab->name_ = "HEARTBEA";
   crontab->interval_ = config->GetInt("server.heartbeatInterval");
   crontab->func_ = Heartbeat::SendStoreHeartbeat;
-  crontab->arg_ = channel_.get();
+  crontab->arg_ = coordinator_interaction_.get();
 
   crontab_manager_->AddAndRunCrontab(crontab);
 

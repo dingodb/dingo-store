@@ -16,6 +16,8 @@
 
 #include <regex>
 
+#include "butil/strings/string_split.h"
+
 namespace dingodb {
 
 bool Helper::IsIp(const std::string& s) {
@@ -23,6 +25,52 @@ bool Helper::IsIp(const std::string& s) {
       "(?=(\\b|\\D))(((\\d{1,2})|(1\\d{1,2})|(2[0-4]\\d)|(25[0-5]))\\.){3}(("
       "\\d{1,2})|(1\\d{1,2})|(2[0-4]\\d)|(25[0-5]))(?=(\\b|\\D))");
   return std::regex_match(s, reg);
+}
+
+std::vector<pb::common::Location> Helper::ExtractLocations(
+    const google::protobuf::RepeatedPtrField<pb::common::Store>& stores) {
+  std::vector<pb::common::Location> locations;
+  for (auto store : stores) {
+    locations.push_back(store.raft_location());
+  }
+  return locations;
+}
+
+// format: 127.0.0.1:8201:0
+std::string Helper::LocationToString(const pb::common::Location& location) {
+  return butil::StringPrintf("%s:%d:0", location.host().c_str(),
+                             location.port());
+}
+
+// format: 127.0.0.1:8201:0,127.0.0.1:8202:0,127.0.0.1:8203:0
+std::string Helper::FormatPeers(
+    const std::vector<pb::common::Location>& locations) {
+  std::string s;
+  for (int i = 0; i < locations.size(); ++i) {
+    s += LocationToString(locations[i]);
+    if (i + 1 < locations.size()) {
+      s += ",";
+    }
+  }
+  return s;
+}
+
+std::vector<butil::EndPoint> Helper::StrToEndpoint(const std::string& str) {
+  std::vector<std::string> addrs;
+  butil::SplitString(str, ',', &addrs);
+
+  std::vector<butil::EndPoint> endpoints;
+  for (auto addr : addrs) {
+    butil::EndPoint endpoint;
+    if (butil::hostname2endpoint(addr.c_str(), &endpoint) != 0 &&
+        str2endpoint(addr.c_str(), &endpoint) != 0) {
+      continue;
+    }
+
+    endpoints.push_back(endpoint);
+  }
+
+  return endpoints;
 }
 
 }  // namespace dingodb

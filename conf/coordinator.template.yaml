@@ -1,21 +1,18 @@
 cluster:
   name: dingodb
-  instance_id: 12345
-  coordinators: 127.0.0.1:19190,127.0.0.1:19191,127.0.0.1:19192
 server:
-  host: 127.0.0.1
-  port: 23000
-  heartbeatInterval: 10000 # ms
+  host: $SERVER_HOST$
+  port: $SERVER_PORT$
 raft:
-  host: 127.0.0.1
-  port: 23100
-  path: /opt/dingo-poc/store/data/store/raft
+  host: $RAFT_HOST$
+  port: $RAFT_PORT$
+  path: $BASE_PATH$/data/coordinator/raft
   electionTimeout: 1000 # ms
   snapshotInterval: 3600 # s
 log:
-  logPath: /opt/dingo-poc/store/log
+  logPath: $BASE_PATH$/log
 store:
-  dbPath: /opt/dingo-poc/store/data/store/db
+  dbPath: $BASE_PATH$/data/coordinator/db
   dcfConfiguration:
     tcBlockSize: 131072
     tcBlockCacheSize: 67108864

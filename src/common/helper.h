@@ -18,6 +18,7 @@
 #include <string>
 #include <vector>
 
+#include "butil/endpoint.h"
 #include "butil/strings/stringprintf.h"
 #include "proto/common.pb.h"
 
@@ -28,32 +29,16 @@ class Helper {
   static bool IsIp(const std::string& s);
 
   static std::vector<pb::common::Location> ExtractLocations(
-      const google::protobuf::RepeatedPtrField<pb::common::Store>& stores) {
-    std::vector<pb::common::Location> locations;
-    for (auto store : stores) {
-      locations.push_back(store.raft_location());
-    }
-    return locations;
-  }
-
+      const google::protobuf::RepeatedPtrField<pb::common::Store>& stores);
   // format: 127.0.0.1:8201:0
-  static std::string LocationToString(const pb::common::Location& location) {
-    return butil::StringPrintf("%s:%d:0", location.host().c_str(),
-                               location.port());
-  }
+  static std::string LocationToString(const pb::common::Location& location);
 
   // format: 127.0.0.1:8201:0,127.0.0.1:8202:0,127.0.0.1:8203:0
   static std::string FormatPeers(
-      const std::vector<pb::common::Location>& locations) {
-    std::string s;
-    for (int i = 0; i < locations.size(); ++i) {
-      s += LocationToString(locations[i]);
-      if (i + 1 < locations.size()) {
-        s += ",";
-      }
-    }
-    return s;
-  }
+      const std::vector<pb::common::Location>& locations);
+
+  // 127.0.0.1:8201,127.0.0.1:8202,127.0.0.1:8203 to EndPoint
+  static std::vector<butil::EndPoint> StrToEndpoint(const std::string& addrs);
 };
 
 }  // namespace dingodb
