@@ -48,12 +48,23 @@ class CoordinatorControl {
   // in: parent_schema_id
   // in: schema_name
   // out: new schema_id
+  // return: 0 or -1
   int CreateSchema(uint64_t parent_schema_id, std::string schema_name,
                    uint64_t &new_schema_id);
+
+  // create schema
+  // in: schema_id
+  // in: table_definition
+  // out: new table_id
+  // return: 0 or -1
+  int CreateTable(uint64_t schema_id,
+                  pb::meta::TableDefinition table_definition,
+                  uint64_t &new_table_id);
 
   // create store
   // in: cluster_id
   // out: store_id, password
+  // return: 0 or -1
   int CreateStore(uint64_t cluster_id, uint64_t &store_id,
                   std::string &password);
 
@@ -74,7 +85,7 @@ class CoordinatorControl {
   const pb::common::RegionMap &GetRegionMap();
 
   // get schemas
-  void GetSchemas(uint64_t schema_id, std::vector<pb::common::Schema> &schemas);
+  void GetSchemas(uint64_t schema_id, std::vector<pb::meta::Schema> &schemas);
 
  private:
   // global ids
@@ -93,10 +104,11 @@ class CoordinatorControl {
   pb::common::StoreMap store_map_;
 
   // schemas
-  std::map<uint64_t, pb::common::Schema> schema_map_;
+  std::map<uint64_t, pb::meta::Schema> schema_map_;
 
   // tables
-  std::map<uint64_t, pb::common::Table> table_map_;
+  // TableInternal is combination of Table & TableDefinition
+  std::map<uint64_t, pb::coordinator_internal::TableInternal> table_map_;
 };
 
 }  // namespace dingodb

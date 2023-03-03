@@ -22,22 +22,156 @@ package dingodb.pb.meta;
 option java_package = "io.dingodb.meta";
 option cc_generic_services = true;
 
+enum EntityType {
+  ENTITY_TYPE_SCHEMA = 0;
+  ENTITY_TYPE_TABLE = 1;
+  ENTITY_TYPE_PART = 2;
+}
+
+// The initial 3 internal schemas
+enum ReservedSchemaIds {
+  ROOT_SCHEMA = 0;
+  META_SCHEMA = 1;
+  DINGO_SCHEMA = 2;
+}
+
+// Used for transformation to SDK CommonId
+message DingoCommonId {
+  EntityType entity_type = 1;
+  uint64 parent_entity_id =
+      2;  // if the entity is table, this field is its schema_id
+  uint64 entity_id = 3;
+}
+
+// Define types about SQL.
+enum SqlType {
+  SQL_TYPE_BOOLEAN = 0;
+  SQL_TYPE_INTEGER = 1;
+  SQL_TYPE_BIGINT = 2;
+  SQL_TYPE_DOUBLE = 3;
+  SQL_TYPE_FLOAT = 4;
+  SQL_TYPE_DATE = 5;
+  SQL_TYPE_TIME = 6;
+  SQL_TYPE_TIMESTAMP = 7;
+  SQL_TYPE_VARCHAR = 8;
+  SQL_TYPE_ARRAY = 9;
+  SQL_TYPE_MULTISET = 10;
+  SQL_TYPE_ANY = 11;
+}
+
+// Define ElementType about Composite Structure.
+enum ElementType {
+  ELEM_TYPE_DOUBLE = 0;
+  ELEM_TYPE_FLOAT = 1;
+  ELEM_TYPE_INT32 = 2;
+  ELEM_TYPE_INT64 = 3;
+  ELEM_TYPE_UINT32 = 4;
+  ELEM_TYPE_UINT64 = 5;
+  ELEM_TYPE_BOOLEAN = 6;
+  ELEM_TYPE_STRING = 7;
+  ELEM_TYPE_BYTES = 8;
+  ELEM_TYPE_FIX32 = 9;
+  ELEM_TYPE_FIX64 = 10;
+  ELEM_TYPE_SFIX32 = 11;
+  ELEM_TYPE_SFIX64 = 12;
+}
+
+/**
+ * Column Definition.
+ */
+message ColumnDefinition {
+  string name = 1;
+  SqlType sql_type = 2;
+  ElementType element_type = 3;
+  int32 precision = 4;
+  int32 scale = 5;
+  bool nullable = 6;
+  int32 indexOfKey = 7;
+  bool has_default_val = 8;
+  string default_val = 9;
+}
+
+// Information about Index.
+message Index {
+  repeated string index_column = 1;
+  bool is_unique = 2;
+}
+
+// compute partition by columns and operand function.
+enum PartitionStrategy {
+  PT_STRATEGY_RANGE = 0;
+  PT_STRATEGY_HASH = 1;
+}
+
+message RangePartition {
+  repeated dingodb.pb.common.Range ranges = 1;
+}
+
+message HashPartition {}
+
+message PartitionRule {
+  repeated string columns = 1;
+  PartitionStrategy strategy = 2;
+  RangePartition range_partition = 3;
+  HashPartition hash_partition = 4;
+}
+
+// Schema
+message Schema {
+  DingoCommonId id = 1;
+  string name = 2;
+  repeated DingoCommonId schema_ids = 3;
+  repeated DingoCommonId table_ids = 4;
+}
+
+// TableDefinition is for SQL
+message TableDefinition {
+  string name = 1;
+  repeated ColumnDefinition columns = 2;
+  map<string, Index> indexes = 3;
+  uint32 version = 4;
+  uint64 ttl = 5;
+  PartitionRule table_partition = 6;
+  dingodb.pb.common.Engine engine = 7;
+  map<string, string> properties = 8;
+}
+
+// This Part is mainly equal to the Part in DingoDB 0.5.x
+message Part {
+  DingoCommonId id = 1;  // this is really region id, its parent entity is table
+  dingodb.pb.common.Range range = 2;      // the range of this part
+  dingodb.pb.common.Location leader = 3;  // the leader's store location
+  repeated dingodb.pb.common.Location voters =
+      4;  // all members of the region that have right to vote, this field is
+          // equal to the old replicates field of Part.
+  repeated dingodb.pb.common.Location learners =
+      5;  // all members of the region that is learners, have no right to vote
+  uint64 regionmap_epoch = 6;
+  uint64 storemap_epoch = 7;
+}
+
+// A Table has one or many parts.
+message Table {
+  DingoCommonId id = 1;
+  repeated Part parts = 2;
+}
+
 message GetSchemasRequest {
-  uint64 schema_id = 1;
+  DingoCommonId schema_id = 1;
 }
 
 message GetSchemasResponse {
   dingodb.pb.error.Error error = 1;
-  repeated dingodb.pb.common.Schema schemas = 2;
+  repeated Schema schemas = 2;
 }
 
 message TableDefinitionWithId {
-  uint64 table_id = 1;
-  dingodb.pb.common.TableDefinition table_definition = 2;
+  DingoCommonId table_id = 1;
+  TableDefinition table_definition = 2;
 }
 
 message GetTablesRequest {
-  uint64 schema_id = 1;
+  DingoCommonId schema_id = 1;
 }
 
 message GetTablesResponse {
@@ -46,37 +180,36 @@ message GetTablesResponse {
 }
 
 message GetTableRequest {
-  uint64 table_id = 1;
+  DingoCommonId table_id = 1;
 }
 
 message GetTableResponse {
   dingodb.pb.error.Error error = 1;
-  dingodb.pb.common.Table table = 2;
+  Table table = 2;
 }
 
 message CreateTableRequest {
-  uint64 schema_id = 1;
-  dingodb.pb.common.TableDefinition table_definition = 2;
+  DingoCommonId schema_id = 1;
+  TableDefinition table_definition = 2;
 }
 
 message CreateTableResponse {
   dingodb.pb.error.Error error = 1;
-  dingodb.pb.common.Table table = 2;
+  Table table = 2;
 }
 
 message CreateSchemaRequest {
-  uint64 parent_schema_id = 1;
+  DingoCommonId parent_schema_id = 1;
   string schema_name = 2;
 }
 
 message CreateSchemaResponse {
   dingodb.pb.error.Error error = 1;
-  dingodb.pb.common.Schema schema = 2;
+  Schema schema = 2;
 }
 
 message DropTableRequest {
-  uint64 schema_id = 1;
-  uint64 table_id = 2;
+  DingoCommonId table_id = 1;
 }
 
 message DropTableResponse {
@@ -101,7 +234,7 @@ service MetaService {
 
   // CreateTable
   // in: schema_id TableDefinition
-  // out: Table
+  // out: table_id
   rpc CreateTable(CreateTableRequest) returns (CreateTableResponse);
 
   // DropTable
