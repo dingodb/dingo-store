@@ -243,7 +243,8 @@ std::string RocksEngine::GetName() { return name_; }
 pb::common::Engine RocksEngine::GetID() { return type_; }
 
 // not implement
-int RocksEngine::AddRegion([[maybe_unused]] const std::shared_ptr<pb::common::Region> region) {
+int RocksEngine::AddRegion(
+    [[maybe_unused]] const std::shared_ptr<pb::common::Region> region) {
   return 0;
 }
 
@@ -696,6 +697,93 @@ int64_t RocksEngine::KvCount(std::shared_ptr<Context> ctx,
 #endif
 
   return count;
+}
+
+// if not exist set
+pb::error::Errno RocksEngine::KvPutIfAbsent(std::shared_ptr<Context> ctx,
+                                            const pb::common::KeyValue& kv) {
+  pb::common::KeyValue kv_internal;
+  kv_internal.set_key(kv.key());
+  kv_internal.set_value("");
+
+  const std::string& value = kv.value();
+
+  // compare and replace. support does not exist
+  return KvBcompareAndSet(ctx, kv_internal, value);
+}
+
+// if not exist set
+pb::error::Errno RocksEngine::KvBatchPutIfAbsent(
+    std::shared_ptr<Context> ctx,
+    const std::vector<pb::common::KeyValue>& vt_kv) {
+  if (!ctx) {
+    LOG(ERROR) << butil::StringPrintf("ctx nullptr  not supprt");
+    return {};
+  }
+
+  const std::string& cf = ctx->cf_name();
+  auto iter = map_index_cf_item_.find(cf);
+  if (iter == map_index_cf_item_.end()) {
+    LOG(ERROR) << butil::StringPrintf("column family : %s not found",
+                                      cf.c_str());
+    return pb::error::Errno::EKEY_NOTFOUND;
+  }
+
+  rocksdb::Status s;
+  rocksdb::TransactionOptions txn_options;
+  txn_options.set_snapshot = true;
+  rocksdb::Transaction* txn =
+      txn_db_->BeginTransaction(map_index_cf_item_[cf].GetWriteOptions());
+  if (!txn) {
+    LOG(ERROR) << butil::StringPrintf(
+        "rocksdb::TransactionDB::BeginTransaction failed");
+    return pb::error::Errno::EKEY_NOTFOUND;
+  }
+
+  const rocksdb::Snapshot* snapshot = txn->GetSnapshot();
+
+  rocksdb::ReadOptions read_options;
+  read_options.snapshot = snapshot;
+
+  std::unique_ptr<rocksdb::Transaction> utxn(txn);
+
+  for (size_t i = 0; i < vt_kv.size(); ++i) {
+    std::string value_old;
+
+    // other read will failed
+    s = utxn->GetForUpdate(
+        read_options, map_index_cf_item_[cf].GetHandle(),
+        rocksdb::Slice(vt_kv[i].key().data(), vt_kv[i].key().size()),
+        &value_old);
+    if (!s.IsNotFound()) {
+      txn->Rollback();
+      LOG(ERROR) << butil::StringPrintf(
+          "rocksdb::TransactionDB::GetForUpdate failed : %s",
+          s.ToString().c_str());
+      return pb::error::Errno::EKEY_NOTFOUND;
+    }
+
+    // write a key in this transaction
+    s = utxn->Put(
+        map_index_cf_item_[cf].GetHandle(),
+        rocksdb::Slice(vt_kv[i].key().data(), vt_kv[i].key().size()),
+        rocksdb::Slice(vt_kv[i].value().data(), vt_kv[i].value().size()));
+    if (!s.ok()) {
+      txn->Rollback();
+      LOG(ERROR) << butil::StringPrintf(
+          "rocksdb::TransactionDB::Put failed : %s", s.ToString().c_str());
+      return pb::error::Errno::EKEY_NOTFOUND;
+    }
+  }
+
+  s = txn->Commit();
+  if (!s.ok()) {
+    LOG(ERROR) << butil::StringPrintf(
+        "rocksdb::TransactionDB::Commit failed : %s", s.ToString().c_str());
+    return pb::error::Errno::EKEY_NOTFOUND;
+  }
+
+  return pb::error::Errno::OK;
 }
 
 std::shared_ptr<EngineReader> RocksEngine::CreateReader(

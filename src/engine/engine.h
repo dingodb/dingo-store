@@ -17,6 +17,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "common/context.h"
 #include "config/config.h"
@@ -140,6 +141,18 @@ class Engine {
                           const std::string& key_begin,
                           const std::string& key_end) {
     return -1;
+  }
+
+  // if not exist set
+  virtual pb::error::Errno KvPutIfAbsent(std::shared_ptr<Context> ctx,
+                                         const pb::common::KeyValue& kv) {
+    return pb::error::Errno::EKEY_NOTFOUND;
+  }
+  // if not exists set
+  virtual pb::error::Errno KvBatchPutIfAbsent(
+      std::shared_ptr<Context> ctx,
+      const std::vector<pb::common::KeyValue>& vt_kv) {
+    return pb::error::Errno::EKEY_NOTFOUND;
   }
 
  protected:
