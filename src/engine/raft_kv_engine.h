@@ -49,4 +49,4 @@ class RaftKvEngine : public Engine {
 
 }  // namespace dingodb
 
-#endif  // DINGODB_ENGINE_RAFT_KV_ENGINE_H_
+#endif  // DINGODB_ENGINE_RAFT_KV_ENGINE_H_H  // NOLINT
