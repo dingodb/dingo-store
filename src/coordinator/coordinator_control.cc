@@ -21,6 +21,7 @@
 
 #include "google/protobuf/unknown_field_set.h"
 #include "proto/common.pb.h"
+#include "proto/meta.pb.h"
 
 namespace dingodb {
 void CoordinatorControl::Init() {
@@ -35,21 +36,43 @@ void CoordinatorControl::Init() {
 
   // init schema_map_ at innocent cluster
   if (schema_map_.empty()) {
-    pb::common::Schema root_schema;
-    root_schema.set_id(0);
+    pb::meta::Schema root_schema;
     root_schema.set_name("root");
+    auto* schema_id = root_schema.mutable_id();
+    schema_id->set_entity_type(
+        ::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
+    schema_id->set_parent_entity_id(
+        ::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
+    schema_id->set_entity_id(
+        ::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
 
     // meta schema
-    pb::common::Schema meta_schema;
-    meta_schema.set_id(1);
-    meta_schema.set_name("meta");
-    root_schema.add_schema_ids(1);
+    pb::meta::Schema meta_schema;
+    meta_schema.set_name("dingo");
+    schema_id = meta_schema.mutable_id();
+    schema_id->set_entity_type(
+        ::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
+    schema_id->set_parent_entity_id(
+        ::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
+    schema_id->set_entity_id(
+        ::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+
+    auto* sub_schema_id = root_schema.add_schema_ids();
+    sub_schema_id->CopyFrom(*schema_id);
 
     // dingo schema
-    pb::common::Schema dingo_schema;
-    dingo_schema.set_id(2);
+    pb::meta::Schema dingo_schema;
     dingo_schema.set_name("dingo");
-    root_schema.add_schema_ids(2);
+    schema_id = dingo_schema.mutable_id();
+    schema_id->set_entity_type(
+        ::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
+    schema_id->set_parent_entity_id(
+        ::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
+    schema_id->set_entity_id(
+        ::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+
+    sub_schema_id = root_schema.add_schema_ids();
+    sub_schema_id->CopyFrom(*schema_id);
 
     // add the initial schemas to schema_map_
     // TODO: data persistence
@@ -81,10 +104,19 @@ int CoordinatorControl::CreateSchema(uint64_t parent_schema_id,
   }
 
   new_schema_id = CreateSchemaId();
-  schema_map_[parent_schema_id].add_schema_ids(new_schema_id);
-  pb::common::Schema new_schema;
-  new_schema.set_id(new_schema_id);
+
+  // add new schema to parent schema
+  auto* schema_id = schema_map_[parent_schema_id].add_schema_ids();
+  schema_id->set_entity_type(
+      ::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
+  schema_id->set_parent_entity_id(parent_schema_id);
+  schema_id->set_entity_id(new_schema_id);
+
+  // add new chema to  schema_map_
+  pb::meta::Schema new_schema;
   new_schema.set_name(schema_name);
+  auto* the_new_schema_id = new_schema.mutable_id();
+  the_new_schema_id->CopyFrom(*schema_id);
 
   schema_map_.insert(std::make_pair(new_schema_id, new_schema));
 
@@ -215,7 +247,7 @@ int CoordinatorControl::CreateStore(uint64_t cluster_id, uint64_t& store_id,
 // in: schema_id
 // out: schemas
 void CoordinatorControl::GetSchemas(uint64_t schema_id,
-                                    std::vector<pb::common::Schema>& schemas) {
+                                    std::vector<pb::meta::Schema>& schemas) {
   if (schema_id < 0) {
     LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
     return;
@@ -233,7 +265,7 @@ void CoordinatorControl::GetSchemas(uint64_t schema_id,
 
   auto& schema = schema_map_[schema_id];
   for (int i = 0; i < schema.schema_ids_size(); i++) {
-    int sub_schema_id = schema.schema_ids(i);
+    int sub_schema_id = schema.schema_ids(i).entity_id();
     if (schema_map_.find(sub_schema_id) == schema_map_.end()) {
       LOG(ERROR) << "ERRROR: sub_schema_id " << sub_schema_id << " not exists";
       continue;
@@ -245,4 +277,41 @@ void CoordinatorControl::GetSchemas(uint64_t schema_id,
   LOG(INFO) << "GetSchemas id=" << schema_id
             << " sub schema count=" << schema_map_.size();
 }
+
+int CoordinatorControl::CreateTable(uint64_t schema_id,
+                                    pb::meta::TableDefinition table_definition,
+                                    uint64_t& new_table_id) {
+  // validate schema_id is existed
+  if (schema_map_.find(schema_id) == schema_map_.end()) {
+    LOG(ERROR) << "schema_id is illegal " << schema_id;
+    return -1;
+  }
+
+  // validate part information
+  if (!table_definition.has_table_partition()) {
+    LOG(ERROR) << "no table_partition provided ";
+    return -1;
+  }
+  auto const& table_partition = table_definition.table_partition();
+  if (table_partition.has_hash_partition()) {
+    LOG(ERROR) << "hash_partiton is not supported";
+    return -1;
+  } else if (!table_partition.has_range_partition()) {
+    LOG(ERROR) << "no range_partition provided ";
+    return -1;
+  }
+
+  auto const& range_partition = table_partition.range_partition();
+  if (range_partition.ranges_size() == 0) {
+    LOG(ERROR) << "no range provided ";
+    return -1;
+  }
+
+  // create table
+  // extract part info, create region for each part
+
+  new_table_id = 100;
+  return 0;
+}
+
 }  // namespace dingodb

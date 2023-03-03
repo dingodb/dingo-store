@@ -40,8 +40,13 @@ void SendGetSchemas(brpc::Controller& cntl,
   dingodb::pb::meta::GetSchemasRequest request;
   dingodb::pb::meta::GetSchemasResponse response;
 
-  // const char* op = nullptr;
-  request.set_schema_id(0);
+  auto* schema_id = request.mutable_schema_id();
+  schema_id->set_entity_type(
+      ::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
+  schema_id->set_parent_entity_id(
+      ::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
+  schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
+
   stub.GetSchemas(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
     LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
@@ -50,7 +55,7 @@ void SendGetSchemas(brpc::Controller& cntl,
 
   if (FLAGS_log_each_request) {
     LOG(INFO) << "Received response"
-              << " schema_id =" << request.schema_id()
+              << " schema_id =" << request.schema_id().entity_id()
               << " schema_count =" << response.schemas_size()
               << " request_attachment=" << cntl.request_attachment().size()
               << " response_attachment=" << cntl.response_attachment().size()
@@ -58,17 +63,17 @@ void SendGetSchemas(brpc::Controller& cntl,
     LOG(INFO) << response.DebugString();
 
     for (int32_t i = 0; i < response.schemas_size(); i++) {
-      LOG(INFO) << "schema_id=[" << response.schemas(i).id() << "]"
+      LOG(INFO) << "schema_id=[" << response.schemas(i).id().entity_id() << "]"
                 << "child_schema_count="
                 << response.schemas(i).schema_ids_size()
                 << "child_table_count=" << response.schemas(i).table_ids_size();
       for (int32_t j = 0; j < response.schemas(i).schema_ids_size(); j++) {
-        LOG(INFO) << "child schema_id=[" << response.schemas(i).schema_ids(j)
-                  << "]";
+        LOG(INFO) << "child schema_id=["
+                  << response.schemas(i).schema_ids(j).entity_id() << "]";
       }
       for (int32_t j = 0; j < response.schemas(i).table_ids_size(); j++) {
-        LOG(INFO) << "child table_id=[" << response.schemas(i).table_ids(j)
-                  << "]";
+        LOG(INFO) << "child table_id=["
+                  << response.schemas(i).table_ids(j).entity_id() << "]";
       }
     }
   }
@@ -79,8 +84,14 @@ void SendGetTables(brpc::Controller& cntl,
   dingodb::pb::meta::GetTablesRequest request;
   dingodb::pb::meta::GetTablesResponse response;
 
-  // const char* op = nullptr;
-  request.set_schema_id(0);
+  auto* schema_id = request.mutable_schema_id();
+  schema_id->set_entity_type(
+      ::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
+  schema_id->set_parent_entity_id(
+      ::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
+  schema_id->set_entity_id(
+      ::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+
   stub.GetTables(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
     LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
@@ -89,7 +100,7 @@ void SendGetTables(brpc::Controller& cntl,
 
   if (FLAGS_log_each_request) {
     LOG(INFO) << "Received response"
-              << " request schema_id =" << request.schema_id()
+              << " request schema_id =" << request.schema_id().entity_id()
               << " table_count =" << response.table_definition_with_ids_size()
               << " request_attachment=" << cntl.request_attachment().size()
               << " response_attachment=" << cntl.response_attachment().size()
@@ -122,7 +133,14 @@ void SendCreateTable(brpc::Controller& cntl,
   dingodb::pb::meta::CreateTableRequest request;
   dingodb::pb::meta::CreateTableResponse response;
 
-  request.set_schema_id(1);
+  auto* schema_id = request.mutable_schema_id();
+  schema_id->set_entity_type(
+      ::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
+  schema_id->set_entity_id(
+      ::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+  schema_id->set_parent_entity_id(
+      ::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
+
   // string name = 1;
   auto* table_definition = request.mutable_table_definition();
   table_definition->set_name("t_test1");
@@ -132,9 +150,8 @@ void SendCreateTable(brpc::Controller& cntl,
     std::string column_name("test_columen_");
     column_name.append(std::to_string(i));
     column->set_name(column_name);
-    column->set_sql_type(::dingodb::pb::common::SqlType::SQL_TYPE_INTEGER);
-    column->set_element_type(
-        ::dingodb::pb::common::ElementType::ELEM_TYPE_BYTES);
+    column->set_sql_type(::dingodb::pb::meta::SqlType::SQL_TYPE_INTEGER);
+    column->set_element_type(::dingodb::pb::meta::ElementType::ELEM_TYPE_BYTES);
     column->set_precision(100);
     column->set_nullable(false);
     column->set_indexofkey(7);
@@ -161,7 +178,7 @@ void SendCreateTable(brpc::Controller& cntl,
 
   if (FLAGS_log_each_request) {
     LOG(INFO) << "Received response"
-              << " request schema_id =" << request.schema_id()
+              << " request schema_id =" << request.schema_id().entity_id()
               << " request_attachment=" << cntl.request_attachment().size()
               << " response_attachment=" << cntl.response_attachment().size()
               << " latency=" << cntl.latency_us();
@@ -175,9 +192,12 @@ void SendDropTable(brpc::Controller& cntl,
   dingodb::pb::meta::DropTableRequest request;
   dingodb::pb::meta::DropTableResponse response;
 
-  // const char* op = nullptr;
-  request.set_schema_id(1);
-  request.set_table_id(1);
+  auto* table_id = request.mutable_table_id();
+  table_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
+  table_id->set_parent_entity_id(
+      ::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+  table_id->set_entity_id(1);
+
   stub.DropTable(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
     LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
@@ -186,8 +206,8 @@ void SendDropTable(brpc::Controller& cntl,
 
   if (FLAGS_log_each_request) {
     LOG(INFO) << "Received response"
-              << " request schema_id =" << request.schema_id()
-              << " request table_id =" << request.table_id()
+              << " request schema_id =" << request.table_id().parent_entity_id()
+              << " request table_id =" << request.table_id().entity_id()
               << " request_attachment=" << cntl.request_attachment().size()
               << " response_attachment=" << cntl.response_attachment().size()
               << " latency=" << cntl.latency_us();
@@ -200,7 +220,14 @@ void SendCreateSchema(brpc::Controller& cntl,
   dingodb::pb::meta::CreateSchemaRequest request;
   dingodb::pb::meta::CreateSchemaResponse response;
 
-  request.set_parent_schema_id(2);
+  auto* parent_schema_id = request.mutable_parent_schema_id();
+  parent_schema_id->set_entity_type(
+      ::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
+  parent_schema_id->set_parent_entity_id(
+      ::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
+  parent_schema_id->set_entity_id(
+      ::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+
   request.set_schema_name("test_create_schema");
   stub.CreateSchema(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
@@ -211,7 +238,8 @@ void SendCreateSchema(brpc::Controller& cntl,
 
   if (FLAGS_log_each_request) {
     LOG(INFO) << "Received response"
-              << " request parent_schema_id =" << request.parent_schema_id()
+              << " request parent_schema_id ="
+              << request.parent_schema_id().entity_id()
               << " request schema_name=" << request.schema_name()
               << " request_attachment=" << cntl.request_attachment().size()
               << " response_attachment=" << cntl.response_attachment().size()
