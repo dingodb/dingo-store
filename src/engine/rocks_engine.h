@@ -93,6 +93,14 @@ class RocksEngine : public Engine {
   int64_t KvCount(std::shared_ptr<Context> ctx, const std::string& key_begin,
                   const std::string& key_end) override;
 
+  // if not exist set
+  pb::error::Errno KvPutIfAbsent(std::shared_ptr<Context> ctx,
+                                 const pb::common::KeyValue& kv) override;
+  // if not exists set
+  pb::error::Errno KvBatchPutIfAbsent(
+      std::shared_ptr<Context> ctx,
+      const std::vector<pb::common::KeyValue>& vt_kv) override;
+
   std::shared_ptr<EngineReader> CreateReader(
       std::shared_ptr<Context> ctx) override;
 
