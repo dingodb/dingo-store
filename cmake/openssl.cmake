@@ -33,7 +33,8 @@ ExternalProject_Add(
         SOURCE_DIR ${OPENSSL_SOURCES_DIR}/src/extern_openssl/
         CONFIGURE_COMMAND sh config -DOPENSSL_NO_SCTP -DOPENSSL_NO_KTLS  -DOPENSSL_USE_NODELETE -DOPENSSL_PIC -no-shared
         BUILD_IN_SOURCE 1
-        BUILD_COMMAND $(MAKE) -j ${NUM_OF_PROCESSOR}
+        # BUILD_COMMAND $(MAKE) -j ${NUM_OF_PROCESSOR}
+        BUILD_COMMAND $(MAKE)
         INSTALL_COMMAND mkdir -p ${OPENSSL_INSTALL_DIR}/lib/ COMMAND cp ${OPENSSL_SOURCES_DIR}/src/extern_openssl/libssl.a ${OPENSSL_INSTALL_DIR}/lib/ COMMAND cp ${OPENSSL_SOURCES_DIR}/src/extern_openssl/libcrypto.a ${OPENSSL_INSTALL_DIR}/lib/ COMMAND cp -r ${OPENSSL_SOURCES_DIR}/src/extern_openssl/include ${OPENSSL_INSTALL_DIR}/
 )
 

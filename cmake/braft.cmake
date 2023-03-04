@@ -51,7 +51,8 @@ ExternalProject_Add(
         -DCMAKE_POSITION_INDEPENDENT_CODE:BOOL=ON
         -DCMAKE_BUILD_TYPE:STRING=${THIRD_PARTY_BUILD_TYPE}
         # BUILD_IN_SOURCE 1
-        BUILD_COMMAND $(MAKE) -j ${NUM_OF_PROCESSOR} braft-static
+        # BUILD_COMMAND $(MAKE) -j ${NUM_OF_PROCESSOR} braft-static
+        BUILD_COMMAND $(MAKE) braft-static
         INSTALL_COMMAND mkdir -p ${BRAFT_INSTALL_DIR}/lib/ COMMAND cp ${BRAFT_BINARY_DIR}/output/lib/libbraft.a ${BRAFT_LIBRARIES} COMMAND cp -r ${BRAFT_BINARY_DIR}/output/include ${BRAFT_INCLUDE_DIR}/
 )
 

@@ -39,7 +39,7 @@ ExternalProject_Add(
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON
         -DCMAKE_BUILD_TYPE=${THIRD_PARTY_BUILD_TYPE}
         # -DCMAKE_PREFIX_PATH=${prefix_path}
-        -DWITH_DEBUG_SYMBOLS=OFF
+        # -DWITH_DEBUG_SYMBOLS=OFF
         ${EXTERNAL_OPTIONAL_ARGS}
         LIST_SEPARATOR |
         CMAKE_CACHE_ARGS -DCMAKE_INSTALL_PREFIX:PATH=${GTEST_INSTALL_DIR}
@@ -51,7 +51,8 @@ ExternalProject_Add(
         # GIT_TAG "v1.13.0"
         # URL "https://github.com/google/googletest/archive/v1.13.0.tar.gz"
         # BUILD_IN_SOURCE 1
-        BUILD_COMMAND $(MAKE) -j ${NUM_OF_PROCESSOR}
+        # BUILD_COMMAND $(MAKE) -j ${NUM_OF_PROCESSOR}
+        BUILD_COMMAND $(MAKE)
         INSTALL_COMMAND mkdir -p ${GTEST_INSTALL_DIR}/lib/ COMMAND cp ${GTEST_BINARY_DIR}/lib/libgtest.a ${GTEST_LIBRARIES} COMMAND cp ${GTEST_BINARY_DIR}/lib/libgtest_main.a ${GTEST_MAIN_LIBRARIES} COMMAND cp ${GTEST_BINARY_DIR}/lib/libgmock.a ${GMOCK_LIBRARIES} COMMAND cp ${GTEST_BINARY_DIR}/lib/libgmock_main.a ${GMOCK_MAIN_LIBRARIES} COMMAND cp -r ${GTEST_SOURCES_DIR}/googletest/include ${GTEST_INCLUDE_DIR} COMMAND cp -r ${GTEST_SOURCES_DIR}/googlemock/include ${GTEST_INCLUDE_DIR}/
 )
 
