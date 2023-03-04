@@ -17,6 +17,7 @@
 
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <variant>
 #include <vector>
@@ -104,6 +105,10 @@ class RocksEngine : public Engine {
   std::shared_ptr<EngineReader> CreateReader(
       std::shared_ptr<Context> ctx) override;
 
+  using CfDefaultConfValueBase = std::variant<int64_t, double, std::string>;
+  using CfDefaultConfValue = std::optional<CfDefaultConfValueBase>;
+  using CfDefaultConfMap = std::map<std::string, CfDefaultConfValue>;
+
  private:
   void Close();
 
@@ -116,9 +121,6 @@ class RocksEngine : public Engine {
   rocksdb::Options db_options_;
   rocksdb::TransactionDB* txn_db_;
 
-  using CfDefaultConfValueBase = std::variant<int64_t, double, std::string>;
-  using CfDefaultConfValue = std::optional<CfDefaultConfValueBase>;
-  using CfDefaultConfMap = std::map<std::string, CfDefaultConfValue>;
   CfDefaultConfMap cf_configuration_default_map_;
 
   // set cf config
