@@ -14,36 +14,97 @@
 
 #include "store/store_control.h"
 
+#include <memory>
+
+#include "common/helper.h"
 #include "server/server.h"
 
 namespace dingodb {
 
-static bool ValidateAddRegion(std::shared_ptr<pb::common::Region> region) {
-  return true;
+pb::error::Errno ValidateAddRegion(
+    std::shared_ptr<StoreMetaManager> store_meta_manager,
+    std::shared_ptr<pb::common::Region> region) {
+  if (store_meta_manager->IsExistRegion(region->id())) {
+    return pb::error::EREGION_ALREADY_EXIST;
+  }
+
+  return pb::error::OK;
 }
 
-void StoreControl::AddRegion(std::shared_ptr<pb::common::Region> region) {
+pb::error::Errno StoreControl::AddRegion(
+    std::shared_ptr<Context> ctx, std::shared_ptr<pb::common::Region> region) {
+  auto store_meta_manager = Server::GetInstance()->get_store_meta_manager();
+
   // valiate region
-  if (!ValidateAddRegion(region)) {
-    return;
+  auto errcode = ValidateAddRegion(store_meta_manager, region);
+  if (errcode != pb::error::OK) {
+    return errcode;
   }
 
   // Add raft node
   auto engine = Server::GetInstance()->get_engine(pb::common::ENG_RAFTSTORE);
   if (engine == nullptr) {
-    return;
+    return pb::error::ESTORE_NOTEXIST_RAFTENGINE;
   }
-  engine->AddRegion(region);
+  engine->AddRegion(ctx, region);
 
   // Add region to store region meta manager
-  Server::GetInstance()->get_store_meta_manager()->AddRegion(region);
+  store_meta_manager->AddRegion(region);
+  return pb::error::OK;
 }
 
 void StoreControl::AddRegions(
+    std::shared_ptr<Context> ctx,
     std::vector<std::shared_ptr<pb::common::Region> > regions) {
   for (auto region : regions) {
-    AddRegion(region);
+    AddRegion(ctx, region);
   }
+}
+
+pb::error::Errno StoreControl::ChangeRegion(
+    std::shared_ptr<Context> ctx, std::shared_ptr<pb::common::Region> region) {
+  auto filterPeersByRole =
+      [region](pb::common::PeerRole role) -> std::vector<pb::common::Peer> {
+    std::vector<pb::common::Peer> peers;
+    for (auto peer : region->peers()) {
+      if (peer.role() == role) {
+        peers.push_back(peer);
+      }
+    }
+  };
+
+  auto engine = Server::GetInstance()->get_engine(pb::common::ENG_RAFTSTORE);
+  if (engine == nullptr) {
+    return pb::error::ESTORE_NOTEXIST_RAFTENGINE;
+  }
+  return engine->ChangeRegion(ctx, region->id(),
+                              filterPeersByRole(pb::common::VOTER));
+}
+
+pb::error::Errno StoreControl::DeleteRegion(std::shared_ptr<Context> ctx,
+                                            uint64_t region_id) {
+  auto store_meta_manager = Server::GetInstance()->get_store_meta_manager();
+  auto region = store_meta_manager->GetRegion(region_id);
+
+  // Check region status
+
+  // Shutdown raft node
+  auto engine = Server::GetInstance()->get_engine(pb::common::ENG_RAFTSTORE);
+  if (engine == nullptr) {
+    return pb::error::ESTORE_NOTEXIST_RAFTENGINE;
+  }
+  engine->DestroyRegion(ctx, region_id);
+
+  // Delete data
+  ctx->set_directly_delete(true);
+  engine->KvDeleteRange(ctx, region->range());
+
+  // Delete meta data
+  store_meta_manager->DeleteRegion(region_id);
+
+  // Free other resources
+
+  return pb::error::OK;
 }
 
 }  // namespace dingodb

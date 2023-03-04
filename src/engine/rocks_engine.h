@@ -51,18 +51,27 @@ class RocksEngine : public Engine {
   std::string GetName() override;
   pb::common::Engine GetID() override;
 
-  // not
-  int AddRegion(const std::shared_ptr<pb::common::Region> region) override;
-
-  int DestroyRegion(uint64_t region_id) override;
-
   Snapshot* GetSnapshot() override;
   void ReleaseSnapshot() override;
 
-  std::shared_ptr<std::string> KvGet(std::shared_ptr<Context> ctx,
-                                     const std::string& key) override;
+  pb::error::Errno KvGet(std::shared_ptr<Context> ctx, const std::string& key,
+                         std::string& value) override;
+  pb::error::Errno KvBatchGet(std::shared_ptr<Context> ctx,
+                              const std::vector<std::string>& keys,
+                              std::vector<pb::common::KeyValue>& kvs) override;
+
   pb::error::Errno KvPut(std::shared_ptr<Context> ctx,
                          const pb::common::KeyValue& kv) override;
+  pb::error::Errno KvBatchPut(
+      std::shared_ptr<Context> ctx,
+      const std::vector<pb::common::KeyValue>& kvs) override;
+
+  pb::error::Errno KvPutIfAbsent(std::shared_ptr<Context> ctx,
+                                 const pb::common::KeyValue& kv) override;
+  pb::error::Errno KvBatchPutIfAbsent(
+      std::shared_ptr<Context> ctx,
+      const std::vector<pb::common::KeyValue>& kvs,
+      std::vector<std::string>& put_keys) override;
 
   // compare and replace. support does not exist
   pb::error::Errno KvBcompareAndSet(std::shared_ptr<Context> ctx,
@@ -73,9 +82,7 @@ class RocksEngine : public Engine {
                             const std::string& key) override;
 
   pb::error::Errno KvDeleteRange(std::shared_ptr<Context> ctx,
-                                 const std::string& key_begin,
-                                 const std::string& key_endbool,
-                                 bool delete_files_in_range) override;
+                                 const pb::common::Range& range) override;
 
   pb::error::Errno KvWriteBatch(
       std::shared_ptr<Context> ctx,
@@ -92,14 +99,6 @@ class RocksEngine : public Engine {
   // [key_begin, key_end)
   int64_t KvCount(std::shared_ptr<Context> ctx, const std::string& key_begin,
                   const std::string& key_end) override;
-
-  // if not exist set
-  pb::error::Errno KvPutIfAbsent(std::shared_ptr<Context> ctx,
-                                 const pb::common::KeyValue& kv) override;
-  // if not exists set
-  pb::error::Errno KvBatchPutIfAbsent(
-      std::shared_ptr<Context> ctx,
-      const std::vector<pb::common::KeyValue>& vt_kv) override;
 
   std::shared_ptr<EngineReader> CreateReader(
       std::shared_ptr<Context> ctx) override;

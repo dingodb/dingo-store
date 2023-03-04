@@ -81,6 +81,11 @@ void StoreRegionMeta::AddRegion(
   regions_.insert(std::make_pair(region->id(), region));
 }
 
+void StoreRegionMeta::DeleteRegion(uint64_t region_id) {
+  std::unique_lock<std::shared_mutex> lock(mutex_);
+  regions_.erase(region_id);
+}
+
 std::shared_ptr<pb::common::Region> StoreRegionMeta::GetRegion(
     uint64_t region_id) {
   std::shared_lock<std::shared_mutex> lock(mutex_);
@@ -191,6 +196,15 @@ std::shared_ptr<pb::common::Store> StoreMetaManager::GetStore() {
   return server_meta_->GetStore();
 }
 
+bool StoreMetaManager::IsExistRegion(uint64_t region_id) {
+  return region_meta_->IsExist(region_id);
+}
+
+std::shared_ptr<pb::common::Region> StoreMetaManager::GetRegion(
+    uint64_t region_id) {
+  return region_meta_->GetRegion(region_id);
+}
+
 std::map<uint64_t, std::shared_ptr<pb::common::Region> >
 StoreMetaManager::GetAllRegion() {
   return region_meta_->GetAllRegion();
@@ -199,6 +213,10 @@ StoreMetaManager::GetAllRegion() {
 void StoreMetaManager::AddRegion(
     const std::shared_ptr<pb::common::Region> region) {
   region_meta_->AddRegion(region);
+}
+
+void StoreMetaManager::DeleteRegion(uint64_t region_id) {
+  region_meta_->DeleteRegion(region_id);
 }
 
 }  // namespace dingodb

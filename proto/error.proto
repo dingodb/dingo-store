@@ -14,6 +14,8 @@
 
 syntax = "proto3";
 
+import "common.proto";
+
 package dingodb.pb.error;
 
 option java_package = "io.dingodb.error";
@@ -23,23 +25,41 @@ enum Errno {
   OK = 0;
 
   // universal [10000, 20000)
-  EILLEGAL_PARAMTETERS = 10000;
-  EKEY_NOTFOUND = 10001;
-  EKEY_FORMAT = 10002;
+  EINTERNAL = 10000;
+  ECONTEXT = 10001;
+  EILLEGAL_PARAMTETERS = 10010;
+  EKEY_NOTFOUND = 10011;
+  EKEY_FORMAT = 10012;
+  EKEY_EMPTY = 10013;
+  ENOT_SUPPORT = 10100;
 
   // store [20000, 30000)
+  ESTORE_NOTEXIST_RAFTENGINE = 20000;
+  ESTORE_INVALID_CF = 20001;
 
   // meta [30000, 40000)
 
   // coordinator [40000, 50000)
 
   // raft [50000, 60000)
-  ERAFT_NOTNODE = 50000;
-  ERAFT_NOTLEADER = 50001;
-  ERAFT_COMMITLOG = 50002;
+  ERAFT_INIT = 50000;
+  ERAFT_NOTNODE = 50001;
+  ERAFT_NOTLEADER = 50002;
+  ERAFT_COMMITLOG = 50003;
+
+  // region [60000, 70000)
+  EREGION_ALREADY_EXIST = 60000;
+  EREGION_NOT_FOUND = 60001;
+}
+
+message NotLeader {
+  uint64 region_id = 1;
+  dingodb.pb.common.Peer leader = 2;
 }
 
 message Error {
   Errno errcode = 1;
   string errmsg = 2;
+
+  NotLeader not_leader = 10;
 }

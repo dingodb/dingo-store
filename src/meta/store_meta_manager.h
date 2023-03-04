@@ -77,6 +77,7 @@ class StoreRegionMeta : public TransformKvAble {
   bool IsExist(uint64_t region_id);
 
   void AddRegion(const std::shared_ptr<pb::common::Region> region);
+  void DeleteRegion(uint64_t region_id);
   std::shared_ptr<pb::common::Region> GetRegion(uint64_t region_id);
   std::map<uint64_t, std::shared_ptr<pb::common::Region> > GetAllRegion();
 
@@ -108,9 +109,14 @@ class StoreMetaManager {
 
   uint64_t GetServerEpoch();
   uint64_t GetRegionEpoch();
+
   std::shared_ptr<pb::common::Store> GetStore();
+
+  bool IsExistRegion(uint64_t region_id);
+  std::shared_ptr<pb::common::Region> GetRegion(uint64_t region_id);
   std::map<uint64_t, std::shared_ptr<pb::common::Region> > GetAllRegion();
   void AddRegion(const std::shared_ptr<pb::common::Region> region);
+  void DeleteRegion(uint64_t region_id);
 
  private:
   DISALLOW_COPY_AND_ASSIGN(StoreMetaManager);

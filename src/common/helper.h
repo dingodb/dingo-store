@@ -21,6 +21,7 @@
 #include "butil/endpoint.h"
 #include "butil/strings/stringprintf.h"
 #include "proto/common.pb.h"
+#include "proto/error.pb.h"
 
 namespace dingodb {
 
@@ -28,11 +29,21 @@ class Helper {
  public:
   static bool IsIp(const std::string& s);
 
+  static bool IsDifferenceLocation(const pb::common::Location& location,
+                                   const pb::common::Location& other_location);
+  static bool IsDifferencePeers(
+      const std::vector<pb::common::Peer>& peers,
+      const std::vector<pb::common::Peer>& other_peers);
+
+  static void SortPeers(std::vector<pb::common::Peer>& peers);
   static std::vector<pb::common::Location> ExtractLocations(
       const google::protobuf::RepeatedPtrField<pb::common::Peer>& peers);
 
   // format: 127.0.0.1:8201:0
   static std::string LocationToString(const pb::common::Location& location);
+
+  static butil::EndPoint LocationToEndPoint(
+      const pb::common::Location& location);
 
   // format: 127.0.0.1:8201:0,127.0.0.1:8202:0,127.0.0.1:8203:0
   static std::string FormatPeers(
@@ -40,6 +51,32 @@ class Helper {
 
   // 127.0.0.1:8201,127.0.0.1:8202,127.0.0.1:8203 to EndPoint
   static std::vector<butil::EndPoint> StrToEndpoint(const std::string& str);
+
+  static std::shared_ptr<pb::error::Error> Error(pb::error::Errno errcode,
+                                                 const std::string& errmsg);
+  static bool Error(pb::error::Errno errcode, const std::string& errmsg,
+                    pb::error::Error& err);
+  static bool Error(pb::error::Errno errcode, const std::string& errmsg,
+                    std::shared_ptr<pb::error::Error> err);
+
+  template <typename T>
+  static std::vector<T> PbRepeatedToVector(
+      const google::protobuf::RepeatedPtrField<T>& data) {
+    std::vector<T> vec;
+    for (auto& item : data) {
+      vec.push_back(item);
+    }
+
+    return vec;
+  }
+
+  template <typename T>
+  static void VectorToPbRepeated(const std::vector<T>& vec,
+                                 google::protobuf::RepeatedPtrField<T>* out) {
+    for (auto& item : vec) {
+      *(out->Add()) = item;
+    }
+  }
 };
 
 }  // namespace dingodb

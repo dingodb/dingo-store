@@ -24,22 +24,31 @@ class Context {
  public:
   Context() : cntl_(nullptr), done_(nullptr) {}
   Context(brpc::Controller* cntl, google::protobuf::Closure* done)
-      : cntl_(cntl), done_(done) {}
+      : cntl_(cntl), done_(done), response_(nullptr) {}
+  Context(brpc::Controller* cntl, google::protobuf::Closure* done,
+          google::protobuf::Message* response)
+      : cntl_(cntl), done_(done), response_(response) {}
   ~Context() = default;
 
-  brpc::Controller* get_cntl() { return cntl_; }
+  brpc::Controller* cntl() { return cntl_; }
   Context& set_cntl(brpc::Controller* cntl) {
     cntl_ = cntl;
     return *this;
   }
 
-  google::protobuf::Closure* get_done() { return done_; }
+  google::protobuf::Closure* done() { return done_; }
   Context& set_done(google::protobuf::Closure* done) {
     done_ = done;
     return *this;
   }
 
-  uint64_t get_region_id() { return region_id_; }
+  google::protobuf::Message* response() { return response_; }
+  Context& set_response(google::protobuf::Message* response) {
+    response_ = response;
+    return *this;
+  }
+
+  uint64_t region_id() { return region_id_; }
   Context& set_region_id(uint64_t region_id) {
     region_id_ = region_id;
     return *this;
@@ -48,13 +57,29 @@ class Context {
   void set_cf_name(const std::string& cf_name) { cf_name_ = cf_name; }
   const std::string& cf_name() const { return cf_name_; }
 
+  bool directly_delete() { return directly_delete_; }
+  void set_directly_delete(bool directly_delete) {
+    directly_delete_ = directly_delete;
+  }
+
+  bool delete_files_in_range() { return delete_files_in_range_; }
+  void set_delete_files_in_range(bool delete_files_in_range) {
+    delete_files_in_range_ = delete_files_in_range;
+  }
+
  private:
   // brpc framework free resource
   brpc::Controller* cntl_;
   google::protobuf::Closure* done_;
+  google::protobuf::Message* response_;
 
   uint64_t region_id_;
+  // Column family name
   std::string cf_name_;
+  // Directly delete data, not through raft.
+  bool directly_delete_;
+  // Rocksdb delete range in files
+  bool delete_files_in_range_;
 };
 
 #endif

@@ -27,6 +27,9 @@
 
 namespace dingodb {
 
+const std::string kStoreDataCF = "default";
+const std::string kStoreMetaCF = "meta";
+
 enum class EnumEngineIterator {
   kRocksIterator = 0,
   kMemoryIterator = 1,
@@ -82,19 +85,43 @@ class Engine {
   virtual std::string GetName() = 0;
   virtual pb::common::Engine GetID() = 0;
 
-  virtual int AddRegion(
-      [[maybe_unused]] const std::shared_ptr<pb::common::Region> region) {
-    return -1;
+  virtual pb::error::Errno AddRegion(
+      [[maybe_unused]] std::shared_ptr<Context> ctx,
+      const std::shared_ptr<pb::common::Region> region) {
+    return pb::error::Errno::ENOT_SUPPORT;
   }
-  virtual int DestroyRegion([[maybe_unused]] uint64_t region_id) { return -1; }
+  virtual pb::error::Errno DestroyRegion(
+      [[maybe_unused]] std::shared_ptr<Context> ctx, uint64_t region_id) {
+    return pb::error::Errno::ENOT_SUPPORT;
+  }
+  virtual pb::error::Errno ChangeRegion(
+      [[maybe_unused]] std::shared_ptr<Context> ctx, uint64_t region_id,
+      std::vector<pb::common::Peer> peers) {
+    return pb::error::Errno::ENOT_SUPPORT;
+  }
 
   virtual Snapshot* GetSnapshot() { return nullptr; }
   virtual void ReleaseSnapshot() {}
 
-  virtual std::shared_ptr<std::string> KvGet(std::shared_ptr<Context> ctx,
-                                             const std::string& key) = 0;
+  virtual pb::error::Errno KvGet(std::shared_ptr<Context> ctx,
+                                 const std::string& key,
+                                 std::string& value) = 0;
+  virtual pb::error::Errno KvBatchGet(
+      std::shared_ptr<Context> ctx, const std::vector<std::string>& keys,
+      std::vector<pb::common::KeyValue>& kvs) = 0;
+
   virtual pb::error::Errno KvPut(std::shared_ptr<Context> ctx,
                                  const pb::common::KeyValue& kv) = 0;
+  virtual pb::error::Errno KvBatchPut(
+      std::shared_ptr<Context> ctx,
+      const std::vector<pb::common::KeyValue>& kvs) = 0;
+
+  virtual pb::error::Errno KvPutIfAbsent(std::shared_ptr<Context> ctx,
+                                         const pb::common::KeyValue& kv) = 0;
+  virtual pb::error::Errno KvBatchPutIfAbsent(
+      std::shared_ptr<Context> ctx,
+      const std::vector<pb::common::KeyValue>& kvs,
+      std::vector<std::string>& put_keys) = 0;
 
   virtual std::shared_ptr<EngineReader> CreateReader(
       std::shared_ptr<Context> /*ctx*/) {
@@ -105,25 +132,25 @@ class Engine {
   virtual pb::error::Errno KvBcompareAndSet(std::shared_ptr<Context> ctx,
                                             const pb::common::KeyValue& kv,
                                             const std::string& value) {
-    return pb::error::Errno::EKEY_NOTFOUND;
+    return pb::error::Errno::ENOT_SUPPORT;
   }
 
   virtual pb::error::Errno KvDelete(std::shared_ptr<Context> ctx,
                                     const std::string& key) {
-    return pb::error::Errno::EKEY_NOTFOUND;
+    return pb::error::Errno::ENOT_SUPPORT;
   }
 
   virtual pb::error::Errno KvDeleteRange(std::shared_ptr<Context> ctx,
                                          const std::string& key_begin,
                                          const std::string& key_endbool,
                                          bool delete_files_in_range) {
-    return pb::error::Errno::EKEY_NOTFOUND;
+    return pb::error::Errno::ENOT_SUPPORT;
   }
 
   virtual pb::error::Errno KvWriteBatch(
       std::shared_ptr<Context> ctx,
       const std::vector<pb::common::KeyValue>& vt_put) {
-    return pb::error::Errno::EKEY_NOTFOUND;
+    return pb::error::Errno::ENOT_SUPPORT;
   }
 
   // read range When the amount of data is relatively small.
@@ -133,7 +160,7 @@ class Engine {
       std::shared_ptr<Context> ctx, const std::string& key_begin,
       const std::string& key_end,
       std::vector<pb::common::KeyValue>& vt_kv) {  // NOLINT
-    return pb::error::Errno::EKEY_NOTFOUND;
+    return pb::error::Errno::ENOT_SUPPORT;
   }
 
   // [key_begin, key_end)
@@ -143,16 +170,9 @@ class Engine {
     return -1;
   }
 
-  // if not exist set
-  virtual pb::error::Errno KvPutIfAbsent(std::shared_ptr<Context> ctx,
-                                         const pb::common::KeyValue& kv) {
-    return pb::error::Errno::EKEY_NOTFOUND;
-  }
-  // if not exists set
-  virtual pb::error::Errno KvBatchPutIfAbsent(
-      std::shared_ptr<Context> ctx,
-      const std::vector<pb::common::KeyValue>& vt_kv) {
-    return pb::error::Errno::EKEY_NOTFOUND;
+  virtual pb::error::Errno KvDeleteRange(std::shared_ptr<Context> ctx,
+                                         const pb::common::Range& range) {
+    return pb::error::Errno::ENOT_SUPPORT;
   }
 
  protected:

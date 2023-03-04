@@ -15,6 +15,7 @@
 #include "raft/raft_node.h"
 
 #include "butil/strings/stringprintf.h"
+#include "common/helper.h"
 #include "config/config_manager.h"
 #include "raft/state_machine.h"
 
@@ -80,7 +81,7 @@ pb::error::Errno RaftNode::Commit(
 
   braft::Task task;
   task.data = &data;
-  task.done = new StoreClosure(ctx->get_cntl(), ctx->get_done());
+  task.done = new StoreClosure(ctx);
   node_->apply(task);
   return pb::error::OK;
 }
@@ -91,7 +92,8 @@ bool RaftNode::IsLeaderLeaseValid() { return node_->is_leader_lease_valid(); }
 
 braft::PeerId RaftNode::GetLeaderId() { return node_->leader_id(); }
 
-void RaftNode::shutdown(braft::Closure* done) { node_->shutdown(done); }
+void RaftNode::Shutdown(braft::Closure* done) { node_->shutdown(done); }
+void RaftNode::Join() { node_->join(); }
 
 butil::Status RaftNode::ListPeers(std::vector<braft::PeerId>* peers) {
   return node_->list_peers(peers);
@@ -105,9 +107,15 @@ void RaftNode::RemovePeer(const braft::PeerId& peer, braft::Closure* done) {
   node_->remove_peer(peer, done);
 }
 
-void RaftNode::ChangePeers(const braft::Configuration& new_peers,
+void RaftNode::ChangePeers(const std::vector<pb::common::Peer>& peers,
                            braft::Closure* done) {
-  node_->change_peers(new_peers, done);
+  braft::Configuration config;
+  for (auto peer : peers) {
+    butil::EndPoint endpoint = Helper::LocationToEndPoint(peer.raft_location());
+    config.add_peer(braft::PeerId(endpoint));
+  }
+
+  node_->change_peers(config, done);
 }
 
 butil::Status RaftNode::ResetPeers(const braft::Configuration& new_peers) {

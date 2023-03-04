@@ -23,6 +23,7 @@
 #include "engine/engine.h"
 #include "engine/mem_engine.h"
 #include "engine/raft_kv_engine.h"
+#include "engine/rocks_engine.h"
 #include "store/heartbeat.h"
 
 namespace dingodb {
@@ -87,16 +88,23 @@ bool Server::InitServerID() {
 
 bool Server::InitEngines() {
   auto config = ConfigManager::GetInstance()->GetConfig(role_);
-  std::shared_ptr<Engine> mem_engine = std::make_shared<MemEngine>();
-  if (!mem_engine->Init(config)) {
+  // std::shared_ptr<Engine> mem_engine = std::make_shared<MemEngine>();
+  // if (!mem_engine->Init(config)) {
+  //   return false;
+  // }
+
+  std::shared_ptr<Engine> rock_engine = std::make_shared<RocksEngine>();
+  if (!rock_engine->Init(config)) {
     return false;
   }
+
   std::shared_ptr<Engine> raft_kv_engine =
-      std::make_shared<RaftKvEngine>(mem_engine);
+      std::make_shared<RaftKvEngine>(rock_engine);
   if (!raft_kv_engine->Init(config)) {
     return false;
   }
-  engines_.insert(std::make_pair(mem_engine->GetID(), mem_engine));
+  // engines_.insert(std::make_pair(mem_engine->GetID(), mem_engine));
+  engines_.insert(std::make_pair(rock_engine->GetID(), rock_engine));
   engines_.insert(std::make_pair(raft_kv_engine->GetID(), raft_kv_engine));
 
   return true;
@@ -133,7 +141,7 @@ bool Server::InitCrontabManager() {
   crontab->func_ = Heartbeat::SendStoreHeartbeat;
   crontab->arg_ = coordinator_interaction_.get();
 
-  crontab_manager_->AddAndRunCrontab(crontab);
+  // crontab_manager_->AddAndRunCrontab(crontab);
 
   return true;
 }
