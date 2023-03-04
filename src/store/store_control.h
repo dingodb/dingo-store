@@ -18,7 +18,9 @@
 #include <memory>
 
 #include "butil/macros.h"
+#include "common/context.h"
 #include "proto/common.pb.h"
+#include "proto/error.pb.h"
 
 namespace dingodb {
 
@@ -27,15 +29,16 @@ class StoreControl {
   StoreControl(){};
   ~StoreControl(){};
 
-  void AddRegion(std::shared_ptr<pb::common::Region> region);
-  void AddRegions(std::vector<std::shared_ptr<pb::common::Region> > regions);
+  pb::error::Errno AddRegion(std::shared_ptr<Context> ctx,
+                             std::shared_ptr<pb::common::Region> region);
+  void AddRegions(std::shared_ptr<Context> ctx,
+                  std::vector<std::shared_ptr<pb::common::Region> > regions);
 
-  void DeleteRegion(std::shared_ptr<pb::common::Region> region);
+  pb::error::Errno ChangeRegion(std::shared_ptr<Context> ctx,
+                                std::shared_ptr<pb::common::Region> region);
 
-  // Not support
-  void AddPeer() {}
-  void ChangePeer() {}
-  void TransferLeader() {}
+  pb::error::Errno DeleteRegion(std::shared_ptr<Context> ctx,
+                                uint64_t region_id);
 
  private:
   DISALLOW_COPY_AND_ASSIGN(StoreControl);

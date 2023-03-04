@@ -17,6 +17,7 @@
 
 #include "braft/raft.h"
 #include "brpc/controller.h"
+#include "common/context.h"
 #include "engine/engine.h"
 #include "proto/raft.pb.h"
 
@@ -24,17 +25,15 @@ namespace dingodb {
 
 class StoreClosure : public braft::Closure {
  public:
-  StoreClosure(brpc::Controller* cntl, google::protobuf::Closure* done)
-      : cntl_(cntl), done_(done) {}
+  StoreClosure(std::shared_ptr<Context> ctx) : ctx_(ctx) {}
   ~StoreClosure() {}
 
   void Run();
 
+  std::shared_ptr<Context> get_ctx() { return ctx_; }
+
  private:
-  // brpc framework free resource
-  brpc::Controller* cntl_;
-  google::protobuf::Closure* done_;
-  uint64_t region_id_;
+  std::shared_ptr<Context> ctx_;
 };
 
 class StoreStateMachine : public braft::StateMachine {
@@ -47,7 +46,6 @@ class StoreStateMachine : public braft::StateMachine {
   int on_snapshot_load(braft::SnapshotReader* reader);
   void on_leader_start();
   void on_leader_start(int64_t term);
-  void on_leader_stop();
   void on_leader_stop(const butil::Status& status);
   void on_error(const ::braft::Error& e);
   void on_configuration_committed(const ::braft::Configuration& conf);
@@ -55,13 +53,15 @@ class StoreStateMachine : public braft::StateMachine {
   void on_stop_following(const ::braft::LeaderChangeContext& ctx);
 
  private:
-  void dispatchRequest(const StoreClosure* done,
+  void DispatchRequest(StoreClosure* done,
                        const dingodb::pb::raft::RaftCmdRequest& raft_cmd);
-  void handlePutRequest(const StoreClosure* done,
+  void HandlePutRequest(StoreClosure* done,
                         const dingodb::pb::raft::PutRequest& request);
-  void handlePutIfAbsentRequest(
-      const StoreClosure* done,
+  void HandlePutIfAbsentRequest(
+      StoreClosure* done,
       const dingodb::pb::raft::PutIfAbsentRequest& request);
+  void HandleDeleteRangeRequest(StoreClosure* done,
+                                const pb::raft::DeleteRangeRequest& request);
 
  private:
   std::shared_ptr<Engine> engine_;

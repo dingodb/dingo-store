@@ -28,17 +28,43 @@ DEFINE_int32(req_num, 1, "Number of requests");
 DEFINE_int32(timeout_ms, 500, "Timeout for each request");
 DEFINE_string(store_addr, "127.0.0.1:20001", "store server addr");
 DEFINE_string(method, "KvGet", "Request method");
+DEFINE_string(key, "hello", "Request key");
 
 bvar::LatencyRecorder g_latency_recorder("dingo-store");
+
+const char alphabet[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i',
+                         'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r',
+                         's', 't', 'o', 'v', 'w', 'x', 'y', 'z', '0',
+                         '1', '2', '3', '4', '5', '6', '7', '8', '9'};
+
+// rand string
+std::string genRandomString(int len) {
+  std::string result;
+  int alphabet_len = sizeof(alphabet);
+  for (int i = 0; i < len; ++i) {
+    result.append(1, alphabet[rand() % alphabet_len]);
+  }
+
+  return result;
+}
+
+std::vector<std::string> genKeys(int nums) {
+  std::vector<std::string> vec;
+  for (int i = 0; i < nums; ++i) {
+    vec.push_back(genRandomString(4));
+  }
+
+  return vec;
+}
 
 void sendKvGet(brpc::Controller& cntl,
                dingodb::pb::store::StoreService_Stub& stub) {
   dingodb::pb::store::KvGetRequest request;
   dingodb::pb::store::KvGetResponse response;
 
-  std::string key = "Hello";
   const char* op = NULL;
-  request.set_key(key.data(), key.size());
+  request.set_region_id(111111);
+  request.set_key(FLAGS_key);
   stub.KvGet(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
     LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
@@ -47,7 +73,8 @@ void sendKvGet(brpc::Controller& cntl,
 
   if (FLAGS_log_each_request) {
     LOG(INFO) << "Received response"
-              << " key=" << request.key() << " value=" << response.value()
+              << " request=" << request.DebugString()
+              << " response=" << response.DebugString()
               << " request_attachment=" << cntl.request_attachment().size()
               << " response_attachment=" << cntl.response_attachment().size()
               << " latency=" << cntl.latency_us();
@@ -59,10 +86,10 @@ void sendKvPut(brpc::Controller& cntl,
   dingodb::pb::store::KvPutRequest request;
   dingodb::pb::store::KvPutResponse response;
 
-  request.set_region_id(10000);
+  request.set_region_id(111111);
   dingodb::pb::common::KeyValue* kv = request.mutable_kv();
-  kv->set_key("hello");
-  kv->set_value("world");
+  kv->set_key(FLAGS_key);
+  kv->set_value(genRandomString(64));
 
   stub.KvPut(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
@@ -71,7 +98,8 @@ void sendKvPut(brpc::Controller& cntl,
 
   if (FLAGS_log_each_request) {
     LOG(INFO) << "Received response"
-              << " key=" << kv->key() << " value=" << kv->value()
+              << " request=" << request.DebugString()
+              << " response=" << response.DebugString()
               << " request_attachment=" << cntl.request_attachment().size()
               << " response_attachment=" << cntl.response_attachment().size()
               << " latency=" << cntl.latency_us();
@@ -84,18 +112,30 @@ void sendAddRegion(brpc::Controller& cntl,
   dingodb::pb::store::AddRegionResponse response;
 
   dingodb::pb::common::Region* region = request.mutable_region();
-  region->set_id(10000);
+  region->set_id(111111);
   region->set_epoch(1);
   region->set_table_id(10);
-  // region->set_table_name("test-10");
-  // region->set_partition_id(1);
-  // region->set_replica_num(1);
+  region->set_name("test-111111");
   dingodb::pb::common::Range* range = region->mutable_range();
   range->set_start_key("0000000");
   range->set_end_key("11111111");
-  // region->add_electors("127.0.0.1:20101:0");
-  // region->add_electors("127.0.0.1:20102:0");
-  // region->add_electors("127.0.0.1:20103:0");
+  auto peer = region->add_peers();
+  peer->set_store_id(1001);
+  auto raft_loc = peer->mutable_raft_location();
+  raft_loc->set_host("127.0.0.1");
+  raft_loc->set_port(20101);
+
+  peer = region->add_peers();
+  peer->set_store_id(1002);
+  raft_loc = peer->mutable_raft_location();
+  raft_loc->set_host("127.0.0.1");
+  raft_loc->set_port(20102);
+
+  peer = region->add_peers();
+  peer->set_store_id(1003);
+  raft_loc = peer->mutable_raft_location();
+  raft_loc->set_host("127.0.0.1");
+  raft_loc->set_port(20103);
 
   stub.AddRegion(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
@@ -105,6 +145,8 @@ void sendAddRegion(brpc::Controller& cntl,
 
   if (FLAGS_log_each_request) {
     LOG(INFO) << "Received response"
+              << " request=" << request.DebugString()
+              << " response=" << response.DebugString()
               << " request_attachment=" << cntl.request_attachment().size()
               << " response_attachment=" << cntl.response_attachment().size()
               << " latency=" << cntl.latency_us();

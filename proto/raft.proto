@@ -25,20 +25,32 @@ enum CmdType {
   NONE = 0;
   PUT = 1;
   PUTIFABSENT = 2;
+  DELETERANGE = 3;
 }
 
 message PutRequest {
-  repeated dingodb.pb.common.KeyValue kvs = 1;
+  string cf_name = 1;
+  repeated dingodb.pb.common.KeyValue kvs = 2;
 }
 
-message PutResponse {}
+message PutResponse {
+}
 
 message PutIfAbsentRequest {
-  repeated dingodb.pb.common.KeyValue kvs = 1;
+  string cf_name = 1;
+  repeated dingodb.pb.common.KeyValue kvs = 2;
 }
 
 message PutIfAbsentResponse {
   repeated bytes put_keys = 1;
+}
+
+message DeleteRangeRequest {
+  string cf_name = 1;
+  repeated dingodb.pb.common.Range ranges = 2;
+}
+
+message DeleteRangeResponse {
 }
 
 message Request {
@@ -46,6 +58,7 @@ message Request {
   oneof cmd_body {
     PutRequest put = 2;
     PutIfAbsentRequest put_if_absent = 3;
+    DeleteRangeRequest delete_range = 4;
   }
 }
 
@@ -62,7 +75,8 @@ message RaftCmdRequest {
   repeated Request requests = 2;
 }
 
-message ResponseHeader {}
+message ResponseHeader {
+}
 
 message RaftCmdResponse {
   ResponseHeader header = 1;

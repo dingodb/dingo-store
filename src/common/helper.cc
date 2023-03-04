@@ -27,6 +27,36 @@ bool Helper::IsIp(const std::string& s) {
   return std::regex_match(s, reg);
 }
 
+bool Helper::IsDifferenceLocation(const pb::common::Location& location,
+                                  const pb::common::Location& other_location) {
+  return location.host() != other_location.host() ||
+         location.port() != other_location.port();
+}
+
+void Helper::SortPeers(std::vector<pb::common::Peer>& peers) {
+  auto compare_func = [](pb::common::Peer& a, pb::common::Peer& b) -> bool {
+    return a.store_id() < b.store_id();
+  };
+  std::sort(peers.begin(), peers.end(), compare_func);
+}
+
+bool Helper::IsDifferencePeers(
+    const std::vector<pb::common::Peer>& peers,
+    const std::vector<pb::common::Peer>& other_peers) {
+  if (peers.size() != other_peers.size()) {
+    return true;
+  }
+
+  for (int i = 0; i < peers.size(); ++i) {
+    if (Helper::IsDifferenceLocation(peers[i].raft_location(),
+                                     other_peers[i].raft_location())) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 std::vector<pb::common::Location> Helper::ExtractLocations(
     const google::protobuf::RepeatedPtrField<pb::common::Peer>& peers) {
   std::vector<pb::common::Location> locations;
@@ -40,6 +70,17 @@ std::vector<pb::common::Location> Helper::ExtractLocations(
 std::string Helper::LocationToString(const pb::common::Location& location) {
   return butil::StringPrintf("%s:%d:0", location.host().c_str(),
                              location.port());
+}
+
+butil::EndPoint Helper::LocationToEndPoint(
+    const pb::common::Location& location) {
+  butil::EndPoint endpoint;
+  if (butil::hostname2endpoint(location.host().c_str(), location.port(),
+                               &endpoint) != 0 &&
+      str2endpoint(location.host().c_str(), location.port(), &endpoint) != 0) {
+  }
+
+  return endpoint;
 }
 
 // format: 127.0.0.1:8201:0,127.0.0.1:8202:0,127.0.0.1:8203:0
@@ -71,6 +112,28 @@ std::vector<butil::EndPoint> Helper::StrToEndpoint(const std::string& str) {
   }
 
   return endpoints;
+}
+
+std::shared_ptr<pb::error::Error> Helper::Error(pb::error::Errno errcode,
+                                                const std::string& errmsg) {
+  std::shared_ptr<pb::error::Error> err = std::make_shared<pb::error::Error>();
+  err->set_errcode(errcode);
+  err->set_errmsg(errmsg);
+  return err;
+}
+
+bool Helper::Error(pb::error::Errno errcode, const std::string& errmsg,
+                   pb::error::Error& err) {
+  err.set_errcode(errcode);
+  err.set_errmsg(errmsg);
+  return false;
+}
+
+bool Helper::Error(pb::error::Errno errcode, const std::string& errmsg,
+                   std::shared_ptr<pb::error::Error> err) {
+  err->set_errcode(errcode);
+  err->set_errmsg(errmsg);
+  return false;
 }
 
 }  // namespace dingodb

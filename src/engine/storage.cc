@@ -24,14 +24,37 @@ Snapshot* Storage::GetSnapshot() { return nullptr; }
 
 void Storage::ReleaseSnapshot() {}
 
-std::shared_ptr<std::string> Storage::KvGet(std::shared_ptr<Context> ctx,
-                                            const std::string& key) {
-  return engine_->KvGet(ctx, key);
+pb::error::Errno Storage::KvGet(std::shared_ptr<Context> ctx,
+                                const std::string& key, std::string& value) {
+  return engine_->KvGet(ctx, key, value);
+}
+
+pb::error::Errno Storage::KvBatchGet(std::shared_ptr<Context> ctx,
+                                     const std::vector<std::string>& keys,
+                                     std::vector<pb::common::KeyValue>& kvs) {
+  return engine_->KvBatchGet(ctx, keys, kvs);
 }
 
 pb::error::Errno Storage::KvPut(std::shared_ptr<Context> ctx,
                                 const pb::common::KeyValue& kv) {
   return engine_->KvPut(ctx, kv);
+}
+
+pb::error::Errno Storage::KvBatchPut(
+    std::shared_ptr<Context> ctx,
+    const std::vector<pb::common::KeyValue>& kvs) {
+  return engine_->KvBatchPut(ctx, kvs);
+}
+
+pb::error::Errno Storage::KvPutIfAbsent(std::shared_ptr<Context> ctx,
+                                        const pb::common::KeyValue& kv) {
+  return engine_->KvPutIfAbsent(ctx, kv);
+}
+
+pb::error::Errno Storage::KvBatchPutIfAbsent(
+    std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs,
+    std::vector<std::string>& put_keys) {
+  return engine_->KvBatchPutIfAbsent(ctx, kvs, put_keys);
 }
 
 }  // namespace dingodb

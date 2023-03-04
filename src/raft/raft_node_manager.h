@@ -30,8 +30,9 @@ class RaftNodeManager {
   ~RaftNodeManager();
 
   bool IsExist(uint64_t node_id);
-  void AddNode(uint64_t node_id, std::shared_ptr<RaftNode> node);
   std::shared_ptr<RaftNode> GetNode(uint64_t node_id);
+  void AddNode(uint64_t node_id, std::shared_ptr<RaftNode> node);
+  void DeleteNode(uint64_t node_id);
 
  private:
   DISALLOW_COPY_AND_ASSIGN(RaftNodeManager);
