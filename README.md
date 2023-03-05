@@ -1,4 +1,4 @@
-[![CMake](https://github.com/ketor/dingo-poc/actions/workflows/cmake.yml/badge.svg)](https://github.com/ketor/dingo-poc/actions/workflows/cmake.yml)
+[![CMake](https://github.com/dingodb/dingo-poc/actions/workflows/cmake.yml/badge.svg)](https://github.com/dingodb/dingo-poc/actions/workflows/cmake.yml)
 
 # How to build
 
