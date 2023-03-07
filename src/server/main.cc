@@ -50,17 +50,18 @@ int main(int argc, char *argv[]) {
 
   dingodb::pb::common::ClusterRole role = dingodb::pb::common::COORDINATOR;
 
-  auto isCoodinator = dingodb::Helper::IsEqual(
+  auto is_coodinator = dingodb::Helper::IsEqualIgnoreCase(
       FLAGS_role, dingodb::pb::common::ClusterRole_Name(
                       dingodb::pb::common::ClusterRole::COORDINATOR));
-  auto isStore = dingodb::Helper::IsEqual(
+  auto is_store = dingodb::Helper::IsEqualIgnoreCase(
       FLAGS_role, dingodb::pb::common::ClusterRole_Name(
                       dingodb::pb::common::ClusterRole::STORE));
-  if (isStore) {
-    role = dingodb::pb::common::STORE;
-  }
 
-  if (!isCoodinator && !isStore) {
+  if (is_store) {
+    role = dingodb::pb::common::STORE;
+  } else if (is_coodinator) {
+    role = dingodb::pb::common::COORDINATOR;
+  } else {
     LOG(ERROR) << "Invalid server role[" + FLAGS_role + "]";
     return -1;
   }
@@ -95,7 +96,7 @@ int main(int argc, char *argv[]) {
   dingodb::CoordinatorServiceImpl coordinator_service;
   dingodb::MetaServiceImpl meta_service;
   dingodb::StoreServiceImpl store_service;
-  if (isCoodinator) {
+  if (is_coodinator) {
     // init CoordinatorController
     coordinator_control.Init();
     coordinator_service.SetControl(&coordinator_control);
@@ -112,7 +113,7 @@ int main(int argc, char *argv[]) {
       LOG(ERROR) << "Fail to add meta service";
       return -1;
     }
-  } else if (isStore) {
+  } else if (is_store) {
     if (!dingodb_server->InitCoordinatorInteraction()) {
       LOG(ERROR) << "InitCoordinatorInteraction failed!";
       return -1;

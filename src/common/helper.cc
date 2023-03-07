@@ -151,10 +151,13 @@ bool Helper::Error(pb::error::Errno errcode, const std::string& errmsg,
   return false;
 }
 
-bool Helper::IsEqual(const std::string& src, const std::string& dest) {
-  return src.size() == dest.size() &&
-         std::equal(src.begin(), dest.end(), dest.begin(),
-                    [](char c1, char c2) {
+bool Helper::IsEqualIgnoreCase(const std::string& str1,
+                               const std::string& str2) {
+  if (str1.size() != str2.size()) {
+    return false;
+  }
+  return std::equal(str1.begin(), str1.end(), str2.begin(),
+                    [](const char c1, const char c2) {
                       return std::tolower(c1) == std::tolower(c2);
                     });
 }
