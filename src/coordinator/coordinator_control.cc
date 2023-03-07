@@ -22,12 +22,18 @@
 #include <utility>
 #include <vector>
 
+#include "butil/scoped_lock.h"
 #include "google/protobuf/unknown_field_set.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator_internal.pb.h"
 #include "proto/meta.pb.h"
 
 namespace dingodb {
+
+CoordinatorControl::CoordinatorControl() {
+  bthread_mutex_init(&control_mutex_, nullptr);
+}
+
 void CoordinatorControl::Init() {
   next_coordinator_id_ = 1;
   next_store_id_ = 1;
@@ -96,6 +102,9 @@ uint64_t CoordinatorControl::CreateCoordinatorId() {
 int CoordinatorControl::CreateSchema(uint64_t parent_schema_id,
                                      std::string schema_name,
                                      uint64_t& new_schema_id) {
+  BAIDU_SCOPED_LOCK(control_mutex_);
+
+  // validate
   if (schema_map_.find(parent_schema_id) == schema_map_.end()) {
     LOG(INFO) << " CreateSchema parent_schema_id is illegal "
               << parent_schema_id;
@@ -137,7 +146,10 @@ uint64_t CoordinatorControl::CreatePartitionId() {
 
 // TODO: data persistence
 uint64_t CoordinatorControl::UpdateStoreMap(const pb::common::Store& store) {
+  BAIDU_SCOPED_LOCK(control_mutex_);
+
   bool need_update_epoch = false;
+  bool need_add_store = true;
   for (int i = 0; i < store_map_.stores_size(); i++) {
     auto* old_store = store_map_.mutable_stores(i);
     if (old_store->id() == store.id()) {
@@ -150,11 +162,12 @@ uint64_t CoordinatorControl::UpdateStoreMap(const pb::common::Store& store) {
         need_update_epoch = true;
       }
       old_store->CopyFrom(store);
+      need_add_store = false;
       break;
     }
   }
 
-  if (!need_update_epoch) {
+  if (need_add_store) {
     // create new store
     auto* new_store = store_map_.add_stores();
     new_store->CopyFrom(store);
@@ -207,6 +220,8 @@ uint64_t CoordinatorControl::UpdateRegionMap(const pb::common::Region& region) {
 // TODO: data persistence
 uint64_t CoordinatorControl::UpdateRegionMapMulti(
     std::vector<pb::common::Region> regions) {
+  BAIDU_SCOPED_LOCK(control_mutex_);
+
   bool need_to_update_epoch = false;
 
   for (const auto& region : regions) {
@@ -225,15 +240,21 @@ uint64_t CoordinatorControl::UpdateRegionMapMulti(
 }
 
 const pb::common::StoreMap& CoordinatorControl::GetStoreMap() {
+  BAIDU_SCOPED_LOCK(control_mutex_);
+
   return this->store_map_;
 }
 
 const pb::common::RegionMap& CoordinatorControl::GetRegionMap() {
+  BAIDU_SCOPED_LOCK(control_mutex_);
+
   return this->region_map_;
 }
 
 int CoordinatorControl::CreateStore(uint64_t cluster_id, uint64_t& store_id,
                                     std::string& password) {
+  BAIDU_SCOPED_LOCK(control_mutex_);
+
   if (cluster_id > 0) {
     store_id = CreateStoreId();
     password = "TO_BE_CONTINUED";
@@ -252,6 +273,8 @@ int CoordinatorControl::CreateStore(uint64_t cluster_id, uint64_t& store_id,
 // out: schemas
 void CoordinatorControl::GetSchemas(uint64_t schema_id,
                                     std::vector<pb::meta::Schema>& schemas) {
+  BAIDU_SCOPED_LOCK(control_mutex_);
+
   if (schema_id < 0) {
     LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
     return;
@@ -314,6 +337,12 @@ int CoordinatorControl::CreateTable(
   // create table
   // extract part info, create region for each part
   // TODO: 3 is a temp default value
+  {
+    BAIDU_SCOPED_LOCK(control_mutex_);
+    new_table_id = CreateTableId();
+    LOG(INFO) << "CreateTable new_table_id=" << new_table_id;
+  }
+
   std::vector<uint64_t> new_region_ids;
   for (int i = 0; i < range_partition.ranges_size(); i++) {
     // int ret = CreateRegion(const std::string &region_name, const std::string
@@ -348,31 +377,36 @@ int CoordinatorControl::CreateTable(
     return -1;
   }
 
-  // create part for table
-  pb::coordinator_internal::TableInternal table_internal;
-  new_table_id = CreateTableId();
-  table_internal.set_id(new_table_id);
-  for (int i = 0; i < new_region_ids.size(); i++) {
-    // create part and set region_id & range
-    auto* part_internal = table_internal.add_partitions();
-    part_internal->set_region_id(new_region_ids[i]);
-    auto* part_range = part_internal->mutable_range();
-    part_range->CopyFrom(range_partition.ranges(i));
+  {
+    BAIDU_SCOPED_LOCK(control_mutex_);
+
+    // create part for table
+    pb::coordinator_internal::TableInternal table_internal;
+    table_internal.set_id(new_table_id);
+    for (int i = 0; i < new_region_ids.size(); i++) {
+      // create part and set region_id & range
+      auto* part_internal = table_internal.add_partitions();
+      part_internal->set_region_id(new_region_ids[i]);
+      auto* part_range = part_internal->mutable_range();
+      part_range->CopyFrom(range_partition.ranges(i));
+    }
+
+    // add table_internal to table_map_
+    table_map_[new_table_id] = table_internal;
+
+    // add table_id to schema
+    auto* table_id = schema_map_[schema_id].add_table_ids();
+    table_id->set_entity_id(new_table_id);
+    table_id->set_parent_entity_id(schema_id);
+    table_id->set_entity_type(
+        ::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
   }
-
-  // add table_internal to table_map_
-  table_map_[new_table_id] = table_internal;
-
-  // add table_id to schema
-  auto* table_id = schema_map_[schema_id].add_table_ids();
-  table_id->set_entity_id(new_table_id);
-  table_id->set_parent_entity_id(schema_id);
-  table_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
 
   return 0;
 }
 
 int CoordinatorControl::DropRegion(uint64_t region_id) {
+  BAIDU_SCOPED_LOCK(control_mutex_);
   // set region state to DELETE
   for (int i = 0; i < region_map_.regions_size(); i++) {
     if (region_map_.regions(i).id() == region_id) {
@@ -393,6 +427,8 @@ int CoordinatorControl::CreateRegion(const std::string& region_name,
                                      pb::common::Range region_range,
                                      uint64_t schema_id, uint64_t table_id,
                                      uint64_t& new_region_id) {
+  BAIDU_SCOPED_LOCK(control_mutex_);
+
   std::vector<pb::common::Store> stores_for_regions;
   std::vector<pb::common::Store> selected_stores_for_regions;
 
@@ -467,6 +503,8 @@ void CoordinatorControl::GetTables(
     return;
   }
 
+  BAIDU_SCOPED_LOCK(control_mutex_);
+
   if (this->schema_map_.find(schema_id) == schema_map_.end()) {
     LOG(ERROR) << "ERRROR: schema_id not found" << schema_id;
     return;
@@ -505,6 +543,8 @@ void CoordinatorControl::GetTable(uint64_t schema_id, uint64_t table_id,
                << table.id().entity_id();
     return;
   }
+
+  BAIDU_SCOPED_LOCK(control_mutex_);
 
   if (this->schema_map_.find(schema_id) == schema_map_.end()) {
     LOG(ERROR) << "ERRROR: schema_id not found" << schema_id;

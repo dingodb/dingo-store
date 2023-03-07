@@ -26,6 +26,7 @@
 #include "bthread/bthread.h"
 #include "gflags/gflags.h"
 #include "proto/coordinator.pb.h"
+#include "proto/meta.pb.h"
 
 DEFINE_bool(log_each_request, true, "Print log for each request");
 DEFINE_bool(use_bthread, false, "Use bthread to send requests");
@@ -128,9 +129,9 @@ void SendCreateStore(brpc::Controller& cntl,
   }
 }
 
-void SendStoreHearbeat(
-    brpc::Controller& cntl,
-    dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
+void SendStoreHearbeat(brpc::Controller& cntl,
+                       dingodb::pb::coordinator::CoordinatorService_Stub& stub,
+                       uint64_t store_id) {
   dingodb::pb::coordinator::StoreHeartbeatRequest request;
   dingodb::pb::coordinator::StoreHeartbeatResponse response;
 
@@ -138,12 +139,12 @@ void SendStoreHearbeat(
   request.set_self_regionmap_epoch(1);
   // mock store
   auto* store = request.mutable_store();
-  store->set_id(2);
+  store->set_id(store_id);
   store->set_state(::dingodb::pb::common::StoreState::STORE_NORMAL);
   auto* server_location = store->mutable_server_location();
   server_location->set_host("127.0.0.1");
   server_location->set_port(19191);
-  auto* raft_location = store->mutable_server_location();
+  auto* raft_location = store->mutable_raft_location();
   raft_location->set_host("127.0.0.1");
   raft_location->set_port(19192);
   store->set_resource_tag("DINGO_DEFAULT");
@@ -151,7 +152,7 @@ void SendStoreHearbeat(
   // mock regions
   for (int i = 0; i < 3; i++) {
     auto* region = request.add_regions();
-    region->set_id(2);
+    region->set_id(store_id * 100 + i);
     region->set_epoch(1);
     std::string region_name("test_region_");
     region_name.append(std::to_string(i));
@@ -162,7 +163,7 @@ void SendStoreHearbeat(
     // mock peers
     for (int j = 0; j < 3; j++) {
       auto* peer = region->add_peers();
-      peer->set_store_id(1);
+      peer->set_store_id(store_id);
       auto* server_location = peer->mutable_server_location();
       server_location->set_host("127.0.0.1");
       server_location->set_port(19191);
@@ -170,20 +171,6 @@ void SendStoreHearbeat(
       raft_location->set_host("127.0.0.1");
       raft_location->set_port(19192);
     }
-
-    // mock learners
-    // for (int j = 0; j < 3; j++) {
-    //   auto* store = region->add_learners();
-    //   store->set_id(j);
-    //   store->set_status(::dingodb::pb::common::StoreStatus::STORE_NORMAL);
-    //   auto* server_location = store->mutable_server_location();
-    //   server_location->set_host("127.0.0.1");
-    //   server_location->set_port(19191);
-    //   auto* raft_location = store->mutable_server_location();
-    //   raft_location->set_host("127.0.0.1");
-    //   raft_location->set_port(19192);
-    //   store->set_resource_tag("DINGO_DEFAULT");
-    // }
 
     // mock range
     auto* range = region->mutable_range();
@@ -195,7 +182,7 @@ void SendStoreHearbeat(
     range->set_end_key(std::string(end_key));
 
     // mock meta
-    region->set_schema_id(1);
+    region->set_schema_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
     region->set_table_id(2);
 
     // mock create ts
@@ -207,7 +194,7 @@ void SendStoreHearbeat(
   stub.StoreHeartbeat(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
     LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
-    // bthread_usleep(FLAGS_timeout_ms * 1000L);
+    bthread_usleep(FLAGS_timeout_ms * 1000L);
   }
 
   if (FLAGS_log_each_request) {
@@ -239,7 +226,11 @@ void* Sender(void* /*arg*/) {
     if (FLAGS_method == "Hello") {
       SendHello(cntl, stub);
     } else if (FLAGS_method == "StoreHeartbeat") {
-      SendStoreHearbeat(cntl, stub);
+      SendStoreHearbeat(cntl, stub, 100);
+      cntl.Reset();
+      SendStoreHearbeat(cntl, stub, 200);
+      cntl.Reset();
+      SendStoreHearbeat(cntl, stub, 300);
     } else if (FLAGS_method == "CreateStore") {
       SendCreateStore(cntl, stub);
     } else if (FLAGS_method == "GetStoreMap") {

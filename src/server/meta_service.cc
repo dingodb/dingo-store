@@ -96,7 +96,9 @@ void MetaServiceImpl::CreateTable(
       new_table_id);
   if (ret < 0) {
     LOG(ERROR) << "CreateTable failed in meta_service";
+    return;
   }
+  LOG(INFO) << "CreateTable new_table_id=" << new_table_id;
 
   auto *table_id = response->mutable_table_id();
   table_id->set_entity_id(new_table_id);
