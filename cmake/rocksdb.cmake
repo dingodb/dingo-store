@@ -20,27 +20,16 @@ SET(ROCKSDB_INSTALL_DIR ${THIRD_PARTY_PATH}/install/rocksdb)
 SET(ROCKSDB_INCLUDE_DIR "${ROCKSDB_INSTALL_DIR}/include" CACHE PATH "rocksdb include directory." FORCE)
 SET(ROCKSDB_LIBRARIES "${ROCKSDB_INSTALL_DIR}/lib/librocksdb.a" CACHE FILEPATH "rocksdb library." FORCE)
 
-set(prefix_path "${THIRD_PARTY_PATH}/install/snappy|${THIRD_PARTY_PATH}/install/zlib|${THIRD_PARTY_PATH}/install/gflags")
-
-#FILE(WRITE ${ROCKSDB_SOURCES_DIR}/src/build.sh
-#        "PORTABLE=1 make -j${NUM_OF_PROCESSOR} static_lib"
-#        )
+set(prefix_path "${THIRD_PARTY_PATH}/install/snappy|${THIRD_PARTY_PATH}/install/zlib|${THIRD_PARTY_PATH}/install/lz4|${THIRD_PARTY_PATH}/install/zstd|${THIRD_PARTY_PATH}/install/gflags")
 
 ExternalProject_Add(
         extern_rocksdb
         ${EXTERNAL_PROJECT_LOG_ARGS}
-        DEPENDS gflags zlib snappy
+        DEPENDS gflags zlib snappy lz4 zstd
         SOURCE_DIR ${ROCKSDB_SOURCES_DIR}
         BINARY_DIR ${ROCKSDB_BINARY_DIR}
         PREFIX ${ROCKSDB_INSTALL_DIR}
-        # GIT_REPOSITORY "https://github.com/facebook/rocksdb.git"
-        # GIT_TAG "v7.8.3"
-        # URL "https://github.com/facebook/rocksdb/archive/v7.9.2.tar.gz"
         UPDATE_COMMAND ""
-        # CONFIGURE_COMMAND ""
-        # BUILD_IN_SOURCE 1
-        # BUILD_COMMAND mv ../build.sh . COMMAND sh build.sh
-        # INSTALL_COMMAND mkdir -p ${ROCKSDB_INSTALL_DIR}/lib COMMAND cp -r include ${ROCKSDB_INSTALL_DIR}/ COMMAND cp librocksdb.a ${ROCKSDB_LIBRARIES}
         CMAKE_ARGS -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
         -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
         -DCMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}
@@ -57,6 +46,9 @@ ExternalProject_Add(
         -DCMAKE_PREFIX_PATH=${prefix_path}
         -DPORTABLE=ON
         -DWITH_SNAPPY=ON
+        -DWITH_LZ4=ON
+        -DWITH_ZSTD=ON
+        -DWITH_ZLIB=ON
         -DWITH_RUNTIME_DEBUG=ON
         -DROCKSDB_BUILD_SHARED=OFF
         -DWITH_BENCHMARK_TOOLS=OFF
@@ -71,7 +63,7 @@ ExternalProject_Add(
         -DCMAKE_BUILD_TYPE:STRING=${THIRD_PARTY_BUILD_TYPE}
 )
 
-ADD_DEPENDENCIES(extern_rocksdb zlib snappy gflags)
+ADD_DEPENDENCIES(extern_rocksdb zlib snappy gflags lz4 zstd)
 ADD_LIBRARY(rocksdb STATIC IMPORTED GLOBAL)
 SET_PROPERTY(TARGET rocksdb PROPERTY IMPORTED_LOCATION ${ROCKSDB_LIBRARIES})
 ADD_DEPENDENCIES(rocksdb extern_rocksdb)
