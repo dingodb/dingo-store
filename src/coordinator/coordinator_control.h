@@ -31,7 +31,7 @@ namespace dingodb {
 
 class CoordinatorControl {
  public:
-  CoordinatorControl() = default;
+  CoordinatorControl();
   void Init();
   uint64_t CreateCoordinatorId();
   uint64_t CreateStoreId();
@@ -106,6 +106,9 @@ class CoordinatorControl {
   void GetTable(uint64_t schema_id, uint64_t table_id, pb::meta::Table &table);
 
  private:
+  // mutex
+  bthread_mutex_t control_mutex_;
+
   // global ids
   uint64_t next_coordinator_id_;
   uint64_t next_store_id_;

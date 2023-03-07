@@ -128,6 +128,33 @@ void SendGetTables(brpc::Controller& cntl,
   }
 }
 
+void SendGetTable(brpc::Controller& cntl,
+                  dingodb::pb::meta::MetaService_Stub& stub) {
+  dingodb::pb::meta::GetTableRequest request;
+  dingodb::pb::meta::GetTableResponse response;
+
+  auto* table_id = request.mutable_table_id();
+  table_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
+  table_id->set_parent_entity_id(
+      ::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+  table_id->set_entity_id(1);
+
+  stub.GetTable(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    // bthread_usleep(FLAGS_timeout_ms * 1000L);
+  }
+
+  if (FLAGS_log_each_request) {
+    LOG(INFO) << "Received response"
+              << " table_id =" << request.table_id().entity_id()
+              << " request_attachment=" << cntl.request_attachment().size()
+              << " response_attachment=" << cntl.response_attachment().size()
+              << " latency=" << cntl.latency_us();
+    LOG(INFO) << response.DebugString();
+  }
+}
+
 void SendCreateTable(brpc::Controller& cntl,
                      dingodb::pb::meta::MetaService_Stub& stub) {
   dingodb::pb::meta::CreateTableRequest request;
@@ -170,6 +197,24 @@ void SendCreateTable(brpc::Controller& cntl,
   auto* prop = table_definition->mutable_properties();
   (*prop)["test property"] = "test_property_value";
 
+  // add partition_rule
+  // repeated string columns = 1;
+  // PartitionStrategy strategy = 2;
+  // RangePartition range_partition = 3;
+  // HashPartition hash_partition = 4;
+  auto* partition_rule = table_definition->mutable_table_partition();
+  auto* part_column = partition_rule->add_columns();
+  part_column->assign("test_part_column");
+  auto* range_partition = partition_rule->mutable_range_partition();
+
+  for (int i = 0; i < 3; i++) {
+    auto* part_range = range_partition->add_ranges();
+    auto* part_range_start = part_range->mutable_start_key();
+    part_range_start->assign(std::to_string(i * 100));
+    auto* part_range_end = part_range->mutable_start_key();
+    part_range_end->assign(std::to_string((i + 1) * 100));
+  }
+
   stub.CreateTable(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
     LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
@@ -182,8 +227,8 @@ void SendCreateTable(brpc::Controller& cntl,
               << " request_attachment=" << cntl.request_attachment().size()
               << " response_attachment=" << cntl.response_attachment().size()
               << " latency=" << cntl.latency_us();
-    LOG(INFO) << request.DebugString();
-    LOG(INFO) << response.DebugString();
+    LOG(INFO) << " request=" << request.DebugString();
+    LOG(INFO) << " response=" << response.DebugString();
   }
 }
 
@@ -274,6 +319,11 @@ void* Sender(void* /*arg*/) {
       SendDropTable(cntl, stub);
     } else if (FLAGS_method == "CreateSchema") {
       SendCreateSchema(cntl, stub);
+    } else if (FLAGS_method == "GetTable") {
+      SendGetTable(cntl, stub);
+    } else {
+      LOG(INFO) << " method illegal , exit";
+      return nullptr;
     }
 
     bthread_usleep(FLAGS_timeout_ms * 10000L);
