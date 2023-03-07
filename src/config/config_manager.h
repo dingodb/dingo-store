@@ -22,6 +22,7 @@
 #include "config/config.h"
 #include "config/yaml_config.h"
 #include "glog/logging.h"
+#include "proto/common.pb.h"
 
 template <typename T>
 struct DefaultSingletonTraits;
@@ -33,9 +34,9 @@ class ConfigManager {
  public:
   static ConfigManager *GetInstance();
 
-  bool IsExist(const std::string &name);
-  void Register(const std::string &name, std::shared_ptr<Config> config);
-  std::shared_ptr<Config> GetConfig(const std::string &name);
+  bool IsExist(pb::common::ClusterRole role);
+  void Register(pb::common::ClusterRole role, std::shared_ptr<Config> config);
+  std::shared_ptr<Config> GetConfig(pb::common::ClusterRole role);
 
  private:
   ConfigManager();

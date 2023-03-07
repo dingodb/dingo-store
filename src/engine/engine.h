@@ -106,22 +106,28 @@ class Engine {
   virtual pb::error::Errno KvGet(std::shared_ptr<Context> ctx,
                                  const std::string& key,
                                  std::string& value) = 0;
-  virtual pb::error::Errno KvBatchGet(
-      std::shared_ptr<Context> ctx, const std::vector<std::string>& keys,
-      std::vector<pb::common::KeyValue>& kvs) = 0;
+  virtual pb::error::Errno KvBatchGet(std::shared_ptr<Context> ctx,
+                                      const std::vector<std::string>& keys,
+                                      std::vector<pb::common::KeyValue>& kvs) {
+    return pb::error::Errno::ENOT_SUPPORT;
+  }
 
   virtual pb::error::Errno KvPut(std::shared_ptr<Context> ctx,
                                  const pb::common::KeyValue& kv) = 0;
   virtual pb::error::Errno KvBatchPut(
       std::shared_ptr<Context> ctx,
-      const std::vector<pb::common::KeyValue>& kvs) = 0;
+      const std::vector<pb::common::KeyValue>& kvs) {
+    return pb::error::Errno::ENOT_SUPPORT;
+  }
 
   virtual pb::error::Errno KvPutIfAbsent(std::shared_ptr<Context> ctx,
                                          const pb::common::KeyValue& kv) = 0;
   virtual pb::error::Errno KvBatchPutIfAbsent(
       std::shared_ptr<Context> ctx,
       const std::vector<pb::common::KeyValue>& kvs,
-      std::vector<std::string>& put_keys) = 0;
+      std::vector<std::string>& put_keys) {
+    return pb::error::Errno::ENOT_SUPPORT;
+  }
 
   virtual std::shared_ptr<EngineReader> CreateReader(
       std::shared_ptr<Context> /*ctx*/) {

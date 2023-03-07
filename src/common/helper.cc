@@ -16,6 +16,7 @@
 
 #include <regex>
 
+#include "butil/endpoint.h"
 #include "butil/strings/string_split.h"
 
 namespace dingodb {
@@ -25,6 +26,20 @@ bool Helper::IsIp(const std::string& s) {
       "(?=(\\b|\\D))(((\\d{1,2})|(1\\d{1,2})|(2[0-4]\\d)|(25[0-5]))\\.){3}(("
       "\\d{1,2})|(1\\d{1,2})|(2[0-4]\\d)|(25[0-5]))(?=(\\b|\\D))");
   return std::regex_match(s, reg);
+}
+
+butil::EndPoint Helper::GetEndPoint(const std::string& host, int port) {
+  butil::ip_t ip;
+  if (host.empty()) {
+    ip = butil::IP_ANY;
+  } else {
+    if (Helper::IsIp(host)) {
+      butil::str2ip(host.c_str(), &ip);
+    } else {
+      butil::hostname2ip(host.c_str(), &ip);
+    }
+  }
+  return butil::EndPoint(ip, port);
 }
 
 bool Helper::IsDifferenceLocation(const pb::common::Location& location,
@@ -134,6 +149,14 @@ bool Helper::Error(pb::error::Errno errcode, const std::string& errmsg,
   err->set_errcode(errcode);
   err->set_errmsg(errmsg);
   return false;
+}
+
+bool Helper::IsEqual(const std::string& src, const std::string& dest) {
+  return src.size() == dest.size() &&
+         std::equal(src.begin(), dest.end(), dest.begin(),
+                    [](char c1, char c2) {
+                      return std::tolower(c1) == std::tolower(c2);
+                    });
 }
 
 }  // namespace dingodb

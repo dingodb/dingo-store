@@ -17,6 +17,7 @@
 #include "butil/endpoint.h"
 #include "common/helper.h"
 #include "config/config_manager.h"
+#include "proto/common.pb.h"
 #include "raft/state_machine.h"
 #include "server/server.h"
 
@@ -29,28 +30,15 @@ RaftKvEngine::RaftKvEngine(std::shared_ptr<Engine> engine)
 RaftKvEngine::~RaftKvEngine() {}
 
 bool RaftKvEngine::Init(std::shared_ptr<Config> config) {
-  LOG(INFO) << "Init RaftKvEngine...";
+  LOG(INFO) << "Now=> Int Raft Kv Engine with config[" << config->ToString();
   return true;
 }
 
-std::string RaftKvEngine::GetName() { return "RAFT_KV_ENGINE"; }
-
-pb::common::Engine RaftKvEngine::GetID() { return pb::common::ENG_RAFTSTORE; }
-
-butil::EndPoint getRaftEndPoint(const std::string host, int port) {
-  butil::ip_t ip;
-  if (host.empty()) {
-    ip = butil::IP_ANY;
-  } else {
-    if (Helper::IsIp(host)) {
-      butil::str2ip(host.c_str(), &ip);
-    } else {
-      butil::hostname2ip(host.c_str(), &ip);
-    }
-  }
-
-  return butil::EndPoint(ip, port);
+std::string RaftKvEngine::GetName() {
+  return pb::common::Engine_Name(pb::common::ENG_RAFT_STORE);
 }
+
+pb::common::Engine RaftKvEngine::GetID() { return pb::common::ENG_RAFT_STORE; }
 
 pb::error::Errno RaftKvEngine::AddRegion(
     std::shared_ptr<Context> ctx,

@@ -46,6 +46,8 @@ class YamlConfig : public Config {
   std::map<std::string, int> GetIntMap(const std::string& key);
   std::map<std::string, std::string> GetStringMap(const std::string& key);
 
+  std::string ToString();
+
  private:
   template <typename T>
   T GetScalar(const std::string& key);

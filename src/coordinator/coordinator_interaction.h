@@ -66,7 +66,7 @@ pb::error::Errno CoordinatorInteraction::SendRequest(
   do {
     brpc::Controller cntl;
     cntl.set_log_id(butil::fast_rand());
-    int leader_index = GetLeader();
+    const int leader_index = GetLeader();
     channels_[leader_index]->CallMethod(method, &cntl, &request, &response,
                                         nullptr);
     if (cntl.Failed()) {

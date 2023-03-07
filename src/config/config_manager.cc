@@ -19,6 +19,7 @@
 #include "butil/memory/singleton.h"
 #include "butil/strings/stringprintf.h"
 #include "glog/logging.h"
+#include "proto/common.pb.h"
 
 namespace dingodb {
 
@@ -29,14 +30,16 @@ ConfigManager *ConfigManager::GetInstance() {
   return Singleton<ConfigManager>::get();
 }
 
-bool ConfigManager::IsExist(const std::string &name) {
+bool ConfigManager::IsExist(pb::common::ClusterRole role) {
   std::shared_lock<std::shared_mutex> lock(mutex_);
+  auto name = dingodb::pb::common::ClusterRole_Name(role);
   return configs_.find(name) != configs_.end();
 }
 
-void ConfigManager::Register(const std::string &name,
+void ConfigManager::Register(pb::common::ClusterRole role,
                              std::shared_ptr<Config> config) {
-  if (IsExist(name)) {
+  auto name = dingodb::pb::common::ClusterRole_Name(role);
+  if (IsExist(role)) {
     LOG(WARNING) << butil::StringPrintf("config %s already exist!",
                                         name.c_str());
     return;
@@ -46,8 +49,9 @@ void ConfigManager::Register(const std::string &name,
   configs_[name] = config;
 }
 
-std::shared_ptr<Config> ConfigManager::GetConfig(const std::string &name) {
+std::shared_ptr<Config> ConfigManager::GetConfig(pb::common::ClusterRole role) {
   std::shared_lock<std::shared_mutex> lock(mutex_);
+  auto name = dingodb::pb::common::ClusterRole_Name(role);
   auto it = configs_.find(name);
   if (it == configs_.end()) {
     LOG(WARNING) << butil::StringPrintf("config %s not exist!", name.c_str());

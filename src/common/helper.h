@@ -29,6 +29,8 @@ class Helper {
  public:
   static bool IsIp(const std::string& s);
 
+  static butil::EndPoint GetEndPoint(const std::string& host, int port);
+
   static bool IsDifferenceLocation(const pb::common::Location& location,
                                    const pb::common::Location& other_location);
   static bool IsDifferencePeers(
@@ -58,6 +60,8 @@ class Helper {
                     pb::error::Error& err);
   static bool Error(pb::error::Errno errcode, const std::string& errmsg,
                     std::shared_ptr<pb::error::Error> err);
+
+  static bool IsEqual(const std::string& src, const std::string& dest);
 
   template <typename T>
   static std::vector<T> PbRepeatedToVector(
