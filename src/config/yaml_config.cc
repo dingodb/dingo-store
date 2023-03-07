@@ -24,7 +24,6 @@ int YamlConfig::Load(const std::string& data) {
   int new_active_index_ = active_index_.load() == 0 ? 1 : 0;
   configs_[new_active_index_] = YAML::Load(data);
   active_index_.store(new_active_index_);
-
   return 0;
 }
 
@@ -60,7 +59,6 @@ std::string YamlConfig::GetString(const std::string& key) {
     LOG(ERROR) << "Config GetString failed: " << key
                << " exception: " << e.what();
   }
-
   return "";
 }
 
@@ -155,6 +153,12 @@ std::map<std::string, T> YamlConfig::GetMap(const std::string& key) {
   }
 
   return result;
+}
+
+std::string YamlConfig::ToString() {
+  // ToDo return String
+  // Concat all configuration to String
+  return "";
 }
 
 }  // namespace dingodb

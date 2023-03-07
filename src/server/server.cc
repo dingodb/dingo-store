@@ -24,24 +24,34 @@
 #include "engine/mem_engine.h"
 #include "engine/raft_kv_engine.h"
 #include "engine/rocks_engine.h"
+#include "proto/common.pb.h"
 #include "store/heartbeat.h"
 
 namespace dingodb {
 
-void Server::set_role(const std::string& role) { role_ = role; }
+void Server::set_role(pb::common::ClusterRole role) { role_ = role; }
 
 Server* Server::GetInstance() { return Singleton<Server>::get(); }
 
 bool Server::InitConfig(const std::string& filename) {
-  std::shared_ptr<Config> config = std::make_shared<YamlConfig>();
+  std::shared_ptr<Config> const config = std::make_shared<YamlConfig>();
   if (config->LoadFile(filename) != 0) {
     return false;
   }
 
-  butil::FilePath filepath(filename);
-  ConfigManager::GetInstance()->Register(
-      filepath.BaseName().RemoveExtension().value(), config);
+  butil::FilePath const filepath(filename);
 
+  auto role_str_value = filepath.BaseName().RemoveExtension().value();
+  pb::common::ClusterRole cluster_role;
+  bool const is_ok =
+      pb::common::ClusterRole_Parse(role_str_value, &cluster_role);
+  if (!is_ok) {
+    LOG(ERROR) << "Invalid Input role value[" + role_str_value +
+                      "], Init Config Failed";
+    return false;
+  }
+
+  ConfigManager::GetInstance()->Register(cluster_role, config);
   return true;
 }
 
@@ -51,27 +61,29 @@ bool Server::InitLog() {
   LOG(INFO) << "log_dir: " << FLAGS_log_dir;
   FLAGS_logbufsecs = 0;
 
-  const std::string program_name = butil::StringPrintf("./%s", role_.c_str());
+  auto role_str_value = pb::common::ClusterRole_Name(role_);
+  const std::string program_name =
+      butil::StringPrintf("./%s", role_str_value.c_str());
   google::InitGoogleLogging(program_name.c_str());
   google::SetLogDestination(
       google::GLOG_INFO,
       butil::StringPrintf("%s/%s.info.log.", FLAGS_log_dir.c_str(),
-                          role_.c_str())
+                          role_str_value.c_str())
           .c_str());
   google::SetLogDestination(
       google::GLOG_WARNING,
       butil::StringPrintf("%s/%s.warn.log.", FLAGS_log_dir.c_str(),
-                          role_.c_str())
+                          role_str_value.c_str())
           .c_str());
   google::SetLogDestination(
       google::GLOG_ERROR,
       butil::StringPrintf("%s/%s.error.log.", FLAGS_log_dir.c_str(),
-                          role_.c_str())
+                          role_str_value.c_str())
           .c_str());
   google::SetLogDestination(
       google::GLOG_FATAL,
       butil::StringPrintf("%s/%s.fatal.log.", FLAGS_log_dir.c_str(),
-                          role_.c_str())
+                          role_str_value.c_str())
           .c_str());
 
   return true;
@@ -98,6 +110,14 @@ bool Server::InitEngines() {
     return false;
   }
 
+  /**
+   * todo: huzx will role init different engine
+   * start raft node and start to vote
+   */
+
+  // will init meta storage engine
+
+  // default Key-Value storage engine
   std::shared_ptr<Engine> raft_kv_engine =
       std::make_shared<RaftKvEngine>(rock_engine);
   if (!raft_kv_engine->Init(config)) {
@@ -121,7 +141,7 @@ bool Server::InitCoordinatorInteraction() {
 bool Server::InitRaftNodeManager() { return true; }
 
 bool Server::InitStorage() {
-  storage_ = std::make_shared<Storage>(engines_[pb::common::ENG_RAFTSTORE]);
+  storage_ = std::make_shared<Storage>(engines_[pb::common::ENG_RAFT_STORE]);
   return true;
 }
 

@@ -22,6 +22,7 @@
 #include "crontab/crontab.h"
 #include "engine/storage.h"
 #include "meta/store_meta_manager.h"
+#include "proto/common.pb.h"
 #include "store/store_control.h"
 
 template <typename T>
@@ -33,7 +34,7 @@ class Server {
  public:
   static Server* GetInstance();
 
-  void set_role(const std::string& role);
+  void set_role(pb::common::ClusterRole role);
 
   // Init config.
   bool InitConfig(const std::string& filename);
@@ -112,7 +113,7 @@ class Server {
   // read from store config file.
   uint64_t id_;
   // Role, include store/coordinator
-  std::string role_;
+  pb::common::ClusterRole role_;
   // Service ip and port.
   butil::EndPoint server_endpoint_;
   // Raft ip and port.

@@ -19,12 +19,19 @@ package dingodb.pb.common;
 option java_package = "io.dingodb.common";
 option cc_generic_services = true;
 
+enum ClusterRole {
+  COORDINATOR = 0;
+  STORE = 1;
+  EXECUTOR = 2;
+};
+
 enum Engine {
   ENG_ROCKSDB = 0;
   ENG_MEMORY = 1;
   ENG_XDP = 2;
-  ENG_RAFTSTORE = 3;
+  ENG_RAFT_STORE = 3;
   ENG_COLUMNAR = 4;
+  ENG_RAFT_META = 5;
 };
 
 message Location {

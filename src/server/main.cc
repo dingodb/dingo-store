@@ -20,6 +20,7 @@
 #include "config/config.h"
 #include "config/config_manager.h"
 #include "gflags/gflags.h"
+#include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
 #include "proto/store.pb.h"
 #include "server/coordinator_service.h"
@@ -34,53 +35,43 @@ DEFINE_string(role, "", "server role [store|coordinator]");
 butil::EndPoint GetServerEndPoint(std::shared_ptr<dingodb::Config> config) {
   const std::string host = config->GetString("server.host");
   const int port = config->GetInt("server.port");
-
-  butil::ip_t ip;
-  if (host.empty()) {
-    ip = butil::IP_ANY;
-  } else {
-    if (dingodb::Helper::IsIp(host)) {
-      butil::str2ip(host.c_str(), &ip);
-    } else {
-      butil::hostname2ip(host.c_str(), &ip);
-    }
-  }
-
-  return butil::EndPoint(ip, port);
+  return dingodb::Helper::GetEndPoint(host, port);
 }
 
 // Get raft endpoint from config
 butil::EndPoint GetRaftEndPoint(std::shared_ptr<dingodb::Config> config) {
   const std::string host = config->GetString("raft.host");
   const int port = config->GetInt("raft.port");
-
-  butil::ip_t ip;
-  if (host.empty()) {
-    ip = butil::IP_ANY;
-  } else {
-    if (dingodb::Helper::IsIp(host)) {
-      butil::str2ip(host.c_str(), &ip);
-    } else {
-      butil::hostname2ip(host.c_str(), &ip);
-    }
-  }
-
-  return butil::EndPoint(ip, port);
+  return dingodb::Helper::GetEndPoint(host, port);
 }
 
 int main(int argc, char *argv[]) {
   google::ParseCommandLineFlags(&argc, &argv, true);
-  if (FLAGS_role != "coordinator" && FLAGS_role != "store") {
-    LOG(ERROR) << "Invalid server role, just [store|coordinator].";
+
+  dingodb::pb::common::ClusterRole role = dingodb::pb::common::COORDINATOR;
+
+  auto isCoodinator = dingodb::Helper::IsEqual(
+      FLAGS_role, dingodb::pb::common::ClusterRole_Name(
+                      dingodb::pb::common::ClusterRole::COORDINATOR));
+  auto isStore = dingodb::Helper::IsEqual(
+      FLAGS_role, dingodb::pb::common::ClusterRole_Name(
+                      dingodb::pb::common::ClusterRole::STORE));
+  if (isStore) {
+    role = dingodb::pb::common::STORE;
+  }
+
+  if (!isCoodinator && !isStore) {
+    LOG(ERROR) << "Invalid server role[" + FLAGS_role + "]";
     return -1;
   }
+
   if (FLAGS_conf.empty()) {
     LOG(ERROR) << "Missing server config.";
     return -1;
   }
 
   auto *dingodb_server = dingodb::Server::GetInstance();
-  dingodb_server->set_role(FLAGS_role);
+  dingodb_server->set_role(role);
   if (!dingodb_server->InitConfig(FLAGS_conf)) {
     LOG(ERROR) << "InitConfig failed!";
     return -1;
@@ -95,16 +86,16 @@ int main(int argc, char *argv[]) {
   }
 
   dingodb_server->set_server_endpoint(GetServerEndPoint(
-      dingodb::ConfigManager::GetInstance()->GetConfig(FLAGS_role)));
-  dingodb_server->set_raft_endpoint(GetRaftEndPoint(
-      dingodb::ConfigManager::GetInstance()->GetConfig(FLAGS_role)));
+      dingodb::ConfigManager::GetInstance()->GetConfig(role)));
+  dingodb_server->set_raft_endpoint(
+      GetRaftEndPoint(dingodb::ConfigManager::GetInstance()->GetConfig(role)));
 
   brpc::Server server;
   dingodb::CoordinatorControl coordinator_control;
   dingodb::CoordinatorServiceImpl coordinator_service;
   dingodb::MetaServiceImpl meta_service;
   dingodb::StoreServiceImpl store_service;
-  if (FLAGS_role == "coordinator") {
+  if (isCoodinator) {
     // init CoordinatorController
     coordinator_control.Init();
     coordinator_service.SetControl(&coordinator_control);
@@ -121,7 +112,7 @@ int main(int argc, char *argv[]) {
       LOG(ERROR) << "Fail to add meta service";
       return -1;
     }
-  } else if (FLAGS_role == "store") {
+  } else if (isStore) {
     if (!dingodb_server->InitCoordinatorInteraction()) {
       LOG(ERROR) << "InitCoordinatorInteraction failed!";
       return -1;

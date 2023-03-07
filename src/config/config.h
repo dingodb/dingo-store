@@ -40,6 +40,8 @@ class Config {
   virtual std::map<std::string, int> GetIntMap(const std::string& key) = 0;
   virtual std::map<std::string, std::string> GetStringMap(
       const std::string& key) = 0;
+
+  virtual std::string ToString() = 0;
 };
 
 }  // namespace dingodb

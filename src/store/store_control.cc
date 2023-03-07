@@ -42,7 +42,7 @@ pb::error::Errno StoreControl::AddRegion(
   }
 
   // Add raft node
-  auto engine = Server::GetInstance()->get_engine(pb::common::ENG_RAFTSTORE);
+  auto engine = Server::GetInstance()->get_engine(pb::common::ENG_RAFT_STORE);
   if (engine == nullptr) {
     return pb::error::ESTORE_NOTEXIST_RAFTENGINE;
   }
@@ -73,7 +73,7 @@ pb::error::Errno StoreControl::ChangeRegion(
     }
   };
 
-  auto engine = Server::GetInstance()->get_engine(pb::common::ENG_RAFTSTORE);
+  auto engine = Server::GetInstance()->get_engine(pb::common::ENG_RAFT_STORE);
   if (engine == nullptr) {
     return pb::error::ESTORE_NOTEXIST_RAFTENGINE;
   }
@@ -89,7 +89,7 @@ pb::error::Errno StoreControl::DeleteRegion(std::shared_ptr<Context> ctx,
   // Check region status
 
   // Shutdown raft node
-  auto engine = Server::GetInstance()->get_engine(pb::common::ENG_RAFTSTORE);
+  auto engine = Server::GetInstance()->get_engine(pb::common::ENG_RAFT_STORE);
   if (engine == nullptr) {
     return pb::error::ESTORE_NOTEXIST_RAFTENGINE;
   }

@@ -1,7 +1,7 @@
 
 
 
-set(TEST_DEP_SRCS ${CONFIG_SRCS} ${CRONTAB_SRCS})
+set(TEST_DEP_SRCS ${CONFIG_SRCS} ${CRONTAB_SRCS} ${PROTO_SRCS})
 
 enable_testing()
 

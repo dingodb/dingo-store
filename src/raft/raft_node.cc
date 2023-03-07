@@ -17,6 +17,7 @@
 #include "butil/strings/stringprintf.h"
 #include "common/helper.h"
 #include "config/config_manager.h"
+#include "proto/common.pb.h"
 #include "raft/state_machine.h"
 
 namespace dingodb {
@@ -43,14 +44,15 @@ int RaftNode::Init(const std::string& init_conf) {
     return -1;
   }
 
-  auto config = ConfigManager::GetInstance()->GetConfig("store");
+  auto config =
+      ConfigManager::GetInstance()->GetConfig(pb::common::ClusterRole::STORE);
 
   node_options.election_timeout_ms = config->GetInt("raft.electionTimeout");
   node_options.fsm = fsm_;
   node_options.node_owns_fsm = false;
   node_options.snapshot_interval_s = config->GetInt("raft.snapshotInterval");
 
-  std::string path = butil::StringPrintf(
+  std::string const path = butil::StringPrintf(
       "%s/%ld", config->GetString("raft.path").c_str(), node_id_);
   node_options.log_uri = "local://" + path + "/log";
   node_options.raft_meta_uri = "local://" + path + "/raft_meta";
