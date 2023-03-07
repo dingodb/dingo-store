@@ -1,10 +1,10 @@
-# Copyright (c) 2020-present Baidu, Inc. All Rights Reserved.
+# Copyright (c) 2023 dingodb.com, Inc. All Rights Reserved
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-# http://www.apache.org/licenses/LICENSE-2.0
+#     http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -23,30 +23,22 @@ SET(YAMLCPP_LIBRARIES "${YAMLCPP_INSTALL_DIR}/lib/libyaml-cpp.a" CACHE FILEPATH 
 ExternalProject_Add(
         extern_yamlcpp
         ${EXTERNAL_PROJECT_LOG_ARGS}
-        # GIT_REPOSITORY "https://github.com/jbeder/yaml-cpp.git"
-        # GIT_TAG "1b50109f7bea60bd382d8ea7befce3d2bd67da5f" # Just pick HEAD on 20230214
-        # URL "https://github.com/jbeder/yaml-cpp/archive/1b50109f7bea60bd382d8ea7befce3d2bd67da5f.tar.gz"
-        # BUILD_IN_SOURCE 1
         SOURCE_DIR ${YAMLCPP_SOURCES_DIR}
         BINARY_DIR ${YAMLCPP_BINARY_DIR}
         PREFIX ${YAMLCPP_INSTALL_DIR}
         CMAKE_ARGS -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
-        # -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
         -DCMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}
-        # -DCMAKE_C_FLAGS=${CMAKE_C_FLAGS}
         -DCMAKE_INSTALL_PREFIX=${YAMLCPP_INSTALL_DIR}
         -DCMAKE_INSTALL_LIBDIR=${YAMLCPP_INSTALL_DIR}/lib
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON
         -DCMAKE_BUILD_TYPE=${THIRD_PARTY_BUILD_TYPE}
         -DCMAKE_PREFIX_PATH=${prefix_path}
-        # -DWITH_DEBUG_SYMBOLS=OFF
         ${EXTERNAL_OPTIONAL_ARGS}
         LIST_SEPARATOR |
         CMAKE_CACHE_ARGS -DCMAKE_INSTALL_PREFIX:PATH=${YAMLCPP_INSTALL_DIR}
         -DCMAKE_INSTALL_LIBDIR:PATH=${YAMLCPP_INSTALL_DIR}/lib
         -DCMAKE_POSITION_INDEPENDENT_CODE:BOOL=ON
         -DCMAKE_BUILD_TYPE:STRING=${THIRD_PARTY_BUILD_TYPE}
-        # BUILD_COMMAND $(MAKE) -j ${NUM_OF_PROCESSOR}
         BUILD_COMMAND $(MAKE)
         INSTALL_COMMAND mkdir -p ${YAMLCPP_INSTALL_DIR}/lib/ COMMAND cp ${YAMLCPP_BINARY_DIR}/libyaml-cpp.a ${YAMLCPP_LIBRARIES} COMMAND cp -r ${YAMLCPP_SOURCES_DIR}/include ${YAMLCPP_INCLUDE_DIR}/
 )

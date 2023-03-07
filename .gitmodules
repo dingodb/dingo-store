@@ -34,3 +34,9 @@
 [submodule "contrib/openssl"]
 	path = contrib/openssl
 	url = https://github.com/openssl/openssl
+[submodule "contrib/lz4"]
+	path = contrib/lz4
+	url = https://github.com/lz4/lz4
+[submodule "contrib/zstd"]
+	path = contrib/zstd
+	url = https://github.com/facebook/zstd
