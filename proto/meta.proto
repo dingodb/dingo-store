@@ -195,7 +195,7 @@ message CreateTableRequest {
 
 message CreateTableResponse {
   dingodb.pb.error.Error error = 1;
-  Table table = 2;
+  DingoCommonId table_id = 2;
 }
 
 message CreateSchemaRequest {

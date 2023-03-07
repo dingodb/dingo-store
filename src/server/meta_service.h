@@ -38,6 +38,10 @@ class MetaServiceImpl : public pb::meta::MetaService {
                  const pb::meta::GetTablesRequest* request,
                  pb::meta::GetTablesResponse* response,
                  google::protobuf::Closure* done) override;
+  void GetTable(google::protobuf::RpcController* controller,
+                const pb::meta::GetTableRequest* request,
+                pb::meta::GetTableResponse* response,
+                google::protobuf::Closure* done) override;
   void CreateTable(google::protobuf::RpcController* controller,
                    const pb::meta::CreateTableRequest* request,
                    pb::meta::CreateTableResponse* response,

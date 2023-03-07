@@ -19,16 +19,16 @@ import "meta.proto";
 
 package dingodb.pb.coordinator_internal;
 
-// PartitionInternal is storage structure for coordinator
-message PartitionInternal {
-  uint64 id = 1;
+// PartInternal is storage structure for coordinator
+// PartInternal is not table partition in SQL, its only use for storage.
+message PartInternal {
+  uint64 region_id = 1;               // the region id of this part
   dingodb.pb.common.Range range = 2;  // the range of this part
-  repeated uint64 region_ids = 3;     // Region has range property
 }
 
 // TableInternal is storage structure for coordinator
 message TableInternal {
   uint64 id = 1;
   dingodb.pb.meta.TableDefinition definition = 2;
-  repeated PartitionInternal partitions = 3;
+  repeated PartInternal partitions = 3;
 }

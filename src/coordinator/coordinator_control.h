@@ -42,7 +42,17 @@ class CoordinatorControl {
   uint64_t CreatePartitionId();
 
   // create region
-  uint64_t CreateRegion();
+  // in: resource_tag
+  // out: new region id
+  int CreateRegion(const std::string &region_name,
+                   const std::string &resource_tag, int32_t replica_num,
+                   pb::common::Range region_range, uint64_t schema_id,
+                   uint64_t table_id, uint64_t &new_region_id);
+
+  // drop region
+  // in:  region_id
+  // return: 0 or -1
+  int DropRegion(uint64_t region_id);
 
   // create schema
   // in: parent_schema_id
@@ -58,7 +68,7 @@ class CoordinatorControl {
   // out: new table_id
   // return: 0 or -1
   int CreateTable(uint64_t schema_id,
-                  pb::meta::TableDefinition table_definition,
+                  const pb::meta::TableDefinition &table_definition,
                   uint64_t &new_table_id);
 
   // create store
@@ -86,6 +96,14 @@ class CoordinatorControl {
 
   // get schemas
   void GetSchemas(uint64_t schema_id, std::vector<pb::meta::Schema> &schemas);
+
+  // get tables
+  void GetTables(
+      uint64_t schema_id,
+      std::vector<pb::meta::TableDefinitionWithId> &table_definition_with_ids);
+
+  // get table
+  void GetTable(uint64_t schema_id, uint64_t table_id, pb::meta::Table &table);
 
  private:
   // global ids

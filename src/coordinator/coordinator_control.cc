@@ -14,6 +14,9 @@
 
 #include "coordinator/coordinator_control.h"
 
+#include <bits/types/FILE.h>
+#include <sys/types.h>
+
 #include <cstdint>
 #include <string>
 #include <utility>
@@ -21,6 +24,7 @@
 
 #include "google/protobuf/unknown_field_set.h"
 #include "proto/common.pb.h"
+#include "proto/coordinator_internal.pb.h"
 #include "proto/meta.pb.h"
 
 namespace dingodb {
@@ -278,9 +282,9 @@ void CoordinatorControl::GetSchemas(uint64_t schema_id,
             << " sub schema count=" << schema_map_.size();
 }
 
-int CoordinatorControl::CreateTable(uint64_t schema_id,
-                                    pb::meta::TableDefinition table_definition,
-                                    uint64_t& new_table_id) {
+int CoordinatorControl::CreateTable(
+    uint64_t schema_id, const pb::meta::TableDefinition& table_definition,
+    uint64_t& new_table_id) {
   // validate schema_id is existed
   if (schema_map_.find(schema_id) == schema_map_.end()) {
     LOG(ERROR) << "schema_id is illegal " << schema_id;
@@ -309,9 +313,275 @@ int CoordinatorControl::CreateTable(uint64_t schema_id,
 
   // create table
   // extract part info, create region for each part
+  // TODO: 3 is a temp default value
+  std::vector<uint64_t> new_region_ids;
+  for (int i = 0; i < range_partition.ranges_size(); i++) {
+    // int ret = CreateRegion(const std::string &region_name, const std::string
+    // &resource_tag, int32_t replica_num, pb::common::Range region_range,
+    // uint64_t schema_id, uint64_t table_id, uint64_t &new_region_id)
+    std::string region_name =
+        table_definition.name() + "_part_" + std::to_string(i);
+    uint64_t new_region_id;
+    int ret = CreateRegion(region_name, "", 3, range_partition.ranges(i),
+                           schema_id, new_table_id, new_region_id);
+    if (ret < 0) {
+      LOG(ERROR) << "CreateRegion failed in CreateTable table_name="
+                 << table_definition.name();
+      break;
+    }
 
-  new_table_id = 100;
+    new_region_ids.push_back(new_region_id);
+  }
+
+  if (new_region_ids.size() < range_partition.ranges_size()) {
+    LOG(ERROR) << "Not enough regions is created, drop residual regions need="
+               << range_partition.ranges_size()
+               << " created=" << new_region_ids.size();
+    for (auto region_id_to_delete : new_region_ids) {
+      int ret = DropRegion(region_id_to_delete);
+      if (ret < 0) {
+        LOG(ERROR) << "DropRegion failed in CreateTable table_name="
+                   << table_definition.name()
+                   << " region_id =" << region_id_to_delete;
+      }
+    }
+    return -1;
+  }
+
+  // create part for table
+  pb::coordinator_internal::TableInternal table_internal;
+  new_table_id = CreateTableId();
+  table_internal.set_id(new_table_id);
+  for (int i = 0; i < new_region_ids.size(); i++) {
+    // create part and set region_id & range
+    auto* part_internal = table_internal.add_partitions();
+    part_internal->set_region_id(new_region_ids[i]);
+    auto* part_range = part_internal->mutable_range();
+    part_range->CopyFrom(range_partition.ranges(i));
+  }
+
+  // add table_internal to table_map_
+  table_map_[new_table_id] = table_internal;
+
+  // add table_id to schema
+  auto* table_id = schema_map_[schema_id].add_table_ids();
+  table_id->set_entity_id(new_table_id);
+  table_id->set_parent_entity_id(schema_id);
+  table_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
+
   return 0;
+}
+
+int CoordinatorControl::DropRegion(uint64_t region_id) {
+  // set region state to DELETE
+  for (int i = 0; i < region_map_.regions_size(); i++) {
+    if (region_map_.regions(i).id() == region_id) {
+      auto* region = region_map_.mutable_regions(i);
+      region->set_state(::dingodb::pb::common::RegionState::REGION_DELETE);
+      LOG(INFO) << "drop region success, id = " << region_id;
+      return 0;
+    }
+  }
+
+  LOG(ERROR) << "ERROR drop region id not exists, id = " << region_id;
+  return -1;
+}
+
+int CoordinatorControl::CreateRegion(const std::string& region_name,
+                                     const std::string& resource_tag,
+                                     int32_t replica_num,
+                                     pb::common::Range region_range,
+                                     uint64_t schema_id, uint64_t table_id,
+                                     uint64_t& new_region_id) {
+  std::vector<pb::common::Store> stores_for_regions;
+  std::vector<pb::common::Store> selected_stores_for_regions;
+
+  // when resource_tag exists, select store with resource_tag
+  for (int i = 0; i < store_map_.stores_size(); i++) {
+    const auto& store = store_map_.stores(i);
+    if (store.state() != pb::common::StoreState::STORE_NORMAL) {
+      continue;
+    }
+
+    if (resource_tag.length() == 0) {
+      stores_for_regions.push_back(store);
+    } else if (store.resource_tag() == resource_tag) {
+      stores_for_regions.push_back(store);
+    }
+  }
+
+  // if not enough stores it selected, return -1
+  if (stores_for_regions.size() < replica_num) {
+    LOG(INFO) << "Not enough stores for create region";
+    return -1;
+  }
+
+  // select replica_num stores
+  // POC version select the first replica_num stores
+  selected_stores_for_regions.reserve(replica_num);
+  for (int i = 0; i < replica_num; i++) {
+    selected_stores_for_regions.push_back(stores_for_regions[i]);
+  }
+
+  // generate new region
+  uint64_t create_region_id = CreateRegionId();
+  auto* new_region = region_map_.add_regions();
+  new_region->set_id(create_region_id);
+  new_region->set_epoch(1);
+  new_region->set_name(region_name);
+  new_region->set_state(::dingodb::pb::common::RegionState::REGION_NEW);
+  auto* range = new_region->mutable_range();
+  range->CopyFrom(region_range);
+  // add store_id and its peer location to region
+  for (int i = 0; i < replica_num; i++) {
+    auto store = selected_stores_for_regions[i];
+    auto* peer = new_region->add_peers();
+    peer->set_store_id(store.id());
+    peer->set_role(::dingodb::pb::common::PeerRole::VOTER);
+    peer->mutable_server_location()->CopyFrom(store.server_location());
+    peer->mutable_raft_location()->CopyFrom(store.raft_location());
+  }
+
+  new_region->set_schema_id(schema_id);
+  new_region->set_table_id(table_id);
+
+  region_map_.set_epoch(region_map_.epoch() + 1);
+  new_region_id = create_region_id;
+
+  return 0;
+}
+
+// get tables
+void CoordinatorControl::GetTables(
+    uint64_t schema_id,
+    std::vector<pb::meta::TableDefinitionWithId>& table_definition_with_ids) {
+  if (schema_id < 0) {
+    LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
+    return;
+  }
+
+  if (!table_definition_with_ids.empty()) {
+    LOG(ERROR)
+        << "ERRROR: vector table_definition_with_ids is not empty , size="
+        << table_definition_with_ids.size();
+    return;
+  }
+
+  if (this->schema_map_.find(schema_id) == schema_map_.end()) {
+    LOG(ERROR) << "ERRROR: schema_id not found" << schema_id;
+    return;
+  }
+
+  auto& schema = schema_map_[schema_id];
+  for (int i = 0; i < schema.table_ids_size(); i++) {
+    int table_id = schema.table_ids(i).entity_id();
+    if (table_map_.find(table_id) == table_map_.end()) {
+      LOG(ERROR) << "ERRROR: table_id " << table_id << " not exists";
+      continue;
+    }
+
+    // construct return value
+    pb::meta::TableDefinitionWithId table_def_with_id;
+    table_def_with_id.mutable_table_id()->CopyFrom(schema.table_ids(i));
+    table_def_with_id.mutable_table_definition()->CopyFrom(
+        table_map_[table_id].definition());
+    table_definition_with_ids.push_back(table_def_with_id);
+  }
+
+  LOG(INFO) << "GetSchemas id=" << schema_id
+            << " sub schema count=" << schema_map_.size();
+}
+
+// get table
+void CoordinatorControl::GetTable(uint64_t schema_id, uint64_t table_id,
+                                  pb::meta::Table& table) {
+  if (schema_id < 0) {
+    LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
+    return;
+  }
+
+  if (table.id().entity_id() != 0) {
+    LOG(ERROR) << "ERRROR: table is not empty , table_id="
+               << table.id().entity_id();
+    return;
+  }
+
+  if (this->schema_map_.find(schema_id) == schema_map_.end()) {
+    LOG(ERROR) << "ERRROR: schema_id not found" << schema_id;
+    return;
+  }
+
+  if (this->table_map_.find(table_id) == table_map_.end()) {
+    LOG(ERROR) << "ERRROR: table_id not found" << table_id;
+    return;
+  }
+
+  // construct Table from table_internal
+  auto table_internal = table_map_.at(table_id);
+  auto* common_id_table = table.mutable_id();
+  common_id_table->set_entity_id(table_id);
+  common_id_table->set_parent_entity_id(schema_id);
+  common_id_table->set_entity_type(
+      ::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
+
+  for (int i = 0; i < table_internal.partitions_size(); i++) {
+    auto* part = table.add_parts();
+
+    // part id
+    uint64_t region_id = table_internal.partitions(i).region_id();
+
+    auto* common_id_region = part->mutable_id();
+    common_id_region->set_entity_id(region_id);
+    common_id_region->set_parent_entity_id(table_id);
+    common_id_region->set_entity_type(
+        ::dingodb::pb::meta::EntityType::ENTITY_TYPE_PART);
+
+    // part range
+    auto* part_range = part->mutable_range();
+    part_range->CopyFrom(table_internal.partitions(i).range());
+
+    // get region
+    pb::common::Region* part_region = nullptr;
+    for (int i = 0; i < region_map_.regions_size(); i++) {
+      auto* old_region = region_map_.mutable_regions(i);
+      if (old_region->id() == region_id) {
+        part_region = old_region;
+        break;
+      }
+    }
+
+    if (part_region == nullptr) {
+      LOG(ERROR)
+          << "ERROR cannot find region in regionmap_ while GetTable, table_id ="
+          << table_id << " region_id=" << region_id;
+      continue;
+    }
+
+    // part leader location
+    auto* leader_location = part->mutable_leader();
+
+    // part voter & learner locations
+    for (int j = 0; j < part_region->peers_size(); j++) {
+      const auto& part_peer = part_region->peers(i);
+      if (part_peer.store_id() == part_region->leader_store_id()) {
+        leader_location->CopyFrom(part_peer.server_location());
+      }
+
+      if (part_peer.role() == ::dingodb::pb::common::PeerRole::VOTER) {
+        auto* voter_location = part->add_voters();
+        voter_location->CopyFrom(part_peer.server_location());
+      } else if (part_peer.role() == ::dingodb::pb::common::PeerRole::LEARNER) {
+        auto* learner_location = part->add_learners();
+        learner_location->CopyFrom(part_peer.server_location());
+      }
+    }
+
+    // part regionmap_epoch
+    part->set_regionmap_epoch(region_map_.epoch());
+
+    // part storemap_epoch
+    part->set_storemap_epoch(store_map_.epoch());
+  }
 }
 
 }  // namespace dingodb
