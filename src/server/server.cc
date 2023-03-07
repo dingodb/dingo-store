@@ -41,17 +41,7 @@ bool Server::InitConfig(const std::string& filename) {
 
   butil::FilePath const filepath(filename);
 
-  auto role_str_value = filepath.BaseName().RemoveExtension().value();
-  pb::common::ClusterRole cluster_role;
-  bool const is_ok =
-      pb::common::ClusterRole_Parse(role_str_value, &cluster_role);
-  if (!is_ok) {
-    LOG(ERROR) << "Invalid Input role value[" + role_str_value +
-                      "], Init Config Failed";
-    return false;
-  }
-
-  ConfigManager::GetInstance()->Register(cluster_role, config);
+  ConfigManager::GetInstance()->Register(role_, config);
   return true;
 }
 
@@ -168,6 +158,7 @@ bool Server::InitCrontabManager() {
 
 bool Server::InitStoreControl() {
   store_control_ = std::make_shared<StoreControl>();
+  return true;
 }
 
 void Server::Destroy() {

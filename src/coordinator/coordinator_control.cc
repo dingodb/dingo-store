@@ -380,9 +380,13 @@ int CoordinatorControl::CreateTable(
   {
     BAIDU_SCOPED_LOCK(control_mutex_);
 
-    // create part for table
+    // create table_internal, set id & table_definition
     pb::coordinator_internal::TableInternal table_internal;
     table_internal.set_id(new_table_id);
+    auto* definition = table_internal.mutable_definition();
+    definition->CopyFrom(table_definition);
+
+    // set part for table_internal
     for (int i = 0; i < new_region_ids.size(); i++) {
       // create part and set region_id & range
       auto* part_internal = table_internal.add_partitions();
@@ -491,6 +495,8 @@ int CoordinatorControl::CreateRegion(const std::string& region_name,
 void CoordinatorControl::GetTables(
     uint64_t schema_id,
     std::vector<pb::meta::TableDefinitionWithId>& table_definition_with_ids) {
+  LOG(INFO) << "GetTables in control schema_id=" << schema_id;
+
   if (schema_id < 0) {
     LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
     return;
@@ -518,6 +524,8 @@ void CoordinatorControl::GetTables(
       continue;
     }
 
+    LOG(INFO) << "GetTables found table_id=" << table_id;
+
     // construct return value
     pb::meta::TableDefinitionWithId table_def_with_id;
     table_def_with_id.mutable_table_id()->CopyFrom(schema.table_ids(i));
@@ -526,8 +534,8 @@ void CoordinatorControl::GetTables(
     table_definition_with_ids.push_back(table_def_with_id);
   }
 
-  LOG(INFO) << "GetSchemas id=" << schema_id
-            << " sub schema count=" << schema_map_.size();
+  LOG(INFO) << "GetTables schema_id=" << schema_id
+            << " tables count=" << table_definition_with_ids.size();
 }
 
 // get table

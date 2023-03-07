@@ -61,7 +61,8 @@ class Helper {
   static bool Error(pb::error::Errno errcode, const std::string& errmsg,
                     std::shared_ptr<pb::error::Error> err);
 
-  static bool IsEqual(const std::string& src, const std::string& dest);
+  static bool IsEqualIgnoreCase(const std::string& str1,
+                                const std::string& str2);
 
   template <typename T>
   static std::vector<T> PbRepeatedToVector(

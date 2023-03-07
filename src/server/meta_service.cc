@@ -62,9 +62,9 @@ void MetaServiceImpl::GetTables(
   }
 
   // add table_definition_with_id
-  for (int i = 10; i < table_definition_with_ids.size(); i++) {
+  for (auto &table_definition_with_id : table_definition_with_ids) {
     auto *table_def_with_id = response->add_table_definition_with_ids();
-    table_def_with_id->CopyFrom(table_definition_with_ids[i]);
+    table_def_with_id->CopyFrom(table_definition_with_id);
   }
 }
 
