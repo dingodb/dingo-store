@@ -36,9 +36,7 @@ int YamlConfig::LoadFile(const std::string& filename) {
   return 0;
 }
 
-int YamlConfig::ReloadFile(const std::string& filename) {
-  return Load(filename);
-}
+int YamlConfig::ReloadFile(const std::string& filename) { return Load(filename); }
 
 int YamlConfig::GetInt(const std::string& key) {
   try {
@@ -56,8 +54,7 @@ std::string YamlConfig::GetString(const std::string& key) {
     butil::TrimWhitespaceASCII(s, butil::TrimPositions::TRIM_ALL, &result);
     return result;
   } catch (std::exception& e) {
-    LOG(ERROR) << "Config GetString failed: " << key
-               << " exception: " << e.what();
+    LOG(ERROR) << "Config GetString failed: " << key << " exception: " << e.what();
   }
   return "";
 }
@@ -66,8 +63,7 @@ std::vector<int> YamlConfig::GetIntList(const std::string& key) {
   try {
     return GetList<int>(key);
   } catch (std::exception& e) {
-    LOG(ERROR) << "Config GetIntList failed: " << key
-               << " exception: " << e.what();
+    LOG(ERROR) << "Config GetIntList failed: " << key << " exception: " << e.what();
   }
 
   return std::vector<int>{};
@@ -77,8 +73,7 @@ std::vector<std::string> YamlConfig::GetStringList(const std::string& key) {
   try {
     return GetList<std::string>(key);
   } catch (std::exception& e) {
-    LOG(ERROR) << "Config GetStringList failed: " << key
-               << " exception: " << e.what();
+    LOG(ERROR) << "Config GetStringList failed: " << key << " exception: " << e.what();
   }
 
   return std::vector<std::string>{};
@@ -88,20 +83,17 @@ std::map<std::string, int> YamlConfig::GetIntMap(const std::string& key) {
   try {
     return GetMap<int>(key);
   } catch (std::exception& e) {
-    LOG(ERROR) << "Config GetIntMap failed: " << key
-               << " exception: " << e.what();
+    LOG(ERROR) << "Config GetIntMap failed: " << key << " exception: " << e.what();
   }
 
   return std::map<std::string, int>{};
 }
 
-std::map<std::string, std::string> YamlConfig::GetStringMap(
-    const std::string& key) {
+std::map<std::string, std::string> YamlConfig::GetStringMap(const std::string& key) {
   try {
     return GetMap<std::string>(key);
   } catch (std::exception& e) {
-    LOG(ERROR) << "Config GetStringMap failed: " << key
-               << " exception: " << e.what();
+    LOG(ERROR) << "Config GetStringMap failed: " << key << " exception: " << e.what();
   }
 
   return std::map<std::string, std::string>{};

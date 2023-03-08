@@ -91,9 +91,7 @@ class Slice {
   std::string ToString(bool hex = false) const;
 
   // Return a string_view that references the same data as this slice.
-  std::string_view ToStringView() const {
-    return std::string_view(data_, size_);
-  }
+  std::string_view ToStringView() const { return std::string_view(data_, size_); }
 
   // Decodes the current slice interpreted as an hexadecimal string into result,
   // if successful returns true, if this isn't a valid hex string
@@ -109,13 +107,10 @@ class Slice {
   int compare(const Slice& b) const;
 
   // Return true iff "x" is a prefix of "*this"
-  bool starts_with(const Slice& x) const {
-    return ((size_ >= x.size_) && (memcmp(data_, x.data_, x.size_) == 0));
-  }
+  bool starts_with(const Slice& x) const { return ((size_ >= x.size_) && (memcmp(data_, x.data_, x.size_) == 0)); }
 
   bool ends_with(const Slice& x) const {
-    return ((size_ >= x.size_) &&
-            (memcmp(data_ + size_ - x.size_, x.data_, x.size_) == 0));
+    return ((size_ >= x.size_) && (memcmp(data_ + size_ - x.size_, x.data_, x.size_) == 0));
   }
 
   // Compare two slices and returns the first byte where they differ
@@ -131,8 +126,7 @@ class Slice {
 // A set of Slices that are virtually concatenated together.  'parts' points
 // to an array of Slices.  The number of elements in the array is 'num_parts'.
 struct SliceParts {
-  SliceParts(const Slice* _parts, int _num_parts)
-      : parts(_parts), num_parts(_num_parts) {}
+  SliceParts(const Slice* _parts, int _num_parts) : parts(_parts), num_parts(_num_parts) {}
   SliceParts() : parts(nullptr), num_parts(0) {}
 
   const Slice* parts;
@@ -140,8 +134,7 @@ struct SliceParts {
 };
 
 inline bool operator==(const Slice& x, const Slice& y) {
-  return ((x.size() == y.size()) &&
-          (memcmp(x.data(), y.data(), x.size()) == 0));
+  return ((x.size() == y.size()) && (memcmp(x.data(), y.data(), x.size()) == 0));
 }
 
 inline bool operator!=(const Slice& x, const Slice& y) { return !(x == y); }

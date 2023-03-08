@@ -32,22 +32,15 @@ class Storage {
   Snapshot* GetSnapshot();
   void ReleaseSnapshot();
 
-  pb::error::Errno KvGet(std::shared_ptr<Context> ctx, const std::string& key,
-                         std::string& value);
-  pb::error::Errno KvBatchGet(std::shared_ptr<Context> ctx,
-                              const std::vector<std::string>& keys,
+  pb::error::Errno KvGet(std::shared_ptr<Context> ctx, const std::string& key, std::string& value);
+  pb::error::Errno KvBatchGet(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys,
                               std::vector<pb::common::KeyValue>& kvs);
-  pb::error::Errno KvPut(std::shared_ptr<Context> ctx,
-                         const pb::common::KeyValue& kv);
-  pb::error::Errno KvBatchPut(std::shared_ptr<Context> ctx,
-                              const std::vector<pb::common::KeyValue>& kvs);
+  pb::error::Errno KvPut(std::shared_ptr<Context> ctx, const pb::common::KeyValue& kv);
+  pb::error::Errno KvBatchPut(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs);
 
-  pb::error::Errno KvPutIfAbsent(std::shared_ptr<Context> ctx,
-                                 const pb::common::KeyValue& kv);
-  pb::error::Errno KvBatchPutIfAbsent(
-      std::shared_ptr<Context> ctx,
-      const std::vector<pb::common::KeyValue>& kvs,
-      std::vector<std::string>& put_keys);
+  pb::error::Errno KvPutIfAbsent(std::shared_ptr<Context> ctx, const pb::common::KeyValue& kv);
+  pb::error::Errno KvBatchPutIfAbsent(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs,
+                                      std::vector<std::string>& put_keys);
 
  private:
   std::shared_ptr<Engine> engine_;

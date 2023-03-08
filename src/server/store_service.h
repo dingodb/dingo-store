@@ -26,50 +26,33 @@ class StoreServiceImpl : public pb::store::StoreService {
  public:
   StoreServiceImpl();
 
-  void AddRegion(google::protobuf::RpcController* controller,
-                 const pb::store::AddRegionRequest* request,
-                 pb::store::AddRegionResponse* response,
-                 google::protobuf::Closure* done);
+  void AddRegion(google::protobuf::RpcController* controller, const pb::store::AddRegionRequest* request,
+                 pb::store::AddRegionResponse* response, google::protobuf::Closure* done);
 
-  void ChangeRegion(google::protobuf::RpcController* controller,
-                    const pb::store::ChangeRegionRequest* request,
-                    pb::store::ChangeRegionResponse* response,
-                    google::protobuf::Closure* done);
+  void ChangeRegion(google::protobuf::RpcController* controller, const pb::store::ChangeRegionRequest* request,
+                    pb::store::ChangeRegionResponse* response, google::protobuf::Closure* done);
 
-  void DestroyRegion(google::protobuf::RpcController* controller,
-                     const pb::store::DestroyRegionRequest* request,
-                     pb::store::DestroyRegionResponse* response,
-                     google::protobuf::Closure* done);
+  void DestroyRegion(google::protobuf::RpcController* controller, const pb::store::DestroyRegionRequest* request,
+                     pb::store::DestroyRegionResponse* response, google::protobuf::Closure* done);
 
-  void KvGet(google::protobuf::RpcController* controller,
-             const pb::store::KvGetRequest* request,
-             pb::store::KvGetResponse* response,
-             google::protobuf::Closure* done);
+  void KvGet(google::protobuf::RpcController* controller, const pb::store::KvGetRequest* request,
+             pb::store::KvGetResponse* response, google::protobuf::Closure* done);
 
-  void KvBatchGet(google::protobuf::RpcController* controller,
-                  const pb::store::KvBatchGetRequest* request,
-                  pb::store::KvBatchGetResponse* response,
-                  google::protobuf::Closure* done);
+  void KvBatchGet(google::protobuf::RpcController* controller, const pb::store::KvBatchGetRequest* request,
+                  pb::store::KvBatchGetResponse* response, google::protobuf::Closure* done);
 
-  void KvPut(google::protobuf::RpcController* controller,
-             const pb::store::KvPutRequest* request,
-             pb::store::KvPutResponse* response,
-             google::protobuf::Closure* done);
+  void KvPut(google::protobuf::RpcController* controller, const pb::store::KvPutRequest* request,
+             pb::store::KvPutResponse* response, google::protobuf::Closure* done);
 
-  void KvBatchPut(google::protobuf::RpcController* controller,
-                  const pb::store::KvBatchPutRequest* request,
-                  pb::store::KvBatchPutResponse* response,
-                  google::protobuf::Closure* done);
+  void KvBatchPut(google::protobuf::RpcController* controller, const pb::store::KvBatchPutRequest* request,
+                  pb::store::KvBatchPutResponse* response, google::protobuf::Closure* done);
 
-  void KvPutIfAbsent(google::protobuf::RpcController* controller,
-                     const pb::store::KvPutIfAbsentRequest* request,
-                     pb::store::KvPutIfAbsentResponse* response,
-                     google::protobuf::Closure* done);
+  void KvPutIfAbsent(google::protobuf::RpcController* controller, const pb::store::KvPutIfAbsentRequest* request,
+                     pb::store::KvPutIfAbsentResponse* response, google::protobuf::Closure* done);
 
   void KvBatchPutIfAbsent(google::protobuf::RpcController* controller,
                           const pb::store::KvBatchPutIfAbsentRequest* request,
-                          pb::store::KvBatchPutIfAbsentResponse* response,
-                          google::protobuf::Closure* done);
+                          pb::store::KvBatchPutIfAbsentResponse* response, google::protobuf::Closure* done);
 
   void set_storage(std::shared_ptr<Storage> storage);
 

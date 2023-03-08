@@ -7,6 +7,9 @@ if [[ ! -d "$mydir" ]]; then mydir="$PWD"; fi
 
 
 DEFINE_string role 'store' 'server role'
+DEFINE_boolean clean_db 1 'clean db'
+DEFINE_boolean clean_raft 1 'clean raft'
+DEFINE_boolean clean_log 0 'clean log'
 
 # parse the command-line
 FLAGS "$@" || exit 1
@@ -78,6 +81,16 @@ function deploy_store() {
   sed  -i 's,\$RAFT_HOST\$,'"$RAFT_HOST"',g'  $dstpath/conf/${role}.yaml
   sed  -i 's,\$RAFT_PORT\$,'"$raft_port"',g'  $dstpath/conf/${role}.yaml
   sed  -i 's,\$BASE_PATH\$,'"$dstpath"',g'  $dstpath/conf/${role}.yaml
+
+  if [ "${FLAGS_clean_db}" == "0" ]; then
+    rm -rf $dstpath/data/store/db/*
+  fi
+  if [ "${FLAGS_clean_raft}" == "0" ]; then
+    rm -rf $dstpath/data/store/raft/*
+  fi
+  if [ "${FLAGS_clean_log}" == "0" ]; then
+    rm -rf $dstpath/log/*
+  fi
 }
 
 for ((i=1; i<=$SERVER_NUM; ++i)); do

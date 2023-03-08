@@ -1,5 +1,6 @@
 cluster:
   name: dingodb
+  instance_id: $INSTANCE_ID$
 server:
   host: $SERVER_HOST$
   port: $SERVER_PORT$

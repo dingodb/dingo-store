@@ -42,8 +42,7 @@ class CoordinatorInteraction {
   void NextLeader(int leader_index);
 
   template <typename Request, typename Response>
-  pb::error::Errno SendRequest(const std::string& api_name,
-                               const Request& request, Response& response);
+  pb::error::Errno SendRequest(const std::string& api_name, const Request& request, Response& response);
 
  private:
   DISALLOW_COPY_AND_ASSIGN(CoordinatorInteraction);
@@ -54,12 +53,10 @@ class CoordinatorInteraction {
 };
 
 template <typename Request, typename Response>
-pb::error::Errno CoordinatorInteraction::SendRequest(
-    const std::string& api_name, const Request& request, Response& response) {
-  const ::google::protobuf::ServiceDescriptor* service_desc =
-      pb::coordinator::CoordinatorService::descriptor();
-  const ::google::protobuf::MethodDescriptor* method =
-      service_desc->FindMethodByName(api_name);
+pb::error::Errno CoordinatorInteraction::SendRequest(const std::string& api_name, const Request& request,
+                                                     Response& response) {
+  const ::google::protobuf::ServiceDescriptor* service_desc = pb::coordinator::CoordinatorService::descriptor();
+  const ::google::protobuf::MethodDescriptor* method = service_desc->FindMethodByName(api_name);
 
   LOG(INFO) << "send request to coordinator api " << api_name;
   int retry_count = 0;
@@ -67,12 +64,10 @@ pb::error::Errno CoordinatorInteraction::SendRequest(
     brpc::Controller cntl;
     cntl.set_log_id(butil::fast_rand());
     const int leader_index = GetLeader();
-    channels_[leader_index]->CallMethod(method, &cntl, &request, &response,
-                                        nullptr);
+    channels_[leader_index]->CallMethod(method, &cntl, &request, &response, nullptr);
     if (cntl.Failed()) {
-      LOG(ERROR) << butil::StringPrintf(
-          "%s response failed, %lu %d %s", api_name.c_str(), cntl.log_id(),
-          cntl.ErrorCode(), cntl.ErrorText().c_str());
+      LOG(ERROR) << butil::StringPrintf("%s response failed, %lu %d %s", api_name.c_str(), cntl.log_id(),
+                                        cntl.ErrorCode(), cntl.ErrorText().c_str());
       if (cntl.ErrorCode() == pb::error::ERAFT_NOTLEADER) {
         ++retry_count;
         NextLeader(leader_index);

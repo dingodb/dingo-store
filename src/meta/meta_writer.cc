@@ -14,9 +14,49 @@
 
 #include "meta/meta_writer.h"
 
+#include "common/context.h"
+#include "common/helper.h"
+
 namespace dingodb {
 
-bool MetaWriter::Write(const std::vector<pb::common::KeyValue> kvs) {
+bool MetaWriter::Put(const std::shared_ptr<pb::common::KeyValue> kv) {
+  LOG(INFO) << "Put meta data, key: " << Helper::StringToHex(kv->key());
+  std::shared_ptr<Context> ctx = std::make_shared<Context>();
+  ctx->set_cf_name(kStoreMetaCF);
+  ctx->set_flush(true);
+  auto errcode = engine_->KvPut(ctx, *kv.get());
+  if (errcode != pb::error::OK) {
+    LOG(ERROR) << "Meta write failed, errcode: " << errcode;
+    return false;
+  }
+
+  return true;
+}
+
+bool MetaWriter::Put(const std::vector<pb::common::KeyValue> kvs) {
+  LOG(INFO) << "Put meta data, key nums: " << kvs.size();
+  std::shared_ptr<Context> ctx = std::make_shared<Context>();
+  ctx->set_cf_name(kStoreMetaCF);
+  ctx->set_flush(true);
+  auto errcode = engine_->KvBatchPut(ctx, kvs);
+  if (errcode != pb::error::OK) {
+    LOG(ERROR) << "Meta batch write failed, errcode: " << errcode;
+    return false;
+  }
+
+  return true;
+}
+
+bool MetaWriter::Delete(const std::string& key) {
+  std::shared_ptr<Context> ctx = std::make_shared<Context>();
+  ctx->set_cf_name(kStoreMetaCF);
+
+  auto errcode = engine_->KvDelete(ctx, key);
+  if (errcode != pb::error::OK) {
+    LOG(ERROR) << "Meta delete failed, errcode: " << errcode;
+    return false;
+  }
+
   return true;
 }
 

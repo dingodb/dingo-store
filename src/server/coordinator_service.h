@@ -26,30 +26,19 @@ class CoordinatorServiceImpl : public pb::coordinator::CoordinatorService {
  public:
   CoordinatorServiceImpl() = default;
 
-  void SetControl(CoordinatorControl* coordinator_control) {
-    this->coordinator_control = coordinator_control;
-  };
+  void SetControl(CoordinatorControl* coordinator_control) { this->coordinator_control = coordinator_control; };
 
-  void Hello(google::protobuf::RpcController* controller,
-             const pb::coordinator::HelloRequest* request,
-             pb::coordinator::HelloResponse* response,
-             google::protobuf::Closure* done) override;
+  void Hello(google::protobuf::RpcController* controller, const pb::coordinator::HelloRequest* request,
+             pb::coordinator::HelloResponse* response, google::protobuf::Closure* done) override;
   void StoreHeartbeat(google::protobuf::RpcController* controller,
                       const pb::coordinator::StoreHeartbeatRequest* request,
-                      pb::coordinator::StoreHeartbeatResponse* response,
-                      google::protobuf::Closure* done) override;
-  void GetRegionMap(google::protobuf::RpcController* controller,
-                    const pb::coordinator::GetRegionMapRequest* request,
-                    pb::coordinator::GetRegionMapResponse* response,
-                    google::protobuf::Closure* done) override;
-  void GetStoreMap(google::protobuf::RpcController* controller,
-                   const pb::coordinator::GetStoreMapRequest* request,
-                   pb::coordinator::GetStoreMapResponse* response,
-                   google::protobuf::Closure* done) override;
-  void CreateStore(google::protobuf::RpcController* controller,
-                   const pb::coordinator::CreateStoreRequest* request,
-                   pb::coordinator::CreateStoreResponse* response,
-                   google::protobuf::Closure* done) override;
+                      pb::coordinator::StoreHeartbeatResponse* response, google::protobuf::Closure* done) override;
+  void GetRegionMap(google::protobuf::RpcController* controller, const pb::coordinator::GetRegionMapRequest* request,
+                    pb::coordinator::GetRegionMapResponse* response, google::protobuf::Closure* done) override;
+  void GetStoreMap(google::protobuf::RpcController* controller, const pb::coordinator::GetStoreMapRequest* request,
+                   pb::coordinator::GetStoreMapResponse* response, google::protobuf::Closure* done) override;
+  void CreateStore(google::protobuf::RpcController* controller, const pb::coordinator::CreateStoreRequest* request,
+                   pb::coordinator::CreateStoreResponse* response, google::protobuf::Closure* done) override;
 
   CoordinatorControl* coordinator_control;
 };

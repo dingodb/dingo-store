@@ -24,20 +24,17 @@ namespace dingodb {
 
 StoreServiceImpl::StoreServiceImpl() {}
 
-void StoreServiceImpl::AddRegion(
-    google::protobuf::RpcController* controller,
-    const dingodb::pb::store::AddRegionRequest* request,
-    dingodb::pb::store::AddRegionResponse* response,
-    google::protobuf::Closure* done) {
+void StoreServiceImpl::AddRegion(google::protobuf::RpcController* controller,
+                                 const dingodb::pb::store::AddRegionRequest* request,
+                                 dingodb::pb::store::AddRegionResponse* response, google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
   LOG(INFO) << "AddRegion request...";
 
-  auto store_control = Server::GetInstance()->get_store_control();
+  auto store_control = Server::GetInstance()->store_control();
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
-  auto errcode = store_control->AddRegion(
-      ctx, std::make_shared<pb::common::Region>(request->region()));
+  auto errcode = store_control->AddRegion(ctx, std::make_shared<pb::common::Region>(request->region()));
   if (errcode != pb::error::OK) {
     auto mut_err = response->mutable_error();
     mut_err->set_errcode(errcode);
@@ -45,19 +42,16 @@ void StoreServiceImpl::AddRegion(
   }
 }
 
-void StoreServiceImpl::ChangeRegion(
-    google::protobuf::RpcController* controller,
-    const pb::store::ChangeRegionRequest* request,
-    pb::store::ChangeRegionResponse* response,
-    google::protobuf::Closure* done) {
+void StoreServiceImpl::ChangeRegion(google::protobuf::RpcController* controller,
+                                    const pb::store::ChangeRegionRequest* request,
+                                    pb::store::ChangeRegionResponse* response, google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
   LOG(INFO) << "ChangeRegion request...";
 
-  auto store_control = Server::GetInstance()->get_store_control();
+  auto store_control = Server::GetInstance()->store_control();
   std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
-  auto errcode = store_control->ChangeRegion(
-      ctx, std::make_shared<pb::common::Region>(request->region()));
+  auto errcode = store_control->ChangeRegion(ctx, std::make_shared<pb::common::Region>(request->region()));
   if (errcode != pb::error::OK) {
     auto mut_err = response->mutable_error();
     mut_err->set_errcode(errcode);
@@ -65,16 +59,15 @@ void StoreServiceImpl::ChangeRegion(
   }
 }
 
-void StoreServiceImpl::DestroyRegion(
-    google::protobuf::RpcController* controller,
-    const dingodb::pb::store::DestroyRegionRequest* request,
-    dingodb::pb::store::DestroyRegionResponse* response,
-    google::protobuf::Closure* done) {
+void StoreServiceImpl::DestroyRegion(google::protobuf::RpcController* controller,
+                                     const dingodb::pb::store::DestroyRegionRequest* request,
+                                     dingodb::pb::store::DestroyRegionResponse* response,
+                                     google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
   LOG(INFO) << "DestroyRegion request...";
 
-  auto store_control = Server::GetInstance()->get_store_control();
+  auto store_control = Server::GetInstance()->store_control();
   std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
   auto errcode = store_control->DeleteRegion(ctx, request->region_id());
   if (errcode != pb::error::OK) {
@@ -84,11 +77,9 @@ void StoreServiceImpl::DestroyRegion(
   }
 }
 
-pb::error::Errno ValidateKvGetRequest(
-    const dingodb::pb::store::KvGetRequest* request) {
+pb::error::Errno ValidateKvGetRequest(const dingodb::pb::store::KvGetRequest* request) {
   // Check is exist region.
-  if (!Server::GetInstance()->get_store_meta_manager()->IsExistRegion(
-          request->region_id())) {
+  if (!Server::GetInstance()->store_meta_manager()->IsExistRegion(request->region_id())) {
     return pb::error::EREGION_NOT_FOUND;
   }
 
@@ -101,8 +92,7 @@ pb::error::Errno ValidateKvGetRequest(
 
 void StoreServiceImpl::KvGet(google::protobuf::RpcController* controller,
                              const dingodb::pb::store::KvGetRequest* request,
-                             dingodb::pb::store::KvGetResponse* response,
-                             google::protobuf::Closure* done) {
+                             dingodb::pb::store::KvGetResponse* response, google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
   LOG(INFO) << "KvGet request: " << request->key();
@@ -128,11 +118,9 @@ void StoreServiceImpl::KvGet(google::protobuf::RpcController* controller,
   }
 }
 
-pb::error::Errno ValidateKvBatchGetRequest(
-    const dingodb::pb::store::KvBatchGetRequest* request) {
+pb::error::Errno ValidateKvBatchGetRequest(const dingodb::pb::store::KvBatchGetRequest* request) {
   // Check is exist region.
-  if (!Server::GetInstance()->get_store_meta_manager()->IsExistRegion(
-          request->region_id())) {
+  if (!Server::GetInstance()->store_meta_manager()->IsExistRegion(request->region_id())) {
     return pb::error::EREGION_NOT_FOUND;
   }
 
@@ -146,8 +134,7 @@ pb::error::Errno ValidateKvBatchGetRequest(
 }
 
 void StoreServiceImpl::KvBatchGet(google::protobuf::RpcController* controller,
-                                  const pb::store::KvBatchGetRequest* request,
-                                  pb::store::KvBatchGetResponse* response,
+                                  const pb::store::KvBatchGetRequest* request, pb::store::KvBatchGetResponse* response,
                                   google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
@@ -165,8 +152,7 @@ void StoreServiceImpl::KvBatchGet(google::protobuf::RpcController* controller,
   ctx->set_region_id(request->region_id()).set_cf_name(kStoreDataCF);
 
   std::vector<pb::common::KeyValue> kvs;
-  errcode = storage_->KvBatchGet(
-      ctx, Helper::PbRepeatedToVector<std::string>(request->keys()), kvs);
+  errcode = storage_->KvBatchGet(ctx, Helper::PbRepeatedToVector<std::string>(request->keys()), kvs);
   if (errcode != pb::error::OK) {
     auto err = response->mutable_error();
     err->set_errcode(errcode);
@@ -177,11 +163,9 @@ void StoreServiceImpl::KvBatchGet(google::protobuf::RpcController* controller,
   Helper::VectorToPbRepeated(kvs, response->mutable_kvs());
 }
 
-pb::error::Errno ValidateKvPutRequest(
-    const dingodb::pb::store::KvPutRequest* request) {
+pb::error::Errno ValidateKvPutRequest(const dingodb::pb::store::KvPutRequest* request) {
   // Check is exist region.
-  if (!Server::GetInstance()->get_store_meta_manager()->IsExistRegion(
-          request->region_id())) {
+  if (!Server::GetInstance()->store_meta_manager()->IsExistRegion(request->region_id())) {
     return pb::error::EREGION_NOT_FOUND;
   }
 
@@ -194,8 +178,7 @@ pb::error::Errno ValidateKvPutRequest(
 
 void StoreServiceImpl::KvPut(google::protobuf::RpcController* controller,
                              const dingodb::pb::store::KvPutRequest* request,
-                             dingodb::pb::store::KvPutResponse* response,
-                             google::protobuf::Closure* done) {
+                             dingodb::pb::store::KvPutResponse* response, google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
   LOG(INFO) << "KvPut request: " << request->kv().key();
@@ -208,8 +191,7 @@ void StoreServiceImpl::KvPut(google::protobuf::RpcController* controller,
     return;
   }
 
-  std::shared_ptr<Context> ctx =
-      std::make_shared<Context>(cntl, done_guard.release(), response);
+  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done_guard.release(), response);
   ctx->set_region_id(request->region_id()).set_cf_name(kStoreDataCF);
   errcode = storage_->KvPut(ctx, request->kv());
   if (errcode != pb::error::OK) {
@@ -220,11 +202,9 @@ void StoreServiceImpl::KvPut(google::protobuf::RpcController* controller,
   }
 }
 
-pb::error::Errno ValidateKvBatchPutRequest(
-    const dingodb::pb::store::KvBatchPutRequest* request) {
+pb::error::Errno ValidateKvBatchPutRequest(const dingodb::pb::store::KvBatchPutRequest* request) {
   // Check is exist region.
-  if (!Server::GetInstance()->get_store_meta_manager()->IsExistRegion(
-          request->region_id())) {
+  if (!Server::GetInstance()->store_meta_manager()->IsExistRegion(request->region_id())) {
     return pb::error::EREGION_NOT_FOUND;
   }
 
@@ -238,8 +218,7 @@ pb::error::Errno ValidateKvBatchPutRequest(
 }
 
 void StoreServiceImpl::KvBatchPut(google::protobuf::RpcController* controller,
-                                  const pb::store::KvBatchPutRequest* request,
-                                  pb::store::KvBatchPutResponse* response,
+                                  const pb::store::KvBatchPutRequest* request, pb::store::KvBatchPutResponse* response,
                                   google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
@@ -252,11 +231,9 @@ void StoreServiceImpl::KvBatchPut(google::protobuf::RpcController* controller,
     return;
   }
 
-  std::shared_ptr<Context> ctx =
-      std::make_shared<Context>(cntl, done_guard.release(), response);
+  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done_guard.release(), response);
   ctx->set_region_id(request->region_id()).set_cf_name(kStoreDataCF);
-  errcode =
-      storage_->KvBatchPut(ctx, Helper::PbRepeatedToVector(request->kvs()));
+  errcode = storage_->KvBatchPut(ctx, Helper::PbRepeatedToVector(request->kvs()));
   if (errcode != pb::error::OK) {
     auto err = response->mutable_error();
     err->set_errcode(errcode);
@@ -265,11 +242,9 @@ void StoreServiceImpl::KvBatchPut(google::protobuf::RpcController* controller,
   }
 }
 
-pb::error::Errno ValidateKvPutIfAbsentRequest(
-    const dingodb::pb::store::KvPutIfAbsentRequest* request) {
+pb::error::Errno ValidateKvPutIfAbsentRequest(const dingodb::pb::store::KvPutIfAbsentRequest* request) {
   // Check is exist region.
-  if (!Server::GetInstance()->get_store_meta_manager()->IsExistRegion(
-          request->region_id())) {
+  if (!Server::GetInstance()->store_meta_manager()->IsExistRegion(request->region_id())) {
     return pb::error::EREGION_NOT_FOUND;
   }
 
@@ -280,11 +255,9 @@ pb::error::Errno ValidateKvPutIfAbsentRequest(
   return pb::error::OK;
 }
 
-void StoreServiceImpl::KvPutIfAbsent(
-    google::protobuf::RpcController* controller,
-    const pb::store::KvPutIfAbsentRequest* request,
-    pb::store::KvPutIfAbsentResponse* response,
-    google::protobuf::Closure* done) {
+void StoreServiceImpl::KvPutIfAbsent(google::protobuf::RpcController* controller,
+                                     const pb::store::KvPutIfAbsentRequest* request,
+                                     pb::store::KvPutIfAbsentResponse* response, google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
   LOG(INFO) << "KvPutIfAbsent request: ";
@@ -296,8 +269,7 @@ void StoreServiceImpl::KvPutIfAbsent(
     return;
   }
 
-  std::shared_ptr<Context> ctx =
-      std::make_shared<Context>(cntl, done_guard.release(), response);
+  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done_guard.release(), response);
   ctx->set_region_id(request->region_id()).set_cf_name(kStoreDataCF);
   errcode = storage_->KvPutIfAbsent(ctx, request->kv());
   if (errcode != pb::error::OK) {
@@ -308,11 +280,9 @@ void StoreServiceImpl::KvPutIfAbsent(
   }
 }
 
-pb::error::Errno ValidateKvBatchPutIfAbsentRequest(
-    const dingodb::pb::store::KvBatchPutIfAbsentRequest* request) {
+pb::error::Errno ValidateKvBatchPutIfAbsentRequest(const dingodb::pb::store::KvBatchPutIfAbsentRequest* request) {
   // Check is exist region.
-  if (!Server::GetInstance()->get_store_meta_manager()->IsExistRegion(
-          request->region_id())) {
+  if (!Server::GetInstance()->store_meta_manager()->IsExistRegion(request->region_id())) {
     return pb::error::EREGION_NOT_FOUND;
   }
 
@@ -325,11 +295,10 @@ pb::error::Errno ValidateKvBatchPutIfAbsentRequest(
   return pb::error::OK;
 }
 
-void StoreServiceImpl::KvBatchPutIfAbsent(
-    google::protobuf::RpcController* controller,
-    const pb::store::KvBatchPutIfAbsentRequest* request,
-    pb::store::KvBatchPutIfAbsentResponse* response,
-    google::protobuf::Closure* done) {
+void StoreServiceImpl::KvBatchPutIfAbsent(google::protobuf::RpcController* controller,
+                                          const pb::store::KvBatchPutIfAbsentRequest* request,
+                                          pb::store::KvBatchPutIfAbsentResponse* response,
+                                          google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
   LOG(INFO) << "KvBatchPutIfAbsent request: ";
@@ -342,13 +311,11 @@ void StoreServiceImpl::KvBatchPutIfAbsent(
     return;
   }
 
-  std::shared_ptr<Context> ctx =
-      std::make_shared<Context>(cntl, done_guard.release(), response);
+  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done_guard.release(), response);
   ctx->set_region_id(request->region_id()).set_cf_name(kStoreDataCF);
 
   std::vector<std::string> put_keys;
-  errcode = storage_->KvBatchPutIfAbsent(
-      ctx, Helper::PbRepeatedToVector(request->kvs()), put_keys);
+  errcode = storage_->KvBatchPutIfAbsent(ctx, Helper::PbRepeatedToVector(request->kvs()), put_keys);
   if (errcode != pb::error::OK) {
     auto err = response->mutable_error();
     err->set_errcode(errcode);
@@ -357,8 +324,6 @@ void StoreServiceImpl::KvBatchPutIfAbsent(
   }
 }
 
-void StoreServiceImpl::set_storage(std::shared_ptr<Storage> storage) {
-  storage_ = storage;
-}
+void StoreServiceImpl::set_storage(std::shared_ptr<Storage> storage) { storage_ = storage; }
 
 }  // namespace dingodb

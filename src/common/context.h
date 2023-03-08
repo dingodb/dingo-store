@@ -22,12 +22,33 @@
 
 class Context {
  public:
-  Context() : cntl_(nullptr), done_(nullptr) {}
+  Context()
+      : cntl_(nullptr),
+        done_(nullptr),
+        response_(nullptr),
+        region_id_(0),
+        cf_name_(""),
+        directly_delete_(false),
+        delete_files_in_range_(false),
+        flush_(false) {}
   Context(brpc::Controller* cntl, google::protobuf::Closure* done)
-      : cntl_(cntl), done_(done), response_(nullptr) {}
-  Context(brpc::Controller* cntl, google::protobuf::Closure* done,
-          google::protobuf::Message* response)
-      : cntl_(cntl), done_(done), response_(response) {}
+      : cntl_(cntl),
+        done_(done),
+        response_(nullptr),
+        region_id_(0),
+        cf_name_(""),
+        directly_delete_(false),
+        delete_files_in_range_(false),
+        flush_(false) {}
+  Context(brpc::Controller* cntl, google::protobuf::Closure* done, google::protobuf::Message* response)
+      : cntl_(cntl),
+        done_(done),
+        response_(response),
+        region_id_(0),
+        cf_name_(""),
+        directly_delete_(false),
+        delete_files_in_range_(false),
+        flush_(false) {}
   ~Context() = default;
 
   brpc::Controller* cntl() { return cntl_; }
@@ -58,14 +79,13 @@ class Context {
   const std::string& cf_name() const { return cf_name_; }
 
   bool directly_delete() { return directly_delete_; }
-  void set_directly_delete(bool directly_delete) {
-    directly_delete_ = directly_delete;
-  }
+  void set_directly_delete(bool directly_delete) { directly_delete_ = directly_delete; }
 
   bool delete_files_in_range() { return delete_files_in_range_; }
-  void set_delete_files_in_range(bool delete_files_in_range) {
-    delete_files_in_range_ = delete_files_in_range;
-  }
+  void set_delete_files_in_range(bool delete_files_in_range) { delete_files_in_range_ = delete_files_in_range; }
+
+  bool flush() { return flush_; }
+  void set_flush(bool flush) { flush_ = flush; }
 
  private:
   // brpc framework free resource
@@ -80,6 +100,8 @@ class Context {
   bool directly_delete_;
   // Rocksdb delete range in files
   bool delete_files_in_range_;
+  // Flush data to persistence.
+  bool flush_;
 };
 
 #endif

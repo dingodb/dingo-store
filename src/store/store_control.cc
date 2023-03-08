@@ -21,9 +21,8 @@
 
 namespace dingodb {
 
-pb::error::Errno ValidateAddRegion(
-    std::shared_ptr<StoreMetaManager> store_meta_manager,
-    std::shared_ptr<pb::common::Region> region) {
+pb::error::Errno ValidateAddRegion(std::shared_ptr<StoreMetaManager> store_meta_manager,
+                                   std::shared_ptr<pb::common::Region> region) {
   if (store_meta_manager->IsExistRegion(region->id())) {
     return pb::error::EREGION_ALREADY_EXIST;
   }
@@ -31,9 +30,8 @@ pb::error::Errno ValidateAddRegion(
   return pb::error::OK;
 }
 
-pb::error::Errno StoreControl::AddRegion(
-    std::shared_ptr<Context> ctx, std::shared_ptr<pb::common::Region> region) {
-  auto store_meta_manager = Server::GetInstance()->get_store_meta_manager();
+pb::error::Errno StoreControl::AddRegion(std::shared_ptr<Context> ctx, std::shared_ptr<pb::common::Region> region) {
+  auto store_meta_manager = Server::GetInstance()->store_meta_manager();
 
   // valiate region
   auto errcode = ValidateAddRegion(store_meta_manager, region);
@@ -53,18 +51,14 @@ pb::error::Errno StoreControl::AddRegion(
   return pb::error::OK;
 }
 
-void StoreControl::AddRegions(
-    std::shared_ptr<Context> ctx,
-    std::vector<std::shared_ptr<pb::common::Region> > regions) {
+void StoreControl::AddRegions(std::shared_ptr<Context> ctx, std::vector<std::shared_ptr<pb::common::Region> > regions) {
   for (auto region : regions) {
     AddRegion(ctx, region);
   }
 }
 
-pb::error::Errno StoreControl::ChangeRegion(
-    std::shared_ptr<Context> ctx, std::shared_ptr<pb::common::Region> region) {
-  auto filterPeersByRole =
-      [region](pb::common::PeerRole role) -> std::vector<pb::common::Peer> {
+pb::error::Errno StoreControl::ChangeRegion(std::shared_ptr<Context> ctx, std::shared_ptr<pb::common::Region> region) {
+  auto filterPeersByRole = [region](pb::common::PeerRole role) -> std::vector<pb::common::Peer> {
     std::vector<pb::common::Peer> peers;
     for (auto peer : region->peers()) {
       if (peer.role() == role) {
@@ -77,13 +71,11 @@ pb::error::Errno StoreControl::ChangeRegion(
   if (engine == nullptr) {
     return pb::error::ESTORE_NOTEXIST_RAFTENGINE;
   }
-  return engine->ChangeRegion(ctx, region->id(),
-                              filterPeersByRole(pb::common::VOTER));
+  return engine->ChangeRegion(ctx, region->id(), filterPeersByRole(pb::common::VOTER));
 }
 
-pb::error::Errno StoreControl::DeleteRegion(std::shared_ptr<Context> ctx,
-                                            uint64_t region_id) {
-  auto store_meta_manager = Server::GetInstance()->get_store_meta_manager();
+pb::error::Errno StoreControl::DeleteRegion(std::shared_ptr<Context> ctx, uint64_t region_id) {
+  auto store_meta_manager = Server::GetInstance()->store_meta_manager();
   auto region = store_meta_manager->GetRegion(region_id);
 
   // Check region status

@@ -30,11 +30,9 @@ class Heartbeat {
 
   static void SendStoreHeartbeat(void* arg);
 
-  static void HandleStoreHeartbeatResponse(
-      std::shared_ptr<StoreMetaManager> store_meta,
-      const pb::coordinator::StoreHeartbeatResponse& response);
+  static void HandleStoreHeartbeatResponse(std::shared_ptr<StoreMetaManager> store_meta,
+                                           const pb::coordinator::StoreHeartbeatResponse& response);
 };
-
 
 }  // namespace dingodb
 

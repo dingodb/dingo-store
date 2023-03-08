@@ -29,9 +29,11 @@ class MetaReader {
   ~MetaReader() {}
 
   std::shared_ptr<pb::common::KeyValue> Get(const std::string& key);
-  std::vector<pb::common::KeyValue> Scan(const std::string& prefix);
+  bool Scan(const std::string& prefix, std::vector<pb::common::KeyValue>& kvs);
 
  private:
+  DISALLOW_COPY_AND_ASSIGN(MetaReader);
+
   std::shared_ptr<Engine> engine_;
 };
 

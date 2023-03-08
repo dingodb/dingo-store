@@ -27,8 +27,7 @@ std::string MemEngine::GetName() { return "MEM_ENGINE"; }
 
 pb::common::Engine MemEngine::GetID() { return pb::common::ENG_MEMORY; }
 
-pb::error::Errno MemEngine::KvGet(std::shared_ptr<Context> ctx,
-                                  const std::string& key, std::string& value) {
+pb::error::Errno MemEngine::KvGet(std::shared_ptr<Context> ctx, const std::string& key, std::string& value) {
   auto it = store_.find(key);
   if (it == store_.end()) {
     return pb::error::EKEY_NOTFOUND;
@@ -38,34 +37,29 @@ pb::error::Errno MemEngine::KvGet(std::shared_ptr<Context> ctx,
   return pb::error::OK;
 }
 
-pb::error::Errno MemEngine::KvBatchGet(std::shared_ptr<Context> ctx,
-                                       const std::vector<std::string>& keys,
+pb::error::Errno MemEngine::KvBatchGet(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys,
                                        std::vector<pb::common::KeyValue>& kvs) {
   return pb::error::ENOT_SUPPORT;
 }
 
-pb::error::Errno MemEngine::KvPut(std::shared_ptr<Context> ctx,
-                                  const pb::common::KeyValue& kv) {
+pb::error::Errno MemEngine::KvPut(std::shared_ptr<Context> ctx, const pb::common::KeyValue& kv) {
   LOG(INFO) << "MemEngine::KvPut: " << kv.key() << " : " << kv.value();
   std::unique_lock<std::shared_mutex> lock(mutex_);
   store_[kv.key()] = kv.value();
   return pb::error::OK;
 }
 
-pb::error::Errno MemEngine::KvBatchPut(
-    std::shared_ptr<Context> ctx,
-    const std::vector<pb::common::KeyValue>& kvs) {
+pb::error::Errno MemEngine::KvBatchPut(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs) {
   return pb::error::ENOT_SUPPORT;
 }
 
-pb::error::Errno MemEngine::KvPutIfAbsent(std::shared_ptr<Context> ctx,
-                                          const pb::common::KeyValue& kv) {
+pb::error::Errno MemEngine::KvPutIfAbsent(std::shared_ptr<Context> ctx, const pb::common::KeyValue& kv) {
   return pb::error::ENOT_SUPPORT;
 }
 
-pb::error::Errno MemEngine::KvBatchPutIfAbsent(
-    std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs,
-    std::vector<std::string>& put_keys) {
+pb::error::Errno MemEngine::KvBatchPutIfAbsent(std::shared_ptr<Context> ctx,
+                                               const std::vector<pb::common::KeyValue>& kvs,
+                                               std::vector<std::string>& put_keys) {
   return pb::error::ENOT_SUPPORT;
 }
 

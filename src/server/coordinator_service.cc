@@ -25,10 +25,9 @@
 
 namespace dingodb {
 
-void CoordinatorServiceImpl::Hello(
-    google::protobuf::RpcController * /*controller*/,
-    const pb::coordinator::HelloRequest *request,
-    pb::coordinator::HelloResponse *response, google::protobuf::Closure *done) {
+void CoordinatorServiceImpl::Hello(google::protobuf::RpcController * /*controller*/,
+                                   const pb::coordinator::HelloRequest *request,
+                                   pb::coordinator::HelloResponse *response, google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
   LOG(INFO) << "Hello request: " << request->hello();
 
@@ -36,11 +35,10 @@ void CoordinatorServiceImpl::Hello(
   response->set_status_detail("OK");
 }
 
-void CoordinatorServiceImpl::CreateStore(
-    google::protobuf::RpcController *controller,
-    const pb::coordinator::CreateStoreRequest *request,
-    pb::coordinator::CreateStoreResponse *response,
-    google::protobuf::Closure *done) {
+void CoordinatorServiceImpl::CreateStore(google::protobuf::RpcController *controller,
+                                         const pb::coordinator::CreateStoreRequest *request,
+                                         pb::coordinator::CreateStoreResponse *response,
+                                         google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
   LOG(INFO) << "CreateStore request cluster_id = : " << request->cluster_id();
   LOG(INFO) << request->DebugString();
@@ -48,35 +46,29 @@ void CoordinatorServiceImpl::CreateStore(
   // create store
   uint64_t store_id = 0;
   std::string password;
-  int ret = this->coordinator_control->CreateStore(request->cluster_id(),
-                                                   store_id, password);
+  int ret = this->coordinator_control->CreateStore(request->cluster_id(), store_id, password);
 
   if (ret == 0) {
     response->set_store_id(store_id);
     response->set_password(password);
   } else {
-    brpc::Controller *brpc_controller =
-        static_cast<brpc::Controller *>(controller);
-    brpc_controller->SetFailed(pb::error::EILLEGAL_PARAMTETERS,
-                               "Need legal cluster_id");
+    brpc::Controller *brpc_controller = static_cast<brpc::Controller *>(controller);
+    brpc_controller->SetFailed(pb::error::EILLEGAL_PARAMTETERS, "Need legal cluster_id");
   }
 }
 
-void CoordinatorServiceImpl::StoreHeartbeat(
-    google::protobuf::RpcController * /*controller*/,
-    const pb::coordinator::StoreHeartbeatRequest *request,
-    pb::coordinator::StoreHeartbeatResponse *response,
-    google::protobuf::Closure *done) {
+void CoordinatorServiceImpl::StoreHeartbeat(google::protobuf::RpcController * /*controller*/,
+                                            const pb::coordinator::StoreHeartbeatRequest *request,
+                                            pb::coordinator::StoreHeartbeatResponse *response,
+                                            google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
-  LOG(INFO) << "StoreHearbeat request: storemap_epoch ["
-            << request->self_storemap_epoch() << "] regionmap_epoch ["
+  LOG(INFO) << "StoreHearbeat request: storemap_epoch [" << request->self_storemap_epoch() << "] regionmap_epoch ["
             << request->self_regionmap_epoch() << "]";
 
   LOG(INFO) << request->DebugString();
 
   // update store map
-  int new_storemap_epoch =
-      this->coordinator_control->UpdateStoreMap(request->store());
+  int new_storemap_epoch = this->coordinator_control->UpdateStoreMap(request->store());
 
   // update region map
   LOG(INFO) << " region size = " << request->regions_size();
@@ -85,12 +77,10 @@ void CoordinatorServiceImpl::StoreHeartbeat(
   for (int i = 0; i < request->regions_size(); i++) {
     regions.push_back(request->regions(i));
   }
-  int new_regionmap_epoch =
-      this->coordinator_control->UpdateRegionMapMulti(regions);
+  int new_regionmap_epoch = this->coordinator_control->UpdateRegionMapMulti(regions);
 
   // setup response
-  LOG(INFO) << "set epoch id to response " << new_storemap_epoch << " "
-            << new_regionmap_epoch;
+  LOG(INFO) << "set epoch id to response " << new_storemap_epoch << " " << new_regionmap_epoch;
   response->set_storemap_epoch(new_storemap_epoch);
   response->set_regionmap_epoch(new_regionmap_epoch);
 
@@ -103,11 +93,10 @@ void CoordinatorServiceImpl::StoreHeartbeat(
   LOG(INFO) << "end reponse build " << response->DebugString();
 }
 
-void CoordinatorServiceImpl::GetStoreMap(
-    google::protobuf::RpcController * /*controller*/,
-    const pb::coordinator::GetStoreMapRequest *request,
-    pb::coordinator::GetStoreMapResponse *response,
-    google::protobuf::Closure *done) {
+void CoordinatorServiceImpl::GetStoreMap(google::protobuf::RpcController * /*controller*/,
+                                         const pb::coordinator::GetStoreMapRequest *request,
+                                         pb::coordinator::GetStoreMapResponse *response,
+                                         google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
   LOG(INFO) << "GetStoreMap request: _epoch [" << request->epoch() << "]";
 
@@ -118,11 +107,10 @@ void CoordinatorServiceImpl::GetStoreMap(
   response->set_epoch(storemap.epoch());
 }
 
-void CoordinatorServiceImpl::GetRegionMap(
-    google::protobuf::RpcController * /*controller*/,
-    const pb::coordinator::GetRegionMapRequest *request,
-    pb::coordinator::GetRegionMapResponse *response,
-    google::protobuf::Closure *done) {
+void CoordinatorServiceImpl::GetRegionMap(google::protobuf::RpcController * /*controller*/,
+                                          const pb::coordinator::GetRegionMapRequest *request,
+                                          pb::coordinator::GetRegionMapResponse *response,
+                                          google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
   LOG(INFO) << "GetRegionMap request: _epoch [" << request->epoch() << "]";
 
