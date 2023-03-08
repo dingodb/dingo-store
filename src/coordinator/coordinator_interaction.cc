@@ -26,13 +26,10 @@ bool CoordinatorInteraction::Init(const std::string& addr) {
   }
 
   for (auto& endpoint : endpoints_) {
-    LOG(INFO) << butil::StringPrintf("Init channel %s:%d",
-                                     butil::ip2str(endpoint.ip).c_str(),
-                                     endpoint.port);
+    LOG(INFO) << butil::StringPrintf("Init channel %s:%d", butil::ip2str(endpoint.ip).c_str(), endpoint.port);
     std::unique_ptr<brpc::Channel> channel = std::make_unique<brpc::Channel>();
     if (channel->Init(endpoint, nullptr) != 0) {
-      LOG(ERROR) << butil::StringPrintf("Init channel failed, %s:%d",
-                                        butil::ip2str(endpoint.ip).c_str(),
+      LOG(ERROR) << butil::StringPrintf("Init channel failed, %s:%d", butil::ip2str(endpoint.ip).c_str(),
                                         endpoint.port);
       return false;
     }

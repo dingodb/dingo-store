@@ -33,24 +33,16 @@ class MemEngine : public Engine {
   std::string GetName();
   pb::common::Engine GetID();
 
-  pb::error::Errno KvGet(std::shared_ptr<Context> ctx, const std::string& key,
-                         std::string& value) override;
-  pb::error::Errno KvBatchGet(std::shared_ptr<Context> ctx,
-                              const std::vector<std::string>& keys,
+  pb::error::Errno KvGet(std::shared_ptr<Context> ctx, const std::string& key, std::string& value) override;
+  pb::error::Errno KvBatchGet(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys,
                               std::vector<pb::common::KeyValue>& kvs) override;
 
-  pb::error::Errno KvPut(std::shared_ptr<Context> ctx,
-                         const pb::common::KeyValue& kv) override;
-  pb::error::Errno KvBatchPut(
-      std::shared_ptr<Context> ctx,
-      const std::vector<pb::common::KeyValue>& kvs) override;
+  pb::error::Errno KvPut(std::shared_ptr<Context> ctx, const pb::common::KeyValue& kv) override;
+  pb::error::Errno KvBatchPut(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs) override;
 
-  pb::error::Errno KvPutIfAbsent(std::shared_ptr<Context> ctx,
-                                 const pb::common::KeyValue& kv) override;
-  pb::error::Errno KvBatchPutIfAbsent(
-      std::shared_ptr<Context> ctx,
-      const std::vector<pb::common::KeyValue>& kvs,
-      std::vector<std::string>& put_keys) override;
+  pb::error::Errno KvPutIfAbsent(std::shared_ptr<Context> ctx, const pb::common::KeyValue& kv) override;
+  pb::error::Errno KvBatchPutIfAbsent(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs,
+                                      std::vector<std::string>& put_keys) override;
 
  private:
   std::shared_mutex mutex_;

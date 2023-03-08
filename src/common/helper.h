@@ -15,6 +15,7 @@
 #ifndef DINGODB_COMMON_HELPER_H_
 #define DINGODB_COMMON_HELPER_H_
 
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -31,11 +32,9 @@ class Helper {
 
   static butil::EndPoint GetEndPoint(const std::string& host, int port);
 
-  static bool IsDifferenceLocation(const pb::common::Location& location,
-                                   const pb::common::Location& other_location);
-  static bool IsDifferencePeers(
-      const std::vector<pb::common::Peer>& peers,
-      const std::vector<pb::common::Peer>& other_peers);
+  static bool IsDifferenceLocation(const pb::common::Location& location, const pb::common::Location& other_location);
+  static bool IsDifferencePeers(const std::vector<pb::common::Peer>& peers,
+                                const std::vector<pb::common::Peer>& other_peers);
 
   static void SortPeers(std::vector<pb::common::Peer>& peers);
   static std::vector<pb::common::Location> ExtractLocations(
@@ -44,29 +43,22 @@ class Helper {
   // format: 127.0.0.1:8201:0
   static std::string LocationToString(const pb::common::Location& location);
 
-  static butil::EndPoint LocationToEndPoint(
-      const pb::common::Location& location);
+  static butil::EndPoint LocationToEndPoint(const pb::common::Location& location);
 
   // format: 127.0.0.1:8201:0,127.0.0.1:8202:0,127.0.0.1:8203:0
-  static std::string FormatPeers(
-      const std::vector<pb::common::Location>& locations);
+  static std::string FormatPeers(const std::vector<pb::common::Location>& locations);
 
   // 127.0.0.1:8201,127.0.0.1:8202,127.0.0.1:8203 to EndPoint
   static std::vector<butil::EndPoint> StrToEndpoint(const std::string& str);
 
-  static std::shared_ptr<pb::error::Error> Error(pb::error::Errno errcode,
-                                                 const std::string& errmsg);
-  static bool Error(pb::error::Errno errcode, const std::string& errmsg,
-                    pb::error::Error& err);
-  static bool Error(pb::error::Errno errcode, const std::string& errmsg,
-                    std::shared_ptr<pb::error::Error> err);
+  static std::shared_ptr<pb::error::Error> Error(pb::error::Errno errcode, const std::string& errmsg);
+  static bool Error(pb::error::Errno errcode, const std::string& errmsg, pb::error::Error& err);
+  static bool Error(pb::error::Errno errcode, const std::string& errmsg, std::shared_ptr<pb::error::Error> err);
 
-  static bool IsEqualIgnoreCase(const std::string& str1,
-                                const std::string& str2);
+  static bool IsEqualIgnoreCase(const std::string& str1, const std::string& str2);
 
   template <typename T>
-  static std::vector<T> PbRepeatedToVector(
-      const google::protobuf::RepeatedPtrField<T>& data) {
+  static std::vector<T> PbRepeatedToVector(const google::protobuf::RepeatedPtrField<T>& data) {
     std::vector<T> vec;
     for (auto& item : data) {
       vec.push_back(item);
@@ -76,11 +68,37 @@ class Helper {
   }
 
   template <typename T>
-  static void VectorToPbRepeated(const std::vector<T>& vec,
-                                 google::protobuf::RepeatedPtrField<T>* out) {
+  static void VectorToPbRepeated(const std::vector<T>& vec, google::protobuf::RepeatedPtrField<T>* out) {
     for (auto& item : vec) {
       *(out->Add()) = item;
     }
+  }
+
+  static std::string Increment(const std::string& input) {
+    std::string ret(input.size(), 0);
+    int carry = 1;
+    for (int i = input.size() - 1; i >= 0; --i) {
+      if (input[i] == 0xFF && carry == 1) {
+        ret[i] = 0;
+      } else {
+        ret[i] = (input[i] + carry);
+        carry = 0;
+      }
+    }
+
+    return (carry == 0) ? ret : input;
+  }
+
+  static std::string StringToHex(const std::string& str) {
+    std::string result = "0x";
+    std::string tmp;
+    std::stringstream ss;
+    for (int i = 0; i < str.size(); i++) {
+      ss << std::hex << int(str[i]) << std::endl;
+      ss >> tmp;
+      result += tmp;
+    }
+    return result;
   }
 };
 

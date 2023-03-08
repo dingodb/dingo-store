@@ -53,15 +53,10 @@ class StoreStateMachine : public braft::StateMachine {
   void on_stop_following(const ::braft::LeaderChangeContext& ctx);
 
  private:
-  void DispatchRequest(StoreClosure* done,
-                       const dingodb::pb::raft::RaftCmdRequest& raft_cmd);
-  void HandlePutRequest(StoreClosure* done,
-                        const dingodb::pb::raft::PutRequest& request);
-  void HandlePutIfAbsentRequest(
-      StoreClosure* done,
-      const dingodb::pb::raft::PutIfAbsentRequest& request);
-  void HandleDeleteRangeRequest(StoreClosure* done,
-                                const pb::raft::DeleteRangeRequest& request);
+  void DispatchRequest(StoreClosure* done, const dingodb::pb::raft::RaftCmdRequest& raft_cmd);
+  void HandlePutRequest(StoreClosure* done, const dingodb::pb::raft::PutRequest& request);
+  void HandlePutIfAbsentRequest(StoreClosure* done, const dingodb::pb::raft::PutIfAbsentRequest& request);
+  void HandleDeleteRangeRequest(StoreClosure* done, const pb::raft::DeleteRangeRequest& request);
 
  private:
   std::shared_ptr<Engine> engine_;

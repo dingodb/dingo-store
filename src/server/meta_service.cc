@@ -25,17 +25,14 @@
 
 namespace dingodb {
 
-void MetaServiceImpl::GetSchemas(
-    google::protobuf::RpcController * /*controller*/,
-    const pb::meta::GetSchemasRequest *request,
-    pb::meta::GetSchemasResponse *response, google::protobuf::Closure *done) {
+void MetaServiceImpl::GetSchemas(google::protobuf::RpcController * /*controller*/,
+                                 const pb::meta::GetSchemasRequest *request, pb::meta::GetSchemasResponse *response,
+                                 google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
-  LOG(INFO) << "GetSchemas request:  schema_id = ["
-            << request->schema_id().entity_id() << "]";
+  LOG(INFO) << "GetSchemas request:  schema_id = [" << request->schema_id().entity_id() << "]";
 
   std::vector<pb::meta::Schema> schemas;
-  this->coordinator_control->GetSchemas(request->schema_id().entity_id(),
-                                        schemas);
+  this->coordinator_control->GetSchemas(request->schema_id().entity_id(), schemas);
 
   for (auto &schema : schemas) {
     auto *new_schema = response->add_schemas();
@@ -43,21 +40,17 @@ void MetaServiceImpl::GetSchemas(
   }
 }
 
-void MetaServiceImpl::GetTables(
-    google::protobuf::RpcController * /*controller*/,
-    const pb::meta::GetTablesRequest *request,
-    pb::meta::GetTablesResponse *response, google::protobuf::Closure *done) {
+void MetaServiceImpl::GetTables(google::protobuf::RpcController * /*controller*/,
+                                const pb::meta::GetTablesRequest *request, pb::meta::GetTablesResponse *response,
+                                google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
-  LOG(INFO) << "GetTables request:  schema_id = ["
-            << request->schema_id().entity_id() << "]";
+  LOG(INFO) << "GetTables request:  schema_id = [" << request->schema_id().entity_id() << "]";
 
   std::vector<pb::meta::TableDefinitionWithId> table_definition_with_ids;
-  this->coordinator_control->GetTables(request->schema_id().entity_id(),
-                                       table_definition_with_ids);
+  this->coordinator_control->GetTables(request->schema_id().entity_id(), table_definition_with_ids);
 
   if (table_definition_with_ids.empty()) {
-    LOG(INFO) << "meta_service GetTables no tables, schema_id="
-              << request->schema_id().entity_id();
+    LOG(INFO) << "meta_service GetTables no tables, schema_id=" << request->schema_id().entity_id();
     return;
   }
 
@@ -69,31 +62,25 @@ void MetaServiceImpl::GetTables(
 }
 
 void MetaServiceImpl::GetTable(google::protobuf::RpcController * /*controller*/,
-                               const pb::meta::GetTableRequest *request,
-                               pb::meta::GetTableResponse *response,
+                               const pb::meta::GetTableRequest *request, pb::meta::GetTableResponse *response,
                                google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
-  LOG(INFO) << "GetTable request:  table_id = ["
-            << request->table_id().entity_id() << "]";
+  LOG(INFO) << "GetTable request:  table_id = [" << request->table_id().entity_id() << "]";
 
   auto *table = response->mutable_table();
-  this->coordinator_control->GetTable(request->table_id().parent_entity_id(),
-                                      request->table_id().entity_id(), *table);
+  this->coordinator_control->GetTable(request->table_id().parent_entity_id(), request->table_id().entity_id(), *table);
 }
 
-void MetaServiceImpl::CreateTable(
-    google::protobuf::RpcController * /*controller*/,
-    const pb::meta::CreateTableRequest *request,
-    pb::meta::CreateTableResponse *response, google::protobuf::Closure *done) {
+void MetaServiceImpl::CreateTable(google::protobuf::RpcController * /*controller*/,
+                                  const pb::meta::CreateTableRequest *request, pb::meta::CreateTableResponse *response,
+                                  google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
-  LOG(INFO) << "CreatTable request:  schema_id = ["
-            << request->schema_id().entity_id() << "]";
+  LOG(INFO) << "CreatTable request:  schema_id = [" << request->schema_id().entity_id() << "]";
   LOG(INFO) << request->DebugString();
 
   uint64_t new_table_id;
-  int ret = this->coordinator_control->CreateTable(
-      request->schema_id().entity_id(), request->table_definition(),
-      new_table_id);
+  int ret = this->coordinator_control->CreateTable(request->schema_id().entity_id(), request->table_definition(),
+                                                   new_table_id);
   if (ret < 0) {
     LOG(ERROR) << "CreateTable failed in meta_service";
     return;
@@ -105,48 +92,38 @@ void MetaServiceImpl::CreateTable(
   table_id->set_parent_entity_id(request->schema_id().entity_id());
   table_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
 
-  LOG(INFO) << "CreateTable Success in meta_service table_name ="
-            << request->table_definition().name();
+  LOG(INFO) << "CreateTable Success in meta_service table_name =" << request->table_definition().name();
 }
 
 void MetaServiceImpl::CreateSchema(google::protobuf::RpcController *controller,
                                    const pb::meta::CreateSchemaRequest *request,
-                                   pb::meta::CreateSchemaResponse *response,
-                                   google::protobuf::Closure *done) {
+                                   pb::meta::CreateSchemaResponse *response, google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
-  LOG(INFO) << "CreatSchema request:  parent_schema_id = ["
-            << request->parent_schema_id().entity_id() << "]";
+  LOG(INFO) << "CreatSchema request:  parent_schema_id = [" << request->parent_schema_id().entity_id() << "]";
   LOG(INFO) << request->DebugString();
 
   uint64_t new_schema_id;
-  int ret = this->coordinator_control->CreateSchema(
-      request->parent_schema_id().entity_id(), request->schema_name(),
-      new_schema_id);
+  int ret = this->coordinator_control->CreateSchema(request->parent_schema_id().entity_id(), request->schema_name(),
+                                                    new_schema_id);
   if (ret) {
     LOG(INFO) << "CreateSchema failed ret = " << ret;
-    brpc::Controller *brpc_controller =
-        static_cast<brpc::Controller *>(controller);
+    brpc::Controller *brpc_controller = static_cast<brpc::Controller *>(controller);
     brpc_controller->SetFailed(ret, "create schema failed");
     return;
   }
 
   auto *schema = response->mutable_schema();
-  schema->mutable_id()->set_entity_type(
-      ::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
+  schema->mutable_id()->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
   schema->mutable_id()->set_entity_id(new_schema_id);
-  schema->mutable_id()->set_parent_entity_id(
-      request->parent_schema_id().entity_id());
+  schema->mutable_id()->set_parent_entity_id(request->parent_schema_id().entity_id());
   schema->set_name(request->schema_name());
 }
 
-void MetaServiceImpl::DropTable(
-    google::protobuf::RpcController * /*controller*/,
-    const pb::meta::DropTableRequest *request,
-    pb::meta::DropTableResponse * /*response*/,
-    google::protobuf::Closure *done) {
+void MetaServiceImpl::DropTable(google::protobuf::RpcController * /*controller*/,
+                                const pb::meta::DropTableRequest *request, pb::meta::DropTableResponse * /*response*/,
+                                google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
-  LOG(INFO) << "DropTable request:  schema_id = ["
-            << request->table_id().parent_entity_id() << "]"
+  LOG(INFO) << "DropTable request:  schema_id = [" << request->table_id().parent_entity_id() << "]"
             << " table_id = [" << request->table_id().entity_id() << "]";
   LOG(INFO) << request->DebugString();
 }

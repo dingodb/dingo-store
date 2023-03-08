@@ -29,13 +29,12 @@ DEFINE_int32(timeout_ms, 500, "Timeout for each request");
 DEFINE_string(store_addr, "127.0.0.1:20001", "store server addr");
 DEFINE_string(method, "KvGet", "Request method");
 DEFINE_string(key, "hello", "Request key");
+DEFINE_int32(region_id, 111111, "region id");
 
 bvar::LatencyRecorder g_latency_recorder("dingo-store");
 
-const char alphabet[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i',
-                         'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r',
-                         's', 't', 'o', 'v', 'w', 'x', 'y', 'z', '0',
-                         '1', '2', '3', '4', '5', '6', '7', '8', '9'};
+const char alphabet[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r',
+                         's', 't', 'o', 'v', 'w', 'x', 'y', 'z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'};
 
 // rand string
 std::string genRandomString(int len) {
@@ -57,13 +56,12 @@ std::vector<std::string> genKeys(int nums) {
   return vec;
 }
 
-void sendKvGet(brpc::Controller& cntl,
-               dingodb::pb::store::StoreService_Stub& stub) {
+void sendKvGet(brpc::Controller& cntl, dingodb::pb::store::StoreService_Stub& stub) {
   dingodb::pb::store::KvGetRequest request;
   dingodb::pb::store::KvGetResponse response;
 
   const char* op = NULL;
-  request.set_region_id(111111);
+  request.set_region_id(FLAGS_region_id);
   request.set_key(FLAGS_key);
   stub.KvGet(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
@@ -72,21 +70,17 @@ void sendKvGet(brpc::Controller& cntl,
   }
 
   if (FLAGS_log_each_request) {
-    LOG(INFO) << "Received response"
-              << " request=" << request.DebugString()
-              << " response=" << response.DebugString()
+    LOG(INFO) << " request=" << request.ShortDebugString() << " response=" << response.ShortDebugString()
               << " request_attachment=" << cntl.request_attachment().size()
-              << " response_attachment=" << cntl.response_attachment().size()
-              << " latency=" << cntl.latency_us();
+              << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
   }
 }
 
-void sendKvPut(brpc::Controller& cntl,
-               dingodb::pb::store::StoreService_Stub& stub) {
+void sendKvPut(brpc::Controller& cntl, dingodb::pb::store::StoreService_Stub& stub) {
   dingodb::pb::store::KvPutRequest request;
   dingodb::pb::store::KvPutResponse response;
 
-  request.set_region_id(111111);
+  request.set_region_id(FLAGS_region_id);
   dingodb::pb::common::KeyValue* kv = request.mutable_kv();
   kv->set_key(FLAGS_key);
   kv->set_value(genRandomString(64));
@@ -97,25 +91,21 @@ void sendKvPut(brpc::Controller& cntl,
   }
 
   if (FLAGS_log_each_request) {
-    LOG(INFO) << "Received response"
-              << " request=" << request.DebugString()
-              << " response=" << response.DebugString()
+    LOG(INFO) << " request=" << request.ShortDebugString() << " response=" << response.ShortDebugString()
               << " request_attachment=" << cntl.request_attachment().size()
-              << " response_attachment=" << cntl.response_attachment().size()
-              << " latency=" << cntl.latency_us();
+              << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
   }
 }
 
-void sendAddRegion(brpc::Controller& cntl,
-                   dingodb::pb::store::StoreService_Stub& stub) {
+void sendAddRegion(brpc::Controller& cntl, dingodb::pb::store::StoreService_Stub& stub) {
   dingodb::pb::store::AddRegionRequest request;
   dingodb::pb::store::AddRegionResponse response;
 
   dingodb::pb::common::Region* region = request.mutable_region();
-  region->set_id(111111);
+  region->set_id(FLAGS_region_id);
   region->set_epoch(1);
   region->set_table_id(10);
-  region->set_name("test-111111");
+  region->set_name("test-" + std::to_string(FLAGS_region_id));
   dingodb::pb::common::Range* range = region->mutable_range();
   range->set_start_key("0000000");
   range->set_end_key("11111111");
@@ -144,12 +134,9 @@ void sendAddRegion(brpc::Controller& cntl,
   }
 
   if (FLAGS_log_each_request) {
-    LOG(INFO) << "Received response"
-              << " request=" << request.DebugString()
-              << " response=" << response.DebugString()
+    LOG(INFO) << " request=" << request.ShortDebugString() << " response=" << response.ShortDebugString()
               << " request_attachment=" << cntl.request_attachment().size()
-              << " response_attachment=" << cntl.response_attachment().size()
-              << " latency=" << cntl.latency_us();
+              << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
   }
 }
 

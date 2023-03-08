@@ -28,8 +28,7 @@ void CrontabManager::Run(void* arg) {
     try {
       crontab->func_(crontab->arg_);
     } catch (...) {
-      LOG(ERROR) << butil::StringPrintf("Crontab %u %s happen exception",
-                                        crontab->id_, crontab->name_.c_str());
+      LOG(ERROR) << butil::StringPrintf("Crontab %u %s happen exception", crontab->id_, crontab->name_.c_str());
     }
     ++crontab->run_count_;
   } else {
@@ -37,15 +36,11 @@ void CrontabManager::Run(void* arg) {
   }
 
   if (crontab->max_times_ == 0 || crontab->run_count_ < crontab->max_times_) {
-    bthread_timer_add(&crontab->timer_id_,
-                      butil::milliseconds_from_now(crontab->interval_), &Run,
-                      crontab);
+    bthread_timer_add(&crontab->timer_id_, butil::milliseconds_from_now(crontab->interval_), &Run, crontab);
   }
 }
 
-uint32_t CrontabManager::AllocCrontabId() {
-  return auinc_crontab_id_.fetch_add(1);
-}
+uint32_t CrontabManager::AllocCrontabId() { return auinc_crontab_id_.fetch_add(1); }
 
 uint32_t CrontabManager::AddAndRunCrontab(std::shared_ptr<Crontab> crontab) {
   uint32_t crontab_id = AddCrontab(crontab);
@@ -75,9 +70,7 @@ void CrontabManager::StartCrontab(uint32_t crontab_id) {
 
   bthread_t tid;
   const bthread_attr_t attr = BTHREAD_ATTR_NORMAL;
-  bthread_start_background(
-      &tid, &attr, [](void* arg) -> void* { CrontabManager::Run(arg); },
-      crontab.get());
+  bthread_start_background(&tid, &attr, [](void* arg) -> void* { CrontabManager::Run(arg); }, crontab.get());
 }
 
 void CrontabManager::PauseCrontab(uint32_t crontab_id) {

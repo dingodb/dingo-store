@@ -38,8 +38,7 @@ std::shared_ptr<RaftNode> RaftNodeManager::GetNode(uint64_t node_id) {
   return it->second;
 }
 
-void RaftNodeManager::AddNode(uint64_t node_id,
-                              std::shared_ptr<RaftNode> node) {
+void RaftNodeManager::AddNode(uint64_t node_id, std::shared_ptr<RaftNode> node) {
   if (IsExist(node_id)) {
     LOG(WARNING) << butil::StringPrintf("node %lu already exist!", node_id);
     return;

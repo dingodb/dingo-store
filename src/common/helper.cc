@@ -42,29 +42,23 @@ butil::EndPoint Helper::GetEndPoint(const std::string& host, int port) {
   return butil::EndPoint(ip, port);
 }
 
-bool Helper::IsDifferenceLocation(const pb::common::Location& location,
-                                  const pb::common::Location& other_location) {
-  return location.host() != other_location.host() ||
-         location.port() != other_location.port();
+bool Helper::IsDifferenceLocation(const pb::common::Location& location, const pb::common::Location& other_location) {
+  return location.host() != other_location.host() || location.port() != other_location.port();
 }
 
 void Helper::SortPeers(std::vector<pb::common::Peer>& peers) {
-  auto compare_func = [](pb::common::Peer& a, pb::common::Peer& b) -> bool {
-    return a.store_id() < b.store_id();
-  };
+  auto compare_func = [](pb::common::Peer& a, pb::common::Peer& b) -> bool { return a.store_id() < b.store_id(); };
   std::sort(peers.begin(), peers.end(), compare_func);
 }
 
-bool Helper::IsDifferencePeers(
-    const std::vector<pb::common::Peer>& peers,
-    const std::vector<pb::common::Peer>& other_peers) {
+bool Helper::IsDifferencePeers(const std::vector<pb::common::Peer>& peers,
+                               const std::vector<pb::common::Peer>& other_peers) {
   if (peers.size() != other_peers.size()) {
     return true;
   }
 
   for (int i = 0; i < peers.size(); ++i) {
-    if (Helper::IsDifferenceLocation(peers[i].raft_location(),
-                                     other_peers[i].raft_location())) {
+    if (Helper::IsDifferenceLocation(peers[i].raft_location(), other_peers[i].raft_location())) {
       return true;
     }
   }
@@ -83,15 +77,12 @@ std::vector<pb::common::Location> Helper::ExtractLocations(
 
 // format: 127.0.0.1:8201:0
 std::string Helper::LocationToString(const pb::common::Location& location) {
-  return butil::StringPrintf("%s:%d:0", location.host().c_str(),
-                             location.port());
+  return butil::StringPrintf("%s:%d:0", location.host().c_str(), location.port());
 }
 
-butil::EndPoint Helper::LocationToEndPoint(
-    const pb::common::Location& location) {
+butil::EndPoint Helper::LocationToEndPoint(const pb::common::Location& location) {
   butil::EndPoint endpoint;
-  if (butil::hostname2endpoint(location.host().c_str(), location.port(),
-                               &endpoint) != 0 &&
+  if (butil::hostname2endpoint(location.host().c_str(), location.port(), &endpoint) != 0 &&
       str2endpoint(location.host().c_str(), location.port(), &endpoint) != 0) {
   }
 
@@ -99,8 +90,7 @@ butil::EndPoint Helper::LocationToEndPoint(
 }
 
 // format: 127.0.0.1:8201:0,127.0.0.1:8202:0,127.0.0.1:8203:0
-std::string Helper::FormatPeers(
-    const std::vector<pb::common::Location>& locations) {
+std::string Helper::FormatPeers(const std::vector<pb::common::Location>& locations) {
   std::string s;
   for (int i = 0; i < locations.size(); ++i) {
     s += LocationToString(locations[i]);
@@ -118,8 +108,7 @@ std::vector<butil::EndPoint> Helper::StrToEndpoint(const std::string& str) {
   std::vector<butil::EndPoint> endpoints;
   for (const auto& addr : addrs) {
     butil::EndPoint endpoint;
-    if (butil::hostname2endpoint(addr.c_str(), &endpoint) != 0 &&
-        str2endpoint(addr.c_str(), &endpoint) != 0) {
+    if (butil::hostname2endpoint(addr.c_str(), &endpoint) != 0 && str2endpoint(addr.c_str(), &endpoint) != 0) {
       continue;
     }
 
@@ -129,37 +118,31 @@ std::vector<butil::EndPoint> Helper::StrToEndpoint(const std::string& str) {
   return endpoints;
 }
 
-std::shared_ptr<pb::error::Error> Helper::Error(pb::error::Errno errcode,
-                                                const std::string& errmsg) {
+std::shared_ptr<pb::error::Error> Helper::Error(pb::error::Errno errcode, const std::string& errmsg) {
   std::shared_ptr<pb::error::Error> err = std::make_shared<pb::error::Error>();
   err->set_errcode(errcode);
   err->set_errmsg(errmsg);
   return err;
 }
 
-bool Helper::Error(pb::error::Errno errcode, const std::string& errmsg,
-                   pb::error::Error& err) {
+bool Helper::Error(pb::error::Errno errcode, const std::string& errmsg, pb::error::Error& err) {
   err.set_errcode(errcode);
   err.set_errmsg(errmsg);
   return false;
 }
 
-bool Helper::Error(pb::error::Errno errcode, const std::string& errmsg,
-                   std::shared_ptr<pb::error::Error> err) {
+bool Helper::Error(pb::error::Errno errcode, const std::string& errmsg, std::shared_ptr<pb::error::Error> err) {
   err->set_errcode(errcode);
   err->set_errmsg(errmsg);
   return false;
 }
 
-bool Helper::IsEqualIgnoreCase(const std::string& str1,
-                               const std::string& str2) {
+bool Helper::IsEqualIgnoreCase(const std::string& str1, const std::string& str2) {
   if (str1.size() != str2.size()) {
     return false;
   }
   return std::equal(str1.begin(), str1.end(), str2.begin(),
-                    [](const char c1, const char c2) {
-                      return std::tolower(c1) == std::tolower(c2);
-                    });
+                    [](const char c1, const char c2) { return std::tolower(c1) == std::tolower(c2); });
 }
 
 }  // namespace dingodb

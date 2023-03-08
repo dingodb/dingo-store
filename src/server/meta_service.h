@@ -26,35 +26,21 @@ class MetaServiceImpl : public pb::meta::MetaService {
  public:
   MetaServiceImpl() = default;
 
-  void SetControl(CoordinatorControl* coordinator_control) {
-    this->coordinator_control = coordinator_control;
-  };
+  void SetControl(CoordinatorControl* coordinator_control) { this->coordinator_control = coordinator_control; };
 
-  void GetSchemas(google::protobuf::RpcController* controller,
-                  const pb::meta::GetSchemasRequest* request,
-                  pb::meta::GetSchemasResponse* response,
-                  google::protobuf::Closure* done) override;
-  void GetTables(google::protobuf::RpcController* controller,
-                 const pb::meta::GetTablesRequest* request,
-                 pb::meta::GetTablesResponse* response,
-                 google::protobuf::Closure* done) override;
-  void GetTable(google::protobuf::RpcController* controller,
-                const pb::meta::GetTableRequest* request,
-                pb::meta::GetTableResponse* response,
-                google::protobuf::Closure* done) override;
-  void CreateTable(google::protobuf::RpcController* controller,
-                   const pb::meta::CreateTableRequest* request,
-                   pb::meta::CreateTableResponse* response,
-                   google::protobuf::Closure* done) override;
-  void DropTable(google::protobuf::RpcController* controller,
-                 const pb::meta::DropTableRequest* request,
-                 pb::meta::DropTableResponse* response,
-                 google::protobuf::Closure* done) override;
+  void GetSchemas(google::protobuf::RpcController* controller, const pb::meta::GetSchemasRequest* request,
+                  pb::meta::GetSchemasResponse* response, google::protobuf::Closure* done) override;
+  void GetTables(google::protobuf::RpcController* controller, const pb::meta::GetTablesRequest* request,
+                 pb::meta::GetTablesResponse* response, google::protobuf::Closure* done) override;
+  void GetTable(google::protobuf::RpcController* controller, const pb::meta::GetTableRequest* request,
+                pb::meta::GetTableResponse* response, google::protobuf::Closure* done) override;
+  void CreateTable(google::protobuf::RpcController* controller, const pb::meta::CreateTableRequest* request,
+                   pb::meta::CreateTableResponse* response, google::protobuf::Closure* done) override;
+  void DropTable(google::protobuf::RpcController* controller, const pb::meta::DropTableRequest* request,
+                 pb::meta::DropTableResponse* response, google::protobuf::Closure* done) override;
 
-  void CreateSchema(google::protobuf::RpcController* controller,
-                    const pb::meta::CreateSchemaRequest* request,
-                    pb::meta::CreateSchemaResponse* response,
-                    google::protobuf::Closure* done) override;
+  void CreateSchema(google::protobuf::RpcController* controller, const pb::meta::CreateSchemaRequest* request,
+                    pb::meta::CreateSchemaResponse* response, google::protobuf::Closure* done) override;
 
   CoordinatorControl* coordinator_control;
 };

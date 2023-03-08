@@ -44,10 +44,8 @@ class CoordinatorControl {
   // create region
   // in: resource_tag
   // out: new region id
-  int CreateRegion(const std::string &region_name,
-                   const std::string &resource_tag, int32_t replica_num,
-                   pb::common::Range region_range, uint64_t schema_id,
-                   uint64_t table_id, uint64_t &new_region_id);
+  int CreateRegion(const std::string &region_name, const std::string &resource_tag, int32_t replica_num,
+                   pb::common::Range region_range, uint64_t schema_id, uint64_t table_id, uint64_t &new_region_id);
 
   // drop region
   // in:  region_id
@@ -59,24 +57,20 @@ class CoordinatorControl {
   // in: schema_name
   // out: new schema_id
   // return: 0 or -1
-  int CreateSchema(uint64_t parent_schema_id, std::string schema_name,
-                   uint64_t &new_schema_id);
+  int CreateSchema(uint64_t parent_schema_id, std::string schema_name, uint64_t &new_schema_id);
 
   // create schema
   // in: schema_id
   // in: table_definition
   // out: new table_id
   // return: 0 or -1
-  int CreateTable(uint64_t schema_id,
-                  const pb::meta::TableDefinition &table_definition,
-                  uint64_t &new_table_id);
+  int CreateTable(uint64_t schema_id, const pb::meta::TableDefinition &table_definition, uint64_t &new_table_id);
 
   // create store
   // in: cluster_id
   // out: store_id, password
   // return: 0 or -1
-  int CreateStore(uint64_t cluster_id, uint64_t &store_id,
-                  std::string &password);
+  int CreateStore(uint64_t cluster_id, uint64_t &store_id, std::string &password);
 
   // update store map with new Store info
   // return new epoch
@@ -98,9 +92,7 @@ class CoordinatorControl {
   void GetSchemas(uint64_t schema_id, std::vector<pb::meta::Schema> &schemas);
 
   // get tables
-  void GetTables(
-      uint64_t schema_id,
-      std::vector<pb::meta::TableDefinitionWithId> &table_definition_with_ids);
+  void GetTables(uint64_t schema_id, std::vector<pb::meta::TableDefinitionWithId> &table_definition_with_ids);
 
   // get table
   void GetTable(uint64_t schema_id, uint64_t table_id, pb::meta::Table &table);

@@ -25,39 +25,31 @@ void StoreClosure::Run() {
   LOG(INFO) << "Closure run...";
 
   // Set response error
-  auto setErrorFunc = [](butil::Status& status,
-                         google::protobuf::Message* message) {
+  auto setErrorFunc = [](butil::Status& status, google::protobuf::Message* message) {
     const google::protobuf::Reflection* reflection = message->GetReflection();
     const google::protobuf::Descriptor* desc = message->GetDescriptor();
 
-    const google::protobuf::FieldDescriptor* error_field =
-        desc->FindFieldByName("error");
-    google::protobuf::Message* error =
-        reflection->MutableMessage(message, error_field);
+    const google::protobuf::FieldDescriptor* error_field = desc->FindFieldByName("error");
+    google::protobuf::Message* error = reflection->MutableMessage(message, error_field);
     const google::protobuf::Reflection* error_ref = error->GetReflection();
     const google::protobuf::Descriptor* error_desc = error->GetDescriptor();
-    const google::protobuf::FieldDescriptor* errcode_field =
-        error_desc->FindFieldByName("errcode");
+    const google::protobuf::FieldDescriptor* errcode_field = error_desc->FindFieldByName("errcode");
     error_ref->SetEnumValue(error, errcode_field, status.error_code());
-    const google::protobuf::FieldDescriptor* errmsg_field =
-        error_desc->FindFieldByName("errmsg");
+    const google::protobuf::FieldDescriptor* errmsg_field = error_desc->FindFieldByName("errmsg");
     error_ref->SetString(error, errmsg_field, status.error_str());
   };
 
   brpc::ClosureGuard done_guard(ctx_->done());
   if (!status().ok()) {
-    LOG(ERROR) << butil::StringPrintf(
-        "raft log commit failed, region[%ld] %d:%s", ctx_->region_id(),
-        status().error_code(), status().error_cstr());
+    LOG(ERROR) << butil::StringPrintf("raft log commit failed, region[%ld] %d:%s", ctx_->region_id(),
+                                      status().error_code(), status().error_cstr());
     setErrorFunc(status(), ctx_->response());
   }
 }
 
-StoreStateMachine::StoreStateMachine(std::shared_ptr<Engine> engine)
-    : engine_(engine) {}
+StoreStateMachine::StoreStateMachine(std::shared_ptr<Engine> engine) : engine_(engine) {}
 
-void StoreStateMachine::DispatchRequest(
-    StoreClosure* done, const pb::raft::RaftCmdRequest& raft_cmd) {
+void StoreStateMachine::DispatchRequest(StoreClosure* done, const pb::raft::RaftCmdRequest& raft_cmd) {
   for (auto& req : raft_cmd.requests()) {
     switch (req.cmd_type()) {
       case pb::raft::CmdType::PUT:
@@ -75,8 +67,7 @@ void StoreStateMachine::DispatchRequest(
   }
 }
 
-void StoreStateMachine::HandlePutRequest(StoreClosure* done,
-                                         const pb::raft::PutRequest& request) {
+void StoreStateMachine::HandlePutRequest(StoreClosure* done, const pb::raft::PutRequest& request) {
   LOG(INFO) << "handlePutRequest ...";
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->set_cf_name(request.cf_name());
@@ -85,8 +76,7 @@ void StoreStateMachine::HandlePutRequest(StoreClosure* done,
   }
 }
 
-void StoreStateMachine::HandlePutIfAbsentRequest(
-    StoreClosure* done, const pb::raft::PutIfAbsentRequest& request) {
+void StoreStateMachine::HandlePutIfAbsentRequest(StoreClosure* done, const pb::raft::PutIfAbsentRequest& request) {
   // todo: write data
   LOG(INFO) << "handlePutIfAbsentRequest ...";
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
@@ -96,8 +86,7 @@ void StoreStateMachine::HandlePutIfAbsentRequest(
   }
 }
 
-void StoreStateMachine::HandleDeleteRangeRequest(
-    StoreClosure* done, const pb::raft::DeleteRangeRequest& request) {
+void StoreStateMachine::HandleDeleteRangeRequest(StoreClosure* done, const pb::raft::DeleteRangeRequest& request) {
   LOG(INFO) << "HandleDeleteRangeRequest ...";
 }
 
@@ -109,9 +98,8 @@ void StoreStateMachine::on_apply(braft::Iterator& iter) {
     butil::IOBufAsZeroCopyInputStream wrapper(iter.data());
     pb::raft::RaftCmdRequest raft_cmd;
     CHECK(raft_cmd.ParseFromZeroCopyStream(&wrapper));
-    LOG(INFO) << butil::StringPrintf(
-        "raft commited log region(%ld) term(%ld) index(%ld)",
-        raft_cmd.header().region_id(), iter.term(), iter.index());
+    LOG(INFO) << butil::StringPrintf("raft commited log region(%ld) term(%ld) index(%ld)",
+                                     raft_cmd.header().region_id(), iter.term(), iter.index());
 
     LOG(INFO) << "raft_cmd: " << raft_cmd.ShortDebugString();
     DispatchRequest(dynamic_cast<StoreClosure*>(iter.done()), raft_cmd);
@@ -120,47 +108,38 @@ void StoreStateMachine::on_apply(braft::Iterator& iter) {
 
 void StoreStateMachine::on_shutdown() { LOG(INFO) << "on_shutdown..."; }
 
-void StoreStateMachine::on_snapshot_save(braft::SnapshotWriter* writer,
-                                         braft::Closure* done) {
+void StoreStateMachine::on_snapshot_save(braft::SnapshotWriter* writer, braft::Closure* done) {
   LOG(INFO) << "on_snapshot_save...";
 }
 
-int StoreStateMachine::on_snapshot_load(
-    [[maybe_unused]] braft::SnapshotReader* reader) {
+int StoreStateMachine::on_snapshot_load([[maybe_unused]] braft::SnapshotReader* reader) {
   LOG(INFO) << "on_snapshot_load...";
   return -1;
 }
 
 void StoreStateMachine::on_leader_start() { LOG(INFO) << "on_leader_start..."; }
 
-void StoreStateMachine::on_leader_start(int64_t term) {
-  LOG(INFO) << "on_leader_start term: " << term;
-}
+void StoreStateMachine::on_leader_start(int64_t term) { LOG(INFO) << "on_leader_start term: " << term; }
 
 void StoreStateMachine::on_leader_stop(const butil::Status& status) {
-  LOG(INFO) << "on_leader_stop: " << status.error_code() << " "
-            << status.error_str();
+  LOG(INFO) << "on_leader_stop: " << status.error_code() << " " << status.error_str();
 }
 
 void StoreStateMachine::on_error(const ::braft::Error& e) {
-  LOG(INFO) << butil::StringPrintf("on_error type(%d) %d %s", e.type(),
-                                   e.status().error_code(),
+  LOG(INFO) << butil::StringPrintf("on_error type(%d) %d %s", e.type(), e.status().error_code(),
                                    e.status().error_cstr());
 }
 
-void StoreStateMachine::on_configuration_committed(
-    const ::braft::Configuration& conf) {
+void StoreStateMachine::on_configuration_committed(const ::braft::Configuration& conf) {
   LOG(INFO) << "on_configuration_committed...";
   // std::vector<braft::PeerId> peers;
   // conf.list_peers(&peers);
 }
 
-void StoreStateMachine::on_start_following(
-    const ::braft::LeaderChangeContext& ctx) {
+void StoreStateMachine::on_start_following(const ::braft::LeaderChangeContext& ctx) {
   LOG(INFO) << "on_start_following...";
 }
-void StoreStateMachine::on_stop_following(
-    const ::braft::LeaderChangeContext& ctx) {
+void StoreStateMachine::on_stop_following(const ::braft::LeaderChangeContext& ctx) {
   LOG(INFO) << "on_stop_following...";
 }
 

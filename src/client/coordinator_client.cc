@@ -38,8 +38,7 @@ DEFINE_string(method, "Hello", "Request method");
 
 bvar::LatencyRecorder g_latency_recorder("dingo-coordinator");
 
-void SendHello(brpc::Controller& cntl,
-               dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
+void SendHello(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
   dingodb::pb::coordinator::HelloRequest request;
   dingodb::pb::coordinator::HelloResponse response;
 
@@ -54,15 +53,12 @@ void SendHello(brpc::Controller& cntl,
 
   if (FLAGS_log_each_request) {
     LOG(INFO) << "Received response"
-              << " hello=" << request.hello()
-              << " request_attachment=" << cntl.request_attachment().size()
-              << " response_attachment=" << cntl.response_attachment().size()
-              << " latency=" << cntl.latency_us();
+              << " hello=" << request.hello() << " request_attachment=" << cntl.request_attachment().size()
+              << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
   }
 }
 
-void SendGetStoreMap(brpc::Controller& cntl,
-                     dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
+void SendGetStoreMap(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
   dingodb::pb::coordinator::GetStoreMapRequest request;
   dingodb::pb::coordinator::GetStoreMapResponse response;
 
@@ -76,16 +72,13 @@ void SendGetStoreMap(brpc::Controller& cntl,
 
   if (FLAGS_log_each_request) {
     LOG(INFO) << "Received response"
-              << " get_store_map=" << request.epoch()
-              << " request_attachment=" << cntl.request_attachment().size()
-              << " response_attachment=" << cntl.response_attachment().size()
-              << " latency=" << cntl.latency_us();
+              << " get_store_map=" << request.epoch() << " request_attachment=" << cntl.request_attachment().size()
+              << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
     LOG(INFO) << response.DebugString();
   }
 }
 
-void SendGetRegionMap(brpc::Controller& cntl,
-                      dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
+void SendGetRegionMap(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
   dingodb::pb::coordinator::GetRegionMapRequest request;
   dingodb::pb::coordinator::GetRegionMapResponse response;
 
@@ -99,23 +92,19 @@ void SendGetRegionMap(brpc::Controller& cntl,
 
   if (FLAGS_log_each_request) {
     LOG(INFO) << "Received response"
-              << " get_store_map=" << request.epoch()
-              << " request_attachment=" << cntl.request_attachment().size()
-              << " response_attachment=" << cntl.response_attachment().size()
-              << " latency=" << cntl.latency_us();
+              << " get_store_map=" << request.epoch() << " request_attachment=" << cntl.request_attachment().size()
+              << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
     LOG(INFO) << response.DebugString();
   }
 }
-void SendCreateStore(brpc::Controller& cntl,
-                     dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
+void SendCreateStore(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
   dingodb::pb::coordinator::CreateStoreRequest request;
   dingodb::pb::coordinator::CreateStoreResponse response;
 
   request.set_cluster_id(1);
   stub.CreateStore(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
-    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorCode() << "["
-                 << cntl.ErrorText() << "]";
+    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorCode() << "[" << cntl.ErrorText() << "]";
     // bthread_usleep(FLAGS_timeout_ms * 1000L);
   }
 
@@ -123,14 +112,12 @@ void SendCreateStore(brpc::Controller& cntl,
     LOG(INFO) << "Received response"
               << " create store cluster_id =" << request.cluster_id()
               << " request_attachment=" << cntl.request_attachment().size()
-              << " response_attachment=" << cntl.response_attachment().size()
-              << " latency=" << cntl.latency_us();
+              << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
     LOG(INFO) << response.DebugString();
   }
 }
 
-void SendStoreHearbeat(brpc::Controller& cntl,
-                       dingodb::pb::coordinator::CoordinatorService_Stub& stub,
+void SendStoreHearbeat(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub,
                        uint64_t store_id) {
   dingodb::pb::coordinator::StoreHeartbeatRequest request;
   dingodb::pb::coordinator::StoreHeartbeatResponse response;
@@ -175,8 +162,8 @@ void SendStoreHearbeat(brpc::Controller& cntl,
     // mock range
     auto* range = region->mutable_range();
     const char start_key[] = {0, 0, 0, 0};
-    const char end_key[] = {static_cast<char>(255), static_cast<char>(255),
-                            static_cast<char>(255), static_cast<char>(255)};
+    const char end_key[] = {static_cast<char>(255), static_cast<char>(255), static_cast<char>(255),
+                            static_cast<char>(255)};
 
     range->set_start_key(std::string(start_key));
     range->set_end_key(std::string(end_key));
@@ -201,8 +188,7 @@ void SendStoreHearbeat(brpc::Controller& cntl,
     LOG(INFO) << "Received response"
               << " store_heartbeat "
               << " request_attachment=" << cntl.request_attachment().size()
-              << " response_attachment=" << cntl.response_attachment().size()
-              << " latency=" << cntl.latency_us();
+              << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
     LOG(INFO) << response.DebugString();
   }
 }
@@ -263,8 +249,7 @@ int main(int argc, char* argv[]) {
   while (!brpc::IsAskedToQuit()) {
     LOG_IF(INFO, !FLAGS_log_each_request)
         << "Sending Request"
-        << " qps=" << g_latency_recorder.qps(1)
-        << " latency=" << g_latency_recorder.latency(1);
+        << " qps=" << g_latency_recorder.qps(1) << " latency=" << g_latency_recorder.latency(1);
   }
 
   LOG(INFO) << "Coordinator client is going to quit";

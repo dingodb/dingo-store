@@ -35,8 +35,7 @@ class RaftNode {
   int Init(const std::string& init_conf);
   void Destroy();
 
-  pb::error::Errno Commit(std::shared_ptr<Context> ctx,
-                          std::shared_ptr<pb::raft::RaftCmdRequest> raft_cmd);
+  pb::error::Errno Commit(std::shared_ptr<Context> ctx, std::shared_ptr<pb::raft::RaftCmdRequest> raft_cmd);
 
   bool IsLeader();
   bool IsLeaderLeaseValid();
@@ -48,8 +47,7 @@ class RaftNode {
   butil::Status ListPeers(std::vector<braft::PeerId>* peers);
   void AddPeer(const braft::PeerId& peer, braft::Closure* done);
   void RemovePeer(const braft::PeerId& peer, braft::Closure* done);
-  void ChangePeers(const std::vector<pb::common::Peer>& peers,
-                   braft::Closure* done);
+  void ChangePeers(const std::vector<pb::common::Peer>& peers, braft::Closure* done);
   butil::Status ResetPeers(const braft::Configuration& new_peers);
 
  private:

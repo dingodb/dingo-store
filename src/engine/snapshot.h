@@ -24,8 +24,7 @@ class Snapshot {
   ~Snapshot(){};
 
   virtual std::shared_ptr<std::string> Get(const std::string& key) = 0;
-  virtual std::shared_ptr<std::string> GetCf(const std::string cf_name,
-                                             const std::string& key) = 0;
+  virtual std::shared_ptr<std::string> GetCf(const std::string cf_name, const std::string& key) = 0;
 
  private:
   Snapshot(){};

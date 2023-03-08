@@ -24,7 +24,8 @@
 #include "engine/mem_engine.h"
 #include "engine/raft_kv_engine.h"
 #include "engine/rocks_engine.h"
-#include "proto/common.pb.h"
+#include "meta/meta_reader.h"
+#include "meta/meta_writer.h"
 #include "store/heartbeat.h"
 
 namespace dingodb {
@@ -39,8 +40,6 @@ bool Server::InitConfig(const std::string& filename) {
     return false;
   }
 
-  butil::FilePath const filepath(filename);
-
   ConfigManager::GetInstance()->Register(role_, config);
   return true;
 }
@@ -51,30 +50,17 @@ bool Server::InitLog() {
   LOG(INFO) << "log_dir: " << FLAGS_log_dir;
   FLAGS_logbufsecs = 0;
 
-  auto role_str_value = pb::common::ClusterRole_Name(role_);
-  const std::string program_name =
-      butil::StringPrintf("./%s", role_str_value.c_str());
+  auto role_name = pb::common::ClusterRole_Name(role_);
+  const std::string program_name = butil::StringPrintf("./%s", role_name.c_str());
   google::InitGoogleLogging(program_name.c_str());
-  google::SetLogDestination(
-      google::GLOG_INFO,
-      butil::StringPrintf("%s/%s.info.log.", FLAGS_log_dir.c_str(),
-                          role_str_value.c_str())
-          .c_str());
-  google::SetLogDestination(
-      google::GLOG_WARNING,
-      butil::StringPrintf("%s/%s.warn.log.", FLAGS_log_dir.c_str(),
-                          role_str_value.c_str())
-          .c_str());
-  google::SetLogDestination(
-      google::GLOG_ERROR,
-      butil::StringPrintf("%s/%s.error.log.", FLAGS_log_dir.c_str(),
-                          role_str_value.c_str())
-          .c_str());
-  google::SetLogDestination(
-      google::GLOG_FATAL,
-      butil::StringPrintf("%s/%s.fatal.log.", FLAGS_log_dir.c_str(),
-                          role_str_value.c_str())
-          .c_str());
+  google::SetLogDestination(google::GLOG_INFO,
+                            butil::StringPrintf("%s/%s.info.log.", FLAGS_log_dir.c_str(), role_name.c_str()).c_str());
+  google::SetLogDestination(google::GLOG_WARNING,
+                            butil::StringPrintf("%s/%s.warn.log.", FLAGS_log_dir.c_str(), role_name.c_str()).c_str());
+  google::SetLogDestination(google::GLOG_ERROR,
+                            butil::StringPrintf("%s/%s.error.log.", FLAGS_log_dir.c_str(), role_name.c_str()).c_str());
+  google::SetLogDestination(google::GLOG_FATAL,
+                            butil::StringPrintf("%s/%s.fatal.log.", FLAGS_log_dir.c_str(), role_name.c_str()).c_str());
 
   return true;
 }
@@ -108,8 +94,7 @@ bool Server::InitEngines() {
   // will init meta storage engine
 
   // default Key-Value storage engine
-  std::shared_ptr<Engine> raft_kv_engine =
-      std::make_shared<RaftKvEngine>(rock_engine);
+  std::shared_ptr<Engine> raft_kv_engine = std::make_shared<RaftKvEngine>(rock_engine);
   if (!raft_kv_engine->Init(config)) {
     return false;
   }
@@ -124,11 +109,8 @@ bool Server::InitCoordinatorInteraction() {
   coordinator_interaction_ = std::make_shared<CoordinatorInteraction>();
 
   auto config = ConfigManager::GetInstance()->GetConfig(role_);
-  return coordinator_interaction_->Init(
-      config->GetString("cluster.coordinators"));
+  return coordinator_interaction_->Init(config->GetString("cluster.coordinators"));
 }
-
-bool Server::InitRaftNodeManager() { return true; }
 
 bool Server::InitStorage() {
   storage_ = std::make_shared<Storage>(engines_[pb::common::ENG_RAFT_STORE]);
@@ -136,8 +118,10 @@ bool Server::InitStorage() {
 }
 
 bool Server::InitStoreMetaManager() {
-  store_meta_manager_ = std::make_shared<StoreMetaManager>();
-  return true;
+  auto engine = engines_[pb::common::ENG_ROCKSDB];
+  store_meta_manager_ =
+      std::make_shared<StoreMetaManager>(std::make_shared<MetaReader>(engine), std::make_shared<MetaWriter>(engine));
+  return store_meta_manager_->Init();
 }
 
 bool Server::InitCrontabManager() {
@@ -156,8 +140,23 @@ bool Server::InitCrontabManager() {
   return true;
 }
 
-bool Server::InitStoreControl() {
-  store_control_ = std::make_shared<StoreControl>();
+bool Server::InitStoreControl() { store_control_ = std::make_shared<StoreControl>(); }
+
+bool Server::Recover() {
+  // Recover region meta data.
+  if (!store_meta_manager_->Recover()) {
+    LOG(ERROR) << "Recover store region meta data failed";
+    return false;
+  }
+
+  // Recover engine state.
+  for (auto& it : engines_) {
+    if (!it.second->Recover()) {
+      LOG(ERROR) << "Recover engine failed, engine " << it.second->GetName();
+      return false;
+    }
+  }
+
   return true;
 }
 

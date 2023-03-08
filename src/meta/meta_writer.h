@@ -28,9 +28,13 @@ class MetaWriter {
   MetaWriter(std::shared_ptr<Engine> engine) : engine_(engine) {}
   ~MetaWriter() {}
 
-  bool Write(const std::vector<pb::common::KeyValue> kvs);
+  bool Put(const std::shared_ptr<pb::common::KeyValue> kv);
+  bool Put(const std::vector<pb::common::KeyValue> kvs);
+  bool Delete(const std::string& key);
 
  private:
+  DISALLOW_COPY_AND_ASSIGN(MetaWriter);
+
   std::shared_ptr<Engine> engine_;
 };
 

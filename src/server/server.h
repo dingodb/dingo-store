@@ -54,9 +54,6 @@ class Server {
   // Init coordinator interaction
   bool InitCoordinatorInteraction();
 
-  // Pull region infomation for init current node own region.
-  bool InitRaftNodeManager();
-
   // Init storage engine.
   bool InitStorage();
 
@@ -69,38 +66,31 @@ class Server {
   // Init store control
   bool InitStoreControl();
 
+  // Recover server state, include store/region/raft.
+  bool Recover();
+
   void Destroy();
 
-  uint64_t get_id() { return id_; }
+  uint64_t id() { return id_; }
 
-  butil::EndPoint get_server_endpoint() { return server_endpoint_; }
-  void set_server_endpoint(const butil::EndPoint& endpoint) {
-    server_endpoint_ = endpoint;
-  }
+  butil::EndPoint server_endpoint() { return server_endpoint_; }
+  void set_server_endpoint(const butil::EndPoint& endpoint) { server_endpoint_ = endpoint; }
 
-  butil::EndPoint get_raft_endpoint() { return raft_endpoint_; }
-  void set_raft_endpoint(const butil::EndPoint& endpoint) {
-    raft_endpoint_ = endpoint;
-  }
+  butil::EndPoint raft_endpoint() { return raft_endpoint_; }
+  void set_raft_endpoint(const butil::EndPoint& endpoint) { raft_endpoint_ = endpoint; }
 
-  std::shared_ptr<CoordinatorInteraction> get_coordinator_interaction() {
-    return coordinator_interaction_;
-  }
+  std::shared_ptr<CoordinatorInteraction> coordinator_interaction() { return coordinator_interaction_; }
 
   std::shared_ptr<Engine> get_engine(pb::common::Engine type) {
     auto it = engines_.find(type);
     return (it != engines_.end()) ? it->second : nullptr;
   }
 
-  std::shared_ptr<Storage> get_storage() { return storage_; }
-  std::shared_ptr<StoreMetaManager> get_store_meta_manager() {
-    return store_meta_manager_;
-  }
-  std::shared_ptr<CrontabManager> get_crontab_manager() {
-    return crontab_manager_;
-  }
+  std::shared_ptr<Storage> storage() { return storage_; }
+  std::shared_ptr<StoreMetaManager> store_meta_manager() { return store_meta_manager_; }
+  std::shared_ptr<CrontabManager> crontab_manager() { return crontab_manager_; }
 
-  std::shared_ptr<StoreControl> get_store_control() { return store_control_; }
+  std::shared_ptr<StoreControl> store_control() { return store_control_; }
 
  private:
   Server(){};
