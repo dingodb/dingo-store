@@ -36,7 +36,7 @@ bool RaftKvEngine::Init(std::shared_ptr<Config> config) {
 // Recover raft node from region meta data.
 // Invoke when server starting.
 bool RaftKvEngine::Recover() {
-  auto store_meta = Server::GetInstance()->store_meta_manager();
+  auto store_meta = Server::GetInstance()->GetStoreMetaManager();
   auto regions = store_meta->GetAllRegion();
 
   auto ctx = std::make_shared<Context>();
@@ -69,7 +69,7 @@ butil::EndPoint getRaftEndPoint(const std::string host, int port) {
 pb::error::Errno RaftKvEngine::AddRegion(std::shared_ptr<Context> ctx,
                                          const std::shared_ptr<pb::common::Region> region) {
   std::shared_ptr<RaftNode> node = std::make_shared<RaftNode>(
-      region->id(), braft::PeerId(Server::GetInstance()->raft_endpoint()), new StoreStateMachine(engine_));
+      region->id(), braft::PeerId(Server::GetInstance()->RaftEndpoint()), new StoreStateMachine(engine_));
 
   if (node->Init(Helper::FormatPeers(Helper::ExtractLocations(region->peers()))) != 0) {
     node->Destroy();

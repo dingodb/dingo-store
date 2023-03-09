@@ -26,11 +26,12 @@
 #include "engine/rocks_engine.h"
 #include "meta/meta_reader.h"
 #include "meta/meta_writer.h"
+#include "proto/common.pb.h"
 #include "store/heartbeat.h"
 
 namespace dingodb {
 
-void Server::set_role(pb::common::ClusterRole role) { role_ = role; }
+void Server::SetRole(pb::common::ClusterRole role) { role_ = role; }
 
 Server* Server::GetInstance() { return Singleton<Server>::get(); }
 
@@ -64,8 +65,6 @@ bool Server::InitLog() {
 
   return true;
 }
-
-bool Server::ValiateCoordinator() { return true; }
 
 bool Server::InitServerID() {
   auto config = ConfigManager::GetInstance()->GetConfig(role_);
@@ -140,21 +139,27 @@ bool Server::InitCrontabManager() {
   return true;
 }
 
-bool Server::InitStoreControl() { store_control_ = std::make_shared<StoreControl>(); }
+bool Server::InitStoreControl() {
+  store_control_ = std::make_shared<StoreControl>();
+  return true;
+}
 
 bool Server::Recover() {
-  // Recover region meta data.
-  if (!store_meta_manager_->Recover()) {
-    LOG(ERROR) << "Recover store region meta data failed";
-    return false;
-  }
-
-  // Recover engine state.
-  for (auto& it : engines_) {
-    if (!it.second->Recover()) {
-      LOG(ERROR) << "Recover engine failed, engine " << it.second->GetName();
+  if (this->role_ == pb::common::STORE) {
+    // Recover region meta data.
+    if (!store_meta_manager_->Recover()) {
+      LOG(ERROR) << "Recover store region meta data failed";
       return false;
     }
+
+    // Recover engine state.
+    for (auto& it : engines_) {
+      if (!it.second->Recover()) {
+        LOG(ERROR) << "Recover engine failed, engine " << it.second->GetName();
+        return false;
+      }
+    }
+  } else if (this->role_ == pb::common::COORDINATOR) {
   }
 
   return true;
