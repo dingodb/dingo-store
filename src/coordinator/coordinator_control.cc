@@ -75,9 +75,9 @@ void CoordinatorControl::Init() {
 
     // add the initial schemas to schema_map_
     // TODO: data persistence
-    schema_map_.insert(std::make_pair(0, root_schema));
-    schema_map_.insert(std::make_pair(1, meta_schema));
-    schema_map_.insert(std::make_pair(2, dingo_schema));
+    schema_map_.insert(std::make_pair(0, root_schema));   // raft_kv_put
+    schema_map_.insert(std::make_pair(1, meta_schema));   // raft_kv_put
+    schema_map_.insert(std::make_pair(2, dingo_schema));  // raft_kv_put
 
     LOG(INFO) << "init schema_map_ finished";
   }
@@ -107,6 +107,7 @@ int CoordinatorControl::CreateSchema(uint64_t parent_schema_id, std::string sche
   schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
   schema_id->set_parent_entity_id(parent_schema_id);
   schema_id->set_entity_id(new_schema_id);
+  // raft_kv_put
 
   // add new chema to  schema_map_
   pb::meta::Schema new_schema;
@@ -114,7 +115,7 @@ int CoordinatorControl::CreateSchema(uint64_t parent_schema_id, std::string sche
   auto* the_new_schema_id = new_schema.mutable_id();
   the_new_schema_id->CopyFrom(*schema_id);
 
-  schema_map_.insert(std::make_pair(new_schema_id, new_schema));
+  schema_map_.insert(std::make_pair(new_schema_id, new_schema));  // raft_kv_put
 
   return 0;
 }
@@ -129,39 +130,33 @@ uint64_t CoordinatorControl::CreatePartitionId() { return next_partition_id_++; 
 uint64_t CoordinatorControl::UpdateStoreMap(const pb::common::Store& store) {
   BAIDU_SCOPED_LOCK(control_mutex_);
 
-  bool need_update_epoch = false;
-  bool need_add_store = true;
-  for (int i = 0; i < store_map_.stores_size(); i++) {
-    auto* old_store = store_map_.mutable_stores(i);
-    if (old_store->id() == store.id()) {
-      // update old store properties
-      if (old_store->state() != store.state()) {
-        LOG(INFO) << "STORE STATUS CHANGE store_id = " << store.id() << " old status = " << old_store->state()
-                  << " new status = " << store.state();
-        store_map_.set_epoch(store_map_.epoch() + 1);
-        need_update_epoch = true;
-      }
-      old_store->CopyFrom(store);
-      need_add_store = false;
-      break;
+  if (store_map_.find(store.id()) != store_map_.end()) {
+    if (store_map_[store.id()].state() != store.state()) {
+      LOG(INFO) << "STORE STATUS CHANGE store_id = " << store.id() << " old status = " << store_map_[store.id()].state()
+                << " new status = " << store.state();
+      store_map_epoch_++;              // raft_kv_put
+      store_map_[store.id()] = store;  // raft_kv_put
     }
+  } else {
+    LOG(INFO) << "NEED ADD NEW STORE store_id = " << store.id();
+    store_map_epoch_++;                                    // raft_kv_put
+    store_map_.insert(std::make_pair(store.id(), store));  // raft_kv_put
   }
 
-  if (need_add_store) {
-    // create new store
-    auto* new_store = store_map_.add_stores();
-    new_store->CopyFrom(store);
-  }
+  LOG(INFO) << "UpdateStoreMap store_id=" << store.id();
 
-  LOG(INFO) << "UpdateStoreMap " << store_map_.DebugString();
-
-  return store_map_.epoch();
+  return store_map_epoch_;
 }
 
-const pb::common::StoreMap& CoordinatorControl::GetStoreMap() {
+void CoordinatorControl::GetStoreMap(pb::common::StoreMap& store_map) {
   BAIDU_SCOPED_LOCK(control_mutex_);
 
-  return this->store_map_;
+  store_map.set_epoch(store_map_epoch_);
+
+  for (auto& elemnt : store_map_) {
+    auto* tmp_region = store_map.add_stores();
+    tmp_region->CopyFrom(elemnt.second);
+  }
 }
 
 void CoordinatorControl::GetRegionMap(pb::common::RegionMap& region_map) {
@@ -176,15 +171,16 @@ void CoordinatorControl::GetRegionMap(pb::common::RegionMap& region_map) {
 }
 
 int CoordinatorControl::CreateStore(uint64_t cluster_id, uint64_t& store_id, std::string& password) {
-  BAIDU_SCOPED_LOCK(control_mutex_);
-
   if (cluster_id > 0) {
+    BAIDU_SCOPED_LOCK(control_mutex_);
     store_id = CreateStoreId();
     password = "TO_BE_CONTINUED";
 
-    auto* store = store_map_.add_stores();
-    store->set_id(store_id);
+    pb::common::Store store;
+    store.set_id(store_id);
 
+    store_map_epoch_++;                                  // raft_kv_put
+    store_map_.insert(std::make_pair(store_id, store));  // raft_kv_put
     return 0;
   } else {
     return -1;
@@ -310,13 +306,15 @@ int CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta::TableDef
     }
 
     // add table_internal to table_map_
-    table_map_[new_table_id] = table_internal;
+    table_map_epoch_++;                                               // raft_kv_put
+    table_map_.insert(std::make_pair(new_table_id, table_internal));  // raft_kv_put
 
     // add table_id to schema
     auto* table_id = schema_map_[schema_id].add_table_ids();
     table_id->set_entity_id(new_table_id);
     table_id->set_parent_entity_id(schema_id);
     table_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
+    // raft_kv_put
   }
 
   return 0;
@@ -345,8 +343,8 @@ int CoordinatorControl::CreateRegion(const std::string& region_name, const std::
   std::vector<pb::common::Store> selected_stores_for_regions;
 
   // when resource_tag exists, select store with resource_tag
-  for (int i = 0; i < store_map_.stores_size(); i++) {
-    const auto& store = store_map_.stores(i);
+  for (const auto& element : store_map_) {
+    const auto& store = element.second;
     if (store.state() != pb::common::StoreState::STORE_NORMAL) {
       continue;
     }
@@ -399,7 +397,9 @@ int CoordinatorControl::CreateRegion(const std::string& region_name, const std::
   new_region.set_schema_id(schema_id);
   new_region.set_table_id(table_id);
 
-  region_map_epoch_++;
+  region_map_epoch_++;                                               // raft_kv_put
+  region_map_.insert(std::make_pair(create_region_id, new_region));  // raft_kv_put
+
   new_region_id = create_region_id;
 
   return 0;
@@ -449,7 +449,6 @@ void CoordinatorControl::GetTables(uint64_t schema_id,
 
 // get table
 void CoordinatorControl::GetTable(uint64_t schema_id, uint64_t table_id, pb::meta::Table& table) {
-  BAIDU_SCOPED_LOCK(control_mutex_);
   if (schema_id < 0) {
     LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
     return;
@@ -525,7 +524,7 @@ void CoordinatorControl::GetTable(uint64_t schema_id, uint64_t table_id, pb::met
     part->set_regionmap_epoch(region_map_epoch_);
 
     // part storemap_epoch
-    part->set_storemap_epoch(store_map_.epoch());
+    part->set_storemap_epoch(store_map_epoch_);
   }
 }
 
@@ -533,25 +532,19 @@ void CoordinatorControl::GetTable(uint64_t schema_id, uint64_t table_id, pb::met
 uint64_t CoordinatorControl::UpdateRegionMap(std::vector<pb::common::Region>& regions) {
   BAIDU_SCOPED_LOCK(control_mutex_);
 
-  bool need_to_update_epoch = false;
-
   for (const auto& region : regions) {
     if (region_map_.find(region.id()) != region_map_.end()) {
       LOG(INFO) << " update region to region_map in heartbeat, region_id=" << region.id();
       if (region_map_[region.id()].state() != region.state()) {
         LOG(INFO) << "REGION STATUS CHANGE region_id = " << region.id()
                   << " old status = " << region_map_[region.id()].state() << " new status = " << region.state();
-        region_map_[region.id()].CopyFrom(region);
-        need_to_update_epoch = true;
+        region_map_[region.id()].CopyFrom(region);  // raft_kv_put
+        region_map_epoch_++;                        // raft_kv_put
       }
     } else {
       LOG(ERROR) << " found illegal region in heartbeat, region_id=" << region.id();
-      region_map_.insert(std::make_pair(region.id(), region));
-      need_to_update_epoch = true;
-    }
-
-    if (need_to_update_epoch) {
-      region_map_epoch_++;
+      region_map_.insert(std::make_pair(region.id(), region));  // raft_kv_put
+      region_map_epoch_++;                                      // raft_kv_put
     }
   }
   LOG(INFO) << "UpdateRegionMapMulti epoch=" << region_map_epoch_;

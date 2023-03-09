@@ -79,7 +79,7 @@ class CoordinatorControl {
   uint64_t UpdateStoreMap(const pb::common::Store &store);
 
   // get storemap
-  const pb::common::StoreMap &GetStoreMap();
+  void GetStoreMap(pb::common::StoreMap &store_map);
 
   // update region map with new Region info
   // return new epoch
@@ -110,12 +110,13 @@ class CoordinatorControl {
   uint64_t next_table_id_;
   uint64_t next_partition_id_;
 
-  // global maps
+  // regions
   uint64_t region_map_epoch_;
   std::map<uint64_t, pb::common::Region> region_map_;
 
+  // stores
   uint64_t store_map_epoch_;
-  pb::common::StoreMap store_map_;
+  std::map<uint64_t, pb::common::Store> store_map_;
 
   // schemas
   uint64_t schema_map_epoch_;
