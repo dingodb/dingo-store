@@ -41,8 +41,13 @@ class MemEngine : public Engine {
   pb::error::Errno KvBatchPut(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs) override;
 
   pb::error::Errno KvPutIfAbsent(std::shared_ptr<Context> ctx, const pb::common::KeyValue& kv) override;
-  pb::error::Errno KvBatchPutIfAbsent(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs,
-                                      std::vector<std::string>& put_keys) override;
+
+  pb::error::Errno KvBatchPutIfAbsentAtomic(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs,
+                                            std::vector<std::string>& put_keys) override;
+
+  pb::error::Errno KvBatchPutIfAbsentNonAtomic(std::shared_ptr<Context> ctx,
+                                               const std::vector<pb::common::KeyValue>& kvs,
+                                               std::vector<std::string>& put_keys) override;
 
  private:
   std::shared_mutex mutex_;

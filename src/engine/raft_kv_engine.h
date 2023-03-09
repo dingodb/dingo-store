@@ -44,15 +44,15 @@ class RaftKvEngine : public Engine {
   pb::error::Errno KvBatchGet(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys,
                               std::vector<pb::common::KeyValue>& kvs) override;
 
-  pb::error::Errno KvScan(std::shared_ptr<Context> ctx, const std::string& start_key, const std::string& end_key,
-                          std::vector<pb::common::KeyValue>& kvs) override;
-
   pb::error::Errno KvPut(std::shared_ptr<Context> ctx, const pb::common::KeyValue& kv) override;
   pb::error::Errno KvBatchPut(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs) override;
 
+  pb::error::Errno KvScan(std::shared_ptr<Context> ctx, const std::string& start_key, const std::string& end_key,
+                          std::vector<pb::common::KeyValue>& kvs) override;
+
   pb::error::Errno KvPutIfAbsent(std::shared_ptr<Context> ctx, const pb::common::KeyValue& kv) override;
-  pb::error::Errno KvBatchPutIfAbsent(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs,
-                                      std::vector<std::string>& put_keys) override;
+  pb::error::Errno KvBatchPutIfAbsentAtomic(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs,
+                                            std::vector<std::string>& put_keys) override;
 
   pb::error::Errno KvDeleteRange(std::shared_ptr<Context> ctx, const pb::common::Range& range) override;
 
