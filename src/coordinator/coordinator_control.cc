@@ -158,75 +158,21 @@ uint64_t CoordinatorControl::UpdateStoreMap(const pb::common::Store& store) {
   return store_map_.epoch();
 }
 
-bool CoordinatorControl::UpdateOneRegionMap(const pb::common::Region& region) {
-  bool need_to_add_region = true;
-  bool need_to_update_epoch = false;
-
-  for (int i = 0; i < region_map_.regions_size(); i++) {
-    auto* old_region = region_map_.mutable_regions(i);
-    if (old_region->id() == region.id()) {
-      if (old_region->state() != region.state()) {
-        LOG(INFO) << "REGION STATUS CHANGE region_id = " << region.id() << " old status = " << old_region->state()
-                  << " new status = " << region.state();
-      }
-      old_region->CopyFrom(region);
-      need_to_add_region = false;
-      need_to_update_epoch = true;
-      break;
-    }
-  }
-
-  if (need_to_add_region) {
-    // add new region to regionmap (may only used for testing, not exist in
-    // production env)
-    auto* new_region = region_map_.add_regions();
-    new_region->CopyFrom(region);
-    need_to_update_epoch = true;
-  }
-
-  return need_to_update_epoch;
-}
-
-// TODO: data persistence
-uint64_t CoordinatorControl::UpdateRegionMap(const pb::common::Region& region) {
-  if (UpdateOneRegionMap(region)) {
-    region_map_.set_epoch(region_map_.epoch() + 1);
-  }
-
-  return region_map_.epoch();
-}
-
-// TODO: data persistence
-uint64_t CoordinatorControl::UpdateRegionMapMulti(std::vector<pb::common::Region> regions) {
-  BAIDU_SCOPED_LOCK(control_mutex_);
-
-  bool need_to_update_epoch = false;
-
-  for (const auto& region : regions) {
-    if (UpdateOneRegionMap(region)) {
-      need_to_update_epoch = true;
-    }
-  }
-
-  if (need_to_update_epoch) {
-    region_map_.set_epoch(region_map_.epoch());
-  }
-
-  LOG(INFO) << "UpdateRegionMapMulti " << region_map_.DebugString();
-
-  return region_map_.epoch();
-}
-
 const pb::common::StoreMap& CoordinatorControl::GetStoreMap() {
   BAIDU_SCOPED_LOCK(control_mutex_);
 
   return this->store_map_;
 }
 
-const pb::common::RegionMap& CoordinatorControl::GetRegionMap() {
+void CoordinatorControl::GetRegionMap(pb::common::RegionMap& region_map) {
   BAIDU_SCOPED_LOCK(control_mutex_);
 
-  return this->region_map_;
+  region_map.set_epoch(region_map_epoch_);
+
+  for (auto& elemnt : region_map_) {
+    auto* tmp_region = region_map.add_regions();
+    tmp_region->CopyFrom(elemnt.second);
+  }
 }
 
 int CoordinatorControl::CreateStore(uint64_t cluster_id, uint64_t& store_id, std::string& password) {
@@ -379,17 +325,15 @@ int CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta::TableDef
 int CoordinatorControl::DropRegion(uint64_t region_id) {
   BAIDU_SCOPED_LOCK(control_mutex_);
   // set region state to DELETE
-  for (int i = 0; i < region_map_.regions_size(); i++) {
-    if (region_map_.regions(i).id() == region_id) {
-      auto* region = region_map_.mutable_regions(i);
-      region->set_state(::dingodb::pb::common::RegionState::REGION_DELETE);
-      LOG(INFO) << "drop region success, id = " << region_id;
-      return 0;
-    }
+  if (region_map_.find(region_id) != region_map_.end()) {
+    region_map_[region_id].set_state(::dingodb::pb::common::RegionState::REGION_DELETE);
+    LOG(INFO) << "drop region success, id = " << region_id;
+  } else {
+    LOG(ERROR) << "ERROR drop region id not exists, id = " << region_id;
+    return -1;
   }
 
-  LOG(ERROR) << "ERROR drop region id not exists, id = " << region_id;
-  return -1;
+  return 0;
 }
 
 int CoordinatorControl::CreateRegion(const std::string& region_name, const std::string& resource_tag,
@@ -429,27 +373,33 @@ int CoordinatorControl::CreateRegion(const std::string& region_name, const std::
 
   // generate new region
   uint64_t create_region_id = CreateRegionId();
-  auto* new_region = region_map_.add_regions();
-  new_region->set_id(create_region_id);
-  new_region->set_epoch(1);
-  new_region->set_name(region_name);
-  new_region->set_state(::dingodb::pb::common::RegionState::REGION_NEW);
-  auto* range = new_region->mutable_range();
+  if (region_map_.find(create_region_id) != region_map_.end()) {
+    LOG(ERROR) << "create_region_id =" << create_region_id << " is illegal, cannot create region!!";
+    return -1;
+  }
+
+  // create new region in memory
+  pb::common::Region new_region;
+  new_region.set_id(create_region_id);
+  new_region.set_epoch(1);
+  new_region.set_name(region_name);
+  new_region.set_state(::dingodb::pb::common::RegionState::REGION_NEW);
+  auto* range = new_region.mutable_range();
   range->CopyFrom(region_range);
   // add store_id and its peer location to region
   for (int i = 0; i < replica_num; i++) {
     auto store = selected_stores_for_regions[i];
-    auto* peer = new_region->add_peers();
+    auto* peer = new_region.add_peers();
     peer->set_store_id(store.id());
     peer->set_role(::dingodb::pb::common::PeerRole::VOTER);
     peer->mutable_server_location()->CopyFrom(store.server_location());
     peer->mutable_raft_location()->CopyFrom(store.raft_location());
   }
 
-  new_region->set_schema_id(schema_id);
-  new_region->set_table_id(table_id);
+  new_region.set_schema_id(schema_id);
+  new_region.set_table_id(table_id);
 
-  region_map_.set_epoch(region_map_.epoch() + 1);
+  region_map_epoch_++;
   new_region_id = create_region_id;
 
   return 0;
@@ -499,6 +449,7 @@ void CoordinatorControl::GetTables(uint64_t schema_id,
 
 // get table
 void CoordinatorControl::GetTable(uint64_t schema_id, uint64_t table_id, pb::meta::Table& table) {
+  BAIDU_SCOPED_LOCK(control_mutex_);
   if (schema_id < 0) {
     LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
     return;
@@ -544,28 +495,20 @@ void CoordinatorControl::GetTable(uint64_t schema_id, uint64_t table_id, pb::met
     part_range->CopyFrom(table_internal.partitions(i).range());
 
     // get region
-    pb::common::Region* part_region = nullptr;
-    for (int i = 0; i < region_map_.regions_size(); i++) {
-      auto* old_region = region_map_.mutable_regions(i);
-      if (old_region->id() == region_id) {
-        part_region = old_region;
-        break;
-      }
-    }
-
-    if (part_region == nullptr) {
+    if (region_map_.find(region_id) == region_map_.end()) {
       LOG(ERROR) << "ERROR cannot find region in regionmap_ while GetTable, table_id =" << table_id
                  << " region_id=" << region_id;
       continue;
     }
+    pb::common::Region& part_region = region_map_[region_id];
 
     // part leader location
     auto* leader_location = part->mutable_leader();
 
     // part voter & learner locations
-    for (int j = 0; j < part_region->peers_size(); j++) {
-      const auto& part_peer = part_region->peers(i);
-      if (part_peer.store_id() == part_region->leader_store_id()) {
+    for (int j = 0; j < part_region.peers_size(); j++) {
+      const auto& part_peer = part_region.peers(i);
+      if (part_peer.store_id() == part_region.leader_store_id()) {
         leader_location->CopyFrom(part_peer.server_location());
       }
 
@@ -579,11 +522,41 @@ void CoordinatorControl::GetTable(uint64_t schema_id, uint64_t table_id, pb::met
     }
 
     // part regionmap_epoch
-    part->set_regionmap_epoch(region_map_.epoch());
+    part->set_regionmap_epoch(region_map_epoch_);
 
     // part storemap_epoch
     part->set_storemap_epoch(store_map_.epoch());
   }
+}
+
+// TODO: data persistence
+uint64_t CoordinatorControl::UpdateRegionMap(std::vector<pb::common::Region>& regions) {
+  BAIDU_SCOPED_LOCK(control_mutex_);
+
+  bool need_to_update_epoch = false;
+
+  for (const auto& region : regions) {
+    if (region_map_.find(region.id()) != region_map_.end()) {
+      LOG(INFO) << " update region to region_map in heartbeat, region_id=" << region.id();
+      if (region_map_[region.id()].state() != region.state()) {
+        LOG(INFO) << "REGION STATUS CHANGE region_id = " << region.id()
+                  << " old status = " << region_map_[region.id()].state() << " new status = " << region.state();
+        region_map_[region.id()].CopyFrom(region);
+        need_to_update_epoch = true;
+      }
+    } else {
+      LOG(ERROR) << " found illegal region in heartbeat, region_id=" << region.id();
+      region_map_.insert(std::make_pair(region.id(), region));
+      need_to_update_epoch = true;
+    }
+
+    if (need_to_update_epoch) {
+      region_map_epoch_++;
+    }
+  }
+  LOG(INFO) << "UpdateRegionMapMulti epoch=" << region_map_epoch_;
+
+  return region_map_epoch_;
 }
 
 }  // namespace dingodb
