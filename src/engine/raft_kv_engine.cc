@@ -67,7 +67,6 @@ pb::error::Errno RaftKvEngine::AddRegion(std::shared_ptr<Context> ctx,
     state_machine = new MetaStateMachine(engine_);
   } else {
     LOG(ERROR) << "AddRegion ClusterRole illegal " << ctx->ClusterRole();
-    return pb::error::EILLEGAL_PARAMTETERS;
   }
 
   std::shared_ptr<RaftNode> node = std::make_shared<RaftNode>(
@@ -132,7 +131,6 @@ std::shared_ptr<pb::raft::RaftCmdRequest> GenRaftCmdRequest(const std::shared_pt
   pb::raft::PutRequest* put_request = request->mutable_put();
   put_request->set_cf_name(ctx->cf_name());
   put_request->add_kvs()->CopyFrom(kv);
-
   return raft_cmd;
 }
 
@@ -200,7 +198,12 @@ std::shared_ptr<pb::raft::RaftCmdRequest> GenRaftCmdPutIfAbsentRequest(const std
   request->set_cmd_type(pb::raft::CmdType::PUTIFABSENT);
   pb::raft::PutIfAbsentRequest* put_if_absent_request = request->mutable_put_if_absent();
   put_if_absent_request->set_cf_name(ctx->cf_name());
+<<<<<<< HEAD
   put_if_absent_request->add_kvs()->CopyFrom(kv);
+=======
+  auto* kv_req = put_if_absent_request->add_kvs();
+  *kv_req = kv;
+>>>>>>> 8dc1bc1 ([coordinator] Refactor coordinator_control preparing for raft_kv_engine.)
 
   return raft_cmd;
 }
