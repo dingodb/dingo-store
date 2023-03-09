@@ -44,7 +44,7 @@ void StoreClosure::Run() {
 StoreStateMachine::StoreStateMachine(std::shared_ptr<Engine> engine) : engine_(engine) {}
 
 void StoreStateMachine::DispatchRequest(StoreClosure* done, const pb::raft::RaftCmdRequest& raft_cmd) {
-  for (auto& req : raft_cmd.requests()) {
+  for (const auto& req : raft_cmd.requests()) {
     switch (req.cmd_type()) {
       case pb::raft::CmdType::PUT:
         HandlePutRequest(done, req.put());
@@ -61,7 +61,7 @@ void StoreStateMachine::DispatchRequest(StoreClosure* done, const pb::raft::Raft
   }
 }
 
-void StoreStateMachine::HandlePutRequest(StoreClosure* done, const pb::raft::PutRequest& request) {
+void StoreStateMachine::HandlePutRequest([[maybe_unused]] StoreClosure* done, const pb::raft::PutRequest& request) {
   LOG(INFO) << "handlePutRequest ...";
   std::shared_ptr<Context> ctx =
       (done != nullptr && done->get_ctx() != nullptr) ? done->get_ctx() : std::make_shared<Context>();
@@ -106,7 +106,8 @@ void StoreStateMachine::HandlePutIfAbsentRequest(StoreClosure* done, const pb::r
   }
 }
 
-void StoreStateMachine::HandleDeleteRangeRequest(StoreClosure* done, const pb::raft::DeleteRangeRequest& request) {
+void StoreStateMachine::HandleDeleteRangeRequest([[maybe_unused]] StoreClosure* done,
+                                                 [[maybe_unused]] const pb::raft::DeleteRangeRequest& request) {
   LOG(INFO) << "HandleDeleteRangeRequest ...";
 }
 
@@ -128,7 +129,8 @@ void StoreStateMachine::on_apply(braft::Iterator& iter) {
 
 void StoreStateMachine::on_shutdown() { LOG(INFO) << "on_shutdown..."; }
 
-void StoreStateMachine::on_snapshot_save(braft::SnapshotWriter* writer, braft::Closure* done) {
+void StoreStateMachine::on_snapshot_save([[maybe_unused]] braft::SnapshotWriter* writer,
+                                         [[maybe_unused]] braft::Closure* done) {
   LOG(INFO) << "on_snapshot_save...";
 }
 
@@ -150,16 +152,16 @@ void StoreStateMachine::on_error(const ::braft::Error& e) {
                                    e.status().error_cstr());
 }
 
-void StoreStateMachine::on_configuration_committed(const ::braft::Configuration& conf) {
+void StoreStateMachine::on_configuration_committed([[maybe_unused]] const ::braft::Configuration& conf) {
   LOG(INFO) << "on_configuration_committed...";
   // std::vector<braft::PeerId> peers;
   // conf.list_peers(&peers);
 }
 
-void StoreStateMachine::on_start_following(const ::braft::LeaderChangeContext& ctx) {
+void StoreStateMachine::on_start_following([[maybe_unused]] const ::braft::LeaderChangeContext& ctx) {
   LOG(INFO) << "on_start_following...";
 }
-void StoreStateMachine::on_stop_following(const ::braft::LeaderChangeContext& ctx) {
+void StoreStateMachine::on_stop_following([[maybe_unused]] const ::braft::LeaderChangeContext& ctx) {
   LOG(INFO) << "on_stop_following...";
 }
 

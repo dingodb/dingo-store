@@ -24,9 +24,9 @@ option cc_generic_services = true;
 
 // Store report self status and region (this node is leader) status
 message StoreHeartbeatRequest {
-  uint64 self_storemap_epoch = 1;     // storemap epoch in this Store
-  uint64 self_regionmap_epoch = 2;    // regionmap epoch in this Store
-  dingodb.pb.common.Store store = 3;  // self store info
+  uint64 self_storemap_epoch = 1;                 // storemap epoch in this Store
+  uint64 self_regionmap_epoch = 2;                // regionmap epoch in this Store
+  dingodb.pb.common.Store store = 3;              // self store info
   repeated dingodb.pb.common.Region regions = 4;  // self region info
 }
 
@@ -78,6 +78,16 @@ message CreateStoreResponse {
   string password = 3;
 }
 
+message GetCoordinatorMapRequest {
+  uint64 cluster_id = 1;
+}
+
+message GetCoordinatorMapResponse {
+  uint64 epoch = 1;
+  dingodb.pb.common.Location leader_location = 2;
+  repeated dingodb.pb.common.Location coordinator_locations = 3;
+}
+
 service CoordinatorService {
   // Hello
   rpc Hello(HelloRequest) returns (HelloResponse);
@@ -88,4 +98,7 @@ service CoordinatorService {
   rpc GetStoreMap(GetStoreMapRequest) returns (GetStoreMapResponse);
 
   rpc CreateStore(CreateStoreRequest) returns (CreateStoreResponse);
+
+  // Coordinator
+  rpc GetCoordinatorMap(GetCoordinatorMapRequest) returns (GetCoordinatorMapResponse);
 }

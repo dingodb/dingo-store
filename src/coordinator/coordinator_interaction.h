@@ -34,7 +34,7 @@ const int kMaxRetry = 3;
 class CoordinatorInteraction {
  public:
   CoordinatorInteraction() : leader_index_(0){};
-  ~CoordinatorInteraction(){};
+  ~CoordinatorInteraction() = default;
 
   bool Init(const std::string& addr);
 
@@ -44,9 +44,10 @@ class CoordinatorInteraction {
   template <typename Request, typename Response>
   pb::error::Errno SendRequest(const std::string& api_name, const Request& request, Response& response);
 
- private:
-  DISALLOW_COPY_AND_ASSIGN(CoordinatorInteraction);
+  CoordinatorInteraction(const CoordinatorInteraction&) = delete;
+  const CoordinatorInteraction& operator=(const CoordinatorInteraction&) = delete;
 
+ private:
   std::atomic<int> leader_index_;
   std::vector<butil::EndPoint> endpoints_;
   std::vector<std::unique_ptr<brpc::Channel> > channels_;

@@ -33,10 +33,10 @@ class RaftNodeManager {
   std::shared_ptr<RaftNode> GetNode(uint64_t node_id);
   void AddNode(uint64_t node_id, std::shared_ptr<RaftNode> node);
   void DeleteNode(uint64_t node_id);
+  RaftNodeManager(const RaftNodeManager &) = delete;
+  const RaftNodeManager &operator=(const RaftNodeManager &) = delete;
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(RaftNodeManager);
-
   std::shared_mutex mutex_;
   std::map<uint64_t, std::shared_ptr<RaftNode> > nodes_;
 };
