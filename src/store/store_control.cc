@@ -31,7 +31,7 @@ pb::error::Errno ValidateAddRegion(std::shared_ptr<StoreMetaManager> store_meta_
 }
 
 pb::error::Errno StoreControl::AddRegion(std::shared_ptr<Context> ctx, std::shared_ptr<pb::common::Region> region) {
-  auto store_meta_manager = Server::GetInstance()->store_meta_manager();
+  auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
 
   // valiate region
   auto errcode = ValidateAddRegion(store_meta_manager, region);
@@ -40,7 +40,7 @@ pb::error::Errno StoreControl::AddRegion(std::shared_ptr<Context> ctx, std::shar
   }
 
   // Add raft node
-  auto engine = Server::GetInstance()->get_engine(pb::common::ENG_RAFT_STORE);
+  auto engine = Server::GetInstance()->GetEngine(pb::common::ENG_RAFT_STORE);
   if (engine == nullptr) {
     return pb::error::ESTORE_NOTEXIST_RAFTENGINE;
   }
@@ -58,30 +58,31 @@ void StoreControl::AddRegions(std::shared_ptr<Context> ctx, std::vector<std::sha
 }
 
 pb::error::Errno StoreControl::ChangeRegion(std::shared_ptr<Context> ctx, std::shared_ptr<pb::common::Region> region) {
-  auto filterPeersByRole = [region](pb::common::PeerRole role) -> std::vector<pb::common::Peer> {
+  auto filter_peers_by_role = [region](pb::common::PeerRole role) -> std::vector<pb::common::Peer> {
     std::vector<pb::common::Peer> peers;
-    for (auto peer : region->peers()) {
+    for (const auto& peer : region->peers()) {
       if (peer.role() == role) {
         peers.push_back(peer);
       }
     }
+    return peers;
   };
 
-  auto engine = Server::GetInstance()->get_engine(pb::common::ENG_RAFT_STORE);
+  auto engine = Server::GetInstance()->GetEngine(pb::common::ENG_RAFT_STORE);
   if (engine == nullptr) {
     return pb::error::ESTORE_NOTEXIST_RAFTENGINE;
   }
-  return engine->ChangeRegion(ctx, region->id(), filterPeersByRole(pb::common::VOTER));
+  return engine->ChangeRegion(ctx, region->id(), filter_peers_by_role(pb::common::VOTER));
 }
 
 pb::error::Errno StoreControl::DeleteRegion(std::shared_ptr<Context> ctx, uint64_t region_id) {
-  auto store_meta_manager = Server::GetInstance()->store_meta_manager();
+  auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
   auto region = store_meta_manager->GetRegion(region_id);
 
   // Check region status
 
   // Shutdown raft node
-  auto engine = Server::GetInstance()->get_engine(pb::common::ENG_RAFT_STORE);
+  auto engine = Server::GetInstance()->GetEngine(pb::common::ENG_RAFT_STORE);
   if (engine == nullptr) {
     return pb::error::ESTORE_NOTEXIST_RAFTENGINE;
   }

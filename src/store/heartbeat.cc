@@ -24,15 +24,15 @@ void Heartbeat::SendStoreHeartbeat(void* arg) {
   CoordinatorInteraction* coordinator_interaction = static_cast<CoordinatorInteraction*>(arg);
 
   pb::coordinator::StoreHeartbeatRequest request;
-  auto store_meta = Server::GetInstance()->store_meta_manager();
+  auto store_meta = Server::GetInstance()->GetStoreMetaManager();
 
   request.set_self_storemap_epoch(store_meta->GetServerEpoch());
   request.set_self_regionmap_epoch(store_meta->GetRegionEpoch());
-  auto store = request.mutable_store();
+  auto* store = request.mutable_store();
   *store = *store_meta->GetStoreServerMeta();
 
   for (auto& it : store_meta->GetAllRegion()) {
-    auto region = request.add_regions();
+    auto* region = request.add_regions();
     *region = *(it.second);
   }
 
@@ -46,7 +46,7 @@ static std::vector<std::shared_ptr<pb::common::Region> > GetNewRegion(
     std::map<uint64_t, std::shared_ptr<pb::common::Region> > local_regions,
     const google::protobuf::RepeatedPtrField<dingodb::pb::common::Region>& remote_regions) {
   std::vector<std::shared_ptr<pb::common::Region> > new_regions;
-  for (auto& remote_region : remote_regions) {
+  for (const auto& remote_region : remote_regions) {
     if (local_regions.find(remote_region.id()) == local_regions.end()) {
       new_regions.push_back(std::make_shared<pb::common::Region>(remote_region));
     }
@@ -58,8 +58,8 @@ static std::vector<std::shared_ptr<pb::common::Region> > GetNewRegion(
 static std::vector<std::shared_ptr<pb::common::Region> > GetChangedPeerRegion(
     std::map<uint64_t, std::shared_ptr<pb::common::Region> > local_regions,
     const google::protobuf::RepeatedPtrField<dingodb::pb::common::Region>& remote_regions) {
-  std::vector<std::shared_ptr<pb::common::Region> > changedPeers;
-  for (auto& remote_region : remote_regions) {
+  std::vector<std::shared_ptr<pb::common::Region> > changed_peers;
+  for (const auto& remote_region : remote_regions) {
     auto it = local_regions.find(remote_region.id());
     if (it != local_regions.end() && remote_region.epoch() != it->second->epoch()) {
       std::vector<pb::common::Peer> local_peers(it->second->peers().begin(), it->second->peers().end());
@@ -68,24 +68,24 @@ static std::vector<std::shared_ptr<pb::common::Region> > GetChangedPeerRegion(
       Helper::SortPeers(local_peers);
       Helper::SortPeers(remote_peers);
       if (Helper::IsDifferencePeers(local_peers, remote_peers)) {
-        changedPeers.push_back(std::make_shared<pb::common::Region>(remote_region));
+        changed_peers.push_back(std::make_shared<pb::common::Region>(remote_region));
       }
     }
   }
 
-  return changedPeers;
+  return changed_peers;
 }
 
 static std::vector<std::shared_ptr<pb::common::Region> > GetDeleteRegion(
     std::map<uint64_t, std::shared_ptr<pb::common::Region> > local_regions,
     const google::protobuf::RepeatedPtrField<pb::common::Region>& remote_regions) {
   auto to_region_map_func = [remote_regions]() -> std::map<uint64_t, pb::common::Region> {
-    std::map<uint64_t, pb::common::Region> regionMap;
-    for (auto& remote_region : remote_regions) {
-      regionMap[remote_region.id()] = remote_region;
+    std::map<uint64_t, pb::common::Region> region_map;
+    for (const auto& remote_region : remote_regions) {
+      region_map[remote_region.id()] = remote_region;
     }
 
-    return regionMap;
+    return region_map;
   };
 
   std::vector<std::shared_ptr<pb::common::Region> > regions;
@@ -104,12 +104,12 @@ void Heartbeat::HandleStoreHeartbeatResponse(std::shared_ptr<dingodb::StoreMetaM
   // check region, if has new region, add region.
   LOG(INFO) << "HandleStoreHeartbeatResponse...";
   auto local_regions = store_meta->GetAllRegion();
-  auto store_control = Server::GetInstance()->store_control();
+  auto store_control = Server::GetInstance()->GetStoreControl();
 
   // If has new region, add region.
   auto new_regions = GetNewRegion(local_regions, response.regionmap().regions());
   LOG(INFO) << "new regions size: " << new_regions.size();
-  if (new_regions.size() > 0) {
+  if (!new_regions.empty()) {
     std::shared_ptr<Context> ctx = std::make_shared<Context>();
     // store_control->AddRegions(ctx, new_regions);
   }

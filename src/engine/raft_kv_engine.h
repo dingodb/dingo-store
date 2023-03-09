@@ -27,7 +27,7 @@ namespace dingodb {
 class RaftKvEngine : public Engine {
  public:
   RaftKvEngine(std::shared_ptr<Engine> engine);
-  ~RaftKvEngine();
+  ~RaftKvEngine() override;
 
   bool Init(std::shared_ptr<Config> config) override;
   bool Recover() override;
@@ -35,7 +35,7 @@ class RaftKvEngine : public Engine {
   std::string GetName() override;
   pb::common::Engine GetID() override;
 
-  pb::error::Errno AddRegion(std::shared_ptr<Context> ctx, const std::shared_ptr<pb::common::Region> region) override;
+  pb::error::Errno AddRegion(std::shared_ptr<Context> ctx, std::shared_ptr<pb::common::Region> region) override;
   pb::error::Errno ChangeRegion(std::shared_ptr<Context> ctx, uint64_t region_id,
                                 std::vector<pb::common::Peer> peers) override;
   pb::error::Errno DestroyRegion(std::shared_ptr<Context> ctx, uint64_t region_id) override;

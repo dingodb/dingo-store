@@ -88,7 +88,7 @@ void CoordinatorServiceImpl::StoreHeartbeat(google::protobuf::RpcController * /*
   this->coordinator_control->GetRegionMap(*new_regionmap);
 
   auto *new_storemap = response->mutable_storemap();
-  new_storemap->CopyFrom(this->coordinator_control->GetStoreMap());
+  this->coordinator_control->GetStoreMap(*new_storemap);
 
   LOG(INFO) << "end reponse build " << response->DebugString();
 }
@@ -101,7 +101,7 @@ void CoordinatorServiceImpl::GetStoreMap(google::protobuf::RpcController * /*con
   LOG(INFO) << "GetStoreMap request: _epoch [" << request->epoch() << "]";
 
   pb::common::StoreMap storemap;
-  storemap = this->coordinator_control->GetStoreMap();
+  this->coordinator_control->GetStoreMap(storemap);
 
   response->mutable_storemap()->CopyFrom(storemap);
   response->set_epoch(storemap.epoch());

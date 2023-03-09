@@ -18,7 +18,7 @@ namespace dingodb {
 
 Storage::Storage(std::shared_ptr<Engine> engine) : engine_(engine) {}
 
-Storage::~Storage() {}
+Storage::~Storage() = default;
 
 Snapshot* Storage::GetSnapshot() { return nullptr; }
 

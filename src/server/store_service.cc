@@ -22,7 +22,7 @@
 
 namespace dingodb {
 
-StoreServiceImpl::StoreServiceImpl() {}
+StoreServiceImpl::StoreServiceImpl() = default;
 
 void StoreServiceImpl::AddRegion(google::protobuf::RpcController* controller,
                                  const dingodb::pb::store::AddRegionRequest* request,
@@ -31,12 +31,12 @@ void StoreServiceImpl::AddRegion(google::protobuf::RpcController* controller,
   brpc::ClosureGuard done_guard(done);
   LOG(INFO) << "AddRegion request...";
 
-  auto store_control = Server::GetInstance()->store_control();
+  auto store_control = Server::GetInstance()->GetStoreControl();
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
   auto errcode = store_control->AddRegion(ctx, std::make_shared<pb::common::Region>(request->region()));
   if (errcode != pb::error::OK) {
-    auto mut_err = response->mutable_error();
+    auto* mut_err = response->mutable_error();
     mut_err->set_errcode(errcode);
     mut_err->set_errmsg("Add region failed!");
   }
@@ -49,11 +49,11 @@ void StoreServiceImpl::ChangeRegion(google::protobuf::RpcController* controller,
   brpc::ClosureGuard done_guard(done);
   LOG(INFO) << "ChangeRegion request...";
 
-  auto store_control = Server::GetInstance()->store_control();
+  auto store_control = Server::GetInstance()->GetStoreControl();
   std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
   auto errcode = store_control->ChangeRegion(ctx, std::make_shared<pb::common::Region>(request->region()));
   if (errcode != pb::error::OK) {
-    auto mut_err = response->mutable_error();
+    auto* mut_err = response->mutable_error();
     mut_err->set_errcode(errcode);
     mut_err->set_errmsg("Change region failed!");
   }
@@ -67,11 +67,11 @@ void StoreServiceImpl::DestroyRegion(google::protobuf::RpcController* controller
   brpc::ClosureGuard done_guard(done);
   LOG(INFO) << "DestroyRegion request...";
 
-  auto store_control = Server::GetInstance()->store_control();
+  auto store_control = Server::GetInstance()->GetStoreControl();
   std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
   auto errcode = store_control->DeleteRegion(ctx, request->region_id());
   if (errcode != pb::error::OK) {
-    auto mut_err = response->mutable_error();
+    auto* mut_err = response->mutable_error();
     mut_err->set_errcode(errcode);
     mut_err->set_errmsg("Destroy region failed!");
   }
@@ -79,7 +79,7 @@ void StoreServiceImpl::DestroyRegion(google::protobuf::RpcController* controller
 
 pb::error::Errno ValidateKvGetRequest(const dingodb::pb::store::KvGetRequest* request) {
   // Check is exist region.
-  if (!Server::GetInstance()->store_meta_manager()->IsExistRegion(request->region_id())) {
+  if (!Server::GetInstance()->GetStoreMetaManager()->IsExistRegion(request->region_id())) {
     return pb::error::EREGION_NOT_FOUND;
   }
 
@@ -99,7 +99,7 @@ void StoreServiceImpl::KvGet(google::protobuf::RpcController* controller,
 
   auto errcode = ValidateKvGetRequest(request);
   if (errcode != pb::error::OK) {
-    auto err = response->mutable_error();
+    auto* err = response->mutable_error();
     err->set_errcode(errcode);
     err->set_errmsg("Get key failed");
     return;
@@ -110,7 +110,7 @@ void StoreServiceImpl::KvGet(google::protobuf::RpcController* controller,
   std::string value;
   errcode = storage_->KvGet(ctx, request->key(), value);
   if (errcode != pb::error::OK) {
-    auto err = response->mutable_error();
+    auto* err = response->mutable_error();
     err->set_errcode(errcode);
     err->set_errmsg("KvGet failed");
   } else {
@@ -120,11 +120,11 @@ void StoreServiceImpl::KvGet(google::protobuf::RpcController* controller,
 
 pb::error::Errno ValidateKvBatchGetRequest(const dingodb::pb::store::KvBatchGetRequest* request) {
   // Check is exist region.
-  if (!Server::GetInstance()->store_meta_manager()->IsExistRegion(request->region_id())) {
+  if (!Server::GetInstance()->GetStoreMetaManager()->IsExistRegion(request->region_id())) {
     return pb::error::EREGION_NOT_FOUND;
   }
 
-  for (auto& key : request->keys()) {
+  for (const auto& key : request->keys()) {
     if (key.empty()) {
       return pb::error::EKEY_EMPTY;
     }
@@ -142,7 +142,7 @@ void StoreServiceImpl::KvBatchGet(google::protobuf::RpcController* controller,
 
   auto errcode = ValidateKvBatchGetRequest(request);
   if (errcode != pb::error::OK) {
-    auto err = response->mutable_error();
+    auto* err = response->mutable_error();
     err->set_errcode(errcode);
     err->set_errmsg("Get key failed");
     return;
@@ -154,7 +154,7 @@ void StoreServiceImpl::KvBatchGet(google::protobuf::RpcController* controller,
   std::vector<pb::common::KeyValue> kvs;
   errcode = storage_->KvBatchGet(ctx, Helper::PbRepeatedToVector<std::string>(request->keys()), kvs);
   if (errcode != pb::error::OK) {
-    auto err = response->mutable_error();
+    auto* err = response->mutable_error();
     err->set_errcode(errcode);
     err->set_errmsg("KvGet failed");
     return;
@@ -165,7 +165,7 @@ void StoreServiceImpl::KvBatchGet(google::protobuf::RpcController* controller,
 
 pb::error::Errno ValidateKvPutRequest(const dingodb::pb::store::KvPutRequest* request) {
   // Check is exist region.
-  if (!Server::GetInstance()->store_meta_manager()->IsExistRegion(request->region_id())) {
+  if (!Server::GetInstance()->GetStoreMetaManager()->IsExistRegion(request->region_id())) {
     return pb::error::EREGION_NOT_FOUND;
   }
 
@@ -185,7 +185,7 @@ void StoreServiceImpl::KvPut(google::protobuf::RpcController* controller,
 
   auto errcode = ValidateKvPutRequest(request);
   if (errcode != pb::error::OK) {
-    auto err = response->mutable_error();
+    auto* err = response->mutable_error();
     err->set_errcode(errcode);
     err->set_errmsg("Put key failed");
     return;
@@ -195,7 +195,7 @@ void StoreServiceImpl::KvPut(google::protobuf::RpcController* controller,
   ctx->set_region_id(request->region_id()).set_cf_name(kStoreDataCF);
   errcode = storage_->KvPut(ctx, request->kv());
   if (errcode != pb::error::OK) {
-    auto err = response->mutable_error();
+    auto* err = response->mutable_error();
     err->set_errcode(errcode);
     err->set_errmsg("Put key failed");
     brpc::ClosureGuard done_guard(done);
@@ -204,11 +204,11 @@ void StoreServiceImpl::KvPut(google::protobuf::RpcController* controller,
 
 pb::error::Errno ValidateKvBatchPutRequest(const dingodb::pb::store::KvBatchPutRequest* request) {
   // Check is exist region.
-  if (!Server::GetInstance()->store_meta_manager()->IsExistRegion(request->region_id())) {
+  if (!Server::GetInstance()->GetStoreMetaManager()->IsExistRegion(request->region_id())) {
     return pb::error::EREGION_NOT_FOUND;
   }
 
-  for (auto& kv : request->kvs()) {
+  for (const auto& kv : request->kvs()) {
     if (kv.key().empty()) {
       return pb::error::EKEY_EMPTY;
     }
@@ -225,7 +225,7 @@ void StoreServiceImpl::KvBatchPut(google::protobuf::RpcController* controller,
 
   auto errcode = ValidateKvBatchPutRequest(request);
   if (errcode != pb::error::OK) {
-    auto err = response->mutable_error();
+    auto* err = response->mutable_error();
     err->set_errcode(errcode);
     err->set_errmsg("Batch Put key failed");
     return;
@@ -235,7 +235,7 @@ void StoreServiceImpl::KvBatchPut(google::protobuf::RpcController* controller,
   ctx->set_region_id(request->region_id()).set_cf_name(kStoreDataCF);
   errcode = storage_->KvBatchPut(ctx, Helper::PbRepeatedToVector(request->kvs()));
   if (errcode != pb::error::OK) {
-    auto err = response->mutable_error();
+    auto* err = response->mutable_error();
     err->set_errcode(errcode);
     err->set_errmsg("Put key failed");
     brpc::ClosureGuard done_guard(done);
@@ -244,7 +244,7 @@ void StoreServiceImpl::KvBatchPut(google::protobuf::RpcController* controller,
 
 pb::error::Errno ValidateKvPutIfAbsentRequest(const dingodb::pb::store::KvPutIfAbsentRequest* request) {
   // Check is exist region.
-  if (!Server::GetInstance()->store_meta_manager()->IsExistRegion(request->region_id())) {
+  if (!Server::GetInstance()->GetStoreMetaManager()->IsExistRegion(request->region_id())) {
     return pb::error::EREGION_NOT_FOUND;
   }
 
@@ -263,7 +263,7 @@ void StoreServiceImpl::KvPutIfAbsent(google::protobuf::RpcController* controller
   LOG(INFO) << "KvPutIfAbsent request: ";
   auto errcode = ValidateKvPutIfAbsentRequest(request);
   if (errcode != pb::error::OK) {
-    auto err = response->mutable_error();
+    auto* err = response->mutable_error();
     err->set_errcode(errcode);
     err->set_errmsg("Put key failed");
     return;
@@ -273,7 +273,7 @@ void StoreServiceImpl::KvPutIfAbsent(google::protobuf::RpcController* controller
   ctx->set_region_id(request->region_id()).set_cf_name(kStoreDataCF);
   errcode = storage_->KvPutIfAbsent(ctx, request->kv());
   if (errcode != pb::error::OK) {
-    auto err = response->mutable_error();
+    auto* err = response->mutable_error();
     err->set_errcode(errcode);
     err->set_errmsg("Put if absent key failed");
     brpc::ClosureGuard done_guard(done);
@@ -282,11 +282,11 @@ void StoreServiceImpl::KvPutIfAbsent(google::protobuf::RpcController* controller
 
 pb::error::Errno ValidateKvBatchPutIfAbsentRequest(const dingodb::pb::store::KvBatchPutIfAbsentRequest* request) {
   // Check is exist region.
-  if (!Server::GetInstance()->store_meta_manager()->IsExistRegion(request->region_id())) {
+  if (!Server::GetInstance()->GetStoreMetaManager()->IsExistRegion(request->region_id())) {
     return pb::error::EREGION_NOT_FOUND;
   }
 
-  for (auto& kv : request->kvs()) {
+  for (const auto& kv : request->kvs()) {
     if (kv.key().empty()) {
       return pb::error::EKEY_EMPTY;
     }
@@ -305,7 +305,7 @@ void StoreServiceImpl::KvBatchPutIfAbsent(google::protobuf::RpcController* contr
 
   auto errcode = ValidateKvBatchPutIfAbsentRequest(request);
   if (errcode != pb::error::OK) {
-    auto err = response->mutable_error();
+    auto* err = response->mutable_error();
     err->set_errcode(errcode);
     err->set_errmsg("Batch Put key failed");
     return;
@@ -317,7 +317,7 @@ void StoreServiceImpl::KvBatchPutIfAbsent(google::protobuf::RpcController* contr
   std::vector<std::string> put_keys;
   errcode = storage_->KvBatchPutIfAbsent(ctx, Helper::PbRepeatedToVector(request->kvs()), put_keys);
   if (errcode != pb::error::OK) {
-    auto err = response->mutable_error();
+    auto* err = response->mutable_error();
     err->set_errcode(errcode);
     err->set_errmsg("Batch put if absent key failed");
     brpc::ClosureGuard done_guard(done);
