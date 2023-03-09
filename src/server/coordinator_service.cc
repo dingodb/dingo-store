@@ -77,7 +77,7 @@ void CoordinatorServiceImpl::StoreHeartbeat(google::protobuf::RpcController * /*
   for (int i = 0; i < request->regions_size(); i++) {
     regions.push_back(request->regions(i));
   }
-  int new_regionmap_epoch = this->coordinator_control->UpdateRegionMapMulti(regions);
+  int new_regionmap_epoch = this->coordinator_control->UpdateRegionMap(regions);
 
   // setup response
   LOG(INFO) << "set epoch id to response " << new_storemap_epoch << " " << new_regionmap_epoch;
@@ -85,10 +85,10 @@ void CoordinatorServiceImpl::StoreHeartbeat(google::protobuf::RpcController * /*
   response->set_regionmap_epoch(new_regionmap_epoch);
 
   auto *new_regionmap = response->mutable_regionmap();
-  new_regionmap->CopyFrom(this->coordinator_control->GetRegionMap());
+  this->coordinator_control->GetRegionMap(*new_regionmap);
 
   auto *new_storemap = response->mutable_storemap();
-  new_storemap->CopyFrom(this->coordinator_control->GetStoreMap());
+  this->coordinator_control->GetStoreMap(*new_storemap);
 
   LOG(INFO) << "end reponse build " << response->DebugString();
 }
@@ -101,7 +101,7 @@ void CoordinatorServiceImpl::GetStoreMap(google::protobuf::RpcController * /*con
   LOG(INFO) << "GetStoreMap request: _epoch [" << request->epoch() << "]";
 
   pb::common::StoreMap storemap;
-  storemap = this->coordinator_control->GetStoreMap();
+  this->coordinator_control->GetStoreMap(storemap);
 
   response->mutable_storemap()->CopyFrom(storemap);
   response->set_epoch(storemap.epoch());
@@ -115,7 +115,7 @@ void CoordinatorServiceImpl::GetRegionMap(google::protobuf::RpcController * /*co
   LOG(INFO) << "GetRegionMap request: _epoch [" << request->epoch() << "]";
 
   pb::common::RegionMap regionmap;
-  regionmap = this->coordinator_control->GetRegionMap();
+  this->coordinator_control->GetRegionMap(regionmap);
 
   response->mutable_regionmap()->CopyFrom(regionmap);
   response->set_epoch(regionmap.epoch());

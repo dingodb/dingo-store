@@ -15,6 +15,7 @@
 #ifndef DINGODB_ENGINE_ROCKS_ENGINE_H_  // NOLINT
 #define DINGODB_ENGINE_ROCKS_ENGINE_H_
 
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <optional>
@@ -63,38 +64,47 @@ class RocksEngine : public Engine {
   pb::error::Errno KvBatchPut(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs) override;
 
   pb::error::Errno KvPutIfAbsent(std::shared_ptr<Context> ctx, const pb::common::KeyValue& kv) override;
-  pb::error::Errno KvBatchPutIfAbsent(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs,
-                                      std::vector<std::string>& put_keys) override;
+
+  pb::error::Errno KvBatchPutIfAbsentAtomic(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs,
+                                            std::vector<std::string>& put_keys) override;
+
+  pb::error::Errno KvBatchPutIfAbsentNonAtomic(std::shared_ptr<Context> ctx,
+                                               const std::vector<pb::common::KeyValue>& kvs,
+                                               std::vector<std::string>& put_keys) override;
 
   // compare and replace. support does not exist
-  pb::error::Errno KvBcompareAndSet(std::shared_ptr<Context> ctx, const pb::common::KeyValue& kv,
-                                    const std::string& value) override;
+  pb::error::Errno KvCompareAndSet(std::shared_ptr<Context> ctx, const pb::common::KeyValue& kv,
+                                   const std::string& value) override;
 
   pb::error::Errno KvDelete(std::shared_ptr<Context> ctx, const std::string& key) override;
 
   pb::error::Errno KvDeleteRange(std::shared_ptr<Context> ctx, const pb::common::Range& range) override;
 
-  pb::error::Errno KvWriteBatch(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& vt_put) override;
+  pb::error::Errno KvWriteBatch(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& puts) override;
 
   // read range When the amount of data is relatively small.
   // CreateReader may be better
-  // [key_begin, key_end)
-  pb::error::Errno KvScan(std::shared_ptr<Context> ctx, const std::string& key_begin, const std::string& key_end,
-                          std::vector<pb::common::KeyValue>& vt_kv) override;  // NOLINT
+  // [begin_key, end_key)
+  pb::error::Errno KvScan(std::shared_ptr<Context> ctx, const std::string& begin_key, const std::string& end_key,
+                          std::vector<pb::common::KeyValue>& kvs) override;  // NOLINT
 
-  // [key_begin, key_end)
-  int64_t KvCount(std::shared_ptr<Context> ctx, const std::string& key_begin, const std::string& key_end) override;
+  // [begin_key, end_key)
+  pb::error::Errno KvCount(std::shared_ptr<Context> ctx, const std::string& begin_key, const std::string& end_key,
+                           int64_t& count) override;
 
   std::shared_ptr<EngineReader> CreateReader(std::shared_ptr<Context> ctx) override;
 
   using CfDefaultConfValueBase = std::variant<int64_t, double, std::string>;
   using CfDefaultConfValue = std::optional<CfDefaultConfValueBase>;
-  using CfDefaultConfMap = std::map<std::string, CfDefaultConfValue>;
+  using CfDefaultConf = std::map<std::string, CfDefaultConfValue>;
 
  private:
+  pb::error::Errno KvBatchPutIfAbsent(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs,
+                                      std::vector<std::string>& put_keys, bool is_atomic);  // NOLINT
+
   void Close();
 
-  bool InitCfConfig(const std::vector<std::string>& vt_column_family);
+  bool InitCfConfig(const std::vector<std::string>& column_family);
 
   pb::common::Engine type_;
   std::string name_;
@@ -103,43 +113,40 @@ class RocksEngine : public Engine {
   rocksdb::Options db_options_;
   rocksdb::TransactionDB* txn_db_;
 
-  CfDefaultConfMap cf_configuration_default_map_;
-
   // set cf config
-  static bool SetCfConfiguration(const CfDefaultConfMap& map_default_conf,
-                                 const std::map<std::string, std::string>& cf_configuration_map,
+  static bool SetCfConfiguration(const CfDefaultConf& default_conf,
+                                 const std::map<std::string, std::string>& cf_configuration,
                                  rocksdb::ColumnFamilyOptions* family_options);
 
-  // set default column family if not exist. rockdb not allow no default column
-  // family we will move default to first
-  static void SetDefaultIfNotExist(std::vector<std::string>& vt_column_family);  // NOLINT
+  // set default column family if not exist. rockdb not allow no default
+  // column family we will move default to first
+  static void SetDefaultIfNotExist(std::vector<std::string>& column_family);  // NOLINT
 
   // new_cf = base + cf . cf will overwite base value if exists.
   static void CreateNewMap(const std::map<std::string, std::string>& base, const std::map<std::string, std::string>& cf,
                            std::map<std::string, std::string>& new_cf);  // NOLINT
 
-  bool RocksdbInit(const std::string& db_path, const std::vector<std::string>& vt_column_family,
-                   std::vector<rocksdb::ColumnFamilyHandle*>& vt_family_handles);  // NOLINT
+  bool RocksdbInit(const std::string& db_path, const std::vector<std::string>& column_family,
+                   std::vector<rocksdb::ColumnFamilyHandle*>& family_handles);  // NOLINT
 
-  void SetColumnFamilyHandle(const std::vector<std::string>& vt_column_family,
-                             const std::vector<rocksdb::ColumnFamilyHandle*>& vt_family_handles);
+  void SetColumnFamilyHandle(const std::vector<std::string>& column_family,
+                             const std::vector<rocksdb::ColumnFamilyHandle*>& family_handles);
 
-  void SetColumnFamilyFromConfig(const std::shared_ptr<Config>& config,
-                                 const std::vector<std::string>& vt_column_family);
+  void SetColumnFamilyFromConfig(const std::shared_ptr<Config>& config, const std::vector<std::string>& column_family);
 
   // class ColumnFamily;
   class ColumnFamily {
    public:
     ColumnFamily();
     explicit ColumnFamily(const std::string& cf_index, const std::string& cf_desc_name, const rocksdb::WriteOptions& wo,
-                          const rocksdb::ReadOptions& ro, const CfDefaultConfMap& map_default_conf,
-                          const std::map<std::string, std::string>& map_conf, rocksdb::ColumnFamilyHandle* handle);
+                          const rocksdb::ReadOptions& ro, const CfDefaultConf& default_conf,
+                          const std::map<std::string, std::string>& conf, rocksdb::ColumnFamilyHandle* handle);
     explicit ColumnFamily(const std::string& cf_index, const std::string& cf_desc_name, const rocksdb::WriteOptions& wo,
-                          const rocksdb::ReadOptions& ro, const CfDefaultConfMap& map_default_conf,
-                          const std::map<std::string, std::string>& map_conf);
+                          const rocksdb::ReadOptions& ro, const CfDefaultConf& default_conf,
+                          const std::map<std::string, std::string>& conf);
 
     explicit ColumnFamily(const std::string& cf_index, const std::string& cf_desc_name,
-                          const CfDefaultConfMap& map_default_conf, const std::map<std::string, std::string>& map_conf);
+                          const CfDefaultConf& default_conf, const std::map<std::string, std::string>& conf);
 
     ~ColumnFamily();
 
@@ -159,11 +166,11 @@ class RocksEngine : public Engine {
     void SetReadOptions(const rocksdb::ReadOptions& ro) { ro_ = ro; }
     const rocksdb::ReadOptions& GetReadOptions() const { return ro_; }
 
-    void SetDefaultConfMap(const CfDefaultConfMap& map_default_conf) { map_default_conf_ = map_default_conf; }
-    const CfDefaultConfMap& GetDefaultConfMap() const { return map_default_conf_; }
+    void SetDefaultConf(const CfDefaultConf& default_conf) { default_conf_ = default_conf; }
+    const CfDefaultConf& GetDefaultConf() const { return default_conf_; }
 
-    void SetConfMap(const std::map<std::string, std::string>& map_conf) { map_conf_ = map_conf; }
-    const std::map<std::string, std::string>& GetConfMap() const { return map_conf_; }
+    void SetConf(const std::map<std::string, std::string>& conf) { conf_ = conf; }
+    const std::map<std::string, std::string>& GetConf() const { return conf_; }
 
     void SetHandle(rocksdb::ColumnFamilyHandle* handle) { handle_ = handle; }
     rocksdb::ColumnFamilyHandle* GetHandle() const { return handle_; }
@@ -177,17 +184,17 @@ class RocksEngine : public Engine {
     std::string cf_desc_name_;
     rocksdb::WriteOptions wo_;
     rocksdb::ReadOptions ro_;
-    CfDefaultConfMap map_default_conf_;
-    std::map<std::string, std::string> map_conf_;
-    // reference vt_family_handles_  do not release this handle
+    CfDefaultConf default_conf_;
+    std::map<std::string, std::string> conf_;
+    // reference family_handles_  do not release this handle
     rocksdb::ColumnFamilyHandle* handle_;
   };
 
-  std::map<std::string, ColumnFamily> map_index_cf_item_;
+  std::map<std::string, ColumnFamily> cfs_;
 
-  static const std::string& k_db_path;
-  static const std::string& k_column_families;
-  static const std::string& k_base_column_family;
+  static const std::string& kDbPath;
+  static const std::string& kColumnFamilies;
+  static const std::string& kBaseColumnFamily;
 };
 
 }  // namespace dingodb

@@ -14,10 +14,14 @@
 
 #include "engine/raft_kv_engine.h"
 
+#include <memory>
+
+#include "braft/raft.h"
 #include "butil/endpoint.h"
 #include "common/helper.h"
 #include "config/config_manager.h"
 #include "proto/common.pb.h"
+#include "raft/meta_state_machine.h"
 #include "raft/state_machine.h"
 #include "server/server.h"
 
@@ -36,7 +40,7 @@ bool RaftKvEngine::Init(std::shared_ptr<Config> config) {
 // Recover raft node from region meta data.
 // Invoke when server starting.
 bool RaftKvEngine::Recover() {
-  auto store_meta = Server::GetInstance()->store_meta_manager();
+  auto store_meta = Server::GetInstance()->GetStoreMetaManager();
   auto regions = store_meta->GetAllRegion();
 
   auto ctx = std::make_shared<Context>();
@@ -47,29 +51,21 @@ bool RaftKvEngine::Recover() {
   return true;
 }
 
-std::string RaftKvEngine::GetName() { pb::common::Engine_Name(pb::common::ENG_RAFT_STORE); }
+std::string RaftKvEngine::GetName() { return pb::common::Engine_Name(pb::common::ENG_RAFT_STORE); }
 
 pb::common::Engine RaftKvEngine::GetID() { return pb::common::ENG_RAFT_STORE; }
 
-butil::EndPoint getRaftEndPoint(const std::string host, int port) {
-  butil::ip_t ip;
-  if (host.empty()) {
-    ip = butil::IP_ANY;
-  } else {
-    if (Helper::IsIp(host)) {
-      butil::str2ip(host.c_str(), &ip);
-    } else {
-      butil::hostname2ip(host.c_str(), &ip);
-    }
-  }
-
-  return butil::EndPoint(ip, port);
-}
-
 pb::error::Errno RaftKvEngine::AddRegion(std::shared_ptr<Context> ctx,
                                          const std::shared_ptr<pb::common::Region> region) {
+  std::shared_ptr<braft::StateMachine> state_machine = nullptr;
+  if (ctx->ClusterRole() == pb::common::ClusterRole::STORE) {
+    state_machine = std::make_shared<StoreStateMachine>(engine_);
+  } else if (ctx->ClusterRole() == pb::common::ClusterRole::COORDINATOR) {
+    state_machine = std::make_shared<MetaStateMachine>(engine_);
+  }
+
   std::shared_ptr<RaftNode> node = std::make_shared<RaftNode>(
-      region->id(), braft::PeerId(Server::GetInstance()->raft_endpoint()), new StoreStateMachine(engine_));
+      ctx->ClusterRole(), region->id(), braft::PeerId(Server::GetInstance()->RaftEndpoint()), state_machine.get());
 
   if (node->Init(Helper::FormatPeers(Helper::ExtractLocations(region->peers()))) != 0) {
     node->Destroy();
@@ -216,9 +212,9 @@ std::shared_ptr<pb::raft::RaftCmdRequest> genRaftCmdPutIfAbsentRequest(const std
   return raft_cmd;
 }
 
-pb::error::Errno RaftKvEngine::KvBatchPutIfAbsent(std::shared_ptr<Context> ctx,
-                                                  const std::vector<pb::common::KeyValue>& kvs,
-                                                  std::vector<std::string>& put_keys) {
+pb::error::Errno RaftKvEngine::KvBatchPutIfAbsentAtomic(std::shared_ptr<Context> ctx,
+                                                        const std::vector<pb::common::KeyValue>& kvs,
+                                                        std::vector<std::string>& put_keys) {
   auto node = raft_node_manager_->GetNode(ctx->region_id());
   if (node == nullptr) {
     LOG(ERROR) << "Not found raft node " << ctx->region_id();

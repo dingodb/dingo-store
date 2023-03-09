@@ -34,7 +34,7 @@ class Server {
  public:
   static Server* GetInstance();
 
-  void set_role(pb::common::ClusterRole role);
+  void SetRole(pb::common::ClusterRole role);
 
   // Init config.
   bool InitConfig(const std::string& filename);
@@ -43,7 +43,7 @@ class Server {
   bool InitLog();
 
   // Valiate coordinator is connected and valid.
-  bool ValiateCoordinator();
+  static bool ValiateCoordinator() { return true; }
 
   // Every server instance has id, the id is allocated by coordinator.
   bool InitServerID();
@@ -66,37 +66,43 @@ class Server {
   // Init store control
   bool InitStoreControl();
 
+  pb::error::Errno StartMetaRegion(std::shared_ptr<Config> config, std::shared_ptr<Engine> kv_engine);
+
   // Recover server state, include store/region/raft.
   bool Recover();
 
   void Destroy();
 
-  uint64_t id() { return id_; }
+  uint64_t Id() const { return id_; }
 
-  butil::EndPoint server_endpoint() { return server_endpoint_; }
-  void set_server_endpoint(const butil::EndPoint& endpoint) { server_endpoint_ = endpoint; }
+  butil::EndPoint ServerEndpoint() { return server_endpoint_; }
+  void SetServerEndpoint(const butil::EndPoint& endpoint) { server_endpoint_ = endpoint; }
 
-  butil::EndPoint raft_endpoint() { return raft_endpoint_; }
-  void set_raft_endpoint(const butil::EndPoint& endpoint) { raft_endpoint_ = endpoint; }
+  butil::EndPoint RaftEndpoint() { return raft_endpoint_; }
+  void SetRaftEndpoint(const butil::EndPoint& endpoint) { raft_endpoint_ = endpoint; }
 
-  std::shared_ptr<CoordinatorInteraction> coordinator_interaction() { return coordinator_interaction_; }
+  std::shared_ptr<CoordinatorInteraction> GetCoordinatorInteraction() { return coordinator_interaction_; }
 
-  std::shared_ptr<Engine> get_engine(pb::common::Engine type) {
+  std::shared_ptr<Engine> GetEngine(pb::common::Engine type) {
     auto it = engines_.find(type);
     return (it != engines_.end()) ? it->second : nullptr;
   }
 
-  std::shared_ptr<Storage> storage() { return storage_; }
-  std::shared_ptr<StoreMetaManager> store_meta_manager() { return store_meta_manager_; }
-  std::shared_ptr<CrontabManager> crontab_manager() { return crontab_manager_; }
+  std::shared_ptr<Storage> GetStorage() { return storage_; }
+  std::shared_ptr<StoreMetaManager> GetStoreMetaManager() { return store_meta_manager_; }
+  std::shared_ptr<CrontabManager> GetCrontabManager() { return crontab_manager_; }
 
-  std::shared_ptr<StoreControl> store_control() { return store_control_; }
+  std::shared_ptr<StoreControl> GetStoreControl() { return store_control_; }
+
+  Server(const Server&) = delete;
+  const Server& operator=(const Server&) = delete;
 
  private:
-  Server(){};
-  ~Server(){};
+  Server() = default;
+  ;
+  ~Server() = default;
+  ;
   friend struct DefaultSingletonTraits<Server>;
-  DISALLOW_COPY_AND_ASSIGN(Server);
 
   // This is server instance id, every store server has one id, it's unique,
   // represent store's identity, provided by coordinator.

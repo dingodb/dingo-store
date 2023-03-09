@@ -32,7 +32,7 @@ namespace dingodb {
 class TransformKvAble {
  public:
   TransformKvAble(const std::string& prefix) : prefix_(prefix){};
-  ~TransformKvAble() = default;
+  virtual ~TransformKvAble() = default;
 
   std::string prefix() { return prefix_; }
   virtual std::string GenKey(uint64_t region_id) { return ""; }
@@ -68,10 +68,10 @@ class StoreServerMeta {
   StoreServerMeta& SetRaftLocation(const butil::EndPoint&& endpoint);
 
   std::shared_ptr<pb::common::Store> GetStore();
+  StoreServerMeta(const StoreServerMeta&) = delete;
+  const StoreServerMeta& operator=(const StoreServerMeta&) = delete;
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(StoreServerMeta);
-
   uint64_t epoch_;
   std::shared_ptr<pb::common::Store> store_;
 };
@@ -80,7 +80,7 @@ class StoreServerMeta {
 class StoreRegionMeta : public TransformKvAble {
  public:
   StoreRegionMeta() : TransformKvAble("META_REGION"){};
-  ~StoreRegionMeta() = default;
+  ~StoreRegionMeta() override = default;
 
   bool Init();
   bool Recover(const std::vector<pb::common::KeyValue>& kvs);
@@ -88,7 +88,7 @@ class StoreRegionMeta : public TransformKvAble {
   uint64_t GetEpoch() const;
   bool IsExist(uint64_t region_id);
 
-  void AddRegion(const std::shared_ptr<pb::common::Region> region);
+  void AddRegion(std::shared_ptr<pb::common::Region> region);
   void DeleteRegion(uint64_t region_id);
   std::shared_ptr<pb::common::Region> GetRegion(uint64_t region_id);
   std::map<uint64_t, std::shared_ptr<pb::common::Region> > GetAllRegion();
@@ -96,14 +96,16 @@ class StoreRegionMeta : public TransformKvAble {
   uint64_t ParseRegionId(const std::string& str);
   std::string GenKey(uint64_t region_id) override;
   std::shared_ptr<pb::common::KeyValue> TransformToKv(uint64_t region_id) override;
-  std::shared_ptr<pb::common::KeyValue> TransformToKv(const std::shared_ptr<pb::common::Region> region) override;
+  std::shared_ptr<pb::common::KeyValue> TransformToKv(std::shared_ptr<pb::common::Region> region) override;
   std::vector<std::shared_ptr<pb::common::KeyValue> > TransformToKvtWithDelta() override;
   std::vector<std::shared_ptr<pb::common::KeyValue> > TransformToKvWithAll() override;
 
   void TransformFromKv(const std::vector<pb::common::KeyValue>& kvs) override;
 
+  StoreRegionMeta(const StoreRegionMeta&) = delete;
+  const StoreRegionMeta& operator=(const StoreRegionMeta&) = delete;
+
  private:
-  DISALLOW_COPY_AND_ASSIGN(StoreRegionMeta);
   uint64_t epoch_;
 
   // Record which region changed.
@@ -119,7 +121,7 @@ class StoreRegionMeta : public TransformKvAble {
 class StoreMetaManager {
  public:
   StoreMetaManager(std::shared_ptr<MetaReader> meta_reader, std::shared_ptr<MetaWriter> meta_writer);
-  ~StoreMetaManager() {}
+  ~StoreMetaManager() = default;
 
   bool Init();
   bool Recover();
@@ -132,12 +134,13 @@ class StoreMetaManager {
   bool IsExistRegion(uint64_t region_id);
   std::shared_ptr<pb::common::Region> GetRegion(uint64_t region_id);
   std::map<uint64_t, std::shared_ptr<pb::common::Region> > GetAllRegion();
-  void AddRegion(const std::shared_ptr<pb::common::Region> region);
+  void AddRegion(std::shared_ptr<pb::common::Region> region);
   void DeleteRegion(uint64_t region_id);
 
- private:
-  DISALLOW_COPY_AND_ASSIGN(StoreMetaManager);
+  StoreMetaManager(const StoreMetaManager&) = delete;
+  void operator=(const StoreMetaManager&) = delete;
 
+ private:
   // Read meta data from persistence storage.
   std::shared_ptr<MetaReader> meta_reader_;
   // Write meta data to persistence storage.

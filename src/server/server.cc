@@ -14,10 +14,15 @@
 
 #include "server/server.h"
 
+#include <memory>
 #include <vector>
 
+#include "braft/util.h"
+#include "butil/endpoint.h"
 #include "butil/files/file_path.h"
 #include "butil/strings/stringprintf.h"
+#include "common/constant.h"
+#include "common/helper.h"
 #include "config/config.h"
 #include "config/config_manager.h"
 #include "engine/engine.h"
@@ -26,11 +31,13 @@
 #include "engine/rocks_engine.h"
 #include "meta/meta_reader.h"
 #include "meta/meta_writer.h"
+#include "proto/common.pb.h"
+#include "proto/error.pb.h"
 #include "store/heartbeat.h"
 
 namespace dingodb {
 
-void Server::set_role(pb::common::ClusterRole role) { role_ = role; }
+void Server::SetRole(pb::common::ClusterRole role) { role_ = role; }
 
 Server* Server::GetInstance() { return Singleton<Server>::get(); }
 
@@ -65,44 +72,72 @@ bool Server::InitLog() {
   return true;
 }
 
-bool Server::ValiateCoordinator() { return true; }
-
 bool Server::InitServerID() {
   auto config = ConfigManager::GetInstance()->GetConfig(role_);
   id_ = config->GetInt("cluster.instance_id");
-
   return id_ != 0;
 }
 
 bool Server::InitEngines() {
   auto config = ConfigManager::GetInstance()->GetConfig(role_);
-  // std::shared_ptr<Engine> mem_engine = std::make_shared<MemEngine>();
-  // if (!mem_engine->Init(config)) {
-  //   return false;
-  // }
 
   std::shared_ptr<Engine> rock_engine = std::make_shared<RocksEngine>();
   if (!rock_engine->Init(config)) {
+    LOG(ERROR) << "Init RocksEngine Failed with Config[" << config->ToString();
     return false;
   }
 
-  /**
-   * todo: huzx will role init different engine
-   * start raft node and start to vote
-   */
-
-  // will init meta storage engine
-
   // default Key-Value storage engine
-  std::shared_ptr<Engine> raft_kv_engine = std::make_shared<RaftKvEngine>(rock_engine);
+  std::shared_ptr<Engine> const raft_kv_engine = std::make_shared<RaftKvEngine>(rock_engine);
   if (!raft_kv_engine->Init(config)) {
+    LOG(ERROR) << "Init RaftKvEngine Failed with Config[" << config->ToString();
     return false;
   }
   // engines_.insert(std::make_pair(mem_engine->GetID(), mem_engine));
   engines_.insert(std::make_pair(rock_engine->GetID(), rock_engine));
   engines_.insert(std::make_pair(raft_kv_engine->GetID(), raft_kv_engine));
-
   return true;
+}
+
+pb::error::Errno Server::StartMetaRegion(std::shared_ptr<Config> config, std::shared_ptr<Engine> kv_engine) {
+  /**
+   * 1. construct context(must contains role)
+   */
+  std::shared_ptr<Context> ctx = std::make_shared<Context>();
+  ctx->SetClusterRole(pb::common::COORDINATOR);
+
+  /*
+   * 2. construct region list
+   *    1) Region ID
+   *    2) Region PeerList
+   */
+  std::shared_ptr<pb::common::Region> region = std::make_shared<pb::common::Region>();
+  region->set_id(Constant::kCoordinatorRegionId);
+  region->set_table_id(Constant::kCoordinatorTableId);
+  region->set_schema_id(Constant::kCoordinatorSchemaId);
+  uint64_t timestamp_us = butil::gettimeofday_ms();
+  region->set_create_timestamp(timestamp_us);
+  region->set_state(pb::common::RegionState::REGION_NEW);
+  region->set_name("COORDINATOR");
+
+  std::string coordinator_list = config->GetString("coordinator.peers");
+  std::vector<butil::EndPoint> peer_nodes = Helper::StrToEndpoint(coordinator_list);
+
+  for (auto it = peer_nodes.begin(); it != peer_nodes.end(); ++it) {
+    auto peer = region->add_peers();
+    auto location = peer->mutable_raft_location();
+    location->set_host(butil::ip2str(it->ip).c_str());
+    location->set_port(it->port);
+    LOG(INFO) << "COORDINATOR set peer node:" << (butil::ip2str(it->ip).c_str()) << ":" << it->port;
+  }
+
+  dingodb::pb::common::Range* range = region->mutable_range();
+  range->set_start_key("0000");
+  range->set_end_key("FFFF");
+
+  LOG(INFO) << "Create Region Request:" << region->DebugString();
+  pb::error::Errno ret = kv_engine->AddRegion(ctx, region);
+  return ret;
 }
 
 bool Server::InitCoordinatorInteraction() {
@@ -140,21 +175,27 @@ bool Server::InitCrontabManager() {
   return true;
 }
 
-bool Server::InitStoreControl() { store_control_ = std::make_shared<StoreControl>(); }
+bool Server::InitStoreControl() {
+  store_control_ = std::make_shared<StoreControl>();
+  return store_control_ != nullptr;
+}
 
 bool Server::Recover() {
-  // Recover region meta data.
-  if (!store_meta_manager_->Recover()) {
-    LOG(ERROR) << "Recover store region meta data failed";
-    return false;
-  }
-
-  // Recover engine state.
-  for (auto& it : engines_) {
-    if (!it.second->Recover()) {
-      LOG(ERROR) << "Recover engine failed, engine " << it.second->GetName();
+  if (this->role_ == pb::common::STORE) {
+    // Recover region meta data.
+    if (!store_meta_manager_->Recover()) {
+      LOG(ERROR) << "Recover store region meta data failed";
       return false;
     }
+
+    // Recover engine state.
+    for (auto& it : engines_) {
+      if (!it.second->Recover()) {
+        LOG(ERROR) << "Recover engine failed, engine " << it.second->GetName();
+        return false;
+      }
+    }
+  } else if (this->role_ == pb::common::COORDINATOR) {
   }
 
   return true;

@@ -27,7 +27,7 @@ namespace dingodb {
 class RaftKvEngine : public Engine {
  public:
   RaftKvEngine(std::shared_ptr<Engine> engine);
-  ~RaftKvEngine();
+  ~RaftKvEngine() override;
 
   bool Init(std::shared_ptr<Config> config) override;
   bool Recover() override;
@@ -35,7 +35,7 @@ class RaftKvEngine : public Engine {
   std::string GetName() override;
   pb::common::Engine GetID() override;
 
-  pb::error::Errno AddRegion(std::shared_ptr<Context> ctx, const std::shared_ptr<pb::common::Region> region) override;
+  pb::error::Errno AddRegion(std::shared_ptr<Context> ctx, std::shared_ptr<pb::common::Region> region) override;
   pb::error::Errno ChangeRegion(std::shared_ptr<Context> ctx, uint64_t region_id,
                                 std::vector<pb::common::Peer> peers) override;
   pb::error::Errno DestroyRegion(std::shared_ptr<Context> ctx, uint64_t region_id) override;
@@ -44,15 +44,15 @@ class RaftKvEngine : public Engine {
   pb::error::Errno KvBatchGet(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys,
                               std::vector<pb::common::KeyValue>& kvs) override;
 
-  pb::error::Errno KvScan(std::shared_ptr<Context> ctx, const std::string& start_key, const std::string& end_key,
-                          std::vector<pb::common::KeyValue>& kvs) override;
-
   pb::error::Errno KvPut(std::shared_ptr<Context> ctx, const pb::common::KeyValue& kv) override;
   pb::error::Errno KvBatchPut(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs) override;
 
+  pb::error::Errno KvScan(std::shared_ptr<Context> ctx, const std::string& start_key, const std::string& end_key,
+                          std::vector<pb::common::KeyValue>& kvs) override;
+
   pb::error::Errno KvPutIfAbsent(std::shared_ptr<Context> ctx, const pb::common::KeyValue& kv) override;
-  pb::error::Errno KvBatchPutIfAbsent(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs,
-                                      std::vector<std::string>& put_keys) override;
+  pb::error::Errno KvBatchPutIfAbsentAtomic(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs,
+                                            std::vector<std::string>& put_keys) override;
 
   pb::error::Errno KvDeleteRange(std::shared_ptr<Context> ctx, const pb::common::Range& range) override;
 

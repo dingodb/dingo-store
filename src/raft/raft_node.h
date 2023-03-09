@@ -21,6 +21,7 @@
 #include <memory>
 
 #include "common/context.h"
+#include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "proto/raft.pb.h"
 
@@ -29,7 +30,7 @@ namespace dingodb {
 // Encapsulation braft node
 class RaftNode {
  public:
-  RaftNode(uint64_t node_id, braft::PeerId peer_id, braft::StateMachine* fsm);
+  RaftNode(pb::common::ClusterRole role, uint64_t node_id, braft::PeerId peer_id, braft::StateMachine* fsm);
   ~RaftNode();
 
   int Init(const std::string& init_conf);
@@ -51,6 +52,7 @@ class RaftNode {
   butil::Status ResetPeers(const braft::Configuration& new_peers);
 
  private:
+  pb::common::ClusterRole role_;
   uint64_t node_id_;
   std::unique_ptr<braft::Node> node_;
   braft::StateMachine* fsm_;

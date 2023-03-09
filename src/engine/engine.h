@@ -67,7 +67,7 @@ class EngineReader : public std::enable_shared_from_this<EngineReader> {
   EngineReader() = default;
   virtual ~EngineReader() = default;
   std::shared_ptr<EngineReader> GetSelf() { return shared_from_this(); }
-  virtual std::shared_ptr<EngineIterator> CreateIterator(const std::string& key_begin, const std::string& key_end) = 0;
+  virtual std::shared_ptr<EngineIterator> Scan(const std::string& begin_key, const std::string& end_key) = 0;
   virtual std::shared_ptr<std::string> KvGet(const std::string& key) = 0;
   virtual const std::string& GetName() const = 0;
   virtual uint32_t GetID() = 0;
@@ -109,15 +109,24 @@ class Engine {
   virtual pb::error::Errno KvBatchPut(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs) = 0;
 
   virtual pb::error::Errno KvPutIfAbsent(std::shared_ptr<Context> ctx, const pb::common::KeyValue& kv) = 0;
-  virtual pb::error::Errno KvBatchPutIfAbsent(std::shared_ptr<Context> ctx,
-                                              const std::vector<pb::common::KeyValue>& kvs,
-                                              std::vector<std::string>& put_keys) = 0;
+
+  virtual pb::error::Errno KvBatchPutIfAbsentAtomic(std::shared_ptr<Context> ctx,
+                                                    const std::vector<pb::common::KeyValue>& kvs,
+                                                    std::vector<std::string>& put_keys) {
+    return pb::error::Errno::ENOT_SUPPORT;
+  }
+
+  virtual pb::error::Errno KvBatchPutIfAbsentNonAtomic(std::shared_ptr<Context> ctx,
+                                                       const std::vector<pb::common::KeyValue>& kvs,
+                                                       std::vector<std::string>& put_keys) {
+    return pb::error::Errno::ENOT_SUPPORT;
+  }
 
   virtual std::shared_ptr<EngineReader> CreateReader(std::shared_ptr<Context> /*ctx*/) { return {}; }
 
   // compare and replace. support does not exist
-  virtual pb::error::Errno KvBcompareAndSet(std::shared_ptr<Context> ctx, const pb::common::KeyValue& kv,
-                                            const std::string& value) {
+  virtual pb::error::Errno KvCompareAndSet(std::shared_ptr<Context> ctx, const pb::common::KeyValue& kv,
+                                           const std::string& value) {
     return pb::error::Errno::ENOT_SUPPORT;
   }
 
@@ -125,27 +134,28 @@ class Engine {
     return pb::error::Errno::ENOT_SUPPORT;
   }
 
-  virtual pb::error::Errno KvDeleteRange(std::shared_ptr<Context> ctx, const std::string& key_begin,
-                                         const std::string& key_endbool, bool delete_files_in_range) {
+  virtual pb::error::Errno KvDeleteRange(std::shared_ptr<Context> ctx, const std::string& begin_key,
+                                         const std::string& end_key, bool delete_files_in_range) {
     return pb::error::Errno::ENOT_SUPPORT;
   }
 
-  virtual pb::error::Errno KvWriteBatch(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& vt_put) {
+  virtual pb::error::Errno KvWriteBatch(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& puts) {
     return pb::error::Errno::ENOT_SUPPORT;
   }
 
   // read range When the amount of data is relatively small.
   // CreateReader may be better
-  // [key_begin, key_end)
-  virtual pb::error::Errno KvScan(std::shared_ptr<Context> ctx, const std::string& key_begin,
-                                  const std::string& key_end,
-                                  std::vector<pb::common::KeyValue>& vt_kv) {  // NOLINT
+  // [begin_key, end_key)
+  virtual pb::error::Errno KvScan(std::shared_ptr<Context> ctx, const std::string& begin_key,
+                                  const std::string& end_key,
+                                  std::vector<pb::common::KeyValue>& kvs) {  // NOLINT
     return pb::error::Errno::ENOT_SUPPORT;
   }
 
-  // [key_begin, key_end)
-  virtual int64_t KvCount(std::shared_ptr<Context> ctx, const std::string& key_begin, const std::string& key_end) {
-    return -1;
+  // [begin_key, end_key)
+  virtual pb::error::Errno KvCount(std::shared_ptr<Context> ctx, const std::string& begin_key,
+                                   const std::string& end_key, int64_t& count) {  // NOLINT
+    return pb::error::Errno::ENOT_SUPPORT;
   }
 
   virtual pb::error::Errno KvDeleteRange(std::shared_ptr<Context> ctx, const pb::common::Range& range) {

@@ -23,16 +23,16 @@ namespace dingodb {
 StoreServerMeta::StoreServerMeta() : store_(std::make_shared<pb::common::Store>()) {}
 
 bool StoreServerMeta::Init() {
-  auto server = Server::GetInstance();
-  store_->set_id(server->id());
+  auto* server = Server::GetInstance();
+  store_->set_id(server->Id());
   store_->set_epoch(0);
   store_->set_state(pb::common::STORE_NORMAL);
-  auto server_location = store_->mutable_server_location();
-  server_location->set_host(butil::ip2str(server->server_endpoint().ip).c_str());
-  server_location->set_port(server->server_endpoint().port);
-  auto raf_location = store_->mutable_raft_location();
-  raf_location->set_host(butil::ip2str(server->raft_endpoint().ip).c_str());
-  raf_location->set_port(server->raft_endpoint().port);
+  auto* server_location = store_->mutable_server_location();
+  server_location->set_host(butil::ip2str(server->ServerEndpoint().ip).c_str());
+  server_location->set_port(server->ServerEndpoint().port);
+  auto* raf_location = store_->mutable_raft_location();
+  raf_location->set_host(butil::ip2str(server->RaftEndpoint().ip).c_str());
+  raf_location->set_port(server->RaftEndpoint().port);
 
   LOG(INFO) << "store server meta: " << store_->ShortDebugString();
 
@@ -126,7 +126,7 @@ uint64_t StoreRegionMeta::ParseRegionId(const std::string& str) {
   std::string s(str.c_str() + prefix_.size());
   try {
     return std::stoull(s, nullptr, 10);
-  } catch (std::invalid_argument e) {
+  } catch (std::invalid_argument& e) {
     LOG(ERROR) << "string to uint64_t failed: " << e.what();
   }
 
@@ -176,7 +176,7 @@ std::vector<std::shared_ptr<pb::common::KeyValue> > StoreRegionMeta::TransformTo
   std::shared_lock<std::shared_mutex> lock(mutex_);
 
   std::vector<std::shared_ptr<pb::common::KeyValue> > kvs;
-  for (auto it : regions_) {
+  for (const auto& it : regions_) {
     std::shared_ptr<pb::common::KeyValue> kv = std::make_shared<pb::common::KeyValue>();
     kv->set_key(GenKey(it.first));
     kv->set_value(it.second->SerializeAsString());
@@ -188,7 +188,7 @@ std::vector<std::shared_ptr<pb::common::KeyValue> > StoreRegionMeta::TransformTo
 
 void StoreRegionMeta::TransformFromKv(const std::vector<pb::common::KeyValue>& kvs) {
   std::unique_lock<std::shared_mutex> lock(mutex_);
-  for (auto& kv : kvs) {
+  for (const auto& kv : kvs) {
     uint64_t region_id = ParseRegionId(kv.key());
     std::shared_ptr<pb::common::Region> region = std::make_shared<pb::common::Region>();
     region->ParsePartialFromArray(kv.value().data(), kv.value().size());

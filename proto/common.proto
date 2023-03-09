@@ -31,7 +31,6 @@ enum Engine {
   ENG_XDP = 2;
   ENG_RAFT_STORE = 3;
   ENG_COLUMNAR = 4;
-  ENG_RAFT_META = 5;
 };
 
 message Location {
