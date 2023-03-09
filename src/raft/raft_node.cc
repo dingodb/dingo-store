@@ -22,8 +22,8 @@
 
 namespace dingodb {
 
-RaftNode::RaftNode(uint64_t node_id, braft::PeerId peer_id, braft::StateMachine* fsm)
-    : node_id_(node_id), node_(new braft::Node(std::to_string(node_id), peer_id)), fsm_(fsm) {}
+RaftNode::RaftNode(pb::common::ClusterRole role, uint64_t node_id, braft::PeerId peer_id, braft::StateMachine* fsm)
+    : role_(role), node_id_(node_id), node_(new braft::Node(std::to_string(node_id), peer_id)), fsm_(fsm) {}
 
 RaftNode::~RaftNode() {
   if (fsm_) {
@@ -41,7 +41,7 @@ int RaftNode::Init(const std::string& init_conf) {
     return -1;
   }
 
-  auto config = ConfigManager::GetInstance()->GetConfig(pb::common::ClusterRole::STORE);
+  auto config = ConfigManager::GetInstance()->GetConfig(role_);
 
   node_options.election_timeout_ms = config->GetInt("raft.electionTimeout");
   node_options.fsm = fsm_;

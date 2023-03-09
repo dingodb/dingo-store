@@ -83,13 +83,15 @@ int main(int argc, char *argv[]) {
     LOG(ERROR) << "InitServerID failed!";
     return -1;
   }
+
+  std::shared_ptr<dingodb::Config> const config = dingodb::ConfigManager::GetInstance()->GetConfig(role);
+  dingodb_server->SetServerEndpoint(GetServerEndPoint(config));
+  dingodb_server->SetRaftEndpoint(GetRaftEndPoint(config));
+
   if (!dingodb_server->InitEngines()) {
     LOG(ERROR) << "InitEngines failed!";
     return -1;
   }
-
-  dingodb_server->SetServerEndpoint(GetServerEndPoint(dingodb::ConfigManager::GetInstance()->GetConfig(role)));
-  dingodb_server->SetRaftEndpoint(GetRaftEndPoint(dingodb::ConfigManager::GetInstance()->GetConfig(role)));
 
   brpc::Server server;
   dingodb::CoordinatorControl coordinator_control;
@@ -111,6 +113,7 @@ int main(int argc, char *argv[]) {
       LOG(ERROR) << "Fail to add meta service!";
       return -1;
     }
+
   } else if (is_store) {
     if (!dingodb_server->InitCoordinatorInteraction()) {
       LOG(ERROR) << "InitCoordinatorInteraction failed!";
@@ -151,6 +154,15 @@ int main(int argc, char *argv[]) {
     return -1;
   }
   LOG(INFO) << "Raft server is running on " << raft_server.listen_address();
+
+  if (is_coodinator) {
+    auto engine = dingodb_server->GetEngine(dingodb::pb::common::Engine::ENG_RAFT_STORE);
+    dingodb::pb::error::Errno status = dingodb_server->StartMetaRegion(config, engine);
+    if (status != dingodb::pb::error::Errno::OK) {
+      LOG(INFO) << "Init RaftNode and StateMachine Failed:" << status;
+      return -1;
+    }
+  }
 
   if (!dingodb_server->Recover()) {
     LOG(ERROR) << "Recover failed!";

@@ -18,7 +18,10 @@
 #include <string>
 
 #include "brpc/controller.h"
+#include "proto/common.pb.h"
 #include "proto/store.pb.h"
+
+namespace dingodb {
 
 class Context {
  public:
@@ -30,7 +33,8 @@ class Context {
         cf_name_(""),
         directly_delete_(false),
         delete_files_in_range_(false),
-        flush_(false) {}
+        flush_(false),
+        role_(pb::common::ClusterRole::STORE) {}
   Context(brpc::Controller* cntl, google::protobuf::Closure* done)
       : cntl_(cntl),
         done_(done),
@@ -39,7 +43,8 @@ class Context {
         cf_name_(""),
         directly_delete_(false),
         delete_files_in_range_(false),
-        flush_(false) {}
+        flush_(false),
+        role_(pb::common::ClusterRole::STORE) {}
   Context(brpc::Controller* cntl, google::protobuf::Closure* done, google::protobuf::Message* response)
       : cntl_(cntl),
         done_(done),
@@ -48,7 +53,8 @@ class Context {
         cf_name_(""),
         directly_delete_(false),
         delete_files_in_range_(false),
-        flush_(false) {}
+        flush_(false),
+        role_(pb::common::ClusterRole::STORE) {}
   ~Context() = default;
 
   brpc::Controller* cntl() { return cntl_; }
@@ -87,6 +93,9 @@ class Context {
   bool flush() { return flush_; }
   void set_flush(bool flush) { flush_ = flush; }
 
+  pb::common::ClusterRole ClusterRole() { return role_; }
+  void SetClusterRole(pb::common::ClusterRole role) { role_ = role; }
+
  private:
   // brpc framework free resource
   brpc::Controller* cntl_;
@@ -102,6 +111,10 @@ class Context {
   bool delete_files_in_range_;
   // Flush data to persistence.
   bool flush_;
+  // role
+  pb::common::ClusterRole role_;
 };
+
+}  // namespace dingodb
 
 #endif

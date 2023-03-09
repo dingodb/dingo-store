@@ -4,16 +4,18 @@ cluster:
 server:
   host: 127.0.0.1
   port: 19190
+coordinator:
+  peers: 127.0.0.1:8001,127.0.0.1:8002,127.0.0.1:8003
 raft:
   host: 127.0.0.1
-  port: 20000
-  path: /opt/dingo-poc/data/coordinator/raft
+  port: 8001
+  path: ./data/coordinator/raft
   electionTimeout: 1000 # ms
   snapshotInterval: 3600 # s
 log:
-  logPath: /opt/dingo-poc/log
+  logPath: ./log
 store:
-  dbPath: /opt/dingo-poc/data/coordinator/db
+  dbPath: ./data/coordinator/db
   base:
     block_size: 131072
     block_cache: 67108864

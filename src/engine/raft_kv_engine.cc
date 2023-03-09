@@ -14,10 +14,14 @@
 
 #include "engine/raft_kv_engine.h"
 
+#include <memory>
+
+#include "braft/raft.h"
 #include "butil/endpoint.h"
 #include "common/helper.h"
 #include "config/config_manager.h"
 #include "proto/common.pb.h"
+#include "raft/meta_state_machine.h"
 #include "raft/state_machine.h"
 #include "server/server.h"
 
@@ -47,29 +51,21 @@ bool RaftKvEngine::Recover() {
   return true;
 }
 
-std::string RaftKvEngine::GetName() { pb::common::Engine_Name(pb::common::ENG_RAFT_STORE); }
+std::string RaftKvEngine::GetName() { return pb::common::Engine_Name(pb::common::ENG_RAFT_STORE); }
 
 pb::common::Engine RaftKvEngine::GetID() { return pb::common::ENG_RAFT_STORE; }
 
-butil::EndPoint getRaftEndPoint(const std::string host, int port) {
-  butil::ip_t ip;
-  if (host.empty()) {
-    ip = butil::IP_ANY;
-  } else {
-    if (Helper::IsIp(host)) {
-      butil::str2ip(host.c_str(), &ip);
-    } else {
-      butil::hostname2ip(host.c_str(), &ip);
-    }
-  }
-
-  return butil::EndPoint(ip, port);
-}
-
 pb::error::Errno RaftKvEngine::AddRegion(std::shared_ptr<Context> ctx,
                                          const std::shared_ptr<pb::common::Region> region) {
+  std::shared_ptr<braft::StateMachine> state_machine = nullptr;
+  if (ctx->ClusterRole() == pb::common::ClusterRole::STORE) {
+    state_machine = std::make_shared<StoreStateMachine>(engine_);
+  } else if (ctx->ClusterRole() == pb::common::ClusterRole::COORDINATOR) {
+    state_machine = std::make_shared<MetaStateMachine>(engine_);
+  }
+
   std::shared_ptr<RaftNode> node = std::make_shared<RaftNode>(
-      region->id(), braft::PeerId(Server::GetInstance()->RaftEndpoint()), new StoreStateMachine(engine_));
+      ctx->ClusterRole(), region->id(), braft::PeerId(Server::GetInstance()->RaftEndpoint()), state_machine.get());
 
   if (node->Init(Helper::FormatPeers(Helper::ExtractLocations(region->peers()))) != 0) {
     node->Destroy();

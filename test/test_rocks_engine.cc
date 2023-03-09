@@ -24,6 +24,7 @@
 #include <string>
 #include <vector>
 
+#include "common/context.h"
 #include "config/config_manager.h"
 #include "engine/rocks_engine.h"
 #include "proto/common.pb.h"
@@ -80,8 +81,7 @@ class RocksEngineTest {
     server_->SetRole(dingodb::pb::common::ClusterRole::STORE);
     server_->InitConfig(filename_);
     config_manager_ = dingodb::ConfigManager::GetInstance();
-    config_ =
-        config_manager_->GetConfig(dingodb::pb::common::ClusterRole::STORE);
+    config_ = config_manager_->GetConfig(dingodb::pb::common::ClusterRole::STORE);
   }
   void TearDown() {}
 
@@ -136,7 +136,7 @@ TEST(RocksEngineTest, KvPut) {
     EXPECT_EQ(ok, dingodb::pb::error::Errno::ECONTEXT);
   }
 
-  std::shared_ptr<Context> ctx = std::make_shared<Context>();
+  std::shared_ptr<dingodb::Context> ctx = std::make_shared<dingodb::Context>();
 
   // Context not empty, but Context name empty
   {
@@ -222,7 +222,7 @@ TEST(RocksEngineTest, KvBatchPut) {
     EXPECT_EQ(ok, dingodb::pb::error::Errno::ECONTEXT);
   }
 
-  std::shared_ptr<Context> ctx = std::make_shared<Context>();
+  std::shared_ptr<dingodb::Context> ctx = std::make_shared<dingodb::Context>();
 
   // Context not empty, but Context name empty
   {
@@ -329,7 +329,7 @@ TEST(RocksEngineTest, KvGet) {
     EXPECT_EQ(ok, dingodb::pb::error::Errno::ECONTEXT);
   }
 
-  std::shared_ptr<Context> ctx = std::make_shared<Context>();
+  std::shared_ptr<dingodb::Context> ctx = std::make_shared<dingodb::Context>();
 
   // Context not empty, but Context name empty
   {
@@ -386,7 +386,7 @@ TEST(RocksEngineTest, KvCompareAndSet) {
     EXPECT_EQ(ok, dingodb::pb::error::Errno::ECONTEXT);
   }
 
-  std::shared_ptr<Context> ctx = std::make_shared<Context>();
+  std::shared_ptr<dingodb::Context> ctx = std::make_shared<dingodb::Context>();
 
   // Context not empty, but Context name empty
   {
@@ -395,8 +395,7 @@ TEST(RocksEngineTest, KvCompareAndSet) {
     kv.set_value("value");
     std::string value = "value123456";
 
-    dingodb::pb::error::Errno ok =
-        rocks_engine.KvCompareAndSet(ctx, kv, value);
+    dingodb::pb::error::Errno ok = rocks_engine.KvCompareAndSet(ctx, kv, value);
     EXPECT_EQ(ok, dingodb::pb::error::Errno::ESTORE_INVALID_CF);
   }
 
@@ -411,8 +410,7 @@ TEST(RocksEngineTest, KvCompareAndSet) {
     kv.set_value("value");
     std::string value = "value123456";
 
-    dingodb::pb::error::Errno ok =
-        rocks_engine.KvCompareAndSet(ctx, kv, value);
+    dingodb::pb::error::Errno ok = rocks_engine.KvCompareAndSet(ctx, kv, value);
     EXPECT_EQ(ok, dingodb::pb::error::Errno::ESTORE_INVALID_CF);
   }
 
@@ -423,8 +421,7 @@ TEST(RocksEngineTest, KvCompareAndSet) {
     dingodb::pb::common::KeyValue kv;
     std::string value = "value123456";
 
-    dingodb::pb::error::Errno ok =
-        rocks_engine.KvCompareAndSet(ctx, kv, value);
+    dingodb::pb::error::Errno ok = rocks_engine.KvCompareAndSet(ctx, kv, value);
     EXPECT_EQ(ok, dingodb::pb::error::Errno::EKEY_EMPTY);
   }
 
@@ -434,8 +431,7 @@ TEST(RocksEngineTest, KvCompareAndSet) {
     kv.set_key("key");
     std::string value = "value";
 
-    dingodb::pb::error::Errno ok =
-        rocks_engine.KvCompareAndSet(ctx, kv, value);
+    dingodb::pb::error::Errno ok = rocks_engine.KvCompareAndSet(ctx, kv, value);
     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
   }
 
@@ -445,8 +441,7 @@ TEST(RocksEngineTest, KvCompareAndSet) {
     kv.set_key("key1");
     std::string value = "value123456";
 
-    dingodb::pb::error::Errno ok =
-        rocks_engine.KvCompareAndSet(ctx, kv, value);
+    dingodb::pb::error::Errno ok = rocks_engine.KvCompareAndSet(ctx, kv, value);
     EXPECT_EQ(ok, dingodb::pb::error::Errno::EINTERNAL);
   }
 
@@ -457,8 +452,7 @@ TEST(RocksEngineTest, KvCompareAndSet) {
     kv.set_value("value1");
     const std::string &value = "value1_modify";
 
-    dingodb::pb::error::Errno ok =
-        rocks_engine.KvCompareAndSet(ctx, kv, value);
+    dingodb::pb::error::Errno ok = rocks_engine.KvCompareAndSet(ctx, kv, value);
 
     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
   }
@@ -476,7 +470,7 @@ TEST(RocksEngineTest, KvBatchGet) {
     EXPECT_EQ(ok, dingodb::pb::error::Errno::ECONTEXT);
   }
 
-  std::shared_ptr<Context> ctx = std::make_shared<Context>();
+  std::shared_ptr<dingodb::Context> ctx = std::make_shared<dingodb::Context>();
 
   // Context not empty, but Context name empty
   {
@@ -551,7 +545,7 @@ TEST(RocksEngineTest, KvPutIfAbsent) {
     EXPECT_EQ(ok, dingodb::pb::error::Errno::ECONTEXT);
   }
 
-  std::shared_ptr<Context> ctx = std::make_shared<Context>();
+  std::shared_ptr<dingodb::Context> ctx = std::make_shared<dingodb::Context>();
 
   // Context not empty, but Context name empty
   {
@@ -626,12 +620,11 @@ TEST(RocksEngineTest, KvBatchPutIfAbsentAtomic) {
     std::vector<dingodb::pb::common::KeyValue> kvs;
     std::vector<std::string> put_keys;
 
-    dingodb::pb::error::Errno ok =
-        rocks_engine.KvBatchPutIfAbsentAtomic({}, kvs, put_keys);
+    dingodb::pb::error::Errno ok = rocks_engine.KvBatchPutIfAbsentAtomic({}, kvs, put_keys);
     EXPECT_EQ(ok, dingodb::pb::error::Errno::ECONTEXT);
   }
 
-  std::shared_ptr<Context> ctx = std::make_shared<Context>();
+  std::shared_ptr<dingodb::Context> ctx = std::make_shared<dingodb::Context>();
 
   // Context not empty, but Context name empty
   {
@@ -645,8 +638,7 @@ TEST(RocksEngineTest, KvBatchPutIfAbsentAtomic) {
 
     kvs.push_back(kv);
 
-    dingodb::pb::error::Errno ok =
-        rocks_engine.KvBatchPutIfAbsentAtomic(ctx, kvs, put_keys);
+    dingodb::pb::error::Errno ok = rocks_engine.KvBatchPutIfAbsentAtomic(ctx, kvs, put_keys);
     EXPECT_EQ(ok, dingodb::pb::error::Errno::ESTORE_INVALID_CF);
   }
 
@@ -665,8 +657,7 @@ TEST(RocksEngineTest, KvBatchPutIfAbsentAtomic) {
     kv.set_value("value1");
     kvs.push_back(kv);
 
-    dingodb::pb::error::Errno ok =
-        rocks_engine.KvBatchPutIfAbsentAtomic(ctx, kvs, put_keys);
+    dingodb::pb::error::Errno ok = rocks_engine.KvBatchPutIfAbsentAtomic(ctx, kvs, put_keys);
 
     EXPECT_EQ(ok, dingodb::pb::error::Errno::ESTORE_INVALID_CF);
   }
@@ -679,8 +670,7 @@ TEST(RocksEngineTest, KvBatchPutIfAbsentAtomic) {
     std::vector<dingodb::pb::common::KeyValue> kvs;
     std::vector<std::string> put_keys;
 
-    dingodb::pb::error::Errno ok =
-        rocks_engine.KvBatchPutIfAbsentAtomic(ctx, kvs, put_keys);
+    dingodb::pb::error::Errno ok = rocks_engine.KvBatchPutIfAbsentAtomic(ctx, kvs, put_keys);
     EXPECT_EQ(ok, dingodb::pb::error::Errno::EKEY_EMPTY);
   }
 
@@ -699,8 +689,7 @@ TEST(RocksEngineTest, KvBatchPutIfAbsentAtomic) {
     kv.set_value("value2");
     kvs.push_back(kv);
 
-    dingodb::pb::error::Errno ok =
-        rocks_engine.KvBatchPutIfAbsentAtomic(ctx, kvs, put_keys);
+    dingodb::pb::error::Errno ok = rocks_engine.KvBatchPutIfAbsentAtomic(ctx, kvs, put_keys);
     EXPECT_EQ(ok, dingodb::pb::error::Errno::EKEY_EMPTY);
   }
 
@@ -728,8 +717,7 @@ TEST(RocksEngineTest, KvBatchPutIfAbsentAtomic) {
     kv.set_value("value");
     kvs.push_back(kv);
 
-    dingodb::pb::error::Errno ok =
-        rocks_engine.KvBatchPutIfAbsentAtomic(ctx, kvs, put_keys);
+    dingodb::pb::error::Errno ok = rocks_engine.KvBatchPutIfAbsentAtomic(ctx, kvs, put_keys);
     EXPECT_EQ(ok, dingodb::pb::error::Errno::EINTERNAL);
 
     std::string value;
@@ -761,8 +749,7 @@ TEST(RocksEngineTest, KvBatchPutIfAbsentAtomic) {
     kv.set_value("value104");
     kvs.push_back(kv);
 
-    dingodb::pb::error::Errno ok =
-        rocks_engine.KvBatchPutIfAbsentAtomic(ctx, kvs, put_keys);
+    dingodb::pb::error::Errno ok = rocks_engine.KvBatchPutIfAbsentAtomic(ctx, kvs, put_keys);
     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
 
     std::string value;
@@ -789,12 +776,11 @@ TEST(RocksEngineTest, KvBatchPutIfAbsentNonAtomic) {
     std::vector<dingodb::pb::common::KeyValue> kvs;
     std::vector<std::string> put_keys;
 
-    dingodb::pb::error::Errno ok =
-        rocks_engine.KvBatchPutIfAbsentNonAtomic({}, kvs, put_keys);
+    dingodb::pb::error::Errno ok = rocks_engine.KvBatchPutIfAbsentNonAtomic({}, kvs, put_keys);
     EXPECT_EQ(ok, dingodb::pb::error::Errno::ECONTEXT);
   }
 
-  std::shared_ptr<Context> ctx = std::make_shared<Context>();
+  std::shared_ptr<dingodb::Context> ctx = std::make_shared<dingodb::Context>();
 
   // Context not empty, but Context name empty
   {
@@ -808,8 +794,7 @@ TEST(RocksEngineTest, KvBatchPutIfAbsentNonAtomic) {
 
     kvs.push_back(kv);
 
-    dingodb::pb::error::Errno ok =
-        rocks_engine.KvBatchPutIfAbsentNonAtomic(ctx, kvs, put_keys);
+    dingodb::pb::error::Errno ok = rocks_engine.KvBatchPutIfAbsentNonAtomic(ctx, kvs, put_keys);
     EXPECT_EQ(ok, dingodb::pb::error::Errno::ESTORE_INVALID_CF);
   }
 
@@ -828,8 +813,7 @@ TEST(RocksEngineTest, KvBatchPutIfAbsentNonAtomic) {
     kv.set_value("value1");
     kvs.push_back(kv);
 
-    dingodb::pb::error::Errno ok =
-        rocks_engine.KvBatchPutIfAbsentNonAtomic(ctx, kvs, put_keys);
+    dingodb::pb::error::Errno ok = rocks_engine.KvBatchPutIfAbsentNonAtomic(ctx, kvs, put_keys);
 
     EXPECT_EQ(ok, dingodb::pb::error::Errno::ESTORE_INVALID_CF);
   }
@@ -842,8 +826,7 @@ TEST(RocksEngineTest, KvBatchPutIfAbsentNonAtomic) {
     std::vector<dingodb::pb::common::KeyValue> kvs;
     std::vector<std::string> put_keys;
 
-    dingodb::pb::error::Errno ok =
-        rocks_engine.KvBatchPutIfAbsentNonAtomic(ctx, kvs, put_keys);
+    dingodb::pb::error::Errno ok = rocks_engine.KvBatchPutIfAbsentNonAtomic(ctx, kvs, put_keys);
     EXPECT_EQ(ok, dingodb::pb::error::Errno::EKEY_EMPTY);
   }
 
@@ -862,8 +845,7 @@ TEST(RocksEngineTest, KvBatchPutIfAbsentNonAtomic) {
     kv.set_value("value2");
     kvs.push_back(kv);
 
-    dingodb::pb::error::Errno ok =
-        rocks_engine.KvBatchPutIfAbsentNonAtomic(ctx, kvs, put_keys);
+    dingodb::pb::error::Errno ok = rocks_engine.KvBatchPutIfAbsentNonAtomic(ctx, kvs, put_keys);
     EXPECT_EQ(ok, dingodb::pb::error::Errno::EKEY_EMPTY);
   }
 
@@ -891,8 +873,7 @@ TEST(RocksEngineTest, KvBatchPutIfAbsentNonAtomic) {
     kv.set_value("value");
     kvs.push_back(kv);
 
-    dingodb::pb::error::Errno ok =
-        rocks_engine.KvBatchPutIfAbsentNonAtomic(ctx, kvs, put_keys);
+    dingodb::pb::error::Errno ok = rocks_engine.KvBatchPutIfAbsentNonAtomic(ctx, kvs, put_keys);
     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
 
     std::string value;
@@ -924,8 +905,7 @@ TEST(RocksEngineTest, KvBatchPutIfAbsentNonAtomic) {
     kv.set_value("value204");
     kvs.push_back(kv);
 
-    dingodb::pb::error::Errno ok =
-        rocks_engine.KvBatchPutIfAbsentNonAtomic(ctx, kvs, put_keys);
+    dingodb::pb::error::Errno ok = rocks_engine.KvBatchPutIfAbsentNonAtomic(ctx, kvs, put_keys);
     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
 
     std::string value;
@@ -954,7 +934,7 @@ TEST(RocksEngineTest, KvDelete) {
     EXPECT_EQ(ok, dingodb::pb::error::Errno::ECONTEXT);
   }
 
-  std::shared_ptr<Context> ctx = std::make_shared<Context>();
+  std::shared_ptr<dingodb::Context> ctx = std::make_shared<dingodb::Context>();
 
   // Context not empty, but Context name empty
   {
@@ -1129,7 +1109,7 @@ TEST(RocksEngineTest, KvScan) {
     EXPECT_EQ(ok, dingodb::pb::error::Errno::ECONTEXT);
   }
 
-  std::shared_ptr<Context> ctx = std::make_shared<Context>();
+  std::shared_ptr<dingodb::Context> ctx = std::make_shared<dingodb::Context>();
 
   // Context not empty, but Context name empty
   {
