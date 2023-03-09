@@ -14,7 +14,6 @@
 
 #include "coordinator/coordinator_control.h"
 
-#include <bits/types/FILE.h>
 #include <sys/types.h>
 
 #include <cstdint>
