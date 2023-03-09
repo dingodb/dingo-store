@@ -18,9 +18,9 @@
 
 namespace dingodb {
 
-RaftNodeManager::RaftNodeManager() {}
+RaftNodeManager::RaftNodeManager() = default;
 
-RaftNodeManager::~RaftNodeManager() {}
+RaftNodeManager::~RaftNodeManager() = default;
 
 bool RaftNodeManager::IsExist(uint64_t node_id) {
   std::shared_lock<std::shared_mutex> lock(mutex_);

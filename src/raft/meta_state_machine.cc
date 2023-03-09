@@ -26,7 +26,7 @@ void MetaClosure::Run() {
   LOG(INFO) << "Closure run...";
 
   // Set response error
-  auto setErrorFunc = [](butil::Status& status, google::protobuf::Message* message) {
+  auto set_error_func = [](butil::Status& status, google::protobuf::Message* message) {
     const google::protobuf::Reflection* reflection = message->GetReflection();
     const google::protobuf::Descriptor* desc = message->GetDescriptor();
 
@@ -44,14 +44,14 @@ void MetaClosure::Run() {
   if (!status().ok()) {
     LOG(ERROR) << butil::StringPrintf("raft log commit failed, region[%ld] %d:%s", ctx_->region_id(),
                                       status().error_code(), status().error_cstr());
-    setErrorFunc(status(), ctx_->response());
+    set_error_func(status(), ctx_->response());
   }
 }
 
 MetaStateMachine::MetaStateMachine(std::shared_ptr<Engine> engine) : engine_(engine) {}
 
 void MetaStateMachine::DispatchRequest(MetaClosure* done, const pb::raft::RaftCmdRequest& raft_cmd) {
-  for (auto& req : raft_cmd.requests()) {
+  for (const auto& req : raft_cmd.requests()) {
     switch (req.cmd_type()) {
       case pb::raft::CmdType::META_CREATE_SCHEMA:
         // HandleCreateSchema(done, request);
@@ -82,7 +82,7 @@ void MetaStateMachine::on_apply(braft::Iterator& iter) {
 
 void MetaStateMachine::on_shutdown() { LOG(INFO) << "on_shutdown..."; }
 
-void MetaStateMachine::on_snapshot_save(braft::SnapshotWriter* writer, braft::Closure* done) {
+void MetaStateMachine::on_snapshot_save(braft::SnapshotWriter* /*writer*/, braft::Closure* /*done*/) {
   LOG(INFO) << "on_snapshot_save...";
 }
 
@@ -113,6 +113,7 @@ void MetaStateMachine::on_configuration_committed(const ::braft::Configuration& 
 void MetaStateMachine::on_start_following(const ::braft::LeaderChangeContext& ctx) {
   LOG(INFO) << "on_start_following...";
 }
+
 void MetaStateMachine::on_stop_following(const ::braft::LeaderChangeContext& ctx) {
   LOG(INFO) << "on_stop_following...";
 }

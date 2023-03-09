@@ -99,7 +99,7 @@ void RaftNode::RemovePeer(const braft::PeerId& peer, braft::Closure* done) { nod
 
 void RaftNode::ChangePeers(const std::vector<pb::common::Peer>& peers, braft::Closure* done) {
   braft::Configuration config;
-  for (auto peer : peers) {
+  for (const auto& peer : peers) {
     butil::EndPoint endpoint = Helper::LocationToEndPoint(peer.raft_location());
     config.add_peer(braft::PeerId(endpoint));
   }

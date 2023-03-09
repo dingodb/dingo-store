@@ -34,56 +34,64 @@ namespace dingodb {
 class CoordinatorControl {
  public:
   CoordinatorControl();
+  static void GenerateRootSchemas(pb::meta::Schema &root_schema, pb::meta::Schema &meta_schema,
+                                  pb::meta::Schema &dingo_schema);
+  static void GenerateRootSchemasMetaIncrement(pb::meta::Schema &root_schema, pb::meta::Schema &meta_schema,
+                                               pb::meta::Schema &dingo_schema,
+                                               pb::coordinator_internal::MetaIncrement &meta_increment);
   void Init();
-  uint64_t CreateCoordinatorId();
-  uint64_t CreateStoreId();
-  uint64_t CreateRegionId();
-
-  uint64_t CreateSchemaId();
-  uint64_t CreateTableId();
-  uint64_t CreatePartitionId();
+  uint64_t CreateCoordinatorId(pb::coordinator_internal::MetaIncrement &meta_increment);
+  uint64_t CreateStoreId(pb::coordinator_internal::MetaIncrement &meta_increment);
+  uint64_t CreateRegionId(pb::coordinator_internal::MetaIncrement &meta_increment);
+  uint64_t CreateSchemaId(pb::coordinator_internal::MetaIncrement &meta_increment);
+  uint64_t CreateTableId(pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // create region
   // in: resource_tag
   // out: new region id
   int CreateRegion(const std::string &region_name, const std::string &resource_tag, int32_t replica_num,
-                   pb::common::Range region_range, uint64_t schema_id, uint64_t table_id, uint64_t &new_region_id);
+                   pb::common::Range region_range, uint64_t schema_id, uint64_t table_id, uint64_t &new_region_id,
+                   pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // drop region
   // in:  region_id
   // return: 0 or -1
-  int DropRegion(uint64_t region_id);
+  int DropRegion(uint64_t region_id, pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // create schema
   // in: parent_schema_id
   // in: schema_name
   // out: new schema_id
   // return: 0 or -1
-  int CreateSchema(uint64_t parent_schema_id, std::string schema_name, uint64_t &new_schema_id);
+  int CreateSchema(uint64_t parent_schema_id, std::string schema_name, uint64_t &new_schema_id,
+                   pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // create schema
   // in: schema_id
   // in: table_definition
   // out: new table_id
   // return: 0 or -1
-  int CreateTable(uint64_t schema_id, const pb::meta::TableDefinition &table_definition, uint64_t &new_table_id);
+  int CreateTable(uint64_t schema_id, const pb::meta::TableDefinition &table_definition, uint64_t &new_table_id,
+                  pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // create store
   // in: cluster_id
   // out: store_id, password
   // return: 0 or -1
-  int CreateStore(uint64_t cluster_id, uint64_t &store_id, std::string &password);
+  int CreateStore(uint64_t cluster_id, uint64_t &store_id, std::string &password,
+                  pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // update store map with new Store info
   // return new epoch
-  uint64_t UpdateStoreMap(const pb::common::Store &store);
+  uint64_t UpdateStoreMap(const pb::common::Store &store, pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // get storemap
   void GetStoreMap(pb::common::StoreMap &store_map);
 
   // update region map with new Region info
   // return new epoch
-  uint64_t UpdateRegionMap(std::vector<pb::common::Region> &regions);
+  uint64_t UpdateRegionMap(std::vector<pb::common::Region> &regions,
+                           pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // get regionmap
   void GetRegionMap(pb::common::RegionMap &region_map);
@@ -96,6 +104,14 @@ class CoordinatorControl {
 
   // get table
   void GetTable(uint64_t schema_id, uint64_t table_id, pb::meta::Table &table);
+
+  // get coordinator_map
+  void GetCoordinatorMap(uint64_t cluster_id, uint64_t &epoch, pb::common::Location &leader_location,
+                         std::vector<pb::common::Location> &locations) const;
+
+  // on_apply callback
+  // leader do need update next_xx_id, so leader call this function with update_ids=false
+  void ApplyMetaIncrement(pb::coordinator_internal::MetaIncrement &meta_increment, bool update_ids);
 
  private:
   // mutex
@@ -126,6 +142,13 @@ class CoordinatorControl {
   // TableInternal is combination of Table & TableDefinition
   uint64_t table_map_epoch_;
   std::map<uint64_t, pb::coordinator_internal::TableInternal> table_map_;
+
+  // coordinators
+  uint64_t coordinator_map_epoch_;
+  std::map<uint64_t, pb::coordinator_internal::CoordinatorInternal> coordinator_map_;
+
+  // root schema write to raft
+  bool root_schema_writed_to_raft_;
 };
 
 }  // namespace dingodb

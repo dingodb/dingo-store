@@ -123,12 +123,12 @@ pb::error::Errno Server::StartMetaRegion(std::shared_ptr<Config> config, std::sh
   std::string coordinator_list = config->GetString("coordinator.peers");
   std::vector<butil::EndPoint> peer_nodes = Helper::StrToEndpoint(coordinator_list);
 
-  for (auto it = peer_nodes.begin(); it != peer_nodes.end(); ++it) {
-    auto peer = region->add_peers();
-    auto location = peer->mutable_raft_location();
-    location->set_host(butil::ip2str(it->ip).c_str());
-    location->set_port(it->port);
-    LOG(INFO) << "COORDINATOR set peer node:" << (butil::ip2str(it->ip).c_str()) << ":" << it->port;
+  for (auto& peer_node : peer_nodes) {
+    auto* peer = region->add_peers();
+    auto* location = peer->mutable_raft_location();
+    location->set_host(butil::ip2str(peer_node.ip).c_str());
+    location->set_port(peer_node.port);
+    LOG(INFO) << "COORDINATOR set peer node:" << (butil::ip2str(peer_node.ip).c_str()) << ":" << peer_node.port;
   }
 
   dingodb::pb::common::Range* range = region->mutable_range();

@@ -32,3 +32,70 @@ message TableInternal {
   dingodb.pb.meta.TableDefinition definition = 2;
   repeated PartInternal partitions = 3;
 }
+
+// CoordinatorInteral stores coordinator info for SDK & stores.
+message CoordinatorInternal {
+  uint64 id = 1;
+  dingodb.pb.meta.TableDefinition definition = 2;
+  repeated PartInternal partitions = 3;
+}
+
+enum MetaIncrementOpType {
+  CREATE = 0;
+  UPDATE = 1;
+  DELETE = 2;
+}
+
+message MetaIncrementCoordinator {
+  uint64 id = 1;
+  dingodb.pb.coordinator_internal.CoordinatorInternal coordinator = 2;
+  MetaIncrementOpType op_type = 3;
+}
+
+message MetaIncrementStore {
+  uint64 id = 1;
+  dingodb.pb.common.Store store = 2;
+  MetaIncrementOpType op_type = 3;
+}
+
+message MetaIncrementRegion {
+  uint64 id = 1;
+  dingodb.pb.common.Region region = 2;
+  MetaIncrementOpType op_type = 3;
+  uint64 table_id = 4;
+}
+
+message MetaIncrementSchema {
+  uint64 id = 1;
+  dingodb.pb.meta.Schema schema = 2;
+  MetaIncrementOpType op_type = 3;
+  uint64 schema_id = 4;  // parent schema
+}
+
+message MetaIncrementTable {
+  uint64 id = 1;
+  dingodb.pb.coordinator_internal.TableInternal table = 2;
+  MetaIncrementOpType op_type = 3;
+  uint64 schema_id = 4;  // the table's schema
+}
+
+// MetaIncrement stores meta data need to be inserted or updated
+message MetaIncrement {
+  repeated MetaIncrementCoordinator coordinators = 1;
+  repeated MetaIncrementStore stores = 2;
+  repeated MetaIncrementRegion regions = 3;
+  repeated MetaIncrementSchema schemas = 4;
+  repeated MetaIncrementTable tables = 5;
+
+  uint64 coordinator_map_epoch = 6;
+  uint64 store_map_epoch = 7;
+  uint64 region_map_epoch = 8;
+  uint64 schema_map_epoch = 9;
+  uint64 table_map_epoch = 10;
+
+  uint64 next_coordinator_id = 11;
+  uint64 next_store_id = 12;
+  uint64 next_region_id = 13;
+  uint64 next_schema_id = 14;
+  uint64 next_table_id = 15;
+}

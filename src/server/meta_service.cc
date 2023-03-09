@@ -21,6 +21,7 @@
 
 #include "brpc/controller.h"
 #include "proto/common.pb.h"
+#include "proto/coordinator_internal.pb.h"
 #include "proto/meta.pb.h"
 
 namespace dingodb {
@@ -78,9 +79,11 @@ void MetaServiceImpl::CreateTable(google::protobuf::RpcController * /*controller
   LOG(INFO) << "CreatTable request:  schema_id = [" << request->schema_id().entity_id() << "]";
   LOG(INFO) << request->DebugString();
 
+  pb::coordinator_internal::MetaIncrement meta_increment;
+
   uint64_t new_table_id;
   int ret = this->coordinator_control->CreateTable(request->schema_id().entity_id(), request->table_definition(),
-                                                   new_table_id);
+                                                   new_table_id, meta_increment);
   if (ret < 0) {
     LOG(ERROR) << "CreateTable failed in meta_service";
     return;
@@ -102,9 +105,11 @@ void MetaServiceImpl::CreateSchema(google::protobuf::RpcController *controller,
   LOG(INFO) << "CreatSchema request:  parent_schema_id = [" << request->parent_schema_id().entity_id() << "]";
   LOG(INFO) << request->DebugString();
 
+  pb::coordinator_internal::MetaIncrement meta_increment;
+
   uint64_t new_schema_id;
   int ret = this->coordinator_control->CreateSchema(request->parent_schema_id().entity_id(), request->schema_name(),
-                                                    new_schema_id);
+                                                    new_schema_id, meta_increment);
   if (ret) {
     LOG(INFO) << "CreateSchema failed ret = " << ret;
     brpc::Controller *brpc_controller = static_cast<brpc::Controller *>(controller);

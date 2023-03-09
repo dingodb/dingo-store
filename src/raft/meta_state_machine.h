@@ -26,11 +26,11 @@ namespace dingodb {
 class MetaClosure : public braft::Closure {
  public:
   MetaClosure(std::shared_ptr<Context> ctx) : ctx_(ctx) {}
-  ~MetaClosure() {}
+  ~MetaClosure() override = default;
 
-  void Run();
+  void Run() override;
 
-  std::shared_ptr<Context> get_ctx() { return ctx_; }
+  std::shared_ptr<Context> GetCtx() { return ctx_; }
 
  private:
   std::shared_ptr<Context> ctx_;
@@ -40,23 +40,21 @@ class MetaStateMachine : public braft::StateMachine {
  public:
   MetaStateMachine(std::shared_ptr<Engine> engine);
 
-  void on_apply(braft::Iterator& iter);
-  void on_shutdown();
-  void on_snapshot_save(braft::SnapshotWriter* writer, braft::Closure* done);
-  int on_snapshot_load(braft::SnapshotReader* reader);
+  void on_apply(braft::Iterator& iter) override;
+  void on_shutdown() override;
+  void on_snapshot_save(braft::SnapshotWriter* writer, braft::Closure* done) override;
+  int on_snapshot_load(braft::SnapshotReader* reader) override;
   void on_leader_start();
-  void on_leader_start(int64_t term);
-  void on_leader_stop(const butil::Status& status);
-  void on_error(const ::braft::Error& e);
-  void on_configuration_committed(const ::braft::Configuration& conf);
-  void on_start_following(const ::braft::LeaderChangeContext& ctx);
-  void on_stop_following(const ::braft::LeaderChangeContext& ctx);
+  void on_leader_start(int64_t term) override;
+  void on_leader_stop(const butil::Status& status) override;
+  void on_error(const ::braft::Error& e) override;
+  void on_configuration_committed(const ::braft::Configuration& conf) override;
+  void on_start_following(const ::braft::LeaderChangeContext& ctx) override;
+  void on_stop_following(const ::braft::LeaderChangeContext& ctx) override;
 
  private:
   void DispatchRequest(MetaClosure* done, const pb::raft::RaftCmdRequest& raft_cmd);
   void HandleCreateSchema(MetaClosure* done, const pb::raft::RaftCreateSchemaRequest& request);
-
- private:
   std::shared_ptr<Engine> engine_;
 };
 

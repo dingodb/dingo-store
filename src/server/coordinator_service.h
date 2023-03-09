@@ -40,6 +40,11 @@ class CoordinatorServiceImpl : public pb::coordinator::CoordinatorService {
   void CreateStore(google::protobuf::RpcController* controller, const pb::coordinator::CreateStoreRequest* request,
                    pb::coordinator::CreateStoreResponse* response, google::protobuf::Closure* done) override;
 
+  void GetCoordinatorMap(google::protobuf::RpcController* controller,
+                         const pb::coordinator::GetCoordinatorMapRequest* request,
+                         pb::coordinator::GetCoordinatorMapResponse* response,
+                         google::protobuf::Closure* done) override;
+
   CoordinatorControl* coordinator_control;
 };
 

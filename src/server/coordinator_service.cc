@@ -21,6 +21,7 @@
 #include "brpc/controller.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
+#include "proto/coordinator_internal.pb.h"
 #include "proto/error.pb.h"
 
 namespace dingodb {
@@ -43,10 +44,12 @@ void CoordinatorServiceImpl::CreateStore(google::protobuf::RpcController *contro
   LOG(INFO) << "CreateStore request cluster_id = : " << request->cluster_id();
   LOG(INFO) << request->DebugString();
 
+  pb::coordinator_internal::MetaIncrement meta_increment;
+
   // create store
   uint64_t store_id = 0;
   std::string password;
-  int ret = this->coordinator_control->CreateStore(request->cluster_id(), store_id, password);
+  int ret = this->coordinator_control->CreateStore(request->cluster_id(), store_id, password, meta_increment);
 
   if (ret == 0) {
     response->set_store_id(store_id);
@@ -67,8 +70,10 @@ void CoordinatorServiceImpl::StoreHeartbeat(google::protobuf::RpcController * /*
 
   LOG(INFO) << request->DebugString();
 
+  pb::coordinator_internal::MetaIncrement meta_increment;
+
   // update store map
-  int new_storemap_epoch = this->coordinator_control->UpdateStoreMap(request->store());
+  int new_storemap_epoch = this->coordinator_control->UpdateStoreMap(request->store(), meta_increment);
 
   // update region map
   LOG(INFO) << " region size = " << request->regions_size();
@@ -77,7 +82,7 @@ void CoordinatorServiceImpl::StoreHeartbeat(google::protobuf::RpcController * /*
   for (int i = 0; i < request->regions_size(); i++) {
     regions.push_back(request->regions(i));
   }
-  int new_regionmap_epoch = this->coordinator_control->UpdateRegionMap(regions);
+  int new_regionmap_epoch = this->coordinator_control->UpdateRegionMap(regions, meta_increment);
 
   // setup response
   LOG(INFO) << "set epoch id to response " << new_storemap_epoch << " " << new_regionmap_epoch;
@@ -119,6 +124,21 @@ void CoordinatorServiceImpl::GetRegionMap(google::protobuf::RpcController * /*co
 
   response->mutable_regionmap()->CopyFrom(regionmap);
   response->set_epoch(regionmap.epoch());
+}
+
+void CoordinatorServiceImpl::GetCoordinatorMap(google::protobuf::RpcController * /*controller*/,
+                                               const pb::coordinator::GetCoordinatorMapRequest *request,
+                                               pb::coordinator::GetCoordinatorMapResponse *response,
+                                               google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+  LOG(INFO) << "GetCoordinatorMap request: _epoch [" << request->cluster_id() << "]";
+
+  uint64_t epoch;
+  pb::common::Location leader_location;
+  std::vector<pb::common::Location> locations;
+  this->coordinator_control->GetCoordinatorMap(request->cluster_id(), epoch, leader_location, locations);
+
+  response->set_epoch(epoch);
 }
 
 }  // namespace dingodb
