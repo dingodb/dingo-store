@@ -1,7 +1,7 @@
 
 
 
-set(TEST_DEP_SRCS ${CONFIG_SRCS} ${CRONTAB_SRCS} ${PROTO_SRCS})
+set(TEST_DEP_SRCS ${CONFIG_SRCS} ${CRONTAB_SRCS} ${ENGINE_SRCS} ${COMMON_SRCS} ${RAFT_SRCS} ${PROTO_SRCS} ${PROTO_HEADER} ${COORDINATOR_SRCS} ${META_SRCS} ${STORE_SRCS} ${PROJECT_SOURCE_DIR}/src/server/coordinator_service.cc ${PROJECT_SOURCE_DIR}/src/server/store_service.cc ${PROJECT_SOURCE_DIR}/src/server/server.cc)
 
 enable_testing()
 

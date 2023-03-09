@@ -47,7 +47,7 @@ pb::error::Errno Storage::KvPutIfAbsent(std::shared_ptr<Context> ctx, const pb::
 
 pb::error::Errno Storage::KvBatchPutIfAbsent(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs,
                                              std::vector<std::string>& put_keys) {
-  return engine_->KvBatchPutIfAbsent(ctx, kvs, put_keys);
+  return engine_->KvBatchPutIfAbsentNonAtomic(ctx, kvs, put_keys);
 }
 
 }  // namespace dingodb

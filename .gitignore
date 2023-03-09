@@ -56,3 +56,4 @@ third-party
 build/
 dist/
 .vscode/
+*.bak

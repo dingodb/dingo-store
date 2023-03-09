@@ -15,7 +15,7 @@ raft:
 log:
   logPath: /opt/dingo-poc/store/log
 store:
-  dbPath: /opt/dingo-poc/store/data/store/db
+  dbPath: ./rocks_example
   base:
     block_size: 131072
     block_cache: 67108864
@@ -24,11 +24,15 @@ store:
     max_write_buffer_number: 2
     max_compaction_bytes: 134217728
     write_buffer_size: 67108864
-    prefix_extractor: 8
+    prefix_extractor or FixedPrefixTransform: 8
     max_bytes_for_level_base: 134217728
     target_file_size_base: 67108864
   default:
+  instruction:
+    max_write_buffer_number: 3
   columnFamilies:
     - default
     - meta
+    - instruction
+
   collectStatsInterval: 5

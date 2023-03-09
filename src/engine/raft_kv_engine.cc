@@ -216,9 +216,9 @@ std::shared_ptr<pb::raft::RaftCmdRequest> genRaftCmdPutIfAbsentRequest(const std
   return raft_cmd;
 }
 
-pb::error::Errno RaftKvEngine::KvBatchPutIfAbsent(std::shared_ptr<Context> ctx,
-                                                  const std::vector<pb::common::KeyValue>& kvs,
-                                                  std::vector<std::string>& put_keys) {
+pb::error::Errno RaftKvEngine::KvBatchPutIfAbsentAtomic(std::shared_ptr<Context> ctx,
+                                                        const std::vector<pb::common::KeyValue>& kvs,
+                                                        std::vector<std::string>& put_keys) {
   auto node = raft_node_manager_->GetNode(ctx->region_id());
   if (node == nullptr) {
     LOG(ERROR) << "Not found raft node " << ctx->region_id();
