@@ -57,9 +57,15 @@ pb::error::Errno MemEngine::KvPutIfAbsent(std::shared_ptr<Context> ctx, const pb
   return pb::error::ENOT_SUPPORT;
 }
 
-pb::error::Errno MemEngine::KvBatchPutIfAbsent(std::shared_ptr<Context> ctx,
-                                               const std::vector<pb::common::KeyValue>& kvs,
-                                               std::vector<std::string>& put_keys) {
+pb::error::Errno MemEngine::KvBatchPutIfAbsentAtomic(std::shared_ptr<Context> ctx,
+                                                     const std::vector<pb::common::KeyValue>& kvs,
+                                                     std::vector<std::string>& put_keys) {
+  return pb::error::ENOT_SUPPORT;
+}
+
+pb::error::Errno MemEngine::KvBatchPutIfAbsentNonAtomic(std::shared_ptr<Context> ctx,
+                                                        const std::vector<pb::common::KeyValue>& kvs,
+                                                        std::vector<std::string>& put_keys) {
   return pb::error::ENOT_SUPPORT;
 }
 

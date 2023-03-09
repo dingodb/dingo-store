@@ -140,7 +140,10 @@ bool Server::InitCrontabManager() {
   return true;
 }
 
-bool Server::InitStoreControl() { store_control_ = std::make_shared<StoreControl>(); }
+bool Server::InitStoreControl() {
+  store_control_ = std::make_shared<StoreControl>();
+  return true;
+}
 
 bool Server::Recover() {
   // Recover region meta data.
