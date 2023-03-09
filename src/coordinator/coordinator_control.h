@@ -22,6 +22,8 @@
 
 #include "brpc/controller.h"
 #include "brpc/server.h"
+#include "bthread/types.h"
+#include "butil/scoped_lock.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
 #include "proto/coordinator_internal.pb.h"
@@ -81,12 +83,10 @@ class CoordinatorControl {
 
   // update region map with new Region info
   // return new epoch
-  bool UpdateOneRegionMap(const pb::common::Region &region);
-  uint64_t UpdateRegionMap(const pb::common::Region &region);
-  uint64_t UpdateRegionMapMulti(std::vector<pb::common::Region> regions);
+  uint64_t UpdateRegionMap(std::vector<pb::common::Region> &regions);
 
   // get regionmap
-  const pb::common::RegionMap &GetRegionMap();
+  void GetRegionMap(pb::common::RegionMap &region_map);
 
   // get schemas
   void GetSchemas(uint64_t schema_id, std::vector<pb::meta::Schema> &schemas);
@@ -112,15 +112,18 @@ class CoordinatorControl {
 
   // global maps
   uint64_t region_map_epoch_;
-  pb::common::RegionMap region_map_;
+  std::map<uint64_t, pb::common::Region> region_map_;
+
   uint64_t store_map_epoch_;
   pb::common::StoreMap store_map_;
 
   // schemas
+  uint64_t schema_map_epoch_;
   std::map<uint64_t, pb::meta::Schema> schema_map_;
 
   // tables
   // TableInternal is combination of Table & TableDefinition
+  uint64_t table_map_epoch_;
   std::map<uint64_t, pb::coordinator_internal::TableInternal> table_map_;
 };
 
