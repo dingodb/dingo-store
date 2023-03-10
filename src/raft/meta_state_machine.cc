@@ -14,47 +14,24 @@
 
 #include "raft/meta_state_machine.h"
 
+#include <memory>
+
 #include "braft/util.h"
 #include "butil/strings/stringprintf.h"
+#include "coordinator/coordinator_control.h"
+#include "proto/coordinator_internal.pb.h"
 #include "proto/error.pb.h"
 
 namespace dingodb {
 
-using RaftCreateSchemaRequest = pb::raft::RaftCreateSchemaRequest;
+MetaStateMachine::MetaStateMachine(std::shared_ptr<Engine> engine, MetaControl* meta_control)
+    : engine_(engine), meta_control_(meta_control) {}
 
-void MetaClosure::Run() {
-  LOG(INFO) << "Closure run...";
-
-  // Set response error
-  auto set_error_func = [](butil::Status& status, google::protobuf::Message* message) {
-    const google::protobuf::Reflection* reflection = message->GetReflection();
-    const google::protobuf::Descriptor* desc = message->GetDescriptor();
-
-    const google::protobuf::FieldDescriptor* error_field = desc->FindFieldByName("error");
-    google::protobuf::Message* error = reflection->MutableMessage(message, error_field);
-    const google::protobuf::Reflection* error_ref = error->GetReflection();
-    const google::protobuf::Descriptor* error_desc = error->GetDescriptor();
-    const google::protobuf::FieldDescriptor* errcode_field = error_desc->FindFieldByName("errcode");
-    error_ref->SetEnumValue(error, errcode_field, status.error_code());
-    const google::protobuf::FieldDescriptor* errmsg_field = error_desc->FindFieldByName("errmsg");
-    error_ref->SetString(error, errmsg_field, status.error_str());
-  };
-
-  brpc::ClosureGuard done_guard(ctx_->done());
-  if (!status().ok()) {
-    LOG(ERROR) << butil::StringPrintf("raft log commit failed, region[%ld] %d:%s", ctx_->region_id(),
-                                      status().error_code(), status().error_cstr());
-    set_error_func(status(), ctx_->response());
-  }
-}
-
-MetaStateMachine::MetaStateMachine(std::shared_ptr<Engine> engine) : engine_(engine) {}
-
-void MetaStateMachine::DispatchRequest(MetaClosure* done, const pb::raft::RaftCmdRequest& raft_cmd) {
+void MetaStateMachine::DispatchRequest(bool is_leader, const pb::raft::RaftCmdRequest& raft_cmd) {
   for (const auto& req : raft_cmd.requests()) {
     switch (req.cmd_type()) {
       case pb::raft::CmdType::META_WRITE:
-        // HandleCreateSchema(done, request);
+        HandleMetaProcess(is_leader, raft_cmd);
         break;
       default:
         LOG(ERROR) << "Unknown raft cmd type " << req.cmd_type();
@@ -62,21 +39,43 @@ void MetaStateMachine::DispatchRequest(MetaClosure* done, const pb::raft::RaftCm
   }
 }
 
-void MetaStateMachine::HandleCreateSchema(MetaClosure* done, const RaftCreateSchemaRequest& request) {}
+void MetaStateMachine::HandleMetaProcess(bool is_leader, const pb::raft::RaftCmdRequest& raft_cmd) {
+  // return response about diffrent Closure
+  // todo
+  // std::shared_ptr<Context> const ctx = done->GetCtx();
+  // brpc::ClosureGuard const done_guard(ctx->done());
+
+  CoordinatorControl* controller = dynamic_cast<CoordinatorControl*>(meta_control_);
+  if (raft_cmd.requests_size() > 0) {
+    auto meta_increment = raft_cmd.requests(0).meta_req().meta_increment();
+    controller->ApplyMetaIncrement(meta_increment, is_leader);
+  }
+}
 
 void MetaStateMachine::on_apply(braft::Iterator& iter) {
   LOG(INFO) << "on_apply...";
   for (; iter.valid(); iter.next()) {
-    brpc::ClosureGuard done_guard(iter.done());
+    braft::AsyncClosureGuard const done_guard(iter.done());
 
-    butil::IOBufAsZeroCopyInputStream wrapper(iter.data());
+    // Leader Node, then we should apply the data to memory and rocksdb
+    bool is_leader = false;
     pb::raft::RaftCmdRequest raft_cmd;
-    CHECK(raft_cmd.ParseFromZeroCopyStream(&wrapper));
+    if (iter.done()) {
+      StoreClosure* store_closure = dynamic_cast<StoreClosure*>(iter.done());
+      raft_cmd = *(store_closure->GetRequest());
+      is_leader = true;
+    } else {
+      butil::IOBufAsZeroCopyInputStream wrapper(iter.data());
+      CHECK(raft_cmd.ParseFromZeroCopyStream(&wrapper));
+    }
+
     LOG(INFO) << butil::StringPrintf("raft commited log region(%ld) term(%ld) index(%ld)",
                                      raft_cmd.header().region_id(), iter.term(), iter.index());
-
     LOG(INFO) << "raft_cmd: " << raft_cmd.ShortDebugString();
-    DispatchRequest(dynamic_cast<MetaClosure*>(iter.done()), raft_cmd);
+
+    // Follower only write data ?
+    // DispatchRequest(dynamic_cast<StoreClosure*>(iter.done()), is_leader, raft_cmd);
+    DispatchRequest(is_leader, raft_cmd);
   }
 }
 

@@ -15,10 +15,14 @@
 #include "server/coordinator_service.h"
 
 #include <cstdint>
+#include <memory>
+#include <shared_mutex>
 #include <string>
 #include <vector>
 
 #include "brpc/controller.h"
+#include "common/constant.h"
+#include "coordinator/coordinator_closure.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
 #include "proto/coordinator_internal.pb.h"
@@ -50,7 +54,6 @@ void CoordinatorServiceImpl::CreateStore(google::protobuf::RpcController *contro
   uint64_t store_id = 0;
   std::string password;
   int ret = this->coordinator_control->CreateStore(request->cluster_id(), store_id, password, meta_increment);
-
   if (ret == 0) {
     response->set_store_id(store_id);
     response->set_password(password);
@@ -58,6 +61,17 @@ void CoordinatorServiceImpl::CreateStore(google::protobuf::RpcController *contro
     brpc::Controller *brpc_controller = static_cast<brpc::Controller *>(controller);
     brpc_controller->SetFailed(pb::error::EILLEGAL_PARAMTETERS, "Need legal cluster_id");
   }
+
+  std::shared_ptr<CreateStoreClosure> meta_create_store_closure =
+      std::make_shared<CreateStoreClosure>(request, response, done_guard.release());
+  std::shared_ptr<Context> ctx =
+      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_create_store_closure.get());
+  ctx->set_region_id(Constant::kCoordinatorRegionId);
+  ctx->SetMetaController(static_cast<MetaControl *>(coordinator_control));
+
+  // this is a async operation will be block by closure
+  engine_->MetaPut(ctx, meta_increment);
+  return;
 }
 
 void CoordinatorServiceImpl::StoreHeartbeat(google::protobuf::RpcController * /*controller*/,

@@ -40,7 +40,7 @@ class RaftControlAble {
 
 class RaftKvEngine : public Engine, public RaftControlAble {
  public:
-  RaftKvEngine(std::shared_ptr<Engine> engine);
+  RaftKvEngine(std::shared_ptr<Engine> engine, MetaControl* meta_control_);
   ~RaftKvEngine() override;
 
   bool Init(std::shared_ptr<Config> config) override;
@@ -71,7 +71,10 @@ class RaftKvEngine : public Engine, public RaftControlAble {
 
   pb::error::Errno KvDeleteRange(std::shared_ptr<Context> ctx, const pb::common::Range& range) override;
 
+  pb::error::Errno MetaPut(std::shared_ptr<Context> ctx, const pb::coordinator_internal::MetaIncrement& meta) override;
+
  private:
+  MetaControl* meta_control_;
   std::shared_ptr<Engine> engine_;
   std::unique_ptr<RaftNodeManager> raft_node_manager_;
 };

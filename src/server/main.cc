@@ -88,23 +88,24 @@ int main(int argc, char *argv[]) {
   dingo_server->SetServerEndpoint(GetServerEndPoint(config));
   dingo_server->SetRaftEndpoint(GetRaftEndPoint(config));
 
-  if (!dingo_server->InitEngines()) {
-    LOG(ERROR) << "InitEngines failed!";
-    return -1;
-  }
-
   brpc::Server brpc_server;
   dingodb::CoordinatorControl coordinator_control;
   dingodb::CoordinatorServiceImpl coordinator_service;
   dingodb::MetaServiceImpl meta_service;
   dingodb::StoreServiceImpl store_service;
+
+  if (!dingo_server->InitEngines(coordinator_control)) {
+    LOG(ERROR) << "InitEngines failed!";
+    return -1;
+  }
+
   // raft server
   brpc::Server raft_server;
   if (is_coodinator) {
     // init CoordinatorController
     coordinator_control.Init();
-    coordinator_service.SetControl(&coordinator_control);
-    meta_service.SetControl(&coordinator_control);
+    coordinator_service.SetController(&coordinator_control);
+    meta_service.SetController(&coordinator_control);
 
     // add service to brpc
     if (brpc_server.AddService(&coordinator_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
@@ -128,14 +129,16 @@ int main(int argc, char *argv[]) {
 
     // start meta region
     auto engine = dingo_server->GetEngine(dingodb::pb::common::Engine::ENG_RAFT_STORE);
-    dingodb::pb::error::Errno status = dingo_server->StartMetaRegion(config, engine);
+    dingodb::pb::error::Errno const status = dingo_server->StartMetaRegion(config, engine);
     if (status != dingodb::pb::error::Errno::OK) {
       LOG(INFO) << "Init RaftNode and StateMachine Failed:" << status;
       return -1;
     }
+
+    // the Engine should be init success
+    coordinator_service.SetKvEngine(engine);
     // build in-memory meta cache
     // TODO: load data from kv engine into maps
-
   } else if (is_store) {
     if (!dingo_server->InitCoordinatorInteraction()) {
       LOG(ERROR) << "InitCoordinatorInteraction failed!";

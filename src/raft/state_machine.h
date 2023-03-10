@@ -25,15 +25,18 @@ namespace dingodb {
 
 class StoreClosure : public braft::Closure {
  public:
-  StoreClosure(std::shared_ptr<Context> ctx) : ctx_(ctx) {}
+  StoreClosure(std::shared_ptr<Context> ctx, std::shared_ptr<pb::raft::RaftCmdRequest> request)
+      : ctx_(ctx), request_(request) {}
   ~StoreClosure() override = default;
 
   void Run() override;
 
   std::shared_ptr<Context> GetCtx() { return ctx_; }
+  std::shared_ptr<pb::raft::RaftCmdRequest> GetRequest() { return request_; }
 
  private:
   std::shared_ptr<Context> ctx_;
+  std::shared_ptr<pb::raft::RaftCmdRequest> request_;
 };
 
 class StoreStateMachine : public braft::StateMachine {

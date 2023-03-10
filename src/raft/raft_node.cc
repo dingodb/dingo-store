@@ -76,7 +76,8 @@ pb::error::Errno RaftNode::Commit(std::shared_ptr<Context> ctx, std::shared_ptr<
 
   braft::Task task;
   task.data = &data;
-  task.done = new StoreClosure(ctx);
+  LOG(INFO) << "Commit raft cmd to " << node_id_ << "," << ctx->done() << ",";
+  task.done = new StoreClosure(ctx, raft_cmd);
   node_->apply(task);
 
   return pb::error::OK;
