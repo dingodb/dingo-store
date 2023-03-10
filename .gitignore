@@ -57,3 +57,9 @@ build/
 dist/
 .vscode/
 *.bak
+
+# Maven Files
+target/
+
+# Ignore Gradle project-specific cache directory
+.gradle
