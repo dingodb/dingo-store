@@ -77,7 +77,7 @@ class RocksEngine : public Engine {
                                    const std::string& value) override;
 
   pb::error::Errno KvDelete(std::shared_ptr<Context> ctx, const std::string& key) override;
-
+  // [begin_key, end_key)
   pb::error::Errno KvDeleteRange(std::shared_ptr<Context> ctx, const pb::common::Range& range) override;
 
   // read range When the amount of data is relatively small.
