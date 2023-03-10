@@ -754,70 +754,169 @@ void CoordinatorControl::GetCoordinatorMap(uint64_t cluster_id, uint64_t& epoch,
 void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrement& meta_increment, bool update_ids) {
   BAIDU_SCOPED_LOCK(control_mutex_);
 
-  // follower need to update next ids
-  if (update_ids) {
-    // uint64 next_coordinator_id = 11;
-    // uint64 next_store_id = 12;
-    // uint64 next_region_id = 13;
-    // uint64 next_schema_id = 14;
-    // uint64 next_table_id = 15;
+  // prepare data to write to kv engine
+  std::vector<pb::common::KeyValue> meta_write_to_kv;
+  std::vector<pb::common::KeyValue> meta_delete_to_kv;
 
-    if (meta_increment.next_coordinator_id() > 0) {
+  // follower need to update next ids
+  // uint64 next_coordinator_id = 11;
+  // uint64 next_store_id = 12;
+  // uint64 next_region_id = 13;
+  // uint64 next_schema_id = 14;
+  // uint64 next_table_id = 15;
+
+  if (meta_increment.next_coordinator_id() > 0) {
+    if (update_ids) {
       this->next_coordinator_id_ = meta_increment.next_coordinator_id();
     }
 
-    if (meta_increment.next_store_id() > 0) {
+    // meta_write_kv
+    pb::common::KeyValue kv;
+    kv.mutable_key()->assign("next_coordinator_id_");
+    kv.mutable_value()->assign(std::to_string(meta_increment.next_coordinator_id()));
+    meta_write_to_kv.push_back(kv);
+  }
+
+  if (meta_increment.next_store_id() > 0) {
+    if (update_ids) {
       this->next_store_id_ = meta_increment.next_coordinator_id();
     }
 
-    if (meta_increment.next_region_id() > 0) {
+    // meta_write_kv
+    pb::common::KeyValue kv;
+    kv.mutable_key()->assign("next_store_id");
+    kv.mutable_value()->assign(std::to_string(meta_increment.next_store_id()));
+    meta_write_to_kv.push_back(kv);
+  }
+
+  if (meta_increment.next_region_id() > 0) {
+    if (update_ids) {
       this->next_region_id_ = meta_increment.next_coordinator_id();
     }
 
-    if (meta_increment.next_schema_id() > 0) {
+    // meta_write_kv
+    pb::common::KeyValue kv;
+    kv.mutable_key()->assign("next_region_id");
+    kv.mutable_value()->assign(std::to_string(meta_increment.next_region_id()));
+    meta_write_to_kv.push_back(kv);
+  }
+
+  if (meta_increment.next_schema_id() > 0) {
+    if (update_ids) {
       this->next_schema_id_ = meta_increment.next_coordinator_id();
     }
 
-    if (meta_increment.next_table_id() > 0) {
-      this->next_table_id_ = meta_increment.next_coordinator_id();
-    }
+    // meta_write_kv
+    pb::common::KeyValue kv;
+    kv.mutable_key()->assign("next_schema_id");
+    kv.mutable_value()->assign(std::to_string(meta_increment.next_schema_id()));
+    meta_write_to_kv.push_back(kv);
   }
 
-  // coordinator map
+  if (meta_increment.next_table_id() > 0) {
+    if (update_ids) {
+      this->next_table_id_ = meta_increment.next_coordinator_id();
+    }
+
+    // meta_write_kv
+    pb::common::KeyValue kv;
+    kv.mutable_key()->assign("next_table_id");
+    kv.mutable_value()->assign(std::to_string(meta_increment.next_table_id()));
+    meta_write_to_kv.push_back(kv);
+  }
+
+  // 1.coordinator map
   if (meta_increment.coordinator_map_epoch() != 0) {
     coordinator_map_epoch_ = meta_increment.coordinator_map_epoch();
+
+    // meta_write_kv
+    pb::common::KeyValue kv;
+    kv.mutable_key()->assign(std::string("coordinator_map_epoch"));
+    kv.mutable_value()->assign(std::to_string(meta_increment.coordinator_map_epoch()));
+    meta_write_to_kv.push_back(kv);
   }
+
   for (int i = 0; i < meta_increment.coordinators_size(); i++) {
     const auto& coordinator = meta_increment.coordinators(i);
     if (coordinator.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
       coordinator_map_[coordinator.id()] = coordinator.coordinator();
+
+      // meta_write_kv
+      pb::common::KeyValue kv;
+      kv.mutable_key()->assign(std::string("coordinator_map") + std::to_string(coordinator.id()));
+      kv.mutable_value()->assign(coordinator.coordinator().SerializeAsString());
+      meta_write_to_kv.push_back(kv);
+
     } else if (coordinator.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
       auto& update_coordinator = coordinator_map_[coordinator.id()];
       update_coordinator.CopyFrom(coordinator.coordinator());
+
+      // meta_write_kv
+      pb::common::KeyValue kv;
+      kv.mutable_key()->assign(std::string("coordinator_map") + std::to_string(coordinator.id()));
+      kv.mutable_value()->assign(coordinator.coordinator().SerializeAsString());
+      meta_write_to_kv.push_back(kv);
+
     } else if (coordinator.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
       coordinator_map_.erase(coordinator.id());
+
+      // meta_delete_kv
+      pb::common::KeyValue kv;
+      kv.mutable_key()->assign(std::string("coordinator_map") + std::to_string(coordinator.id()));
+      meta_delete_to_kv.push_back(kv);
     }
   }
 
-  // store map
+  // 2.store map
   if (meta_increment.store_map_epoch() != 0) {
     store_map_epoch_ = meta_increment.store_map_epoch();
+
+    // meta_write_kv
+    pb::common::KeyValue kv;
+    kv.mutable_key()->assign(std::string("store_map_epoch"));
+    kv.mutable_value()->assign(std::to_string(meta_increment.store_map_epoch()));
+    meta_write_to_kv.push_back(kv);
   }
   for (int i = 0; i < meta_increment.stores_size(); i++) {
     const auto& store = meta_increment.stores(i);
     if (store.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
       store_map_[store.id()] = store.store();
+
+      // meta_write_kv
+      pb::common::KeyValue kv;
+      kv.mutable_key()->assign(std::string("store_map") + std::to_string(store.id()));
+      kv.mutable_value()->assign(store.store().SerializeAsString());
+      meta_write_to_kv.push_back(kv);
+
     } else if (store.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
       auto& update_store = store_map_[store.id()];
       update_store.CopyFrom(store.store());
+
+      // meta_write_kv
+      pb::common::KeyValue kv;
+      kv.mutable_key()->assign(std::string("store_map") + std::to_string(store.id()));
+      kv.mutable_value()->assign(store.store().SerializeAsString());
+      meta_write_to_kv.push_back(kv);
+
     } else if (store.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
       store_map_.erase(store.id());
+
+      // meta_delete_kv
+      pb::common::KeyValue kv;
+      kv.mutable_key()->assign(std::string("store_map") + std::to_string(store.id()));
+      meta_delete_to_kv.push_back(kv);
     }
   }
 
-  // schema map
+  // 3.schema map
   if (meta_increment.schema_map_epoch() != 0) {
     schema_map_epoch_ = meta_increment.schema_map_epoch();
+
+    // meta_write_kv
+    pb::common::KeyValue kv;
+    kv.mutable_key()->assign(std::string("schema_map_epoch"));
+    kv.mutable_value()->assign(std::to_string(meta_increment.schema_map_epoch()));
+    meta_write_to_kv.push_back(kv);
   }
   for (int i = 0; i < meta_increment.schemas_size(); i++) {
     const auto& schema = meta_increment.schemas(i);
@@ -829,45 +928,107 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
           new_sub_schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
           new_sub_schema_id->set_entity_id(schema.id());
           new_sub_schema_id->set_parent_entity_id(schema.schema_id());
+
+          // meta_write_kv
+          pb::common::KeyValue kv;
+          kv.mutable_key()->assign(std::string("schema_map") + std::to_string(schema.schema_id()));
+          kv.mutable_value()->assign(schema_map_[schema.schema_id()].SerializeAsString());
+          meta_write_to_kv.push_back(kv);
         }
       }
       schema_map_[schema.id()] = schema.schema();
+
+      // meta_write_kv
+      pb::common::KeyValue kv;
+      kv.mutable_key()->assign(std::string("schema_map") + std::to_string(schema.id()));
+      kv.mutable_value()->assign(schema.schema().SerializeAsString());
+      meta_write_to_kv.push_back(kv);
+
     } else if (schema.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
       auto& update_schema = schema_map_[schema.id()];
       update_schema.CopyFrom(schema.schema());
+
+      // meta_write_kv
+      pb::common::KeyValue kv;
+      kv.mutable_key()->assign(std::string("schema_map") + std::to_string(schema.id()));
+      kv.mutable_value()->assign(schema.schema().SerializeAsString());
+      meta_write_to_kv.push_back(kv);
+
     } else if (schema.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
       schema_map_.erase(schema.id());
+
+      // meta_delete_kv
+      pb::common::KeyValue kv;
+      kv.mutable_key()->assign(std::string("schema_map") + std::to_string(schema.id()));
+      meta_delete_to_kv.push_back(kv);
     }
   }
 
-  // region map
+  // 4.region map
   if (meta_increment.region_map_epoch() != 0) {
     region_map_epoch_ = meta_increment.region_map_epoch();
+
+    // meta_write_kv
+    pb::common::KeyValue kv;
+    kv.mutable_key()->assign(std::string("region_map_epoch"));
+    kv.mutable_value()->assign(std::to_string(meta_increment.region_map_epoch()));
+    meta_write_to_kv.push_back(kv);
   }
   for (int i = 0; i < meta_increment.regions_size(); i++) {
     const auto& region = meta_increment.regions(i);
     if (region.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
       // add region to region_map
       region_map_[region.id()] = region.region();
+
+      // meta_write_kv
+      pb::common::KeyValue kv;
+      kv.mutable_key()->assign(std::string("region_map") + std::to_string(region.id()));
+      kv.mutable_value()->assign(region.region().SerializeAsString());
+      meta_write_to_kv.push_back(kv);
+
     } else if (region.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
       // update region to region_map
       auto& update_region = region_map_[region.id()];
       update_region.CopyFrom(region.region());
+
+      // meta_write_kv
+      pb::common::KeyValue kv;
+      kv.mutable_key()->assign(std::string("region_map") + std::to_string(region.id()));
+      kv.mutable_value()->assign(region.region().SerializeAsString());
+      meta_write_to_kv.push_back(kv);
+
     } else if (region.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
       // remove region from region_map
       region_map_.erase(region.id());
+
+      // meta_delete_kv
+      pb::common::KeyValue kv;
+      kv.mutable_key()->assign(std::string("region_map") + std::to_string(region.id()));
+      meta_delete_to_kv.push_back(kv);
     }
   }
 
-  // table map
+  // 5.table map
   if (meta_increment.table_map_epoch() != 0) {
     table_map_epoch_ = meta_increment.table_map_epoch();
+
+    // meta_write_kv
+    pb::common::KeyValue kv;
+    kv.mutable_key()->assign(std::string("table_map_epoch"));
+    kv.mutable_value()->assign(std::to_string(meta_increment.table_map_epoch()));
+    meta_write_to_kv.push_back(kv);
   }
   for (int i = 0; i < meta_increment.tables_size(); i++) {
     const auto& table = meta_increment.tables(i);
     if (table.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
       // add table to table_map
       table_map_[table.id()] = table.table();
+
+      // meta_write_kv
+      pb::common::KeyValue kv;
+      kv.mutable_key()->assign(std::string("table_map") + std::to_string(table.id()));
+      kv.mutable_value()->assign(table.table().SerializeAsString());
+      meta_write_to_kv.push_back(kv);
 
       // update parent schema
       pb::meta::DingoCommonId table_common_id;
@@ -878,17 +1039,37 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
       if (schema_map_.find(table.schema_id()) != schema_map_.end()) {
         auto* add_table_id = schema_map_[table.schema_id()].add_table_ids();
         add_table_id->CopyFrom(table_common_id);
+
+        // meta_write_kv
+        pb::common::KeyValue kv;
+        kv.mutable_key()->assign(std::string("schema_map") + std::to_string(table.schema_id()));
+        kv.mutable_value()->assign(schema_map_[table.schema_id()].SerializeAsString());
+        meta_write_to_kv.push_back(kv);
+
       } else {
         LOG(ERROR) << " CREATE TABLE apply illegal schema_id=" << table.schema_id() << " table_id=" << table.id()
                    << " table_name=" << table.table().definition().name();
       }
+
     } else if (table.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
       // update table to table_map
       auto& update_table = table_map_[table.id()];
       update_table.CopyFrom(table.table());
+
+      // meta_write_kv
+      pb::common::KeyValue kv;
+      kv.mutable_key()->assign(std::string("table_map") + std::to_string(table.id()));
+      kv.mutable_value()->assign(table.table().SerializeAsString());
+      meta_write_to_kv.push_back(kv);
+
     } else if (table.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
       // delete table from table_map
       table_map_.erase(table.id());
+
+      // meta_delete_kv
+      pb::common::KeyValue kv;
+      kv.mutable_key()->assign(std::string("table_map") + std::to_string(table.id()));
+      meta_delete_to_kv.push_back(kv);
     }
   }
 }

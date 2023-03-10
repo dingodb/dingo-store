@@ -22,6 +22,7 @@
 #include "coordinator/coordinator_interaction.h"
 #include "crontab/crontab.h"
 #include "engine/storage.h"
+#include "meta/coordinator_meta_manager.h"
 #include "meta/store_meta_manager.h"
 #include "proto/common.pb.h"
 #include "store/store_control.h"
@@ -131,6 +132,9 @@ class Server {
 
   // This is store control, execute admin operation, like add/del region etc.
   std::shared_ptr<StoreControl> store_control_;
+
+  // This is manage coordinator meta data, like store state and region state.
+  std::shared_ptr<CoordinatorMetaManager> coordinator_meta_manager_;
 };
 
 }  // namespace dingodb
