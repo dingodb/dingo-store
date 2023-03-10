@@ -29,8 +29,10 @@ class CoordinatorServiceImpl : public pb::coordinator::CoordinatorService {
  public:
   CoordinatorServiceImpl() = default;
 
-  void SetController(CoordinatorControl* coordinator_control) { this->coordinator_control = coordinator_control; };
   void SetKvEngine(std::shared_ptr<Engine> engine) { engine_ = engine; };
+  void SetControl(std::shared_ptr<CoordinatorControl> coordinator_control) {
+    this->coordinator_control = coordinator_control;
+  };
 
   void Hello(google::protobuf::RpcController* controller, const pb::coordinator::HelloRequest* request,
              pb::coordinator::HelloResponse* response, google::protobuf::Closure* done) override;
@@ -50,8 +52,8 @@ class CoordinatorServiceImpl : public pb::coordinator::CoordinatorService {
                          google::protobuf::Closure* done) override;
 
  private:
-  CoordinatorControl* coordinator_control;
   std::shared_ptr<Engine> engine_;
+  std::shared_ptr<CoordinatorControl> coordinator_control;
 };
 
 }  // namespace dingodb

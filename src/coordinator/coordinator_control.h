@@ -17,6 +17,7 @@
 
 #include <cstdint>
 #include <map>
+#include <shared_mutex>
 #include <string>
 #include <vector>
 
@@ -24,7 +25,10 @@
 #include "brpc/server.h"
 #include "bthread/types.h"
 #include "butil/scoped_lock.h"
+#include "butil/strings/stringprintf.h"
 #include "common/meta_control.h"
+#include "meta/meta_reader.h"
+#include "meta/meta_writer.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
 #include "proto/coordinator_internal.pb.h"
@@ -32,20 +36,113 @@
 
 namespace dingodb {
 
+template <typename T>
+class MetaMapStorage {
+ public:
+  const std::string internal_prefix;
+  MetaMapStorage(std::map<uint64_t, T> *elements_ptr) : internal_prefix(typeid(T).name()), elements_(elements_ptr){};
+  ~MetaMapStorage() = default;
+
+  std::string Prefix() { return internal_prefix; }
+
+  bool Init() {
+    LOG(INFO) << "coordinator server meta";
+    return true;
+  }
+
+  bool Recover(const std::vector<pb::common::KeyValue> &kvs) {
+    TransformFromKv(kvs);
+    return true;
+  }
+
+  bool IsExist(uint64_t id) {
+    // std::shared_lock<std::shared_mutex> lock(mutex_);
+    auto it = elements_->find(id);
+    return static_cast<bool>(it != elements_->end());
+  }
+
+  uint64_t ParseId(const std::string &str) {
+    if (str.size() <= internal_prefix.size()) {
+      LOG(ERROR) << "Parse id failed, invalid str " << str;
+      return 0;
+    }
+
+    std::string s(str.c_str() + internal_prefix.size() + 1);
+    try {
+      return std::stoull(s, nullptr, 10);
+    } catch (std::invalid_argument &e) {
+      LOG(ERROR) << "string to uint64_t failed: " << e.what();
+    }
+
+    return 0;
+  }
+
+  std::string GenKey(uint64_t region_id) { return butil::StringPrintf("%s_%lu", internal_prefix.c_str(), region_id); }
+
+  std::shared_ptr<pb::common::KeyValue> TransformToKv(uint64_t id) {
+    // std::shared_lock<std::shared_mutex> lock(mutex_);
+    auto it = elements_->find(id);
+    if (it == elements_->end()) {
+      return nullptr;
+    }
+
+    return TransformToKv(it->second);
+  };
+
+  std::shared_ptr<pb::common::KeyValue> TransformToKv(std::shared_ptr<T> element) {
+    std::shared_ptr<pb::common::KeyValue> kv = std::make_shared<pb::common::KeyValue>();
+    kv->set_key(GenKey(element->id()));
+    kv->set_value(element->SerializeAsString());
+
+    return kv;
+  }
+
+  std::vector<pb::common::KeyValue> TransformToKvWithAll() {
+    // std::shared_lock<std::shared_mutex> lock(mutex_);
+
+    std::vector<pb::common::KeyValue> kvs;
+    for (const auto &it : *elements_) {
+      pb::common::KeyValue kv;
+      kv.set_key(GenKey(it.first));
+      kv.set_value(it.second.SerializeAsString());
+      kvs.push_back(kv);
+    }
+
+    return kvs;
+  }
+
+  void TransformFromKv(const std::vector<pb::common::KeyValue> &kvs) {
+    // std::unique_lock<std::shared_mutex> lock(mutex_);
+    for (const auto &kv : kvs) {
+      uint64_t id = ParseId(kv.key());
+      T element;
+      element.ParsePartialFromArray(kv.value().data(), kv.value().size());
+      elements_->insert_or_assign(id, element);
+    }
+  };
+
+  MetaMapStorage(const MetaMapStorage &) = delete;
+  const MetaMapStorage &operator=(const MetaMapStorage &) = delete;
+
+ private:
+  // Protect regions_ concurrent access.
+  // std::shared_mutex mutex_;
+  // Coordinator all region meta data in this server.
+  // std::map<uint64_t, std::shared_ptr<T>> *elements_;
+  std::map<uint64_t, T> *elements_;
+};
+
 class CoordinatorControl : public MetaControl {
  public:
-  CoordinatorControl();
+  CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, std::shared_ptr<MetaWriter> meta_writer);
+  ~CoordinatorControl();
+  bool Recover();
   static void GenerateRootSchemas(pb::meta::Schema &root_schema, pb::meta::Schema &meta_schema,
                                   pb::meta::Schema &dingo_schema);
   static void GenerateRootSchemasMetaIncrement(pb::meta::Schema &root_schema, pb::meta::Schema &meta_schema,
                                                pb::meta::Schema &dingo_schema,
                                                pb::coordinator_internal::MetaIncrement &meta_increment);
   void Init() override;
-  uint64_t CreateCoordinatorId(pb::coordinator_internal::MetaIncrement &meta_increment) override;
-  uint64_t CreateStoreId(pb::coordinator_internal::MetaIncrement &meta_increment) override;
-  uint64_t CreateRegionId(pb::coordinator_internal::MetaIncrement &meta_increment) override;
-  uint64_t CreateSchemaId(pb::coordinator_internal::MetaIncrement &meta_increment) override;
-  uint64_t CreateTableId(pb::coordinator_internal::MetaIncrement &meta_increment) override;
 
   // create region
   // in: resource_tag
@@ -128,29 +225,44 @@ class CoordinatorControl : public MetaControl {
   uint64_t next_table_id_;
   uint64_t next_partition_id_;
 
-  // regions
-  uint64_t region_map_epoch_;
-  std::map<uint64_t, pb::common::Region> region_map_;
+  // coordinators
+  uint64_t coordinator_map_epoch_;
+  std::map<uint64_t, pb::coordinator_internal::CoordinatorInternal> coordinator_map_;
+  MetaMapStorage<pb::coordinator_internal::CoordinatorInternal> *coordinator_meta_;
 
   // stores
   uint64_t store_map_epoch_;
   std::map<uint64_t, pb::common::Store> store_map_;
+  MetaMapStorage<pb::common::Store> *store_meta_;
 
   // schemas
   uint64_t schema_map_epoch_;
   std::map<uint64_t, pb::meta::Schema> schema_map_;
+  MetaMapStorage<pb::meta::Schema> *schema_meta_;
+
+  // regions
+  uint64_t region_map_epoch_;
+  std::map<uint64_t, pb::common::Region> region_map_;
+  MetaMapStorage<pb::common::Region> *region_meta_;
 
   // tables
   // TableInternal is combination of Table & TableDefinition
   uint64_t table_map_epoch_;
   std::map<uint64_t, pb::coordinator_internal::TableInternal> table_map_;
+  MetaMapStorage<pb::coordinator_internal::TableInternal> *table_meta_;
 
-  // coordinators
-  uint64_t coordinator_map_epoch_;
-  std::map<uint64_t, pb::coordinator_internal::CoordinatorInternal> coordinator_map_;
+  // ids_epochs
+  // TableInternal is combination of Table & TableDefinition
+  std::map<uint64_t, pb::coordinator_internal::IdEpochInternal> id_epoch_map_;
+  MetaMapStorage<pb::coordinator_internal::IdEpochInternal> *id_epoch_meta_;
 
   // root schema write to raft
   bool root_schema_writed_to_raft_;
+
+  // Read meta data from persistence storage.
+  std::shared_ptr<MetaReader> meta_reader_;
+  // Write meta data to persistence storage.
+  std::shared_ptr<MetaWriter> meta_writer_;
 };
 
 }  // namespace dingodb

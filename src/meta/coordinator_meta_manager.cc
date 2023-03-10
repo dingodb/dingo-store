@@ -16,6 +16,7 @@
 
 #include "glog/logging.h"
 #include "proto/common.pb.h"
+#include "proto/coordinator_internal.pb.h"
 #include "server/server.h"
 
 namespace dingodb {
@@ -47,14 +48,14 @@ CoordinatorServerMeta& CoordinatorServerMeta::SetState(pb::common::CoordinatorSt
   return *this;
 }
 
-CoordinatorServerMeta& CoordinatorServerMeta::SetServerLocation(const butil::EndPoint&& endpoint) {
+CoordinatorServerMeta& CoordinatorServerMeta::SetServerLocation(const butil::EndPoint&& /*endpoint*/) {
   //   auto* location = store_->mutable_server_location();
   //   location->set_host(butil::ip2str(endpoint.ip).c_str());
   //   location->set_port(endpoint.port);
   return *this;
 }
 
-CoordinatorServerMeta& CoordinatorServerMeta::SetRaftLocation(const butil::EndPoint&& endpoint) {
+CoordinatorServerMeta& CoordinatorServerMeta::SetRaftLocation(const butil::EndPoint&& /*endpoint*/) {
   //   auto* location = store_->mutable_raft_location();
   //   location->set_host(butil::ip2str(endpoint.ip).c_str());
   //   location->set_port(endpoint.port);
@@ -68,7 +69,11 @@ CoordinatorMetaManager::CoordinatorMetaManager(std::shared_ptr<MetaReader> meta_
     : meta_reader_(meta_reader),
       meta_writer_(meta_writer),
       server_meta_(std::make_unique<CoordinatorServerMeta>()),
-      region_meta_(std::make_unique<CoordinatorMap<int>>()) {}
+      coordinator_meta_(std::make_unique<CoordinatorMap<pb::coordinator_internal::CoordinatorInternal>>()),
+      store_meta_(std::make_unique<CoordinatorMap<pb::common::Store>>()),
+      schema_meta_(std::make_unique<CoordinatorMap<pb::meta::Schema>>()),
+      region_meta_(std::make_unique<CoordinatorMap<pb::common::Region>>()),
+      table_meta_(std::make_unique<CoordinatorMap<pb::coordinator_internal::TableInternal>>()) {}
 
 bool CoordinatorMetaManager::Init() {
   if (!server_meta_->Init()) {
@@ -101,25 +106,10 @@ std::shared_ptr<pb::common::Coordinator> CoordinatorMetaManager::GetCoordinatorS
   return server_meta_->GetCoordinator();
 }
 
-bool CoordinatorMetaManager::IsExistRegion(uint64_t region_id) { return region_meta_->IsExist(region_id); }
+//   region_meta_->AddRegion(region);
+//   meta_writer_->Put(region_meta_->TransformToKv(region));
 
-std::shared_ptr<pb::common::Region> CoordinatorMetaManager::GetRegion(uint64_t region_id) {
-  //   return region_meta_->GetRegion(region_id);
-}
-
-std::map<uint64_t, std::shared_ptr<pb::common::Region>> CoordinatorMetaManager::GetAllRegion() {
-  //   return region_meta_->GetAllRegion();
-}
-
-void CoordinatorMetaManager::AddRegion(const std::shared_ptr<pb::common::Region> region) {
-  LOG(INFO) << "CoordinatorMeta add region, region_id " << region->id();
-  //   region_meta_->AddRegion(region);
-  //   meta_writer_->Put(region_meta_->TransformToKv(region));
-}
-
-void CoordinatorMetaManager::DeleteRegion(uint64_t region_id) {
-  //   region_meta_->DeleteRegion(region_id);
-  //   meta_writer_->Delete(region_meta_->GenKey(region_id));
-}
+//   region_meta_->DeleteRegion(region_id);
+//   meta_writer_->Delete(region_meta_->GenKey(region_id));
 
 }  // namespace dingodb

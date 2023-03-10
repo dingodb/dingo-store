@@ -40,6 +40,29 @@ message CoordinatorInternal {
   repeated PartInternal partitions = 3;
 }
 
+enum IdEpochType {
+  ID_NEXT_COORINATOR = 0;
+  ID_NEXT_STORE = 1;
+  ID_NEXT_SCHEMA = 2;
+  ID_NEXT_REGION = 3;
+  ID_NEXT_TABLE = 4;
+
+  EPOCH_COORINATOR = 5;
+  EPOCH_STORE = 6;
+  EPOCH_SCHEMA = 7;
+  EPOCH_REGION = 8;
+  EPOCH_TABLE = 9;
+}
+
+message IdEpochInternal {
+  IdEpochType id = 1;
+  uint64 value = 2;
+}
+
+message IdEpochInternals {
+  repeated IdEpochInternal next_id = 1;
+}
+
 enum MetaIncrementOpType {
   CREATE = 0;
   UPDATE = 1;

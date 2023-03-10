@@ -15,6 +15,8 @@
 #ifndef DINGODB_meta_SERVICE_H_
 #define DINGODB_meta_SERVICE_H_
 
+#include <memory>
+
 #include "brpc/controller.h"
 #include "brpc/server.h"
 #include "coordinator/coordinator_control.h"
@@ -26,7 +28,9 @@ class MetaServiceImpl : public pb::meta::MetaService {
  public:
   MetaServiceImpl() = default;
 
-  void SetController(CoordinatorControl* coordinator_control) { this->coordinator_control = coordinator_control; };
+  void SetControl(std::shared_ptr<CoordinatorControl> coordinator_control) {
+    this->coordinator_control = coordinator_control;
+  };
 
   void GetSchemas(google::protobuf::RpcController* controller, const pb::meta::GetSchemasRequest* request,
                   pb::meta::GetSchemasResponse* response, google::protobuf::Closure* done) override;
@@ -42,7 +46,7 @@ class MetaServiceImpl : public pb::meta::MetaService {
   void CreateSchema(google::protobuf::RpcController* controller, const pb::meta::CreateSchemaRequest* request,
                     pb::meta::CreateSchemaResponse* response, google::protobuf::Closure* done) override;
 
-  CoordinatorControl* coordinator_control;
+  std::shared_ptr<CoordinatorControl> coordinator_control;
 };
 
 }  // namespace dingodb

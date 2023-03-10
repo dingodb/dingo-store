@@ -19,6 +19,7 @@
 
 #include "brpc/channel.h"
 #include "common/meta_control.h"
+#include "coordinator/coordinator_control.h"
 #include "coordinator/coordinator_interaction.h"
 #include "crontab/crontab.h"
 #include "engine/storage.h"
@@ -68,6 +69,9 @@ class Server {
   // Init store control
   bool InitStoreControl();
 
+  // Init coordinator control
+  bool InitCoordinatorControl();
+
   pb::error::Errno StartMetaRegion(std::shared_ptr<Config> config, std::shared_ptr<Engine> kv_engine);
 
   // Recover server state, include store/region/raft.
@@ -95,6 +99,7 @@ class Server {
   std::shared_ptr<CrontabManager> GetCrontabManager() { return crontab_manager_; }
 
   std::shared_ptr<StoreControl> GetStoreControl() { return store_control_; }
+  std::shared_ptr<CoordinatorControl> GetCoordinatorControl() { return coordinator_control_; }
 
   Server(const Server&) = delete;
   const Server& operator=(const Server&) = delete;
@@ -134,7 +139,7 @@ class Server {
   std::shared_ptr<StoreControl> store_control_;
 
   // This is manage coordinator meta data, like store state and region state.
-  std::shared_ptr<CoordinatorMetaManager> coordinator_meta_manager_;
+  std::shared_ptr<CoordinatorControl> coordinator_control_;
 };
 
 }  // namespace dingodb
