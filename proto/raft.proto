@@ -31,9 +31,7 @@ enum CmdType {
   DELETERANGE = 3;
 
   // Coordinator State Machine Operator
-  META_CREATE_SCHEMA = 2000;
-  META_CREATE_TABLE = 2001;
-  META_CMD = 2002;
+  META_WRITE = 2000;
 }
 
 message PutRequest {
@@ -66,23 +64,7 @@ message RaftCreateTableRequest {}
 message RaftCreateTableResponse {}
 
 message RaftMetaRequest {
-  repeated dingodb.pb.coordinator_internal.CoordinatorInternal coordinators = 1;
-  repeated dingodb.pb.common.Store stores = 2;
-  repeated dingodb.pb.common.Region regions = 3;
-  repeated dingodb.pb.meta.Schema schemas = 4;
-  repeated dingodb.pb.coordinator_internal.TableInternal tables = 5;
-
-  uint64 coordinator_map_epoch = 6;
-  uint64 store_map_epoch = 7;
-  uint64 region_map_epoch = 8;
-  uint64 schema_map_epoch = 9;
-  uint64 table_map_epoch = 10;
-
-  uint64 next_coordinator_id_ = 11;
-  uint64 next_store_id_ = 12;
-  uint64 next_region_id_ = 13;
-  uint64 next_schema_id_ = 14;
-  uint64 next_table_id_ = 15;
+  dingodb.pb.coordinator_internal.MetaIncrement meta_increment = 1;
 }
 
 message Request {
@@ -94,9 +76,7 @@ message Request {
     DeleteRangeRequest delete_range = 1002;
 
     // Coordinator Operation[2000, 3000]
-    RaftCreateSchemaRequest create_schema_req = 2001;
-    RaftCreateTableRequest create_table_req = 2002;
-    RaftMetaRequest meta_req = 2003;
+    RaftMetaRequest meta_req = 2000;
   }
 }
 
