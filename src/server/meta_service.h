@@ -26,7 +26,7 @@ class MetaServiceImpl : public pb::meta::MetaService {
  public:
   MetaServiceImpl() = default;
 
-  void SetControl(CoordinatorControl* coordinator_control) { this->coordinator_control = coordinator_control; };
+  void SetController(CoordinatorControl* coordinator_control) { this->coordinator_control = coordinator_control; };
 
   void GetSchemas(google::protobuf::RpcController* controller, const pb::meta::GetSchemasRequest* request,
                   pb::meta::GetSchemasResponse* response, google::protobuf::Closure* done) override;

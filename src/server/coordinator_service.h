@@ -15,9 +15,12 @@
 #ifndef DINGODB_COORDINATOR_SERVICE_H_
 #define DINGODB_COORDINATOR_SERVICE_H_
 
+#include <memory>
+
 #include "brpc/controller.h"
 #include "brpc/server.h"
 #include "coordinator/coordinator_control.h"
+#include "engine/engine.h"
 #include "proto/coordinator.pb.h"
 
 namespace dingodb {
@@ -26,7 +29,8 @@ class CoordinatorServiceImpl : public pb::coordinator::CoordinatorService {
  public:
   CoordinatorServiceImpl() = default;
 
-  void SetControl(CoordinatorControl* coordinator_control) { this->coordinator_control = coordinator_control; };
+  void SetController(CoordinatorControl* coordinator_control) { this->coordinator_control = coordinator_control; };
+  void SetKvEngine(std::shared_ptr<Engine> engine) { engine_ = engine; };
 
   void Hello(google::protobuf::RpcController* controller, const pb::coordinator::HelloRequest* request,
              pb::coordinator::HelloResponse* response, google::protobuf::Closure* done) override;
@@ -45,7 +49,9 @@ class CoordinatorServiceImpl : public pb::coordinator::CoordinatorService {
                          pb::coordinator::GetCoordinatorMapResponse* response,
                          google::protobuf::Closure* done) override;
 
+ private:
   CoordinatorControl* coordinator_control;
+  std::shared_ptr<Engine> engine_;
 };
 
 }  // namespace dingodb

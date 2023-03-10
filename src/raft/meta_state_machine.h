@@ -15,31 +15,22 @@
 #ifndef DINGODB_META_STATE_MACHINE_H_
 #define DINGODB_META_STATE_MACHINE_H_
 
+#include <algorithm>
+#include <memory>
+
 #include "braft/raft.h"
 #include "brpc/controller.h"
 #include "common/context.h"
 #include "engine/engine.h"
+#include "proto/common.pb.h"
 #include "proto/raft.pb.h"
+#include "raft/state_machine.h"
 
 namespace dingodb {
 
-class MetaClosure : public braft::Closure {
- public:
-  MetaClosure(std::shared_ptr<Context> ctx) : ctx_(ctx) {}
-  ~MetaClosure() override = default;
-
-  void Run() override;
-
-  std::shared_ptr<Context> GetCtx() { return ctx_; }
-
- private:
-  std::shared_ptr<Context> ctx_;
-};
-
 class MetaStateMachine : public braft::StateMachine {
  public:
-  MetaStateMachine(std::shared_ptr<Engine> engine);
-
+  MetaStateMachine(std::shared_ptr<Engine> engine, MetaControl* meta_control);
   void on_apply(braft::Iterator& iter) override;
   void on_shutdown() override;
   void on_snapshot_save(braft::SnapshotWriter* writer, braft::Closure* done) override;
@@ -53,9 +44,12 @@ class MetaStateMachine : public braft::StateMachine {
   void on_stop_following(const ::braft::LeaderChangeContext& ctx) override;
 
  private:
-  void DispatchRequest(MetaClosure* done, const pb::raft::RaftCmdRequest& raft_cmd);
-  void HandleCreateSchema(MetaClosure* done, const pb::raft::RaftCreateSchemaRequest& request);
+  // void DispatchRequest(StoreClosure* done, bool is_leader, const pb::raft::RaftCmdRequest& raft_cmd);
+  void DispatchRequest(bool is_leader, const pb::raft::RaftCmdRequest& raft_cmd);
+  void HandleMetaProcess(bool is_leader, const pb::raft::RaftCmdRequest& raft_cmd);
+  // void HandleMetaProcess(StoreClosure* done, bool is_leader, const pb::raft::RaftCmdRequest& raft_cmd);
   std::shared_ptr<Engine> engine_;
+  MetaControl* meta_control_;
 };
 
 }  // namespace dingodb

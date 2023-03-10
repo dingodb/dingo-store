@@ -14,6 +14,8 @@
 
 #include "server/server.h"
 
+#include <algorithm>
+#include <any>
 #include <memory>
 #include <vector>
 
@@ -78,7 +80,7 @@ bool Server::InitServerID() {
   return id_ != 0;
 }
 
-bool Server::InitEngines() {
+bool Server::InitEngines(MetaControl& ctl) {
   auto config = ConfigManager::GetInstance()->GetConfig(role_);
 
   std::shared_ptr<Engine> rock_engine = std::make_shared<RocksEngine>();
@@ -88,7 +90,10 @@ bool Server::InitEngines() {
   }
 
   // default Key-Value storage engine
-  std::shared_ptr<Engine> const raft_kv_engine = std::make_shared<RaftKvEngine>(rock_engine);
+  MetaControl* const controller = dynamic_cast<MetaControl*>(&ctl);
+  bool is_coordinator = (role_ == pb::common::ClusterRole::COORDINATOR);
+  std::shared_ptr<Engine> const raft_kv_engine = std::make_shared<RaftKvEngine>(rock_engine, controller);
+  // std::make_shared<RaftKvEngine>(rock_engine, is_coordinator ? controller : nullptr);
   if (!raft_kv_engine->Init(config)) {
     LOG(ERROR) << "Init RaftKvEngine Failed with Config[" << config->ToString();
     return false;

@@ -18,6 +18,7 @@
 #include <string>
 
 #include "brpc/controller.h"
+#include "common/meta_control.h"
 #include "common/synchronization.h"
 #include "proto/common.pb.h"
 #include "proto/store.pb.h"
@@ -36,7 +37,8 @@ class Context {
         delete_files_in_range_(false),
         flush_(false),
         role_(pb::common::ClusterRole::STORE),
-        enable_sync_(false) {}
+        enable_sync_(false),
+        meta_ctl_(nullptr) {}
   Context(brpc::Controller* cntl, google::protobuf::Closure* done)
       : cntl_(cntl),
         done_(done),
@@ -47,7 +49,8 @@ class Context {
         delete_files_in_range_(false),
         flush_(false),
         role_(pb::common::ClusterRole::STORE),
-        enable_sync_(false) {}
+        enable_sync_(false),
+        meta_ctl_(nullptr) {}
   Context(brpc::Controller* cntl, google::protobuf::Closure* done, google::protobuf::Message* response)
       : cntl_(cntl),
         done_(done),
@@ -58,7 +61,8 @@ class Context {
         delete_files_in_range_(false),
         flush_(false),
         role_(pb::common::ClusterRole::STORE),
-        enable_sync_(false) {}
+        enable_sync_(false),
+        meta_ctl_(nullptr) {}
   ~Context() = default;
 
   brpc::Controller* cntl() { return cntl_; }
@@ -110,6 +114,9 @@ class Context {
   std::shared_ptr<BthreadCond> Cond() { return cond_; }
   butil::Status Status() { return status_; }
   void SetStatus(butil::Status& status) { status_ = status; }
+  void SetMetaController(MetaControl* meta_ctl) { meta_ctl_ = meta_ctl; }
+
+  MetaControl* GetMetaControl() { return meta_ctl_; }
 
  private:
   // brpc framework free resource
@@ -133,6 +140,7 @@ class Context {
   bool enable_sync_;
   butil::Status status_;
   std::shared_ptr<BthreadCond> cond_;
+  MetaControl* meta_ctl_;
 };
 
 }  // namespace dingodb

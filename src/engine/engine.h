@@ -141,6 +141,14 @@ class Engine {
     return pb::error::Errno::ENOT_SUPPORT;
   }
 
+  /**
+   * This is used by RaftKvEngine to Persist Meta
+   * This is a alternative method, will be replace by zihui new Interface.
+   */
+  virtual pb::error::Errno MetaPut(std::shared_ptr<Context> ctx, const pb::coordinator_internal::MetaIncrement& meta) {
+    return pb::error::Errno::ENOT_SUPPORT;
+  }
+
  protected:
   Engine() = default;
 };

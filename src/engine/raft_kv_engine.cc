@@ -22,15 +22,19 @@
 #include "common/synchronization.h"
 #include "config/config_manager.h"
 #include "proto/common.pb.h"
+#include "proto/coordinator_internal.pb.h"
 #include "proto/error.pb.h"
+#include "proto/raft.pb.h"
 #include "raft/meta_state_machine.h"
 #include "raft/state_machine.h"
 #include "server/server.h"
 
 namespace dingodb {
 
-RaftKvEngine::RaftKvEngine(std::shared_ptr<Engine> engine)
-    : engine_(engine), raft_node_manager_(std::move(std::make_unique<RaftNodeManager>())) {}
+RaftKvEngine::RaftKvEngine(std::shared_ptr<Engine> engine, MetaControl* meta_control)
+    : engine_(engine),
+      meta_control_(meta_control),
+      raft_node_manager_(std::move(std::make_unique<RaftNodeManager>())) {}
 
 RaftKvEngine::~RaftKvEngine() = default;
 
@@ -64,7 +68,7 @@ pb::error::Errno RaftKvEngine::AddRegion(std::shared_ptr<Context> ctx,
   if (ctx->ClusterRole() == pb::common::ClusterRole::STORE) {
     state_machine = new StoreStateMachine(engine_);
   } else if (ctx->ClusterRole() == pb::common::ClusterRole::COORDINATOR) {
-    state_machine = new MetaStateMachine(engine_);
+    state_machine = new MetaStateMachine(engine_, meta_control_);
   } else {
     LOG(ERROR) << "AddRegion ClusterRole illegal " << ctx->ClusterRole();
   }
@@ -198,13 +202,7 @@ std::shared_ptr<pb::raft::RaftCmdRequest> GenRaftCmdPutIfAbsentRequest(const std
   request->set_cmd_type(pb::raft::CmdType::PUTIFABSENT);
   pb::raft::PutIfAbsentRequest* put_if_absent_request = request->mutable_put_if_absent();
   put_if_absent_request->set_cf_name(ctx->cf_name());
-<<<<<<< HEAD
   put_if_absent_request->add_kvs()->CopyFrom(kv);
-=======
-  auto* kv_req = put_if_absent_request->add_kvs();
-  *kv_req = kv;
->>>>>>> 8dc1bc1 ([coordinator] Refactor coordinator_control preparing for raft_kv_engine.)
-
   return raft_cmd;
 }
 
@@ -272,6 +270,25 @@ pb::error::Errno RaftKvEngine::KvDeleteRange(std::shared_ptr<Context> ctx, const
   }
 
   return node->Commit(ctx, GenRaftCmdRequest(ctx, range));
+}
+
+pb::error::Errno RaftKvEngine::MetaPut(std::shared_ptr<Context> ctx,
+                                       const pb::coordinator_internal::MetaIncrement& meta) {
+  // change MetaIncrement to RaftCmdRequest
+  std::shared_ptr<pb::raft::RaftCmdRequest> const raft_cmd = std::make_shared<pb::raft::RaftCmdRequest>();
+  pb::raft::RequestHeader* header = raft_cmd->mutable_header();
+  auto* request = raft_cmd->add_requests();
+  request->set_cmd_type(pb::raft::CmdType::META_WRITE);
+  pb::raft::RaftMetaRequest* meta_request = request->mutable_meta_req();
+  auto* meta_increment_request = meta_request->mutable_meta_increment();
+  meta_increment_request->CopyFrom(meta);
+
+  auto node = raft_node_manager_->GetNode(ctx->region_id());
+  if (node == nullptr) {
+    LOG(ERROR) << "Not found raft node " << ctx->region_id();
+    return pb::error::ERAFT_NOTNODE;
+  }
+  return node->Commit(ctx, raft_cmd);
 }
 
 }  // namespace dingodb
