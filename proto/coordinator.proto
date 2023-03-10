@@ -19,7 +19,7 @@ import "error.proto";
 
 package dingodb.pb.coordinator;
 
-option java_package = "org.dingo.coordinator";
+option java_package = "io.dingodb.coordinator";
 option cc_generic_services = true;
 
 // Store report self status and region (this node is leader) status
