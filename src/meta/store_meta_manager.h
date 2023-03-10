@@ -23,34 +23,10 @@
 #include "engine/engine.h"
 #include "meta/meta_reader.h"
 #include "meta/meta_writer.h"
+#include "meta/transform_kv_able.h"
 #include "proto/common.pb.h"
 
 namespace dingodb {
-
-// Support kv transform ability.
-// This is abstract class.
-class TransformKvAble {
- public:
-  TransformKvAble(const std::string& prefix) : prefix_(prefix){};
-  virtual ~TransformKvAble() = default;
-
-  std::string prefix() { return prefix_; }
-  virtual std::string GenKey(uint64_t region_id) { return ""; }
-
-  // Transform other format to kv.
-  virtual std::shared_ptr<pb::common::KeyValue> TransformToKv(uint64_t region_id) = 0;
-  virtual std::shared_ptr<pb::common::KeyValue> TransformToKv(const std::shared_ptr<pb::common::Region> region) = 0;
-  // Transform other format to kv with delta.
-  virtual std::vector<std::shared_ptr<pb::common::KeyValue> > TransformToKvtWithDelta() = 0;
-  // Transform other format to kv with all.
-  virtual std::vector<std::shared_ptr<pb::common::KeyValue> > TransformToKvWithAll() = 0;
-
-  // Transform kv to other format.
-  virtual void TransformFromKv(const std::vector<pb::common::KeyValue>& kvs) = 0;
-
- protected:
-  const std::string prefix_;
-};
 
 // Manage store server store data
 class StoreServerMeta {
