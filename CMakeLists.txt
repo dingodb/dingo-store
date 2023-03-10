@@ -70,7 +70,7 @@ foreach (PROTO ${PROTO_FILES})
             DEPENDS protobuf
     )
 endforeach ()
-add_library(PROTO_OBJS OBJECT ${PROTO_SRCS} ${PROTO_HEADER})
+add_library(PROTO_OBJS OBJECT ${PROTO_SRCS})
 message("Debug Message protoc: ${PROTOBUF_PROTOC_EXECUTABLE}, proto srcs : ${PROTO_SRCS}")
 
 # include PROTO_HEADER
@@ -136,13 +136,28 @@ file(GLOB COORDINATOR_SRCS ${PROJECT_SOURCE_DIR}/src/coordinator/*.cc)
 file(GLOB STORE_SRCS ${PROJECT_SOURCE_DIR}/src/store/*.cc)
 file(GLOB SERVER_SRCS ${PROJECT_SOURCE_DIR}/src/server/*.cc)
 
+list(REMOVE_ITEM SERVER_SRCS "${PROJECT_SOURCE_DIR}/src/server/main.cc")
+
+# object file
+add_library(DINGODB_OBJS
+            OBJECT
+            ${COMMON_SRCS}
+            ${CONFIG_SRCS}
+            ${RAFT_SRCS}
+            ${ENGINE_SRCS}
+            ${CRONTAB_SRCS}
+            ${META_SRCS}
+            ${COORDINATOR_SRCS}
+            ${STORE_SRCS}
+            ${SERVER_SRCS})
+
 # bin output dir
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin)
 
-add_executable(dingodb_server ${SERVER_SRCS} ${STORE_SRCS} ${COORDINATOR_SRCS} ${META_SRCS} ${REGION_SRCS} ${ENGINE_SRCS} ${RAFT_SRCS} ${CRONTAB_SRCS} ${CONFIG_SRCS} ${COMMON_SRCS} ${PROTO_SRCS} ${PROTO_HEADER})
-add_executable(dingodb_client_store src/client/store_client.cc ${PROTO_SRCS} ${PROTO_HEADER})
-add_executable(dingodb_client_coordinator src/client/coordinator_client.cc ${PROTO_SRCS} ${PROTO_HEADER})
-add_executable(dingodb_client_meta src/client/meta_client.cc ${PROTO_SRCS} ${PROTO_HEADER})
+add_executable(dingodb_server src/server/main.cc $<TARGET_OBJECTS:DINGODB_OBJS> $<TARGET_OBJECTS:PROTO_OBJS>)
+add_executable(dingodb_client_store src/client/store_client.cc $<TARGET_OBJECTS:PROTO_OBJS>)
+add_executable(dingodb_client_coordinator src/client/coordinator_client.cc $<TARGET_OBJECTS:PROTO_OBJS>)
+add_executable(dingodb_client_meta src/client/meta_client.cc $<TARGET_OBJECTS:PROTO_OBJS>)
 
 add_dependencies(dingodb_server ${DEPEND_LIBS})
 add_dependencies(dingodb_client_store ${DEPEND_LIBS})
@@ -170,6 +185,8 @@ target_link_libraries(dingodb_client_meta
                       "-Xlinker \"-(\""
                       ${DYNAMIC_LIB}
                       "-Xlinker \"-)\"")
+
+
 
 if(BUILD_UNIT_TESTS)
     add_subdirectory(test)

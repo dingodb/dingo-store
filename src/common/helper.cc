@@ -145,4 +145,45 @@ bool Helper::IsEqualIgnoreCase(const std::string& str1, const std::string& str2)
                     [](const char c1, const char c2) { return std::tolower(c1) == std::tolower(c2); });
 }
 
+std::string Helper::Increment(const std::string& input) {
+  std::string ret(input.size(), 0);
+  int carry = 1;
+  for (int i = input.size() - 1; i >= 0; --i) {
+    if (input[i] == 0xFF && carry == 1) {
+      ret[i] = 0;
+    } else {
+      ret[i] = (input[i] + carry);
+      carry = 0;
+    }
+  }
+
+  return (carry == 0) ? ret : input;
+}
+
+std::string Helper::StringToHex(const std::string& str) {
+  std::string result = "0x";
+  std::string tmp;
+  std::stringstream ss;
+  for (int i = 0; i < str.size(); i++) {
+    ss << std::hex << int(str[i]) << std::endl;
+    ss >> tmp;
+    result += tmp;
+  }
+  return result;
+}
+
+void Helper::SetPbMessageError(int errcode, const std::string& errmsg, google::protobuf::Message* message) {
+  const google::protobuf::Reflection* reflection = message->GetReflection();
+  const google::protobuf::Descriptor* desc = message->GetDescriptor();
+
+  const google::protobuf::FieldDescriptor* error_field = desc->FindFieldByName("error");
+  google::protobuf::Message* error = reflection->MutableMessage(message, error_field);
+  const google::protobuf::Reflection* error_ref = error->GetReflection();
+  const google::protobuf::Descriptor* error_desc = error->GetDescriptor();
+  const google::protobuf::FieldDescriptor* errcode_field = error_desc->FindFieldByName("errcode");
+  error_ref->SetEnumValue(error, errcode_field, errcode);
+  const google::protobuf::FieldDescriptor* errmsg_field = error_desc->FindFieldByName("errmsg");
+  error_ref->SetString(error, errmsg_field, errmsg);
+}
+
 }  // namespace dingodb

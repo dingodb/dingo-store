@@ -16,6 +16,7 @@
 
 #include "braft/util.h"
 #include "butil/strings/stringprintf.h"
+#include "common/helper.h"
 #include "proto/error.pb.h"
 #include "proto/raft.pb.h"
 
@@ -24,26 +25,19 @@ namespace dingodb {
 void StoreClosure::Run() {
   LOG(INFO) << "Closure run...";
 
-  // Set response error
-  auto setErrorFunc = [](butil::Status& status, google::protobuf::Message* message) {
-    const google::protobuf::Reflection* reflection = message->GetReflection();
-    const google::protobuf::Descriptor* desc = message->GetDescriptor();
-
-    const google::protobuf::FieldDescriptor* error_field = desc->FindFieldByName("error");
-    google::protobuf::Message* error = reflection->MutableMessage(message, error_field);
-    const google::protobuf::Reflection* error_ref = error->GetReflection();
-    const google::protobuf::Descriptor* error_desc = error->GetDescriptor();
-    const google::protobuf::FieldDescriptor* errcode_field = error_desc->FindFieldByName("errcode");
-    error_ref->SetEnumValue(error, errcode_field, status.error_code());
-    const google::protobuf::FieldDescriptor* errmsg_field = error_desc->FindFieldByName("errmsg");
-    error_ref->SetString(error, errmsg_field, status.error_str());
-  };
-
-  brpc::ClosureGuard done_guard(ctx_->done());
+  brpc::ClosureGuard done_guard(ctx_->IsSyncMode() ? nullptr : ctx_->done());
   if (!status().ok()) {
     LOG(ERROR) << butil::StringPrintf("raft log commit failed, region[%ld] %d:%s", ctx_->region_id(),
                                       status().error_code(), status().error_cstr());
-    setErrorFunc(status(), ctx_->response());
+    if (!ctx_->IsSyncMode()) {
+      // todo
+      Helper::SetPbMessageError(status().error_code(), status().error_str(), ctx_->response());
+    }
+  }
+
+  if (ctx_->IsSyncMode()) {
+    ctx_->SetStatus(status());
+    ctx_->Cond()->DecreaseSignal();
   }
 }
 
@@ -69,20 +63,46 @@ void StoreStateMachine::DispatchRequest(StoreClosure* done, const pb::raft::Raft
 
 void StoreStateMachine::HandlePutRequest(StoreClosure* done, const pb::raft::PutRequest& request) {
   LOG(INFO) << "handlePutRequest ...";
-  std::shared_ptr<Context> ctx = std::make_shared<Context>();
+  std::shared_ptr<Context> ctx =
+      (done != nullptr && done->get_ctx() != nullptr) ? done->get_ctx() : std::make_shared<Context>();
   ctx->set_cf_name(request.cf_name());
-  for (auto& kv : request.kvs()) {
-    engine_->KvPut(ctx, kv);
+
+  pb::error::Errno errcode = pb::error::OK;
+  if (request.kvs().size() == 1) {
+    errcode = engine_->KvPut(ctx, request.kvs().Get(0));
+  } else {
+    errcode = engine_->KvBatchPut(ctx, Helper::PbRepeatedToVector(request.kvs()));
+  }
+
+  if (errcode != pb::error::OK && done != nullptr && done->get_ctx() != nullptr && !done->get_ctx()->IsSyncMode()) {
+    Helper::SetPbMessageError(errcode, "Put failed.", done->get_ctx()->response());
   }
 }
 
 void StoreStateMachine::HandlePutIfAbsentRequest(StoreClosure* done, const pb::raft::PutIfAbsentRequest& request) {
-  // todo: write data
   LOG(INFO) << "handlePutIfAbsentRequest ...";
-  std::shared_ptr<Context> ctx = std::make_shared<Context>();
+  std::shared_ptr<Context> ctx =
+      (done != nullptr && done->get_ctx() != nullptr) ? done->get_ctx() : std::make_shared<Context>();
   ctx->set_cf_name(request.cf_name());
-  for (auto& kv : request.kvs()) {
-    engine_->KvPut(ctx, kv);
+
+  if (request.kvs().size() == 1) {
+    auto errcode = engine_->KvPutIfAbsent(ctx, request.kvs().Get(0));
+    if (errcode != pb::error::OK && done != nullptr && done->get_ctx() != nullptr) {
+      Helper::SetPbMessageError(errcode, "Put if absent failed.", done->get_ctx()->response());
+    }
+  } else {
+    std::vector<std::string> put_keys;
+    auto errcode = engine_->KvBatchPutIfAbsentNonAtomic(ctx, Helper::PbRepeatedToVector(request.kvs()), put_keys);
+    if (done != nullptr && done->get_ctx() != nullptr) {
+      if (errcode != pb::error::OK) {
+        Helper::SetPbMessageError(errcode, "Batch put if absent failed.", done->get_ctx()->response());
+      } else {
+        auto response = dynamic_cast<pb::store::KvBatchPutIfAbsentResponse*>(done->get_ctx()->response());
+        for (auto& key : put_keys) {
+          response->add_put_keys(key);
+        }
+      }
+    }
   }
 }
 
@@ -93,7 +113,7 @@ void StoreStateMachine::HandleDeleteRangeRequest(StoreClosure* done, const pb::r
 void StoreStateMachine::on_apply(braft::Iterator& iter) {
   LOG(INFO) << "on_apply...";
   for (; iter.valid(); iter.next()) {
-    brpc::ClosureGuard done_guard(iter.done());
+    braft::AsyncClosureGuard done_guard(iter.done());
 
     butil::IOBufAsZeroCopyInputStream wrapper(iter.data());
     pb::raft::RaftCmdRequest raft_cmd;

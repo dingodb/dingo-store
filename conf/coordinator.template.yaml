@@ -13,27 +13,19 @@ raft:
 log:
   logPath: $BASE_PATH$/log
 store:
-  dbPath: $BASE_PATH$/data/coordinator/db
-  dcfConfiguration:
-    tcBlockSize: 131072
-    tcBlockCacheSize: 67108864
-    cfArenaBlockSize: 67108864
-    cfMinWriteBufferNumberToMerge: 4
-    cfMaxWriteBufferNumber: 2
-    cfMaxCompactionBytes: 134217728
-    cfWriteBufferSize: 67108864
-    cfFixedLengthPrefixExtractor: 8
-    cfMaxBytesForLevelBase: 134217728
-    cfTargetFileSizeBase: 67108864
-  icfConfiguration:
-    tcBlockSize: 131072
-    tcBlockCacheSize: 67108864
-    cfArenaBlockSize: 67108864
-    cfMinWriteBufferNumberToMerge: 4
-    cfMaxWriteBufferNumber: 3
-    cfMaxCompactionBytes: 134217728
-    cfWriteBufferSize: 67108864
-    cfFixedLengthPrefixExtractor: 8
-    cfMaxBytesForLevelBase: 134217728
-    cfTargetFileSizeBase: 67108864
+  dbPath: $BASE_PATH$/data/store/db
+  base:
+    block_size: 131072
+    block_cache: 67108864
+    arena_block_size: 67108864
+    min_write_buffer_number_to_merge: 4
+    max_write_buffer_number: 2
+    max_compaction_bytes: 134217728
+    write_buffer_size: 67108864
+    prefix_extractor: 8
+    max_bytes_for_level_base: 134217728
+    target_file_size_base: 67108864
+  columnFamilies:
+    - default
+    - meta
   collectStatsInterval: 5

@@ -28,8 +28,7 @@ void Heartbeat::SendStoreHeartbeat(void* arg) {
 
   request.set_self_storemap_epoch(store_meta->GetServerEpoch());
   request.set_self_regionmap_epoch(store_meta->GetRegionEpoch());
-  auto* store = request.mutable_store();
-  *store = *store_meta->GetStoreServerMeta();
+  request.mutable_store()->CopyFrom(*store_meta->GetStoreServerMeta());
 
   for (auto& it : store_meta->GetAllRegion()) {
     auto* region = request.add_regions();
@@ -37,9 +36,10 @@ void Heartbeat::SendStoreHeartbeat(void* arg) {
   }
 
   pb::coordinator::StoreHeartbeatResponse response;
-  coordinator_interaction->SendRequest<pb::coordinator::StoreHeartbeatRequest, pb::coordinator::StoreHeartbeatResponse>(
-      "StoreHearbeat", request, response);
-  HandleStoreHeartbeatResponse(store_meta, response);
+  auto errcode = coordinator_interaction->SendRequest("StoreHeartbeat", request, response);
+  if (errcode == pb::error::OK) {
+    HandleStoreHeartbeatResponse(store_meta, response);
+  }
 }
 
 static std::vector<std::shared_ptr<pb::common::Region> > GetNewRegion(
@@ -60,6 +60,9 @@ static std::vector<std::shared_ptr<pb::common::Region> > GetChangedPeerRegion(
     const google::protobuf::RepeatedPtrField<dingodb::pb::common::Region>& remote_regions) {
   std::vector<std::shared_ptr<pb::common::Region> > changed_peers;
   for (const auto& remote_region : remote_regions) {
+    if (remote_region.id() == 0) {
+      continue;
+    }
     auto it = local_regions.find(remote_region.id());
     if (it != local_regions.end() && remote_region.epoch() != it->second->epoch()) {
       std::vector<pb::common::Peer> local_peers(it->second->peers().begin(), it->second->peers().end());
@@ -82,6 +85,9 @@ static std::vector<std::shared_ptr<pb::common::Region> > GetDeleteRegion(
   auto to_region_map_func = [remote_regions]() -> std::map<uint64_t, pb::common::Region> {
     std::map<uint64_t, pb::common::Region> region_map;
     for (const auto& remote_region : remote_regions) {
+      if (remote_region.id() == 0) {
+        continue;
+      }
       region_map[remote_region.id()] = remote_region;
     }
 
@@ -106,12 +112,14 @@ void Heartbeat::HandleStoreHeartbeatResponse(std::shared_ptr<dingodb::StoreMetaM
   auto local_regions = store_meta->GetAllRegion();
   auto store_control = Server::GetInstance()->GetStoreControl();
 
+  LOG(INFO) << "local_regions size: " << local_regions.size();
+
   // If has new region, add region.
   auto new_regions = GetNewRegion(local_regions, response.regionmap().regions());
   LOG(INFO) << "new regions size: " << new_regions.size();
   if (!new_regions.empty()) {
     std::shared_ptr<Context> ctx = std::make_shared<Context>();
-    // store_control->AddRegions(ctx, new_regions);
+    store_control->AddRegions(ctx, new_regions);
   }
 
   // Check for change peers region.

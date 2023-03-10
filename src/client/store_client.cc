@@ -60,19 +60,37 @@ void sendKvGet(brpc::Controller& cntl, dingodb::pb::store::StoreService_Stub& st
   dingodb::pb::store::KvGetRequest request;
   dingodb::pb::store::KvGetResponse response;
 
-  const char* op = NULL;
   request.set_region_id(FLAGS_region_id);
   request.set_key(FLAGS_key);
   stub.KvGet(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
     LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
-    // bthread_usleep(FLAGS_timeout_ms * 1000L);
   }
 
   if (FLAGS_log_each_request) {
     LOG(INFO) << " request=" << request.ShortDebugString() << " response=" << response.ShortDebugString()
-              << " request_attachment=" << cntl.request_attachment().size()
-              << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+              << " latency=" << cntl.latency_us() << "us";
+  }
+}
+
+void sendKvBatchGet(brpc::Controller& cntl, dingodb::pb::store::StoreService_Stub& stub) {
+  dingodb::pb::store::KvBatchGetRequest request;
+  dingodb::pb::store::KvBatchGetResponse response;
+
+  request.set_region_id(FLAGS_region_id);
+  for (int i = 0; i < 10; ++i) {
+    std::string key = FLAGS_key + "_" + std::to_string(i);
+    request.add_keys(key);
+  }
+
+  stub.KvBatchGet(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+  }
+
+  if (FLAGS_log_each_request) {
+    LOG(INFO) << " request=" << request.ShortDebugString() << " response=" << response.ShortDebugString()
+              << " latency=" << cntl.latency_us() << "us";
   }
 }
 
@@ -92,8 +110,73 @@ void sendKvPut(brpc::Controller& cntl, dingodb::pb::store::StoreService_Stub& st
 
   if (FLAGS_log_each_request) {
     LOG(INFO) << " request=" << request.ShortDebugString() << " response=" << response.ShortDebugString()
-              << " request_attachment=" << cntl.request_attachment().size()
-              << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+              << " latency=" << cntl.latency_us() << "us";
+  }
+}
+
+void sendKvBatchPut(brpc::Controller& cntl, dingodb::pb::store::StoreService_Stub& stub) {
+  dingodb::pb::store::KvBatchPutRequest request;
+  dingodb::pb::store::KvBatchPutResponse response;
+
+  request.set_region_id(FLAGS_region_id);
+  for (int i = 0; i < 10; ++i) {
+    std::string key = FLAGS_key + "_" + std::to_string(i);
+    auto kv = request.add_kvs();
+    kv->set_key(key);
+    kv->set_value(genRandomString(64));
+  }
+
+  stub.KvBatchPut(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+  }
+
+  if (FLAGS_log_each_request) {
+    LOG(INFO) << " request=" << request.ShortDebugString() << " response=" << response.ShortDebugString()
+              << " latency=" << cntl.latency_us() << "us";
+  }
+}
+
+void sendKvPutIfAbsent(brpc::Controller& cntl, dingodb::pb::store::StoreService_Stub& stub) {
+  dingodb::pb::store::KvPutIfAbsentRequest request;
+  dingodb::pb::store::KvPutIfAbsentResponse response;
+
+  request.set_region_id(FLAGS_region_id);
+  dingodb::pb::common::KeyValue* kv = request.mutable_kv();
+  kv->set_key(FLAGS_key);
+  kv->set_value(genRandomString(64));
+
+  stub.KvPutIfAbsent(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+  }
+
+  if (FLAGS_log_each_request) {
+    LOG(INFO) << " request=" << request.ShortDebugString() << " response=" << response.ShortDebugString()
+              << " latency=" << cntl.latency_us() << "us";
+  }
+}
+
+void sendKvBatchPutIfAbsent(brpc::Controller& cntl, dingodb::pb::store::StoreService_Stub& stub) {
+  dingodb::pb::store::KvBatchPutIfAbsentRequest request;
+  dingodb::pb::store::KvBatchPutIfAbsentResponse response;
+
+  request.set_region_id(FLAGS_region_id);
+  for (int i = 0; i < 10; ++i) {
+    std::string key = FLAGS_key + "_" + std::to_string(i);
+    auto kv = request.add_kvs();
+    kv->set_key(key);
+    kv->set_value(genRandomString(64));
+  }
+
+  stub.KvBatchPutIfAbsent(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+  }
+
+  if (FLAGS_log_each_request) {
+    LOG(INFO) << " request=" << request.ShortDebugString() << " response=" << response.ShortDebugString()
+              << " latency=" << cntl.latency_us() << "us";
   }
 }
 
@@ -135,8 +218,65 @@ void sendAddRegion(brpc::Controller& cntl, dingodb::pb::store::StoreService_Stub
 
   if (FLAGS_log_each_request) {
     LOG(INFO) << " request=" << request.ShortDebugString() << " response=" << response.ShortDebugString()
-              << " request_attachment=" << cntl.request_attachment().size()
-              << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+              << " latency=" << cntl.latency_us() << "us";
+  }
+}
+
+void sendChangeRegion(brpc::Controller& cntl, dingodb::pb::store::StoreService_Stub& stub) {
+  dingodb::pb::store::ChangeRegionRequest request;
+  dingodb::pb::store::ChangeRegionResponse response;
+
+  dingodb::pb::common::Region* region = request.mutable_region();
+  region->set_id(FLAGS_region_id);
+  region->set_epoch(1);
+  region->set_table_id(10);
+  region->set_name("test-" + std::to_string(FLAGS_region_id));
+  dingodb::pb::common::Range* range = region->mutable_range();
+  range->set_start_key("0000000");
+  range->set_end_key("11111111");
+  auto peer = region->add_peers();
+  peer->set_store_id(1001);
+  auto raft_loc = peer->mutable_raft_location();
+  raft_loc->set_host("127.0.0.1");
+  raft_loc->set_port(20101);
+
+  peer = region->add_peers();
+  peer->set_store_id(1002);
+  raft_loc = peer->mutable_raft_location();
+  raft_loc->set_host("127.0.0.1");
+  raft_loc->set_port(20102);
+
+  peer = region->add_peers();
+  peer->set_store_id(1004);
+  raft_loc = peer->mutable_raft_location();
+  raft_loc->set_host("127.0.0.1");
+  raft_loc->set_port(20104);
+
+  stub.ChangeRegion(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+  }
+
+  if (FLAGS_log_each_request) {
+    LOG(INFO) << " request=" << request.ShortDebugString() << " response=" << response.ShortDebugString()
+              << " latency=" << cntl.latency_us() << "us";
+  }
+}
+
+void sendDestroyRegion(brpc::Controller& cntl, dingodb::pb::store::StoreService_Stub& stub) {
+  dingodb::pb::store::DestroyRegionRequest request;
+  dingodb::pb::store::DestroyRegionResponse response;
+
+  request.set_region_id(FLAGS_region_id);
+
+  stub.DestroyRegion(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+  }
+
+  if (FLAGS_log_each_request) {
+    LOG(INFO) << " request=" << request.ShortDebugString() << " response=" << response.ShortDebugString()
+              << " latency=" << cntl.latency_us() << "us";
   }
 }
 
@@ -159,11 +299,29 @@ void* sender(void* arg) {
     if (FLAGS_method == "AddRegion") {
       sendAddRegion(cntl, stub);
 
+    } else if (FLAGS_method == "ChangeRegion") {
+      sendAddRegion(cntl, stub);
+
+    } else if (FLAGS_method == "DestroyRegion") {
+      sendAddRegion(cntl, stub);
+
     } else if (FLAGS_method == "KvPut") {
       sendKvPut(cntl, stub);
 
+    } else if (FLAGS_method == "KvBatchPut") {
+      sendKvBatchPut(cntl, stub);
+
+    } else if (FLAGS_method == "KvPutIfAbsent") {
+      sendKvPutIfAbsent(cntl, stub);
+
+    } else if (FLAGS_method == "KvBatchPutIfAbsent") {
+      sendKvBatchPutIfAbsent(cntl, stub);
+
     } else if (FLAGS_method == "KvGet") {
       sendKvGet(cntl, stub);
+
+    } else if (FLAGS_method == "KvBatchGet") {
+      sendKvBatchGet(cntl, stub);
     }
 
     g_latency_recorder << cntl.latency_us();

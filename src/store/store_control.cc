@@ -33,18 +33,21 @@ pb::error::Errno ValidateAddRegion(std::shared_ptr<StoreMetaManager> store_meta_
 pb::error::Errno StoreControl::AddRegion(std::shared_ptr<Context> ctx, std::shared_ptr<pb::common::Region> region) {
   auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
 
-  // valiate region
+  // Valiate region
   auto errcode = ValidateAddRegion(store_meta_manager, region);
   if (errcode != pb::error::OK) {
     return errcode;
   }
 
   // Add raft node
-  auto engine = Server::GetInstance()->GetEngine(pb::common::ENG_RAFT_STORE);
+  auto engine = std::dynamic_pointer_cast<RaftKvEngine>(Server::GetInstance()->GetEngine(pb::common::ENG_RAFT_STORE));
   if (engine == nullptr) {
     return pb::error::ESTORE_NOTEXIST_RAFTENGINE;
   }
-  engine->AddRegion(ctx, region);
+  errcode = engine->AddRegion(ctx, region);
+  if (errcode != pb::error::OK) {
+    return errcode;
+  }
 
   // Add region to store region meta manager
   store_meta_manager->AddRegion(region);
@@ -68,7 +71,7 @@ pb::error::Errno StoreControl::ChangeRegion(std::shared_ptr<Context> ctx, std::s
     return peers;
   };
 
-  auto engine = Server::GetInstance()->GetEngine(pb::common::ENG_RAFT_STORE);
+  auto engine = std::dynamic_pointer_cast<RaftKvEngine>(Server::GetInstance()->GetEngine(pb::common::ENG_RAFT_STORE));
   if (engine == nullptr) {
     return pb::error::ESTORE_NOTEXIST_RAFTENGINE;
   }
@@ -82,7 +85,7 @@ pb::error::Errno StoreControl::DeleteRegion(std::shared_ptr<Context> ctx, uint64
   // Check region status
 
   // Shutdown raft node
-  auto engine = Server::GetInstance()->GetEngine(pb::common::ENG_RAFT_STORE);
+  auto engine = std::dynamic_pointer_cast<RaftKvEngine>(Server::GetInstance()->GetEngine(pb::common::ENG_RAFT_STORE));
   if (engine == nullptr) {
     return pb::error::ESTORE_NOTEXIST_RAFTENGINE;
   }
