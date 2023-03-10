@@ -17,6 +17,7 @@
 #include <sys/types.h>
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -29,9 +30,101 @@
 
 namespace dingodb {
 
-CoordinatorControl::CoordinatorControl() {
+CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, std::shared_ptr<MetaWriter> meta_writer)
+    : meta_reader_(meta_reader), meta_writer_(meta_writer) {
   bthread_mutex_init(&control_mutex_, nullptr);
   root_schema_writed_to_raft_ = false;
+
+  coordinator_meta_ = new MetaMapStorage<pb::coordinator_internal::CoordinatorInternal>(&coordinator_map_);
+  store_meta_ = new MetaMapStorage<pb::common::Store>(&store_map_);
+  schema_meta_ = new MetaMapStorage<pb::meta::Schema>(&schema_map_);
+  region_meta_ = new MetaMapStorage<pb::common::Region>(&region_map_);
+  table_meta_ = new MetaMapStorage<pb::coordinator_internal::TableInternal>(&table_map_);
+  id_epoch_meta_ = new MetaMapStorage<pb::coordinator_internal::IdEpochInternal>(&id_epoch_map_);
+}
+
+CoordinatorControl::~CoordinatorControl() {
+  delete coordinator_meta_;
+  delete store_meta_;
+  delete schema_meta_;
+  delete region_meta_;
+  delete table_meta_;
+}
+
+bool CoordinatorControl::Recover() {
+  BAIDU_SCOPED_LOCK(control_mutex_);
+
+  std::vector<pb::common::KeyValue> kvs;
+
+  LOG(INFO) << "Coordinator start to Recover";
+
+  // coordinator map
+  if (!meta_reader_->Scan(coordinator_meta_->Prefix(), kvs)) {
+    return false;
+  }
+
+  if (!coordinator_meta_->Recover(kvs)) {
+    return false;
+  }
+  LOG(INFO) << "Recover coordinator_meta, count=" << kvs.size();
+  kvs.clear();
+
+  // store map
+  if (!meta_reader_->Scan(store_meta_->Prefix(), kvs)) {
+    return false;
+  }
+
+  if (!store_meta_->Recover(kvs)) {
+    return false;
+  }
+  LOG(INFO) << "Recover store_meta, count=" << kvs.size();
+  kvs.clear();
+
+  // schema map
+  if (!meta_reader_->Scan(schema_meta_->Prefix(), kvs)) {
+    return false;
+  }
+
+  if (!schema_meta_->Recover(kvs)) {
+    return false;
+  }
+  LOG(INFO) << "Recover schema_meta, count=" << kvs.size();
+  kvs.clear();
+
+  // region map
+  if (!meta_reader_->Scan(region_meta_->Prefix(), kvs)) {
+    return false;
+  }
+
+  if (!region_meta_->Recover(kvs)) {
+    return false;
+  }
+  LOG(INFO) << "Recover region_meta, count=" << kvs.size();
+  kvs.clear();
+
+  // table map
+  if (!meta_reader_->Scan(table_meta_->Prefix(), kvs)) {
+    return false;
+  }
+
+  if (!table_meta_->Recover(kvs)) {
+    return false;
+  }
+  LOG(INFO) << "Recover table_meta, count=" << kvs.size();
+  kvs.clear();
+
+  // id_epoch map
+  if (!meta_reader_->Scan(id_epoch_meta_->Prefix(), kvs)) {
+    return false;
+  }
+
+  if (!id_epoch_meta_->Recover(kvs)) {
+    return false;
+  }
+  LOG(INFO) << "Recover id_epoch_meta, count=" << kvs.size();
+  kvs.clear();
+
+  return true;
 }
 
 void CoordinatorControl::GenerateRootSchemas(pb::meta::Schema& root_schema, pb::meta::Schema& meta_schema,
@@ -95,7 +188,7 @@ void CoordinatorControl::GenerateRootSchemasMetaIncrement(pb::meta::Schema& root
 }
 
 // TODO: load data from raft_kv_engine
-void CoordinatorControl::Init() {
+bool CoordinatorControl::Init() {
   next_coordinator_id_ = 1;
   next_store_id_ = 1;
   next_region_id_ = 1;
@@ -119,8 +212,14 @@ void CoordinatorControl::Init() {
     schema_map_.insert(std::make_pair(1, meta_schema));   // raft_kv_put
     schema_map_.insert(std::make_pair(2, dingo_schema));  // raft_kv_put
 
+    // write to rocksdb
+    auto const schema_kvs = schema_meta_->TransformToKvWithAll();
+    meta_writer_->Put(schema_kvs);
+
     LOG(INFO) << "init schema_map_ finished";
   }
+
+  return true;
 }
 
 uint64_t CoordinatorControl::CreateCoordinatorId(pb::coordinator_internal::MetaIncrement& meta_increment) {

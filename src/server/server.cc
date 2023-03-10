@@ -27,6 +27,7 @@
 #include "common/helper.h"
 #include "config/config.h"
 #include "config/config_manager.h"
+#include "coordinator/coordinator_control.h"
 #include "engine/engine.h"
 #include "engine/mem_engine.h"
 #include "engine/raft_kv_engine.h"
@@ -163,6 +164,17 @@ bool Server::InitStoreMetaManager() {
   store_meta_manager_ =
       std::make_shared<StoreMetaManager>(std::make_shared<MetaReader>(engine), std::make_shared<MetaWriter>(engine));
   return store_meta_manager_->Init();
+}
+
+bool Server::InitCoordinatorControl() {
+  auto engine = engines_[pb::common::ENG_ROCKSDB];
+  coordinator_control_ =
+      std::make_shared<CoordinatorControl>(std::make_shared<MetaReader>(engine), std::make_shared<MetaWriter>(engine));
+
+  if (!coordinator_control_->Recover()) {
+    return false;
+  }
+  return coordinator_control_->Init();
 }
 
 bool Server::InitCrontabManager() {

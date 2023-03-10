@@ -26,6 +26,7 @@
 #include "meta/meta_writer.h"
 #include "meta/transform_kv_able.h"
 #include "proto/common.pb.h"
+#include "proto/coordinator_internal.pb.h"
 
 namespace dingodb {
 
@@ -67,7 +68,11 @@ class CoordinatorMap {
     LOG(INFO) << "coordinator server meta";
     return true;
   }
-  bool Recover(const std::vector<pb::common::KeyValue>& /*kvs*/) { return true; }
+
+  bool Recover(const std::vector<pb::common::KeyValue>& kvs) {
+    TransformFromKv(kvs);
+    return true;
+  }
 
   bool IsExist(uint64_t id) {
     std::shared_lock<std::shared_mutex> lock(mutex_);
@@ -118,7 +123,7 @@ class CoordinatorMap {
     for (const auto& it : elements_) {
       std::shared_ptr<pb::common::KeyValue> kv = std::make_shared<pb::common::KeyValue>();
       kv->set_key(GenKey(it.first));
-      kv->set_value(it.second->SerializeAsString());
+      kv->set_value(it.second.SerializeAsString());
       kvs.push_back(kv);
     }
 
@@ -129,8 +134,8 @@ class CoordinatorMap {
     std::unique_lock<std::shared_mutex> lock(mutex_);
     for (const auto& kv : kvs) {
       uint64_t id = ParseId(kv.key());
-      std::shared_ptr<T> element = std::make_shared<T>();
-      element->ParsePartialFromArray(kv.value().data(), kv.value().size());
+      T element;
+      element.ParsePartialFromArray(kv.value().data(), kv.value().size());
       elements_.insert_or_assign(id, element);
     }
   };
@@ -142,7 +147,7 @@ class CoordinatorMap {
   // Protect regions_ concurrent access.
   std::shared_mutex mutex_;
   // Coordinator all region meta data in this server.
-  std::map<uint64_t, std::shared_ptr<T>> elements_;
+  std::map<uint64_t, T> elements_;
 };
 
 // Manage store server meta data, like store and region.
@@ -157,12 +162,6 @@ class CoordinatorMetaManager {
 
   std::shared_ptr<pb::common::Coordinator> GetCoordinatorServerMeta();
 
-  bool IsExistRegion(uint64_t region_id);
-  std::shared_ptr<pb::common::Region> GetRegion(uint64_t region_id);
-  std::map<uint64_t, std::shared_ptr<pb::common::Region>> GetAllRegion();
-  void AddRegion(std::shared_ptr<pb::common::Region> region);
-  void DeleteRegion(uint64_t region_id);
-
   CoordinatorMetaManager(const CoordinatorMetaManager&) = delete;
   void operator=(const CoordinatorMetaManager&) = delete;
 
@@ -174,8 +173,13 @@ class CoordinatorMetaManager {
 
   // Coordinator server meta data, like id/state/endpoint etc.
   std::unique_ptr<CoordinatorServerMeta> server_meta_;
-  // Coordinator manage region meta data.
-  std::unique_ptr<CoordinatorMap<int>> region_meta_;
+
+  // Coordinator maps
+  std::unique_ptr<CoordinatorMap<pb::coordinator_internal::CoordinatorInternal>> coordinator_meta_;
+  std::unique_ptr<CoordinatorMap<pb::common::Store>> store_meta_;
+  std::unique_ptr<CoordinatorMap<pb::meta::Schema>> schema_meta_;
+  std::unique_ptr<CoordinatorMap<pb::common::Region>> region_meta_;
+  std::unique_ptr<CoordinatorMap<pb::coordinator_internal::TableInternal>> table_meta_;
 };
 
 }  // namespace dingodb

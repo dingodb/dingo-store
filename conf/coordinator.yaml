@@ -33,4 +33,5 @@ store:
   columnFamilies:
     - default
     - instruction
+    - meta
   collectStatsInterval: 5
