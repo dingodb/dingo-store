@@ -49,11 +49,7 @@ class RocksIterator : public EngineIterator {
       : iter_(iter), begin_key_(begin_key), end_key_(end_key) {
     Start(begin_key);
   }
-  void Start(const std::string& key) {
-    if (!key.empty()) {
-      iter_->Seek(key);
-    }
-  }
+  void Start(const std::string& key) { iter_->Seek(key); }
 
   bool HasNext() override {
     bool ret = iter_->Valid();
@@ -98,11 +94,11 @@ class RocksReader : public EngineReader {
  public:
   explicit RocksReader(rocksdb::TransactionDB* txn_db, rocksdb::ColumnFamilyHandle* handle,
                        const rocksdb::WriteOptions& write_options)
-      : txn_db_(txn_db), handle_(handle), write_options_(write_options) {
-    snapshot_ = nullptr;
-    txn_ = nullptr;
+      : txn_db_(txn_db), handle_(handle), write_options_(write_options), txn_(nullptr) {
+    snapshot_ = txn_db_->GetSnapshot();
   }
 
+#if 0
   bool BeginTransaction() {
     rocksdb::TransactionOptions txn_options;
     txn_options.set_snapshot = true;
@@ -117,6 +113,7 @@ class RocksReader : public EngineReader {
 
     return true;
   }
+#endif
 
   std::shared_ptr<EngineIterator> Scan(const std::string& begin_key, const std::string& end_key) override {
     rocksdb::ReadOptions read_options;
@@ -644,28 +641,34 @@ pb::error::Errno RocksEngine::KvScan(std::shared_ptr<Context> ctx, const std::st
     return pb::error::ECONTEXT;
   }
 
-  if (start_key.empty()) {
-    LOG(ERROR) << butil::StringPrintf("begin_key empty  not support");
-    return pb::error::Errno::EKEY_EMPTY;
-  }
-
-  if (end_key.empty()) {
-    LOG(ERROR) << butil::StringPrintf("end_key empty  not support");
-    return pb::error::Errno::EKEY_EMPTY;
-  }
-
-  auto iter = column_familys_.find(ctx->cf_name());
+  const std::string& cf = ctx->cf_name();
+  auto iter = column_familys_.find(cf);
   if (iter == column_familys_.end()) {
-    LOG(ERROR) << butil::StringPrintf("column family : %s not found", ctx->cf_name().c_str());
+    LOG(ERROR) << butil::StringPrintf("column family : %s not found", cf.c_str());
     return pb::error::Errno::ESTORE_INVALID_CF;
   }
 
+// cancel  transaction because we only read
+#if 0
+  rocksdb::TransactionOptions txn_options;
+  txn_options.set_snapshot = true;
+
+  std::unique_ptr<rocksdb::Transaction> utxn(txn_db_->BeginTransaction(iter->second.GetWriteOptions(), txn_options));
+#endif
+  const rocksdb::Snapshot* snapshot = txn_db_->GetSnapshot();
+#if 0
+  if (utxn) {
+    LOG(ERROR) << butil::StringPrintf("rocksdb::TransactionDB::BeginTransaction failed");
+    return pb::error::Errno::EINTERNAL;
+  }
+#endif
   rocksdb::ReadOptions read_options;
   read_options.snapshot = txn_db_->GetSnapshot();
 
   std::string_view end_key_view(end_key);
   rocksdb::Iterator* it = txn_db_->NewIterator(read_options, iter->second.GetHandle());
-  for (it->Seek(start_key); it->Valid() && it->key().ToStringView() < end_key_view; it->Next()) {
+  for (it->Seek(start_key); it->Valid() && (end_key_view.empty() || it->key().ToStringView() < end_key_view);
+       it->Next()) {
     pb::common::KeyValue kv;
     kv.set_key(it->key().data(), it->key().size());
     kv.set_value(it->value().data(), it->value().size());
@@ -687,33 +690,47 @@ pb::error::Errno RocksEngine::KvCount(std::shared_ptr<Context> ctx, const std::s
     return pb::error::Errno::ECONTEXT;
   }
 
-  if (start_key.empty()) {
-    LOG(ERROR) << butil::StringPrintf("start_key empty  not support");
-    return pb::error::Errno::EKEY_EMPTY;
-  }
-
-  if (end_key.empty()) {
-    LOG(ERROR) << butil::StringPrintf("end_key empty  not support");
-    return pb::error::Errno::EKEY_EMPTY;
-  }
-
-  auto iter = column_familys_.find(ctx->cf_name());
+  const std::string& cf = ctx->cf_name();
+  auto iter = column_familys_.find(cf);
   if (iter == column_familys_.end()) {
-    LOG(ERROR) << butil::StringPrintf("column family : %s not found", ctx->cf_name().c_str());
+    LOG(ERROR) << butil::StringPrintf("column family : %s not found", cf.c_str());
     return pb::error::Errno::ESTORE_INVALID_CF;
   }
 
-  rocksdb::ReadOptions read_options;
-  read_options.snapshot = txn_db_->GetSnapshot();
-
   count = 0;
-  std::string_view end_key_view(end_key);
-  rocksdb::Iterator* it = txn_db_->NewIterator(read_options, iter->second.GetHandle());
-  for (it->Seek(start_key); it->Valid() && it->key().ToStringView() < end_key_view; it->Next()) {
+
+#if 0
+  rocksdb::TransactionOptions txn_options;
+  txn_options.set_snapshot = true;
+
+  std::unique_ptr<rocksdb::Transaction> utxn(txn_db_->BeginTransaction(iter->second.GetWriteOptions(), txn_options));
+
+  if (!utxn) {
+    LOG(ERROR) << butil::StringPrintf("rocksdb::TransactionDB::BeginTransaction failed");
+    return pb::error::Errno::EINTERNAL;
+  }
+#endif
+
+  const rocksdb::Snapshot* snapshot = txn_db_->GetSnapshot();
+  rocksdb::ReadOptions read_options;
+  read_options.snapshot = snapshot;
+
+  rocksdb::Iterator* itr = txn_db_->NewIterator(read_options, iter->second.GetHandle());
+
+  itr->Seek(start_key);
+
+  while (itr->Valid()) {
+    const auto& key = itr->key();
+
+    if ((!end_key.empty()) && end_key <= key.ToString()) {
+      break;
+    }
+
     count++;
+    itr->Next();
   }
 
-  delete it;
+  delete itr;
   txn_db_->ReleaseSnapshot(read_options.snapshot);
 
   return pb::error::Errno::OK;
@@ -725,6 +742,7 @@ std::shared_ptr<EngineReader> RocksEngine::CreateReader(std::shared_ptr<Context>
     return {};
   }
 
+
   const std::string& cf = ctx->cf_name();
   auto iter = column_familys_.find(cf);
   if (iter == column_familys_.end()) {
@@ -735,10 +753,10 @@ std::shared_ptr<EngineReader> RocksEngine::CreateReader(std::shared_ptr<Context>
   std::shared_ptr<RocksReader> reader =
       std::make_shared<RocksReader>(txn_db_, iter->second.GetHandle(), iter->second.GetWriteOptions());
 
-  if (!reader->BeginTransaction()) {
-    LOG(ERROR) << butil::StringPrintf("RocksReader::BeginTransaction cf ; %s", cf.c_str());
-    return {};
-  }
+  // if (!reader->BeginTransaction()) {
+  //   LOG(ERROR) << butil::StringPrintf("RocksReader::BeginTransaction cf ; %s", cf.c_str());
+  //   return {};
+  // }
 
   return reader;
 }
