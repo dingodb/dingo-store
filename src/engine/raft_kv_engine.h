@@ -29,7 +29,7 @@ class RaftControlAble {
   virtual ~RaftControlAble() = default;
 
   virtual pb::error::Errno AddRegion([[maybe_unused]] std::shared_ptr<Context> ctx,
-                                     const std::shared_ptr<pb::common::Region> region) = 0;
+                                     std::shared_ptr<pb::common::Region> region) = 0;
   virtual pb::error::Errno DestroyRegion([[maybe_unused]] std::shared_ptr<Context> ctx, uint64_t region_id) = 0;
   virtual pb::error::Errno ChangeRegion([[maybe_unused]] std::shared_ptr<Context> ctx, uint64_t region_id,
                                         std::vector<pb::common::Peer> peers) = 0;

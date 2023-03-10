@@ -64,7 +64,7 @@ void StoreStateMachine::DispatchRequest(StoreClosure* done, const pb::raft::Raft
 void StoreStateMachine::HandlePutRequest([[maybe_unused]] StoreClosure* done, const pb::raft::PutRequest& request) {
   LOG(INFO) << "handlePutRequest ...";
   std::shared_ptr<Context> ctx =
-      (done != nullptr && done->get_ctx() != nullptr) ? done->get_ctx() : std::make_shared<Context>();
+      (done != nullptr && done->GetCtx() != nullptr) ? done->GetCtx() : std::make_shared<Context>();
   ctx->set_cf_name(request.cf_name());
 
   pb::error::Errno errcode = pb::error::OK;
@@ -74,30 +74,30 @@ void StoreStateMachine::HandlePutRequest([[maybe_unused]] StoreClosure* done, co
     errcode = engine_->KvBatchPut(ctx, Helper::PbRepeatedToVector(request.kvs()));
   }
 
-  if (errcode != pb::error::OK && done != nullptr && done->get_ctx() != nullptr && !done->get_ctx()->IsSyncMode()) {
-    Helper::SetPbMessageError(errcode, "Put failed.", done->get_ctx()->response());
+  if (errcode != pb::error::OK && done != nullptr && done->GetCtx() != nullptr && !done->GetCtx()->IsSyncMode()) {
+    Helper::SetPbMessageError(errcode, "Put failed.", done->GetCtx()->response());
   }
 }
 
 void StoreStateMachine::HandlePutIfAbsentRequest(StoreClosure* done, const pb::raft::PutIfAbsentRequest& request) {
   LOG(INFO) << "handlePutIfAbsentRequest ...";
   std::shared_ptr<Context> ctx =
-      (done != nullptr && done->get_ctx() != nullptr) ? done->get_ctx() : std::make_shared<Context>();
+      (done != nullptr && done->GetCtx() != nullptr) ? done->GetCtx() : std::make_shared<Context>();
   ctx->set_cf_name(request.cf_name());
 
   if (request.kvs().size() == 1) {
     auto errcode = engine_->KvPutIfAbsent(ctx, request.kvs().Get(0));
-    if (errcode != pb::error::OK && done != nullptr && done->get_ctx() != nullptr) {
-      Helper::SetPbMessageError(errcode, "Put if absent failed.", done->get_ctx()->response());
+    if (errcode != pb::error::OK && done != nullptr && done->GetCtx() != nullptr) {
+      Helper::SetPbMessageError(errcode, "Put if absent failed.", done->GetCtx()->response());
     }
   } else {
     std::vector<std::string> put_keys;
     auto errcode = engine_->KvBatchPutIfAbsentNonAtomic(ctx, Helper::PbRepeatedToVector(request.kvs()), put_keys);
-    if (done != nullptr && done->get_ctx() != nullptr) {
+    if (done != nullptr && done->GetCtx() != nullptr) {
       if (errcode != pb::error::OK) {
-        Helper::SetPbMessageError(errcode, "Batch put if absent failed.", done->get_ctx()->response());
+        Helper::SetPbMessageError(errcode, "Batch put if absent failed.", done->GetCtx()->response());
       } else {
-        auto response = dynamic_cast<pb::store::KvBatchPutIfAbsentResponse*>(done->get_ctx()->response());
+        auto response = dynamic_cast<pb::store::KvBatchPutIfAbsentResponse*>(done->GetCtx()->response());
         for (auto& key : put_keys) {
           response->add_put_keys(key);
         }

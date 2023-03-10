@@ -143,7 +143,7 @@ pb::error::Errno RaftKvEngine::KvPut(std::shared_ptr<Context> ctx, const pb::com
     return pb::error::ERAFT_NOTNODE;
   }
 
-  return node->Commit(ctx, genRaftCmdRequest(ctx, kv));
+  return node->Commit(ctx, GenRaftCmdRequest(ctx, kv));
 
   // ctx->EnableSyncMode();
   // ctx->Cond()->IncreaseWait();
@@ -159,10 +159,10 @@ pb::error::Errno RaftKvEngine::KvPut(std::shared_ptr<Context> ctx, const pb::com
 //     LOG(ERROR) << "Not found raft node " << ctx->region_id();
 //     return pb::error::ERAFT_NOTNODE;
 //   }
-//   return node->Commit(ctx, genRaftCmdRequest(ctx, kv));
+//   return node->Commit(ctx, GenRaftCmdRequest(ctx, kv));
 // }
 
-std::shared_ptr<pb::raft::RaftCmdRequest> genRaftCmdRequest(const std::shared_ptr<Context> ctx,
+std::shared_ptr<pb::raft::RaftCmdRequest> GenRaftCmdRequest(const std::shared_ptr<Context> ctx,
                                                             const std::vector<pb::common::KeyValue>& kvs) {
   std::shared_ptr<pb::raft::RaftCmdRequest> raft_cmd = std::make_shared<pb::raft::RaftCmdRequest>();
 
