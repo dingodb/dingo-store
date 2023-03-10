@@ -53,7 +53,7 @@ MetaStateMachine::MetaStateMachine(std::shared_ptr<Engine> engine) : engine_(eng
 void MetaStateMachine::DispatchRequest(MetaClosure* done, const pb::raft::RaftCmdRequest& raft_cmd) {
   for (const auto& req : raft_cmd.requests()) {
     switch (req.cmd_type()) {
-      case pb::raft::CmdType::META_CREATE_SCHEMA:
+      case pb::raft::CmdType::META_WRITE:
         // HandleCreateSchema(done, request);
         break;
       default:
