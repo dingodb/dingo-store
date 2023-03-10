@@ -123,7 +123,7 @@ uint64_t StoreRegionMeta::ParseRegionId(const std::string& str) {
     return 0;
   }
 
-  std::string s(str.c_str() + prefix_.size());
+  std::string s(str.c_str() + prefix_.size() + 1);
   try {
     return std::stoull(s, nullptr, 10);
   } catch (std::invalid_argument& e) {
@@ -246,6 +246,7 @@ std::map<uint64_t, std::shared_ptr<pb::common::Region> > StoreMetaManager::GetAl
 }
 
 void StoreMetaManager::AddRegion(const std::shared_ptr<pb::common::Region> region) {
+  LOG(INFO) << "StoreMeta add region, region_id " << region->id();
   region_meta_->AddRegion(region);
   meta_writer_->Put(region_meta_->TransformToKv(region));
 }

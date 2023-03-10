@@ -24,7 +24,21 @@
 
 namespace dingodb {
 
-class RaftKvEngine : public Engine {
+class RaftControlAble {
+ public:
+  virtual ~RaftControlAble() = default;
+
+  virtual pb::error::Errno AddRegion([[maybe_unused]] std::shared_ptr<Context> ctx,
+                                     const std::shared_ptr<pb::common::Region> region) = 0;
+  virtual pb::error::Errno DestroyRegion([[maybe_unused]] std::shared_ptr<Context> ctx, uint64_t region_id) = 0;
+  virtual pb::error::Errno ChangeRegion([[maybe_unused]] std::shared_ptr<Context> ctx, uint64_t region_id,
+                                        std::vector<pb::common::Peer> peers) = 0;
+
+ protected:
+  RaftControlAble() = default;
+};
+
+class RaftKvEngine : public Engine, public RaftControlAble {
  public:
   RaftKvEngine(std::shared_ptr<Engine> engine);
   ~RaftKvEngine() override;
@@ -45,6 +59,7 @@ class RaftKvEngine : public Engine {
                               std::vector<pb::common::KeyValue>& kvs) override;
 
   pb::error::Errno KvPut(std::shared_ptr<Context> ctx, const pb::common::KeyValue& kv) override;
+  // pb::error::Errno KvAsyncPut(std::shared_ptr<Context> ctx, const pb::common::KeyValue& kv) override;
   pb::error::Errno KvBatchPut(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs) override;
 
   pb::error::Errno KvScan(std::shared_ptr<Context> ctx, const std::string& start_key, const std::string& end_key,

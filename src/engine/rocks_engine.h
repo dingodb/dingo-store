@@ -80,8 +80,6 @@ class RocksEngine : public Engine {
 
   pb::error::Errno KvDeleteRange(std::shared_ptr<Context> ctx, const pb::common::Range& range) override;
 
-  pb::error::Errno KvWriteBatch(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& puts) override;
-
   // read range When the amount of data is relatively small.
   // CreateReader may be better
   // [begin_key, end_key)
@@ -190,7 +188,7 @@ class RocksEngine : public Engine {
     rocksdb::ColumnFamilyHandle* handle_;
   };
 
-  std::map<std::string, ColumnFamily> cfs_;
+  std::map<std::string, ColumnFamily> column_familys_;
 
   static const std::string& kDbPath;
   static const std::string& kColumnFamilies;

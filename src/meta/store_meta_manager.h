@@ -95,6 +95,7 @@ class StoreRegionMeta : public TransformKvAble {
 
   uint64_t ParseRegionId(const std::string& str);
   std::string GenKey(uint64_t region_id) override;
+
   std::shared_ptr<pb::common::KeyValue> TransformToKv(uint64_t region_id) override;
   std::shared_ptr<pb::common::KeyValue> TransformToKv(std::shared_ptr<pb::common::Region> region) override;
   std::vector<std::shared_ptr<pb::common::KeyValue> > TransformToKvtWithDelta() override;

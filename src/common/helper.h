@@ -74,32 +74,11 @@ class Helper {
     }
   }
 
-  static std::string Increment(const std::string& input) {
-    std::string ret(input.size(), 0);
-    int carry = 1;
-    for (int i = input.size() - 1; i >= 0; --i) {
-      if (input[i] == 0xFF && carry == 1) {
-        ret[i] = 0;
-      } else {
-        ret[i] = (input[i] + carry);
-        carry = 0;
-      }
-    }
+  static std::string Increment(const std::string& input);
 
-    return (carry == 0) ? ret : input;
-  }
+  static std::string StringToHex(const std::string& str);
 
-  static std::string StringToHex(const std::string& str) {
-    std::string result = "0x";
-    std::string tmp;
-    std::stringstream ss;
-    for (int i = 0; i < str.size(); i++) {
-      ss << std::hex << int(str[i]) << std::endl;
-      ss >> tmp;
-      result += tmp;
-    }
-    return result;
-  }
+  static void SetPbMessageError(int errcode, const std::string& errmsg, google::protobuf::Message* message);
 };
 
 }  // namespace dingodb

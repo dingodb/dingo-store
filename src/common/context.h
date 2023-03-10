@@ -18,6 +18,7 @@
 #include <string>
 
 #include "brpc/controller.h"
+#include "common/synchronization.h"
 #include "proto/common.pb.h"
 #include "proto/store.pb.h"
 
@@ -34,7 +35,8 @@ class Context {
         directly_delete_(false),
         delete_files_in_range_(false),
         flush_(false),
-        role_(pb::common::ClusterRole::STORE) {}
+        role_(pb::common::ClusterRole::STORE),
+        enable_sync_(false) {}
   Context(brpc::Controller* cntl, google::protobuf::Closure* done)
       : cntl_(cntl),
         done_(done),
@@ -44,7 +46,8 @@ class Context {
         directly_delete_(false),
         delete_files_in_range_(false),
         flush_(false),
-        role_(pb::common::ClusterRole::STORE) {}
+        role_(pb::common::ClusterRole::STORE),
+        enable_sync_(false) {}
   Context(brpc::Controller* cntl, google::protobuf::Closure* done, google::protobuf::Message* response)
       : cntl_(cntl),
         done_(done),
@@ -54,7 +57,8 @@ class Context {
         directly_delete_(false),
         delete_files_in_range_(false),
         flush_(false),
-        role_(pb::common::ClusterRole::STORE) {}
+        role_(pb::common::ClusterRole::STORE),
+        enable_sync_(false) {}
   ~Context() = default;
 
   brpc::Controller* cntl() { return cntl_; }
@@ -96,6 +100,17 @@ class Context {
   pb::common::ClusterRole ClusterRole() { return role_; }
   void SetClusterRole(pb::common::ClusterRole role) { role_ = role; }
 
+  void EnableSyncMode() {
+    enable_sync_ = true;
+    cond_ = std::make_shared<BthreadCond>();
+  }
+
+  bool IsSyncMode() { return enable_sync_; }
+
+  std::shared_ptr<BthreadCond> Cond() { return cond_; }
+  butil::Status Status() { return status_; }
+  void SetStatus(butil::Status& status) { status_ = status; }
+
  private:
   // brpc framework free resource
   brpc::Controller* cntl_;
@@ -113,8 +128,13 @@ class Context {
   bool flush_;
   // role
   pb::common::ClusterRole role_;
+
+  // For sync mode
+  bool enable_sync_;
+  butil::Status status_;
+  std::shared_ptr<BthreadCond> cond_;
 };
 
 }  // namespace dingodb
 
-#endif
+#endif  // DINGODB_COMMON_CONTEXT_H_

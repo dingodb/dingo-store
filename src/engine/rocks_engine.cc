@@ -177,7 +177,7 @@ static const char* kMaxBytesForLevelBase = "max_bytes_for_level_base";
 static const char* kTargetFileSizeBase = "target_file_size_base";
 
 RocksEngine::RocksEngine()
-    : type_(pb::common::Engine::ENG_ROCKSDB), name_("ROCKS_ENGINE"), txn_db_(nullptr), cfs_({}) {}
+    : type_(pb::common::Engine::ENG_ROCKSDB), name_("ROCKS_ENGINE"), txn_db_(nullptr), column_familys_({}) {}
 
 RocksEngine::~RocksEngine() { Close(); }
 
@@ -243,8 +243,8 @@ pb::error::Errno RocksEngine::KvGet(std::shared_ptr<Context> ctx, const std::str
   }
 
   const std::string& cf = ctx->cf_name();
-  auto iter = cfs_.find(cf);
-  if (iter == cfs_.end()) {
+  auto iter = column_familys_.find(cf);
+  if (iter == column_familys_.end()) {
     LOG(ERROR) << butil::StringPrintf("column family : %s not found", cf.c_str());
     return pb::error::ESTORE_INVALID_CF;
   }
@@ -283,8 +283,8 @@ pb::error::Errno RocksEngine::KvBatchGet(std::shared_ptr<Context> ctx, const std
   }
 
   const std::string& cf = ctx->cf_name();
-  auto iter = cfs_.find(cf);
-  if (iter == cfs_.end()) {
+  auto iter = column_familys_.find(cf);
+  if (iter == column_familys_.end()) {
     LOG(ERROR) << butil::StringPrintf("column family : %s not found", cf.c_str());
     return pb::error::ESTORE_INVALID_CF;
   }
@@ -318,11 +318,9 @@ pb::error::Errno RocksEngine::KvPut(std::shared_ptr<Context> ctx, const pb::comm
     return pb::error::Errno::EKEY_EMPTY;
   }
 
-  // allow value emtpy
-
   const std::string& cf = ctx->cf_name();
-  auto iter = cfs_.find(cf);
-  if (iter == cfs_.end()) {
+  auto iter = column_familys_.find(cf);
+  if (iter == column_familys_.end()) {
     LOG(ERROR) << butil::StringPrintf("column family : %s not found", cf.c_str());
     return pb::error::Errno::ESTORE_INVALID_CF;
   }
@@ -343,7 +341,51 @@ pb::error::Errno RocksEngine::KvPut(std::shared_ptr<Context> ctx, const pb::comm
 }
 
 pb::error::Errno RocksEngine::KvBatchPut(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs) {
-  return KvWriteBatch(ctx, kvs);
+  if (!ctx) {
+    LOG(ERROR) << butil::StringPrintf("ctx nullptr  not support");
+    return pb::error::ECONTEXT;
+  }
+
+  if (kvs.empty()) {
+    LOG(ERROR) << butil::StringPrintf("keys empty not support");
+    return pb::error::EKEY_EMPTY;
+  }
+
+  for (const auto& kv : kvs) {
+    if (kv.key().empty()) {
+      LOG(ERROR) << butil::StringPrintf("key empty not support");
+      return pb::error::EKEY_EMPTY;
+    }
+  }
+
+  const std::string& cf = ctx->cf_name();
+  auto iter = column_familys_.find(cf);
+  if (iter == column_familys_.end()) {
+    LOG(ERROR) << butil::StringPrintf("column family : %s not found", cf.c_str());
+    return pb::error::Errno::ESTORE_INVALID_CF;
+  }
+
+  rocksdb::WriteBatch batch;
+  for (const auto& kv : kvs) {
+    rocksdb::Status s = batch.Put(iter->second.GetHandle(), kv.key(), kv.value());
+    if (!s.ok()) {
+      LOG(ERROR) << butil::StringPrintf("rocksdb::WriteBatch::Put failed : %s", s.ToString().c_str());
+      return pb::error::Errno::EINTERNAL;
+    }
+  }
+
+  rocksdb::Status s = txn_db_->Write(iter->second.GetWriteOptions(), &batch);
+  if (!s.ok()) {
+    LOG(ERROR) << butil::StringPrintf("rocksdb::TransactionDB::Write failed : %s", s.ToString().c_str());
+    return pb::error::Errno::EINTERNAL;
+  }
+
+  if (ctx->flush()) {
+    rocksdb::FlushOptions option;
+    txn_db_->Flush(option, iter->second.GetHandle());
+  }
+
+  return pb::error::Errno::OK;
 }
 
 pb::error::Errno RocksEngine::KvPutIfAbsent(std::shared_ptr<Context> ctx, const pb::common::KeyValue& kv) {
@@ -389,8 +431,8 @@ pb::error::Errno RocksEngine::KvBatchPutIfAbsent(std::shared_ptr<Context> ctx,
   }
 
   const std::string& cf = ctx->cf_name();
-  auto iter = cfs_.find(cf);
-  if (iter == cfs_.end()) {
+  auto iter = column_familys_.find(cf);
+  if (iter == column_familys_.end()) {
     LOG(ERROR) << butil::StringPrintf("column family : %s not found", cf.c_str());
     return pb::error::Errno::ESTORE_INVALID_CF;
   }
@@ -464,46 +506,46 @@ pb::error::Errno RocksEngine::KvCompareAndSet(std::shared_ptr<Context> ctx, cons
     return pb::error::Errno::EKEY_EMPTY;
   }
 
-  const std::string& cf = ctx->cf_name();
-  auto iter = cfs_.find(cf);
-  if (iter == cfs_.end()) {
-    LOG(ERROR) << butil::StringPrintf("column family : %s not found", cf.c_str());
+  auto iter = column_familys_.find(ctx->cf_name());
+  if (iter == column_familys_.end()) {
+    LOG(ERROR) << butil::StringPrintf("column family : %s not found", ctx->cf_name().c_str());
     return pb::error::Errno::ESTORE_INVALID_CF;
   }
 
-  std::unique_ptr<rocksdb::Transaction> utxn(txn_db_->BeginTransaction(iter->second.GetWriteOptions()));
-
-  if (!utxn) {
+  std::unique_ptr<rocksdb::Transaction> txn(txn_db_->BeginTransaction(iter->second.GetWriteOptions()));
+  if (!txn) {
     LOG(ERROR) << butil::StringPrintf("rocksdb::TransactionDB::BeginTransaction failed");
     return pb::error::Errno::EINTERNAL;
   }
 
-  std::string value_old;
-
   // other read will failed
-  rocksdb::Status s = utxn->GetForUpdate(iter->second.GetReadOptions(), iter->second.GetHandle(),
-                                         rocksdb::Slice(kv.key().data(), kv.key().size()), &value_old);
+  std::string old_value;
+  rocksdb::Status s = txn->GetForUpdate(iter->second.GetReadOptions(), iter->second.GetHandle(),
+                                        rocksdb::Slice(kv.key().data(), kv.key().size()), &old_value);
   if (!s.ok()) {
     if (!s.IsNotFound() || !kv.value().empty()) {
+      txn->Rollback();
       LOG(ERROR) << butil::StringPrintf("rocksdb::TransactionDB::GetForUpdate failed : %s", s.ToString().c_str());
       return pb::error::Errno::EINTERNAL;
     }
   }
 
-  if (kv.value() != value_old) {
+  if (kv.value() != old_value) {
+    txn->Rollback();
     LOG(WARNING) << butil::StringPrintf("rocksdb::TransactionDB::GetForUpdate value is not equal");
     return pb::error::Errno::EINTERNAL;
   }
 
   // write a key in this transaction
-  s = utxn->Put(iter->second.GetHandle(), rocksdb::Slice(kv.key().data(), kv.key().size()),
-                rocksdb::Slice(value.data(), value.size()));
+  s = txn->Put(iter->second.GetHandle(), rocksdb::Slice(kv.key().data(), kv.key().size()),
+               rocksdb::Slice(value.data(), value.size()));
   if (!s.ok()) {
+    txn->Rollback();
     LOG(ERROR) << butil::StringPrintf("rocksdb::TransactionDB::Put failed : %s", s.ToString().c_str());
     return pb::error::Errno::EINTERNAL;
   }
 
-  s = utxn->Commit();
+  s = txn->Commit();
   if (!s.ok()) {
     LOG(ERROR) << butil::StringPrintf("rocksdb::TransactionDB::Commit failed : %s", s.ToString().c_str());
     return pb::error::Errno::EINTERNAL;
@@ -524,8 +566,8 @@ pb::error::Errno RocksEngine::KvDelete(std::shared_ptr<Context> ctx, const std::
   }
 
   const std::string& cf = ctx->cf_name();
-  auto iter = cfs_.find(cf);
-  if (iter == cfs_.end()) {
+  auto iter = column_familys_.find(cf);
+  if (iter == column_familys_.end()) {
     LOG(ERROR) << butil::StringPrintf("column family : %s not found", cf.c_str());
     return pb::error::Errno::ESTORE_INVALID_CF;
   }
@@ -556,8 +598,8 @@ pb::error::Errno RocksEngine::KvDeleteRange(std::shared_ptr<Context> ctx, const 
   }
 
   const std::string& cf = ctx->cf_name();
-  auto iter = cfs_.find(cf);
-  if (iter == cfs_.end()) {
+  auto iter = column_familys_.find(cf);
+  if (iter == column_familys_.end()) {
     LOG(ERROR) << butil::StringPrintf("column family : %s not found", cf.c_str());
     return pb::error::Errno::ESTORE_INVALID_CF;
   }
@@ -595,58 +637,6 @@ pb::error::Errno RocksEngine::KvDeleteRange(std::shared_ptr<Context> ctx, const 
   return pb::error::Errno::OK;
 }
 
-pb::error::Errno RocksEngine::KvWriteBatch(std::shared_ptr<Context> ctx,
-                                           const std::vector<pb::common::KeyValue>& puts) {
-  if (!ctx) {
-    LOG(ERROR) << butil::StringPrintf("ctx nullptr  not support");
-    return pb::error::ECONTEXT;
-  }
-
-  if (puts.empty()) {
-    LOG(ERROR) << butil::StringPrintf("keys empty not support");
-    return pb::error::EKEY_EMPTY;
-  }
-
-  for (const auto& kv : puts) {
-    if (kv.key().empty()) {
-      LOG(ERROR) << butil::StringPrintf("key empty not support");
-      return pb::error::EKEY_EMPTY;
-    }
-  }
-
-  const std::string& cf = ctx->cf_name();
-  auto iter = cfs_.find(cf);
-  if (iter == cfs_.end()) {
-    LOG(ERROR) << butil::StringPrintf("column family : %s not found", cf.c_str());
-    return pb::error::Errno::ESTORE_INVALID_CF;
-  }
-
-  rocksdb::WriteBatch batch;
-
-  rocksdb::Status s;
-
-  for (const auto& kv : puts) {
-    s = batch.Put(iter->second.GetHandle(), kv.key(), kv.value());
-    if (!s.ok()) {
-      LOG(ERROR) << butil::StringPrintf("rocksdb::WriteBatch::Put failed : %s", s.ToString().c_str());
-      return pb::error::Errno::EINTERNAL;
-    }
-  }
-
-  s = txn_db_->Write(iter->second.GetWriteOptions(), &batch);
-  if (!s.ok()) {
-    LOG(ERROR) << butil::StringPrintf("rocksdb::TransactionDB::Write failed : %s", s.ToString().c_str());
-    return pb::error::Errno::EINTERNAL;
-  }
-
-  if (ctx->flush()) {
-    rocksdb::FlushOptions option;
-    txn_db_->Flush(option, iter->second.GetHandle());
-  }
-
-  return pb::error::Errno::OK;
-}
-
 pb::error::Errno RocksEngine::KvScan(std::shared_ptr<Context> ctx, const std::string& start_key,
                                      const std::string& end_key, std::vector<pb::common::KeyValue>& kvs) {
   if (!ctx) {
@@ -664,28 +654,14 @@ pb::error::Errno RocksEngine::KvScan(std::shared_ptr<Context> ctx, const std::st
     return pb::error::Errno::EKEY_EMPTY;
   }
 
-  const std::string& cf = ctx->cf_name();
-  auto iter = cfs_.find(cf);
-  if (iter == cfs_.end()) {
-    LOG(ERROR) << butil::StringPrintf("column family : %s not found", cf.c_str());
+  auto iter = column_familys_.find(ctx->cf_name());
+  if (iter == column_familys_.end()) {
+    LOG(ERROR) << butil::StringPrintf("column family : %s not found", ctx->cf_name().c_str());
     return pb::error::Errno::ESTORE_INVALID_CF;
   }
 
-  rocksdb::TransactionOptions txn_options;
-  txn_options.set_snapshot = true;
-
-  std::unique_ptr<rocksdb::Transaction> utxn(txn_db_->BeginTransaction(iter->second.GetWriteOptions(), txn_options));
-  const rocksdb::Snapshot* snapshot = txn_db_->GetSnapshot();
-  if (utxn) {
-    LOG(ERROR) << butil::StringPrintf("rocksdb::TransactionDB::BeginTransaction failed");
-    return pb::error::Errno::EINTERNAL;
-  }
-
   rocksdb::ReadOptions read_options;
-
-  read_options.snapshot = snapshot;
-
-  rocksdb::Iterator* itr = txn_db_->NewIterator(read_options, iter->second.GetHandle());
+  read_options.snapshot = txn_db_->GetSnapshot();
 
   std::string_view end_key_view(end_key);
   rocksdb::Iterator* it = txn_db_->NewIterator(read_options, iter->second.GetHandle());
@@ -695,26 +671,15 @@ pb::error::Errno RocksEngine::KvScan(std::shared_ptr<Context> ctx, const std::st
     kv.set_value(it->value().data(), it->value().size());
 
     kvs.emplace_back(std::move(kv));
-
-    itr->Next();
   }
 
   delete it;
-
-#if 0
   txn_db_->ReleaseSnapshot(read_options.snapshot);
-  s = txn->Commit();
-  if (!s.ok()) {
-    LOG(ERROR) << butil::StringPrintf(
-        "rocksdb::TransactionDB::Commit failed : %s", s.ToString().c_str());
-    return pb::error::Errno::EKEY_NOTFOUND;
-  }
-#endif
 
   return pb::error::Errno::OK;
 }
 
-pb::error::Errno RocksEngine::KvCount(std::shared_ptr<Context> ctx, const std::string& begin_key,
+pb::error::Errno RocksEngine::KvCount(std::shared_ptr<Context> ctx, const std::string& start_key,
                                       const std::string& end_key, int64_t& count) {
   count = -1;
   if (!ctx) {
@@ -722,8 +687,8 @@ pb::error::Errno RocksEngine::KvCount(std::shared_ptr<Context> ctx, const std::s
     return pb::error::Errno::ECONTEXT;
   }
 
-  if (begin_key.empty()) {
-    LOG(ERROR) << butil::StringPrintf("begin_key empty  not support");
+  if (start_key.empty()) {
+    LOG(ERROR) << butil::StringPrintf("start_key empty  not support");
     return pb::error::Errno::EKEY_EMPTY;
   }
 
@@ -732,58 +697,24 @@ pb::error::Errno RocksEngine::KvCount(std::shared_ptr<Context> ctx, const std::s
     return pb::error::Errno::EKEY_EMPTY;
   }
 
-  const std::string& cf = ctx->cf_name();
-  auto iter = cfs_.find(cf);
-  if (iter == cfs_.end()) {
-    LOG(ERROR) << butil::StringPrintf("column family : %s not found", cf.c_str());
+  auto iter = column_familys_.find(ctx->cf_name());
+  if (iter == column_familys_.end()) {
+    LOG(ERROR) << butil::StringPrintf("column family : %s not found", ctx->cf_name().c_str());
     return pb::error::Errno::ESTORE_INVALID_CF;
   }
 
-  count = 0;
-
-  rocksdb::TransactionOptions txn_options;
-  txn_options.set_snapshot = true;
-
-  std::unique_ptr<rocksdb::Transaction> utxn(txn_db_->BeginTransaction(iter->second.GetWriteOptions(), txn_options));
-
-  if (!utxn) {
-    LOG(ERROR) << butil::StringPrintf("rocksdb::TransactionDB::BeginTransaction failed");
-    return pb::error::Errno::EINTERNAL;
-  }
-
-  const rocksdb::Snapshot* snapshot = txn_db_->GetSnapshot();
   rocksdb::ReadOptions read_options;
-  read_options.snapshot = snapshot;
+  read_options.snapshot = txn_db_->GetSnapshot();
 
-  rocksdb::Iterator* itr = txn_db_->NewIterator(read_options, iter->second.GetHandle());
-
-  if (!begin_key.empty()) {
-    itr->Seek(begin_key);
-  }
-
-  while (itr->Valid()) {
-    const auto& key = itr->key();
-
-    if (end_key >= key.data()) {
-      break;
-    }
-
+  count = 0;
+  std::string_view end_key_view(end_key);
+  rocksdb::Iterator* it = txn_db_->NewIterator(read_options, iter->second.GetHandle());
+  for (it->Seek(start_key); it->Valid() && it->key().ToStringView() < end_key_view; it->Next()) {
     count++;
   }
 
-  delete itr;
-
-  rocksdb::Status s;
-
-#if 0
-  txn_db_->ReleaseSnapshot(snapshot);
-  s = txn->Commit();
-  if (!s.ok()) {
-    LOG(ERROR) << butil::StringPrintf(
-        "rocksdb::TransactionDB::Commit failed : %s", s.ToString().c_str());
-    return pb::error::Errno::EKEY_NOTFOUND;
-  }
-#endif
+  delete it;
+  txn_db_->ReleaseSnapshot(read_options.snapshot);
 
   return pb::error::Errno::OK;
 }
@@ -795,8 +726,8 @@ std::shared_ptr<EngineReader> RocksEngine::CreateReader(std::shared_ptr<Context>
   }
 
   const std::string& cf = ctx->cf_name();
-  auto iter = cfs_.find(cf);
-  if (iter == cfs_.end()) {
+  auto iter = column_familys_.find(cf);
+  if (iter == column_familys_.end()) {
     LOG(ERROR) << butil::StringPrintf("column family : %s not found", cf.c_str());
     return {};
   }
@@ -816,10 +747,10 @@ void RocksEngine::Close() {
   type_ = pb::common::Engine::ENG_ROCKSDB;
 
   if (txn_db_) {
-    for (const auto& [_, cf] : cfs_) {
+    for (const auto& [_, cf] : column_familys_) {
       txn_db_->DestroyColumnFamilyHandle(cf.GetHandle());
     }
-    cfs_.clear();
+    column_familys_.clear();
     delete txn_db_;
     txn_db_ = nullptr;
   }
@@ -901,7 +832,7 @@ bool RocksEngine::InitCfConfig(const std::vector<std::string>& column_family) {
   dcf_default_conf.emplace(kTargetFileSizeBase, std::make_optional(static_cast<int64_t>(67108864)));
 
   for (const auto& cf : column_family) {
-    cfs_.emplace(cf, ColumnFamily(cf, cf, dcf_default_conf, {}));
+    column_familys_.emplace(cf, ColumnFamily(cf, cf, dcf_default_conf, {}));
   }
 
   return true;
@@ -1022,7 +953,8 @@ bool RocksEngine::RocksdbInit(const std::string& db_path, const std::vector<std:
   std::vector<rocksdb::ColumnFamilyDescriptor> column_families;
   for (const auto& column_family : column_family) {
     rocksdb::ColumnFamilyOptions family_options;
-    SetCfConfiguration(cfs_[column_family].GetDefaultConf(), cfs_[column_family].GetConf(), &family_options);
+    SetCfConfiguration(column_familys_[column_family].GetDefaultConf(), column_familys_[column_family].GetConf(),
+                       &family_options);
 
     column_families.push_back(rocksdb::ColumnFamilyDescriptor(column_family, family_options));
   }
@@ -1047,7 +979,7 @@ void RocksEngine::SetColumnFamilyHandle(const std::vector<std::string>& column_f
                                         const std::vector<rocksdb::ColumnFamilyHandle*>& family_handles) {
   size_t i = 0;
   for (const auto& column_family : column_family) {
-    cfs_[column_family].SetHandle(family_handles[i++]);
+    column_familys_[column_family].SetHandle(family_handles[i++]);
   }
 }
 
@@ -1066,7 +998,7 @@ void RocksEngine::SetColumnFamilyFromConfig(const std::shared_ptr<Config>& confi
 
     CreateNewMap(base_cf_configuration, cf_configuration, new_cf_configuration);
 
-    cfs_[column_family].SetConf(new_cf_configuration);
+    column_familys_[column_family].SetConf(new_cf_configuration);
   }
 }
 

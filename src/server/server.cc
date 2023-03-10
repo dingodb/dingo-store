@@ -136,7 +136,8 @@ pb::error::Errno Server::StartMetaRegion(std::shared_ptr<Config> config, std::sh
   range->set_end_key("FFFF");
 
   LOG(INFO) << "Create Region Request:" << region->DebugString();
-  pb::error::Errno ret = kv_engine->AddRegion(ctx, region);
+  auto raft_engine = std::dynamic_pointer_cast<RaftKvEngine>(kv_engine);
+  pb::error::Errno ret = raft_engine->AddRegion(ctx, region);
   return ret;
 }
 
@@ -170,7 +171,7 @@ bool Server::InitCrontabManager() {
   crontab->func_ = Heartbeat::SendStoreHeartbeat;
   crontab->arg_ = coordinator_interaction_.get();
 
-  // crontab_manager_->AddAndRunCrontab(crontab);
+  crontab_manager_->AddAndRunCrontab(crontab);
 
   return true;
 }
