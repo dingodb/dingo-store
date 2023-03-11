@@ -33,8 +33,9 @@ namespace dingodb {
 
 class MetaControl {
  public:
+  virtual ~MetaControl() = default;
   MetaControl() = default;
-  virtual void Init() = 0;
+  virtual bool Init() = 0;
   virtual uint64_t CreateCoordinatorId(pb::coordinator_internal::MetaIncrement &meta_increment) = 0;
   virtual uint64_t CreateStoreId(pb::coordinator_internal::MetaIncrement &meta_increment) = 0;
   virtual uint64_t CreateRegionId(pb::coordinator_internal::MetaIncrement &meta_increment) = 0;

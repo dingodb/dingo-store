@@ -52,7 +52,7 @@ class Server {
   bool InitServerID();
 
   // Init storage engines;
-  bool InitEngines(MetaControl& ctl);
+  bool InitEngines();
 
   // Init coordinator interaction
   bool InitCoordinatorInteraction();

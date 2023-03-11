@@ -24,7 +24,7 @@
 
 namespace dingodb {
 
-MetaStateMachine::MetaStateMachine(std::shared_ptr<Engine> engine, MetaControl* meta_control)
+MetaStateMachine::MetaStateMachine(std::shared_ptr<Engine> engine, std::shared_ptr<MetaControl> meta_control)
     : engine_(engine), meta_control_(meta_control) {}
 
 void MetaStateMachine::DispatchRequest(bool is_leader, const pb::raft::RaftCmdRequest& raft_cmd) {
@@ -45,10 +45,10 @@ void MetaStateMachine::HandleMetaProcess(bool is_leader, const pb::raft::RaftCmd
   // std::shared_ptr<Context> const ctx = done->GetCtx();
   // brpc::ClosureGuard const done_guard(ctx->done());
 
-  CoordinatorControl* controller = dynamic_cast<CoordinatorControl*>(meta_control_);
+  // CoordinatorControl* controller = dynamic_cast<CoordinatorControl*>(meta_control_);
   if (raft_cmd.requests_size() > 0) {
     auto meta_increment = raft_cmd.requests(0).meta_req().meta_increment();
-    controller->ApplyMetaIncrement(meta_increment, is_leader);
+    meta_control_->ApplyMetaIncrement(meta_increment, is_leader);
   }
 }
 

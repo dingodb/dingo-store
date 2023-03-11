@@ -30,7 +30,7 @@ namespace dingodb {
 
 class MetaStateMachine : public braft::StateMachine {
  public:
-  MetaStateMachine(std::shared_ptr<Engine> engine, MetaControl* meta_control);
+  MetaStateMachine(std::shared_ptr<Engine> engine, std::shared_ptr<MetaControl> meta_control);
   void on_apply(braft::Iterator& iter) override;
   void on_shutdown() override;
   void on_snapshot_save(braft::SnapshotWriter* writer, braft::Closure* done) override;
@@ -49,7 +49,7 @@ class MetaStateMachine : public braft::StateMachine {
   void HandleMetaProcess(bool is_leader, const pb::raft::RaftCmdRequest& raft_cmd);
   // void HandleMetaProcess(StoreClosure* done, bool is_leader, const pb::raft::RaftCmdRequest& raft_cmd);
   std::shared_ptr<Engine> engine_;
-  MetaControl* meta_control_;
+  std::shared_ptr<MetaControl> meta_control_;
 };
 
 }  // namespace dingodb

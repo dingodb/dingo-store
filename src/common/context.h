@@ -15,6 +15,7 @@
 #ifndef DINGODB_COMMON_CONTEXT_H_
 #define DINGODB_COMMON_CONTEXT_H_
 
+#include <memory>
 #include <string>
 
 #include "brpc/controller.h"
@@ -114,9 +115,9 @@ class Context {
   std::shared_ptr<BthreadCond> Cond() { return cond_; }
   butil::Status Status() { return status_; }
   void SetStatus(butil::Status& status) { status_ = status; }
-  void SetMetaController(MetaControl* meta_ctl) { meta_ctl_ = meta_ctl; }
+  void SetMetaController(std::shared_ptr<MetaControl> meta_ctl) { meta_ctl_ = meta_ctl; }
 
-  MetaControl* GetMetaControl() { return meta_ctl_; }
+  std::shared_ptr<MetaControl> GetMetaControl() { return meta_ctl_; }
 
  private:
   // brpc framework free resource
@@ -140,7 +141,7 @@ class Context {
   bool enable_sync_;
   butil::Status status_;
   std::shared_ptr<BthreadCond> cond_;
-  MetaControl* meta_ctl_;
+  std::shared_ptr<MetaControl> meta_ctl_;
 };
 
 }  // namespace dingodb
