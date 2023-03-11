@@ -41,6 +41,8 @@ class MetaMapStorage {
  public:
   const std::string internal_prefix;
   MetaMapStorage(std::map<uint64_t, T> *elements_ptr) : internal_prefix(typeid(T).name()), elements_(elements_ptr){};
+  MetaMapStorage(std::map<uint64_t, T> *elements_ptr, const std::string &prefix)
+      : internal_prefix(prefix), elements_(elements_ptr){};
   ~MetaMapStorage() = default;
 
   std::string Prefix() { return internal_prefix; }
@@ -89,10 +91,18 @@ class MetaMapStorage {
     return TransformToKv(it->second);
   };
 
-  std::shared_ptr<pb::common::KeyValue> TransformToKv(std::shared_ptr<T> element) {
+  std::shared_ptr<pb::common::KeyValue> TransformToKv(T element) {
     std::shared_ptr<pb::common::KeyValue> kv = std::make_shared<pb::common::KeyValue>();
-    kv->set_key(GenKey(element->id()));
-    kv->set_value(element->SerializeAsString());
+    kv->set_key(GenKey(element.id()));
+    kv->set_value(element.SerializeAsString());
+
+    return kv;
+  }
+
+  pb::common::KeyValue TransformToKvValue(T element) {
+    pb::common::KeyValue kv;
+    kv.set_key(GenKey(element.id()));
+    kv.set_value(element.SerializeAsString());
 
     return kv;
   }
@@ -135,14 +145,19 @@ class MetaMapStorage {
 class CoordinatorControl : public MetaControl {
  public:
   CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, std::shared_ptr<MetaWriter> meta_writer);
-  ~CoordinatorControl();
+  ~CoordinatorControl() override;
   bool Recover();
-  static void GenerateRootSchemas(pb::meta::Schema &root_schema, pb::meta::Schema &meta_schema,
-                                  pb::meta::Schema &dingo_schema);
-  static void GenerateRootSchemasMetaIncrement(pb::meta::Schema &root_schema, pb::meta::Schema &meta_schema,
-                                               pb::meta::Schema &dingo_schema,
+  static void GenerateRootSchemas(pb::coordinator_internal::SchemaInternal &root_schema,
+                                  pb::coordinator_internal::SchemaInternal &meta_schema,
+                                  pb::coordinator_internal::SchemaInternal &dingo_schema);
+  static void GenerateRootSchemasMetaIncrement(pb::coordinator_internal::SchemaInternal &root_schema,
+                                               pb::coordinator_internal::SchemaInternal &meta_schema,
+                                               pb::coordinator_internal::SchemaInternal &dingo_schema,
                                                pb::coordinator_internal::MetaIncrement &meta_increment);
-  void Init() override;
+  bool Init() override;
+  bool IsLeader() override;
+  void SetLeader() override;
+  void SetNotLeader() override;
 
   // create region
   // in: resource_tag
@@ -206,48 +221,48 @@ class CoordinatorControl : public MetaControl {
 
   // get coordinator_map
   void GetCoordinatorMap(uint64_t cluster_id, uint64_t &epoch, pb::common::Location &leader_location,
-                         std::vector<pb::common::Location> &locations) const override;
+                         std::vector<pb::common::Location> &locations) override;
 
   // on_apply callback
   // leader do need update next_xx_id, so leader call this function with update_ids=false
   void ApplyMetaIncrement(pb::coordinator_internal::MetaIncrement &meta_increment, bool update_ids) override;
 
+  // get next id/epoch
+  uint64_t GetNextId(const pb::coordinator_internal::IdEpochType &key,
+                     pb::coordinator_internal::MetaIncrement &meta_increment);
+
+  // get present id/epoch
+  uint64_t GetPresentId(const pb::coordinator_internal::IdEpochType &key);
+
  private:
   // mutex
   bthread_mutex_t control_mutex_;
 
-  // global ids
-  uint64_t next_coordinator_id_;
-  uint64_t next_store_id_;
-  uint64_t next_region_id_;
-
-  uint64_t next_schema_id_;
-  uint64_t next_table_id_;
-  uint64_t next_partition_id_;
+  // // global ids
+  // uint64_t next_coordinator_id_;
+  // uint64_t next_store_id_;
+  // uint64_t next_schema_id_;
+  // uint64_t next_region_id_;
+  // uint64_t next_table_id_;
 
   // coordinators
-  uint64_t coordinator_map_epoch_;
   std::map<uint64_t, pb::coordinator_internal::CoordinatorInternal> coordinator_map_;
   MetaMapStorage<pb::coordinator_internal::CoordinatorInternal> *coordinator_meta_;
 
   // stores
-  uint64_t store_map_epoch_;
   std::map<uint64_t, pb::common::Store> store_map_;
   MetaMapStorage<pb::common::Store> *store_meta_;
 
   // schemas
-  uint64_t schema_map_epoch_;
-  std::map<uint64_t, pb::meta::Schema> schema_map_;
-  MetaMapStorage<pb::meta::Schema> *schema_meta_;
+  std::map<uint64_t, pb::coordinator_internal::SchemaInternal> schema_map_;
+  MetaMapStorage<pb::coordinator_internal::SchemaInternal> *schema_meta_;
 
   // regions
-  uint64_t region_map_epoch_;
   std::map<uint64_t, pb::common::Region> region_map_;
   MetaMapStorage<pb::common::Region> *region_meta_;
 
   // tables
   // TableInternal is combination of Table & TableDefinition
-  uint64_t table_map_epoch_;
   std::map<uint64_t, pb::coordinator_internal::TableInternal> table_map_;
   MetaMapStorage<pb::coordinator_internal::TableInternal> *table_meta_;
 
@@ -263,6 +278,9 @@ class CoordinatorControl : public MetaControl {
   std::shared_ptr<MetaReader> meta_reader_;
   // Write meta data to persistence storage.
   std::shared_ptr<MetaWriter> meta_writer_;
+
+  // node is leader or not
+  std::atomic<bool> is_leader_;
 };
 
 }  // namespace dingodb
