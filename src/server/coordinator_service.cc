@@ -60,12 +60,12 @@ void CoordinatorServiceImpl::CreateStore(google::protobuf::RpcController *contro
   } else {
     brpc::Controller *brpc_controller = static_cast<brpc::Controller *>(controller);
     brpc_controller->SetFailed(pb::error::EILLEGAL_PARAMTETERS, "Need legal cluster_id");
+    return;
   }
 
-  std::shared_ptr<CreateStoreClosure> meta_create_store_closure =
-      std::make_shared<CreateStoreClosure>(request, response, done_guard.release());
+  CreateStoreClosure *meta_create_store_closure = new CreateStoreClosure(request, response, done_guard.release());
   std::shared_ptr<Context> ctx =
-      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_create_store_closure.get());
+      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_create_store_closure);
   ctx->set_region_id(Constant::kCoordinatorRegionId);
   ctx->SetMetaController(static_cast<MetaControl *>(coordinator_control));
 
