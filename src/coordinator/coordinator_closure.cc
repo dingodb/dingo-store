@@ -15,11 +15,5 @@
 #include "coordinator/coordinator_closure.h"
 
 #include "braft/util.h"
-#include "brpc/closure_guard.h"
 
-namespace dingodb {
-
-void CreateStoreClosure::Run() { brpc::ClosureGuard done_guard(done_); }
-
-}  // namespace dingodb
-
+namespace dingodb {}  // namespace dingodb

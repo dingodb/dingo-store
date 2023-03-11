@@ -36,7 +36,7 @@ void CoordinatorServiceImpl::Hello(google::protobuf::RpcController * /*controlle
   brpc::ClosureGuard done_guard(done);
   LOG(INFO) << "Hello request: " << request->hello();
 
-  if (!this->coordinator_control->IsLeader()) {
+  if (!this->coordinator_control_->IsLeader()) {
     return RedirectResponse(response);
   }
 
@@ -52,7 +52,7 @@ void CoordinatorServiceImpl::CreateStore(google::protobuf::RpcController *contro
   LOG(INFO) << "CreateStore request cluster_id = : " << request->cluster_id();
   LOG(INFO) << request->DebugString();
 
-  if (!this->coordinator_control->IsLeader()) {
+  if (!this->coordinator_control_->IsLeader()) {
     return RedirectResponse(response);
   }
 
@@ -61,7 +61,7 @@ void CoordinatorServiceImpl::CreateStore(google::protobuf::RpcController *contro
   // create store
   uint64_t store_id = 0;
   std::string password;
-  int ret = this->coordinator_control->CreateStore(request->cluster_id(), store_id, password, meta_increment);
+  int ret = this->coordinator_control_->CreateStore(request->cluster_id(), store_id, password, meta_increment);
   if (ret == 0) {
     response->set_store_id(store_id);
     response->set_password(password);
@@ -71,7 +71,12 @@ void CoordinatorServiceImpl::CreateStore(google::protobuf::RpcController *contro
     return;
   }
 
-  CreateStoreClosure *meta_create_store_closure = new CreateStoreClosure(request, response, done_guard.release());
+  // prepare for raft process
+  CoordinatorClosure<pb::coordinator::CreateStoreRequest, pb::coordinator::CreateStoreResponse>
+      *meta_create_store_closure =
+          new CoordinatorClosure<pb::coordinator::CreateStoreRequest, pb::coordinator::CreateStoreResponse>(
+              request, response, done_guard.release());
+
   std::shared_ptr<Context> ctx =
       std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_create_store_closure);
   ctx->set_region_id(Constant::kCoordinatorRegionId);
@@ -80,7 +85,7 @@ void CoordinatorServiceImpl::CreateStore(google::protobuf::RpcController *contro
   engine_->MetaPut(ctx, meta_increment);
 }
 
-void CoordinatorServiceImpl::StoreHeartbeat(google::protobuf::RpcController * /*controller*/,
+void CoordinatorServiceImpl::StoreHeartbeat(google::protobuf::RpcController *controller,
                                             const pb::coordinator::StoreHeartbeatRequest *request,
                                             pb::coordinator::StoreHeartbeatResponse *response,
                                             google::protobuf::Closure *done) {
@@ -90,9 +95,9 @@ void CoordinatorServiceImpl::StoreHeartbeat(google::protobuf::RpcController * /*
 
   LOG(INFO) << request->DebugString();
 
-  if (!this->coordinator_control->IsLeader()) {
+  if (!this->coordinator_control_->IsLeader()) {
     pb::common::Location leader_location;
-    this->coordinator_control->GetLeaderLocation(leader_location);
+    this->coordinator_control_->GetLeaderLocation(leader_location);
 
     auto *error_in_response = response->mutable_error();
     error_in_response->mutable_leader_location()->CopyFrom(leader_location);
@@ -103,7 +108,7 @@ void CoordinatorServiceImpl::StoreHeartbeat(google::protobuf::RpcController * /*
   pb::coordinator_internal::MetaIncrement meta_increment;
 
   // update store map
-  int new_storemap_epoch = this->coordinator_control->UpdateStoreMap(request->store(), meta_increment);
+  int new_storemap_epoch = this->coordinator_control_->UpdateStoreMap(request->store(), meta_increment);
 
   // update region map
   LOG(INFO) << " region size = " << request->regions_size();
@@ -112,18 +117,32 @@ void CoordinatorServiceImpl::StoreHeartbeat(google::protobuf::RpcController * /*
   for (int i = 0; i < request->regions_size(); i++) {
     regions.push_back(request->regions(i));
   }
-  int new_regionmap_epoch = this->coordinator_control->UpdateRegionMap(regions, meta_increment);
+  uint64_t new_regionmap_epoch = this->coordinator_control_->UpdateRegionMap(regions, meta_increment);
 
-  // setup response
-  LOG(INFO) << "set epoch id to response " << new_storemap_epoch << " " << new_regionmap_epoch;
-  response->set_storemap_epoch(new_storemap_epoch);
-  response->set_regionmap_epoch(new_regionmap_epoch);
+  // prepare for raft process
+  CoordinatorClosure<pb::coordinator::StoreHeartbeatRequest, pb::coordinator::StoreHeartbeatResponse>
+      *meta_create_store_closure =
+          new CoordinatorClosure<pb::coordinator::StoreHeartbeatRequest, pb::coordinator::StoreHeartbeatResponse>(
+              request, response, done_guard.release(), new_regionmap_epoch, new_storemap_epoch,
+              this->coordinator_control_);
 
-  auto *new_regionmap = response->mutable_regionmap();
-  this->coordinator_control->GetRegionMap(*new_regionmap);
+  std::shared_ptr<Context> ctx =
+      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_create_store_closure);
+  ctx->set_region_id(Constant::kCoordinatorRegionId);
 
-  auto *new_storemap = response->mutable_storemap();
-  this->coordinator_control->GetStoreMap(*new_storemap);
+  // this is a async operation will be block by closure
+  engine_->MetaPut(ctx, meta_increment);
+
+  // // setup response
+  // LOG(INFO) << "set epoch id to response " << new_storemap_epoch << " " << new_regionmap_epoch;
+  // response->set_storemap_epoch(new_storemap_epoch);
+  // response->set_regionmap_epoch(new_regionmap_epoch);
+
+  // auto *new_regionmap = response->mutable_regionmap();
+  // this->coordinator_control_->GetRegionMap(*new_regionmap);
+
+  // auto *new_storemap = response->mutable_storemap();
+  // this->coordinator_control_->GetStoreMap(*new_storemap);
 
   LOG(INFO) << "end reponse build " << response->DebugString();
 }
@@ -134,14 +153,14 @@ void CoordinatorServiceImpl::GetStoreMap(google::protobuf::RpcController * /*con
                                          google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
 
-  if (!this->coordinator_control->IsLeader()) {
+  if (!this->coordinator_control_->IsLeader()) {
     return RedirectResponse(response);
   }
 
   LOG(INFO) << "GetStoreMap request: _epoch [" << request->epoch() << "]";
 
   pb::common::StoreMap storemap;
-  this->coordinator_control->GetStoreMap(storemap);
+  this->coordinator_control_->GetStoreMap(storemap);
 
   response->mutable_storemap()->CopyFrom(storemap);
   response->set_epoch(storemap.epoch());
@@ -153,14 +172,14 @@ void CoordinatorServiceImpl::GetRegionMap(google::protobuf::RpcController * /*co
                                           google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
 
-  if (!this->coordinator_control->IsLeader()) {
+  if (!this->coordinator_control_->IsLeader()) {
     return RedirectResponse(response);
   }
 
   LOG(INFO) << "GetRegionMap request: _epoch [" << request->epoch() << "]";
 
   pb::common::RegionMap regionmap;
-  this->coordinator_control->GetRegionMap(regionmap);
+  this->coordinator_control_->GetRegionMap(regionmap);
 
   response->mutable_regionmap()->CopyFrom(regionmap);
   response->set_epoch(regionmap.epoch());
@@ -176,7 +195,7 @@ void CoordinatorServiceImpl::GetCoordinatorMap(google::protobuf::RpcController *
   uint64_t epoch;
   pb::common::Location leader_location;
   std::vector<pb::common::Location> locations;
-  this->coordinator_control->GetCoordinatorMap(request->cluster_id(), epoch, leader_location, locations);
+  this->coordinator_control_->GetCoordinatorMap(request->cluster_id(), epoch, leader_location, locations);
 
   response->set_epoch(epoch);
 }

@@ -121,17 +121,5 @@ message MetaIncrement {
   repeated MetaIncrementRegion regions = 3;
   repeated MetaIncrementSchema schemas = 4;
   repeated MetaIncrementTable tables = 5;
-  repeated MetaIncrementIdEpoch idepochs = 16;
-
-  uint64 coordinator_map_epoch = 6;
-  uint64 store_map_epoch = 7;
-  uint64 region_map_epoch = 8;
-  uint64 schema_map_epoch = 9;
-  uint64 table_map_epoch = 10;
-
-  uint64 next_coordinator_id = 11;
-  uint64 next_store_id = 12;
-  uint64 next_region_id = 13;
-  uint64 next_schema_id = 14;
-  uint64 next_table_id = 15;
+  repeated MetaIncrementIdEpoch idepochs = 6;
 }

@@ -15,28 +15,72 @@
 #ifndef DINGODB_COORDINATOR_CLOSURE_H__
 #define DINGODB_COORDINATOR_CLOSURE_H__
 
+#include <cstdint>
+#include <memory>
+
 #include "braft/util.h"
+#include "brpc/closure_guard.h"
+#include "coordinator/coordinator_control.h"
 #include "proto/coordinator.pb.h"
 
 namespace dingodb {
 
-using CreateStoreRequest = pb::coordinator::CreateStoreRequest;
-using CreateStoreRespone = pb::coordinator::CreateStoreResponse;
-
-class CreateStoreClosure : public braft::Closure {
+template <typename REQ, typename RESP>
+class CoordinatorClosure : public braft::Closure {
  public:
-  CreateStoreClosure(const CreateStoreRequest* request, CreateStoreRespone* response, google::protobuf::Closure* done)
+  CoordinatorClosure(const REQ* request, RESP* response, google::protobuf::Closure* done)
       : request_(request), response_(response), done_(done) {}
-  ~CreateStoreClosure() override = default;
+  ~CoordinatorClosure() override = default;
 
-  const CreateStoreRequest* request() const { return request_; }  // NOLINT
-  CreateStoreRespone* response() const { return response_; }      // NOLINT
-  void Run() override;
+  const REQ* request() const { return request_; }  // NOLINT
+  RESP* response() const { return response_; }     // NOLINT
+  void Run() override { brpc::ClosureGuard done_guard(done_); }
 
  private:
-  const CreateStoreRequest* request_;
-  CreateStoreRespone* response_;
+  const REQ* request_;
+  RESP* response_;
   google::protobuf::Closure* done_;
+};
+
+template <>
+class CoordinatorClosure<pb::coordinator::StoreHeartbeatRequest, pb::coordinator::StoreHeartbeatResponse>
+    : public braft::Closure {
+ public:
+  CoordinatorClosure(const pb::coordinator::StoreHeartbeatRequest* request,
+                     pb::coordinator::StoreHeartbeatResponse* response, google::protobuf::Closure* done,
+                     uint64_t new_regionmap_epoch, uint64_t new_storemap_epoch,
+                     std::shared_ptr<CoordinatorControl> coordinator_control)
+      : request_(request),
+        response_(response),
+        done_(done),
+        coordinator_control_(coordinator_control),
+        new_regionmap_epoch_(new_regionmap_epoch),
+        new_storemap_epoch_(new_storemap_epoch) {}
+  ~CoordinatorClosure() override = default;
+
+  const pb::coordinator::StoreHeartbeatRequest* request() const { return request_; }  // NOLINT
+  pb::coordinator::StoreHeartbeatResponse* response() const { return response_; }     // NOLINT
+
+  void Run() override {
+    auto* new_regionmap = response()->mutable_regionmap();
+    coordinator_control_->GetRegionMap(*new_regionmap);
+
+    auto* new_storemap = response()->mutable_storemap();
+    coordinator_control_->GetStoreMap(*new_storemap);
+
+    response()->set_storemap_epoch(new_storemap_epoch_);
+    response()->set_regionmap_epoch(new_regionmap_epoch_);
+
+    brpc::ClosureGuard done_guard(done_);
+  }
+
+ private:
+  const pb::coordinator::StoreHeartbeatRequest* request_;
+  pb::coordinator::StoreHeartbeatResponse* response_;
+  google::protobuf::Closure* done_;
+  uint64_t new_regionmap_epoch_;
+  uint64_t new_storemap_epoch_;
+  std::shared_ptr<CoordinatorControl> coordinator_control_;
 };
 
 }  // namespace dingodb

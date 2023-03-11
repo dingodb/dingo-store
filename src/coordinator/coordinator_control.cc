@@ -142,65 +142,69 @@ void CoordinatorControl::GenerateRootSchemas(pb::coordinator_internal::SchemaInt
   root_schema_internal.set_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
   auto* root_schema = root_schema_internal.mutable_schema();
   root_schema->set_name("root");
-  auto* schema_id = root_schema->mutable_id();
-  schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
-  schema_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
-  schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
+  auto* root_schema_id = root_schema->mutable_id();
+  root_schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
+  root_schema_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
+  root_schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
 
   // meta schema
   // pb::meta::Schema meta_schema;
   meta_schema_internal.set_id(::dingodb::pb::meta::ReservedSchemaIds::META_SCHEMA);
   auto* meta_schema = meta_schema_internal.mutable_schema();
-  schema_id = meta_schema->mutable_id();
+  auto* meta_schema_id = meta_schema->mutable_id();
   meta_schema->set_name("meta");
-  schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
-  schema_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
-  schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::META_SCHEMA);
+  meta_schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
+  meta_schema_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
+  meta_schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::META_SCHEMA);
 
-  auto* sub_schema_id = root_schema->add_schema_ids();
-  sub_schema_id->CopyFrom(*schema_id);
+  auto* sub_schema_id_meta = root_schema->add_schema_ids();
+  sub_schema_id_meta->CopyFrom(*meta_schema_id);
 
   // dingo schema
   // pb::meta::Schema dingo_schema;
   dingo_schema_internal.set_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
-  auto* dingo_schema = meta_schema_internal.mutable_schema();
+  auto* dingo_schema = dingo_schema_internal.mutable_schema();
   dingo_schema->set_name("dingo");
-  schema_id = dingo_schema->mutable_id();
-  schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
-  schema_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
-  schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+  auto* dingo_schema_id = dingo_schema->mutable_id();
+  dingo_schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
+  dingo_schema_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
+  dingo_schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
 
-  sub_schema_id = root_schema->add_schema_ids();
-  sub_schema_id->CopyFrom(*schema_id);
+  auto* sub_schema_id_dingo = root_schema->add_schema_ids();
+  sub_schema_id_dingo->CopyFrom(*dingo_schema_id);
+
+  LOG(INFO) << "GenerateRootSchemas 0[" << root_schema_internal.DebugString();
+  LOG(INFO) << "GenerateRootSchemas 1[" << meta_schema_internal.DebugString();
+  LOG(INFO) << "GenerateRootSchemas 2[" << dingo_schema_internal.DebugString();
 }
 
-void CoordinatorControl::GenerateRootSchemasMetaIncrement(pb::coordinator_internal::SchemaInternal& root_schema,
-                                                          pb::coordinator_internal::SchemaInternal& meta_schema,
-                                                          pb::coordinator_internal::SchemaInternal& dingo_schema,
-                                                          pb::coordinator_internal::MetaIncrement& meta_increment) {
-  // update meta_increment
-  auto* schema_increment_root = meta_increment.add_schemas();
-  auto* schema_increment_meta = meta_increment.add_schemas();
-  auto* schema_increment_dingo = meta_increment.add_schemas();
+// void CoordinatorControl::GenerateRootSchemasMetaIncrement(pb::coordinator_internal::SchemaInternal& root_schema,
+//                                                           pb::coordinator_internal::SchemaInternal& meta_schema,
+//                                                           pb::coordinator_internal::SchemaInternal& dingo_schema,
+//                                                           pb::coordinator_internal::MetaIncrement& meta_increment) {
+//   // update meta_increment
+//   auto* schema_increment_root = meta_increment.add_schemas();
+//   auto* schema_increment_meta = meta_increment.add_schemas();
+//   auto* schema_increment_dingo = meta_increment.add_schemas();
 
-  schema_increment_root->set_id(root_schema.id());
-  schema_increment_root->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
-  schema_increment_root->set_schema_id(root_schema.schema().id().parent_entity_id());
-  auto* increment_root = schema_increment_root->mutable_schema_internal();
-  increment_root->CopyFrom(root_schema);
+//   schema_increment_root->set_id(root_schema.id());
+//   schema_increment_root->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
+//   schema_increment_root->set_schema_id(root_schema.schema().id().parent_entity_id());
+//   auto* increment_root = schema_increment_root->mutable_schema_internal();
+//   increment_root->CopyFrom(root_schema);
 
-  schema_increment_meta->set_id(meta_schema.id());
-  schema_increment_meta->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
-  schema_increment_meta->set_schema_id(meta_schema.schema().id().parent_entity_id());
-  auto* increment_meta = schema_increment_meta->mutable_schema_internal();
-  increment_meta->CopyFrom(meta_schema);
+//   schema_increment_meta->set_id(meta_schema.id());
+//   schema_increment_meta->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
+//   schema_increment_meta->set_schema_id(meta_schema.schema().id().parent_entity_id());
+//   auto* increment_meta = schema_increment_meta->mutable_schema_internal();
+//   increment_meta->CopyFrom(meta_schema);
 
-  schema_increment_dingo->set_id(dingo_schema.id());
-  schema_increment_dingo->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
-  schema_increment_dingo->set_schema_id(dingo_schema.schema().id().parent_entity_id());
-  auto* increment_dingo = schema_increment_dingo->mutable_schema_internal();
-  increment_dingo->CopyFrom(dingo_schema);
-}
+//   schema_increment_dingo->set_id(dingo_schema.id());
+//   schema_increment_dingo->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
+//   schema_increment_dingo->set_schema_id(dingo_schema.schema().id().parent_entity_id());
+//   auto* increment_dingo = schema_increment_dingo->mutable_schema_internal();
+//   increment_dingo->CopyFrom(dingo_schema);
+// }
 
 // TODO: load data from raft_kv_engine
 bool CoordinatorControl::Init() {
@@ -214,7 +218,6 @@ bool CoordinatorControl::Init() {
     GenerateRootSchemas(root_schema, meta_schema, dingo_schema);
 
     // add the initial schemas to schema_map_
-    // TODO: data persistence
     schema_map_.insert(std::make_pair(0, root_schema));   // raft_kv_put
     schema_map_.insert(std::make_pair(1, meta_schema));   // raft_kv_put
     schema_map_.insert(std::make_pair(2, dingo_schema));  // raft_kv_put
@@ -307,16 +310,16 @@ int CoordinatorControl::CreateSchema(uint64_t parent_schema_id, std::string sche
   BAIDU_SCOPED_LOCK(control_mutex_);
 
   // initial schema create
-  if (!root_schema_writed_to_raft_) {
-    pb::coordinator_internal::SchemaInternal root_schema;
-    pb::coordinator_internal::SchemaInternal meta_schema;
-    pb::coordinator_internal::SchemaInternal dingo_schema;
+  // if (!root_schema_writed_to_raft_) {
+  //   pb::coordinator_internal::SchemaInternal root_schema;
+  //   pb::coordinator_internal::SchemaInternal meta_schema;
+  //   pb::coordinator_internal::SchemaInternal dingo_schema;
 
-    GenerateRootSchemas(root_schema, meta_schema, dingo_schema);
-    GenerateRootSchemasMetaIncrement(root_schema, meta_schema, dingo_schema, meta_increment);
+  //   GenerateRootSchemas(root_schema, meta_schema, dingo_schema);
+  //   GenerateRootSchemasMetaIncrement(root_schema, meta_schema, dingo_schema, meta_increment);
 
-    root_schema_writed_to_raft_ = true;
-  }
+  //   root_schema_writed_to_raft_ = true;
+  // }
 
   // validate
   if (schema_map_.find(parent_schema_id) == schema_map_.end()) {
@@ -354,9 +357,13 @@ int CoordinatorControl::CreateSchema(uint64_t parent_schema_id, std::string sche
   auto* schema_increment = meta_increment.add_schemas();
   schema_increment->set_id(new_schema_id);
   schema_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
+  schema_increment->set_schema_id(parent_schema_id);
 
   auto* schema_increment_schema = schema_increment->mutable_schema_internal();
   schema_increment_schema->CopyFrom(new_schema_internal);
+
+  // bump up schema map epoch
+  GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_SCHEMA, meta_increment);
 
   // on_apply
   //  schema_map_.insert(std::make_pair(new_schema_id, new_schema));  // raft_kv_put
@@ -376,8 +383,7 @@ uint64_t CoordinatorControl::UpdateStoreMap(const pb::common::Store& store,
                 << " new status = " << store.state();
 
       // update meta_increment
-      store_map_epoch = GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_STORE, meta_increment);
-      meta_increment.set_store_map_epoch(store_map_epoch);
+      GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_STORE, meta_increment);
       auto* store_increment = meta_increment.add_stores();
       store_increment->set_id(store.id());
       store_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
@@ -393,8 +399,7 @@ uint64_t CoordinatorControl::UpdateStoreMap(const pb::common::Store& store,
     LOG(INFO) << "NEED ADD NEW STORE store_id = " << store.id();
 
     // update meta_increment
-    store_map_epoch = GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_STORE, meta_increment);
-    meta_increment.set_store_map_epoch(store_map_epoch);
+    GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_STORE, meta_increment);
     auto* store_increment = meta_increment.add_stores();
     store_increment->set_id(store.id());
     store_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
@@ -424,8 +429,7 @@ int CoordinatorControl::CreateStore(uint64_t cluster_id, uint64_t& store_id, std
     store.set_id(store_id);
 
     // update meta_increment
-    uint64_t store_map_epoch = GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_STORE, meta_increment);
-    meta_increment.set_store_map_epoch(store_map_epoch);
+    GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_STORE, meta_increment);
     auto* store_increment = meta_increment.add_stores();
     store_increment->set_id(store_id);
     store_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
@@ -445,16 +449,16 @@ int CoordinatorControl::CreateStore(uint64_t cluster_id, uint64_t& store_id, std
 int CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta::TableDefinition& table_definition,
                                     uint64_t& new_table_id, pb::coordinator_internal::MetaIncrement& meta_increment) {
   // initial schema create
-  if (!root_schema_writed_to_raft_) {
-    pb::coordinator_internal::SchemaInternal root_schema;
-    pb::coordinator_internal::SchemaInternal meta_schema;
-    pb::coordinator_internal::SchemaInternal dingo_schema;
+  // if (!root_schema_writed_to_raft_) {
+  //   pb::coordinator_internal::SchemaInternal root_schema;
+  //   pb::coordinator_internal::SchemaInternal meta_schema;
+  //   pb::coordinator_internal::SchemaInternal dingo_schema;
 
-    GenerateRootSchemas(root_schema, meta_schema, dingo_schema);
-    GenerateRootSchemasMetaIncrement(root_schema, meta_schema, dingo_schema, meta_increment);
+  //   GenerateRootSchemas(root_schema, meta_schema, dingo_schema);
+  //   GenerateRootSchemasMetaIncrement(root_schema, meta_schema, dingo_schema, meta_increment);
 
-    root_schema_writed_to_raft_ = true;
-  }
+  //   root_schema_writed_to_raft_ = true;
+  // }
 
   // validate schema_id is existed
   if (schema_map_.find(schema_id) == schema_map_.end()) {
@@ -524,6 +528,9 @@ int CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta::TableDef
   {
     BAIDU_SCOPED_LOCK(control_mutex_);
 
+    // bumper up EPOCH_REGION
+    GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_REGION, meta_increment);
+
     // create table_internal, set id & table_definition
     pb::coordinator_internal::TableInternal table_internal;
     table_internal.set_id(new_table_id);
@@ -541,11 +548,11 @@ int CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta::TableDef
 
     // add table_internal to table_map_
     // update meta_increment
-    uint64_t table_map_epoch = GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_TABLE, meta_increment);
-    meta_increment.set_table_map_epoch(table_map_epoch);
+    GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_TABLE, meta_increment);
     auto* table_increment = meta_increment.add_tables();
     table_increment->set_id(new_table_id);
     table_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
+    table_increment->set_schema_id(schema_id);
 
     auto* table_increment_table = table_increment->mutable_table();
     table_increment_table->CopyFrom(table_internal);
@@ -595,6 +602,66 @@ int CoordinatorControl::DropRegion(uint64_t region_id, pb::coordinator_internal:
     LOG(ERROR) << "ERROR drop region id not exists, id = " << region_id;
     return -1;
   }
+
+  return 0;
+}
+
+// drop table
+int CoordinatorControl::DropTable(uint64_t schema_id, uint64_t table_id,
+                                  pb::coordinator_internal::MetaIncrement& meta_increment) {
+  if (schema_id < 0) {
+    LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
+    return -1;
+  }
+
+  BAIDU_SCOPED_LOCK(control_mutex_);
+
+  if (this->schema_map_.find(schema_id) == schema_map_.end()) {
+    LOG(ERROR) << "ERRROR: schema_id not found" << schema_id;
+    return -1;
+  }
+
+  if (this->table_map_.find(table_id) == table_map_.end()) {
+    LOG(ERROR) << "ERRROR: table_id not found" << table_id;
+    return -1;
+  }
+
+  // construct Table from table_internal
+  auto table_internal = table_map_.at(table_id);
+
+  bool need_delete_region = false;
+  for (int i = 0; i < table_internal.partitions_size(); i++) {
+    // part id
+    uint64_t region_id = table_internal.partitions(i).region_id();
+
+    // get region
+    if (region_map_.find(region_id) == region_map_.end()) {
+      LOG(ERROR) << "ERROR cannot find region in regionmap_ while DropTable, table_id =" << table_id
+                 << " region_id=" << region_id;
+      return -1;
+    }
+    pb::common::Region& part_region = region_map_[region_id];
+
+    auto* region_to_delete = meta_increment.add_regions();
+    region_to_delete->set_id(region_id);
+    region_to_delete->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
+    auto* region_to_delete_region = region_to_delete->mutable_region();
+    region_to_delete_region->CopyFrom(part_region);
+
+    need_delete_region = true;
+  }
+
+  // bump up region map epoch
+  GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_REGION, meta_increment);
+
+  // delete table
+  auto* table_to_delete = meta_increment.add_tables();
+  table_to_delete->set_id(table_id);
+  table_to_delete->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
+  table_to_delete->CopyFrom(table_internal);
+
+  // bump up region map epoch
+  GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_TABLE, meta_increment);
 
   return 0;
 }
@@ -778,12 +845,23 @@ void CoordinatorControl::GetSchemas(uint64_t schema_id, std::vector<pb::meta::Sc
   }
 
   auto& schema_internal = schema_map_[schema_id];
+  LOG(INFO) << " sub schema count=" << schema_internal.schema().schema_ids_size();
+
   for (int i = 0; i < schema_internal.schema().schema_ids_size(); i++) {
     int sub_schema_id = schema_internal.schema().schema_ids(i).entity_id();
+
+    LOG(INFO) << "sub_schema_id=" << sub_schema_id;
+
+    LOG(INFO) << schema_internal.schema().DebugString();
+
     if (schema_map_.find(sub_schema_id) == schema_map_.end()) {
       LOG(ERROR) << "ERRROR: sub_schema_id " << sub_schema_id << " not exists";
+      LOG(INFO) << "ERRROR: sub_schema_id " << sub_schema_id << " not exists";
       continue;
     }
+    LOG(INFO) << " schema_map_ =" << schema_map_[sub_schema_id].DebugString();
+
+    LOG(INFO) << " GetSchemas push_back sub schema id=" << sub_schema_id;
 
     schemas.push_back(schema_map_[sub_schema_id].schema());
   }
@@ -1022,13 +1100,16 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
       // update parent schema for user schemas
       if (schema.id() > pb::meta::ReservedSchemaIds::DINGO_SCHEMA) {
         if (schema_map_.find(schema.schema_id()) != schema_map_.end()) {
-          auto* new_sub_schema_id = schema_map_[schema.schema_id()].mutable_schema()->add_schema_ids();
+          auto& new_sub_schema = schema_map_[schema.schema_id()];
+          auto* new_sub_schema_id = new_sub_schema.mutable_schema()->add_schema_ids();
           new_sub_schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
           new_sub_schema_id->set_entity_id(schema.id());
           new_sub_schema_id->set_parent_entity_id(schema.schema_id());
 
+          LOG(INFO) << "3.schema map CREATE new_sub_schema id=" << schema.id() << " parent_id=" << schema.schema_id();
+
           // meta_write_kv
-          meta_write_to_kv.push_back(schema_meta_->TransformToKvValue(schema_map_[schema.schema_id()]));
+          meta_write_to_kv.push_back(schema_meta_->TransformToKvValue(new_sub_schema));
         }
       }
       schema_map_[schema.id()] = schema.schema_internal();
@@ -1095,11 +1176,14 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
       table_common_id.set_parent_entity_id(table.schema_id());
 
       if (schema_map_.find(table.schema_id()) != schema_map_.end()) {
-        auto* add_table_id = schema_map_[table.schema_id()].mutable_schema()->add_table_ids();
+        auto& schema = schema_map_[table.schema_id()];
+        auto* add_table_id = schema.mutable_schema()->add_table_ids();
         add_table_id->CopyFrom(table_common_id);
 
+        LOG(INFO) << "5.table map CREATE new_sub_table id=" << table.id() << " parent_id=" << table.schema_id();
+
         // meta_write_kv
-        meta_write_to_kv.push_back(schema_meta_->TransformToKvValue(schema_map_[table.schema_id()]));
+        meta_write_to_kv.push_back(schema_meta_->TransformToKvValue(schema));
 
       } else {
         LOG(ERROR) << " CREATE TABLE apply illegal schema_id=" << table.schema_id() << " table_id=" << table.id()
@@ -1125,11 +1209,13 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
 
   // TODO: need engine support transaction
   // write update to local engine, begin
-  if (!meta_writer_->Put(meta_write_to_kv)) {
-    LOG(INFO) << "ApplyMetaIncrement meta_write failed, exit program";
-    LOG(ERROR) << "ApplyMetaIncrement meta_write failed, exit program";
+  if (!meta_write_to_kv.empty()) {
+    if (!meta_writer_->Put(meta_write_to_kv)) {
+      LOG(INFO) << "ApplyMetaIncrement meta_write failed, exit program";
+      LOG(ERROR) << "ApplyMetaIncrement meta_write failed, exit program";
 
-    exit(-1);
+      exit(-1);
+    }
   }
 
   for (auto const& kv : meta_delete_to_kv) {
