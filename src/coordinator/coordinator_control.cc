@@ -24,6 +24,7 @@
 #include <vector>
 
 #include "butil/scoped_lock.h"
+#include "butil/strings/string_split.h"
 #include "google/protobuf/unknown_field_set.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator_internal.pb.h"
@@ -32,7 +33,7 @@
 namespace dingodb {
 
 CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, std::shared_ptr<MetaWriter> meta_writer)
-    : meta_reader_(meta_reader), meta_writer_(meta_writer) {
+    : meta_reader_(meta_reader), meta_writer_(meta_writer), is_leader_(false) {
   bthread_mutex_init(&control_mutex_, nullptr);
   root_schema_writed_to_raft_ = false;
 
@@ -241,11 +242,43 @@ uint64_t CoordinatorControl::GetPresentId(const pb::coordinator_internal::IdEpoc
   return value;
 }
 
+void CoordinatorControl::SetRaftNode(std::shared_ptr<RaftNode> raft_node) { raft_node_ = raft_node; }
+
+void CoordinatorControl::GetLeaderLocation(pb::common::Location& leader_location) {
+  if (raft_node_ == nullptr) {
+    LOG(ERROR) << "GetLeaderLocation raft_node_ is nullptr";
+    return;
+  }
+
+  // parse Location from string
+  auto leader_string = raft_node_->GetLeaderId().to_string();
+
+  std::vector<std::string> addrs;
+  butil::SplitString(leader_string, ':', &addrs);
+
+  if (addrs.size() != 3) {
+    LOG(ERROR) << "GetLeaderLocation peerid to string error " << leader_string;
+    return;
+  }
+
+  leader_location.set_host(addrs[0]);
+
+  int32_t value;
+  try {
+    value = std::stoi(addrs[1]);
+    leader_location.set_port(value);
+  } catch (const std::invalid_argument& ia) {
+    LOG(ERROR) << "GetLeaderLocation parse port error Irnvalid argument: " << ia.what() << std::endl;
+  } catch (const std::out_of_range& oor) {
+    LOG(ERROR) << "GetLeaderLocation parse port error Out of Range error: " << oor.what() << std::endl;
+  }
+}
+
 uint64_t CoordinatorControl::GetNextId(const pb::coordinator_internal::IdEpochType& key,
                                        pb::coordinator_internal::MetaIncrement& meta_increment) {
   uint64_t value = 0;
   if (id_epoch_map_.find(key) == id_epoch_map_.end()) {
-    value = 3;
+    value = 100;
     LOG(INFO) << "GetNextId key=" << key << " not found, generate new id=" << value;
   } else {
     value = id_epoch_map_[key].value();
@@ -1090,13 +1123,24 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
     }
   }
 
-  // write update to local engine
+  // TODO: need engine support transaction
+  // write update to local engine, begin
   if (!meta_writer_->Put(meta_write_to_kv)) {
     LOG(INFO) << "ApplyMetaIncrement meta_write failed, exit program";
     LOG(ERROR) << "ApplyMetaIncrement meta_write failed, exit program";
 
     exit(-1);
   }
+
+  for (auto const& kv : meta_delete_to_kv) {
+    if (!meta_writer_->Delete(kv.key())) {
+      LOG(INFO) << "ApplyMetaIncrement meta_delete failed, exit program";
+      LOG(ERROR) << "ApplyMetaIncrement meta_delete failed, exit program";
+
+      exit(-1);
+    }
+  }
+  // write update to local engine, end
 }
 
 }  // namespace dingodb

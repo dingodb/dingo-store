@@ -28,6 +28,7 @@
 #include "proto/coordinator.pb.h"
 #include "proto/coordinator_internal.pb.h"
 #include "proto/meta.pb.h"
+#include "raft/raft_node.h"
 
 namespace dingodb {
 
@@ -39,6 +40,11 @@ class MetaControl {
   virtual bool IsLeader() = 0;
   virtual void SetLeader() = 0;
   virtual void SetNotLeader() = 0;
+
+  virtual void GetLeaderLocation(pb::common::Location &leader_location) = 0;
+
+  // set raft_node to coordinator_control
+  virtual void SetRaftNode(std::shared_ptr<RaftNode> raft_node) = 0;
 
   // create region
   // in: resource_tag

@@ -90,12 +90,19 @@ int MetaStateMachine::on_snapshot_load([[maybe_unused]] braft::SnapshotReader* r
   return -1;
 }
 
-void MetaStateMachine::on_leader_start() { LOG(INFO) << "on_leader_start..."; }
+void MetaStateMachine::on_leader_start() {
+  LOG(INFO) << "on_leader_start...";
+  meta_control_->SetLeader();
+}
 
-void MetaStateMachine::on_leader_start(int64_t term) { LOG(INFO) << "on_leader_start term: " << term; }
+void MetaStateMachine::on_leader_start(int64_t term) {
+  LOG(INFO) << "on_leader_start term: " << term;
+  meta_control_->SetLeader();
+}
 
 void MetaStateMachine::on_leader_stop(const butil::Status& status) {
   LOG(INFO) << "on_leader_stop: " << status.error_code() << " " << status.error_str();
+  meta_control_->SetNotLeader();
 }
 
 void MetaStateMachine::on_error(const ::braft::Error& e) {

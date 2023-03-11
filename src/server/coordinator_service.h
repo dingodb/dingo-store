@@ -29,6 +29,16 @@ class CoordinatorServiceImpl : public pb::coordinator::CoordinatorService {
  public:
   CoordinatorServiceImpl() = default;
 
+  template <typename T>
+  void RedirectResponse(T response) {
+    pb::common::Location leader_location;
+    this->coordinator_control->GetLeaderLocation(leader_location);
+
+    auto* error_in_response = response->mutable_error();
+    error_in_response->mutable_leader_location()->CopyFrom(leader_location);
+    error_in_response->set_errcode(::dingodb::pb::error::Errno::ERAFT_NOTLEADER);
+  }
+
   void SetKvEngine(std::shared_ptr<Engine> engine) { engine_ = engine; };
   void SetControl(std::shared_ptr<CoordinatorControl> coordinator_control) {
     this->coordinator_control = coordinator_control;
@@ -51,9 +61,10 @@ class CoordinatorServiceImpl : public pb::coordinator::CoordinatorService {
                          pb::coordinator::GetCoordinatorMapResponse* response,
                          google::protobuf::Closure* done) override;
 
+  std::shared_ptr<CoordinatorControl> coordinator_control;
+
  private:
   std::shared_ptr<Engine> engine_;
-  std::shared_ptr<CoordinatorControl> coordinator_control;
 };
 
 }  // namespace dingodb

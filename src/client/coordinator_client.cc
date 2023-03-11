@@ -55,6 +55,7 @@ void SendHello(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorServ
     LOG(INFO) << "Received response"
               << " hello=" << request.hello() << " request_attachment=" << cntl.request_attachment().size()
               << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+    LOG(INFO) << response.DebugString();
   }
 }
 

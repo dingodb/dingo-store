@@ -15,6 +15,7 @@
 #ifndef DINGODB_ENGINE_RAFT_META_ENGINE_H_
 #define DINGODB_ENGINE_RAFT_META_ENGINE_H_
 
+#include "common/meta_control.h"
 #include "engine/raft_kv_engine.h"
 
 namespace dingodb {
@@ -26,7 +27,7 @@ class RaftMetaEngine : public RaftKvEngine {
   bool Init(std::shared_ptr<Config> config) override;
   bool Recover() override;
 
-  pb::error::Errno AddRegion(std::shared_ptr<Context> ctx, std::shared_ptr<pb::common::Region> region) override;
+  pb::error::Errno InitCoordinatorRegion(std::shared_ptr<Context> ctx, std::shared_ptr<pb::common::Region> region);
 
   pb::error::Errno MetaPut(std::shared_ptr<Context> ctx, const pb::coordinator_internal::MetaIncrement& meta) override;
 

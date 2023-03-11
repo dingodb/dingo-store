@@ -67,14 +67,6 @@ pb::error::Errno RaftKvEngine::AddRegion(std::shared_ptr<Context> ctx,
   braft::StateMachine* state_machine = nullptr;
   state_machine = new StoreStateMachine(engine_);
 
-  // if (ctx->ClusterRole() == pb::common::ClusterRole::STORE) {
-  //   state_machine = new StoreStateMachine(engine_);
-  // } else if (ctx->ClusterRole() == pb::common::ClusterRole::COORDINATOR) {
-  //   state_machine = new MetaStateMachine(engine_, meta_control_);
-  // } else {
-  //   LOG(ERROR) << "AddRegion ClusterRole illegal " << ctx->ClusterRole();
-  // }
-
   std::shared_ptr<RaftNode> node = std::make_shared<RaftNode>(
       ctx->ClusterRole(), region->id(), braft::PeerId(Server::GetInstance()->RaftEndpoint()), state_machine);
 

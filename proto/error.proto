@@ -62,5 +62,7 @@ message Error {
   Errno errcode = 1;
   string errmsg = 2;
 
+  dingodb.pb.common.Location leader_location = 3;
+
   NotLeader not_leader = 10;
 }

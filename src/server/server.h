@@ -69,9 +69,6 @@ class Server {
   // Init store control
   bool InitStoreControl();
 
-  // Init coordinator control
-  bool InitCoordinatorControl();
-
   pb::error::Errno StartMetaRegion(std::shared_ptr<Config> config, std::shared_ptr<Engine> kv_engine);
 
   // Recover server state, include store/region/raft.

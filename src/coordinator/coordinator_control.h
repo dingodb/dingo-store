@@ -17,6 +17,7 @@
 
 #include <cstdint>
 #include <map>
+#include <memory>
 #include <shared_mutex>
 #include <string>
 #include <vector>
@@ -33,6 +34,7 @@
 #include "proto/coordinator.pb.h"
 #include "proto/coordinator_internal.pb.h"
 #include "proto/meta.pb.h"
+#include "raft/raft_node.h"
 
 namespace dingodb {
 
@@ -159,6 +161,8 @@ class CoordinatorControl : public MetaControl {
   void SetLeader() override;
   void SetNotLeader() override;
 
+  void GetLeaderLocation(pb::common::Location &leader_location) override;
+
   // create region
   // in: resource_tag
   // out: new region id
@@ -234,6 +238,9 @@ class CoordinatorControl : public MetaControl {
   // get present id/epoch
   uint64_t GetPresentId(const pb::coordinator_internal::IdEpochType &key);
 
+  // set raft_node to coordinator_control
+  void SetRaftNode(std::shared_ptr<RaftNode> raft_node) override;
+
  private:
   // mutex
   bthread_mutex_t control_mutex_;
@@ -281,6 +288,11 @@ class CoordinatorControl : public MetaControl {
 
   // node is leader or not
   std::atomic<bool> is_leader_;
+
+  // raft node
+  std::shared_ptr<RaftNode> raft_node_;
+
+  uint64_t test_;
 };
 
 }  // namespace dingodb

@@ -36,6 +36,10 @@ void CoordinatorServiceImpl::Hello(google::protobuf::RpcController * /*controlle
   brpc::ClosureGuard done_guard(done);
   LOG(INFO) << "Hello request: " << request->hello();
 
+  if (!this->coordinator_control->IsLeader()) {
+    return RedirectResponse(response);
+  }
+
   response->set_state(static_cast<pb::common::CoordinatorState>(0));
   response->set_status_detail("OK");
 }
@@ -47,6 +51,10 @@ void CoordinatorServiceImpl::CreateStore(google::protobuf::RpcController *contro
   brpc::ClosureGuard done_guard(done);
   LOG(INFO) << "CreateStore request cluster_id = : " << request->cluster_id();
   LOG(INFO) << request->DebugString();
+
+  if (!this->coordinator_control->IsLeader()) {
+    return RedirectResponse(response);
+  }
 
   pb::coordinator_internal::MetaIncrement meta_increment;
 
@@ -67,8 +75,6 @@ void CoordinatorServiceImpl::CreateStore(google::protobuf::RpcController *contro
   std::shared_ptr<Context> ctx =
       std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_create_store_closure);
   ctx->set_region_id(Constant::kCoordinatorRegionId);
-  // ctx->SetMetaController(static_cast<MetaControl *>(coordinator_control));
-  ctx->SetMetaController(coordinator_control);
 
   // this is a async operation will be block by closure
   engine_->MetaPut(ctx, meta_increment);
@@ -83,6 +89,16 @@ void CoordinatorServiceImpl::StoreHeartbeat(google::protobuf::RpcController * /*
             << request->self_regionmap_epoch() << "]";
 
   LOG(INFO) << request->DebugString();
+
+  if (!this->coordinator_control->IsLeader()) {
+    pb::common::Location leader_location;
+    this->coordinator_control->GetLeaderLocation(leader_location);
+
+    auto *error_in_response = response->mutable_error();
+    error_in_response->mutable_leader_location()->CopyFrom(leader_location);
+    error_in_response->set_errcode(::dingodb::pb::error::Errno::ERAFT_NOTLEADER);
+    return;
+  }
 
   pb::coordinator_internal::MetaIncrement meta_increment;
 
@@ -117,6 +133,11 @@ void CoordinatorServiceImpl::GetStoreMap(google::protobuf::RpcController * /*con
                                          pb::coordinator::GetStoreMapResponse *response,
                                          google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
+
+  if (!this->coordinator_control->IsLeader()) {
+    return RedirectResponse(response);
+  }
+
   LOG(INFO) << "GetStoreMap request: _epoch [" << request->epoch() << "]";
 
   pb::common::StoreMap storemap;
@@ -131,6 +152,11 @@ void CoordinatorServiceImpl::GetRegionMap(google::protobuf::RpcController * /*co
                                           pb::coordinator::GetRegionMapResponse *response,
                                           google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
+
+  if (!this->coordinator_control->IsLeader()) {
+    return RedirectResponse(response);
+  }
+
   LOG(INFO) << "GetRegionMap request: _epoch [" << request->epoch() << "]";
 
   pb::common::RegionMap regionmap;

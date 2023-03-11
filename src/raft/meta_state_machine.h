@@ -21,6 +21,8 @@
 #include "braft/raft.h"
 #include "brpc/controller.h"
 #include "common/context.h"
+#include "common/meta_control.h"
+#include "coordinator/coordinator_control.h"
 #include "engine/engine.h"
 #include "proto/common.pb.h"
 #include "proto/raft.pb.h"
