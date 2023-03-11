@@ -96,6 +96,20 @@ bool Server::InitEngines() {
 
   // cooridnator use RaftMetaEngine
   if (role_ == pb::common::ClusterRole::COORDINATOR) {
+    // init CoordinatorController
+    coordinator_control_ = std::make_shared<CoordinatorControl>(std::make_shared<MetaReader>(rock_engine),
+                                                                std::make_shared<MetaWriter>(rock_engine));
+
+    if (!coordinator_control_->Recover()) {
+      LOG(ERROR) << "coordinator_control_->Recover Failed";
+      return false;
+    }
+    if (!coordinator_control_->Init()) {
+      LOG(ERROR) << "coordinator_control_->Init Failed";
+      return false;
+    }
+
+    // init raft_meta_engine
     raft_kv_engine = std::make_shared<RaftMetaEngine>(rock_engine, coordinator_control_);
   } else {
     raft_kv_engine = std::make_shared<RaftKvEngine>(rock_engine);
@@ -149,8 +163,11 @@ pb::error::Errno Server::StartMetaRegion(std::shared_ptr<Config> config, std::sh
   range->set_end_key("FFFF");
 
   LOG(INFO) << "Create Region Request:" << region->DebugString();
-  auto raft_engine = std::dynamic_pointer_cast<RaftKvEngine>(kv_engine);
-  pb::error::Errno ret = raft_engine->AddRegion(ctx, region);
+  auto raft_engine = std::dynamic_pointer_cast<RaftMetaEngine>(kv_engine);
+  pb::error::Errno ret = raft_engine->InitCoordinatorRegion(ctx, region);
+
+  // set node-manager to coordinator_control here
+
   return ret;
 }
 
@@ -171,17 +188,6 @@ bool Server::InitStoreMetaManager() {
   store_meta_manager_ =
       std::make_shared<StoreMetaManager>(std::make_shared<MetaReader>(engine), std::make_shared<MetaWriter>(engine));
   return store_meta_manager_->Init();
-}
-
-bool Server::InitCoordinatorControl() {
-  auto engine = engines_[pb::common::ENG_ROCKSDB];
-  coordinator_control_ =
-      std::make_shared<CoordinatorControl>(std::make_shared<MetaReader>(engine), std::make_shared<MetaWriter>(engine));
-
-  if (!coordinator_control_->Recover()) {
-    return false;
-  }
-  return coordinator_control_->Init();
 }
 
 bool Server::InitCrontabManager() {

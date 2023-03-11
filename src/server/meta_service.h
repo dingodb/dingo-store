@@ -28,6 +28,16 @@ class MetaServiceImpl : public pb::meta::MetaService {
  public:
   MetaServiceImpl() = default;
 
+  template <typename T>
+  void RedirectResponse(T response) {
+    pb::common::Location leader_location;
+    this->coordinator_control->GetLeaderLocation(leader_location);
+
+    auto* error_in_response = response->mutable_error();
+    error_in_response->mutable_leader_location()->CopyFrom(leader_location);
+    error_in_response->set_errcode(::dingodb::pb::error::Errno::ERAFT_NOTLEADER);
+  }
+
   void SetControl(std::shared_ptr<CoordinatorControl> coordinator_control) {
     this->coordinator_control = coordinator_control;
   };

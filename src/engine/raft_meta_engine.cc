@@ -14,6 +14,7 @@
 
 #include "engine/raft_meta_engine.h"
 
+#include <cstdint>
 #include <memory>
 
 #include "braft/raft.h"
@@ -21,6 +22,7 @@
 #include "common/helper.h"
 #include "common/synchronization.h"
 #include "config/config_manager.h"
+#include "coordinator/coordinator_control.h"
 #include "engine/raft_kv_engine.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator_internal.pb.h"
@@ -48,13 +50,12 @@ bool RaftMetaEngine::Init(std::shared_ptr<Config> config) {
 
 bool RaftMetaEngine::Recover() { return true; }
 
-pb::error::Errno RaftMetaEngine::AddRegion(std::shared_ptr<Context> ctx,
-                                           const std::shared_ptr<pb::common::Region> region) {
+pb::error::Errno RaftMetaEngine::InitCoordinatorRegion(std::shared_ptr<Context> ctx,
+                                                       const std::shared_ptr<pb::common::Region> region) {
   LOG(INFO) << "RaftkvEngine add region, region_id " << region->id();
 
   // construct MetaStatMachine here
-  braft::StateMachine* state_machine = nullptr;
-  state_machine = new MetaStateMachine(engine_, meta_control_);
+  braft::StateMachine* state_machine = new MetaStateMachine(engine_, meta_control_);
 
   std::shared_ptr<RaftNode> node = std::make_shared<RaftNode>(
       ctx->ClusterRole(), region->id(), braft::PeerId(Server::GetInstance()->RaftEndpoint()), state_machine);
@@ -65,6 +66,10 @@ pb::error::Errno RaftMetaEngine::AddRegion(std::shared_ptr<Context> ctx,
   }
 
   raft_node_manager_->AddNode(region->id(), node);
+
+  // set raft_node to coordinator_control
+  meta_control_->SetRaftNode(node);
+
   return pb::error::OK;
 }
 

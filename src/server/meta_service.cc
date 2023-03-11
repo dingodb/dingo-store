@@ -30,6 +30,11 @@ void MetaServiceImpl::GetSchemas(google::protobuf::RpcController * /*controller*
                                  const pb::meta::GetSchemasRequest *request, pb::meta::GetSchemasResponse *response,
                                  google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
+
+  if (!this->coordinator_control->IsLeader()) {
+    return RedirectResponse(response);
+  }
+
   LOG(INFO) << "GetSchemas request:  schema_id = [" << request->schema_id().entity_id() << "]";
 
   std::vector<pb::meta::Schema> schemas;
@@ -45,6 +50,11 @@ void MetaServiceImpl::GetTables(google::protobuf::RpcController * /*controller*/
                                 const pb::meta::GetTablesRequest *request, pb::meta::GetTablesResponse *response,
                                 google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
+
+  if (!this->coordinator_control->IsLeader()) {
+    return RedirectResponse(response);
+  }
+
   LOG(INFO) << "GetTables request:  schema_id = [" << request->schema_id().entity_id() << "]";
 
   std::vector<pb::meta::TableDefinitionWithId> table_definition_with_ids;
@@ -66,6 +76,11 @@ void MetaServiceImpl::GetTable(google::protobuf::RpcController * /*controller*/,
                                const pb::meta::GetTableRequest *request, pb::meta::GetTableResponse *response,
                                google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
+
+  if (!this->coordinator_control->IsLeader()) {
+    return RedirectResponse(response);
+  }
+
   LOG(INFO) << "GetTable request:  table_id = [" << request->table_id().entity_id() << "]";
 
   auto *table = response->mutable_table();
@@ -76,6 +91,11 @@ void MetaServiceImpl::CreateTable(google::protobuf::RpcController * /*controller
                                   const pb::meta::CreateTableRequest *request, pb::meta::CreateTableResponse *response,
                                   google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
+
+  if (!this->coordinator_control->IsLeader()) {
+    return RedirectResponse(response);
+  }
+
   LOG(INFO) << "CreatTable request:  schema_id = [" << request->schema_id().entity_id() << "]";
   LOG(INFO) << request->DebugString();
 
@@ -102,6 +122,11 @@ void MetaServiceImpl::CreateSchema(google::protobuf::RpcController *controller,
                                    const pb::meta::CreateSchemaRequest *request,
                                    pb::meta::CreateSchemaResponse *response, google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
+
+  if (!this->coordinator_control->IsLeader()) {
+    return RedirectResponse(response);
+  }
+
   LOG(INFO) << "CreatSchema request:  parent_schema_id = [" << request->parent_schema_id().entity_id() << "]";
   LOG(INFO) << request->DebugString();
 
@@ -125,9 +150,14 @@ void MetaServiceImpl::CreateSchema(google::protobuf::RpcController *controller,
 }
 
 void MetaServiceImpl::DropTable(google::protobuf::RpcController * /*controller*/,
-                                const pb::meta::DropTableRequest *request, pb::meta::DropTableResponse * /*response*/,
+                                const pb::meta::DropTableRequest *request, pb::meta::DropTableResponse *response,
                                 google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
+
+  if (!this->coordinator_control->IsLeader()) {
+    return RedirectResponse(response);
+  }
+
   LOG(INFO) << "DropTable request:  schema_id = [" << request->table_id().parent_entity_id() << "]"
             << " table_id = [" << request->table_id().entity_id() << "]";
   LOG(INFO) << request->DebugString();

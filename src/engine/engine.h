@@ -23,6 +23,7 @@
 #include "config/config.h"
 #include "engine/snapshot.h"
 #include "proto/common.pb.h"
+#include "proto/coordinator_internal.pb.h"
 #include "proto/error.pb.h"
 
 namespace dingodb {

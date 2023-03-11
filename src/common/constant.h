@@ -24,17 +24,17 @@ class Constant {
   /**
    * Define Global Region Id for Coordinator(As only One)
    */
-  static const int64_t kCoordinatorRegionId = 0x12345678;
+  static const int64_t kCoordinatorRegionId = 0;
 
   /**
    * Define Global TableID for Coordinator(As only one)
    */
-  static const uint64_t kCoordinatorTableId = 0x12345678;
+  static const uint64_t kCoordinatorTableId = 0;
 
   /**
    * Define Global SchemaId for Coordinator(As only one)
    */
-  static const uint64_t kCoordinatorSchemaId = 0x12345678;
+  static const uint64_t kCoordinatorSchemaId = 0;
 };
 
 }  // namespace dingodb
