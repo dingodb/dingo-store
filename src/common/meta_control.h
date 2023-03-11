@@ -36,11 +36,9 @@ class MetaControl {
   virtual ~MetaControl() = default;
   MetaControl() = default;
   virtual bool Init() = 0;
-  virtual uint64_t CreateCoordinatorId(pb::coordinator_internal::MetaIncrement &meta_increment) = 0;
-  virtual uint64_t CreateStoreId(pb::coordinator_internal::MetaIncrement &meta_increment) = 0;
-  virtual uint64_t CreateRegionId(pb::coordinator_internal::MetaIncrement &meta_increment) = 0;
-  virtual uint64_t CreateSchemaId(pb::coordinator_internal::MetaIncrement &meta_increment) = 0;
-  virtual uint64_t CreateTableId(pb::coordinator_internal::MetaIncrement &meta_increment) = 0;
+  virtual bool IsLeader() = 0;
+  virtual void SetLeader() = 0;
+  virtual void SetNotLeader() = 0;
 
   // create region
   // in: resource_tag
@@ -105,7 +103,7 @@ class MetaControl {
 
   // get coordinator_map
   virtual void GetCoordinatorMap(uint64_t cluster_id, uint64_t &epoch, pb::common::Location &leader_location,
-                                 std::vector<pb::common::Location> &locations) const = 0;
+                                 std::vector<pb::common::Location> &locations) = 0;
 
   // on_apply callback
   // leader do need update next_xx_id, so leader call this function with update_ids=false

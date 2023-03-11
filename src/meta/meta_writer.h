@@ -26,15 +26,16 @@ namespace dingodb {
 class MetaWriter {
  public:
   MetaWriter(std::shared_ptr<Engine> engine) : engine_(engine) {}
-  ~MetaWriter() {}
+  ~MetaWriter() = default;
 
-  bool Put(const std::shared_ptr<pb::common::KeyValue> kv);
-  bool Put(const std::vector<pb::common::KeyValue> kvs);
-  bool Delete(const std::string& key);
+  bool Put(std::shared_ptr<pb::common::KeyValue> kv);
+  bool Put(std::vector<pb::common::KeyValue> kvs);
+  bool Delete(const std::string &key);
+
+  MetaWriter(const MetaWriter &) = delete;
+  const MetaWriter &operator=(const MetaWriter &) = delete;
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(MetaWriter);
-
   std::shared_ptr<Engine> engine_;
 };
 

@@ -24,7 +24,7 @@ bool MetaWriter::Put(const std::shared_ptr<pb::common::KeyValue> kv) {
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->set_cf_name(kStoreMetaCF);
   ctx->set_flush(true);
-  auto errcode = engine_->KvPut(ctx, *kv.get());
+  auto errcode = engine_->KvPut(ctx, *kv);
   if (errcode != pb::error::OK) {
     LOG(ERROR) << "Meta write failed, errcode: " << errcode;
     return false;

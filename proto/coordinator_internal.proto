@@ -33,6 +33,12 @@ message TableInternal {
   repeated PartInternal partitions = 3;
 }
 
+// SchemaInternal is storage structure for schema
+message SchemaInternal {
+  uint64 id = 1;
+  dingodb.pb.meta.Schema schema = 2;
+}
+
 // CoordinatorInteral stores coordinator info for SDK & stores.
 message CoordinatorInternal {
   uint64 id = 1;
@@ -55,7 +61,7 @@ enum IdEpochType {
 }
 
 message IdEpochInternal {
-  IdEpochType id = 1;
+  uint64 id = 1;
   uint64 value = 2;
 }
 
@@ -90,7 +96,7 @@ message MetaIncrementRegion {
 
 message MetaIncrementSchema {
   uint64 id = 1;
-  dingodb.pb.meta.Schema schema = 2;
+  SchemaInternal schema_internal = 2;
   MetaIncrementOpType op_type = 3;
   uint64 schema_id = 4;  // parent schema
 }
@@ -102,6 +108,12 @@ message MetaIncrementTable {
   uint64 schema_id = 4;  // the table's schema
 }
 
+message MetaIncrementIdEpoch {
+  uint64 id = 1;
+  IdEpochInternal idepoch = 2;
+  MetaIncrementOpType op_type = 3;
+}
+
 // MetaIncrement stores meta data need to be inserted or updated
 message MetaIncrement {
   repeated MetaIncrementCoordinator coordinators = 1;
@@ -109,6 +121,7 @@ message MetaIncrement {
   repeated MetaIncrementRegion regions = 3;
   repeated MetaIncrementSchema schemas = 4;
   repeated MetaIncrementTable tables = 5;
+  repeated MetaIncrementIdEpoch idepochs = 16;
 
   uint64 coordinator_map_epoch = 6;
   uint64 store_map_epoch = 7;

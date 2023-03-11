@@ -27,11 +27,11 @@ class CreateStoreClosure : public braft::Closure {
  public:
   CreateStoreClosure(const CreateStoreRequest* request, CreateStoreRespone* response, google::protobuf::Closure* done)
       : request_(request), response_(response), done_(done) {}
-  ~CreateStoreClosure() {}
+  ~CreateStoreClosure() override = default;
 
-  const CreateStoreRequest* request() const { return request_; }
-  CreateStoreRespone* response() const { return response_; }
-  void Run();
+  const CreateStoreRequest* request() const { return request_; }  // NOLINT
+  CreateStoreRespone* response() const { return response_; }      // NOLINT
+  void Run() override;
 
  private:
   const CreateStoreRequest* request_;
