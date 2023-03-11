@@ -31,6 +31,7 @@
 #include "engine/engine.h"
 #include "engine/mem_engine.h"
 #include "engine/raft_kv_engine.h"
+#include "engine/raft_meta_engine.h"
 #include "engine/rocks_engine.h"
 #include "meta/meta_reader.h"
 #include "meta/meta_writer.h"
@@ -81,7 +82,7 @@ bool Server::InitServerID() {
   return id_ != 0;
 }
 
-bool Server::InitEngines(MetaControl& ctl) {
+bool Server::InitEngines() {
   auto config = ConfigManager::GetInstance()->GetConfig(role_);
 
   std::shared_ptr<Engine> rock_engine = std::make_shared<RocksEngine>();
@@ -91,21 +92,27 @@ bool Server::InitEngines(MetaControl& ctl) {
   }
 
   // default Key-Value storage engine
-  MetaControl* const controller = dynamic_cast<MetaControl*>(&ctl);
-  bool is_coordinator = (role_ == pb::common::ClusterRole::COORDINATOR);
-  std::shared_ptr<Engine> const raft_kv_engine = std::make_shared<RaftKvEngine>(rock_engine, controller);
-  // std::make_shared<RaftKvEngine>(rock_engine, is_coordinator ? controller : nullptr);
+  std::shared_ptr<Engine> raft_kv_engine;
+
+  // cooridnator use RaftMetaEngine
+  if (role_ == pb::common::ClusterRole::COORDINATOR) {
+    raft_kv_engine = std::make_shared<RaftMetaEngine>(rock_engine, coordinator_control_);
+  } else {
+    raft_kv_engine = std::make_shared<RaftKvEngine>(rock_engine);
+  }
+
   if (!raft_kv_engine->Init(config)) {
     LOG(ERROR) << "Init RaftKvEngine Failed with Config[" << config->ToString();
     return false;
   }
+
   // engines_.insert(std::make_pair(mem_engine->GetID(), mem_engine));
   engines_.insert(std::make_pair(rock_engine->GetID(), rock_engine));
   engines_.insert(std::make_pair(raft_kv_engine->GetID(), raft_kv_engine));
   return true;
 }
 
-pb::error::Errno Server::StartMetaRegion(std::shared_ptr<Config> config, std::shared_ptr<Engine> kv_engine) {
+pb::error::Errno Server::StartMetaRegion(std::shared_ptr<Config> config, std::shared_ptr<Engine> kv_engine) {  // NOLINT
   /**
    * 1. construct context(must contains role)
    */
