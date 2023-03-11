@@ -20,8 +20,18 @@ option(LINK_TCMALLOC "Link tcmalloc if possible" OFF)
 option(BUILD_UNIT_TESTS "Build unit test" ON)
 option(DINGO_BUILD_STATIC "Link libraries statically to generate the DingoDB binary" OFF)
 
+include(CheckCXXCompilerFlag)
+check_cxx_compiler_flag("-std=c++17" COMPILER_SUPPORTS_CXX17)
+if(COMPILER_SUPPORTS_CXX17)
+    set(CMAKE_CXX_STANDARD 17)
+    set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
+else()
+    message(FATAL_ERROR "The compiler ${CMAKE_CXX_COMPILER} has no C++17 support. Please use a different C++ compiler.")
+endif()
+
 set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_EXPORT_COMPILE_COMMANDS 1)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set(CMAKE_BUILD_TYPE "Debug")
 
 # Avoid warning about DOWNLOAD_EXTRACT_TIMESTAMP in CMake 3.24:
 if (CMAKE_VERSION VERSION_GREATER_EQUAL "3.24.0")
@@ -51,27 +61,48 @@ include(brpc)
 include(braft)
 include(yaml-cpp)
 
-# LIST ALL THE PROTO FILES AND COMPILE IT TO .H AND .CPP
-file(GLOB PROTO_FILES ${CMAKE_SOURCE_DIR}/proto/*.proto)
 message("protoc: ${PROTOBUF_PROTOC_EXECUTABLE}, proto inc: ${PROTOBUF_INCLUDE_DIRS}, lib: ${PROTOBUF_LIBRARIES}, ${PROTOBUF_PROTOC_LIBRARY}, protos: ${PROTO_FILES}")
-file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/proto)
-foreach (PROTO ${PROTO_FILES})
-    message(proto : ${PROTO})
-    get_filename_component(PROTO_WE ${PROTO} NAME)
-    string(REPLACE ".proto" "" PROTO_WE ${PROTO_WE})
-    list(APPEND PROTO_HDRS "${CMAKE_CURRENT_BINARY_DIR}/proto/${PROTO_WE}.pb.h")
-    list(APPEND PROTO_SRCS "${CMAKE_CURRENT_BINARY_DIR}/proto/${PROTO_WE}.pb.cc")
-    add_custom_command(
-            OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/proto/${PROTO_WE}.pb.h ${CMAKE_CURRENT_BINARY_DIR}/proto/${PROTO_WE}.pb.cc
-            COMMAND ${PROTOBUF_PROTOC_EXECUTABLE}
-            --cpp_out=${CMAKE_CURRENT_BINARY_DIR}/proto
-            --proto_path=${PROTOBUF_INCLUDE_DIR}
-            --proto_path=${CMAKE_SOURCE_DIR}/proto ${PROTO}
-            DEPENDS protobuf
-    )
-endforeach ()
+SET(MESSAGE_DIR ${CMAKE_CURRENT_BINARY_DIR}/proto)
+if(EXISTS "${CMAKE_CURRENT_BINARY_DIR}/proto" AND IS_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/proto")
+        SET(PROTO_META_BASE_DIR ${MESSAGE_DIR})
+else()
+        file(MAKE_DIRECTORY ${MESSAGE_DIR})
+        SET(PROTO_META_BASE_DIR ${MESSAGE_DIR})
+endif()
+
+LIST(APPEND PROTO_FLAGS -I${CMAKE_SOURCE_DIR}/proto)
+file(GLOB_RECURSE MSG_PROTOS ${CMAKE_SOURCE_DIR}/proto/*.proto)
+set(PROTO_SRCS "")
+set(PROTO_HDRS "")
+
+foreach(msg ${MSG_PROTOS})
+        get_filename_component(FIL_WE ${msg} NAME_WE)
+
+        list(APPEND PROTO_SRCS "${CMAKE_CURRENT_BINARY_DIR}/proto/${FIL_WE}.pb.cc")
+        list(APPEND PROTO_HDRS "${CMAKE_CURRENT_BINARY_DIR}/proto/${FIL_WE}.pb.h")
+
+        add_custom_command(
+          OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/proto/${FIL_WE}.pb.cc"
+                 "${CMAKE_CURRENT_BINARY_DIR}/proto/${FIL_WE}.pb.h"
+          COMMAND  ${PROTOBUF_PROTOC_EXECUTABLE}
+          ARGS --cpp_out  ${PROTO_META_BASE_DIR}
+            -I ${CMAKE_SOURCE_DIR}/proto
+            ${msg}
+          DEPENDS protobuf ${msg}
+          COMMENT "Running C++ protocol buffer compiler on ${msg}"
+          VERBATIM
+        )
+endforeach()
+set_source_files_properties(${PROTO_SRCS} ${PROTO_HDRS} PROPERTIES GENERATED TRUE)
+
 add_library(PROTO_OBJS OBJECT ${PROTO_SRCS})
 message("Debug Message protoc: ${PROTOBUF_PROTOC_EXECUTABLE}, proto srcs : ${PROTO_SRCS}")
+
+add_custom_target(build_proto ALL
+                DEPENDS ${PROTO_SRCS} ${PROTO_HDRS}
+                COMMENT "generate message target"
+                VERBATIM
+                )
 
 # include PROTO_HEADER
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
@@ -84,7 +115,6 @@ include_directories(${ROCKSDB_INCLUDE_DIR})
 include_directories(${YAMLCPP_INCLUDE_DIR})
 include_directories(${OPENSSL_INCLUDE_DIR})
 include_directories(${PROJECT_SOURCE_DIR}/src)
-
 
 set(DYNAMIC_LIB
     ${GFLAGS_LIBRARIES}
@@ -186,8 +216,6 @@ target_link_libraries(dingodb_client_meta
                       "-Xlinker \"-(\""
                       ${DYNAMIC_LIB}
                       "-Xlinker \"-)\"")
-
-
 
 if(BUILD_UNIT_TESTS)
     add_subdirectory(test)
