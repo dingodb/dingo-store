@@ -57,17 +57,17 @@ void SendGetSchemas(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub&
               << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
     LOG(INFO) << response.DebugString();
 
-    for (int32_t i = 0; i < response.schemas_size(); i++) {
-      LOG(INFO) << "schema_id=[" << response.schemas(i).id().entity_id() << "]"
-                << "child_schema_count=" << response.schemas(i).schema_ids_size()
-                << "child_table_count=" << response.schemas(i).table_ids_size();
-      for (int32_t j = 0; j < response.schemas(i).schema_ids_size(); j++) {
-        LOG(INFO) << "child schema_id=[" << response.schemas(i).schema_ids(j).entity_id() << "]";
-      }
-      for (int32_t j = 0; j < response.schemas(i).table_ids_size(); j++) {
-        LOG(INFO) << "child table_id=[" << response.schemas(i).table_ids(j).entity_id() << "]";
-      }
-    }
+    // for (int32_t i = 0; i < response.schemas_size(); i++) {
+    //   LOG(INFO) << "schema_id=[" << response.schemas(i).id().entity_id() << "]"
+    //             << "child_schema_count=" << response.schemas(i).schema_ids_size()
+    //             << "child_table_count=" << response.schemas(i).table_ids_size();
+    //   for (int32_t j = 0; j < response.schemas(i).schema_ids_size(); j++) {
+    //     LOG(INFO) << "child schema_id=[" << response.schemas(i).schema_ids(j).entity_id() << "]";
+    //   }
+    //   for (int32_t j = 0; j < response.schemas(i).table_ids_size(); j++) {
+    //     LOG(INFO) << "child table_id=[" << response.schemas(i).table_ids(j).entity_id() << "]";
+    //   }
+    // }
   }
 }
 
@@ -122,7 +122,7 @@ void SendGetTable(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& s
   auto* table_id = request.mutable_table_id();
   table_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
   table_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
-  table_id->set_entity_id(1);
+  table_id->set_entity_id(102);
 
   stub.GetTable(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {

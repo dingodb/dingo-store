@@ -152,10 +152,10 @@ class CoordinatorControl : public MetaControl {
   static void GenerateRootSchemas(pb::coordinator_internal::SchemaInternal &root_schema,
                                   pb::coordinator_internal::SchemaInternal &meta_schema,
                                   pb::coordinator_internal::SchemaInternal &dingo_schema);
-  static void GenerateRootSchemasMetaIncrement(pb::coordinator_internal::SchemaInternal &root_schema,
-                                               pb::coordinator_internal::SchemaInternal &meta_schema,
-                                               pb::coordinator_internal::SchemaInternal &dingo_schema,
-                                               pb::coordinator_internal::MetaIncrement &meta_increment);
+  // static void GenerateRootSchemasMetaIncrement(pb::coordinator_internal::SchemaInternal &root_schema,
+  //                                              pb::coordinator_internal::SchemaInternal &meta_schema,
+  //                                              pb::coordinator_internal::SchemaInternal &dingo_schema,
+  //                                              pb::coordinator_internal::MetaIncrement &meta_increment);
   bool Init() override;
   bool IsLeader() override;
   void SetLeader() override;
@@ -221,7 +221,17 @@ class CoordinatorControl : public MetaControl {
   void GetTables(uint64_t schema_id, std::vector<pb::meta::TableDefinitionWithId> &table_definition_with_ids) override;
 
   // get table
+  // in: schema_id
+  // in: table_id
+  // out: Table
   void GetTable(uint64_t schema_id, uint64_t table_id, pb::meta::Table &table) override;
+
+  // drop table
+  // in: schema_id
+  // in: table_id
+  // out: meta_increment
+  // return: 0 or -1
+  int DropTable(uint64_t schema_id, uint64_t table_id, pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // get coordinator_map
   void GetCoordinatorMap(uint64_t cluster_id, uint64_t &epoch, pb::common::Location &leader_location,
