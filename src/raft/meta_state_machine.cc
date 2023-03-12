@@ -18,6 +18,7 @@
 
 #include "braft/util.h"
 #include "butil/strings/stringprintf.h"
+#include "common/helper.h"
 #include "coordinator/coordinator_control.h"
 #include "proto/coordinator_internal.pb.h"
 #include "proto/error.pb.h"
@@ -53,7 +54,6 @@ void MetaStateMachine::HandleMetaProcess(bool is_leader, const pb::raft::RaftCmd
 }
 
 void MetaStateMachine::on_apply(braft::Iterator& iter) {
-  LOG(INFO) << "on_apply...";
   for (; iter.valid(); iter.next()) {
     braft::AsyncClosureGuard const done_guard(iter.done());
 
@@ -69,12 +69,9 @@ void MetaStateMachine::on_apply(braft::Iterator& iter) {
       CHECK(raft_cmd.ParseFromZeroCopyStream(&wrapper));
     }
 
-    LOG(INFO) << butil::StringPrintf("raft commited log region(%ld) term(%ld) index(%ld)",
-                                     raft_cmd.header().region_id(), iter.term(), iter.index());
-    LOG(INFO) << "raft_cmd: " << raft_cmd.ShortDebugString();
-
-    // Follower only write data ?
-    // DispatchRequest(dynamic_cast<StoreClosure*>(iter.done()), is_leader, raft_cmd);
+    std::string str_raft_cmd = Helper::MessageToJsonString(raft_cmd);
+    LOG(INFO) << butil::StringPrintf("raft apply log on region[%ld-term:%ld-index:%ld] cmd:[%s]",
+                                     raft_cmd.header().region_id(), iter.term(), iter.index(), str_raft_cmd.c_str());
     DispatchRequest(is_leader, raft_cmd);
   }
 }

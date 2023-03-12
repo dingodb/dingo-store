@@ -32,6 +32,5 @@ store:
     max_write_buffer_number: 3
   columnFamilies:
     - default
-    - instruction
     - meta
   collectStatsInterval: 5

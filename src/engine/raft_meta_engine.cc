@@ -44,7 +44,7 @@ RaftMetaEngine::RaftMetaEngine(std::shared_ptr<Engine> engine, std::shared_ptr<M
 RaftMetaEngine::~RaftMetaEngine() = default;
 
 bool RaftMetaEngine::Init(std::shared_ptr<Config> config) {
-  LOG(INFO) << "Now=> Int Raft Kv Engine with config[" << config->ToString();
+  LOG(INFO) << "Now=> Int Raft Kv Engine with config[" << config->ToString() + "]";
   return true;
 }
 
@@ -87,7 +87,7 @@ pb::error::Errno RaftMetaEngine::MetaPut(std::shared_ptr<Context> ctx,
   // call braft node->apply()
   auto node = raft_node_manager_->GetNode(ctx->region_id());
   if (node == nullptr) {
-    LOG(ERROR) << "Not found raft node " << ctx->region_id();
+    LOG(ERROR) << "Not found raft node on region:" << ctx->region_id();
     return pb::error::ERAFT_NOTNODE;
   }
   return node->Commit(ctx, raft_cmd);

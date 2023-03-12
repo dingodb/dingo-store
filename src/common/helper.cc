@@ -18,6 +18,7 @@
 
 #include "butil/endpoint.h"
 #include "butil/strings/string_split.h"
+#include "google/protobuf/util/json_util.h"
 
 namespace dingodb {
 
@@ -164,8 +165,8 @@ std::string Helper::StringToHex(const std::string& str) {
   std::string result = "0x";
   std::string tmp;
   std::stringstream ss;
-  for (int i = 0; i < str.size(); i++) {
-    ss << std::hex << int(str[i]) << std::endl;
+  for (char const i : str) {
+    ss << std::hex << int(i) << std::endl;
     ss >> tmp;
     result += tmp;
   }
@@ -184,6 +185,17 @@ void Helper::SetPbMessageError(int errcode, const std::string& errmsg, google::p
   error_ref->SetEnumValue(error, errcode_field, errcode);
   const google::protobuf::FieldDescriptor* errmsg_field = error_desc->FindFieldByName("errmsg");
   error_ref->SetString(error, errmsg_field, errmsg);
+}
+
+std::string Helper::MessageToJsonString(const google::protobuf::Message& message) {
+  std::string json_string;
+  google::protobuf::util::JsonOptions options;
+  options.always_print_primitive_fields = true;
+  google::protobuf::util::Status status = google::protobuf::util::MessageToJsonString(message, &json_string, options);
+  if (!status.ok()) {
+    std::cerr << "Failed to convert message to JSON: [" << status.message() << "]" << std::endl;
+  }
+  return json_string;
 }
 
 }  // namespace dingodb

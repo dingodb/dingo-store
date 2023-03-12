@@ -4,6 +4,8 @@ cluster:
 server:
   host: $SERVER_HOST$
   port: $SERVER_PORT$
+coordinator:
+  peers: $SERVER_HOST$:$SERVER_PORT$
 raft:
   host: $RAFT_HOST$
   port: $RAFT_PORT$

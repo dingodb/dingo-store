@@ -20,6 +20,7 @@
 
 #include "braft/util.h"
 #include "brpc/closure_guard.h"
+#include "common/helper.h"
 #include "coordinator/coordinator_control.h"
 #include "proto/coordinator.pb.h"
 
@@ -34,7 +35,13 @@ class CoordinatorClosure : public braft::Closure {
 
   const REQ* request() const { return request_; }  // NOLINT
   RESP* response() const { return response_; }     // NOLINT
-  void Run() override { brpc::ClosureGuard done_guard(done_); }
+  void Run() override {
+    brpc::ClosureGuard done_guard(done_);
+    std::string str_request = Helper::MessageToJsonString(*request_);
+    std::string str_response = Helper::MessageToJsonString(*response_);
+    LOG(INFO) << "Coordinator Closure return respone [" << str_response << "] to client with request[" << str_request
+              << "]";
+  }
 
  private:
   const REQ* request_;
@@ -72,6 +79,10 @@ class CoordinatorClosure<pb::coordinator::StoreHeartbeatRequest, pb::coordinator
     response()->set_regionmap_epoch(new_regionmap_epoch_);
 
     brpc::ClosureGuard done_guard(done_);
+    std::string str_request = Helper::MessageToJsonString(*request_);
+    std::string str_response = Helper::MessageToJsonString(*response_);
+    LOG(INFO) << "Coordinator Closure return Heartbeat response[" << str_response << "] to store with request["
+              << str_request << "]";
   }
 
  private:
