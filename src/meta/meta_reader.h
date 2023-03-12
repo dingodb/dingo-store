@@ -18,14 +18,14 @@
 #include <memory>
 #include <vector>
 
-#include "engine/engine.h"
+#include "engine/raw_engine.h"
 #include "proto/common.pb.h"
 
 namespace dingodb {
 
 class MetaReader {
  public:
-  MetaReader(std::shared_ptr<Engine> engine) : engine_(engine) {}
+  MetaReader(std::shared_ptr<RawEngine> engine) : engine_(engine) {}
   ~MetaReader() {}
 
   std::shared_ptr<pb::common::KeyValue> Get(const std::string& key);
@@ -34,7 +34,7 @@ class MetaReader {
  private:
   DISALLOW_COPY_AND_ASSIGN(MetaReader);
 
-  std::shared_ptr<Engine> engine_;
+  std::shared_ptr<RawEngine> engine_;
 };
 
 }  // namespace dingodb

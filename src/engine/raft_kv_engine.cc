@@ -21,17 +21,18 @@
 #include "common/helper.h"
 #include "common/synchronization.h"
 #include "config/config_manager.h"
+#include "engine/write_data.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator_internal.pb.h"
 #include "proto/error.pb.h"
 #include "proto/raft.pb.h"
 #include "raft/meta_state_machine.h"
-#include "raft/state_machine.h"
+#include "raft/store_state_machine.h"
 #include "server/server.h"
 
 namespace dingodb {
 
-RaftKvEngine::RaftKvEngine(std::shared_ptr<Engine> engine)
+RaftKvEngine::RaftKvEngine(std::shared_ptr<RawEngine> engine)
     : engine_(engine), raft_node_manager_(std::move(std::make_unique<RaftNodeManager>())) {}
 
 RaftKvEngine::~RaftKvEngine() = default;
@@ -59,8 +60,7 @@ std::string RaftKvEngine::GetName() { return pb::common::Engine_Name(pb::common:
 
 pb::common::Engine RaftKvEngine::GetID() { return pb::common::ENG_RAFT_STORE; }
 
-pb::error::Errno RaftKvEngine::AddRegion(std::shared_ptr<Context> ctx,
-                                         const std::shared_ptr<pb::common::Region> region) {
+butil::Status RaftKvEngine::AddRegion(std::shared_ptr<Context> ctx, const std::shared_ptr<pb::common::Region> region) {
   LOG(INFO) << "RaftkvEngine add region, region_id " << region->id();
 
   // construct StoreStateMachine
@@ -72,217 +72,97 @@ pb::error::Errno RaftKvEngine::AddRegion(std::shared_ptr<Context> ctx,
 
   if (node->Init(Helper::FormatPeers(Helper::ExtractLocations(region->peers()))) != 0) {
     node->Destroy();
-    return pb::error::ERAFT_INIT;
+    return butil::Status(pb::error::ERAFT_INIT, "Raft init failed");
   }
 
   raft_node_manager_->AddNode(region->id(), node);
-  return pb::error::OK;
+  return butil::Status();
 }
 
-pb::error::Errno RaftKvEngine::ChangeRegion([[maybe_unused]] std::shared_ptr<Context> ctx, uint64_t region_id,
-                                            std::vector<pb::common::Peer> peers) {
+butil::Status RaftKvEngine::ChangeRegion([[maybe_unused]] std::shared_ptr<Context> ctx, uint64_t region_id,
+                                         std::vector<pb::common::Peer> peers) {
   raft_node_manager_->GetNode(region_id)->ChangePeers(peers, nullptr);
-  return pb::error::OK;
+  return butil::Status();
 }
 
-pb::error::Errno RaftKvEngine::DestroyRegion([[maybe_unused]] std::shared_ptr<Context> ctx, uint64_t region_id) {
+butil::Status RaftKvEngine::DestroyRegion([[maybe_unused]] std::shared_ptr<Context> ctx, uint64_t region_id) {
   auto node = raft_node_manager_->GetNode(region_id);
   if (node == nullptr) {
-    return pb::error::ERAFT_NOTNODE;
+    return butil::Status(pb::error::ERAFT_NOTNODE, "Raft not node");
   }
   node->Shutdown(nullptr);
   node->Join();
 
   raft_node_manager_->DeleteNode(region_id);
-  return pb::error::OK;
+  return butil::Status();
 }
 
-pb::error::Errno RaftKvEngine::KvGet(std::shared_ptr<Context> ctx, const std::string& key, std::string& value) {
-  auto node = raft_node_manager_->GetNode(ctx->region_id());
-  if (node == nullptr) {
-    LOG(ERROR) << "Not found raft node " << ctx->region_id();
-    return pb::error::ERAFT_NOTNODE;
-  }
-
-  return engine_->KvGet(ctx, key, value);
-}
-
-pb::error::Errno RaftKvEngine::KvBatchGet(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys,
-                                          std::vector<pb::common::KeyValue>& kvs) {
-  return engine_->KvBatchGet(ctx, keys, kvs);
-}
-
-pb::error::Errno RaftKvEngine::KvScan(std::shared_ptr<Context> ctx, const std::string& start_key,
-                                      const std::string& end_key, std::vector<pb::common::KeyValue>& kvs) {
-  return engine_->KvScan(ctx, start_key, end_key, kvs);
-}
-
-std::shared_ptr<pb::raft::RaftCmdRequest> GenRaftCmdRequest(const std::shared_ptr<Context> ctx,
-                                                            const pb::common::KeyValue& kv) {
+std::shared_ptr<pb::raft::RaftCmdRequest> genRaftCmdRequest(const std::shared_ptr<Context> ctx,
+                                                            const WriteData& write_data) {
   std::shared_ptr<pb::raft::RaftCmdRequest> raft_cmd = std::make_shared<pb::raft::RaftCmdRequest>();
 
   pb::raft::RequestHeader* header = raft_cmd->mutable_header();
-  header->set_region_id(ctx->region_id());
+  header->set_region_id(ctx->RegionId());
 
-  auto* request = raft_cmd->add_requests();
-  request->set_cmd_type(pb::raft::CmdType::PUT);
-  pb::raft::PutRequest* put_request = request->mutable_put();
-  put_request->set_cf_name(ctx->cf_name());
-  put_request->add_kvs()->CopyFrom(kv);
-  return raft_cmd;
-}
+  for (auto datum : write_data.Datums()) {
+    auto requests = raft_cmd->mutable_requests();
 
-pb::error::Errno RaftKvEngine::KvPut(std::shared_ptr<Context> ctx, const pb::common::KeyValue& kv) {
-  auto node = raft_node_manager_->GetNode(ctx->region_id());
-  if (node == nullptr) {
-    LOG(ERROR) << "Not found raft node " << ctx->region_id();
-    return pb::error::ERAFT_NOTNODE;
+    requests->AddAllocated(datum->TransformToRaft());
   }
-
-  return node->Commit(ctx, GenRaftCmdRequest(ctx, kv));
-
-  // ctx->EnableSyncMode();
-  // ctx->Cond()->IncreaseWait();
-  // if (!ctx->Status().ok()) {
-  //   return pb::error::EINTERNAL;
-  // }
-  // return pb::error::OK;
-}
-
-// pb::error::Errno RaftKvEngine::KvAsyncPut(std::shared_ptr<Context> ctx, const pb::common::KeyValue& kv) {
-//   auto node = raft_node_manager_->GetNode(ctx->region_id());
-//   if (node == nullptr) {
-//     LOG(ERROR) << "Not found raft node " << ctx->region_id();
-//     return pb::error::ERAFT_NOTNODE;
-//   }
-//   return node->Commit(ctx, GenRaftCmdRequest(ctx, kv));
-// }
-
-std::shared_ptr<pb::raft::RaftCmdRequest> GenRaftCmdRequest(const std::shared_ptr<Context> ctx,
-                                                            const std::vector<pb::common::KeyValue>& kvs) {
-  std::shared_ptr<pb::raft::RaftCmdRequest> raft_cmd = std::make_shared<pb::raft::RaftCmdRequest>();
-
-  pb::raft::RequestHeader* header = raft_cmd->mutable_header();
-  header->set_region_id(ctx->region_id());
-
-  auto* request = raft_cmd->add_requests();
-  request->set_cmd_type(pb::raft::CmdType::PUT);
-
-  pb::raft::PutRequest* put_request = request->mutable_put();
-  put_request->set_cf_name(ctx->cf_name());
-  Helper::VectorToPbRepeated(kvs, put_request->mutable_kvs());
 
   return raft_cmd;
 }
 
-pb::error::Errno RaftKvEngine::KvBatchPut(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs) {
-  auto node = raft_node_manager_->GetNode(ctx->region_id());
+butil::Status RaftKvEngine::Write(std::shared_ptr<Context> ctx, const WriteData& write_data) {
+  auto node = raft_node_manager_->GetNode(ctx->RegionId());
   if (node == nullptr) {
-    LOG(ERROR) << "Not found raft node " << ctx->region_id();
-    return pb::error::ERAFT_NOTNODE;
+    LOG(ERROR) << "Not found raft node " << ctx->RegionId();
+    return butil::Status(pb::error::ERAFT_NOTNODE, "Not found node");
   }
 
-  return node->Commit(ctx, GenRaftCmdRequest(ctx, kvs));
-}
-
-std::shared_ptr<pb::raft::RaftCmdRequest> GenRaftCmdPutIfAbsentRequest(const std::shared_ptr<Context> ctx,
-                                                                       const pb::common::KeyValue& kv) {
-  std::shared_ptr<pb::raft::RaftCmdRequest> raft_cmd = std::make_shared<pb::raft::RaftCmdRequest>();
-
-  pb::raft::RequestHeader* header = raft_cmd->mutable_header();
-  header->set_region_id(ctx->region_id());
-
-  auto* request = raft_cmd->add_requests();
-  request->set_cmd_type(pb::raft::CmdType::PUTIFABSENT);
-  pb::raft::PutIfAbsentRequest* put_if_absent_request = request->mutable_put_if_absent();
-  put_if_absent_request->set_cf_name(ctx->cf_name());
-  put_if_absent_request->add_kvs()->CopyFrom(kv);
-  return raft_cmd;
-}
-
-pb::error::Errno RaftKvEngine::KvPutIfAbsent(std::shared_ptr<Context> ctx, const pb::common::KeyValue& kv) {
-  auto node = raft_node_manager_->GetNode(ctx->region_id());
-  if (node == nullptr) {
-    LOG(ERROR) << "Not found raft node " << ctx->region_id();
-    return pb::error::ERAFT_NOTNODE;
+  auto s = node->Commit(ctx, genRaftCmdRequest(ctx, write_data));
+  if (!s.ok()) {
+    return s;
   }
 
-  return node->Commit(ctx, GenRaftCmdPutIfAbsentRequest(ctx, kv));
-}
-
-std::shared_ptr<pb::raft::RaftCmdRequest> GenRaftCmdPutIfAbsentRequest(const std::shared_ptr<Context> ctx,
-                                                                       const std::vector<pb::common::KeyValue>& kvs) {
-  std::shared_ptr<pb::raft::RaftCmdRequest> raft_cmd = std::make_shared<pb::raft::RaftCmdRequest>();
-
-  pb::raft::RequestHeader* header = raft_cmd->mutable_header();
-  header->set_region_id(ctx->region_id());
-
-  auto* request = raft_cmd->add_requests();
-  request->set_cmd_type(pb::raft::CmdType::PUTIFABSENT);
-
-  pb::raft::PutIfAbsentRequest* put_if_absent_request = request->mutable_put_if_absent();
-  put_if_absent_request->set_cf_name(ctx->cf_name());
-  Helper::VectorToPbRepeated(kvs, put_if_absent_request->mutable_kvs());
-
-  return raft_cmd;
-}
-
-pb::error::Errno RaftKvEngine::KvBatchPutIfAbsentAtomic(std::shared_ptr<Context> ctx,
-                                                        const std::vector<pb::common::KeyValue>& kvs,
-                                                        [[maybe_unused]] std::vector<std::string>& put_keys) {
-  auto node = raft_node_manager_->GetNode(ctx->region_id());
-  if (node == nullptr) {
-    LOG(ERROR) << "Not found raft node " << ctx->region_id();
-    return pb::error::ERAFT_NOTNODE;
+  ctx->EnableSyncMode();
+  ctx->Cond()->IncreaseWait();
+  LOG(INFO) << "Wake up";
+  if (!ctx->Status().ok()) {
+    return ctx->Status();
   }
-
-  return node->Commit(ctx, GenRaftCmdPutIfAbsentRequest(ctx, kvs));
+  return butil::Status();
 }
 
-std::shared_ptr<pb::raft::RaftCmdRequest> GenRaftCmdRequest(const std::shared_ptr<Context> ctx,
-                                                            const pb::common::Range& range) {
-  std::shared_ptr<pb::raft::RaftCmdRequest> raft_cmd = std::make_shared<pb::raft::RaftCmdRequest>();
-
-  pb::raft::RequestHeader* header = raft_cmd->mutable_header();
-  header->set_region_id(ctx->region_id());
-
-  auto* request = raft_cmd->add_requests();
-  request->set_cmd_type(pb::raft::CmdType::PUT);
-  pb::raft::DeleteRangeRequest* delete_range_request = request->mutable_delete_range();
-  delete_range_request->set_cf_name(ctx->cf_name());
-  auto* range_req = delete_range_request->add_ranges();
-  *range_req = range;
-
-  return raft_cmd;
-}
-
-pb::error::Errno RaftKvEngine::KvDeleteRange(std::shared_ptr<Context> ctx, const pb::common::Range& range) {
-  auto node = raft_node_manager_->GetNode(ctx->region_id());
+butil::Status RaftKvEngine::AsyncWrite(std::shared_ptr<Context> ctx, const WriteData& write_data, WriteCb_t cb) {
+  LOG(INFO) << "here 0001";
+  auto node = raft_node_manager_->GetNode(ctx->RegionId());
   if (node == nullptr) {
-    LOG(ERROR) << "Not found raft node " << ctx->region_id();
-    return pb::error::ERAFT_NOTNODE;
+    LOG(ERROR) << "Not found raft node " << ctx->RegionId();
+    return butil::Status(pb::error::ERAFT_NOTNODE, "Not found node");
   }
+  LOG(INFO) << "here 0002";
 
-  return node->Commit(ctx, GenRaftCmdRequest(ctx, range));
+  ctx->SetWriteCb(cb);
+  return node->Commit(ctx, genRaftCmdRequest(ctx, write_data));
 }
 
-// pb::error::Errno RaftKvEngine::MetaPut(std::shared_ptr<Context> ctx,
-//                                        const pb::coordinator_internal::MetaIncrement& meta) {
-//   // change MetaIncrement to RaftCmdRequest
-//   std::shared_ptr<pb::raft::RaftCmdRequest> const raft_cmd = std::make_shared<pb::raft::RaftCmdRequest>();
-//   pb::raft::RequestHeader* header = raft_cmd->mutable_header();
-//   auto* request = raft_cmd->add_requests();
-//   request->set_cmd_type(pb::raft::CmdType::META_WRITE);
-//   pb::raft::RaftMetaRequest* meta_request = request->mutable_meta_req();
-//   auto* meta_increment_request = meta_request->mutable_meta_increment();
-//   meta_increment_request->CopyFrom(meta);
+std::shared_ptr<Engine::Reader> RaftKvEngine::NewReader(const std::string& cf_name) {
+  return std::make_shared<RaftKvEngine::Reader>(engine_->NewReader(cf_name));
+}
 
-//   auto node = raft_node_manager_->GetNode(ctx->region_id());
-//   if (node == nullptr) {
-//     LOG(ERROR) << "Not found raft node " << ctx->region_id();
-//     return pb::error::ERAFT_NOTNODE;
-//   }
-//   return node->Commit(ctx, raft_cmd);
-// }
+butil::Status RaftKvEngine::Reader::KvGet(std::shared_ptr<Context> ctx, const std::string& key, std::string& value) {
+  return reader_->KvGet(key, value);
+}
+
+butil::Status RaftKvEngine::Reader::KvScan(std::shared_ptr<Context> ctx, const std::string& start_key,
+                                           const std::string& end_key, std::vector<pb::common::KeyValue>& kvs) {
+  return reader_->KvScan(start_key, end_key, kvs);
+}
+
+butil::Status RaftKvEngine::Reader::KvCount(std::shared_ptr<Context> ctx, const std::string& start_key,
+                                            const std::string& end_key, int64_t& count) {
+  return reader_->KvCount(start_key, end_key, count);
+}
 
 }  // namespace dingodb

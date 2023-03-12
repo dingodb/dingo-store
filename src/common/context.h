@@ -20,6 +20,7 @@
 
 #include "brpc/controller.h"
 #include "common/synchronization.h"
+#include "engine/write_data.h"
 #include "proto/common.pb.h"
 #include "proto/store.pb.h"
 
@@ -59,41 +60,41 @@ class Context {
         enable_sync_(false) {}
   ~Context() = default;
 
-  brpc::Controller* cntl() { return cntl_; }
-  Context& set_cntl(brpc::Controller* cntl) {
+  brpc::Controller* Cntl() { return cntl_; }
+  Context& SetCntl(brpc::Controller* cntl) {
     cntl_ = cntl;
     return *this;
   }
 
-  google::protobuf::Closure* done() { return done_; }
-  Context& set_done(google::protobuf::Closure* done) {
+  google::protobuf::Closure* Done() { return done_; }
+  Context& SetDone(google::protobuf::Closure* done) {
     done_ = done;
     return *this;
   }
 
-  google::protobuf::Message* response() { return response_; }
-  Context& set_response(google::protobuf::Message* response) {
+  google::protobuf::Message* Response() { return response_; }
+  Context& SetResponse(google::protobuf::Message* response) {
     response_ = response;
     return *this;
   }
 
-  uint64_t region_id() { return region_id_; }
-  Context& set_region_id(uint64_t region_id) {
+  uint64_t RegionId() { return region_id_; }
+  Context& SetRegionId(uint64_t region_id) {
     region_id_ = region_id;
     return *this;
   }
 
-  void set_cf_name(const std::string& cf_name) { cf_name_ = cf_name; }
-  const std::string& cf_name() const { return cf_name_; }
+  void SetCfName(const std::string& cf_name) { cf_name_ = cf_name; }
+  const std::string& CfName() const { return cf_name_; }
 
-  bool directly_delete() { return directly_delete_; }
-  void set_directly_delete(bool directly_delete) { directly_delete_ = directly_delete; }
+  bool DirectlyDelete() { return directly_delete_; }
+  void SetDirectlyDelete(bool directly_delete) { directly_delete_ = directly_delete; }
 
-  bool delete_files_in_range() { return delete_files_in_range_; }
-  void set_delete_files_in_range(bool delete_files_in_range) { delete_files_in_range_ = delete_files_in_range; }
+  bool DeleteFilesInRange() { return delete_files_in_range_; }
+  void SetDeleteFilesInRange(bool delete_files_in_range) { delete_files_in_range_ = delete_files_in_range; }
 
-  bool flush() { return flush_; }
-  void set_flush(bool flush) { flush_ = flush; }
+  bool Flush() { return flush_; }
+  void SetFlush(bool flush) { flush_ = flush; }
 
   pb::common::ClusterRole ClusterRole() { return role_; }
   void SetClusterRole(pb::common::ClusterRole role) { role_ = role; }
@@ -108,6 +109,9 @@ class Context {
   std::shared_ptr<BthreadCond> Cond() { return cond_; }
   butil::Status Status() { return status_; }
   void SetStatus(butil::Status& status) { status_ = status; }
+
+  WriteCb_t WriteCb() { return write_cb_; }
+  void SetWriteCb(WriteCb_t write_cb) { write_cb_ = write_cb; }
 
  private:
   // brpc framework free resource
@@ -131,6 +135,8 @@ class Context {
   bool enable_sync_;
   butil::Status status_;
   std::shared_ptr<BthreadCond> cond_;
+
+  WriteCb_t write_cb_;
 };
 
 }  // namespace dingodb

@@ -24,7 +24,7 @@
 
 namespace dingodb {
 
-MetaStateMachine::MetaStateMachine(std::shared_ptr<Engine> engine, std::shared_ptr<MetaControl> meta_control)
+MetaStateMachine::MetaStateMachine(std::shared_ptr<RawEngine> engine, std::shared_ptr<MetaControl> meta_control)
     : engine_(engine), meta_control_(meta_control) {}
 
 void MetaStateMachine::DispatchRequest(bool is_leader, const pb::raft::RaftCmdRequest& raft_cmd) {

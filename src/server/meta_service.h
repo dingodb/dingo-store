@@ -20,6 +20,7 @@
 #include "brpc/controller.h"
 #include "brpc/server.h"
 #include "coordinator/coordinator_control.h"
+#include "engine/engine.h"
 #include "proto/meta.pb.h"
 
 namespace dingodb {

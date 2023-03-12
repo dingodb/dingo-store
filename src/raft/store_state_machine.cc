@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "raft/state_machine.h"
+#include "raft/store_state_machine.h"
 
 #include "braft/util.h"
 #include "butil/strings/stringprintf.h"
@@ -25,23 +25,22 @@ namespace dingodb {
 void StoreClosure::Run() {
   LOG(INFO) << "Closure run...";
 
-  brpc::ClosureGuard done_guard(ctx_->IsSyncMode() ? nullptr : ctx_->done());
+  brpc::ClosureGuard done_guard(ctx_->IsSyncMode() ? nullptr : ctx_->Done());
   if (!status().ok()) {
-    LOG(ERROR) << butil::StringPrintf("raft log commit failed, region[%ld] %d:%s", ctx_->region_id(),
+    LOG(ERROR) << butil::StringPrintf("raft log commit failed, region[%ld] %d:%s", ctx_->RegionId(),
                                       status().error_code(), status().error_cstr());
-    if (!ctx_->IsSyncMode()) {
-      // todo
-      Helper::SetPbMessageError(status().error_code(), status().error_str(), ctx_->response());
-    }
+
+    ctx_->SetStatus(status());
   }
 
   if (ctx_->IsSyncMode()) {
-    ctx_->SetStatus(status());
     ctx_->Cond()->DecreaseSignal();
+  } else {
+    ctx_->WriteCb()(ctx_->Status());
   }
 }
 
-StoreStateMachine::StoreStateMachine(std::shared_ptr<Engine> engine) : engine_(engine) {}
+StoreStateMachine::StoreStateMachine(std::shared_ptr<RawEngine> engine) : engine_(engine) {}
 
 void StoreStateMachine::DispatchRequest(StoreClosure* done, const pb::raft::RaftCmdRequest& raft_cmd) {
   for (const auto& req : raft_cmd.requests()) {
@@ -61,47 +60,40 @@ void StoreStateMachine::DispatchRequest(StoreClosure* done, const pb::raft::Raft
   }
 }
 
-void StoreStateMachine::HandlePutRequest([[maybe_unused]] StoreClosure* done, const pb::raft::PutRequest& request) {
+void StoreStateMachine::HandlePutRequest(StoreClosure* done, const pb::raft::PutRequest& request) {
   LOG(INFO) << "handlePutRequest ...";
-  std::shared_ptr<Context> ctx =
-      (done != nullptr && done->GetCtx() != nullptr) ? done->GetCtx() : std::make_shared<Context>();
-  ctx->set_cf_name(request.cf_name());
-
-  pb::error::Errno errcode = pb::error::OK;
+  butil::Status status;
+  auto writer = engine_->NewWriter(request.cf_name());
   if (request.kvs().size() == 1) {
-    errcode = engine_->KvPut(ctx, request.kvs().Get(0));
+    status = writer->KvPut(request.kvs().Get(0));
   } else {
-    errcode = engine_->KvBatchPut(ctx, Helper::PbRepeatedToVector(request.kvs()));
+    status = writer->KvBatchPut(Helper::PbRepeatedToVector(request.kvs()));
   }
 
-  if (errcode != pb::error::OK && done != nullptr && done->GetCtx() != nullptr && !done->GetCtx()->IsSyncMode()) {
-    Helper::SetPbMessageError(errcode, "Put failed.", done->GetCtx()->response());
+  if (done != nullptr) {
+    std::shared_ptr<Context> ctx = done->GetCtx();
+    if (ctx) {
+      ctx->SetStatus(status);
+    }
   }
 }
 
 void StoreStateMachine::HandlePutIfAbsentRequest(StoreClosure* done, const pb::raft::PutIfAbsentRequest& request) {
   LOG(INFO) << "handlePutIfAbsentRequest ...";
-  std::shared_ptr<Context> ctx =
-      (done != nullptr && done->GetCtx() != nullptr) ? done->GetCtx() : std::make_shared<Context>();
-  ctx->set_cf_name(request.cf_name());
 
+  butil::Status status;
+  auto writer = engine_->NewWriter(request.cf_name());
   if (request.kvs().size() == 1) {
-    auto errcode = engine_->KvPutIfAbsent(ctx, request.kvs().Get(0));
-    if (errcode != pb::error::OK && done != nullptr && done->GetCtx() != nullptr) {
-      Helper::SetPbMessageError(errcode, "Put if absent failed.", done->GetCtx()->response());
-    }
+    status = writer->KvPutIfAbsent(request.kvs().Get(0));
   } else {
     std::vector<std::string> put_keys;
-    auto errcode = engine_->KvBatchPutIfAbsentNonAtomic(ctx, Helper::PbRepeatedToVector(request.kvs()), put_keys);
-    if (done != nullptr && done->GetCtx() != nullptr) {
-      if (errcode != pb::error::OK) {
-        Helper::SetPbMessageError(errcode, "Batch put if absent failed.", done->GetCtx()->response());
-      } else {
-        auto response = dynamic_cast<pb::store::KvBatchPutIfAbsentResponse*>(done->GetCtx()->response());
-        for (auto& key : put_keys) {
-          response->add_put_keys(key);
-        }
-      }
+    status = writer->KvBatchPutIfAbsent(Helper::PbRepeatedToVector(request.kvs()), put_keys, true);
+  }
+
+  if (done != nullptr) {
+    std::shared_ptr<Context> ctx = done->GetCtx();
+    if (ctx) {
+      ctx->SetStatus(status);
     }
   }
 }
@@ -109,6 +101,22 @@ void StoreStateMachine::HandlePutIfAbsentRequest(StoreClosure* done, const pb::r
 void StoreStateMachine::HandleDeleteRangeRequest([[maybe_unused]] StoreClosure* done,
                                                  [[maybe_unused]] const pb::raft::DeleteRangeRequest& request) {
   LOG(INFO) << "HandleDeleteRangeRequest ...";
+
+  butil::Status status;
+  auto writer = engine_->NewWriter(request.cf_name());
+  for (auto& range : request.ranges()) {
+    status = writer->KvDeleteRange(range);
+    if (!status.ok()) {
+      break;
+    }
+  }
+
+  if (done != nullptr) {
+    std::shared_ptr<Context> ctx = done->GetCtx();
+    if (ctx) {
+      ctx->SetStatus(status);
+    }
+  }
 }
 
 void StoreStateMachine::on_apply(braft::Iterator& iter) {

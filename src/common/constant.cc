@@ -12,32 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DINGODB_META_META_WRITER_H_
-#define DINGODB_META_META_WRITER_H_
-
-#include <memory>
-#include <vector>
-
-#include "engine/raw_engine.h"
-#include "proto/common.pb.h"
+#include "common/constant.h"
 
 namespace dingodb {
 
-class MetaWriter {
- public:
-  MetaWriter(std::shared_ptr<RawEngine> engine) : engine_(engine) {}
-  ~MetaWriter() = default;
-
-  bool Put(std::shared_ptr<pb::common::KeyValue> kv);
-  bool Put(std::vector<pb::common::KeyValue> kvs);
-  bool Delete(const std::string &key);
-
-  MetaWriter(const MetaWriter &) = delete;
-  const MetaWriter &operator=(const MetaWriter &) = delete;
-
-  std::shared_ptr<RawEngine> engine_;
-};
+const std::string Constant::kStoreDataCF = "default";
+const std::string Constant::kStoreMetaCF = "meta";
 
 }  // namespace dingodb
-
-#endif  // DINGODB_META_META_WRITER_H_

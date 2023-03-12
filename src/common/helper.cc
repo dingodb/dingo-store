@@ -172,7 +172,7 @@ std::string Helper::StringToHex(const std::string& str) {
   return result;
 }
 
-void Helper::SetPbMessageError(int errcode, const std::string& errmsg, google::protobuf::Message* message) {
+void Helper::SetPbMessageError(butil::Status status, google::protobuf::Message* message) {
   const google::protobuf::Reflection* reflection = message->GetReflection();
   const google::protobuf::Descriptor* desc = message->GetDescriptor();
 
@@ -181,9 +181,9 @@ void Helper::SetPbMessageError(int errcode, const std::string& errmsg, google::p
   const google::protobuf::Reflection* error_ref = error->GetReflection();
   const google::protobuf::Descriptor* error_desc = error->GetDescriptor();
   const google::protobuf::FieldDescriptor* errcode_field = error_desc->FindFieldByName("errcode");
-  error_ref->SetEnumValue(error, errcode_field, errcode);
+  error_ref->SetEnumValue(error, errcode_field, status.error_code());
   const google::protobuf::FieldDescriptor* errmsg_field = error_desc->FindFieldByName("errmsg");
-  error_ref->SetString(error, errmsg_field, errmsg);
+  error_ref->SetString(error, errmsg_field, status.error_str());
 }
 
 }  // namespace dingodb

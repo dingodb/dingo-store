@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "butil/endpoint.h"
+#include "butil/status.h"
 #include "butil/strings/stringprintf.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
@@ -61,7 +62,17 @@ class Helper {
   static std::vector<T> PbRepeatedToVector(const google::protobuf::RepeatedPtrField<T>& data) {
     std::vector<T> vec;
     for (auto& item : data) {
-      vec.push_back(item);
+      vec.emplace_back(std::move(item));
+    }
+
+    return vec;
+  }
+
+  template <typename T>
+  static std::vector<T> PbRepeatedToVector(google::protobuf::RepeatedPtrField<T>* data) {
+    std::vector<T> vec;
+    for (auto& item : *data) {
+      vec.emplace_back(std::move(item));
     }
 
     return vec;
@@ -78,7 +89,7 @@ class Helper {
 
   static std::string StringToHex(const std::string& str);
 
-  static void SetPbMessageError(int errcode, const std::string& errmsg, google::protobuf::Message* message);
+  static void SetPbMessageError(butil::Status status, google::protobuf::Message* message);
 };
 
 }  // namespace dingodb

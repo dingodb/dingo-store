@@ -18,7 +18,7 @@
 #include "common/helper.h"
 #include "config/config_manager.h"
 #include "proto/common.pb.h"
-#include "raft/state_machine.h"
+#include "raft/store_state_machine.h"
 
 namespace dingodb {
 
@@ -65,9 +65,9 @@ int RaftNode::Init(const std::string& init_conf) {
 void RaftNode::Destroy() {}
 
 // Commit message to raft
-pb::error::Errno RaftNode::Commit(std::shared_ptr<Context> ctx, std::shared_ptr<pb::raft::RaftCmdRequest> raft_cmd) {
+butil::Status RaftNode::Commit(std::shared_ptr<Context> ctx, std::shared_ptr<pb::raft::RaftCmdRequest> raft_cmd) {
   if (!IsLeader()) {
-    return pb::error::ERAFT_NOTLEADER;
+    return butil::Status(pb::error::ERAFT_NOTLEADER, "Not leader");
   }
   LOG(INFO) << "Commit raft cmd to " << node_id_;
   butil::IOBuf data;
@@ -76,11 +76,10 @@ pb::error::Errno RaftNode::Commit(std::shared_ptr<Context> ctx, std::shared_ptr<
 
   braft::Task task;
   task.data = &data;
-  LOG(INFO) << "Commit raft cmd to " << node_id_ << "," << ctx->done() << ",";
   task.done = new StoreClosure(ctx, raft_cmd);
   node_->apply(task);
 
-  return pb::error::OK;
+  return butil::Status();
 }
 
 bool RaftNode::IsLeader() { return node_->is_leader(); }

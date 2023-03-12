@@ -21,15 +21,15 @@
 namespace dingodb {
 class RaftMetaEngine : public RaftKvEngine {
  public:
-  RaftMetaEngine(std::shared_ptr<Engine> engine, std::shared_ptr<MetaControl> meta_control);
+  RaftMetaEngine(std::shared_ptr<RawEngine> engine, std::shared_ptr<MetaControl> meta_control);
   ~RaftMetaEngine() override;
 
   bool Init(std::shared_ptr<Config> config) override;
   bool Recover() override;
 
-  pb::error::Errno InitCoordinatorRegion(std::shared_ptr<Context> ctx, std::shared_ptr<pb::common::Region> region);
+  butil::Status InitCoordinatorRegion(std::shared_ptr<Context> ctx, std::shared_ptr<pb::common::Region> region);
 
-  pb::error::Errno MetaPut(std::shared_ptr<Context> ctx, const pb::coordinator_internal::MetaIncrement& meta) override;
+  butil::Status MetaPut(std::shared_ptr<Context> ctx, const pb::coordinator_internal::MetaIncrement& meta) override;
 
  private:
   std::shared_ptr<MetaControl> meta_control_;

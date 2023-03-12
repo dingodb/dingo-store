@@ -36,7 +36,7 @@ class RaftNode {
   int Init(const std::string& init_conf);
   void Destroy();
 
-  pb::error::Errno Commit(std::shared_ptr<Context> ctx, std::shared_ptr<pb::raft::RaftCmdRequest> raft_cmd);
+  butil::Status Commit(std::shared_ptr<Context> ctx, std::shared_ptr<pb::raft::RaftCmdRequest> raft_cmd);
 
   bool IsLeader();
   bool IsLeaderLeaseValid();
