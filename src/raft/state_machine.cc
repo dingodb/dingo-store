@@ -23,8 +23,6 @@
 namespace dingodb {
 
 void StoreClosure::Run() {
-  LOG(INFO) << "Closure run...";
-
   brpc::ClosureGuard done_guard(ctx_->IsSyncMode() ? nullptr : ctx_->done());
   if (!status().ok()) {
     LOG(ERROR) << butil::StringPrintf("raft log commit failed, region[%ld] %d:%s", ctx_->region_id(),
@@ -62,10 +60,11 @@ void StoreStateMachine::DispatchRequest(StoreClosure* done, const pb::raft::Raft
 }
 
 void StoreStateMachine::HandlePutRequest([[maybe_unused]] StoreClosure* done, const pb::raft::PutRequest& request) {
-  LOG(INFO) << "handlePutRequest ...";
   std::shared_ptr<Context> ctx =
       (done != nullptr && done->GetCtx() != nullptr) ? done->GetCtx() : std::make_shared<Context>();
   ctx->set_cf_name(request.cf_name());
+
+  LOG(INFO) << "handlePutRequest=> on Region:" << ctx->region_id() << ", RecordCnt:" << request.kvs().size();
 
   pb::error::Errno errcode = pb::error::OK;
   if (request.kvs().size() == 1) {
@@ -116,13 +115,18 @@ void StoreStateMachine::on_apply(braft::Iterator& iter) {
   for (; iter.valid(); iter.next()) {
     braft::AsyncClosureGuard done_guard(iter.done());
 
-    butil::IOBufAsZeroCopyInputStream wrapper(iter.data());
     pb::raft::RaftCmdRequest raft_cmd;
-    CHECK(raft_cmd.ParseFromZeroCopyStream(&wrapper));
-    LOG(INFO) << butil::StringPrintf("raft commited log region(%ld) term(%ld) index(%ld)",
-                                     raft_cmd.header().region_id(), iter.term(), iter.index());
+    if (iter.done()) {
+      StoreClosure* store_closure = dynamic_cast<StoreClosure*>(iter.done());
+      raft_cmd = *(store_closure->GetRequest());
+    } else {
+      butil::IOBufAsZeroCopyInputStream wrapper(iter.data());
+      CHECK(raft_cmd.ParseFromZeroCopyStream(&wrapper));
+    }
 
-    LOG(INFO) << "raft_cmd: " << raft_cmd.ShortDebugString();
+    std::string str_raft_cmd = Helper::MessageToJsonString(raft_cmd);
+    LOG(INFO) << butil::StringPrintf("raft apply log on region[%ld-term:%ld-index:%ld] cmd:[%s]",
+                                     raft_cmd.header().region_id(), iter.term(), iter.index(), str_raft_cmd.c_str());
     DispatchRequest(dynamic_cast<StoreClosure*>(iter.done()), raft_cmd);
   }
 }

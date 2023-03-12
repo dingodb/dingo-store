@@ -79,6 +79,7 @@ class Helper {
   static std::string StringToHex(const std::string& str);
 
   static void SetPbMessageError(int errcode, const std::string& errmsg, google::protobuf::Message* message);
+  static std::string MessageToJsonString(const google::protobuf::Message& message);
 };
 
 }  // namespace dingodb

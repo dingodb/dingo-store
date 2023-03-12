@@ -69,7 +69,6 @@ pb::error::Errno RaftNode::Commit(std::shared_ptr<Context> ctx, std::shared_ptr<
   if (!IsLeader()) {
     return pb::error::ERAFT_NOTLEADER;
   }
-  LOG(INFO) << "Commit raft cmd to " << node_id_;
   butil::IOBuf data;
   butil::IOBufAsZeroCopyOutputStream wrapper(&data);
   raft_cmd->SerializeToZeroCopyStream(&wrapper);
