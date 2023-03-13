@@ -658,7 +658,9 @@ int CoordinatorControl::DropTable(uint64_t schema_id, uint64_t table_id,
   auto* table_to_delete = meta_increment.add_tables();
   table_to_delete->set_id(table_id);
   table_to_delete->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
-  table_to_delete->CopyFrom(table_internal);
+
+  auto* table_to_delete_table = table_to_delete->mutable_table();
+  table_to_delete_table->CopyFrom(table_internal);
 
   // bump up region map epoch
   GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_TABLE, meta_increment);
