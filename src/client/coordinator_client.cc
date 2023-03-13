@@ -27,6 +27,7 @@
 #include "gflags/gflags.h"
 #include "proto/coordinator.pb.h"
 #include "proto/meta.pb.h"
+#include "proto/node.pb.h"
 
 DEFINE_bool(log_each_request, true, "Print log for each request");
 DEFINE_bool(use_bthread, false, "Use bthread to send requests");
@@ -37,6 +38,27 @@ DEFINE_int32(req_num, 1, "Number of requests");
 DEFINE_string(method, "Hello", "Request method");
 
 bvar::LatencyRecorder g_latency_recorder("dingo-coordinator");
+
+void SendGetNodeInfo(brpc::Controller& cntl, dingodb::pb::node::NodeService_Stub& stub) {
+  dingodb::pb::node::GetNodeInfoRequest request;
+  dingodb::pb::node::GetNodeInfoResponse response;
+
+  std::string key = "Hello";
+  // const char* op = nullptr;
+  request.set_cluster_id(0);
+  stub.GetNodeInfo(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    // bthread_usleep(FLAGS_timeout_ms * 1000L);
+  }
+
+  if (FLAGS_log_each_request) {
+    LOG(INFO) << "Received response"
+              << " cluster_id=" << request.cluster_id() << " request_attachment=" << cntl.request_attachment().size()
+              << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+    LOG(INFO) << response.DebugString();
+  }
+}
 
 void SendHello(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
   dingodb::pb::coordinator::HelloRequest request;
@@ -206,6 +228,7 @@ void* Sender(void* /*arg*/) {
       continue;
     }
     dingodb::pb::coordinator::CoordinatorService_Stub stub(&channel);
+    dingodb::pb::node::NodeService_Stub node_stub(&channel);
 
     brpc::Controller cntl;
     cntl.set_timeout_ms(FLAGS_timeout_ms);
@@ -224,6 +247,8 @@ void* Sender(void* /*arg*/) {
       SendGetStoreMap(cntl, stub);
     } else if (FLAGS_method == "GetRegionMap") {
       SendGetRegionMap(cntl, stub);
+    } else if (FLAGS_method == "GetNodeInfo") {
+      SendGetNodeInfo(cntl, node_stub);
     } else {
       LOG(INFO) << " method illegal , exit";
       return nullptr;

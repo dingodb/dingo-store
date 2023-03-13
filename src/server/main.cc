@@ -25,6 +25,7 @@
 #include "proto/store.pb.h"
 #include "server/coordinator_service.h"
 #include "server/meta_service.h"
+#include "server/node_service.h"
 #include "server/server.h"
 #include "server/store_service.h"
 
@@ -100,9 +101,23 @@ int main(int argc, char *argv[]) {
   dingodb::CoordinatorServiceImpl coordinator_service;
   dingodb::MetaServiceImpl meta_service;
   dingodb::StoreServiceImpl store_service;
+  dingodb::NodeServiceImpl node_service;
+
+  node_service.SetServer(dingo_server);
 
   brpc::Server brpc_server;
   brpc::Server raft_server;
+
+  if (brpc_server.AddService(&node_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
+    LOG(ERROR) << "Fail to add node service to brpc_server!";
+    return -1;
+  }
+
+  if (raft_server.AddService(&node_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
+    LOG(ERROR) << "Fail to add node service raft_server!";
+    return -1;
+  }
+
   if (is_coodinator) {
     coordinator_service.SetControl(dingo_server->GetCoordinatorControl());
     meta_service.SetControl(dingo_server->GetCoordinatorControl());
