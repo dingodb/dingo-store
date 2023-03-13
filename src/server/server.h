@@ -39,6 +39,7 @@ class Server {
   static Server* GetInstance();
 
   void SetRole(pb::common::ClusterRole role);
+  pb::common::ClusterRole GetRole() { return this->role_; };
 
   // Init config.
   bool InitConfig(const std::string& filename);

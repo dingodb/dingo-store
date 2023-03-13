@@ -133,7 +133,7 @@ bool Server::InitEngines() {
   return true;
 }
 
-butil::Status Server::StartMetaRegion(std::shared_ptr<Config> config,
+butil::Status Server::StartMetaRegion(std::shared_ptr<Config> config,       // NOLINT
                                       std::shared_ptr<Engine> kv_engine) {  // NOLINT
   /**
    * 1. construct context(must contains role)
