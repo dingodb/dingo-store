@@ -972,7 +972,7 @@ void CoordinatorControl::GetTable(uint64_t schema_id, uint64_t table_id, pb::met
 
     // part voter & learner locations
     for (int j = 0; j < part_region.peers_size(); j++) {
-      const auto& part_peer = part_region.peers(i);
+      const auto& part_peer = part_region.peers(j);
       if (part_peer.store_id() == part_region.leader_store_id()) {
         leader_location->CopyFrom(part_peer.server_location());
       }
