@@ -23,12 +23,15 @@
 #include <utility>
 #include <vector>
 
+#include "brpc/channel.h"
 #include "butil/scoped_lock.h"
 #include "butil/strings/string_split.h"
+#include "common/helper.h"
 #include "google/protobuf/unknown_field_set.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator_internal.pb.h"
 #include "proto/meta.pb.h"
+#include "proto/node.pb.h"
 
 namespace dingodb {
 
@@ -247,13 +250,73 @@ uint64_t CoordinatorControl::GetPresentId(const pb::coordinator_internal::IdEpoc
 
 void CoordinatorControl::SetRaftNode(std::shared_ptr<RaftNode> raft_node) { raft_node_ = raft_node; }
 
-void CoordinatorControl::GetLeaderLocation(pb::common::Location& leader_location) {
+void CoordinatorControl::GetServerLocation(pb::common::Location& raft_location, pb::common::Location& server_location) {
+  // validate raft_location
+  // TODO: how to support ipv6
+  if (raft_location.host().length() <= 0 || raft_location.port() <= 0) {
+    LOG(ERROR) << "GetServiceLocation illegal raft_location=" << dingodb::Helper::MessageToJsonString(raft_location);
+    return;
+  }
+
+  // find in cache
+  auto raft_location_string = raft_location.host() + ":" + std::to_string(raft_location.port());
+  if (coordinator_location_cache_.find(raft_location_string) != coordinator_location_cache_.end()) {
+    server_location.CopyFrom(coordinator_location_cache_[raft_location_string]);
+    LOG(INFO) << "GetServiceLocation Cache Hit raft_location=" << dingodb::Helper::MessageToJsonString(raft_location);
+    return;
+  }
+
+  // cache miss, use rpc to get remote_node server location, and store in cache
+  braft::PeerId remote_node(raft_location_string);
+
+  // rpc
+  brpc::Channel channel;
+  if (channel.Init(remote_node.addr, nullptr) != 0) {
+    LOG(ERROR) << "Fail to init channel to " << remote_node;
+    return;
+  }
+
+  dingodb::pb::node::NodeService_Stub stub(&channel);
+
+  brpc::Controller cntl;
+  cntl.set_timeout_ms(1000L);
+
+  dingodb::pb::node::GetNodeInfoRequest request;
+  dingodb::pb::node::GetNodeInfoResponse response;
+
+  std::string key = "Hello";
+  request.set_cluster_id(0);
+  stub.GetNodeInfo(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    // bthread_usleep(FLAGS_timeout_ms * 1000L);
+  }
+
+  LOG(INFO) << "Received response"
+            << " cluster_id=" << request.cluster_id() << " request_attachment=" << cntl.request_attachment().size()
+            << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+  LOG(INFO) << dingodb::Helper::MessageToJsonString(response);
+
+  server_location.CopyFrom(response.node_info().server_location());
+
+  // add to cache if get server_location
+  if (server_location.host().length() > 0 && server_location.port() > 0) {
+    LOG(INFO) << "GetServiceLocation Cache Miss, add new cache raft_location="
+              << dingodb::Helper::MessageToJsonString(raft_location);
+    coordinator_location_cache_[raft_location_string] = server_location;
+  } else {
+    LOG(INFO) << "GetServiceLocation Cache Miss, can't get server_location, raft_location="
+              << dingodb::Helper::MessageToJsonString(raft_location);
+  }
+}
+
+void CoordinatorControl::GetLeaderLocation(pb::common::Location& leader_server_location) {
   if (raft_node_ == nullptr) {
     LOG(ERROR) << "GetLeaderLocation raft_node_ is nullptr";
     return;
   }
 
-  // parse Location from string
+  // parse leader raft location from string
   auto leader_string = raft_node_->GetLeaderId().to_string();
 
   std::vector<std::string> addrs;
@@ -264,17 +327,21 @@ void CoordinatorControl::GetLeaderLocation(pb::common::Location& leader_location
     return;
   }
 
-  leader_location.set_host(addrs[0]);
+  pb::common::Location leader_raft_location;
+  leader_raft_location.set_host(addrs[0]);
 
   int32_t value;
   try {
     value = std::stoi(addrs[1]);
-    leader_location.set_port(value);
+    leader_raft_location.set_port(value);
   } catch (const std::invalid_argument& ia) {
     LOG(ERROR) << "GetLeaderLocation parse port error Irnvalid argument: " << ia.what() << std::endl;
   } catch (const std::out_of_range& oor) {
     LOG(ERROR) << "GetLeaderLocation parse port error Out of Range error: " << oor.what() << std::endl;
   }
+
+  // GetServerLocation
+  this->GetServerLocation(leader_raft_location, leader_server_location);
 }
 
 uint64_t CoordinatorControl::GetNextId(const pb::coordinator_internal::IdEpochType& key,

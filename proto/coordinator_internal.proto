@@ -42,8 +42,8 @@ message SchemaInternal {
 // CoordinatorInteral stores coordinator info for SDK & stores.
 message CoordinatorInternal {
   uint64 id = 1;
-  dingodb.pb.meta.TableDefinition definition = 2;
-  repeated PartInternal partitions = 3;
+  dingodb.pb.common.Location server_location = 2;
+  dingodb.pb.common.Location raft_location = 3;
 }
 
 enum IdEpochType {

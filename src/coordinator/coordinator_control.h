@@ -161,7 +161,13 @@ class CoordinatorControl : public MetaControl {
   void SetLeader() override;
   void SetNotLeader() override;
 
-  void GetLeaderLocation(pb::common::Location &leader_location) override;
+  // Get raft leader's server location for sdk use
+  void GetLeaderLocation(pb::common::Location &leader_server_location) override;
+
+  // use raft_location to get server_location
+  // in: raft_location
+  // out: server_location
+  void GetServerLocation(pb::common::Location &raft_location, pb::common::Location &server_location);
 
   // create region
   // in: resource_tag
@@ -302,7 +308,8 @@ class CoordinatorControl : public MetaControl {
   // raft node
   std::shared_ptr<RaftNode> raft_node_;
 
-  uint64_t test_;
+  // coordinator raft_location to server_location cache
+  std::map<std::string, pb::common::Location> coordinator_location_cache_;
 };
 
 }  // namespace dingodb

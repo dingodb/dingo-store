@@ -75,19 +75,20 @@ struct PutIfAbsentDatum : public DatumAble {
 };
 
 struct CreateSchemaDatum : public DatumAble {
-  DatumType GetType() { return DatumType::CREATESCHEMA; }
+  virtual ~CreateSchemaDatum() = default;
+  DatumType GetType() override { return DatumType::CREATESCHEMA; }
 
-  pb::raft::Request* TransformToRaft() override {}
+  pb::raft::Request* TransformToRaft() override { return nullptr; }
   void TransformFromRaft(pb::raft::Response& resonse) override {}
 };
 
 class WriteData {
  public:
-  const std::vector<std::shared_ptr<DatumAble> > Datums() const { return datums_; }
+  std::vector<std::shared_ptr<DatumAble>> Datums() const { return datums_; }
   void AddDatums(std::shared_ptr<DatumAble> datum) { datums_.push_back(datum); }
 
  private:
-  std::vector<std::shared_ptr<DatumAble> > datums_;
+  std::vector<std::shared_ptr<DatumAble>> datums_;
 };
 
 }  // namespace dingodb
