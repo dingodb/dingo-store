@@ -143,7 +143,7 @@ public class ServiceOperation {
             NavigableMap<ByteArrayUtils.ComparableByteArray, Meta.Part> parts =
                     metaClient.getParts(table.getName());
 
-            DingoKeyValueCodec keyValueCodec = new DingoKeyValueCodec(
+            KeyValueCodec keyValueCodec = new DingoKeyValueCodec(
                     table.getDingoType(),
                     table.getKeyMapping()
             );

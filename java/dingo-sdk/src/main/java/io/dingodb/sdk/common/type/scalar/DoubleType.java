@@ -19,10 +19,10 @@ package io.dingodb.sdk.common.type.scalar;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonTypeName;
-import io.dingodb.sdk.common.serial.schema.DingoSchema;
-import io.dingodb.sdk.common.serial.schema.DoubleSchema;
+import io.dingodb.serial.v2.t1.schema.DingoSchema;
 import io.dingodb.sdk.common.type.TypeCode;
 import io.dingodb.sdk.common.type.converter.DataConverter;
+import io.dingodb.serial.v2.t1.schema.DoubleSchema;
 import org.checkerframework.checker.nullness.qual.NonNull;
 
 import java.math.BigDecimal;
