@@ -30,13 +30,8 @@ SERVER_HOST=127.0.0.1
 SERVER_START_PORT=20000
 RAFT_HOST=127.0.0.1
 RAFT_START_PORT=20100
-COORDINATOR_SERVER_START_PORT=32000
-COORDINATOR_RAFT_START_PORT=32100
-
-if [ $FLAGS_role == "coordinator" ]; then
-  SERVER_START_PORT=32000
-  RAFT_START_PORT=32100
-fi
+COORDINATOR_SERVER_START_PORT=22000
+COORDINATOR_RAFT_START_PORT=22100
 
 function deploy_store() {
   role=$1
@@ -117,7 +112,7 @@ for ((i=1; i<=$SERVER_NUM; ++i)); do
   program_dir=$BASE_DIR/dist/${FLAGS_role}${i}
 
 if [ $FLAGS_role == "coordinator" ]; then
-  deploy_store ${FLAGS_role} $BASE_DIR $program_dir `expr $COORDINATOR_RAFT_START_PORT + $i` `expr $COORDINATOR_RAFT_START_PORT + $i` `expr $INSTANCE_START_ID + $i` ${COOR_SRV_PEERS} ${COOR_RAFT_PEERS}
+  deploy_store ${FLAGS_role} $BASE_DIR $program_dir `expr $COORDINATOR_SERVER_START_PORT + $i` `expr $COORDINATOR_RAFT_START_PORT + $i` `expr $INSTANCE_START_ID + $i` ${COOR_SRV_PEERS} ${COOR_RAFT_PEERS}
 else
   deploy_store ${FLAGS_role} $BASE_DIR $program_dir `expr $SERVER_START_PORT + $i` `expr $RAFT_START_PORT + $i` `expr $INSTANCE_START_ID + $i` ${COOR_SRV_PEERS} ${COOR_RAFT_PEERS}
 fi
