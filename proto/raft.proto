@@ -82,6 +82,15 @@ message Request {
 
 message Response {
   CmdType cmd_type = 1;
+
+  oneof cmd_body {
+    PutResponse put = 1000;
+    PutIfAbsentResponse put_if_absent = 1001;
+    DeleteRangeResponse delete_range = 1002;
+
+    RaftCreateSchemaResponse create_schema_req = 2001;
+    RaftCreateTableResponse create_table_req = 2002;
+  }
 }
 
 message RequestHeader {

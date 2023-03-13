@@ -14,6 +14,7 @@
 
 #include "meta/meta_writer.h"
 
+#include "common/constant.h"
 #include "common/context.h"
 #include "common/helper.h"
 
@@ -21,12 +22,10 @@ namespace dingodb {
 
 bool MetaWriter::Put(const std::shared_ptr<pb::common::KeyValue> kv) {
   LOG(INFO) << "Put meta data, key: " << Helper::StringToHex(kv->key());
-  std::shared_ptr<Context> ctx = std::make_shared<Context>();
-  ctx->set_cf_name(kStoreMetaCF);
-  ctx->set_flush(true);
-  auto errcode = engine_->KvPut(ctx, *kv);
-  if (errcode != pb::error::OK) {
-    LOG(ERROR) << "Meta write failed, errcode: " << errcode;
+  auto writer = engine_->NewWriter(Constant::kStoreMetaCF);
+  auto status = writer->KvPut(*kv.get());
+  if (!status.ok()) {
+    LOG(ERROR) << "Meta write failed, errcode: " << status.error_code() << " " << status.error_str();
     return false;
   }
 
@@ -35,12 +34,10 @@ bool MetaWriter::Put(const std::shared_ptr<pb::common::KeyValue> kv) {
 
 bool MetaWriter::Put(const std::vector<pb::common::KeyValue> kvs) {
   LOG(INFO) << "Put meta data, key nums: " << kvs.size();
-  std::shared_ptr<Context> ctx = std::make_shared<Context>();
-  ctx->set_cf_name(kStoreMetaCF);
-  ctx->set_flush(true);
-  auto errcode = engine_->KvBatchPut(ctx, kvs);
-  if (errcode != pb::error::OK) {
-    LOG(ERROR) << "Meta batch write failed, errcode: " << errcode;
+  auto writer = engine_->NewWriter(Constant::kStoreMetaCF);
+  auto status = writer->KvBatchPut(kvs);
+  if (!status.ok()) {
+    LOG(ERROR) << "Meta batch write failed, errcode: " << status.error_code() << " " << status.error_str();
     return false;
   }
 
@@ -48,12 +45,11 @@ bool MetaWriter::Put(const std::vector<pb::common::KeyValue> kvs) {
 }
 
 bool MetaWriter::Delete(const std::string& key) {
-  std::shared_ptr<Context> ctx = std::make_shared<Context>();
-  ctx->set_cf_name(kStoreMetaCF);
-
-  auto errcode = engine_->KvDelete(ctx, key);
-  if (errcode != pb::error::OK) {
-    LOG(ERROR) << "Meta delete failed, errcode: " << errcode;
+  LOG(INFO) << "Delete meta data, key: " << key;
+  auto writer = engine_->NewWriter(Constant::kStoreMetaCF);
+  auto status = writer->KvDelete(key);
+  if (!status.ok()) {
+    LOG(ERROR) << "Meta delete failed, errcode: " << status.error_code() << " " << status.error_str();
     return false;
   }
 

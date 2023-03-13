@@ -14,18 +14,17 @@
 
 #include "meta/meta_reader.h"
 
+#include "common/constant.h"
 #include "common/helper.h"
 
 namespace dingodb {
 
 std::shared_ptr<pb::common::KeyValue> MetaReader::Get(const std::string& key) {
-  std::shared_ptr<Context> ctx = std::make_shared<Context>();
-  ctx->set_cf_name(kStoreMetaCF);
-
+  auto reader = engine_->NewReader(Constant::kStoreMetaCF);
   std::string* value = new std::string();
-  auto errcode = engine_->KvGet(ctx, key, *value);
-  if (errcode != pb::error::OK) {
-    LOG(ERROR) << "Meta get failed, errcode: " << errcode;
+  auto status = reader->KvGet(key, *value);
+  if (!status.ok()) {
+    LOG(ERROR) << "Meta get failed, errcode: " << status.error_code() << " " << status.error_str();
     return nullptr;
   }
 
@@ -37,17 +36,16 @@ std::shared_ptr<pb::common::KeyValue> MetaReader::Get(const std::string& key) {
 }
 
 bool MetaReader::Scan(const std::string& prefix, std::vector<pb::common::KeyValue>& kvs) {
-  std::shared_ptr<Context> ctx = std::make_shared<Context>();
-  ctx->set_cf_name(kStoreMetaCF);
-
+  auto reader = engine_->NewReader(Constant::kStoreMetaCF);
   const std::string prefix_next = Helper::Increment(prefix);
-  LOG(INFO) << "Scan meta data, prefix: " << Helper::StringToHex(prefix) << "-" << Helper::StringToHex(prefix_next);
-  auto errcode = engine_->KvScan(ctx, prefix, prefix_next, kvs);
-  if (errcode != pb::error::OK) {
-    LOG(ERROR) << "Meta scan failed, errcode: " << errcode;
+  auto status = reader->KvScan(prefix, prefix_next, kvs);
+  if (!status.ok()) {
+    LOG(ERROR) << "Meta scan failed, errcode: " << status.error_code() << " " << status.error_str();
     return false;
   }
-  LOG(INFO) << "Scan meta data, result kvs size: " << kvs.size();
+  LOG(INFO) << "Scan meta data, prefix: " << Helper::StringToHex(prefix) << "-" << Helper::StringToHex(prefix_next)
+            << ": " << kvs.size();
+
   return true;
 }
 

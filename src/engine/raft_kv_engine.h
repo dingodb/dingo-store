@@ -18,6 +18,7 @@
 #include <memory>
 
 #include "engine/engine.h"
+#include "engine/raw_engine.h"
 #include "proto/error.pb.h"
 #include "proto/store.pb.h"
 #include "raft/raft_node_manager.h"
@@ -28,11 +29,11 @@ class RaftControlAble {
  public:
   virtual ~RaftControlAble() = default;
 
-  virtual pb::error::Errno AddRegion([[maybe_unused]] std::shared_ptr<Context> ctx,
-                                     std::shared_ptr<pb::common::Region> region) = 0;
-  virtual pb::error::Errno DestroyRegion([[maybe_unused]] std::shared_ptr<Context> ctx, uint64_t region_id) = 0;
-  virtual pb::error::Errno ChangeRegion([[maybe_unused]] std::shared_ptr<Context> ctx, uint64_t region_id,
-                                        std::vector<pb::common::Peer> peers) = 0;
+  virtual butil::Status AddRegion([[maybe_unused]] std::shared_ptr<Context> ctx,
+                                  std::shared_ptr<pb::common::Region> region) = 0;
+  virtual butil::Status DestroyRegion([[maybe_unused]] std::shared_ptr<Context> ctx, uint64_t region_id) = 0;
+  virtual butil::Status ChangeRegion([[maybe_unused]] std::shared_ptr<Context> ctx, uint64_t region_id,
+                                     std::vector<pb::common::Peer> peers) = 0;
 
  protected:
   RaftControlAble() = default;
@@ -40,7 +41,7 @@ class RaftControlAble {
 
 class RaftKvEngine : public Engine, public RaftControlAble {
  public:
-  RaftKvEngine(std::shared_ptr<Engine> engine);
+  RaftKvEngine(std::shared_ptr<RawEngine> engine);
   ~RaftKvEngine() override;
 
   bool Init(std::shared_ptr<Config> config) override;
@@ -49,30 +50,33 @@ class RaftKvEngine : public Engine, public RaftControlAble {
   std::string GetName() override;
   pb::common::Engine GetID() override;
 
-  pb::error::Errno AddRegion(std::shared_ptr<Context> ctx, std::shared_ptr<pb::common::Region> region) override;
-  pb::error::Errno ChangeRegion(std::shared_ptr<Context> ctx, uint64_t region_id,
-                                std::vector<pb::common::Peer> peers) override;
-  pb::error::Errno DestroyRegion(std::shared_ptr<Context> ctx, uint64_t region_id) override;
+  butil::Status AddRegion(std::shared_ptr<Context> ctx, std::shared_ptr<pb::common::Region> region) override;
+  butil::Status ChangeRegion(std::shared_ptr<Context> ctx, uint64_t region_id,
+                             std::vector<pb::common::Peer> peers) override;
+  butil::Status DestroyRegion(std::shared_ptr<Context> ctx, uint64_t region_id) override;
 
-  pb::error::Errno KvGet(std::shared_ptr<Context> ctx, const std::string& key, std::string& value) override;
-  pb::error::Errno KvBatchGet(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys,
-                              std::vector<pb::common::KeyValue>& kvs) override;
+  butil::Status Write(std::shared_ptr<Context> ctx, const WriteData& write_data) override;
+  butil::Status AsyncWrite(std::shared_ptr<Context> ctx, const WriteData& write_data, WriteCb_t cb) override;
 
-  pb::error::Errno KvPut(std::shared_ptr<Context> ctx, const pb::common::KeyValue& kv) override;
-  // pb::error::Errno KvAsyncPut(std::shared_ptr<Context> ctx, const pb::common::KeyValue& kv) override;
-  pb::error::Errno KvBatchPut(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs) override;
+  std::shared_ptr<Engine::Reader> NewReader(const std::string& cf_name) override;
 
-  pb::error::Errno KvScan(std::shared_ptr<Context> ctx, const std::string& start_key, const std::string& end_key,
-                          std::vector<pb::common::KeyValue>& kvs) override;
+  class Reader : public Engine::Reader {
+   public:
+    Reader(std::shared_ptr<RawEngine::Reader> reader) : reader_(reader) {}
+    butil::Status KvGet(std::shared_ptr<Context> ctx, const std::string& key, std::string& value) override;
 
-  pb::error::Errno KvPutIfAbsent(std::shared_ptr<Context> ctx, const pb::common::KeyValue& kv) override;
-  pb::error::Errno KvBatchPutIfAbsentAtomic(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs,
-                                            std::vector<std::string>& put_keys) override;
+    butil::Status KvScan(std::shared_ptr<Context> ctx, const std::string& start_key, const std::string& end_key,
+                         std::vector<pb::common::KeyValue>& kvs) override;
 
-  pb::error::Errno KvDeleteRange(std::shared_ptr<Context> ctx, const pb::common::Range& range) override;
+    butil::Status KvCount(std::shared_ptr<Context> ctx, const std::string& start_key, const std::string& end_key,
+                          int64_t& count) override;
+
+   private:
+    std::shared_ptr<RawEngine::Reader> reader_;
+  };
 
  protected:
-  std::shared_ptr<Engine> engine_;                      // NOLINT
+  std::shared_ptr<RawEngine> engine_;                   // NOLINT
   std::unique_ptr<RaftNodeManager> raft_node_manager_;  // NOLINT
 };
 

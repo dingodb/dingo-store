@@ -29,12 +29,12 @@ class StoreControl {
   StoreControl(){};
   ~StoreControl(){};
 
-  pb::error::Errno AddRegion(std::shared_ptr<Context> ctx, std::shared_ptr<pb::common::Region> region);
+  butil::Status AddRegion(std::shared_ptr<Context> ctx, std::shared_ptr<pb::common::Region> region);
   void AddRegions(std::shared_ptr<Context> ctx, std::vector<std::shared_ptr<pb::common::Region> > regions);
 
-  pb::error::Errno ChangeRegion(std::shared_ptr<Context> ctx, std::shared_ptr<pb::common::Region> region);
+  butil::Status ChangeRegion(std::shared_ptr<Context> ctx, std::shared_ptr<pb::common::Region> region);
 
-  pb::error::Errno DeleteRegion(std::shared_ptr<Context> ctx, uint64_t region_id);
+  butil::Status DeleteRegion(std::shared_ptr<Context> ctx, uint64_t region_id);
 
  private:
   DISALLOW_COPY_AND_ASSIGN(StoreControl);

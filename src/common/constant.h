@@ -16,25 +16,25 @@
 #define DINGODB_COMMON_CONSTANT_H__
 
 #include <cstdint>
+#include <string>
 
 namespace dingodb {
 
 class Constant {
  public:
-  /**
-   * Define Global Region Id for Coordinator(As only One)
-   */
+  // Define Global Region Id for Coordinator(As only One)
   static const int64_t kCoordinatorRegionId = 0;
 
-  /**
-   * Define Global TableID for Coordinator(As only one)
-   */
+  // Define Global TableID for Coordinator(As only one)
   static const uint64_t kCoordinatorTableId = 0;
 
-  /**
-   * Define Global SchemaId for Coordinator(As only one)
-   */
+  // Define Global SchemaId for Coordinator(As only one)
   static const uint64_t kCoordinatorSchemaId = 0;
+
+  // Define Store data column family.
+  static const std::string kStoreDataCF;
+  // Define Store meta column family.
+  static const std::string kStoreMetaCF;
 };
 
 }  // namespace dingodb

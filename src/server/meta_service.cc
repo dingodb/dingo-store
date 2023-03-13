@@ -123,7 +123,7 @@ void MetaServiceImpl::CreateTable(google::protobuf::RpcController *controller,
 
   std::shared_ptr<Context> ctx =
       std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_create_store_closure);
-  ctx->set_region_id(Constant::kCoordinatorRegionId);
+  ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
   engine_->MetaPut(ctx, meta_increment);
@@ -168,7 +168,7 @@ void MetaServiceImpl::CreateSchema(google::protobuf::RpcController *controller,
 
   std::shared_ptr<Context> ctx =
       std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_create_store_closure);
-  ctx->set_region_id(Constant::kCoordinatorRegionId);
+  ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
   engine_->MetaPut(ctx, meta_increment);
@@ -203,7 +203,7 @@ void MetaServiceImpl::DropTable(google::protobuf::RpcController *controller, con
 
   std::shared_ptr<Context> ctx =
       std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_create_store_closure);
-  ctx->set_region_id(Constant::kCoordinatorRegionId);
+  ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
   engine_->MetaPut(ctx, meta_increment);

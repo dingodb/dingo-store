@@ -32,6 +32,7 @@
 #include "engine/mem_engine.h"
 #include "engine/raft_kv_engine.h"
 #include "engine/raft_meta_engine.h"
+#include "engine/raw_rocks_engine.h"
 #include "engine/rocks_engine.h"
 #include "meta/meta_reader.h"
 #include "meta/meta_writer.h"
@@ -82,23 +83,32 @@ bool Server::InitServerID() {
   return id_ != 0;
 }
 
-bool Server::InitEngines() {
+bool Server::InitRawEngines() {
   auto config = ConfigManager::GetInstance()->GetConfig(role_);
 
-  std::shared_ptr<Engine> rock_engine = std::make_shared<RocksEngine>();
+  std::shared_ptr<RawEngine> rock_engine = std::make_shared<RawRocksEngine>();
   if (!rock_engine->Init(config)) {
-    LOG(ERROR) << "Init RocksEngine Failed with Config[" << config->ToString();
+    LOG(ERROR) << "Init RawRocksEngine Failed with Config[" << config->ToString();
     return false;
   }
+
+  raw_engines_.insert(std::make_pair(rock_engine->GetID(), rock_engine));
+  return true;
+}
+
+bool Server::InitEngines() {
+  auto config = ConfigManager::GetInstance()->GetConfig(role_);
 
   // default Key-Value storage engine
   std::shared_ptr<Engine> raft_kv_engine;
 
+  auto raw_engine = raw_engines_[pb::common::RAW_ENG_ROCKSDB];
+
   // cooridnator use RaftMetaEngine
   if (role_ == pb::common::ClusterRole::COORDINATOR) {
     // init CoordinatorController
-    coordinator_control_ = std::make_shared<CoordinatorControl>(std::make_shared<MetaReader>(rock_engine),
-                                                                std::make_shared<MetaWriter>(rock_engine));
+    coordinator_control_ = std::make_shared<CoordinatorControl>(std::make_shared<MetaReader>(raw_engine),
+                                                                std::make_shared<MetaWriter>(raw_engine));
 
     if (!coordinator_control_->Recover()) {
       LOG(ERROR) << "coordinator_control_->Recover Failed";
@@ -110,23 +120,21 @@ bool Server::InitEngines() {
     }
 
     // init raft_meta_engine
-    raft_kv_engine = std::make_shared<RaftMetaEngine>(rock_engine, coordinator_control_);
+    raft_kv_engine = std::make_shared<RaftMetaEngine>(raw_engine, coordinator_control_);
   } else {
-    raft_kv_engine = std::make_shared<RaftKvEngine>(rock_engine);
+    raft_kv_engine = std::make_shared<RaftKvEngine>(raw_engine);
+    if (!raft_kv_engine->Init(config)) {
+      LOG(ERROR) << "Init RaftKvEngine failed with Config[" << config->ToString() << "]";
+      return false;
+    }
   }
 
-  if (!raft_kv_engine->Init(config)) {
-    LOG(ERROR) << "Init RaftKvEngine Failed with Config[" << config->ToString();
-    return false;
-  }
-
-  // engines_.insert(std::make_pair(mem_engine->GetID(), mem_engine));
-  engines_.insert(std::make_pair(rock_engine->GetID(), rock_engine));
   engines_.insert(std::make_pair(raft_kv_engine->GetID(), raft_kv_engine));
   return true;
 }
 
-pb::error::Errno Server::StartMetaRegion(std::shared_ptr<Config> config, std::shared_ptr<Engine> kv_engine) {  // NOLINT
+butil::Status Server::StartMetaRegion(std::shared_ptr<Config> config,
+                                      std::shared_ptr<Engine> kv_engine) {  // NOLINT
   /**
    * 1. construct context(must contains role)
    */
@@ -164,11 +172,11 @@ pb::error::Errno Server::StartMetaRegion(std::shared_ptr<Config> config, std::sh
 
   LOG(INFO) << "Create Region Request:" << region->DebugString();
   auto raft_engine = std::dynamic_pointer_cast<RaftMetaEngine>(kv_engine);
-  pb::error::Errno ret = raft_engine->InitCoordinatorRegion(ctx, region);
+  butil::Status status = raft_engine->InitCoordinatorRegion(ctx, region);
 
   // set node-manager to coordinator_control here
 
-  return ret;
+  return status;
 }
 
 bool Server::InitCoordinatorInteraction() {
@@ -184,7 +192,7 @@ bool Server::InitStorage() {
 }
 
 bool Server::InitStoreMetaManager() {
-  auto engine = engines_[pb::common::ENG_ROCKSDB];
+  auto engine = raw_engines_[pb::common::RAW_ENG_ROCKSDB];
   store_meta_manager_ =
       std::make_shared<StoreMetaManager>(std::make_shared<MetaReader>(engine), std::make_shared<MetaWriter>(engine));
   return store_meta_manager_->Init();
@@ -201,7 +209,7 @@ bool Server::InitCrontabManager() {
   crontab->func_ = Heartbeat::SendStoreHeartbeat;
   crontab->arg_ = coordinator_interaction_.get();
 
-  crontab_manager_->AddAndRunCrontab(crontab);
+  // crontab_manager_->AddAndRunCrontab(crontab);
 
   return true;
 }
