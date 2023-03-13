@@ -667,6 +667,54 @@ butil::Status RawRocksEngine::Writer::KvBatchPut(const std::vector<pb::common::K
   return butil::Status();
 }
 
+butil::Status RawRocksEngine::Writer::KvBatchPutAndDelete(const std::vector<pb::common::KeyValue>& kv_puts,
+                                                          const std::vector<pb::common::KeyValue>& kv_deletes) {
+  if (kv_puts.empty() && kv_deletes.empty()) {
+    LOG(ERROR) << butil::StringPrintf("keys empty not support");
+    return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
+  }
+
+  for (const auto& kv : kv_puts) {
+    if (kv.key().empty()) {
+      LOG(ERROR) << butil::StringPrintf("key empty not support");
+      return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
+    }
+  }
+
+  for (const auto& kv : kv_deletes) {
+    if (kv.key().empty()) {
+      LOG(ERROR) << butil::StringPrintf("key empty not support");
+      return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
+    }
+  }
+
+  rocksdb::WriteBatch batch;
+  for (const auto& kv : kv_puts) {
+    rocksdb::Status s = batch.Put(column_family_->GetHandle(), kv.key(), kv.value());
+    if (!s.ok()) {
+      LOG(ERROR) << butil::StringPrintf("rocksdb::WriteBatch::Put failed : %s", s.ToString().c_str());
+      return butil::Status(pb::error::EINTERNAL, "Internal error");
+    }
+  }
+
+  for (const auto& kv : kv_deletes) {
+    rocksdb::Status s = batch.Delete(column_family_->GetHandle(), kv.key(), kv.value());
+    if (!s.ok()) {
+      LOG(ERROR) << butil::StringPrintf("rocksdb::WriteBatch::Put failed : %s", s.ToString().c_str());
+      return butil::Status(pb::error::EINTERNAL, "Internal error");
+    }
+  }
+
+  rocksdb::WriteOptions write_options;
+  rocksdb::Status s = txn_db_->Write(write_options, &batch);
+  if (!s.ok()) {
+    LOG(ERROR) << butil::StringPrintf("rocksdb::TransactionDB::Write failed : %s", s.ToString().c_str());
+    return butil::Status(pb::error::EINTERNAL, "Internal error");
+  }
+
+  return butil::Status();
+}
+
 butil::Status RawRocksEngine::Writer::KvPutIfAbsent(const pb::common::KeyValue& kv) {
   pb::common::KeyValue internal_kv;
   internal_kv.set_key(kv.key());
