@@ -30,10 +30,12 @@ SERVER_HOST=127.0.0.1
 SERVER_START_PORT=20000
 RAFT_HOST=127.0.0.1
 RAFT_START_PORT=20100
+COORDINATOR_SERVER_START_PORT=32000
+COORDINATOR_RAFT_START_PORT=32100
 
 if [ $FLAGS_role == "coordinator" ]; then
-  SERVER_START_PORT=22000
-  RAFT_START_PORT=22100
+  SERVER_START_PORT=32000
+  RAFT_START_PORT=32100
 fi
 
 function deploy_store() {
@@ -43,6 +45,8 @@ function deploy_store() {
   server_port=$4
   raft_port=$5
   instance_id=$6
+  coor_srv_peers=$7
+  coor_raft_peers=$8
 
   echo "server ${dstpath}"
 
@@ -75,12 +79,15 @@ function deploy_store() {
   cp $srcpath/build/bin/dingodb_server $dstpath/bin/
   cp $srcpath/conf/${role}.template.yaml $dstpath/conf/${role}.yaml
 
-  sed  -i 's,\$INSTANCE_ID\$,'"$instance_id"',g'  $dstpath/conf/${role}.yaml
-  sed  -i 's,\$SERVER_HOST\$,'"$SERVER_HOST"',g'  $dstpath/conf/${role}.yaml
-  sed  -i 's,\$SERVER_PORT\$,'"$server_port"',g'  $dstpath/conf/${role}.yaml
-  sed  -i 's,\$RAFT_HOST\$,'"$RAFT_HOST"',g'  $dstpath/conf/${role}.yaml
-  sed  -i 's,\$RAFT_PORT\$,'"$raft_port"',g'  $dstpath/conf/${role}.yaml
-  sed  -i 's,\$BASE_PATH\$,'"$dstpath"',g'  $dstpath/conf/${role}.yaml
+  sed  -i 's,\$INSTANCE_ID\$,'"$instance_id"',g'          $dstpath/conf/${role}.yaml
+  sed  -i 's,\$SERVER_HOST\$,'"$SERVER_HOST"',g'          $dstpath/conf/${role}.yaml
+  sed  -i 's,\$SERVER_PORT\$,'"$server_port"',g'          $dstpath/conf/${role}.yaml
+  sed  -i 's,\$RAFT_HOST\$,'"$RAFT_HOST"',g'              $dstpath/conf/${role}.yaml
+  sed  -i 's,\$RAFT_PORT\$,'"$raft_port"',g'              $dstpath/conf/${role}.yaml
+  sed  -i 's,\$BASE_PATH\$,'"$dstpath"',g'                $dstpath/conf/${role}.yaml
+
+  sed  -i 's|\$COORDINATOR_SERVICE_PEERS\$|'"$coor_srv_peers"'|g'    $dstpath/conf/${role}.yaml
+  sed  -i 's|\$COORDINATOR_RAFT_PEERS\$|'"$coor_raft_peers"'|g'  $dstpath/conf/${role}.yaml
 
   if [ "${FLAGS_clean_db}" == "0" ]; then
     rm -rf $dstpath/data/store/db/*
@@ -93,10 +100,28 @@ function deploy_store() {
   fi
 }
 
+COOR_SRV_PEERS=""
+COOR_RAFT_PEERS=""
+
+for ((i=1; i<=$SERVER_NUM; ++i)); do
+    COOR_SRV_PEERS=${COOR_SRV_PEERS}","$SERVER_HOST":"`expr $COORDINATOR_SERVER_START_PORT + $i`
+    COOR_RAFT_PEERS=${COOR_RAFT_PEERS}","$SERVER_HOST":"`expr $COORDINATOR_RAFT_START_PORT + $i`
+done
+COOR_SRV_PEERS=${COOR_SRV_PEERS:1}
+COOR_RAFT_PEERS=${COOR_RAFT_PEERS:1}
+
+echo ${COOR_SRV_PEERS}
+echo ${COOR_RAFT_PEERS}
+
 for ((i=1; i<=$SERVER_NUM; ++i)); do
   program_dir=$BASE_DIR/dist/${FLAGS_role}${i}
 
-  deploy_store ${FLAGS_role} $BASE_DIR $program_dir `expr $SERVER_START_PORT + $i` `expr $RAFT_START_PORT + $i` `expr $INSTANCE_START_ID + $i`
+if [ $FLAGS_role == "coordinator" ]; then
+  deploy_store ${FLAGS_role} $BASE_DIR $program_dir `expr $COORDINATOR_RAFT_START_PORT + $i` `expr $COORDINATOR_RAFT_START_PORT + $i` `expr $INSTANCE_START_ID + $i` ${COOR_SRV_PEERS} ${COOR_RAFT_PEERS}
+else
+  deploy_store ${FLAGS_role} $BASE_DIR $program_dir `expr $SERVER_START_PORT + $i` `expr $RAFT_START_PORT + $i` `expr $INSTANCE_START_ID + $i` ${COOR_SRV_PEERS} ${COOR_RAFT_PEERS}
+fi
+
 done
 
 echo "Finish..."
