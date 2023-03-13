@@ -4,6 +4,9 @@
 
 package io.dingodb.sdk.common.table;
 
+import lombok.AllArgsConstructor;
+
+@AllArgsConstructor
 public class ColumnDefinition implements Column {
 
     private String name;

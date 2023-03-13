@@ -16,7 +16,7 @@
 
 package io.dingodb.sdk.common.type.scalar;
 
-import io.dingodb.sdk.common.serial.schema.DingoSchema;
+import io.dingodb.serial.v2.t1.schema.DingoSchema;
 import io.dingodb.sdk.common.type.NullType;
 import io.dingodb.sdk.common.type.NullableType;
 import io.dingodb.sdk.common.type.TypeCode;
