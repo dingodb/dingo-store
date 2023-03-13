@@ -5,7 +5,7 @@ server:
   host: $SERVER_HOST$
   port: $SERVER_PORT$
 coordinator:
-  peers: $SERVER_HOST$:$SERVER_PORT$
+  peers: $COORDINATOR_RAFT_PEERS$
 raft:
   host: $RAFT_HOST$
   port: $RAFT_PORT$
