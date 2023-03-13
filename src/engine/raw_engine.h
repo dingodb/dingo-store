@@ -85,6 +85,8 @@ class RawEngine {
     virtual ~Writer() = default;
     virtual butil::Status KvPut(const pb::common::KeyValue& kv) = 0;
     virtual butil::Status KvBatchPut(const std::vector<pb::common::KeyValue>& kvs) = 0;
+    virtual butil::Status KvBatchPutAndDelete(const std::vector<pb::common::KeyValue>& kv_puts,
+                                              const std::vector<pb::common::KeyValue>& kv_deletes) = 0;
 
     virtual butil::Status KvPutIfAbsent(const pb::common::KeyValue& kv) = 0;
     virtual butil::Status KvBatchPutIfAbsent(const std::vector<pb::common::KeyValue>& kvs,

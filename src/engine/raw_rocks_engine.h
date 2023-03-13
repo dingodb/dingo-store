@@ -133,6 +133,8 @@ class RawRocksEngine : public RawEngine {
     ~Writer() override{};
     butil::Status KvPut(const pb::common::KeyValue& kv) override;
     butil::Status KvBatchPut(const std::vector<pb::common::KeyValue>& kvs) override;
+    butil::Status KvBatchPutAndDelete(const std::vector<pb::common::KeyValue>& kv_puts,
+                                      const std::vector<pb::common::KeyValue>& kv_deletes) override;
 
     butil::Status KvPutIfAbsent(const pb::common::KeyValue& kv) override;
 
