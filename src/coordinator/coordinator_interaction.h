@@ -42,7 +42,7 @@ class CoordinatorInteraction {
   void NextLeader(int leader_index);
 
   template <typename Request, typename Response>
-  pb::error::Errno SendRequest(const std::string& api_name, const Request& request, Response& response);
+  butil::Status SendRequest(const std::string& api_name, const Request& request, Response& response);
 
   CoordinatorInteraction(const CoordinatorInteraction&) = delete;
   const CoordinatorInteraction& operator=(const CoordinatorInteraction&) = delete;
@@ -54,8 +54,8 @@ class CoordinatorInteraction {
 };
 
 template <typename Request, typename Response>
-pb::error::Errno CoordinatorInteraction::SendRequest(const std::string& api_name, const Request& request,
-                                                     Response& response) {
+butil::Status CoordinatorInteraction::SendRequest(const std::string& api_name, const Request& request,
+                                                  Response& response) {
   const ::google::protobuf::ServiceDescriptor* service_desc = pb::coordinator::CoordinatorService::descriptor();
   const ::google::protobuf::MethodDescriptor* method = service_desc->FindMethodByName(api_name);
 
@@ -69,18 +69,23 @@ pb::error::Errno CoordinatorInteraction::SendRequest(const std::string& api_name
     if (cntl.Failed()) {
       LOG(ERROR) << butil::StringPrintf("%s response failed, %lu %d %s", api_name.c_str(), cntl.log_id(),
                                         cntl.ErrorCode(), cntl.ErrorText().c_str());
-      if (cntl.ErrorCode() == pb::error::ERAFT_NOTLEADER) {
+      return butil::Status(cntl.ErrorCode(), cntl.ErrorText());
+    }
+
+    if (response.error().errcode() != pb::error::OK) {
+      if (response.error().errcode() == pb::error::ERAFT_NOTLEADER) {
         ++retry_count;
         NextLeader(leader_index);
       } else {
-        return static_cast<pb::error::Errno>(cntl.ErrorCode());
+        return butil::Status(response.error().errcode(), response.error().errmsg());
       }
     } else {
-      return pb::error::OK;
+      return butil::Status();
     }
+
   } while (retry_count < kMaxRetry);
 
-  return pb::error::ERAFT_NOTLEADER;
+  return butil::Status(pb::error::ERAFT_NOTLEADER, "Not raft leader");
 }
 
 }  // namespace dingodb

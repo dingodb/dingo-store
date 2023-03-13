@@ -36,8 +36,8 @@ void Heartbeat::SendStoreHeartbeat(void* arg) {
   }
 
   pb::coordinator::StoreHeartbeatResponse response;
-  auto errcode = coordinator_interaction->SendRequest("StoreHeartbeat", request, response);
-  if (errcode == pb::error::OK) {
+  auto status = coordinator_interaction->SendRequest("StoreHeartbeat", request, response);
+  if (status.ok()) {
     HandleStoreHeartbeatResponse(store_meta, response);
   }
 }

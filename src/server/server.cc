@@ -209,7 +209,7 @@ bool Server::InitCrontabManager() {
   crontab->func_ = Heartbeat::SendStoreHeartbeat;
   crontab->arg_ = coordinator_interaction_.get();
 
-  // crontab_manager_->AddAndRunCrontab(crontab);
+  crontab_manager_->AddAndRunCrontab(crontab);
 
   return true;
 }
