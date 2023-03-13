@@ -22,16 +22,20 @@ package dingodb.pb.node;
 option java_package = "io.dingodb.node";
 option cc_generic_services = true;
 
+message NodeInfo {
+  uint64 id = 1;
+  dingodb.pb.common.ClusterRole role = 2;
+  dingodb.pb.common.Location server_location = 3;
+  dingodb.pb.common.Location raft_location = 4;
+}
+
 message GetNodeInfoRequest {
   uint64 cluster_id = 1;
 }
 
 message GetNodeInfoResponse {
   dingodb.pb.error.Error error = 1;
-  uint64 id = 2;
-  dingodb.pb.common.ClusterRole role = 3;
-  dingodb.pb.common.Location server_location = 4;
-  dingodb.pb.common.Location raft_location = 5;
+  NodeInfo node_info = 2;
 }
 
 service NodeService {

@@ -42,19 +42,21 @@ void NodeServiceImpl::GetNodeInfo(google::protobuf::RpcController* /*controller*
     error->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
   }
 
-  response->set_id(server_->Id());
-  response->set_role(server_->GetRole());
+  auto* node_info = response->mutable_node_info();
+
+  node_info->set_id(server_->Id());
+  node_info->set_role(server_->GetRole());
 
   // parse server location
-  auto* server_location = response->mutable_server_location();
+  auto* server_location = node_info->mutable_server_location();
   auto* server_host = server_location->mutable_host();
   auto host_str = butil::ip2str(server_->ServerEndpoint().ip);
   server_host->assign(std::string(host_str.c_str()));
   server_location->set_port(server_->ServerEndpoint().port);
 
   // parse raft location
-  auto* raft_location = response->mutable_raft_location();
-  auto* raft_host = server_location->mutable_host();
+  auto* raft_location = node_info->mutable_raft_location();
+  auto* raft_host = raft_location->mutable_host();
   auto raft_host_str = butil::ip2str(server_->RaftEndpoint().ip);
   raft_host->assign(std::string(host_str.c_str()));
   raft_location->set_port(server_->RaftEndpoint().port);
