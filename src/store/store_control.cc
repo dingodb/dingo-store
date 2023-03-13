@@ -21,37 +21,37 @@
 
 namespace dingodb {
 
-pb::error::Errno ValidateAddRegion(std::shared_ptr<StoreMetaManager> store_meta_manager,
-                                   std::shared_ptr<pb::common::Region> region) {
+butil::Status ValidateAddRegion(std::shared_ptr<StoreMetaManager> store_meta_manager,
+                                std::shared_ptr<pb::common::Region> region) {
   if (store_meta_manager->IsExistRegion(region->id())) {
-    return pb::error::EREGION_ALREADY_EXIST;
+    return butil::Status(pb::error::EREGION_ALREADY_EXIST, "Region already exist");
   }
 
-  return pb::error::OK;
+  return butil::Status();
 }
 
-pb::error::Errno StoreControl::AddRegion(std::shared_ptr<Context> ctx, std::shared_ptr<pb::common::Region> region) {
+butil::Status StoreControl::AddRegion(std::shared_ptr<Context> ctx, std::shared_ptr<pb::common::Region> region) {
   auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
 
   // Valiate region
-  auto errcode = ValidateAddRegion(store_meta_manager, region);
-  if (errcode != pb::error::OK) {
-    return errcode;
+  auto status = ValidateAddRegion(store_meta_manager, region);
+  if (!status.ok()) {
+    return status;
   }
 
   // Add raft node
   auto engine = std::dynamic_pointer_cast<RaftKvEngine>(Server::GetInstance()->GetEngine(pb::common::ENG_RAFT_STORE));
   if (engine == nullptr) {
-    return pb::error::ESTORE_NOTEXIST_RAFTENGINE;
+    return butil::Status(pb::error::ESTORE_NOTEXIST_RAFTENGINE, "Not exist raft engine");
   }
-  errcode = engine->AddRegion(ctx, region);
-  if (errcode != pb::error::OK) {
-    return errcode;
+  status = engine->AddRegion(ctx, region);
+  if (!status.ok()) {
+    return status;
   }
 
   // Add region to store region meta manager
   store_meta_manager->AddRegion(region);
-  return pb::error::OK;
+  return butil::Status();
 }
 
 void StoreControl::AddRegions(std::shared_ptr<Context> ctx, std::vector<std::shared_ptr<pb::common::Region> > regions) {
@@ -60,7 +60,7 @@ void StoreControl::AddRegions(std::shared_ptr<Context> ctx, std::vector<std::sha
   }
 }
 
-pb::error::Errno StoreControl::ChangeRegion(std::shared_ptr<Context> ctx, std::shared_ptr<pb::common::Region> region) {
+butil::Status StoreControl::ChangeRegion(std::shared_ptr<Context> ctx, std::shared_ptr<pb::common::Region> region) {
   auto filter_peers_by_role = [region](pb::common::PeerRole role) -> std::vector<pb::common::Peer> {
     std::vector<pb::common::Peer> peers;
     for (const auto& peer : region->peers()) {
@@ -73,12 +73,12 @@ pb::error::Errno StoreControl::ChangeRegion(std::shared_ptr<Context> ctx, std::s
 
   auto engine = std::dynamic_pointer_cast<RaftKvEngine>(Server::GetInstance()->GetEngine(pb::common::ENG_RAFT_STORE));
   if (engine == nullptr) {
-    return pb::error::ESTORE_NOTEXIST_RAFTENGINE;
+    return butil::Status(pb::error::ESTORE_NOTEXIST_RAFTENGINE, "Not exist raft engine");
   }
   return engine->ChangeRegion(ctx, region->id(), filter_peers_by_role(pb::common::VOTER));
 }
 
-pb::error::Errno StoreControl::DeleteRegion(std::shared_ptr<Context> ctx, uint64_t region_id) {
+butil::Status StoreControl::DeleteRegion(std::shared_ptr<Context> ctx, uint64_t region_id) {
   auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
   auto region = store_meta_manager->GetRegion(region_id);
 
@@ -87,20 +87,20 @@ pb::error::Errno StoreControl::DeleteRegion(std::shared_ptr<Context> ctx, uint64
   // Shutdown raft node
   auto engine = std::dynamic_pointer_cast<RaftKvEngine>(Server::GetInstance()->GetEngine(pb::common::ENG_RAFT_STORE));
   if (engine == nullptr) {
-    return pb::error::ESTORE_NOTEXIST_RAFTENGINE;
+    return butil::Status(pb::error::ESTORE_NOTEXIST_RAFTENGINE, "Not exist raft engine");
   }
   engine->DestroyRegion(ctx, region_id);
 
   // Delete data
-  ctx->set_directly_delete(true);
-  engine->KvDeleteRange(ctx, region->range());
+  ctx->SetDirectlyDelete(true);
+  // engine->KvDeleteRange(ctx, region->range());
 
   // Delete meta data
   store_meta_manager->DeleteRegion(region_id);
 
   // Free other resources
 
-  return pb::error::OK;
+  return butil::Status();
 }
 
 }  // namespace dingodb

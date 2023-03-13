@@ -81,7 +81,7 @@ void CoordinatorServiceImpl::CreateStore(google::protobuf::RpcController *contro
 
   std::shared_ptr<Context> const ctx =
       std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_create_store_closure);
-  ctx->set_region_id(Constant::kCoordinatorRegionId);
+  ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
   engine_->MetaPut(ctx, meta_increment);
@@ -128,7 +128,7 @@ void CoordinatorServiceImpl::StoreHeartbeat(google::protobuf::RpcController *con
 
   std::shared_ptr<Context> const ctx =
       std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_create_store_closure);
-  ctx->set_region_id(Constant::kCoordinatorRegionId);
+  ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
   engine_->MetaPut(ctx, meta_increment);

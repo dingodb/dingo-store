@@ -14,6 +14,10 @@
 
 #include "engine/storage.h"
 
+#include "common/constant.h"
+#include "common/helper.h"
+#include "engine/write_data.h"
+
 namespace dingodb {
 
 Storage::Storage(std::shared_ptr<Engine> engine) : engine_(engine) {}
@@ -24,30 +28,52 @@ Snapshot* Storage::GetSnapshot() { return nullptr; }
 
 void Storage::ReleaseSnapshot() {}
 
-pb::error::Errno Storage::KvGet(std::shared_ptr<Context> ctx, const std::string& key, std::string& value) {
-  return engine_->KvGet(ctx, key, value);
+butil::Status Storage::KvGet(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys,
+                             std::vector<pb::common::KeyValue>& kvs) {
+  auto reader = engine_->NewReader(Constant::kStoreDataCF);
+  for (auto& key : keys) {
+    std::string value;
+    auto status = reader->KvGet(ctx, key, value);
+    if (!status.ok()) {
+      return status;
+    }
+
+    pb::common::KeyValue kv;
+    kv.set_key(key);
+    kv.set_value(value);
+    kvs.emplace_back(kv);
+  }
+
+  return butil::Status();
 }
 
-pb::error::Errno Storage::KvBatchGet(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys,
-                                     std::vector<pb::common::KeyValue>& kvs) {
-  return engine_->KvBatchGet(ctx, keys, kvs);
+butil::Status Storage::KvPut(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs) {
+  WriteData write_data;
+  std::shared_ptr<PutDatum> datum = std::make_shared<PutDatum>();
+  datum->cf_name = ctx->CfName();
+  datum->kvs = std::move(kvs);
+  write_data.AddDatums(std::static_pointer_cast<DatumAble>(datum));
+
+  return engine_->AsyncWrite(ctx, write_data, [ctx](butil::Status status) {
+    LOG(INFO) << "here 003";
+    if (!status.ok()) {
+      Helper::SetPbMessageError(status, ctx->Response());
+    }
+  });
 }
 
-pb::error::Errno Storage::KvPut(std::shared_ptr<Context> ctx, const pb::common::KeyValue& kv) {
-  return engine_->KvPut(ctx, kv);
-}
+butil::Status Storage::KvPutIfAbsent(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs) {
+  WriteData write_data;
+  std::shared_ptr<PutIfAbsentDatum> datum = std::make_shared<PutIfAbsentDatum>();
+  datum->cf_name = ctx->CfName();
+  datum->kvs = kvs;
+  write_data.AddDatums(std::static_pointer_cast<DatumAble>(datum));
 
-pb::error::Errno Storage::KvBatchPut(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs) {
-  return engine_->KvBatchPut(ctx, kvs);
-}
-
-pb::error::Errno Storage::KvPutIfAbsent(std::shared_ptr<Context> ctx, const pb::common::KeyValue& kv) {
-  return engine_->KvPutIfAbsent(ctx, kv);
-}
-
-pb::error::Errno Storage::KvBatchPutIfAbsent(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs,
-                                             std::vector<std::string>& put_keys) {
-  return engine_->KvBatchPutIfAbsentNonAtomic(ctx, kvs, put_keys);
+  return engine_->AsyncWrite(ctx, write_data, [ctx](butil::Status status) {
+    if (!status.ok()) {
+      Helper::SetPbMessageError(status, ctx->Response());
+    }
+  });
 }
 
 }  // namespace dingodb

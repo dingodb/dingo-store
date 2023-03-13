@@ -88,7 +88,10 @@ int main(int argc, char *argv[]) {
   dingo_server->SetServerEndpoint(GetServerEndPoint(config));
   dingo_server->SetRaftEndpoint(GetRaftEndPoint(config));
 
-  brpc::Server brpc_server;
+  if (!dingo_server->InitRawEngines()) {
+    LOG(ERROR) << "InitRawEngines failed!";
+    return -1;
+  }
   if (!dingo_server->InitEngines()) {
     LOG(ERROR) << "InitEngines failed!";
     return -1;
@@ -98,7 +101,7 @@ int main(int argc, char *argv[]) {
   dingodb::MetaServiceImpl meta_service;
   dingodb::StoreServiceImpl store_service;
 
-  // raft server
+  brpc::Server brpc_server;
   brpc::Server raft_server;
   if (is_coodinator) {
     coordinator_service.SetControl(dingo_server->GetCoordinatorControl());
@@ -130,8 +133,8 @@ int main(int argc, char *argv[]) {
     LOG(INFO) << "Raft server is running on " << raft_server.listen_address();
 
     // start meta region
-    dingodb::pb::error::Errno const status = dingo_server->StartMetaRegion(config, engine);
-    if (status != dingodb::pb::error::Errno::OK) {
+    butil::Status const status = dingo_server->StartMetaRegion(config, engine);
+    if (!status.ok()) {
       LOG(INFO) << "Init RaftNode and StateMachine Failed:" << status;
       return -1;
     }

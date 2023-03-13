@@ -17,6 +17,8 @@ DIST_DIR=$BASE_DIR/dist
 
 SERVER_NUM=3
 
+ulimit -c unlimited
+
 function start_program() {
   role=$1
   root_dir=$2

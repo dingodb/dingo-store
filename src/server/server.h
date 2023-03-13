@@ -22,6 +22,7 @@
 #include "coordinator/coordinator_control.h"
 #include "coordinator/coordinator_interaction.h"
 #include "crontab/crontab.h"
+#include "engine/raw_engine.h"
 #include "engine/storage.h"
 #include "meta/coordinator_meta_manager.h"
 #include "meta/store_meta_manager.h"
@@ -51,6 +52,9 @@ class Server {
   // Every server instance has id, the id is allocated by coordinator.
   bool InitServerID();
 
+  // Init raw storage engines;
+  bool InitRawEngines();
+
   // Init storage engines;
   bool InitEngines();
 
@@ -69,7 +73,7 @@ class Server {
   // Init store control
   bool InitStoreControl();
 
-  pb::error::Errno StartMetaRegion(std::shared_ptr<Config> config, std::shared_ptr<Engine> kv_engine);
+  butil::Status StartMetaRegion(std::shared_ptr<Config> config, std::shared_ptr<Engine> kv_engine);
 
   // Recover server state, include store/region/raft.
   bool Recover();
@@ -103,9 +107,8 @@ class Server {
 
  private:
   Server() = default;
-  ;
   ~Server() = default;
-  ;
+
   friend struct DefaultSingletonTraits<Server>;
 
   // This is server instance id, every store server has one id, it's unique,
@@ -124,6 +127,7 @@ class Server {
 
   // All store engine, include MemEngine/RaftKvEngine/RocksEngine
   std::map<pb::common::Engine, std::shared_ptr<Engine> > engines_;
+  std::map<pb::common::RawEngine, std::shared_ptr<RawEngine> > raw_engines_;
 
   // This is a Storage class, deal with all about storage stuff.
   std::shared_ptr<Storage> storage_;

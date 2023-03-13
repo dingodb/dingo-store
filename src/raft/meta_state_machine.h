@@ -26,13 +26,13 @@
 #include "engine/engine.h"
 #include "proto/common.pb.h"
 #include "proto/raft.pb.h"
-#include "raft/state_machine.h"
+#include "raft/store_state_machine.h"
 
 namespace dingodb {
 
 class MetaStateMachine : public braft::StateMachine {
  public:
-  MetaStateMachine(std::shared_ptr<Engine> engine, std::shared_ptr<MetaControl> meta_control);
+  MetaStateMachine(std::shared_ptr<RawEngine> engine, std::shared_ptr<MetaControl> meta_control);
   void on_apply(braft::Iterator& iter) override;
   void on_shutdown() override;
   void on_snapshot_save(braft::SnapshotWriter* writer, braft::Closure* done) override;
@@ -50,7 +50,7 @@ class MetaStateMachine : public braft::StateMachine {
   void DispatchRequest(bool is_leader, const pb::raft::RaftCmdRequest& raft_cmd);
   void HandleMetaProcess(bool is_leader, const pb::raft::RaftCmdRequest& raft_cmd);
   // void HandleMetaProcess(StoreClosure* done, bool is_leader, const pb::raft::RaftCmdRequest& raft_cmd);
-  std::shared_ptr<Engine> engine_;
+  std::shared_ptr<RawEngine> engine_;
   std::shared_ptr<MetaControl> meta_control_;
 };
 

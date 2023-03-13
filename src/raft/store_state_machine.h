@@ -18,7 +18,7 @@
 #include "braft/raft.h"
 #include "brpc/controller.h"
 #include "common/context.h"
-#include "engine/engine.h"
+#include "engine/raw_engine.h"
 #include "proto/raft.pb.h"
 
 namespace dingodb {
@@ -41,7 +41,7 @@ class StoreClosure : public braft::Closure {
 
 class StoreStateMachine : public braft::StateMachine {
  public:
-  StoreStateMachine(std::shared_ptr<Engine> engine);
+  StoreStateMachine(std::shared_ptr<RawEngine> engine);
 
   void on_apply(braft::Iterator& iter) override;
   void on_shutdown() override;
@@ -61,7 +61,8 @@ class StoreStateMachine : public braft::StateMachine {
   void HandlePutIfAbsentRequest(StoreClosure* done, const dingodb::pb::raft::PutIfAbsentRequest& request);
   void HandleDeleteRangeRequest(StoreClosure* done, const pb::raft::DeleteRangeRequest& request);
 
-  std::shared_ptr<Engine> engine_;
+ private:
+  std::shared_ptr<RawEngine> engine_;
 };
 
 }  // namespace dingodb

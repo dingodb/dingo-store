@@ -30,24 +30,13 @@ class MemEngine : public Engine {
   MemEngine();
 
   bool Init(std::shared_ptr<Config> config);
-  std::string GetName();
-  pb::common::Engine GetID();
+  std::string GetName() override;
+  pb::common::Engine GetID() override;
 
-  pb::error::Errno KvGet(std::shared_ptr<Context> ctx, const std::string& key, std::string& value) override;
-  pb::error::Errno KvBatchGet(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys,
-                              std::vector<pb::common::KeyValue>& kvs) override;
+  butil::Status Write(std::shared_ptr<Context> ctx, const WriteData& write_data) override;
+  butil::Status AsyncWrite(std::shared_ptr<Context> ctx, const WriteData& write_data, WriteCb_t cb) override;
 
-  pb::error::Errno KvPut(std::shared_ptr<Context> ctx, const pb::common::KeyValue& kv) override;
-  pb::error::Errno KvBatchPut(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs) override;
-
-  pb::error::Errno KvPutIfAbsent(std::shared_ptr<Context> ctx, const pb::common::KeyValue& kv) override;
-
-  pb::error::Errno KvBatchPutIfAbsentAtomic(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs,
-                                            std::vector<std::string>& put_keys) override;
-
-  pb::error::Errno KvBatchPutIfAbsentNonAtomic(std::shared_ptr<Context> ctx,
-                                               const std::vector<pb::common::KeyValue>& kvs,
-                                               std::vector<std::string>& put_keys) override;
+  std::shared_ptr<Engine::Reader> NewReader(const std::string& cf_name) override;
 
  private:
   std::shared_mutex mutex_;
