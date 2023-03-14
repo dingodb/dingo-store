@@ -21,7 +21,6 @@
 
 #include "butil/endpoint.h"
 #include "butil/status.h"
-#include "butil/strings/stringprintf.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 
@@ -50,7 +49,8 @@ class Helper {
   static std::string FormatPeers(const std::vector<pb::common::Location>& locations);
 
   // 127.0.0.1:8201,127.0.0.1:8202,127.0.0.1:8203 to EndPoint
-  static std::vector<butil::EndPoint> StrToEndpoint(const std::string& str);
+  static butil::EndPoint StrToEndPoint(const std::string str);
+  static std::vector<butil::EndPoint> StrToEndpoints(const std::string& str);
 
   static std::shared_ptr<pb::error::Error> Error(pb::error::Errno errcode, const std::string& errmsg);
   static bool Error(pb::error::Errno errcode, const std::string& errmsg, pb::error::Error& err);
@@ -90,7 +90,17 @@ class Helper {
   static std::string StringToHex(const std::string& str);
 
   static void SetPbMessageError(butil::Status status, google::protobuf::Message* message);
+  template <typename T>
+  static void SetPbMessageErrorLeader(butil::EndPoint endpoint, T* message) {
+    auto leader_location = message->mutable_error()->mutable_leader_location();
+    leader_location->set_host(std::string(butil::ip2str(endpoint.ip).c_str()));
+    leader_location->set_port(endpoint.port);
+  }
+
   static std::string MessageToJsonString(const google::protobuf::Message& message);
+
+  static butil::EndPoint QueryServerEndpointByRaftEndpoint(
+      std::map<uint64_t, std::shared_ptr<pb::common::Store>> stores, butil::EndPoint endpoint);
 };
 
 }  // namespace dingodb

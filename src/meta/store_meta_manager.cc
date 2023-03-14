@@ -20,21 +20,24 @@
 
 namespace dingodb {
 
-StoreServerMeta::StoreServerMeta() : store_(std::make_shared<pb::common::Store>()) {}
+StoreServerMeta::StoreServerMeta() {}
 
 bool StoreServerMeta::Init() {
   auto* server = Server::GetInstance();
-  store_->set_id(server->Id());
-  store_->set_epoch(0);
-  store_->set_state(pb::common::STORE_NORMAL);
-  auto* server_location = store_->mutable_server_location();
+
+  std::shared_ptr<pb::common::Store> store = std::make_shared<pb::common::Store>();
+  store->set_id(server->Id());
+  store->set_epoch(0);
+  store->set_state(pb::common::STORE_NORMAL);
+  auto* server_location = store->mutable_server_location();
   server_location->set_host(butil::ip2str(server->ServerEndpoint().ip).c_str());
   server_location->set_port(server->ServerEndpoint().port);
-  auto* raf_location = store_->mutable_raft_location();
+  auto* raf_location = store->mutable_raft_location();
   raf_location->set_host(butil::ip2str(server->RaftEndpoint().ip).c_str());
   raf_location->set_port(server->RaftEndpoint().port);
 
-  LOG(INFO) << "store server meta: " << store_->ShortDebugString();
+  LOG(INFO) << "store server meta: " << store->ShortDebugString();
+  AddStore(store);
 
   return true;
 }
@@ -46,31 +49,45 @@ StoreServerMeta& StoreServerMeta::SetEpoch(uint64_t epoch) {
   return *this;
 }
 
-StoreServerMeta& StoreServerMeta::SetId(uint64_t id) {
-  store_->set_id(id);
-  return *this;
+bool StoreServerMeta::IsExist(uint64_t store_id) {
+  std::shared_lock<std::shared_mutex> lock(mutex_);
+  return stores_.find(store_id) != stores_.end();
 }
 
-StoreServerMeta& StoreServerMeta::SetState(pb::common::StoreState state) {
-  store_->set_state(state);
-  return *this;
+void StoreServerMeta::AddStore(std::shared_ptr<pb::common::Store> store) {
+  if (IsExist(store->id())) {
+    LOG(WARNING) << butil::StringPrintf("store %lu already exist!", store->id());
+    return;
+  }
+
+  std::unique_lock<std::shared_mutex> lock(mutex_);
+  stores_.insert(std::make_pair(store->id(), store));
+}
+void StoreServerMeta::UpdateStore(std::shared_ptr<pb::common::Store> store) {
+  std::unique_lock<std::shared_mutex> lock(mutex_);
+  epoch_ += 1;
+  stores_.insert_or_assign(store->id(), store);
+}
+void StoreServerMeta::DeleteStore(uint64_t store_id) {
+  std::unique_lock<std::shared_mutex> lock(mutex_);
+  stores_.erase(store_id);
 }
 
-StoreServerMeta& StoreServerMeta::SetServerLocation(const butil::EndPoint&& endpoint) {
-  auto* location = store_->mutable_server_location();
-  location->set_host(butil::ip2str(endpoint.ip).c_str());
-  location->set_port(endpoint.port);
-  return *this;
+std::shared_ptr<pb::common::Store> StoreServerMeta::GetStore(uint64_t store_id) {
+  std::shared_lock<std::shared_mutex> lock(mutex_);
+  auto it = stores_.find(store_id);
+  if (it == stores_.end()) {
+    LOG(WARNING) << butil::StringPrintf("region %lu not exist!", store_id);
+    return nullptr;
+  }
+
+  return it->second;
 }
 
-StoreServerMeta& StoreServerMeta::SetRaftLocation(const butil::EndPoint&& endpoint) {
-  auto* location = store_->mutable_raft_location();
-  location->set_host(butil::ip2str(endpoint.ip).c_str());
-  location->set_port(endpoint.port);
-  return *this;
+std::map<uint64_t, std::shared_ptr<pb::common::Store>> StoreServerMeta::GetAllStore() {
+  std::shared_lock<std::shared_mutex> lock(mutex_);
+  return stores_;
 }
-
-std::shared_ptr<pb::common::Store> StoreServerMeta::GetStore() { return store_; }
 
 bool StoreRegionMeta::Init() { return true; }
 
@@ -96,6 +113,12 @@ void StoreRegionMeta::AddRegion(const std::shared_ptr<pb::common::Region> region
   regions_.insert(std::make_pair(region->id(), region));
 }
 
+void StoreRegionMeta::UpdateRegion(std::shared_ptr<pb::common::Region> region) {
+  std::unique_lock<std::shared_mutex> lock(mutex_);
+  region->set_epoch(region->epoch() + 1);
+  regions_.insert_or_assign(region->id(), region);
+}
+
 void StoreRegionMeta::DeleteRegion(uint64_t region_id) {
   std::unique_lock<std::shared_mutex> lock(mutex_);
   regions_.erase(region_id);
@@ -112,7 +135,7 @@ std::shared_ptr<pb::common::Region> StoreRegionMeta::GetRegion(uint64_t region_i
   return it->second;
 }
 
-std::map<uint64_t, std::shared_ptr<pb::common::Region> > StoreRegionMeta::GetAllRegion() {
+std::map<uint64_t, std::shared_ptr<pb::common::Region>> StoreRegionMeta::GetAllRegion() {
   std::shared_lock<std::shared_mutex> lock(mutex_);
   return regions_;
 }
@@ -155,10 +178,10 @@ std::shared_ptr<pb::common::KeyValue> StoreRegionMeta::TransformToKv(uint64_t re
   return TransformToKv(it->second);
 }
 
-std::vector<std::shared_ptr<pb::common::KeyValue> > StoreRegionMeta::TransformToKvtWithDelta() {
+std::vector<std::shared_ptr<pb::common::KeyValue>> StoreRegionMeta::TransformToKvtWithDelta() {
   std::shared_lock<std::shared_mutex> lock(mutex_);
 
-  std::vector<std::shared_ptr<pb::common::KeyValue> > kvs;
+  std::vector<std::shared_ptr<pb::common::KeyValue>> kvs;
   for (auto region_id : changed_regions_) {
     auto it = regions_.find(region_id);
     if (it != regions_.end()) {
@@ -172,10 +195,10 @@ std::vector<std::shared_ptr<pb::common::KeyValue> > StoreRegionMeta::TransformTo
   return kvs;
 }
 
-std::vector<std::shared_ptr<pb::common::KeyValue> > StoreRegionMeta::TransformToKvWithAll() {
+std::vector<std::shared_ptr<pb::common::KeyValue>> StoreRegionMeta::TransformToKvWithAll() {
   std::shared_lock<std::shared_mutex> lock(mutex_);
 
-  std::vector<std::shared_ptr<pb::common::KeyValue> > kvs;
+  std::vector<std::shared_ptr<pb::common::KeyValue>> kvs;
   for (const auto& it : regions_) {
     std::shared_ptr<pb::common::KeyValue> kv = std::make_shared<pb::common::KeyValue>();
     kv->set_key(GenKey(it.first));
@@ -233,17 +256,26 @@ uint64_t StoreMetaManager::GetServerEpoch() { return server_meta_->GetEpoch(); }
 
 uint64_t StoreMetaManager::GetRegionEpoch() { return region_meta_->GetEpoch(); }
 
-std::shared_ptr<pb::common::Store> StoreMetaManager::GetStoreServerMeta() { return server_meta_->GetStore(); }
+bool StoreMetaManager::IsExistStore(uint64_t store_id) { return server_meta_->IsExist(store_id); }
+
+void StoreMetaManager::AddStore(std::shared_ptr<pb::common::Store> store) {
+  LOG(INFO) << "StoreMeta add store, store_id " << store->id();
+  server_meta_->AddStore(store);
+}
+
+void StoreMetaManager::UpdateStore(std::shared_ptr<pb::common::Store> store) { server_meta_->UpdateStore(store); }
+
+void StoreMetaManager::DeleteStore(uint64_t store_id) { server_meta_->DeleteStore(store_id); }
+
+std::shared_ptr<pb::common::Store> StoreMetaManager::GetStore(uint64_t store_id) {
+  return server_meta_->GetStore(store_id);
+}
+
+std::map<uint64_t, std::shared_ptr<pb::common::Store>> StoreMetaManager::GetAllStore() {
+  return server_meta_->GetAllStore();
+}
 
 bool StoreMetaManager::IsExistRegion(uint64_t region_id) { return region_meta_->IsExist(region_id); }
-
-std::shared_ptr<pb::common::Region> StoreMetaManager::GetRegion(uint64_t region_id) {
-  return region_meta_->GetRegion(region_id);
-}
-
-std::map<uint64_t, std::shared_ptr<pb::common::Region> > StoreMetaManager::GetAllRegion() {
-  return region_meta_->GetAllRegion();
-}
 
 void StoreMetaManager::AddRegion(const std::shared_ptr<pb::common::Region> region) {
   LOG(INFO) << "StoreMeta add region, region_id " << region->id();
@@ -251,9 +283,22 @@ void StoreMetaManager::AddRegion(const std::shared_ptr<pb::common::Region> regio
   meta_writer_->Put(region_meta_->TransformToKv(region));
 }
 
+void StoreMetaManager::UpdateRegion(std::shared_ptr<pb::common::Region> region) {
+  region_meta_->UpdateRegion(region);
+  meta_writer_->Put(region_meta_->TransformToKv(region));
+}
+
 void StoreMetaManager::DeleteRegion(uint64_t region_id) {
   region_meta_->DeleteRegion(region_id);
   meta_writer_->Delete(region_meta_->GenKey(region_id));
+}
+
+std::shared_ptr<pb::common::Region> StoreMetaManager::GetRegion(uint64_t region_id) {
+  return region_meta_->GetRegion(region_id);
+}
+
+std::map<uint64_t, std::shared_ptr<pb::common::Region>> StoreMetaManager::GetAllRegion() {
+  return region_meta_->GetAllRegion();
 }
 
 }  // namespace dingodb

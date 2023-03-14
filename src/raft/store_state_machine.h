@@ -41,7 +41,7 @@ class StoreClosure : public braft::Closure {
 
 class StoreStateMachine : public braft::StateMachine {
  public:
-  StoreStateMachine(std::shared_ptr<RawEngine> engine);
+  StoreStateMachine(std::shared_ptr<RawEngine> engine, uint64_t node_id);
 
   void on_apply(braft::Iterator& iter) override;
   void on_shutdown() override;
@@ -62,6 +62,7 @@ class StoreStateMachine : public braft::StateMachine {
   void HandleDeleteRangeRequest(StoreClosure* done, const pb::raft::DeleteRangeRequest& request);
 
  private:
+  uint64_t node_id_;
   std::shared_ptr<RawEngine> engine_;
 };
 

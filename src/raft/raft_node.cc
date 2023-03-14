@@ -19,6 +19,7 @@
 #include "config/config_manager.h"
 #include "proto/common.pb.h"
 #include "raft/store_state_machine.h"
+#include "server/server.h"
 
 namespace dingodb {
 
@@ -67,7 +68,7 @@ void RaftNode::Destroy() {}
 // Commit message to raft
 butil::Status RaftNode::Commit(std::shared_ptr<Context> ctx, std::shared_ptr<pb::raft::RaftCmdRequest> raft_cmd) {
   if (!IsLeader()) {
-    return butil::Status(pb::error::ERAFT_NOTLEADER, "Not leader");
+    return butil::Status(pb::error::ERAFT_NOTLEADER, GetLeaderId().to_string());
   }
   butil::IOBuf data;
   butil::IOBufAsZeroCopyOutputStream wrapper(&data);

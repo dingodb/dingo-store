@@ -64,8 +64,7 @@ butil::Status RaftKvEngine::AddRegion(std::shared_ptr<Context> ctx, const std::s
   LOG(INFO) << "RaftkvEngine add region, region_id " << region->id();
 
   // construct StoreStateMachine
-  braft::StateMachine* state_machine = nullptr;
-  state_machine = new StoreStateMachine(engine_);
+  braft::StateMachine* state_machine = new StoreStateMachine(engine_, region->id());
 
   std::shared_ptr<RaftNode> node = std::make_shared<RaftNode>(
       ctx->ClusterRole(), region->id(), braft::PeerId(Server::GetInstance()->RaftEndpoint()), state_machine);
@@ -135,13 +134,11 @@ butil::Status RaftKvEngine::Write(std::shared_ptr<Context> ctx, const WriteData&
 }
 
 butil::Status RaftKvEngine::AsyncWrite(std::shared_ptr<Context> ctx, const WriteData& write_data, WriteCb_t cb) {
-  LOG(INFO) << "here 0001";
   auto node = raft_node_manager_->GetNode(ctx->RegionId());
   if (node == nullptr) {
     LOG(ERROR) << "Not found raft node " << ctx->RegionId();
     return butil::Status(pb::error::ERAFT_NOTNODE, "Not found node");
   }
-  LOG(INFO) << "here 0002";
 
   ctx->SetWriteCb(cb);
   return node->Commit(ctx, genRaftCmdRequest(ctx, write_data));

@@ -156,7 +156,7 @@ butil::Status Server::StartMetaRegion(std::shared_ptr<Config> config,       // N
   region->set_name("COORDINATOR");
 
   std::string coordinator_list = config->GetString("coordinator.peers");
-  std::vector<butil::EndPoint> peer_nodes = Helper::StrToEndpoint(coordinator_list);
+  std::vector<butil::EndPoint> peer_nodes = Helper::StrToEndpoints(coordinator_list);
 
   for (auto& peer_node : peer_nodes) {
     auto* peer = region->add_peers();

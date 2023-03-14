@@ -18,6 +18,7 @@
 
 #include "butil/endpoint.h"
 #include "butil/strings/string_split.h"
+#include "butil/strings/stringprintf.h"
 #include "google/protobuf/util/json_util.h"
 
 namespace dingodb {
@@ -102,7 +103,19 @@ std::string Helper::FormatPeers(const std::vector<pb::common::Location>& locatio
   return s;
 }
 
-std::vector<butil::EndPoint> Helper::StrToEndpoint(const std::string& str) {
+// 127.0.0.1:8201:0 to endpoint
+butil::EndPoint Helper::StrToEndPoint(const std::string str) {
+  std::vector<std::string> strs;
+  butil::SplitString(str, ':', &strs);
+
+  butil::EndPoint endpoint;
+  if (strs.size() >= 2) {
+    butil::str2endpoint(strs[0].c_str(), std::stoi(strs[1]), &endpoint);
+  }
+  return endpoint;
+}
+
+std::vector<butil::EndPoint> Helper::StrToEndpoints(const std::string& str) {
   std::vector<std::string> addrs;
   butil::SplitString(str, ',', &addrs);
 
@@ -196,6 +209,19 @@ std::string Helper::MessageToJsonString(const google::protobuf::Message& message
     std::cerr << "Failed to convert message to JSON: [" << status.message() << "]" << std::endl;
   }
   return json_string;
+}
+
+butil::EndPoint Helper::QueryServerEndpointByRaftEndpoint(std::map<uint64_t, std::shared_ptr<pb::common::Store>> stores,
+                                                          butil::EndPoint endpoint) {
+  butil::EndPoint result;
+  std::string host(butil::ip2str(endpoint.ip).c_str());
+  for (auto it : stores) {
+    if (it.second->raft_location().host() == host && it.second->raft_location().port() == endpoint.port) {
+      str2endpoint(it.second->server_location().host().c_str(), it.second->server_location().port(), &result);
+    }
+  }
+
+  return result;
 }
 
 }  // namespace dingodb
