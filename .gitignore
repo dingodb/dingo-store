@@ -50,6 +50,7 @@ tags
 .project
 .settings/language.settings.xml
 third-party
+.iml
 
 # bazel
 
