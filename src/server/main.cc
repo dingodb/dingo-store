@@ -12,6 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+
+#define _GNU_SOURCE
+#include <unistd.h>
+#include <dlfcn.h>
+#include <libunwind.h>
+#include <csignal>
+
 #include <iostream>
 
 #include "brpc/server.h"
@@ -46,8 +53,56 @@ butil::EndPoint GetRaftEndPoint(std::shared_ptr<dingodb::Config> config) {
   return dingodb::Helper::GetEndPoint(host, port);
 }
 
+static void SignalHandler(int signo) {
+  printf("========== handle signal '%s': '%s' ==========\n", sigdescr_np(signo), sigabbrev_np(signo));
+  unw_context_t context;
+  unw_cursor_t cursor;
+  unw_getcontext(&context);
+  unw_init_local(&cursor, &context);
+  int i = 0;
+
+  do {
+    unw_word_t ip, offset;
+    char symbol[256];
+
+    unw_word_t pc, sp;
+    unw_get_reg(&cursor, UNW_REG_IP, &pc);
+    unw_get_reg(&cursor, UNW_REG_SP, &sp);
+    Dl_info info = {};
+
+    // Get the instruction pointer and symbol name for this frame
+    unw_get_reg(&cursor, UNW_REG_IP, &ip);
+    unw_get_proc_name(&cursor, symbol, sizeof(symbol), &offset);
+
+    if (dladdr((void *)pc, &info)) {
+      // Print the frame number, instruction pointer, .so filename, and symbol name
+      printf("Frame %d: [0x%016zx] %32s : %s + 0x%lx\n", i++, (void*)ip, info.dli_fname, symbol, offset);
+    }
+
+  } while (unw_step(&cursor) > 0);
+
+  exit(0);
+}
+
+void SetupSignalHandler() {
+  sighandler_t s;
+  s = signal(SIGTERM, SignalHandler);
+  if (s == SIG_ERR) {
+    printf("Failed to setup signal handler for SIGTERM\n");
+    exit(-1);
+  }
+  s = signal(SIGSEGV, SignalHandler);
+  if (s == SIG_ERR) {
+    printf("Failed to setup signal handler for SIGSEGV\n");
+    exit(-1);
+  }
+}
+
+
 int main(int argc, char *argv[]) {
   google::ParseCommandLineFlags(&argc, &argv, true);
+
+  SetupSignalHandler();
 
   dingodb::pb::common::ClusterRole role = dingodb::pb::common::COORDINATOR;
 

@@ -40,3 +40,7 @@
 [submodule "contrib/zstd"]
 	path = contrib/zstd
 	url = https://github.com/facebook/zstd
+[submodule "contrib/libunwind"]
+	path = contrib/libunwind
+	url = https://github.com/dingodb/libunwind
+	branch = v1.6.2-patched
