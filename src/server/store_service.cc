@@ -25,6 +25,19 @@ namespace dingodb {
 
 StoreServiceImpl::StoreServiceImpl() = default;
 
+// Set error response leader location.
+template <typename T>
+void RedirectLeader(std::string addr, T* response) {
+  LOG(INFO) << "Redirect leader " << addr;
+  auto endpoint = Helper::StrToEndPoint(addr);
+  if (endpoint.port == 0) return;
+
+  butil::EndPoint server_endpoint =
+      Helper::QueryServerEndpointByRaftEndpoint(Server::GetInstance()->GetStoreMetaManager()->GetAllStore(), endpoint);
+  if (server_endpoint.port == 0) return;
+  Helper::SetPbMessageErrorLeader(server_endpoint, response);
+}
+
 void StoreServiceImpl::AddRegion(google::protobuf::RpcController* controller,
                                  const dingodb::pb::store::AddRegionRequest* request,
                                  dingodb::pb::store::AddRegionResponse* response, google::protobuf::Closure* done) {
@@ -106,14 +119,11 @@ void StoreServiceImpl::KvGet(google::protobuf::RpcController* controller,
     return;
   }
 
-  LOG(INFO) << "address: " << (void*)request->key().data();
-
   std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
   ctx->SetRegionId(request->region_id()).SetCfName(Constant::kStoreDataCF);
   std::vector<std::string> keys;
   auto mut_request = const_cast<dingodb::pb::store::KvGetRequest*>(request);
   keys.emplace_back(std::move(*mut_request->release_key()));
-  LOG(INFO) << "address: " << (void*)(keys.begin()->data());
 
   std::vector<pb::common::KeyValue> kvs;
   status = storage_->KvGet(ctx, keys, kvs);
@@ -121,6 +131,10 @@ void StoreServiceImpl::KvGet(google::protobuf::RpcController* controller,
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
+    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+      err->set_errmsg("Not leader, please redirect leader.");
+      RedirectLeader(status.error_str(), response);
+    }
     return;
   }
   if (kvs.size() > 0) {
@@ -168,6 +182,10 @@ void StoreServiceImpl::KvBatchGet(google::protobuf::RpcController* controller,
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
+    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+      err->set_errmsg("Not leader, please redirect leader.");
+      RedirectLeader(status.error_str(), response);
+    }
     return;
   }
 
@@ -212,6 +230,10 @@ void StoreServiceImpl::KvPut(google::protobuf::RpcController* controller,
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
+    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+      err->set_errmsg("Not leader, please redirect leader.");
+      RedirectLeader(status.error_str(), response);
+    }
     brpc::ClosureGuard done_guard(done);
   }
 }
@@ -253,6 +275,10 @@ void StoreServiceImpl::KvBatchPut(google::protobuf::RpcController* controller,
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
+    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+      err->set_errmsg("Not leader, please redirect leader.");
+      RedirectLeader(status.error_str(), response);
+    }
     brpc::ClosureGuard done_guard(done);
   }
 }
@@ -294,6 +320,10 @@ void StoreServiceImpl::KvPutIfAbsent(google::protobuf::RpcController* controller
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
+    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+      err->set_errmsg("Not leader, please redirect leader.");
+      RedirectLeader(status.error_str(), response);
+    }
     brpc::ClosureGuard done_guard(done);
   }
 }
@@ -338,6 +368,10 @@ void StoreServiceImpl::KvBatchPutIfAbsent(google::protobuf::RpcController* contr
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
+    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+      err->set_errmsg("Not leader, please redirect leader.");
+      RedirectLeader(status.error_str(), response);
+    }
     brpc::ClosureGuard done_guard(done);
   }
 }

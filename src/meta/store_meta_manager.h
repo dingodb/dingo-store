@@ -34,22 +34,26 @@ class StoreServerMeta {
   StoreServerMeta();
   ~StoreServerMeta() = default;
 
+  StoreServerMeta(const StoreServerMeta&) = delete;
+  const StoreServerMeta& operator=(const StoreServerMeta&) = delete;
+
   bool Init();
 
   uint64_t GetEpoch() const;
   StoreServerMeta& SetEpoch(uint64_t epoch);
-  StoreServerMeta& SetId(uint64_t id);
-  StoreServerMeta& SetState(pb::common::StoreState state);
-  StoreServerMeta& SetServerLocation(const butil::EndPoint&& endpoint);
-  StoreServerMeta& SetRaftLocation(const butil::EndPoint&& endpoint);
 
-  std::shared_ptr<pb::common::Store> GetStore();
-  StoreServerMeta(const StoreServerMeta&) = delete;
-  const StoreServerMeta& operator=(const StoreServerMeta&) = delete;
+  bool IsExist(uint64_t store_id);
+
+  void AddStore(std::shared_ptr<pb::common::Store> store);
+  void UpdateStore(std::shared_ptr<pb::common::Store> store);
+  void DeleteStore(uint64_t store_id);
+  std::shared_ptr<pb::common::Store> GetStore(uint64_t store_id);
+  std::map<uint64_t, std::shared_ptr<pb::common::Store>> GetAllStore();
 
  private:
   uint64_t epoch_;
-  std::shared_ptr<pb::common::Store> store_;
+  std::shared_mutex mutex_;
+  std::map<uint64_t, std::shared_ptr<pb::common::Store>> stores_;
 };
 
 // Manage store server region meta data
@@ -66,16 +70,17 @@ class StoreRegionMeta : public TransformKvAble {
 
   void AddRegion(std::shared_ptr<pb::common::Region> region);
   void DeleteRegion(uint64_t region_id);
+  void UpdateRegion(std::shared_ptr<pb::common::Region> region);
   std::shared_ptr<pb::common::Region> GetRegion(uint64_t region_id);
-  std::map<uint64_t, std::shared_ptr<pb::common::Region> > GetAllRegion();
+  std::map<uint64_t, std::shared_ptr<pb::common::Region>> GetAllRegion();
 
   uint64_t ParseRegionId(const std::string& str);
   std::string GenKey(uint64_t region_id) override;
 
   std::shared_ptr<pb::common::KeyValue> TransformToKv(uint64_t region_id) override;
   std::shared_ptr<pb::common::KeyValue> TransformToKv(std::shared_ptr<pb::common::Region> region) override;
-  std::vector<std::shared_ptr<pb::common::KeyValue> > TransformToKvtWithDelta() override;
-  std::vector<std::shared_ptr<pb::common::KeyValue> > TransformToKvWithAll() override;
+  std::vector<std::shared_ptr<pb::common::KeyValue>> TransformToKvtWithDelta() override;
+  std::vector<std::shared_ptr<pb::common::KeyValue>> TransformToKvWithAll() override;
 
   void TransformFromKv(const std::vector<pb::common::KeyValue>& kvs) override;
 
@@ -90,7 +95,7 @@ class StoreRegionMeta : public TransformKvAble {
   // Protect regions_ concurrent access.
   std::shared_mutex mutex_;
   // Store all region meta data in this server.
-  std::map<uint64_t, std::shared_ptr<pb::common::Region> > regions_;
+  std::map<uint64_t, std::shared_ptr<pb::common::Region>> regions_;
 };
 
 // Manage store server meta data, like store and region.
@@ -106,13 +111,19 @@ class StoreMetaManager {
   uint64_t GetServerEpoch();
   uint64_t GetRegionEpoch();
 
-  std::shared_ptr<pb::common::Store> GetStoreServerMeta();
+  bool IsExistStore(uint64_t store_id);
+  void AddStore(std::shared_ptr<pb::common::Store> store);
+  void UpdateStore(std::shared_ptr<pb::common::Store> store);
+  void DeleteStore(uint64_t store_id);
+  std::shared_ptr<pb::common::Store> GetStore(uint64_t store_id);
+  std::map<uint64_t, std::shared_ptr<pb::common::Store>> GetAllStore();
 
   bool IsExistRegion(uint64_t region_id);
-  std::shared_ptr<pb::common::Region> GetRegion(uint64_t region_id);
-  std::map<uint64_t, std::shared_ptr<pb::common::Region> > GetAllRegion();
   void AddRegion(std::shared_ptr<pb::common::Region> region);
+  void UpdateRegion(std::shared_ptr<pb::common::Region> region);
   void DeleteRegion(uint64_t region_id);
+  std::shared_ptr<pb::common::Region> GetRegion(uint64_t region_id);
+  std::map<uint64_t, std::shared_ptr<pb::common::Region>> GetAllRegion();
 
   StoreMetaManager(const StoreMetaManager&) = delete;
   void operator=(const StoreMetaManager&) = delete;

@@ -32,6 +32,7 @@ butil::Status ValidateAddRegion(std::shared_ptr<StoreMetaManager> store_meta_man
 
 butil::Status StoreControl::AddRegion(std::shared_ptr<Context> ctx, std::shared_ptr<pb::common::Region> region) {
   auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
+  LOG(INFO) << "Add region info: " << region->DebugString();
 
   // Valiate region
   auto status = ValidateAddRegion(store_meta_manager, region);
@@ -52,12 +53,6 @@ butil::Status StoreControl::AddRegion(std::shared_ptr<Context> ctx, std::shared_
   // Add region to store region meta manager
   store_meta_manager->AddRegion(region);
   return butil::Status();
-}
-
-void StoreControl::AddRegions(std::shared_ptr<Context> ctx, std::vector<std::shared_ptr<pb::common::Region> > regions) {
-  for (auto region : regions) {
-    AddRegion(ctx, region);
-  }
 }
 
 butil::Status StoreControl::ChangeRegion(std::shared_ptr<Context> ctx, std::shared_ptr<pb::common::Region> region) {

@@ -53,16 +53,9 @@ enum Errno {
   EREGION_NOT_FOUND = 60001;
 }
 
-message NotLeader {
-  uint64 region_id = 1;
-  dingodb.pb.common.Peer leader = 2;
-}
-
 message Error {
   Errno errcode = 1;
   string errmsg = 2;
 
   dingodb.pb.common.Location leader_location = 3;
-
-  NotLeader not_leader = 10;
 }

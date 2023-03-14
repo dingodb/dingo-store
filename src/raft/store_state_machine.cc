@@ -19,6 +19,7 @@
 #include "common/helper.h"
 #include "proto/error.pb.h"
 #include "proto/raft.pb.h"
+#include "server/server.h"
 
 namespace dingodb {
 
@@ -27,9 +28,8 @@ void StoreClosure::Run() {
 
   brpc::ClosureGuard done_guard(ctx_->IsSyncMode() ? nullptr : ctx_->Done());
   if (!status().ok()) {
-    LOG(ERROR) << butil::StringPrintf(
-        "raft log commit failed, region[%ld] %d:%s", ctx_->RegionId(),
-        status().error_code(), status().error_cstr());
+    LOG(ERROR) << butil::StringPrintf("raft log commit failed, region[%ld] %d:%s", ctx_->RegionId(),
+                                      status().error_code(), status().error_cstr());
 
     ctx_->SetStatus(status());
   }
@@ -43,11 +43,10 @@ void StoreClosure::Run() {
   }
 }
 
-StoreStateMachine::StoreStateMachine(std::shared_ptr<RawEngine> engine)
-    : engine_(engine) {}
+StoreStateMachine::StoreStateMachine(std::shared_ptr<RawEngine> engine, uint64_t node_id)
+    : engine_(engine), node_id_(node_id) {}
 
-void StoreStateMachine::DispatchRequest(
-    StoreClosure* done, const pb::raft::RaftCmdRequest& raft_cmd) {
+void StoreStateMachine::DispatchRequest(StoreClosure* done, const pb::raft::RaftCmdRequest& raft_cmd) {
   for (const auto& req : raft_cmd.requests()) {
     switch (req.cmd_type()) {
       case pb::raft::CmdType::PUT:
@@ -65,8 +64,7 @@ void StoreStateMachine::DispatchRequest(
   }
 }
 
-void StoreStateMachine::HandlePutRequest(StoreClosure* done,
-                                         const pb::raft::PutRequest& request) {
+void StoreStateMachine::HandlePutRequest(StoreClosure* done, const pb::raft::PutRequest& request) {
   LOG(INFO) << "handlePutRequest ...";
   butil::Status status;
   auto writer = engine_->NewWriter(request.cf_name());
@@ -84,8 +82,7 @@ void StoreStateMachine::HandlePutRequest(StoreClosure* done,
   }
 }
 
-void StoreStateMachine::HandlePutIfAbsentRequest(
-    StoreClosure* done, const pb::raft::PutIfAbsentRequest& request) {
+void StoreStateMachine::HandlePutIfAbsentRequest(StoreClosure* done, const pb::raft::PutIfAbsentRequest& request) {
   LOG(INFO) << "handlePutIfAbsentRequest ...";
 
   butil::Status status;
@@ -94,8 +91,7 @@ void StoreStateMachine::HandlePutIfAbsentRequest(
     status = writer->KvPutIfAbsent(request.kvs().Get(0));
   } else {
     std::vector<std::string> put_keys;
-    status = writer->KvBatchPutIfAbsent(
-        Helper::PbRepeatedToVector(request.kvs()), put_keys, true);
+    status = writer->KvBatchPutIfAbsent(Helper::PbRepeatedToVector(request.kvs()), put_keys, true);
   }
 
   if (done != nullptr) {
@@ -106,9 +102,8 @@ void StoreStateMachine::HandlePutIfAbsentRequest(
   }
 }
 
-void StoreStateMachine::HandleDeleteRangeRequest(
-    [[maybe_unused]] StoreClosure* done,
-    [[maybe_unused]] const pb::raft::DeleteRangeRequest& request) {
+void StoreStateMachine::HandleDeleteRangeRequest([[maybe_unused]] StoreClosure* done,
+                                                 [[maybe_unused]] const pb::raft::DeleteRangeRequest& request) {
   LOG(INFO) << "HandleDeleteRangeRequest ...";
 
   butil::Status status;
@@ -143,24 +138,20 @@ void StoreStateMachine::on_apply(braft::Iterator& iter) {
     }
 
     std::string str_raft_cmd = Helper::MessageToJsonString(raft_cmd);
-    LOG(INFO) << butil::StringPrintf(
-        "raft apply log on region[%ld-term:%ld-index:%ld] cmd:[%s]",
-        raft_cmd.header().region_id(), iter.term(), iter.index(),
-        str_raft_cmd.c_str());
+    LOG(INFO) << butil::StringPrintf("raft apply log on region[%ld-term:%ld-index:%ld] cmd:[%s]",
+                                     raft_cmd.header().region_id(), iter.term(), iter.index(), str_raft_cmd.c_str());
     DispatchRequest(dynamic_cast<StoreClosure*>(iter.done()), raft_cmd);
   }
 }
 
 void StoreStateMachine::on_shutdown() { LOG(INFO) << "on_shutdown..."; }
 
-void StoreStateMachine::on_snapshot_save(
-    [[maybe_unused]] braft::SnapshotWriter* writer,
-    [[maybe_unused]] braft::Closure* done) {
+void StoreStateMachine::on_snapshot_save([[maybe_unused]] braft::SnapshotWriter* writer,
+                                         [[maybe_unused]] braft::Closure* done) {
   LOG(INFO) << "on_snapshot_save...";
 }
 
-int StoreStateMachine::on_snapshot_load(
-    [[maybe_unused]] braft::SnapshotReader* reader) {
+int StoreStateMachine::on_snapshot_load([[maybe_unused]] braft::SnapshotReader* reader) {
   LOG(INFO) << "on_snapshot_load...";
   return -1;
 }
@@ -169,32 +160,36 @@ void StoreStateMachine::on_leader_start() { LOG(INFO) << "on_leader_start..."; }
 
 void StoreStateMachine::on_leader_start(int64_t term) {
   LOG(INFO) << "on_leader_start term: " << term;
+
+  auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
+  auto region = store_meta_manager->GetRegion(node_id_);
+  region->set_leader_store_id(Server::GetInstance()->Id());
+  region->set_state(pb::common::REGION_NORMAL);
 }
 
 void StoreStateMachine::on_leader_stop(const butil::Status& status) {
-  LOG(INFO) << "on_leader_stop: " << status.error_code() << " "
-            << status.error_str();
+  LOG(INFO) << "on_leader_stop: " << status.error_code() << " " << status.error_str();
 }
 
 void StoreStateMachine::on_error(const ::braft::Error& e) {
-  LOG(INFO) << butil::StringPrintf("on_error type(%d) %d %s", e.type(),
-                                   e.status().error_code(),
+  LOG(INFO) << butil::StringPrintf("on_error type(%d) %d %s", e.type(), e.status().error_code(),
                                    e.status().error_cstr());
 }
 
-void StoreStateMachine::on_configuration_committed(
-    [[maybe_unused]] const ::braft::Configuration& conf) {
+void StoreStateMachine::on_configuration_committed([[maybe_unused]] const ::braft::Configuration& conf) {
   LOG(INFO) << "on_configuration_committed...";
   // std::vector<braft::PeerId> peers;
   // conf.list_peers(&peers);
 }
 
-void StoreStateMachine::on_start_following(
-    [[maybe_unused]] const ::braft::LeaderChangeContext& ctx) {
+void StoreStateMachine::on_start_following([[maybe_unused]] const ::braft::LeaderChangeContext& ctx) {
   LOG(INFO) << "on_start_following...";
+  auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
+  auto region = store_meta_manager->GetRegion(node_id_);
+  region->set_leader_store_id(0);
+  region->set_state(pb::common::REGION_NORMAL);
 }
-void StoreStateMachine::on_stop_following(
-    [[maybe_unused]] const ::braft::LeaderChangeContext& ctx) {
+void StoreStateMachine::on_stop_following([[maybe_unused]] const ::braft::LeaderChangeContext& ctx) {
   LOG(INFO) << "on_stop_following...";
 }
 
