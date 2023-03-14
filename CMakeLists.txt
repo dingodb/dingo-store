@@ -60,6 +60,7 @@ include(rocksdb)
 include(brpc)
 include(braft)
 include(yaml-cpp)
+include(libunwind)
 
 message("protoc: ${PROTOBUF_PROTOC_EXECUTABLE}, proto inc: ${PROTOBUF_INCLUDE_DIRS}, lib: ${PROTOBUF_LIBRARIES}, ${PROTOBUF_PROTOC_LIBRARY}, protos: ${PROTO_FILES}")
 SET(MESSAGE_DIR ${CMAKE_CURRENT_BINARY_DIR}/proto)
@@ -114,6 +115,7 @@ include_directories(${GFLAGS_INCLUDE_DIR})
 include_directories(${ROCKSDB_INCLUDE_DIR})
 include_directories(${YAMLCPP_INCLUDE_DIR})
 include_directories(${OPENSSL_INCLUDE_DIR})
+include_directories(${LIBUNWIND_INCLUDE_DIR})
 include_directories(${PROJECT_SOURCE_DIR}/src)
 
 set(DYNAMIC_LIB
@@ -133,6 +135,9 @@ set(DYNAMIC_LIB
     ${GLOG_LIBRARIES}
     ${GTEST_MAIN_LIBRARIES}
     ${GTEST_LIBRARIES}
+    ${LIBUNWIND_LIBRARIES}
+    ${LIBUNWIND_GENERIC_LIBRARIES}
+    ${LIBUNWIND_ARCH_LIBRARIES}
     # rt
     dl
     Threads::Threads
@@ -153,6 +158,7 @@ set(DEPEND_LIBS
     glog
     yamlcpp
     gtest
+    libunwind
     )
 
 # source file
