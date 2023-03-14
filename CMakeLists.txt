@@ -13,7 +13,7 @@
 # limitations under the License.
 
 cmake_minimum_required(VERSION 3.20)
-project(dingo C CXX)
+project(dingo-store C CXX)
 
 option(EXAMPLE_LINK_SO "Whether examples are linked dynamically" OFF)
 option(LINK_TCMALLOC "Link tcmalloc if possible" OFF)
