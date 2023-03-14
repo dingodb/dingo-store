@@ -33,6 +33,7 @@ class MetaWriter {
 
   bool Put(std::shared_ptr<pb::common::KeyValue> kv);
   bool Put(std::vector<pb::common::KeyValue> kvs);
+  bool PutAndDelete(std::vector<pb::common::KeyValue> kvs_put, std::vector<pb::common::KeyValue> kvs_delete);
   bool Delete(const std::string &key);
 
  private:
