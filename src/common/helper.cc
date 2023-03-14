@@ -30,6 +30,37 @@ bool Helper::IsIp(const std::string& s) {
   return std::regex_match(s, reg);
 }
 
+int Helper::PeerIdToLocation(braft::PeerId peer_id, pb::common::Location& location) {
+  // parse leader raft location from string
+  auto peer_id_string = peer_id.to_string();
+
+  std::vector<std::string> addrs;
+  butil::SplitString(peer_id_string, ':', &addrs);
+
+  if (addrs.size() != 3) {
+    LOG(ERROR) << "GetLeaderLocation peerid to string error " << peer_id_string;
+    return -1;
+  }
+
+  pb::common::Location temp_location;
+  temp_location.set_host(addrs[0]);
+
+  int32_t value;
+  try {
+    value = std::stoi(addrs[1]);
+    temp_location.set_port(value);
+  } catch (const std::invalid_argument& ia) {
+    LOG(ERROR) << "PeerIdToLocation parse port error Irnvalid argument: " << ia.what() << std::endl;
+    return -1;
+  } catch (const std::out_of_range& oor) {
+    LOG(ERROR) << "PeerIdToLocation parse port error Out of Range error: " << oor.what() << std::endl;
+    return -1;
+  }
+
+  location.CopyFrom(temp_location);
+  return 0;
+}
+
 butil::EndPoint Helper::GetEndPoint(const std::string& host, int port) {
   butil::ip_t ip;
   if (host.empty()) {
