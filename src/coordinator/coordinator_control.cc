@@ -1259,21 +1259,11 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
     }
   }
 
-  // TODO: need engine support transaction
   // write update to local engine, begin
-  if (!meta_write_to_kv.empty()) {
-    if (!meta_writer_->Put(meta_write_to_kv)) {
-      LOG(INFO) << "ApplyMetaIncrement meta_write failed, exit program";
-      LOG(ERROR) << "ApplyMetaIncrement meta_write failed, exit program";
-
-      exit(-1);
-    }
-  }
-
-  for (auto const& kv : meta_delete_to_kv) {
-    if (!meta_writer_->Delete(kv.key())) {
-      LOG(INFO) << "ApplyMetaIncrement meta_delete failed, exit program";
-      LOG(ERROR) << "ApplyMetaIncrement meta_delete failed, exit program";
+  if ((!meta_write_to_kv.empty()) || (!meta_delete_to_kv.empty())) {
+    if (!meta_writer_->PutAndDelete(meta_write_to_kv, meta_delete_to_kv)) {
+      LOG(INFO) << "ApplyMetaIncrement PutAndDelete failed, exit program";
+      LOG(ERROR) << "ApplyMetaIncrement PutAndDelete failed, exit program";
 
       exit(-1);
     }

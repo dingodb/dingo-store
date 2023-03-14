@@ -12,13 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
+#ifndef _GNU_SOURCE
 #define _GNU_SOURCE
-#include <unistd.h>
+#endif
 #include <dlfcn.h>
 #include <libunwind.h>
-#include <csignal>
+#include <unistd.h>
 
+#include <csignal>
 #include <iostream>
 
 #include "brpc/server.h"
@@ -76,7 +77,7 @@ static void SignalHandler(int signo) {
 
     if (dladdr((void *)pc, &info)) {
       // Print the frame number, instruction pointer, .so filename, and symbol name
-      printf("Frame %d: [0x%016zx] %32s : %s + 0x%lx\n", i++, (void*)ip, info.dli_fname, symbol, offset);
+      printf("Frame %d: [0x%016zx] %32s : %s + 0x%lx\n", i++, (void *)ip, info.dli_fname, symbol, offset);
     }
 
   } while (unw_step(&cursor) > 0);
@@ -97,7 +98,6 @@ void SetupSignalHandler() {
     exit(-1);
   }
 }
-
 
 int main(int argc, char *argv[]) {
   google::ParseCommandLineFlags(&argc, &argv, true);

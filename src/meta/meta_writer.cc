@@ -44,6 +44,18 @@ bool MetaWriter::Put(const std::vector<pb::common::KeyValue> kvs) {
   return true;
 }
 
+bool MetaWriter::PutAndDelete(std::vector<pb::common::KeyValue> kvs_put, std::vector<pb::common::KeyValue> kvs_delete) {
+  LOG(INFO) << "PutAndDelete meta data, key_put nums: " << kvs_put.size() << " key_delete nums:" << kvs_delete.size();
+  auto writer = engine_->NewWriter(Constant::kStoreMetaCF);
+  auto status = writer->KvBatchPutAndDelete(kvs_put, kvs_delete);
+  if (!status.ok()) {
+    LOG(ERROR) << "Meta batch write and delete failed, errcode: " << status.error_code() << " " << status.error_str();
+    return false;
+  }
+
+  return true;
+}
+
 bool MetaWriter::Delete(const std::string& key) {
   LOG(INFO) << "Delete meta data, key: " << key;
   auto writer = engine_->NewWriter(Constant::kStoreMetaCF);
