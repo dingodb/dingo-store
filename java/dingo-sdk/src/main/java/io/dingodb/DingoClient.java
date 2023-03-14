@@ -19,6 +19,8 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
+import static io.dingodb.common.Common.Engine.ENG_ROCKSDB;
+
 public class DingoClient {
 
     private UnifyStoreConnection connection;
@@ -89,7 +91,11 @@ public class DingoClient {
 
         System.out.println(isSuccess);
 
-        Object[] objects = {1};
+        try {
+            Thread.sleep(20000);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
 
         boolean test = dingoClient.upsert(tableName, Collections.singletonList(new Object[]{1, null}), Collections.singletonList(new Object[]{1, "zhangsan"}));
         System.out.println(test);
