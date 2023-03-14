@@ -25,6 +25,7 @@
 #include "brpc/controller.h"
 #include "bthread/bthread.h"
 #include "gflags/gflags.h"
+#include "google/protobuf/util/json_util.h"
 #include "proto/coordinator.pb.h"
 #include "proto/meta.pb.h"
 #include "proto/node.pb.h"
@@ -38,6 +39,17 @@ DEFINE_int32(req_num, 1, "Number of requests");
 DEFINE_string(method, "Hello", "Request method");
 
 bvar::LatencyRecorder g_latency_recorder("dingo-coordinator");
+
+std::string MessageToJsonString(const google::protobuf::Message& message) {
+  std::string json_string;
+  google::protobuf::util::JsonOptions options;
+  options.always_print_primitive_fields = true;
+  google::protobuf::util::Status status = google::protobuf::util::MessageToJsonString(message, &json_string, options);
+  if (!status.ok()) {
+    std::cerr << "Failed to convert message to JSON: [" << status.message() << "]" << std::endl;
+  }
+  return json_string;
+}
 
 void SendGetNodeInfo(brpc::Controller& cntl, dingodb::pb::node::NodeService_Stub& stub) {
   dingodb::pb::node::GetNodeInfoRequest request;
@@ -137,7 +149,8 @@ void SendGetRegionMap(brpc::Controller& cntl, dingodb::pb::coordinator::Coordina
   if (FLAGS_log_each_request) {
     LOG(INFO) << "Received response"
               << " get_store_map=" << request.epoch() << " request_attachment=" << cntl.request_attachment().size()
-              << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+              << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us()
+              << " response=" << MessageToJsonString(response);
     LOG(INFO) << response.DebugString();
   }
 }
