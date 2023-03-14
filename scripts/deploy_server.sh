@@ -105,8 +105,8 @@ done
 COOR_SRV_PEERS=${COOR_SRV_PEERS:1}
 COOR_RAFT_PEERS=${COOR_RAFT_PEERS:1}
 
-echo ${COOR_SRV_PEERS}
-echo ${COOR_RAFT_PEERS}
+echo "server peers: ${COOR_SRV_PEERS}"
+echo "raft peers: ${COOR_RAFT_PEERS}"
 
 for ((i=1; i<=$SERVER_NUM; ++i)); do
   program_dir=$BASE_DIR/dist/${FLAGS_role}${i}

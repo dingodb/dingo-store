@@ -18,5 +18,6 @@ namespace dingodb {
 
 const std::string Constant::kStoreDataCF = "default";
 const std::string Constant::kStoreMetaCF = "meta";
+const std::string Constant::kStoreRegionMetaPrefix = "META_REGION";
 
 }  // namespace dingodb

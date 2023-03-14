@@ -28,13 +28,14 @@ class MetaWriter {
   MetaWriter(std::shared_ptr<RawEngine> engine) : engine_(engine) {}
   ~MetaWriter() = default;
 
+  MetaWriter(const MetaWriter &) = delete;
+  const MetaWriter &operator=(const MetaWriter &) = delete;
+
   bool Put(std::shared_ptr<pb::common::KeyValue> kv);
   bool Put(std::vector<pb::common::KeyValue> kvs);
   bool Delete(const std::string &key);
 
-  MetaWriter(const MetaWriter &) = delete;
-  const MetaWriter &operator=(const MetaWriter &) = delete;
-
+ private:
   std::shared_ptr<RawEngine> engine_;
 };
 

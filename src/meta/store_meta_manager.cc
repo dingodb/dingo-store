@@ -20,8 +20,6 @@
 
 namespace dingodb {
 
-StoreServerMeta::StoreServerMeta() {}
-
 bool StoreServerMeta::Init() {
   auto* server = Server::GetInstance();
 
