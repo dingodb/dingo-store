@@ -4,6 +4,9 @@
 
 package io.dingodb.sdk.service.connector;
 
+import io.dingodb.common.Common;
+import io.dingodb.coordinator.Coordinator;
+import io.dingodb.coordinator.CoordinatorServiceGrpc;
 import io.dingodb.sdk.common.utils.GrpcConnection;
 import io.dingodb.meta.MetaServiceGrpc;
 import io.grpc.ManagedChannel;
@@ -20,9 +23,18 @@ public class ServiceConnector {
     }
 
     public void initConnection() {
-        // TODO connection coordinator leader
-
         ManagedChannel channel = GrpcConnection.newChannel(target);
-        metaBlockingStub = MetaServiceGrpc.newBlockingStub(channel);
+        CoordinatorServiceGrpc.CoordinatorServiceBlockingStub blockingStub =
+                CoordinatorServiceGrpc.newBlockingStub(channel);
+        Coordinator.GetCoordinatorMapResponse response = blockingStub.getCoordinatorMap(
+                Coordinator.GetCoordinatorMapRequest.newBuilder().setClusterId(0).build());
+
+        Common.Location leaderLocation = response.getLeaderLocation();
+        if (!leaderLocation.getHost().isEmpty()) {
+            target = leaderLocation.getHost() + ":" + leaderLocation.getPort();
+            channel = GrpcConnection.newChannel(target);
+            metaBlockingStub = MetaServiceGrpc.newBlockingStub(channel);
+        }
+
     }
 }
