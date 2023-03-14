@@ -156,8 +156,6 @@ int StoreStateMachine::on_snapshot_load([[maybe_unused]] braft::SnapshotReader* 
   return -1;
 }
 
-void StoreStateMachine::on_leader_start() { LOG(INFO) << "on_leader_start..."; }
-
 void StoreStateMachine::on_leader_start(int64_t term) {
   LOG(INFO) << "on_leader_start term: " << term;
 

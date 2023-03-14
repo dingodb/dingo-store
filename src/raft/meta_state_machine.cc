@@ -87,11 +87,6 @@ int MetaStateMachine::on_snapshot_load([[maybe_unused]] braft::SnapshotReader* r
   return -1;
 }
 
-void MetaStateMachine::on_leader_start() {
-  LOG(INFO) << "on_leader_start...";
-  meta_control_->SetLeader();
-}
-
 void MetaStateMachine::on_leader_start(int64_t term) {
   LOG(INFO) << "on_leader_start term: " << term;
   meta_control_->SetLeader();

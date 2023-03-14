@@ -49,6 +49,7 @@ class Helper {
   static int PeerIdToLocation(braft::PeerId peer_id, pb::common::Location& location);
 
   static butil::EndPoint LocationToEndPoint(const pb::common::Location& location);
+  static pb::common::Location EndPointToLocation(const butil::EndPoint& endpoint);
 
   // format: 127.0.0.1:8201:0,127.0.0.1:8202:0,127.0.0.1:8203:0
   static std::string FormatPeers(const std::vector<pb::common::Location>& locations);
@@ -95,6 +96,7 @@ class Helper {
   static std::string StringToHex(const std::string& str);
 
   static void SetPbMessageError(butil::Status status, google::protobuf::Message* message);
+
   template <typename T>
   static void SetPbMessageErrorLeader(butil::EndPoint endpoint, T* message) {
     auto leader_location = message->mutable_error()->mutable_leader_location();
@@ -104,8 +106,14 @@ class Helper {
 
   static std::string MessageToJsonString(const google::protobuf::Message& message);
 
+  // Use raft endpoint query server endpoint
   static butil::EndPoint QueryServerEndpointByRaftEndpoint(
       std::map<uint64_t, std::shared_ptr<pb::common::Store>> stores, butil::EndPoint endpoint);
+
+  // use raft_location to get server_location
+  // in: raft_location
+  // out: server_location
+  static void GetServerLocation(const pb::common::Location& raft_location, pb::common::Location& server_location);
 };
 
 }  // namespace dingodb
