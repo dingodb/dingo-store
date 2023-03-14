@@ -8,6 +8,7 @@ import io.dingodb.client.ContextForClient;
 import io.dingodb.client.Result;
 import io.dingodb.client.ServiceOperation;
 import io.dingodb.client.StoreOperationType;
+import io.dingodb.common.Common;
 import io.dingodb.sdk.common.partition.PartitionDetailDefinition;
 import io.dingodb.sdk.common.partition.PartitionRule;
 import io.dingodb.sdk.common.table.ColumnDefinition;
@@ -77,7 +78,13 @@ public class DingoClient {
         PartitionDetailDefinition detailDefinition = new PartitionDetailDefinition(null, null, Arrays.asList(new Object[]{1}));
         PartitionRule partitionRule = new PartitionRule(null, null, Arrays.asList(detailDefinition));
 
-        TableDefinition tableDefinition = new TableDefinition(tableName, Arrays.asList(c1, c2), 1, 0, partitionRule, ENG_ROCKSDB.name(), null);
+        TableDefinition tableDefinition = new TableDefinition(tableName,
+                Arrays.asList(c1, c2),
+                1,
+                0,
+                partitionRule,
+                Common.Engine.ENG_ROCKSDB.name(),
+                null);
         boolean isSuccess = dingoClient.createTable(tableDefinition);
 
         System.out.println(isSuccess);

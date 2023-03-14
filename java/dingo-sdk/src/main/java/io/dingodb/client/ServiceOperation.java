@@ -101,8 +101,8 @@ public class ServiceOperation {
         for (int index = 0; index < wholeContext.getStartKeyInBytes().size(); index++) {
             byte[] keyInBytes = wholeContext.getStartKeyInBytes().get(index);
             Meta.Part part = getPartByStartKey(routeTable, keyInBytes);
-            // String leaderAddress = part.getLeader().getHost() + ":" + part.getLeader().getPort();
-            String leaderAddress = "192.168.1.201:20002";
+            String leaderAddress = part.getLeader().getHost() + ":" + part.getLeader().getPort();
+            // String leaderAddress = "192.168.1.201:20002";
             if (leaderAddress == null) {
                 log.error("Cannot find partition, table {} key:{} not found when do operation",
                         tableName,
