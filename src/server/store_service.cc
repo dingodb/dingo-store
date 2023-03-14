@@ -26,15 +26,25 @@ namespace dingodb {
 StoreServiceImpl::StoreServiceImpl() = default;
 
 // Set error response leader location.
+// Priority from local storemap query, and then from remote node query.
 template <typename T>
 void RedirectLeader(std::string addr, T* response) {
   LOG(INFO) << "Redirect leader " << addr;
-  auto endpoint = Helper::StrToEndPoint(addr);
-  if (endpoint.port == 0) return;
+  auto raft_endpoint = Helper::StrToEndPoint(addr);
+  if (raft_endpoint.port == 0) return;
 
-  butil::EndPoint server_endpoint =
-      Helper::QueryServerEndpointByRaftEndpoint(Server::GetInstance()->GetStoreMetaManager()->GetAllStore(), endpoint);
-  if (server_endpoint.port == 0) return;
+  // From local store map query.
+  butil::EndPoint server_endpoint = Helper::QueryServerEndpointByRaftEndpoint(
+      Server::GetInstance()->GetStoreMetaManager()->GetAllStore(), raft_endpoint);
+  if (server_endpoint.port == 0) {
+    // From remote node query.
+    pb::common::Location server_location;
+    Helper::GetServerLocation(Helper::EndPointToLocation(raft_endpoint), server_location);
+    if (server_location.port() > 0) {
+      server_endpoint = Helper::LocationToEndPoint(server_location);
+    }
+  }
+
   Helper::SetPbMessageErrorLeader(server_endpoint, response);
 }
 

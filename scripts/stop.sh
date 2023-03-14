@@ -14,7 +14,8 @@ eval set -- "${FLAGS_ARGV}"
 
 echo "role: ${FLAGS_role}"
 
-process_no=`ps -ef | grep dingodb_server | grep ${FLAGS_role} | grep -v grep | awk '{print $2}' | xargs`
+user=`whoami`
+process_no=`ps -ef | grep dingodb_server | grep ${FLAGS_role} | grep ${user} | grep -v grep | awk '{print $2}' | xargs`
 
 if [ "$process_no" != "" ]; then
   echo "process no: ${process_no}"

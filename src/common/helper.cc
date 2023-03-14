@@ -16,10 +16,14 @@
 
 #include <regex>
 
+#include "brpc/controller.h"
+// #include "brpc/server.h"
+#include "brpc/channel.h"
 #include "butil/endpoint.h"
 #include "butil/strings/string_split.h"
 #include "butil/strings/stringprintf.h"
 #include "google/protobuf/util/json_util.h"
+#include "proto/node.pb.h"
 
 namespace dingodb {
 
@@ -120,6 +124,14 @@ butil::EndPoint Helper::LocationToEndPoint(const pb::common::Location& location)
   }
 
   return endpoint;
+}
+
+pb::common::Location Helper::EndPointToLocation(const butil::EndPoint& endpoint) {
+  pb::common::Location location;
+  location.set_host(butil::ip2str(endpoint.ip).c_str());
+  location.set_port(endpoint.port);
+
+  return location;
 }
 
 // format: 127.0.0.1:8201:0,127.0.0.1:8202:0,127.0.0.1:8203:0
@@ -253,6 +265,50 @@ butil::EndPoint Helper::QueryServerEndpointByRaftEndpoint(std::map<uint64_t, std
   }
 
   return result;
+}
+
+void Helper::GetServerLocation(const pb::common::Location& raft_location, pb::common::Location& server_location) {
+  // validate raft_location
+  // TODO: how to support ipv6
+  if (raft_location.host().length() <= 0 || raft_location.port() <= 0) {
+    LOG(ERROR) << "GetServiceLocation illegal raft_location=" << Helper::MessageToJsonString(raft_location);
+    return;
+  }
+
+  // find in cache
+  auto raft_location_string = raft_location.host() + ":" + std::to_string(raft_location.port());
+
+  // cache miss, use rpc to get remote_node server location, and store in cache
+  braft::PeerId remote_node(raft_location_string);
+
+  // rpc
+  brpc::Channel channel;
+  if (channel.Init(remote_node.addr, nullptr) != 0) {
+    LOG(ERROR) << "Fail to init channel to " << remote_node;
+    return;
+  }
+
+  pb::node::NodeService_Stub stub(&channel);
+
+  brpc::Controller cntl;
+  cntl.set_timeout_ms(1000L);
+
+  pb::node::GetNodeInfoRequest request;
+  pb::node::GetNodeInfoResponse response;
+
+  std::string key = "Hello";
+  request.set_cluster_id(0);
+  stub.GetNodeInfo(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    return;
+  }
+
+  LOG(INFO) << "Received response"
+            << " cluster_id=" << request.cluster_id() << " latency=" << cntl.latency_us();
+  LOG(INFO) << Helper::MessageToJsonString(response);
+
+  server_location.CopyFrom(response.node_info().server_location());
 }
 
 }  // namespace dingodb

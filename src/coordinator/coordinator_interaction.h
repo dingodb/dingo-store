@@ -36,6 +36,9 @@ class CoordinatorInteraction {
   CoordinatorInteraction() : leader_index_(0){};
   ~CoordinatorInteraction() = default;
 
+  CoordinatorInteraction(const CoordinatorInteraction&) = delete;
+  const CoordinatorInteraction& operator=(const CoordinatorInteraction&) = delete;
+
   bool Init(const std::string& addr);
 
   int GetLeader();
@@ -43,9 +46,6 @@ class CoordinatorInteraction {
 
   template <typename Request, typename Response>
   butil::Status SendRequest(const std::string& api_name, const Request& request, Response& response);
-
-  CoordinatorInteraction(const CoordinatorInteraction&) = delete;
-  const CoordinatorInteraction& operator=(const CoordinatorInteraction&) = delete;
 
  private:
   std::atomic<int> leader_index_;
