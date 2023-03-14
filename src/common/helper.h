@@ -19,6 +19,7 @@
 #include <string>
 #include <vector>
 
+#include "braft/configuration.h"
 #include "butil/endpoint.h"
 #include "butil/status.h"
 #include "proto/common.pb.h"
@@ -43,13 +44,17 @@ class Helper {
   // format: 127.0.0.1:8201:0
   static std::string LocationToString(const pb::common::Location& location);
 
+  // transform braft::PeerId to Location
+  // return 0 or -1
+  static int PeerIdToLocation(braft::PeerId peer_id, pb::common::Location& location);
+
   static butil::EndPoint LocationToEndPoint(const pb::common::Location& location);
 
   // format: 127.0.0.1:8201:0,127.0.0.1:8202:0,127.0.0.1:8203:0
   static std::string FormatPeers(const std::vector<pb::common::Location>& locations);
 
   // 127.0.0.1:8201,127.0.0.1:8202,127.0.0.1:8203 to EndPoint
-  static butil::EndPoint StrToEndPoint(const std::string str);
+  static butil::EndPoint StrToEndPoint(std::string str);
   static std::vector<butil::EndPoint> StrToEndpoints(const std::string& str);
 
   static std::shared_ptr<pb::error::Error> Error(pb::error::Errno errcode, const std::string& errmsg);

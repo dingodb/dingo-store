@@ -23,6 +23,7 @@
 #include <utility>
 #include <vector>
 
+#include "braft/configuration.h"
 #include "brpc/channel.h"
 #include "butil/scoped_lock.h"
 #include "butil/strings/string_split.h"
@@ -319,25 +320,10 @@ void CoordinatorControl::GetLeaderLocation(pb::common::Location& leader_server_l
   // parse leader raft location from string
   auto leader_string = raft_node_->GetLeaderId().to_string();
 
-  std::vector<std::string> addrs;
-  butil::SplitString(leader_string, ':', &addrs);
-
-  if (addrs.size() != 3) {
-    LOG(ERROR) << "GetLeaderLocation peerid to string error " << leader_string;
-    return;
-  }
-
   pb::common::Location leader_raft_location;
-  leader_raft_location.set_host(addrs[0]);
-
-  int32_t value;
-  try {
-    value = std::stoi(addrs[1]);
-    leader_raft_location.set_port(value);
-  } catch (const std::invalid_argument& ia) {
-    LOG(ERROR) << "GetLeaderLocation parse port error Irnvalid argument: " << ia.what() << std::endl;
-  } catch (const std::out_of_range& oor) {
-    LOG(ERROR) << "GetLeaderLocation parse port error Out of Range error: " << oor.what() << std::endl;
+  int ret = Helper::PeerIdToLocation(raft_node_->GetLeaderId(), leader_raft_location);
+  if (ret < 0) {
+    return;
   }
 
   // GetServerLocation
@@ -1063,16 +1049,51 @@ void CoordinatorControl::GetTable(uint64_t schema_id, uint64_t table_id, pb::met
   }
 }
 
-// TODO: fininsh logic
-void CoordinatorControl::GetCoordinatorMap(uint64_t cluster_id, uint64_t& epoch,
-                                           [[maybe_unused]] pb::common::Location& leader_location,
-                                           [[maybe_unused]] std::vector<pb::common::Location>& locations) {
+// TODO: add epoch logic
+void CoordinatorControl::GetCoordinatorMap(uint64_t cluster_id, uint64_t& epoch, pb::common::Location& leader_location,
+                                           std::vector<pb::common::Location>& locations) {
   if (cluster_id < 0) {
     return;
   }
   epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_COORINATOR);
   leader_location.mutable_host()->assign("127.0.0.1");
   leader_location.set_port(19190);
+
+  if (raft_node_ == nullptr) {
+    LOG(ERROR) << "GetCoordinatorMap raft_node_ is nullptr";
+    return;
+  }
+
+  std::vector<braft::PeerId> peers;
+  raft_node_->ListPeers(&peers);
+
+  // get all server_location from raft_node
+  for (const auto& peer : peers) {
+    pb::common::Location raft_location;
+    pb::common::Location server_location;
+
+    int ret = Helper::PeerIdToLocation(peer, raft_location);
+    if (ret < 0) {
+      LOG(ERROR) << "GetCoordinatorMap cannot transform raft peerid, peerid=" << peer;
+      continue;
+    }
+
+    GetServerLocation(raft_location, server_location);
+
+    locations.push_back(server_location);
+  }
+
+  // get leader server_location from raft_node
+  auto leader_peer_id = raft_node_->GetLeaderId();
+  pb::common::Location leader_raft_location;
+
+  int ret = Helper::PeerIdToLocation(leader_peer_id, leader_raft_location);
+  if (ret < 0) {
+    LOG(ERROR) << "GetCoordinatorMap cannot transform raft leader peerid, peerid=" << leader_peer_id;
+    return;
+  }
+
+  GetServerLocation(leader_raft_location, leader_location);
 }
 
 // ApplyMetaIncrement is on_apply callback

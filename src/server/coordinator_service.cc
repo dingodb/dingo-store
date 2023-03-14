@@ -202,6 +202,14 @@ void CoordinatorServiceImpl::GetCoordinatorMap(google::protobuf::RpcController *
   this->coordinator_control_->GetCoordinatorMap(request->cluster_id(), epoch, leader_location, locations);
 
   response->set_epoch(epoch);
+
+  auto *leader_location_resp = response->mutable_leader_location();
+  leader_location_resp->CopyFrom(leader_location);
+
+  for (const auto &member_location : locations) {
+    auto *location = response->add_coordinator_locations();
+    location->CopyFrom(member_location);
+  }
 }
 
 }  // namespace dingodb

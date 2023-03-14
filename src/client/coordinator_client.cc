@@ -101,6 +101,27 @@ void SendGetStoreMap(brpc::Controller& cntl, dingodb::pb::coordinator::Coordinat
   }
 }
 
+void SendGetCoordinatorMap(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
+  dingodb::pb::coordinator::GetCoordinatorMapRequest request;
+  dingodb::pb::coordinator::GetCoordinatorMapResponse response;
+
+  request.set_cluster_id(0);
+
+  stub.GetCoordinatorMap(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    // bthread_usleep(FLAGS_timeout_ms * 1000L);
+  }
+
+  if (FLAGS_log_each_request) {
+    LOG(INFO) << "Received response"
+              << " get_coordinator_map=" << request.cluster_id()
+              << " request_attachment=" << cntl.request_attachment().size()
+              << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+    LOG(INFO) << response.DebugString();
+  }
+}
+
 void SendGetRegionMap(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
   dingodb::pb::coordinator::GetRegionMapRequest request;
   dingodb::pb::coordinator::GetRegionMapResponse response;
@@ -247,6 +268,8 @@ void* Sender(void* /*arg*/) {
       SendGetStoreMap(cntl, stub);
     } else if (FLAGS_method == "GetRegionMap") {
       SendGetRegionMap(cntl, stub);
+    } else if (FLAGS_method == "GetCoordinatorMap") {
+      SendGetCoordinatorMap(cntl, stub);
     } else if (FLAGS_method == "GetNodeInfo") {
       SendGetNodeInfo(cntl, node_stub);
     } else {
