@@ -14,8 +14,6 @@ import java.util.List;
 @Getter
 @AllArgsConstructor
 public class ContextForClient {
-
     private final List<Object[]> keyList;
-
     private final List<Object[]> values;
 }
