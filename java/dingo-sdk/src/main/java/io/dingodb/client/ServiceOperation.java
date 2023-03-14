@@ -76,14 +76,16 @@ public class ServiceOperation {
                 code = resultForStore.getCode();
                 message = resultForStore.getErrorMessage();
                 List<Common.KeyValue> records = resultForStore.getRecords();
-                results.addAll(records.stream()
-                    .map(kv -> {
-                        try {
-                            return codec.decode(new KeyValue(kv.getKey().toByteArray(), kv.getValue().toByteArray()));
-                        } catch (IOException e) {
-                            throw new RuntimeException(e);
-                        }
-                    }).collect(Collectors.toList()));
+                if (resultForStore.getRecords() != null) {
+                    results.addAll(records.stream()
+                        .map(kv -> {
+                            try {
+                                return codec.decode(new KeyValue(kv.getKey().toByteArray(), kv.getValue().toByteArray()));
+                            } catch (IOException e) {
+                                throw new RuntimeException(e);
+                            }
+                        }).collect(Collectors.toList()));
+                }
 
             } catch (InterruptedException | ExecutionException e) {
                 throw new RuntimeException(e);
@@ -99,7 +101,8 @@ public class ServiceOperation {
         for (int index = 0; index < wholeContext.getStartKeyInBytes().size(); index++) {
             byte[] keyInBytes = wholeContext.getStartKeyInBytes().get(index);
             Meta.Part part = getPartByStartKey(routeTable, keyInBytes);
-            String leaderAddress = part.getLeader().getHost() + ":" + part.getLeader().getPort();
+            // String leaderAddress = part.getLeader().getHost() + ":" + part.getLeader().getPort();
+            String leaderAddress = "192.168.1.201:20002";
             if (leaderAddress == null) {
                 log.error("Cannot find partition, table {} key:{} not found when do operation",
                         tableName,
@@ -148,7 +151,7 @@ public class ServiceOperation {
                     table.getKeyMapping()
             );
 
-            RangeStrategy rangeStrategy = new RangeStrategy(parts.navigableKeySet());
+            RangeStrategy rangeStrategy = new RangeStrategy(parts.navigableKeySet(), keyValueCodec);
             Meta.DingoCommonId tableId = metaClient.getTableId(table.getName());
 
             routeTable = new RouteTable(tableId, keyValueCodec, parts, rangeStrategy);
@@ -178,22 +181,22 @@ public class ServiceOperation {
     private ContextForStore getStoreContext(ContextForClient inputContext, KeyValueCodec codec, Table tableDef) {
         List<byte[]> startKeyInBytes = inputContext.getKeyList().stream().map(x -> {
             try {
-                if (x.length != tableDef.getPrimaryKeyCount()) {
-                    log.error("Inconsistent number of primary keys:{}", x);
-                }
                 return codec.encodeKey(x);
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
         }).collect(Collectors.toList());
 
-        List<KeyValue> keyValueList = inputContext.getValues().stream().map(x -> {
-            try {
-                return codec.encode(x);
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-        }).collect(Collectors.toList());
+        List<KeyValue> keyValueList = null;
+        if (inputContext.getValues() != null) {
+            keyValueList = inputContext.getValues().stream().map(x -> {
+                try {
+                    return codec.encode(x);
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            }).collect(Collectors.toList());
+        }
 
         return ContextForStore.builder()
                 .startKeyInBytes(startKeyInBytes)

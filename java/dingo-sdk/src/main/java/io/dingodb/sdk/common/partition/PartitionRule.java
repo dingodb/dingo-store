@@ -6,32 +6,32 @@ package io.dingodb.sdk.common.partition;
 
 import java.util.List;
 
-public class PartitionDefinition implements Partition {
+public class PartitionRule implements Partition {
 
-    String funcName;
+    String strategy;
 
     List<String> cols;
 
     List<PartitionDetailDefinition> details;
 
-    public PartitionDefinition(String funcName, List<String> cols, List<PartitionDetailDefinition> details) {
-        this.funcName = funcName;
+    public PartitionRule(String strategy, List<String> cols, List<PartitionDetailDefinition> details) {
+        this.strategy = strategy;
         this.cols = cols;
         this.details = details;
     }
 
     @Override
-    public String funcName() {
-        return null;
+    public String strategy() {
+        return strategy;
     }
 
     @Override
     public List<String> cols() {
-        return null;
+        return cols;
     }
 
     @Override
-    public List<PartitionDetail> details() {
-        return null;
+    public List<PartitionDetailDefinition> details() {
+        return details;
     }
 }

@@ -4,6 +4,8 @@
 
 package io.dingodb.sdk.common.table;
 
+import io.dingodb.sdk.common.codec.DingoKeyValueCodec;
+import io.dingodb.sdk.common.codec.KeyValueCodec;
 import io.dingodb.sdk.common.partition.Partition;
 import io.dingodb.sdk.common.type.DingoType;
 import io.dingodb.sdk.common.type.DingoTypeFactory;
@@ -80,5 +82,9 @@ public interface Table {
             return Arrays.asList(pkIndices);
         }
         return indices;
+    }
+
+    default KeyValueCodec createCodec() {
+        return new DingoKeyValueCodec(getDingoType(), getKeyMapping());
     }
 }
