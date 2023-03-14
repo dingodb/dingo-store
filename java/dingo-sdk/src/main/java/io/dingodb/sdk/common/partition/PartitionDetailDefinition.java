@@ -22,16 +22,16 @@ public class PartitionDetailDefinition implements PartitionDetail {
 
     @Override
     public String getPartName() {
-        return null;
+        return partName;
     }
 
     @Override
     public String getOperator() {
-        return null;
+        return operator;
     }
 
     @Override
     public List<Object> getOperand() {
-        return null;
+        return operand;
     }
 }

@@ -8,9 +8,9 @@ import java.util.List;
 
 public interface Partition {
 
-    String funcName();
+    String strategy();
 
     List<String> cols();
 
-    List<PartitionDetail> details();
+    List<PartitionDetailDefinition> details();
 }

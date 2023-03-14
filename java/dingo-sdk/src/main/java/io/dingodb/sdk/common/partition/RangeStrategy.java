@@ -4,10 +4,13 @@
 
 package io.dingodb.sdk.common.partition;
 
+import io.dingodb.sdk.common.codec.DingoKeyValueCodec;
+import io.dingodb.sdk.common.codec.KeyValueCodec;
 import io.dingodb.sdk.common.utils.ByteArrayUtils;
 import io.dingodb.sdk.common.utils.ByteArrayUtils.ComparableByteArray;
 import org.checkerframework.checker.nullness.qual.NonNull;
 
+import java.io.IOException;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.Map;
@@ -19,13 +22,13 @@ public class RangeStrategy extends PartitionStrategy<ComparableByteArray> {
 
     private final NavigableSet<ComparableByteArray> ranges;
 
-    // private final transient DingoKeyValueCodec codec;
+    private final transient KeyValueCodec codec;
 
     public RangeStrategy(
-            NavigableSet<ComparableByteArray> ranges
-            /* DingoKeyValueCodec codec*/) {
+            NavigableSet<ComparableByteArray> ranges,
+             KeyValueCodec codec) {
         this.ranges = ranges;
-        // this.codec = codec;
+        this.codec = codec;
     }
 
     @Override
@@ -35,12 +38,11 @@ public class RangeStrategy extends PartitionStrategy<ComparableByteArray> {
 
     @Override
     public ComparableByteArray calcPartId(Object @NonNull [] keyTuple) {
-        /*try {
+        try {
             return calcPartId(codec.encodeKey(keyTuple));
         } catch (IOException e) {
             throw new RuntimeException(e);
-        }*/
-        return null;
+        }
     }
 
     @Override
