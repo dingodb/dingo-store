@@ -54,7 +54,7 @@ butil::EndPoint GetRaftEndPoint(std::shared_ptr<dingodb::Config> config) {
 }
 
 static void SignalHandler(int signo) {
-  printf("========== handle signal '%s': '%s' ==========\n", sigdescr_np(signo), sigabbrev_np(signo));
+  printf("========== handle signal '%d' ==========\n", signo);
   unw_context_t context;
   unw_cursor_t cursor;
   unw_getcontext(&context);
