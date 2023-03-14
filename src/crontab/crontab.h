@@ -63,8 +63,11 @@ class Crontab {
 // Manage crontab use brpc::bthread_timer_add
 class CrontabManager {
  public:
-  CrontabManager() {}
-  ~CrontabManager() {}
+  CrontabManager() = default;
+  ~CrontabManager() = default;
+
+  CrontabManager(const CrontabManager&) = delete;
+  const CrontabManager& operator=(const CrontabManager&) = delete;
 
   static void Run(void* arg);
 
@@ -77,8 +80,6 @@ class CrontabManager {
   void Destroy();
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(CrontabManager);
-
   // Allocate crontab id by auto incremental.
   uint32_t AllocCrontabId();
 

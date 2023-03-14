@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DINGODB_COMMON_CONSTATN_H_
-#define DINGODB_COMMON_CONSTANT_H__
+#ifndef DINGODB_COMMON_CONSTANT_H_
+#define DINGODB_COMMON_CONSTANT_H_
 
 #include <cstdint>
 #include <string>
@@ -35,8 +35,10 @@ class Constant {
   static const std::string kStoreDataCF;
   // Define Store meta column family.
   static const std::string kStoreMetaCF;
+  // Define store meta prefix.
+  static const std::string kStoreRegionMetaPrefix;
 };
 
 }  // namespace dingodb
 
-#endif
+#endif  // DINGODB_COMMON_CONSTANT_H_

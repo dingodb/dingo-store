@@ -26,14 +26,15 @@ namespace dingodb {
 class MetaReader {
  public:
   MetaReader(std::shared_ptr<RawEngine> engine) : engine_(engine) {}
-  ~MetaReader() {}
+  ~MetaReader() = default;
+
+  MetaReader(const MetaReader&) = delete;
+  const MetaReader& operator=(const MetaReader&) = delete;
 
   std::shared_ptr<pb::common::KeyValue> Get(const std::string& key);
   bool Scan(const std::string& prefix, std::vector<pb::common::KeyValue>& kvs);
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(MetaReader);
-
   std::shared_ptr<RawEngine> engine_;
 };
 

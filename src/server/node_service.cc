@@ -22,7 +22,6 @@
 
 #include "brpc/controller.h"
 #include "butil/endpoint.h"
-#include "common/constant.h"
 #include "coordinator/coordinator_closure.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator_internal.pb.h"

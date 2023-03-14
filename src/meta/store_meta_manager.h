@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "butil/endpoint.h"
+#include "common/constant.h"
 #include "engine/engine.h"
 #include "meta/meta_reader.h"
 #include "meta/meta_writer.h"
@@ -31,7 +32,7 @@ namespace dingodb {
 // Manage store server store data
 class StoreServerMeta {
  public:
-  StoreServerMeta();
+  StoreServerMeta() = default;
   ~StoreServerMeta() = default;
 
   StoreServerMeta(const StoreServerMeta&) = delete;
@@ -59,8 +60,11 @@ class StoreServerMeta {
 // Manage store server region meta data
 class StoreRegionMeta : public TransformKvAble {
  public:
-  StoreRegionMeta() : TransformKvAble("META_REGION"){};
+  StoreRegionMeta() : TransformKvAble(Constant::kStoreRegionMetaPrefix){};
   ~StoreRegionMeta() override = default;
+
+  StoreRegionMeta(const StoreRegionMeta&) = delete;
+  const StoreRegionMeta& operator=(const StoreRegionMeta&) = delete;
 
   bool Init();
   bool Recover(const std::vector<pb::common::KeyValue>& kvs);
@@ -84,9 +88,6 @@ class StoreRegionMeta : public TransformKvAble {
 
   void TransformFromKv(const std::vector<pb::common::KeyValue>& kvs) override;
 
-  StoreRegionMeta(const StoreRegionMeta&) = delete;
-  const StoreRegionMeta& operator=(const StoreRegionMeta&) = delete;
-
  private:
   uint64_t epoch_;
 
@@ -104,6 +105,9 @@ class StoreMetaManager {
  public:
   StoreMetaManager(std::shared_ptr<MetaReader> meta_reader, std::shared_ptr<MetaWriter> meta_writer);
   ~StoreMetaManager() = default;
+
+  StoreMetaManager(const StoreMetaManager&) = delete;
+  void operator=(const StoreMetaManager&) = delete;
 
   bool Init();
   bool Recover();
@@ -124,9 +128,6 @@ class StoreMetaManager {
   void DeleteRegion(uint64_t region_id);
   std::shared_ptr<pb::common::Region> GetRegion(uint64_t region_id);
   std::map<uint64_t, std::shared_ptr<pb::common::Region>> GetAllRegion();
-
-  StoreMetaManager(const StoreMetaManager&) = delete;
-  void operator=(const StoreMetaManager&) = delete;
 
  private:
   // Read meta data from persistence storage.
