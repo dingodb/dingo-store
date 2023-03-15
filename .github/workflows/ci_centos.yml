@@ -9,7 +9,6 @@ on:
 env:
   # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
   BUILD_TYPE: Release
-  GITHUB_ACTION_REPOSITORY:  https://github.com/dingodb/dingo-poc.git
 
 jobs:
   build:
@@ -20,25 +19,25 @@ jobs:
     # get docker contatiner
     container: 
       image: garyhhh/dingo-centos:latest
-      # volumes:
-      #   -  /home/runner/work/dingo-poc/dingo-poc:/home/runner/work/dingo-poc/dingo-poc
-        # - /home/runner/work/dingo-poc/dingo-poc:/__w/dingo-poc/dingo-poc
 
     steps:
-    # - uses: actions/checkout@v3
+    - uses: actions/checkout@v3
+
+    - name: Set Safe Dir
+      run: git config --global --add safe.directory $PWD 
+
     - name: Clone Submodule
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
       # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
-      run: cd /home && git clone ${{env.GITHUB_ACTION_REPOSITORY}} && cd dingo-poc && git submodule update --init --recursive
-
+      run: git submodule update --init --recursive
 
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
       # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
-      run: cd /home/dingo-poc && cmake -B ./build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
-
+      run:  cmake -B ./build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
 
     - name: Build
       # Build your program with the given configuration
-      run: cd /home/dingo-poc && cmake --build ./build --config ${{env.BUILD_TYPE}}
+      run: cmake --build ./build --config ${{env.BUILD_TYPE}}
+    
 
