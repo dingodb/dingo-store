@@ -22,8 +22,12 @@ public class DingoJavaExampleUsingSDK {
 
         String tableName = "testChannel";
 
-        boolean test1 = dingoClient.dropTable(tableName);
-        System.out.println(test1);
+        try {
+            boolean test1 = dingoClient.dropTable(tableName);
+            System.out.println(test1);
+        } catch (Exception e) {
+            System.out.println(e.toString());
+        }
 
         ColumnDefinition c1 = new ColumnDefinition("id", "integer", "", 0, 0, false, 0, "");
         ColumnDefinition c2 = new ColumnDefinition("name", "varchar", "", 0, 0, false, -1, "");
@@ -40,25 +44,29 @@ public class DingoJavaExampleUsingSDK {
                 null);
         boolean isSuccess = dingoClient.createTable(tableDefinition);
 
-        System.out.println(isSuccess);
+        System.out.println("create table, result is " + isSuccess);
 
         try {
-            Thread.sleep(20000);
+            Thread.sleep(12000);
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
 
-        for (int i = 0; i < 1; i++) {
+        int test_count = 100;
+        for (int i = 0; i < test_count; i++) {
             Map<String, Object> map = Maps.newLinkedHashMap();
             map.put(c1.getName(), i);
             map.put(c2.getName(), "zhangsan" + i);
             boolean test = dingoClient.upsert(tableName, Collections.singletonList(new Record(c1.getName(), map)));
-            System.out.println(test);
+            System.out.println("put " + i + " result is " + test);
         }
 
-        Record record = dingoClient.get(tableName, new Key(Arrays.asList(Value.get(0), Value.get(""))));
-        System.out.println(record);
+        for (int i = 0; i < test_count; i++) {
+            Record record = dingoClient.get(tableName, new Key(Arrays.asList(Value.get(i), Value.get(""))));
+            System.out.println(record);
+        }
 
         dingoClient.close();
     }
 }
+
