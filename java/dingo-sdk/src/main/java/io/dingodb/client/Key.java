@@ -14,36 +14,33 @@
  * limitations under the License.
  */
 
-package io.dingodb.sdk.common.partition;
+package io.dingodb.client;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
-public class PartitionRule implements Partition {
+public class Key {
 
-    String strategy;
+    /**
+     * Optional database for the key.
+     */
+    private final String database;
 
-    List<String> cols;
+    /**
+     * Required, user keys for with multiple columns.
+     */
+    public final List<Value> userKey;
 
-    List<PartitionDetailDefinition> details;
-
-    public PartitionRule(String strategy, List<String> cols, List<PartitionDetailDefinition> details) {
-        this.strategy = strategy;
-        this.cols = cols;
-        this.details = details;
+    public Key(List<Value> userKey) {
+        this("dingo", userKey);
     }
 
-    @Override
-    public String strategy() {
-        return strategy;
+    public Key(String database, List<Value> userKey) {
+        this.database = database;
+        this.userKey = userKey;
     }
 
-    @Override
-    public List<String> cols() {
-        return cols;
-    }
-
-    @Override
-    public List<PartitionDetailDefinition> details() {
-        return details;
+    public List<Object> getUserKey() {
+        return userKey.stream().map(Value::getObject).collect(Collectors.toList());
     }
 }

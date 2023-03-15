@@ -26,6 +26,10 @@ public class StoreServiceClient {
         }
     }
 
+    public void shutdown() {
+        channel.shutdown();
+    }
+
     public Store.KvPutResponse kvPut(Store.KvPutRequest request) {
         return blockingStub.kvPut(request);
     }

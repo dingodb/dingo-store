@@ -16,9 +16,17 @@
 
 package io.dingodb.client;
 
-import io.dingodb.sdk.service.store.StoreServiceClient;
-
-public interface IStoreOperation {
-
-    ResultForStore doOperation(StoreServiceClient storeServiceClient, ContextForStore contextForStore);
+/**
+ * Bin type for byte[] values.
+ */
+public final class ParticleType {
+    public static final int NULL = 0;
+    public static final int INTEGER = 1;
+    public static final int DOUBLE = 2;
+    public static final int STRING = 3;
+    public static final int BLOB = 4;
+    public static final int JBLOB = 7;
+    public static final int BOOL = 17;
+    public static final int MAP = 19;
+    public static final int LIST = 20;
 }
