@@ -70,7 +70,13 @@ void CrontabManager::StartCrontab(uint32_t crontab_id) {
 
   bthread_t tid;
   const bthread_attr_t attr = BTHREAD_ATTR_NORMAL;
-  bthread_start_background(&tid, &attr, [](void* arg) -> void* { CrontabManager::Run(arg); }, crontab.get());
+  bthread_start_background(
+      &tid, &attr,
+      [](void* arg) -> void* {
+        CrontabManager::Run(arg);
+        return nullptr;
+      },
+      crontab.get());
 }
 
 void CrontabManager::PauseCrontab(uint32_t crontab_id) {
