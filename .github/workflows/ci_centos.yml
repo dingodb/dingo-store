@@ -24,7 +24,7 @@ jobs:
     - uses: actions/checkout@v3
 
     - name: Set Safe Dir
-      run: git config --global --add safe.directory /__w/dingo-store/dingo-store 
+      run: git config --global --add safe.directory $PWD 
 
     - name: Clone Submodule
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
