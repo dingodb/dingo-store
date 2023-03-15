@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Use the command in the next line to release
+# cmake -DCMAKE_BUILD_TYPE=Release -DTHIRD_PARTY_BUILD_TYPE=Release ..
 cmake_minimum_required(VERSION 3.20)
 project(dingo-store C CXX)
 
@@ -31,7 +33,6 @@ endif()
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-set(CMAKE_BUILD_TYPE "Debug")
 
 # Avoid warning about DOWNLOAD_EXTRACT_TIMESTAMP in CMake 3.24:
 if (CMAKE_VERSION VERSION_GREATER_EQUAL "3.24.0")
