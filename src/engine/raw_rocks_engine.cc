@@ -698,7 +698,7 @@ butil::Status RawRocksEngine::Writer::KvBatchPutAndDelete(const std::vector<pb::
   }
 
   for (const auto& kv : kv_deletes) {
-    rocksdb::Status s = batch.Delete(column_family_->GetHandle(), kv.key(), kv.value());
+    rocksdb::Status s = batch.Delete(column_family_->GetHandle(), kv.key());
     if (!s.ok()) {
       LOG(ERROR) << butil::StringPrintf("rocksdb::WriteBatch::Put failed : %s", s.ToString().c_str());
       return butil::Status(pb::error::EINTERNAL, "Internal error");
