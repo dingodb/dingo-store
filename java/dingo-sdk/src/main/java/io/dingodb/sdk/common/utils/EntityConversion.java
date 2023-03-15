@@ -19,18 +19,7 @@ import java.util.List;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
 
-import static io.dingodb.meta.Meta.SqlType.SQL_TYPE_ANY;
-import static io.dingodb.meta.Meta.SqlType.SQL_TYPE_ARRAY;
-import static io.dingodb.meta.Meta.SqlType.SQL_TYPE_BIGINT;
-import static io.dingodb.meta.Meta.SqlType.SQL_TYPE_BOOLEAN;
-import static io.dingodb.meta.Meta.SqlType.SQL_TYPE_DATE;
-import static io.dingodb.meta.Meta.SqlType.SQL_TYPE_DOUBLE;
-import static io.dingodb.meta.Meta.SqlType.SQL_TYPE_FLOAT;
 import static io.dingodb.meta.Meta.SqlType.SQL_TYPE_INTEGER;
-import static io.dingodb.meta.Meta.SqlType.SQL_TYPE_MULTISET;
-import static io.dingodb.meta.Meta.SqlType.SQL_TYPE_TIME;
-import static io.dingodb.meta.Meta.SqlType.SQL_TYPE_TIMESTAMP;
-import static io.dingodb.meta.Meta.SqlType.SQL_TYPE_VARCHAR;
 import static io.dingodb.sdk.common.utils.ByteArrayUtils.EMPTY_BYTES;
 
 public class EntityConversion {
@@ -129,59 +118,25 @@ public class EntityConversion {
                 return "DOUBLE";
             case SQL_TYPE_BIGINT:
                 return "LONG";
-            case SQL_TYPE_FLOAT:
-                return "FLOAT";
-            case SQL_TYPE_DATE:
-                return "DATE";
-            case SQL_TYPE_TIME:
-                return "TIME";
-            case SQL_TYPE_TIMESTAMP:
-                return "TIMESTAMP";
-            case SQL_TYPE_ARRAY:
-                return "ARRAY";
-            case SQL_TYPE_MULTISET:
-                return "MULTISET";
-            case SQL_TYPE_ANY:
-                return "ANY";
             default:
-                break;
+                return "STRING";
         }
-        throw new IllegalArgumentException("Unrecognized type name \"" + sqlType.name() + "\".");
     }
 
     private static Meta.SqlType swap(String type) {
-        switch (type.toUpperCase()) {
-            case "STRING":
-            case "VARCHAR":
-                return SQL_TYPE_VARCHAR;
-            case "INT":
-            case "INTEGER":
+        switch (type.toLowerCase()) {
+            case "varchar":
+                return Meta.SqlType.SQL_TYPE_VARCHAR;
+            case "integer":
                 return SQL_TYPE_INTEGER;
-            case "BOOL":
-            case "BOOLEAN":
-                return SQL_TYPE_BOOLEAN;
-            case "LONG":
-                return SQL_TYPE_BIGINT;
-            case "DOUBLE":
-                return SQL_TYPE_DOUBLE;
-            case "FLOAT":
-                return SQL_TYPE_FLOAT;
-            case "DATE":
-                return SQL_TYPE_DATE;
-            case "TIME":
-                return SQL_TYPE_TIME;
-            case "TIMESTAMP":
-                return SQL_TYPE_TIMESTAMP;
-            case "ARRAY":
-                return SQL_TYPE_ARRAY;
-            case "LIST":
-            case "MULTISET":
-                return SQL_TYPE_MULTISET;
-            case "ANY":
-                return SQL_TYPE_ANY;
+            case "boolean":
+                return Meta.SqlType.SQL_TYPE_BOOLEAN;
+            case "long":
+                return Meta.SqlType.SQL_TYPE_BIGINT;
+            case "double":
+                return Meta.SqlType.SQL_TYPE_DOUBLE;
             default:
-                break;
+                return Meta.SqlType.SQL_TYPE_VARCHAR;
         }
-        throw new IllegalArgumentException("Unrecognized type name \"" + type + "\".");
     }
 }

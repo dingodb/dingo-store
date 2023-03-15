@@ -1,8 +1,5 @@
-import com.google.common.collect.Maps;
 import io.dingodb.DingoClient;
-import io.dingodb.client.Key;
-import io.dingodb.client.Record;
-import io.dingodb.client.Value;
+import io.dingodb.client.Result;
 import io.dingodb.common.Common;
 import io.dingodb.sdk.common.partition.PartitionDetailDefinition;
 import io.dingodb.sdk.common.partition.PartitionRule;
@@ -11,7 +8,6 @@ import io.dingodb.sdk.common.table.TableDefinition;
 
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.Map;
 
 public class DingoJavaExampleUsingSDK {
 
@@ -20,7 +16,7 @@ public class DingoJavaExampleUsingSDK {
         DingoClient dingoClient = new DingoClient("192.168.1.201:22001", 10);
         dingoClient.open();
 
-        String tableName = "testChannel";
+        String tableName = "test";
 
         boolean test1 = dingoClient.dropTable(tableName);
         System.out.println(test1);
@@ -48,17 +44,13 @@ public class DingoJavaExampleUsingSDK {
             throw new RuntimeException(e);
         }
 
-        for (int i = 0; i < 1; i++) {
-            Map<String, Object> map = Maps.newLinkedHashMap();
-            map.put(c1.getName(), i);
-            map.put(c2.getName(), "zhangsan" + i);
-            boolean test = dingoClient.upsert(tableName, Collections.singletonList(new Record(c1.getName(), map)));
-            System.out.println(test);
+        boolean test = dingoClient.upsert(tableName, Collections.singletonList(new Object[]{1, null}), Collections.singletonList(new Object[]{1, "zhangsan"}));
+        System.out.println(test);
+
+        Result result = dingoClient.get(tableName, Collections.singletonList(new Object[]{1, null}));
+
+        for (Object[] value : result.getValues()) {
+            System.out.println(Arrays.toString(value));
         }
-
-        Record record = dingoClient.get(tableName, new Key(Arrays.asList(Value.get(0), Value.get(""))));
-        System.out.println(record);
-
-        dingoClient.close();
     }
 }

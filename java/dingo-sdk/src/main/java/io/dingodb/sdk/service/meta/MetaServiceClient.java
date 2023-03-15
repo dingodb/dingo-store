@@ -1,3 +1,7 @@
+/*
+ * Copyright 2021, Zetyun DataPortal All rights reserved.
+ */
+
 package io.dingodb.sdk.service.meta;
 
 import io.dingodb.sdk.service.connector.ServiceConnector;
@@ -47,10 +51,6 @@ public class MetaServiceClient {
         this.metaBlockingStub = this.connector.getMetaBlockingStub();
     }
 
-    public void close() {
-        connector.shutdown();
-    }
-
     public boolean createTable(@NonNull String tableName, @NonNull Table table) {
         Meta.TableDefinition definition = swap(table);
 
@@ -79,6 +79,7 @@ public class MetaServiceClient {
     }
 
     public Meta.DingoCommonId getTableId(@NonNull String tableName) {
+        // TODO cache is empty, get id from meta
         Meta.DingoCommonId commonId = tableIdCache.get(tableName);
         if (commonId == null) {
             Meta.GetTablesRequest request = Meta.GetTablesRequest.newBuilder().setSchemaId(ROOT_SCHEMA_ID).build();
@@ -89,10 +90,10 @@ public class MetaServiceClient {
                 if (withId.getTableDefinition().getName().equalsIgnoreCase(tableName)) {
                     commonId = withId.getTableId();
                     tableDefinitionCache.put(commonId, swap(withId.getTableDefinition()));
-                    tableIdCache.put(tableName, commonId);
                     break;
                 }
             }
+            tableIdCache.put(tableName, commonId);
         }
         return commonId;
     }
