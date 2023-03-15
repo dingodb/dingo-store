@@ -1,13 +1,27 @@
 /*
- * Copyright 2021, Zetyun DataPortal All rights reserved.
+ * Copyright 2021 DataCanvas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 package io.dingodb.client;
 
 import io.dingodb.UnifyStoreConnection;
+import io.dingodb.client.operation.OperationFactory;
 import io.dingodb.sdk.common.KeyValue;
 import io.dingodb.sdk.common.codec.DingoKeyValueCodec;
 import io.dingodb.sdk.common.codec.KeyValueCodec;
+import io.dingodb.sdk.common.table.Column;
 import io.dingodb.sdk.service.store.StoreServiceClient;
 import io.dingodb.common.Common;
 import io.dingodb.sdk.common.concurrent.Executors;
@@ -26,6 +40,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
 import java.util.TreeMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.stream.Collectors;
@@ -35,6 +50,7 @@ public class ServiceOperation {
 
     private static Map<String, RouteTable> dingoRouteTables = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
     private static Map<String, Table> tableDefinitionInCache = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+    private static Map<String, StoreServiceClient> storeServiceClientMap = new ConcurrentHashMap<>();
 
     private UnifyStoreConnection connection;
     private int retryTimes;
@@ -42,6 +58,11 @@ public class ServiceOperation {
     public ServiceOperation(UnifyStoreConnection connection, int retryTimes) {
         this.connection = connection;
         this.retryTimes = retryTimes;
+    }
+
+    public void close() {
+        connection.getMetaClient().close();
+        storeServiceClientMap.values().forEach(StoreServiceClient::shutdown);
     }
 
     public Result operation(String tableName, StoreOperationType type, ContextForClient clientParameters) {
@@ -65,33 +86,52 @@ public class ServiceOperation {
                             () -> storeOperation.doOperation(serviceClient, entry.getValue()))
             );
         }
-        List<Object[]> results = new ArrayList<>();
-
         int code = 0;
-        String message = null;
+        String message = "";
 
+        List<Common.KeyValue> keyValueList = new ArrayList<>();
         for (Future<ResultForStore> future : futures) {
             try {
                 ResultForStore resultForStore = future.get();
                 code = resultForStore.getCode();
-                message = resultForStore.getErrorMessage();
+                if (code != 0) {
+                    message = resultForStore.getErrorMessage();
+                    // throw new RuntimeException(message);
+                }
                 List<Common.KeyValue> records = resultForStore.getRecords();
-                if (resultForStore.getRecords() != null) {
-                    results.addAll(records.stream()
-                        .map(kv -> {
-                            try {
-                                return codec.decode(new KeyValue(kv.getKey().toByteArray(), kv.getValue().toByteArray()));
-                            } catch (IOException e) {
-                                throw new RuntimeException(e);
-                            }
-                        }).collect(Collectors.toList()));
+                if (resultForStore.getRecords() != null && resultForStore.getRecords().size() > 0) {
+                    keyValueList.addAll(resultForStore.getRecords());
                 }
 
             } catch (InterruptedException | ExecutionException e) {
                 throw new RuntimeException(e);
             }
         }
-        return new Result(code == 0, message, null, results);
+        ResultForStore resultForStore = new ResultForStore(code, message, keyValueList);
+        return getResult(resultForStore, codec, getTableDefinition(tableName).getColumns());
+    }
+
+    private Result getResult(ResultForStore resultForStore, KeyValueCodec codec, List<Column> columns) {
+        String errorMessage = resultForStore.getErrorMessage();
+        int code = resultForStore.getCode();
+        List<Record> records = null;
+        if (resultForStore.getRecords() != null && !resultForStore.getRecords().isEmpty()) {
+            records = resultForStore.getRecords().stream()
+                .map(kv -> new KeyValue(kv.getKey().toByteArray(), kv.getValue().toByteArray()))
+                .map(kv -> {
+                    try {
+                        List<io.dingodb.client.Column> columnArray = new ArrayList<>();
+                        Object[] values = codec.decode(kv);
+                        for (int i = 0; i < values.length; i++) {
+                            columnArray.add(new io.dingodb.client.Column(columns.get(i).getName(), values[i]));
+                        }
+                        return new Record(columns, columnArray.toArray(new io.dingodb.client.Column[0]));
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                }).collect(Collectors.toList());
+        }
+        return new Result(code == 0, errorMessage, records);
     }
 
     private Map<String, ContextForStore> groupKeysByStore(
@@ -180,17 +220,17 @@ public class ServiceOperation {
     private ContextForStore getStoreContext(ContextForClient inputContext, KeyValueCodec codec, Table tableDef) {
         List<byte[]> startKeyInBytes = inputContext.getKeyList().stream().map(x -> {
             try {
-                return codec.encodeKey(x);
+                return codec.encodeKey(x.getUserKey().toArray(new Object[tableDef.getColumns().size()]));
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
         }).collect(Collectors.toList());
 
         List<KeyValue> keyValueList = null;
-        if (inputContext.getValues() != null) {
-            keyValueList = inputContext.getValues().stream().map(x -> {
+        if (inputContext.getRecords() != null) {
+            keyValueList = inputContext.getRecords().stream().map(x -> {
                 try {
-                    return codec.encode(x);
+                    return codec.encode(x.getColumnValuesInOrder().toArray());
                 } catch (IOException e) {
                     throw new RuntimeException(e);
                 }
@@ -204,7 +244,8 @@ public class ServiceOperation {
     }
 
     private synchronized StoreServiceClient getStore(final RouteTable routeTable, String leaderAddress) {
-        return routeTable.getLeaderStoreService(leaderAddress);
+        return storeServiceClientMap.computeIfAbsent(leaderAddress,
+                client -> routeTable.getLeaderStoreService(leaderAddress));
     }
 
     private synchronized Meta.Part getPartByStartKey(final RouteTable routeTable, byte[] keyInBytes) {

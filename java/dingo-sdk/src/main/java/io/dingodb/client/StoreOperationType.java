@@ -19,5 +19,7 @@ package io.dingodb.client;
 public enum StoreOperationType {
     PUT,
 
+    PUT_IF_ABSENT,
+
     GET,
 }

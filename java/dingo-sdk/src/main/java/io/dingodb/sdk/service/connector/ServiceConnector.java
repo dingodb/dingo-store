@@ -12,9 +12,12 @@ import io.dingodb.meta.MetaServiceGrpc;
 import io.grpc.ManagedChannel;
 import lombok.Getter;
 
+import java.util.concurrent.TimeUnit;
+
 public class ServiceConnector {
 
     private String target;
+    private ManagedChannel channel;
     @Getter
     private MetaServiceGrpc.MetaServiceBlockingStub metaBlockingStub;
 
@@ -23,7 +26,7 @@ public class ServiceConnector {
     }
 
     public void initConnection() {
-        ManagedChannel channel = GrpcConnection.newChannel(target);
+        channel = GrpcConnection.newChannel(target);
         CoordinatorServiceGrpc.CoordinatorServiceBlockingStub blockingStub =
                 CoordinatorServiceGrpc.newBlockingStub(channel);
         Coordinator.GetCoordinatorMapResponse response = blockingStub.getCoordinatorMap(
@@ -35,6 +38,13 @@ public class ServiceConnector {
             channel = GrpcConnection.newChannel(target);
             metaBlockingStub = MetaServiceGrpc.newBlockingStub(channel);
         }
+    }
 
+    public void shutdown() {
+        try {
+            channel.shutdown().awaitTermination(10, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
     }
 }
