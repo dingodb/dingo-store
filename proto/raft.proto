@@ -15,8 +15,6 @@
 syntax = "proto3";
 
 import "common.proto";
-import "meta.proto";
-import "coordinator.proto";
 import "coordinator_internal.proto";
 
 package dingodb.pb.raft;

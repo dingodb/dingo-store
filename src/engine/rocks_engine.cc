@@ -43,8 +43,8 @@
 
 namespace dingodb {
 
-bool RocksEngine::Init(std::shared_ptr<Config> config) {}
-std::string RocksEngine::GetName() { pb::common::Engine_Name(pb::common::ENG_ROCKSDB); }
+bool RocksEngine::Init([[maybe_unused]] std::shared_ptr<Config> config) { return true; }
+std::string RocksEngine::GetName() { return pb::common::Engine_Name(pb::common::ENG_ROCKSDB); }
 
 pb::common::Engine RocksEngine::GetID() { return pb::common::ENG_ROCKSDB; }
 
