@@ -18,7 +18,7 @@ user=`whoami`
 process_no=`ps -ef | grep dingodb_server | grep ${FLAGS_role} | grep ${user} | grep -v grep | awk '{print $2}' | xargs`
 
 if [ "$process_no" != "" ]; then
-  echo "process no: ${process_no}"
+  echo "pid to kill: ${process_no}"
   kill -9 $process_no
 else
   echo "not exist ${FLAGS_role} process"

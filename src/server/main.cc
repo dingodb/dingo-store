@@ -34,6 +34,7 @@
 #include "server/coordinator_service.h"
 #include "server/meta_service.h"
 #include "server/node_service.h"
+#include "server/push_service.h"
 #include "server/server.h"
 #include "server/store_service.h"
 
@@ -77,7 +78,7 @@ static void SignalHandler(int signo) {
 
     if (dladdr((void *)pc, &info)) {
       // Print the frame number, instruction pointer, .so filename, and symbol name
-      printf("Frame %d: [0x%016zx] %32s : %s + 0x%lx\n", i++, (void *)ip, info.dli_fname, symbol, offset);
+      printf("Frame %d: [0x%016zx] %32s : %s + 0x%lx\n", i++, (void *)ip, info.dli_fname, symbol, offset);  // NOLINT
     }
 
   } while (unw_step(&cursor) > 0);
@@ -157,6 +158,7 @@ int main(int argc, char *argv[]) {
   dingodb::MetaServiceImpl meta_service;
   dingodb::StoreServiceImpl store_service;
   dingodb::NodeServiceImpl node_service;
+  dingodb::PushServiceImpl push_service;
 
   node_service.SetServer(dingo_server);
 
@@ -181,6 +183,12 @@ int main(int argc, char *argv[]) {
     auto engine = dingo_server->GetEngine(dingodb::pb::common::Engine::ENG_RAFT_STORE);
     coordinator_service.SetKvEngine(engine);
     meta_service.SetKvEngine(engine);
+
+    // init push crontab
+    if (!dingo_server->InitCrontabManagerForCoordinator()) {
+      LOG(ERROR) << "InitCrontabManagerForCoordinator failed!";
+      return -1;
+    }
 
     // add service to brpc
     if (brpc_server.AddService(&coordinator_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
@@ -235,6 +243,12 @@ int main(int argc, char *argv[]) {
 
     store_service.set_storage(dingo_server->GetStorage());
     if (brpc_server.AddService(&store_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
+      LOG(ERROR) << "Fail to add store service!";
+      return -1;
+    }
+
+    // add push service to server_location
+    if (brpc_server.AddService(&push_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
       LOG(ERROR) << "Fail to add store service!";
       return -1;
     }

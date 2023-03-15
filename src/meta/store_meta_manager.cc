@@ -221,7 +221,9 @@ StoreMetaManager::StoreMetaManager(std::shared_ptr<MetaReader> meta_reader, std:
     : meta_reader_(meta_reader),
       meta_writer_(meta_writer),
       server_meta_(std::make_unique<StoreServerMeta>()),
-      region_meta_(std::make_unique<StoreRegionMeta>()) {}
+      region_meta_(std::make_unique<StoreRegionMeta>()) {
+  bthread_mutex_init(&heartbeat_update_mutex_, nullptr);
+}
 
 bool StoreMetaManager::Init() {
   if (!server_meta_->Init()) {
@@ -253,6 +255,8 @@ bool StoreMetaManager::Recover() {
 uint64_t StoreMetaManager::GetServerEpoch() { return server_meta_->GetEpoch(); }
 
 uint64_t StoreMetaManager::GetRegionEpoch() { return region_meta_->GetEpoch(); }
+
+bthread_mutex_t* StoreMetaManager::GetHeartbeatUpdateMutexRef() { return &heartbeat_update_mutex_; };
 
 bool StoreMetaManager::IsExistStore(uint64_t store_id) { return server_meta_->IsExist(store_id); }
 

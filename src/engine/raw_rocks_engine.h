@@ -161,8 +161,8 @@ class RawRocksEngine : public RawEngine {
 
   void Flush(const std::string& cf_name) override;
 
-  std::shared_ptr<RawEngine::Reader> NewReader(const std::string& cf_name);
-  std::shared_ptr<RawEngine::Writer> NewWriter(const std::string& cf_name);
+  std::shared_ptr<RawEngine::Reader> NewReader(const std::string& cf_name) override;
+  std::shared_ptr<RawEngine::Writer> NewWriter(const std::string& cf_name) override;
 
  private:
   void Close();

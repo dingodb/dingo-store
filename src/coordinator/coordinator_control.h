@@ -212,6 +212,10 @@ class CoordinatorControl : public MetaControl {
   // get storemap
   void GetStoreMap(pb::common::StoreMap &store_map) override;
 
+  // get push storemap
+  // this function will use std::swap to empty the class member store_need_push_
+  void GetPushStoreMap(std::map<uint64_t, pb::common::Store> &store_to_push);
+
   // update region map with new Region info
   // return new epoch
   uint64_t UpdateRegionMap(std::vector<pb::common::Region> &regions,
@@ -275,6 +279,7 @@ class CoordinatorControl : public MetaControl {
   // stores
   std::map<uint64_t, pb::common::Store> store_map_;
   MetaMapStorage<pb::common::Store> *store_meta_;
+  std::map<uint64_t, pb::common::Store> store_need_push_;  // will send push msg to these stores in crontab
 
   // schemas
   std::map<uint64_t, pb::coordinator_internal::SchemaInternal> schema_map_;

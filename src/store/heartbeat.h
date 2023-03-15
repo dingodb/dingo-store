@@ -15,7 +15,10 @@
 #ifndef DINGODB_SERVER_HEARTBEAT_H_
 #define DINGODB_SERVER_HEARTBEAT_H_
 
+#include <atomic>
+
 #include "brpc/channel.h"
+#include "coordinator/coordinator_control.h"
 #include "meta/store_meta_manager.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
@@ -25,10 +28,11 @@ namespace dingodb {
 
 class Heartbeat {
  public:
-  Heartbeat(){};
-  ~Heartbeat(){};
+  Heartbeat();
+  ~Heartbeat();
 
   static void SendStoreHeartbeat(void* arg);
+  static void SendCoordinatorPushToStore(void* arg);
 
   static void HandleStoreHeartbeatResponse(std::shared_ptr<StoreMetaManager> store_meta,
                                            const pb::coordinator::StoreHeartbeatResponse& response);

@@ -4,6 +4,7 @@ cluster:
 server:
   host: $SERVER_HOST$
   port: $SERVER_PORT$
+  pushInterval: 1000 # ms
 coordinator:
   peers: $COORDINATOR_RAFT_PEERS$
 raft:

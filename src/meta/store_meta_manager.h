@@ -19,6 +19,7 @@
 #include <shared_mutex>
 #include <vector>
 
+#include "bthread/types.h"
 #include "butil/endpoint.h"
 #include "common/constant.h"
 #include "engine/engine.h"
@@ -114,6 +115,7 @@ class StoreMetaManager {
 
   uint64_t GetServerEpoch();
   uint64_t GetRegionEpoch();
+  bthread_mutex_t* GetHeartbeatUpdateMutexRef();
 
   bool IsExistStore(uint64_t store_id);
   void AddStore(std::shared_ptr<pb::common::Store> store);
@@ -139,6 +141,10 @@ class StoreMetaManager {
   std::unique_ptr<StoreServerMeta> server_meta_;
   // Store manage region meta data.
   std::unique_ptr<StoreRegionMeta> region_meta_;
+
+  // heartbeat update mutex
+  // only one heartbeat respone can be processed on time
+  bthread_mutex_t heartbeat_update_mutex_;
 };
 
 }  // namespace dingodb
