@@ -97,13 +97,7 @@ void CoordinatorServiceImpl::StoreHeartbeat(google::protobuf::RpcController *con
   LOG(INFO) << "Receive Store Heartbeat Request, IsLeader:" << is_leader << ", Request:" << format_request;
 
   if (!is_leader) {
-    pb::common::Location leader_location;
-    this->coordinator_control_->GetLeaderLocation(leader_location);
-
-    auto *error_in_response = response->mutable_error();
-    error_in_response->mutable_leader_location()->CopyFrom(leader_location);
-    error_in_response->set_errcode(::dingodb::pb::error::Errno::ERAFT_NOTLEADER);
-    return;
+    return RedirectResponse(response);
   }
 
   pb::coordinator_internal::MetaIncrement meta_increment;

@@ -71,6 +71,9 @@ class Server {
   // Init crontab heartbeat
   bool InitCrontabManager();
 
+  // Init coordinator heartbeat
+  bool InitCrontabManagerForCoordinator();
+
   // Init store control
   bool InitStoreControl();
 

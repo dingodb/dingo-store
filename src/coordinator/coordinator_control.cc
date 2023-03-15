@@ -239,7 +239,7 @@ bool CoordinatorControl::Init() {
 uint64_t CoordinatorControl::GetPresentId(const pb::coordinator_internal::IdEpochType& key) {
   uint64_t value = 0;
   if (id_epoch_map_.find(key) == id_epoch_map_.end()) {
-    value = 3;
+    value = 100;
     LOG(INFO) << "GetPresentId key=" << key << " not found, generate new id=" << value;
   } else {
     value = id_epoch_map_[key].value();
@@ -830,6 +830,12 @@ void CoordinatorControl::GetStoreMap(pb::common::StoreMap& store_map) {
   }
 }
 
+void CoordinatorControl::GetPushStoreMap(std::map<uint64_t, pb::common::Store>& store_to_push) {
+  BAIDU_SCOPED_LOCK(control_mutex_);
+
+  store_to_push.swap(store_need_push_);
+}
+
 void CoordinatorControl::GetRegionMap(pb::common::RegionMap& region_map) {
   BAIDU_SCOPED_LOCK(control_mutex_);
 
@@ -1190,6 +1196,25 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
     if (region.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
       // add region to region_map
       region_map_[region.id()] = region.region();
+
+      // add_store_for_push
+      // only create region will push to store now
+      for (int j = 0; j < region.region().peers_size(); j++) {
+        uint64_t store_id = region.region().peers(j).store_id();
+        LOG(INFO) << " add_store_for_push, peers_size=" << region.region().peers_size() << " store_id =" << store_id;
+
+        if (store_need_push_.find(store_id) == store_need_push_.end()) {
+          if (store_map_.find(store_id) != store_map_.end()) {
+            store_need_push_[store_id] = store_map_[store_id];
+            LOG(INFO) << " add_store_for_push, store_id=" << store_id << " in create region=" << region.region().id()
+                      << " location=" << store_map_[store_id].server_location().host() << ":"
+                      << store_map_[store_id].server_location().port();
+          } else {
+            LOG(ERROR) << " add_store_for_push, illegal store_id=" << store_id
+                       << " in create region=" << region.region().id();
+          }
+        }
+      }
 
       // meta_write_kv
       meta_write_to_kv.push_back(region_meta_->TransformToKvValue(region.region()));
