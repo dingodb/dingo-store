@@ -39,7 +39,6 @@ class MemEngine : public Engine {
   std::shared_ptr<Engine::Reader> NewReader(const std::string& cf_name) override;
 
  private:
-  std::shared_mutex mutex_;
   std::map<std::string, std::string> store_;
 };
 

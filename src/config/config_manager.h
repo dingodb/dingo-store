@@ -19,6 +19,8 @@
 #include <mutex>
 #include <shared_mutex>
 
+#include "bthread/mutex.h"
+// #include "butil/macros.h"
 #include "config/config.h"
 #include "config/yaml_config.h"
 #include "glog/logging.h"
@@ -47,7 +49,7 @@ class ConfigManager {
 
   friend struct DefaultSingletonTraits<ConfigManager>;
 
-  std::shared_mutex mutex_;
+  bthread_mutex_t mutex_;
   std::map<std::string, std::shared_ptr<Config> > configs_;
 };
 

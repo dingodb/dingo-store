@@ -20,6 +20,9 @@
 
 namespace dingodb {
 
+StoreServerMeta::StoreServerMeta() { bthread_mutex_init(&mutex_, nullptr); };
+StoreServerMeta::~StoreServerMeta() { bthread_mutex_destroy(&mutex_); };
+
 bool StoreServerMeta::Init() {
   auto* server = Server::GetInstance();
 
@@ -48,31 +51,32 @@ StoreServerMeta& StoreServerMeta::SetEpoch(uint64_t epoch) {
 }
 
 bool StoreServerMeta::IsExist(uint64_t store_id) {
-  std::shared_lock<std::shared_mutex> lock(mutex_);
+  BAIDU_SCOPED_LOCK(mutex_);
   return stores_.find(store_id) != stores_.end();
 }
 
 void StoreServerMeta::AddStore(std::shared_ptr<pb::common::Store> store) {
-  if (IsExist(store->id())) {
+  BAIDU_SCOPED_LOCK(mutex_);
+  if (stores_.find(store->id()) != stores_.end()) {
     LOG(WARNING) << butil::StringPrintf("store %lu already exist!", store->id());
     return;
   }
 
-  std::unique_lock<std::shared_mutex> lock(mutex_);
   stores_.insert(std::make_pair(store->id(), store));
 }
+
 void StoreServerMeta::UpdateStore(std::shared_ptr<pb::common::Store> store) {
-  std::unique_lock<std::shared_mutex> lock(mutex_);
+  BAIDU_SCOPED_LOCK(mutex_);
   epoch_ += 1;
   stores_.insert_or_assign(store->id(), store);
 }
 void StoreServerMeta::DeleteStore(uint64_t store_id) {
-  std::unique_lock<std::shared_mutex> lock(mutex_);
+  BAIDU_SCOPED_LOCK(mutex_);
   stores_.erase(store_id);
 }
 
 std::shared_ptr<pb::common::Store> StoreServerMeta::GetStore(uint64_t store_id) {
-  std::shared_lock<std::shared_mutex> lock(mutex_);
+  BAIDU_SCOPED_LOCK(mutex_);
   auto it = stores_.find(store_id);
   if (it == stores_.end()) {
     LOG(WARNING) << butil::StringPrintf("region %lu not exist!", store_id);
@@ -83,9 +87,15 @@ std::shared_ptr<pb::common::Store> StoreServerMeta::GetStore(uint64_t store_id) 
 }
 
 std::map<uint64_t, std::shared_ptr<pb::common::Store>> StoreServerMeta::GetAllStore() {
-  std::shared_lock<std::shared_mutex> lock(mutex_);
+  BAIDU_SCOPED_LOCK(mutex_);
   return stores_;
 }
+
+StoreRegionMeta::StoreRegionMeta() : TransformKvAble(Constant::kStoreRegionMetaPrefix) {
+  bthread_mutex_init(&mutex_, nullptr);
+};
+
+StoreRegionMeta::~StoreRegionMeta() { bthread_mutex_destroy(&mutex_); }
 
 bool StoreRegionMeta::Init() { return true; }
 
@@ -97,33 +107,33 @@ bool StoreRegionMeta::Recover(const std::vector<pb::common::KeyValue>& kvs) {
 uint64_t StoreRegionMeta::GetEpoch() const { return epoch_; }
 
 bool StoreRegionMeta::IsExist(uint64_t region_id) {
-  std::shared_lock<std::shared_mutex> lock(mutex_);
+  BAIDU_SCOPED_LOCK(mutex_);
   return regions_.find(region_id) != regions_.end();
 }
 
 void StoreRegionMeta::AddRegion(const std::shared_ptr<pb::common::Region> region) {
-  if (IsExist(region->id())) {
+  BAIDU_SCOPED_LOCK(mutex_);
+  if (regions_.find(region->id()) != regions_.end()) {
     LOG(WARNING) << butil::StringPrintf("region %lu already exist!", region->id());
     return;
   }
 
-  std::unique_lock<std::shared_mutex> lock(mutex_);
   regions_.insert(std::make_pair(region->id(), region));
 }
 
 void StoreRegionMeta::UpdateRegion(std::shared_ptr<pb::common::Region> region) {
-  std::unique_lock<std::shared_mutex> lock(mutex_);
+  BAIDU_SCOPED_LOCK(mutex_);
   region->set_epoch(region->epoch() + 1);
   regions_.insert_or_assign(region->id(), region);
 }
 
 void StoreRegionMeta::DeleteRegion(uint64_t region_id) {
-  std::unique_lock<std::shared_mutex> lock(mutex_);
+  BAIDU_SCOPED_LOCK(mutex_);
   regions_.erase(region_id);
 }
 
 std::shared_ptr<pb::common::Region> StoreRegionMeta::GetRegion(uint64_t region_id) {
-  std::shared_lock<std::shared_mutex> lock(mutex_);
+  BAIDU_SCOPED_LOCK(mutex_);
   auto it = regions_.find(region_id);
   if (it == regions_.end()) {
     LOG(WARNING) << butil::StringPrintf("region %lu not exist!", region_id);
@@ -134,7 +144,7 @@ std::shared_ptr<pb::common::Region> StoreRegionMeta::GetRegion(uint64_t region_i
 }
 
 std::map<uint64_t, std::shared_ptr<pb::common::Region>> StoreRegionMeta::GetAllRegion() {
-  std::shared_lock<std::shared_mutex> lock(mutex_);
+  BAIDU_SCOPED_LOCK(mutex_);
   return regions_;
 }
 
@@ -167,7 +177,7 @@ std::shared_ptr<pb::common::KeyValue> StoreRegionMeta::TransformToKv(const std::
 }
 
 std::shared_ptr<pb::common::KeyValue> StoreRegionMeta::TransformToKv(uint64_t region_id) {
-  std::shared_lock<std::shared_mutex> lock(mutex_);
+  BAIDU_SCOPED_LOCK(mutex_);
   auto it = regions_.find(region_id);
   if (it == regions_.end()) {
     return nullptr;
@@ -177,7 +187,7 @@ std::shared_ptr<pb::common::KeyValue> StoreRegionMeta::TransformToKv(uint64_t re
 }
 
 std::vector<std::shared_ptr<pb::common::KeyValue>> StoreRegionMeta::TransformToKvtWithDelta() {
-  std::shared_lock<std::shared_mutex> lock(mutex_);
+  BAIDU_SCOPED_LOCK(mutex_);
 
   std::vector<std::shared_ptr<pb::common::KeyValue>> kvs;
   for (auto region_id : changed_regions_) {
@@ -194,7 +204,7 @@ std::vector<std::shared_ptr<pb::common::KeyValue>> StoreRegionMeta::TransformToK
 }
 
 std::vector<std::shared_ptr<pb::common::KeyValue>> StoreRegionMeta::TransformToKvWithAll() {
-  std::shared_lock<std::shared_mutex> lock(mutex_);
+  BAIDU_SCOPED_LOCK(mutex_);
 
   std::vector<std::shared_ptr<pb::common::KeyValue>> kvs;
   for (const auto& it : regions_) {
@@ -208,7 +218,7 @@ std::vector<std::shared_ptr<pb::common::KeyValue>> StoreRegionMeta::TransformToK
 }
 
 void StoreRegionMeta::TransformFromKv(const std::vector<pb::common::KeyValue>& kvs) {
-  std::unique_lock<std::shared_mutex> lock(mutex_);
+  BAIDU_SCOPED_LOCK(mutex_);
   for (const auto& kv : kvs) {
     uint64_t region_id = ParseRegionId(kv.key());
     std::shared_ptr<pb::common::Region> region = std::make_shared<pb::common::Region>();
@@ -224,6 +234,8 @@ StoreMetaManager::StoreMetaManager(std::shared_ptr<MetaReader> meta_reader, std:
       region_meta_(std::make_unique<StoreRegionMeta>()) {
   bthread_mutex_init(&heartbeat_update_mutex_, nullptr);
 }
+
+StoreMetaManager::~StoreMetaManager() { bthread_mutex_destroy(&heartbeat_update_mutex_); }
 
 bool StoreMetaManager::Init() {
   if (!server_meta_->Init()) {

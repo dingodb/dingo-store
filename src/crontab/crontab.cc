@@ -19,6 +19,10 @@
 
 namespace dingodb {
 
+CrontabManager::CrontabManager() { bthread_mutex_init(&mutex_, nullptr); }
+
+CrontabManager::~CrontabManager() { bthread_mutex_destroy(&mutex_); }
+
 void CrontabManager::Run(void* arg) {
   Crontab* crontab = static_cast<Crontab*>(arg);
   if (crontab->pause_) {
@@ -50,16 +54,18 @@ uint32_t CrontabManager::AddAndRunCrontab(std::shared_ptr<Crontab> crontab) {
 }
 
 uint32_t CrontabManager::AddCrontab(std::shared_ptr<Crontab> crontab) {
+  BAIDU_SCOPED_LOCK(mutex_);
+
   uint32_t crontab_id = AllocCrontabId();
   crontab->id_ = crontab_id;
 
-  std::unique_lock<std::shared_mutex> lock(mutex_);
   crontabs_[crontab_id] = crontab;
   return crontab_id;
 }
 
 void CrontabManager::StartCrontab(uint32_t crontab_id) {
-  std::shared_lock<std::shared_mutex> lock(mutex_);
+  BAIDU_SCOPED_LOCK(mutex_);
+
   auto it = crontabs_.find(crontab_id);
   if (it == crontabs_.end()) {
     LOG(WARNING) << "Not exist crontab " << crontab_id;
@@ -79,8 +85,7 @@ void CrontabManager::StartCrontab(uint32_t crontab_id) {
       crontab.get());
 }
 
-void CrontabManager::PauseCrontab(uint32_t crontab_id) {
-  std::shared_lock<std::shared_mutex> lock(mutex_);
+void CrontabManager::InnerPauseCrontab(uint32_t crontab_id) {
   auto it = crontabs_.find(crontab_id);
   if (it == crontabs_.end()) {
     LOG(WARNING) << "Not exist crontab " << crontab_id;
@@ -93,16 +98,21 @@ void CrontabManager::PauseCrontab(uint32_t crontab_id) {
     bthread_timer_del(crontab->timer_id_);
   }
 }
+void CrontabManager::PauseCrontab(uint32_t crontab_id) {
+  BAIDU_SCOPED_LOCK(mutex_);
+
+  InnerPauseCrontab(crontab_id);
+}
 
 void CrontabManager::DeleteCrontab(uint32_t crontab_id) {
-  PauseCrontab(crontab_id);
+  BAIDU_SCOPED_LOCK(mutex_);
+  InnerPauseCrontab(crontab_id);
 
-  std::unique_lock<std::shared_mutex> lock(mutex_);
   crontabs_.erase(crontab_id);
 }
 
 void CrontabManager::Destroy() {
-  std::unique_lock<std::shared_mutex> lock(mutex_);
+  BAIDU_SCOPED_LOCK(mutex_);
 
   for (auto it = crontabs_.begin(); it != crontabs_.end();) {
     bthread_timer_del(it->second->timer_id_);

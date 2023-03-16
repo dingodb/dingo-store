@@ -137,8 +137,6 @@ class MetaMapStorage {
   const MetaMapStorage &operator=(const MetaMapStorage &) = delete;
 
  private:
-  // Protect regions_ concurrent access.
-  // std::shared_mutex mutex_;
   // Coordinator all region meta data in this server.
   // std::map<uint64_t, std::shared_ptr<T>> *elements_;
   std::map<uint64_t, T> *elements_;

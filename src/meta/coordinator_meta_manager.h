@@ -58,9 +58,9 @@ template <typename T>
 class CoordinatorMap {
  public:
   const std::string internal_prefix;
-  CoordinatorMap(const std::string& prefix) : internal_prefix(prefix){};
+  CoordinatorMap(const std::string& prefix) : internal_prefix(prefix) { bthread_mutex_init(&mutex_, nullptr); };
   CoordinatorMap() : internal_prefix(typeid(T).name()){};
-  ~CoordinatorMap() = default;
+  ~CoordinatorMap() { bthread_mutex_destroy(&mutex_); };
 
   std::string Prefix() { return internal_prefix; }
 
@@ -75,7 +75,7 @@ class CoordinatorMap {
   }
 
   bool IsExist(uint64_t id) {
-    std::shared_lock<std::shared_mutex> lock(mutex_);
+    BAIDU_SCOPED_LOCK(mutex_);
     auto it = elements_.find(id);
     return static_cast<bool>(it != elements_.end());
   }
@@ -99,7 +99,7 @@ class CoordinatorMap {
   std::string GenKey(uint64_t region_id) { return butil::StringPrintf("%s_%lu", internal_prefix.c_str(), region_id); }
 
   std::shared_ptr<pb::common::KeyValue> TransformToKv(uint64_t id) {
-    std::shared_lock<std::shared_mutex> lock(mutex_);
+    BAIDU_SCOPED_LOCK(mutex_);
     auto it = elements_.find(id);
     if (it == elements_.end()) {
       return nullptr;
@@ -117,7 +117,7 @@ class CoordinatorMap {
   }
 
   std::vector<std::shared_ptr<pb::common::KeyValue>> TransformToKvWithAll() {
-    std::shared_lock<std::shared_mutex> lock(mutex_);
+    BAIDU_SCOPED_LOCK(mutex_);
 
     std::vector<std::shared_ptr<pb::common::KeyValue>> kvs;
     for (const auto& it : elements_) {
@@ -131,7 +131,7 @@ class CoordinatorMap {
   }
 
   void TransformFromKv(const std::vector<pb::common::KeyValue>& kvs) {
-    std::unique_lock<std::shared_mutex> lock(mutex_);
+    BAIDU_SCOPED_LOCK(mutex_);
     for (const auto& kv : kvs) {
       uint64_t id = ParseId(kv.key());
       T element;
@@ -145,7 +145,7 @@ class CoordinatorMap {
 
  private:
   // Protect regions_ concurrent access.
-  std::shared_mutex mutex_;
+  bthread_mutex_t mutex_;
   // Coordinator all region meta data in this server.
   std::map<uint64_t, T> elements_;
 };
