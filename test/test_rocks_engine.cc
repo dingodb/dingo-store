@@ -27,9 +27,11 @@
 #include <string>
 #include <vector>
 
+#include "butil/status.h"
 #include "common/context.h"
 #include "config/config_manager.h"
 #include "engine/engine.h"
+#include "engine/raw_rocks_engine.h"
 #include "engine/rocks_engine.h"
 #include "proto/common.pb.h"
 #include "server/server.h"
@@ -69,1059 +71,1106 @@ bool DeleteFile(const char *path) {
 }
 #endif
 
-// static const std::string &kDefautCf = "default";
-// // static const std::string &kDefautCf = "meta";
-
-// class RocksEngineTest {
-//  public:
-//   std::shared_ptr<dingodb::Config> GetConfig() { return config_; }
-
-//   dingodb::RocksEngine &GetRocksEngine() { return rocks_engine_; }
-
-//   void SetUp() {
-//     std::cout << "RocksEngineTest::SetUp()" << std::endl;
-//     server_ = dingodb::Server::GetInstance();
-//     filename_ = "../../conf/store.yaml";
-//     server_->SetRole(dingodb::pb::common::ClusterRole::STORE);
-//     server_->InitConfig(filename_);
-//     config_manager_ = dingodb::ConfigManager::GetInstance();
-//     config_ = config_manager_->GetConfig(dingodb::pb::common::ClusterRole::STORE);
-//   }
-//   void TearDown() {}
-
-//  private:
-//   dingodb::Server *server_;
-//   std::string filename_ = "../../conf/store.yaml";
-//   dingodb::ConfigManager *config_manager_;
-//   std::shared_ptr<dingodb::Config> config_;
-//   dingodb::RocksEngine rocks_engine_;
-// };
-
-// static RocksEngineTest rocks_engine_test;
-
-// TEST(RocksEngineTest, BeforeInit) { rocks_engine_test.SetUp(); }
-
-// TEST(RocksEngineTest, Init) {
-//   dingodb::RocksEngine &rocks_engine = rocks_engine_test.GetRocksEngine();
-
-//   bool ret = rocks_engine.Init({});
-//   EXPECT_FALSE(ret);
-
-//   std::shared_ptr<dingodb::Config> config = rocks_engine_test.GetConfig();
-// #if 0
-//   std::string store_db_path_value = config->GetString("store.dbPath");
-//   if (!store_db_path_value.empty()) {
-//     struct stat statbuf;
-//     lstat(store_db_path_value.c_str(), &statbuf);
-//     if (S_ISDIR(statbuf.st_mode)) {
-//       std::cout << "path : " << store_db_path_value << "need to delete [Y/N]"
-//                 << std::endl;
-//       std::string s;
-//       std::cin >> s;
-//       if (s == "Y" || s == "y" || s == "yes" || s == "Yes") {
-//         DeleteFile(store_db_path_value.c_str());
-//       }
-//     }
-// #endif
-
-//   // Test for various configuration file exceptions
-//   ret = rocks_engine.Init(config);
-//   EXPECT_TRUE(ret);
-// }
-
-// TEST(RocksEngineTest, KvPut) {
-//   dingodb::RocksEngine &rocks_engine = rocks_engine_test.GetRocksEngine();
-
-//   // Context empty
-//   {
-//     dingodb::pb::common::KeyValue kv;
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvPut({}, kv);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::ECONTEXT);
-//   }
-
-//   std::shared_ptr<dingodb::Context> ctx = std::make_shared<dingodb::Context>();
-
-//   // Context not empty, but Context name empty
-//   {
-//     dingodb::pb::common::KeyValue kv;
-//     kv.set_key("key");
-//     kv.set_value("value");
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvPut(ctx, kv);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::ESTORE_INVALID_CF);
-//   }
-
-//   const std::string &cf_name = kDefautCf;
-//   ctx->set_cf_name(cf_name);
-
-//   // Context not empty, but Context name not exist
-//   {
-//     ctx->set_cf_name("dummy");
-//     dingodb::pb::common::KeyValue kv;
-//     kv.set_key("key");
-//     kv.set_value("value");
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvPut(ctx, kv);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::ESTORE_INVALID_CF);
-//   }
-
-//   ctx->set_cf_name(cf_name);
-
-//   // key empty
-//   {
-//     dingodb::pb::common::KeyValue kv;
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvPut(ctx, kv);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::EKEY_EMPTY);
-//   }
-
-//   // value empty
-//   {
-//     dingodb::pb::common::KeyValue kv;
-//     kv.set_key("key1");
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvPut(ctx, kv);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
-//   }
-
-//   {
-//     dingodb::pb::common::KeyValue kv;
-//     kv.set_key("key1");
-//     kv.set_value("value1");
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvPut(ctx, kv);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
-//   }
-
-//   {
-//     dingodb::pb::common::KeyValue kv;
-//     kv.set_key("key2");
-//     kv.set_value("value2");
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvPut(ctx, kv);
-
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
-//   }
-
-//   {
-//     dingodb::pb::common::KeyValue kv;
-//     kv.set_key("key3");
-//     kv.set_value("value3");
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvPut(ctx, kv);
-
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
-//   }
-// }
-
-// TEST(RocksEngineTest, KvBatchPut) {
-//   dingodb::RocksEngine &rocks_engine = rocks_engine_test.GetRocksEngine();
-
-//   // Context empty
-//   {
-//     std::vector<dingodb::pb::common::KeyValue> kvs;
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvBatchPut({}, kvs);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::ECONTEXT);
-//   }
-
-//   std::shared_ptr<dingodb::Context> ctx = std::make_shared<dingodb::Context>();
-
-//   // Context not empty, but Context name empty
-//   {
-//     dingodb::pb::common::KeyValue kv;
-//     std::vector<dingodb::pb::common::KeyValue> kvs;
-//     kv.set_key("key1");
-//     kv.set_value("value1");
-//     kvs.emplace_back(kv);
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvBatchPut(ctx, kvs);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::ESTORE_INVALID_CF);
-//   }
-
-//   const std::string &cf_name = kDefautCf;
-//   ctx->set_cf_name(cf_name);
-
-//   // Context not empty, but Context name not exist
-//   {
-//     dingodb::pb::common::KeyValue kv;
-//     ctx->set_cf_name("dummy");
-//     std::vector<dingodb::pb::common::KeyValue> kvs;
-//     kv.set_key("key1");
-//     kv.set_value("value1");
-//     kvs.emplace_back(kv);
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvBatchPut(ctx, kvs);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::ESTORE_INVALID_CF);
-//   }
-
-//   ctx->set_cf_name(cf_name);
-
-//   // key empty
-//   {
-//     dingodb::pb::common::KeyValue kv;
-//     std::vector<dingodb::pb::common::KeyValue> kvs;
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvBatchPut(ctx, kvs);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::EKEY_EMPTY);
-//   }
-
-//   // key empty
-//   {
-//     dingodb::pb::common::KeyValue kv;
-//     std::vector<dingodb::pb::common::KeyValue> kvs;
-//     kv.set_key("");
-//     kv.set_value("value1");
-//     kvs.emplace_back(kv);
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvBatchPut(ctx, kvs);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::EKEY_EMPTY);
-//   }
-
-//   // some key empty
-//   {
-//     dingodb::pb::common::KeyValue kv;
-//     std::vector<dingodb::pb::common::KeyValue> kvs;
-
-//     kv.set_key("key1");
-//     kv.set_value("value1");
-//     kvs.emplace_back(kv);
-
-//     kv.set_key("key2");
-//     kv.set_value("value2");
-//     kvs.emplace_back(kv);
-
-//     kv.set_key("");
-//     kv.set_value("value3");
-//     kvs.emplace_back(kv);
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvBatchPut(ctx, kvs);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::EKEY_EMPTY);
-//   }
-
-//   // ok
-//   {
-//     dingodb::pb::common::KeyValue kv;
-//     std::vector<dingodb::pb::common::KeyValue> kvs;
-//     kv.set_key("key1");
-//     kv.set_value("value1");
-//     kvs.emplace_back(kv);
-
-//     kv.set_key("key2");
-//     kv.set_value("value2");
-//     kvs.emplace_back(kv);
-
-//     kv.set_key("key3");
-//     kv.set_value("value3");
-//     kvs.emplace_back(kv);
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvBatchPut(ctx, kvs);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
-//   }
-// }
-
-// TEST(RocksEngineTest, KvGet) {
-//   dingodb::RocksEngine &rocks_engine = rocks_engine_test.GetRocksEngine();
-
-//   // Context empty
-//   {
-//     std::string key;
-
-//     std::string value;
-//     dingodb::pb::error::Errno ok = rocks_engine.KvGet({}, key, value);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::ECONTEXT);
-//   }
-
-//   std::shared_ptr<dingodb::Context> ctx = std::make_shared<dingodb::Context>();
-
-//   // Context not empty, but Context name empty
-//   {
-//     std::string key = "key";
-//     std::string value;
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvGet(ctx, key, value);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::ESTORE_INVALID_CF);
-//   }
-
-//   const std::string &cf_name = kDefautCf;
-//   ctx->set_cf_name(cf_name);
-
-//   // Context not empty, but Context name not exist
-//   {
-//     ctx->set_cf_name("dummy");
-//     std::string key = "key";
-//     std::string value;
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvGet(ctx, key, value);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::ESTORE_INVALID_CF);
-//   }
-
-//   ctx->set_cf_name(cf_name);
-
-//   // key empty
-//   {
-//     std::string key;
-//     std::string value;
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvGet(ctx, key, value);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::EKEY_EMPTY);
-//   }
-
-//   {
-//     const std::string &key = "key1";
-//     std::string value;
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvGet(ctx, key, value);
-
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
-//   }
-// }
-
-// TEST(RocksEngineTest, KvCompareAndSet) {
-//   dingodb::RocksEngine &rocks_engine = rocks_engine_test.GetRocksEngine();
-
-//   // Context empty
-//   {
-//     dingodb::pb::common::KeyValue kv;
-//     std::string value;
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvCompareAndSet({}, kv, value);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::ECONTEXT);
-//   }
-
-//   std::shared_ptr<dingodb::Context> ctx = std::make_shared<dingodb::Context>();
-
-//   // Context not empty, but Context name empty
-//   {
-//     dingodb::pb::common::KeyValue kv;
-//     kv.set_key("key");
-//     kv.set_value("value");
-//     std::string value = "value123456";
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvCompareAndSet(ctx, kv, value);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::ESTORE_INVALID_CF);
-//   }
-
-//   const std::string &cf_name = kDefautCf;
-//   ctx->set_cf_name(cf_name);
-
-//   // Context not empty, but Context name not exist
-//   {
-//     ctx->set_cf_name("dummy");
-//     dingodb::pb::common::KeyValue kv;
-//     kv.set_key("key");
-//     kv.set_value("value");
-//     std::string value = "value123456";
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvCompareAndSet(ctx, kv, value);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::ESTORE_INVALID_CF);
-//   }
-
-//   ctx->set_cf_name(cf_name);
-
-//   // key empty
-//   {
-//     dingodb::pb::common::KeyValue kv;
-//     std::string value = "value123456";
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvCompareAndSet(ctx, kv, value);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::EKEY_EMPTY);
-//   }
-
-//   // value empty . key exist failed
-//   {
-//     dingodb::pb::common::KeyValue kv;
-//     kv.set_key("key");
-//     std::string value = "value";
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvCompareAndSet(ctx, kv, value);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
-//   }
-
-//   // value empty . key exist failed
-//   {
-//     dingodb::pb::common::KeyValue kv;
-//     kv.set_key("key1");
-//     std::string value = "value123456";
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvCompareAndSet(ctx, kv, value);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::EINTERNAL);
-//   }
-
-//   // normal
-//   {
-//     dingodb::pb::common::KeyValue kv;
-//     kv.set_key("key1");
-//     kv.set_value("value1");
-//     const std::string &value = "value1_modify";
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvCompareAndSet(ctx, kv, value);
-
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
-//   }
-// }
-
-// TEST(RocksEngineTest, KvBatchGet) {
-//   dingodb::RocksEngine &rocks_engine = rocks_engine_test.GetRocksEngine();
-
-//   // Context empty
-//   {
-//     std::vector<std::string> keys;
-//     std::vector<dingodb::pb::common::KeyValue> kvs;
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvBatchGet({}, keys, kvs);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::ECONTEXT);
-//   }
-
-//   std::shared_ptr<dingodb::Context> ctx = std::make_shared<dingodb::Context>();
-
-//   // Context not empty, but Context name empty
-//   {
-//     std::vector<std::string> keys{"key", "key1"};
-//     std::vector<dingodb::pb::common::KeyValue> kvs;
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvBatchGet(ctx, keys, kvs);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::ESTORE_INVALID_CF);
-//   }
-
-//   const std::string &cf_name = kDefautCf;
-//   ctx->set_cf_name(cf_name);
-
-//   // Context not empty, but Context name not exist
-//   {
-//     ctx->set_cf_name("dummy");
-//     std::vector<std::string> keys{"key", "key1"};
-//     std::vector<dingodb::pb::common::KeyValue> kvs;
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvBatchGet(ctx, keys, kvs);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::ESTORE_INVALID_CF);
-//   }
-
-//   ctx->set_cf_name(cf_name);
-
-//   // key all empty
-//   {
-//     std::vector<std::string> keys;
-//     std::vector<dingodb::pb::common::KeyValue> kvs;
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvBatchGet(ctx, keys, kvs);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::EKEY_EMPTY);
-//   }
-
-//   // key some empty
-//   {
-//     std::vector<std::string> keys{"key1", "", "key"};
-//     std::vector<dingodb::pb::common::KeyValue> kvs;
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvBatchGet(ctx, keys, kvs);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::EKEY_EMPTY);
-//   }
-
-//   // some key not exist
-//   {
-//     std::vector<std::string> keys{"key1", "key2", "key", "key4"};
-//     std::vector<dingodb::pb::common::KeyValue> kvs;
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvBatchGet(ctx, keys, kvs);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::EINTERNAL);
-//   }
-
-//   // normal
-//   {
-//     std::vector<std::string> keys{"key1", "key"};
-//     std::vector<dingodb::pb::common::KeyValue> kvs;
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvBatchGet(ctx, keys, kvs);
-
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
-//   }
-// }
-
-// TEST(RocksEngineTest, KvPutIfAbsent) {
-//   dingodb::RocksEngine &rocks_engine = rocks_engine_test.GetRocksEngine();
-
-//   // Context empty
-//   {
-//     dingodb::pb::common::KeyValue kv;
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvPutIfAbsent({}, kv);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::ECONTEXT);
-//   }
-
-//   std::shared_ptr<dingodb::Context> ctx = std::make_shared<dingodb::Context>();
-
-//   // Context not empty, but Context name empty
-//   {
-//     dingodb::pb::common::KeyValue kv;
-//     kv.set_key("key");
-//     kv.set_value("value");
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvPutIfAbsent(ctx, kv);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::ESTORE_INVALID_CF);
-//   }
-
-//   const std::string &cf_name = kDefautCf;
-//   ctx->set_cf_name(cf_name);
-
-//   // Context not empty, but Context name not exist
-//   {
-//     ctx->set_cf_name("dummy");
-//     dingodb::pb::common::KeyValue kv;
-//     kv.set_key("key");
-//     kv.set_value("value");
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvPutIfAbsent(ctx, kv);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::ESTORE_INVALID_CF);
-//   }
-
-//   ctx->set_cf_name(cf_name);
-
-//   // key empty
-//   {
-//     dingodb::pb::common::KeyValue kv;
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvPutIfAbsent(ctx, kv);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::EKEY_EMPTY);
-//   }
-
-//   // value empty . key exist failed
-//   {
-//     dingodb::pb::common::KeyValue kv;
-//     kv.set_key("key");
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvPutIfAbsent(ctx, kv);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::EINTERNAL);
-//   }
-
-//   // value empty . key exist failed
-//   {
-//     dingodb::pb::common::KeyValue kv;
-//     kv.set_key("key1");
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvPutIfAbsent(ctx, kv);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::EINTERNAL);
-//   }
-
-//   // normal
-//   {
-//     dingodb::pb::common::KeyValue kv;
-//     kv.set_key("key10");
-//     kv.set_value("value10");
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvPutIfAbsent(ctx, kv);
-
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
-//   }
-// }
-
-// TEST(RocksEngineTest, KvBatchPutIfAbsentAtomic) {
-//   dingodb::RocksEngine &rocks_engine = rocks_engine_test.GetRocksEngine();
-
-//   // Context empty
-//   {
-//     std::vector<std::string> keys;
-//     std::vector<dingodb::pb::common::KeyValue> kvs;
-//     std::vector<std::string> put_keys;
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvBatchPutIfAbsentAtomic({}, kvs, put_keys);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::ECONTEXT);
-//   }
-
-//   std::shared_ptr<dingodb::Context> ctx = std::make_shared<dingodb::Context>();
-
-//   // Context not empty, but Context name empty
-//   {
-//     std::vector<std::string> keys;
-//     std::vector<dingodb::pb::common::KeyValue> kvs;
-//     std::vector<std::string> put_keys;
-
-//     dingodb::pb::common::KeyValue kv;
-//     kv.set_key("key1");
-//     kv.set_value("value1");
-
-//     kvs.push_back(kv);
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvBatchPutIfAbsentAtomic(ctx, kvs, put_keys);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::ESTORE_INVALID_CF);
-//   }
-
-//   const std::string &cf_name = kDefautCf;
-//   ctx->set_cf_name(cf_name);
-
-//   // Context not empty, but Context name not exist
-//   {
-//     ctx->set_cf_name("dummy");
-//     std::vector<std::string> keys;
-//     std::vector<dingodb::pb::common::KeyValue> kvs;
-//     std::vector<std::string> put_keys;
-
-//     dingodb::pb::common::KeyValue kv;
-//     kv.set_key("key1");
-//     kv.set_value("value1");
-//     kvs.push_back(kv);
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvBatchPutIfAbsentAtomic(ctx, kvs, put_keys);
-
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::ESTORE_INVALID_CF);
-//   }
-
-//   ctx->set_cf_name(cf_name);
-
-//   // key all empty
-//   {
-//     std::vector<std::string> keys;
-//     std::vector<dingodb::pb::common::KeyValue> kvs;
-//     std::vector<std::string> put_keys;
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvBatchPutIfAbsentAtomic(ctx, kvs, put_keys);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::EKEY_EMPTY);
-//   }
-
-//   // some key not exist
-//   {
-//     std::vector<std::string> keys;
-//     std::vector<dingodb::pb::common::KeyValue> kvs;
-//     std::vector<std::string> put_keys;
-
-//     dingodb::pb::common::KeyValue kv;
-//     kv.set_key("key1");
-//     kv.set_value("value1");
-//     kvs.push_back(kv);
-
-//     kv.set_key("");
-//     kv.set_value("value2");
-//     kvs.push_back(kv);
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvBatchPutIfAbsentAtomic(ctx, kvs, put_keys);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::EKEY_EMPTY);
-//   }
-
-//   // some key exist failed
-//   {
-//     std::vector<std::string> keys;
-//     std::vector<dingodb::pb::common::KeyValue> kvs;
-//     std::vector<std::string> put_keys;
-
-//     dingodb::pb::common::KeyValue kv;
-
-//     kv.set_key("key111");
-//     kv.set_value("value111");
-//     kvs.push_back(kv);
-
-//     kv.set_key("key1");
-//     kv.set_value("value1");
-//     kvs.push_back(kv);
-
-//     kv.set_key("key2");
-//     kv.set_value("value2");
-//     kvs.push_back(kv);
-
-//     kv.set_key("key");
-//     kv.set_value("value");
-//     kvs.push_back(kv);
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvBatchPutIfAbsentAtomic(ctx, kvs, put_keys);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::EINTERNAL);
-
-//     std::string value;
-//     ok = rocks_engine.KvGet(ctx, "key111", value);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::EKEY_NOTFOUND);
-//   }
-
-//   // normal key all not exist
-//   {
-//     std::vector<std::string> keys;
-//     std::vector<dingodb::pb::common::KeyValue> kvs;
-//     std::vector<std::string> put_keys;
-
-//     dingodb::pb::common::KeyValue kv;
-
-//     kv.set_key("key101");
-//     kv.set_value("value101");
-//     kvs.push_back(kv);
-
-//     kv.set_key("key102");
-//     kv.set_value("value102");
-//     kvs.push_back(kv);
-
-//     kv.set_key("key103");
-//     kv.set_value("value103");
-//     kvs.push_back(kv);
-
-//     kv.set_key("key104");
-//     kv.set_value("value104");
-//     kvs.push_back(kv);
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvBatchPutIfAbsentAtomic(ctx, kvs, put_keys);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
-
-//     std::string value;
-//     ok = rocks_engine.KvGet(ctx, "key101", value);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
-
-//     ok = rocks_engine.KvGet(ctx, "key102", value);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
-
-//     ok = rocks_engine.KvGet(ctx, "key103", value);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
-
-//     ok = rocks_engine.KvGet(ctx, "key104", value);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
-//   }
-// }
-
-// TEST(RocksEngineTest, KvBatchPutIfAbsentNonAtomic) {
-//   dingodb::RocksEngine &rocks_engine = rocks_engine_test.GetRocksEngine();
-
-//   // Context empty
-//   {
-//     std::vector<std::string> keys;
-//     std::vector<dingodb::pb::common::KeyValue> kvs;
-//     std::vector<std::string> put_keys;
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvBatchPutIfAbsentNonAtomic({}, kvs, put_keys);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::ECONTEXT);
-//   }
-
-//   std::shared_ptr<dingodb::Context> ctx = std::make_shared<dingodb::Context>();
-
-//   // Context not empty, but Context name empty
-//   {
-//     std::vector<std::string> keys;
-//     std::vector<dingodb::pb::common::KeyValue> kvs;
-//     std::vector<std::string> put_keys;
-
-//     dingodb::pb::common::KeyValue kv;
-//     kv.set_key("key1");
-//     kv.set_value("value1");
-
-//     kvs.push_back(kv);
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvBatchPutIfAbsentNonAtomic(ctx, kvs, put_keys);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::ESTORE_INVALID_CF);
-//   }
-
-//   const std::string &cf_name = kDefautCf;
-//   ctx->set_cf_name(cf_name);
-
-//   // Context not empty, but Context name not exist
-//   {
-//     ctx->set_cf_name("dummy");
-//     std::vector<std::string> keys;
-//     std::vector<dingodb::pb::common::KeyValue> kvs;
-//     std::vector<std::string> put_keys;
-
-//     dingodb::pb::common::KeyValue kv;
-//     kv.set_key("key1");
-//     kv.set_value("value1");
-//     kvs.push_back(kv);
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvBatchPutIfAbsentNonAtomic(ctx, kvs, put_keys);
-
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::ESTORE_INVALID_CF);
-//   }
-
-//   ctx->set_cf_name(cf_name);
-
-//   // key all empty
-//   {
-//     std::vector<std::string> keys;
-//     std::vector<dingodb::pb::common::KeyValue> kvs;
-//     std::vector<std::string> put_keys;
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvBatchPutIfAbsentNonAtomic(ctx, kvs, put_keys);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::EKEY_EMPTY);
-//   }
-
-//   // some key not exist
-//   {
-//     std::vector<std::string> keys;
-//     std::vector<dingodb::pb::common::KeyValue> kvs;
-//     std::vector<std::string> put_keys;
-
-//     dingodb::pb::common::KeyValue kv;
-//     kv.set_key("key1");
-//     kv.set_value("value1");
-//     kvs.push_back(kv);
-
-//     kv.set_key("");
-//     kv.set_value("value2");
-//     kvs.push_back(kv);
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvBatchPutIfAbsentNonAtomic(ctx, kvs, put_keys);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::EKEY_EMPTY);
-//   }
-
-//   // some key exist failed
-//   {
-//     std::vector<std::string> keys;
-//     std::vector<dingodb::pb::common::KeyValue> kvs;
-//     std::vector<std::string> put_keys;
-
-//     dingodb::pb::common::KeyValue kv;
-
-//     kv.set_key("key1111");
-//     kv.set_value("value111");
-//     kvs.push_back(kv);
-
-//     kv.set_key("key1");
-//     kv.set_value("value1");
-//     kvs.push_back(kv);
-
-//     kv.set_key("key2");
-//     kv.set_value("value2");
-//     kvs.push_back(kv);
-
-//     kv.set_key("key");
-//     kv.set_value("value");
-//     kvs.push_back(kv);
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvBatchPutIfAbsentNonAtomic(ctx, kvs, put_keys);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
-
-//     std::string value;
-//     ok = rocks_engine.KvGet(ctx, "key1111", value);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
-//   }
-
-//   // normal key all not exist
-//   {
-//     std::vector<std::string> keys;
-//     std::vector<dingodb::pb::common::KeyValue> kvs;
-//     std::vector<std::string> put_keys;
-
-//     dingodb::pb::common::KeyValue kv;
-
-//     kv.set_key("key201");
-//     kv.set_value("value201");
-//     kvs.push_back(kv);
-
-//     kv.set_key("key202");
-//     kv.set_value("value202");
-//     kvs.push_back(kv);
-
-//     kv.set_key("key203");
-//     kv.set_value("value203");
-//     kvs.push_back(kv);
-
-//     kv.set_key("key204");
-//     kv.set_value("value204");
-//     kvs.push_back(kv);
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvBatchPutIfAbsentNonAtomic(ctx, kvs, put_keys);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
-
-//     std::string value;
-//     ok = rocks_engine.KvGet(ctx, "key201", value);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
-
-//     ok = rocks_engine.KvGet(ctx, "key202", value);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
-
-//     ok = rocks_engine.KvGet(ctx, "key203", value);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
-
-//     ok = rocks_engine.KvGet(ctx, "key204", value);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
-//   }
-// }
-
-// TEST(RocksEngineTest, KvScan) {
-//   dingodb::RocksEngine &rocks_engine = rocks_engine_test.GetRocksEngine();
+static const std::string &kDefautCf = "default";
+// static const std::string &kDefautCf = "meta";
+
+class RawRocksEngineTest {
+ public:
+  std::shared_ptr<dingodb::Config> GetConfig() { return config_; }
+
+  dingodb::RawRocksEngine &GetRawRocksEngine() { return raw_raw_rocks_engine_; }
+
+  void MySetUp() {
+    std::cout << "RawRocksEngineTest::SetUp()" << std::endl;
+    server_ = dingodb::Server::GetInstance();
+    filename_ = "../../conf/store.yaml";
+    server_->SetRole(dingodb::pb::common::ClusterRole::STORE);
+    server_->InitConfig(filename_);
+    config_manager_ = dingodb::ConfigManager::GetInstance();
+    config_ = config_manager_->GetConfig(dingodb::pb::common::ClusterRole::STORE);
+  }
+  void MyTearDown() {}
+
+ private:
+  dingodb::Server *server_;
+  std::string filename_ = "../../conf/store.yaml";
+  dingodb::ConfigManager *config_manager_;
+  std::shared_ptr<dingodb::Config> config_;
+  dingodb::RawRocksEngine raw_raw_rocks_engine_;
+};
+
+static RawRocksEngineTest rocks_engine_test;
+
+TEST(RawRocksEngineTest, BeforeInit) { rocks_engine_test.MySetUp(); }
+
+TEST(RawRocksEngineTest, MyInit) {
+  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test.GetRawRocksEngine();
+
+  bool ret = raw_rocks_engine.Init({});
+  EXPECT_FALSE(ret);
+
+  std::shared_ptr<dingodb::Config> config = rocks_engine_test.GetConfig();
+#if 0
+  std::string store_db_path_value = config->GetString("store.dbPath");
+  if (!store_db_path_value.empty()) {
+    struct stat statbuf;
+    lstat(store_db_path_value.c_str(), &statbuf);
+    if (S_ISDIR(statbuf.st_mode)) {
+      std::cout << "path : " << store_db_path_value << "need to delete [Y/N]"
+                << std::endl;
+      std::string s;
+      std::cin >> s;
+      if (s == "Y" || s == "y" || s == "yes" || s == "Yes") {
+        DeleteFile(store_db_path_value.c_str());
+      }
+    }
+#endif
+
+  // Test for various configuration file exceptions
+  ret = raw_rocks_engine.Init(config);
+  EXPECT_TRUE(ret);
+}
+
+TEST(RawRocksEngineTest, GetName) {
+  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test.GetRawRocksEngine();
+
+  std::string name = raw_rocks_engine.GetName();
+  EXPECT_EQ(name, "RAW_ENG_ROCKSDB");
+}
+
+TEST(RawRocksEngineTest, GetID) {
+  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test.GetRawRocksEngine();
+
+  dingodb::pb::common::RawEngine id = raw_rocks_engine.GetID();
+  EXPECT_EQ(id, dingodb::pb::common::RawEngine::RAW_ENG_ROCKSDB);
+}
+
+TEST(RawRocksEngineTest, GetSnapshot$ReleaseSnapshot) {
+  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test.GetRawRocksEngine();
+
+  std::shared_ptr<dingodb::Snapshot> snapshot = raw_rocks_engine.GetSnapshot();
+  EXPECT_NE(snapshot.get(), nullptr);
+
+  raw_rocks_engine.ReleaseSnapshot(snapshot);
+
+  // bugs crash
+  // raw_rocks_engine.ReleaseSnapshot({});
+}
+
+TEST(RawRocksEngineTest, Flush) {
+  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test.GetRawRocksEngine();
+
+  const std::string &cf_name = kDefautCf;
+
+  // bugs if cf_name empty or not exists. crash
+  raw_rocks_engine.Flush(cf_name);
+}
+
+TEST(RawRocksEngineTest, NewReader) {
+  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test.GetRawRocksEngine();
+
+  // cf empty
+  {
+    const std::string &cf_name = "";
+
+    std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
+
+    EXPECT_EQ(reader.get(), nullptr);
+  }
+
+  // cf not exist
+  {
+    const std::string &cf_name = "12345";
+
+    std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
+
+    EXPECT_EQ(reader.get(), nullptr);
+  }
+
+  // ok
+  {
+    const std::string &cf_name = kDefautCf;
+
+    std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
+
+    EXPECT_NE(reader.get(), nullptr);
+  }
+}
+
+TEST(RawRocksEngineTest, NewWriter) {
+  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test.GetRawRocksEngine();
+
+  // cf empty
+  {
+    const std::string &cf_name = "";
+
+    std::shared_ptr<dingodb::RawEngine::Writer> writer = raw_rocks_engine.NewWriter(cf_name);
+
+    EXPECT_EQ(writer.get(), nullptr);
+  }
+
+  // cf not exist
+  {
+    const std::string &cf_name = "12345";
+
+    std::shared_ptr<dingodb::RawEngine::Writer> writer = raw_rocks_engine.NewWriter(cf_name);
+
+    EXPECT_EQ(writer.get(), nullptr);
+  }
+
+  // ok
+  {
+    const std::string &cf_name = kDefautCf;
+    std::shared_ptr<dingodb::RawEngine::Writer> writer = raw_rocks_engine.NewWriter(cf_name);
+
+    EXPECT_NE(writer.get(), nullptr);
+  }
+}
+
+TEST(RawRocksEngineTest, KvPut) {
+  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test.GetRawRocksEngine();
+  const std::string &cf_name = kDefautCf;
+  std::shared_ptr<dingodb::RawEngine::Writer> writer = raw_rocks_engine.NewWriter(cf_name);
+
+  // key empty
+  {
+    dingodb::pb::common::KeyValue kv;
+
+    butil::Status ok = writer->KvPut(kv);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_EMPTY);
+  }
+
+  // value empty allow
+  {
+    dingodb::pb::common::KeyValue kv;
+    kv.set_key("key1");
+
+    butil::Status ok = writer->KvPut(kv);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+  }
+
+  {
+    dingodb::pb::common::KeyValue kv;
+    kv.set_key("key1");
+    kv.set_value("value1");
+
+    butil::Status ok = writer->KvPut(kv);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+  }
+
+  {
+    dingodb::pb::common::KeyValue kv;
+    kv.set_key("key2");
+    kv.set_value("value2");
+
+    butil::Status ok = writer->KvPut(kv);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+  }
+
+  {
+    dingodb::pb::common::KeyValue kv;
+    kv.set_key("key3");
+    kv.set_value("value3");
+
+    butil::Status ok = writer->KvPut(kv);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+  }
+}
+
+TEST(RawRocksEngineTest, KvBatchPut) {
+  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test.GetRawRocksEngine();
+  const std::string &cf_name = kDefautCf;
+  std::shared_ptr<dingodb::RawEngine::Writer> writer = raw_rocks_engine.NewWriter(cf_name);
+
+  // key empty
+  {
+    std::vector<dingodb::pb::common::KeyValue> kvs;
+
+    butil::Status ok = writer->KvBatchPut(kvs);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_EMPTY);
+  }
+
+  // key empty
+  {
+    dingodb::pb::common::KeyValue kv;
+    std::vector<dingodb::pb::common::KeyValue> kvs;
+    kv.set_key("");
+    kv.set_value("value1");
+    kvs.emplace_back(kv);
+
+    butil::Status ok = writer->KvBatchPut(kvs);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_EMPTY);
+  }
+
+  // some key empty
+  {
+    dingodb::pb::common::KeyValue kv;
+    std::vector<dingodb::pb::common::KeyValue> kvs;
+
+    kv.set_key("key1");
+    kv.set_value("value1");
+    kvs.emplace_back(kv);
+
+    kv.set_key("key2");
+    kv.set_value("value2");
+    kvs.emplace_back(kv);
+
+    kv.set_key("");
+    kv.set_value("value3");
+    kvs.emplace_back(kv);
+
+    butil::Status ok = writer->KvBatchPut(kvs);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_EMPTY);
+  }
+
+  // ok
+  {
+    dingodb::pb::common::KeyValue kv;
+    std::vector<dingodb::pb::common::KeyValue> kvs;
+    kv.set_key("key1");
+    kv.set_value("value1");
+    kvs.emplace_back(kv);
+
+    kv.set_key("key2");
+    kv.set_value("value2");
+    kvs.emplace_back(kv);
+
+    kv.set_key("key3");
+    kv.set_value("value3");
+    kvs.emplace_back(kv);
+
+    butil::Status ok = writer->KvBatchPut(kvs);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+
+    std::string value1;
+    std::string value2;
+    std::string value3;
+    std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
+    ok = reader->KvGet("key1", value1);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+    EXPECT_EQ("value1", value1);
+
+    ok = reader->KvGet("key2", value2);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+    EXPECT_EQ("value2", value2);
+
+    ok = reader->KvGet("key3", value3);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+    EXPECT_EQ("value3", value3);
+  }
+}
+
+TEST(RawRocksEngineTest, KvBatchPutAndDelete) {
+  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test.GetRawRocksEngine();
+  const std::string &cf_name = kDefautCf;
+  std::shared_ptr<dingodb::RawEngine::Writer> writer = raw_rocks_engine.NewWriter(cf_name);
+
+  // key empty failed
+  {
+    std::vector<dingodb::pb::common::KeyValue> kv_puts;
+    std::vector<dingodb::pb::common::KeyValue> kv_deletes;
+
+    butil::Status ok = writer->KvBatchPutAndDelete(kv_puts, kv_deletes);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_EMPTY);
+  }
+
+  // key empty failed
+  {
+    dingodb::pb::common::KeyValue kv;
+    std::vector<dingodb::pb::common::KeyValue> kv_puts;
+    std::vector<dingodb::pb::common::KeyValue> kv_deletes;
+    kv.set_key("");
+    kv.set_value("value1");
+    kv_puts.emplace_back(kv);
+
+    butil::Status ok = writer->KvBatchPutAndDelete(kv_puts, kv_deletes);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_EMPTY);
+  }
+
+  // key empty failed
+  {
+    dingodb::pb::common::KeyValue kv;
+    std::vector<dingodb::pb::common::KeyValue> kv_puts;
+    std::vector<dingodb::pb::common::KeyValue> kv_deletes;
+    kv.set_key("key1");
+    kv.set_value("value1");
+    kv_puts.emplace_back(kv);
+
+    kv.set_key("");
+    kv.set_value("value1");
+    kv_deletes.emplace_back(kv);
+
+    butil::Status ok = writer->KvBatchPutAndDelete(kv_puts, kv_deletes);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_EMPTY);
+  }
+
+  // some key empty failed
+  {
+    dingodb::pb::common::KeyValue kv;
+    std::vector<dingodb::pb::common::KeyValue> kv_puts;
+    std::vector<dingodb::pb::common::KeyValue> kv_deletes;
+
+    kv.set_key("key1");
+    kv.set_value("value1");
+    kv_puts.emplace_back(kv);
+
+    kv.set_key("key2");
+    kv.set_value("value2");
+    kv_puts.emplace_back(kv);
+
+    kv.set_key("");
+    kv.set_value("value3");
+    kv_puts.emplace_back(kv);
+
+    butil::Status ok = writer->KvBatchPutAndDelete(kv_puts, kv_deletes);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_EMPTY);
+  }
+
+  // some key empty failed
+  {
+    dingodb::pb::common::KeyValue kv;
+    std::vector<dingodb::pb::common::KeyValue> kv_puts;
+    std::vector<dingodb::pb::common::KeyValue> kv_deletes;
+
+    kv.set_key("key1");
+    kv.set_value("value1");
+    kv_puts.emplace_back(kv);
+
+    kv.set_key("key2");
+    kv.set_value("value2");
+    kv_puts.emplace_back(kv);
+
+    kv.set_key("");
+    kv.set_value("value3");
+    kv_deletes.emplace_back(kv);
+
+    butil::Status ok = writer->KvBatchPutAndDelete(kv_puts, kv_deletes);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_EMPTY);
+  }
+
+  // ok only deletes
+  {
+    dingodb::pb::common::KeyValue kv;
+    std::vector<dingodb::pb::common::KeyValue> kv_puts;
+    std::vector<dingodb::pb::common::KeyValue> kv_deletes;
+
+    kv.set_key("not_found_key");
+    kv.set_value("value_not_found_key");
+    kv_deletes.emplace_back(kv);
+
+    kv.set_key("key1");
+    kv.set_value("value1");
+    kv_deletes.emplace_back(kv);
+
+    kv.set_key("key2");
+    kv.set_value("value2");
+    kv_deletes.emplace_back(kv);
+
+    kv.set_key("key3");
+    kv.set_value("value3");
+    kv_deletes.emplace_back(kv);
+
+    butil::Status ok = writer->KvBatchPutAndDelete(kv_puts, kv_deletes);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+
+    std::string value0;
+    std::string value1;
+    std::string value2;
+    std::string value3;
+    std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
+
+    ok = reader->KvGet("not_found_key", value1);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_NOTFOUND);
+
+    ok = reader->KvGet("key1", value1);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_NOTFOUND);
+
+    ok = reader->KvGet("key2", value2);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_NOTFOUND);
+
+    ok = reader->KvGet("key3", value3);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_NOTFOUND);
+  }
+
+  // ok puts and delete
+  {
+    dingodb::pb::common::KeyValue kv;
+    std::vector<dingodb::pb::common::KeyValue> kv_puts;
+    std::vector<dingodb::pb::common::KeyValue> kv_deletes;
+    kv.set_key("key1");
+    kv.set_value("value1");
+    kv_puts.emplace_back(kv);
+
+    kv.set_key("key2");
+    kv.set_value("value2");
+    kv_puts.emplace_back(kv);
+
+    kv.set_key("key3");
+    kv.set_value("value3");
+    kv_puts.emplace_back(kv);
+
+    kv.set_key("key99");
+    kv.set_value("value99");
+    kv_puts.emplace_back(kv);
+
+    ///////////////////////////////////////
+    kv.set_key("key1");
+    kv_deletes.emplace_back(kv);
+
+    kv.set_key("key2");
+    kv_deletes.emplace_back(kv);
+
+    kv.set_key("key3");
+    kv_deletes.emplace_back(kv);
+
+    butil::Status ok = writer->KvBatchPutAndDelete(kv_puts, kv_deletes);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+
+    std::string value0;
+    std::string value1;
+    std::string value2;
+    std::string value3;
+
+    std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
+
+    ok = reader->KvGet("key1", value1);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_NOTFOUND);
+
+    ok = reader->KvGet("key2", value2);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_NOTFOUND);
+
+    ok = reader->KvGet("key3", value3);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_NOTFOUND);
+
+    ok = reader->KvGet("key99", value0);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+    EXPECT_EQ("value99", value0);
+  }
+
+  // ok only puts
+  {
+    dingodb::pb::common::KeyValue kv;
+    std::vector<dingodb::pb::common::KeyValue> kv_puts;
+    std::vector<dingodb::pb::common::KeyValue> kv_deletes;
+    kv.set_key("key1");
+    kv.set_value("value1");
+    kv_puts.emplace_back(kv);
+
+    kv.set_key("key2");
+    kv.set_value("value2");
+    kv_puts.emplace_back(kv);
+
+    kv.set_key("key3");
+    kv.set_value("value3");
+    kv_puts.emplace_back(kv);
+
+    butil::Status ok = writer->KvBatchPutAndDelete(kv_puts, kv_deletes);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+
+    std::string value1;
+    std::string value2;
+    std::string value3;
+    std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
+    ok = reader->KvGet("key1", value1);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+    EXPECT_EQ("value1", value1);
+
+    ok = reader->KvGet("key2", value2);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+    EXPECT_EQ("value2", value2);
+
+    ok = reader->KvGet("key3", value3);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+    EXPECT_EQ("value3", value3);
+  }
+}
+
+TEST(RawRocksEngineTest, KvGet) {
+  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test.GetRawRocksEngine();
+
+  const std::string &cf_name = kDefautCf;
+  std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
+
+  // key empty
+  {
+    std::string key;
+    std::string value;
+
+    butil::Status ok = reader->KvGet(key, value);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_EMPTY);
+  }
+
+  {
+    const std::string &key = "key1";
+    std::string value;
+
+    butil::Status ok = reader->KvGet(key, value);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+  }
+}
+
+TEST(RawRocksEngineTest, KvCompareAndSet) {
+  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test.GetRawRocksEngine();
+  const std::string &cf_name = kDefautCf;
+  std::shared_ptr<dingodb::RawEngine::Writer> writer = raw_rocks_engine.NewWriter(cf_name);
+
+  // key empty
+  {
+    dingodb::pb::common::KeyValue kv;
+    std::string value = "value123456";
+
+    butil::Status ok = writer->KvCompareAndSet(kv, value);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_EMPTY);
+  }
+
+  // value empty . key not exist failed
+  {
+    dingodb::pb::common::KeyValue kv;
+    kv.set_key("key");
+    std::string value = "value";
+
+    butil::Status ok = writer->KvCompareAndSet(kv, value);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_NOTFOUND);
+  }
+
+  // value empty . key exist current value not empty. failed
+  {
+    dingodb::pb::common::KeyValue kv;
+    kv.set_key("key1");
+    std::string value = "value123456";
+
+    butil::Status ok = writer->KvCompareAndSet(kv, value);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EINTERNAL);
+  }
+
+  // normal
+  {
+    dingodb::pb::common::KeyValue kv;
+    kv.set_key("key1");
+    kv.set_value("value1");
+    const std::string &value = "value1_modify";
+
+    butil::Status ok = writer->KvCompareAndSet(kv, value);
+
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+
+    std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
+    std::string key = kv.key();
+    std::string value_another;
+    ok = reader->KvGet(key, value_another);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+    EXPECT_EQ(value, value_another);
+  }
+
+  // normal
+  {
+    dingodb::pb::common::KeyValue kv;
+    kv.set_key("key1");
+    kv.set_value("value1_modify");
+    const std::string &value = "";
+
+    butil::Status ok = writer->KvCompareAndSet(kv, value);
+
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+
+    std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
+    std::string key = kv.key();
+    std::string value_another;
+    ok = reader->KvGet(key, value_another);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+    EXPECT_EQ(value, value_another);
+  }
+  // normal
+  {
+    dingodb::pb::common::KeyValue kv;
+    kv.set_key("key1");
+    kv.set_value("");
+    const std::string &value = "value1";
+
+    butil::Status ok = writer->KvCompareAndSet(kv, value);
+
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+
+    std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
+    std::string key = kv.key();
+    std::string value_another;
+    ok = reader->KvGet(key, value_another);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+    EXPECT_EQ(value, value_another);
+  }
+}
+
+#if 0
+TEST(RawRocksEngineTest, KvBatchGet) {
+  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test.GetRawRocksEngine();
+
+  const std::string &cf_name = kDefautCf;
+  std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
+
+  // key all empty
+  {
+    std::vector<std::string> keys;
+    std::vector<dingodb::pb::common::KeyValue> kvs;
+
+    butil::Status ok = reader->KvBatchGet(keys, kvs);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_EMPTY);
+  }
+
+  // key some empty
+  {
+    std::vector<std::string> keys{"key1", "", "key"};
+    std::vector<dingodb::pb::common::KeyValue> kvs;
+
+    butil::Status ok = reader->KvBatchGet(keys, kvs);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_EMPTY);
+  }
+
+  // some key not exist
+  {
+    std::vector<std::string> keys{"key1", "key2", "key", "key4"};
+    std::vector<dingodb::pb::common::KeyValue> kvs;
+
+    butil::Status ok = reader->KvBatchGet(keys, kvs);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EINTERNAL);
+  }
+
+  // normal
+  {
+    std::vector<std::string> keys{"key1", "key"};
+    std::vector<dingodb::pb::common::KeyValue> kvs;
+
+    butil::Status ok = reader->KvBatchGet(keys, kvs);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+  }
+}
+#endif
+
+TEST(RawRocksEngineTest, KvPutIfAbsent) {
+  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test.GetRawRocksEngine();
+  const std::string &cf_name = kDefautCf;
+  std::shared_ptr<dingodb::RawEngine::Writer> writer = raw_rocks_engine.NewWriter(cf_name);
+
+  // key empty
+  {
+    dingodb::pb::common::KeyValue kv;
+
+    butil::Status ok = writer->KvPutIfAbsent(kv);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_EMPTY);
+  }
+
+  // key exist value empty failed
+  {
+    dingodb::pb::common::KeyValue kv;
+    kv.set_key("key");
+
+    butil::Status ok = writer->KvPutIfAbsent(kv);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+  }
+
+  // value empty . key exist failed
+  {
+    dingodb::pb::common::KeyValue kv;
+    kv.set_key("key1");
+
+    butil::Status ok = writer->KvPutIfAbsent(kv);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EINTERNAL);
+  }
+
+  // normal
+  {
+    dingodb::pb::common::KeyValue kv;
+    kv.set_key("key10");
+    kv.set_value("value10");
+
+    butil::Status ok = writer->KvPutIfAbsent(kv);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+  }
+
+  // key value already exist failed
+  {
+    dingodb::pb::common::KeyValue kv;
+    kv.set_key("key10");
+    kv.set_value("value10");
+
+    butil::Status ok = writer->KvPutIfAbsent(kv);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EINTERNAL);
+  }
+
+  // key value already exist failed
+  {
+    dingodb::pb::common::KeyValue kv;
+    kv.set_key("key10");
+    kv.set_value("");
+
+    butil::Status ok = writer->KvPutIfAbsent(kv);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EINTERNAL);
+  }
+
+  // normal
+  {
+    dingodb::pb::common::KeyValue kv;
+    kv.set_key("key11");
+    kv.set_value("");
+
+    butil::Status ok = writer->KvPutIfAbsent(kv);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+  }
+
+  // normal
+  {
+    dingodb::pb::common::KeyValue kv;
+    kv.set_key("key11");
+    kv.set_value("value11");
+
+    butil::Status ok = writer->KvPutIfAbsent(kv);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EINTERNAL);
+  }
+
+  // normal
+  {
+    dingodb::pb::common::KeyValue kv;
+    kv.set_key("key11");
+    kv.set_value("");
+
+    butil::Status ok = writer->KvPutIfAbsent(kv);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EINTERNAL);
+  }
+}
+
+TEST(RawRocksEngineTest, KvBatchPutIfAbsentAtomic) {
+  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test.GetRawRocksEngine();
+  const std::string &cf_name = kDefautCf;
+  std::shared_ptr<dingodb::RawEngine::Writer> writer = raw_rocks_engine.NewWriter(cf_name);
+
+  // key all empty
+  {
+    std::vector<std::string> keys;
+    std::vector<dingodb::pb::common::KeyValue> kvs;
+    std::vector<std::string> put_keys;
+
+    butil::Status ok = writer->KvBatchPutIfAbsent(kvs, put_keys, true);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_EMPTY);
+  }
+
+  // some key not exist
+  {
+    std::vector<std::string> keys;
+    std::vector<dingodb::pb::common::KeyValue> kvs;
+    std::vector<std::string> put_keys;
+
+    dingodb::pb::common::KeyValue kv;
+    kv.set_key("key1");
+    kv.set_value("value1");
+    kvs.push_back(kv);
+
+    kv.set_key("");
+    kv.set_value("value2");
+    kvs.push_back(kv);
+
+    butil::Status ok = writer->KvBatchPutIfAbsent(kvs, put_keys, true);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_EMPTY);
+  }
+
+  // some key exist failed
+  {
+    std::vector<std::string> keys;
+    std::vector<dingodb::pb::common::KeyValue> kvs;
+    std::vector<std::string> put_keys;
+
+    dingodb::pb::common::KeyValue kv;
+
+    kv.set_key("key111");
+    kv.set_value("value111");
+    kvs.push_back(kv);
+
+    kv.set_key("key1");
+    kv.set_value("value1");
+    kvs.push_back(kv);
+
+    kv.set_key("key2");
+    kv.set_value("value2");
+    kvs.push_back(kv);
+
+    kv.set_key("key");
+    kv.set_value("value");
+    kvs.push_back(kv);
+
+    butil::Status ok = writer->KvBatchPutIfAbsent(kvs, put_keys, true);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EINTERNAL);
+
+    std::string value;
+    std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
+    ok = reader->KvGet("key111", value);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_NOTFOUND);
+  }
+
+  // normal key all not exist
+  {
+    std::vector<std::string> keys;
+    std::vector<dingodb::pb::common::KeyValue> kvs;
+    std::vector<std::string> put_keys;
+
+    dingodb::pb::common::KeyValue kv;
+
+    kv.set_key("key101");
+    kv.set_value("value101");
+    kvs.push_back(kv);
+
+    kv.set_key("key102");
+    kv.set_value("value102");
+    kvs.push_back(kv);
+
+    kv.set_key("key103");
+    kv.set_value("value103");
+    kvs.push_back(kv);
+
+    kv.set_key("key104");
+    kv.set_value("value104");
+    kvs.push_back(kv);
+
+    butil::Status ok = writer->KvBatchPutIfAbsent(kvs, put_keys, true);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+
+    std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
+
+    std::string value;
+    ok = reader->KvGet("key101", value);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+
+    ok = reader->KvGet("key102", value);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+
+    ok = reader->KvGet("key103", value);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+
+    ok = reader->KvGet("key104", value);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+  }
+}
+
+TEST(RawRocksEngineTest, KvBatchPutIfAbsentNonAtomic) {
+  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test.GetRawRocksEngine();
+  const std::string &cf_name = kDefautCf;
+  std::shared_ptr<dingodb::RawEngine::Writer> writer = raw_rocks_engine.NewWriter(cf_name);
+
+  // key all empty
+  {
+    std::vector<std::string> keys;
+    std::vector<dingodb::pb::common::KeyValue> kvs;
+    std::vector<std::string> put_keys;
+
+    butil::Status ok = writer->KvBatchPutIfAbsent(kvs, put_keys, false);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_EMPTY);
+  }
+
+  // some key not exist
+  {
+    std::vector<std::string> keys;
+    std::vector<dingodb::pb::common::KeyValue> kvs;
+    std::vector<std::string> put_keys;
+
+    dingodb::pb::common::KeyValue kv;
+    kv.set_key("key1");
+    kv.set_value("value1");
+    kvs.push_back(kv);
+
+    kv.set_key("");
+    kv.set_value("value2");
+    kvs.push_back(kv);
+
+    butil::Status ok = writer->KvBatchPutIfAbsent(kvs, put_keys, false);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_EMPTY);
+  }
+
+  // some key exist ok
+  {
+    std::vector<std::string> keys;
+    std::vector<dingodb::pb::common::KeyValue> kvs;
+    std::vector<std::string> put_keys;
+
+    dingodb::pb::common::KeyValue kv;
+
+    kv.set_key("key1111");
+    kv.set_value("value111");
+    kvs.push_back(kv);
+
+    kv.set_key("key1");
+    kv.set_value("value1");
+    kvs.push_back(kv);
+
+    kv.set_key("key2");
+    kv.set_value("value2");
+    kvs.push_back(kv);
+
+    kv.set_key("key");
+    kv.set_value("value");
+    kvs.push_back(kv);
+
+    butil::Status ok = writer->KvBatchPutIfAbsent(kvs, put_keys, false);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+
+    std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
+
+    std::string value;
+    ok = reader->KvGet("key1111", value);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+  }
+
+  // normal key all not exist
+  {
+    std::vector<std::string> keys;
+    std::vector<dingodb::pb::common::KeyValue> kvs;
+    std::vector<std::string> put_keys;
+
+    dingodb::pb::common::KeyValue kv;
+
+    kv.set_key("key201");
+    kv.set_value("value201");
+    kvs.push_back(kv);
+
+    kv.set_key("key202");
+    kv.set_value("value202");
+    kvs.push_back(kv);
+
+    kv.set_key("key203");
+    kv.set_value("value203");
+    kvs.push_back(kv);
+
+    kv.set_key("key204");
+    kv.set_value("value204");
+    kvs.push_back(kv);
+
+    butil::Status ok = writer->KvBatchPutIfAbsent(kvs, put_keys, false);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+
+    std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
+
+    std::string value;
+    ok = reader->KvGet("key201", value);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+
+    ok = reader->KvGet("key202", value);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+
+    ok = reader->KvGet("key203", value);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+
+    ok = reader->KvGet("key204", value);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+  }
+}
+
+TEST(RawRocksEngineTest, KvScan) {
+  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test.GetRawRocksEngine();
+  const std::string &cf_name = kDefautCf;
+  std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
+
+  // start_key empty error
+  {
+    std::string start_key;
+    std::string end_key;
+    std::vector<dingodb::pb::common::KeyValue> kvs;
+
+    butil::Status ok = reader->KvScan(start_key, end_key, kvs);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_EMPTY);
+  }
+
+  // start_key valid and end_key empty error
+  {
+    std::string start_key = "key";
+    std::string end_key;
+    std::vector<dingodb::pb::common::KeyValue> kvs;
+
+    butil::Status ok = reader->KvScan(start_key, end_key, kvs);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_EMPTY);
+  }
+
+  // ok
+  {
+    std::string start_key = "key101";
+    std::string end_key = "key199";
+    std::vector<dingodb::pb::common::KeyValue> kvs;
+
+    butil::Status ok = reader->KvScan(start_key, end_key, kvs);
+
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+    std::cout << "start_key : " << start_key << " "
+              << "end_key : " << end_key << std::endl;
+    for (const auto &kv : kvs) {
+      std::cout << kv.key() << ":" << kv.value() << std::endl;
+    }
+  }
+
+  // ok
+  {
+    std::string start_key = "key201";
+    std::string end_key = "key204";
+    std::vector<dingodb::pb::common::KeyValue> kvs;
+
+    butil::Status ok = reader->KvScan(start_key, end_key, kvs);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+
+    std::cout << "start_key : " << start_key << " "
+              << "end_key : " << end_key << std::endl;
+    for (const auto &kv : kvs) {
+      std::cout << kv.key() << ":" << kv.value() << std::endl;
+    }
+  }
+}
+
+TEST(RawRocksEngineTest, KvCount) {
+  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test.GetRawRocksEngine();
+  const std::string &cf_name = kDefautCf;
+  std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
+
+  // start_key empty error
+  {
+    std::string start_key;
+    std::string end_key;
+    int64_t count = 0;
+
+    butil::Status ok = reader->KvCount(start_key, end_key, count);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_EMPTY);
+  }
+
+  // start_key valid and end_key empty error
+  {
+    std::string start_key = "key101";
+    std::string end_key;
+    int64_t count = 0;
+
+    butil::Status ok = reader->KvCount(start_key, end_key, count);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_EMPTY);
+  }
+
+  // ok
+  {
+    std::string start_key = "key201";
+    std::string end_key = "key204";
+    int64_t count = 0;
+
+    butil::Status ok = reader->KvCount(start_key, end_key, count);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+
+    std::cout << "start_key : " << start_key << " "
+              << "end_key : " << end_key << " count : " << count << std::endl;
+
+    std::vector<dingodb::pb::common::KeyValue> kvs;
+
+    ok = reader->KvScan(start_key, end_key, kvs);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+    EXPECT_EQ(count, kvs.size());
+  }
+}
+
+// TEST(RawRocksEngineTest, CreateReader) {
+//   dingodb::RocksEngine &raw_rocks_engine = rocks_engine_test.GetRawRocksEngine();
 
 //   // Context empty
 //   {
 //     std::shared_ptr<dingodb::Context> ctx;
-//     std::string begin_key;
-//     std::string end_key;
-//     std::vector<dingodb::pb::common::KeyValue> kvs;
 
-//     dingodb::pb::error::Errno ok = rocks_engine.KvScan({}, begin_key, end_key, kvs);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::ECONTEXT);
-//   }
-
-//   std::shared_ptr<dingodb::Context> ctx = std::make_shared<dingodb::Context>();
-
-//   // Context not empty, but Context name empty
-//   {
-//     std::string begin_key = "key01";
-//     std::string end_key = "key1000";
-//     std::vector<dingodb::pb::common::KeyValue> kvs;
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvScan(ctx, begin_key, end_key, kvs);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::ESTORE_INVALID_CF);
-//   }
-
-//   const std::string &cf_name = kDefautCf;
-//   ctx->set_cf_name(cf_name);
-
-//   // Context not empty, but Context name not exist
-//   {
-//     ctx->set_cf_name("dummy");
-//     std::string begin_key = "key01";
-//     std::string end_key = "key1000";
-//     std::vector<dingodb::pb::common::KeyValue> kvs;
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvScan(ctx, begin_key, end_key, kvs);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::ESTORE_INVALID_CF);
-//   }
-
-//   ctx->set_cf_name(cf_name);
-
-//   // ok
-//   {
-//     std::string begin_key;
-//     std::string end_key;
-//     std::vector<dingodb::pb::common::KeyValue> kvs;
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvScan(ctx, begin_key, end_key, kvs);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
-//     std::cout << "begin_key : " << begin_key << " "
-//               << "end_key : " << end_key << std::endl;
-//     for (const auto &kv : kvs) {
-//       std::cout << kv.key() << ":" << kv.value() << std::endl;
-//     }
-//   }
-
-//   // ok
-//   {
-//     std::string begin_key = "key101";
-//     std::string end_key;
-//     std::vector<dingodb::pb::common::KeyValue> kvs;
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvScan(ctx, begin_key, end_key, kvs);
-
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
-//     std::cout << "begin_key : " << begin_key << " "
-//               << "end_key : " << end_key << std::endl;
-//     for (const auto &kv : kvs) {
-//       std::cout << kv.key() << ":" << kv.value() << std::endl;
-//     }
-//   }
-
-//   // ok
-//   {
-//     std::string begin_key = "key201";
-//     std::string end_key = "key204";
-//     std::vector<dingodb::pb::common::KeyValue> kvs;
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvScan(ctx, begin_key, end_key, kvs);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
-
-//     std::cout << "begin_key : " << begin_key << " "
-//               << "end_key : " << end_key << std::endl;
-//     for (const auto &kv : kvs) {
-//       std::cout << kv.key() << ":" << kv.value() << std::endl;
-//     }
-//   }
-// }
-
-// TEST(RocksEngineTest, KvCount) {
-//   dingodb::RocksEngine &rocks_engine = rocks_engine_test.GetRocksEngine();
-
-//   // Context empty
-//   {
-//     std::shared_ptr<dingodb::Context> ctx;
-//     std::string begin_key;
-//     std::string end_key;
-//     int64_t count = 0;
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvCount({}, begin_key, end_key, count);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::ECONTEXT);
-//   }
-
-//   std::shared_ptr<dingodb::Context> ctx = std::make_shared<dingodb::Context>();
-
-//   // Context not empty, but Context name empty
-//   {
-//     std::string begin_key = "key01";
-//     std::string end_key = "key1000";
-//     int64_t count = 0;
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvCount(ctx, begin_key, end_key, count);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::ESTORE_INVALID_CF);
-//   }
-
-//   const std::string &cf_name = kDefautCf;
-//   ctx->set_cf_name(cf_name);
-
-//   // Context not empty, but Context name not exist
-//   {
-//     ctx->set_cf_name("dummy");
-//     std::string begin_key = "key01";
-//     std::string end_key = "key1000";
-//     int64_t count = 0;
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvCount(ctx, begin_key, end_key, count);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::ESTORE_INVALID_CF);
-//   }
-
-//   ctx->set_cf_name(cf_name);
-
-//   // ok
-//   {
-//     std::string begin_key;
-//     std::string end_key;
-//     int64_t count = 0;
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvCount(ctx, begin_key, end_key, count);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
-//     std::cout << "begin_key : " << begin_key << " "
-//               << "end_key : " << end_key << " count : " << count << std::endl;
-//     std::vector<dingodb::pb::common::KeyValue> kvs;
-
-//     ok = rocks_engine.KvScan(ctx, begin_key, end_key, kvs);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
-//     EXPECT_EQ(count, kvs.size());
-//   }
-
-//   // ok
-//   {
-//     std::string begin_key = "key101";
-//     std::string end_key;
-//     int64_t count = 0;
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvCount(ctx, begin_key, end_key, count);
-
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
-//     std::cout << "begin_key : " << begin_key << " "
-//               << "end_key : " << end_key << " count : " << count << std::endl;
-//     std::vector<dingodb::pb::common::KeyValue> kvs;
-
-//     ok = rocks_engine.KvScan(ctx, begin_key, end_key, kvs);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
-//     EXPECT_EQ(count, kvs.size());
-//   }
-
-//   // ok
-//   {
-//     std::string begin_key = "key201";
-//     std::string end_key = "key204";
-//     int64_t count = 0;
-
-//     dingodb::pb::error::Errno ok = rocks_engine.KvCount(ctx, begin_key, end_key, count);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
-
-//     std::cout << "begin_key : " << begin_key << " "
-//               << "end_key : " << end_key << " count : " << count << std::endl;
-
-//     std::vector<dingodb::pb::common::KeyValue> kvs;
-
-//     ok = rocks_engine.KvScan(ctx, begin_key, end_key, kvs);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
-//     EXPECT_EQ(count, kvs.size());
-//   }
-// }
-
-// TEST(RocksEngineTest, CreateReader) {
-//   dingodb::RocksEngine &rocks_engine = rocks_engine_test.GetRocksEngine();
-
-//   // Context empty
-//   {
-//     std::shared_ptr<dingodb::Context> ctx;
-
-//     std::shared_ptr<dingodb::EngineReader> reader = rocks_engine.CreateReader({});
+//     std::shared_ptr<dingodb::EngineReader> reader = raw_rocks_engine.CreateReader({});
 //     EXPECT_EQ(reader.get(), nullptr);
 //   }
 
@@ -1129,7 +1178,7 @@ bool DeleteFile(const char *path) {
 
 //   // Context not empty, but Context name empty
 //   {
-//     std::shared_ptr<dingodb::EngineReader> reader = rocks_engine.CreateReader(ctx);
+//     std::shared_ptr<dingodb::EngineReader> reader = raw_rocks_engine.CreateReader(ctx);
 //     EXPECT_EQ(reader.get(), nullptr);
 //   }
 
@@ -1137,7 +1186,7 @@ bool DeleteFile(const char *path) {
 //   {
 //     ctx->set_cf_name("dummy");
 
-//     std::shared_ptr<dingodb::EngineReader> reader = rocks_engine.CreateReader(ctx);
+//     std::shared_ptr<dingodb::EngineReader> reader = raw_rocks_engine.CreateReader(ctx);
 //     EXPECT_EQ(reader.get(), nullptr);
 //   }
 
@@ -1146,18 +1195,18 @@ bool DeleteFile(const char *path) {
 
 //   // ok
 //   {
-//     std::shared_ptr<dingodb::EngineReader> reader = rocks_engine.CreateReader(ctx);
+//     std::shared_ptr<dingodb::EngineReader> reader = raw_rocks_engine.CreateReader(ctx);
 //     EXPECT_NE(reader.get(), nullptr);
 //   }
 // }
 
-// TEST(RocksEngineTest, EngineReader) {
-//   dingodb::RocksEngine &rocks_engine = rocks_engine_test.GetRocksEngine();
+// TEST(RawRocksEngineTest, EngineReader) {
+//   dingodb::RocksEngine &raw_rocks_engine = rocks_engine_test.GetRawRocksEngine();
 //   const std::string &cf_name = kDefautCf;
 //   std::shared_ptr<dingodb::Context> ctx = std::make_shared<dingodb::Context>();
 //   ctx->set_cf_name(cf_name);
 
-//   std::shared_ptr<dingodb::EngineReader> reader = rocks_engine.CreateReader(ctx);
+//   std::shared_ptr<dingodb::EngineReader> reader = raw_rocks_engine.CreateReader(ctx);
 
 //   // GetSelf
 //   {
@@ -1191,13 +1240,13 @@ bool DeleteFile(const char *path) {
 //   }
 // }
 
-// TEST(RocksEngineTest, EngineIterator) {
-//   dingodb::RocksEngine &rocks_engine = rocks_engine_test.GetRocksEngine();
+// TEST(RawRocksEngineTest, EngineIterator) {
+//   dingodb::RocksEngine &raw_rocks_engine = rocks_engine_test.GetRawRocksEngine();
 //   const std::string &cf_name = kDefautCf;
 //   std::shared_ptr<dingodb::Context> ctx = std::make_shared<dingodb::Context>();
 //   ctx->set_cf_name(cf_name);
 
-//   std::shared_ptr<dingodb::EngineReader> reader = rocks_engine.CreateReader(ctx);
+//   std::shared_ptr<dingodb::EngineReader> reader = raw_rocks_engine.CreateReader(ctx);
 //   std::shared_ptr<dingodb::EngineIterator> engine_iterator = reader->Scan("", "");
 
 //   // GetSelf
@@ -1217,12 +1266,12 @@ bool DeleteFile(const char *path) {
 //   }
 
 //   {
-//     std::string begin_key;
+//     std::string start_key;
 //     std::string end_key;
 
-//     std::shared_ptr<dingodb::EngineIterator> engine_iterator = reader->Scan(begin_key, end_key);
+//     std::shared_ptr<dingodb::EngineIterator> engine_iterator = reader->Scan(start_key, end_key);
 
-//     std::cout << "begin_key : " << begin_key << " "
+//     std::cout << "start_key : " << start_key << " "
 //               << "end_key : " << end_key << std::endl;
 //     while (engine_iterator->HasNext()) {
 //       std::string key;
@@ -1234,12 +1283,12 @@ bool DeleteFile(const char *path) {
 //   }
 
 //   {
-//     std::string begin_key = "key101";
+//     std::string start_key = "key101";
 //     std::string end_key;
 
-//     std::shared_ptr<dingodb::EngineIterator> engine_iterator = reader->Scan(begin_key, end_key);
+//     std::shared_ptr<dingodb::EngineIterator> engine_iterator = reader->Scan(start_key, end_key);
 
-//     std::cout << "begin_key : " << begin_key << " "
+//     std::cout << "start_key : " << start_key << " "
 //               << "end_key : " << end_key << std::endl;
 //     while (engine_iterator->HasNext()) {
 //       std::string key;
@@ -1251,12 +1300,12 @@ bool DeleteFile(const char *path) {
 //   }
 
 //   {
-//     std::string begin_key = "key201";
+//     std::string start_key = "key201";
 //     std::string end_key = "key204";
 
-//     std::shared_ptr<dingodb::EngineIterator> engine_iterator = reader->Scan(begin_key, end_key);
+//     std::shared_ptr<dingodb::EngineIterator> engine_iterator = reader->Scan(start_key, end_key);
 
-//     std::cout << "begin_key : " << begin_key << " "
+//     std::cout << "start_key : " << start_key << " "
 //               << "end_key : " << end_key << std::endl;
 //     while (engine_iterator->HasNext()) {
 //       std::string key;
@@ -1268,7 +1317,7 @@ bool DeleteFile(const char *path) {
 //   }
 
 //   {
-//     std::string begin_key;
+//     std::string start_key;
 //     std::string end_key;
 
 //     std::vector<dingodb::pb::common::KeyValue> kvs;
@@ -1282,12 +1331,12 @@ bool DeleteFile(const char *path) {
 //       kvs.push_back(kv);
 //     }
 
-//     dingodb::pb::error::Errno ok = rocks_engine.KvBatchPut(ctx, kvs);
+//     dingodb::pb::error::Errno ok = raw_rocks_engine.KvBatchPut(ctx, kvs);
 //     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
 
-//     std::shared_ptr<dingodb::EngineIterator> engine_iterator = reader->Scan(begin_key, end_key);
+//     std::shared_ptr<dingodb::EngineIterator> engine_iterator = reader->Scan(start_key, end_key);
 
-//     std::cout << "begin_key : " << begin_key << " "
+//     std::cout << "start_key : " << start_key << " "
 //               << "end_key : " << end_key << std::endl;
 //     while (engine_iterator->HasNext()) {
 //       std::string key;
@@ -1299,7 +1348,7 @@ bool DeleteFile(const char *path) {
 //   }
 
 //   {
-//     std::string begin_key;
+//     std::string start_key;
 //     std::string end_key;
 
 //     std::vector<dingodb::pb::common::KeyValue> kvs;
@@ -1314,9 +1363,9 @@ bool DeleteFile(const char *path) {
 //     }
 
 //     bool run_once = false;
-//     std::shared_ptr<dingodb::EngineIterator> engine_iterator = reader->Scan(begin_key, end_key);
+//     std::shared_ptr<dingodb::EngineIterator> engine_iterator = reader->Scan(start_key, end_key);
 
-//     std::cout << "begin_key : " << begin_key << " "
+//     std::cout << "start_key : " << start_key << " "
 //               << "end_key : " << end_key << std::endl;
 //     while (engine_iterator->HasNext()) {
 //       std::string key;
@@ -1326,7 +1375,7 @@ bool DeleteFile(const char *path) {
 //       engine_iterator->Next();
 
 //       if (!run_once) {
-//         dingodb::pb::error::Errno ok = rocks_engine.KvBatchPut(ctx, kvs);
+//         dingodb::pb::error::Errno ok = raw_rocks_engine.KvBatchPut(ctx, kvs);
 //         EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
 //         run_once = true;
 //       }
@@ -1334,311 +1383,317 @@ bool DeleteFile(const char *path) {
 //   }
 // }
 
-// TEST(RocksEngineTest, KvDelete) {
-//   dingodb::RocksEngine &rocks_engine = rocks_engine_test.GetRocksEngine();
+TEST(RawRocksEngineTest, KvDelete) {
+  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test.GetRawRocksEngine();
+  const std::string &cf_name = kDefautCf;
+  std::shared_ptr<dingodb::RawEngine::Writer> writer = raw_rocks_engine.NewWriter(cf_name);
 
-//   // Context empty
-//   {
-//     std::string key;
+  // key empty
+  {
+    std::string key;
 
-//     dingodb::pb::error::Errno ok = rocks_engine.KvDelete({}, key);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::ECONTEXT);
-//   }
+    butil::Status ok = writer->KvDelete(key);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_EMPTY);
+  }
 
-//   std::shared_ptr<dingodb::Context> ctx = std::make_shared<dingodb::Context>();
+  // key not exist in rockdb
+  {
+    const std::string &key = "not_exist_key";
 
-//   // Context not empty, but Context name empty
-//   {
-//     std::string key = "key";
+    butil::Status ok = writer->KvDelete(key);
 
-//     dingodb::pb::error::Errno ok = rocks_engine.KvDelete(ctx, key);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::ESTORE_INVALID_CF);
-//   }
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+  }
 
-//   const std::string &cf_name = kDefautCf;
-//   ctx->set_cf_name(cf_name);
+  // ok
+  {
+    const std::string &key = "key1";
 
-//   // Context not empty, but Context name not exist
-//   {
-//     ctx->set_cf_name("dummy");
-//     std::string key = "key";
+    std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
 
-//     dingodb::pb::error::Errno ok = rocks_engine.KvDelete(ctx, key);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::ESTORE_INVALID_CF);
-//   }
+    std::string value;
+    butil::Status ok = reader->KvGet(key, value);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
-//   ctx->set_cf_name(cf_name);
+    ok = writer->KvDelete(key);
 
-//   // key empty
-//   {
-//     std::string key;
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+  }
 
-//     dingodb::pb::error::Errno ok = rocks_engine.KvDelete(ctx, key);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::EKEY_EMPTY);
-//   }
+  // double delete ok
+  {
+    const std::string &key = "key1";
 
-//   // ok
-//   {
-//     const std::string &key = "key1";
+    butil::Status ok = writer->KvDelete(key);
 
-//     dingodb::pb::error::Errno ok = rocks_engine.KvDelete(ctx, key);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
-//   }
+    std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
 
-//   // ok
-//   {
-//     const std::string &key = "key";
+    std::string value;
+    ok = reader->KvGet(key, value);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_NOTFOUND);
+  }
 
-//     dingodb::pb::error::Errno ok = rocks_engine.KvDelete(ctx, key);
+  // ok
+  {
+    const std::string &key = "key";
 
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
-//   }
+    butil::Status ok = writer->KvDelete(key);
 
-//   // ok
-//   {
-//     const std::string &key = "key1";
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+  }
 
-//     dingodb::pb::error::Errno ok = rocks_engine.KvDelete(ctx, key);
+  // ok
+  {
+    const std::string &key = "key1";
 
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
-//   }
+    butil::Status ok = writer->KvDelete(key);
 
-//   // ok
-//   {
-//     const std::string &key = "key2";
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+  }
 
-//     dingodb::pb::error::Errno ok = rocks_engine.KvDelete(ctx, key);
+  // ok
+  {
+    const std::string &key = "key2";
 
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
-//   }
+    butil::Status ok = writer->KvDelete(key);
 
-//   // ok
-//   {
-//     const std::string &key = "key3";
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+  }
 
-//     dingodb::pb::error::Errno ok = rocks_engine.KvDelete(ctx, key);
+  // ok
+  {
+    const std::string &key = "key3";
 
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
-//   }
+    butil::Status ok = writer->KvDelete(key);
 
-//   // ok
-//   {
-//     const std::string &key = "key10";
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+  }
 
-//     dingodb::pb::error::Errno ok = rocks_engine.KvDelete(ctx, key);
+  // ok
+  {
+    const std::string &key = "key10";
 
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
-//   }
+    butil::Status ok = writer->KvDelete(key);
 
-//   // ok
-//   {
-//     const std::string &key = "key1111";
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+  }
 
-//     dingodb::pb::error::Errno ok = rocks_engine.KvDelete(ctx, key);
+  // ok
+  {
+    const std::string &key = "key1111";
 
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
-//   }
+    butil::Status ok = writer->KvDelete(key);
 
-//   // ok
-//   {
-//     const std::string &key = "key101";
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+  }
 
-//     dingodb::pb::error::Errno ok = rocks_engine.KvDelete(ctx, key);
+  // ok
+  {
+    const std::string &key = "key101";
 
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
-//   }
+    butil::Status ok = writer->KvDelete(key);
 
-//   // ok
-//   {
-//     const std::string &key = "key102";
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+  }
 
-//     dingodb::pb::error::Errno ok = rocks_engine.KvDelete(ctx, key);
+  // ok
+  {
+    const std::string &key = "key102";
 
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
-//   }
+    butil::Status ok = writer->KvDelete(key);
 
-//   // ok
-//   {
-//     const std::string &key = "key103";
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+  }
 
-//     dingodb::pb::error::Errno ok = rocks_engine.KvDelete(ctx, key);
+  // ok
+  {
+    const std::string &key = "key103";
 
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
-//   }
+    butil::Status ok = writer->KvDelete(key);
 
-//   // ok
-//   {
-//     const std::string &key = "key104";
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+  }
 
-//     dingodb::pb::error::Errno ok = rocks_engine.KvDelete(ctx, key);
+  // ok
+  {
+    const std::string &key = "key104";
 
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
-//   }
+    butil::Status ok = writer->KvDelete(key);
 
-//   // ok
-//   {
-//     const std::string &key = "key201";
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+  }
 
-//     dingodb::pb::error::Errno ok = rocks_engine.KvDelete(ctx, key);
+  // ok
+  {
+    const std::string &key = "key201";
 
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
-//   }
+    butil::Status ok = writer->KvDelete(key);
 
-//   // ok
-//   {
-//     const std::string &key = "key202";
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+  }
 
-//     dingodb::pb::error::Errno ok = rocks_engine.KvDelete(ctx, key);
+  // ok
+  {
+    const std::string &key = "key202";
 
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
-//   }
+    butil::Status ok = writer->KvDelete(key);
 
-//   // ok
-//   {
-//     const std::string &key = "key203";
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+  }
 
-//     dingodb::pb::error::Errno ok = rocks_engine.KvDelete(ctx, key);
+  // ok
+  {
+    const std::string &key = "key203";
 
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
-//   }
+    butil::Status ok = writer->KvDelete(key);
 
-//   // ok
-//   {
-//     const std::string &key = "key204";
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+  }
 
-//     dingodb::pb::error::Errno ok = rocks_engine.KvDelete(ctx, key);
+  // ok
+  {
+    const std::string &key = "key204";
 
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
-//   }
-// }
+    butil::Status ok = writer->KvDelete(key);
 
-// TEST(RocksEngineTest, KvDeleteRange) {
-//   dingodb::RocksEngine &rocks_engine = rocks_engine_test.GetRocksEngine();
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+  }
+}
 
-//   // Context empty
-//   {
-//     dingodb::pb::common::Range range;
+TEST(RawRocksEngineTest, KvDeleteRange) {
+  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test.GetRawRocksEngine();
+  const std::string &cf_name = kDefautCf;
+  std::shared_ptr<dingodb::RawEngine::Writer> writer = raw_rocks_engine.NewWriter(cf_name);
 
-//     dingodb::pb::error::Errno ok = rocks_engine.KvDeleteRange({}, range);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::ECONTEXT);
-//   }
+  // wirite key -> key999
+  {
+    std::vector<dingodb::pb::common::KeyValue> kvs;
+    std::vector<std::string> put_keys;
 
-//   std::shared_ptr<dingodb::Context> ctx = std::make_shared<dingodb::Context>();
+    for (int i = 0; i < 1000; i++) {
+      dingodb::pb::common::KeyValue kv;
+      kv.set_key("key" + std::to_string(i));
+      kv.set_value("value" + std::to_string(i));
+      kvs.push_back(kv);
+    }
 
-//   // Context not empty, but Context name empty
-//   {
-//     dingodb::pb::common::Range range;
-//     range.set_start_key("key1");
-//     range.set_end_key("key10");
+    butil::Status ok = writer->KvBatchPut(kvs);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+  }
 
-//     dingodb::pb::error::Errno ok = rocks_engine.KvDeleteRange(ctx, range);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::ESTORE_INVALID_CF);
-//   }
+  // key empty
+  {
+    dingodb::pb::common::Range range;
 
-//   const std::string &cf_name = kDefautCf;
-//   ctx->set_cf_name(cf_name);
+    butil::Status ok = writer->KvDeleteRange(range);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_EMPTY);
+  }
 
-//   // Context not empty, but Context name not exist
-//   {
-//     ctx->set_cf_name("dummy");
-//     dingodb::pb::common::Range range;
-//     range.set_start_key("key1");
-//     range.set_end_key("key10");
+  // start key not empty but end key empty
+  {
+    dingodb::pb::common::Range range;
+    range.set_start_key("key");
 
-//     dingodb::pb::error::Errno ok = rocks_engine.KvDeleteRange(ctx, range);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::ESTORE_INVALID_CF);
-//   }
+    butil::Status ok = writer->KvDeleteRange(range);
 
-//   ctx->set_cf_name(cf_name);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_EMPTY);
+  }
 
-//   // key empty
-//   {
-//     dingodb::pb::common::Range range;
+  // ok
+  {
+    dingodb::pb::common::Range range;
+    range.set_start_key("key");
+    range.set_end_key("key100");
 
-//     dingodb::pb::error::Errno ok = rocks_engine.KvDeleteRange(ctx, range);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::EKEY_EMPTY);
-//   }
+    butil::Status ok = writer->KvDeleteRange(range);
 
-//   // key not empty but value empty
-//   {
-//     dingodb::pb::common::Range range;
-//     range.set_start_key("key");
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
-//     dingodb::pb::error::Errno ok = rocks_engine.KvDeleteRange(ctx, range);
+    std::string start_key = "key";
+    std::string end_key = "key100";
+    std::vector<dingodb::pb::common::KeyValue> kvs;
 
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::EKEY_EMPTY);
-//   }
+    std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
 
-//   // ok
-//   {
-//     dingodb::pb::common::Range range;
-//     range.set_start_key("key");
-//     range.set_end_key("key100");
+    ok = reader->KvScan(start_key, end_key, kvs);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
-//     dingodb::pb::error::Errno ok = rocks_engine.KvDeleteRange(ctx, range);
+    std::cout << "start_key : " << start_key << " "
+              << "end_key : " << end_key << std::endl;
+    for (const auto &kv : kvs) {
+      std::cout << kv.key() << ":" << kv.value() << std::endl;
+    }
 
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
+    std::string key = "key";
+    std::string value;
+    ok = reader->KvGet(key, value);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_NOTFOUND);
 
-//     std::string begin_key;
-//     std::string end_key;
-//     std::vector<dingodb::pb::common::KeyValue> kvs;
+    key = "key100";
+    ok = reader->KvGet(key, value);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+  }
 
-//     ok = rocks_engine.KvScan(ctx, begin_key, end_key, kvs);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
+  // ok
+  {
+    dingodb::pb::common::Range range;
+    range.set_start_key("key100");
+    range.set_end_key("key200");
 
-//     std::cout << "begin_key : " << begin_key << " "
-//               << "end_key : " << end_key << std::endl;
-//     for (const auto &kv : kvs) {
-//       std::cout << kv.key() << ":" << kv.value() << std::endl;
-//     }
-//   }
+    butil::Status ok = writer->KvDeleteRange(range);
 
-//   // ok
-//   {
-//     dingodb::pb::common::Range range;
-//     range.set_start_key("key100");
-//     range.set_end_key("key200");
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
-//     dingodb::pb::error::Errno ok = rocks_engine.KvDeleteRange(ctx, range);
+    std::string start_key = "key100";
+    std::string end_key = "key200";
+    std::vector<dingodb::pb::common::KeyValue> kvs;
 
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
+    std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
 
-//     std::string begin_key;
-//     std::string end_key;
-//     std::vector<dingodb::pb::common::KeyValue> kvs;
+    ok = reader->KvScan(start_key, end_key, kvs);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
-//     ok = rocks_engine.KvScan(ctx, begin_key, end_key, kvs);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
+    std::cout << "start_key : " << start_key << " "
+              << "end_key : " << end_key << std::endl;
+    for (const auto &kv : kvs) {
+      std::cout << kv.key() << ":" << kv.value() << std::endl;
+    }
 
-//     std::cout << "begin_key : " << begin_key << " "
-//               << "end_key : " << end_key << std::endl;
-//     for (const auto &kv : kvs) {
-//       std::cout << kv.key() << ":" << kv.value() << std::endl;
-//     }
-//   }
+    std::string key = "key100";
+    std::string value;
+    ok = reader->KvGet(key, value);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_NOTFOUND);
 
-//   // ok
-//   {
-//     dingodb::pb::common::Range range;
-//     range.set_start_key("key");
-//     range.set_end_key("key99999");
+    key = "key200";
+    ok = reader->KvGet(key, value);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+  }
 
-//     dingodb::pb::error::Errno ok = rocks_engine.KvDeleteRange(ctx, range);
+  // ok
+  {
+    dingodb::pb::common::Range range;
+    range.set_start_key("key");
+    range.set_end_key("key99999");
 
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
+    butil::Status ok = writer->KvDeleteRange(range);
 
-//     std::string begin_key;
-//     std::string end_key;
-//     std::vector<dingodb::pb::common::KeyValue> kvs;
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
-//     ok = rocks_engine.KvScan(ctx, begin_key, end_key, kvs);
-//     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
+    std::string start_key = "key";
+    std::string end_key = "key99999";
+    std::vector<dingodb::pb::common::KeyValue> kvs;
 
-//     std::cout << "begin_key : " << begin_key << " "
-//               << "end_key : " << end_key << std::endl;
-//     for (const auto &kv : kvs) {
-//       std::cout << kv.key() << ":" << kv.value() << std::endl;
-//     }
-//   }
-// }
+    std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
+
+    ok = reader->KvScan(start_key, end_key, kvs);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+
+    std::cout << "start_key : " << start_key << " "
+              << "end_key : " << end_key << std::endl;
+    for (const auto &kv : kvs) {
+      std::cout << kv.key() << ":" << kv.value() << std::endl;
+    }
+  }
+}
