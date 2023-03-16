@@ -140,7 +140,7 @@ class RawRocksEngine : public RawEngine {
 
     butil::Status KvBatchPutIfAbsent(const std::vector<pb::common::KeyValue>& kvs, std::vector<std::string>& put_keys,
                                      bool is_atomic) override;
-
+    // key must be exist
     butil::Status KvCompareAndSet(const pb::common::KeyValue& kv, const std::string& value) override;
 
     butil::Status KvDelete(const std::string& key) override;
@@ -148,6 +148,7 @@ class RawRocksEngine : public RawEngine {
     butil::Status KvDeleteRange(const pb::common::Range& range) override;
 
    private:
+    butil::Status KvCompareAndSetInternal(const pb::common::KeyValue& kv, const std::string& value, bool is_key_exist);
     std::shared_ptr<ColumnFamily> column_family_;
     std::shared_ptr<rocksdb::TransactionDB> txn_db_;
   };

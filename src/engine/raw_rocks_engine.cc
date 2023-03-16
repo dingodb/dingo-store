@@ -28,6 +28,8 @@
 #include <utility>
 #include <vector>
 
+#include "butil/compiler_specific.h"
+#include "butil/macros.h"
 #include "butil/strings/stringprintf.h"
 #include "config/config_manager.h"
 #include "engine/engine.h"
@@ -48,9 +50,9 @@ namespace dingodb {
 
 class RocksIterator : public EngineIterator {
  public:
-  explicit RocksIterator(rocksdb::Iterator* iter, const std::string& begin_key, const std::string& end_key)
-      : iter_(iter), begin_key_(begin_key), end_key_(end_key) {
-    Start(begin_key);
+  explicit RocksIterator(rocksdb::Iterator* iter, const std::string& start_key, const std::string& end_key)
+      : iter_(iter), start_key_(start_key), end_key_(end_key) {
+    Start(start_key);
   }
   void Start(const std::string& key) {
     if (!key.empty()) {
@@ -93,7 +95,7 @@ class RocksIterator : public EngineIterator {
   rocksdb::Iterator* iter_;
   const std::string name_ = "RocksIterator";
   uint32_t id_ = static_cast<uint32_t>(EnumEngineIterator::kRocksIterator);
-  std::string begin_key_;
+  std::string start_key_;
   std::string end_key_;
 };
 
@@ -118,13 +120,13 @@ RawRocksEngine::~RawRocksEngine() { Close(); }
 
 // load rocksdb config from config file
 bool RawRocksEngine::Init(std::shared_ptr<Config> config) {
-  if (!config) {
+  if (BAIDU_UNLIKELY(!config)) {
     LOG(ERROR) << butil::StringPrintf("config empty not support!");
     return false;
   }
 
   std::string store_db_path_value = config->GetString(kDbPath);
-  if (store_db_path_value.empty()) {
+  if (BAIDU_UNLIKELY(store_db_path_value.empty())) {
     LOG(ERROR) << butil::StringPrintf("can not find : %s", kDbPath.c_str());
     return false;
   }
@@ -132,7 +134,7 @@ bool RawRocksEngine::Init(std::shared_ptr<Config> config) {
   DLOG(INFO) << butil::StringPrintf("rocksdb path : %s", store_db_path_value.c_str());
 
   std::vector<std::string> column_family = config->GetStringList(kColumnFamilies);
-  if (column_family.empty()) {
+  if (BAIDU_UNLIKELY(column_family.empty())) {
     LOG(ERROR) << butil::StringPrintf("%s : empty. not found any column family", kColumnFamilies.c_str());
     return false;
   }
@@ -145,7 +147,7 @@ bool RawRocksEngine::Init(std::shared_ptr<Config> config) {
 
   std::vector<rocksdb::ColumnFamilyHandle*> family_handles;
   bool ret = RocksdbInit(store_db_path_value, column_family, family_handles);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     DLOG(ERROR) << butil::StringPrintf("rocksdb::DB::Open : %s failed", store_db_path_value.c_str());
     return false;
   }
@@ -433,8 +435,7 @@ bool RawRocksEngine::RocksdbInit(const std::string& db_path, const std::vector<s
     return false;
   }
 
-  std::shared_ptr<rocksdb::TransactionDB> temp_txn_db(txn_db);
-  txn_db_ = temp_txn_db;
+  txn_db_.reset(txn_db);
 
   return true;
 }
@@ -531,7 +532,7 @@ butil::Status RawRocksEngine::Reader::KvGet(const std::string& key, std::string&
 
 butil::Status RawRocksEngine::Reader::KvGet(std::shared_ptr<dingodb::Snapshot> snapshot, const std::string& key,
                                             std::string& value) {
-  if (key.empty()) {
+  if (BAIDU_UNLIKELY(key.empty())) {
     LOG(ERROR) << butil::StringPrintf("key empty not support");
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
@@ -560,12 +561,12 @@ butil::Status RawRocksEngine::Reader::KvScan(const std::string& start_key, const
 
 butil::Status RawRocksEngine::Reader::KvScan(std::shared_ptr<dingodb::Snapshot> snapshot, const std::string& start_key,
                                              const std::string& end_key, std::vector<pb::common::KeyValue>& kvs) {
-  if (start_key.empty()) {
-    LOG(ERROR) << butil::StringPrintf("begin_key empty  not support");
+  if (BAIDU_UNLIKELY(start_key.empty())) {
+    LOG(ERROR) << butil::StringPrintf("start_key empty  not support");
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
 
-  if (end_key.empty()) {
+  if (BAIDU_UNLIKELY(end_key.empty())) {
     LOG(ERROR) << butil::StringPrintf("end_key empty  not support");
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
@@ -595,12 +596,12 @@ butil::Status RawRocksEngine::Reader::KvCount(const std::string& start_key, cons
 
 butil::Status RawRocksEngine::Reader::KvCount(std::shared_ptr<dingodb::Snapshot> snapshot, const std::string& start_key,
                                               const std::string& end_key, int64_t& count) {
-  if (start_key.empty()) {
+  if (BAIDU_UNLIKELY(start_key.empty())) {
     LOG(ERROR) << butil::StringPrintf("start_key empty  not support");
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
 
-  if (end_key.empty()) {
+  if (BAIDU_UNLIKELY(end_key.empty())) {
     LOG(ERROR) << butil::StringPrintf("end_key empty  not support");
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
@@ -619,7 +620,7 @@ butil::Status RawRocksEngine::Reader::KvCount(std::shared_ptr<dingodb::Snapshot>
 }
 
 butil::Status RawRocksEngine::Writer::KvPut(const pb::common::KeyValue& kv) {
-  if (kv.key().empty()) {
+  if (BAIDU_UNLIKELY(kv.key().empty())) {
     LOG(ERROR) << butil::StringPrintf("key empty  not support");
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
@@ -636,75 +637,42 @@ butil::Status RawRocksEngine::Writer::KvPut(const pb::common::KeyValue& kv) {
 }
 
 butil::Status RawRocksEngine::Writer::KvBatchPut(const std::vector<pb::common::KeyValue>& kvs) {
-  if (kvs.empty()) {
-    LOG(ERROR) << butil::StringPrintf("keys empty not support");
-    return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
-  }
-
-  for (const auto& kv : kvs) {
-    if (kv.key().empty()) {
-      LOG(ERROR) << butil::StringPrintf("key empty not support");
-      return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
-    }
-  }
-
-  rocksdb::WriteBatch batch;
-  for (const auto& kv : kvs) {
-    rocksdb::Status s = batch.Put(column_family_->GetHandle(), kv.key(), kv.value());
-    if (!s.ok()) {
-      LOG(ERROR) << butil::StringPrintf("rocksdb::WriteBatch::Put failed : %s", s.ToString().c_str());
-      return butil::Status(pb::error::EINTERNAL, "Internal error");
-    }
-  }
-
-  rocksdb::WriteOptions write_options;
-  rocksdb::Status s = txn_db_->Write(write_options, &batch);
-  if (!s.ok()) {
-    LOG(ERROR) << butil::StringPrintf("rocksdb::TransactionDB::Write failed : %s", s.ToString().c_str());
-    return butil::Status(pb::error::EINTERNAL, "Internal error");
-  }
-
-  return butil::Status();
+  return KvBatchPutAndDelete(kvs, {});
 }
 
 butil::Status RawRocksEngine::Writer::KvBatchPutAndDelete(const std::vector<pb::common::KeyValue>& kv_puts,
                                                           const std::vector<pb::common::KeyValue>& kv_deletes) {
-  if (kv_puts.empty() && kv_deletes.empty()) {
+  if (BAIDU_UNLIKELY(kv_puts.empty() && kv_deletes.empty())) {
     LOG(ERROR) << butil::StringPrintf("keys empty not support");
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
 
-  for (const auto& kv : kv_puts) {
-    if (kv.key().empty()) {
-      LOG(ERROR) << butil::StringPrintf("key empty not support");
-      return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
-    }
-  }
-
-  for (const auto& kv : kv_deletes) {
-    if (kv.key().empty()) {
-      LOG(ERROR) << butil::StringPrintf("key empty not support");
-      return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
-    }
-  }
-
   rocksdb::WriteBatch batch;
   for (const auto& kv : kv_puts) {
-    rocksdb::Status s = batch.Put(column_family_->GetHandle(), kv.key(), kv.value());
-    if (!s.ok()) {
-      LOG(ERROR) << butil::StringPrintf("rocksdb::WriteBatch::Put failed : %s", s.ToString().c_str());
-      return butil::Status(pb::error::EINTERNAL, "Internal error");
+    if (BAIDU_UNLIKELY(kv.key().empty())) {
+      LOG(ERROR) << butil::StringPrintf("key empty not support");
+      return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
+    } else {
+      rocksdb::Status s = batch.Put(column_family_->GetHandle(), kv.key(), kv.value());
+      if (BAIDU_UNLIKELY(!s.ok())) {
+        LOG(ERROR) << butil::StringPrintf("rocksdb::WriteBatch::Put failed : %s", s.ToString().c_str());
+        return butil::Status(pb::error::EINTERNAL, "Internal error");
+      }
     }
   }
 
   for (const auto& kv : kv_deletes) {
-    rocksdb::Status s = batch.Delete(column_family_->GetHandle(), kv.key());
-    if (!s.ok()) {
-      LOG(ERROR) << butil::StringPrintf("rocksdb::WriteBatch::Put failed : %s", s.ToString().c_str());
-      return butil::Status(pb::error::EINTERNAL, "Internal error");
+    if (BAIDU_UNLIKELY(kv.key().empty())) {
+      LOG(ERROR) << butil::StringPrintf("key empty not support");
+      return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
+    } else {
+      rocksdb::Status s = batch.Delete(column_family_->GetHandle(), kv.key());
+      if (BAIDU_UNLIKELY(!s.ok())) {
+        LOG(ERROR) << butil::StringPrintf("rocksdb::WriteBatch::Put failed : %s", s.ToString().c_str());
+        return butil::Status(pb::error::EINTERNAL, "Internal error");
+      }
     }
   }
-
   rocksdb::WriteOptions write_options;
   rocksdb::Status s = txn_db_->Write(write_options, &batch);
   if (!s.ok()) {
@@ -723,12 +691,12 @@ butil::Status RawRocksEngine::Writer::KvPutIfAbsent(const pb::common::KeyValue& 
   const std::string& value = kv.value();
 
   // compare and replace. support does not exist
-  return KvCompareAndSet(internal_kv, value);
+  return KvCompareAndSetInternal(internal_kv, value, false);
 }
 
 butil::Status RawRocksEngine::Writer::KvBatchPutIfAbsent(const std::vector<pb::common::KeyValue>& kvs,
                                                          std::vector<std::string>& put_keys, bool is_atomic) {
-  if (kvs.empty()) {
+  if (BAIDU_UNLIKELY(kvs.empty())) {
     LOG(ERROR) << butil::StringPrintf("empty keys not support");
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
@@ -795,57 +763,11 @@ butil::Status RawRocksEngine::Writer::KvBatchPutIfAbsent(const std::vector<pb::c
 }
 
 butil::Status RawRocksEngine::Writer::KvCompareAndSet(const pb::common::KeyValue& kv, const std::string& value) {
-  if (kv.key().empty()) {
-    LOG(ERROR) << butil::StringPrintf("key empty  not support");
-    return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
-  }
-
-  rocksdb::WriteOptions write_options;
-  std::unique_ptr<rocksdb::Transaction> txn(txn_db_->BeginTransaction(write_options));
-  if (!txn) {
-    LOG(ERROR) << butil::StringPrintf("rocksdb::TransactionDB::BeginTransaction failed");
-    return butil::Status(pb::error::EINTERNAL, "Internal error");
-  }
-
-  // other read will failed
-  std::string old_value;
-  rocksdb::ReadOptions read_options;
-  rocksdb::Status s = txn->GetForUpdate(read_options, column_family_->GetHandle(),
-                                        rocksdb::Slice(kv.key().data(), kv.key().size()), &old_value);
-  if (!s.ok()) {
-    if (!s.IsNotFound() || !kv.value().empty()) {
-      txn->Rollback();
-      LOG(ERROR) << butil::StringPrintf("rocksdb::TransactionDB::GetForUpdate failed : %s", s.ToString().c_str());
-      return butil::Status(pb::error::EINTERNAL, "Internal error");
-    }
-  }
-
-  if (kv.value() != old_value) {
-    txn->Rollback();
-    LOG(WARNING) << butil::StringPrintf("rocksdb::TransactionDB::GetForUpdate value is not equal");
-    return butil::Status(pb::error::EINTERNAL, "Internal error");
-  }
-
-  // write a key in this transaction
-  s = txn->Put(column_family_->GetHandle(), rocksdb::Slice(kv.key().data(), kv.key().size()),
-               rocksdb::Slice(value.data(), value.size()));
-  if (!s.ok()) {
-    txn->Rollback();
-    LOG(ERROR) << butil::StringPrintf("rocksdb::TransactionDB::Put failed : %s", s.ToString().c_str());
-    return butil::Status(pb::error::EINTERNAL, "Internal error");
-  }
-
-  s = txn->Commit();
-  if (!s.ok()) {
-    LOG(ERROR) << butil::StringPrintf("rocksdb::TransactionDB::Commit failed : %s", s.ToString().c_str());
-    return butil::Status(pb::error::EINTERNAL, "Internal error");
-  }
-
-  return butil::Status();
+  return KvCompareAndSetInternal(kv, value, true);
 }
 
 butil::Status RawRocksEngine::Writer::KvDelete(const std::string& key) {
-  if (key.empty()) {
+  if (BAIDU_UNLIKELY(key.empty())) {
     LOG(ERROR) << butil::StringPrintf("key empty  not support");
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
@@ -862,11 +784,11 @@ butil::Status RawRocksEngine::Writer::KvDelete(const std::string& key) {
 }
 
 butil::Status RawRocksEngine::Writer::KvDeleteRange(const pb::common::Range& range) {
-  if (range.start_key().empty()) {
-    LOG(ERROR) << butil::StringPrintf("begin_key empty  not support");
+  if (BAIDU_UNLIKELY(range.start_key().empty())) {
+    LOG(ERROR) << butil::StringPrintf("start_key empty  not support");
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
-  if (range.end_key().empty()) {
+  if (BAIDU_UNLIKELY(range.end_key().empty())) {
     LOG(ERROR) << butil::StringPrintf("end_key empty  not support");
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
@@ -889,6 +811,67 @@ butil::Status RawRocksEngine::Writer::KvDeleteRange(const pb::common::Range& ran
   s = txn_db_->Write(write_options, opt, &batch);
   if (!s.ok()) {
     LOG(ERROR) << butil::StringPrintf("rocksdb::TransactionDB::Write failed : %s", s.ToString().c_str());
+    return butil::Status(pb::error::EINTERNAL, "Internal error");
+  }
+
+  return butil::Status();
+}
+
+butil::Status RawRocksEngine::Writer::KvCompareAndSetInternal(const pb::common::KeyValue& kv, const std::string& value,
+                                                              bool is_key_exist) {
+  if (BAIDU_UNLIKELY(kv.key().empty())) {
+    LOG(ERROR) << butil::StringPrintf("key empty  not support");
+    return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
+  }
+
+  rocksdb::WriteOptions write_options;
+  std::unique_ptr<rocksdb::Transaction> txn(txn_db_->BeginTransaction(write_options));
+  if (!txn) {
+    LOG(ERROR) << butil::StringPrintf("rocksdb::TransactionDB::BeginTransaction failed");
+    return butil::Status(pb::error::EINTERNAL, "Internal error");
+  }
+
+  // other read will failed
+  std::string old_value;
+  rocksdb::ReadOptions read_options;
+  rocksdb::Status s = txn->GetForUpdate(read_options, column_family_->GetHandle(),
+                                        rocksdb::Slice(kv.key().data(), kv.key().size()), &old_value);
+  if (s.ok()) {
+    if (!is_key_exist) {
+      txn->Rollback();
+      LOG(ERROR) << butil::StringPrintf("rocksdb::TransactionDB::GetForUpdate key already eixst ");
+      return butil::Status(pb::error::EINTERNAL, "Internal error");
+    }
+  } else if (s.IsNotFound()) {
+    if (is_key_exist || (!is_key_exist && !kv.value().empty())) {
+      txn->Rollback();
+      LOG(ERROR) << butil::StringPrintf("rocksdb::TransactionDB::GetForUpdate not found key ");
+      return butil::Status(pb::error::EKEY_NOTFOUND, "Not found");
+    }
+  } else {  // error
+    txn->Rollback();
+    LOG(ERROR) << butil::StringPrintf("rocksdb::TransactionDB::GetForUpdate failed : %s", s.ToString().c_str());
+    return butil::Status(pb::error::EINTERNAL, "Internal error");
+  }
+
+  if (kv.value() != old_value) {
+    txn->Rollback();
+    LOG(WARNING) << butil::StringPrintf("rocksdb::TransactionDB::GetForUpdate value is not equal");
+    return butil::Status(pb::error::EINTERNAL, "Internal error");
+  }
+
+  // write a key in this transaction
+  s = txn->Put(column_family_->GetHandle(), rocksdb::Slice(kv.key().data(), kv.key().size()),
+               rocksdb::Slice(value.data(), value.size()));
+  if (!s.ok()) {
+    txn->Rollback();
+    LOG(ERROR) << butil::StringPrintf("rocksdb::TransactionDB::Put failed : %s", s.ToString().c_str());
+    return butil::Status(pb::error::EINTERNAL, "Internal error");
+  }
+
+  s = txn->Commit();
+  if (!s.ok()) {
+    LOG(ERROR) << butil::StringPrintf("rocksdb::TransactionDB::Commit failed : %s", s.ToString().c_str());
     return butil::Status(pb::error::EINTERNAL, "Internal error");
   }
 
