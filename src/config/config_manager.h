@@ -41,8 +41,11 @@ class ConfigManager {
  private:
   ConfigManager();
   ~ConfigManager();
+
+  ConfigManager(const ConfigManager &) = delete;
+  const ConfigManager &operator=(const ConfigManager &) = delete;
+
   friend struct DefaultSingletonTraits<ConfigManager>;
-  DISALLOW_COPY_AND_ASSIGN(ConfigManager);
 
   std::shared_mutex mutex_;
   std::map<std::string, std::shared_ptr<Config> > configs_;

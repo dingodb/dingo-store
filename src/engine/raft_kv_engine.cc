@@ -60,6 +60,8 @@ std::string RaftKvEngine::GetName() { return pb::common::Engine_Name(pb::common:
 
 pb::common::Engine RaftKvEngine::GetID() { return pb::common::ENG_RAFT_STORE; }
 
+std::shared_ptr<RawEngine> RaftKvEngine::GetRawEngine() { return engine_; }
+
 butil::Status RaftKvEngine::AddRegion(std::shared_ptr<Context> ctx, const std::shared_ptr<pb::common::Region> region) {
   LOG(INFO) << "RaftkvEngine add region, region_id " << region->id();
 
@@ -78,21 +80,25 @@ butil::Status RaftKvEngine::AddRegion(std::shared_ptr<Context> ctx, const std::s
   return butil::Status();
 }
 
-butil::Status RaftKvEngine::ChangeRegion([[maybe_unused]] std::shared_ptr<Context> ctx, uint64_t region_id,
+butil::Status RaftKvEngine::ChangeRegion(std::shared_ptr<Context> ctx, uint64_t region_id,
                                          std::vector<pb::common::Peer> peers) {
   raft_node_manager_->GetNode(region_id)->ChangePeers(peers, nullptr);
   return butil::Status();
 }
 
-butil::Status RaftKvEngine::DestroyRegion([[maybe_unused]] std::shared_ptr<Context> ctx, uint64_t region_id) {
+butil::Status RaftKvEngine::DestroyRegion(std::shared_ptr<Context> ctx, uint64_t region_id) {
   auto node = raft_node_manager_->GetNode(region_id);
   if (node == nullptr) {
     return butil::Status(pb::error::ERAFT_NOTNODE, "Raft not node");
   }
-  node->Shutdown(nullptr);
-  node->Join();
-
   raft_node_manager_->DeleteNode(region_id);
+
+  LOG(INFO) << "Node start shutdown " << region_id;
+  node->Shutdown(nullptr);
+  LOG(INFO) << "Node finish shutdown " << region_id;
+  node->Join();
+  LOG(INFO) << "Node join " << region_id;
+
   return butil::Status();
 }
 

@@ -10,6 +10,7 @@ DEFINE_string role 'store' 'server role'
 DEFINE_boolean clean_db 1 'clean db'
 DEFINE_boolean clean_raft 1 'clean raft'
 DEFINE_boolean clean_log 0 'clean log'
+DEFINE_boolean replace_conf 0 'replace conf'
 
 # parse the command-line
 FLAGS "$@" || exit 1
@@ -72,17 +73,19 @@ function deploy_store() {
   fi
 
   cp $srcpath/build/bin/dingodb_server $dstpath/bin/
-  cp $srcpath/conf/${role}.template.yaml $dstpath/conf/${role}.yaml
+  if [ "${FLAGS_replace_conf}" == "0" ]; then
+    cp $srcpath/conf/${role}.template.yaml $dstpath/conf/${role}.yaml
 
-  sed  -i 's,\$INSTANCE_ID\$,'"$instance_id"',g'          $dstpath/conf/${role}.yaml
-  sed  -i 's,\$SERVER_HOST\$,'"$SERVER_HOST"',g'          $dstpath/conf/${role}.yaml
-  sed  -i 's,\$SERVER_PORT\$,'"$server_port"',g'          $dstpath/conf/${role}.yaml
-  sed  -i 's,\$RAFT_HOST\$,'"$RAFT_HOST"',g'              $dstpath/conf/${role}.yaml
-  sed  -i 's,\$RAFT_PORT\$,'"$raft_port"',g'              $dstpath/conf/${role}.yaml
-  sed  -i 's,\$BASE_PATH\$,'"$dstpath"',g'                $dstpath/conf/${role}.yaml
+    sed  -i 's,\$INSTANCE_ID\$,'"$instance_id"',g'          $dstpath/conf/${role}.yaml
+    sed  -i 's,\$SERVER_HOST\$,'"$SERVER_HOST"',g'          $dstpath/conf/${role}.yaml
+    sed  -i 's,\$SERVER_PORT\$,'"$server_port"',g'          $dstpath/conf/${role}.yaml
+    sed  -i 's,\$RAFT_HOST\$,'"$RAFT_HOST"',g'              $dstpath/conf/${role}.yaml
+    sed  -i 's,\$RAFT_PORT\$,'"$raft_port"',g'              $dstpath/conf/${role}.yaml
+    sed  -i 's,\$BASE_PATH\$,'"$dstpath"',g'                $dstpath/conf/${role}.yaml
 
-  sed  -i 's|\$COORDINATOR_SERVICE_PEERS\$|'"$coor_srv_peers"'|g'    $dstpath/conf/${role}.yaml
-  sed  -i 's|\$COORDINATOR_RAFT_PEERS\$|'"$coor_raft_peers"'|g'  $dstpath/conf/${role}.yaml
+    sed  -i 's|\$COORDINATOR_SERVICE_PEERS\$|'"$coor_srv_peers"'|g'    $dstpath/conf/${role}.yaml
+    sed  -i 's|\$COORDINATOR_RAFT_PEERS\$|'"$coor_raft_peers"'|g'  $dstpath/conf/${role}.yaml
+  fi
 
   if [ "${FLAGS_clean_db}" == "0" ]; then
     rm -rf $dstpath/data/store/db/*

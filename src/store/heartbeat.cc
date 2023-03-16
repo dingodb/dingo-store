@@ -189,6 +189,10 @@ static std::vector<std::shared_ptr<pb::common::Region> > GetNewRegion(
     const google::protobuf::RepeatedPtrField<dingodb::pb::common::Region>& remote_regions) {
   std::vector<std::shared_ptr<pb::common::Region> > new_regions;
   for (const auto& remote_region : remote_regions) {
+    // Only state is new, create new region.
+    if (remote_region.state() != pb::common::REGION_NEW) {
+      continue;
+    }
     if (local_regions.find(remote_region.id()) == local_regions.end()) {
       new_regions.push_back(std::make_shared<pb::common::Region>(remote_region));
     }
@@ -203,6 +207,11 @@ static std::vector<std::shared_ptr<pb::common::Region> > GetChangedPeerRegion(
   std::vector<std::shared_ptr<pb::common::Region> > changed_peers;
   for (const auto& remote_region : remote_regions) {
     if (remote_region.id() == 0) {
+      continue;
+    }
+    if (remote_region.state() != pb::common::REGION_NORMAL && remote_region.state() != pb::common::REGION_EXPAND &&
+        remote_region.state() != pb::common::REGION_SHRINK && remote_region.state() != pb::common::REGION_DEGRADED &&
+        remote_region.state() != pb::common::REGION_DANGER) {
       continue;
     }
     auto it = local_regions.find(remote_region.id());

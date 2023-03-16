@@ -22,6 +22,7 @@
 
 #include "common/context.h"
 #include "config/config.h"
+#include "engine/raw_engine.h"
 #include "engine/snapshot.h"
 #include "engine/write_data.h"
 #include "proto/common.pb.h"
@@ -40,6 +41,8 @@ class Engine {
 
   virtual std::string GetName() = 0;
   virtual pb::common::Engine GetID() = 0;
+
+  virtual std::shared_ptr<RawEngine> GetRawEngine() { return nullptr; }
 
   virtual std::shared_ptr<Snapshot> GetSnapshot() { return nullptr; }
   virtual void ReleaseSnapshot(std::shared_ptr<Snapshot> snapshot) {}
@@ -60,10 +63,8 @@ class Engine {
 
   virtual std::shared_ptr<Reader> NewReader(const std::string& cf_name) = 0;
 
-  /**
-   * This is used by RaftKvEngine to Persist Meta
-   * This is a alternative method, will be replace by zihui new Interface.
-   */
+  //  This is used by RaftKvEngine to Persist Meta
+  //  This is a alternative method, will be replace by zihui new Interface.
   virtual butil::Status MetaPut(std::shared_ptr<Context> ctx, const pb::coordinator_internal::MetaIncrement& meta) {
     return butil::Status(pb::error::Errno::ENOT_SUPPORT, "Not support");
   }

@@ -26,15 +26,18 @@ namespace dingodb {
 
 class StoreControl {
  public:
-  StoreControl(){};
-  ~StoreControl(){};
+  StoreControl();
+  ~StoreControl();
+
+  StoreControl(const StoreControl &) = delete;
+  const StoreControl &operator=(const StoreControl &) = delete;
 
   butil::Status AddRegion(std::shared_ptr<Context> ctx, std::shared_ptr<pb::common::Region> region);
   butil::Status ChangeRegion(std::shared_ptr<Context> ctx, std::shared_ptr<pb::common::Region> region);
   butil::Status DeleteRegion(std::shared_ptr<Context> ctx, uint64_t region_id);
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(StoreControl);
+  bthread_mutex_t control_mutex_;
 };
 
 }  // namespace dingodb
