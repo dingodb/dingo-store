@@ -103,7 +103,7 @@ void SetupSignalHandler() {
 int main(int argc, char *argv[]) {
   google::ParseCommandLineFlags(&argc, &argv, true);
 
-  SetupSignalHandler();
+  // SetupSignalHandler();
 
   dingodb::pb::common::ClusterRole role = dingodb::pb::common::COORDINATOR;
 
@@ -234,6 +234,10 @@ int main(int argc, char *argv[]) {
     }
     if (!dingo_server->InitStoreMetaManager()) {
       LOG(ERROR) << "InitStoreMetaManager failed!";
+      return -1;
+    }
+    if (!dingo_server->InitStoreControl()) {
+      LOG(ERROR) << "InitStoreControl failed!";
       return -1;
     }
     if (!dingo_server->InitCrontabManager()) {

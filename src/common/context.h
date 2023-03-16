@@ -33,7 +33,6 @@ class Context {
         done_(nullptr),
         response_(nullptr),
         region_id_(0),
-        directly_delete_(false),
         delete_files_in_range_(false),
         flush_(false),
         role_(pb::common::ClusterRole::STORE),
@@ -43,7 +42,6 @@ class Context {
         done_(done),
         response_(nullptr),
         region_id_(0),
-        directly_delete_(false),
         delete_files_in_range_(false),
         flush_(false),
         role_(pb::common::ClusterRole::STORE),
@@ -53,7 +51,6 @@ class Context {
         done_(done),
         response_(response),
         region_id_(0),
-        directly_delete_(false),
         delete_files_in_range_(false),
         flush_(false),
         role_(pb::common::ClusterRole::STORE),
@@ -87,9 +84,6 @@ class Context {
   void SetCfName(const std::string& cf_name) { cf_name_ = cf_name; }
   const std::string& CfName() const { return cf_name_; }
 
-  bool DirectlyDelete() { return directly_delete_; }
-  void SetDirectlyDelete(bool directly_delete) { directly_delete_ = directly_delete; }
-
   bool DeleteFilesInRange() { return delete_files_in_range_; }
   void SetDeleteFilesInRange(bool delete_files_in_range) { delete_files_in_range_ = delete_files_in_range; }
 
@@ -122,8 +116,6 @@ class Context {
   uint64_t region_id_;
   // Column family name
   std::string cf_name_;
-  // Directly delete data, not through raft.
-  bool directly_delete_;
   // Rocksdb delete range in files
   bool delete_files_in_range_;
   // Flush data to persistence.

@@ -101,14 +101,32 @@ void StoreServiceImpl::DestroyRegion(google::protobuf::RpcController* controller
   }
 }
 
-butil::Status ValidateKvGetRequest(const dingodb::pb::store::KvGetRequest* request) {
+butil::Status ValidateRegion(uint64_t region_id) {
+  auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
+  auto region = store_meta_manager->GetRegion(region_id);
   // Check is exist region.
-  if (!Server::GetInstance()->GetStoreMetaManager()->IsExistRegion(request->region_id())) {
+  if (!region) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
   }
+  // if (region->state() == pb::common::REGION_NEW) {
+  //   return butil::Status(pb::error::EREGION_UNAVAILABLE, "Region is new, waiting later");
+  // }
+  // if (region->state() == pb::common::REGION_DELETE || region->state() == pb::common::REGION_DELETING ||
+  //     region->state() == pb::common::REGION_DELETED) {
+  //   return butil::Status(pb::error::EREGION_UNAVAILABLE, "Region is deleting");
+  // }
 
+  return butil::Status();
+}
+
+butil::Status ValidateKvGetRequest(const dingodb::pb::store::KvGetRequest* request) {
   if (request->key().empty()) {
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
+  }
+
+  auto status = ValidateRegion(request->region_id());
+  if (!status.ok()) {
+    return status;
   }
 
   return butil::Status();
@@ -153,15 +171,15 @@ void StoreServiceImpl::KvGet(google::protobuf::RpcController* controller,
 }
 
 butil::Status ValidateKvBatchGetRequest(const dingodb::pb::store::KvBatchGetRequest* request) {
-  // Check is exist region.
-  if (!Server::GetInstance()->GetStoreMetaManager()->IsExistRegion(request->region_id())) {
-    return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
-  }
-
   for (const auto& key : request->keys()) {
     if (key.empty()) {
       return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
     }
+  }
+
+  auto status = ValidateRegion(request->region_id());
+  if (!status.ok()) {
+    return status;
   }
 
   return butil::Status();
@@ -203,13 +221,13 @@ void StoreServiceImpl::KvBatchGet(google::protobuf::RpcController* controller,
 }
 
 butil::Status ValidateKvPutRequest(const dingodb::pb::store::KvPutRequest* request) {
-  // Check is exist region.
-  if (!Server::GetInstance()->GetStoreMetaManager()->IsExistRegion(request->region_id())) {
-    return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
-  }
-
   if (request->kv().key().empty()) {
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
+  }
+
+  auto status = ValidateRegion(request->region_id());
+  if (!status.ok()) {
+    return status;
   }
 
   return butil::Status();
@@ -249,15 +267,15 @@ void StoreServiceImpl::KvPut(google::protobuf::RpcController* controller,
 }
 
 butil::Status ValidateKvBatchPutRequest(const dingodb::pb::store::KvBatchPutRequest* request) {
-  // Check is exist region.
-  if (!Server::GetInstance()->GetStoreMetaManager()->IsExistRegion(request->region_id())) {
-    return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
-  }
-
   for (const auto& kv : request->kvs()) {
     if (kv.key().empty()) {
       return butil::Status(pb::error::EKEY_EMPTY, "key is empty");
     }
+  }
+
+  auto status = ValidateRegion(request->region_id());
+  if (!status.ok()) {
+    return status;
   }
 
   return butil::Status();
@@ -294,13 +312,13 @@ void StoreServiceImpl::KvBatchPut(google::protobuf::RpcController* controller,
 }
 
 butil::Status ValidateKvPutIfAbsentRequest(const dingodb::pb::store::KvPutIfAbsentRequest* request) {
-  // Check is exist region.
-  if (!Server::GetInstance()->GetStoreMetaManager()->IsExistRegion(request->region_id())) {
-    return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
-  }
-
   if (request->kv().key().empty()) {
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
+  }
+
+  auto status = ValidateRegion(request->region_id());
+  if (!status.ok()) {
+    return status;
   }
 
   return butil::Status();
@@ -339,15 +357,15 @@ void StoreServiceImpl::KvPutIfAbsent(google::protobuf::RpcController* controller
 }
 
 butil::Status ValidateKvBatchPutIfAbsentRequest(const dingodb::pb::store::KvBatchPutIfAbsentRequest* request) {
-  // Check is exist region.
-  if (!Server::GetInstance()->GetStoreMetaManager()->IsExistRegion(request->region_id())) {
-    return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
-  }
-
   for (const auto& kv : request->kvs()) {
     if (kv.key().empty()) {
       return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
     }
+  }
+
+  auto status = ValidateRegion(request->region_id());
+  if (!status.ok()) {
+    return status;
   }
 
   return butil::Status();

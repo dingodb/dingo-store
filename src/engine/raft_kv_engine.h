@@ -50,6 +50,8 @@ class RaftKvEngine : public Engine, public RaftControlAble {
   std::string GetName() override;
   pb::common::Engine GetID() override;
 
+  std::shared_ptr<RawEngine> GetRawEngine() override;
+
   butil::Status AddRegion(std::shared_ptr<Context> ctx, std::shared_ptr<pb::common::Region> region) override;
   butil::Status ChangeRegion(std::shared_ptr<Context> ctx, uint64_t region_id,
                              std::vector<pb::common::Peer> peers) override;

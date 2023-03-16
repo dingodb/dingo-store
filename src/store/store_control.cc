@@ -21,16 +21,24 @@
 
 namespace dingodb {
 
+StoreControl::StoreControl() { bthread_mutex_init(&control_mutex_, nullptr); };
+StoreControl::~StoreControl() { bthread_mutex_destroy(&control_mutex_); };
+
 butil::Status ValidateAddRegion(std::shared_ptr<StoreMetaManager> store_meta_manager,
                                 std::shared_ptr<pb::common::Region> region) {
   if (store_meta_manager->IsExistRegion(region->id())) {
     return butil::Status(pb::error::EREGION_ALREADY_EXIST, "Region already exist");
   }
 
+  if (region->state() != pb::common::REGION_NEW) {
+    return butil::Status(pb::error::EREGION_STATE, "Region state not new");
+  }
+
   return butil::Status();
 }
 
 butil::Status StoreControl::AddRegion(std::shared_ptr<Context> ctx, std::shared_ptr<pb::common::Region> region) {
+  BAIDU_SCOPED_LOCK(control_mutex_);
   auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
   LOG(INFO) << "Add region info: " << region->DebugString();
 
@@ -55,7 +63,30 @@ butil::Status StoreControl::AddRegion(std::shared_ptr<Context> ctx, std::shared_
   return butil::Status();
 }
 
+butil::Status ValidateChangeRegion(std::shared_ptr<StoreMetaManager> store_meta_manager,
+                                   std::shared_ptr<pb::common::Region> region) {
+  if (!store_meta_manager->IsExistRegion(region->id())) {
+    return butil::Status(pb::error::EREGION_NOT_FOUND, "Region not exist, cant't change.");
+  }
+
+  if (region->state() != pb::common::REGION_NORMAL && region->state() != pb::common::REGION_EXPAND &&
+      region->state() != pb::common::REGION_SHRINK && region->state() != pb::common::REGION_DEGRADED &&
+      region->state() != pb::common::REGION_DANGER) {
+    return butil::Status(pb::error::EREGION_STATE, "Region state not allow change.");
+  }
+
+  return butil::Status();
+}
+
 butil::Status StoreControl::ChangeRegion(std::shared_ptr<Context> ctx, std::shared_ptr<pb::common::Region> region) {
+  BAIDU_SCOPED_LOCK(control_mutex_);
+  auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
+  // Valiate region
+  auto status = ValidateChangeRegion(store_meta_manager, region);
+  if (!status.ok()) {
+    return status;
+  }
+
   auto filter_peers_by_role = [region](pb::common::PeerRole role) -> std::vector<pb::common::Peer> {
     std::vector<pb::common::Peer> peers;
     for (const auto& peer : region->peers()) {
@@ -73,25 +104,47 @@ butil::Status StoreControl::ChangeRegion(std::shared_ptr<Context> ctx, std::shar
   return engine->ChangeRegion(ctx, region->id(), filter_peers_by_role(pb::common::VOTER));
 }
 
+butil::Status ValidateDeleteRegion(std::shared_ptr<StoreMetaManager> store_meta_manager,
+                                   std::shared_ptr<pb::common::Region> region) {
+  if (region->state() == pb::common::REGION_DELETE || region->state() == pb::common::REGION_DELETING ||
+      region->state() == pb::common::REGION_DELETED) {
+    return butil::Status(pb::error::EREGION_STATE, "Region state not allow delete.");
+  }
+
+  return butil::Status();
+}
+
 butil::Status StoreControl::DeleteRegion(std::shared_ptr<Context> ctx, uint64_t region_id) {
+  BAIDU_SCOPED_LOCK(control_mutex_);
   auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
   auto region = store_meta_manager->GetRegion(region_id);
 
-  // Check region status
+  // Valiate region
+  auto status = ValidateDeleteRegion(store_meta_manager, region);
+  if (!status.ok()) {
+    return status;
+  }
+
+  // Update state
+  region->set_state(pb::common::REGION_DELETING);
+  store_meta_manager->UpdateRegion(region);
 
   // Shutdown raft node
   auto engine = std::dynamic_pointer_cast<RaftKvEngine>(Server::GetInstance()->GetEngine(pb::common::ENG_RAFT_STORE));
   if (engine == nullptr) {
     return butil::Status(pb::error::ESTORE_NOTEXIST_RAFTENGINE, "Not exist raft engine");
   }
-  engine->DestroyRegion(ctx, region_id);
 
   // Delete data
-  ctx->SetDirectlyDelete(true);
-  // engine->KvDeleteRange(ctx, region->range());
+  auto writer = engine->GetRawEngine()->NewWriter(Constant::kStoreDataCF);
+  writer->KvDeleteRange(region->range());
+
+  // Delete raft
+  engine->DestroyRegion(ctx, region_id);
 
   // Delete meta data
-  store_meta_manager->DeleteRegion(region_id);
+  region->set_state(pb::common::REGION_DELETED);
+  // store_meta_manager->DeleteRegion(region_id);
 
   // Free other resources
 
