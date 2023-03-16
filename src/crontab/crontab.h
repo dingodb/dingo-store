@@ -63,8 +63,8 @@ class Crontab {
 // Manage crontab use brpc::bthread_timer_add
 class CrontabManager {
  public:
-  CrontabManager() = default;
-  ~CrontabManager() = default;
+  CrontabManager();
+  ~CrontabManager();
 
   CrontabManager(const CrontabManager&) = delete;
   const CrontabManager& operator=(const CrontabManager&) = delete;
@@ -83,10 +83,12 @@ class CrontabManager {
   // Allocate crontab id by auto incremental.
   uint32_t AllocCrontabId();
 
+  void InnerPauseCrontab(uint32_t crontab_id);
+
   // Atomic auto incremental variable
   std::atomic<uint32_t> auinc_crontab_id_;
   // Protect crontabs_ concurrence access.
-  std::shared_mutex mutex_;
+  bthread_mutex_t mutex_;
   // Store all crontab, key(crontab_id) / value(Crontab)
   std::map<uint32_t, std::shared_ptr<Crontab> > crontabs_;
 };

@@ -108,13 +108,13 @@ butil::Status ValidateRegion(uint64_t region_id) {
   if (!region) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
   }
-  // if (region->state() == pb::common::REGION_NEW) {
-  //   return butil::Status(pb::error::EREGION_UNAVAILABLE, "Region is new, waiting later");
-  // }
-  // if (region->state() == pb::common::REGION_DELETE || region->state() == pb::common::REGION_DELETING ||
-  //     region->state() == pb::common::REGION_DELETED) {
-  //   return butil::Status(pb::error::EREGION_UNAVAILABLE, "Region is deleting");
-  // }
+  if (region->state() == pb::common::REGION_NEW) {
+    return butil::Status(pb::error::EREGION_UNAVAILABLE, "Region is new, waiting later");
+  }
+  if (region->state() == pb::common::REGION_DELETE || region->state() == pb::common::REGION_DELETING ||
+      region->state() == pb::common::REGION_DELETED) {
+    return butil::Status(pb::error::EREGION_UNAVAILABLE, "Region is deleting");
+  }
 
   return butil::Status();
 }

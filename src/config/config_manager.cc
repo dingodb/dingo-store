@@ -17,36 +17,37 @@
 #include <memory>
 
 #include "butil/memory/singleton.h"
+#include "butil/scoped_lock.h"
 #include "butil/strings/stringprintf.h"
 #include "glog/logging.h"
 #include "proto/common.pb.h"
 
 namespace dingodb {
 
-ConfigManager::ConfigManager() {}
-ConfigManager::~ConfigManager() {}
+ConfigManager::ConfigManager() { bthread_mutex_init(&mutex_, nullptr); }
+ConfigManager::~ConfigManager() { bthread_mutex_destroy(&mutex_); }
 
 ConfigManager *ConfigManager::GetInstance() { return Singleton<ConfigManager>::get(); }
 
 bool ConfigManager::IsExist(pb::common::ClusterRole role) {
-  std::shared_lock<std::shared_mutex> lock(mutex_);
+  BAIDU_SCOPED_LOCK(mutex_);
   auto name = pb::common::ClusterRole_Name(role);
   return configs_.find(name) != configs_.end();
 }
 
 void ConfigManager::Register(pb::common::ClusterRole role, std::shared_ptr<Config> config) {
+  BAIDU_SCOPED_LOCK(mutex_);
   auto name = pb::common::ClusterRole_Name(role);
-  if (IsExist(role)) {
+  if (configs_.find(name) != configs_.end()) {
     LOG(WARNING) << butil::StringPrintf("config %s already exist!", name.c_str());
     return;
   }
 
-  std::unique_lock<std::shared_mutex> lock(mutex_);
   configs_[name] = config;
 }
 
 std::shared_ptr<Config> ConfigManager::GetConfig(pb::common::ClusterRole role) {
-  std::shared_lock<std::shared_mutex> lock(mutex_);
+  BAIDU_SCOPED_LOCK(mutex_);
   auto name = pb::common::ClusterRole_Name(role);
   auto it = configs_.find(name);
   if (it == configs_.end()) {

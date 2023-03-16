@@ -18,17 +18,17 @@
 
 namespace dingodb {
 
-RaftNodeManager::RaftNodeManager() = default;
+RaftNodeManager::RaftNodeManager() { bthread_mutex_init(&mutex_, nullptr); }
 
-RaftNodeManager::~RaftNodeManager() = default;
+RaftNodeManager::~RaftNodeManager() { bthread_mutex_destroy(&mutex_); }
 
 bool RaftNodeManager::IsExist(uint64_t node_id) {
-  std::shared_lock<std::shared_mutex> lock(mutex_);
+  BAIDU_SCOPED_LOCK(mutex_);
   return nodes_.find(node_id) != nodes_.end();
 }
 
 std::shared_ptr<RaftNode> RaftNodeManager::GetNode(uint64_t node_id) {
-  std::shared_lock<std::shared_mutex> lock(mutex_);
+  BAIDU_SCOPED_LOCK(mutex_);
   auto it = nodes_.find(node_id);
   if (it == nodes_.end()) {
     LOG(WARNING) << butil::StringPrintf("node %lu not exist!", node_id);
@@ -39,17 +39,17 @@ std::shared_ptr<RaftNode> RaftNodeManager::GetNode(uint64_t node_id) {
 }
 
 void RaftNodeManager::AddNode(uint64_t node_id, std::shared_ptr<RaftNode> node) {
-  if (IsExist(node_id)) {
+  BAIDU_SCOPED_LOCK(mutex_);
+  if (nodes_.find(node_id) != nodes_.end()) {
     LOG(WARNING) << butil::StringPrintf("node %lu already exist!", node_id);
     return;
   }
 
-  std::unique_lock<std::shared_mutex> lock(mutex_);
   nodes_.insert(std::make_pair(node_id, node));
 }
 
 void RaftNodeManager::DeleteNode(uint64_t node_id) {
-  std::unique_lock<std::shared_mutex> lock(mutex_);
+  BAIDU_SCOPED_LOCK(mutex_);
   nodes_.erase(node_id);
 }
 

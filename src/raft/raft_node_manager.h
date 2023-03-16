@@ -37,7 +37,8 @@ class RaftNodeManager {
   const RaftNodeManager &operator=(const RaftNodeManager &) = delete;
 
  private:
-  std::shared_mutex mutex_;
+  bthread_mutex_t mutex_;
+
   std::map<uint64_t, std::shared_ptr<RaftNode> > nodes_;
 };
 

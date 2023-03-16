@@ -33,8 +33,8 @@ namespace dingodb {
 // Manage store server store data
 class StoreServerMeta {
  public:
-  StoreServerMeta() = default;
-  ~StoreServerMeta() = default;
+  StoreServerMeta();
+  ~StoreServerMeta();
 
   StoreServerMeta(const StoreServerMeta&) = delete;
   const StoreServerMeta& operator=(const StoreServerMeta&) = delete;
@@ -54,15 +54,15 @@ class StoreServerMeta {
 
  private:
   uint64_t epoch_;
-  std::shared_mutex mutex_;
+  bthread_mutex_t mutex_;
   std::map<uint64_t, std::shared_ptr<pb::common::Store>> stores_;
 };
 
 // Manage store server region meta data
 class StoreRegionMeta : public TransformKvAble {
  public:
-  StoreRegionMeta() : TransformKvAble(Constant::kStoreRegionMetaPrefix){};
-  ~StoreRegionMeta() override = default;
+  StoreRegionMeta();
+  ~StoreRegionMeta() override;
 
   StoreRegionMeta(const StoreRegionMeta&) = delete;
   const StoreRegionMeta& operator=(const StoreRegionMeta&) = delete;
@@ -95,7 +95,7 @@ class StoreRegionMeta : public TransformKvAble {
   // Record which region changed.
   std::vector<uint64_t> changed_regions_;
   // Protect regions_ concurrent access.
-  std::shared_mutex mutex_;
+  bthread_mutex_t mutex_;
   // Store all region meta data in this server.
   std::map<uint64_t, std::shared_ptr<pb::common::Region>> regions_;
 };
@@ -105,7 +105,7 @@ class StoreRegionMeta : public TransformKvAble {
 class StoreMetaManager {
  public:
   StoreMetaManager(std::shared_ptr<MetaReader> meta_reader, std::shared_ptr<MetaWriter> meta_writer);
-  ~StoreMetaManager() = default;
+  ~StoreMetaManager();
 
   StoreMetaManager(const StoreMetaManager&) = delete;
   void operator=(const StoreMetaManager&) = delete;

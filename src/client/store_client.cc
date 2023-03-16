@@ -21,6 +21,7 @@
 #include "brpc/controller.h"
 #include "bthread/bthread.h"
 #include "gflags/gflags.h"
+#include "proto/meta.pb.h"
 #include "proto/store.pb.h"
 
 DEFINE_bool(log_each_request, true, "Print log for each request");
@@ -29,10 +30,11 @@ DEFINE_int32(thread_num, 1, "Number of threads sending requests");
 DEFINE_int32(req_num, 1, "Number of requests");
 DEFINE_int32(round_num, 1, "Round of requests");
 DEFINE_int32(timeout_ms, 500, "Timeout for each request");
-DEFINE_string(store_addr, "127.0.0.1:20001", "store server addr");
+DEFINE_string(addr, "127.0.0.1:10001", "server addr");
 DEFINE_string(method, "KvGet", "Request method");
 DEFINE_string(key, "hello", "Request key");
 DEFINE_int32(region_id, 111111, "region id");
+DEFINE_int32(table_id, 0, "table id");
 
 bvar::LatencyRecorder g_latency_recorder("dingo-store");
 
@@ -59,7 +61,7 @@ std::vector<std::string> genKeys(int nums) {
   return vec;
 }
 
-int64_t sendKvGet(dingodb::pb::store::StoreService_Stub& stub, uint64_t region_id, const std::string& key,
+int64_t SendKvGet(dingodb::pb::store::StoreService_Stub& stub, uint64_t region_id, const std::string& key,
                   std::string& value) {
   dingodb::pb::store::KvGetRequest request;
   dingodb::pb::store::KvGetResponse response;
@@ -83,7 +85,7 @@ int64_t sendKvGet(dingodb::pb::store::StoreService_Stub& stub, uint64_t region_i
   return cntl.latency_us();
 }
 
-void sendKvBatchGet(dingodb::pb::store::StoreService_Stub& stub) {
+void SendKvBatchGet(dingodb::pb::store::StoreService_Stub& stub) {
   dingodb::pb::store::KvBatchGetRequest request;
   dingodb::pb::store::KvBatchGetResponse response;
 
@@ -107,7 +109,7 @@ void sendKvBatchGet(dingodb::pb::store::StoreService_Stub& stub) {
   }
 }
 
-int64_t sendKvPut(dingodb::pb::store::StoreService_Stub& stub, uint64_t region_id, const std::string& key,
+int64_t SendKvPut(dingodb::pb::store::StoreService_Stub& stub, uint64_t region_id, const std::string& key,
                   const std::string& value) {
   dingodb::pb::store::KvPutRequest request;
   dingodb::pb::store::KvPutResponse response;
@@ -149,7 +151,7 @@ void TestBatchPutGet(dingodb::pb::store::StoreService_Stub& stub, uint64_t regio
 
   std::vector<int64_t> latencys;
   for (auto& it : dataset) {
-    latencys.push_back(sendKvPut(stub, region_id, it.first, it.second));
+    latencys.push_back(SendKvPut(stub, region_id, it.first, it.second));
   }
 
   int sum = std::accumulate(latencys.begin(), latencys.end(), 0);
@@ -158,7 +160,7 @@ void TestBatchPutGet(dingodb::pb::store::StoreService_Stub& stub, uint64_t regio
   latencys.clear();
   for (auto& it : dataset) {
     std::string value;
-    latencys.push_back(sendKvGet(stub, region_id, it.first, value));
+    latencys.push_back(SendKvGet(stub, region_id, it.first, value));
     if (value != it.second) {
       LOG(INFO) << "Not match...";
     }
@@ -168,7 +170,7 @@ void TestBatchPutGet(dingodb::pb::store::StoreService_Stub& stub, uint64_t regio
   LOG(INFO) << "Get average latency: " << sum / latencys.size() << " us";
 }
 
-void sendKvBatchPut(dingodb::pb::store::StoreService_Stub& stub) {
+void SendKvBatchPut(dingodb::pb::store::StoreService_Stub& stub) {
   dingodb::pb::store::KvBatchPutRequest request;
   dingodb::pb::store::KvBatchPutResponse response;
 
@@ -194,7 +196,7 @@ void sendKvBatchPut(dingodb::pb::store::StoreService_Stub& stub) {
   }
 }
 
-void sendKvPutIfAbsent(dingodb::pb::store::StoreService_Stub& stub) {
+void SendKvPutIfAbsent(dingodb::pb::store::StoreService_Stub& stub) {
   dingodb::pb::store::KvPutIfAbsentRequest request;
   dingodb::pb::store::KvPutIfAbsentResponse response;
 
@@ -217,7 +219,7 @@ void sendKvPutIfAbsent(dingodb::pb::store::StoreService_Stub& stub) {
   }
 }
 
-void sendKvBatchPutIfAbsent(dingodb::pb::store::StoreService_Stub& stub) {
+void SendKvBatchPutIfAbsent(dingodb::pb::store::StoreService_Stub& stub) {
   dingodb::pb::store::KvBatchPutIfAbsentRequest request;
   dingodb::pb::store::KvBatchPutIfAbsentResponse response;
 
@@ -243,7 +245,7 @@ void sendKvBatchPutIfAbsent(dingodb::pb::store::StoreService_Stub& stub) {
   }
 }
 
-void sendAddRegion(dingodb::pb::store::StoreService_Stub& stub) {
+void SendAddRegion(dingodb::pb::store::StoreService_Stub& stub) {
   dingodb::pb::store::AddRegionRequest request;
   dingodb::pb::store::AddRegionResponse response;
 
@@ -289,7 +291,7 @@ void sendAddRegion(dingodb::pb::store::StoreService_Stub& stub) {
   }
 }
 
-void sendChangeRegion(dingodb::pb::store::StoreService_Stub& stub) {
+void SendChangeRegion(dingodb::pb::store::StoreService_Stub& stub) {
   dingodb::pb::store::ChangeRegionRequest request;
   dingodb::pb::store::ChangeRegionResponse response;
 
@@ -333,7 +335,7 @@ void sendChangeRegion(dingodb::pb::store::StoreService_Stub& stub) {
   }
 }
 
-void sendDestroyRegion(dingodb::pb::store::StoreService_Stub& stub) {
+void SendDestroyRegion(dingodb::pb::store::StoreService_Stub& stub) {
   dingodb::pb::store::DestroyRegionRequest request;
   dingodb::pb::store::DestroyRegionResponse response;
 
@@ -353,10 +355,90 @@ void sendDestroyRegion(dingodb::pb::store::StoreService_Stub& stub) {
   }
 }
 
+void SendCreateTable(dingodb::pb::meta::MetaService_Stub& stub) {
+  dingodb::pb::meta::CreateTableRequest request;
+  dingodb::pb::meta::CreateTableResponse response;
+
+  auto* schema_id = request.mutable_schema_id();
+  schema_id->set_entity_type(dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
+  schema_id->set_entity_id(dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+  schema_id->set_parent_entity_id(dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
+
+  // string name = 1;
+  auto table_definition = request.mutable_table_definition();
+  table_definition->set_name("zihui_table_01");
+  // repeated ColumnDefinition columns = 2;
+  for (int i = 0; i < 3; i++) {
+    auto column = table_definition->add_columns();
+    std::string column_name("column_");
+    column_name.append(std::to_string(i));
+    column->set_name(column_name);
+    column->set_sql_type(::dingodb::pb::meta::SqlType::SQL_TYPE_INTEGER);
+    column->set_element_type(::dingodb::pb::meta::ElementType::ELEM_TYPE_BYTES);
+    column->set_precision(100);
+    column->set_nullable(false);
+    column->set_indexofkey(7);
+    column->set_has_default_val(false);
+    column->set_default_val("0");
+  }
+
+  table_definition->set_version(1);
+  table_definition->set_ttl(0);
+  table_definition->set_engine(dingodb::pb::common::Engine::ENG_RAFT_STORE);
+  // map<string, string> properties = 8;
+  auto prop = table_definition->mutable_properties();
+  (*prop)["user"] = "zihuideng";
+
+  // partition
+  auto partition_rule = table_definition->mutable_table_partition();
+  auto part_column = partition_rule->add_columns();
+  part_column->assign("column_0");
+  auto range_partition = partition_rule->mutable_range_partition();
+
+  for (int i = 0; i < 1; i++) {
+    auto* part_range = range_partition->add_ranges();
+    auto* part_range_start = part_range->mutable_start_key();
+    part_range_start->assign(std::to_string(i * 100));
+    auto* part_range_end = part_range->mutable_start_key();
+    part_range_end->assign(std::to_string((i + 1) * 100));
+  }
+
+  brpc::Controller cntl;
+  stub.CreateTable(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+  }
+
+  if (FLAGS_log_each_request) {
+    LOG(INFO) << " request=" << request.ShortDebugString() << " response=" << response.ShortDebugString()
+              << " latency=" << cntl.latency_us() << "us";
+  }
+}
+
+void SendDropTable(dingodb::pb::meta::MetaService_Stub& stub) {
+  dingodb::pb::meta::DropTableRequest request;
+  dingodb::pb::meta::DropTableResponse response;
+
+  auto* table_id = request.mutable_table_id();
+  table_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
+  table_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+  table_id->set_entity_id(FLAGS_table_id);
+
+  brpc::Controller cntl;
+  stub.DropTable(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+  }
+
+  if (FLAGS_log_each_request) {
+    LOG(INFO) << " request=" << request.ShortDebugString() << " response=" << response.ShortDebugString()
+              << " latency=" << cntl.latency_us() << "us";
+  }
+}
+
 void* sender(void* arg) {
   for (int i = 0; i < FLAGS_round_num; ++i) {
-    braft::PeerId leader(FLAGS_store_addr);
-
+    braft::PeerId leader(FLAGS_addr);
     // rpc
     brpc::Channel channel;
     if (channel.Init(leader.addr, NULL) != 0) {
@@ -365,37 +447,42 @@ void* sender(void* arg) {
       continue;
     }
     dingodb::pb::store::StoreService_Stub stub(&channel);
+    dingodb::pb::meta::MetaService_Stub meta_stub(&channel);
 
     if (FLAGS_method == "AddRegion") {
-      sendAddRegion(stub);
+      SendAddRegion(stub);
 
     } else if (FLAGS_method == "ChangeRegion") {
-      sendChangeRegion(stub);
+      SendChangeRegion(stub);
 
     } else if (FLAGS_method == "DestroyRegion") {
-      sendDestroyRegion(stub);
+      SendDestroyRegion(stub);
 
     } else if (FLAGS_method == "KvPut") {
-      sendKvPut(stub, FLAGS_region_id, FLAGS_key, genRandomString(64));
+      SendKvPut(stub, FLAGS_region_id, FLAGS_key, genRandomString(64));
 
     } else if (FLAGS_method == "KvBatchPut") {
-      sendKvBatchPut(stub);
+      SendKvBatchPut(stub);
 
     } else if (FLAGS_method == "KvPutIfAbsent") {
-      sendKvPutIfAbsent(stub);
+      SendKvPutIfAbsent(stub);
 
     } else if (FLAGS_method == "KvBatchPutIfAbsent") {
-      sendKvBatchPutIfAbsent(stub);
+      SendKvBatchPutIfAbsent(stub);
 
     } else if (FLAGS_method == "KvGet") {
       std::string value;
-      sendKvGet(stub, FLAGS_region_id, FLAGS_key, value);
+      SendKvGet(stub, FLAGS_region_id, FLAGS_key, value);
 
     } else if (FLAGS_method == "KvBatchGet") {
-      sendKvBatchGet(stub);
+      SendKvBatchGet(stub);
 
     } else if (FLAGS_method == "TestBatchPutGet") {
       TestBatchPutGet(stub, FLAGS_region_id, FLAGS_req_num);
+    } else if (FLAGS_method == "CreateTable") {
+      SendCreateTable(meta_stub);
+    } else if (FLAGS_method == "DropTable") {
+      SendDropTable(meta_stub);
     }
 
     bthread_usleep(FLAGS_timeout_ms * 1000L);

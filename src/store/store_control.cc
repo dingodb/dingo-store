@@ -60,6 +60,11 @@ butil::Status StoreControl::AddRegion(std::shared_ptr<Context> ctx, std::shared_
 
   // Add region to store region meta manager
   store_meta_manager->AddRegion(region);
+
+  // Update region state
+  region->set_state(pb::common::REGION_NORMAL);
+  store_meta_manager->UpdateRegion(region);
+
   return butil::Status();
 }
 
