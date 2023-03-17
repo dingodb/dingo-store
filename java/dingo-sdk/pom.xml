@@ -116,7 +116,7 @@
                     <execution>
                         <id>generate-javadoc</id>
                         <goals>
-                            <goal>javadoc</goal>
+                            <goal>jar</goal>
                         </goals>
                     </execution>
                 </executions>
