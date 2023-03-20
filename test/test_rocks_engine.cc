@@ -99,17 +99,20 @@ class RawRocksEngineTest {
   dingodb::RawRocksEngine raw_raw_rocks_engine_;
 };
 
-static RawRocksEngineTest rocks_engine_test;
+static RawRocksEngineTest *rocks_engine_test = nullptr;
 
-TEST(RawRocksEngineTest, BeforeInit) { rocks_engine_test.MySetUp(); }
+TEST(RawRocksEngineTest, BeforeInit) {
+  rocks_engine_test = new RawRocksEngineTest();
+  rocks_engine_test->MySetUp();
+}
 
 TEST(RawRocksEngineTest, MyInit) {
-  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test.GetRawRocksEngine();
+  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test->GetRawRocksEngine();
 
   bool ret = raw_rocks_engine.Init({});
   EXPECT_FALSE(ret);
 
-  std::shared_ptr<dingodb::Config> config = rocks_engine_test.GetConfig();
+  std::shared_ptr<dingodb::Config> config = rocks_engine_test->GetConfig();
 #if 0
   std::string store_db_path_value = config->GetString("store.dbPath");
   if (!store_db_path_value.empty()) {
@@ -132,21 +135,21 @@ TEST(RawRocksEngineTest, MyInit) {
 }
 
 TEST(RawRocksEngineTest, GetName) {
-  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test.GetRawRocksEngine();
+  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test->GetRawRocksEngine();
 
   std::string name = raw_rocks_engine.GetName();
   EXPECT_EQ(name, "RAW_ENG_ROCKSDB");
 }
 
 TEST(RawRocksEngineTest, GetID) {
-  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test.GetRawRocksEngine();
+  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test->GetRawRocksEngine();
 
   dingodb::pb::common::RawEngine id = raw_rocks_engine.GetID();
   EXPECT_EQ(id, dingodb::pb::common::RawEngine::RAW_ENG_ROCKSDB);
 }
 
 TEST(RawRocksEngineTest, GetSnapshot$ReleaseSnapshot) {
-  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test.GetRawRocksEngine();
+  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test->GetRawRocksEngine();
 
   std::shared_ptr<dingodb::Snapshot> snapshot = raw_rocks_engine.GetSnapshot();
   EXPECT_NE(snapshot.get(), nullptr);
@@ -158,7 +161,7 @@ TEST(RawRocksEngineTest, GetSnapshot$ReleaseSnapshot) {
 }
 
 TEST(RawRocksEngineTest, Flush) {
-  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test.GetRawRocksEngine();
+  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test->GetRawRocksEngine();
 
   const std::string &cf_name = kDefautCf;
 
@@ -167,7 +170,7 @@ TEST(RawRocksEngineTest, Flush) {
 }
 
 TEST(RawRocksEngineTest, NewReader) {
-  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test.GetRawRocksEngine();
+  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test->GetRawRocksEngine();
 
   // cf empty
   {
@@ -198,7 +201,7 @@ TEST(RawRocksEngineTest, NewReader) {
 }
 
 TEST(RawRocksEngineTest, NewWriter) {
-  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test.GetRawRocksEngine();
+  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test->GetRawRocksEngine();
 
   // cf empty
   {
@@ -228,7 +231,7 @@ TEST(RawRocksEngineTest, NewWriter) {
 }
 
 TEST(RawRocksEngineTest, KvPut) {
-  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test.GetRawRocksEngine();
+  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test->GetRawRocksEngine();
   const std::string &cf_name = kDefautCf;
   std::shared_ptr<dingodb::RawEngine::Writer> writer = raw_rocks_engine.NewWriter(cf_name);
 
@@ -278,7 +281,7 @@ TEST(RawRocksEngineTest, KvPut) {
 }
 
 TEST(RawRocksEngineTest, KvBatchPut) {
-  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test.GetRawRocksEngine();
+  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test->GetRawRocksEngine();
   const std::string &cf_name = kDefautCf;
   std::shared_ptr<dingodb::RawEngine::Writer> writer = raw_rocks_engine.NewWriter(cf_name);
 
@@ -361,7 +364,7 @@ TEST(RawRocksEngineTest, KvBatchPut) {
 }
 
 TEST(RawRocksEngineTest, KvBatchPutAndDelete) {
-  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test.GetRawRocksEngine();
+  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test->GetRawRocksEngine();
   const std::string &cf_name = kDefautCf;
   std::shared_ptr<dingodb::RawEngine::Writer> writer = raw_rocks_engine.NewWriter(cf_name);
 
@@ -586,7 +589,7 @@ TEST(RawRocksEngineTest, KvBatchPutAndDelete) {
 }
 
 TEST(RawRocksEngineTest, KvGet) {
-  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test.GetRawRocksEngine();
+  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test->GetRawRocksEngine();
 
   const std::string &cf_name = kDefautCf;
   std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
@@ -610,7 +613,7 @@ TEST(RawRocksEngineTest, KvGet) {
 }
 
 TEST(RawRocksEngineTest, KvCompareAndSet) {
-  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test.GetRawRocksEngine();
+  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test->GetRawRocksEngine();
   const std::string &cf_name = kDefautCf;
   std::shared_ptr<dingodb::RawEngine::Writer> writer = raw_rocks_engine.NewWriter(cf_name);
 
@@ -702,7 +705,7 @@ TEST(RawRocksEngineTest, KvCompareAndSet) {
 
 #if 0
 TEST(RawRocksEngineTest, KvBatchGet) {
-  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test.GetRawRocksEngine();
+  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test->GetRawRocksEngine();
 
   const std::string &cf_name = kDefautCf;
   std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
@@ -746,7 +749,7 @@ TEST(RawRocksEngineTest, KvBatchGet) {
 #endif
 
 TEST(RawRocksEngineTest, KvPutIfAbsent) {
-  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test.GetRawRocksEngine();
+  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test->GetRawRocksEngine();
   const std::string &cf_name = kDefautCf;
   std::shared_ptr<dingodb::RawEngine::Writer> writer = raw_rocks_engine.NewWriter(cf_name);
 
@@ -838,7 +841,7 @@ TEST(RawRocksEngineTest, KvPutIfAbsent) {
 }
 
 TEST(RawRocksEngineTest, KvBatchPutIfAbsentAtomic) {
-  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test.GetRawRocksEngine();
+  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test->GetRawRocksEngine();
   const std::string &cf_name = kDefautCf;
   std::shared_ptr<dingodb::RawEngine::Writer> writer = raw_rocks_engine.NewWriter(cf_name);
 
@@ -949,7 +952,7 @@ TEST(RawRocksEngineTest, KvBatchPutIfAbsentAtomic) {
 }
 
 TEST(RawRocksEngineTest, KvBatchPutIfAbsentNonAtomic) {
-  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test.GetRawRocksEngine();
+  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test->GetRawRocksEngine();
   const std::string &cf_name = kDefautCf;
   std::shared_ptr<dingodb::RawEngine::Writer> writer = raw_rocks_engine.NewWriter(cf_name);
 
@@ -1061,7 +1064,7 @@ TEST(RawRocksEngineTest, KvBatchPutIfAbsentNonAtomic) {
 }
 
 TEST(RawRocksEngineTest, KvScan) {
-  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test.GetRawRocksEngine();
+  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test->GetRawRocksEngine();
   const std::string &cf_name = kDefautCf;
   std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
 
@@ -1119,7 +1122,7 @@ TEST(RawRocksEngineTest, KvScan) {
 }
 
 TEST(RawRocksEngineTest, KvCount) {
-  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test.GetRawRocksEngine();
+  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test->GetRawRocksEngine();
   const std::string &cf_name = kDefautCf;
   std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
 
@@ -1164,7 +1167,7 @@ TEST(RawRocksEngineTest, KvCount) {
 }
 
 // TEST(RawRocksEngineTest, CreateReader) {
-//   dingodb::RocksEngine &raw_rocks_engine = rocks_engine_test.GetRawRocksEngine();
+//   dingodb::RocksEngine &raw_rocks_engine = rocks_engine_test->GetRawRocksEngine();
 
 //   // Context empty
 //   {
@@ -1201,7 +1204,7 @@ TEST(RawRocksEngineTest, KvCount) {
 // }
 
 // TEST(RawRocksEngineTest, EngineReader) {
-//   dingodb::RocksEngine &raw_rocks_engine = rocks_engine_test.GetRawRocksEngine();
+//   dingodb::RocksEngine &raw_rocks_engine = rocks_engine_test->GetRawRocksEngine();
 //   const std::string &cf_name = kDefautCf;
 //   std::shared_ptr<dingodb::Context> ctx = std::make_shared<dingodb::Context>();
 //   ctx->set_cf_name(cf_name);
@@ -1241,7 +1244,7 @@ TEST(RawRocksEngineTest, KvCount) {
 // }
 
 // TEST(RawRocksEngineTest, EngineIterator) {
-//   dingodb::RocksEngine &raw_rocks_engine = rocks_engine_test.GetRawRocksEngine();
+//   dingodb::RocksEngine &raw_rocks_engine = rocks_engine_test->GetRawRocksEngine();
 //   const std::string &cf_name = kDefautCf;
 //   std::shared_ptr<dingodb::Context> ctx = std::make_shared<dingodb::Context>();
 //   ctx->set_cf_name(cf_name);
@@ -1384,7 +1387,7 @@ TEST(RawRocksEngineTest, KvCount) {
 // }
 
 TEST(RawRocksEngineTest, KvDelete) {
-  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test.GetRawRocksEngine();
+  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test->GetRawRocksEngine();
   const std::string &cf_name = kDefautCf;
   std::shared_ptr<dingodb::RawEngine::Writer> writer = raw_rocks_engine.NewWriter(cf_name);
 
@@ -1563,7 +1566,7 @@ TEST(RawRocksEngineTest, KvDelete) {
 }
 
 TEST(RawRocksEngineTest, KvDeleteRange) {
-  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test.GetRawRocksEngine();
+  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test->GetRawRocksEngine();
   const std::string &cf_name = kDefautCf;
   std::shared_ptr<dingodb::RawEngine::Writer> writer = raw_rocks_engine.NewWriter(cf_name);
 
@@ -1696,4 +1699,10 @@ TEST(RawRocksEngineTest, KvDeleteRange) {
       std::cout << kv.key() << ":" << kv.value() << std::endl;
     }
   }
+}
+
+
+TEST(RawRocksEngineTest, Destroy) {
+  delete rocks_engine_test;
+  rocks_engine_test = nullptr;
 }
