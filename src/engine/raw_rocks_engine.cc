@@ -206,8 +206,6 @@ void RawRocksEngine::Close() {
     txn_db_ = nullptr;
   }
 
-  rocksdb::DestroyDB(kDbPath, db_options_);
-
   DLOG(INFO) << butil::StringPrintf("rocksdb::DB::Close");
 }
 
