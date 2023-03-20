@@ -31,6 +31,10 @@ else()
     message(FATAL_ERROR "The compiler ${CMAKE_CXX_COMPILER} has no C++17 support. Please use a different C++ compiler.")
 endif()
 
+if(THIRD_PARTY_BUILD_TYPE MATCHES "Debug")
+    message(FATAL_ERROR "The THIRD_PARTY_BUILD_TYPE ${THIRD_PARTY_BUILD_TYPE} is not supported. Please change it to Release / RelWithDebInfo / MinSizeRel.")
+endif()
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
