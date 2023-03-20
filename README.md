@@ -1,4 +1,4 @@
-[![CMake](https://github.com/dingodb/dingo-poc/actions/workflows/cmake.yml/badge.svg)](https://github.com/dingodb/dingo-poc/actions/workflows/cmake.yml)
+[![CMake](https://github.com/dingodb/dingo-store/actions/workflows/cmake.yml/badge.svg)](https://github.com/dingodb/dingo-store/actions/workflows/cmake.yml)
 
 # What's Dingo-Store?
 
