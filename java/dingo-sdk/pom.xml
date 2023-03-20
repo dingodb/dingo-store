@@ -12,6 +12,10 @@
     <modelVersion>4.0.0</modelVersion>
     <name>DingoSDK- SDK For DingoDB</name>
 
+    <properties>
+        <maven.deploy.skip>false</maven.deploy.skip>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>org.slf4j</groupId>

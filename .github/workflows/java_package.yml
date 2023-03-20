@@ -28,7 +28,7 @@ jobs:
           server-username: MAVEN_USERNAME
           server-password: MAVEN_PASSWORD
       - name: Publish package
-        run:  cd java && mvn clean deploy -pl dingo-sdk  -Dmaven.test.skip=true
+        run:  cd java && mvn clean deploy -Dmaven.test.skip=true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MAVEN_USERNAME: ${{ secrets.OSSRH_USERNAME }}
