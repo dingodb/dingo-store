@@ -38,8 +38,7 @@ enum ReservedSchemaIds {
 // Used for transformation to SDK CommonId
 message DingoCommonId {
   EntityType entity_type = 1;
-  uint64 parent_entity_id =
-      2;  // if the entity is table, this field is its schema_id
+  uint64 parent_entity_id = 2;  // if the entity is table, this field is its schema_id
   uint64 entity_id = 3;
 }
 
@@ -56,7 +55,8 @@ enum SqlType {
   SQL_TYPE_VARCHAR = 8;
   SQL_TYPE_ARRAY = 9;
   SQL_TYPE_MULTISET = 10;
-  SQL_TYPE_ANY = 11;
+  SQL_TYPE_BYTES = 11;
+  SQL_TYPE_ANY = 12;
 }
 
 // Define ElementType about Composite Structure.
@@ -138,12 +138,11 @@ message TableDefinition {
 
 // This Part is mainly equal to the Part in DingoDB 0.5.x
 message Part {
-  DingoCommonId id = 1;  // this is really region id, its parent entity is table
-  dingodb.pb.common.Range range = 2;      // the range of this part
-  dingodb.pb.common.Location leader = 3;  // the leader's store location
-  repeated dingodb.pb.common.Location voters =
-      4;  // all members of the region that have right to vote, this field is
-          // equal to the old replicates field of Part.
+  DingoCommonId id = 1;                            // this is really region id, its parent entity is table
+  dingodb.pb.common.Range range = 2;               // the range of this part
+  dingodb.pb.common.Location leader = 3;           // the leader's store location
+  repeated dingodb.pb.common.Location voters = 4;  // all members of the region that have right to vote, this field is
+                                                   // equal to the old replicates field of Part.
   repeated dingodb.pb.common.Location learners =
       5;  // all members of the region that is learners, have no right to vote
   uint64 regionmap_epoch = 6;
