@@ -98,7 +98,6 @@ public class ServiceOperation {
                     message = resultForStore.getErrorMessage();
                     // throw new RuntimeException(message);
                 }
-                List<Common.KeyValue> records = resultForStore.getRecords();
                 if (resultForStore.getRecords() != null && resultForStore.getRecords().size() > 0) {
                     keyValueList.addAll(resultForStore.getRecords());
                 }

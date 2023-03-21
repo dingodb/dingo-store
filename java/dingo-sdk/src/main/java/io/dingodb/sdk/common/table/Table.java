@@ -69,6 +69,19 @@ public interface Table {
         );
     }
 
+    default Column getColumn(int index) {
+        return getColumns().get(index);
+    }
+
+    default Column getColumn(String name) {
+        for (Column column : getColumns()) {
+            if (column.getName().equalsIgnoreCase(name)) {
+                return column;
+            }
+        }
+        return null;
+    }
+
     default TupleMapping getKeyMapping() {
         return TupleMapping.of(getKeyColumnIndices());
     }

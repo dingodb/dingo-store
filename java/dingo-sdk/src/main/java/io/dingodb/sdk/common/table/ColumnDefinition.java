@@ -17,7 +17,9 @@
 package io.dingodb.sdk.common.table;
 
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 
+@Builder
 @AllArgsConstructor
 public class ColumnDefinition implements Column {
 

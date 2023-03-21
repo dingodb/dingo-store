@@ -23,6 +23,7 @@ import static io.dingodb.meta.Meta.SqlType.SQL_TYPE_ANY;
 import static io.dingodb.meta.Meta.SqlType.SQL_TYPE_ARRAY;
 import static io.dingodb.meta.Meta.SqlType.SQL_TYPE_BIGINT;
 import static io.dingodb.meta.Meta.SqlType.SQL_TYPE_BOOLEAN;
+import static io.dingodb.meta.Meta.SqlType.SQL_TYPE_BYTES;
 import static io.dingodb.meta.Meta.SqlType.SQL_TYPE_DATE;
 import static io.dingodb.meta.Meta.SqlType.SQL_TYPE_DOUBLE;
 import static io.dingodb.meta.Meta.SqlType.SQL_TYPE_FLOAT;
@@ -74,8 +75,29 @@ public class EntityConversion {
     }
 
     public static Meta.PartitionRule calcRange(Table table) {
+        List<Integer> keyList = table.getKeyColumnIndices();
         int columnCount = table.getColumns().size();
         List<PartitionDetailDefinition> partDetails = table.getPartDefinition().details();
+
+        List<Column> cols = keyList.stream().map(table::getColumn).collect(Collectors.toList());
+
+        for (PartitionDetailDefinition partDetail : partDetails) {
+            if (partDetail.getOperand().size() > keyList.size()) {
+                throw new IllegalArgumentException(
+                    "Partition values count must be <= key columns count, but values count is "
+                    + partDetail.getOperand().size()
+                );
+            }
+            for (int i = 0; i < partDetail.getOperand().size(); i++) {
+                String simpleName = partDetail.getOperand().get(i).getClass().getSimpleName();
+                String sqlType = cols.get(i).getType();
+                if (!simpleName.equalsIgnoreCase(sqlType)) {
+                    throw new IllegalArgumentException(
+                        "partition value type: (" + simpleName + ") must be the same as the primary key type: (" + sqlType + ")"
+                    );
+                }
+            }
+        }
 
         KeyValueCodec codec = table.createCodec();
         Iterator<byte[]> keys = partDetails.stream()
@@ -143,6 +165,8 @@ public class EntityConversion {
                 return "MULTISET";
             case SQL_TYPE_ANY:
                 return "ANY";
+            case SQL_TYPE_BYTES:
+                return "BINARY";
             default:
                 break;
         }
@@ -179,6 +203,10 @@ public class EntityConversion {
                 return SQL_TYPE_MULTISET;
             case "ANY":
                 return SQL_TYPE_ANY;
+            case "BYTES":
+            case "BINARY":
+            case "BLOB":
+                return SQL_TYPE_BYTES;
             default:
                 break;
         }

@@ -18,10 +18,12 @@ package io.dingodb.sdk.common.table;
 
 import io.dingodb.sdk.common.partition.Partition;
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 
 import java.util.List;
 import java.util.Map;
 
+@Builder
 @AllArgsConstructor
 public class TableDefinition implements Table {
 

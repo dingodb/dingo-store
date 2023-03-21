@@ -35,6 +35,7 @@ public class ServiceConnector {
         Common.Location leaderLocation = response.getLeaderLocation();
         if (!leaderLocation.getHost().isEmpty()) {
             target = leaderLocation.getHost() + ":" + leaderLocation.getPort();
+            channel.shutdownNow();
             channel = GrpcConnection.newChannel(target);
             metaBlockingStub = MetaServiceGrpc.newBlockingStub(channel);
         }
