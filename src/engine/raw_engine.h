@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DINGODB_ENGINE_KV_ENGINE_H_
+#ifndef DINGODB_ENGINE_KV_ENGINE_H_  // NOLINT
 #define DINGODB_ENGINE_KV_ENGINE_H_
 
 #include <memory>
@@ -98,6 +98,7 @@ class RawEngine {
     virtual butil::Status KvDeleteBatch(const std::vector<std::string>& keys) = 0;
 
     virtual butil::Status KvDeleteRange(const pb::common::Range& range) = 0;
+    virtual butil::Status KvDeleteIfEqual(const pb::common::KeyValue& kv) = 0;
   };
 
   virtual bool Init(std::shared_ptr<Config> config) = 0;
@@ -120,4 +121,4 @@ class RawEngine {
 
 }  // namespace dingodb
 
-#endif  // DINGODB_ENGINE_KV_ENGINE_H_
+#endif  // DINGODB_ENGINE_KV_ENGINE_H_  // NOLINT

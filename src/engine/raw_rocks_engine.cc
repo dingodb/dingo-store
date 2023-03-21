@@ -99,9 +99,9 @@ class RocksIterator : public EngineIterator {
   std::string end_key_;
 };
 
-static const std::string kDbPath = "store.dbPath";
-static const std::string kColumnFamilies = "store.columnFamilies";
-static const std::string kBaseColumnFamily = "store.base";
+static const char* kDbPath = "store.dbPath";
+static const char* kColumnFamilies = "store.columnFamilies";
+static const char* kBaseColumnFamily = "store.base";
 
 static const char* kBlockSize = "block_size";
 static const char* kBlockCache = "block_cache";
@@ -127,15 +127,15 @@ bool RawRocksEngine::Init(std::shared_ptr<Config> config) {
 
   std::string store_db_path_value = config->GetString(kDbPath);
   if (BAIDU_UNLIKELY(store_db_path_value.empty())) {
-    LOG(ERROR) << butil::StringPrintf("can not find : %s", kDbPath.c_str());
+    LOG(ERROR) << butil::StringPrintf("can not find : %s", kDbPath);
     return false;
   }
 
-  DLOG(INFO) << butil::StringPrintf("rocksdb path : %s", store_db_path_value.c_str());
+  LOG(INFO) << butil::StringPrintf("rocksdb path : %s", store_db_path_value.c_str());
 
   std::vector<std::string> column_family = config->GetStringList(kColumnFamilies);
   if (BAIDU_UNLIKELY(column_family.empty())) {
-    LOG(ERROR) << butil::StringPrintf("%s : empty. not found any column family", kColumnFamilies.c_str());
+    LOG(ERROR) << butil::StringPrintf("%s : empty. not found any column family", kColumnFamilies);
     return false;
   }
 
@@ -148,13 +148,13 @@ bool RawRocksEngine::Init(std::shared_ptr<Config> config) {
   std::vector<rocksdb::ColumnFamilyHandle*> family_handles;
   bool ret = RocksdbInit(store_db_path_value, column_family, family_handles);
   if (BAIDU_UNLIKELY(!ret)) {
-    DLOG(ERROR) << butil::StringPrintf("rocksdb::DB::Open : %s failed", store_db_path_value.c_str());
+    LOG(ERROR) << butil::StringPrintf("rocksdb::DB::Open : %s failed", store_db_path_value.c_str());
     return false;
   }
 
   SetColumnFamilyHandle(column_family, family_handles);
 
-  DLOG(INFO) << butil::StringPrintf("rocksdb::DB::Open : %s success!", store_db_path_value.c_str());
+  LOG(INFO) << butil::StringPrintf("rocksdb::DB::Open : %s success!", store_db_path_value.c_str());
 
   return true;
 }
@@ -206,7 +206,7 @@ void RawRocksEngine::Close() {
     txn_db_ = nullptr;
   }
 
-  DLOG(INFO) << butil::StringPrintf("rocksdb::DB::Close");
+  LOG(INFO) << butil::StringPrintf("rocksdb::DB::Close");
 }
 
 std::shared_ptr<RawRocksEngine::ColumnFamily> RawRocksEngine::GetColumnFamily(const std::string& cf_name) {
@@ -821,6 +821,57 @@ butil::Status RawRocksEngine::Writer::KvDeleteRange(const pb::common::Range& ran
   s = txn_db_->Write(write_options, opt, &batch);
   if (!s.ok()) {
     LOG(ERROR) << butil::StringPrintf("rocksdb::TransactionDB::Write failed : %s", s.ToString().c_str());
+    return butil::Status(pb::error::EINTERNAL, "Internal error");
+  }
+
+  return butil::Status();
+}
+
+butil::Status RawRocksEngine::Writer::KvDeleteIfEqual(const pb::common::KeyValue& kv) {
+  if (BAIDU_UNLIKELY(kv.key().empty())) {
+    LOG(ERROR) << butil::StringPrintf("key empty  not support");
+    return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
+  }
+
+  rocksdb::WriteOptions write_options;
+  std::unique_ptr<rocksdb::Transaction> txn(txn_db_->BeginTransaction(write_options));
+  if (!txn) {
+    LOG(ERROR) << butil::StringPrintf("rocksdb::TransactionDB::BeginTransaction failed");
+    return butil::Status(pb::error::EINTERNAL, "Internal error");
+  }
+
+  // other read will failed
+  std::string old_value;
+  rocksdb::ReadOptions read_options;
+  rocksdb::Status s = txn->GetForUpdate(read_options, column_family_->GetHandle(),
+                                        rocksdb::Slice(kv.key().data(), kv.key().size()), &old_value);
+  if (!s.ok()) {
+    txn->Rollback();
+    if (s.IsNotFound()) {
+      LOG(ERROR) << butil::StringPrintf("rocksdb::TransactionDB::GetForUpdate not found key ");
+      return butil::Status(pb::error::EKEY_NOTFOUND, "Not found");
+    }
+    LOG(ERROR) << butil::StringPrintf("rocksdb::TransactionDB::GetForUpdate failed : %s", s.ToString().c_str());
+    return butil::Status(pb::error::EINTERNAL, "Internal error");
+  }
+
+  if (kv.value() != old_value) {
+    txn->Rollback();
+    LOG(WARNING) << butil::StringPrintf("rocksdb::TransactionDB::GetForUpdate value is not equal");
+    return butil::Status(pb::error::EINTERNAL, "Internal error");
+  }
+
+  // write a key in this transaction
+  s = txn->Delete(column_family_->GetHandle(), rocksdb::Slice(kv.key().data(), kv.key().size()));
+  if (!s.ok()) {
+    txn->Rollback();
+    LOG(ERROR) << butil::StringPrintf("rocksdb::TransactionDB::Delete failed : %s", s.ToString().c_str());
+    return butil::Status(pb::error::EINTERNAL, "Internal error");
+  }
+
+  s = txn->Commit();
+  if (!s.ok()) {
+    LOG(ERROR) << butil::StringPrintf("rocksdb::TransactionDB::Commit failed : %s", s.ToString().c_str());
     return butil::Status(pb::error::EINTERNAL, "Internal error");
   }
 

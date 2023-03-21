@@ -27,35 +27,38 @@ class StoreServiceImpl : public pb::store::StoreService {
   StoreServiceImpl();
 
   void AddRegion(google::protobuf::RpcController* controller, const pb::store::AddRegionRequest* request,
-                 pb::store::AddRegionResponse* response, google::protobuf::Closure* done);
+                 pb::store::AddRegionResponse* response, google::protobuf::Closure* done) override;
 
   void ChangeRegion(google::protobuf::RpcController* controller, const pb::store::ChangeRegionRequest* request,
-                    pb::store::ChangeRegionResponse* response, google::protobuf::Closure* done);
+                    pb::store::ChangeRegionResponse* response, google::protobuf::Closure* done) override;
 
   void DestroyRegion(google::protobuf::RpcController* controller, const pb::store::DestroyRegionRequest* request,
-                     pb::store::DestroyRegionResponse* response, google::protobuf::Closure* done);
+                     pb::store::DestroyRegionResponse* response, google::protobuf::Closure* done) override;
 
   void KvGet(google::protobuf::RpcController* controller, const pb::store::KvGetRequest* request,
-             pb::store::KvGetResponse* response, google::protobuf::Closure* done);
+             pb::store::KvGetResponse* response, google::protobuf::Closure* done) override;
 
   void KvBatchGet(google::protobuf::RpcController* controller, const pb::store::KvBatchGetRequest* request,
-                  pb::store::KvBatchGetResponse* response, google::protobuf::Closure* done);
+                  pb::store::KvBatchGetResponse* response, google::protobuf::Closure* done) override;
 
   void KvPut(google::protobuf::RpcController* controller, const pb::store::KvPutRequest* request,
-             pb::store::KvPutResponse* response, google::protobuf::Closure* done);
+             pb::store::KvPutResponse* response, google::protobuf::Closure* done) override;
 
   void KvBatchPut(google::protobuf::RpcController* controller, const pb::store::KvBatchPutRequest* request,
-                  pb::store::KvBatchPutResponse* response, google::protobuf::Closure* done);
+                  pb::store::KvBatchPutResponse* response, google::protobuf::Closure* done) override;
 
   void KvPutIfAbsent(google::protobuf::RpcController* controller, const pb::store::KvPutIfAbsentRequest* request,
-                     pb::store::KvPutIfAbsentResponse* response, google::protobuf::Closure* done);
+                     pb::store::KvPutIfAbsentResponse* response, google::protobuf::Closure* done) override;
 
   void KvBatchPutIfAbsent(google::protobuf::RpcController* controller,
                           const pb::store::KvBatchPutIfAbsentRequest* request,
-                          pb::store::KvBatchPutIfAbsentResponse* response, google::protobuf::Closure* done);
+                          pb::store::KvBatchPutIfAbsentResponse* response, google::protobuf::Closure* done) override;
 
   void KvBatchDelete(google::protobuf::RpcController* controller, const pb::store::KvBatchDeleteRequest* request,
                      pb::store::KvBatchDeleteResponse* response, google::protobuf::Closure* done) override;
+
+  void KvDeleteRange(google::protobuf::RpcController* controller, const pb::store::KvDeleteRangeRequest* request,
+                     pb::store::KvDeleteRangeResponse* response, google::protobuf::Closure* done) override;
 
   void set_storage(std::shared_ptr<Storage> storage);
 

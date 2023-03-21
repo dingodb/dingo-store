@@ -41,6 +41,8 @@ class Storage {
 
   butil::Status KvDelete(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys);
 
+  butil::Status KvDeleteRange(std::shared_ptr<Context> ctx, const pb::common::Range& range);
+
  private:
   std::shared_ptr<Engine> engine_;
 };

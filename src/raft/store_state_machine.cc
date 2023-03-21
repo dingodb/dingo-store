@@ -111,7 +111,7 @@ void StoreStateMachine::HandleDeleteRangeRequest([[maybe_unused]] StoreClosure* 
 
   butil::Status status;
   auto writer = engine_->NewWriter(request.cf_name());
-  for (auto& range : request.ranges()) {
+  for (const auto& range : request.ranges()) {
     status = writer->KvDeleteRange(range);
     if (!status.ok()) {
       break;

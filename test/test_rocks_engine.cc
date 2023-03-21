@@ -1627,6 +1627,94 @@ TEST(RawRocksEngineTest, KvDeleteBatch) {
   }
 }
 
+TEST(RawRocksEngineTest, KvDeleteIfEqual) {
+  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test->GetRawRocksEngine();
+  const std::string &cf_name = kDefautCf;
+  std::shared_ptr<dingodb::RawEngine::Writer> writer = raw_rocks_engine.NewWriter(cf_name);
+
+  // key  empty failed
+  {
+    dingodb::pb::common::KeyValue kv;
+
+    butil::Status ok = writer->KvDeleteIfEqual(kv);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_EMPTY);
+  }
+
+  // key not exist
+  {
+    dingodb::pb::common::KeyValue kv;
+    kv.set_key("key598");
+    kv.set_value("value598");
+
+    butil::Status ok = writer->KvDeleteIfEqual(kv);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_NOTFOUND);
+  }
+
+  // key exist value exist but value uneqaul
+  {
+    std::vector<dingodb::pb::common::KeyValue> kvs;
+
+    for (int i = 0; i < 1; i++) {
+      dingodb::pb::common::KeyValue kv;
+      kv.set_key("myequalkey" + std::to_string(i));
+      kv.set_value("myequalvalue" + std::to_string(i));
+      kvs.emplace_back(std::move(kv));
+    }
+
+    butil::Status ok = writer->KvBatchPut(kvs);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+
+    std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
+
+    std::string value;
+    for (int i = 0; i < 1; i++) {
+      ok = reader->KvGet(kvs[i].key(), value);
+      EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+      EXPECT_EQ(value, kvs[i].value());
+    }
+
+    for (auto &kv : kvs) {
+      kv.set_value("243fgdfgd");
+      ok = writer->KvDeleteIfEqual(kv);
+      EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EINTERNAL);
+    }
+  }
+
+  // ok
+  {
+    std::vector<dingodb::pb::common::KeyValue> kvs;
+
+    for (int i = 0; i < 10; i++) {
+      dingodb::pb::common::KeyValue kv;
+      kv.set_key("myequalkey" + std::to_string(i));
+      kv.set_value("myequalvalue" + std::to_string(i));
+      kvs.emplace_back(std::move(kv));
+    }
+
+    butil::Status ok = writer->KvBatchPut(kvs);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+
+    std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
+
+    std::string value;
+    for (int i = 0; i < 10; i++) {
+      ok = reader->KvGet(kvs[i].key(), value);
+      EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+      EXPECT_EQ(value, kvs[i].value());
+    }
+
+    for (const auto &kv : kvs) {
+      ok = writer->KvDeleteIfEqual(kv);
+      EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+    }
+
+    for (int i = 0; i < 10; i++) {
+      ok = reader->KvGet(kvs[i].key(), value);
+      EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_NOTFOUND);
+    }
+  }
+}
+
 TEST(RawRocksEngineTest, KvDeleteRange) {
   dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test->GetRawRocksEngine();
   const std::string &cf_name = kDefautCf;
