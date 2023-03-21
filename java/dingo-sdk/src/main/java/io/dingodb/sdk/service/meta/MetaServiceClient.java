@@ -20,9 +20,9 @@ import static io.dingodb.sdk.common.utils.EntityConversion.swap;
 
 public class MetaServiceClient {
 
-    public static final Meta.DingoCommonId ROOT_SCHEMA_ID = Meta.DingoCommonId.newBuilder()
+    public static final Meta.DingoCommonId DINGO_SCHEMA_ID = Meta.DingoCommonId.newBuilder()
             .setEntityType(Meta.EntityType.ENTITY_TYPE_SCHEMA)
-            .setEntityId(Meta.ReservedSchemaIds.ROOT_SCHEMA_VALUE)
+            .setEntityId(Meta.ReservedSchemaIds.DINGO_SCHEMA_VALUE)
             .setParentEntityId(0)
             .build();
 
@@ -40,7 +40,7 @@ public class MetaServiceClient {
     private ServiceConnector connector;
 
     public MetaServiceClient(ServiceConnector connector) {
-        this.id = ROOT_SCHEMA_ID;
+        this.id = DINGO_SCHEMA_ID;
         this.name = ROOT_NAME;
         this.connector = connector;
         this.connector.initConnection();
@@ -55,7 +55,7 @@ public class MetaServiceClient {
         Meta.TableDefinition definition = swap(table);
 
         Meta.CreateTableRequest request = Meta.CreateTableRequest.newBuilder()
-                .setSchemaId(ROOT_SCHEMA_ID)
+                .setSchemaId(DINGO_SCHEMA_ID)
                 .setTableDefinition(definition)
                 .build();
 
@@ -81,7 +81,7 @@ public class MetaServiceClient {
     public Meta.DingoCommonId getTableId(@NonNull String tableName) {
         Meta.DingoCommonId commonId = tableIdCache.get(tableName);
         if (commonId == null) {
-            Meta.GetTablesRequest request = Meta.GetTablesRequest.newBuilder().setSchemaId(ROOT_SCHEMA_ID).build();
+            Meta.GetTablesRequest request = Meta.GetTablesRequest.newBuilder().setSchemaId(DINGO_SCHEMA_ID).build();
             Meta.GetTablesResponse response = metaBlockingStub.getTables(request);
 
             List<Meta.TableDefinitionWithId> withIdsList = response.getTableDefinitionWithIdsList();

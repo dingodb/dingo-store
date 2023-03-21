@@ -147,6 +147,23 @@ public final class Record {
         return values;
     }
 
+    public static Record toRecordByColumn(Record record, List<String> colNames) {
+        List<String> keyColumns = new ArrayList<>();
+        for (String key: record.getKeyColumnNames()) {
+            keyColumns.add(key);
+        }
+
+        Map<String, Object> columnsInOrder = new HashMap<>();
+        for (String colName : colNames) {
+            Object value = record.columnsInOrderMapping.get(colName);
+            if (value instanceof Value) {
+                value = ((Value) value).getObject();
+            }
+            columnsInOrder.put(colName, value);
+        }
+        return new Record(keyColumns, columnsInOrder);
+    }
+
     /**
      * Get column value given column name.
      */

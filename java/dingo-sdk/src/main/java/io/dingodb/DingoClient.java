@@ -87,6 +87,12 @@ public class DingoClient {
         return result.getValues();
     }
 
+    public Record get(final String tableName, final Key firstKey, List<String> colNames) {
+        Record record = get(tableName, firstKey);
+
+        return Record.toRecordByColumn(record, colNames);
+    }
+
     public void close() {
         serviceOperation.close();
     }

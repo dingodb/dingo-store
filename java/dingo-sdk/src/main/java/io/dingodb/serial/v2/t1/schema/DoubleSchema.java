@@ -143,6 +143,7 @@ public class DoubleSchema implements DingoSchema<Double> {
         }
         long l = 0;
         if ((buf.read() & 0xFF) >= 0x80) {
+            buf.skip(-1);
             l |= buf.read() & 0xFF ^ 0x80;
             for (int i = 0; i < 7; i++) {
                 l <<= 8;
