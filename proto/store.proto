@@ -111,6 +111,15 @@ message KvBatchDeleteResponse {
   dingodb.pb.error.Error error = 1;
 }
 
+message KvDeleteRangeRequest {
+  uint64 region_id = 1;
+  dingodb.pb.common.Range range = 2;
+}
+
+message KvDeleteRangeResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
 service StoreService {
   // region
   rpc AddRegion(AddRegionRequest) returns (AddRegionResponse);
@@ -125,4 +134,5 @@ service StoreService {
   rpc KvPutIfAbsent(KvPutIfAbsentRequest) returns (KvPutIfAbsentResponse);
   rpc KvBatchPutIfAbsent(KvBatchPutIfAbsentRequest) returns (KvBatchPutIfAbsentResponse);
   rpc KvBatchDelete(KvBatchDeleteRequest) returns (KvBatchDeleteResponse);
+  rpc KvDeleteRange(KvDeleteRangeRequest) returns (KvDeleteRangeResponse);
 };
