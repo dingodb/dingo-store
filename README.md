@@ -1,4 +1,8 @@
-[![CMake](https://github.com/dingodb/dingo-store/actions/workflows/cmake.yml/badge.svg)](https://github.com/dingodb/dingo-store/actions/workflows/cmake.yml)
+[![CMake_ubuntu](https://github.com/dingodb/dingo-store/actions/workflows/ci_ubuntu.yml/badge.svg)](https://github.com/dingodb/dingo-store/actions/workflows/ci_ubuntu.yml)
+[![CMake_rocky8.6](https://github.com/dingodb/dingo-store/actions/workflows/ci_rocky.yml/badge.svg)](https://github.com/dingodb/dingo-store/actions/workflows/ci_rocky.yml)
+[![CMake_centos7](https://github.com/dingodb/dingo-store/actions/workflows/ci_centos.yml/badge.svg)](https://github.com/dingodb/dingo-store/actions/workflows/ci_centos.yml)
+[![Java_Maven_Build](https://github.com/dingodb/dingo-store/actions/workflows/java_build.yml/badge.svg)](https://github.com/dingodb/dingo-store/actions/workflows/java_build.yml)
+[![Maven_Publish_package](https://github.com/dingodb/dingo-store/actions/workflows/java_package.yml/badge.svg)](https://github.com/dingodb/dingo-store/actions/workflows/java_package.yml)
 
 # What's Dingo-Store?
 
@@ -21,3 +25,4 @@ mkdir build && cd build && cmake .. && make -j8
 ```java
 cd java && mvn clean package -DskipTests
 ```
+
