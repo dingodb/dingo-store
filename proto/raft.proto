@@ -58,7 +58,7 @@ message DeleteRangeResponse {}
 
 message DeleteBatchRequest {
   string cf_name = 1;
-  repeated dingodb.pb.common.KeyValue kvs = 2;
+  repeated bytes keys = 2;
 }
 
 message DeleteBatchResponse {}
