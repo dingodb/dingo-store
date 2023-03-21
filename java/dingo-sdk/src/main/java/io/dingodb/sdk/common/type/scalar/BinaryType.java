@@ -39,7 +39,7 @@ public class BinaryType extends AbstractScalarType {
 
     @Override
     public DingoSchema toDingoSchema(int index) {
-        return null;
+        return new BytesSchema(index);
     }
 
     @Override

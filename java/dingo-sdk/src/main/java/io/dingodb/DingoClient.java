@@ -9,7 +9,7 @@ import io.dingodb.client.Key;
 import io.dingodb.client.Record;
 import io.dingodb.client.Result;
 import io.dingodb.client.ServiceOperation;
-import io.dingodb.client.StoreOperationType;
+import io.dingodb.client.operation.StoreOperationType;
 import io.dingodb.client.Value;
 import io.dingodb.sdk.common.table.Table;
 
@@ -90,7 +90,23 @@ public class DingoClient {
     public Record get(final String tableName, final Key firstKey, List<String> colNames) {
         Record record = get(tableName, firstKey);
 
+        if (record == null) {
+            return null;
+        }
         return Record.toRecordByColumn(record, colNames);
+    }
+
+    public boolean delete(final String tableName, Key key) {
+        return delete(tableName, Collections.singletonList(key));
+    }
+
+    public boolean delete(final String tableName, List<Key> keys) {
+        Result result = serviceOperation.operation(
+                tableName,
+                StoreOperationType.DELETE,
+                ContextForClient.builder().keyList(keys).build()
+        );
+        return result.isSuccess();
     }
 
     public void close() {

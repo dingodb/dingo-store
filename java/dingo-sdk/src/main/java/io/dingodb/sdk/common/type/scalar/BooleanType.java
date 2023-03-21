@@ -19,6 +19,7 @@ package io.dingodb.sdk.common.type.scalar;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonTypeName;
+import io.dingodb.serial.v2.t1.schema.BooleanSchema;
 import io.dingodb.serial.v2.t1.schema.DingoSchema;
 import io.dingodb.sdk.common.type.TypeCode;
 import io.dingodb.sdk.common.type.converter.DataConverter;
@@ -38,7 +39,7 @@ public class BooleanType extends AbstractScalarType {
 
     @Override
     public DingoSchema toDingoSchema(int index) {
-        return null;
+        return new BooleanSchema(index);
     }
 
     @Override

@@ -89,8 +89,8 @@ public class EntityConversion {
                 );
             }
             for (int i = 0; i < partDetail.getOperand().size(); i++) {
-                String simpleName = partDetail.getOperand().get(i).getClass().getSimpleName();
-                String sqlType = cols.get(i).getType();
+                String simpleName = convert(partDetail.getOperand().get(i).getClass().getSimpleName());
+                String sqlType = convert(cols.get(i).getType());
                 if (!simpleName.equalsIgnoreCase(sqlType)) {
                     throw new IllegalArgumentException(
                         "partition value type: (" + simpleName + ") must be the same as the primary key type: (" + sqlType + ")"
@@ -124,6 +124,15 @@ public class EntityConversion {
         return Meta.PartitionRule.newBuilder()
                 .setRangePartition(rangePartition)
                 .build();
+    }
+
+    private static String convert(String type) {
+        switch (type.toUpperCase()) {
+            case "STRING":
+                return "varchar";
+            default:
+                return type;
+        }
     }
 
     public static Meta.ColumnDefinition swap(Column column) {
