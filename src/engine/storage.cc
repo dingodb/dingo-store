@@ -17,6 +17,7 @@
 #include "common/constant.h"
 #include "common/helper.h"
 #include "engine/write_data.h"
+#include "proto/common.pb.h"
 
 namespace dingodb {
 
@@ -81,6 +82,21 @@ butil::Status Storage::KvDelete(std::shared_ptr<Context> ctx, const std::vector<
   std::shared_ptr<DeleteBatchDatum> datum = std::make_shared<DeleteBatchDatum>();
   datum->cf_name = ctx->CfName();
   datum->keys = std::move(const_cast<std::vector<std::string>&>(keys));  // NOLINT
+  write_data.AddDatums(std::static_pointer_cast<DatumAble>(datum));
+
+  return engine_->AsyncWrite(ctx, write_data, [ctx](butil::Status status) {
+    LOG(INFO) << "here 003";
+    if (!status.ok()) {
+      Helper::SetPbMessageError(status, ctx->Response());
+    }
+  });
+}
+
+butil::Status Storage::KvDeleteRange(std::shared_ptr<Context> ctx, const pb::common::Range& range) {
+  WriteData write_data;
+  std::shared_ptr<DeleteRangeDatum> datum = std::make_shared<DeleteRangeDatum>();
+  datum->cf_name = ctx->CfName();
+  datum->ranges.emplace_back(std::move(const_cast<pb::common::Range&>(range)));
   write_data.AddDatums(std::static_pointer_cast<DatumAble>(datum));
 
   return engine_->AsyncWrite(ctx, write_data, [ctx](butil::Status status) {

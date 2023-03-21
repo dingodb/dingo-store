@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DINGODB_ENGINE_ROCKS_KV_ENGINE_H_
+#ifndef DINGODB_ENGINE_ROCKS_KV_ENGINE_H_  // NOLINT
 #define DINGODB_ENGINE_ROCKS_KV_ENGINE_H_
 
 #include <cstdint>
@@ -94,7 +94,7 @@ class RawRocksEngine : public RawEngine {
 
   class RocksSnapshot : public dingodb::Snapshot {
    public:
-    RocksSnapshot(const rocksdb::Snapshot* snapshot) : snapshot_(snapshot) {}
+    explicit RocksSnapshot(const rocksdb::Snapshot* snapshot) : snapshot_(snapshot) {}
     ~RocksSnapshot() override{};
 
     const rocksdb::Snapshot* InnerSnapshot() { return snapshot_; }
@@ -147,6 +147,9 @@ class RawRocksEngine : public RawEngine {
     butil::Status KvDeleteBatch(const std::vector<std::string>& keys) override;
 
     butil::Status KvDeleteRange(const pb::common::Range& range) override;
+
+    // key must be exist
+    butil::Status KvDeleteIfEqual(const pb::common::KeyValue& kv) override;
 
    private:
     butil::Status KvCompareAndSetInternal(const pb::common::KeyValue& kv, const std::string& value, bool is_key_exist);
@@ -203,4 +206,4 @@ class RawRocksEngine : public RawEngine {
 
 }  // namespace dingodb
 
-#endif  // DINGODB_ENGINE_ROCKS_KV_ENGINE_H_
+#endif  // DINGODB_ENGINE_ROCKS_KV_ENGINE_H_  // NOLINT

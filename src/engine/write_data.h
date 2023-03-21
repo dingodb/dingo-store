@@ -15,6 +15,8 @@
 #ifndef DINGODB_ENGINE_WRITE_DATA_H_
 #define DINGODB_ENGINE_WRITE_DATA_H_
 
+#include <vector>
+
 #include "proto/raft.pb.h"
 
 namespace dingodb {
@@ -101,6 +103,30 @@ struct DeleteBatchDatum : public DatumAble {
 
   std::string cf_name;
   std::vector<std::string> keys;
+};
+
+struct DeleteRangeDatum : public DatumAble {
+  virtual ~DeleteRangeDatum() = default;
+  DatumType GetType() override { return DatumType::DELETERANGE; }
+
+  pb::raft::Request* TransformToRaft() override {
+    auto* request = new pb::raft::Request();
+
+    request->set_cmd_type(pb::raft::CmdType::DELETERANGE);
+    pb::raft::DeleteRangeRequest* delete_range_request = request->mutable_delete_range();
+    delete_range_request->set_cf_name(cf_name);
+
+    for (const auto& range : ranges) {
+      delete_range_request->add_ranges()->CopyFrom(range);
+    }
+
+    return request;
+  }
+
+  void TransformFromRaft(pb::raft::Response& resonse) override {}
+
+  std::string cf_name;
+  std::vector<pb::common::Range> ranges;
 };
 
 struct CreateSchemaDatum : public DatumAble {
