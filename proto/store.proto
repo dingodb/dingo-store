@@ -104,7 +104,7 @@ message KvBatchPutIfAbsentResponse {
 
 message KvBatchDeleteRequest {
   uint64 region_id = 1;
-  repeated dingodb.pb.common.KeyValue kvs = 2;
+  repeated bytes keys = 2;
 }
 
 message KvBatchDeleteResponse {
