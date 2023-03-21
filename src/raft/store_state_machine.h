@@ -59,6 +59,7 @@ class StoreStateMachine : public braft::StateMachine {
   void HandlePutRequest(StoreClosure* done, const dingodb::pb::raft::PutRequest& request);
   void HandlePutIfAbsentRequest(StoreClosure* done, const dingodb::pb::raft::PutIfAbsentRequest& request);
   void HandleDeleteRangeRequest(StoreClosure* done, const pb::raft::DeleteRangeRequest& request);
+  void HandleDeleteBatchRequest(StoreClosure* done, const pb::raft::DeleteBatchRequest& request);
 
  private:
   uint64_t node_id_;

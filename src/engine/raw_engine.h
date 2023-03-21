@@ -95,6 +95,7 @@ class RawEngine {
     virtual butil::Status KvCompareAndSet(const pb::common::KeyValue& kv, const std::string& value) = 0;
 
     virtual butil::Status KvDelete(const std::string& key) = 0;
+    virtual butil::Status KvDeleteBatch(const std::vector<std::string>& keys) = 0;
 
     virtual butil::Status KvDeleteRange(const pb::common::Range& range) = 0;
   };

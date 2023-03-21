@@ -39,6 +39,8 @@ class Storage {
 
   butil::Status KvPutIfAbsent(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs);
 
+  butil::Status KvDelete(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys);
+
  private:
   std::shared_ptr<Engine> engine_;
 };

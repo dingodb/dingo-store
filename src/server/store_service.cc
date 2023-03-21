@@ -386,6 +386,51 @@ void StoreServiceImpl::KvBatchPutIfAbsent(google::protobuf::RpcController* contr
   }
 }
 
+butil::Status ValidateKvBatchDeleteRequest(const dingodb::pb::store::KvBatchDeleteRequest* request) {
+  // Check is exist region.
+  if (!Server::GetInstance()->GetStoreMetaManager()->IsExistRegion(request->region_id())) {
+    return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
+  }
+
+  for (const auto& key : request->keys()) {
+    if (key.empty()) {
+      return butil::Status(pb::error::EKEY_EMPTY, "key is empty");
+    }
+  }
+
+  return butil::Status();
+}
+
+void StoreServiceImpl::KvBatchDelete(google::protobuf::RpcController* controller,
+                                     const pb::store::KvBatchDeleteRequest* request,
+                                     pb::store::KvBatchDeleteResponse* response, google::protobuf::Closure* done) {
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(done);
+
+  butil::Status status = ValidateKvBatchDeleteRequest(request);
+  if (!status.ok()) {
+    auto* err = response->mutable_error();
+    err->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
+    err->set_errmsg(status.error_str());
+    return;
+  }
+
+  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done_guard.release(), response);
+  ctx->SetRegionId(request->region_id()).SetCfName(Constant::kStoreDataCF);
+  auto *mut_request = const_cast<dingodb::pb::store::KvBatchDeleteRequest*>(request);
+  status = storage_->KvDelete(ctx, Helper::PbRepeatedToVector(mut_request->mutable_keys()));
+  if (!status.ok()) {
+    auto* err = response->mutable_error();
+    err->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
+    err->set_errmsg(status.error_str());
+    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+      err->set_errmsg("Not leader, please redirect leader.");
+      RedirectLeader(status.error_str(), response);
+    }
+    brpc::ClosureGuard done_guard(done);
+  }
+}
+
 void StoreServiceImpl::set_storage(std::shared_ptr<Storage> storage) { storage_ = storage; }
 
 }  // namespace dingodb

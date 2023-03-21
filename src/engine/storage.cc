@@ -76,4 +76,19 @@ butil::Status Storage::KvPutIfAbsent(std::shared_ptr<Context> ctx, const std::ve
   });
 }
 
+butil::Status Storage::KvDelete(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys) {
+  WriteData write_data;
+  std::shared_ptr<DeleteBatchDatum> datum = std::make_shared<DeleteBatchDatum>();
+  datum->cf_name = ctx->CfName();
+  datum->keys = std::move(const_cast<std::vector<std::string>&>(keys));  // NOLINT
+  write_data.AddDatums(std::static_pointer_cast<DatumAble>(datum));
+
+  return engine_->AsyncWrite(ctx, write_data, [ctx](butil::Status status) {
+    LOG(INFO) << "here 003";
+    if (!status.ok()) {
+      Helper::SetPbMessageError(status, ctx->Response());
+    }
+  });
+}
+
 }  // namespace dingodb

@@ -21,7 +21,13 @@ namespace dingodb {
 
 using WriteCb_t = std::function<void(butil::Status)>;
 
-enum class DatumType { PUT = 0, PUTIFABSENT = 1, CREATESCHEMA = 2 };
+enum class DatumType {
+  PUT = 0,
+  PUTIFABSENT = 1,
+  CREATESCHEMA = 2,
+  DELETERANGE = 3,
+  DELETEBATCH = 4,
+};
 
 class DatumAble {
  public:
@@ -72,6 +78,29 @@ struct PutIfAbsentDatum : public DatumAble {
 
   std::string cf_name;
   std::vector<pb::common::KeyValue> kvs;
+};
+
+struct DeleteBatchDatum : public DatumAble {
+  virtual ~DeleteBatchDatum() = default;
+  DatumType GetType() override { return DatumType::DELETEBATCH; }
+
+  pb::raft::Request* TransformToRaft() override {
+    auto* request = new pb::raft::Request();
+
+    request->set_cmd_type(pb::raft::CmdType::DELETEBATCH);
+    pb::raft::DeleteBatchRequest* delete_batch_request = request->mutable_delete_batch();
+    delete_batch_request->set_cf_name(cf_name);
+    for (const auto& key : keys) {
+      delete_batch_request->add_keys()->assign(key.data(), key.size());
+    }
+
+    return request;
+  }
+
+  void TransformFromRaft(pb::raft::Response& resonse) override {}
+
+  std::string cf_name;
+  std::vector<std::string> keys;
 };
 
 struct CreateSchemaDatum : public DatumAble {
