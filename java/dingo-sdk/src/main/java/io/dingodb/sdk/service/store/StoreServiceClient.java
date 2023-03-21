@@ -53,4 +53,8 @@ public class StoreServiceClient {
     public Store.KvBatchGetResponse kvBatchGet(Store.KvBatchGetRequest request) {
         return blockingStub.kvBatchGet(request);
     }
+
+    public Store.KvBatchDeleteResponse kvBatchDelete(Store.KvBatchDeleteRequest request) {
+        return blockingStub.kvBatchDelete(request);
+    }
 }

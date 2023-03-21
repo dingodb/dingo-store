@@ -18,6 +18,7 @@ package io.dingodb.client;
 
 import io.dingodb.UnifyStoreConnection;
 import io.dingodb.client.operation.OperationFactory;
+import io.dingodb.client.operation.StoreOperationType;
 import io.dingodb.sdk.common.KeyValue;
 import io.dingodb.sdk.common.codec.DingoKeyValueCodec;
 import io.dingodb.sdk.common.codec.KeyValueCodec;

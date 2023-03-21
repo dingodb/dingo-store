@@ -115,6 +115,7 @@ public final class TypeCode {
             case "VARCHAR":
                 return STRING;
             case "BINARY":
+            case "BYTES":
             case "VARBINARY":
             case "BLOB":
                 return BINARY;

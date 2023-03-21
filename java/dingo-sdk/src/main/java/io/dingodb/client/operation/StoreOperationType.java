@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.dingodb.client;
+package io.dingodb.client.operation;
 
 public enum StoreOperationType {
     PUT,
@@ -22,4 +22,6 @@ public enum StoreOperationType {
     PUT_IF_ABSENT,
 
     GET,
+
+    DELETE,
 }

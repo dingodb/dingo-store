@@ -17,9 +17,6 @@
 package io.dingodb.client.operation;
 
 import io.dingodb.client.IStoreOperation;
-import io.dingodb.client.StoreOperationType;
-import io.dingodb.client.operation.GetOperation;
-import io.dingodb.client.operation.PutOperation;
 
 public final class OperationFactory {
 
@@ -31,6 +28,8 @@ public final class OperationFactory {
                 return PutOperation.getInstance();
             case PUT_IF_ABSENT:
                 return PutIfAbsentOperation.getInstance();
+            case DELETE:
+                return DeleteOperation.getInstance();
             default:
                 return null;
         }
