@@ -54,6 +54,9 @@ class StoreServiceImpl : public pb::store::StoreService {
                           const pb::store::KvBatchPutIfAbsentRequest* request,
                           pb::store::KvBatchPutIfAbsentResponse* response, google::protobuf::Closure* done);
 
+  void KvBatchDelete(google::protobuf::RpcController* controller, const pb::store::KvBatchDeleteRequest* request,
+                     pb::store::KvBatchDeleteResponse* response, google::protobuf::Closure* done) override;
+
   void set_storage(std::shared_ptr<Storage> storage);
 
  private:

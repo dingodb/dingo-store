@@ -1565,6 +1565,68 @@ TEST(RawRocksEngineTest, KvDelete) {
   }
 }
 
+TEST(RawRocksEngineTest, KvDeleteBatch) {
+  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test->GetRawRocksEngine();
+  const std::string &cf_name = kDefautCf;
+  std::shared_ptr<dingodb::RawEngine::Writer> writer = raw_rocks_engine.NewWriter(cf_name);
+
+  // keys empty failed
+  {
+    std::vector<std::string> keys;
+
+    butil::Status ok = writer->KvDeleteBatch(keys);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_EMPTY);
+  }
+
+  // some key empty failed
+  {
+    std::vector<std::string> keys;
+    keys.emplace_back("key");
+    keys.emplace_back("");
+
+    butil::Status ok = writer->KvDeleteBatch(keys);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_EMPTY);
+  }
+
+  // ok
+  {
+    std::vector<dingodb::pb::common::KeyValue> kvs;
+
+    for (int i = 0; i < 10; i++) {
+      dingodb::pb::common::KeyValue kv;
+      kv.set_key("mykey" + std::to_string(i));
+      kv.set_value("myvalue" + std::to_string(i));
+      kvs.emplace_back(std::move(kv));
+    }
+
+    butil::Status ok = writer->KvBatchPut(kvs);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+
+    std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
+
+    std::string value;
+    for (int i = 0; i < 10; i++) {
+      ok = reader->KvGet(kvs[i].key(), value);
+      EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+      EXPECT_EQ(value, kvs[i].value());
+    }
+
+    std::vector<std::string> keys;
+    keys.reserve(kvs.size());
+    for (const auto &kv : kvs) {
+      keys.emplace_back(kv.key());
+    }
+
+    ok = writer->KvDeleteBatch(keys);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+
+    for (int i = 0; i < 10; i++) {
+      ok = reader->KvGet(kvs[i].key(), value);
+      EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_NOTFOUND);
+    }
+  }
+}
+
 TEST(RawRocksEngineTest, KvDeleteRange) {
   dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test->GetRawRocksEngine();
   const std::string &cf_name = kDefautCf;
@@ -1700,7 +1762,6 @@ TEST(RawRocksEngineTest, KvDeleteRange) {
     }
   }
 }
-
 
 TEST(RawRocksEngineTest, Destroy) {
   delete rocks_engine_test;

@@ -58,6 +58,9 @@ void StoreStateMachine::DispatchRequest(StoreClosure* done, const pb::raft::Raft
       case pb::raft::CmdType::DELETERANGE:
         HandleDeleteRangeRequest(done, req.delete_range());
         break;
+      case pb::raft::CmdType::DELETEBATCH:
+        HandleDeleteBatchRequest(done, req.delete_batch());
+        break;
       default:
         LOG(ERROR) << "Unknown raft cmd type " << req.cmd_type();
     }
@@ -117,6 +120,28 @@ void StoreStateMachine::HandleDeleteRangeRequest([[maybe_unused]] StoreClosure* 
 
   if (done != nullptr) {
     std::shared_ptr<Context> ctx = done->GetCtx();
+    if (ctx) {
+      ctx->SetStatus(status);
+    }
+  }
+}
+
+void StoreStateMachine::HandleDeleteBatchRequest([[maybe_unused]] StoreClosure* done,
+                                                 [[maybe_unused]] const pb::raft::DeleteBatchRequest& request) {
+  LOG(INFO) << "HandleDeleteBatchRequest ...";
+
+  auto writer = engine_->NewWriter(request.cf_name());
+
+  butil::Status status;
+
+  if (request.keys().size() == 1) {
+    status = writer->KvDelete(request.keys().Get(0));
+  } else {
+    status = writer->KvDeleteBatch(Helper::PbRepeatedToVector(request.keys()));
+  }
+
+  if (done != nullptr) {
+    std::shared_ptr<Context> ctx = done->GetCtx();  // NOLINT
     if (ctx) {
       ctx->SetStatus(status);
     }

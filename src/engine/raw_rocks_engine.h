@@ -144,6 +144,7 @@ class RawRocksEngine : public RawEngine {
     butil::Status KvCompareAndSet(const pb::common::KeyValue& kv, const std::string& value) override;
 
     butil::Status KvDelete(const std::string& key) override;
+    butil::Status KvDeleteBatch(const std::vector<std::string>& keys) override;
 
     butil::Status KvDeleteRange(const pb::common::Range& range) override;
 

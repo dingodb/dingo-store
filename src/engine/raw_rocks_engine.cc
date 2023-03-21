@@ -781,6 +781,18 @@ butil::Status RawRocksEngine::Writer::KvDelete(const std::string& key) {
   return butil::Status();
 }
 
+butil::Status RawRocksEngine::Writer::KvDeleteBatch(const std::vector<std::string>& keys) {
+  std::vector<pb::common::KeyValue> kvs;
+  for (const auto& key : keys) {
+    pb::common::KeyValue kv;
+    kv.set_key(key);
+
+    kvs.emplace_back(std::move(kv));
+  }
+
+  return KvBatchPutAndDelete({}, kvs);
+}
+
 butil::Status RawRocksEngine::Writer::KvDeleteRange(const pb::common::Range& range) {
   if (BAIDU_UNLIKELY(range.start_key().empty())) {
     LOG(ERROR) << butil::StringPrintf("start_key empty  not support");
