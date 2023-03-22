@@ -44,6 +44,92 @@ void CoordinatorServiceImpl::Hello(google::protobuf::RpcController * /*controlle
   response->set_status_detail("OK");
 }
 
+void CoordinatorServiceImpl::CreateExecutor(google::protobuf::RpcController *controller,
+                                            const pb::coordinator::CreateExecutorRequest *request,
+                                            pb::coordinator::CreateExecutorResponse *response,
+                                            google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+  auto format_request = Helper::MessageToJsonString(*request);
+  auto is_leader = this->coordinator_control_->IsLeader();
+  LOG(INFO) << "Receive Create Executor Request: IsLeader:" << is_leader << ", Request: " << format_request;
+
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  pb::coordinator_internal::MetaIncrement meta_increment;
+
+  // create executor
+  uint64_t executor_id = 0;
+  std::string keyring;
+  auto local_ctl = this->coordinator_control_;
+  int const ret = local_ctl->CreateExecutor(request->cluster_id(), executor_id, keyring, meta_increment);
+  if (ret == 0) {
+    response->set_executor_id(executor_id);
+    response->set_keyring(keyring);
+  } else {
+    brpc::Controller *brpc_controller = static_cast<brpc::Controller *>(controller);
+    brpc_controller->SetFailed(pb::error::EILLEGAL_PARAMTETERS, "Need legal cluster_id");
+    return;
+  }
+
+  // prepare for raft process
+  CoordinatorClosure<pb::coordinator::CreateExecutorRequest, pb::coordinator::CreateExecutorResponse>
+      *meta_create_store_closure =
+          new CoordinatorClosure<pb::coordinator::CreateExecutorRequest, pb::coordinator::CreateExecutorResponse>(
+              request, response, done_guard.release());
+
+  std::shared_ptr<Context> const ctx =
+      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_create_store_closure);
+  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+
+  // this is a async operation will be block by closure
+  engine_->MetaPut(ctx, meta_increment);
+}
+
+void CoordinatorServiceImpl::DeleteExecutor(google::protobuf::RpcController *controller,
+                                            const pb::coordinator::DeleteExecutorRequest *request,
+                                            pb::coordinator::DeleteExecutorResponse *response,
+                                            google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+  auto format_request = Helper::MessageToJsonString(*request);
+  auto is_leader = this->coordinator_control_->IsLeader();
+  LOG(INFO) << "Receive Create Executor Request: IsLeader:" << is_leader << ", Request: " << format_request;
+
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  pb::coordinator_internal::MetaIncrement meta_increment;
+
+  // delete store
+  uint64_t executor_id = request->executor_id();
+  std::string keyring = request->keyring();
+  auto local_ctl = this->coordinator_control_;
+  int const ret = local_ctl->DeleteExecutor(request->cluster_id(), executor_id, keyring, meta_increment);
+  if (ret != 0) {
+    brpc::Controller *brpc_controller = static_cast<brpc::Controller *>(controller);
+    brpc_controller->SetFailed(pb::error::ESTORE_NOTEXIST_RAFTENGINE, "DeleteExecutor failed");
+
+    auto *error = response->mutable_error();
+    error->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
+    return;
+  }
+
+  // prepare for raft process
+  CoordinatorClosure<pb::coordinator::DeleteExecutorRequest, pb::coordinator::DeleteExecutorResponse>
+      *meta_delete_store_closure =
+          new CoordinatorClosure<pb::coordinator::DeleteExecutorRequest, pb::coordinator::DeleteExecutorResponse>(
+              request, response, done_guard.release());
+
+  std::shared_ptr<Context> const ctx =
+      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_delete_store_closure);
+  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+
+  // this is a async operation will be block by closure
+  engine_->MetaPut(ctx, meta_increment);
+}
+
 void CoordinatorServiceImpl::CreateStore(google::protobuf::RpcController *controller,
                                          const pb::coordinator::CreateStoreRequest *request,
                                          pb::coordinator::CreateStoreResponse *response,
@@ -61,12 +147,12 @@ void CoordinatorServiceImpl::CreateStore(google::protobuf::RpcController *contro
 
   // create store
   uint64_t store_id = 0;
-  std::string password;
+  std::string keyring;
   auto local_ctl = this->coordinator_control_;
-  int const ret = local_ctl->CreateStore(request->cluster_id(), store_id, password, meta_increment);
+  int const ret = local_ctl->CreateStore(request->cluster_id(), store_id, keyring, meta_increment);
   if (ret == 0) {
     response->set_store_id(store_id);
-    response->set_password(password);
+    response->set_keyring(keyring);
   } else {
     brpc::Controller *brpc_controller = static_cast<brpc::Controller *>(controller);
     brpc_controller->SetFailed(pb::error::EILLEGAL_PARAMTETERS, "Need legal cluster_id");
@@ -87,6 +173,107 @@ void CoordinatorServiceImpl::CreateStore(google::protobuf::RpcController *contro
   engine_->MetaPut(ctx, meta_increment);
 }
 
+void CoordinatorServiceImpl::DeleteStore(google::protobuf::RpcController *controller,
+                                         const pb::coordinator::DeleteStoreRequest *request,
+                                         pb::coordinator::DeleteStoreResponse *response,
+                                         google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+  auto format_request = Helper::MessageToJsonString(*request);
+  auto is_leader = this->coordinator_control_->IsLeader();
+  LOG(INFO) << "Receive Create Store Request: IsLeader:" << is_leader << ", Request: " << format_request;
+
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  pb::coordinator_internal::MetaIncrement meta_increment;
+
+  // delete store
+  uint64_t store_id = request->store_id();
+  std::string keyring = request->keyring();
+  auto local_ctl = this->coordinator_control_;
+  int const ret = local_ctl->DeleteStore(request->cluster_id(), store_id, keyring, meta_increment);
+  if (ret != 0) {
+    brpc::Controller *brpc_controller = static_cast<brpc::Controller *>(controller);
+    brpc_controller->SetFailed(pb::error::ESTORE_NOTEXIST_RAFTENGINE, "DeleteStore failed");
+
+    auto *error = response->mutable_error();
+    error->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
+    return;
+  }
+
+  // prepare for raft process
+  CoordinatorClosure<pb::coordinator::DeleteStoreRequest, pb::coordinator::DeleteStoreResponse>
+      *meta_delete_store_closure =
+          new CoordinatorClosure<pb::coordinator::DeleteStoreRequest, pb::coordinator::DeleteStoreResponse>(
+              request, response, done_guard.release());
+
+  std::shared_ptr<Context> const ctx =
+      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_delete_store_closure);
+  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+
+  // this is a async operation will be block by closure
+  engine_->MetaPut(ctx, meta_increment);
+}
+
+void CoordinatorServiceImpl::ExecutorHeartbeat(google::protobuf::RpcController *controller,
+                                               const pb::coordinator::ExecutorHeartbeatRequest *request,
+                                               pb::coordinator::ExecutorHeartbeatResponse *response,
+                                               google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+  auto format_request = Helper::MessageToJsonString(*request);
+  auto is_leader = this->coordinator_control_->IsLeader();
+  LOG(INFO) << "Receive Executor Heartbeat Request, IsLeader:" << is_leader << ", Request:" << format_request;
+
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  // validate executor
+  if (!request->has_executor()) {
+    auto *error = response->mutable_error();
+    error->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
+    LOG(INFO) << "ExecutorHeartBeat has_executor() is false, reject heartbeat";
+    return;
+  }
+
+  int ret = this->coordinator_control_->ValidateExecutor(request->executor().id(), request->executor().keyring());
+  if (ret) {
+    LOG(INFO) << "ExecutorHeartBeat ValidateExecutor failed, reject heardbeat, executor_id=" << request->executor().id()
+              << " keyring=" << request->executor().keyring();
+    return;
+  }
+
+  pb::coordinator_internal::MetaIncrement meta_increment;
+
+  // update executor map
+  int const new_executormap_epoch = this->coordinator_control_->UpdateExecutorMap(request->executor(), meta_increment);
+
+  // prepare for raft process
+  CoordinatorClosure<pb::coordinator::ExecutorHeartbeatRequest, pb::coordinator::ExecutorHeartbeatResponse>
+      *meta_create_executor_closure =
+          new CoordinatorClosure<pb::coordinator::ExecutorHeartbeatRequest, pb::coordinator::ExecutorHeartbeatResponse>(
+              request, response, done_guard.release(), new_executormap_epoch, this->coordinator_control_);
+
+  std::shared_ptr<Context> const ctx =
+      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_create_executor_closure);
+  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+
+  // this is a async operation will be block by closure
+  engine_->MetaPut(ctx, meta_increment);
+
+  // // setup response
+  // LOG(INFO) << "set epoch id to response " << new_executormap_epoch << " " << new_regionmap_epoch;
+  // response->set_executormap_epoch(new_executormap_epoch);
+  // response->set_regionmap_epoch(new_regionmap_epoch);
+
+  // auto *new_regionmap = response->mutable_regionmap();
+  // this->coordinator_control_->GetRegionMap(*new_regionmap);
+
+  // auto *new_executormap = response->mutable_executormap();
+  // this->coordinator_control_->GetExecutorMap(*new_executormap);
+}
+
 void CoordinatorServiceImpl::StoreHeartbeat(google::protobuf::RpcController *controller,
                                             const pb::coordinator::StoreHeartbeatRequest *request,
                                             pb::coordinator::StoreHeartbeatResponse *response,
@@ -98,6 +285,21 @@ void CoordinatorServiceImpl::StoreHeartbeat(google::protobuf::RpcController *con
 
   if (!is_leader) {
     return RedirectResponse(response);
+  }
+
+  // validate store
+  if (!request->has_store()) {
+    auto *error = response->mutable_error();
+    error->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
+    LOG(INFO) << "StoreHeartBeat has_store() is false, reject heartbeat";
+    return;
+  }
+
+  int ret = this->coordinator_control_->ValidateStore(request->store().id(), request->store().keyring());
+  if (ret) {
+    LOG(INFO) << "StoreHeartBeat ValidateStore failed, reject heardbeat, store_id=" << request->store().id()
+              << " keyring=" << request->store().keyring();
+    return;
   }
 
   pb::coordinator_internal::MetaIncrement meta_increment;
@@ -158,6 +360,27 @@ void CoordinatorServiceImpl::GetStoreMap(google::protobuf::RpcController * /*con
   this->coordinator_control_->GetStoreMap(storemap);
   response->mutable_storemap()->CopyFrom(storemap);
   response->set_epoch(storemap.epoch());
+}
+
+void CoordinatorServiceImpl::GetExecutorMap(google::protobuf::RpcController * /*controller*/,
+                                            const pb::coordinator::GetExecutorMapRequest *request,
+                                            pb::coordinator::GetExecutorMapResponse *response,
+                                            google::protobuf::Closure *done) {
+  brpc::ClosureGuard const done_guard(done);
+
+  auto format_request = Helper::MessageToJsonString(*request);
+  auto is_leader = this->coordinator_control_->IsLeader();
+  LOG(INFO) << "Receive Get ExecutorMap Request, IsLeader:" << is_leader << ", Request:" << format_request;
+
+  if (!is_leader) {
+    RedirectResponse(response);
+    return;
+  }
+
+  pb::common::ExecutorMap executormap;
+  this->coordinator_control_->GetExecutorMap(executormap);
+  response->mutable_executormap()->CopyFrom(executormap);
+  response->set_epoch(executormap.epoch());
 }
 
 void CoordinatorServiceImpl::GetRegionMap(google::protobuf::RpcController * /*controller*/,

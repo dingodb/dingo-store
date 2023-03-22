@@ -28,6 +28,7 @@ bool StoreServerMeta::Init() {
 
   std::shared_ptr<pb::common::Store> store = std::make_shared<pb::common::Store>();
   store->set_id(server->Id());
+  store->mutable_keyring()->assign(server->Keyring());
   store->set_epoch(0);
   store->set_state(pb::common::STORE_NORMAL);
   auto* server_location = store->mutable_server_location();

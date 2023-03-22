@@ -81,7 +81,7 @@ class MetaMapStorage {
     return 0;
   }
 
-  std::string GenKey(uint64_t region_id) { return butil::StringPrintf("%s_%lu", internal_prefix.c_str(), region_id); }
+  std::string GenKey(uint64_t id) { return butil::StringPrintf("%s_%lu", internal_prefix.c_str(), id); }
 
   std::shared_ptr<pb::common::KeyValue> TransformToKv(uint64_t id) {
     // std::shared_lock<std::shared_mutex> lock(mutex_);
@@ -197,10 +197,34 @@ class CoordinatorControl : public MetaControl {
 
   // create store
   // in: cluster_id
-  // out: store_id, password
+  // out: store_id, keyring
   // return: 0 or -1
-  int CreateStore(uint64_t cluster_id, uint64_t &store_id, std::string &password,
+  int CreateStore(uint64_t cluster_id, uint64_t &store_id, std::string &keyring,
                   pb::coordinator_internal::MetaIncrement &meta_increment) override;
+
+  // delete store
+  // in: cluster_id, store_id, keyring
+  // return: 0 or -1
+  int DeleteStore(uint64_t cluster_id, uint64_t store_id, std::string keyring,
+                  pb::coordinator_internal::MetaIncrement &meta_increment) override;
+
+  // create executor
+  // in: cluster_id
+  // out: executor_id, keyring
+  // return: 0 or -1
+  int CreateExecutor(uint64_t cluster_id, uint64_t &executor_id, std::string &keyring,
+                     pb::coordinator_internal::MetaIncrement &meta_increment) override;
+
+  // delete executor
+  // in: cluster_id, executor_id, keyring
+  // return: 0 or -1
+  int DeleteExecutor(uint64_t cluster_id, uint64_t executor_id, std::string keyring,
+                     pb::coordinator_internal::MetaIncrement &meta_increment) override;
+
+  // update executor map with new Executor info
+  // return new epoch
+  uint64_t UpdateExecutorMap(const pb::common::Executor &executor,
+                             pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // update store map with new Store info
   // return new epoch
@@ -209,6 +233,9 @@ class CoordinatorControl : public MetaControl {
 
   // get storemap
   void GetStoreMap(pb::common::StoreMap &store_map) override;
+
+  // get executormap
+  void GetExecutorMap(pb::common::ExecutorMap &executor_map);
 
   // get push storemap
   // this function will use std::swap to empty the class member store_need_push_
@@ -259,6 +286,14 @@ class CoordinatorControl : public MetaControl {
   // set raft_node to coordinator_control
   void SetRaftNode(std::shared_ptr<RaftNode> raft_node) override;
 
+  // validate store keyring
+  // return: 0 or -1
+  int ValidateStore(uint64_t store_id, const std::string &keyring);
+
+  // validate executor keyring
+  // return: 0 or -1
+  int ValidateExecutor(uint64_t executor_id, const std::string &keyring);
+
  private:
   // mutex
   bthread_mutex_t control_mutex_;
@@ -274,9 +309,14 @@ class CoordinatorControl : public MetaControl {
   std::map<uint64_t, pb::coordinator_internal::CoordinatorInternal> coordinator_map_;
   MetaMapStorage<pb::coordinator_internal::CoordinatorInternal> *coordinator_meta_;
 
+  // executors
+  std::map<uint64_t, pb::common::Executor> executor_map_;
+  MetaMapStorage<pb::common::Executor> *executor_meta_;          // need construct
+  std::map<uint64_t, pb::common::Executor> executor_need_push_;  // will send push msg to these executors in crontab
+
   // stores
   std::map<uint64_t, pb::common::Store> store_map_;
-  MetaMapStorage<pb::common::Store> *store_meta_;
+  MetaMapStorage<pb::common::Store> *store_meta_;          // need contruct
   std::map<uint64_t, pb::common::Store> store_need_push_;  // will send push msg to these stores in crontab
 
   // schemas

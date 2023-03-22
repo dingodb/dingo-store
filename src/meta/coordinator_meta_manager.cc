@@ -21,12 +21,12 @@
 
 namespace dingodb {
 
-CoordinatorServerMeta::CoordinatorServerMeta() : store_(std::make_shared<pb::common::Coordinator>()) {}
+CoordinatorServerMeta::CoordinatorServerMeta() : coordinator_(std::make_shared<pb::common::Coordinator>()) {}
 
 bool CoordinatorServerMeta::Init() {
   auto* server = Server::GetInstance();
-  store_->set_id(server->Id());
-  LOG(INFO) << "store server meta: " << store_->ShortDebugString();
+  coordinator_->set_id(server->Id());
+  LOG(INFO) << "coordinator server meta: " << coordinator_->ShortDebugString();
 
   return true;
 }
@@ -39,38 +39,40 @@ CoordinatorServerMeta& CoordinatorServerMeta::SetEpoch(uint64_t epoch) {
 }
 
 CoordinatorServerMeta& CoordinatorServerMeta::SetId(uint64_t id) {
-  store_->set_id(id);
+  coordinator_->set_id(id);
   return *this;
 }
 
 CoordinatorServerMeta& CoordinatorServerMeta::SetState(pb::common::CoordinatorState state) {
-  store_->set_state(state);
+  coordinator_->set_state(state);
   return *this;
 }
 
 CoordinatorServerMeta& CoordinatorServerMeta::SetServerLocation(const butil::EndPoint&& /*endpoint*/) {
-  //   auto* location = store_->mutable_server_location();
+  //   auto* location = coordinator_->mutable_server_location();
   //   location->set_host(butil::ip2str(endpoint.ip).c_str());
   //   location->set_port(endpoint.port);
   return *this;
 }
 
 CoordinatorServerMeta& CoordinatorServerMeta::SetRaftLocation(const butil::EndPoint&& /*endpoint*/) {
-  //   auto* location = store_->mutable_raft_location();
+  //   auto* location = coordinator_->mutable_raft_location();
   //   location->set_host(butil::ip2str(endpoint.ip).c_str());
   //   location->set_port(endpoint.port);
   return *this;
 }
 
-std::shared_ptr<pb::common::Coordinator> CoordinatorServerMeta::GetCoordinator() { return store_; }
+std::shared_ptr<pb::common::Coordinator> CoordinatorServerMeta::GetCoordinator() { return coordinator_; }
 
 CoordinatorMetaManager::CoordinatorMetaManager(std::shared_ptr<MetaReader> meta_reader,
                                                std::shared_ptr<MetaWriter> meta_writer)
     : meta_reader_(meta_reader),
       meta_writer_(meta_writer),
       server_meta_(std::make_unique<CoordinatorServerMeta>()),
+      idepoch_meta_(std::make_unique<CoordinatorMap<pb::coordinator_internal::IdEpochInternal>>()),
       coordinator_meta_(std::make_unique<CoordinatorMap<pb::coordinator_internal::CoordinatorInternal>>()),
       store_meta_(std::make_unique<CoordinatorMap<pb::common::Store>>()),
+      executor_meta_(std::make_unique<CoordinatorMap<pb::common::Executor>>()),
       schema_meta_(std::make_unique<CoordinatorMap<pb::meta::Schema>>()),
       region_meta_(std::make_unique<CoordinatorMap<pb::common::Region>>()),
       table_meta_(std::make_unique<CoordinatorMap<pb::coordinator_internal::TableInternal>>()) {}

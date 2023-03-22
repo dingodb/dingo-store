@@ -47,6 +47,7 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   region_meta_ = new MetaMapStorage<pb::common::Region>(&region_map_);
   table_meta_ = new MetaMapStorage<pb::coordinator_internal::TableInternal>(&table_map_);
   id_epoch_meta_ = new MetaMapStorage<pb::coordinator_internal::IdEpochInternal>(&id_epoch_map_);
+  executor_meta_ = new MetaMapStorage<pb::common::Executor>(&executor_map_);
 }
 
 CoordinatorControl::~CoordinatorControl() {
@@ -239,7 +240,7 @@ bool CoordinatorControl::Init() {
 uint64_t CoordinatorControl::GetPresentId(const pb::coordinator_internal::IdEpochType& key) {
   uint64_t value = 0;
   if (id_epoch_map_.find(key) == id_epoch_map_.end()) {
-    value = 100;
+    value = 1000;
     LOG(INFO) << "GetPresentId key=" << key << " not found, generate new id=" << value;
   } else {
     value = id_epoch_map_[key].value();
@@ -296,7 +297,7 @@ uint64_t CoordinatorControl::GetNextId(const pb::coordinator_internal::IdEpochTy
                                        pb::coordinator_internal::MetaIncrement& meta_increment) {
   uint64_t value = 0;
   if (id_epoch_map_.find(key) == id_epoch_map_.end()) {
-    value = 100;
+    value = 1000;
     LOG(INFO) << "GetNextId key=" << key << " not found, generate new id=" << value;
   } else {
     value = id_epoch_map_[key].value();
@@ -386,6 +387,51 @@ int CoordinatorControl::CreateSchema(uint64_t parent_schema_id, std::string sche
   return 0;
 }
 
+uint64_t CoordinatorControl::UpdateExecutorMap(const pb::common::Executor& executor,
+                                               pb::coordinator_internal::MetaIncrement& meta_increment) {
+  BAIDU_SCOPED_LOCK(control_mutex_);
+  uint64_t executor_map_epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_EXECUTOR);
+
+  if (executor_map_.find(executor.id()) != executor_map_.end()) {
+    if (executor_map_[executor.id()].state() != executor.state()) {
+      LOG(INFO) << "executor STATUS CHANGE executor_id = " << executor.id()
+                << " old status = " << executor_map_[executor.id()].state() << " new status = " << executor.state();
+
+      // update meta_increment
+      GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_EXECUTOR, meta_increment);
+      auto* executor_increment = meta_increment.add_executors();
+      executor_increment->set_id(executor.id());
+      executor_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
+
+      auto* executor_increment_executor = executor_increment->mutable_executor();
+      executor_increment_executor->CopyFrom(executor);
+
+      // on_apply
+      // executor_map_epoch++;              // raft_kv_put
+      // executor_map_[executor.id()] = executor;  // raft_kv_put
+    }
+  } else {
+    LOG(INFO) << "NEED ADD NEW executor executor_id = " << executor.id();
+
+    // update meta_increment
+    GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_EXECUTOR, meta_increment);
+    auto* executor_increment = meta_increment.add_executors();
+    executor_increment->set_id(executor.id());
+    executor_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
+
+    auto* executor_increment_executor = executor_increment->mutable_executor();
+    executor_increment_executor->CopyFrom(executor);
+
+    // on_apply
+    // executor_map_epoch++;                                    // raft_kv_put
+    // executor_map_.insert(std::make_pair(executor.id(), executor));  // raft_kv_put
+  }
+
+  LOG(INFO) << "UpdateExecutorMap executor_id=" << executor.id();
+
+  return executor_map_epoch;
+}
+
 // TODO: data persistence
 uint64_t CoordinatorControl::UpdateStoreMap(const pb::common::Store& store,
                                             pb::coordinator_internal::MetaIncrement& meta_increment) {
@@ -432,16 +478,18 @@ uint64_t CoordinatorControl::UpdateStoreMap(const pb::common::Store& store,
   return store_map_epoch;
 }
 
-int CoordinatorControl::CreateStore(uint64_t cluster_id, uint64_t& store_id, std::string& password,
+int CoordinatorControl::CreateStore(uint64_t cluster_id, uint64_t& store_id, std::string& keyring,
                                     pb::coordinator_internal::MetaIncrement& meta_increment) {
   if (cluster_id > 0) {
     BAIDU_SCOPED_LOCK(control_mutex_);
 
     store_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_STORE, meta_increment);
-    password = "TO_BE_CONTINUED";
+    keyring = Helper::generateRandomString(16);
 
     pb::common::Store store;
     store.set_id(store_id);
+    store.mutable_keyring()->assign(keyring);
+    store.set_state(::dingodb::pb::common::StoreState::STORE_NEW);
 
     // update meta_increment
     GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_STORE, meta_increment);
@@ -455,6 +503,107 @@ int CoordinatorControl::CreateStore(uint64_t cluster_id, uint64_t& store_id, std
     // on_apply
     // store_map_epoch++;                                  // raft_kv_put
     // store_map_.insert(std::make_pair(store_id, store));  // raft_kv_put
+    return 0;
+  } else {
+    return -1;
+  }
+}
+
+int CoordinatorControl::DeleteStore(uint64_t cluster_id, uint64_t store_id, std::string keyring,
+                                    pb::coordinator_internal::MetaIncrement& meta_increment) {
+  if (cluster_id > 0 && store_id > 0 && keyring.length() > 0) {
+    BAIDU_SCOPED_LOCK(control_mutex_);
+
+    if (store_map_.find(store_id) == store_map_.end()) {
+      LOG(INFO) << "DeleteStore store_id not exists, id=" << store_id;
+      return -1;
+    }
+
+    auto store_to_delete = store_map_[store_id];
+    if (keyring.compare(store_to_delete.keyring())) {
+      LOG(INFO) << "DeleteStore store_id id=" << store_id << " keyring not equal, input keyring=" << keyring
+                << " but store's keyring=" << store_to_delete.keyring();
+      return -1;
+    }
+
+    // update meta_increment
+    GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_STORE, meta_increment);
+    auto* store_increment = meta_increment.add_stores();
+    store_increment->set_id(store_id);
+    store_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
+
+    auto* store_increment_store = store_increment->mutable_store();
+    store_increment_store->CopyFrom(store_to_delete);
+
+    // on_apply
+    // store_map_epoch++;                                  // raft_kv_put
+    // store_map_.insert(std::make_pair(store_id, store));  // raft_kv_put
+    return 0;
+  } else {
+    return -1;
+  }
+}
+
+int CoordinatorControl::CreateExecutor(uint64_t cluster_id, uint64_t& executor_id, std::string& keyring,
+                                       pb::coordinator_internal::MetaIncrement& meta_increment) {
+  if (cluster_id > 0) {
+    BAIDU_SCOPED_LOCK(control_mutex_);
+
+    executor_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_EXECUTOR, meta_increment);
+    keyring = Helper::generateRandomString(16);
+
+    pb::common::Executor executor;
+    executor.set_id(executor_id);
+    executor.mutable_keyring()->assign(keyring);
+    executor.set_state(::dingodb::pb::common::ExecutorState::EXECUTOR_NEW);
+
+    // update meta_increment
+    GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_EXECUTOR, meta_increment);
+    auto* executor_increment = meta_increment.add_executors();
+    executor_increment->set_id(executor_id);
+    executor_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
+
+    auto* executor_increment_executor = executor_increment->mutable_executor();
+    executor_increment_executor->CopyFrom(executor);
+
+    // on_apply
+    // executor_map_epoch++;                                  // raft_kv_put
+    // executor_map_.insert(std::make_pair(executor_id, executor));  // raft_kv_put
+    return 0;
+  } else {
+    return -1;
+  }
+}
+
+int CoordinatorControl::DeleteExecutor(uint64_t cluster_id, uint64_t executor_id, std::string keyring,
+                                       pb::coordinator_internal::MetaIncrement& meta_increment) {
+  if (cluster_id > 0 && executor_id > 0 && keyring.length() > 0) {
+    BAIDU_SCOPED_LOCK(control_mutex_);
+
+    if (executor_map_.find(executor_id) == executor_map_.end()) {
+      LOG(INFO) << "DeleteExecutor executor_id not exists, id=" << executor_id;
+      return -1;
+    }
+
+    auto executor_to_delete = executor_map_[executor_id];
+    if (keyring.compare(executor_to_delete.keyring())) {
+      LOG(INFO) << "DeleteExecutor executor_id id=" << executor_id << " keyring not equal, input keyring=" << keyring
+                << " but executor's keyring=" << executor_to_delete.keyring();
+      return -1;
+    }
+
+    // update meta_increment
+    GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_EXECUTOR, meta_increment);
+    auto* executor_increment = meta_increment.add_executors();
+    executor_increment->set_id(executor_id);
+    executor_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
+
+    auto* executor_increment_executor = executor_increment->mutable_executor();
+    executor_increment_executor->CopyFrom(executor_to_delete);
+
+    // on_apply
+    // executor_map_epoch++;                                  // raft_kv_put
+    // executor_map_.insert(std::make_pair(executor_id, executor));  // raft_kv_put
     return 0;
   } else {
     return -1;
@@ -830,6 +979,18 @@ void CoordinatorControl::GetStoreMap(pb::common::StoreMap& store_map) {
   }
 }
 
+void CoordinatorControl::GetExecutorMap(pb::common::ExecutorMap& executor_map) {
+  BAIDU_SCOPED_LOCK(control_mutex_);
+
+  uint64_t executor_map_epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_EXECUTOR);
+  executor_map.set_epoch(executor_map_epoch);
+
+  for (auto& elemnt : executor_map_) {
+    auto* tmp_region = executor_map.add_executors();
+    tmp_region->CopyFrom(elemnt.second);
+  }
+}
+
 void CoordinatorControl::GetPushStoreMap(std::map<uint64_t, pb::common::Store>& store_to_push) {
   BAIDU_SCOPED_LOCK(control_mutex_);
 
@@ -1151,7 +1312,31 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
     }
   }
 
-  // 3.schema map
+  // 3.executor map
+  for (int i = 0; i < meta_increment.executors_size(); i++) {
+    const auto& executor = meta_increment.executors(i);
+    if (executor.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
+      executor_map_[executor.id()] = executor.executor();
+
+      // meta_write_kv
+      meta_write_to_kv.push_back(executor_meta_->TransformToKvValue(executor.executor()));
+
+    } else if (executor.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
+      auto& update_executor = executor_map_[executor.id()];
+      update_executor.CopyFrom(executor.executor());
+
+      // meta_write_kv
+      meta_write_to_kv.push_back(executor_meta_->TransformToKvValue(executor.executor()));
+
+    } else if (executor.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
+      executor_map_.erase(executor.id());
+
+      // meta_delete_kv
+      meta_delete_to_kv.push_back(executor_meta_->TransformToKvValue(executor.executor()));
+    }
+  }
+
+  // 4.schema map
   for (int i = 0; i < meta_increment.schemas_size(); i++) {
     const auto& schema = meta_increment.schemas(i);
     if (schema.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
@@ -1190,7 +1375,7 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
     }
   }
 
-  // 4.region map
+  // 5.region map
   for (int i = 0; i < meta_increment.regions_size(); i++) {
     const auto& region = meta_increment.regions(i);
     if (region.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
@@ -1236,7 +1421,7 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
     }
   }
 
-  // 5.table map
+  // 6.table map
   for (int i = 0; i < meta_increment.tables_size(); i++) {
     const auto& table = meta_increment.tables(i);
     if (table.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
@@ -1294,6 +1479,56 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
     }
   }
   // write update to local engine, end
+}
+
+int CoordinatorControl::ValidateStore(uint64_t store_id, const std::string& keyring) {
+  BAIDU_SCOPED_LOCK(control_mutex_);
+
+  if (keyring.compare(std::string("TO_BE_CONTINUED")) == 0) {
+    LOG(INFO) << "ValidateStore store_id=" << store_id << " debug pass with TO_BE_CONTINUED";
+    return 0;
+  }
+
+  if (store_map_.find(store_id) != store_map_.end()) {
+    auto store_in_map = store_map_[store_id];
+    if (store_in_map.keyring().compare(keyring) == 0) {
+      LOG(INFO) << "ValidateStore store_id=" << store_id << " succcess";
+      return 0;
+    }
+
+    LOG(INFO) << "ValidateStore store_id=" << store_id << "keyring wrong fail input_keyring=" << keyring
+              << " correct_keyring=" << store_in_map.keyring();
+    return -1;
+  }
+
+  LOG(INFO) << "ValidateStore store_id=" << store_id << " not exist fail";
+
+  return -1;
+}
+
+int CoordinatorControl::ValidateExecutor(uint64_t executor_id, const std::string& keyring) {
+  BAIDU_SCOPED_LOCK(control_mutex_);
+
+  if (keyring.compare(std::string("TO_BE_CONTINUED")) == 0) {
+    LOG(INFO) << "ValidateExecutor executor_id=" << executor_id << " debug pass with TO_BE_CONTINUED";
+    return 0;
+  }
+
+  if (executor_map_.find(executor_id) != executor_map_.end()) {
+    auto executor_in_map = executor_map_[executor_id];
+    if (executor_in_map.keyring().compare(keyring) == 0) {
+      LOG(INFO) << "ValidateExecutor executor_id=" << executor_id << " succcess";
+      return 0;
+    }
+
+    LOG(INFO) << "ValidateExecutor executor_id=" << executor_id << "keyring wrong fail input_keyring=" << keyring
+              << " correct_keyring=" << executor_in_map.keyring();
+    return -1;
+  }
+
+  LOG(INFO) << "ValidateExecutor executor_id=" << executor_id << " not exist fail";
+
+  return -1;
 }
 
 }  // namespace dingodb

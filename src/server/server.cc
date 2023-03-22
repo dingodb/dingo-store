@@ -80,7 +80,8 @@ bool Server::InitLog() {
 bool Server::InitServerID() {
   auto config = ConfigManager::GetInstance()->GetConfig(role_);
   id_ = config->GetInt("cluster.instance_id");
-  return id_ != 0;
+  keyring_ = config->GetString("cluster.keyring");
+  return id_ != 0 && (!keyring_.empty());
 }
 
 bool Server::InitRawEngines() {

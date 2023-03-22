@@ -76,10 +76,29 @@ class MetaControl {
 
   // create store
   // in: cluster_id
-  // out: store_id, password
+  // out: store_id, keyring
   // return: 0 or -1
-  virtual int CreateStore(uint64_t cluster_id, uint64_t &store_id, std::string &password,
+  virtual int CreateStore(uint64_t cluster_id, uint64_t &store_id, std::string &keyring,
                           pb::coordinator_internal::MetaIncrement &meta_increment) = 0;
+
+  // delete store
+  // in: cluster_id, store_id, keyring
+  // return: 0 or -1
+  virtual int DeleteStore(uint64_t cluster_id, uint64_t store_id, std::string keyring,
+                          pb::coordinator_internal::MetaIncrement &meta_increment) = 0;
+
+  // create executor
+  // in: cluster_id
+  // out: executor_id, keyring
+  // return: 0 or -1
+  virtual int CreateExecutor(uint64_t cluster_id, uint64_t &executor_id, std::string &keyring,
+                             pb::coordinator_internal::MetaIncrement &meta_increment) = 0;
+
+  // delete executor
+  // in: cluster_id, executor_id, keyring
+  // return: 0 or -1
+  virtual int DeleteExecutor(uint64_t cluster_id, uint64_t executor_id, std::string keyring,
+                             pb::coordinator_internal::MetaIncrement &meta_increment) = 0;
 
   // update store map with new Store info
   // return new epoch

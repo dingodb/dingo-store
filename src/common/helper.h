@@ -114,6 +114,9 @@ class Helper {
   // in: raft_location
   // out: server_location
   static void GetServerLocation(const pb::common::Location& raft_location, pb::common::Location& server_location);
+
+  // generate random string for keyring
+  static std::string generateRandomString(int length);
 };
 
 }  // namespace dingodb
