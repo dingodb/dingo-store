@@ -14,6 +14,7 @@
 
 #include "common/helper.h"
 
+#include <cstdint>
 #include <regex>
 
 #include "brpc/controller.h"
@@ -206,7 +207,7 @@ std::string Helper::Increment(const std::string& input) {
   std::string ret(input.size(), 0);
   int carry = 1;
   for (int i = input.size() - 1; i >= 0; --i) {
-    if (input[i] == 0xFF && carry == 1) {
+    if (static_cast<int32_t>(input[i]) == 0xFF && carry == 1) {
       ret[i] = 0;
     } else {
       ret[i] = (input[i] + carry);
