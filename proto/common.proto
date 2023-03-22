@@ -108,9 +108,8 @@ message Executor {
   uint64 epoch = 2;
   ExecutorState state = 3;
   Location server_location = 4;
-  Location raft_location = 5;
-  string resource_tag = 6;
-  string keyring = 7;
+  string resource_tag = 5;
+  string keyring = 6;
 }
 
 message ExecutorMap {
