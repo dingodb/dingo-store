@@ -343,7 +343,7 @@ void StoreServiceImpl::KvPutIfAbsent(google::protobuf::RpcController* controller
   auto mut_request = const_cast<dingodb::pb::store::KvPutIfAbsentRequest*>(request);
   std::vector<pb::common::KeyValue> kvs;
   kvs.emplace_back(std::move(*mut_request->release_kv()));
-  status = storage_->KvPutIfAbsent(ctx, kvs);
+  status = storage_->KvPutIfAbsent(ctx, kvs, true);
   if (!status.ok()) {
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
@@ -391,7 +391,7 @@ void StoreServiceImpl::KvBatchPutIfAbsent(google::protobuf::RpcController* contr
   ctx->SetRegionId(request->region_id()).SetCfName(Constant::kStoreDataCF);
 
   auto mut_request = const_cast<dingodb::pb::store::KvBatchPutIfAbsentRequest*>(request);
-  status = storage_->KvPutIfAbsent(ctx, Helper::PbRepeatedToVector(mut_request->mutable_kvs()));
+  status = storage_->KvPutIfAbsent(ctx, Helper::PbRepeatedToVector(mut_request->mutable_kvs()), request->is_atomic());
   if (!status.ok()) {
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<pb::error::Errno>(status.error_code()));

@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "engine/storage.h"
+#include <vector>
 
 #include "common/constant.h"
 #include "common/helper.h"
@@ -36,6 +37,10 @@ butil::Status Storage::KvGet(std::shared_ptr<Context> ctx, const std::vector<std
     std::string value;
     auto status = reader->KvGet(ctx, key, value);
     if (!status.ok()) {
+      if (pb::error::EKEY_NOTFOUND == status.error_code()) {
+        continue;
+      }
+      kvs.clear();
       return status;
     }
 
@@ -63,11 +68,13 @@ butil::Status Storage::KvPut(std::shared_ptr<Context> ctx, const std::vector<pb:
   });
 }
 
-butil::Status Storage::KvPutIfAbsent(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs) {
+butil::Status Storage::KvPutIfAbsent(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs,
+                                     bool is_atomic) {
   WriteData write_data;
   std::shared_ptr<PutIfAbsentDatum> datum = std::make_shared<PutIfAbsentDatum>();
   datum->cf_name = ctx->CfName();
   datum->kvs = kvs;
+  datum->is_atomic = is_atomic;
   write_data.AddDatums(std::static_pointer_cast<DatumAble>(datum));
 
   return engine_->AsyncWrite(ctx, write_data, [ctx](butil::Status status) {
