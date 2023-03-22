@@ -57,6 +57,7 @@ CoordinatorControl::~CoordinatorControl() {
   delete region_meta_;
   delete table_meta_;
   delete id_epoch_meta_;
+  delete executor_meta_;
 }
 
 bool CoordinatorControl::IsLeader() { return is_leader_.load(); }
