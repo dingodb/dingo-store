@@ -139,7 +139,7 @@
                         </goals>
                         <configuration>
                             <shadedArtifactAttached>true</shadedArtifactAttached>
-                            <shadedClassifierName>sources</shadedClassifierName>
+                            <shadedClassifierName>all</shadedClassifierName>
                             <filters>
                                 <filter>
                                     <artifact>*:*</artifact>
