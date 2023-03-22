@@ -15,6 +15,8 @@
 #ifndef DINGODB_STORE_STORE_CONTROL_H_
 #define DINGODB_STORE_STORE_CONTROL_H_
 
+#include <atomic>
+#include <cstdint>
 #include <memory>
 
 #include "butil/macros.h"
@@ -36,8 +38,19 @@ class StoreControl {
   butil::Status ChangeRegion(std::shared_ptr<Context> ctx, std::shared_ptr<pb::common::Region> region);
   butil::Status DeleteRegion(std::shared_ptr<Context> ctx, uint64_t region_id);
 
+  void SetHeartbeatIntervalMultiple(uint64_t interval_multiple);
+  void TriggerHeartbeat();
+
+  // return true if need to send heartbeat
+  bool CheckNeedToHeartbeat();
+
+  std::atomic_bool need_send_heartbeat_immediately;
+
  private:
   bthread_mutex_t control_mutex_;
+  std::atomic_bool need_heartbeat_immediately;  // this value is true mean heartbeat is neeed immediately
+  uint64_t heartbeat_interval_multiple;         // this value describe N times the heartbeat_interval to push_interval
+  uint64_t heartbeat_count;                     // this value store heartbeat executed count
 };
 
 }  // namespace dingodb

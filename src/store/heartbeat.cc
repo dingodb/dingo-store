@@ -23,6 +23,7 @@
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
 #include "proto/push.pb.h"
+#include "server/server.h"
 
 namespace dingodb {
 
@@ -108,8 +109,15 @@ void Heartbeat::SendCoordinatorPushToStore(void* arg) {
 }
 
 void Heartbeat::SendStoreHeartbeat(void* arg) {
-  LOG(INFO) << "SendStoreHeartbeat...";
+  // LOG(INFO) << "SendStoreHeartbeat...";
   CoordinatorInteraction* coordinator_interaction = static_cast<CoordinatorInteraction*>(arg);
+
+  auto store_control = Server::GetInstance()->GetStoreControl();
+  if (!store_control->CheckNeedToHeartbeat()) {
+    // LOG(INFO) << "CheckNeedToHeartbeat is false, no need to hearbeat";
+    return;
+  }
+  LOG(INFO) << "CheckNeedToHeartbeat is true, start to SendStoreHeartbeat";
 
   pb::coordinator::StoreHeartbeatRequest request;
   auto store_meta = Server::GetInstance()->GetStoreMetaManager();
