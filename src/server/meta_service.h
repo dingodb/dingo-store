@@ -54,6 +54,8 @@ class MetaServiceImpl : public pb::meta::MetaService {
                    pb::meta::CreateTableResponse* response, google::protobuf::Closure* done) override;
   void DropTable(google::protobuf::RpcController* controller, const pb::meta::DropTableRequest* request,
                  pb::meta::DropTableResponse* response, google::protobuf::Closure* done) override;
+  void CreateTableId(google::protobuf::RpcController* controller, const pb::meta::CreateTableIdRequest* request,
+                     pb::meta::CreateTableIdResponse* response, google::protobuf::Closure* done) override;
 
   void CreateSchema(google::protobuf::RpcController* controller, const pb::meta::CreateSchemaRequest* request,
                     pb::meta::CreateSchemaResponse* response, google::protobuf::Closure* done) override;

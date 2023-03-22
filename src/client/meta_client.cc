@@ -139,7 +139,32 @@ void SendGetTable(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& s
   }
 }
 
-void SendCreateTable(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub) {
+void SendCreateTableId(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub) {
+  dingodb::pb::meta::CreateTableIdRequest request;
+  dingodb::pb::meta::CreateTableIdResponse response;
+
+  auto* schema_id = request.mutable_schema_id();
+  schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
+  schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+  schema_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
+
+  stub.CreateTableId(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    // bthread_usleep(FLAGS_timeout_ms * 1000L);
+  }
+
+  if (FLAGS_log_each_request) {
+    LOG(INFO) << "Received response"
+              << " request schema_id =" << request.schema_id().entity_id()
+              << " request_attachment=" << cntl.request_attachment().size()
+              << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+    LOG(INFO) << " request=" << request.DebugString();
+    LOG(INFO) << " response=" << response.DebugString();
+  }
+}
+
+void SendCreateTable(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub, bool with_table_id) {
   dingodb::pb::meta::CreateTableRequest request;
   dingodb::pb::meta::CreateTableResponse response;
 
@@ -147,6 +172,13 @@ void SendCreateTable(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub
   schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
   schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
   schema_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
+
+  if (with_table_id) {
+    auto* table_id = request.mutable_table_id();
+    table_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
+    table_id->set_entity_id(1024);
+    table_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
+  }
 
   // string name = 1;
   auto* table_definition = request.mutable_table_definition();
@@ -284,7 +316,11 @@ void* Sender(void* /*arg*/) {
     } else if (FLAGS_method == "GetTables") {
       SendGetTables(cntl, stub);
     } else if (FLAGS_method == "CreateTable") {
-      SendCreateTable(cntl, stub);
+      SendCreateTable(cntl, stub, false);
+    } else if (FLAGS_method == "CreateTableWithId") {
+      SendCreateTable(cntl, stub, true);
+    } else if (FLAGS_method == "CreateTableId") {
+      SendCreateTableId(cntl, stub);
     } else if (FLAGS_method == "DropTable") {
       SendDropTable(cntl, stub);
     } else if (FLAGS_method == "CreateSchema") {

@@ -187,9 +187,19 @@ message GetTableResponse {
   Table table = 2;
 }
 
+message CreateTableIdRequest {
+  DingoCommonId schema_id = 1;
+}
+
+message CreateTableIdResponse {
+  dingodb.pb.error.Error error = 1;
+  DingoCommonId table_id = 2;
+}
+
 message CreateTableRequest {
   DingoCommonId schema_id = 1;
-  TableDefinition table_definition = 2;
+  DingoCommonId table_id = 2;
+  TableDefinition table_definition = 3;
 }
 
 message CreateTableResponse {
@@ -231,8 +241,14 @@ service MetaService {
   // out: Table
   rpc GetTable(GetTableRequest) returns (GetTableResponse);
 
+  // CreateTableId
+  // in: schema_id
+  // out: table_id
+  rpc CreateTableId(CreateTableIdRequest) returns (CreateTableIdResponse);
+
   // CreateTable
-  // in: schema_id TableDefinition
+  // in: schema_id table_id TableDefinition
+  //      if table_id is specified, use given table_id, else create new table_id
   // out: table_id
   rpc CreateTable(CreateTableRequest) returns (CreateTableResponse);
 
