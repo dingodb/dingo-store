@@ -1,6 +1,7 @@
 cluster:
   name: dingodb
   instance_id: 23456
+  keyring: TO_BE_CONTINUED
 server:
   host: 127.0.0.1
   port: 19190

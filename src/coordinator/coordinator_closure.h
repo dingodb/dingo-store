@@ -94,6 +94,44 @@ class CoordinatorClosure<pb::coordinator::StoreHeartbeatRequest, pb::coordinator
   std::shared_ptr<CoordinatorControl> coordinator_control_;
 };
 
+template <>
+class CoordinatorClosure<pb::coordinator::ExecutorHeartbeatRequest, pb::coordinator::ExecutorHeartbeatResponse>
+    : public braft::Closure {
+ public:
+  CoordinatorClosure(const pb::coordinator::ExecutorHeartbeatRequest* request,
+                     pb::coordinator::ExecutorHeartbeatResponse* response, google::protobuf::Closure* done,
+                     uint64_t new_executormap_epoch, std::shared_ptr<CoordinatorControl> coordinator_control)
+      : request_(request),
+        response_(response),
+        done_(done),
+        coordinator_control_(coordinator_control),
+        new_executormap_epoch_(new_executormap_epoch) {}
+  ~CoordinatorClosure() override = default;
+
+  const pb::coordinator::ExecutorHeartbeatRequest* request() const { return request_; }  // NOLINT
+  pb::coordinator::ExecutorHeartbeatResponse* response() const { return response_; }     // NOLINT
+
+  void Run() override {
+    auto* new_executormap = response()->mutable_executormap();
+    coordinator_control_->GetExecutorMap(*new_executormap);
+
+    response()->set_executormap_epoch(new_executormap_epoch_);
+
+    brpc::ClosureGuard done_guard(done_);
+    std::string str_request = Helper::MessageToJsonString(*request_);
+    std::string str_response = Helper::MessageToJsonString(*response_);
+    LOG(INFO) << "Coordinator Closure return Heartbeat response[" << str_response << "] to executor with request["
+              << str_request << "]";
+  }
+
+ private:
+  const pb::coordinator::ExecutorHeartbeatRequest* request_;
+  pb::coordinator::ExecutorHeartbeatResponse* response_;
+  google::protobuf::Closure* done_;
+  uint64_t new_executormap_epoch_;
+  std::shared_ptr<CoordinatorControl> coordinator_control_;
+};
+
 }  // namespace dingodb
 
 #endif  // DINGODB_COORDINATOR_COMMON_H_

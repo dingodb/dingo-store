@@ -53,8 +53,25 @@ class CoordinatorServiceImpl : public pb::coordinator::CoordinatorService {
                     pb::coordinator::GetRegionMapResponse* response, google::protobuf::Closure* done) override;
   void GetStoreMap(google::protobuf::RpcController* controller, const pb::coordinator::GetStoreMapRequest* request,
                    pb::coordinator::GetStoreMapResponse* response, google::protobuf::Closure* done) override;
+
   void CreateStore(google::protobuf::RpcController* controller, const pb::coordinator::CreateStoreRequest* request,
                    pb::coordinator::CreateStoreResponse* response, google::protobuf::Closure* done) override;
+  void DeleteStore(google::protobuf::RpcController* controller, const pb::coordinator::DeleteStoreRequest* request,
+                   pb::coordinator::DeleteStoreResponse* response, google::protobuf::Closure* done) override;
+
+  void ExecutorHeartbeat(google::protobuf::RpcController* controller,
+                         const pb::coordinator::ExecutorHeartbeatRequest* request,
+                         pb::coordinator::ExecutorHeartbeatResponse* response,
+                         google::protobuf::Closure* done) override;
+  void CreateExecutor(google::protobuf::RpcController* controller,
+                      const pb::coordinator::CreateExecutorRequest* request,
+                      pb::coordinator::CreateExecutorResponse* response, google::protobuf::Closure* done) override;
+  void DeleteExecutor(google::protobuf::RpcController* controller,
+                      const pb::coordinator::DeleteExecutorRequest* request,
+                      pb::coordinator::DeleteExecutorResponse* response, google::protobuf::Closure* done) override;
+  void GetExecutorMap(google::protobuf::RpcController* controller,
+                      const pb::coordinator::GetExecutorMapRequest* request,
+                      pb::coordinator::GetExecutorMapResponse* response, google::protobuf::Closure* done) override;
 
   void GetCoordinatorMap(google::protobuf::RpcController* controller,
                          const pb::coordinator::GetCoordinatorMapRequest* request,

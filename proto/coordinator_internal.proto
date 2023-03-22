@@ -58,6 +58,9 @@ enum IdEpochType {
   EPOCH_SCHEMA = 7;
   EPOCH_REGION = 8;
   EPOCH_TABLE = 9;
+
+  ID_NEXT_EXECUTOR = 10;
+  EPOCH_EXECUTOR = 11;
 }
 
 message IdEpochInternal {
@@ -84,6 +87,12 @@ message MetaIncrementCoordinator {
 message MetaIncrementStore {
   uint64 id = 1;
   dingodb.pb.common.Store store = 2;
+  MetaIncrementOpType op_type = 3;
+}
+
+message MetaIncrementExecutor {
+  uint64 id = 1;
+  dingodb.pb.common.Executor executor = 2;
   MetaIncrementOpType op_type = 3;
 }
 
@@ -122,4 +131,5 @@ message MetaIncrement {
   repeated MetaIncrementSchema schemas = 4;
   repeated MetaIncrementTable tables = 5;
   repeated MetaIncrementIdEpoch idepochs = 6;
+  repeated MetaIncrementExecutor executors = 7;
 }

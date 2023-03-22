@@ -51,7 +51,7 @@ class CoordinatorServerMeta {
 
  private:
   uint64_t epoch_;
-  std::shared_ptr<pb::common::Coordinator> store_;
+  std::shared_ptr<pb::common::Coordinator> coordinator_;
 };
 
 template <typename T>
@@ -150,7 +150,7 @@ class CoordinatorMap {
   std::map<uint64_t, T> elements_;
 };
 
-// Manage store server meta data, like store and region.
+// Manage server meta data
 // the data will report periodic.
 class CoordinatorMetaManager {
  public:
@@ -175,8 +175,10 @@ class CoordinatorMetaManager {
   std::unique_ptr<CoordinatorServerMeta> server_meta_;
 
   // Coordinator maps
+  std::unique_ptr<CoordinatorMap<pb::coordinator_internal::IdEpochInternal>> idepoch_meta_;
   std::unique_ptr<CoordinatorMap<pb::coordinator_internal::CoordinatorInternal>> coordinator_meta_;
   std::unique_ptr<CoordinatorMap<pb::common::Store>> store_meta_;
+  std::unique_ptr<CoordinatorMap<pb::common::Executor>> executor_meta_;
   std::unique_ptr<CoordinatorMap<pb::meta::Schema>> schema_meta_;
   std::unique_ptr<CoordinatorMap<pb::common::Region>> region_meta_;
   std::unique_ptr<CoordinatorMap<pb::coordinator_internal::TableInternal>> table_meta_;

@@ -2,6 +2,7 @@ cluster:
   name: dingodb
   instance_id: 12345
   coordinators: 127.0.0.1:19190,127.0.0.1:19191,127.0.0.1:19192
+  keyring: TO_BE_CONTINUED
 server:
   host: 127.0.0.1
   port: 23000

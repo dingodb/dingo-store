@@ -16,6 +16,7 @@
 #define DINGODB_STORE_SERVER_H_
 
 #include <memory>
+#include <string>
 
 #include "brpc/channel.h"
 #include "common/meta_control.h"
@@ -85,6 +86,7 @@ class Server {
   void Destroy();
 
   uint64_t Id() const { return id_; }
+  std::string Keyring() const { return keyring_; }
 
   butil::EndPoint ServerEndpoint() { return server_endpoint_; }
   void SetServerEndpoint(const butil::EndPoint& endpoint) { server_endpoint_ = endpoint; }
@@ -119,6 +121,8 @@ class Server {
   // represent store's identity, provided by coordinator.
   // read from store config file.
   uint64_t id_;
+  // This is keyring, the password for this instance to join in the cluster
+  std::string keyring_;
   // Role, include store/coordinator
   pb::common::ClusterRole role_;
   // Service ip and port.

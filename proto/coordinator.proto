@@ -38,6 +38,17 @@ message StoreHeartbeatResponse {
   dingodb.pb.common.RegionMap regionmap = 5;  // new regionmap
 }
 
+message ExecutorHeartbeatRequest {
+  uint64 self_executormap_epoch = 1;        // executormap epoch in this Executor
+  dingodb.pb.common.Executor executor = 2;  // self executor info
+}
+
+message ExecutorHeartbeatResponse {
+  dingodb.pb.error.Error error = 1;
+  uint64 executormap_epoch = 2;                   // the lates epoch of executormap
+  dingodb.pb.common.ExecutorMap executormap = 3;  // new executormap
+}
+
 message HelloRequest {
   uint64 hello = 1;
 }
@@ -75,7 +86,7 @@ message CreateStoreRequest {
 message CreateStoreResponse {
   dingodb.pb.error.Error error = 1;
   uint64 store_id = 2;
-  string password = 3;
+  string keyring = 3;
 }
 
 message GetCoordinatorMapRequest {
@@ -88,6 +99,46 @@ message GetCoordinatorMapResponse {
   repeated dingodb.pb.common.Location coordinator_locations = 3;
 }
 
+message DeleteStoreRequest {
+  uint64 cluster_id = 1;
+  uint64 store_id = 2;
+  string keyring = 3;
+}
+
+message DeleteStoreResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
+message CreateExecutorRequest {
+  uint64 cluster_id = 1;
+}
+
+message CreateExecutorResponse {
+  dingodb.pb.error.Error error = 1;
+  uint64 executor_id = 2;
+  string keyring = 3;
+}
+
+message DeleteExecutorRequest {
+  uint64 cluster_id = 1;
+  uint64 executor_id = 2;
+  string keyring = 3;
+}
+
+message DeleteExecutorResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
+message GetExecutorMapRequest {
+  uint64 epoch = 1;
+}
+
+message GetExecutorMapResponse {
+  dingodb.pb.error.Error error = 1;
+  uint64 epoch = 2;
+  dingodb.pb.common.ExecutorMap executormap = 3;
+}
+
 service CoordinatorService {
   // Hello
   rpc Hello(HelloRequest) returns (HelloResponse);
@@ -98,6 +149,13 @@ service CoordinatorService {
   rpc GetStoreMap(GetStoreMapRequest) returns (GetStoreMapResponse);
 
   rpc CreateStore(CreateStoreRequest) returns (CreateStoreResponse);
+  rpc DeleteStore(DeleteStoreRequest) returns (DeleteStoreResponse);
+
+  // Executor
+  rpc ExecutorHeartbeat(ExecutorHeartbeatRequest) returns (ExecutorHeartbeatResponse);
+  rpc CreateExecutor(CreateExecutorRequest) returns (CreateExecutorResponse);
+  rpc DeleteExecutor(DeleteExecutorRequest) returns (DeleteExecutorResponse);
+  rpc GetExecutorMap(GetExecutorMapRequest) returns (GetExecutorMapResponse);
 
   // Coordinator
   rpc GetCoordinatorMap(GetCoordinatorMapRequest) returns (GetCoordinatorMapResponse);

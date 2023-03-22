@@ -113,6 +113,26 @@ void SendGetStoreMap(brpc::Controller& cntl, dingodb::pb::coordinator::Coordinat
   }
 }
 
+void SendGetExecutorMap(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
+  dingodb::pb::coordinator::GetExecutorMapRequest request;
+  dingodb::pb::coordinator::GetExecutorMapResponse response;
+
+  request.set_epoch(1);
+
+  stub.GetExecutorMap(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    // bthread_usleep(FLAGS_timeout_ms * 1000L);
+  }
+
+  if (FLAGS_log_each_request) {
+    LOG(INFO) << "Received response"
+              << " get_executor_map=" << request.epoch() << " request_attachment=" << cntl.request_attachment().size()
+              << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+    LOG(INFO) << response.DebugString();
+  }
+}
+
 void SendGetCoordinatorMap(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
   dingodb::pb::coordinator::GetCoordinatorMapRequest request;
   dingodb::pb::coordinator::GetCoordinatorMapResponse response;
@@ -154,6 +174,7 @@ void SendGetRegionMap(brpc::Controller& cntl, dingodb::pb::coordinator::Coordina
     LOG(INFO) << response.DebugString();
   }
 }
+
 void SendCreateStore(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
   dingodb::pb::coordinator::CreateStoreRequest request;
   dingodb::pb::coordinator::CreateStoreResponse response;
@@ -168,6 +189,74 @@ void SendCreateStore(brpc::Controller& cntl, dingodb::pb::coordinator::Coordinat
   if (FLAGS_log_each_request) {
     LOG(INFO) << "Received response"
               << " create store cluster_id =" << request.cluster_id()
+              << " request_attachment=" << cntl.request_attachment().size()
+              << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+    LOG(INFO) << response.DebugString();
+  }
+}
+
+void SendDeleteStore(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
+  dingodb::pb::coordinator::DeleteStoreRequest request;
+  dingodb::pb::coordinator::DeleteStoreResponse response;
+
+  request.set_cluster_id(1);
+  request.set_store_id(101);
+  auto* keyring = request.mutable_keyring();
+  keyring->assign("aabbcc");
+
+  stub.DeleteStore(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorCode() << "[" << cntl.ErrorText() << "]";
+    // bthread_usleep(FLAGS_timeout_ms * 1000L);
+  }
+
+  if (FLAGS_log_each_request) {
+    LOG(INFO) << "Received response"
+              << " create store cluster_id =" << request.cluster_id()
+              << " request_attachment=" << cntl.request_attachment().size()
+              << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+    LOG(INFO) << response.DebugString();
+  }
+}
+
+void SendCreateExecutor(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
+  dingodb::pb::coordinator::CreateExecutorRequest request;
+  dingodb::pb::coordinator::CreateExecutorResponse response;
+
+  request.set_cluster_id(1);
+  stub.CreateExecutor(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorCode() << "[" << cntl.ErrorText() << "]";
+    // bthread_usleep(FLAGS_timeout_ms * 1000L);
+  }
+
+  if (FLAGS_log_each_request) {
+    LOG(INFO) << "Received response"
+              << " create executor cluster_id =" << request.cluster_id()
+              << " request_attachment=" << cntl.request_attachment().size()
+              << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+    LOG(INFO) << response.DebugString();
+  }
+}
+
+void SendDeleteExecutor(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
+  dingodb::pb::coordinator::DeleteExecutorRequest request;
+  dingodb::pb::coordinator::DeleteExecutorResponse response;
+
+  request.set_cluster_id(1);
+  request.set_executor_id(101);
+  auto* keyring = request.mutable_keyring();
+  keyring->assign("aabbcc");
+
+  stub.DeleteExecutor(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorCode() << "[" << cntl.ErrorText() << "]";
+    // bthread_usleep(FLAGS_timeout_ms * 1000L);
+  }
+
+  if (FLAGS_log_each_request) {
+    LOG(INFO) << "Received response"
+              << " create executor cluster_id =" << request.cluster_id()
               << " request_attachment=" << cntl.request_attachment().size()
               << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
     LOG(INFO) << response.DebugString();
@@ -277,8 +366,16 @@ void* Sender(void* /*arg*/) {
       SendStoreHearbeat(cntl, stub, 300);
     } else if (FLAGS_method == "CreateStore") {
       SendCreateStore(cntl, stub);
+    } else if (FLAGS_method == "DeleteStore") {
+      SendDeleteStore(cntl, stub);
+    } else if (FLAGS_method == "CreateExecutor") {
+      SendCreateExecutor(cntl, stub);
+    } else if (FLAGS_method == "DeleteExecutor") {
+      SendDeleteExecutor(cntl, stub);
     } else if (FLAGS_method == "GetStoreMap") {
       SendGetStoreMap(cntl, stub);
+    } else if (FLAGS_method == "GetExecutorMap") {
+      SendGetExecutorMap(cntl, stub);
     } else if (FLAGS_method == "GetRegionMap") {
       SendGetRegionMap(cntl, stub);
     } else if (FLAGS_method == "GetCoordinatorMap") {

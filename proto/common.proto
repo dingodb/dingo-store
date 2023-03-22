@@ -63,6 +63,12 @@ enum StoreState {
   STORE_OUT = 3;      // up but no data will distribute to this store
 }
 
+enum ExecutorState {
+  EXECUTOR_NORMAL = 0;
+  EXECUTOR_NEW = 1;      // a new store, wait to startup and join raft
+  EXECUTOR_OFFLINE = 2;  // miss hearteat
+}
+
 enum RegionState {
   REGION_NORMAL = 0;
 
@@ -97,6 +103,21 @@ message CoordinatorMap {
   repeated Coordinator coordinators = 2;
 }
 
+message Executor {
+  uint64 id = 1;
+  uint64 epoch = 2;
+  ExecutorState state = 3;
+  Location server_location = 4;
+  Location raft_location = 5;
+  string resource_tag = 6;
+  string keyring = 7;
+}
+
+message ExecutorMap {
+  uint64 epoch = 1;
+  repeated Executor executors = 2;
+}
+
 message Store {
   uint64 id = 1;
   uint64 epoch = 2;
@@ -104,6 +125,7 @@ message Store {
   Location server_location = 4;
   Location raft_location = 5;
   string resource_tag = 6;
+  string keyring = 7;
 }
 
 message StoreMap {

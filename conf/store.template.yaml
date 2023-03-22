@@ -2,6 +2,7 @@ cluster:
   name: dingodb
   instance_id: $INSTANCE_ID$
   coordinators: $COORDINATOR_SERVICE_PEERS$
+  keyring: TO_BE_CONTINUED
 server:
   host: $SERVER_HOST$
   port: $SERVER_PORT$
