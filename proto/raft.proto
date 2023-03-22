@@ -43,6 +43,7 @@ message PutResponse {}
 message PutIfAbsentRequest {
   string cf_name = 1;
   repeated dingodb.pb.common.KeyValue kvs = 2;
+  bool is_atomic = 3;
 }
 
 message PutIfAbsentResponse {
