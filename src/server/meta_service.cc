@@ -88,6 +88,48 @@ void MetaServiceImpl::GetTable(google::protobuf::RpcController * /*controller*/,
   this->coordinator_control_->GetTable(request->table_id().parent_entity_id(), request->table_id().entity_id(), *table);
 }
 
+void MetaServiceImpl::CreateTableId(google::protobuf::RpcController *controller,
+                                    const pb::meta::CreateTableIdRequest *request,
+                                    pb::meta::CreateTableIdResponse *response, google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!this->coordinator_control_->IsLeader()) {
+    return RedirectResponse(response);
+  }
+
+  LOG(INFO) << "CreateTableId request:  schema_id = [" << request->schema_id().entity_id() << "]";
+  LOG(INFO) << request->DebugString();
+
+  pb::coordinator_internal::MetaIncrement meta_increment;
+
+  uint64_t new_table_id;
+  int ret = this->coordinator_control_->CreateTableId(request->schema_id().entity_id(), new_table_id, meta_increment);
+  if (ret < 0) {
+    LOG(ERROR) << "CreateTableId failed in meta_service";
+    return;
+  }
+  LOG(INFO) << "CreateTableId new_table_id=" << new_table_id;
+
+  auto *table_id = response->mutable_table_id();
+  table_id->set_entity_id(new_table_id);
+  table_id->set_parent_entity_id(request->schema_id().entity_id());
+  table_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
+
+  // prepare for raft process
+  CoordinatorClosure<pb::meta::CreateTableIdRequest, pb::meta::CreateTableIdResponse> *meta_create_store_closure =
+      new CoordinatorClosure<pb::meta::CreateTableIdRequest, pb::meta::CreateTableIdResponse>(request, response,
+                                                                                              done_guard.release());
+
+  std::shared_ptr<Context> ctx =
+      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_create_store_closure);
+  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+
+  // this is a async operation will be block by closure
+  engine_->MetaPut(ctx, meta_increment);
+
+  LOG(INFO) << "CreateTableId Success in meta_service table_d =" << new_table_id;
+}
+
 void MetaServiceImpl::CreateTable(google::protobuf::RpcController *controller,
                                   const pb::meta::CreateTableRequest *request, pb::meta::CreateTableResponse *response,
                                   google::protobuf::Closure *done) {
@@ -97,12 +139,20 @@ void MetaServiceImpl::CreateTable(google::protobuf::RpcController *controller,
     return RedirectResponse(response);
   }
 
-  LOG(INFO) << "CreatTable request:  schema_id = [" << request->schema_id().entity_id() << "]";
+  LOG(INFO) << "CreateTable request:  schema_id = [" << request->schema_id().entity_id() << "]";
   LOG(INFO) << request->DebugString();
 
   pb::coordinator_internal::MetaIncrement meta_increment;
 
-  uint64_t new_table_id;
+  uint64_t new_table_id = 0;
+  if (request->has_table_id()) {
+    if (request->table_id().entity_id() > 0) {
+      new_table_id = request->table_id().entity_id();
+      LOG(INFO) << "CreateTable table_id is given[" << new_table_id << "] request:  schema_id = ["
+                << request->schema_id().entity_id() << "]";
+    }
+  }
+
   int ret = this->coordinator_control_->CreateTable(request->schema_id().entity_id(), request->table_definition(),
                                                     new_table_id, meta_increment);
   if (ret < 0) {

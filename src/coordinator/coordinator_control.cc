@@ -610,6 +610,24 @@ int CoordinatorControl::DeleteExecutor(uint64_t cluster_id, uint64_t executor_id
   }
 }
 
+int CoordinatorControl::CreateTableId(uint64_t schema_id, uint64_t& new_table_id,
+                                      pb::coordinator_internal::MetaIncrement& meta_increment) {
+  // validate schema_id is existed
+  if (schema_map_.find(schema_id) == schema_map_.end()) {
+    LOG(ERROR) << "schema_id is illegal " << schema_id;
+    return -1;
+  }
+
+  // create table id
+  {
+    BAIDU_SCOPED_LOCK(control_mutex_);
+    new_table_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_TABLE, meta_increment);
+    LOG(INFO) << "CreateTableId new_table_id=" << new_table_id;
+  }
+
+  return 0;
+}
+
 int CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta::TableDefinition& table_definition,
                                     uint64_t& new_table_id, pb::coordinator_internal::MetaIncrement& meta_increment) {
   // initial schema create
@@ -652,8 +670,9 @@ int CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta::TableDef
 
   // create table
   // extract part info, create region for each part
-  // TODO: 3 is a temp default value
-  {
+
+  // if new_table_id is not given, create a new table_id
+  if (new_table_id <= 0) {
     BAIDU_SCOPED_LOCK(control_mutex_);
     new_table_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_TABLE, meta_increment);
     LOG(INFO) << "CreateTable new_table_id=" << new_table_id;

@@ -189,6 +189,13 @@ class CoordinatorControl : public MetaControl {
 
   // create schema
   // in: schema_id
+  // out: new table_id
+  // return: 0 or -1
+  int CreateTableId(uint64_t schema_id, uint64_t &new_table_id,
+                    pb::coordinator_internal::MetaIncrement &meta_increment);
+
+  // create schema
+  // in: schema_id
   // in: table_definition
   // out: new table_id
   // return: 0 or -1
