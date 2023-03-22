@@ -188,6 +188,10 @@ void StoreStateMachine::on_leader_start(int64_t term) {
   auto region = store_meta_manager->GetRegion(node_id_);
   region->set_leader_store_id(Server::GetInstance()->Id());
   region->set_state(pb::common::REGION_NORMAL);
+
+  // trigger heartbeat
+  auto store_control = Server::GetInstance()->GetStoreControl();
+  store_control->TriggerHeartbeat();
 }
 
 void StoreStateMachine::on_leader_stop(const butil::Status& status) {

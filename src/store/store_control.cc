@@ -156,4 +156,32 @@ butil::Status StoreControl::DeleteRegion(std::shared_ptr<Context> ctx, uint64_t 
   return butil::Status();
 }
 
+void StoreControl::SetHeartbeatIntervalMultiple(uint64_t interval_multiple) {
+  this->heartbeat_interval_multiple = interval_multiple;
+}
+
+void StoreControl::TriggerHeartbeat() {
+  LOG(INFO) << "TriggerHeartbeat";
+  this->need_heartbeat_immediately.store(true);
+}
+
+bool StoreControl::CheckNeedToHeartbeat() {
+  if (this->need_heartbeat_immediately.load()) {
+    this->need_heartbeat_immediately.store(false);
+    this->heartbeat_count = 0;
+
+    LOG(INFO) << "Heartbeat is triggerred";
+    return true;
+  }
+
+  this->heartbeat_count++;
+
+  if (this->heartbeat_count >= this->heartbeat_interval_multiple) {
+    this->heartbeat_count = 0;
+    return true;
+  }
+
+  return false;
+}
+
 }  // namespace dingodb
