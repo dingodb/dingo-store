@@ -138,6 +138,7 @@ class RawRocksEngine : public RawEngine {
 
     butil::Status KvPutIfAbsent(const pb::common::KeyValue& kv) override;
 
+
     butil::Status KvBatchPutIfAbsent(const std::vector<pb::common::KeyValue>& kvs, std::vector<std::string>& put_keys,
                                      bool is_atomic) override;
     // key must be exist

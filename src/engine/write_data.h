@@ -68,8 +68,9 @@ struct PutIfAbsentDatum : public DatumAble {
 
     request->set_cmd_type(pb::raft::CmdType::PUTIFABSENT);
     pb::raft::PutIfAbsentRequest* put_if_absent_request = request->mutable_put_if_absent();
+    put_if_absent_request->set_cf_name(cf_name);
+    put_if_absent_request->set_is_atomic(is_atomic);
     for (auto kv : kvs) {
-      put_if_absent_request->set_cf_name(cf_name);
       put_if_absent_request->add_kvs()->CopyFrom(kv);
     }
 
@@ -80,6 +81,7 @@ struct PutIfAbsentDatum : public DatumAble {
 
   std::string cf_name;
   std::vector<pb::common::KeyValue> kvs;
+  bool is_atomic;
 };
 
 struct DeleteBatchDatum : public DatumAble {
