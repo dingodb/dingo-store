@@ -14,18 +14,8 @@
  * limitations under the License.
  */
 
-package io.dingodb.sdk.common.type;
+package io.dingodb.sdk.common.serial;
 
-import io.dingodb.sdk.common.serial.schema.DingoSchema;
-
-public final class TypeUtils {
-    private TypeUtils() {
-    }
-
-    public static DingoSchema elementTypeToDingoList(DingoType elementType) {
-        switch (elementType.getTypeCode()) {
-            default:
-                throw new RuntimeException("Not Support ListType");
-        }
-    }
+public class Config {
+    public final static int SCALE = 100;
 }

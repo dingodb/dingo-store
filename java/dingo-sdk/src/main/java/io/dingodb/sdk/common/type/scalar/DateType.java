@@ -19,12 +19,12 @@ package io.dingodb.sdk.common.type.scalar;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonTypeName;
-import io.dingodb.serial.v2.t1.schema.DingoSchema;
+import io.dingodb.sdk.common.serial.schema.DingoSchema;
+import io.dingodb.sdk.common.serial.schema.LongSchema;
 import io.dingodb.sdk.common.type.NullType;
 import io.dingodb.sdk.common.type.TypeCode;
 import io.dingodb.sdk.common.type.converter.DataConverter;
 import io.dingodb.sdk.common.type.utils.DateTimeUtils;
-import io.dingodb.serial.v2.t1.schema.LongSchema;
 import org.checkerframework.checker.nullness.qual.NonNull;
 import org.checkerframework.checker.nullness.qual.Nullable;
 

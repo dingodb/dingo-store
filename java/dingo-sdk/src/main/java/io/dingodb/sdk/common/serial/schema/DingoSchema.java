@@ -16,34 +16,38 @@
 
 package io.dingodb.sdk.common.serial.schema;
 
-public interface DingoSchema {
+import io.dingodb.sdk.common.serial.Buf;
+
+public interface DingoSchema<T> {
+
+    byte NULL = 0;
+    byte NOTNULL = 1;
+
     Type getType();
 
     void setIndex(int index);
 
     int getIndex();
 
-    void setLength(int length);
+    void setIsKey(boolean isKey);
+
+    boolean isKey();
 
     int getLength();
 
-    void setMaxLength(int maxLength);
+    void setAllowNull(boolean allowNull);
 
-    int getMaxLength();
+    boolean isAllowNull();
 
-    void setPrecision(int precision);
+    void encodeKey(Buf buf, T data);
+    void encodeKeyForUpdate(Buf buf, T data);
+    T decodeKey(Buf buf);
+    void skipKey(Buf buf);
 
-    int getPrecision();
+    void encodeKeyPrefix(Buf buf, T data);
 
-    void setScale(int scale);
+    void encodeValue(Buf buf, T data);
+    T decodeValue(Buf buf);
+    void skipValue(Buf buf);
 
-    int getScale();
-
-    void setNotNull(boolean notNull);
-
-    boolean isNotNull();
-
-    void setDefaultValue(Object defaultValue) throws ClassCastException;
-
-    Object getDefaultValue();
 }

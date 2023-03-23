@@ -18,7 +18,7 @@ package io.dingodb.sdk.common.type;
 
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
-import io.dingodb.serial.v2.t1.schema.DingoSchema;
+import io.dingodb.sdk.common.serial.schema.DingoSchema;
 import io.dingodb.sdk.common.type.converter.DataConverter;
 import io.dingodb.sdk.common.type.scalar.BinaryType;
 import io.dingodb.sdk.common.type.scalar.BooleanType;
