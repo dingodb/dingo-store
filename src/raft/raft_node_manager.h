@@ -29,12 +29,13 @@ class RaftNodeManager {
   RaftNodeManager();
   ~RaftNodeManager();
 
+  RaftNodeManager(const RaftNodeManager &) = delete;
+  const RaftNodeManager &operator=(const RaftNodeManager &) = delete;
+
   bool IsExist(uint64_t node_id);
   std::shared_ptr<RaftNode> GetNode(uint64_t node_id);
   void AddNode(uint64_t node_id, std::shared_ptr<RaftNode> node);
   void DeleteNode(uint64_t node_id);
-  RaftNodeManager(const RaftNodeManager &) = delete;
-  const RaftNodeManager &operator=(const RaftNodeManager &) = delete;
 
  private:
   bthread_mutex_t mutex_;

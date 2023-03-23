@@ -22,6 +22,7 @@
 #include "common/synchronization.h"
 #include "config/config_manager.h"
 #include "engine/write_data.h"
+#include "event/store_state_machine_event.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator_internal.pb.h"
 #include "proto/error.pb.h"
@@ -49,8 +50,9 @@ bool RaftKvEngine::Recover() {
   auto regions = store_meta->GetAllRegion();
 
   auto ctx = std::make_shared<Context>();
+  auto listener_factory = std::make_shared<StoreSmEventListenerFactory>();
   for (auto& it : regions) {
-    AddRegion(ctx, it.second);
+    AddRegion(ctx, it.second, listener_factory->Build());
   }
 
   return true;
@@ -62,11 +64,12 @@ pb::common::Engine RaftKvEngine::GetID() { return pb::common::ENG_RAFT_STORE; }
 
 std::shared_ptr<RawEngine> RaftKvEngine::GetRawEngine() { return engine_; }
 
-butil::Status RaftKvEngine::AddRegion(std::shared_ptr<Context> ctx, const std::shared_ptr<pb::common::Region> region) {
+butil::Status RaftKvEngine::AddRegion(std::shared_ptr<Context> ctx, const std::shared_ptr<pb::common::Region> region,
+                                      std::shared_ptr<EventListenerCollection> listeners) {
   LOG(INFO) << "RaftkvEngine add region, region_id " << region->id();
 
   // construct StoreStateMachine
-  braft::StateMachine* state_machine = new StoreStateMachine(engine_, region->id());
+  braft::StateMachine* state_machine = new StoreStateMachine(engine_, region->id(), listeners);
 
   std::shared_ptr<RaftNode> node = std::make_shared<RaftNode>(
       ctx->ClusterRole(), region->id(), braft::PeerId(Server::GetInstance()->RaftEndpoint()), state_machine);

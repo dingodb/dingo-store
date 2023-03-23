@@ -312,7 +312,7 @@ void Helper::GetServerLocation(const pb::common::Location& raft_location, pb::co
   server_location.CopyFrom(response.node_info().server_location());
 }
 
-std::string Helper::generateRandomString(int length) {
+std::string Helper::GenerateRandomString(int length) {
   std::string chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
   std::string randString = "";
 
@@ -324,6 +324,11 @@ std::string Helper::generateRandomString(int length) {
   }
 
   return randString;
+}
+
+uint64_t Helper::GenId() {
+  static uint64_t id = 0;
+  return ++id;
 }
 
 }  // namespace dingodb
