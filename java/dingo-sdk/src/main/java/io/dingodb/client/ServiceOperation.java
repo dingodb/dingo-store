@@ -23,6 +23,7 @@ import io.dingodb.sdk.common.KeyValue;
 import io.dingodb.sdk.common.codec.DingoKeyValueCodec;
 import io.dingodb.sdk.common.codec.KeyValueCodec;
 import io.dingodb.sdk.common.table.Column;
+import io.dingodb.sdk.common.utils.Parameters;
 import io.dingodb.sdk.service.store.StoreServiceClient;
 import io.dingodb.common.Common;
 import io.dingodb.sdk.common.concurrent.Executors;
@@ -73,6 +74,8 @@ public class ServiceOperation {
         }
         KeyValueCodec codec = routeTable.getCodec();
         Table tableDef = getTableDefinition(tableName);
+
+        check(tableDef, clientParameters.getRecords());
         IStoreOperation storeOperation = OperationFactory.getStoreOperation(type);
         ContextForStore contextForStore = getStoreContext(clientParameters, codec, tableDef);
         Map<String, ContextForStore> keys2Store = groupKeysByStore(routeTable, tableName, contextForStore);
@@ -132,6 +135,16 @@ public class ServiceOperation {
                 }).collect(Collectors.toList());
         }
         return new Result(code == 0, errorMessage, records);
+    }
+
+    private void check(Table tableDefinition, List<Record> records) {
+        if (records == null) {
+            return;
+        }
+        tableDefinition.getColumns().stream()
+                .filter(c -> !c.isNullable())
+                .forEach(c -> records.forEach(record ->
+                        Parameters.nonNull(record.getValue(c.getName()), "Non-null fields cannot be null")));
     }
 
     private Map<String, ContextForStore> groupKeysByStore(

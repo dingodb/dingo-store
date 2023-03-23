@@ -52,15 +52,22 @@ public class MetaServiceClient {
     }
 
     public boolean createTable(@NonNull String tableName, @NonNull Table table) {
-        Meta.TableDefinition definition = swap(table);
+        Meta.CreateTableIdRequest createTableIdRequest = Meta.CreateTableIdRequest.newBuilder()
+                .setSchemaId(DINGO_SCHEMA_ID)
+                .build();
+
+        Meta.CreateTableIdResponse createTableIdResponse = metaBlockingStub.createTableId(createTableIdRequest);
+        Meta.DingoCommonId tableId = createTableIdResponse.getTableId();
+
+        Meta.TableDefinition definition = swap(table, tableId);
 
         Meta.CreateTableRequest request = Meta.CreateTableRequest.newBuilder()
                 .setSchemaId(DINGO_SCHEMA_ID)
+                .setTableId(tableId)
                 .setTableDefinition(definition)
                 .build();
 
         Meta.CreateTableResponse response = metaBlockingStub.createTable(request);
-        Meta.DingoCommonId tableId = response.getTableId();
 
         tableIdCache.put(tableName, tableId);
         tableDefinitionCache.put(tableId, table);

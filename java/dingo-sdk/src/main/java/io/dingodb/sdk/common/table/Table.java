@@ -16,6 +16,7 @@
 
 package io.dingodb.sdk.common.table;
 
+import io.dingodb.meta.Meta;
 import io.dingodb.sdk.common.codec.DingoKeyValueCodec;
 import io.dingodb.sdk.common.codec.KeyValueCodec;
 import io.dingodb.sdk.common.partition.Partition;
@@ -109,7 +110,7 @@ public interface Table {
         return indices;
     }
 
-    default KeyValueCodec createCodec() {
-        return new DingoKeyValueCodec(getDingoType(), getKeyMapping(), 0L);
+    default KeyValueCodec createCodec(Meta.DingoCommonId tableId) {
+        return new DingoKeyValueCodec(getDingoType(), getKeyMapping(), tableId.getEntityId());
     }
 }

@@ -96,6 +96,14 @@ public final class Record {
         this.columnsInOrderMapping.putAll(columns);
     }
 
+    private Record(final Map<String, Object> columns, final List<String> keyColumns) {
+        this.keyColumns = new ArrayList<>(keyColumns.size());
+        this.columnsInOrderMapping = Maps.newLinkedHashMap();
+
+        this.keyColumns.addAll(keyColumns);
+        this.columnsInOrderMapping.putAll(columns);
+    }
+
     public Object[] getDingoColumnValuesInOrder() {
         Object[] values = new Object[columnsInOrderMapping.size()];
         int i = 0;
@@ -161,7 +169,7 @@ public final class Record {
             }
             columnsInOrder.put(colName, value);
         }
-        return new Record(keyColumns, columnsInOrder);
+        return new Record(columnsInOrder, keyColumns);
     }
 
     /**
