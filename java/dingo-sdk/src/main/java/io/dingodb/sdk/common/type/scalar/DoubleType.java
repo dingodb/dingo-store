@@ -47,7 +47,7 @@ public class DoubleType extends AbstractScalarType {
     @Override
     protected Object convertValueTo(@NonNull Object value, @NonNull DataConverter converter) {
         if (value instanceof Float) {
-            return BigDecimal.valueOf((Float) value).doubleValue();
+            return new BigDecimal(String.valueOf(value)).doubleValue();
         }
         return super.convertValueTo(value, converter);
     }

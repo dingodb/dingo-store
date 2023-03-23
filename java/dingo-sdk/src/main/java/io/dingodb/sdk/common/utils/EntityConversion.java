@@ -13,6 +13,7 @@ import io.dingodb.sdk.common.table.Column;
 import io.dingodb.sdk.common.table.ColumnDefinition;
 import io.dingodb.sdk.common.table.Table;
 import io.dingodb.sdk.common.table.TableDefinition;
+import io.dingodb.sdk.common.type.TypeCode;
 
 import java.util.Iterator;
 import java.util.List;
@@ -36,7 +37,7 @@ import static io.dingodb.sdk.common.utils.ByteArrayUtils.EMPTY_BYTES;
 
 public class EntityConversion {
 
-    public static Meta.TableDefinition swap(Table table) {
+    public static Meta.TableDefinition swap(Table table, Meta.DingoCommonId tableId) {
         List<Meta.ColumnDefinition> columnDefinitions = table.getColumns().stream()
                 .map(EntityConversion::swap)
                 .collect(Collectors.toList());
@@ -45,7 +46,7 @@ public class EntityConversion {
                 .setName(table.getName())
                 .setVersion(table.getVersion())
                 .setTtl(table.getTtl())
-                .setTablePartition(calcRange(table))
+                .setTablePartition(calcRange(table, tableId))
                 .setEngine(Common.Engine.valueOf(table.getEngine()))
                 .addAllColumns(columnDefinitions).build();
     }
@@ -74,7 +75,7 @@ public class EntityConversion {
         );
     }
 
-    public static Meta.PartitionRule calcRange(Table table) {
+    public static Meta.PartitionRule calcRange(Table table, Meta.DingoCommonId tableId) {
         List<Integer> keyList = table.getKeyColumnIndices();
         int columnCount = table.getColumns().size();
         List<PartitionDetailDefinition> partDetails = table.getPartDefinition().details();
@@ -89,9 +90,11 @@ public class EntityConversion {
                 );
             }
             for (int i = 0; i < partDetail.getOperand().size(); i++) {
-                String simpleName = convert(partDetail.getOperand().get(i).getClass().getSimpleName());
-                String sqlType = convert(cols.get(i).getType());
-                if (!simpleName.equalsIgnoreCase(sqlType)) {
+                String simpleName = partDetail.getOperand().get(i).getClass().getSimpleName().toUpperCase();
+                int simpleCode = TypeCode.codeOf(simpleName);
+                String sqlType = cols.get(i).getType().toUpperCase();
+                int sqlTypeCode = TypeCode.codeOf(sqlType);
+                if (simpleCode != sqlTypeCode) {
                     throw new IllegalArgumentException(
                         "partition value type: (" + simpleName + ") must be the same as the primary key type: (" + sqlType + ")"
                     );
@@ -99,7 +102,7 @@ public class EntityConversion {
             }
         }
 
-        KeyValueCodec codec = table.createCodec();
+        KeyValueCodec codec = table.createCodec(tableId);
         Iterator<byte[]> keys = partDetails.stream()
                 .map(PartitionDetailDefinition::getOperand)
                 .map(operand -> operand.toArray(new Object[columnCount]))
@@ -124,15 +127,6 @@ public class EntityConversion {
         return Meta.PartitionRule.newBuilder()
                 .setRangePartition(rangePartition)
                 .build();
-    }
-
-    private static String convert(String type) {
-        switch (type.toUpperCase()) {
-            case "STRING":
-                return "varchar";
-            default:
-                return type;
-        }
     }
 
     public static Meta.ColumnDefinition swap(Column column) {
@@ -194,6 +188,7 @@ public class EntityConversion {
             case "BOOLEAN":
                 return SQL_TYPE_BOOLEAN;
             case "LONG":
+            case "BIGINT":
                 return SQL_TYPE_BIGINT;
             case "DOUBLE":
                 return SQL_TYPE_DOUBLE;
