@@ -110,6 +110,6 @@ public interface Table {
     }
 
     default KeyValueCodec createCodec() {
-        return new DingoKeyValueCodec(getDingoType(), getKeyMapping());
+        return new DingoKeyValueCodec(getDingoType(), getKeyMapping(), 0L);
     }
 }

@@ -16,20 +16,19 @@
 
 package io.dingodb.sdk.common.serial.schema;
 
-public class DoubleSchema implements DingoSchema {
-    private int index;
-    private boolean notNull;
-    private Double defaultValue;
+import io.dingodb.sdk.common.serial.Buf;
 
-    public DoubleSchema(int index) {
-        setIndex(index);
-        setNotNull(false);
+public class DoubleSchema implements DingoSchema<Double> {
+
+    private int index;
+    private boolean isKey;
+    private boolean allowNull = true;
+
+    public DoubleSchema() {
     }
 
-    public DoubleSchema(int index, Object defaultValue) {
-        setIndex(index);
-        setNotNull(true);
-        setDefaultValue(defaultValue);
+    public DoubleSchema(int index) {
+        this.index = index;
     }
 
     @Override
@@ -48,62 +47,190 @@ public class DoubleSchema implements DingoSchema {
     }
 
     @Override
-    public void setLength(int length) {
-        throw new UnsupportedOperationException("Double Schema data length always be 9");
+    public void setIsKey(boolean isKey) {
+        this.isKey = isKey;
+    }
+
+    @Override
+    public boolean isKey() {
+        return isKey;
     }
 
     @Override
     public int getLength() {
+        if (allowNull) {
+            return getWithNullTagLength();
+        }
+        return getDataLength();
+    }
+
+    private int getWithNullTagLength() {
         return 9;
     }
 
-    @Override
-    public void setMaxLength(int maxLength) {
-        throw new UnsupportedOperationException("Double Schema data length always be 9");
+    private int getDataLength() {
+        return 8;
     }
 
     @Override
-    public int getMaxLength() {
-        return 9;
+    public void setAllowNull(boolean allowNull) {
+        this.allowNull = allowNull;
     }
 
     @Override
-    public void setPrecision(int precision) {
-        throw new UnsupportedOperationException("Double Schema not support Precision");
+    public boolean isAllowNull() {
+        return allowNull;
     }
 
     @Override
-    public int getPrecision() {
-        return 0;
+    public void encodeKey(Buf buf, Double data) {
+        if (allowNull) {
+            buf.ensureRemainder(getWithNullTagLength());
+            if (data == null) {
+                buf.write(NULL);
+                internalEncodeNull(buf);
+            } else {
+                buf.write(NOTNULL);
+                internalEncodeKey(buf, data);
+            }
+        } else {
+            buf.ensureRemainder(getDataLength());
+            internalEncodeKey(buf, data);
+        }
     }
 
     @Override
-    public void setScale(int scale) {
-        throw new UnsupportedOperationException("Double Schema not support Scale");
+    public void encodeKeyForUpdate(Buf buf, Double data) {
+        if (allowNull) {
+            if (data == null) {
+                buf.write(NULL);
+                internalEncodeNull(buf);
+            } else {
+                buf.write(NOTNULL);
+                internalEncodeKey(buf, data);
+            }
+        } else {
+            internalEncodeKey(buf, data);
+        }
+    }
+
+    private void internalEncodeNull(Buf buf) {
+        buf.write((byte) 0);
+        buf.write((byte) 0);
+        buf.write((byte) 0);
+        buf.write((byte) 0);
+        buf.write((byte) 0);
+        buf.write((byte) 0);
+        buf.write((byte) 0);
+        buf.write((byte) 0);
+    }
+
+    private void internalEncodeKey(Buf buf, Double data) {
+        long ln = (Double.doubleToLongBits(data));
+        if (data >= 0) {
+            buf.write((byte) (ln >>> 56 ^ 0x80));
+            buf.write((byte) (ln >>> 48));
+            buf.write((byte) (ln >>> 40));
+            buf.write((byte) (ln >>> 32));
+            buf.write((byte) (ln >>> 24));
+            buf.write((byte) (ln >>> 16));
+            buf.write((byte) (ln >>> 8));
+            buf.write((byte) ln);
+        } else {
+            buf.write((byte) (~ ln >>> 56));
+            buf.write((byte) (~ ln >>> 48));
+            buf.write((byte) (~ ln >>> 40));
+            buf.write((byte) (~ ln >>> 32));
+            buf.write((byte) (~ ln >>> 24));
+            buf.write((byte) (~ ln >>> 16));
+            buf.write((byte) (~ ln >>> 8));
+            buf.write((byte) ~ ln);
+        }
     }
 
     @Override
-    public int getScale() {
-        return 0;
+    public Double decodeKey(Buf buf) {
+        if (allowNull) {
+            if (buf.read() == NULL) {
+                buf.skip(getDataLength());
+                return null;
+            }
+        }
+        long l = buf.read() & 0xFF;
+
+        if (l >= 0x80) {
+            l = l ^ 0x80;
+            for (int i = 0; i < 7; i++) {
+                l <<= 8;
+                l |= buf.read() & 0xFF;
+            }
+        } else {
+            l = ~l;
+            for (int i = 0; i < 7; i++) {
+                l <<= 8;
+                l |= ~buf.read() & 0xFF;
+            }
+        }
+        return Double.longBitsToDouble(l);
     }
 
     @Override
-    public void setNotNull(boolean notNull) {
-        this.notNull = notNull;
+    public void skipKey(Buf buf) {
+        buf.skip(getLength());
     }
 
     @Override
-    public boolean isNotNull() {
-        return notNull;
+    public void encodeKeyPrefix(Buf buf, Double data) {
+        encodeKey(buf, data);
     }
 
     @Override
-    public void setDefaultValue(Object defaultValue) throws ClassCastException {
-        this.defaultValue = (Double) defaultValue;
+    public void encodeValue(Buf buf, Double data) {
+        if (allowNull) {
+            buf.ensureRemainder(getWithNullTagLength());
+            if (data == null) {
+                buf.write(NULL);
+                internalEncodeNull(buf);
+            } else {
+                buf.write(NOTNULL);
+                internalEncodeValue(buf, data);
+            }
+        } else {
+            buf.ensureRemainder(getDataLength());
+            internalEncodeValue(buf, data);
+        }
+    }
+
+    private void internalEncodeValue(Buf buf, Double data) {
+        long ln = Double.doubleToLongBits(data);
+        buf.write((byte) (ln >>> 56));
+        buf.write((byte) (ln >>> 48));
+        buf.write((byte) (ln >>> 40));
+        buf.write((byte) (ln >>> 32));
+        buf.write((byte) (ln >>> 24));
+        buf.write((byte) (ln >>> 16));
+        buf.write((byte) (ln >>> 8));
+        buf.write((byte) ln);
     }
 
     @Override
-    public Object getDefaultValue() {
-        return defaultValue;
+    public Double decodeValue(Buf buf) {
+        if (allowNull) {
+            if (buf.read() == NULL) {
+                buf.skip(getDataLength());
+                return null;
+            }
+        }
+        long l = buf.read()  & 0xFF;
+        for (int i = 0; i < 7; i++) {
+            l <<= 8;
+            l |= buf.read() & 0xFF;
+        }
+        return Double.longBitsToDouble(l);
+    }
+
+    @Override
+    public void skipValue(Buf buf) {
+        buf.skip(getLength());
     }
 }

@@ -17,12 +17,12 @@
 package io.dingodb.sdk.common.codec;
 
 import io.dingodb.sdk.common.KeyValue;
+import io.dingodb.sdk.common.serial.RecordDecoder;
+import io.dingodb.sdk.common.serial.RecordEncoder;
+import io.dingodb.sdk.common.serial.schema.DingoSchema;
 import io.dingodb.sdk.common.type.DingoType;
 import io.dingodb.sdk.common.type.TupleMapping;
 import io.dingodb.sdk.common.type.converter.DingoConverter;
-import io.dingodb.serial.v2.t1.RecordDecoder;
-import io.dingodb.serial.v2.t1.RecordEncoder;
-import io.dingodb.serial.v2.t1.schema.DingoSchema;
 import org.checkerframework.checker.nullness.qual.NonNull;
 
 import java.io.IOException;
@@ -35,7 +35,7 @@ public class DingoKeyValueCodec implements KeyValueCodec {
     RecordEncoder re;
     RecordDecoder rd;
 
-    public DingoKeyValueCodec(DingoType type, TupleMapping keyMapping) {
+    public DingoKeyValueCodec(DingoType type, TupleMapping keyMapping, long commonId) {
         this.type = type;
         table = type.toDingoSchemas();
         for (DingoSchema schema : table) {
@@ -45,8 +45,8 @@ public class DingoKeyValueCodec implements KeyValueCodec {
                 schema.setIsKey(false);
             }
         }
-        re = new RecordEncoder(0, table);
-        rd = new RecordDecoder(0, table);
+        re = new RecordEncoder(0, table, commonId);
+        rd = new RecordDecoder(0, table, commonId);
     }
 
     @Override

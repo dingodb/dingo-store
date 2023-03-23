@@ -16,25 +16,24 @@
 
 package io.dingodb.sdk.common.serial.schema;
 
-public class BooleanSchema implements DingoSchema {
-    private int index;
-    private boolean notNull;
-    private Boolean defaultValue;
+import io.dingodb.sdk.common.serial.Buf;
 
-    public BooleanSchema(int index) {
-        setIndex(index);
-        setNotNull(false);
+public class BooleanSchema implements DingoSchema<Boolean> {
+
+    private int index;
+    private boolean isKey;
+    private boolean allowNull = true;
+
+    public BooleanSchema() {
     }
 
-    public BooleanSchema(int index, Object defaultValue) {
-        setIndex(index);
-        setNotNull(true);
-        setDefaultValue(defaultValue);
+    public BooleanSchema(int index) {
+        this.index = index;
     }
 
     @Override
     public Type getType() {
-        return Type.BOOLEAN;
+        return Type.INTEGER;
     }
 
     @Override
@@ -48,62 +47,140 @@ public class BooleanSchema implements DingoSchema {
     }
 
     @Override
-    public void setLength(int length) {
-        throw new UnsupportedOperationException("Boolean Schema data length always be 2");
+    public void setIsKey(boolean isKey) {
+        this.isKey = isKey;
+    }
+
+    @Override
+    public boolean isKey() {
+        return isKey;
     }
 
     @Override
     public int getLength() {
+        if (allowNull) {
+            return getWithNullTagLength();
+        }
+        return getDataLength();
+    }
+
+    private int getWithNullTagLength() {
         return 2;
     }
 
-    @Override
-    public void setMaxLength(int maxLength) {
-        throw new UnsupportedOperationException("Boolean Schema data length always be 2");
+    private int getDataLength() {
+        return 1;
     }
 
     @Override
-    public int getMaxLength() {
-        return 2;
+    public void setAllowNull(boolean allowNull) {
+        this.allowNull = allowNull;
     }
 
     @Override
-    public void setPrecision(int precision) {
-        throw new UnsupportedOperationException("Boolean Schema not support Precision");
+    public boolean isAllowNull() {
+        return allowNull;
     }
 
     @Override
-    public int getPrecision() {
-        return 0;
+    public void encodeKey(Buf buf, Boolean data) {
+        if (allowNull) {
+            buf.ensureRemainder(getWithNullTagLength());
+            if (data == null) {
+                buf.write(NULL);
+                internalEncodeNull(buf);
+            } else {
+                buf.write(NOTNULL);
+                internalEncodeData(buf, data);
+            }
+        } else {
+            buf.ensureRemainder(getDataLength());
+            internalEncodeData(buf, data);
+        }
     }
 
     @Override
-    public void setScale(int scale) {
-        throw new UnsupportedOperationException("Boolean Schema not support Scale");
+    public void encodeKeyForUpdate(Buf buf, Boolean data) {
+        if (allowNull) {
+            if (data == null) {
+                buf.write(NULL);
+                internalEncodeNull(buf);
+            } else {
+                buf.write(NOTNULL);
+                internalEncodeData(buf, data);
+            }
+        } else {
+            internalEncodeData(buf, data);
+        }
+    }
+
+    private void internalEncodeNull(Buf buf) {
+        buf.write((byte) 0);
+    }
+
+    private void internalEncodeData(Buf buf, Boolean b) {
+        if (b) {
+            buf.write((byte) 1);
+        } else {
+            buf.write((byte) 0);
+        }
     }
 
     @Override
-    public int getScale() {
-        return 0;
+    public Boolean decodeKey(Buf buf) {
+        if (allowNull) {
+            if (buf.read() == NULL) {
+                buf.skip(getDataLength());
+                return null;
+            }
+        }
+        return internalDecodeData(buf);
+    }
+
+    private Boolean internalDecodeData(Buf buf) {
+        return buf.read() == (byte) 0 ? false : true;
     }
 
     @Override
-    public void setNotNull(boolean notNull) {
-        this.notNull = notNull;
+    public void skipKey(Buf buf) {
+        buf.skip(getLength());
     }
 
     @Override
-    public boolean isNotNull() {
-        return notNull;
+    public void encodeKeyPrefix(Buf buf, Boolean data) {
+        encodeKey(buf, data);
     }
 
     @Override
-    public void setDefaultValue(Object defaultValue) throws ClassCastException {
-        this.defaultValue = (Boolean) defaultValue;
+    public void encodeValue(Buf buf, Boolean data) {
+        if (allowNull) {
+            buf.ensureRemainder(getWithNullTagLength());
+            if (data == null) {
+                buf.write(NULL);
+                internalEncodeNull(buf);
+            } else {
+                buf.write(NOTNULL);
+                internalEncodeData(buf, data);
+            }
+        } else {
+            buf.ensureRemainder(getDataLength());
+            internalEncodeData(buf, data);
+        }
     }
 
     @Override
-    public Object getDefaultValue() {
-        return defaultValue;
+    public Boolean decodeValue(Buf buf) {
+        if (allowNull) {
+            if (buf.read() == NULL) {
+                buf.skip(getDataLength());
+                return null;
+            }
+        }
+        return internalDecodeData(buf);
+    }
+
+    @Override
+    public void skipValue(Buf buf) {
+        buf.skip(getLength());
     }
 }

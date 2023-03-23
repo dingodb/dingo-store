@@ -16,20 +16,19 @@
 
 package io.dingodb.sdk.common.serial.schema;
 
-public class IntegerSchema implements DingoSchema {
-    private int index;
-    private boolean notNull;
-    private Integer defaultValue;
+import io.dingodb.sdk.common.serial.Buf;
 
-    public IntegerSchema(int index) {
-        setIndex(index);
-        setNotNull(false);
+public class IntegerSchema implements DingoSchema<Integer> {
+
+    private int index;
+    private boolean isKey;
+    private boolean allowNull = true;
+
+    public IntegerSchema() {
     }
 
-    public IntegerSchema(int index, Object defaultValue) {
-        setIndex(index);
-        setNotNull(true);
-        setDefaultValue(defaultValue);
+    public IntegerSchema(int index) {
+        this.index = index;
     }
 
     @Override
@@ -48,62 +47,151 @@ public class IntegerSchema implements DingoSchema {
     }
 
     @Override
-    public void setLength(int length) {
-        throw new UnsupportedOperationException("Short Schema data length always be 5");
+    public void setIsKey(boolean isKey) {
+        this.isKey = isKey;
+    }
+
+    @Override
+    public boolean isKey() {
+        return isKey;
     }
 
     @Override
     public int getLength() {
+        if (allowNull) {
+            return getWithNullTagLength();
+        }
+        return getDataLength();
+    }
+
+    private int getWithNullTagLength() {
         return 5;
     }
 
-    @Override
-    public void setMaxLength(int maxLength) {
-        throw new UnsupportedOperationException("Integer Schema data length always be 5");
+    private int getDataLength() {
+        return 4;
     }
 
     @Override
-    public int getMaxLength() {
-        return 5;
+    public void setAllowNull(boolean allowNull) {
+        this.allowNull = allowNull;
     }
 
     @Override
-    public void setPrecision(int precision) {
-        throw new UnsupportedOperationException("Integer Schema not support Precision");
+    public boolean isAllowNull() {
+        return allowNull;
     }
 
     @Override
-    public int getPrecision() {
-        return 0;
+    public void encodeKey(Buf buf, Integer data) {
+        if (allowNull) {
+            buf.ensureRemainder(getWithNullTagLength());
+            if (data == null) {
+                buf.write(NULL);
+                internalEncodeNull(buf);
+            } else {
+                buf.write(NOTNULL);
+                internalEncodeKey(buf, data);
+            }
+        } else {
+            buf.ensureRemainder(getDataLength());
+            internalEncodeKey(buf, data);
+        }
     }
 
     @Override
-    public void setScale(int scale) {
-        throw new UnsupportedOperationException("Integer Schema not support Scale");
+    public void encodeKeyForUpdate(Buf buf, Integer data) {
+        if (allowNull) {
+            if (data == null) {
+                buf.write(NULL);
+                internalEncodeNull(buf);
+            } else {
+                buf.write(NOTNULL);
+                internalEncodeKey(buf, data);
+            }
+        } else {
+            internalEncodeKey(buf, data);
+        }
+    }
+
+    private void internalEncodeNull(Buf buf) {
+        buf.write((byte) 0);
+        buf.write((byte) 0);
+        buf.write((byte) 0);
+        buf.write((byte) 0);
+    }
+
+    private void internalEncodeKey(Buf buf, Integer data) {
+        buf.write((byte) (data >>> 24 ^ 0x80));
+        buf.write((byte) (data >>> 16));
+        buf.write((byte) (data >>> 8));
+        buf.write((byte) data.intValue());
     }
 
     @Override
-    public int getScale() {
-        return 0;
+    public Integer decodeKey(Buf buf) {
+        if (allowNull) {
+            if (buf.read() == NULL) {
+                buf.skip(getDataLength());
+                return null;
+            }
+        }
+        return (((buf.read() & 0xFF ^ 0x80) << 24)
+                | ((buf.read() & 0xFF) << 16)
+                | ((buf.read() & 0xFF) << 8)
+                | (buf.read() & 0xFF));
     }
 
     @Override
-    public void setNotNull(boolean notNull) {
-        this.notNull = notNull;
+    public void skipKey(Buf buf) {
+        buf.skip(getLength());
     }
 
     @Override
-    public boolean isNotNull() {
-        return notNull;
+    public void encodeKeyPrefix(Buf buf, Integer data) {
+        encodeKey(buf, data);
     }
 
     @Override
-    public void setDefaultValue(Object defaultValue) throws ClassCastException {
-        this.defaultValue = (Integer) defaultValue;
+    public void encodeValue(Buf buf, Integer data) {
+        if (allowNull) {
+            buf.ensureRemainder(getWithNullTagLength());
+            if (data == null) {
+                buf.write(NULL);
+                internalEncodeNull(buf);
+            } else {
+                buf.write(NOTNULL);
+                internalEncodeValue(buf, data);
+            }
+        } else {
+            buf.ensureRemainder(getDataLength());
+            internalEncodeValue(buf, data);
+        }
+    }
+
+    private void internalEncodeValue(Buf buf, Integer data) {
+        buf.write((byte) (data >>> 24));
+        buf.write((byte) (data >>> 16));
+        buf.write((byte) (data >>> 8));
+        buf.write((byte) data.intValue());
     }
 
     @Override
-    public Object getDefaultValue() {
-        return defaultValue;
+    public Integer decodeValue(Buf buf) {
+        if (allowNull) {
+            if (buf.read() == NULL) {
+                buf.skip(getDataLength());
+                return null;
+            }
+        }
+        return (((buf.read() & 0xFF) << 24)
+                | ((buf.read() & 0xFF) << 16)
+                | ((buf.read() & 0xFF) << 8)
+                | (buf.read() & 0xFF));
+    }
+
+    @Override
+    public void skipValue(Buf buf) {
+        buf.skip(getLength());
     }
 }

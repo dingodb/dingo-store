@@ -185,13 +185,15 @@ public class ServiceOperation {
             NavigableMap<ByteArrayUtils.ComparableByteArray, Meta.Part> parts =
                     metaClient.getParts(table.getName());
 
+            Meta.DingoCommonId tableId = metaClient.getTableId(table.getName());
+
             KeyValueCodec keyValueCodec = new DingoKeyValueCodec(
                     table.getDingoType(),
-                    table.getKeyMapping()
+                    table.getKeyMapping(),
+                    tableId.getEntityId()
             );
 
             RangeStrategy rangeStrategy = new RangeStrategy(parts.navigableKeySet(), keyValueCodec);
-            Meta.DingoCommonId tableId = metaClient.getTableId(table.getName());
 
             routeTable = new RouteTable(tableId, keyValueCodec, parts, rangeStrategy);
 

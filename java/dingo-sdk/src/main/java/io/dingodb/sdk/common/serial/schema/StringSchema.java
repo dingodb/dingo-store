@@ -16,23 +16,21 @@
 
 package io.dingodb.sdk.common.serial.schema;
 
-public class StringSchema implements DingoSchema {
-    private int index;
-    private int maxLength;
-    private boolean notNull;
-    private String defaultValue;
+import io.dingodb.sdk.common.serial.Buf;
 
-    public StringSchema(int index, int maxLength) {
-        setIndex(index);
-        setMaxLength(maxLength);
-        setNotNull(false);
+import java.nio.charset.StandardCharsets;
+
+public class StringSchema implements DingoSchema<String> {
+
+    private int index;
+    private boolean isKey;
+    private boolean allowNull = true;
+
+    public StringSchema() {
     }
 
-    public StringSchema(int index, int maxLength, Object defaultValue) {
-        setIndex(index);
-        setMaxLength(maxLength);
-        setNotNull(true);
-        setDefaultValue(defaultValue);
+    public StringSchema(int index) {
+        this.index = index;
     }
 
     @Override
@@ -51,8 +49,13 @@ public class StringSchema implements DingoSchema {
     }
 
     @Override
-    public void setLength(int length) {
-        throw new UnsupportedOperationException("String Schema data length always be 0 (not sure)");
+    public void setIsKey(boolean isKey) {
+        this.isKey = isKey;
+    }
+
+    @Override
+    public boolean isKey() {
+        return isKey;
     }
 
     @Override
@@ -61,52 +64,201 @@ public class StringSchema implements DingoSchema {
     }
 
     @Override
-    public void setMaxLength(int maxLength) {
-        this.maxLength = maxLength == 0 ? 0 : 1 + 4 + maxLength;
+    public void setAllowNull(boolean allowNull) {
+        this.allowNull = allowNull;
     }
 
     @Override
-    public int getMaxLength() {
-        return maxLength;
+    public boolean isAllowNull() {
+        return allowNull;
+    }
+
+    public void encodeKey(Buf buf, String data) {
+        if (allowNull) {
+            buf.ensureRemainder(5);
+            if (data == null) {
+                buf.write(NULL);
+                buf.reverseWriteInt0();
+            } else {
+                buf.write(NOTNULL);
+                byte[] bytes = data.getBytes(StandardCharsets.UTF_8);
+                buf.reverseWriteInt(internalEncodeKey(buf, bytes));
+            }
+        } else {
+            buf.ensureRemainder(4);
+            byte[] bytes = data.getBytes(StandardCharsets.UTF_8);
+            buf.reverseWriteInt(internalEncodeKey(buf, bytes));
+        }
+    }
+
+    private int internalEncodeKey(Buf buf, byte[] data) {
+        int groupNum = data.length / 8;
+        int size = (groupNum + 1) * 9;
+        int remainderSize = data.length % 8;
+        int remaindZero;
+        if (remainderSize == 0) {
+            remainderSize = 8;
+            remaindZero = 8;
+        } else {
+            remaindZero = 8 - remainderSize;
+        }
+        buf.ensureRemainder(size);
+        for (int i = 0; i < groupNum; i++) {
+            buf.write(data, 8 * i, 8);
+            buf.write((byte) 255);
+        }
+        if (remainderSize < 8) {
+            buf.write(data, 8 * groupNum, remainderSize);
+        }
+        for (int i = 0; i < remaindZero; i++) {
+            buf.write((byte) 0);
+        }
+        buf.write((byte) (255 - remaindZero));
+        return size;
     }
 
     @Override
-    public void setPrecision(int precision) {
-        throw new UnsupportedOperationException("String Schema not support Precision");
+    public void encodeKeyForUpdate(Buf buf, String data) {
+        if (allowNull) {
+            if (data == null) {
+                buf.write(NULL);
+                buf.reverseWriteInt0();
+            } else {
+                buf.write(NOTNULL);
+                byte[] bytes = data.getBytes(StandardCharsets.UTF_8);
+                buf.reverseWriteInt(internalEncodeKeyForUpdate(buf, bytes));
+            }
+        } else {
+            byte[] bytes = data.getBytes(StandardCharsets.UTF_8);
+            buf.reverseWriteInt(internalEncodeKeyForUpdate(buf, bytes));
+        }
+    }
+
+    private int internalEncodeKeyForUpdate(Buf buf, byte[] data) {
+        int groupNum = data.length / 8;
+        int size = (groupNum + 1) * 9;
+        int remainderSize = data.length % 8;
+        int remaindZero;
+        if (remainderSize == 0) {
+            remainderSize = 8;
+            remaindZero = 8;
+        } else {
+            remaindZero = 8 - remainderSize;
+        }
+        int oldSize = buf.reverseReadInt();
+        buf.reverseSkip(-4);
+        buf.resize(oldSize, size);
+        for (int i = 0; i < groupNum; i++) {
+            buf.write(data, 8 * i, 8);
+            buf.write((byte) 255);
+        }
+        if (remainderSize < 8) {
+            buf.write(data, 8 * groupNum, remainderSize);
+        }
+        for (int i = 0; i < remaindZero; i++) {
+            buf.write((byte) 0);
+        }
+        buf.write((byte) (255 - remaindZero));
+        return size;
+    }
+
+
+    @Override
+    public String decodeKey(Buf buf) {
+        if (allowNull) {
+            if (buf.read() == NULL) {
+                buf.reverseSkipInt();
+                return null;
+            }
+        }
+        return new String(internalReadBytes(buf), StandardCharsets.UTF_8);
+    }
+
+    private byte[] internalReadBytes(Buf buf) {
+        int length = buf.reverseReadInt();
+        int groupNum = length / 9;
+        buf.skip(length - 1);
+        int reminderZero = 255 - buf.read() & 0xFF;
+        buf.skip(0 - length);
+        int oriLength = groupNum * 8 - reminderZero;
+        byte[] data = new byte[oriLength];
+        if (oriLength != 0) {
+            groupNum --;
+            for (int i = 0; i < groupNum; i++) {
+                buf.read(data, 8 * i, 8);
+                buf.skip(1);
+            }
+            if (reminderZero != 8) {
+                buf.read(data, 8 * groupNum, 8 - reminderZero);
+            }
+        }
+        buf.skip(reminderZero + 1);
+        return data;
     }
 
     @Override
-    public int getPrecision() {
-        return 0;
+    public void skipKey(Buf buf) {
+        buf.skip(buf.reverseReadInt());
     }
 
     @Override
-    public void setScale(int scale) {
-        throw new UnsupportedOperationException("String Schema not support Scale");
+    public void encodeKeyPrefix(Buf buf, String data) {
+        if (allowNull) {
+            buf.ensureRemainder(1);
+            if (data == null) {
+                buf.write(NULL);
+            } else {
+                buf.write(NOTNULL);
+                byte[] bytes = data.getBytes(StandardCharsets.UTF_8);
+                internalEncodeKey(buf, bytes);
+            }
+        } else {
+            byte[] bytes = data.getBytes(StandardCharsets.UTF_8);
+            internalEncodeKey(buf, bytes);
+        }
     }
 
     @Override
-    public int getScale() {
-        return 0;
+    public void encodeValue(Buf buf, String data) {
+        if (allowNull) {
+            if (data == null) {
+                buf.ensureRemainder(1);
+                buf.write(NULL);
+            } else {
+                byte[] bytes = data.getBytes(StandardCharsets.UTF_8);
+                buf.ensureRemainder(1 + 4 + bytes.length);
+                buf.write(NOTNULL);
+                buf.writeInt(bytes.length);
+                buf.write(bytes);
+            }
+        } else {
+            byte[] bytes = data.getBytes(StandardCharsets.UTF_8);
+            buf.ensureRemainder(4 + bytes.length);
+            buf.writeInt(bytes.length);
+            buf.write(bytes);
+        }
     }
 
     @Override
-    public void setNotNull(boolean notNull) {
-        this.notNull = notNull;
+    public String decodeValue(Buf buf) {
+        if (allowNull) {
+            if (buf.read() == NULL) {
+                return null;
+            } else {
+                return new String(buf.read(buf.readInt()), StandardCharsets.UTF_8);
+            }
+        }
+        return new String(buf.read(buf.readInt()), StandardCharsets.UTF_8);
     }
 
     @Override
-    public boolean isNotNull() {
-        return notNull;
-    }
-
-    @Override
-    public void setDefaultValue(Object defaultValue) throws ClassCastException {
-        this.defaultValue = (String) defaultValue;
-    }
-
-    @Override
-    public Object getDefaultValue() {
-        return defaultValue;
+    public void skipValue(Buf buf) {
+        if (allowNull) {
+            if (buf.read() == NOTNULL) {
+                buf.skip(buf.readInt());
+            }
+        } else {
+            buf.skip(buf.readInt());
+        }
     }
 }
