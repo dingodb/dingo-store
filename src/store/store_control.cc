@@ -17,6 +17,7 @@
 #include <memory>
 
 #include "common/helper.h"
+#include "event/store_state_machine_event.h"
 #include "server/server.h"
 
 namespace dingodb {
@@ -53,7 +54,9 @@ butil::Status StoreControl::AddRegion(std::shared_ptr<Context> ctx, std::shared_
   if (engine == nullptr) {
     return butil::Status(pb::error::ESTORE_NOTEXIST_RAFTENGINE, "Not exist raft engine");
   }
-  status = engine->AddRegion(ctx, region);
+
+  auto listener_factory = std::make_shared<StoreSmEventListenerFactory>();
+  status = engine->AddRegion(ctx, region, listener_factory->Build());
   if (!status.ok()) {
     return status;
   }

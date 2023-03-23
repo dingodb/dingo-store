@@ -19,6 +19,7 @@
 #include "brpc/controller.h"
 #include "common/context.h"
 #include "engine/raw_engine.h"
+#include "event/event.h"
 #include "proto/raft.pb.h"
 
 namespace dingodb {
@@ -41,7 +42,8 @@ class StoreClosure : public braft::Closure {
 
 class StoreStateMachine : public braft::StateMachine {
  public:
-  StoreStateMachine(std::shared_ptr<RawEngine> engine, uint64_t node_id);
+  StoreStateMachine(std::shared_ptr<RawEngine> engine, uint64_t node_id,
+                    std::shared_ptr<EventListenerCollection> listeners);
 
   void on_apply(braft::Iterator& iter) override;
   void on_shutdown() override;
@@ -49,21 +51,15 @@ class StoreStateMachine : public braft::StateMachine {
   int on_snapshot_load(braft::SnapshotReader* reader) override;
   void on_leader_start(int64_t term) override;
   void on_leader_stop(const butil::Status& status) override;
-  void on_error(const ::braft::Error& e) override;
-  void on_configuration_committed(const ::braft::Configuration& conf) override;
-  void on_start_following(const ::braft::LeaderChangeContext& ctx) override;
-  void on_stop_following(const ::braft::LeaderChangeContext& ctx) override;
-
- private:
-  void DispatchRequest(StoreClosure* done, const dingodb::pb::raft::RaftCmdRequest& raft_cmd);
-  void HandlePutRequest(StoreClosure* done, const dingodb::pb::raft::PutRequest& request);
-  void HandlePutIfAbsentRequest(StoreClosure* done, const dingodb::pb::raft::PutIfAbsentRequest& request);
-  void HandleDeleteRangeRequest(StoreClosure* done, const pb::raft::DeleteRangeRequest& request);
-  void HandleDeleteBatchRequest(StoreClosure* done, const pb::raft::DeleteBatchRequest& request);
+  void on_error(const braft::Error& e) override;
+  void on_configuration_committed(const braft::Configuration& conf) override;
+  void on_start_following(const braft::LeaderChangeContext& ctx) override;
+  void on_stop_following(const braft::LeaderChangeContext& ctx) override;
 
  private:
   uint64_t node_id_;
   std::shared_ptr<RawEngine> engine_;
+  std::shared_ptr<EventListenerCollection> listeners_;
 };
 
 }  // namespace dingodb

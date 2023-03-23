@@ -485,7 +485,7 @@ int CoordinatorControl::CreateStore(uint64_t cluster_id, uint64_t& store_id, std
     BAIDU_SCOPED_LOCK(control_mutex_);
 
     store_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_STORE, meta_increment);
-    keyring = Helper::generateRandomString(16);
+    keyring = Helper::GenerateRandomString(16);
 
     pb::common::Store store;
     store.set_id(store_id);
@@ -551,7 +551,7 @@ int CoordinatorControl::CreateExecutor(uint64_t cluster_id, uint64_t& executor_i
     BAIDU_SCOPED_LOCK(control_mutex_);
 
     executor_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_EXECUTOR, meta_increment);
-    keyring = Helper::generateRandomString(16);
+    keyring = Helper::GenerateRandomString(16);
 
     pb::common::Executor executor;
     executor.set_id(executor_id);

@@ -19,6 +19,7 @@
 
 #include "engine/engine.h"
 #include "engine/raw_engine.h"
+#include "event/event.h"
 #include "proto/error.pb.h"
 #include "proto/store.pb.h"
 #include "raft/raft_node_manager.h"
@@ -30,7 +31,8 @@ class RaftControlAble {
   virtual ~RaftControlAble() = default;
 
   virtual butil::Status AddRegion([[maybe_unused]] std::shared_ptr<Context> ctx,
-                                  std::shared_ptr<pb::common::Region> region) = 0;
+                                  std::shared_ptr<pb::common::Region> region,
+                                  std::shared_ptr<EventListenerCollection> listeners) = 0;
   virtual butil::Status DestroyRegion([[maybe_unused]] std::shared_ptr<Context> ctx, uint64_t region_id) = 0;
   virtual butil::Status ChangeRegion([[maybe_unused]] std::shared_ptr<Context> ctx, uint64_t region_id,
                                      std::vector<pb::common::Peer> peers) = 0;
@@ -52,7 +54,8 @@ class RaftKvEngine : public Engine, public RaftControlAble {
 
   std::shared_ptr<RawEngine> GetRawEngine() override;
 
-  butil::Status AddRegion(std::shared_ptr<Context> ctx, std::shared_ptr<pb::common::Region> region) override;
+  butil::Status AddRegion(std::shared_ptr<Context> ctx, std::shared_ptr<pb::common::Region> region,
+                          std::shared_ptr<EventListenerCollection> listeners) override;
   butil::Status ChangeRegion(std::shared_ptr<Context> ctx, uint64_t region_id,
                              std::vector<pb::common::Peer> peers) override;
   butil::Status DestroyRegion(std::shared_ptr<Context> ctx, uint64_t region_id) override;

@@ -61,7 +61,6 @@ butil::Status Storage::KvPut(std::shared_ptr<Context> ctx, const std::vector<pb:
   write_data.AddDatums(std::static_pointer_cast<DatumAble>(datum));
 
   return engine_->AsyncWrite(ctx, write_data, [ctx](butil::Status status) {
-    LOG(INFO) << "here 003";
     if (!status.ok()) {
       Helper::SetPbMessageError(status, ctx->Response());
     }
@@ -92,7 +91,6 @@ butil::Status Storage::KvDelete(std::shared_ptr<Context> ctx, const std::vector<
   write_data.AddDatums(std::static_pointer_cast<DatumAble>(datum));
 
   return engine_->AsyncWrite(ctx, write_data, [ctx](butil::Status status) {
-    LOG(INFO) << "here 003";
     if (!status.ok()) {
       Helper::SetPbMessageError(status, ctx->Response());
     }
@@ -107,7 +105,6 @@ butil::Status Storage::KvDeleteRange(std::shared_ptr<Context> ctx, const pb::com
   write_data.AddDatums(std::static_pointer_cast<DatumAble>(datum));
 
   return engine_->AsyncWrite(ctx, write_data, [ctx](butil::Status status) {
-    LOG(INFO) << "here 003";
     if (!status.ok()) {
       Helper::SetPbMessageError(status, ctx->Response());
     }

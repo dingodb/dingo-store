@@ -172,6 +172,8 @@ file(GLOB CONFIG_SRCS ${PROJECT_SOURCE_DIR}/src/config/*.cc)
 file(GLOB RAFT_SRCS ${PROJECT_SOURCE_DIR}/src/raft/*.cc)
 file(GLOB ENGINE_SRCS ${PROJECT_SOURCE_DIR}/src/engine/*.cc)
 file(GLOB CRONTAB_SRCS ${PROJECT_SOURCE_DIR}/src/crontab/*.cc)
+file(GLOB HANDLER_SRCS ${PROJECT_SOURCE_DIR}/src/handler/*.cc)
+file(GLOB EVENT_SRCS ${PROJECT_SOURCE_DIR}/src/event/*.cc)
 file(GLOB META_SRCS ${PROJECT_SOURCE_DIR}/src/meta/*.cc)
 file(GLOB COORDINATOR_SRCS ${PROJECT_SOURCE_DIR}/src/coordinator/*.cc)
 file(GLOB STORE_SRCS ${PROJECT_SOURCE_DIR}/src/store/*.cc)
@@ -187,6 +189,8 @@ add_library(DINGODB_OBJS
             ${RAFT_SRCS}
             ${ENGINE_SRCS}
             ${CRONTAB_SRCS}
+            ${HANDLER_SRCS}
+            ${EVENT_SRCS}
             ${META_SRCS}
             ${COORDINATOR_SRCS}
             ${STORE_SRCS}

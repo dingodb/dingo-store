@@ -17,6 +17,7 @@
 #include "braft/util.h"
 #include "butil/strings/stringprintf.h"
 #include "common/helper.h"
+#include "event/store_state_machine_event.h"
 #include "proto/error.pb.h"
 #include "proto/raft.pb.h"
 #include "server/server.h"
@@ -43,186 +44,125 @@ void StoreClosure::Run() {
   }
 }
 
-StoreStateMachine::StoreStateMachine(std::shared_ptr<RawEngine> engine, uint64_t node_id)
-    : engine_(engine), node_id_(node_id) {}
-
-void StoreStateMachine::DispatchRequest(StoreClosure* done, const pb::raft::RaftCmdRequest& raft_cmd) {
-  for (const auto& req : raft_cmd.requests()) {
-    switch (req.cmd_type()) {
-      case pb::raft::CmdType::PUT:
-        HandlePutRequest(done, req.put());
-        break;
-      case pb::raft::CmdType::PUTIFABSENT:
-        HandlePutIfAbsentRequest(done, req.put_if_absent());
-        break;
-      case pb::raft::CmdType::DELETERANGE:
-        HandleDeleteRangeRequest(done, req.delete_range());
-        break;
-      case pb::raft::CmdType::DELETEBATCH:
-        HandleDeleteBatchRequest(done, req.delete_batch());
-        break;
-      default:
-        LOG(ERROR) << "Unknown raft cmd type " << req.cmd_type();
-    }
-  }
-}
-
-void StoreStateMachine::HandlePutRequest(StoreClosure* done, const pb::raft::PutRequest& request) {
-  LOG(INFO) << "handlePutRequest ...";
-  butil::Status status;
-  auto writer = engine_->NewWriter(request.cf_name());
-  if (request.kvs().size() == 1) {
-    status = writer->KvPut(request.kvs().Get(0));
-  } else {
-    status = writer->KvBatchPut(Helper::PbRepeatedToVector(request.kvs()));
-  }
-
-  if (done != nullptr) {
-    std::shared_ptr<Context> ctx = done->GetCtx();
-    if (ctx) {
-      ctx->SetStatus(status);
-    }
-  }
-}
-
-void StoreStateMachine::HandlePutIfAbsentRequest(StoreClosure* done, const pb::raft::PutIfAbsentRequest& request) {
-  LOG(INFO) << "handlePutIfAbsentRequest ...";
-
-  butil::Status status;
-  auto writer = engine_->NewWriter(request.cf_name());
-  std::vector<std::string> put_keys;  // NOLINT
-  if (request.kvs().size() == 1) {
-    status = writer->KvPutIfAbsent(request.kvs().Get(0));
-  } else {
-    status = writer->KvBatchPutIfAbsent(Helper::PbRepeatedToVector(request.kvs()), put_keys, request.is_atomic());
-  }
-
-  if (done != nullptr) {
-    std::shared_ptr<Context> ctx = done->GetCtx();
-    if (ctx) {
-      ctx->SetStatus(status);
-      if (request.kvs().size() != 1) {
-        for (const auto& key : put_keys) {
-          (dynamic_cast<pb::store::KvBatchPutIfAbsentResponse*>(ctx->Response()))->add_put_keys(key);
-        }
-      }
-    }
-  }
-}
-
-void StoreStateMachine::HandleDeleteRangeRequest([[maybe_unused]] StoreClosure* done,
-                                                 [[maybe_unused]] const pb::raft::DeleteRangeRequest& request) {
-  LOG(INFO) << "HandleDeleteRangeRequest ...";
-
-  butil::Status status;
-  auto writer = engine_->NewWriter(request.cf_name());
-  for (const auto& range : request.ranges()) {
-    status = writer->KvDeleteRange(range);
-    if (!status.ok()) {
-      break;
-    }
-  }
-
-  if (done != nullptr) {
-    std::shared_ptr<Context> ctx = done->GetCtx();
-    if (ctx) {
-      ctx->SetStatus(status);
-    }
-  }
-}
-
-void StoreStateMachine::HandleDeleteBatchRequest([[maybe_unused]] StoreClosure* done,
-                                                 [[maybe_unused]] const pb::raft::DeleteBatchRequest& request) {
-  LOG(INFO) << "HandleDeleteBatchRequest ...";
-
-  auto writer = engine_->NewWriter(request.cf_name());
-
-  butil::Status status;
-
-  if (request.keys().size() == 1) {
-    status = writer->KvDelete(request.keys().Get(0));
-  } else {
-    status = writer->KvDeleteBatch(Helper::PbRepeatedToVector(request.keys()));
-  }
-
-  if (done != nullptr) {
-    std::shared_ptr<Context> ctx = done->GetCtx();  // NOLINT
-    if (ctx) {
-      ctx->SetStatus(status);
-    }
-  }
-}
+StoreStateMachine::StoreStateMachine(std::shared_ptr<RawEngine> engine, uint64_t node_id,
+                                     std::shared_ptr<EventListenerCollection> listeners)
+    : engine_(engine), node_id_(node_id), listeners_(listeners) {}
 
 void StoreStateMachine::on_apply(braft::Iterator& iter) {
   LOG(INFO) << "on_apply...";
   for (; iter.valid(); iter.next()) {
     braft::AsyncClosureGuard done_guard(iter.done());
 
-    pb::raft::RaftCmdRequest raft_cmd;
+    auto raft_cmd = std::make_shared<pb::raft::RaftCmdRequest>();
     if (iter.done()) {
       StoreClosure* store_closure = dynamic_cast<StoreClosure*>(iter.done());
-      raft_cmd = *(store_closure->GetRequest());
+      raft_cmd = store_closure->GetRequest();
     } else {
       butil::IOBufAsZeroCopyInputStream wrapper(iter.data());
-      CHECK(raft_cmd.ParseFromZeroCopyStream(&wrapper));
+      CHECK(raft_cmd->ParseFromZeroCopyStream(&wrapper));
     }
 
-    std::string str_raft_cmd = Helper::MessageToJsonString(raft_cmd);
+    std::string str_raft_cmd = Helper::MessageToJsonString(*raft_cmd.get());
     LOG(INFO) << butil::StringPrintf("raft apply log on region[%ld-term:%ld-index:%ld] cmd:[%s]",
-                                     raft_cmd.header().region_id(), iter.term(), iter.index(), str_raft_cmd.c_str());
-    DispatchRequest(dynamic_cast<StoreClosure*>(iter.done()), raft_cmd);
+                                     raft_cmd->header().region_id(), iter.term(), iter.index(), str_raft_cmd.c_str());
+    // Build event
+    auto event = std::make_shared<SmApplyEvent>();
+    event->engine_ = engine_;
+    event->done_ = iter.done();
+    event->raft_cmd_ = raft_cmd;
+
+    for (auto listener : listeners_->Get(EventType::SM_APPLY)) {
+      listener->OnEvent(event);
+    }
   }
 }
 
-void StoreStateMachine::on_shutdown() { LOG(INFO) << "on_shutdown..."; }
+void StoreStateMachine::on_shutdown() {
+  LOG(INFO) << "on_shutdown...";
+  auto event = std::make_shared<SmShutdownEvent>();
 
-void StoreStateMachine::on_snapshot_save([[maybe_unused]] braft::SnapshotWriter* writer,
-                                         [[maybe_unused]] braft::Closure* done) {
-  LOG(INFO) << "on_snapshot_save...";
+  for (auto listener : listeners_->Get(EventType::SM_SNAPSHOT_SAVE)) {
+    listener->OnEvent(event);
+  }
 }
 
-int StoreStateMachine::on_snapshot_load([[maybe_unused]] braft::SnapshotReader* reader) {
+void StoreStateMachine::on_snapshot_save(braft::SnapshotWriter* writer, braft::Closure* done) {
+  LOG(INFO) << "on_snapshot_save...";
+  auto event = std::make_shared<SmSnapshotSaveEvent>(writer, done);
+
+  for (auto listener : listeners_->Get(EventType::SM_SNAPSHOT_SAVE)) {
+    listener->OnEvent(event);
+  }
+}
+
+int StoreStateMachine::on_snapshot_load(braft::SnapshotReader* reader) {
   LOG(INFO) << "on_snapshot_load...";
+  auto event = std::make_shared<SmSnapshotLoadEvent>(reader);
+
+  for (auto listener : listeners_->Get(EventType::SM_SNAPSHOT_LOAD)) {
+    listener->OnEvent(event);
+  }
   return -1;
 }
 
 void StoreStateMachine::on_leader_start(int64_t term) {
   LOG(INFO) << "on_leader_start term: " << term;
 
-  auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
-  auto region = store_meta_manager->GetRegion(node_id_);
-  region->set_leader_store_id(Server::GetInstance()->Id());
-  region->set_state(pb::common::REGION_NORMAL);
+  auto event = std::make_shared<SmLeaderStartEvent>();
+  event->term_ = term;
+  event->node_id_ = node_id_;
 
-  // trigger heartbeat
-  auto store_control = Server::GetInstance()->GetStoreControl();
-  store_control->TriggerHeartbeat();
+  for (auto listener : listeners_->Get(EventType::SM_LEADER_START)) {
+    listener->OnEvent(event);
+  }
 }
 
 void StoreStateMachine::on_leader_stop(const butil::Status& status) {
   LOG(INFO) << "on_leader_stop: " << status.error_code() << " " << status.error_str();
+  auto event = std::make_shared<SmLeaderStopEvent>(status);
+
+  for (auto listener : listeners_->Get(EventType::SM_LEADER_STOP)) {
+    listener->OnEvent(event);
+  }
 }
 
-void StoreStateMachine::on_error(const ::braft::Error& e) {
+void StoreStateMachine::on_error(const braft::Error& e) {
   LOG(INFO) << butil::StringPrintf("on_error type(%d) %d %s", e.type(), e.status().error_code(),
                                    e.status().error_cstr());
+
+  auto event = std::make_shared<SmErrorEvent>(e);
+
+  for (auto listener : listeners_->Get(EventType::SM_ERROR)) {
+    listener->OnEvent(event);
+  }
 }
 
-void StoreStateMachine::on_configuration_committed([[maybe_unused]] const ::braft::Configuration& conf) {
+void StoreStateMachine::on_configuration_committed(const braft::Configuration& conf) {
   LOG(INFO) << "on_configuration_committed...";
-  // std::vector<braft::PeerId> peers;
-  // conf.list_peers(&peers);
+
+  auto event = std::make_shared<SmConfigurationCommittedEvent>(conf);
+
+  for (auto listener : listeners_->Get(EventType::SM_CONFIGURATION_COMMITTED)) {
+    listener->OnEvent(event);
+  }
 }
 
-void StoreStateMachine::on_start_following([[maybe_unused]] const ::braft::LeaderChangeContext& ctx) {
+void StoreStateMachine::on_start_following(const braft::LeaderChangeContext& ctx) {
   LOG(INFO) << "on_start_following...";
-  auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
-  auto region = store_meta_manager->GetRegion(node_id_);
-  region->set_leader_store_id(0);
-  region->set_state(pb::common::REGION_NORMAL);
+  auto event = std::make_shared<SmStartFollowingEvent>(ctx);
+  event->node_id_ = node_id_;
+
+  for (auto listener : listeners_->Get(EventType::SM_START_FOLLOWING)) {
+    listener->OnEvent(event);
+  }
 }
-void StoreStateMachine::on_stop_following([[maybe_unused]] const ::braft::LeaderChangeContext& ctx) {
+
+void StoreStateMachine::on_stop_following(const braft::LeaderChangeContext& ctx) {
   LOG(INFO) << "on_stop_following...";
+  auto event = std::make_shared<SmStopFollowingEvent>(ctx);
+  for (auto listener : listeners_->Get(EventType::SM_STOP_FOLLOWING)) {
+    listener->OnEvent(event);
+  }
 }
 
 }  // namespace dingodb
