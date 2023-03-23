@@ -15,7 +15,7 @@ eval set -- "${FLAGS_ARGV}"
 echo "role: ${FLAGS_role}"
 
 user=`whoami`
-process_no=`ps -ef | grep dingodb_server | grep ${FLAGS_role} | grep ${user} | grep -v grep | awk '{print $2}' | xargs`
+process_no=`ps -fu ${user} | grep dingodb_server | grep ${FLAGS_role} | grep -v grep | awk '{print $2}' | xargs`
 
 if [ "$process_no" != "" ]; then
   echo "pid to kill: ${process_no}"
