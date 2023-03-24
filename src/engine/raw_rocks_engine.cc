@@ -115,7 +115,7 @@ static const char* kPrefixExtractor = "prefix_extractor";
 static const char* kMaxBytesForLevelBase = "max_bytes_for_level_base";
 static const char* kTargetFileSizeBase = "target_file_size_base";
 
-RawRocksEngine::RawRocksEngine() : txn_db_(nullptr), column_familys_({}) {}
+RawRocksEngine::RawRocksEngine() : txn_db_(nullptr), column_families_({}) {}
 
 RawRocksEngine::~RawRocksEngine() { Close(); }
 
@@ -200,10 +200,10 @@ std::shared_ptr<RawEngine::Writer> RawRocksEngine::NewWriter(const std::string& 
 
 void RawRocksEngine::Close() {
   if (txn_db_) {
-    for (const auto& [_, cf] : column_familys_) {
+    for (const auto& [_, cf] : column_families_) {
       txn_db_->DestroyColumnFamilyHandle(cf->GetHandle());
     }
-    column_familys_.clear();
+    column_families_.clear();
     txn_db_ = nullptr;
   }
 
@@ -211,8 +211,8 @@ void RawRocksEngine::Close() {
 }
 
 std::shared_ptr<RawRocksEngine::ColumnFamily> RawRocksEngine::GetColumnFamily(const std::string& cf_name) {
-  auto iter = column_familys_.find(cf_name);
-  if (iter == column_familys_.end()) {
+  auto iter = column_families_.find(cf_name);
+  if (iter == column_families_.end()) {
     LOG(ERROR) << butil::StringPrintf("column family %s not found", cf_name.c_str());
     return nullptr;
   }
@@ -293,7 +293,7 @@ bool RawRocksEngine::InitCfConfig(const std::vector<std::string>& column_family)
 
   for (const auto& cf_name : column_family) {
     std::map<std::string, std::string> conf;
-    column_familys_.emplace(cf_name, std::make_shared<ColumnFamily>(cf_name, dcf_default_conf, conf));
+    column_families_.emplace(cf_name, std::make_shared<ColumnFamily>(cf_name, dcf_default_conf, conf));
   }
 
   return true;
@@ -414,7 +414,7 @@ bool RawRocksEngine::RocksdbInit(const std::string& db_path, const std::vector<s
   std::vector<rocksdb::ColumnFamilyDescriptor> column_families;
   for (const auto& column_family : column_family) {
     rocksdb::ColumnFamilyOptions family_options;
-    SetCfConfiguration(column_familys_[column_family]->GetDefaultConf(), column_familys_[column_family]->GetConf(),
+    SetCfConfiguration(column_families_[column_family]->GetDefaultConf(), column_families_[column_family]->GetConf(),
                        &family_options);
 
     column_families.push_back(rocksdb::ColumnFamilyDescriptor(column_family, family_options));
@@ -430,7 +430,7 @@ bool RawRocksEngine::RocksdbInit(const std::string& db_path, const std::vector<s
   rocksdb::Status s =
       rocksdb::TransactionDB::Open(db_options, txn_db_options, db_path, column_families, &family_handles, &txn_db);
   if (!s.ok()) {
-    LOG(ERROR) << butil::StringPrintf("rocksdb::TransactionDB::Open faild : %s", s.ToString().c_str());
+    LOG(ERROR) << butil::StringPrintf("rocksdb::TransactionDB::Open failed : %s", s.ToString().c_str());
     return false;
   }
 
@@ -443,7 +443,7 @@ void RawRocksEngine::SetColumnFamilyHandle(const std::vector<std::string>& colum
                                            const std::vector<rocksdb::ColumnFamilyHandle*>& family_handles) {
   size_t i = 0;
   for (const auto& column_family : column_family) {
-    column_familys_[column_family]->SetHandle(family_handles[i++]);
+    column_families_[column_family]->SetHandle(family_handles[i++]);
   }
 }
 
@@ -462,7 +462,7 @@ void RawRocksEngine::SetColumnFamilyFromConfig(const std::shared_ptr<Config>& co
 
     CreateNewMap(base_cf_configuration, cf_configuration, new_cf_configuration);
 
-    column_familys_[column_family]->SetConf(new_cf_configuration);
+    column_families_[column_family]->SetConf(new_cf_configuration);
   }
 }
 
