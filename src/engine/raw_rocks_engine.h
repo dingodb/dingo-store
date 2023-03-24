@@ -186,11 +186,11 @@ class RawRocksEngine : public RawEngine {
                                  const std::map<std::string, std::string>& cf_configuration,
                                  rocksdb::ColumnFamilyOptions* family_options);
 
-  // set default column family if not exist. rockdb not allow no default
+  // set default column family if not exist. rocksdb not allow no default
   // column family we will move default to first
   static void SetDefaultIfNotExist(std::vector<std::string>& column_family);  // NOLINT
 
-  // new_cf = base + cf . cf will overwite base value if exists.
+  // new_cf = base + cf . cf will overwrite base value if exists.
   static void CreateNewMap(const std::map<std::string, std::string>& base, const std::map<std::string, std::string>& cf,
                            std::map<std::string, std::string>& new_cf);  // NOLINT
 
@@ -202,7 +202,7 @@ class RawRocksEngine : public RawEngine {
 
   void SetColumnFamilyFromConfig(const std::shared_ptr<Config>& config, const std::vector<std::string>& column_family);
 
-  std::map<std::string, std::shared_ptr<ColumnFamily> > column_familys_;
+  std::map<std::string, std::shared_ptr<ColumnFamily> > column_families_;
 };
 
 }  // namespace dingodb
