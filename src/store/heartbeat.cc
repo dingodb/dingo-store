@@ -178,7 +178,7 @@ static std::vector<std::shared_ptr<pb::common::Store> > GetDeletedStore(
     std::map<uint64_t, std::shared_ptr<pb::common::Store> > local_stores,
     const google::protobuf::RepeatedPtrField<pb::common::Store>& remote_stores) {
   std::vector<std::shared_ptr<pb::common::Store> > stores;
-  for (auto& store : remote_stores) {
+  for (const auto& store : remote_stores) {
     if (store.state() != pb::common::STORE_OFFLINE && store.state() != pb::common::STORE_OUT) {
       continue;
     }
@@ -242,7 +242,7 @@ static std::vector<std::shared_ptr<pb::common::Region> > GetDeleteRegion(
     std::map<uint64_t, std::shared_ptr<pb::common::Region> > local_regions,
     const google::protobuf::RepeatedPtrField<pb::common::Region>& remote_regions) {
   std::vector<std::shared_ptr<pb::common::Region> > regions;
-  for (auto& region : remote_regions) {
+  for (const auto& region : remote_regions) {
     if (region.id() == 0 || region.state() != pb::common::REGION_DELETE) {
       continue;
     }

@@ -34,6 +34,10 @@ class MetaReader {
   std::shared_ptr<pb::common::KeyValue> Get(const std::string& key);
   bool Scan(const std::string& prefix, std::vector<pb::common::KeyValue>& kvs);
 
+  // with Snapshot
+  std::shared_ptr<pb::common::KeyValue> Get(std::shared_ptr<Snapshot> snapshot, const std::string& key);
+  bool Scan(std::shared_ptr<Snapshot>, const std::string& prefix, std::vector<pb::common::KeyValue>& kvs);
+
  private:
   std::shared_ptr<RawEngine> engine_;
 };

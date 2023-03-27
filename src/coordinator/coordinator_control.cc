@@ -28,6 +28,8 @@
 #include "butil/scoped_lock.h"
 #include "butil/strings/string_split.h"
 #include "common/helper.h"
+#include "engine/snapshot.h"
+#include "glog/logging.h"
 #include "google/protobuf/unknown_field_set.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator_internal.pb.h"
@@ -37,7 +39,7 @@
 namespace dingodb {
 
 CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, std::shared_ptr<MetaWriter> meta_writer)
-    : meta_reader_(meta_reader), meta_writer_(meta_writer), is_leader_(false) {
+    : meta_reader_(meta_reader), meta_writer_(meta_writer), leader_term_(-1) {
   bthread_mutex_init(&control_mutex_, nullptr);
   root_schema_writed_to_raft_ = false;
 
@@ -60,9 +62,210 @@ CoordinatorControl::~CoordinatorControl() {
   delete executor_meta_;
 }
 
-bool CoordinatorControl::IsLeader() { return is_leader_.load(); }
-void CoordinatorControl::SetLeader() { is_leader_.store(true); }
-void CoordinatorControl::SetNotLeader() { is_leader_.store(false); }
+bool CoordinatorControl::IsLeader() { return leader_term_.load(butil::memory_order_acquire) > 0; }
+void CoordinatorControl::SetLeaderTerm(int64_t term) { leader_term_.store(term, butil::memory_order_release); }
+
+// OnLeaderStart will init id_epoch_map_temp_ from id_epoch_map_ which is in state machine
+void CoordinatorControl::OnLeaderStart(int64_t term) {
+  id_epoch_map_temp_ = id_epoch_map_;
+  LOG(INFO) << "OnLeaderStart init id_epoch_map_temp_ finished, term=" << term;
+}
+
+std::shared_ptr<Snapshot> CoordinatorControl::PrepareRaftSnapshot() {
+  LOG(INFO) << "PrepareRaftSnapshot";
+  return this->raw_engine_of_meta_->GetSnapshot();
+}
+
+bool CoordinatorControl::ReadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapshot,
+                                                pb::coordinator_internal::MetaSnapshotFile& meta_snapshot_file) {
+  LOG(INFO) << "Coordinator start to ReadMetaToSnapshotFile";
+
+  std::vector<pb::common::KeyValue> kvs;
+
+  // 0.id_epoch map
+  if (!meta_reader_->Scan(snapshot, id_epoch_meta_->Prefix(), kvs)) {
+    return false;
+  }
+
+  for (const auto& kv : kvs) {
+    auto* snapshot_file_kv = meta_snapshot_file.add_id_epoch_map_kvs();
+    snapshot_file_kv->CopyFrom(kv);
+  }
+
+  LOG(INFO) << "Snapshot id_epoch_meta, count=" << kvs.size();
+  kvs.clear();
+
+  // 1.coordinator map
+  if (!meta_reader_->Scan(snapshot, coordinator_meta_->Prefix(), kvs)) {
+    return false;
+  }
+
+  for (const auto& kv : kvs) {
+    auto* snapshot_file_kv = meta_snapshot_file.add_coordinator_map_kvs();
+    snapshot_file_kv->CopyFrom(kv);
+  }
+  LOG(INFO) << "Snapshot coordinator_meta, count=" << kvs.size();
+  kvs.clear();
+
+  // 2.store map
+  if (!meta_reader_->Scan(snapshot, store_meta_->Prefix(), kvs)) {
+    return false;
+  }
+
+  for (const auto& kv : kvs) {
+    auto* snapshot_file_kv = meta_snapshot_file.add_store_map_kvs();
+    snapshot_file_kv->CopyFrom(kv);
+  }
+  LOG(INFO) << "Snapshot store_meta, count=" << kvs.size();
+  kvs.clear();
+
+  // 3.executor map
+  if (!meta_reader_->Scan(snapshot, executor_meta_->Prefix(), kvs)) {
+    return false;
+  }
+
+  for (const auto& kv : kvs) {
+    auto* snapshot_file_kv = meta_snapshot_file.add_executor_map_kvs();
+    snapshot_file_kv->CopyFrom(kv);
+  }
+  LOG(INFO) << "Snapshot executor_meta, count=" << kvs.size();
+  kvs.clear();
+
+  // 4.schema map
+  if (!meta_reader_->Scan(snapshot, schema_meta_->Prefix(), kvs)) {
+    return false;
+  }
+
+  for (const auto& kv : kvs) {
+    auto* snapshot_file_kv = meta_snapshot_file.add_schema_map_kvs();
+    snapshot_file_kv->CopyFrom(kv);
+  }
+  LOG(INFO) << "Snapshot schema_meta, count=" << kvs.size();
+  kvs.clear();
+
+  // 5.region map
+  if (!meta_reader_->Scan(snapshot, region_meta_->Prefix(), kvs)) {
+    return false;
+  }
+
+  for (const auto& kv : kvs) {
+    auto* snapshot_file_kv = meta_snapshot_file.add_region_map_kvs();
+    snapshot_file_kv->CopyFrom(kv);
+  }
+  LOG(INFO) << "Snapshot region_meta, count=" << kvs.size();
+  kvs.clear();
+
+  // 6.table map
+  if (!meta_reader_->Scan(snapshot, table_meta_->Prefix(), kvs)) {
+    return false;
+  }
+
+  for (const auto& kv : kvs) {
+    auto* snapshot_file_kv = meta_snapshot_file.add_table_map_kvs();
+    snapshot_file_kv->CopyFrom(kv);
+  }
+  LOG(INFO) << "Snapshot table_meta, count=" << kvs.size();
+  kvs.clear();
+
+  return true;
+}
+
+bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::MetaSnapshotFile& meta_snapshot_file) {
+  BAIDU_SCOPED_LOCK(control_mutex_);
+
+  std::vector<pb::common::KeyValue> kvs;
+
+  LOG(INFO) << "Coordinator start to LoadMetaFromSnapshotFile";
+
+  // 0.id_epoch map
+  kvs.reserve(meta_snapshot_file.id_epoch_map_kvs_size());
+  for (int i = 0; i < meta_snapshot_file.id_epoch_map_kvs_size(); i++) {
+    kvs.push_back(meta_snapshot_file.id_epoch_map_kvs(i));
+  }
+
+  if (!id_epoch_meta_->Recover(kvs)) {
+    return false;
+  }
+  LOG(INFO) << "LoadSnapshot id_epoch_meta, count=" << kvs.size();
+  kvs.clear();
+
+  // 1.coordinator map
+  kvs.reserve(meta_snapshot_file.coordinator_map_kvs_size());
+  for (int i = 0; i < meta_snapshot_file.coordinator_map_kvs_size(); i++) {
+    kvs.push_back(meta_snapshot_file.coordinator_map_kvs(i));
+  }
+
+  if (!coordinator_meta_->Recover(kvs)) {
+    return false;
+  }
+  LOG(INFO) << "LoadSnapshot coordinator_meta, count=" << kvs.size();
+  kvs.clear();
+
+  // 2.store map
+  kvs.reserve(meta_snapshot_file.store_map_kvs_size());
+  for (int i = 0; i < meta_snapshot_file.store_map_kvs_size(); i++) {
+    kvs.push_back(meta_snapshot_file.store_map_kvs(i));
+  }
+
+  if (!store_meta_->Recover(kvs)) {
+    return false;
+  }
+  LOG(INFO) << "LoadSnapshot store_meta, count=" << kvs.size();
+  kvs.clear();
+
+  // 3.executor map
+  kvs.reserve(meta_snapshot_file.executor_map_kvs_size());
+  for (int i = 0; i < meta_snapshot_file.executor_map_kvs_size(); i++) {
+    kvs.push_back(meta_snapshot_file.executor_map_kvs(i));
+  }
+
+  if (!executor_meta_->Recover(kvs)) {
+    return false;
+  }
+  LOG(INFO) << "LoadSnapshot executor_meta, count=" << kvs.size();
+  kvs.clear();
+
+  // 4.schema map
+  kvs.reserve(meta_snapshot_file.schema_map_kvs_size());
+  for (int i = 0; i < meta_snapshot_file.schema_map_kvs_size(); i++) {
+    kvs.push_back(meta_snapshot_file.schema_map_kvs(i));
+  }
+
+  if (!schema_meta_->Recover(kvs)) {
+    return false;
+  }
+  LOG(INFO) << "LoadSnapshot schema_meta, count=" << kvs.size();
+  kvs.clear();
+
+  // 5.region map
+  kvs.reserve(meta_snapshot_file.region_map_kvs_size());
+  for (int i = 0; i < meta_snapshot_file.region_map_kvs_size(); i++) {
+    kvs.push_back(meta_snapshot_file.region_map_kvs(i));
+  }
+
+  if (!region_meta_->Recover(kvs)) {
+    return false;
+  }
+  LOG(INFO) << "LoadSnapshot region_meta, count=" << kvs.size();
+  kvs.clear();
+
+  // 6.table map
+  kvs.reserve(meta_snapshot_file.table_map_kvs_size());
+  for (int i = 0; i < meta_snapshot_file.table_map_kvs_size(); i++) {
+    kvs.push_back(meta_snapshot_file.table_map_kvs(i));
+  }
+
+  if (!table_meta_->Recover(kvs)) {
+    return false;
+  }
+  LOG(INFO) << "LoadSnapshot table_meta, count=" << kvs.size();
+  kvs.clear();
+
+  // 7.init id_epoch_map_temp_
+  id_epoch_map_temp_ = id_epoch_map_;
+
+  return true;
+}
 
 bool CoordinatorControl::Recover() {
   BAIDU_SCOPED_LOCK(control_mutex_);
@@ -71,7 +274,18 @@ bool CoordinatorControl::Recover() {
 
   LOG(INFO) << "Coordinator start to Recover";
 
-  // coordinator map
+  // 0.id_epoch map
+  if (!meta_reader_->Scan(id_epoch_meta_->Prefix(), kvs)) {
+    return false;
+  }
+
+  if (!id_epoch_meta_->Recover(kvs)) {
+    return false;
+  }
+  LOG(INFO) << "Recover id_epoch_meta, count=" << kvs.size();
+  kvs.clear();
+
+  // 1.coordinator map
   if (!meta_reader_->Scan(coordinator_meta_->Prefix(), kvs)) {
     return false;
   }
@@ -82,7 +296,7 @@ bool CoordinatorControl::Recover() {
   LOG(INFO) << "Recover coordinator_meta, count=" << kvs.size();
   kvs.clear();
 
-  // store map
+  // 2.store map
   if (!meta_reader_->Scan(store_meta_->Prefix(), kvs)) {
     return false;
   }
@@ -93,7 +307,18 @@ bool CoordinatorControl::Recover() {
   LOG(INFO) << "Recover store_meta, count=" << kvs.size();
   kvs.clear();
 
-  // schema map
+  // 3.executor map
+  if (!meta_reader_->Scan(executor_meta_->Prefix(), kvs)) {
+    return false;
+  }
+
+  if (!executor_meta_->Recover(kvs)) {
+    return false;
+  }
+  LOG(INFO) << "Recover executor_meta, count=" << kvs.size();
+  kvs.clear();
+
+  // 4.schema map
   if (!meta_reader_->Scan(schema_meta_->Prefix(), kvs)) {
     return false;
   }
@@ -104,7 +329,7 @@ bool CoordinatorControl::Recover() {
   LOG(INFO) << "Recover schema_meta, count=" << kvs.size();
   kvs.clear();
 
-  // region map
+  // 5.region map
   if (!meta_reader_->Scan(region_meta_->Prefix(), kvs)) {
     return false;
   }
@@ -115,7 +340,7 @@ bool CoordinatorControl::Recover() {
   LOG(INFO) << "Recover region_meta, count=" << kvs.size();
   kvs.clear();
 
-  // table map
+  // 6.table map
   if (!meta_reader_->Scan(table_meta_->Prefix(), kvs)) {
     return false;
   }
@@ -126,16 +351,8 @@ bool CoordinatorControl::Recover() {
   LOG(INFO) << "Recover table_meta, count=" << kvs.size();
   kvs.clear();
 
-  // id_epoch map
-  if (!meta_reader_->Scan(id_epoch_meta_->Prefix(), kvs)) {
-    return false;
-  }
-
-  if (!id_epoch_meta_->Recover(kvs)) {
-    return false;
-  }
-  LOG(INFO) << "Recover id_epoch_meta, count=" << kvs.size();
-  kvs.clear();
+  // 7.init id_epoch_map_temp_
+  id_epoch_map_temp_ = id_epoch_map_;
 
   return true;
 }
@@ -240,11 +457,11 @@ bool CoordinatorControl::Init() {
 
 uint64_t CoordinatorControl::GetPresentId(const pb::coordinator_internal::IdEpochType& key) {
   uint64_t value = 0;
-  if (id_epoch_map_.find(key) == id_epoch_map_.end()) {
+  if (id_epoch_map_temp_.find(key) == id_epoch_map_temp_.end()) {
     value = 1000;
     LOG(INFO) << "GetPresentId key=" << key << " not found, generate new id=" << value;
   } else {
-    value = id_epoch_map_[key].value();
+    value = id_epoch_map_temp_[key].value();
     LOG(INFO) << "GetPresentId key=" << key << " value=" << value;
   }
 
@@ -294,20 +511,23 @@ void CoordinatorControl::GetLeaderLocation(pb::common::Location& leader_server_l
   this->GetServerLocation(leader_raft_location, leader_server_location);
 }
 
+// GetNextId only update id_epoch_map_temp_ in leader, the persistent id_epoch_map_ will be updated in on_apply
+// When on_leader_start, the id_epoch_map_temp_ will init from id_epoch_map_
+// only id_epoch_map_ is in state machine, and will persistent to raft and local rocksdb
 uint64_t CoordinatorControl::GetNextId(const pb::coordinator_internal::IdEpochType& key,
                                        pb::coordinator_internal::MetaIncrement& meta_increment) {
   uint64_t value = 0;
-  if (id_epoch_map_.find(key) == id_epoch_map_.end()) {
+  if (id_epoch_map_temp_.find(key) == id_epoch_map_temp_.end()) {
     value = 1000;
     LOG(INFO) << "GetNextId key=" << key << " not found, generate new id=" << value;
   } else {
-    value = id_epoch_map_[key].value();
+    value = id_epoch_map_temp_[key].value();
     LOG(INFO) << "GetNextId key=" << key << " value=" << value;
   }
   value++;
 
   // update id in memory
-  id_epoch_map_[key].set_value(value);
+  id_epoch_map_temp_[key].set_value(value);
 
   // generate meta_increment
   auto* idepoch = meta_increment.add_idepochs();
@@ -521,7 +741,7 @@ int CoordinatorControl::DeleteStore(uint64_t cluster_id, uint64_t store_id, std:
     }
 
     auto store_to_delete = store_map_[store_id];
-    if (keyring.compare(store_to_delete.keyring())) {
+    if (keyring == store_to_delete.keyring()) {
       LOG(INFO) << "DeleteStore store_id id=" << store_id << " keyring not equal, input keyring=" << keyring
                 << " but store's keyring=" << store_to_delete.keyring();
       return -1;
@@ -587,7 +807,7 @@ int CoordinatorControl::DeleteExecutor(uint64_t cluster_id, uint64_t executor_id
     }
 
     auto executor_to_delete = executor_map_[executor_id];
-    if (keyring.compare(executor_to_delete.keyring())) {
+    if (keyring == executor_to_delete.keyring()) {
       LOG(INFO) << "DeleteExecutor executor_id id=" << executor_id << " keyring not equal, input keyring=" << keyring
                 << " but executor's keyring=" << executor_to_delete.keyring();
       return -1;
@@ -1246,39 +1466,53 @@ void CoordinatorControl::GetCoordinatorMap(uint64_t cluster_id, uint64_t& epoch,
 }
 
 // ApplyMetaIncrement is on_apply callback
-// leader do need update next_xx_id, so leader call this function with update_ids=false
-void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrement& meta_increment, bool update_ids) {
+void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrement& meta_increment,
+                                            [[maybe_unused]] bool id_leader, uint64_t term, uint64_t index) {
   BAIDU_SCOPED_LOCK(control_mutex_);
+
+  // if index < local apply index, just return
+  if (id_epoch_map_.find(pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX) != id_epoch_map_.end()) {
+    uint64_t applied_index = id_epoch_map_[pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX].value();
+    if (index <= applied_index) {
+      LOG(INFO) << "ApplyMetaIncrement index < applied_index, just return, [index=" << index
+                << "][applied_index=" << applied_index << "]";
+      return;
+    }
+  }
 
   // prepare data to write to kv engine
   std::vector<pb::common::KeyValue> meta_write_to_kv;
   std::vector<pb::common::KeyValue> meta_delete_to_kv;
 
-  // leader do not need to update in-memory cache of id & epoch
-  // follower need to update in-memory cache of id & epoch
   // 0.id & epoch
+  // raft_apply_term & raft_apply_index stores in id_epoch_map too
+  pb::coordinator_internal::IdEpochInternal raft_apply_term;
+  raft_apply_term.set_id(pb::coordinator_internal::IdEpochType::RAFT_APPLY_TERM);
+  raft_apply_term.set_value(term);
+
+  pb::coordinator_internal::IdEpochInternal raft_apply_index;
+  raft_apply_index.set_id(pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX);
+  raft_apply_index.set_value(index);
+
+  meta_write_to_kv.push_back(id_epoch_meta_->TransformToKvValue(raft_apply_term));
+  meta_write_to_kv.push_back(id_epoch_meta_->TransformToKvValue(raft_apply_index));
+
   for (int i = 0; i < meta_increment.idepochs_size(); i++) {
     const auto& idepoch = meta_increment.idepochs(i);
     if (idepoch.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
-      if (update_ids) {
-        auto& create_idepoch = id_epoch_map_[idepoch.id()];
-        create_idepoch.CopyFrom(idepoch.idepoch());
-      }
+      auto& create_idepoch = id_epoch_map_[idepoch.id()];
+      create_idepoch.CopyFrom(idepoch.idepoch());
 
       meta_write_to_kv.push_back(id_epoch_meta_->TransformToKvValue(idepoch.idepoch()));
 
     } else if (idepoch.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
-      if (update_ids) {
-        auto& update_idepoch = id_epoch_map_[idepoch.id()];
-        update_idepoch.CopyFrom(idepoch.idepoch());
-      }
+      auto& update_idepoch = id_epoch_map_[idepoch.id()];
+      update_idepoch.CopyFrom(idepoch.idepoch());
 
       meta_write_to_kv.push_back(id_epoch_meta_->TransformToKvValue(idepoch.idepoch()));
 
     } else if (idepoch.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
-      if (update_ids) {
-        id_epoch_map_.erase(idepoch.id());
-      }
+      id_epoch_map_.erase(idepoch.id());
 
       meta_delete_to_kv.push_back(id_epoch_meta_->TransformToKvValue(idepoch.idepoch()));
     }
@@ -1504,14 +1738,14 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
 int CoordinatorControl::ValidateStore(uint64_t store_id, const std::string& keyring) {
   BAIDU_SCOPED_LOCK(control_mutex_);
 
-  if (keyring.compare(std::string("TO_BE_CONTINUED")) == 0) {
+  if (keyring == std::string("TO_BE_CONTINUED") == 0) {
     LOG(INFO) << "ValidateStore store_id=" << store_id << " debug pass with TO_BE_CONTINUED";
     return 0;
   }
 
   if (store_map_.find(store_id) != store_map_.end()) {
     auto store_in_map = store_map_[store_id];
-    if (store_in_map.keyring().compare(keyring) == 0) {
+    if (store_in_map.keyring() == keyring) {
       LOG(INFO) << "ValidateStore store_id=" << store_id << " succcess";
       return 0;
     }
@@ -1529,14 +1763,14 @@ int CoordinatorControl::ValidateStore(uint64_t store_id, const std::string& keyr
 int CoordinatorControl::ValidateExecutor(uint64_t executor_id, const std::string& keyring) {
   BAIDU_SCOPED_LOCK(control_mutex_);
 
-  if (keyring.compare(std::string("TO_BE_CONTINUED")) == 0) {
+  if (keyring == std::string("TO_BE_CONTINUED")) {
     LOG(INFO) << "ValidateExecutor executor_id=" << executor_id << " debug pass with TO_BE_CONTINUED";
     return 0;
   }
 
   if (executor_map_.find(executor_id) != executor_map_.end()) {
     auto executor_in_map = executor_map_[executor_id];
-    if (executor_in_map.keyring().compare(keyring) == 0) {
+    if (executor_in_map.keyring() == keyring) {
       LOG(INFO) << "ValidateExecutor executor_id=" << executor_id << " succcess";
       return 0;
     }

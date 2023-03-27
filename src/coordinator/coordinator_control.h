@@ -28,6 +28,7 @@
 #include "butil/scoped_lock.h"
 #include "butil/strings/stringprintf.h"
 #include "common/meta_control.h"
+#include "engine/snapshot.h"
 #include "meta/meta_reader.h"
 #include "meta/meta_writer.h"
 #include "proto/common.pb.h"
@@ -156,8 +157,8 @@ class CoordinatorControl : public MetaControl {
   //                                              pb::coordinator_internal::MetaIncrement &meta_increment);
   bool Init() override;
   bool IsLeader() override;
-  void SetLeader() override;
-  void SetNotLeader() override;
+  void SetLeaderTerm(int64_t term) override;
+  void OnLeaderStart(int64_t term) override;
 
   // Get raft leader's server location for sdk use
   void GetLeaderLocation(pb::common::Location &leader_server_location) override;
@@ -280,8 +281,8 @@ class CoordinatorControl : public MetaControl {
                          std::vector<pb::common::Location> &locations) override;
 
   // on_apply callback
-  // leader do need update next_xx_id, so leader call this function with update_ids=false
-  void ApplyMetaIncrement(pb::coordinator_internal::MetaIncrement &meta_increment, bool update_ids) override;
+  void ApplyMetaIncrement(pb::coordinator_internal::MetaIncrement &meta_increment, bool id_leader, uint64_t term,
+                          uint64_t index) override;
 
   // get next id/epoch
   uint64_t GetNextId(const pb::coordinator_internal::IdEpochType &key,
@@ -301,6 +302,17 @@ class CoordinatorControl : public MetaControl {
   // return: 0 or -1
   int ValidateExecutor(uint64_t executor_id, const std::string &keyring);
 
+  // prepare snapshot for raft snapshot
+  // return: Snapshot
+  std::shared_ptr<Snapshot> PrepareRaftSnapshot() override;
+
+  // ReadMetaToSnapshotFile
+  bool ReadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapshot,
+                              pb::coordinator_internal::MetaSnapshotFile &meta_snapshot_file) override;
+
+  // LoadMetaFromSnapshotFile
+  bool LoadMetaFromSnapshotFile(pb::coordinator_internal::MetaSnapshotFile &meta_snapshot_file) override;
+
  private:
   // mutex
   bthread_mutex_t control_mutex_;
@@ -312,37 +324,41 @@ class CoordinatorControl : public MetaControl {
   // uint64_t next_region_id_;
   // uint64_t next_table_id_;
 
-  // coordinators
+  // ids_epochs_temp (out of state machine, only for leader use)
+  // TableInternal is combination of Table & TableDefinition
+  std::map<uint64_t, pb::coordinator_internal::IdEpochInternal> id_epoch_map_temp_;
+
+  // 0.ids_epochs
+  // TableInternal is combination of Table & TableDefinition
+  std::map<uint64_t, pb::coordinator_internal::IdEpochInternal> id_epoch_map_;
+  MetaMapStorage<pb::coordinator_internal::IdEpochInternal> *id_epoch_meta_;
+
+  // 1.coordinators
   std::map<uint64_t, pb::coordinator_internal::CoordinatorInternal> coordinator_map_;
   MetaMapStorage<pb::coordinator_internal::CoordinatorInternal> *coordinator_meta_;
 
-  // executors
-  std::map<uint64_t, pb::common::Executor> executor_map_;
-  MetaMapStorage<pb::common::Executor> *executor_meta_;          // need construct
-  std::map<uint64_t, pb::common::Executor> executor_need_push_;  // will send push msg to these executors in crontab
-
-  // stores
+  // 2.stores
   std::map<uint64_t, pb::common::Store> store_map_;
   MetaMapStorage<pb::common::Store> *store_meta_;          // need contruct
   std::map<uint64_t, pb::common::Store> store_need_push_;  // will send push msg to these stores in crontab
 
-  // schemas
+  // 3.executors
+  std::map<uint64_t, pb::common::Executor> executor_map_;
+  MetaMapStorage<pb::common::Executor> *executor_meta_;          // need construct
+  std::map<uint64_t, pb::common::Executor> executor_need_push_;  // will send push msg to these executors in crontab
+
+  // 4.schemas
   std::map<uint64_t, pb::coordinator_internal::SchemaInternal> schema_map_;
   MetaMapStorage<pb::coordinator_internal::SchemaInternal> *schema_meta_;
 
-  // regions
+  // 5.regions
   std::map<uint64_t, pb::common::Region> region_map_;
   MetaMapStorage<pb::common::Region> *region_meta_;
 
-  // tables
+  // 6.tables
   // TableInternal is combination of Table & TableDefinition
   std::map<uint64_t, pb::coordinator_internal::TableInternal> table_map_;
   MetaMapStorage<pb::coordinator_internal::TableInternal> *table_meta_;
-
-  // ids_epochs
-  // TableInternal is combination of Table & TableDefinition
-  std::map<uint64_t, pb::coordinator_internal::IdEpochInternal> id_epoch_map_;
-  MetaMapStorage<pb::coordinator_internal::IdEpochInternal> *id_epoch_meta_;
 
   // root schema write to raft
   bool root_schema_writed_to_raft_;
@@ -353,13 +369,16 @@ class CoordinatorControl : public MetaControl {
   std::shared_ptr<MetaWriter> meta_writer_;
 
   // node is leader or not
-  std::atomic<bool> is_leader_;
+  butil::atomic<int64_t> leader_term_;
 
   // raft node
   std::shared_ptr<RaftNode> raft_node_;
 
   // coordinator raft_location to server_location cache
   std::map<std::string, pb::common::Location> coordinator_location_cache_;
+
+  // raw_engine for state_machine storage
+  std::shared_ptr<RawEngine> raw_engine_of_meta_;
 };
 
 }  // namespace dingodb

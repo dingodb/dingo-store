@@ -14,15 +14,32 @@
 
 #include "meta/meta_reader.h"
 
+#include <cstddef>
+
+#include "butil/status.h"
 #include "common/constant.h"
 #include "common/helper.h"
+#include "engine/snapshot.h"
 
 namespace dingodb {
 
-std::shared_ptr<pb::common::KeyValue> MetaReader::Get(const std::string& key) {
+std::shared_ptr<pb::common::KeyValue> MetaReader::Get(const std::string& key) { return Get(nullptr, key); }
+
+bool MetaReader::Scan(const std::string& prefix, std::vector<pb::common::KeyValue>& kvs) {
+  return Scan(nullptr, prefix, kvs);
+}
+
+// Get with specific snapshot
+std::shared_ptr<pb::common::KeyValue> MetaReader::Get(std::shared_ptr<Snapshot> snapshot, const std::string& key) {
   auto reader = engine_->NewReader(Constant::kStoreMetaCF);
   std::string* value = new std::string();
-  auto status = reader->KvGet(key, *value);
+
+  butil::Status status;
+  if (snapshot) {
+    status = reader->KvGet(snapshot, key, *value);
+  } else {
+    status = reader->KvGet(key, *value);
+  }
   if (!status.ok()) {
     LOG(ERROR) << "Meta get failed, errcode: " << status.error_code() << " " << status.error_str();
     return nullptr;
@@ -35,10 +52,18 @@ std::shared_ptr<pb::common::KeyValue> MetaReader::Get(const std::string& key) {
   return kv;
 }
 
-bool MetaReader::Scan(const std::string& prefix, std::vector<pb::common::KeyValue>& kvs) {
+// Scan with specific snapshot
+bool MetaReader::Scan(std::shared_ptr<Snapshot> snapshot, const std::string& prefix,
+                      std::vector<pb::common::KeyValue>& kvs) {
   auto reader = engine_->NewReader(Constant::kStoreMetaCF);
   const std::string prefix_next = Helper::Increment(prefix);
-  auto status = reader->KvScan(prefix, prefix_next, kvs);
+
+  butil::Status status;
+  if (snapshot) {
+    status = reader->KvScan(snapshot, prefix, prefix_next, kvs);
+  } else {
+    status = reader->KvScan(prefix, prefix_next, kvs);
+  }
   if (!status.ok()) {
     LOG(ERROR) << "Meta scan failed, errcode: " << status.error_code() << " " << status.error_str();
     return false;

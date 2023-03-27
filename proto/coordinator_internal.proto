@@ -61,6 +61,9 @@ enum IdEpochType {
 
   ID_NEXT_EXECUTOR = 10;
   EPOCH_EXECUTOR = 11;
+
+  RAFT_APPLY_TERM = 12;
+  RAFT_APPLY_INDEX = 13;
 }
 
 message IdEpochInternal {
@@ -132,4 +135,15 @@ message MetaIncrement {
   repeated MetaIncrementTable tables = 5;
   repeated MetaIncrementIdEpoch idepochs = 6;
   repeated MetaIncrementExecutor executors = 7;
+}
+
+// snapshot pb file message
+message MetaSnapshotFile {
+  repeated dingodb.pb.common.KeyValue id_epoch_map_kvs = 1;
+  repeated dingodb.pb.common.KeyValue coordinator_map_kvs = 2;
+  repeated dingodb.pb.common.KeyValue store_map_kvs = 3;
+  repeated dingodb.pb.common.KeyValue executor_map_kvs = 4;
+  repeated dingodb.pb.common.KeyValue schema_map_kvs = 5;
+  repeated dingodb.pb.common.KeyValue region_map_kvs = 6;
+  repeated dingodb.pb.common.KeyValue table_map_kvs = 7;
 }
