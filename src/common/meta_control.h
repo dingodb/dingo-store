@@ -24,6 +24,7 @@
 #include "brpc/server.h"
 #include "bthread/types.h"
 #include "butil/scoped_lock.h"
+#include "engine/snapshot.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
 #include "proto/coordinator_internal.pb.h"
@@ -38,8 +39,8 @@ class MetaControl {
   MetaControl() = default;
   virtual bool Init() = 0;
   virtual bool IsLeader() = 0;
-  virtual void SetLeader() = 0;
-  virtual void SetNotLeader() = 0;
+  virtual void SetLeaderTerm(int64_t term) = 0;
+  virtual void OnLeaderStart(int64_t term) = 0;
 
   virtual void GetLeaderLocation(pb::common::Location &leader_location) = 0;
 
@@ -131,8 +132,19 @@ class MetaControl {
                                  std::vector<pb::common::Location> &locations) = 0;
 
   // on_apply callback
-  // leader do need update next_xx_id, so leader call this function with update_ids=false
-  virtual void ApplyMetaIncrement(pb::coordinator_internal::MetaIncrement &meta_increment, bool update_ids) = 0;
+  virtual void ApplyMetaIncrement(pb::coordinator_internal::MetaIncrement &meta_increment, bool id_leader,
+                                  uint64_t term, uint64_t index) = 0;
+
+  // prepare snapshot for raft snapshot
+  // return: Snapshot
+  virtual std::shared_ptr<Snapshot> PrepareRaftSnapshot() = 0;
+
+  // ReadMetaToSnapshotFile
+  virtual bool ReadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapshot,
+                                      pb::coordinator_internal::MetaSnapshotFile &meta_snapshot_file) = 0;
+
+  // LoadMetaFromSnapshotFile
+  virtual bool LoadMetaFromSnapshotFile(pb::coordinator_internal::MetaSnapshotFile &meta_snapshot_file) = 0;
 };
 
 }  // namespace dingodb

@@ -14,12 +14,18 @@
 
 #include "raft/meta_state_machine.h"
 
+#include <braft/protobuf_file.h>  // braft::ProtoBufFile
+#include <braft/storage.h>        // braft::SnapshotWriter
+#include <braft/util.h>           // braft::AsyncClosureGuard
+
+#include <cstdint>
 #include <memory>
 
-#include "braft/util.h"
 #include "butil/strings/stringprintf.h"
 #include "common/helper.h"
+#include "common/meta_control.h"
 #include "coordinator/coordinator_control.h"
+#include "engine/snapshot.h"
 #include "proto/coordinator_internal.pb.h"
 #include "proto/error.pb.h"
 
@@ -28,11 +34,12 @@ namespace dingodb {
 MetaStateMachine::MetaStateMachine(std::shared_ptr<RawEngine> engine, std::shared_ptr<MetaControl> meta_control)
     : engine_(engine), meta_control_(meta_control) {}
 
-void MetaStateMachine::DispatchRequest(bool is_leader, const pb::raft::RaftCmdRequest& raft_cmd) {
+void MetaStateMachine::DispatchRequest(bool is_leader, uint64_t term, uint64_t index,
+                                       const pb::raft::RaftCmdRequest& raft_cmd) {
   for (const auto& req : raft_cmd.requests()) {
     switch (req.cmd_type()) {
       case pb::raft::CmdType::META_WRITE:
-        HandleMetaProcess(is_leader, raft_cmd);
+        HandleMetaProcess(is_leader, term, index, raft_cmd);
         break;
       default:
         LOG(ERROR) << "Unknown raft cmd type " << req.cmd_type();
@@ -40,7 +47,8 @@ void MetaStateMachine::DispatchRequest(bool is_leader, const pb::raft::RaftCmdRe
   }
 }
 
-void MetaStateMachine::HandleMetaProcess(bool is_leader, const pb::raft::RaftCmdRequest& raft_cmd) {
+void MetaStateMachine::HandleMetaProcess(bool is_leader, uint64_t term, uint64_t index,
+                                         const pb::raft::RaftCmdRequest& raft_cmd) {
   // return response about diffrent Closure
   // todo
   // std::shared_ptr<Context> const ctx = done->GetCtx();
@@ -49,7 +57,7 @@ void MetaStateMachine::HandleMetaProcess(bool is_leader, const pb::raft::RaftCmd
   // CoordinatorControl* controller = dynamic_cast<CoordinatorControl*>(meta_control_);
   if (raft_cmd.requests_size() > 0) {
     auto meta_increment = raft_cmd.requests(0).meta_req().meta_increment();
-    meta_control_->ApplyMetaIncrement(meta_increment, is_leader);
+    meta_control_->ApplyMetaIncrement(meta_increment, is_leader, term, index);
   }
 }
 
@@ -72,29 +80,96 @@ void MetaStateMachine::on_apply(braft::Iterator& iter) {
     std::string str_raft_cmd = Helper::MessageToJsonString(raft_cmd);
     LOG(INFO) << butil::StringPrintf("raft apply log on region[%ld-term:%ld-index:%ld] cmd:[%s]",
                                      raft_cmd.header().region_id(), iter.term(), iter.index(), str_raft_cmd.c_str());
-    DispatchRequest(is_leader, raft_cmd);
+    DispatchRequest(is_leader, iter.term(), iter.index(), raft_cmd);
   }
 }
 
 void MetaStateMachine::on_shutdown() { LOG(INFO) << "on_shutdown..."; }
 
-void MetaStateMachine::on_snapshot_save(braft::SnapshotWriter* /*writer*/, braft::Closure* /*done*/) {
+struct SnapshotArg {
+  int64_t value;
+  std::shared_ptr<MetaControl> control;
+  std::shared_ptr<Snapshot> snapshot;
+  braft::SnapshotWriter* writer;
+  braft::Closure* done;
+};
+
+static void* SaveSnapshot(void* arg) {
+  SnapshotArg* sa = (SnapshotArg*)arg;
+  std::unique_ptr<SnapshotArg> arg_guard(sa);
+  // Serialize StateMachine to the snapshot
+  brpc::ClosureGuard done_guard(sa->done);
+  std::string snapshot_path = sa->writer->get_path() + "/data";
+  LOG(INFO) << "Saving snapshot to " << snapshot_path;
+  // Use protobuf to store the snapshot for backward compatibility.
+  pb::coordinator_internal::MetaSnapshotFile s;
+  bool ret = sa->control->ReadMetaToSnapshotFile(sa->snapshot, s);
+  if (!ret) {
+    sa->done->status().set_error(EIO, "Fail to add file to writer, ReadMetaToSnapshotFile return false");
+    return nullptr;
+  }
+
+  braft::ProtoBufFile pb_file(snapshot_path);
+  if (pb_file.save(&s, true) != 0) {
+    sa->done->status().set_error(EIO, "Fail to save pb_file");
+    return nullptr;
+  }
+  // Snapshot is a set of files in raft. Add the only file into the
+  // writer here.
+  if (sa->writer->add_file("data") != 0) {
+    sa->done->status().set_error(EIO, "Fail to add file to writer");
+    return nullptr;
+  }
+  return nullptr;
+}
+
+void MetaStateMachine::on_snapshot_save(braft::SnapshotWriter* writer, braft::Closure* done) {
   LOG(INFO) << "on_snapshot_save...";
+  // Save current StateMachine in memory and starts a new bthread to avoid
+  // blocking StateMachine since it's a bit slow to write data to disk
+  // file.
+  SnapshotArg* arg = new SnapshotArg;
+  // arg->value = _value.load(butil::memory_order_relaxed);
+  arg->control = this->meta_control_;
+  arg->snapshot = this->meta_control_->PrepareRaftSnapshot();
+  arg->writer = writer;
+  arg->done = done;
+  bthread_t tid;
+  bthread_start_urgent(&tid, nullptr, SaveSnapshot, arg);
 }
 
 int MetaStateMachine::on_snapshot_load([[maybe_unused]] braft::SnapshotReader* reader) {
   LOG(INFO) << "on_snapshot_load...";
-  return -1;
+  // Load snasphot from reader, replacing the running StateMachine
+  CHECK(!this->meta_control_->IsLeader()) << "Leader is not supposed to load snapshot";
+  if (reader->get_file_meta("data", nullptr) != 0) {
+    LOG(ERROR) << "Fail to find `data' on " << reader->get_path();
+    return -1;
+  }
+  std::string snapshot_path = reader->get_path() + "/data";
+  braft::ProtoBufFile pb_file(snapshot_path);
+  pb::coordinator_internal::MetaSnapshotFile s;
+  if (pb_file.load(&s) != 0) {
+    LOG(ERROR) << "Fail to load snapshot from " << snapshot_path;
+    return -1;
+  }
+  bool ret = this->meta_control_->LoadMetaFromSnapshotFile(s);
+  if (!ret) {
+    LOG(ERROR) << "Fail to load snapshot from " << snapshot_path << " LoadMetaFromSnapshotFile return false";
+    return -1;
+  }
+  return 0;
 }
 
 void MetaStateMachine::on_leader_start(int64_t term) {
   LOG(INFO) << "on_leader_start term: " << term;
-  meta_control_->SetLeader();
+  meta_control_->SetLeaderTerm(term);
+  meta_control_->OnLeaderStart(term);
 }
 
 void MetaStateMachine::on_leader_stop(const butil::Status& status) {
   LOG(INFO) << "on_leader_stop: " << status.error_code() << " " << status.error_str();
-  meta_control_->SetNotLeader();
+  meta_control_->SetLeaderTerm(-1);
 }
 
 void MetaStateMachine::on_error(const ::braft::Error& e) {
@@ -102,17 +177,17 @@ void MetaStateMachine::on_error(const ::braft::Error& e) {
                                    e.status().error_cstr());
 }
 
-void MetaStateMachine::on_configuration_committed(const ::braft::Configuration& conf) {
+void MetaStateMachine::on_configuration_committed(const ::braft::Configuration& /*conf*/) {
   LOG(INFO) << "on_configuration_committed...";
   // std::vector<braft::PeerId> peers;
   // conf.list_peers(&peers);
 }
 
-void MetaStateMachine::on_start_following(const ::braft::LeaderChangeContext& ctx) {
+void MetaStateMachine::on_start_following(const ::braft::LeaderChangeContext& /*ctx*/) {
   LOG(INFO) << "on_start_following...";
 }
 
-void MetaStateMachine::on_stop_following(const ::braft::LeaderChangeContext& ctx) {
+void MetaStateMachine::on_stop_following(const ::braft::LeaderChangeContext& /*ctx*/) {
   LOG(INFO) << "on_stop_following...";
 }
 

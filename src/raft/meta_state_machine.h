@@ -16,6 +16,7 @@
 #define DINGODB_META_STATE_MACHINE_H_
 
 #include <algorithm>
+#include <cstdint>
 #include <memory>
 
 #include "braft/raft.h"
@@ -46,8 +47,8 @@ class MetaStateMachine : public braft::StateMachine {
 
  private:
   // void DispatchRequest(StoreClosure* done, bool is_leader, const pb::raft::RaftCmdRequest& raft_cmd);
-  void DispatchRequest(bool is_leader, const pb::raft::RaftCmdRequest& raft_cmd);
-  void HandleMetaProcess(bool is_leader, const pb::raft::RaftCmdRequest& raft_cmd);
+  void DispatchRequest(bool is_leader, uint64_t term, uint64_t index, const pb::raft::RaftCmdRequest& raft_cmd);
+  void HandleMetaProcess(bool is_leader, uint64_t term, uint64_t index, const pb::raft::RaftCmdRequest& raft_cmd);
   // void HandleMetaProcess(StoreClosure* done, bool is_leader, const pb::raft::RaftCmdRequest& raft_cmd);
   std::shared_ptr<RawEngine> engine_;
   std::shared_ptr<MetaControl> meta_control_;
