@@ -133,6 +133,7 @@ Checks: '*,
     -readability-use-anyofallof,
 
     -zirkon-*,
+    '
 
 WarningsAsErrors: '*'
 
