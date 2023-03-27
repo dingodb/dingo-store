@@ -103,9 +103,9 @@ static void* SaveSnapshot(void* arg) {
   LOG(INFO) << "Saving snapshot to " << snapshot_path;
   // Use protobuf to store the snapshot for backward compatibility.
   pb::coordinator_internal::MetaSnapshotFile s;
-  bool ret = sa->control->ReadMetaToSnapshotFile(sa->snapshot, s);
+  bool ret = sa->control->LoadMetaToSnapshotFile(sa->snapshot, s);
   if (!ret) {
-    sa->done->status().set_error(EIO, "Fail to add file to writer, ReadMetaToSnapshotFile return false");
+    sa->done->status().set_error(EIO, "Fail to add file to writer, LoadMetaToSnapshotFile return false");
     return nullptr;
   }
 
@@ -138,7 +138,7 @@ void MetaStateMachine::on_snapshot_save(braft::SnapshotWriter* writer, braft::Cl
   bthread_start_urgent(&tid, nullptr, SaveSnapshot, arg);
 }
 
-int MetaStateMachine::on_snapshot_load([[maybe_unused]] braft::SnapshotReader* reader) {
+int MetaStateMachine::on_snapshot_load(braft::SnapshotReader* reader) {
   LOG(INFO) << "on_snapshot_load...";
   // Load snasphot from reader, replacing the running StateMachine
   CHECK(!this->meta_control_->IsLeader()) << "Leader is not supposed to load snapshot";

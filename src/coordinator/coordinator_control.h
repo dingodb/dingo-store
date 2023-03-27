@@ -145,7 +145,8 @@ class MetaMapStorage {
 
 class CoordinatorControl : public MetaControl {
  public:
-  CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, std::shared_ptr<MetaWriter> meta_writer);
+  CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, std::shared_ptr<MetaWriter> meta_writer,
+                     std::shared_ptr<RawEngine> raw_engine_of_meta);
   ~CoordinatorControl() override;
   bool Recover();
   static void GenerateRootSchemas(pb::coordinator_internal::SchemaInternal &root_schema,
@@ -306,8 +307,8 @@ class CoordinatorControl : public MetaControl {
   // return: Snapshot
   std::shared_ptr<Snapshot> PrepareRaftSnapshot() override;
 
-  // ReadMetaToSnapshotFile
-  bool ReadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapshot,
+  // LoadMetaToSnapshotFile
+  bool LoadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapshot,
                               pb::coordinator_internal::MetaSnapshotFile &meta_snapshot_file) override;
 
   // LoadMetaFromSnapshotFile

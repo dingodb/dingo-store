@@ -38,8 +38,9 @@
 
 namespace dingodb {
 
-CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, std::shared_ptr<MetaWriter> meta_writer)
-    : meta_reader_(meta_reader), meta_writer_(meta_writer), leader_term_(-1) {
+CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, std::shared_ptr<MetaWriter> meta_writer,
+                                       std::shared_ptr<RawEngine> raw_engine_of_meta)
+    : meta_reader_(meta_reader), meta_writer_(meta_writer), leader_term_(-1), raw_engine_of_meta_(raw_engine_of_meta) {
   bthread_mutex_init(&control_mutex_, nullptr);
   root_schema_writed_to_raft_ = false;
 
@@ -76,9 +77,9 @@ std::shared_ptr<Snapshot> CoordinatorControl::PrepareRaftSnapshot() {
   return this->raw_engine_of_meta_->GetSnapshot();
 }
 
-bool CoordinatorControl::ReadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapshot,
+bool CoordinatorControl::LoadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapshot,
                                                 pb::coordinator_internal::MetaSnapshotFile& meta_snapshot_file) {
-  LOG(INFO) << "Coordinator start to ReadMetaToSnapshotFile";
+  LOG(INFO) << "Coordinator start to LoadMetaToSnapshotFile";
 
   std::vector<pb::common::KeyValue> kvs;
 

@@ -111,7 +111,7 @@ bool Server::InitEngines() {
   if (role_ == pb::common::ClusterRole::COORDINATOR) {
     // init CoordinatorController
     coordinator_control_ = std::make_shared<CoordinatorControl>(std::make_shared<MetaReader>(raw_engine),
-                                                                std::make_shared<MetaWriter>(raw_engine));
+                                                                std::make_shared<MetaWriter>(raw_engine), raw_engine);
 
     if (!coordinator_control_->Recover()) {
       LOG(ERROR) << "coordinator_control_->Recover Failed";
