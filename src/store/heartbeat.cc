@@ -31,16 +31,16 @@ void Heartbeat::SendCoordinatorPushToStore(void* arg) {
   CoordinatorControl* coordinator_control = static_cast<CoordinatorControl*>(arg);
 
   if (!coordinator_control->IsLeader()) {
-    LOG(INFO) << "SendCoordinatorPushToStore... this is follower";
+    // LOG(INFO) << "SendCoordinatorPushToStore... this is follower";
     return;
   }
-  LOG(INFO) << "SendCoordinatorPushToStore... this is leader";
+  // LOG(INFO) << "SendCoordinatorPushToStore... this is leader";
 
   std::map<uint64_t, pb::common::Store> store_to_push;
   coordinator_control->GetPushStoreMap(store_to_push);
 
   if (store_to_push.empty()) {
-    LOG(INFO) << "SendCoordinatorPushToStore... No store to push";
+    // LOG(INFO) << "SendCoordinatorPushToStore... No store to push";
     return;
   }
 

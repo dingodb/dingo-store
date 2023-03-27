@@ -139,8 +139,8 @@ class MetaControl {
   // return: Snapshot
   virtual std::shared_ptr<Snapshot> PrepareRaftSnapshot() = 0;
 
-  // ReadMetaToSnapshotFile
-  virtual bool ReadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapshot,
+  // LoadMetaToSnapshotFile
+  virtual bool LoadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapshot,
                                       pb::coordinator_internal::MetaSnapshotFile &meta_snapshot_file) = 0;
 
   // LoadMetaFromSnapshotFile
