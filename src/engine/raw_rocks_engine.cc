@@ -165,14 +165,7 @@ std::string RawRocksEngine::GetName() { return pb::common::RawEngine_Name(pb::co
 pb::common::RawEngine RawRocksEngine::GetID() { return pb::common::RAW_ENG_ROCKSDB; }
 
 std::shared_ptr<Snapshot> RawRocksEngine::GetSnapshot() {
-  return std::make_shared<RocksSnapshot>(txn_db_->GetSnapshot());
-}
-
-// not implement
-void RawRocksEngine::ReleaseSnapshot(std::shared_ptr<Snapshot> snapshot) {
-  if (txn_db_) {
-    txn_db_->ReleaseSnapshot(std::dynamic_pointer_cast<RocksSnapshot>(snapshot)->InnerSnapshot());
-  }
+  return std::make_shared<RocksSnapshot>(txn_db_->GetSnapshot(), txn_db_);
 }
 
 void RawRocksEngine::Flush(const std::string& cf_name) {
@@ -525,7 +518,7 @@ RawRocksEngine::ColumnFamily& RawRocksEngine::ColumnFamily::operator=(RawRocksEn
 }
 
 butil::Status RawRocksEngine::Reader::KvGet(const std::string& key, std::string& value) {
-  auto snapshot = std::make_shared<RocksSnapshot>(txn_db_->GetSnapshot());
+  auto snapshot = std::make_shared<RocksSnapshot>(txn_db_->GetSnapshot(), txn_db_);
   return KvGet(snapshot, key, value);
 }
 
@@ -554,7 +547,7 @@ butil::Status RawRocksEngine::Reader::KvGet(std::shared_ptr<dingodb::Snapshot> s
 
 butil::Status RawRocksEngine::Reader::KvScan(const std::string& start_key, const std::string& end_key,
                                              std::vector<pb::common::KeyValue>& kvs) {
-  auto snapshot = std::make_shared<RocksSnapshot>(txn_db_->GetSnapshot());
+  auto snapshot = std::make_shared<RocksSnapshot>(txn_db_->GetSnapshot(), txn_db_);
   return KvScan(snapshot, start_key, end_key, kvs);
 }
 
@@ -589,7 +582,7 @@ butil::Status RawRocksEngine::Reader::KvScan(std::shared_ptr<dingodb::Snapshot> 
 
 butil::Status RawRocksEngine::Reader::KvCount(const std::string& start_key, const std::string& end_key,
                                               int64_t& count) {
-  auto snapshot = std::make_shared<RocksSnapshot>(txn_db_->GetSnapshot());
+  auto snapshot = std::make_shared<RocksSnapshot>(txn_db_->GetSnapshot(), txn_db_);
   return KvCount(snapshot, start_key, end_key, count);
 }
 

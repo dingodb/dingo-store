@@ -50,8 +50,6 @@ pb::common::Engine RocksEngine::GetID() { return pb::common::ENG_ROCKSDB; }
 
 // not implement
 std::shared_ptr<Snapshot> RocksEngine::GetSnapshot() { return nullptr; }
-// not implement
-void RocksEngine::ReleaseSnapshot(std::shared_ptr<Snapshot> snapshot) {}
 
 butil::Status RocksEngine::Write(std::shared_ptr<Context> ctx, const WriteData& write_data) { return butil::Status(); }
 butil::Status RocksEngine::AsyncWrite(std::shared_ptr<Context> ctx, const WriteData& write_data, WriteCb_t write_cb) {

@@ -45,7 +45,6 @@ class Engine {
   virtual std::shared_ptr<RawEngine> GetRawEngine() { return nullptr; }
 
   virtual std::shared_ptr<Snapshot> GetSnapshot() { return nullptr; }
-  virtual void ReleaseSnapshot(std::shared_ptr<Snapshot> snapshot) {}
 
   virtual butil::Status Write(std::shared_ptr<Context> ctx, const WriteData& write_data) = 0;
   virtual butil::Status AsyncWrite(std::shared_ptr<Context> ctx, const WriteData& write_data, WriteCb_t cb) = 0;
