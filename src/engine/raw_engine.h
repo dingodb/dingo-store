@@ -108,7 +108,6 @@ class RawEngine {
   virtual pb::common::RawEngine GetID() = 0;
 
   virtual std::shared_ptr<Snapshot> GetSnapshot() = 0;
-  virtual void ReleaseSnapshot(std::shared_ptr<Snapshot>) = 0;
 
   virtual void Flush(const std::string& cf_name) = 0;
 

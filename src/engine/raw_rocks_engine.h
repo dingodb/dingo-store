@@ -94,13 +94,19 @@ class RawRocksEngine : public RawEngine {
 
   class RocksSnapshot : public dingodb::Snapshot {
    public:
-    explicit RocksSnapshot(const rocksdb::Snapshot* snapshot) : snapshot_(snapshot) {}
-    ~RocksSnapshot() override{};
+    explicit RocksSnapshot(const rocksdb::Snapshot* snapshot, std::shared_ptr<rocksdb::TransactionDB> txn_db)
+        : snapshot_(snapshot), txn_db_(txn_db) {}
+    ~RocksSnapshot() override {
+      if (txn_db_) {
+        txn_db_->ReleaseSnapshot(snapshot_);
+      }
+    };
 
     const rocksdb::Snapshot* InnerSnapshot() { return snapshot_; }
 
    private:
     const rocksdb::Snapshot* snapshot_;
+    std::shared_ptr<rocksdb::TransactionDB> txn_db_;
   };
 
   class Reader : public RawEngine::Reader {
@@ -138,7 +144,6 @@ class RawRocksEngine : public RawEngine {
 
     butil::Status KvPutIfAbsent(const pb::common::KeyValue& kv) override;
 
-
     butil::Status KvBatchPutIfAbsent(const std::vector<pb::common::KeyValue>& kvs, std::vector<std::string>& put_keys,
                                      bool is_atomic) override;
     // key must be exist
@@ -163,7 +168,6 @@ class RawRocksEngine : public RawEngine {
   pb::common::RawEngine GetID() override;
 
   std::shared_ptr<Snapshot> GetSnapshot() override;
-  void ReleaseSnapshot(std::shared_ptr<Snapshot>) override;
 
   void Flush(const std::string& cf_name) override;
 

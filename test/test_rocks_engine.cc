@@ -154,7 +154,7 @@ TEST(RawRocksEngineTest, GetSnapshot$ReleaseSnapshot) {
   std::shared_ptr<dingodb::Snapshot> snapshot = raw_rocks_engine.GetSnapshot();
   EXPECT_NE(snapshot.get(), nullptr);
 
-  raw_rocks_engine.ReleaseSnapshot(snapshot);
+  // raw_rocks_engine.ReleaseSnapshot(snapshot);
 
   // bugs crash
   // raw_rocks_engine.ReleaseSnapshot({});
