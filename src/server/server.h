@@ -25,7 +25,6 @@
 #include "crontab/crontab.h"
 #include "engine/raw_engine.h"
 #include "engine/storage.h"
-#include "meta/coordinator_meta_manager.h"
 #include "meta/store_meta_manager.h"
 #include "proto/common.pb.h"
 #include "store/store_control.h"
