@@ -59,6 +59,8 @@ class MetaServiceImpl : public pb::meta::MetaService {
 
   void CreateSchema(google::protobuf::RpcController* controller, const pb::meta::CreateSchemaRequest* request,
                     pb::meta::CreateSchemaResponse* response, google::protobuf::Closure* done) override;
+  void DropSchema(google::protobuf::RpcController* controller, const pb::meta::DropSchemaRequest* request,
+                  pb::meta::DropSchemaResponse* response, google::protobuf::Closure* done) override;
 
  private:
   std::shared_ptr<CoordinatorControl> coordinator_control_;

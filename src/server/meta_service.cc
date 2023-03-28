@@ -116,12 +116,12 @@ void MetaServiceImpl::CreateTableId(google::protobuf::RpcController *controller,
   table_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
 
   // prepare for raft process
-  CoordinatorClosure<pb::meta::CreateTableIdRequest, pb::meta::CreateTableIdResponse> *meta_create_store_closure =
+  CoordinatorClosure<pb::meta::CreateTableIdRequest, pb::meta::CreateTableIdResponse> *meta_put_closure =
       new CoordinatorClosure<pb::meta::CreateTableIdRequest, pb::meta::CreateTableIdResponse>(request, response,
                                                                                               done_guard.release());
 
   std::shared_ptr<Context> ctx =
-      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_create_store_closure);
+      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
@@ -167,18 +167,55 @@ void MetaServiceImpl::CreateTable(google::protobuf::RpcController *controller,
   table_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
 
   // prepare for raft process
-  CoordinatorClosure<pb::meta::CreateTableRequest, pb::meta::CreateTableResponse> *meta_create_store_closure =
+  CoordinatorClosure<pb::meta::CreateTableRequest, pb::meta::CreateTableResponse> *meta_put_closure =
       new CoordinatorClosure<pb::meta::CreateTableRequest, pb::meta::CreateTableResponse>(request, response,
                                                                                           done_guard.release());
 
   std::shared_ptr<Context> ctx =
-      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_create_store_closure);
+      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
   engine_->MetaPut(ctx, meta_increment);
 
   LOG(INFO) << "CreateTable Success in meta_service table_name =" << request->table_definition().name();
+}
+
+void MetaServiceImpl::DropSchema(google::protobuf::RpcController *controller,
+                                 const pb::meta::DropSchemaRequest *request, pb::meta::DropSchemaResponse *response,
+                                 google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!this->coordinator_control_->IsLeader()) {
+    return RedirectResponse(response);
+  }
+
+  LOG(INFO) << "DropSchema request:  parent_schema_id = [" << request->schema_id().entity_id() << "]";
+  LOG(INFO) << request->DebugString();
+
+  pb::coordinator_internal::MetaIncrement meta_increment;
+
+  uint64_t schema_id = request->schema_id().entity_id();
+  uint64_t parent_schema_id = request->schema_id().parent_entity_id();
+  int ret = this->coordinator_control_->DropSchema(parent_schema_id, schema_id, meta_increment);
+  if (ret) {
+    LOG(INFO) << "DropSchema failed ret = " << ret;
+    brpc::Controller *brpc_controller = static_cast<brpc::Controller *>(controller);
+    brpc_controller->SetFailed(ret, "drop schema failed");
+    return;
+  }
+
+  // prepare for raft process
+  CoordinatorClosure<pb::meta::DropSchemaRequest, pb::meta::DropSchemaResponse> *meta_put_closure =
+      new CoordinatorClosure<pb::meta::DropSchemaRequest, pb::meta::DropSchemaResponse>(request, response,
+                                                                                        done_guard.release());
+
+  std::shared_ptr<Context> ctx =
+      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
+  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+
+  // this is a async operation will be block by closure
+  engine_->MetaPut(ctx, meta_increment);
 }
 
 void MetaServiceImpl::CreateSchema(google::protobuf::RpcController *controller,
@@ -212,12 +249,12 @@ void MetaServiceImpl::CreateSchema(google::protobuf::RpcController *controller,
   schema->set_name(request->schema_name());
 
   // prepare for raft process
-  CoordinatorClosure<pb::meta::CreateSchemaRequest, pb::meta::CreateSchemaResponse> *meta_create_store_closure =
+  CoordinatorClosure<pb::meta::CreateSchemaRequest, pb::meta::CreateSchemaResponse> *meta_put_closure =
       new CoordinatorClosure<pb::meta::CreateSchemaRequest, pb::meta::CreateSchemaResponse>(request, response,
                                                                                             done_guard.release());
 
   std::shared_ptr<Context> ctx =
-      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_create_store_closure);
+      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
@@ -247,12 +284,12 @@ void MetaServiceImpl::DropTable(google::protobuf::RpcController *controller, con
   }
 
   // prepare for raft process
-  CoordinatorClosure<pb::meta::DropTableRequest, pb::meta::DropTableResponse> *meta_create_store_closure =
+  CoordinatorClosure<pb::meta::DropTableRequest, pb::meta::DropTableResponse> *meta_put_closure =
       new CoordinatorClosure<pb::meta::DropTableRequest, pb::meta::DropTableResponse>(request, response,
                                                                                       done_guard.release());
 
   std::shared_ptr<Context> ctx =
-      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_create_store_closure);
+      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure

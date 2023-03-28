@@ -75,12 +75,12 @@ void CoordinatorServiceImpl::CreateExecutor(google::protobuf::RpcController *con
 
   // prepare for raft process
   CoordinatorClosure<pb::coordinator::CreateExecutorRequest, pb::coordinator::CreateExecutorResponse>
-      *meta_create_store_closure =
+      *meta_put_closure =
           new CoordinatorClosure<pb::coordinator::CreateExecutorRequest, pb::coordinator::CreateExecutorResponse>(
               request, response, done_guard.release());
 
   std::shared_ptr<Context> const ctx =
-      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_create_store_closure);
+      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
@@ -160,13 +160,12 @@ void CoordinatorServiceImpl::CreateStore(google::protobuf::RpcController *contro
   }
 
   // prepare for raft process
-  CoordinatorClosure<pb::coordinator::CreateStoreRequest, pb::coordinator::CreateStoreResponse>
-      *meta_create_store_closure =
-          new CoordinatorClosure<pb::coordinator::CreateStoreRequest, pb::coordinator::CreateStoreResponse>(
-              request, response, done_guard.release());
+  CoordinatorClosure<pb::coordinator::CreateStoreRequest, pb::coordinator::CreateStoreResponse> *meta_put_closure =
+      new CoordinatorClosure<pb::coordinator::CreateStoreRequest, pb::coordinator::CreateStoreResponse>(
+          request, response, done_guard.release());
 
   std::shared_ptr<Context> const ctx =
-      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_create_store_closure);
+      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
@@ -317,13 +316,13 @@ void CoordinatorServiceImpl::StoreHeartbeat(google::protobuf::RpcController *con
 
   // prepare for raft process
   CoordinatorClosure<pb::coordinator::StoreHeartbeatRequest, pb::coordinator::StoreHeartbeatResponse>
-      *meta_create_store_closure =
+      *meta_put_closure =
           new CoordinatorClosure<pb::coordinator::StoreHeartbeatRequest, pb::coordinator::StoreHeartbeatResponse>(
               request, response, done_guard.release(), new_regionmap_epoch, new_storemap_epoch,
               this->coordinator_control_);
 
   std::shared_ptr<Context> const ctx =
-      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_create_store_closure);
+      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure

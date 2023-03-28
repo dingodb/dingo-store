@@ -217,6 +217,14 @@ message CreateSchemaResponse {
   Schema schema = 2;
 }
 
+message DropSchemaRequest {
+  DingoCommonId schema_id = 1;
+}
+
+message DropSchemaResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
 message DropTableRequest {
   DingoCommonId table_id = 1;
 }
@@ -261,6 +269,11 @@ service MetaService {
   // in: parent_schema_id schema_name
   // out: Schema
   rpc CreateSchema(CreateSchemaRequest) returns (CreateSchemaResponse);
+
+  // DropSchema
+  // in: parent_schema_id schema_name
+  // out: Schema
+  rpc DropSchema(DropSchemaRequest) returns (DropSchemaResponse);
 
   // TODO
   // Operation about User, such as create/drop/grant.
