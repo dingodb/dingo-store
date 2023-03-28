@@ -1089,6 +1089,7 @@ int CoordinatorControl::DropTable(uint64_t schema_id, uint64_t table_id,
       region_to_delete->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
       auto* region_to_delete_region = region_to_delete->mutable_region();
       region_to_delete_region->CopyFrom(part_region);
+      LOG(INFO) << "Delete Region in Drop Table, table_id=" << table_id << " region_id=" << region_id;
 
       need_delete_region = true;
     }
@@ -1808,7 +1809,7 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
 }
 
 int CoordinatorControl::ValidateStore(uint64_t store_id, const std::string& keyring) {
-  if (keyring == std::string("TO_BE_CONTINUED") == 0) {
+  if (keyring == std::string("TO_BE_CONTINUED")) {
     LOG(INFO) << "ValidateStore store_id=" << store_id << " debug pass with TO_BE_CONTINUED";
     return 0;
   }
