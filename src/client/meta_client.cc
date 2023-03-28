@@ -250,7 +250,7 @@ void SendDropTable(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& 
   auto* table_id = request.mutable_table_id();
   table_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
   table_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
-  table_id->set_entity_id(1);
+  table_id->set_entity_id(1001);
 
   stub.DropTable(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
