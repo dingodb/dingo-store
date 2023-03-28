@@ -409,45 +409,29 @@ void CoordinatorControl::GenerateRootSchemas(pb::coordinator_internal::SchemaInt
   // root schema
   // pb::meta::Schema root_schema;
   root_schema_internal.set_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
-  auto* root_schema = root_schema_internal.mutable_schema();
-  root_schema->set_name("root");
-  auto* root_schema_id = root_schema->mutable_id();
-  root_schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
-  root_schema_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
-  root_schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
+  root_schema_internal.set_name("root");
 
   // meta schema
   // pb::meta::Schema meta_schema;
   meta_schema_internal.set_id(::dingodb::pb::meta::ReservedSchemaIds::META_SCHEMA);
-  auto* meta_schema = meta_schema_internal.mutable_schema();
-  auto* meta_schema_id = meta_schema->mutable_id();
-  meta_schema->set_name("meta");
-  meta_schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
-  meta_schema_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
-  meta_schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::META_SCHEMA);
+  meta_schema_internal.set_name("meta");
 
-  auto* sub_schema_id_meta = root_schema->add_schema_ids();
-  sub_schema_id_meta->CopyFrom(*meta_schema_id);
+  root_schema_internal.add_schema_ids(meta_schema_internal.id());
 
   // dingo schema
   // pb::meta::Schema dingo_schema;
   dingo_schema_internal.set_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
-  auto* dingo_schema = dingo_schema_internal.mutable_schema();
-  dingo_schema->set_name("dingo");
-  auto* dingo_schema_id = dingo_schema->mutable_id();
-  dingo_schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
-  dingo_schema_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
-  dingo_schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+  dingo_schema_internal.set_name("dingo");
 
-  auto* sub_schema_id_dingo = root_schema->add_schema_ids();
-  sub_schema_id_dingo->CopyFrom(*dingo_schema_id);
+  root_schema_internal.add_schema_ids(dingo_schema_internal.id());
 
   LOG(INFO) << "GenerateRootSchemas 0[" << root_schema_internal.DebugString();
   LOG(INFO) << "GenerateRootSchemas 1[" << meta_schema_internal.DebugString();
   LOG(INFO) << "GenerateRootSchemas 2[" << dingo_schema_internal.DebugString();
 }
 
-// TODO: load data from raft_kv_engine
+// Init
+// init is called after recover
 bool CoordinatorControl::Init() {
   // root=0 meta=1 dingo=2, other schema begins from 3
   // init schema_map_ at innocent cluster
@@ -563,6 +547,55 @@ uint64_t CoordinatorControl::GetNextId(const pb::coordinator_internal::IdEpochTy
   return value;
 }
 
+// drop schema
+// in: parent_schema_id
+// in: schema_id
+// return: 0 or -1
+int CoordinatorControl::DropSchema(uint64_t parent_schema_id, uint64_t schema_id,
+                                   pb::coordinator_internal::MetaIncrement& meta_increment) {
+  if (schema_id < 0) {
+    LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
+    return -1;
+  }
+
+  if (parent_schema_id < 0) {
+    LOG(ERROR) << "ERRROR: parent_schema_id illegal " << schema_id;
+    return -1;
+  }
+
+  pb::coordinator_internal::SchemaInternal schema_internal;
+  {
+    BAIDU_SCOPED_LOCK(schema_map_mutex_);
+    if (this->schema_map_.find(schema_id) == schema_map_.end()) {
+      LOG(ERROR) << "ERRROR: schema_id not found" << schema_id;
+      return -1;
+    }
+
+    auto& schema_to_delete = schema_map_[schema_id];
+    if (schema_to_delete.table_ids_size() > 0 || schema_to_delete.schema_ids_size() > 0) {
+      LOG(ERROR) << "ERRROR: schema is not null" << schema_id << " table_ids_size=" << schema_to_delete.table_ids_size()
+                 << " schema_ids_size=" << schema_to_delete.schema_ids_size();
+      return -1;
+    }
+    // construct schema from schema_internal
+    schema_internal = schema_map_.at(schema_id);
+  }
+
+  // bump up epoch
+  GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_SCHEMA, meta_increment);
+
+  // delete schema
+  auto* schema_to_delete = meta_increment.add_schemas();
+  schema_to_delete->set_id(schema_id);
+  schema_to_delete->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
+  schema_to_delete->set_schema_id(parent_schema_id);
+
+  auto* schema_to_delete_schema = schema_to_delete->mutable_schema_internal();
+  schema_to_delete_schema->CopyFrom(schema_internal);
+
+  return 0;
+}
+
 // TODO: check name comflicts before create new schema
 int CoordinatorControl::CreateSchema(uint64_t parent_schema_id, std::string schema_name, uint64_t& new_schema_id,
                                      pb::coordinator_internal::MetaIncrement& meta_increment) {
@@ -592,14 +625,7 @@ int CoordinatorControl::CreateSchema(uint64_t parent_schema_id, std::string sche
   // add new schema to  schema_map_
   pb::coordinator_internal::SchemaInternal new_schema_internal;
   new_schema_internal.set_id(new_schema_id);
-
-  auto* new_schema = new_schema_internal.mutable_schema();
-  new_schema->set_name(schema_name);
-  auto* the_new_schema_id = new_schema->mutable_id();
-  // the_new_schema_id->CopyFrom(*schema_id);
-  the_new_schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
-  the_new_schema_id->set_parent_entity_id(parent_schema_id);
-  the_new_schema_id->set_entity_id(new_schema_id);
+  new_schema_internal.set_name(schema_name);
 
   // update meta_increment
   auto* schema_increment = meta_increment.add_schemas();
@@ -671,7 +697,7 @@ uint64_t CoordinatorControl::UpdateExecutorMap(const pb::common::Executor& execu
   return executor_map_epoch;
 }
 
-// TODO: data persistence
+// UpdateStoreMap
 uint64_t CoordinatorControl::UpdateStoreMap(const pb::common::Store& store,
                                             pb::coordinator_internal::MetaIncrement& meta_increment) {
   uint64_t store_map_epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_STORE);
@@ -1104,6 +1130,7 @@ int CoordinatorControl::DropTable(uint64_t schema_id, uint64_t table_id,
   auto* table_to_delete = meta_increment.add_tables();
   table_to_delete->set_id(table_id);
   table_to_delete->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
+  table_to_delete->set_schema_id(schema_id);
 
   auto* table_to_delete_table = table_to_delete->mutable_table();
   table_to_delete_table->CopyFrom(table_internal);
@@ -1197,7 +1224,7 @@ int CoordinatorControl::CreateRegion(const std::string& region_name, const std::
   return 0;
 }
 
-// TODO: data persistence
+// UpdateRegionMap
 uint64_t CoordinatorControl::UpdateRegionMap(std::vector<pb::common::Region>& regions,
                                              pb::coordinator_internal::MetaIncrement& meta_increment) {
   uint64_t region_map_epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_REGION);
@@ -1318,14 +1345,14 @@ void CoordinatorControl::GetSchemas(uint64_t schema_id, std::vector<pb::meta::Sc
     }
 
     auto& schema_internal = schema_map_[schema_id];
-    LOG(INFO) << " sub schema count=" << schema_internal.schema().schema_ids_size();
+    LOG(INFO) << " sub schema count=" << schema_internal.schema_ids_size();
 
-    for (int i = 0; i < schema_internal.schema().schema_ids_size(); i++) {
-      int sub_schema_id = schema_internal.schema().schema_ids(i).entity_id();
+    for (int i = 0; i < schema_internal.schema_ids_size(); i++) {
+      uint64_t sub_schema_id = schema_internal.schema_ids(i);
 
       LOG(INFO) << "sub_schema_id=" << sub_schema_id;
 
-      LOG(INFO) << schema_internal.schema().DebugString();
+      LOG(INFO) << schema_internal.DebugString();
 
       if (schema_map_.find(sub_schema_id) == schema_map_.end()) {
         LOG(ERROR) << "ERRROR: sub_schema_id " << sub_schema_id << " not exists";
@@ -1336,7 +1363,32 @@ void CoordinatorControl::GetSchemas(uint64_t schema_id, std::vector<pb::meta::Sc
 
       LOG(INFO) << " GetSchemas push_back sub schema id=" << sub_schema_id;
 
-      schemas.push_back(schema_map_[sub_schema_id].schema());
+      // construct sub_schema_for_response
+      const auto& lean_schema = schema_map_[sub_schema_id];
+      pb::meta::Schema sub_schema_for_response;
+
+      auto* sub_schema_common_id = sub_schema_for_response.mutable_id();
+      sub_schema_common_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
+      sub_schema_common_id->set_entity_id(lean_schema.id());  // this is equal to sub_schema_id
+      sub_schema_common_id->set_parent_entity_id(
+          schema_id);  // this is sub_schema_id's parent which is the input schema_id
+
+      for (auto x : lean_schema.schema_ids()) {
+        auto* temp_id = sub_schema_for_response.add_schema_ids();
+        temp_id->set_entity_id(x);
+        temp_id->set_parent_entity_id(sub_schema_id);
+        temp_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
+      }
+
+      for (auto x : lean_schema.table_ids()) {
+        auto* temp_id = sub_schema_for_response.add_table_ids();
+        temp_id->set_entity_id(x);
+        temp_id->set_parent_entity_id(sub_schema_id);
+        temp_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
+      }
+
+      // push sub_schema_for_response into response
+      schemas.push_back(sub_schema_for_response);
     }
   }
 
@@ -1366,8 +1418,8 @@ void CoordinatorControl::GetTables(uint64_t schema_id,
     }
 
     auto& schema_internal = schema_map_[schema_id];
-    for (int i = 0; i < schema_internal.schema().table_ids_size(); i++) {
-      int table_id = schema_internal.schema().table_ids(i).entity_id();
+    for (int i = 0; i < schema_internal.table_ids_size(); i++) {
+      uint64_t table_id = schema_internal.table_ids(i);
       if (table_map_.find(table_id) == table_map_.end()) {
         LOG(ERROR) << "ERRROR: table_id " << table_id << " not exists";
         continue;
@@ -1377,7 +1429,13 @@ void CoordinatorControl::GetTables(uint64_t schema_id,
 
       // construct return value
       pb::meta::TableDefinitionWithId table_def_with_id;
-      table_def_with_id.mutable_table_id()->CopyFrom(schema_internal.schema().table_ids(i));
+
+      // table_def_with_id.mutable_table_id()->CopyFrom(schema_internal.schema().table_ids(i));
+      auto* table_id_for_response = table_def_with_id.mutable_table_id();
+      table_id_for_response->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
+      table_id_for_response->set_entity_id(table_id);
+      table_id_for_response->set_parent_entity_id(schema_id);
+
       table_def_with_id.mutable_table_definition()->CopyFrom(table_map_[table_id].definition());
       table_definition_with_ids.push_back(table_def_with_id);
     }
@@ -1663,16 +1721,15 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         // update parent schema for user schemas
         if (schema.id() > pb::meta::ReservedSchemaIds::DINGO_SCHEMA) {
           if (schema_map_.find(schema.schema_id()) != schema_map_.end()) {
-            auto& new_sub_schema = schema_map_[schema.schema_id()];
-            auto* new_sub_schema_id = new_sub_schema.mutable_schema()->add_schema_ids();
-            new_sub_schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
-            new_sub_schema_id->set_entity_id(schema.id());
-            new_sub_schema_id->set_parent_entity_id(schema.schema_id());
+            auto& parent_schema = schema_map_[schema.schema_id()];
+
+            // add new created schema's id to its parent schema's schema_ids
+            parent_schema.add_schema_ids(schema.id());
 
             LOG(INFO) << "3.schema map CREATE new_sub_schema id=" << schema.id() << " parent_id=" << schema.schema_id();
 
             // meta_write_kv
-            meta_write_to_kv.push_back(schema_meta_->TransformToKvValue(new_sub_schema));
+            meta_write_to_kv.push_back(schema_meta_->TransformToKvValue(parent_schema));
           }
         }
         schema_map_[schema.id()] = schema.schema_internal();
@@ -1689,6 +1746,28 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
 
       } else if (schema.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
         schema_map_.erase(schema.id());
+
+        // delete from parent schema
+        if (schema_map_.find(schema.schema_id()) != schema_map_.end()) {
+          auto& parent_schema = schema_map_[schema.schema_id()];
+
+          // according to the protobuf document, we must use CopyFrom for protobuf message data structure here
+          pb::coordinator_internal::SchemaInternal new_schema;
+          new_schema.CopyFrom(parent_schema);
+
+          new_schema.clear_table_ids();
+
+          // add left schema_id to new_schema
+          for (auto x : parent_schema.table_ids()) {
+            if (x != schema.id()) {
+              new_schema.add_schema_ids(x);
+            }
+          }
+          parent_schema.CopyFrom(new_schema);
+
+          // meta_write_kv
+          meta_write_to_kv.push_back(schema_meta_->TransformToKvValue(parent_schema));
+        }
 
         // meta_delete_kv
         meta_delete_to_kv.push_back(schema_meta_->TransformToKvValue(schema.schema_internal()));
@@ -1751,22 +1830,21 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
     for (int i = 0; i < meta_increment.tables_size(); i++) {
       const auto& table = meta_increment.tables(i);
       if (table.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
+        // need to update schema, so acquire lock
+        BAIDU_SCOPED_LOCK(schema_map_mutex_);
+
         // add table to table_map
         table_map_[table.id()] = table.table();
 
         // meta_write_kv
         meta_write_to_kv.push_back(table_meta_->TransformToKvValue(table.table()));
 
-        // update parent schema
-        pb::meta::DingoCommonId table_common_id;
-        table_common_id.set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
-        table_common_id.set_entity_id(table.id());
-        table_common_id.set_parent_entity_id(table.schema_id());
-
+        // add table to parent schema
         if (schema_map_.find(table.schema_id()) != schema_map_.end()) {
           auto& schema = schema_map_[table.schema_id()];
-          auto* add_table_id = schema.mutable_schema()->add_table_ids();
-          add_table_id->CopyFrom(table_common_id);
+
+          // add new created table's id to its parent schema's table_ids
+          schema.add_table_ids(table.id());
 
           LOG(INFO) << "5.table map CREATE new_sub_table id=" << table.id() << " parent_id=" << table.schema_id();
 
@@ -1787,9 +1865,39 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         meta_write_to_kv.push_back(table_meta_->TransformToKvValue(table.table()));
 
       } else if (table.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
+        // need to update schema, so acquire lock
+        BAIDU_SCOPED_LOCK(schema_map_mutex_);
+
         // delete table from table_map
         table_map_.erase(table.id());
 
+        // delete from parent schema
+        if (schema_map_.find(table.schema_id()) != schema_map_.end()) {
+          auto& schema = schema_map_[table.schema_id()];
+
+          // according to the doc, we must use CopyFrom for protobuf message data structure here
+          pb::coordinator_internal::SchemaInternal new_schema;
+          new_schema.CopyFrom(schema);
+
+          new_schema.clear_table_ids();
+
+          // add left table_id to new_schema
+          for (auto x : schema.table_ids()) {
+            if (x != table.id()) {
+              new_schema.add_table_ids(x);
+            }
+          }
+          schema.CopyFrom(new_schema);
+
+          LOG(INFO) << "5.table map DELETE new_sub_table id=" << table.id() << " parent_id=" << table.schema_id();
+
+          // meta_write_kv
+          meta_write_to_kv.push_back(schema_meta_->TransformToKvValue(schema));
+
+        } else {
+          LOG(ERROR) << " DROP TABLE apply illegal schema_id=" << table.schema_id() << " table_id=" << table.id()
+                     << " table_name=" << table.table().definition().name();
+        }
         // meta_delete_kv
         meta_delete_to_kv.push_back(table_meta_->TransformToKvValue(table.table()));
       }

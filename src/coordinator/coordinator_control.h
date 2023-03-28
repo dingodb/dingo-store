@@ -189,6 +189,13 @@ class CoordinatorControl : public MetaControl {
   int CreateSchema(uint64_t parent_schema_id, std::string schema_name, uint64_t &new_schema_id,
                    pb::coordinator_internal::MetaIncrement &meta_increment) override;
 
+  // drop schema
+  // in: parent_schema_id
+  // in: schema_id
+  // return: 0 or -1
+  int DropSchema(uint64_t parent_schema_id, uint64_t schema_id,
+                 pb::coordinator_internal::MetaIncrement &meta_increment);
+
   // create schema
   // in: schema_id
   // out: new table_id

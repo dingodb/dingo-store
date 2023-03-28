@@ -36,7 +36,9 @@ message TableInternal {
 // SchemaInternal is storage structure for schema
 message SchemaInternal {
   uint64 id = 1;
-  dingodb.pb.meta.Schema schema = 2;
+  string name = 2;
+  repeated uint64 schema_ids = 3;
+  repeated uint64 table_ids = 4;
 }
 
 // CoordinatorInteral stores coordinator info for SDK & stores.
