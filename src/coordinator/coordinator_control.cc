@@ -553,7 +553,7 @@ uint64_t CoordinatorControl::GetNextId(const pb::coordinator_internal::IdEpochTy
 // return: 0 or -1
 int CoordinatorControl::DropSchema(uint64_t parent_schema_id, uint64_t schema_id,
                                    pb::coordinator_internal::MetaIncrement& meta_increment) {
-  if (schema_id < 0) {
+  if (schema_id <= 3) {
     LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
     return -1;
   }
