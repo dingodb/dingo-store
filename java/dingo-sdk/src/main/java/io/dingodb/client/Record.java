@@ -274,31 +274,30 @@ public final class Record {
      */
     @Override
     public String toString() {
+        if (columnsInOrderMapping.isEmpty()) {
+            return null;
+        }
         StringBuilder sb = new StringBuilder(500);
         sb.append("(columns:");
 
-        if (columnsInOrderMapping != null) {
-            boolean sep = false;
+        boolean sep = false;
 
-            for (Map.Entry<String,Object> entry : columnsInOrderMapping.entrySet()) {
-                if (sep) {
-                    sb.append(',');
-                } else {
-                    sep = true;
-                }
-                sb.append('(');
-                sb.append(entry.getKey());
-                sb.append(':');
-                sb.append(entry.getValue());
-                sb.append(')');
-
-                if (sb.length() > 1000) {
-                    sb.append("...");
-                    break;
-                }
+        for (Map.Entry<String,Object> entry : columnsInOrderMapping.entrySet()) {
+            if (sep) {
+                sb.append(',');
+            } else {
+                sep = true;
             }
-        } else {
-            sb.append("null");
+            sb.append('(');
+            sb.append(entry.getKey());
+            sb.append(':');
+            sb.append(entry.getValue());
+            sb.append(')');
+
+            if (sb.length() > 1000) {
+                sb.append("...");
+                break;
+            }
         }
         sb.append(')');
         return sb.toString();
