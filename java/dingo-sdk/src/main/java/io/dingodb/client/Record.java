@@ -167,7 +167,9 @@ public final class Record {
             if (value instanceof Value) {
                 value = ((Value) value).getObject();
             }
-            columnsInOrder.put(colName, value);
+            if (value != null) {
+                columnsInOrder.put(colName, value);
+            }
         }
         return new Record(columnsInOrder, keyColumns);
     }
