@@ -41,7 +41,16 @@ namespace dingodb {
 CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, std::shared_ptr<MetaWriter> meta_writer,
                                        std::shared_ptr<RawEngine> raw_engine_of_meta)
     : meta_reader_(meta_reader), meta_writer_(meta_writer), leader_term_(-1), raw_engine_of_meta_(raw_engine_of_meta) {
-  bthread_mutex_init(&control_mutex_, nullptr);
+  bthread_mutex_init(&id_epoch_map_temp_mutex_, nullptr);
+  bthread_mutex_init(&id_epoch_map_mutex_, nullptr);
+  bthread_mutex_init(&coordinator_map_mutex_, nullptr);
+  bthread_mutex_init(&store_map_mutex_, nullptr);
+  bthread_mutex_init(&store_need_push_mutex_, nullptr);
+  bthread_mutex_init(&executor_map_mutex_, nullptr);
+  bthread_mutex_init(&executor_need_push_mutex_, nullptr);
+  bthread_mutex_init(&schema_map_mutex_, nullptr);
+  bthread_mutex_init(&region_map_mutex_, nullptr);
+  bthread_mutex_init(&table_map_mutex_, nullptr);
   root_schema_writed_to_raft_ = false;
 
   coordinator_meta_ = new MetaMapStorage<pb::coordinator_internal::CoordinatorInternal>(&coordinator_map_);
@@ -68,6 +77,7 @@ void CoordinatorControl::SetLeaderTerm(int64_t term) { leader_term_.store(term, 
 
 // OnLeaderStart will init id_epoch_map_temp_ from id_epoch_map_ which is in state machine
 void CoordinatorControl::OnLeaderStart(int64_t term) {
+  BAIDU_SCOPED_LOCK(id_epoch_map_mutex_);
   id_epoch_map_temp_ = id_epoch_map_;
   LOG(INFO) << "OnLeaderStart init id_epoch_map_temp_ finished, term=" << term;
 }
@@ -172,20 +182,20 @@ bool CoordinatorControl::LoadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapsh
 }
 
 bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::MetaSnapshotFile& meta_snapshot_file) {
-  BAIDU_SCOPED_LOCK(control_mutex_);
+  LOG(INFO) << "Coordinator start to LoadMetaFromSnapshotFile";
 
   std::vector<pb::common::KeyValue> kvs;
-
-  LOG(INFO) << "Coordinator start to LoadMetaFromSnapshotFile";
 
   // 0.id_epoch map
   kvs.reserve(meta_snapshot_file.id_epoch_map_kvs_size());
   for (int i = 0; i < meta_snapshot_file.id_epoch_map_kvs_size(); i++) {
     kvs.push_back(meta_snapshot_file.id_epoch_map_kvs(i));
   }
-
-  if (!id_epoch_meta_->Recover(kvs)) {
-    return false;
+  {
+    BAIDU_SCOPED_LOCK(id_epoch_map_mutex_);
+    if (!id_epoch_meta_->Recover(kvs)) {
+      return false;
+    }
   }
   LOG(INFO) << "LoadSnapshot id_epoch_meta, count=" << kvs.size();
   kvs.clear();
@@ -195,9 +205,11 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
   for (int i = 0; i < meta_snapshot_file.coordinator_map_kvs_size(); i++) {
     kvs.push_back(meta_snapshot_file.coordinator_map_kvs(i));
   }
-
-  if (!coordinator_meta_->Recover(kvs)) {
-    return false;
+  {
+    BAIDU_SCOPED_LOCK(coordinator_map_mutex_);
+    if (!coordinator_meta_->Recover(kvs)) {
+      return false;
+    }
   }
   LOG(INFO) << "LoadSnapshot coordinator_meta, count=" << kvs.size();
   kvs.clear();
@@ -207,9 +219,11 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
   for (int i = 0; i < meta_snapshot_file.store_map_kvs_size(); i++) {
     kvs.push_back(meta_snapshot_file.store_map_kvs(i));
   }
-
-  if (!store_meta_->Recover(kvs)) {
-    return false;
+  {
+    BAIDU_SCOPED_LOCK(store_map_mutex_);
+    if (!store_meta_->Recover(kvs)) {
+      return false;
+    }
   }
   LOG(INFO) << "LoadSnapshot store_meta, count=" << kvs.size();
   kvs.clear();
@@ -219,9 +233,11 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
   for (int i = 0; i < meta_snapshot_file.executor_map_kvs_size(); i++) {
     kvs.push_back(meta_snapshot_file.executor_map_kvs(i));
   }
-
-  if (!executor_meta_->Recover(kvs)) {
-    return false;
+  {
+    BAIDU_SCOPED_LOCK(executor_map_mutex_);
+    if (!executor_meta_->Recover(kvs)) {
+      return false;
+    }
   }
   LOG(INFO) << "LoadSnapshot executor_meta, count=" << kvs.size();
   kvs.clear();
@@ -231,9 +247,11 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
   for (int i = 0; i < meta_snapshot_file.schema_map_kvs_size(); i++) {
     kvs.push_back(meta_snapshot_file.schema_map_kvs(i));
   }
-
-  if (!schema_meta_->Recover(kvs)) {
-    return false;
+  {
+    BAIDU_SCOPED_LOCK(schema_map_mutex_);
+    if (!schema_meta_->Recover(kvs)) {
+      return false;
+    }
   }
   LOG(INFO) << "LoadSnapshot schema_meta, count=" << kvs.size();
   kvs.clear();
@@ -243,9 +261,11 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
   for (int i = 0; i < meta_snapshot_file.region_map_kvs_size(); i++) {
     kvs.push_back(meta_snapshot_file.region_map_kvs(i));
   }
-
-  if (!region_meta_->Recover(kvs)) {
-    return false;
+  {
+    BAIDU_SCOPED_LOCK(region_map_mutex_);
+    if (!region_meta_->Recover(kvs)) {
+      return false;
+    }
   }
   LOG(INFO) << "LoadSnapshot region_meta, count=" << kvs.size();
   kvs.clear();
@@ -255,33 +275,41 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
   for (int i = 0; i < meta_snapshot_file.table_map_kvs_size(); i++) {
     kvs.push_back(meta_snapshot_file.table_map_kvs(i));
   }
-
-  if (!table_meta_->Recover(kvs)) {
-    return false;
+  {
+    BAIDU_SCOPED_LOCK(table_map_mutex_);
+    if (!table_meta_->Recover(kvs)) {
+      return false;
+    }
   }
   LOG(INFO) << "LoadSnapshot table_meta, count=" << kvs.size();
   kvs.clear();
 
   // 7.init id_epoch_map_temp_
-  id_epoch_map_temp_ = id_epoch_map_;
+  {
+    BAIDU_SCOPED_LOCK(id_epoch_map_temp_mutex_);
+    BAIDU_SCOPED_LOCK(id_epoch_map_mutex_);
+    id_epoch_map_temp_ = id_epoch_map_;
+  }
+  LOG(INFO) << "LoadSnapshot id_epoch_map_temp, count=" << id_epoch_map_temp_.size();
 
   return true;
 }
 
 bool CoordinatorControl::Recover() {
-  BAIDU_SCOPED_LOCK(control_mutex_);
+  LOG(INFO) << "Coordinator start to Recover";
 
   std::vector<pb::common::KeyValue> kvs;
-
-  LOG(INFO) << "Coordinator start to Recover";
 
   // 0.id_epoch map
   if (!meta_reader_->Scan(id_epoch_meta_->Prefix(), kvs)) {
     return false;
   }
+  {
+    BAIDU_SCOPED_LOCK(id_epoch_map_mutex_);
 
-  if (!id_epoch_meta_->Recover(kvs)) {
-    return false;
+    if (!id_epoch_meta_->Recover(kvs)) {
+      return false;
+    }
   }
   LOG(INFO) << "Recover id_epoch_meta, count=" << kvs.size();
   kvs.clear();
@@ -290,9 +318,11 @@ bool CoordinatorControl::Recover() {
   if (!meta_reader_->Scan(coordinator_meta_->Prefix(), kvs)) {
     return false;
   }
-
-  if (!coordinator_meta_->Recover(kvs)) {
-    return false;
+  {
+    BAIDU_SCOPED_LOCK(coordinator_map_mutex_);
+    if (!coordinator_meta_->Recover(kvs)) {
+      return false;
+    }
   }
   LOG(INFO) << "Recover coordinator_meta, count=" << kvs.size();
   kvs.clear();
@@ -301,9 +331,11 @@ bool CoordinatorControl::Recover() {
   if (!meta_reader_->Scan(store_meta_->Prefix(), kvs)) {
     return false;
   }
-
-  if (!store_meta_->Recover(kvs)) {
-    return false;
+  {
+    BAIDU_SCOPED_LOCK(store_map_mutex_);
+    if (!store_meta_->Recover(kvs)) {
+      return false;
+    }
   }
   LOG(INFO) << "Recover store_meta, count=" << kvs.size();
   kvs.clear();
@@ -312,9 +344,11 @@ bool CoordinatorControl::Recover() {
   if (!meta_reader_->Scan(executor_meta_->Prefix(), kvs)) {
     return false;
   }
-
-  if (!executor_meta_->Recover(kvs)) {
-    return false;
+  {
+    BAIDU_SCOPED_LOCK(executor_map_mutex_);
+    if (!executor_meta_->Recover(kvs)) {
+      return false;
+    }
   }
   LOG(INFO) << "Recover executor_meta, count=" << kvs.size();
   kvs.clear();
@@ -323,9 +357,11 @@ bool CoordinatorControl::Recover() {
   if (!meta_reader_->Scan(schema_meta_->Prefix(), kvs)) {
     return false;
   }
-
-  if (!schema_meta_->Recover(kvs)) {
-    return false;
+  {
+    BAIDU_SCOPED_LOCK(schema_map_mutex_);
+    if (!schema_meta_->Recover(kvs)) {
+      return false;
+    }
   }
   LOG(INFO) << "Recover schema_meta, count=" << kvs.size();
   kvs.clear();
@@ -334,9 +370,11 @@ bool CoordinatorControl::Recover() {
   if (!meta_reader_->Scan(region_meta_->Prefix(), kvs)) {
     return false;
   }
-
-  if (!region_meta_->Recover(kvs)) {
-    return false;
+  {
+    BAIDU_SCOPED_LOCK(region_map_mutex_);
+    if (!region_meta_->Recover(kvs)) {
+      return false;
+    }
   }
   LOG(INFO) << "Recover region_meta, count=" << kvs.size();
   kvs.clear();
@@ -345,15 +383,22 @@ bool CoordinatorControl::Recover() {
   if (!meta_reader_->Scan(table_meta_->Prefix(), kvs)) {
     return false;
   }
-
-  if (!table_meta_->Recover(kvs)) {
-    return false;
+  {
+    BAIDU_SCOPED_LOCK(table_map_mutex_);
+    if (!table_meta_->Recover(kvs)) {
+      return false;
+    }
   }
   LOG(INFO) << "Recover table_meta, count=" << kvs.size();
   kvs.clear();
 
   // 7.init id_epoch_map_temp_
-  id_epoch_map_temp_ = id_epoch_map_;
+  {
+    BAIDU_SCOPED_LOCK(id_epoch_map_temp_mutex_);
+    BAIDU_SCOPED_LOCK(id_epoch_map_mutex_);
+    id_epoch_map_temp_ = id_epoch_map_;
+  }
+  LOG(INFO) << "Recover id_epoch_map_temp, count=" << id_epoch_map_temp_.size();
 
   return true;
 }
@@ -402,34 +447,6 @@ void CoordinatorControl::GenerateRootSchemas(pb::coordinator_internal::SchemaInt
   LOG(INFO) << "GenerateRootSchemas 2[" << dingo_schema_internal.DebugString();
 }
 
-// void CoordinatorControl::GenerateRootSchemasMetaIncrement(pb::coordinator_internal::SchemaInternal& root_schema,
-//                                                           pb::coordinator_internal::SchemaInternal& meta_schema,
-//                                                           pb::coordinator_internal::SchemaInternal& dingo_schema,
-//                                                           pb::coordinator_internal::MetaIncrement& meta_increment) {
-//   // update meta_increment
-//   auto* schema_increment_root = meta_increment.add_schemas();
-//   auto* schema_increment_meta = meta_increment.add_schemas();
-//   auto* schema_increment_dingo = meta_increment.add_schemas();
-
-//   schema_increment_root->set_id(root_schema.id());
-//   schema_increment_root->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
-//   schema_increment_root->set_schema_id(root_schema.schema().id().parent_entity_id());
-//   auto* increment_root = schema_increment_root->mutable_schema_internal();
-//   increment_root->CopyFrom(root_schema);
-
-//   schema_increment_meta->set_id(meta_schema.id());
-//   schema_increment_meta->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
-//   schema_increment_meta->set_schema_id(meta_schema.schema().id().parent_entity_id());
-//   auto* increment_meta = schema_increment_meta->mutable_schema_internal();
-//   increment_meta->CopyFrom(meta_schema);
-
-//   schema_increment_dingo->set_id(dingo_schema.id());
-//   schema_increment_dingo->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
-//   schema_increment_dingo->set_schema_id(dingo_schema.schema().id().parent_entity_id());
-//   auto* increment_dingo = schema_increment_dingo->mutable_schema_internal();
-//   increment_dingo->CopyFrom(dingo_schema);
-// }
-
 // TODO: load data from raft_kv_engine
 bool CoordinatorControl::Init() {
   // root=0 meta=1 dingo=2, other schema begins from 3
@@ -458,6 +475,7 @@ bool CoordinatorControl::Init() {
 
 uint64_t CoordinatorControl::GetPresentId(const pb::coordinator_internal::IdEpochType& key) {
   uint64_t value = 0;
+  BAIDU_SCOPED_LOCK(id_epoch_map_temp_mutex_);
   if (id_epoch_map_temp_.find(key) == id_epoch_map_temp_.end()) {
     value = 1000;
     LOG(INFO) << "GetPresentId key=" << key << " not found, generate new id=" << value;
@@ -518,17 +536,20 @@ void CoordinatorControl::GetLeaderLocation(pb::common::Location& leader_server_l
 uint64_t CoordinatorControl::GetNextId(const pb::coordinator_internal::IdEpochType& key,
                                        pb::coordinator_internal::MetaIncrement& meta_increment) {
   uint64_t value = 0;
-  if (id_epoch_map_temp_.find(key) == id_epoch_map_temp_.end()) {
-    value = 1000;
-    LOG(INFO) << "GetNextId key=" << key << " not found, generate new id=" << value;
-  } else {
-    value = id_epoch_map_temp_[key].value();
-    LOG(INFO) << "GetNextId key=" << key << " value=" << value;
-  }
-  value++;
+  {
+    BAIDU_SCOPED_LOCK(id_epoch_map_temp_mutex_);
+    if (id_epoch_map_temp_.find(key) == id_epoch_map_temp_.end()) {
+      value = 1000;
+      LOG(INFO) << "GetNextId key=" << key << " not found, generate new id=" << value;
+    } else {
+      value = id_epoch_map_temp_[key].value();
+      LOG(INFO) << "GetNextId key=" << key << " value=" << value;
+    }
+    value++;
 
-  // update id in memory
-  id_epoch_map_temp_[key].set_value(value);
+    // update id in memory
+    id_epoch_map_temp_[key].set_value(value);
+  }
 
   // generate meta_increment
   auto* idepoch = meta_increment.add_idepochs();
@@ -545,29 +566,18 @@ uint64_t CoordinatorControl::GetNextId(const pb::coordinator_internal::IdEpochTy
 // TODO: check name comflicts before create new schema
 int CoordinatorControl::CreateSchema(uint64_t parent_schema_id, std::string schema_name, uint64_t& new_schema_id,
                                      pb::coordinator_internal::MetaIncrement& meta_increment) {
-  BAIDU_SCOPED_LOCK(control_mutex_);
-
-  // initial schema create
-  // if (!root_schema_writed_to_raft_) {
-  //   pb::coordinator_internal::SchemaInternal root_schema;
-  //   pb::coordinator_internal::SchemaInternal meta_schema;
-  //   pb::coordinator_internal::SchemaInternal dingo_schema;
-
-  //   GenerateRootSchemas(root_schema, meta_schema, dingo_schema);
-  //   GenerateRootSchemasMetaIncrement(root_schema, meta_schema, dingo_schema, meta_increment);
-
-  //   root_schema_writed_to_raft_ = true;
-  // }
-
   // validate
-  if (schema_map_.find(parent_schema_id) == schema_map_.end()) {
-    LOG(INFO) << " CreateSchema parent_schema_id is illegal " << parent_schema_id;
-    return -1;
-  }
+  {
+    BAIDU_SCOPED_LOCK(schema_map_mutex_);
+    if (schema_map_.find(parent_schema_id) == schema_map_.end()) {
+      LOG(INFO) << " CreateSchema parent_schema_id is illegal " << parent_schema_id;
+      return -1;
+    }
 
-  if (schema_name.empty()) {
-    LOG(INFO) << " CreateSchema schema_name is illegal " << schema_name;
-    return -1;
+    if (schema_name.empty()) {
+      LOG(INFO) << " CreateSchema schema_name is illegal " << schema_name;
+      return -1;
+    }
   }
 
   new_schema_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_SCHEMA, meta_increment);
@@ -611,42 +621,49 @@ int CoordinatorControl::CreateSchema(uint64_t parent_schema_id, std::string sche
 
 uint64_t CoordinatorControl::UpdateExecutorMap(const pb::common::Executor& executor,
                                                pb::coordinator_internal::MetaIncrement& meta_increment) {
-  BAIDU_SCOPED_LOCK(control_mutex_);
   uint64_t executor_map_epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_EXECUTOR);
 
-  if (executor_map_.find(executor.id()) != executor_map_.end()) {
-    if (executor_map_[executor.id()].state() != executor.state()) {
-      LOG(INFO) << "executor STATUS CHANGE executor_id = " << executor.id()
-                << " old status = " << executor_map_[executor.id()].state() << " new status = " << executor.state();
+  bool need_update_epoch = false;
+  {
+    BAIDU_SCOPED_LOCK(executor_map_mutex_);
+    if (executor_map_.find(executor.id()) != executor_map_.end()) {
+      if (executor_map_[executor.id()].state() != executor.state()) {
+        LOG(INFO) << "executor STATUS CHANGE executor_id = " << executor.id()
+                  << " old status = " << executor_map_[executor.id()].state() << " new status = " << executor.state();
+
+        // update meta_increment
+        need_update_epoch = true;
+        auto* executor_increment = meta_increment.add_executors();
+        executor_increment->set_id(executor.id());
+        executor_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
+
+        auto* executor_increment_executor = executor_increment->mutable_executor();
+        executor_increment_executor->CopyFrom(executor);
+
+        // on_apply
+        // executor_map_epoch++;              // raft_kv_put
+        // executor_map_[executor.id()] = executor;  // raft_kv_put
+      }
+    } else {
+      LOG(INFO) << "NEED ADD NEW executor executor_id = " << executor.id();
 
       // update meta_increment
-      GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_EXECUTOR, meta_increment);
+      need_update_epoch = true;
       auto* executor_increment = meta_increment.add_executors();
       executor_increment->set_id(executor.id());
-      executor_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
+      executor_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
 
       auto* executor_increment_executor = executor_increment->mutable_executor();
       executor_increment_executor->CopyFrom(executor);
 
       // on_apply
-      // executor_map_epoch++;              // raft_kv_put
-      // executor_map_[executor.id()] = executor;  // raft_kv_put
+      // executor_map_epoch++;                                    // raft_kv_put
+      // executor_map_.insert(std::make_pair(executor.id(), executor));  // raft_kv_put
     }
-  } else {
-    LOG(INFO) << "NEED ADD NEW executor executor_id = " << executor.id();
+  }
 
-    // update meta_increment
+  if (need_update_epoch) {
     GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_EXECUTOR, meta_increment);
-    auto* executor_increment = meta_increment.add_executors();
-    executor_increment->set_id(executor.id());
-    executor_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
-
-    auto* executor_increment_executor = executor_increment->mutable_executor();
-    executor_increment_executor->CopyFrom(executor);
-
-    // on_apply
-    // executor_map_epoch++;                                    // raft_kv_put
-    // executor_map_.insert(std::make_pair(executor.id(), executor));  // raft_kv_put
   }
 
   LOG(INFO) << "UpdateExecutorMap executor_id=" << executor.id();
@@ -657,42 +674,49 @@ uint64_t CoordinatorControl::UpdateExecutorMap(const pb::common::Executor& execu
 // TODO: data persistence
 uint64_t CoordinatorControl::UpdateStoreMap(const pb::common::Store& store,
                                             pb::coordinator_internal::MetaIncrement& meta_increment) {
-  BAIDU_SCOPED_LOCK(control_mutex_);
   uint64_t store_map_epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_STORE);
 
-  if (store_map_.find(store.id()) != store_map_.end()) {
-    if (store_map_[store.id()].state() != store.state()) {
-      LOG(INFO) << "STORE STATUS CHANGE store_id = " << store.id() << " old status = " << store_map_[store.id()].state()
-                << " new status = " << store.state();
+  bool need_update_epoch = false;
+  {
+    BAIDU_SCOPED_LOCK(store_map_mutex_);
+    if (store_map_.find(store.id()) != store_map_.end()) {
+      if (store_map_[store.id()].state() != store.state()) {
+        LOG(INFO) << "STORE STATUS CHANGE store_id = " << store.id()
+                  << " old status = " << store_map_[store.id()].state() << " new status = " << store.state();
+
+        // update meta_increment
+        need_update_epoch = true;
+        auto* store_increment = meta_increment.add_stores();
+        store_increment->set_id(store.id());
+        store_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
+
+        auto* store_increment_store = store_increment->mutable_store();
+        store_increment_store->CopyFrom(store);
+
+        // on_apply
+        // store_map_epoch++;              // raft_kv_put
+        // store_map_[store.id()] = store;  // raft_kv_put
+      }
+    } else {
+      LOG(INFO) << "NEED ADD NEW STORE store_id = " << store.id();
 
       // update meta_increment
-      GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_STORE, meta_increment);
+      need_update_epoch = true;
       auto* store_increment = meta_increment.add_stores();
       store_increment->set_id(store.id());
-      store_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
+      store_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
 
       auto* store_increment_store = store_increment->mutable_store();
       store_increment_store->CopyFrom(store);
 
       // on_apply
-      // store_map_epoch++;              // raft_kv_put
-      // store_map_[store.id()] = store;  // raft_kv_put
+      // store_map_epoch++;                                    // raft_kv_put
+      // store_map_.insert(std::make_pair(store.id(), store));  // raft_kv_put
     }
-  } else {
-    LOG(INFO) << "NEED ADD NEW STORE store_id = " << store.id();
+  }
 
-    // update meta_increment
+  if (need_update_epoch) {
     GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_STORE, meta_increment);
-    auto* store_increment = meta_increment.add_stores();
-    store_increment->set_id(store.id());
-    store_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
-
-    auto* store_increment_store = store_increment->mutable_store();
-    store_increment_store->CopyFrom(store);
-
-    // on_apply
-    // store_map_epoch++;                                    // raft_kv_put
-    // store_map_.insert(std::make_pair(store.id(), store));  // raft_kv_put
   }
 
   LOG(INFO) << "UpdateStoreMap store_id=" << store.id();
@@ -702,150 +726,150 @@ uint64_t CoordinatorControl::UpdateStoreMap(const pb::common::Store& store,
 
 int CoordinatorControl::CreateStore(uint64_t cluster_id, uint64_t& store_id, std::string& keyring,
                                     pb::coordinator_internal::MetaIncrement& meta_increment) {
-  if (cluster_id > 0) {
-    BAIDU_SCOPED_LOCK(control_mutex_);
-
-    store_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_STORE, meta_increment);
-    keyring = Helper::GenerateRandomString(16);
-
-    pb::common::Store store;
-    store.set_id(store_id);
-    store.mutable_keyring()->assign(keyring);
-    store.set_state(::dingodb::pb::common::StoreState::STORE_NEW);
-
-    // update meta_increment
-    GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_STORE, meta_increment);
-    auto* store_increment = meta_increment.add_stores();
-    store_increment->set_id(store_id);
-    store_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
-
-    auto* store_increment_store = store_increment->mutable_store();
-    store_increment_store->CopyFrom(store);
-
-    // on_apply
-    // store_map_epoch++;                                  // raft_kv_put
-    // store_map_.insert(std::make_pair(store_id, store));  // raft_kv_put
-    return 0;
-  } else {
+  if (cluster_id <= 0) {
     return -1;
   }
+
+  store_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_STORE, meta_increment);
+  keyring = Helper::GenerateRandomString(16);
+
+  pb::common::Store store;
+  store.set_id(store_id);
+  store.mutable_keyring()->assign(keyring);
+  store.set_state(::dingodb::pb::common::StoreState::STORE_NEW);
+
+  // update meta_increment
+  GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_STORE, meta_increment);
+  auto* store_increment = meta_increment.add_stores();
+  store_increment->set_id(store_id);
+  store_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
+
+  auto* store_increment_store = store_increment->mutable_store();
+  store_increment_store->CopyFrom(store);
+
+  // on_apply
+  // store_map_epoch++;                                  // raft_kv_put
+  // store_map_.insert(std::make_pair(store_id, store));  // raft_kv_put
+  return 0;
 }
 
 int CoordinatorControl::DeleteStore(uint64_t cluster_id, uint64_t store_id, std::string keyring,
                                     pb::coordinator_internal::MetaIncrement& meta_increment) {
-  if (cluster_id > 0 && store_id > 0 && keyring.length() > 0) {
-    BAIDU_SCOPED_LOCK(control_mutex_);
+  if (cluster_id <= 0 || store_id <= 0 || keyring.length() <= 0) {
+    return -1;
+  }
 
+  pb::common::Store store_to_delete;
+  {
+    BAIDU_SCOPED_LOCK(store_map_mutex_);
     if (store_map_.find(store_id) == store_map_.end()) {
       LOG(INFO) << "DeleteStore store_id not exists, id=" << store_id;
       return -1;
     }
 
-    auto store_to_delete = store_map_[store_id];
+    store_to_delete = store_map_[store_id];
     if (keyring == store_to_delete.keyring()) {
       LOG(INFO) << "DeleteStore store_id id=" << store_id << " keyring not equal, input keyring=" << keyring
                 << " but store's keyring=" << store_to_delete.keyring();
       return -1;
     }
-
-    // update meta_increment
-    GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_STORE, meta_increment);
-    auto* store_increment = meta_increment.add_stores();
-    store_increment->set_id(store_id);
-    store_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
-
-    auto* store_increment_store = store_increment->mutable_store();
-    store_increment_store->CopyFrom(store_to_delete);
-
-    // on_apply
-    // store_map_epoch++;                                  // raft_kv_put
-    // store_map_.insert(std::make_pair(store_id, store));  // raft_kv_put
-    return 0;
-  } else {
-    return -1;
   }
+
+  // update meta_increment
+  GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_STORE, meta_increment);
+  auto* store_increment = meta_increment.add_stores();
+  store_increment->set_id(store_id);
+  store_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
+
+  auto* store_increment_store = store_increment->mutable_store();
+  store_increment_store->CopyFrom(store_to_delete);
+
+  // on_apply
+  // store_map_epoch++;                                  // raft_kv_put
+  // store_map_.insert(std::make_pair(store_id, store));  // raft_kv_put
+  return 0;
 }
 
 int CoordinatorControl::CreateExecutor(uint64_t cluster_id, uint64_t& executor_id, std::string& keyring,
                                        pb::coordinator_internal::MetaIncrement& meta_increment) {
-  if (cluster_id > 0) {
-    BAIDU_SCOPED_LOCK(control_mutex_);
-
-    executor_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_EXECUTOR, meta_increment);
-    keyring = Helper::GenerateRandomString(16);
-
-    pb::common::Executor executor;
-    executor.set_id(executor_id);
-    executor.mutable_keyring()->assign(keyring);
-    executor.set_state(::dingodb::pb::common::ExecutorState::EXECUTOR_NEW);
-
-    // update meta_increment
-    GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_EXECUTOR, meta_increment);
-    auto* executor_increment = meta_increment.add_executors();
-    executor_increment->set_id(executor_id);
-    executor_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
-
-    auto* executor_increment_executor = executor_increment->mutable_executor();
-    executor_increment_executor->CopyFrom(executor);
-
-    // on_apply
-    // executor_map_epoch++;                                  // raft_kv_put
-    // executor_map_.insert(std::make_pair(executor_id, executor));  // raft_kv_put
-    return 0;
-  } else {
+  if (cluster_id <= 0) {
     return -1;
   }
+
+  executor_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_EXECUTOR, meta_increment);
+  keyring = Helper::GenerateRandomString(16);
+
+  pb::common::Executor executor;
+  executor.set_id(executor_id);
+  executor.mutable_keyring()->assign(keyring);
+  executor.set_state(::dingodb::pb::common::ExecutorState::EXECUTOR_NEW);
+
+  // update meta_increment
+  GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_EXECUTOR, meta_increment);
+  auto* executor_increment = meta_increment.add_executors();
+  executor_increment->set_id(executor_id);
+  executor_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
+
+  auto* executor_increment_executor = executor_increment->mutable_executor();
+  executor_increment_executor->CopyFrom(executor);
+
+  // on_apply
+  // executor_map_epoch++;                                  // raft_kv_put
+  // executor_map_.insert(std::make_pair(executor_id, executor));  // raft_kv_put
+  return 0;
 }
 
 int CoordinatorControl::DeleteExecutor(uint64_t cluster_id, uint64_t executor_id, std::string keyring,
                                        pb::coordinator_internal::MetaIncrement& meta_increment) {
-  if (cluster_id > 0 && executor_id > 0 && keyring.length() > 0) {
-    BAIDU_SCOPED_LOCK(control_mutex_);
+  if (cluster_id <= 0 || executor_id <= 0 || keyring.length() <= 0) {
+    return -1;
+  }
 
+  pb::common::Executor executor_to_delete;
+  {
+    BAIDU_SCOPED_LOCK(executor_map_mutex_);
     if (executor_map_.find(executor_id) == executor_map_.end()) {
       LOG(INFO) << "DeleteExecutor executor_id not exists, id=" << executor_id;
       return -1;
     }
 
-    auto executor_to_delete = executor_map_[executor_id];
+    executor_to_delete = executor_map_[executor_id];
     if (keyring == executor_to_delete.keyring()) {
       LOG(INFO) << "DeleteExecutor executor_id id=" << executor_id << " keyring not equal, input keyring=" << keyring
                 << " but executor's keyring=" << executor_to_delete.keyring();
       return -1;
     }
-
-    // update meta_increment
-    GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_EXECUTOR, meta_increment);
-    auto* executor_increment = meta_increment.add_executors();
-    executor_increment->set_id(executor_id);
-    executor_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
-
-    auto* executor_increment_executor = executor_increment->mutable_executor();
-    executor_increment_executor->CopyFrom(executor_to_delete);
-
-    // on_apply
-    // executor_map_epoch++;                                  // raft_kv_put
-    // executor_map_.insert(std::make_pair(executor_id, executor));  // raft_kv_put
-    return 0;
-  } else {
-    return -1;
   }
+
+  // update meta_increment
+  GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_EXECUTOR, meta_increment);
+  auto* executor_increment = meta_increment.add_executors();
+  executor_increment->set_id(executor_id);
+  executor_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
+
+  auto* executor_increment_executor = executor_increment->mutable_executor();
+  executor_increment_executor->CopyFrom(executor_to_delete);
+
+  // on_apply
+  // executor_map_epoch++;                                  // raft_kv_put
+  // executor_map_.insert(std::make_pair(executor_id, executor));  // raft_kv_put
+  return 0;
 }
 
 int CoordinatorControl::CreateTableId(uint64_t schema_id, uint64_t& new_table_id,
                                       pb::coordinator_internal::MetaIncrement& meta_increment) {
   // validate schema_id is existed
-  if (schema_map_.find(schema_id) == schema_map_.end()) {
-    LOG(ERROR) << "schema_id is illegal " << schema_id;
-    return -1;
+  {
+    BAIDU_SCOPED_LOCK(schema_map_mutex_);
+    if (schema_map_.find(schema_id) == schema_map_.end()) {
+      LOG(ERROR) << "schema_id is illegal " << schema_id;
+      return -1;
+    }
   }
 
   // create table id
-  {
-    BAIDU_SCOPED_LOCK(control_mutex_);
-    new_table_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_TABLE, meta_increment);
-    LOG(INFO) << "CreateTableId new_table_id=" << new_table_id;
-  }
+  new_table_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_TABLE, meta_increment);
+  LOG(INFO) << "CreateTableId new_table_id=" << new_table_id;
 
   return 0;
 }
@@ -865,9 +889,12 @@ int CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta::TableDef
   // }
 
   // validate schema_id is existed
-  if (schema_map_.find(schema_id) == schema_map_.end()) {
-    LOG(ERROR) << "schema_id is illegal " << schema_id;
-    return -1;
+  {
+    BAIDU_SCOPED_LOCK(schema_map_mutex_);
+    if (schema_map_.find(schema_id) == schema_map_.end()) {
+      LOG(ERROR) << "schema_id is illegal " << schema_id;
+      return -1;
+    }
   }
 
   // validate part information
@@ -895,7 +922,6 @@ int CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta::TableDef
 
   // if new_table_id is not given, create a new table_id
   if (new_table_id <= 0) {
-    BAIDU_SCOPED_LOCK(control_mutex_);
     new_table_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_TABLE, meta_increment);
     LOG(INFO) << "CreateTable new_table_id=" << new_table_id;
   }
@@ -930,82 +956,86 @@ int CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta::TableDef
     return -1;
   }
 
-  {
-    BAIDU_SCOPED_LOCK(control_mutex_);
+  // bumper up EPOCH_REGION
+  GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_REGION, meta_increment);
 
-    // bumper up EPOCH_REGION
-    GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_REGION, meta_increment);
+  // create table_internal, set id & table_definition
+  pb::coordinator_internal::TableInternal table_internal;
+  table_internal.set_id(new_table_id);
+  auto* definition = table_internal.mutable_definition();
+  definition->CopyFrom(table_definition);
 
-    // create table_internal, set id & table_definition
-    pb::coordinator_internal::TableInternal table_internal;
-    table_internal.set_id(new_table_id);
-    auto* definition = table_internal.mutable_definition();
-    definition->CopyFrom(table_definition);
-
-    // set part for table_internal
-    for (int i = 0; i < new_region_ids.size(); i++) {
-      // create part and set region_id & range
-      auto* part_internal = table_internal.add_partitions();
-      part_internal->set_region_id(new_region_ids[i]);
-      auto* part_range = part_internal->mutable_range();
-      part_range->CopyFrom(range_partition.ranges(i));
-    }
-
-    // add table_internal to table_map_
-    // update meta_increment
-    GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_TABLE, meta_increment);
-    auto* table_increment = meta_increment.add_tables();
-    table_increment->set_id(new_table_id);
-    table_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
-    table_increment->set_schema_id(schema_id);
-
-    auto* table_increment_table = table_increment->mutable_table();
-    table_increment_table->CopyFrom(table_internal);
-
-    // on_apply
-    //  table_map_epoch++;                                               // raft_kv_put
-    //  table_map_.insert(std::make_pair(new_table_id, table_internal));  // raft_kv_put
-
-    // add table_id to schema
-    // auto* table_id = schema_map_[schema_id].add_table_ids();
-    // table_id->set_entity_id(new_table_id);
-    // table_id->set_parent_entity_id(schema_id);
-    // table_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
-    // raft_kv_put
+  // set part for table_internal
+  for (int i = 0; i < new_region_ids.size(); i++) {
+    // create part and set region_id & range
+    auto* part_internal = table_internal.add_partitions();
+    part_internal->set_region_id(new_region_ids[i]);
+    auto* part_range = part_internal->mutable_range();
+    part_range->CopyFrom(range_partition.ranges(i));
   }
+
+  // add table_internal to table_map_
+  // update meta_increment
+  GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_TABLE, meta_increment);
+  auto* table_increment = meta_increment.add_tables();
+  table_increment->set_id(new_table_id);
+  table_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
+  table_increment->set_schema_id(schema_id);
+
+  auto* table_increment_table = table_increment->mutable_table();
+  table_increment_table->CopyFrom(table_internal);
+
+  // on_apply
+  //  table_map_epoch++;                                               // raft_kv_put
+  //  table_map_.insert(std::make_pair(new_table_id, table_internal));  // raft_kv_put
+
+  // add table_id to schema
+  // auto* table_id = schema_map_[schema_id].add_table_ids();
+  // table_id->set_entity_id(new_table_id);
+  // table_id->set_parent_entity_id(schema_id);
+  // table_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
+  // raft_kv_put
 
   return 0;
 }
 
 int CoordinatorControl::DropRegion(uint64_t region_id, pb::coordinator_internal::MetaIncrement& meta_increment) {
-  BAIDU_SCOPED_LOCK(control_mutex_);
   // set region state to DELETE
-  if (region_map_.find(region_id) != region_map_.end()) {
-    auto region_to_delete = region_map_[region_id];
-    region_to_delete.set_state(::dingodb::pb::common::RegionState::REGION_DELETE);
+  bool need_update_epoch = false;
+  {
+    BAIDU_SCOPED_LOCK(region_map_mutex_);
+    if (region_map_.find(region_id) != region_map_.end()) {
+      auto region_to_delete = region_map_[region_id];
+      region_to_delete.set_state(::dingodb::pb::common::RegionState::REGION_DELETE);
 
-    // update meta_increment
-    auto* region_increment = meta_increment.add_regions();
-    region_increment->set_id(region_id);
-    region_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
+      // update meta_increment
+      need_update_epoch = true;
+      auto* region_increment = meta_increment.add_regions();
+      region_increment->set_id(region_id);
+      region_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
 
-    auto* region_increment_region = region_increment->mutable_region();
-    region_increment_region->CopyFrom(region_to_delete);
+      auto* region_increment_region = region_increment->mutable_region();
+      region_increment_region->CopyFrom(region_to_delete);
 
-    // on_apply
-    // region_map_[region_id].set_state(::dingodb::pb::common::RegionState::REGION_DELETE);
-    LOG(INFO) << "drop region success, id = " << region_id;
-  } else {
-    // delete regions on the fly (usually in CreateTable)
-    for (int i = 0; i < meta_increment.regions_size(); i++) {
-      auto* region_in_increment = meta_increment.mutable_regions(i);
-      if (region_in_increment->id() == region_id) {
-        region_in_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
+      // on_apply
+      // region_map_[region_id].set_state(::dingodb::pb::common::RegionState::REGION_DELETE);
+      LOG(INFO) << "drop region success, id = " << region_id;
+    } else {
+      // delete regions on the fly (usually in CreateTable)
+      for (int i = 0; i < meta_increment.regions_size(); i++) {
+        auto* region_in_increment = meta_increment.mutable_regions(i);
+        if (region_in_increment->id() == region_id) {
+          region_in_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
+        }
       }
-    }
 
-    LOG(ERROR) << "ERROR drop region id not exists, id = " << region_id;
-    return -1;
+      LOG(ERROR) << "ERROR drop region id not exists, id = " << region_id;
+      return -1;
+    }
+  }
+
+  if (need_update_epoch) {
+    GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_REGION, meta_increment);
   }
 
   return 0;
@@ -1019,45 +1049,55 @@ int CoordinatorControl::DropTable(uint64_t schema_id, uint64_t table_id,
     return -1;
   }
 
-  BAIDU_SCOPED_LOCK(control_mutex_);
-
-  if (this->schema_map_.find(schema_id) == schema_map_.end()) {
-    LOG(ERROR) << "ERRROR: schema_id not found" << schema_id;
-    return -1;
-  }
-
-  if (this->table_map_.find(table_id) == table_map_.end()) {
-    LOG(ERROR) << "ERRROR: table_id not found" << table_id;
-    return -1;
-  }
-
-  // construct Table from table_internal
-  auto table_internal = table_map_.at(table_id);
-
-  bool need_delete_region = false;
-  for (int i = 0; i < table_internal.partitions_size(); i++) {
-    // part id
-    uint64_t region_id = table_internal.partitions(i).region_id();
-
-    // get region
-    if (region_map_.find(region_id) == region_map_.end()) {
-      LOG(ERROR) << "ERROR cannot find region in regionmap_ while DropTable, table_id =" << table_id
-                 << " region_id=" << region_id;
+  {
+    BAIDU_SCOPED_LOCK(schema_map_mutex_);
+    if (this->schema_map_.find(schema_id) == schema_map_.end()) {
+      LOG(ERROR) << "ERRROR: schema_id not found" << schema_id;
       return -1;
     }
-    pb::common::Region& part_region = region_map_[region_id];
+  }
 
-    auto* region_to_delete = meta_increment.add_regions();
-    region_to_delete->set_id(region_id);
-    region_to_delete->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
-    auto* region_to_delete_region = region_to_delete->mutable_region();
-    region_to_delete_region->CopyFrom(part_region);
+  pb::coordinator_internal::TableInternal table_internal;
+  {
+    BAIDU_SCOPED_LOCK(table_map_mutex_);
+    if (this->table_map_.find(table_id) == table_map_.end()) {
+      LOG(ERROR) << "ERRROR: table_id not found" << table_id;
+      return -1;
+    }
 
-    need_delete_region = true;
+    // construct Table from table_internal
+    table_internal = table_map_.at(table_id);
+  }
+
+  bool need_delete_region = false;
+  {
+    BAIDU_SCOPED_LOCK(region_map_mutex_);
+    for (int i = 0; i < table_internal.partitions_size(); i++) {
+      // part id
+      uint64_t region_id = table_internal.partitions(i).region_id();
+
+      // get region
+      if (region_map_.find(region_id) == region_map_.end()) {
+        LOG(ERROR) << "ERROR cannot find region in regionmap_ while DropTable, table_id =" << table_id
+                   << " region_id=" << region_id;
+        return -1;
+      }
+      pb::common::Region& part_region = region_map_[region_id];
+
+      auto* region_to_delete = meta_increment.add_regions();
+      region_to_delete->set_id(region_id);
+      region_to_delete->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
+      auto* region_to_delete_region = region_to_delete->mutable_region();
+      region_to_delete_region->CopyFrom(part_region);
+
+      need_delete_region = true;
+    }
   }
 
   // bump up region map epoch
-  GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_REGION, meta_increment);
+  if (need_delete_region) {
+    GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_REGION, meta_increment);
+  }
 
   // delete table
   auto* table_to_delete = meta_increment.add_tables();
@@ -1067,7 +1107,7 @@ int CoordinatorControl::DropTable(uint64_t schema_id, uint64_t table_id,
   auto* table_to_delete_table = table_to_delete->mutable_table();
   table_to_delete_table->CopyFrom(table_internal);
 
-  // bump up region map epoch
+  // bump up table map epoch
   GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_TABLE, meta_increment);
 
   return 0;
@@ -1077,26 +1117,27 @@ int CoordinatorControl::CreateRegion(const std::string& region_name, const std::
                                      int32_t replica_num, pb::common::Range region_range, uint64_t schema_id,
                                      uint64_t table_id, uint64_t& new_region_id,
                                      pb::coordinator_internal::MetaIncrement& meta_increment) {
-  BAIDU_SCOPED_LOCK(control_mutex_);
-
   std::vector<pb::common::Store> stores_for_regions;
   std::vector<pb::common::Store> selected_stores_for_regions;
 
   // when resource_tag exists, select store with resource_tag
-  for (const auto& element : store_map_) {
-    const auto& store = element.second;
-    if (store.state() != pb::common::StoreState::STORE_NORMAL) {
-      continue;
-    }
+  {
+    BAIDU_SCOPED_LOCK(store_map_mutex_);
+    for (const auto& element : store_map_) {
+      const auto& store = element.second;
+      if (store.state() != pb::common::StoreState::STORE_NORMAL) {
+        continue;
+      }
 
-    if (resource_tag.length() == 0) {
-      stores_for_regions.push_back(store);
-    } else if (store.resource_tag() == resource_tag) {
-      stores_for_regions.push_back(store);
+      if (resource_tag.length() == 0) {
+        stores_for_regions.push_back(store);
+      } else if (store.resource_tag() == resource_tag) {
+        stores_for_regions.push_back(store);
+      }
     }
   }
 
-  // if not enough stores it selected, return -1
+  // if not enough stores is selected, return -1
   if (stores_for_regions.size() < replica_num) {
     LOG(INFO) << "Not enough stores for create region";
     return -1;
@@ -1158,44 +1199,45 @@ int CoordinatorControl::CreateRegion(const std::string& region_name, const std::
 // TODO: data persistence
 uint64_t CoordinatorControl::UpdateRegionMap(std::vector<pb::common::Region>& regions,
                                              pb::coordinator_internal::MetaIncrement& meta_increment) {
-  BAIDU_SCOPED_LOCK(control_mutex_);
-
   uint64_t region_map_epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_REGION);
 
   bool need_to_get_next_epoch = false;
-  for (const auto& region : regions) {
-    if (region_map_.find(region.id()) != region_map_.end()) {
-      LOG(INFO) << " update region to region_map in heartbeat, region_id=" << region.id();
-      if (region_map_[region.id()].state() != region.state()) {
-        LOG(INFO) << "REGION STATUS CHANGE region_id = " << region.id()
-                  << " old status = " << region_map_[region.id()].state() << " new status = " << region.state();
-        // update meta_increment
+  {
+    BAIDU_SCOPED_LOCK(region_map_mutex_);
+    for (const auto& region : regions) {
+      if (region_map_.find(region.id()) != region_map_.end()) {
+        LOG(INFO) << " update region to region_map in heartbeat, region_id=" << region.id();
+        if (region_map_[region.id()].state() != region.state()) {
+          LOG(INFO) << "REGION STATUS CHANGE region_id = " << region.id()
+                    << " old status = " << region_map_[region.id()].state() << " new status = " << region.state();
+          // update meta_increment
+          auto* region_increment = meta_increment.add_regions();
+          region_increment->set_id(region.id());
+          region_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
+
+          auto* region_increment_region = region_increment->mutable_region();
+          region_increment_region->CopyFrom(region);
+
+          need_to_get_next_epoch = true;
+
+          // on_apply
+          // region_map_[region.id()].CopyFrom(region);  // raft_kv_put
+          // region_map_epoch++;                        // raft_kv_put
+        }
+      } else {
+        LOG(INFO) << " found illegal region in heartbeat, region_id=" << region.id();
+
         auto* region_increment = meta_increment.add_regions();
         region_increment->set_id(region.id());
-        region_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
+        region_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
 
         auto* region_increment_region = region_increment->mutable_region();
         region_increment_region->CopyFrom(region);
 
         need_to_get_next_epoch = true;
 
-        // on_apply
-        // region_map_[region.id()].CopyFrom(region);  // raft_kv_put
-        // region_map_epoch++;                        // raft_kv_put
+        // region_map_.insert(std::make_pair(region.id(), region));  // raft_kv_put
       }
-    } else {
-      LOG(INFO) << " found illegal region in heartbeat, region_id=" << region.id();
-
-      auto* region_increment = meta_increment.add_regions();
-      region_increment->set_id(region.id());
-      region_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
-
-      auto* region_increment_region = region_increment->mutable_region();
-      region_increment_region->CopyFrom(region);
-
-      need_to_get_next_epoch = true;
-
-      // region_map_.insert(std::make_pair(region.id(), region));  // raft_kv_put
     }
   }
 
@@ -1209,43 +1251,48 @@ uint64_t CoordinatorControl::UpdateRegionMap(std::vector<pb::common::Region>& re
 }
 
 void CoordinatorControl::GetStoreMap(pb::common::StoreMap& store_map) {
-  BAIDU_SCOPED_LOCK(control_mutex_);
-
   uint64_t store_map_epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_STORE);
   store_map.set_epoch(store_map_epoch);
 
-  for (auto& elemnt : store_map_) {
-    auto* tmp_region = store_map.add_stores();
-    tmp_region->CopyFrom(elemnt.second);
+  {
+    BAIDU_SCOPED_LOCK(store_map_mutex_);
+    for (auto& elemnt : store_map_) {
+      auto* tmp_region = store_map.add_stores();
+      tmp_region->CopyFrom(elemnt.second);
+    }
   }
 }
 
 void CoordinatorControl::GetExecutorMap(pb::common::ExecutorMap& executor_map) {
-  BAIDU_SCOPED_LOCK(control_mutex_);
-
   uint64_t executor_map_epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_EXECUTOR);
   executor_map.set_epoch(executor_map_epoch);
-
-  for (auto& elemnt : executor_map_) {
-    auto* tmp_region = executor_map.add_executors();
-    tmp_region->CopyFrom(elemnt.second);
+  {
+    BAIDU_SCOPED_LOCK(executor_map_mutex_);
+    for (auto& elemnt : executor_map_) {
+      auto* tmp_region = executor_map.add_executors();
+      tmp_region->CopyFrom(elemnt.second);
+    }
   }
 }
 
 void CoordinatorControl::GetPushStoreMap(std::map<uint64_t, pb::common::Store>& store_to_push) {
-  BAIDU_SCOPED_LOCK(control_mutex_);
-
+  BAIDU_SCOPED_LOCK(store_need_push_mutex_);
   store_to_push.swap(store_need_push_);
 }
 
+void CoordinatorControl::GetPushExecutorMap(std::map<uint64_t, pb::common::Executor>& executor_to_push) {
+  BAIDU_SCOPED_LOCK(executor_need_push_mutex_);
+  executor_to_push.swap(executor_need_push_);
+}
+
 void CoordinatorControl::GetRegionMap(pb::common::RegionMap& region_map) {
-  BAIDU_SCOPED_LOCK(control_mutex_);
-
   region_map.set_epoch(GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_REGION));
-
-  for (auto& elemnt : region_map_) {
-    auto* tmp_region = region_map.add_regions();
-    tmp_region->CopyFrom(elemnt.second);
+  {
+    BAIDU_SCOPED_LOCK(region_map_mutex_);
+    for (auto& elemnt : region_map_) {
+      auto* tmp_region = region_map.add_regions();
+      tmp_region->CopyFrom(elemnt.second);
+    }
   }
 }
 
@@ -1253,8 +1300,6 @@ void CoordinatorControl::GetRegionMap(pb::common::RegionMap& region_map) {
 // in: schema_id
 // out: schemas
 void CoordinatorControl::GetSchemas(uint64_t schema_id, std::vector<pb::meta::Schema>& schemas) {
-  BAIDU_SCOPED_LOCK(control_mutex_);
-
   if (schema_id < 0) {
     LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
     return;
@@ -1265,30 +1310,33 @@ void CoordinatorControl::GetSchemas(uint64_t schema_id, std::vector<pb::meta::Sc
     return;
   }
 
-  if (this->schema_map_.find(schema_id) == schema_map_.end()) {
-    return;
-  }
-
-  auto& schema_internal = schema_map_[schema_id];
-  LOG(INFO) << " sub schema count=" << schema_internal.schema().schema_ids_size();
-
-  for (int i = 0; i < schema_internal.schema().schema_ids_size(); i++) {
-    int sub_schema_id = schema_internal.schema().schema_ids(i).entity_id();
-
-    LOG(INFO) << "sub_schema_id=" << sub_schema_id;
-
-    LOG(INFO) << schema_internal.schema().DebugString();
-
-    if (schema_map_.find(sub_schema_id) == schema_map_.end()) {
-      LOG(ERROR) << "ERRROR: sub_schema_id " << sub_schema_id << " not exists";
-      LOG(INFO) << "ERRROR: sub_schema_id " << sub_schema_id << " not exists";
-      continue;
+  {
+    BAIDU_SCOPED_LOCK(schema_map_mutex_);
+    if (this->schema_map_.find(schema_id) == schema_map_.end()) {
+      return;
     }
-    LOG(INFO) << " schema_map_ =" << schema_map_[sub_schema_id].DebugString();
 
-    LOG(INFO) << " GetSchemas push_back sub schema id=" << sub_schema_id;
+    auto& schema_internal = schema_map_[schema_id];
+    LOG(INFO) << " sub schema count=" << schema_internal.schema().schema_ids_size();
 
-    schemas.push_back(schema_map_[sub_schema_id].schema());
+    for (int i = 0; i < schema_internal.schema().schema_ids_size(); i++) {
+      int sub_schema_id = schema_internal.schema().schema_ids(i).entity_id();
+
+      LOG(INFO) << "sub_schema_id=" << sub_schema_id;
+
+      LOG(INFO) << schema_internal.schema().DebugString();
+
+      if (schema_map_.find(sub_schema_id) == schema_map_.end()) {
+        LOG(ERROR) << "ERRROR: sub_schema_id " << sub_schema_id << " not exists";
+        LOG(INFO) << "ERRROR: sub_schema_id " << sub_schema_id << " not exists";
+        continue;
+      }
+      LOG(INFO) << " schema_map_ =" << schema_map_[sub_schema_id].DebugString();
+
+      LOG(INFO) << " GetSchemas push_back sub schema id=" << sub_schema_id;
+
+      schemas.push_back(schema_map_[sub_schema_id].schema());
+    }
   }
 
   LOG(INFO) << "GetSchemas id=" << schema_id << " sub schema count=" << schema_map_.size();
@@ -1309,28 +1357,29 @@ void CoordinatorControl::GetTables(uint64_t schema_id,
     return;
   }
 
-  BAIDU_SCOPED_LOCK(control_mutex_);
-
-  if (this->schema_map_.find(schema_id) == schema_map_.end()) {
-    LOG(ERROR) << "ERRROR: schema_id not found" << schema_id;
-    return;
-  }
-
-  auto& schema_internal = schema_map_[schema_id];
-  for (int i = 0; i < schema_internal.schema().table_ids_size(); i++) {
-    int table_id = schema_internal.schema().table_ids(i).entity_id();
-    if (table_map_.find(table_id) == table_map_.end()) {
-      LOG(ERROR) << "ERRROR: table_id " << table_id << " not exists";
-      continue;
+  {
+    BAIDU_SCOPED_LOCK(schema_map_mutex_);
+    if (this->schema_map_.find(schema_id) == schema_map_.end()) {
+      LOG(ERROR) << "ERRROR: schema_id not found" << schema_id;
+      return;
     }
 
-    LOG(INFO) << "GetTables found table_id=" << table_id;
+    auto& schema_internal = schema_map_[schema_id];
+    for (int i = 0; i < schema_internal.schema().table_ids_size(); i++) {
+      int table_id = schema_internal.schema().table_ids(i).entity_id();
+      if (table_map_.find(table_id) == table_map_.end()) {
+        LOG(ERROR) << "ERRROR: table_id " << table_id << " not exists";
+        continue;
+      }
 
-    // construct return value
-    pb::meta::TableDefinitionWithId table_def_with_id;
-    table_def_with_id.mutable_table_id()->CopyFrom(schema_internal.schema().table_ids(i));
-    table_def_with_id.mutable_table_definition()->CopyFrom(table_map_[table_id].definition());
-    table_definition_with_ids.push_back(table_def_with_id);
+      LOG(INFO) << "GetTables found table_id=" << table_id;
+
+      // construct return value
+      pb::meta::TableDefinitionWithId table_def_with_id;
+      table_def_with_id.mutable_table_id()->CopyFrom(schema_internal.schema().table_ids(i));
+      table_def_with_id.mutable_table_definition()->CopyFrom(table_map_[table_id].definition());
+      table_definition_with_ids.push_back(table_def_with_id);
+    }
   }
 
   LOG(INFO) << "GetTables schema_id=" << schema_id << " tables count=" << table_definition_with_ids.size();
@@ -1348,20 +1397,23 @@ void CoordinatorControl::GetTable(uint64_t schema_id, uint64_t table_id, pb::met
     return;
   }
 
-  BAIDU_SCOPED_LOCK(control_mutex_);
+  pb::coordinator_internal::TableInternal table_internal;
+  {
+    BAIDU_SCOPED_LOCK(table_map_mutex_);
+    if (this->schema_map_.find(schema_id) == schema_map_.end()) {
+      LOG(ERROR) << "ERRROR: schema_id not found" << schema_id;
+      return;
+    }
 
-  if (this->schema_map_.find(schema_id) == schema_map_.end()) {
-    LOG(ERROR) << "ERRROR: schema_id not found" << schema_id;
-    return;
+    if (this->table_map_.find(table_id) == table_map_.end()) {
+      LOG(ERROR) << "ERRROR: table_id not found" << table_id;
+      return;
+    }
+
+    // construct Table from table_internal
+    table_internal = table_map_.at(table_id);
   }
 
-  if (this->table_map_.find(table_id) == table_map_.end()) {
-    LOG(ERROR) << "ERRROR: table_id not found" << table_id;
-    return;
-  }
-
-  // construct Table from table_internal
-  auto table_internal = table_map_.at(table_id);
   auto* common_id_table = table.mutable_id();
   common_id_table->set_entity_id(table_id);
   common_id_table->set_parent_entity_id(schema_id);
@@ -1469,258 +1521,277 @@ void CoordinatorControl::GetCoordinatorMap(uint64_t cluster_id, uint64_t& epoch,
 // ApplyMetaIncrement is on_apply callback
 void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrement& meta_increment,
                                             [[maybe_unused]] bool id_leader, uint64_t term, uint64_t index) {
-  BAIDU_SCOPED_LOCK(control_mutex_);
-
-  // if index < local apply index, just return
-  if (id_epoch_map_.find(pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX) != id_epoch_map_.end()) {
-    uint64_t applied_index = id_epoch_map_[pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX].value();
-    if (index <= applied_index) {
-      LOG(INFO) << "ApplyMetaIncrement index < applied_index, just return, [index=" << index
-                << "][applied_index=" << applied_index << "]";
-      return;
-    }
-  }
-
   // prepare data to write to kv engine
   std::vector<pb::common::KeyValue> meta_write_to_kv;
   std::vector<pb::common::KeyValue> meta_delete_to_kv;
 
-  // 0.id & epoch
-  // raft_apply_term & raft_apply_index stores in id_epoch_map too
-  pb::coordinator_internal::IdEpochInternal raft_apply_term;
-  raft_apply_term.set_id(pb::coordinator_internal::IdEpochType::RAFT_APPLY_TERM);
-  raft_apply_term.set_value(term);
+  {
+    BAIDU_SCOPED_LOCK(id_epoch_map_mutex_);
+    // if index < local apply index, just return
+    if (id_epoch_map_.find(pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX) != id_epoch_map_.end()) {
+      uint64_t applied_index = id_epoch_map_[pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX].value();
+      if (index <= applied_index) {
+        LOG(INFO) << "ApplyMetaIncrement index < applied_index, just return, [index=" << index
+                  << "][applied_index=" << applied_index << "]";
+        return;
+      }
+    }
 
-  pb::coordinator_internal::IdEpochInternal raft_apply_index;
-  raft_apply_index.set_id(pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX);
-  raft_apply_index.set_value(index);
+    // 0.id & epoch
+    // raft_apply_term & raft_apply_index stores in id_epoch_map too
+    pb::coordinator_internal::IdEpochInternal raft_apply_term;
+    raft_apply_term.set_id(pb::coordinator_internal::IdEpochType::RAFT_APPLY_TERM);
+    raft_apply_term.set_value(term);
 
-  meta_write_to_kv.push_back(id_epoch_meta_->TransformToKvValue(raft_apply_term));
-  meta_write_to_kv.push_back(id_epoch_meta_->TransformToKvValue(raft_apply_index));
+    pb::coordinator_internal::IdEpochInternal raft_apply_index;
+    raft_apply_index.set_id(pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX);
+    raft_apply_index.set_value(index);
 
-  for (int i = 0; i < meta_increment.idepochs_size(); i++) {
-    const auto& idepoch = meta_increment.idepochs(i);
-    if (idepoch.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
-      auto& create_idepoch = id_epoch_map_[idepoch.id()];
-      create_idepoch.CopyFrom(idepoch.idepoch());
+    meta_write_to_kv.push_back(id_epoch_meta_->TransformToKvValue(raft_apply_term));
+    meta_write_to_kv.push_back(id_epoch_meta_->TransformToKvValue(raft_apply_index));
 
-      meta_write_to_kv.push_back(id_epoch_meta_->TransformToKvValue(idepoch.idepoch()));
+    for (int i = 0; i < meta_increment.idepochs_size(); i++) {
+      const auto& idepoch = meta_increment.idepochs(i);
+      if (idepoch.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
+        auto& create_idepoch = id_epoch_map_[idepoch.id()];
+        create_idepoch.CopyFrom(idepoch.idepoch());
 
-    } else if (idepoch.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
-      auto& update_idepoch = id_epoch_map_[idepoch.id()];
-      update_idepoch.CopyFrom(idepoch.idepoch());
+        meta_write_to_kv.push_back(id_epoch_meta_->TransformToKvValue(idepoch.idepoch()));
 
-      meta_write_to_kv.push_back(id_epoch_meta_->TransformToKvValue(idepoch.idepoch()));
+      } else if (idepoch.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
+        auto& update_idepoch = id_epoch_map_[idepoch.id()];
+        update_idepoch.CopyFrom(idepoch.idepoch());
 
-    } else if (idepoch.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
-      id_epoch_map_.erase(idepoch.id());
+        meta_write_to_kv.push_back(id_epoch_meta_->TransformToKvValue(idepoch.idepoch()));
 
-      meta_delete_to_kv.push_back(id_epoch_meta_->TransformToKvValue(idepoch.idepoch()));
+      } else if (idepoch.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
+        id_epoch_map_.erase(idepoch.id());
+
+        meta_delete_to_kv.push_back(id_epoch_meta_->TransformToKvValue(idepoch.idepoch()));
+      }
     }
   }
 
   // 1.coordinator map
-  for (int i = 0; i < meta_increment.coordinators_size(); i++) {
-    const auto& coordinator = meta_increment.coordinators(i);
-    if (coordinator.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
-      coordinator_map_[coordinator.id()] = coordinator.coordinator();
+  {
+    BAIDU_SCOPED_LOCK(coordinator_map_mutex_);
+    for (int i = 0; i < meta_increment.coordinators_size(); i++) {
+      const auto& coordinator = meta_increment.coordinators(i);
+      if (coordinator.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
+        coordinator_map_[coordinator.id()] = coordinator.coordinator();
 
-      // meta_write_kv
-      meta_write_to_kv.push_back(coordinator_meta_->TransformToKvValue(coordinator.coordinator()));
+        // meta_write_kv
+        meta_write_to_kv.push_back(coordinator_meta_->TransformToKvValue(coordinator.coordinator()));
 
-    } else if (coordinator.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
-      auto& update_coordinator = coordinator_map_[coordinator.id()];
-      update_coordinator.CopyFrom(coordinator.coordinator());
+      } else if (coordinator.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
+        auto& update_coordinator = coordinator_map_[coordinator.id()];
+        update_coordinator.CopyFrom(coordinator.coordinator());
 
-      // meta_write_kv
-      meta_write_to_kv.push_back(coordinator_meta_->TransformToKvValue(coordinator.coordinator()));
+        // meta_write_kv
+        meta_write_to_kv.push_back(coordinator_meta_->TransformToKvValue(coordinator.coordinator()));
 
-    } else if (coordinator.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
-      coordinator_map_.erase(coordinator.id());
+      } else if (coordinator.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
+        coordinator_map_.erase(coordinator.id());
 
-      // meta_delete_kv
-      meta_delete_to_kv.push_back(coordinator_meta_->TransformToKvValue(coordinator.coordinator()));
+        // meta_delete_kv
+        meta_delete_to_kv.push_back(coordinator_meta_->TransformToKvValue(coordinator.coordinator()));
+      }
     }
   }
 
   // 2.store map
-  for (int i = 0; i < meta_increment.stores_size(); i++) {
-    const auto& store = meta_increment.stores(i);
-    if (store.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
-      store_map_[store.id()] = store.store();
+  {
+    BAIDU_SCOPED_LOCK(store_map_mutex_);
+    for (int i = 0; i < meta_increment.stores_size(); i++) {
+      const auto& store = meta_increment.stores(i);
+      if (store.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
+        store_map_[store.id()] = store.store();
 
-      // meta_write_kv
-      meta_write_to_kv.push_back(store_meta_->TransformToKvValue(store.store()));
+        // meta_write_kv
+        meta_write_to_kv.push_back(store_meta_->TransformToKvValue(store.store()));
 
-    } else if (store.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
-      auto& update_store = store_map_[store.id()];
-      update_store.CopyFrom(store.store());
+      } else if (store.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
+        auto& update_store = store_map_[store.id()];
+        update_store.CopyFrom(store.store());
 
-      // meta_write_kv
-      meta_write_to_kv.push_back(store_meta_->TransformToKvValue(store.store()));
+        // meta_write_kv
+        meta_write_to_kv.push_back(store_meta_->TransformToKvValue(store.store()));
 
-    } else if (store.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
-      store_map_.erase(store.id());
+      } else if (store.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
+        store_map_.erase(store.id());
 
-      // meta_delete_kv
-      meta_delete_to_kv.push_back(store_meta_->TransformToKvValue(store.store()));
+        // meta_delete_kv
+        meta_delete_to_kv.push_back(store_meta_->TransformToKvValue(store.store()));
+      }
     }
   }
 
   // 3.executor map
-  for (int i = 0; i < meta_increment.executors_size(); i++) {
-    const auto& executor = meta_increment.executors(i);
-    if (executor.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
-      executor_map_[executor.id()] = executor.executor();
+  {
+    BAIDU_SCOPED_LOCK(executor_map_mutex_);
+    for (int i = 0; i < meta_increment.executors_size(); i++) {
+      const auto& executor = meta_increment.executors(i);
+      if (executor.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
+        executor_map_[executor.id()] = executor.executor();
 
-      // meta_write_kv
-      meta_write_to_kv.push_back(executor_meta_->TransformToKvValue(executor.executor()));
+        // meta_write_kv
+        meta_write_to_kv.push_back(executor_meta_->TransformToKvValue(executor.executor()));
 
-    } else if (executor.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
-      auto& update_executor = executor_map_[executor.id()];
-      update_executor.CopyFrom(executor.executor());
+      } else if (executor.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
+        auto& update_executor = executor_map_[executor.id()];
+        update_executor.CopyFrom(executor.executor());
 
-      // meta_write_kv
-      meta_write_to_kv.push_back(executor_meta_->TransformToKvValue(executor.executor()));
+        // meta_write_kv
+        meta_write_to_kv.push_back(executor_meta_->TransformToKvValue(executor.executor()));
 
-    } else if (executor.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
-      executor_map_.erase(executor.id());
+      } else if (executor.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
+        executor_map_.erase(executor.id());
 
-      // meta_delete_kv
-      meta_delete_to_kv.push_back(executor_meta_->TransformToKvValue(executor.executor()));
+        // meta_delete_kv
+        meta_delete_to_kv.push_back(executor_meta_->TransformToKvValue(executor.executor()));
+      }
     }
   }
 
   // 4.schema map
-  for (int i = 0; i < meta_increment.schemas_size(); i++) {
-    const auto& schema = meta_increment.schemas(i);
-    if (schema.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
-      // update parent schema for user schemas
-      if (schema.id() > pb::meta::ReservedSchemaIds::DINGO_SCHEMA) {
-        if (schema_map_.find(schema.schema_id()) != schema_map_.end()) {
-          auto& new_sub_schema = schema_map_[schema.schema_id()];
-          auto* new_sub_schema_id = new_sub_schema.mutable_schema()->add_schema_ids();
-          new_sub_schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
-          new_sub_schema_id->set_entity_id(schema.id());
-          new_sub_schema_id->set_parent_entity_id(schema.schema_id());
+  {
+    BAIDU_SCOPED_LOCK(schema_map_mutex_);
+    for (int i = 0; i < meta_increment.schemas_size(); i++) {
+      const auto& schema = meta_increment.schemas(i);
+      if (schema.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
+        // update parent schema for user schemas
+        if (schema.id() > pb::meta::ReservedSchemaIds::DINGO_SCHEMA) {
+          if (schema_map_.find(schema.schema_id()) != schema_map_.end()) {
+            auto& new_sub_schema = schema_map_[schema.schema_id()];
+            auto* new_sub_schema_id = new_sub_schema.mutable_schema()->add_schema_ids();
+            new_sub_schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
+            new_sub_schema_id->set_entity_id(schema.id());
+            new_sub_schema_id->set_parent_entity_id(schema.schema_id());
 
-          LOG(INFO) << "3.schema map CREATE new_sub_schema id=" << schema.id() << " parent_id=" << schema.schema_id();
+            LOG(INFO) << "3.schema map CREATE new_sub_schema id=" << schema.id() << " parent_id=" << schema.schema_id();
 
-          // meta_write_kv
-          meta_write_to_kv.push_back(schema_meta_->TransformToKvValue(new_sub_schema));
+            // meta_write_kv
+            meta_write_to_kv.push_back(schema_meta_->TransformToKvValue(new_sub_schema));
+          }
         }
+        schema_map_[schema.id()] = schema.schema_internal();
+
+        // meta_write_kv
+        meta_write_to_kv.push_back(schema_meta_->TransformToKvValue(schema.schema_internal()));
+
+      } else if (schema.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
+        auto& update_schema = schema_map_[schema.id()];
+        update_schema.CopyFrom(schema.schema_internal());
+
+        // meta_write_kv
+        meta_write_to_kv.push_back(schema_meta_->TransformToKvValue(schema.schema_internal()));
+
+      } else if (schema.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
+        schema_map_.erase(schema.id());
+
+        // meta_delete_kv
+        meta_delete_to_kv.push_back(schema_meta_->TransformToKvValue(schema.schema_internal()));
       }
-      schema_map_[schema.id()] = schema.schema_internal();
-
-      // meta_write_kv
-      meta_write_to_kv.push_back(schema_meta_->TransformToKvValue(schema.schema_internal()));
-
-    } else if (schema.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
-      auto& update_schema = schema_map_[schema.id()];
-      update_schema.CopyFrom(schema.schema_internal());
-
-      // meta_write_kv
-      meta_write_to_kv.push_back(schema_meta_->TransformToKvValue(schema.schema_internal()));
-
-    } else if (schema.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
-      schema_map_.erase(schema.id());
-
-      // meta_delete_kv
-      meta_delete_to_kv.push_back(schema_meta_->TransformToKvValue(schema.schema_internal()));
     }
   }
 
   // 5.region map
-  for (int i = 0; i < meta_increment.regions_size(); i++) {
-    const auto& region = meta_increment.regions(i);
-    if (region.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
-      // add region to region_map
-      region_map_[region.id()] = region.region();
+  {
+    BAIDU_SCOPED_LOCK(region_map_mutex_);
+    for (int i = 0; i < meta_increment.regions_size(); i++) {
+      const auto& region = meta_increment.regions(i);
+      if (region.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
+        // add region to region_map
+        region_map_[region.id()] = region.region();
 
-      // add_store_for_push
-      // only create region will push to store now
-      for (int j = 0; j < region.region().peers_size(); j++) {
-        uint64_t store_id = region.region().peers(j).store_id();
-        LOG(INFO) << " add_store_for_push, peers_size=" << region.region().peers_size() << " store_id =" << store_id;
+        // add_store_for_push
+        // only create region will push to store now
+        for (int j = 0; j < region.region().peers_size(); j++) {
+          uint64_t store_id = region.region().peers(j).store_id();
+          LOG(INFO) << " add_store_for_push, peers_size=" << region.region().peers_size() << " store_id =" << store_id;
 
-        if (store_need_push_.find(store_id) == store_need_push_.end()) {
-          if (store_map_.find(store_id) != store_map_.end()) {
-            store_need_push_[store_id] = store_map_[store_id];
-            LOG(INFO) << " add_store_for_push, store_id=" << store_id << " in create region=" << region.region().id()
-                      << " location=" << store_map_[store_id].server_location().host() << ":"
-                      << store_map_[store_id].server_location().port();
-          } else {
-            LOG(ERROR) << " add_store_for_push, illegal store_id=" << store_id
-                       << " in create region=" << region.region().id();
+          if (store_need_push_.find(store_id) == store_need_push_.end()) {
+            if (store_map_.find(store_id) != store_map_.end()) {
+              store_need_push_[store_id] = store_map_[store_id];
+              LOG(INFO) << " add_store_for_push, store_id=" << store_id << " in create region=" << region.region().id()
+                        << " location=" << store_map_[store_id].server_location().host() << ":"
+                        << store_map_[store_id].server_location().port();
+            } else {
+              LOG(ERROR) << " add_store_for_push, illegal store_id=" << store_id
+                         << " in create region=" << region.region().id();
+            }
           }
         }
+
+        // meta_write_kv
+        meta_write_to_kv.push_back(region_meta_->TransformToKvValue(region.region()));
+
+      } else if (region.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
+        // update region to region_map
+        auto& update_region = region_map_[region.id()];
+        update_region.CopyFrom(region.region());
+
+        // meta_write_kv
+        meta_write_to_kv.push_back(region_meta_->TransformToKvValue(region.region()));
+
+      } else if (region.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
+        // remove region from region_map
+        region_map_.erase(region.id());
+
+        // meta_delete_kv
+        meta_delete_to_kv.push_back(region_meta_->TransformToKvValue(region.region()));
       }
-
-      // meta_write_kv
-      meta_write_to_kv.push_back(region_meta_->TransformToKvValue(region.region()));
-
-    } else if (region.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
-      // update region to region_map
-      auto& update_region = region_map_[region.id()];
-      update_region.CopyFrom(region.region());
-
-      // meta_write_kv
-      meta_write_to_kv.push_back(region_meta_->TransformToKvValue(region.region()));
-
-    } else if (region.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
-      // remove region from region_map
-      region_map_.erase(region.id());
-
-      // meta_delete_kv
-      meta_delete_to_kv.push_back(region_meta_->TransformToKvValue(region.region()));
     }
   }
 
   // 6.table map
-  for (int i = 0; i < meta_increment.tables_size(); i++) {
-    const auto& table = meta_increment.tables(i);
-    if (table.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
-      // add table to table_map
-      table_map_[table.id()] = table.table();
-
-      // meta_write_kv
-      meta_write_to_kv.push_back(table_meta_->TransformToKvValue(table.table()));
-
-      // update parent schema
-      pb::meta::DingoCommonId table_common_id;
-      table_common_id.set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
-      table_common_id.set_entity_id(table.id());
-      table_common_id.set_parent_entity_id(table.schema_id());
-
-      if (schema_map_.find(table.schema_id()) != schema_map_.end()) {
-        auto& schema = schema_map_[table.schema_id()];
-        auto* add_table_id = schema.mutable_schema()->add_table_ids();
-        add_table_id->CopyFrom(table_common_id);
-
-        LOG(INFO) << "5.table map CREATE new_sub_table id=" << table.id() << " parent_id=" << table.schema_id();
+  {
+    BAIDU_SCOPED_LOCK(table_map_mutex_);
+    for (int i = 0; i < meta_increment.tables_size(); i++) {
+      const auto& table = meta_increment.tables(i);
+      if (table.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
+        // add table to table_map
+        table_map_[table.id()] = table.table();
 
         // meta_write_kv
-        meta_write_to_kv.push_back(schema_meta_->TransformToKvValue(schema));
+        meta_write_to_kv.push_back(table_meta_->TransformToKvValue(table.table()));
 
-      } else {
-        LOG(ERROR) << " CREATE TABLE apply illegal schema_id=" << table.schema_id() << " table_id=" << table.id()
-                   << " table_name=" << table.table().definition().name();
+        // update parent schema
+        pb::meta::DingoCommonId table_common_id;
+        table_common_id.set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
+        table_common_id.set_entity_id(table.id());
+        table_common_id.set_parent_entity_id(table.schema_id());
+
+        if (schema_map_.find(table.schema_id()) != schema_map_.end()) {
+          auto& schema = schema_map_[table.schema_id()];
+          auto* add_table_id = schema.mutable_schema()->add_table_ids();
+          add_table_id->CopyFrom(table_common_id);
+
+          LOG(INFO) << "5.table map CREATE new_sub_table id=" << table.id() << " parent_id=" << table.schema_id();
+
+          // meta_write_kv
+          meta_write_to_kv.push_back(schema_meta_->TransformToKvValue(schema));
+
+        } else {
+          LOG(ERROR) << " CREATE TABLE apply illegal schema_id=" << table.schema_id() << " table_id=" << table.id()
+                     << " table_name=" << table.table().definition().name();
+        }
+
+      } else if (table.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
+        // update table to table_map
+        auto& update_table = table_map_[table.id()];
+        update_table.CopyFrom(table.table());
+
+        // meta_write_kv
+        meta_write_to_kv.push_back(table_meta_->TransformToKvValue(table.table()));
+
+      } else if (table.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
+        // delete table from table_map
+        table_map_.erase(table.id());
+
+        // meta_delete_kv
+        meta_delete_to_kv.push_back(table_meta_->TransformToKvValue(table.table()));
       }
-
-    } else if (table.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
-      // update table to table_map
-      auto& update_table = table_map_[table.id()];
-      update_table.CopyFrom(table.table());
-
-      // meta_write_kv
-      meta_write_to_kv.push_back(table_meta_->TransformToKvValue(table.table()));
-
-    } else if (table.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
-      // delete table from table_map
-      table_map_.erase(table.id());
-
-      // meta_delete_kv
-      meta_delete_to_kv.push_back(table_meta_->TransformToKvValue(table.table()));
     }
   }
 
@@ -1737,23 +1808,24 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
 }
 
 int CoordinatorControl::ValidateStore(uint64_t store_id, const std::string& keyring) {
-  BAIDU_SCOPED_LOCK(control_mutex_);
-
   if (keyring == std::string("TO_BE_CONTINUED") == 0) {
     LOG(INFO) << "ValidateStore store_id=" << store_id << " debug pass with TO_BE_CONTINUED";
     return 0;
   }
 
-  if (store_map_.find(store_id) != store_map_.end()) {
-    auto store_in_map = store_map_[store_id];
-    if (store_in_map.keyring() == keyring) {
-      LOG(INFO) << "ValidateStore store_id=" << store_id << " succcess";
-      return 0;
-    }
+  {
+    BAIDU_SCOPED_LOCK(store_map_mutex_);
+    if (store_map_.find(store_id) != store_map_.end()) {
+      auto store_in_map = store_map_[store_id];
+      if (store_in_map.keyring() == keyring) {
+        LOG(INFO) << "ValidateStore store_id=" << store_id << " succcess";
+        return 0;
+      }
 
-    LOG(INFO) << "ValidateStore store_id=" << store_id << "keyring wrong fail input_keyring=" << keyring
-              << " correct_keyring=" << store_in_map.keyring();
-    return -1;
+      LOG(INFO) << "ValidateStore store_id=" << store_id << "keyring wrong fail input_keyring=" << keyring
+                << " correct_keyring=" << store_in_map.keyring();
+      return -1;
+    }
   }
 
   LOG(INFO) << "ValidateStore store_id=" << store_id << " not exist fail";
@@ -1762,23 +1834,24 @@ int CoordinatorControl::ValidateStore(uint64_t store_id, const std::string& keyr
 }
 
 int CoordinatorControl::ValidateExecutor(uint64_t executor_id, const std::string& keyring) {
-  BAIDU_SCOPED_LOCK(control_mutex_);
-
   if (keyring == std::string("TO_BE_CONTINUED")) {
     LOG(INFO) << "ValidateExecutor executor_id=" << executor_id << " debug pass with TO_BE_CONTINUED";
     return 0;
   }
 
-  if (executor_map_.find(executor_id) != executor_map_.end()) {
-    auto executor_in_map = executor_map_[executor_id];
-    if (executor_in_map.keyring() == keyring) {
-      LOG(INFO) << "ValidateExecutor executor_id=" << executor_id << " succcess";
-      return 0;
-    }
+  {
+    BAIDU_SCOPED_LOCK(executor_map_mutex_);
+    if (executor_map_.find(executor_id) != executor_map_.end()) {
+      auto executor_in_map = executor_map_[executor_id];
+      if (executor_in_map.keyring() == keyring) {
+        LOG(INFO) << "ValidateExecutor executor_id=" << executor_id << " succcess";
+        return 0;
+      }
 
-    LOG(INFO) << "ValidateExecutor executor_id=" << executor_id << "keyring wrong fail input_keyring=" << keyring
-              << " correct_keyring=" << executor_in_map.keyring();
-    return -1;
+      LOG(INFO) << "ValidateExecutor executor_id=" << executor_id << "keyring wrong fail input_keyring=" << keyring
+                << " correct_keyring=" << executor_in_map.keyring();
+      return -1;
+    }
   }
 
   LOG(INFO) << "ValidateExecutor executor_id=" << executor_id << " not exist fail";
