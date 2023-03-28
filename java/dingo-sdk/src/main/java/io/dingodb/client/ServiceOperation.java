@@ -19,6 +19,7 @@ package io.dingodb.client;
 import io.dingodb.UnifyStoreConnection;
 import io.dingodb.client.operation.OperationFactory;
 import io.dingodb.client.operation.StoreOperationType;
+import io.dingodb.sdk.common.DingoClientException;
 import io.dingodb.sdk.common.KeyValue;
 import io.dingodb.sdk.common.codec.DingoKeyValueCodec;
 import io.dingodb.sdk.common.codec.KeyValueCodec;
@@ -72,46 +73,68 @@ public class ServiceOperation {
         if (routeTable == null) {
             log.error("table {} not found when do operation:{}", tableName, type);
         }
-        KeyValueCodec codec = routeTable.getCodec();
-        Table tableDef = getTableDefinition(tableName);
-
-        check(tableDef, clientParameters.getRecords());
-        IStoreOperation storeOperation = OperationFactory.getStoreOperation(type);
-        ContextForStore contextForStore = getStoreContext(clientParameters, codec, tableDef);
-        Map<String, ContextForStore> keys2Store = groupKeysByStore(routeTable, tableName, contextForStore);
-
-        List<Future<ResultForStore>> futures = new ArrayList<>();
-
-        for (Map.Entry<String, ContextForStore> entry : keys2Store.entrySet()) {
-            String leaderAddress = entry.getKey();
-            StoreServiceClient serviceClient = getStore(routeTable, leaderAddress);
-            futures.add(
-                    Executors.submit("do-operation",
-                            () -> storeOperation.doOperation(serviceClient, entry.getValue()))
-            );
-        }
-        int code = 0;
+        int code = -1;
         String message = "";
-
-        List<Common.KeyValue> keyValueList = new ArrayList<>();
-        for (Future<ResultForStore> future : futures) {
+        Result result;
+        do {
             try {
-                ResultForStore resultForStore = future.get();
-                code = resultForStore.getCode();
-                if (code != 0) {
-                    message = resultForStore.getErrorMessage();
-                    // throw new RuntimeException(message);
-                }
-                if (resultForStore.getRecords() != null && resultForStore.getRecords().size() > 0) {
-                    keyValueList.addAll(resultForStore.getRecords());
+                KeyValueCodec codec = routeTable.getCodec();
+                Table tableDef = getTableDefinition(tableName);
+
+                check(tableDef, clientParameters.getRecords());
+                IStoreOperation storeOperation = OperationFactory.getStoreOperation(type);
+                ContextForStore contextForStore = getStoreContext(clientParameters, codec, tableDef);
+                Map<String, ContextForStore> keys2Store = groupKeysByStore(routeTable, tableName, contextForStore);
+
+                List<Future<ResultForStore>> futures = new ArrayList<>();
+
+                for (Map.Entry<String, ContextForStore> entry : keys2Store.entrySet()) {
+                    String leaderAddress = entry.getKey();
+                    StoreServiceClient serviceClient = getStore(routeTable, leaderAddress);
+                    futures.add(
+                        Executors.submit("do-operation",
+                            () -> storeOperation.doOperation(serviceClient, entry.getValue()))
+                    );
                 }
 
-            } catch (InterruptedException | ExecutionException e) {
-                throw new RuntimeException(e);
+                List<Common.KeyValue> keyValueList = new ArrayList<>();
+                for (Future<ResultForStore> future : futures) {
+                    try {
+                        ResultForStore resultForStore = future.get();
+                        code = resultForStore.getCode();
+                        if (code != 0) {
+                            message = resultForStore.getErrorMessage();
+                            throw new RuntimeException(message);
+                        }
+                        if (resultForStore.getRecords() != null && resultForStore.getRecords().size() > 0) {
+                            keyValueList.addAll(resultForStore.getRecords());
+                        }
+
+                    } catch (InterruptedException | ExecutionException e) {
+                        throw new RuntimeException(e);
+                    }
+                }
+                ResultForStore resultForStore = new ResultForStore(code, message, keyValueList);
+                result = getResult(resultForStore, codec, getTableDefinition(tableName).getColumns());
+            } catch (DingoClientException ex) {
+                log.error("Execute operation:{} failed, retry times:{} ", type, retryTimes, ex);
+                result = new Result(code == 0, ex.getMessage());
+            } finally {
+                if (code != 0 && retryTimes > 0) {
+                    try {
+                        Thread.sleep(200);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                    routeTable = getAndRefreshRouteTable(tableName, true);
+                }
             }
+        } while (code != 0 && --retryTimes > 0);
+
+        if (code != 0 && retryTimes == 0) {
+            log.error("Retry attempts exhausted, failed to execute operation:{} on table:{}", type, tableName);
         }
-        ResultForStore resultForStore = new ResultForStore(code, message, keyValueList);
-        return getResult(resultForStore, codec, getTableDefinition(tableName).getColumns());
+        return result;
     }
 
     private Result getResult(ResultForStore resultForStore, KeyValueCodec codec, List<Column> columns) {
@@ -155,11 +178,10 @@ public class ServiceOperation {
             byte[] keyInBytes = wholeContext.getStartKeyInBytes().get(index);
             Meta.Part part = getPartByStartKey(routeTable, keyInBytes);
             if (part.getLeader().getHost().isEmpty()) {
-                log.error("Cannot find partition, table {} key:{} not found when do operation",
-                        tableName,
-                        Arrays.toString(keyInBytes));
-                throw new RuntimeException("table " + tableName + " key:" + Arrays.toString(keyInBytes)
-                        + " not found when do operation");
+                log.error("Unable to find the store leader of the key:{} in table:{}",
+                        Arrays.toString(keyInBytes),
+                        tableName);
+                throw new DingoClientException.InvalidStoreLeader(tableName);
             }
             String leaderAddress = part.getLeader().getHost() + ":" + part.getLeader().getPort();
             List<byte[]> keyList = keyListByStore.computeIfAbsent(leaderAddress, k -> new ArrayList<>());

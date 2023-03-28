@@ -91,9 +91,13 @@ public class MetaServiceClient {
         return response.getError().getErrcodeValue() == 0;
     }
 
-    public boolean dropTable(@NonNull String tableName) {
+    public synchronized boolean dropTable(@NonNull String tableName) {
+        Meta.DingoCommonId tableId = getTableId(tableName);
+        if (tableId == null) {
+            return false;
+        }
         Meta.DropTableRequest request = Meta.DropTableRequest.newBuilder()
-                .setTableId(getTableId(tableName))
+                .setTableId(tableId)
                 .build();
 
         Meta.DropTableResponse response = metaBlockingStub.dropTable(request);
