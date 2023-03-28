@@ -250,6 +250,10 @@ class CoordinatorControl : public MetaControl {
   // this function will use std::swap to empty the class member store_need_push_
   void GetPushStoreMap(std::map<uint64_t, pb::common::Store> &store_to_push);
 
+  // get push executormap
+  // this function will use std::swap to empty the class member executor_need_push_
+  void GetPushExecutorMap(std::map<uint64_t, pb::common::Executor> &executor_to_push);
+
   // update region map with new Region info
   // return new epoch
   uint64_t UpdateRegionMap(std::vector<pb::common::Region> &regions,
@@ -315,51 +319,51 @@ class CoordinatorControl : public MetaControl {
   bool LoadMetaFromSnapshotFile(pb::coordinator_internal::MetaSnapshotFile &meta_snapshot_file) override;
 
  private:
-  // mutex
-  bthread_mutex_t control_mutex_;
-
-  // // global ids
-  // uint64_t next_coordinator_id_;
-  // uint64_t next_store_id_;
-  // uint64_t next_schema_id_;
-  // uint64_t next_region_id_;
-  // uint64_t next_table_id_;
-
   // ids_epochs_temp (out of state machine, only for leader use)
   // TableInternal is combination of Table & TableDefinition
   std::map<uint64_t, pb::coordinator_internal::IdEpochInternal> id_epoch_map_temp_;
+  bthread_mutex_t id_epoch_map_temp_mutex_;
 
   // 0.ids_epochs
   // TableInternal is combination of Table & TableDefinition
   std::map<uint64_t, pb::coordinator_internal::IdEpochInternal> id_epoch_map_;
   MetaMapStorage<pb::coordinator_internal::IdEpochInternal> *id_epoch_meta_;
+  bthread_mutex_t id_epoch_map_mutex_;
 
   // 1.coordinators
   std::map<uint64_t, pb::coordinator_internal::CoordinatorInternal> coordinator_map_;
   MetaMapStorage<pb::coordinator_internal::CoordinatorInternal> *coordinator_meta_;
+  bthread_mutex_t coordinator_map_mutex_;
 
   // 2.stores
   std::map<uint64_t, pb::common::Store> store_map_;
   MetaMapStorage<pb::common::Store> *store_meta_;          // need contruct
   std::map<uint64_t, pb::common::Store> store_need_push_;  // will send push msg to these stores in crontab
+  bthread_mutex_t store_map_mutex_;
+  bthread_mutex_t store_need_push_mutex_;
 
   // 3.executors
   std::map<uint64_t, pb::common::Executor> executor_map_;
   MetaMapStorage<pb::common::Executor> *executor_meta_;          // need construct
   std::map<uint64_t, pb::common::Executor> executor_need_push_;  // will send push msg to these executors in crontab
+  bthread_mutex_t executor_map_mutex_;
+  bthread_mutex_t executor_need_push_mutex_;
 
   // 4.schemas
   std::map<uint64_t, pb::coordinator_internal::SchemaInternal> schema_map_;
   MetaMapStorage<pb::coordinator_internal::SchemaInternal> *schema_meta_;
+  bthread_mutex_t schema_map_mutex_;
 
   // 5.regions
   std::map<uint64_t, pb::common::Region> region_map_;
   MetaMapStorage<pb::common::Region> *region_meta_;
+  bthread_mutex_t region_map_mutex_;
 
   // 6.tables
   // TableInternal is combination of Table & TableDefinition
   std::map<uint64_t, pb::coordinator_internal::TableInternal> table_map_;
   MetaMapStorage<pb::coordinator_internal::TableInternal> *table_meta_;
+  bthread_mutex_t table_map_mutex_;
 
   // root schema write to raft
   bool root_schema_writed_to_raft_;
