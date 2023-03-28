@@ -1,3 +1,19 @@
+/*
+ * Copyright 2021 DataCanvas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package io.dingodb.sdk.service.meta;
 
 import io.dingodb.sdk.service.connector.ServiceConnector;
@@ -53,7 +69,7 @@ public class MetaServiceClient {
 
     public boolean createTable(@NonNull String tableName, @NonNull Table table) {
         Meta.CreateTableIdRequest createTableIdRequest = Meta.CreateTableIdRequest.newBuilder()
-                .setSchemaId(DINGO_SCHEMA_ID)
+                .setSchemaId(id)
                 .build();
 
         Meta.CreateTableIdResponse createTableIdResponse = metaBlockingStub.createTableId(createTableIdRequest);
@@ -62,7 +78,7 @@ public class MetaServiceClient {
         Meta.TableDefinition definition = swap(table, tableId);
 
         Meta.CreateTableRequest request = Meta.CreateTableRequest.newBuilder()
-                .setSchemaId(DINGO_SCHEMA_ID)
+                .setSchemaId(id)
                 .setTableId(tableId)
                 .setTableDefinition(definition)
                 .build();
@@ -88,7 +104,7 @@ public class MetaServiceClient {
     public Meta.DingoCommonId getTableId(@NonNull String tableName) {
         Meta.DingoCommonId commonId = tableIdCache.get(tableName);
         if (commonId == null) {
-            Meta.GetTablesRequest request = Meta.GetTablesRequest.newBuilder().setSchemaId(DINGO_SCHEMA_ID).build();
+            Meta.GetTablesRequest request = Meta.GetTablesRequest.newBuilder().setSchemaId(id).build();
             Meta.GetTablesResponse response = metaBlockingStub.getTables(request);
 
             List<Meta.TableDefinitionWithId> withIdsList = response.getTableDefinitionWithIdsList();

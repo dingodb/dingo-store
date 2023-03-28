@@ -154,14 +154,14 @@ public class ServiceOperation {
         for (int index = 0; index < wholeContext.getStartKeyInBytes().size(); index++) {
             byte[] keyInBytes = wholeContext.getStartKeyInBytes().get(index);
             Meta.Part part = getPartByStartKey(routeTable, keyInBytes);
-            String leaderAddress = part.getLeader().getHost() + ":" + part.getLeader().getPort();
-            if (leaderAddress == null) {
+            if (part.getLeader().getHost().isEmpty()) {
                 log.error("Cannot find partition, table {} key:{} not found when do operation",
                         tableName,
                         Arrays.toString(keyInBytes));
                 throw new RuntimeException("table " + tableName + " key:" + Arrays.toString(keyInBytes)
                         + " not found when do operation");
             }
+            String leaderAddress = part.getLeader().getHost() + ":" + part.getLeader().getPort();
             List<byte[]> keyList = keyListByStore.computeIfAbsent(leaderAddress, k -> new ArrayList<>());
             regionIdMap.computeIfAbsent(leaderAddress, k -> part.getId());
             keyList.add(keyInBytes);

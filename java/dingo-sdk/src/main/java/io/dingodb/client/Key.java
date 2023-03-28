@@ -16,6 +16,7 @@
 
 package io.dingodb.client;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -30,6 +31,10 @@ public class Key {
      * Required, user keys for with multiple columns.
      */
     public final List<Value> userKey;
+
+    public Key(Value userKey) {
+        this(Collections.singletonList(userKey));
+    }
 
     public Key(List<Value> userKey) {
         this("dingo", userKey);
