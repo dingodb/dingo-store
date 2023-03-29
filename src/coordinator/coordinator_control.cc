@@ -957,7 +957,8 @@ int CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta::TableDef
     // int ret = CreateRegion(const std::string &region_name, const std::string
     // &resource_tag, int32_t replica_num, pb::common::Range region_range,
     // uint64_t schema_id, uint64_t table_id, uint64_t &new_region_id)
-    std::string const region_name = table_definition.name() + "_part_" + std::to_string(i);
+    std::string const region_name = std::to_string(schema_id) + std::string("_") + table_definition.name() +
+                                    std::string("_part_") + std::to_string(i);
     uint64_t new_region_id;
     int const ret = CreateRegion(region_name, "", 3, range_partition.ranges(i), schema_id, new_table_id, new_region_id,
                                  meta_increment);
@@ -1190,7 +1191,7 @@ int CoordinatorControl::CreateRegion(const std::string& region_name, const std::
   pb::common::Region new_region;
   new_region.set_id(create_region_id);
   new_region.set_epoch(1);
-  new_region.set_name(region_name);
+  new_region.set_name(region_name + std::string("_") + std::to_string(create_region_id));
   new_region.set_state(::dingodb::pb::common::RegionState::REGION_NEW);
   auto* range = new_region.mutable_range();
   range->CopyFrom(region_range);
