@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+import "error.proto";
+
+package dingodb.pb.version;
+
+option java_package = "io.dingodb.version";
+option cc_generic_services = true;
+
+enum VersionType {
+  TABLE = 0;
+}
+
+message VersionId {
+  VersionType type = 1;
+  uint64 id = 2;
+}
+
+message GetCurrVersionRequest {
+  VersionId verId = 1;
+}
+
+message GetCurrVersionResponse {
+  dingodb.pb.error.Error error = 1;
+  uint64 version = 2;
+}
+
+message GetNewVersionRequest {
+  VersionId verId = 1;
+  uint64 version = 2;
+}
+
+message GetNewVersionResponse {
+  dingodb.pb.error.Error error = 1;
+  uint64 version = 2;
+}
+
+service VersionService {
+
+  rpc GetCurrVersion(GetCurrVersionRequest) returns (GetCurrVersionResponse) {}
+
+  rpc GetNewVersion(GetNewVersionRequest) returns (GetNewVersionResponse) {}
+
+}
