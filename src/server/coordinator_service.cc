@@ -308,10 +308,11 @@ void CoordinatorServiceImpl::StoreHeartbeat(google::protobuf::RpcController *con
 
   // update region map
   std::vector<pb::common::Region> regions;
-  regions.resize(request->regions_size());
-  for (int i = 0; i < request->regions_size(); i++) {
-    regions.push_back(request->regions(i));
+  for (const auto &x : request->regions()) {
+    regions.push_back(x);
   }
+
+  // call UpdateRegionMap
   uint64_t const new_regionmap_epoch = this->coordinator_control_->UpdateRegionMap(regions, meta_increment);
 
   // prepare for raft process
