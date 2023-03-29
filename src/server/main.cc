@@ -38,6 +38,7 @@
 #include "server/push_service.h"
 #include "server/server.h"
 #include "server/store_service.h"
+#include "server/version_service.h"
 
 DEFINE_string(conf, "", "server config");
 DEFINE_string(role, "", "server role [store|coordinator]");
@@ -161,6 +162,8 @@ int main(int argc, char *argv[]) {
   dingodb::NodeServiceImpl node_service;
   dingodb::PushServiceImpl push_service;
 
+  dingodb::VersionServiceProtoImpl version_service;
+
   node_service.SetServer(dingo_server);
 
   brpc::Server brpc_server;
@@ -168,6 +171,11 @@ int main(int argc, char *argv[]) {
 
   if (brpc_server.AddService(&node_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
     DINGO_LOG(ERROR) << "Fail to add node service to brpc_server!";
+    return -1;
+  }
+
+  if (brpc_server.AddService(&version_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
+    LOG(ERROR) << "Fail to add node service to brpc_server!";
     return -1;
   }
 
