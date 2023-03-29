@@ -462,10 +462,11 @@ uint64_t CoordinatorControl::GetPresentId(const pb::coordinator_internal::IdEpoc
   BAIDU_SCOPED_LOCK(id_epoch_map_temp_mutex_);
   if (id_epoch_map_temp_.find(key) == id_epoch_map_temp_.end()) {
     value = 1000;
-    LOG(INFO) << "GetPresentId key=" << key << " not found, generate new id=" << value;
+    LOG(INFO) << "GetPresentId key=" << pb::coordinator_internal::IdEpochType_Name(key)
+              << " not found, generate new id=" << value;
   } else {
     value = id_epoch_map_temp_[key].value();
-    LOG(INFO) << "GetPresentId key=" << key << " value=" << value;
+    LOG(INFO) << "GetPresentId key=" << pb::coordinator_internal::IdEpochType_Name(key) << " value=" << value;
   }
 
   return value;
@@ -524,10 +525,11 @@ uint64_t CoordinatorControl::GetNextId(const pb::coordinator_internal::IdEpochTy
     BAIDU_SCOPED_LOCK(id_epoch_map_temp_mutex_);
     if (id_epoch_map_temp_.find(key) == id_epoch_map_temp_.end()) {
       value = 1000;
-      LOG(INFO) << "GetNextId key=" << key << " not found, generate new id=" << value;
+      LOG(INFO) << "GetNextId key=" << pb::coordinator_internal::IdEpochType_Name(key)
+                << " not found, generate new id=" << value;
     } else {
       value = id_epoch_map_temp_[key].value();
-      LOG(INFO) << "GetNextId key=" << key << " value=" << value;
+      LOG(INFO) << "GetNextId key=" << pb::coordinator_internal::IdEpochType_Name(key) << " value=" << value;
     }
     value++;
 
@@ -1278,8 +1280,13 @@ uint64_t CoordinatorControl::UpdateRegionMap(std::vector<pb::common::Region>& re
         // on_apply
         // region_map_[region.id()].CopyFrom(region);  // raft_kv_put
         // region_map_epoch++;                        // raft_kv_put
+      } else if (region.id() == 0) {
+        LOG(INFO) << " found illegal null region in heartbeat, region_id=0"
+                  << " name=" << region.name() << " leader_store_id=" << region.leader_store_id()
+                  << " state=" << region.state();
       } else {
-        LOG(INFO) << " found illegal region in heartbeat, region_id=" << region.id();
+        LOG(INFO) << " found illegal region in heartbeat, region_id=" << region.id() << " name=" << region.name()
+                  << " leader_store_id=" << region.leader_store_id() << " state=" << region.state();
 
         auto* region_increment = meta_increment.add_regions();
         region_increment->set_id(region.id());
@@ -1287,6 +1294,7 @@ uint64_t CoordinatorControl::UpdateRegionMap(std::vector<pb::common::Region>& re
 
         auto* region_increment_region = region_increment->mutable_region();
         region_increment_region->CopyFrom(region);
+        region_increment_region->set_state(::dingodb::pb::common::RegionState::REGION_ILLEGAL);
 
         need_to_get_next_epoch = true;
 
