@@ -1108,13 +1108,14 @@ int CoordinatorControl::DropTable(uint64_t schema_id, uint64_t table_id,
                    << " region_id=" << region_id;
         return -1;
       }
-      pb::common::Region& part_region = region_map_[region_id];
 
+      // update region to DELETE, not delete region really, not
       auto* region_to_delete = meta_increment.add_regions();
       region_to_delete->set_id(region_id);
-      region_to_delete->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
+      region_to_delete->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
       auto* region_to_delete_region = region_to_delete->mutable_region();
-      region_to_delete_region->CopyFrom(part_region);
+      region_to_delete_region->CopyFrom(region_map_[region_id]);
+      region_to_delete->mutable_region()->set_state(::dingodb::pb::common::RegionState::REGION_DELETE);
       LOG(INFO) << "Delete Region in Drop Table, table_id=" << table_id << " region_id=" << region_id;
 
       need_delete_region = true;
@@ -1235,23 +1236,47 @@ uint64_t CoordinatorControl::UpdateRegionMap(std::vector<pb::common::Region>& re
     for (const auto& region : regions) {
       if (region_map_.find(region.id()) != region_map_.end()) {
         LOG(INFO) << " update region to region_map in heartbeat, region_id=" << region.id();
-        if (region_map_[region.id()].state() != region.state()) {
+
+        // if state not change, just update leader_store_id
+        if (region_map_[region.id()].state() == region.state()) {
+          // update the region's leader_store_id, no need to apply raft
+          if (region_map_[region.id()].leader_store_id() != region.leader_store_id()) {
+            region_map_[region.id()].set_leader_store_id(region.leader_store_id());
+          }
+          continue;
+        } else {
+          // state not equal, need to update region data and apply raft
           LOG(INFO) << "REGION STATUS CHANGE region_id = " << region.id()
                     << " old status = " << region_map_[region.id()].state() << " new status = " << region.state();
-          // update meta_increment
-          auto* region_increment = meta_increment.add_regions();
-          region_increment->set_id(region.id());
-          region_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
+          // maybe need to build a state machine here
+          // if a region is set to DELETE, it will never be updated to other normal state
+          const auto& region_delete_state_name =
+              dingodb::pb::common::RegionState_Name(pb::common::RegionState::REGION_DELETE);
+          const auto& region_state_in_map = dingodb::pb::common::RegionState_Name(region_map_[region.id()].state());
+          const auto& region_state_in_req = dingodb::pb::common::RegionState_Name(region.state());
 
-          auto* region_increment_region = region_increment->mutable_region();
-          region_increment_region->CopyFrom(region);
-
-          need_to_get_next_epoch = true;
-
-          // on_apply
-          // region_map_[region.id()].CopyFrom(region);  // raft_kv_put
-          // region_map_epoch++;                        // raft_kv_put
+          // if store want to update a region state from DELETE_* to other NON DELETE_* state, it is illegal
+          if (region_state_in_map.rfind(region_delete_state_name, 0) == 0 &&
+              region_state_in_req.rfind(region_delete_state_name, 0) != 0) {
+            LOG(INFO) << "illegal intend to update region state from REGION_DELETE to " << region_state_in_req
+                      << " region_id=" << region.id();
+            continue;
+          }
         }
+
+        // update meta_increment
+        auto* region_increment = meta_increment.add_regions();
+        region_increment->set_id(region.id());
+        region_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
+
+        auto* region_increment_region = region_increment->mutable_region();
+        region_increment_region->CopyFrom(region);
+
+        need_to_get_next_epoch = true;
+
+        // on_apply
+        // region_map_[region.id()].CopyFrom(region);  // raft_kv_put
+        // region_map_epoch++;                        // raft_kv_put
       } else {
         LOG(INFO) << " found illegal region in heartbeat, region_id=" << region.id();
 

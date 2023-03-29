@@ -171,7 +171,11 @@ void SendGetRegionMap(brpc::Controller& cntl, dingodb::pb::coordinator::Coordina
               << " get_store_map=" << request.epoch() << " request_attachment=" << cntl.request_attachment().size()
               << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us()
               << " response=" << MessageToJsonString(response);
-    LOG(INFO) << response.DebugString();
+    for (const auto& region : response.regionmap().regions()) {
+      LOG(INFO) << "Region " << region.id() << " State=" << region.state()
+                << " leader_store_id=" << region.leader_store_id();
+    }
+    // LOG(INFO) << response.DebugString();
   }
 }
 
