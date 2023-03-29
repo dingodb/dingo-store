@@ -89,6 +89,7 @@ enum RegionState {
   REGION_DELETING = 11;  // region is deleting
   REGION_DELETED = 12;   // region is deleted
   // other state add here
+  REGION_ILLEGAL = 13;  // region is not create by coordinator
 }
 
 message Coordinator {
