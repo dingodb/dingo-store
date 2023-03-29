@@ -101,6 +101,8 @@ public class MetaServiceClient {
                 .build();
 
         Meta.DropTableResponse response = metaBlockingStub.dropTable(request);
+        tableIdCache.remove(tableName);
+        tableDefinitionCache.remove(tableId);
 
         return response.getError().getErrcodeValue() == 0;
     }
