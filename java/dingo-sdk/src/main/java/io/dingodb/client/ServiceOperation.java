@@ -72,6 +72,7 @@ public class ServiceOperation {
         RouteTable routeTable = getAndRefreshRouteTable(tableName, false);
         if (routeTable == null) {
             log.error("table {} not found when do operation:{}", tableName, type);
+            return new Result(false, null);
         }
         int code = -1;
         String message = "";
@@ -216,6 +217,9 @@ public class ServiceOperation {
         if (routeTable == null) {
             MetaClient metaClient = connection.getMetaClient();
             Table table = metaClient.getTableDefinition(tableName);
+            if (table == null) {
+                return null;
+            }
 
             NavigableMap<ByteArrayUtils.ComparableByteArray, Meta.Part> parts =
                     metaClient.getParts(table.getName());
@@ -252,6 +256,23 @@ public class ServiceOperation {
         }
 
         return tableDef;
+    }
+
+    public synchronized void updateCacheOfTableDefinition(final String tableName, final Table tableDef) {
+        if (tableName != null && !tableName.isEmpty() && tableDef != null) {
+            tableDefinitionInCache.put(tableName, tableDef);
+            log.info("update cache of table:{} definition:{}", tableName, tableDef);
+        }
+    }
+
+    public synchronized void removeCacheOfTableDefinition(String tableName) {
+        if (tableName != null) {
+            Table table = tableDefinitionInCache.remove(tableName);
+            dingoRouteTables.remove(tableName);
+            if (table != null) {
+                log.info("remove cache of table:{} definition:{}", tableName, table);
+            }
+        }
     }
 
     private ContextForStore getStoreContext(ContextForClient inputContext, KeyValueCodec codec, Table tableDef) {

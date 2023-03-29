@@ -53,11 +53,15 @@ public class DingoClient {
     }
 
     public boolean createTable(Table table) {
-        return connection.getMetaClient().createTable(table.getName(), table);
+        boolean isSuccess = connection.getMetaClient().createTable(table.getName(), table);
+        serviceOperation.updateCacheOfTableDefinition(table.getName(), table);
+        return isSuccess;
     }
 
     public boolean dropTable(String tableName) {
-        return connection.getMetaClient().dropTable(tableName);
+        boolean isSuccess = connection.getMetaClient().dropTable(tableName);
+        serviceOperation.removeCacheOfTableDefinition(tableName);
+        return isSuccess;
     }
 
     public boolean upsert(String tableName, List<Record> records) {
