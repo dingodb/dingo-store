@@ -18,386 +18,125 @@
 #include <cstring>
 #include <string>
 
-#include "braft/raft.h"
-#include "braft/route_table.h"
-#include "braft/util.h"
-#include "brpc/channel.h"
-#include "brpc/controller.h"
 #include "bthread/bthread.h"
+#include "client/coordinator_client_function.h"
 #include "gflags/gflags.h"
-#include "google/protobuf/util/json_util.h"
-#include "proto/coordinator.pb.h"
-#include "proto/meta.pb.h"
-#include "proto/node.pb.h"
 
 DEFINE_bool(log_each_request, true, "Print log for each request");
 DEFINE_bool(use_bthread, false, "Use bthread to send requests");
 DEFINE_int32(thread_num, 1, "Number of threads sending requests");
 DEFINE_int32(timeout_ms, 500, "Timeout for each request");
-DEFINE_string(coordinator_addr, "127.0.0.1:8201", "coordinator server addr");
 DEFINE_int32(req_num, 1, "Number of requests");
 DEFINE_string(method, "Hello", "Request method");
-
-bvar::LatencyRecorder g_latency_recorder("dingo-coordinator");
-
-std::string MessageToJsonString(const google::protobuf::Message& message) {
-  std::string json_string;
-  google::protobuf::util::JsonOptions options;
-  options.always_print_primitive_fields = true;
-  google::protobuf::util::Status status = google::protobuf::util::MessageToJsonString(message, &json_string, options);
-  if (!status.ok()) {
-    std::cerr << "Failed to convert message to JSON: [" << status.message() << "]" << std::endl;
-  }
-  return json_string;
-}
-
-void SendGetNodeInfo(brpc::Controller& cntl, dingodb::pb::node::NodeService_Stub& stub) {
-  dingodb::pb::node::GetNodeInfoRequest request;
-  dingodb::pb::node::GetNodeInfoResponse response;
-
-  std::string key = "Hello";
-  // const char* op = nullptr;
-  request.set_cluster_id(0);
-  stub.GetNodeInfo(&cntl, &request, &response, nullptr);
-  if (cntl.Failed()) {
-    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
-    // bthread_usleep(FLAGS_timeout_ms * 1000L);
-  }
-
-  if (FLAGS_log_each_request) {
-    LOG(INFO) << "Received response"
-              << " cluster_id=" << request.cluster_id() << " request_attachment=" << cntl.request_attachment().size()
-              << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
-    LOG(INFO) << response.DebugString();
-  }
-}
-
-void SendHello(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
-  dingodb::pb::coordinator::HelloRequest request;
-  dingodb::pb::coordinator::HelloResponse response;
-
-  std::string key = "Hello";
-  // const char* op = nullptr;
-  request.set_hello(0);
-  stub.Hello(&cntl, &request, &response, nullptr);
-  if (cntl.Failed()) {
-    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
-    // bthread_usleep(FLAGS_timeout_ms * 1000L);
-  }
-
-  if (FLAGS_log_each_request) {
-    LOG(INFO) << "Received response"
-              << " hello=" << request.hello() << " request_attachment=" << cntl.request_attachment().size()
-              << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
-    LOG(INFO) << response.DebugString();
-  }
-}
-
-void SendGetStoreMap(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
-  dingodb::pb::coordinator::GetStoreMapRequest request;
-  dingodb::pb::coordinator::GetStoreMapResponse response;
-
-  request.set_epoch(1);
-
-  stub.GetStoreMap(&cntl, &request, &response, nullptr);
-  if (cntl.Failed()) {
-    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
-    // bthread_usleep(FLAGS_timeout_ms * 1000L);
-  }
-
-  if (FLAGS_log_each_request) {
-    LOG(INFO) << "Received response"
-              << " get_store_map=" << request.epoch() << " request_attachment=" << cntl.request_attachment().size()
-              << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
-    LOG(INFO) << response.DebugString();
-  }
-}
-
-void SendGetExecutorMap(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
-  dingodb::pb::coordinator::GetExecutorMapRequest request;
-  dingodb::pb::coordinator::GetExecutorMapResponse response;
-
-  request.set_epoch(1);
-
-  stub.GetExecutorMap(&cntl, &request, &response, nullptr);
-  if (cntl.Failed()) {
-    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
-    // bthread_usleep(FLAGS_timeout_ms * 1000L);
-  }
-
-  if (FLAGS_log_each_request) {
-    LOG(INFO) << "Received response"
-              << " get_executor_map=" << request.epoch() << " request_attachment=" << cntl.request_attachment().size()
-              << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
-    LOG(INFO) << response.DebugString();
-  }
-}
-
-void SendGetCoordinatorMap(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
-  dingodb::pb::coordinator::GetCoordinatorMapRequest request;
-  dingodb::pb::coordinator::GetCoordinatorMapResponse response;
-
-  request.set_cluster_id(0);
-
-  stub.GetCoordinatorMap(&cntl, &request, &response, nullptr);
-  if (cntl.Failed()) {
-    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
-    // bthread_usleep(FLAGS_timeout_ms * 1000L);
-  }
-
-  if (FLAGS_log_each_request) {
-    LOG(INFO) << "Received response"
-              << " get_coordinator_map=" << request.cluster_id()
-              << " request_attachment=" << cntl.request_attachment().size()
-              << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
-    LOG(INFO) << response.DebugString();
-  }
-}
-
-void SendGetRegionMap(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
-  dingodb::pb::coordinator::GetRegionMapRequest request;
-  dingodb::pb::coordinator::GetRegionMapResponse response;
-
-  request.set_epoch(1);
-
-  stub.GetRegionMap(&cntl, &request, &response, nullptr);
-  if (cntl.Failed()) {
-    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
-    // bthread_usleep(FLAGS_timeout_ms * 1000L);
-  }
-
-  if (FLAGS_log_each_request) {
-    LOG(INFO) << "Received response"
-              << " get_store_map=" << request.epoch() << " request_attachment=" << cntl.request_attachment().size()
-              << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us()
-              << " response=" << MessageToJsonString(response);
-    for (const auto& region : response.regionmap().regions()) {
-      LOG(INFO) << "Region " << region.id() << " State=" << region.state()
-                << " leader_store_id=" << region.leader_store_id();
-    }
-    // LOG(INFO) << response.DebugString();
-  }
-}
-
-void SendCreateStore(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
-  dingodb::pb::coordinator::CreateStoreRequest request;
-  dingodb::pb::coordinator::CreateStoreResponse response;
-
-  request.set_cluster_id(1);
-  stub.CreateStore(&cntl, &request, &response, nullptr);
-  if (cntl.Failed()) {
-    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorCode() << "[" << cntl.ErrorText() << "]";
-    // bthread_usleep(FLAGS_timeout_ms * 1000L);
-  }
-
-  if (FLAGS_log_each_request) {
-    LOG(INFO) << "Received response"
-              << " create store cluster_id =" << request.cluster_id()
-              << " request_attachment=" << cntl.request_attachment().size()
-              << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
-    LOG(INFO) << response.DebugString();
-  }
-}
-
-void SendDeleteStore(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
-  dingodb::pb::coordinator::DeleteStoreRequest request;
-  dingodb::pb::coordinator::DeleteStoreResponse response;
-
-  request.set_cluster_id(1);
-  request.set_store_id(101);
-  auto* keyring = request.mutable_keyring();
-  keyring->assign("aabbcc");
-
-  stub.DeleteStore(&cntl, &request, &response, nullptr);
-  if (cntl.Failed()) {
-    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorCode() << "[" << cntl.ErrorText() << "]";
-    // bthread_usleep(FLAGS_timeout_ms * 1000L);
-  }
-
-  if (FLAGS_log_each_request) {
-    LOG(INFO) << "Received response"
-              << " create store cluster_id =" << request.cluster_id()
-              << " request_attachment=" << cntl.request_attachment().size()
-              << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
-    LOG(INFO) << response.DebugString();
-  }
-}
-
-void SendCreateExecutor(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
-  dingodb::pb::coordinator::CreateExecutorRequest request;
-  dingodb::pb::coordinator::CreateExecutorResponse response;
-
-  request.set_cluster_id(1);
-  stub.CreateExecutor(&cntl, &request, &response, nullptr);
-  if (cntl.Failed()) {
-    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorCode() << "[" << cntl.ErrorText() << "]";
-    // bthread_usleep(FLAGS_timeout_ms * 1000L);
-  }
-
-  if (FLAGS_log_each_request) {
-    LOG(INFO) << "Received response"
-              << " create executor cluster_id =" << request.cluster_id()
-              << " request_attachment=" << cntl.request_attachment().size()
-              << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
-    LOG(INFO) << response.DebugString();
-  }
-}
-
-void SendDeleteExecutor(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
-  dingodb::pb::coordinator::DeleteExecutorRequest request;
-  dingodb::pb::coordinator::DeleteExecutorResponse response;
-
-  request.set_cluster_id(1);
-  request.set_executor_id(101);
-  auto* keyring = request.mutable_keyring();
-  keyring->assign("aabbcc");
-
-  stub.DeleteExecutor(&cntl, &request, &response, nullptr);
-  if (cntl.Failed()) {
-    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorCode() << "[" << cntl.ErrorText() << "]";
-    // bthread_usleep(FLAGS_timeout_ms * 1000L);
-  }
-
-  if (FLAGS_log_each_request) {
-    LOG(INFO) << "Received response"
-              << " create executor cluster_id =" << request.cluster_id()
-              << " request_attachment=" << cntl.request_attachment().size()
-              << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
-    LOG(INFO) << response.DebugString();
-  }
-}
-
-void SendStoreHearbeat(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub,
-                       uint64_t store_id) {
-  dingodb::pb::coordinator::StoreHeartbeatRequest request;
-  dingodb::pb::coordinator::StoreHeartbeatResponse response;
-
-  request.set_self_storemap_epoch(1);
-  request.set_self_regionmap_epoch(1);
-  // mock store
-  auto* store = request.mutable_store();
-  store->set_id(store_id);
-  store->set_state(::dingodb::pb::common::StoreState::STORE_NORMAL);
-  auto* server_location = store->mutable_server_location();
-  server_location->set_host("127.0.0.1");
-  server_location->set_port(19191);
-  auto* raft_location = store->mutable_raft_location();
-  raft_location->set_host("127.0.0.1");
-  raft_location->set_port(19192);
-  store->set_resource_tag("DINGO_DEFAULT");
-
-  // mock regions
-  for (int i = 0; i < 3; i++) {
-    auto* region = request.add_regions();
-    region->set_id(store_id * 100 + i);
-    region->set_epoch(1);
-    std::string region_name("test_region_");
-    region_name.append(std::to_string(i));
-    region->set_name(region_name);
-    region->set_state(::dingodb::pb::common::RegionState::REGION_NORMAL);
-    region->set_leader_store_id(1);
-
-    // mock peers
-    for (int j = 0; j < 3; j++) {
-      auto* peer = region->add_peers();
-      peer->set_store_id(store_id);
-      auto* server_location = peer->mutable_server_location();
-      server_location->set_host("127.0.0.1");
-      server_location->set_port(19191);
-      auto* raft_location = peer->mutable_server_location();
-      raft_location->set_host("127.0.0.1");
-      raft_location->set_port(19192);
-    }
-
-    // mock range
-    auto* range = region->mutable_range();
-    const char start_key[] = {0, 0, 0, 0};
-    const char end_key[] = {static_cast<char>(255), static_cast<char>(255), static_cast<char>(255),
-                            static_cast<char>(255)};
-
-    range->set_start_key(std::string(start_key));
-    range->set_end_key(std::string(end_key));
-
-    // mock meta
-    region->set_schema_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
-    region->set_table_id(2);
-
-    // mock create ts
-    region->set_create_timestamp(1677496540);
-  }
-
-  // LOG(INFO) << request.DebugString();
-
-  stub.StoreHeartbeat(&cntl, &request, &response, nullptr);
-  if (cntl.Failed()) {
-    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
-    bthread_usleep(FLAGS_timeout_ms * 1000L);
-  }
-
-  if (FLAGS_log_each_request) {
-    LOG(INFO) << "Received response"
-              << " store_heartbeat "
-              << " request_attachment=" << cntl.request_attachment().size()
-              << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
-    LOG(INFO) << response.DebugString();
-  }
-}
+DEFINE_string(id, "", "Request parameter id, for example: table_id for CreateTable/DropTable");
+DEFINE_string(keyring, "", "Request parameter keyring");
+DEFINE_string(coordinator_addr, "", "coordinator servr addr, for example: 127.0.0.1:8001");
+DEFINE_string(group, "0", "Id of the replication group, now coordinator use 0 as groupid");
 
 void* Sender(void* /*arg*/) {
-  while (!brpc::IsAskedToQuit()) {
-    braft::PeerId leader(FLAGS_coordinator_addr);
-
-    // rpc
-    brpc::Channel channel;
-    if (channel.Init(leader.addr, nullptr) != 0) {
-      LOG(ERROR) << "Fail to init channel to " << leader;
-      bthread_usleep(FLAGS_timeout_ms * 1000L);
-      continue;
-    }
-    dingodb::pb::coordinator::CoordinatorService_Stub stub(&channel);
-    dingodb::pb::node::NodeService_Stub node_stub(&channel);
-
-    brpc::Controller cntl;
-    cntl.set_timeout_ms(FLAGS_timeout_ms);
-
-    if (FLAGS_method == "Hello") {
-      SendHello(cntl, stub);
-    } else if (FLAGS_method == "StoreHeartbeat") {
-      SendStoreHearbeat(cntl, stub, 100);
-      cntl.Reset();
-      SendStoreHearbeat(cntl, stub, 200);
-      cntl.Reset();
-      SendStoreHearbeat(cntl, stub, 300);
-    } else if (FLAGS_method == "CreateStore") {
-      SendCreateStore(cntl, stub);
-    } else if (FLAGS_method == "DeleteStore") {
-      SendDeleteStore(cntl, stub);
-    } else if (FLAGS_method == "CreateExecutor") {
-      SendCreateExecutor(cntl, stub);
-    } else if (FLAGS_method == "DeleteExecutor") {
-      SendDeleteExecutor(cntl, stub);
-    } else if (FLAGS_method == "GetStoreMap") {
-      SendGetStoreMap(cntl, stub);
-    } else if (FLAGS_method == "GetExecutorMap") {
-      SendGetExecutorMap(cntl, stub);
-    } else if (FLAGS_method == "GetRegionMap") {
-      SendGetRegionMap(cntl, stub);
-    } else if (FLAGS_method == "GetCoordinatorMap") {
-      SendGetCoordinatorMap(cntl, stub);
-    } else if (FLAGS_method == "GetNodeInfo") {
-      SendGetNodeInfo(cntl, node_stub);
-    } else {
-      LOG(INFO) << " method illegal , exit";
-      return nullptr;
-    }
-
-    bthread_usleep(FLAGS_timeout_ms * 10000L);
+  // get leader location
+  std::string leader_location = GetLeaderLocation();
+  if (leader_location.empty()) {
+    LOG(WARNING) << "GetLeaderLocation failed, use coordinator_addr instead";
+    leader_location = FLAGS_coordinator_addr;
   }
+
+  braft::PeerId leader;
+  if (leader.parse(leader_location) != 0) {
+    LOG(ERROR) << "Fail to parse leader peer_id " << leader_location;
+    return nullptr;
+  }
+
+  // get orignial node location
+  braft::PeerId node;
+  if (node.parse(FLAGS_coordinator_addr) != 0) {
+    LOG(ERROR) << "Fail to parse node peer_id " << FLAGS_coordinator_addr;
+    return nullptr;
+  }
+
+  // rpc for leader access
+  brpc::Channel channel;
+  if (channel.Init(leader.addr, nullptr) != 0) {
+    LOG(ERROR) << "Fail to init channel to " << leader;
+    bthread_usleep(FLAGS_timeout_ms * 1000L);
+    return nullptr;
+  }
+  dingodb::pb::coordinator::CoordinatorService_Stub coordinator_stub(&channel);
+  dingodb::pb::meta::MetaService_Stub meta_stub(&channel);
+
+  // rpc for node access
+  brpc::Channel channel_node;
+  if (channel_node.Init(node.addr, nullptr) != 0) {
+    LOG(ERROR) << "Fail to init channel_node to " << node;
+    bthread_usleep(FLAGS_timeout_ms * 1000L);
+    return nullptr;
+  }
+  dingodb::pb::node::NodeService_Stub node_stub(&channel_node);
+
+  brpc::Controller cntl;
+  cntl.set_timeout_ms(FLAGS_timeout_ms);
+
+  if (FLAGS_method == "Hello") {
+    SendHello(cntl, coordinator_stub);
+  } else if (FLAGS_method == "StoreHeartbeat") {
+    SendStoreHearbeat(cntl, coordinator_stub, 100);
+    cntl.Reset();
+    SendStoreHearbeat(cntl, coordinator_stub, 200);
+    cntl.Reset();
+    SendStoreHearbeat(cntl, coordinator_stub, 300);
+  } else if (FLAGS_method == "CreateStore") {
+    SendCreateStore(cntl, coordinator_stub);
+  } else if (FLAGS_method == "DeleteStore") {
+    SendDeleteStore(cntl, coordinator_stub);
+  } else if (FLAGS_method == "CreateExecutor") {
+    SendCreateExecutor(cntl, coordinator_stub);
+  } else if (FLAGS_method == "DeleteExecutor") {
+    SendDeleteExecutor(cntl, coordinator_stub);
+  } else if (FLAGS_method == "GetStoreMap") {
+    SendGetStoreMap(cntl, coordinator_stub);
+  } else if (FLAGS_method == "GetExecutorMap") {
+    SendGetExecutorMap(cntl, coordinator_stub);
+  } else if (FLAGS_method == "GetRegionMap") {
+    SendGetRegionMap(cntl, coordinator_stub);
+  } else if (FLAGS_method == "GetCoordinatorMap") {
+    SendGetCoordinatorMap(cntl, coordinator_stub);
+  } else if (FLAGS_method == "GetNodeInfo") {
+    SendGetNodeInfo(cntl, node_stub);
+  } else if (FLAGS_method == "GetSchemas") {
+    SendGetSchemas(cntl, meta_stub);
+  } else if (FLAGS_method == "GetTables") {
+    SendGetTables(cntl, meta_stub);
+  } else if (FLAGS_method == "GetTablesCount") {
+    SendGetTablesCount(cntl, meta_stub);
+  } else if (FLAGS_method == "CreateTable") {
+    SendCreateTable(cntl, meta_stub, false);
+  } else if (FLAGS_method == "CreateTableWithId") {
+    SendCreateTable(cntl, meta_stub, true);
+  } else if (FLAGS_method == "CreateTableId") {
+    SendCreateTableId(cntl, meta_stub);
+  } else if (FLAGS_method == "DropTable") {
+    SendDropTable(cntl, meta_stub);
+  } else if (FLAGS_method == "CreateSchema") {
+    SendCreateSchema(cntl, meta_stub);
+  } else if (FLAGS_method == "DropSchema") {
+    SendDropSchema(cntl, meta_stub);
+  } else if (FLAGS_method == "GetTable") {
+    SendGetTable(cntl, meta_stub);
+  } else {
+    LOG(INFO) << " method illegal , exit";
+    return nullptr;
+  }
+
   return nullptr;
 }
 
 int main(int argc, char* argv[]) {
   google::ParseCommandLineFlags(&argc, &argv, true);
+
+  if (FLAGS_coordinator_addr.empty()) {
+    LOG(ERROR) << "Please set --conf or --coordinator_addr";
+    return -1;
+  }
 
   std::vector<bthread_t> tids;
   tids.resize(FLAGS_thread_num);
@@ -409,13 +148,7 @@ int main(int argc, char* argv[]) {
     }
   }
 
-  while (!brpc::IsAskedToQuit()) {
-    LOG_IF(INFO, !FLAGS_log_each_request)
-        << "Sending Request"
-        << " qps=" << g_latency_recorder.qps(1) << " latency=" << g_latency_recorder.latency(1);
-  }
-
-  LOG(INFO) << "Coordinator client is going to quit";
+  // LOG(INFO) << "Coordinator client is going to quit";
   for (int i = 0; i < FLAGS_thread_num; ++i) {
     bthread_join(tids[i], nullptr);
   }
