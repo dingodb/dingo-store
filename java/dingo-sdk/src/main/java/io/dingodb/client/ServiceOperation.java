@@ -43,7 +43,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
 import java.util.TreeMap;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.stream.Collectors;
@@ -51,9 +51,9 @@ import java.util.stream.Collectors;
 @Slf4j
 public class ServiceOperation {
 
-    private static Map<String, RouteTable> dingoRouteTables = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
-    private static Map<String, Table> tableDefinitionInCache = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
-    private static Map<String, StoreServiceClient> storeServiceClientMap = new ConcurrentHashMap<>();
+    private static Map<String, RouteTable> dingoRouteTables = new ConcurrentSkipListMap<>(String.CASE_INSENSITIVE_ORDER);
+    private static Map<String, Table> tableDefinitionInCache = new ConcurrentSkipListMap<>(String.CASE_INSENSITIVE_ORDER);
+    private static Map<String, StoreServiceClient> storeServiceClientMap = new ConcurrentSkipListMap<>();
 
     private UnifyStoreConnection connection;
     private int retryTimes;
@@ -69,10 +69,11 @@ public class ServiceOperation {
     }
 
     public Result operation(String tableName, StoreOperationType type, ContextForClient clientParameters) {
+        int retryTimes = this.retryTimes;
         RouteTable routeTable = getAndRefreshRouteTable(tableName, false);
         if (routeTable == null) {
             log.error("table {} not found when do operation:{}", tableName, type);
-            return new Result(false, null);
+            return new Result(false, "table: " + tableName + " not found");
         }
         int code = -1;
         String message = "";
@@ -258,14 +259,14 @@ public class ServiceOperation {
         return tableDef;
     }
 
-    public synchronized void updateCacheOfTableDefinition(final String tableName, final Table tableDef) {
+    public void updateCacheOfTableDefinition(final String tableName, final Table tableDef) {
         if (tableName != null && !tableName.isEmpty() && tableDef != null) {
             tableDefinitionInCache.put(tableName, tableDef);
             log.info("update cache of table:{} definition:{}", tableName, tableDef);
         }
     }
 
-    public synchronized void removeCacheOfTableDefinition(String tableName) {
+    public void removeCacheOfTableDefinition(String tableName) {
         if (tableName != null) {
             Table table = tableDefinitionInCache.remove(tableName);
             dingoRouteTables.remove(tableName);
@@ -301,12 +302,12 @@ public class ServiceOperation {
                 .build();
     }
 
-    private synchronized StoreServiceClient getStore(final RouteTable routeTable, String leaderAddress) {
+    private StoreServiceClient getStore(final RouteTable routeTable, String leaderAddress) {
         return storeServiceClientMap.computeIfAbsent(leaderAddress,
                 client -> routeTable.getLeaderStoreService(leaderAddress));
     }
 
-    private synchronized Meta.Part getPartByStartKey(final RouteTable routeTable, byte[] keyInBytes) {
+    private Meta.Part getPartByStartKey(final RouteTable routeTable, byte[] keyInBytes) {
         return routeTable.getPartByKey(keyInBytes);
     }
 }
