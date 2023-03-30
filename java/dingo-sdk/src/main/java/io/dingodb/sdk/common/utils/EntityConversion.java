@@ -46,6 +46,7 @@ import static io.dingodb.meta.Meta.SqlType.SQL_TYPE_TIME;
 import static io.dingodb.meta.Meta.SqlType.SQL_TYPE_TIMESTAMP;
 import static io.dingodb.meta.Meta.SqlType.SQL_TYPE_VARCHAR;
 import static io.dingodb.sdk.common.utils.ByteArrayUtils.EMPTY_BYTES;
+import static io.dingodb.sdk.common.utils.Parameters.cleanNull;
 
 public class EntityConversion {
 
@@ -146,7 +147,7 @@ public class EntityConversion {
                 .setName(column.getName())
                 .setNullable(column.isNullable())
                 .setElementType(Meta.ElementType.ELEM_TYPE_STRING)
-                .setDefaultVal(column.getDefaultValue())
+                .setDefaultVal(cleanNull(column.getDefaultValue(), ""))
                 .setPrecision(column.getPrecision())
                 .setScale(column.getScale())
                 .setIndexOfKey(column.getPrimary())
