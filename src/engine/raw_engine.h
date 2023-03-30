@@ -28,35 +28,6 @@
 
 namespace dingodb {
 
-enum class EnumEngineIterator {
-  kRocksIterator = 0,
-  kMemoryIterator = 1,
-  kXdpIterator = 2,
-  kRaftStoreIterator = 3,
-  kColumnarIterator = 4,
-};
-
-enum class EnumEngineReader {
-  kRocksReader = 0,
-  kMemoryReader = 1,
-  kXdpReader = 2,
-  kRaftStoreReader = 3,
-  kColumnarReader = 4,
-};
-
-class EngineIterator : public std::enable_shared_from_this<EngineIterator> {
- public:
-  EngineIterator() = default;
-  virtual ~EngineIterator() = default;
-  std::shared_ptr<EngineIterator> GetSelf() { return shared_from_this(); }
-
-  virtual bool HasNext() = 0;
-  virtual void Next() = 0;
-  virtual void GetKV(std::string& key, std::string& value) = 0;  // NOLINT
-  virtual const std::string& GetName() const = 0;
-  virtual uint32_t GetID() = 0;
-};
-
 class RawEngine {
  public:
   virtual ~RawEngine() = default;
@@ -111,6 +82,7 @@ class RawEngine {
 
   virtual void Flush(const std::string& cf_name) = 0;
 
+  virtual std::shared_ptr<Snapshot> NewSnapshot() = 0;
   virtual std::shared_ptr<Reader> NewReader(const std::string& cf_name) = 0;
   virtual std::shared_ptr<RawEngine::Writer> NewWriter(const std::string& cf_name) = 0;
 

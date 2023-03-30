@@ -58,7 +58,6 @@ bool MetaReader::Scan(std::shared_ptr<Snapshot> snapshot, const std::string& pre
                       std::vector<pb::common::KeyValue>& kvs) {
   auto reader = engine_->NewReader(Constant::kStoreMetaCF);
   const std::string prefix_next = Helper::Increment(prefix);
-
   butil::Status status;
   if (snapshot) {
     status = reader->KvScan(snapshot, prefix, prefix_next, kvs);

@@ -37,6 +37,8 @@ class Constant {
   static const std::string kStoreMetaCF;
   // Define store meta prefix.
   static const std::string kStoreRegionMetaPrefix;
+  // Define store raft prefix.
+  static const std::string kStoreRaftMetaPrefix;
 };
 
 }  // namespace dingodb

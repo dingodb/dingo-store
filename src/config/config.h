@@ -23,10 +23,9 @@ namespace dingodb {
 
 class Config {
  public:
-  Config(){};
-  ~Config(){};
+  Config() = default;
+  virtual ~Config() = default;
 
- public:
   virtual int Load(const std::string& data) = 0;
   virtual int LoadFile(const std::string& filename) = 0;
   virtual int ReloadFile(const std::string& filename) = 0;

@@ -18,8 +18,6 @@
 
 namespace dingodb {
 
-MemEngine::MemEngine() {}
-
 bool MemEngine::Init(std::shared_ptr<Config> config) {
   DINGO_LOG(INFO) << "Init MemEngine...";
   return true;

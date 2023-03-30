@@ -118,6 +118,11 @@ class Helper {
   // generate random string for keyring
   static std::string GenerateRandomString(int length);
   static uint64_t GenId();
+
+  // Create hard link
+  static bool Link(const std::string& old_path, const std::string& new_path);
+
+  static uint64_t Timestamp();
 };
 
 }  // namespace dingodb

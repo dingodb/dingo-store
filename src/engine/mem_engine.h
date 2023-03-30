@@ -27,9 +27,10 @@ namespace dingodb {
 
 class MemEngine : public Engine {
  public:
-  MemEngine();
+  MemEngine() = default;
+  ~MemEngine() override = default;
 
-  bool Init(std::shared_ptr<Config> config);
+  bool Init(std::shared_ptr<Config> config) override;
   std::string GetName() override;
   pb::common::Engine GetID() override;
 

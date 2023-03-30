@@ -22,18 +22,22 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
 #include <iostream>
 #include <memory>
+#include <numeric>
+#include <random>
 #include <string>
 #include <vector>
 
 #include "butil/status.h"
 #include "common/context.h"
-#include "config/config_manager.h"
-#include "engine/engine.h"
+#include "common/helper.h"
+#include "config/config.h"
+#include "config/yaml_config.h"
 #include "engine/raw_rocks_engine.h"
-#include "engine/rocks_engine.h"
 #include "proto/common.pb.h"
+#include "proto/store_internal.pb.h"
 #include "server/server.h"
 
 #if 0
@@ -71,112 +75,129 @@ bool DeleteFile(const char *path) {
 }
 #endif
 
-static const std::string &kDefaultCf = "default";
+static const std::string kDefaultCf = "default";
 // static const std::string &kDefaultCf = "meta";
 
-class RawRocksEngineTest {
- public:
-  std::shared_ptr<dingodb::Config> GetConfig() { return config_; }
+const char kAlphabet[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r',
+                          's', 't', 'o', 'v', 'w', 'x', 'y', 'z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'};
 
-  dingodb::RawRocksEngine &GetRawRocksEngine() { return raw_raw_rocks_engine_; }
+// rand string
+std::string GenRandomString(int len) {
+  std::string result;
+  int alphabet_len = sizeof(kAlphabet);
 
-  void MySetUp() {
-    std::cout << "RawRocksEngineTest::SetUp()" << std::endl;
-    server_ = dingodb::Server::GetInstance();
-    filename_ = "../../conf/store.yaml";
-    server_->SetRole(dingodb::pb::common::ClusterRole::STORE);
-    server_->InitConfig(filename_);
-    config_manager_ = dingodb::ConfigManager::GetInstance();
-    config_ = config_manager_->GetConfig(dingodb::pb::common::ClusterRole::STORE);
+  std::default_random_engine def_engine;
+  std::uniform_int_distribution<> distrib(1, 1000000000);
+  for (int i = 0; i < len; ++i) {
+    result.append(1, kAlphabet[distrib(def_engine) % alphabet_len]);
   }
-  void MyTearDown() {}
 
- private:
-  dingodb::Server *server_;
-  std::string filename_ = "../../conf/store.yaml";
-  dingodb::ConfigManager *config_manager_;
-  std::shared_ptr<dingodb::Config> config_;
-  dingodb::RawRocksEngine raw_raw_rocks_engine_;
+  return result;
+}
+
+const std::string kYamlConfigContent =
+    "cluster:\n"
+    "  name: dingodb\n"
+    "  instance_id: 12345\n"
+    "  coordinators: 127.0.0.1:19190,127.0.0.1:19191,127.0.0.1:19192\n"
+    "  keyring: TO_BE_CONTINUED\n"
+    "server:\n"
+    "  host: 127.0.0.1\n"
+    "  port: 23000\n"
+    "  heartbeatInterval: 10000 # ms\n"
+    "raft:\n"
+    "  host: 127.0.0.1\n"
+    "  port: 23100\n"
+    "  path: /tmp/dingo-store/data/store/raft\n"
+    "  electionTimeout: 1000 # ms\n"
+    "  snapshotInterval: 3600 # s\n"
+    "log:\n"
+    "  logPath: /tmp/dingo-store/log\n"
+    "store:\n"
+    "  dbPath: /tmp/dingo-store/data/store/db\n"
+    "  base:\n"
+    "    block_size: 131072\n"
+    "    block_cache: 67108864\n"
+    "    arena_block_size: 67108864\n"
+    "    min_write_buffer_number_to_merge: 4\n"
+    "    max_write_buffer_number: 4\n"
+    "    max_compaction_bytes: 134217728\n"
+    "    write_buffer_size: 4194304\n"
+    "    prefix_extractor: 8\n"
+    "    max_bytes_for_level_base: 41943040\n"
+    "    target_file_size_base: 4194304\n"
+    "  default:\n"
+    "  instruction:\n"
+    "    max_write_buffer_number: 3\n"
+    "  columnFamilies:\n"
+    "    - default\n"
+    "    - meta\n"
+    "    - instruction\n";
+
+class RawRocksEngineTest : public testing::Test {
+ protected:
+  static void SetUpTestSuite() {
+    std::srand(std::time(nullptr));
+
+    std::shared_ptr<dingodb::Config> config = std::make_shared<dingodb::YamlConfig>();
+    if (config->Load(kYamlConfigContent) != 0) {
+      std::cout << "Load config failed" << std::endl;
+      return;
+    }
+
+    engine = std::make_shared<dingodb::RawRocksEngine>();
+    if (!engine->Init(config)) {
+      std::cout << "RawRocksEngine init failed" << std::endl;
+    }
+  }
+
+  static void TearDownTestSuite() {
+    engine->Close();
+    engine->Destroy();
+  }
+
+  void SetUp() override {}
+
+  void TearDown() override {}
+
+  static std::shared_ptr<dingodb::RawRocksEngine> engine;
 };
 
-static RawRocksEngineTest *rocks_engine_test = nullptr;
+std::shared_ptr<dingodb::RawRocksEngine> RawRocksEngineTest::engine = nullptr;
 
-TEST(RawRocksEngineTest, BeforeInit) {
-  rocks_engine_test = new RawRocksEngineTest();
-  rocks_engine_test->MySetUp();
-}
-
-TEST(RawRocksEngineTest, MyInit) {
-  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test->GetRawRocksEngine();
-
-  bool ret = raw_rocks_engine.Init({});
-  EXPECT_FALSE(ret);
-
-  std::shared_ptr<dingodb::Config> config = rocks_engine_test->GetConfig();
-#if 0
-  std::string store_db_path_value = config->GetString("store.dbPath");
-  if (!store_db_path_value.empty()) {
-    struct stat statbuf;
-    lstat(store_db_path_value.c_str(), &statbuf);
-    if (S_ISDIR(statbuf.st_mode)) {
-      std::cout << "path : " << store_db_path_value << "need to delete [Y/N]"
-                << std::endl;
-      std::string s;
-      std::cin >> s;
-      if (s == "Y" || s == "y" || s == "yes" || s == "Yes") {
-        DeleteFile(store_db_path_value.c_str());
-      }
-    }
-#endif
-
-  // Test for various configuration file exceptions
-  ret = raw_rocks_engine.Init(config);
-  EXPECT_TRUE(ret);
-}
-
-TEST(RawRocksEngineTest, GetName) {
-  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test->GetRawRocksEngine();
-
-  std::string name = raw_rocks_engine.GetName();
+TEST_F(RawRocksEngineTest, GetName) {
+  std::string name = RawRocksEngineTest::engine->GetName();
   EXPECT_EQ(name, "RAW_ENG_ROCKSDB");
 }
 
-TEST(RawRocksEngineTest, GetID) {
-  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test->GetRawRocksEngine();
-
-  dingodb::pb::common::RawEngine id = raw_rocks_engine.GetID();
+TEST_F(RawRocksEngineTest, GetID) {
+  dingodb::pb::common::RawEngine id = RawRocksEngineTest::engine->GetID();
   EXPECT_EQ(id, dingodb::pb::common::RawEngine::RAW_ENG_ROCKSDB);
 }
 
-TEST(RawRocksEngineTest, GetSnapshot$ReleaseSnapshot) {
-  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test->GetRawRocksEngine();
-
-  std::shared_ptr<dingodb::Snapshot> snapshot = raw_rocks_engine.GetSnapshot();
+TEST_F(RawRocksEngineTest, GetSnapshot$ReleaseSnapshot) {
+  std::shared_ptr<dingodb::Snapshot> snapshot = RawRocksEngineTest::engine->GetSnapshot();
   EXPECT_NE(snapshot.get(), nullptr);
 
-  // raw_rocks_engine.ReleaseSnapshot(snapshot);
+  // RawRocksEngineTest::engine->ReleaseSnapshot(snapshot);
 
   // bugs crash
-  // raw_rocks_engine.ReleaseSnapshot({});
+  // RawRocksEngineTest::engine->ReleaseSnapshot({});
 }
 
-TEST(RawRocksEngineTest, Flush) {
-  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test->GetRawRocksEngine();
-
+TEST_F(RawRocksEngineTest, Flush) {
   const std::string &cf_name = kDefaultCf;
 
   // bugs if cf_name empty or not exists. crash
-  raw_rocks_engine.Flush(cf_name);
+  RawRocksEngineTest::engine->Flush(cf_name);
 }
 
-TEST(RawRocksEngineTest, NewReader) {
-  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test->GetRawRocksEngine();
-
+TEST_F(RawRocksEngineTest, NewReader) {
   // cf empty
   {
     const std::string &cf_name = "";
 
-    std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
+    std::shared_ptr<dingodb::RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
 
     EXPECT_EQ(reader.get(), nullptr);
   }
@@ -185,7 +206,7 @@ TEST(RawRocksEngineTest, NewReader) {
   {
     const std::string &cf_name = "12345";
 
-    std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
+    std::shared_ptr<dingodb::RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
 
     EXPECT_EQ(reader.get(), nullptr);
   }
@@ -194,20 +215,18 @@ TEST(RawRocksEngineTest, NewReader) {
   {
     const std::string &cf_name = kDefaultCf;
 
-    std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
+    std::shared_ptr<dingodb::RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
 
     EXPECT_NE(reader.get(), nullptr);
   }
 }
 
-TEST(RawRocksEngineTest, NewWriter) {
-  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test->GetRawRocksEngine();
-
+TEST_F(RawRocksEngineTest, NewWriter) {
   // cf empty
   {
     const std::string &cf_name = "";
 
-    std::shared_ptr<dingodb::RawEngine::Writer> writer = raw_rocks_engine.NewWriter(cf_name);
+    std::shared_ptr<dingodb::RawEngine::Writer> writer = RawRocksEngineTest::engine->NewWriter(cf_name);
 
     EXPECT_EQ(writer.get(), nullptr);
   }
@@ -216,7 +235,7 @@ TEST(RawRocksEngineTest, NewWriter) {
   {
     const std::string &cf_name = "12345";
 
-    std::shared_ptr<dingodb::RawEngine::Writer> writer = raw_rocks_engine.NewWriter(cf_name);
+    std::shared_ptr<dingodb::RawEngine::Writer> writer = RawRocksEngineTest::engine->NewWriter(cf_name);
 
     EXPECT_EQ(writer.get(), nullptr);
   }
@@ -224,16 +243,15 @@ TEST(RawRocksEngineTest, NewWriter) {
   // ok
   {
     const std::string &cf_name = kDefaultCf;
-    std::shared_ptr<dingodb::RawEngine::Writer> writer = raw_rocks_engine.NewWriter(cf_name);
+    std::shared_ptr<dingodb::RawEngine::Writer> writer = RawRocksEngineTest::engine->NewWriter(cf_name);
 
     EXPECT_NE(writer.get(), nullptr);
   }
 }
 
-TEST(RawRocksEngineTest, KvPut) {
-  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test->GetRawRocksEngine();
+TEST_F(RawRocksEngineTest, KvPut) {
   const std::string &cf_name = kDefaultCf;
-  std::shared_ptr<dingodb::RawEngine::Writer> writer = raw_rocks_engine.NewWriter(cf_name);
+  std::shared_ptr<dingodb::RawEngine::Writer> writer = RawRocksEngineTest::engine->NewWriter(cf_name);
 
   // key empty
   {
@@ -280,10 +298,9 @@ TEST(RawRocksEngineTest, KvPut) {
   }
 }
 
-TEST(RawRocksEngineTest, KvBatchPut) {
-  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test->GetRawRocksEngine();
+TEST_F(RawRocksEngineTest, KvBatchPut) {
   const std::string &cf_name = kDefaultCf;
-  std::shared_ptr<dingodb::RawEngine::Writer> writer = raw_rocks_engine.NewWriter(cf_name);
+  std::shared_ptr<dingodb::RawEngine::Writer> writer = RawRocksEngineTest::engine->NewWriter(cf_name);
 
   // key empty
   {
@@ -348,7 +365,7 @@ TEST(RawRocksEngineTest, KvBatchPut) {
     std::string value1;
     std::string value2;
     std::string value3;
-    std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
+    std::shared_ptr<dingodb::RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
     ok = reader->KvGet("key1", value1);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
     EXPECT_EQ("value1", value1);
@@ -363,10 +380,9 @@ TEST(RawRocksEngineTest, KvBatchPut) {
   }
 }
 
-TEST(RawRocksEngineTest, KvBatchPutAndDelete) {
-  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test->GetRawRocksEngine();
+TEST_F(RawRocksEngineTest, KvBatchPutAndDelete) {
   const std::string &cf_name = kDefaultCf;
-  std::shared_ptr<dingodb::RawEngine::Writer> writer = raw_rocks_engine.NewWriter(cf_name);
+  std::shared_ptr<dingodb::RawEngine::Writer> writer = RawRocksEngineTest::engine->NewWriter(cf_name);
 
   // key empty failed
   {
@@ -480,7 +496,7 @@ TEST(RawRocksEngineTest, KvBatchPutAndDelete) {
     std::string value1;
     std::string value2;
     std::string value3;
-    std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
+    std::shared_ptr<dingodb::RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
 
     ok = reader->KvGet("not_found_key", value1);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_NOTFOUND);
@@ -534,7 +550,7 @@ TEST(RawRocksEngineTest, KvBatchPutAndDelete) {
     std::string value2;
     std::string value3;
 
-    std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
+    std::shared_ptr<dingodb::RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
 
     ok = reader->KvGet("key1", value1);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_NOTFOUND);
@@ -573,7 +589,7 @@ TEST(RawRocksEngineTest, KvBatchPutAndDelete) {
     std::string value1;
     std::string value2;
     std::string value3;
-    std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
+    std::shared_ptr<dingodb::RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
     ok = reader->KvGet("key1", value1);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
     EXPECT_EQ("value1", value1);
@@ -588,11 +604,9 @@ TEST(RawRocksEngineTest, KvBatchPutAndDelete) {
   }
 }
 
-TEST(RawRocksEngineTest, KvGet) {
-  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test->GetRawRocksEngine();
-
+TEST_F(RawRocksEngineTest, KvGet) {
   const std::string &cf_name = kDefaultCf;
-  std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
+  std::shared_ptr<dingodb::RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
 
   // key empty
   {
@@ -612,17 +626,16 @@ TEST(RawRocksEngineTest, KvGet) {
   }
 }
 
-TEST(RawRocksEngineTest, KvCompareAndSet) {
-  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test->GetRawRocksEngine();
+TEST_F(RawRocksEngineTest, KvCompareAndSet) {
   const std::string &cf_name = kDefaultCf;
-  std::shared_ptr<dingodb::RawEngine::Writer> writer = raw_rocks_engine.NewWriter(cf_name);
+  std::shared_ptr<dingodb::RawEngine::Writer> writer = RawRocksEngineTest::engine->NewWriter(cf_name);
 
   // key empty
   {
     dingodb::pb::common::KeyValue kv;
     std::string value = "value123456";
+    bool key_state;
 
-    bool key_state = false;
     butil::Status ok = writer->KvCompareAndSet(kv, value, key_state);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_EMPTY);
   }
@@ -632,7 +645,8 @@ TEST(RawRocksEngineTest, KvCompareAndSet) {
     dingodb::pb::common::KeyValue kv;
     kv.set_key("key");
     std::string value = "value";
-    bool key_state = false;
+    bool key_state;
+
     butil::Status ok = writer->KvCompareAndSet(kv, value, key_state);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_NOTFOUND);
   }
@@ -642,8 +656,8 @@ TEST(RawRocksEngineTest, KvCompareAndSet) {
     dingodb::pb::common::KeyValue kv;
     kv.set_key("key1");
     std::string value = "value123456";
+    bool key_state;
 
-    bool key_state = false;
     butil::Status ok = writer->KvCompareAndSet(kv, value, key_state);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EINTERNAL);
   }
@@ -654,13 +668,13 @@ TEST(RawRocksEngineTest, KvCompareAndSet) {
     kv.set_key("key1");
     kv.set_value("value1");
     const std::string &value = "value1_modify";
+    bool key_state;
 
-    bool key_state = false;
     butil::Status ok = writer->KvCompareAndSet(kv, value, key_state);
 
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
-    std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
+    std::shared_ptr<dingodb::RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
     std::string key = kv.key();
     std::string value_another;
     ok = reader->KvGet(key, value_another);
@@ -674,13 +688,13 @@ TEST(RawRocksEngineTest, KvCompareAndSet) {
     kv.set_key("key1");
     kv.set_value("value1_modify");
     const std::string &value = "";
+    bool key_state;
 
-    bool key_state = false;
     butil::Status ok = writer->KvCompareAndSet(kv, value, key_state);
 
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
-    std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
+    std::shared_ptr<dingodb::RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
     std::string key = kv.key();
     std::string value_another;
     ok = reader->KvGet(key, value_another);
@@ -693,13 +707,13 @@ TEST(RawRocksEngineTest, KvCompareAndSet) {
     kv.set_key("key1");
     kv.set_value("");
     const std::string &value = "value1";
+    bool key_state;
 
-    bool key_state = false;
     butil::Status ok = writer->KvCompareAndSet(kv, value, key_state);
 
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
-    std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
+    std::shared_ptr<dingodb::RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
     std::string key = kv.key();
     std::string value_another;
     ok = reader->KvGet(key, value_another);
@@ -709,11 +723,10 @@ TEST(RawRocksEngineTest, KvCompareAndSet) {
 }
 
 #if 0
-TEST(RawRocksEngineTest, KvBatchGet) {
-  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test->GetRawRocksEngine();
+TEST_F(RawRocksEngineTest, KvBatchGet) {
 
   const std::string &cf_name = kDefaultCf;
-  std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
+  std::shared_ptr<dingodb::RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
 
   // key all empty
   {
@@ -753,14 +766,14 @@ TEST(RawRocksEngineTest, KvBatchGet) {
 }
 #endif
 
-TEST(RawRocksEngineTest, KvPutIfAbsent) {
-  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test->GetRawRocksEngine();
+TEST_F(RawRocksEngineTest, KvPutIfAbsent) {
   const std::string &cf_name = kDefaultCf;
-  std::shared_ptr<dingodb::RawEngine::Writer> writer = raw_rocks_engine.NewWriter(cf_name);
+  std::shared_ptr<dingodb::RawEngine::Writer> writer = RawRocksEngineTest::engine->NewWriter(cf_name);
 
   // key empty
   {
     dingodb::pb::common::KeyValue kv;
+
     bool key_state;
     butil::Status ok = writer->KvPutIfAbsent(kv, key_state);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_EMPTY);
@@ -853,10 +866,9 @@ TEST(RawRocksEngineTest, KvPutIfAbsent) {
   }
 }
 
-TEST(RawRocksEngineTest, KvBatchPutIfAbsentAtomic) {
-  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test->GetRawRocksEngine();
+TEST_F(RawRocksEngineTest, KvBatchPutIfAbsentAtomic) {
   const std::string &cf_name = kDefaultCf;
-  std::shared_ptr<dingodb::RawEngine::Writer> writer = raw_rocks_engine.NewWriter(cf_name);
+  std::shared_ptr<dingodb::RawEngine::Writer> writer = RawRocksEngineTest::engine->NewWriter(cf_name);
 
   // key all empty
   {
@@ -872,7 +884,7 @@ TEST(RawRocksEngineTest, KvBatchPutIfAbsentAtomic) {
   {
     std::vector<std::string> keys;
     std::vector<dingodb::pb::common::KeyValue> kvs;
-    std::vector<std::string> put_keys;
+    std::vector<bool> key_states;
 
     dingodb::pb::common::KeyValue kv;
     kv.set_key("key1");
@@ -883,8 +895,6 @@ TEST(RawRocksEngineTest, KvBatchPutIfAbsentAtomic) {
     kv.set_value("value2");
     kvs.push_back(kv);
 
-    std::vector<bool> key_states;
-
     butil::Status ok = writer->KvBatchPutIfAbsent(kvs, key_states, true);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_EMPTY);
   }
@@ -893,7 +903,7 @@ TEST(RawRocksEngineTest, KvBatchPutIfAbsentAtomic) {
   {
     std::vector<std::string> keys;
     std::vector<dingodb::pb::common::KeyValue> kvs;
-    std::vector<std::string> put_keys;
+    std::vector<bool> key_states;
 
     dingodb::pb::common::KeyValue kv;
 
@@ -913,14 +923,12 @@ TEST(RawRocksEngineTest, KvBatchPutIfAbsentAtomic) {
     kv.set_value("value");
     kvs.push_back(kv);
 
-    std::vector<bool> key_states;
-
     butil::Status ok = writer->KvBatchPutIfAbsent(kvs, key_states, true);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EINTERNAL);
-    EXPECT_EQ(0, put_keys.size());
+    EXPECT_EQ(kvs.size(), key_states.size());
 
     std::string value;
-    std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
+    std::shared_ptr<dingodb::RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
     ok = reader->KvGet("key111", value);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_NOTFOUND);
   }
@@ -929,6 +937,7 @@ TEST(RawRocksEngineTest, KvBatchPutIfAbsentAtomic) {
   {
     std::vector<std::string> keys;
     std::vector<dingodb::pb::common::KeyValue> kvs;
+    std::vector<bool> key_states;
 
     dingodb::pb::common::KeyValue kv;
 
@@ -948,16 +957,11 @@ TEST(RawRocksEngineTest, KvBatchPutIfAbsentAtomic) {
     kv.set_value("value104");
     kvs.push_back(kv);
 
-    std::vector<bool> key_states;
-
     butil::Status ok = writer->KvBatchPutIfAbsent(kvs, key_states, true);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
-    for (size_t i = 0; i < key_states.size(); i++) {
-      bool state = key_states[i];
-      EXPECT_EQ(true, state);
-    }
+    EXPECT_EQ(kvs.size(), key_states.size());
 
-    std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
+    std::shared_ptr<dingodb::RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
 
     std::string value;
     ok = reader->KvGet("key101", value);
@@ -974,17 +978,14 @@ TEST(RawRocksEngineTest, KvBatchPutIfAbsentAtomic) {
   }
 }
 
-TEST(RawRocksEngineTest, KvBatchPutIfAbsentNonAtomic) {
-  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test->GetRawRocksEngine();
+TEST_F(RawRocksEngineTest, KvBatchPutIfAbsentNonAtomic) {
   const std::string &cf_name = kDefaultCf;
-  std::shared_ptr<dingodb::RawEngine::Writer> writer = raw_rocks_engine.NewWriter(cf_name);
+  std::shared_ptr<dingodb::RawEngine::Writer> writer = RawRocksEngineTest::engine->NewWriter(cf_name);
 
   // key all empty
   {
     std::vector<std::string> keys;
     std::vector<dingodb::pb::common::KeyValue> kvs;
-    std::vector<std::string> put_keys;
-
     std::vector<bool> key_states;
 
     butil::Status ok = writer->KvBatchPutIfAbsent(kvs, key_states, false);
@@ -995,7 +996,7 @@ TEST(RawRocksEngineTest, KvBatchPutIfAbsentNonAtomic) {
   {
     std::vector<std::string> keys;
     std::vector<dingodb::pb::common::KeyValue> kvs;
-    std::vector<std::string> put_keys;
+    std::vector<bool> key_states;
 
     dingodb::pb::common::KeyValue kv;
     kv.set_key("key1");
@@ -1006,8 +1007,6 @@ TEST(RawRocksEngineTest, KvBatchPutIfAbsentNonAtomic) {
     kv.set_value("value2");
     kvs.push_back(kv);
 
-    std::vector<bool> key_states;
-
     butil::Status ok = writer->KvBatchPutIfAbsent(kvs, key_states, false);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_EMPTY);
   }
@@ -1016,6 +1015,7 @@ TEST(RawRocksEngineTest, KvBatchPutIfAbsentNonAtomic) {
   {
     std::vector<std::string> keys;
     std::vector<dingodb::pb::common::KeyValue> kvs;
+    std::vector<bool> key_states;
 
     dingodb::pb::common::KeyValue kv;
 
@@ -1035,19 +1035,11 @@ TEST(RawRocksEngineTest, KvBatchPutIfAbsentNonAtomic) {
     kv.set_value("value");
     kvs.push_back(kv);
 
-    std::vector<bool> key_states;
-
     butil::Status ok = writer->KvBatchPutIfAbsent(kvs, key_states, false);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
-    for (size_t i = 0; i < key_states.size(); i++) {
-      if (0 == i) {
-        EXPECT_EQ(true, key_states[i]);
-      } else {
-        EXPECT_EQ(false, key_states[i]);
-      }
-    }
+    EXPECT_EQ(kvs.size(), key_states.size());
 
-    std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
+    std::shared_ptr<dingodb::RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
 
     std::string value;
     ok = reader->KvGet("key1111", value);
@@ -1058,6 +1050,7 @@ TEST(RawRocksEngineTest, KvBatchPutIfAbsentNonAtomic) {
   {
     std::vector<std::string> keys;
     std::vector<dingodb::pb::common::KeyValue> kvs;
+    std::vector<bool> key_states;
 
     dingodb::pb::common::KeyValue kv;
 
@@ -1077,16 +1070,11 @@ TEST(RawRocksEngineTest, KvBatchPutIfAbsentNonAtomic) {
     kv.set_value("value204");
     kvs.push_back(kv);
 
-    std::vector<bool> key_states;
-
     butil::Status ok = writer->KvBatchPutIfAbsent(kvs, key_states, false);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
-    for (size_t i = 0; i < key_states.size(); i++) {
-      bool state = key_states[i];
-      EXPECT_EQ(true, state);
-    }
+    EXPECT_EQ(kvs.size(), key_states.size());
 
-    std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
+    std::shared_ptr<dingodb::RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
 
     std::string value;
     ok = reader->KvGet("key201", value);
@@ -1106,7 +1094,7 @@ TEST(RawRocksEngineTest, KvBatchPutIfAbsentNonAtomic) {
   {
     std::vector<std::string> keys;
     std::vector<dingodb::pb::common::KeyValue> kvs;
-    std::vector<std::string> put_keys;
+    std::vector<bool> key_states;
 
     dingodb::pb::common::KeyValue kv;
 
@@ -1126,18 +1114,15 @@ TEST(RawRocksEngineTest, KvBatchPutIfAbsentNonAtomic) {
     kv.set_value("value204");
     kvs.push_back(kv);
 
-    std::vector<bool> key_states;
-
     butil::Status ok = writer->KvBatchPutIfAbsent(kvs, key_states, false);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
-    EXPECT_EQ(0, put_keys.size());
+    EXPECT_EQ(kvs.size(), key_states.size());
   }
 }
 
-TEST(RawRocksEngineTest, KvScan) {
-  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test->GetRawRocksEngine();
+TEST_F(RawRocksEngineTest, KvScan) {
   const std::string &cf_name = kDefaultCf;
-  std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
+  std::shared_ptr<dingodb::RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
 
   // start_key empty error
   {
@@ -1192,10 +1177,9 @@ TEST(RawRocksEngineTest, KvScan) {
   }
 }
 
-TEST(RawRocksEngineTest, KvCount) {
-  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test->GetRawRocksEngine();
+TEST_F(RawRocksEngineTest, KvCount) {
   const std::string &cf_name = kDefaultCf;
-  std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
+  std::shared_ptr<dingodb::RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
 
   // start_key empty error
   {
@@ -1237,14 +1221,14 @@ TEST(RawRocksEngineTest, KvCount) {
   }
 }
 
-// TEST(RawRocksEngineTest, CreateReader) {
-//   dingodb::RocksEngine &raw_rocks_engine = rocks_engine_test->GetRawRocksEngine();
+// TEST_F(RawRocksEngineTest, CreateReader) {
+//   dingodb::RocksEngine &engine = rocks_engine_test->GetRawRocksEngine();
 
 //   // Context empty
 //   {
 //     std::shared_ptr<dingodb::Context> ctx;
 
-//     std::shared_ptr<dingodb::EngineReader> reader = raw_rocks_engine.CreateReader({});
+//     std::shared_ptr<dingodb::EngineReader> reader = RawRocksEngineTest::engine->CreateReader({});
 //     EXPECT_EQ(reader.get(), nullptr);
 //   }
 
@@ -1252,7 +1236,7 @@ TEST(RawRocksEngineTest, KvCount) {
 
 //   // Context not empty, but Context name empty
 //   {
-//     std::shared_ptr<dingodb::EngineReader> reader = raw_rocks_engine.CreateReader(ctx);
+//     std::shared_ptr<dingodb::EngineReader> reader = RawRocksEngineTest::engine->CreateReader(ctx);
 //     EXPECT_EQ(reader.get(), nullptr);
 //   }
 
@@ -1260,7 +1244,7 @@ TEST(RawRocksEngineTest, KvCount) {
 //   {
 //     ctx->set_cf_name("dummy");
 
-//     std::shared_ptr<dingodb::EngineReader> reader = raw_rocks_engine.CreateReader(ctx);
+//     std::shared_ptr<dingodb::EngineReader> reader = RawRocksEngineTest::engine->CreateReader(ctx);
 //     EXPECT_EQ(reader.get(), nullptr);
 //   }
 
@@ -1269,18 +1253,18 @@ TEST(RawRocksEngineTest, KvCount) {
 
 //   // ok
 //   {
-//     std::shared_ptr<dingodb::EngineReader> reader = raw_rocks_engine.CreateReader(ctx);
+//     std::shared_ptr<dingodb::EngineReader> reader = RawRocksEngineTest::engine->CreateReader(ctx);
 //     EXPECT_NE(reader.get(), nullptr);
 //   }
 // }
 
-// TEST(RawRocksEngineTest, EngineReader) {
-//   dingodb::RocksEngine &raw_rocks_engine = rocks_engine_test->GetRawRocksEngine();
+// TEST_F(RawRocksEngineTest, EngineReader) {
+//   dingodb::RocksEngine &engine = rocks_engine_test->GetRawRocksEngine();
 //   const std::string &cf_name = kDefaultCf;
 //   std::shared_ptr<dingodb::Context> ctx = std::make_shared<dingodb::Context>();
 //   ctx->set_cf_name(cf_name);
 
-//   std::shared_ptr<dingodb::EngineReader> reader = raw_rocks_engine.CreateReader(ctx);
+//   std::shared_ptr<dingodb::EngineReader> reader = RawRocksEngineTest::engine->CreateReader(ctx);
 
 //   // GetSelf
 //   {
@@ -1314,13 +1298,13 @@ TEST(RawRocksEngineTest, KvCount) {
 //   }
 // }
 
-// TEST(RawRocksEngineTest, EngineIterator) {
-//   dingodb::RocksEngine &raw_rocks_engine = rocks_engine_test->GetRawRocksEngine();
+// TEST_F(RawRocksEngineTest, EngineIterator) {
+//   dingodb::RocksEngine &engine = rocks_engine_test->GetRawRocksEngine();
 //   const std::string &cf_name = kDefaultCf;
 //   std::shared_ptr<dingodb::Context> ctx = std::make_shared<dingodb::Context>();
 //   ctx->set_cf_name(cf_name);
 
-//   std::shared_ptr<dingodb::EngineReader> reader = raw_rocks_engine.CreateReader(ctx);
+//   std::shared_ptr<dingodb::EngineReader> reader = RawRocksEngineTest::engine->CreateReader(ctx);
 //   std::shared_ptr<dingodb::EngineIterator> engine_iterator = reader->Scan("", "");
 
 //   // GetSelf
@@ -1405,7 +1389,7 @@ TEST(RawRocksEngineTest, KvCount) {
 //       kvs.push_back(kv);
 //     }
 
-//     dingodb::pb::error::Errno ok = raw_rocks_engine.KvBatchPut(ctx, kvs);
+//     dingodb::pb::error::Errno ok = RawRocksEngineTest::engine->KvBatchPut(ctx, kvs);
 //     EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
 
 //     std::shared_ptr<dingodb::EngineIterator> engine_iterator = reader->Scan(start_key, end_key);
@@ -1449,7 +1433,7 @@ TEST(RawRocksEngineTest, KvCount) {
 //       engine_iterator->Next();
 
 //       if (!run_once) {
-//         dingodb::pb::error::Errno ok = raw_rocks_engine.KvBatchPut(ctx, kvs);
+//         dingodb::pb::error::Errno ok = RawRocksEngineTest::engine->KvBatchPut(ctx, kvs);
 //         EXPECT_EQ(ok, dingodb::pb::error::Errno::OK);
 //         run_once = true;
 //       }
@@ -1457,10 +1441,9 @@ TEST(RawRocksEngineTest, KvCount) {
 //   }
 // }
 
-TEST(RawRocksEngineTest, KvDelete) {
-  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test->GetRawRocksEngine();
+TEST_F(RawRocksEngineTest, KvDelete) {
   const std::string &cf_name = kDefaultCf;
-  std::shared_ptr<dingodb::RawEngine::Writer> writer = raw_rocks_engine.NewWriter(cf_name);
+  std::shared_ptr<dingodb::RawEngine::Writer> writer = RawRocksEngineTest::engine->NewWriter(cf_name);
 
   // key empty
   {
@@ -1483,7 +1466,7 @@ TEST(RawRocksEngineTest, KvDelete) {
   {
     const std::string &key = "key1";
 
-    std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
+    std::shared_ptr<dingodb::RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
 
     std::string value;
     butil::Status ok = reader->KvGet(key, value);
@@ -1502,7 +1485,7 @@ TEST(RawRocksEngineTest, KvDelete) {
 
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
-    std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
+    std::shared_ptr<dingodb::RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
 
     std::string value;
     ok = reader->KvGet(key, value);
@@ -1636,10 +1619,9 @@ TEST(RawRocksEngineTest, KvDelete) {
   }
 }
 
-TEST(RawRocksEngineTest, KvDeleteBatch) {
-  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test->GetRawRocksEngine();
+TEST_F(RawRocksEngineTest, KvDeleteBatch) {
   const std::string &cf_name = kDefaultCf;
-  std::shared_ptr<dingodb::RawEngine::Writer> writer = raw_rocks_engine.NewWriter(cf_name);
+  std::shared_ptr<dingodb::RawEngine::Writer> writer = RawRocksEngineTest::engine->NewWriter(cf_name);
 
   // keys empty failed
   {
@@ -1673,7 +1655,7 @@ TEST(RawRocksEngineTest, KvDeleteBatch) {
     butil::Status ok = writer->KvBatchPut(kvs);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
-    std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
+    std::shared_ptr<dingodb::RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
 
     std::string value;
     for (int i = 0; i < 10; i++) {
@@ -1698,10 +1680,9 @@ TEST(RawRocksEngineTest, KvDeleteBatch) {
   }
 }
 
-TEST(RawRocksEngineTest, KvDeleteIfEqual) {
-  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test->GetRawRocksEngine();
+TEST_F(RawRocksEngineTest, KvDeleteIfEqual) {
   const std::string &cf_name = kDefaultCf;
-  std::shared_ptr<dingodb::RawEngine::Writer> writer = raw_rocks_engine.NewWriter(cf_name);
+  std::shared_ptr<dingodb::RawEngine::Writer> writer = RawRocksEngineTest::engine->NewWriter(cf_name);
 
   // key  empty failed
   {
@@ -1735,7 +1716,7 @@ TEST(RawRocksEngineTest, KvDeleteIfEqual) {
     butil::Status ok = writer->KvBatchPut(kvs);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
-    std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
+    std::shared_ptr<dingodb::RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
 
     std::string value;
     for (int i = 0; i < 1; i++) {
@@ -1765,7 +1746,7 @@ TEST(RawRocksEngineTest, KvDeleteIfEqual) {
     butil::Status ok = writer->KvBatchPut(kvs);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
-    std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
+    std::shared_ptr<dingodb::RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
 
     std::string value;
     for (int i = 0; i < 10; i++) {
@@ -1786,15 +1767,14 @@ TEST(RawRocksEngineTest, KvDeleteIfEqual) {
   }
 }
 
-TEST(RawRocksEngineTest, KvDeleteRange) {
-  dingodb::RawRocksEngine &raw_rocks_engine = rocks_engine_test->GetRawRocksEngine();
+TEST_F(RawRocksEngineTest, KvDeleteRange) {
   const std::string &cf_name = kDefaultCf;
-  std::shared_ptr<dingodb::RawEngine::Writer> writer = raw_rocks_engine.NewWriter(cf_name);
+  std::shared_ptr<dingodb::RawEngine::Writer> writer = RawRocksEngineTest::engine->NewWriter(cf_name);
 
   // wirite key -> key999
   {
     std::vector<dingodb::pb::common::KeyValue> kvs;
-    std::vector<std::string> put_keys;
+    std::vector<bool> key_states;
 
     for (int i = 0; i < 1000; i++) {
       dingodb::pb::common::KeyValue kv;
@@ -1839,7 +1819,7 @@ TEST(RawRocksEngineTest, KvDeleteRange) {
     std::string end_key = "key100";
     std::vector<dingodb::pb::common::KeyValue> kvs;
 
-    std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
+    std::shared_ptr<dingodb::RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
 
     ok = reader->KvScan(start_key, end_key, kvs);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
@@ -1874,7 +1854,7 @@ TEST(RawRocksEngineTest, KvDeleteRange) {
     std::string end_key = "key200";
     std::vector<dingodb::pb::common::KeyValue> kvs;
 
-    std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
+    std::shared_ptr<dingodb::RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
 
     ok = reader->KvScan(start_key, end_key, kvs);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
@@ -1909,7 +1889,7 @@ TEST(RawRocksEngineTest, KvDeleteRange) {
     std::string end_key = "key99999";
     std::vector<dingodb::pb::common::KeyValue> kvs;
 
-    std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
+    std::shared_ptr<dingodb::RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
 
     ok = reader->KvScan(start_key, end_key, kvs);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
@@ -1922,7 +1902,98 @@ TEST(RawRocksEngineTest, KvDeleteRange) {
   }
 }
 
-TEST(RawRocksEngineTest, Destroy) {
-  delete rocks_engine_test;
-  rocks_engine_test = nullptr;
+TEST_F(RawRocksEngineTest, Iterator) {
+  auto writer = RawRocksEngineTest::engine->NewWriter(kDefaultCf);
+  dingodb::pb::common::KeyValue kv;
+  kv.set_key("bbbbbbbbbbbbb");
+  kv.set_value(GenRandomString(256));
+  writer->KvPut(kv);
+
+  int count = 0;
+  dingodb::IteratorOptions options;
+  options.upper_bound = "cccc";
+  auto iter = RawRocksEngineTest::engine->NewIterator(kDefaultCf, options);
+  for (iter->Seek("aaaaaaaaaa"); iter->Valid(); iter->Next()) {
+    ++count;
+  }
+
+  EXPECT_GE(count, 1);
 }
+
+// TEST_F(RawRocksEngineTest, Checkpoint) {
+//   auto writer = RawRocksEngineTest::engine->NewWriter(kDefaultCf);
+
+//   dingodb::pb::common::KeyValue kv;
+//   for (int i = 0; i < 10000; ++i) {
+//     kv.set_key(GenRandomString(32));
+//     kv.set_value(GenRandomString(256));
+//     writer->KvPut(kv);
+//   }
+
+//   auto checkpoint = RawRocksEngineTest::engine->NewCheckpoint();
+
+//   const std::string store_path = std::filesystem::path(RawRocksEngineTest::engine->DbPath()).parent_path().string();
+//   std::filesystem::create_directories(store_path);
+//   const std::string checkpoint_path = store_path + "/checkpoint_" + std::to_string(dingodb::Helper::Timestamp());
+//   std::cout << "checkpoint_path: " << checkpoint_path << std::endl;
+//   //  checkpoint->Create("/tmp/dingo-store/data/store/checkpoint");
+//   std::vector<dingodb::pb::store_internal::SstFileInfo> sst_files;
+//   auto status = checkpoint->Create(checkpoint_path, RawRocksEngineTest::engine->GetColumnFamily(kDefaultCf),
+//   sst_files); EXPECT_EQ(true, status.ok());
+
+//   std::filesystem::remove_all(checkpoint_path);
+// }
+
+// TEST_F(RawRocksEngineTest, Ingest) {
+//   auto reader = RawRocksEngineTest::engine->NewReader(kDefaultCf);
+//   auto writer = RawRocksEngineTest::engine->NewWriter(kDefaultCf);
+
+//   const std::vector<std::string> prefixs = {"aa", "bb", "cc", "dd", "ee", "ff", "gg", "hh", "ii", "jj", "mm"};
+//   dingodb::pb::common::KeyValue kv;
+//   for (int i = 0; i < 10000; ++i) {
+//     int pos = i % prefixs.size();
+
+//     kv.set_key(prefixs[pos] + GenRandomString(30));
+//     kv.set_value(GenRandomString(256));
+//     writer->KvPut(kv);
+//   }
+
+//   auto checkpoint = RawRocksEngineTest::engine->NewCheckpoint();
+
+//   const std::string store_path = std::filesystem::path(RawRocksEngineTest::engine->DbPath()).parent_path().string();
+//   std::filesystem::create_directories(store_path);
+//   const std::string checkpoint_path = store_path + "/checkpoint_" + std::to_string(dingodb::Helper::Timestamp());
+//   std::cout << "checkpoint_path: " << checkpoint_path << std::endl;
+
+//   std::vector<dingodb::pb::store_internal::SstFileInfo> sst_files;
+//   auto status = checkpoint->Create(checkpoint_path, RawRocksEngineTest::engine->GetColumnFamily(kDefaultCf),
+//   sst_files); EXPECT_EQ(true, status.ok());
+
+//   dingodb::pb::common::Range range;
+//   range.set_start_key("bb");
+//   range.set_end_key("cc");
+
+//   std::vector<std::string> files;
+//   for (auto& sst_file : sst_files) {
+//     std::cout << "sst file path: " << sst_file.path() << " " << sst_file.start_key() << "-" << sst_file.end_key()
+//               << std::endl;
+//     if (sst_file.start_key() < range.end_key() && range.start_key() < sst_file.end_key()) {
+//       std::cout << "pick up: " << sst_file.path() << std::endl;
+//       files.push_back(sst_file.path());
+//     }
+//   }
+
+//   int64_t count = 0;
+//   reader->KvCount(range.start_key(), range.end_key(), count);
+//   std::cout << "count before delete: " << count << std::endl;
+
+//   writer->KvDeleteRange(range);
+
+//   reader->KvCount(range.start_key(), range.end_key(), count);
+//   std::cout << "count after delete: " << count << std::endl;
+
+//   RawRocksEngineTest::engine->IngestExternalFile(kDefaultCf, files);
+
+//   reader->KvCount(range.start_key(), range.end_key(), count);
+//   std::cout << "count after ingest: " << count << std::endl;
+// }

@@ -21,6 +21,7 @@
 #include "engine/raw_engine.h"
 #include "event/event.h"
 #include "proto/raft.pb.h"
+#include "proto/store_internal.pb.h"
 
 namespace dingodb {
 
@@ -40,10 +41,17 @@ class StoreClosure : public braft::Closure {
   std::shared_ptr<pb::raft::RaftCmdRequest> request_;
 };
 
+// Execute order on restart: on_snapshot_load
+//                           on_configuration_committed
+//                           on_leader_start|on_start_following
+//                           on_apply
 class StoreStateMachine : public braft::StateMachine {
  public:
-  StoreStateMachine(std::shared_ptr<RawEngine> engine, uint64_t node_id,
-                    std::shared_ptr<EventListenerCollection> listeners);
+  explicit StoreStateMachine(std::shared_ptr<RawEngine> engine, uint64_t node_id,
+                             std::shared_ptr<EventListenerCollection> listeners);
+  ~StoreStateMachine() = default;
+
+  bool Init();
 
   void on_apply(braft::Iterator& iter) override;
   void on_shutdown() override;
@@ -57,9 +65,15 @@ class StoreStateMachine : public braft::StateMachine {
   void on_stop_following(const braft::LeaderChangeContext& ctx) override;
 
  private:
+  void DispatchEvent(dingodb::EventType, std::shared_ptr<dingodb::Event> event);
+
   uint64_t node_id_;
   std::shared_ptr<RawEngine> engine_;
   std::shared_ptr<EventListenerCollection> listeners_;
+
+  bool is_restart_;
+  int64_t applied_index_;
+  std::shared_ptr<pb::store_internal::RaftMeta> raft_meta_;
 };
 
 }  // namespace dingodb

@@ -46,6 +46,14 @@ message DestroyRegionResponse {
   dingodb.pb.error.Error error = 1;
 }
 
+message SnapshotRequest {
+  uint64 region_id = 1;
+}
+
+message SnapshotResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
 message KvGetRequest {
   uint64 region_id = 1;
   bytes key = 2;
@@ -202,6 +210,7 @@ service StoreService {
   rpc AddRegion(AddRegionRequest) returns (AddRegionResponse);
   rpc ChangeRegion(ChangeRegionRequest) returns (ChangeRegionResponse);
   rpc DestroyRegion(DestroyRegionRequest) returns (DestroyRegionResponse);
+  rpc Snapshot(SnapshotRequest) returns (SnapshotResponse);
 
   // kv
   rpc KvGet(KvGetRequest) returns (KvGetResponse);

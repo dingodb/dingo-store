@@ -21,17 +21,17 @@ namespace dingodb {
 
 // Load config from string
 int YamlConfig::Load(const std::string& data) {
-  int new_active_index_ = active_index_.load() == 0 ? 1 : 0;
-  configs_[new_active_index_] = YAML::Load(data);
-  active_index_.store(new_active_index_);
+  int new_active_index = active_index_.load() == 0 ? 1 : 0;
+  configs_[new_active_index] = YAML::Load(data);
+  active_index_.store(new_active_index);
   return 0;
 }
 
 // Load config from file
 int YamlConfig::LoadFile(const std::string& filename) {
-  int new_active_index_ = active_index_.load() == 0 ? 1 : 0;
-  configs_[new_active_index_] = YAML::LoadFile(filename);
-  active_index_.store(new_active_index_);
+  int new_active_index = active_index_.load() == 0 ? 1 : 0;
+  configs_[new_active_index] = YAML::LoadFile(filename);
+  active_index_.store(new_active_index);
 
   return 0;
 }

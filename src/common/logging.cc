@@ -23,6 +23,7 @@ void DingoLogger::InitLogger(const std::string& log_dir, const std::string& role
   FLAGS_max_log_size = 80;
   FLAGS_stop_logging_if_full_disk = true;
   FLAGS_minloglevel = google::GLOG_INFO;
+  FLAGS_logbuflevel = google::GLOG_INFO;
 
   const std::string program_name = butil::StringPrintf("./%s", role.c_str());
   google::InitGoogleLogging(program_name.c_str());
@@ -56,4 +57,3 @@ bool DingoLogger::GetStoppingWhenDiskFull() { return FLAGS_stop_logging_if_full_
 void DingoLogger::SetStoppingWhenDiskFull(bool is_stop) { FLAGS_stop_logging_if_full_disk = is_stop; }
 
 }  // namespace dingodb
-

@@ -437,6 +437,26 @@ void SendDropTable(dingodb::pb::meta::MetaService_Stub& stub) {
   }
 }
 
+void SendSnapshot(dingodb::pb::store::StoreService_Stub& stub) {
+  dingodb::pb::store::SnapshotRequest request;
+  dingodb::pb::store::SnapshotResponse response;
+
+  brpc::Controller cntl;
+  cntl.set_timeout_ms(FLAGS_timeout_ms);
+
+  request.set_region_id(FLAGS_region_id);
+
+  stub.Snapshot(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+  }
+
+  if (FLAGS_log_each_request) {
+    DINGO_LOG(INFO) << " request=" << request.ShortDebugString() << " response=" << response.ShortDebugString()
+                    << " latency=" << cntl.latency_us() << "us";
+  }
+}
+
 void* sender(void* arg) {
   for (int i = 0; i < FLAGS_round_num; ++i) {
     braft::PeerId leader(FLAGS_addr);
@@ -480,10 +500,17 @@ void* sender(void* arg) {
 
     } else if (FLAGS_method == "TestBatchPutGet") {
       TestBatchPutGet(stub, FLAGS_region_id, FLAGS_req_num);
+
     } else if (FLAGS_method == "CreateTable") {
       SendCreateTable(meta_stub);
+
     } else if (FLAGS_method == "DropTable") {
       SendDropTable(meta_stub);
+
+    } else if (FLAGS_method == "Snapshot") {
+      SendSnapshot(stub);
+    } else {
+      DINGO_LOG(ERROR) << "unknown method " << FLAGS_method;
     }
 
     bthread_usleep(FLAGS_timeout_ms * 1000L);

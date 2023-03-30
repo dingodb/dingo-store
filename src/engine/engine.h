@@ -51,6 +51,9 @@ class Engine {
 
   class Reader {
    public:
+    Reader() = default;
+    virtual ~Reader() = default;
+
     virtual butil::Status KvGet(std::shared_ptr<Context> ctx, const std::string& key, std::string& value) = 0;
 
     virtual butil::Status KvScan(std::shared_ptr<Context> ctx, const std::string& start_key, const std::string& end_key,
@@ -64,7 +67,8 @@ class Engine {
 
   //  This is used by RaftKvEngine to Persist Meta
   //  This is a alternative method, will be replace by zihui new Interface.
-  virtual butil::Status MetaPut(std::shared_ptr<Context> ctx, const pb::coordinator_internal::MetaIncrement& meta) {
+  virtual butil::Status MetaPut(std::shared_ptr<Context> /*ctx*/,
+                                const pb::coordinator_internal::MetaIncrement& /*meta*/) {
     return butil::Status(pb::error::Errno::ENOT_SUPPORT, "Not support");
   }
 

@@ -39,7 +39,7 @@ int RaftNode::Init(const std::string& init_conf) {
   DINGO_LOG(INFO) << "raft init node_id: " << node_id_ << " init_conf: " << init_conf;
   braft::NodeOptions node_options;
   if (node_options.initial_conf.parse_from(init_conf) != 0) {
-    LOG(ERROR) << "Fail to parse configuration";
+    DINGO_LOG(ERROR) << "Fail to parse configuration";
     return -1;
   }
 
@@ -57,7 +57,7 @@ int RaftNode::Init(const std::string& init_conf) {
   node_options.disable_cli = false;
 
   if (node_->init(node_options) != 0) {
-    LOG(ERROR) << "Fail to init raft node " << node_id_;
+    DINGO_LOG(ERROR) << "Fail to init raft node " << node_id_;
     return -1;
   }
 
@@ -109,5 +109,7 @@ void RaftNode::ChangePeers(const std::vector<pb::common::Peer>& peers, braft::Cl
 }
 
 butil::Status RaftNode::ResetPeers(const braft::Configuration& new_peers) { return node_->reset_peers(new_peers); }
+
+void RaftNode::Snapshot(braft::Closure* done) { node_->snapshot(done); }
 
 }  // namespace dingodb

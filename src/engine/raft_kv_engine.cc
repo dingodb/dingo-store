@@ -70,7 +70,10 @@ butil::Status RaftKvEngine::AddRegion(std::shared_ptr<Context> ctx, const std::s
   DINGO_LOG(INFO) << "RaftkvEngine add region, region_id " << region->id();
 
   // construct StoreStateMachine
-  braft::StateMachine* state_machine = new StoreStateMachine(engine_, region->id(), listeners);
+  auto* state_machine = new StoreStateMachine(engine_, region->id(), listeners);
+  if (!state_machine->Init()) {
+    return butil::Status(pb::error::ERAFT_INIT, "State machine init failed");
+  }
 
   std::shared_ptr<RaftNode> node = std::make_shared<RaftNode>(
       ctx->ClusterRole(), region->id(), braft::PeerId(Server::GetInstance()->RaftEndpoint()), state_machine);
@@ -84,13 +87,13 @@ butil::Status RaftKvEngine::AddRegion(std::shared_ptr<Context> ctx, const std::s
   return butil::Status();
 }
 
-butil::Status RaftKvEngine::ChangeRegion(std::shared_ptr<Context> ctx, uint64_t region_id,
+butil::Status RaftKvEngine::ChangeRegion(std::shared_ptr<Context> /*ctx*/, uint64_t region_id,
                                          std::vector<pb::common::Peer> peers) {
   raft_node_manager_->GetNode(region_id)->ChangePeers(peers, nullptr);
   return butil::Status();
 }
 
-butil::Status RaftKvEngine::DestroyRegion(std::shared_ptr<Context> ctx, uint64_t region_id) {
+butil::Status RaftKvEngine::DestroyRegion(std::shared_ptr<Context> /*ctx*/, uint64_t region_id) {
   auto node = raft_node_manager_->GetNode(region_id);
   if (node == nullptr) {
     return butil::Status(pb::error::ERAFT_NOTNODE, "Raft not node");
@@ -106,15 +109,25 @@ butil::Status RaftKvEngine::DestroyRegion(std::shared_ptr<Context> ctx, uint64_t
   return butil::Status();
 }
 
-std::shared_ptr<pb::raft::RaftCmdRequest> genRaftCmdRequest(const std::shared_ptr<Context> ctx,
+butil::Status RaftKvEngine::Snapshot(std::shared_ptr<Context> ctx, uint64_t region_id) {
+  auto node = raft_node_manager_->GetNode(region_id);
+  if (node == nullptr) {
+    return butil::Status(pb::error::ERAFT_NOTNODE, "Raft not node");
+  }
+
+  node->Snapshot(dynamic_cast<braft::Closure*>(ctx->Done()));
+  return butil::Status();
+}
+
+std::shared_ptr<pb::raft::RaftCmdRequest> GenRaftCmdRequest(const std::shared_ptr<Context> ctx,
                                                             const WriteData& write_data) {
   std::shared_ptr<pb::raft::RaftCmdRequest> raft_cmd = std::make_shared<pb::raft::RaftCmdRequest>();
 
   pb::raft::RequestHeader* header = raft_cmd->mutable_header();
   header->set_region_id(ctx->RegionId());
 
-  for (auto datum : write_data.Datums()) {
-    auto requests = raft_cmd->mutable_requests();
+  for (auto& datum : write_data.Datums()) {
+    auto* requests = raft_cmd->mutable_requests();
 
     requests->AddAllocated(datum->TransformToRaft());
   }
@@ -129,7 +142,7 @@ butil::Status RaftKvEngine::Write(std::shared_ptr<Context> ctx, const WriteData&
     return butil::Status(pb::error::ERAFT_NOTNODE, "Not found node");
   }
 
-  auto s = node->Commit(ctx, genRaftCmdRequest(ctx, write_data));
+  auto s = node->Commit(ctx, GenRaftCmdRequest(ctx, write_data));
   if (!s.ok()) {
     return s;
   }
@@ -151,23 +164,24 @@ butil::Status RaftKvEngine::AsyncWrite(std::shared_ptr<Context> ctx, const Write
   }
 
   ctx->SetWriteCb(cb);
-  return node->Commit(ctx, genRaftCmdRequest(ctx, write_data));
+  return node->Commit(ctx, GenRaftCmdRequest(ctx, write_data));
 }
 
 std::shared_ptr<Engine::Reader> RaftKvEngine::NewReader(const std::string& cf_name) {
   return std::make_shared<RaftKvEngine::Reader>(engine_->NewReader(cf_name));
 }
 
-butil::Status RaftKvEngine::Reader::KvGet(std::shared_ptr<Context> ctx, const std::string& key, std::string& value) {
+butil::Status RaftKvEngine::Reader::KvGet(std::shared_ptr<Context> /*ctx*/, const std::string& key,
+                                          std::string& value) {
   return reader_->KvGet(key, value);
 }
 
-butil::Status RaftKvEngine::Reader::KvScan(std::shared_ptr<Context> ctx, const std::string& start_key,
+butil::Status RaftKvEngine::Reader::KvScan(std::shared_ptr<Context> /*ctx*/, const std::string& start_key,
                                            const std::string& end_key, std::vector<pb::common::KeyValue>& kvs) {
   return reader_->KvScan(start_key, end_key, kvs);
 }
 
-butil::Status RaftKvEngine::Reader::KvCount(std::shared_ptr<Context> ctx, const std::string& start_key,
+butil::Status RaftKvEngine::Reader::KvCount(std::shared_ptr<Context> /*ctx*/, const std::string& start_key,
                                             const std::string& end_key, int64_t& count) {
   return reader_->KvCount(start_key, end_key, count);
 }

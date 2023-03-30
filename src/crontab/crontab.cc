@@ -16,6 +16,7 @@
 
 #include "bthread/bthread.h"
 #include "butil/strings/stringprintf.h"
+#include "common/logging.h"
 
 namespace dingodb {
 
@@ -32,7 +33,7 @@ void CrontabManager::Run(void* arg) {
     try {
       crontab->func(crontab->arg);
     } catch (...) {
-      LOG(ERROR) << butil::StringPrintf("Crontab %u %s happen exception", crontab->id, crontab->name.c_str());
+      DINGO_LOG(ERROR) << butil::StringPrintf("Crontab %u %s happen exception", crontab->id, crontab->name.c_str());
     }
     ++crontab->run_count;
   } else {
@@ -68,7 +69,7 @@ void CrontabManager::StartCrontab(uint32_t crontab_id) {
 
   auto it = crontabs_.find(crontab_id);
   if (it == crontabs_.end()) {
-    LOG(WARNING) << "Not exist crontab " << crontab_id;
+    DINGO_LOG(WARNING) << "Not exist crontab " << crontab_id;
     return;
   }
   auto crontab = it->second;
@@ -88,7 +89,7 @@ void CrontabManager::StartCrontab(uint32_t crontab_id) {
 void CrontabManager::InnerPauseCrontab(uint32_t crontab_id) {
   auto it = crontabs_.find(crontab_id);
   if (it == crontabs_.end()) {
-    LOG(WARNING) << "Not exist crontab " << crontab_id;
+    DINGO_LOG(WARNING) << "Not exist crontab " << crontab_id;
     return;
   }
   auto crontab = it->second;

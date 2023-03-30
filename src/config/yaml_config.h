@@ -31,22 +31,22 @@ namespace dingodb {
 class YamlConfig : public Config {
  public:
   YamlConfig() : active_index_(0) {}
-  ~YamlConfig() {}
+  ~YamlConfig() override = default;
 
-  int Load(const std::string& data);
-  int LoadFile(const std::string& filename);
-  int ReloadFile(const std::string& filename);
+  int Load(const std::string& data) override;
+  int LoadFile(const std::string& filename) override;
+  int ReloadFile(const std::string& filename) override;
 
-  int GetInt(const std::string& key);
-  std::string GetString(const std::string& key);
+  int GetInt(const std::string& key) override;
+  std::string GetString(const std::string& key) override;
 
-  std::vector<int> GetIntList(const std::string& key);
-  std::vector<std::string> GetStringList(const std::string& key);
+  std::vector<int> GetIntList(const std::string& key) override;
+  std::vector<std::string> GetStringList(const std::string& key) override;
 
-  std::map<std::string, int> GetIntMap(const std::string& key);
-  std::map<std::string, std::string> GetStringMap(const std::string& key);
+  std::map<std::string, int> GetIntMap(const std::string& key) override;
+  std::map<std::string, std::string> GetStringMap(const std::string& key) override;
 
-  std::string ToString();
+  std::string ToString() override;
 
  private:
   template <typename T>

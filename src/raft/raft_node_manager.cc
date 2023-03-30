@@ -15,6 +15,7 @@
 #include "raft/raft_node_manager.h"
 
 #include "butil/strings/stringprintf.h"
+#include "common/logging.h"
 
 namespace dingodb {
 
@@ -31,7 +32,7 @@ std::shared_ptr<RaftNode> RaftNodeManager::GetNode(uint64_t node_id) {
   BAIDU_SCOPED_LOCK(mutex_);
   auto it = nodes_.find(node_id);
   if (it == nodes_.end()) {
-    LOG(WARNING) << butil::StringPrintf("node %lu not exist!", node_id);
+    DINGO_LOG(WARNING) << butil::StringPrintf("node %lu not exist!", node_id);
     return nullptr;
   }
 
@@ -41,7 +42,7 @@ std::shared_ptr<RaftNode> RaftNodeManager::GetNode(uint64_t node_id) {
 void RaftNodeManager::AddNode(uint64_t node_id, std::shared_ptr<RaftNode> node) {
   BAIDU_SCOPED_LOCK(mutex_);
   if (nodes_.find(node_id) != nodes_.end()) {
-    LOG(WARNING) << butil::StringPrintf("node %lu already exist!", node_id);
+    DINGO_LOG(WARNING) << butil::StringPrintf("node %lu already exist!", node_id);
     return;
   }
 
