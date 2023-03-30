@@ -46,6 +46,13 @@ message Range {
   bytes end_key = 2;
 }
 
+// prefix scan
+message PrefixScanRange {
+  Range range = 1;
+  bool with_start = 2;
+  bool with_end = 3;
+}
+
 message KeyValue {
   bytes key = 1;
   bytes value = 2;
