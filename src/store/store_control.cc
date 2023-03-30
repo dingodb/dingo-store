@@ -160,6 +160,15 @@ butil::Status StoreControl::DeleteRegion(std::shared_ptr<Context> ctx, uint64_t 
   return butil::Status();
 }
 
+butil::Status StoreControl::Snapshot(std::shared_ptr<Context> ctx, uint64_t region_id) {
+  auto engine = std::dynamic_pointer_cast<RaftKvEngine>(Server::GetInstance()->GetEngine(pb::common::ENG_RAFT_STORE));
+  if (engine == nullptr) {
+    return butil::Status(pb::error::ESTORE_NOTEXIST_RAFTENGINE, "Not exist raft engine");
+  }
+
+  return engine->Snapshot(ctx, region_id);
+}
+
 void StoreControl::SetHeartbeatIntervalMultiple(uint64_t interval_multiple) {
   this->heartbeat_interval_multiple = interval_multiple;
 }

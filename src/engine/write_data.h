@@ -17,6 +17,7 @@
 
 #include <vector>
 
+#include "butil/status.h"
 #include "proto/raft.pb.h"
 
 namespace dingodb {
@@ -33,20 +34,21 @@ enum class DatumType {
 
 class DatumAble {
  public:
+  virtual ~DatumAble() = default;
   virtual DatumType GetType() = 0;
   virtual pb::raft::Request* TransformToRaft() = 0;
   virtual void TransformFromRaft(pb::raft::Response& resonse) = 0;
 };
 
 struct PutDatum : public DatumAble {
-  DatumType GetType() { return DatumType::PUT; }
+  DatumType GetType() override { return DatumType::PUT; }
 
   pb::raft::Request* TransformToRaft() override {
-    auto request = new pb::raft::Request();
+    auto* request = new pb::raft::Request();
 
     request->set_cmd_type(pb::raft::CmdType::PUT);
     pb::raft::PutRequest* put_request = request->mutable_put();
-    for (auto kv : kvs) {
+    for (auto& kv : kvs) {
       put_request->set_cf_name(cf_name);
       put_request->add_kvs()->CopyFrom(kv);
     }
@@ -61,16 +63,16 @@ struct PutDatum : public DatumAble {
 };
 
 struct PutIfAbsentDatum : public DatumAble {
-  DatumType GetType() { return DatumType::PUTIFABSENT; }
+  DatumType GetType() override { return DatumType::PUTIFABSENT; }
 
   pb::raft::Request* TransformToRaft() override {
-    auto request = new pb::raft::Request();
+    auto* request = new pb::raft::Request();
 
     request->set_cmd_type(pb::raft::CmdType::PUTIFABSENT);
     pb::raft::PutIfAbsentRequest* put_if_absent_request = request->mutable_put_if_absent();
     put_if_absent_request->set_cf_name(cf_name);
     put_if_absent_request->set_is_atomic(is_atomic);
-    for (auto kv : kvs) {
+    for (auto& kv : kvs) {
       put_if_absent_request->add_kvs()->CopyFrom(kv);
     }
 
@@ -85,7 +87,7 @@ struct PutIfAbsentDatum : public DatumAble {
 };
 
 struct DeleteBatchDatum : public DatumAble {
-  virtual ~DeleteBatchDatum() = default;
+  ~DeleteBatchDatum() override = default;
   DatumType GetType() override { return DatumType::DELETEBATCH; }
 
   pb::raft::Request* TransformToRaft() override {
@@ -108,7 +110,7 @@ struct DeleteBatchDatum : public DatumAble {
 };
 
 struct DeleteRangeDatum : public DatumAble {
-  virtual ~DeleteRangeDatum() = default;
+  ~DeleteRangeDatum() override = default;
   DatumType GetType() override { return DatumType::DELETERANGE; }
 
   pb::raft::Request* TransformToRaft() override {
@@ -132,7 +134,7 @@ struct DeleteRangeDatum : public DatumAble {
 };
 
 struct CreateSchemaDatum : public DatumAble {
-  virtual ~CreateSchemaDatum() = default;
+  ~CreateSchemaDatum() override = default;
   DatumType GetType() override { return DatumType::CREATESCHEMA; }
 
   pb::raft::Request* TransformToRaft() override { return nullptr; }

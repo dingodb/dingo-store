@@ -24,9 +24,11 @@
 #include <vector>
 
 #include "config/config.h"
+#include "engine/iterator.h"
 #include "engine/raw_engine.h"
 #include "engine/snapshot.h"
 #include "openssl/core_dispatch.h"
+#include "proto/store_internal.pb.h"
 #include "rocksdb/cache.h"
 #include "rocksdb/convenience.h"
 #include "rocksdb/db.h"
@@ -35,6 +37,7 @@
 #include "rocksdb/slice.h"
 #include "rocksdb/slice_transform.h"
 #include "rocksdb/status.h"
+#include "rocksdb/utilities/checkpoint.h"
 #include "rocksdb/utilities/transaction.h"
 #include "rocksdb/utilities/transaction_db.h"
 
@@ -54,7 +57,6 @@ class RawRocksEngine : public RawEngine {
   using CfDefaultConfValue = std::optional<CfDefaultConfValueBase>;
   using CfDefaultConf = std::map<std::string, CfDefaultConfValue>;
 
-  // class ColumnFamily;
   class ColumnFamily {
    public:
     ColumnFamily();
@@ -102,18 +104,62 @@ class RawRocksEngine : public RawEngine {
       }
     };
 
-    const rocksdb::Snapshot* InnerSnapshot() { return snapshot_; }
+    const void* Inner() override { return snapshot_; }
 
    private:
     const rocksdb::Snapshot* snapshot_;
     std::shared_ptr<rocksdb::TransactionDB> txn_db_;
   };
 
+  class Iterator : public dingodb::Iterator {
+   public:
+    explicit Iterator(IteratorOptions options, std::shared_ptr<Snapshot> snapshot, rocksdb::Iterator* iter)
+        : options_(options), snapshot_(snapshot), iter_(iter) {}
+    ~Iterator() override = default;
+
+    std::string GetName() override { return "RawRocks"; }
+    IteratorType GetID() override { return IteratorType::RAW_ROCKS_ENGINE; }
+
+    bool Valid() const override {
+      if (!iter_->Valid()) {
+        return false;
+      }
+
+      if (!options_.upper_bound.empty()) {
+        auto upper_bound = rocksdb::Slice(options_.upper_bound);
+        if (upper_bound.compare(iter_->key()) <= 0) {
+          return false;
+        }
+      }
+
+      return true;
+    }
+
+    void SeekToFirst() override { iter_->SeekToFirst(); }
+    void SeekToLast() override { iter_->SeekToLast(); }
+
+    void Seek(const std::string& target) override { return iter_->Seek(target); }
+
+    void SeekForPrev(const std::string& target) override { return iter_->SeekForPrev(target); }
+
+    void Next() override { iter_->Next(); }
+
+    void Prev() override { iter_->Prev(); }
+
+    std::string_view Key() const override { return std::string_view(iter_->key().data(), iter_->key().size()); }
+    std::string_view Value() const override { return std::string_view(iter_->value().data(), iter_->value().size()); }
+
+   private:
+    IteratorOptions options_;
+    std::shared_ptr<Snapshot> snapshot_;
+    std::unique_ptr<rocksdb::Iterator> iter_;
+  };
+
   class Reader : public RawEngine::Reader {
    public:
     Reader(std::shared_ptr<rocksdb::TransactionDB> txn_db, std::shared_ptr<ColumnFamily> column_family)
         : txn_db_(txn_db), column_family_(column_family) {}
-    ~Reader() override{};
+    ~Reader() override = default;
     butil::Status KvGet(const std::string& key, std::string& value) override;
     butil::Status KvGet(std::shared_ptr<dingodb::Snapshot> snapshot, const std::string& key,
                         std::string& value) override;
@@ -136,18 +182,18 @@ class RawRocksEngine : public RawEngine {
    public:
     Writer(std::shared_ptr<rocksdb::TransactionDB> txn_db, std::shared_ptr<ColumnFamily> column_family)
         : txn_db_(txn_db), column_family_(column_family) {}
-    ~Writer() override{};
+    ~Writer() override = default;
     butil::Status KvPut(const pb::common::KeyValue& kv) override;
     butil::Status KvBatchPut(const std::vector<pb::common::KeyValue>& kvs) override;
     butil::Status KvBatchPutAndDelete(const std::vector<pb::common::KeyValue>& kv_puts,
                                       const std::vector<pb::common::KeyValue>& kv_deletes) override;
 
-    butil::Status KvPutIfAbsent(const pb::common::KeyValue& kv, bool &key_state) override;
+    butil::Status KvPutIfAbsent(const pb::common::KeyValue& kv, bool& key_state) override;
 
     butil::Status KvBatchPutIfAbsent(const std::vector<pb::common::KeyValue>& kvs, std::vector<bool>& key_states,
                                      bool is_atomic) override;
     // key must be exist
-    butil::Status KvCompareAndSet(const pb::common::KeyValue& kv, const std::string& value, bool &key_state) override;
+    butil::Status KvCompareAndSet(const pb::common::KeyValue& kv, const std::string& value, bool& key_state) override;
 
     butil::Status KvDelete(const std::string& key) override;
     butil::Status KvDeleteBatch(const std::vector<std::string>& keys) override;
@@ -158,32 +204,77 @@ class RawRocksEngine : public RawEngine {
     butil::Status KvDeleteIfEqual(const pb::common::KeyValue& kv) override;
 
    private:
-    butil::Status KvCompareAndSetInternal(const pb::common::KeyValue& kv, const std::string& value, bool is_key_exist, bool &key_state);
+    butil::Status KvCompareAndSetInternal(const pb::common::KeyValue& kv, const std::string& value, bool is_key_exist,
+                                          bool& key_state);
     std::shared_ptr<ColumnFamily> column_family_;
     std::shared_ptr<rocksdb::TransactionDB> txn_db_;
   };
 
-  bool Init(std::shared_ptr<Config> config) override;
+  class SstFileWriter {
+   public:
+    SstFileWriter(const rocksdb::Options& options)
+        : options_(options),
+          sst_writer_(std::make_unique<rocksdb::SstFileWriter>(rocksdb::EnvOptions(), options_, nullptr, true)) {}
+    ~SstFileWriter() = default;
+
+    SstFileWriter(SstFileWriter&& rhs) = delete;
+    SstFileWriter& operator=(SstFileWriter&& rhs) = delete;
+
+    butil::Status SaveFile(const std::vector<pb::common::KeyValue>& kvs, const std::string& filename);
+    butil::Status SaveFile(std::shared_ptr<Iterator> iter, const std::string& filename);
+
+    uint64_t GetSize() { return sst_writer_->FileSize(); }
+
+   private:
+    rocksdb::Options options_;
+    std::unique_ptr<rocksdb::SstFileWriter> sst_writer_;
+  };
+
+  class Checkpoint {
+   public:
+    explicit Checkpoint(std::shared_ptr<rocksdb::TransactionDB> txn_db) : txn_db_(txn_db) {}
+    ~Checkpoint() = default;
+
+    Checkpoint(Checkpoint&& rhs) = delete;
+    Checkpoint& operator=(Checkpoint&& rhs) = delete;
+
+    butil::Status Create(const std::string& dirpath);
+    butil::Status Create(const std::string& dirpath, std::shared_ptr<ColumnFamily> column_family,
+                         std::vector<pb::store_internal::SstFileInfo>& sst_files);
+
+   private:
+    std::shared_ptr<rocksdb::TransactionDB> txn_db_;
+  };
+
+  friend class Checkpoint;
   std::string GetName() override;
   pb::common::RawEngine GetID() override;
 
+  bool Init(std::shared_ptr<Config> config) override;
+
+  std::string DbPath() { return db_path_; }
+
   std::shared_ptr<Snapshot> GetSnapshot() override;
 
-  void Flush(const std::string& cf_name) override;
+  butil::Status IngestExternalFile(const std::string& cf_name, const std::vector<std::string>& files);
 
+  void Flush(const std::string& cf_name) override;
+  void Close();
+  void Destroy();
+
+  std::shared_ptr<dingodb::Snapshot> NewSnapshot() override;
   std::shared_ptr<RawEngine::Reader> NewReader(const std::string& cf_name) override;
   std::shared_ptr<RawEngine::Writer> NewWriter(const std::string& cf_name) override;
-
- private:
-  void Close();
+  std::shared_ptr<Iterator> NewIterator(const std::string& cf_name, IteratorOptions options);
+  std::shared_ptr<Iterator> NewIterator(const std::string& cf_name, std::shared_ptr<Snapshot> snapshot,
+                                        IteratorOptions options);
+  std::shared_ptr<SstFileWriter> NewSstFileWriter();
+  std::shared_ptr<Checkpoint> NewCheckpoint();
 
   std::shared_ptr<ColumnFamily> GetColumnFamily(const std::string& cf_name);
 
+ private:
   bool InitCfConfig(const std::vector<std::string>& column_family);
-
-  // destroy rocksdb need
-  rocksdb::Options db_options_;
-  std::shared_ptr<rocksdb::TransactionDB> txn_db_;
 
   // set cf config
   static bool SetCfConfiguration(const CfDefaultConf& default_conf,
@@ -206,6 +297,10 @@ class RawRocksEngine : public RawEngine {
 
   void SetColumnFamilyFromConfig(const std::shared_ptr<Config>& config, const std::vector<std::string>& column_family);
 
+  // destroy rocksdb need
+  std::string db_path_;
+  rocksdb::Options db_options_;
+  std::shared_ptr<rocksdb::TransactionDB> txn_db_;
   std::map<std::string, std::shared_ptr<ColumnFamily> > column_families_;
 };
 

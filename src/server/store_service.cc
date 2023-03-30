@@ -102,6 +102,22 @@ void StoreServiceImpl::DestroyRegion(google::protobuf::RpcController* controller
   }
 }
 
+void StoreServiceImpl::Snapshot(google::protobuf::RpcController* controller, const pb::store::SnapshotRequest* request,
+                                pb::store::SnapshotResponse* response, google::protobuf::Closure* done) {
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(done);
+  DINGO_LOG(INFO) << "Snapshot request... ";
+
+  auto store_control = Server::GetInstance()->GetStoreControl();
+  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
+  auto status = store_control->Snapshot(ctx, request->region_id());
+  if (!status.ok()) {
+    auto* mut_err = response->mutable_error();
+    mut_err->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
+    mut_err->set_errmsg(status.error_str());
+  }
+}
+
 butil::Status ValidateRegion(uint64_t region_id) {
   auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
   auto region = store_meta_manager->GetRegion(region_id);
@@ -497,6 +513,6 @@ void StoreServiceImpl::KvDeleteRange(google::protobuf::RpcController* controller
   }
 }
 
-void StoreServiceImpl::set_storage(std::shared_ptr<Storage> storage) { storage_ = storage; }
+void StoreServiceImpl::SetStorage(std::shared_ptr<Storage> storage) { storage_ = storage; }
 
 }  // namespace dingodb

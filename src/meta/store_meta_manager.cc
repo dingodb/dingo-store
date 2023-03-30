@@ -149,27 +149,9 @@ std::map<uint64_t, std::shared_ptr<pb::common::Region>> StoreRegionMeta::GetAllR
   return regions_;
 }
 
-uint64_t StoreRegionMeta::ParseRegionId(const std::string& str) {
-  if (str.size() <= prefix_.size()) {
-    DINGO_LOG(ERROR) << "Parse region id failed, invalid str " << str;
-    return 0;
-  }
-
-  std::string s(str.c_str() + prefix_.size() + 1);
-  try {
-    return std::stoull(s, nullptr, 10);
-  } catch (std::invalid_argument& e) {
-    DINGO_LOG(ERROR) << "string to uint64_t failed: " << e.what();
-  }
-
-  return 0;
-}
-
-std::string StoreRegionMeta::GenKey(uint64_t region_id) {
-  return butil::StringPrintf("%s_%lu", prefix_.c_str(), region_id);
-}
-
-std::shared_ptr<pb::common::KeyValue> StoreRegionMeta::TransformToKv(const std::shared_ptr<pb::common::Region> region) {
+std::shared_ptr<pb::common::KeyValue> StoreRegionMeta::TransformToKv(
+    const std::shared_ptr<google::protobuf::Message> obj) {
+  auto region = std::dynamic_pointer_cast<pb::common::Region>(obj);
   std::shared_ptr<pb::common::KeyValue> kv = std::make_shared<pb::common::KeyValue>();
   kv->set_key(GenKey(region->id()));
   kv->set_value(region->SerializeAsString());
@@ -228,11 +210,86 @@ void StoreRegionMeta::TransformFromKv(const std::vector<pb::common::KeyValue>& k
   }
 }
 
+StoreRaftMeta::StoreRaftMeta() : TransformKvAble(Constant::kStoreRaftMetaPrefix) {
+  bthread_mutex_init(&mutex_, nullptr);
+}
+
+StoreRaftMeta::~StoreRaftMeta() { bthread_mutex_destroy(&mutex_); }
+
+bool StoreRaftMeta::Init() { return true; }
+
+bool StoreRaftMeta::Recover(const std::vector<pb::common::KeyValue>& kvs) {
+  TransformFromKv(kvs);
+  return true;
+}
+
+void StoreRaftMeta::Add(std::shared_ptr<pb::store_internal::RaftMeta> raft_meta) {
+  BAIDU_SCOPED_LOCK(mutex_);
+  if (raft_metas_.find(raft_meta->region_id()) != raft_metas_.end()) {
+    DINGO_LOG(WARNING) << butil::StringPrintf("raft meta %lu already exist!", raft_meta->region_id());
+    return;
+  }
+
+  raft_metas_.insert(std::make_pair(raft_meta->region_id(), raft_meta));
+}
+
+void StoreRaftMeta::Update(std::shared_ptr<pb::store_internal::RaftMeta> raft_meta) {
+  BAIDU_SCOPED_LOCK(mutex_);
+  raft_metas_.insert_or_assign(raft_meta->region_id(), raft_meta);
+}
+
+void StoreRaftMeta::Delete(uint64_t region_id) {
+  BAIDU_SCOPED_LOCK(mutex_);
+  raft_metas_.erase(region_id);
+}
+
+std::shared_ptr<pb::store_internal::RaftMeta> StoreRaftMeta::Get(uint64_t region_id) {
+  BAIDU_SCOPED_LOCK(mutex_);
+  auto it = raft_metas_.find(region_id);
+  if (it == raft_metas_.end()) {
+    DINGO_LOG(WARNING) << butil::StringPrintf("raft meta %lu not exist!", region_id);
+    return nullptr;
+  }
+
+  return it->second;
+}
+
+std::shared_ptr<pb::common::KeyValue> StoreRaftMeta::TransformToKv(
+    const std::shared_ptr<google::protobuf::Message> obj) {
+  auto raft_meta = std::dynamic_pointer_cast<pb::store_internal::RaftMeta>(obj);
+  std::shared_ptr<pb::common::KeyValue> kv = std::make_shared<pb::common::KeyValue>();
+  kv->set_key(GenKey(raft_meta->region_id()));
+  kv->set_value(raft_meta->SerializeAsString());
+
+  return kv;
+}
+
+std::shared_ptr<pb::common::KeyValue> StoreRaftMeta::TransformToKv(uint64_t region_id) {
+  BAIDU_SCOPED_LOCK(mutex_);
+  auto it = raft_metas_.find(region_id);
+  if (it == raft_metas_.end()) {
+    return nullptr;
+  }
+
+  return TransformToKv(it->second);
+}
+
+void StoreRaftMeta::TransformFromKv(const std::vector<pb::common::KeyValue>& kvs) {
+  BAIDU_SCOPED_LOCK(mutex_);
+  for (const auto& kv : kvs) {
+    uint64_t region_id = ParseRegionId(kv.key());
+    std::shared_ptr<pb::store_internal::RaftMeta> raft_meta = std::make_shared<pb::store_internal::RaftMeta>();
+    raft_meta->ParsePartialFromArray(kv.value().data(), kv.value().size());
+    raft_metas_.insert_or_assign(region_id, raft_meta);
+  }
+}
+
 StoreMetaManager::StoreMetaManager(std::shared_ptr<MetaReader> meta_reader, std::shared_ptr<MetaWriter> meta_writer)
     : meta_reader_(meta_reader),
       meta_writer_(meta_writer),
       server_meta_(std::make_unique<StoreServerMeta>()),
-      region_meta_(std::make_unique<StoreRegionMeta>()) {
+      region_meta_(std::make_unique<StoreRegionMeta>()),
+      raft_meta_(std::make_unique<StoreRaftMeta>()) {
   bthread_mutex_init(&heartbeat_update_mutex_, nullptr);
 }
 
@@ -249,16 +306,34 @@ bool StoreMetaManager::Init() {
     return false;
   }
 
+  if (!raft_meta_->Init()) {
+    DINGO_LOG(ERROR) << "Init store raft meta failed!";
+    return false;
+  }
+
   return true;
 }
 
 bool StoreMetaManager::Recover() {
-  std::vector<pb::common::KeyValue> kvs;
-  if (!meta_reader_->Scan(region_meta_->prefix(), kvs)) {
+  std::vector<pb::common::KeyValue> regio_meta_kvs;
+  if (!meta_reader_->Scan(region_meta_->prefix(), regio_meta_kvs)) {
+    DINGO_LOG(ERROR) << "Scan store region meta failed!";
     return false;
   }
 
-  if (!region_meta_->Recover(kvs)) {
+  if (!region_meta_->Recover(regio_meta_kvs)) {
+    DINGO_LOG(ERROR) << "Recover store region meta failed!";
+    return false;
+  }
+
+  std::vector<pb::common::KeyValue> raft_meta_kvs;
+  if (!meta_reader_->Scan(raft_meta_->prefix(), raft_meta_kvs)) {
+    DINGO_LOG(ERROR) << "Scan store raft meta failed!";
+    return false;
+  }
+
+  if (!raft_meta_->Recover(raft_meta_kvs)) {
+    DINGO_LOG(ERROR) << "Recover store raft meta failed!";
     return false;
   }
 
@@ -314,6 +389,24 @@ std::shared_ptr<pb::common::Region> StoreMetaManager::GetRegion(uint64_t region_
 
 std::map<uint64_t, std::shared_ptr<pb::common::Region>> StoreMetaManager::GetAllRegion() {
   return region_meta_->GetAllRegion();
+}
+
+void StoreMetaManager::AddRaftMeta(std::shared_ptr<pb::store_internal::RaftMeta> raft_meta) {
+  raft_meta_->Add(raft_meta);
+  meta_writer_->Put(raft_meta_->TransformToKv(raft_meta));
+}
+
+void StoreMetaManager::SaveRaftMeta(std::shared_ptr<pb::store_internal::RaftMeta> raft_meta) {
+  meta_writer_->Put(raft_meta_->TransformToKv(raft_meta));
+}
+
+void StoreMetaManager::DeleteRaftMeta(uint64_t region_id) {
+  raft_meta_->Delete(region_id);
+  meta_writer_->Delete(region_meta_->GenKey(region_id));
+}
+
+std::shared_ptr<pb::store_internal::RaftMeta> StoreMetaManager::GetRaftMeta(uint64_t region_id) {
+  return raft_meta_->Get(region_id);
 }
 
 }  // namespace dingodb

@@ -19,10 +19,11 @@
 #include <shared_mutex>
 #include <vector>
 
-#include "butil/endpoint.h"
-#include "engine/engine.h"
-#include "meta/meta_reader.h"
-#include "meta/meta_writer.h"
+#include "butil/strings/stringprintf.h"
+// #include "engine/engine.h"
+// #include "meta/meta_reader.h"
+// #include "meta/meta_writer.h"
+#include "common/logging.h"
 #include "proto/common.pb.h"
 
 namespace dingodb {
@@ -35,15 +36,43 @@ class TransformKvAble {
   virtual ~TransformKvAble() = default;
 
   std::string prefix() { return prefix_; }
-  virtual std::string GenKey(uint64_t /*region_id*/) { return ""; }
+  virtual std::string GenKey(uint64_t id) { return butil::StringPrintf("%s_%lu", prefix_.c_str(), id); }
+
+  virtual uint64_t ParseRegionId(const std::string& str) {
+    if (str.size() <= prefix_.size()) {
+      DINGO_LOG(ERROR) << "Parse region id failed, invalid str " << str;
+      return 0;
+    }
+
+    std::string s(str.c_str() + prefix_.size() + 1);
+    try {
+      return std::stoull(s, nullptr, 10);
+    } catch (std::invalid_argument& e) {
+      DINGO_LOG(ERROR) << "string to uint64_t failed: " << e.what();
+    }
+
+    return 0;
+  }
 
   // Transform other format to kv.
-  virtual std::shared_ptr<pb::common::KeyValue> TransformToKv(uint64_t id) = 0;
-  virtual std::shared_ptr<pb::common::KeyValue> TransformToKv(const std::shared_ptr<pb::common::Region> region) = 0;
+  virtual std::shared_ptr<pb::common::KeyValue> TransformToKv(uint64_t id) {
+    DINGO_LOG(ERROR) << "Not support";
+    return nullptr;
+  }
+  virtual std::shared_ptr<pb::common::KeyValue> TransformToKv(const std::shared_ptr<google::protobuf::Message> obj) {
+    DINGO_LOG(ERROR) << "Not support";
+    return nullptr;
+  }
   // Transform other format to kv with delta.
-  virtual std::vector<std::shared_ptr<pb::common::KeyValue> > TransformToKvtWithDelta() = 0;
+  virtual std::vector<std::shared_ptr<pb::common::KeyValue> > TransformToKvtWithDelta() {
+    DINGO_LOG(ERROR) << "Not support";
+    return {};
+  }
   // Transform other format to kv with all.
-  virtual std::vector<std::shared_ptr<pb::common::KeyValue> > TransformToKvWithAll() = 0;
+  virtual std::vector<std::shared_ptr<pb::common::KeyValue> > TransformToKvWithAll() {
+    DINGO_LOG(ERROR) << "Not support";
+    return {};
+  }
 
   // Transform kv to other format.
   virtual void TransformFromKv(const std::vector<pb::common::KeyValue>& kvs) = 0;

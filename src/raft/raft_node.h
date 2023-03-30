@@ -51,6 +51,8 @@ class RaftNode {
   void ChangePeers(const std::vector<pb::common::Peer>& peers, braft::Closure* done);
   butil::Status ResetPeers(const braft::Configuration& new_peers);
 
+  void Snapshot(braft::Closure* done);
+
  private:
   pb::common::ClusterRole role_;
   uint64_t node_id_;

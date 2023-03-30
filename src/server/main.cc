@@ -104,7 +104,7 @@ void SetupSignalHandler() {
 int main(int argc, char *argv[]) {
   google::ParseCommandLineFlags(&argc, &argv, true);
 
-  // SetupSignalHandler();
+  SetupSignalHandler();
 
   dingodb::pb::common::ClusterRole role = dingodb::pb::common::COORDINATOR;
 
@@ -246,7 +246,7 @@ int main(int argc, char *argv[]) {
       return -1;
     }
 
-    store_service.set_storage(dingo_server->GetStorage());
+    store_service.SetStorage(dingo_server->GetStorage());
     if (brpc_server.AddService(&store_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
       DINGO_LOG(ERROR) << "Fail to add store service!";
       return -1;

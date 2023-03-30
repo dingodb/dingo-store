@@ -14,21 +14,39 @@
 
 #include "event/store_state_machine_event.h"
 
+#include "handler/raft_snapshot_handler.h"
+
 namespace dingodb {
 
 void SmApplyEventListener::OnEvent(std::shared_ptr<Event> event) {
   auto the_event = std::dynamic_pointer_cast<SmApplyEvent>(event);
 
   // Dispatch
-  auto done = dynamic_cast<StoreClosure*>(the_event->done_);
+  auto* done = dynamic_cast<StoreClosure*>(the_event->done);
   auto ctx = done ? done->GetCtx() : nullptr;
-  for (const auto& req : the_event->raft_cmd_->requests()) {
+  for (const auto& req : the_event->raft_cmd->requests()) {
     auto handler = handler_collection_->GetHandler(static_cast<HandlerType>(req.cmd_type()));
     if (handler) {
-      handler->Handle(ctx, the_event->engine_, req);
+      handler->Handle(ctx, the_event->engine, req);
     } else {
-      LOG(ERROR) << "Unknown raft cmd type " << req.cmd_type();
+      DINGO_LOG(ERROR) << "Unknown raft cmd type " << req.cmd_type();
     }
+  }
+}
+
+void SmSnapshotSaveEventListener::OnEvent(std::shared_ptr<Event> event) {
+  auto the_event = std::dynamic_pointer_cast<SmSnapshotSaveEvent>(event);
+
+  if (handler_) {
+    handler_->Handle(the_event->node_id, the_event->engine, the_event->writer, the_event->done);
+  }
+}
+
+void SmSnapshotLoadEventListener::OnEvent(std::shared_ptr<Event> event) {
+  auto the_event = std::dynamic_pointer_cast<SmSnapshotLoadEvent>(event);
+
+  if (handler_) {
+    handler_->Handle(the_event->node_id, the_event->engine, the_event->reader);
   }
 }
 
@@ -37,9 +55,11 @@ void SmLeaderStartEventListener::OnEvent(std::shared_ptr<Event> event) {
 
   // Update region meta
   auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
-  auto region = store_meta_manager->GetRegion(the_event->node_id_);
-  region->set_leader_store_id(Server::GetInstance()->Id());
-  region->set_state(pb::common::REGION_NORMAL);
+  auto region = store_meta_manager->GetRegion(the_event->node_id);
+  if (region) {
+    region->set_leader_store_id(Server::GetInstance()->Id());
+    region->set_state(pb::common::REGION_NORMAL);
+  }
 
   // trigger heartbeat
   auto store_control = Server::GetInstance()->GetStoreControl();
@@ -50,27 +70,32 @@ void SmStartFollowingEventListener::OnEvent(std::shared_ptr<Event> event) {
   auto the_event = std::dynamic_pointer_cast<SmStartFollowingEvent>(event);
   // Update region meta
   auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
-  auto region = store_meta_manager->GetRegion(the_event->node_id_);
-  region->set_leader_store_id(0);
-  region->set_state(pb::common::REGION_NORMAL);
+  auto region = store_meta_manager->GetRegion(the_event->node_id);
+  if (region) {
+    region->set_leader_store_id(0);
+    region->set_state(pb::common::REGION_NORMAL);
+  }
 }
 
 std::shared_ptr<EventListenerCollection> StoreSmEventListenerFactory::Build() {
-  auto listener_collection_ = std::make_shared<EventListenerCollection>();
+  auto listener_collection = std::make_shared<EventListenerCollection>();
 
-  auto handlerFactory = std::make_shared<RaftApplyHandlerFactory>();
-  listener_collection_->Register(std::make_shared<SmApplyEventListener>(handlerFactory->Build()));
+  auto handler_factory = std::make_shared<RaftApplyHandlerFactory>();
+  listener_collection->Register(std::make_shared<SmApplyEventListener>(handler_factory->Build()));
 
-  listener_collection_->Register(std::make_shared<SmShutdownEventListener>());
-  listener_collection_->Register(std::make_shared<SmSnapshotSaveEventListener>());
-  listener_collection_->Register(std::make_shared<SmSnapshotLoadEventListener>());
-  listener_collection_->Register(std::make_shared<SmLeaderStartEventListener>());
-  listener_collection_->Register(std::make_shared<SmLeaderStopEventListener>());
-  listener_collection_->Register(std::make_shared<SmErrorEventListener>());
-  listener_collection_->Register(std::make_shared<SmConfigurationCommittedEventListener>());
-  listener_collection_->Register(std::make_shared<SmStartFollowingEventListener>());
-  listener_collection_->Register(std::make_shared<SmStopFollowingEventListener>());
+  listener_collection->Register(std::make_shared<SmShutdownEventListener>());
+  listener_collection->Register(
+      std::make_shared<SmSnapshotSaveEventListener>(std::make_shared<RaftSaveSnapshotHanler>()));
+  listener_collection->Register(
+      std::make_shared<SmSnapshotLoadEventListener>(std::make_shared<RaftLoadSnapshotHanler>()));
+  listener_collection->Register(std::make_shared<SmLeaderStartEventListener>());
+  listener_collection->Register(std::make_shared<SmLeaderStopEventListener>());
+  listener_collection->Register(std::make_shared<SmErrorEventListener>());
+  listener_collection->Register(std::make_shared<SmConfigurationCommittedEventListener>());
+  listener_collection->Register(std::make_shared<SmStartFollowingEventListener>());
+  listener_collection->Register(std::make_shared<SmStopFollowingEventListener>());
 
-  return listener_collection_;
+  return listener_collection;
 }
+
 }  // namespace dingodb

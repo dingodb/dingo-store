@@ -36,6 +36,7 @@ class RaftControlAble {
   virtual butil::Status DestroyRegion([[maybe_unused]] std::shared_ptr<Context> ctx, uint64_t region_id) = 0;
   virtual butil::Status ChangeRegion([[maybe_unused]] std::shared_ptr<Context> ctx, uint64_t region_id,
                                      std::vector<pb::common::Peer> peers) = 0;
+  virtual butil::Status Snapshot([[maybe_unused]] std::shared_ptr<Context> ctx, uint64_t region_id) = 0;
 
  protected:
   RaftControlAble() = default;
@@ -59,6 +60,7 @@ class RaftKvEngine : public Engine, public RaftControlAble {
   butil::Status ChangeRegion(std::shared_ptr<Context> ctx, uint64_t region_id,
                              std::vector<pb::common::Peer> peers) override;
   butil::Status DestroyRegion(std::shared_ptr<Context> ctx, uint64_t region_id) override;
+  butil::Status Snapshot(std::shared_ptr<Context> ctx, uint64_t region_id) override;
 
   butil::Status Write(std::shared_ptr<Context> ctx, const WriteData& write_data) override;
   butil::Status AsyncWrite(std::shared_ptr<Context> ctx, const WriteData& write_data, WriteCb_t cb) override;

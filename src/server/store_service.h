@@ -35,6 +35,9 @@ class StoreServiceImpl : public pb::store::StoreService {
   void DestroyRegion(google::protobuf::RpcController* controller, const pb::store::DestroyRegionRequest* request,
                      pb::store::DestroyRegionResponse* response, google::protobuf::Closure* done) override;
 
+  void Snapshot(google::protobuf::RpcController* controller, const pb::store::SnapshotRequest* request,
+                pb::store::SnapshotResponse* response, google::protobuf::Closure* done) override;
+
   void KvGet(google::protobuf::RpcController* controller, const pb::store::KvGetRequest* request,
              pb::store::KvGetResponse* response, google::protobuf::Closure* done) override;
 
@@ -60,7 +63,7 @@ class StoreServiceImpl : public pb::store::StoreService {
   void KvDeleteRange(google::protobuf::RpcController* controller, const pb::store::KvDeleteRangeRequest* request,
                      pb::store::KvDeleteRangeResponse* response, google::protobuf::Closure* done) override;
 
-  void set_storage(std::shared_ptr<Storage> storage);
+  void SetStorage(std::shared_ptr<Storage> storage);
 
  private:
   std::shared_ptr<Storage> storage_;

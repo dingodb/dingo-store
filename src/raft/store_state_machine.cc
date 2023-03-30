@@ -23,6 +23,8 @@
 #include "proto/raft.pb.h"
 #include "server/server.h"
 
+const int kSaveAppliedIndexStep = 10;
+
 namespace dingodb {
 
 void StoreClosure::Run() {
@@ -47,12 +49,41 @@ void StoreClosure::Run() {
 
 StoreStateMachine::StoreStateMachine(std::shared_ptr<RawEngine> engine, uint64_t node_id,
                                      std::shared_ptr<EventListenerCollection> listeners)
-    : engine_(engine), node_id_(node_id), listeners_(listeners) {}
+    : engine_(engine), node_id_(node_id), listeners_(listeners), is_restart_(true), applied_index_(0) {}
+
+bool StoreStateMachine::Init() {
+  // Recover applied index
+  auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
+  auto raft_meta = store_meta_manager->GetRaftMeta(node_id_);
+  if (raft_meta) {
+    DINGO_LOG(INFO) << "applied_index: " << raft_meta->applied_index();
+    applied_index_ = raft_meta->applied_index();
+
+  } else {
+    raft_meta = std::make_shared<pb::store_internal::RaftMeta>();
+    raft_meta->set_region_id(node_id_);
+    raft_meta->set_applied_index(0);
+    store_meta_manager->AddRaftMeta(raft_meta);
+  }
+
+  raft_meta_ = raft_meta;
+
+  return true;
+}
+
+void StoreStateMachine::DispatchEvent(dingodb::EventType event_type, std::shared_ptr<dingodb::Event> event) {
+  for (auto& listener : listeners_->Get(event_type)) {
+    listener->OnEvent(event);
+  }
+}
 
 void StoreStateMachine::on_apply(braft::Iterator& iter) {
   DINGO_LOG(INFO) << "on_apply...";
   for (; iter.valid(); iter.next()) {
-    braft::AsyncClosureGuard const done_guard(iter.done());
+    braft::AsyncClosureGuard done_guard(iter.done());
+    if (iter.index() <= applied_index_) {
+      continue;
+    }
 
     auto raft_cmd = std::make_shared<pb::raft::RaftCmdRequest>();
     if (iter.done()) {
@@ -63,107 +94,135 @@ void StoreStateMachine::on_apply(braft::Iterator& iter) {
       CHECK(raft_cmd->ParseFromZeroCopyStream(&wrapper));
     }
 
-    DINGO_LOG(DEBUG) << butil::StringPrintf("raft apply log on region[%ld-term:%ld-index:%ld] cmd:[%s]",
-                                            raft_cmd->header().region_id(), iter.term(), iter.index(),
-                                            raft_cmd->DebugString().c_str());
+    DINGO_LOG(INFO) << butil::StringPrintf(
+        "raft apply log on region[%ld-term:%ld-index:%ld] applied_index[%ld] cmd:[%s]", raft_cmd->header().region_id(),
+        iter.term(), iter.index(), applied_index_, raft_cmd->ShortDebugString().c_str());
     // Build event
     auto event = std::make_shared<SmApplyEvent>();
-    event->engine_ = engine_;
-    event->done_ = iter.done();
-    event->raft_cmd_ = raft_cmd;
+    event->engine = engine_;
+    event->done = iter.done();
+    event->raft_cmd = raft_cmd;
 
-    for (const auto& listener : listeners_->Get(EventType::SM_APPLY)) {
-      listener->OnEvent(event);
-    }
+    DispatchEvent(EventType::SM_APPLY, event);
+    applied_index_ = iter.index();
+  }
+
+  // Persistence applied index
+  if (applied_index_ % kSaveAppliedIndexStep == 0) {
+    raft_meta_->set_applied_index(applied_index_);
+    auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
+    store_meta_manager->SaveRaftMeta(raft_meta_);
   }
 }
 
 void StoreStateMachine::on_shutdown() {
   DINGO_LOG(INFO) << "on_shutdown...";
   auto event = std::make_shared<SmShutdownEvent>();
-
-  for (const auto& listener : listeners_->Get(EventType::SM_SNAPSHOT_SAVE)) {
-    listener->OnEvent(event);
-  }
+  DispatchEvent(EventType::SM_SHUTDOWN, event);
 }
 
 void StoreStateMachine::on_snapshot_save(braft::SnapshotWriter* writer, braft::Closure* done) {
-  DINGO_LOG(INFO) << "on_snapshot_save...";
-  auto event = std::make_shared<SmSnapshotSaveEvent>(writer, done);
+  DINGO_LOG(INFO) << "on_snapshot_save start...";
+  auto event = std::make_shared<SmSnapshotSaveEvent>();
+  event->engine = engine_;
+  event->writer = writer;
+  event->done = done;
+  event->node_id = node_id_;
 
-  for (const auto& listener : listeners_->Get(EventType::SM_SNAPSHOT_SAVE)) {
-    listener->OnEvent(event);
-  }
+  DispatchEvent(EventType::SM_SNAPSHOT_SAVE, event);
+  DINGO_LOG(INFO) << "on_snapshot_save done...";
 }
 
+// Load snapshot timing
+// 1. server restart.
+//    on_snapshot_load:
+//      1>. max_index = max(applied_index, snapshot_index)
+//      2>. not load snapshot files
+//      3>. applied_index = max_index
+// 2. add peer.
+//    install_snapshot
+//    on_snapshot_load:
+//      1>. max_index = max(applied_index, snapshot_index)
+//      2>. load snapshot files
+//      3>. applied_index = max_index
+// 3. follower log fall behind leader and leader log already deleted.
+//    install_snapshot
+//    on_snapshot_load:
+//      1>. max_index = max(applied_index, snapshot_index)
+//      2>. load snapshot files
+//      3>. applied_index = max_index
 int StoreStateMachine::on_snapshot_load(braft::SnapshotReader* reader) {
-  DINGO_LOG(INFO) << "on_snapshot_load...";
-  auto event = std::make_shared<SmSnapshotLoadEvent>(reader);
+  braft::SnapshotMeta meta;
+  reader->load_meta(&meta);
+  DINGO_LOG(INFO) << butil::StringPrintf("load snapshot(%ld-%ld) applied_index(%lu)", meta.last_included_term(),
+                                         meta.last_included_index(), applied_index_);
 
-  for (const auto& listener : listeners_->Get(EventType::SM_SNAPSHOT_LOAD)) {
-    listener->OnEvent(event);
+  int64_t max_index = std::max(applied_index_, meta.last_included_index());
+
+  if (!is_restart_) {
+    auto event = std::make_shared<SmSnapshotLoadEvent>();
+    event->engine = engine_;
+    event->reader = reader;
+    event->node_id = node_id_;
+    DispatchEvent(EventType::SM_SNAPSHOT_LOAD, event);
   }
-  return -1;
+
+  applied_index_ = max_index;
+  is_restart_ = false;
+
+  return 0;
 }
 
 void StoreStateMachine::on_leader_start(int64_t term) {
   DINGO_LOG(INFO) << "on_leader_start term: " << term;
 
   auto event = std::make_shared<SmLeaderStartEvent>();
-  event->term_ = term;
-  event->node_id_ = node_id_;
+  event->term = term;
+  event->node_id = node_id_;
 
-  for (const auto& listener : listeners_->Get(EventType::SM_LEADER_START)) {
-    listener->OnEvent(event);
-  }
+  DispatchEvent(EventType::SM_LEADER_START, event);
 }
 
 void StoreStateMachine::on_leader_stop(const butil::Status& status) {
   DINGO_LOG(INFO) << "on_leader_stop: " << status.error_code() << " " << status.error_str();
-  auto event = std::make_shared<SmLeaderStopEvent>(status);
+  auto event = std::make_shared<SmLeaderStopEvent>();
+  event->status = status;
 
-  for (const auto& listener : listeners_->Get(EventType::SM_LEADER_STOP)) {
-    listener->OnEvent(event);
-  }
+  DispatchEvent(EventType::SM_LEADER_STOP, event);
 }
 
 void StoreStateMachine::on_error(const braft::Error& e) {
   DINGO_LOG(INFO) << butil::StringPrintf("on_error type(%d) %d %s", e.type(), e.status().error_code(),
                                          e.status().error_cstr());
 
-  auto event = std::make_shared<SmErrorEvent>(e);
+  auto event = std::make_shared<SmErrorEvent>();
+  event->e = e;
 
-  for (const auto& listener : listeners_->Get(EventType::SM_ERROR)) {
-    listener->OnEvent(event);
-  }
+  DispatchEvent(EventType::SM_ERROR, event);
 }
 
 void StoreStateMachine::on_configuration_committed(const braft::Configuration& conf) {
   DINGO_LOG(INFO) << "on_configuration_committed...";
 
-  auto event = std::make_shared<SmConfigurationCommittedEvent>(conf);
+  auto event = std::make_shared<SmConfigurationCommittedEvent>();
+  event->conf = conf;
 
-  for (const auto& listener : listeners_->Get(EventType::SM_CONFIGURATION_COMMITTED)) {
-    listener->OnEvent(event);
-  }
+  DispatchEvent(EventType::SM_CONFIGURATION_COMMITTED, event);
 }
 
 void StoreStateMachine::on_start_following(const braft::LeaderChangeContext& ctx) {
   DINGO_LOG(INFO) << "on_start_following...";
   auto event = std::make_shared<SmStartFollowingEvent>(ctx);
-  event->node_id_ = node_id_;
+  event->node_id = node_id_;
 
-  for (const auto& listener : listeners_->Get(EventType::SM_START_FOLLOWING)) {
-    listener->OnEvent(event);
-  }
+  DispatchEvent(EventType::SM_START_FOLLOWING, event);
 }
 
 void StoreStateMachine::on_stop_following(const braft::LeaderChangeContext& ctx) {
   DINGO_LOG(INFO) << "on_stop_following...";
   auto event = std::make_shared<SmStopFollowingEvent>(ctx);
-  for (const auto& listener : listeners_->Get(EventType::SM_STOP_FOLLOWING)) {
-    listener->OnEvent(event);
-  }
+
+  DispatchEvent(EventType::SM_STOP_FOLLOWING, event);
 }
 
 }  // namespace dingodb

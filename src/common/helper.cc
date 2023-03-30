@@ -14,6 +14,9 @@
 
 #include "common/helper.h"
 
+#include <unistd.h>
+
+#include <chrono>
 #include <cstdint>
 #include <regex>
 
@@ -331,6 +334,15 @@ std::string Helper::GenerateRandomString(int length) {
 uint64_t Helper::GenId() {
   static uint64_t id = 0;
   return ++id;
+}
+
+bool Helper::Link(const std::string& old_path, const std::string& new_path) {
+  return ::link(old_path.c_str(), new_path.c_str()) == 0;
+}
+
+uint64_t Helper::Timestamp() {
+  return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
+      .count();
 }
 
 }  // namespace dingodb

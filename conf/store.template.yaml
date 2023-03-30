@@ -13,7 +13,7 @@ raft:
   port: $RAFT_PORT$
   path: $BASE_PATH$/data/store/raft
   electionTimeout: 1000 # ms
-  snapshotInterval: 3600 # s
+  snapshotInterval: 0 # s
 log:
   logPath: $BASE_PATH$/log
 store:

@@ -12,21 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DINGODB_ENGINE_SNAPSHOT_H_
-#define DINGODB_ENGINE_SNAPSHOT_H_
+syntax = "proto3";
 
-#include <memory>
+package dingodb.pb.store_internal;
 
-namespace dingodb {
+option java_package = "io.dingodb.store_internal";
+option cc_generic_services = true;
 
-class Snapshot {
- public:
-  Snapshot() = default;
-  virtual ~Snapshot() = default;
+message SstFileInfo {
+  int32 level = 1;
+  string name = 2;
+  string path = 3;
+  bytes start_key = 4;
+  bytes end_key = 5;
+}
 
-  virtual const void* Inner() = 0;
-};
-
-}  // namespace dingodb
-
-#endif  // DINGODB_ENGINE_SNAPSHOT_H_
+message RaftMeta {
+  int64 region_id = 1;
+  int64 applied_index = 2;
+}

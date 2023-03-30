@@ -38,6 +38,8 @@ class StoreControl {
   butil::Status ChangeRegion(std::shared_ptr<Context> ctx, std::shared_ptr<pb::common::Region> region);
   butil::Status DeleteRegion(std::shared_ptr<Context> ctx, uint64_t region_id);
 
+  butil::Status Snapshot(std::shared_ptr<Context> ctx, uint64_t region_id);
+
   void SetHeartbeatIntervalMultiple(uint64_t interval_multiple);
   void TriggerHeartbeat();
 

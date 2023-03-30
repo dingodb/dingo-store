@@ -64,9 +64,9 @@ struct Event {
   Event(EventSource source, EventType type) : id_(Helper::GenId()), source_(source), type_(type) {}
   virtual ~Event() = default;
 
-  uint64_t GetID() { return id_; }
-  EventSource GetSource() { return source_; }
-  EventType GetType() { return type_; }
+  uint64_t GetID() const { return id_; }
+  EventSource GetSource() const { return source_; }
+  EventType GetType() const { return type_; }
 
   uint64_t id_;
   EventSource source_;
@@ -81,7 +81,7 @@ class EventListener {
   EventListener(const EventListener &) = delete;
   const EventListener &operator=(const EventListener &) = delete;
 
-  uint64_t GetID() { return id_; }
+  uint64_t GetID() const { return id_; }
   virtual EventType GetType() = 0;
   virtual void OnEvent(std::shared_ptr<Event> event) = 0;
 

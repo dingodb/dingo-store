@@ -50,11 +50,14 @@ pb::common::Engine RocksEngine::GetID() { return pb::common::ENG_ROCKSDB; }
 // not implement
 std::shared_ptr<Snapshot> RocksEngine::GetSnapshot() { return nullptr; }
 
-butil::Status RocksEngine::Write(std::shared_ptr<Context> ctx, const WriteData& write_data) { return butil::Status(); }
-butil::Status RocksEngine::AsyncWrite(std::shared_ptr<Context> ctx, const WriteData& write_data, WriteCb_t write_cb) {
+butil::Status RocksEngine::Write(std::shared_ptr<Context> /*ctx*/, const WriteData& /*write_data*/) {
+  return butil::Status();
+}
+butil::Status RocksEngine::AsyncWrite(std::shared_ptr<Context> /*ctx*/, const WriteData& /*write_data*/,
+                                      WriteCb_t /*write_cb*/) {
   return butil::Status();
 }
 
-std::shared_ptr<Engine::Reader> RocksEngine::NewReader(const std::string& cf_name) { return nullptr; }
+std::shared_ptr<Engine::Reader> RocksEngine::NewReader(const std::string& /*cf_name*/) { return nullptr; }
 
 }  // namespace dingodb

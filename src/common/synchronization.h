@@ -17,111 +17,112 @@
 
 #include "bthread/bthread.h"
 #include "bthread/butex.h"
+#include "common/logging.h"
 
 namespace dingodb {
 
 class BthreadCond {
  public:
   BthreadCond(int count = 0) {
-    bthread_cond_init(&_cond, nullptr);
-    bthread_mutex_init(&_mutex, nullptr);
-    _count = count;
+    bthread_cond_init(&cond_, nullptr);
+    bthread_mutex_init(&mutex_, nullptr);
+    count_ = count;
   }
   ~BthreadCond() {
-    bthread_mutex_destroy(&_mutex);
-    bthread_cond_destroy(&_cond);
+    bthread_mutex_destroy(&mutex_);
+    bthread_cond_destroy(&cond_);
   }
 
-  int Count() const { return _count; }
+  int Count() const { return count_; }
 
   void Increase() {
-    bthread_mutex_lock(&_mutex);
-    ++_count;
-    bthread_mutex_unlock(&_mutex);
+    bthread_mutex_lock(&mutex_);
+    ++count_;
+    bthread_mutex_unlock(&mutex_);
   }
 
   void DecreaseSignal() {
-    bthread_mutex_lock(&_mutex);
-    --_count;
-    bthread_cond_signal(&_cond);
-    bthread_mutex_unlock(&_mutex);
+    bthread_mutex_lock(&mutex_);
+    --count_;
+    bthread_cond_signal(&cond_);
+    bthread_mutex_unlock(&mutex_);
   }
 
   void DecreaseBroadcast() {
-    bthread_mutex_lock(&_mutex);
-    --_count;
-    bthread_cond_broadcast(&_cond);
-    bthread_mutex_unlock(&_mutex);
+    bthread_mutex_lock(&mutex_);
+    --count_;
+    bthread_cond_broadcast(&cond_);
+    bthread_mutex_unlock(&mutex_);
   }
 
   int Wait(int cond = 0) {
     int ret = 0;
-    bthread_mutex_lock(&_mutex);
-    while (_count > cond) {
-      ret = bthread_cond_wait(&_cond, &_mutex);
+    bthread_mutex_lock(&mutex_);
+    while (count_ > cond) {
+      ret = bthread_cond_wait(&cond_, &mutex_);
       if (ret != 0) {
-        LOG(WARNING) << "wait timeout, ret: " << ret;
+        DINGO_LOG(WARNING) << "wait timeout, ret: " << ret;
         break;
       }
     }
 
-    bthread_mutex_unlock(&_mutex);
+    bthread_mutex_unlock(&mutex_);
     return ret;
   }
 
   int IncreaseWait(int cond = 0) {
     int ret = 0;
-    bthread_mutex_lock(&_mutex);
-    while (_count + 1 > cond) {
-      ret = bthread_cond_wait(&_cond, &_mutex);
+    bthread_mutex_lock(&mutex_);
+    while (count_ + 1 > cond) {
+      ret = bthread_cond_wait(&cond_, &mutex_);
       if (ret != 0) {
-        LOG(WARNING) << "wait timeout, ret: " << ret;
+        DINGO_LOG(WARNING) << "wait timeout, ret: " << ret;
         break;
       }
     }
 
-    ++_count;
-    bthread_mutex_unlock(&_mutex);
+    ++count_;
+    bthread_mutex_unlock(&mutex_);
     return ret;
   }
 
   int TimedWait(int64_t timeout_us, int cond = 0) {
     int ret = 0;
     timespec tm = butil::microseconds_from_now(timeout_us);
-    bthread_mutex_lock(&_mutex);
-    while (_count > cond) {
-      ret = bthread_cond_timedwait(&_cond, &_mutex, &tm);
+    bthread_mutex_lock(&mutex_);
+    while (count_ > cond) {
+      ret = bthread_cond_timedwait(&cond_, &mutex_, &tm);
       if (ret != 0) {
-        LOG(WARNING) << "wait timeout, ret: " << ret;
+        DINGO_LOG(WARNING) << "wait timeout, ret: " << ret;
         break;
       }
     }
 
-    bthread_mutex_unlock(&_mutex);
+    bthread_mutex_unlock(&mutex_);
     return ret;
   }
 
   int IncreaseTimedWait(int64_t timeout_us, int cond = 0) {
     int ret = 0;
     timespec tm = butil::microseconds_from_now(timeout_us);
-    bthread_mutex_lock(&_mutex);
-    while (_count + 1 > cond) {
-      ret = bthread_cond_timedwait(&_cond, &_mutex, &tm);
+    bthread_mutex_lock(&mutex_);
+    while (count_ + 1 > cond) {
+      ret = bthread_cond_timedwait(&cond_, &mutex_, &tm);
       if (ret != 0) {
-        LOG(WARNING) << "wait timeout, ret: " << ret;
+        DINGO_LOG(WARNING) << "wait timeout, ret: " << ret;
         break;
       }
     }
 
-    ++_count;
-    bthread_mutex_unlock(&_mutex);
+    ++count_;
+    bthread_mutex_unlock(&mutex_);
     return ret;
   }
 
  private:
-  int _count;
-  bthread_cond_t _cond;
-  bthread_mutex_t _mutex;
+  int count_;
+  bthread_cond_t cond_;
+  bthread_mutex_t mutex_;
 };
 
 };  // namespace dingodb

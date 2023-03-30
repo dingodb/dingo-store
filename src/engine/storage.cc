@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "engine/storage.h"
+
 #include <vector>
 
 #include "common/constant.h"
@@ -33,7 +34,7 @@ void Storage::ReleaseSnapshot() {}
 butil::Status Storage::KvGet(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys,
                              std::vector<pb::common::KeyValue>& kvs) {
   auto reader = engine_->NewReader(Constant::kStoreDataCF);
-  for (auto& key : keys) {
+  for (const auto& key : keys) {
     std::string value;
     auto status = reader->KvGet(ctx, key, value);
     if (!status.ok()) {
@@ -57,7 +58,7 @@ butil::Status Storage::KvPut(std::shared_ptr<Context> ctx, const std::vector<pb:
   WriteData write_data;
   std::shared_ptr<PutDatum> datum = std::make_shared<PutDatum>();
   datum->cf_name = ctx->CfName();
-  datum->kvs = std::move(kvs);
+  datum->kvs = kvs;
   write_data.AddDatums(std::static_pointer_cast<DatumAble>(datum));
 
   return engine_->AsyncWrite(ctx, write_data, [ctx](butil::Status status) {

@@ -27,7 +27,7 @@ namespace dingodb {
 class RocksEngine : public Engine {
  public:
   RocksEngine() = default;
-  ~RocksEngine() override {}
+  ~RocksEngine() override = default;
 
   RocksEngine(const RocksEngine& rhs) = delete;
   RocksEngine& operator=(const RocksEngine& rhs) = delete;

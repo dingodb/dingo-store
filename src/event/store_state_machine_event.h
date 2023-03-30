@@ -26,20 +26,20 @@ namespace dingodb {
 // State Machine apply event
 struct SmApplyEvent : public Event {
   SmApplyEvent() : Event(EventSource::RAFT_STATE_MACHINE, EventType::SM_APPLY) {}
-  ~SmApplyEvent() = default;
+  ~SmApplyEvent() override = default;
 
-  std::shared_ptr<RawEngine> engine_;
-  braft::Closure* done_;
-  std::shared_ptr<pb::raft::RaftCmdRequest> raft_cmd_;
+  std::shared_ptr<RawEngine> engine;
+  braft::Closure* done;
+  std::shared_ptr<pb::raft::RaftCmdRequest> raft_cmd;
 };
 
 class SmApplyEventListener : public EventListener {
  public:
   SmApplyEventListener(std::shared_ptr<HandlerCollection> handler_collection)
-      : EventListener(), handler_collection_(handler_collection) {}
-  ~SmApplyEventListener() = default;
+      : handler_collection_(handler_collection) {}
+  ~SmApplyEventListener() override = default;
 
-  EventType GetType() { return EventType::SM_APPLY; }
+  EventType GetType() override { return EventType::SM_APPLY; }
   void OnEvent(std::shared_ptr<Event> event) override;
 
  private:
@@ -49,169 +49,175 @@ class SmApplyEventListener : public EventListener {
 // State Machine Shutdown
 struct SmShutdownEvent : public Event {
   SmShutdownEvent() : Event(EventSource::RAFT_STATE_MACHINE, EventType::SM_SHUTDOWN) {}
-  ~SmShutdownEvent() = default;
+  ~SmShutdownEvent() override = default;
 };
 
 class SmShutdownEventListener : public EventListener {
  public:
   SmShutdownEventListener() = default;
-  ~SmShutdownEventListener() = default;
+  ~SmShutdownEventListener() override = default;
 
-  EventType GetType() { return EventType::SM_SHUTDOWN; }
-  void OnEvent(std::shared_ptr<Event> event) {}
+  EventType GetType() override { return EventType::SM_SHUTDOWN; }
+  void OnEvent(std::shared_ptr<Event> event) override {}
 };
 
 // State Machine SnapshotSave
 struct SmSnapshotSaveEvent : public Event {
-  SmSnapshotSaveEvent(braft::SnapshotWriter* writer, braft::Closure* done)
-      : Event(EventSource::RAFT_STATE_MACHINE, EventType::SM_SNAPSHOT_SAVE), writer_(writer), done_(done) {}
-  ~SmSnapshotSaveEvent() = default;
+  SmSnapshotSaveEvent() : Event(EventSource::RAFT_STATE_MACHINE, EventType::SM_SNAPSHOT_SAVE) {}
+  ~SmSnapshotSaveEvent() override = default;
 
-  braft::SnapshotWriter* writer_;
-  braft::Closure* done_;
+  std::shared_ptr<RawEngine> engine;
+  braft::SnapshotWriter* writer;
+  braft::Closure* done;
+  uint64_t node_id;
 };
 
 class SmSnapshotSaveEventListener : public EventListener {
  public:
-  SmSnapshotSaveEventListener() = default;
-  ~SmSnapshotSaveEventListener() = default;
+  SmSnapshotSaveEventListener(std::shared_ptr<Handler> handler) : handler_(handler) {}
+  ~SmSnapshotSaveEventListener() override = default;
 
-  EventType GetType() { return EventType::SM_SNAPSHOT_SAVE; }
-  void OnEvent(std::shared_ptr<Event> event) {}
+  EventType GetType() override { return EventType::SM_SNAPSHOT_SAVE; }
+  void OnEvent(std::shared_ptr<Event> event) override;
+
+ private:
+  std::shared_ptr<Handler> handler_;
 };
 
 // State Machine SnapshotLoad
 struct SmSnapshotLoadEvent : public Event {
-  SmSnapshotLoadEvent(braft::SnapshotReader* reader)
-      : Event(EventSource::RAFT_STATE_MACHINE, EventType::SM_SNAPSHOT_LOAD), reader_(reader) {}
-  ~SmSnapshotLoadEvent() = default;
+  SmSnapshotLoadEvent() : Event(EventSource::RAFT_STATE_MACHINE, EventType::SM_SNAPSHOT_LOAD) {}
+  ~SmSnapshotLoadEvent() override = default;
 
-  braft::SnapshotReader* reader_;
+  std::shared_ptr<RawEngine> engine;
+  braft::SnapshotReader* reader;
+  uint64_t node_id;
 };
 
 class SmSnapshotLoadEventListener : public EventListener {
  public:
-  SmSnapshotLoadEventListener() = default;
-  ~SmSnapshotLoadEventListener() = default;
+  SmSnapshotLoadEventListener(std::shared_ptr<Handler> handler) : handler_(handler) {}
+  ~SmSnapshotLoadEventListener() override = default;
 
-  EventType GetType() { return EventType::SM_SNAPSHOT_LOAD; }
-  void OnEvent(std::shared_ptr<Event> event) {}
+  EventType GetType() override { return EventType::SM_SNAPSHOT_LOAD; }
+  void OnEvent(std::shared_ptr<Event> event) override;
+
+ private:
+  std::shared_ptr<Handler> handler_;
 };
 
 // State Machine LeaderStart
 struct SmLeaderStartEvent : public Event {
   SmLeaderStartEvent() : Event(EventSource::RAFT_STATE_MACHINE, EventType::SM_LEADER_START) {}
-  ~SmLeaderStartEvent() = default;
+  ~SmLeaderStartEvent() override = default;
 
-  int64_t term_;
-  int64_t node_id_;
+  int64_t term;
+  int64_t node_id;
 };
 
 class SmLeaderStartEventListener : public EventListener {
  public:
   SmLeaderStartEventListener() = default;
-  ~SmLeaderStartEventListener() = default;
+  ~SmLeaderStartEventListener() override = default;
 
-  EventType GetType() { return EventType::SM_LEADER_START; }
+  EventType GetType() override { return EventType::SM_LEADER_START; }
   void OnEvent(std::shared_ptr<Event> event) override;
 };
 
 // State Machine LeaderStop
 struct SmLeaderStopEvent : public Event {
-  SmLeaderStopEvent(const butil::Status& status)
-      : Event(EventSource::RAFT_STATE_MACHINE, EventType::SM_LEADER_STOP), status_(status) {}
-  ~SmLeaderStopEvent() = default;
+  SmLeaderStopEvent() : Event(EventSource::RAFT_STATE_MACHINE, EventType::SM_LEADER_STOP) {}
+  ~SmLeaderStopEvent() override = default;
 
-  const butil::Status& status_;
+  butil::Status status;
 };
 
 class SmLeaderStopEventListener : public EventListener {
  public:
   SmLeaderStopEventListener() = default;
-  ~SmLeaderStopEventListener() = default;
+  ~SmLeaderStopEventListener() override = default;
 
-  EventType GetType() { return EventType::SM_LEADER_STOP; }
-  void OnEvent(std::shared_ptr<Event> event) {}
+  EventType GetType() override { return EventType::SM_LEADER_STOP; }
+  void OnEvent(std::shared_ptr<Event> event) override {}
 };
 
 // State Machine Error
 struct SmErrorEvent : public Event {
-  SmErrorEvent(const braft::Error& e) : Event(EventSource::RAFT_STATE_MACHINE, EventType::SM_ERROR), e_(e) {}
-  ~SmErrorEvent() = default;
+  SmErrorEvent() : Event(EventSource::RAFT_STATE_MACHINE, EventType::SM_ERROR) {}
+  ~SmErrorEvent() override = default;
 
-  const braft::Error& e_;
+  braft::Error e;
 };
 
 class SmErrorEventListener : public EventListener {
  public:
   SmErrorEventListener() = default;
-  ~SmErrorEventListener() = default;
+  ~SmErrorEventListener() override = default;
 
-  EventType GetType() { return EventType::SM_ERROR; }
-  void OnEvent(std::shared_ptr<Event> event) {}
+  EventType GetType() override { return EventType::SM_ERROR; }
+  void OnEvent(std::shared_ptr<Event> event) override {}
 };
 
 // State Machine ConfigurationCommitted
 struct SmConfigurationCommittedEvent : public Event {
-  SmConfigurationCommittedEvent(const braft::Configuration& conf)
-      : Event(EventSource::RAFT_STATE_MACHINE, EventType::SM_CONFIGURATION_COMMITTED), conf_(conf) {}
-  ~SmConfigurationCommittedEvent() = default;
+  SmConfigurationCommittedEvent() : Event(EventSource::RAFT_STATE_MACHINE, EventType::SM_CONFIGURATION_COMMITTED) {}
+  ~SmConfigurationCommittedEvent() override = default;
 
-  const braft::Configuration& conf_;
+  braft::Configuration conf;
 };
 
 class SmConfigurationCommittedEventListener : public EventListener {
  public:
   SmConfigurationCommittedEventListener() = default;
-  ~SmConfigurationCommittedEventListener() = default;
+  ~SmConfigurationCommittedEventListener() override = default;
 
-  EventType GetType() { return EventType::SM_CONFIGURATION_COMMITTED; }
-  void OnEvent(std::shared_ptr<Event> event) {}
+  EventType GetType() override { return EventType::SM_CONFIGURATION_COMMITTED; }
+  void OnEvent(std::shared_ptr<Event> event) override {}
 };
 
 // State Machine StartFollowing
 struct SmStartFollowingEvent : public Event {
   SmStartFollowingEvent(const braft::LeaderChangeContext& ctx)
-      : Event(EventSource::RAFT_STATE_MACHINE, EventType::SM_START_FOLLOWING), ctx_(ctx) {}
-  ~SmStartFollowingEvent() = default;
+      : Event(EventSource::RAFT_STATE_MACHINE, EventType::SM_START_FOLLOWING), ctx(ctx) {}
+  ~SmStartFollowingEvent() override = default;
 
-  const braft::LeaderChangeContext& ctx_;
-  uint64_t node_id_;
+  const braft::LeaderChangeContext& ctx;
+  uint64_t node_id;
 };
 
 class SmStartFollowingEventListener : public EventListener {
  public:
   SmStartFollowingEventListener() = default;
-  ~SmStartFollowingEventListener() = default;
+  ~SmStartFollowingEventListener() override = default;
 
-  EventType GetType() { return EventType::SM_START_FOLLOWING; }
+  EventType GetType() override { return EventType::SM_START_FOLLOWING; }
   void OnEvent(std::shared_ptr<Event> event) override;
 };
 
 // State Machine StopFollowing
 struct SmStopFollowingEvent : public Event {
   SmStopFollowingEvent(const braft::LeaderChangeContext& ctx)
-      : Event(EventSource::RAFT_STATE_MACHINE, EventType::SM_STOP_FOLLOWING), ctx_(ctx) {}
-  ~SmStopFollowingEvent() = default;
+      : Event(EventSource::RAFT_STATE_MACHINE, EventType::SM_STOP_FOLLOWING), ctx(ctx) {}
+  ~SmStopFollowingEvent() override = default;
 
-  const braft::LeaderChangeContext& ctx_;
+  const braft::LeaderChangeContext& ctx;
 };
 
 class SmStopFollowingEventListener : public EventListener {
  public:
   SmStopFollowingEventListener() = default;
-  ~SmStopFollowingEventListener() = default;
+  ~SmStopFollowingEventListener() override = default;
 
-  EventType GetType() { return EventType::SM_STOP_FOLLOWING; }
-  void OnEvent(std::shared_ptr<Event> event) {}
+  EventType GetType() override { return EventType::SM_STOP_FOLLOWING; }
+  void OnEvent(std::shared_ptr<Event> event) override {}
 };
 
 class StoreSmEventListenerFactory : public EventListenerFactory {
  public:
   StoreSmEventListenerFactory() = default;
-  ~StoreSmEventListenerFactory() = default;
+  ~StoreSmEventListenerFactory() override = default;
 
-  std::shared_ptr<EventListenerCollection> Build();
+  std::shared_ptr<EventListenerCollection> Build() override;
 };
 
 }  // namespace dingodb
