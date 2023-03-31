@@ -16,6 +16,7 @@
 
 #include <string>
 
+#include "common/logging.h"
 #include "proto/common.pb.h"
 
 DECLARE_bool(log_each_request);
@@ -39,18 +40,18 @@ std::string GetLeaderLocation() {
   braft::PeerId leader;
   if (!FLAGS_coordinator_addr.empty()) {
     if (leader.parse(FLAGS_coordinator_addr) != 0) {
-      LOG(ERROR) << "Fail to parse peer_id " << FLAGS_coordinator_addr;
+      DINGO_LOG(ERROR) << "Fail to parse peer_id " << FLAGS_coordinator_addr;
       return std::string();
     }
   } else {
-    LOG(ERROR) << "Please set --coordinator_addr";
+    DINGO_LOG(ERROR) << "Please set --coordinator_addr";
     return std::string();
   }
 
   // rpc
   brpc::Channel channel;
   if (channel.Init(leader.addr, nullptr) != 0) {
-    LOG(ERROR) << "Fail to init channel to " << leader;
+    DINGO_LOG(ERROR) << "Fail to init channel to " << leader;
     bthread_usleep(FLAGS_timeout_ms * 1000L);
     return std::string();
   }
@@ -63,12 +64,12 @@ std::string GetLeaderLocation() {
   brpc::Controller cntl;
   stub.GetCoordinatorMap(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
-    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
     return std::string();
   }
 
   auto leader_location = response.leader_location().host() + ":" + std::to_string(response.leader_location().port());
-  LOG(INFO) << "leader_location: " << leader_location;
+  DINGO_LOG(INFO) << "leader_location: " << leader_location;
   return leader_location;
 }
 
@@ -81,15 +82,16 @@ void SendGetNodeInfo(brpc::Controller& cntl, dingodb::pb::node::NodeService_Stub
   request.set_cluster_id(0);
   stub.GetNodeInfo(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
-    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
     // bthread_usleep(FLAGS_timeout_ms * 1000L);
   }
 
   if (FLAGS_log_each_request) {
-    LOG(INFO) << "Received response"
-              << " cluster_id=" << request.cluster_id() << " request_attachment=" << cntl.request_attachment().size()
-              << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
-    LOG(INFO) << response.DebugString();
+    DINGO_LOG(INFO) << "Received response"
+                    << " cluster_id=" << request.cluster_id()
+                    << " request_attachment=" << cntl.request_attachment().size()
+                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+    DINGO_LOG(INFO) << response.DebugString();
   }
 }
 
@@ -102,15 +104,15 @@ void SendHello(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorServ
   request.set_hello(0);
   stub.Hello(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
-    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
     // bthread_usleep(FLAGS_timeout_ms * 1000L);
   }
 
   if (FLAGS_log_each_request) {
-    LOG(INFO) << "Received response"
-              << " hello=" << request.hello() << " request_attachment=" << cntl.request_attachment().size()
-              << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
-    LOG(INFO) << response.DebugString();
+    DINGO_LOG(INFO) << "Received response"
+                    << " hello=" << request.hello() << " request_attachment=" << cntl.request_attachment().size()
+                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+    DINGO_LOG(INFO) << response.DebugString();
   }
 }
 
@@ -122,15 +124,16 @@ void SendGetStoreMap(brpc::Controller& cntl, dingodb::pb::coordinator::Coordinat
 
   stub.GetStoreMap(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
-    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
     // bthread_usleep(FLAGS_timeout_ms * 1000L);
   }
 
   if (FLAGS_log_each_request) {
-    LOG(INFO) << "Received response"
-              << " get_store_map=" << request.epoch() << " request_attachment=" << cntl.request_attachment().size()
-              << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
-    LOG(INFO) << response.DebugString();
+    DINGO_LOG(INFO) << "Received response"
+                    << " get_store_map=" << request.epoch()
+                    << " request_attachment=" << cntl.request_attachment().size()
+                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+    DINGO_LOG(INFO) << response.DebugString();
   }
 }
 
@@ -142,15 +145,16 @@ void SendGetExecutorMap(brpc::Controller& cntl, dingodb::pb::coordinator::Coordi
 
   stub.GetExecutorMap(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
-    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
     // bthread_usleep(FLAGS_timeout_ms * 1000L);
   }
 
   if (FLAGS_log_each_request) {
-    LOG(INFO) << "Received response"
-              << " get_executor_map=" << request.epoch() << " request_attachment=" << cntl.request_attachment().size()
-              << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
-    LOG(INFO) << response.DebugString();
+    DINGO_LOG(INFO) << "Received response"
+                    << " get_executor_map=" << request.epoch()
+                    << " request_attachment=" << cntl.request_attachment().size()
+                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+    DINGO_LOG(INFO) << response.DebugString();
   }
 }
 
@@ -162,16 +166,16 @@ void SendGetCoordinatorMap(brpc::Controller& cntl, dingodb::pb::coordinator::Coo
 
   stub.GetCoordinatorMap(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
-    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
     // bthread_usleep(FLAGS_timeout_ms * 1000L);
   }
 
   if (FLAGS_log_each_request) {
-    LOG(INFO) << "Received response"
-              << " get_coordinator_map=" << request.cluster_id()
-              << " request_attachment=" << cntl.request_attachment().size()
-              << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
-    LOG(INFO) << response.DebugString();
+    DINGO_LOG(INFO) << "Received response"
+                    << " get_coordinator_map=" << request.cluster_id()
+                    << " request_attachment=" << cntl.request_attachment().size()
+                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+    DINGO_LOG(INFO) << response.DebugString();
   }
 }
 
@@ -183,21 +187,22 @@ void SendGetRegionMap(brpc::Controller& cntl, dingodb::pb::coordinator::Coordina
 
   stub.GetRegionMap(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
-    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
     // bthread_usleep(FLAGS_timeout_ms * 1000L);
   }
 
   if (FLAGS_log_each_request) {
-    LOG(INFO) << "Received response"
-              << " get_store_map=" << request.epoch() << " request_attachment=" << cntl.request_attachment().size()
-              << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us()
-              << " response=" << MessageToJsonString(response);
+    DINGO_LOG(INFO) << "Received response"
+                    << " get_store_map=" << request.epoch()
+                    << " request_attachment=" << cntl.request_attachment().size()
+                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us()
+                    << " response=" << MessageToJsonString(response);
     for (const auto& region : response.regionmap().regions()) {
-      LOG(INFO) << "Region id=" << region.id() << " name=" << region.name()
-                << " state=" << dingodb::pb::common::RegionState_Name(region.state())
-                << " leader_store_id=" << region.leader_store_id();
+      DINGO_LOG(INFO) << "Region id=" << region.id() << " name=" << region.name()
+                      << " state=" << dingodb::pb::common::RegionState_Name(region.state())
+                      << " leader_store_id=" << region.leader_store_id();
     }
-    // LOG(INFO) << response.DebugString();
+    // DINGO_LOG(INFO) << response.DebugString();
   }
 }
 
@@ -208,16 +213,16 @@ void SendCreateStore(brpc::Controller& cntl, dingodb::pb::coordinator::Coordinat
   request.set_cluster_id(1);
   stub.CreateStore(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
-    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorCode() << "[" << cntl.ErrorText() << "]";
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorCode() << "[" << cntl.ErrorText() << "]";
     // bthread_usleep(FLAGS_timeout_ms * 1000L);
   }
 
   if (FLAGS_log_each_request) {
-    LOG(INFO) << "Received response"
-              << " create store cluster_id =" << request.cluster_id()
-              << " request_attachment=" << cntl.request_attachment().size()
-              << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
-    LOG(INFO) << response.DebugString();
+    DINGO_LOG(INFO) << "Received response"
+                    << " create store cluster_id =" << request.cluster_id()
+                    << " request_attachment=" << cntl.request_attachment().size()
+                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+    DINGO_LOG(INFO) << response.DebugString();
   }
 }
 
@@ -228,13 +233,13 @@ void SendDeleteStore(brpc::Controller& cntl, dingodb::pb::coordinator::Coordinat
   request.set_cluster_id(1);
 
   if (FLAGS_id.empty()) {
-    LOG(WARNING) << "id is empty";
+    DINGO_LOG(WARNING) << "id is empty";
     return;
   }
   request.set_store_id(std::stol(FLAGS_id));
 
   if (FLAGS_keyring.empty()) {
-    LOG(WARNING) << "keyring is empty";
+    DINGO_LOG(WARNING) << "keyring is empty";
     return;
   }
   auto* keyring = request.mutable_keyring();
@@ -242,16 +247,16 @@ void SendDeleteStore(brpc::Controller& cntl, dingodb::pb::coordinator::Coordinat
 
   stub.DeleteStore(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
-    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorCode() << "[" << cntl.ErrorText() << "]";
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorCode() << "[" << cntl.ErrorText() << "]";
     // bthread_usleep(FLAGS_timeout_ms * 1000L);
   }
 
   if (FLAGS_log_each_request) {
-    LOG(INFO) << "Received response"
-              << " create store cluster_id =" << request.cluster_id()
-              << " request_attachment=" << cntl.request_attachment().size()
-              << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
-    LOG(INFO) << response.DebugString();
+    DINGO_LOG(INFO) << "Received response"
+                    << " create store cluster_id =" << request.cluster_id()
+                    << " request_attachment=" << cntl.request_attachment().size()
+                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+    DINGO_LOG(INFO) << response.DebugString();
   }
 }
 
@@ -262,16 +267,16 @@ void SendCreateExecutor(brpc::Controller& cntl, dingodb::pb::coordinator::Coordi
   request.set_cluster_id(1);
   stub.CreateExecutor(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
-    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorCode() << "[" << cntl.ErrorText() << "]";
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorCode() << "[" << cntl.ErrorText() << "]";
     // bthread_usleep(FLAGS_timeout_ms * 1000L);
   }
 
   if (FLAGS_log_each_request) {
-    LOG(INFO) << "Received response"
-              << " create executor cluster_id =" << request.cluster_id()
-              << " request_attachment=" << cntl.request_attachment().size()
-              << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
-    LOG(INFO) << response.DebugString();
+    DINGO_LOG(INFO) << "Received response"
+                    << " create executor cluster_id =" << request.cluster_id()
+                    << " request_attachment=" << cntl.request_attachment().size()
+                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+    DINGO_LOG(INFO) << response.DebugString();
   }
 }
 
@@ -281,13 +286,13 @@ void SendDeleteExecutor(brpc::Controller& cntl, dingodb::pb::coordinator::Coordi
 
   request.set_cluster_id(1);
   if (FLAGS_id.empty()) {
-    LOG(WARNING) << "id is empty";
+    DINGO_LOG(WARNING) << "id is empty";
     return;
   }
   request.set_executor_id(std::stol(FLAGS_id));
 
   if (FLAGS_keyring.empty()) {
-    LOG(WARNING) << "keyring is empty";
+    DINGO_LOG(WARNING) << "keyring is empty";
     return;
   }
   auto* keyring = request.mutable_keyring();
@@ -295,16 +300,16 @@ void SendDeleteExecutor(brpc::Controller& cntl, dingodb::pb::coordinator::Coordi
 
   stub.DeleteExecutor(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
-    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorCode() << "[" << cntl.ErrorText() << "]";
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorCode() << "[" << cntl.ErrorText() << "]";
     // bthread_usleep(FLAGS_timeout_ms * 1000L);
   }
 
   if (FLAGS_log_each_request) {
-    LOG(INFO) << "Received response"
-              << " create executor cluster_id =" << request.cluster_id()
-              << " request_attachment=" << cntl.request_attachment().size()
-              << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
-    LOG(INFO) << response.DebugString();
+    DINGO_LOG(INFO) << "Received response"
+                    << " create executor cluster_id =" << request.cluster_id()
+                    << " request_attachment=" << cntl.request_attachment().size()
+                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+    DINGO_LOG(INFO) << response.DebugString();
   }
 }
 
@@ -367,20 +372,20 @@ void SendStoreHearbeat(brpc::Controller& cntl, dingodb::pb::coordinator::Coordin
     region->set_create_timestamp(1677496540);
   }
 
-  // LOG(INFO) << request.DebugString();
+  // DINGO_LOG(INFO) << request.DebugString();
 
   stub.StoreHeartbeat(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
-    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
     bthread_usleep(FLAGS_timeout_ms * 1000L);
   }
 
   if (FLAGS_log_each_request) {
-    LOG(INFO) << "Received response"
-              << " store_heartbeat "
-              << " request_attachment=" << cntl.request_attachment().size()
-              << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
-    LOG(INFO) << response.DebugString();
+    DINGO_LOG(INFO) << "Received response"
+                    << " store_heartbeat "
+                    << " request_attachment=" << cntl.request_attachment().size()
+                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+    DINGO_LOG(INFO) << response.DebugString();
   }
 }
 
@@ -395,26 +400,26 @@ void SendGetSchemas(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub&
 
   stub.GetSchemas(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
-    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
     // bthread_usleep(FLAGS_timeout_ms * 1000L);
   }
 
   if (FLAGS_log_each_request) {
-    LOG(INFO) << "Received response"
-              << " schema_id=" << request.schema_id().entity_id() << " schema_count=" << response.schemas_size()
-              << " request_attachment=" << cntl.request_attachment().size()
-              << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
-    LOG(INFO) << response.DebugString();
+    DINGO_LOG(INFO) << "Received response"
+                    << " schema_id=" << request.schema_id().entity_id() << " schema_count=" << response.schemas_size()
+                    << " request_attachment=" << cntl.request_attachment().size()
+                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+    DINGO_LOG(INFO) << response.DebugString();
 
     // for (int32_t i = 0; i < response.schemas_size(); i++) {
-    //   LOG(INFO) << "schema_id=[" << response.schemas(i).id().entity_id() << "]"
+    //   DINGO_LOG(INFO) << "schema_id=[" << response.schemas(i).id().entity_id() << "]"
     //             << "child_schema_count=" << response.schemas(i).schema_ids_size()
     //             << "child_table_count=" << response.schemas(i).table_ids_size();
     //   for (int32_t j = 0; j < response.schemas(i).schema_ids_size(); j++) {
-    //     LOG(INFO) << "child schema_id=[" << response.schemas(i).schema_ids(j).entity_id() << "]";
+    //     DINGO_LOG(INFO) << "child schema_id=[" << response.schemas(i).schema_ids(j).entity_id() << "]";
     //   }
     //   for (int32_t j = 0; j < response.schemas(i).table_ids_size(); j++) {
-    //     LOG(INFO) << "child table_id=[" << response.schemas(i).table_ids(j).entity_id() << "]";
+    //     DINGO_LOG(INFO) << "child table_id=[" << response.schemas(i).table_ids(j).entity_id() << "]";
     //   }
     // }
   }
@@ -431,16 +436,16 @@ void SendGetTablesCount(brpc::Controller& cntl, dingodb::pb::meta::MetaService_S
 
   stub.GetTables(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
-    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
     // bthread_usleep(FLAGS_timeout_ms * 1000L);
   }
 
   if (FLAGS_log_each_request) {
-    LOG(INFO) << "Received response"
-              << " request schema_id=" << request.schema_id().entity_id()
-              << " table_count=" << response.table_definition_with_ids_size()
-              << " request_attachment=" << cntl.request_attachment().size()
-              << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+    DINGO_LOG(INFO) << "Received response"
+                    << " request schema_id=" << request.schema_id().entity_id()
+                    << " table_count=" << response.table_definition_with_ids_size()
+                    << " request_attachment=" << cntl.request_attachment().size()
+                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
   }
 }
 
@@ -455,32 +460,32 @@ void SendGetTables(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& 
 
   stub.GetTables(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
-    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
     // bthread_usleep(FLAGS_timeout_ms * 1000L);
   }
 
   if (FLAGS_log_each_request) {
-    LOG(INFO) << "Received response"
-              << " request schema_id=" << request.schema_id().entity_id()
-              << " table_count=" << response.table_definition_with_ids_size()
-              << " request_attachment=" << cntl.request_attachment().size()
-              << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
-    LOG(INFO) << response.DebugString();
+    DINGO_LOG(INFO) << "Received response"
+                    << " request schema_id=" << request.schema_id().entity_id()
+                    << " table_count=" << response.table_definition_with_ids_size()
+                    << " request_attachment=" << cntl.request_attachment().size()
+                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+    DINGO_LOG(INFO) << response.DebugString();
     // for (int32_t i = 0; i < response.tables_size(); i++) {
     //   const auto& table = response.tables(i);
-    //   LOG(INFO) << "table_id=[" << table.id() << "]"
+    //   DINGO_LOG(INFO) << "table_id=[" << table.id() << "]"
     //             << "partition_count=" << table.partitions_size();
 
     //   for (int32_t j = 0; j < table.partitions_size(); j++) {
     //     const auto& partition = table.partitions(j);
-    //     LOG(INFO) << "partition_id=[" << partition.id()
+    //     DINGO_LOG(INFO) << "partition_id=[" << partition.id()
     //               << "] region_count = " << partition.regions_size()
     //               << " start_key " << partition.range().start_key()
     //               << " end_key " << partition.range().end_key();
 
     //     for (int32_t k = 0; k < partition.regions_size(); k++) {
     //       const auto& region  = partition.regions(k);
-    //       LOG(INFO) << "region_id = " << region.id() << " region_name = " <<
+    //       DINGO_LOG(INFO) << "region_id = " << region.id() << " region_name = " <<
     //       region.name() ;
     //     }
     //   }
@@ -497,23 +502,23 @@ void SendGetTable(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& s
   table_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
 
   if (FLAGS_id.empty()) {
-    LOG(WARNING) << "id is empty";
+    DINGO_LOG(WARNING) << "id is empty";
     return;
   }
   table_id->set_entity_id(std::stol(FLAGS_id));
 
   stub.GetTable(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
-    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
     // bthread_usleep(FLAGS_timeout_ms * 1000L);
   }
 
   if (FLAGS_log_each_request) {
-    LOG(INFO) << "Received response"
-              << " table_id=" << request.table_id().entity_id()
-              << " request_attachment=" << cntl.request_attachment().size()
-              << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
-    LOG(INFO) << response.DebugString();
+    DINGO_LOG(INFO) << "Received response"
+                    << " table_id=" << request.table_id().entity_id()
+                    << " request_attachment=" << cntl.request_attachment().size()
+                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+    DINGO_LOG(INFO) << response.DebugString();
   }
 }
 
@@ -528,17 +533,17 @@ void SendCreateTableId(brpc::Controller& cntl, dingodb::pb::meta::MetaService_St
 
   stub.CreateTableId(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
-    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
     // bthread_usleep(FLAGS_timeout_ms * 1000L);
   }
 
   if (FLAGS_log_each_request) {
-    LOG(INFO) << "Received response"
-              << " request schema_id=" << request.schema_id().entity_id()
-              << " request_attachment=" << cntl.request_attachment().size()
-              << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
-    LOG(INFO) << " request=" << request.DebugString();
-    LOG(INFO) << " response=" << response.DebugString();
+    DINGO_LOG(INFO) << "Received response"
+                    << " request schema_id=" << request.schema_id().entity_id()
+                    << " request_attachment=" << cntl.request_attachment().size()
+                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+    DINGO_LOG(INFO) << " request=" << request.DebugString();
+    DINGO_LOG(INFO) << " response=" << response.DebugString();
   }
 }
 
@@ -556,7 +561,7 @@ void SendCreateTable(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub
     table_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
     table_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
     if (FLAGS_id.empty()) {
-      LOG(WARNING) << "id is empty";
+      DINGO_LOG(WARNING) << "id is empty";
       return;
     }
     table_id->set_entity_id(std::stol(FLAGS_id));
@@ -611,17 +616,17 @@ void SendCreateTable(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub
 
   stub.CreateTable(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
-    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
     // bthread_usleep(FLAGS_timeout_ms * 1000L);
   }
 
   if (FLAGS_log_each_request) {
-    LOG(INFO) << "Received response"
-              << " request schema_id=" << request.schema_id().entity_id()
-              << " request_attachment=" << cntl.request_attachment().size()
-              << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
-    LOG(INFO) << " request=" << request.DebugString();
-    LOG(INFO) << " response=" << response.DebugString();
+    DINGO_LOG(INFO) << "Received response"
+                    << " request schema_id=" << request.schema_id().entity_id()
+                    << " request_attachment=" << cntl.request_attachment().size()
+                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+    DINGO_LOG(INFO) << " request=" << request.DebugString();
+    DINGO_LOG(INFO) << " response=" << response.DebugString();
   }
 }
 
@@ -633,24 +638,24 @@ void SendDropTable(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& 
   table_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
   table_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
   if (FLAGS_id.empty()) {
-    LOG(WARNING) << "id is empty";
+    DINGO_LOG(WARNING) << "id is empty";
     return;
   }
   table_id->set_entity_id(std::stol(FLAGS_id));
 
   stub.DropTable(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
-    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
     // bthread_usleep(FLAGS_timeout_ms * 1000L);
   }
 
   if (FLAGS_log_each_request) {
-    LOG(INFO) << "Received response"
-              << " request schema_id=" << request.table_id().parent_entity_id()
-              << " request table_id=" << request.table_id().entity_id()
-              << " request_attachment=" << cntl.request_attachment().size()
-              << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
-    LOG(INFO) << response.DebugString();
+    DINGO_LOG(INFO) << "Received response"
+                    << " request schema_id=" << request.table_id().parent_entity_id()
+                    << " request table_id=" << request.table_id().entity_id()
+                    << " request_attachment=" << cntl.request_attachment().size()
+                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+    DINGO_LOG(INFO) << response.DebugString();
   }
 }
 
@@ -662,25 +667,25 @@ void SendDropSchema(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub&
   schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
   schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
   if (FLAGS_id.empty()) {
-    LOG(WARNING) << "id is empty";
+    DINGO_LOG(WARNING) << "id is empty";
     return;
   }
   schema_id->set_entity_id(std::stol(FLAGS_id));
 
   stub.DropSchema(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
-    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
     // bthread_usleep(FLAGS_timeout_ms * 1000L);
     return;
   }
 
   if (FLAGS_log_each_request) {
-    LOG(INFO) << "Received response"
-              << " request parent_schema_id=" << request.schema_id().parent_entity_id()
-              << " request schema_id=" << request.schema_id().entity_id()
-              << " request_attachment=" << cntl.request_attachment().size()
-              << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
-    LOG(INFO) << response.DebugString();
+    DINGO_LOG(INFO) << "Received response"
+                    << " request parent_schema_id=" << request.schema_id().parent_entity_id()
+                    << " request schema_id=" << request.schema_id().entity_id()
+                    << " request_attachment=" << cntl.request_attachment().size()
+                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+    DINGO_LOG(INFO) << response.DebugString();
   }
 }
 
@@ -696,17 +701,17 @@ void SendCreateSchema(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stu
   request.set_schema_name("test_create_schema");
   stub.CreateSchema(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
-    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
     // bthread_usleep(FLAGS_timeout_ms * 1000L);
     return;
   }
 
   if (FLAGS_log_each_request) {
-    LOG(INFO) << "Received response"
-              << " request parent_schema_id=" << request.parent_schema_id().entity_id()
-              << " request schema_name=" << request.schema_name()
-              << " request_attachment=" << cntl.request_attachment().size()
-              << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
-    LOG(INFO) << response.DebugString();
+    DINGO_LOG(INFO) << "Received response"
+                    << " request parent_schema_id=" << request.parent_schema_id().entity_id()
+                    << " request schema_name=" << request.schema_name()
+                    << " request_attachment=" << cntl.request_attachment().size()
+                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+    DINGO_LOG(INFO) << response.DebugString();
   }
 }

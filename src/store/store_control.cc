@@ -17,6 +17,7 @@
 #include <memory>
 
 #include "common/helper.h"
+#include "common/logging.h"
 #include "event/store_state_machine_event.h"
 #include "server/server.h"
 
@@ -41,7 +42,7 @@ butil::Status ValidateAddRegion(std::shared_ptr<StoreMetaManager> store_meta_man
 butil::Status StoreControl::AddRegion(std::shared_ptr<Context> ctx, std::shared_ptr<pb::common::Region> region) {
   BAIDU_SCOPED_LOCK(control_mutex_);
   auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
-  LOG(INFO) << "Add region info: " << region->DebugString();
+  DINGO_LOG(INFO) << "Add region info: " << region->DebugString();
 
   // Valiate region
   auto status = ValidateAddRegion(store_meta_manager, region);
@@ -164,7 +165,7 @@ void StoreControl::SetHeartbeatIntervalMultiple(uint64_t interval_multiple) {
 }
 
 void StoreControl::TriggerHeartbeat() {
-  LOG(INFO) << "TriggerHeartbeat";
+  DINGO_LOG(INFO) << "TriggerHeartbeat";
   this->need_heartbeat_immediately.store(true);
 }
 
@@ -173,7 +174,7 @@ bool StoreControl::CheckNeedToHeartbeat() {
     this->need_heartbeat_immediately.store(false);
     this->heartbeat_count = 0;
 
-    LOG(INFO) << "Heartbeat is triggerred";
+    DINGO_LOG(INFO) << "Heartbeat is triggerred";
     return true;
   }
 

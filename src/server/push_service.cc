@@ -17,6 +17,7 @@
 #include "common/constant.h"
 #include "common/context.h"
 #include "common/helper.h"
+#include "common/logging.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
 #include "proto/push.pb.h"
@@ -32,8 +33,8 @@ void PushServiceImpl::PushHeartbeat(google::protobuf::RpcController* controller,
                                     dingodb::pb::push::PushHeartbeatResponse* /*response*/,
                                     google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
-  brpc::ClosureGuard done_guard(done);
-  LOG(INFO) << "PushHeartbeat request: " << dingodb::Helper::MessageToJsonString(*request);
+  brpc::ClosureGuard const done_guard(done);
+  DINGO_LOG(INFO) << "PushHeartbeat request: " << dingodb::Helper::MessageToJsonString(*request);
 
   // call HandleStoreHeartbeatResponse
   auto heartbeat_response = request->heartbeat_response();

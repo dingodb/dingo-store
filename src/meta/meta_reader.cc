@@ -19,6 +19,7 @@
 #include "butil/status.h"
 #include "common/constant.h"
 #include "common/helper.h"
+#include "common/logging.h"
 #include "engine/snapshot.h"
 
 namespace dingodb {
@@ -41,7 +42,7 @@ std::shared_ptr<pb::common::KeyValue> MetaReader::Get(std::shared_ptr<Snapshot> 
     status = reader->KvGet(key, *value);
   }
   if (!status.ok()) {
-    LOG(ERROR) << "Meta get failed, errcode: " << status.error_code() << " " << status.error_str();
+    DINGO_LOG(ERROR) << "Meta get failed, errcode: " << status.error_code() << " " << status.error_str();
     return nullptr;
   }
 
@@ -65,11 +66,11 @@ bool MetaReader::Scan(std::shared_ptr<Snapshot> snapshot, const std::string& pre
     status = reader->KvScan(prefix, prefix_next, kvs);
   }
   if (!status.ok()) {
-    LOG(ERROR) << "Meta scan failed, errcode: " << status.error_code() << " " << status.error_str();
+    DINGO_LOG(ERROR) << "Meta scan failed, errcode: " << status.error_code() << " " << status.error_str();
     return false;
   }
-  LOG(INFO) << "Scan meta data, prefix: " << Helper::StringToHex(prefix) << "-" << Helper::StringToHex(prefix_next)
-            << ": " << kvs.size();
+  DINGO_LOG(INFO) << "Scan meta data, prefix: " << Helper::StringToHex(prefix) << "-"
+                  << Helper::StringToHex(prefix_next) << ": " << kvs.size();
 
   return true;
 }

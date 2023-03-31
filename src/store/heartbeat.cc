@@ -18,6 +18,7 @@
 
 #include "butil/scoped_lock.h"
 #include "common/helper.h"
+#include "common/logging.h"
 #include "coordinator/coordinator_control.h"
 #include "coordinator/coordinator_interaction.h"
 #include "proto/common.pb.h"
@@ -31,16 +32,16 @@ void Heartbeat::SendCoordinatorPushToStore(void* arg) {
   CoordinatorControl* coordinator_control = static_cast<CoordinatorControl*>(arg);
 
   if (!coordinator_control->IsLeader()) {
-    // LOG(INFO) << "SendCoordinatorPushToStore... this is follower";
+    // DINGO_LOG(INFO) << "SendCoordinatorPushToStore... this is follower";
     return;
   }
-  // LOG(INFO) << "SendCoordinatorPushToStore... this is leader";
+  // DINGO_LOG(INFO) << "SendCoordinatorPushToStore... this is leader";
 
   std::map<uint64_t, pb::common::Store> store_to_push;
   coordinator_control->GetPushStoreMap(store_to_push);
 
   if (store_to_push.empty()) {
-    // LOG(INFO) << "SendCoordinatorPushToStore... No store to push";
+    // DINGO_LOG(INFO) << "SendCoordinatorPushToStore... No store to push";
     return;
   }
 
@@ -57,7 +58,7 @@ void Heartbeat::SendCoordinatorPushToStore(void* arg) {
     heartbeat_response.set_regionmap_epoch(new_regionmap->epoch());
 
     std::string str_response = Helper::MessageToJsonString(heartbeat_response);
-    LOG(INFO) << "SendCoordinatorPushToStore will send [" << str_response << "] to store with request[";
+    DINGO_LOG(INFO) << "SendCoordinatorPushToStore will send [" << str_response << "] to store with request[";
   }
 
   // prepare request and response
@@ -73,8 +74,8 @@ void Heartbeat::SendCoordinatorPushToStore(void* arg) {
     const pb::common::Location& store_server_location = store_need_send.server_location();
 
     if (store_server_location.host().length() <= 0 || store_server_location.port() <= 0) {
-      LOG(ERROR) << "SendCoordinatorPushToStore illegal store_server_location="
-                 << Helper::MessageToJsonString(store_server_location);
+      DINGO_LOG(ERROR) << "SendCoordinatorPushToStore illegal store_server_location="
+                       << Helper::MessageToJsonString(store_server_location);
       return;
     }
 
@@ -88,7 +89,7 @@ void Heartbeat::SendCoordinatorPushToStore(void* arg) {
     // rpc
     brpc::Channel channel;
     if (channel.Init(remote_node.addr, nullptr) != 0) {
-      LOG(ERROR) << "SendCoordinatorPushToStore Fail to init channel to " << remote_node;
+      DINGO_LOG(ERROR) << "SendCoordinatorPushToStore Fail to init channel to " << remote_node;
       return;
     }
 
@@ -99,25 +100,25 @@ void Heartbeat::SendCoordinatorPushToStore(void* arg) {
 
     stub.PushHeartbeat(&cntl, &request, &response, nullptr);
     if (cntl.Failed()) {
-      LOG(WARNING) << "SendCoordinatorPushToStore Fail to send request to : " << cntl.ErrorText();
+      DINGO_LOG(WARNING) << "SendCoordinatorPushToStore Fail to send request to : " << cntl.ErrorText();
       return;
     }
 
-    LOG(INFO) << "SendCoordinatorPushToStore to " << store_server_location_string
-              << " response latency=" << cntl.latency_us() << " msg=" << Helper::MessageToJsonString(response);
+    DINGO_LOG(INFO) << "SendCoordinatorPushToStore to " << store_server_location_string
+                    << " response latency=" << cntl.latency_us() << " msg=" << Helper::MessageToJsonString(response);
   }
 }
 
 void Heartbeat::SendStoreHeartbeat(void* arg) {
-  // LOG(INFO) << "SendStoreHeartbeat...";
+  // DINGO_LOG(INFO) << "SendStoreHeartbeat...";
   CoordinatorInteraction* coordinator_interaction = static_cast<CoordinatorInteraction*>(arg);
 
   auto store_control = Server::GetInstance()->GetStoreControl();
   if (!store_control->CheckNeedToHeartbeat()) {
-    // LOG(INFO) << "CheckNeedToHeartbeat is false, no need to hearbeat";
+    // DINGO_LOG(INFO) << "CheckNeedToHeartbeat is false, no need to hearbeat";
     return;
   }
-  LOG(INFO) << "CheckNeedToHeartbeat is true, start to SendStoreHeartbeat";
+  DINGO_LOG(INFO) << "CheckNeedToHeartbeat is true, start to SendStoreHeartbeat";
 
   pb::coordinator::StoreHeartbeatRequest request;
   auto store_meta = Server::GetInstance()->GetStoreMetaManager();
@@ -265,19 +266,19 @@ void Heartbeat::HandleStoreHeartbeatResponse(std::shared_ptr<dingodb::StoreMetaM
   auto remote_stores = response.storemap().stores();
 
   auto new_stores = GetNewStore(local_stores, remote_stores);
-  LOG(INFO) << "new store size: " << new_stores.size() << " / " << local_stores.size();
+  DINGO_LOG(INFO) << "new store size: " << new_stores.size() << " / " << local_stores.size();
   for (const auto& store : new_stores) {
     store_meta->AddStore(store);
   }
 
   auto changed_stores = GetChangedStore(local_stores, remote_stores);
-  LOG(INFO) << "changed store size: " << changed_stores.size() << " / " << local_stores.size();
+  DINGO_LOG(INFO) << "changed store size: " << changed_stores.size() << " / " << local_stores.size();
   for (const auto& store : changed_stores) {
     store_meta->UpdateStore(store);
   }
 
   auto deleted_stores = GetDeletedStore(local_stores, remote_stores);
-  LOG(INFO) << "deleted store size: " << deleted_stores.size() << " / " << local_stores.size();
+  DINGO_LOG(INFO) << "deleted store size: " << deleted_stores.size() << " / " << local_stores.size();
   for (const auto& store : deleted_stores) {
     store_meta->DeleteStore(store->id());
   }
@@ -289,7 +290,7 @@ void Heartbeat::HandleStoreHeartbeatResponse(std::shared_ptr<dingodb::StoreMetaM
 
   // If has new region, add region.
   auto new_regions = GetNewRegion(local_regions, remote_regions);
-  LOG(INFO) << "new regions size: " << new_regions.size() << " / " << local_regions.size();
+  DINGO_LOG(INFO) << "new regions size: " << new_regions.size() << " / " << local_regions.size();
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   for (const auto& region : new_regions) {
     store_control->AddRegion(ctx, region);
@@ -297,7 +298,7 @@ void Heartbeat::HandleStoreHeartbeatResponse(std::shared_ptr<dingodb::StoreMetaM
 
   // Check for change peers region.
   auto changed_peer_regions = GetChangedPeerRegion(local_regions, remote_regions);
-  LOG(INFO) << "change peer regions size: " << changed_peer_regions.size() << " / " << local_regions.size();
+  DINGO_LOG(INFO) << "change peer regions size: " << changed_peer_regions.size() << " / " << local_regions.size();
   for (auto region : changed_peer_regions) {
     std::shared_ptr<Context> ctx = std::make_shared<Context>();
     // store_control->ChangeRegion(ctx, region);
@@ -305,7 +306,7 @@ void Heartbeat::HandleStoreHeartbeatResponse(std::shared_ptr<dingodb::StoreMetaM
 
   // Check for delete region.
   auto delete_regions = GetDeleteRegion(local_regions, remote_regions);
-  LOG(INFO) << "delete regions size: " << delete_regions.size() << " / " << local_regions.size();
+  DINGO_LOG(INFO) << "delete regions size: " << delete_regions.size() << " / " << local_regions.size();
   for (auto region : delete_regions) {
     std::shared_ptr<Context> ctx = std::make_shared<Context>();
     // store_control->DeleteRegion(ctx, region->id());

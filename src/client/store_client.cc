@@ -20,6 +20,7 @@
 #include "brpc/channel.h"
 #include "brpc/controller.h"
 #include "bthread/bthread.h"
+#include "common/logging.h"
 #include "gflags/gflags.h"
 #include "proto/meta.pb.h"
 #include "proto/store.pb.h"
@@ -73,13 +74,13 @@ int64_t SendKvGet(dingodb::pb::store::StoreService_Stub& stub, uint64_t region_i
   request.set_key(key);
   stub.KvGet(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
-    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
   }
 
   value = response.value();
   if (FLAGS_log_each_request) {
-    LOG(INFO) << " request=" << request.ShortDebugString() << " response=" << response.ShortDebugString()
-              << " latency=" << cntl.latency_us() << "us";
+    DINGO_LOG(INFO) << " request=" << request.ShortDebugString() << " response=" << response.ShortDebugString()
+                    << " latency=" << cntl.latency_us() << "us";
   }
 
   return cntl.latency_us();
@@ -100,12 +101,12 @@ void SendKvBatchGet(dingodb::pb::store::StoreService_Stub& stub) {
 
   stub.KvBatchGet(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
-    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
   }
 
   if (FLAGS_log_each_request) {
-    LOG(INFO) << " request=" << request.ShortDebugString() << " response=" << response.ShortDebugString()
-              << " latency=" << cntl.latency_us() << "us";
+    DINGO_LOG(INFO) << " request=" << request.ShortDebugString() << " response=" << response.ShortDebugString()
+                    << " latency=" << cntl.latency_us() << "us";
   }
 }
 
@@ -124,12 +125,12 @@ int64_t SendKvPut(dingodb::pb::store::StoreService_Stub& stub, uint64_t region_i
 
   stub.KvPut(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
-    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
   }
 
   if (FLAGS_log_each_request) {
-    LOG(INFO) << " request=" << request.ShortDebugString() << " response=" << response.ShortDebugString()
-              << " latency=" << cntl.latency_us() << "us";
+    DINGO_LOG(INFO) << " request=" << request.ShortDebugString() << " response=" << response.ShortDebugString()
+                    << " latency=" << cntl.latency_us() << "us";
   }
 
   return cntl.latency_us();
@@ -155,19 +156,19 @@ void TestBatchPutGet(dingodb::pb::store::StoreService_Stub& stub, uint64_t regio
   }
 
   int sum = std::accumulate(latencys.begin(), latencys.end(), 0);
-  LOG(INFO) << "Put average latency: " << sum / latencys.size() << " us";
+  DINGO_LOG(INFO) << "Put average latency: " << sum / latencys.size() << " us";
 
   latencys.clear();
   for (auto& it : dataset) {
     std::string value;
     latencys.push_back(SendKvGet(stub, region_id, it.first, value));
     if (value != it.second) {
-      LOG(INFO) << "Not match...";
+      DINGO_LOG(INFO) << "Not match...";
     }
   }
 
   sum = std::accumulate(latencys.begin(), latencys.end(), 0);
-  LOG(INFO) << "Get average latency: " << sum / latencys.size() << " us";
+  DINGO_LOG(INFO) << "Get average latency: " << sum / latencys.size() << " us";
 }
 
 void SendKvBatchPut(dingodb::pb::store::StoreService_Stub& stub) {
@@ -187,12 +188,12 @@ void SendKvBatchPut(dingodb::pb::store::StoreService_Stub& stub) {
 
   stub.KvBatchPut(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
-    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
   }
 
   if (FLAGS_log_each_request) {
-    LOG(INFO) << " request=" << request.ShortDebugString() << " response=" << response.ShortDebugString()
-              << " latency=" << cntl.latency_us() << "us";
+    DINGO_LOG(INFO) << " request=" << request.ShortDebugString() << " response=" << response.ShortDebugString()
+                    << " latency=" << cntl.latency_us() << "us";
   }
 }
 
@@ -210,12 +211,12 @@ void SendKvPutIfAbsent(dingodb::pb::store::StoreService_Stub& stub) {
 
   stub.KvPutIfAbsent(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
-    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
   }
 
   if (FLAGS_log_each_request) {
-    LOG(INFO) << " request=" << request.ShortDebugString() << " response=" << response.ShortDebugString()
-              << " latency=" << cntl.latency_us() << "us";
+    DINGO_LOG(INFO) << " request=" << request.ShortDebugString() << " response=" << response.ShortDebugString()
+                    << " latency=" << cntl.latency_us() << "us";
   }
 }
 
@@ -236,12 +237,12 @@ void SendKvBatchPutIfAbsent(dingodb::pb::store::StoreService_Stub& stub) {
 
   stub.KvBatchPutIfAbsent(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
-    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
   }
 
   if (FLAGS_log_each_request) {
-    LOG(INFO) << " request=" << request.ShortDebugString() << " response=" << response.ShortDebugString()
-              << " latency=" << cntl.latency_us() << "us";
+    DINGO_LOG(INFO) << " request=" << request.ShortDebugString() << " response=" << response.ShortDebugString()
+                    << " latency=" << cntl.latency_us() << "us";
   }
 }
 
@@ -281,13 +282,13 @@ void SendAddRegion(dingodb::pb::store::StoreService_Stub& stub) {
 
   stub.AddRegion(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
-    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
     // bthread_usleep(FLAGS_timeout_ms * 1000L);
   }
 
   if (FLAGS_log_each_request) {
-    LOG(INFO) << " request=" << request.ShortDebugString() << " response=" << response.ShortDebugString()
-              << " latency=" << cntl.latency_us() << "us";
+    DINGO_LOG(INFO) << " request=" << request.ShortDebugString() << " response=" << response.ShortDebugString()
+                    << " latency=" << cntl.latency_us() << "us";
   }
 }
 
@@ -326,12 +327,12 @@ void SendChangeRegion(dingodb::pb::store::StoreService_Stub& stub) {
 
   stub.ChangeRegion(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
-    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
   }
 
   if (FLAGS_log_each_request) {
-    LOG(INFO) << " request=" << request.ShortDebugString() << " response=" << response.ShortDebugString()
-              << " latency=" << cntl.latency_us() << "us";
+    DINGO_LOG(INFO) << " request=" << request.ShortDebugString() << " response=" << response.ShortDebugString()
+                    << " latency=" << cntl.latency_us() << "us";
   }
 }
 
@@ -346,12 +347,12 @@ void SendDestroyRegion(dingodb::pb::store::StoreService_Stub& stub) {
 
   stub.DestroyRegion(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
-    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
   }
 
   if (FLAGS_log_each_request) {
-    LOG(INFO) << " request=" << request.ShortDebugString() << " response=" << response.ShortDebugString()
-              << " latency=" << cntl.latency_us() << "us";
+    DINGO_LOG(INFO) << " request=" << request.ShortDebugString() << " response=" << response.ShortDebugString()
+                    << " latency=" << cntl.latency_us() << "us";
   }
 }
 
@@ -406,12 +407,12 @@ void SendCreateTable(dingodb::pb::meta::MetaService_Stub& stub) {
   brpc::Controller cntl;
   stub.CreateTable(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
-    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
   }
 
   if (FLAGS_log_each_request) {
-    LOG(INFO) << " request=" << request.ShortDebugString() << " response=" << response.ShortDebugString()
-              << " latency=" << cntl.latency_us() << "us";
+    DINGO_LOG(INFO) << " request=" << request.ShortDebugString() << " response=" << response.ShortDebugString()
+                    << " latency=" << cntl.latency_us() << "us";
   }
 }
 
@@ -427,12 +428,12 @@ void SendDropTable(dingodb::pb::meta::MetaService_Stub& stub) {
   brpc::Controller cntl;
   stub.DropTable(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
-    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
   }
 
   if (FLAGS_log_each_request) {
-    LOG(INFO) << " request=" << request.ShortDebugString() << " response=" << response.ShortDebugString()
-              << " latency=" << cntl.latency_us() << "us";
+    DINGO_LOG(INFO) << " request=" << request.ShortDebugString() << " response=" << response.ShortDebugString()
+                    << " latency=" << cntl.latency_us() << "us";
   }
 }
 
@@ -442,7 +443,7 @@ void* sender(void* arg) {
     // rpc
     brpc::Channel channel;
     if (channel.Init(leader.addr, NULL) != 0) {
-      LOG(ERROR) << "Fail to init channel to " << leader;
+      DINGO_LOG(ERROR) << "Fail to init channel to " << leader;
       bthread_usleep(FLAGS_timeout_ms * 1000L);
       continue;
     }
@@ -500,7 +501,7 @@ int main(int argc, char* argv[]) {
 
   for (int i = 0; i < FLAGS_thread_num; ++i) {
     if (bthread_start_background(&tids[i], NULL, sender, NULL) != 0) {
-      LOG(ERROR) << "Fail to create bthread";
+      DINGO_LOG(ERROR) << "Fail to create bthread";
       return -1;
     }
   }
@@ -512,7 +513,7 @@ int main(int argc, char* argv[]) {
   //           << " latency=" << g_latency_recorder.latency(1);
   // }
 
-  // LOG(INFO) << "Store client is going to quit";
+  // DINGO_LOG(INFO) << "Store client is going to quit";
   for (int i = 0; i < FLAGS_thread_num; ++i) {
     bthread_join(tids[i], NULL);
   }

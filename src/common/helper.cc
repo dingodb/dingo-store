@@ -17,19 +17,19 @@
 #include <cstdint>
 #include <regex>
 
-#include "brpc/controller.h"
-// #include "brpc/server.h"
 #include "brpc/channel.h"
+#include "brpc/controller.h"
 #include "butil/endpoint.h"
 #include "butil/strings/string_split.h"
 #include "butil/strings/stringprintf.h"
+#include "common/logging.h"
 #include "google/protobuf/util/json_util.h"
 #include "proto/node.pb.h"
 
 namespace dingodb {
 
 bool Helper::IsIp(const std::string& s) {
-  std::regex reg(
+  std::regex const reg(
       "(?=(\\b|\\D))(((\\d{1,2})|(1\\d{1,2})|(2[0-4]\\d)|(25[0-5]))\\.){3}(("
       "\\d{1,2})|(1\\d{1,2})|(2[0-4]\\d)|(25[0-5]))(?=(\\b|\\D))");
   return std::regex_match(s, reg);
@@ -43,7 +43,7 @@ int Helper::PeerIdToLocation(braft::PeerId peer_id, pb::common::Location& locati
   butil::SplitString(peer_id_string, ':', &addrs);
 
   if (addrs.size() != 3) {
-    LOG(ERROR) << "GetLeaderLocation peerid to string error " << peer_id_string;
+    DINGO_LOG(ERROR) << "GetLeaderLocation peerid to string error " << peer_id_string;
     return -1;
   }
 
@@ -55,10 +55,10 @@ int Helper::PeerIdToLocation(braft::PeerId peer_id, pb::common::Location& locati
     value = std::stoi(addrs[1]);
     temp_location.set_port(value);
   } catch (const std::invalid_argument& ia) {
-    LOG(ERROR) << "PeerIdToLocation parse port error Irnvalid argument: " << ia.what() << std::endl;
+    DINGO_LOG(ERROR) << "PeerIdToLocation parse port error Irnvalid argument: " << ia.what() << std::endl;
     return -1;
   } catch (const std::out_of_range& oor) {
-    LOG(ERROR) << "PeerIdToLocation parse port error Out of Range error: " << oor.what() << std::endl;
+    DINGO_LOG(ERROR) << "PeerIdToLocation parse port error Out of Range error: " << oor.what() << std::endl;
     return -1;
   }
 
@@ -272,7 +272,7 @@ void Helper::GetServerLocation(const pb::common::Location& raft_location, pb::co
   // validate raft_location
   // TODO: how to support ipv6
   if (raft_location.host().length() <= 0 || raft_location.port() <= 0) {
-    LOG(ERROR) << "GetServiceLocation illegal raft_location=" << Helper::MessageToJsonString(raft_location);
+    DINGO_LOG(ERROR) << "GetServiceLocation illegal raft_location=" << Helper::MessageToJsonString(raft_location);
     return;
   }
 
@@ -285,7 +285,7 @@ void Helper::GetServerLocation(const pb::common::Location& raft_location, pb::co
   // rpc
   brpc::Channel channel;
   if (channel.Init(remote_node.addr, nullptr) != 0) {
-    LOG(ERROR) << "Fail to init channel to " << remote_node;
+    DINGO_LOG(ERROR) << "Fail to init channel to " << remote_node;
     return;
   }
 
@@ -301,13 +301,13 @@ void Helper::GetServerLocation(const pb::common::Location& raft_location, pb::co
   request.set_cluster_id(0);
   stub.GetNodeInfo(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
-    LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
     return;
   }
 
-  LOG(INFO) << "Received response"
-            << " cluster_id=" << request.cluster_id() << " latency=" << cntl.latency_us();
-  LOG(INFO) << Helper::MessageToJsonString(response);
+  DINGO_LOG(INFO) << "Received response"
+                  << " cluster_id=" << request.cluster_id() << " latency=" << cntl.latency_us();
+  DINGO_LOG(INFO) << Helper::MessageToJsonString(response);
 
   server_location.CopyFrom(response.node_info().server_location());
 }
