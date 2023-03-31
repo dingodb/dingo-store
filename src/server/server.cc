@@ -23,9 +23,9 @@
 #include "braft/util.h"
 #include "butil/endpoint.h"
 #include "butil/files/file_path.h"
-#include "butil/strings/stringprintf.h"
 #include "common/constant.h"
 #include "common/helper.h"
+#include "common/logging.h"
 #include "config/config.h"
 #include "config/config_manager.h"
 #include "coordinator/coordinator_control.h"
@@ -35,7 +35,6 @@
 #include "engine/raft_meta_engine.h"
 #include "engine/raw_rocks_engine.h"
 #include "engine/rocks_engine.h"
-#include "glog/logging.h"
 #include "meta/meta_reader.h"
 #include "meta/meta_writer.h"
 #include "proto/common.pb.h"
@@ -60,21 +59,12 @@ bool Server::InitConfig(const std::string& filename) {
 
 bool Server::InitLog() {
   auto config = ConfigManager::GetInstance()->GetConfig(role_);
-  FLAGS_log_dir = config->GetString("log.logPath");
-  LOG(INFO) << "log_dir: " << FLAGS_log_dir;
-  FLAGS_logbufsecs = 0;
 
+  FLAGS_log_dir = config->GetString("log.logPath");
   auto role_name = pb::common::ClusterRole_Name(role_);
-  const std::string program_name = butil::StringPrintf("./%s", role_name.c_str());
-  google::InitGoogleLogging(program_name.c_str());
-  google::SetLogDestination(google::GLOG_INFO,
-                            butil::StringPrintf("%s/%s.info.log.", FLAGS_log_dir.c_str(), role_name.c_str()).c_str());
-  google::SetLogDestination(google::GLOG_WARNING,
-                            butil::StringPrintf("%s/%s.warn.log.", FLAGS_log_dir.c_str(), role_name.c_str()).c_str());
-  google::SetLogDestination(google::GLOG_ERROR,
-                            butil::StringPrintf("%s/%s.error.log.", FLAGS_log_dir.c_str(), role_name.c_str()).c_str());
-  google::SetLogDestination(google::GLOG_FATAL,
-                            butil::StringPrintf("%s/%s.fatal.log.", FLAGS_log_dir.c_str(), role_name.c_str()).c_str());
+  DingoLogger::InitLogger(FLAGS_log_dir, role_name);
+
+  DINGO_LOG(INFO) << "log_dir: " << FLAGS_log_dir << " role:" << role_name;
 
   return true;
 }
@@ -89,9 +79,9 @@ bool Server::InitServerID() {
 bool Server::InitRawEngines() {
   auto config = ConfigManager::GetInstance()->GetConfig(role_);
 
-  std::shared_ptr<RawEngine> rock_engine = std::make_shared<RawRocksEngine>();
+  std::shared_ptr<RawEngine> const rock_engine = std::make_shared<RawRocksEngine>();
   if (!rock_engine->Init(config)) {
-    LOG(ERROR) << "Init RawRocksEngine Failed with Config[" << config->ToString();
+    DINGO_LOG(ERROR) << "Init RawRocksEngine Failed with Config[" << config->ToString();
     return false;
   }
 
@@ -114,11 +104,11 @@ bool Server::InitEngines() {
                                                                 std::make_shared<MetaWriter>(raw_engine), raw_engine);
 
     if (!coordinator_control_->Recover()) {
-      LOG(ERROR) << "coordinator_control_->Recover Failed";
+      DINGO_LOG(ERROR) << "coordinator_control_->Recover Failed";
       return false;
     }
     if (!coordinator_control_->Init()) {
-      LOG(ERROR) << "coordinator_control_->Init Failed";
+      DINGO_LOG(ERROR) << "coordinator_control_->Init Failed";
       return false;
     }
 
@@ -127,7 +117,7 @@ bool Server::InitEngines() {
   } else {
     raft_kv_engine = std::make_shared<RaftKvEngine>(raw_engine);
     if (!raft_kv_engine->Init(config)) {
-      LOG(ERROR) << "Init RaftKvEngine failed with Config[" << config->ToString() << "]";
+      DINGO_LOG(ERROR) << "Init RaftKvEngine failed with Config[" << config->ToString() << "]";
       return false;
     }
   }
@@ -166,14 +156,14 @@ butil::Status Server::StartMetaRegion(std::shared_ptr<Config> config,       // N
     auto* location = peer->mutable_raft_location();
     location->set_host(butil::ip2str(peer_node.ip).c_str());
     location->set_port(peer_node.port);
-    LOG(INFO) << "COORDINATOR set peer node:" << (butil::ip2str(peer_node.ip).c_str()) << ":" << peer_node.port;
+    DINGO_LOG(INFO) << "COORDINATOR set peer node:" << (butil::ip2str(peer_node.ip).c_str()) << ":" << peer_node.port;
   }
 
   dingodb::pb::common::Range* range = region->mutable_range();
   range->set_start_key("0000");
   range->set_end_key("FFFF");
 
-  LOG(INFO) << "Create Region Request:" << region->DebugString();
+  DINGO_LOG(INFO) << "Create Region Request:" << region->DebugString();
   auto raft_engine = std::dynamic_pointer_cast<RaftMetaEngine>(kv_engine);
   butil::Status status = raft_engine->InitCoordinatorRegion(ctx, region);
 
@@ -238,24 +228,24 @@ bool Server::InitStoreControl() {
   auto config = ConfigManager::GetInstance()->GetConfig(role_);
   uint64_t heartbeat_interval = config->GetInt("server.heartbeatInterval");
   if (heartbeat_interval <= 0) {
-    LOG(INFO) << "server.heartbeatInterval illegal";
+    DINGO_LOG(INFO) << "server.heartbeatInterval illegal";
     return false;
   }
 
   uint64_t push_interval = config->GetInt("server.pushInterval");
   if (push_interval <= 0) {
-    LOG(INFO) << "server.pushInterval illegal";
+    DINGO_LOG(INFO) << "server.pushInterval illegal";
     return false;
   }
 
   if (heartbeat_interval < push_interval) {
-    LOG(INFO) << "server.heartbeatInterval must bigger than server.pushInterval";
+    DINGO_LOG(INFO) << "server.heartbeatInterval must bigger than server.pushInterval";
     return false;
   }
 
   store_control_->SetHeartbeatIntervalMultiple(heartbeat_interval / push_interval);
 
-  LOG(INFO) << "SetHeartbeatIntervalMultiple to " << heartbeat_interval / push_interval;
+  DINGO_LOG(INFO) << "SetHeartbeatIntervalMultiple to " << heartbeat_interval / push_interval;
 
   return store_control_ != nullptr;
 }
@@ -264,14 +254,14 @@ bool Server::Recover() {
   if (this->role_ == pb::common::STORE) {
     // Recover region meta data.
     if (!store_meta_manager_->Recover()) {
-      LOG(ERROR) << "Recover store region meta data failed";
+      DINGO_LOG(ERROR) << "Recover store region meta data failed";
       return false;
     }
 
     // Recover engine state.
     for (auto& it : engines_) {
       if (!it.second->Recover()) {
-        LOG(ERROR) << "Recover engine failed, engine " << it.second->GetName();
+        DINGO_LOG(ERROR) << "Recover engine failed, engine " << it.second->GetName();
         return false;
       }
     }

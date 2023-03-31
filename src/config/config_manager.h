@@ -20,10 +20,9 @@
 #include <shared_mutex>
 
 #include "bthread/mutex.h"
-// #include "butil/macros.h"
+#include "common/logging.h"
 #include "config/config.h"
 #include "config/yaml_config.h"
-#include "glog/logging.h"
 #include "proto/common.pb.h"
 
 template <typename T>
@@ -40,12 +39,12 @@ class ConfigManager {
   void Register(pb::common::ClusterRole role, std::shared_ptr<Config> config);
   std::shared_ptr<Config> GetConfig(pb::common::ClusterRole role);
 
+  ConfigManager(const ConfigManager &) = delete;
+  const ConfigManager &operator=(const ConfigManager &) = delete;
+
  private:
   ConfigManager();
   ~ConfigManager();
-
-  ConfigManager(const ConfigManager &) = delete;
-  const ConfigManager &operator=(const ConfigManager &) = delete;
 
   friend struct DefaultSingletonTraits<ConfigManager>;
 

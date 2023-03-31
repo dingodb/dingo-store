@@ -30,7 +30,6 @@
 #include "butil/strings/stringprintf.h"
 #include "config/config_manager.h"
 #include "engine/engine.h"
-#include "glog/logging.h"
 #include "proto/error.pb.h"
 #include "rocksdb/advanced_options.h"
 #include "rocksdb/cache.h"
