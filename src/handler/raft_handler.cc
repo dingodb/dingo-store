@@ -40,10 +40,11 @@ void PutIfAbsentHandler::Handle(std::shared_ptr<Context> ctx, std::shared_ptr<Ra
   DINGO_LOG(INFO) << "PutIfAbsentHandler ...";
   butil::Status status;
   std::vector<std::string> put_keys;  // NOLINT
+  std::string put_key;                // NOLINT
   auto &request = req.put_if_absent();
   auto writer = engine->NewWriter(request.cf_name());
   if (request.kvs().size() == 1) {
-    status = writer->KvPutIfAbsent(request.kvs().Get(0));
+    status = writer->KvPutIfAbsent(request.kvs().Get(0), put_key);
   } else {
     status = writer->KvBatchPutIfAbsent(Helper::PbRepeatedToVector(request.kvs()), put_keys, request.is_atomic());
   }
@@ -51,9 +52,19 @@ void PutIfAbsentHandler::Handle(std::shared_ptr<Context> ctx, std::shared_ptr<Ra
   if (ctx) {
     ctx->SetStatus(status);
     if (request.kvs().size() != 1) {
-      auto response = dynamic_cast<pb::store::KvBatchPutIfAbsentResponse *>(ctx->Response());
+      auto *response = dynamic_cast<pb::store::KvBatchPutIfAbsentResponse *>(ctx->Response());
       for (const auto &key : put_keys) {
         response->add_put_keys(key);
+      }
+    } else {  // only one key
+      if ("dingodb.pb.store.KvPutIfAbsentResponse" == ctx->Response()->GetTypeName()) {
+        auto *response = dynamic_cast<pb::store::KvPutIfAbsentResponse *>(ctx->Response());
+        response->add_put_key(put_key);
+      } else {  // dingodb.pb.store.KvBatchPutIfAbsentResponse
+        auto *response = dynamic_cast<pb::store::KvBatchPutIfAbsentResponse *>(ctx->Response());
+        if (!put_key.empty()) {
+          response->add_put_keys(put_key);
+        }
       }
     }
   }

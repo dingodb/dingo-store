@@ -88,11 +88,12 @@ class RawEngine {
     virtual butil::Status KvBatchPutAndDelete(const std::vector<pb::common::KeyValue>& kv_puts,
                                               const std::vector<pb::common::KeyValue>& kv_deletes) = 0;
 
-    virtual butil::Status KvPutIfAbsent(const pb::common::KeyValue& kv) = 0;
+    virtual butil::Status KvPutIfAbsent(const pb::common::KeyValue& kv, std::string& put_key) = 0;
     virtual butil::Status KvBatchPutIfAbsent(const std::vector<pb::common::KeyValue>& kvs,
                                              std::vector<std::string>& put_keys, bool is_atomic) = 0;
 
-    virtual butil::Status KvCompareAndSet(const pb::common::KeyValue& kv, const std::string& value) = 0;
+    virtual butil::Status KvCompareAndSet(const pb::common::KeyValue& kv, const std::string& value,
+                                          std::string& put_key) = 0;
 
     virtual butil::Status KvDelete(const std::string& key) = 0;
     virtual butil::Status KvDeleteBatch(const std::vector<std::string>& keys) = 0;
