@@ -92,7 +92,7 @@ message KvPutIfAbsentRequest {
 message KvPutIfAbsentResponse {
   dingodb.pb.error.Error error = 1;
   // If put_key is not equal to request key means failure.
-  repeated bytes put_key = 2;
+  bytes put_key = 2;
 }
 
 message KvBatchPutIfAbsentRequest {
