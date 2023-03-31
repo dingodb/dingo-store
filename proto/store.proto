@@ -91,6 +91,9 @@ message KvPutIfAbsentRequest {
 
 message KvPutIfAbsentResponse {
   dingodb.pb.error.Error error = 1;
+  // key_state = true, update success
+  // key_state = false, update failed
+  bool key_state = 2;
 }
 
 message KvBatchPutIfAbsentRequest {
@@ -101,7 +104,10 @@ message KvBatchPutIfAbsentRequest {
 
 message KvBatchPutIfAbsentResponse {
   dingodb.pb.error.Error error = 1;
-  repeated bytes put_keys = 2;
+  // return the execution status of each key
+  // key_states[index] = true, update success
+  // key_states[index] = false, update failed
+  repeated bool key_states = 2;
 }
 
 message KvBatchDeleteRequest {
