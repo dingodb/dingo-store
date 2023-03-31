@@ -24,6 +24,7 @@ namespace dingodb {
  * The larger the number, the more comprehensive information is displayed.
  */
 #define DEBUG 79
+static constexpr int kGlobalValueOfDebug = DEBUG;
 
 #define DINGO_LOG(level) DINGO_LOG_##level
 
@@ -36,10 +37,20 @@ namespace dingodb {
 class DingoLogger {
  public:
   static void InitLogger(const std::string& log_dir, const std::string& role);
+  // LogLevel and Log Verbose
   static void SetMinLogLevel(int level);
   static int GetMinLogLevel();
   static void SetMinVerboseLevel(int v);
   static int GetMinVerboseLevel();
+
+  static int GetLogBuffSecs();
+  static void SetLogBuffSecs(uint32_t secs);
+
+  static int32_t GetMaxLogSize();
+  static void SetMaxLogSize(uint32_t max_log_size);
+
+  static bool GetStoppingWhenDiskFull();
+  static void SetStoppingWhenDiskFull(bool is_stop);
 };
 
 }  // namespace dingodb

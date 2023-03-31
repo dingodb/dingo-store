@@ -36,6 +36,8 @@ std::string GetLeaderLocation();
 
 // coordinator service functions
 void SendGetNodeInfo(brpc::Controller& cntl, dingodb::pb::node::NodeService_Stub& stub);
+void SendGetLogLevel(brpc::Controller& cntl, dingodb::pb::node::NodeService_Stub& stub);
+void SendChangeLogLevel(brpc::Controller& cntl, dingodb::pb::node::NodeService_Stub& stub);
 void SendHello(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
 void SendGetStoreMap(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
 void SendGetExecutorMap(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);

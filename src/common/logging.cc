@@ -44,5 +44,16 @@ void DingoLogger::SetMinVerboseLevel(int v) { FLAGS_v = v; }
 
 int DingoLogger::GetMinVerboseLevel() { return FLAGS_v; }
 
+int DingoLogger::GetLogBuffSecs() { return FLAGS_logbufsecs; }
+
+void DingoLogger::SetLogBuffSecs(uint32_t secs) { FLAGS_logbufsecs = secs; }
+
+int32_t DingoLogger::GetMaxLogSize() { return FLAGS_max_log_size; }
+void DingoLogger::SetMaxLogSize(uint32_t max_log_size) { FLAGS_max_log_size = max_log_size; }
+
+bool DingoLogger::GetStoppingWhenDiskFull() { return FLAGS_stop_logging_if_full_disk; }
+
+void DingoLogger::SetStoppingWhenDiskFull(bool is_stop) { FLAGS_stop_logging_if_full_disk = is_stop; }
+
 }  // namespace dingodb
 

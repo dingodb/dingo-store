@@ -103,6 +103,10 @@ void* Sender(void* /*arg*/) {
     SendGetCoordinatorMap(cntl, coordinator_stub);
   } else if (FLAGS_method == "GetNodeInfo") {
     SendGetNodeInfo(cntl, node_stub);
+  } else if (FLAGS_method == "GetLogLevel") {
+    SendGetLogLevel(cntl, node_stub);
+  } else if (FLAGS_method == "ChangeLogLevel") {
+    SendChangeLogLevel(cntl, node_stub);
   } else if (FLAGS_method == "GetSchemas") {
     SendGetSchemas(cntl, meta_stub);
   } else if (FLAGS_method == "GetTables") {

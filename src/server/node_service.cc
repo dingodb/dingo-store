@@ -22,19 +22,22 @@
 
 #include "brpc/controller.h"
 #include "butil/endpoint.h"
+#include "common/logging.h"
 #include "coordinator/coordinator_closure.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator_internal.pb.h"
 #include "proto/node.pb.h"
 
 namespace dingodb {
+using pb::node::LogDetail;
+using pb::node::LogLevel;
 
 void NodeServiceImpl::SetServer(dingodb::Server* server) { this->server_ = server; }
 
 void NodeServiceImpl::GetNodeInfo(google::protobuf::RpcController* /*controller*/,
                                   const pb::node::GetNodeInfoRequest* request, pb::node::GetNodeInfoResponse* response,
                                   google::protobuf::Closure* done) {
-  brpc::ClosureGuard done_guard(done);
+  brpc::ClosureGuard const done_guard(done);
 
   if (request->cluster_id() < 0) {
     auto* error = response->mutable_error();
@@ -59,6 +62,59 @@ void NodeServiceImpl::GetNodeInfo(google::protobuf::RpcController* /*controller*
   auto raft_host_str = butil::ip2str(server_->RaftEndpoint().ip);
   raft_host->assign(std::string(host_str.c_str()));
   raft_location->set_port(server_->RaftEndpoint().port);
+}
+
+void NodeServiceImpl::GetLogLevel(google::protobuf::RpcController* controller,
+                                  const pb::node::GetLogLevelRequest* request, pb::node::GetLogLevelResponse* response,
+                                  google::protobuf::Closure* done) {
+  brpc::ClosureGuard const done_guard(done);
+
+  auto format_request = Helper::MessageToJsonString(*request);
+  DINGO_LOG(INFO) << "Receive Request:" << format_request;
+
+  auto* log_detail = response->mutable_log_detail();
+  log_detail->set_log_buf_secs(DingoLogger::GetLogBuffSecs());
+  log_detail->set_max_log_size(DingoLogger::GetMaxLogSize());
+  log_detail->set_stop_logging_if_full_disk(DingoLogger::GetStoppingWhenDiskFull());
+
+  int const min_log_level = DingoLogger::GetMinLogLevel();
+  int const min_verbose_level = DingoLogger::GetMinVerboseLevel();
+
+  if (min_log_level > pb::node::FATAL) {
+    DINGO_LOG(ERROR) << "Invalid Log Level:" << min_log_level;
+    brpc::Controller* brpc_controller = static_cast<brpc::Controller*>(controller);
+    brpc_controller->SetFailed(pb::error::EINTERNAL, "Invalid LogLevel");
+    return;
+  }
+
+  if (min_log_level == 0 && min_verbose_level > 1) {
+    response->set_log_level(static_cast<LogLevel>(0));
+  } else {
+    response->set_log_level(static_cast<LogLevel>(min_log_level + 1));
+  }
+}
+void NodeServiceImpl::ChangeLogLevel(google::protobuf::RpcController* /* controller */,
+                                     const pb::node::ChangeLogLevelRequest* request,
+                                     pb::node::ChangeLogLevelResponse* response, google::protobuf::Closure* done) {
+  brpc::ClosureGuard const done_guard(done);
+
+  auto format_request = Helper::MessageToJsonString(*request);
+  DINGO_LOG(INFO) << "ChangeLogLevel=>Receive Request:" << format_request;
+
+  const LogLevel log_level = request->log_level();
+  if (log_level == DEBUG) {
+    DingoLogger::SetMinLogLevel(1);
+    DingoLogger::SetMinVerboseLevel(kGlobalValueOfDebug);
+  } else {
+    DingoLogger::SetMinLogLevel(static_cast<int>(log_level) - 1);
+    DingoLogger::SetMinVerboseLevel(1);
+  }
+
+  const LogDetail log_detal = request->log_detail();
+  DingoLogger::SetLogBuffSecs(log_detal.log_buf_secs());
+  DingoLogger::SetMaxLogSize(log_detal.max_log_size());
+  DingoLogger::SetStoppingWhenDiskFull(log_detal.stop_logging_if_full_disk());
+  return;
 }
 
 }  // namespace dingodb
