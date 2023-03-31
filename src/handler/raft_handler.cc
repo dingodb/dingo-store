@@ -39,21 +39,32 @@ void PutIfAbsentHandler::Handle(std::shared_ptr<Context> ctx, std::shared_ptr<Ra
                                 const pb::raft::Request &req) {
   DINGO_LOG(INFO) << "PutIfAbsentHandler ...";
   butil::Status status;
-  std::vector<std::string> put_keys;  // NOLINT
-  auto &request = req.put_if_absent();
+  std::vector<bool> key_states;  // NOLINT
+  bool key_state;
+  const auto &request = req.put_if_absent();
   auto writer = engine->NewWriter(request.cf_name());
   if (request.kvs().size() == 1) {
-    status = writer->KvPutIfAbsent(request.kvs().Get(0));
+    status = writer->KvPutIfAbsent(request.kvs().Get(0), key_state);
   } else {
-    status = writer->KvBatchPutIfAbsent(Helper::PbRepeatedToVector(request.kvs()), put_keys, request.is_atomic());
+    status = writer->KvBatchPutIfAbsent(Helper::PbRepeatedToVector(request.kvs()), key_states, request.is_atomic());
   }
 
   if (ctx) {
     ctx->SetStatus(status);
     if (request.kvs().size() != 1) {
-      auto response = dynamic_cast<pb::store::KvBatchPutIfAbsentResponse *>(ctx->Response());
-      for (const auto &key : put_keys) {
-        response->add_put_keys(key);
+      auto *response = dynamic_cast<pb::store::KvBatchPutIfAbsentResponse *>(ctx->Response());
+      // std::vector<bool> must do not use foreach
+      for (size_t i = 0; i < key_states.size(); i++) {
+        bool key = key_states[i];
+        response->add_key_states(key);
+      }
+    } else {  // only one key
+      if ("dingodb.pb.store.KvPutIfAbsentResponse" == ctx->Response()->GetTypeName()) {
+        auto *response = dynamic_cast<pb::store::KvPutIfAbsentResponse *>(ctx->Response());
+        response->set_key_state(key_state);
+      } else {  // dingodb.pb.store.KvBatchPutIfAbsentResponse
+        auto *response = dynamic_cast<pb::store::KvBatchPutIfAbsentResponse *>(ctx->Response());
+        response->add_key_states(key_state);
       }
     }
   }

@@ -622,7 +622,8 @@ TEST(RawRocksEngineTest, KvCompareAndSet) {
     dingodb::pb::common::KeyValue kv;
     std::string value = "value123456";
 
-    butil::Status ok = writer->KvCompareAndSet(kv, value);
+    bool key_state = false;
+    butil::Status ok = writer->KvCompareAndSet(kv, value, key_state);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_EMPTY);
   }
 
@@ -631,8 +632,8 @@ TEST(RawRocksEngineTest, KvCompareAndSet) {
     dingodb::pb::common::KeyValue kv;
     kv.set_key("key");
     std::string value = "value";
-
-    butil::Status ok = writer->KvCompareAndSet(kv, value);
+    bool key_state = false;
+    butil::Status ok = writer->KvCompareAndSet(kv, value, key_state);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_NOTFOUND);
   }
 
@@ -642,7 +643,8 @@ TEST(RawRocksEngineTest, KvCompareAndSet) {
     kv.set_key("key1");
     std::string value = "value123456";
 
-    butil::Status ok = writer->KvCompareAndSet(kv, value);
+    bool key_state = false;
+    butil::Status ok = writer->KvCompareAndSet(kv, value, key_state);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EINTERNAL);
   }
 
@@ -653,7 +655,8 @@ TEST(RawRocksEngineTest, KvCompareAndSet) {
     kv.set_value("value1");
     const std::string &value = "value1_modify";
 
-    butil::Status ok = writer->KvCompareAndSet(kv, value);
+    bool key_state = false;
+    butil::Status ok = writer->KvCompareAndSet(kv, value, key_state);
 
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
@@ -672,7 +675,8 @@ TEST(RawRocksEngineTest, KvCompareAndSet) {
     kv.set_value("value1_modify");
     const std::string &value = "";
 
-    butil::Status ok = writer->KvCompareAndSet(kv, value);
+    bool key_state = false;
+    butil::Status ok = writer->KvCompareAndSet(kv, value, key_state);
 
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
@@ -690,7 +694,8 @@ TEST(RawRocksEngineTest, KvCompareAndSet) {
     kv.set_value("");
     const std::string &value = "value1";
 
-    butil::Status ok = writer->KvCompareAndSet(kv, value);
+    bool key_state = false;
+    butil::Status ok = writer->KvCompareAndSet(kv, value, key_state);
 
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
@@ -756,8 +761,8 @@ TEST(RawRocksEngineTest, KvPutIfAbsent) {
   // key empty
   {
     dingodb::pb::common::KeyValue kv;
-
-    butil::Status ok = writer->KvPutIfAbsent(kv);
+    bool key_state;
+    butil::Status ok = writer->KvPutIfAbsent(kv, key_state);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_EMPTY);
   }
 
@@ -766,7 +771,8 @@ TEST(RawRocksEngineTest, KvPutIfAbsent) {
     dingodb::pb::common::KeyValue kv;
     kv.set_key("key");
 
-    butil::Status ok = writer->KvPutIfAbsent(kv);
+    bool key_state;
+    butil::Status ok = writer->KvPutIfAbsent(kv, key_state);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
   }
 
@@ -775,8 +781,9 @@ TEST(RawRocksEngineTest, KvPutIfAbsent) {
     dingodb::pb::common::KeyValue kv;
     kv.set_key("key1");
 
-    butil::Status ok = writer->KvPutIfAbsent(kv);
-    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EINTERNAL);
+    bool key_state;
+    butil::Status ok = writer->KvPutIfAbsent(kv, key_state);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
   }
 
   // normal
@@ -785,7 +792,8 @@ TEST(RawRocksEngineTest, KvPutIfAbsent) {
     kv.set_key("key10");
     kv.set_value("value10");
 
-    butil::Status ok = writer->KvPutIfAbsent(kv);
+    bool key_state;
+    butil::Status ok = writer->KvPutIfAbsent(kv, key_state);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
   }
 
@@ -795,8 +803,9 @@ TEST(RawRocksEngineTest, KvPutIfAbsent) {
     kv.set_key("key10");
     kv.set_value("value10");
 
-    butil::Status ok = writer->KvPutIfAbsent(kv);
-    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EINTERNAL);
+    bool key_state;
+    butil::Status ok = writer->KvPutIfAbsent(kv, key_state);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
   }
 
   // key value already exist failed
@@ -805,8 +814,9 @@ TEST(RawRocksEngineTest, KvPutIfAbsent) {
     kv.set_key("key10");
     kv.set_value("");
 
-    butil::Status ok = writer->KvPutIfAbsent(kv);
-    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EINTERNAL);
+    bool key_state;
+    butil::Status ok = writer->KvPutIfAbsent(kv, key_state);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
   }
 
   // normal
@@ -815,7 +825,8 @@ TEST(RawRocksEngineTest, KvPutIfAbsent) {
     kv.set_key("key11");
     kv.set_value("");
 
-    butil::Status ok = writer->KvPutIfAbsent(kv);
+    bool key_state;
+    butil::Status ok = writer->KvPutIfAbsent(kv, key_state);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
   }
 
@@ -825,8 +836,9 @@ TEST(RawRocksEngineTest, KvPutIfAbsent) {
     kv.set_key("key11");
     kv.set_value("value11");
 
-    butil::Status ok = writer->KvPutIfAbsent(kv);
-    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EINTERNAL);
+    bool key_state;
+    butil::Status ok = writer->KvPutIfAbsent(kv, key_state);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
   }
 
   // normal
@@ -835,8 +847,9 @@ TEST(RawRocksEngineTest, KvPutIfAbsent) {
     kv.set_key("key11");
     kv.set_value("");
 
-    butil::Status ok = writer->KvPutIfAbsent(kv);
-    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EINTERNAL);
+    bool key_state;
+    butil::Status ok = writer->KvPutIfAbsent(kv, key_state);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
   }
 }
 
@@ -849,9 +862,9 @@ TEST(RawRocksEngineTest, KvBatchPutIfAbsentAtomic) {
   {
     std::vector<std::string> keys;
     std::vector<dingodb::pb::common::KeyValue> kvs;
-    std::vector<std::string> put_keys;
+    std::vector<bool> key_states;
 
-    butil::Status ok = writer->KvBatchPutIfAbsent(kvs, put_keys, true);
+    butil::Status ok = writer->KvBatchPutIfAbsent(kvs, key_states, true);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_EMPTY);
   }
 
@@ -870,7 +883,9 @@ TEST(RawRocksEngineTest, KvBatchPutIfAbsentAtomic) {
     kv.set_value("value2");
     kvs.push_back(kv);
 
-    butil::Status ok = writer->KvBatchPutIfAbsent(kvs, put_keys, true);
+    std::vector<bool> key_states;
+
+    butil::Status ok = writer->KvBatchPutIfAbsent(kvs, key_states, true);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_EMPTY);
   }
 
@@ -898,7 +913,9 @@ TEST(RawRocksEngineTest, KvBatchPutIfAbsentAtomic) {
     kv.set_value("value");
     kvs.push_back(kv);
 
-    butil::Status ok = writer->KvBatchPutIfAbsent(kvs, put_keys, true);
+    std::vector<bool> key_states;
+
+    butil::Status ok = writer->KvBatchPutIfAbsent(kvs, key_states, true);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EINTERNAL);
     EXPECT_EQ(0, put_keys.size());
 
@@ -912,7 +929,6 @@ TEST(RawRocksEngineTest, KvBatchPutIfAbsentAtomic) {
   {
     std::vector<std::string> keys;
     std::vector<dingodb::pb::common::KeyValue> kvs;
-    std::vector<std::string> put_keys;
 
     dingodb::pb::common::KeyValue kv;
 
@@ -932,9 +948,14 @@ TEST(RawRocksEngineTest, KvBatchPutIfAbsentAtomic) {
     kv.set_value("value104");
     kvs.push_back(kv);
 
-    butil::Status ok = writer->KvBatchPutIfAbsent(kvs, put_keys, true);
+    std::vector<bool> key_states;
+
+    butil::Status ok = writer->KvBatchPutIfAbsent(kvs, key_states, true);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
-    EXPECT_EQ(4, put_keys.size());
+    for (size_t i = 0; i < key_states.size(); i++) {
+      bool state = key_states[i];
+      EXPECT_EQ(true, state);
+    }
 
     std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
 
@@ -964,7 +985,9 @@ TEST(RawRocksEngineTest, KvBatchPutIfAbsentNonAtomic) {
     std::vector<dingodb::pb::common::KeyValue> kvs;
     std::vector<std::string> put_keys;
 
-    butil::Status ok = writer->KvBatchPutIfAbsent(kvs, put_keys, false);
+    std::vector<bool> key_states;
+
+    butil::Status ok = writer->KvBatchPutIfAbsent(kvs, key_states, false);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_EMPTY);
   }
 
@@ -983,7 +1006,9 @@ TEST(RawRocksEngineTest, KvBatchPutIfAbsentNonAtomic) {
     kv.set_value("value2");
     kvs.push_back(kv);
 
-    butil::Status ok = writer->KvBatchPutIfAbsent(kvs, put_keys, false);
+    std::vector<bool> key_states;
+
+    butil::Status ok = writer->KvBatchPutIfAbsent(kvs, key_states, false);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_EMPTY);
   }
 
@@ -991,7 +1016,6 @@ TEST(RawRocksEngineTest, KvBatchPutIfAbsentNonAtomic) {
   {
     std::vector<std::string> keys;
     std::vector<dingodb::pb::common::KeyValue> kvs;
-    std::vector<std::string> put_keys;
 
     dingodb::pb::common::KeyValue kv;
 
@@ -1011,9 +1035,17 @@ TEST(RawRocksEngineTest, KvBatchPutIfAbsentNonAtomic) {
     kv.set_value("value");
     kvs.push_back(kv);
 
-    butil::Status ok = writer->KvBatchPutIfAbsent(kvs, put_keys, false);
+    std::vector<bool> key_states;
+
+    butil::Status ok = writer->KvBatchPutIfAbsent(kvs, key_states, false);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
-    EXPECT_EQ(1, put_keys.size());
+    for (size_t i = 0; i < key_states.size(); i++) {
+      if (0 == i) {
+        EXPECT_EQ(true, key_states[i]);
+      } else {
+        EXPECT_EQ(false, key_states[i]);
+      }
+    }
 
     std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
 
@@ -1026,7 +1058,6 @@ TEST(RawRocksEngineTest, KvBatchPutIfAbsentNonAtomic) {
   {
     std::vector<std::string> keys;
     std::vector<dingodb::pb::common::KeyValue> kvs;
-    std::vector<std::string> put_keys;
 
     dingodb::pb::common::KeyValue kv;
 
@@ -1046,9 +1077,14 @@ TEST(RawRocksEngineTest, KvBatchPutIfAbsentNonAtomic) {
     kv.set_value("value204");
     kvs.push_back(kv);
 
-    butil::Status ok = writer->KvBatchPutIfAbsent(kvs, put_keys, false);
+    std::vector<bool> key_states;
+
+    butil::Status ok = writer->KvBatchPutIfAbsent(kvs, key_states, false);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
-    EXPECT_EQ(4, put_keys.size());
+    for (size_t i = 0; i < key_states.size(); i++) {
+      bool state = key_states[i];
+      EXPECT_EQ(true, state);
+    }
 
     std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
 
@@ -1090,7 +1126,9 @@ TEST(RawRocksEngineTest, KvBatchPutIfAbsentNonAtomic) {
     kv.set_value("value204");
     kvs.push_back(kv);
 
-    butil::Status ok = writer->KvBatchPutIfAbsent(kvs, put_keys, false);
+    std::vector<bool> key_states;
+
+    butil::Status ok = writer->KvBatchPutIfAbsent(kvs, key_states, false);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
     EXPECT_EQ(0, put_keys.size());
   }

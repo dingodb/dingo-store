@@ -142,12 +142,12 @@ class RawRocksEngine : public RawEngine {
     butil::Status KvBatchPutAndDelete(const std::vector<pb::common::KeyValue>& kv_puts,
                                       const std::vector<pb::common::KeyValue>& kv_deletes) override;
 
-    butil::Status KvPutIfAbsent(const pb::common::KeyValue& kv) override;
+    butil::Status KvPutIfAbsent(const pb::common::KeyValue& kv, bool &key_state) override;
 
-    butil::Status KvBatchPutIfAbsent(const std::vector<pb::common::KeyValue>& kvs, std::vector<std::string>& put_keys,
+    butil::Status KvBatchPutIfAbsent(const std::vector<pb::common::KeyValue>& kvs, std::vector<bool>& key_states,
                                      bool is_atomic) override;
     // key must be exist
-    butil::Status KvCompareAndSet(const pb::common::KeyValue& kv, const std::string& value) override;
+    butil::Status KvCompareAndSet(const pb::common::KeyValue& kv, const std::string& value, bool &key_state) override;
 
     butil::Status KvDelete(const std::string& key) override;
     butil::Status KvDeleteBatch(const std::vector<std::string>& keys) override;
@@ -158,7 +158,7 @@ class RawRocksEngine : public RawEngine {
     butil::Status KvDeleteIfEqual(const pb::common::KeyValue& kv) override;
 
    private:
-    butil::Status KvCompareAndSetInternal(const pb::common::KeyValue& kv, const std::string& value, bool is_key_exist);
+    butil::Status KvCompareAndSetInternal(const pb::common::KeyValue& kv, const std::string& value, bool is_key_exist, bool &key_state);
     std::shared_ptr<ColumnFamily> column_family_;
     std::shared_ptr<rocksdb::TransactionDB> txn_db_;
   };
