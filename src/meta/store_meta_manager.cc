@@ -15,7 +15,7 @@
 #include "meta/store_meta_manager.h"
 
 #include "butil/strings/stringprintf.h"
-#include "glog/logging.h"
+#include "common/logging.h"
 #include "server/server.h"
 
 namespace dingodb {
@@ -38,7 +38,7 @@ bool StoreServerMeta::Init() {
   raf_location->set_host(butil::ip2str(server->RaftEndpoint().ip).c_str());
   raf_location->set_port(server->RaftEndpoint().port);
 
-  LOG(INFO) << "store server meta: " << store->ShortDebugString();
+  DINGO_LOG(INFO) << "store server meta: " << store->ShortDebugString();
   AddStore(store);
 
   return true;
@@ -59,7 +59,7 @@ bool StoreServerMeta::IsExist(uint64_t store_id) {
 void StoreServerMeta::AddStore(std::shared_ptr<pb::common::Store> store) {
   BAIDU_SCOPED_LOCK(mutex_);
   if (stores_.find(store->id()) != stores_.end()) {
-    LOG(WARNING) << butil::StringPrintf("store %lu already exist!", store->id());
+    DINGO_LOG(WARNING) << butil::StringPrintf("store %lu already exist!", store->id());
     return;
   }
 
@@ -80,7 +80,7 @@ std::shared_ptr<pb::common::Store> StoreServerMeta::GetStore(uint64_t store_id) 
   BAIDU_SCOPED_LOCK(mutex_);
   auto it = stores_.find(store_id);
   if (it == stores_.end()) {
-    LOG(WARNING) << butil::StringPrintf("region %lu not exist!", store_id);
+    DINGO_LOG(WARNING) << butil::StringPrintf("region %lu not exist!", store_id);
     return nullptr;
   }
 
@@ -115,7 +115,7 @@ bool StoreRegionMeta::IsExist(uint64_t region_id) {
 void StoreRegionMeta::AddRegion(const std::shared_ptr<pb::common::Region> region) {
   BAIDU_SCOPED_LOCK(mutex_);
   if (regions_.find(region->id()) != regions_.end()) {
-    LOG(WARNING) << butil::StringPrintf("region %lu already exist!", region->id());
+    DINGO_LOG(WARNING) << butil::StringPrintf("region %lu already exist!", region->id());
     return;
   }
 
@@ -137,7 +137,7 @@ std::shared_ptr<pb::common::Region> StoreRegionMeta::GetRegion(uint64_t region_i
   BAIDU_SCOPED_LOCK(mutex_);
   auto it = regions_.find(region_id);
   if (it == regions_.end()) {
-    LOG(WARNING) << butil::StringPrintf("region %lu not exist!", region_id);
+    DINGO_LOG(WARNING) << butil::StringPrintf("region %lu not exist!", region_id);
     return nullptr;
   }
 
@@ -151,7 +151,7 @@ std::map<uint64_t, std::shared_ptr<pb::common::Region>> StoreRegionMeta::GetAllR
 
 uint64_t StoreRegionMeta::ParseRegionId(const std::string& str) {
   if (str.size() <= prefix_.size()) {
-    LOG(ERROR) << "Parse region id failed, invalid str " << str;
+    DINGO_LOG(ERROR) << "Parse region id failed, invalid str " << str;
     return 0;
   }
 
@@ -159,7 +159,7 @@ uint64_t StoreRegionMeta::ParseRegionId(const std::string& str) {
   try {
     return std::stoull(s, nullptr, 10);
   } catch (std::invalid_argument& e) {
-    LOG(ERROR) << "string to uint64_t failed: " << e.what();
+    DINGO_LOG(ERROR) << "string to uint64_t failed: " << e.what();
   }
 
   return 0;
@@ -240,12 +240,12 @@ StoreMetaManager::~StoreMetaManager() { bthread_mutex_destroy(&heartbeat_update_
 
 bool StoreMetaManager::Init() {
   if (!server_meta_->Init()) {
-    LOG(ERROR) << "Init store server meta failed!";
+    DINGO_LOG(ERROR) << "Init store server meta failed!";
     return false;
   }
 
   if (!region_meta_->Init()) {
-    LOG(ERROR) << "Init store region meta failed!";
+    DINGO_LOG(ERROR) << "Init store region meta failed!";
     return false;
   }
 
@@ -274,7 +274,7 @@ bthread_mutex_t* StoreMetaManager::GetHeartbeatUpdateMutexRef() { return &heartb
 bool StoreMetaManager::IsExistStore(uint64_t store_id) { return server_meta_->IsExist(store_id); }
 
 void StoreMetaManager::AddStore(std::shared_ptr<pb::common::Store> store) {
-  LOG(INFO) << "StoreMeta add store, store_id " << store->id();
+  DINGO_LOG(INFO) << "StoreMeta add store, store_id " << store->id();
   server_meta_->AddStore(store);
 }
 
@@ -293,7 +293,7 @@ std::map<uint64_t, std::shared_ptr<pb::common::Store>> StoreMetaManager::GetAllS
 bool StoreMetaManager::IsExistRegion(uint64_t region_id) { return region_meta_->IsExist(region_id); }
 
 void StoreMetaManager::AddRegion(const std::shared_ptr<pb::common::Region> region) {
-  LOG(INFO) << "StoreMeta add region, region_id " << region->id();
+  DINGO_LOG(INFO) << "StoreMeta add region, region_id " << region->id();
   region_meta_->AddRegion(region);
   meta_writer_->Put(region_meta_->TransformToKv(region));
 }

@@ -28,8 +28,8 @@
 #include "butil/scoped_lock.h"
 #include "butil/strings/string_split.h"
 #include "common/helper.h"
+#include "common/logging.h"
 #include "engine/snapshot.h"
-#include "glog/logging.h"
 #include "google/protobuf/unknown_field_set.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator_internal.pb.h"
@@ -79,17 +79,17 @@ void CoordinatorControl::SetLeaderTerm(int64_t term) { leader_term_.store(term, 
 void CoordinatorControl::OnLeaderStart(int64_t term) {
   BAIDU_SCOPED_LOCK(id_epoch_map_mutex_);
   id_epoch_map_temp_ = id_epoch_map_;
-  LOG(INFO) << "OnLeaderStart init id_epoch_map_temp_ finished, term=" << term;
+  DINGO_LOG(INFO) << "OnLeaderStart init id_epoch_map_temp_ finished, term=" << term;
 }
 
 std::shared_ptr<Snapshot> CoordinatorControl::PrepareRaftSnapshot() {
-  LOG(INFO) << "PrepareRaftSnapshot";
+  DINGO_LOG(INFO) << "PrepareRaftSnapshot";
   return this->raw_engine_of_meta_->GetSnapshot();
 }
 
 bool CoordinatorControl::LoadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapshot,
                                                 pb::coordinator_internal::MetaSnapshotFile& meta_snapshot_file) {
-  LOG(INFO) << "Coordinator start to LoadMetaToSnapshotFile";
+  DINGO_LOG(INFO) << "Coordinator start to LoadMetaToSnapshotFile";
 
   std::vector<pb::common::KeyValue> kvs;
 
@@ -103,7 +103,7 @@ bool CoordinatorControl::LoadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapsh
     snapshot_file_kv->CopyFrom(kv);
   }
 
-  LOG(INFO) << "Snapshot id_epoch_meta, count=" << kvs.size();
+  DINGO_LOG(INFO) << "Snapshot id_epoch_meta, count=" << kvs.size();
   kvs.clear();
 
   // 1.coordinator map
@@ -115,7 +115,7 @@ bool CoordinatorControl::LoadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapsh
     auto* snapshot_file_kv = meta_snapshot_file.add_coordinator_map_kvs();
     snapshot_file_kv->CopyFrom(kv);
   }
-  LOG(INFO) << "Snapshot coordinator_meta, count=" << kvs.size();
+  DINGO_LOG(INFO) << "Snapshot coordinator_meta, count=" << kvs.size();
   kvs.clear();
 
   // 2.store map
@@ -127,7 +127,7 @@ bool CoordinatorControl::LoadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapsh
     auto* snapshot_file_kv = meta_snapshot_file.add_store_map_kvs();
     snapshot_file_kv->CopyFrom(kv);
   }
-  LOG(INFO) << "Snapshot store_meta, count=" << kvs.size();
+  DINGO_LOG(INFO) << "Snapshot store_meta, count=" << kvs.size();
   kvs.clear();
 
   // 3.executor map
@@ -139,7 +139,7 @@ bool CoordinatorControl::LoadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapsh
     auto* snapshot_file_kv = meta_snapshot_file.add_executor_map_kvs();
     snapshot_file_kv->CopyFrom(kv);
   }
-  LOG(INFO) << "Snapshot executor_meta, count=" << kvs.size();
+  DINGO_LOG(INFO) << "Snapshot executor_meta, count=" << kvs.size();
   kvs.clear();
 
   // 4.schema map
@@ -151,7 +151,7 @@ bool CoordinatorControl::LoadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapsh
     auto* snapshot_file_kv = meta_snapshot_file.add_schema_map_kvs();
     snapshot_file_kv->CopyFrom(kv);
   }
-  LOG(INFO) << "Snapshot schema_meta, count=" << kvs.size();
+  DINGO_LOG(INFO) << "Snapshot schema_meta, count=" << kvs.size();
   kvs.clear();
 
   // 5.region map
@@ -163,7 +163,7 @@ bool CoordinatorControl::LoadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapsh
     auto* snapshot_file_kv = meta_snapshot_file.add_region_map_kvs();
     snapshot_file_kv->CopyFrom(kv);
   }
-  LOG(INFO) << "Snapshot region_meta, count=" << kvs.size();
+  DINGO_LOG(INFO) << "Snapshot region_meta, count=" << kvs.size();
   kvs.clear();
 
   // 6.table map
@@ -175,14 +175,14 @@ bool CoordinatorControl::LoadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapsh
     auto* snapshot_file_kv = meta_snapshot_file.add_table_map_kvs();
     snapshot_file_kv->CopyFrom(kv);
   }
-  LOG(INFO) << "Snapshot table_meta, count=" << kvs.size();
+  DINGO_LOG(INFO) << "Snapshot table_meta, count=" << kvs.size();
   kvs.clear();
 
   return true;
 }
 
 bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::MetaSnapshotFile& meta_snapshot_file) {
-  LOG(INFO) << "Coordinator start to LoadMetaFromSnapshotFile";
+  DINGO_LOG(INFO) << "Coordinator start to LoadMetaFromSnapshotFile";
 
   std::vector<pb::common::KeyValue> kvs;
 
@@ -197,7 +197,7 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
       return false;
     }
   }
-  LOG(INFO) << "LoadSnapshot id_epoch_meta, count=" << kvs.size();
+  DINGO_LOG(INFO) << "LoadSnapshot id_epoch_meta, count=" << kvs.size();
   kvs.clear();
 
   // 1.coordinator map
@@ -211,7 +211,7 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
       return false;
     }
   }
-  LOG(INFO) << "LoadSnapshot coordinator_meta, count=" << kvs.size();
+  DINGO_LOG(INFO) << "LoadSnapshot coordinator_meta, count=" << kvs.size();
   kvs.clear();
 
   // 2.store map
@@ -225,7 +225,7 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
       return false;
     }
   }
-  LOG(INFO) << "LoadSnapshot store_meta, count=" << kvs.size();
+  DINGO_LOG(INFO) << "LoadSnapshot store_meta, count=" << kvs.size();
   kvs.clear();
 
   // 3.executor map
@@ -239,7 +239,7 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
       return false;
     }
   }
-  LOG(INFO) << "LoadSnapshot executor_meta, count=" << kvs.size();
+  DINGO_LOG(INFO) << "LoadSnapshot executor_meta, count=" << kvs.size();
   kvs.clear();
 
   // 4.schema map
@@ -253,7 +253,7 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
       return false;
     }
   }
-  LOG(INFO) << "LoadSnapshot schema_meta, count=" << kvs.size();
+  DINGO_LOG(INFO) << "LoadSnapshot schema_meta, count=" << kvs.size();
   kvs.clear();
 
   // 5.region map
@@ -267,7 +267,7 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
       return false;
     }
   }
-  LOG(INFO) << "LoadSnapshot region_meta, count=" << kvs.size();
+  DINGO_LOG(INFO) << "LoadSnapshot region_meta, count=" << kvs.size();
   kvs.clear();
 
   // 6.table map
@@ -281,7 +281,7 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
       return false;
     }
   }
-  LOG(INFO) << "LoadSnapshot table_meta, count=" << kvs.size();
+  DINGO_LOG(INFO) << "LoadSnapshot table_meta, count=" << kvs.size();
   kvs.clear();
 
   // 7.init id_epoch_map_temp_
@@ -290,13 +290,13 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
     BAIDU_SCOPED_LOCK(id_epoch_map_mutex_);
     id_epoch_map_temp_ = id_epoch_map_;
   }
-  LOG(INFO) << "LoadSnapshot id_epoch_map_temp, count=" << id_epoch_map_temp_.size();
+  DINGO_LOG(INFO) << "LoadSnapshot id_epoch_map_temp, count=" << id_epoch_map_temp_.size();
 
   return true;
 }
 
 bool CoordinatorControl::Recover() {
-  LOG(INFO) << "Coordinator start to Recover";
+  DINGO_LOG(INFO) << "Coordinator start to Recover";
 
   std::vector<pb::common::KeyValue> kvs;
 
@@ -311,7 +311,7 @@ bool CoordinatorControl::Recover() {
       return false;
     }
   }
-  LOG(INFO) << "Recover id_epoch_meta, count=" << kvs.size();
+  DINGO_LOG(INFO) << "Recover id_epoch_meta, count=" << kvs.size();
   kvs.clear();
 
   // 1.coordinator map
@@ -324,7 +324,7 @@ bool CoordinatorControl::Recover() {
       return false;
     }
   }
-  LOG(INFO) << "Recover coordinator_meta, count=" << kvs.size();
+  DINGO_LOG(INFO) << "Recover coordinator_meta, count=" << kvs.size();
   kvs.clear();
 
   // 2.store map
@@ -337,7 +337,7 @@ bool CoordinatorControl::Recover() {
       return false;
     }
   }
-  LOG(INFO) << "Recover store_meta, count=" << kvs.size();
+  DINGO_LOG(INFO) << "Recover store_meta, count=" << kvs.size();
   kvs.clear();
 
   // 3.executor map
@@ -350,7 +350,7 @@ bool CoordinatorControl::Recover() {
       return false;
     }
   }
-  LOG(INFO) << "Recover executor_meta, count=" << kvs.size();
+  DINGO_LOG(INFO) << "Recover executor_meta, count=" << kvs.size();
   kvs.clear();
 
   // 4.schema map
@@ -363,7 +363,7 @@ bool CoordinatorControl::Recover() {
       return false;
     }
   }
-  LOG(INFO) << "Recover schema_meta, count=" << kvs.size();
+  DINGO_LOG(INFO) << "Recover schema_meta, count=" << kvs.size();
   kvs.clear();
 
   // 5.region map
@@ -376,7 +376,7 @@ bool CoordinatorControl::Recover() {
       return false;
     }
   }
-  LOG(INFO) << "Recover region_meta, count=" << kvs.size();
+  DINGO_LOG(INFO) << "Recover region_meta, count=" << kvs.size();
   kvs.clear();
 
   // 6.table map
@@ -389,7 +389,7 @@ bool CoordinatorControl::Recover() {
       return false;
     }
   }
-  LOG(INFO) << "Recover table_meta, count=" << kvs.size();
+  DINGO_LOG(INFO) << "Recover table_meta, count=" << kvs.size();
   kvs.clear();
 
   // 7.init id_epoch_map_temp_
@@ -398,7 +398,7 @@ bool CoordinatorControl::Recover() {
     BAIDU_SCOPED_LOCK(id_epoch_map_mutex_);
     id_epoch_map_temp_ = id_epoch_map_;
   }
-  LOG(INFO) << "Recover id_epoch_map_temp, count=" << id_epoch_map_temp_.size();
+  DINGO_LOG(INFO) << "Recover id_epoch_map_temp, count=" << id_epoch_map_temp_.size();
 
   return true;
 }
@@ -425,9 +425,9 @@ void CoordinatorControl::GenerateRootSchemas(pb::coordinator_internal::SchemaInt
 
   root_schema_internal.add_schema_ids(dingo_schema_internal.id());
 
-  LOG(INFO) << "GenerateRootSchemas 0[" << root_schema_internal.DebugString();
-  LOG(INFO) << "GenerateRootSchemas 1[" << meta_schema_internal.DebugString();
-  LOG(INFO) << "GenerateRootSchemas 2[" << dingo_schema_internal.DebugString();
+  DINGO_LOG(INFO) << "GenerateRootSchemas 0[" << root_schema_internal.DebugString();
+  DINGO_LOG(INFO) << "GenerateRootSchemas 1[" << meta_schema_internal.DebugString();
+  DINGO_LOG(INFO) << "GenerateRootSchemas 2[" << dingo_schema_internal.DebugString();
 }
 
 // Init
@@ -451,7 +451,7 @@ bool CoordinatorControl::Init() {
     auto const schema_kvs = schema_meta_->TransformToKvWithAll();
     meta_writer_->Put(schema_kvs);
 
-    LOG(INFO) << "init schema_map_ finished";
+    DINGO_LOG(INFO) << "init schema_map_ finished";
   }
 
   return true;
@@ -462,11 +462,11 @@ uint64_t CoordinatorControl::GetPresentId(const pb::coordinator_internal::IdEpoc
   BAIDU_SCOPED_LOCK(id_epoch_map_temp_mutex_);
   if (id_epoch_map_temp_.find(key) == id_epoch_map_temp_.end()) {
     value = 1000;
-    LOG(INFO) << "GetPresentId key=" << pb::coordinator_internal::IdEpochType_Name(key)
-              << " not found, generate new id=" << value;
+    DINGO_LOG(INFO) << "GetPresentId key=" << pb::coordinator_internal::IdEpochType_Name(key)
+                    << " not found, generate new id=" << value;
   } else {
     value = id_epoch_map_temp_[key].value();
-    LOG(INFO) << "GetPresentId key=" << pb::coordinator_internal::IdEpochType_Name(key) << " value=" << value;
+    DINGO_LOG(INFO) << "GetPresentId key=" << pb::coordinator_internal::IdEpochType_Name(key) << " value=" << value;
   }
 
   return value;
@@ -479,7 +479,8 @@ void CoordinatorControl::GetServerLocation(pb::common::Location& raft_location, 
   auto raft_location_string = raft_location.host() + ":" + std::to_string(raft_location.port());
   if (coordinator_location_cache_.find(raft_location_string) != coordinator_location_cache_.end()) {
     server_location.CopyFrom(coordinator_location_cache_[raft_location_string]);
-    LOG(INFO) << "GetServiceLocation Cache Hit raft_location=" << dingodb::Helper::MessageToJsonString(raft_location);
+    DINGO_LOG(INFO) << "GetServiceLocation Cache Hit raft_location="
+                    << dingodb::Helper::MessageToJsonString(raft_location);
     return;
   }
 
@@ -487,18 +488,18 @@ void CoordinatorControl::GetServerLocation(pb::common::Location& raft_location, 
 
   // add to cache if get server_location
   if (server_location.host().length() > 0 && server_location.port() > 0) {
-    LOG(INFO) << "GetServiceLocation Cache Miss, add new cache raft_location="
-              << Helper::MessageToJsonString(raft_location);
+    DINGO_LOG(INFO) << "GetServiceLocation Cache Miss, add new cache raft_location="
+                    << Helper::MessageToJsonString(raft_location);
     coordinator_location_cache_[raft_location_string] = server_location;
   } else {
-    LOG(INFO) << "GetServiceLocation Cache Miss, can't get server_location, raft_location="
-              << Helper::MessageToJsonString(raft_location);
+    DINGO_LOG(INFO) << "GetServiceLocation Cache Miss, can't get server_location, raft_location="
+                    << Helper::MessageToJsonString(raft_location);
   }
 }
 
 void CoordinatorControl::GetLeaderLocation(pb::common::Location& leader_server_location) {
   if (raft_node_ == nullptr) {
-    LOG(ERROR) << "GetLeaderLocation raft_node_ is nullptr";
+    DINGO_LOG(ERROR) << "GetLeaderLocation raft_node_ is nullptr";
     return;
   }
 
@@ -525,11 +526,11 @@ uint64_t CoordinatorControl::GetNextId(const pb::coordinator_internal::IdEpochTy
     BAIDU_SCOPED_LOCK(id_epoch_map_temp_mutex_);
     if (id_epoch_map_temp_.find(key) == id_epoch_map_temp_.end()) {
       value = 1000;
-      LOG(INFO) << "GetNextId key=" << pb::coordinator_internal::IdEpochType_Name(key)
-                << " not found, generate new id=" << value;
+      DINGO_LOG(INFO) << "GetNextId key=" << pb::coordinator_internal::IdEpochType_Name(key)
+                      << " not found, generate new id=" << value;
     } else {
       value = id_epoch_map_temp_[key].value();
-      LOG(INFO) << "GetNextId key=" << pb::coordinator_internal::IdEpochType_Name(key) << " value=" << value;
+      DINGO_LOG(INFO) << "GetNextId key=" << pb::coordinator_internal::IdEpochType_Name(key) << " value=" << value;
     }
     value++;
 
@@ -556,12 +557,12 @@ uint64_t CoordinatorControl::GetNextId(const pb::coordinator_internal::IdEpochTy
 int CoordinatorControl::DropSchema(uint64_t parent_schema_id, uint64_t schema_id,
                                    pb::coordinator_internal::MetaIncrement& meta_increment) {
   if (schema_id <= 3) {
-    LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
+    DINGO_LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
     return -1;
   }
 
   if (parent_schema_id < 0) {
-    LOG(ERROR) << "ERRROR: parent_schema_id illegal " << schema_id;
+    DINGO_LOG(ERROR) << "ERRROR: parent_schema_id illegal " << schema_id;
     return -1;
   }
 
@@ -569,14 +570,15 @@ int CoordinatorControl::DropSchema(uint64_t parent_schema_id, uint64_t schema_id
   {
     BAIDU_SCOPED_LOCK(schema_map_mutex_);
     if (this->schema_map_.find(schema_id) == schema_map_.end()) {
-      LOG(ERROR) << "ERRROR: schema_id not found" << schema_id;
+      DINGO_LOG(ERROR) << "ERRROR: schema_id not found" << schema_id;
       return -1;
     }
 
     auto& schema_to_delete = schema_map_[schema_id];
     if (schema_to_delete.table_ids_size() > 0 || schema_to_delete.schema_ids_size() > 0) {
-      LOG(ERROR) << "ERRROR: schema is not null" << schema_id << " table_ids_size=" << schema_to_delete.table_ids_size()
-                 << " schema_ids_size=" << schema_to_delete.schema_ids_size();
+      DINGO_LOG(ERROR) << "ERRROR: schema is not null" << schema_id
+                       << " table_ids_size=" << schema_to_delete.table_ids_size()
+                       << " schema_ids_size=" << schema_to_delete.schema_ids_size();
       return -1;
     }
     // construct schema from schema_internal
@@ -605,12 +607,12 @@ int CoordinatorControl::CreateSchema(uint64_t parent_schema_id, std::string sche
   {
     BAIDU_SCOPED_LOCK(schema_map_mutex_);
     if (schema_map_.find(parent_schema_id) == schema_map_.end()) {
-      LOG(INFO) << " CreateSchema parent_schema_id is illegal " << parent_schema_id;
+      DINGO_LOG(INFO) << " CreateSchema parent_schema_id is illegal " << parent_schema_id;
       return -1;
     }
 
     if (schema_name.empty()) {
-      LOG(INFO) << " CreateSchema schema_name is illegal " << schema_name;
+      DINGO_LOG(INFO) << " CreateSchema schema_name is illegal " << schema_name;
       return -1;
     }
   }
@@ -656,8 +658,9 @@ uint64_t CoordinatorControl::UpdateExecutorMap(const pb::common::Executor& execu
     BAIDU_SCOPED_LOCK(executor_map_mutex_);
     if (executor_map_.find(executor.id()) != executor_map_.end()) {
       if (executor_map_[executor.id()].state() != executor.state()) {
-        LOG(INFO) << "executor STATUS CHANGE executor_id = " << executor.id()
-                  << " old status = " << executor_map_[executor.id()].state() << " new status = " << executor.state();
+        DINGO_LOG(INFO) << "executor STATUS CHANGE executor_id = " << executor.id()
+                        << " old status = " << executor_map_[executor.id()].state()
+                        << " new status = " << executor.state();
 
         // update meta_increment
         need_update_epoch = true;
@@ -673,7 +676,7 @@ uint64_t CoordinatorControl::UpdateExecutorMap(const pb::common::Executor& execu
         // executor_map_[executor.id()] = executor;  // raft_kv_put
       }
     } else {
-      LOG(INFO) << "NEED ADD NEW executor executor_id = " << executor.id();
+      DINGO_LOG(INFO) << "NEED ADD NEW executor executor_id = " << executor.id();
 
       // update meta_increment
       need_update_epoch = true;
@@ -694,7 +697,7 @@ uint64_t CoordinatorControl::UpdateExecutorMap(const pb::common::Executor& execu
     GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_EXECUTOR, meta_increment);
   }
 
-  LOG(INFO) << "UpdateExecutorMap executor_id=" << executor.id();
+  DINGO_LOG(INFO) << "UpdateExecutorMap executor_id=" << executor.id();
 
   return executor_map_epoch;
 }
@@ -709,8 +712,8 @@ uint64_t CoordinatorControl::UpdateStoreMap(const pb::common::Store& store,
     BAIDU_SCOPED_LOCK(store_map_mutex_);
     if (store_map_.find(store.id()) != store_map_.end()) {
       if (store_map_[store.id()].state() != store.state()) {
-        LOG(INFO) << "STORE STATUS CHANGE store_id = " << store.id()
-                  << " old status = " << store_map_[store.id()].state() << " new status = " << store.state();
+        DINGO_LOG(INFO) << "STORE STATUS CHANGE store_id = " << store.id()
+                        << " old status = " << store_map_[store.id()].state() << " new status = " << store.state();
 
         // update meta_increment
         need_update_epoch = true;
@@ -726,7 +729,7 @@ uint64_t CoordinatorControl::UpdateStoreMap(const pb::common::Store& store,
         // store_map_[store.id()] = store;  // raft_kv_put
       }
     } else {
-      LOG(INFO) << "NEED ADD NEW STORE store_id = " << store.id();
+      DINGO_LOG(INFO) << "NEED ADD NEW STORE store_id = " << store.id();
 
       // update meta_increment
       need_update_epoch = true;
@@ -747,7 +750,7 @@ uint64_t CoordinatorControl::UpdateStoreMap(const pb::common::Store& store,
     GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_STORE, meta_increment);
   }
 
-  LOG(INFO) << "UpdateStoreMap store_id=" << store.id();
+  DINGO_LOG(INFO) << "UpdateStoreMap store_id=" << store.id();
 
   return store_map_epoch;
 }
@@ -791,14 +794,14 @@ int CoordinatorControl::DeleteStore(uint64_t cluster_id, uint64_t store_id, std:
   {
     BAIDU_SCOPED_LOCK(store_map_mutex_);
     if (store_map_.find(store_id) == store_map_.end()) {
-      LOG(INFO) << "DeleteStore store_id not exists, id=" << store_id;
+      DINGO_LOG(INFO) << "DeleteStore store_id not exists, id=" << store_id;
       return -1;
     }
 
     store_to_delete = store_map_[store_id];
     if (keyring == store_to_delete.keyring()) {
-      LOG(INFO) << "DeleteStore store_id id=" << store_id << " keyring not equal, input keyring=" << keyring
-                << " but store's keyring=" << store_to_delete.keyring();
+      DINGO_LOG(INFO) << "DeleteStore store_id id=" << store_id << " keyring not equal, input keyring=" << keyring
+                      << " but store's keyring=" << store_to_delete.keyring();
       return -1;
     }
   }
@@ -857,14 +860,15 @@ int CoordinatorControl::DeleteExecutor(uint64_t cluster_id, uint64_t executor_id
   {
     BAIDU_SCOPED_LOCK(executor_map_mutex_);
     if (executor_map_.find(executor_id) == executor_map_.end()) {
-      LOG(INFO) << "DeleteExecutor executor_id not exists, id=" << executor_id;
+      DINGO_LOG(INFO) << "DeleteExecutor executor_id not exists, id=" << executor_id;
       return -1;
     }
 
     executor_to_delete = executor_map_[executor_id];
     if (keyring == executor_to_delete.keyring()) {
-      LOG(INFO) << "DeleteExecutor executor_id id=" << executor_id << " keyring not equal, input keyring=" << keyring
-                << " but executor's keyring=" << executor_to_delete.keyring();
+      DINGO_LOG(INFO) << "DeleteExecutor executor_id id=" << executor_id
+                      << " keyring not equal, input keyring=" << keyring
+                      << " but executor's keyring=" << executor_to_delete.keyring();
       return -1;
     }
   }
@@ -890,14 +894,14 @@ int CoordinatorControl::CreateTableId(uint64_t schema_id, uint64_t& new_table_id
   {
     BAIDU_SCOPED_LOCK(schema_map_mutex_);
     if (schema_map_.find(schema_id) == schema_map_.end()) {
-      LOG(ERROR) << "schema_id is illegal " << schema_id;
+      DINGO_LOG(ERROR) << "schema_id is illegal " << schema_id;
       return -1;
     }
   }
 
   // create table id
   new_table_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_TABLE, meta_increment);
-  LOG(INFO) << "CreateTableId new_table_id=" << new_table_id;
+  DINGO_LOG(INFO) << "CreateTableId new_table_id=" << new_table_id;
 
   return 0;
 }
@@ -920,28 +924,28 @@ int CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta::TableDef
   {
     BAIDU_SCOPED_LOCK(schema_map_mutex_);
     if (schema_map_.find(schema_id) == schema_map_.end()) {
-      LOG(ERROR) << "schema_id is illegal " << schema_id;
+      DINGO_LOG(ERROR) << "schema_id is illegal " << schema_id;
       return -1;
     }
   }
 
   // validate part information
   if (!table_definition.has_table_partition()) {
-    LOG(ERROR) << "no table_partition provided ";
+    DINGO_LOG(ERROR) << "no table_partition provided ";
     return -1;
   }
   auto const& table_partition = table_definition.table_partition();
   if (table_partition.has_hash_partition()) {
-    LOG(ERROR) << "hash_partiton is not supported";
+    DINGO_LOG(ERROR) << "hash_partiton is not supported";
     return -1;
   } else if (!table_partition.has_range_partition()) {
-    LOG(ERROR) << "no range_partition provided ";
+    DINGO_LOG(ERROR) << "no range_partition provided ";
     return -1;
   }
 
   auto const& range_partition = table_partition.range_partition();
   if (range_partition.ranges_size() == 0) {
-    LOG(ERROR) << "no range provided ";
+    DINGO_LOG(ERROR) << "no range provided ";
     return -1;
   }
 
@@ -951,7 +955,7 @@ int CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta::TableDef
   // if new_table_id is not given, create a new table_id
   if (new_table_id <= 0) {
     new_table_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_TABLE, meta_increment);
-    LOG(INFO) << "CreateTable new_table_id=" << new_table_id;
+    DINGO_LOG(INFO) << "CreateTable new_table_id=" << new_table_id;
   }
 
   std::vector<uint64_t> new_region_ids;
@@ -965,7 +969,7 @@ int CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta::TableDef
     int const ret = CreateRegion(region_name, "", 3, range_partition.ranges(i), schema_id, new_table_id, new_region_id,
                                  meta_increment);
     if (ret < 0) {
-      LOG(ERROR) << "CreateRegion failed in CreateTable table_name=" << table_definition.name();
+      DINGO_LOG(ERROR) << "CreateRegion failed in CreateTable table_name=" << table_definition.name();
       break;
     }
 
@@ -973,13 +977,13 @@ int CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta::TableDef
   }
 
   if (new_region_ids.size() < range_partition.ranges_size()) {
-    LOG(ERROR) << "Not enough regions is created, drop residual regions need=" << range_partition.ranges_size()
-               << " created=" << new_region_ids.size();
+    DINGO_LOG(ERROR) << "Not enough regions is created, drop residual regions need=" << range_partition.ranges_size()
+                     << " created=" << new_region_ids.size();
     for (auto region_id_to_delete : new_region_ids) {
       int ret = DropRegion(region_id_to_delete, meta_increment);
       if (ret < 0) {
-        LOG(ERROR) << "DropRegion failed in CreateTable table_name=" << table_definition.name()
-                   << " region_id =" << region_id_to_delete;
+        DINGO_LOG(ERROR) << "DropRegion failed in CreateTable table_name=" << table_definition.name()
+                         << " region_id =" << region_id_to_delete;
       }
     }
     return -1;
@@ -1048,7 +1052,7 @@ int CoordinatorControl::DropRegion(uint64_t region_id, pb::coordinator_internal:
 
       // on_apply
       // region_map_[region_id].set_state(::dingodb::pb::common::RegionState::REGION_DELETE);
-      LOG(INFO) << "drop region success, id = " << region_id;
+      DINGO_LOG(INFO) << "drop region success, id = " << region_id;
     } else {
       // delete regions on the fly (usually in CreateTable)
       for (int i = 0; i < meta_increment.regions_size(); i++) {
@@ -1058,7 +1062,7 @@ int CoordinatorControl::DropRegion(uint64_t region_id, pb::coordinator_internal:
         }
       }
 
-      LOG(ERROR) << "ERROR drop region id not exists, id = " << region_id;
+      DINGO_LOG(ERROR) << "ERROR drop region id not exists, id = " << region_id;
       return -1;
     }
   }
@@ -1074,14 +1078,14 @@ int CoordinatorControl::DropRegion(uint64_t region_id, pb::coordinator_internal:
 int CoordinatorControl::DropTable(uint64_t schema_id, uint64_t table_id,
                                   pb::coordinator_internal::MetaIncrement& meta_increment) {
   if (schema_id < 0) {
-    LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
+    DINGO_LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
     return -1;
   }
 
   {
     BAIDU_SCOPED_LOCK(schema_map_mutex_);
     if (this->schema_map_.find(schema_id) == schema_map_.end()) {
-      LOG(ERROR) << "ERRROR: schema_id not found" << schema_id;
+      DINGO_LOG(ERROR) << "ERRROR: schema_id not found" << schema_id;
       return -1;
     }
   }
@@ -1090,7 +1094,7 @@ int CoordinatorControl::DropTable(uint64_t schema_id, uint64_t table_id,
   {
     BAIDU_SCOPED_LOCK(table_map_mutex_);
     if (this->table_map_.find(table_id) == table_map_.end()) {
-      LOG(ERROR) << "ERRROR: table_id not found" << table_id;
+      DINGO_LOG(ERROR) << "ERRROR: table_id not found" << table_id;
       return -1;
     }
 
@@ -1107,8 +1111,8 @@ int CoordinatorControl::DropTable(uint64_t schema_id, uint64_t table_id,
 
       // get region
       if (region_map_.find(region_id) == region_map_.end()) {
-        LOG(ERROR) << "ERROR cannot find region in regionmap_ while DropTable, table_id =" << table_id
-                   << " region_id=" << region_id;
+        DINGO_LOG(ERROR) << "ERROR cannot find region in regionmap_ while DropTable, table_id =" << table_id
+                         << " region_id=" << region_id;
         return -1;
       }
 
@@ -1119,7 +1123,7 @@ int CoordinatorControl::DropTable(uint64_t schema_id, uint64_t table_id,
       auto* region_to_delete_region = region_to_delete->mutable_region();
       region_to_delete_region->CopyFrom(region_map_[region_id]);
       region_to_delete->mutable_region()->set_state(::dingodb::pb::common::RegionState::REGION_DELETE);
-      LOG(INFO) << "Delete Region in Drop Table, table_id=" << table_id << " region_id=" << region_id;
+      DINGO_LOG(INFO) << "Delete Region in Drop Table, table_id=" << table_id << " region_id=" << region_id;
 
       need_delete_region = true;
     }
@@ -1171,7 +1175,7 @@ int CoordinatorControl::CreateRegion(const std::string& region_name, const std::
 
   // if not enough stores is selected, return -1
   if (stores_for_regions.size() < replica_num) {
-    LOG(INFO) << "Not enough stores for create region";
+    DINGO_LOG(INFO) << "Not enough stores for create region";
     return -1;
   }
 
@@ -1185,7 +1189,7 @@ int CoordinatorControl::CreateRegion(const std::string& region_name, const std::
   // generate new region
   uint64_t const create_region_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION, meta_increment);
   if (region_map_.find(create_region_id) != region_map_.end()) {
-    LOG(ERROR) << "create_region_id =" << create_region_id << " is illegal, cannot create region!!";
+    DINGO_LOG(ERROR) << "create_region_id =" << create_region_id << " is illegal, cannot create region!!";
     return -1;
   }
 
@@ -1238,7 +1242,7 @@ uint64_t CoordinatorControl::UpdateRegionMap(std::vector<pb::common::Region>& re
     BAIDU_SCOPED_LOCK(region_map_mutex_);
     for (const auto& region : regions) {
       if (region_map_.find(region.id()) != region_map_.end()) {
-        LOG(INFO) << " update region to region_map in heartbeat, region_id=" << region.id();
+        DINGO_LOG(INFO) << " update region to region_map in heartbeat, region_id=" << region.id();
 
         // if state not change, just update leader_store_id
         if (region_map_[region.id()].state() == region.state()) {
@@ -1249,8 +1253,8 @@ uint64_t CoordinatorControl::UpdateRegionMap(std::vector<pb::common::Region>& re
           continue;
         } else {
           // state not equal, need to update region data and apply raft
-          LOG(INFO) << "REGION STATUS CHANGE region_id = " << region.id()
-                    << " old status = " << region_map_[region.id()].state() << " new status = " << region.state();
+          DINGO_LOG(INFO) << "REGION STATUS CHANGE region_id = " << region.id()
+                          << " old status = " << region_map_[region.id()].state() << " new status = " << region.state();
           // maybe need to build a state machine here
           // if a region is set to DELETE, it will never be updated to other normal state
           const auto& region_delete_state_name =
@@ -1261,8 +1265,8 @@ uint64_t CoordinatorControl::UpdateRegionMap(std::vector<pb::common::Region>& re
           // if store want to update a region state from DELETE_* to other NON DELETE_* state, it is illegal
           if (region_state_in_map.rfind(region_delete_state_name, 0) == 0 &&
               region_state_in_req.rfind(region_delete_state_name, 0) != 0) {
-            LOG(INFO) << "illegal intend to update region state from REGION_DELETE to " << region_state_in_req
-                      << " region_id=" << region.id();
+            DINGO_LOG(INFO) << "illegal intend to update region state from REGION_DELETE to " << region_state_in_req
+                            << " region_id=" << region.id();
             continue;
           }
         }
@@ -1281,12 +1285,12 @@ uint64_t CoordinatorControl::UpdateRegionMap(std::vector<pb::common::Region>& re
         // region_map_[region.id()].CopyFrom(region);  // raft_kv_put
         // region_map_epoch++;                        // raft_kv_put
       } else if (region.id() == 0) {
-        LOG(INFO) << " found illegal null region in heartbeat, region_id=0"
-                  << " name=" << region.name() << " leader_store_id=" << region.leader_store_id()
-                  << " state=" << region.state();
+        DINGO_LOG(INFO) << " found illegal null region in heartbeat, region_id=0"
+                        << " name=" << region.name() << " leader_store_id=" << region.leader_store_id()
+                        << " state=" << region.state();
       } else {
-        LOG(INFO) << " found illegal region in heartbeat, region_id=" << region.id() << " name=" << region.name()
-                  << " leader_store_id=" << region.leader_store_id() << " state=" << region.state();
+        DINGO_LOG(INFO) << " found illegal region in heartbeat, region_id=" << region.id() << " name=" << region.name()
+                        << " leader_store_id=" << region.leader_store_id() << " state=" << region.state();
 
         auto* region_increment = meta_increment.add_regions();
         region_increment->set_id(region.id());
@@ -1307,7 +1311,7 @@ uint64_t CoordinatorControl::UpdateRegionMap(std::vector<pb::common::Region>& re
     region_map_epoch = GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_REGION, meta_increment);
   }
 
-  LOG(INFO) << "UpdateRegionMapMulti epoch=" << region_map_epoch;
+  DINGO_LOG(INFO) << "UpdateRegionMapMulti epoch=" << region_map_epoch;
 
   return region_map_epoch;
 }
@@ -1363,12 +1367,12 @@ void CoordinatorControl::GetRegionMap(pb::common::RegionMap& region_map) {
 // out: schemas
 void CoordinatorControl::GetSchemas(uint64_t schema_id, std::vector<pb::meta::Schema>& schemas) {
   if (schema_id < 0) {
-    LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
+    DINGO_LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
     return;
   }
 
   if (!schemas.empty()) {
-    LOG(ERROR) << "ERRROR: vector schemas is not empty , size=" << schemas.size();
+    DINGO_LOG(ERROR) << "ERRROR: vector schemas is not empty , size=" << schemas.size();
     return;
   }
 
@@ -1379,23 +1383,23 @@ void CoordinatorControl::GetSchemas(uint64_t schema_id, std::vector<pb::meta::Sc
     }
 
     auto& schema_internal = schema_map_[schema_id];
-    LOG(INFO) << " sub schema count=" << schema_internal.schema_ids_size();
+    DINGO_LOG(INFO) << " sub schema count=" << schema_internal.schema_ids_size();
 
     for (int i = 0; i < schema_internal.schema_ids_size(); i++) {
       uint64_t sub_schema_id = schema_internal.schema_ids(i);
 
-      LOG(INFO) << "sub_schema_id=" << sub_schema_id;
+      DINGO_LOG(INFO) << "sub_schema_id=" << sub_schema_id;
 
-      LOG(INFO) << schema_internal.DebugString();
+      DINGO_LOG(INFO) << schema_internal.DebugString();
 
       if (schema_map_.find(sub_schema_id) == schema_map_.end()) {
-        LOG(ERROR) << "ERRROR: sub_schema_id " << sub_schema_id << " not exists";
-        LOG(INFO) << "ERRROR: sub_schema_id " << sub_schema_id << " not exists";
+        DINGO_LOG(ERROR) << "ERRROR: sub_schema_id " << sub_schema_id << " not exists";
+        DINGO_LOG(INFO) << "ERRROR: sub_schema_id " << sub_schema_id << " not exists";
         continue;
       }
-      LOG(INFO) << " schema_map_ =" << schema_map_[sub_schema_id].DebugString();
+      DINGO_LOG(INFO) << " schema_map_ =" << schema_map_[sub_schema_id].DebugString();
 
-      LOG(INFO) << " GetSchemas push_back sub schema id=" << sub_schema_id;
+      DINGO_LOG(INFO) << " GetSchemas push_back sub schema id=" << sub_schema_id;
 
       // construct sub_schema_for_response
       const auto& lean_schema = schema_map_[sub_schema_id];
@@ -1426,28 +1430,29 @@ void CoordinatorControl::GetSchemas(uint64_t schema_id, std::vector<pb::meta::Sc
     }
   }
 
-  LOG(INFO) << "GetSchemas id=" << schema_id << " sub schema count=" << schema_map_.size();
+  DINGO_LOG(INFO) << "GetSchemas id=" << schema_id << " sub schema count=" << schema_map_.size();
 }
 
 // get tables
 void CoordinatorControl::GetTables(uint64_t schema_id,
                                    std::vector<pb::meta::TableDefinitionWithId>& table_definition_with_ids) {
-  LOG(INFO) << "GetTables in control schema_id=" << schema_id;
+  DINGO_LOG(INFO) << "GetTables in control schema_id=" << schema_id;
 
   if (schema_id < 0) {
-    LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
+    DINGO_LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
     return;
   }
 
   if (!table_definition_with_ids.empty()) {
-    LOG(ERROR) << "ERRROR: vector table_definition_with_ids is not empty , size=" << table_definition_with_ids.size();
+    DINGO_LOG(ERROR) << "ERRROR: vector table_definition_with_ids is not empty , size="
+                     << table_definition_with_ids.size();
     return;
   }
 
   {
     BAIDU_SCOPED_LOCK(schema_map_mutex_);
     if (this->schema_map_.find(schema_id) == schema_map_.end()) {
-      LOG(ERROR) << "ERRROR: schema_id not found" << schema_id;
+      DINGO_LOG(ERROR) << "ERRROR: schema_id not found" << schema_id;
       return;
     }
 
@@ -1455,11 +1460,11 @@ void CoordinatorControl::GetTables(uint64_t schema_id,
     for (int i = 0; i < schema_internal.table_ids_size(); i++) {
       uint64_t table_id = schema_internal.table_ids(i);
       if (table_map_.find(table_id) == table_map_.end()) {
-        LOG(ERROR) << "ERRROR: table_id " << table_id << " not exists";
+        DINGO_LOG(ERROR) << "ERRROR: table_id " << table_id << " not exists";
         continue;
       }
 
-      LOG(INFO) << "GetTables found table_id=" << table_id;
+      DINGO_LOG(INFO) << "GetTables found table_id=" << table_id;
 
       // construct return value
       pb::meta::TableDefinitionWithId table_def_with_id;
@@ -1475,18 +1480,18 @@ void CoordinatorControl::GetTables(uint64_t schema_id,
     }
   }
 
-  LOG(INFO) << "GetTables schema_id=" << schema_id << " tables count=" << table_definition_with_ids.size();
+  DINGO_LOG(INFO) << "GetTables schema_id=" << schema_id << " tables count=" << table_definition_with_ids.size();
 }
 
 // get table
 void CoordinatorControl::GetTable(uint64_t schema_id, uint64_t table_id, pb::meta::Table& table) {
   if (schema_id < 0) {
-    LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
+    DINGO_LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
     return;
   }
 
   if (table.id().entity_id() != 0) {
-    LOG(ERROR) << "ERRROR: table is not empty , table_id=" << table.id().entity_id();
+    DINGO_LOG(ERROR) << "ERRROR: table is not empty , table_id=" << table.id().entity_id();
     return;
   }
 
@@ -1494,12 +1499,12 @@ void CoordinatorControl::GetTable(uint64_t schema_id, uint64_t table_id, pb::met
   {
     BAIDU_SCOPED_LOCK(table_map_mutex_);
     if (this->schema_map_.find(schema_id) == schema_map_.end()) {
-      LOG(ERROR) << "ERRROR: schema_id not found" << schema_id;
+      DINGO_LOG(ERROR) << "ERRROR: schema_id not found" << schema_id;
       return;
     }
 
     if (this->table_map_.find(table_id) == table_map_.end()) {
-      LOG(ERROR) << "ERRROR: table_id not found" << table_id;
+      DINGO_LOG(ERROR) << "ERRROR: table_id not found" << table_id;
       return;
     }
 
@@ -1529,8 +1534,8 @@ void CoordinatorControl::GetTable(uint64_t schema_id, uint64_t table_id, pb::met
 
     // get region
     if (region_map_.find(region_id) == region_map_.end()) {
-      LOG(ERROR) << "ERROR cannot find region in regionmap_ while GetTable, table_id =" << table_id
-                 << " region_id=" << region_id;
+      DINGO_LOG(ERROR) << "ERROR cannot find region in regionmap_ while GetTable, table_id =" << table_id
+                       << " region_id=" << region_id;
       continue;
     }
     pb::common::Region& part_region = region_map_[region_id];
@@ -1575,7 +1580,7 @@ void CoordinatorControl::GetCoordinatorMap(uint64_t cluster_id, uint64_t& epoch,
   leader_location.set_port(19190);
 
   if (raft_node_ == nullptr) {
-    LOG(ERROR) << "GetCoordinatorMap raft_node_ is nullptr";
+    DINGO_LOG(ERROR) << "GetCoordinatorMap raft_node_ is nullptr";
     return;
   }
 
@@ -1589,7 +1594,7 @@ void CoordinatorControl::GetCoordinatorMap(uint64_t cluster_id, uint64_t& epoch,
 
     int ret = Helper::PeerIdToLocation(peer, raft_location);
     if (ret < 0) {
-      LOG(ERROR) << "GetCoordinatorMap cannot transform raft peerid, peerid=" << peer;
+      DINGO_LOG(ERROR) << "GetCoordinatorMap cannot transform raft peerid, peerid=" << peer;
       continue;
     }
 
@@ -1604,7 +1609,7 @@ void CoordinatorControl::GetCoordinatorMap(uint64_t cluster_id, uint64_t& epoch,
 
   int ret = Helper::PeerIdToLocation(leader_peer_id, leader_raft_location);
   if (ret < 0) {
-    LOG(ERROR) << "GetCoordinatorMap cannot transform raft leader peerid, peerid=" << leader_peer_id;
+    DINGO_LOG(ERROR) << "GetCoordinatorMap cannot transform raft leader peerid, peerid=" << leader_peer_id;
     return;
   }
 
@@ -1624,8 +1629,8 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
     if (id_epoch_map_.find(pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX) != id_epoch_map_.end()) {
       uint64_t applied_index = id_epoch_map_[pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX].value();
       if (index <= applied_index) {
-        LOG(INFO) << "ApplyMetaIncrement index < applied_index, just return, [index=" << index
-                  << "][applied_index=" << applied_index << "]";
+        DINGO_LOG(INFO) << "ApplyMetaIncrement index < applied_index, just return, [index=" << index
+                        << "][applied_index=" << applied_index << "]";
         return;
       }
     }
@@ -1760,7 +1765,8 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
             // add new created schema's id to its parent schema's schema_ids
             parent_schema.add_schema_ids(schema.id());
 
-            LOG(INFO) << "3.schema map CREATE new_sub_schema id=" << schema.id() << " parent_id=" << schema.schema_id();
+            DINGO_LOG(INFO) << "3.schema map CREATE new_sub_schema id=" << schema.id()
+                            << " parent_id=" << schema.schema_id();
 
             // meta_write_kv
             meta_write_to_kv.push_back(schema_meta_->TransformToKvValue(parent_schema));
@@ -1822,17 +1828,19 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         // only create region will push to store now
         for (int j = 0; j < region.region().peers_size(); j++) {
           uint64_t store_id = region.region().peers(j).store_id();
-          LOG(INFO) << " add_store_for_push, peers_size=" << region.region().peers_size() << " store_id =" << store_id;
+          DINGO_LOG(INFO) << " add_store_for_push, peers_size=" << region.region().peers_size()
+                          << " store_id =" << store_id;
 
           if (store_need_push_.find(store_id) == store_need_push_.end()) {
             if (store_map_.find(store_id) != store_map_.end()) {
               store_need_push_[store_id] = store_map_[store_id];
-              LOG(INFO) << " add_store_for_push, store_id=" << store_id << " in create region=" << region.region().id()
-                        << " location=" << store_map_[store_id].server_location().host() << ":"
-                        << store_map_[store_id].server_location().port();
+              DINGO_LOG(INFO) << " add_store_for_push, store_id=" << store_id
+                              << " in create region=" << region.region().id()
+                              << " location=" << store_map_[store_id].server_location().host() << ":"
+                              << store_map_[store_id].server_location().port();
             } else {
-              LOG(ERROR) << " add_store_for_push, illegal store_id=" << store_id
-                         << " in create region=" << region.region().id();
+              DINGO_LOG(ERROR) << " add_store_for_push, illegal store_id=" << store_id
+                               << " in create region=" << region.region().id();
             }
           }
         }
@@ -1880,14 +1888,14 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
           // add new created table's id to its parent schema's table_ids
           schema.add_table_ids(table.id());
 
-          LOG(INFO) << "5.table map CREATE new_sub_table id=" << table.id() << " parent_id=" << table.schema_id();
+          DINGO_LOG(INFO) << "5.table map CREATE new_sub_table id=" << table.id() << " parent_id=" << table.schema_id();
 
           // meta_write_kv
           meta_write_to_kv.push_back(schema_meta_->TransformToKvValue(schema));
 
         } else {
-          LOG(ERROR) << " CREATE TABLE apply illegal schema_id=" << table.schema_id() << " table_id=" << table.id()
-                     << " table_name=" << table.table().definition().name();
+          DINGO_LOG(ERROR) << " CREATE TABLE apply illegal schema_id=" << table.schema_id()
+                           << " table_id=" << table.id() << " table_name=" << table.table().definition().name();
         }
 
       } else if (table.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
@@ -1923,14 +1931,14 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
           }
           schema.CopyFrom(new_schema);
 
-          LOG(INFO) << "5.table map DELETE new_sub_table id=" << table.id() << " parent_id=" << table.schema_id();
+          DINGO_LOG(INFO) << "5.table map DELETE new_sub_table id=" << table.id() << " parent_id=" << table.schema_id();
 
           // meta_write_kv
           meta_write_to_kv.push_back(schema_meta_->TransformToKvValue(schema));
 
         } else {
-          LOG(ERROR) << " DROP TABLE apply illegal schema_id=" << table.schema_id() << " table_id=" << table.id()
-                     << " table_name=" << table.table().definition().name();
+          DINGO_LOG(ERROR) << " DROP TABLE apply illegal schema_id=" << table.schema_id() << " table_id=" << table.id()
+                           << " table_name=" << table.table().definition().name();
         }
         // meta_delete_kv
         meta_delete_to_kv.push_back(table_meta_->TransformToKvValue(table.table()));
@@ -1941,9 +1949,7 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
   // write update to local engine, begin
   if ((!meta_write_to_kv.empty()) || (!meta_delete_to_kv.empty())) {
     if (!meta_writer_->PutAndDelete(meta_write_to_kv, meta_delete_to_kv)) {
-      LOG(INFO) << "ApplyMetaIncrement PutAndDelete failed, exit program";
-      LOG(ERROR) << "ApplyMetaIncrement PutAndDelete failed, exit program";
-
+      DINGO_LOG(ERROR) << "ApplyMetaIncrement PutAndDelete failed, exit program";
       exit(-1);
     }
   }
@@ -1952,7 +1958,7 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
 
 int CoordinatorControl::ValidateStore(uint64_t store_id, const std::string& keyring) {
   if (keyring == std::string("TO_BE_CONTINUED")) {
-    LOG(INFO) << "ValidateStore store_id=" << store_id << " debug pass with TO_BE_CONTINUED";
+    DINGO_LOG(INFO) << "ValidateStore store_id=" << store_id << " debug pass with TO_BE_CONTINUED";
     return 0;
   }
 
@@ -1961,24 +1967,24 @@ int CoordinatorControl::ValidateStore(uint64_t store_id, const std::string& keyr
     if (store_map_.find(store_id) != store_map_.end()) {
       auto store_in_map = store_map_[store_id];
       if (store_in_map.keyring() == keyring) {
-        LOG(INFO) << "ValidateStore store_id=" << store_id << " succcess";
+        DINGO_LOG(INFO) << "ValidateStore store_id=" << store_id << " succcess";
         return 0;
       }
 
-      LOG(INFO) << "ValidateStore store_id=" << store_id << "keyring wrong fail input_keyring=" << keyring
-                << " correct_keyring=" << store_in_map.keyring();
+      DINGO_LOG(INFO) << "ValidateStore store_id=" << store_id << "keyring wrong fail input_keyring=" << keyring
+                      << " correct_keyring=" << store_in_map.keyring();
       return -1;
     }
   }
 
-  LOG(INFO) << "ValidateStore store_id=" << store_id << " not exist fail";
+  DINGO_LOG(INFO) << "ValidateStore store_id=" << store_id << " not exist fail";
 
   return -1;
 }
 
 int CoordinatorControl::ValidateExecutor(uint64_t executor_id, const std::string& keyring) {
   if (keyring == std::string("TO_BE_CONTINUED")) {
-    LOG(INFO) << "ValidateExecutor executor_id=" << executor_id << " debug pass with TO_BE_CONTINUED";
+    DINGO_LOG(INFO) << "ValidateExecutor executor_id=" << executor_id << " debug pass with TO_BE_CONTINUED";
     return 0;
   }
 
@@ -1987,17 +1993,18 @@ int CoordinatorControl::ValidateExecutor(uint64_t executor_id, const std::string
     if (executor_map_.find(executor_id) != executor_map_.end()) {
       auto executor_in_map = executor_map_[executor_id];
       if (executor_in_map.keyring() == keyring) {
-        LOG(INFO) << "ValidateExecutor executor_id=" << executor_id << " succcess";
+        DINGO_LOG(INFO) << "ValidateExecutor executor_id=" << executor_id << " succcess";
         return 0;
       }
 
-      LOG(INFO) << "ValidateExecutor executor_id=" << executor_id << "keyring wrong fail input_keyring=" << keyring
-                << " correct_keyring=" << executor_in_map.keyring();
+      DINGO_LOG(INFO) << "ValidateExecutor executor_id=" << executor_id
+                      << "keyring wrong fail input_keyring=" << keyring
+                      << " correct_keyring=" << executor_in_map.keyring();
       return -1;
     }
   }
 
-  LOG(INFO) << "ValidateExecutor executor_id=" << executor_id << " not exist fail";
+  DINGO_LOG(INFO) << "ValidateExecutor executor_id=" << executor_id << " not exist fail";
 
   return -1;
 }
