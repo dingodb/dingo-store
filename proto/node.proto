@@ -38,9 +38,47 @@ message GetNodeInfoResponse {
   NodeInfo node_info = 2;
 }
 
+enum LogLevel {
+  DEBUG = 0;
+  INFO = 1;
+  WARNING = 2;
+  ERROR = 3;
+  FATAL = 4;
+}
+
+message LogDetail {
+  // Sets the maximum number of seconds which logs may be buffered for.
+  uint32 log_buf_secs = 1;
+  // Sets the maximum log file size (in MB)
+  uint32 max_log_size = 2;
+  // Sets whether to avoid logging to the disk if the disk is full.
+  bool stop_logging_if_full_disk = 3;
+}
+
+message GetLogLevelRequest {};
+message GetLogLevelResponse {
+  dingodb.pb.error.Error error = 1;
+  LogLevel log_level = 2;
+  LogDetail log_detail = 3;
+};
+
+message ChangeLogLevelRequest {
+  LogLevel log_level = 1;
+  LogDetail log_detail = 2;
+};
+
+message ChangeLogLevelResponse {
+  dingodb.pb.error.Error error = 1;
+};
+
 service NodeService {
   // GetNodeInfo
   // in: cluster_id
   // out: List<Node>
   rpc GetNodeInfo(GetNodeInfoRequest) returns (GetNodeInfoResponse);
+
+  // Get current log level information
+  rpc GetLogLevel(GetLogLevelRequest) returns (GetLogLevelResponse);
+  // Change the LogLevel
+  rpc ChangeLogLevel(ChangeLogLevelRequest) returns (ChangeLogLevelResponse);
 }

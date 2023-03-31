@@ -18,6 +18,7 @@
 
 #include "common/logging.h"
 #include "proto/common.pb.h"
+#include "proto/node.pb.h"
 
 DECLARE_bool(log_each_request);
 DECLARE_int32(timeout_ms);
@@ -77,7 +78,7 @@ void SendGetNodeInfo(brpc::Controller& cntl, dingodb::pb::node::NodeService_Stub
   dingodb::pb::node::GetNodeInfoRequest request;
   dingodb::pb::node::GetNodeInfoResponse response;
 
-  std::string key = "Hello";
+  std::string const key = "Hello";
   // const char* op = nullptr;
   request.set_cluster_id(0);
   stub.GetNodeInfo(&cntl, &request, &response, nullptr);
@@ -95,11 +96,49 @@ void SendGetNodeInfo(brpc::Controller& cntl, dingodb::pb::node::NodeService_Stub
   }
 }
 
+void SendGetLogLevel(brpc::Controller& cntl, dingodb::pb::node::NodeService_Stub& stub) {
+  dingodb::pb::node::GetLogLevelRequest request;
+  dingodb::pb::node::GetLogLevelResponse response;
+  stub.GetLogLevel(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+  }
+
+  if (FLAGS_log_each_request) {
+    std::string format_response = MessageToJsonString(response);
+    DINGO_LOG(INFO) << "Received response" << format_response
+                    << " request_attachment=" << cntl.request_attachment().size()
+                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+    DINGO_LOG(INFO) << response.DebugString();
+  }
+}
+
+void SendChangeLogLevel(brpc::Controller& cntl, dingodb::pb::node::NodeService_Stub& stub) {
+  dingodb::pb::node::ChangeLogLevelRequest request;
+  dingodb::pb::node::ChangeLogLevelResponse response;
+
+  request.set_log_level(dingodb::pb::node::WARNING);
+  auto* log_detail = request.mutable_log_detail();
+  log_detail->set_log_buf_secs(10);
+  log_detail->set_max_log_size(100);
+  log_detail->set_stop_logging_if_full_disk(false);
+
+  stub.ChangeLogLevel(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+  }
+
+  std::string const request_format = MessageToJsonString(request);
+  std::string const response_format = MessageToJsonString(response);
+  DINGO_LOG(INFO) << request_format;
+  DINGO_LOG(INFO) << response_format;
+}
+
 void SendHello(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
   dingodb::pb::coordinator::HelloRequest request;
   dingodb::pb::coordinator::HelloResponse response;
 
-  std::string key = "Hello";
+  std::string const key = "Hello";
   // const char* op = nullptr;
   request.set_hello(0);
   stub.Hello(&cntl, &request, &response, nullptr);

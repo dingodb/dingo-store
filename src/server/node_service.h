@@ -32,6 +32,10 @@ class NodeServiceImpl : public pb::node::NodeService {
 
   void GetNodeInfo(google::protobuf::RpcController* controller, const pb::node::GetNodeInfoRequest* request,
                    pb::node::GetNodeInfoResponse* response, google::protobuf::Closure* done) override;
+  void GetLogLevel(google::protobuf::RpcController* controller, const pb::node::GetLogLevelRequest* request,
+                   pb::node::GetLogLevelResponse* response, google::protobuf::Closure* done) override;
+  void ChangeLogLevel(google::protobuf::RpcController* controller, const pb::node::ChangeLogLevelRequest* request,
+                      pb::node::ChangeLogLevelResponse* response, google::protobuf::Closure* done) override;
 
   void SetServer(dingodb::Server* server);
 
