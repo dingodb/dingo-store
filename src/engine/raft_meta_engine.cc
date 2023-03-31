@@ -20,6 +20,7 @@
 #include "braft/raft.h"
 #include "butil/endpoint.h"
 #include "common/helper.h"
+#include "common/logging.h"
 #include "common/synchronization.h"
 #include "config/config_manager.h"
 #include "coordinator/coordinator_control.h"
@@ -45,7 +46,7 @@ RaftMetaEngine::RaftMetaEngine(std::shared_ptr<RawEngine> engine, std::shared_pt
 RaftMetaEngine::~RaftMetaEngine() = default;
 
 bool RaftMetaEngine::Init(std::shared_ptr<Config> config) {
-  LOG(INFO) << "Now=> Int Raft Kv Engine with config[" << config->ToString() + "]";
+  DINGO_LOG(INFO) << "Now=> Int Raft Kv Engine with config[" << config->ToString() + "]";
   return true;
 }
 
@@ -53,12 +54,12 @@ bool RaftMetaEngine::Recover() { return true; }
 
 butil::Status RaftMetaEngine::InitCoordinatorRegion(std::shared_ptr<Context> ctx,
                                                     const std::shared_ptr<pb::common::Region> region) {
-  LOG(INFO) << "RaftkvEngine add region, region_id " << region->id();
+  DINGO_LOG(INFO) << "RaftkvEngine add region, region_id " << region->id();
 
   // construct MetaStatMachine here
   braft::StateMachine* state_machine = new MetaStateMachine(engine_, meta_control_);
 
-  std::shared_ptr<RaftNode> node = std::make_shared<RaftNode>(
+  std::shared_ptr<RaftNode> const node = std::make_shared<RaftNode>(
       ctx->ClusterRole(), region->id(), braft::PeerId(Server::GetInstance()->RaftEndpoint()), state_machine);
 
   if (node->Init(Helper::FormatPeers(Helper::ExtractLocations(region->peers()))) != 0) {
@@ -77,7 +78,7 @@ butil::Status RaftMetaEngine::InitCoordinatorRegion(std::shared_ptr<Context> ctx
 butil::Status RaftMetaEngine::MetaPut(std::shared_ptr<Context> ctx,
                                       const pb::coordinator_internal::MetaIncrement& meta) {
   // use MetaIncrement to construct RaftCmdRequest
-  std::shared_ptr<pb::raft::RaftCmdRequest> raft_cmd = std::make_shared<pb::raft::RaftCmdRequest>();
+  std::shared_ptr<pb::raft::RaftCmdRequest> const raft_cmd = std::make_shared<pb::raft::RaftCmdRequest>();
   auto* request = raft_cmd->add_requests();
   request->set_cmd_type(pb::raft::CmdType::META_WRITE);
 
@@ -88,7 +89,7 @@ butil::Status RaftMetaEngine::MetaPut(std::shared_ptr<Context> ctx,
   // call braft node->apply()
   auto node = raft_node_manager_->GetNode(ctx->RegionId());
   if (node == nullptr) {
-    LOG(ERROR) << "Not found raft node on region " << ctx->RegionId();
+    DINGO_LOG(ERROR) << "Not found raft node on region " << ctx->RegionId();
     return butil::Status(pb::error::ERAFT_NOTNODE, "Not found raft node");
   }
   return node->Commit(ctx, raft_cmd);

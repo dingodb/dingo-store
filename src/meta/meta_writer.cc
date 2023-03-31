@@ -17,15 +17,16 @@
 #include "common/constant.h"
 #include "common/context.h"
 #include "common/helper.h"
+#include "common/logging.h"
 
 namespace dingodb {
 
 bool MetaWriter::Put(const std::shared_ptr<pb::common::KeyValue> kv) {
-  LOG(INFO) << "Put meta data, key: " << Helper::StringToHex(kv->key());
+  DINGO_LOG(INFO) << "Put meta data, key: " << Helper::StringToHex(kv->key());
   auto writer = engine_->NewWriter(Constant::kStoreMetaCF);
-  auto status = writer->KvPut(*kv.get());
+  auto status = writer->KvPut(*kv);
   if (!status.ok()) {
-    LOG(ERROR) << "Meta write failed, errcode: " << status.error_code() << " " << status.error_str();
+    DINGO_LOG(ERROR) << "Meta write failed, errcode: " << status.error_code() << " " << status.error_str();
     return false;
   }
 
@@ -33,11 +34,11 @@ bool MetaWriter::Put(const std::shared_ptr<pb::common::KeyValue> kv) {
 }
 
 bool MetaWriter::Put(const std::vector<pb::common::KeyValue> kvs) {
-  LOG(INFO) << "Put meta data, key nums: " << kvs.size();
+  DINGO_LOG(INFO) << "Put meta data, key nums: " << kvs.size();
   auto writer = engine_->NewWriter(Constant::kStoreMetaCF);
   auto status = writer->KvBatchPut(kvs);
   if (!status.ok()) {
-    LOG(ERROR) << "Meta batch write failed, errcode: " << status.error_code() << " " << status.error_str();
+    DINGO_LOG(ERROR) << "Meta batch write failed, errcode: " << status.error_code() << " " << status.error_str();
     return false;
   }
 
@@ -45,11 +46,13 @@ bool MetaWriter::Put(const std::vector<pb::common::KeyValue> kvs) {
 }
 
 bool MetaWriter::PutAndDelete(std::vector<pb::common::KeyValue> kvs_put, std::vector<pb::common::KeyValue> kvs_delete) {
-  LOG(INFO) << "PutAndDelete meta data, key_put nums: " << kvs_put.size() << " key_delete nums:" << kvs_delete.size();
+  DINGO_LOG(INFO) << "PutAndDelete meta data, key_put nums: " << kvs_put.size()
+                  << " key_delete nums:" << kvs_delete.size();
   auto writer = engine_->NewWriter(Constant::kStoreMetaCF);
   auto status = writer->KvBatchPutAndDelete(kvs_put, kvs_delete);
   if (!status.ok()) {
-    LOG(ERROR) << "Meta batch write and delete failed, errcode: " << status.error_code() << " " << status.error_str();
+    DINGO_LOG(ERROR) << "Meta batch write and delete failed, errcode: " << status.error_code() << " "
+                     << status.error_str();
     return false;
   }
 
@@ -57,11 +60,11 @@ bool MetaWriter::PutAndDelete(std::vector<pb::common::KeyValue> kvs_put, std::ve
 }
 
 bool MetaWriter::Delete(const std::string& key) {
-  LOG(INFO) << "Delete meta data, key: " << key;
+  DINGO_LOG(INFO) << "Delete meta data, key: " << key;
   auto writer = engine_->NewWriter(Constant::kStoreMetaCF);
   auto status = writer->KvDelete(key);
   if (!status.ok()) {
-    LOG(ERROR) << "Meta delete failed, errcode: " << status.error_code() << " " << status.error_str();
+    DINGO_LOG(ERROR) << "Meta delete failed, errcode: " << status.error_code() << " " << status.error_str();
     return false;
   }
 

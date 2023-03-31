@@ -20,6 +20,7 @@
 
 #include "bthread/bthread.h"
 #include "client/coordinator_client_function.h"
+#include "common/logging.h"
 #include "gflags/gflags.h"
 
 DEFINE_bool(log_each_request, true, "Print log for each request");
@@ -37,27 +38,27 @@ void* Sender(void* /*arg*/) {
   // get leader location
   std::string leader_location = GetLeaderLocation();
   if (leader_location.empty()) {
-    LOG(WARNING) << "GetLeaderLocation failed, use coordinator_addr instead";
+    DINGO_LOG(WARNING) << "GetLeaderLocation failed, use coordinator_addr instead";
     leader_location = FLAGS_coordinator_addr;
   }
 
   braft::PeerId leader;
   if (leader.parse(leader_location) != 0) {
-    LOG(ERROR) << "Fail to parse leader peer_id " << leader_location;
+    DINGO_LOG(ERROR) << "Fail to parse leader peer_id " << leader_location;
     return nullptr;
   }
 
   // get orignial node location
   braft::PeerId node;
   if (node.parse(FLAGS_coordinator_addr) != 0) {
-    LOG(ERROR) << "Fail to parse node peer_id " << FLAGS_coordinator_addr;
+    DINGO_LOG(ERROR) << "Fail to parse node peer_id " << FLAGS_coordinator_addr;
     return nullptr;
   }
 
   // rpc for leader access
   brpc::Channel channel;
   if (channel.Init(leader.addr, nullptr) != 0) {
-    LOG(ERROR) << "Fail to init channel to " << leader;
+    DINGO_LOG(ERROR) << "Fail to init channel to " << leader;
     bthread_usleep(FLAGS_timeout_ms * 1000L);
     return nullptr;
   }
@@ -67,7 +68,7 @@ void* Sender(void* /*arg*/) {
   // rpc for node access
   brpc::Channel channel_node;
   if (channel_node.Init(node.addr, nullptr) != 0) {
-    LOG(ERROR) << "Fail to init channel_node to " << node;
+    DINGO_LOG(ERROR) << "Fail to init channel_node to " << node;
     bthread_usleep(FLAGS_timeout_ms * 1000L);
     return nullptr;
   }
@@ -123,7 +124,7 @@ void* Sender(void* /*arg*/) {
   } else if (FLAGS_method == "GetTable") {
     SendGetTable(cntl, meta_stub);
   } else {
-    LOG(INFO) << " method illegal , exit";
+    DINGO_LOG(INFO) << " method illegal , exit";
     return nullptr;
   }
 
@@ -134,7 +135,7 @@ int main(int argc, char* argv[]) {
   google::ParseCommandLineFlags(&argc, &argv, true);
 
   if (FLAGS_coordinator_addr.empty()) {
-    LOG(ERROR) << "Please set --conf or --coordinator_addr";
+    DINGO_LOG(ERROR) << "Please set --conf or --coordinator_addr";
     return -1;
   }
 
@@ -143,12 +144,12 @@ int main(int argc, char* argv[]) {
 
   for (int i = 0; i < FLAGS_thread_num; ++i) {
     if (bthread_start_background(&tids[i], nullptr, Sender, nullptr) != 0) {
-      LOG(ERROR) << "Fail to create bthread";
+      DINGO_LOG(ERROR) << "Fail to create bthread";
       return -1;
     }
   }
 
-  // LOG(INFO) << "Coordinator client is going to quit";
+  // DINGO_LOG(INFO) << "Coordinator client is going to quit";
   for (int i = 0; i < FLAGS_thread_num; ++i) {
     bthread_join(tids[i], nullptr);
   }

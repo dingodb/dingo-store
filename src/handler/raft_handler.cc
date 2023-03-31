@@ -15,11 +15,12 @@
 #include "handler/raft_handler.h"
 
 #include "common/helper.h"
+#include "common/logging.h"
 
 namespace dingodb {
 
 void PutHandler::Handle(std::shared_ptr<Context> ctx, std::shared_ptr<RawEngine> engine, const pb::raft::Request &req) {
-  LOG(INFO) << "PutHandler ...";
+  DINGO_LOG(INFO) << "PutHandler ...";
   butil::Status status;
   auto &request = req.put();
   auto writer = engine->NewWriter(request.cf_name());
@@ -36,7 +37,7 @@ void PutHandler::Handle(std::shared_ptr<Context> ctx, std::shared_ptr<RawEngine>
 
 void PutIfAbsentHandler::Handle(std::shared_ptr<Context> ctx, std::shared_ptr<RawEngine> engine,
                                 const pb::raft::Request &req) {
-  LOG(INFO) << "PutIfAbsentHandler ...";
+  DINGO_LOG(INFO) << "PutIfAbsentHandler ...";
   butil::Status status;
   std::vector<std::string> put_keys;  // NOLINT
   auto &request = req.put_if_absent();
@@ -60,7 +61,7 @@ void PutIfAbsentHandler::Handle(std::shared_ptr<Context> ctx, std::shared_ptr<Ra
 
 void DeleteRangeHandler::Handle(std::shared_ptr<Context> ctx, std::shared_ptr<RawEngine> engine,
                                 const pb::raft::Request &req) {
-  LOG(INFO) << "DeleteRangeHandler ...";
+  DINGO_LOG(INFO) << "DeleteRangeHandler ...";
 
   butil::Status status;
   auto &request = req.delete_range();
@@ -79,7 +80,7 @@ void DeleteRangeHandler::Handle(std::shared_ptr<Context> ctx, std::shared_ptr<Ra
 
 void DeleteBatchHandler::Handle(std::shared_ptr<Context> ctx, std::shared_ptr<RawEngine> engine,
                                 const pb::raft::Request &req) {
-  LOG(INFO) << "DeleteBatchHandler ...";
+  DINGO_LOG(INFO) << "DeleteBatchHandler ...";
 
   butil::Status status;
   auto &request = req.delete_batch();

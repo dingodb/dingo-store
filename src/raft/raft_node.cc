@@ -16,6 +16,7 @@
 
 #include "butil/strings/stringprintf.h"
 #include "common/helper.h"
+#include "common/logging.h"
 #include "config/config_manager.h"
 #include "proto/common.pb.h"
 #include "raft/store_state_machine.h"
@@ -35,7 +36,7 @@ RaftNode::~RaftNode() {
 
 // init_conf: 127.0.0.1:8201:0,127.0.0.1:8202:0,127.0.0.1:8203:0
 int RaftNode::Init(const std::string& init_conf) {
-  LOG(INFO) << "raft init node_id: " << node_id_ << " init_conf: " << init_conf;
+  DINGO_LOG(INFO) << "raft init node_id: " << node_id_ << " init_conf: " << init_conf;
   braft::NodeOptions node_options;
   if (node_options.initial_conf.parse_from(init_conf) != 0) {
     LOG(ERROR) << "Fail to parse configuration";
@@ -100,7 +101,7 @@ void RaftNode::RemovePeer(const braft::PeerId& peer, braft::Closure* done) { nod
 void RaftNode::ChangePeers(const std::vector<pb::common::Peer>& peers, braft::Closure* done) {
   braft::Configuration config;
   for (const auto& peer : peers) {
-    butil::EndPoint endpoint = Helper::LocationToEndPoint(peer.raft_location());
+    butil::EndPoint const endpoint = Helper::LocationToEndPoint(peer.raft_location());
     config.add_peer(braft::PeerId(endpoint));
   }
 

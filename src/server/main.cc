@@ -25,6 +25,7 @@
 #include "brpc/server.h"
 #include "butil/endpoint.h"
 #include "common/helper.h"
+#include "common/logging.h"
 #include "config/config.h"
 #include "config/config_manager.h"
 #include "gflags/gflags.h"
@@ -117,27 +118,27 @@ int main(int argc, char *argv[]) {
   } else if (is_coodinator) {
     role = dingodb::pb::common::COORDINATOR;
   } else {
-    LOG(ERROR) << "Invalid server role[" + FLAGS_role + "]";
+    DINGO_LOG(ERROR) << "Invalid server role[" + FLAGS_role + "]";
     return -1;
   }
 
   if (FLAGS_conf.empty()) {
-    LOG(ERROR) << "Missing server config.";
+    DINGO_LOG(ERROR) << "Missing server config.";
     return -1;
   }
 
   auto *dingo_server = dingodb::Server::GetInstance();
   dingo_server->SetRole(role);
   if (!dingo_server->InitConfig(FLAGS_conf)) {
-    LOG(ERROR) << "InitConfig failed!";
+    DINGO_LOG(ERROR) << "InitConfig failed!";
     return -1;
   }
   if (!dingo_server->InitLog()) {
-    LOG(ERROR) << "InitLog failed!";
+    DINGO_LOG(ERROR) << "InitLog failed!";
     return -1;
   }
   if (!dingo_server->InitServerID()) {
-    LOG(ERROR) << "InitServerID failed!";
+    DINGO_LOG(ERROR) << "InitServerID failed!";
     return -1;
   }
 
@@ -146,11 +147,11 @@ int main(int argc, char *argv[]) {
   dingo_server->SetRaftEndpoint(GetRaftEndPoint(config));
 
   if (!dingo_server->InitRawEngines()) {
-    LOG(ERROR) << "InitRawEngines failed!";
+    DINGO_LOG(ERROR) << "InitRawEngines failed!";
     return -1;
   }
   if (!dingo_server->InitEngines()) {
-    LOG(ERROR) << "InitEngines failed!";
+    DINGO_LOG(ERROR) << "InitEngines failed!";
     return -1;
   }
 
@@ -166,12 +167,12 @@ int main(int argc, char *argv[]) {
   brpc::Server raft_server;
 
   if (brpc_server.AddService(&node_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
-    LOG(ERROR) << "Fail to add node service to brpc_server!";
+    DINGO_LOG(ERROR) << "Fail to add node service to brpc_server!";
     return -1;
   }
 
   if (raft_server.AddService(&node_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
-    LOG(ERROR) << "Fail to add node service raft_server!";
+    DINGO_LOG(ERROR) << "Fail to add node service raft_server!";
     return -1;
   }
 
@@ -186,34 +187,34 @@ int main(int argc, char *argv[]) {
 
     // init push crontab
     if (!dingo_server->InitCrontabManagerForCoordinator()) {
-      LOG(ERROR) << "InitCrontabManagerForCoordinator failed!";
+      DINGO_LOG(ERROR) << "InitCrontabManagerForCoordinator failed!";
       return -1;
     }
 
     // add service to brpc
     if (brpc_server.AddService(&coordinator_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
-      LOG(ERROR) << "Fail to add coordinator service!";
+      DINGO_LOG(ERROR) << "Fail to add coordinator service!";
       return -1;
     }
     if (brpc_server.AddService(&meta_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
-      LOG(ERROR) << "Fail to add meta service!";
+      DINGO_LOG(ERROR) << "Fail to add meta service!";
       return -1;
     }
 
     if (braft::add_service(&raft_server, dingo_server->RaftEndpoint()) != 0) {
-      LOG(ERROR) << "Fail to add raft service!";
+      DINGO_LOG(ERROR) << "Fail to add raft service!";
       return -1;
     }
     if (raft_server.Start(dingo_server->RaftEndpoint(), nullptr) != 0) {
-      LOG(ERROR) << "Fail to start raft server!";
+      DINGO_LOG(ERROR) << "Fail to start raft server!";
       return -1;
     }
-    LOG(INFO) << "Raft server is running on " << raft_server.listen_address();
+    DINGO_LOG(INFO) << "Raft server is running on " << raft_server.listen_address();
 
     // start meta region
     butil::Status const status = dingo_server->StartMetaRegion(config, engine);
     if (!status.ok()) {
-      LOG(INFO) << "Init RaftNode and StateMachine Failed:" << status;
+      DINGO_LOG(INFO) << "Init RaftNode and StateMachine Failed:" << status;
       return -1;
     }
 
@@ -221,71 +222,71 @@ int main(int argc, char *argv[]) {
     // TODO: load data from kv engine into maps
   } else if (is_store) {
     if (!dingo_server->InitCoordinatorInteraction()) {
-      LOG(ERROR) << "InitCoordinatorInteraction failed!";
+      DINGO_LOG(ERROR) << "InitCoordinatorInteraction failed!";
       return -1;
     }
     if (!dingo_server->ValiateCoordinator()) {
-      LOG(ERROR) << "ValiateCoordinator failed!";
+      DINGO_LOG(ERROR) << "ValiateCoordinator failed!";
       return -1;
     }
     if (!dingo_server->InitStorage()) {
-      LOG(ERROR) << "InitStorage failed!";
+      DINGO_LOG(ERROR) << "InitStorage failed!";
       return -1;
     }
     if (!dingo_server->InitStoreMetaManager()) {
-      LOG(ERROR) << "InitStoreMetaManager failed!";
+      DINGO_LOG(ERROR) << "InitStoreMetaManager failed!";
       return -1;
     }
     if (!dingo_server->InitStoreControl()) {
-      LOG(ERROR) << "InitStoreControl failed!";
+      DINGO_LOG(ERROR) << "InitStoreControl failed!";
       return -1;
     }
     if (!dingo_server->InitCrontabManager()) {
-      LOG(ERROR) << "InitCrontabManager failed!";
+      DINGO_LOG(ERROR) << "InitCrontabManager failed!";
       return -1;
     }
 
     store_service.set_storage(dingo_server->GetStorage());
     if (brpc_server.AddService(&store_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
-      LOG(ERROR) << "Fail to add store service!";
+      DINGO_LOG(ERROR) << "Fail to add store service!";
       return -1;
     }
 
     // add push service to server_location
     if (brpc_server.AddService(&push_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
-      LOG(ERROR) << "Fail to add store service!";
+      DINGO_LOG(ERROR) << "Fail to add store service!";
       return -1;
     }
 
     // raft server
     if (braft::add_service(&raft_server, dingo_server->RaftEndpoint()) != 0) {
-      LOG(ERROR) << "Fail to add raft service!";
+      DINGO_LOG(ERROR) << "Fail to add raft service!";
       return -1;
     }
     if (raft_server.Start(dingo_server->RaftEndpoint(), nullptr) != 0) {
-      LOG(ERROR) << "Fail to start raft server!";
+      DINGO_LOG(ERROR) << "Fail to start raft server!";
       return -1;
     }
-    LOG(INFO) << "Raft server is running on " << raft_server.listen_address();
+    DINGO_LOG(INFO) << "Raft server is running on " << raft_server.listen_address();
   }
 
   if (!dingo_server->Recover()) {
-    LOG(ERROR) << "Recover failed!";
+    DINGO_LOG(ERROR) << "Recover failed!";
     return -1;
   }
 
   // Start server after raft server started.
   if (brpc_server.Start(dingo_server->ServerEndpoint(), nullptr) != 0) {
-    LOG(ERROR) << "Fail to start server!";
+    DINGO_LOG(ERROR) << "Fail to start server!";
     return -1;
   }
-  LOG(INFO) << "Server is running on " << brpc_server.listen_address();
+  DINGO_LOG(INFO) << "Server is running on " << brpc_server.listen_address();
 
   // Wait until 'CTRL-C' is pressed. then Stop() and Join() the service
   while (!brpc::IsAskedToQuit()) {
     sleep(1);
   }
-  LOG(INFO) << "Server is going to quit";
+  DINGO_LOG(INFO) << "Server is going to quit";
 
   raft_server.Stop(0);
   brpc_server.Stop(0);

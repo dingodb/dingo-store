@@ -21,16 +21,16 @@ namespace dingodb {
 bool CoordinatorInteraction::Init(const std::string& addr) {
   endpoints_ = Helper::StrToEndpoints(addr);
   if (endpoints_.empty()) {
-    LOG(ERROR) << "Parse addr failed " << addr;
+    DINGO_LOG(ERROR) << "Parse addr failed " << addr;
     return false;
   }
 
   for (auto& endpoint : endpoints_) {
-    LOG(INFO) << butil::StringPrintf("Init channel %s:%d", butil::ip2str(endpoint.ip).c_str(), endpoint.port);
+    DINGO_LOG(INFO) << butil::StringPrintf("Init channel %s:%d", butil::ip2str(endpoint.ip).c_str(), endpoint.port);
     std::unique_ptr<brpc::Channel> channel = std::make_unique<brpc::Channel>();
     if (channel->Init(endpoint, nullptr) != 0) {
-      LOG(ERROR) << butil::StringPrintf("Init channel failed, %s:%d", butil::ip2str(endpoint.ip).c_str(),
-                                        endpoint.port);
+      DINGO_LOG(ERROR) << butil::StringPrintf("Init channel failed, %s:%d", butil::ip2str(endpoint.ip).c_str(),
+                                              endpoint.port);
       return false;
     }
     channels_.push_back(std::move(channel));
@@ -42,7 +42,7 @@ bool CoordinatorInteraction::Init(const std::string& addr) {
 int CoordinatorInteraction::GetLeader() { return leader_index_.load(); }
 
 void CoordinatorInteraction::NextLeader(int leader_index) {
-  int next_leader_index = (leader_index + 1) % endpoints_.size();
+  int const next_leader_index = (leader_index + 1) % endpoints_.size();
   leader_index_.compare_exchange_weak(leader_index, next_leader_index);
 }
 

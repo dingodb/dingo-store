@@ -14,11 +14,13 @@
 
 #include "handler/handler.h"
 
+#include "common/logging.h"
+
 namespace dingodb {
 
 void HandlerCollection::Register(std::shared_ptr<Handler> handler) {
   if (handlers_.find(handler->GetType()) != handlers_.end()) {
-    LOG(ERROR) << "Handler already exist " << static_cast<int>(handler->GetType());
+    DINGO_LOG(ERROR) << "Handler already exist " << static_cast<int>(handler->GetType());
     return;
   }
 

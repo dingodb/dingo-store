@@ -27,6 +27,7 @@
 #include "bthread/types.h"
 #include "butil/scoped_lock.h"
 #include "butil/strings/stringprintf.h"
+#include "common/logging.h"
 #include "common/meta_control.h"
 #include "engine/snapshot.h"
 #include "meta/meta_reader.h"
@@ -51,7 +52,7 @@ class MetaMapStorage {
   std::string Prefix() { return internal_prefix; }
 
   bool Init() {
-    LOG(INFO) << "coordinator server meta";
+    DINGO_LOG(INFO) << "coordinator server meta";
     return true;
   }
 

@@ -23,15 +23,15 @@ namespace dingodb {
  * define the debug log level.
  * The larger the number, the more comprehensive information is displayed.
  */
-#define DEBUG 88
+#define DEBUG 79
 
 #define DINGO_LOG(level) DINGO_LOG_##level
 
+#define DINGO_LOG_DEBUG VLOG(DEBUG)
 #define DINGO_LOG_INFO LOG(INFO)
 #define DINGO_LOG_WARNING LOG(WARNING)
 #define DINGO_LOG_ERROR LOG(ERROR)
 #define DINGO_LOG_FATAL LOG(FATAL)
-#define DINGO_LOG_DEBUG VLOG(DEBUG)
 
 class DingoLogger {
  public:

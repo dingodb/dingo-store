@@ -19,6 +19,7 @@
 #include "braft/raft.h"
 #include "butil/endpoint.h"
 #include "common/helper.h"
+#include "common/logging.h"
 #include "common/synchronization.h"
 #include "config/config_manager.h"
 #include "engine/write_data.h"
@@ -39,7 +40,7 @@ RaftKvEngine::RaftKvEngine(std::shared_ptr<RawEngine> engine)
 RaftKvEngine::~RaftKvEngine() = default;
 
 bool RaftKvEngine::Init(std::shared_ptr<Config> config) {
-  LOG(INFO) << "Now=> Int Raft Kv Engine with config[" << config->ToString();
+  DINGO_LOG(INFO) << "Now=> Int Raft Kv Engine with config[" << config->ToString();
   return true;
 }
 
@@ -66,7 +67,7 @@ std::shared_ptr<RawEngine> RaftKvEngine::GetRawEngine() { return engine_; }
 
 butil::Status RaftKvEngine::AddRegion(std::shared_ptr<Context> ctx, const std::shared_ptr<pb::common::Region> region,
                                       std::shared_ptr<EventListenerCollection> listeners) {
-  LOG(INFO) << "RaftkvEngine add region, region_id " << region->id();
+  DINGO_LOG(INFO) << "RaftkvEngine add region, region_id " << region->id();
 
   // construct StoreStateMachine
   braft::StateMachine* state_machine = new StoreStateMachine(engine_, region->id(), listeners);
@@ -96,11 +97,11 @@ butil::Status RaftKvEngine::DestroyRegion(std::shared_ptr<Context> ctx, uint64_t
   }
   raft_node_manager_->DeleteNode(region_id);
 
-  LOG(INFO) << "Node start shutdown " << region_id;
+  DINGO_LOG(INFO) << "Node start shutdown " << region_id;
   node->Shutdown(nullptr);
-  LOG(INFO) << "Node finish shutdown " << region_id;
+  DINGO_LOG(INFO) << "Node finish shutdown " << region_id;
   node->Join();
-  LOG(INFO) << "Node join " << region_id;
+  DINGO_LOG(INFO) << "Node join " << region_id;
 
   return butil::Status();
 }
@@ -124,7 +125,7 @@ std::shared_ptr<pb::raft::RaftCmdRequest> genRaftCmdRequest(const std::shared_pt
 butil::Status RaftKvEngine::Write(std::shared_ptr<Context> ctx, const WriteData& write_data) {
   auto node = raft_node_manager_->GetNode(ctx->RegionId());
   if (node == nullptr) {
-    LOG(ERROR) << "Not found raft node " << ctx->RegionId();
+    DINGO_LOG(ERROR) << "Not found raft node " << ctx->RegionId();
     return butil::Status(pb::error::ERAFT_NOTNODE, "Not found node");
   }
 
@@ -135,7 +136,7 @@ butil::Status RaftKvEngine::Write(std::shared_ptr<Context> ctx, const WriteData&
 
   ctx->EnableSyncMode();
   ctx->Cond()->IncreaseWait();
-  LOG(INFO) << "Wake up";
+  DINGO_LOG(INFO) << "Wake up";
   if (!ctx->Status().ok()) {
     return ctx->Status();
   }
@@ -145,7 +146,7 @@ butil::Status RaftKvEngine::Write(std::shared_ptr<Context> ctx, const WriteData&
 butil::Status RaftKvEngine::AsyncWrite(std::shared_ptr<Context> ctx, const WriteData& write_data, WriteCb_t cb) {
   auto node = raft_node_manager_->GetNode(ctx->RegionId());
   if (node == nullptr) {
-    LOG(ERROR) << "Not found raft node " << ctx->RegionId();
+    DINGO_LOG(ERROR) << "Not found raft node " << ctx->RegionId();
     return butil::Status(pb::error::ERAFT_NOTNODE, "Not found node");
   }
 
