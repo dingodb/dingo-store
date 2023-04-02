@@ -153,17 +153,10 @@ class CoordinatorControl : public MetaControl {
   static void GenerateRootSchemas(pb::coordinator_internal::SchemaInternal &root_schema,
                                   pb::coordinator_internal::SchemaInternal &meta_schema,
                                   pb::coordinator_internal::SchemaInternal &dingo_schema);
-  // static void GenerateRootSchemasMetaIncrement(pb::coordinator_internal::SchemaInternal &root_schema,
-  //                                              pb::coordinator_internal::SchemaInternal &meta_schema,
-  //                                              pb::coordinator_internal::SchemaInternal &dingo_schema,
-  //                                              pb::coordinator_internal::MetaIncrement &meta_increment);
-  bool Init() override;
-  bool IsLeader() override;
-  void SetLeaderTerm(int64_t term) override;
-  void OnLeaderStart(int64_t term) override;
+  bool Init();
 
   // Get raft leader's server location for sdk use
-  void GetLeaderLocation(pb::common::Location &leader_server_location) override;
+  void GetLeaderLocation(pb::common::Location &leader_server_location);
 
   // use raft_location to get server_location
   // in: raft_location
@@ -175,12 +168,12 @@ class CoordinatorControl : public MetaControl {
   // out: new region id
   int CreateRegion(const std::string &region_name, const std::string &resource_tag, int32_t replica_num,
                    pb::common::Range region_range, uint64_t schema_id, uint64_t table_id, uint64_t &new_region_id,
-                   pb::coordinator_internal::MetaIncrement &meta_increment) override;
+                   pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // drop region
   // in:  region_id
   // return: 0 or -1
-  int DropRegion(uint64_t region_id, pb::coordinator_internal::MetaIncrement &meta_increment) override;
+  int DropRegion(uint64_t region_id, pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // create schema
   // in: parent_schema_id
@@ -188,7 +181,7 @@ class CoordinatorControl : public MetaControl {
   // out: new schema_id
   // return: 0 or -1
   int CreateSchema(uint64_t parent_schema_id, std::string schema_name, uint64_t &new_schema_id,
-                   pb::coordinator_internal::MetaIncrement &meta_increment) override;
+                   pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // drop schema
   // in: parent_schema_id
@@ -210,33 +203,33 @@ class CoordinatorControl : public MetaControl {
   // out: new table_id
   // return: 0 or -1
   int CreateTable(uint64_t schema_id, const pb::meta::TableDefinition &table_definition, uint64_t &new_table_id,
-                  pb::coordinator_internal::MetaIncrement &meta_increment) override;
+                  pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // create store
   // in: cluster_id
   // out: store_id, keyring
   // return: 0 or -1
   int CreateStore(uint64_t cluster_id, uint64_t &store_id, std::string &keyring,
-                  pb::coordinator_internal::MetaIncrement &meta_increment) override;
+                  pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // delete store
   // in: cluster_id, store_id, keyring
   // return: 0 or -1
   int DeleteStore(uint64_t cluster_id, uint64_t store_id, std::string keyring,
-                  pb::coordinator_internal::MetaIncrement &meta_increment) override;
+                  pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // create executor
   // in: cluster_id
   // out: executor_id, keyring
   // return: 0 or -1
   int CreateExecutor(uint64_t cluster_id, uint64_t &executor_id, std::string &keyring,
-                     pb::coordinator_internal::MetaIncrement &meta_increment) override;
+                     pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // delete executor
   // in: cluster_id, executor_id, keyring
   // return: 0 or -1
   int DeleteExecutor(uint64_t cluster_id, uint64_t executor_id, std::string keyring,
-                     pb::coordinator_internal::MetaIncrement &meta_increment) override;
+                     pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // update executor map with new Executor info
   // return new epoch
@@ -245,11 +238,10 @@ class CoordinatorControl : public MetaControl {
 
   // update store map with new Store info
   // return new epoch
-  uint64_t UpdateStoreMap(const pb::common::Store &store,
-                          pb::coordinator_internal::MetaIncrement &meta_increment) override;
+  uint64_t UpdateStoreMap(const pb::common::Store &store, pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // get storemap
-  void GetStoreMap(pb::common::StoreMap &store_map) override;
+  void GetStoreMap(pb::common::StoreMap &store_map);
 
   // get executormap
   void GetExecutorMap(pb::common::ExecutorMap &executor_map);
@@ -265,22 +257,22 @@ class CoordinatorControl : public MetaControl {
   // update region map with new Region info
   // return new epoch
   uint64_t UpdateRegionMap(std::vector<pb::common::Region> &regions,
-                           pb::coordinator_internal::MetaIncrement &meta_increment) override;
+                           pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // get regionmap
-  void GetRegionMap(pb::common::RegionMap &region_map) override;
+  void GetRegionMap(pb::common::RegionMap &region_map);
 
   // get schemas
-  void GetSchemas(uint64_t schema_id, std::vector<pb::meta::Schema> &schemas) override;
+  void GetSchemas(uint64_t schema_id, std::vector<pb::meta::Schema> &schemas);
 
   // get tables
-  void GetTables(uint64_t schema_id, std::vector<pb::meta::TableDefinitionWithId> &table_definition_with_ids) override;
+  void GetTables(uint64_t schema_id, std::vector<pb::meta::TableDefinitionWithId> &table_definition_with_ids);
 
   // get table
   // in: schema_id
   // in: table_id
   // out: Table
-  void GetTable(uint64_t schema_id, uint64_t table_id, pb::meta::Table &table) override;
+  void GetTable(uint64_t schema_id, uint64_t table_id, pb::meta::Table &table);
 
   // get table metrics
   // in: schema_id
@@ -297,11 +289,7 @@ class CoordinatorControl : public MetaControl {
 
   // get coordinator_map
   void GetCoordinatorMap(uint64_t cluster_id, uint64_t &epoch, pb::common::Location &leader_location,
-                         std::vector<pb::common::Location> &locations) override;
-
-  // on_apply callback
-  void ApplyMetaIncrement(pb::coordinator_internal::MetaIncrement &meta_increment, bool id_leader, uint64_t term,
-                          uint64_t index) override;
+                         std::vector<pb::common::Location> &locations);
 
   // get next id/epoch
   uint64_t GetNextId(const pb::coordinator_internal::IdEpochType &key,
@@ -309,9 +297,6 @@ class CoordinatorControl : public MetaControl {
 
   // get present id/epoch
   uint64_t GetPresentId(const pb::coordinator_internal::IdEpochType &key);
-
-  // set raft_node to coordinator_control
-  void SetRaftNode(std::shared_ptr<RaftNode> raft_node) override;
 
   // validate store keyring
   // return: 0 or -1
@@ -321,16 +306,29 @@ class CoordinatorControl : public MetaControl {
   // return: 0 or -1
   int ValidateExecutor(uint64_t executor_id, const std::string &keyring);
 
+  // functions below are for raft fsm
+  bool IsLeader() override;                   // for raft fsm
+  void SetLeaderTerm(int64_t term) override;  // for raft fsm
+  void OnLeaderStart(int64_t term) override;  // for raft fsm
+
+  // set raft_node to coordinator_control
+  void SetRaftNode(std::shared_ptr<RaftNode> raft_node) override;  // for raft fsm
+
+  // on_apply callback
+  void ApplyMetaIncrement(pb::coordinator_internal::MetaIncrement &meta_increment, bool id_leader, uint64_t term,
+                          uint64_t index) override;  // for raft fsm
+
   // prepare snapshot for raft snapshot
   // return: Snapshot
-  std::shared_ptr<Snapshot> PrepareRaftSnapshot() override;
+  std::shared_ptr<Snapshot> PrepareRaftSnapshot() override;  // for raft fsm
 
   // LoadMetaToSnapshotFile
   bool LoadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapshot,
-                              pb::coordinator_internal::MetaSnapshotFile &meta_snapshot_file) override;
+                              pb::coordinator_internal::MetaSnapshotFile &meta_snapshot_file) override;  // for raft fsm
 
   // LoadMetaFromSnapshotFile
-  bool LoadMetaFromSnapshotFile(pb::coordinator_internal::MetaSnapshotFile &meta_snapshot_file) override;
+  bool LoadMetaFromSnapshotFile(
+      pb::coordinator_internal::MetaSnapshotFile &meta_snapshot_file) override;  // for raft fsm
 
  private:
   // ids_epochs_temp (out of state machine, only for leader use)
