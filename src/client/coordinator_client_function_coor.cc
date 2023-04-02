@@ -12,10 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "client/coordinator_client_function.h"
-
 #include <string>
 
+#include "client/coordinator_client_function.h"
 #include "common/logging.h"
 #include "proto/common.pb.h"
 #include "proto/node.pb.h"
@@ -141,6 +140,7 @@ void SendHello(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorServ
   std::string const key = "Hello";
   // const char* op = nullptr;
   request.set_hello(0);
+  request.set_get_memory_info(true);
   stub.Hello(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
     DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
