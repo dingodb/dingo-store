@@ -35,7 +35,7 @@ void CoordinatorServiceImpl::Hello(google::protobuf::RpcController * /*controlle
                                    const pb::coordinator::HelloRequest *request,
                                    pb::coordinator::HelloResponse *response, google::protobuf::Closure *done) {
   brpc::ClosureGuard const done_guard(done);
-  DINGO_LOG(INFO) << "Hello request: " << request->hello();
+  DINGO_LOG(DEBUG) << "Hello request: " << request->hello();
 
   if (!this->coordinator_control_->IsLeader()) {
     return RedirectResponse(response);
@@ -71,6 +71,9 @@ void CoordinatorServiceImpl::CreateExecutor(google::protobuf::RpcController *con
   } else {
     brpc::Controller *brpc_controller = static_cast<brpc::Controller *>(controller);
     brpc_controller->SetFailed(pb::error::EILLEGAL_PARAMTETERS, "Need legal cluster_id");
+
+    auto *error = response->mutable_error();
+    error->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
     return;
   }
 
@@ -95,7 +98,7 @@ void CoordinatorServiceImpl::DeleteExecutor(google::protobuf::RpcController *con
   brpc::ClosureGuard done_guard(done);
   auto format_request = Helper::MessageToJsonString(*request);
   auto is_leader = this->coordinator_control_->IsLeader();
-  DINGO_LOG(INFO) << "Receive Create Executor Request: IsLeader:" << is_leader << ", Request: " << format_request;
+  DINGO_LOG(WARNING) << "Receive Create Executor Request: IsLeader:" << is_leader << ", Request: " << format_request;
 
   if (!is_leader) {
     return RedirectResponse(response);
@@ -103,7 +106,7 @@ void CoordinatorServiceImpl::DeleteExecutor(google::protobuf::RpcController *con
 
   pb::coordinator_internal::MetaIncrement meta_increment;
 
-  // delete store
+  // delete executor
   uint64_t const executor_id = request->executor_id();
   std::string const keyring = request->keyring();
   auto local_ctl = this->coordinator_control_;
@@ -114,6 +117,8 @@ void CoordinatorServiceImpl::DeleteExecutor(google::protobuf::RpcController *con
 
     auto *error = response->mutable_error();
     error->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
+
+    DINGO_LOG(ERROR) << "Deleteexecutor failed:  executor_id=" << executor_id << ", keyring=" << keyring;
     return;
   }
 
@@ -180,7 +185,7 @@ void CoordinatorServiceImpl::DeleteStore(google::protobuf::RpcController *contro
   brpc::ClosureGuard done_guard(done);
   auto format_request = Helper::MessageToJsonString(*request);
   auto is_leader = this->coordinator_control_->IsLeader();
-  DINGO_LOG(INFO) << "Receive Create Store Request: IsLeader:" << is_leader << ", Request: " << format_request;
+  DINGO_LOG(WARNING) << "Receive Create Store Request: IsLeader:" << is_leader << ", Request: " << format_request;
 
   if (!is_leader) {
     return RedirectResponse(response);
@@ -199,6 +204,8 @@ void CoordinatorServiceImpl::DeleteStore(google::protobuf::RpcController *contro
 
     auto *error = response->mutable_error();
     error->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
+
+    DINGO_LOG(ERROR) << "DeleteStore failed:  store_id=" << store_id << ", keyring=" << keyring;
     return;
   }
 
@@ -223,7 +230,7 @@ void CoordinatorServiceImpl::ExecutorHeartbeat(google::protobuf::RpcController *
   brpc::ClosureGuard done_guard(done);
   auto format_request = Helper::MessageToJsonString(*request);
   auto is_leader = this->coordinator_control_->IsLeader();
-  DINGO_LOG(INFO) << "Receive Executor Heartbeat Request, IsLeader:" << is_leader << ", Request:" << format_request;
+  DINGO_LOG(DEBUG) << "Receive Executor Heartbeat Request, IsLeader:" << is_leader << ", Request:" << format_request;
 
   if (!is_leader) {
     return RedirectResponse(response);
@@ -233,14 +240,14 @@ void CoordinatorServiceImpl::ExecutorHeartbeat(google::protobuf::RpcController *
   if (!request->has_executor()) {
     auto *error = response->mutable_error();
     error->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
-    DINGO_LOG(INFO) << "ExecutorHeartBeat has_executor() is false, reject heartbeat";
+    DINGO_LOG(ERROR) << "ExecutorHeartBeat has_executor() is false, reject heartbeat";
     return;
   }
 
   int const ret = this->coordinator_control_->ValidateExecutor(request->executor().id(), request->executor().keyring());
   if (ret) {
-    DINGO_LOG(INFO) << "ExecutorHeartBeat ValidateExecutor failed, reject heardbeat, executor_id="
-                    << request->executor().id() << " keyring=" << request->executor().keyring();
+    DINGO_LOG(ERROR) << "ExecutorHeartBeat ValidateExecutor failed, reject heardbeat, executor_id="
+                     << request->executor().id() << " keyring=" << request->executor().keyring();
     return;
   }
 
@@ -281,7 +288,7 @@ void CoordinatorServiceImpl::StoreHeartbeat(google::protobuf::RpcController *con
   brpc::ClosureGuard done_guard(done);
   auto format_request = Helper::MessageToJsonString(*request);
   auto is_leader = this->coordinator_control_->IsLeader();
-  DINGO_LOG(INFO) << "Receive Store Heartbeat Request, IsLeader:" << is_leader << ", Request:" << format_request;
+  DINGO_LOG(DEBUG) << "Receive Store Heartbeat Request, IsLeader:" << is_leader << ", Request:" << format_request;
 
   if (!is_leader) {
     return RedirectResponse(response);
@@ -291,14 +298,14 @@ void CoordinatorServiceImpl::StoreHeartbeat(google::protobuf::RpcController *con
   if (!request->has_store()) {
     auto *error = response->mutable_error();
     error->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
-    DINGO_LOG(INFO) << "StoreHeartBeat has_store() is false, reject heartbeat";
+    DINGO_LOG(ERROR) << "StoreHeartBeat has_store() is false, reject heartbeat";
     return;
   }
 
   int const ret = this->coordinator_control_->ValidateStore(request->store().id(), request->store().keyring());
   if (ret) {
-    DINGO_LOG(INFO) << "StoreHeartBeat ValidateStore failed, reject heardbeat, store_id=" << request->store().id()
-                    << " keyring=" << request->store().keyring();
+    DINGO_LOG(ERROR) << "StoreHeartBeat ValidateStore failed, reject heardbeat, store_id=" << request->store().id()
+                     << " keyring=" << request->store().keyring();
     return;
   }
 
@@ -350,7 +357,7 @@ void CoordinatorServiceImpl::GetStoreMap(google::protobuf::RpcController * /*con
 
   auto format_request = Helper::MessageToJsonString(*request);
   auto is_leader = this->coordinator_control_->IsLeader();
-  DINGO_LOG(INFO) << "Receive Get StoreMap Request, IsLeader:" << is_leader << ", Request:" << format_request;
+  DINGO_LOG(DEBUG) << "Receive Get StoreMap Request, IsLeader:" << is_leader << ", Request:" << format_request;
 
   if (!is_leader) {
     RedirectResponse(response);
@@ -371,7 +378,7 @@ void CoordinatorServiceImpl::GetExecutorMap(google::protobuf::RpcController * /*
 
   auto format_request = Helper::MessageToJsonString(*request);
   auto is_leader = this->coordinator_control_->IsLeader();
-  DINGO_LOG(INFO) << "Receive Get ExecutorMap Request, IsLeader:" << is_leader << ", Request:" << format_request;
+  DINGO_LOG(DEBUG) << "Receive Get ExecutorMap Request, IsLeader:" << is_leader << ", Request:" << format_request;
 
   if (!is_leader) {
     RedirectResponse(response);
@@ -392,7 +399,7 @@ void CoordinatorServiceImpl::GetRegionMap(google::protobuf::RpcController * /*co
 
   auto format_request = Helper::MessageToJsonString(*request);
   auto is_leader = this->coordinator_control_->IsLeader();
-  DINGO_LOG(INFO) << "Receive Get RegionMap Request, IsLeader:" << is_leader << ", Request:" << format_request;
+  DINGO_LOG(DEBUG) << "Receive Get RegionMap Request, IsLeader:" << is_leader << ", Request:" << format_request;
 
   if (!is_leader) {
     RedirectResponse(response);
@@ -412,7 +419,7 @@ void CoordinatorServiceImpl::GetCoordinatorMap(google::protobuf::RpcController *
                                                google::protobuf::Closure *done) {
   brpc::ClosureGuard const done_guard(done);
   auto format_request = Helper::MessageToJsonString(*request);
-  DINGO_LOG(INFO) << "Receive Get CoordinatorMap Request:" << format_request;
+  DINGO_LOG(DEBUG) << "Receive Get CoordinatorMap Request:" << format_request;
 
   uint64_t epoch;
   pb::common::Location leader_location;

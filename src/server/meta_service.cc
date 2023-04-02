@@ -37,7 +37,7 @@ void MetaServiceImpl::GetSchemas(google::protobuf::RpcController * /*controller*
     return RedirectResponse(response);
   }
 
-  DINGO_LOG(INFO) << "GetSchemas request:  schema_id = [" << request->schema_id().entity_id() << "]";
+  DINGO_LOG(DEBUG) << "GetSchemas request:  schema_id = [" << request->schema_id().entity_id() << "]";
 
   std::vector<pb::meta::Schema> schemas;
   this->coordinator_control_->GetSchemas(request->schema_id().entity_id(), schemas);
@@ -57,7 +57,7 @@ void MetaServiceImpl::GetTables(google::protobuf::RpcController * /*controller*/
     return RedirectResponse(response);
   }
 
-  DINGO_LOG(INFO) << "GetTables request:  schema_id = [" << request->schema_id().entity_id() << "]";
+  DINGO_LOG(DEBUG) << "GetTables request:  schema_id = [" << request->schema_id().entity_id() << "]";
 
   std::vector<pb::meta::TableDefinitionWithId> table_definition_with_ids;
   this->coordinator_control_->GetTables(request->schema_id().entity_id(), table_definition_with_ids);
@@ -83,7 +83,7 @@ void MetaServiceImpl::GetTable(google::protobuf::RpcController * /*controller*/,
     return RedirectResponse(response);
   }
 
-  DINGO_LOG(INFO) << "GetTable request:  table_id = [" << request->table_id().entity_id() << "]";
+  DINGO_LOG(DEBUG) << "GetTable request:  table_id = [" << request->table_id().entity_id() << "]";
 
   auto *table = response->mutable_table();
   this->coordinator_control_->GetTable(request->table_id().parent_entity_id(), request->table_id().entity_id(), *table);
@@ -98,7 +98,7 @@ void MetaServiceImpl::GetTableMetrics(google::protobuf::RpcController * /*contro
     return RedirectResponse(response);
   }
 
-  DINGO_LOG(INFO) << "GetTableMetrics request:  table_id = [" << request->table_id().entity_id() << "]";
+  DINGO_LOG(DEBUG) << "GetTableMetrics request:  table_id = [" << request->table_id().entity_id() << "]";
 }
 
 void MetaServiceImpl::CreateTableId(google::protobuf::RpcController *controller,
@@ -111,7 +111,7 @@ void MetaServiceImpl::CreateTableId(google::protobuf::RpcController *controller,
   }
 
   DINGO_LOG(INFO) << "CreateTableId request:  schema_id = [" << request->schema_id().entity_id() << "]";
-  DINGO_LOG(INFO) << request->DebugString();
+  DINGO_LOG(DEBUG) << request->DebugString();
 
   pb::coordinator_internal::MetaIncrement meta_increment;
 
@@ -153,7 +153,7 @@ void MetaServiceImpl::CreateTable(google::protobuf::RpcController *controller,
   }
 
   DINGO_LOG(INFO) << "CreateTable request:  schema_id = [" << request->schema_id().entity_id() << "]";
-  DINGO_LOG(INFO) << request->DebugString();
+  DINGO_LOG(DEBUG) << request->DebugString();
 
   pb::coordinator_internal::MetaIncrement meta_increment;
 
@@ -203,7 +203,7 @@ void MetaServiceImpl::DropSchema(google::protobuf::RpcController *controller,
     return RedirectResponse(response);
   }
 
-  DINGO_LOG(INFO) << "DropSchema request:  parent_schema_id = [" << request->schema_id().entity_id() << "]";
+  DINGO_LOG(WARNING) << "DropSchema request:  parent_schema_id = [" << request->schema_id().entity_id() << "]";
   DINGO_LOG(INFO) << request->DebugString();
 
   pb::coordinator_internal::MetaIncrement meta_increment;
@@ -212,7 +212,7 @@ void MetaServiceImpl::DropSchema(google::protobuf::RpcController *controller,
   uint64_t parent_schema_id = request->schema_id().parent_entity_id();
   int ret = this->coordinator_control_->DropSchema(parent_schema_id, schema_id, meta_increment);
   if (ret) {
-    DINGO_LOG(INFO) << "DropSchema failed ret = " << ret;
+    DINGO_LOG(ERROR) << "DropSchema failed, schema_id=" << schema_id << " ret = " << ret;
     brpc::Controller *brpc_controller = static_cast<brpc::Controller *>(controller);
     brpc_controller->SetFailed(ret, "drop schema failed");
     return;
@@ -241,7 +241,7 @@ void MetaServiceImpl::CreateSchema(google::protobuf::RpcController *controller,
   }
 
   DINGO_LOG(INFO) << "CreatSchema request:  parent_schema_id = [" << request->parent_schema_id().entity_id() << "]";
-  DINGO_LOG(INFO) << request->DebugString();
+  DINGO_LOG(DEBUG) << request->DebugString();
 
   pb::coordinator_internal::MetaIncrement meta_increment;
 
@@ -249,7 +249,8 @@ void MetaServiceImpl::CreateSchema(google::protobuf::RpcController *controller,
   int ret = this->coordinator_control_->CreateSchema(request->parent_schema_id().entity_id(), request->schema_name(),
                                                      new_schema_id, meta_increment);
   if (ret) {
-    DINGO_LOG(INFO) << "CreateSchema failed ret = " << ret;
+    DINGO_LOG(ERROR) << "CreateSchema schema_id = " << new_schema_id
+                     << " parent_schema_id=" << request->parent_schema_id().entity_id() << " failed ret = " << ret;
     brpc::Controller *brpc_controller = static_cast<brpc::Controller *>(controller);
     brpc_controller->SetFailed(ret, "create schema failed");
     return;
@@ -282,9 +283,9 @@ void MetaServiceImpl::DropTable(google::protobuf::RpcController *controller, con
     return RedirectResponse(response);
   }
 
-  DINGO_LOG(INFO) << "DropTable request:  schema_id = [" << request->table_id().parent_entity_id() << "]"
-                  << " table_id = [" << request->table_id().entity_id() << "]";
-  DINGO_LOG(INFO) << request->DebugString();
+  DINGO_LOG(WARNING) << "DropTable request:  schema_id = [" << request->table_id().parent_entity_id() << "]"
+                     << " table_id = [" << request->table_id().entity_id() << "]";
+  DINGO_LOG(DEBUG) << request->DebugString();
 
   pb::coordinator_internal::MetaIncrement meta_increment;
 
@@ -292,7 +293,7 @@ void MetaServiceImpl::DropTable(google::protobuf::RpcController *controller, con
                                                   request->table_id().entity_id(), meta_increment);
   if (ret < 0) {
     response->mutable_error()->set_errcode(::dingodb::pb::error::Errno::EINTERNAL);
-    DINGO_LOG(ERROR) << "DropTable failed in meta_service";
+    DINGO_LOG(ERROR) << "DropTable failed in meta_service, table_id=" << request->table_id().entity_id();
     return;
   }
 
