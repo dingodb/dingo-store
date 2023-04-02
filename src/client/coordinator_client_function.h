@@ -49,6 +49,7 @@ void SendCreateExecutor(brpc::Controller& cntl, dingodb::pb::coordinator::Coordi
 void SendDeleteExecutor(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
 void SendStoreHearbeat(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub,
                        uint64_t store_id);
+void SendGetStoreMetrics(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
 
 // meta service functions
 void SendGetSchemas(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub);
@@ -60,3 +61,4 @@ void SendCreateTable(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub
 void SendDropTable(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub);
 void SendDropSchema(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub);
 void SendCreateSchema(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub);
+void SendGetTableMetrics(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub);

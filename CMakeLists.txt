@@ -201,7 +201,7 @@ set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin)
 
 add_executable(dingodb_server src/server/main.cc $<TARGET_OBJECTS:DINGODB_OBJS> $<TARGET_OBJECTS:PROTO_OBJS>)
 add_executable(dingodb_client_store src/client/store_client.cc $<TARGET_OBJECTS:PROTO_OBJS>)
-add_executable(dingodb_client_coordinator src/client/coordinator_client.cc src/client/coordinator_client_function.cc $<TARGET_OBJECTS:PROTO_OBJS>)
+add_executable(dingodb_client_coordinator src/client/coordinator_client.cc src/client/coordinator_client_function_coor.cc src/client/coordinator_client_function_meta.cc $<TARGET_OBJECTS:PROTO_OBJS>)
 
 add_dependencies(DINGODB_OBJS ${DEPEND_LIBS})
 add_dependencies(dingodb_server ${DEPEND_LIBS})
