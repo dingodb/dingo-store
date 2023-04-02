@@ -245,6 +245,9 @@ class CoordinatorControl : public MetaControl {
   // get storemap
   void GetStoreMap(pb::common::StoreMap &store_map);
 
+  // get store metrics
+  void GetStoreMetrics(std::vector<pb::common::StoreMetrics> &store_metrics);
+
   // get executormap
   void GetExecutorMap(pb::common::ExecutorMap &executor_map);
 

@@ -632,6 +632,12 @@ void CoordinatorControl::GetTableMetrics(uint64_t schema_id, uint64_t table_id,
         table_metrics_internal.set_id(table_id);
         table_metrics_internal.mutable_table_metrics()->CopyFrom(*table_metrics_single);
         table_metrics_map_[table_id] = table_metrics_internal;
+
+        DINGO_LOG(INFO) << "table_metrics first calculated, table_id=" << table_id
+                        << " row_count=" << table_metrics_single->rows_count()
+                        << " min_key=" << table_metrics_single->min_key()
+                        << " max_key=" << table_metrics_single->max_key()
+                        << " part_count=" << table_metrics_single->part_count();
       }
     } else {
       // construct TableMetrics from table_metrics_internal
@@ -664,8 +670,8 @@ uint64_t CoordinatorControl::CalculateTableMetricsSingle(uint64_t table_id, pb::
   }
 
   // build result metrics
-  uint64_t row_count;
-  std::string min_key;
+  uint64_t row_count = 0;
+  std::string min_key(10, '\xFF');
   std::string max_key;
 
   {
@@ -718,6 +724,10 @@ uint64_t CoordinatorControl::CalculateTableMetricsSingle(uint64_t table_id, pb::
   table_metrics.set_min_key(min_key);
   table_metrics.set_max_key(max_key);
   table_metrics.set_part_count(table_internal.partitions_size());
+
+  DINGO_LOG(DEBUG) << "table_metrics calculated in CalculateTableMetricsSingle, table_id=" << table_id
+                   << " row_count=" << table_metrics.rows_count() << " min_key=" << table_metrics.min_key()
+                   << " max_key=" << table_metrics.max_key() << " part_count=" << table_metrics.part_count();
 
   return 0;
 }

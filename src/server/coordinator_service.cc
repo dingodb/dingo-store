@@ -370,6 +370,30 @@ void CoordinatorServiceImpl::GetStoreMap(google::protobuf::RpcController * /*con
   response->set_epoch(storemap.epoch());
 }
 
+void CoordinatorServiceImpl::GetStoreMetrics(google::protobuf::RpcController * /*controller*/,
+                                             const pb::coordinator::GetStoreMetricsRequest *request,
+                                             pb::coordinator::GetStoreMetricsResponse *response,
+                                             google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+  auto format_request = Helper::MessageToJsonString(*request);
+  auto is_leader = this->coordinator_control_->IsLeader();
+  DINGO_LOG(DEBUG) << "Receive Get StoreMetrics Request, IsLeader:" << is_leader << ", Request:" << format_request;
+
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  // get store metrics
+  pb::common::StoreMetrics store_metrics;
+  std::vector<pb::common::StoreMetrics> store_metrics_list;
+  this->coordinator_control_->GetStoreMetrics(store_metrics_list);
+
+  for (auto &store_metrics : store_metrics_list) {
+    auto *new_store_metrics = response->add_store_metrics();
+    new_store_metrics->CopyFrom(store_metrics);
+  }
+}
+
 void CoordinatorServiceImpl::GetExecutorMap(google::protobuf::RpcController * /*controller*/,
                                             const pb::coordinator::GetExecutorMapRequest *request,
                                             pb::coordinator::GetExecutorMapResponse *response,

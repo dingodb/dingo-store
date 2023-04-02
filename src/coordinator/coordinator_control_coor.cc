@@ -97,6 +97,13 @@ void CoordinatorControl::GetStoreMap(pb::common::StoreMap& store_map) {
   }
 }
 
+void CoordinatorControl::GetStoreMetrics(std::vector<pb::common::StoreMetrics>& store_metrics) {
+  BAIDU_SCOPED_LOCK(store_metrics_map_mutex_);
+  for (auto& elemnt : store_metrics_map_) {
+    store_metrics.push_back(elemnt.second);
+  }
+}
+
 void CoordinatorControl::GetPushStoreMap(std::map<uint64_t, pb::common::Store>& store_to_push) {
   BAIDU_SCOPED_LOCK(store_need_push_mutex_);
   store_to_push.swap(store_need_push_);

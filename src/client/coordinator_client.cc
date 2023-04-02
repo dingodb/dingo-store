@@ -101,6 +101,8 @@ void* Sender(void* /*arg*/) {
     SendGetRegionMap(cntl, coordinator_stub);
   } else if (FLAGS_method == "GetCoordinatorMap") {
     SendGetCoordinatorMap(cntl, coordinator_stub);
+  } else if (FLAGS_method == "GetStoreMetrics") {
+    SendGetStoreMetrics(cntl, coordinator_stub);
   } else if (FLAGS_method == "GetNodeInfo") {
     SendGetNodeInfo(cntl, node_stub);
   } else if (FLAGS_method == "GetLogLevel") {
@@ -127,6 +129,8 @@ void* Sender(void* /*arg*/) {
     SendDropSchema(cntl, meta_stub);
   } else if (FLAGS_method == "GetTable") {
     SendGetTable(cntl, meta_stub);
+  } else if (FLAGS_method == "GetTableMetrics") {
+    SendGetTableMetrics(cntl, meta_stub);
   } else {
     DINGO_LOG(INFO) << " method illegal , exit";
     return nullptr;
