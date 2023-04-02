@@ -43,6 +43,11 @@ void CoordinatorServiceImpl::Hello(google::protobuf::RpcController * /*controlle
 
   response->set_state(static_cast<pb::common::CoordinatorState>(0));
   response->set_status_detail("OK");
+
+  if (request->get_memory_info()) {
+    auto *memory_info = response->mutable_memory_info();
+    this->coordinator_control_->GetMemoryInfo(*memory_info);
+  }
 }
 
 void CoordinatorServiceImpl::CreateExecutor(google::protobuf::RpcController *controller,
@@ -322,6 +327,11 @@ void CoordinatorServiceImpl::StoreHeartbeat(google::protobuf::RpcController *con
 
   // call UpdateRegionMap
   uint64_t const new_regionmap_epoch = this->coordinator_control_->UpdateRegionMap(regions, meta_increment);
+
+  // update store metrics
+  if (request->has_store_metrics()) {
+    this->coordinator_control_->UpdateStoreMetrics(request->store_metrics(), meta_increment);
+  }
 
   // prepare for raft process
   CoordinatorClosure<pb::coordinator::StoreHeartbeatRequest, pb::coordinator::StoreHeartbeatResponse>

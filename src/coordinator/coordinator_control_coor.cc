@@ -25,6 +25,7 @@
 #include "brpc/channel.h"
 #include "butil/scoped_lock.h"
 #include "butil/strings/string_split.h"
+#include "butil/synchronization/lock.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "coordinator/coordinator_control.h"
@@ -640,6 +641,11 @@ uint64_t CoordinatorControl::UpdateExecutorMap(const pb::common::Executor& execu
 uint64_t CoordinatorControl::UpdateStoreMetrics(const pb::common::StoreMetrics& store_metrics,
                                                 pb::coordinator_internal::MetaIncrement& meta_increment) {
   //   uint64_t store_map_epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_STORE);
+  if (store_metrics.id() <= 0) {
+    DINGO_LOG(ERROR) << "ERROR: UpdateStoreMetrics store_metrics.id() <= 0, store_metrics.id() = "
+                     << store_metrics.id();
+    return -1;
+  }
 
   bool need_update_epoch = false;
   {
@@ -684,6 +690,112 @@ uint64_t CoordinatorControl::UpdateStoreMetrics(const pb::common::StoreMetrics& 
   DINGO_LOG(INFO) << "UpdateStoreMetricsMap store_metrics.id=" << store_metrics.id();
 
   return 0;
+}
+
+void CoordinatorControl::GetMemoryInfo(pb::coordinator::CoordinatorMemoryInfo& memory_info) {
+  // compute size
+  {
+    BAIDU_SCOPED_LOCK(id_epoch_map_temp_mutex_);
+    memory_info.set_id_epoch_map_temp_count(id_epoch_map_temp_.size());
+    for (auto& it : id_epoch_map_temp_) {
+      memory_info.set_id_epoch_map_temp_size(memory_info.id_epoch_map_temp_size() + sizeof(it.first) +
+                                             it.second.ByteSizeLong());
+    }
+    memory_info.set_total_size(memory_info.total_size() + memory_info.id_epoch_map_temp_size());
+  }
+  {
+    BAIDU_SCOPED_LOCK(id_epoch_map_mutex_);
+    memory_info.set_id_epoch_map_count(id_epoch_map_.size());
+    for (auto& it : id_epoch_map_) {
+      memory_info.set_id_epoch_map_size(memory_info.id_epoch_map_size() + sizeof(it.first) + it.second.ByteSizeLong());
+    }
+    memory_info.set_total_size(memory_info.total_size() + memory_info.id_epoch_map_size());
+  }
+  {
+    BAIDU_SCOPED_LOCK(coordinator_map_mutex_);
+    memory_info.set_coordinator_map_count(coordinator_map_.size());
+    for (auto& it : coordinator_map_) {
+      memory_info.set_coordinator_map_size(memory_info.coordinator_map_size() + sizeof(it.first) +
+                                           it.second.ByteSizeLong());
+    }
+    memory_info.set_total_size(memory_info.total_size() + memory_info.coordinator_map_size());
+  }
+  {
+    BAIDU_SCOPED_LOCK(store_map_mutex_);
+    memory_info.set_store_map_count(store_map_.size());
+    for (auto& it : store_map_) {
+      memory_info.set_store_map_size(memory_info.store_map_size() + sizeof(it.first) + it.second.ByteSizeLong());
+    }
+    memory_info.set_total_size(memory_info.total_size() + memory_info.store_map_size());
+  }
+  {
+    BAIDU_SCOPED_LOCK(store_need_push_mutex_);
+    memory_info.set_store_need_push_count(store_need_push_.size());
+    for (auto& it : store_need_push_) {
+      memory_info.set_store_need_push_size(memory_info.store_need_push_size() + sizeof(it.first) +
+                                           it.second.ByteSizeLong());
+    }
+    memory_info.set_total_size(memory_info.total_size() + memory_info.store_need_push_size());
+  }
+  {
+    BAIDU_SCOPED_LOCK(executor_map_mutex_);
+    memory_info.set_executor_map_count(executor_map_.size());
+    for (auto& it : executor_map_) {
+      memory_info.set_executor_map_size(memory_info.executor_map_size() + sizeof(it.first) + it.second.ByteSizeLong());
+    }
+    memory_info.set_total_size(memory_info.total_size() + memory_info.executor_map_size());
+  }
+  {
+    BAIDU_SCOPED_LOCK(executor_need_push_mutex_);
+    memory_info.set_executor_need_push_count(executor_need_push_.size());
+    for (auto& it : executor_need_push_) {
+      memory_info.set_executor_need_push_size(memory_info.executor_need_push_size() + sizeof(it.first) +
+                                              it.second.ByteSizeLong());
+    }
+    memory_info.set_total_size(memory_info.total_size() + memory_info.executor_need_push_size());
+  }
+  {
+    BAIDU_SCOPED_LOCK(schema_map_mutex_);
+    memory_info.set_schema_map_count(schema_map_.size());
+    for (auto& it : schema_map_) {
+      memory_info.set_schema_map_size(memory_info.schema_map_size() + sizeof(it.first) + it.second.ByteSizeLong());
+    }
+    memory_info.set_total_size(memory_info.total_size() + memory_info.schema_map_size());
+  }
+  {
+    BAIDU_SCOPED_LOCK(region_map_mutex_);
+    memory_info.set_region_map_count(region_map_.size());
+    for (auto& it : region_map_) {
+      memory_info.set_region_map_size(memory_info.region_map_size() + sizeof(it.first) + it.second.ByteSizeLong());
+    }
+    memory_info.set_total_size(memory_info.total_size() + memory_info.region_map_size());
+  }
+  {
+    BAIDU_SCOPED_LOCK(table_map_mutex_);
+    memory_info.set_table_map_count(table_map_.size());
+    for (auto& it : table_map_) {
+      memory_info.set_table_map_size(memory_info.table_map_size() + sizeof(it.first) + it.second.ByteSizeLong());
+    }
+    memory_info.set_total_size(memory_info.total_size() + memory_info.table_map_size());
+  }
+  {
+    BAIDU_SCOPED_LOCK(store_metrics_map_mutex_);
+    memory_info.set_store_metrics_map_count(store_metrics_map_.size());
+    for (auto& it : store_metrics_map_) {
+      memory_info.set_store_metrics_map_size(memory_info.store_metrics_map_size() + sizeof(it.first) +
+                                             it.second.ByteSizeLong());
+    }
+    memory_info.set_total_size(memory_info.total_size() + memory_info.store_metrics_map_size());
+  }
+  {
+    BAIDU_SCOPED_LOCK(table_metrics_map_mutex_);
+    memory_info.set_table_metrics_map_count(table_metrics_map_.size());
+    for (auto& it : table_metrics_map_) {
+      memory_info.set_table_metrics_map_size(memory_info.table_metrics_map_size() + sizeof(it.first) +
+                                             it.second.ByteSizeLong());
+    }
+    memory_info.set_total_size(memory_info.total_size() + memory_info.table_metrics_map_size());
+  }
 }
 
 }  // namespace dingodb

@@ -157,6 +157,9 @@ class CoordinatorControl : public MetaControl {
                                   pb::coordinator_internal::SchemaInternal &dingo_schema);
   bool Init();
 
+  // GetMemoryInfo
+  void GetMemoryInfo(pb::coordinator::CoordinatorMemoryInfo &memory_info);
+
   // Get raft leader's server location for sdk use
   void GetLeaderLocation(pb::common::Location &leader_server_location);
 
