@@ -30,7 +30,6 @@ class Crontab {
  public:
   Crontab()
       : id_(0),
-        name_(""),
         interval_(0),
         max_times_(0),
         immediately_(false),

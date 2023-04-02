@@ -33,6 +33,12 @@ message TableInternal {
   repeated PartInternal partitions = 3;
 }
 
+// TableMetricsInternal is storage structure for table_metrics
+message TableMetricsInternal {
+  uint64 id = 1;
+  dingodb.pb.meta.TableMetrics table_metrics = 2;
+}
+
 // SchemaInternal is storage structure for schema
 message SchemaInternal {
   uint64 id = 1;
@@ -94,6 +100,12 @@ message MetaIncrementStore {
   MetaIncrementOpType op_type = 3;
 }
 
+message MetaIncrementStoreMetrics {
+  uint64 id = 1;
+  dingodb.pb.common.StoreMetrics store_metrics = 2;
+  MetaIncrementOpType op_type = 3;
+}
+
 message MetaIncrementExecutor {
   uint64 id = 1;
   dingodb.pb.common.Executor executor = 2;
@@ -136,6 +148,7 @@ message MetaIncrement {
   repeated MetaIncrementTable tables = 5;
   repeated MetaIncrementIdEpoch idepochs = 6;
   repeated MetaIncrementExecutor executors = 7;
+  repeated MetaIncrementStoreMetrics store_metrics = 8;
 }
 
 // snapshot pb file message
@@ -147,4 +160,5 @@ message MetaSnapshotFile {
   repeated dingodb.pb.common.KeyValue schema_map_kvs = 5;
   repeated dingodb.pb.common.KeyValue region_map_kvs = 6;
   repeated dingodb.pb.common.KeyValue table_map_kvs = 7;
+  repeated dingodb.pb.common.KeyValue store_metrics_map_kvs = 8;
 }

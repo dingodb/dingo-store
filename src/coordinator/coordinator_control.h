@@ -279,8 +279,13 @@ class CoordinatorControl : public MetaControl {
   // get table metrics
   // in: schema_id
   // in: table_id
-  // out: TableMetrics
-  void GetTableMetrics(uint64_t schema_id, uint64_t table_id, pb::meta::TableMetrics &table_metrics);
+  // out: TableMetricsWithId
+  void GetTableMetrics(uint64_t schema_id, uint64_t table_id, pb::meta::TableMetricsWithId &table_metrics);
+
+  // update store metrics with new metrics
+  // return new epoch
+  uint64_t UpdateStoreMetrics(const pb::common::StoreMetrics &store_metrics,
+                              pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // drop table
   // in: schema_id
@@ -307,6 +312,12 @@ class CoordinatorControl : public MetaControl {
   // validate executor keyring
   // return: 0 or -1
   int ValidateExecutor(uint64_t executor_id, const std::string &keyring);
+
+  // calculate table metrics
+  void CalculateTableMetrics();
+
+  // calculate single table metrics
+  uint64_t CalculateTableMetricsSingle(uint64_t table_id, pb::meta::TableMetrics &table_metrics);
 
   // functions below are for raft fsm
   bool IsLeader() override;                   // for raft fsm
@@ -378,6 +389,16 @@ class CoordinatorControl : public MetaControl {
   std::map<uint64_t, pb::coordinator_internal::TableInternal> table_map_;
   MetaMapStorage<pb::coordinator_internal::TableInternal> *table_meta_;
   bthread_mutex_t table_map_mutex_;
+
+  // 7.store_metrics
+  std::map<uint64_t, pb::common::StoreMetrics> store_metrics_map_;
+  MetaMapStorage<pb::common::StoreMetrics> *store_metrics_meta_;
+  bthread_mutex_t store_metrics_map_mutex_;
+
+  // 8.table_metrics
+  std::map<uint64_t, pb::coordinator_internal::TableMetricsInternal> table_metrics_map_;
+  MetaMapStorage<pb::coordinator_internal::TableMetricsInternal> *table_metrics_meta_;
+  bthread_mutex_t table_metrics_map_mutex_;
 
   // root schema write to raft
   bool root_schema_writed_to_raft_;
