@@ -282,6 +282,12 @@ class CoordinatorControl : public MetaControl {
   // out: Table
   void GetTable(uint64_t schema_id, uint64_t table_id, pb::meta::Table &table) override;
 
+  // get table metrics
+  // in: schema_id
+  // in: table_id
+  // out: TableMetrics
+  void GetTableMetrics(uint64_t schema_id, uint64_t table_id, pb::meta::TableMetrics &table_metrics);
+
   // drop table
   // in: schema_id
   // in: table_id
