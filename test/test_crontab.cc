@@ -30,18 +30,17 @@ class CrontabManagerTest : public testing::Test {
 TEST(CrontabManagerTest, immediately) {
   dingodb::CrontabManager crontab_manager;
 
-  std::shared_ptr<dingodb::Crontab> crontab =
-      std::make_shared<dingodb::Crontab>();
-  crontab->name_ = "test";
-  crontab->immediately_ = true;
-  crontab->max_times_ = 1;
-  crontab->interval_ = 10000;
-  crontab->func_ = [](void* arg) -> void {
+  std::shared_ptr<dingodb::Crontab> crontab = std::make_shared<dingodb::Crontab>();
+  crontab->name = "test";
+  crontab->immediately = true;
+  crontab->max_times = 1;
+  crontab->interval = 10000;
+  crontab->func = [](void* arg) -> void {
     std::string* str = static_cast<std::string*>(arg);
     str->append("0");
   };
   std::string str;
-  crontab->arg_ = &str;
+  crontab->arg = &str;
 
   crontab_manager.AddAndRunCrontab(crontab);
   std::this_thread::sleep_for(std::chrono::seconds(2));
@@ -53,17 +52,16 @@ TEST(CrontabManagerTest, immediately) {
 TEST(CrontabManagerTest, max_times) {
   dingodb::CrontabManager crontab_manager;
 
-  std::shared_ptr<dingodb::Crontab> crontab =
-      std::make_shared<dingodb::Crontab>();
-  crontab->name_ = "test";
-  crontab->max_times_ = 3;
-  crontab->interval_ = 1000;
-  crontab->func_ = [](void* arg) -> void {
+  std::shared_ptr<dingodb::Crontab> crontab = std::make_shared<dingodb::Crontab>();
+  crontab->name = "test";
+  crontab->max_times = 3;
+  crontab->interval = 1000;
+  crontab->func = [](void* arg) -> void {
     std::string* str = static_cast<std::string*>(arg);
     str->append("0");
   };
   std::string str;
-  crontab->arg_ = &str;
+  crontab->arg = &str;
 
   crontab_manager.AddAndRunCrontab(crontab);
   std::this_thread::sleep_for(std::chrono::seconds(5));
@@ -75,17 +73,16 @@ TEST(CrontabManagerTest, max_times) {
 TEST(CrontabManagerTest, pause) {
   dingodb::CrontabManager crontab_manager;
 
-  std::shared_ptr<dingodb::Crontab> crontab =
-      std::make_shared<dingodb::Crontab>();
-  crontab->name_ = "test";
-  crontab->max_times_ = 3;
-  crontab->interval_ = 3000;
-  crontab->func_ = [](void* arg) -> void {
+  std::shared_ptr<dingodb::Crontab> crontab = std::make_shared<dingodb::Crontab>();
+  crontab->name = "test";
+  crontab->max_times = 3;
+  crontab->interval = 3000;
+  crontab->func = [](void* arg) -> void {
     std::string* str = static_cast<std::string*>(arg);
     str->append("0");
   };
   std::string str;
-  crontab->arg_ = &str;
+  crontab->arg = &str;
 
   uint32_t crontab_id = crontab_manager.AddAndRunCrontab(crontab);
   std::this_thread::sleep_for(std::chrono::seconds(1));

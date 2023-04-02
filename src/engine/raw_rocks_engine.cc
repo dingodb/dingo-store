@@ -100,20 +100,20 @@ class RocksIterator : public EngineIterator {
   std::string end_key_;
 };
 
-static const char* kDbPath = "store.dbPath";
-static const char* kColumnFamilies = "store.columnFamilies";
-static const char* kBaseColumnFamily = "store.base";
+static const char* k_db_path = "store.dbPath";
+static const char* k_column_families = "store.columnFamilies";
+static const char* k_base_column_family = "store.base";
 
-static const char* kBlockSize = "block_size";
-static const char* kBlockCache = "block_cache";
-static const char* kArenaBlockSize = "arena_block_size";
-static const char* kMinWriteBufferNumberToMerge = "min_write_buffer_number_to_merge";
-static const char* kMaxWriteBufferNumber = "max_write_buffer_number";
-static const char* kMaxCompactionBytes = "max_compaction_bytes";
-static const char* kWriteBufferSize = "write_buffer_size";
-static const char* kPrefixExtractor = "prefix_extractor";
-static const char* kMaxBytesForLevelBase = "max_bytes_for_level_base";
-static const char* kTargetFileSizeBase = "target_file_size_base";
+static const char* k_block_size = "block_size";
+static const char* k_block_cache = "block_cache";
+static const char* k_arena_block_size = "arena_block_size";
+static const char* k_min_write_buffer_number_to_merge = "min_write_buffer_number_to_merge";
+static const char* k_max_write_buffer_number = "max_write_buffer_number";
+static const char* k_max_compaction_bytes = "max_compaction_bytes";
+static const char* k_write_buffer_size = "write_buffer_size";
+static const char* k_prefix_extractor = "prefix_extractor";
+static const char* k_max_bytes_for_level_base = "max_bytes_for_level_base";
+static const char* k_target_file_size_base = "target_file_size_base";
 
 RawRocksEngine::RawRocksEngine() : txn_db_(nullptr), column_families_({}) {}
 
@@ -126,17 +126,17 @@ bool RawRocksEngine::Init(std::shared_ptr<Config> config) {
     return false;
   }
 
-  std::string store_db_path_value = config->GetString(kDbPath);
+  std::string store_db_path_value = config->GetString(k_db_path);
   if (BAIDU_UNLIKELY(store_db_path_value.empty())) {
-    DINGO_LOG(ERROR) << butil::StringPrintf("can not find : %s", kDbPath);
+    DINGO_LOG(ERROR) << butil::StringPrintf("can not find : %s", k_db_path);
     return false;
   }
 
   DINGO_LOG(INFO) << butil::StringPrintf("rocksdb path : %s", store_db_path_value.c_str());
 
-  std::vector<std::string> column_family = config->GetStringList(kColumnFamilies);
+  std::vector<std::string> column_family = config->GetStringList(k_column_families);
   if (BAIDU_UNLIKELY(column_family.empty())) {
-    DINGO_LOG(ERROR) << butil::StringPrintf("%s : empty. not found any column family", kColumnFamilies);
+    DINGO_LOG(ERROR) << butil::StringPrintf("%s : empty. not found any column family", k_column_families);
     return false;
   }
 
@@ -264,25 +264,25 @@ void SetCfConfigurationElementWrapper(const RawRocksEngine::CfDefaultConf& defau
 
 bool RawRocksEngine::InitCfConfig(const std::vector<std::string>& column_family) {
   CfDefaultConf dcf_default_conf;
-  dcf_default_conf.emplace(kBlockSize, std::make_optional(static_cast<int64_t>(131072)));
+  dcf_default_conf.emplace(k_block_size, std::make_optional(static_cast<int64_t>(131072)));
 
-  dcf_default_conf.emplace(kBlockCache, std::make_optional(static_cast<int64_t>(67108864)));
+  dcf_default_conf.emplace(k_block_cache, std::make_optional(static_cast<int64_t>(67108864)));
 
-  dcf_default_conf.emplace(kArenaBlockSize, std::make_optional(static_cast<int64_t>(67108864)));
+  dcf_default_conf.emplace(k_arena_block_size, std::make_optional(static_cast<int64_t>(67108864)));
 
-  dcf_default_conf.emplace(kMinWriteBufferNumberToMerge, std::make_optional(static_cast<int64_t>(4)));
+  dcf_default_conf.emplace(k_min_write_buffer_number_to_merge, std::make_optional(static_cast<int64_t>(4)));
 
-  dcf_default_conf.emplace(kMaxWriteBufferNumber, std::make_optional(static_cast<int64_t>(2)));
+  dcf_default_conf.emplace(k_max_write_buffer_number, std::make_optional(static_cast<int64_t>(2)));
 
-  dcf_default_conf.emplace(kMaxCompactionBytes, std::make_optional(static_cast<int64_t>(134217728)));
+  dcf_default_conf.emplace(k_max_compaction_bytes, std::make_optional(static_cast<int64_t>(134217728)));
 
-  dcf_default_conf.emplace(kWriteBufferSize, std::make_optional(static_cast<int64_t>(67108864)));
+  dcf_default_conf.emplace(k_write_buffer_size, std::make_optional(static_cast<int64_t>(67108864)));
 
-  dcf_default_conf.emplace(kPrefixExtractor, std::make_optional(static_cast<int64_t>(8)));
+  dcf_default_conf.emplace(k_prefix_extractor, std::make_optional(static_cast<int64_t>(8)));
 
-  dcf_default_conf.emplace(kMaxBytesForLevelBase, std::make_optional(static_cast<int64_t>(134217728)));
+  dcf_default_conf.emplace(k_max_bytes_for_level_base, std::make_optional(static_cast<int64_t>(134217728)));
 
-  dcf_default_conf.emplace(kTargetFileSizeBase, std::make_optional(static_cast<int64_t>(67108864)));
+  dcf_default_conf.emplace(k_target_file_size_base, std::make_optional(static_cast<int64_t>(67108864)));
 
   for (const auto& cf_name : column_family) {
     std::map<std::string, std::string> conf;
@@ -301,13 +301,13 @@ bool RawRocksEngine::SetCfConfiguration(const CfDefaultConf& default_conf,
   rocksdb::BlockBasedTableOptions table_options;
 
   // block_size
-  SetCfConfigurationElementWrapper(default_conf, cf_configuration, kBlockSize, table_options.block_size);
+  SetCfConfigurationElementWrapper(default_conf, cf_configuration, k_block_size, table_options.block_size);
 
   // block_cache
   {
     size_t value = 0;
 
-    SetCfConfigurationElementWrapper(default_conf, cf_configuration, kBlockCache, value);
+    SetCfConfigurationElementWrapper(default_conf, cf_configuration, k_block_cache, value);
 
     auto cache = rocksdb::NewLRUCache(value);  // LRUcache
     table_options.block_cache = cache;
@@ -315,37 +315,37 @@ bool RawRocksEngine::SetCfConfiguration(const CfDefaultConf& default_conf,
 
   // arena_block_size
 
-  SetCfConfigurationElementWrapper(default_conf, cf_configuration, kArenaBlockSize, cf_options.arena_block_size);
+  SetCfConfigurationElementWrapper(default_conf, cf_configuration, k_arena_block_size, cf_options.arena_block_size);
 
   // min_write_buffer_number_to_merge
-  SetCfConfigurationElementWrapper(default_conf, cf_configuration, kMinWriteBufferNumberToMerge,
+  SetCfConfigurationElementWrapper(default_conf, cf_configuration, k_min_write_buffer_number_to_merge,
                                    cf_options.min_write_buffer_number_to_merge);
 
   // max_write_buffer_number
-  SetCfConfigurationElementWrapper(default_conf, cf_configuration, kMaxWriteBufferNumber,
+  SetCfConfigurationElementWrapper(default_conf, cf_configuration, k_max_write_buffer_number,
                                    cf_options.max_write_buffer_number);
 
   // max_compaction_bytes
-  SetCfConfigurationElementWrapper(default_conf, cf_configuration, kMaxCompactionBytes,
+  SetCfConfigurationElementWrapper(default_conf, cf_configuration, k_max_compaction_bytes,
                                    cf_options.max_compaction_bytes);
 
   // write_buffer_size
-  SetCfConfigurationElementWrapper(default_conf, cf_configuration, kWriteBufferSize, cf_options.write_buffer_size);
+  SetCfConfigurationElementWrapper(default_conf, cf_configuration, k_write_buffer_size, cf_options.write_buffer_size);
 
   // prefix_extractor
   {
     size_t value = 0;
-    SetCfConfigurationElementWrapper(default_conf, cf_configuration, kPrefixExtractor, value);
+    SetCfConfigurationElementWrapper(default_conf, cf_configuration, k_prefix_extractor, value);
 
     cf_options.prefix_extractor.reset(rocksdb::NewFixedPrefixTransform(value));
   }
 
   // max_bytes_for_level_base
-  SetCfConfigurationElementWrapper(default_conf, cf_configuration, kMaxBytesForLevelBase,
+  SetCfConfigurationElementWrapper(default_conf, cf_configuration, k_max_bytes_for_level_base,
                                    cf_options.max_bytes_for_level_base);
 
   // target_file_size_base
-  SetCfConfigurationElementWrapper(default_conf, cf_configuration, kTargetFileSizeBase,
+  SetCfConfigurationElementWrapper(default_conf, cf_configuration, k_target_file_size_base,
                                    cf_options.target_file_size_base);
 
   cf_options.compression_per_level = {
@@ -443,7 +443,7 @@ void RawRocksEngine::SetColumnFamilyHandle(const std::vector<std::string>& colum
 void RawRocksEngine::SetColumnFamilyFromConfig(const std::shared_ptr<Config>& config,
                                                const std::vector<std::string>& column_family) {
   // get base column family configure. allow empty
-  const std::map<std::string, std::string>& base_cf_configuration = config->GetStringMap(kBaseColumnFamily);
+  const std::map<std::string, std::string>& base_cf_configuration = config->GetStringMap(k_base_column_family);
 
   // assign values ​​to each column family
   for (const auto& column_family : column_family) {

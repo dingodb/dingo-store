@@ -29,34 +29,34 @@ namespace dingodb {
 class Crontab {
  public:
   Crontab()
-      : id_(0),
-        interval_(0),
-        max_times_(0),
-        immediately_(false),
-        run_count_(0),
-        pause_(false),
-        timer_id_(0),
-        func_(nullptr),
-        arg_(nullptr) {}
+      : id(0),
+        interval(0),
+        max_times(0),
+        immediately(false),
+        run_count(0),
+        pause(false),
+        timer_id(0),
+        func(nullptr),
+        arg(nullptr) {}
 
-  uint32_t id_;
-  std::string name_;
+  uint32_t id;
+  std::string name;
   // unit ms
-  uint64_t interval_;
+  uint64_t interval;
   // 0 is no limit
-  uint32_t max_times_;
+  uint32_t max_times;
   // Is immediately run
-  bool immediately_;
+  bool immediately;
   // Already run count
-  int run_count_;
+  int run_count;
   // Is pause crontab
-  bool pause_;
+  bool pause;
   // bthread_timer_t handler
-  bthread_timer_t timer_id_;
+  bthread_timer_t timer_id;
   // For run target function
-  std::function<void(void*)> func_;
+  std::function<void(void*)> func;
   // Delivery to func_'s argument
-  void* arg_;
+  void* arg;
 };
 
 // Manage crontab use brpc::bthread_timer_add

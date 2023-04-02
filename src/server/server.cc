@@ -197,10 +197,10 @@ bool Server::InitCrontabManager() {
   // Add heartbeat crontab
   std::shared_ptr<Crontab> crontab = std::make_shared<Crontab>();
   auto config = ConfigManager::GetInstance()->GetConfig(role_);
-  crontab->name_ = "HEARTBEA";
-  crontab->interval_ = config->GetInt("server.pushInterval");
-  crontab->func_ = Heartbeat::SendStoreHeartbeat;
-  crontab->arg_ = coordinator_interaction_.get();
+  crontab->name = "HEARTBEA";
+  crontab->interval = config->GetInt("server.pushInterval");
+  crontab->func = Heartbeat::SendStoreHeartbeat;
+  crontab->arg = coordinator_interaction_.get();
 
   crontab_manager_->AddAndRunCrontab(crontab);
 
@@ -215,19 +215,19 @@ bool Server::InitCrontabManagerForCoordinator() {
 
   // add push crontab
   std::shared_ptr<Crontab> crontab = std::make_shared<Crontab>();
-  crontab->name_ = "PUSH";
-  crontab->interval_ = config->GetInt("server.pushInterval");
-  crontab->func_ = Heartbeat::SendCoordinatorPushToStore;
-  crontab->arg_ = coordinator_control_.get();
+  crontab->name = "PUSH";
+  crontab->interval = config->GetInt("server.pushInterval");
+  crontab->func = Heartbeat::SendCoordinatorPushToStore;
+  crontab->arg = coordinator_control_.get();
 
   crontab_manager_->AddAndRunCrontab(crontab);
 
   // add calculate crontab
   std::shared_ptr<Crontab> crontab_calc = std::make_shared<Crontab>();
-  crontab_calc->name_ = "CALCULATE";
-  crontab_calc->interval_ = config->GetInt("server.pushInterval") * 60;
-  crontab_calc->func_ = Heartbeat::CalculateTableMetrics;
-  crontab_calc->arg_ = coordinator_control_.get();
+  crontab_calc->name = "CALCULATE";
+  crontab_calc->interval = config->GetInt("server.pushInterval") * 60;
+  crontab_calc->func = Heartbeat::CalculateTableMetrics;
+  crontab_calc->arg = coordinator_control_.get();
 
   crontab_manager_->AddAndRunCrontab(crontab_calc);
 
