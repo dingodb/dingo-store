@@ -144,6 +144,8 @@ class MetaMapStorage {
   std::map<uint64_t, T> *elements_;
 };
 
+#define COORDINATOR_ID_OF_MAP_MIN 1000
+
 class CoordinatorControl : public MetaControl {
  public:
   CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, std::shared_ptr<MetaWriter> meta_writer,

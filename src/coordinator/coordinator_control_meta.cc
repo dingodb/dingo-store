@@ -119,7 +119,7 @@ int CoordinatorControl::CreateSchema(uint64_t parent_schema_id, std::string sche
 // return: 0 or -1
 int CoordinatorControl::DropSchema(uint64_t parent_schema_id, uint64_t schema_id,
                                    pb::coordinator_internal::MetaIncrement& meta_increment) {
-  if (schema_id <= 3) {
+  if (schema_id <= COORDINATOR_ID_OF_MAP_MIN) {
     DINGO_LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
     return -1;
   }

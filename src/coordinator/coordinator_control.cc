@@ -211,7 +211,7 @@ uint64_t CoordinatorControl::GetPresentId(const pb::coordinator_internal::IdEpoc
   uint64_t value = 0;
   BAIDU_SCOPED_LOCK(id_epoch_map_temp_mutex_);
   if (id_epoch_map_temp_.find(key) == id_epoch_map_temp_.end()) {
-    value = 1000;
+    value = COORDINATOR_ID_OF_MAP_MIN;
     DINGO_LOG(INFO) << "GetPresentId key=" << pb::coordinator_internal::IdEpochType_Name(key)
                     << " not found, generate new id=" << value;
   } else {
@@ -273,7 +273,7 @@ uint64_t CoordinatorControl::GetNextId(const pb::coordinator_internal::IdEpochTy
   {
     BAIDU_SCOPED_LOCK(id_epoch_map_temp_mutex_);
     if (id_epoch_map_temp_.find(key) == id_epoch_map_temp_.end()) {
-      value = 1000;
+      value = COORDINATOR_ID_OF_MAP_MIN;
       DINGO_LOG(INFO) << "GetNextId key=" << pb::coordinator_internal::IdEpochType_Name(key)
                       << " not found, generate new id=" << value;
     } else {
