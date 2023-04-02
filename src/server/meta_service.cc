@@ -89,6 +89,18 @@ void MetaServiceImpl::GetTable(google::protobuf::RpcController * /*controller*/,
   this->coordinator_control_->GetTable(request->table_id().parent_entity_id(), request->table_id().entity_id(), *table);
 }
 
+void MetaServiceImpl::GetTableMetrics(google::protobuf::RpcController * /*controller*/,
+                                      const pb::meta::GetTableMetricsRequest *request,
+                                      pb::meta::GetTableMetricsResponse *response, google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!this->coordinator_control_->IsLeader()) {
+    return RedirectResponse(response);
+  }
+
+  DINGO_LOG(INFO) << "GetTableMetrics request:  table_id = [" << request->table_id().entity_id() << "]";
+}
+
 void MetaServiceImpl::CreateTableId(google::protobuf::RpcController *controller,
                                     const pb::meta::CreateTableIdRequest *request,
                                     pb::meta::CreateTableIdResponse *response, google::protobuf::Closure *done) {
