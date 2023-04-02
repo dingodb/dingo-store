@@ -25,22 +25,22 @@ CrontabManager::~CrontabManager() { bthread_mutex_destroy(&mutex_); }
 
 void CrontabManager::Run(void* arg) {
   Crontab* crontab = static_cast<Crontab*>(arg);
-  if (crontab->pause_) {
+  if (crontab->pause) {
     return;
   }
-  if (crontab->immediately_) {
+  if (crontab->immediately) {
     try {
-      crontab->func_(crontab->arg_);
+      crontab->func(crontab->arg);
     } catch (...) {
-      LOG(ERROR) << butil::StringPrintf("Crontab %u %s happen exception", crontab->id_, crontab->name_.c_str());
+      LOG(ERROR) << butil::StringPrintf("Crontab %u %s happen exception", crontab->id, crontab->name.c_str());
     }
-    ++crontab->run_count_;
+    ++crontab->run_count;
   } else {
-    crontab->immediately_ = true;
+    crontab->immediately = true;
   }
 
-  if (crontab->max_times_ == 0 || crontab->run_count_ < crontab->max_times_) {
-    bthread_timer_add(&crontab->timer_id_, butil::milliseconds_from_now(crontab->interval_), &Run, crontab);
+  if (crontab->max_times == 0 || crontab->run_count < crontab->max_times) {
+    bthread_timer_add(&crontab->timer_id, butil::milliseconds_from_now(crontab->interval), &Run, crontab);
   }
 }
 
@@ -57,7 +57,7 @@ uint32_t CrontabManager::AddCrontab(std::shared_ptr<Crontab> crontab) {
   BAIDU_SCOPED_LOCK(mutex_);
 
   uint32_t crontab_id = AllocCrontabId();
-  crontab->id_ = crontab_id;
+  crontab->id = crontab_id;
 
   crontabs_[crontab_id] = crontab;
   return crontab_id;
@@ -72,7 +72,7 @@ void CrontabManager::StartCrontab(uint32_t crontab_id) {
     return;
   }
   auto crontab = it->second;
-  crontab->pause_ = false;
+  crontab->pause = false;
 
   bthread_t tid;
   const bthread_attr_t attr = BTHREAD_ATTR_NORMAL;
@@ -93,9 +93,9 @@ void CrontabManager::InnerPauseCrontab(uint32_t crontab_id) {
   }
   auto crontab = it->second;
 
-  crontab->pause_ = true;
-  if (crontab->timer_id_ != 0) {
-    bthread_timer_del(crontab->timer_id_);
+  crontab->pause = true;
+  if (crontab->timer_id != 0) {
+    bthread_timer_del(crontab->timer_id);
   }
 }
 void CrontabManager::PauseCrontab(uint32_t crontab_id) {
@@ -115,7 +115,7 @@ void CrontabManager::Destroy() {
   BAIDU_SCOPED_LOCK(mutex_);
 
   for (auto it = crontabs_.begin(); it != crontabs_.end();) {
-    bthread_timer_del(it->second->timer_id_);
+    bthread_timer_del(it->second->timer_id);
 
     it = crontabs_.erase(it);
   }
