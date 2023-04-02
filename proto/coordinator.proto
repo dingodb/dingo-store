@@ -80,6 +80,16 @@ message GetStoreMapResponse {
   dingodb.pb.common.StoreMap storemap = 3;
 }
 
+message GetStoreMetricsRequest {
+  uint64 epoch = 1;
+}
+
+message GetStoreMetricsResponse {
+  dingodb.pb.error.Error error = 1;
+  uint64 epoch = 2;
+  repeated dingodb.pb.common.StoreMetrics store_metrics = 3;
+}
+
 message CreateStoreRequest {
   uint64 cluster_id = 1;
 }
@@ -148,6 +158,7 @@ service CoordinatorService {
   rpc StoreHeartbeat(StoreHeartbeatRequest) returns (StoreHeartbeatResponse);
   rpc GetRegionMap(GetRegionMapRequest) returns (GetRegionMapResponse);
   rpc GetStoreMap(GetStoreMapRequest) returns (GetStoreMapResponse);
+  rpc GetStoreMetrics(GetStoreMetricsRequest) returns (GetStoreMetricsResponse);
 
   rpc CreateStore(CreateStoreRequest) returns (CreateStoreResponse);
   rpc DeleteStore(DeleteStoreRequest) returns (DeleteStoreResponse);
