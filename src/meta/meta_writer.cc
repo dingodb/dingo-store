@@ -71,4 +71,21 @@ bool MetaWriter::Delete(const std::string& key) {
   return true;
 }
 
+bool MetaWriter::DeleteRange(const std::string& start_key, const std::string& end_key) {
+  DINGO_LOG(INFO) << "DeleteRange meta data, start_key: " << start_key << " end_key: " << end_key;
+  auto writer = engine_->NewWriter(Constant::kStoreMetaCF);
+
+  pb::common::Range range;
+  range.set_start_key(start_key);
+  range.set_end_key(end_key);
+
+  auto status = writer->KvDeleteRange(range);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << "Meta delete_range failed, errcode: " << status.error_code() << " " << status.error_str();
+    return false;
+  }
+
+  return true;
+}
+
 }  // namespace dingodb
