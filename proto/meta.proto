@@ -155,6 +155,25 @@ message Table {
   repeated Part parts = 2;
 }
 
+// Part metrics for optimization of SQL plan
+message PartMetrics {
+  DingoCommonId id = 1;
+  uint64 rows_count = 2;
+  bytes min_key = 3;
+  bytes max_key = 4;
+}
+
+// Table metrics for optimization of SQL plan
+message TableMetrics {
+  DingoCommonId id = 1;
+  uint64 rows_count = 2;
+  bytes min_key = 3;
+  bytes max_key = 4;
+  uint64 part_count = 5;
+
+  repeated PartMetrics part_metrics = 6;
+}
+
 message GetSchemasRequest {
   DingoCommonId schema_id = 1;
 }
@@ -185,6 +204,15 @@ message GetTableRequest {
 message GetTableResponse {
   dingodb.pb.error.Error error = 1;
   Table table = 2;
+}
+
+message GetTableMetricsRequest {
+  DingoCommonId table_id = 1;
+}
+
+message GetTableMetricsResponse {
+  dingodb.pb.error.Error error = 1;
+  TableMetrics table_metrics = 2;
 }
 
 message CreateTableIdRequest {
@@ -248,6 +276,11 @@ service MetaService {
   // in: table_id
   // out: Table
   rpc GetTable(GetTableRequest) returns (GetTableResponse);
+
+  // GetTableMetrics
+  // in: table_id
+  // out: table_metrics
+  rpc GetTableMetrics(GetTableMetricsRequest) returns (GetTableMetricsResponse);
 
   // CreateTableId
   // in: schema_id

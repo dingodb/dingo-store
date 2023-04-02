@@ -24,10 +24,12 @@ option cc_generic_services = true;
 
 // Store report self status and region (this node is leader) status
 message StoreHeartbeatRequest {
-  uint64 self_storemap_epoch = 1;                 // storemap epoch in this Store
-  uint64 self_regionmap_epoch = 2;                // regionmap epoch in this Store
-  dingodb.pb.common.Store store = 3;              // self store info
-  repeated dingodb.pb.common.Region regions = 4;  // self region info
+  uint64 self_storemap_epoch = 1;                               // storemap epoch in this Store
+  uint64 self_regionmap_epoch = 2;                              // regionmap epoch in this Store
+  dingodb.pb.common.Store store = 3;                            // self store info
+  repeated dingodb.pb.common.Region regions = 4;                // self region info
+  dingodb.pb.common.StoreMetrics store_metrics = 5;             // self store metrics
+  repeated dingodb.pb.common.RegionMetrics region_metrics = 6;  // all region's metrics include follower on this store
 }
 
 message StoreHeartbeatResponse {
