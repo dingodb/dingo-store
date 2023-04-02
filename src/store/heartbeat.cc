@@ -28,6 +28,20 @@
 
 namespace dingodb {
 
+// this is for coordinator
+void Heartbeat::CalculateTableMetrics(void* arg) {
+  CoordinatorControl* coordinator_control = static_cast<CoordinatorControl*>(arg);
+
+  if (!coordinator_control->IsLeader()) {
+    // DINGO_LOG(INFO) << "SendCoordinatorPushToStore... this is follower";
+    return;
+  }
+  DINGO_LOG(DEBUG) << "CalculateTableMetrics... this is leader";
+
+  coordinator_control->CalculateTableMetrics();
+}
+
+// this is for coordinator
 void Heartbeat::SendCoordinatorPushToStore(void* arg) {
   CoordinatorControl* coordinator_control = static_cast<CoordinatorControl*>(arg);
 
@@ -35,7 +49,7 @@ void Heartbeat::SendCoordinatorPushToStore(void* arg) {
     // DINGO_LOG(INFO) << "SendCoordinatorPushToStore... this is follower";
     return;
   }
-  // DINGO_LOG(INFO) << "SendCoordinatorPushToStore... this is leader";
+  DINGO_LOG(DEBUG) << "SendCoordinatorPushToStore... this is leader";
 
   std::map<uint64_t, pb::common::Store> store_to_push;
   coordinator_control->GetPushStoreMap(store_to_push);

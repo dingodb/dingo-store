@@ -33,6 +33,7 @@ class Heartbeat {
 
   static void SendStoreHeartbeat(void* arg);
   static void SendCoordinatorPushToStore(void* arg);
+  static void CalculateTableMetrics(void* arg);
 
   static void HandleStoreHeartbeatResponse(std::shared_ptr<StoreMetaManager> store_meta,
                                            const pb::coordinator::StoreHeartbeatResponse& response);

@@ -630,4 +630,53 @@ uint64_t CoordinatorControl::UpdateExecutorMap(const pb::common::Executor& execu
   return executor_map_epoch;
 }
 
+uint64_t CoordinatorControl::UpdateStoreMetrics(const pb::common::StoreMetrics& store_metrics,
+                                                pb::coordinator_internal::MetaIncrement& meta_increment) {
+  //   uint64_t store_map_epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_STORE);
+
+  bool need_update_epoch = false;
+  {
+    BAIDU_SCOPED_LOCK(store_metrics_map_mutex_);
+    if (store_metrics_map_.find(store_metrics.id()) != store_metrics_map_.end()) {
+      DINGO_LOG(DEBUG) << "STORE METIRCS UPDATE store_metrics.id = " << store_metrics.id();
+
+      // update meta_increment
+      need_update_epoch = true;
+      auto* store_metrics_increment = meta_increment.add_store_metrics();
+      store_metrics_increment->set_id(store_metrics.id());
+      store_metrics_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
+
+      auto* store_metrics_increment_store = store_metrics_increment->mutable_store_metrics();
+      store_metrics_increment_store->CopyFrom(store_metrics);
+
+      // on_apply
+      // store_metrics_map_epoch++;              // raft_kv_put
+      // store_metrics_map_[store_metrics.id()] = store;  // raft_kv_put
+    } else {
+      DINGO_LOG(INFO) << "NEED ADD NEW STORE store_metrics.id = " << store_metrics.id();
+
+      // update meta_increment
+      need_update_epoch = true;
+      auto* store_metrics_increment = meta_increment.add_store_metrics();
+      store_metrics_increment->set_id(store_metrics.id());
+      store_metrics_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
+
+      auto* store_metrics_increment_store = store_metrics_increment->mutable_store_metrics();
+      store_metrics_increment_store->CopyFrom(store_metrics);
+
+      // on_apply
+      // store_metrics_map_epoch++;                                    // raft_kv_put
+      // store_metrics_map_.insert(std::make_pair(store_metrics.id(), store));  // raft_kv_put
+    }
+  }
+
+  //   if (need_update_epoch) {
+  //     GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_STORE, meta_increment);
+  //   }
+
+  DINGO_LOG(INFO) << "UpdateStoreMetricsMap store_metrics.id=" << store_metrics.id();
+
+  return 0;
+}
+
 }  // namespace dingodb

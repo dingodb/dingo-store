@@ -51,8 +51,11 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   bthread_mutex_init(&schema_map_mutex_, nullptr);
   bthread_mutex_init(&region_map_mutex_, nullptr);
   bthread_mutex_init(&table_map_mutex_, nullptr);
+  bthread_mutex_init(&store_metrics_map_mutex_, nullptr);
+  bthread_mutex_init(&table_metrics_map_mutex_, nullptr);
   root_schema_writed_to_raft_ = false;
 
+  // the data structure below will write to raft
   coordinator_meta_ = new MetaMapStorage<pb::coordinator_internal::CoordinatorInternal>(&coordinator_map_);
   store_meta_ = new MetaMapStorage<pb::common::Store>(&store_map_);
   schema_meta_ = new MetaMapStorage<pb::coordinator_internal::SchemaInternal>(&schema_map_);
@@ -60,6 +63,8 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   table_meta_ = new MetaMapStorage<pb::coordinator_internal::TableInternal>(&table_map_);
   id_epoch_meta_ = new MetaMapStorage<pb::coordinator_internal::IdEpochInternal>(&id_epoch_map_);
   executor_meta_ = new MetaMapStorage<pb::common::Executor>(&executor_map_);
+  store_metrics_meta_ = new MetaMapStorage<pb::common::StoreMetrics>(&store_metrics_map_);
+  table_metrics_meta_ = new MetaMapStorage<pb::coordinator_internal::TableMetricsInternal>(&table_metrics_map_);
 }
 
 CoordinatorControl::~CoordinatorControl() {
@@ -169,7 +174,21 @@ bool CoordinatorControl::Recover() {
   DINGO_LOG(INFO) << "Recover table_meta, count=" << kvs.size();
   kvs.clear();
 
-  // 7.init id_epoch_map_temp_
+  // 7.store_metrics map
+  if (!meta_reader_->Scan(store_metrics_meta_->Prefix(), kvs)) {
+    return false;
+  }
+  {
+    BAIDU_SCOPED_LOCK(store_metrics_map_mutex_);
+    if (!store_metrics_meta_->Recover(kvs)) {
+      return false;
+    }
+  }
+  DINGO_LOG(INFO) << "Recover store_metrics_meta, count=" << kvs.size();
+  kvs.clear();
+
+  // init id_epoch_map_temp_
+  // copy id_epoch_map_ to id_epoch_map_temp_
   {
     BAIDU_SCOPED_LOCK(id_epoch_map_temp_mutex_);
     BAIDU_SCOPED_LOCK(id_epoch_map_mutex_);

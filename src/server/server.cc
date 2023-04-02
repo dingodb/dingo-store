@@ -211,14 +211,25 @@ bool Server::InitCrontabManagerForCoordinator() {
   crontab_manager_ = std::make_shared<CrontabManager>();
 
   // Add heartbeat crontab
-  std::shared_ptr<Crontab> crontab = std::make_shared<Crontab>();
   auto config = ConfigManager::GetInstance()->GetConfig(role_);
+
+  // add push crontab
+  std::shared_ptr<Crontab> crontab = std::make_shared<Crontab>();
   crontab->name_ = "PUSH";
   crontab->interval_ = config->GetInt("server.pushInterval");
   crontab->func_ = Heartbeat::SendCoordinatorPushToStore;
   crontab->arg_ = coordinator_control_.get();
 
   crontab_manager_->AddAndRunCrontab(crontab);
+
+  // add calculate crontab
+  std::shared_ptr<Crontab> crontab_calc = std::make_shared<Crontab>();
+  crontab_calc->name_ = "CALCULATE";
+  crontab_calc->interval_ = config->GetInt("server.pushInterval") * 60;
+  crontab_calc->func_ = Heartbeat::CalculateTableMetrics;
+  crontab_calc->arg_ = coordinator_control_.get();
+
+  crontab_manager_->AddAndRunCrontab(crontab_calc);
 
   return true;
 }

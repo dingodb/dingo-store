@@ -155,23 +155,17 @@ message Table {
   repeated Part parts = 2;
 }
 
-// Part metrics for optimization of SQL plan
-message PartMetrics {
-  DingoCommonId id = 1;
-  uint64 rows_count = 2;
-  bytes min_key = 3;
-  bytes max_key = 4;
-}
-
 // Table metrics for optimization of SQL plan
 message TableMetrics {
-  DingoCommonId id = 1;
-  uint64 rows_count = 2;
-  bytes min_key = 3;
-  bytes max_key = 4;
-  uint64 part_count = 5;
+  uint64 rows_count = 1;
+  bytes min_key = 2;
+  bytes max_key = 3;
+  uint64 part_count = 4;
+}
 
-  repeated PartMetrics part_metrics = 6;
+message TableMetricsWithId {
+  DingoCommonId id = 1;
+  TableMetrics table_metrics = 2;
 }
 
 message GetSchemasRequest {
@@ -212,7 +206,7 @@ message GetTableMetricsRequest {
 
 message GetTableMetricsResponse {
   dingodb.pb.error.Error error = 1;
-  TableMetrics table_metrics = 2;
+  TableMetricsWithId table_metrics = 2;
 }
 
 message CreateTableIdRequest {

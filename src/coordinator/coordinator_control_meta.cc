@@ -590,7 +590,8 @@ void CoordinatorControl::GetTable(uint64_t schema_id, uint64_t table_id, pb::met
 }
 
 // get table metrics
-void CoordinatorControl::GetTableMetrics(uint64_t schema_id, uint64_t table_id, pb::meta::TableMetrics& table_metrics) {
+void CoordinatorControl::GetTableMetrics(uint64_t schema_id, uint64_t table_id,
+                                         pb::meta::TableMetricsWithId& table_metrics) {
   if (schema_id < 0) {
     DINGO_LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
     return;
@@ -601,27 +602,143 @@ void CoordinatorControl::GetTableMetrics(uint64_t schema_id, uint64_t table_id, 
     return;
   }
 
-  pb::coordinator_internal::TableInternal table_internal;
   {
-    BAIDU_SCOPED_LOCK(table_map_mutex_);
+    BAIDU_SCOPED_LOCK(schema_map_mutex_);
     if (this->schema_map_.find(schema_id) == schema_map_.end()) {
       DINGO_LOG(ERROR) << "ERRROR: schema_id not found" << schema_id;
       return;
     }
+  }
 
+  {
+    BAIDU_SCOPED_LOCK(table_map_mutex_);
     if (this->table_map_.find(table_id) == table_map_.end()) {
       DINGO_LOG(ERROR) << "ERRROR: table_id not found" << table_id;
       return;
+    }
+  }
+
+  pb::coordinator_internal::TableMetricsInternal table_metrics_internal;
+  {
+    BAIDU_SCOPED_LOCK(table_metrics_map_mutex_);
+    if (this->table_metrics_map_.find(table_id) == table_metrics_map_.end()) {
+      DINGO_LOG(INFO) << "table_metrics not found, try to calculate new one" << table_id;
+
+      // calculate table metrics using region metrics
+      auto* table_metrics_single = table_metrics_internal.mutable_table_metrics();
+      if (CalculateTableMetricsSingle(table_id, *table_metrics_single) < 0) {
+        DINGO_LOG(ERROR) << "ERRROR: CalculateTableMetricsSingle failed" << table_id;
+      } else {
+        table_metrics_internal.set_id(table_id);
+        table_metrics_internal.mutable_table_metrics()->CopyFrom(*table_metrics_single);
+        table_metrics_map_[table_id] = table_metrics_internal;
+      }
+    } else {
+      // construct TableMetrics from table_metrics_internal
+      DINGO_LOG(DEBUG) << "table_metrics found, return metrics in map" << table_id;
+      table_metrics_internal = table_metrics_map_.at(table_id);
+    }
+  }
+
+  // construct TableMetricsWithId
+  auto* common_id_table = table_metrics.mutable_id();
+  common_id_table->set_entity_id(table_id);
+  common_id_table->set_parent_entity_id(schema_id);
+  common_id_table->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
+
+  table_metrics.mutable_table_metrics()->CopyFrom(table_metrics_internal.table_metrics());
+}
+
+// CalculateTableMetricsSingle
+uint64_t CoordinatorControl::CalculateTableMetricsSingle(uint64_t table_id, pb::meta::TableMetrics& table_metrics) {
+  pb::coordinator_internal::TableInternal table_internal;
+  {
+    BAIDU_SCOPED_LOCK(table_map_mutex_);
+    if (this->table_map_.find(table_id) == table_map_.end()) {
+      DINGO_LOG(ERROR) << "ERRROR: table_id not found" << table_id;
+      return -1;
     }
 
     // construct Table from table_internal
     table_internal = table_map_.at(table_id);
   }
 
-  auto* common_id_table = table_metrics.mutable_id();
-  common_id_table->set_entity_id(table_id);
-  common_id_table->set_parent_entity_id(schema_id);
-  common_id_table->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
+  // build result metrics
+  uint64_t row_count;
+  std::string min_key;
+  std::string max_key;
+
+  {
+    BAIDU_SCOPED_LOCK(store_metrics_map_mutex_);
+
+    for (int i = 0; i < table_internal.partitions_size(); i++) {
+      // part id
+      uint64_t region_id = table_internal.partitions(i).region_id();
+
+      // get region
+      pb::common::Region part_region;
+      {
+        BAIDU_SCOPED_LOCK(region_map_mutex_);
+        if (region_map_.find(region_id) == region_map_.end()) {
+          DINGO_LOG(ERROR) << "ERROR cannot find region in regionmap_ while GetTable, table_id =" << table_id
+                           << " region_id=" << region_id;
+          continue;
+        }
+        part_region = region_map_[region_id];
+      }
+
+      if (store_metrics_map_.find(part_region.leader_store_id()) != store_metrics_map_.end()) {
+        pb::common::StoreMetrics& store_metrics = store_metrics_map_.at(part_region.leader_store_id());
+        const auto& region_metrics = store_metrics.region_metrics_map();
+
+        if (region_metrics.find(part_region.id()) != region_metrics.end()) {
+          row_count += region_metrics.at(region_id).row_count();
+
+          if (min_key.empty()) {
+            min_key = region_metrics.at(region_id).min_key();
+          } else {
+            if (min_key.compare(region_metrics.at(region_id).min_key()) > 0) {
+              min_key = region_metrics.at(region_id).min_key();
+            }
+          }
+
+          if (max_key.empty()) {
+            max_key = region_metrics.at(region_id).max_key();
+          } else {
+            if (max_key.compare(region_metrics.at(region_id).max_key()) < 0) {
+              max_key = region_metrics.at(region_id).max_key();
+            }
+          }
+        }
+      }
+    }
+  }
+
+  table_metrics.set_rows_count(row_count);
+  table_metrics.set_min_key(min_key);
+  table_metrics.set_max_key(max_key);
+  table_metrics.set_part_count(table_internal.partitions_size());
+
+  return 0;
+}
+
+// CalculateTableMetrics
+// calculate table metrics using region metrics
+// only recalculate when table_metrics_map_ does contain table_id
+// if the table_id is not in table_map_, remove it from table_metrics_map_
+void CoordinatorControl::CalculateTableMetrics() {
+  BAIDU_SCOPED_LOCK(table_metrics_map_mutex_);
+
+  for (auto table_metrics_internal : table_metrics_map_) {
+    uint64_t table_id = table_metrics_internal.first;
+    pb::meta::TableMetrics table_metrics;
+    if (CalculateTableMetricsSingle(table_id, table_metrics) < 0) {
+      DINGO_LOG(ERROR) << "ERRROR: CalculateTableMetricsSingle failed, remove metrics from map" << table_id;
+      table_metrics_map_.erase(table_id);
+    } else {
+      table_metrics_internal.second.mutable_table_metrics()->CopyFrom(table_metrics);
+    }
+  }
 }
 
 }  // namespace dingodb

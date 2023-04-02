@@ -99,6 +99,10 @@ void MetaServiceImpl::GetTableMetrics(google::protobuf::RpcController * /*contro
   }
 
   DINGO_LOG(DEBUG) << "GetTableMetrics request:  table_id = [" << request->table_id().entity_id() << "]";
+
+  auto *table_metrics = response->mutable_table_metrics();
+  this->coordinator_control_->GetTableMetrics(request->table_id().parent_entity_id(), request->table_id().entity_id(),
+                                              *table_metrics);
 }
 
 void MetaServiceImpl::CreateTableId(google::protobuf::RpcController *controller,
