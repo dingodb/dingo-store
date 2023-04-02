@@ -35,6 +35,7 @@ class MetaWriter {
   bool Put(std::vector<pb::common::KeyValue> kvs);
   bool PutAndDelete(std::vector<pb::common::KeyValue> kvs_put, std::vector<pb::common::KeyValue> kvs_delete);
   bool Delete(const std::string &key);
+  bool DeleteRange(const std::string &start_key, const std::string &end_key);
 
  private:
   std::shared_ptr<RawEngine> engine_;
