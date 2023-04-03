@@ -272,7 +272,8 @@ void Helper::GetServerLocation(const pb::common::Location& raft_location, pb::co
   // validate raft_location
   // TODO: how to support ipv6
   if (raft_location.host().length() <= 0 || raft_location.port() <= 0) {
-    DINGO_LOG(ERROR) << "GetServiceLocation illegal raft_location=" << Helper::MessageToJsonString(raft_location);
+    DINGO_LOG(ERROR) << "GetServiceLocation illegal raft_location=" << raft_location.host() << ":"
+                     << raft_location.port();
     return;
   }
 
@@ -306,24 +307,25 @@ void Helper::GetServerLocation(const pb::common::Location& raft_location, pb::co
   }
 
   DINGO_LOG(INFO) << "Received response"
-                  << " cluster_id=" << request.cluster_id() << " latency=" << cntl.latency_us();
-  DINGO_LOG(INFO) << Helper::MessageToJsonString(response);
+                  << " cluster_id=" << request.cluster_id() << " latency=" << cntl.latency_us()
+                  << " server_location=" << response.node_info().server_location().host() << ":"
+                  << response.node_info().server_location().port();
 
   server_location.CopyFrom(response.node_info().server_location());
 }
 
 std::string Helper::GenerateRandomString(int length) {
   std::string chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
-  std::string randString = "";
+  std::string rand_string;
 
-  unsigned int seed = time(0);  // Get seed value for rand_r()
+  unsigned int seed = time(nullptr);  // Get seed value for rand_r()
 
   for (int i = 0; i < length; i++) {
-    int randIndex = rand_r(&seed) % chars.size();
-    randString += chars[randIndex];
+    int rand_index = rand_r(&seed) % chars.size();
+    rand_string += chars[rand_index];
   }
 
-  return randString;
+  return rand_string;
 }
 
 uint64_t Helper::GenId() {

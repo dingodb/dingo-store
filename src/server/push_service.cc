@@ -34,10 +34,10 @@ void PushServiceImpl::PushHeartbeat(google::protobuf::RpcController* controller,
                                     google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard const done_guard(done);
-  DINGO_LOG(INFO) << "PushHeartbeat request: " << dingodb::Helper::MessageToJsonString(*request);
+  DINGO_LOG(DEBUG) << "PushHeartbeat request: " << request->DebugString();
 
   // call HandleStoreHeartbeatResponse
-  auto heartbeat_response = request->heartbeat_response();
+  const auto& heartbeat_response = request->heartbeat_response();
   auto store_meta = Server::GetInstance()->GetStoreMetaManager();
   Heartbeat::HandleStoreHeartbeatResponse(store_meta, heartbeat_response);
 }

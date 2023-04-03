@@ -38,10 +38,8 @@ class CoordinatorClosure : public braft::Closure {
   RESP* response() const { return response_; }     // NOLINT
   void Run() override {
     brpc::ClosureGuard done_guard(done_);
-    std::string str_request = Helper::MessageToJsonString(*request_);
-    std::string str_response = Helper::MessageToJsonString(*response_);
-    DINGO_LOG(INFO) << "Coordinator Closure return respone [" << str_response << "] to client with request["
-                    << str_request << "]";
+    DINGO_LOG(DEBUG) << "Coordinator Closure return respone [" << response_->DebugString()
+                     << "] to client with request[" << request_->DebugString() << "]";
   }
 
  private:
@@ -80,10 +78,8 @@ class CoordinatorClosure<pb::coordinator::StoreHeartbeatRequest, pb::coordinator
     response()->set_regionmap_epoch(new_regionmap_epoch_);
 
     brpc::ClosureGuard const done_guard(done_);
-    std::string const str_request = Helper::MessageToJsonString(*request_);
-    std::string const str_response = Helper::MessageToJsonString(*response_);
-    DINGO_LOG(INFO) << "Coordinator Closure return Heartbeat response[" << str_response << "] to store with request["
-                    << str_request << "]";
+    DINGO_LOG(DEBUG) << "Coordinator Closure return Heartbeat respone [" << response_->DebugString()
+                     << "] to store with request[" << request_->DebugString() << "]";
   }
 
  private:
@@ -119,10 +115,8 @@ class CoordinatorClosure<pb::coordinator::ExecutorHeartbeatRequest, pb::coordina
     response()->set_executormap_epoch(new_executormap_epoch_);
 
     brpc::ClosureGuard const done_guard(done_);
-    std::string const str_request = Helper::MessageToJsonString(*request_);
-    std::string const str_response = Helper::MessageToJsonString(*response_);
-    DINGO_LOG(INFO) << "Coordinator Closure return Heartbeat response[" << str_response << "] to executor with request["
-                    << str_request << "]";
+    DINGO_LOG(DEBUG) << "Coordinator Closure return Heartbeat respone [" << response_->DebugString()
+                     << "] to executor with request[" << request_->DebugString() << "]";
   }
 
  private:
