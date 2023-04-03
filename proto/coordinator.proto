@@ -51,43 +51,48 @@ message ExecutorHeartbeatResponse {
 }
 
 message CoordinatorMemoryInfo {
-  uint64 total_size = 1;
+  uint64 applied_term = 1;
+  uint64 applied_index = 2;
 
-  uint64 id_epoch_map_temp_count = 2;
-  uint64 id_epoch_map_temp_size = 3;
+  uint64 total_size = 3;
 
-  uint64 id_epoch_map_count = 4;
-  uint64 id_epoch_map_size = 5;
+  uint64 id_epoch_map_temp_count = 4;
+  uint64 id_epoch_map_temp_size = 5;
 
-  uint64 coordinator_map_count = 6;
-  uint64 coordinator_map_size = 7;
+  uint64 id_epoch_map_count = 6;
+  uint64 id_epoch_map_size = 7;
 
-  uint64 store_map_count = 8;
-  uint64 store_map_size = 9;
+  uint64 coordinator_map_count = 8;
+  uint64 coordinator_map_size = 9;
 
-  uint64 store_need_push_count = 10;
-  uint64 store_need_push_size = 11;
+  uint64 store_map_count = 10;
+  uint64 store_map_size = 11;
 
-  uint64 executor_map_count = 12;
-  uint64 executor_map_size = 13;
+  uint64 store_need_push_count = 12;
+  uint64 store_need_push_size = 13;
 
-  uint64 executor_need_push_count = 14;
-  uint64 executor_need_push_size = 15;
+  uint64 executor_map_count = 14;
+  uint64 executor_map_size = 15;
 
-  uint64 schema_map_count = 16;
-  uint64 schema_map_size = 17;
+  uint64 executor_need_push_count = 16;
+  uint64 executor_need_push_size = 17;
 
-  uint64 region_map_count = 18;
-  uint64 region_map_size = 19;
+  uint64 schema_map_count = 18;
+  uint64 schema_map_size = 19;
 
-  uint64 table_map_count = 20;
-  uint64 table_map_size = 21;
+  uint64 region_map_count = 20;
+  uint64 region_map_size = 21;
 
-  uint64 store_metrics_map_count = 22;
-  uint64 store_metrics_map_size = 23;
+  uint64 table_map_count = 22;
+  uint64 table_map_size = 23;
 
-  uint64 table_metrics_map_count = 24;
-  uint64 table_metrics_map_size = 25;
+  uint64 store_metrics_map_count = 24;
+  uint64 store_metrics_map_size = 25;
+
+  uint64 table_metrics_map_count = 26;
+  uint64 table_metrics_map_size = 27;
+
+  repeated dingodb.pb.common.KeyValue id_epoch_values = 28;
 }
 
 message HelloRequest {

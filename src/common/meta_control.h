@@ -40,6 +40,7 @@ class MetaControl {
   virtual bool IsLeader() = 0;
   virtual void SetLeaderTerm(int64_t term) = 0;
   virtual void OnLeaderStart(int64_t term) = 0;
+  virtual int GetAppliedTermAndIndex(uint64_t &term, uint64_t &index) = 0;
 
   // set raft_node to coordinator_control
   virtual void SetRaftNode(std::shared_ptr<RaftNode> raft_node) = 0;

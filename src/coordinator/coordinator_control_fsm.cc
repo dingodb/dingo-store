@@ -41,6 +41,29 @@ bool CoordinatorControl::IsLeader() { return leader_term_.load(butil::memory_ord
 void CoordinatorControl::SetLeaderTerm(int64_t term) { leader_term_.store(term, butil::memory_order_release); }
 void CoordinatorControl::SetRaftNode(std::shared_ptr<RaftNode> raft_node) { raft_node_ = raft_node; }
 
+int CoordinatorControl::GetAppliedTermAndIndex(uint64_t& term, uint64_t& index) {
+  BAIDU_SCOPED_LOCK(id_epoch_map_mutex_);
+
+  int ret = 0;
+  if (id_epoch_map_.find(pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX) != id_epoch_map_.end()) {
+    index = id_epoch_map_[pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX].value();
+  } else {
+    DINGO_LOG(ERROR) << "GetAppliedTermAndIndex failed, id_epoch_map_ not contain RAFT_APPLY_INDEX";
+    ret = -1;
+  }
+
+  if (id_epoch_map_.find(pb::coordinator_internal::IdEpochType::RAFT_APPLY_TERM) != id_epoch_map_.end()) {
+    term = id_epoch_map_[pb::coordinator_internal::IdEpochType::RAFT_APPLY_TERM].value();
+  } else {
+    DINGO_LOG(ERROR) << "GetAppliedTermAndIndex failed, id_epoch_map_ not contain RAFT_APPLY_TERM";
+    ret = -1;
+  }
+
+  DINGO_LOG(INFO) << "GetAppliedTermAndIndex, term=" << term << ", index=" << index;
+
+  return ret;
+}
+
 // OnLeaderStart will init id_epoch_map_temp_ from id_epoch_map_ which is in state machine
 void CoordinatorControl::OnLeaderStart(int64_t term) {
   BAIDU_SCOPED_LOCK(id_epoch_map_mutex_);
@@ -305,13 +328,22 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
   {
     BAIDU_SCOPED_LOCK(id_epoch_map_mutex_);
     // if index < local apply index, just return
+    uint64_t applied_index = 0;
+    uint64_t applied_term = 0;
+
     if (id_epoch_map_.find(pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX) != id_epoch_map_.end()) {
-      uint64_t applied_index = id_epoch_map_[pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX].value();
-      if (index <= applied_index) {
-        DINGO_LOG(INFO) << "ApplyMetaIncrement index < applied_index, just return, [index=" << index
-                        << "][applied_index=" << applied_index << "]";
-        return;
-      }
+      applied_index = id_epoch_map_[pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX].value();
+    }
+
+    if (id_epoch_map_.find(pb::coordinator_internal::IdEpochType::RAFT_APPLY_TERM) != id_epoch_map_.end()) {
+      applied_term = id_epoch_map_[pb::coordinator_internal::IdEpochType::RAFT_APPLY_TERM].value();
+    }
+
+    if (index <= applied_index && term <= applied_term) {
+      DINGO_LOG(WARNING) << "ApplyMetaIncrement index <= applied_index && term <<= applied_term, just return, [index="
+                         << index << "][applied_index=" << applied_index << "]"
+                         << "[term=" << term << "][applied_term=" << applied_term;
+      return;
     }
 
     // 0.id & epoch
@@ -323,6 +355,10 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
     pb::coordinator_internal::IdEpochInternal raft_apply_index;
     raft_apply_index.set_id(pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX);
     raft_apply_index.set_value(index);
+
+    // update applied term & index in fsm
+    id_epoch_map_[pb::coordinator_internal::IdEpochType::RAFT_APPLY_TERM] = raft_apply_term;
+    id_epoch_map_[pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX] = raft_apply_index;
 
     meta_write_to_kv.push_back(id_epoch_meta_->TransformToKvValue(raft_apply_term));
     meta_write_to_kv.push_back(id_epoch_meta_->TransformToKvValue(raft_apply_index));
