@@ -255,6 +255,19 @@ message DropTableResponse {
   dingodb.pb.error.Error error = 1;
 }
 
+// Metrics
+message GetTableMetricRequest {
+    DingoCommonId table_id = 1;
+}
+
+message GetTableMetricResponse {
+    dingodb.pb.error.Error error = 1;
+    uint64 row_count = 2;
+    bytes min = 3;
+    bytes max = 4;
+    uint64 part_count = 5;
+}
+
 service MetaService {
   // GetSchema
   // in: schema_id
@@ -302,8 +315,10 @@ service MetaService {
   // out: Schema
   rpc DropSchema(DropSchemaRequest) returns (DropSchemaResponse);
 
-  // TODO
-  // Operation about User, such as create/drop/grant.
-
   // Operation about Metrics
+  // GetTableRowCount
+  // in: table_id
+  // out: row_count
+  rpc GetTableMetric(GetTableMetricRequest) returns (GetTableMetricResponse);
+  
 }
