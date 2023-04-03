@@ -71,8 +71,8 @@ void Heartbeat::SendCoordinatorPushToStore(void* arg) {
     heartbeat_response.set_storemap_epoch(new_storemap->epoch());
     heartbeat_response.set_regionmap_epoch(new_regionmap->epoch());
 
-    std::string str_response = Helper::MessageToJsonString(heartbeat_response);
-    DINGO_LOG(INFO) << "SendCoordinatorPushToStore will send [" << str_response << "] to store with request[";
+    DINGO_LOG(INFO) << "SendCoordinatorPushToStore will send to store with response:"
+                    << heartbeat_response.DebugString();
   }
 
   // prepare request and response
@@ -88,8 +88,8 @@ void Heartbeat::SendCoordinatorPushToStore(void* arg) {
     const pb::common::Location& store_server_location = store_need_send.server_location();
 
     if (store_server_location.host().length() <= 0 || store_server_location.port() <= 0) {
-      DINGO_LOG(ERROR) << "SendCoordinatorPushToStore illegal store_server_location="
-                       << Helper::MessageToJsonString(store_server_location);
+      DINGO_LOG(ERROR) << "SendCoordinatorPushToStore illegal store_server_location=" << store_server_location.host()
+                       << ":" << store_server_location.port();
       return;
     }
 
@@ -118,8 +118,8 @@ void Heartbeat::SendCoordinatorPushToStore(void* arg) {
       return;
     }
 
-    DINGO_LOG(INFO) << "SendCoordinatorPushToStore to " << store_server_location_string
-                    << " response latency=" << cntl.latency_us() << " msg=" << Helper::MessageToJsonString(response);
+    DINGO_LOG(DEBUG) << "SendCoordinatorPushToStore to " << store_server_location_string
+                     << " response latency=" << cntl.latency_us() << " msg=" << response.DebugString();
   }
 }
 

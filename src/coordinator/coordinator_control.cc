@@ -246,8 +246,8 @@ void CoordinatorControl::GetServerLocation(pb::common::Location& raft_location, 
   auto raft_location_string = raft_location.host() + ":" + std::to_string(raft_location.port());
   if (coordinator_location_cache_.find(raft_location_string) != coordinator_location_cache_.end()) {
     server_location.CopyFrom(coordinator_location_cache_[raft_location_string]);
-    DINGO_LOG(INFO) << "GetServiceLocation Cache Hit raft_location="
-                    << dingodb::Helper::MessageToJsonString(raft_location);
+    DINGO_LOG(INFO) << "GetServiceLocation Cache Hit raft_location=" << raft_location.host() << ":"
+                    << raft_location.port();
     return;
   }
 
@@ -255,12 +255,12 @@ void CoordinatorControl::GetServerLocation(pb::common::Location& raft_location, 
 
   // add to cache if get server_location
   if (server_location.host().length() > 0 && server_location.port() > 0) {
-    DINGO_LOG(INFO) << "GetServiceLocation Cache Miss, add new cache raft_location="
-                    << Helper::MessageToJsonString(raft_location);
+    DINGO_LOG(INFO) << "GetServiceLocation Cache Miss, add new cache raft_location=" << raft_location.host() << ":"
+                    << raft_location.port();
     coordinator_location_cache_[raft_location_string] = server_location;
   } else {
     DINGO_LOG(INFO) << "GetServiceLocation Cache Miss, can't get server_location, raft_location="
-                    << Helper::MessageToJsonString(raft_location);
+                    << raft_location.host() << ":" << raft_location.port();
   }
 }
 

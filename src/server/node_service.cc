@@ -69,8 +69,7 @@ void NodeServiceImpl::GetLogLevel(google::protobuf::RpcController* controller,
                                   google::protobuf::Closure* done) {
   brpc::ClosureGuard const done_guard(done);
 
-  auto format_request = Helper::MessageToJsonString(*request);
-  DINGO_LOG(INFO) << "Receive Request:" << format_request;
+  DINGO_LOG(INFO) << "GetLogLevel receive Request:" << request->DebugString();
 
   auto* log_detail = response->mutable_log_detail();
   log_detail->set_log_buf_secs(DingoLogger::GetLogBuffSecs());
@@ -95,11 +94,10 @@ void NodeServiceImpl::GetLogLevel(google::protobuf::RpcController* controller,
 }
 void NodeServiceImpl::ChangeLogLevel(google::protobuf::RpcController* /* controller */,
                                      const pb::node::ChangeLogLevelRequest* request,
-                                     pb::node::ChangeLogLevelResponse* response, google::protobuf::Closure* done) {
+                                     pb::node::ChangeLogLevelResponse* /*response*/, google::protobuf::Closure* done) {
   brpc::ClosureGuard const done_guard(done);
 
-  auto format_request = Helper::MessageToJsonString(*request);
-  DINGO_LOG(INFO) << "ChangeLogLevel=>Receive Request:" << format_request;
+  DINGO_LOG(INFO) << "ChangeLogLevel=>Receive Request:" << request->DebugString();
 
   const LogLevel log_level = request->log_level();
   if (log_level == DEBUG) {
@@ -110,11 +108,10 @@ void NodeServiceImpl::ChangeLogLevel(google::protobuf::RpcController* /* control
     DingoLogger::SetMinVerboseLevel(1);
   }
 
-  const LogDetail log_detal = request->log_detail();
-  DingoLogger::SetLogBuffSecs(log_detal.log_buf_secs());
-  DingoLogger::SetMaxLogSize(log_detal.max_log_size());
-  DingoLogger::SetStoppingWhenDiskFull(log_detal.stop_logging_if_full_disk());
-  return;
+  const LogDetail& log_detail = request->log_detail();
+  DingoLogger::SetLogBuffSecs(log_detail.log_buf_secs());
+  DingoLogger::SetMaxLogSize(log_detail.max_log_size());
+  DingoLogger::SetStoppingWhenDiskFull(log_detail.stop_logging_if_full_disk());
 }
 
 }  // namespace dingodb

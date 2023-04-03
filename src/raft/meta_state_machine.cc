@@ -78,10 +78,10 @@ void MetaStateMachine::on_apply(braft::Iterator& iter) {
       CHECK(raft_cmd.ParseFromZeroCopyStream(&wrapper));
     }
 
-    std::string str_raft_cmd = Helper::MessageToJsonString(raft_cmd);
-    DINGO_LOG(INFO) << butil::StringPrintf("raft apply log on region[%ld-term:%ld-index:%ld] cmd:[%s]",
-                                           raft_cmd.header().region_id(), iter.term(), iter.index(),
-                                           str_raft_cmd.c_str());
+    DINGO_LOG(DEBUG) << butil::StringPrintf("raft apply log on region[%ld-term:%ld-index:%ld] cmd:[%s]",
+                                            raft_cmd.header().region_id(), iter.term(), iter.index(),
+                                            raft_cmd.DebugString().c_str());
+
     DispatchRequest(is_leader, iter.term(), iter.index(), raft_cmd);
   }
 }
