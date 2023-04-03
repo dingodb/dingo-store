@@ -1,0 +1,102 @@
+---
+version: '3.0'
+services:
+  coordinator1:
+    image: dingo-store:latest
+    hostname: coordinator1
+    container_name: coordinator1
+    networks:
+      - dingo_net
+    environment:
+      FLAGS_role: coordinator
+      COOR_RAFT_PEERS: coordinator1:22101,coordinator2:22101,coordinator3:22101
+      INSTANCE_START_ID: 1001
+      SERVER_HOST: coordinator1
+      RAFT_HOST: coordinator1
+
+      
+  coordinator2:
+    image: dingo-store:latest
+    hostname: coordinator2
+    container_name: coordinator2
+    networks:
+      - dingo_net
+    environment:
+      FLAGS_role: coordinator
+      COOR_RAFT_PEERS: coordinator1:22101,coordinator2:22101,coordinator3:22101
+      INSTANCE_START_ID: 1002
+      SERVER_HOST: coordinator2
+      RAFT_HOST: coordinator2
+
+
+  coordinator3:
+    image: dingo-store:latest
+    hostname: coordinator3
+    container_name: coordinator3
+    networks:
+      - dingo_net
+    environment:
+      FLAGS_role: coordinator
+      COOR_RAFT_PEERS: coordinator1:22101,coordinator2:22101,coordinator3:22101
+      INSTANCE_START_ID: 1003
+      SERVER_HOST: coordinator3
+      RAFT_HOST: coordinator3
+
+
+  store1:
+    image: dingo-store:latest
+    hostname: store1
+    container_name: store1
+    networks:
+      - dingo_net
+    depends_on:
+      - coordinator1
+      - coordinator2
+      - coordinator3
+    environment:
+       FLAGS_role: store
+       COOR_SRV_PEERS: coordinator1:22001,coordinator2:22001,coordinator3:22001
+       INSTANCE_START_ID: 1001
+       SERVER_HOST: store1
+       RAFT_HOST: store1
+
+
+  store2:
+    image: dingo-store:latest
+    hostname: store2
+    container_name: store2
+    networks:
+      - dingo_net
+    depends_on:
+      - coordinator1
+      - coordinator2
+      - coordinator3
+    environment:
+       FLAGS_role: store
+       COOR_SRV_PEERS: coordinator1:22001,coordinator2:22001,coordinator3:22001
+       INSTANCE_START_ID: 1002
+       SERVER_HOST: store2
+       RAFT_HOST: store2
+
+
+  store3:
+    image: dingo-store:latest
+    hostname: store3
+    container_name: store3
+    networks:
+      - dingo_net
+    depends_on:
+      - coordinator1
+      - coordinator2
+      - coordinator3
+    environment:
+       FLAGS_role: store
+       COOR_SRV_PEERS: coordinator1:22001,coordinator2:22001,coordinator3:22001
+       INSTANCE_START_ID: 1003
+       SERVER_HOST: store3
+       RAFT_HOST: store3
+
+
+networks:
+    dingo_net:
+        driver: bridge

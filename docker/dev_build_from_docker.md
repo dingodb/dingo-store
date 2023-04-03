@@ -29,15 +29,15 @@ docker build docker/rocky86/  -t rocky86-dingo-dev
 If you want to start quickly, we can refer to the following commands to pull container
 
 ``````
-docker pull garyhhh/u18-dingo-dev
+docker pull dingodatabase/u18-dingo-dev
 
-docker pull garyhhh/u22-dingo-dev
+docker pull dingodatabase/u22-dingo-dev
 
-docker pull garyhhh/centos7-dingo-dev
+docker pull dingodatabase/centos7-dingo-dev
 
-docker pull garyhhh/centos8-dingo-dev
+docker pull dingodatabase/centos8-dingo-dev
 
-docker pullgaryhhh/rocky86-dingo-dev
+docker pull dingodatabase/rocky86-dingo-dev
 ``````
 
 ## Use docker container
