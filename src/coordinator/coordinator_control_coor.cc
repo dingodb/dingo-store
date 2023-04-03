@@ -696,6 +696,8 @@ void CoordinatorControl::GetMemoryInfo(pb::coordinator::CoordinatorMemoryInfo& m
   // compute size
   {
     BAIDU_SCOPED_LOCK(id_epoch_map_temp_mutex_);
+
+    // set count & size
     memory_info.set_id_epoch_map_temp_count(id_epoch_map_temp_.size());
     for (auto& it : id_epoch_map_temp_) {
       memory_info.set_id_epoch_map_temp_size(memory_info.id_epoch_map_temp_size() + sizeof(it.first) +
@@ -705,11 +707,33 @@ void CoordinatorControl::GetMemoryInfo(pb::coordinator::CoordinatorMemoryInfo& m
   }
   {
     BAIDU_SCOPED_LOCK(id_epoch_map_mutex_);
+
+    // set term & index
+    if (id_epoch_map_.find(pb::coordinator_internal::IdEpochType::RAFT_APPLY_TERM) != id_epoch_map_.end()) {
+      memory_info.set_applied_term(id_epoch_map_.at(pb::coordinator_internal::IdEpochType::RAFT_APPLY_TERM).value());
+    }
+    if (id_epoch_map_.find(pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX) != id_epoch_map_.end()) {
+      memory_info.set_applied_index(id_epoch_map_.at(pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX).value());
+    }
+
+    // set count & size
     memory_info.set_id_epoch_map_count(id_epoch_map_.size());
     for (auto& it : id_epoch_map_) {
       memory_info.set_id_epoch_map_size(memory_info.id_epoch_map_size() + sizeof(it.first) + it.second.ByteSizeLong());
     }
     memory_info.set_total_size(memory_info.total_size() + memory_info.id_epoch_map_size());
+
+    // dump id & epoch to kv
+    for (auto& it : id_epoch_map_) {
+      const google::protobuf::EnumDescriptor* enum_descriptor =
+          dingodb::pb::coordinator_internal::IdEpochType_descriptor();
+      const google::protobuf::EnumValueDescriptor* enum_value_descriptor = enum_descriptor->FindValueByNumber(it.first);
+      std::string name = enum_value_descriptor->name();
+
+      auto* id_epoch = memory_info.add_id_epoch_values();
+      id_epoch->set_key(name);
+      id_epoch->set_value(std::to_string(it.second.value()));
+    }
   }
   {
     BAIDU_SCOPED_LOCK(coordinator_map_mutex_);

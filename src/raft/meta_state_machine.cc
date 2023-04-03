@@ -148,6 +148,35 @@ int MetaStateMachine::on_snapshot_load(braft::SnapshotReader* reader) {
     DINGO_LOG(ERROR) << "Fail to find `data' on " << reader->get_path();
     return -1;
   }
+
+  // load snapshot meta
+  braft::SnapshotMeta snapshot_meta;
+  auto ret = reader->load_meta(&snapshot_meta);
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << "Fail to load snapshot meta from " << reader->get_path();
+    return -1;
+  }
+
+  // if last_include_index < last_applied_index, we should not load snapshot
+  // because we have already applied logs after last_include_index
+  uint64_t term = 0;
+  uint64_t index = 0;
+  ret = this->meta_control_->GetAppliedTermAndIndex(term, index);
+  if (ret < 0) {
+    DINGO_LOG(WARNING) << "Fail to GetAppliedTermAndIndex, need snapshot install, when load snapshot from "
+                       << reader->get_path();
+  }
+
+  DINGO_LOG(INFO) << "on_snapshot_load last_include_index:" << snapshot_meta.last_included_index()
+                  << " last_applied_index:" << index << " last_include_term:" << snapshot_meta.last_included_term()
+                  << " last_applied_term:" << term;
+
+  if (term >= snapshot_meta.last_included_term() && index >= snapshot_meta.last_included_index()) {
+    DINGO_LOG(WARNING) << "skip to load snapshot from " << reader->get_path()
+                       << " because last_include_index < last_applied_index and last_include_term < last_applied_term";
+    return 0;
+  }
+
   std::string snapshot_path = reader->get_path() + "/data";
   braft::ProtoBufFile pb_file(snapshot_path);
   pb::coordinator_internal::MetaSnapshotFile s;
@@ -155,8 +184,9 @@ int MetaStateMachine::on_snapshot_load(braft::SnapshotReader* reader) {
     DINGO_LOG(ERROR) << "Fail to load snapshot from " << snapshot_path;
     return -1;
   }
-  bool ret = this->meta_control_->LoadMetaFromSnapshotFile(s);
-  if (!ret) {
+
+  bool bool_ret = this->meta_control_->LoadMetaFromSnapshotFile(s);
+  if (!bool_ret) {
     DINGO_LOG(ERROR) << "Fail to load snapshot from " << snapshot_path << " LoadMetaFromSnapshotFile return false";
     return -1;
   }

@@ -326,9 +326,10 @@ class CoordinatorControl : public MetaControl {
   uint64_t CalculateTableMetricsSingle(uint64_t table_id, pb::meta::TableMetrics &table_metrics);
 
   // functions below are for raft fsm
-  bool IsLeader() override;                   // for raft fsm
-  void SetLeaderTerm(int64_t term) override;  // for raft fsm
-  void OnLeaderStart(int64_t term) override;  // for raft fsm
+  bool IsLeader() override;                                              // for raft fsm
+  void SetLeaderTerm(int64_t term) override;                             // for raft fsm
+  void OnLeaderStart(int64_t term) override;                             // for raft fsm
+  int GetAppliedTermAndIndex(uint64_t &term, uint64_t &index) override;  // for raft fsm
 
   // set raft_node to coordinator_control
   void SetRaftNode(std::shared_ptr<RaftNode> raft_node) override;  // for raft fsm
