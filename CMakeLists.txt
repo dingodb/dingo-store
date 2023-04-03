@@ -66,6 +66,7 @@ include(brpc)
 include(braft)
 include(yaml-cpp)
 include(libunwind)
+include(gperftools)
 
 message("protoc: ${PROTOBUF_PROTOC_EXECUTABLE}, proto inc: ${PROTOBUF_INCLUDE_DIRS}, lib: ${PROTOBUF_LIBRARIES}, ${PROTOBUF_PROTOC_LIBRARY}, protos: ${PROTO_FILES}")
 SET(MESSAGE_DIR ${CMAKE_CURRENT_BINARY_DIR}/proto)
@@ -121,6 +122,7 @@ include_directories(${ROCKSDB_INCLUDE_DIR})
 include_directories(${YAMLCPP_INCLUDE_DIR})
 include_directories(${OPENSSL_INCLUDE_DIR})
 include_directories(${LIBUNWIND_INCLUDE_DIR})
+include_directories(${GPERFTOOLS_INCLUDE_DIR})
 include_directories(${PROJECT_SOURCE_DIR}/src)
 
 set(DYNAMIC_LIB
@@ -165,6 +167,12 @@ set(DEPEND_LIBS
     gtest
     libunwind
     )
+
+if(LINK_TCMALLOC)
+    message(STATUS "Build DingoDB with tcmalloc")
+    set(DYNAMIC_LIB ${DYNAMIC_LIB} ${GPERFTOOLS_LIBRARIES})
+    set(DEPEND_LIBS ${DEPEND_LIBS} gperftools)
+endif()
 
 # source file
 file(GLOB COMMON_SRCS ${PROJECT_SOURCE_DIR}/src/common/*.cc)
