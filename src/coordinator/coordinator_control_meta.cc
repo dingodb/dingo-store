@@ -504,14 +504,56 @@ void CoordinatorControl::GetTables(uint64_t schema_id,
 }
 
 // get table
-void CoordinatorControl::GetTable(uint64_t schema_id, uint64_t table_id, pb::meta::Table& table) {
+void CoordinatorControl::GetTable(uint64_t schema_id, uint64_t table_id,
+                                  pb::meta::TableDefinitionWithId& table_definition_with_id) {
+  DINGO_LOG(INFO) << "GetTables in control schema_id=" << schema_id;
+
   if (schema_id < 0) {
     DINGO_LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
     return;
   }
 
-  if (table.id().entity_id() != 0) {
-    DINGO_LOG(ERROR) << "ERRROR: table is not empty , table_id=" << table.id().entity_id();
+  if (table_id <= 0) {
+    DINGO_LOG(ERROR) << "ERRROR: table illegal, table_id=" << table_id;
+    return;
+  }
+
+  // validate schema_id
+  {
+    BAIDU_SCOPED_LOCK(schema_map_mutex_);
+    if (this->schema_map_.find(schema_id) == schema_map_.end()) {
+      DINGO_LOG(ERROR) << "ERRROR: schema_id not found" << schema_id;
+      return;
+    }
+  }
+
+  // validate table_id & get table definition
+  {
+    BAIDU_SCOPED_LOCK(table_map_mutex_);
+    if (table_map_.find(table_id) == table_map_.end()) {
+      DINGO_LOG(ERROR) << "ERRROR: table_id " << table_id << " not exists";
+      return;
+    }
+
+    DINGO_LOG(INFO) << "GetTable found table_id=" << table_id;
+
+    // table_def_with_id.mutable_table_id()->CopyFrom(schema_internal.schema().table_ids(i));
+    auto* table_id_for_response = table_definition_with_id.mutable_table_id();
+    table_id_for_response->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
+    table_id_for_response->set_entity_id(table_id);
+    table_id_for_response->set_parent_entity_id(schema_id);
+
+    table_definition_with_id.mutable_table_definition()->CopyFrom(table_map_[table_id].definition());
+  }
+
+  DINGO_LOG(DEBUG) << "GetTable schema_id=" << schema_id << " table_id=" << table_id
+                   << " table_definition_with_id=" << table_definition_with_id.DebugString();
+}
+
+// get parts
+void CoordinatorControl::GetParts(uint64_t schema_id, uint64_t table_id, pb::meta::TableParts& table_parts) {
+  if (schema_id < 0) {
+    DINGO_LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
     return;
   }
 
@@ -532,13 +574,8 @@ void CoordinatorControl::GetTable(uint64_t schema_id, uint64_t table_id, pb::met
     table_internal = table_map_.at(table_id);
   }
 
-  auto* common_id_table = table.mutable_id();
-  common_id_table->set_entity_id(table_id);
-  common_id_table->set_parent_entity_id(schema_id);
-  common_id_table->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
-
   for (int i = 0; i < table_internal.partitions_size(); i++) {
-    auto* part = table.add_parts();
+    auto* part = table_parts.add_parts();
 
     // part id
     uint64_t region_id = table_internal.partitions(i).region_id();

@@ -279,8 +279,14 @@ class CoordinatorControl : public MetaControl {
   // get table
   // in: schema_id
   // in: table_id
-  // out: Table
-  void GetTable(uint64_t schema_id, uint64_t table_id, pb::meta::Table &table);
+  // out: TableDefinitionWithId
+  void GetTable(uint64_t schema_id, uint64_t table_id, pb::meta::TableDefinitionWithId &table_definition);
+
+  // get parts
+  // in: schema_id
+  // in: table_id
+  // out: repeated parts
+  void GetParts(uint64_t schema_id, uint64_t table_id, pb::meta::TableParts &parts);
 
   // get table metrics
   // in: schema_id

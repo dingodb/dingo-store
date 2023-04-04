@@ -85,8 +85,24 @@ void MetaServiceImpl::GetTable(google::protobuf::RpcController * /*controller*/,
 
   DINGO_LOG(DEBUG) << "GetTable request:  table_id = [" << request->table_id().entity_id() << "]";
 
-  auto *table = response->mutable_table();
+  auto *table = response->mutable_table_definition_with_id();
   this->coordinator_control_->GetTable(request->table_id().parent_entity_id(), request->table_id().entity_id(), *table);
+}
+
+void MetaServiceImpl::GetParts(google::protobuf::RpcController * /*controller*/,
+                               const pb::meta::GetPartsRequest *request, pb::meta::GetPartsResponse *response,
+                               google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!this->coordinator_control_->IsLeader()) {
+    return RedirectResponse(response);
+  }
+
+  DINGO_LOG(DEBUG) << "GetTable request:  table_id = [" << request->table_id().entity_id() << "]";
+
+  auto *table_parts = response->mutable_table_parts();
+  this->coordinator_control_->GetParts(request->table_id().parent_entity_id(), request->table_id().entity_id(),
+                                       *table_parts);
 }
 
 void MetaServiceImpl::GetTableMetrics(google::protobuf::RpcController * /*controller*/,
