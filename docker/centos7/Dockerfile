@@ -4,8 +4,9 @@ ENV TZ=Asia/Shanghai
 SHELL ["/bin/bash", "-c"]
 
 RUN yum makecache  \
-    && yum install -y  ntp openjdk-1.8-jdk vim unzip netcat net-tools tzdata wget git gcc gcc-c++ make automake maven centos-release-scl  openssl openssl-devel  \
+    && yum install -y  ntp openjdk-1.8-jdk vim unzip netcat net-tools tzdata wget git gcc gcc-c++ make automake maven centos-release-scl  openssl openssl-devel libtool  \
     &&  yum install -y devtoolset-11-gcc devtoolset-11-gcc-c++ devtoolset-11-binutils \
+    && yum install -y  http://opensource.wandisco.com/centos/7/git/x86_64/wandisco-git-release-7-2.noarch.rpm && yum -y install git \
     && yum -y install perl-IPC-Cmd \
     && yum clean all \
     && ln -fs /usr/share/zoneinfo/${TZ} /etc/localtime \
