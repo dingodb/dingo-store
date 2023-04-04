@@ -89,9 +89,9 @@ void MetaServiceImpl::GetTable(google::protobuf::RpcController * /*controller*/,
   this->coordinator_control_->GetTable(request->table_id().parent_entity_id(), request->table_id().entity_id(), *table);
 }
 
-void MetaServiceImpl::GetParts(google::protobuf::RpcController * /*controller*/,
-                               const pb::meta::GetPartsRequest *request, pb::meta::GetPartsResponse *response,
-                               google::protobuf::Closure *done) {
+void MetaServiceImpl::GetTableRange(google::protobuf::RpcController * /*controller*/,
+                                    const pb::meta::GetTableRangeRequest *request,
+                                    pb::meta::GetTableRangeResponse *response, google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
 
   if (!this->coordinator_control_->IsLeader()) {
@@ -100,9 +100,9 @@ void MetaServiceImpl::GetParts(google::protobuf::RpcController * /*controller*/,
 
   DINGO_LOG(DEBUG) << "GetTable request:  table_id = [" << request->table_id().entity_id() << "]";
 
-  auto *table_parts = response->mutable_table_parts();
-  this->coordinator_control_->GetParts(request->table_id().parent_entity_id(), request->table_id().entity_id(),
-                                       *table_parts);
+  auto *table_range = response->mutable_table_range();
+  this->coordinator_control_->GetTableRange(request->table_id().parent_entity_id(), request->table_id().entity_id(),
+                                            *table_range);
 }
 
 void MetaServiceImpl::GetTableMetrics(google::protobuf::RpcController * /*controller*/,

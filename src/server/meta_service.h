@@ -50,8 +50,8 @@ class MetaServiceImpl : public pb::meta::MetaService {
                  pb::meta::GetTablesResponse* response, google::protobuf::Closure* done) override;
   void GetTable(google::protobuf::RpcController* controller, const pb::meta::GetTableRequest* request,
                 pb::meta::GetTableResponse* response, google::protobuf::Closure* done) override;
-  void GetParts(google::protobuf::RpcController* controller, const pb::meta::GetPartsRequest* request,
-                pb::meta::GetPartsResponse* response, google::protobuf::Closure* done) override;
+  void GetTableRange(google::protobuf::RpcController* controller, const pb::meta::GetTableRangeRequest* request,
+                     pb::meta::GetTableRangeResponse* response, google::protobuf::Closure* done) override;
   void GetTableMetrics(google::protobuf::RpcController* controller, const pb::meta::GetTableMetricsRequest* request,
                        pb::meta::GetTableMetricsResponse* response, google::protobuf::Closure* done) override;
   void CreateTable(google::protobuf::RpcController* controller, const pb::meta::CreateTableRequest* request,

@@ -28,11 +28,28 @@ enum EntityType {
   ENTITY_TYPE_PART = 2;
 }
 
-// The initial 3 internal schemas
+// The id of internal schemas
+// internal schema is prebuilt in dingoDB, and can't be created or deleted.
 enum ReservedSchemaIds {
   ROOT_SCHEMA = 0;
   META_SCHEMA = 1;
   DINGO_SCHEMA = 2;
+  MYSQL_SCHEMA = 3;
+  INFORMATION_SCHEMA = 4;
+  MAX_INTERNAL_SCHEMA = 1000;  // don't modify this value
+}
+
+// The id of internal tables
+// internal tables is create using dingoDB client, and can be deleted.
+// If a dingodb need to use mysql protocol, it should create mysql internal tables first.
+enum ReservedTableIds {
+  NONE = 0;
+  // mysql internal table use id from 100~200
+  MYSQL_USER = 101;
+  MYSQL_DB = 102;
+  MYSQL_TABLES_PRIV = 103;
+  MYSQL_GLOBAL_VARIABLE = 104;
+  MAX_INTERNAL_TABLE = 1000;  // don't modify this value
 }
 
 // Used for transformation to SDK CommonId
@@ -137,7 +154,7 @@ message TableDefinition {
 }
 
 // This Part is mainly equal to the Part in DingoDB 0.5.x
-message Part {
+message RangeDistribution {
   DingoCommonId id = 1;                            // this is really region id, its parent entity is table
   dingodb.pb.common.Range range = 2;               // the range of this part
   dingodb.pb.common.Location leader = 3;           // the leader's store location
@@ -149,16 +166,9 @@ message Part {
   uint64 storemap_epoch = 7;
 }
 
-// A Table has one or many parts.
-// This message maybe unused in the future.
-message Table {
-  DingoCommonId id = 1;
-  repeated Part parts = 2;
-}
-
-// Table parts is used for sdk to get all parts of a table.
-message TableParts {
-  repeated Part parts = 2;
+// TableRange is used for sdk to get all range distribution of a table.
+message TableRange {
+  repeated RangeDistribution range_distribution = 2;
 }
 
 // Table metrics for optimization of SQL plan
@@ -206,13 +216,13 @@ message GetTableResponse {
   TableDefinitionWithId table_definition_with_id = 2;
 }
 
-message GetPartsRequest {
+message GetTableRangeRequest {
   DingoCommonId table_id = 1;
 }
 
-message GetPartsResponse {
+message GetTableRangeResponse {
   dingodb.pb.error.Error error = 1;
-  TableParts table_parts = 2;
+  TableRange table_range = 2;
 }
 
 message GetTableMetricsRequest {
@@ -286,10 +296,10 @@ service MetaService {
   // out: TableDefinitionWithId
   rpc GetTable(GetTableRequest) returns (GetTableResponse);
 
-  // GetParts
+  // GetTableRange
   // in: table_id
-  // out: repeated Part
-  rpc GetParts(GetPartsRequest) returns (GetPartsResponse);
+  // out: TableRange
+  rpc GetTableRange(GetTableRangeRequest) returns (GetTableRangeResponse);
 
   // GetTableMetrics
   // in: table_id

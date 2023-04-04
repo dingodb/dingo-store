@@ -17,6 +17,7 @@
 #include "client/coordinator_client_function.h"
 #include "common/logging.h"
 #include "proto/common.pb.h"
+#include "proto/meta.pb.h"
 #include "proto/node.pb.h"
 
 DECLARE_bool(log_each_request);
@@ -137,9 +138,9 @@ void SendGetTable(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& s
   }
 }
 
-void SendGetParts(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub) {
-  dingodb::pb::meta::GetPartsRequest request;
-  dingodb::pb::meta::GetPartsResponse response;
+void SendGetTableRange(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub) {
+  dingodb::pb::meta::GetTableRangeRequest request;
+  dingodb::pb::meta::GetTableRangeResponse response;
 
   auto* table_id = request.mutable_table_id();
   table_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
@@ -151,7 +152,7 @@ void SendGetParts(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& s
   }
   table_id->set_entity_id(std::stol(FLAGS_id));
 
-  stub.GetParts(&cntl, &request, &response, nullptr);
+  stub.GetTableRange(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
     DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
     // bthread_usleep(FLAGS_timeout_ms * 1000L);

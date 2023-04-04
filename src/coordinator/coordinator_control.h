@@ -154,7 +154,9 @@ class CoordinatorControl : public MetaControl {
   bool Recover();
   static void GenerateRootSchemas(pb::coordinator_internal::SchemaInternal &root_schema,
                                   pb::coordinator_internal::SchemaInternal &meta_schema,
-                                  pb::coordinator_internal::SchemaInternal &dingo_schema);
+                                  pb::coordinator_internal::SchemaInternal &dingo_schema,
+                                  pb::coordinator_internal::SchemaInternal &mysql_schema,
+                                  pb::coordinator_internal::SchemaInternal &information_schema);
   bool Init();
 
   // GetMemoryInfo
@@ -286,7 +288,7 @@ class CoordinatorControl : public MetaControl {
   // in: schema_id
   // in: table_id
   // out: repeated parts
-  void GetParts(uint64_t schema_id, uint64_t table_id, pb::meta::TableParts &parts);
+  void GetTableRange(uint64_t schema_id, uint64_t table_id, pb::meta::TableRange &table_range);
 
   // get table metrics
   // in: schema_id

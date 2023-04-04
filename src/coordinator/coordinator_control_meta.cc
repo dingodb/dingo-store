@@ -39,7 +39,9 @@ namespace dingodb {
 
 void CoordinatorControl::GenerateRootSchemas(pb::coordinator_internal::SchemaInternal& root_schema_internal,
                                              pb::coordinator_internal::SchemaInternal& meta_schema_internal,
-                                             pb::coordinator_internal::SchemaInternal& dingo_schema_internal) {
+                                             pb::coordinator_internal::SchemaInternal& dingo_schema_internal,
+                                             pb::coordinator_internal::SchemaInternal& mysql_schema_internal,
+                                             pb::coordinator_internal::SchemaInternal& information_schema_internal) {
   // root schema
   // pb::meta::Schema root_schema;
   root_schema_internal.set_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
@@ -59,9 +61,25 @@ void CoordinatorControl::GenerateRootSchemas(pb::coordinator_internal::SchemaInt
 
   root_schema_internal.add_schema_ids(dingo_schema_internal.id());
 
+  // mysql schema
+  // pb::mysql::Schema mysql_schema;
+  mysql_schema_internal.set_id(::dingodb::pb::meta::ReservedSchemaIds::MYSQL_SCHEMA);
+  mysql_schema_internal.set_name("mysql");
+
+  root_schema_internal.add_schema_ids(mysql_schema_internal.id());
+
+  // information schema
+  // pb::information::Schema information_schema;
+  information_schema_internal.set_id(::dingodb::pb::meta::ReservedSchemaIds::INFORMATION_SCHEMA);
+  information_schema_internal.set_name("information");
+
+  root_schema_internal.add_schema_ids(information_schema_internal.id());
+
   DINGO_LOG(INFO) << "GenerateRootSchemas 0[" << root_schema_internal.DebugString();
   DINGO_LOG(INFO) << "GenerateRootSchemas 1[" << meta_schema_internal.DebugString();
   DINGO_LOG(INFO) << "GenerateRootSchemas 2[" << dingo_schema_internal.DebugString();
+  DINGO_LOG(INFO) << "GenerateRootSchemas 3[" << mysql_schema_internal.DebugString();
+  DINGO_LOG(INFO) << "GenerateRootSchemas 4[" << information_schema_internal.DebugString();
 }
 
 // TODO: check name comflicts before create new schema
@@ -550,8 +568,8 @@ void CoordinatorControl::GetTable(uint64_t schema_id, uint64_t table_id,
                    << " table_definition_with_id=" << table_definition_with_id.DebugString();
 }
 
-// get parts
-void CoordinatorControl::GetParts(uint64_t schema_id, uint64_t table_id, pb::meta::TableParts& table_parts) {
+// get table range
+void CoordinatorControl::GetTableRange(uint64_t schema_id, uint64_t table_id, pb::meta::TableRange& table_range) {
   if (schema_id < 0) {
     DINGO_LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
     return;
@@ -575,18 +593,18 @@ void CoordinatorControl::GetParts(uint64_t schema_id, uint64_t table_id, pb::met
   }
 
   for (int i = 0; i < table_internal.partitions_size(); i++) {
-    auto* part = table_parts.add_parts();
+    auto* range_distribution = table_range.add_range_distribution();
 
-    // part id
+    // range_distribution id
     uint64_t region_id = table_internal.partitions(i).region_id();
 
-    auto* common_id_region = part->mutable_id();
+    auto* common_id_region = range_distribution->mutable_id();
     common_id_region->set_entity_id(region_id);
     common_id_region->set_parent_entity_id(table_id);
     common_id_region->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_PART);
 
-    // part range
-    auto* part_range = part->mutable_range();
+    // range_distribution range
+    auto* part_range = range_distribution->mutable_range();
     part_range->CopyFrom(table_internal.partitions(i).range());
 
     // get region
@@ -597,10 +615,10 @@ void CoordinatorControl::GetParts(uint64_t schema_id, uint64_t table_id, pb::met
     }
     pb::common::Region& part_region = region_map_[region_id];
 
-    // part leader location
-    auto* leader_location = part->mutable_leader();
+    // range_distribution leader location
+    auto* leader_location = range_distribution->mutable_leader();
 
-    // part voter & learner locations
+    // range_distribution voter & learner locations
     for (int j = 0; j < part_region.peers_size(); j++) {
       const auto& part_peer = part_region.peers(j);
       if (part_peer.store_id() == part_region.leader_store_id()) {
@@ -608,21 +626,21 @@ void CoordinatorControl::GetParts(uint64_t schema_id, uint64_t table_id, pb::met
       }
 
       if (part_peer.role() == ::dingodb::pb::common::PeerRole::VOTER) {
-        auto* voter_location = part->add_voters();
+        auto* voter_location = range_distribution->add_voters();
         voter_location->CopyFrom(part_peer.server_location());
       } else if (part_peer.role() == ::dingodb::pb::common::PeerRole::LEARNER) {
-        auto* learner_location = part->add_learners();
+        auto* learner_location = range_distribution->add_learners();
         learner_location->CopyFrom(part_peer.server_location());
       }
     }
 
-    // part regionmap_epoch
+    // range_distribution regionmap_epoch
     uint64_t region_map_epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_REGION);
-    part->set_regionmap_epoch(region_map_epoch);
+    range_distribution->set_regionmap_epoch(region_map_epoch);
 
-    // part storemap_epoch
+    // range_distribution storemap_epoch
     uint64_t store_map_epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_STORE);
-    part->set_storemap_epoch(store_map_epoch);
+    range_distribution->set_storemap_epoch(store_map_epoch);
   }
 }
 
