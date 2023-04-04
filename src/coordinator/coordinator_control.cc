@@ -208,13 +208,18 @@ bool CoordinatorControl::Init() {
     pb::coordinator_internal::SchemaInternal root_schema;
     pb::coordinator_internal::SchemaInternal meta_schema;
     pb::coordinator_internal::SchemaInternal dingo_schema;
+    pb::coordinator_internal::SchemaInternal mysql_schema;
+    pb::coordinator_internal::SchemaInternal information_schema;
 
-    GenerateRootSchemas(root_schema, meta_schema, dingo_schema);
+    GenerateRootSchemas(root_schema, meta_schema, dingo_schema, mysql_schema, information_schema);
 
     // add the initial schemas to schema_map_
-    schema_map_.insert(std::make_pair(0, root_schema));   // raft_kv_put
-    schema_map_.insert(std::make_pair(1, meta_schema));   // raft_kv_put
-    schema_map_.insert(std::make_pair(2, dingo_schema));  // raft_kv_put
+    schema_map_.insert(std::make_pair(pb::meta::ReservedSchemaIds::ROOT_SCHEMA, root_schema));    // raft_kv_put
+    schema_map_.insert(std::make_pair(pb::meta::ReservedSchemaIds::META_SCHEMA, meta_schema));    // raft_kv_put
+    schema_map_.insert(std::make_pair(pb::meta::ReservedSchemaIds::DINGO_SCHEMA, dingo_schema));  // raft_kv_put
+    schema_map_.insert(std::make_pair(pb::meta::ReservedSchemaIds::MYSQL_SCHEMA, mysql_schema));  // raft_kv_put
+    schema_map_.insert(
+        std::make_pair(pb::meta::ReservedSchemaIds::INFORMATION_SCHEMA, information_schema));  // raft_kv_put
 
     // write to rocksdb
     auto const schema_kvs = schema_meta_->TransformToKvWithAll();

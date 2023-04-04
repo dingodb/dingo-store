@@ -56,7 +56,7 @@ void SendGetSchemas(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub&
 void SendGetTablesCount(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub);
 void SendGetTables(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub);
 void SendGetTable(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub);
-void SendGetParts(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub);
+void SendGetTableRange(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub);
 void SendCreateTableId(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub);
 void SendCreateTable(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub, bool with_table_id);
 void SendDropTable(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub);

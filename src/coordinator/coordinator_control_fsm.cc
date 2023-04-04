@@ -473,7 +473,7 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
       const auto& schema = meta_increment.schemas(i);
       if (schema.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
         // update parent schema for user schemas
-        if (schema.id() > pb::meta::ReservedSchemaIds::DINGO_SCHEMA) {
+        if (schema.id() > pb::meta::ReservedSchemaIds::MAX_INTERNAL_SCHEMA) {
           if (schema_map_.find(schema.schema_id()) != schema_map_.end()) {
             auto& parent_schema = schema_map_[schema.schema_id()];
 
