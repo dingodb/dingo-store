@@ -143,20 +143,20 @@ public class MetaServiceClient {
         return tableDefinitionCache.get(id);
     }
 
-    public NavigableMap<ByteArrayUtils.ComparableByteArray, Meta.Part> getParts(String tableName) {
+    public NavigableMap<ByteArrayUtils.ComparableByteArray, Meta.RangeDistribution> getParts(String tableName) {
         Meta.DingoCommonId tableId = getTableId(tableName);
         return getParts(tableId);
     }
 
-    public NavigableMap<ByteArrayUtils.ComparableByteArray, Meta.Part> getParts(Meta.DingoCommonId id) {
-        NavigableMap<ByteArrayUtils.ComparableByteArray, Meta.Part> result = new TreeMap<>();
-        Meta.GetTableRequest request = Meta.GetTableRequest.newBuilder()
+    public NavigableMap<ByteArrayUtils.ComparableByteArray, Meta.RangeDistribution> getParts(Meta.DingoCommonId id) {
+        NavigableMap<ByteArrayUtils.ComparableByteArray, Meta.RangeDistribution> result = new TreeMap<>();
+        Meta.GetTableRangeRequest request = Meta.GetTableRangeRequest.newBuilder()
                 .setTableId(id)
                 .build();
 
-        Meta.GetTableResponse response = metaBlockingStub.getTable(request);
+        Meta.GetTableRangeResponse response = metaBlockingStub.getTableRange(request);
 
-        for (Meta.Part tablePart : response.getTable().getPartsList()) {
+        for (Meta.RangeDistribution tablePart : response.getTableRange().getRangeDistributionList() ) {
             result.put(new ByteArrayUtils.ComparableByteArray(
                     tablePart.getRange().getStartKey().toByteArray()),
                     tablePart);

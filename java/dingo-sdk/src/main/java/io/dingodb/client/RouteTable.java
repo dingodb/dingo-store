@@ -33,14 +33,14 @@ public class RouteTable {
 
     @Getter
     private KeyValueCodec codec;
-    private NavigableMap<ByteArrayUtils.ComparableByteArray, Meta.Part> partRange;
+    private NavigableMap<ByteArrayUtils.ComparableByteArray, Meta.RangeDistribution> partRange;
     private PartitionStrategy<ByteArrayUtils.ComparableByteArray> partitionStrategy;
 
     public StoreServiceClient getLeaderStoreService(String leaderAddress) {
         return new StoreServiceClient(leaderAddress);
     }
 
-    public Meta.Part getPartByKey(byte[] keyInBytes) {
+    public Meta.RangeDistribution getPartByKey(byte[] keyInBytes) {
         ByteArrayUtils.ComparableByteArray byteArray = partitionStrategy.calcPartId(keyInBytes);
         return partRange.get(byteArray);
     }

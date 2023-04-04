@@ -178,7 +178,7 @@ public class ServiceOperation {
         Map<String, Meta.DingoCommonId> regionIdMap = new HashMap<>();
         for (int index = 0; index < wholeContext.getStartKeyInBytes().size(); index++) {
             byte[] keyInBytes = wholeContext.getStartKeyInBytes().get(index);
-            Meta.Part part = getPartByStartKey(routeTable, keyInBytes);
+            Meta.RangeDistribution part = getPartByStartKey(routeTable, keyInBytes);
             if (part.getLeader().getHost().isEmpty()) {
                 log.error("Unable to find the store leader of the key:{} in table:{}",
                         Arrays.toString(keyInBytes),
@@ -222,7 +222,7 @@ public class ServiceOperation {
                 return null;
             }
 
-            NavigableMap<ByteArrayUtils.ComparableByteArray, Meta.Part> parts =
+            NavigableMap<ByteArrayUtils.ComparableByteArray, Meta.RangeDistribution> parts =
                     metaClient.getParts(table.getName());
 
             Meta.DingoCommonId tableId = metaClient.getTableId(table.getName());
@@ -307,7 +307,7 @@ public class ServiceOperation {
                 client -> routeTable.getLeaderStoreService(leaderAddress));
     }
 
-    private Meta.Part getPartByStartKey(final RouteTable routeTable, byte[] keyInBytes) {
+    private Meta.RangeDistribution getPartByStartKey(final RouteTable routeTable, byte[] keyInBytes) {
         return routeTable.getPartByKey(keyInBytes);
     }
 }
