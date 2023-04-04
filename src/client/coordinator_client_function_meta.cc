@@ -105,25 +105,6 @@ void SendGetTables(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& 
                     << " request_attachment=" << cntl.request_attachment().size()
                     << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
     DINGO_LOG(INFO) << response.DebugString();
-    // for (int32_t i = 0; i < response.tables_size(); i++) {
-    //   const auto& table = response.tables(i);
-    //   DINGO_LOG(INFO) << "table_id=[" << table.id() << "]"
-    //             << "partition_count=" << table.partitions_size();
-
-    //   for (int32_t j = 0; j < table.partitions_size(); j++) {
-    //     const auto& partition = table.partitions(j);
-    //     DINGO_LOG(INFO) << "partition_id=[" << partition.id()
-    //               << "] region_count = " << partition.regions_size()
-    //               << " start_key " << partition.range().start_key()
-    //               << " end_key " << partition.range().end_key();
-
-    //     for (int32_t k = 0; k < partition.regions_size(); k++) {
-    //       const auto& region  = partition.regions(k);
-    //       DINGO_LOG(INFO) << "region_id = " << region.id() << " region_name = " <<
-    //       region.name() ;
-    //     }
-    //   }
-    // }
   }
 }
 
@@ -142,6 +123,35 @@ void SendGetTable(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& s
   table_id->set_entity_id(std::stol(FLAGS_id));
 
   stub.GetTable(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    // bthread_usleep(FLAGS_timeout_ms * 1000L);
+  }
+
+  if (FLAGS_log_each_request) {
+    DINGO_LOG(INFO) << "Received response"
+                    << " table_id=" << request.table_id().entity_id()
+                    << " request_attachment=" << cntl.request_attachment().size()
+                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+    DINGO_LOG(INFO) << response.DebugString();
+  }
+}
+
+void SendGetParts(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub) {
+  dingodb::pb::meta::GetPartsRequest request;
+  dingodb::pb::meta::GetPartsResponse response;
+
+  auto* table_id = request.mutable_table_id();
+  table_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
+  table_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+
+  if (FLAGS_id.empty()) {
+    DINGO_LOG(WARNING) << "id is empty";
+    return;
+  }
+  table_id->set_entity_id(std::stol(FLAGS_id));
+
+  stub.GetParts(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
     DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
     // bthread_usleep(FLAGS_timeout_ms * 1000L);

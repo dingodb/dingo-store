@@ -129,6 +129,8 @@ void* Sender(void* /*arg*/) {
     SendDropSchema(cntl, meta_stub);
   } else if (FLAGS_method == "GetTable") {
     SendGetTable(cntl, meta_stub);
+  } else if (FLAGS_method == "GetParts") {
+    SendGetParts(cntl, meta_stub);
   } else if (FLAGS_method == "GetTableMetrics") {
     SendGetTableMetrics(cntl, meta_stub);
   } else {

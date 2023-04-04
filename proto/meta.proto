@@ -283,7 +283,7 @@ service MetaService {
 
   // GetTable
   // in: table_id
-  // out: Table
+  // out: TableDefinitionWithId
   rpc GetTable(GetTableRequest) returns (GetTableResponse);
 
   // GetParts
