@@ -56,8 +56,8 @@ message CoordinatorMemoryInfo {
 
   uint64 total_size = 3;
 
-  uint64 id_epoch_map_temp_count = 4;
-  uint64 id_epoch_map_temp_size = 5;
+  uint64 id_epoch_safe_map_temp_count = 4;
+  uint64 id_epoch_safe_map_temp_size = 5;
 
   uint64 id_epoch_map_count = 6;
   uint64 id_epoch_map_size = 7;

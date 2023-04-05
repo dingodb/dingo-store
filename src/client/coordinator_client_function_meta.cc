@@ -44,7 +44,19 @@ void SendGetSchemas(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub&
                     << " schema_id=" << request.schema_id().entity_id() << " schema_count=" << response.schemas_size()
                     << " request_attachment=" << cntl.request_attachment().size()
                     << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
-    DINGO_LOG(INFO) << response.DebugString();
+    // DINGO_LOG(INFO) << response.DebugString();
+    for (const auto& schema : response.schemas()) {
+      DINGO_LOG(INFO) << "schema_id=[" << schema.id().entity_id() << "]"
+                      << "schema_name=[" << schema.name() << "]"
+                      << "child_schema_count=" << schema.schema_ids_size()
+                      << "child_table_count=" << schema.table_ids_size();
+      for (const auto& child_schema_id : schema.schema_ids()) {
+        DINGO_LOG(INFO) << "child schema_id=[" << child_schema_id.entity_id() << "]";
+      }
+      for (const auto& child_table_id : schema.table_ids()) {
+        DINGO_LOG(INFO) << "child table_id=[" << child_table_id.entity_id() << "]";
+      }
+    }
 
     // for (int32_t i = 0; i < response.schemas_size(); i++) {
     //   DINGO_LOG(INFO) << "schema_id=[" << response.schemas(i).id().entity_id() << "]"
@@ -105,7 +117,11 @@ void SendGetTables(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& 
                     << " table_count=" << response.table_definition_with_ids_size()
                     << " request_attachment=" << cntl.request_attachment().size()
                     << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
-    DINGO_LOG(INFO) << response.DebugString();
+    // DINGO_LOG(INFO) << response.DebugString();
+    for (const auto& table_definition_with_id : response.table_definition_with_ids()) {
+      DINGO_LOG(INFO) << "table_id=[" << table_definition_with_id.table_id().entity_id() << "]"
+                      << "table_name=" << table_definition_with_id.table_definition().name();
+    }
   }
 }
 

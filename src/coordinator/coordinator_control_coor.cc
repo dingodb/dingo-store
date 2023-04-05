@@ -700,17 +700,25 @@ uint64_t CoordinatorControl::UpdateStoreMetrics(const pb::common::StoreMetrics& 
 
 void CoordinatorControl::GetMemoryInfo(pb::coordinator::CoordinatorMemoryInfo& memory_info) {
   // compute size
-  {
-    BAIDU_SCOPED_LOCK(id_epoch_map_temp_mutex_);
+  // {
+  //   BAIDU_SCOPED_LOCK(id_epoch_map_temp_mutex_);
 
-    // set count & size
-    memory_info.set_id_epoch_map_temp_count(id_epoch_map_temp_.size());
-    for (auto& it : id_epoch_map_temp_) {
-      memory_info.set_id_epoch_map_temp_size(memory_info.id_epoch_map_temp_size() + sizeof(it.first) +
-                                             it.second.ByteSizeLong());
-    }
-    memory_info.set_total_size(memory_info.total_size() + memory_info.id_epoch_map_temp_size());
-  }
+  //   // set count & size
+  //   memory_info.set_id_epoch_map_temp_count(id_epoch_map_temp_.size());
+  //   for (auto& it : id_epoch_map_temp_) {
+  //     memory_info.set_id_epoch_map_temp_size(memory_info.id_epoch_map_temp_size() + sizeof(it.first) +
+  //                                            it.second.ByteSizeLong());
+  //   }
+  //   memory_info.set_total_size(memory_info.total_size() + memory_info.id_epoch_map_temp_size());
+  // }
+
+  uint64_t count = 0;
+  uint64_t memory_size = 0;
+  id_epoch_map_safe_temp_.Size(count);
+  id_epoch_map_safe_temp_.MemorySize(memory_size);
+  memory_info.set_id_epoch_safe_map_temp_count(count);
+  memory_info.set_id_epoch_safe_map_temp_size(memory_size);
+
   {
     BAIDU_SCOPED_LOCK(id_epoch_map_mutex_);
 

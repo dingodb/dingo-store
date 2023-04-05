@@ -42,36 +42,41 @@ void CoordinatorControl::SetLeaderTerm(int64_t term) { leader_term_.store(term, 
 void CoordinatorControl::SetRaftNode(std::shared_ptr<RaftNode> raft_node) { raft_node_ = raft_node; }
 
 int CoordinatorControl::GetAppliedTermAndIndex(uint64_t& term, uint64_t& index) {
-  BAIDU_SCOPED_LOCK(id_epoch_map_mutex_);
+  // BAIDU_SCOPED_LOCK(id_epoch_map_mutex_);
 
-  int ret = 0;
-  auto* temp_index = id_epoch_map_temp_.seek(pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX);
-  auto* temp_term = id_epoch_map_temp_.seek(pb::coordinator_internal::IdEpochType::RAFT_APPLY_TERM);
+  // int ret = 0;
+  // auto* temp_index = id_epoch_map_temp_.seek(pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX);
+  // auto* temp_term = id_epoch_map_temp_.seek(pb::coordinator_internal::IdEpochType::RAFT_APPLY_TERM);
 
-  if (temp_index != nullptr) {
-    index = temp_index->value();
-  } else {
-    DINGO_LOG(ERROR) << "GetAppliedTermAndIndex failed, id_epoch_map_ not contain RAFT_APPLY_INDEX";
-    ret = -1;
-  }
+  id_epoch_map_safe_temp_.GetPresentId(pb::coordinator_internal::IdEpochType::RAFT_APPLY_TERM, term);
+  id_epoch_map_safe_temp_.GetPresentId(pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX, index);
 
-  if (temp_term != nullptr) {
-    term = temp_term->value();
-  } else {
-    DINGO_LOG(ERROR) << "GetAppliedTermAndIndex failed, id_epoch_map_ not contain RAFT_APPLY_TERM";
-    ret = -1;
-  }
+  // if (temp_index != nullptr) {
+  //   index = temp_index->value();
+  // } else {
+  //   DINGO_LOG(ERROR) << "GetAppliedTermAndIndex failed, id_epoch_map_ not contain RAFT_APPLY_INDEX";
+  //   ret = -1;
+  // }
+
+  // if (temp_term != nullptr) {
+  //   term = temp_term->value();
+  // } else {
+  //   DINGO_LOG(ERROR) << "GetAppliedTermAndIndex failed, id_epoch_map_ not contain RAFT_APPLY_TERM";
+  //   ret = -1;
+  // }
 
   DINGO_LOG(INFO) << "GetAppliedTermAndIndex, term=" << term << ", index=" << index;
 
-  return ret;
+  return 0;
 }
 
 // OnLeaderStart will init id_epoch_map_temp_ from id_epoch_map_ which is in state machine
 void CoordinatorControl::OnLeaderStart(int64_t term) {
   BAIDU_SCOPED_LOCK(id_epoch_map_mutex_);
-  id_epoch_map_temp_ = id_epoch_map_;
-  DINGO_LOG(INFO) << "OnLeaderStart init id_epoch_map_temp_ finished, term=" << term;
+  // id_epoch_map_temp_ = id_epoch_map_;
+  // DINGO_LOG(INFO) << "OnLeaderStart init id_epoch_map_temp_ finished, term=" << term;
+  id_epoch_map_safe_temp_.Copy(id_epoch_map_);
+  DINGO_LOG(INFO) << "OnLeaderStart init id_epoch_safe_map_temp_ finished, term=" << term;
 }
 
 std::shared_ptr<Snapshot> CoordinatorControl::PrepareRaftSnapshot() {
@@ -312,11 +317,15 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
   // init id_epoch_map_temp_
   // copy id_epoch_map_ to id_epoch_map_temp_
   {
-    BAIDU_SCOPED_LOCK(id_epoch_map_temp_mutex_);
+    // BAIDU_SCOPED_LOCK(id_epoch_map_temp_mutex_);
     BAIDU_SCOPED_LOCK(id_epoch_map_mutex_);
-    id_epoch_map_temp_ = id_epoch_map_;
+    // id_epoch_map_temp_ = id_epoch_map_;
+    id_epoch_map_safe_temp_.Copy(id_epoch_map_);
   }
-  DINGO_LOG(INFO) << "LoadSnapshot id_epoch_map_temp, count=" << id_epoch_map_temp_.size();
+  // DINGO_LOG(INFO) << "LoadSnapshot id_epoch_map_temp, count=" << id_epoch_map_temp_.size();
+  uint64_t size = 0;
+  id_epoch_map_safe_temp_.Size(size);
+  DINGO_LOG(INFO) << "LoadSnapshot id_epoch_safe_map_temp, count=" << size;
 
   return true;
 }
