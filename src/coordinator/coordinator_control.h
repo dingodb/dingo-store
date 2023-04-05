@@ -25,6 +25,7 @@
 #include "brpc/controller.h"
 #include "brpc/server.h"
 #include "bthread/types.h"
+#include "butil/containers/flat_map.h"
 #include "butil/scoped_lock.h"
 #include "butil/strings/stringprintf.h"
 #include "common/logging.h"
@@ -44,8 +45,9 @@ template <typename T>
 class MetaMapStorage {
  public:
   const std::string internal_prefix;
-  MetaMapStorage(std::map<uint64_t, T> *elements_ptr) : internal_prefix(typeid(T).name()), elements_(elements_ptr){};
-  MetaMapStorage(std::map<uint64_t, T> *elements_ptr, const std::string &prefix)
+  MetaMapStorage(butil::FlatMap<uint64_t, T> *elements_ptr)
+      : internal_prefix(typeid(T).name()), elements_(elements_ptr){};
+  MetaMapStorage(butil::FlatMap<uint64_t, T> *elements_ptr, const std::string &prefix)
       : internal_prefix(prefix), elements_(elements_ptr){};
   ~MetaMapStorage() = default;
 
@@ -131,7 +133,8 @@ class MetaMapStorage {
       uint64_t id = ParseId(kv.key());
       T element;
       element.ParsePartialFromArray(kv.value().data(), kv.value().size());
-      elements_->insert_or_assign(id, element);
+      // elements_->insert_or_assign(id, element);
+      elements_->insert(id, element);
     }
   };
 
@@ -141,7 +144,7 @@ class MetaMapStorage {
  private:
   // Coordinator all region meta data in this server.
   // std::map<uint64_t, std::shared_ptr<T>> *elements_;
-  std::map<uint64_t, T> *elements_;
+  butil::FlatMap<uint64_t, T> *elements_;
 };
 
 #define COORDINATOR_ID_OF_MAP_MIN 1000
@@ -258,11 +261,11 @@ class CoordinatorControl : public MetaControl {
 
   // get push storemap
   // this function will use std::swap to empty the class member store_need_push_
-  void GetPushStoreMap(std::map<uint64_t, pb::common::Store> &store_to_push);
+  void GetPushStoreMap(butil::FlatMap<uint64_t, pb::common::Store> &store_to_push);
 
   // get push executormap
   // this function will use std::swap to empty the class member executor_need_push_
-  void GetPushExecutorMap(std::map<uint64_t, pb::common::Executor> &executor_to_push);
+  void GetPushExecutorMap(butil::FlatMap<uint64_t, pb::common::Executor> &executor_to_push);
 
   // update region map with new Region info
   // return new epoch
@@ -319,6 +322,11 @@ class CoordinatorControl : public MetaControl {
   // get present id/epoch
   uint64_t GetPresentId(const pb::coordinator_internal::IdEpochType &key);
 
+  // validate schema if exists
+  // in: schema_id
+  // return: true/false
+  bool ValidateSchema(uint64_t schema_id);
+
   // validate store keyring
   // return: 0 or -1
   int ValidateStore(uint64_t store_id, const std::string &keyring);
@@ -361,57 +369,58 @@ class CoordinatorControl : public MetaControl {
  private:
   // ids_epochs_temp (out of state machine, only for leader use)
   // TableInternal is combination of Table & TableDefinition
-  std::map<uint64_t, pb::coordinator_internal::IdEpochInternal> id_epoch_map_temp_;
+  butil::FlatMap<uint64_t, pb::coordinator_internal::IdEpochInternal> id_epoch_map_temp_;
   bthread_mutex_t id_epoch_map_temp_mutex_;
 
   // 0.ids_epochs
   // TableInternal is combination of Table & TableDefinition
-  std::map<uint64_t, pb::coordinator_internal::IdEpochInternal> id_epoch_map_;
+  butil::FlatMap<uint64_t, pb::coordinator_internal::IdEpochInternal> id_epoch_map_;
   MetaMapStorage<pb::coordinator_internal::IdEpochInternal> *id_epoch_meta_;
   bthread_mutex_t id_epoch_map_mutex_;
 
   // 1.coordinators
-  std::map<uint64_t, pb::coordinator_internal::CoordinatorInternal> coordinator_map_;
+  butil::FlatMap<uint64_t, pb::coordinator_internal::CoordinatorInternal> coordinator_map_;
   MetaMapStorage<pb::coordinator_internal::CoordinatorInternal> *coordinator_meta_;
   bthread_mutex_t coordinator_map_mutex_;
 
   // 2.stores
-  std::map<uint64_t, pb::common::Store> store_map_;
-  MetaMapStorage<pb::common::Store> *store_meta_;          // need contruct
-  std::map<uint64_t, pb::common::Store> store_need_push_;  // will send push msg to these stores in crontab
+  butil::FlatMap<uint64_t, pb::common::Store> store_map_;
+  MetaMapStorage<pb::common::Store> *store_meta_;                // need contruct
+  butil::FlatMap<uint64_t, pb::common::Store> store_need_push_;  // will send push msg to these stores in crontab
   bthread_mutex_t store_map_mutex_;
   bthread_mutex_t store_need_push_mutex_;
 
   // 3.executors
-  std::map<uint64_t, pb::common::Executor> executor_map_;
-  MetaMapStorage<pb::common::Executor> *executor_meta_;          // need construct
-  std::map<uint64_t, pb::common::Executor> executor_need_push_;  // will send push msg to these executors in crontab
+  butil::FlatMap<uint64_t, pb::common::Executor> executor_map_;
+  MetaMapStorage<pb::common::Executor> *executor_meta_;  // need construct
+  butil::FlatMap<uint64_t, pb::common::Executor>
+      executor_need_push_;  // will send push msg to these executors in crontab
   bthread_mutex_t executor_map_mutex_;
   bthread_mutex_t executor_need_push_mutex_;
 
   // 4.schemas
-  std::map<uint64_t, pb::coordinator_internal::SchemaInternal> schema_map_;
+  butil::FlatMap<uint64_t, pb::coordinator_internal::SchemaInternal> schema_map_;
   MetaMapStorage<pb::coordinator_internal::SchemaInternal> *schema_meta_;
   bthread_mutex_t schema_map_mutex_;
 
   // 5.regions
-  std::map<uint64_t, pb::common::Region> region_map_;
+  butil::FlatMap<uint64_t, pb::common::Region> region_map_;
   MetaMapStorage<pb::common::Region> *region_meta_;
   bthread_mutex_t region_map_mutex_;
 
   // 6.tables
   // TableInternal is combination of Table & TableDefinition
-  std::map<uint64_t, pb::coordinator_internal::TableInternal> table_map_;
+  butil::FlatMap<uint64_t, pb::coordinator_internal::TableInternal> table_map_;
   MetaMapStorage<pb::coordinator_internal::TableInternal> *table_meta_;
   bthread_mutex_t table_map_mutex_;
 
   // 7.store_metrics
-  std::map<uint64_t, pb::common::StoreMetrics> store_metrics_map_;
+  butil::FlatMap<uint64_t, pb::common::StoreMetrics> store_metrics_map_;
   MetaMapStorage<pb::common::StoreMetrics> *store_metrics_meta_;
   bthread_mutex_t store_metrics_map_mutex_;
 
   // 8.table_metrics
-  std::map<uint64_t, pb::coordinator_internal::TableMetricsInternal> table_metrics_map_;
+  butil::FlatMap<uint64_t, pb::coordinator_internal::TableMetricsInternal> table_metrics_map_;
   MetaMapStorage<pb::coordinator_internal::TableMetricsInternal> *table_metrics_meta_;
   bthread_mutex_t table_metrics_map_mutex_;
 

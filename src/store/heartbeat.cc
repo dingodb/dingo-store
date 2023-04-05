@@ -51,7 +51,8 @@ void Heartbeat::SendCoordinatorPushToStore(void* arg) {
   }
   DINGO_LOG(DEBUG) << "SendCoordinatorPushToStore... this is leader";
 
-  std::map<uint64_t, pb::common::Store> store_to_push;
+  butil::FlatMap<uint64_t, pb::common::Store> store_to_push;
+  store_to_push.init(1000, 80);  // notice: FlagMap must init before use
   coordinator_control->GetPushStoreMap(store_to_push);
 
   if (store_to_push.empty()) {
