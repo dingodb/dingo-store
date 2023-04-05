@@ -30,6 +30,7 @@
 #include "butil/strings/string_split.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "coordinator/coordinator_meta_storage.h"
 #include "engine/snapshot.h"
 #include "google/protobuf/unknown_field_set.h"
 #include "proto/common.pb.h"
@@ -43,7 +44,7 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
                                        std::shared_ptr<RawEngine> raw_engine_of_meta)
     : meta_reader_(meta_reader), meta_writer_(meta_writer), leader_term_(-1), raw_engine_of_meta_(raw_engine_of_meta) {
   // init bthread mutex
-  bthread_mutex_init(&id_epoch_map_temp_mutex_, nullptr);
+  // bthread_mutex_init(&id_epoch_map_temp_mutex_, nullptr);
   bthread_mutex_init(&id_epoch_map_mutex_, nullptr);
   bthread_mutex_init(&coordinator_map_mutex_, nullptr);
   bthread_mutex_init(&store_map_mutex_, nullptr);
@@ -69,7 +70,7 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   table_metrics_meta_ = new MetaMapStorage<pb::coordinator_internal::TableMetricsInternal>(&table_metrics_map_);
 
   // init FlatMap
-  id_epoch_map_temp_.init(1000, 80);
+  // id_epoch_map_temp_.init(1000, 80);
   id_epoch_map_.init(1000, 80);
   coordinator_map_.init(1000, 80);
   store_map_.init(1000, 80);
@@ -81,6 +82,9 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   table_map_.init(100000, 80);
   store_metrics_map_.init(1000, 80);
   table_metrics_map_.init(100000, 80);
+
+  // init SafeMap
+  id_epoch_map_safe_temp_.Init(100);  // id_epoch_map_temp_ is a small map
 }
 
 CoordinatorControl::~CoordinatorControl() {
@@ -206,11 +210,15 @@ bool CoordinatorControl::Recover() {
   // init id_epoch_map_temp_
   // copy id_epoch_map_ to id_epoch_map_temp_
   {
-    BAIDU_SCOPED_LOCK(id_epoch_map_temp_mutex_);
+    // BAIDU_SCOPED_LOCK(id_epoch_map_temp_mutex_);
     BAIDU_SCOPED_LOCK(id_epoch_map_mutex_);
-    id_epoch_map_temp_ = id_epoch_map_;
+    // id_epoch_map_temp_ = id_epoch_map_;
+    id_epoch_map_safe_temp_.Copy(id_epoch_map_);
   }
-  DINGO_LOG(INFO) << "Recover id_epoch_map_temp, count=" << id_epoch_map_temp_.size();
+  // DINGO_LOG(INFO) << "Recover id_epoch_map_temp, count=" << id_epoch_map_temp_.size();
+  uint64_t size = 0;
+  id_epoch_map_safe_temp_.Size(size);
+  DINGO_LOG(INFO) << "Recover id_epoch_safe_map_temp, count=" << size;
 
   return true;
 }
@@ -245,25 +253,6 @@ bool CoordinatorControl::Init() {
   }
 
   return true;
-}
-
-uint64_t CoordinatorControl::GetPresentId(const pb::coordinator_internal::IdEpochType& key) {
-  uint64_t value = 0;
-  BAIDU_SCOPED_LOCK(id_epoch_map_temp_mutex_);
-
-  auto* temp_id_epoch = id_epoch_map_temp_.seek(key);
-
-  // if (id_epoch_map_temp_.find(key) == id_epoch_map_temp_.end()) {
-  if (temp_id_epoch == nullptr) {
-    value = COORDINATOR_ID_OF_MAP_MIN;
-    DINGO_LOG(INFO) << "GetPresentId key=" << pb::coordinator_internal::IdEpochType_Name(key)
-                    << " not found, generate new id=" << value;
-  } else {
-    value = id_epoch_map_temp_[key].value();
-    DINGO_LOG(INFO) << "GetPresentId key=" << pb::coordinator_internal::IdEpochType_Name(key) << " value=" << value;
-  }
-
-  return value;
 }
 
 void CoordinatorControl::GetServerLocation(pb::common::Location& raft_location, pb::common::Location& server_location) {
@@ -313,39 +302,65 @@ void CoordinatorControl::GetLeaderLocation(pb::common::Location& leader_server_l
 // only id_epoch_map_ is in state machine, and will persistent to raft and local rocksdb
 uint64_t CoordinatorControl::GetNextId(const pb::coordinator_internal::IdEpochType& key,
                                        pb::coordinator_internal::MetaIncrement& meta_increment) {
-  uint64_t value = 0;
-  {
-    BAIDU_SCOPED_LOCK(id_epoch_map_temp_mutex_);
-    auto* temp_id_epoch = id_epoch_map_temp_.seek(key);
+  // uint64_t value = 0;
+  // {
+  //   BAIDU_SCOPED_LOCK(id_epoch_map_temp_mutex_);
+  //   auto* temp_id_epoch = id_epoch_map_temp_.seek(key);
 
-    // if (id_epoch_map_temp_.seek(key) == nullptr) {
-    if (temp_id_epoch == nullptr) {
-      value = COORDINATOR_ID_OF_MAP_MIN + 1;
-      DINGO_LOG(INFO) << "GetNextId key=" << pb::coordinator_internal::IdEpochType_Name(key)
-                      << " not found, generate new id=" << value;
+  //   // if (id_epoch_map_temp_.seek(key) == nullptr) {
+  //   if (temp_id_epoch == nullptr) {
+  //     value = COORDINATOR_ID_OF_MAP_MIN + 1;
+  //     DINGO_LOG(INFO) << "GetNextId key=" << pb::coordinator_internal::IdEpochType_Name(key)
+  //                     << " not found, generate new id=" << value;
 
-      pb::coordinator_internal::IdEpochInternal id_epoch;
-      id_epoch.set_id(key);
-      id_epoch.set_value(value);
+  //     pb::coordinator_internal::IdEpochInternal id_epoch;
+  //     id_epoch.set_id(key);
+  //     id_epoch.set_value(value);
 
-      // update id in memory
-      id_epoch_map_temp_.insert(key, id_epoch);
-    } else {
-      value = temp_id_epoch->value() + 1;
-      DINGO_LOG(INFO) << "GetNextId key=" << pb::coordinator_internal::IdEpochType_Name(key) << " value=" << value;
-      // update id in memory
-      temp_id_epoch->set_value(value);
-    }
-  }
+  //     // update id in memory
+  //     id_epoch_map_temp_.insert(key, id_epoch);
+  //   } else {
+  //     value = temp_id_epoch->value() + 1;
+  //     DINGO_LOG(INFO) << "GetNextId key=" << pb::coordinator_internal::IdEpochType_Name(key) << " value=" << value;
+  //     // update id in memory
+  //     temp_id_epoch->set_value(value);
+  //   }
+  // }
+
+  // get next id from id_epoch_map_safe_temp_
+  uint64_t next_id = 0;
+  id_epoch_map_safe_temp_.GetNextId(key, next_id);
 
   // generate meta_increment
   auto* idepoch = meta_increment.add_idepochs();
   idepoch->set_id(key);
   idepoch->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
 
-  auto* idepoch_internl = idepoch->mutable_idepoch();
-  idepoch_internl->set_id(key);
-  idepoch_internl->set_value(value);
+  auto* idepoch_internal = idepoch->mutable_idepoch();
+  idepoch_internal->set_id(key);
+  idepoch_internal->set_value(next_id);
+
+  return next_id;
+}
+
+uint64_t CoordinatorControl::GetPresentId(const pb::coordinator_internal::IdEpochType& key) {
+  // uint64_t value = 0;
+  // BAIDU_SCOPED_LOCK(id_epoch_map_temp_mutex_);
+
+  // auto* temp_id_epoch = id_epoch_map_temp_.seek(key);
+
+  // // if (id_epoch_map_temp_.find(key) == id_epoch_map_temp_.end()) {
+  // if (temp_id_epoch == nullptr) {
+  //   value = COORDINATOR_ID_OF_MAP_MIN;
+  //   DINGO_LOG(INFO) << "GetPresentId key=" << pb::coordinator_internal::IdEpochType_Name(key)
+  //                   << " not found, generate new id=" << value;
+  // } else {
+  //   value = id_epoch_map_temp_[key].value();
+  //   DINGO_LOG(INFO) << "GetPresentId key=" << pb::coordinator_internal::IdEpochType_Name(key) << " value=" << value;
+  // }
+
+  uint64_t value = 0;
+  id_epoch_map_safe_temp_.GetPresentId(key, value);
 
   return value;
 }

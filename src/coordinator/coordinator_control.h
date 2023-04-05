@@ -30,6 +30,7 @@
 #include "butil/strings/stringprintf.h"
 #include "common/logging.h"
 #include "common/meta_control.h"
+#include "coordinator/coordinator_meta_storage.h"
 #include "engine/snapshot.h"
 #include "meta/meta_reader.h"
 #include "meta/meta_writer.h"
@@ -40,114 +41,6 @@
 #include "raft/raft_node.h"
 
 namespace dingodb {
-
-template <typename T>
-class MetaMapStorage {
- public:
-  const std::string internal_prefix;
-  MetaMapStorage(butil::FlatMap<uint64_t, T> *elements_ptr)
-      : internal_prefix(typeid(T).name()), elements_(elements_ptr){};
-  MetaMapStorage(butil::FlatMap<uint64_t, T> *elements_ptr, const std::string &prefix)
-      : internal_prefix(prefix), elements_(elements_ptr){};
-  ~MetaMapStorage() = default;
-
-  std::string Prefix() { return internal_prefix; }
-
-  bool Init() {
-    DINGO_LOG(INFO) << "coordinator server meta";
-    return true;
-  }
-
-  bool Recover(const std::vector<pb::common::KeyValue> &kvs) {
-    TransformFromKv(kvs);
-    return true;
-  }
-
-  bool IsExist(uint64_t id) {
-    // std::shared_lock<std::shared_mutex> lock(mutex_);
-    auto it = elements_->find(id);
-    return static_cast<bool>(it != elements_->end());
-  }
-
-  uint64_t ParseId(const std::string &str) {
-    if (str.size() <= internal_prefix.size()) {
-      LOG(ERROR) << "Parse id failed, invalid str " << str;
-      return 0;
-    }
-
-    std::string s(str.c_str() + internal_prefix.size() + 1);
-    try {
-      return std::stoull(s, nullptr, 10);
-    } catch (std::invalid_argument &e) {
-      LOG(ERROR) << "string to uint64_t failed: " << e.what();
-    }
-
-    return 0;
-  }
-
-  std::string GenKey(uint64_t id) { return butil::StringPrintf("%s_%lu", internal_prefix.c_str(), id); }
-
-  std::shared_ptr<pb::common::KeyValue> TransformToKv(uint64_t id) {
-    // std::shared_lock<std::shared_mutex> lock(mutex_);
-    auto it = elements_->find(id);
-    if (it == elements_->end()) {
-      return nullptr;
-    }
-
-    return TransformToKv(it->second);
-  };
-
-  std::shared_ptr<pb::common::KeyValue> TransformToKv(T element) {
-    std::shared_ptr<pb::common::KeyValue> kv = std::make_shared<pb::common::KeyValue>();
-    kv->set_key(GenKey(element.id()));
-    kv->set_value(element.SerializeAsString());
-
-    return kv;
-  }
-
-  pb::common::KeyValue TransformToKvValue(T element) {
-    pb::common::KeyValue kv;
-    kv.set_key(GenKey(element.id()));
-    kv.set_value(element.SerializeAsString());
-
-    return kv;
-  }
-
-  std::vector<pb::common::KeyValue> TransformToKvWithAll() {
-    // std::shared_lock<std::shared_mutex> lock(mutex_);
-
-    std::vector<pb::common::KeyValue> kvs;
-    for (const auto &it : *elements_) {
-      pb::common::KeyValue kv;
-      kv.set_key(GenKey(it.first));
-      kv.set_value(it.second.SerializeAsString());
-      kvs.push_back(kv);
-    }
-
-    return kvs;
-  }
-
-  void TransformFromKv(const std::vector<pb::common::KeyValue> &kvs) {
-    // std::unique_lock<std::shared_mutex> lock(mutex_);
-    for (const auto &kv : kvs) {
-      uint64_t id = ParseId(kv.key());
-      T element;
-      element.ParsePartialFromArray(kv.value().data(), kv.value().size());
-      // elements_->insert_or_assign(id, element);
-      elements_->insert(id, element);
-    }
-  };
-
-  MetaMapStorage(const MetaMapStorage &) = delete;
-  const MetaMapStorage &operator=(const MetaMapStorage &) = delete;
-
- private:
-  // Coordinator all region meta data in this server.
-  // std::map<uint64_t, std::shared_ptr<T>> *elements_;
-  butil::FlatMap<uint64_t, T> *elements_;
-};
-
-#define COORDINATOR_ID_OF_MAP_MIN 1000
 
 class CoordinatorControl : public MetaControl {
  public:
@@ -369,8 +262,10 @@ class CoordinatorControl : public MetaControl {
  private:
   // ids_epochs_temp (out of state machine, only for leader use)
   // TableInternal is combination of Table & TableDefinition
-  butil::FlatMap<uint64_t, pb::coordinator_internal::IdEpochInternal> id_epoch_map_temp_;
-  bthread_mutex_t id_epoch_map_temp_mutex_;
+  //   butil::FlatMap<uint64_t, pb::coordinator_internal::IdEpochInternal> id_epoch_map_temp_;
+  //   bthread_mutex_t id_epoch_map_temp_mutex_;
+
+  DingoSafeIdEpochMap id_epoch_map_safe_temp_;
 
   // 0.ids_epochs
   // TableInternal is combination of Table & TableDefinition
