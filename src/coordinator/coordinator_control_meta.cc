@@ -14,6 +14,7 @@
 
 #include <sys/types.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <memory>
@@ -82,21 +83,30 @@ void CoordinatorControl::GenerateRootSchemas(pb::coordinator_internal::SchemaInt
   DINGO_LOG(INFO) << "GenerateRootSchemas 4[" << information_schema_internal.DebugString();
 }
 
+bool CoordinatorControl::ValidateSchema(uint64_t schema_id) {
+  BAIDU_SCOPED_LOCK(schema_map_mutex_);
+  auto* temp_schema = schema_map_.seek(schema_id);
+  if (temp_schema == nullptr) {
+    DINGO_LOG(ERROR) << " ValidateSchema schema_id is illegal " << schema_id;
+    return false;
+  }
+
+  return true;
+}
+
 // TODO: check name comflicts before create new schema
 int CoordinatorControl::CreateSchema(uint64_t parent_schema_id, std::string schema_name, uint64_t& new_schema_id,
                                      pb::coordinator_internal::MetaIncrement& meta_increment) {
   // validate
-  {
-    BAIDU_SCOPED_LOCK(schema_map_mutex_);
-    if (schema_map_.find(parent_schema_id) == schema_map_.end()) {
-      DINGO_LOG(INFO) << " CreateSchema parent_schema_id is illegal " << parent_schema_id;
-      return -1;
-    }
 
-    if (schema_name.empty()) {
-      DINGO_LOG(INFO) << " CreateSchema schema_name is illegal " << schema_name;
-      return -1;
-    }
+  if (!ValidateSchema(parent_schema_id)) {
+    DINGO_LOG(ERROR) << " CreateSchema parent_schema_id is illegal " << parent_schema_id;
+    return -1;
+  }
+
+  if (schema_name.empty()) {
+    DINGO_LOG(INFO) << " CreateSchema schema_name is illegal " << schema_name;
+    return -1;
   }
 
   new_schema_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_SCHEMA, meta_increment);
@@ -150,20 +160,20 @@ int CoordinatorControl::DropSchema(uint64_t parent_schema_id, uint64_t schema_id
   pb::coordinator_internal::SchemaInternal schema_internal;
   {
     BAIDU_SCOPED_LOCK(schema_map_mutex_);
-    if (this->schema_map_.find(schema_id) == schema_map_.end()) {
+    auto* schema_to_delete = schema_map_.seek(schema_id);
+    if (schema_to_delete == nullptr) {
       DINGO_LOG(ERROR) << "ERRROR: schema_id not found" << schema_id;
       return -1;
     }
 
-    auto& schema_to_delete = schema_map_[schema_id];
-    if (schema_to_delete.table_ids_size() > 0 || schema_to_delete.schema_ids_size() > 0) {
+    if (schema_to_delete->table_ids_size() > 0 || schema_to_delete->schema_ids_size() > 0) {
       DINGO_LOG(ERROR) << "ERRROR: schema is not null" << schema_id
-                       << " table_ids_size=" << schema_to_delete.table_ids_size()
-                       << " schema_ids_size=" << schema_to_delete.schema_ids_size();
+                       << " table_ids_size=" << schema_to_delete->table_ids_size()
+                       << " schema_ids_size=" << schema_to_delete->schema_ids_size();
       return -1;
     }
     // construct schema from schema_internal
-    schema_internal = schema_map_.at(schema_id);
+    schema_internal = *schema_to_delete;
   }
 
   // bump up epoch
@@ -197,21 +207,22 @@ void CoordinatorControl::GetSchemas(uint64_t schema_id, std::vector<pb::meta::Sc
 
   {
     BAIDU_SCOPED_LOCK(schema_map_mutex_);
-    if (this->schema_map_.find(schema_id) == schema_map_.end()) {
+    auto* schema_internal = schema_map_.seek(schema_id);
+    if (schema_internal == nullptr) {
       return;
     }
 
-    auto& schema_internal = schema_map_[schema_id];
-    DINGO_LOG(INFO) << " sub schema count=" << schema_internal.schema_ids_size();
+    DINGO_LOG(INFO) << " sub schema count=" << schema_internal->schema_ids_size();
 
-    for (int i = 0; i < schema_internal.schema_ids_size(); i++) {
-      uint64_t sub_schema_id = schema_internal.schema_ids(i);
+    for (int i = 0; i < schema_internal->schema_ids_size(); i++) {
+      uint64_t sub_schema_id = schema_internal->schema_ids(i);
 
       DINGO_LOG(INFO) << "sub_schema_id=" << sub_schema_id;
 
-      DINGO_LOG(INFO) << schema_internal.DebugString();
+      DINGO_LOG(INFO) << schema_internal->DebugString();
 
-      if (schema_map_.find(sub_schema_id) == schema_map_.end()) {
+      auto* lean_schema = schema_map_.seek(sub_schema_id);
+      if (lean_schema == nullptr) {
         DINGO_LOG(ERROR) << "ERRROR: sub_schema_id " << sub_schema_id << " not exists";
         DINGO_LOG(INFO) << "ERRROR: sub_schema_id " << sub_schema_id << " not exists";
         continue;
@@ -221,23 +232,22 @@ void CoordinatorControl::GetSchemas(uint64_t schema_id, std::vector<pb::meta::Sc
       DINGO_LOG(INFO) << " GetSchemas push_back sub schema id=" << sub_schema_id;
 
       // construct sub_schema_for_response
-      const auto& lean_schema = schema_map_[sub_schema_id];
       pb::meta::Schema sub_schema_for_response;
 
       auto* sub_schema_common_id = sub_schema_for_response.mutable_id();
       sub_schema_common_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
-      sub_schema_common_id->set_entity_id(lean_schema.id());  // this is equal to sub_schema_id
+      sub_schema_common_id->set_entity_id(lean_schema->id());  // this is equal to sub_schema_id
       sub_schema_common_id->set_parent_entity_id(
           schema_id);  // this is sub_schema_id's parent which is the input schema_id
 
-      for (auto x : lean_schema.schema_ids()) {
+      for (auto x : lean_schema->schema_ids()) {
         auto* temp_id = sub_schema_for_response.add_schema_ids();
         temp_id->set_entity_id(x);
         temp_id->set_parent_entity_id(sub_schema_id);
         temp_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
       }
 
-      for (auto x : lean_schema.table_ids()) {
+      for (auto x : lean_schema->table_ids()) {
         auto* temp_id = sub_schema_for_response.add_table_ids();
         temp_id->set_entity_id(x);
         temp_id->set_parent_entity_id(sub_schema_id);
@@ -257,7 +267,7 @@ int CoordinatorControl::CreateTableId(uint64_t schema_id, uint64_t& new_table_id
   // validate schema_id is existed
   {
     BAIDU_SCOPED_LOCK(schema_map_mutex_);
-    if (schema_map_.find(schema_id) == schema_map_.end()) {
+    if (schema_map_.seek(schema_id) == nullptr) {
       DINGO_LOG(ERROR) << "schema_id is illegal " << schema_id;
       return -1;
     }
@@ -287,7 +297,7 @@ int CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta::TableDef
   // validate schema_id is existed
   {
     BAIDU_SCOPED_LOCK(schema_map_mutex_);
-    if (schema_map_.find(schema_id) == schema_map_.end()) {
+    if (schema_map_.seek(schema_id) == nullptr) {
       DINGO_LOG(ERROR) << "schema_id is illegal " << schema_id;
       return -1;
     }
@@ -404,24 +414,22 @@ int CoordinatorControl::DropTable(uint64_t schema_id, uint64_t table_id,
     return -1;
   }
 
-  {
-    BAIDU_SCOPED_LOCK(schema_map_mutex_);
-    if (this->schema_map_.find(schema_id) == schema_map_.end()) {
-      DINGO_LOG(ERROR) << "ERRROR: schema_id not found" << schema_id;
-      return -1;
-    }
+  if (!ValidateSchema(schema_id)) {
+    DINGO_LOG(ERROR) << "ERRROR: schema_id not valid" << schema_id;
+    return -1;
   }
 
   pb::coordinator_internal::TableInternal table_internal;
   {
     BAIDU_SCOPED_LOCK(table_map_mutex_);
-    if (this->table_map_.find(table_id) == table_map_.end()) {
+    auto* temp_table = table_map_.seek(table_id);
+    if (temp_table == nullptr) {
       DINGO_LOG(ERROR) << "ERRROR: table_id not found" << table_id;
       return -1;
     }
 
     // construct Table from table_internal
-    table_internal = table_map_.at(table_id);
+    table_internal = *temp_table;
   }
 
   bool need_delete_region = false;
@@ -432,7 +440,7 @@ int CoordinatorControl::DropTable(uint64_t schema_id, uint64_t table_id,
       uint64_t region_id = table_internal.partitions(i).region_id();
 
       // get region
-      if (region_map_.find(region_id) == region_map_.end()) {
+      if (region_map_.seek(region_id) == nullptr) {
         DINGO_LOG(ERROR) << "ERROR cannot find region in regionmap_ while DropTable, table_id =" << table_id
                          << " region_id=" << region_id;
         return -1;
@@ -489,7 +497,7 @@ void CoordinatorControl::GetTables(uint64_t schema_id,
 
   {
     BAIDU_SCOPED_LOCK(schema_map_mutex_);
-    if (this->schema_map_.find(schema_id) == schema_map_.end()) {
+    if (this->schema_map_.seek(schema_id) == nullptr) {
       DINGO_LOG(ERROR) << "ERRROR: schema_id not found" << schema_id;
       return;
     }
@@ -497,7 +505,8 @@ void CoordinatorControl::GetTables(uint64_t schema_id,
     auto& schema_internal = schema_map_[schema_id];
     for (int i = 0; i < schema_internal.table_ids_size(); i++) {
       uint64_t table_id = schema_internal.table_ids(i);
-      if (table_map_.find(table_id) == table_map_.end()) {
+      auto* temp_table = table_map_.seek(table_id);
+      if (temp_table == nullptr) {
         DINGO_LOG(ERROR) << "ERRROR: table_id " << table_id << " not exists";
         continue;
       }
@@ -513,7 +522,7 @@ void CoordinatorControl::GetTables(uint64_t schema_id,
       table_id_for_response->set_entity_id(table_id);
       table_id_for_response->set_parent_entity_id(schema_id);
 
-      table_def_with_id.mutable_table_definition()->CopyFrom(table_map_[table_id].definition());
+      table_def_with_id.mutable_table_definition()->CopyFrom(temp_table->definition());
       table_definition_with_ids.push_back(table_def_with_id);
     }
   }
@@ -537,18 +546,16 @@ void CoordinatorControl::GetTable(uint64_t schema_id, uint64_t table_id,
   }
 
   // validate schema_id
-  {
-    BAIDU_SCOPED_LOCK(schema_map_mutex_);
-    if (this->schema_map_.find(schema_id) == schema_map_.end()) {
-      DINGO_LOG(ERROR) << "ERRROR: schema_id not found" << schema_id;
-      return;
-    }
+  if (!ValidateSchema(schema_id)) {
+    DINGO_LOG(ERROR) << "ERRROR: schema_id not valid" << schema_id;
+    return;
   }
 
   // validate table_id & get table definition
   {
     BAIDU_SCOPED_LOCK(table_map_mutex_);
-    if (table_map_.find(table_id) == table_map_.end()) {
+    auto* temp_table = table_map_.seek(table_id);
+    if (temp_table == nullptr) {
       DINGO_LOG(ERROR) << "ERRROR: table_id " << table_id << " not exists";
       return;
     }
@@ -561,7 +568,7 @@ void CoordinatorControl::GetTable(uint64_t schema_id, uint64_t table_id,
     table_id_for_response->set_entity_id(table_id);
     table_id_for_response->set_parent_entity_id(schema_id);
 
-    table_definition_with_id.mutable_table_definition()->CopyFrom(table_map_[table_id].definition());
+    table_definition_with_id.mutable_table_definition()->CopyFrom(temp_table->definition());
   }
 
   DINGO_LOG(DEBUG) << "GetTable schema_id=" << schema_id << " table_id=" << table_id
@@ -576,20 +583,21 @@ void CoordinatorControl::GetTableRange(uint64_t schema_id, uint64_t table_id, pb
   }
 
   pb::coordinator_internal::TableInternal table_internal;
+  if (!ValidateSchema(schema_id)) {
+    DINGO_LOG(ERROR) << "ERRROR: schema_id not found" << schema_id;
+    return;
+  }
   {
     BAIDU_SCOPED_LOCK(table_map_mutex_);
-    if (this->schema_map_.find(schema_id) == schema_map_.end()) {
-      DINGO_LOG(ERROR) << "ERRROR: schema_id not found" << schema_id;
-      return;
-    }
 
-    if (this->table_map_.find(table_id) == table_map_.end()) {
+    auto* temp_table = table_map_.seek(table_id);
+    if (temp_table == nullptr) {
       DINGO_LOG(ERROR) << "ERRROR: table_id not found" << table_id;
       return;
     }
 
     // construct Table from table_internal
-    table_internal = table_map_.at(table_id);
+    table_internal = *temp_table;
   }
 
   for (int i = 0; i < table_internal.partitions_size(); i++) {
@@ -608,20 +616,21 @@ void CoordinatorControl::GetTableRange(uint64_t schema_id, uint64_t table_id, pb
     part_range->CopyFrom(table_internal.partitions(i).range());
 
     // get region
-    if (region_map_.find(region_id) == region_map_.end()) {
+    auto* part_region = region_map_.seek(region_id);
+
+    if (part_region == nullptr) {
       DINGO_LOG(ERROR) << "ERROR cannot find region in regionmap_ while GetTable, table_id =" << table_id
                        << " region_id=" << region_id;
       continue;
     }
-    pb::common::Region& part_region = region_map_[region_id];
 
     // range_distribution leader location
     auto* leader_location = range_distribution->mutable_leader();
 
     // range_distribution voter & learner locations
-    for (int j = 0; j < part_region.peers_size(); j++) {
-      const auto& part_peer = part_region.peers(j);
-      if (part_peer.store_id() == part_region.leader_store_id()) {
+    for (int j = 0; j < part_region->peers_size(); j++) {
+      const auto& part_peer = part_region->peers(j);
+      if (part_peer.store_id() == part_region->leader_store_id()) {
         leader_location->CopyFrom(part_peer.server_location());
       }
 
@@ -657,17 +666,14 @@ void CoordinatorControl::GetTableMetrics(uint64_t schema_id, uint64_t table_id,
     return;
   }
 
-  {
-    BAIDU_SCOPED_LOCK(schema_map_mutex_);
-    if (this->schema_map_.find(schema_id) == schema_map_.end()) {
-      DINGO_LOG(ERROR) << "ERRROR: schema_id not found" << schema_id;
-      return;
-    }
+  if (!ValidateSchema(schema_id)) {
+    DINGO_LOG(ERROR) << "ERRROR: schema_id not found" << schema_id;
+    return;
   }
 
   {
     BAIDU_SCOPED_LOCK(table_map_mutex_);
-    if (this->table_map_.find(table_id) == table_map_.end()) {
+    if (table_map_.seek(table_id) == nullptr) {
       DINGO_LOG(ERROR) << "ERRROR: table_id not found" << table_id;
       return;
     }
@@ -676,7 +682,8 @@ void CoordinatorControl::GetTableMetrics(uint64_t schema_id, uint64_t table_id,
   pb::coordinator_internal::TableMetricsInternal table_metrics_internal;
   {
     BAIDU_SCOPED_LOCK(table_metrics_map_mutex_);
-    if (this->table_metrics_map_.find(table_id) == table_metrics_map_.end()) {
+    auto* temp_table_metrics = table_metrics_map_.seek(table_id);
+    if (temp_table_metrics == nullptr) {
       DINGO_LOG(INFO) << "table_metrics not found, try to calculate new one" << table_id;
 
       // calculate table metrics using region metrics
@@ -686,7 +693,8 @@ void CoordinatorControl::GetTableMetrics(uint64_t schema_id, uint64_t table_id,
       } else {
         table_metrics_internal.set_id(table_id);
         table_metrics_internal.mutable_table_metrics()->CopyFrom(*table_metrics_single);
-        table_metrics_map_[table_id] = table_metrics_internal;
+        // table_metrics_map_[table_id] = table_metrics_internal;
+        temp_table_metrics->CopyFrom(table_metrics_internal);
 
         DINGO_LOG(INFO) << "table_metrics first calculated, table_id=" << table_id
                         << " row_count=" << table_metrics_single->rows_count()
@@ -697,7 +705,7 @@ void CoordinatorControl::GetTableMetrics(uint64_t schema_id, uint64_t table_id,
     } else {
       // construct TableMetrics from table_metrics_internal
       DINGO_LOG(DEBUG) << "table_metrics found, return metrics in map" << table_id;
-      table_metrics_internal = table_metrics_map_.at(table_id);
+      table_metrics_internal = *temp_table_metrics;
     }
   }
 
@@ -715,13 +723,14 @@ uint64_t CoordinatorControl::CalculateTableMetricsSingle(uint64_t table_id, pb::
   pb::coordinator_internal::TableInternal table_internal;
   {
     BAIDU_SCOPED_LOCK(table_map_mutex_);
-    if (this->table_map_.find(table_id) == table_map_.end()) {
+    auto* temp_table = table_map_.seek(table_id);
+    if (temp_table == nullptr) {
       DINGO_LOG(ERROR) << "ERRROR: table_id not found" << table_id;
       return -1;
     }
 
     // construct Table from table_internal
-    table_internal = table_map_.at(table_id);
+    table_internal = *temp_table;
   }
 
   // build result metrics
@@ -740,17 +749,20 @@ uint64_t CoordinatorControl::CalculateTableMetricsSingle(uint64_t table_id, pb::
       pb::common::Region part_region;
       {
         BAIDU_SCOPED_LOCK(region_map_mutex_);
-        if (region_map_.find(region_id) == region_map_.end()) {
+        auto* temp_region = region_map_.seek(region_id);
+        if (temp_region == nullptr) {
           DINGO_LOG(ERROR) << "ERROR cannot find region in regionmap_ while GetTable, table_id =" << table_id
                            << " region_id=" << region_id;
           continue;
         }
-        part_region = region_map_[region_id];
+        part_region = *temp_region;
       }
 
-      if (store_metrics_map_.find(part_region.leader_store_id()) != store_metrics_map_.end()) {
-        pb::common::StoreMetrics& store_metrics = store_metrics_map_.at(part_region.leader_store_id());
-        const auto& region_metrics = store_metrics.region_metrics_map();
+      auto* temp_store_metrics = store_metrics_map_.seek(part_region.leader_store_id());
+      // if (store_metrics_map_.find(part_region.leader_store_id()) != store_metrics_map_.end()) {
+      if (temp_store_metrics != nullptr) {
+        // pb::common::StoreMetrics& store_metrics = store_metrics_map_.at(part_region.leader_store_id());
+        const auto& region_metrics = temp_store_metrics->region_metrics_map();
 
         if (region_metrics.find(part_region.id()) != region_metrics.end()) {
           row_count += region_metrics.at(region_id).row_count();

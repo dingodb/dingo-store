@@ -16,6 +16,7 @@
 
 #include <sys/types.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <memory>
@@ -41,6 +42,7 @@ namespace dingodb {
 CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, std::shared_ptr<MetaWriter> meta_writer,
                                        std::shared_ptr<RawEngine> raw_engine_of_meta)
     : meta_reader_(meta_reader), meta_writer_(meta_writer), leader_term_(-1), raw_engine_of_meta_(raw_engine_of_meta) {
+  // init bthread mutex
   bthread_mutex_init(&id_epoch_map_temp_mutex_, nullptr);
   bthread_mutex_init(&id_epoch_map_mutex_, nullptr);
   bthread_mutex_init(&coordinator_map_mutex_, nullptr);
@@ -65,6 +67,20 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   executor_meta_ = new MetaMapStorage<pb::common::Executor>(&executor_map_);
   store_metrics_meta_ = new MetaMapStorage<pb::common::StoreMetrics>(&store_metrics_map_);
   table_metrics_meta_ = new MetaMapStorage<pb::coordinator_internal::TableMetricsInternal>(&table_metrics_map_);
+
+  // init FlatMap
+  id_epoch_map_temp_.init(1000, 80);
+  id_epoch_map_.init(1000, 80);
+  coordinator_map_.init(1000, 80);
+  store_map_.init(1000, 80);
+  store_need_push_.init(1000, 80);
+  executor_map_.init(1000, 80);
+  executor_need_push_.init(1000, 80);
+  schema_map_.init(10000, 80);
+  region_map_.init(300000, 80);
+  table_map_.init(100000, 80);
+  store_metrics_map_.init(1000, 80);
+  table_metrics_map_.init(100000, 80);
 }
 
 CoordinatorControl::~CoordinatorControl() {
@@ -234,7 +250,11 @@ bool CoordinatorControl::Init() {
 uint64_t CoordinatorControl::GetPresentId(const pb::coordinator_internal::IdEpochType& key) {
   uint64_t value = 0;
   BAIDU_SCOPED_LOCK(id_epoch_map_temp_mutex_);
-  if (id_epoch_map_temp_.find(key) == id_epoch_map_temp_.end()) {
+
+  auto* temp_id_epoch = id_epoch_map_temp_.seek(key);
+
+  // if (id_epoch_map_temp_.find(key) == id_epoch_map_temp_.end()) {
+  if (temp_id_epoch == nullptr) {
     value = COORDINATOR_ID_OF_MAP_MIN;
     DINGO_LOG(INFO) << "GetPresentId key=" << pb::coordinator_internal::IdEpochType_Name(key)
                     << " not found, generate new id=" << value;
@@ -296,18 +316,26 @@ uint64_t CoordinatorControl::GetNextId(const pb::coordinator_internal::IdEpochTy
   uint64_t value = 0;
   {
     BAIDU_SCOPED_LOCK(id_epoch_map_temp_mutex_);
-    if (id_epoch_map_temp_.find(key) == id_epoch_map_temp_.end()) {
-      value = COORDINATOR_ID_OF_MAP_MIN;
+    auto* temp_id_epoch = id_epoch_map_temp_.seek(key);
+
+    // if (id_epoch_map_temp_.seek(key) == nullptr) {
+    if (temp_id_epoch == nullptr) {
+      value = COORDINATOR_ID_OF_MAP_MIN + 1;
       DINGO_LOG(INFO) << "GetNextId key=" << pb::coordinator_internal::IdEpochType_Name(key)
                       << " not found, generate new id=" << value;
-    } else {
-      value = id_epoch_map_temp_[key].value();
-      DINGO_LOG(INFO) << "GetNextId key=" << pb::coordinator_internal::IdEpochType_Name(key) << " value=" << value;
-    }
-    value++;
 
-    // update id in memory
-    id_epoch_map_temp_[key].set_value(value);
+      pb::coordinator_internal::IdEpochInternal id_epoch;
+      id_epoch.set_id(key);
+      id_epoch.set_value(value);
+
+      // update id in memory
+      id_epoch_map_temp_.insert(key, id_epoch);
+    } else {
+      value = temp_id_epoch->value() + 1;
+      DINGO_LOG(INFO) << "GetNextId key=" << pb::coordinator_internal::IdEpochType_Name(key) << " value=" << value;
+      // update id in memory
+      temp_id_epoch->set_value(value);
+    }
   }
 
   // generate meta_increment

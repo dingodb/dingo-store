@@ -45,15 +45,18 @@ int CoordinatorControl::GetAppliedTermAndIndex(uint64_t& term, uint64_t& index) 
   BAIDU_SCOPED_LOCK(id_epoch_map_mutex_);
 
   int ret = 0;
-  if (id_epoch_map_.find(pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX) != id_epoch_map_.end()) {
-    index = id_epoch_map_[pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX].value();
+  auto* temp_index = id_epoch_map_temp_.seek(pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX);
+  auto* temp_term = id_epoch_map_temp_.seek(pb::coordinator_internal::IdEpochType::RAFT_APPLY_TERM);
+
+  if (temp_index != nullptr) {
+    index = temp_index->value();
   } else {
     DINGO_LOG(ERROR) << "GetAppliedTermAndIndex failed, id_epoch_map_ not contain RAFT_APPLY_INDEX";
     ret = -1;
   }
 
-  if (id_epoch_map_.find(pb::coordinator_internal::IdEpochType::RAFT_APPLY_TERM) != id_epoch_map_.end()) {
-    term = id_epoch_map_[pb::coordinator_internal::IdEpochType::RAFT_APPLY_TERM].value();
+  if (temp_term != nullptr) {
+    term = temp_term->value();
   } else {
     DINGO_LOG(ERROR) << "GetAppliedTermAndIndex failed, id_epoch_map_ not contain RAFT_APPLY_TERM";
     ret = -1;
@@ -186,7 +189,7 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
   DINGO_LOG(INFO) << "Coordinator start to LoadMetaFromSnapshotFile";
 
   // clean all data of rocksdb
-  if (!meta_writer_->DeleteRange(std::string(), std::string("\xff\xff\xff\xff"))) {
+  if (!meta_writer_->DeleteRange(std::string(10, '\0'), std::string(10, '\xff'))) {
     DINGO_LOG(ERROR) << "Coordinator delete range failed in LoadMetaFromSnapshotFile";
     return false;
   }
@@ -331,12 +334,17 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
     uint64_t applied_index = 0;
     uint64_t applied_term = 0;
 
-    if (id_epoch_map_.find(pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX) != id_epoch_map_.end()) {
-      applied_index = id_epoch_map_[pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX].value();
+    auto* temp_index = id_epoch_map_.seek(pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX);
+    auto* temp_term = id_epoch_map_.seek(pb::coordinator_internal::IdEpochType::RAFT_APPLY_TERM);
+
+    // if (id_epoch_map_.find(pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX) != id_epoch_map_.end()) {
+    if (temp_index != nullptr) {
+      applied_index = temp_index->value();
     }
 
-    if (id_epoch_map_.find(pb::coordinator_internal::IdEpochType::RAFT_APPLY_TERM) != id_epoch_map_.end()) {
-      applied_term = id_epoch_map_[pb::coordinator_internal::IdEpochType::RAFT_APPLY_TERM].value();
+    // if (id_epoch_map_.find(pb::coordinator_internal::IdEpochType::RAFT_APPLY_TERM) != id_epoch_map_.end()) {
+    if (temp_term != nullptr) {
+      applied_term = temp_term->value();
     }
 
     if (index <= applied_index && term <= applied_term) {
@@ -474,17 +482,17 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
       if (schema.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
         // update parent schema for user schemas
         if (schema.id() > pb::meta::ReservedSchemaIds::MAX_INTERNAL_SCHEMA) {
-          if (schema_map_.find(schema.schema_id()) != schema_map_.end()) {
-            auto& parent_schema = schema_map_[schema.schema_id()];
-
+          auto* parent_schema = schema_map_.seek(schema.schema_id());
+          // if (schema_map_.find(schema.schema_id()) != schema_map_.end()) {
+          if (parent_schema != nullptr) {
             // add new created schema's id to its parent schema's schema_ids
-            parent_schema.add_schema_ids(schema.id());
+            parent_schema->add_schema_ids(schema.id());
 
             DINGO_LOG(INFO) << "3.schema map CREATE new_sub_schema id=" << schema.id()
                             << " parent_id=" << schema.schema_id();
 
             // meta_write_kv
-            meta_write_to_kv.push_back(schema_meta_->TransformToKvValue(parent_schema));
+            meta_write_to_kv.push_back(schema_meta_->TransformToKvValue(*parent_schema));
           }
         }
         schema_map_[schema.id()] = schema.schema_internal();
@@ -503,25 +511,25 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         schema_map_.erase(schema.id());
 
         // delete from parent schema
-        if (schema_map_.find(schema.schema_id()) != schema_map_.end()) {
-          auto& parent_schema = schema_map_[schema.schema_id()];
-
+        auto* parent_schema = schema_map_.seek(schema.schema_id());
+        // if (schema_map_.find(schema.schema_id()) != schema_map_.end()) {
+        if (parent_schema != nullptr) {
           // according to the protobuf document, we must use CopyFrom for protobuf message data structure here
           pb::coordinator_internal::SchemaInternal new_schema;
-          new_schema.CopyFrom(parent_schema);
+          new_schema.CopyFrom(*parent_schema);
 
           new_schema.clear_table_ids();
 
           // add left schema_id to new_schema
-          for (auto x : parent_schema.table_ids()) {
+          for (auto x : parent_schema->table_ids()) {
             if (x != schema.id()) {
               new_schema.add_schema_ids(x);
             }
           }
-          parent_schema.CopyFrom(new_schema);
+          parent_schema->CopyFrom(new_schema);
 
           // meta_write_kv
-          meta_write_to_kv.push_back(schema_meta_->TransformToKvValue(parent_schema));
+          meta_write_to_kv.push_back(schema_meta_->TransformToKvValue(*parent_schema));
         }
 
         // meta_delete_kv
@@ -541,21 +549,25 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
 
         // add_store_for_push
         // only create region will push to store now
-        for (int j = 0; j < region.region().peers_size(); j++) {
-          uint64_t store_id = region.region().peers(j).store_id();
-          DINGO_LOG(INFO) << " add_store_for_push, peers_size=" << region.region().peers_size()
-                          << " store_id =" << store_id;
+        {
+          BAIDU_SCOPED_LOCK(store_need_push_mutex_);
+          for (int j = 0; j < region.region().peers_size(); j++) {
+            uint64_t store_id = region.region().peers(j).store_id();
+            DINGO_LOG(INFO) << " add_store_for_push, peers_size=" << region.region().peers_size()
+                            << " store_id =" << store_id;
 
-          if (store_need_push_.find(store_id) == store_need_push_.end()) {
-            if (store_map_.find(store_id) != store_map_.end()) {
-              store_need_push_[store_id] = store_map_[store_id];
-              DINGO_LOG(INFO) << " add_store_for_push, store_id=" << store_id
-                              << " in create region=" << region.region().id()
-                              << " location=" << store_map_[store_id].server_location().host() << ":"
-                              << store_map_[store_id].server_location().port();
-            } else {
-              DINGO_LOG(ERROR) << " add_store_for_push, illegal store_id=" << store_id
-                               << " in create region=" << region.region().id();
+            if (store_need_push_.seek(store_id) == nullptr) {
+              auto* temp_store = store_map_.seek(store_id);
+              if (temp_store != nullptr) {
+                store_need_push_.insert(store_id, *temp_store);
+                DINGO_LOG(INFO) << " add_store_for_push, store_id=" << store_id
+                                << " in create region=" << region.region().id()
+                                << " location=" << temp_store->server_location().host() << ":"
+                                << temp_store->server_location().port();
+              } else {
+                DINGO_LOG(ERROR) << " add_store_for_push, illegal store_id=" << store_id
+                                 << " in create region=" << region.region().id();
+              }
             }
           }
         }
@@ -597,16 +609,16 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         meta_write_to_kv.push_back(table_meta_->TransformToKvValue(table.table()));
 
         // add table to parent schema
-        if (schema_map_.find(table.schema_id()) != schema_map_.end()) {
-          auto& schema = schema_map_[table.schema_id()];
-
+        auto* schema = schema_map_.seek(table.schema_id());
+        // if (schema_map_.find(table.schema_id()) != schema_map_.end()) {
+        if (schema != nullptr) {
           // add new created table's id to its parent schema's table_ids
-          schema.add_table_ids(table.id());
+          schema->add_table_ids(table.id());
 
           DINGO_LOG(INFO) << "5.table map CREATE new_sub_table id=" << table.id() << " parent_id=" << table.schema_id();
 
           // meta_write_kv
-          meta_write_to_kv.push_back(schema_meta_->TransformToKvValue(schema));
+          meta_write_to_kv.push_back(schema_meta_->TransformToKvValue(*schema));
 
         } else {
           DINGO_LOG(ERROR) << " CREATE TABLE apply illegal schema_id=" << table.schema_id()
@@ -629,27 +641,27 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         table_map_.erase(table.id());
 
         // delete from parent schema
-        if (schema_map_.find(table.schema_id()) != schema_map_.end()) {
-          auto& schema = schema_map_[table.schema_id()];
-
+        auto* schema = schema_map_.seek(table.schema_id());
+        // if (schema_map_.find(table.schema_id()) != schema_map_.end()) {
+        if (schema != nullptr) {
           // according to the doc, we must use CopyFrom for protobuf message data structure here
           pb::coordinator_internal::SchemaInternal new_schema;
-          new_schema.CopyFrom(schema);
+          new_schema.CopyFrom(*schema);
 
           new_schema.clear_table_ids();
 
           // add left table_id to new_schema
-          for (auto x : schema.table_ids()) {
+          for (auto x : schema->table_ids()) {
             if (x != table.id()) {
               new_schema.add_table_ids(x);
             }
           }
-          schema.CopyFrom(new_schema);
+          schema->CopyFrom(new_schema);
 
           DINGO_LOG(INFO) << "5.table map DELETE new_sub_table id=" << table.id() << " parent_id=" << table.schema_id();
 
           // meta_write_kv
-          meta_write_to_kv.push_back(schema_meta_->TransformToKvValue(schema));
+          meta_write_to_kv.push_back(schema_meta_->TransformToKvValue(*schema));
 
         } else {
           DINGO_LOG(ERROR) << " DROP TABLE apply illegal schema_id=" << table.schema_id() << " table_id=" << table.id()

@@ -14,6 +14,7 @@
 
 #include <sys/types.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <memory>
@@ -105,7 +106,7 @@ void CoordinatorControl::GetStoreMetrics(std::vector<pb::common::StoreMetrics>& 
   }
 }
 
-void CoordinatorControl::GetPushStoreMap(std::map<uint64_t, pb::common::Store>& store_to_push) {
+void CoordinatorControl::GetPushStoreMap(butil::FlatMap<uint64_t, pb::common::Store>& store_to_push) {
   BAIDU_SCOPED_LOCK(store_need_push_mutex_);
   store_to_push.swap(store_need_push_);
 }
@@ -118,15 +119,15 @@ int CoordinatorControl::ValidateStore(uint64_t store_id, const std::string& keyr
 
   {
     BAIDU_SCOPED_LOCK(store_map_mutex_);
-    if (store_map_.find(store_id) != store_map_.end()) {
-      auto store_in_map = store_map_[store_id];
-      if (store_in_map.keyring() == keyring) {
+    auto* store_in_map = store_map_.seek(store_id);
+    if (store_in_map != nullptr) {
+      if (store_in_map->keyring() == keyring) {
         DINGO_LOG(INFO) << "ValidateStore store_id=" << store_id << " succcess";
         return 0;
       }
 
       DINGO_LOG(INFO) << "ValidateStore store_id=" << store_id << "keyring wrong fail input_keyring=" << keyring
-                      << " correct_keyring=" << store_in_map.keyring();
+                      << " correct_keyring=" << store_in_map->keyring();
       return -1;
     }
   }
@@ -174,12 +175,13 @@ int CoordinatorControl::DeleteStore(uint64_t cluster_id, uint64_t store_id, std:
   pb::common::Store store_to_delete;
   {
     BAIDU_SCOPED_LOCK(store_map_mutex_);
-    if (store_map_.find(store_id) == store_map_.end()) {
+    auto* temp_store = store_map_.seek(store_id);
+    if (temp_store == nullptr) {
       DINGO_LOG(INFO) << "DeleteStore store_id not exists, id=" << store_id;
       return -1;
     }
 
-    store_to_delete = store_map_[store_id];
+    store_to_delete = *temp_store;
     if (keyring == store_to_delete.keyring()) {
       DINGO_LOG(INFO) << "DeleteStore store_id id=" << store_id << " keyring not equal, input keyring=" << keyring
                       << " but store's keyring=" << store_to_delete.keyring();
@@ -209,10 +211,11 @@ uint64_t CoordinatorControl::UpdateStoreMap(const pb::common::Store& store,
   bool need_update_epoch = false;
   {
     BAIDU_SCOPED_LOCK(store_map_mutex_);
-    if (store_map_.find(store.id()) != store_map_.end()) {
-      if (store_map_[store.id()].state() != store.state()) {
-        DINGO_LOG(INFO) << "STORE STATUS CHANGE store_id = " << store.id()
-                        << " old status = " << store_map_[store.id()].state() << " new status = " << store.state();
+    auto* temp_store = store_map_.seek(store.id());
+    if (temp_store != nullptr) {
+      if (temp_store->state() != store.state()) {
+        DINGO_LOG(INFO) << "STORE STATUS CHANGE store_id = " << store.id() << " old status = " << temp_store->state()
+                        << " new status = " << store.state();
 
         // update meta_increment
         need_update_epoch = true;
@@ -304,7 +307,7 @@ int CoordinatorControl::CreateRegion(const std::string& region_name, const std::
 
   // generate new region
   uint64_t const create_region_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION, meta_increment);
-  if (region_map_.find(create_region_id) != region_map_.end()) {
+  if (region_map_.seek(create_region_id) != nullptr) {
     DINGO_LOG(ERROR) << "create_region_id =" << create_region_id << " is illegal, cannot create region!!";
     return -1;
   }
@@ -353,9 +356,9 @@ int CoordinatorControl::DropRegion(uint64_t region_id, pb::coordinator_internal:
   bool need_update_epoch = false;
   {
     BAIDU_SCOPED_LOCK(region_map_mutex_);
-    if (region_map_.find(region_id) != region_map_.end()) {
-      auto region_to_delete = region_map_[region_id];
-      region_to_delete.set_state(::dingodb::pb::common::RegionState::REGION_DELETE);
+    auto* region_to_delete = region_map_.seek(region_id);
+    if (region_to_delete != nullptr) {
+      region_to_delete->set_state(::dingodb::pb::common::RegionState::REGION_DELETE);
 
       // update meta_increment
       need_update_epoch = true;
@@ -364,7 +367,7 @@ int CoordinatorControl::DropRegion(uint64_t region_id, pb::coordinator_internal:
       region_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
 
       auto* region_increment_region = region_increment->mutable_region();
-      region_increment_region->CopyFrom(region_to_delete);
+      region_increment_region->CopyFrom(*region_to_delete);
 
       // on_apply
       // region_map_[region_id].set_state(::dingodb::pb::common::RegionState::REGION_DELETE);
@@ -399,14 +402,15 @@ uint64_t CoordinatorControl::UpdateRegionMap(std::vector<pb::common::Region>& re
   {
     BAIDU_SCOPED_LOCK(region_map_mutex_);
     for (const auto& region : regions) {
-      if (region_map_.find(region.id()) != region_map_.end()) {
+      auto* temp_region = region_map_.seek(region.id());
+      if (temp_region != nullptr) {
         DINGO_LOG(INFO) << " update region to region_map in heartbeat, region_id=" << region.id();
 
         // if state not change, just update leader_store_id
-        if (region_map_[region.id()].state() == region.state()) {
+        if (temp_region->state() == region.state()) {
           // update the region's leader_store_id, no need to apply raft
-          if (region_map_[region.id()].leader_store_id() != region.leader_store_id()) {
-            region_map_[region.id()].set_leader_store_id(region.leader_store_id());
+          if (temp_region->leader_store_id() != region.leader_store_id()) {
+            temp_region->set_leader_store_id(region.leader_store_id());
           }
           continue;
         } else {
@@ -417,7 +421,7 @@ uint64_t CoordinatorControl::UpdateRegionMap(std::vector<pb::common::Region>& re
           // if a region is set to DELETE, it will never be updated to other normal state
           const auto& region_delete_state_name =
               dingodb::pb::common::RegionState_Name(pb::common::RegionState::REGION_DELETE);
-          const auto& region_state_in_map = dingodb::pb::common::RegionState_Name(region_map_[region.id()].state());
+          const auto& region_state_in_map = dingodb::pb::common::RegionState_Name(temp_region->state());
           const auto& region_state_in_req = dingodb::pb::common::RegionState_Name(region.state());
 
           // if store want to update a region state from DELETE_* to other NON DELETE_* state, it is illegal
@@ -486,7 +490,7 @@ void CoordinatorControl::GetExecutorMap(pb::common::ExecutorMap& executor_map) {
   }
 }
 
-void CoordinatorControl::GetPushExecutorMap(std::map<uint64_t, pb::common::Executor>& executor_to_push) {
+void CoordinatorControl::GetPushExecutorMap(butil::FlatMap<uint64_t, pb::common::Executor>& executor_to_push) {
   BAIDU_SCOPED_LOCK(executor_need_push_mutex_);
   executor_to_push.swap(executor_need_push_);
 }
@@ -499,16 +503,16 @@ int CoordinatorControl::ValidateExecutor(uint64_t executor_id, const std::string
 
   {
     BAIDU_SCOPED_LOCK(executor_map_mutex_);
-    if (executor_map_.find(executor_id) != executor_map_.end()) {
-      auto executor_in_map = executor_map_[executor_id];
-      if (executor_in_map.keyring() == keyring) {
+    auto* executor_in_map = executor_map_.seek(executor_id);
+    if (executor_in_map != nullptr) {
+      if (executor_in_map->keyring() == keyring) {
         DINGO_LOG(INFO) << "ValidateExecutor executor_id=" << executor_id << " succcess";
         return 0;
       }
 
       DINGO_LOG(INFO) << "ValidateExecutor executor_id=" << executor_id
                       << "keyring wrong fail input_keyring=" << keyring
-                      << " correct_keyring=" << executor_in_map.keyring();
+                      << " correct_keyring=" << executor_in_map->keyring();
       return -1;
     }
   }
@@ -556,12 +560,13 @@ int CoordinatorControl::DeleteExecutor(uint64_t cluster_id, uint64_t executor_id
   pb::common::Executor executor_to_delete;
   {
     BAIDU_SCOPED_LOCK(executor_map_mutex_);
-    if (executor_map_.find(executor_id) == executor_map_.end()) {
+    auto* temp_executor = executor_map_.seek(executor_id);
+    if (temp_executor == nullptr) {
       DINGO_LOG(INFO) << "DeleteExecutor executor_id not exists, id=" << executor_id;
       return -1;
     }
 
-    executor_to_delete = executor_map_[executor_id];
+    executor_to_delete = *temp_executor;
     if (keyring == executor_to_delete.keyring()) {
       DINGO_LOG(INFO) << "DeleteExecutor executor_id id=" << executor_id
                       << " keyring not equal, input keyring=" << keyring
@@ -592,11 +597,12 @@ uint64_t CoordinatorControl::UpdateExecutorMap(const pb::common::Executor& execu
   bool need_update_epoch = false;
   {
     BAIDU_SCOPED_LOCK(executor_map_mutex_);
-    if (executor_map_.find(executor.id()) != executor_map_.end()) {
-      if (executor_map_[executor.id()].state() != executor.state()) {
+    auto* temp_executor = executor_map_.seek(executor.id());
+    // if (executor_map_.find(executor.id()) != executor_map_.end()) {
+    if (temp_executor != nullptr) {
+      if (temp_executor->state() != executor.state()) {
         DINGO_LOG(INFO) << "executor STATUS CHANGE executor_id = " << executor.id()
-                        << " old status = " << executor_map_[executor.id()].state()
-                        << " new status = " << executor.state();
+                        << " old status = " << temp_executor->state() << " new status = " << executor.state();
 
         // update meta_increment
         need_update_epoch = true;
@@ -650,7 +656,7 @@ uint64_t CoordinatorControl::UpdateStoreMetrics(const pb::common::StoreMetrics& 
   bool need_update_epoch = false;
   {
     BAIDU_SCOPED_LOCK(store_metrics_map_mutex_);
-    if (store_metrics_map_.find(store_metrics.id()) != store_metrics_map_.end()) {
+    if (store_metrics_map_.seek(store_metrics.id()) != nullptr) {
       DINGO_LOG(DEBUG) << "STORE METIRCS UPDATE store_metrics.id = " << store_metrics.id();
 
       // update meta_increment
@@ -709,11 +715,18 @@ void CoordinatorControl::GetMemoryInfo(pb::coordinator::CoordinatorMemoryInfo& m
     BAIDU_SCOPED_LOCK(id_epoch_map_mutex_);
 
     // set term & index
-    if (id_epoch_map_.find(pb::coordinator_internal::IdEpochType::RAFT_APPLY_TERM) != id_epoch_map_.end()) {
-      memory_info.set_applied_term(id_epoch_map_.at(pb::coordinator_internal::IdEpochType::RAFT_APPLY_TERM).value());
+    auto* temp_index = id_epoch_map_.seek(pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX);
+    auto* temp_term = id_epoch_map_.seek(pb::coordinator_internal::IdEpochType::RAFT_APPLY_TERM);
+
+    // if (id_epoch_map_.find(pb::coordinator_internal::IdEpochType::RAFT_APPLY_TERM) != id_epoch_map_.end()) {
+    if (temp_term != nullptr) {
+      // memory_info.set_applied_term(id_epoch_map_.at(pb::coordinator_internal::IdEpochType::RAFT_APPLY_TERM).value());
+      memory_info.set_applied_term(temp_term->value());
     }
-    if (id_epoch_map_.find(pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX) != id_epoch_map_.end()) {
-      memory_info.set_applied_index(id_epoch_map_.at(pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX).value());
+    // if (id_epoch_map_.find(pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX) != id_epoch_map_.end()) {
+    if (temp_index != nullptr) {
+      // memory_info.set_applied_index(id_epoch_map_.at(pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX).value());
+      memory_info.set_applied_index(temp_index->value());
     }
 
     // set count & size
