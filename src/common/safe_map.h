@@ -25,8 +25,9 @@ namespace dingodb {
 
 // Implement a ThreadSafeMap
 // Notice: Must call Init(capacity) before use
-// all membber functions return 1 if success, return -1 if failed
+// all membber functions except Size(), MemorySize() return 1 if success, return -1 if failed
 // all inner functions return 1 if success, return 0 if failed
+// Size() and MemorySize() return 0 if failed, return size if success
 template <typename T_KEY, typename T_VALUE>
 class DingoSafeMap {
  public:
@@ -55,18 +56,18 @@ class DingoSafeMap {
     return 0;
   }
 
-  int Size(uint64_t &size) {
+  uint64_t Size() {
     TypeScopedPtr ptr;
     if (safe_map.Read(&ptr) != 0) {
-      return -1;
+      return 0;
     }
 
-    size = ptr->size();
-    return 1;
+    return ptr->size();
   }
 
-  int MemorySize(uint64_t &size) {
+  uint64_t MemorySize() {
     TypeScopedPtr ptr;
+    uint64_t size = 0;
     if (safe_map.Read(&ptr) != 0) {
       return -1;
     }
@@ -74,7 +75,7 @@ class DingoSafeMap {
     for (auto const it : *ptr) {
       size += it.second.ByteSizeLong();
     }
-    return 1;
+    return size;
   }
 
   int Swap(const TypeFlatMap &input_map) {
@@ -151,6 +152,14 @@ class DingoSafeMap {
 
   int Erase(const T_KEY &key, const T_VALUE &value) {
     if (safe_map.Modify(InnerErase, key, value) > 0) {
+      return 1;
+    } else {
+      return -1;
+    }
+  }
+
+  int Clear() {
+    if (safe_map.Modify(InnerClear) > 0) {
       return 1;
     } else {
       return -1;
