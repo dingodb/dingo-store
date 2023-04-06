@@ -98,6 +98,11 @@ std::vector<pb::store_internal::SstFileInfo> RaftSnapshot::GenSnapshotFileByChec
 
 bool RaftSnapshot::SaveSnapshot(braft::SnapshotWriter* writer, std::shared_ptr<dingodb::pb::common::Region> region,
                                 GenSnapshotFileFunc func) {
+  if (region->range().start_key().empty() || region->range().end_key().empty()) {
+    DINGO_LOG(ERROR) << butil::StringPrintf("Save snapshot region %ld failed, range is invalid", region->id());
+    return false;
+  }
+
   DINGO_LOG(INFO) << butil::StringPrintf("Save snapshot region %ld range[%s-%s]", region->id(),
                                          region->range().start_key().c_str(), region->range().end_key().c_str());
   auto raw_engine = std::dynamic_pointer_cast<RawRocksEngine>(engine_);

@@ -49,7 +49,7 @@ void StoreClosure::Run() {
 
 StoreStateMachine::StoreStateMachine(std::shared_ptr<RawEngine> engine, uint64_t node_id,
                                      std::shared_ptr<EventListenerCollection> listeners)
-    : engine_(engine), node_id_(node_id), listeners_(listeners), is_restart_(true), applied_index_(0) {}
+    : engine_(engine), node_id_(node_id), listeners_(listeners), applied_term_(0), applied_index_(0) {}
 
 bool StoreStateMachine::Init() {
   // Recover applied index
@@ -62,6 +62,7 @@ bool StoreStateMachine::Init() {
   } else {
     raft_meta = std::make_shared<pb::store_internal::RaftMeta>();
     raft_meta->set_region_id(node_id_);
+    raft_meta->set_term(0);
     raft_meta->set_applied_index(0);
     store_meta_manager->AddRaftMeta(raft_meta);
   }
@@ -104,11 +105,15 @@ void StoreStateMachine::on_apply(braft::Iterator& iter) {
     event->raft_cmd = raft_cmd;
 
     DispatchEvent(EventType::SM_APPLY, event);
+    applied_term_ = iter.term();
     applied_index_ = iter.index();
   }
 
   // Persistence applied index
+  // If operation is idempotent, it's ok.
+  // If not, must be stored with the data.
   if (applied_index_ % kSaveAppliedIndexStep == 0) {
+    raft_meta_->set_term(applied_term_);
     raft_meta_->set_applied_index(applied_index_);
     auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
     store_meta_manager->SaveRaftMeta(raft_meta_);
@@ -157,18 +162,14 @@ int StoreStateMachine::on_snapshot_load(braft::SnapshotReader* reader) {
   DINGO_LOG(INFO) << butil::StringPrintf("load snapshot(%ld-%ld) applied_index(%lu)", meta.last_included_term(),
                                          meta.last_included_index(), applied_index_);
 
-  int64_t max_index = std::max(applied_index_, meta.last_included_index());
-
-  if (!is_restart_) {
+  if (meta.last_included_index() > applied_index_) {
     auto event = std::make_shared<SmSnapshotLoadEvent>();
     event->engine = engine_;
     event->reader = reader;
     event->node_id = node_id_;
     DispatchEvent(EventType::SM_SNAPSHOT_LOAD, event);
+    applied_index_ = meta.last_included_index();
   }
-
-  applied_index_ = max_index;
-  is_restart_ = false;
 
   return 0;
 }
