@@ -48,10 +48,14 @@ class MetaServiceImpl : public pb::meta::MetaService {
                   pb::meta::GetSchemasResponse* response, google::protobuf::Closure* done) override;
   void GetSchema(google::protobuf::RpcController* controller, const pb::meta::GetSchemaRequest* request,
                  pb::meta::GetSchemaResponse* response, google::protobuf::Closure* done) override;
+  void GetSchemaByName(google::protobuf::RpcController* controller, const pb::meta::GetSchemaByNameRequest* request,
+                       pb::meta::GetSchemaByNameResponse* response, google::protobuf::Closure* done) override;
   void GetTables(google::protobuf::RpcController* controller, const pb::meta::GetTablesRequest* request,
                  pb::meta::GetTablesResponse* response, google::protobuf::Closure* done) override;
   void GetTable(google::protobuf::RpcController* controller, const pb::meta::GetTableRequest* request,
                 pb::meta::GetTableResponse* response, google::protobuf::Closure* done) override;
+  void GetTableByName(google::protobuf::RpcController* controller, const pb::meta::GetTableByNameRequest* request,
+                      pb::meta::GetTableByNameResponse* response, google::protobuf::Closure* done) override;
   void GetTableRange(google::protobuf::RpcController* controller, const pb::meta::GetTableRangeRequest* request,
                      pb::meta::GetTableRangeResponse* response, google::protobuf::Closure* done) override;
   void GetTableMetrics(google::protobuf::RpcController* controller, const pb::meta::GetTableMetricsRequest* request,

@@ -39,6 +39,11 @@ void MetaServiceImpl::GetSchemas(google::protobuf::RpcController * /*controller*
 
   DINGO_LOG(DEBUG) << "GetSchemas request:  schema_id = [" << request->schema_id().entity_id() << "]";
 
+  if (!request->has_schema_id()) {
+    response->mutable_error()->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
+    return;
+  }
+
   std::vector<pb::meta::Schema> schemas;
   this->coordinator_control_->GetSchemas(request->schema_id().entity_id(), schemas);
 
@@ -59,8 +64,38 @@ void MetaServiceImpl::GetSchema(google::protobuf::RpcController * /*controller*/
 
   DINGO_LOG(DEBUG) << "GetSchema request:  schema_id = [" << request->schema_id().entity_id() << "]";
 
+  if (!request->has_schema_id()) {
+    response->mutable_error()->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
+    return;
+  }
+
+  if (!request->has_schema_id()) {
+    response->mutable_error()->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
+    return;
+  }
+
   auto *schema = response->mutable_schema();
   this->coordinator_control_->GetSchema(request->schema_id().entity_id(), *schema);
+}
+
+void MetaServiceImpl::GetSchemaByName(google::protobuf::RpcController * /*controller*/,
+                                      const pb::meta::GetSchemaByNameRequest *request,
+                                      pb::meta::GetSchemaByNameResponse *response, google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!this->coordinator_control_->IsLeader()) {
+    return RedirectResponse(response);
+  }
+
+  DINGO_LOG(DEBUG) << "GetSchemaByName request:  schema_name = [" << request->schema_name() << "]";
+
+  if (request->schema_name().empty()) {
+    response->mutable_error()->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
+    return;
+  }
+
+  auto *schema = response->mutable_schema();
+  this->coordinator_control_->GetSchema(0, *schema);
 }
 
 void MetaServiceImpl::GetTables(google::protobuf::RpcController * /*controller*/,
@@ -73,6 +108,11 @@ void MetaServiceImpl::GetTables(google::protobuf::RpcController * /*controller*/
   }
 
   DINGO_LOG(DEBUG) << "GetTables request:  schema_id = [" << request->schema_id().entity_id() << "]";
+
+  if (!request->has_schema_id() || request->schema_id().entity_id() <= 0) {
+    response->mutable_error()->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
+    return;
+  }
 
   std::vector<pb::meta::TableDefinitionWithId> table_definition_with_ids;
   this->coordinator_control_->GetTables(request->schema_id().entity_id(), table_definition_with_ids);
@@ -98,10 +138,36 @@ void MetaServiceImpl::GetTable(google::protobuf::RpcController * /*controller*/,
     return RedirectResponse(response);
   }
 
+  if (!request->has_table_id()) {
+    response->mutable_error()->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
+    return;
+  }
+
   DINGO_LOG(DEBUG) << "GetTable request:  table_id = [" << request->table_id().entity_id() << "]";
 
   auto *table = response->mutable_table_definition_with_id();
   this->coordinator_control_->GetTable(request->table_id().parent_entity_id(), request->table_id().entity_id(), *table);
+}
+
+void MetaServiceImpl::GetTableByName(google::protobuf::RpcController * /*controller*/,
+                                     const pb::meta::GetTableByNameRequest *request,
+                                     pb::meta::GetTableByNameResponse *response, google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!this->coordinator_control_->IsLeader()) {
+    return RedirectResponse(response);
+  }
+
+  DINGO_LOG(DEBUG) << "GetTableByName request:  schema_id = [" << request->schema_id().entity_id() << "]"
+                   << " table_name = [" << request->table_name() << "]";
+
+  if (request->table_name().empty()) {
+    response->mutable_error()->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
+    return;
+  }
+
+  auto *table = response->mutable_table_definition_with_id();
+  this->coordinator_control_->GetTable(0, 1001, *table);
 }
 
 void MetaServiceImpl::GetTableRange(google::protobuf::RpcController * /*controller*/,
@@ -114,6 +180,11 @@ void MetaServiceImpl::GetTableRange(google::protobuf::RpcController * /*controll
   }
 
   DINGO_LOG(DEBUG) << "GetTable request:  table_id = [" << request->table_id().entity_id() << "]";
+
+  if (!request->has_table_id()) {
+    response->mutable_error()->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
+    return;
+  }
 
   auto *table_range = response->mutable_table_range();
   this->coordinator_control_->GetTableRange(request->table_id().parent_entity_id(), request->table_id().entity_id(),
@@ -131,6 +202,11 @@ void MetaServiceImpl::GetTableMetrics(google::protobuf::RpcController * /*contro
 
   DINGO_LOG(DEBUG) << "GetTableMetrics request:  table_id = [" << request->table_id().entity_id() << "]";
 
+  if (!request->has_table_id()) {
+    response->mutable_error()->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
+    return;
+  }
+
   auto *table_metrics = response->mutable_table_metrics();
   this->coordinator_control_->GetTableMetrics(request->table_id().parent_entity_id(), request->table_id().entity_id(),
                                               *table_metrics);
@@ -147,6 +223,11 @@ void MetaServiceImpl::CreateTableId(google::protobuf::RpcController *controller,
 
   DINGO_LOG(INFO) << "CreateTableId request:  schema_id = [" << request->schema_id().entity_id() << "]";
   DINGO_LOG(DEBUG) << request->DebugString();
+
+  if (!request->has_schema_id()) {
+    response->mutable_error()->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
+    return;
+  }
 
   pb::coordinator_internal::MetaIncrement meta_increment;
 
@@ -189,6 +270,11 @@ void MetaServiceImpl::CreateTable(google::protobuf::RpcController *controller,
 
   DINGO_LOG(INFO) << "CreateTable request:  schema_id = [" << request->schema_id().entity_id() << "]";
   DINGO_LOG(DEBUG) << request->DebugString();
+
+  if (!request->has_schema_id() || !request->has_table_definition()) {
+    response->mutable_error()->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
+    return;
+  }
 
   pb::coordinator_internal::MetaIncrement meta_increment;
 
@@ -241,6 +327,11 @@ void MetaServiceImpl::DropSchema(google::protobuf::RpcController *controller,
   DINGO_LOG(WARNING) << "DropSchema request:  parent_schema_id = [" << request->schema_id().entity_id() << "]";
   DINGO_LOG(INFO) << request->DebugString();
 
+  if (!request->has_schema_id()) {
+    response->mutable_error()->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
+    return;
+  }
+
   pb::coordinator_internal::MetaIncrement meta_increment;
 
   uint64_t schema_id = request->schema_id().entity_id();
@@ -277,6 +368,11 @@ void MetaServiceImpl::CreateSchema(google::protobuf::RpcController *controller,
 
   DINGO_LOG(INFO) << "CreatSchema request:  parent_schema_id = [" << request->parent_schema_id().entity_id() << "]";
   DINGO_LOG(DEBUG) << request->DebugString();
+
+  if (!request->has_parent_schema_id()) {
+    response->mutable_error()->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
+    return;
+  }
 
   pb::coordinator_internal::MetaIncrement meta_increment;
 
@@ -321,6 +417,11 @@ void MetaServiceImpl::DropTable(google::protobuf::RpcController *controller, con
   DINGO_LOG(WARNING) << "DropTable request:  schema_id = [" << request->table_id().parent_entity_id() << "]"
                      << " table_id = [" << request->table_id().entity_id() << "]";
   DINGO_LOG(DEBUG) << request->DebugString();
+
+  if (!request->has_table_id()) {
+    response->mutable_error()->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
+    return;
+  }
 
   pb::coordinator_internal::MetaIncrement meta_increment;
 

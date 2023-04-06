@@ -23,6 +23,7 @@
 DECLARE_bool(log_each_request);
 DECLARE_int32(timeout_ms);
 DECLARE_string(id);
+DECLARE_string(name);
 
 void SendGetSchemas(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub) {
   dingodb::pb::meta::GetSchemasRequest request;
@@ -91,6 +92,38 @@ void SendGetSchema(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& 
   if (FLAGS_log_each_request) {
     DINGO_LOG(INFO) << "Received response"
                     << " schema_id=" << request.schema_id().entity_id()
+                    << " table_id_count=" << response.schema().table_ids_size()
+                    << " request_attachment=" << cntl.request_attachment().size()
+                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+    // DINGO_LOG(INFO) << response.DebugString();
+    DINGO_LOG(INFO) << "schema_id=[" << response.schema().id().entity_id() << "]"
+                    << "schema_name=[" << response.schema().name() << "]"
+                    << "child_table_count=" << response.schema().table_ids_size();
+    for (const auto& child_table_id : response.schema().table_ids()) {
+      DINGO_LOG(INFO) << "child table_id=[" << child_table_id.entity_id() << "]";
+    }
+  }
+}
+
+void SendGetSchemaByName(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub) {
+  dingodb::pb::meta::GetSchemaByNameRequest request;
+  dingodb::pb::meta::GetSchemaByNameResponse response;
+
+  if (FLAGS_name.empty()) {
+    DINGO_LOG(WARNING) << "id is empty";
+    return;
+  }
+  request.set_schema_name(FLAGS_name);
+
+  stub.GetSchemaByName(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    // bthread_usleep(FLAGS_timeout_ms * 1000L);
+  }
+
+  if (FLAGS_log_each_request) {
+    DINGO_LOG(INFO) << "Received response"
+                    << " schema_name=" << request.schema_name()
                     << " table_id_count=" << response.schema().table_ids_size()
                     << " request_attachment=" << cntl.request_attachment().size()
                     << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
@@ -180,6 +213,32 @@ void SendGetTable(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& s
   if (FLAGS_log_each_request) {
     DINGO_LOG(INFO) << "Received response"
                     << " table_id=" << request.table_id().entity_id()
+                    << " request_attachment=" << cntl.request_attachment().size()
+                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+    DINGO_LOG(INFO) << response.DebugString();
+  }
+}
+
+void SendGetTableByName(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub) {
+  dingodb::pb::meta::GetTableByNameRequest request;
+  dingodb::pb::meta::GetTableByNameResponse response;
+
+  if (FLAGS_name.empty()) {
+    DINGO_LOG(WARNING) << "name is empty";
+    return;
+  }
+
+  request.set_table_name(FLAGS_name);
+
+  stub.GetTableByName(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    // bthread_usleep(FLAGS_timeout_ms * 1000L);
+  }
+
+  if (FLAGS_log_each_request) {
+    DINGO_LOG(INFO) << "Received response"
+                    << " table_name=" << request.table_name()
                     << " request_attachment=" << cntl.request_attachment().size()
                     << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
     DINGO_LOG(INFO) << response.DebugString();

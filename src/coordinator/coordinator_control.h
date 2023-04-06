@@ -174,6 +174,9 @@ class CoordinatorControl : public MetaControl {
   // get schema
   void GetSchema(uint64_t schema_id, pb::meta::Schema &schema);
 
+  // get schema by name
+  void GetSchemaByName(const std::string &schema_name, pb::meta::Schema &schema);
+
   // get tables
   void GetTables(uint64_t schema_id, std::vector<pb::meta::TableDefinitionWithId> &table_definition_with_ids);
 
@@ -182,6 +185,13 @@ class CoordinatorControl : public MetaControl {
   // in: table_id
   // out: TableDefinitionWithId
   void GetTable(uint64_t schema_id, uint64_t table_id, pb::meta::TableDefinitionWithId &table_definition);
+
+  // get table by name
+  // in: schema_id
+  // in: table_name
+  // out: TableDefinitionWithId
+  void GetTableByName(uint64_t schema_id, const std::string &table_name,
+                      pb::meta::TableDefinitionWithId &table_definition);
 
   // get parts
   // in: schema_id

@@ -261,7 +261,43 @@ void CoordinatorControl::GetSchema(uint64_t schema_id, pb::meta::Schema& schema)
     }
   }
 
-  DINGO_LOG(INFO) << "GetSchemas id=" << schema_id << " sub table count=" << schema.table_ids_size();
+  DINGO_LOG(INFO) << "GetSchema id=" << schema_id << " sub table count=" << schema.table_ids_size();
+}
+
+// GetSchemaByName
+// in: schema_name
+// out: schema
+void CoordinatorControl::GetSchemaByName(const std::string& schema_name, pb::meta::Schema& schema) {
+  if (schema_name.empty()) {
+    DINGO_LOG(ERROR) << "ERRROR: schema_name illegal " << schema_name;
+    return;
+  }
+
+  {
+    BAIDU_SCOPED_LOCK(schema_map_mutex_);
+    for (const auto& it : schema_map_) {
+      if (it.second.name() == schema_name) {
+        auto* temp_id = schema.mutable_id();
+        temp_id->set_entity_id(it.first);
+        temp_id->set_parent_entity_id(::dingodb::pb::meta::ROOT_SCHEMA);
+        temp_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
+
+        schema.set_name(it.second.name());
+
+        for (auto it : it.second.table_ids()) {
+          pb::meta::DingoCommonId table_id;
+          table_id.set_entity_id(it);
+          table_id.set_parent_entity_id(temp_id->entity_id());
+          table_id.set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
+
+          schema.add_table_ids()->CopyFrom(table_id);
+        }
+        break;
+      }
+    }
+  }
+
+  DINGO_LOG(INFO) << "GetSchemaByName name=" << schema_name << " sub table count=" << schema.table_ids_size();
 }
 
 int CoordinatorControl::CreateTableId(uint64_t schema_id, uint64_t& new_table_id,
@@ -527,7 +563,7 @@ void CoordinatorControl::GetTables(uint64_t schema_id,
 // get table
 void CoordinatorControl::GetTable(uint64_t schema_id, uint64_t table_id,
                                   pb::meta::TableDefinitionWithId& table_definition_with_id) {
-  DINGO_LOG(INFO) << "GetTables in control schema_id=" << schema_id;
+  DINGO_LOG(INFO) << "GetTable in control schema_id=" << schema_id;
 
   if (schema_id < 0) {
     DINGO_LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
@@ -567,6 +603,45 @@ void CoordinatorControl::GetTable(uint64_t schema_id, uint64_t table_id,
 
   DINGO_LOG(DEBUG) << "GetTable schema_id=" << schema_id << " table_id=" << table_id
                    << " table_definition_with_id=" << table_definition_with_id.DebugString();
+}
+
+// get table by name
+void CoordinatorControl::GetTableByName(uint64_t schema_id, const std::string& table_name,
+                                        pb::meta::TableDefinitionWithId& table_definition) {
+  DINGO_LOG(INFO) << "GetTableByName in control schema_id=" << schema_id << " table_name=" << table_name;
+
+  if (schema_id < 0) {
+    DINGO_LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
+    return;
+  }
+
+  if (table_name.empty()) {
+    DINGO_LOG(ERROR) << "ERRROR: table_name illegal " << table_name;
+    return;
+  }
+
+  if (!ValidateSchema(schema_id)) {
+    DINGO_LOG(ERROR) << "ERRROR: schema_id not valid" << schema_id;
+    return;
+  }
+
+  {
+    BAIDU_SCOPED_LOCK(table_map_mutex_);
+    for (auto& table : table_map_) {
+      if (table.second.definition().name() == table_name) {
+        DINGO_LOG(INFO) << "GetTableByName found table_id=" << table.first;
+
+        // table_def_with_id.mutable_table_id()->CopyFrom(schema_internal.schema().table_ids(i));
+        auto* table_id_for_response = table_definition.mutable_table_id();
+        table_id_for_response->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
+        table_id_for_response->set_entity_id(table.first);
+        table_id_for_response->set_parent_entity_id(schema_id);
+
+        table_definition.mutable_table_definition()->CopyFrom(table.second.definition());
+        break;
+      }
+    }
+  }
 }
 
 // get table range
