@@ -71,8 +71,34 @@ public class RecordEncoder {
         return valueBuf.getBytes();
     }
 
-    public byte[] encodeKeyPrefix(Object[] record) {
-        return null;
+    public byte[] encodeMinKeyPrefix() {
+        Buf keyBuf = new BufImpl(8);
+        keyBuf.writeLong(commonId);
+        return keyBuf.getBytes();
+    }
+
+    public byte[] encodeMaxKeyPrefix() {
+        if (commonId == Long.MAX_VALUE) {
+            throw new RuntimeException("CommonId reach max! Cannot generate Max Key Prefix");
+        }
+        Buf keyBuf = new BufImpl(8);
+        keyBuf.writeLong(commonId+1);
+        return keyBuf.getBytes();
+    }
+
+    public byte[] encodeKeyPrefix(Object[] record, int columnCount) {
+        Buf keyBuf = new BufImpl(keyBufSize);
+        keyBuf.writeLong(commonId);
+        for (DingoSchema schema : schemas) {
+            if (schema.isKey()) {
+                schema.encodeKey(keyBuf, record[schema.getIndex()]);
+                columnCount--;
+                if (columnCount <= 0) {
+                    break;
+                }
+            }
+        }
+        return keyBuf.getBytes();
     }
 
     public byte[] updateValueByRecord(byte[] buf, Object[] record, int[] columnIndexes) {

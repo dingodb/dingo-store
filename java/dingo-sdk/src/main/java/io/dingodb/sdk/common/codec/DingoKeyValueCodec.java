@@ -65,4 +65,20 @@ public class DingoKeyValueCodec implements KeyValueCodec {
         Object[] converted = (Object[]) type.convertTo(record, DingoConverter.INSTANCE);
         return re.encodeKey(converted);
     }
+
+    @Override
+    public byte[] encodeKeyPrefix(Object record, int columnCount) throws IOException {
+        Object[] converted = (Object[]) type.convertTo(record, DingoConverter.INSTANCE);
+        return re.encodeKeyPrefix(converted, columnCount);
+    }
+
+    @Override
+    public byte[] encodeMinKeyPrefix() throws IOException {
+        return re.encodeMinKeyPrefix();
+    }
+
+    @Override
+    public byte[] encodeMaxKeyPrefix() throws IOException {
+        return re.encodeMaxKeyPrefix();
+    }
 }
