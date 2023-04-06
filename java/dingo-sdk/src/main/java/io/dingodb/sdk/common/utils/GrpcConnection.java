@@ -24,8 +24,10 @@ import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
 import io.grpc.stub.AbstractBlockingStub;
 import lombok.NonNull;
+import org.slf4j.Logger;
 
 import javax.activation.UnsupportedDataTypeException;
+import java.util.concurrent.TimeUnit;
 
 public class GrpcConnection {
 
@@ -43,6 +45,31 @@ public class GrpcConnection {
                 return CoordinatorServiceGrpc.newBlockingStub(channel);
             default:
                 throw new UnsupportedDataTypeException(ident);
+        }
+    }
+
+    public static void shutdownManagedChannel(ManagedChannel channel, Logger log) {
+        if (!channel.isShutdown()) {
+            try {
+                channel.shutdown();
+                if (!channel.awaitTermination(45, TimeUnit.SECONDS)) {
+                    log.warn("Timed out gracefully shutting down connection: {}. ", channel);
+                }
+            } catch (InterruptedException e) {
+                log.error("Unexpected exception while waiting for channel termination", e);
+            }
+        }
+
+        // Forceful shut down if still not terminated.
+        if (!channel.isTerminated()) {
+            try {
+                channel.shutdownNow();
+                if (!channel.awaitTermination(15, TimeUnit.SECONDS)) {
+                    log.warn("Timed out forcefully shutting down connection: {}. ", channel);
+                }
+            } catch (InterruptedException e) {
+                log.error("Unexpected exception while waiting for channel termination", e);
+            }
         }
     }
 }

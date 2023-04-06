@@ -198,7 +198,11 @@ public class StringSchema implements DingoSchema<String> {
 
     @Override
     public void skipKey(Buf buf) {
-        buf.skip(buf.reverseReadInt());
+        if (allowNull) {
+            buf.skip(buf.reverseReadInt() + 1);
+        } else {
+            buf.skip(buf.reverseReadInt());
+        }
     }
 
     @Override

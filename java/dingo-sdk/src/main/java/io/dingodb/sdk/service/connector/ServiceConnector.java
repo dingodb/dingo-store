@@ -23,9 +23,11 @@ import io.dingodb.sdk.common.utils.GrpcConnection;
 import io.dingodb.meta.MetaServiceGrpc;
 import io.grpc.ManagedChannel;
 import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.concurrent.TimeUnit;
 
+@Slf4j
 public class ServiceConnector {
 
     private String target;
@@ -46,18 +48,14 @@ public class ServiceConnector {
 
         Common.Location leaderLocation = response.getLeaderLocation();
         if (!leaderLocation.getHost().isEmpty()) {
+            GrpcConnection.shutdownManagedChannel(channel, log);
             target = leaderLocation.getHost() + ":" + leaderLocation.getPort();
-            channel.shutdownNow();
             channel = GrpcConnection.newChannel(target);
             metaBlockingStub = MetaServiceGrpc.newBlockingStub(channel);
         }
     }
 
     public void shutdown() {
-        try {
-            channel.shutdown().awaitTermination(10, TimeUnit.SECONDS);
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        }
+        GrpcConnection.shutdownManagedChannel(channel, log);
     }
 }

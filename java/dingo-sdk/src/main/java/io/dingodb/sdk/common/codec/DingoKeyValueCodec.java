@@ -67,7 +67,7 @@ public class DingoKeyValueCodec implements KeyValueCodec {
     }
 
     @Override
-    public byte[] encodeKeyPrefix(Object record, int columnCount) throws IOException {
+    public byte[] encodeKeyPrefix(Object[] record, int columnCount) throws IOException {
         Object[] converted = (Object[]) type.convertTo(record, DingoConverter.INSTANCE);
         return re.encodeKeyPrefix(converted, columnCount);
     }

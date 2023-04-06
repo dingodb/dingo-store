@@ -32,6 +32,10 @@ public class DingoClientException extends IllegalArgumentException {
         this.errorCode = errorCode;
     }
 
+    public DingoClientException(String message) {
+        super(message);
+    }
+
     public DingoClientException(int errorCode) {
         super();
         this.errorCode = errorCode;
