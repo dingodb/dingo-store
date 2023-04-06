@@ -109,6 +109,15 @@ void CoordinatorServiceImpl::DeleteExecutor(google::protobuf::RpcController *con
     return RedirectResponse(response);
   }
 
+  if (request->executor_id() == 0) {
+    brpc::Controller *brpc_controller = static_cast<brpc::Controller *>(controller);
+    brpc_controller->SetFailed(pb::error::EILLEGAL_PARAMTETERS, "Need legal executor_id");
+
+    auto *error = response->mutable_error();
+    error->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
+    return;
+  }
+
   pb::coordinator_internal::MetaIncrement meta_increment;
 
   // delete executor
@@ -195,6 +204,15 @@ void CoordinatorServiceImpl::DeleteStore(google::protobuf::RpcController *contro
     return RedirectResponse(response);
   }
 
+  if (request->store_id() == 0) {
+    brpc::Controller *brpc_controller = static_cast<brpc::Controller *>(controller);
+    brpc_controller->SetFailed(pb::error::EILLEGAL_PARAMTETERS, "Need legal store_id");
+
+    auto *error = response->mutable_error();
+    error->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
+    return;
+  }
+
   pb::coordinator_internal::MetaIncrement meta_increment;
 
   // delete store
@@ -240,11 +258,17 @@ void CoordinatorServiceImpl::ExecutorHeartbeat(google::protobuf::RpcController *
     return RedirectResponse(response);
   }
 
-  // validate executor
   if (!request->has_executor()) {
     auto *error = response->mutable_error();
     error->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
     DINGO_LOG(ERROR) << "ExecutorHeartBeat has_executor() is false, reject heartbeat";
+    return;
+  }
+
+  if (request->executor().id() == 0) {
+    auto *error = response->mutable_error();
+    error->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
+    DINGO_LOG(ERROR) << "ExecutorHeartBeat executor_id is 0, reject heartbeat";
     return;
   }
 

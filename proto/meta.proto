@@ -201,6 +201,15 @@ message GetSchemaResponse {
   Schema schema = 2;
 }
 
+message GetSchemaByNameRequest {
+  string schema_name = 1;
+}
+
+message GetSchemaByNameResponse {
+  dingodb.pb.error.Error error = 1;
+  Schema schema = 2;
+}
+
 message TableDefinitionWithId {
   DingoCommonId table_id = 1;
   TableDefinition table_definition = 2;
@@ -220,6 +229,16 @@ message GetTableRequest {
 }
 
 message GetTableResponse {
+  dingodb.pb.error.Error error = 1;
+  TableDefinitionWithId table_definition_with_id = 2;
+}
+
+message GetTableByNameRequest {
+  DingoCommonId schema_id = 1;
+  string table_name = 2;
+}
+
+message GetTableByNameResponse {
   dingodb.pb.error.Error error = 1;
   TableDefinitionWithId table_definition_with_id = 2;
 }
@@ -299,6 +318,11 @@ service MetaService {
   // out: Schema
   rpc GetSchema(GetSchemaRequest) returns (GetSchemaResponse);
 
+  // GetSchemaByName
+  // in: schema_name
+  // out: Schema
+  rpc GetSchemaByName(GetSchemaByNameRequest) returns (GetSchemaByNameResponse);
+
   // GetTables
   // in: schema_id
   // out: List<TableDefinitionWithId>
@@ -308,6 +332,11 @@ service MetaService {
   // in: table_id
   // out: TableDefinitionWithId
   rpc GetTable(GetTableRequest) returns (GetTableResponse);
+
+  // GetTableByName
+  // in: table_id
+  // out: TableDefinitionWithId
+  rpc GetTableByName(GetTableByNameRequest) returns (GetTableByNameResponse);
 
   // GetTableRange
   // in: table_id
