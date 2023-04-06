@@ -15,6 +15,8 @@
 #ifndef DINGODB_RAFT_STATE_MACHINE_H_
 #define DINGODB_RAFT_STATE_MACHINE_H_
 
+#include <cstdint>
+
 #include "braft/raft.h"
 #include "brpc/controller.h"
 #include "common/context.h"
@@ -71,7 +73,7 @@ class StoreStateMachine : public braft::StateMachine {
   std::shared_ptr<RawEngine> engine_;
   std::shared_ptr<EventListenerCollection> listeners_;
 
-  bool is_restart_;
+  int64_t applied_term_;
   int64_t applied_index_;
   std::shared_ptr<pb::store_internal::RaftMeta> raft_meta_;
 };

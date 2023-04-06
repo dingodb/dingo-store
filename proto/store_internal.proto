@@ -29,5 +29,6 @@ message SstFileInfo {
 
 message RaftMeta {
   int64 region_id = 1;
-  int64 applied_index = 2;
+  int64 term = 2;
+  int64 applied_index = 3;
 }

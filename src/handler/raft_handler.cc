@@ -22,7 +22,7 @@ namespace dingodb {
 void PutHandler::Handle(std::shared_ptr<Context> ctx, std::shared_ptr<RawEngine> engine, const pb::raft::Request &req) {
   DINGO_LOG(INFO) << "PutHandler ...";
   butil::Status status;
-  auto &request = req.put();
+  const auto &request = req.put();
   auto writer = engine->NewWriter(request.cf_name());
   if (request.kvs().size() == 1) {
     status = writer->KvPut(request.kvs().Get(0));
@@ -54,8 +54,8 @@ void PutIfAbsentHandler::Handle(std::shared_ptr<Context> ctx, std::shared_ptr<Ra
     if (request.kvs().size() != 1) {
       auto *response = dynamic_cast<pb::store::KvBatchPutIfAbsentResponse *>(ctx->Response());
       // std::vector<bool> must do not use foreach
-      for (size_t i = 0; i < key_states.size(); i++) {
-        bool key = key_states[i];
+      for (auto &&key_state : key_states) {
+        bool key = key_state;
         response->add_key_states(key);
       }
     } else {  // only one key
@@ -75,7 +75,7 @@ void DeleteRangeHandler::Handle(std::shared_ptr<Context> ctx, std::shared_ptr<Ra
   DINGO_LOG(INFO) << "DeleteRangeHandler ...";
 
   butil::Status status;
-  auto &request = req.delete_range();
+  const auto &request = req.delete_range();
   auto writer = engine->NewWriter(request.cf_name());
   for (const auto &range : request.ranges()) {
     status = writer->KvDeleteRange(range);
@@ -94,7 +94,7 @@ void DeleteBatchHandler::Handle(std::shared_ptr<Context> ctx, std::shared_ptr<Ra
   DINGO_LOG(INFO) << "DeleteBatchHandler ...";
 
   butil::Status status;
-  auto &request = req.delete_batch();
+  const auto &request = req.delete_batch();
   auto writer = engine->NewWriter(request.cf_name());
   if (request.keys().size() == 1) {
     status = writer->KvDelete(request.keys().Get(0));
