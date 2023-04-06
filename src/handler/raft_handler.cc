@@ -20,7 +20,6 @@
 namespace dingodb {
 
 void PutHandler::Handle(std::shared_ptr<Context> ctx, std::shared_ptr<RawEngine> engine, const pb::raft::Request &req) {
-  DINGO_LOG(INFO) << "PutHandler ...";
   butil::Status status;
   const auto &request = req.put();
   auto writer = engine->NewWriter(request.cf_name());
@@ -37,13 +36,13 @@ void PutHandler::Handle(std::shared_ptr<Context> ctx, std::shared_ptr<RawEngine>
 
 void PutIfAbsentHandler::Handle(std::shared_ptr<Context> ctx, std::shared_ptr<RawEngine> engine,
                                 const pb::raft::Request &req) {
-  DINGO_LOG(INFO) << "PutIfAbsentHandler ...";
   butil::Status status;
   std::vector<bool> key_states;  // NOLINT
   bool key_state;
   const auto &request = req.put_if_absent();
   auto writer = engine->NewWriter(request.cf_name());
-  if (request.kvs().size() == 1) {
+  bool const is_write_batch = (request.kvs().size() == 1);
+  if (!is_write_batch) {
     status = writer->KvPutIfAbsent(request.kvs().Get(0), key_state);
   } else {
     status = writer->KvBatchPutIfAbsent(Helper::PbRepeatedToVector(request.kvs()), key_states, request.is_atomic());
@@ -55,14 +54,13 @@ void PutIfAbsentHandler::Handle(std::shared_ptr<Context> ctx, std::shared_ptr<Ra
       auto *response = dynamic_cast<pb::store::KvBatchPutIfAbsentResponse *>(ctx->Response());
       // std::vector<bool> must do not use foreach
       for (auto &&key_state : key_states) {
-        bool key = key_state;
-        response->add_key_states(key);
+        response->add_key_states(key_state);
       }
     } else {  // only one key
-      if ("dingodb.pb.store.KvPutIfAbsentResponse" == ctx->Response()->GetTypeName()) {
+      if (!is_write_batch) {
         auto *response = dynamic_cast<pb::store::KvPutIfAbsentResponse *>(ctx->Response());
         response->set_key_state(key_state);
-      } else {  // dingodb.pb.store.KvBatchPutIfAbsentResponse
+      } else {
         auto *response = dynamic_cast<pb::store::KvBatchPutIfAbsentResponse *>(ctx->Response());
         response->add_key_states(key_state);
       }
@@ -72,8 +70,6 @@ void PutIfAbsentHandler::Handle(std::shared_ptr<Context> ctx, std::shared_ptr<Ra
 
 void DeleteRangeHandler::Handle(std::shared_ptr<Context> ctx, std::shared_ptr<RawEngine> engine,
                                 const pb::raft::Request &req) {
-  DINGO_LOG(INFO) << "DeleteRangeHandler ...";
-
   butil::Status status;
   const auto &request = req.delete_range();
   auto writer = engine->NewWriter(request.cf_name());
@@ -91,8 +87,6 @@ void DeleteRangeHandler::Handle(std::shared_ptr<Context> ctx, std::shared_ptr<Ra
 
 void DeleteBatchHandler::Handle(std::shared_ptr<Context> ctx, std::shared_ptr<RawEngine> engine,
                                 const pb::raft::Request &req) {
-  DINGO_LOG(INFO) << "DeleteBatchHandler ...";
-
   butil::Status status;
   const auto &request = req.delete_batch();
   auto writer = engine->NewWriter(request.cf_name());

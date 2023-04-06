@@ -28,8 +28,6 @@ const int kSaveAppliedIndexStep = 10;
 namespace dingodb {
 
 void StoreClosure::Run() {
-  DINGO_LOG(INFO) << "Closure run...";
-
   brpc::ClosureGuard const done_guard(ctx_->IsSyncMode() ? nullptr : ctx_->Done());
   if (!status().ok()) {
     DINGO_LOG(ERROR) << butil::StringPrintf("raft log commit failed, region[%ld] %d:%s", ctx_->RegionId(),
@@ -79,7 +77,6 @@ void StoreStateMachine::DispatchEvent(dingodb::EventType event_type, std::shared
 }
 
 void StoreStateMachine::on_apply(braft::Iterator& iter) {
-  DINGO_LOG(INFO) << "on_apply...";
   for (; iter.valid(); iter.next()) {
     braft::AsyncClosureGuard done_guard(iter.done());
     if (iter.index() <= applied_index_) {
