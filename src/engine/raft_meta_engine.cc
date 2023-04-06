@@ -59,8 +59,10 @@ butil::Status RaftMetaEngine::InitCoordinatorRegion(std::shared_ptr<Context> ctx
   // construct MetaStatMachine here
   braft::StateMachine* state_machine = new MetaStateMachine(engine_, meta_control_);
 
-  std::shared_ptr<RaftNode> const node = std::make_shared<RaftNode>(
-      ctx->ClusterRole(), region->id(), braft::PeerId(Server::GetInstance()->RaftEndpoint()), state_machine);
+  std::string const meta_raft_name = butil::StringPrintf("%s-%ld", "Coordinator", region->id());
+  std::shared_ptr<RaftNode> const node =
+      std::make_shared<RaftNode>(ctx->ClusterRole(), region->id(), meta_raft_name,
+                                 braft::PeerId(Server::GetInstance()->RaftEndpoint()), state_machine);
 
   if (node->Init(Helper::FormatPeers(Helper::ExtractLocations(region->peers()))) != 0) {
     node->Destroy();

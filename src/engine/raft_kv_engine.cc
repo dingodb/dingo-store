@@ -75,8 +75,9 @@ butil::Status RaftKvEngine::AddRegion(std::shared_ptr<Context> ctx, const std::s
     return butil::Status(pb::error::ERAFT_INIT, "State machine init failed");
   }
 
-  std::shared_ptr<RaftNode> node = std::make_shared<RaftNode>(
-      ctx->ClusterRole(), region->id(), braft::PeerId(Server::GetInstance()->RaftEndpoint()), state_machine);
+  std::shared_ptr<RaftNode> node =
+      std::make_shared<RaftNode>(ctx->ClusterRole(), region->id(), region->name(),
+                                 braft::PeerId(Server::GetInstance()->RaftEndpoint()), state_machine);
 
   if (node->Init(Helper::FormatPeers(Helper::ExtractLocations(region->peers()))) != 0) {
     node->Destroy();
