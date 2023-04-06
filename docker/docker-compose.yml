@@ -5,6 +5,8 @@ services:
     image: dingodatabase/dingo-store:latest
     hostname: coordinator1
     container_name: coordinator1
+    ports:
+      - 22001:22001
     networks:
       - dingo_net
     environment:
@@ -18,6 +20,8 @@ services:
     image: dingodatabase/dingo-store:latest
     hostname: coordinator2
     container_name: coordinator2
+    ports:
+      - 22002:22001
     networks:
       - dingo_net
     environment:
@@ -31,6 +35,8 @@ services:
     image: dingodatabase/dingo-store:latest
     hostname: coordinator3
     container_name: coordinator3
+    ports:
+      - 22003:22001
     networks:
       - dingo_net
     environment:
