@@ -33,6 +33,8 @@ namespace dingodb {
 
 // Implement a ThreadSafeMap
 // This is for IdEpoch with atomic GetNextId function
+// all membber functions return 1 if success, return -1 if failed
+// all inner functions return 0 if success, return -1 if failed
 class DingoSafeIdEpochMap : public DingoSafeMap<uint64_t, pb::coordinator_internal::IdEpochInternal> {
  public:
   using TypeFlatMap = butil::FlatMap<uint64_t, pb::coordinator_internal::IdEpochInternal>;
@@ -49,15 +51,21 @@ class DingoSafeIdEpochMap : public DingoSafeMap<uint64_t, pb::coordinator_intern
     if (!value_ptr) {
       // if not exist, return 0
       value = 0;
-      return 0;
+      return 1;
     } else {
       value = value_ptr->value();
     }
 
-    return 0;
+    return 1;
   }
 
-  int GetNextId(const uint64_t &key, uint64_t &value) { return safe_map.Modify(InnerGetNextId, key, value); }
+  int GetNextId(const uint64_t &key, uint64_t &value) {
+    if (safe_map.Modify(InnerGetNextId, key, value) > 0) {
+      return 1;
+    } else {
+      return -1;
+    }
+  }
 
  private:
   static size_t InnerGetNextId(TypeFlatMap &map, const uint64_t &key, const uint64_t &value) {

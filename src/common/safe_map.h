@@ -25,6 +25,8 @@ namespace dingodb {
 
 // Implement a ThreadSafeMap
 // Notice: Must call Init(capacity) before use
+// all membber functions return 1 if success, return -1 if failed
+// all inner functions return 1 if success, return 0 if failed
 template <typename T_KEY, typename T_VALUE>
 class DingoSafeMap {
  public:
@@ -75,25 +77,95 @@ class DingoSafeMap {
     return 1;
   }
 
-  int Swap(const TypeFlatMap &input_map) { return safe_map.Modify(InnerSwap, input_map); }
-
-  int Copy(const TypeFlatMap &input_map) { return safe_map.Modify(InnerCopy, input_map); }
-
-  int Put(const T_KEY &key, const T_VALUE &value) { return safe_map.Modify(InnerPut, key, value); }
-
-  int MultiPut(const std::vector<T_KEY> &key_list, const std::vector<T_VALUE> &value_list) {
-    return safe_map.Modify(InnerMultiPut, key_list, value_list);
+  int Swap(const TypeFlatMap &input_map) {
+    if (safe_map.Modify(InnerSwap, input_map) > 0) {
+      return 1;
+    } else {
+      return -1;
+    }
   }
 
-  int PutIfExists(const T_KEY &key, const T_VALUE &value) { return safe_map.Modify(InnerPutIfExists, key, value); }
+  int Swap(const TypeSafeMap &input_map) {
+    if (safe_map.Modify(InnerSwap, input_map) > 0) {
+      return 1;
+    } else {
+      return -1;
+    }
+  }
 
-  int PutIfAbsent(const T_KEY &key, const T_VALUE &value) { return safe_map.Modify(InnerPutIfAbsent, key, value); }
+  int Copy(const TypeFlatMap &input_map) {
+    if (safe_map.Modify(InnerCopy, input_map) > 0) {
+      return 1;
+    } else {
+      return -1;
+    }
+  }
 
-  int Erase(const T_KEY &key, const T_VALUE &value) { return safe_map.Modify(InnerErase, key, value); }
+  int Put(const T_KEY &key, const T_VALUE &value) {
+    if (safe_map.Modify(InnerPut, key, value) > 0) {
+      return 1;
+    } else {
+      return -1;
+    }
+  }
+
+  int MultiPut(const std::vector<T_KEY> &key_list, const std::vector<T_VALUE> &value_list) {
+    if (safe_map.Modify(InnerMultiPut, key_list, value_list) > 0) {
+      return 1;
+    } else {
+      return -1;
+    }
+  }
+
+  int PutIfExists(const T_KEY &key, const T_VALUE &value) {
+    if (safe_map.Modify(InnerPutIfExists, key, value) > 0) {
+      return 1;
+    } else {
+      return -1;
+    }
+  }
+
+  int PutIfAbsent(const T_KEY &key, const T_VALUE &value) {
+    if (safe_map.Modify(InnerPutIfAbsent, key, value) > 0) {
+      return 1;
+    } else {
+      return -1;
+    }
+  }
+
+  int PutIfEqual(const T_KEY &key, const T_VALUE &value) {
+    if (safe_map.Modify(InnerPutIfEqual, key, value) > 0) {
+      return 1;
+    } else {
+      return -1;
+    }
+  }
+
+  int PutIfNotEqual(const T_KEY &key, const T_VALUE &value) {
+    if (safe_map.Modify(InnerPutIfNotEqual, key, value) > 0) {
+      return 1;
+    } else {
+      return -1;
+    }
+  }
+
+  int Erase(const T_KEY &key, const T_VALUE &value) {
+    if (safe_map.Modify(InnerErase, key, value) > 0) {
+      return 1;
+    } else {
+      return -1;
+    }
+  }
 
  protected:
+  // all inner function return 1 if modify record access, return 0 if no record is successfully modified
   static size_t InnerSwap(TypeFlatMap &map, const TypeFlatMap &input_map) {
     map.swap(input_map);
+    return 1;
+  }
+
+  static size_t InnerSwap(TypeFlatMap &map, const TypeSafeMap &input_map) {
+    input_map.swap(map);
     return 1;
   }
 
@@ -146,6 +218,34 @@ class DingoSafeMap {
   static size_t InnerPutIfAbsent(TypeFlatMap &map, const T_KEY &key, const T_VALUE &value) {
     auto *value_ptr = map.seek(key);
     if (value_ptr != nullptr) {
+      return 0;
+    }
+
+    map.insert(key, value);
+    return 1;
+  }
+
+  static size_t InnerPutIfEqual(TypeFlatMap &map, const T_KEY &key, const T_VALUE &value) {
+    auto *value_ptr = map.seek(key);
+    if (value_ptr == nullptr) {
+      return 0;
+    }
+
+    if (*value_ptr != value) {
+      return 0;
+    }
+
+    *value_ptr = value;
+    return 1;
+  }
+
+  static size_t InnerPutIfNotEqual(TypeFlatMap &map, const T_KEY &key, const T_VALUE &value) {
+    auto *value_ptr = map.seek(key);
+    if (value_ptr == nullptr) {
+      return 0;
+    }
+
+    if (*value_ptr == value) {
       return 0;
     }
 
