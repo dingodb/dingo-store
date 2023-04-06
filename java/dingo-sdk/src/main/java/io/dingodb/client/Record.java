@@ -17,6 +17,7 @@
 package io.dingodb.client;
 
 import com.google.common.collect.Maps;
+import io.dingodb.sdk.common.DingoClientException;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
@@ -25,6 +26,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 /**
  * Container object for records.
@@ -39,6 +41,8 @@ public final class Record {
     private final Map<String, Object> columnsInOrderMapping;
 
     private final List<String> keyColumns;
+
+    private static List<io.dingodb.sdk.common.table.Column> columnDefinitions;
 
     /**
      * Constructor Record by TableDefinition and columns.
@@ -55,7 +59,7 @@ public final class Record {
             throw new RuntimeException(errMsg);
         }
 
-
+        Record.columnDefinitions = columnDefinitions;
         for (io.dingodb.sdk.common.table.Column columnDefinition: columnDefinitions) {
             String columnName = columnDefinition.getName();
             if (columnDefinition.isPrimary()) {
@@ -162,7 +166,11 @@ public final class Record {
         }
 
         Map<String, Object> columnsInOrder = new HashMap<>();
+        List<String> names = columnDefinitions.stream().map(io.dingodb.sdk.common.table.Column::getName).collect(Collectors.toList());
         for (String colName : colNames) {
+            if (!names.contains(colName)) {
+                throw new DingoClientException("The specified name: " + colName + " does not exist in the table.");
+            }
             Object value = record.columnsInOrderMapping.get(colName);
             if (value instanceof Value) {
                 value = ((Value) value).getObject();

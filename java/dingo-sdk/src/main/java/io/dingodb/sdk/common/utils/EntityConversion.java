@@ -19,6 +19,7 @@ package io.dingodb.sdk.common.utils;
 import com.google.protobuf.ByteString;
 import io.dingodb.common.Common;
 import io.dingodb.meta.Meta;
+import io.dingodb.sdk.common.DingoClientException;
 import io.dingodb.sdk.common.codec.KeyValueCodec;
 import io.dingodb.sdk.common.partition.PartitionDetailDefinition;
 import io.dingodb.sdk.common.table.Column;
@@ -27,6 +28,7 @@ import io.dingodb.sdk.common.table.Table;
 import io.dingodb.sdk.common.table.TableDefinition;
 import io.dingodb.sdk.common.type.TypeCode;
 
+import java.io.IOException;
 import java.util.Iterator;
 import java.util.List;
 import java.util.TreeSet;
@@ -51,6 +53,12 @@ import static io.dingodb.sdk.common.utils.Parameters.cleanNull;
 public class EntityConversion {
 
     public static Meta.TableDefinition swap(Table table, Meta.DingoCommonId tableId) {
+        Optional.ofNullable(table.getColumns())
+                .filter(__ -> __.stream()
+                        .map(Column::getName)
+                        .distinct()
+                        .count() == __.size())
+                .orElseThrow(() -> new DingoClientException("Table field names cannot be repeated."));
         List<Meta.ColumnDefinition> columnDefinitions = table.getColumns().stream()
                 .map(EntityConversion::swap)
                 .collect(Collectors.toList());
@@ -89,6 +97,22 @@ public class EntityConversion {
     }
 
     public static Meta.PartitionRule calcRange(Table table, Meta.DingoCommonId tableId) {
+        KeyValueCodec codec = table.createCodec(tableId);
+        if (table.getPartDefinition() == null) {
+            try {
+                Meta.RangePartition rangePartition = Meta.RangePartition.newBuilder().addRanges(
+                        Common.Range.newBuilder()
+                                .setStartKey(ByteString.copyFrom(codec.encodeMinKeyPrefix()))
+                                .setEndKey(ByteString.copyFrom(codec.encodeMaxKeyPrefix()))
+                                .build()
+                ).build();
+                return Meta.PartitionRule.newBuilder()
+                        .setRangePartition(rangePartition)
+                        .build();
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }
         List<Integer> keyList = table.getKeyColumnIndices();
         int columnCount = table.getColumns().size();
         List<PartitionDetailDefinition> partDetails = table.getPartDefinition().details();
@@ -115,7 +139,6 @@ public class EntityConversion {
             }
         }
 
-        KeyValueCodec codec = table.createCodec(tableId);
         Iterator<byte[]> keys = partDetails.stream()
                 .map(PartitionDetailDefinition::getOperand)
                 .map(operand -> operand.toArray(new Object[columnCount]))

@@ -128,13 +128,14 @@ public class ServiceOperation {
                     } catch (InterruptedException e) {
                         e.printStackTrace();
                     }
+                    storeServiceClientMap.values().forEach(StoreServiceClient::shutdown);
                     routeTable = getAndRefreshRouteTable(tableName, true);
                 }
             }
         } while (code != 0 && --retryTimes > 0);
 
         if (code != 0 && retryTimes == 0) {
-            log.error("Retry attempts exhausted, failed to execute operation:{} on table:{}", type, tableName);
+            throw new RuntimeException("Retry attempts exhausted, failed to execute operation: " + type + " on table: " + tableName);
         }
         return result;
     }

@@ -20,9 +20,11 @@ import io.dingodb.sdk.common.utils.GrpcConnection;
 import io.dingodb.store.Store;
 import io.dingodb.store.StoreServiceGrpc;
 import io.grpc.ManagedChannel;
+import lombok.extern.slf4j.Slf4j;
 
 import javax.activation.UnsupportedDataTypeException;
 
+@Slf4j
 public class StoreServiceClient {
 
     private ManagedChannel channel;
@@ -39,7 +41,7 @@ public class StoreServiceClient {
     }
 
     public void shutdown() {
-        channel.shutdown();
+        GrpcConnection.shutdownManagedChannel(channel, log);
     }
 
     public Store.KvPutResponse kvPut(Store.KvPutRequest request) {
