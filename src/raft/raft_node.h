@@ -30,7 +30,8 @@ namespace dingodb {
 // Encapsulation braft node
 class RaftNode {
  public:
-  RaftNode(pb::common::ClusterRole role, uint64_t node_id, braft::PeerId peer_id, braft::StateMachine* fsm);
+  RaftNode(pb::common::ClusterRole role, uint64_t node_id, const std::string& raft_group_name, braft::PeerId peer_id,
+           braft::StateMachine* fsm);
   ~RaftNode();
 
   int Init(const std::string& init_conf);
@@ -56,6 +57,7 @@ class RaftNode {
  private:
   pb::common::ClusterRole role_;
   uint64_t node_id_;
+  std::string raft_group_name_;
   std::unique_ptr<braft::Node> node_;
   braft::StateMachine* fsm_;
 };

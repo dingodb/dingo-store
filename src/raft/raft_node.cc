@@ -24,8 +24,13 @@
 
 namespace dingodb {
 
-RaftNode::RaftNode(pb::common::ClusterRole role, uint64_t node_id, braft::PeerId peer_id, braft::StateMachine* fsm)
-    : role_(role), node_id_(node_id), node_(new braft::Node(std::to_string(node_id), peer_id)), fsm_(fsm) {}
+RaftNode::RaftNode(pb::common::ClusterRole role, uint64_t node_id, const std::string& raft_group_name,
+                   braft::PeerId peer_id, braft::StateMachine* fsm)
+    : role_(role),
+      node_id_(node_id),
+      raft_group_name_(raft_group_name),
+      node_(new braft::Node(raft_group_name.c_str(), peer_id)),
+      fsm_(fsm) {}
 
 RaftNode::~RaftNode() {
   if (fsm_) {
