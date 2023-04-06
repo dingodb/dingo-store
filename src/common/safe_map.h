@@ -42,6 +42,8 @@ class DingoSafeMap {
   void Init(uint64_t capacity) { safe_map.Modify(InnerInit, capacity); }
   void Resize(uint64_t capacity) { safe_map.Modify(InnerResize, capacity); }
 
+  // Get
+  // get value by key
   int Get(const T_KEY &key, T_VALUE &value) {
     TypeScopedPtr ptr;
     if (safe_map.Read(&ptr) != 0) {
@@ -56,6 +58,39 @@ class DingoSafeMap {
     return 0;
   }
 
+  // Get
+  // get value by key
+  T_VALUE Get(const T_KEY &key) {
+    TypeScopedPtr ptr;
+    T_VALUE value;
+    if (safe_map.Read(&ptr) != 0) {
+      return value;
+    }
+    auto *value_ptr = ptr->seek(key);
+    if (!value_ptr) {
+      return value;
+    }
+
+    return *value_ptr;
+  }
+
+  // Count
+  // count the number of key
+  uint64_t Count(const T_KEY &key) {
+    TypeScopedPtr ptr;
+    if (safe_map.Read(&ptr) != 0) {
+      return 0;
+    }
+    auto *value_ptr = ptr->seek(key);
+    if (!value_ptr) {
+      return 0;
+    }
+
+    return 1;
+  }
+
+  // Size
+  // return the record count of map
   uint64_t Size() {
     TypeScopedPtr ptr;
     if (safe_map.Read(&ptr) != 0) {
@@ -65,6 +100,8 @@ class DingoSafeMap {
     return ptr->size();
   }
 
+  // MemorySize
+  // return the memory size of map
   uint64_t MemorySize() {
     TypeScopedPtr ptr;
     uint64_t size = 0;
@@ -78,30 +115,48 @@ class DingoSafeMap {
     return size;
   }
 
-  int Swap(const TypeFlatMap &input_map) {
-    if (safe_map.Modify(InnerSwap, input_map) > 0) {
+  // Swap
+  // swap the map with FlatMap input_map
+  int SwapFlatMap(const TypeFlatMap &input_map) {
+    if (safe_map.Modify(InnerSwapFlatMap, input_map) > 0) {
       return 1;
     } else {
       return -1;
     }
   }
 
+  // Swap
+  // swap the map with SafeMap input_map
   int Swap(const TypeSafeMap &input_map) {
-    if (safe_map.Modify(InnerSwap, input_map) > 0) {
+    if (safe_map.Modify(InnerSwapSafeMap, input_map) > 0) {
       return 1;
     } else {
       return -1;
     }
   }
 
-  int Copy(const TypeFlatMap &input_map) {
-    if (safe_map.Modify(InnerCopy, input_map) > 0) {
+  // Copy
+  // copy the map with FlatMap input_map
+  int CopyFlatMap(const TypeFlatMap &input_map) {
+    if (safe_map.Modify(InnerCopyFlatMap, input_map) > 0) {
       return 1;
     } else {
       return -1;
     }
   }
 
+  // Copy
+  // copy the map with SafeMap input_map
+  int Copy(const TypeSafeMap &input_map) {
+    if (safe_map.Modify(InnerCopySafeMap, input_map) > 0) {
+      return 1;
+    } else {
+      return -1;
+    }
+  }
+
+  // Put
+  // put key-value pair into map
   int Put(const T_KEY &key, const T_VALUE &value) {
     if (safe_map.Modify(InnerPut, key, value) > 0) {
       return 1;
@@ -110,6 +165,8 @@ class DingoSafeMap {
     }
   }
 
+  // MultiPut
+  // put key-value pairs into map
   int MultiPut(const std::vector<T_KEY> &key_list, const std::vector<T_VALUE> &value_list) {
     if (safe_map.Modify(InnerMultiPut, key_list, value_list) > 0) {
       return 1;
@@ -118,6 +175,8 @@ class DingoSafeMap {
     }
   }
 
+  // PutIfExists
+  // put key-value pair into map if key exists
   int PutIfExists(const T_KEY &key, const T_VALUE &value) {
     if (safe_map.Modify(InnerPutIfExists, key, value) > 0) {
       return 1;
@@ -126,6 +185,8 @@ class DingoSafeMap {
     }
   }
 
+  // PutIfAbsent
+  // put key-value pair into map if key not exists
   int PutIfAbsent(const T_KEY &key, const T_VALUE &value) {
     if (safe_map.Modify(InnerPutIfAbsent, key, value) > 0) {
       return 1;
@@ -134,6 +195,8 @@ class DingoSafeMap {
     }
   }
 
+  // PutIfEqual
+  // put key-value pair into map if key exists and value equals
   int PutIfEqual(const T_KEY &key, const T_VALUE &value) {
     if (safe_map.Modify(InnerPutIfEqual, key, value) > 0) {
       return 1;
@@ -142,6 +205,8 @@ class DingoSafeMap {
     }
   }
 
+  // PutIfNotEqual
+  // put key-value pair into map if key exists and value not equals
   int PutIfNotEqual(const T_KEY &key, const T_VALUE &value) {
     if (safe_map.Modify(InnerPutIfNotEqual, key, value) > 0) {
       return 1;
@@ -150,14 +215,18 @@ class DingoSafeMap {
     }
   }
 
-  int Erase(const T_KEY &key, const T_VALUE &value) {
-    if (safe_map.Modify(InnerErase, key, value) > 0) {
+  // Erase
+  // erase key-value pair from map
+  int Erase(const T_KEY &key) {
+    if (safe_map.Modify(InnerErase, key) > 0) {
       return 1;
     } else {
       return -1;
     }
   }
 
+  // Erase
+  // erase all key-value pairs from map
   int Clear() {
     if (safe_map.Modify(InnerClear) > 0) {
       return 1;
@@ -168,18 +237,23 @@ class DingoSafeMap {
 
  protected:
   // all inner function return 1 if modify record access, return 0 if no record is successfully modified
-  static size_t InnerSwap(TypeFlatMap &map, const TypeFlatMap &input_map) {
+  static size_t InnerSwapFlatMap(TypeFlatMap &map, const TypeFlatMap &input_map) {
     map.swap(input_map);
     return 1;
   }
 
-  static size_t InnerSwap(TypeFlatMap &map, const TypeSafeMap &input_map) {
+  static size_t InnerSwapSafeMap(TypeFlatMap &map, const TypeSafeMap &input_map) {
     input_map.swap(map);
     return 1;
   }
 
-  static size_t InnerCopy(TypeFlatMap &map, const TypeFlatMap &input_map) {
+  static size_t InnerCopyFlatMap(TypeFlatMap &map, const TypeFlatMap &input_map) {
     map = input_map;
+    return 1;
+  }
+
+  static size_t InnerCopySafeMap(TypeFlatMap &map, const TypeSafeMap &input_map) {
+    input_map.copy(map);
     return 1;
   }
 
