@@ -137,8 +137,7 @@ message PartitionRule {
 message Schema {
   DingoCommonId id = 1;
   string name = 2;
-  repeated DingoCommonId schema_ids = 3;
-  repeated DingoCommonId table_ids = 4;
+  repeated DingoCommonId table_ids = 3;
 }
 
 // TableDefinition is for SQL
@@ -191,6 +190,15 @@ message GetSchemasRequest {
 message GetSchemasResponse {
   dingodb.pb.error.Error error = 1;
   repeated Schema schemas = 2;
+}
+
+message GetSchemaRequest {
+  DingoCommonId schema_id = 1;
+}
+
+message GetSchemaResponse {
+  dingodb.pb.error.Error error = 1;
+  Schema schema = 2;
 }
 
 message TableDefinitionWithId {
@@ -281,10 +289,15 @@ message DropTableResponse {
 }
 
 service MetaService {
-  // GetSchema
+  // GetSchemas
   // in: schema_id
   // out: List<Schema>
   rpc GetSchemas(GetSchemasRequest) returns (GetSchemasResponse);
+
+  // GetSchema
+  // in: schema_id
+  // out: Schema
+  rpc GetSchema(GetSchemaRequest) returns (GetSchemaResponse);
 
   // GetTables
   // in: schema_id

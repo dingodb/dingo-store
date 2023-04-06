@@ -111,6 +111,8 @@ void* Sender(void* /*arg*/) {
     SendChangeLogLevel(cntl, node_stub);
   } else if (FLAGS_method == "GetSchemas") {
     SendGetSchemas(cntl, meta_stub);
+  } else if (FLAGS_method == "GetSchema") {
+    SendGetSchema(cntl, meta_stub);
   } else if (FLAGS_method == "GetTables") {
     SendGetTables(cntl, meta_stub);
   } else if (FLAGS_method == "GetTablesCount") {

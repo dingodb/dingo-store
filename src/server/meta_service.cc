@@ -48,6 +48,21 @@ void MetaServiceImpl::GetSchemas(google::protobuf::RpcController * /*controller*
   }
 }
 
+void MetaServiceImpl::GetSchema(google::protobuf::RpcController * /*controller*/,
+                                const pb::meta::GetSchemaRequest *request, pb::meta::GetSchemaResponse *response,
+                                google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!this->coordinator_control_->IsLeader()) {
+    return RedirectResponse(response);
+  }
+
+  DINGO_LOG(DEBUG) << "GetSchema request:  schema_id = [" << request->schema_id().entity_id() << "]";
+
+  auto *schema = response->mutable_schema();
+  this->coordinator_control_->GetSchema(request->schema_id().entity_id(), *schema);
+}
+
 void MetaServiceImpl::GetTables(google::protobuf::RpcController * /*controller*/,
                                 const pb::meta::GetTablesRequest *request, pb::meta::GetTablesResponse *response,
                                 google::protobuf::Closure *done) {

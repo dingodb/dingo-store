@@ -53,6 +53,7 @@ void SendGetStoreMetrics(brpc::Controller& cntl, dingodb::pb::coordinator::Coord
 
 // meta service functions
 void SendGetSchemas(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub);
+void SendGetSchema(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub);
 void SendGetTablesCount(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub);
 void SendGetTables(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub);
 void SendGetTable(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub);

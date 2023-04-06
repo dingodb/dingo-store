@@ -46,6 +46,8 @@ class MetaServiceImpl : public pb::meta::MetaService {
 
   void GetSchemas(google::protobuf::RpcController* controller, const pb::meta::GetSchemasRequest* request,
                   pb::meta::GetSchemasResponse* response, google::protobuf::Closure* done) override;
+  void GetSchema(google::protobuf::RpcController* controller, const pb::meta::GetSchemaRequest* request,
+                 pb::meta::GetSchemaResponse* response, google::protobuf::Closure* done) override;
   void GetTables(google::protobuf::RpcController* controller, const pb::meta::GetTablesRequest* request,
                  pb::meta::GetTablesResponse* response, google::protobuf::Closure* done) override;
   void GetTable(google::protobuf::RpcController* controller, const pb::meta::GetTableRequest* request,
