@@ -489,21 +489,6 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
     for (int i = 0; i < meta_increment.schemas_size(); i++) {
       const auto& schema = meta_increment.schemas(i);
       if (schema.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
-        // update parent schema for user schemas
-        if (schema.id() > pb::meta::ReservedSchemaIds::MAX_INTERNAL_SCHEMA) {
-          auto* parent_schema = schema_map_.seek(schema.schema_id());
-          // if (schema_map_.find(schema.schema_id()) != schema_map_.end()) {
-          if (parent_schema != nullptr) {
-            // add new created schema's id to its parent schema's schema_ids
-            parent_schema->add_schema_ids(schema.id());
-
-            DINGO_LOG(INFO) << "3.schema map CREATE new_sub_schema id=" << schema.id()
-                            << " parent_id=" << schema.schema_id();
-
-            // meta_write_kv
-            meta_write_to_kv.push_back(schema_meta_->TransformToKvValue(*parent_schema));
-          }
-        }
         schema_map_[schema.id()] = schema.schema_internal();
 
         // meta_write_kv
@@ -518,28 +503,6 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
 
       } else if (schema.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
         schema_map_.erase(schema.id());
-
-        // delete from parent schema
-        auto* parent_schema = schema_map_.seek(schema.schema_id());
-        // if (schema_map_.find(schema.schema_id()) != schema_map_.end()) {
-        if (parent_schema != nullptr) {
-          // according to the protobuf document, we must use CopyFrom for protobuf message data structure here
-          pb::coordinator_internal::SchemaInternal new_schema;
-          new_schema.CopyFrom(*parent_schema);
-
-          new_schema.clear_table_ids();
-
-          // add left schema_id to new_schema
-          for (auto x : parent_schema->table_ids()) {
-            if (x != schema.id()) {
-              new_schema.add_schema_ids(x);
-            }
-          }
-          parent_schema->CopyFrom(new_schema);
-
-          // meta_write_kv
-          meta_write_to_kv.push_back(schema_meta_->TransformToKvValue(*parent_schema));
-        }
 
         // meta_delete_kv
         meta_delete_to_kv.push_back(schema_meta_->TransformToKvValue(schema.schema_internal()));
@@ -619,7 +582,6 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
 
         // add table to parent schema
         auto* schema = schema_map_.seek(table.schema_id());
-        // if (schema_map_.find(table.schema_id()) != schema_map_.end()) {
         if (schema != nullptr) {
           // add new created table's id to its parent schema's table_ids
           schema->add_table_ids(table.id());
@@ -628,7 +590,6 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
 
           // meta_write_kv
           meta_write_to_kv.push_back(schema_meta_->TransformToKvValue(*schema));
-
         } else {
           DINGO_LOG(ERROR) << " CREATE TABLE apply illegal schema_id=" << table.schema_id()
                            << " table_id=" << table.id() << " table_name=" << table.table().definition().name();

@@ -53,28 +53,20 @@ void CoordinatorControl::GenerateRootSchemas(pb::coordinator_internal::SchemaInt
   meta_schema_internal.set_id(::dingodb::pb::meta::ReservedSchemaIds::META_SCHEMA);
   meta_schema_internal.set_name("meta");
 
-  root_schema_internal.add_schema_ids(meta_schema_internal.id());
-
   // dingo schema
   // pb::meta::Schema dingo_schema;
   dingo_schema_internal.set_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
   dingo_schema_internal.set_name("dingo");
-
-  root_schema_internal.add_schema_ids(dingo_schema_internal.id());
 
   // mysql schema
   // pb::mysql::Schema mysql_schema;
   mysql_schema_internal.set_id(::dingodb::pb::meta::ReservedSchemaIds::MYSQL_SCHEMA);
   mysql_schema_internal.set_name("mysql");
 
-  root_schema_internal.add_schema_ids(mysql_schema_internal.id());
-
   // information schema
   // pb::information::Schema information_schema;
   information_schema_internal.set_id(::dingodb::pb::meta::ReservedSchemaIds::INFORMATION_SCHEMA);
   information_schema_internal.set_name("information");
-
-  root_schema_internal.add_schema_ids(information_schema_internal.id());
 
   DINGO_LOG(INFO) << "GenerateRootSchemas 0[" << root_schema_internal.DebugString();
   DINGO_LOG(INFO) << "GenerateRootSchemas 1[" << meta_schema_internal.DebugString();
@@ -166,10 +158,9 @@ int CoordinatorControl::DropSchema(uint64_t parent_schema_id, uint64_t schema_id
       return -1;
     }
 
-    if (schema_to_delete->table_ids_size() > 0 || schema_to_delete->schema_ids_size() > 0) {
+    if (schema_to_delete->table_ids_size() > 0) {
       DINGO_LOG(ERROR) << "ERRROR: schema is not null" << schema_id
-                       << " table_ids_size=" << schema_to_delete->table_ids_size()
-                       << " schema_ids_size=" << schema_to_delete->schema_ids_size();
+                       << " table_ids_size=" << schema_to_delete->table_ids_size();
       return -1;
     }
     // construct schema from schema_internal
@@ -195,7 +186,8 @@ int CoordinatorControl::DropSchema(uint64_t parent_schema_id, uint64_t schema_id
 // in: schema_id
 // out: schemas
 void CoordinatorControl::GetSchemas(uint64_t schema_id, std::vector<pb::meta::Schema>& schemas) {
-  if (schema_id < 0) {
+  // only root schema can has sub schemas
+  if (schema_id != 0) {
     DINGO_LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
     return;
   }
@@ -207,59 +199,69 @@ void CoordinatorControl::GetSchemas(uint64_t schema_id, std::vector<pb::meta::Sc
 
   {
     BAIDU_SCOPED_LOCK(schema_map_mutex_);
-    auto* schema_internal = schema_map_.seek(schema_id);
-    if (schema_internal == nullptr) {
-      return;
-    }
+    for (const auto& it : schema_map_) {
+      pb::meta::Schema schema;
 
-    DINGO_LOG(INFO) << " sub schema count=" << schema_internal->schema_ids_size();
+      auto* temp_id = schema.mutable_id();
+      temp_id->set_entity_id(it.first);
+      temp_id->set_parent_entity_id(schema_id);
+      temp_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
 
-    for (int i = 0; i < schema_internal->schema_ids_size(); i++) {
-      uint64_t sub_schema_id = schema_internal->schema_ids(i);
+      schema.set_name(it.second.name());
 
-      DINGO_LOG(INFO) << "sub_schema_id=" << sub_schema_id;
+      // construct table_ids in schema
+      for (auto it_table : it.second.table_ids()) {
+        pb::meta::DingoCommonId table_id;
+        table_id.set_entity_id(it_table);
+        table_id.set_parent_entity_id(temp_id->entity_id());
+        table_id.set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
 
-      DINGO_LOG(INFO) << schema_internal->DebugString();
-
-      auto* lean_schema = schema_map_.seek(sub_schema_id);
-      if (lean_schema == nullptr) {
-        DINGO_LOG(ERROR) << "ERRROR: sub_schema_id " << sub_schema_id << " not exists";
-        DINGO_LOG(INFO) << "ERRROR: sub_schema_id " << sub_schema_id << " not exists";
-        continue;
-      }
-      DINGO_LOG(INFO) << " schema_map_ =" << schema_map_[sub_schema_id].DebugString();
-
-      DINGO_LOG(INFO) << " GetSchemas push_back sub schema id=" << sub_schema_id;
-
-      // construct sub_schema_for_response
-      pb::meta::Schema sub_schema_for_response;
-
-      auto* sub_schema_common_id = sub_schema_for_response.mutable_id();
-      sub_schema_common_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
-      sub_schema_common_id->set_entity_id(lean_schema->id());  // this is equal to sub_schema_id
-      sub_schema_common_id->set_parent_entity_id(
-          schema_id);  // this is sub_schema_id's parent which is the input schema_id
-
-      for (auto x : lean_schema->schema_ids()) {
-        auto* temp_id = sub_schema_for_response.add_schema_ids();
-        temp_id->set_entity_id(x);
-        temp_id->set_parent_entity_id(sub_schema_id);
-        temp_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
+        schema.add_table_ids()->CopyFrom(table_id);
       }
 
-      for (auto x : lean_schema->table_ids()) {
-        auto* temp_id = sub_schema_for_response.add_table_ids();
-        temp_id->set_entity_id(x);
-        temp_id->set_parent_entity_id(sub_schema_id);
-        temp_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
-      }
-
-      // push sub_schema_for_response into response
-      schemas.push_back(sub_schema_for_response);
+      schemas.push_back(schema);
     }
   }
 
   DINGO_LOG(INFO) << "GetSchemas id=" << schema_id << " sub schema count=" << schema_map_.size();
+}
+
+// GetSchema
+// in: schema_id
+// out: schema
+void CoordinatorControl::GetSchema(uint64_t schema_id, pb::meta::Schema& schema) {
+  // only root schema can has sub schemas
+  if (schema_id < 0) {
+    DINGO_LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
+    return;
+  }
+
+  {
+    BAIDU_SCOPED_LOCK(schema_map_mutex_);
+    auto* temp_schema = schema_map_.seek(schema_id);
+    if (temp_schema == nullptr) {
+      DINGO_LOG(ERROR) << "ERRROR: schema_id not found " << schema_id;
+      return;
+    }
+
+    auto* temp_id = schema.mutable_id();
+    temp_id->set_entity_id(temp_schema->id());
+    temp_id->set_parent_entity_id(::dingodb::pb::meta::ROOT_SCHEMA);
+    temp_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
+
+    schema.set_name(temp_schema->name());
+
+    for (auto it : temp_schema->table_ids()) {
+      pb::meta::DingoCommonId table_id;
+      table_id.set_entity_id(it);
+      table_id.set_parent_entity_id(schema_id);
+      table_id.set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
+
+      schema.add_table_ids()->CopyFrom(table_id);
+    }
+  }
+
+  DINGO_LOG(INFO) << "GetSchemas id=" << schema_id << " sub table count=" << schema.table_ids_size();
 }
 
 int CoordinatorControl::CreateTableId(uint64_t schema_id, uint64_t& new_table_id,
@@ -282,19 +284,11 @@ int CoordinatorControl::CreateTableId(uint64_t schema_id, uint64_t& new_table_id
 
 int CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta::TableDefinition& table_definition,
                                     uint64_t& new_table_id, pb::coordinator_internal::MetaIncrement& meta_increment) {
-  // initial schema create
-  // if (!root_schema_writed_to_raft_) {
-  //   pb::coordinator_internal::SchemaInternal root_schema;
-  //   pb::coordinator_internal::SchemaInternal meta_schema;
-  //   pb::coordinator_internal::SchemaInternal dingo_schema;
-
-  //   GenerateRootSchemas(root_schema, meta_schema, dingo_schema);
-  //   GenerateRootSchemasMetaIncrement(root_schema, meta_schema, dingo_schema, meta_increment);
-
-  //   root_schema_writed_to_raft_ = true;
-  // }
-
   // validate schema_id is existed
+  if (schema_id <= 0) {
+    DINGO_LOG(ERROR) << "schema_id is illegal " << schema_id;
+    return -1;
+  }
   {
     BAIDU_SCOPED_LOCK(schema_map_mutex_);
     if (schema_map_.seek(schema_id) == nullptr) {

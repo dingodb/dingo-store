@@ -48,11 +48,7 @@ void SendGetSchemas(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub&
     for (const auto& schema : response.schemas()) {
       DINGO_LOG(INFO) << "schema_id=[" << schema.id().entity_id() << "]"
                       << "schema_name=[" << schema.name() << "]"
-                      << "child_schema_count=" << schema.schema_ids_size()
                       << "child_table_count=" << schema.table_ids_size();
-      for (const auto& child_schema_id : schema.schema_ids()) {
-        DINGO_LOG(INFO) << "child schema_id=[" << child_schema_id.entity_id() << "]";
-      }
       for (const auto& child_table_id : schema.table_ids()) {
         DINGO_LOG(INFO) << "child table_id=[" << child_table_id.entity_id() << "]";
       }
@@ -69,6 +65,42 @@ void SendGetSchemas(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub&
     //     DINGO_LOG(INFO) << "child table_id=[" << response.schemas(i).table_ids(j).entity_id() << "]";
     //   }
     // }
+  }
+}
+
+void SendGetSchema(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub) {
+  dingodb::pb::meta::GetSchemaRequest request;
+  dingodb::pb::meta::GetSchemaResponse response;
+
+  auto* schema_id = request.mutable_schema_id();
+  schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
+  schema_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
+
+  if (FLAGS_id.empty()) {
+    DINGO_LOG(WARNING) << "id is empty";
+    return;
+  }
+  schema_id->set_entity_id(std::stol(FLAGS_id));
+
+  stub.GetSchema(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    // bthread_usleep(FLAGS_timeout_ms * 1000L);
+  }
+
+  if (FLAGS_log_each_request) {
+    DINGO_LOG(INFO) << "Received response"
+                    << " schema_id=" << request.schema_id().entity_id()
+                    << " table_id_count=" << response.schema().table_ids_size()
+                    << " request_attachment=" << cntl.request_attachment().size()
+                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+    // DINGO_LOG(INFO) << response.DebugString();
+    DINGO_LOG(INFO) << "schema_id=[" << response.schema().id().entity_id() << "]"
+                    << "schema_name=[" << response.schema().name() << "]"
+                    << "child_table_count=" << response.schema().table_ids_size();
+    for (const auto& child_table_id : response.schema().table_ids()) {
+      DINGO_LOG(INFO) << "child table_id=[" << child_table_id.entity_id() << "]";
+    }
   }
 }
 
