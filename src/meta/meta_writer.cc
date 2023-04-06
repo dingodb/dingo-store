@@ -22,7 +22,7 @@
 namespace dingodb {
 
 bool MetaWriter::Put(const std::shared_ptr<pb::common::KeyValue> kv) {
-  DINGO_LOG(INFO) << "Put meta data, key: " << Helper::StringToHex(kv->key());
+  DINGO_LOG(DEBUG) << "Put meta data, key: " << Helper::StringToHex(kv->key());
   auto writer = engine_->NewWriter(Constant::kStoreMetaCF);
   auto status = writer->KvPut(*kv);
   if (!status.ok()) {
@@ -34,7 +34,7 @@ bool MetaWriter::Put(const std::shared_ptr<pb::common::KeyValue> kv) {
 }
 
 bool MetaWriter::Put(const std::vector<pb::common::KeyValue> kvs) {
-  DINGO_LOG(INFO) << "Put meta data, key nums: " << kvs.size();
+  DINGO_LOG(DEBUG) << "Put meta data, key nums: " << kvs.size();
   auto writer = engine_->NewWriter(Constant::kStoreMetaCF);
   auto status = writer->KvBatchPut(kvs);
   if (!status.ok()) {
@@ -46,8 +46,8 @@ bool MetaWriter::Put(const std::vector<pb::common::KeyValue> kvs) {
 }
 
 bool MetaWriter::PutAndDelete(std::vector<pb::common::KeyValue> kvs_put, std::vector<pb::common::KeyValue> kvs_delete) {
-  DINGO_LOG(INFO) << "PutAndDelete meta data, key_put nums: " << kvs_put.size()
-                  << " key_delete nums:" << kvs_delete.size();
+  DINGO_LOG(DEBUG) << "PutAndDelete meta data, key_put nums: " << kvs_put.size()
+                   << " key_delete nums:" << kvs_delete.size();
   auto writer = engine_->NewWriter(Constant::kStoreMetaCF);
   auto status = writer->KvBatchPutAndDelete(kvs_put, kvs_delete);
   if (!status.ok()) {
@@ -60,7 +60,7 @@ bool MetaWriter::PutAndDelete(std::vector<pb::common::KeyValue> kvs_put, std::ve
 }
 
 bool MetaWriter::Delete(const std::string& key) {
-  DINGO_LOG(INFO) << "Delete meta data, key: " << key;
+  DINGO_LOG(DEBUG) << "Delete meta data, key: " << key;
   auto writer = engine_->NewWriter(Constant::kStoreMetaCF);
   auto status = writer->KvDelete(key);
   if (!status.ok()) {
@@ -72,7 +72,7 @@ bool MetaWriter::Delete(const std::string& key) {
 }
 
 bool MetaWriter::DeleteRange(const std::string& start_key, const std::string& end_key) {
-  DINGO_LOG(INFO) << "DeleteRange meta data, start_key: " << start_key << " end_key: " << end_key;
+  DINGO_LOG(DEBUG) << "DeleteRange meta data, start_key: " << start_key << " end_key: " << end_key;
   auto writer = engine_->NewWriter(Constant::kStoreMetaCF);
 
   pb::common::Range range;
