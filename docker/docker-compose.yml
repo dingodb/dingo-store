@@ -5,98 +5,94 @@ services:
     image: dingodatabase/dingo-store:latest
     hostname: coordinator1
     container_name: coordinator1
-    ports:
-      - 22001:22001
-    networks:
-      - dingo_net
+    network_mode: host
     environment:
       FLAGS_role: coordinator
-      COOR_RAFT_PEERS: coordinator1:22101,coordinator2:22101,coordinator3:22101
+      COOR_RAFT_PEERS: ${DINGO_HOST_IP}:22101,${DINGO_HOST_IP}:22102,${DINGO_HOST_IP}:22103
+      COORDINATOR_SERVER_START_PORT: 22001
+      COORDINATOR_RAFT_START_PORT: 22101
       INSTANCE_START_ID: 1001
-      SERVER_HOST: coordinator1
-      RAFT_HOST: coordinator1
+      SERVER_HOST: ${DINGO_HOST_IP}
+      RAFT_HOST: ${DINGO_HOST_IP}
 
   coordinator2:
     image: dingodatabase/dingo-store:latest
     hostname: coordinator2
     container_name: coordinator2
-    ports:
-      - 22002:22001
-    networks:
-      - dingo_net
+    network_mode: host
     environment:
       FLAGS_role: coordinator
-      COOR_RAFT_PEERS: coordinator1:22101,coordinator2:22101,coordinator3:22101
+      COOR_RAFT_PEERS: ${DINGO_HOST_IP}:22101,${DINGO_HOST_IP}:22102,${DINGO_HOST_IP}:22103
+      COORDINATOR_SERVER_START_PORT: 22002
+      COORDINATOR_RAFT_START_PORT: 22102
       INSTANCE_START_ID: 1002
-      SERVER_HOST: coordinator2
-      RAFT_HOST: coordinator2
+      SERVER_HOST: ${DINGO_HOST_IP}
+      RAFT_HOST: ${DINGO_HOST_IP}
 
   coordinator3:
     image: dingodatabase/dingo-store:latest
     hostname: coordinator3
     container_name: coordinator3
-    ports:
-      - 22003:22001
-    networks:
-      - dingo_net
+    network_mode: host
     environment:
       FLAGS_role: coordinator
-      COOR_RAFT_PEERS: coordinator1:22101,coordinator2:22101,coordinator3:22101
+      COOR_RAFT_PEERS: ${DINGO_HOST_IP}:22101,${DINGO_HOST_IP}:22102,${DINGO_HOST_IP}:22103
+      COORDINATOR_SERVER_START_PORT: 22003
+      COORDINATOR_RAFT_START_PORT: 22103
       INSTANCE_START_ID: 1003
-      SERVER_HOST: coordinator3
-      RAFT_HOST: coordinator3
+      SERVER_HOST: ${DINGO_HOST_IP}
+      RAFT_HOST: ${DINGO_HOST_IP}
 
   store1:
     image: dingodatabase/dingo-store:latest
     hostname: store1
     container_name: store1
-    networks:
-      - dingo_net
+    network_mode: host
     depends_on:
       - coordinator1
       - coordinator2
       - coordinator3
     environment:
       FLAGS_role: store
-      COOR_SRV_PEERS: coordinator1:22001,coordinator2:22001,coordinator3:22001
+      COOR_SRV_PEERS: ${DINGO_HOST_IP}:22001,${DINGO_HOST_IP}:22002,${DINGO_HOST_IP}:22003
+      RAFT_START_PORT: 20101
+      SERVER_START_PORT: 20001
       INSTANCE_START_ID: 1001
-      SERVER_HOST: store1
-      RAFT_HOST: store1
+      SERVER_HOST: ${DINGO_HOST_IP}
+      RAFT_HOST: ${DINGO_HOST_IP}
 
   store2:
     image: dingodatabase/dingo-store:latest
     hostname: store2
     container_name: store2
-    networks:
-      - dingo_net
+    network_mode: host
     depends_on:
       - coordinator1
       - coordinator2
       - coordinator3
     environment:
       FLAGS_role: store
-      COOR_SRV_PEERS: coordinator1:22001,coordinator2:22001,coordinator3:22001
+      COOR_SRV_PEERS: ${DINGO_HOST_IP}:22001,${DINGO_HOST_IP}:22002,${DINGO_HOST_IP}:22003
+      RAFT_START_PORT: 20102
+      SERVER_START_PORT: 20002
       INSTANCE_START_ID: 1002
-      SERVER_HOST: store2
-      RAFT_HOST: store2
+      SERVER_HOST: ${DINGO_HOST_IP}
+      RAFT_HOST: ${DINGO_HOST_IP}
 
   store3:
     image: dingodatabase/dingo-store:latest
     hostname: store3
     container_name: store3
-    networks:
-      - dingo_net
+    network_mode: host
     depends_on:
       - coordinator1
       - coordinator2
       - coordinator3
     environment:
       FLAGS_role: store
-      COOR_SRV_PEERS: coordinator1:22001,coordinator2:22001,coordinator3:22001
+      COOR_SRV_PEERS: ${DINGO_HOST_IP}:22001,${DINGO_HOST_IP}:22002,${DINGO_HOST_IP}:22003
+      RAFT_START_PORT: 20103
+      SERVER_START_PORT: 20003
       INSTANCE_START_ID: 1003
-      SERVER_HOST: store3
-      RAFT_HOST: store3
-
-networks:
-  dingo_net:
-    driver: bridge
+      SERVER_HOST: ${DINGO_HOST_IP}
+      RAFT_HOST: ${DINGO_HOST_IP}
