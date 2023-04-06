@@ -92,7 +92,7 @@ void StoreStateMachine::on_apply(braft::Iterator& iter) {
       CHECK(raft_cmd->ParseFromZeroCopyStream(&wrapper));
     }
 
-    DINGO_LOG(INFO) << butil::StringPrintf(
+    DINGO_LOG(DEBUG) << butil::StringPrintf(
         "raft apply log on region[%ld-term:%ld-index:%ld] applied_index[%ld] cmd:[%s]", raft_cmd->header().region_id(),
         iter.term(), iter.index(), applied_index_, raft_cmd->ShortDebugString().c_str());
     // Build event
