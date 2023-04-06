@@ -30,6 +30,7 @@
 #include "butil/strings/stringprintf.h"
 #include "common/logging.h"
 #include "common/meta_control.h"
+#include "common/safe_map.h"
 #include "coordinator/coordinator_meta_storage.h"
 #include "engine/snapshot.h"
 #include "meta/meta_reader.h"
@@ -274,10 +275,6 @@ class CoordinatorControl : public MetaControl {
 
  private:
   // ids_epochs_temp (out of state machine, only for leader use)
-  // TableInternal is combination of Table & TableDefinition
-  //   butil::FlatMap<uint64_t, pb::coordinator_internal::IdEpochInternal> id_epoch_map_temp_;
-  //   bthread_mutex_t id_epoch_map_temp_mutex_;
-
   DingoSafeIdEpochMap id_epoch_map_safe_temp_;
 
   // 0.ids_epochs
@@ -310,6 +307,9 @@ class CoordinatorControl : public MetaControl {
   butil::FlatMap<uint64_t, pb::coordinator_internal::SchemaInternal> schema_map_;
   MetaMapStorage<pb::coordinator_internal::SchemaInternal> *schema_meta_;
   bthread_mutex_t schema_map_mutex_;
+  // schema map temp, only for leader use, is out of state machine
+  // schema_name -> schema-id
+  DingoSafeMap<std::string, uint64_t> schema_name_map_safe_temp_;
 
   // 5.regions
   butil::FlatMap<uint64_t, pb::common::Region> region_map_;
@@ -321,6 +321,10 @@ class CoordinatorControl : public MetaControl {
   butil::FlatMap<uint64_t, pb::coordinator_internal::TableInternal> table_map_;
   MetaMapStorage<pb::coordinator_internal::TableInternal> *table_meta_;
   bthread_mutex_t table_map_mutex_;
+
+  // table map temp, only for leader use, is out of state machine
+  // table_name -> table-id
+  DingoSafeMap<std::string, uint64_t> table_name_map_safe_temp_;
 
   // 7.store_metrics
   butil::FlatMap<uint64_t, pb::common::StoreMetrics> store_metrics_map_;

@@ -72,11 +72,36 @@ int CoordinatorControl::GetAppliedTermAndIndex(uint64_t& term, uint64_t& index) 
 
 // OnLeaderStart will init id_epoch_map_temp_ from id_epoch_map_ which is in state machine
 void CoordinatorControl::OnLeaderStart(int64_t term) {
-  BAIDU_SCOPED_LOCK(id_epoch_map_mutex_);
-  // id_epoch_map_temp_ = id_epoch_map_;
-  // DINGO_LOG(INFO) << "OnLeaderStart init id_epoch_map_temp_ finished, term=" << term;
-  id_epoch_map_safe_temp_.Copy(id_epoch_map_);
-  DINGO_LOG(INFO) << "OnLeaderStart init id_epoch_safe_map_temp_ finished, term=" << term;
+  {
+    BAIDU_SCOPED_LOCK(id_epoch_map_mutex_);
+    // id_epoch_map_temp_ = id_epoch_map_;
+    // DINGO_LOG(INFO) << "OnLeaderStart init id_epoch_map_temp_ finished, term=" << term;
+    id_epoch_map_safe_temp_.CopyFlatMap(id_epoch_map_);
+  }
+  DINGO_LOG(INFO) << "OnLeaderStart init id_epoch_safe_map_temp_ finished, term=" << term
+                  << " count=" << id_epoch_map_safe_temp_.Size();
+
+  // copy schema_map_ to schema_name_map_safe_temp_
+  {
+    BAIDU_SCOPED_LOCK(schema_map_mutex_);
+    schema_name_map_safe_temp_.Clear();
+    for (const auto& it : schema_map_) {
+      schema_name_map_safe_temp_.Put(it.second.name(), it.first);
+    }
+  }
+  DINGO_LOG(INFO) << "OnLeaderStart init schema_name_map_safe_temp_ finished, term=" << term
+                  << " count=" << schema_name_map_safe_temp_.Size();
+
+  // copy table_map_ to table_name_map_safe_temp_
+  {
+    BAIDU_SCOPED_LOCK(table_map_mutex_);
+    table_name_map_safe_temp_.Clear();
+    for (const auto& it : table_map_) {
+      table_name_map_safe_temp_.Put(it.second.definition().name(), it.first);
+    }
+  }
+  DINGO_LOG(INFO) << "OnLeaderStart init table_name_map_safe_temp_ finished, term=" << term
+                  << " count=" << table_name_map_safe_temp_.Size();
 }
 
 std::shared_ptr<Snapshot> CoordinatorControl::PrepareRaftSnapshot() {
@@ -317,15 +342,30 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
   // init id_epoch_map_temp_
   // copy id_epoch_map_ to id_epoch_map_temp_
   {
-    // BAIDU_SCOPED_LOCK(id_epoch_map_temp_mutex_);
     BAIDU_SCOPED_LOCK(id_epoch_map_mutex_);
-    // id_epoch_map_temp_ = id_epoch_map_;
-    id_epoch_map_safe_temp_.Copy(id_epoch_map_);
+    id_epoch_map_safe_temp_.CopyFlatMap(id_epoch_map_);
   }
-  // DINGO_LOG(INFO) << "LoadSnapshot id_epoch_map_temp, count=" << id_epoch_map_temp_.size();
-  uint64_t size = 0;
-  id_epoch_map_safe_temp_.Size(size);
-  DINGO_LOG(INFO) << "LoadSnapshot id_epoch_safe_map_temp, count=" << size;
+  DINGO_LOG(INFO) << "LoadSnapshot id_epoch_safe_map_temp, count=" << id_epoch_map_safe_temp_.Size();
+
+  // copy schema_map_ to schema_name_map_safe_temp_
+  {
+    BAIDU_SCOPED_LOCK(schema_map_mutex_);
+    schema_name_map_safe_temp_.Clear();
+    for (const auto& it : schema_map_) {
+      schema_name_map_safe_temp_.Put(it.second.name(), it.first);
+    }
+  }
+  DINGO_LOG(INFO) << "LoadSnapshot schema_name_map_safe_temp, count=" << schema_name_map_safe_temp_.Size();
+
+  // copy table_map_ to table_name_map_safe_temp_
+  {
+    BAIDU_SCOPED_LOCK(table_map_mutex_);
+    table_name_map_safe_temp_.Clear();
+    for (const auto& it : table_map_) {
+      table_name_map_safe_temp_.Put(it.second.definition().name(), it.first);
+    }
+  }
+  DINGO_LOG(INFO) << "LoadSnapshot table_name_map_safe_temp, count=" << table_name_map_safe_temp_.Size();
 
   return true;
 }

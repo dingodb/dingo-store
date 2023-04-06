@@ -95,7 +95,7 @@ void MetaServiceImpl::GetSchemaByName(google::protobuf::RpcController * /*contro
   }
 
   auto *schema = response->mutable_schema();
-  this->coordinator_control_->GetSchema(0, *schema);
+  this->coordinator_control_->GetSchemaByName(request->schema_name(), *schema);
 }
 
 void MetaServiceImpl::GetTables(google::protobuf::RpcController * /*controller*/,
@@ -167,7 +167,7 @@ void MetaServiceImpl::GetTableByName(google::protobuf::RpcController * /*control
   }
 
   auto *table = response->mutable_table_definition_with_id();
-  this->coordinator_control_->GetTable(0, 1001, *table);
+  this->coordinator_control_->GetTableByName(request->schema_id().entity_id(), request->table_name(), *table);
 }
 
 void MetaServiceImpl::GetTableRange(google::protobuf::RpcController * /*controller*/,
