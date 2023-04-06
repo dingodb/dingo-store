@@ -22,5 +22,5 @@ ENV JAVA_HOME /usr/lib/jvm/java-1.8.0-openjdk
 ENV PATH=/opt/rh/gcc-toolset-11/root/usr/bin:$PATH
 WORKDIR /opt/dingo-store
 
-ENTRYPOINT [ "/opt/dingo-store/scripts/docker-dingo-store" ]
+ENTRYPOINT [ "/opt/dingo-store/scripts/docker-dingo-store.sh" ]
 CMD ["cleanstart"]
