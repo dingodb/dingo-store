@@ -84,7 +84,9 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   table_metrics_map_.init(100000, 80);
 
   // init SafeMap
-  id_epoch_map_safe_temp_.Init(100);  // id_epoch_map_temp_ is a small map
+  id_epoch_map_safe_temp_.Init(100);      // id_epoch_map_temp_ is a small map
+  schema_name_map_safe_temp_.Init(1000);  // schema_map_ is a big map
+  table_name_map_safe_temp_.Init(10000);  // table_map_ is a big map
 }
 
 CoordinatorControl::~CoordinatorControl() {
@@ -207,18 +209,32 @@ bool CoordinatorControl::Recover() {
   DINGO_LOG(INFO) << "Recover store_metrics_meta, count=" << kvs.size();
   kvs.clear();
 
-  // init id_epoch_map_temp_
-  // copy id_epoch_map_ to id_epoch_map_temp_
+  // copy id_epoch_map_ to id_epoch_map_safe_temp_
   {
-    // BAIDU_SCOPED_LOCK(id_epoch_map_temp_mutex_);
     BAIDU_SCOPED_LOCK(id_epoch_map_mutex_);
-    // id_epoch_map_temp_ = id_epoch_map_;
-    id_epoch_map_safe_temp_.Copy(id_epoch_map_);
+    id_epoch_map_safe_temp_.CopyFlatMap(id_epoch_map_);
   }
-  // DINGO_LOG(INFO) << "Recover id_epoch_map_temp, count=" << id_epoch_map_temp_.size();
-  uint64_t size = 0;
-  id_epoch_map_safe_temp_.Size(size);
-  DINGO_LOG(INFO) << "Recover id_epoch_safe_map_temp, count=" << size;
+  DINGO_LOG(INFO) << "Recover id_epoch_safe_map_temp, count=" << id_epoch_map_safe_temp_.Size();
+
+  // copy schema_map_ to schema_name_map_safe_temp_
+  {
+    BAIDU_SCOPED_LOCK(schema_map_mutex_);
+    schema_name_map_safe_temp_.Clear();
+    for (const auto& it : schema_map_) {
+      schema_name_map_safe_temp_.Put(it.second.name(), it.first);
+    }
+  }
+  DINGO_LOG(INFO) << "Recover schema_name_map_safe_temp, count=" << schema_name_map_safe_temp_.Size();
+
+  // copy table_map_ to table_name_map_safe_temp_
+  {
+    BAIDU_SCOPED_LOCK(table_map_mutex_);
+    table_name_map_safe_temp_.Clear();
+    for (const auto& it : table_map_) {
+      table_name_map_safe_temp_.Put(it.second.definition().name(), it.first);
+    }
+  }
+  DINGO_LOG(INFO) << "Recover table_name_map_safe_temp, count=" << table_name_map_safe_temp_.Size();
 
   return true;
 }
@@ -302,31 +318,6 @@ void CoordinatorControl::GetLeaderLocation(pb::common::Location& leader_server_l
 // only id_epoch_map_ is in state machine, and will persistent to raft and local rocksdb
 uint64_t CoordinatorControl::GetNextId(const pb::coordinator_internal::IdEpochType& key,
                                        pb::coordinator_internal::MetaIncrement& meta_increment) {
-  // uint64_t value = 0;
-  // {
-  //   BAIDU_SCOPED_LOCK(id_epoch_map_temp_mutex_);
-  //   auto* temp_id_epoch = id_epoch_map_temp_.seek(key);
-
-  //   // if (id_epoch_map_temp_.seek(key) == nullptr) {
-  //   if (temp_id_epoch == nullptr) {
-  //     value = COORDINATOR_ID_OF_MAP_MIN + 1;
-  //     DINGO_LOG(INFO) << "GetNextId key=" << pb::coordinator_internal::IdEpochType_Name(key)
-  //                     << " not found, generate new id=" << value;
-
-  //     pb::coordinator_internal::IdEpochInternal id_epoch;
-  //     id_epoch.set_id(key);
-  //     id_epoch.set_value(value);
-
-  //     // update id in memory
-  //     id_epoch_map_temp_.insert(key, id_epoch);
-  //   } else {
-  //     value = temp_id_epoch->value() + 1;
-  //     DINGO_LOG(INFO) << "GetNextId key=" << pb::coordinator_internal::IdEpochType_Name(key) << " value=" << value;
-  //     // update id in memory
-  //     temp_id_epoch->set_value(value);
-  //   }
-  // }
-
   // get next id from id_epoch_map_safe_temp_
   uint64_t next_id = 0;
   id_epoch_map_safe_temp_.GetNextId(key, next_id);
@@ -344,21 +335,6 @@ uint64_t CoordinatorControl::GetNextId(const pb::coordinator_internal::IdEpochTy
 }
 
 uint64_t CoordinatorControl::GetPresentId(const pb::coordinator_internal::IdEpochType& key) {
-  // uint64_t value = 0;
-  // BAIDU_SCOPED_LOCK(id_epoch_map_temp_mutex_);
-
-  // auto* temp_id_epoch = id_epoch_map_temp_.seek(key);
-
-  // // if (id_epoch_map_temp_.find(key) == id_epoch_map_temp_.end()) {
-  // if (temp_id_epoch == nullptr) {
-  //   value = COORDINATOR_ID_OF_MAP_MIN;
-  //   DINGO_LOG(INFO) << "GetPresentId key=" << pb::coordinator_internal::IdEpochType_Name(key)
-  //                   << " not found, generate new id=" << value;
-  // } else {
-  //   value = id_epoch_map_temp_[key].value();
-  //   DINGO_LOG(INFO) << "GetPresentId key=" << pb::coordinator_internal::IdEpochType_Name(key) << " value=" << value;
-  // }
-
   uint64_t value = 0;
   id_epoch_map_safe_temp_.GetPresentId(key, value);
 

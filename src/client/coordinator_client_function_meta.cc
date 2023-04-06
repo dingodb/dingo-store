@@ -303,6 +303,11 @@ void SendCreateTable(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub
   dingodb::pb::meta::CreateTableRequest request;
   dingodb::pb::meta::CreateTableResponse response;
 
+  if (FLAGS_name.empty()) {
+    DINGO_LOG(WARNING) << "name is empty";
+    return;
+  }
+
   auto* schema_id = request.mutable_schema_id();
   schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
   schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
@@ -321,7 +326,8 @@ void SendCreateTable(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub
 
   // string name = 1;
   auto* table_definition = request.mutable_table_definition();
-  table_definition->set_name("t_test1");
+  table_definition->set_name(FLAGS_name);
+
   // repeated ColumnDefinition columns = 2;
   for (int i = 0; i < 3; i++) {
     auto* column = table_definition->add_columns();
@@ -445,12 +451,17 @@ void SendCreateSchema(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stu
   dingodb::pb::meta::CreateSchemaRequest request;
   dingodb::pb::meta::CreateSchemaResponse response;
 
+  if (FLAGS_name.empty()) {
+    DINGO_LOG(WARNING) << "name is empty";
+    return;
+  }
+
   auto* parent_schema_id = request.mutable_parent_schema_id();
   parent_schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
   parent_schema_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
   parent_schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
 
-  request.set_schema_name("test_create_schema");
+  request.set_schema_name(FLAGS_name);
   stub.CreateSchema(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
     DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
