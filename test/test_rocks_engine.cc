@@ -114,7 +114,7 @@ const std::string kYamlConfigContent =
     "log:\n"
     "  logPath: /tmp/dingo-store/log\n"
     "store:\n"
-    "  dbPath: /tmp/dingo-store/data/store/db\n"
+    "  dbPath: ./rocks_example\n"
     "  base:\n"
     "    block_size: 131072\n"
     "    block_cache: 67108864\n"
@@ -122,7 +122,7 @@ const std::string kYamlConfigContent =
     "    min_write_buffer_number_to_merge: 4\n"
     "    max_write_buffer_number: 4\n"
     "    max_compaction_bytes: 134217728\n"
-    "    write_buffer_size: 4194304\n"
+    "    write_buffer_size: 67108864\n"
     "    prefix_extractor: 8\n"
     "    max_bytes_for_level_base: 41943040\n"
     "    target_file_size_base: 4194304\n"
@@ -133,6 +133,8 @@ const std::string kYamlConfigContent =
     "    - default\n"
     "    - meta\n"
     "    - instruction\n";
+
+
 
 class RawRocksEngineTest : public testing::Test {
  protected:
