@@ -14,6 +14,9 @@
 
 #include "engine/raw_rocks_engine.h"
 
+#include <elf.h>
+
+#include <algorithm>
 #include <climits>
 #include <cstddef>
 #include <cstdint>
@@ -32,6 +35,7 @@
 #include "butil/compiler_specific.h"
 #include "butil/macros.h"
 #include "butil/strings/stringprintf.h"
+#include "common/constant.h"
 #include "common/logging.h"
 #include "config/config_manager.h"
 #include "engine/engine.h"
@@ -49,21 +53,151 @@
 
 namespace dingodb {
 
-static const char* kDbPath = "store.dbPath";
-static const char* kColumnFamilies = "store.columnFamilies";
-static const char* kBaseColumnFamily = "store.base";
+class RocksIterator : public EngineIterator {
+ public:
+  explicit RocksIterator(std::shared_ptr<dingodb::Snapshot> snapshot, std::shared_ptr<rocksdb::TransactionDB> txn_db,
+                         std::shared_ptr<RawRocksEngine::ColumnFamily> column_family, const std::string& start_key,
+                         const std::string& end_key, bool with_start, bool with_end)
+      : snapshot_(snapshot),
+        txn_db_(txn_db),
+        column_family_(column_family),
+        iter_(nullptr),
+        start_key_(start_key),
+        end_key_(end_key),
+        with_start_(with_start),
+        with_end_(with_end),
+        has_valid_kv_(false) {
+    rocksdb::ReadOptions read_option;
+    read_option.snapshot = static_cast<const rocksdb::Snapshot*>(
+        std::dynamic_pointer_cast<RawRocksEngine::RocksSnapshot>(snapshot)->Inner());
 
-static const char* kBlockSize = "block_size";
-static const char* kBlockCache = "block_cache";
-static const char* kArenaBlockSize = "arena_block_size";
-static const char* kMinWriteBufferNumberToMerge = "min_write_buffer_number_to_merge";
-static const char* kMaxWriteBufferNumber = "max_write_buffer_number";
-static const char* kMaxCompactionBytes = "max_compaction_bytes";
-static const char* kWriteBufferSize = "write_buffer_size";
-static const char* kPrefixExtractor = "prefix_extractor";
-static const char* kMaxBytesForLevelBase = "max_bytes_for_level_base";
-static const char* kTargetFileSizeBase = "target_file_size_base";
-static const char* kMaxBytesForLevelMultiplier = "max_bytes_for_level_multiplier";
+    iter_ = txn_db_->NewIterator(read_option, column_family_->GetHandle());
+  }
+  void Start() override {
+    iter_->Seek(start_key_);
+
+    while (iter_->Valid()) {
+      rocksdb::Slice key = iter_->key();
+      if (FilterStartKey(key)) {
+        has_valid_kv_ = true;
+        return;
+      }
+      iter_->Next();
+    }
+
+    has_valid_kv_ = false;
+  }
+
+  bool HasNext() override {
+    if (iter_->Valid()) {
+      rocksdb::Slice key = iter_->key();
+      if (FilterEndKey(key)) {
+        has_valid_kv_ = true;
+        return true;
+      }
+    }
+    has_valid_kv_ = false;
+    return false;
+  }
+
+  void Next() override { iter_->Next(); }
+
+  bool GetKV(std::string& key, std::string& value) {  // NOLINT
+    if (has_valid_kv_) {
+      key.assign(iter_->key().data(), iter_->key().size());
+      value.assign(iter_->value().data(), iter_->value().size());
+    }
+
+    return has_valid_kv_;
+  }
+
+  bool GetKey(std::string& key) override {
+    if (has_valid_kv_) {
+      key.assign(iter_->key().data(), iter_->key().size());
+    }
+    return has_valid_kv_;
+  }
+  bool GetValue(std::string& value) override {
+    if (has_valid_kv_) {
+      value.assign(iter_->value().data(), iter_->value().size());
+    }
+    return has_valid_kv_;
+  }
+
+  const std::string& GetName() const override { return name_; }
+  uint32_t GetID() override { return id_; }
+
+  ~RocksIterator() override {
+    if (iter_) {
+      delete iter_;
+      iter_ = nullptr;
+    }
+    column_family_ = nullptr;
+    snapshot_ = nullptr;
+    txn_db_ = nullptr;
+    has_valid_kv_ = false;
+  }
+
+ protected:
+  //
+ private:
+  [[maybe_unused]] bool FilterKey(const rocksdb::Slice& key) {
+    // such as key >= start_key_ && key <= end_key_
+    return FilterStartKey(key) && FilterEndKey(key);
+  }
+
+  // key >= start_key_ || key > start_key_
+  bool FilterStartKey(const rocksdb::Slice& key) {
+    size_t min = std ::min(key.size(), start_key_.size());
+    int cmp = memcmp(key.data(), start_key_.data(), min);
+
+    if (cmp > 0) {
+      return true;
+    } else if (cmp < 0) {
+      return false;
+    } else {  // 0 ==  cmp
+      if (key.size() > start_key_.size()) {
+        return with_start_;
+      } else if (key.size() < start_key_.size()) {
+        return false;
+      } else {  // key and start_key_ same [data and size]
+        return with_start_;
+      }
+    }
+  }
+
+  // key <= end_key_ ||  key < end_key_
+  bool FilterEndKey(const rocksdb::Slice& key) {
+    size_t min = std::min(key.size(), end_key_.size());
+    int cmp = memcmp(key.data(), end_key_.data(), min);
+
+    if (cmp > 0) {
+      return false;
+    } else if (cmp < 0) {
+      return true;
+    } else {  // 0 ==  cmp
+      if (key.size() > end_key_.size()) {
+        return with_end_;
+      } else if (key.size() < end_key_.size()) {
+        return true;
+      } else {  // key and end_key_ same [data and size]
+        return with_end_;
+      }
+    }
+  }
+
+  std::shared_ptr<dingodb::Snapshot> snapshot_;
+  std::shared_ptr<rocksdb::TransactionDB> txn_db_;
+  std::shared_ptr<RawRocksEngine::ColumnFamily> column_family_;
+  rocksdb::Iterator* iter_;
+  const std::string name_ = "RocksIterator";
+  uint32_t id_ = static_cast<uint32_t>(EnumEngineIterator::kRocksIterator);
+  std::string start_key_;
+  std::string end_key_;
+  bool with_start_;
+  bool with_end_;
+  bool has_valid_kv_;
+};
 
 RawRocksEngine::RawRocksEngine() : txn_db_(nullptr), column_families_({}) {}
 
@@ -76,34 +210,37 @@ bool RawRocksEngine::Init(std::shared_ptr<Config> config) {
     return false;
   }
 
-  db_path_ = config->GetString(kDbPath);
-  if (BAIDU_UNLIKELY(db_path_.empty())) {
-    DINGO_LOG(ERROR) << butil::StringPrintf("can not find : %s", kDbPath);
+  std::string store_db_path_value = config->GetString(Constant::kDbPath);
+  if (BAIDU_UNLIKELY(store_db_path_value.empty())) {
+    DINGO_LOG(ERROR) << butil::StringPrintf("can not find : %s", Constant::kDbPath.c_str());
     return false;
   }
+
+  db_path_ = store_db_path_value;
 
   DINGO_LOG(INFO) << butil::StringPrintf("rocksdb path : %s", db_path_.c_str());
 
-  std::vector<std::string> column_familys = config->GetStringList(kColumnFamilies);
-  if (BAIDU_UNLIKELY(column_familys.empty())) {
-    DINGO_LOG(ERROR) << butil::StringPrintf("%s : empty. not found any column family", kColumnFamilies);
+  std::vector<std::string> column_families = config->GetStringList(Constant::kColumnFamilies);
+  if (BAIDU_UNLIKELY(column_families.empty())) {
+    DINGO_LOG(ERROR) << butil::StringPrintf("%s : empty. not found any column family",
+                                            Constant::kColumnFamilies.c_str());
     return false;
   }
 
-  SetDefaultIfNotExist(column_familys);
+  SetDefaultIfNotExist(column_families);
 
-  InitCfConfig(column_familys);
+  InitCfConfig(column_families);
 
-  SetColumnFamilyFromConfig(config, column_familys);
+  SetColumnFamilyFromConfig(config, column_families);
 
   std::vector<rocksdb::ColumnFamilyHandle*> family_handles;
-  bool ret = RocksdbInit(db_path_, column_familys, family_handles);
+  bool ret = RocksdbInit(db_path_, column_families, family_handles);
   if (BAIDU_UNLIKELY(!ret)) {
     DINGO_LOG(ERROR) << butil::StringPrintf("rocksdb::DB::Open : %s failed", db_path_.c_str());
     return false;
   }
 
-  SetColumnFamilyHandle(column_familys, family_handles);
+  SetColumnFamilyHandle(column_families, family_handles);
 
   DINGO_LOG(INFO) << butil::StringPrintf("rocksdb::DB::Open : %s success!", db_path_.c_str());
 
@@ -263,31 +400,31 @@ void SetCfConfigurationElementWrapper(const RawRocksEngine::CfDefaultConf& defau
   }
 }
 
-bool RawRocksEngine::InitCfConfig(const std::vector<std::string>& column_familys) {
+bool RawRocksEngine::InitCfConfig(const std::vector<std::string>& column_families) {
   CfDefaultConf dcf_default_conf;
-  dcf_default_conf.emplace(kBlockSize, std::make_optional(static_cast<int64_t>(131072)));
+  dcf_default_conf.emplace(Constant::kBlockSize, std::make_optional(static_cast<int64_t>(131072)));
 
-  dcf_default_conf.emplace(kBlockCache, std::make_optional(static_cast<int64_t>(67108864)));
+  dcf_default_conf.emplace(Constant::kBlockCache, std::make_optional(static_cast<int64_t>(67108864)));
 
-  dcf_default_conf.emplace(kArenaBlockSize, std::make_optional(static_cast<int64_t>(67108864)));
+  dcf_default_conf.emplace(Constant::kArenaBlockSize, std::make_optional(static_cast<int64_t>(67108864)));
 
-  dcf_default_conf.emplace(kMinWriteBufferNumberToMerge, std::make_optional(static_cast<int64_t>(4)));
+  dcf_default_conf.emplace(Constant::kMinWriteBufferNumberToMerge, std::make_optional(static_cast<int64_t>(4)));
 
-  dcf_default_conf.emplace(kMaxWriteBufferNumber, std::make_optional(static_cast<int64_t>(2)));
+  dcf_default_conf.emplace(Constant::kMaxWriteBufferNumber, std::make_optional(static_cast<int64_t>(2)));
 
-  dcf_default_conf.emplace(kMaxCompactionBytes, std::make_optional(static_cast<int64_t>(134217728)));
+  dcf_default_conf.emplace(Constant::kMaxCompactionBytes, std::make_optional(static_cast<int64_t>(134217728)));
 
-  dcf_default_conf.emplace(kWriteBufferSize, std::make_optional(static_cast<int64_t>(67108864)));
+  dcf_default_conf.emplace(Constant::kWriteBufferSize, std::make_optional(static_cast<int64_t>(67108864)));
 
-  dcf_default_conf.emplace(kPrefixExtractor, std::make_optional(static_cast<int64_t>(8)));
+  dcf_default_conf.emplace(Constant::kPrefixExtractor, std::make_optional(static_cast<int64_t>(8)));
 
-  dcf_default_conf.emplace(kMaxBytesForLevelBase, std::make_optional(static_cast<int64_t>(134217728)));
+  dcf_default_conf.emplace(Constant::kMaxBytesForLevelBase, std::make_optional(static_cast<int64_t>(134217728)));
 
-  dcf_default_conf.emplace(kTargetFileSizeBase, std::make_optional(static_cast<int64_t>(67108864)));
+  dcf_default_conf.emplace(Constant::kTargetFileSizeBase, std::make_optional(static_cast<int64_t>(67108864)));
 
-  dcf_default_conf.emplace(kMaxBytesForLevelMultiplier, std::make_optional(static_cast<int64_t>(10)));
+  dcf_default_conf.emplace(Constant::kMaxBytesForLevelMultiplier, std::make_optional(static_cast<int64_t>(10)));
 
-  for (const auto& cf_name : column_familys) {
+  for (const auto& cf_name : column_families) {
     std::map<std::string, std::string> conf;
     column_families_.emplace(cf_name, std::make_shared<ColumnFamily>(cf_name, dcf_default_conf, conf));
   }
@@ -304,13 +441,14 @@ bool RawRocksEngine::SetCfConfiguration(const CfDefaultConf& default_conf,
   rocksdb::BlockBasedTableOptions table_options;
 
   // block_size
-  SetCfConfigurationElementWrapper(default_conf, cf_configuration, kBlockSize, table_options.block_size);
+  SetCfConfigurationElementWrapper(default_conf, cf_configuration, Constant::kBlockSize.c_str(),
+                                   table_options.block_size);
 
   // block_cache
   {
     size_t value = 0;
 
-    SetCfConfigurationElementWrapper(default_conf, cf_configuration, kBlockCache, value);
+    SetCfConfigurationElementWrapper(default_conf, cf_configuration, Constant::kBlockCache.c_str(), value);
 
     auto cache = rocksdb::NewLRUCache(value);  // LRUcache
     table_options.block_cache = cache;
@@ -318,41 +456,43 @@ bool RawRocksEngine::SetCfConfiguration(const CfDefaultConf& default_conf,
 
   // arena_block_size
 
-  SetCfConfigurationElementWrapper(default_conf, cf_configuration, kArenaBlockSize, cf_options.arena_block_size);
+  SetCfConfigurationElementWrapper(default_conf, cf_configuration, Constant::kArenaBlockSize.c_str(),
+                                   cf_options.arena_block_size);
 
   // min_write_buffer_number_to_merge
-  SetCfConfigurationElementWrapper(default_conf, cf_configuration, kMinWriteBufferNumberToMerge,
+  SetCfConfigurationElementWrapper(default_conf, cf_configuration, Constant::kMinWriteBufferNumberToMerge.c_str(),
                                    cf_options.min_write_buffer_number_to_merge);
 
   // max_write_buffer_number
-  SetCfConfigurationElementWrapper(default_conf, cf_configuration, kMaxWriteBufferNumber,
+  SetCfConfigurationElementWrapper(default_conf, cf_configuration, Constant::kMaxWriteBufferNumber.c_str(),
                                    cf_options.max_write_buffer_number);
 
   // max_compaction_bytes
-  SetCfConfigurationElementWrapper(default_conf, cf_configuration, kMaxCompactionBytes,
+  SetCfConfigurationElementWrapper(default_conf, cf_configuration, Constant::kMaxCompactionBytes.c_str(),
                                    cf_options.max_compaction_bytes);
 
   // write_buffer_size
-  SetCfConfigurationElementWrapper(default_conf, cf_configuration, kWriteBufferSize, cf_options.write_buffer_size);
+  SetCfConfigurationElementWrapper(default_conf, cf_configuration, Constant::kWriteBufferSize.c_str(),
+                                   cf_options.write_buffer_size);
 
   // max_bytes_for_level_multiplier
-  SetCfConfigurationElementWrapper(default_conf, cf_configuration, kMaxBytesForLevelMultiplier,
+  SetCfConfigurationElementWrapper(default_conf, cf_configuration, Constant::kMaxBytesForLevelMultiplier.c_str(),
                                    cf_options.max_bytes_for_level_multiplier);
 
   // prefix_extractor
   {
     size_t value = 0;
-    SetCfConfigurationElementWrapper(default_conf, cf_configuration, kPrefixExtractor, value);
+    SetCfConfigurationElementWrapper(default_conf, cf_configuration, Constant::kPrefixExtractor.c_str(), value);
 
     cf_options.prefix_extractor.reset(rocksdb::NewFixedPrefixTransform(value));
   }
 
   // max_bytes_for_level_base
-  SetCfConfigurationElementWrapper(default_conf, cf_configuration, kMaxBytesForLevelBase,
+  SetCfConfigurationElementWrapper(default_conf, cf_configuration, Constant::kMaxBytesForLevelBase.c_str(),
                                    cf_options.max_bytes_for_level_base);
 
   // target_file_size_base
-  SetCfConfigurationElementWrapper(default_conf, cf_configuration, kTargetFileSizeBase,
+  SetCfConfigurationElementWrapper(default_conf, cf_configuration, Constant::kTargetFileSizeBase.c_str(),
                                    cf_options.target_file_size_base);
 
   cf_options.compression_per_level = {
@@ -377,13 +517,13 @@ bool RawRocksEngine::SetCfConfiguration(const CfDefaultConf& default_conf,
   return true;
 }
 
-void RawRocksEngine::SetDefaultIfNotExist(std::vector<std::string>& column_familys) {
+void RawRocksEngine::SetDefaultIfNotExist(std::vector<std::string>& column_families) {
   // First find the default configuration, if there is, then exchange the
   // position, if not, add
   bool found_default = false;
   size_t i = 0;
-  for (; i < column_familys.size(); i++) {
-    if (column_familys[i] == ROCKSDB_NAMESPACE::kDefaultColumnFamilyName) {
+  for (; i < column_families.size(); i++) {
+    if (column_families[i] == ROCKSDB_NAMESPACE::kDefaultColumnFamilyName) {
       found_default = true;
       break;
     }
@@ -391,10 +531,10 @@ void RawRocksEngine::SetDefaultIfNotExist(std::vector<std::string>& column_famil
 
   if (found_default) {
     if (0 != i) {
-      std::swap(column_familys[i], column_familys[0]);
+      std::swap(column_families[i], column_families[0]);
     }
   } else {
-    column_familys.insert(column_familys.begin(), ROCKSDB_NAMESPACE::kDefaultColumnFamilyName);
+    column_families.insert(column_families.begin(), ROCKSDB_NAMESPACE::kDefaultColumnFamilyName);
   }
 }
 
@@ -439,21 +579,21 @@ bool RawRocksEngine::RocksdbInit(const std::string& db_path, const std::vector<s
   return true;
 }
 
-void RawRocksEngine::SetColumnFamilyHandle(const std::vector<std::string>& column_familys,
+void RawRocksEngine::SetColumnFamilyHandle(const std::vector<std::string>& column_families,
                                            const std::vector<rocksdb::ColumnFamilyHandle*>& family_handles) {
   size_t i = 0;
-  for (const auto& column_family : column_familys) {
+  for (const auto& column_family : column_families) {
     column_families_[column_family]->SetHandle(family_handles[i++]);
   }
 }
 
 void RawRocksEngine::SetColumnFamilyFromConfig(const std::shared_ptr<Config>& config,
-                                               const std::vector<std::string>& column_familys) {
+                                               const std::vector<std::string>& column_families) {
   // get base column family configure. allow empty
-  const std::map<std::string, std::string>& base_cf_configuration = config->GetStringMap(kBaseColumnFamily);
+  const std::map<std::string, std::string>& base_cf_configuration = config->GetStringMap(Constant::kBaseColumnFamily);
 
   // assign values ​​to each column family
-  for (const auto& column_family : column_familys) {
+  for (const auto& column_family : column_families) {
     std::string column_family_key("store." + column_family);
     // get column family configure
     const std::map<std::string, std::string>& cf_configuration = config->GetStringMap(column_family_key);
@@ -619,6 +759,14 @@ butil::Status RawRocksEngine::Reader::KvCount(std::shared_ptr<dingodb::Snapshot>
   delete it;
 
   return butil::Status();
+}
+
+std::shared_ptr<EngineIterator> RawRocksEngine::Reader::NewIterator(const std::string& start_key,
+                                                                    const std::string& end_key, bool with_start,
+                                                                    bool with_end) {
+  auto snapshot = std::make_shared<RocksSnapshot>(txn_db_->GetSnapshot(), txn_db_);
+
+  return std::make_shared<RocksIterator>(snapshot, txn_db_, column_family_, start_key, end_key, with_start, with_end);
 }
 
 butil::Status RawRocksEngine::Writer::KvPut(const pb::common::KeyValue& kv) {

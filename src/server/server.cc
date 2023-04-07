@@ -35,6 +35,7 @@
 #include "engine/raft_meta_engine.h"
 #include "engine/raw_rocks_engine.h"
 #include "engine/rocks_engine.h"
+#include "engine/scan_factory.h"
 #include "meta/meta_reader.h"
 #include "meta/meta_writer.h"
 #include "proto/common.pb.h"
@@ -259,6 +260,20 @@ bool Server::InitStoreControl() {
   DINGO_LOG(INFO) << "SetHeartbeatIntervalMultiple to " << heartbeat_interval / push_interval;
 
   return store_control_ != nullptr;
+}
+
+// add scan factory to CrontabManager
+bool Server::AddScanToCrontabManager() {
+  // Add scan crontab
+  std::shared_ptr<Crontab> crontab = std::make_shared<Crontab>();
+  auto config = ConfigManager::GetInstance()->GetConfig(role_);
+  crontab->name = "SCAN";
+  crontab->interval = config->GetInt(Constant::kStoreScan + "." + Constant::kStoreScanScanIntervalMs);
+  crontab->func = ScanContextFactory::RegularCleaningHandler;
+  crontab->arg = ScanContextFactory::GetInstance();
+
+  crontab_manager_->AddAndRunCrontab(crontab);
+  return true;
 }
 
 bool Server::Recover() {
