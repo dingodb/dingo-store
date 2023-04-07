@@ -1,5 +1,12 @@
 ---
-version: '3.0'
+version: '2.4'
+
+x-shared-environment: &shared-env
+  SERVER_HOST: ${DINGO_HOST_IP}
+  RAFT_HOST: ${DINGO_HOST_IP}
+  COOR_RAFT_PEERS: ${DINGO_HOST_IP}:22101,${DINGO_HOST_IP}:22102,${DINGO_HOST_IP}:22103
+  COOR_SRV_PEERS: ${DINGO_HOST_IP}:22001,${DINGO_HOST_IP}:22002,${DINGO_HOST_IP}:22003 
+
 services:
   coordinator1:
     image: dingodatabase/dingo-store:latest
@@ -8,12 +15,10 @@ services:
     network_mode: host
     environment:
       FLAGS_role: coordinator
-      COOR_RAFT_PEERS: ${DINGO_HOST_IP}:22101,${DINGO_HOST_IP}:22102,${DINGO_HOST_IP}:22103
       COORDINATOR_SERVER_START_PORT: 22001
       COORDINATOR_RAFT_START_PORT: 22101
       INSTANCE_START_ID: 1001
-      SERVER_HOST: ${DINGO_HOST_IP}
-      RAFT_HOST: ${DINGO_HOST_IP}
+      <<: *shared-env
 
   coordinator2:
     image: dingodatabase/dingo-store:latest
@@ -22,12 +27,10 @@ services:
     network_mode: host
     environment:
       FLAGS_role: coordinator
-      COOR_RAFT_PEERS: ${DINGO_HOST_IP}:22101,${DINGO_HOST_IP}:22102,${DINGO_HOST_IP}:22103
       COORDINATOR_SERVER_START_PORT: 22002
       COORDINATOR_RAFT_START_PORT: 22102
       INSTANCE_START_ID: 1002
-      SERVER_HOST: ${DINGO_HOST_IP}
-      RAFT_HOST: ${DINGO_HOST_IP}
+      <<: *shared-env
 
   coordinator3:
     image: dingodatabase/dingo-store:latest
@@ -36,12 +39,10 @@ services:
     network_mode: host
     environment:
       FLAGS_role: coordinator
-      COOR_RAFT_PEERS: ${DINGO_HOST_IP}:22101,${DINGO_HOST_IP}:22102,${DINGO_HOST_IP}:22103
       COORDINATOR_SERVER_START_PORT: 22003
       COORDINATOR_RAFT_START_PORT: 22103
       INSTANCE_START_ID: 1003
-      SERVER_HOST: ${DINGO_HOST_IP}
-      RAFT_HOST: ${DINGO_HOST_IP}
+      <<: *shared-env
 
   store1:
     image: dingodatabase/dingo-store:latest
@@ -54,12 +55,10 @@ services:
       - coordinator3
     environment:
       FLAGS_role: store
-      COOR_SRV_PEERS: ${DINGO_HOST_IP}:22001,${DINGO_HOST_IP}:22002,${DINGO_HOST_IP}:22003
       RAFT_START_PORT: 20101
       SERVER_START_PORT: 20001
       INSTANCE_START_ID: 1001
-      SERVER_HOST: ${DINGO_HOST_IP}
-      RAFT_HOST: ${DINGO_HOST_IP}
+      <<: *shared-env
 
   store2:
     image: dingodatabase/dingo-store:latest
@@ -72,12 +71,10 @@ services:
       - coordinator3
     environment:
       FLAGS_role: store
-      COOR_SRV_PEERS: ${DINGO_HOST_IP}:22001,${DINGO_HOST_IP}:22002,${DINGO_HOST_IP}:22003
       RAFT_START_PORT: 20102
       SERVER_START_PORT: 20002
       INSTANCE_START_ID: 1002
-      SERVER_HOST: ${DINGO_HOST_IP}
-      RAFT_HOST: ${DINGO_HOST_IP}
+      <<: *shared-env
 
   store3:
     image: dingodatabase/dingo-store:latest
@@ -90,9 +87,7 @@ services:
       - coordinator3
     environment:
       FLAGS_role: store
-      COOR_SRV_PEERS: ${DINGO_HOST_IP}:22001,${DINGO_HOST_IP}:22002,${DINGO_HOST_IP}:22003
       RAFT_START_PORT: 20103
       SERVER_START_PORT: 20003
       INSTANCE_START_ID: 1003
-      SERVER_HOST: ${DINGO_HOST_IP}
-      RAFT_HOST: ${DINGO_HOST_IP}
+      <<: *shared-env
