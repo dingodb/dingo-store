@@ -39,6 +39,30 @@ class Constant {
   static const std::string kStoreRegionMetaPrefix;
   // Define store raft prefix.
   static const std::string kStoreRaftMetaPrefix;
+
+  // rocksdb config
+  inline static const std::string kDbPath = "store.dbPath";
+  inline static const std::string kColumnFamilies = "store.columnFamilies";
+  inline static const std::string kBaseColumnFamily = "store.base";
+
+  inline static const std::string kBlockSize = "block_size";
+  inline static const std::string kBlockCache = "block_cache";
+  inline static const std::string kArenaBlockSize = "arena_block_size";
+  inline static const std::string kMinWriteBufferNumberToMerge = "min_write_buffer_number_to_merge";
+  inline static const std::string kMaxWriteBufferNumber = "max_write_buffer_number";
+  inline static const std::string kMaxCompactionBytes = "max_compaction_bytes";
+  inline static const std::string kWriteBufferSize = "write_buffer_size";
+  inline static const std::string kPrefixExtractor = "prefix_extractor";
+  inline static const std::string kMaxBytesForLevelBase = "max_bytes_for_level_base";
+  inline static const std::string kTargetFileSizeBase = "target_file_size_base";
+  inline static const std::string kMaxBytesForLevelMultiplier = "max_bytes_for_level_multiplier";
+
+  // scan config
+  inline static const std::string kStoreScan = "store.scan";
+  inline static const std::string kStoreScanTimeoutMs = "timeout_ms";
+  inline static const std::string kStoreScanMaxBytesRpc = "max_bytes_rpc";
+  inline static const std::string kStoreScanMaxFetchCntByServer = "max_fetch_cnt_by_server";
+  inline static const std::string kStoreScanScanIntervalMs = "scan_interval_ms";
 };
 
 }  // namespace dingodb

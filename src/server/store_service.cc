@@ -20,6 +20,7 @@
 #include "common/logging.h"
 #include "meta/store_meta_manager.h"
 #include "proto/common.pb.h"
+#include "proto/error.pb.h"
 #include "server/server.h"
 
 namespace dingodb {
@@ -510,6 +511,171 @@ void StoreServiceImpl::KvDeleteRange(google::protobuf::RpcController* controller
       RedirectLeader(status.error_str(), response);
     }
     brpc::ClosureGuard const done_guard(done);
+  }
+}
+
+butil::Status ValidateKvScanBeginRequest(const dingodb::pb::store::KvScanBeginRequest* request) {
+  // Check is exist region.
+  if (!Server::GetInstance()->GetStoreMetaManager()->IsExistRegion(request->region_id())) {
+    return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
+  }
+
+  if (BAIDU_UNLIKELY(request->range().range().start_key().empty() || request->range().range().end_key().empty())) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
+  }
+
+  if (BAIDU_UNLIKELY(request->range().range().start_key() > request->range().range().end_key())) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
+
+  } else if (BAIDU_UNLIKELY(request->range().range().start_key() == request->range().range().end_key())) {
+    if (request->range().with_start() && !request->range().with_end()) {
+      return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
+    }
+  }
+
+  return butil::Status();
+}
+
+void StoreServiceImpl::KvScanBegin(google::protobuf::RpcController* controller,
+                                   const ::dingodb::pb::store::KvScanBeginRequest* request,
+                                   ::dingodb::pb::store::KvScanBeginResponse* response,
+                                   ::google::protobuf::Closure* done) {
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(done);
+  DINGO_LOG(INFO) << "KvScanBegin request";
+
+  butil::Status status = ValidateKvScanBeginRequest(request);
+  if (!status.ok()) {
+    auto* err = response->mutable_error();
+    err->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
+    err->set_errmsg(status.error_str());
+    return;
+  }
+
+  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
+  ctx->SetRegionId(request->region_id()).SetCfName(Constant::kStoreDataCF);
+
+  std::vector<pb::common::KeyValue> kvs;  // NOLINT
+  std::string scan_id;                    // NOLINT
+
+  status = storage_->KvScanBegin(ctx, Constant::kStoreDataCF, request->region_id(), request->range(),
+                                 request->max_fetch_cnt(), request->key_only(), request->disable_auto_release(),
+                                 &scan_id, &kvs);
+  if (!status.ok()) {
+    auto* err = response->mutable_error();
+    err->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
+    err->set_errmsg(status.error_str());
+    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+      err->set_errmsg("Not leader, please redirect leader.");
+      RedirectLeader(status.error_str(), response);
+    }
+    return;
+  }
+
+  if (!response->kvs().empty()) {
+    Helper::VectorToPbRepeated(kvs, response->mutable_kvs());
+  }
+
+  *response->mutable_scan_id() = scan_id;
+}
+
+butil::Status ValidateKvScanContinueRequest(const dingodb::pb::store::KvScanContinueRequest* request) {
+  // Check is exist region.
+  if (!Server::GetInstance()->GetStoreMetaManager()->IsExistRegion(request->region_id())) {
+    return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
+  }
+
+  if (request->scan_id().empty()) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "scan_id is empty");
+  }
+
+  if (0 == request->max_fetch_cnt()) {
+    return butil::Status(pb::error::EKEY_EMPTY, "max_fetch_cnt is 0");
+  }
+
+  return butil::Status();
+}
+
+void StoreServiceImpl::KvScanContinue(google::protobuf::RpcController* controller,
+                                      const ::dingodb::pb::store::KvScanContinueRequest* request,
+                                      ::dingodb::pb::store::KvScanContinueResponse* response,
+                                      ::google::protobuf::Closure* done) {
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(done);
+
+  butil::Status status = ValidateKvScanContinueRequest(request);
+  if (!status.ok()) {
+    auto* err = response->mutable_error();
+    err->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
+    err->set_errmsg(status.error_str());
+    return;
+  }
+
+  std::shared_ptr<Context> const ctx = std::make_shared<Context>(cntl, done);
+  ctx->SetRegionId(request->region_id()).SetCfName(Constant::kStoreDataCF);
+
+  std::vector<pb::common::KeyValue> kvs;  // NOLINT
+  status = storage_->KvScanContinue(ctx, request->scan_id(), request->max_fetch_cnt(), &kvs);
+
+  if (!status.ok()) {
+    auto* err = response->mutable_error();
+    err->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
+    err->set_errmsg(status.error_str());
+    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+      err->set_errmsg("Not leader, please redirect leader.");
+      RedirectLeader(status.error_str(), response);
+    }
+    return;
+  }
+
+  if (!response->kvs().empty()) {
+    Helper::VectorToPbRepeated(kvs, response->mutable_kvs());
+  }
+}
+
+butil::Status ValidateKvScanReleaseRequest(const dingodb::pb::store::KvScanReleaseRequest* request) {
+  // Check is exist region.
+  if (!Server::GetInstance()->GetStoreMetaManager()->IsExistRegion(request->region_id())) {
+    return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
+  }
+
+  if (request->scan_id().empty()) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "scan_id is empty");
+  }
+
+  return butil::Status();
+}
+
+void StoreServiceImpl::KvScanRelease(google::protobuf::RpcController* controller,
+                                     const ::dingodb::pb::store::KvScanReleaseRequest* request,
+                                     ::dingodb::pb::store::KvScanReleaseResponse* response,
+                                     ::google::protobuf::Closure* done) {
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(done);
+
+  butil::Status status = ValidateKvScanReleaseRequest(request);
+  if (!status.ok()) {
+    auto* err = response->mutable_error();
+    err->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
+    err->set_errmsg(status.error_str());
+    return;
+  }
+
+  std::shared_ptr<Context> const ctx = std::make_shared<Context>(cntl, done);
+  ctx->SetRegionId(request->region_id()).SetCfName(Constant::kStoreDataCF);
+
+  std::vector<pb::common::KeyValue> kvs;  // NOLINT
+  status = storage_->KvScanRelease(ctx, request->scan_id());
+
+  if (!status.ok()) {
+    auto* err = response->mutable_error();
+    err->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
+    err->set_errmsg(status.error_str());
+    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+      err->set_errmsg("Not leader, please redirect leader.");
+      RedirectLeader(status.error_str(), response);
+    }
+    return;
   }
 }
 

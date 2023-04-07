@@ -28,6 +28,37 @@
 
 namespace dingodb {
 
+enum class EnumEngineIterator {
+  kRocksIterator = 0,
+  kMemoryIterator = 1,
+  kXdpIterator = 2,
+  kRaftStoreIterator = 3,
+  kColumnarIterator = 4,
+};
+
+enum class EnumEngineReader {
+  kRocksReader = 0,
+  kMemoryReader = 1,
+  kXdpReader = 2,
+  kRaftStoreReader = 3,
+  kColumnarReader = 4,
+};
+
+class EngineIterator : public std::enable_shared_from_this<EngineIterator> {
+ public:
+  EngineIterator() = default;
+  virtual ~EngineIterator() = default;
+  std::shared_ptr<EngineIterator> GetSelf() { return shared_from_this(); }
+  virtual void Start() = 0;
+  virtual bool HasNext() = 0;
+  virtual void Next() = 0;
+  virtual bool GetKV(std::string& key, std::string& value) = 0;  // NOLINT
+  virtual bool GetKey(std::string& key) = 0;                     // NOLINT
+  virtual bool GetValue(std::string& value) = 0;                 // NOLINT
+  virtual const std::string& GetName() const = 0;
+  virtual uint32_t GetID() = 0;
+};
+
 class RawEngine {
  public:
   virtual ~RawEngine() = default;
@@ -48,6 +79,9 @@ class RawEngine {
     virtual butil::Status KvCount(const std::string& start_key, const std::string& end_key, int64_t& count) = 0;
     virtual butil::Status KvCount(std::shared_ptr<dingodb::Snapshot> snapshot, const std::string& start_key,
                                   const std::string& end_key, int64_t& count) = 0;
+
+    virtual std::shared_ptr<EngineIterator> NewIterator(const std::string& start_key, const std::string& end_key,
+                                                        bool with_start, bool with_end) = 0;
   };
 
   class Writer {
@@ -59,11 +93,12 @@ class RawEngine {
     virtual butil::Status KvBatchPutAndDelete(const std::vector<pb::common::KeyValue>& kv_puts,
                                               const std::vector<pb::common::KeyValue>& kv_deletes) = 0;
 
-    virtual butil::Status KvPutIfAbsent(const pb::common::KeyValue& kv, bool &key_state) = 0;
+    virtual butil::Status KvPutIfAbsent(const pb::common::KeyValue& kv, bool& key_state) = 0;
     virtual butil::Status KvBatchPutIfAbsent(const std::vector<pb::common::KeyValue>& kvs,
                                              std::vector<bool>& key_states, bool is_atomic) = 0;
 
-    virtual butil::Status KvCompareAndSet(const pb::common::KeyValue& kv, const std::string& value, bool &key_state) = 0;
+    virtual butil::Status KvCompareAndSet(const pb::common::KeyValue& kv, const std::string& value,
+                                          bool& key_state) = 0;
 
     virtual butil::Status KvDelete(const std::string& key) = 0;
     virtual butil::Status KvDeleteBatch(const std::vector<std::string>& keys) = 0;
