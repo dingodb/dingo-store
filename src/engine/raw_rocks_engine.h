@@ -173,6 +173,9 @@ class RawRocksEngine : public RawEngine {
     butil::Status KvCount(std::shared_ptr<dingodb::Snapshot> snapshot, const std::string& start_key,
                           const std::string& end_key, int64_t& count) override;
 
+    std::shared_ptr<EngineIterator> NewIterator(const std::string& start_key, const std::string& end_key,
+                                                bool with_start, bool with_end) override;
+
    private:
     std::shared_ptr<rocksdb::TransactionDB> txn_db_;
     std::shared_ptr<ColumnFamily> column_family_;

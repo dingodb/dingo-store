@@ -63,7 +63,20 @@ class StoreServiceImpl : public pb::store::StoreService {
   void KvDeleteRange(google::protobuf::RpcController* controller, const pb::store::KvDeleteRangeRequest* request,
                      pb::store::KvDeleteRangeResponse* response, google::protobuf::Closure* done) override;
 
+  void KvScanBegin(google::protobuf::RpcController* controller, const ::dingodb::pb::store::KvScanBeginRequest* request,
+                   ::dingodb::pb::store::KvScanBeginResponse* response, ::google::protobuf::Closure* done) override;
+
+  void KvScanContinue(google::protobuf::RpcController* controller,
+                      const ::dingodb::pb::store::KvScanContinueRequest* request,
+                      ::dingodb::pb::store::KvScanContinueResponse* response,
+                      ::google::protobuf::Closure* done) override;
+
+  void KvScanRelease(google::protobuf::RpcController* controller,
+                    const ::dingodb::pb::store::KvScanReleaseRequest* request,
+                    ::dingodb::pb::store::KvScanReleaseResponse* response, ::google::protobuf::Closure* done) override;
+
   void SetStorage(std::shared_ptr<Storage> storage);
+
 
  private:
   std::shared_ptr<Storage> storage_;

@@ -224,5 +224,5 @@ service StoreService {
 
   rpc KvScanBegin(KvScanBeginRequest) returns (KvScanBeginResponse);
   rpc KvScanContinue(KvScanContinueRequest) returns (KvScanContinueResponse);
-  rpc KvScanReleae(KvScanReleaseRequest) returns (KvScanReleaseResponse);
+  rpc KvScanRelease(KvScanReleaseRequest) returns (KvScanReleaseResponse);
 };

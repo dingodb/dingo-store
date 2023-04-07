@@ -37,3 +37,9 @@ store:
     - instruction
 
   collectStatsInterval: 5
+
+  scan:
+    scan_interval_ms: 60000 # ms
+    timeout_ms: 60000 # ms
+    max_bytes_rpc: 4194304
+    max_fetch_cnt_by_server: 1000
