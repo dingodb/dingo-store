@@ -235,7 +235,7 @@ static std::vector<std::shared_ptr<pb::common::Region> > GetChangedPeerRegion(
     }
     if (remote_region.state() != pb::common::REGION_NORMAL && remote_region.state() != pb::common::REGION_EXPAND &&
         remote_region.state() != pb::common::REGION_SHRINK && remote_region.state() != pb::common::REGION_DEGRADED &&
-        remote_region.state() != pb::common::REGION_DANGER) {
+        remote_region.state() != pb::common::REGION_UNAVAILABLE) {
       continue;
     }
     auto it = local_regions.find(remote_region.id());

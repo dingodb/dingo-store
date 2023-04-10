@@ -22,6 +22,41 @@ package dingodb.pb.coordinator;
 option java_package = "io.dingodb.coordinator";
 option cc_generic_services = true;
 
+message SplitRequest {
+  uint64 split_to_region_id = 1;  // split to region id
+  bytes split_watershed_key = 2;  // split watershed key
+}
+
+message MergeRequest {
+  uint64 merge_to_region_id = 1;  // merge to region id
+}
+
+// RegionCmdType
+enum RegionCmdType {
+  CMD_NONE = 0;  // this is a placeholder
+  CMD_CREATE = 1;
+  CMD_DELETE = 2;
+  CMD_SPLIT = 3;
+  CMD_MERGE = 4;
+  CMD_CHANGE_PEER = 5;
+}
+
+// RegionAdditional
+message RegionCmd {
+  dingodb.pb.common.RegionDefinition region_definition = 2;  // region definition
+  RegionCmdType region_cmd_type = 3;                         // the cmd want to be executed
+  oneof Request {
+    SplitRequest split = 4;  // split parameters
+    MergeRequest merge = 5;  // merge parameters
+  }
+}
+
+// StoreOperation
+message StoreOperation {
+  uint64 store_id = 1;
+  repeated RegionCmd region_additional = 2;
+}
+
 // Store report self status and region (this node is leader) status
 message StoreHeartbeatRequest {
   uint64 self_storemap_epoch = 1;                    // storemap epoch in this Store
@@ -31,12 +66,14 @@ message StoreHeartbeatRequest {
   dingodb.pb.common.StoreMetrics store_metrics = 5;  // self store metrics
 }
 
+// StoreHeartbeatResponse
 message StoreHeartbeatResponse {
   dingodb.pb.error.Error error = 1;
-  uint64 storemap_epoch = 2;                  // the lates epoch of storemap
-  uint64 regionmap_epoch = 3;                 // the lates epoch of regionmap
-  dingodb.pb.common.StoreMap storemap = 4;    // new storemap
-  dingodb.pb.common.RegionMap regionmap = 5;  // new regionmap
+  uint64 storemap_epoch = 2;                    // the lates epoch of storemap
+  uint64 regionmap_epoch = 3;                   // the lates epoch of regionmap
+  dingodb.pb.common.StoreMap storemap = 4;      // new storemap
+  dingodb.pb.common.RegionMap regionmap = 5;    // new regionmap
+  repeated StoreOperation store_operation = 6;  // operations need to be done
 }
 
 message ExecutorHeartbeatRequest {

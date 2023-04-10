@@ -80,7 +80,7 @@ butil::Status ValidateChangeRegion(std::shared_ptr<StoreMetaManager> store_meta_
 
   if (region->state() != pb::common::REGION_NORMAL && region->state() != pb::common::REGION_EXPAND &&
       region->state() != pb::common::REGION_SHRINK && region->state() != pb::common::REGION_DEGRADED &&
-      region->state() != pb::common::REGION_DANGER) {
+      region->state() != pb::common::REGION_UNAVAILABLE) {
     return butil::Status(pb::error::EREGION_STATE, "Region state not allow change.");
   }
 
