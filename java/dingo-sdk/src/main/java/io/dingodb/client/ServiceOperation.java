@@ -128,7 +128,6 @@ public class ServiceOperation {
                     } catch (InterruptedException e) {
                         e.printStackTrace();
                     }
-                    storeServiceClientMap.values().forEach(StoreServiceClient::shutdown);
                     routeTable = getAndRefreshRouteTable(tableName, true);
                 }
             }
@@ -224,7 +223,7 @@ public class ServiceOperation {
             }
 
             NavigableMap<ByteArrayUtils.ComparableByteArray, Meta.RangeDistribution> parts =
-                    metaClient.getParts(table.getName());
+                    metaClient.getRangeDistribution(table.getName());
 
             Meta.DingoCommonId tableId = metaClient.getTableId(table.getName());
 

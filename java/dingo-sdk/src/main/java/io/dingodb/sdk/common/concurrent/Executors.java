@@ -20,6 +20,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -41,6 +42,22 @@ public class Executors {
             .group(new ThreadGroup(GLOBAL_NAME))
             .build();
 
+    public static String threadName() {
+        return Thread.currentThread().getName();
+    }
+
+    public static Executor executor(String name) {
+        return command -> execute(name, command);
+    }
+
+    public static void execute(String name, Runnable command) {
+        GLOBAL_POOL.execute(wrap(name, command));
+    }
+
+    public static void execute(String name, Runnable command, boolean ignoreError) {
+        GLOBAL_POOL.execute(wrap(name, command, ignoreError));
+    }
+
     public static <T> CompletableFuture<T> submit(String name, Callable<T> task) {
         CompletableFuture<T> future = new CompletableFuture<>();
         GLOBAL_POOL.execute(() -> {
@@ -55,6 +72,14 @@ public class Executors {
 
     private static <V> Callable<V> wrap(String name, Callable<V> callable) {
         return () -> call(name, callable, false);
+    }
+
+    private static Runnable wrap(String name, Runnable runnable) {
+        return () -> run(name, runnable, false);
+    }
+
+    private static Runnable wrap(String name, Runnable runnable, boolean ignoreError) {
+        return () -> run(name, runnable, ignoreError);
     }
 
     private static <V> V call(String name, Callable<V> callable, boolean ignoreFalse) throws Exception {
@@ -81,6 +106,31 @@ public class Executors {
             thread.setName(FREE_THREAD_NAME);
             if (log.isTraceEnabled()) {
                 log.trace("Call [{}] finish, thread id [{}], reset thread name.", name, thread.getId());
+            }
+        }
+    }
+
+    private static void run(String name, Runnable runnable, boolean ignoreError) {
+        Thread thread = Thread.currentThread();
+        try {
+            if (log.isTraceEnabled()) {
+                log.trace("Run [{}] start, thread id [{}], set thread name.", name, thread.getId());
+            }
+            StringBuilder builder = new StringBuilder(name);
+            builder.append("-").append(thread.getId());
+            thread.setName(builder.toString());
+            runnable.run();
+        } catch (Throwable e) {
+            if (ignoreError) {
+                log.error("Execute {} catch error.", name, e);
+            } else {
+                log.error("Execute {} catch error.", name, e);
+                throw e;
+            }
+        } finally {
+            thread.setName(FREE_THREAD_NAME);
+            if (log.isTraceEnabled()) {
+                log.trace("Run [{}] finish, thread id [{}], reset thread name.", name, thread.getId());
             }
         }
     }
