@@ -25,9 +25,8 @@
 #include "coordinator/coordinator_closure.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator_internal.pb.h"
+#include "proto/error.pb.h"
 #include "proto/meta.pb.h"
-
-using dingodb::pb::error::Errno;
 
 namespace dingodb {
 
@@ -235,9 +234,11 @@ void MetaServiceImpl::CreateTableId(google::protobuf::RpcController *controller,
   pb::coordinator_internal::MetaIncrement meta_increment;
 
   uint64_t new_table_id;
-  int ret = this->coordinator_control_->CreateTableId(request->schema_id().entity_id(), new_table_id, meta_increment);
-  if (ret < 0) {
+  pb::error::Errno ret =
+      this->coordinator_control_->CreateTableId(request->schema_id().entity_id(), new_table_id, meta_increment);
+  if (ret != pb::error::Errno::OK) {
     DINGO_LOG(ERROR) << "CreateTableId failed in meta_service";
+    response->mutable_error()->set_errcode(ret);
     return;
   }
   DINGO_LOG(INFO) << "CreateTableId new_table_id=" << new_table_id;
@@ -290,10 +291,11 @@ void MetaServiceImpl::CreateTable(google::protobuf::RpcController *controller,
     }
   }
 
-  int ret = this->coordinator_control_->CreateTable(request->schema_id().entity_id(), request->table_definition(),
-                                                    new_table_id, meta_increment);
-  if (ret < 0) {
-    DINGO_LOG(ERROR) << "CreateTable failed in meta_service";
+  pb::error::Errno ret = this->coordinator_control_->CreateTable(
+      request->schema_id().entity_id(), request->table_definition(), new_table_id, meta_increment);
+  if (ret != pb::error::Errno::OK) {
+    DINGO_LOG(ERROR) << "CreateTable failed in meta_service, error code=" << ret;
+    response->mutable_error()->set_errcode(ret);
     return;
   }
   DINGO_LOG(INFO) << "CreateTable new_table_id=" << new_table_id;
@@ -339,11 +341,12 @@ void MetaServiceImpl::DropSchema(google::protobuf::RpcController *controller,
 
   uint64_t schema_id = request->schema_id().entity_id();
   uint64_t parent_schema_id = request->schema_id().parent_entity_id();
-  int ret = this->coordinator_control_->DropSchema(parent_schema_id, schema_id, meta_increment);
-  if (ret) {
+  pb::error::Errno ret = this->coordinator_control_->DropSchema(parent_schema_id, schema_id, meta_increment);
+  if (ret != pb::error::Errno::OK) {
     DINGO_LOG(ERROR) << "DropSchema failed, schema_id=" << schema_id << " ret = " << ret;
-    brpc::Controller *brpc_controller = static_cast<brpc::Controller *>(controller);
-    brpc_controller->SetFailed(ret, "drop schema failed");
+    // brpc::Controller *brpc_controller = static_cast<brpc::Controller *>(controller);
+    // brpc_controller->SetFailed(ret, "drop schema failed");
+    response->mutable_error()->set_errcode(ret);
     return;
   }
 
@@ -380,13 +383,14 @@ void MetaServiceImpl::CreateSchema(google::protobuf::RpcController *controller,
   pb::coordinator_internal::MetaIncrement meta_increment;
 
   uint64_t new_schema_id;
-  int ret = this->coordinator_control_->CreateSchema(request->parent_schema_id().entity_id(), request->schema_name(),
-                                                     new_schema_id, meta_increment);
-  if (ret) {
+  pb::error::Errno ret = this->coordinator_control_->CreateSchema(
+      request->parent_schema_id().entity_id(), request->schema_name(), new_schema_id, meta_increment);
+  if (ret != pb::error::Errno::OK) {
     DINGO_LOG(ERROR) << "CreateSchema schema_id = " << new_schema_id
                      << " parent_schema_id=" << request->parent_schema_id().entity_id() << " failed ret = " << ret;
-    brpc::Controller *brpc_controller = static_cast<brpc::Controller *>(controller);
-    brpc_controller->SetFailed(ret, "create schema failed");
+    // brpc::Controller *brpc_controller = static_cast<brpc::Controller *>(controller);
+    // brpc_controller->SetFailed(ret, "create schema failed");
+    response->mutable_error()->set_errcode(ret);
     return;
   }
 
@@ -428,10 +432,10 @@ void MetaServiceImpl::DropTable(google::protobuf::RpcController *controller, con
 
   pb::coordinator_internal::MetaIncrement meta_increment;
 
-  int ret = this->coordinator_control_->DropTable(request->table_id().parent_entity_id(),
-                                                  request->table_id().entity_id(), meta_increment);
-  if (ret < 0) {
-    response->mutable_error()->set_errcode(Errno::EINTERNAL);
+  pb::error::Errno ret = this->coordinator_control_->DropTable(request->table_id().parent_entity_id(),
+                                                               request->table_id().entity_id(), meta_increment);
+  if (ret != pb::error::Errno::OK) {
+    response->mutable_error()->set_errcode(ret);
     DINGO_LOG(ERROR) << "DropTable failed in meta_service, table_id=" << request->table_id().entity_id();
     return;
   }

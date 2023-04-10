@@ -170,7 +170,7 @@ void StoreServiceImpl::KvGet(google::protobuf::RpcController* controller,
   std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
   ctx->SetRegionId(request->region_id()).SetCfName(Constant::kStoreDataCF);
   std::vector<std::string> keys;
-  auto mut_request = const_cast<dingodb::pb::store::KvGetRequest*>(request);
+  auto* mut_request = const_cast<dingodb::pb::store::KvGetRequest*>(request);
   keys.emplace_back(std::move(*mut_request->release_key()));
 
   std::vector<pb::common::KeyValue> kvs;
@@ -185,7 +185,7 @@ void StoreServiceImpl::KvGet(google::protobuf::RpcController* controller,
     }
     return;
   }
-  if (kvs.size() > 0) {
+  if (!kvs.empty()) {
     response->set_value(kvs[0].value());
   }
 }
@@ -224,7 +224,7 @@ void StoreServiceImpl::KvBatchGet(google::protobuf::RpcController* controller,
   ctx->SetRegionId(request->region_id()).SetCfName(Constant::kStoreDataCF);
 
   std::vector<pb::common::KeyValue> kvs;
-  auto mut_request = const_cast<dingodb::pb::store::KvBatchGetRequest*>(request);
+  auto* mut_request = const_cast<dingodb::pb::store::KvBatchGetRequest*>(request);
   status = storage_->KvGet(ctx, Helper::PbRepeatedToVector(mut_request->mutable_keys()), kvs);
   if (!status.ok()) {
     auto* err = response->mutable_error();
@@ -270,7 +270,7 @@ void StoreServiceImpl::KvPut(google::protobuf::RpcController* controller,
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done_guard.release(), response);
   ctx->SetRegionId(request->region_id()).SetCfName(Constant::kStoreDataCF);
-  auto mut_request = const_cast<dingodb::pb::store::KvPutRequest*>(request);
+  auto* mut_request = const_cast<dingodb::pb::store::KvPutRequest*>(request);
   std::vector<pb::common::KeyValue> kvs;
   kvs.emplace_back(std::move(*mut_request->release_kv()));
   status = storage_->KvPut(ctx, kvs);
@@ -317,7 +317,7 @@ void StoreServiceImpl::KvBatchPut(google::protobuf::RpcController* controller,
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done_guard.release(), response);
   ctx->SetRegionId(request->region_id()).SetCfName(Constant::kStoreDataCF);
-  auto mut_request = const_cast<dingodb::pb::store::KvBatchPutRequest*>(request);
+  auto* mut_request = const_cast<dingodb::pb::store::KvBatchPutRequest*>(request);
   status = storage_->KvPut(ctx, Helper::PbRepeatedToVector(mut_request->mutable_kvs()));
   if (!status.ok()) {
     auto* err = response->mutable_error();
@@ -360,7 +360,7 @@ void StoreServiceImpl::KvPutIfAbsent(google::protobuf::RpcController* controller
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done_guard.release(), response);
   ctx->SetRegionId(request->region_id()).SetCfName(Constant::kStoreDataCF);
-  auto mut_request = const_cast<dingodb::pb::store::KvPutIfAbsentRequest*>(request);
+  auto* mut_request = const_cast<dingodb::pb::store::KvPutIfAbsentRequest*>(request);
   std::vector<pb::common::KeyValue> kvs;
   kvs.emplace_back(std::move(*mut_request->release_kv()));
   status = storage_->KvPutIfAbsent(ctx, kvs, true);
