@@ -25,28 +25,28 @@ namespace dingodb {
 // PutRequest
 class PutHandler : public BaseHandler {
  public:
-  HandlerType GetType() override { return HandlerType::PUT; }
+  HandlerType GetType() override { return HandlerType::kPut; }
   void Handle(std::shared_ptr<Context> ctx, std::shared_ptr<RawEngine> engine, const pb::raft::Request &req) override;
 };
 
 // PutIfAbsentRequest
 class PutIfAbsentHandler : public BaseHandler {
  public:
-  HandlerType GetType() override { return HandlerType::PUTIFABSENT; }
+  HandlerType GetType() override { return HandlerType::kPutIfabsent; }
   void Handle(std::shared_ptr<Context> ctx, std::shared_ptr<RawEngine> engine, const pb::raft::Request &req) override;
 };
 
 // DeleteRangeRequest
 class DeleteRangeHandler : public BaseHandler {
  public:
-  HandlerType GetType() override { return HandlerType::DELETERANGE; }
+  HandlerType GetType() override { return HandlerType::kDeleteRange; }
   void Handle(std::shared_ptr<Context> ctx, std::shared_ptr<RawEngine> engine, const pb::raft::Request &req) override;
 };
 
 // DeleteBatchRequest
 class DeleteBatchHandler : public BaseHandler {
  public:
-  HandlerType GetType() override { return HandlerType::DELETEBATCH; }
+  HandlerType GetType() override { return HandlerType::kDeleteBatch; }
   void Handle(std::shared_ptr<Context> ctx, std::shared_ptr<RawEngine> engine, const pb::raft::Request &req) override;
 };
 

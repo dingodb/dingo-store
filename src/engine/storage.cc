@@ -64,7 +64,7 @@ butil::Status Storage::KvPut(std::shared_ptr<Context> ctx, const std::vector<pb:
   datum->kvs = kvs;
   write_data.AddDatums(std::static_pointer_cast<DatumAble>(datum));
 
-  return engine_->AsyncWrite(ctx, write_data, [ctx](butil::Status status) {
+  return engine_->AsyncWrite(ctx, write_data, [](std::shared_ptr<Context> ctx, butil::Status status) {
     if (!status.ok()) {
       Helper::SetPbMessageError(status, ctx->Response());
     }
@@ -80,7 +80,7 @@ butil::Status Storage::KvPutIfAbsent(std::shared_ptr<Context> ctx, const std::ve
   datum->is_atomic = is_atomic;
   write_data.AddDatums(std::static_pointer_cast<DatumAble>(datum));
 
-  return engine_->AsyncWrite(ctx, write_data, [ctx](butil::Status status) {
+  return engine_->AsyncWrite(ctx, write_data, [](std::shared_ptr<Context> ctx, butil::Status status) {
     if (!status.ok()) {
       Helper::SetPbMessageError(status, ctx->Response());
     }
@@ -94,7 +94,7 @@ butil::Status Storage::KvDelete(std::shared_ptr<Context> ctx, const std::vector<
   datum->keys = std::move(const_cast<std::vector<std::string>&>(keys));  // NOLINT
   write_data.AddDatums(std::static_pointer_cast<DatumAble>(datum));
 
-  return engine_->AsyncWrite(ctx, write_data, [ctx](butil::Status status) {
+  return engine_->AsyncWrite(ctx, write_data, [](std::shared_ptr<Context> ctx, butil::Status status) {
     if (!status.ok()) {
       Helper::SetPbMessageError(status, ctx->Response());
     }
@@ -108,7 +108,7 @@ butil::Status Storage::KvDeleteRange(std::shared_ptr<Context> ctx, const pb::com
   datum->ranges.emplace_back(std::move(const_cast<pb::common::Range&>(range)));
   write_data.AddDatums(std::static_pointer_cast<DatumAble>(datum));
 
-  return engine_->AsyncWrite(ctx, write_data, [ctx](butil::Status status) {
+  return engine_->AsyncWrite(ctx, write_data, [](std::shared_ptr<Context> ctx, butil::Status status) {
     if (!status.ok()) {
       Helper::SetPbMessageError(status, ctx->Response());
     }

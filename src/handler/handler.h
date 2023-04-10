@@ -26,15 +26,15 @@ namespace dingodb {
 
 enum class HandlerType {
   // Raft apply log handler
-  PUT = pb::raft::PUT,
-  PUTIFABSENT = pb::raft::PUTIFABSENT,
-  DELETERANGE = pb::raft::DELETERANGE,
-  DELETEBATCH = pb::raft::DELETEBATCH,
-  META_WRITE = pb::raft::META_WRITE,
+  kPut = pb::raft::PUT,
+  kPutIfabsent = pb::raft::PUTIFABSENT,
+  kDeleteRange = pb::raft::DELETERANGE,
+  kDeleteBatch = pb::raft::DELETEBATCH,
+  kMetaWrite = pb::raft::META_WRITE,
 
   // Snapshot
-  SAVE_SNAPSHOT = 1000,
-  LOAD_SNAPSHOT = 1001,
+  kSaveSnapshot = 1000,
+  kLoadSnapshot = 1001,
 };
 
 class Handler {

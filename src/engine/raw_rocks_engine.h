@@ -118,7 +118,7 @@ class RawRocksEngine : public RawEngine {
     ~Iterator() override = default;
 
     std::string GetName() override { return "RawRocks"; }
-    IteratorType GetID() override { return IteratorType::RAW_ROCKS_ENGINE; }
+    IteratorType GetID() override { return IteratorType::kRawRocksEngine; }
 
     bool Valid() const override {
       if (!iter_->Valid()) {

@@ -22,14 +22,12 @@
 
 namespace dingodb {
 
-using WriteCb_t = std::function<void(butil::Status)>;
-
 enum class DatumType {
-  PUT = 0,
-  PUTIFABSENT = 1,
-  CREATESCHEMA = 2,
-  DELETERANGE = 3,
-  DELETEBATCH = 4,
+  kPut = 0,
+  kPutIfabsent = 1,
+  kCreateSchema = 2,
+  kDeleteRange = 3,
+  kDeleteBatch = 4,
 };
 
 class DatumAble {
@@ -41,7 +39,7 @@ class DatumAble {
 };
 
 struct PutDatum : public DatumAble {
-  DatumType GetType() override { return DatumType::PUT; }
+  DatumType GetType() override { return DatumType::kPut; }
 
   pb::raft::Request* TransformToRaft() override {
     auto* request = new pb::raft::Request();
@@ -63,7 +61,7 @@ struct PutDatum : public DatumAble {
 };
 
 struct PutIfAbsentDatum : public DatumAble {
-  DatumType GetType() override { return DatumType::PUTIFABSENT; }
+  DatumType GetType() override { return DatumType::kPutIfabsent; }
 
   pb::raft::Request* TransformToRaft() override {
     auto* request = new pb::raft::Request();
@@ -88,7 +86,7 @@ struct PutIfAbsentDatum : public DatumAble {
 
 struct DeleteBatchDatum : public DatumAble {
   ~DeleteBatchDatum() override = default;
-  DatumType GetType() override { return DatumType::DELETEBATCH; }
+  DatumType GetType() override { return DatumType::kDeleteBatch; }
 
   pb::raft::Request* TransformToRaft() override {
     auto* request = new pb::raft::Request();
@@ -111,7 +109,7 @@ struct DeleteBatchDatum : public DatumAble {
 
 struct DeleteRangeDatum : public DatumAble {
   ~DeleteRangeDatum() override = default;
-  DatumType GetType() override { return DatumType::DELETERANGE; }
+  DatumType GetType() override { return DatumType::kDeleteRange; }
 
   pb::raft::Request* TransformToRaft() override {
     auto* request = new pb::raft::Request();
@@ -135,7 +133,7 @@ struct DeleteRangeDatum : public DatumAble {
 
 struct CreateSchemaDatum : public DatumAble {
   ~CreateSchemaDatum() override = default;
-  DatumType GetType() override { return DatumType::CREATESCHEMA; }
+  DatumType GetType() override { return DatumType::kCreateSchema; }
 
   pb::raft::Request* TransformToRaft() override { return nullptr; }
   void TransformFromRaft(pb::raft::Response& resonse) override {}

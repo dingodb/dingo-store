@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include <numeric>
+#include <random>
 
 #include "braft/raft.h"
 #include "braft/route_table.h"
@@ -39,24 +40,28 @@ DEFINE_int32(table_id, 0, "table id");
 
 bvar::LatencyRecorder g_latency_recorder("dingo-store");
 
-const char alphabet[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r',
-                         's', 't', 'o', 'v', 'w', 'x', 'y', 'z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'};
+const char kAlphabet[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r',
+                          's', 't', 'o', 'v', 'w', 'x', 'y', 'z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'};
 
 // rand string
-std::string genRandomString(int len) {
+std::string GenRandomString(int len) {
   std::string result;
-  int alphabet_len = sizeof(alphabet);
+  int alphabet_len = sizeof(kAlphabet);
+
+  std::default_random_engine def_engine;
+  std::uniform_int_distribution<> distrib(1, 1000000000);
   for (int i = 0; i < len; ++i) {
-    result.append(1, alphabet[rand() % alphabet_len]);
+    result.append(1, kAlphabet[distrib(def_engine) % alphabet_len]);
   }
 
   return result;
 }
 
-std::vector<std::string> genKeys(int nums) {
+std::vector<std::string> GenKeys(int nums) {
   std::vector<std::string> vec;
+  vec.reserve(nums);
   for (int i = 0; i < nums; ++i) {
-    vec.push_back(genRandomString(4));
+    vec.push_back(GenRandomString(4));
   }
 
   return vec;
@@ -136,26 +141,27 @@ int64_t SendKvPut(dingodb::pb::store::StoreService_Stub& stub, uint64_t region_i
   return cntl.latency_us();
 }
 
-std::map<std::string, std::string> genDataset(int n) {
+std::map<std::string, std::string> GenDataset(int n) {
   std::map<std::string, std::string> dataset;
 
   for (int i = 0; i < n; ++i) {
-    std::string key = genRandomString(32);
-    dataset[key] = genRandomString(256);
+    std::string key = GenRandomString(32);
+    dataset[key] = GenRandomString(256);
   }
 
   return dataset;
 }
 
 void TestBatchPutGet(dingodb::pb::store::StoreService_Stub& stub, uint64_t region_id, int num) {
-  auto dataset = genDataset(num);
+  auto dataset = GenDataset(num);
 
   std::vector<int64_t> latencys;
+  latencys.reserve(dataset.size());
   for (auto& it : dataset) {
     latencys.push_back(SendKvPut(stub, region_id, it.first, it.second));
   }
 
-  int sum = std::accumulate(latencys.begin(), latencys.end(), 0);
+  int64_t sum = std::accumulate(latencys.begin(), latencys.end(), static_cast<int64_t>(0));
   DINGO_LOG(INFO) << "Put average latency: " << sum / latencys.size() << " us";
 
   latencys.clear();
@@ -167,7 +173,7 @@ void TestBatchPutGet(dingodb::pb::store::StoreService_Stub& stub, uint64_t regio
     }
   }
 
-  sum = std::accumulate(latencys.begin(), latencys.end(), 0);
+  sum = std::accumulate(latencys.begin(), latencys.end(), static_cast<int64_t>(0));
   DINGO_LOG(INFO) << "Get average latency: " << sum / latencys.size() << " us";
 }
 
@@ -181,9 +187,9 @@ void SendKvBatchPut(dingodb::pb::store::StoreService_Stub& stub) {
   request.set_region_id(FLAGS_region_id);
   for (int i = 0; i < 10; ++i) {
     std::string key = FLAGS_key + "_" + std::to_string(i);
-    auto kv = request.add_kvs();
+    auto* kv = request.add_kvs();
     kv->set_key(key);
-    kv->set_value(genRandomString(64));
+    kv->set_value(GenRandomString(64));
   }
 
   stub.KvBatchPut(&cntl, &request, &response, nullptr);
@@ -207,7 +213,7 @@ void SendKvPutIfAbsent(dingodb::pb::store::StoreService_Stub& stub) {
   request.set_region_id(FLAGS_region_id);
   dingodb::pb::common::KeyValue* kv = request.mutable_kv();
   kv->set_key(FLAGS_key);
-  kv->set_value(genRandomString(64));
+  kv->set_value(GenRandomString(64));
 
   stub.KvPutIfAbsent(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
@@ -230,9 +236,9 @@ void SendKvBatchPutIfAbsent(dingodb::pb::store::StoreService_Stub& stub) {
   request.set_region_id(FLAGS_region_id);
   for (int i = 0; i < 10; ++i) {
     std::string key = FLAGS_key + "_" + std::to_string(i);
-    auto kv = request.add_kvs();
+    auto* kv = request.add_kvs();
     kv->set_key(key);
-    kv->set_value(genRandomString(64));
+    kv->set_value(GenRandomString(64));
   }
 
   stub.KvBatchPutIfAbsent(&cntl, &request, &response, nullptr);
@@ -256,29 +262,29 @@ void SendAddRegion(dingodb::pb::store::StoreService_Stub& stub) {
   dingodb::pb::common::Region* region = request.mutable_region();
   region->set_id(FLAGS_region_id);
   region->set_epoch(1);
-  region->set_table_id(10);
+  region->set_table_id(11);
   region->set_name("test-" + std::to_string(FLAGS_region_id));
   region->set_state(dingodb::pb::common::REGION_NEW);
   dingodb::pb::common::Range* range = region->mutable_range();
   range->set_start_key("0000000");
   range->set_end_key("11111111");
-  auto peer = region->add_peers();
-  peer->set_store_id(1001);
-  auto raft_loc = peer->mutable_raft_location();
-  raft_loc->set_host("127.0.0.1");
-  raft_loc->set_port(10101);
+  // auto* peer = region->add_peers();
+  // peer->set_store_id(1001);
+  // auto* raft_loc = peer->mutable_raft_location();
+  // raft_loc->set_host("127.0.0.1");
+  // raft_loc->set_port(10101);
 
-  peer = region->add_peers();
-  peer->set_store_id(1002);
-  raft_loc = peer->mutable_raft_location();
-  raft_loc->set_host("127.0.0.1");
-  raft_loc->set_port(10102);
+  // peer = region->add_peers();
+  // peer->set_store_id(1002);
+  // raft_loc = peer->mutable_raft_location();
+  // raft_loc->set_host("127.0.0.1");
+  // raft_loc->set_port(10102);
 
-  peer = region->add_peers();
-  peer->set_store_id(1003);
-  raft_loc = peer->mutable_raft_location();
-  raft_loc->set_host("127.0.0.1");
-  raft_loc->set_port(10103);
+  // peer = region->add_peers();
+  // peer->set_store_id(1003);
+  // raft_loc = peer->mutable_raft_location();
+  // raft_loc->set_host("127.0.0.1");
+  // raft_loc->set_port(10103);
 
   stub.AddRegion(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
@@ -302,14 +308,14 @@ void SendChangeRegion(dingodb::pb::store::StoreService_Stub& stub) {
   dingodb::pb::common::Region* region = request.mutable_region();
   region->set_id(FLAGS_region_id);
   region->set_epoch(1);
-  region->set_table_id(10);
+  region->set_table_id(11);
   region->set_name("test-" + std::to_string(FLAGS_region_id));
   dingodb::pb::common::Range* range = region->mutable_range();
   range->set_start_key("0000000");
   range->set_end_key("11111111");
-  auto peer = region->add_peers();
+  auto* peer = region->add_peers();
   peer->set_store_id(1001);
-  auto raft_loc = peer->mutable_raft_location();
+  auto* raft_loc = peer->mutable_raft_location();
   raft_loc->set_host("127.0.0.1");
   raft_loc->set_port(10101);
 
@@ -366,11 +372,11 @@ void SendCreateTable(dingodb::pb::meta::MetaService_Stub& stub) {
   schema_id->set_parent_entity_id(dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
 
   // string name = 1;
-  auto table_definition = request.mutable_table_definition();
+  auto* table_definition = request.mutable_table_definition();
   table_definition->set_name("zihui_table_01");
   // repeated ColumnDefinition columns = 2;
   for (int i = 0; i < 3; i++) {
-    auto column = table_definition->add_columns();
+    auto* column = table_definition->add_columns();
     std::string column_name("column_");
     column_name.append(std::to_string(i));
     column->set_name(column_name);
@@ -387,14 +393,14 @@ void SendCreateTable(dingodb::pb::meta::MetaService_Stub& stub) {
   table_definition->set_ttl(0);
   table_definition->set_engine(dingodb::pb::common::Engine::ENG_RAFT_STORE);
   // map<string, string> properties = 8;
-  auto prop = table_definition->mutable_properties();
+  auto* prop = table_definition->mutable_properties();
   (*prop)["user"] = "zihuideng";
 
   // partition
-  auto partition_rule = table_definition->mutable_table_partition();
-  auto part_column = partition_rule->add_columns();
+  auto* partition_rule = table_definition->mutable_table_partition();
+  auto* part_column = partition_rule->add_columns();
   part_column->assign("column_0");
-  auto range_partition = partition_rule->mutable_range_partition();
+  auto* range_partition = partition_rule->mutable_range_partition();
 
   for (int i = 0; i < 1; i++) {
     auto* part_range = range_partition->add_ranges();
@@ -457,12 +463,12 @@ void SendSnapshot(dingodb::pb::store::StoreService_Stub& stub) {
   }
 }
 
-void* sender(void* arg) {
+void* Sender(void* /*arg*/) {
   for (int i = 0; i < FLAGS_round_num; ++i) {
     braft::PeerId leader(FLAGS_addr);
     // rpc
     brpc::Channel channel;
-    if (channel.Init(leader.addr, NULL) != 0) {
+    if (channel.Init(leader.addr, nullptr) != 0) {
       DINGO_LOG(ERROR) << "Fail to init channel to " << leader;
       bthread_usleep(FLAGS_timeout_ms * 1000L);
       continue;
@@ -480,7 +486,7 @@ void* sender(void* arg) {
       SendDestroyRegion(stub);
 
     } else if (FLAGS_method == "KvPut") {
-      SendKvPut(stub, FLAGS_region_id, FLAGS_key, genRandomString(64));
+      SendKvPut(stub, FLAGS_region_id, FLAGS_key, GenRandomString(64));
 
     } else if (FLAGS_method == "KvBatchPut") {
       SendKvBatchPut(stub);
@@ -527,7 +533,7 @@ int main(int argc, char* argv[]) {
   std::srand(std::time(nullptr));
 
   for (int i = 0; i < FLAGS_thread_num; ++i) {
-    if (bthread_start_background(&tids[i], NULL, sender, NULL) != 0) {
+    if (bthread_start_background(&tids[i], nullptr, Sender, nullptr) != 0) {
       DINGO_LOG(ERROR) << "Fail to create bthread";
       return -1;
     }
@@ -542,7 +548,7 @@ int main(int argc, char* argv[]) {
 
   // DINGO_LOG(INFO) << "Store client is going to quit";
   for (int i = 0; i < FLAGS_thread_num; ++i) {
-    bthread_join(tids[i], NULL);
+    bthread_join(tids[i], nullptr);
   }
 
   return 0;

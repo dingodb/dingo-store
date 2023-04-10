@@ -63,7 +63,7 @@ class RaftKvEngine : public Engine, public RaftControlAble {
   butil::Status Snapshot(std::shared_ptr<Context> ctx, uint64_t region_id) override;
 
   butil::Status Write(std::shared_ptr<Context> ctx, const WriteData& write_data) override;
-  butil::Status AsyncWrite(std::shared_ptr<Context> ctx, const WriteData& write_data, WriteCb_t cb) override;
+  butil::Status AsyncWrite(std::shared_ptr<Context> ctx, const WriteData& write_data, WriteCbFunc cb) override;
 
   std::shared_ptr<Engine::Reader> NewReader(const std::string& cf_name) override;
 

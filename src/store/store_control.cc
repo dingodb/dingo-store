@@ -23,7 +23,13 @@
 
 namespace dingodb {
 
-StoreControl::StoreControl() { bthread_mutex_init(&control_mutex_, nullptr); };
+StoreControl::StoreControl()
+    : need_send_heartbeat_immediately(false),
+      need_heartbeat_immediately_(false),
+      heartbeat_interval_multiple_(0),
+      heartbeat_count_(0) {
+  bthread_mutex_init(&control_mutex_, nullptr);
+};
 StoreControl::~StoreControl() { bthread_mutex_destroy(&control_mutex_); };
 
 butil::Status ValidateAddRegion(std::shared_ptr<StoreMetaManager> store_meta_manager,
@@ -113,7 +119,7 @@ butil::Status StoreControl::ChangeRegion(std::shared_ptr<Context> ctx, std::shar
   return engine->ChangeRegion(ctx, region->id(), filter_peers_by_role(pb::common::VOTER));
 }
 
-butil::Status ValidateDeleteRegion(std::shared_ptr<StoreMetaManager> store_meta_manager,
+butil::Status ValidateDeleteRegion(std::shared_ptr<StoreMetaManager> /*store_meta_manager*/,
                                    std::shared_ptr<pb::common::Region> region) {
   if (region->state() == pb::common::REGION_DELETE || region->state() == pb::common::REGION_DELETING ||
       region->state() == pb::common::REGION_DELETED) {
@@ -170,27 +176,27 @@ butil::Status StoreControl::Snapshot(std::shared_ptr<Context> ctx, uint64_t regi
 }
 
 void StoreControl::SetHeartbeatIntervalMultiple(uint64_t interval_multiple) {
-  this->heartbeat_interval_multiple = interval_multiple;
+  this->heartbeat_interval_multiple_ = interval_multiple;
 }
 
 void StoreControl::TriggerHeartbeat() {
   DINGO_LOG(INFO) << "TriggerHeartbeat";
-  this->need_heartbeat_immediately.store(true);
+  this->need_heartbeat_immediately_.store(true);
 }
 
 bool StoreControl::CheckNeedToHeartbeat() {
-  if (this->need_heartbeat_immediately.load()) {
-    this->need_heartbeat_immediately.store(false);
-    this->heartbeat_count = 0;
+  if (this->need_heartbeat_immediately_.load()) {
+    this->need_heartbeat_immediately_.store(false);
+    this->heartbeat_count_ = 0;
 
     DINGO_LOG(INFO) << "Heartbeat is triggerred";
     return true;
   }
 
-  this->heartbeat_count++;
+  this->heartbeat_count_++;
 
-  if (this->heartbeat_count >= this->heartbeat_interval_multiple) {
-    this->heartbeat_count = 0;
+  if (this->heartbeat_count_ >= this->heartbeat_interval_multiple_) {
+    this->heartbeat_count_ = 0;
     return true;
   }
 

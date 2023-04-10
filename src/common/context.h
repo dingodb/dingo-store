@@ -20,11 +20,14 @@
 
 #include "brpc/controller.h"
 #include "common/synchronization.h"
-#include "engine/write_data.h"
 #include "proto/common.pb.h"
 #include "proto/store.pb.h"
 
 namespace dingodb {
+
+class Context;
+
+using WriteCbFunc = std::function<void(std::shared_ptr<Context>, butil::Status)>;
 
 class Context {
  public:
@@ -75,7 +78,7 @@ class Context {
     return *this;
   }
 
-  uint64_t RegionId() { return region_id_; }
+  uint64_t RegionId() const { return region_id_; }
   Context& SetRegionId(uint64_t region_id) {
     region_id_ = region_id;
     return *this;
@@ -84,10 +87,10 @@ class Context {
   void SetCfName(const std::string& cf_name) { cf_name_ = cf_name; }
   const std::string& CfName() const { return cf_name_; }
 
-  bool DeleteFilesInRange() { return delete_files_in_range_; }
+  bool DeleteFilesInRange() const { return delete_files_in_range_; }
   void SetDeleteFilesInRange(bool delete_files_in_range) { delete_files_in_range_ = delete_files_in_range; }
 
-  bool Flush() { return flush_; }
+  bool Flush() const { return flush_; }
   void SetFlush(bool flush) { flush_ = flush; }
 
   pb::common::ClusterRole ClusterRole() { return role_; }
@@ -98,14 +101,14 @@ class Context {
     cond_ = std::make_shared<BthreadCond>();
   }
 
-  bool IsSyncMode() { return enable_sync_; }
+  bool IsSyncMode() const { return enable_sync_; }
 
   std::shared_ptr<BthreadCond> Cond() { return cond_; }
   butil::Status Status() { return status_; }
   void SetStatus(butil::Status& status) { status_ = status; }
 
-  WriteCb_t WriteCb() { return write_cb_; }
-  void SetWriteCb(WriteCb_t write_cb) { write_cb_ = write_cb; }
+  WriteCbFunc WriteCb() { return write_cb_; }
+  void SetWriteCb(WriteCbFunc write_cb) { write_cb_ = write_cb; }
 
  private:
   // brpc framework free resource
@@ -128,7 +131,7 @@ class Context {
   butil::Status status_;
   std::shared_ptr<BthreadCond> cond_;
 
-  WriteCb_t write_cb_;
+  WriteCbFunc write_cb_;
 };
 
 }  // namespace dingodb

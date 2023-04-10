@@ -35,7 +35,7 @@ class TransformKvAble {
   TransformKvAble(const std::string& prefix) : prefix_(prefix){};
   virtual ~TransformKvAble() = default;
 
-  std::string prefix() { return prefix_; }
+  std::string Prefix() { return prefix_; }
   virtual std::string GenKey(uint64_t id) { return butil::StringPrintf("%s_%lu", prefix_.c_str(), id); }
 
   virtual uint64_t ParseRegionId(const std::string& str) {
@@ -55,11 +55,11 @@ class TransformKvAble {
   }
 
   // Transform other format to kv.
-  virtual std::shared_ptr<pb::common::KeyValue> TransformToKv(uint64_t id) {
+  virtual std::shared_ptr<pb::common::KeyValue> TransformToKv(uint64_t /*id*/) {
     DINGO_LOG(ERROR) << "Not support";
     return nullptr;
   }
-  virtual std::shared_ptr<pb::common::KeyValue> TransformToKv(const std::shared_ptr<google::protobuf::Message> obj) {
+  virtual std::shared_ptr<pb::common::KeyValue> TransformToKv(std::shared_ptr<google::protobuf::Message> /*obj*/) {
     DINGO_LOG(ERROR) << "Not support";
     return nullptr;
   }
@@ -77,7 +77,7 @@ class TransformKvAble {
   // Transform kv to other format.
   virtual void TransformFromKv(const std::vector<pb::common::KeyValue>& kvs) = 0;
 
- protected:
+ private:
   const std::string prefix_;
 };
 

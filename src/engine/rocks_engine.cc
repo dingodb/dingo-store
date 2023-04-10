@@ -54,7 +54,7 @@ butil::Status RocksEngine::Write(std::shared_ptr<Context> /*ctx*/, const WriteDa
   return butil::Status();
 }
 butil::Status RocksEngine::AsyncWrite(std::shared_ptr<Context> /*ctx*/, const WriteData& /*write_data*/,
-                                      WriteCb_t /*write_cb*/) {
+                                      WriteCbFunc /*write_cb*/) {
   return butil::Status();
 }
 

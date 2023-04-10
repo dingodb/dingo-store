@@ -316,7 +316,7 @@ bool StoreMetaManager::Init() {
 
 bool StoreMetaManager::Recover() {
   std::vector<pb::common::KeyValue> regio_meta_kvs;
-  if (!meta_reader_->Scan(region_meta_->prefix(), regio_meta_kvs)) {
+  if (!meta_reader_->Scan(region_meta_->Prefix(), regio_meta_kvs)) {
     DINGO_LOG(ERROR) << "Scan store region meta failed!";
     return false;
   }
@@ -327,7 +327,7 @@ bool StoreMetaManager::Recover() {
   }
 
   std::vector<pb::common::KeyValue> raft_meta_kvs;
-  if (!meta_reader_->Scan(raft_meta_->prefix(), raft_meta_kvs)) {
+  if (!meta_reader_->Scan(raft_meta_->Prefix(), raft_meta_kvs)) {
     DINGO_LOG(ERROR) << "Scan store raft meta failed!";
     return false;
   }

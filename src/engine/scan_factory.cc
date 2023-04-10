@@ -129,7 +129,6 @@ void ScanContextFactory::TryDeleteScan(const std::string& scan_id) {
 }
 
 void ScanContextFactory::RegularCleaningHandler(void* arg) {
-  std::cout << "void ScanContextFactory::RegularCleaningHandler(void* arg)" << std::endl;
   ScanContextFactory* factory = static_cast<ScanContextFactory*>(arg);
 
   BAIDU_SCOPED_LOCK(factory->mutex_);
