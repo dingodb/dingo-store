@@ -26,6 +26,7 @@ import io.dingodb.sdk.common.table.Column;
 import io.dingodb.sdk.common.table.ColumnDefinition;
 import io.dingodb.sdk.common.table.Table;
 import io.dingodb.sdk.common.table.TableDefinition;
+import io.dingodb.sdk.common.table.metric.TableMetrics;
 import io.dingodb.sdk.common.type.TypeCode;
 
 import java.io.IOException;
@@ -52,7 +53,7 @@ import static io.dingodb.sdk.common.utils.Parameters.cleanNull;
 
 public class EntityConversion {
 
-    public static Meta.TableDefinition swap(Table table, Meta.DingoCommonId tableId) {
+    public static Meta.TableDefinition mapping(Table table, Meta.DingoCommonId tableId) {
         Optional.ofNullable(table.getColumns())
                 .filter(__ -> __.stream()
                         .map(Column::getName)
@@ -60,7 +61,7 @@ public class EntityConversion {
                         .count() == __.size())
                 .orElseThrow(() -> new DingoClientException("Table field names cannot be repeated."));
         List<Meta.ColumnDefinition> columnDefinitions = table.getColumns().stream()
-                .map(EntityConversion::swap)
+                .map(EntityConversion::mapping)
                 .collect(Collectors.toList());
 
         return Meta.TableDefinition.newBuilder()
@@ -72,10 +73,10 @@ public class EntityConversion {
                 .addAllColumns(columnDefinitions).build();
     }
 
-    public static Table swap(Meta.TableDefinition tableDefinition) {
+    public static Table mapping(Meta.TableDefinition tableDefinition) {
         return new TableDefinition(
                 tableDefinition.getName(),
-                tableDefinition.getColumnsList().stream().map(EntityConversion::swap).collect(Collectors.toList()),
+                tableDefinition.getColumnsList().stream().map(EntityConversion::mapping).collect(Collectors.toList()),
                 tableDefinition.getVersion(),
                 (int) tableDefinition.getTtl(),
                 null,
@@ -83,16 +84,25 @@ public class EntityConversion {
                 tableDefinition.getPropertiesMap());
     }
 
-    public static Column swap(Meta.ColumnDefinition definition) {
+    public static Column mapping(Meta.ColumnDefinition definition) {
         return new ColumnDefinition(
                 definition.getName(),
-                swap(definition.getSqlType()),
+                mapping(definition.getSqlType()),
                 definition.getElementType().name(),
                 definition.getPrecision(),
                 definition.getScale(),
                 definition.getNullable(),
                 definition.getIndexOfKey(),
                 definition.getDefaultVal()
+        );
+    }
+
+    public static TableMetrics mapping(Meta.TableMetrics metrics) {
+        return new TableMetrics(
+                metrics.getMinKey().toByteArray(),
+                metrics.getMaxKey().toByteArray(),
+                metrics.getRowsCount(),
+                metrics.getPartCount()
         );
     }
 
@@ -165,7 +175,7 @@ public class EntityConversion {
                 .build();
     }
 
-    public static Meta.ColumnDefinition swap(Column column) {
+    public static Meta.ColumnDefinition mapping(Column column) {
         return Meta.ColumnDefinition.newBuilder()
                 .setName(column.getName())
                 .setNullable(column.isNullable())
@@ -174,11 +184,11 @@ public class EntityConversion {
                 .setPrecision(column.getPrecision())
                 .setScale(column.getScale())
                 .setIndexOfKey(column.getPrimary())
-                .setSqlType(swap(column.getType()))
+                .setSqlType(mapping(column.getType()))
                 .build();
     }
 
-    private static String swap(Meta.SqlType sqlType) {
+    private static String mapping(Meta.SqlType sqlType) {
         switch (sqlType) {
             case SQL_TYPE_VARCHAR:
                 return "STRING";
@@ -212,7 +222,7 @@ public class EntityConversion {
         throw new IllegalArgumentException("Unrecognized type name \"" + sqlType.name() + "\".");
     }
 
-    private static Meta.SqlType swap(String type) {
+    private static Meta.SqlType mapping(String type) {
         switch (type.toUpperCase()) {
             case "STRING":
             case "VARCHAR":

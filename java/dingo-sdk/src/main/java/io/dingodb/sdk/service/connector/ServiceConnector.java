@@ -21,41 +21,77 @@ import io.dingodb.coordinator.Coordinator;
 import io.dingodb.coordinator.CoordinatorServiceGrpc;
 import io.dingodb.sdk.common.utils.GrpcConnection;
 import io.dingodb.meta.MetaServiceGrpc;
+import io.grpc.ConnectivityState;
 import io.grpc.ManagedChannel;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
-import java.util.concurrent.TimeUnit;
+import java.util.Set;
+import java.util.concurrent.CopyOnWriteArraySet;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @Slf4j
 public class ServiceConnector {
 
-    private String target;
     private ManagedChannel channel;
     @Getter
     private MetaServiceGrpc.MetaServiceBlockingStub metaBlockingStub;
 
-    public ServiceConnector(String target) {
-        this.target = target;
+    private Set<Common.Location> locations = new CopyOnWriteArraySet<>();
+
+    private AtomicBoolean isShutdown = new AtomicBoolean(false);
+
+    public ServiceConnector(Set<Common.Location> locations) {
+        this.locations.addAll(locations);
+        initConnection();
+    }
+
+    public Set<Common.Location> getLocations() {
+        return locations;
+    }
+
+    public Common.Location getLeader() {
+        for (Common.Location location : locations) {
+            String target = location.getHost() + ":" + location.getPort();
+            channel = GrpcConnection.newChannel(target);
+            ConnectivityState state = channel.getState(true);
+            if (state == ConnectivityState.CONNECTING || state == ConnectivityState.READY || state == ConnectivityState.IDLE) {
+                CoordinatorServiceGrpc.CoordinatorServiceBlockingStub blockingStub =
+                        CoordinatorServiceGrpc.newBlockingStub(channel);
+                Coordinator.GetCoordinatorMapResponse response = blockingStub.getCoordinatorMap(
+                        Coordinator.GetCoordinatorMapRequest.newBuilder().setClusterId(0).build());
+
+                Common.Location leaderLocation = response.getLeaderLocation();
+                GrpcConnection.shutdownManagedChannel(channel, log);
+                if (!leaderLocation.getHost().isEmpty()) {
+                    target = leaderLocation.getHost() + ":" + leaderLocation.getPort();
+                    channel = GrpcConnection.newChannel(target);
+                    metaBlockingStub = MetaServiceGrpc.newBlockingStub(channel);
+                    return leaderLocation;
+                }
+            }
+        }
+        return null;
     }
 
     public void initConnection() {
-        channel = GrpcConnection.newChannel(target);
-        CoordinatorServiceGrpc.CoordinatorServiceBlockingStub blockingStub =
-                CoordinatorServiceGrpc.newBlockingStub(channel);
-        Coordinator.GetCoordinatorMapResponse response = blockingStub.getCoordinatorMap(
-                Coordinator.GetCoordinatorMapRequest.newBuilder().setClusterId(0).build());
+        connection();
+        channel.notifyWhenStateChanged(ConnectivityState.TRANSIENT_FAILURE, this::connection);
+        channel.notifyWhenStateChanged(ConnectivityState.SHUTDOWN, this::connection);
+    }
 
-        Common.Location leaderLocation = response.getLeaderLocation();
-        if (!leaderLocation.getHost().isEmpty()) {
-            GrpcConnection.shutdownManagedChannel(channel, log);
-            target = leaderLocation.getHost() + ":" + leaderLocation.getPort();
-            channel = GrpcConnection.newChannel(target);
-            metaBlockingStub = MetaServiceGrpc.newBlockingStub(channel);
+    private void connection() {
+        if (isShutdown.get()) {
+            return;
         }
+        if (channel != null) {
+            return;
+        }
+        getLeader();
     }
 
     public void shutdown() {
         GrpcConnection.shutdownManagedChannel(channel, log);
+        isShutdown.set(true);
     }
 }

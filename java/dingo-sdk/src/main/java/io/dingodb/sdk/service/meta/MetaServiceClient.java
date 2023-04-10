@@ -17,6 +17,8 @@
 package io.dingodb.sdk.service.meta;
 
 import io.dingodb.sdk.common.DingoClientException;
+import io.dingodb.sdk.common.table.metric.TableMetrics;
+import io.dingodb.sdk.common.utils.EntityConversion;
 import io.dingodb.sdk.common.utils.Optional;
 import io.dingodb.sdk.service.connector.ServiceConnector;
 import io.dingodb.sdk.common.table.Table;
@@ -27,7 +29,6 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.experimental.Accessors;
 
-import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
 import java.util.TreeMap;
@@ -36,7 +37,7 @@ import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import static io.dingodb.sdk.common.utils.EntityConversion.swap;
+import static io.dingodb.sdk.common.utils.EntityConversion.mapping;
 
 @Accessors(fluent = true)
 public class MetaServiceClient {
@@ -108,7 +109,12 @@ public class MetaServiceClient {
     public MetaServiceClient getMetaService(String name) {
         MetaServiceClient metaService = Optional.mapOrNull(metaServiceIdCache.get(name), metaServiceCache::get);
         if (metaService == null) {
-            // TODO Get the schema from the store by name
+            Meta.GetSchemaByNameRequest request = Meta.GetSchemaByNameRequest.newBuilder().setSchemaName(name).build();
+            Meta.GetSchemaByNameResponse response = metaBlockingStub.getSchemaByName(request);
+            metaService = Optional.ofNullable(response.getSchema())
+                    .ifPresent(this::addMetaServiceCache)
+                    .map(Meta.Schema::getId)
+                    .mapOrNull(metaServiceCache::get);
         }
         return metaService;
     }
@@ -129,7 +135,7 @@ public class MetaServiceClient {
         Meta.DingoCommonId tableId = tableDefinitionWithId.getTableId();
         String name = tableDefinitionWithId.getTableDefinition().getName();
         tableIdCache.computeIfAbsent(name, __ -> tableId);
-        tableDefinitionCache.computeIfAbsent(tableId, __ -> swap(tableDefinitionWithId.getTableDefinition()));
+        tableDefinitionCache.computeIfAbsent(tableId, __ -> mapping(tableDefinitionWithId.getTableDefinition()));
     }
 
     public boolean createTable(@NonNull String tableName, @NonNull Table table) {
@@ -143,7 +149,7 @@ public class MetaServiceClient {
         Meta.CreateTableIdResponse createTableIdResponse = metaBlockingStub.createTableId(createTableIdRequest);
         Meta.DingoCommonId tableId = createTableIdResponse.getTableId();
 
-        Meta.TableDefinition definition = swap(table, tableId);
+        Meta.TableDefinition definition = mapping(table, tableId);
 
         Meta.CreateTableRequest request = Meta.CreateTableRequest.newBuilder()
                 .setSchemaId(id)
@@ -178,16 +184,16 @@ public class MetaServiceClient {
     public Meta.DingoCommonId getTableId(@NonNull String tableName) {
         Meta.DingoCommonId tableId = tableIdCache.get(tableName);
         if (tableId == null) {
-            Meta.GetTablesRequest request = Meta.GetTablesRequest.newBuilder().setSchemaId(id).build();
-            Meta.GetTablesResponse response = metaBlockingStub.getTables(request);
+            Meta.GetTableByNameRequest request = Meta.GetTableByNameRequest.newBuilder()
+                    .setSchemaId(id)
+                    .setTableName(tableName)
+                    .build();
+            Meta.GetTableByNameResponse response = metaBlockingStub.getTableByName(request);
 
-            List<Meta.TableDefinitionWithId> withIdsList = response.getTableDefinitionWithIdsList();
-            for (Meta.TableDefinitionWithId withId : withIdsList) {
-                if (withId.getTableDefinition().getName().equalsIgnoreCase(tableName)) {
-                    addTableCache(withId);
-                    tableId = tableIdCache.get(tableName);
-                    break;
-                }
+            Meta.TableDefinitionWithId withId = response.getTableDefinitionWithId();
+            if (withId.getTableDefinition().getName().equals(tableName)) {
+                addTableCache(withId);
+                tableId = tableIdCache.get(tableName);
             }
         }
         return tableId;
@@ -211,17 +217,17 @@ public class MetaServiceClient {
         if (table == null) {
             Meta.GetTableRequest request = Meta.GetTableRequest.newBuilder().setTableId(tableId).build();
             Meta.GetTableResponse response = metaBlockingStub.getTable(request);
-            table = swap(response.getTableDefinitionWithId().getTableDefinition());
+            table = mapping(response.getTableDefinitionWithId().getTableDefinition());
         }
         return table;
     }
 
-    public NavigableMap<ByteArrayUtils.ComparableByteArray, Meta.RangeDistribution> getParts(String tableName) {
+    public NavigableMap<ByteArrayUtils.ComparableByteArray, Meta.RangeDistribution> getRangeDistribution(String tableName) {
         Meta.DingoCommonId tableId = getTableId(tableName);
-        return getParts(tableId);
+        return getRangeDistribution(tableId);
     }
 
-    public NavigableMap<ByteArrayUtils.ComparableByteArray, Meta.RangeDistribution> getParts(Meta.DingoCommonId id) {
+    public NavigableMap<ByteArrayUtils.ComparableByteArray, Meta.RangeDistribution> getRangeDistribution(Meta.DingoCommonId id) {
         NavigableMap<ByteArrayUtils.ComparableByteArray, Meta.RangeDistribution> result = new TreeMap<>();
         Meta.GetTableRangeRequest request = Meta.GetTableRangeRequest.newBuilder()
                 .setTableId(id)
@@ -235,5 +241,18 @@ public class MetaServiceClient {
                     tablePart);
         }
         return result;
+    }
+
+    public TableMetrics getTableMetrics(String tableName) {
+        return Optional.ofNullable(getTableId(tableName))
+            .map(tableId -> {
+                Meta.GetTableMetricsRequest request = Meta.GetTableMetricsRequest.newBuilder()
+                    .setTableId(tableId)
+                    .build();
+                Meta.GetTableMetricsResponse response = metaBlockingStub.getTableMetrics(request);
+                Meta.TableMetricsWithId metrics = response.getTableMetrics();
+                return metrics.getTableMetrics();
+            })
+            .mapOrNull(EntityConversion::mapping);
     }
 }
