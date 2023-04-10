@@ -26,6 +26,9 @@
 namespace dingodb {
 
 class MetaServiceImpl : public pb::meta::MetaService {
+
+  using Errno = pb::error::Errno;
+
  public:
   MetaServiceImpl() = default;
 
@@ -36,7 +39,7 @@ class MetaServiceImpl : public pb::meta::MetaService {
 
     auto* error_in_response = response->mutable_error();
     error_in_response->mutable_leader_location()->CopyFrom(leader_location);
-    error_in_response->set_errcode(::dingodb::pb::error::Errno::ERAFT_NOTLEADER);
+    error_in_response->set_errcode(Errno::ERAFT_NOTLEADER);
   }
 
   void SetKvEngine(std::shared_ptr<Engine> engine) { engine_ = engine; };

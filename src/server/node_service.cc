@@ -31,6 +31,7 @@
 namespace dingodb {
 using pb::node::LogDetail;
 using pb::node::LogLevel;
+using pb::error::Errno;
 
 void NodeServiceImpl::SetServer(dingodb::Server* server) { this->server_ = server; }
 
@@ -41,7 +42,7 @@ void NodeServiceImpl::GetNodeInfo(google::protobuf::RpcController* /*controller*
 
   if (request->cluster_id() < 0) {
     auto* error = response->mutable_error();
-    error->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
+    error->set_errcode(Errno::EILLEGAL_PARAMTETERS);
   }
 
   auto* node_info = response->mutable_node_info();

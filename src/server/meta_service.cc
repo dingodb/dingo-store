@@ -26,6 +26,9 @@
 #include "proto/common.pb.h"
 #include "proto/coordinator_internal.pb.h"
 #include "proto/meta.pb.h"
+
+using dingodb::pb::error::Errno;
+
 namespace dingodb {
 
 void MetaServiceImpl::GetSchemas(google::protobuf::RpcController * /*controller*/,
@@ -40,7 +43,7 @@ void MetaServiceImpl::GetSchemas(google::protobuf::RpcController * /*controller*
   DINGO_LOG(DEBUG) << "GetSchemas request:  schema_id = [" << request->schema_id().entity_id() << "]";
 
   if (!request->has_schema_id()) {
-    response->mutable_error()->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
     return;
   }
 
@@ -65,12 +68,12 @@ void MetaServiceImpl::GetSchema(google::protobuf::RpcController * /*controller*/
   DINGO_LOG(DEBUG) << "GetSchema request:  schema_id = [" << request->schema_id().entity_id() << "]";
 
   if (!request->has_schema_id()) {
-    response->mutable_error()->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
     return;
   }
 
   if (!request->has_schema_id()) {
-    response->mutable_error()->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
     return;
   }
 
@@ -90,7 +93,7 @@ void MetaServiceImpl::GetSchemaByName(google::protobuf::RpcController * /*contro
   DINGO_LOG(DEBUG) << "GetSchemaByName request:  schema_name = [" << request->schema_name() << "]";
 
   if (request->schema_name().empty()) {
-    response->mutable_error()->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
     return;
   }
 
@@ -110,7 +113,7 @@ void MetaServiceImpl::GetTables(google::protobuf::RpcController * /*controller*/
   DINGO_LOG(DEBUG) << "GetTables request:  schema_id = [" << request->schema_id().entity_id() << "]";
 
   if (!request->has_schema_id() || request->schema_id().entity_id() <= 0) {
-    response->mutable_error()->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
     return;
   }
 
@@ -139,7 +142,7 @@ void MetaServiceImpl::GetTable(google::protobuf::RpcController * /*controller*/,
   }
 
   if (!request->has_table_id()) {
-    response->mutable_error()->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
     return;
   }
 
@@ -162,7 +165,7 @@ void MetaServiceImpl::GetTableByName(google::protobuf::RpcController * /*control
                    << " table_name = [" << request->table_name() << "]";
 
   if (request->table_name().empty()) {
-    response->mutable_error()->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
     return;
   }
 
@@ -182,7 +185,7 @@ void MetaServiceImpl::GetTableRange(google::protobuf::RpcController * /*controll
   DINGO_LOG(DEBUG) << "GetTable request:  table_id = [" << request->table_id().entity_id() << "]";
 
   if (!request->has_table_id()) {
-    response->mutable_error()->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
     return;
   }
 
@@ -203,7 +206,7 @@ void MetaServiceImpl::GetTableMetrics(google::protobuf::RpcController * /*contro
   DINGO_LOG(DEBUG) << "GetTableMetrics request:  table_id = [" << request->table_id().entity_id() << "]";
 
   if (!request->has_table_id()) {
-    response->mutable_error()->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
     return;
   }
 
@@ -225,7 +228,7 @@ void MetaServiceImpl::CreateTableId(google::protobuf::RpcController *controller,
   DINGO_LOG(DEBUG) << request->DebugString();
 
   if (!request->has_schema_id()) {
-    response->mutable_error()->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
     return;
   }
 
@@ -272,7 +275,7 @@ void MetaServiceImpl::CreateTable(google::protobuf::RpcController *controller,
   DINGO_LOG(DEBUG) << request->DebugString();
 
   if (!request->has_schema_id() || !request->has_table_definition()) {
-    response->mutable_error()->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
     return;
   }
 
@@ -328,7 +331,7 @@ void MetaServiceImpl::DropSchema(google::protobuf::RpcController *controller,
   DINGO_LOG(INFO) << request->DebugString();
 
   if (!request->has_schema_id()) {
-    response->mutable_error()->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
     return;
   }
 
@@ -370,7 +373,7 @@ void MetaServiceImpl::CreateSchema(google::protobuf::RpcController *controller,
   DINGO_LOG(DEBUG) << request->DebugString();
 
   if (!request->has_parent_schema_id()) {
-    response->mutable_error()->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
     return;
   }
 
@@ -419,7 +422,7 @@ void MetaServiceImpl::DropTable(google::protobuf::RpcController *controller, con
   DINGO_LOG(DEBUG) << request->DebugString();
 
   if (!request->has_table_id()) {
-    response->mutable_error()->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
     return;
   }
 
@@ -428,7 +431,7 @@ void MetaServiceImpl::DropTable(google::protobuf::RpcController *controller, con
   int ret = this->coordinator_control_->DropTable(request->table_id().parent_entity_id(),
                                                   request->table_id().entity_id(), meta_increment);
   if (ret < 0) {
-    response->mutable_error()->set_errcode(::dingodb::pb::error::Errno::EINTERNAL);
+    response->mutable_error()->set_errcode(Errno::EINTERNAL);
     DINGO_LOG(ERROR) << "DropTable failed in meta_service, table_id=" << request->table_id().entity_id();
     return;
   }

@@ -28,6 +28,10 @@
 namespace dingodb {
 
 class Helper {
+
+  using Errno = pb::error::Errno;
+  using PbError = pb::error::Error;
+
  public:
   static bool IsIp(const std::string& s);
 
@@ -58,9 +62,9 @@ class Helper {
   static butil::EndPoint StrToEndPoint(std::string str);
   static std::vector<butil::EndPoint> StrToEndpoints(const std::string& str);
 
-  static std::shared_ptr<pb::error::Error> Error(pb::error::Errno errcode, const std::string& errmsg);
-  static bool Error(pb::error::Errno errcode, const std::string& errmsg, pb::error::Error& err);
-  static bool Error(pb::error::Errno errcode, const std::string& errmsg, std::shared_ptr<pb::error::Error> err);
+  static std::shared_ptr<PbError> Error(Errno errcode, const std::string& errmsg);
+  static bool Error(Errno errcode, const std::string& errmsg, PbError& err);
+  static bool Error(Errno errcode, const std::string& errmsg, std::shared_ptr<PbError> err);
 
   static bool IsEqualIgnoreCase(const std::string& str1, const std::string& str2);
 
