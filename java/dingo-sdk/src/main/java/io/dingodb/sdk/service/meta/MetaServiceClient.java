@@ -17,6 +17,7 @@
 package io.dingodb.sdk.service.meta;
 
 import io.dingodb.sdk.common.DingoClientException;
+import io.dingodb.sdk.common.concurrent.Executors;
 import io.dingodb.sdk.common.table.metric.TableMetrics;
 import io.dingodb.sdk.common.utils.EntityConversion;
 import io.dingodb.sdk.common.utils.Optional;
@@ -29,6 +30,7 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.experimental.Accessors;
 
+import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
 import java.util.TreeMap;
@@ -42,7 +44,13 @@ import static io.dingodb.sdk.common.utils.EntityConversion.mapping;
 @Accessors(fluent = true)
 public class MetaServiceClient {
 
-    public static final Meta.DingoCommonId DINGO_SCHEMA_ID = Meta.DingoCommonId.newBuilder()
+    private static final Meta.DingoCommonId ROOT_SCHEMA_ID = Meta.DingoCommonId.newBuilder()
+            .setEntityType(Meta.EntityType.ENTITY_TYPE_SCHEMA)
+            .setEntityId(Meta.ReservedSchemaIds.ROOT_SCHEMA_VALUE)
+            .setParentEntityId(0)
+            .build();
+
+    private static final Meta.DingoCommonId DINGO_SCHEMA_ID = Meta.DingoCommonId.newBuilder()
             .setEntityType(Meta.EntityType.ENTITY_TYPE_SCHEMA)
             .setEntityId(Meta.ReservedSchemaIds.DINGO_SCHEMA_VALUE)
             .setParentEntityId(0)
@@ -50,12 +58,13 @@ public class MetaServiceClient {
 
     private final Map<String, Meta.DingoCommonId> metaServiceIdCache = new ConcurrentSkipListMap<>();
     private final Map<Meta.DingoCommonId, Table> tableDefinitionCache = new ConcurrentHashMap<>();
-    private final Map<Meta.DingoCommonId, MetaServiceClient> metaServiceCache = new ConcurrentSkipListMap<>();
+    private final Map<Meta.DingoCommonId, MetaServiceClient> metaServiceCache = new ConcurrentHashMap<>();
     private final Map<String, Meta.DingoCommonId> tableIdCache = new ConcurrentHashMap<>();
 
     private MetaServiceGrpc.MetaServiceBlockingStub metaBlockingStub;
 
     private String ROOT_NAME = "DINGO_ROOT";
+    private Meta.DingoCommonId parentId;
     @Getter
     private Meta.DingoCommonId id;
     @Getter
@@ -64,22 +73,36 @@ public class MetaServiceClient {
     private ServiceConnector connector;
 
     public MetaServiceClient(ServiceConnector connector) {
+        this.parentId = ROOT_SCHEMA_ID;
         this.id = DINGO_SCHEMA_ID;
         this.name = ROOT_NAME;
         this.connector = connector;
         this.connector.initConnection();
         this.metaBlockingStub = this.connector.getMetaBlockingStub();
+        Executors.execute("meta-service-client-reload", this::reload);
     }
 
     public MetaServiceClient(Meta.DingoCommonId id, String name, ServiceConnector connector) {
+        this.parentId = ROOT_SCHEMA_ID;
         this.connector = connector;
         this.id = id;
         this.name = name;
-        // TODO reload
+        this.metaBlockingStub = connector.getMetaBlockingStub();
     }
 
     public void close() {
         connector.shutdown();
+    }
+
+    private synchronized void reload() {
+        if (!tableDefinitionCache.isEmpty() || !metaServiceCache.isEmpty()) {
+            return;
+        }
+        if (id == null) {
+            id = DINGO_SCHEMA_ID;
+        }
+        this.getSchemas(parentId).forEach(this::addMetaServiceCache);
+        this.getTableDefinitions(id).forEach(this::addTableCache);
     }
 
     private void addMetaServiceCache(Meta.Schema schema) {
@@ -89,9 +112,9 @@ public class MetaServiceClient {
         );
     }
 
-    public void createSchema(String name) {
+    public void createSubMetaService(String name) {
         Meta.CreateSchemaRequest request = Meta.CreateSchemaRequest.newBuilder()
-                .setParentSchemaId(id)
+                .setParentSchemaId(parentId)
                 .setSchemaName(name)
                 .build();
 
@@ -101,16 +124,28 @@ public class MetaServiceClient {
         addMetaServiceCache(schema);
     }
 
-    public Map<String, MetaServiceClient> getMetaServices() {
+    public List<Meta.Schema> getSchemas(Meta.DingoCommonId id) {
+        Meta.GetSchemasRequest request = Meta.GetSchemasRequest.newBuilder()
+                .setSchemaId(id)
+                .build();
+
+        Meta.GetSchemasResponse response = metaBlockingStub.getSchemas(request);
+        return response.getSchemasList();
+    }
+
+    public Map<String, MetaServiceClient> getSubMetaServices() {
         return metaServiceCache.values().stream()
                 .collect(Collectors.toMap(MetaServiceClient::name, Function.identity()));
     }
 
-    public MetaServiceClient getMetaService(String name) {
+    public MetaServiceClient getSubMetaService(String name) {
         MetaServiceClient metaService = Optional.mapOrNull(metaServiceIdCache.get(name), metaServiceCache::get);
         if (metaService == null) {
             Meta.GetSchemaByNameRequest request = Meta.GetSchemaByNameRequest.newBuilder().setSchemaName(name).build();
             Meta.GetSchemaByNameResponse response = metaBlockingStub.getSchemaByName(request);
+            if (response.getSchema().getName().isEmpty()) {
+                return null;
+            }
             metaService = Optional.ofNullable(response.getSchema())
                     .ifPresent(this::addMetaServiceCache)
                     .map(Meta.Schema::getId)
@@ -119,7 +154,7 @@ public class MetaServiceClient {
         return metaService;
     }
 
-    public boolean dropSchema(String name) {
+    public boolean dropSubMetaService(String name) {
         return Optional.ofNullable(metaServiceIdCache.get(name))
                 .map(schemaId -> {
                     Meta.DropSchemaRequest request = Meta.DropSchemaRequest.newBuilder()
@@ -201,10 +236,19 @@ public class MetaServiceClient {
 
     public Map<String, Table> getTableDefinitions() {
         if (tableDefinitionCache.isEmpty()) {
-            // TODO reload
+            reload();
         }
         return tableDefinitionCache.values().stream()
                 .collect(Collectors.toMap(Table::getName, Function.identity()));
+    }
+
+    private List<Meta.TableDefinitionWithId> getTableDefinitions(Meta.DingoCommonId id) {
+        Meta.GetTablesRequest request = Meta.GetTablesRequest.newBuilder()
+                .setSchemaId(id)
+                .build();
+
+        Meta.GetTablesResponse response = metaBlockingStub.getTables(request);
+        return response.getTableDefinitionWithIdsList();
     }
 
     public Table getTableDefinition(@NonNull String name) {
@@ -235,9 +279,9 @@ public class MetaServiceClient {
 
         Meta.GetTableRangeResponse response = metaBlockingStub.getTableRange(request);
 
-        for (Meta.RangeDistribution tablePart : response.getTableRange().getRangeDistributionList() ) {
+        for (Meta.RangeDistribution tablePart : response.getTableRange().getRangeDistributionList()) {
             result.put(new ByteArrayUtils.ComparableByteArray(
-                    tablePart.getRange().getStartKey().toByteArray()),
+                            tablePart.getRange().getStartKey().toByteArray()),
                     tablePart);
         }
         return result;
@@ -245,14 +289,14 @@ public class MetaServiceClient {
 
     public TableMetrics getTableMetrics(String tableName) {
         return Optional.ofNullable(getTableId(tableName))
-            .map(tableId -> {
-                Meta.GetTableMetricsRequest request = Meta.GetTableMetricsRequest.newBuilder()
-                    .setTableId(tableId)
-                    .build();
-                Meta.GetTableMetricsResponse response = metaBlockingStub.getTableMetrics(request);
-                Meta.TableMetricsWithId metrics = response.getTableMetrics();
-                return metrics.getTableMetrics();
-            })
-            .mapOrNull(EntityConversion::mapping);
+                .map(tableId -> {
+                    Meta.GetTableMetricsRequest request = Meta.GetTableMetricsRequest.newBuilder()
+                            .setTableId(tableId)
+                            .build();
+                    Meta.GetTableMetricsResponse response = metaBlockingStub.getTableMetrics(request);
+                    Meta.TableMetricsWithId metrics = response.getTableMetrics();
+                    return metrics.getTableMetrics();
+                })
+                .mapOrNull(EntityConversion::mapping);
     }
 }

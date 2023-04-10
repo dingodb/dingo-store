@@ -22,14 +22,16 @@ public class UnifyStoreConnection {
 
     private MetaClient metaClient;
     private Integer retryTimes;
+    private String schema;
 
-    public UnifyStoreConnection(String coordinatorSvr, Integer retryTimes) {
+    public UnifyStoreConnection(String coordinatorSvr, String schema, Integer retryTimes) {
         this.metaClient = new MetaClient(coordinatorSvr);
         this.retryTimes = retryTimes;
+        this.schema = schema;
     }
 
     public void initConnection() {
-        this.metaClient.init();
+        this.metaClient.init(schema);
     }
 
     public MetaClient getMetaClient() {
