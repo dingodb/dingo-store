@@ -33,6 +33,7 @@
 #include "google/protobuf/unknown_field_set.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator_internal.pb.h"
+#include "proto/error.pb.h"
 #include "proto/meta.pb.h"
 #include "proto/node.pb.h"
 
@@ -104,20 +105,21 @@ bool CoordinatorControl::ValidateSchema(uint64_t schema_id) {
 // in: schema_name
 // out: new_schema_id
 // out: meta_increment
-// return 0 if success
-// return -1 if failed
-int CoordinatorControl::CreateSchema(uint64_t parent_schema_id, std::string schema_name, uint64_t& new_schema_id,
-                                     pb::coordinator_internal::MetaIncrement& meta_increment) {
+// return OK if success
+// return other if failed
+pb::error::Errno CoordinatorControl::CreateSchema(uint64_t parent_schema_id, std::string schema_name,
+                                                  uint64_t& new_schema_id,
+                                                  pb::coordinator_internal::MetaIncrement& meta_increment) {
   // validate if parent_schema_id is root schema
   // only root schema can have sub schema
   if (parent_schema_id != ::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA) {
     DINGO_LOG(ERROR) << " CreateSchema parent_schema_id is not root schema " << parent_schema_id;
-    return -1;
+    return pb::error::Errno::EILLEGAL_PARAMTETERS;
   }
 
   if (schema_name.empty()) {
     DINGO_LOG(INFO) << " CreateSchema schema_name is illegal " << schema_name;
-    return -1;
+    return pb::error::Errno::EILLEGAL_PARAMTETERS;
   }
 
   // check if schema_name exists
@@ -125,7 +127,7 @@ int CoordinatorControl::CreateSchema(uint64_t parent_schema_id, std::string sche
   schema_name_map_safe_temp_.Get(schema_name, value);
   if (value != 0) {
     DINGO_LOG(INFO) << " CreateSchema schema_name is exist " << schema_name;
-    return -1;
+    return pb::error::Errno::ESCHEMA_EXISTS;
   }
 
   // create new schema id
@@ -135,7 +137,7 @@ int CoordinatorControl::CreateSchema(uint64_t parent_schema_id, std::string sche
   if (schema_name_map_safe_temp_.PutIfAbsent(schema_name, new_schema_id) < 0) {
     DINGO_LOG(INFO) << " CreateSchema schema_name" << schema_name
                     << " is exist, when insert new_schema_id=" << new_schema_id;
-    return -1;
+    return pb::error::Errno::ESCHEMA_EXISTS;
   }
 
   // add new schema to  schema_map_
@@ -158,7 +160,7 @@ int CoordinatorControl::CreateSchema(uint64_t parent_schema_id, std::string sche
   // on_apply
   //  schema_map_.insert(std::make_pair(new_schema_id, new_schema));  // raft_kv_put
 
-  return 0;
+  return pb::error::Errno::OK;
 }
 
 // DropSchema
@@ -166,16 +168,16 @@ int CoordinatorControl::CreateSchema(uint64_t parent_schema_id, std::string sche
 // in: parent_schema_id
 // in: schema_id
 // return: 0 or -1
-int CoordinatorControl::DropSchema(uint64_t parent_schema_id, uint64_t schema_id,
-                                   pb::coordinator_internal::MetaIncrement& meta_increment) {
+pb::error::Errno CoordinatorControl::DropSchema(uint64_t parent_schema_id, uint64_t schema_id,
+                                                pb::coordinator_internal::MetaIncrement& meta_increment) {
   if (schema_id <= COORDINATOR_ID_OF_MAP_MIN) {
     DINGO_LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
-    return -1;
+    return pb::error::Errno::EILLEGAL_PARAMTETERS;
   }
 
   if (parent_schema_id < 0) {
     DINGO_LOG(ERROR) << "ERRROR: parent_schema_id illegal " << schema_id;
-    return -1;
+    return pb::error::Errno::EILLEGAL_PARAMTETERS;
   }
 
   pb::coordinator_internal::SchemaInternal schema_internal;
@@ -184,13 +186,13 @@ int CoordinatorControl::DropSchema(uint64_t parent_schema_id, uint64_t schema_id
     auto* schema_to_delete = schema_map_.seek(schema_id);
     if (schema_to_delete == nullptr) {
       DINGO_LOG(ERROR) << "ERRROR: schema_id not found" << schema_id;
-      return -1;
+      return pb::error::Errno::ESCHEMA_NOT_FOUND;
     }
 
     if (schema_to_delete->table_ids_size() > 0) {
       DINGO_LOG(ERROR) << "ERRROR: schema is not null" << schema_id
                        << " table_ids_size=" << schema_to_delete->table_ids_size();
-      return -1;
+      return pb::error::Errno::ESCHEMA_NOT_EMPTY;
     }
     // construct schema from schema_internal
     schema_internal = *schema_to_delete;
@@ -211,7 +213,7 @@ int CoordinatorControl::DropSchema(uint64_t parent_schema_id, uint64_t schema_id
   // delete schema_name from schema_name_map_safe_temp_
   schema_name_map_safe_temp_.Erase(schema_internal.name());
 
-  return 0;
+  return pb::error::Errno::OK;
 }
 
 // GetSchemas
@@ -322,14 +324,14 @@ void CoordinatorControl::GetSchemaByName(const std::string& schema_name, pb::met
 // in: schema_id
 // out: new_table_id, meta_increment
 // return: 0 success, -1 failed
-int CoordinatorControl::CreateTableId(uint64_t schema_id, uint64_t& new_table_id,
-                                      pb::coordinator_internal::MetaIncrement& meta_increment) {
+pb::error::Errno CoordinatorControl::CreateTableId(uint64_t schema_id, uint64_t& new_table_id,
+                                                   pb::coordinator_internal::MetaIncrement& meta_increment) {
   // validate schema_id is existed
   {
     BAIDU_SCOPED_LOCK(schema_map_mutex_);
     if (schema_map_.seek(schema_id) == nullptr) {
       DINGO_LOG(ERROR) << "schema_id is illegal " << schema_id;
-      return -1;
+      return pb::error::Errno::EILLEGAL_PARAMTETERS;
     }
   }
 
@@ -337,48 +339,49 @@ int CoordinatorControl::CreateTableId(uint64_t schema_id, uint64_t& new_table_id
   new_table_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_TABLE, meta_increment);
   DINGO_LOG(INFO) << "CreateTableId new_table_id=" << new_table_id;
 
-  return 0;
+  return pb::error::Errno::OK;
 }
 
 // CreateTable
 // in: schema_id, table_definition
 // out: new_table_id, meta_increment
 // return: 0 success, -1 failed
-int CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta::TableDefinition& table_definition,
-                                    uint64_t& new_table_id, pb::coordinator_internal::MetaIncrement& meta_increment) {
+pb::error::Errno CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta::TableDefinition& table_definition,
+                                                 uint64_t& new_table_id,
+                                                 pb::coordinator_internal::MetaIncrement& meta_increment) {
   // validate schema
   // root schema cannot create table
   if (schema_id < 0 || schema_id == ::dingodb::pb::meta::ROOT_SCHEMA) {
     DINGO_LOG(ERROR) << "schema_id is illegal " << schema_id;
-    return -1;
+    return pb::error::Errno::EILLEGAL_PARAMTETERS;
   }
 
   {
     BAIDU_SCOPED_LOCK(schema_map_mutex_);
     if (schema_map_.seek(schema_id) == nullptr) {
       DINGO_LOG(ERROR) << "schema_id is illegal " << schema_id;
-      return -1;
+      return pb::error::Errno::EILLEGAL_PARAMTETERS;
     }
   }
 
   // validate part information
   if (!table_definition.has_table_partition()) {
     DINGO_LOG(ERROR) << "no table_partition provided ";
-    return -1;
+    return pb::error::Errno::ETABLE_DEFINITION_ILLEGAL;
   }
   auto const& table_partition = table_definition.table_partition();
   if (table_partition.has_hash_partition()) {
     DINGO_LOG(ERROR) << "hash_partiton is not supported";
-    return -1;
+    return pb::error::Errno::ETABLE_DEFINITION_ILLEGAL;
   } else if (!table_partition.has_range_partition()) {
     DINGO_LOG(ERROR) << "no range_partition provided ";
-    return -1;
+    return pb::error::Errno::ETABLE_DEFINITION_ILLEGAL;
   }
 
   auto const& range_partition = table_partition.range_partition();
   if (range_partition.ranges_size() == 0) {
     DINGO_LOG(ERROR) << "no range provided ";
-    return -1;
+    return pb::error::Errno::ETABLE_DEFINITION_ILLEGAL;
   }
 
   // check if table_name exists
@@ -386,7 +389,7 @@ int CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta::TableDef
   table_name_map_safe_temp_.Get(table_definition.name(), value);
   if (value != 0) {
     DINGO_LOG(INFO) << " Createtable table_name is exist " << table_definition.name();
-    return -1;
+    return pb::error::Errno::ETABLE_EXISTS;
   }
 
   // if new_table_id is not given, create a new table_id
@@ -399,7 +402,7 @@ int CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta::TableDef
   if (table_name_map_safe_temp_.PutIfAbsent(table_definition.name(), new_table_id) < 0) {
     DINGO_LOG(INFO) << " CreateTable table_name" << table_definition.name()
                     << " is exist, when insert new_table_id=" << new_table_id;
-    return -1;
+    return pb::error::Errno::ETABLE_EXISTS;
   }
 
   // create table
@@ -433,7 +436,10 @@ int CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta::TableDef
                          << " region_id =" << region_id_to_delete;
       }
     }
-    return -1;
+
+    // remove table_name from map
+    table_name_map_safe_temp_.Erase(table_definition.name());
+    return pb::error::Errno::ETABLE_REGION_CREATE_FAILED;
   }
 
   // bumper up EPOCH_REGION
@@ -476,23 +482,23 @@ int CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta::TableDef
   // table_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
   // raft_kv_put
 
-  return 0;
+  return pb::error::Errno::OK;
 }
 
 // DropTable
 // in: schema_id, table_id
 // out: meta_increment
-// return: 0 success, -1 fail
-int CoordinatorControl::DropTable(uint64_t schema_id, uint64_t table_id,
-                                  pb::coordinator_internal::MetaIncrement& meta_increment) {
+// return: errno
+pb::error::Errno CoordinatorControl::DropTable(uint64_t schema_id, uint64_t table_id,
+                                               pb::coordinator_internal::MetaIncrement& meta_increment) {
   if (schema_id < 0) {
     DINGO_LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
-    return -1;
+    return pb::error::Errno::EILLEGAL_PARAMTETERS;
   }
 
   if (!ValidateSchema(schema_id)) {
     DINGO_LOG(ERROR) << "ERRROR: schema_id not valid" << schema_id;
-    return -1;
+    return pb::error::Errno::EILLEGAL_PARAMTETERS;
   }
 
   pb::coordinator_internal::TableInternal table_internal;
@@ -501,7 +507,7 @@ int CoordinatorControl::DropTable(uint64_t schema_id, uint64_t table_id,
     auto* temp_table = table_map_.seek(table_id);
     if (temp_table == nullptr) {
       DINGO_LOG(ERROR) << "ERRROR: table_id not found" << table_id;
-      return -1;
+      return pb::error::Errno::ETABLE_NOT_FOUND;
     }
 
     // construct Table from table_internal
@@ -519,7 +525,7 @@ int CoordinatorControl::DropTable(uint64_t schema_id, uint64_t table_id,
       if (region_map_.seek(region_id) == nullptr) {
         DINGO_LOG(ERROR) << "ERROR cannot find region in regionmap_ while DropTable, table_id =" << table_id
                          << " region_id=" << region_id;
-        return -1;
+        return pb::error::Errno::ETABLE_REGION_DROP_FAILED;
       }
 
       // update region to DELETE, not delete region really, not
@@ -555,7 +561,7 @@ int CoordinatorControl::DropTable(uint64_t schema_id, uint64_t table_id,
   // delete table_name from table_name_safe_map_temp_
   table_name_map_safe_temp_.Erase(table_internal.definition().name());
 
-  return 0;
+  return pb::error::Errno::OK;
 }
 
 // get tables

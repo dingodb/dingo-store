@@ -38,6 +38,7 @@
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
 #include "proto/coordinator_internal.pb.h"
+#include "proto/error.pb.h"
 #include "proto/meta.pb.h"
 #include "raft/raft_node.h"
 
@@ -83,31 +84,31 @@ class CoordinatorControl : public MetaControl {
   // in: parent_schema_id
   // in: schema_name
   // out: new schema_id
-  // return: 0 or -1
-  int CreateSchema(uint64_t parent_schema_id, std::string schema_name, uint64_t &new_schema_id,
-                   pb::coordinator_internal::MetaIncrement &meta_increment);
+  // return: errno
+  pb::error::Errno CreateSchema(uint64_t parent_schema_id, std::string schema_name, uint64_t &new_schema_id,
+                                pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // drop schema
   // in: parent_schema_id
   // in: schema_id
   // return: 0 or -1
-  int DropSchema(uint64_t parent_schema_id, uint64_t schema_id,
-                 pb::coordinator_internal::MetaIncrement &meta_increment);
+  pb::error::Errno DropSchema(uint64_t parent_schema_id, uint64_t schema_id,
+                              pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // create schema
   // in: schema_id
   // out: new table_id
-  // return: 0 or -1
-  int CreateTableId(uint64_t schema_id, uint64_t &new_table_id,
-                    pb::coordinator_internal::MetaIncrement &meta_increment);
+  // return: errno
+  pb::error::Errno CreateTableId(uint64_t schema_id, uint64_t &new_table_id,
+                                 pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // create schema
   // in: schema_id
   // in: table_definition
   // out: new table_id
-  // return: 0 or -1
-  int CreateTable(uint64_t schema_id, const pb::meta::TableDefinition &table_definition, uint64_t &new_table_id,
-                  pb::coordinator_internal::MetaIncrement &meta_increment);
+  // return: errno
+  pb::error::Errno CreateTable(uint64_t schema_id, const pb::meta::TableDefinition &table_definition,
+                               uint64_t &new_table_id, pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // create store
   // in: cluster_id
@@ -215,8 +216,9 @@ class CoordinatorControl : public MetaControl {
   // in: schema_id
   // in: table_id
   // out: meta_increment
-  // return: 0 or -1
-  int DropTable(uint64_t schema_id, uint64_t table_id, pb::coordinator_internal::MetaIncrement &meta_increment);
+  // return: errno
+  pb::error::Errno DropTable(uint64_t schema_id, uint64_t table_id,
+                             pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // get coordinator_map
   void GetCoordinatorMap(uint64_t cluster_id, uint64_t &epoch, pb::common::Location &leader_location,
