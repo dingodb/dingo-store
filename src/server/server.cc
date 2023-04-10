@@ -199,7 +199,12 @@ bool Server::InitCrontabManager() {
   std::shared_ptr<Crontab> crontab = std::make_shared<Crontab>();
   auto config = ConfigManager::GetInstance()->GetConfig(role_);
   crontab->name = "HEARTBEA";
-  crontab->interval = config->GetInt("server.pushInterval");
+  uint64_t push_interval = config->GetInt("server.pushInterval");
+  if (push_interval <= 0) {
+    DINGO_LOG(INFO) << "server.pushInterval illegal";
+    return false;
+  }
+  crontab->interval = push_interval;
   crontab->func = Heartbeat::SendStoreHeartbeat;
   crontab->arg = coordinator_interaction_.get();
 
@@ -217,7 +222,12 @@ bool Server::InitCrontabManagerForCoordinator() {
   // add push crontab
   std::shared_ptr<Crontab> crontab = std::make_shared<Crontab>();
   crontab->name = "PUSH";
-  crontab->interval = config->GetInt("server.pushInterval");
+  uint64_t push_interval = config->GetInt("server.pushInterval");
+  if (push_interval <= 0) {
+    DINGO_LOG(INFO) << "server.pushInterval illegal";
+    return false;
+  }
+  crontab->interval = push_interval;
   crontab->func = Heartbeat::SendCoordinatorPushToStore;
   crontab->arg = coordinator_control_.get();
 
@@ -226,7 +236,7 @@ bool Server::InitCrontabManagerForCoordinator() {
   // add calculate crontab
   std::shared_ptr<Crontab> crontab_calc = std::make_shared<Crontab>();
   crontab_calc->name = "CALCULATE";
-  crontab_calc->interval = config->GetInt("server.pushInterval") * 60;
+  crontab_calc->interval = push_interval * 60;
   crontab_calc->func = Heartbeat::CalculateTableMetrics;
   crontab_calc->arg = coordinator_control_.get();
 
@@ -268,7 +278,12 @@ bool Server::AddScanToCrontabManager() {
   std::shared_ptr<Crontab> crontab = std::make_shared<Crontab>();
   auto config = ConfigManager::GetInstance()->GetConfig(role_);
   crontab->name = "SCAN";
-  crontab->interval = config->GetInt(Constant::kStoreScan + "." + Constant::kStoreScanScanIntervalMs);
+  uint64_t scan_interval = config->GetInt(Constant::kStoreScan + "." + Constant::kStoreScanScanIntervalMs);
+  if (scan_interval <= 0) {
+    DINGO_LOG(INFO) << "store.scan.scan_interval_ms";
+    return false;
+  }
+  crontab->interval = scan_interval;
   crontab->func = ScanContextFactory::RegularCleaningHandler;
   crontab->arg = ScanContextFactory::GetInstance();
 
