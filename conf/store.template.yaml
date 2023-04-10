@@ -33,3 +33,5 @@ store:
     - default
     - meta
   collectStatsInterval: 5
+  scan:
+    scan_interval_ms: 30000 # ms
