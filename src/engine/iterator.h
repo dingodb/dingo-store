@@ -22,12 +22,12 @@
 namespace dingodb {
 
 enum class IteratorType {
-  RAW_ROCKS_ENGINE = 0,
-  RAW_XDP_ENGINE = 1,
-  MEM_ENGINE = 2,
-  ROCKS_ENGINE = 3,
-  RAFT_ENGINE = 4,
-  COLUMNAR_ENGINE = 5,
+  kRawRocksEngine = 0,
+  kRawXdpEngine = 1,
+  kMemEngine = 2,
+  kRocksEngine = 3,
+  kRaftEngine = 4,
+  kColumnarEngine = 5,
 };
 
 struct IteratorOptions {

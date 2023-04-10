@@ -280,7 +280,7 @@ bool Server::AddScanToCrontabManager() {
   crontab->name = "SCAN";
   uint64_t scan_interval = config->GetInt(Constant::kStoreScan + "." + Constant::kStoreScanScanIntervalMs);
   if (scan_interval <= 0) {
-    DINGO_LOG(INFO) << "store.scan.scan_interval_ms";
+    DINGO_LOG(ERROR) << "store.scan.scan_interval_ms";
     return false;
   }
   crontab->interval = scan_interval;

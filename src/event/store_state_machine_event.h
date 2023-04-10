@@ -25,7 +25,7 @@ namespace dingodb {
 
 // State Machine apply event
 struct SmApplyEvent : public Event {
-  SmApplyEvent() : Event(EventSource::RAFT_STATE_MACHINE, EventType::SM_APPLY) {}
+  SmApplyEvent() : Event(EventSource::kRaftStateMachine, EventType::kSmApply) {}
   ~SmApplyEvent() override = default;
 
   std::shared_ptr<RawEngine> engine;
@@ -39,7 +39,7 @@ class SmApplyEventListener : public EventListener {
       : handler_collection_(handler_collection) {}
   ~SmApplyEventListener() override = default;
 
-  EventType GetType() override { return EventType::SM_APPLY; }
+  EventType GetType() override { return EventType::kSmApply; }
   void OnEvent(std::shared_ptr<Event> event) override;
 
  private:
@@ -48,7 +48,7 @@ class SmApplyEventListener : public EventListener {
 
 // State Machine Shutdown
 struct SmShutdownEvent : public Event {
-  SmShutdownEvent() : Event(EventSource::RAFT_STATE_MACHINE, EventType::SM_SHUTDOWN) {}
+  SmShutdownEvent() : Event(EventSource::kRaftStateMachine, EventType::kSmShutdown) {}
   ~SmShutdownEvent() override = default;
 };
 
@@ -57,13 +57,13 @@ class SmShutdownEventListener : public EventListener {
   SmShutdownEventListener() = default;
   ~SmShutdownEventListener() override = default;
 
-  EventType GetType() override { return EventType::SM_SHUTDOWN; }
+  EventType GetType() override { return EventType::kSmShutdown; }
   void OnEvent(std::shared_ptr<Event> event) override {}
 };
 
 // State Machine SnapshotSave
 struct SmSnapshotSaveEvent : public Event {
-  SmSnapshotSaveEvent() : Event(EventSource::RAFT_STATE_MACHINE, EventType::SM_SNAPSHOT_SAVE) {}
+  SmSnapshotSaveEvent() : Event(EventSource::kRaftStateMachine, EventType::kSmSnapshotSave) {}
   ~SmSnapshotSaveEvent() override = default;
 
   std::shared_ptr<RawEngine> engine;
@@ -77,7 +77,7 @@ class SmSnapshotSaveEventListener : public EventListener {
   SmSnapshotSaveEventListener(std::shared_ptr<Handler> handler) : handler_(handler) {}
   ~SmSnapshotSaveEventListener() override = default;
 
-  EventType GetType() override { return EventType::SM_SNAPSHOT_SAVE; }
+  EventType GetType() override { return EventType::kSmSnapshotSave; }
   void OnEvent(std::shared_ptr<Event> event) override;
 
  private:
@@ -86,7 +86,7 @@ class SmSnapshotSaveEventListener : public EventListener {
 
 // State Machine SnapshotLoad
 struct SmSnapshotLoadEvent : public Event {
-  SmSnapshotLoadEvent() : Event(EventSource::RAFT_STATE_MACHINE, EventType::SM_SNAPSHOT_LOAD) {}
+  SmSnapshotLoadEvent() : Event(EventSource::kRaftStateMachine, EventType::kSmSnapshotLoad) {}
   ~SmSnapshotLoadEvent() override = default;
 
   std::shared_ptr<RawEngine> engine;
@@ -99,7 +99,7 @@ class SmSnapshotLoadEventListener : public EventListener {
   SmSnapshotLoadEventListener(std::shared_ptr<Handler> handler) : handler_(handler) {}
   ~SmSnapshotLoadEventListener() override = default;
 
-  EventType GetType() override { return EventType::SM_SNAPSHOT_LOAD; }
+  EventType GetType() override { return EventType::kSmSnapshotLoad; }
   void OnEvent(std::shared_ptr<Event> event) override;
 
  private:
@@ -108,7 +108,7 @@ class SmSnapshotLoadEventListener : public EventListener {
 
 // State Machine LeaderStart
 struct SmLeaderStartEvent : public Event {
-  SmLeaderStartEvent() : Event(EventSource::RAFT_STATE_MACHINE, EventType::SM_LEADER_START) {}
+  SmLeaderStartEvent() : Event(EventSource::kRaftStateMachine, EventType::kSmLeaderStart) {}
   ~SmLeaderStartEvent() override = default;
 
   int64_t term;
@@ -120,13 +120,13 @@ class SmLeaderStartEventListener : public EventListener {
   SmLeaderStartEventListener() = default;
   ~SmLeaderStartEventListener() override = default;
 
-  EventType GetType() override { return EventType::SM_LEADER_START; }
+  EventType GetType() override { return EventType::kSmLeaderStart; }
   void OnEvent(std::shared_ptr<Event> event) override;
 };
 
 // State Machine LeaderStop
 struct SmLeaderStopEvent : public Event {
-  SmLeaderStopEvent() : Event(EventSource::RAFT_STATE_MACHINE, EventType::SM_LEADER_STOP) {}
+  SmLeaderStopEvent() : Event(EventSource::kRaftStateMachine, EventType::kSmLeaderStop) {}
   ~SmLeaderStopEvent() override = default;
 
   butil::Status status;
@@ -137,13 +137,13 @@ class SmLeaderStopEventListener : public EventListener {
   SmLeaderStopEventListener() = default;
   ~SmLeaderStopEventListener() override = default;
 
-  EventType GetType() override { return EventType::SM_LEADER_STOP; }
+  EventType GetType() override { return EventType::kSmLeaderStop; }
   void OnEvent(std::shared_ptr<Event> event) override {}
 };
 
 // State Machine Error
 struct SmErrorEvent : public Event {
-  SmErrorEvent() : Event(EventSource::RAFT_STATE_MACHINE, EventType::SM_ERROR) {}
+  SmErrorEvent() : Event(EventSource::kRaftStateMachine, EventType::kSmError) {}
   ~SmErrorEvent() override = default;
 
   braft::Error e;
@@ -154,13 +154,13 @@ class SmErrorEventListener : public EventListener {
   SmErrorEventListener() = default;
   ~SmErrorEventListener() override = default;
 
-  EventType GetType() override { return EventType::SM_ERROR; }
+  EventType GetType() override { return EventType::kSmError; }
   void OnEvent(std::shared_ptr<Event> event) override {}
 };
 
 // State Machine ConfigurationCommitted
 struct SmConfigurationCommittedEvent : public Event {
-  SmConfigurationCommittedEvent() : Event(EventSource::RAFT_STATE_MACHINE, EventType::SM_CONFIGURATION_COMMITTED) {}
+  SmConfigurationCommittedEvent() : Event(EventSource::kRaftStateMachine, EventType::kSmConfigurationCommited) {}
   ~SmConfigurationCommittedEvent() override = default;
 
   braft::Configuration conf;
@@ -171,14 +171,14 @@ class SmConfigurationCommittedEventListener : public EventListener {
   SmConfigurationCommittedEventListener() = default;
   ~SmConfigurationCommittedEventListener() override = default;
 
-  EventType GetType() override { return EventType::SM_CONFIGURATION_COMMITTED; }
+  EventType GetType() override { return EventType::kSmConfigurationCommited; }
   void OnEvent(std::shared_ptr<Event> event) override {}
 };
 
 // State Machine StartFollowing
 struct SmStartFollowingEvent : public Event {
   SmStartFollowingEvent(const braft::LeaderChangeContext& ctx)
-      : Event(EventSource::RAFT_STATE_MACHINE, EventType::SM_START_FOLLOWING), ctx(ctx) {}
+      : Event(EventSource::kRaftStateMachine, EventType::kSmStartFollowing), ctx(ctx) {}
   ~SmStartFollowingEvent() override = default;
 
   const braft::LeaderChangeContext& ctx;
@@ -190,14 +190,14 @@ class SmStartFollowingEventListener : public EventListener {
   SmStartFollowingEventListener() = default;
   ~SmStartFollowingEventListener() override = default;
 
-  EventType GetType() override { return EventType::SM_START_FOLLOWING; }
+  EventType GetType() override { return EventType::kSmStartFollowing; }
   void OnEvent(std::shared_ptr<Event> event) override;
 };
 
 // State Machine StopFollowing
 struct SmStopFollowingEvent : public Event {
   SmStopFollowingEvent(const braft::LeaderChangeContext& ctx)
-      : Event(EventSource::RAFT_STATE_MACHINE, EventType::SM_STOP_FOLLOWING), ctx(ctx) {}
+      : Event(EventSource::kRaftStateMachine, EventType::kSmStopFollowing), ctx(ctx) {}
   ~SmStopFollowingEvent() override = default;
 
   const braft::LeaderChangeContext& ctx;
@@ -208,7 +208,7 @@ class SmStopFollowingEventListener : public EventListener {
   SmStopFollowingEventListener() = default;
   ~SmStopFollowingEventListener() override = default;
 
-  EventType GetType() override { return EventType::SM_STOP_FOLLOWING; }
+  EventType GetType() override { return EventType::kSmStopFollowing; }
   void OnEvent(std::shared_ptr<Event> event) override {}
 };
 

@@ -41,36 +41,36 @@ namespace dingodb {
 
 // Event source, like raft state machine.
 enum class EventSource {
-  RAFT_STATE_MACHINE,
+  kRaftStateMachine,
 };
 
 // Event type
 enum class EventType {
   // Raft state machine event.
-  SM_APPLY,
-  SM_SHUTDOWN,
-  SM_SNAPSHOT_SAVE,
-  SM_SNAPSHOT_LOAD,
-  SM_LEADER_START,
-  SM_LEADER_STOP,
-  SM_ERROR,
-  SM_CONFIGURATION_COMMITTED,
-  SM_START_FOLLOWING,
-  SM_STOP_FOLLOWING,
+  kSmApply,
+  kSmShutdown,
+  kSmSnapshotSave,
+  kSmSnapshotLoad,
+  kSmLeaderStart,
+  kSmLeaderStop,
+  kSmError,
+  kSmConfigurationCommited,
+  kSmStartFollowing,
+  kSmStopFollowing,
 };
 
 // Event abstract class.
 struct Event {
-  Event(EventSource source, EventType type) : id_(Helper::GenId()), source_(source), type_(type) {}
+  Event(EventSource source, EventType type) : id(Helper::GenId()), source(source), type(type) {}
   virtual ~Event() = default;
 
-  uint64_t GetID() const { return id_; }
-  EventSource GetSource() const { return source_; }
-  EventType GetType() const { return type_; }
+  uint64_t GetID() const { return id; }
+  EventSource GetSource() const { return source; }
+  EventType GetType() const { return type; }
 
-  uint64_t id_;
-  EventSource source_;
-  EventType type_;
+  uint64_t id;
+  EventSource source;
+  EventType type;
 };
 
 // Event listerner abstract class.
@@ -85,7 +85,7 @@ class EventListener {
   virtual EventType GetType() = 0;
   virtual void OnEvent(std::shared_ptr<Event> event) = 0;
 
- protected:
+ private:
   uint64_t id_;
 };
 

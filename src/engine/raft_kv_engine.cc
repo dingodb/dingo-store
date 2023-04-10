@@ -157,7 +157,7 @@ butil::Status RaftKvEngine::Write(std::shared_ptr<Context> ctx, const WriteData&
   return butil::Status();
 }
 
-butil::Status RaftKvEngine::AsyncWrite(std::shared_ptr<Context> ctx, const WriteData& write_data, WriteCb_t cb) {
+butil::Status RaftKvEngine::AsyncWrite(std::shared_ptr<Context> ctx, const WriteData& write_data, WriteCbFunc cb) {
   auto node = raft_node_manager_->GetNode(ctx->RegionId());
   if (node == nullptr) {
     DINGO_LOG(ERROR) << "Not found raft node " << ctx->RegionId();

@@ -14,6 +14,8 @@
 
 #include "raft/store_state_machine.h"
 
+#include <memory>
+
 #include "braft/util.h"
 #include "butil/strings/stringprintf.h"
 #include "common/helper.h"
@@ -28,6 +30,8 @@ const int kSaveAppliedIndexStep = 10;
 namespace dingodb {
 
 void StoreClosure::Run() {
+  // Delete self after run
+  std::unique_ptr<StoreClosure> self_guard(this);
   brpc::ClosureGuard const done_guard(ctx_->IsSyncMode() ? nullptr : ctx_->Done());
   if (!status().ok()) {
     DINGO_LOG(ERROR) << butil::StringPrintf("raft log commit failed, region[%ld] %d:%s", ctx_->RegionId(),
@@ -40,7 +44,7 @@ void StoreClosure::Run() {
     ctx_->Cond()->DecreaseSignal();
   } else {
     if (ctx_->WriteCb()) {
-      ctx_->WriteCb()(ctx_->Status());
+      ctx_->WriteCb()(ctx_, ctx_->Status());
     }
   }
 }
@@ -101,7 +105,7 @@ void StoreStateMachine::on_apply(braft::Iterator& iter) {
     event->done = iter.done();
     event->raft_cmd = raft_cmd;
 
-    DispatchEvent(EventType::SM_APPLY, event);
+    DispatchEvent(EventType::kSmApply, event);
     applied_term_ = iter.term();
     applied_index_ = iter.index();
   }
@@ -120,7 +124,7 @@ void StoreStateMachine::on_apply(braft::Iterator& iter) {
 void StoreStateMachine::on_shutdown() {
   DINGO_LOG(INFO) << "on_shutdown...";
   auto event = std::make_shared<SmShutdownEvent>();
-  DispatchEvent(EventType::SM_SHUTDOWN, event);
+  DispatchEvent(EventType::kSmShutdown, event);
 }
 
 void StoreStateMachine::on_snapshot_save(braft::SnapshotWriter* writer, braft::Closure* done) {
@@ -131,7 +135,7 @@ void StoreStateMachine::on_snapshot_save(braft::SnapshotWriter* writer, braft::C
   event->done = done;
   event->node_id = node_id_;
 
-  DispatchEvent(EventType::SM_SNAPSHOT_SAVE, event);
+  DispatchEvent(EventType::kSmSnapshotSave, event);
   DINGO_LOG(INFO) << "on_snapshot_save done...";
 }
 
@@ -164,7 +168,7 @@ int StoreStateMachine::on_snapshot_load(braft::SnapshotReader* reader) {
     event->engine = engine_;
     event->reader = reader;
     event->node_id = node_id_;
-    DispatchEvent(EventType::SM_SNAPSHOT_LOAD, event);
+    DispatchEvent(EventType::kSmSnapshotLoad, event);
     applied_index_ = meta.last_included_index();
   }
 
@@ -178,7 +182,7 @@ void StoreStateMachine::on_leader_start(int64_t term) {
   event->term = term;
   event->node_id = node_id_;
 
-  DispatchEvent(EventType::SM_LEADER_START, event);
+  DispatchEvent(EventType::kSmLeaderStart, event);
 }
 
 void StoreStateMachine::on_leader_stop(const butil::Status& status) {
@@ -186,7 +190,7 @@ void StoreStateMachine::on_leader_stop(const butil::Status& status) {
   auto event = std::make_shared<SmLeaderStopEvent>();
   event->status = status;
 
-  DispatchEvent(EventType::SM_LEADER_STOP, event);
+  DispatchEvent(EventType::kSmLeaderStop, event);
 }
 
 void StoreStateMachine::on_error(const braft::Error& e) {
@@ -196,7 +200,7 @@ void StoreStateMachine::on_error(const braft::Error& e) {
   auto event = std::make_shared<SmErrorEvent>();
   event->e = e;
 
-  DispatchEvent(EventType::SM_ERROR, event);
+  DispatchEvent(EventType::kSmError, event);
 }
 
 void StoreStateMachine::on_configuration_committed(const braft::Configuration& conf) {
@@ -205,7 +209,7 @@ void StoreStateMachine::on_configuration_committed(const braft::Configuration& c
   auto event = std::make_shared<SmConfigurationCommittedEvent>();
   event->conf = conf;
 
-  DispatchEvent(EventType::SM_CONFIGURATION_COMMITTED, event);
+  DispatchEvent(EventType::kSmConfigurationCommited, event);
 }
 
 void StoreStateMachine::on_start_following(const braft::LeaderChangeContext& ctx) {
@@ -213,14 +217,14 @@ void StoreStateMachine::on_start_following(const braft::LeaderChangeContext& ctx
   auto event = std::make_shared<SmStartFollowingEvent>(ctx);
   event->node_id = node_id_;
 
-  DispatchEvent(EventType::SM_START_FOLLOWING, event);
+  DispatchEvent(EventType::kSmStartFollowing, event);
 }
 
 void StoreStateMachine::on_stop_following(const braft::LeaderChangeContext& ctx) {
   DINGO_LOG(INFO) << "on_stop_following...";
   auto event = std::make_shared<SmStopFollowingEvent>(ctx);
 
-  DispatchEvent(EventType::SM_STOP_FOLLOWING, event);
+  DispatchEvent(EventType::kSmStopFollowing, event);
 }
 
 }  // namespace dingodb

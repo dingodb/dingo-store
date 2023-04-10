@@ -157,7 +157,6 @@ void StoreServiceImpl::KvGet(google::protobuf::RpcController* controller,
                              dingodb::pb::store::KvGetResponse* response, google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(INFO) << "KvGet request: " << request->key();
 
   butil::Status status = ValidateKvGetRequest(request);
   if (!status.ok()) {
@@ -210,7 +209,6 @@ void StoreServiceImpl::KvBatchGet(google::protobuf::RpcController* controller,
                                   google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(INFO) << "KvBatchGet request";
 
   butil::Status status = ValidateKvBatchGetRequest(request);
   if (!status.ok()) {
@@ -258,7 +256,6 @@ void StoreServiceImpl::KvPut(google::protobuf::RpcController* controller,
                              dingodb::pb::store::KvPutResponse* response, google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(INFO) << "KvPut request: " << request->kv().key();
 
   butil::Status status = ValidateKvPutRequest(request);
   if (!status.ok()) {
@@ -349,7 +346,7 @@ void StoreServiceImpl::KvPutIfAbsent(google::protobuf::RpcController* controller
                                      pb::store::KvPutIfAbsentResponse* response, google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(INFO) << "KvPutIfAbsent request: ";
+
   butil::Status status = ValidateKvPutIfAbsentRequest(request);
   if (!status.ok()) {
     auto* err = response->mutable_error();
@@ -397,7 +394,6 @@ void StoreServiceImpl::KvBatchPutIfAbsent(google::protobuf::RpcController* contr
                                           google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(INFO) << "KvBatchPutIfAbsent request: ";
 
   butil::Status status = ValidateKvBatchPutIfAbsentRequest(request);
   if (!status.ok()) {
@@ -544,7 +540,6 @@ void StoreServiceImpl::KvScanBegin(google::protobuf::RpcController* controller,
                                    ::google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(INFO) << "KvScanBegin request";
 
   butil::Status status = ValidateKvScanBeginRequest(request);
   if (!status.ok()) {

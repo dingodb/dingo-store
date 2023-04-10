@@ -104,7 +104,8 @@ bool RaftSnapshot::SaveSnapshot(braft::SnapshotWriter* writer, std::shared_ptr<d
   }
 
   DINGO_LOG(INFO) << butil::StringPrintf("Save snapshot region %ld range[%s-%s]", region->id(),
-                                         region->range().start_key().c_str(), region->range().end_key().c_str());
+                                         Helper::StringToHex(region->range().start_key()).c_str(),
+                                         Helper::StringToHex(region->range().end_key()).c_str());
   auto raw_engine = std::dynamic_pointer_cast<RawRocksEngine>(engine_);
 
   std::string checkpoint_dir = raw_engine->DbPath() + "/checkpoint_" + std::to_string(Helper::Timestamp());

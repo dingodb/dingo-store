@@ -50,7 +50,7 @@ class Engine {
   virtual std::shared_ptr<Snapshot> GetSnapshot() { return nullptr; }
 
   virtual butil::Status Write(std::shared_ptr<Context> ctx, const WriteData& write_data) = 0;
-  virtual butil::Status AsyncWrite(std::shared_ptr<Context> ctx, const WriteData& write_data, WriteCb_t cb) = 0;
+  virtual butil::Status AsyncWrite(std::shared_ptr<Context> ctx, const WriteData& write_data, WriteCbFunc cb) = 0;
 
   class Reader {
    public:

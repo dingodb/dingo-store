@@ -50,9 +50,9 @@ class StoreControl {
 
  private:
   bthread_mutex_t control_mutex_;
-  std::atomic_bool need_heartbeat_immediately;  // this value is true mean heartbeat is neeed immediately
-  uint64_t heartbeat_interval_multiple;         // this value describe N times the heartbeat_interval to push_interval
-  uint64_t heartbeat_count;                     // this value store heartbeat executed count
+  std::atomic_bool need_heartbeat_immediately_;  // this value is true mean heartbeat is neeed immediately
+  uint64_t heartbeat_interval_multiple_;         // this value describe N times the heartbeat_interval to push_interval
+  uint64_t heartbeat_count_;                     // this value store heartbeat executed count
 };
 
 }  // namespace dingodb

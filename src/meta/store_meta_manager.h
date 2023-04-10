@@ -112,7 +112,7 @@ class StoreRaftMeta : public TransformKvAble {
   std::shared_ptr<pb::store_internal::RaftMeta> Get(uint64_t region_id);
 
   std::shared_ptr<pb::common::KeyValue> TransformToKv(uint64_t region_id) override;
-  std::shared_ptr<pb::common::KeyValue> TransformToKv(const std::shared_ptr<google::protobuf::Message> obj) override;
+  std::shared_ptr<pb::common::KeyValue> TransformToKv(std::shared_ptr<google::protobuf::Message> obj) override;
 
   void TransformFromKv(const std::vector<pb::common::KeyValue>& kvs) override;
 

@@ -61,14 +61,14 @@ class RaftSnapshot {
 
 class RaftSaveSnapshotHanler : public BaseHandler {
  public:
-  HandlerType GetType() { return HandlerType::SAVE_SNAPSHOT; }
+  HandlerType GetType() override { return HandlerType::kSaveSnapshot; }
   void Handle(uint64_t region_id, std::shared_ptr<RawEngine> engine, braft::SnapshotWriter* writer,
               braft::Closure* done) override;
 };
 
 class RaftLoadSnapshotHanler : public BaseHandler {
  public:
-  HandlerType GetType() { return HandlerType::LOAD_SNAPSHOT; }
+  HandlerType GetType() override { return HandlerType::kLoadSnapshot; }
   void Handle(uint64_t region_id, std::shared_ptr<RawEngine> engine, braft::SnapshotReader* reader) override;
 };
 

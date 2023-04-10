@@ -23,12 +23,12 @@ bool MemEngine::Init(std::shared_ptr<Config> config) {
   return true;
 }
 
-std::string MemEngine::GetName() { return "MEM_ENGINE"; }
+std::string MemEngine::GetName() { return "kMemEngine"; }
 
 pb::common::Engine MemEngine::GetID() { return pb::common::ENG_MEMORY; }
 
 butil::Status MemEngine::Write(std::shared_ptr<Context> ctx, const WriteData& write_data) { return butil::Status(); }
-butil::Status MemEngine::AsyncWrite(std::shared_ptr<Context> ctx, const WriteData& write_data, WriteCb_t cb) {
+butil::Status MemEngine::AsyncWrite(std::shared_ptr<Context> ctx, const WriteData& write_data, WriteCbFunc cb) {
   return butil::Status();
 }
 
