@@ -31,6 +31,9 @@
 
 namespace dingodb {
 
+using Errno = pb::error::Errno;
+using PbError = pb::error::Error;
+
 bool Helper::IsIp(const std::string& s) {
   std::regex const reg(
       "(?=(\\b|\\D))(((\\d{1,2})|(1\\d{1,2})|(2[0-4]\\d)|(25[0-5]))\\.){3}(("
@@ -179,20 +182,20 @@ std::vector<butil::EndPoint> Helper::StrToEndpoints(const std::string& str) {
   return endpoints;
 }
 
-std::shared_ptr<pb::error::Error> Helper::Error(pb::error::Errno errcode, const std::string& errmsg) {
-  std::shared_ptr<pb::error::Error> err = std::make_shared<pb::error::Error>();
+std::shared_ptr<PbError> Helper::Error(Errno errcode, const std::string& errmsg) {
+  std::shared_ptr<PbError> err = std::make_shared<PbError>();
   err->set_errcode(errcode);
   err->set_errmsg(errmsg);
   return err;
 }
 
-bool Helper::Error(pb::error::Errno errcode, const std::string& errmsg, pb::error::Error& err) {
+bool Helper::Error(Errno errcode, const std::string& errmsg, PbError& err) {
   err.set_errcode(errcode);
   err.set_errmsg(errmsg);
   return false;
 }
 
-bool Helper::Error(pb::error::Errno errcode, const std::string& errmsg, std::shared_ptr<pb::error::Error> err) {
+bool Helper::Error(Errno errcode, const std::string& errmsg, std::shared_ptr<PbError> err) {
   err->set_errcode(errcode);
   err->set_errmsg(errmsg);
   return false;

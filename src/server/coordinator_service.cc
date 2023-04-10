@@ -78,7 +78,7 @@ void CoordinatorServiceImpl::CreateExecutor(google::protobuf::RpcController *con
     brpc_controller->SetFailed(pb::error::EILLEGAL_PARAMTETERS, "Need legal cluster_id");
 
     auto *error = response->mutable_error();
-    error->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
+    error->set_errcode(Errno::EILLEGAL_PARAMTETERS);
     return;
   }
 
@@ -114,7 +114,7 @@ void CoordinatorServiceImpl::DeleteExecutor(google::protobuf::RpcController *con
     brpc_controller->SetFailed(pb::error::EILLEGAL_PARAMTETERS, "Need legal executor_id");
 
     auto *error = response->mutable_error();
-    error->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
+    error->set_errcode(Errno::EILLEGAL_PARAMTETERS);
     return;
   }
 
@@ -130,7 +130,7 @@ void CoordinatorServiceImpl::DeleteExecutor(google::protobuf::RpcController *con
     brpc_controller->SetFailed(pb::error::ESTORE_NOTEXIST_RAFTENGINE, "DeleteExecutor failed");
 
     auto *error = response->mutable_error();
-    error->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
+    error->set_errcode(Errno::EILLEGAL_PARAMTETERS);
 
     DINGO_LOG(ERROR) << "Deleteexecutor failed:  executor_id=" << executor_id << ", keyring=" << keyring;
     return;
@@ -209,7 +209,7 @@ void CoordinatorServiceImpl::DeleteStore(google::protobuf::RpcController *contro
     brpc_controller->SetFailed(pb::error::EILLEGAL_PARAMTETERS, "Need legal store_id");
 
     auto *error = response->mutable_error();
-    error->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
+    error->set_errcode(Errno::EILLEGAL_PARAMTETERS);
     return;
   }
 
@@ -225,7 +225,7 @@ void CoordinatorServiceImpl::DeleteStore(google::protobuf::RpcController *contro
     brpc_controller->SetFailed(pb::error::ESTORE_NOTEXIST_RAFTENGINE, "DeleteStore failed");
 
     auto *error = response->mutable_error();
-    error->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
+    error->set_errcode(Errno::EILLEGAL_PARAMTETERS);
 
     DINGO_LOG(ERROR) << "DeleteStore failed:  store_id=" << store_id << ", keyring=" << keyring;
     return;
@@ -260,14 +260,14 @@ void CoordinatorServiceImpl::ExecutorHeartbeat(google::protobuf::RpcController *
 
   if (!request->has_executor()) {
     auto *error = response->mutable_error();
-    error->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
+    error->set_errcode(Errno::EILLEGAL_PARAMTETERS);
     DINGO_LOG(ERROR) << "ExecutorHeartBeat has_executor() is false, reject heartbeat";
     return;
   }
 
   if (request->executor().id() == 0) {
     auto *error = response->mutable_error();
-    error->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
+    error->set_errcode(Errno::EILLEGAL_PARAMTETERS);
     DINGO_LOG(ERROR) << "ExecutorHeartBeat executor_id is 0, reject heartbeat";
     return;
   }
@@ -325,7 +325,7 @@ void CoordinatorServiceImpl::StoreHeartbeat(google::protobuf::RpcController *con
   // validate store
   if (!request->has_store()) {
     auto *error = response->mutable_error();
-    error->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
+    error->set_errcode(Errno::EILLEGAL_PARAMTETERS);
     DINGO_LOG(ERROR) << "StoreHeartBeat has_store() is false, reject heartbeat";
     return;
   }

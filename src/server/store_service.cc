@@ -23,6 +23,8 @@
 #include "proto/error.pb.h"
 #include "server/server.h"
 
+using dingodb::pb::error::Errno;
+
 namespace dingodb {
 
 StoreServiceImpl::StoreServiceImpl() = default;
@@ -63,7 +65,7 @@ void StoreServiceImpl::AddRegion(google::protobuf::RpcController* controller,
   auto status = store_control->AddRegion(ctx, std::make_shared<pb::common::Region>(request->region()));
   if (!status.ok()) {
     auto* mut_err = response->mutable_error();
-    mut_err->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
+    mut_err->set_errcode(static_cast<Errno>(status.error_code()));
     mut_err->set_errmsg(status.error_str());
   }
 }
@@ -80,7 +82,7 @@ void StoreServiceImpl::ChangeRegion(google::protobuf::RpcController* controller,
   auto status = store_control->ChangeRegion(ctx, std::make_shared<pb::common::Region>(request->region()));
   if (!status.ok()) {
     auto* mut_err = response->mutable_error();
-    mut_err->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
+    mut_err->set_errcode(static_cast<Errno>(status.error_code()));
     mut_err->set_errmsg(status.error_str());
   }
 }
@@ -98,7 +100,7 @@ void StoreServiceImpl::DestroyRegion(google::protobuf::RpcController* controller
   auto status = store_control->DeleteRegion(ctx, request->region_id());
   if (!status.ok()) {
     auto* mut_err = response->mutable_error();
-    mut_err->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
+    mut_err->set_errcode(static_cast<Errno>(status.error_code()));
     mut_err->set_errmsg(status.error_str());
   }
 }
@@ -114,7 +116,7 @@ void StoreServiceImpl::Snapshot(google::protobuf::RpcController* controller, con
   auto status = store_control->Snapshot(ctx, request->region_id());
   if (!status.ok()) {
     auto* mut_err = response->mutable_error();
-    mut_err->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
+    mut_err->set_errcode(static_cast<Errno>(status.error_code()));
     mut_err->set_errmsg(status.error_str());
   }
 }
@@ -160,7 +162,7 @@ void StoreServiceImpl::KvGet(google::protobuf::RpcController* controller,
   butil::Status status = ValidateKvGetRequest(request);
   if (!status.ok()) {
     auto* err = response->mutable_error();
-    err->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
+    err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
     return;
   }
@@ -175,7 +177,7 @@ void StoreServiceImpl::KvGet(google::protobuf::RpcController* controller,
   status = storage_->KvGet(ctx, keys, kvs);
   if (!status.ok()) {
     auto* err = response->mutable_error();
-    err->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
+    err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       err->set_errmsg("Not leader, please redirect leader.");
@@ -213,7 +215,7 @@ void StoreServiceImpl::KvBatchGet(google::protobuf::RpcController* controller,
   butil::Status status = ValidateKvBatchGetRequest(request);
   if (!status.ok()) {
     auto* err = response->mutable_error();
-    err->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
+    err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
     return;
   }
@@ -226,7 +228,7 @@ void StoreServiceImpl::KvBatchGet(google::protobuf::RpcController* controller,
   status = storage_->KvGet(ctx, Helper::PbRepeatedToVector(mut_request->mutable_keys()), kvs);
   if (!status.ok()) {
     auto* err = response->mutable_error();
-    err->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
+    err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       err->set_errmsg("Not leader, please redirect leader.");
@@ -261,7 +263,7 @@ void StoreServiceImpl::KvPut(google::protobuf::RpcController* controller,
   butil::Status status = ValidateKvPutRequest(request);
   if (!status.ok()) {
     auto* err = response->mutable_error();
-    err->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
+    err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
     return;
   }
@@ -274,7 +276,7 @@ void StoreServiceImpl::KvPut(google::protobuf::RpcController* controller,
   status = storage_->KvPut(ctx, kvs);
   if (!status.ok()) {
     auto* err = response->mutable_error();
-    err->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
+    err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       err->set_errmsg("Not leader, please redirect leader.");
@@ -308,7 +310,7 @@ void StoreServiceImpl::KvBatchPut(google::protobuf::RpcController* controller,
   butil::Status status = ValidateKvBatchPutRequest(request);
   if (!status.ok()) {
     auto* err = response->mutable_error();
-    err->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
+    err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
     return;
   }
@@ -319,7 +321,7 @@ void StoreServiceImpl::KvBatchPut(google::protobuf::RpcController* controller,
   status = storage_->KvPut(ctx, Helper::PbRepeatedToVector(mut_request->mutable_kvs()));
   if (!status.ok()) {
     auto* err = response->mutable_error();
-    err->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
+    err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       err->set_errmsg("Not leader, please redirect leader.");
@@ -351,7 +353,7 @@ void StoreServiceImpl::KvPutIfAbsent(google::protobuf::RpcController* controller
   butil::Status status = ValidateKvPutIfAbsentRequest(request);
   if (!status.ok()) {
     auto* err = response->mutable_error();
-    err->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
+    err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
     return;
   }
@@ -364,7 +366,7 @@ void StoreServiceImpl::KvPutIfAbsent(google::protobuf::RpcController* controller
   status = storage_->KvPutIfAbsent(ctx, kvs, true);
   if (!status.ok()) {
     auto* err = response->mutable_error();
-    err->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
+    err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       err->set_errmsg("Not leader, please redirect leader.");
@@ -400,7 +402,7 @@ void StoreServiceImpl::KvBatchPutIfAbsent(google::protobuf::RpcController* contr
   butil::Status status = ValidateKvBatchPutIfAbsentRequest(request);
   if (!status.ok()) {
     auto* err = response->mutable_error();
-    err->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
+    err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
     return;
   }
@@ -412,7 +414,7 @@ void StoreServiceImpl::KvBatchPutIfAbsent(google::protobuf::RpcController* contr
   status = storage_->KvPutIfAbsent(ctx, Helper::PbRepeatedToVector(mut_request->mutable_kvs()), request->is_atomic());
   if (!status.ok()) {
     auto* err = response->mutable_error();
-    err->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
+    err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       err->set_errmsg("Not leader, please redirect leader.");
@@ -446,7 +448,7 @@ void StoreServiceImpl::KvBatchDelete(google::protobuf::RpcController* controller
   butil::Status status = ValidateKvBatchDeleteRequest(request);
   if (!status.ok()) {
     auto* err = response->mutable_error();
-    err->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
+    err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
     return;
   }
@@ -457,7 +459,7 @@ void StoreServiceImpl::KvBatchDelete(google::protobuf::RpcController* controller
   status = storage_->KvDelete(ctx, Helper::PbRepeatedToVector(mut_request->mutable_keys()));
   if (!status.ok()) {
     auto* err = response->mutable_error();
-    err->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
+    err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       err->set_errmsg("Not leader, please redirect leader.");
@@ -493,7 +495,7 @@ void StoreServiceImpl::KvDeleteRange(google::protobuf::RpcController* controller
   butil::Status status = ValidateKvDeleteRangeRequest(request);
   if (!status.ok()) {
     auto* err = response->mutable_error();
-    err->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
+    err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
     return;
   }
@@ -504,7 +506,7 @@ void StoreServiceImpl::KvDeleteRange(google::protobuf::RpcController* controller
   status = storage_->KvDeleteRange(ctx, *mut_request->mutable_range());
   if (!status.ok()) {
     auto* err = response->mutable_error();
-    err->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
+    err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       err->set_errmsg("Not leader, please redirect leader.");
@@ -547,7 +549,7 @@ void StoreServiceImpl::KvScanBegin(google::protobuf::RpcController* controller,
   butil::Status status = ValidateKvScanBeginRequest(request);
   if (!status.ok()) {
     auto* err = response->mutable_error();
-    err->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
+    err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
     return;
   }
@@ -563,7 +565,7 @@ void StoreServiceImpl::KvScanBegin(google::protobuf::RpcController* controller,
                                  &scan_id, &kvs);
   if (!status.ok()) {
     auto* err = response->mutable_error();
-    err->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
+    err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       err->set_errmsg("Not leader, please redirect leader.");
@@ -606,7 +608,7 @@ void StoreServiceImpl::KvScanContinue(google::protobuf::RpcController* controlle
   butil::Status status = ValidateKvScanContinueRequest(request);
   if (!status.ok()) {
     auto* err = response->mutable_error();
-    err->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
+    err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
     return;
   }
@@ -619,7 +621,7 @@ void StoreServiceImpl::KvScanContinue(google::protobuf::RpcController* controlle
 
   if (!status.ok()) {
     auto* err = response->mutable_error();
-    err->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
+    err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       err->set_errmsg("Not leader, please redirect leader.");
@@ -656,7 +658,7 @@ void StoreServiceImpl::KvScanRelease(google::protobuf::RpcController* controller
   butil::Status status = ValidateKvScanReleaseRequest(request);
   if (!status.ok()) {
     auto* err = response->mutable_error();
-    err->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
+    err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
     return;
   }
@@ -669,7 +671,7 @@ void StoreServiceImpl::KvScanRelease(google::protobuf::RpcController* controller
 
   if (!status.ok()) {
     auto* err = response->mutable_error();
-    err->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
+    err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       err->set_errmsg("Not leader, please redirect leader.");

@@ -33,6 +33,9 @@
 namespace dingodb {
 
 class Engine {
+
+  using Errno = pb::error::Errno;
+
  public:
   virtual ~Engine() = default;
 
@@ -69,7 +72,7 @@ class Engine {
   //  This is a alternative method, will be replace by zihui new Interface.
   virtual butil::Status MetaPut(std::shared_ptr<Context> /*ctx*/,
                                 const pb::coordinator_internal::MetaIncrement& /*meta*/) {
-    return butil::Status(pb::error::Errno::ENOT_SUPPORT, "Not support");
+    return butil::Status(Errno::ENOT_SUPPORT, "Not support");
   }
 
  protected:
