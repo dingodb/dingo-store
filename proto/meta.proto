@@ -106,6 +106,7 @@ message ColumnDefinition {
   int32 indexOfKey = 7;
   bool has_default_val = 8;
   string default_val = 9;
+  bool auto_increment = 10;
 }
 
 // Information about Index.
@@ -307,6 +308,38 @@ message DropTableResponse {
   dingodb.pb.error.Error error = 1;
 }
 
+message GetAutoIncrementRequest {
+  DingoCommonId table_id = 1;
+}
+
+message GetAutoIncrementResponse {
+  dingodb.pb.error.Error error = 1;
+  uint64 start_id = 2;
+}
+
+message UpdateAutoIncrementRequest {
+  DingoCommonId table_id = 1;
+  uint64 start_id = 2;
+  bool force = 3;
+}
+
+message UpdateAutoIncrementResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
+message GenerateAutoIncrementRequest {
+  DingoCommonId table_id = 1;
+  uint64 count = 2;
+  uint32 auto_increment_increment = 3;
+  uint32 auto_increment_offset = 4;
+}
+
+message GenerateAutoIncrementResponse {
+  dingodb.pb.error.Error error = 1;
+  uint64 start_id = 2;
+  uint64 end_id = 3;
+}
+
 service MetaService {
   // GetSchemas
   // in: schema_id
@@ -373,6 +406,21 @@ service MetaService {
   // in: parent_schema_id schema_name
   // out: Schema
   rpc DropSchema(DropSchemaRequest) returns (DropSchemaResponse);
+
+  // GetAutoIncrement
+  // in: table_id
+  // out: start_id
+  rpc GetAutoIncrement(GetAutoIncrementRequest) returns (GetAutoIncrementResponse);
+
+  // UpdateAutoIncrement
+  // in: table_id start_id force
+  // out: error code
+  rpc UpdateAutoIncrement(UpdateAutoIncrementRequest) returns (UpdateAutoIncrementResponse);
+
+  // GenerateAutoIncrement
+  // in: table_id count auto_increment_increment auto_increment_offset
+  // out: start_id, end_id
+  rpc GenerateAutoIncrement(GenerateAutoIncrementRequest) returns (GenerateAutoIncrementResponse);
 
   // TODO
   // Operation about User, such as create/drop/grant.
