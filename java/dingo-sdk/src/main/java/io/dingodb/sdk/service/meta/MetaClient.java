@@ -29,8 +29,15 @@ public class MetaClient {
         this.target = target;
     }
 
-    public void init() {
+    public void init(String schema) {
         this.metaServiceClient = new MetaServiceClient(CoordinatorConnector.getCoordinatorConnector(target));
-        // TODO retry
+        MetaServiceClient subMetaService = null;
+        try {
+            subMetaService = this.metaServiceClient.getSubMetaService(schema);
+        } finally {
+            if (subMetaService != null) {
+                this.metaServiceClient = subMetaService;
+            }
+        }
     }
 }

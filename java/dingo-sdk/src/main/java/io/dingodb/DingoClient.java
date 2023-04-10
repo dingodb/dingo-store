@@ -33,7 +33,7 @@ public class DingoClient {
 
     private UnifyStoreConnection connection;
 
-    public ServiceOperation serviceOperation;
+    private ServiceOperation serviceOperation;
 
     public static Integer retryTimes = 20;
 
@@ -42,7 +42,11 @@ public class DingoClient {
     }
 
     public DingoClient(String coordinatorSvr, Integer retryTimes) {
-        connection = new UnifyStoreConnection(coordinatorSvr, retryTimes);
+        this(coordinatorSvr, "DINGO_ROOT", retryTimes);
+    }
+
+    public DingoClient(String coordinatorSvr, String schema, Integer retryTimes) {
+        connection = new UnifyStoreConnection(coordinatorSvr, schema, retryTimes);
         DingoClient.retryTimes = retryTimes;
     }
 
