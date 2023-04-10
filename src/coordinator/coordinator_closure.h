@@ -37,6 +37,9 @@ class CoordinatorClosure : public braft::Closure {
   const REQ* request() const { return request_; }  // NOLINT
   RESP* response() const { return response_; }     // NOLINT
   void Run() override {
+    // Auto delete this after Run()
+    std::unique_ptr<CoordinatorClosure<REQ, RESP>> self_guard(this);
+    // Repsond this RPC.
     brpc::ClosureGuard done_guard(done_);
     DINGO_LOG(DEBUG) << "Coordinator Closure return respone [" << response_->DebugString()
                      << "] to client with request[" << request_->DebugString() << "]";
@@ -68,6 +71,10 @@ class CoordinatorClosure<pb::coordinator::StoreHeartbeatRequest, pb::coordinator
   pb::coordinator::StoreHeartbeatResponse* response() const { return response_; }     // NOLINT
 
   void Run() override {
+    // Auto delete this after Run()
+    std::unique_ptr<CoordinatorClosure<pb::coordinator::StoreHeartbeatRequest, pb::coordinator::StoreHeartbeatResponse>>
+        self_guard(this);
+    // Repsond this RPC.
     auto* new_regionmap = response()->mutable_regionmap();
     coordinator_control_->GetRegionMap(*new_regionmap);
 
@@ -109,6 +116,11 @@ class CoordinatorClosure<pb::coordinator::ExecutorHeartbeatRequest, pb::coordina
   pb::coordinator::ExecutorHeartbeatResponse* response() const { return response_; }     // NOLINT
 
   void Run() override {
+    // Auto delete this after Run()
+    std::unique_ptr<
+        CoordinatorClosure<pb::coordinator::ExecutorHeartbeatRequest, pb::coordinator::ExecutorHeartbeatResponse>>
+        self_guard(this);
+    // Repsond this RPC.
     auto* new_executormap = response()->mutable_executormap();
     coordinator_control_->GetExecutorMap(*new_executormap);
 
