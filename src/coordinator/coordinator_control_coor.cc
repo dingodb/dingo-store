@@ -19,6 +19,7 @@
 #include <cstdlib>
 #include <memory>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -33,6 +34,7 @@
 #include "engine/snapshot.h"
 #include "google/protobuf/unknown_field_set.h"
 #include "proto/common.pb.h"
+#include "proto/coordinator.pb.h"
 #include "proto/coordinator_internal.pb.h"
 #include "proto/meta.pb.h"
 #include "proto/node.pb.h"
@@ -312,7 +314,7 @@ int CoordinatorControl::CreateRegion(const std::string& region_name, const std::
     return -1;
   }
 
-  // create new region in memory
+  // create new region in memory begin
   pb::common::Region new_region;
   new_region.set_id(create_region_id);
   new_region.set_epoch(1);
@@ -333,6 +335,41 @@ int CoordinatorControl::CreateRegion(const std::string& region_name, const std::
   new_region.set_schema_id(schema_id);
   new_region.set_table_id(table_id);
 
+  // create region definition begin
+  auto* region_definition = new_region.mutable_metrics()->mutable_region_definition();
+  region_definition->set_id(create_region_id);
+  region_definition->set_name(region_name + std::string("_") + std::to_string(create_region_id));
+  region_definition->set_epoch(1);
+  auto* range_in_definition = region_definition->mutable_range();
+  range_in_definition->CopyFrom(region_range);
+
+  // add store_id and its peer location to region
+  for (int i = 0; i < replica_num; i++) {
+    auto store = selected_stores_for_regions[i];
+    auto* peer = region_definition->add_peers();
+    peer->set_store_id(store.id());
+    peer->set_role(::dingodb::pb::common::PeerRole::VOTER);
+    peer->mutable_server_location()->CopyFrom(store.server_location());
+    peer->mutable_raft_location()->CopyFrom(store.raft_location());
+  }
+
+  new_region.mutable_definition()->CopyFrom(*region_definition);
+  // create region definition end
+  // create new region in memory end
+
+  // create store operations
+  std::vector<pb::coordinator::StoreOperation> store_operations;
+  for (int i = 0; i < replica_num; i++) {
+    auto store = selected_stores_for_regions[i];
+    pb::coordinator::StoreOperation store_operation;
+
+    store_operation.set_id(store.id());
+    auto* region_cmd = store_operation.add_region_cmds();
+    region_cmd->set_region_cmd_type(::dingodb::pb::coordinator::RegionCmdType::CMD_CREATE);
+    auto* create_request = region_cmd->mutable_create_request();
+    create_request->mutable_region_definition()->CopyFrom(*region_definition);
+  }
+
   // update meta_increment
   auto* region_increment = meta_increment.add_regions();
   region_increment->set_id(create_region_id);
@@ -341,6 +378,13 @@ int CoordinatorControl::CreateRegion(const std::string& region_name, const std::
 
   auto* region_increment_region = region_increment->mutable_region();
   region_increment_region->CopyFrom(new_region);
+
+  // add store operations to meta_increment
+  for (const auto& store_operation : store_operations) {
+    auto* store_operation_increment = meta_increment.add_store_operations();
+    store_operation_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
+    store_operation_increment->mutable_store_operation()->CopyFrom(store_operation);
+  }
 
   // on_apply
   // region_map_epoch++;                                               // raft_kv_put
@@ -357,7 +401,10 @@ int CoordinatorControl::DropRegion(uint64_t region_id, pb::coordinator_internal:
   {
     BAIDU_SCOPED_LOCK(region_map_mutex_);
     auto* region_to_delete = region_map_.seek(region_id);
-    if (region_to_delete != nullptr) {
+    if (region_to_delete != nullptr &&
+        region_to_delete->state() != ::dingodb::pb::common::RegionState::REGION_DELETED &&
+        region_to_delete->state() != ::dingodb::pb::common::RegionState::REGION_DELETE &&
+        region_to_delete->state() != ::dingodb::pb::common::RegionState::REGION_DELETING) {
       region_to_delete->set_state(::dingodb::pb::common::RegionState::REGION_DELETE);
 
       // update meta_increment
@@ -368,6 +415,21 @@ int CoordinatorControl::DropRegion(uint64_t region_id, pb::coordinator_internal:
 
       auto* region_increment_region = region_increment->mutable_region();
       region_increment_region->CopyFrom(*region_to_delete);
+
+      // add store operations to meta_increment
+      for (int i = 0; i < region_to_delete->peers_size(); i++) {
+        auto* peer = region_to_delete->mutable_peers(i);
+        pb::coordinator::StoreOperation store_operation;
+        store_operation.set_id(peer->store_id());
+        auto* region_cmd = store_operation.add_region_cmds();
+        region_cmd->set_region_cmd_type(::dingodb::pb::coordinator::RegionCmdType::CMD_DELETE);
+        auto* delete_request = region_cmd->mutable_delete_request();
+        delete_request->set_region_id(region_id);
+
+        auto* store_operation_increment = meta_increment.add_store_operations();
+        store_operation_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
+        store_operation_increment->mutable_store_operation()->CopyFrom(store_operation);
+      }
 
       // on_apply
       // region_map_[region_id].set_state(::dingodb::pb::common::RegionState::REGION_DELETE);
@@ -644,6 +706,104 @@ uint64_t CoordinatorControl::UpdateExecutorMap(const pb::common::Executor& execu
   return executor_map_epoch;
 }
 
+// Update RegionMap and StoreOperation
+void CoordinatorControl::UpdateRegionMapAndStoreOperation(const pb::common::StoreMetrics& store_metrics,
+                                                          pb::coordinator_internal::MetaIncrement& meta_increment) {
+  // update region_map
+  for (const auto& it : store_metrics.region_metrics_map()) {
+    const auto& region_metrics = it.second;
+    if (!region_metrics.has_braft_status()) {
+      DINGO_LOG(ERROR) << "region_metrics has no braft_status,store_id=" << store_metrics.id()
+                       << " region_id=" << region_metrics.id();
+      continue;
+    }
+
+    if (region_metrics.braft_status().raft_state() != pb::common::RaftNodeState::STATE_LEADER) {
+      continue;
+    }
+
+    // update region_map
+    {
+      BAIDU_SCOPED_LOCK(region_map_mutex_);
+      auto* temp_region = region_map_.seek(region_metrics.id());
+      if (temp_region != nullptr) {
+        if (temp_region->leader_store_id() != store_metrics.id()) {
+          DINGO_LOG(INFO) << "region leader change region_id = " << region_metrics.id()
+                          << " old leader_store_id = " << temp_region->leader_store_id()
+                          << " new leader_store_id = " << store_metrics.id();
+
+          // update meta_increment
+          auto* region_increment = meta_increment.add_regions();
+          region_increment->set_id(region_metrics.id());
+          region_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
+
+          auto* region_increment_region = region_increment->mutable_region();
+          region_increment_region->CopyFrom(*temp_region);
+          region_increment_region->set_leader_store_id(store_metrics.id());
+          region_increment_region->mutable_metrics()->CopyFrom(region_metrics);
+
+          if (region_metrics.store_region_state() == pb::common::StoreRegionState::NORMAL) {
+            region_increment_region->set_state(::dingodb::pb::common::RegionState::REGION_NORMAL);
+          } else if (region_metrics.store_region_state() == pb::common::StoreRegionState::SPLITTING) {
+            region_increment_region->set_state(::dingodb::pb::common::RegionState::REGION_SPLITTING);
+          }
+
+          // on_apply
+          // region_map_[region_metrics.id()].set_leader_store_id(store_metrics.id());
+        }
+      } else {
+        DINGO_LOG(ERROR) << "ERROR: UpdateRegionMapAndStoreOperation region not exists, region_id = "
+                         << region_metrics.id();
+      }
+    }
+  }
+
+  // update store operation
+  pb::coordinator::StoreOperation store_operation;
+  GetStoreOperation(store_metrics.id(), store_operation);
+
+  if (store_operation.region_cmds_size() == 0) {
+    return;
+  }
+
+  auto* store_operation_increment = meta_increment.add_store_operations();
+  store_operation_increment->set_id(store_metrics.id());
+  store_operation_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
+  auto* store_operation_increment_store_operation = store_operation_increment->mutable_store_operation();
+
+  // add to be deleted region_cmd to increment
+  for (auto& it : *store_operation.mutable_region_cmds()) {
+    if (it.region_cmd_type() == pb::coordinator::RegionCmdType::CMD_CREATE) {
+      // check CMD_CREATE region_id exists
+      if (store_metrics.region_metrics_map().contains(it.region_id())) {
+        DINGO_LOG(INFO) << "CMD_CREATE store_id=" << store_metrics.id() << " region_id = " << it.region_id()
+                        << " exists, remove store_operation";
+        auto* region_cmd_for_delete = store_operation_increment_store_operation->add_region_cmds();
+        region_cmd_for_delete->CopyFrom(it);
+      }
+    } else if (it.region_cmd_type() == pb::coordinator::RegionCmdType::CMD_DELETE) {
+      // check CMD_DELETE region_id exists
+      if (!store_metrics.region_metrics_map().contains(it.region_id())) {
+        DINGO_LOG(INFO) << "CMD_DELETE store_id=" << store_metrics.id() << "region_id = " << it.region_id()
+                        << " not exists";
+        auto* region_cmd_for_delete = store_operation_increment_store_operation->add_region_cmds();
+        region_cmd_for_delete->CopyFrom(it);
+      } else if (store_metrics.region_metrics_map().at(it.region_id()).store_region_state() ==
+                     pb::common::StoreRegionState::DELETED ||
+                 store_metrics.region_metrics_map().at(it.region_id()).store_region_state() ==
+                     pb::common::StoreRegionState::DELETING) {
+        DINGO_LOG(INFO) << "CMD_DELETE store_id=" << store_metrics.id() << "region_id = " << it.region_id()
+                        << " exists, but state is DELETED or DELETING";
+        auto* region_cmd_for_delete = store_operation_increment_store_operation->add_region_cmds();
+        region_cmd_for_delete->CopyFrom(it);
+      } else {
+        DINGO_LOG(INFO) << "CMD_DELETE store_id=" << store_metrics.id() << "region_id = " << it.region_id()
+                        << " exists, but state is not DELETED or DELETING";
+      }
+    }
+  }
+}
+
 uint64_t CoordinatorControl::UpdateStoreMetrics(const pb::common::StoreMetrics& store_metrics,
                                                 pb::coordinator_internal::MetaIncrement& meta_increment) {
   //   uint64_t store_map_epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_STORE);
@@ -692,6 +852,11 @@ uint64_t CoordinatorControl::UpdateStoreMetrics(const pb::common::StoreMetrics& 
   //   if (need_update_epoch) {
   //     GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_STORE, meta_increment);
   //   }
+
+  // use region_metrics_map to update region_map and store_operation
+  if (store_metrics.region_metrics_map_size() > 0) {
+    UpdateRegionMapAndStoreOperation(store_metrics, meta_increment);
+  }
 
   DINGO_LOG(INFO) << "UpdateStoreMetricsMap store_metrics.id=" << store_metrics.id();
 
@@ -825,6 +990,10 @@ void CoordinatorControl::GetMemoryInfo(pb::coordinator::CoordinatorMemoryInfo& m
     }
     memory_info.set_total_size(memory_info.total_size() + memory_info.table_metrics_map_size());
   }
+}
+
+void CoordinatorControl::GetStoreOperation(uint64_t store_id, pb::coordinator::StoreOperation& store_operation) {
+  store_operation_map_.Get(store_id, store_operation);
 }
 
 }  // namespace dingodb

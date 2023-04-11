@@ -84,6 +84,15 @@ class CoordinatorClosure<pb::coordinator::StoreHeartbeatRequest, pb::coordinator
     response()->set_storemap_epoch(new_storemap_epoch_);
     response()->set_regionmap_epoch(new_regionmap_epoch_);
 
+    // add store operation
+    auto store_id = request_->store().id();
+    auto* store_operation_to_push = response_->mutable_store_operation();
+    coordinator_control_->GetStoreOperation(store_id, *store_operation_to_push);
+    if (store_operation_to_push->region_cmds_size() > 0) {
+      DINGO_LOG(INFO) << "Coordinator Closure will send to store with store_operation "
+                      << store_operation_to_push->DebugString();
+    }
+
     brpc::ClosureGuard const done_guard(done_);
     DINGO_LOG(DEBUG) << "Coordinator Closure return Heartbeat respone [" << response_->DebugString()
                      << "] to store with request[" << request_->DebugString() << "]";
