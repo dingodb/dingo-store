@@ -74,19 +74,15 @@ class DingoSafeMap {
     return *value_ptr;
   }
 
-  // Count
-  // count the number of key
-  uint64_t Count(const T_KEY &key) {
+  // Exists
+  // check if the key exists in the safe map
+  bool Exists(const T_KEY &key) {
     TypeScopedPtr ptr;
     if (safe_map.Read(&ptr) != 0) {
-      return 0;
+      return false;
     }
     auto *value_ptr = ptr->seek(key);
-    if (!value_ptr) {
-      return 0;
-    }
-
-    return 1;
+    return static_cast<bool>(value_ptr);
   }
 
   // Size
@@ -106,13 +102,14 @@ class DingoSafeMap {
     TypeScopedPtr ptr;
     uint64_t size = 0;
     if (safe_map.Read(&ptr) != 0) {
-      return -1;
+      return 0;
     }
 
     for (auto const it : *ptr) {
       size += it.second.ByteSizeLong();
     }
-    return size;
+    // safe map is double buffered map, so we need to multiply 2
+    return size * 2;
   }
 
   // Swap
