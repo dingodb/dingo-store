@@ -82,7 +82,7 @@ public class MetaServiceClient {
         Executors.execute("meta-service-client-reload", this::reload);
     }
 
-    public MetaServiceClient(Meta.DingoCommonId id, String name, ServiceConnector connector) {
+    private MetaServiceClient(Meta.DingoCommonId id, String name, ServiceConnector connector) {
         this.parentId = ROOT_SCHEMA_ID;
         this.connector = connector;
         this.id = id;

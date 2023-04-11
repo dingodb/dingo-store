@@ -23,6 +23,7 @@ import io.dingodb.client.Result;
 import io.dingodb.client.ServiceOperation;
 import io.dingodb.client.operation.StoreOperationType;
 import io.dingodb.client.Value;
+import io.dingodb.sdk.common.DingoClientException;
 import io.dingodb.sdk.common.table.Table;
 
 import java.util.Collections;
@@ -134,6 +135,13 @@ public class DingoClient {
                 ContextForClient.builder().keyList(keys).build()
         );
         return result.isSuccess();
+    }
+
+    public Table getTableDefinition(final String tableName) {
+        if (tableName == null || tableName.isEmpty()) {
+            throw new DingoClientException("Invalid table name: " + tableName);
+        }
+        return serviceOperation.getTableDefinition(tableName);
     }
 
     public void close() {
