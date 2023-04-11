@@ -30,24 +30,26 @@
 
 namespace dingodb {
 
-enum class ScanContextState : unsigned char {
-  kUninitState = 0,
-  kOpeningState = 1,
-  kOpenedState = 2,
-  kBeginningState = 3,
-  kBegunState = 4,
-  kContinuingState = 5,
-  kContinuedState = 6,
-  kReleasingState = 7,
-  kReleasedState = 8,
+enum class ScanState : unsigned char {
+  kUninit = 0,
+  kOpening = 1,
+  kOpened = 2,
+  kBeginning = 3,
+  kBegun = 4,
+  kContinuing = 5,
+  kContinued = 6,
+  kReleasing = 7,
+  kReleased = 8,
   // error or timeout to destroy
-  kErrorState = 9,
-  kBegunTimeoutState = 10,
-  kContinuedTimeoutState = 11,
-  kReleasedTimeoutState = 12,
+  kError = 9,
+  kBegunTimeout = 10,
+  kContinuedTimeout = 11,
+  kReleasedTimeout = 12,
   kAllowImmediateRecycling = 13,
-  kDestroyState = 14,
+  kDestroy = 14,
 };
+
+class ScanHandler;
 
 class ScanContext {
  public:
@@ -59,22 +61,16 @@ class ScanContext {
   ScanContext(ScanContext&& rhs) = delete;
   ScanContext& operator=(ScanContext&& rhs) = delete;
 
-  butil::Status Open(const std::string& scan_id, uint64_t timeout_ms, uint64_t max_bytes_rpc,
-                     uint64_t max_fetch_cnt_by_server, std::shared_ptr<RawEngine> engine, const std::string& cf_name);
+  static void Init(uint64_t timeout_ms, uint64_t max_bytes_rpc, uint64_t max_fetch_cnt_by_server);
 
-  butil::Status ScanBegin(uint64_t region_id, const pb::common::PrefixScanRange& range, uint64_t max_fetch_cnt,
-                          bool key_only, bool disable_auto_release, std::vector<pb::common::KeyValue>& kvs);  // NOLINT
-
-  butil::Status ScanContinue(const std::string& scan_id, uint64_t max_fetch_cnt,
-                             std::vector<pb::common::KeyValue>& kvs);  // NOLINT
-
-  butil::Status ScanRelease(const std::string& scan_id);
+  butil::Status Open(const std::string& scan_id, std::shared_ptr<RawEngine> engine, const std::string& cf_name);
 
   // Is it possible to delete this object
   bool IsRecyclable();
 
  protected:
-  //
+  friend class ScanHandler;
+
  private:
   void Close();
   static std::chrono::milliseconds GetCurrentTime();
@@ -92,11 +88,7 @@ class ScanContext {
 
   bool disable_auto_release_;
 
-  std::vector<pb::common::KeyValue> kvs_;
-
-  pb::common::KeyValue kv_;
-
-  ScanContextState state_;
+  ScanState state_;
 
   std::shared_ptr<RawEngine> engine_;
 
@@ -110,16 +102,36 @@ class ScanContext {
   // millisecond 1s = 1000 millisecond
   std::chrono::milliseconds last_time_ms_;
 
+  bthread_mutex_t mutex_;
+
   // timeout millisecond to destroy
-  uint64_t timeout_ms_;
+  static uint64_t timeout_ms_;
 
   // Maximum number of bytes per transfer from rpc default 4M
-  uint64_t max_bytes_rpc_;
+  static uint64_t max_bytes_rpc_;
 
   // kv count per transfer specified by the server
-  uint64_t max_fetch_cnt_by_server_;
+  static uint64_t max_fetch_cnt_by_server_;
+};
 
-  bthread_mutex_t mutex_;
+class ScanHandler {
+ public:
+  ScanHandler() = delete;
+  ~ScanHandler() = delete;
+
+  ScanHandler(const ScanHandler& rhs) = delete;
+  ScanHandler& operator=(const ScanHandler& rhs) = delete;
+  ScanHandler(ScanHandler&& rhs) = delete;
+  ScanHandler& operator=(ScanHandler&& rhs) = delete;
+
+  static butil::Status ScanBegin(std::shared_ptr<ScanContext> context, uint64_t region_id,
+                                 const pb::common::PrefixScanRange& range, uint64_t max_fetch_cnt, bool key_only,
+                                 bool disable_auto_release, std::vector<pb::common::KeyValue>* kvs);
+
+  static butil::Status ScanContinue(std::shared_ptr<ScanContext> context, const std::string& scan_id,
+                                    uint64_t max_fetch_cnt, std::vector<pb::common::KeyValue>* kvs);
+
+  static butil::Status ScanRelease(std::shared_ptr<ScanContext> context, [[maybe_unused]] const std::string& scan_id);
 };
 
 }  // namespace dingodb

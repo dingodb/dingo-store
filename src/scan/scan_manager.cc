@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-#include "engine/scan_factory.h"
+#include "scan/scan_manager.h"
 
 #include <memory>
 
@@ -21,14 +21,14 @@
 
 namespace dingodb {
 
-ScanContextFactory::ScanContextFactory()
+ScanManager::ScanManager()
     : timeout_ms_(60 * 1000),
       max_bytes_rpc_(4 * 1024 * 1024),
       max_fetch_cnt_by_server_(1000),
       scan_interval_ms_(60 * 1000) {
   bthread_mutex_init(&mutex_, nullptr);
 }
-ScanContextFactory::~ScanContextFactory() {
+ScanManager::~ScanManager() {
   timeout_ms_ = 60 * 1000;
   max_bytes_rpc_ = 4 * 1024 * 1024;
   max_fetch_cnt_by_server_ = 1000;
@@ -38,9 +38,9 @@ ScanContextFactory::~ScanContextFactory() {
   bthread_mutex_destroy(&mutex_);
 }
 
-ScanContextFactory* ScanContextFactory::GetInstance() { return Singleton<ScanContextFactory>::get(); }
+ScanManager* ScanManager::GetInstance() { return Singleton<ScanManager>::get(); }
 
-bool ScanContextFactory::Init(std::shared_ptr<Config> config) {
+bool ScanManager::Init(std::shared_ptr<Config> config) {
   BAIDU_SCOPED_LOCK(mutex_);
   std::map<std::string, int> conf = config->GetIntMap(Constant::kStoreScan);
 
@@ -72,10 +72,12 @@ bool ScanContextFactory::Init(std::shared_ptr<Config> config) {
     }
   }
 
+  ScanContext::Init(timeout_ms_, max_bytes_rpc_, max_fetch_cnt_by_server_);
+
   return true;
 }
 
-std::shared_ptr<ScanContext> ScanContextFactory::CreateScan(std::string* scan_id) {
+std::shared_ptr<ScanContext> ScanManager::CreateScan(std::string* scan_id) {
   BAIDU_SCOPED_LOCK(mutex_);
 
   while (true) {
@@ -96,7 +98,7 @@ std::shared_ptr<ScanContext> ScanContextFactory::CreateScan(std::string* scan_id
   return scan;
 }
 
-std::shared_ptr<ScanContext> ScanContextFactory::FindScan(const std::string& scan_id) {
+std::shared_ptr<ScanContext> ScanManager::FindScan(const std::string& scan_id) {
   BAIDU_SCOPED_LOCK(mutex_);
   auto iter = alive_scans_.find(scan_id);
   if (iter != alive_scans_.end()) {
@@ -105,7 +107,7 @@ std::shared_ptr<ScanContext> ScanContextFactory::FindScan(const std::string& sca
   return nullptr;
 }
 
-void ScanContextFactory::DeleteScan(const std::string& scan_id) {
+void ScanManager::DeleteScan(const std::string& scan_id) {
   BAIDU_SCOPED_LOCK(mutex_);
   auto iter = alive_scans_.find(scan_id);
   if (iter != alive_scans_.end()) {
@@ -116,7 +118,7 @@ void ScanContextFactory::DeleteScan(const std::string& scan_id) {
   }
 }
 
-void ScanContextFactory::TryDeleteScan(const std::string& scan_id) {
+void ScanManager::TryDeleteScan(const std::string& scan_id) {
   BAIDU_SCOPED_LOCK(mutex_);
   auto iter = alive_scans_.find(scan_id);
   if (iter != alive_scans_.end()) {
@@ -128,19 +130,19 @@ void ScanContextFactory::TryDeleteScan(const std::string& scan_id) {
   }
 }
 
-void ScanContextFactory::RegularCleaningHandler(void* arg) {
-  ScanContextFactory* factory = static_cast<ScanContextFactory*>(arg);
+void ScanManager::RegularCleaningHandler(void* arg) {
+  ScanManager* manager = static_cast<ScanManager*>(arg);
 
-  BAIDU_SCOPED_LOCK(factory->mutex_);
-  for (auto iter = factory->alive_scans_.begin(); iter != factory->alive_scans_.end();) {
+  BAIDU_SCOPED_LOCK(manager->mutex_);
+  for (auto iter = manager->alive_scans_.begin(); iter != manager->alive_scans_.end();) {
     if (iter->second->IsRecyclable()) {
-      factory->waiting_destroyed_scans_[iter->first] = iter->second;
-      factory->alive_scans_.erase(iter++);
+      manager->waiting_destroyed_scans_[iter->first] = iter->second;
+      manager->alive_scans_.erase(iter++);
     } else {
       iter++;
     }
   }
-  factory->waiting_destroyed_scans_.clear();
+  manager->waiting_destroyed_scans_.clear();
 }
 
 }  // namespace dingodb

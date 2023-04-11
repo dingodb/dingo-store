@@ -29,19 +29,19 @@
 namespace dingodb {
 
 enum class EnumEngineIterator {
-  kRocksIterator = 0,
-  kMemoryIterator = 1,
-  kXdpIterator = 2,
-  kRaftStoreIterator = 3,
-  kColumnarIterator = 4,
+  kRocks = 0,
+  kMemory = 1,
+  kXdp = 2,
+  kRaftStore = 3,
+  kColumnar = 4,
 };
 
 enum class EnumEngineReader {
-  kRocksReader = 0,
-  kMemoryReader = 1,
-  kXdpReader = 2,
-  kRaftStoreReader = 3,
-  kColumnarReader = 4,
+  kRocks = 0,
+  kMemory = 1,
+  kXdp = 2,
+  kRaftStore = 3,
+  kColumnar = 4,
 };
 
 class EngineIterator : public std::enable_shared_from_this<EngineIterator> {

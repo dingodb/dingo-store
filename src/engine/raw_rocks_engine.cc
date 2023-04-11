@@ -190,8 +190,8 @@ class RocksIterator : public EngineIterator {
   std::shared_ptr<rocksdb::TransactionDB> txn_db_;
   std::shared_ptr<RawRocksEngine::ColumnFamily> column_family_;
   rocksdb::Iterator* iter_;
-  const std::string name_ = "RocksIterator";
-  uint32_t id_ = static_cast<uint32_t>(EnumEngineIterator::kRocksIterator);
+  const std::string name_ = "Rocks";
+  uint32_t id_ = static_cast<uint32_t>(EnumEngineIterator::kRocks);
   std::string start_key_;
   std::string end_key_;
   bool with_start_;
