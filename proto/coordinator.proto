@@ -22,13 +22,27 @@ package dingodb.pb.coordinator;
 option java_package = "io.dingodb.coordinator";
 option cc_generic_services = true;
 
+message CreateRequest {
+  dingodb.pb.common.RegionDefinition region_definition = 1;  // region definition
+}
+
+message DeleteRequest {
+  uint64 region_id = 1;  // region id to be deleted
+}
+
 message SplitRequest {
-  uint64 split_to_region_id = 1;  // split to region id
-  bytes split_watershed_key = 2;  // split watershed key
+  uint64 split_from_region_id = 1;  // split from region id
+  uint64 split_to_region_id = 2;    // split to region id
+  bytes split_watershed_key = 3;    // split watershed key
 }
 
 message MergeRequest {
-  uint64 merge_to_region_id = 1;  // merge to region id
+  uint64 merge_from_region_id = 1;  // merge from region id
+  uint64 merge_to_region_id = 2;    // merge to region id
+}
+
+message ChangePeerRequest {
+  dingodb.pb.common.RegionDefinition region_definition = 1;  // region definition contains new peer
 }
 
 // RegionCmdType
@@ -41,13 +55,16 @@ enum RegionCmdType {
   CMD_CHANGE_PEER = 5;
 }
 
-// RegionAdditional
+// RegionCmd
 message RegionCmd {
   dingodb.pb.common.RegionDefinition region_definition = 2;  // region definition
   RegionCmdType region_cmd_type = 3;                         // the cmd want to be executed
   oneof Request {
-    SplitRequest split = 4;  // split parameters
-    MergeRequest merge = 5;  // merge parameters
+    CreateRequest create_request = 4;           // create parameters
+    DeleteRequest delete_request = 5;           // delete parameters
+    SplitRequest split_request = 6;             // split parameters
+    MergeRequest merge_request = 7;             // merge parameters
+    ChangePeerRequest change_peer_request = 8;  // change peer parameters
   }
 }
 

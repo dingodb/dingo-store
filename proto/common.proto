@@ -243,7 +243,7 @@ message RaftPeerStatus {
   uint32 consecutive_error_times = 7;
 }
 
-// RaftNodeMetrics
+// BRaftStatus
 message BRaftStatus {
   RaftNodeState raft_state = 1;
   string peer_id = 11;
@@ -269,6 +269,7 @@ message RegionMetrics {
   uint64 leader_store_id = 2;               // leader store id
   StoreRegionState store_region_state = 3;  // region state defined by store
   BRaftStatus braft_status = 4;             // region braft status defined by store
+  RegionDefinition region_definition = 5;   // region definition
 
   uint64 row_count = 11;    // row count of this region
   bytes min_key = 12;       // the min key of this region now exist
@@ -276,7 +277,7 @@ message RegionMetrics {
   uint64 region_size = 14;  // the bytes size of this region
 }
 
-// store metrics
+// StoreMetrics
 message StoreMetrics {
   uint64 id = 1;              // store id
   uint64 total_capacity = 2;  // total capacity of this store
