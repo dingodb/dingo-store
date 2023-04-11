@@ -74,6 +74,24 @@ class DingoSafeMap {
     return *value_ptr;
   }
 
+  // GetAllKeys
+  // get all keys of the map
+  int GetAllKeys(std::vector<T_KEY> &keys) {
+    TypeScopedPtr ptr;
+    if (safe_map.Read(&ptr) != 0) {
+      return -1;
+    }
+
+    for (typename TypeFlatMap::const_iterator it = ptr->begin(); it != ptr->end(); ++it) {
+      if (it == ptr->end()) {
+        break;
+      }
+      keys->push_back(it->first);
+    }
+
+    return keys.size();
+  }
+
   // Exists
   // check if the key exists in the safe map
   bool Exists(const T_KEY &key) {
@@ -146,6 +164,18 @@ class DingoSafeMap {
   // copy the map with SafeMap input_map
   int Copy(const TypeSafeMap &input_map) {
     if (safe_map.Modify(InnerCopySafeMap, input_map) > 0) {
+      return 1;
+    } else {
+      return -1;
+    }
+  }
+
+  // GetFlatMapCopy
+  // get a copy of the internal flat map
+  // used to get all key-value pairs from safe map
+  // the out_map must be initialized before call this function
+  int GetFlatMapCopy(const TypeFlatMap &out_map) {
+    if (safe_map.Modify(InnerGetFlatMapCopy, out_map) > 0) {
       return 1;
     } else {
       return -1;
@@ -232,6 +262,11 @@ class DingoSafeMap {
     }
   }
 
+  // Overload the [] operator for reading
+  // now we can use map[key] to get value
+  // but it's hard to implement the [] operator for writing
+  T_VALUE operator[](T_KEY &key) const { return Get(key); }
+
  protected:
   // all inner function return 1 if modify record access, return 0 if no record is successfully modified
   static size_t InnerSwapFlatMap(TypeFlatMap &map, const TypeFlatMap &input_map) {
@@ -246,6 +281,11 @@ class DingoSafeMap {
 
   static size_t InnerCopyFlatMap(TypeFlatMap &map, const TypeFlatMap &input_map) {
     map = input_map;
+    return 1;
+  }
+
+  static size_t InnerGetFlatMapCopy(TypeFlatMap &map, const TypeFlatMap &out_map) {
+    out_map = map;
     return 1;
   }
 
