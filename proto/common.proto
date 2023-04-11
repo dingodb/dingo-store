@@ -95,8 +95,18 @@ enum RegionState {
   REGION_DELETE = 10;    // region need to delete
   REGION_DELETING = 11;  // region is deleting
   REGION_DELETED = 12;   // region is deleted
+
+  REGION_SPLIT = 13;      // region need to split
+  REGION_SPLITTING = 14;  // region is splitting
+  REGION_SPLITED = 15;    // region is splited (split's past tense is split, not splited, use as a symbol here)
+
+  REGION_MERGE = 16;    // region need to merge
+  REGION_MERGING = 17;  // region is mergting
+  REGION_MERGED = 18;   // region is merged
+
   // other state add here
-  REGION_ILLEGAL = 13;  // region is not create by coordinator
+  REGION_ILLEGAL = 20;  // region is not create by coordinator
+  REGION_DOWN = 21;     // region is offline
 }
 
 // StoreRegionState
@@ -105,7 +115,7 @@ enum StoreRegionState {
   NEW = 0;        // new region, not join raft
   NORMAL = 1;     // normal
   STANDBY = 2;    // standby, can not serve read/write
-  SPLITING = 3;   // region is spliting to another region
+  SPLITTING = 3;  // region is spliting to another region
   MERGING = 4;    // region is merging to another region
   DELETING = 5;   // region is deleting
   DELETED = 6;    // region is deleted
@@ -212,8 +222,8 @@ message RegionDefinition {
   uint64 id = 1;
   uint64 epoch = 2;
   string name = 3;
-  repeated Peer peers = 5;
-  Range range = 6;
+  repeated Peer peers = 4;
+  Range range = 5;
 }
 
 // RaftNodeStatus
