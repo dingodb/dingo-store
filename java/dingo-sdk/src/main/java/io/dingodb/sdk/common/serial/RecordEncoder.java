@@ -91,7 +91,7 @@ public class RecordEncoder {
         keyBuf.writeLong(commonId);
         for (DingoSchema schema : schemas) {
             if (schema.isKey()) {
-                schema.encodeKey(keyBuf, record[schema.getIndex()]);
+                schema.encodeKeyPrefix(keyBuf, record[schema.getIndex()]);
                 columnCount--;
                 if (columnCount <= 0) {
                     break;
