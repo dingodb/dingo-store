@@ -32,6 +32,7 @@
 #include "common/meta_control.h"
 #include "common/safe_map.h"
 #include "coordinator/coordinator_meta_storage.h"
+#include "engine/engine.h"
 #include "engine/snapshot.h"
 #include "meta/meta_reader.h"
 #include "meta/meta_writer.h"
@@ -56,6 +57,12 @@ class CoordinatorControl : public MetaControl {
                                   pb::coordinator_internal::SchemaInternal &mysql_schema,
                                   pb::coordinator_internal::SchemaInternal &information_schema);
   bool Init();
+  void SetKvEngine(std::shared_ptr<Engine> engine) { engine_ = engine; };
+
+  // SubmitMetaIncrement
+  // in:  meta_increment
+  // return: 0 or -1
+  int SubmitMetaIncrement(pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // GetMemoryInfo
   void GetMemoryInfo(pb::coordinator::CoordinatorMemoryInfo &memory_info);
@@ -150,6 +157,13 @@ class CoordinatorControl : public MetaControl {
 
   // get store metrics
   void GetStoreMetrics(std::vector<pb::common::StoreMetrics> &store_metrics);
+
+  // get store operation
+  void GetStoreOperation(uint64_t store_id, pb::coordinator::StoreOperation &store_operation);
+
+  // UpdateRegionMapAndStoreOperation
+  void UpdateRegionMapAndStoreOperation(const pb::common::StoreMetrics &store_metrics,
+                                        pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // get executormap
   void GetExecutorMap(pb::common::ExecutorMap &executor_map);
@@ -338,6 +352,11 @@ class CoordinatorControl : public MetaControl {
   MetaMapStorage<pb::coordinator_internal::TableMetricsInternal> *table_metrics_meta_;
   bthread_mutex_t table_metrics_map_mutex_;
 
+  // 9.store_operation
+  DingoSafeMap<uint64_t, pb::coordinator::StoreOperation> store_operation_map_;
+  MetaSafeMapStorage<pb::coordinator::StoreOperation> *store_operation_meta_;
+  bthread_mutex_t store_operation_map_mutex_;  // may need a write lock
+
   // root schema write to raft
   bool root_schema_writed_to_raft_;
 
@@ -357,6 +376,9 @@ class CoordinatorControl : public MetaControl {
 
   // raw_engine for state_machine storage
   std::shared_ptr<RawEngine> raw_engine_of_meta_;
+
+  // raft kv engine
+  std::shared_ptr<Engine> engine_;
 };
 
 }  // namespace dingodb

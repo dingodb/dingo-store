@@ -56,6 +56,7 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   bthread_mutex_init(&table_map_mutex_, nullptr);
   bthread_mutex_init(&store_metrics_map_mutex_, nullptr);
   bthread_mutex_init(&table_metrics_map_mutex_, nullptr);
+  bthread_mutex_init(&store_operation_map_mutex_, nullptr);
   root_schema_writed_to_raft_ = false;
 
   // the data structure below will write to raft
@@ -68,6 +69,7 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   executor_meta_ = new MetaMapStorage<pb::common::Executor>(&executor_map_);
   store_metrics_meta_ = new MetaMapStorage<pb::common::StoreMetrics>(&store_metrics_map_);
   table_metrics_meta_ = new MetaMapStorage<pb::coordinator_internal::TableMetricsInternal>(&table_metrics_map_);
+  store_operation_meta_ = new MetaSafeMapStorage<pb::coordinator::StoreOperation>(&store_operation_map_);
 
   // init FlatMap
   // id_epoch_map_temp_.init(1000, 80);
@@ -87,6 +89,7 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   id_epoch_map_safe_temp_.Init(100);      // id_epoch_map_temp_ is a small map
   schema_name_map_safe_temp_.Init(1000);  // schema_map_ is a big map
   table_name_map_safe_temp_.Init(10000);  // table_map_ is a big map
+  store_operation_map_.Init(1000);        // store_operation_map_ is a big map
 }
 
 CoordinatorControl::~CoordinatorControl() {
@@ -207,6 +210,32 @@ bool CoordinatorControl::Recover() {
     }
   }
   DINGO_LOG(INFO) << "Recover store_metrics_meta, count=" << kvs.size();
+  kvs.clear();
+
+  // 8.table_metrics map
+  if (!meta_reader_->Scan(table_metrics_meta_->Prefix(), kvs)) {
+    return false;
+  }
+  {
+    BAIDU_SCOPED_LOCK(table_metrics_map_mutex_);
+    if (!table_metrics_meta_->Recover(kvs)) {
+      return false;
+    }
+  }
+  DINGO_LOG(INFO) << "Recover table_metrics_meta, count=" << kvs.size();
+  kvs.clear();
+
+  // 9.store_operation map
+  if (!meta_reader_->Scan(store_operation_meta_->Prefix(), kvs)) {
+    return false;
+  }
+  {
+    BAIDU_SCOPED_LOCK(table_metrics_map_mutex_);
+    if (!store_operation_meta_->Recover(kvs)) {
+      return false;
+    }
+  }
+  DINGO_LOG(INFO) << "Recover store_operation_meta_, count=" << kvs.size();
   kvs.clear();
 
   // copy id_epoch_map_ to id_epoch_map_safe_temp_

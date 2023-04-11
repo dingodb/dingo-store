@@ -115,6 +115,9 @@ bool Server::InitEngines() {
 
     // init raft_meta_engine
     raft_kv_engine = std::make_shared<RaftMetaEngine>(raw_engine, coordinator_control_);
+
+    // set raft_meta_engine to coordinator_control
+    coordinator_control_->SetKvEngine(raft_kv_engine);
   } else {
     raft_kv_engine = std::make_shared<RaftKvEngine>(raw_engine);
     if (!raft_kv_engine->Init(config)) {

@@ -108,6 +108,16 @@ void Heartbeat::SendCoordinatorPushToStore(void* arg) {
       return;
     }
 
+    // add StoreOperation
+    pb::coordinator::StoreOperation store_operation;
+    coordinator_control->GetStoreOperation(store_need_send.id(), store_operation);
+    heartbeat_response.mutable_store_operation()->CopyFrom(store_operation);
+    if (store_operation.region_cmds_size() > 0) {
+      DINGO_LOG(INFO) << "SendCoordinatorPushToStore will send to store with store_operation:"
+                      << store_operation.DebugString();
+    }
+
+    // start rpc
     pb::push::PushService_Stub stub(&channel);
 
     brpc::Controller cntl;

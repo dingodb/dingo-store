@@ -98,10 +98,10 @@ template <typename T>
 class MetaSafeMapStorage {
  public:
   const std::string internal_prefix;
-  MetaSafeMapStorage(butil::FlatMap<uint64_t, T> *elements_ptr)
-      : internal_prefix(typeid(T).name()), elements_(elements_ptr){};
-  MetaSafeMapStorage(butil::FlatMap<uint64_t, T> *elements_ptr, const std::string &prefix)
-      : internal_prefix(prefix), elements_(elements_ptr){};
+  MetaSafeMapStorage(DingoSafeMap<uint64_t, T> *elements_ptr)
+      : internal_prefix(std::string("meta_map_safe") + typeid(T).name()), elements_(elements_ptr){};
+  MetaSafeMapStorage(DingoSafeMap<uint64_t, T> *elements_ptr, const std::string &prefix)
+      : internal_prefix(std::string("meta_map_safe") + prefix), elements_(elements_ptr){};
   ~MetaSafeMapStorage() = default;
 
   std::string Prefix() { return internal_prefix; }
@@ -214,9 +214,9 @@ class MetaMapStorage {
  public:
   const std::string internal_prefix;
   MetaMapStorage(butil::FlatMap<uint64_t, T> *elements_ptr)
-      : internal_prefix(typeid(T).name()), elements_(elements_ptr){};
+      : internal_prefix(std::string("meta_map_flat") + typeid(T).name()), elements_(elements_ptr){};
   MetaMapStorage(butil::FlatMap<uint64_t, T> *elements_ptr, const std::string &prefix)
-      : internal_prefix(prefix), elements_(elements_ptr){};
+      : internal_prefix(std::string("meta_map_flat") + prefix), elements_(elements_ptr){};
   ~MetaMapStorage() = default;
 
   std::string Prefix() { return internal_prefix; }
