@@ -187,6 +187,7 @@ file(GLOB META_SRCS ${PROJECT_SOURCE_DIR}/src/meta/*.cc)
 file(GLOB COORDINATOR_SRCS ${PROJECT_SOURCE_DIR}/src/coordinator/*.cc)
 file(GLOB STORE_SRCS ${PROJECT_SOURCE_DIR}/src/store/*.cc)
 file(GLOB SERVER_SRCS ${PROJECT_SOURCE_DIR}/src/server/*.cc)
+file(GLOB SCAN_SRCS ${PROJECT_SOURCE_DIR}/src/scan/*.cc)
 
 list(REMOVE_ITEM SERVER_SRCS "${PROJECT_SOURCE_DIR}/src/server/main.cc")
 
@@ -203,7 +204,8 @@ add_library(DINGODB_OBJS
             ${META_SRCS}
             ${COORDINATOR_SRCS}
             ${STORE_SRCS}
-            ${SERVER_SRCS})
+            ${SERVER_SRCS}
+            ${SCAN_SRCS})
 
 # bin output dir
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin)

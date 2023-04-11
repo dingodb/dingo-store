@@ -20,7 +20,8 @@
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
-#include "engine/scan_factory.h"
+#include "scan/scan.h"
+#include "scan/scan_manager.h"
 #include "engine/write_data.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
@@ -119,24 +120,23 @@ butil::Status Storage::KvScanBegin([[maybe_unused]] std::shared_ptr<Context> ctx
                                    uint64_t region_id, const pb::common::PrefixScanRange& range, uint64_t max_fetch_cnt,
                                    bool key_only, bool disable_auto_release, std::string* scan_id,
                                    std::vector<pb::common::KeyValue>* kvs) {
-  ScanContextFactory* factory = ScanContextFactory::GetInstance();
-  std::shared_ptr<ScanContext> scan = factory->CreateScan(scan_id);
+  ScanManager* manager = ScanManager::GetInstance();
+  std::shared_ptr<ScanContext> scan = manager->CreateScan(scan_id);
 
   butil::Status status;
 
-  status = scan->Open(*scan_id, factory->GetTimeoutMs(), factory->GetMaxBytesRpc(), factory->GetMaxFetchCntByServer(),
-                      engine_->GetRawEngine(), cf_name);
+  status = scan->Open(*scan_id, engine_->GetRawEngine(), cf_name);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << butil::StringPrintf("ScanContext::Open failed : %s", scan_id->c_str());
-    factory->DeleteScan(*scan_id);
+    manager->DeleteScan(*scan_id);
     *scan_id = "";
     return status;
   }
 
-  status = scan->ScanBegin(region_id, range, max_fetch_cnt, key_only, disable_auto_release, *kvs);
+  status = ScanHandler::ScanBegin(scan, region_id, range, max_fetch_cnt, key_only, disable_auto_release, kvs);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << butil::StringPrintf("ScanContext::ScanBegin failed: %s", scan_id->c_str());
-    factory->DeleteScan(*scan_id);
+    manager->DeleteScan(*scan_id);
     *scan_id = "";
     kvs->clear();
     return status;
@@ -147,17 +147,17 @@ butil::Status Storage::KvScanBegin([[maybe_unused]] std::shared_ptr<Context> ctx
 
 butil::Status Storage::KvScanContinue([[maybe_unused]] std::shared_ptr<Context> ctx, const std::string& scan_id,
                                       uint64_t max_fetch_cnt, std::vector<pb::common::KeyValue>* kvs) {
-  ScanContextFactory* factory = ScanContextFactory::GetInstance();
-  std::shared_ptr<ScanContext> scan = factory->FindScan(scan_id);
+  ScanManager* manager = ScanManager::GetInstance();
+  std::shared_ptr<ScanContext> scan = manager->FindScan(scan_id);
   butil::Status status;
   if (!scan) {
     DINGO_LOG(ERROR) << butil::StringPrintf("scan_id : %s not found", scan_id.c_str());
     return butil::Status(pb::error::ESCAN_NOTFOUND, "Not found scan_id");
   }
 
-  status = scan->ScanContinue(scan_id, max_fetch_cnt, *kvs);
+  status = ScanHandler::ScanContinue(scan, scan_id, max_fetch_cnt, kvs);
   if (!status.ok()) {
-    factory->DeleteScan(scan_id);
+    manager->DeleteScan(scan_id);
     DINGO_LOG(ERROR) << butil::StringPrintf("ScanContext::ScanBegin failed scan : %s max_fetch_cnt : %lu",
                                             scan_id.c_str(), max_fetch_cnt);
     return status;
@@ -167,27 +167,25 @@ butil::Status Storage::KvScanContinue([[maybe_unused]] std::shared_ptr<Context> 
 }
 
 butil::Status Storage::KvScanRelease([[maybe_unused]] std::shared_ptr<Context> ctx, const std::string& scan_id) {
-  ScanContextFactory* factory = ScanContextFactory::GetInstance();
-  std::shared_ptr<ScanContext> scan = factory->FindScan(scan_id);
+  ScanManager* manager = ScanManager::GetInstance();
+  std::shared_ptr<ScanContext> scan = manager->FindScan(scan_id);
   butil::Status status;
   if (!scan) {
     DINGO_LOG(ERROR) << butil::StringPrintf("scan_id : %s not found", scan_id.c_str());
     return butil::Status(pb::error::ESCAN_NOTFOUND, "Not found scan_id");
   }
 
-  status = scan->ScanRelease(scan_id);
+  status = ScanHandler::ScanRelease(scan, scan_id);
   if (!status.ok()) {
-    factory->DeleteScan(scan_id);
+    manager->DeleteScan(scan_id);
     DINGO_LOG(ERROR) << butil::StringPrintf("ScanContext::ScanRelease failed : %s", scan_id.c_str());
     return status;
   }
 
   // if set auto release. directly delete
-  factory->TryDeleteScan(scan_id);
+  manager->TryDeleteScan(scan_id);
 
   return status;
 }
-
-
 
 }  // namespace dingodb

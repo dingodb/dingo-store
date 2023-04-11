@@ -12,26 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DINGODB_ENGINE_SCAN_FACTORY_H_  // NOLINT
-#define DINGODB_ENGINE_SCAN_FACTORY_H_
+#ifndef DINGODB_ENGINE_SCAN_MANAGER_H_  // NOLINT
+#define DINGODB_ENGINE_SCAN_MANAGER_H_
 
 #include <map>
 #include <memory>
 #include <string>
 
 #include "butil/memory/singleton.h"
-#include "engine/scan.h"
+#include "scan/scan.h"
 
 namespace dingodb {
 
-class ScanContextFactory {
+class ScanManager {
  public:
-  static ScanContextFactory* GetInstance();
+  static ScanManager* GetInstance();
 
-  ScanContextFactory(const ScanContextFactory& rhs) = delete;
-  ScanContextFactory& operator=(const ScanContextFactory& rhs) = delete;
-  ScanContextFactory(ScanContextFactory&& rhs) = delete;
-  ScanContextFactory& operator=(ScanContextFactory&& rhs) = delete;
+  ScanManager(const ScanManager& rhs) = delete;
+  ScanManager& operator=(const ScanManager& rhs) = delete;
+  ScanManager(ScanManager&& rhs) = delete;
+  ScanManager& operator=(ScanManager&& rhs) = delete;
 
   bool Init(std::shared_ptr<Config> config);
 
@@ -49,9 +49,9 @@ class ScanContextFactory {
   static void RegularCleaningHandler(void* arg);
 
  private:
-  ScanContextFactory();
-  ~ScanContextFactory();
-  friend struct DefaultSingletonTraits<ScanContextFactory>;
+  ScanManager();
+  ~ScanManager();
+  friend struct DefaultSingletonTraits<ScanManager>;
 
   std::map<std::string, std::shared_ptr<ScanContext>> alive_scans_;
   std::map<std::string, std::shared_ptr<ScanContext>> waiting_destroyed_scans_;
@@ -64,4 +64,4 @@ class ScanContextFactory {
 
 }  // namespace dingodb
 
-#endif  // DINGODB_ENGINE_SCAN_FACTORY_H_   // NOLINT
+#endif  // DINGODB_ENGINE_SCAN_MANAGER_H_   // NOLINT

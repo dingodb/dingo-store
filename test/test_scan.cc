@@ -22,6 +22,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <exception>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -35,25 +36,25 @@
 #include "engine/engine.h"
 #include "engine/raw_rocks_engine.h"
 #include "engine/rocks_engine.h"
-#include "engine/scan.h"
-#include "engine/scan_factory.h"
 #include "proto/common.pb.h"
+#include "scan/scan.h"
+#include "scan/scan_manager.h"
 #include "server/server.h"
 
 namespace dingodb {
 
 static const std::string &kDefaultCf = Constant::kStoreDataCF;  // NOLINT
 
-class ScanTest {
+class ScanTest : public testing::Test {
  public:
-  std::shared_ptr<Config> GetConfig() { return config_; }
+  static std::shared_ptr<Config> GetConfig() { return config_; }
 
-  std::shared_ptr<RawRocksEngine> GetRawRocksEngine() { return raw_raw_rocks_engine_; }
-  ScanContextFactory *&GetFactory() { return factory_; }
+  static std::shared_ptr<RawRocksEngine> GetRawRocksEngine() { return raw_raw_rocks_engine_; }
+  static ScanManager *&GetManager() { return manager_; }
 
-  std::shared_ptr<ScanContext> GetScan(std::string *scan_id) {
+  static std::shared_ptr<ScanContext> GetScan(std::string *scan_id) {
     if (!scan_) {
-      scan_ = factory_->CreateScan(scan_id);
+      scan_ = manager_->CreateScan(scan_id);
       scan_id_ = *scan_id;
     } else {
       *scan_id = scan_id_;
@@ -61,112 +62,103 @@ class ScanTest {
     return scan_;
   }
 
-  void DeleteScan() {
+  static void DeleteScan() {
     if (!scan_id_.empty() || scan_) {
-      factory_->DeleteScan(scan_id_);
+      manager_->DeleteScan(scan_id_);
     }
     scan_.reset();
     scan_id_ = "";
   }
 
-  void MySetUp() {
+ protected:
+  static void SetUpTestSuite() {
     std::cout << "ScanTest::SetUp()" << std::endl;
     server_ = Server::GetInstance();
-    filename_ = "../../conf/store.yaml";
     server_->SetRole(pb::common::ClusterRole::STORE);
-    server_->InitConfig(filename_);
+    server_->InitConfig(kFileName);
     config_manager_ = ConfigManager::GetInstance();
     config_ = config_manager_->GetConfig(pb::common::ClusterRole::STORE);
-    factory_ = ScanContextFactory::GetInstance();
+    manager_ = ScanManager::GetInstance();
     raw_raw_rocks_engine_ = std::make_shared<RawRocksEngine>();
   }
-  void MyTearDown() {}
+
+  static void TearDownTestSuite() { raw_raw_rocks_engine_->Close(); }
+
+  void SetUp() override {}
+  void TearDown() override {}
 
  private:
-  Server *server_;
-  std::string filename_ = "../../conf/store.yaml";
-  ConfigManager *config_manager_;
-  std::shared_ptr<Config> config_;
-  std::shared_ptr<RawRocksEngine> raw_raw_rocks_engine_;
-  ScanContextFactory *factory_;
-  std::shared_ptr<ScanContext> scan_;
-  std::string scan_id_;
+  inline static Server *server_ = nullptr;
+  inline static const std::string kFileName = "../../conf/store.yaml";
+  inline static ConfigManager *config_manager_ = nullptr;
+  inline static std::shared_ptr<Config> config_;
+  inline static std::shared_ptr<RawRocksEngine> raw_raw_rocks_engine_;
+  inline static ScanManager *manager_ = nullptr;
+  inline static std::shared_ptr<ScanContext> scan_;
+  inline static std::string scan_id_;
 };
 
-static ScanTest *scan_test = nullptr;
-
-// cppcheck-suppress syntaxError
-TEST(ScanTest, BeforeInit) {
-  scan_test = new ScanTest();
-  scan_test->MySetUp();
-}
-
-TEST(ScanTest, InitRocksdb) {
-  auto raw_rocks_engine = scan_test->GetRawRocksEngine();
+TEST_F(ScanTest, InitRocksdb) {
+  auto raw_rocks_engine = this->GetRawRocksEngine();
 
   bool ret = raw_rocks_engine->Init({});
   EXPECT_FALSE(ret);
 
-  std::shared_ptr<Config> config = scan_test->GetConfig();
+  std::shared_ptr<Config> config = this->GetConfig();
 
   // Test for various configuration file exceptions
   ret = raw_rocks_engine->Init(config);
   EXPECT_TRUE(ret);
 
-  auto *factory = scan_test->GetFactory();
-  factory->Init(config);
+  auto *manager = this->GetManager();
+  manager->Init(config);
 }
 
-TEST(ScanTest, Open) {
-  auto raw_rocks_engine = scan_test->GetRawRocksEngine();
+TEST_F(ScanTest, Open) {
+  auto raw_rocks_engine = this->GetRawRocksEngine();
   std::string scan_id;
-  auto scan = scan_test->GetScan(&scan_id);
+  auto scan = this->GetScan(&scan_id);
   std::cout << "scan_id : " << scan_id << std::endl;
 
   EXPECT_NE(scan.get(), nullptr);
 
-  auto *factory = scan_test->GetFactory();
+  auto *manager = this->GetManager();
 
   butil::Status ok;
 
   // scan id empty failed
-  ok = scan->Open("", factory->GetTimeoutMs(), factory->GetMaxBytesRpc(), factory->GetMaxFetchCntByServer(),
-                  raw_rocks_engine, kDefaultCf);
+  ok = scan->Open("", raw_rocks_engine, kDefaultCf);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
 
-  // timeout == 0 failed
-  ok = scan->Open(scan_id, 0, factory->GetMaxBytesRpc(), factory->GetMaxFetchCntByServer(), raw_rocks_engine,
-                  kDefaultCf);
-  EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
+  // // timeout == 0 failed
+  // ok = scan->Open(scan_id, raw_rocks_engine, kDefaultCf);
+  // EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
 
-  // max bytes rpc = 0 failed
-  ok = scan->Open(scan_id, factory->GetTimeoutMs(), 0, factory->GetMaxFetchCntByServer(), raw_rocks_engine, kDefaultCf);
-  EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
+  // // max bytes rpc = 0 failed
+  // ok = scan->Open(scan_id, raw_rocks_engine, kDefaultCf);
+  // EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
 
-  // max_fetch_cnt_by_server == 0 failed
-  ok = scan->Open(scan_id, factory->GetTimeoutMs(), factory->GetMaxBytesRpc(), 0, raw_rocks_engine, kDefaultCf);
-  EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
+  // // max_fetch_cnt_by_server == 0 failed
+  // ok = scan->Open(scan_id, raw_rocks_engine, kDefaultCf);
+  // EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
 
   // engin empty {} failed
-  ok = scan->Open(scan_id, factory->GetTimeoutMs(), factory->GetMaxBytesRpc(), factory->GetMaxFetchCntByServer(), {},
-                  kDefaultCf);
+  ok = scan->Open(scan_id, {}, kDefaultCf);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
 
   // kDefaultCf empty  failed
-  ok = scan->Open(scan_id, factory->GetTimeoutMs(), factory->GetMaxBytesRpc(), factory->GetMaxFetchCntByServer(),
-                  raw_rocks_engine, "");
+  ok = scan->Open(scan_id, raw_rocks_engine, "");
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
 
-  ok = scan->Open(scan_id, factory->GetTimeoutMs(), factory->GetMaxBytesRpc(), factory->GetMaxFetchCntByServer(),
-                  raw_rocks_engine, kDefaultCf);
+  ok = scan->Open(scan_id, raw_rocks_engine, kDefaultCf);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 }
 
 // empty data
-TEST(ScanTest, ScanBegin) {
-  auto raw_rocks_engine = scan_test->GetRawRocksEngine();
+TEST_F(ScanTest, ScanBegin) {
+  auto raw_rocks_engine = this->GetRawRocksEngine();
   std::string scan_id;
-  auto scan = scan_test->GetScan(&scan_id);
+  auto scan = this->GetScan(&scan_id);
   std::cout << "scan_id : " << scan_id << std::endl;
 
   EXPECT_NE(scan.get(), nullptr);
@@ -182,7 +174,7 @@ TEST(ScanTest, ScanBegin) {
   std::vector<pb::common::KeyValue> kvs;
 
   // range empty
-  ok = scan->ScanBegin(region_id, range, max_fetch_cnt, key_only, disable_auto_release, kvs);
+  ok = ScanHandler::ScanBegin(scan, region_id, range, max_fetch_cnt, key_only, disable_auto_release, &kvs);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
 
   range.mutable_range()->set_start_key("keyAAA");
@@ -191,7 +183,7 @@ TEST(ScanTest, ScanBegin) {
   range.set_with_end(false);
 
   // range value failed
-  ok = scan->ScanBegin(0, range, max_fetch_cnt, key_only, disable_auto_release, kvs);
+  ok = ScanHandler::ScanBegin(scan, 0, range, max_fetch_cnt, key_only, disable_auto_release, &kvs);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
 
   range.mutable_range()->set_start_key("keyAAA");
@@ -200,7 +192,7 @@ TEST(ScanTest, ScanBegin) {
   range.set_with_end(false);
 
   // range value failed
-  ok = scan->ScanBegin(0, range, max_fetch_cnt, key_only, disable_auto_release, kvs);
+  ok = ScanHandler::ScanBegin(scan, 0, range, max_fetch_cnt, key_only, disable_auto_release, &kvs);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
 
   range.mutable_range()->set_start_key("keyAAA");
@@ -209,14 +201,14 @@ TEST(ScanTest, ScanBegin) {
   range.set_with_end(false);
 
   // ok
-  ok = scan->ScanBegin(region_id, range, max_fetch_cnt, key_only, disable_auto_release, kvs);
+  ok = ScanHandler::ScanBegin(scan, region_id, range, max_fetch_cnt, key_only, disable_auto_release, &kvs);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
-  scan_test->DeleteScan();
+  this->DeleteScan();
 }
 
-TEST(ScanTest, InsertData) {
-  auto raw_rocks_engine = scan_test->GetRawRocksEngine();
+TEST_F(ScanTest, InsertData) {
+  auto raw_rocks_engine = this->GetRawRocksEngine();
   const std::string &cf_name = kDefaultCf;
   std::shared_ptr<dingodb::RawEngine::Writer> writer = raw_rocks_engine->NewWriter(cf_name);
 
@@ -341,20 +333,19 @@ TEST(ScanTest, InsertData) {
   }
 }
 
-TEST(ScanTest, ScanBeginEqual) {
-  auto raw_rocks_engine = scan_test->GetRawRocksEngine();
+TEST_F(ScanTest, ScanBeginEqual) {
+  auto raw_rocks_engine = this->GetRawRocksEngine();
   std::string scan_id;
-  auto scan = scan_test->GetScan(&scan_id);
+  auto scan = this->GetScan(&scan_id);
   std::cout << "scan_id : " << scan_id << std::endl;
 
   EXPECT_NE(scan.get(), nullptr);
 
-  auto *factory = scan_test->GetFactory();
+  auto *manager = this->GetManager();
 
   butil::Status ok;
 
-  ok = scan->Open(scan_id, factory->GetTimeoutMs(), factory->GetMaxBytesRpc(), factory->GetMaxFetchCntByServer(),
-                  raw_rocks_engine, kDefaultCf);
+  ok = scan->Open(scan_id, raw_rocks_engine, kDefaultCf);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
   EXPECT_NE(scan.get(), nullptr);
@@ -373,32 +364,31 @@ TEST(ScanTest, ScanBeginEqual) {
   range.set_with_end(true);
 
   // ok
-  ok = scan->ScanBegin(region_id, range, max_fetch_cnt, key_only, disable_auto_release, kvs);
+  ok = ScanHandler::ScanBegin(scan, region_id, range, max_fetch_cnt, key_only, disable_auto_release, &kvs);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
   for (const auto &kv : kvs) {
     std::cout << kv.key() << ":" << kv.value() << std::endl;
   }
 
-  scan_test->DeleteScan();
+  this->DeleteScan();
 }
 
-TEST(ScanTest, ScanBeginOthers) {
-  auto raw_rocks_engine = scan_test->GetRawRocksEngine();
+TEST_F(ScanTest, ScanBeginOthers) {
+  auto raw_rocks_engine = this->GetRawRocksEngine();
   std::string scan_id;
 
-  auto *factory = scan_test->GetFactory();
+  auto *manager = this->GetManager();
   butil::Status ok;
 
   // [keyAA, keyAA0, keyAAA, keyAAA0, keyABB, keyABB0, keyABC, keyABC0, keyABD, keyABD0, keyAB, keyAB0 ]
   // test start_key end_key equal start_key >= keyAA and end_key <=keyAA
   {
-    auto scan = scan_test->GetScan(&scan_id);
+    auto scan = this->GetScan(&scan_id);
     std::cout << "scan_id : " << scan_id << std::endl;
 
     EXPECT_NE(scan.get(), nullptr);
-    ok = scan->Open(scan_id, factory->GetTimeoutMs(), factory->GetMaxBytesRpc(), factory->GetMaxFetchCntByServer(),
-                    raw_rocks_engine, kDefaultCf);
+    ok = scan->Open(scan_id, raw_rocks_engine, kDefaultCf);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
     EXPECT_NE(scan.get(), nullptr);
@@ -417,7 +407,7 @@ TEST(ScanTest, ScanBeginOthers) {
     range.set_with_end(true);
 
     // ok
-    ok = scan->ScanBegin(region_id, range, max_fetch_cnt, key_only, disable_auto_release, kvs);
+    ok = ScanHandler::ScanBegin(scan, region_id, range, max_fetch_cnt, key_only, disable_auto_release, &kvs);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
     for (const auto &kv : kvs) {
@@ -430,18 +420,17 @@ TEST(ScanTest, ScanBeginOthers) {
     EXPECT_EQ(kvs[2].key(), "keyAAA");
     EXPECT_EQ(kvs[3].key(), "keyAAA0");
 
-    scan_test->DeleteScan();
+    this->DeleteScan();
   }
 
   // [keyAA, keyAA0, keyAAA, keyAAA0, keyABB, keyABB0, keyABC, keyABC0, keyABD, keyABD0, keyAB, keyAB0 ]
   // test start_key >= keyAA and end_key < keyABB
   {
-    auto scan = scan_test->GetScan(&scan_id);
+    auto scan = this->GetScan(&scan_id);
     std::cout << "scan_id : " << scan_id << std::endl;
 
     EXPECT_NE(scan.get(), nullptr);
-    ok = scan->Open(scan_id, factory->GetTimeoutMs(), factory->GetMaxBytesRpc(), factory->GetMaxFetchCntByServer(),
-                    raw_rocks_engine, kDefaultCf);
+    ok = scan->Open(scan_id, raw_rocks_engine, kDefaultCf);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
     EXPECT_NE(scan.get(), nullptr);
@@ -460,7 +449,7 @@ TEST(ScanTest, ScanBeginOthers) {
     range.set_with_end(false);
 
     // ok
-    ok = scan->ScanBegin(region_id, range, max_fetch_cnt, key_only, disable_auto_release, kvs);
+    ok = ScanHandler::ScanBegin(scan, region_id, range, max_fetch_cnt, key_only, disable_auto_release, &kvs);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
     for (const auto &kv : kvs) {
@@ -475,18 +464,17 @@ TEST(ScanTest, ScanBeginOthers) {
     EXPECT_EQ(kvs[4].key(), "keyAB");
     EXPECT_EQ(kvs[5].key(), "keyAB0");
 
-    scan_test->DeleteScan();
+    this->DeleteScan();
   }
 
   // [keyAA, keyAA0, keyAAA, keyAAA0, keyABB, keyABB0, keyABC, keyABC0, keyABD, keyABD0, keyAB, keyAB0 ]
   // test start_key > keyAA and end_key < keyABB
   {
-    auto scan = scan_test->GetScan(&scan_id);
+    auto scan = this->GetScan(&scan_id);
     std::cout << "scan_id : " << scan_id << std::endl;
 
     EXPECT_NE(scan.get(), nullptr);
-    ok = scan->Open(scan_id, factory->GetTimeoutMs(), factory->GetMaxBytesRpc(), factory->GetMaxFetchCntByServer(),
-                    raw_rocks_engine, kDefaultCf);
+    ok = scan->Open(scan_id, raw_rocks_engine, kDefaultCf);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
     EXPECT_NE(scan.get(), nullptr);
@@ -505,7 +493,7 @@ TEST(ScanTest, ScanBeginOthers) {
     range.set_with_end(false);
 
     // ok
-    ok = scan->ScanBegin(region_id, range, max_fetch_cnt, key_only, disable_auto_release, kvs);
+    ok = ScanHandler::ScanBegin(scan, region_id, range, max_fetch_cnt, key_only, disable_auto_release, &kvs);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
     for (const auto &kv : kvs) {
@@ -516,18 +504,17 @@ TEST(ScanTest, ScanBeginOthers) {
     EXPECT_EQ(kvs[0].key(), "keyAB");
     EXPECT_EQ(kvs[1].key(), "keyAB0");
 
-    scan_test->DeleteScan();
+    this->DeleteScan();
   }
 
   // [keyAA, keyAA0, keyAAA, keyAAA0, keyABB, keyABB0, keyABC, keyABC0, keyABD, keyABD0, keyAB, keyAB0 ]
   // test start_key > keyAA and end_key <= keyABB
   {
-    auto scan = scan_test->GetScan(&scan_id);
+    auto scan = this->GetScan(&scan_id);
     std::cout << "scan_id : " << scan_id << std::endl;
 
     EXPECT_NE(scan.get(), nullptr);
-    ok = scan->Open(scan_id, factory->GetTimeoutMs(), factory->GetMaxBytesRpc(), factory->GetMaxFetchCntByServer(),
-                    raw_rocks_engine, kDefaultCf);
+    ok = scan->Open(scan_id, raw_rocks_engine, kDefaultCf);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
     EXPECT_NE(scan.get(), nullptr);
@@ -546,7 +533,7 @@ TEST(ScanTest, ScanBeginOthers) {
     range.set_with_end(true);
 
     // ok
-    ok = scan->ScanBegin(region_id, range, max_fetch_cnt, key_only, disable_auto_release, kvs);
+    ok = ScanHandler::ScanBegin(scan, region_id, range, max_fetch_cnt, key_only, disable_auto_release, &kvs);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
     for (const auto &kv : kvs) {
@@ -559,18 +546,17 @@ TEST(ScanTest, ScanBeginOthers) {
     EXPECT_EQ(kvs[2].key(), "keyABB");
     EXPECT_EQ(kvs[3].key(), "keyABB0");
 
-    scan_test->DeleteScan();
+    this->DeleteScan();
   }
 
   // [keyAA, keyAA0, keyAAA, keyAAA0, keyABB, keyABB0, keyABC, keyABC0, keyABD, keyABD0, keyAB, keyAB0 ]
   // test start_key >= keyAA and end_key <= keyABB
   {
-    auto scan = scan_test->GetScan(&scan_id);
+    auto scan = this->GetScan(&scan_id);
     std::cout << "scan_id : " << scan_id << std::endl;
 
     EXPECT_NE(scan.get(), nullptr);
-    ok = scan->Open(scan_id, factory->GetTimeoutMs(), factory->GetMaxBytesRpc(), factory->GetMaxFetchCntByServer(),
-                    raw_rocks_engine, kDefaultCf);
+    ok = scan->Open(scan_id, raw_rocks_engine, kDefaultCf);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
     EXPECT_NE(scan.get(), nullptr);
@@ -589,7 +575,7 @@ TEST(ScanTest, ScanBeginOthers) {
     range.set_with_end(true);
 
     // ok
-    ok = scan->ScanBegin(region_id, range, max_fetch_cnt, key_only, disable_auto_release, kvs);
+    ok = ScanHandler::ScanBegin(scan, region_id, range, max_fetch_cnt, key_only, disable_auto_release, &kvs);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
     for (const auto &kv : kvs) {
@@ -606,25 +592,24 @@ TEST(ScanTest, ScanBeginOthers) {
     EXPECT_EQ(kvs[6].key(), "keyABB");
     EXPECT_EQ(kvs[7].key(), "keyABB0");
 
-    scan_test->DeleteScan();
+    this->DeleteScan();
   }
 }
 
-TEST(ScanTest, ScanBeginNormal) {
-  auto raw_rocks_engine = scan_test->GetRawRocksEngine();
+TEST_F(ScanTest, ScanBeginNormal) {
+  auto raw_rocks_engine = this->GetRawRocksEngine();
   std::string scan_id;
 
-  auto *factory = scan_test->GetFactory();
+  auto *manager = this->GetManager();
   butil::Status ok;
 
   // [keyAA, keyAA0, keyAAA, keyAAA0, keyABB, keyABB0, keyABC, keyABC0, keyABD, keyABD0, keyAB, keyAB0 ]
 
-  auto scan = scan_test->GetScan(&scan_id);
+  auto scan = this->GetScan(&scan_id);
   std::cout << "scan_id : " << scan_id << std::endl;
 
   EXPECT_NE(scan.get(), nullptr);
-  ok = scan->Open(scan_id, factory->GetTimeoutMs(), factory->GetMaxBytesRpc(), factory->GetMaxFetchCntByServer(),
-                  raw_rocks_engine, kDefaultCf);
+  ok = scan->Open(scan_id, raw_rocks_engine, kDefaultCf);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
   EXPECT_NE(scan.get(), nullptr);
@@ -643,7 +628,7 @@ TEST(ScanTest, ScanBeginNormal) {
   range.set_with_end(true);
 
   // ok
-  ok = scan->ScanBegin(region_id, range, max_fetch_cnt, key_only, disable_auto_release, kvs);
+  ok = ScanHandler::ScanBegin(scan, region_id, range, max_fetch_cnt, key_only, disable_auto_release, &kvs);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
   for (const auto &kv : kvs) {
@@ -653,42 +638,42 @@ TEST(ScanTest, ScanBeginNormal) {
   EXPECT_EQ(kvs.size(), 0);
 }
 
-TEST(ScanTest, ScanContinue) {
-  auto raw_rocks_engine = scan_test->GetRawRocksEngine();
+TEST_F(ScanTest, ScanContinue) {
+  auto raw_rocks_engine = this->GetRawRocksEngine();
   std::string scan_id;
 
-  auto scan = scan_test->GetScan(&scan_id);
+  auto scan = this->GetScan(&scan_id);
   std::cout << "scan_id : " << scan_id << std::endl;
 
-  auto *factory = scan_test->GetFactory();
+  auto *manager = this->GetManager();
   butil::Status ok;
 
   uint64_t max_fetch_cnt = 2;
   std::vector<pb::common::KeyValue> kvs;
 
   // scan_id empty failed
-  ok = scan->ScanContinue("", max_fetch_cnt, kvs);
+  ok = ScanHandler::ScanContinue(scan, "", max_fetch_cnt, &kvs);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
 
   // max_fetch_cnt == 0 failed
-  ok = scan->ScanContinue(scan_id, 0, kvs);
+  ok = ScanHandler::ScanContinue(scan, scan_id, 0, &kvs);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
 
-  ok = scan->ScanContinue(scan_id, max_fetch_cnt, kvs);
+  ok = ScanHandler::ScanContinue(scan, scan_id, max_fetch_cnt, &kvs);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
   for (const auto &kv : kvs) {
     std::cout << kv.key() << ":" << kv.value() << std::endl;
   }
 
-  ok = scan->ScanContinue(scan_id, max_fetch_cnt, kvs);
+  ok = ScanHandler::ScanContinue(scan, scan_id, max_fetch_cnt, &kvs);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
   for (const auto &kv : kvs) {
     std::cout << kv.key() << ":" << kv.value() << std::endl;
   }
 
-  ok = scan->ScanContinue(scan_id, max_fetch_cnt, kvs);
+  ok = ScanHandler::ScanContinue(scan, scan_id, max_fetch_cnt, &kvs);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
   for (const auto &kv : kvs) {
@@ -696,32 +681,32 @@ TEST(ScanTest, ScanContinue) {
   }
 }
 
-TEST(ScanTest, ScanRelease) {
-  auto raw_rocks_engine = scan_test->GetRawRocksEngine();
+TEST_F(ScanTest, ScanRelease) {
+  auto raw_rocks_engine = this->GetRawRocksEngine();
   std::string scan_id;
 
-  auto scan = scan_test->GetScan(&scan_id);
+  auto scan = this->GetScan(&scan_id);
   std::cout << "scan_id : " << scan_id << std::endl;
 
-  auto *factory = scan_test->GetFactory();
+  auto *manager = this->GetManager();
   butil::Status ok;
 
   // scan_id empty failed
-  ok = scan->ScanRelease("");
+  ok = ScanHandler::ScanRelease(scan, "");
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
 
-  ok = scan->ScanRelease(scan_id);
+  ok = ScanHandler::ScanRelease(scan, scan_id);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 }
 
-TEST(ScanTest, IsRecyclable) {
-  auto raw_rocks_engine = scan_test->GetRawRocksEngine();
+TEST_F(ScanTest, IsRecyclable) {
+  auto raw_rocks_engine = this->GetRawRocksEngine();
   std::string scan_id;
 
-  auto scan = scan_test->GetScan(&scan_id);
+  auto scan = this->GetScan(&scan_id);
   std::cout << "scan_id : " << scan_id << std::endl;
 
-  auto *factory = scan_test->GetFactory();
+  auto *manager = this->GetManager();
 
   bool ret = scan->IsRecyclable();
 
@@ -731,24 +716,23 @@ TEST(ScanTest, IsRecyclable) {
 
   EXPECT_EQ(ret, false);
 
-  scan_test->DeleteScan();
+  this->DeleteScan();
 }
 
-TEST(ScanTest, scan) {
-  auto raw_rocks_engine = scan_test->GetRawRocksEngine();
+TEST_F(ScanTest, scan) {
+  auto raw_rocks_engine = this->GetRawRocksEngine();
   std::string scan_id;
 
-  auto *factory = scan_test->GetFactory();
+  auto *manager = this->GetManager();
   butil::Status ok;
 
   // [keyAA, keyAA0, keyAAA, keyAAA0, keyABB, keyABB0, keyABC, keyABC0, keyABD, keyABD0, keyAB, keyAB0 ]
 
-  auto scan = scan_test->GetScan(&scan_id);
+  auto scan = this->GetScan(&scan_id);
   std::cout << "scan_id : " << scan_id << std::endl;
 
   EXPECT_NE(scan.get(), nullptr);
-  ok = scan->Open(scan_id, factory->GetTimeoutMs(), factory->GetMaxBytesRpc(), factory->GetMaxFetchCntByServer(),
-                  raw_rocks_engine, kDefaultCf);
+  ok = scan->Open(scan_id, raw_rocks_engine, kDefaultCf);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
   EXPECT_NE(scan.get(), nullptr);
@@ -767,7 +751,7 @@ TEST(ScanTest, scan) {
   range.set_with_end(true);
 
   // ok
-  ok = scan->ScanBegin(region_id, range, max_fetch_cnt, key_only, disable_auto_release, kvs);
+  ok = ScanHandler::ScanBegin(scan, region_id, range, max_fetch_cnt, key_only, disable_auto_release, &kvs);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
   for (const auto &kv : kvs) {
@@ -779,7 +763,7 @@ TEST(ScanTest, scan) {
   max_fetch_cnt = 1;
 
   while (true) {
-    ok = scan->ScanContinue(scan_id, max_fetch_cnt, kvs);
+    ok = ScanHandler::ScanContinue(scan, scan_id, max_fetch_cnt, &kvs);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
     for (const auto &kv : kvs) {
@@ -789,114 +773,115 @@ TEST(ScanTest, scan) {
     if (kvs.empty()) {
       break;
     }
+    kvs.clear();
   }
 
-  ok = scan->ScanRelease(scan_id);
+  ok = ScanHandler::ScanRelease(scan, scan_id);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
-  scan_test->DeleteScan();
+  this->DeleteScan();
 }
 
-TEST(ScanFactoryTest, Init2) {
-  auto raw_rocks_engine = scan_test->GetRawRocksEngine();
+TEST_F(ScanTest, Init2) {
+  auto raw_rocks_engine = this->GetRawRocksEngine();
   std::string scan_id;
 
-  auto *factory = scan_test->GetFactory();
+  auto *manager = this->GetManager();
   butil::Status ok;
-  std::shared_ptr<Config> config = scan_test->GetConfig();
-  bool ret = factory->Init(config);
+  std::shared_ptr<Config> config = this->GetConfig();
+  bool ret = manager->Init(config);
 
   EXPECT_EQ(ret, true);
 }
 
-TEST(ScanFactoryTest, CreateScan) {
+TEST_F(ScanTest, CreateScan) {
   std::string scan_id;
 
-  auto *factory = scan_test->GetFactory();
+  auto *manager = this->GetManager();
 
-  std::shared_ptr<ScanContext> scan = factory->CreateScan(&scan_id);
+  std::shared_ptr<ScanContext> scan = manager->CreateScan(&scan_id);
 
   EXPECT_NE(scan.get(), nullptr);
 }
 
-TEST(ScanFactoryTest, FindScan) {
-  auto raw_rocks_engine = scan_test->GetRawRocksEngine();
+TEST_F(ScanTest, FindScan) {
+  auto raw_rocks_engine = this->GetRawRocksEngine();
   std::string scan_id;
 
-  auto *factory = scan_test->GetFactory();
+  auto *manager = this->GetManager();
 
-  scan_test->GetScan(&scan_id);
+  this->GetScan(&scan_id);
 
-  auto scan = factory->FindScan(scan_id);
+  auto scan = manager->FindScan(scan_id);
 
   EXPECT_NE(scan.get(), nullptr);
 
-  scan = factory->FindScan("");
+  scan = manager->FindScan("");
 
   EXPECT_EQ(scan.get(), nullptr);
 }
 
-TEST(ScanFactoryTest, TryDeleteScan) {
-  auto raw_rocks_engine = scan_test->GetRawRocksEngine();
+TEST_F(ScanTest, TryDeleteScan) {
+  auto raw_rocks_engine = this->GetRawRocksEngine();
   std::string scan_id;
 
-  auto *factory = scan_test->GetFactory();
+  auto *manager = this->GetManager();
 
-  scan_test->GetScan(&scan_id);
+  this->GetScan(&scan_id);
 
-  factory->TryDeleteScan(scan_id);
+  manager->TryDeleteScan(scan_id);
 }
 
-TEST(ScanFactoryTest, DeleteScan) {
-  auto raw_rocks_engine = scan_test->GetRawRocksEngine();
+TEST_F(ScanTest, DeleteScan) {
+  auto raw_rocks_engine = this->GetRawRocksEngine();
   std::string scan_id;
 
-  auto *factory = scan_test->GetFactory();
+  auto *manager = this->GetManager();
 
-  scan_test->GetScan(&scan_id);
+  this->GetScan(&scan_id);
 
-  factory->DeleteScan(scan_id);
+  manager->DeleteScan(scan_id);
 }
 
-TEST(ScanFactoryTest, GetTimeoutMs) {
-  auto raw_rocks_engine = scan_test->GetRawRocksEngine();
+TEST_F(ScanTest, GetTimeoutMs) {
+  auto raw_rocks_engine = this->GetRawRocksEngine();
   std::string scan_id;
-  auto *factory = scan_test->GetFactory();
+  auto *manager = this->GetManager();
 
-  auto timeout_ms = factory->GetTimeoutMs();
+  auto timeout_ms = manager->GetTimeoutMs();
   EXPECT_NE(timeout_ms, 0);
 }
 
-TEST(ScanFactoryTest, GetMaxBytesRpc) {
-  auto raw_rocks_engine = scan_test->GetRawRocksEngine();
+TEST_F(ScanTest, GetMaxBytesRpc) {
+  auto raw_rocks_engine = this->GetRawRocksEngine();
   std::string scan_id;
-  auto *factory = scan_test->GetFactory();
+  auto *manager = this->GetManager();
 
-  auto max_bytes_rpc = factory->GetMaxBytesRpc();
+  auto max_bytes_rpc = manager->GetMaxBytesRpc();
   EXPECT_NE(max_bytes_rpc, 0);
 }
 
-TEST(ScanFactoryTest, GetMaxFetchCntByServer) {
-  auto raw_rocks_engine = scan_test->GetRawRocksEngine();
+TEST_F(ScanTest, GetMaxFetchCntByServer) {
+  auto raw_rocks_engine = this->GetRawRocksEngine();
   std::string scan_id;
-  auto *factory = scan_test->GetFactory();
+  auto *manager = this->GetManager();
 
-  auto max_fetch_cnt_by_server = factory->GetMaxFetchCntByServer();
+  auto max_fetch_cnt_by_server = manager->GetMaxFetchCntByServer();
   EXPECT_NE(max_fetch_cnt_by_server, 0);
 }
 
-TEST(ScanFactoryTest, RegularCleaningHandler) {
-  auto raw_rocks_engine = scan_test->GetRawRocksEngine();
+TEST_F(ScanTest, RegularCleaningHandler) {
+  auto raw_rocks_engine = this->GetRawRocksEngine();
   std::string scan_id;
-  auto *factory = scan_test->GetFactory();
+  auto *manager = this->GetManager();
 
-  factory->RegularCleaningHandler(factory);
+  manager->RegularCleaningHandler(manager);
 }
 
-TEST(ScanFactoryTest, max_times) {
-  auto raw_rocks_engine = scan_test->GetRawRocksEngine();
+TEST_F(ScanTest, max_times) {
+  auto raw_rocks_engine = this->GetRawRocksEngine();
   std::string scan_id;
-  auto *factory = scan_test->GetFactory();
+  auto *manager = this->GetManager();
 
   dingodb::CrontabManager crontab_manager;
 
@@ -904,13 +889,26 @@ TEST(ScanFactoryTest, max_times) {
   crontab->name = "SCAN";
   crontab->max_times = 0;
   crontab->interval = 100;
-  // crontab->interval_ = factory->GetScanIntervalMs();
-  crontab->func = factory->RegularCleaningHandler;
-  crontab->arg = factory;
+  // crontab->interval_ = manager->GetScanIntervalMs();
+  crontab->func = manager->RegularCleaningHandler;
+  crontab->arg = manager;
 
-  auto config = scan_test->GetConfig();
+  auto config = this->GetConfig();
   auto name = Constant::kStoreScan + "." + Constant::kStoreScanScanIntervalMs;
-  auto interval = config->GetInt(Constant::kStoreScan + "." + Constant::kStoreScanScanIntervalMs);
+  int interval = -1;
+  try {
+    interval = config->GetInt(Constant::kStoreScan + "." + Constant::kStoreScanScanIntervalMs);
+  } catch (const std::exception &e) {
+    std::cout << "exception GetInt " << Constant::kStoreScan + "." + Constant::kStoreScanScanIntervalMs
+              << " failed. use default" << std::endl;
+    interval = 60000;
+  }
+
+  if (interval <= 0) {
+    std::cout << "GetInt " << Constant::kStoreScan + "." + Constant::kStoreScanScanIntervalMs << " failed. use default"
+              << std::endl;
+    interval = 60000;
+  }
 
   std::cout << "name : " << name << std::endl;
   std::cout << "interval : " << interval << std::endl;
@@ -921,8 +919,8 @@ TEST(ScanFactoryTest, max_times) {
   crontab_manager.Destroy();
 }
 
-TEST(ScanFactoryTest, KvDeleteRange) {
-  auto raw_rocks_engine = scan_test->GetRawRocksEngine();
+TEST_F(ScanTest, KvDeleteRange) {
+  auto raw_rocks_engine = this->GetRawRocksEngine();
   const std::string &cf_name = kDefaultCf;
   std::shared_ptr<dingodb::RawEngine::Writer> writer = raw_rocks_engine->NewWriter(cf_name);
 
@@ -951,11 +949,6 @@ TEST(ScanFactoryTest, KvDeleteRange) {
       std::cout << kv.key() << ":" << kv.value() << std::endl;
     }
   }
-}
-
-TEST(ScanFactoryTest, Destroy) {
-  delete scan_test;
-  scan_test = nullptr;
 }
 
 }  // namespace dingodb

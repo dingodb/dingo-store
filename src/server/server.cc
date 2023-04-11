@@ -35,7 +35,7 @@
 #include "engine/raft_meta_engine.h"
 #include "engine/raw_rocks_engine.h"
 #include "engine/rocks_engine.h"
-#include "engine/scan_factory.h"
+#include "scan/scan_manager.h"
 #include "meta/meta_reader.h"
 #include "meta/meta_writer.h"
 #include "proto/common.pb.h"
@@ -284,8 +284,8 @@ bool Server::AddScanToCrontabManager() {
     return false;
   }
   crontab->interval = scan_interval;
-  crontab->func = ScanContextFactory::RegularCleaningHandler;
-  crontab->arg = ScanContextFactory::GetInstance();
+  crontab->func = ScanManager::RegularCleaningHandler;
+  crontab->arg = ScanManager::GetInstance();
 
   crontab_manager_->AddAndRunCrontab(crontab);
   return true;
