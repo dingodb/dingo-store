@@ -15,6 +15,7 @@
 syntax = "proto3";
 
 import "common.proto";
+import "coordinator.proto";
 import "meta.proto";
 
 package dingodb.pb.coordinator_internal;
@@ -105,6 +106,12 @@ message MetaIncrementStoreMetrics {
   MetaIncrementOpType op_type = 3;
 }
 
+message MetaIncrementTableMetrics {
+  uint64 id = 1;
+  dingodb.pb.coordinator_internal.TableMetricsInternal table_metrics = 2;
+  MetaIncrementOpType op_type = 3;
+}
+
 message MetaIncrementExecutor {
   uint64 id = 1;
   dingodb.pb.common.Executor executor = 2;
@@ -138,6 +145,12 @@ message MetaIncrementIdEpoch {
   MetaIncrementOpType op_type = 3;
 }
 
+message MetaIncrementStoreOperation {
+  uint64 id = 1;  // this is store id
+  dingodb.pb.coordinator.StoreOperation store_operation = 2;
+  MetaIncrementOpType op_type = 3;
+}
+
 // MetaIncrement stores meta data need to be inserted or updated
 message MetaIncrement {
   repeated MetaIncrementCoordinator coordinators = 1;
@@ -148,6 +161,8 @@ message MetaIncrement {
   repeated MetaIncrementIdEpoch idepochs = 6;
   repeated MetaIncrementExecutor executors = 7;
   repeated MetaIncrementStoreMetrics store_metrics = 8;
+  repeated MetaIncrementTableMetrics table_metrics = 9;
+  repeated MetaIncrementStoreOperation store_operations = 10;
 }
 
 // snapshot pb file message
@@ -160,4 +175,6 @@ message MetaSnapshotFile {
   repeated dingodb.pb.common.KeyValue region_map_kvs = 6;
   repeated dingodb.pb.common.KeyValue table_map_kvs = 7;
   repeated dingodb.pb.common.KeyValue store_metrics_map_kvs = 8;
+  repeated dingodb.pb.common.KeyValue table_metrics_map_kvs = 9;
+  repeated dingodb.pb.common.KeyValue store_operation_map_kvs = 10;
 }
