@@ -26,6 +26,7 @@
 #include "engine/raw_engine.h"
 #include "engine/storage.h"
 #include "meta/store_meta_manager.h"
+#include "metrics/store_metrics_manager.h"
 #include "proto/common.pb.h"
 #include "store/store_control.h"
 
@@ -80,6 +81,8 @@ class Server {
   // add scan factory to CrontabManager
   bool AddScanToCrontabManager();
 
+  bool InitStoreMetricsManager();
+
   butil::Status StartMetaRegion(std::shared_ptr<Config> config, std::shared_ptr<Engine> kv_engine);
 
   // Recover server state, include store/region/raft.
@@ -105,6 +108,7 @@ class Server {
 
   std::shared_ptr<Storage> GetStorage() { return storage_; }
   std::shared_ptr<StoreMetaManager> GetStoreMetaManager() { return store_meta_manager_; }
+  std::shared_ptr<StoreMetricsManager> GetStoreMetricsManager() { return store_metrics_manager_; }
   std::shared_ptr<CrontabManager> GetCrontabManager() { return crontab_manager_; }
 
   std::shared_ptr<StoreControl> GetStoreControl() { return store_control_; }
@@ -143,6 +147,8 @@ class Server {
   std::shared_ptr<Storage> storage_;
   // This is manage store meta data, like store state and region state.
   std::shared_ptr<StoreMetaManager> store_meta_manager_;
+  // This is manage store metric data, like store metric/region metric/rocksdb metric.
+  std::shared_ptr<StoreMetricsManager> store_metrics_manager_;
   // This is manage crontab, like heartbeat.
   std::shared_ptr<CrontabManager> crontab_manager_;
 

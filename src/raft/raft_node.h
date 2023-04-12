@@ -54,6 +54,8 @@ class RaftNode {
 
   void Snapshot(braft::Closure* done);
 
+  std::shared_ptr<pb::common::BRaftStatus> GetStatus();
+
  private:
   pb::common::ClusterRole role_;
   uint64_t node_id_;

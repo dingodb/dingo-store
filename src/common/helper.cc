@@ -14,6 +14,7 @@
 
 #include "common/helper.h"
 
+#include <sys/statvfs.h>
 #include <unistd.h>
 
 #include <chrono>
@@ -459,6 +460,21 @@ butil::Status Helper::KvDeleteRangeParamCheck(const pb::common::RangeWithOptions
   }
 
   return butil::Status();
+}
+
+bool Helper::GetDiskCapacity(const std::string& path, std::map<std::string, uint64_t>& output) {
+  struct statvfs stat;
+  if (statvfs(path.c_str(), &stat) != 0) {
+    std::cerr << "Failed to get file system statistics\n";
+    return false;
+  }
+
+  uint64_t total_space = stat.f_frsize * stat.f_blocks;
+  uint64_t free_space = stat.f_frsize * stat.f_bfree;
+
+  output["TotalCapacity"] = total_space;
+  output["FreeCcapacity"] = free_space;
+  return true;
 }
 
 }  // namespace dingodb

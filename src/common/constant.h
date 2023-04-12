@@ -32,13 +32,17 @@ class Constant {
   static const uint64_t kCoordinatorSchemaId = 0;
 
   // Define Store data column family.
-  static const std::string kStoreDataCF;
+  inline static const std::string kStoreDataCF = "default";
   // Define Store meta column family.
-  static const std::string kStoreMetaCF;
+  inline static const std::string kStoreMetaCF = "meta";
   // Define store meta prefix.
-  static const std::string kStoreRegionMetaPrefix;
+  inline static const std::string kStoreRegionMetaPrefix = "META_REGION";
+  // Define store meta prefix.
+  inline static const std::string kStoreRegionMetaPrefixV2 = "META_REGIONV2";
   // Define store raft prefix.
-  static const std::string kStoreRaftMetaPrefix;
+  inline static const std::string kStoreRaftMetaPrefix = "META_RAFT";
+  // Define store region metrics prefix.
+  inline static const std::string kStoreRegionMetricsPrefix = "METRICS_REGION";
 
   // rocksdb config
   inline static const std::string kDbPath = "store.dbPath";

@@ -12,13 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "common/constant.h"
+#include <gtest/gtest.h>
 
-namespace dingodb {
+#include <iostream>
+#include <string>
 
-const std::string Constant::kStoreDataCF = "default";
-const std::string Constant::kStoreMetaCF = "meta";
-const std::string Constant::kStoreRegionMetaPrefix = "META_REGION";
-const std::string Constant::kStoreRaftMetaPrefix = "META_RAFT";
+#include "common/helper.h"
 
-}  // namespace dingodb
+class HelperTest : public testing::Test {
+ protected:
+  void SetUp() override {}
+  void TearDown() override {}
+};
+
+TEST_F(HelperTest, GetDiskCapacity) {
+  std::string path = "/";
+  std::map<std::string, uint64_t> output;
+
+  EXPECT_EQ(true, dingodb::Helper::GetDiskCapacity(path, output));
+  std::cout << output["TotalSpace"] << " " << output["FreeSpace"] << std::endl;
+}

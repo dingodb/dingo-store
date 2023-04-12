@@ -62,8 +62,8 @@ class StoreServerMeta {
 // Manage store server region meta data
 class StoreRegionMeta : public TransformKvAble {
  public:
-  StoreRegionMeta();
-  ~StoreRegionMeta() override;
+  StoreRegionMeta() : TransformKvAble(Constant::kStoreRegionMetaPrefix) { bthread_mutex_init(&mutex_, nullptr); }
+  ~StoreRegionMeta() override { bthread_mutex_destroy(&mutex_); }
 
   StoreRegionMeta(const StoreRegionMeta&) = delete;
   const StoreRegionMeta& operator=(const StoreRegionMeta&) = delete;
@@ -98,10 +98,36 @@ class StoreRegionMeta : public TransformKvAble {
   std::map<uint64_t, std::shared_ptr<pb::common::Region>> regions_;
 };
 
+// Manage store server region meta data
+class StoreRegionMetaV2 : public TransformKvAble {
+ public:
+  StoreRegionMetaV2() : TransformKvAble(Constant::kStoreRegionMetaPrefix) { bthread_mutex_init(&mutex_, nullptr); }
+  ~StoreRegionMetaV2() override { bthread_mutex_destroy(&mutex_); }
+
+  bool Init();
+  bool Recover(const std::vector<pb::common::KeyValue>& kvs);
+
+  void AddRegion(std::shared_ptr<pb::store_internal::Region> region);
+  void DeleteRegion(uint64_t region_id);
+  void UpdateRegion(std::shared_ptr<pb::store_internal::Region> region);
+  std::shared_ptr<pb::store_internal::Region> GetRegion(uint64_t region_id);
+  std::vector<std::shared_ptr<pb::store_internal::Region>> GetAllRegion();
+
+  std::shared_ptr<pb::common::KeyValue> TransformToKv(uint64_t region_id) override;
+  std::shared_ptr<pb::common::KeyValue> TransformToKv(std::shared_ptr<google::protobuf::Message> obj) override;
+
+  void TransformFromKv(const std::vector<pb::common::KeyValue>& kvs) override;
+
+ private:
+  bthread_mutex_t mutex_;
+  // Store all region meta data in this server.
+  std::map<uint64_t, std::shared_ptr<pb::store_internal::Region>> regions_;
+};
+
 class StoreRaftMeta : public TransformKvAble {
  public:
-  StoreRaftMeta();
-  ~StoreRaftMeta() override;
+  StoreRaftMeta() : TransformKvAble(Constant::kStoreRaftMetaPrefix) { bthread_mutex_init(&mutex_, nullptr); }
+  ~StoreRaftMeta() override { bthread_mutex_destroy(&mutex_); }
 
   bool Init();
   bool Recover(const std::vector<pb::common::KeyValue>& kvs);
@@ -145,6 +171,7 @@ class StoreMetaManager {
   std::shared_ptr<pb::common::Store> GetStore(uint64_t store_id);
   std::map<uint64_t, std::shared_ptr<pb::common::Store>> GetAllStore();
 
+  //
   bool IsExistRegion(uint64_t region_id);
   void AddRegion(std::shared_ptr<pb::common::Region> region);
   void UpdateRegion(std::shared_ptr<pb::common::Region> region);
@@ -157,6 +184,13 @@ class StoreMetaManager {
   void DeleteRaftMeta(uint64_t region_id);
   std::shared_ptr<pb::store_internal::RaftMeta> GetRaftMeta(uint64_t region_id);
 
+  bool IsExistRegionV2(uint64_t region_id);
+  void AddRegionV2(std::shared_ptr<pb::store_internal::Region> region);
+  void UpdateRegionV2(std::shared_ptr<pb::store_internal::Region> region, bool is_persistence);
+  void DeleteRegionV2(uint64_t region_id);
+  std::shared_ptr<pb::store_internal::Region> GetRegionV2(uint64_t region_id);
+  std::vector<std::shared_ptr<pb::store_internal::Region>> GetAllRegionV2();
+
  private:
   // Read meta data from persistence storage.
   std::shared_ptr<MetaReader> meta_reader_;
@@ -167,6 +201,8 @@ class StoreMetaManager {
   std::unique_ptr<StoreServerMeta> server_meta_;
   // Store manage region meta data.
   std::unique_ptr<StoreRegionMeta> region_meta_;
+
+  std::unique_ptr<StoreRegionMetaV2> region_metav2_;
   // Store raft meta.
   std::unique_ptr<StoreRaftMeta> raft_meta_;
 

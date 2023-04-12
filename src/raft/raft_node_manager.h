@@ -15,6 +15,7 @@
 #ifndef DINGODB_RAFT_RAFT_NODE_MANAGER_H_
 #define DINGODB_RAFT_RAFT_NODE_MANAGER_H_
 
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <shared_mutex>

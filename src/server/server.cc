@@ -198,19 +198,33 @@ bool Server::InitCrontabManager() {
   crontab_manager_ = std::make_shared<CrontabManager>();
 
   // Add heartbeat crontab
-  std::shared_ptr<Crontab> crontab = std::make_shared<Crontab>();
+  std::shared_ptr<Crontab> heartbeat_crontab = std::make_shared<Crontab>();
   auto config = ConfigManager::GetInstance()->GetConfig(role_);
-  crontab->name = "HEARTBEA";
+  heartbeat_crontab->name = "HEARTBEA";
   uint64_t push_interval = config->GetInt("server.pushInterval");
   if (push_interval <= 0) {
-    DINGO_LOG(INFO) << "server.pushInterval illegal";
+    DINGO_LOG(ERROR) << "config server.pushInterval illegal";
     return false;
   }
-  crontab->interval = push_interval;
-  crontab->func = Heartbeat::SendStoreHeartbeat;
-  crontab->arg = coordinator_interaction_.get();
+  heartbeat_crontab->interval = push_interval;
+  heartbeat_crontab->func = Heartbeat::SendStoreHeartbeat;
+  heartbeat_crontab->arg = coordinator_interaction_.get();
 
-  crontab_manager_->AddAndRunCrontab(crontab);
+  crontab_manager_->AddAndRunCrontab(heartbeat_crontab);
+
+  // Add store metrics crontab
+  std::shared_ptr<Crontab> metrics_crontab = std::make_shared<Crontab>();
+  metrics_crontab->name = "METRICS";
+  uint64_t metrics_interval = config->GetInt("server.metricsCollectInterval");
+  if (metrics_interval <= 0) {
+    DINGO_LOG(ERROR) << "config server.metricsCollectInterval illegal";
+    return false;
+  }
+  metrics_crontab->interval = metrics_interval;
+  metrics_crontab->func = [](void* /*arg*/) { Server::GetInstance()->GetStoreMetricsManager()->CollectMetrics(); };
+  metrics_crontab->arg = nullptr;
+
+  crontab_manager_->AddAndRunCrontab(metrics_crontab);
 
   return true;
 }
@@ -291,6 +305,13 @@ bool Server::AddScanToCrontabManager() {
 
   crontab_manager_->AddAndRunCrontab(crontab);
   return true;
+}
+
+bool Server::InitStoreMetricsManager() {
+  auto engine = raw_engines_[pb::common::RAW_ENG_ROCKSDB];
+  store_metrics_manager_ =
+      std::make_shared<StoreMetricsManager>(std::make_shared<MetaReader>(engine), std::make_shared<MetaWriter>(engine));
+  return store_metrics_manager_->Init();
 }
 
 bool Server::Recover() {
