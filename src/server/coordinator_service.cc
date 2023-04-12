@@ -297,17 +297,6 @@ void CoordinatorServiceImpl::ExecutorHeartbeat(google::protobuf::RpcController *
 
   // this is a async operation will be block by closure
   engine_->MetaPut(ctx, meta_increment);
-
-  // // setup response
-  // DINGO_LOG(INFO) << "set epoch id to response " << new_executormap_epoch << " " << new_regionmap_epoch;
-  // response->set_executormap_epoch(new_executormap_epoch);
-  // response->set_regionmap_epoch(new_regionmap_epoch);
-
-  // auto *new_regionmap = response->mutable_regionmap();
-  // this->coordinator_control_->GetRegionMap(*new_regionmap);
-
-  // auto *new_executormap = response->mutable_executormap();
-  // this->coordinator_control_->GetExecutorMap(*new_executormap);
 }
 
 void CoordinatorServiceImpl::StoreHeartbeat(google::protobuf::RpcController *controller,
@@ -370,17 +359,6 @@ void CoordinatorServiceImpl::StoreHeartbeat(google::protobuf::RpcController *con
 
   // this is a async operation will be block by closure
   engine_->MetaPut(ctx, meta_increment);
-
-  // // setup response
-  // DINGO_LOG(INFO) << "set epoch id to response " << new_storemap_epoch << " " << new_regionmap_epoch;
-  // response->set_storemap_epoch(new_storemap_epoch);
-  // response->set_regionmap_epoch(new_regionmap_epoch);
-
-  // auto *new_regionmap = response->mutable_regionmap();
-  // this->coordinator_control_->GetRegionMap(*new_regionmap);
-
-  // auto *new_storemap = response->mutable_storemap();
-  // this->coordinator_control_->GetStoreMap(*new_storemap);
 }
 
 void CoordinatorServiceImpl::GetStoreMap(google::protobuf::RpcController * /*controller*/,
@@ -521,6 +499,73 @@ void CoordinatorServiceImpl::GetCoordinatorMap(google::protobuf::RpcController *
     auto *location = response->add_coordinator_locations();
     location->CopyFrom(member_location);
   }
+}
+
+void CoordinatorServiceImpl::DropRegionPermanently(google::protobuf::RpcController *controller,
+                                                   const pb::coordinator::DropRegionPermanentlyRequest *request,
+                                                   pb::coordinator::DropRegionPermanentlyResponse *response,
+                                                   google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+  DINGO_LOG(DEBUG) << "Receive Drop Region Permanently Request:" << request->DebugString();
+
+  auto is_leader = this->coordinator_control_->IsLeader();
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  pb::coordinator_internal::MetaIncrement meta_increment;
+
+  auto region_id = request->region_id();
+  auto cluster_id = request->cluster_id();
+
+  auto ret = this->coordinator_control_->DropRegionPermanently(region_id, meta_increment);
+  response->mutable_error()->set_errcode(ret);
+
+  // prepare for raft process
+  CoordinatorClosure<pb::coordinator::DropRegionPermanentlyRequest, pb::coordinator::DropRegionPermanentlyResponse>
+      *meta_drop_region_permanently_closure = new CoordinatorClosure<pb::coordinator::DropRegionPermanentlyRequest,
+                                                                     pb::coordinator::DropRegionPermanentlyResponse>(
+          request, response, done_guard.release());
+
+  std::shared_ptr<Context> const ctx =
+      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_drop_region_permanently_closure);
+  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+
+  // this is a async operation will be block by closure
+  engine_->MetaPut(ctx, meta_increment);
+}
+
+void CoordinatorServiceImpl::CleanStoreOperation(google::protobuf::RpcController *controller,
+                                                 const pb::coordinator::CleanStoreOperationRequest *request,
+                                                 pb::coordinator::CleanStoreOperationResponse *response,
+                                                 google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+  DINGO_LOG(DEBUG) << "Receive CleanStoreOperation Request:" << request->DebugString();
+
+  auto is_leader = this->coordinator_control_->IsLeader();
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  pb::coordinator_internal::MetaIncrement meta_increment;
+
+  auto store_id = request->store_id();
+
+  auto ret = this->coordinator_control_->CleanStoreOperation(store_id, meta_increment);
+  response->mutable_error()->set_errcode(ret);
+
+  // prepare for raft process
+  CoordinatorClosure<pb::coordinator::CleanStoreOperationRequest,
+                     pb::coordinator::CleanStoreOperationResponse> *meta_clean_store_operation_closure =
+      new CoordinatorClosure<pb::coordinator::CleanStoreOperationRequest, pb::coordinator::CleanStoreOperationResponse>(
+          request, response, done_guard.release());
+
+  std::shared_ptr<Context> const ctx =
+      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_clean_store_operation_closure);
+  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+
+  // this is a async operation will be block by closure
+  engine_->MetaPut(ctx, meta_increment);
 }
 
 }  // namespace dingodb

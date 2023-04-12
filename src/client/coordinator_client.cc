@@ -103,6 +103,10 @@ void* Sender(void* /*arg*/) {
     SendGetRegionMap(cntl, coordinator_stub);
   } else if (FLAGS_method == "GetCoordinatorMap") {
     SendGetCoordinatorMap(cntl, coordinator_stub);
+  } else if (FLAGS_method == "DropRegionPermanently") {
+    SendDropRegionPermanently(cntl, coordinator_stub);
+  } else if (FLAGS_method == "CleanStoreOperation") {
+    SendCleanStoreOperation(cntl, coordinator_stub);
   } else if (FLAGS_method == "GetStoreMetrics") {
     SendGetStoreMetrics(cntl, coordinator_stub);
   } else if (FLAGS_method == "GetStoreOperation") {

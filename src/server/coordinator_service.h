@@ -87,6 +87,16 @@ class CoordinatorServiceImpl : public pb::coordinator::CoordinatorService {
                          pb::coordinator::GetCoordinatorMapResponse* response,
                          google::protobuf::Closure* done) override;
 
+  void DropRegionPermanently(google::protobuf::RpcController* controller,
+                             const pb::coordinator::DropRegionPermanentlyRequest* request,
+                             pb::coordinator::DropRegionPermanentlyResponse* response,
+                             google::protobuf::Closure* done) override;
+
+  void CleanStoreOperation(google::protobuf::RpcController* controller,
+                           const pb::coordinator::CleanStoreOperationRequest* request,
+                           pb::coordinator::CleanStoreOperationResponse* response,
+                           google::protobuf::Closure* done) override;
+
  private:
   std::shared_ptr<CoordinatorControl> coordinator_control_;
   std::shared_ptr<Engine> engine_;

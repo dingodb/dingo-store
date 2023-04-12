@@ -93,6 +93,7 @@ void NodeServiceImpl::GetLogLevel(google::protobuf::RpcController* controller,
     response->set_log_level(static_cast<LogLevel>(min_log_level + 1));
   }
 }
+
 void NodeServiceImpl::ChangeLogLevel(google::protobuf::RpcController* /* controller */,
                                      const pb::node::ChangeLogLevelRequest* request,
                                      pb::node::ChangeLogLevelResponse* /*response*/, google::protobuf::Closure* done) {
