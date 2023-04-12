@@ -23,12 +23,12 @@ namespace dingodb {
  * define the debug log level.
  * The larger the number, the more comprehensive information is displayed.
  */
-#define DEBUG 79
-static constexpr int kGlobalValueOfDebug = DEBUG;
+#define DINGO_DEBUG 79
+static constexpr int kGlobalValueOfDebug = DINGO_DEBUG;
 
 #define DINGO_LOG(level) DINGO_LOG_##level
 
-#define DINGO_LOG_DEBUG VLOG(DEBUG)
+#define DINGO_LOG_DEBUG VLOG(DINGO_DEBUG)
 #define DINGO_LOG_INFO LOG(INFO)
 #define DINGO_LOG_WARNING LOG(WARNING)
 #define DINGO_LOG_ERROR LOG(ERROR)
@@ -55,4 +55,3 @@ class DingoLogger {
 
 }  // namespace dingodb
 #endif
-

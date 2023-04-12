@@ -31,6 +31,7 @@ DEFINE_int32(req_num, 1, "Number of requests");
 DEFINE_string(method, "Hello", "Request method");
 DEFINE_string(id, "", "Request parameter id, for example: table_id for CreateTable/DropTable");
 DEFINE_string(name, "", "Request parameter name, for example: table_id for GetSchemaByName/GetTableByName");
+DEFINE_string(level, "", "Request log level [DEBUG, INFO, WARNING, ERROR, FATAL]");
 DEFINE_string(keyring, "", "Request parameter keyring");
 DEFINE_string(coordinator_addr, "", "coordinator servr addr, for example: 127.0.0.1:8001");
 DEFINE_string(group, "0", "Id of the replication group, now coordinator use 0 as groupid");
@@ -104,6 +105,8 @@ void* Sender(void* /*arg*/) {
     SendGetCoordinatorMap(cntl, coordinator_stub);
   } else if (FLAGS_method == "GetStoreMetrics") {
     SendGetStoreMetrics(cntl, coordinator_stub);
+  } else if (FLAGS_method == "GetStoreOperation") {
+    SendGetStoreOperation(cntl, coordinator_stub);
   } else if (FLAGS_method == "GetNodeInfo") {
     SendGetNodeInfo(cntl, node_stub);
   } else if (FLAGS_method == "GetLogLevel") {

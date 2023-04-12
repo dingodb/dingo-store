@@ -29,9 +29,9 @@
 #include "proto/node.pb.h"
 
 namespace dingodb {
+using pb::error::Errno;
 using pb::node::LogDetail;
 using pb::node::LogLevel;
-using pb::error::Errno;
 
 void NodeServiceImpl::SetServer(dingodb::Server* server) { this->server_ = server; }
 
@@ -101,8 +101,8 @@ void NodeServiceImpl::ChangeLogLevel(google::protobuf::RpcController* /* control
   DINGO_LOG(INFO) << "ChangeLogLevel=>Receive Request:" << request->DebugString();
 
   const LogLevel log_level = request->log_level();
-  if (log_level == DEBUG) {
-    DingoLogger::SetMinLogLevel(1);
+  if (log_level == pb::node::DEBUG) {
+    DingoLogger::SetMinLogLevel(0);
     DingoLogger::SetMinVerboseLevel(kGlobalValueOfDebug);
   } else {
     DingoLogger::SetMinLogLevel(static_cast<int>(log_level) - 1);
