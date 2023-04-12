@@ -32,6 +32,7 @@
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
 #include "proto/store.pb.h"
+#include "server/cluster_service.h"
 #include "server/coordinator_service.h"
 #include "server/meta_service.h"
 #include "server/node_service.h"
@@ -161,8 +162,8 @@ int main(int argc, char *argv[]) {
   dingodb::StoreServiceImpl store_service;
   dingodb::NodeServiceImpl node_service;
   dingodb::PushServiceImpl push_service;
-
   dingodb::VersionServiceProtoImpl version_service;
+  dingodb::ClusterStatImpl cluster_stat_service;
 
   node_service.SetServer(dingo_server);
 
@@ -213,6 +214,14 @@ int main(int argc, char *argv[]) {
       DINGO_LOG(ERROR) << "Fail to add raft service!";
       return -1;
     }
+
+    // Add Cluster Stat Service to get meta information from dingodb cluster
+    cluster_stat_service.SetControl(dingo_server->GetCoordinatorControl());
+    if (0 != brpc_server.AddService(&cluster_stat_service, brpc::SERVER_OWNS_SERVICE)) {
+      DINGO_LOG(ERROR) << "Fail to add cluster stat service";
+      return -1;
+    }
+
     if (raft_server.Start(dingo_server->RaftEndpoint(), nullptr) != 0) {
       DINGO_LOG(ERROR) << "Fail to start raft server!";
       return -1;
