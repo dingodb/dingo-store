@@ -87,6 +87,16 @@ class CoordinatorControl : public MetaControl {
   // return: 0 or -1
   int DropRegion(uint64_t region_id, pb::coordinator_internal::MetaIncrement &meta_increment);
 
+  // drop region permanently
+  // in:  region_id
+  // return: errno
+  pb::error::Errno DropRegionPermanently(uint64_t region_id, pb::coordinator_internal::MetaIncrement &meta_increment);
+
+  // CleanStoreOperation
+  // in:  store_id
+  // return: 0 or -1
+  pb::error::Errno CleanStoreOperation(uint64_t store_id, pb::coordinator_internal::MetaIncrement &meta_increment);
+
   // create schema
   // in: parent_schema_id
   // in: schema_name

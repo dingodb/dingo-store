@@ -514,36 +514,12 @@ pb::error::Errno CoordinatorControl::DropTable(uint64_t schema_id, uint64_t tabl
     table_internal = *temp_table;
   }
 
-  bool need_delete_region = false;
-  {
-    BAIDU_SCOPED_LOCK(region_map_mutex_);
-    for (int i = 0; i < table_internal.partitions_size(); i++) {
-      // part id
-      uint64_t region_id = table_internal.partitions(i).region_id();
+  // call DropRegion
+  for (int i = 0; i < table_internal.partitions_size(); i++) {
+    // part id
+    uint64_t region_id = table_internal.partitions(i).region_id();
 
-      // get region
-      if (region_map_.seek(region_id) == nullptr) {
-        DINGO_LOG(ERROR) << "ERROR cannot find region in regionmap_ while DropTable, table_id =" << table_id
-                         << " region_id=" << region_id;
-        return pb::error::Errno::ETABLE_REGION_DROP_FAILED;
-      }
-
-      // update region to DELETE, not delete region really, not
-      auto* region_to_delete = meta_increment.add_regions();
-      region_to_delete->set_id(region_id);
-      region_to_delete->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
-      auto* region_to_delete_region = region_to_delete->mutable_region();
-      region_to_delete_region->CopyFrom(region_map_[region_id]);
-      region_to_delete->mutable_region()->set_state(::dingodb::pb::common::RegionState::REGION_DELETE);
-      DINGO_LOG(INFO) << "Delete Region in Drop Table, table_id=" << table_id << " region_id=" << region_id;
-
-      need_delete_region = true;
-    }
-  }
-
-  // bump up region map epoch
-  if (need_delete_region) {
-    GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_REGION, meta_increment);
+    DropRegion(region_id, meta_increment);
   }
 
   // delete table

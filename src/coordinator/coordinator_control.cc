@@ -230,7 +230,7 @@ bool CoordinatorControl::Recover() {
     return false;
   }
   {
-    BAIDU_SCOPED_LOCK(table_metrics_map_mutex_);
+    BAIDU_SCOPED_LOCK(store_operation_map_mutex_);
     if (!store_operation_meta_->Recover(kvs)) {
       return false;
     }

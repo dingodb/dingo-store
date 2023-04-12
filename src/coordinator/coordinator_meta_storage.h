@@ -167,10 +167,11 @@ class MetaSafeMapStorage {
   }
 
   std::vector<pb::common::KeyValue> TransformToKvWithAll() {
-    // std::shared_lock<std::shared_mutex> lock(mutex_);
+    butil::FlatMap<uint64_t, T> temp_map;
+    elements_->GetFlatMapCopy(temp_map);
 
     std::vector<pb::common::KeyValue> kvs;
-    for (const auto &it : *elements_) {
+    for (const auto &it : temp_map) {
       pb::common::KeyValue kv;
       kv.set_key(GenKey(it.first));
       kv.set_value(it.second.SerializeAsString());
