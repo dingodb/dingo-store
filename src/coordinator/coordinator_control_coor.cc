@@ -367,6 +367,11 @@ int CoordinatorControl::CreateRegion(const std::string& region_name, const std::
 
     store_operation.set_id(store.id());
     auto* region_cmd = store_operation.add_region_cmds();
+    region_cmd->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
+    region_cmd->set_create_timestamp(
+        std::chrono::time_point_cast<std::chrono::microseconds>(std::chrono::system_clock::now())
+            .time_since_epoch()
+            .count());
     region_cmd->set_region_id(create_region_id);
     region_cmd->set_region_cmd_type(::dingodb::pb::coordinator::RegionCmdType::CMD_CREATE);
     auto* create_request = region_cmd->mutable_create_request();

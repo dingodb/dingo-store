@@ -482,7 +482,7 @@ void SendGetStoreOperation(brpc::Controller& cntl, dingodb::pb::coordinator::Coo
   }
 
   for (const auto& it : response.store_operations()) {
-    DINGO_LOG(INFO) << "store_id=" << it.id() << " store_operation=" << it.ShortDebugString();
+    DINGO_LOG(INFO) << "store_id=" << it.id() << " store_operation=" << it.DebugString();
   }
 
   if (FLAGS_log_each_request) {
