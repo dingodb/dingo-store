@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DINGODB_meta_SERVICE_H_
-#define DINGODB_meta_SERVICE_H_
+#ifndef DINGODB_META_SERVICE_H_
+#define DINGODB_META_SERVICE_H_
 
 #include <memory>
 
@@ -82,4 +82,4 @@ class MetaServiceImpl : public pb::meta::MetaService {
 
 }  // namespace dingodb
 
-#endif  // DINGODB_meta_SERVICE_H_
+#endif  // DINGODB_META_SERVICE_H_
