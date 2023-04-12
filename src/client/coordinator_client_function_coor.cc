@@ -22,6 +22,7 @@
 DECLARE_bool(log_each_request);
 DECLARE_int32(timeout_ms);
 DECLARE_string(id);
+DECLARE_string(level);
 DECLARE_string(keyring);
 DECLARE_string(coordinator_addr);
 
@@ -116,7 +117,23 @@ void SendChangeLogLevel(brpc::Controller& cntl, dingodb::pb::node::NodeService_S
   dingodb::pb::node::ChangeLogLevelRequest request;
   dingodb::pb::node::ChangeLogLevelResponse response;
 
-  request.set_log_level(dingodb::pb::node::WARNING);
+  using ::dingodb::pb::node::LogLevel;
+
+  if (FLAGS_level == "DEBUG") {
+    request.set_log_level(dingodb::pb::node::DEBUG);
+  } else if (FLAGS_level == "INFO") {
+    request.set_log_level(dingodb::pb::node::INFO);
+  } else if (FLAGS_level == "WARNING") {
+    request.set_log_level(dingodb::pb::node::WARNING);
+  } else if (FLAGS_level == "ERROR") {
+    request.set_log_level(dingodb::pb::node::ERROR);
+  } else if (FLAGS_level == "FATAL") {
+    request.set_log_level(dingodb::pb::node::FATAL);
+  } else {
+    DINGO_LOG(WARNING) << "level is not valid";
+    request.set_log_level(dingodb::pb::node::WARNING);
+  }
+
   auto* log_detail = request.mutable_log_detail();
   log_detail->set_log_buf_secs(10);
   log_detail->set_max_log_size(100);
@@ -443,5 +460,34 @@ void SendGetStoreMetrics(brpc::Controller& cntl, dingodb::pb::coordinator::Coord
                     << " request_attachment=" << cntl.request_attachment().size()
                     << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
     DINGO_LOG(INFO) << response.DebugString();
+  }
+}
+
+void SendGetStoreOperation(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
+  dingodb::pb::coordinator::GetStoreOperationRequest request;
+  dingodb::pb::coordinator::GetStoreOperationResponse response;
+
+  if (!FLAGS_id.empty()) {
+    request.set_id(std::stoull(FLAGS_id));
+  }
+
+  stub.GetStoreOperation(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    // bthread_usleep(FLAGS_timeout_ms * 1000L);
+  }
+
+  for (const auto& it : response.store_operations()) {
+    DINGO_LOG(INFO) << "store_id=" << it.id() << " cmd_count=" << it.region_cmds_size();
+  }
+
+  for (const auto& it : response.store_operations()) {
+    DINGO_LOG(INFO) << "store_id=" << it.id() << " store_operation=" << it.ShortDebugString();
+  }
+
+  if (FLAGS_log_each_request) {
+    DINGO_LOG(INFO) << "Received response"
+                    << " request_attachment=" << cntl.request_attachment().size()
+                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
   }
 }
