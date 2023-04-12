@@ -263,11 +263,11 @@ enum RaftNodeState {
 message RaftPeerStatus {
   bool valid = 1;
   bool installing_snapshot = 2;
-  uint64 next_index = 3;
-  uint64 last_rpc_send_timestamp = 4;
-  uint64 flying_append_entries_size = 5;
-  uint64 readonly_index = 6;
-  uint32 consecutive_error_times = 7;
+  int64 next_index = 3;
+  int64 last_rpc_send_timestamp = 4;
+  int64 flying_append_entries_size = 5;
+  int64 readonly_index = 6;
+  int32 consecutive_error_times = 7;
 }
 
 // BRaftStatus
@@ -276,15 +276,15 @@ message BRaftStatus {
   string peer_id = 11;
   string leader_peer_id = 12;
   bool readonly = 13;
-  uint64 term = 14;
-  uint64 committed_index = 15;
-  uint64 known_applied_index = 16;
-  uint64 pending_index = 17;
-  uint64 pending_queue_size = 18;
-  uint64 applying_index = 19;
-  uint64 first_index = 20;
-  uint64 last_index = 21;
-  uint64 disk_index = 22;
+  int64 term = 14;
+  int64 committed_index = 15;
+  int64 known_applied_index = 16;
+  int64 pending_index = 17;
+  int64 pending_queue_size = 18;
+  int64 applying_index = 19;
+  int64 first_index = 20;
+  int64 last_index = 21;
+  int64 disk_index = 22;
 
   map<string, RaftPeerStatus> stable_followers = 23;
   map<string, RaftPeerStatus> unstable_followers = 24;

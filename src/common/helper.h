@@ -136,6 +136,7 @@ class Helper {
 
   static butil::Status KvDeleteRangeParamCheck(const pb::common::RangeWithOptions& range, std::string* real_start_key,
                                                std::string* real_end_key);
+  static bool GetDiskCapacity(const std::string& path, std::map<std::string, uint64_t>& output);
 };
 
 }  // namespace dingodb

@@ -92,12 +92,6 @@ std::map<uint64_t, std::shared_ptr<pb::common::Store>> StoreServerMeta::GetAllSt
   return stores_;
 }
 
-StoreRegionMeta::StoreRegionMeta() : TransformKvAble(Constant::kStoreRegionMetaPrefix) {
-  bthread_mutex_init(&mutex_, nullptr);
-};
-
-StoreRegionMeta::~StoreRegionMeta() { bthread_mutex_destroy(&mutex_); }
-
 bool StoreRegionMeta::Init() { return true; }
 
 bool StoreRegionMeta::Recover(const std::vector<pb::common::KeyValue>& kvs) {
@@ -210,11 +204,82 @@ void StoreRegionMeta::TransformFromKv(const std::vector<pb::common::KeyValue>& k
   }
 }
 
-StoreRaftMeta::StoreRaftMeta() : TransformKvAble(Constant::kStoreRaftMetaPrefix) {
-  bthread_mutex_init(&mutex_, nullptr);
+bool StoreRegionMetaV2::Init() { return true; }
+
+bool StoreRegionMetaV2::Recover(const std::vector<pb::common::KeyValue>& kvs) {
+  TransformFromKv(kvs);
+  return true;
 }
 
-StoreRaftMeta::~StoreRaftMeta() { bthread_mutex_destroy(&mutex_); }
+void StoreRegionMetaV2::AddRegion(std::shared_ptr<pb::store_internal::Region> region) {
+  BAIDU_SCOPED_LOCK(mutex_);
+  if (regions_.find(region->id()) != regions_.end()) {
+    DINGO_LOG(WARNING) << butil::StringPrintf("region %lu already exist!", region->id());
+    return;
+  }
+
+  regions_.insert(std::make_pair(region->id(), region));
+}
+
+void StoreRegionMetaV2::DeleteRegion(uint64_t region_id) {
+  BAIDU_SCOPED_LOCK(mutex_);
+  regions_.erase(region_id);
+}
+
+void StoreRegionMetaV2::UpdateRegion(std::shared_ptr<pb::store_internal::Region> region) {
+  BAIDU_SCOPED_LOCK(mutex_);
+  regions_.insert_or_assign(region->id(), region);
+}
+std::shared_ptr<pb::store_internal::Region> StoreRegionMetaV2::GetRegion(uint64_t region_id) {
+  BAIDU_SCOPED_LOCK(mutex_);
+  auto it = regions_.find(region_id);
+  if (it == regions_.end()) {
+    DINGO_LOG(WARNING) << butil::StringPrintf("region %lu not exist!", region_id);
+    return nullptr;
+  }
+
+  return it->second;
+}
+
+std::vector<std::shared_ptr<pb::store_internal::Region>> StoreRegionMetaV2::GetAllRegion() {
+  BAIDU_SCOPED_LOCK(mutex_);
+  std::vector<std::shared_ptr<pb::store_internal::Region>> regions;
+  regions.reserve(regions_.size());
+  for (auto [_, region] : regions_) {
+    regions.push_back(region);
+  }
+
+  return regions;
+}
+
+std::shared_ptr<pb::common::KeyValue> StoreRegionMetaV2::TransformToKv(uint64_t region_id) {
+  BAIDU_SCOPED_LOCK(mutex_);
+  auto it = regions_.find(region_id);
+  if (it == regions_.end()) {
+    return nullptr;
+  }
+
+  return TransformToKv(it->second);
+}
+
+std::shared_ptr<pb::common::KeyValue> StoreRegionMetaV2::TransformToKv(std::shared_ptr<google::protobuf::Message> obj) {
+  auto region = std::dynamic_pointer_cast<pb::store_internal::Region>(obj);
+  auto kv = std::make_shared<pb::common::KeyValue>();
+  kv->set_key(GenKey(region->id()));
+  kv->set_value(region->SerializeAsString());
+
+  return kv;
+}
+
+void StoreRegionMetaV2::TransformFromKv(const std::vector<pb::common::KeyValue>& kvs) {
+  BAIDU_SCOPED_LOCK(mutex_);
+  for (const auto& kv : kvs) {
+    uint64_t region_id = ParseRegionId(kv.key());
+    auto region = std::make_shared<pb::store_internal::Region>();
+    region->ParsePartialFromArray(kv.value().data(), kv.value().size());
+    regions_.insert_or_assign(region_id, region);
+  }
+}
 
 bool StoreRaftMeta::Init() { return true; }
 
@@ -407,6 +472,36 @@ void StoreMetaManager::DeleteRaftMeta(uint64_t region_id) {
 
 std::shared_ptr<pb::store_internal::RaftMeta> StoreMetaManager::GetRaftMeta(uint64_t region_id) {
   return raft_meta_->Get(region_id);
+}
+
+bool StoreMetaManager::IsExistRegionV2(uint64_t region_id) { return region_metav2_->GetRegion(region_id) != nullptr; }
+
+void StoreMetaManager::AddRegionV2(std::shared_ptr<pb::store_internal::Region> region) {
+  region_metav2_->AddRegion(region);
+
+  meta_writer_->Put(region_metav2_->TransformToKv(region));
+}
+
+void StoreMetaManager::UpdateRegionV2(std::shared_ptr<pb::store_internal::Region> region, bool is_persistence) {
+  region_metav2_->UpdateRegion(region);
+
+  if (is_persistence) {
+    meta_writer_->Put(region_metav2_->TransformToKv(region));
+  }
+}
+
+void StoreMetaManager::DeleteRegionV2(uint64_t region_id) {
+  region_metav2_->DeleteRegion(region_id);
+
+  meta_writer_->Delete(region_metav2_->GenKey(region_id));
+}
+
+std::shared_ptr<pb::store_internal::Region> StoreMetaManager::GetRegionV2(uint64_t region_id) {
+  return region_metav2_->GetRegion(region_id);
+}
+
+std::vector<std::shared_ptr<pb::store_internal::Region>> StoreMetaManager::GetAllRegionV2() {
+  return region_metav2_->GetAllRegion();
 }
 
 }  // namespace dingodb

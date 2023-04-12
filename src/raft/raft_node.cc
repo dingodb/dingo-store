@@ -14,6 +14,11 @@
 
 #include "raft/raft_node.h"
 
+#include <cstdarg>
+#include <cstddef>
+#include <memory>
+#include <utility>
+
 #include "butil/strings/stringprintf.h"
 #include "common/helper.h"
 #include "common/logging.h"
@@ -116,5 +121,57 @@ void RaftNode::ChangePeers(const std::vector<pb::common::Peer>& peers, braft::Cl
 butil::Status RaftNode::ResetPeers(const braft::Configuration& new_peers) { return node_->reset_peers(new_peers); }
 
 void RaftNode::Snapshot(braft::Closure* done) { node_->snapshot(done); }
+
+std::shared_ptr<pb::common::BRaftStatus> RaftNode::GetStatus() {
+  braft::NodeStatus status;
+  node_->get_status(&status);
+
+  auto braft_status = std::make_shared<pb::common::BRaftStatus>();
+  braft_status->set_raft_state(static_cast<pb::common::RaftNodeState>(status.state));
+  braft_status->set_peer_id(status.peer_id.to_string());
+  braft_status->set_leader_peer_id(status.leader_id.to_string());
+  braft_status->set_readonly(status.readonly);
+  braft_status->set_term(status.term);
+  braft_status->set_committed_index(status.committed_index);
+  braft_status->set_known_applied_index(status.known_applied_index);
+  braft_status->set_pending_index(status.pending_index);
+  braft_status->set_pending_queue_size(status.pending_queue_size);
+  braft_status->set_applying_index(status.applying_index);
+  braft_status->set_first_index(status.first_index);
+  braft_status->set_last_index(status.last_index);
+  braft_status->set_disk_index(status.disk_index);
+
+  auto* stable_follower = braft_status->mutable_stable_followers();
+  for (auto [peer_id, peer_status] : status.stable_followers) {
+    pb::common::RaftPeerStatus braft_peer_status;
+    braft_peer_status.set_valid(peer_status.valid);
+    braft_peer_status.set_installing_snapshot(peer_status.installing_snapshot);
+    braft_peer_status.set_next_index(peer_status.next_index);
+    braft_peer_status.set_last_rpc_send_timestamp(peer_status.last_rpc_send_timestamp);
+    braft_peer_status.set_flying_append_entries_size(peer_status.flying_append_entries_size);
+    braft_peer_status.set_readonly_index(peer_status.readonly_index);
+    braft_peer_status.set_consecutive_error_times(peer_status.consecutive_error_times);
+    braft_peer_status.set_valid(peer_status.valid);
+
+    stable_follower->insert({peer_id.to_string(), braft_peer_status});
+  }
+
+  auto* unstable_follower = braft_status->mutable_unstable_followers();
+  for (auto [peer_id, peer_status] : status.stable_followers) {
+    pb::common::RaftPeerStatus braft_peer_status;
+    braft_peer_status.set_valid(peer_status.valid);
+    braft_peer_status.set_installing_snapshot(peer_status.installing_snapshot);
+    braft_peer_status.set_next_index(peer_status.next_index);
+    braft_peer_status.set_last_rpc_send_timestamp(peer_status.last_rpc_send_timestamp);
+    braft_peer_status.set_flying_append_entries_size(peer_status.flying_append_entries_size);
+    braft_peer_status.set_readonly_index(peer_status.readonly_index);
+    braft_peer_status.set_consecutive_error_times(peer_status.consecutive_error_times);
+    braft_peer_status.set_valid(peer_status.valid);
+
+    unstable_follower->insert({peer_id.to_string(), braft_peer_status});
+  }
+
+  return braft_status;
+}
 
 }  // namespace dingodb
