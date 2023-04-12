@@ -285,7 +285,11 @@ class DingoSafeMap {
   }
 
   static size_t InnerGetFlatMapCopy(TypeFlatMap &map, const TypeFlatMap &out_map) {
-    out_map = map;
+    // Notice: The brpc's template restrict to return value in Modify process, but we need to do this, so use a
+    // const_cast to modify the input parameter here
+    auto &mutable_out_map = const_cast<TypeFlatMap &>(out_map);
+
+    mutable_out_map = map;
     return 1;
   }
 
