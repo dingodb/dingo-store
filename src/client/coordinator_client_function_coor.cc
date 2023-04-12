@@ -491,3 +491,53 @@ void SendGetStoreOperation(brpc::Controller& cntl, dingodb::pb::coordinator::Coo
                     << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
   }
 }
+
+void SendDropRegionPermanently(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
+  dingodb::pb::coordinator::DropRegionPermanentlyRequest request;
+  dingodb::pb::coordinator::DropRegionPermanentlyResponse response;
+
+  if (!FLAGS_id.empty()) {
+    request.set_region_id(std::stoull(FLAGS_id));
+  } else {
+    DINGO_LOG(ERROR) << "id is empty";
+    return;
+  }
+
+  stub.DropRegionPermanently(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    // bthread_usleep(FLAGS_timeout_ms * 1000L);
+  }
+
+  if (FLAGS_log_each_request) {
+    DINGO_LOG(INFO) << "Received response"
+                    << " request_attachment=" << cntl.request_attachment().size()
+                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+    DINGO_LOG_INFO << response.DebugString();
+  }
+}
+
+void SendCleanStoreOperation(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
+  dingodb::pb::coordinator::CleanStoreOperationRequest request;
+  dingodb::pb::coordinator::CleanStoreOperationResponse response;
+
+  if (!FLAGS_id.empty()) {
+    request.set_store_id(std::stoull(FLAGS_id));
+  } else {
+    DINGO_LOG(ERROR) << "id is empty";
+    return;
+  }
+
+  stub.CleanStoreOperation(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    // bthread_usleep(FLAGS_timeout_ms * 1000L);
+  }
+
+  if (FLAGS_log_each_request) {
+    DINGO_LOG(INFO) << "Received response"
+                    << " request_attachment=" << cntl.request_attachment().size()
+                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+    DINGO_LOG_INFO << response.DebugString();
+  }
+}

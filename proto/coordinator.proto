@@ -260,6 +260,23 @@ message GetExecutorMapResponse {
   dingodb.pb.common.ExecutorMap executormap = 3;
 }
 
+message DropRegionPermanentlyRequest {
+  uint64 cluster_id = 1;
+  uint64 region_id = 2;
+}
+
+message DropRegionPermanentlyResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
+message CleanStoreOperationRequest {
+  uint64 store_id = 1;
+}
+
+message CleanStoreOperationResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
 service CoordinatorService {
   // Hello
   rpc Hello(HelloRequest) returns (HelloResponse);
@@ -282,4 +299,10 @@ service CoordinatorService {
 
   // Coordinator
   rpc GetCoordinatorMap(GetCoordinatorMapRequest) returns (GetCoordinatorMapResponse);
+
+  // Region
+  rpc DropRegionPermanently(DropRegionPermanentlyRequest) returns (DropRegionPermanentlyResponse);
+
+  // StoreOperation
+  rpc CleanStoreOperation(CleanStoreOperationRequest) returns (CleanStoreOperationResponse);
 }
