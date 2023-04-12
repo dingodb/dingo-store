@@ -16,7 +16,15 @@ Dingo-Store is a hybrid project of C++ and Java, where C++ provides distributed 
 
 ```shell
 git submodule update --init --recursive
-mkdir build && cd build && cmake .. && make -j8
+
+# Release
+mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Release -DTHIRD_PARTY_BUILD_TYPE=Release -DDINGO_BUILD_STATIC=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ..
+
+# Debug
+mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Debug -DTHIRD_PARTY_BUILD_TYPE=RelWithDebInfo -DDINGO_BUILD_STATIC=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ..
+
+# RelWithDebInfo
+mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo -DTHIRD_PARTY_BUILD_TYPE=RelWithDebInfo -DDINGO_BUILD_STATIC=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ..
 ```
 
 ## For Java
