@@ -160,6 +160,7 @@ class CoordinatorControl : public MetaControl {
 
   // get store operation
   void GetStoreOperation(uint64_t store_id, pb::coordinator::StoreOperation &store_operation);
+  void GetStoreOperations(butil::FlatMap<uint64_t, pb::coordinator::StoreOperation> &store_operations);
 
   // UpdateRegionMapAndStoreOperation
   void UpdateRegionMapAndStoreOperation(const pb::common::StoreMetrics &store_metrics,

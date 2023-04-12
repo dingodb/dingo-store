@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "brpc/controller.h"
+#include "butil/containers/flat_map.h"
 #include "common/constant.h"
 #include "common/logging.h"
 #include "coordinator/coordinator_closure.h"
@@ -424,6 +425,37 @@ void CoordinatorServiceImpl::GetStoreMetrics(google::protobuf::RpcController * /
     auto *new_store_metrics = response->add_store_metrics();
     new_store_metrics->CopyFrom(store_metrics);
   }
+}
+
+void CoordinatorServiceImpl::GetStoreOperation(google::protobuf::RpcController * /*controller*/,
+                                               const pb::coordinator::GetStoreOperationRequest *request,
+                                               pb::coordinator::GetStoreOperationResponse *response,
+                                               google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+  auto is_leader = this->coordinator_control_->IsLeader();
+  DINGO_LOG(DEBUG) << "Receive Get StoreOperation Request, IsLeader:" << is_leader
+                   << ", Request:" << request->DebugString();
+
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  // if id = 0, get all store operation
+  if (request->id() == 0) {
+    butil::FlatMap<uint64_t, pb::coordinator::StoreOperation> store_operations;
+    store_operations.init(100);
+    coordinator_control_->GetStoreOperations(store_operations);
+
+    for (const auto &it : store_operations) {
+      auto *new_store_operation = response->add_store_operations();
+      new_store_operation->CopyFrom(it.second);
+    }
+    return;
+  }
+
+  // get store_operation for id
+  auto *store_operation = response->add_store_operations();
+  coordinator_control_->GetStoreOperation(request->id(), *store_operation);
 }
 
 void CoordinatorServiceImpl::GetExecutorMap(google::protobuf::RpcController * /*controller*/,

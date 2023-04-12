@@ -25,6 +25,7 @@
 
 #include "braft/configuration.h"
 #include "brpc/channel.h"
+#include "butil/containers/flat_map.h"
 #include "butil/scoped_lock.h"
 #include "butil/strings/string_split.h"
 #include "butil/synchronization/lock.h"
@@ -365,9 +366,12 @@ int CoordinatorControl::CreateRegion(const std::string& region_name, const std::
 
     store_operation.set_id(store.id());
     auto* region_cmd = store_operation.add_region_cmds();
+    region_cmd->set_region_id(create_region_id);
     region_cmd->set_region_cmd_type(::dingodb::pb::coordinator::RegionCmdType::CMD_CREATE);
     auto* create_request = region_cmd->mutable_create_request();
     create_request->mutable_region_definition()->CopyFrom(*region_definition);
+
+    store_operations.push_back(store_operation);
   }
 
   // update meta_increment
@@ -382,8 +386,11 @@ int CoordinatorControl::CreateRegion(const std::string& region_name, const std::
   // add store operations to meta_increment
   for (const auto& store_operation : store_operations) {
     auto* store_operation_increment = meta_increment.add_store_operations();
+    store_operation_increment->set_id(store_operation.id());
     store_operation_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
     store_operation_increment->mutable_store_operation()->CopyFrom(store_operation);
+
+    DINGO_LOG(INFO) << "store_operation_increment = " << store_operation_increment->DebugString();
   }
 
   // on_apply
@@ -422,11 +429,13 @@ int CoordinatorControl::DropRegion(uint64_t region_id, pb::coordinator_internal:
         pb::coordinator::StoreOperation store_operation;
         store_operation.set_id(peer->store_id());
         auto* region_cmd = store_operation.add_region_cmds();
+        region_cmd->set_region_id(region_id);
         region_cmd->set_region_cmd_type(::dingodb::pb::coordinator::RegionCmdType::CMD_DELETE);
         auto* delete_request = region_cmd->mutable_delete_request();
         delete_request->set_region_id(region_id);
 
         auto* store_operation_increment = meta_increment.add_store_operations();
+        store_operation_increment->set_id(store_operation.id());
         store_operation_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
         store_operation_increment->mutable_store_operation()->CopyFrom(store_operation);
       }
@@ -994,6 +1003,11 @@ void CoordinatorControl::GetMemoryInfo(pb::coordinator::CoordinatorMemoryInfo& m
 
 void CoordinatorControl::GetStoreOperation(uint64_t store_id, pb::coordinator::StoreOperation& store_operation) {
   store_operation_map_.Get(store_id, store_operation);
+}
+
+void CoordinatorControl::GetStoreOperations(
+    butil::FlatMap<uint64_t, pb::coordinator::StoreOperation>& store_operations) {
+  store_operation_map_.GetFlatMapCopy(store_operations);
 }
 
 }  // namespace dingodb
