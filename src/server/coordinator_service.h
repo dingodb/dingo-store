@@ -58,6 +58,10 @@ class CoordinatorServiceImpl : public pb::coordinator::CoordinatorService {
   void GetStoreMetrics(google::protobuf::RpcController* controller,
                        const pb::coordinator::GetStoreMetricsRequest* request,
                        pb::coordinator::GetStoreMetricsResponse* response, google::protobuf::Closure* done) override;
+  void GetStoreOperation(google::protobuf::RpcController* controller,
+                         const pb::coordinator::GetStoreOperationRequest* request,
+                         pb::coordinator::GetStoreOperationResponse* response,
+                         google::protobuf::Closure* done) override;
 
   void CreateStore(google::protobuf::RpcController* controller, const pb::coordinator::CreateStoreRequest* request,
                    pb::coordinator::CreateStoreResponse* response, google::protobuf::Closure* done) override;

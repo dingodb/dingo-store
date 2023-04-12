@@ -46,7 +46,7 @@ void Heartbeat::SendCoordinatorPushToStore(void* arg) {
   CoordinatorControl* coordinator_control = static_cast<CoordinatorControl*>(arg);
 
   if (!coordinator_control->IsLeader()) {
-    // DINGO_LOG(INFO) << "SendCoordinatorPushToStore... this is follower";
+    DINGO_LOG(DEBUG) << "SendCoordinatorPushToStore... this is follower";
     return;
   }
   DINGO_LOG(DEBUG) << "SendCoordinatorPushToStore... this is leader";
@@ -73,7 +73,7 @@ void Heartbeat::SendCoordinatorPushToStore(void* arg) {
     heartbeat_response.set_regionmap_epoch(new_regionmap->epoch());
 
     DINGO_LOG(INFO) << "SendCoordinatorPushToStore will send to store with response:"
-                    << heartbeat_response.DebugString();
+                    << heartbeat_response.ShortDebugString();
   }
 
   // prepare request and response
@@ -114,7 +114,7 @@ void Heartbeat::SendCoordinatorPushToStore(void* arg) {
     heartbeat_response.mutable_store_operation()->CopyFrom(store_operation);
     if (store_operation.region_cmds_size() > 0) {
       DINGO_LOG(INFO) << "SendCoordinatorPushToStore will send to store with store_operation:"
-                      << store_operation.DebugString();
+                      << store_operation.ShortDebugString();
     }
 
     // start rpc

@@ -89,8 +89,9 @@ class CoordinatorClosure<pb::coordinator::StoreHeartbeatRequest, pb::coordinator
     auto* store_operation_to_push = response_->mutable_store_operation();
     coordinator_control_->GetStoreOperation(store_id, *store_operation_to_push);
     if (store_operation_to_push->region_cmds_size() > 0) {
-      DINGO_LOG(INFO) << "Coordinator Closure will send to store with store_operation "
-                      << store_operation_to_push->DebugString();
+      DINGO_LOG(INFO) << "Coordinator Closure will send to store with store_operation, store_id=" << store_id
+                      << " region_cmd_size=" << store_operation_to_push->region_cmds_size()
+                      << " store_operation=" << store_operation_to_push->ShortDebugString();
     }
 
     brpc::ClosureGuard const done_guard(done_);

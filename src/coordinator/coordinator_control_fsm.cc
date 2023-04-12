@@ -789,12 +789,17 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
   }
 
   // 8.store_operation map
+  // only on_apply will really write store_operation_map_, so we don't need to lock it
+  // store_operation only support CREATE and DELETE
   {
+    DINGO_LOG(INFO) << "store_operation increment size=" << meta_increment.store_operations_size();
+
     for (int i = 0; i < meta_increment.store_operations_size(); i++) {
       const auto& store_operation = meta_increment.store_operations(i);
       if (store_operation.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
         pb::coordinator::StoreOperation store_operation_in_map;
-        store_operation_map_.Get(store_operation.id(), store_operation_in_map);
+        store_operation_in_map.set_id(store_operation.id());
+        store_operation_map_.Get(store_operation_in_map.id(), store_operation_in_map);
 
         for (const auto& region_cmd : store_operation.store_operation().region_cmds()) {
           store_operation_in_map.add_region_cmds()->CopyFrom(region_cmd);
@@ -804,7 +809,7 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         // meta_write_kv
         meta_write_to_kv.push_back(store_operation_meta_->TransformToKvValue(store_operation.store_operation()));
 
-        DINGO_LOG(DEBUG) << "store_operation_map_ CREATE, store_operation=" << store_operation.ShortDebugString();
+        DINGO_LOG(INFO) << "store_operation_map_ CREATE, store_operation=" << store_operation.ShortDebugString();
 
       } else if (store_operation.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
         // store_operation_map_.Put(store_operation.id(), store_operation.store_operation());
@@ -816,7 +821,8 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
 
       } else if (store_operation.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
         pb::coordinator::StoreOperation store_operation_in_map;
-        store_operation_map_.Get(store_operation.id(), store_operation_in_map);
+        store_operation_in_map.set_id(store_operation.id());
+        store_operation_map_.Get(store_operation_in_map.id(), store_operation_in_map);
 
         if (store_operation_in_map.region_cmds_size() > 0 && store_operation.store_operation().region_cmds_size() > 0) {
           // erase region_cmd in store_operation_map_ if region_id & region_cmd_type is same
@@ -842,7 +848,7 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
           }
         }
 
-        DINGO_LOG(DEBUG) << "store_operation_map_ DELETE, store_operation=" << store_operation.ShortDebugString();
+        DINGO_LOG(INFO) << "store_operation_map_ DELETE, store_operation=" << store_operation.ShortDebugString();
       }
     }
   }
