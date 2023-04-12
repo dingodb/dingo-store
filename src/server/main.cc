@@ -26,6 +26,7 @@
 #include "butil/endpoint.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "common/version.h"
 #include "config/config.h"
 #include "config/config_manager.h"
 #include "gflags/gflags.h"
@@ -43,6 +44,8 @@
 
 DEFINE_string(conf, "", "server config");
 DEFINE_string(role, "", "server role [store|coordinator]");
+DEFINE_string(git_commit_hash, GIT_VERSION, "current git commit version");
+DEFINE_string(git_tag_name, GIT_TAG_NAME, "current dingo version");
 
 // Get server endpoint from config
 butil::EndPoint GetServerEndPoint(std::shared_ptr<dingodb::Config> config) {
@@ -303,6 +306,8 @@ int main(int argc, char *argv[]) {
     return -1;
   }
   DINGO_LOG(INFO) << "Server is running on " << brpc_server.listen_address();
+  DINGO_LOG(INFO) << "Current Git Commit version is:" << FLAGS_git_commit_hash;
+  DINGO_LOG(INFO) << "Current branch tag is:" << FLAGS_git_tag_name;
 
   // Wait until 'CTRL-C' is pressed. then Stop() and Join() the service
   while (!brpc::IsAskedToQuit()) {
