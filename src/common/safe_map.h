@@ -92,6 +92,25 @@ class DingoSafeMap {
     return keys.size();
   }
 
+  // GetAllKeyValues
+  // get all keys and values of the map
+  int GetAllKeyValues(std::vector<T_KEY> &keys, std::vector<T_VALUE> &values) {
+    TypeScopedPtr ptr;
+    if (safe_map.Read(&ptr) != 0) {
+      return -1;
+    }
+
+    for (typename TypeFlatMap::const_iterator it = ptr->begin(); it != ptr->end(); ++it) {
+      if (it == ptr->end()) {
+        break;
+      }
+      keys->push_back(it->first);
+      values->push_back(it->second);
+    }
+
+    return keys.size();
+  }
+
   // Exists
   // check if the key exists in the safe map
   bool Exists(const T_KEY &key) {
