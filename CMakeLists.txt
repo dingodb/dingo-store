@@ -210,6 +210,30 @@ add_library(DINGODB_OBJS
 # bin output dir
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin)
 
+execute_process(
+    COMMAND git describe --always --dirty
+    OUTPUT_VARIABLE GIT_VERSION
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+
+execute_process(
+    COMMAND git describe --tags --abbrev=0
+    OUTPUT_VARIABLE GIT_TAG
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+
+if (NOT GIT_VERSION)
+    set(GIT_VERSION "unknown")
+endif()
+
+if (NOT GIT_TAG_NAME)
+    set(GIT_TAG_NAME "unknown")
+endif()
+
+
+add_definitions(-DGIT_VERSION="${GIT_VERSION}")
+add_definitions(-DGIT_TAG_NAME="${GIT_TAG_NAME}")
+
 add_executable(dingodb_server src/server/main.cc $<TARGET_OBJECTS:DINGODB_OBJS> $<TARGET_OBJECTS:PROTO_OBJS>)
 add_executable(dingodb_client_store src/client/store_client.cc $<TARGET_OBJECTS:PROTO_OBJS>)
 add_executable(dingodb_client_coordinator src/client/coordinator_client.cc src/client/coordinator_client_function_coor.cc src/client/coordinator_client_function_meta.cc $<TARGET_OBJECTS:PROTO_OBJS>)
