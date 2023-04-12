@@ -37,6 +37,7 @@
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
 #include "proto/coordinator_internal.pb.h"
+#include "proto/error.pb.h"
 #include "proto/meta.pb.h"
 #include "proto/node.pb.h"
 
@@ -415,13 +416,15 @@ int CoordinatorControl::DropRegion(uint64_t region_id, pb::coordinator_internal:
       region_to_delete->set_state(::dingodb::pb::common::RegionState::REGION_DELETE);
 
       // update meta_increment
+      // update region to DELETE, not delete region really, not
       need_update_epoch = true;
       auto* region_increment = meta_increment.add_regions();
       region_increment->set_id(region_id);
-      region_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
+      region_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
 
       auto* region_increment_region = region_increment->mutable_region();
       region_increment_region->CopyFrom(*region_to_delete);
+      region_increment_region->set_state(::dingodb::pb::common::RegionState::REGION_DELETE);
 
       // add store operations to meta_increment
       for (int i = 0; i < region_to_delete->peers_size(); i++) {
@@ -462,6 +465,69 @@ int CoordinatorControl::DropRegion(uint64_t region_id, pb::coordinator_internal:
   }
 
   return 0;
+}
+
+// DropRegionPermanently
+// delete region from disk
+pb::error::Errno CoordinatorControl::DropRegionPermanently(uint64_t region_id,
+                                                           pb::coordinator_internal::MetaIncrement& meta_increment) {
+  // set region state to DELETE
+  bool need_update_epoch = false;
+  {
+    BAIDU_SCOPED_LOCK(region_map_mutex_);
+    auto* region_to_delete = region_map_.seek(region_id);
+    if (region_to_delete == nullptr) {
+      DINGO_LOG(INFO) << "DropRegionPermanently region not exists, id = " << region_id;
+      return pb::error::Errno::EREGION_NOT_FOUND;
+    }
+
+    // if region is dropped, do real delete
+    if (region_to_delete->state() != ::dingodb::pb::common::RegionState::REGION_DELETE ||
+        region_to_delete->state() != ::dingodb::pb::common::RegionState::REGION_DELETE ||
+        region_to_delete->state() != ::dingodb::pb::common::RegionState::REGION_DELETING) {
+      region_to_delete->set_state(::dingodb::pb::common::RegionState::REGION_DELETE);
+
+      // update meta_increment
+      // update region to DELETE, not delete region really, not
+      need_update_epoch = true;
+      auto* region_increment = meta_increment.add_regions();
+      region_increment->set_id(region_id);
+      region_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
+
+      auto* region_increment_region = region_increment->mutable_region();
+      region_increment_region->CopyFrom(*region_to_delete);
+      region_increment_region->set_state(::dingodb::pb::common::RegionState::REGION_DELETE);
+
+      // on_apply
+      // region_map_[region_id].set_state(::dingodb::pb::common::RegionState::REGION_DELETE);
+      DINGO_LOG(INFO) << "DropRegionPermanently drop region success, id = " << region_id;
+    }
+  }
+
+  if (need_update_epoch) {
+    GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_REGION, meta_increment);
+  }
+
+  return pb::error::Errno::OK;
+}
+
+// CleanStoreOperation
+pb::error::Errno CoordinatorControl::CleanStoreOperation(uint64_t store_id,
+                                                         pb::coordinator_internal::MetaIncrement& meta_increment) {
+  pb::coordinator::StoreOperation store_operation;
+  int ret = store_operation_map_.Get(store_id, store_operation);
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << "CleanStoreOperation store operation not exists, store_id = " << store_id;
+    return pb::error::Errno::EILLEGAL_PARAMTETERS;
+  }
+
+  // clean store operation
+  auto* store_operation_increment = meta_increment.add_store_operations();
+  store_operation_increment->set_id(store_id);
+  store_operation_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
+  store_operation_increment->mutable_store_operation()->CopyFrom(store_operation);
+
+  return pb::error::Errno::OK;
 }
 
 // UpdateRegionMap
@@ -1008,6 +1074,11 @@ void CoordinatorControl::GetStoreOperation(uint64_t store_id, pb::coordinator::S
 void CoordinatorControl::GetStoreOperations(
     butil::FlatMap<uint64_t, pb::coordinator::StoreOperation>& store_operations) {
   store_operation_map_.GetFlatMapCopy(store_operations);
+
+  // auto store_opertion_kvs = store_operation_meta_->TransformToKvWithAll();
+  // for (auto& it : store_opertion_kvs) {
+  //   DINGO_LOG(DEBUG) << "store_operation_meta_ key=" << it.key() << " value=" << it.value();
+  // }
 }
 
 }  // namespace dingodb
