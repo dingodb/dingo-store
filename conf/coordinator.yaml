@@ -5,6 +5,7 @@ cluster:
 server:
   host: 127.0.0.1
   port: 19190
+  pushInterval: 1000 # ms
 coordinator:
   peers: 127.0.0.1:8001,127.0.0.1:8002,127.0.0.1:8003
 raft:

@@ -47,13 +47,19 @@ bool RaftKvEngine::Init(std::shared_ptr<Config> config) {
 // Recover raft node from region meta data.
 // Invoke when server starting.
 bool RaftKvEngine::Recover() {
-  auto store_meta = Server::GetInstance()->GetStoreMetaManager();
-  auto regions = store_meta->GetAllRegion();
+  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+  auto regions = store_region_meta->GetAllRegion();
 
   auto ctx = std::make_shared<Context>();
   auto listener_factory = std::make_shared<StoreSmEventListenerFactory>();
-  for (auto& it : regions) {
-    AddRegion(ctx, it.second, listener_factory->Build());
+  for (auto& region : regions) {
+    if (region->state() == pb::common::StoreRegionState::NEW ||
+        region->state() == pb::common::StoreRegionState::NORMAL ||
+        region->state() == pb::common::StoreRegionState::STANDBY ||
+        region->state() == pb::common::StoreRegionState::SPLITTING ||
+        region->state() == pb::common::StoreRegionState::MERGING) {
+      AddNode(ctx, region, listener_factory->Build());
+    }
   }
 
   return true;
@@ -65,8 +71,9 @@ pb::common::Engine RaftKvEngine::GetID() { return pb::common::ENG_RAFT_STORE; }
 
 std::shared_ptr<RawEngine> RaftKvEngine::GetRawEngine() { return engine_; }
 
-butil::Status RaftKvEngine::AddRegion(std::shared_ptr<Context> ctx, const std::shared_ptr<pb::common::Region> region,
-                                      std::shared_ptr<EventListenerCollection> listeners) {
+butil::Status RaftKvEngine::AddNode(std::shared_ptr<Context> ctx,
+                                    const std::shared_ptr<pb::store_internal::Region> region,
+                                    std::shared_ptr<EventListenerCollection> listeners) {
   DINGO_LOG(INFO) << "RaftkvEngine add region, region_id " << region->id();
 
   // construct StoreStateMachine
@@ -76,10 +83,10 @@ butil::Status RaftKvEngine::AddRegion(std::shared_ptr<Context> ctx, const std::s
   }
 
   std::shared_ptr<RaftNode> node =
-      std::make_shared<RaftNode>(ctx->ClusterRole(), region->id(), region->name(),
+      std::make_shared<RaftNode>(ctx->ClusterRole(), region->id(), region->definition().name(),
                                  braft::PeerId(Server::GetInstance()->RaftEndpoint()), state_machine);
 
-  if (node->Init(Helper::FormatPeers(Helper::ExtractLocations(region->peers()))) != 0) {
+  if (node->Init(Helper::FormatPeers(Helper::ExtractLocations(region->definition().peers()))) != 0) {
     node->Destroy();
     return butil::Status(pb::error::ERAFT_INIT, "Raft init failed");
   }
@@ -88,29 +95,27 @@ butil::Status RaftKvEngine::AddRegion(std::shared_ptr<Context> ctx, const std::s
   return butil::Status();
 }
 
-butil::Status RaftKvEngine::ChangeRegion(std::shared_ptr<Context> /*ctx*/, uint64_t region_id,
-                                         std::vector<pb::common::Peer> peers) {
+butil::Status RaftKvEngine::ChangeNode(std::shared_ptr<Context> /*ctx*/, uint64_t region_id,
+                                       std::vector<pb::common::Peer> peers) {
   raft_node_manager_->GetNode(region_id)->ChangePeers(peers, nullptr);
   return butil::Status();
 }
 
-butil::Status RaftKvEngine::DestroyRegion(std::shared_ptr<Context> /*ctx*/, uint64_t region_id) {
+butil::Status RaftKvEngine::DestroyNode(std::shared_ptr<Context> /*ctx*/, uint64_t region_id) {
   auto node = raft_node_manager_->GetNode(region_id);
   if (node == nullptr) {
     return butil::Status(pb::error::ERAFT_NOTNODE, "Raft not node");
   }
   raft_node_manager_->DeleteNode(region_id);
 
-  DINGO_LOG(INFO) << "Node start shutdown " << region_id;
-  node->Shutdown(nullptr);
-  DINGO_LOG(INFO) << "Node finish shutdown " << region_id;
-  node->Join();
-  DINGO_LOG(INFO) << "Node join " << region_id;
+  node->Destroy();
 
   return butil::Status();
 }
 
-butil::Status RaftKvEngine::Snapshot(std::shared_ptr<Context> ctx, uint64_t region_id) {
+std::shared_ptr<RaftNode> RaftKvEngine::GetNode(uint64_t region_id) { return raft_node_manager_->GetNode(region_id); }
+
+butil::Status RaftKvEngine::DoSnapshot(std::shared_ptr<Context> ctx, uint64_t region_id) {
   auto node = raft_node_manager_->GetNode(region_id);
   if (node == nullptr) {
     return butil::Status(pb::error::ERAFT_NOTNODE, "Raft not node");

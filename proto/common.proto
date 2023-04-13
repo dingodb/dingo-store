@@ -124,9 +124,7 @@ enum StoreRegionState {
   MERGING = 4;    // region is merging to another region
   DELETING = 5;   // region is deleting
   DELETED = 6;    // region is deleted
-  EXPANDING = 7;  // region is adding new peer
-  SHRINKING = 8;  // region is removing peer
-  ORPHAN = 9;     // region is orphan, need to delete
+  ORPHAN = 7;     // region is orphan, need to delete
 }
 
 // RegionRaftStatus

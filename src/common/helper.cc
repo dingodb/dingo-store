@@ -349,39 +349,6 @@ uint64_t Helper::Timestamp() {
       .count();
 }
 
-// original_key + 1. note overflow
-bool Helper::Increment(const std::string& original_key, std::string* key) {
-  if (BAIDU_UNLIKELY(original_key.empty())) {
-    DINGO_LOG(ERROR) << butil::StringPrintf("original_key empty");
-    return false;
-  }
-
-  if (!key) {
-    DINGO_LOG(ERROR) << butil::StringPrintf("key is nullptr. not support");
-    return false;
-  }
-
-  if (KeyIsEndOfAllTable(original_key)) {
-    return false;
-  }
-
-  *key = original_key;
-
-  unsigned char carry = 1;
-  for (auto size = key->size() - 1; size >= 0; --size) {
-    if ((*key)[size] == static_cast<char>(0xFF)) {
-      (*key)[size] = static_cast<char>(0);
-    } else {
-      unsigned char value = static_cast<unsigned char>((*key)[size]) + carry;
-      (*key)[size] = static_cast<char>(value);
-      carry = 0;
-      break;
-    }
-  }
-
-  return true;
-}
-
 // end key of all table
 bool Helper::KeyIsEndOfAllTable(const std::string& key) {
   for (const auto& elem : key) {
@@ -411,25 +378,10 @@ butil::Status Helper::KvDeleteRangeParamCheck(const pb::common::RangeWithOptions
     }
   }
 
-  std::string internal_real_start_key;
-  if (!range.with_start()) {
-    if (!Helper::Increment(range.range().start_key(), &internal_real_start_key)) {
-      DINGO_LOG(ERROR) << butil::StringPrintf("Increment start_key failed");
-      return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
-    }
-  } else {
-    internal_real_start_key = range.range().start_key();
-  }
-
-  std::string internal_real_end_key;
-  if (range.with_end()) {
-    if (!Helper::Increment(range.range().end_key(), &internal_real_end_key)) {
-      DINGO_LOG(ERROR) << butil::StringPrintf("Increment end_key failed");
-      return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
-    }
-  } else {
-    internal_real_end_key = range.range().end_key();
-  }
+  std::string internal_real_start_key =
+      range.with_start() ? range.range().start_key() : Helper::Increment(range.range().start_key());
+  std::string internal_real_end_key =
+      range.with_end() ? Helper::Increment(range.range().end_key()) : range.range().end_key();
 
   // parameter check again
   if (BAIDU_UNLIKELY(internal_real_start_key > internal_real_end_key)) {

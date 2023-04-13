@@ -15,6 +15,7 @@
 #include "event/store_state_machine_event.h"
 
 #include "handler/raft_snapshot_handler.h"
+#include "store/heartbeat.h"
 
 namespace dingodb {
 
@@ -54,26 +55,21 @@ void SmLeaderStartEventListener::OnEvent(std::shared_ptr<Event> event) {
   auto the_event = std::dynamic_pointer_cast<SmLeaderStartEvent>(event);
 
   // Update region meta
-  auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
-  auto region = store_meta_manager->GetRegion(the_event->node_id);
-  if (region) {
-    region->set_leader_store_id(Server::GetInstance()->Id());
-    region->set_state(pb::common::REGION_NORMAL);
+  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+  if (store_region_meta) {
+    store_region_meta->UpdateLeaderId(the_event->node_id, Server::GetInstance()->Id());
   }
 
   // trigger heartbeat
-  auto store_control = Server::GetInstance()->GetStoreControl();
-  store_control->TriggerHeartbeat();
+  Heartbeat::TriggerStoreHeartbeat(nullptr);
 }
 
 void SmStartFollowingEventListener::OnEvent(std::shared_ptr<Event> event) {
   auto the_event = std::dynamic_pointer_cast<SmStartFollowingEvent>(event);
   // Update region meta
-  auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
-  auto region = store_meta_manager->GetRegion(the_event->node_id);
-  if (region) {
-    region->set_leader_store_id(0);
-    region->set_state(pb::common::REGION_NORMAL);
+  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+  if (store_region_meta) {
+    store_region_meta->UpdateLeaderId(the_event->node_id, 0);
   }
 }
 

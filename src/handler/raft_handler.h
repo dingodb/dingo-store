@@ -19,6 +19,7 @@
 #include "engine/raw_engine.h"
 #include "handler/handler.h"
 #include "proto/raft.pb.h"
+#include "proto/store_internal.pb.h"
 
 namespace dingodb {
 
@@ -47,6 +48,24 @@ class DeleteRangeHandler : public BaseHandler {
 class DeleteBatchHandler : public BaseHandler {
  public:
   HandlerType GetType() override { return HandlerType::kDeleteBatch; }
+  void Handle(std::shared_ptr<Context> ctx, std::shared_ptr<RawEngine> engine, const pb::raft::Request &req) override;
+};
+
+// SplitHandler
+class SplitHandler : public BaseHandler {
+ public:
+  class SplitClosure : public braft::Closure {
+   public:
+    SplitClosure(std::shared_ptr<pb::store_internal::Region> region) : region_(region) {}
+    ~SplitClosure() override = default;
+
+    void Run() override;
+
+   private:
+    std::shared_ptr<pb::store_internal::Region> region_;
+  };
+
+  HandlerType GetType() override { return HandlerType::kSplit; }
   void Handle(std::shared_ptr<Context> ctx, std::shared_ptr<RawEngine> engine, const pb::raft::Request &req) override;
 };
 

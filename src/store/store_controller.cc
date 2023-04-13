@@ -12,23 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <gtest/gtest.h>
+#include "store/store_controller.h"
 
-#include <iostream>
-#include <string>
+#include <memory>
+#include <vector>
 
-#include "meta/store_meta_manager.h"
+#include "common/helper.h"
+#include "common/logging.h"
+#include "event/store_state_machine_event.h"
+#include "server/server.h"
 
-class StoreRegionMetaTest : public testing::Test {
- protected:
-  void SetUp() override {}
-  void TearDown() override {}
-};
-
-TEST(StoreRegionMetaTest, ParseRegionId) {
-  dingodb::StoreRegionMeta store_region_meta(nullptr, nullptr);
-
-  uint64_t region_id = store_region_meta.ParseRegionId("META_REGION_11111");
-
-  EXPECT_EQ(11111, region_id);
-}
+namespace dingodb {}  // namespace dingodb

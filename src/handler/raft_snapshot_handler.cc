@@ -32,14 +32,15 @@ struct SaveRaftSnapshotArg {
 
 // Scan region, generate sst snapshot file
 std::vector<pb::store_internal::SstFileInfo> RaftSnapshot::GenSnapshotFileByScan(
-    const std::string& checkpoint_dir, std::shared_ptr<pb::common::Region> region) {
+    const std::string& checkpoint_dir, std::shared_ptr<pb::store_internal::Region> region) {
   auto raw_engine = std::dynamic_pointer_cast<RawRocksEngine>(engine_);
+  auto range = region->definition().range();
   // Build Iterator
   IteratorOptions options;
-  options.upper_bound = region->range().end_key();
+  options.upper_bound = range.end_key();
 
   auto iter = raw_engine->NewIterator(Constant::kStoreDataCF, engine_snapshot_, options);
-  iter->Seek(region->range().start_key());
+  iter->Seek(range.start_key());
 
   // Build checkpoing name and path
   std::string checkpoint_name = std::to_string(region->id()) + ".sst";
@@ -58,8 +59,8 @@ std::vector<pb::store_internal::SstFileInfo> RaftSnapshot::GenSnapshotFileByScan
   sst_file.set_level(0);
   sst_file.set_name(checkpoint_name);
   sst_file.set_path(checkpoint_path);
-  sst_file.set_start_key(region->range().start_key());
-  sst_file.set_end_key(region->range().end_key());
+  sst_file.set_start_key(range.start_key());
+  sst_file.set_end_key(range.end_key());
 
   DINGO_LOG(INFO) << "sst file info: " << sst_file.ShortDebugString();
 
@@ -81,7 +82,7 @@ std::vector<pb::store_internal::SstFileInfo> FilterSstFile(std::vector<pb::store
 
 // Do Checkpoint and hard link, generate sst snapshot file
 std::vector<pb::store_internal::SstFileInfo> RaftSnapshot::GenSnapshotFileByCheckpoint(
-    const std::string& checkpoint_dir, std::shared_ptr<dingodb::pb::common::Region> region) {
+    const std::string& checkpoint_dir, std::shared_ptr<dingodb::pb::store_internal::Region> region) {
   auto raw_engine = std::dynamic_pointer_cast<RawRocksEngine>(engine_);
 
   std::vector<pb::store_internal::SstFileInfo> sst_files;
@@ -93,19 +94,19 @@ std::vector<pb::store_internal::SstFileInfo> RaftSnapshot::GenSnapshotFileByChec
     return {};
   }
 
-  return FilterSstFile(sst_files, region->range().start_key(), region->range().end_key());
+  return FilterSstFile(sst_files, region->definition().range().start_key(), region->definition().range().end_key());
 }
 
-bool RaftSnapshot::SaveSnapshot(braft::SnapshotWriter* writer, std::shared_ptr<dingodb::pb::common::Region> region,
-                                GenSnapshotFileFunc func) {
-  if (region->range().start_key().empty() || region->range().end_key().empty()) {
+bool RaftSnapshot::SaveSnapshot(braft::SnapshotWriter* writer,
+                                std::shared_ptr<dingodb::pb::store_internal::Region> region, GenSnapshotFileFunc func) {
+  if (region->definition().range().start_key().empty() || region->definition().range().end_key().empty()) {
     DINGO_LOG(ERROR) << butil::StringPrintf("Save snapshot region %ld failed, range is invalid", region->id());
     return false;
   }
 
   DINGO_LOG(INFO) << butil::StringPrintf("Save snapshot region %ld range[%s-%s]", region->id(),
-                                         Helper::StringToHex(region->range().start_key()).c_str(),
-                                         Helper::StringToHex(region->range().end_key()).c_str());
+                                         Helper::StringToHex(region->definition().range().start_key()).c_str(),
+                                         Helper::StringToHex(region->definition().range().end_key()).c_str());
   auto raw_engine = std::dynamic_pointer_cast<RawRocksEngine>(engine_);
 
   std::string checkpoint_dir = raw_engine->DbPath() + "/checkpoint_" + std::to_string(Helper::Timestamp());
@@ -138,13 +139,14 @@ bool RaftSnapshot::SaveSnapshot(braft::SnapshotWriter* writer, std::shared_ptr<d
   return true;
 }
 
-bool RaftSnapshot::ValidateSnapshotFile(std::shared_ptr<dingodb::pb::common::Region>& region,
+bool RaftSnapshot::ValidateSnapshotFile(std::shared_ptr<dingodb::pb::store_internal::Region>& region,
                                         std::unique_ptr<pb::store_internal::SstFileInfo> filemeta) {
   return true;
 }
 
 // Load snapshot by ingest sst files
-bool RaftSnapshot::LoadSnapshot(braft::SnapshotReader* reader, std::shared_ptr<dingodb::pb::common::Region> region) {
+bool RaftSnapshot::LoadSnapshot(braft::SnapshotReader* reader,
+                                std::shared_ptr<dingodb::pb::store_internal::Region> region) {
   DINGO_LOG(INFO) << "LoadSnapshot ...";
   auto filepath_func = [](const std::string& path, std::vector<std::string>& files) -> std::vector<std::string> {
     std::vector<std::string> filepaths;
@@ -176,7 +178,7 @@ bool RaftSnapshot::LoadSnapshot(braft::SnapshotReader* reader, std::shared_ptr<d
   }
 
   // Delete old region data
-  auto status = engine_->NewWriter(Constant::kStoreDataCF)->KvDeleteRange(region->range());
+  auto status = engine_->NewWriter(Constant::kStoreDataCF)->KvDeleteRange(region->definition().range());
   if (!status.ok()) {
     return false;
   }
@@ -202,7 +204,8 @@ void RaftSaveSnapshotHanler::Handle(uint64_t region_id, std::shared_ptr<RawEngin
       [](void* arg) -> void* {
         SaveRaftSnapshotArg* snapshot_arg = static_cast<SaveRaftSnapshotArg*>(arg);
         brpc::ClosureGuard done_guard(snapshot_arg->done);
-        auto region = Server::GetInstance()->GetStoreMetaManager()->GetRegion(snapshot_arg->region_id);
+        auto region =
+            Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(snapshot_arg->region_id);
 
         auto gen_snapshot_file_func = std::bind(&RaftSnapshot::GenSnapshotFileByScan, snapshot_arg->raft_snapshot,
                                                 std::placeholders::_1, std::placeholders::_2);
@@ -224,7 +227,7 @@ void RaftSaveSnapshotHanler::Handle(uint64_t region_id, std::shared_ptr<RawEngin
 
 void RaftLoadSnapshotHanler::Handle(uint64_t region_id, std::shared_ptr<RawEngine> engine,
                                     braft::SnapshotReader* reader) {
-  auto region = Server::GetInstance()->GetStoreMetaManager()->GetRegion(region_id);
+  auto region = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
   auto raft_snapshot = std::make_unique<RaftSnapshot>(engine);
   if (!raft_snapshot->LoadSnapshot(reader, region)) {
     DINGO_LOG(ERROR) << "Load snapshot failed, region: " << region->id();

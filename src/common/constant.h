@@ -37,12 +37,12 @@ class Constant {
   inline static const std::string kStoreMetaCF = "meta";
   // Define store meta prefix.
   inline static const std::string kStoreRegionMetaPrefix = "META_REGION";
-  // Define store meta prefix.
-  inline static const std::string kStoreRegionMetaPrefixV2 = "META_REGIONV2";
   // Define store raft prefix.
   inline static const std::string kStoreRaftMetaPrefix = "META_RAFT";
   // Define store region metrics prefix.
   inline static const std::string kStoreRegionMetricsPrefix = "METRICS_REGION";
+  // Define region controller prefix.
+  inline static const std::string kStoreRegionControllerPrefix = "CONTROLLER_REGION";
 
   // rocksdb config
   inline static const std::string kDbPath = "store.dbPath";

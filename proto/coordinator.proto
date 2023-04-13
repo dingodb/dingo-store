@@ -53,6 +53,13 @@ enum RegionCmdType {
   CMD_SPLIT = 3;
   CMD_MERGE = 4;
   CMD_CHANGE_PEER = 5;
+  CMD_SNAPSHOT = 6;
+}
+
+// Regino cmd status
+enum RegionCmdStatus {
+  STATUS_NONE = 0;
+  STATUS_DONE = 1;
 }
 
 // RegionCmd
@@ -68,6 +75,8 @@ message RegionCmd {
     MergeRequest merge_request = 14;             // merge parameters
     ChangePeerRequest change_peer_request = 15;  // change peer parameters
   }
+
+  RegionCmdStatus status = 50;  // the status of this cmd
 }
 
 // StoreOperation

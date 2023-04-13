@@ -14,6 +14,8 @@
 
 #include "server/push_service.h"
 
+#include <cstdint>
+
 #include "common/constant.h"
 #include "common/context.h"
 #include "common/helper.h"
@@ -23,6 +25,7 @@
 #include "proto/push.pb.h"
 #include "server/server.h"
 #include "store/heartbeat.h"
+#include "store/region_controller.h"
 
 namespace dingodb {
 
@@ -34,28 +37,74 @@ void PushServiceImpl::PushHeartbeat(google::protobuf::RpcController* controller,
                                     google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard const done_guard(done);
-  DINGO_LOG(DEBUG) << "PushHeartbeat request: " << request->DebugString();
+  DINGO_LOG(DEBUG) << "PushHeartbeat request: " << request->ShortDebugString();
 
   // call HandleStoreHeartbeatResponse
   const auto& heartbeat_response = request->heartbeat_response();
   auto store_meta = Server::GetInstance()->GetStoreMetaManager();
-  Heartbeat::HandleStoreHeartbeatResponse(store_meta, heartbeat_response);
+  HeartbeatTask::HandleStoreHeartbeatResponse(store_meta, heartbeat_response);
 }
 
 void PushServiceImpl::PushStoreOperation(google::protobuf::RpcController* controller,
                                          const dingodb::pb::push::PushStoreOperationRequest* request,
-                                         dingodb::pb::push::PushStoreOperationResponse*,
+                                         dingodb::pb::push::PushStoreOperationResponse* response,
                                          google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard const done_guard(done);
-  DINGO_LOG(DEBUG) << "PushStoreOperation request: " << request->DebugString();
+  DINGO_LOG(DEBUG) << "PushStoreOperation request: " << request->ShortDebugString();
 
-  // call HandleStoreOperationResponse
-  const auto& store_operation = request->store_operation();
-  auto store_meta = Server::GetInstance()->GetStoreMetaManager();
+  if (request->store_operation().id() != Server::GetInstance()->Id()) {
+    return;
+  }
 
-  pb::push::PushStoreOperationResponse store_operation_response;
-  Heartbeat::HandleStoreOperationRequest(store_meta, store_operation, store_operation_response);
+  auto region_controller = Server::GetInstance()->GetRegionController();
+  for (const auto& command : request->store_operation().region_cmds()) {
+    butil::Status status;
+    auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
+    switch (command.region_cmd_type()) {
+      case pb::coordinator::CMD_CREATE:
+        status = CreateRegionTask::ValidateCreateRegion(store_meta_manager, command.region_id());
+        break;
+      case pb::coordinator::CMD_DELETE:
+        status = DeleteRegionTask::ValidateDeleteRegion(
+            store_meta_manager, store_meta_manager->GetStoreRegionMeta()->GetRegion(command.region_id()));
+        break;
+      case pb::coordinator::CMD_SPLIT:
+        status =
+            SplitRegionTask::ValidateSplitRegion(store_meta_manager->GetStoreRegionMeta(), command.split_request());
+        break;
+      case pb::coordinator::CMD_CHANGE_PEER:
+        status = ChangeRegionTask::ValidateChangeRegion(
+            store_meta_manager, store_meta_manager->GetStoreRegionMeta()->GetRegion(command.region_id()));
+        break;
+      default:
+        DINGO_LOG(ERROR) << "Unknown command type: " << command.region_cmd_type();
+    }
+
+    auto error_func = [response](uint64_t command_id, butil::Status status) {
+      auto* result = response->add_region_cmd_results();
+      result->set_region_cmd_id(command_id);
+      auto* mut_err = result->mutable_error();
+      mut_err->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
+      mut_err->set_errmsg(status.error_str());
+    };
+
+    if (!status.ok()) {
+      error_func(command.id(), status);
+      continue;
+    }
+
+    std::shared_ptr<Context> ctx = std::make_shared<Context>();
+    status =
+        region_controller->DispatchRegionControlCommand(ctx, std::make_shared<pb::coordinator::RegionCmd>(command));
+    if (!status.ok()) {
+      error_func(command.id(), status);
+    }
+  }
+
+  if (!response->region_cmd_results().empty()) {
+    response->mutable_error()->CopyFrom(response->region_cmd_results(0).error());
+  }
 }
 
 }  // namespace dingodb

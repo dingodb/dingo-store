@@ -19,6 +19,7 @@
 
 #include "common/helper.h"
 #include "common/logging.h"
+#include "server/server.h"
 
 namespace dingodb {
 
@@ -146,12 +147,52 @@ void DeleteBatchHandler::Handle(std::shared_ptr<Context> ctx, std::shared_ptr<Ra
   }
 }
 
+void SplitHandler::SplitClosure::Run() {
+  std::unique_ptr<SplitClosure> self_guard(this);
+  DINGO_LOG(INFO) << "SplitHandler::SplitClosure::Run...";
+
+  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+
+  store_region_meta->UpdateState(region_, pb::common::StoreRegionState::NORMAL);
+}
+
+void SplitHandler::Handle(std::shared_ptr<Context>, std::shared_ptr<RawEngine>, const pb::raft::Request &req) {
+  const auto &request = req.split();
+  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+  auto from_region = store_region_meta->GetRegion(request.from_region_id());
+  auto to_region = store_region_meta->GetRegion(request.to_region_id());
+  // Set parent range
+  auto *range = from_region->mutable_definition()->mutable_range();
+  auto end_key = range->start_key();
+  range->set_end_key(request.split_key());
+
+  // Set child range
+  range = to_region->mutable_definition()->mutable_range();
+  range->set_start_key(request.split_key());
+  range->set_end_key(end_key);
+
+  // Set region state spliting
+  store_region_meta->UpdateState(from_region, pb::common::StoreRegionState::SPLITTING);
+
+  // Do parent region snapshot
+  auto engine = Server::GetInstance()->GetEngine();
+  std::shared_ptr<Context> from_ctx = std::make_shared<Context>();
+  from_ctx->SetDone(new SplitHandler::SplitClosure(from_region));
+  engine->DoSnapshot(from_ctx, from_region->id());
+
+  // Do child region snapshot
+  std::shared_ptr<Context> to_ctx = std::make_shared<Context>();
+  to_ctx->SetDone(new SplitHandler::SplitClosure(to_region));
+  engine->DoSnapshot(to_ctx, to_region->id());
+}
+
 std::shared_ptr<HandlerCollection> RaftApplyHandlerFactory::Build() {
   auto handler_collection = std::make_shared<HandlerCollection>();
   handler_collection->Register(std::make_shared<PutHandler>());
   handler_collection->Register(std::make_shared<PutIfAbsentHandler>());
   handler_collection->Register(std::make_shared<DeleteRangeHandler>());
   handler_collection->Register(std::make_shared<DeleteBatchHandler>());
+  handler_collection->Register(std::make_shared<SplitHandler>());
 
   return handler_collection;
 }

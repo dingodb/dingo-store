@@ -14,14 +14,12 @@
 
 #include "store/heartbeat.h"
 
+#include <cstddef>
 #include <map>
+#include <memory>
 
-#include "butil/scoped_lock.h"
-#include "butil/time.h"
 #include "common/helper.h"
 #include "common/logging.h"
-#include "coordinator/coordinator_control.h"
-#include "coordinator/coordinator_interaction.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
 #include "proto/coordinator_internal.pb.h"
@@ -31,57 +29,140 @@
 
 namespace dingodb {
 
-butil::Status Heartbeat::RpcSendPushStoreOperation(const pb::common::Location& location,
-                                                   const pb::push::PushStoreOperationRequest& request,
-                                                   pb::push::PushStoreOperationResponse& response) {
-  // build send location string
-  auto store_server_location_string = location.host() + ":" + std::to_string(location.port());
-  braft::PeerId remote_node(store_server_location_string);
+void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> coordinator_interaction) {
+  auto engine = Server::GetInstance()->GetEngine();
+  auto raft_kv_engine =
+      (engine->GetID() == pb::common::ENG_RAFT_STORE) ? std::dynamic_pointer_cast<RaftKvEngine>(engine) : nullptr;
 
-  // rpc
-  brpc::Channel channel;
-  if (channel.Init(remote_node.addr, nullptr) != 0) {
-    DINGO_LOG(ERROR) << "SendCoordinatorPushToStore... channel init failed";
-    return butil::Status(pb::error::Errno::ESTORE_NOT_FOUND, "cannot connect store");
+  pb::coordinator::StoreHeartbeatRequest request;
+  auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
+
+  request.set_self_storemap_epoch(store_meta_manager->GetStoreServerMeta()->GetEpoch());
+  request.set_self_regionmap_epoch(store_meta_manager->GetStoreRegionMeta()->GetEpoch());
+
+  // store
+  request.mutable_store()->CopyFrom(*store_meta_manager->GetStoreServerMeta()->GetStore(Server::GetInstance()->Id()));
+
+  // store_metrics
+  auto metrics_manager = Server::GetInstance()->GetStoreMetricsManager();
+  auto* mut_store_metrics = request.mutable_store_metrics();
+  mut_store_metrics->CopyFrom(*metrics_manager->GetStoreMetrics()->Metrics());
+
+  auto* mut_region_metrics_map = mut_store_metrics->mutable_region_metrics_map();
+  auto region_metrics = metrics_manager->GetStoreRegionMetrics();
+  auto region_metas = store_meta_manager->GetStoreRegionMeta()->GetAllRegion();
+  for (const auto& region : region_metas) {
+    pb::common::RegionMetrics tmp_region_metrics;
+    auto metrics = region_metrics->GetMetrics(region->id());
+    if (metrics != nullptr) {
+      tmp_region_metrics.CopyFrom(*metrics);
+    }
+
+    tmp_region_metrics.set_id(region->id());
+    tmp_region_metrics.set_leader_store_id(region->leader_id());
+    tmp_region_metrics.set_store_region_state(region->state());
+    tmp_region_metrics.mutable_region_definition()->CopyFrom(region->definition());
+
+    if (raft_kv_engine != nullptr) {
+      auto raft_node = raft_kv_engine->GetNode(region->id());
+      if (raft_node != nullptr) {
+        tmp_region_metrics.mutable_braft_status()->CopyFrom(*raft_node->GetStatus());
+      }
+    }
+
+    mut_region_metrics_map->insert({region->id(), tmp_region_metrics});
   }
 
-  brpc::Controller cntl;
-  cntl.set_timeout_ms(500L);
-
-  pb::push::PushService_Stub(&channel).PushStoreOperation(&cntl, &request, &response, nullptr);
-
-  if (cntl.Failed()) {
-    DINGO_LOG(ERROR) << "SendCoordinatorPushToStore... rpc failed, error code: " << cntl.ErrorCode()
-                     << ", error message: " << cntl.ErrorText();
-    return butil::Status(cntl.ErrorCode(), cntl.ErrorText());
+  auto region_metricses = metrics_manager->GetStoreRegionMetrics()->GetAllMetrics();
+  for (auto region_metrics : region_metricses) {
   }
 
-  if (response.error().errcode() != pb::error::Errno::OK) {
-    DINGO_LOG(ERROR) << "SendCoordinatorPushToStore... rpc failed, error code: " << response.error().errcode()
-                     << ", error message: " << response.error().errmsg();
-    return butil::Status(response.error().errcode(), response.error().errmsg());
+  pb::coordinator::StoreHeartbeatResponse response;
+  auto status = coordinator_interaction->SendRequest("StoreHeartbeat", request, response);
+  if (status.ok()) {
+    HeartbeatTask::HandleStoreHeartbeatResponse(store_meta_manager, response);
+  }
+}
+
+static std::vector<std::shared_ptr<pb::common::Store> > GetNewStore(
+    std::map<uint64_t, std::shared_ptr<pb::common::Store> > local_stores,
+    const google::protobuf::RepeatedPtrField<dingodb::pb::common::Store>& remote_stores) {
+  std::vector<std::shared_ptr<pb::common::Store> > new_stores;
+  for (const auto& remote_store : remote_stores) {
+    if (local_stores.find(remote_store.id()) == local_stores.end()) {
+      new_stores.push_back(std::make_shared<pb::common::Store>(remote_store));
+    }
   }
 
-  return butil::Status::OK();
+  return new_stores;
+}
+
+static std::vector<std::shared_ptr<pb::common::Store> > GetChangedStore(
+    std::map<uint64_t, std::shared_ptr<pb::common::Store> > local_stores,
+    const google::protobuf::RepeatedPtrField<dingodb::pb::common::Store>& remote_stores) {
+  std::vector<std::shared_ptr<pb::common::Store> > changed_stores;
+  for (const auto& remote_store : remote_stores) {
+    if (remote_store.id() == 0) {
+      continue;
+    }
+    auto it = local_stores.find(remote_store.id());
+    if (it != local_stores.end()) {
+      if (it->second->raft_location().host() != remote_store.raft_location().host() ||
+          it->second->raft_location().port() != remote_store.raft_location().port()) {
+        changed_stores.push_back(std::make_shared<pb::common::Store>(remote_store));
+      }
+    }
+  }
+
+  return changed_stores;
+}
+
+static std::vector<std::shared_ptr<pb::common::Store> > GetDeletedStore(
+    std::map<uint64_t, std::shared_ptr<pb::common::Store> > local_stores,
+    const google::protobuf::RepeatedPtrField<pb::common::Store>& remote_stores) {
+  std::vector<std::shared_ptr<pb::common::Store> > stores;
+  for (const auto& store : remote_stores) {
+    if (store.state() != pb::common::STORE_OFFLINE && store.in_state() != pb::common::STORE_OUT) {
+      continue;
+    }
+
+    auto it = local_stores.find(store.id());
+    if (it != local_stores.end()) {
+      stores.push_back(it->second);
+    }
+  }
+
+  return stores;
+}
+
+void HeartbeatTask::HandleStoreHeartbeatResponse(std::shared_ptr<dingodb::StoreMetaManager> store_meta_manager,
+                                                 const pb::coordinator::StoreHeartbeatResponse& response) {
+  // Handle store meta data.
+  auto store_server_meta = store_meta_manager->GetStoreServerMeta();
+  auto local_stores = store_server_meta->GetAllStore();
+  auto remote_stores = response.storemap().stores();
+
+  auto new_stores = GetNewStore(local_stores, remote_stores);
+  DINGO_LOG(INFO) << "new store size: " << new_stores.size() << " / " << local_stores.size();
+  for (const auto& store : new_stores) {
+    store_server_meta->AddStore(store);
+  }
+
+  auto changed_stores = GetChangedStore(local_stores, remote_stores);
+  DINGO_LOG(INFO) << "changed store size: " << changed_stores.size() << " / " << local_stores.size();
+  for (const auto& store : changed_stores) {
+    store_server_meta->UpdateStore(store);
+  }
+
+  auto deleted_stores = GetDeletedStore(local_stores, remote_stores);
+  DINGO_LOG(INFO) << "deleted store size: " << deleted_stores.size() << " / " << local_stores.size();
+  for (const auto& store : deleted_stores) {
+    store_server_meta->DeleteStore(store->id());
+  }
 }
 
 // this is for coordinator
-void Heartbeat::CalculateTableMetrics(void* arg) {
-  CoordinatorControl* coordinator_control = static_cast<CoordinatorControl*>(arg);
-
-  if (!coordinator_control->IsLeader()) {
-    // DINGO_LOG(INFO) << "SendCoordinatorPushToStore... this is follower";
-    return;
-  }
-  DINGO_LOG(DEBUG) << "CalculateTableMetrics... this is leader";
-
-  coordinator_control->CalculateTableMetrics();
-}
-
-// this is for coordinator
-void Heartbeat::SendCoordinatorPushToStore(void* arg) {
-  CoordinatorControl* coordinator_control = static_cast<CoordinatorControl*>(arg);
-
+void CoordinatorPushTask::SendCoordinatorPushToStore(std::shared_ptr<CoordinatorControl> coordinator_control) {
   if (!coordinator_control->IsLeader()) {
     DINGO_LOG(DEBUG) << "SendCoordinatorPushToStore... this is follower";
     return;
@@ -133,8 +214,8 @@ void Heartbeat::SendCoordinatorPushToStore(void* arg) {
 
       request.mutable_store_operation()->CopyFrom(store_operation);
 
-      // send rpc
-      auto status = RpcSendPushStoreOperation(it.server_location(), request, response);
+      // send rpcs
+      auto status = Heartbeat::RpcSendPushStoreOperation(it.server_location(), request, response);
 
       // check response
       pb::coordinator_internal::MetaIncrement meta_increment;
@@ -178,7 +259,7 @@ void Heartbeat::SendCoordinatorPushToStore(void* arg) {
                                << " failed, but no leader_location in response";
             }
 
-            auto status = RpcSendPushStoreOperation(response.error().leader_location(), request, response);
+            auto status = Heartbeat::RpcSendPushStoreOperation(response.error().leader_location(), request, response);
             if (status.ok()) {
               DINGO_LOG(INFO) << "SendCoordinatorPushToStore... send store_operation to store_id=" << it.id()
                               << " region_cmd_id=" << it_cmd.region_cmd_id() << " result=" << it_cmd.error().errcode()
@@ -294,223 +375,112 @@ void Heartbeat::SendCoordinatorPushToStore(void* arg) {
   }
 }
 
-void Heartbeat::SendStoreHeartbeat(void* arg) {
-  // DINGO_LOG(INFO) << "SendStoreHeartbeat...";
-  CoordinatorInteraction* coordinator_interaction = static_cast<CoordinatorInteraction*>(arg);
-
-  auto store_control = Server::GetInstance()->GetStoreControl();
-  if (!store_control->CheckNeedToHeartbeat()) {
-    // DINGO_LOG(INFO) << "CheckNeedToHeartbeat is false, no need to hearbeat";
+// this is for coordinator
+void CalculateTableMetricsTask::CalculateTableMetrics(std::shared_ptr<CoordinatorControl> coordinator_control) {
+  if (!coordinator_control->IsLeader()) {
+    // DINGO_LOG(INFO) << "SendCoordinatorPushToStore... this is follower";
     return;
   }
-  DINGO_LOG(INFO) << "CheckNeedToHeartbeat is true, start to SendStoreHeartbeat";
+  DINGO_LOG(DEBUG) << "CalculateTableMetrics... this is leader";
 
-  pb::coordinator::StoreHeartbeatRequest request;
-  auto store_meta = Server::GetInstance()->GetStoreMetaManager();
-
-  request.set_self_storemap_epoch(store_meta->GetServerEpoch());
-  request.set_self_regionmap_epoch(store_meta->GetRegionEpoch());
-
-  request.mutable_store()->CopyFrom(*store_meta->GetStore(Server::GetInstance()->Id()));
-
-  auto store_id = Server::GetInstance()->Id();
-  for (auto& it : store_meta->GetAllRegion()) {
-    if (it.second->leader_store_id() == store_id) {
-      request.add_regions()->CopyFrom(*(it.second));
-    }
-  }
-
-  pb::coordinator::StoreHeartbeatResponse response;
-  auto status = coordinator_interaction->SendRequest("StoreHeartbeat", request, response);
-  if (status.ok()) {
-    HandleStoreHeartbeatResponse(store_meta, response);
-  }
+  coordinator_control->CalculateTableMetrics();
 }
 
-static std::vector<std::shared_ptr<pb::common::Store> > GetNewStore(
-    std::map<uint64_t, std::shared_ptr<pb::common::Store> > local_stores,
-    const google::protobuf::RepeatedPtrField<dingodb::pb::common::Store>& remote_stores) {
-  std::vector<std::shared_ptr<pb::common::Store> > new_stores;
-  for (const auto& remote_store : remote_stores) {
-    if (local_stores.find(remote_store.id()) == local_stores.end()) {
-      new_stores.push_back(std::make_shared<pb::common::Store>(remote_store));
-    }
+int Heartbeat::ExecuteRoutine(void*, bthread::TaskIterator<TaskRunnable*>& iter) {
+  std::unique_ptr<TaskRunnable> self_guard(*iter);
+  if (iter.is_queue_stopped()) {
+    return 0;
   }
 
-  return new_stores;
+  for (; iter; ++iter) {
+    (*iter)->Run();
+  }
+
+  return 0;
 }
 
-static std::vector<std::shared_ptr<pb::common::Store> > GetChangedStore(
-    std::map<uint64_t, std::shared_ptr<pb::common::Store> > local_stores,
-    const google::protobuf::RepeatedPtrField<dingodb::pb::common::Store>& remote_stores) {
-  std::vector<std::shared_ptr<pb::common::Store> > changed_stores;
-  for (const auto& remote_store : remote_stores) {
-    if (remote_store.id() == 0) {
-      continue;
-    }
-    auto it = local_stores.find(remote_store.id());
-    if (it != local_stores.end()) {
-      if (it->second->raft_location().host() != remote_store.raft_location().host() ||
-          it->second->raft_location().port() != remote_store.raft_location().port()) {
-        changed_stores.push_back(std::make_shared<pb::common::Store>(remote_store));
-      }
-    }
+bool Heartbeat::Init() {
+  bthread::ExecutionQueueOptions options;
+  options.bthread_attr = BTHREAD_ATTR_NORMAL;
+
+  if (bthread::execution_queue_start(&queue_id_, &options, ExecuteRoutine, nullptr) != 0) {
+    DINGO_LOG(ERROR) << "Start heartbeat execution queue failed";
+    return false;
   }
 
-  return changed_stores;
+  return true;
 }
 
-static std::vector<std::shared_ptr<pb::common::Store> > GetDeletedStore(
-    std::map<uint64_t, std::shared_ptr<pb::common::Store> > local_stores,
-    const google::protobuf::RepeatedPtrField<pb::common::Store>& remote_stores) {
-  std::vector<std::shared_ptr<pb::common::Store> > stores;
-  for (const auto& store : remote_stores) {
-    if (store.state() != pb::common::STORE_OFFLINE) {
-      continue;
-    }
-
-    auto it = local_stores.find(store.id());
-    if (it != local_stores.end()) {
-      stores.push_back(it->second);
-    }
-  }
-
-  return stores;
-}
-
-static std::vector<std::shared_ptr<pb::common::Region> > GetNewRegion(
-    std::map<uint64_t, std::shared_ptr<pb::common::Region> > local_regions,
-    const google::protobuf::RepeatedPtrField<dingodb::pb::common::Region>& remote_regions) {
-  std::vector<std::shared_ptr<pb::common::Region> > new_regions;
-  for (const auto& remote_region : remote_regions) {
-    // Only state is new, create new region.
-    if (remote_region.state() != pb::common::REGION_NEW) {
-      continue;
-    }
-    if (local_regions.find(remote_region.id()) == local_regions.end()) {
-      new_regions.push_back(std::make_shared<pb::common::Region>(remote_region));
-    }
-  }
-
-  return new_regions;
-}
-
-static std::vector<std::shared_ptr<pb::common::Region> > GetChangedPeerRegion(
-    std::map<uint64_t, std::shared_ptr<pb::common::Region> > local_regions,
-    const google::protobuf::RepeatedPtrField<dingodb::pb::common::Region>& remote_regions) {
-  std::vector<std::shared_ptr<pb::common::Region> > changed_peers;
-  for (const auto& remote_region : remote_regions) {
-    if (remote_region.id() == 0) {
-      continue;
-    }
-    if (remote_region.state() != pb::common::REGION_NORMAL && remote_region.state() != pb::common::REGION_EXPAND &&
-        remote_region.state() != pb::common::REGION_SHRINK && remote_region.state() != pb::common::REGION_DEGRADED &&
-        remote_region.state() != pb::common::REGION_UNAVAILABLE) {
-      continue;
-    }
-    auto it = local_regions.find(remote_region.id());
-    if (it != local_regions.end() && remote_region.epoch() != it->second->epoch()) {
-      std::vector<pb::common::Peer> local_peers(it->second->peers().begin(), it->second->peers().end());
-      std::vector<pb::common::Peer> remote_peers(remote_region.peers().begin(), remote_region.peers().end());
-
-      Helper::SortPeers(local_peers);
-      Helper::SortPeers(remote_peers);
-      if (Helper::IsDifferencePeers(local_peers, remote_peers)) {
-        changed_peers.push_back(std::make_shared<pb::common::Region>(remote_region));
-      }
-    }
-  }
-
-  return changed_peers;
-}
-
-static std::vector<std::shared_ptr<pb::common::Region> > GetDeleteRegion(
-    std::map<uint64_t, std::shared_ptr<pb::common::Region> > local_regions,
-    const google::protobuf::RepeatedPtrField<pb::common::Region>& remote_regions) {
-  std::vector<std::shared_ptr<pb::common::Region> > regions;
-  for (const auto& region : remote_regions) {
-    if (region.id() == 0 || region.state() != pb::common::REGION_DELETE) {
-      continue;
-    }
-
-    auto it = local_regions.find(region.id());
-    if (it != local_regions.end()) {
-      regions.push_back(it->second);
-    }
-  }
-
-  return regions;
-}
-
-void Heartbeat::HandleStoreHeartbeatResponse(std::shared_ptr<dingodb::StoreMetaManager> store_meta,
-                                             const pb::coordinator::StoreHeartbeatResponse& response) {
-  BAIDU_SCOPED_LOCK(*(store_meta->GetHeartbeatUpdateMutexRef()));
-
-  // Handle store meta data.
-  auto local_stores = store_meta->GetAllStore();
-  auto remote_stores = response.storemap().stores();
-
-  auto new_stores = GetNewStore(local_stores, remote_stores);
-  DINGO_LOG(INFO) << "new store size: " << new_stores.size() << " / " << local_stores.size();
-  for (const auto& store : new_stores) {
-    store_meta->AddStore(store);
-  }
-
-  auto changed_stores = GetChangedStore(local_stores, remote_stores);
-  DINGO_LOG(INFO) << "changed store size: " << changed_stores.size() << " / " << local_stores.size();
-  for (const auto& store : changed_stores) {
-    store_meta->UpdateStore(store);
-  }
-
-  auto deleted_stores = GetDeletedStore(local_stores, remote_stores);
-  DINGO_LOG(INFO) << "deleted store size: " << deleted_stores.size() << " / " << local_stores.size();
-  for (const auto& store : deleted_stores) {
-    store_meta->DeleteStore(store->id());
-  }
-
-  // check region, if has new region, add region.
-  auto store_control = Server::GetInstance()->GetStoreControl();
-  auto local_regions = store_meta->GetAllRegion();
-  auto remote_regions = response.regionmap().regions();
-
-  // If has new region, add region.
-  auto new_regions = GetNewRegion(local_regions, remote_regions);
-  DINGO_LOG(INFO) << "new regions size: " << new_regions.size() << " / " << local_regions.size();
-  std::shared_ptr<Context> ctx = std::make_shared<Context>();
-  for (const auto& region : new_regions) {
-    store_control->AddRegion(ctx, region);
-  }
-
-  // Check for change peers region.
-  auto changed_peer_regions = GetChangedPeerRegion(local_regions, remote_regions);
-  DINGO_LOG(INFO) << "change peer regions size: " << changed_peer_regions.size() << " / " << local_regions.size();
-  for (auto region : changed_peer_regions) {
-    std::shared_ptr<Context> ctx = std::make_shared<Context>();
-    // store_control->ChangeRegion(ctx, region);
-  }
-
-  // Check for delete region.
-  auto delete_regions = GetDeleteRegion(local_regions, remote_regions);
-  DINGO_LOG(INFO) << "delete regions size: " << delete_regions.size() << " / " << local_regions.size();
-  for (auto region : delete_regions) {
-    std::shared_ptr<Context> ctx = std::make_shared<Context>();
-    // store_control->DeleteRegion(ctx, region->id());
-  }
-}
-
-void Heartbeat::HandleStoreOperationRequest(std::shared_ptr<dingodb::StoreMetaManager> store_meta,
-                                            const pb::coordinator::StoreOperation& store_operation,
-                                            pb::push::PushStoreOperationResponse& store_operation_response) {
-  auto store_control = Server::GetInstance()->GetStoreControl();
-  auto store_id = store_operation.id();
-  auto store = store_meta->GetStore(store_id);
-  if (store == nullptr) {
-    DINGO_LOG(ERROR) << "store not found, store id: " << store_id;
+void Heartbeat::Destroy() {
+  if (bthread::execution_queue_stop(queue_id_) != 0) {
+    DINGO_LOG(ERROR) << "heartbeat execution queue stop failed";
     return;
   }
 
-  // process region_cmds here.
-  store_operation_response.mutable_error()->set_errcode(::dingodb::pb::error::Errno::OK);
+  if (bthread::execution_queue_join(queue_id_) != 0) {
+    DINGO_LOG(ERROR) << "heartbeat execution queue join failed";
+  }
+}
+
+bool Heartbeat::Execute(TaskRunnable* task) {
+  if (bthread::execution_queue_execute(queue_id_, task) != 0) {
+    DINGO_LOG(ERROR) << "heartbeat execution queue execute failed";
+    return false;
+  }
+
+  return true;
+}
+
+void Heartbeat::TriggerStoreHeartbeat(void*) {
+  // Free at ExecuteRoutine()
+  TaskRunnable* task = new HeartbeatTask(Server::GetInstance()->GetCoordinatorInteraction());
+  Server::GetInstance()->GetHeartbeat()->Execute(task);
+}
+
+void Heartbeat::TriggerCoordinatorPushToStore(void*) {
+  // Free at ExecuteRoutine()
+  TaskRunnable* task = new CoordinatorPushTask(Server::GetInstance()->GetCoordinatorControl());
+  Server::GetInstance()->GetHeartbeat()->Execute(task);
+}
+
+void Heartbeat::TriggerCalculateTableMetrics(void*) {
+  // Free at ExecuteRoutine()
+  TaskRunnable* task = new CalculateTableMetricsTask(Server::GetInstance()->GetCoordinatorControl());
+  Server::GetInstance()->GetHeartbeat()->Execute(task);
+}
+
+butil::Status Heartbeat::RpcSendPushStoreOperation(const pb::common::Location& location,
+                                                   const pb::push::PushStoreOperationRequest& request,
+                                                   pb::push::PushStoreOperationResponse& response) {
+  // build send location string
+  auto store_server_location_string = location.host() + ":" + std::to_string(location.port());
+  braft::PeerId remote_node(store_server_location_string);
+
+  // rpc
+  brpc::Channel channel;
+  if (channel.Init(remote_node.addr, nullptr) != 0) {
+    DINGO_LOG(ERROR) << "SendCoordinatorPushToStore... channel init failed";
+    return butil::Status(pb::error::Errno::ESTORE_NOT_FOUND, "cannot connect store");
+  }
+
+  brpc::Controller cntl;
+  cntl.set_timeout_ms(500L);
+
+  pb::push::PushService_Stub(&channel).PushStoreOperation(&cntl, &request, &response, nullptr);
+
+  if (cntl.Failed()) {
+    DINGO_LOG(ERROR) << "SendCoordinatorPushToStore... rpc failed, error code: " << cntl.ErrorCode()
+                     << ", error message: " << cntl.ErrorText();
+    return butil::Status(cntl.ErrorCode(), cntl.ErrorText());
+  }
+
+  if (response.error().errcode() != pb::error::Errno::OK) {
+    DINGO_LOG(ERROR) << "SendCoordinatorPushToStore... rpc failed, error code: " << response.error().errcode()
+                     << ", error message: " << response.error().errmsg();
+    return butil::Status(response.error().errcode(), response.error().errmsg());
+  }
+
+  return butil::Status::OK();
 }
 
 }  // namespace dingodb

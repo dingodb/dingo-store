@@ -7,7 +7,6 @@ server:
   host: $SERVER_HOST$
   port: $SERVER_PORT$
   heartbeatInterval: 10000 # ms
-  pushInterval: 1000 # ms
   metricsCollectInterval: 300000 # ms
 raft:
   host: $RAFT_HOST$

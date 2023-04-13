@@ -16,34 +16,88 @@
 #define DINGODB_SERVER_HEARTBEAT_H_
 
 #include <atomic>
+#include <memory>
 
 #include "brpc/channel.h"
+#include "common/logging.h"
 #include "coordinator/coordinator_control.h"
+#include "coordinator/coordinator_interaction.h"
 #include "meta/store_meta_manager.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
 #include "proto/push.pb.h"
-#include "server/server.h"
+#include "store/region_controller.h"
 
 namespace dingodb {
 
+class HeartbeatTask : public TaskRunnable {
+ public:
+  HeartbeatTask(std::shared_ptr<CoordinatorInteraction> coordinator_interaction)
+      : coordinator_interaction_(coordinator_interaction) {}
+  ~HeartbeatTask() override = default;
+
+  void Run() override { SendStoreHeartbeat(coordinator_interaction_); }
+
+  static void SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> coordinator_interaction);
+  static void HandleStoreHeartbeatResponse(std::shared_ptr<StoreMetaManager> store_meta,
+                                           const pb::coordinator::StoreHeartbeatResponse& response);
+
+ private:
+  std::shared_ptr<CoordinatorInteraction> coordinator_interaction_;
+};
+
+class CoordinatorPushTask : public TaskRunnable {
+ public:
+  CoordinatorPushTask(std::shared_ptr<CoordinatorControl> coordinator_control)
+      : coordinator_control_(coordinator_control) {}
+  ~CoordinatorPushTask() override = default;
+
+  void Run() override { SendCoordinatorPushToStore(coordinator_control_); }
+
+ private:
+  static void SendCoordinatorPushToStore(std::shared_ptr<CoordinatorControl> coordinator_control);
+
+  std::shared_ptr<CoordinatorControl> coordinator_control_;
+};
+
+class CalculateTableMetricsTask : public TaskRunnable {
+ public:
+  CalculateTableMetricsTask(std::shared_ptr<CoordinatorControl> coordinator_control)
+      : coordinator_control_(coordinator_control) {}
+  ~CalculateTableMetricsTask() override = default;
+
+  void Run() override { CalculateTableMetrics(coordinator_control_); }
+
+ private:
+  static void CalculateTableMetrics(std::shared_ptr<CoordinatorControl> coordinator_control);
+
+  std::shared_ptr<CoordinatorControl> coordinator_control_;
+};
+
 class Heartbeat {
  public:
-  Heartbeat();
-  ~Heartbeat();
+  Heartbeat() : queue_id_({0}) {}
+  ~Heartbeat() = default;
+
+  Heartbeat(const Heartbeat&) = delete;
+  const Heartbeat& operator=(const Heartbeat&) = delete;
+
+  bool Init();
+  void Destroy();
+
+  static void TriggerStoreHeartbeat(void*);
+  static void TriggerCoordinatorPushToStore(void*);
+  static void TriggerCalculateTableMetrics(void*);
 
   static butil::Status RpcSendPushStoreOperation(const pb::common::Location& location,
                                                  const pb::push::PushStoreOperationRequest& request,
                                                  pb::push::PushStoreOperationResponse& response);
-  static void SendStoreHeartbeat(void* arg);
-  static void SendCoordinatorPushToStore(void* arg);
-  static void CalculateTableMetrics(void* arg);
 
-  static void HandleStoreHeartbeatResponse(std::shared_ptr<StoreMetaManager> store_meta,
-                                           const pb::coordinator::StoreHeartbeatResponse& response);
-  static void HandleStoreOperationRequest(std::shared_ptr<StoreMetaManager> store_meta,
-                                          const pb::coordinator::StoreOperation& store_operation,
-                                          pb::push::PushStoreOperationResponse& store_operation_response);
+ private:
+  bool Execute(TaskRunnable* task);
+  static int ExecuteRoutine(void*, bthread::TaskIterator<TaskRunnable*>& iter);
+
+  bthread::ExecutionQueueId<TaskRunnable*> queue_id_;
 };
 
 }  // namespace dingodb

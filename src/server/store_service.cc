@@ -14,12 +14,17 @@
 
 #include "server/store_service.h"
 
+#include <memory>
+#include <string_view>
+#include <vector>
+
 #include "common/constant.h"
 #include "common/context.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "meta/store_meta_manager.h"
 #include "proto/common.pb.h"
+#include "proto/coordinator.pb.h"
 #include "proto/error.pb.h"
 #include "server.h"
 #include "server/server.h"
@@ -40,7 +45,7 @@ void RedirectLeader(std::string addr, T* response) {
 
   // From local store map query.
   butil::EndPoint server_endpoint = Helper::QueryServerEndpointByRaftEndpoint(
-      Server::GetInstance()->GetStoreMetaManager()->GetAllStore(), raft_endpoint);
+      Server::GetInstance()->GetStoreMetaManager()->GetStoreServerMeta()->GetAllStore(), raft_endpoint);
   if (server_endpoint.port == 0) {
     // From remote node query.
     pb::common::Location server_location;
@@ -58,12 +63,15 @@ void StoreServiceImpl::AddRegion(google::protobuf::RpcController* controller,
                                  dingodb::pb::store::AddRegionResponse* response, google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(INFO) << "AddRegion request...";
 
-  auto store_control = Server::GetInstance()->GetStoreControl();
+  auto region_controller = Server::GetInstance()->GetRegionController();
 
-  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
-  auto status = store_control->AddRegion(ctx, std::make_shared<pb::common::Region>(request->region()));
+  auto command = std::make_shared<pb::coordinator::RegionCmd>();
+  command->set_region_id(request->region().id());
+  command->set_region_cmd_type(pb::coordinator::CMD_CREATE);
+  command->mutable_create_request()->mutable_region_definition()->CopyFrom(request->region());
+
+  auto status = region_controller->DispatchRegionControlCommand(std::make_shared<Context>(cntl, done), command);
   if (!status.ok()) {
     auto* mut_err = response->mutable_error();
     mut_err->set_errcode(static_cast<Errno>(status.error_code()));
@@ -76,11 +84,15 @@ void StoreServiceImpl::ChangeRegion(google::protobuf::RpcController* controller,
                                     pb::store::ChangeRegionResponse* response, google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(INFO) << "ChangeRegion request...";
 
-  auto store_control = Server::GetInstance()->GetStoreControl();
-  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
-  auto status = store_control->ChangeRegion(ctx, std::make_shared<pb::common::Region>(request->region()));
+  auto region_controller = Server::GetInstance()->GetRegionController();
+
+  auto command = std::make_shared<pb::coordinator::RegionCmd>();
+  command->set_region_id(request->region().id());
+  command->set_region_cmd_type(pb::coordinator::CMD_CHANGE_PEER);
+  command->mutable_change_peer_request()->mutable_region_definition()->CopyFrom(request->region());
+
+  auto status = region_controller->DispatchRegionControlCommand(std::make_shared<Context>(cntl, done), command);
   if (!status.ok()) {
     auto* mut_err = response->mutable_error();
     mut_err->set_errcode(static_cast<Errno>(status.error_code()));
@@ -96,9 +108,14 @@ void StoreServiceImpl::DestroyRegion(google::protobuf::RpcController* controller
   brpc::ClosureGuard done_guard(done);
   DINGO_LOG(INFO) << "DestroyRegion request...";
 
-  auto store_control = Server::GetInstance()->GetStoreControl();
-  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
-  auto status = store_control->DeleteRegion(ctx, request->region_id());
+  auto region_controller = Server::GetInstance()->GetRegionController();
+
+  auto command = std::make_shared<pb::coordinator::RegionCmd>();
+  command->set_region_id(request->region_id());
+  command->set_region_cmd_type(pb::coordinator::CMD_DELETE);
+  command->mutable_delete_request()->set_region_id(request->region_id());
+
+  auto status = region_controller->DispatchRegionControlCommand(std::make_shared<Context>(cntl, done), command);
   if (!status.ok()) {
     auto* mut_err = response->mutable_error();
     mut_err->set_errcode(static_cast<Errno>(status.error_code()));
@@ -110,11 +127,14 @@ void StoreServiceImpl::Snapshot(google::protobuf::RpcController* controller, con
                                 pb::store::SnapshotResponse* response, google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(INFO) << "Snapshot request... ";
 
-  auto store_control = Server::GetInstance()->GetStoreControl();
-  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
-  auto status = store_control->Snapshot(ctx, request->region_id());
+  auto region_controller = Server::GetInstance()->GetRegionController();
+
+  auto command = std::make_shared<pb::coordinator::RegionCmd>();
+  command->set_region_id(request->region_id());
+  command->set_region_cmd_type(pb::coordinator::CMD_SNAPSHOT);
+
+  auto status = region_controller->DispatchRegionControlCommand(std::make_shared<Context>(cntl, done), command);
   if (!status.ok()) {
     auto* mut_err = response->mutable_error();
     mut_err->set_errcode(static_cast<Errno>(status.error_code()));
@@ -122,20 +142,31 @@ void StoreServiceImpl::Snapshot(google::protobuf::RpcController* controller, con
   }
 }
 
-butil::Status ValidateRegion(uint64_t region_id) {
-  auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
-  auto region = store_meta_manager->GetRegion(region_id);
+butil::Status ValidateRegion(uint64_t region_id, const std::vector<std::string_view>& keys) {
+  // Todo: use double buffer map replace.
+  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+  auto region = store_region_meta->GetRegion(region_id);
   // Check is exist region.
   if (!region) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
   }
-  if (region->state() == pb::common::REGION_NEW) {
+  if (region->state() == pb::common::StoreRegionState::NEW) {
     return butil::Status(pb::error::EREGION_UNAVAILABLE, "Region is new, waiting later");
   }
-  if (region->state() == pb::common::REGION_DELETE || region->state() == pb::common::REGION_DELETING ||
-      region->state() == pb::common::REGION_DELETED) {
+  if (region->state() == pb::common::StoreRegionState::STANDBY) {
+    return butil::Status(pb::error::EREGION_UNAVAILABLE, "Region is standby, waiting later");
+  }
+  if (region->state() == pb::common::StoreRegionState::DELETED ||
+      region->state() == pb::common::StoreRegionState::DELETING) {
     return butil::Status(pb::error::EREGION_UNAVAILABLE, "Region is deleting");
   }
+
+  // auto range = region->definition().range();
+  // for (const auto& key : keys) {
+  //   if (range.start_key().compare(key) > 0 || range.end_key().compare(key) < 0) {
+  //     return butil::Status(pb::error::EKEY_OUT_OF_RANGE, "Key out of range");
+  //   }
+  // }
 
   return butil::Status();
 }
@@ -145,7 +176,8 @@ butil::Status ValidateKvGetRequest(const dingodb::pb::store::KvGetRequest* reque
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
 
-  auto status = ValidateRegion(request->region_id());
+  std::vector<std::string_view> keys = {request->key()};
+  auto status = ValidateRegion(request->region_id(), keys);
   if (!status.ok()) {
     return status;
   }
@@ -191,13 +223,16 @@ void StoreServiceImpl::KvGet(google::protobuf::RpcController* controller,
 }
 
 butil::Status ValidateKvBatchGetRequest(const dingodb::pb::store::KvBatchGetRequest* request) {
+  std::vector<std::string_view> keys;
   for (const auto& key : request->keys()) {
     if (key.empty()) {
       return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
     }
+
+    keys.push_back(key);
   }
 
-  auto status = ValidateRegion(request->region_id());
+  auto status = ValidateRegion(request->region_id(), keys);
   if (!status.ok()) {
     return status;
   }
@@ -244,7 +279,8 @@ butil::Status ValidateKvPutRequest(const dingodb::pb::store::KvPutRequest* reque
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
 
-  auto status = ValidateRegion(request->region_id());
+  std::vector<std::string_view> keys = {request->kv().key()};
+  auto status = ValidateRegion(request->region_id(), keys);
   if (!status.ok()) {
     return status;
   }
@@ -285,13 +321,16 @@ void StoreServiceImpl::KvPut(google::protobuf::RpcController* controller,
 }
 
 butil::Status ValidateKvBatchPutRequest(const dingodb::pb::store::KvBatchPutRequest* request) {
+  std::vector<std::string_view> keys;
   for (const auto& kv : request->kvs()) {
     if (kv.key().empty()) {
       return butil::Status(pb::error::EKEY_EMPTY, "key is empty");
     }
+
+    keys.push_back(kv.key());
   }
 
-  auto status = ValidateRegion(request->region_id());
+  auto status = ValidateRegion(request->region_id(), keys);
   if (!status.ok()) {
     return status;
   }
@@ -334,7 +373,8 @@ butil::Status ValidateKvPutIfAbsentRequest(const dingodb::pb::store::KvPutIfAbse
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
 
-  auto status = ValidateRegion(request->region_id());
+  std::vector<std::string_view> keys = {request->kv().key()};
+  auto status = ValidateRegion(request->region_id(), keys);
   if (!status.ok()) {
     return status;
   }
@@ -375,13 +415,16 @@ void StoreServiceImpl::KvPutIfAbsent(google::protobuf::RpcController* controller
 }
 
 butil::Status ValidateKvBatchPutIfAbsentRequest(const dingodb::pb::store::KvBatchPutIfAbsentRequest* request) {
+  std::vector<std::string_view> keys;
   for (const auto& kv : request->kvs()) {
     if (kv.key().empty()) {
       return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
     }
+
+    keys.push_back(kv.key());
   }
 
-  auto status = ValidateRegion(request->region_id());
+  auto status = ValidateRegion(request->region_id(), keys);
   if (!status.ok()) {
     return status;
   }
@@ -422,15 +465,18 @@ void StoreServiceImpl::KvBatchPutIfAbsent(google::protobuf::RpcController* contr
 }
 
 butil::Status ValidateKvBatchDeleteRequest(const dingodb::pb::store::KvBatchDeleteRequest* request) {
-  // Check is exist region.
-  if (!Server::GetInstance()->GetStoreMetaManager()->IsExistRegion(request->region_id())) {
-    return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
-  }
-
+  std::vector<std::string_view> keys;
   for (const auto& key : request->keys()) {
     if (key.empty()) {
       return butil::Status(pb::error::EKEY_EMPTY, "key is empty");
     }
+
+    keys.push_back(key);
+  }
+
+  auto status = ValidateRegion(request->region_id(), keys);
+  if (!status.ok()) {
+    return status;
   }
 
   return butil::Status();
@@ -468,7 +514,7 @@ void StoreServiceImpl::KvBatchDelete(google::protobuf::RpcController* controller
 
 butil::Status ValidateKvDeleteRangeRequest(const dingodb::pb::store::KvDeleteRangeRequest* request) {
   // Check is exist region.
-  if (!Server::GetInstance()->GetStoreMetaManager()->IsExistRegion(request->region_id())) {
+  if (!Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->IsExistRegion(request->region_id())) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
   }
 
@@ -476,6 +522,12 @@ butil::Status ValidateKvDeleteRangeRequest(const dingodb::pb::store::KvDeleteRan
   if (!s.ok()) {
     DINGO_LOG(ERROR) << butil::StringPrintf("Helper::KvDeleteRangeParamCheck failed : %s", s.error_str().c_str());
     return s;
+  }
+
+  std::vector<std::string_view> keys = {request->range().range().start_key(), request->range().range().end_key()};
+  auto status = ValidateRegion(request->region_id(), keys);
+  if (!status.ok()) {
+    return status;
   }
 
   return butil::Status();
@@ -522,11 +574,6 @@ void StoreServiceImpl::KvDeleteRange(google::protobuf::RpcController* controller
 }
 
 butil::Status ValidateKvScanBeginRequest(const dingodb::pb::store::KvScanBeginRequest* request) {
-  // Check is exist region.
-  if (!Server::GetInstance()->GetStoreMetaManager()->IsExistRegion(request->region_id())) {
-    return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
-  }
-
   if (BAIDU_UNLIKELY(request->range().range().start_key().empty() || request->range().range().end_key().empty())) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
   }
@@ -538,6 +585,12 @@ butil::Status ValidateKvScanBeginRequest(const dingodb::pb::store::KvScanBeginRe
     if (!request->range().with_start() || !request->range().with_end()) {
       return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
     }
+  }
+
+  std::vector<std::string_view> keys = {request->range().range().start_key(), request->range().range().end_key()};
+  auto status = ValidateRegion(request->region_id(), keys);
+  if (!status.ok()) {
+    return status;
   }
 
   return butil::Status();
@@ -587,7 +640,7 @@ void StoreServiceImpl::KvScanBegin(google::protobuf::RpcController* controller,
 
 butil::Status ValidateKvScanContinueRequest(const dingodb::pb::store::KvScanContinueRequest* request) {
   // Check is exist region.
-  if (!Server::GetInstance()->GetStoreMetaManager()->IsExistRegion(request->region_id())) {
+  if (!Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->IsExistRegion(request->region_id())) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
   }
 
@@ -641,7 +694,7 @@ void StoreServiceImpl::KvScanContinue(google::protobuf::RpcController* controlle
 
 butil::Status ValidateKvScanReleaseRequest(const dingodb::pb::store::KvScanReleaseRequest* request) {
   // Check is exist region.
-  if (!Server::GetInstance()->GetStoreMetaManager()->IsExistRegion(request->region_id())) {
+  if (!Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->IsExistRegion(request->region_id())) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
   }
 

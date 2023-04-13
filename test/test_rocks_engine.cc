@@ -89,10 +89,11 @@ std::string GenRandomString(int len) {
   std::string result;
   int alphabet_len = sizeof(kAlphabet);
 
-  std::default_random_engine def_engine;
-  std::uniform_int_distribution<> distrib(1, 1000000000);
+  std::mt19937 rng;
+  rng.seed(std::random_device()());
+  std::uniform_int_distribution<std::mt19937::result_type> distrib(1, 1000000000);
   for (int i = 0; i < len; ++i) {
-    result.append(1, kAlphabet[distrib(def_engine) % alphabet_len]);
+    result.append(1, kAlphabet[distrib(rng) % alphabet_len]);
   }
 
   return result;

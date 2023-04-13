@@ -14,8 +14,7 @@
 
 #include "raft/raft_node.h"
 
-#include <cstdarg>
-#include <cstddef>
+#include <filesystem>
 #include <memory>
 #include <utility>
 
@@ -34,7 +33,7 @@ RaftNode::RaftNode(pb::common::ClusterRole role, uint64_t node_id, const std::st
     : role_(role),
       node_id_(node_id),
       raft_group_name_(raft_group_name),
-      node_(new braft::Node(raft_group_name.c_str(), peer_id)),
+      node_(new braft::Node(raft_group_name, peer_id)),
       fsm_(fsm) {}
 
 RaftNode::~RaftNode() {
@@ -60,10 +59,10 @@ int RaftNode::Init(const std::string& init_conf) {
   node_options.node_owns_fsm = false;
   node_options.snapshot_interval_s = config->GetInt("raft.snapshotInterval");
 
-  std::string const path = butil::StringPrintf("%s/%ld", config->GetString("raft.path").c_str(), node_id_);
-  node_options.log_uri = "local://" + path + "/log";
-  node_options.raft_meta_uri = "local://" + path + "/raft_meta";
-  node_options.snapshot_uri = "local://" + path + "/snapshot";
+  path_ = butil::StringPrintf("%s/%ld", config->GetString("raft.path").c_str(), node_id_);
+  node_options.log_uri = "local://" + path_ + "/log";
+  node_options.raft_meta_uri = "local://" + path_ + "/raft_meta";
+  node_options.snapshot_uri = "local://" + path_ + "/snapshot";
   node_options.disable_cli = false;
 
   if (node_->init(node_options) != 0) {
@@ -74,7 +73,16 @@ int RaftNode::Init(const std::string& init_conf) {
   return 0;
 }
 
-void RaftNode::Destroy() {}
+void RaftNode::Destroy() {
+  DINGO_LOG(DEBUG) << butil::StringPrintf("Delete region %lu raft node shutdown", node_id_);
+  node_->shutdown(nullptr);
+  node_->join();
+  DINGO_LOG(DEBUG) << butil::StringPrintf("Delete region %lu finish raft node shutdown", node_id_);
+
+  // Delete file directory
+  std::filesystem::remove_all(path_);
+  DINGO_LOG(DEBUG) << butil::StringPrintf("Delete region %lu delete file directory", node_id_);
+}
 
 // Commit message to raft
 butil::Status RaftNode::Commit(std::shared_ptr<Context> ctx, std::shared_ptr<pb::raft::RaftCmdRequest> raft_cmd) {

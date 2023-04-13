@@ -51,7 +51,7 @@ class StoreStateMachine : public braft::StateMachine {
  public:
   explicit StoreStateMachine(std::shared_ptr<RawEngine> engine, uint64_t node_id,
                              std::shared_ptr<EventListenerCollection> listeners);
-  ~StoreStateMachine() = default;
+  ~StoreStateMachine() override = default;
 
   bool Init();
 

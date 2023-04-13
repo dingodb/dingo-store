@@ -19,6 +19,7 @@
 #include <braft/util.h>
 
 #include <memory>
+#include <string>
 
 #include "common/context.h"
 #include "proto/common.pb.h"
@@ -57,6 +58,7 @@ class RaftNode {
   std::shared_ptr<pb::common::BRaftStatus> GetStatus();
 
  private:
+  std::string path_;
   pb::common::ClusterRole role_;
   uint64_t node_id_;
   std::string raft_group_name_;
