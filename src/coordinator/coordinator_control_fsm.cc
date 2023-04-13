@@ -84,9 +84,12 @@ void CoordinatorControl::OnLeaderStart(int64_t term) {
 
   // copy table_map_ to table_name_map_safe_temp_
   {
-    BAIDU_SCOPED_LOCK(table_map_mutex_);
+    // BAIDU_SCOPED_LOCK(table_map_mutex_);
     table_name_map_safe_temp_.Clear();
-    for (const auto& it : table_map_) {
+    butil::FlatMap<uint64_t, pb::coordinator_internal::TableInternal> table_map_copy;
+    table_map_copy.init(10000);
+    table_map_.GetFlatMapCopy(table_map_copy);
+    for (const auto& it : table_map_copy) {
       table_name_map_safe_temp_.Put(it.second.definition().name(), it.first);
     }
   }
@@ -331,7 +334,7 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
     kvs.push_back(meta_snapshot_file.table_map_kvs(i));
   }
   {
-    BAIDU_SCOPED_LOCK(table_map_mutex_);
+    // BAIDU_SCOPED_LOCK(table_map_mutex_);
     if (!table_meta_->Recover(kvs)) {
       return false;
     }
@@ -407,9 +410,12 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
 
   // copy table_map_ to table_name_map_safe_temp_
   {
-    BAIDU_SCOPED_LOCK(table_map_mutex_);
+    // BAIDU_SCOPED_LOCK(table_map_mutex_);
     table_name_map_safe_temp_.Clear();
-    for (const auto& it : table_map_) {
+    butil::FlatMap<uint64_t, pb::coordinator_internal::TableInternal> table_map_copy;
+    table_map_copy.init(10000);
+    table_map_.GetFlatMapCopy(table_map_copy);
+    for (const auto& it : table_map_copy) {
       table_name_map_safe_temp_.Put(it.second.definition().name(), it.first);
     }
   }
@@ -688,7 +694,7 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
 
   // 6.table map
   {
-    BAIDU_SCOPED_LOCK(table_map_mutex_);
+    // BAIDU_SCOPED_LOCK(table_map_mutex_);
     for (int i = 0; i < meta_increment.tables_size(); i++) {
       const auto& table = meta_increment.tables(i);
       if (table.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
@@ -696,7 +702,8 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         // BAIDU_SCOPED_LOCK(schema_map_mutex_);
 
         // add table to table_map
-        table_map_[table.id()] = table.table();
+        // table_map_[table.id()] = table.table();
+        table_map_.Put(table.id(), table.table());
 
         // meta_write_kv
         meta_write_to_kv.push_back(table_meta_->TransformToKvValue(table.table()));
@@ -721,8 +728,9 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
 
       } else if (table.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
         // update table to table_map
-        auto& update_table = table_map_[table.id()];
-        update_table.CopyFrom(table.table());
+        // auto& update_table = table_map_[table.id()];
+        // update_table.CopyFrom(table.table());
+        table_map_.Put(table.id(), table.table());
 
         // meta_write_kv
         meta_write_to_kv.push_back(table_meta_->TransformToKvValue(table.table()));
@@ -732,7 +740,7 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         // BAIDU_SCOPED_LOCK(schema_map_mutex_);
 
         // delete table from table_map
-        table_map_.erase(table.id());
+        table_map_.Erase(table.id());
 
         // delete from parent schema
         pb::coordinator_internal::SchemaInternal schema_to_update;

@@ -513,15 +513,12 @@ pb::error::Errno CoordinatorControl::DropTable(uint64_t schema_id, uint64_t tabl
 
   pb::coordinator_internal::TableInternal table_internal;
   {
-    BAIDU_SCOPED_LOCK(table_map_mutex_);
-    auto* temp_table = table_map_.seek(table_id);
-    if (temp_table == nullptr) {
+    // BAIDU_SCOPED_LOCK(table_map_mutex_);
+    int ret = table_map_.Get(table_id, table_internal);
+    if (ret < 0) {
       DINGO_LOG(ERROR) << "ERRROR: table_id not found" << table_id;
       return pb::error::Errno::ETABLE_NOT_FOUND;
     }
-
-    // construct Table from table_internal
-    table_internal = *temp_table;
   }
 
   // call DropRegion
@@ -577,9 +574,11 @@ void CoordinatorControl::GetTables(uint64_t schema_id,
 
     for (int i = 0; i < schema_internal.table_ids_size(); i++) {
       uint64_t table_id = schema_internal.table_ids(i);
-      auto* temp_table = table_map_.seek(table_id);
-      if (temp_table == nullptr) {
-        DINGO_LOG(ERROR) << "ERRROR: table_id " << table_id << " not exists";
+
+      pb::coordinator_internal::TableInternal table_internal;
+      int ret = table_map_.Get(table_id, table_internal);
+      if (ret < 0) {
+        DINGO_LOG(ERROR) << "ERRROR: table_id not found" << table_id;
         continue;
       }
 
@@ -594,7 +593,7 @@ void CoordinatorControl::GetTables(uint64_t schema_id,
       table_id_for_response->set_entity_id(table_id);
       table_id_for_response->set_parent_entity_id(schema_id);
 
-      table_def_with_id.mutable_table_definition()->CopyFrom(temp_table->definition());
+      table_def_with_id.mutable_table_definition()->CopyFrom(table_internal.definition());
       table_definition_with_ids.push_back(table_def_with_id);
     }
   }
@@ -625,10 +624,11 @@ void CoordinatorControl::GetTable(uint64_t schema_id, uint64_t table_id,
 
   // validate table_id & get table definition
   {
-    BAIDU_SCOPED_LOCK(table_map_mutex_);
-    auto* temp_table = table_map_.seek(table_id);
-    if (temp_table == nullptr) {
-      DINGO_LOG(ERROR) << "ERRROR: table_id " << table_id << " not exists";
+    // BAIDU_SCOPED_LOCK(table_map_mutex_);
+    pb::coordinator_internal::TableInternal table_internal;
+    int ret = table_map_.Get(table_id, table_internal);
+    if (ret < 0) {
+      DINGO_LOG(ERROR) << "ERRROR: table_id not found" << table_id;
       return;
     }
 
@@ -640,7 +640,7 @@ void CoordinatorControl::GetTable(uint64_t schema_id, uint64_t table_id,
     table_id_for_response->set_entity_id(table_id);
     table_id_for_response->set_parent_entity_id(schema_id);
 
-    table_definition_with_id.mutable_table_definition()->CopyFrom(temp_table->definition());
+    table_definition_with_id.mutable_table_definition()->CopyFrom(table_internal.definition());
   }
 
   DINGO_LOG(DEBUG) << "GetTable schema_id=" << schema_id << " table_id=" << table_id
@@ -694,16 +694,12 @@ void CoordinatorControl::GetTableRange(uint64_t schema_id, uint64_t table_id, pb
     return;
   }
   {
-    BAIDU_SCOPED_LOCK(table_map_mutex_);
-
-    auto* temp_table = table_map_.seek(table_id);
-    if (temp_table == nullptr) {
+    // BAIDU_SCOPED_LOCK(table_map_mutex_);
+    int ret = table_map_.Get(table_id, table_internal);
+    if (ret < 0) {
       DINGO_LOG(ERROR) << "ERRROR: table_id not found" << table_id;
       return;
     }
-
-    // construct Table from table_internal
-    table_internal = *temp_table;
   }
 
   for (int i = 0; i < table_internal.partitions_size(); i++) {
@@ -778,8 +774,8 @@ void CoordinatorControl::GetTableMetrics(uint64_t schema_id, uint64_t table_id,
   }
 
   {
-    BAIDU_SCOPED_LOCK(table_map_mutex_);
-    if (table_map_.seek(table_id) == nullptr) {
+    // BAIDU_SCOPED_LOCK(table_map_mutex_);
+    if (table_map_.Exists(table_id)) {
       DINGO_LOG(ERROR) << "ERRROR: table_id not found" << table_id;
       return;
     }
@@ -828,15 +824,12 @@ void CoordinatorControl::GetTableMetrics(uint64_t schema_id, uint64_t table_id,
 uint64_t CoordinatorControl::CalculateTableMetricsSingle(uint64_t table_id, pb::meta::TableMetrics& table_metrics) {
   pb::coordinator_internal::TableInternal table_internal;
   {
-    BAIDU_SCOPED_LOCK(table_map_mutex_);
-    auto* temp_table = table_map_.seek(table_id);
-    if (temp_table == nullptr) {
+    // BAIDU_SCOPED_LOCK(table_map_mutex_);
+    int ret = table_map_.Get(table_id, table_internal);
+    if (ret < 0) {
       DINGO_LOG(ERROR) << "ERRROR: table_id not found" << table_id;
       return -1;
     }
-
-    // construct Table from table_internal
-    table_internal = *temp_table;
   }
 
   // build result metrics
