@@ -109,6 +109,12 @@ void SetupSignalHandler() {
 int main(int argc, char *argv[]) {
   google::ParseCommandLineFlags(&argc, &argv, true);
 
+  if (dingodb::FLAGS_show_version) {
+    printf("Dingo-Store version:[%s] with git commit hash:[%s]\n", FLAGS_git_tag_name.c_str(),
+           FLAGS_git_commit_hash.c_str());
+    exit(-1);
+  }
+
   SetupSignalHandler();
 
   dingodb::pb::common::ClusterRole role = dingodb::pb::common::COORDINATOR;

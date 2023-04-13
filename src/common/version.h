@@ -19,8 +19,20 @@
 #ifndef DINGODB_COMMON_VERSION_H_
 #define DINGODB_COMMON_VERSION_H_
 
-#pragma once
+#include "gflags/gflags.h"
 
-namespace dingodb {}  // namespace dingodb
+namespace dingodb {
+
+#ifndef GIT_VERSION
+#define GIT_VERSION "unknown"
+#endif
+
+#ifndef GIT_TAG_NAME
+#define GIT_TAG_NAME "v0.6.0"
+#endif
+
+DECLARE_bool(show_version);
+
+}  // namespace dingodb
 
 #endif  // DINGODB_COMMON_VERSION_H_

@@ -12,7 +12,7 @@ raft:
   host: $RAFT_HOST$
   port: $RAFT_PORT$
   path: $BASE_PATH$/data/coordinator/raft
-  electionTimeout: 1000 # ms
+  electionTimeout: 30000 # ms
   snapshotInterval: 3600 # s
 log:
   logPath: $BASE_PATH$/log

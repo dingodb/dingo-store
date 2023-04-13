@@ -22,10 +22,13 @@
 #include "brpc/controller.h"
 #include "bthread/bthread.h"
 #include "common/logging.h"
+#include "common/version.h"
 #include "gflags/gflags.h"
 #include "proto/meta.pb.h"
 #include "proto/store.pb.h"
 
+DEFINE_string(git_commit_hash, GIT_VERSION, "current git commit version");
+DEFINE_string(git_tag_name, GIT_TAG_NAME, "current dingo version");
 DEFINE_bool(log_each_request, true, "Print log for each request");
 DEFINE_bool(use_bthread, false, "Use bthread to send requests");
 DEFINE_int32(thread_num, 1, "Number of threads sending requests");
@@ -527,6 +530,12 @@ void* Sender(void* /*arg*/) {
 
 int main(int argc, char* argv[]) {
   google::ParseCommandLineFlags(&argc, &argv, true);
+
+  if (dingodb::FLAGS_show_version) {
+    printf("Dingo-Store version:[%s] with git commit hash:[%s]\n", FLAGS_git_tag_name.c_str(),
+           FLAGS_git_commit_hash.c_str());
+    exit(-1);
+  }
 
   std::vector<bthread_t> tids;
   tids.resize(FLAGS_thread_num);
