@@ -949,7 +949,7 @@ void CoordinatorControl::GetMemoryInfo(pb::coordinator::CoordinatorMemoryInfo& m
   memory_info.set_id_epoch_safe_map_temp_size(id_epoch_map_safe_temp_.MemorySize());
 
   {
-    BAIDU_SCOPED_LOCK(id_epoch_map_mutex_);
+    // BAIDU_SCOPED_LOCK(id_epoch_map_mutex_);
 
     // set term & index
     pb::coordinator_internal::IdEpochInternal temp_term;
@@ -970,6 +970,7 @@ void CoordinatorControl::GetMemoryInfo(pb::coordinator::CoordinatorMemoryInfo& m
 
     // dump id & epoch to kv
     butil::FlatMap<uint64_t, pb::coordinator_internal::IdEpochInternal> id_epoch_map_temp;
+    id_epoch_map_temp.init(100);
     int ret = id_epoch_map_.GetFlatMapCopy(id_epoch_map_temp);
     for (auto& it : id_epoch_map_temp) {
       const google::protobuf::EnumDescriptor* enum_descriptor =
@@ -1026,11 +1027,9 @@ void CoordinatorControl::GetMemoryInfo(pb::coordinator::CoordinatorMemoryInfo& m
     memory_info.set_total_size(memory_info.total_size() + memory_info.executor_need_push_size());
   }
   {
-    BAIDU_SCOPED_LOCK(schema_map_mutex_);
-    memory_info.set_schema_map_count(schema_map_.size());
-    for (auto& it : schema_map_) {
-      memory_info.set_schema_map_size(memory_info.schema_map_size() + sizeof(it.first) + it.second.ByteSizeLong());
-    }
+    // BAIDU_SCOPED_LOCK(schema_map_mutex_);
+    memory_info.set_schema_map_count(schema_map_.Size());
+    memory_info.set_schema_map_size(schema_map_.MemorySize());
     memory_info.set_total_size(memory_info.total_size() + memory_info.schema_map_size());
   }
   {

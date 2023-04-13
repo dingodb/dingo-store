@@ -36,7 +36,110 @@ namespace dingodb {
 // all membber functions return 1 if success, return -1 if failed
 // all inner functions return 0 if success, return -1 if failed
 using DingoSafeIdEpochMapBase = DingoSafeMap<uint64_t, pb::coordinator_internal::IdEpochInternal>;
-class DingoSafeIdEpochMap : public DingoSafeMap<uint64_t, pb::coordinator_internal::IdEpochInternal> {
+class DingoSafeIdEpochMap : public DingoSafeIdEpochMapBase {
+ public:
+  using TypeFlatMap = butil::FlatMap<uint64_t, pb::coordinator_internal::IdEpochInternal>;
+  using TypeSafeMap = butil::DoublyBufferedData<TypeFlatMap>;
+  using TypeScopedPtr = typename TypeSafeMap::ScopedPtr;
+
+  int GetPresentId(const uint64_t &key, uint64_t &value) {
+    TypeScopedPtr ptr;
+    if (safe_map.Read(&ptr) != 0) {
+      return -1;
+    }
+
+    auto *value_ptr = ptr->seek(key);
+    if (!value_ptr) {
+      // if not exist, return 0
+      value = 0;
+      return 1;
+    } else {
+      value = value_ptr->value();
+    }
+
+    return 1;
+  }
+
+  uint64_t GetPresentId(const uint64_t &key) {
+    TypeScopedPtr ptr;
+    if (safe_map.Read(&ptr) != 0) {
+      return -1;
+    }
+
+    auto *value_ptr = ptr->seek(key);
+    if (!value_ptr) {
+      // if not exist, return 0
+      return 0;
+    } else {
+      return value_ptr->value();
+    }
+
+    return 0;
+  }
+
+  int GetNextId(const uint64_t &key, uint64_t &value) {
+    if (safe_map.Modify(InnerGetNextId, key, value) > 0) {
+      return 1;
+    } else {
+      return -1;
+    }
+  }
+
+  int UpdatePresentId(const uint64_t &key, const uint64_t &value) {
+    if (safe_map.Modify(InnerUpdatePresentId, key, value) > 0) {
+      return 1;
+    } else {
+      return -1;
+    }
+  }
+
+ private:
+  static size_t InnerGetNextId(TypeFlatMap &map, const uint64_t &key, const uint64_t &value) {
+    // Notice: The brpc's template restrict to return value in Modify process, but we need to do this, so use a
+    // const_cast to modify the input parameter here
+    auto &value_mod = const_cast<uint64_t &>(value);
+
+    auto *value_ptr = map.seek(key);
+    if (value_ptr == nullptr) {
+      // if not exist, construct a new value and return
+      pb::coordinator_internal::IdEpochInternal new_value;
+      new_value.set_id(key);
+      new_value.set_value(COORDINATOR_ID_OF_MAP_MIN + 1);
+      map.insert(key, new_value);
+
+      value_mod = new_value.value();
+    } else {
+      value_ptr->set_value(value_ptr->value() + 1);
+
+      value_mod = value_ptr->value();
+    }
+
+    return 1;
+  }
+
+  static size_t InnerUpdatePresentId(TypeFlatMap &map, const uint64_t &key, const uint64_t &value) {
+    auto *value_ptr = map.seek(key);
+    if (value_ptr == nullptr) {
+      // if not exist, construct a new internal with input value
+      pb::coordinator_internal::IdEpochInternal new_value;
+      new_value.set_id(key);
+      new_value.set_value(value);
+      map.insert(key, new_value);
+
+      return 1;
+    } else if (value_ptr->value() < value) {
+      // if exist, update the value if input value is larger than the value in map
+      value_ptr->set_value(value);
+
+      return 1;
+    } else {
+      return 0;
+    }
+  }
+};
+
+using DingoSafeSchemaMapBase = DingoSafeMap<uint64_t, pb::coordinator_internal::SchemaInternal>;
+class DingoSafeSchemaMap : public DingoSafeIdEpochMapBase {
  public:
   using TypeFlatMap = butil::FlatMap<uint64_t, pb::coordinator_internal::IdEpochInternal>;
   using TypeSafeMap = butil::DoublyBufferedData<TypeFlatMap>;

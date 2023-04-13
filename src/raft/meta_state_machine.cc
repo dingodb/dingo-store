@@ -173,7 +173,11 @@ int MetaStateMachine::on_snapshot_load(braft::SnapshotReader* reader) {
 
   if (term >= snapshot_meta.last_included_term() && index >= snapshot_meta.last_included_index()) {
     DINGO_LOG(WARNING) << "skip to load snapshot from " << reader->get_path()
-                       << " because last_include_index < last_applied_index and last_include_term < last_applied_term";
+                       << " because last_include_index"
+                          " < last_applied_index and last_include_term < last_applied_term";
+    DINGO_LOG(WARNING) << "skip to load snapshot last_include_index:" << snapshot_meta.last_included_index()
+                       << " last_applied_index:" << index << " last_include_term:" << snapshot_meta.last_included_term()
+                       << " last_applied_term:" << term;
     return 0;
   }
 

@@ -309,7 +309,7 @@ class CoordinatorControl : public MetaControl {
   DingoSafeIdEpochMap id_epoch_map_;
   //   butil::FlatMap<uint64_t, pb::coordinator_internal::IdEpochInternal> id_epoch_map_;
   MetaSafeMapStorage<pb::coordinator_internal::IdEpochInternal> *id_epoch_meta_;
-  bthread_mutex_t id_epoch_map_mutex_;
+  //   bthread_mutex_t id_epoch_map_mutex_;
 
   // 1.coordinators
   butil::FlatMap<uint64_t, pb::coordinator_internal::CoordinatorInternal> coordinator_map_;
@@ -332,9 +332,10 @@ class CoordinatorControl : public MetaControl {
   bthread_mutex_t executor_need_push_mutex_;
 
   // 4.schemas
-  butil::FlatMap<uint64_t, pb::coordinator_internal::SchemaInternal> schema_map_;
-  MetaMapStorage<pb::coordinator_internal::SchemaInternal> *schema_meta_;
-  bthread_mutex_t schema_map_mutex_;
+  //   butil::FlatMap<uint64_t, pb::coordinator_internal::SchemaInternal> schema_map_;
+  DingoSafeMap<uint64_t, pb::coordinator_internal::SchemaInternal> schema_map_;
+  MetaSafeMapStorage<pb::coordinator_internal::SchemaInternal> *schema_meta_;
+  //   bthread_mutex_t schema_map_mutex_;
   // schema map temp, only for leader use, is out of state machine
   // schema_name -> schema-id
   DingoSafeMap<std::string, uint64_t> schema_name_map_safe_temp_;

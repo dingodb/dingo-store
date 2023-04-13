@@ -87,9 +87,9 @@ void CoordinatorControl::GenerateRootSchemas(pb::coordinator_internal::SchemaInt
 // if exist return true
 // else return false
 bool CoordinatorControl::ValidateSchema(uint64_t schema_id) {
-  BAIDU_SCOPED_LOCK(schema_map_mutex_);
-  auto* temp_schema = schema_map_.seek(schema_id);
-  if (temp_schema == nullptr) {
+  // BAIDU_SCOPED_LOCK(schema_map_mutex_);
+  bool ret = schema_map_.Exists(schema_id);
+  if (!ret) {
     DINGO_LOG(ERROR) << " ValidateSchema schema_id is illegal " << schema_id;
     return false;
   }
@@ -180,22 +180,21 @@ pb::error::Errno CoordinatorControl::DropSchema(uint64_t parent_schema_id, uint6
     return pb::error::Errno::EILLEGAL_PARAMTETERS;
   }
 
-  pb::coordinator_internal::SchemaInternal schema_internal;
+  pb::coordinator_internal::SchemaInternal schema_internal_to_delete;
   {
-    BAIDU_SCOPED_LOCK(schema_map_mutex_);
-    auto* schema_to_delete = schema_map_.seek(schema_id);
-    if (schema_to_delete == nullptr) {
+    // BAIDU_SCOPED_LOCK(schema_map_mutex_);
+    // auto* schema_to_delete = schema_map_.seek(schema_id);
+    int ret = schema_map_.Get(schema_id, schema_internal_to_delete);
+    if (ret < 0) {
       DINGO_LOG(ERROR) << "ERRROR: schema_id not found" << schema_id;
       return pb::error::Errno::ESCHEMA_NOT_FOUND;
     }
 
-    if (schema_to_delete->table_ids_size() > 0) {
+    if (schema_internal_to_delete.table_ids_size() > 0) {
       DINGO_LOG(ERROR) << "ERRROR: schema is not null" << schema_id
-                       << " table_ids_size=" << schema_to_delete->table_ids_size();
+                       << " table_ids_size=" << schema_internal_to_delete.table_ids_size();
       return pb::error::Errno::ESCHEMA_NOT_EMPTY;
     }
-    // construct schema from schema_internal
-    schema_internal = *schema_to_delete;
   }
 
   // bump up epoch
@@ -208,10 +207,10 @@ pb::error::Errno CoordinatorControl::DropSchema(uint64_t parent_schema_id, uint6
   schema_to_delete->set_schema_id(parent_schema_id);
 
   auto* schema_to_delete_schema = schema_to_delete->mutable_schema_internal();
-  schema_to_delete_schema->CopyFrom(schema_internal);
+  schema_to_delete_schema->CopyFrom(schema_internal_to_delete);
 
   // delete schema_name from schema_name_map_safe_temp_
-  schema_name_map_safe_temp_.Erase(schema_internal.name());
+  schema_name_map_safe_temp_.Erase(schema_internal_to_delete.name());
 
   return pb::error::Errno::OK;
 }
@@ -233,8 +232,16 @@ void CoordinatorControl::GetSchemas(uint64_t schema_id, std::vector<pb::meta::Sc
   }
 
   {
-    BAIDU_SCOPED_LOCK(schema_map_mutex_);
-    for (const auto& it : schema_map_) {
+    // BAIDU_SCOPED_LOCK(schema_map_mutex_);
+    butil::FlatMap<uint64_t, pb::coordinator_internal::SchemaInternal> schema_map_copy;
+    schema_map_copy.init(10000);
+    int ret = schema_map_.GetFlatMapCopy(schema_map_copy);
+    if (ret < 0) {
+      DINGO_LOG(ERROR) << "ERRROR: schema_map_ GetFlatMapCopy failed";
+      return;
+    }
+
+    for (const auto& it : schema_map_copy) {
       pb::meta::Schema schema;
 
       auto* temp_id = schema.mutable_id();
@@ -258,7 +265,7 @@ void CoordinatorControl::GetSchemas(uint64_t schema_id, std::vector<pb::meta::Sc
     }
   }
 
-  DINGO_LOG(INFO) << "GetSchemas id=" << schema_id << " sub schema count=" << schema_map_.size();
+  DINGO_LOG(INFO) << "GetSchemas id=" << schema_id << " sub schema count=" << schema_map_.Size();
 }
 
 // GetSchema
@@ -272,21 +279,22 @@ void CoordinatorControl::GetSchema(uint64_t schema_id, pb::meta::Schema& schema)
   }
 
   {
-    BAIDU_SCOPED_LOCK(schema_map_mutex_);
-    auto* temp_schema = schema_map_.seek(schema_id);
-    if (temp_schema == nullptr) {
+    // BAIDU_SCOPED_LOCK(schema_map_mutex_);
+    pb::coordinator_internal::SchemaInternal temp_schema;
+    int ret = schema_map_.Get(schema_id, temp_schema);
+    if (ret < 0) {
       DINGO_LOG(ERROR) << "ERRROR: schema_id not found " << schema_id;
       return;
     }
 
     auto* temp_id = schema.mutable_id();
-    temp_id->set_entity_id(temp_schema->id());
+    temp_id->set_entity_id(temp_schema.id());
     temp_id->set_parent_entity_id(::dingodb::pb::meta::ROOT_SCHEMA);
     temp_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
 
-    schema.set_name(temp_schema->name());
+    schema.set_name(temp_schema.name());
 
-    for (auto it : temp_schema->table_ids()) {
+    for (auto it : temp_schema.table_ids()) {
       pb::meta::DingoCommonId table_id;
       table_id.set_entity_id(it);
       table_id.set_parent_entity_id(schema_id);
@@ -328,8 +336,9 @@ pb::error::Errno CoordinatorControl::CreateTableId(uint64_t schema_id, uint64_t&
                                                    pb::coordinator_internal::MetaIncrement& meta_increment) {
   // validate schema_id is existed
   {
-    BAIDU_SCOPED_LOCK(schema_map_mutex_);
-    if (schema_map_.seek(schema_id) == nullptr) {
+    // BAIDU_SCOPED_LOCK(schema_map_mutex_);
+    bool ret = schema_map_.Exists(schema_id);
+    if (!ret) {
       DINGO_LOG(ERROR) << "schema_id is illegal " << schema_id;
       return pb::error::Errno::EILLEGAL_PARAMTETERS;
     }
@@ -357,8 +366,9 @@ pb::error::Errno CoordinatorControl::CreateTable(uint64_t schema_id, const pb::m
   }
 
   {
-    BAIDU_SCOPED_LOCK(schema_map_mutex_);
-    if (schema_map_.seek(schema_id) == nullptr) {
+    // BAIDU_SCOPED_LOCK(schema_map_mutex_);
+    bool ret = schema_map_.Exists(schema_id);
+    if (!ret) {
       DINGO_LOG(ERROR) << "schema_id is illegal " << schema_id;
       return pb::error::Errno::EILLEGAL_PARAMTETERS;
     }
@@ -557,13 +567,14 @@ void CoordinatorControl::GetTables(uint64_t schema_id,
   }
 
   {
-    BAIDU_SCOPED_LOCK(schema_map_mutex_);
-    if (this->schema_map_.seek(schema_id) == nullptr) {
+    // BAIDU_SCOPED_LOCK(schema_map_mutex_);
+    pb::coordinator_internal::SchemaInternal schema_internal;
+    int ret = schema_map_.Get(schema_id, schema_internal);
+    if (ret < 0) {
       DINGO_LOG(ERROR) << "ERRROR: schema_id not found" << schema_id;
       return;
     }
 
-    auto& schema_internal = schema_map_[schema_id];
     for (int i = 0; i < schema_internal.table_ids_size(); i++) {
       uint64_t table_id = schema_internal.table_ids(i);
       auto* temp_table = table_map_.seek(table_id);
