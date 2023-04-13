@@ -46,18 +46,9 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
                                        std::shared_ptr<RawEngine> raw_engine_of_meta)
     : meta_reader_(meta_reader), meta_writer_(meta_writer), leader_term_(-1), raw_engine_of_meta_(raw_engine_of_meta) {
   // init bthread mutex
-  // bthread_mutex_init(&id_epoch_map_temp_mutex_, nullptr);
-  // bthread_mutex_init(&id_epoch_map_mutex_, nullptr);
-  // bthread_mutex_init(&coordinator_map_mutex_, nullptr);
-  // bthread_mutex_init(&store_map_mutex_, nullptr);
   bthread_mutex_init(&store_need_push_mutex_, nullptr);
-  // bthread_mutex_init(&executor_map_mutex_, nullptr);
   bthread_mutex_init(&executor_need_push_mutex_, nullptr);
-  // bthread_mutex_init(&schema_map_mutex_, nullptr);
-  // bthread_mutex_init(&region_map_mutex_, nullptr);
-  // bthread_mutex_init(&table_map_mutex_, nullptr);
   bthread_mutex_init(&store_metrics_map_mutex_, nullptr);
-  // bthread_mutex_init(&table_metrics_map_mutex_, nullptr);
   bthread_mutex_init(&store_operation_map_mutex_, nullptr);
   root_schema_writed_to_raft_ = false;
 
@@ -74,18 +65,9 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   store_operation_meta_ = new MetaSafeMapStorage<pb::coordinator::StoreOperation>(&store_operation_map_);
 
   // init FlatMap
-  // id_epoch_map_temp_.init(1000, 80);
-  // id_epoch_map_.init(1000, 80);
-  // coordinator_map_.init(1000, 80);
-  // store_map_.init(1000, 80);
   store_need_push_.init(100, 80);
-  // executor_map_.init(1000, 80);
   executor_need_push_.init(100, 80);
-  // schema_map_.init(10000, 80);
-  // region_map_.init(300000, 80);
-  // table_map_.init(100000, 80);
   store_metrics_map_.init(100, 80);
-  // table_metrics_map_.init(100000, 80);
 
   // init SafeMap
   id_epoch_map_.Init(100);                // id_epoch_map_ is a small map
@@ -245,7 +227,7 @@ bool CoordinatorControl::Recover() {
     return false;
   }
   {
-    BAIDU_SCOPED_LOCK(store_operation_map_mutex_);
+    // BAIDU_SCOPED_LOCK(store_operation_map_mutex_);
     if (!store_operation_meta_->Recover(kvs)) {
       return false;
     }

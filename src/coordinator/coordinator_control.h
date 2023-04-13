@@ -307,54 +307,41 @@ class CoordinatorControl : public MetaControl {
   // 0.ids_epochs
   // TableInternal is combination of Table & TableDefinition
   DingoSafeIdEpochMap id_epoch_map_;
-  //   butil::FlatMap<uint64_t, pb::coordinator_internal::IdEpochInternal> id_epoch_map_;
   MetaSafeMapStorage<pb::coordinator_internal::IdEpochInternal> *id_epoch_meta_;
-  //   bthread_mutex_t id_epoch_map_mutex_;
 
   // 1.coordinators
-  //   butil::FlatMap<uint64_t, pb::coordinator_internal::CoordinatorInternal> coordinator_map_;
   DingoSafeMap<uint64_t, pb::coordinator_internal::CoordinatorInternal> coordinator_map_;
   MetaSafeMapStorage<pb::coordinator_internal::CoordinatorInternal> *coordinator_meta_;
-  //   bthread_mutex_t coordinator_map_mutex_;
 
   // 2.stores
-  //   butil::FlatMap<uint64_t, pb::common::Store> store_map_;
   DingoSafeMap<uint64_t, pb::common::Store> store_map_;
   MetaSafeMapStorage<pb::common::Store> *store_meta_;            // need contruct
   butil::FlatMap<uint64_t, pb::common::Store> store_need_push_;  // will send push msg to these stores in crontab
-  //   bthread_mutex_t store_map_mutex_;
   bthread_mutex_t store_need_push_mutex_;
 
   // 3.executors
-  //   butil::FlatMap<uint64_t, pb::common::Executor> executor_map_;
   DingoSafeMap<uint64_t, pb::common::Executor> executor_map_;
   MetaSafeMapStorage<pb::common::Executor> *executor_meta_;  // need construct
   butil::FlatMap<uint64_t, pb::common::Executor>
       executor_need_push_;  // will send push msg to these executors in crontab
-  //   bthread_mutex_t executor_map_mutex_;
   bthread_mutex_t executor_need_push_mutex_;
 
   // 4.schemas
-  //   butil::FlatMap<uint64_t, pb::coordinator_internal::SchemaInternal> schema_map_;
   DingoSafeMap<uint64_t, pb::coordinator_internal::SchemaInternal> schema_map_;
   MetaSafeMapStorage<pb::coordinator_internal::SchemaInternal> *schema_meta_;
-  //   bthread_mutex_t schema_map_mutex_;
+
   // schema map temp, only for leader use, is out of state machine
   // schema_name -> schema-id
   DingoSafeMap<std::string, uint64_t> schema_name_map_safe_temp_;
 
   // 5.regions
-  //   butil::FlatMap<uint64_t, pb::common::Region> region_map_;
   DingoSafeMap<uint64_t, pb::common::Region> region_map_;
   MetaSafeMapStorage<pb::common::Region> *region_meta_;
-  //   bthread_mutex_t region_map_mutex_;
 
   // 6.tables
   // TableInternal is combination of Table & TableDefinition
-  //   butil::FlatMap<uint64_t, pb::coordinator_internal::TableInternal> table_map_;
   DingoSafeMap<uint64_t, pb::coordinator_internal::TableInternal> table_map_;
   MetaSafeMapStorage<pb::coordinator_internal::TableInternal> *table_meta_;
-  //   bthread_mutex_t table_map_mutex_;
 
   // table map temp, only for leader use, is out of state machine
   // table_name -> table-id
@@ -366,10 +353,8 @@ class CoordinatorControl : public MetaControl {
   bthread_mutex_t store_metrics_map_mutex_;
 
   // 8.table_metrics
-  //   butil::FlatMap<uint64_t, pb::coordinator_internal::TableMetricsInternal> table_metrics_map_;
   DingoSafeMap<uint64_t, pb::coordinator_internal::TableMetricsInternal> table_metrics_map_;
   MetaSafeMapStorage<pb::coordinator_internal::TableMetricsInternal> *table_metrics_meta_;
-  //   bthread_mutex_t table_metrics_map_mutex_;
 
   // 9.store_operation
   DingoSafeMap<uint64_t, pb::coordinator::StoreOperation> store_operation_map_;
