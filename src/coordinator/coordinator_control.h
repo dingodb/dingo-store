@@ -230,7 +230,7 @@ class CoordinatorControl : public MetaControl {
   // in: schema_id
   // in: table_id
   // out: TableMetricsWithId
-  void GetTableMetrics(uint64_t schema_id, uint64_t table_id, pb::meta::TableMetricsWithId &table_metrics);
+  pb::error::Errno GetTableMetrics(uint64_t schema_id, uint64_t table_id, pb::meta::TableMetricsWithId &table_metrics);
 
   // update store metrics with new metrics
   // return new epoch

@@ -758,28 +758,28 @@ void CoordinatorControl::GetTableRange(uint64_t schema_id, uint64_t table_id, pb
 }
 
 // get table metrics
-void CoordinatorControl::GetTableMetrics(uint64_t schema_id, uint64_t table_id,
-                                         pb::meta::TableMetricsWithId& table_metrics) {
+pb::error::Errno CoordinatorControl::GetTableMetrics(uint64_t schema_id, uint64_t table_id,
+                                                     pb::meta::TableMetricsWithId& table_metrics) {
   if (schema_id < 0) {
     DINGO_LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
-    return;
+    return pb::error::Errno::EILLEGAL_PARAMTETERS;
   }
 
   if (table_metrics.id().entity_id() != 0) {
     DINGO_LOG(ERROR) << "ERRROR: table is not empty , table_id=" << table_metrics.id().entity_id();
-    return;
+    return pb::error::Errno::EILLEGAL_PARAMTETERS;
   }
 
   if (!ValidateSchema(schema_id)) {
     DINGO_LOG(ERROR) << "ERRROR: schema_id not found" << schema_id;
-    return;
+    return pb::error::Errno::ESCHEMA_NOT_FOUND;
   }
 
   {
     // BAIDU_SCOPED_LOCK(table_map_mutex_);
-    if (table_map_.Exists(table_id)) {
+    if (!table_map_.Exists(table_id)) {
       DINGO_LOG(ERROR) << "ERRROR: table_id not found" << table_id;
-      return;
+      return pb::error::Errno::ETABLE_NOT_FOUND;
     }
   }
 
@@ -796,6 +796,7 @@ void CoordinatorControl::GetTableMetrics(uint64_t schema_id, uint64_t table_id,
       auto* table_metrics_single = table_metrics_internal.mutable_table_metrics();
       if (CalculateTableMetricsSingle(table_id, *table_metrics_single) < 0) {
         DINGO_LOG(ERROR) << "ERRROR: CalculateTableMetricsSingle failed" << table_id;
+        return pb::error::Errno::ETABLE_METRICS_FAILED;
       } else {
         table_metrics_internal.set_id(table_id);
         table_metrics_internal.mutable_table_metrics()->CopyFrom(*table_metrics_single);
@@ -823,6 +824,8 @@ void CoordinatorControl::GetTableMetrics(uint64_t schema_id, uint64_t table_id,
   common_id_table->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
 
   table_metrics.mutable_table_metrics()->CopyFrom(table_metrics_internal.table_metrics());
+
+  return pb::error::Errno::OK;
 }
 
 // CalculateTableMetricsSingle
@@ -839,8 +842,8 @@ uint64_t CoordinatorControl::CalculateTableMetricsSingle(uint64_t table_id, pb::
 
   // build result metrics
   uint64_t row_count = 0;
-  std::string min_key(10, '\xFF');
-  std::string max_key;
+  std::string min_key(10, '\x00');
+  std::string max_key(10, '\xFF');
 
   {
     BAIDU_SCOPED_LOCK(store_metrics_map_mutex_);

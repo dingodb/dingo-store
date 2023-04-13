@@ -210,8 +210,9 @@ void MetaServiceImpl::GetTableMetrics(google::protobuf::RpcController * /*contro
   }
 
   auto *table_metrics = response->mutable_table_metrics();
-  this->coordinator_control_->GetTableMetrics(request->table_id().parent_entity_id(), request->table_id().entity_id(),
-                                              *table_metrics);
+  auto ret = coordinator_control_->GetTableMetrics(request->table_id().parent_entity_id(),
+                                                   request->table_id().entity_id(), *table_metrics);
+  response->mutable_error()->set_errcode(ret);
 }
 
 void MetaServiceImpl::CreateTableId(google::protobuf::RpcController *controller,
