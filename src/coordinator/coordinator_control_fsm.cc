@@ -548,20 +548,22 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
     for (int i = 0; i < meta_increment.stores_size(); i++) {
       const auto& store = meta_increment.stores(i);
       if (store.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
-        store_map_[store.id()] = store.store();
+        // store_map_[store.id()] = store.store();
+        store_map_.Put(store.id(), store.store());
 
         // meta_write_kv
         meta_write_to_kv.push_back(store_meta_->TransformToKvValue(store.store()));
 
       } else if (store.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
-        auto& update_store = store_map_[store.id()];
-        update_store.CopyFrom(store.store());
+        // auto& update_store = store_map_[store.id()];
+        // update_store.CopyFrom(store.store());
+        store_map_.Put(store.id(), store.store());
 
         // meta_write_kv
         meta_write_to_kv.push_back(store_meta_->TransformToKvValue(store.store()));
 
       } else if (store.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
-        store_map_.erase(store.id());
+        store_map_.Erase(store.id());
 
         // meta_delete_kv
         meta_delete_to_kv.push_back(store_meta_->TransformToKvValue(store.store()));
@@ -659,13 +661,14 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
                             << " store_id =" << store_id;
 
             if (store_need_push_.seek(store_id) == nullptr) {
-              auto* temp_store = store_map_.seek(store_id);
-              if (temp_store != nullptr) {
-                store_need_push_.insert(store_id, *temp_store);
+              pb::common::Store store_to_push;
+              int ret = store_map_.Get(store_id, store_to_push);
+              if (ret > 0) {
+                store_need_push_.insert(store_id, store_to_push);
                 DINGO_LOG(INFO) << " add_store_for_push, store_id=" << store_id
                                 << " in create region=" << region.region().id()
-                                << " location=" << temp_store->server_location().host() << ":"
-                                << temp_store->server_location().port();
+                                << " location=" << store_to_push.server_location().host() << ":"
+                                << store_to_push.server_location().port();
               } else {
                 DINGO_LOG(ERROR) << " add_store_for_push, illegal store_id=" << store_id
                                  << " in create region=" << region.region().id();

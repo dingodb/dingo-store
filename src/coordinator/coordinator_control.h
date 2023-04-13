@@ -318,8 +318,9 @@ class CoordinatorControl : public MetaControl {
   //   bthread_mutex_t coordinator_map_mutex_;
 
   // 2.stores
-  butil::FlatMap<uint64_t, pb::common::Store> store_map_;
-  MetaMapStorage<pb::common::Store> *store_meta_;                // need contruct
+  //   butil::FlatMap<uint64_t, pb::common::Store> store_map_;
+  DingoSafeMap<uint64_t, pb::common::Store> store_map_;
+  MetaSafeMapStorage<pb::common::Store> *store_meta_;            // need contruct
   butil::FlatMap<uint64_t, pb::common::Store> store_need_push_;  // will send push msg to these stores in crontab
   bthread_mutex_t store_map_mutex_;
   bthread_mutex_t store_need_push_mutex_;

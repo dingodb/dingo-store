@@ -96,9 +96,12 @@ void CoordinatorControl::GetStoreMap(pb::common::StoreMap& store_map) {
 
   {
     BAIDU_SCOPED_LOCK(store_map_mutex_);
-    for (auto& elemnt : store_map_) {
+    butil::FlatMap<uint64_t, pb::common::Store> store_map_copy;
+    store_map_.GetFlatMapCopy(store_map_copy);
+
+    for (auto& element : store_map_copy) {
       auto* tmp_region = store_map.add_stores();
-      tmp_region->CopyFrom(elemnt.second);
+      tmp_region->CopyFrom(element.second);
     }
   }
 }
@@ -123,15 +126,18 @@ int CoordinatorControl::ValidateStore(uint64_t store_id, const std::string& keyr
 
   {
     BAIDU_SCOPED_LOCK(store_map_mutex_);
-    auto* store_in_map = store_map_.seek(store_id);
-    if (store_in_map != nullptr) {
-      if (store_in_map->keyring() == keyring) {
+    pb::common::Store store_in_map;
+    int ret = store_map_.Get(store_id, store_in_map);
+
+    // auto* store_in_map = store_map_.seek(store_id);
+    if (ret > 0) {
+      if (store_in_map.keyring() == keyring) {
         DINGO_LOG(INFO) << "ValidateStore store_id=" << store_id << " succcess";
         return 0;
       }
 
       DINGO_LOG(INFO) << "ValidateStore store_id=" << store_id << "keyring wrong fail input_keyring=" << keyring
-                      << " correct_keyring=" << store_in_map->keyring();
+                      << " correct_keyring=" << store_in_map.keyring();
       return -1;
     }
   }
@@ -179,13 +185,12 @@ int CoordinatorControl::DeleteStore(uint64_t cluster_id, uint64_t store_id, std:
   pb::common::Store store_to_delete;
   {
     BAIDU_SCOPED_LOCK(store_map_mutex_);
-    auto* temp_store = store_map_.seek(store_id);
-    if (temp_store == nullptr) {
+    int ret = store_map_.Get(store_id, store_to_delete);
+    if (ret < 0) {
       DINGO_LOG(INFO) << "DeleteStore store_id not exists, id=" << store_id;
       return -1;
     }
 
-    store_to_delete = *temp_store;
     if (keyring == store_to_delete.keyring()) {
       DINGO_LOG(INFO) << "DeleteStore store_id id=" << store_id << " keyring not equal, input keyring=" << keyring
                       << " but store's keyring=" << store_to_delete.keyring();
@@ -215,11 +220,12 @@ uint64_t CoordinatorControl::UpdateStoreMap(const pb::common::Store& store,
   bool need_update_epoch = false;
   {
     BAIDU_SCOPED_LOCK(store_map_mutex_);
-    auto* temp_store = store_map_.seek(store.id());
-    if (temp_store != nullptr) {
-      if (temp_store->state() != store.state()) {
-        DINGO_LOG(INFO) << "STORE STATUS CHANGE store_id = " << store.id() << " old status = " << temp_store->state()
-                        << " new status = " << store.state();
+    pb::common::Store store_to_update;
+    int ret = store_map_.Get(store.id(), store_to_update);
+    if (ret > 0) {
+      if (store_to_update.state() != store.state()) {
+        DINGO_LOG(INFO) << "STORE STATUS CHANGE store_id = " << store.id()
+                        << " old status = " << store_to_update.state() << " new status = " << store.state();
 
         // update meta_increment
         need_update_epoch = true;
@@ -284,7 +290,9 @@ int CoordinatorControl::CreateRegion(const std::string& region_name, const std::
   // when resource_tag exists, select store with resource_tag
   {
     BAIDU_SCOPED_LOCK(store_map_mutex_);
-    for (const auto& element : store_map_) {
+    butil::FlatMap<uint64_t, pb::common::Store> store_map_copy;
+    store_map_.GetFlatMapCopy(store_map_copy);
+    for (const auto& element : store_map_copy) {
       const auto& store = element.second;
       if (store.state() != pb::common::StoreState::STORE_NORMAL) {
         continue;
@@ -1000,10 +1008,8 @@ void CoordinatorControl::GetMemoryInfo(pb::coordinator::CoordinatorMemoryInfo& m
   }
   {
     BAIDU_SCOPED_LOCK(store_map_mutex_);
-    memory_info.set_store_map_count(store_map_.size());
-    for (auto& it : store_map_) {
-      memory_info.set_store_map_size(memory_info.store_map_size() + sizeof(it.first) + it.second.ByteSizeLong());
-    }
+    memory_info.set_store_map_count(store_map_.Size());
+    memory_info.set_store_map_size(store_map_.MemorySize());
     memory_info.set_total_size(memory_info.total_size() + memory_info.store_map_size());
   }
   {

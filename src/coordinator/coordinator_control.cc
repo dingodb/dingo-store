@@ -63,7 +63,7 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
 
   // the data structure below will write to raft
   coordinator_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::CoordinatorInternal>(&coordinator_map_);
-  store_meta_ = new MetaMapStorage<pb::common::Store>(&store_map_);
+  store_meta_ = new MetaSafeMapStorage<pb::common::Store>(&store_map_);
   schema_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::SchemaInternal>(&schema_map_);
   region_meta_ = new MetaSafeMapStorage<pb::common::Region>(&region_map_);
   table_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::TableInternal>(&table_map_);
@@ -77,7 +77,7 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   // id_epoch_map_temp_.init(1000, 80);
   // id_epoch_map_.init(1000, 80);
   // coordinator_map_.init(1000, 80);
-  store_map_.init(1000, 80);
+  // store_map_.init(1000, 80);
   store_need_push_.init(1000, 80);
   executor_map_.init(1000, 80);
   executor_need_push_.init(1000, 80);
@@ -97,6 +97,7 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   table_map_.Init(10000);                 // table_map_ is a big map
   region_map_.Init(30000);                // region_map_ is a big map
   coordinator_map_.Init(10);              // coordinator_map_ is a small map
+  store_map_.Init(100);                   // store_map_ is a small map
 }
 
 CoordinatorControl::~CoordinatorControl() {
