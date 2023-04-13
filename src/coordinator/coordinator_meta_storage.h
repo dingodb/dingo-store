@@ -35,6 +35,7 @@ namespace dingodb {
 // This is for IdEpoch with atomic GetNextId function
 // all membber functions return 1 if success, return -1 if failed
 // all inner functions return 0 if success, return -1 if failed
+using DingoSafeIdEpochMapBase = DingoSafeMap<uint64_t, pb::coordinator_internal::IdEpochInternal>;
 class DingoSafeIdEpochMap : public DingoSafeMap<uint64_t, pb::coordinator_internal::IdEpochInternal> {
  public:
   using TypeFlatMap = butil::FlatMap<uint64_t, pb::coordinator_internal::IdEpochInternal>;
@@ -67,6 +68,20 @@ class DingoSafeIdEpochMap : public DingoSafeMap<uint64_t, pb::coordinator_intern
     }
   }
 
+  int UpdatePresentId(const uint64_t &key, const uint64_t &value) {
+    if (safe_map.Modify(InnerUpdatePresentId, key, value) > 0) {
+      return 1;
+    } else {
+      return -1;
+    }
+  }
+
+  // Erase
+  // erase key-value pair from map
+  // int Erase(const uint64_t &key) {
+  //   return DingoSafeMap<uint64_t, pb::coordinator_internal::IdEpochInternal>::Erase(key);
+  // }
+
  private:
   static size_t InnerGetNextId(TypeFlatMap &map, const uint64_t &key, const uint64_t &value) {
     // Notice: The brpc's template restrict to return value in Modify process, but we need to do this, so use a
@@ -89,6 +104,26 @@ class DingoSafeIdEpochMap : public DingoSafeMap<uint64_t, pb::coordinator_intern
     }
 
     return 1;
+  }
+
+  static size_t InnerUpdatePresentId(TypeFlatMap &map, const uint64_t &key, const uint64_t &value) {
+    auto *value_ptr = map.seek(key);
+    if (value_ptr == nullptr) {
+      // if not exist, construct a new internal with input value
+      pb::coordinator_internal::IdEpochInternal new_value;
+      new_value.set_id(key);
+      new_value.set_value(value);
+      map.insert(key, new_value);
+
+      return 1;
+    } else if (value_ptr->value() < value) {
+      // if exist, update the value if input value is larger than the value in map
+      value_ptr->set_value(value_ptr->value());
+
+      return 1;
+    } else {
+      return 0;
+    }
   }
 };
 

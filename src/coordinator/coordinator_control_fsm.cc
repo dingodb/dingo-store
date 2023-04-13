@@ -55,10 +55,14 @@ int CoordinatorControl::GetAppliedTermAndIndex(uint64_t& term, uint64_t& index) 
 // OnLeaderStart will init id_epoch_map_temp_ from id_epoch_map_ which is in state machine
 void CoordinatorControl::OnLeaderStart(int64_t term) {
   {
-    BAIDU_SCOPED_LOCK(id_epoch_map_mutex_);
+    // BAIDU_SCOPED_LOCK(id_epoch_map_mutex_);
     // id_epoch_map_temp_ = id_epoch_map_;
     // DINGO_LOG(INFO) << "OnLeaderStart init id_epoch_map_temp_ finished, term=" << term;
-    id_epoch_map_safe_temp_.CopyFlatMap(id_epoch_map_);
+    // id_epoch_map_safe_temp_.Copy(id_epoch_map_);
+
+    butil::FlatMap<uint64_t, pb::coordinator_internal::IdEpochInternal> temp_copy;
+    id_epoch_map_.GetFlatMapCopy(temp_copy);
+    id_epoch_map_safe_temp_.SwapFlatMap(temp_copy);
   }
   DINGO_LOG(INFO) << "OnLeaderStart init id_epoch_safe_map_temp_ finished, term=" << term
                   << " count=" << id_epoch_map_safe_temp_.Size();
@@ -373,8 +377,13 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
   // init id_epoch_map_temp_
   // copy id_epoch_map_ to id_epoch_map_temp_
   {
-    BAIDU_SCOPED_LOCK(id_epoch_map_mutex_);
-    id_epoch_map_safe_temp_.CopyFlatMap(id_epoch_map_);
+    // BAIDU_SCOPED_LOCK(id_epoch_map_mutex_);
+    // id_epoch_map_safe_temp_.CopyFlatMap(id_epoch_map_);
+    // id_epoch_map_safe_temp_.Copy(id_epoch_map_);
+
+    butil::FlatMap<uint64_t, pb::coordinator_internal::IdEpochInternal> temp_copy;
+    id_epoch_map_.GetFlatMapCopy(temp_copy);
+    id_epoch_map_safe_temp_.SwapFlatMap(temp_copy);
   }
   DINGO_LOG(INFO) << "LoadSnapshot id_epoch_safe_map_temp, count=" << id_epoch_map_safe_temp_.Size();
 
@@ -414,18 +423,8 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
     uint64_t applied_index = 0;
     uint64_t applied_term = 0;
 
-    auto* temp_index = id_epoch_map_.seek(pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX);
-    auto* temp_term = id_epoch_map_.seek(pb::coordinator_internal::IdEpochType::RAFT_APPLY_TERM);
-
-    // if (id_epoch_map_.find(pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX) != id_epoch_map_.end()) {
-    if (temp_index != nullptr) {
-      applied_index = temp_index->value();
-    }
-
-    // if (id_epoch_map_.find(pb::coordinator_internal::IdEpochType::RAFT_APPLY_TERM) != id_epoch_map_.end()) {
-    if (temp_term != nullptr) {
-      applied_term = temp_term->value();
-    }
+    id_epoch_map_.GetPresentId(pb::coordinator_internal::IdEpochType::RAFT_APPLY_TERM, applied_term);
+    id_epoch_map_.GetPresentId(pb::coordinator_internal::IdEpochType::RAFT_APPLY_TERM, applied_index);
 
     if (index <= applied_index && term <= applied_term) {
       DINGO_LOG(WARNING) << "ApplyMetaIncrement index <= applied_index && term <<= applied_term, just return, [index="
@@ -445,8 +444,8 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
     raft_apply_index.set_value(index);
 
     // update applied term & index in fsm
-    id_epoch_map_[pb::coordinator_internal::IdEpochType::RAFT_APPLY_TERM] = raft_apply_term;
-    id_epoch_map_[pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX] = raft_apply_index;
+    id_epoch_map_.UpdatePresentId(pb::coordinator_internal::IdEpochType::RAFT_APPLY_TERM, term);
+    id_epoch_map_.UpdatePresentId(pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX, index);
 
     meta_write_to_kv.push_back(id_epoch_meta_->TransformToKvValue(raft_apply_term));
     meta_write_to_kv.push_back(id_epoch_meta_->TransformToKvValue(raft_apply_index));
@@ -454,20 +453,28 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
     for (int i = 0; i < meta_increment.idepochs_size(); i++) {
       const auto& idepoch = meta_increment.idepochs(i);
       if (idepoch.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
-        auto& create_idepoch = id_epoch_map_[idepoch.id()];
-        create_idepoch.CopyFrom(idepoch.idepoch());
-
-        meta_write_to_kv.push_back(id_epoch_meta_->TransformToKvValue(idepoch.idepoch()));
-
+        int ret = id_epoch_map_.UpdatePresentId(idepoch.id(), idepoch.idepoch().value());
+        if (ret > 0) {
+          DINGO_LOG(DEBUG) << "ApplyMetaIncrement CREATE, success [id=" << idepoch.id() << "]"
+                           << " value=" << idepoch.idepoch().value();
+          meta_write_to_kv.push_back(id_epoch_meta_->TransformToKvValue(idepoch.idepoch()));
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement CREATE, but UpdatePresentId failed, [id=" << idepoch.id() << "]"
+                             << " value=" << idepoch.idepoch().value();
+        }
       } else if (idepoch.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
-        auto& update_idepoch = id_epoch_map_[idepoch.id()];
-        update_idepoch.CopyFrom(idepoch.idepoch());
-
-        meta_write_to_kv.push_back(id_epoch_meta_->TransformToKvValue(idepoch.idepoch()));
-
+        int ret = id_epoch_map_.UpdatePresentId(idepoch.id(), idepoch.idepoch().value());
+        if (ret > 0) {
+          DINGO_LOG(DEBUG) << "ApplyMetaIncrement UPDATE, success [id=" << idepoch.id() << "]"
+                           << " value=" << idepoch.idepoch().value();
+          meta_write_to_kv.push_back(id_epoch_meta_->TransformToKvValue(idepoch.idepoch()));
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement UPDATE, but UpdatePresentId failed, [id=" << idepoch.id() << "]"
+                             << " value=" << idepoch.idepoch().value();
+        }
       } else if (idepoch.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
-        id_epoch_map_.erase(idepoch.id());
-
+        id_epoch_map_.Erase(idepoch.id());
+        DINGO_LOG(DEBUG) << "ApplyMetaIncrement DELETE, [id=" << idepoch.id() << "]";
         meta_delete_to_kv.push_back(id_epoch_meta_->TransformToKvValue(idepoch.idepoch()));
       }
     }

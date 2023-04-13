@@ -29,7 +29,7 @@ class ClusterStatImpl : public pb::cluster::ClusterStat, public brpc::Tabbed {
  public:
   ClusterStatImpl() = default;
   void default_method(::google::protobuf::RpcController* controller, const pb::cluster::ClusterStatRequest* request,
-                      pb::cluster::ClusterStatResponse* response, ::google::protobuf::Closure* done);
+                      pb::cluster::ClusterStatResponse* response, ::google::protobuf::Closure* done) override;
   void GetTabInfo(brpc::TabInfoList*) const override;
   void SetControl(std::shared_ptr<CoordinatorControl> controller) { controller_ = controller; }
 

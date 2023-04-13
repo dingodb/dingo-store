@@ -289,12 +289,18 @@ class DingoSafeMap {
  protected:
   // all inner function return 1 if modify record access, return 0 if no record is successfully modified
   static size_t InnerSwapFlatMap(TypeFlatMap &map, const TypeFlatMap &input_map) {
-    map.swap(input_map);
+    // Notice: The brpc's template restrict to return value in Modify process, but we need to do this, so use a
+    // const_cast to modify the input parameter here
+    auto &mutable_input_map = const_cast<TypeFlatMap &>(input_map);
+    map.swap(mutable_input_map);
     return 1;
   }
 
   static size_t InnerSwapSafeMap(TypeFlatMap &map, const TypeSafeMap &input_map) {
-    input_map.swap(map);
+    // Notice: The brpc's template restrict to return value in Modify process, but we need to do this, so use a
+    // const_cast to modify the input parameter here
+    auto &mutable_input_map = const_cast<TypeFlatMap &>(input_map);
+    mutable_input_map.Swap(map);
     return 1;
   }
 
@@ -313,7 +319,10 @@ class DingoSafeMap {
   }
 
   static size_t InnerCopySafeMap(TypeFlatMap &map, const TypeSafeMap &input_map) {
-    input_map.copy(map);
+    // Notice: The brpc's template restrict to return value in Modify process, but we need to do this, so use a
+    // const_cast to modify the input parameter here
+    auto &mutable_input_map = const_cast<TypeSafeMap &>(input_map);
+    mutable_input_map.CopyFlatMap(map);
     return 1;
   }
 
