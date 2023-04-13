@@ -264,8 +264,10 @@ uint64_t CoordinatorControl::UpdateStoreMap(const pb::common::Store& store,
 void CoordinatorControl::GetRegionMap(pb::common::RegionMap& region_map) {
   region_map.set_epoch(GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_REGION));
   {
-    BAIDU_SCOPED_LOCK(region_map_mutex_);
-    for (auto& elemnt : region_map_) {
+    // BAIDU_SCOPED_LOCK(region_map_mutex_);
+    butil::FlatMap<uint64_t, pb::common::Region> region_map_copy;
+    region_map_.GetFlatMapCopy(region_map_copy);
+    for (auto& elemnt : region_map_copy) {
       auto* tmp_region = region_map.add_regions();
       tmp_region->CopyFrom(elemnt.second);
     }
@@ -311,7 +313,7 @@ int CoordinatorControl::CreateRegion(const std::string& region_name, const std::
 
   // generate new region
   uint64_t const create_region_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION, meta_increment);
-  if (region_map_.seek(create_region_id) != nullptr) {
+  if (region_map_.Exists(create_region_id)) {
     DINGO_LOG(ERROR) << "create_region_id =" << create_region_id << " is illegal, cannot create region!!";
     return -1;
   }
@@ -412,45 +414,47 @@ int CoordinatorControl::DropRegion(uint64_t region_id, pb::coordinator_internal:
   // set region state to DELETE
   bool need_update_epoch = false;
   {
-    BAIDU_SCOPED_LOCK(region_map_mutex_);
-    auto* region_to_delete = region_map_.seek(region_id);
-    if (region_to_delete != nullptr &&
-        region_to_delete->state() != ::dingodb::pb::common::RegionState::REGION_DELETED &&
-        region_to_delete->state() != ::dingodb::pb::common::RegionState::REGION_DELETE &&
-        region_to_delete->state() != ::dingodb::pb::common::RegionState::REGION_DELETING) {
-      region_to_delete->set_state(::dingodb::pb::common::RegionState::REGION_DELETE);
+    // BAIDU_SCOPED_LOCK(region_map_mutex_);
+    pb::common::Region region_to_delete;
+    int ret = region_map_.Get(region_id, region_to_delete);
+    if (ret > 0) {
+      if (region_to_delete.state() != ::dingodb::pb::common::RegionState::REGION_DELETED &&
+          region_to_delete.state() != ::dingodb::pb::common::RegionState::REGION_DELETE &&
+          region_to_delete.state() != ::dingodb::pb::common::RegionState::REGION_DELETING) {
+        region_to_delete.set_state(::dingodb::pb::common::RegionState::REGION_DELETE);
 
-      // update meta_increment
-      // update region to DELETE, not delete region really, not
-      need_update_epoch = true;
-      auto* region_increment = meta_increment.add_regions();
-      region_increment->set_id(region_id);
-      region_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
+        // update meta_increment
+        // update region to DELETE, not delete region really, not
+        need_update_epoch = true;
+        auto* region_increment = meta_increment.add_regions();
+        region_increment->set_id(region_id);
+        region_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
 
-      auto* region_increment_region = region_increment->mutable_region();
-      region_increment_region->CopyFrom(*region_to_delete);
-      region_increment_region->set_state(::dingodb::pb::common::RegionState::REGION_DELETE);
+        auto* region_increment_region = region_increment->mutable_region();
+        region_increment_region->CopyFrom(region_to_delete);
+        region_increment_region->set_state(::dingodb::pb::common::RegionState::REGION_DELETE);
 
-      // add store operations to meta_increment
-      for (int i = 0; i < region_to_delete->peers_size(); i++) {
-        auto* peer = region_to_delete->mutable_peers(i);
-        pb::coordinator::StoreOperation store_operation;
-        store_operation.set_id(peer->store_id());
-        auto* region_cmd = store_operation.add_region_cmds();
-        region_cmd->set_region_id(region_id);
-        region_cmd->set_region_cmd_type(::dingodb::pb::coordinator::RegionCmdType::CMD_DELETE);
-        auto* delete_request = region_cmd->mutable_delete_request();
-        delete_request->set_region_id(region_id);
+        // add store operations to meta_increment
+        for (int i = 0; i < region_to_delete.peers_size(); i++) {
+          auto* peer = region_to_delete.mutable_peers(i);
+          pb::coordinator::StoreOperation store_operation;
+          store_operation.set_id(peer->store_id());
+          auto* region_cmd = store_operation.add_region_cmds();
+          region_cmd->set_region_id(region_id);
+          region_cmd->set_region_cmd_type(::dingodb::pb::coordinator::RegionCmdType::CMD_DELETE);
+          auto* delete_request = region_cmd->mutable_delete_request();
+          delete_request->set_region_id(region_id);
 
-        auto* store_operation_increment = meta_increment.add_store_operations();
-        store_operation_increment->set_id(store_operation.id());
-        store_operation_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
-        store_operation_increment->mutable_store_operation()->CopyFrom(store_operation);
+          auto* store_operation_increment = meta_increment.add_store_operations();
+          store_operation_increment->set_id(store_operation.id());
+          store_operation_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
+          store_operation_increment->mutable_store_operation()->CopyFrom(store_operation);
+        }
+
+        // on_apply
+        // region_map_[region_id].set_state(::dingodb::pb::common::RegionState::REGION_DELETE);
+        DINGO_LOG(INFO) << "drop region success, id = " << region_id;
       }
-
-      // on_apply
-      // region_map_[region_id].set_state(::dingodb::pb::common::RegionState::REGION_DELETE);
-      DINGO_LOG(INFO) << "drop region success, id = " << region_id;
     } else {
       // delete regions on the fly (usually in CreateTable)
       for (int i = 0; i < meta_increment.regions_size(); i++) {
@@ -479,18 +483,19 @@ pb::error::Errno CoordinatorControl::DropRegionPermanently(uint64_t region_id,
   // set region state to DELETE
   bool need_update_epoch = false;
   {
-    BAIDU_SCOPED_LOCK(region_map_mutex_);
-    auto* region_to_delete = region_map_.seek(region_id);
-    if (region_to_delete == nullptr) {
+    // BAIDU_SCOPED_LOCK(region_map_mutex_);
+    pb::common::Region region_to_delete;
+    int ret = region_map_.Get(region_id, region_to_delete);
+    if (ret < 0) {
       DINGO_LOG(INFO) << "DropRegionPermanently region not exists, id = " << region_id;
       return pb::error::Errno::EREGION_NOT_FOUND;
     }
 
     // if region is dropped, do real delete
-    if (region_to_delete->state() != ::dingodb::pb::common::RegionState::REGION_DELETE ||
-        region_to_delete->state() != ::dingodb::pb::common::RegionState::REGION_DELETE ||
-        region_to_delete->state() != ::dingodb::pb::common::RegionState::REGION_DELETING) {
-      region_to_delete->set_state(::dingodb::pb::common::RegionState::REGION_DELETE);
+    if (region_to_delete.state() != ::dingodb::pb::common::RegionState::REGION_DELETE ||
+        region_to_delete.state() != ::dingodb::pb::common::RegionState::REGION_DELETE ||
+        region_to_delete.state() != ::dingodb::pb::common::RegionState::REGION_DELETING) {
+      region_to_delete.set_state(::dingodb::pb::common::RegionState::REGION_DELETE);
 
       // update meta_increment
       // update region to DELETE, not delete region really, not
@@ -500,7 +505,7 @@ pb::error::Errno CoordinatorControl::DropRegionPermanently(uint64_t region_id,
       region_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
 
       auto* region_increment_region = region_increment->mutable_region();
-      region_increment_region->CopyFrom(*region_to_delete);
+      region_increment_region->CopyFrom(region_to_delete);
       region_increment_region->set_state(::dingodb::pb::common::RegionState::REGION_DELETE);
 
       // on_apply
@@ -542,28 +547,30 @@ uint64_t CoordinatorControl::UpdateRegionMap(std::vector<pb::common::Region>& re
 
   bool need_to_get_next_epoch = false;
   {
-    BAIDU_SCOPED_LOCK(region_map_mutex_);
+    // BAIDU_SCOPED_LOCK(region_map_mutex_);
     for (const auto& region : regions) {
-      auto* temp_region = region_map_.seek(region.id());
-      if (temp_region != nullptr) {
+      pb::common::Region region_to_update;
+      int ret = region_map_.Get(region.id(), region_to_update);
+      if (ret > 0) {
         DINGO_LOG(INFO) << " update region to region_map in heartbeat, region_id=" << region.id();
 
         // if state not change, just update leader_store_id
-        if (temp_region->state() == region.state()) {
+        if (region_to_update.state() == region.state()) {
           // update the region's leader_store_id, no need to apply raft
-          if (temp_region->leader_store_id() != region.leader_store_id()) {
-            temp_region->set_leader_store_id(region.leader_store_id());
+          if (region_to_update.leader_store_id() != region.leader_store_id()) {
+            region_to_update.set_leader_store_id(region.leader_store_id());
+            region_map_.Put(region.id(), region_to_update);
           }
           continue;
         } else {
           // state not equal, need to update region data and apply raft
           DINGO_LOG(INFO) << "REGION STATUS CHANGE region_id = " << region.id()
-                          << " old status = " << region_map_[region.id()].state() << " new status = " << region.state();
+                          << " old status = " << region_to_update.state() << " new status = " << region.state();
           // maybe need to build a state machine here
           // if a region is set to DELETE, it will never be updated to other normal state
           const auto& region_delete_state_name =
               dingodb::pb::common::RegionState_Name(pb::common::RegionState::REGION_DELETE);
-          const auto& region_state_in_map = dingodb::pb::common::RegionState_Name(temp_region->state());
+          const auto& region_state_in_map = dingodb::pb::common::RegionState_Name(region_to_update.state());
           const auto& region_state_in_req = dingodb::pb::common::RegionState_Name(region.state());
 
           // if store want to update a region state from DELETE_* to other NON DELETE_* state, it is illegal
@@ -804,12 +811,14 @@ void CoordinatorControl::UpdateRegionMapAndStoreOperation(const pb::common::Stor
 
     // update region_map
     {
-      BAIDU_SCOPED_LOCK(region_map_mutex_);
-      auto* temp_region = region_map_.seek(region_metrics.id());
-      if (temp_region != nullptr) {
-        if (temp_region->leader_store_id() != store_metrics.id()) {
+      // BAIDU_SCOPED_LOCK(region_map_mutex_);
+      pb::common::Region region_to_update;
+      int ret = region_map_.Get(region_metrics.id(), region_to_update);
+      // auto* temp_region = region_map_.seek(region_metrics.id());
+      if (ret > 0) {
+        if (region_to_update.leader_store_id() != store_metrics.id()) {
           DINGO_LOG(INFO) << "region leader change region_id = " << region_metrics.id()
-                          << " old leader_store_id = " << temp_region->leader_store_id()
+                          << " old leader_store_id = " << region_to_update.leader_store_id()
                           << " new leader_store_id = " << store_metrics.id();
 
           // update meta_increment
@@ -818,7 +827,7 @@ void CoordinatorControl::UpdateRegionMapAndStoreOperation(const pb::common::Stor
           region_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
 
           auto* region_increment_region = region_increment->mutable_region();
-          region_increment_region->CopyFrom(*temp_region);
+          region_increment_region->CopyFrom(region_to_update);
           region_increment_region->set_leader_store_id(store_metrics.id());
           region_increment_region->mutable_metrics()->CopyFrom(region_metrics);
 
@@ -1033,11 +1042,9 @@ void CoordinatorControl::GetMemoryInfo(pb::coordinator::CoordinatorMemoryInfo& m
     memory_info.set_total_size(memory_info.total_size() + memory_info.schema_map_size());
   }
   {
-    BAIDU_SCOPED_LOCK(region_map_mutex_);
-    memory_info.set_region_map_count(region_map_.size());
-    for (auto& it : region_map_) {
-      memory_info.set_region_map_size(memory_info.region_map_size() + sizeof(it.first) + it.second.ByteSizeLong());
-    }
+    // BAIDU_SCOPED_LOCK(region_map_mutex_);
+    memory_info.set_region_map_count(region_map_.Size());
+    memory_info.set_region_map_size(region_map_.MemorySize());
     memory_info.set_total_size(memory_info.total_size() + memory_info.region_map_size());
   }
   {

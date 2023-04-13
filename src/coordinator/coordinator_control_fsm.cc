@@ -320,7 +320,7 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
     kvs.push_back(meta_snapshot_file.region_map_kvs(i));
   }
   {
-    BAIDU_SCOPED_LOCK(region_map_mutex_);
+    // BAIDU_SCOPED_LOCK(region_map_mutex_);
     if (!region_meta_->Recover(kvs)) {
       return false;
     }
@@ -639,12 +639,13 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
 
   // 5.region map
   {
-    BAIDU_SCOPED_LOCK(region_map_mutex_);
+    // BAIDU_SCOPED_LOCK(region_map_mutex_);
     for (int i = 0; i < meta_increment.regions_size(); i++) {
       const auto& region = meta_increment.regions(i);
       if (region.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
         // add region to region_map
-        region_map_[region.id()] = region.region();
+        // region_map_[region.id()] = region.region();
+        region_map_.Put(region.id(), region.region());
 
         // add_store_for_push
         // only create region will push to store now
@@ -676,15 +677,16 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
 
       } else if (region.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
         // update region to region_map
-        auto& update_region = region_map_[region.id()];
-        update_region.CopyFrom(region.region());
+        // auto& update_region = region_map_[region.id()];
+        // update_region.CopyFrom(region.region());
+        region_map_.Put(region.id(), region.region());
 
         // meta_write_kv
         meta_write_to_kv.push_back(region_meta_->TransformToKvValue(region.region()));
 
       } else if (region.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
         // remove region from region_map
-        region_map_.erase(region.id());
+        region_map_.Erase(region.id());
 
         // meta_delete_kv
         meta_delete_to_kv.push_back(region_meta_->TransformToKvValue(region.region()));
