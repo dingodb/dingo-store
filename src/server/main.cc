@@ -84,7 +84,8 @@ static void SignalHandler(int signo) {
 
     if (dladdr((void *)pc, &info)) {
       // Print the frame number, instruction pointer, .so filename, and symbol name
-      printf("Frame %d: [0x%016zx] %32s : %s + 0x%lx\n", i++, (void *)ip, info.dli_fname, symbol, offset);  // NOLINT
+      printf("Frame %d: [0x%016zx] %32s : %s + 0x%lx\n", i++, (size_t)((void *)ip), info.dli_fname, symbol,
+             offset);  // NOLINT
     }
 
   } while (unw_step(&cursor) > 0);
