@@ -24,6 +24,8 @@
 
 #include "braft/configuration.h"
 #include "brpc/channel.h"
+#include "butil/containers/flat_map.h"
+#include "butil/files/file_path.h"
 #include "butil/scoped_lock.h"
 #include "butil/strings/string_split.h"
 #include "common/helper.h"
@@ -783,9 +785,11 @@ void CoordinatorControl::GetTableMetrics(uint64_t schema_id, uint64_t table_id,
 
   pb::coordinator_internal::TableMetricsInternal table_metrics_internal;
   {
-    BAIDU_SCOPED_LOCK(table_metrics_map_mutex_);
-    auto* temp_table_metrics = table_metrics_map_.seek(table_id);
-    if (temp_table_metrics == nullptr) {
+    // BAIDU_SCOPED_LOCK(table_metrics_map_mutex_);
+    int ret = table_metrics_map_.Get(table_id, table_metrics_internal);
+
+    // auto* temp_table_metrics = table_metrics_map_.seek(table_id);
+    if (ret < 0) {
       DINGO_LOG(INFO) << "table_metrics not found, try to calculate new one" << table_id;
 
       // calculate table metrics using region metrics
@@ -796,7 +800,8 @@ void CoordinatorControl::GetTableMetrics(uint64_t schema_id, uint64_t table_id,
         table_metrics_internal.set_id(table_id);
         table_metrics_internal.mutable_table_metrics()->CopyFrom(*table_metrics_single);
         // table_metrics_map_[table_id] = table_metrics_internal;
-        temp_table_metrics->CopyFrom(table_metrics_internal);
+        // temp_table_metrics->CopyFrom(table_metrics_internal);
+        table_metrics_map_.Put(table_id, table_metrics_internal);
 
         DINGO_LOG(INFO) << "table_metrics first calculated, table_id=" << table_id
                         << " row_count=" << table_metrics_single->rows_count()
@@ -807,7 +812,7 @@ void CoordinatorControl::GetTableMetrics(uint64_t schema_id, uint64_t table_id,
     } else {
       // construct TableMetrics from table_metrics_internal
       DINGO_LOG(DEBUG) << "table_metrics found, return metrics in map" << table_id;
-      table_metrics_internal = *temp_table_metrics;
+      // table_metrics_internal = *temp_table_metrics;
     }
   }
 
@@ -902,14 +907,17 @@ uint64_t CoordinatorControl::CalculateTableMetricsSingle(uint64_t table_id, pb::
 // only recalculate when table_metrics_map_ does contain table_id
 // if the table_id is not in table_map_, remove it from table_metrics_map_
 void CoordinatorControl::CalculateTableMetrics() {
-  BAIDU_SCOPED_LOCK(table_metrics_map_mutex_);
+  // BAIDU_SCOPED_LOCK(table_metrics_map_mutex_);
 
-  for (auto table_metrics_internal : table_metrics_map_) {
+  butil::FlatMap<uint64_t, pb::coordinator_internal::TableMetricsInternal> temp_table_metrics_map;
+  table_metrics_map_.GetFlatMapCopy(temp_table_metrics_map);
+
+  for (auto table_metrics_internal : temp_table_metrics_map) {
     uint64_t table_id = table_metrics_internal.first;
     pb::meta::TableMetrics table_metrics;
     if (CalculateTableMetricsSingle(table_id, table_metrics) < 0) {
       DINGO_LOG(ERROR) << "ERRROR: CalculateTableMetricsSingle failed, remove metrics from map" << table_id;
-      table_metrics_map_.erase(table_id);
+      table_metrics_map_.Erase(table_id);
     } else {
       table_metrics_internal.second.mutable_table_metrics()->CopyFrom(table_metrics);
     }

@@ -366,9 +366,10 @@ class CoordinatorControl : public MetaControl {
   bthread_mutex_t store_metrics_map_mutex_;
 
   // 8.table_metrics
-  butil::FlatMap<uint64_t, pb::coordinator_internal::TableMetricsInternal> table_metrics_map_;
-  MetaMapStorage<pb::coordinator_internal::TableMetricsInternal> *table_metrics_meta_;
-  bthread_mutex_t table_metrics_map_mutex_;
+  //   butil::FlatMap<uint64_t, pb::coordinator_internal::TableMetricsInternal> table_metrics_map_;
+  DingoSafeMap<uint64_t, pb::coordinator_internal::TableMetricsInternal> table_metrics_map_;
+  MetaSafeMapStorage<pb::coordinator_internal::TableMetricsInternal> *table_metrics_meta_;
+  //   bthread_mutex_t table_metrics_map_mutex_;
 
   // 9.store_operation
   DingoSafeMap<uint64_t, pb::coordinator::StoreOperation> store_operation_map_;
