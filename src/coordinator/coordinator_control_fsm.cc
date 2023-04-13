@@ -278,7 +278,7 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
     kvs.push_back(meta_snapshot_file.store_map_kvs(i));
   }
   {
-    BAIDU_SCOPED_LOCK(store_map_mutex_);
+    // BAIDU_SCOPED_LOCK(store_map_mutex_);
     if (!store_meta_->Recover(kvs)) {
       return false;
     }
@@ -292,7 +292,7 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
     kvs.push_back(meta_snapshot_file.executor_map_kvs(i));
   }
   {
-    BAIDU_SCOPED_LOCK(executor_map_mutex_);
+    // BAIDU_SCOPED_LOCK(executor_map_mutex_);
     if (!executor_meta_->Recover(kvs)) {
       return false;
     }
@@ -544,7 +544,7 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
 
   // 2.store map
   {
-    BAIDU_SCOPED_LOCK(store_map_mutex_);
+    // BAIDU_SCOPED_LOCK(store_map_mutex_);
     for (int i = 0; i < meta_increment.stores_size(); i++) {
       const auto& store = meta_increment.stores(i);
       if (store.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
@@ -573,24 +573,26 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
 
   // 3.executor map
   {
-    BAIDU_SCOPED_LOCK(executor_map_mutex_);
+    // BAIDU_SCOPED_LOCK(executor_map_mutex_);
     for (int i = 0; i < meta_increment.executors_size(); i++) {
       const auto& executor = meta_increment.executors(i);
       if (executor.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
-        executor_map_[executor.id()] = executor.executor();
+        // executor_map_[executor.id()] = executor.executor();
+        executor_map_.Put(executor.id(), executor.executor());
 
         // meta_write_kv
         meta_write_to_kv.push_back(executor_meta_->TransformToKvValue(executor.executor()));
 
       } else if (executor.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
-        auto& update_executor = executor_map_[executor.id()];
-        update_executor.CopyFrom(executor.executor());
+        // auto& update_executor = executor_map_[executor.id()];
+        // update_executor.CopyFrom(executor.executor());
+        executor_map_.Put(executor.id(), executor.executor());
 
         // meta_write_kv
         meta_write_to_kv.push_back(executor_meta_->TransformToKvValue(executor.executor()));
 
       } else if (executor.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
-        executor_map_.erase(executor.id());
+        executor_map_.Erase(executor.id());
 
         // meta_delete_kv
         meta_delete_to_kv.push_back(executor_meta_->TransformToKvValue(executor.executor()));

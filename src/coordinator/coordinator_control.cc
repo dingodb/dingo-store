@@ -49,9 +49,9 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   // bthread_mutex_init(&id_epoch_map_temp_mutex_, nullptr);
   // bthread_mutex_init(&id_epoch_map_mutex_, nullptr);
   // bthread_mutex_init(&coordinator_map_mutex_, nullptr);
-  bthread_mutex_init(&store_map_mutex_, nullptr);
+  // bthread_mutex_init(&store_map_mutex_, nullptr);
   bthread_mutex_init(&store_need_push_mutex_, nullptr);
-  bthread_mutex_init(&executor_map_mutex_, nullptr);
+  // bthread_mutex_init(&executor_map_mutex_, nullptr);
   bthread_mutex_init(&executor_need_push_mutex_, nullptr);
   // bthread_mutex_init(&schema_map_mutex_, nullptr);
   // bthread_mutex_init(&region_map_mutex_, nullptr);
@@ -68,7 +68,7 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   region_meta_ = new MetaSafeMapStorage<pb::common::Region>(&region_map_);
   table_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::TableInternal>(&table_map_);
   id_epoch_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::IdEpochInternal>(&id_epoch_map_);
-  executor_meta_ = new MetaMapStorage<pb::common::Executor>(&executor_map_);
+  executor_meta_ = new MetaSafeMapStorage<pb::common::Executor>(&executor_map_);
   store_metrics_meta_ = new MetaMapStorage<pb::common::StoreMetrics>(&store_metrics_map_);
   table_metrics_meta_ = new MetaMapStorage<pb::coordinator_internal::TableMetricsInternal>(&table_metrics_map_);
   store_operation_meta_ = new MetaSafeMapStorage<pb::coordinator::StoreOperation>(&store_operation_map_);
@@ -79,7 +79,7 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   // coordinator_map_.init(1000, 80);
   // store_map_.init(1000, 80);
   store_need_push_.init(1000, 80);
-  executor_map_.init(1000, 80);
+  // executor_map_.init(1000, 80);
   executor_need_push_.init(1000, 80);
   // schema_map_.init(10000, 80);
   // region_map_.init(300000, 80);
@@ -98,6 +98,7 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   region_map_.Init(30000);                // region_map_ is a big map
   coordinator_map_.Init(10);              // coordinator_map_ is a small map
   store_map_.Init(100);                   // store_map_ is a small map
+  executor_map_.Init(100);                // executor_map_ is a small map
 }
 
 CoordinatorControl::~CoordinatorControl() {
@@ -152,7 +153,7 @@ bool CoordinatorControl::Recover() {
     return false;
   }
   {
-    BAIDU_SCOPED_LOCK(store_map_mutex_);
+    // BAIDU_SCOPED_LOCK(store_map_mutex_);
     if (!store_meta_->Recover(kvs)) {
       return false;
     }
@@ -165,7 +166,7 @@ bool CoordinatorControl::Recover() {
     return false;
   }
   {
-    BAIDU_SCOPED_LOCK(executor_map_mutex_);
+    // BAIDU_SCOPED_LOCK(executor_map_mutex_);
     if (!executor_meta_->Recover(kvs)) {
       return false;
     }
