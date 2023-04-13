@@ -188,6 +188,7 @@ file(GLOB COORDINATOR_SRCS ${PROJECT_SOURCE_DIR}/src/coordinator/*.cc)
 file(GLOB STORE_SRCS ${PROJECT_SOURCE_DIR}/src/store/*.cc)
 file(GLOB SERVER_SRCS ${PROJECT_SOURCE_DIR}/src/server/*.cc)
 file(GLOB SCAN_SRCS ${PROJECT_SOURCE_DIR}/src/scan/*.cc)
+file(GLOB METRICS_SRCS ${PROJECT_SOURCE_DIR}/src/metrics/*.cc)
 file(GLOB VERSION_SRCS ${PROJECT_SOURCE_DIR}/src/common/version.cc)
 
 list(REMOVE_ITEM SERVER_SRCS "${PROJECT_SOURCE_DIR}/src/server/main.cc")
@@ -206,7 +207,8 @@ add_library(DINGODB_OBJS
             ${COORDINATOR_SRCS}
             ${STORE_SRCS}
             ${SERVER_SRCS}
-            ${SCAN_SRCS})
+            ${SCAN_SRCS}
+            ${METRICS_SRCS})
 
 # bin output dir
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin)
@@ -236,7 +238,7 @@ add_definitions(-DGIT_VERSION="${GIT_VERSION}")
 add_definitions(-DGIT_TAG_NAME="${GIT_TAG_NAME}")
 
 add_executable(dingodb_server src/server/main.cc $<TARGET_OBJECTS:DINGODB_OBJS> $<TARGET_OBJECTS:PROTO_OBJS>)
-add_executable(dingodb_client_store src/client/store_client.cc ${VERSION_SRCS} $<TARGET_OBJECTS:PROTO_OBJS>)
+add_executable(dingodb_client_store src/client/store_client.cc ${VERSION_SRCS} ${COMMON_SRCS} $<TARGET_OBJECTS:PROTO_OBJS>)
 add_executable(dingodb_client_coordinator src/client/coordinator_client.cc src/client/coordinator_client_function_coor.cc src/client/coordinator_client_function_meta.cc ${VERSION_SRCS} $<TARGET_OBJECTS:PROTO_OBJS>)
 
 add_dependencies(DINGODB_OBJS ${DEPEND_LIBS})

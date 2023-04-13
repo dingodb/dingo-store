@@ -23,7 +23,7 @@ option java_package = "io.dingodb.store";
 option cc_generic_services = true;
 
 message AddRegionRequest {
-  dingodb.pb.common.Region region = 1;
+  dingodb.pb.common.RegionDefinition region = 1;
 }
 
 message AddRegionResponse {
@@ -31,7 +31,7 @@ message AddRegionResponse {
 }
 
 message ChangeRegionRequest {
-  dingodb.pb.common.Region region = 1;
+  dingodb.pb.common.RegionDefinition region = 1;
 }
 
 message ChangeRegionResponse {
@@ -180,7 +180,7 @@ message KvScanContinueRequest {
   bytes scan_id = 2;
 
   // The maximum number of requests keys per request
-  // If max_fetch_cnt > 0, it means to return  data. Note that in this way, the return will be slower because
+  // If max_fetch_cnt > 0, it means to return scan_id and data. Note that in this way, the return will be slower because
   // the data needs to be prepared For example: max_fetch_cnt = 10000, which means that the maximum number of kv items
   // in this request is 10000, which is just a suggested value. If the maximum number of kv items in the server is 1000,
   // The data returned each time is only 1000 pieces of data. Note: only the maximum number of kv pairs per request

@@ -19,6 +19,7 @@
 #include <iostream>
 #include <memory>
 #include <numeric>
+#include <random>
 #include <string>
 #include <vector>
 
@@ -74,19 +75,23 @@ const std::string kYamlConfigContent =
     "    - meta\n"
     "    - instruction\n";
 
-static const std::string& kDefaultCf = "default";
+static const std::string kDefaultCf = "default";
 
-const std::string RAFT_SNAPSHOT_PATH = "/tmp/dingo-store/data/store/raft/snapshot";
+const std::string kRaftSnapshotPath = "/tmp/dingo-store/data/store/raft/snapshot";
 
-const char alphabet[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r',
-                         's', 't', 'o', 'v', 'w', 'x', 'y', 'z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'};
+const char kAlphabet[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r',
+                          's', 't', 'o', 'v', 'w', 'x', 'y', 'z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'};
 
 // rand string
-std::string genRandomString(int len) {
+std::string GenRandomString(int len) {
   std::string result;
-  int alphabet_len = sizeof(alphabet);
+  int alphabet_len = sizeof(kAlphabet);
+
+  std::mt19937 rng;
+  rng.seed(std::random_device()());
+  std::uniform_int_distribution<std::mt19937::result_type> distrib(1, 1000000000);
   for (int i = 0; i < len; ++i) {
-    result.append(1, alphabet[rand() % alphabet_len]);
+    result.append(1, kAlphabet[distrib(rng) % alphabet_len]);
   }
 
   return result;
@@ -108,14 +113,14 @@ class RaftSnapshotTest : public testing::Test {
       std::cout << "RawRocksEngine init failed" << std::endl;
     }
 
-    std::filesystem::create_directories(RAFT_SNAPSHOT_PATH);
+    std::filesystem::create_directories(kRaftSnapshotPath);
   }
 
   static void TearDownTestSuite() {
     engine->Close();
     // engine->Destroy();
 
-    // std::filesystem::remove_all(RAFT_SNAPSHOT_PATH);
+    // std::filesystem::remove_all(kRaftSnapshotPath);
   }
 
   void SetUp() override {}
@@ -136,8 +141,8 @@ TEST_F(RaftSnapshotTest, RaftSnapshot) {
   for (int i = 0; i < 10000; ++i) {
     int pos = i % prefixs.size();
 
-    kv.set_key(prefixs[pos] + genRandomString(30));
-    kv.set_value(genRandomString(256));
+    kv.set_key(prefixs[pos] + GenRandomString(30));
+    kv.set_value(GenRandomString(256));
     writer->KvPut(kv);
   }
 
@@ -145,19 +150,20 @@ TEST_F(RaftSnapshotTest, RaftSnapshot) {
   std::unique_ptr<dingodb::RaftSnapshot> raft_snapshot =
       std::make_unique<dingodb::RaftSnapshot>(RaftSnapshotTest::engine);
 
-  auto snapshot_storage = std::make_unique<braft::LocalSnapshotStorage>(RAFT_SNAPSHOT_PATH);
+  auto snapshot_storage = std::make_unique<braft::LocalSnapshotStorage>(kRaftSnapshotPath);
   if (snapshot_storage->init() != 0) {
     LOG(ERROR) << "LocalSnapshotStorage init failed";
   }
 
-  auto region = std::make_shared<dingodb::pb::common::Region>();
-  region->set_id(111);
-  region->set_name("test-snapshot");
-  auto range = region->mutable_range();
+  auto region = std::make_shared<dingodb::pb::store_internal::Region>();
+  auto* definition = region->mutable_definition();
+  definition->set_id(111);
+  definition->set_name("test-snapshot");
+  auto* range = definition->mutable_range();
   range->set_start_key("bb");
   range->set_end_key("cc");
 
-  auto snapshot_writer = snapshot_storage->create();
+  auto* snapshot_writer = snapshot_storage->create();
   auto gen_snapshot_file_func = std::bind(&dingodb::RaftSnapshot::GenSnapshotFileByScan, raft_snapshot.get(),
                                           std::placeholders::_1, std::placeholders::_2);
   EXPECT_EQ(true, raft_snapshot->SaveSnapshot(snapshot_writer, region, gen_snapshot_file_func));
@@ -173,7 +179,7 @@ TEST_F(RaftSnapshotTest, RaftSnapshot) {
   std::cout << "range key count: " << count << std::endl;
 
   // Load snapshot
-  auto snapshot_reader = snapshot_storage->open();
+  auto* snapshot_reader = snapshot_storage->open();
   EXPECT_EQ(true, raft_snapshot->LoadSnapshot(snapshot_reader, region));
   snapshot_storage->close(snapshot_reader);
 

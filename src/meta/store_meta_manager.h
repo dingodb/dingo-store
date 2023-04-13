@@ -15,6 +15,7 @@
 #ifndef DINGODB_STORE_META_MANAGER_H_
 #define DINGODB_STORE_META_MANAGER_H_
 
+#include <cstdint>
 #include <memory>
 #include <shared_mutex>
 #include <vector>
@@ -62,56 +63,30 @@ class StoreServerMeta {
 // Manage store server region meta data
 class StoreRegionMeta : public TransformKvAble {
  public:
-  StoreRegionMeta() : TransformKvAble(Constant::kStoreRegionMetaPrefix) { bthread_mutex_init(&mutex_, nullptr); }
+  StoreRegionMeta(std::shared_ptr<MetaReader> meta_reader, std::shared_ptr<MetaWriter> meta_writer)
+      : TransformKvAble(Constant::kStoreRegionMetaPrefix), meta_reader_(meta_reader), meta_writer_(meta_writer) {
+    bthread_mutex_init(&mutex_, nullptr);
+  }
   ~StoreRegionMeta() override { bthread_mutex_destroy(&mutex_); }
 
-  StoreRegionMeta(const StoreRegionMeta&) = delete;
-  const StoreRegionMeta& operator=(const StoreRegionMeta&) = delete;
-
   bool Init();
-  bool Recover(const std::vector<pb::common::KeyValue>& kvs);
 
-  uint64_t GetEpoch() const;
-  bool IsExist(uint64_t region_id);
+  uint64_t GetEpoch();
 
-  void AddRegion(std::shared_ptr<pb::common::Region> region);
-  void DeleteRegion(uint64_t region_id);
-  void UpdateRegion(std::shared_ptr<pb::common::Region> region);
-  std::shared_ptr<pb::common::Region> GetRegion(uint64_t region_id);
-  std::map<uint64_t, std::shared_ptr<pb::common::Region>> GetAllRegion();
-
-  std::shared_ptr<pb::common::KeyValue> TransformToKv(uint64_t region_id) override;
-  std::shared_ptr<pb::common::KeyValue> TransformToKv(std::shared_ptr<google::protobuf::Message> obj) override;
-  std::vector<std::shared_ptr<pb::common::KeyValue>> TransformToKvtWithDelta() override;
-  std::vector<std::shared_ptr<pb::common::KeyValue>> TransformToKvWithAll() override;
-
-  void TransformFromKv(const std::vector<pb::common::KeyValue>& kvs) override;
-
- private:
-  uint64_t epoch_;
-
-  // Record which region changed.
-  std::vector<uint64_t> changed_regions_;
-  // Protect regions_ concurrent access.
-  bthread_mutex_t mutex_;
-  // Store all region meta data in this server.
-  std::map<uint64_t, std::shared_ptr<pb::common::Region>> regions_;
-};
-
-// Manage store server region meta data
-class StoreRegionMetaV2 : public TransformKvAble {
- public:
-  StoreRegionMetaV2() : TransformKvAble(Constant::kStoreRegionMetaPrefix) { bthread_mutex_init(&mutex_, nullptr); }
-  ~StoreRegionMetaV2() override { bthread_mutex_destroy(&mutex_); }
-
-  bool Init();
-  bool Recover(const std::vector<pb::common::KeyValue>& kvs);
-
+  bool IsExistRegion(uint64_t region_id);
   void AddRegion(std::shared_ptr<pb::store_internal::Region> region);
   void DeleteRegion(uint64_t region_id);
   void UpdateRegion(std::shared_ptr<pb::store_internal::Region> region);
+
+  void UpdateState(std::shared_ptr<pb::store_internal::Region> region, pb::common::StoreRegionState new_state);
+  void UpdateState(uint64_t region_id, pb::common::StoreRegionState new_state);
+
+  void UpdateLeaderId(std::shared_ptr<pb::store_internal::Region> region, uint64_t leader_id);
+  void UpdateLeaderId(uint64_t region_id, uint64_t leader_id);
+
   std::shared_ptr<pb::store_internal::Region> GetRegion(uint64_t region_id);
   std::vector<std::shared_ptr<pb::store_internal::Region>> GetAllRegion();
+  std::vector<std::shared_ptr<pb::store_internal::Region>> GetAllAliveRegion();
 
   std::shared_ptr<pb::common::KeyValue> TransformToKv(uint64_t region_id) override;
   std::shared_ptr<pb::common::KeyValue> TransformToKv(std::shared_ptr<google::protobuf::Message> obj) override;
@@ -119,23 +94,33 @@ class StoreRegionMetaV2 : public TransformKvAble {
   void TransformFromKv(const std::vector<pb::common::KeyValue>& kvs) override;
 
  private:
+  // Read meta data from persistence storage.
+  std::shared_ptr<MetaReader> meta_reader_;
+  // Write meta data to persistence storage.
+  std::shared_ptr<MetaWriter> meta_writer_;
+
   bthread_mutex_t mutex_;
   // Store all region meta data in this server.
+  // Todo: use class wrap pb::store_internal::Region for mutex
   std::map<uint64_t, std::shared_ptr<pb::store_internal::Region>> regions_;
 };
 
 class StoreRaftMeta : public TransformKvAble {
  public:
-  StoreRaftMeta() : TransformKvAble(Constant::kStoreRaftMetaPrefix) { bthread_mutex_init(&mutex_, nullptr); }
+  StoreRaftMeta(std::shared_ptr<MetaReader> meta_reader, std::shared_ptr<MetaWriter> meta_writer)
+      : TransformKvAble(Constant::kStoreRaftMetaPrefix), meta_reader_(meta_reader), meta_writer_(meta_writer) {
+    bthread_mutex_init(&mutex_, nullptr);
+  }
   ~StoreRaftMeta() override { bthread_mutex_destroy(&mutex_); }
 
   bool Init();
-  bool Recover(const std::vector<pb::common::KeyValue>& kvs);
 
-  void Add(std::shared_ptr<pb::store_internal::RaftMeta> raft_meta);
-  void Update(std::shared_ptr<pb::store_internal::RaftMeta> raft_meta);
-  void Delete(uint64_t region_id);
-  std::shared_ptr<pb::store_internal::RaftMeta> Get(uint64_t region_id);
+  static std::shared_ptr<pb::store_internal::RaftMeta> NewRaftMeta(uint64_t region_id);
+
+  void AddRaftMeta(std::shared_ptr<pb::store_internal::RaftMeta> raft_meta);
+  void UpdateRaftMeta(std::shared_ptr<pb::store_internal::RaftMeta> raft_meta);
+  void DeleteRaftMeta(uint64_t region_id);
+  std::shared_ptr<pb::store_internal::RaftMeta> GetRaftMeta(uint64_t region_id);
 
   std::shared_ptr<pb::common::KeyValue> TransformToKv(uint64_t region_id) override;
   std::shared_ptr<pb::common::KeyValue> TransformToKv(std::shared_ptr<google::protobuf::Message> obj) override;
@@ -143,6 +128,11 @@ class StoreRaftMeta : public TransformKvAble {
   void TransformFromKv(const std::vector<pb::common::KeyValue>& kvs) override;
 
  private:
+  // Read meta data from persistence storage.
+  std::shared_ptr<MetaReader> meta_reader_;
+  // Write meta data to persistence storage.
+  std::shared_ptr<MetaWriter> meta_writer_;
+
   bthread_mutex_t mutex_;
   std::map<uint64_t, std::shared_ptr<pb::store_internal::RaftMeta>> raft_metas_;
 };
@@ -151,64 +141,28 @@ class StoreRaftMeta : public TransformKvAble {
 // the data will report periodic.
 class StoreMetaManager {
  public:
-  StoreMetaManager(std::shared_ptr<MetaReader> meta_reader, std::shared_ptr<MetaWriter> meta_writer);
-  ~StoreMetaManager();
+  StoreMetaManager(std::shared_ptr<MetaReader> meta_reader, std::shared_ptr<MetaWriter> meta_writer)
+      : server_meta_(std::make_shared<StoreServerMeta>()),
+        region_meta_(std::make_shared<StoreRegionMeta>(meta_reader, meta_writer)),
+        raft_meta_(std::make_shared<StoreRaftMeta>(meta_reader, meta_writer)) {}
+  ~StoreMetaManager() = default;
 
   StoreMetaManager(const StoreMetaManager&) = delete;
   void operator=(const StoreMetaManager&) = delete;
 
   bool Init();
-  bool Recover();
 
-  uint64_t GetServerEpoch();
-  uint64_t GetRegionEpoch();
-  bthread_mutex_t* GetHeartbeatUpdateMutexRef();
-
-  bool IsExistStore(uint64_t store_id);
-  void AddStore(std::shared_ptr<pb::common::Store> store);
-  void UpdateStore(std::shared_ptr<pb::common::Store> store);
-  void DeleteStore(uint64_t store_id);
-  std::shared_ptr<pb::common::Store> GetStore(uint64_t store_id);
-  std::map<uint64_t, std::shared_ptr<pb::common::Store>> GetAllStore();
-
-  //
-  bool IsExistRegion(uint64_t region_id);
-  void AddRegion(std::shared_ptr<pb::common::Region> region);
-  void UpdateRegion(std::shared_ptr<pb::common::Region> region);
-  void DeleteRegion(uint64_t region_id);
-  std::shared_ptr<pb::common::Region> GetRegion(uint64_t region_id);
-  std::map<uint64_t, std::shared_ptr<pb::common::Region>> GetAllRegion();
-
-  void AddRaftMeta(std::shared_ptr<pb::store_internal::RaftMeta> raft_meta);
-  void SaveRaftMeta(std::shared_ptr<pb::store_internal::RaftMeta> raft_meta);
-  void DeleteRaftMeta(uint64_t region_id);
-  std::shared_ptr<pb::store_internal::RaftMeta> GetRaftMeta(uint64_t region_id);
-
-  bool IsExistRegionV2(uint64_t region_id);
-  void AddRegionV2(std::shared_ptr<pb::store_internal::Region> region);
-  void UpdateRegionV2(std::shared_ptr<pb::store_internal::Region> region, bool is_persistence);
-  void DeleteRegionV2(uint64_t region_id);
-  std::shared_ptr<pb::store_internal::Region> GetRegionV2(uint64_t region_id);
-  std::vector<std::shared_ptr<pb::store_internal::Region>> GetAllRegionV2();
+  std::shared_ptr<StoreServerMeta> GetStoreServerMeta() { return server_meta_; }
+  std::shared_ptr<StoreRegionMeta> GetStoreRegionMeta() { return region_meta_; }
+  std::shared_ptr<StoreRaftMeta> GetStoreRaftMeta() { return raft_meta_; }
 
  private:
-  // Read meta data from persistence storage.
-  std::shared_ptr<MetaReader> meta_reader_;
-  // Write meta data to persistence storage.
-  std::shared_ptr<MetaWriter> meta_writer_;
-
   // Store server meta data, like id/state/endpoint etc.
-  std::unique_ptr<StoreServerMeta> server_meta_;
+  std::shared_ptr<StoreServerMeta> server_meta_;
   // Store manage region meta data.
-  std::unique_ptr<StoreRegionMeta> region_meta_;
-
-  std::unique_ptr<StoreRegionMetaV2> region_metav2_;
+  std::shared_ptr<StoreRegionMeta> region_meta_;
   // Store raft meta.
-  std::unique_ptr<StoreRaftMeta> raft_meta_;
-
-  // heartbeat update mutex
-  // only one heartbeat respone can be processed on time
-  bthread_mutex_t heartbeat_update_mutex_;
+  std::shared_ptr<StoreRaftMeta> raft_meta_;
 };
 
 }  // namespace dingodb

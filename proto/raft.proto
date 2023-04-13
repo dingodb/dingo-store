@@ -28,6 +28,7 @@ enum CmdType {
   PUTIFABSENT = 2;
   DELETERANGE = 3;
   DELETEBATCH = 4;
+  SPLIT = 5;
 
   // Coordinator State Machine Operator
   META_WRITE = 2000;
@@ -66,6 +67,14 @@ message DeleteBatchRequest {
 
 message DeleteBatchResponse {}
 
+message SplitRequest {
+  uint64 from_region_id = 1;  // split from region id
+  uint64 to_region_id = 2;    // split to region id
+  bytes split_key = 3;        // split watershed key
+}
+
+message SplitResponse {}
+
 message RaftCreateSchemaRequest {}
 message RaftCreateSchemaResponse {}
 
@@ -84,6 +93,7 @@ message Request {
     PutIfAbsentRequest put_if_absent = 1001;
     DeleteRangeRequest delete_range = 1002;
     DeleteBatchRequest delete_batch = 1003;
+    SplitRequest split = 1004;
 
     // Coordinator Operation[2000, 3000]
     RaftMetaRequest meta_req = 2000;
@@ -98,6 +108,7 @@ message Response {
     PutIfAbsentResponse put_if_absent = 1001;
     DeleteRangeResponse delete_range = 1002;
     DeleteBatchResponse delete_batch = 1003;
+    SplitResponse split = 1004;
 
     RaftCreateSchemaResponse create_schema_req = 2001;
     RaftCreateTableResponse create_table_req = 2002;

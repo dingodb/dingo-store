@@ -17,7 +17,7 @@ raft:
 log:
   logPath: $BASE_PATH$/log
 store:
-  dbPath: $BASE_PATH$/data/store/db
+  dbPath: $BASE_PATH$/data/coordinator/db
   base:
     block_size: 131072
     block_cache: 67108864

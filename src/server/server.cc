@@ -77,32 +77,26 @@ bool Server::InitServerID() {
   return id_ != 0 && (!keyring_.empty());
 }
 
-bool Server::InitRawEngines() {
+bool Server::InitRawEngine() {
   auto config = ConfigManager::GetInstance()->GetConfig(role_);
 
-  std::shared_ptr<RawEngine> const rock_engine = std::make_shared<RawRocksEngine>();
-  if (!rock_engine->Init(config)) {
+  raw_engine_ = std::make_shared<RawRocksEngine>();
+  if (!raw_engine_->Init(config)) {
     DINGO_LOG(ERROR) << "Init RawRocksEngine Failed with Config[" << config->ToString();
     return false;
   }
 
-  raw_engines_.insert(std::make_pair(rock_engine->GetID(), rock_engine));
   return true;
 }
 
-bool Server::InitEngines() {
+bool Server::InitEngine() {
   auto config = ConfigManager::GetInstance()->GetConfig(role_);
-
-  // default Key-Value storage engine
-  std::shared_ptr<Engine> raft_kv_engine;
-
-  auto raw_engine = raw_engines_[pb::common::RAW_ENG_ROCKSDB];
 
   // cooridnator use RaftMetaEngine
   if (role_ == pb::common::ClusterRole::COORDINATOR) {
     // init CoordinatorController
-    coordinator_control_ = std::make_shared<CoordinatorControl>(std::make_shared<MetaReader>(raw_engine),
-                                                                std::make_shared<MetaWriter>(raw_engine), raw_engine);
+    coordinator_control_ = std::make_shared<CoordinatorControl>(std::make_shared<MetaReader>(raw_engine_),
+                                                                std::make_shared<MetaWriter>(raw_engine_), raw_engine_);
 
     if (!coordinator_control_->Recover()) {
       DINGO_LOG(ERROR) << "coordinator_control_->Recover Failed";
@@ -114,19 +108,18 @@ bool Server::InitEngines() {
     }
 
     // init raft_meta_engine
-    raft_kv_engine = std::make_shared<RaftMetaEngine>(raw_engine, coordinator_control_);
+    engine_ = std::make_shared<RaftMetaEngine>(raw_engine_, coordinator_control_);
 
     // set raft_meta_engine to coordinator_control
-    coordinator_control_->SetKvEngine(raft_kv_engine);
+    coordinator_control_->SetKvEngine(engine_);
   } else {
-    raft_kv_engine = std::make_shared<RaftKvEngine>(raw_engine);
-    if (!raft_kv_engine->Init(config)) {
+    engine_ = std::make_shared<RaftKvEngine>(raw_engine_);
+    if (!engine_->Init(config)) {
       DINGO_LOG(ERROR) << "Init RaftKvEngine failed with Config[" << config->ToString() << "]";
       return false;
     }
   }
 
-  engines_.insert(std::make_pair(raft_kv_engine->GetID(), raft_kv_engine));
   return true;
 }
 
@@ -183,160 +176,136 @@ bool Server::InitCoordinatorInteraction() {
 }
 
 bool Server::InitStorage() {
-  storage_ = std::make_shared<Storage>(engines_[pb::common::ENG_RAFT_STORE]);
+  storage_ = std::make_shared<Storage>(engine_);
   return true;
 }
 
 bool Server::InitStoreMetaManager() {
-  auto engine = raw_engines_[pb::common::RAW_ENG_ROCKSDB];
-  store_meta_manager_ =
-      std::make_shared<StoreMetaManager>(std::make_shared<MetaReader>(engine), std::make_shared<MetaWriter>(engine));
+  store_meta_manager_ = std::make_shared<StoreMetaManager>(std::make_shared<MetaReader>(raw_engine_),
+                                                           std::make_shared<MetaWriter>(raw_engine_));
   return store_meta_manager_->Init();
 }
 
 bool Server::InitCrontabManager() {
   crontab_manager_ = std::make_shared<CrontabManager>();
-
-  // Add heartbeat crontab
-  std::shared_ptr<Crontab> heartbeat_crontab = std::make_shared<Crontab>();
   auto config = ConfigManager::GetInstance()->GetConfig(role_);
-  heartbeat_crontab->name = "HEARTBEA";
-  uint64_t push_interval = config->GetInt("server.pushInterval");
-  if (push_interval <= 0) {
-    DINGO_LOG(ERROR) << "config server.pushInterval illegal";
-    return false;
+
+  if (role_ == pb::common::ClusterRole::STORE) {
+    // Add heartbeat crontab
+    std::shared_ptr<Crontab> heartbeat_crontab = std::make_shared<Crontab>();
+    heartbeat_crontab->name = "HEARTBEA";
+    uint64_t heartbeat_interval = config->GetInt("server.heartbeatInterval");
+    if (heartbeat_interval <= 0) {
+      DINGO_LOG(ERROR) << "config server.heartbeatInterval illegal";
+      return false;
+    }
+    heartbeat_crontab->interval = heartbeat_interval;
+    heartbeat_crontab->func = Heartbeat::TriggerStoreHeartbeat;
+    heartbeat_crontab->arg = nullptr;
+
+    crontab_manager_->AddAndRunCrontab(heartbeat_crontab);
+
+    // Add store metrics crontab
+    std::shared_ptr<Crontab> metrics_crontab = std::make_shared<Crontab>();
+    metrics_crontab->name = "METRICS";
+    uint64_t metrics_interval = config->GetInt("server.metricsCollectInterval");
+    if (metrics_interval <= 0) {
+      DINGO_LOG(ERROR) << "config server.metricsCollectInterval illegal";
+      return false;
+    }
+    metrics_crontab->interval = metrics_interval;
+    metrics_crontab->func = [](void*) { Server::GetInstance()->GetStoreMetricsManager()->CollectMetrics(); };
+    metrics_crontab->arg = nullptr;
+
+    crontab_manager_->AddAndRunCrontab(metrics_crontab);
+
+    // Add scan crontab
+    std::shared_ptr<Crontab> scan_crontab = std::make_shared<Crontab>();
+    scan_crontab->name = "SCAN";
+    uint64_t scan_interval = config->GetInt(Constant::kStoreScan + "." + Constant::kStoreScanScanIntervalMs);
+    if (scan_interval <= 0) {
+      DINGO_LOG(ERROR) << "store.scan.scan_interval_ms illegal";
+      return false;
+    }
+    scan_crontab->interval = scan_interval;
+    scan_crontab->func = ScanManager::RegularCleaningHandler;
+    scan_crontab->arg = ScanManager::GetInstance();
+
+    crontab_manager_->AddAndRunCrontab(scan_crontab);
+
+  } else if (role_ == pb::common::ClusterRole::COORDINATOR) {
+    // Add push crontab
+    std::shared_ptr<Crontab> push_crontab = std::make_shared<Crontab>();
+    push_crontab->name = "PUSH";
+    uint64_t push_interval = config->GetInt("server.pushInterval");
+    if (push_interval <= 0) {
+      DINGO_LOG(INFO) << "server.pushInterval illegal";
+      return false;
+    }
+    push_crontab->interval = push_interval;
+    push_crontab->func = Heartbeat::TriggerCoordinatorPushToStore;
+    push_crontab->arg = nullptr;
+
+    crontab_manager_->AddAndRunCrontab(push_crontab);
+
+    // Add calculate crontab
+    std::shared_ptr<Crontab> calc_crontab = std::make_shared<Crontab>();
+    calc_crontab->name = "CALCULATE";
+    calc_crontab->interval = push_interval * 60;
+    calc_crontab->func = Heartbeat::TriggerCalculateTableMetrics;
+    calc_crontab->arg = nullptr;
+
+    crontab_manager_->AddAndRunCrontab(calc_crontab);
   }
-  heartbeat_crontab->interval = push_interval;
-  heartbeat_crontab->func = Heartbeat::SendStoreHeartbeat;
-  heartbeat_crontab->arg = coordinator_interaction_.get();
-
-  crontab_manager_->AddAndRunCrontab(heartbeat_crontab);
-
-  // Add store metrics crontab
-  std::shared_ptr<Crontab> metrics_crontab = std::make_shared<Crontab>();
-  metrics_crontab->name = "METRICS";
-  uint64_t metrics_interval = config->GetInt("server.metricsCollectInterval");
-  if (metrics_interval <= 0) {
-    DINGO_LOG(ERROR) << "config server.metricsCollectInterval illegal";
-    return false;
-  }
-  metrics_crontab->interval = metrics_interval;
-  metrics_crontab->func = [](void* /*arg*/) { Server::GetInstance()->GetStoreMetricsManager()->CollectMetrics(); };
-  metrics_crontab->arg = nullptr;
-
-  crontab_manager_->AddAndRunCrontab(metrics_crontab);
 
   return true;
 }
 
-bool Server::InitCrontabManagerForCoordinator() {
-  crontab_manager_ = std::make_shared<CrontabManager>();
-
-  // Add heartbeat crontab
-  auto config = ConfigManager::GetInstance()->GetConfig(role_);
-
-  // add push crontab
-  std::shared_ptr<Crontab> crontab = std::make_shared<Crontab>();
-  crontab->name = "PUSH";
-  uint64_t push_interval = config->GetInt("server.pushInterval");
-  if (push_interval <= 0) {
-    DINGO_LOG(INFO) << "server.pushInterval illegal";
-    return false;
-  }
-  crontab->interval = push_interval;
-  crontab->func = Heartbeat::SendCoordinatorPushToStore;
-  crontab->arg = coordinator_control_.get();
-
-  crontab_manager_->AddAndRunCrontab(crontab);
-
-  // add calculate crontab
-  std::shared_ptr<Crontab> crontab_calc = std::make_shared<Crontab>();
-  crontab_calc->name = "CALCULATE";
-  crontab_calc->interval = push_interval * 60;
-  crontab_calc->func = Heartbeat::CalculateTableMetrics;
-  crontab_calc->arg = coordinator_control_.get();
-
-  crontab_manager_->AddAndRunCrontab(crontab_calc);
-
-  return true;
+bool Server::InitStoreController() {
+  store_controller_ = std::make_shared<StoreController>();
+  return store_controller_->Init();
 }
 
-bool Server::InitStoreControl() {
-  store_control_ = std::make_shared<StoreControl>();
-  auto config = ConfigManager::GetInstance()->GetConfig(role_);
-  uint64_t heartbeat_interval = config->GetInt("server.heartbeatInterval");
-  if (heartbeat_interval <= 0) {
-    DINGO_LOG(INFO) << "server.heartbeatInterval illegal";
-    return false;
-  }
-
-  uint64_t push_interval = config->GetInt("server.pushInterval");
-  if (push_interval <= 0) {
-    DINGO_LOG(INFO) << "server.pushInterval illegal";
-    return false;
-  }
-
-  if (heartbeat_interval < push_interval) {
-    DINGO_LOG(INFO) << "server.heartbeatInterval must bigger than server.pushInterval";
-    return false;
-  }
-
-  store_control_->SetHeartbeatIntervalMultiple(heartbeat_interval / push_interval);
-
-  DINGO_LOG(INFO) << "SetHeartbeatIntervalMultiple to " << heartbeat_interval / push_interval;
-
-  return store_control_ != nullptr;
+bool Server::InitRegionController() {
+  region_controller_ = std::make_shared<RegionController>();
+  return region_controller_->Init();
 }
 
-// add scan factory to CrontabManager
-bool Server::AddScanToCrontabManager() {
-  // Add scan crontab
-  std::shared_ptr<Crontab> crontab = std::make_shared<Crontab>();
-  auto config = ConfigManager::GetInstance()->GetConfig(role_);
-  crontab->name = "SCAN";
-  uint64_t scan_interval = config->GetInt(Constant::kStoreScan + "." + Constant::kStoreScanScanIntervalMs);
-  if (scan_interval <= 0) {
-    DINGO_LOG(ERROR) << "store.scan.scan_interval_ms";
-    return false;
-  }
-  crontab->interval = scan_interval;
-  crontab->func = ScanManager::RegularCleaningHandler;
-  crontab->arg = ScanManager::GetInstance();
-
-  crontab_manager_->AddAndRunCrontab(crontab);
-  return true;
+bool Server::InitRegionCommandManager() {
+  region_command_manager_ = std::make_shared<RegionCommandManager>(std::make_shared<MetaReader>(raw_engine_),
+                                                                   std::make_shared<MetaWriter>(raw_engine_));
+  return region_command_manager_->Init();
 }
 
 bool Server::InitStoreMetricsManager() {
-  auto engine = raw_engines_[pb::common::RAW_ENG_ROCKSDB];
-  store_metrics_manager_ =
-      std::make_shared<StoreMetricsManager>(std::make_shared<MetaReader>(engine), std::make_shared<MetaWriter>(engine));
+  store_metrics_manager_ = std::make_shared<StoreMetricsManager>(std::make_shared<MetaReader>(raw_engine_),
+                                                                 std::make_shared<MetaWriter>(raw_engine_));
   return store_metrics_manager_->Init();
 }
 
 bool Server::Recover() {
   if (this->role_ == pb::common::STORE) {
-    // Recover region meta data.
-    if (!store_meta_manager_->Recover()) {
-      DINGO_LOG(ERROR) << "Recover store region meta data failed";
+    // Recover engine state.
+    if (!engine_->Recover()) {
+      DINGO_LOG(ERROR) << "Recover engine failed, engine " << engine_->GetName();
       return false;
     }
-
-    // Recover engine state.
-    for (auto& it : engines_) {
-      if (!it.second->Recover()) {
-        DINGO_LOG(ERROR) << "Recover engine failed, engine " << it.second->GetName();
-        return false;
-      }
-    }
-  } else if (this->role_ == pb::common::COORDINATOR) {
   }
 
   return true;
 }
 
+bool Server::InitHeartbeat() {
+  heartbeat_ = std::make_shared<Heartbeat>();
+  return heartbeat_->Init();
+}
+
 void Server::Destroy() {
   crontab_manager_->Destroy();
+  heartbeat_->Destroy();
+  region_controller_->Destroy();
+  store_controller_->Destroy();
+
   google::ShutdownGoogleLogging();
 }
 

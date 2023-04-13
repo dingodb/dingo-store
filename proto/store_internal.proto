@@ -38,5 +38,6 @@ message RaftMeta {
 message Region {
   uint64 id = 1;
   dingodb.pb.common.RegionDefinition definition = 2;
-  dingodb.pb.common.StoreRegionState state = 3;
+  uint64 leader_id = 3;
+  dingodb.pb.common.StoreRegionState state = 4;
 }

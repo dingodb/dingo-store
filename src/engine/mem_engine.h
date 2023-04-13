@@ -20,6 +20,7 @@
 
 #include "common/context.h"
 #include "engine/engine.h"
+#include "engine/snapshot.h"
 #include "proto/error.pb.h"
 #include "proto/store.pb.h"
 
@@ -33,6 +34,9 @@ class MemEngine : public Engine {
   bool Init(std::shared_ptr<Config> config) override;
   std::string GetName() override;
   pb::common::Engine GetID() override;
+
+  std::shared_ptr<Snapshot> GetSnapshot() override { return nullptr; }
+  butil::Status DoSnapshot(std::shared_ptr<Context>, uint64_t) override { return butil::Status(); }
 
   butil::Status Write(std::shared_ptr<Context> ctx, const WriteData& write_data) override;
   butil::Status AsyncWrite(std::shared_ptr<Context> ctx, const WriteData& write_data, WriteCbFunc cb) override;

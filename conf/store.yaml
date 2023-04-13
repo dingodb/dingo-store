@@ -7,7 +7,6 @@ server:
   host: 127.0.0.1
   port: 23000
   heartbeatInterval: 10000 # ms
-  pushInterval: 1000 # ms
   metricsCollectInterval: 300000 # ms
 raft:
   host: 127.0.0.1

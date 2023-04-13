@@ -30,6 +30,7 @@ enum class HandlerType {
   kPutIfabsent = pb::raft::PUTIFABSENT,
   kDeleteRange = pb::raft::DELETERANGE,
   kDeleteBatch = pb::raft::DELETEBATCH,
+  kSplit = pb::raft::SPLIT,
   kMetaWrite = pb::raft::META_WRITE,
 
   // Snapshot
@@ -56,18 +57,15 @@ class BaseHandler : public Handler {
   BaseHandler() = default;
   ~BaseHandler() override = default;
 
-  void Handle(std::shared_ptr<Context> /*ctx*/, std::shared_ptr<RawEngine> /*engine*/,
-              const pb::raft::Request & /*req*/) override {
+  void Handle(std::shared_ptr<Context>, std::shared_ptr<RawEngine>, const pb::raft::Request &) override {
     DINGO_LOG(ERROR) << "Not support handle...";
   }
 
-  void Handle(uint64_t /*region_id*/, std::shared_ptr<RawEngine> /*engine*/, braft::SnapshotWriter * /*writer*/,
-              braft::Closure * /*done*/) override {
+  void Handle(uint64_t, std::shared_ptr<RawEngine>, braft::SnapshotWriter *, braft::Closure *) override {
     DINGO_LOG(ERROR) << "Not support handle...";
   }
 
-  void Handle(uint64_t /*region_id*/, std::shared_ptr<RawEngine> /*engine*/,
-              braft::SnapshotReader * /*reader*/) override {
+  void Handle(uint64_t, std::shared_ptr<RawEngine>, braft::SnapshotReader *) override {
     DINGO_LOG(ERROR) << "Not support handle...";
   }
 };

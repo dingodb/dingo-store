@@ -79,7 +79,7 @@ TEST(ConfigTest, map_01) {
 
   config.Load(yaml);
   auto result = config.GetStringMap("host");
-  for (auto it : result) {
+  for (auto& it : result) {
     if (it.first == "port") {
       EXPECT_EQ("8400", it.second);
     } else if (it.first == "ip") {

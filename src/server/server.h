@@ -28,7 +28,9 @@
 #include "meta/store_meta_manager.h"
 #include "metrics/store_metrics_manager.h"
 #include "proto/common.pb.h"
-#include "store/store_control.h"
+#include "store/heartbeat.h"
+#include "store/region_controller.h"
+#include "store/store_controller.h"
 
 template <typename T>
 struct DefaultSingletonTraits;
@@ -55,10 +57,10 @@ class Server {
   bool InitServerID();
 
   // Init raw storage engines;
-  bool InitRawEngines();
+  bool InitRawEngine();
 
   // Init storage engines;
-  bool InitEngines();
+  bool InitEngine();
 
   // Init coordinator interaction
   bool InitCoordinatorInteraction();
@@ -72,16 +74,19 @@ class Server {
   // Init crontab heartbeat
   bool InitCrontabManager();
 
-  // Init coordinator heartbeat
-  bool InitCrontabManagerForCoordinator();
+  // Init store controller
+  bool InitStoreController();
 
-  // Init store control
-  bool InitStoreControl();
+  // Init region command manager
+  bool InitRegionCommandManager();
 
-  // add scan factory to CrontabManager
-  bool AddScanToCrontabManager();
+  // Init region controller
+  bool InitRegionController();
 
   bool InitStoreMetricsManager();
+
+  // Init Heartbeat
+  bool InitHeartbeat();
 
   butil::Status StartMetaRegion(std::shared_ptr<Config> config, std::shared_ptr<Engine> kv_engine);
 
@@ -101,18 +106,19 @@ class Server {
 
   std::shared_ptr<CoordinatorInteraction> GetCoordinatorInteraction() { return coordinator_interaction_; }
 
-  std::shared_ptr<Engine> GetEngine(pb::common::Engine type) {
-    auto it = engines_.find(type);
-    return (it != engines_.end()) ? it->second : nullptr;
-  }
+  std::shared_ptr<Engine> GetEngine() { return engine_; }
 
   std::shared_ptr<Storage> GetStorage() { return storage_; }
   std::shared_ptr<StoreMetaManager> GetStoreMetaManager() { return store_meta_manager_; }
   std::shared_ptr<StoreMetricsManager> GetStoreMetricsManager() { return store_metrics_manager_; }
   std::shared_ptr<CrontabManager> GetCrontabManager() { return crontab_manager_; }
 
-  std::shared_ptr<StoreControl> GetStoreControl() { return store_control_; }
+  std::shared_ptr<StoreController> GetStoreController() { return store_controller_; }
+  std::shared_ptr<RegionController> GetRegionController() { return region_controller_; }
+  std::shared_ptr<RegionCommandManager> GetRegionCommandManager() { return region_command_manager_; }
   std::shared_ptr<CoordinatorControl> GetCoordinatorControl() { return coordinator_control_; }
+
+  std::shared_ptr<Heartbeat> GetHeartbeat() { return heartbeat_; }
 
   Server(const Server&) = delete;
   const Server& operator=(const Server&) = delete;
@@ -140,8 +146,8 @@ class Server {
   std::shared_ptr<CoordinatorInteraction> coordinator_interaction_;
 
   // All store engine, include MemEngine/RaftKvEngine/RocksEngine
-  std::map<pb::common::Engine, std::shared_ptr<Engine> > engines_;
-  std::map<pb::common::RawEngine, std::shared_ptr<RawEngine> > raw_engines_;
+  std::shared_ptr<Engine> engine_;
+  std::shared_ptr<RawEngine> raw_engine_;
 
   // This is a Storage class, deal with all about storage stuff.
   std::shared_ptr<Storage> storage_;
@@ -152,11 +158,18 @@ class Server {
   // This is manage crontab, like heartbeat.
   std::shared_ptr<CrontabManager> crontab_manager_;
 
-  // This is store control, execute admin operation, like add/del region etc.
-  std::shared_ptr<StoreControl> store_control_;
+  // This is store control, execute admin operation
+  std::shared_ptr<StoreController> store_controller_;
+  // This is region control, execute admin operation
+  std::shared_ptr<RegionController> region_controller_;
+  // This is region command manager, save region command
+  std::shared_ptr<RegionCommandManager> region_command_manager_;
 
   // This is manage coordinator meta data, like store state and region state.
   std::shared_ptr<CoordinatorControl> coordinator_control_;
+
+  // This is store and coordinator heartbeat.
+  std::shared_ptr<Heartbeat> heartbeat_;
 };
 
 }  // namespace dingodb

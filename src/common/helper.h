@@ -127,9 +127,6 @@ class Helper {
 
   static uint64_t Timestamp();
 
-  // original_key + 1. note overflow
-  static bool Increment(const std::string& original_key, std::string* key);
-
   // end key of all table
   // We are based on this assumption. In general, it is rare to see all 0xFF
   static bool KeyIsEndOfAllTable(const std::string& key);

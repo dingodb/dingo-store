@@ -175,12 +175,12 @@ int main(int argc, char *argv[]) {
   dingo_server->SetServerEndpoint(GetServerEndPoint(config));
   dingo_server->SetRaftEndpoint(GetRaftEndPoint(config));
 
-  if (!dingo_server->InitRawEngines()) {
-    DINGO_LOG(ERROR) << "InitRawEngines failed!";
+  if (!dingo_server->InitRawEngine()) {
+    DINGO_LOG(ERROR) << "InitRawEngine failed!";
     return -1;
   }
-  if (!dingo_server->InitEngines()) {
-    DINGO_LOG(ERROR) << "InitEngines failed!";
+  if (!dingo_server->InitEngine()) {
+    DINGO_LOG(ERROR) << "InitEngine failed!";
     return -1;
   }
 
@@ -217,15 +217,9 @@ int main(int argc, char *argv[]) {
     meta_service.SetControl(dingo_server->GetCoordinatorControl());
 
     // the Engine should be init success
-    auto engine = dingo_server->GetEngine(dingodb::pb::common::Engine::ENG_RAFT_STORE);
+    auto engine = dingo_server->GetEngine();
     coordinator_service.SetKvEngine(engine);
     meta_service.SetKvEngine(engine);
-
-    // init push crontab
-    if (!dingo_server->InitCrontabManagerForCoordinator()) {
-      DINGO_LOG(ERROR) << "InitCrontabManagerForCoordinator failed!";
-      return -1;
-    }
 
     // add service to brpc
     if (brpc_server.AddService(&coordinator_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
@@ -281,17 +275,20 @@ int main(int argc, char *argv[]) {
       DINGO_LOG(ERROR) << "InitStoreMetaManager failed!";
       return -1;
     }
-    if (!dingo_server->InitStoreControl()) {
-      DINGO_LOG(ERROR) << "InitStoreControl failed!";
+    if (!dingo_server->InitStoreMetricsManager()) {
+      DINGO_LOG(ERROR) << "InitStoreMetricsManager failed!";
       return -1;
     }
-    if (!dingo_server->InitCrontabManager()) {
-      DINGO_LOG(ERROR) << "InitCrontabManager failed!";
+    if (!dingo_server->InitStoreController()) {
+      DINGO_LOG(ERROR) << "InitStoreController failed!";
       return -1;
     }
-
-    if (!dingo_server->AddScanToCrontabManager()) {
-      DINGO_LOG(ERROR) << "AddScanToCrontabManager failed!";
+    if (!dingo_server->InitRegionCommandManager()) {
+      DINGO_LOG(ERROR) << "InitRegionCommandManager failed!";
+      return -1;
+    }
+    if (!dingo_server->InitRegionController()) {
+      DINGO_LOG(ERROR) << "InitRegionController failed!";
       return -1;
     }
 
@@ -319,11 +316,20 @@ int main(int argc, char *argv[]) {
     DINGO_LOG(INFO) << "Raft server is running on " << raft_server.listen_address();
   }
 
+  if (!dingo_server->InitCrontabManager()) {
+    DINGO_LOG(ERROR) << "InitCrontabManager failed!";
+    return -1;
+  }
+
   if (!dingo_server->Recover()) {
     DINGO_LOG(ERROR) << "Recover failed!";
     return -1;
   }
 
+  if (!dingo_server->InitHeartbeat()) {
+    DINGO_LOG(ERROR) << "InitHeartbeat failed!";
+    return -1;
+  }
   // Start server after raft server started.
   if (brpc_server.Start(dingo_server->ServerEndpoint(), nullptr) != 0) {
     DINGO_LOG(ERROR) << "Fail to start server!";

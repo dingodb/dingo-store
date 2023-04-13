@@ -15,6 +15,7 @@
 #include "metrics/store_metrics_manager.h"
 
 #include <cstdint>
+#include <memory>
 
 #include "common/helper.h"
 #include "config/config_manager.h"
@@ -39,14 +40,43 @@ bool StoreMetrics::CollectMetrics() {
   return true;
 }
 
-bool StoreRegionMetrics::Init() { return true; }
-bool StoreRegionMetrics::Recover() { return true; }
+bool StoreRegionMetrics::Init() {
+  std::vector<pb::common::KeyValue> kvs;
+  if (!meta_reader_->Scan(Prefix(), kvs)) {
+    DINGO_LOG(ERROR) << "Scan store region metrics failed!";
+    return false;
+  }
+
+  if (!kvs.empty()) {
+    TransformFromKv(kvs);
+  }
+  return true;
+}
 
 bool StoreRegionMetrics::CollectMetrics() { return true; }
 
+std::shared_ptr<pb::common::RegionMetrics> StoreRegionMetrics::NewMetrics(uint64_t region_id) {
+  auto metrics = std::make_shared<pb::common::RegionMetrics>();
+  metrics->set_id(region_id);
+  return metrics;
+}
+
 void StoreRegionMetrics::AddMetrics(std::shared_ptr<pb::common::RegionMetrics> metrics) {
-  BAIDU_SCOPED_LOCK(mutex_);
-  metricses_.insert_or_assign(metrics->id(), metrics);
+  {
+    BAIDU_SCOPED_LOCK(mutex_);
+    metricses_.insert_or_assign(metrics->id(), metrics);
+  }
+
+  meta_writer_->Put(TransformToKv(metrics));
+}
+
+void StoreRegionMetrics::DeleteMetrics(uint64_t region_id) {
+  {
+    BAIDU_SCOPED_LOCK(mutex_);
+    metricses_.erase(region_id);
+  }
+
+  meta_writer_->Delete(GenKey(region_id));
 }
 
 std::shared_ptr<pb::common::RegionMetrics> StoreRegionMetrics::GetMetrics(uint64_t region_id) {
@@ -108,15 +138,6 @@ bool StoreMetricsManager::Init() {
 
   if (!region_metrics_->Init()) {
     DINGO_LOG(ERROR) << "Init store region metrics failed!";
-    return false;
-  }
-
-  return true;
-}
-
-bool StoreMetricsManager::Recover() {
-  if (!region_metrics_->Recover()) {
-    DINGO_LOG(ERROR) << "Recover store region metrics failed!";
     return false;
   }
 

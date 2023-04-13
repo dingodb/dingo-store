@@ -22,6 +22,7 @@
 #include "event/event.h"
 #include "proto/error.pb.h"
 #include "proto/store.pb.h"
+#include "proto/store_internal.pb.h"
 #include "raft/raft_node_manager.h"
 
 namespace dingodb {
@@ -30,13 +31,12 @@ class RaftControlAble {
  public:
   virtual ~RaftControlAble() = default;
 
-  virtual butil::Status AddRegion([[maybe_unused]] std::shared_ptr<Context> ctx,
-                                  std::shared_ptr<pb::common::Region> region,
-                                  std::shared_ptr<EventListenerCollection> listeners) = 0;
-  virtual butil::Status DestroyRegion([[maybe_unused]] std::shared_ptr<Context> ctx, uint64_t region_id) = 0;
-  virtual butil::Status ChangeRegion([[maybe_unused]] std::shared_ptr<Context> ctx, uint64_t region_id,
-                                     std::vector<pb::common::Peer> peers) = 0;
-  virtual butil::Status Snapshot([[maybe_unused]] std::shared_ptr<Context> ctx, uint64_t region_id) = 0;
+  virtual butil::Status AddNode(std::shared_ptr<Context> ctx, std::shared_ptr<pb::store_internal::Region> region,
+                                std::shared_ptr<EventListenerCollection> listeners) = 0;
+  virtual butil::Status DestroyNode(std::shared_ptr<Context> ctx, uint64_t region_id) = 0;
+  virtual butil::Status ChangeNode(std::shared_ptr<Context> ctx, uint64_t region_id,
+                                   std::vector<pb::common::Peer> peers) = 0;
+  virtual std::shared_ptr<RaftNode> GetNode(uint64_t region_id) = 0;
 
  protected:
   RaftControlAble() = default;
@@ -55,12 +55,15 @@ class RaftKvEngine : public Engine, public RaftControlAble {
 
   std::shared_ptr<RawEngine> GetRawEngine() override;
 
-  butil::Status AddRegion(std::shared_ptr<Context> ctx, std::shared_ptr<pb::common::Region> region,
-                          std::shared_ptr<EventListenerCollection> listeners) override;
-  butil::Status ChangeRegion(std::shared_ptr<Context> ctx, uint64_t region_id,
-                             std::vector<pb::common::Peer> peers) override;
-  butil::Status DestroyRegion(std::shared_ptr<Context> ctx, uint64_t region_id) override;
-  butil::Status Snapshot(std::shared_ptr<Context> ctx, uint64_t region_id) override;
+  butil::Status AddNode(std::shared_ptr<Context> ctx, std::shared_ptr<pb::store_internal::Region> region,
+                        std::shared_ptr<EventListenerCollection> listeners) override;
+  butil::Status ChangeNode(std::shared_ptr<Context> ctx, uint64_t region_id,
+                           std::vector<pb::common::Peer> peers) override;
+  butil::Status DestroyNode(std::shared_ptr<Context> ctx, uint64_t region_id) override;
+  std::shared_ptr<RaftNode> GetNode(uint64_t region_id) override;
+
+  std::shared_ptr<Snapshot> GetSnapshot() override { return nullptr; }
+  butil::Status DoSnapshot(std::shared_ptr<Context> ctx, uint64_t region_id) override;
 
   butil::Status Write(std::shared_ptr<Context> ctx, const WriteData& write_data) override;
   butil::Status AsyncWrite(std::shared_ptr<Context> ctx, const WriteData& write_data, WriteCbFunc cb) override;

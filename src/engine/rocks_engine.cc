@@ -47,9 +47,6 @@ std::string RocksEngine::GetName() { return pb::common::Engine_Name(pb::common::
 
 pb::common::Engine RocksEngine::GetID() { return pb::common::ENG_ROCKSDB; }
 
-// not implement
-std::shared_ptr<Snapshot> RocksEngine::GetSnapshot() { return nullptr; }
-
 butil::Status RocksEngine::Write(std::shared_ptr<Context> /*ctx*/, const WriteData& /*write_data*/) {
   return butil::Status();
 }
