@@ -6,6 +6,11 @@ SHELL ["/bin/bash", "-c"]
 
 RUN apt-get update  \
     && apt-get install -y openjdk-8-jdk vim unzip netcat net-tools tzdata wget git gcc g++ make automake maven openssl libssl-dev libtool \
+    && apt-get install -y software-properties-common  \
+    && add-apt-repository -y ppa:ubuntu-toolchain-r/test  \
+    && apt-get update  \
+    && apt-get install -y gcc-11 g++-11  \
+    && update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 100 --slave /usr/bin/g++ g++ /usr/bin/g++-11 \
     && unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY \
     && ln -fs /usr/share/zoneinfo/${TZ} /etc/localtime \
     && echo ${TZ} > /etc/timezone \

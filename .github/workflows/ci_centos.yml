@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     # get docker contatiner
     container: 
-      image: dingodatabase/centos7-dingo-dev:latest
+      image: dingodatabase/dingo-store-centos-7-dev:latest
 
     steps:
     - uses: actions/checkout@v3
