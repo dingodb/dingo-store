@@ -73,7 +73,7 @@ void CoordinatorControl::GenerateRootSchemas(pb::coordinator_internal::SchemaInt
   // information schema
   // pb::information::Schema information_schema;
   information_schema_internal.set_id(::dingodb::pb::meta::ReservedSchemaIds::INFORMATION_SCHEMA);
-  information_schema_internal.set_name("information");
+  information_schema_internal.set_name("information_schema");
 
   DINGO_LOG(INFO) << "GenerateRootSchemas 0[" << root_schema_internal.DebugString();
   DINGO_LOG(INFO) << "GenerateRootSchemas 1[" << meta_schema_internal.DebugString();

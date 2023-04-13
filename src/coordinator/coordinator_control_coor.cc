@@ -952,29 +952,26 @@ void CoordinatorControl::GetMemoryInfo(pb::coordinator::CoordinatorMemoryInfo& m
     BAIDU_SCOPED_LOCK(id_epoch_map_mutex_);
 
     // set term & index
-    auto* temp_index = id_epoch_map_.seek(pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX);
-    auto* temp_term = id_epoch_map_.seek(pb::coordinator_internal::IdEpochType::RAFT_APPLY_TERM);
+    pb::coordinator_internal::IdEpochInternal temp_term;
+    pb::coordinator_internal::IdEpochInternal temp_index;
+    int ret_term = id_epoch_map_.Get(pb::coordinator_internal::IdEpochType::RAFT_APPLY_TERM, temp_term);
+    int ret_index = id_epoch_map_.Get(pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX, temp_index);
 
-    // if (id_epoch_map_.find(pb::coordinator_internal::IdEpochType::RAFT_APPLY_TERM) != id_epoch_map_.end()) {
-    if (temp_term != nullptr) {
-      // memory_info.set_applied_term(id_epoch_map_.at(pb::coordinator_internal::IdEpochType::RAFT_APPLY_TERM).value());
-      memory_info.set_applied_term(temp_term->value());
+    if (ret_term >= 0) {
+      memory_info.set_applied_term(temp_term.value());
     }
-    // if (id_epoch_map_.find(pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX) != id_epoch_map_.end()) {
-    if (temp_index != nullptr) {
-      // memory_info.set_applied_index(id_epoch_map_.at(pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX).value());
-      memory_info.set_applied_index(temp_index->value());
+    if (ret_index >= 0) {
+      memory_info.set_applied_index(temp_index.value());
     }
 
     // set count & size
-    memory_info.set_id_epoch_map_count(id_epoch_map_.size());
-    for (auto& it : id_epoch_map_) {
-      memory_info.set_id_epoch_map_size(memory_info.id_epoch_map_size() + sizeof(it.first) + it.second.ByteSizeLong());
-    }
-    memory_info.set_total_size(memory_info.total_size() + memory_info.id_epoch_map_size());
+    memory_info.set_id_epoch_map_count(id_epoch_map_.Size());
+    memory_info.set_total_size(memory_info.total_size() + id_epoch_map_.MemorySize());
 
     // dump id & epoch to kv
-    for (auto& it : id_epoch_map_) {
+    butil::FlatMap<uint64_t, pb::coordinator_internal::IdEpochInternal> id_epoch_map_temp;
+    int ret = id_epoch_map_.GetFlatMapCopy(id_epoch_map_temp);
+    for (auto& it : id_epoch_map_temp) {
       const google::protobuf::EnumDescriptor* enum_descriptor =
           dingodb::pb::coordinator_internal::IdEpochType_descriptor();
       const google::protobuf::EnumValueDescriptor* enum_value_descriptor = enum_descriptor->FindValueByNumber(it.first);

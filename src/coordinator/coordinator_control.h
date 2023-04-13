@@ -306,8 +306,9 @@ class CoordinatorControl : public MetaControl {
 
   // 0.ids_epochs
   // TableInternal is combination of Table & TableDefinition
-  butil::FlatMap<uint64_t, pb::coordinator_internal::IdEpochInternal> id_epoch_map_;
-  MetaMapStorage<pb::coordinator_internal::IdEpochInternal> *id_epoch_meta_;
+  DingoSafeIdEpochMap id_epoch_map_;
+  //   butil::FlatMap<uint64_t, pb::coordinator_internal::IdEpochInternal> id_epoch_map_;
+  MetaSafeMapStorage<pb::coordinator_internal::IdEpochInternal> *id_epoch_meta_;
   bthread_mutex_t id_epoch_map_mutex_;
 
   // 1.coordinators

@@ -26,10 +26,12 @@
 
 #include "braft/configuration.h"
 #include "brpc/channel.h"
+#include "butil/containers/flat_map.h"
 #include "butil/scoped_lock.h"
 #include "butil/strings/string_split.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "common/safe_map.h"
 #include "coordinator/coordinator_meta_storage.h"
 #include "engine/snapshot.h"
 #include "google/protobuf/unknown_field_set.h"
@@ -65,7 +67,7 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   schema_meta_ = new MetaMapStorage<pb::coordinator_internal::SchemaInternal>(&schema_map_);
   region_meta_ = new MetaMapStorage<pb::common::Region>(&region_map_);
   table_meta_ = new MetaMapStorage<pb::coordinator_internal::TableInternal>(&table_map_);
-  id_epoch_meta_ = new MetaMapStorage<pb::coordinator_internal::IdEpochInternal>(&id_epoch_map_);
+  id_epoch_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::IdEpochInternal>(&id_epoch_map_);
   executor_meta_ = new MetaMapStorage<pb::common::Executor>(&executor_map_);
   store_metrics_meta_ = new MetaMapStorage<pb::common::StoreMetrics>(&store_metrics_map_);
   table_metrics_meta_ = new MetaMapStorage<pb::coordinator_internal::TableMetricsInternal>(&table_metrics_map_);
@@ -73,7 +75,7 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
 
   // init FlatMap
   // id_epoch_map_temp_.init(1000, 80);
-  id_epoch_map_.init(1000, 80);
+  // id_epoch_map_.init(1000, 80);
   coordinator_map_.init(1000, 80);
   store_map_.init(1000, 80);
   store_need_push_.init(1000, 80);
@@ -86,6 +88,7 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   table_metrics_map_.init(100000, 80);
 
   // init SafeMap
+  id_epoch_map_.Init(100);                // id_epoch_map_ is a small map
   id_epoch_map_safe_temp_.Init(100);      // id_epoch_map_temp_ is a small map
   schema_name_map_safe_temp_.Init(1000);  // schema_map_ is a big map
   table_name_map_safe_temp_.Init(10000);  // table_map_ is a big map
@@ -240,8 +243,12 @@ bool CoordinatorControl::Recover() {
 
   // copy id_epoch_map_ to id_epoch_map_safe_temp_
   {
-    BAIDU_SCOPED_LOCK(id_epoch_map_mutex_);
-    id_epoch_map_safe_temp_.CopyFlatMap(id_epoch_map_);
+    // BAIDU_SCOPED_LOCK(id_epoch_map_mutex_);
+    // id_epoch_map_safe_temp_.CopyFlatMap(id_epoch_map_);
+    butil::FlatMap<uint64_t, pb::coordinator_internal::IdEpochInternal> temp_copy;
+    id_epoch_map_.GetFlatMapCopy(temp_copy);
+    id_epoch_map_safe_temp_.SwapFlatMap(temp_copy);
+    // id_epoch_map_safe_temp_.Copy(id_epoch_map_);
   }
   DINGO_LOG(INFO) << "Recover id_epoch_safe_map_temp, count=" << id_epoch_map_safe_temp_.Size();
 
