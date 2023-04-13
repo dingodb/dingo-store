@@ -48,7 +48,7 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   // init bthread mutex
   // bthread_mutex_init(&id_epoch_map_temp_mutex_, nullptr);
   // bthread_mutex_init(&id_epoch_map_mutex_, nullptr);
-  bthread_mutex_init(&coordinator_map_mutex_, nullptr);
+  // bthread_mutex_init(&coordinator_map_mutex_, nullptr);
   bthread_mutex_init(&store_map_mutex_, nullptr);
   bthread_mutex_init(&store_need_push_mutex_, nullptr);
   bthread_mutex_init(&executor_map_mutex_, nullptr);
@@ -62,7 +62,7 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   root_schema_writed_to_raft_ = false;
 
   // the data structure below will write to raft
-  coordinator_meta_ = new MetaMapStorage<pb::coordinator_internal::CoordinatorInternal>(&coordinator_map_);
+  coordinator_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::CoordinatorInternal>(&coordinator_map_);
   store_meta_ = new MetaMapStorage<pb::common::Store>(&store_map_);
   schema_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::SchemaInternal>(&schema_map_);
   region_meta_ = new MetaSafeMapStorage<pb::common::Region>(&region_map_);
@@ -76,7 +76,7 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   // init FlatMap
   // id_epoch_map_temp_.init(1000, 80);
   // id_epoch_map_.init(1000, 80);
-  coordinator_map_.init(1000, 80);
+  // coordinator_map_.init(1000, 80);
   store_map_.init(1000, 80);
   store_need_push_.init(1000, 80);
   executor_map_.init(1000, 80);
@@ -96,6 +96,7 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   schema_map_.Init(10000);                // schema_map_ is a big map
   table_map_.Init(10000);                 // table_map_ is a big map
   region_map_.Init(30000);                // region_map_ is a big map
+  coordinator_map_.Init(10);              // coordinator_map_ is a small map
 }
 
 CoordinatorControl::~CoordinatorControl() {
@@ -137,7 +138,7 @@ bool CoordinatorControl::Recover() {
     return false;
   }
   {
-    BAIDU_SCOPED_LOCK(coordinator_map_mutex_);
+    // BAIDU_SCOPED_LOCK(coordinator_map_mutex_);
     if (!coordinator_meta_->Recover(kvs)) {
       return false;
     }

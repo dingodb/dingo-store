@@ -312,9 +312,10 @@ class CoordinatorControl : public MetaControl {
   //   bthread_mutex_t id_epoch_map_mutex_;
 
   // 1.coordinators
-  butil::FlatMap<uint64_t, pb::coordinator_internal::CoordinatorInternal> coordinator_map_;
-  MetaMapStorage<pb::coordinator_internal::CoordinatorInternal> *coordinator_meta_;
-  bthread_mutex_t coordinator_map_mutex_;
+  //   butil::FlatMap<uint64_t, pb::coordinator_internal::CoordinatorInternal> coordinator_map_;
+  DingoSafeMap<uint64_t, pb::coordinator_internal::CoordinatorInternal> coordinator_map_;
+  MetaSafeMapStorage<pb::coordinator_internal::CoordinatorInternal> *coordinator_meta_;
+  //   bthread_mutex_t coordinator_map_mutex_;
 
   // 2.stores
   butil::FlatMap<uint64_t, pb::common::Store> store_map_;

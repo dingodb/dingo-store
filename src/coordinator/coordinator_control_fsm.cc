@@ -264,7 +264,7 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
     kvs.push_back(meta_snapshot_file.coordinator_map_kvs(i));
   }
   {
-    BAIDU_SCOPED_LOCK(coordinator_map_mutex_);
+    // BAIDU_SCOPED_LOCK(coordinator_map_mutex_);
     if (!coordinator_meta_->Recover(kvs)) {
       return false;
     }
@@ -515,24 +515,26 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
 
   // 1.coordinator map
   {
-    BAIDU_SCOPED_LOCK(coordinator_map_mutex_);
+    // BAIDU_SCOPED_LOCK(coordinator_map_mutex_);
     for (int i = 0; i < meta_increment.coordinators_size(); i++) {
       const auto& coordinator = meta_increment.coordinators(i);
       if (coordinator.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
-        coordinator_map_[coordinator.id()] = coordinator.coordinator();
+        // coordinator_map_[coordinator.id()] = coordinator.coordinator();
+        coordinator_map_.Put(coordinator.id(), coordinator.coordinator());
 
         // meta_write_kv
         meta_write_to_kv.push_back(coordinator_meta_->TransformToKvValue(coordinator.coordinator()));
 
       } else if (coordinator.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
-        auto& update_coordinator = coordinator_map_[coordinator.id()];
-        update_coordinator.CopyFrom(coordinator.coordinator());
+        // auto& update_coordinator = coordinator_map_[coordinator.id()];
+        // update_coordinator.CopyFrom(coordinator.coordinator());
+        coordinator_map_.Put(coordinator.id(), coordinator.coordinator());
 
         // meta_write_kv
         meta_write_to_kv.push_back(coordinator_meta_->TransformToKvValue(coordinator.coordinator()));
 
       } else if (coordinator.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
-        coordinator_map_.erase(coordinator.id());
+        coordinator_map_.Erase(coordinator.id());
 
         // meta_delete_kv
         meta_delete_to_kv.push_back(coordinator_meta_->TransformToKvValue(coordinator.coordinator()));
