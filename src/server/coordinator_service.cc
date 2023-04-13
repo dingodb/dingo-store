@@ -285,6 +285,12 @@ void CoordinatorServiceImpl::ExecutorHeartbeat(google::protobuf::RpcController *
   // update executor map
   int const new_executormap_epoch = this->coordinator_control_->UpdateExecutorMap(request->executor(), meta_increment);
 
+  // if no need to update meta, just return
+  if (meta_increment.ByteSizeLong() == 0) {
+    DINGO_LOG(DEBUG) << "ExecutorHeartbeat no need to update meta, store_id=" << request->executor().id();
+    return;
+  }
+
   // prepare for raft process
   CoordinatorClosure<pb::coordinator::ExecutorHeartbeatRequest, pb::coordinator::ExecutorHeartbeatResponse>
       *meta_create_executor_closure =
@@ -344,6 +350,12 @@ void CoordinatorServiceImpl::StoreHeartbeat(google::protobuf::RpcController *con
   // update store metrics
   if (request->has_store_metrics()) {
     this->coordinator_control_->UpdateStoreMetrics(request->store_metrics(), meta_increment);
+  }
+
+  // if no need to update meta, just return
+  if (meta_increment.ByteSizeLong() == 0) {
+    DINGO_LOG(DEBUG) << "StoreHeartbeat no need to update meta, store_id=" << request->store().id();
+    return;
   }
 
   // prepare for raft process

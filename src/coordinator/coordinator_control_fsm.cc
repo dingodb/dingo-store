@@ -61,17 +61,21 @@ void CoordinatorControl::OnLeaderStart(int64_t term) {
     // id_epoch_map_safe_temp_.Copy(id_epoch_map_);
 
     butil::FlatMap<uint64_t, pb::coordinator_internal::IdEpochInternal> temp_copy;
+    temp_copy.init(100);
     id_epoch_map_.GetFlatMapCopy(temp_copy);
-    id_epoch_map_safe_temp_.SwapFlatMap(temp_copy);
+    id_epoch_map_safe_temp_.CopyFlatMap(temp_copy);
   }
   DINGO_LOG(INFO) << "OnLeaderStart init id_epoch_safe_map_temp_ finished, term=" << term
                   << " count=" << id_epoch_map_safe_temp_.Size();
 
   // copy schema_map_ to schema_name_map_safe_temp_
   {
-    BAIDU_SCOPED_LOCK(schema_map_mutex_);
+    // BAIDU_SCOPED_LOCK(schema_map_mutex_);
     schema_name_map_safe_temp_.Clear();
-    for (const auto& it : schema_map_) {
+    butil::FlatMap<uint64_t, pb::coordinator_internal::SchemaInternal> schema_map_copy;
+    schema_map_copy.init(10000);
+    schema_map_.GetFlatMapCopy(schema_map_copy);
+    for (const auto& it : schema_map_copy) {
       schema_name_map_safe_temp_.Put(it.second.name(), it.first);
     }
   }
@@ -243,7 +247,7 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
     kvs.push_back(meta_snapshot_file.id_epoch_map_kvs(i));
   }
   {
-    BAIDU_SCOPED_LOCK(id_epoch_map_mutex_);
+    // BAIDU_SCOPED_LOCK(id_epoch_map_mutex_);
     if (!id_epoch_meta_->Recover(kvs)) {
       return false;
     }
@@ -299,7 +303,7 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
     kvs.push_back(meta_snapshot_file.schema_map_kvs(i));
   }
   {
-    BAIDU_SCOPED_LOCK(schema_map_mutex_);
+    // BAIDU_SCOPED_LOCK(schema_map_mutex_);
     if (!schema_meta_->Recover(kvs)) {
       return false;
     }
@@ -382,16 +386,20 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
     // id_epoch_map_safe_temp_.Copy(id_epoch_map_);
 
     butil::FlatMap<uint64_t, pb::coordinator_internal::IdEpochInternal> temp_copy;
+    temp_copy.init(100);
     id_epoch_map_.GetFlatMapCopy(temp_copy);
-    id_epoch_map_safe_temp_.SwapFlatMap(temp_copy);
+    id_epoch_map_safe_temp_.CopyFlatMap(temp_copy);
   }
   DINGO_LOG(INFO) << "LoadSnapshot id_epoch_safe_map_temp, count=" << id_epoch_map_safe_temp_.Size();
 
   // copy schema_map_ to schema_name_map_safe_temp_
   {
-    BAIDU_SCOPED_LOCK(schema_map_mutex_);
+    // BAIDU_SCOPED_LOCK(schema_map_mutex_);
     schema_name_map_safe_temp_.Clear();
-    for (const auto& it : schema_map_) {
+    butil::FlatMap<uint64_t, pb::coordinator_internal::SchemaInternal> schema_map_copy;
+    schema_map_copy.init(10000);
+    schema_map_.GetFlatMapCopy(schema_map_copy);
+    for (const auto& it : schema_map_copy) {
       schema_name_map_safe_temp_.Put(it.second.name(), it.first);
     }
   }
@@ -418,18 +426,37 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
   std::vector<pb::common::KeyValue> meta_delete_to_kv;
 
   {
-    BAIDU_SCOPED_LOCK(id_epoch_map_mutex_);
+    // BAIDU_SCOPED_LOCK(id_epoch_map_mutex_);
     // if index < local apply index, just return
     uint64_t applied_index = 0;
     uint64_t applied_term = 0;
 
     id_epoch_map_.GetPresentId(pb::coordinator_internal::IdEpochType::RAFT_APPLY_TERM, applied_term);
-    id_epoch_map_.GetPresentId(pb::coordinator_internal::IdEpochType::RAFT_APPLY_TERM, applied_index);
+    id_epoch_map_.GetPresentId(pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX, applied_index);
 
     if (index <= applied_index && term <= applied_term) {
-      DINGO_LOG(WARNING) << "ApplyMetaIncrement index <= applied_index && term <<= applied_term, just return, [index="
-                         << index << "][applied_index=" << applied_index << "]"
-                         << "[term=" << term << "][applied_term=" << applied_term;
+      DINGO_LOG(WARNING)
+          << "SKIP ApplyMetaIncrement index <= applied_index && term <<= applied_term, just return, [index=" << index
+          << "][applied_index=" << applied_index << "]"
+          << "[term=" << term << "][applied_term=" << applied_term;
+      return;
+    } else if (meta_increment.ByteSizeLong() > 0) {
+      DINGO_LOG(INFO) << "NORMAL ApplyMetaIncrement index <= applied_index && term <<= applied_term [index=" << index
+                      << "][applied_index=" << applied_index << "]"
+                      << "[term=" << term << "][applied_term=" << applied_term;
+      DINGO_LOG(INFO) << "meta_increment byte_size=" << meta_increment.ByteSizeLong();
+      DINGO_LOG(INFO) << "0.idepochs_size=" << meta_increment.idepochs_size();
+      DINGO_LOG(INFO) << "1.coordinators_size=" << meta_increment.coordinators_size();
+      DINGO_LOG(INFO) << "2.stores_size=" << meta_increment.stores_size();
+      DINGO_LOG(INFO) << "3.tables_size=" << meta_increment.tables_size();
+      DINGO_LOG(INFO) << "4.executors_size=" << meta_increment.executors_size();
+      DINGO_LOG(INFO) << "5.regions_size=" << meta_increment.regions_size();
+      DINGO_LOG(INFO) << "6.tables_size=" << meta_increment.tables_size();
+      DINGO_LOG(INFO) << "7.store_metrics_size=" << meta_increment.store_metrics_size();
+      DINGO_LOG(INFO) << "8.tables_metrics_size=" << meta_increment.table_metrics_size();
+      DINGO_LOG(INFO) << "9.store_operations_size=" << meta_increment.store_operations_size();
+    } else {
+      DINGO_LOG(WARNING) << "meta_increment.ByteSizeLong() == 0, just return";
       return;
     }
 
@@ -563,24 +590,40 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
 
   // 4.schema map
   {
-    BAIDU_SCOPED_LOCK(schema_map_mutex_);
+    // BAIDU_SCOPED_LOCK(schema_map_mutex_);
     for (int i = 0; i < meta_increment.schemas_size(); i++) {
       const auto& schema = meta_increment.schemas(i);
       if (schema.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
-        schema_map_[schema.id()] = schema.schema_internal();
+        // schema_map_[schema.id()] = schema.schema_internal();
+        int ret = schema_map_.PutIfAbsent(schema.id(), schema.schema_internal());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement CREATE, [id=" << schema.id() << "] success";
 
-        // meta_write_kv
-        meta_write_to_kv.push_back(schema_meta_->TransformToKvValue(schema.schema_internal()));
-
+          // meta_write_kv
+          meta_write_to_kv.push_back(schema_meta_->TransformToKvValue(schema.schema_internal()));
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement CREATE, [id=" << schema.id() << "] failed";
+        }
       } else if (schema.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
-        auto& update_schema = schema_map_[schema.id()];
-        update_schema.CopyFrom(schema.schema_internal());
+        // auto& update_schema = schema_map_[schema.id()];
+        // update_schema.CopyFrom(schema.schema_internal());
+        int ret = schema_map_.Put(schema.id(), schema.schema_internal());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement UPDATE, [id=" << schema.id() << "] success";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement UPDATE, [id=" << schema.id() << "] failed";
+        }
 
         // meta_write_kv
         meta_write_to_kv.push_back(schema_meta_->TransformToKvValue(schema.schema_internal()));
 
       } else if (schema.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
-        schema_map_.erase(schema.id());
+        int ret = schema_map_.Erase(schema.id());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement DELETE, [id=" << schema.id() << "] success";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement DELETE, [id=" << schema.id() << "] failed";
+        }
 
         // meta_delete_kv
         meta_delete_to_kv.push_back(schema_meta_->TransformToKvValue(schema.schema_internal()));
@@ -650,7 +693,7 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
       const auto& table = meta_increment.tables(i);
       if (table.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
         // need to update schema, so acquire lock
-        BAIDU_SCOPED_LOCK(schema_map_mutex_);
+        // BAIDU_SCOPED_LOCK(schema_map_mutex_);
 
         // add table to table_map
         table_map_[table.id()] = table.table();
@@ -659,15 +702,18 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         meta_write_to_kv.push_back(table_meta_->TransformToKvValue(table.table()));
 
         // add table to parent schema
-        auto* schema = schema_map_.seek(table.schema_id());
-        if (schema != nullptr) {
+        pb::coordinator_internal::SchemaInternal schema_to_update;
+        int ret = schema_map_.Get(table.schema_id(), schema_to_update);
+        // auto* schema = schema_map_.seek(table.schema_id());
+        if (ret > 0) {
           // add new created table's id to its parent schema's table_ids
-          schema->add_table_ids(table.id());
+          schema_to_update.add_table_ids(table.id());
+          schema_map_.Put(table.schema_id(), schema_to_update);
 
           DINGO_LOG(INFO) << "5.table map CREATE new_sub_table id=" << table.id() << " parent_id=" << table.schema_id();
 
           // meta_write_kv
-          meta_write_to_kv.push_back(schema_meta_->TransformToKvValue(*schema));
+          meta_write_to_kv.push_back(schema_meta_->TransformToKvValue(schema_to_update));
         } else {
           DINGO_LOG(ERROR) << " CREATE TABLE apply illegal schema_id=" << table.schema_id()
                            << " table_id=" << table.id() << " table_name=" << table.table().definition().name();
@@ -683,33 +729,35 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
 
       } else if (table.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
         // need to update schema, so acquire lock
-        BAIDU_SCOPED_LOCK(schema_map_mutex_);
+        // BAIDU_SCOPED_LOCK(schema_map_mutex_);
 
         // delete table from table_map
         table_map_.erase(table.id());
 
         // delete from parent schema
-        auto* schema = schema_map_.seek(table.schema_id());
-        // if (schema_map_.find(table.schema_id()) != schema_map_.end()) {
-        if (schema != nullptr) {
+        pb::coordinator_internal::SchemaInternal schema_to_update;
+        int ret = schema_map_.Get(table.schema_id(), schema_to_update);
+
+        if (ret > 0) {
           // according to the doc, we must use CopyFrom for protobuf message data structure here
           pb::coordinator_internal::SchemaInternal new_schema;
-          new_schema.CopyFrom(*schema);
+          new_schema.CopyFrom(schema_to_update);
 
           new_schema.clear_table_ids();
 
           // add left table_id to new_schema
-          for (auto x : schema->table_ids()) {
+          for (auto x : schema_to_update.table_ids()) {
             if (x != table.id()) {
               new_schema.add_table_ids(x);
             }
           }
-          schema->CopyFrom(new_schema);
+          schema_to_update.CopyFrom(new_schema);
+          schema_map_.Put(table.schema_id(), schema_to_update);
 
           DINGO_LOG(INFO) << "5.table map DELETE new_sub_table id=" << table.id() << " parent_id=" << table.schema_id();
 
           // meta_write_kv
-          meta_write_to_kv.push_back(schema_meta_->TransformToKvValue(*schema));
+          meta_write_to_kv.push_back(schema_meta_->TransformToKvValue(schema_to_update));
 
         } else {
           DINGO_LOG(ERROR) << " DROP TABLE apply illegal schema_id=" << table.schema_id() << " table_id=" << table.id()

@@ -47,13 +47,13 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
     : meta_reader_(meta_reader), meta_writer_(meta_writer), leader_term_(-1), raw_engine_of_meta_(raw_engine_of_meta) {
   // init bthread mutex
   // bthread_mutex_init(&id_epoch_map_temp_mutex_, nullptr);
-  bthread_mutex_init(&id_epoch_map_mutex_, nullptr);
+  // bthread_mutex_init(&id_epoch_map_mutex_, nullptr);
   bthread_mutex_init(&coordinator_map_mutex_, nullptr);
   bthread_mutex_init(&store_map_mutex_, nullptr);
   bthread_mutex_init(&store_need_push_mutex_, nullptr);
   bthread_mutex_init(&executor_map_mutex_, nullptr);
   bthread_mutex_init(&executor_need_push_mutex_, nullptr);
-  bthread_mutex_init(&schema_map_mutex_, nullptr);
+  // bthread_mutex_init(&schema_map_mutex_, nullptr);
   bthread_mutex_init(&region_map_mutex_, nullptr);
   bthread_mutex_init(&table_map_mutex_, nullptr);
   bthread_mutex_init(&store_metrics_map_mutex_, nullptr);
@@ -64,7 +64,7 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   // the data structure below will write to raft
   coordinator_meta_ = new MetaMapStorage<pb::coordinator_internal::CoordinatorInternal>(&coordinator_map_);
   store_meta_ = new MetaMapStorage<pb::common::Store>(&store_map_);
-  schema_meta_ = new MetaMapStorage<pb::coordinator_internal::SchemaInternal>(&schema_map_);
+  schema_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::SchemaInternal>(&schema_map_);
   region_meta_ = new MetaMapStorage<pb::common::Region>(&region_map_);
   table_meta_ = new MetaMapStorage<pb::coordinator_internal::TableInternal>(&table_map_);
   id_epoch_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::IdEpochInternal>(&id_epoch_map_);
@@ -81,7 +81,7 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   store_need_push_.init(1000, 80);
   executor_map_.init(1000, 80);
   executor_need_push_.init(1000, 80);
-  schema_map_.init(10000, 80);
+  // schema_map_.init(10000, 80);
   region_map_.init(300000, 80);
   table_map_.init(100000, 80);
   store_metrics_map_.init(1000, 80);
@@ -93,6 +93,7 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   schema_name_map_safe_temp_.Init(1000);  // schema_map_ is a big map
   table_name_map_safe_temp_.Init(10000);  // table_map_ is a big map
   store_operation_map_.Init(1000);        // store_operation_map_ is a big map
+  schema_map_.Init(10000);                // schema_map_ is a big map
 }
 
 CoordinatorControl::~CoordinatorControl() {
@@ -115,11 +116,16 @@ bool CoordinatorControl::Recover() {
     return false;
   }
   {
-    BAIDU_SCOPED_LOCK(id_epoch_map_mutex_);
+    // BAIDU_SCOPED_LOCK(id_epoch_map_mutex_);
 
     if (!id_epoch_meta_->Recover(kvs)) {
       return false;
     }
+
+    DINGO_LOG(WARNING) << "id_epoch_map_ size=" << id_epoch_map_.Size();
+    DINGO_LOG(WARNING) << "term=" << id_epoch_map_.GetPresentId(pb::coordinator_internal::IdEpochType::RAFT_APPLY_TERM);
+    DINGO_LOG(WARNING) << "index="
+                       << id_epoch_map_.GetPresentId(pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX);
   }
   DINGO_LOG(INFO) << "Recover id_epoch_meta, count=" << kvs.size();
   kvs.clear();
@@ -168,7 +174,7 @@ bool CoordinatorControl::Recover() {
     return false;
   }
   {
-    BAIDU_SCOPED_LOCK(schema_map_mutex_);
+    // BAIDU_SCOPED_LOCK(schema_map_mutex_);
     if (!schema_meta_->Recover(kvs)) {
       return false;
     }
@@ -246,17 +252,22 @@ bool CoordinatorControl::Recover() {
     // BAIDU_SCOPED_LOCK(id_epoch_map_mutex_);
     // id_epoch_map_safe_temp_.CopyFlatMap(id_epoch_map_);
     butil::FlatMap<uint64_t, pb::coordinator_internal::IdEpochInternal> temp_copy;
+    temp_copy.init(100);
     id_epoch_map_.GetFlatMapCopy(temp_copy);
-    id_epoch_map_safe_temp_.SwapFlatMap(temp_copy);
+    id_epoch_map_safe_temp_.CopyFlatMap(temp_copy);
     // id_epoch_map_safe_temp_.Copy(id_epoch_map_);
   }
   DINGO_LOG(INFO) << "Recover id_epoch_safe_map_temp, count=" << id_epoch_map_safe_temp_.Size();
 
   // copy schema_map_ to schema_name_map_safe_temp_
   {
-    BAIDU_SCOPED_LOCK(schema_map_mutex_);
+    // BAIDU_SCOPED_LOCK(schema_map_mutex_);
     schema_name_map_safe_temp_.Clear();
-    for (const auto& it : schema_map_) {
+
+    butil::FlatMap<uint64_t, pb::coordinator_internal::SchemaInternal> schema_map_copy;
+    schema_map_copy.init(10000);
+    schema_map_.GetFlatMapCopy(schema_map_copy);
+    for (const auto& it : schema_map_copy) {
       schema_name_map_safe_temp_.Put(it.second.name(), it.first);
     }
   }
@@ -280,7 +291,7 @@ bool CoordinatorControl::Recover() {
 bool CoordinatorControl::Init() {
   // root=0 meta=1 dingo=2, other schema begins from 3
   // init schema_map_ at innocent cluster
-  if (schema_map_.empty()) {
+  if (schema_map_.Size() == 0) {
     pb::coordinator_internal::SchemaInternal root_schema;
     pb::coordinator_internal::SchemaInternal meta_schema;
     pb::coordinator_internal::SchemaInternal dingo_schema;
@@ -290,12 +301,17 @@ bool CoordinatorControl::Init() {
     GenerateRootSchemas(root_schema, meta_schema, dingo_schema, mysql_schema, information_schema);
 
     // add the initial schemas to schema_map_
-    schema_map_.insert(std::make_pair(pb::meta::ReservedSchemaIds::ROOT_SCHEMA, root_schema));    // raft_kv_put
-    schema_map_.insert(std::make_pair(pb::meta::ReservedSchemaIds::META_SCHEMA, meta_schema));    // raft_kv_put
-    schema_map_.insert(std::make_pair(pb::meta::ReservedSchemaIds::DINGO_SCHEMA, dingo_schema));  // raft_kv_put
-    schema_map_.insert(std::make_pair(pb::meta::ReservedSchemaIds::MYSQL_SCHEMA, mysql_schema));  // raft_kv_put
-    schema_map_.insert(
-        std::make_pair(pb::meta::ReservedSchemaIds::INFORMATION_SCHEMA, information_schema));  // raft_kv_put
+    // schema_map_.insert(std::make_pair(pb::meta::ReservedSchemaIds::ROOT_SCHEMA, root_schema));    // raft_kv_put
+    // schema_map_.insert(std::make_pair(pb::meta::ReservedSchemaIds::META_SCHEMA, meta_schema));    // raft_kv_put
+    // schema_map_.insert(std::make_pair(pb::meta::ReservedSchemaIds::DINGO_SCHEMA, dingo_schema));  // raft_kv_put
+    // schema_map_.insert(std::make_pair(pb::meta::ReservedSchemaIds::MYSQL_SCHEMA, mysql_schema));  // raft_kv_put
+    // schema_map_.insert(
+    //     std::make_pair(pb::meta::ReservedSchemaIds::INFORMATION_SCHEMA, information_schema));  // raft_kv_put
+    schema_map_.Put(pb::meta::ReservedSchemaIds::ROOT_SCHEMA, root_schema);                // raft_kv_put
+    schema_map_.Put(pb::meta::ReservedSchemaIds::META_SCHEMA, meta_schema);                // raft_kv_put
+    schema_map_.Put(pb::meta::ReservedSchemaIds::DINGO_SCHEMA, dingo_schema);              // raft_kv_put
+    schema_map_.Put(pb::meta::ReservedSchemaIds::MYSQL_SCHEMA, mysql_schema);              // raft_kv_put
+    schema_map_.Put(pb::meta::ReservedSchemaIds::INFORMATION_SCHEMA, information_schema);  // raft_kv_put
 
     // write to rocksdb
     auto const schema_kvs = schema_meta_->TransformToKvWithAll();
