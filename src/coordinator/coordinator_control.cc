@@ -55,7 +55,7 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   bthread_mutex_init(&executor_need_push_mutex_, nullptr);
   // bthread_mutex_init(&schema_map_mutex_, nullptr);
   bthread_mutex_init(&region_map_mutex_, nullptr);
-  bthread_mutex_init(&table_map_mutex_, nullptr);
+  // bthread_mutex_init(&table_map_mutex_, nullptr);
   bthread_mutex_init(&store_metrics_map_mutex_, nullptr);
   bthread_mutex_init(&table_metrics_map_mutex_, nullptr);
   bthread_mutex_init(&store_operation_map_mutex_, nullptr);
@@ -66,7 +66,7 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   store_meta_ = new MetaMapStorage<pb::common::Store>(&store_map_);
   schema_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::SchemaInternal>(&schema_map_);
   region_meta_ = new MetaMapStorage<pb::common::Region>(&region_map_);
-  table_meta_ = new MetaMapStorage<pb::coordinator_internal::TableInternal>(&table_map_);
+  table_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::TableInternal>(&table_map_);
   id_epoch_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::IdEpochInternal>(&id_epoch_map_);
   executor_meta_ = new MetaMapStorage<pb::common::Executor>(&executor_map_);
   store_metrics_meta_ = new MetaMapStorage<pb::common::StoreMetrics>(&store_metrics_map_);
@@ -83,7 +83,7 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   executor_need_push_.init(1000, 80);
   // schema_map_.init(10000, 80);
   region_map_.init(300000, 80);
-  table_map_.init(100000, 80);
+  // table_map_.init(100000, 80);
   store_metrics_map_.init(1000, 80);
   table_metrics_map_.init(100000, 80);
 
@@ -94,6 +94,7 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   table_name_map_safe_temp_.Init(10000);  // table_map_ is a big map
   store_operation_map_.Init(1000);        // store_operation_map_ is a big map
   schema_map_.Init(10000);                // schema_map_ is a big map
+  table_map_.Init(10000);                 // table_map_ is a big map
 }
 
 CoordinatorControl::~CoordinatorControl() {
@@ -200,7 +201,7 @@ bool CoordinatorControl::Recover() {
     return false;
   }
   {
-    BAIDU_SCOPED_LOCK(table_map_mutex_);
+    // BAIDU_SCOPED_LOCK(table_map_mutex_);
     if (!table_meta_->Recover(kvs)) {
       return false;
     }
@@ -275,9 +276,11 @@ bool CoordinatorControl::Recover() {
 
   // copy table_map_ to table_name_map_safe_temp_
   {
-    BAIDU_SCOPED_LOCK(table_map_mutex_);
-    table_name_map_safe_temp_.Clear();
-    for (const auto& it : table_map_) {
+    // BAIDU_SCOPED_LOCK(table_map_mutex_);
+    butil::FlatMap<uint64_t, pb::coordinator_internal::TableInternal> table_map_copy;
+    table_map_copy.init(10000);
+    table_map_.GetFlatMapCopy(table_map_copy);
+    for (const auto& it : table_map_copy) {
       table_name_map_safe_temp_.Put(it.second.definition().name(), it.first);
     }
   }

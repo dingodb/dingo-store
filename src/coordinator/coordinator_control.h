@@ -347,9 +347,10 @@ class CoordinatorControl : public MetaControl {
 
   // 6.tables
   // TableInternal is combination of Table & TableDefinition
-  butil::FlatMap<uint64_t, pb::coordinator_internal::TableInternal> table_map_;
-  MetaMapStorage<pb::coordinator_internal::TableInternal> *table_meta_;
-  bthread_mutex_t table_map_mutex_;
+  //   butil::FlatMap<uint64_t, pb::coordinator_internal::TableInternal> table_map_;
+  DingoSafeMap<uint64_t, pb::coordinator_internal::TableInternal> table_map_;
+  MetaSafeMapStorage<pb::coordinator_internal::TableInternal> *table_meta_;
+  //   bthread_mutex_t table_map_mutex_;
 
   // table map temp, only for leader use, is out of state machine
   // table_name -> table-id

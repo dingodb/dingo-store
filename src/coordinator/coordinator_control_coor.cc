@@ -1041,11 +1041,9 @@ void CoordinatorControl::GetMemoryInfo(pb::coordinator::CoordinatorMemoryInfo& m
     memory_info.set_total_size(memory_info.total_size() + memory_info.region_map_size());
   }
   {
-    BAIDU_SCOPED_LOCK(table_map_mutex_);
-    memory_info.set_table_map_count(table_map_.size());
-    for (auto& it : table_map_) {
-      memory_info.set_table_map_size(memory_info.table_map_size() + sizeof(it.first) + it.second.ByteSizeLong());
-    }
+    // BAIDU_SCOPED_LOCK(table_map_mutex_);
+    memory_info.set_table_map_count(table_map_.Size());
+    memory_info.set_table_map_size(table_map_.MemorySize());
     memory_info.set_total_size(memory_info.total_size() + memory_info.table_map_size());
   }
   {
