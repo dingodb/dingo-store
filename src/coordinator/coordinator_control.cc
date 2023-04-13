@@ -54,7 +54,7 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   bthread_mutex_init(&executor_map_mutex_, nullptr);
   bthread_mutex_init(&executor_need_push_mutex_, nullptr);
   // bthread_mutex_init(&schema_map_mutex_, nullptr);
-  bthread_mutex_init(&region_map_mutex_, nullptr);
+  // bthread_mutex_init(&region_map_mutex_, nullptr);
   // bthread_mutex_init(&table_map_mutex_, nullptr);
   bthread_mutex_init(&store_metrics_map_mutex_, nullptr);
   bthread_mutex_init(&table_metrics_map_mutex_, nullptr);
@@ -65,7 +65,7 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   coordinator_meta_ = new MetaMapStorage<pb::coordinator_internal::CoordinatorInternal>(&coordinator_map_);
   store_meta_ = new MetaMapStorage<pb::common::Store>(&store_map_);
   schema_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::SchemaInternal>(&schema_map_);
-  region_meta_ = new MetaMapStorage<pb::common::Region>(&region_map_);
+  region_meta_ = new MetaSafeMapStorage<pb::common::Region>(&region_map_);
   table_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::TableInternal>(&table_map_);
   id_epoch_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::IdEpochInternal>(&id_epoch_map_);
   executor_meta_ = new MetaMapStorage<pb::common::Executor>(&executor_map_);
@@ -82,7 +82,7 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   executor_map_.init(1000, 80);
   executor_need_push_.init(1000, 80);
   // schema_map_.init(10000, 80);
-  region_map_.init(300000, 80);
+  // region_map_.init(300000, 80);
   // table_map_.init(100000, 80);
   store_metrics_map_.init(1000, 80);
   table_metrics_map_.init(100000, 80);
@@ -95,6 +95,7 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   store_operation_map_.Init(1000);        // store_operation_map_ is a big map
   schema_map_.Init(10000);                // schema_map_ is a big map
   table_map_.Init(10000);                 // table_map_ is a big map
+  region_map_.Init(30000);                // region_map_ is a big map
 }
 
 CoordinatorControl::~CoordinatorControl() {
@@ -188,7 +189,7 @@ bool CoordinatorControl::Recover() {
     return false;
   }
   {
-    BAIDU_SCOPED_LOCK(region_map_mutex_);
+    // BAIDU_SCOPED_LOCK(region_map_mutex_);
     if (!region_meta_->Recover(kvs)) {
       return false;
     }

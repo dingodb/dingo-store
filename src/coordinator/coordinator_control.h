@@ -341,9 +341,10 @@ class CoordinatorControl : public MetaControl {
   DingoSafeMap<std::string, uint64_t> schema_name_map_safe_temp_;
 
   // 5.regions
-  butil::FlatMap<uint64_t, pb::common::Region> region_map_;
-  MetaMapStorage<pb::common::Region> *region_meta_;
-  bthread_mutex_t region_map_mutex_;
+  //   butil::FlatMap<uint64_t, pb::common::Region> region_map_;
+  DingoSafeMap<uint64_t, pb::common::Region> region_map_;
+  MetaSafeMapStorage<pb::common::Region> *region_meta_;
+  //   bthread_mutex_t region_map_mutex_;
 
   // 6.tables
   // TableInternal is combination of Table & TableDefinition

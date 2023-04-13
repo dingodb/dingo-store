@@ -718,9 +718,9 @@ void CoordinatorControl::GetTableRange(uint64_t schema_id, uint64_t table_id, pb
     part_range->CopyFrom(table_internal.partitions(i).range());
 
     // get region
-    auto* part_region = region_map_.seek(region_id);
-
-    if (part_region == nullptr) {
+    pb::common::Region part_region;
+    int ret = region_map_.Get(region_id, part_region);
+    if (ret < 0) {
       DINGO_LOG(ERROR) << "ERROR cannot find region in regionmap_ while GetTable, table_id =" << table_id
                        << " region_id=" << region_id;
       continue;
@@ -730,9 +730,9 @@ void CoordinatorControl::GetTableRange(uint64_t schema_id, uint64_t table_id, pb
     auto* leader_location = range_distribution->mutable_leader();
 
     // range_distribution voter & learner locations
-    for (int j = 0; j < part_region->peers_size(); j++) {
-      const auto& part_peer = part_region->peers(j);
-      if (part_peer.store_id() == part_region->leader_store_id()) {
+    for (int j = 0; j < part_region.peers_size(); j++) {
+      const auto& part_peer = part_region.peers(j);
+      if (part_peer.store_id() == part_region.leader_store_id()) {
         leader_location->CopyFrom(part_peer.server_location());
       }
 
@@ -847,14 +847,13 @@ uint64_t CoordinatorControl::CalculateTableMetricsSingle(uint64_t table_id, pb::
       // get region
       pb::common::Region part_region;
       {
-        BAIDU_SCOPED_LOCK(region_map_mutex_);
-        auto* temp_region = region_map_.seek(region_id);
-        if (temp_region == nullptr) {
+        // BAIDU_SCOPED_LOCK(region_map_mutex_);
+        int ret = region_map_.Get(region_id, part_region);
+        if (ret < 0) {
           DINGO_LOG(ERROR) << "ERROR cannot find region in regionmap_ while GetTable, table_id =" << table_id
                            << " region_id=" << region_id;
           continue;
         }
-        part_region = *temp_region;
       }
 
       auto* temp_store_metrics = store_metrics_map_.seek(part_region.leader_store_id());
