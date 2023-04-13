@@ -95,7 +95,7 @@ void CoordinatorControl::GetStoreMap(pb::common::StoreMap& store_map) {
   store_map.set_epoch(store_map_epoch);
 
   {
-    BAIDU_SCOPED_LOCK(store_map_mutex_);
+    // BAIDU_SCOPED_LOCK(store_map_mutex_);
     butil::FlatMap<uint64_t, pb::common::Store> store_map_copy;
     store_map_.GetFlatMapCopy(store_map_copy);
 
@@ -125,7 +125,7 @@ int CoordinatorControl::ValidateStore(uint64_t store_id, const std::string& keyr
   }
 
   {
-    BAIDU_SCOPED_LOCK(store_map_mutex_);
+    // BAIDU_SCOPED_LOCK(store_map_mutex_);
     pb::common::Store store_in_map;
     int ret = store_map_.Get(store_id, store_in_map);
 
@@ -184,7 +184,7 @@ int CoordinatorControl::DeleteStore(uint64_t cluster_id, uint64_t store_id, std:
 
   pb::common::Store store_to_delete;
   {
-    BAIDU_SCOPED_LOCK(store_map_mutex_);
+    // BAIDU_SCOPED_LOCK(store_map_mutex_);
     int ret = store_map_.Get(store_id, store_to_delete);
     if (ret < 0) {
       DINGO_LOG(INFO) << "DeleteStore store_id not exists, id=" << store_id;
@@ -219,7 +219,7 @@ uint64_t CoordinatorControl::UpdateStoreMap(const pb::common::Store& store,
 
   bool need_update_epoch = false;
   {
-    BAIDU_SCOPED_LOCK(store_map_mutex_);
+    // BAIDU_SCOPED_LOCK(store_map_mutex_);
     pb::common::Store store_to_update;
     int ret = store_map_.Get(store.id(), store_to_update);
     if (ret > 0) {
@@ -289,7 +289,7 @@ int CoordinatorControl::CreateRegion(const std::string& region_name, const std::
 
   // when resource_tag exists, select store with resource_tag
   {
-    BAIDU_SCOPED_LOCK(store_map_mutex_);
+    // BAIDU_SCOPED_LOCK(store_map_mutex_);
     butil::FlatMap<uint64_t, pb::common::Store> store_map_copy;
     store_map_.GetFlatMapCopy(store_map_copy);
     for (const auto& element : store_map_copy) {
@@ -639,10 +639,12 @@ void CoordinatorControl::GetExecutorMap(pb::common::ExecutorMap& executor_map) {
   uint64_t executor_map_epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_EXECUTOR);
   executor_map.set_epoch(executor_map_epoch);
   {
-    BAIDU_SCOPED_LOCK(executor_map_mutex_);
-    for (auto& elemnt : executor_map_) {
+    // BAIDU_SCOPED_LOCK(executor_map_mutex_);
+    butil::FlatMap<uint64_t, pb::common::Executor> executor_map_copy;
+    executor_map_.GetFlatMapCopy(executor_map_copy);
+    for (auto& element : executor_map_copy) {
       auto* tmp_region = executor_map.add_executors();
-      tmp_region->CopyFrom(elemnt.second);
+      tmp_region->CopyFrom(element.second);
     }
   }
 }
@@ -659,17 +661,19 @@ int CoordinatorControl::ValidateExecutor(uint64_t executor_id, const std::string
   }
 
   {
-    BAIDU_SCOPED_LOCK(executor_map_mutex_);
-    auto* executor_in_map = executor_map_.seek(executor_id);
-    if (executor_in_map != nullptr) {
-      if (executor_in_map->keyring() == keyring) {
+    // BAIDU_SCOPED_LOCK(executor_map_mutex_);
+    pb::common::Executor executor_in_map;
+    int ret = executor_map_.Get(executor_id, executor_in_map);
+    // auto* executor_in_map = executor_map_.seek(executor_id);
+    if (ret > 0) {
+      if (executor_in_map.keyring() == keyring) {
         DINGO_LOG(INFO) << "ValidateExecutor executor_id=" << executor_id << " succcess";
         return 0;
       }
 
       DINGO_LOG(INFO) << "ValidateExecutor executor_id=" << executor_id
                       << "keyring wrong fail input_keyring=" << keyring
-                      << " correct_keyring=" << executor_in_map->keyring();
+                      << " correct_keyring=" << executor_in_map.keyring();
       return -1;
     }
   }
@@ -716,14 +720,13 @@ int CoordinatorControl::DeleteExecutor(uint64_t cluster_id, uint64_t executor_id
 
   pb::common::Executor executor_to_delete;
   {
-    BAIDU_SCOPED_LOCK(executor_map_mutex_);
-    auto* temp_executor = executor_map_.seek(executor_id);
-    if (temp_executor == nullptr) {
+    // BAIDU_SCOPED_LOCK(executor_map_mutex_);
+    int ret = executor_map_.Get(executor_id, executor_to_delete);
+    if (ret < 0) {
       DINGO_LOG(INFO) << "DeleteExecutor executor_id not exists, id=" << executor_id;
       return -1;
     }
 
-    executor_to_delete = *temp_executor;
     if (keyring == executor_to_delete.keyring()) {
       DINGO_LOG(INFO) << "DeleteExecutor executor_id id=" << executor_id
                       << " keyring not equal, input keyring=" << keyring
@@ -753,13 +756,15 @@ uint64_t CoordinatorControl::UpdateExecutorMap(const pb::common::Executor& execu
 
   bool need_update_epoch = false;
   {
-    BAIDU_SCOPED_LOCK(executor_map_mutex_);
-    auto* temp_executor = executor_map_.seek(executor.id());
+    // BAIDU_SCOPED_LOCK(executor_map_mutex_);
+    pb::common::Executor executor_to_update;
+    int ret = executor_map_.Get(executor.id(), executor_to_update);
+    // auto* temp_executor = executor_map_.seek(executor.id());
     // if (executor_map_.find(executor.id()) != executor_map_.end()) {
-    if (temp_executor != nullptr) {
-      if (temp_executor->state() != executor.state()) {
+    if (ret > 0) {
+      if (executor_to_update.state() != executor.state()) {
         DINGO_LOG(INFO) << "executor STATUS CHANGE executor_id = " << executor.id()
-                        << " old status = " << temp_executor->state() << " new status = " << executor.state();
+                        << " old status = " << executor_to_update.state() << " new status = " << executor.state();
 
         // update meta_increment
         need_update_epoch = true;
@@ -1007,7 +1012,7 @@ void CoordinatorControl::GetMemoryInfo(pb::coordinator::CoordinatorMemoryInfo& m
     memory_info.set_total_size(memory_info.total_size() + memory_info.coordinator_map_size());
   }
   {
-    BAIDU_SCOPED_LOCK(store_map_mutex_);
+    // BAIDU_SCOPED_LOCK(store_map_mutex_);
     memory_info.set_store_map_count(store_map_.Size());
     memory_info.set_store_map_size(store_map_.MemorySize());
     memory_info.set_total_size(memory_info.total_size() + memory_info.store_map_size());
@@ -1022,11 +1027,9 @@ void CoordinatorControl::GetMemoryInfo(pb::coordinator::CoordinatorMemoryInfo& m
     memory_info.set_total_size(memory_info.total_size() + memory_info.store_need_push_size());
   }
   {
-    BAIDU_SCOPED_LOCK(executor_map_mutex_);
-    memory_info.set_executor_map_count(executor_map_.size());
-    for (auto& it : executor_map_) {
-      memory_info.set_executor_map_size(memory_info.executor_map_size() + sizeof(it.first) + it.second.ByteSizeLong());
-    }
+    // BAIDU_SCOPED_LOCK(executor_map_mutex_);
+    memory_info.set_executor_map_count(executor_map_.Size());
+    memory_info.set_executor_map_size(executor_map_.MemorySize());
     memory_info.set_total_size(memory_info.total_size() + memory_info.executor_map_size());
   }
   {
