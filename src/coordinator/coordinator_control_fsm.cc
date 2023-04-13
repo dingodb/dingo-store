@@ -362,7 +362,7 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
     kvs.push_back(meta_snapshot_file.table_metrics_map_kvs(i));
   }
   {
-    BAIDU_SCOPED_LOCK(table_metrics_map_mutex_);
+    // BAIDU_SCOPED_LOCK(table_metrics_map_mutex_);
     if (!table_metrics_meta_->Recover(kvs)) {
       return false;
     }
@@ -815,24 +815,26 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
 
   // 8.table_metrics map
   {
-    BAIDU_SCOPED_LOCK(table_metrics_map_mutex_);
+    // BAIDU_SCOPED_LOCK(table_metrics_map_mutex_);
     for (int i = 0; i < meta_increment.table_metrics_size(); i++) {
       const auto& table_metrics = meta_increment.table_metrics(i);
       if (table_metrics.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
-        table_metrics_map_[table_metrics.id()] = table_metrics.table_metrics();
+        // table_metrics_map_[table_metrics.id()] = table_metrics.table_metrics();
+        table_metrics_map_.Put(table_metrics.id(), table_metrics.table_metrics());
 
         // meta_write_kv
         meta_write_to_kv.push_back(table_metrics_meta_->TransformToKvValue(table_metrics.table_metrics()));
 
       } else if (table_metrics.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
-        auto& update_table = table_metrics_map_[table_metrics.id()];
-        update_table.CopyFrom(table_metrics.table_metrics());
+        // auto& update_table = table_metrics_map_[table_metrics.id()];
+        // update_table.CopyFrom(table_metrics.table_metrics());
+        table_metrics_map_.Put(table_metrics.id(), table_metrics.table_metrics());
 
         // meta_write_kv
         meta_write_to_kv.push_back(table_metrics_meta_->TransformToKvValue(table_metrics.table_metrics()));
 
       } else if (table_metrics.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
-        table_metrics_map_.erase(table_metrics.id());
+        table_metrics_map_.Erase(table_metrics.id());
 
         // meta_delete_kv
         meta_delete_to_kv.push_back(table_metrics_meta_->TransformToKvValue(table_metrics.table_metrics()));

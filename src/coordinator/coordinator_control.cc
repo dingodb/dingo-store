@@ -57,7 +57,7 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   // bthread_mutex_init(&region_map_mutex_, nullptr);
   // bthread_mutex_init(&table_map_mutex_, nullptr);
   bthread_mutex_init(&store_metrics_map_mutex_, nullptr);
-  bthread_mutex_init(&table_metrics_map_mutex_, nullptr);
+  // bthread_mutex_init(&table_metrics_map_mutex_, nullptr);
   bthread_mutex_init(&store_operation_map_mutex_, nullptr);
   root_schema_writed_to_raft_ = false;
 
@@ -70,7 +70,7 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   id_epoch_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::IdEpochInternal>(&id_epoch_map_);
   executor_meta_ = new MetaSafeMapStorage<pb::common::Executor>(&executor_map_);
   store_metrics_meta_ = new MetaMapStorage<pb::common::StoreMetrics>(&store_metrics_map_);
-  table_metrics_meta_ = new MetaMapStorage<pb::coordinator_internal::TableMetricsInternal>(&table_metrics_map_);
+  table_metrics_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::TableMetricsInternal>(&table_metrics_map_);
   store_operation_meta_ = new MetaSafeMapStorage<pb::coordinator::StoreOperation>(&store_operation_map_);
 
   // init FlatMap
@@ -78,14 +78,14 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   // id_epoch_map_.init(1000, 80);
   // coordinator_map_.init(1000, 80);
   // store_map_.init(1000, 80);
-  store_need_push_.init(1000, 80);
+  store_need_push_.init(100, 80);
   // executor_map_.init(1000, 80);
-  executor_need_push_.init(1000, 80);
+  executor_need_push_.init(100, 80);
   // schema_map_.init(10000, 80);
   // region_map_.init(300000, 80);
   // table_map_.init(100000, 80);
-  store_metrics_map_.init(1000, 80);
-  table_metrics_map_.init(100000, 80);
+  store_metrics_map_.init(100, 80);
+  // table_metrics_map_.init(100000, 80);
 
   // init SafeMap
   id_epoch_map_.Init(100);                // id_epoch_map_ is a small map
@@ -99,6 +99,7 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   coordinator_map_.Init(10);              // coordinator_map_ is a small map
   store_map_.Init(100);                   // store_map_ is a small map
   executor_map_.Init(100);                // executor_map_ is a small map
+  table_metrics_map_.Init(10000);         // table_metrics_map_ is a big map
 }
 
 CoordinatorControl::~CoordinatorControl() {
@@ -231,7 +232,7 @@ bool CoordinatorControl::Recover() {
     return false;
   }
   {
-    BAIDU_SCOPED_LOCK(table_metrics_map_mutex_);
+    // BAIDU_SCOPED_LOCK(table_metrics_map_mutex_);
     if (!table_metrics_meta_->Recover(kvs)) {
       return false;
     }
