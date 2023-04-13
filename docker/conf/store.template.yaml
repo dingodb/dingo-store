@@ -1,0 +1,37 @@
+cluster:
+  name: dingodb
+  instance_id: $INSTANCE_ID$
+  coordinators: $COORDINATOR_SERVICE_PEERS$
+  keyring: TO_BE_CONTINUED
+server:
+  host: $SERVER_HOST$
+  port: $SERVER_PORT$
+  heartbeatInterval: 10000 # ms
+  pushInterval: 1000 # ms
+raft:
+  host: $RAFT_HOST$
+  port: $RAFT_PORT$
+  path: $BASE_PATH$/data/store/raft
+  electionTimeout: 30000 # ms
+  snapshotInterval: 0 # s
+log:
+  logPath: $BASE_PATH$/log
+store:
+  dbPath: $BASE_PATH$/data/store/db
+  base:
+    block_size: 131072
+    block_cache: 67108864
+    arena_block_size: 67108864
+    min_write_buffer_number_to_merge: 4
+    max_write_buffer_number: 2
+    max_compaction_bytes: 134217728
+    write_buffer_size: 67108864
+    prefix_extractor: 8
+    max_bytes_for_level_base: 134217728
+    target_file_size_base: 67108864
+  columnFamilies:
+    - default
+    - meta
+  collectStatsInterval: 5
+  scan:
+    scan_interval_ms: 30000 # ms

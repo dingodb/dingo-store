@@ -16,7 +16,7 @@ COPY ./dingo-store.tar.gz  /opt
 
 RUN cd /opt && mkdir dingo-store && tar -zxvf dingo-store.tar.gz -C dingo-store && chmod +x -R /opt/dingo-store/*
 
-
+COPY ./conf /opt/dingo-store/conf
 
 ENV JAVA_HOME /usr/lib/jvm/java-1.8.0-openjdk
 ENV PATH=/opt/rh/gcc-toolset-11/root/usr/bin:$PATH
