@@ -428,9 +428,9 @@ pb::error::Errno CoordinatorControl::CreateTable(uint64_t schema_id, const pb::m
     std::string const region_name = std::to_string(schema_id) + std::string("_") + table_definition.name() +
                                     std::string("_part_") + std::to_string(i);
     uint64_t new_region_id;
-    int const ret = CreateRegion(region_name, "", 3, range_partition.ranges(i), schema_id, new_table_id, new_region_id,
-                                 meta_increment);
-    if (ret < 0) {
+    auto ret = CreateRegion(region_name, "", 3, range_partition.ranges(i), schema_id, new_table_id, new_region_id,
+                            meta_increment);
+    if (ret != pb::error::Errno::OK) {
       DINGO_LOG(ERROR) << "CreateRegion failed in CreateTable table_name=" << table_definition.name();
       break;
     }
@@ -442,8 +442,8 @@ pb::error::Errno CoordinatorControl::CreateTable(uint64_t schema_id, const pb::m
     DINGO_LOG(ERROR) << "Not enough regions is created, drop residual regions need=" << range_partition.ranges_size()
                      << " created=" << new_region_ids.size();
     for (auto region_id_to_delete : new_region_ids) {
-      int ret = DropRegion(region_id_to_delete, meta_increment);
-      if (ret < 0) {
+      auto ret = DropRegion(region_id_to_delete, meta_increment);
+      if (ret != pb::error::Errno::OK) {
         DINGO_LOG(ERROR) << "DropRegion failed in CreateTable table_name=" << table_definition.name()
                          << " region_id =" << region_id_to_delete;
       }

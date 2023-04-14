@@ -86,12 +86,26 @@ class CoordinatorServiceImpl : public pb::coordinator::CoordinatorService {
                          const pb::coordinator::GetCoordinatorMapRequest* request,
                          pb::coordinator::GetCoordinatorMapResponse* response,
                          google::protobuf::Closure* done) override;
-
+  // Region service
+  void QueryRegion(google::protobuf::RpcController* controller, const pb::coordinator::QueryRegionRequest* request,
+                   pb::coordinator::QueryRegionResponse* response, google::protobuf::Closure* done) override;
+  void CreateRegion(google::protobuf::RpcController* controller, const pb::coordinator::CreateRegionRequest* request,
+                    pb::coordinator::CreateRegionResponse* response, google::protobuf::Closure* done) override;
+  void DropRegion(google::protobuf::RpcController* controller, const pb::coordinator::DropRegionRequest* request,
+                  pb::coordinator::DropRegionResponse* response, google::protobuf::Closure* done) override;
   void DropRegionPermanently(google::protobuf::RpcController* controller,
                              const pb::coordinator::DropRegionPermanentlyRequest* request,
                              pb::coordinator::DropRegionPermanentlyResponse* response,
                              google::protobuf::Closure* done) override;
+  void SplitRegion(google::protobuf::RpcController* controller, const pb::coordinator::SplitRegionRequest* request,
+                   pb::coordinator::SplitRegionResponse* response, google::protobuf::Closure* done) override;
+  void MergeRegion(google::protobuf::RpcController* controller, const pb::coordinator::MergeRegionRequest* request,
+                   pb::coordinator::MergeRegionResponse* response, google::protobuf::Closure* done) override;
+  void ChangePeerRegion(google::protobuf::RpcController* controller,
+                        const pb::coordinator::ChangePeerRegionRequest* request,
+                        pb::coordinator::ChangePeerRegionResponse* response, google::protobuf::Closure* done) override;
 
+  // StoreOperation service
   void CleanStoreOperation(google::protobuf::RpcController* controller,
                            const pb::coordinator::CleanStoreOperationRequest* request,
                            pb::coordinator::CleanStoreOperationResponse* response,
