@@ -143,14 +143,14 @@ class CoordinatorControl : public MetaControl {
   // in: cluster_id
   // out: store_id, keyring
   // return: 0 or -1
-  int CreateStore(uint64_t cluster_id, uint64_t &store_id, std::string &keyring,
-                  pb::coordinator_internal::MetaIncrement &meta_increment);
+  pb::error::Errno CreateStore(uint64_t cluster_id, uint64_t &store_id, std::string &keyring,
+                               pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // delete store
   // in: cluster_id, store_id, keyring
   // return: 0 or -1
-  int DeleteStore(uint64_t cluster_id, uint64_t store_id, std::string keyring,
-                  pb::coordinator_internal::MetaIncrement &meta_increment);
+  pb::error::Errno DeleteStore(uint64_t cluster_id, uint64_t store_id, std::string keyring,
+                               pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // create executor
   // in: cluster_id
