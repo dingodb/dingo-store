@@ -187,4 +187,9 @@ butil::Status RaftKvEngine::Reader::KvCount(std::shared_ptr<Context> /*ctx*/, co
   return reader_->KvCount(start_key, end_key, count);
 }
 
+butil::Status RaftKvEngine::Reader::KvCount(std::shared_ptr<Context> /*ctx*/, const pb::common::RangeWithOptions& range,
+                                            uint64_t* count) {
+  return reader_->KvCount(range, count);
+}
+
 }  // namespace dingodb

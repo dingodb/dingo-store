@@ -179,7 +179,7 @@ bool ScanContext::IsRecyclable() {
 }
 
 butil::Status ScanHandler::ScanBegin(std::shared_ptr<ScanContext> context, uint64_t region_id,
-                                     const pb::common::PrefixScanRange& range, uint64_t max_fetch_cnt, bool key_only,
+                                     const pb::common::RangeWithOptions& range, uint64_t max_fetch_cnt, bool key_only,
                                      bool disable_auto_release, std::vector<pb::common::KeyValue>* kvs) {
   if (BAIDU_UNLIKELY(range.range().start_key().empty() || range.range().end_key().empty())) {
     DINGO_LOG(ERROR) << butil::StringPrintf("start_key or end_key empty not support ");
@@ -191,7 +191,7 @@ butil::Status ScanHandler::ScanBegin(std::shared_ptr<ScanContext> context, uint6
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
 
   } else if (BAIDU_UNLIKELY(range.range().start_key() == range.range().end_key())) {
-    if (range.with_start() && !range.with_end()) {
+    if (!range.with_start() || !range.with_end()) {
       DINGO_LOG(ERROR) << butil::StringPrintf("range wrong");
       return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
     }

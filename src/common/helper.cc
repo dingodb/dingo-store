@@ -348,4 +348,117 @@ uint64_t Helper::Timestamp() {
       .count();
 }
 
+// original_key + 1. note overflow
+bool Helper::Increment(const std::string& original_key, std::string* key) {
+  if (BAIDU_UNLIKELY(original_key.empty())) {
+    DINGO_LOG(ERROR) << butil::StringPrintf("original_key empty");
+    return false;
+  }
+
+  if (!key) {
+    DINGO_LOG(ERROR) << butil::StringPrintf("key is nullptr. not support");
+    return false;
+  }
+
+  if (KeyIsEndOfAllTable(original_key)) {
+    return false;
+  }
+
+  *key = original_key;
+
+  unsigned char carry = 1;
+  for (auto size = key->size() - 1; size >= 0; --size) {
+    if ((*key)[size] == static_cast<char>(0xFF)) {
+      (*key)[size] = static_cast<char>(0);
+    } else {
+      unsigned char value = static_cast<unsigned char>((*key)[size]) + carry;
+      (*key)[size] = static_cast<char>(value);
+      carry = 0;
+      break;
+    }
+  }
+
+  return true;
+}
+
+// end key of all table
+bool Helper::KeyIsEndOfAllTable(const std::string& key) {
+  for (const auto& elem : key) {
+    if (static_cast<char>(0xFF) != elem) {
+      return false;
+    }
+  }
+  return true;
+}
+
+butil::Status Helper::KvDeleteRangeParamCheck(const pb::common::RangeWithOptions& range, std::string* real_start_key,
+                                              std::string* real_end_key) {
+  if (BAIDU_UNLIKELY(range.range().start_key().empty() || range.range().end_key().empty())) {
+    DINGO_LOG(ERROR) << butil::StringPrintf("start_key or end_key empty. not support");
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
+  }
+
+  if (BAIDU_UNLIKELY(range.range().start_key() > range.range().end_key())) {
+    DINGO_LOG(ERROR) << butil::StringPrintf("start_key > end_key  not support");
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
+
+  } else if (BAIDU_UNLIKELY(range.range().start_key() == range.range().end_key())) {
+    if (!range.with_start() || !range.with_end()) {
+      DINGO_LOG(ERROR) << butil::StringPrintf(
+          "start_key == end_key with_start != true or with_end != true. not support");
+      return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
+    }
+  }
+
+  std::string internal_real_start_key;
+  if (!range.with_start()) {
+    if (!Helper::Increment(range.range().start_key(), &internal_real_start_key)) {
+      DINGO_LOG(ERROR) << butil::StringPrintf("Increment start_key failed");
+      return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
+    }
+  } else {
+    internal_real_start_key = range.range().start_key();
+  }
+
+  std::string internal_real_end_key;
+  if (range.with_end()) {
+    if (!Helper::Increment(range.range().end_key(), &internal_real_end_key)) {
+      DINGO_LOG(ERROR) << butil::StringPrintf("Increment end_key failed");
+      return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
+    }
+  } else {
+    internal_real_end_key = range.range().end_key();
+  }
+
+  // parameter check again
+  if (BAIDU_UNLIKELY(internal_real_start_key > internal_real_end_key)) {
+    DINGO_LOG(ERROR) << butil::StringPrintf("real_start_key > real_end_key  not support");
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
+
+  } else if (BAIDU_UNLIKELY(internal_real_start_key == internal_real_end_key)) {
+    if (!range.with_start() || !range.with_end()) {
+      DINGO_LOG(ERROR) << butil::StringPrintf(
+          "real_start_key == real_end_key with_start != true or with_end != true. not support");
+      return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
+    }
+  }
+
+  // Design constraints We do not allow tables with all 0xFF because there are too many tables and we cannot handle
+  // them
+  if (Helper::KeyIsEndOfAllTable(internal_real_start_key) || Helper::KeyIsEndOfAllTable(internal_real_end_key)) {
+    DINGO_LOG(ERROR) << butil::StringPrintf("real_start_key or real_end_key all 0xFF. not support");
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
+  }
+
+  if (real_start_key) {
+    *real_start_key = internal_real_start_key;
+  }
+
+  if (real_end_key) {
+    *real_end_key = internal_real_end_key;
+  }
+
+  return butil::Status();
+}
+
 }  // namespace dingodb

@@ -28,7 +28,6 @@
 namespace dingodb {
 
 class Helper {
-
   using Errno = pb::error::Errno;
   using PbError = pb::error::Error;
 
@@ -127,6 +126,16 @@ class Helper {
   static bool Link(const std::string& old_path, const std::string& new_path);
 
   static uint64_t Timestamp();
+
+  // original_key + 1. note overflow
+  static bool Increment(const std::string& original_key, std::string* key);
+
+  // end key of all table
+  // We are based on this assumption. In general, it is rare to see all 0xFF
+  static bool KeyIsEndOfAllTable(const std::string& key);
+
+  static butil::Status KvDeleteRangeParamCheck(const pb::common::RangeWithOptions& range, std::string* real_start_key,
+                                               std::string* real_end_key);
 };
 
 }  // namespace dingodb

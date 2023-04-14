@@ -33,7 +33,6 @@
 namespace dingodb {
 
 class Engine {
-
   using Errno = pb::error::Errno;
 
  public:
@@ -64,6 +63,8 @@ class Engine {
 
     virtual butil::Status KvCount(std::shared_ptr<Context> ctx, const std::string& start_key,
                                   const std::string& end_key, int64_t& count) = 0;
+
+    virtual butil::Status KvCount(std::shared_ptr<Context> ctx, const pb::common::RangeWithOptions& range, uint64_t* count) = 0;
   };
 
   virtual std::shared_ptr<Reader> NewReader(const std::string& cf_name) = 0;

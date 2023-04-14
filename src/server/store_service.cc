@@ -21,6 +21,7 @@
 #include "meta/store_meta_manager.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
+#include "server.h"
 #include "server/server.h"
 
 using dingodb::pb::error::Errno;
@@ -471,12 +472,10 @@ butil::Status ValidateKvDeleteRangeRequest(const dingodb::pb::store::KvDeleteRan
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
   }
 
-  if (request->range().start_key().empty()) {
-    return butil::Status(pb::error::EKEY_EMPTY, "start_key is empty");
-  }
-
-  if (request->range().end_key().empty()) {
-    return butil::Status(pb::error::EKEY_EMPTY, "end_key is empty");
+  butil::Status s = Helper::KvDeleteRangeParamCheck(request->range(), nullptr, nullptr);
+  if (!s.ok()) {
+    DINGO_LOG(ERROR) << butil::StringPrintf("Helper::KvDeleteRangeParamCheck failed : %s", s.error_str().c_str());
+    return s;
   }
 
   return butil::Status();
@@ -490,9 +489,19 @@ void StoreServiceImpl::KvDeleteRange(google::protobuf::RpcController* controller
 
   butil::Status status = ValidateKvDeleteRangeRequest(request);
   if (!status.ok()) {
-    auto* err = response->mutable_error();
-    err->set_errcode(static_cast<Errno>(status.error_code()));
-    err->set_errmsg(status.error_str());
+    // Note: The caller requires that if the parameter is wrong, no error will be reported and it will be returned
+    // directly.
+    if (pb::error::EILLEGAL_PARAMTETERS == static_cast<pb::error::Errno>(status.error_code())) {
+      response->set_delete_count(0);
+      auto* err = response->mutable_error();
+      err->set_errcode(pb::error::OK);
+      err->set_errmsg("");
+    } else {
+      auto* err = response->mutable_error();
+      err->set_errcode(static_cast<Errno>(status.error_code()));
+      err->set_errmsg(status.error_str());
+    }
+
     return;
   }
 
@@ -526,7 +535,7 @@ butil::Status ValidateKvScanBeginRequest(const dingodb::pb::store::KvScanBeginRe
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
 
   } else if (BAIDU_UNLIKELY(request->range().range().start_key() == request->range().range().end_key())) {
-    if (request->range().with_start() && !request->range().with_end()) {
+    if (!request->range().with_start() || !request->range().with_end()) {
       return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
     }
   }

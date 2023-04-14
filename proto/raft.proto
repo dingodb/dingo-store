@@ -52,10 +52,12 @@ message PutIfAbsentResponse {
 
 message DeleteRangeRequest {
   string cf_name = 1;
-  repeated dingodb.pb.common.Range ranges = 2;
+  repeated dingodb.pb.common.RangeWithOptions ranges = 2;
 }
 
-message DeleteRangeResponse {}
+message DeleteRangeResponse {
+  repeated uint64 delete_counts = 1;
+}
 
 message DeleteBatchRequest {
   string cf_name = 1;

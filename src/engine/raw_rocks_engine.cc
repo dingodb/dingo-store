@@ -20,6 +20,7 @@
 #include <climits>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <exception>
 #include <iomanip>
 #include <map>
@@ -36,6 +37,7 @@
 #include "butil/macros.h"
 #include "butil/strings/stringprintf.h"
 #include "common/constant.h"
+#include "common/helper.h"
 #include "common/logging.h"
 #include "config/config_manager.h"
 #include "engine/engine.h"
@@ -761,11 +763,69 @@ butil::Status RawRocksEngine::Reader::KvCount(std::shared_ptr<dingodb::Snapshot>
   return butil::Status();
 }
 
+butil::Status RawRocksEngine::Reader::KvCount(const pb::common::RangeWithOptions& range, uint64_t* count) {
+  auto snapshot = std::make_shared<RocksSnapshot>(txn_db_->GetSnapshot(), txn_db_);
+
+  return KvCount(snapshot, range, count);
+}
+butil::Status RawRocksEngine::Reader::KvCount(std::shared_ptr<dingodb::Snapshot> snapshot,
+                                              const pb::common::RangeWithOptions& range, uint64_t* count) {
+  if (BAIDU_UNLIKELY(range.range().start_key().empty() || range.range().end_key().empty())) {
+    DINGO_LOG(ERROR) << butil::StringPrintf("start_key or end_key empty. not support");
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
+  }
+
+  if (BAIDU_UNLIKELY(range.range().start_key() > range.range().end_key())) {
+    DINGO_LOG(ERROR) << butil::StringPrintf("start_key > end_key  not support");
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
+
+  } else if (BAIDU_UNLIKELY(range.range().start_key() == range.range().end_key())) {
+    if (!range.with_start() || !range.with_end()) {
+      DINGO_LOG(ERROR) << butil::StringPrintf(
+          "start_key == end_key with_start != true or with_end != true. not support");
+      return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
+    }
+  }
+
+  // Design constraints We do not allow tables with all 0xFF because there are too many tables and we cannot handle
+  // them
+  if (Helper::KeyIsEndOfAllTable(range.range().start_key()) || Helper::KeyIsEndOfAllTable(range.range().end_key())) {
+    DINGO_LOG(ERROR) << butil::StringPrintf("real_start_key or real_end_key all 0xFF. not support");
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
+  }
+
+  if (!count) {
+    return butil::Status();
+  }
+
+  *count = 0;
+
+  auto iter =
+      NewIterator(snapshot, range.range().start_key(), range.range().end_key(), range.with_start(), range.with_end());
+
+  // uint64_t internal_count = 0;
+  for (iter->Start(); iter->HasNext(); iter->Next()) {
+    ++*count;
+  }
+
+  return butil::Status();
+}
+
 std::shared_ptr<EngineIterator> RawRocksEngine::Reader::NewIterator(const std::string& start_key,
                                                                     const std::string& end_key, bool with_start,
                                                                     bool with_end) {
   auto snapshot = std::make_shared<RocksSnapshot>(txn_db_->GetSnapshot(), txn_db_);
 
+  // return std::make_shared<RocksIterator>(snapshot, txn_db_, column_family_, start_key, end_key, with_start,
+  // with_end);
+
+  return NewIterator(snapshot, start_key, end_key, with_start, with_end);
+}
+
+std::shared_ptr<EngineIterator> RawRocksEngine::Reader::NewIterator(std::shared_ptr<dingodb::Snapshot> snapshot,
+                                                                    const std::string& start_key,
+                                                                    const std::string& end_key, bool with_start,
+                                                                    bool with_end) {
   return std::make_shared<RocksIterator>(snapshot, txn_db_, column_family_, start_key, end_key, with_start, with_end);
 }
 
@@ -941,7 +1001,7 @@ butil::Status RawRocksEngine::Writer::KvDelete(const std::string& key) {
   return butil::Status();
 }
 
-butil::Status RawRocksEngine::Writer::KvDeleteBatch(const std::vector<std::string>& keys) {
+butil::Status RawRocksEngine::Writer::KvBatchDelete(const std::vector<std::string>& keys) {
   std::vector<pb::common::KeyValue> kvs;
   for (const auto& key : keys) {
     pb::common::KeyValue kv;
@@ -954,33 +1014,61 @@ butil::Status RawRocksEngine::Writer::KvDeleteBatch(const std::vector<std::strin
 }
 
 butil::Status RawRocksEngine::Writer::KvDeleteRange(const pb::common::Range& range) {
-  if (BAIDU_UNLIKELY(range.start_key().empty())) {
-    DINGO_LOG(ERROR) << butil::StringPrintf("start_key empty not support");
-    return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
+  if (range.start_key().empty() || range.end_key().empty()) {
+    DINGO_LOG(ERROR) << butil::StringPrintf("start_key or end_key empty. not support");
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range empty");
   }
-  if (BAIDU_UNLIKELY(range.end_key().empty())) {
-    DINGO_LOG(ERROR) << butil::StringPrintf("end_key empty not support");
-    return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
+  if (range.start_key() >= range.end_key()) {
+    DINGO_LOG(ERROR) << butil::StringPrintf("start_key >= end_key  not support");
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
   }
 
-  rocksdb::Slice slice_begin{range.start_key()};
-  rocksdb::Slice slice_end{range.end_key()};
-
-  rocksdb::TransactionDBWriteOptimizations opt;
-  opt.skip_concurrency_control = true;
-  opt.skip_duplicate_key_check = true;
-
-  rocksdb::WriteBatch batch;
-  rocksdb::Status s = batch.DeleteRange(column_family_->GetHandle(), slice_begin, slice_end);
-  if (!s.ok()) {
-    DINGO_LOG(ERROR) << butil::StringPrintf("rocksdb::WriteBatch::DeleteRange failed : %s", s.ToString().c_str());
+  butil::Status status = KvBatchDeleteRangeCore({{range.start_key(), range.end_key()}});
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << butil::StringPrintf("KvBatchDeleteRangeCore failed : %s", status.error_str().c_str());
     return butil::Status(pb::error::EINTERNAL, "Internal error");
   }
 
-  rocksdb::WriteOptions write_options;
-  s = txn_db_->Write(write_options, opt, &batch);
+  return butil::Status();
+}
+
+butil::Status RawRocksEngine::Writer::KvDeleteRange(const pb::common::RangeWithOptions& range) {
+  std::string real_start_key;
+  std::string real_end_key;
+  butil::Status s = Helper::KvDeleteRangeParamCheck(range, &real_start_key, &real_end_key);
   if (!s.ok()) {
-    DINGO_LOG(ERROR) << butil::StringPrintf("rocksdb::TransactionDB::Write failed : %s", s.ToString().c_str());
+    DINGO_LOG(ERROR) << butil::StringPrintf("Helper::KvDeleteRangeParamCheck failed : %s", s.error_str().c_str());
+    return s;
+  }
+
+  pb::common::Range internal_range;
+  internal_range.set_start_key(real_start_key);
+  internal_range.set_end_key(real_end_key);
+
+  return KvDeleteRange(internal_range);
+}
+
+butil::Status RawRocksEngine::Writer::KvBatchDeleteRange(const std::vector<pb::common::RangeWithOptions>& ranges) {
+  std::vector<std::pair<std::string, std::string>> key_pairs;
+  butil::Status status;
+
+  size_t i = 0;
+  for (const auto& range : ranges) {
+    std::string real_start_key;
+    std::string real_end_key;
+    butil::Status status = Helper::KvDeleteRangeParamCheck(range, &real_start_key, &real_end_key);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << butil::StringPrintf("Helper::KvDeleteRangeParamCheck failed : %s index : %lu",
+                                              status.error_str().c_str(), i);
+      return status;
+    }
+    key_pairs.emplace_back(real_start_key, real_end_key);
+    i++;
+  }
+
+  status = KvBatchDeleteRangeCore(key_pairs);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << butil::StringPrintf("KvBatchDeleteRangeCore failed : %s", status.error_str().c_str());
     return butil::Status(pb::error::EINTERNAL, "Internal error");
   }
 
@@ -1103,6 +1191,86 @@ butil::Status RawRocksEngine::Writer::KvCompareAndSetInternal(const pb::common::
 
   return butil::Status();
 }
+
+std::shared_ptr<EngineIterator> RawRocksEngine::Writer::NewIterator(const rocksdb::Snapshot* snapshot,
+                                                                    const std::string& start_key,
+                                                                    const std::string& end_key, bool with_start,
+                                                                    bool with_end) {
+  auto snapshot_share = std::make_shared<RocksSnapshot>(snapshot, txn_db_);
+
+  return std::make_shared<RocksIterator>(snapshot_share, txn_db_, column_family_, start_key, end_key, with_start,
+                                         with_end);
+}
+
+butil::Status RawRocksEngine::Writer::KvBatchDeleteRangeCore(
+    const std::vector<std::pair<std::string, std::string>>& key_pairs) {
+  rocksdb::TransactionDBWriteOptimizations opt;
+  opt.skip_concurrency_control = true;
+  opt.skip_duplicate_key_check = true;
+  rocksdb::WriteBatch batch;
+
+  for (const auto& [real_start_key, real_end_key] : key_pairs) {
+    rocksdb::Slice slice_begin{real_start_key};
+    rocksdb::Slice slice_end{real_end_key};
+
+    rocksdb::Status s = batch.DeleteRange(column_family_->GetHandle(), slice_begin, slice_end);
+    if (!s.ok()) {
+      DINGO_LOG(ERROR) << butil::StringPrintf("rocksdb::WriteBatch::DeleteRange failed : %s", s.ToString().c_str());
+      return butil::Status(pb::error::EINTERNAL, "Internal error");
+    }
+  }
+
+  rocksdb::WriteOptions write_options;
+  rocksdb::Status s = txn_db_->Write(write_options, opt, &batch);
+  if (!s.ok()) {
+    DINGO_LOG(ERROR) << butil::StringPrintf("rocksdb::TransactionDB::Write failed : %s", s.ToString().c_str());
+    return butil::Status(pb::error::EINTERNAL, "Internal error");
+  }
+
+  return butil::Status();
+}
+
+// // original_key + 1. note overflow
+// bool RawRocksEngine::Writer::Increment(const std::string& original_key, std::string* key) {
+//   if (BAIDU_UNLIKELY(original_key.empty())) {
+//     DINGO_LOG(ERROR) << butil::StringPrintf("original_key empty");
+//     return false;
+//   }
+
+//   if (!key) {
+//     DINGO_LOG(ERROR) << butil::StringPrintf("key is nullptr. not support");
+//     return false;
+//   }
+
+//   std::string s(original_key.size(), static_cast<char>(0xFF));
+//   auto n = memcmp(original_key.c_str(), s.c_str(), s.size());
+//   if (BAIDU_UNLIKELY(0 == n)) {
+//     return false;
+//   }
+
+//   *key = std::move(s);
+//   *key = original_key;
+
+//   unsigned char carry = 1;
+//   for (auto size = key->size() - 1; size >= 0; --size) {
+//     if ((*key)[size] == static_cast<char>(0xFF)) {
+//       (*key)[size] = static_cast<char>(0);
+//     } else {
+//       unsigned char value = static_cast<unsigned char>((*key)[size]) + carry;
+//       (*key)[size] = static_cast<char>(value);
+//       carry = 0;
+//       break;
+//     }
+//   }
+
+//   return true;
+// }
+
+// bool RawRocksEngine::Writer::KeyIsEndOfAllTable(const std::string& key) {
+//   std::string s(key.size(), static_cast<char>(0xFF));
+//   auto n = memcmp(key.c_str(), s.c_str(), s.size());
+//   return BAIDU_UNLIKELY(0 == n);
+// }
 
 butil::Status RawRocksEngine::SstFileWriter::SaveFile(const std::vector<pb::common::KeyValue>& kvs,
                                                       const std::string& filename) {

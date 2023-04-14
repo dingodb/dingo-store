@@ -128,7 +128,7 @@ struct DeleteRangeDatum : public DatumAble {
   void TransformFromRaft(pb::raft::Response& resonse) override {}
 
   std::string cf_name;
-  std::vector<pb::common::Range> ranges;
+  std::vector<pb::common::RangeWithOptions> ranges;
 };
 
 struct CreateSchemaDatum : public DatumAble {
