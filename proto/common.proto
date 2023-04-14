@@ -224,6 +224,10 @@ message RegionDefinition {
   string name = 3;
   repeated Peer peers = 4;
   Range range = 5;
+
+  // meta info
+  uint64 schema_id = 6;
+  uint64 table_id = 7;
 }
 
 // RaftNodeStatus
