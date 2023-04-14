@@ -48,6 +48,7 @@ DEFINE_int64(peer_del_store_id, 0, "peer_del_store_id");
 DEFINE_int64(store_id, 0, "store_id");
 DEFINE_int64(region_id, 0, "region_id");
 DEFINE_int64(region_cmd_id, 0, "region_cmd_id");
+DEFINE_string(store_ids, "1001,1002,1003", "store_ids splited by ,");
 
 void* Sender(void* /*arg*/) {
   // get leader location
@@ -118,8 +119,8 @@ void* Sender(void* /*arg*/) {
     SendGetCoordinatorMap(cntl, coordinator_stub);
   } else if (FLAGS_method == "QueryRegion") {
     SendQueryRegion(cntl, coordinator_stub);
-  } else if (FLAGS_method == "CreateRegion") {
-    SendCreateRegion(cntl, coordinator_stub);
+  } else if (FLAGS_method == "CreateRegionForSplit") {
+    SendCreateRegionForSplit(cntl, coordinator_stub);
   } else if (FLAGS_method == "DropRegion") {
     SendDropRegion(cntl, coordinator_stub);
   } else if (FLAGS_method == "DropRegionPermanently") {

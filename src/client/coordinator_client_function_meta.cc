@@ -368,7 +368,7 @@ void SendCreateTable(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub
     auto* part_range = range_partition->add_ranges();
     auto* part_range_start = part_range->mutable_start_key();
     part_range_start->assign(std::to_string(i * 100));
-    auto* part_range_end = part_range->mutable_start_key();
+    auto* part_range_end = part_range->mutable_end_key();
     part_range_end->assign(std::to_string((i + 1) * 100));
   }
 

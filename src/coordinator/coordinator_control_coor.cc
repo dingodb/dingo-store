@@ -300,14 +300,26 @@ pb::error::Errno CoordinatorControl::CreateRegion(const std::string& region_name
                                                   int32_t replica_num, pb::common::Range region_range,
                                                   uint64_t schema_id, uint64_t table_id, uint64_t& new_region_id,
                                                   pb::coordinator_internal::MetaIncrement& meta_increment) {
+  std::vector<uint64_t> store_ids;
+  return CreateRegion(region_name, resource_tag, replica_num, region_range, schema_id, table_id, store_ids,
+                      new_region_id, meta_increment);
+}
+
+pb::error::Errno CoordinatorControl::CreateRegion(const std::string& region_name, const std::string& resource_tag,
+                                                  int32_t replica_num, pb::common::Range region_range,
+                                                  uint64_t schema_id, uint64_t table_id,
+                                                  std::vector<uint64_t>& store_ids, uint64_t& new_region_id,
+                                                  pb::coordinator_internal::MetaIncrement& meta_increment) {
   std::vector<pb::common::Store> stores_for_regions;
   std::vector<pb::common::Store> selected_stores_for_regions;
 
-  // when resource_tag exists, select store with resource_tag
-  {
-    // BAIDU_SCOPED_LOCK(store_map_mutex_);
-    butil::FlatMap<uint64_t, pb::common::Store> store_map_copy;
-    store_map_.GetFlatMapCopy(store_map_copy);
+  // if store_ids is not null, select store with store_ids
+  // or when resource_tag exists, select store with resource_tag
+  butil::FlatMap<uint64_t, pb::common::Store> store_map_copy;
+  store_map_.GetFlatMapCopy(store_map_copy);
+
+  // select store for region
+  if (store_ids.empty()) {
     for (const auto& element : store_map_copy) {
       const auto& store = element.second;
       if (store.state() != pb::common::StoreState::STORE_NORMAL) {
@@ -318,6 +330,20 @@ pb::error::Errno CoordinatorControl::CreateRegion(const std::string& region_name
         stores_for_regions.push_back(store);
       } else if (store.resource_tag() == resource_tag) {
         stores_for_regions.push_back(store);
+      }
+    }
+  } else {
+    for (const auto& element : store_map_copy) {
+      const auto& store = element.second;
+      if (store.state() != pb::common::StoreState::STORE_NORMAL) {
+        continue;
+      }
+
+      for (const auto& store_id : store_ids) {
+        if (store.id() == store_id) {
+          stores_for_regions.push_back(store);
+          break;
+        }
       }
     }
   }
@@ -910,7 +936,7 @@ pb::error::Errno CoordinatorControl::AddStoreOperation(const pb::coordinator::St
           DINGO_LOG(ERROR) << "AddStoreOperation store operation region cmd ongoing conflict, unable to add new "
                               "region_cmd, store_id = "
                            << store_id << ", region_id = " << it.region_id();
-          return pb::error::Errno::EILLEGAL_PARAMTETERS;
+          return pb::error::Errno::EREGION_CMD_ONGING_CONFLICT;
         }
       }
     }
@@ -922,6 +948,11 @@ pb::error::Errno CoordinatorControl::AddStoreOperation(const pb::coordinator::St
   store_operation_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
   store_operation_increment->mutable_store_operation()->CopyFrom(store_operation);
 
+  auto* store_operation_to_update_id = store_operation_increment->mutable_store_operation();
+  for (int i = 0; i < store_operation_to_update_id->region_cmds_size(); i++) {
+    store_operation_to_update_id->mutable_region_cmds(i)->set_id(
+        GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
+  }
   return pb::error::Errno::OK;
 }
 
