@@ -14,6 +14,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #include "client/coordinator_client_function.h"
 #include "common/logging.h"
@@ -39,6 +40,7 @@ DECLARE_int64(peer_del_store_id);
 DECLARE_int64(store_id);
 DECLARE_int64(region_id);
 DECLARE_int64(region_cmd_id);
+DECLARE_string(store_ids);
 
 std::string MessageToJsonString(const google::protobuf::Message& message) {
   std::string json_string;
@@ -503,17 +505,55 @@ void SendQueryRegion(brpc::Controller& cntl, dingodb::pb::coordinator::Coordinat
   }
 }
 
-void SendCreateRegion(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
-  dingodb::pb::coordinator::CreateRegionRequest request;
-  dingodb::pb::coordinator::CreateRegionResponse response;
-
-  if (!FLAGS_name.empty()) {
-    request.set_region_name(FLAGS_name);
-  } else {
-    DINGO_LOG(ERROR) << "id is empty";
+void SendCreateRegionForSplit(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
+  if (FLAGS_id.empty()) {
+    DINGO_LOG(ERROR) << "id is empty (this is the region id to split)";
     return;
   }
 
+  uint64_t region_id_split = std::stoull(FLAGS_id);
+  // query region
+  dingodb::pb::coordinator::QueryRegionRequest query_request;
+  dingodb::pb::coordinator::QueryRegionResponse query_response;
+
+  query_request.set_region_id(region_id_split);
+  stub.QueryRegion(&cntl, &query_request, &query_response, nullptr);
+  if (cntl.Failed()) {
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    // bthread_usleep(FLAGS_timeout_ms * 1000L);
+    return;
+  }
+
+  if (query_response.region().peers_size() == 0) {
+    DINGO_LOG(ERROR) << "region not found";
+    return;
+  }
+
+  dingodb::pb::common::RegionDefinition new_region_definition;
+  new_region_definition.CopyFrom(query_response.region().definition());
+  new_region_definition.mutable_range()->set_start_key(query_response.region().range().end_key());
+  new_region_definition.mutable_range()->set_end_key(query_response.region().range().start_key());
+  new_region_definition.set_name(query_response.region().name() + "_split");
+  new_region_definition.set_id(0);
+
+  std::vector<uint64_t> new_region_store_ids;
+  for (const auto& it : query_response.region().peers()) {
+    new_region_store_ids.push_back(it.store_id());
+  }
+
+  dingodb::pb::coordinator::CreateRegionRequest request;
+  dingodb::pb::coordinator::CreateRegionResponse response;
+
+  request.set_region_name(new_region_definition.name());
+  request.set_replica_num(new_region_definition.peers_size());
+  request.mutable_range()->CopyFrom(new_region_definition.range());
+  request.set_schema_id(query_response.region().schema_id());
+  request.set_table_id(query_response.region().table_id());
+  for (auto it : new_region_store_ids) {
+    request.add_store_ids(it);
+  }
+
+  cntl.Reset();
   stub.CreateRegion(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
     DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
@@ -599,10 +639,39 @@ void SendSplitRegion(brpc::Controller& cntl, dingodb::pb::coordinator::Coordinat
   if (!FLAGS_split_key.empty()) {
     request.mutable_split_request()->set_split_watershed_key(FLAGS_split_key);
   } else {
-    DINGO_LOG(ERROR) << "split_key is empty";
-    return;
+    DINGO_LOG(ERROR) << "split_key is empty, will auto generate from the mid between start_key and end_key";
+    // query the region
+    dingodb::pb::coordinator::QueryRegionRequest query_request;
+    dingodb::pb::coordinator::QueryRegionResponse query_response;
+    query_request.set_region_id(FLAGS_split_from_id);
+    cntl.Reset();
+    stub.QueryRegion(&cntl, &query_request, &query_response, nullptr);
+    if (cntl.Failed()) {
+      DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+      // bthread_usleep(FLAGS_timeout_ms * 1000L);
+      return;
+    }
+
+    if (query_response.region().range().start_key().empty()) {
+      DINGO_LOG(ERROR) << "split from region " << FLAGS_split_from_id << " has no start_key";
+      return;
+    }
+
+    if (query_response.region().range().end_key().empty()) {
+      DINGO_LOG(ERROR) << "split from region " << FLAGS_split_from_id << " has no end_key";
+      return;
+    }
+
+    std::string mid_key = query_response.region().range().start_key();
+    mid_key.push_back(0x80);
+
+    request.mutable_split_request()->set_split_watershed_key(mid_key);
   }
 
+  DINGO_LOG(INFO) << "split from region " << FLAGS_split_from_id << " to region " << FLAGS_split_to_id
+                  << " with watershed key [" << FLAGS_split_key << "] will be sent";
+
+  cntl.Reset();
   stub.SplitRegion(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
     DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
@@ -689,6 +758,7 @@ void SendAddPeerRegion(brpc::Controller& cntl, dingodb::pb::coordinator::Coordin
   dingodb::pb::coordinator::QueryRegionResponse query_response;
 
   query_request.set_region_id(FLAGS_region_id);
+  cntl.Reset();
   stub.QueryRegion(&cntl, &query_request, &query_response, nullptr);
   if (cntl.Failed()) {
     DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
@@ -720,6 +790,7 @@ void SendAddPeerRegion(brpc::Controller& cntl, dingodb::pb::coordinator::Coordin
 
   DINGO_LOG(INFO) << "new_definition: " << new_definition->DebugString();
 
+  cntl.Reset();
   stub.ChangePeerRegion(&cntl, &change_peer_request, &change_peer_response, nullptr);
   if (cntl.Failed()) {
     DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
@@ -788,7 +859,7 @@ void SendRemovePeerRegion(brpc::Controller& cntl, dingodb::pb::coordinator::Coor
   }
 
   DINGO_LOG(INFO) << "new_definition: " << new_definition->DebugString();
-
+  cntl.Reset();
   stub.ChangePeerRegion(&cntl, &change_peer_request, &change_peer_response, nullptr);
   if (cntl.Failed()) {
     DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
@@ -873,6 +944,10 @@ void SendAddStoreOperation(brpc::Controller& cntl, dingodb::pb::coordinator::Coo
     auto* region_cmd = request.mutable_store_operation()->add_region_cmds();
     region_cmd->set_region_id(FLAGS_region_id);
     region_cmd->set_region_cmd_type(::dingodb::pb::coordinator::RegionCmdType::CMD_NONE);
+    region_cmd->set_create_timestamp(
+        std::chrono::time_point_cast<std::chrono::microseconds>(std::chrono::system_clock::now())
+            .time_since_epoch()
+            .count());
   } else {
     DINGO_LOG(ERROR) << "region_id is empty";
     return;

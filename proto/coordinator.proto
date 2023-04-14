@@ -301,8 +301,9 @@ message CreateRegionRequest {
   string resource_tag = 2;
   uint64 replica_num = 3;
   dingodb.pb.common.Range range = 4;
-  uint64 schema_id = 5;  // optional
-  uint64 table_id = 6;   // optional
+  uint64 schema_id = 5;           // optional
+  uint64 table_id = 6;            // optional
+  repeated uint64 store_ids = 7;  // optional if not set, will create choose from all stores
 }
 
 message CreateRegionResponse {

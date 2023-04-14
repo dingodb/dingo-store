@@ -85,6 +85,10 @@ class CoordinatorControl : public MetaControl {
   pb::error::Errno CreateRegion(const std::string &region_name, const std::string &resource_tag, int32_t replica_num,
                                 pb::common::Range region_range, uint64_t schema_id, uint64_t table_id,
                                 uint64_t &new_region_id, pb::coordinator_internal::MetaIncrement &meta_increment);
+  pb::error::Errno CreateRegion(const std::string &region_name, const std::string &resource_tag, int32_t replica_num,
+                                pb::common::Range region_range, uint64_t schema_id, uint64_t table_id,
+                                std::vector<uint64_t> &store_ids, uint64_t &new_region_id,
+                                pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // drop region
   // in:  region_id
