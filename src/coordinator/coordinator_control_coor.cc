@@ -882,6 +882,84 @@ pb::error::Errno CoordinatorControl::CleanStoreOperation(uint64_t store_id,
   return pb::error::Errno::OK;
 }
 
+// AddStoreOperation
+pb::error::Errno CoordinatorControl::AddStoreOperation(const pb::coordinator::StoreOperation& store_operation,
+                                                       pb::coordinator_internal::MetaIncrement& meta_increment) {
+  // validate store id
+  uint64_t store_id = store_operation.id();
+  int ret = store_map_.Exists(store_id);
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << "AddStoreOperation store not exists, store_id = " << store_id;
+    return pb::error::Errno::ESTORE_NOT_FOUND;
+  }
+
+  // validate store operation region_cmd
+  if (store_operation.region_cmds_size() == 0) {
+    DINGO_LOG(ERROR) << "AddStoreOperation store operation region cmd empty, store_id = " << store_id;
+    return pb::error::Errno::EILLEGAL_PARAMTETERS;
+  }
+
+  // check if region is has ongoing region_cmd
+  pb::coordinator::StoreOperation store_operation_ongoing;
+  ret = store_operation_map_.Get(store_id, store_operation_ongoing);
+  if (ret > 0) {
+    for (const auto& it : store_operation.region_cmds()) {
+      for (const auto& it2 : store_operation_ongoing.region_cmds()) {
+        if (it.region_id() == it2.region_id()) {
+          DINGO_LOG(ERROR) << "AddStoreOperation store operation region cmd ongoing conflict, unable to add new "
+                              "region_cmd, store_id = "
+                           << store_id << ", region_id = " << it.region_id();
+          return pb::error::Errno::EILLEGAL_PARAMTETERS;
+        }
+      }
+    }
+  }
+
+  // add store operation
+  auto* store_operation_increment = meta_increment.add_store_operations();
+  store_operation_increment->set_id(store_id);
+  store_operation_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
+  store_operation_increment->mutable_store_operation()->CopyFrom(store_operation);
+
+  return pb::error::Errno::OK;
+}
+
+pb::error::Errno CoordinatorControl::RemoveStoreOperation(uint64_t store_id, uint64_t region_cmd_id,
+                                                          pb::coordinator_internal::MetaIncrement& meta_increment) {
+  pb::coordinator::StoreOperation store_operation;
+  int ret = store_operation_map_.Get(store_id, store_operation);
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << "RemoveStoreOperation store operation not exists, store_id = " << store_id;
+    return pb::error::Errno::EILLEGAL_PARAMTETERS;
+  }
+
+  // check if region_cmd_id exists
+  pb::coordinator_internal::MetaIncrementStoreOperation store_operation_increment;
+  store_operation_increment.set_id(store_id);
+  store_operation_increment.set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
+  auto* store_operation_to_delete = store_operation_increment.mutable_store_operation();
+  store_operation_to_delete->set_id(store_id);
+
+  for (const auto& it : store_operation.region_cmds()) {
+    if (it.id() == region_cmd_id) {
+      // remove region_cmd
+      auto* region_cmd_to_delete = store_operation_to_delete->add_region_cmds();
+      region_cmd_to_delete->CopyFrom(it);
+    }
+  }
+
+  if (store_operation_to_delete->region_cmds_size() == 0) {
+    DINGO_LOG(ERROR) << "RemoveStoreOperation region_cmd_id not exists, store_id = " << store_id
+                     << ", region_cmd_id = " << region_cmd_id;
+    return pb::error::Errno::EILLEGAL_PARAMTETERS;
+  }
+
+  auto* store_operation_increment_to_delete = meta_increment.add_store_operations();
+  store_operation_increment_to_delete->CopyFrom(store_operation_increment);
+
+  return pb::error::Errno::OK;
+}
+
 // UpdateRegionMap
 uint64_t CoordinatorControl::UpdateRegionMap(std::vector<pb::common::Region>& regions,
                                              pb::coordinator_internal::MetaIncrement& meta_increment) {

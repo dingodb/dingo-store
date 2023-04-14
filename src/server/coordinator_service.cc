@@ -417,37 +417,6 @@ void CoordinatorServiceImpl::GetStoreMetrics(google::protobuf::RpcController * /
   }
 }
 
-void CoordinatorServiceImpl::GetStoreOperation(google::protobuf::RpcController * /*controller*/,
-                                               const pb::coordinator::GetStoreOperationRequest *request,
-                                               pb::coordinator::GetStoreOperationResponse *response,
-                                               google::protobuf::Closure *done) {
-  brpc::ClosureGuard done_guard(done);
-  auto is_leader = this->coordinator_control_->IsLeader();
-  DINGO_LOG(DEBUG) << "Receive Get StoreOperation Request, IsLeader:" << is_leader
-                   << ", Request:" << request->DebugString();
-
-  if (!is_leader) {
-    return RedirectResponse(response);
-  }
-
-  // if store_id = 0, get all store operation
-  if (request->store_id() == 0) {
-    butil::FlatMap<uint64_t, pb::coordinator::StoreOperation> store_operations;
-    store_operations.init(100);
-    coordinator_control_->GetStoreOperations(store_operations);
-
-    for (const auto &it : store_operations) {
-      auto *new_store_operation = response->add_store_operations();
-      new_store_operation->CopyFrom(it.second);
-    }
-    return;
-  }
-
-  // get store_operation for id
-  auto *store_operation = response->add_store_operations();
-  coordinator_control_->GetStoreOperation(request->store_id(), *store_operation);
-}
-
 void CoordinatorServiceImpl::GetExecutorMap(google::protobuf::RpcController * /*controller*/,
                                             const pb::coordinator::GetExecutorMapRequest *request,
                                             pb::coordinator::GetExecutorMapResponse *response,
@@ -808,6 +777,37 @@ void CoordinatorServiceImpl::ChangePeerRegion(google::protobuf::RpcController *c
 }
 
 // StoreOperation service
+void CoordinatorServiceImpl::GetStoreOperation(google::protobuf::RpcController * /*controller*/,
+                                               const pb::coordinator::GetStoreOperationRequest *request,
+                                               pb::coordinator::GetStoreOperationResponse *response,
+                                               google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+  auto is_leader = this->coordinator_control_->IsLeader();
+  DINGO_LOG(DEBUG) << "Receive Get StoreOperation Request, IsLeader:" << is_leader
+                   << ", Request:" << request->DebugString();
+
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  // if store_id = 0, get all store operation
+  if (request->store_id() == 0) {
+    butil::FlatMap<uint64_t, pb::coordinator::StoreOperation> store_operations;
+    store_operations.init(100);
+    coordinator_control_->GetStoreOperations(store_operations);
+
+    for (const auto &it : store_operations) {
+      auto *new_store_operation = response->add_store_operations();
+      new_store_operation->CopyFrom(it.second);
+    }
+    return;
+  }
+
+  // get store_operation for id
+  auto *store_operation = response->add_store_operations();
+  coordinator_control_->GetStoreOperation(request->store_id(), *store_operation);
+}
+
 void CoordinatorServiceImpl::CleanStoreOperation(google::protobuf::RpcController *controller,
                                                  const pb::coordinator::CleanStoreOperationRequest *request,
                                                  pb::coordinator::CleanStoreOperationResponse *response,
@@ -827,6 +827,10 @@ void CoordinatorServiceImpl::CleanStoreOperation(google::protobuf::RpcController
   auto ret = this->coordinator_control_->CleanStoreOperation(store_id, meta_increment);
   response->mutable_error()->set_errcode(ret);
 
+  if (meta_increment.ByteSizeLong() == 0) {
+    return;
+  }
+
   // prepare for raft process
   CoordinatorClosure<pb::coordinator::CleanStoreOperationRequest,
                      pb::coordinator::CleanStoreOperationResponse> *meta_clean_store_operation_closure =
@@ -835,6 +839,81 @@ void CoordinatorServiceImpl::CleanStoreOperation(google::protobuf::RpcController
 
   std::shared_ptr<Context> const ctx =
       std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_clean_store_operation_closure);
+  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+
+  // this is a async operation will be block by closure
+  engine_->MetaPut(ctx, meta_increment);
+}
+
+void CoordinatorServiceImpl::AddStoreOperation(google::protobuf::RpcController *controller,
+                                               const pb::coordinator::AddStoreOperationRequest *request,
+                                               pb::coordinator::AddStoreOperationResponse *response,
+                                               google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+  DINGO_LOG(DEBUG) << "Receive AddStoreOperation Request:" << request->DebugString();
+
+  auto is_leader = this->coordinator_control_->IsLeader();
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  pb::coordinator_internal::MetaIncrement meta_increment;
+
+  auto store_operation = request->store_operation();
+
+  auto ret = this->coordinator_control_->AddStoreOperation(store_operation, meta_increment);
+  response->mutable_error()->set_errcode(ret);
+
+  if (meta_increment.ByteSizeLong() == 0) {
+    return;
+  }
+
+  // prepare for raft process
+  CoordinatorClosure<pb::coordinator::AddStoreOperationRequest, pb::coordinator::AddStoreOperationResponse>
+      *meta_add_store_operation_closure =
+          new CoordinatorClosure<pb::coordinator::AddStoreOperationRequest, pb::coordinator::AddStoreOperationResponse>(
+              request, response, done_guard.release());
+
+  std::shared_ptr<Context> const ctx =
+      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_add_store_operation_closure);
+  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+
+  // this is a async operation will be block by closure
+  engine_->MetaPut(ctx, meta_increment);
+}
+
+void CoordinatorServiceImpl::RemoveStoreOperation(google::protobuf::RpcController *controller,
+                                                  const pb::coordinator::RemoveStoreOperationRequest *request,
+                                                  pb::coordinator::RemoveStoreOperationResponse *response,
+                                                  google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+  DINGO_LOG(DEBUG) << "Receive RemoveStoreOperation Request:" << request->DebugString();
+
+  auto is_leader = this->coordinator_control_->IsLeader();
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  pb::coordinator_internal::MetaIncrement meta_increment;
+
+  auto store_id = request->store_id();
+  auto region_cmd_id = request->region_cmd_id();
+
+  auto ret = this->coordinator_control_->RemoveStoreOperation(store_id, region_cmd_id, meta_increment);
+  response->mutable_error()->set_errcode(ret);
+
+  if (meta_increment.ByteSizeLong() == 0) {
+    return;
+  }
+
+  // prepare for raft process
+  CoordinatorClosure<pb::coordinator::RemoveStoreOperationRequest, pb::coordinator::RemoveStoreOperationResponse>
+      *meta_remove_store_operation_closure = new CoordinatorClosure<pb::coordinator::RemoveStoreOperationRequest,
+                                                                    pb::coordinator::RemoveStoreOperationResponse>(
+          request, response, done_guard.release());
+
+  std::shared_ptr<Context> const ctx =
+      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_remove_store_operation_closure);
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure

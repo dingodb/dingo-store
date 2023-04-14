@@ -109,11 +109,6 @@ class CoordinatorControl : public MetaControl {
   pb::error::Errno ChangePeerRegion(uint64_t region_id, std::vector<uint64_t> &new_store_ids,
                                     pb::coordinator_internal::MetaIncrement &meta_increment);
 
-  // CleanStoreOperation
-  // in:  store_id
-  // return: 0 or -1
-  pb::error::Errno CleanStoreOperation(uint64_t store_id, pb::coordinator_internal::MetaIncrement &meta_increment);
-
   // create schema
   // in: parent_schema_id
   // in: schema_name
@@ -188,6 +183,16 @@ class CoordinatorControl : public MetaControl {
   // get store operation
   void GetStoreOperation(uint64_t store_id, pb::coordinator::StoreOperation &store_operation);
   void GetStoreOperations(butil::FlatMap<uint64_t, pb::coordinator::StoreOperation> &store_operations);
+
+  // CleanStoreOperation
+  // in:  store_id
+  // return: 0 or -1
+  pb::error::Errno CleanStoreOperation(uint64_t store_id, pb::coordinator_internal::MetaIncrement &meta_increment);
+
+  pb::error::Errno AddStoreOperation(const pb::coordinator::StoreOperation &store_operation,
+                                     pb::coordinator_internal::MetaIncrement &meta_increment);
+  pb::error::Errno RemoveStoreOperation(uint64_t store_id, uint64_t region_cmd_id,
+                                        pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // UpdateRegionMapAndStoreOperation
   void UpdateRegionMapAndStoreOperation(const pb::common::StoreMetrics &store_metrics,
