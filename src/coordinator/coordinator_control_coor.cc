@@ -148,10 +148,10 @@ int CoordinatorControl::ValidateStore(uint64_t store_id, const std::string& keyr
   return -1;
 }
 
-int CoordinatorControl::CreateStore(uint64_t cluster_id, uint64_t& store_id, std::string& keyring,
-                                    pb::coordinator_internal::MetaIncrement& meta_increment) {
+pb::error::Errno CoordinatorControl::CreateStore(uint64_t cluster_id, uint64_t& store_id, std::string& keyring,
+                                                 pb::coordinator_internal::MetaIncrement& meta_increment) {
   if (cluster_id <= 0) {
-    return -1;
+    return pb::error::Errno::EILLEGAL_PARAMTETERS;
   }
 
   store_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_STORE, meta_increment);
@@ -174,13 +174,13 @@ int CoordinatorControl::CreateStore(uint64_t cluster_id, uint64_t& store_id, std
   // on_apply
   // store_map_epoch++;                                  // raft_kv_put
   // store_map_.insert(std::make_pair(store_id, store));  // raft_kv_put
-  return 0;
+  return pb::error::Errno::OK;
 }
 
-int CoordinatorControl::DeleteStore(uint64_t cluster_id, uint64_t store_id, std::string keyring,
-                                    pb::coordinator_internal::MetaIncrement& meta_increment) {
+pb::error::Errno CoordinatorControl::DeleteStore(uint64_t cluster_id, uint64_t store_id, std::string keyring,
+                                                 pb::coordinator_internal::MetaIncrement& meta_increment) {
   if (cluster_id <= 0 || store_id <= 0 || keyring.length() <= 0) {
-    return -1;
+    return pb::error::Errno::EILLEGAL_PARAMTETERS;
   }
 
   pb::common::Store store_to_delete;
@@ -189,13 +189,13 @@ int CoordinatorControl::DeleteStore(uint64_t cluster_id, uint64_t store_id, std:
     int ret = store_map_.Get(store_id, store_to_delete);
     if (ret < 0) {
       DINGO_LOG(INFO) << "DeleteStore store_id not exists, id=" << store_id;
-      return -1;
+      return pb::error::Errno::ESTORE_NOT_FOUND;
     }
 
     if (keyring == store_to_delete.keyring()) {
       DINGO_LOG(INFO) << "DeleteStore store_id id=" << store_id << " keyring not equal, input keyring=" << keyring
                       << " but store's keyring=" << store_to_delete.keyring();
-      return -1;
+      return pb::error::Errno::EILLEGAL_PARAMTETERS;
     }
   }
 
@@ -211,8 +211,9 @@ int CoordinatorControl::DeleteStore(uint64_t cluster_id, uint64_t store_id, std:
   // on_apply
   // store_map_epoch++;                                  // raft_kv_put
   // store_map_.insert(std::make_pair(store_id, store));  // raft_kv_put
-  return 0;
+  return pb::error::Errno::OK;
 }
+
 // UpdateStoreMap
 uint64_t CoordinatorControl::UpdateStoreMap(const pb::common::Store& store,
                                             pb::coordinator_internal::MetaIncrement& meta_increment) {

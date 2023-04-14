@@ -169,13 +169,19 @@ void CoordinatorServiceImpl::CreateStore(google::protobuf::RpcController *contro
   uint64_t store_id = 0;
   std::string keyring;
   auto local_ctl = this->coordinator_control_;
-  int const ret = local_ctl->CreateStore(request->cluster_id(), store_id, keyring, meta_increment);
-  if (ret == 0) {
+  auto ret = local_ctl->CreateStore(request->cluster_id(), store_id, keyring, meta_increment);
+  if (ret == pb::error::Errno::OK) {
     response->set_store_id(store_id);
     response->set_keyring(keyring);
   } else {
     brpc::Controller *brpc_controller = static_cast<brpc::Controller *>(controller);
     brpc_controller->SetFailed(pb::error::EILLEGAL_PARAMTETERS, "Need legal cluster_id");
+    response->mutable_error()->set_errcode(ret);
+    return;
+  }
+
+  if (meta_increment.ByteSizeLong() == 0) {
+    DINGO_LOG(ERROR) << "CreateStore meta_incremnt=0:  store_id=" << store_id << ", keyring=" << keyring;
     return;
   }
 
@@ -220,15 +226,19 @@ void CoordinatorServiceImpl::DeleteStore(google::protobuf::RpcController *contro
   uint64_t const store_id = request->store_id();
   std::string const keyring = request->keyring();
   auto local_ctl = this->coordinator_control_;
-  int const ret = local_ctl->DeleteStore(request->cluster_id(), store_id, keyring, meta_increment);
-  if (ret != 0) {
+  auto ret = local_ctl->DeleteStore(request->cluster_id(), store_id, keyring, meta_increment);
+  if (ret != pb::error::Errno::OK) {
     brpc::Controller *brpc_controller = static_cast<brpc::Controller *>(controller);
     brpc_controller->SetFailed(pb::error::ESTORE_NOTEXIST_RAFTENGINE, "DeleteStore failed");
 
-    auto *error = response->mutable_error();
-    error->set_errcode(Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errcode(ret);
 
     DINGO_LOG(ERROR) << "DeleteStore failed:  store_id=" << store_id << ", keyring=" << keyring;
+    return;
+  }
+
+  if (meta_increment.ByteSizeLong() == 0) {
+    DINGO_LOG(INFO) << "DeleteStore meta_incremnt=0:  store_id=" << store_id << ", keyring=" << keyring;
     return;
   }
 
@@ -611,6 +621,10 @@ void CoordinatorServiceImpl::DropRegionPermanently(google::protobuf::RpcControll
 
   auto ret = this->coordinator_control_->DropRegionPermanently(region_id, meta_increment);
   response->mutable_error()->set_errcode(ret);
+
+  if (meta_increment.ByteSizeLong() == 0) {
+    return;
+  }
 
   // prepare for raft process
   CoordinatorClosure<pb::coordinator::DropRegionPermanentlyRequest, pb::coordinator::DropRegionPermanentlyResponse>
