@@ -12,19 +12,33 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <cstdint>
 #include <string>
 
 #include "client/coordinator_client_function.h"
 #include "common/logging.h"
+#include "gflags/gflags_declare.h"
 #include "proto/common.pb.h"
+#include "proto/coordinator.pb.h"
 #include "proto/node.pb.h"
 
 DECLARE_bool(log_each_request);
 DECLARE_int32(timeout_ms);
 DECLARE_string(id);
 DECLARE_string(level);
+DECLARE_string(name);
 DECLARE_string(keyring);
 DECLARE_string(coordinator_addr);
+DECLARE_int64(split_from_id);
+DECLARE_int64(split_to_id);
+DECLARE_string(split_key);
+DECLARE_int64(merge_from_id);
+DECLARE_int64(merge_to_id);
+DECLARE_int64(peer_add_store_id);
+DECLARE_int64(peer_del_store_id);
+DECLARE_int64(store_id);
+DECLARE_int64(region_id);
+DECLARE_int64(region_cmd_id);
 
 std::string MessageToJsonString(const google::protobuf::Message& message) {
   std::string json_string;
@@ -463,6 +477,333 @@ void SendGetStoreMetrics(brpc::Controller& cntl, dingodb::pb::coordinator::Coord
   }
 }
 
+// region
+void SendQueryRegion(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
+  dingodb::pb::coordinator::QueryRegionRequest request;
+  dingodb::pb::coordinator::QueryRegionResponse response;
+
+  if (!FLAGS_id.empty()) {
+    request.set_region_id(std::stoull(FLAGS_id));
+  } else {
+    DINGO_LOG(ERROR) << "id is empty";
+    return;
+  }
+
+  stub.QueryRegion(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    // bthread_usleep(FLAGS_timeout_ms * 1000L);
+  }
+
+  if (FLAGS_log_each_request) {
+    DINGO_LOG(INFO) << "Received response"
+                    << " request_attachment=" << cntl.request_attachment().size()
+                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+    DINGO_LOG(INFO) << response.DebugString();
+  }
+}
+
+void SendCreateRegion(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
+  dingodb::pb::coordinator::CreateRegionRequest request;
+  dingodb::pb::coordinator::CreateRegionResponse response;
+
+  if (!FLAGS_name.empty()) {
+    request.set_region_name(FLAGS_name);
+  } else {
+    DINGO_LOG(ERROR) << "id is empty";
+    return;
+  }
+
+  stub.CreateRegion(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    // bthread_usleep(FLAGS_timeout_ms * 1000L);
+  }
+
+  if (FLAGS_log_each_request) {
+    DINGO_LOG(INFO) << "Received response"
+                    << " request_attachment=" << cntl.request_attachment().size()
+                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+    DINGO_LOG(INFO) << response.DebugString();
+  }
+}
+
+void SendDropRegion(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
+  dingodb::pb::coordinator::DropRegionRequest request;
+  dingodb::pb::coordinator::DropRegionResponse response;
+
+  if (!FLAGS_id.empty()) {
+    request.set_region_id(std::stoull(FLAGS_id));
+  } else {
+    DINGO_LOG(ERROR) << "id is empty";
+    return;
+  }
+
+  stub.DropRegion(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    // bthread_usleep(FLAGS_timeout_ms * 1000L);
+  }
+
+  if (FLAGS_log_each_request) {
+    DINGO_LOG(INFO) << "Received response"
+                    << " request_attachment=" << cntl.request_attachment().size()
+                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+    DINGO_LOG(INFO) << response.DebugString();
+  }
+}
+
+void SendDropRegionPermanently(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
+  dingodb::pb::coordinator::DropRegionPermanentlyRequest request;
+  dingodb::pb::coordinator::DropRegionPermanentlyResponse response;
+
+  if (!FLAGS_id.empty()) {
+    request.set_region_id(std::stoull(FLAGS_id));
+  } else {
+    DINGO_LOG(ERROR) << "id is empty";
+    return;
+  }
+
+  stub.DropRegionPermanently(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    // bthread_usleep(FLAGS_timeout_ms * 1000L);
+  }
+
+  if (FLAGS_log_each_request) {
+    DINGO_LOG(INFO) << "Received response"
+                    << " request_attachment=" << cntl.request_attachment().size()
+                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+    DINGO_LOG_INFO << response.DebugString();
+  }
+}
+
+void SendSplitRegion(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
+  dingodb::pb::coordinator::SplitRegionRequest request;
+  dingodb::pb::coordinator::SplitRegionResponse response;
+
+  if (FLAGS_split_to_id > 0) {
+    request.mutable_split_request()->set_split_to_region_id(FLAGS_split_to_id);
+  } else {
+    DINGO_LOG(ERROR) << "split_to_id is empty";
+    return;
+  }
+
+  if (FLAGS_split_from_id > 0) {
+    request.mutable_split_request()->set_split_from_region_id(FLAGS_split_from_id);
+  } else {
+    DINGO_LOG(ERROR) << "split_from_id is empty";
+    return;
+  }
+
+  if (!FLAGS_split_key.empty()) {
+    request.mutable_split_request()->set_split_watershed_key(FLAGS_split_key);
+  } else {
+    DINGO_LOG(ERROR) << "split_key is empty";
+    return;
+  }
+
+  stub.SplitRegion(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    // bthread_usleep(FLAGS_timeout_ms * 1000L);
+  }
+
+  if (FLAGS_log_each_request) {
+    DINGO_LOG(INFO) << "Received response"
+                    << " request_attachment=" << cntl.request_attachment().size()
+                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+    DINGO_LOG_INFO << response.DebugString();
+  }
+}
+
+void SendMergeRegion(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
+  dingodb::pb::coordinator::MergeRegionRequest request;
+  dingodb::pb::coordinator::MergeRegionResponse response;
+
+  if (FLAGS_merge_to_id > 0) {
+    request.mutable_merge_request()->set_merge_to_region_id(FLAGS_merge_to_id);
+  } else {
+    DINGO_LOG(ERROR) << "merge_to_id is empty";
+    return;
+  }
+
+  if (FLAGS_merge_from_id > 0) {
+    request.mutable_merge_request()->set_merge_from_region_id(FLAGS_merge_from_id);
+  } else {
+    DINGO_LOG(ERROR) << "merge_from_id is empty";
+    return;
+  }
+
+  stub.MergeRegion(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    // bthread_usleep(FLAGS_timeout_ms * 1000L);
+  }
+
+  if (FLAGS_log_each_request) {
+    DINGO_LOG(INFO) << "Received response"
+                    << " request_attachment=" << cntl.request_attachment().size()
+                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+    DINGO_LOG_INFO << response.DebugString();
+  }
+}
+
+void SendAddPeerRegion(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
+  if (FLAGS_id.empty()) {
+    DINGO_LOG(ERROR) << "id is empty (this is store_id)";
+    return;
+  }
+
+  uint64_t store_id = std::stoull(FLAGS_id);
+
+  // get StoreMap
+  dingodb::pb::coordinator::GetStoreMapRequest request;
+  dingodb::pb::coordinator::GetStoreMapResponse response;
+
+  request.set_epoch(0);
+  stub.GetStoreMap(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    // bthread_usleep(FLAGS_timeout_ms * 1000L);
+    return;
+  }
+
+  dingodb::pb::common::Peer new_peer;
+  for (const auto& store : response.storemap().stores()) {
+    if (store.id() == store_id) {
+      new_peer.set_store_id(store.id());
+      new_peer.set_role(dingodb::pb::common::PeerRole::VOTER);
+      new_peer.mutable_server_location()->CopyFrom(store.server_location());
+      new_peer.mutable_raft_location()->CopyFrom(store.raft_location());
+    }
+  }
+
+  if (new_peer.store_id() == 0) {
+    DINGO_LOG(ERROR) << "store_id not found";
+    return;
+  }
+
+  // query region
+  dingodb::pb::coordinator::QueryRegionRequest query_request;
+  dingodb::pb::coordinator::QueryRegionResponse query_response;
+
+  query_request.set_region_id(FLAGS_region_id);
+  stub.QueryRegion(&cntl, &query_request, &query_response, nullptr);
+  if (cntl.Failed()) {
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    // bthread_usleep(FLAGS_timeout_ms * 1000L);
+    return;
+  }
+
+  if (query_response.region().peers_size() == 0) {
+    DINGO_LOG(ERROR) << "region not found";
+    return;
+  }
+
+  // validate peer not exists in region peers
+  for (const auto& peer : query_response.region().peers()) {
+    if (peer.store_id() == store_id) {
+      DINGO_LOG(ERROR) << "peer already exists";
+      return;
+    }
+  }
+
+  // generate change peer
+  dingodb::pb::coordinator::ChangePeerRegionRequest change_peer_request;
+  dingodb::pb::coordinator::ChangePeerRegionResponse change_peer_response;
+
+  auto* new_definition = change_peer_request.mutable_change_peer_request()->mutable_region_definition();
+  new_definition->CopyFrom(query_response.region());
+  auto* new_peer_to_add = new_definition->add_peers();
+  new_peer_to_add->CopyFrom(new_peer);
+
+  DINGO_LOG(INFO) << "new_definition: " << new_definition->DebugString();
+
+  stub.ChangePeerRegion(&cntl, &change_peer_request, &change_peer_response, nullptr);
+  if (cntl.Failed()) {
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    // bthread_usleep(FLAGS_timeout_ms * 1000L);
+  }
+
+  if (FLAGS_log_each_request) {
+    DINGO_LOG(INFO) << "Received response"
+                    << " request_attachment=" << cntl.request_attachment().size()
+                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+    DINGO_LOG_INFO << change_peer_response.DebugString();
+  }
+}
+
+void SendRemovePeerRegion(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
+  if (FLAGS_id.empty()) {
+    DINGO_LOG(ERROR) << "id is empty (this is store_id)";
+    return;
+  }
+
+  uint64_t store_id = std::stoull(FLAGS_id);
+
+  // query region
+  dingodb::pb::coordinator::QueryRegionRequest query_request;
+  dingodb::pb::coordinator::QueryRegionResponse query_response;
+
+  query_request.set_region_id(FLAGS_region_id);
+  stub.QueryRegion(&cntl, &query_request, &query_response, nullptr);
+  if (cntl.Failed()) {
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    // bthread_usleep(FLAGS_timeout_ms * 1000L);
+    return;
+  }
+
+  if (query_response.region().peers_size() == 0) {
+    DINGO_LOG(ERROR) << "region not found";
+    return;
+  }
+
+  // validate peer not exists in region peers
+  bool found = false;
+  for (const auto& peer : query_response.region().peers()) {
+    if (peer.store_id() == store_id) {
+      found = true;
+      break;
+    }
+  }
+
+  if (!found) {
+    DINGO_LOG(ERROR) << "peer not found";
+    return;
+  }
+
+  // generate change peer
+  dingodb::pb::coordinator::ChangePeerRegionRequest change_peer_request;
+  dingodb::pb::coordinator::ChangePeerRegionResponse change_peer_response;
+
+  auto* new_definition = change_peer_request.mutable_change_peer_request()->mutable_region_definition();
+  new_definition->CopyFrom(query_response.region());
+  for (int i = 0; i < new_definition->peers_size(); i++) {
+    if (new_definition->peers(i).store_id() == store_id) {
+      new_definition->mutable_peers()->SwapElements(i, new_definition->peers_size() - 1);
+      new_definition->mutable_peers()->RemoveLast();
+      break;
+    }
+  }
+
+  DINGO_LOG(INFO) << "new_definition: " << new_definition->DebugString();
+
+  stub.ChangePeerRegion(&cntl, &change_peer_request, &change_peer_response, nullptr);
+  if (cntl.Failed()) {
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    // bthread_usleep(FLAGS
+  }
+
+  if (FLAGS_log_each_request) {
+    DINGO_LOG(INFO) << "Received response"
+                    << " request_attachment=" << cntl.request_attachment().size()
+                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+    DINGO_LOG_INFO << change_peer_response.DebugString();
+  }
+}
+
+// store operation
 void SendGetStoreOperation(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
   dingodb::pb::coordinator::GetStoreOperationRequest request;
   dingodb::pb::coordinator::GetStoreOperationResponse response;
@@ -492,18 +833,18 @@ void SendGetStoreOperation(brpc::Controller& cntl, dingodb::pb::coordinator::Coo
   }
 }
 
-void SendDropRegionPermanently(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
-  dingodb::pb::coordinator::DropRegionPermanentlyRequest request;
-  dingodb::pb::coordinator::DropRegionPermanentlyResponse response;
+void SendCleanStoreOperation(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
+  dingodb::pb::coordinator::CleanStoreOperationRequest request;
+  dingodb::pb::coordinator::CleanStoreOperationResponse response;
 
   if (!FLAGS_id.empty()) {
-    request.set_region_id(std::stoull(FLAGS_id));
+    request.set_store_id(std::stoull(FLAGS_id));
   } else {
-    DINGO_LOG(ERROR) << "id is empty";
+    DINGO_LOG(ERROR) << "id is empty(this is store_id)";
     return;
   }
 
-  stub.DropRegionPermanently(&cntl, &request, &response, nullptr);
+  stub.CleanStoreOperation(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
     DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
     // bthread_usleep(FLAGS_timeout_ms * 1000L);
@@ -517,18 +858,59 @@ void SendDropRegionPermanently(brpc::Controller& cntl, dingodb::pb::coordinator:
   }
 }
 
-void SendCleanStoreOperation(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
-  dingodb::pb::coordinator::CleanStoreOperationRequest request;
-  dingodb::pb::coordinator::CleanStoreOperationResponse response;
+void SendAddStoreOperation(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
+  dingodb::pb::coordinator::AddStoreOperationRequest request;
+  dingodb::pb::coordinator::AddStoreOperationResponse response;
+
+  if (!FLAGS_id.empty()) {
+    request.mutable_store_operation()->set_id(std::stoull(FLAGS_id));
+  } else {
+    DINGO_LOG(ERROR) << "id is empty (this is store_id)";
+    return;
+  }
+
+  if (FLAGS_region_id != 0) {
+    auto* region_cmd = request.mutable_store_operation()->add_region_cmds();
+    region_cmd->set_region_id(FLAGS_region_id);
+    region_cmd->set_region_cmd_type(::dingodb::pb::coordinator::RegionCmdType::CMD_NONE);
+  } else {
+    DINGO_LOG(ERROR) << "region_id is empty";
+    return;
+  }
+
+  stub.AddStoreOperation(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    // bthread_usleep(FLAGS_timeout_ms * 1000L);
+  }
+
+  if (FLAGS_log_each_request) {
+    DINGO_LOG(INFO) << "Received response"
+                    << " request_attachment=" << cntl.request_attachment().size()
+                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+    DINGO_LOG_INFO << response.DebugString();
+  }
+}
+
+void SendRemoveStoreOperation(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
+  dingodb::pb::coordinator::RemoveStoreOperationRequest request;
+  dingodb::pb::coordinator::RemoveStoreOperationResponse response;
 
   if (!FLAGS_id.empty()) {
     request.set_store_id(std::stoull(FLAGS_id));
   } else {
-    DINGO_LOG(ERROR) << "id is empty";
+    DINGO_LOG(ERROR) << "id is empty (this is store_id)";
     return;
   }
 
-  stub.CleanStoreOperation(&cntl, &request, &response, nullptr);
+  if (FLAGS_region_cmd_id != 0) {
+    request.set_region_cmd_id(FLAGS_region_cmd_id);
+  } else {
+    DINGO_LOG(ERROR) << "region_cmd_id is empty";
+    return;
+  }
+
+  stub.RemoveStoreOperation(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
     DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
     // bthread_usleep(FLAGS_timeout_ms * 1000L);

@@ -38,6 +38,16 @@ DEFINE_string(level, "", "Request log level [DEBUG, INFO, WARNING, ERROR, FATAL]
 DEFINE_string(keyring, "", "Request parameter keyring");
 DEFINE_string(coordinator_addr, "", "coordinator servr addr, for example: 127.0.0.1:8001");
 DEFINE_string(group, "0", "Id of the replication group, now coordinator use 0 as groupid");
+DEFINE_int64(split_from_id, 0, "split_from_id");
+DEFINE_int64(split_to_id, 0, "split_to_id");
+DEFINE_string(split_key, "", "split_water_shed_key");
+DEFINE_int64(merge_from_id, 0, "merge_from_id");
+DEFINE_int64(merge_to_id, 0, "merge_to_id");
+DEFINE_int64(peer_add_store_id, 0, "peer_add_store_id");
+DEFINE_int64(peer_del_store_id, 0, "peer_del_store_id");
+DEFINE_int64(store_id, 0, "store_id");
+DEFINE_int64(region_id, 0, "region_id");
+DEFINE_int64(region_cmd_id, 0, "region_cmd_id");
 
 void* Sender(void* /*arg*/) {
   // get leader location
@@ -106,14 +116,32 @@ void* Sender(void* /*arg*/) {
     SendGetRegionMap(cntl, coordinator_stub);
   } else if (FLAGS_method == "GetCoordinatorMap") {
     SendGetCoordinatorMap(cntl, coordinator_stub);
+  } else if (FLAGS_method == "QueryRegion") {
+    SendQueryRegion(cntl, coordinator_stub);
+  } else if (FLAGS_method == "CreateRegion") {
+    SendCreateRegion(cntl, coordinator_stub);
+  } else if (FLAGS_method == "DropRegion") {
+    SendDropRegion(cntl, coordinator_stub);
   } else if (FLAGS_method == "DropRegionPermanently") {
     SendDropRegionPermanently(cntl, coordinator_stub);
-  } else if (FLAGS_method == "CleanStoreOperation") {
-    SendCleanStoreOperation(cntl, coordinator_stub);
-  } else if (FLAGS_method == "GetStoreMetrics") {
-    SendGetStoreMetrics(cntl, coordinator_stub);
+  } else if (FLAGS_method == "SplitRegion") {
+    SendSplitRegion(cntl, coordinator_stub);
+  } else if (FLAGS_method == "MergeRegion") {
+    SendMergeRegion(cntl, coordinator_stub);
+  } else if (FLAGS_method == "AddPeerRegion") {
+    SendAddPeerRegion(cntl, coordinator_stub);
+  } else if (FLAGS_method == "RemovePeerRegion") {
+    SendRemovePeerRegion(cntl, coordinator_stub);
   } else if (FLAGS_method == "GetStoreOperation") {
     SendGetStoreOperation(cntl, coordinator_stub);
+  } else if (FLAGS_method == "CleanStoreOperation") {
+    SendCleanStoreOperation(cntl, coordinator_stub);
+  } else if (FLAGS_method == "AddStoreOperation") {
+    SendAddStoreOperation(cntl, coordinator_stub);
+  } else if (FLAGS_method == "RemoveStoreOperation") {
+    SendRemoveStoreOperation(cntl, coordinator_stub);
+  } else if (FLAGS_method == "GetStoreMetrics") {
+    SendGetStoreMetrics(cntl, coordinator_stub);
   } else if (FLAGS_method == "GetNodeInfo") {
     SendGetNodeInfo(cntl, node_stub);
   } else if (FLAGS_method == "GetLogLevel") {
