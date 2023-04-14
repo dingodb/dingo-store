@@ -14,6 +14,9 @@
 
 #include "handler/raft_handler.h"
 
+#include <cstddef>
+#include <vector>
+
 #include "common/helper.h"
 #include "common/logging.h"
 
@@ -72,16 +75,58 @@ void DeleteRangeHandler::Handle(std::shared_ptr<Context> ctx, std::shared_ptr<Ra
                                 const pb::raft::Request &req) {
   butil::Status status;
   const auto &request = req.delete_range();
+  auto reader = engine->NewReader(request.cf_name());
   auto writer = engine->NewWriter(request.cf_name());
-  for (const auto &range : request.ranges()) {
-    status = writer->KvDeleteRange(range);
-    if (!status.ok()) {
-      break;
+  uint64_t delete_count = 0;
+  if (1 == request.ranges().size()) {
+    status = reader->KvCount(request.ranges()[0], &delete_count);
+    if (status.ok() && 0 != delete_count) {
+      status = writer->KvDeleteRange(request.ranges()[0]);
+      if (!status.ok()) {
+        delete_count = 0;
+      }
+    } else {
+      delete_count = 0;
+    }
+  } else {
+    uint64_t internal_delete_count = 0;
+    {
+      auto snapshot = engine->GetSnapshot();
+      for (const auto &range : request.ranges()) {
+        uint64_t delete_count = 0;
+        status = reader->KvCount(snapshot, range, &internal_delete_count);
+        if (!status.ok()) {
+          break;
+        }
+        delete_count += internal_delete_count;
+      }
+    }
+
+    if (status.ok() && 0 != delete_count) {
+      status = writer->KvBatchDeleteRange(Helper::PbRepeatedToVector(request.ranges()));
+      if (!status.ok()) {
+        delete_count = 0;
+      }
+    } else {
+      delete_count = 0;
     }
   }
 
   if (ctx) {
-    ctx->SetStatus(status);
+    if (1 == request.ranges().empty()) {
+      auto *response = dynamic_cast<pb::store::KvDeleteRangeResponse *>(ctx->Response());
+      if (status.ok()) {
+      } else {
+        delete_count = 0;
+        // Note: The caller requires that if the parameter is wrong, no error will be reported and it will be returned.
+        if (pb::error::EILLEGAL_PARAMTETERS == static_cast<pb::error::Errno>(status.error_code())) {
+          status.set_error(pb::error::OK, "");
+        }
+      }
+
+      ctx->SetStatus(status);
+      response->set_delete_count(delete_count);
+    }
   }
 }
 
@@ -93,7 +138,7 @@ void DeleteBatchHandler::Handle(std::shared_ptr<Context> ctx, std::shared_ptr<Ra
   if (request.keys().size() == 1) {
     status = writer->KvDelete(request.keys().Get(0));
   } else {
-    status = writer->KvDeleteBatch(Helper::PbRepeatedToVector(request.keys()));
+    status = writer->KvBatchDelete(Helper::PbRepeatedToVector(request.keys()));
   }
 
   if (ctx) {

@@ -20,6 +20,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -173,10 +174,17 @@ class RawRocksEngine : public RawEngine {
     butil::Status KvCount(std::shared_ptr<dingodb::Snapshot> snapshot, const std::string& start_key,
                           const std::string& end_key, int64_t& count) override;
 
+    butil::Status KvCount(const pb::common::RangeWithOptions& range, uint64_t* count) override;
+    butil::Status KvCount(std::shared_ptr<dingodb::Snapshot> snapshot, const pb::common::RangeWithOptions& range,
+                          uint64_t* count) override;
+
     std::shared_ptr<EngineIterator> NewIterator(const std::string& start_key, const std::string& end_key,
                                                 bool with_start, bool with_end) override;
 
    private:
+    std::shared_ptr<EngineIterator> NewIterator(std::shared_ptr<dingodb::Snapshot> snapshot,
+                                                const std::string& start_key, const std::string& end_key,
+                                                bool with_start, bool with_end);
     std::shared_ptr<rocksdb::TransactionDB> txn_db_;
     std::shared_ptr<ColumnFamily> column_family_;
   };
@@ -199,9 +207,11 @@ class RawRocksEngine : public RawEngine {
     butil::Status KvCompareAndSet(const pb::common::KeyValue& kv, const std::string& value, bool& key_state) override;
 
     butil::Status KvDelete(const std::string& key) override;
-    butil::Status KvDeleteBatch(const std::vector<std::string>& keys) override;
+    butil::Status KvBatchDelete(const std::vector<std::string>& keys) override;
 
     butil::Status KvDeleteRange(const pb::common::Range& range) override;
+    butil::Status KvDeleteRange(const pb::common::RangeWithOptions& range) override;
+    butil::Status KvBatchDeleteRange(const std::vector<pb::common::RangeWithOptions>& ranges) override;
 
     // key must be exist
     butil::Status KvDeleteIfEqual(const pb::common::KeyValue& kv) override;
@@ -209,6 +219,15 @@ class RawRocksEngine : public RawEngine {
    private:
     butil::Status KvCompareAndSetInternal(const pb::common::KeyValue& kv, const std::string& value, bool is_key_exist,
                                           bool& key_state);
+
+    std::shared_ptr<EngineIterator> NewIterator(const rocksdb::Snapshot* snapshot, const std::string& start_key,
+                                                const std::string& end_key, bool with_start, bool with_end);
+
+    butil::Status KvBatchDeleteRangeCore(const std::vector<std::pair<std::string, std::string>>& key_pairs);
+
+    // // original_key + 1. note overflow
+    // static bool Increment(const std::string& original_key, std::string* key);
+
     std::shared_ptr<ColumnFamily> column_family_;
     std::shared_ptr<rocksdb::TransactionDB> txn_db_;
   };
@@ -304,7 +323,7 @@ class RawRocksEngine : public RawEngine {
   std::string db_path_;
   rocksdb::Options db_options_;
   std::shared_ptr<rocksdb::TransactionDB> txn_db_;
-  std::map<std::string, std::shared_ptr<ColumnFamily> > column_families_;
+  std::map<std::string, std::shared_ptr<ColumnFamily>> column_families_;
 };
 
 }  // namespace dingodb

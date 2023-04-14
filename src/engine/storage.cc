@@ -20,11 +20,11 @@
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
-#include "scan/scan.h"
-#include "scan/scan_manager.h"
 #include "engine/write_data.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
+#include "scan/scan.h"
+#include "scan/scan_manager.h"
 namespace dingodb {
 
 Storage::Storage(std::shared_ptr<Engine> engine) : engine_(engine) {}
@@ -102,11 +102,11 @@ butil::Status Storage::KvDelete(std::shared_ptr<Context> ctx, const std::vector<
   });
 }
 
-butil::Status Storage::KvDeleteRange(std::shared_ptr<Context> ctx, const pb::common::Range& range) {
+butil::Status Storage::KvDeleteRange(std::shared_ptr<Context> ctx, const pb::common::RangeWithOptions& range) {
   WriteData write_data;
   std::shared_ptr<DeleteRangeDatum> datum = std::make_shared<DeleteRangeDatum>();
   datum->cf_name = ctx->CfName();
-  datum->ranges.emplace_back(std::move(const_cast<pb::common::Range&>(range)));
+  datum->ranges.emplace_back(std::move(const_cast<pb::common::RangeWithOptions&>(range)));
   write_data.AddDatums(std::static_pointer_cast<DatumAble>(datum));
 
   return engine_->AsyncWrite(ctx, write_data, [](std::shared_ptr<Context> ctx, butil::Status status) {
@@ -117,7 +117,7 @@ butil::Status Storage::KvDeleteRange(std::shared_ptr<Context> ctx, const pb::com
 }
 
 butil::Status Storage::KvScanBegin([[maybe_unused]] std::shared_ptr<Context> ctx, const std::string& cf_name,
-                                   uint64_t region_id, const pb::common::PrefixScanRange& range, uint64_t max_fetch_cnt,
+                                   uint64_t region_id, const pb::common::RangeWithOptions& range, uint64_t max_fetch_cnt,
                                    bool key_only, bool disable_auto_release, std::string* scan_id,
                                    std::vector<pb::common::KeyValue>* kvs) {
   ScanManager* manager = ScanManager::GetInstance();

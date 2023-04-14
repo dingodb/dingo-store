@@ -164,12 +164,12 @@ public class StoreServiceClient {
 
     public boolean kvDeleteRange(DingoCommonId tableId, DingoCommonId regionId, Range range) {
         return exec(stub -> {
-            Store.KvDeleteRangeRequest req = Store.KvDeleteRangeRequest.newBuilder()
+            /*Store.KvDeleteRangeRequest req = Store.KvDeleteRangeRequest.newBuilder()
                     .setRegionId(regionId.entityId())
                     .setRange(mapping(range))
                     .build();
             Store.KvDeleteRangeResponse res = stub.kvDeleteRange(req);
-            check(res.getError());
+            check(res.getError());*/
             return true;
         }, 10, tableId, regionId);
     }

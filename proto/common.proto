@@ -47,7 +47,7 @@ message Range {
 }
 
 // prefix scan
-message PrefixScanRange {
+message RangeWithOptions {
   Range range = 1;
   bool with_start = 2;
   bool with_end = 3;

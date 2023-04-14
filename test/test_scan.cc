@@ -166,7 +166,7 @@ TEST_F(ScanTest, ScanBegin) {
   butil::Status ok;
 
   uint64_t region_id = 1;
-  pb::common::PrefixScanRange range;
+  pb::common::RangeWithOptions range;
 
   uint64_t max_fetch_cnt = 10;
   bool key_only = false;
@@ -181,6 +181,24 @@ TEST_F(ScanTest, ScanBegin) {
   range.mutable_range()->set_end_key("keyAAA");
   range.set_with_start(true);
   range.set_with_end(false);
+
+  // range value failed
+  ok = ScanHandler::ScanBegin(scan, 0, range, max_fetch_cnt, key_only, disable_auto_release, &kvs);
+  EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
+
+  range.mutable_range()->set_start_key("keyAAA");
+  range.mutable_range()->set_end_key("keyAAA");
+  range.set_with_start(false);
+  range.set_with_end(false);
+
+  // range value failed
+  ok = ScanHandler::ScanBegin(scan, 0, range, max_fetch_cnt, key_only, disable_auto_release, &kvs);
+  EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
+
+  range.mutable_range()->set_start_key("keyAAA");
+  range.mutable_range()->set_end_key("keyAAA");
+  range.set_with_start(false);
+  range.set_with_end(true);
 
   // range value failed
   ok = ScanHandler::ScanBegin(scan, 0, range, max_fetch_cnt, key_only, disable_auto_release, &kvs);
@@ -351,7 +369,7 @@ TEST_F(ScanTest, ScanBeginEqual) {
   EXPECT_NE(scan.get(), nullptr);
 
   uint64_t region_id = 1;
-  pb::common::PrefixScanRange range;
+  pb::common::RangeWithOptions range;
 
   uint64_t max_fetch_cnt = 10;
   bool key_only = false;
@@ -394,7 +412,7 @@ TEST_F(ScanTest, ScanBeginOthers) {
     EXPECT_NE(scan.get(), nullptr);
 
     uint64_t region_id = 1;
-    pb::common::PrefixScanRange range;
+    pb::common::RangeWithOptions range;
 
     uint64_t max_fetch_cnt = 100;
     bool key_only = false;
@@ -436,7 +454,7 @@ TEST_F(ScanTest, ScanBeginOthers) {
     EXPECT_NE(scan.get(), nullptr);
 
     uint64_t region_id = 1;
-    pb::common::PrefixScanRange range;
+    pb::common::RangeWithOptions range;
 
     uint64_t max_fetch_cnt = 100;
     bool key_only = false;
@@ -480,7 +498,7 @@ TEST_F(ScanTest, ScanBeginOthers) {
     EXPECT_NE(scan.get(), nullptr);
 
     uint64_t region_id = 1;
-    pb::common::PrefixScanRange range;
+    pb::common::RangeWithOptions range;
 
     uint64_t max_fetch_cnt = 100;
     bool key_only = false;
@@ -520,7 +538,7 @@ TEST_F(ScanTest, ScanBeginOthers) {
     EXPECT_NE(scan.get(), nullptr);
 
     uint64_t region_id = 1;
-    pb::common::PrefixScanRange range;
+    pb::common::RangeWithOptions range;
 
     uint64_t max_fetch_cnt = 100;
     bool key_only = false;
@@ -562,7 +580,7 @@ TEST_F(ScanTest, ScanBeginOthers) {
     EXPECT_NE(scan.get(), nullptr);
 
     uint64_t region_id = 1;
-    pb::common::PrefixScanRange range;
+    pb::common::RangeWithOptions range;
 
     uint64_t max_fetch_cnt = 100;
     bool key_only = false;
@@ -615,7 +633,7 @@ TEST_F(ScanTest, ScanBeginNormal) {
   EXPECT_NE(scan.get(), nullptr);
 
   uint64_t region_id = 1;
-  pb::common::PrefixScanRange range;
+  pb::common::RangeWithOptions range;
 
   uint64_t max_fetch_cnt = 0;
   bool key_only = false;
@@ -738,7 +756,7 @@ TEST_F(ScanTest, scan) {
   EXPECT_NE(scan.get(), nullptr);
 
   uint64_t region_id = 1;
-  pb::common::PrefixScanRange range;
+  pb::common::RangeWithOptions range;
 
   uint64_t max_fetch_cnt = 0;
   bool key_only = true;

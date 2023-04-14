@@ -78,6 +78,8 @@ class RaftKvEngine : public Engine, public RaftControlAble {
     butil::Status KvCount(std::shared_ptr<Context> ctx, const std::string& start_key, const std::string& end_key,
                           int64_t& count) override;
 
+    butil::Status KvCount(std::shared_ptr<Context> ctx, const pb::common::RangeWithOptions& range, uint64_t* count) override;
+
    private:
     std::shared_ptr<RawEngine::Reader> reader_;
   };

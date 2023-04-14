@@ -24,6 +24,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
+#include <iterator>
 #include <memory>
 #include <numeric>
 #include <random>
@@ -135,8 +136,6 @@ const std::string kYamlConfigContent =
     "    - default\n"
     "    - meta\n"
     "    - instruction\n";
-
-
 
 class RawRocksEngineTest : public testing::Test {
  protected:
@@ -1225,6 +1224,185 @@ TEST_F(RawRocksEngineTest, KvCount) {
   }
 }
 
+TEST_F(RawRocksEngineTest, KvCountWithRangeWithOptions) {
+  const std::string &cf_name = kDefaultCf;
+  std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
+
+  // start_key empty error
+  {
+    pb::common::RangeWithOptions range;
+    uint64_t count = 0;
+
+    butil::Status ok = reader->KvCount(range, &count);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+  }
+
+  // start_key valid and end_key empty error
+  {
+    pb::common::RangeWithOptions range;
+    range.mutable_range()->set_start_key("key101");
+    uint64_t count = 0;
+
+    butil::Status ok = reader->KvCount(range, &count);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+  }
+
+  // errror
+  {
+    pb::common::RangeWithOptions range;
+    range.mutable_range()->set_start_key("key202");
+    range.mutable_range()->set_end_key("key201");
+    range.set_with_start(true);
+    range.set_with_end(false);
+    uint64_t count = 0;
+
+    butil::Status ok = reader->KvCount(range, &count);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+  }
+
+  // errror
+  {
+    pb::common::RangeWithOptions range;
+    range.mutable_range()->set_start_key("key202");
+    range.mutable_range()->set_end_key("key202");
+    range.set_with_start(true);
+    range.set_with_end(false);
+    uint64_t count = 0;
+
+    butil::Status ok = reader->KvCount(range, &count);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+  }
+
+  // errror
+  {
+    pb::common::RangeWithOptions range;
+    range.mutable_range()->set_start_key("key202");
+    range.mutable_range()->set_end_key("key202");
+    range.set_with_start(false);
+    range.set_with_end(true);
+    uint64_t count = 0;
+
+    butil::Status ok = reader->KvCount(range, &count);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+  }
+
+  // errror
+  {
+    pb::common::RangeWithOptions range;
+    range.mutable_range()->set_start_key("key202");
+    range.mutable_range()->set_end_key("key202");
+    range.set_with_start(false);
+    range.set_with_end(false);
+    uint64_t count = 0;
+
+    butil::Status ok = reader->KvCount(range, &count);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+  }
+
+  // errror
+  {
+    pb::common::RangeWithOptions range;
+    std::string start_key(5, static_cast<char>(0xFF));
+    std::string end_key(5, static_cast<char>(0xFF));
+    range.mutable_range()->set_start_key(start_key);
+    range.mutable_range()->set_end_key(end_key);
+    range.set_with_start(true);
+    range.set_with_end(true);
+    uint64_t count = 0;
+
+    butil::Status ok = reader->KvCount(range, &count);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+  }
+
+  // ok
+  {
+    pb::common::RangeWithOptions range;
+    range.mutable_range()->set_start_key("key201");
+    range.mutable_range()->set_end_key("key204");
+    range.set_with_start(true);
+    range.set_with_end(false);
+    uint64_t count = 0;
+
+    butil::Status ok = reader->KvCount(range, &count);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    std::cout << "start_key : " << range.range().start_key() << " "
+              << "end_key : " << range.range().end_key() << " count : " << count << std::endl;
+
+    std::vector<pb::common::KeyValue> kvs;
+
+    ok = reader->KvScan(range.range().start_key(), range.range().end_key(), kvs);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    EXPECT_EQ(count, kvs.size());
+  }
+
+  // ok
+  {
+    pb::common::RangeWithOptions range;
+    range.mutable_range()->set_start_key("key201");
+    range.mutable_range()->set_end_key("key204");
+    range.set_with_start(true);
+    range.set_with_end(true);
+    uint64_t count = 0;
+
+    butil::Status ok = reader->KvCount(range, &count);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    std::cout << "start_key : " << range.range().start_key() << " "
+              << "end_key : " << range.range().end_key() << " count : " << count << std::endl;
+
+    std::vector<pb::common::KeyValue> kvs;
+
+    ok = reader->KvScan(range.range().start_key(), "key205", kvs);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    EXPECT_EQ(count, kvs.size());
+  }
+
+  // ok
+  {
+    pb::common::RangeWithOptions range;
+    range.mutable_range()->set_start_key("key201");
+    range.mutable_range()->set_end_key("key204");
+    range.set_with_start(false);
+    range.set_with_end(true);
+    uint64_t count = 0;
+
+    butil::Status ok = reader->KvCount(range, &count);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    std::cout << "start_key : " << range.range().start_key() << " "
+              << "end_key : " << range.range().end_key() << " count : " << count << std::endl;
+
+    std::vector<pb::common::KeyValue> kvs;
+
+    ok = reader->KvScan("key202", "key205", kvs);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    EXPECT_EQ(count, kvs.size());
+  }
+
+  // ok
+  {
+    pb::common::RangeWithOptions range;
+    range.mutable_range()->set_start_key("key201");
+    range.mutable_range()->set_end_key("key204");
+    range.set_with_start(false);
+    range.set_with_end(false);
+    uint64_t count = 0;
+
+    butil::Status ok = reader->KvCount(range, &count);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    std::cout << "start_key : " << range.range().start_key() << " "
+              << "end_key : " << range.range().end_key() << " count : " << count << std::endl;
+
+    std::vector<pb::common::KeyValue> kvs;
+
+    ok = reader->KvScan("key202", range.range().end_key(), kvs);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    EXPECT_EQ(count, kvs.size());
+  }
+}
+
 // TEST_F(RawRocksEngineTest, CreateReader) {
 //   RocksEngine &engine = rocks_engine_test->GetRawRocksEngine();
 
@@ -1623,7 +1801,7 @@ TEST_F(RawRocksEngineTest, KvDelete) {
   }
 }
 
-TEST_F(RawRocksEngineTest, KvDeleteBatch) {
+TEST_F(RawRocksEngineTest, KvBatchDelete) {
   const std::string &cf_name = kDefaultCf;
   std::shared_ptr<RawEngine::Writer> writer = RawRocksEngineTest::engine->NewWriter(cf_name);
 
@@ -1631,7 +1809,7 @@ TEST_F(RawRocksEngineTest, KvDeleteBatch) {
   {
     std::vector<std::string> keys;
 
-    butil::Status ok = writer->KvDeleteBatch(keys);
+    butil::Status ok = writer->KvBatchDelete(keys);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_EMPTY);
   }
 
@@ -1641,7 +1819,7 @@ TEST_F(RawRocksEngineTest, KvDeleteBatch) {
     keys.emplace_back("key");
     keys.emplace_back("");
 
-    butil::Status ok = writer->KvDeleteBatch(keys);
+    butil::Status ok = writer->KvBatchDelete(keys);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_EMPTY);
   }
 
@@ -1674,7 +1852,7 @@ TEST_F(RawRocksEngineTest, KvDeleteBatch) {
       keys.emplace_back(kv.key());
     }
 
-    ok = writer->KvDeleteBatch(keys);
+    ok = writer->KvBatchDelete(keys);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     for (int i = 0; i < 10; i++) {
@@ -1775,7 +1953,7 @@ TEST_F(RawRocksEngineTest, KvDeleteRange) {
   const std::string &cf_name = kDefaultCf;
   std::shared_ptr<RawEngine::Writer> writer = RawRocksEngineTest::engine->NewWriter(cf_name);
 
-  // wirite key -> key999
+  // write key -> key999
   {
     std::vector<pb::common::KeyValue> kvs;
     std::vector<bool> key_states;
@@ -1796,7 +1974,7 @@ TEST_F(RawRocksEngineTest, KvDeleteRange) {
     pb::common::Range range;
 
     butil::Status ok = writer->KvDeleteRange(range);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_EMPTY);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
   }
 
   // start key not empty but end key empty
@@ -1806,7 +1984,7 @@ TEST_F(RawRocksEngineTest, KvDeleteRange) {
 
     butil::Status ok = writer->KvDeleteRange(range);
 
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_EMPTY);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
   }
 
   // ok
@@ -1903,6 +2081,771 @@ TEST_F(RawRocksEngineTest, KvDeleteRange) {
     for (const auto &kv : kvs) {
       std::cout << kv.key() << ":" << kv.value() << std::endl;
     }
+  }
+}
+
+TEST_F(RawRocksEngineTest, KvDeleteRangeWithRangeWithOptions) {
+  const std::string &cf_name = kDefaultCf;
+  std::shared_ptr<RawEngine::Writer> writer = RawRocksEngineTest::engine->NewWriter(cf_name);
+
+  // write KEY -> KEY10
+  {
+    std::vector<pb::common::KeyValue> kvs;
+    std::vector<bool> key_states;
+
+    for (int i = 0; i < 10; i++) {
+      pb::common::KeyValue kv;
+      kv.set_key("KEY" + std::to_string(i));
+      kv.set_value("VALUE" + std::to_string(i));
+      kvs.push_back(kv);
+    }
+
+    butil::Status ok = writer->KvBatchPut(kvs);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+  }
+
+  // key empty failed
+  {
+    pb::common::RangeWithOptions range;
+    butil::Status ok = writer->KvDeleteRange(range);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+  }
+
+  // start key not empty but end key empty failed
+  {
+    pb::common::RangeWithOptions range;
+
+    range.mutable_range()->set_start_key("key");
+
+    butil::Status ok = writer->KvDeleteRange(range);
+
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+  }
+
+  // end key not empty but start key empty failed
+  {
+    pb::common::RangeWithOptions range;
+
+    range.mutable_range()->set_end_key("key");
+
+    butil::Status ok = writer->KvDeleteRange(range);
+
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+  }
+
+  // start key >  end key equal failed
+  {
+    pb::common::RangeWithOptions range;
+
+    range.mutable_range()->set_start_key("key");
+    range.mutable_range()->set_end_key("Key");
+
+    butil::Status ok = writer->KvDeleteRange(range);
+
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+  }
+
+  // start key ==  end key equal failed
+  {
+    pb::common::RangeWithOptions range;
+
+    range.mutable_range()->set_start_key("key");
+    range.mutable_range()->set_end_key("key");
+    range.set_with_start(true);
+    range.set_with_end(false);
+
+    butil::Status ok = writer->KvDeleteRange(range);
+
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+  }
+
+  // start key ==  end key equal failed
+  {
+    pb::common::RangeWithOptions range;
+
+    range.mutable_range()->set_start_key("key");
+    range.mutable_range()->set_end_key("key");
+    range.set_with_start(false);
+    range.set_with_end(false);
+
+    butil::Status ok = writer->KvDeleteRange(range);
+
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+  }
+
+  // start key ==  end key equal  with_start = false  _with_end = true failed
+  {
+    pb::common::RangeWithOptions range;
+
+    range.mutable_range()->set_start_key("key");
+    range.mutable_range()->set_end_key("key");
+    range.set_with_start(false);
+    range.set_with_end(true);
+
+    butil::Status ok = writer->KvDeleteRange(range);
+
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+  }
+
+  // failed
+  {
+    pb::common::RangeWithOptions range;
+    range.mutable_range()->set_start_key("KEY");
+    range.mutable_range()->set_end_key("KEY10");
+
+    butil::Status ok = writer->KvDeleteRange(range);
+
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+  }
+
+  // ok
+  {
+    pb::common::RangeWithOptions range;
+
+    range.mutable_range()->set_start_key("key");
+    range.mutable_range()->set_end_key("key");
+    range.set_with_start(true);
+    range.set_with_end(true);
+
+    butil::Status ok = writer->KvDeleteRange(range);
+
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+  }
+
+  // ok delete KEY0 KEY1
+  {
+    pb::common::RangeWithOptions range;
+    range.mutable_range()->set_start_key("KEX");
+    range.mutable_range()->set_end_key("KEY10");
+
+    butil::Status ok = writer->KvDeleteRange(range);
+
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    std::vector<pb::common::KeyValue> kvs;
+
+    std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
+
+    std::string key1 = "KEY0";
+    std::string value1;
+    ok = reader->KvGet(key1, value1);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOTFOUND);
+
+    std::string key2 = "KEY1";
+    std::string value2;
+    ok = reader->KvGet(key2, value2);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOTFOUND);
+
+    std::string start_key = "KEY";
+    std::string end_key = "KEZ";
+    ok = reader->KvScan(start_key, end_key, kvs);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    std::cout << "start_key : " << start_key << " "
+              << "end_key : " << end_key << std::endl;
+    for (const auto &kv : kvs) {
+      std::cout << kv.key() << ":" << kv.value() << std::endl;
+    }
+  }
+
+  // ok delete KEY
+  {
+    pb::common::RangeWithOptions range;
+    range.mutable_range()->set_start_key("KEY");
+    range.mutable_range()->set_end_key("KEY");
+    range.set_with_start(true);
+    range.set_with_end(true);
+
+    butil::Status ok = writer->KvDeleteRange(range);
+
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    std::vector<pb::common::KeyValue> kvs;
+
+    std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
+
+    std::string start_key = "KEY";
+    std::string end_key = "KEZ";
+    ok = reader->KvScan(start_key, end_key, kvs);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    std::cout << "start_key : " << start_key << " "
+              << "end_key : " << end_key << std::endl;
+    for (const auto &kv : kvs) {
+      std::cout << kv.key() << ":" << kv.value() << std::endl;
+    }
+
+    EXPECT_EQ(0, kvs.size());
+  }
+
+  // write KEY -> KEY10
+  {
+    std::vector<pb::common::KeyValue> kvs;
+    std::vector<bool> key_states;
+
+    for (int i = 0; i < 10; i++) {
+      pb::common::KeyValue kv;
+      kv.set_key("KEY" + std::to_string(i));
+      kv.set_value("VALUE" + std::to_string(i));
+      kvs.push_back(kv);
+    }
+
+    butil::Status ok = writer->KvBatchPut(kvs);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+  }
+
+  // write KEZ -> KEZ10
+  {
+    std::vector<pb::common::KeyValue> kvs;
+    std::vector<bool> key_states;
+
+    for (int i = 0; i < 10; i++) {
+      pb::common::KeyValue kv;
+      kv.set_key("KEZ" + std::to_string(i));
+      kv.set_value("VALUE_Z" + std::to_string(i));
+      kvs.push_back(kv);
+    }
+
+    butil::Status ok = writer->KvBatchPut(kvs);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+  }
+
+  {
+    // ok delete KEY
+    pb::common::RangeWithOptions range;
+    range.mutable_range()->set_start_key("KEY");
+    range.mutable_range()->set_end_key("KEZ");
+    range.set_with_start(true);
+    range.set_with_end(false);
+
+    butil::Status ok = writer->KvDeleteRange(range);
+
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    std::vector<pb::common::KeyValue> kvs;
+
+    std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
+
+    std::string start_key = "KEY";
+    std::string end_key = "KF0";
+    ok = reader->KvScan(start_key, end_key, kvs);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    std::cout << "start_key : " << start_key << " "
+              << "end_key : " << end_key << std::endl;
+    for (const auto &kv : kvs) {
+      std::cout << kv.key() << ":" << kv.value() << std::endl;
+    }
+
+    EXPECT_EQ(10, kvs.size());
+  }
+
+  {
+    // ok delete KEY
+    pb::common::RangeWithOptions range;
+    range.mutable_range()->set_start_key("KEY");
+    range.mutable_range()->set_end_key("KEZ");
+    range.set_with_start(true);
+    range.set_with_end(true);
+
+    butil::Status ok = writer->KvDeleteRange(range);
+
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    std::vector<pb::common::KeyValue> kvs;
+
+    std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
+
+    std::string start_key = "KEY";
+    std::string end_key = "KF0";
+    ok = reader->KvScan(start_key, end_key, kvs);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    std::cout << "start_key : " << start_key << " "
+              << "end_key : " << end_key << std::endl;
+    for (const auto &kv : kvs) {
+      std::cout << kv.key() << ":" << kv.value() << std::endl;
+    }
+
+    EXPECT_EQ(0, kvs.size());
+  }
+
+  // write KEY -> KEY10
+  {
+    std::vector<pb::common::KeyValue> kvs;
+    std::vector<bool> key_states;
+
+    for (int i = 0; i < 10; i++) {
+      pb::common::KeyValue kv;
+      kv.set_key("KEY" + std::to_string(i));
+      kv.set_value("VALUE" + std::to_string(i));
+      kvs.push_back(kv);
+    }
+
+    butil::Status ok = writer->KvBatchPut(kvs);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+  }
+
+  // write KEZ -> KEZ10
+  {
+    std::vector<pb::common::KeyValue> kvs;
+    std::vector<bool> key_states;
+
+    for (int i = 0; i < 10; i++) {
+      pb::common::KeyValue kv;
+      kv.set_key("KEZ" + std::to_string(i));
+      kv.set_value("VALUE_Z" + std::to_string(i));
+      kvs.push_back(kv);
+    }
+
+    butil::Status ok = writer->KvBatchPut(kvs);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+  }
+
+  {
+    // ok delete KEY
+    pb::common::RangeWithOptions range;
+    range.mutable_range()->set_start_key("KEY");
+    range.mutable_range()->set_end_key("KEZ");
+    range.set_with_start(false);
+    range.set_with_end(false);
+
+    butil::Status ok = writer->KvDeleteRange(range);
+
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+  }
+
+  {
+    // ok delete KEY
+    pb::common::RangeWithOptions range;
+    range.mutable_range()->set_start_key("KEX");
+    range.mutable_range()->set_end_key("KEZ");
+    range.set_with_start(false);
+    range.set_with_end(true);
+
+    butil::Status ok = writer->KvDeleteRange(range);
+
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    std::vector<pb::common::KeyValue> kvs;
+
+    std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
+
+    std::string start_key = "KEY";
+    std::string end_key = "KF0";
+    ok = reader->KvScan(start_key, end_key, kvs);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    std::cout << "start_key : " << start_key << " "
+              << "end_key : " << end_key << std::endl;
+    for (const auto &kv : kvs) {
+      std::cout << kv.key() << ":" << kv.value() << std::endl;
+    }
+
+    EXPECT_EQ(0, kvs.size());
+  }
+
+  {
+    // ok delete KEY
+    pb::common::RangeWithOptions range;
+    char array[] = {static_cast<char>(0xFF), static_cast<char>(0xFF), static_cast<char>(0xFF), static_cast<char>(0xFF)};
+
+    range.mutable_range()->set_start_key(std::string(array, std::size(array)));
+    range.mutable_range()->set_end_key(std::string(array, std::size(array)));
+    range.set_with_start(true);
+    range.set_with_end(true);
+
+    butil::Status ok = writer->KvDeleteRange(range);
+
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+  }
+}
+
+TEST_F(RawRocksEngineTest, KvBatchDeleteRange) {
+  const std::string &cf_name = kDefaultCf;
+  std::shared_ptr<RawEngine::Writer> writer = RawRocksEngineTest::engine->NewWriter(cf_name);
+
+  // write KEY -> KEY10
+  {
+    std::vector<pb::common::KeyValue> kvs;
+    std::vector<bool> key_states;
+
+    for (int i = 0; i < 10; i++) {
+      pb::common::KeyValue kv;
+      kv.set_key("KEY" + std::to_string(i));
+      kv.set_value("VALUE" + std::to_string(i));
+      kvs.push_back(kv);
+    }
+
+    butil::Status ok = writer->KvBatchPut(kvs);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+  }
+
+  // key empty failed
+  {
+    pb::common::RangeWithOptions range;
+    butil::Status ok = writer->KvBatchDeleteRange({range});
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+  }
+
+  // start key not empty but end key empty failed
+  {
+    pb::common::RangeWithOptions range;
+
+    range.mutable_range()->set_start_key("key");
+
+    butil::Status ok = writer->KvBatchDeleteRange({range});
+
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+  }
+
+  // end key not empty but start key empty failed
+  {
+    pb::common::RangeWithOptions range;
+
+    range.mutable_range()->set_end_key("key");
+
+    butil::Status ok = writer->KvBatchDeleteRange({range});
+
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+  }
+
+  // start key >  end key equal failed
+  {
+    pb::common::RangeWithOptions range;
+
+    range.mutable_range()->set_start_key("key");
+    range.mutable_range()->set_end_key("Key");
+
+    butil::Status ok = writer->KvBatchDeleteRange({range});
+
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+  }
+
+  // start key ==  end key equal failed
+  {
+    pb::common::RangeWithOptions range;
+
+    range.mutable_range()->set_start_key("key");
+    range.mutable_range()->set_end_key("key");
+    range.set_with_start(true);
+    range.set_with_end(false);
+
+    butil::Status ok = writer->KvBatchDeleteRange({range});
+
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+  }
+
+  // start key ==  end key equal failed
+  {
+    pb::common::RangeWithOptions range;
+
+    range.mutable_range()->set_start_key("key");
+    range.mutable_range()->set_end_key("key");
+    range.set_with_start(false);
+    range.set_with_end(false);
+
+    butil::Status ok = writer->KvBatchDeleteRange({range});
+
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+  }
+
+  // start key ==  end key equal  with_start = false  _with_end = true failed
+  {
+    pb::common::RangeWithOptions range;
+
+    range.mutable_range()->set_start_key("key");
+    range.mutable_range()->set_end_key("key");
+    range.set_with_start(false);
+    range.set_with_end(true);
+
+    butil::Status ok = writer->KvBatchDeleteRange({range});
+
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+  }
+
+  // failed
+  {
+    pb::common::RangeWithOptions range;
+    range.mutable_range()->set_start_key("KEY");
+    range.mutable_range()->set_end_key("KEY10");
+
+    butil::Status ok = writer->KvBatchDeleteRange({range});
+
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+  }
+
+  // ok
+  {
+    std::vector<pb::common::RangeWithOptions> ranges;
+
+    pb::common::RangeWithOptions range1;
+
+    range1.mutable_range()->set_start_key("key");
+    range1.mutable_range()->set_end_key("key");
+    range1.set_with_start(true);
+    range1.set_with_end(true);
+
+    ranges.emplace_back(range1);
+
+    pb::common::RangeWithOptions range2;
+
+    range2.mutable_range()->set_start_key("ABC");
+    range2.mutable_range()->set_end_key("ABC");
+    range2.set_with_start(true);
+    range2.set_with_end(true);
+
+    ranges.emplace_back(range2);
+
+    butil::Status ok = writer->KvBatchDeleteRange(ranges);
+
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+  }
+
+  // ok delete KEY0 KEY1
+  {
+    pb::common::RangeWithOptions range;
+    range.mutable_range()->set_start_key("KEX");
+    range.mutable_range()->set_end_key("KEY10");
+
+    butil::Status ok = writer->KvBatchDeleteRange({range});
+
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    std::vector<pb::common::KeyValue> kvs;
+
+    std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
+
+    std::string key1 = "KEY0";
+    std::string value1;
+    ok = reader->KvGet(key1, value1);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOTFOUND);
+
+    std::string key2 = "KEY1";
+    std::string value2;
+    ok = reader->KvGet(key2, value2);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOTFOUND);
+
+    std::string start_key = "KEY";
+    std::string end_key = "KEZ";
+    ok = reader->KvScan(start_key, end_key, kvs);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    std::cout << "start_key : " << start_key << " "
+              << "end_key : " << end_key << std::endl;
+    for (const auto &kv : kvs) {
+      std::cout << kv.key() << ":" << kv.value() << std::endl;
+    }
+  }
+
+  // ok delete KEY
+  {
+    pb::common::RangeWithOptions range;
+    range.mutable_range()->set_start_key("KEY");
+    range.mutable_range()->set_end_key("KEY");
+    range.set_with_start(true);
+    range.set_with_end(true);
+
+    butil::Status ok = writer->KvBatchDeleteRange({range});
+
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    std::vector<pb::common::KeyValue> kvs;
+
+    std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
+
+    std::string start_key = "KEY";
+    std::string end_key = "KEZ";
+    ok = reader->KvScan(start_key, end_key, kvs);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    std::cout << "start_key : " << start_key << " "
+              << "end_key : " << end_key << std::endl;
+    for (const auto &kv : kvs) {
+      std::cout << kv.key() << ":" << kv.value() << std::endl;
+    }
+
+    EXPECT_EQ(0, kvs.size());
+  }
+
+  // write KEY -> KEY10
+  {
+    std::vector<pb::common::KeyValue> kvs;
+    std::vector<bool> key_states;
+
+    for (int i = 0; i < 10; i++) {
+      pb::common::KeyValue kv;
+      kv.set_key("KEY" + std::to_string(i));
+      kv.set_value("VALUE" + std::to_string(i));
+      kvs.push_back(kv);
+    }
+
+    butil::Status ok = writer->KvBatchPut(kvs);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+  }
+
+  // write KEZ -> KEZ10
+  {
+    std::vector<pb::common::KeyValue> kvs;
+    std::vector<bool> key_states;
+
+    for (int i = 0; i < 10; i++) {
+      pb::common::KeyValue kv;
+      kv.set_key("KEZ" + std::to_string(i));
+      kv.set_value("VALUE_Z" + std::to_string(i));
+      kvs.push_back(kv);
+    }
+
+    butil::Status ok = writer->KvBatchPut(kvs);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+  }
+
+  {
+    std::vector<pb::common::RangeWithOptions> ranges;
+
+    // ok delete KEY
+    {
+      pb::common::RangeWithOptions range;
+      range.mutable_range()->set_start_key("KEY");
+      range.mutable_range()->set_end_key("KEY");
+      range.set_with_start(true);
+      range.set_with_end(true);
+      ranges.emplace_back(range);
+    }
+
+    {
+      // ok delete KEY
+      pb::common::RangeWithOptions range;
+      range.mutable_range()->set_start_key("KEZ");
+      range.mutable_range()->set_end_key("KEZ");
+      range.set_with_start(true);
+      range.set_with_end(true);
+      ranges.emplace_back(range);
+    }
+
+    butil::Status ok = writer->KvBatchDeleteRange(ranges);
+
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    std::vector<pb::common::KeyValue> kvs;
+
+    std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
+
+    std::string start_key = "KEY";
+    std::string end_key = "KEZ";
+    ok = reader->KvScan(start_key, end_key, kvs);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    std::cout << "start_key : " << start_key << " "
+              << "end_key : " << end_key << std::endl;
+    for (const auto &kv : kvs) {
+      std::cout << kv.key() << ":" << kv.value() << std::endl;
+    }
+
+    EXPECT_EQ(0, kvs.size());
+
+    start_key = "KEZ";
+    end_key = "KE[";
+    ok = reader->KvScan(start_key, end_key, kvs);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    std::cout << "start_key : " << start_key << " "
+              << "end_key : " << end_key << std::endl;
+    for (const auto &kv : kvs) {
+      std::cout << kv.key() << ":" << kv.value() << std::endl;
+    }
+
+    EXPECT_EQ(0, kvs.size());
+  }
+
+  // write KEY -> KEY10
+  {
+    std::vector<pb::common::KeyValue> kvs;
+    std::vector<bool> key_states;
+
+    for (int i = 0; i < 10; i++) {
+      pb::common::KeyValue kv;
+      kv.set_key("KEY" + std::to_string(i));
+      kv.set_value("VALUE" + std::to_string(i));
+      kvs.push_back(kv);
+    }
+
+    butil::Status ok = writer->KvBatchPut(kvs);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+  }
+
+  // write KEZ -> KEZ10
+  {
+    std::vector<pb::common::KeyValue> kvs;
+    std::vector<bool> key_states;
+
+    for (int i = 0; i < 10; i++) {
+      pb::common::KeyValue kv;
+      kv.set_key("KEZ" + std::to_string(i));
+      kv.set_value("VALUE_Z" + std::to_string(i));
+      kvs.push_back(kv);
+    }
+
+    butil::Status ok = writer->KvBatchPut(kvs);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+  }
+
+  {
+    // ok delete KEY
+    pb::common::RangeWithOptions range;
+    range.mutable_range()->set_start_key("KEY");
+    range.mutable_range()->set_end_key("KEZ");
+    range.set_with_start(false);
+    range.set_with_end(false);
+
+    butil::Status ok = writer->KvBatchDeleteRange({range});
+
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+  }
+
+  {
+    // ok delete KEY
+    pb::common::RangeWithOptions range;
+    range.mutable_range()->set_start_key("KEX");
+    range.mutable_range()->set_end_key("KEZ");
+    range.set_with_start(false);
+    range.set_with_end(true);
+
+    butil::Status ok = writer->KvBatchDeleteRange({range});
+
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    std::vector<pb::common::KeyValue> kvs;
+
+    std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
+
+    std::string start_key = "KEY";
+    std::string end_key = "KF0";
+    ok = reader->KvScan(start_key, end_key, kvs);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    std::cout << "start_key : " << start_key << " "
+              << "end_key : " << end_key << std::endl;
+    for (const auto &kv : kvs) {
+      std::cout << kv.key() << ":" << kv.value() << std::endl;
+    }
+
+    EXPECT_EQ(0, kvs.size());
+  }
+
+  {
+    // ok delete KEY
+    pb::common::RangeWithOptions range;
+    char array[] = {static_cast<char>(0xFF), static_cast<char>(0xFF), static_cast<char>(0xFF), static_cast<char>(0xFF)};
+
+    range.mutable_range()->set_start_key(std::string(array, std::size(array)));
+    range.mutable_range()->set_end_key(std::string(array, std::size(array)));
+    range.set_with_start(true);
+    range.set_with_end(true);
+
+    butil::Status ok = writer->KvBatchDeleteRange({range});
+
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
   }
 }
 
