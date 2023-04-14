@@ -75,22 +75,39 @@ class CoordinatorControl : public MetaControl {
   // out: server_location
   void GetServerLocation(pb::common::Location &raft_location, pb::common::Location &server_location);
 
+  // query region info
+  pb::error::Errno QueryRegion(uint64_t region_id, pb::common::Region &region);
+
   // create region
   // in: resource_tag
   // out: new region id
-  int CreateRegion(const std::string &region_name, const std::string &resource_tag, int32_t replica_num,
-                   pb::common::Range region_range, uint64_t schema_id, uint64_t table_id, uint64_t &new_region_id,
-                   pb::coordinator_internal::MetaIncrement &meta_increment);
+  // return: errno
+  pb::error::Errno CreateRegion(const std::string &region_name, const std::string &resource_tag, int32_t replica_num,
+                                pb::common::Range region_range, uint64_t schema_id, uint64_t table_id,
+                                uint64_t &new_region_id, pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // drop region
   // in:  region_id
-  // return: 0 or -1
-  int DropRegion(uint64_t region_id, pb::coordinator_internal::MetaIncrement &meta_increment);
+  // return: errno
+  pb::error::Errno DropRegion(uint64_t region_id, pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // drop region permanently
   // in:  region_id
   // return: errno
   pb::error::Errno DropRegionPermanently(uint64_t region_id, pb::coordinator_internal::MetaIncrement &meta_increment);
+
+  // split region
+  pb::error::Errno SplitRegion(uint64_t split_from_region_id, uint64_t split_to_region_id,
+                               std::string split_watershed_key,
+                               pb::coordinator_internal::MetaIncrement &meta_increment);
+
+  // merge region
+  pb::error::Errno MergeRegion(uint64_t merge_from_region_id, uint64_t merge_to_region_id,
+                               pb::coordinator_internal::MetaIncrement &meta_increment);
+
+  // change peer region
+  pb::error::Errno ChangePeerRegion(uint64_t region_id, std::vector<uint64_t> &new_store_ids,
+                                    pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // CleanStoreOperation
   // in:  store_id

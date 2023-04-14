@@ -468,7 +468,7 @@ void SendGetStoreOperation(brpc::Controller& cntl, dingodb::pb::coordinator::Coo
   dingodb::pb::coordinator::GetStoreOperationResponse response;
 
   if (!FLAGS_id.empty()) {
-    request.set_id(std::stoull(FLAGS_id));
+    request.set_store_id(std::stoull(FLAGS_id));
   }
 
   stub.GetStoreOperation(&cntl, &request, &response, nullptr);

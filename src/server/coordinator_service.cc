@@ -430,8 +430,8 @@ void CoordinatorServiceImpl::GetStoreOperation(google::protobuf::RpcController *
     return RedirectResponse(response);
   }
 
-  // if id = 0, get all store operation
-  if (request->id() == 0) {
+  // if store_id = 0, get all store operation
+  if (request->store_id() == 0) {
     butil::FlatMap<uint64_t, pb::coordinator::StoreOperation> store_operations;
     store_operations.init(100);
     coordinator_control_->GetStoreOperations(store_operations);
@@ -445,7 +445,7 @@ void CoordinatorServiceImpl::GetStoreOperation(google::protobuf::RpcController *
 
   // get store_operation for id
   auto *store_operation = response->add_store_operations();
-  coordinator_control_->GetStoreOperation(request->id(), *store_operation);
+  coordinator_control_->GetStoreOperation(request->store_id(), *store_operation);
 }
 
 void CoordinatorServiceImpl::GetExecutorMap(google::protobuf::RpcController * /*controller*/,
@@ -513,6 +513,116 @@ void CoordinatorServiceImpl::GetCoordinatorMap(google::protobuf::RpcController *
   }
 }
 
+// Region services
+void CoordinatorServiceImpl::QueryRegion(google::protobuf::RpcController * /*controller*/,
+                                         const pb::coordinator::QueryRegionRequest *request,
+                                         pb::coordinator::QueryRegionResponse *response,
+                                         google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+  DINGO_LOG(DEBUG) << "Receive Query Region Request:" << request->DebugString();
+
+  auto is_leader = this->coordinator_control_->IsLeader();
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  auto region_id = request->region_id();
+
+  pb::common::Region region;
+  auto ret = this->coordinator_control_->QueryRegion(region_id, region);
+  response->mutable_error()->set_errcode(ret);
+
+  if (ret == pb::error::Errno::OK) {
+    response->mutable_region()->CopyFrom(region);
+  } else {
+    response->mutable_error()->set_errcode(ret);
+  }
+}
+
+void CoordinatorServiceImpl::CreateRegion(google::protobuf::RpcController *controller,
+                                          const pb::coordinator::CreateRegionRequest *request,
+                                          pb::coordinator::CreateRegionResponse *response,
+                                          google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+  DINGO_LOG(DEBUG) << "Receive Create Region Request:" << request->DebugString();
+
+  auto is_leader = this->coordinator_control_->IsLeader();
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  pb::coordinator_internal::MetaIncrement meta_increment;
+
+  std::string region_name = request->region_name();
+  std::string resource_tag = request->resource_tag();
+  uint64_t replica_num = request->replica_num();
+  pb::common::Range range = request->range();
+  uint64_t schema_id = request->schema_id();
+  uint64_t table_id = request->table_id();
+  uint64_t new_region_id = 0;
+
+  auto ret = coordinator_control_->CreateRegion(region_name, resource_tag, replica_num, range, schema_id, table_id,
+                                                new_region_id, meta_increment);
+  response->mutable_error()->set_errcode(ret);
+  response->set_region_id(new_region_id);
+
+  // if meta_increment is empty, means no need to update meta
+  if (meta_increment.ByteSizeLong() == 0) {
+    return;
+  }
+
+  // prepare for raft process
+  CoordinatorClosure<pb::coordinator::CreateRegionRequest, pb::coordinator::CreateRegionResponse>
+      *meta_create_region_closure =
+          new CoordinatorClosure<pb::coordinator::CreateRegionRequest, pb::coordinator::CreateRegionResponse>(
+              request, response, done_guard.release());
+
+  std::shared_ptr<Context> const ctx =
+      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_create_region_closure);
+  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+
+  // this is a async operation will be block by closure
+  engine_->MetaPut(ctx, meta_increment);
+}
+
+void CoordinatorServiceImpl::DropRegion(google::protobuf::RpcController *controller,
+                                        const pb::coordinator::DropRegionRequest *request,
+                                        pb::coordinator::DropRegionResponse *response,
+                                        google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+  DINGO_LOG(DEBUG) << "Receive Drop Region Request:" << request->DebugString();
+
+  auto is_leader = this->coordinator_control_->IsLeader();
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  pb::coordinator_internal::MetaIncrement meta_increment;
+
+  auto region_id = request->region_id();
+
+  auto ret = this->coordinator_control_->DropRegion(region_id, meta_increment);
+  response->mutable_error()->set_errcode(ret);
+
+  // if meta_increment is empty, means no need to update meta
+  if (meta_increment.ByteSizeLong() == 0) {
+    return;
+  }
+
+  // prepare for raft process
+  CoordinatorClosure<pb::coordinator::DropRegionRequest, pb::coordinator::DropRegionResponse>
+      *meta_drop_region_closure =
+          new CoordinatorClosure<pb::coordinator::DropRegionRequest, pb::coordinator::DropRegionResponse>(
+              request, response, done_guard.release());
+
+  std::shared_ptr<Context> const ctx =
+      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_drop_region_closure);
+  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+
+  // this is a async operation will be block by closure
+  engine_->MetaPut(ctx, meta_increment);
+}
+
 void CoordinatorServiceImpl::DropRegionPermanently(google::protobuf::RpcController *controller,
                                                    const pb::coordinator::DropRegionPermanentlyRequest *request,
                                                    pb::coordinator::DropRegionPermanentlyResponse *response,
@@ -547,6 +657,157 @@ void CoordinatorServiceImpl::DropRegionPermanently(google::protobuf::RpcControll
   engine_->MetaPut(ctx, meta_increment);
 }
 
+void CoordinatorServiceImpl::SplitRegion(google::protobuf::RpcController *controller,
+                                         const pb::coordinator::SplitRegionRequest *request,
+                                         pb::coordinator::SplitRegionResponse *response,
+                                         google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+  DINGO_LOG(DEBUG) << "Receive Split Region Request:" << request->DebugString();
+
+  auto is_leader = this->coordinator_control_->IsLeader();
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  pb::coordinator_internal::MetaIncrement meta_increment;
+
+  // validate region_cmd
+  if (!request->has_split_request()) {
+    response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
+    return;
+  }
+
+  auto split_request = request->split_request();
+
+  auto ret =
+      this->coordinator_control_->SplitRegion(split_request.split_from_region_id(), split_request.split_to_region_id(),
+                                              split_request.split_watershed_key(), meta_increment);
+  response->mutable_error()->set_errcode(ret);
+
+  // if meta_increment is empty, means no need to update meta
+  if (meta_increment.ByteSizeLong() == 0) {
+    return;
+  }
+
+  // prepare for raft process
+  CoordinatorClosure<pb::coordinator::SplitRegionRequest, pb::coordinator::SplitRegionResponse>
+      *meta_split_region_closure =
+          new CoordinatorClosure<pb::coordinator::SplitRegionRequest, pb::coordinator::SplitRegionResponse>(
+              request, response, done_guard.release());
+
+  std::shared_ptr<Context> const ctx =
+      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_split_region_closure);
+  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+
+  // this is a async operation will be block by closure
+  engine_->MetaPut(ctx, meta_increment);
+}
+
+void CoordinatorServiceImpl::MergeRegion(google::protobuf::RpcController *controller,
+                                         const pb::coordinator::MergeRegionRequest *request,
+                                         pb::coordinator::MergeRegionResponse *response,
+                                         google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+  DINGO_LOG(DEBUG) << "Receive Merge Region Request:" << request->DebugString();
+
+  auto is_leader = this->coordinator_control_->IsLeader();
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  pb::coordinator_internal::MetaIncrement meta_increment;
+
+  // validate region_cmd
+  if (!request->has_merge_request()) {
+    response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
+    return;
+  }
+
+  auto merge_request = request->merge_request();
+
+  auto ret = this->coordinator_control_->MergeRegion(merge_request.merge_from_region_id(),
+                                                     merge_request.merge_to_region_id(), meta_increment);
+  response->mutable_error()->set_errcode(ret);
+
+  // if meta_increment is empty, means no need to update meta
+  if (meta_increment.ByteSizeLong() == 0) {
+    return;
+  }
+
+  // prepare for raft process
+  CoordinatorClosure<pb::coordinator::MergeRegionRequest, pb::coordinator::MergeRegionResponse>
+      *meta_merge_region_closure =
+          new CoordinatorClosure<pb::coordinator::MergeRegionRequest, pb::coordinator::MergeRegionResponse>(
+              request, response, done_guard.release());
+
+  std::shared_ptr<Context> const ctx =
+      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_merge_region_closure);
+  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+
+  // this is a async operation will be block by closure
+  engine_->MetaPut(ctx, meta_increment);
+}
+
+void CoordinatorServiceImpl::ChangePeerRegion(google::protobuf::RpcController *controller,
+                                              const pb::coordinator::ChangePeerRegionRequest *request,
+                                              pb::coordinator::ChangePeerRegionResponse *response,
+                                              google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+  DINGO_LOG(DEBUG) << "Receive Change Peer Region Request:" << request->DebugString();
+
+  auto is_leader = this->coordinator_control_->IsLeader();
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  pb::coordinator_internal::MetaIncrement meta_increment;
+
+  // validate region_cmd
+  if (!request->has_change_peer_request()) {
+    response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
+    return;
+  }
+
+  auto change_peer_request = request->change_peer_request();
+  if (!change_peer_request.has_region_definition()) {
+    response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
+    return;
+  }
+
+  const auto &region_definition = change_peer_request.region_definition();
+  if (region_definition.peers_size() == 0) {
+    response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
+    return;
+  }
+
+  std::vector<uint64_t> new_store_ids;
+  for (const auto &it : region_definition.peers()) {
+    new_store_ids.push_back(it.store_id());
+  }
+
+  auto ret = this->coordinator_control_->ChangePeerRegion(region_definition.id(), new_store_ids, meta_increment);
+  response->mutable_error()->set_errcode(ret);
+
+  // if meta_increment is empty, means no need to update meta
+  if (meta_increment.ByteSizeLong() == 0) {
+    return;
+  }
+
+  // prepare for raft process
+  CoordinatorClosure<pb::coordinator::ChangePeerRegionRequest, pb::coordinator::ChangePeerRegionResponse>
+      *meta_change_peer_region_closure =
+          new CoordinatorClosure<pb::coordinator::ChangePeerRegionRequest, pb::coordinator::ChangePeerRegionResponse>(
+              request, response, done_guard.release());
+
+  std::shared_ptr<Context> const ctx =
+      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_change_peer_region_closure);
+  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+
+  // this is a async operation will be block by closure
+  engine_->MetaPut(ctx, meta_increment);
+}
+
+// StoreOperation service
 void CoordinatorServiceImpl::CleanStoreOperation(google::protobuf::RpcController *controller,
                                                  const pb::coordinator::CleanStoreOperationRequest *request,
                                                  pb::coordinator::CleanStoreOperationResponse *response,
