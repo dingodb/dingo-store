@@ -194,7 +194,7 @@ message GetStoreMetricsResponse {
 }
 
 message GetStoreOperationRequest {
-  uint64 id = 1;  // this is store_id, if 0, means get all store operation
+  uint64 store_id = 1;  // this is store_id, if 0, means get all store operation
 }
 
 message GetStoreOperationResponse {
@@ -262,6 +262,62 @@ message GetExecutorMapResponse {
   dingodb.pb.common.ExecutorMap executormap = 3;
 }
 
+message CleanStoreOperationRequest {
+  uint64 store_id = 1;
+}
+
+message CleanStoreOperationResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
+message AddStoreOperationRequest {
+  StoreOperation store_operation = 1;
+}
+
+message AddStoreOperationResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
+message RemoveStoreOperationRequest {
+  uint64 store_id = 1;
+  uint64 region_cmd_id = 2;
+}
+
+message RemoveStoreOperationResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
+message QueryRegionRequest {
+  uint64 region_id = 1;
+}
+
+message QueryRegionResponse {
+  dingodb.pb.error.Error error = 1;
+  dingodb.pb.common.Region region = 2;
+}
+
+message CreateRegionRequest {
+  string region_name = 1;
+  string resource_tag = 2;
+  uint64 replica_num = 3;
+  dingodb.pb.common.Range range = 4;
+  uint64 schema_id = 5;  // optional
+  uint64 table_id = 6;   // optional
+}
+
+message CreateRegionResponse {
+  dingodb.pb.error.Error error = 1;
+  uint64 region_id = 2;
+}
+
+message DropRegionRequest {
+  uint64 region_id = 1;
+}
+
+message DropRegionResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
 message DropRegionPermanentlyRequest {
   uint64 cluster_id = 1;
   uint64 region_id = 2;
@@ -271,11 +327,27 @@ message DropRegionPermanentlyResponse {
   dingodb.pb.error.Error error = 1;
 }
 
-message CleanStoreOperationRequest {
-  uint64 store_id = 1;
+message SplitRegionRequest {
+  SplitRequest split_request = 1;
 }
 
-message CleanStoreOperationResponse {
+message SplitRegionResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
+message MergeRegionRequest {
+  MergeRequest merge_request = 1;
+}
+
+message MergeRegionResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
+message ChangePeerRegionRequest {
+  ChangePeerRequest change_peer_request = 1;
+}
+
+message ChangePeerRegionResponse {
   dingodb.pb.error.Error error = 1;
 }
 
@@ -288,7 +360,6 @@ service CoordinatorService {
   rpc GetRegionMap(GetRegionMapRequest) returns (GetRegionMapResponse);
   rpc GetStoreMap(GetStoreMapRequest) returns (GetStoreMapResponse);
   rpc GetStoreMetrics(GetStoreMetricsRequest) returns (GetStoreMetricsResponse);
-  rpc GetStoreOperation(GetStoreOperationRequest) returns (GetStoreOperationResponse);
 
   rpc CreateStore(CreateStoreRequest) returns (CreateStoreResponse);
   rpc DeleteStore(DeleteStoreRequest) returns (DeleteStoreResponse);
@@ -303,8 +374,17 @@ service CoordinatorService {
   rpc GetCoordinatorMap(GetCoordinatorMapRequest) returns (GetCoordinatorMapResponse);
 
   // Region
+  rpc QueryRegion(QueryRegionRequest) returns (QueryRegionResponse);
+  rpc CreateRegion(CreateRegionRequest) returns (CreateRegionResponse);
+  rpc DropRegion(DropRegionRequest) returns (DropRegionResponse);
   rpc DropRegionPermanently(DropRegionPermanentlyRequest) returns (DropRegionPermanentlyResponse);
+  rpc SplitRegion(SplitRegionRequest) returns (SplitRegionResponse);
+  rpc MergeRegion(MergeRegionRequest) returns (MergeRegionResponse);
+  rpc ChangePeerRegion(ChangePeerRegionRequest) returns (ChangePeerRegionResponse);
 
   // StoreOperation
+  rpc GetStoreOperation(GetStoreOperationRequest) returns (GetStoreOperationResponse);
   rpc CleanStoreOperation(CleanStoreOperationRequest) returns (CleanStoreOperationResponse);
+  rpc AddStoreOperation(AddStoreOperationRequest) returns (AddStoreOperationResponse);
+  rpc RemoveStoreOperation(RemoveStoreOperationRequest) returns (RemoveStoreOperationResponse);
 }
