@@ -58,10 +58,6 @@ class CoordinatorServiceImpl : public pb::coordinator::CoordinatorService {
   void GetStoreMetrics(google::protobuf::RpcController* controller,
                        const pb::coordinator::GetStoreMetricsRequest* request,
                        pb::coordinator::GetStoreMetricsResponse* response, google::protobuf::Closure* done) override;
-  void GetStoreOperation(google::protobuf::RpcController* controller,
-                         const pb::coordinator::GetStoreOperationRequest* request,
-                         pb::coordinator::GetStoreOperationResponse* response,
-                         google::protobuf::Closure* done) override;
 
   void CreateStore(google::protobuf::RpcController* controller, const pb::coordinator::CreateStoreRequest* request,
                    pb::coordinator::CreateStoreResponse* response, google::protobuf::Closure* done) override;
@@ -106,10 +102,22 @@ class CoordinatorServiceImpl : public pb::coordinator::CoordinatorService {
                         pb::coordinator::ChangePeerRegionResponse* response, google::protobuf::Closure* done) override;
 
   // StoreOperation service
+  void GetStoreOperation(google::protobuf::RpcController* controller,
+                         const pb::coordinator::GetStoreOperationRequest* request,
+                         pb::coordinator::GetStoreOperationResponse* response,
+                         google::protobuf::Closure* done) override;
   void CleanStoreOperation(google::protobuf::RpcController* controller,
                            const pb::coordinator::CleanStoreOperationRequest* request,
                            pb::coordinator::CleanStoreOperationResponse* response,
                            google::protobuf::Closure* done) override;
+  void AddStoreOperation(google::protobuf::RpcController* controller,
+                         const pb::coordinator::AddStoreOperationRequest* request,
+                         pb::coordinator::AddStoreOperationResponse* response,
+                         google::protobuf::Closure* done) override;
+  void RemoveStoreOperation(google::protobuf::RpcController* controller,
+                            const pb::coordinator::RemoveStoreOperationRequest* request,
+                            pb::coordinator::RemoveStoreOperationResponse* response,
+                            google::protobuf::Closure* done) override;
 
  private:
   std::shared_ptr<CoordinatorControl> coordinator_control_;
