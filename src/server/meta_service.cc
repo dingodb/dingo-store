@@ -345,8 +345,6 @@ void MetaServiceImpl::DropSchema(google::protobuf::RpcController *controller,
   pb::error::Errno ret = this->coordinator_control_->DropSchema(parent_schema_id, schema_id, meta_increment);
   if (ret != pb::error::Errno::OK) {
     DINGO_LOG(ERROR) << "DropSchema failed, schema_id=" << schema_id << " ret = " << ret;
-    // brpc::Controller *brpc_controller = static_cast<brpc::Controller *>(controller);
-    // brpc_controller->SetFailed(ret, "drop schema failed");
     response->mutable_error()->set_errcode(ret);
     return;
   }
@@ -389,8 +387,6 @@ void MetaServiceImpl::CreateSchema(google::protobuf::RpcController *controller,
   if (ret != pb::error::Errno::OK) {
     DINGO_LOG(ERROR) << "CreateSchema schema_id = " << new_schema_id
                      << " parent_schema_id=" << request->parent_schema_id().entity_id() << " failed ret = " << ret;
-    // brpc::Controller *brpc_controller = static_cast<brpc::Controller *>(controller);
-    // brpc_controller->SetFailed(ret, "create schema failed");
     response->mutable_error()->set_errcode(ret);
     return;
   }

@@ -15,6 +15,7 @@
 #include <sys/types.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -30,6 +31,7 @@
 #include "butil/scoped_lock.h"
 #include "butil/strings/string_split.h"
 #include "butil/synchronization/lock.h"
+#include "butil/time.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "coordinator/coordinator_control.h"
@@ -159,8 +161,10 @@ pb::error::Errno CoordinatorControl::CreateStore(uint64_t cluster_id, uint64_t& 
 
   pb::common::Store store;
   store.set_id(store_id);
-  store.mutable_keyring()->assign(keyring);
+  store.set_keyring(keyring);
   store.set_state(::dingodb::pb::common::StoreState::STORE_NEW);
+  store.set_in_state(::dingodb::pb::common::StoreInState::STORE_IN);
+  store.set_create_timestamp(butil::gettimeofday_ms());
 
   // update meta_increment
   GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_STORE, meta_increment);
@@ -192,10 +196,16 @@ pb::error::Errno CoordinatorControl::DeleteStore(uint64_t cluster_id, uint64_t s
       return pb::error::Errno::ESTORE_NOT_FOUND;
     }
 
-    if (keyring == store_to_delete.keyring()) {
+    if (keyring != store_to_delete.keyring()) {
       DINGO_LOG(INFO) << "DeleteStore store_id id=" << store_id << " keyring not equal, input keyring=" << keyring
                       << " but store's keyring=" << store_to_delete.keyring();
-      return pb::error::Errno::EILLEGAL_PARAMTETERS;
+      return pb::error::Errno::EKEYRING_ILLEGAL;
+    }
+
+    if (store_to_delete.state() != pb::common::StoreState::STORE_OFFLINE &&
+        store_to_delete.state() != pb::common::StoreState::STORE_NEW) {
+      DINGO_LOG(INFO) << "DeleteStore store_id id=" << store_id << " already deleted";
+      return pb::error::Errno::ESTORE_IN_USE;
     }
   }
 
@@ -225,7 +235,12 @@ uint64_t CoordinatorControl::UpdateStoreMap(const pb::common::Store& store,
     pb::common::Store store_to_update;
     int ret = store_map_.Get(store.id(), store_to_update);
     if (ret > 0) {
-      if (store_to_update.state() != store.state()) {
+      if (store_to_update.state() == pb::common::StoreState::STORE_NEW) {
+        // this is a new store's first heartbeat
+        // so we need to update the store's state to STORE_NORMAL
+        // and update the store's server_location
+        // and update the store's raft_location
+        // and update the store's last_seen_timestamp
         DINGO_LOG(INFO) << "STORE STATUS CHANGE store_id = " << store.id()
                         << " old status = " << store_to_update.state() << " new status = " << store.state();
 
@@ -236,13 +251,31 @@ uint64_t CoordinatorControl::UpdateStoreMap(const pb::common::Store& store,
         store_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
 
         auto* store_increment_store = store_increment->mutable_store();
-        store_increment_store->CopyFrom(store);
+        store_increment_store->CopyFrom(store_to_update);  // only update server_location & raft_location & state
 
-        // on_apply
-        // store_map_epoch++;              // raft_kv_put
-        // store_map_[store.id()] = store;  // raft_kv_put
+        // only update server_location & raft_location & state & last_seen_timestamp
+        store_increment_store->mutable_server_location()->CopyFrom(store.server_location());
+        store_increment_store->mutable_raft_location()->CopyFrom(store.raft_location());
+        store_increment_store->set_state(pb::common::StoreState::STORE_NORMAL);
+        store_increment_store->set_last_seen_timestamp(butil::gettimeofday_ms());
+      } else {
+        // this is normall heartbeat,
+        // so only need to update state & last_seen_timestamp, no need to update epoch
+        auto* store_increment = meta_increment.add_stores();
+        store_increment->set_id(store.id());
+        store_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
+
+        auto* store_increment_store = store_increment->mutable_store();
+        store_increment_store->CopyFrom(store_to_update);  // only update server_location & raft_location & state
+
+        // only update state & last_seen_timestamp
+        store_increment_store->set_state(pb::common::StoreState::STORE_NORMAL);
+        store_increment_store->set_last_seen_timestamp(butil::gettimeofday_ms());
       }
     } else {
+      // this is a special new store's first heartbeat
+      // only store using keyring=TO_BE_CONTINUED can get into this branch
+      // so we just add this store into store_map_
       DINGO_LOG(INFO) << "NEED ADD NEW STORE store_id = " << store.id();
 
       // update meta_increment
@@ -253,10 +286,11 @@ uint64_t CoordinatorControl::UpdateStoreMap(const pb::common::Store& store,
 
       auto* store_increment_store = store_increment->mutable_store();
       store_increment_store->CopyFrom(store);
+      store_increment_store->set_state(pb::common::StoreState::STORE_NORMAL);
+      store_increment_store->set_last_seen_timestamp(butil::gettimeofday_ms());
 
-      // on_apply
-      // store_map_epoch++;                                    // raft_kv_put
-      // store_map_.insert(std::make_pair(store.id(), store));  // raft_kv_put
+      // setup create_timestamp
+      store_increment_store->set_create_timestamp(butil::gettimeofday_ms());
     }
   }
 
@@ -267,6 +301,21 @@ uint64_t CoordinatorControl::UpdateStoreMap(const pb::common::Store& store,
   DINGO_LOG(INFO) << "UpdateStoreMap store_id=" << store.id();
 
   return store_map_epoch;
+}
+
+bool CoordinatorControl::TrySetStoreToOffline(uint64_t store_id) {
+  pb::common::Store store_to_update;
+  int ret = store_map_.Get(store_id, store_to_update);
+  if (ret > 0) {
+    if (store_to_update.state() == pb::common::StoreState::STORE_NORMAL &&
+        store_to_update.last_seen_timestamp() + (60 * 1000) < butil::gettimeofday_ms()) {
+      // update store's state to STORE_OFFLINE
+      store_to_update.set_state(pb::common::StoreState::STORE_OFFLINE);
+      store_map_.Put(store_id, store_to_update);
+      return true;
+    }
+  }
+  return false;
 }
 
 void CoordinatorControl::GetRegionMap(pb::common::RegionMap& region_map) {
@@ -420,10 +469,7 @@ pb::error::Errno CoordinatorControl::CreateRegion(const std::string& region_name
     store_operation.set_id(store.id());
     auto* region_cmd = store_operation.add_region_cmds();
     region_cmd->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
-    region_cmd->set_create_timestamp(
-        std::chrono::time_point_cast<std::chrono::microseconds>(std::chrono::system_clock::now())
-            .time_since_epoch()
-            .count());
+    region_cmd->set_create_timestamp(butil::gettimeofday_ms());
     region_cmd->set_region_id(create_region_id);
     region_cmd->set_region_cmd_type(::dingodb::pb::coordinator::RegionCmdType::CMD_CREATE);
     auto* create_request = region_cmd->mutable_create_request();
@@ -643,10 +689,7 @@ pb::error::Errno CoordinatorControl::SplitRegion(uint64_t split_from_region_id, 
   region_cmd.mutable_split_request()->set_split_watershed_key(split_watershed_key);
   region_cmd.mutable_split_request()->set_split_from_region_id(split_from_region_id);
   region_cmd.mutable_split_request()->set_split_to_region_id(split_to_region_id);
-  region_cmd.set_create_timestamp(
-      std::chrono::time_point_cast<std::chrono::microseconds>(std::chrono::system_clock::now())
-          .time_since_epoch()
-          .count());
+  region_cmd.set_create_timestamp(butil::gettimeofday_ms());
 
   for (auto it : split_from_region_peers) {
     auto* store_operation_increment = meta_increment.add_store_operations();
@@ -806,10 +849,7 @@ pb::error::Errno CoordinatorControl::ChangePeerRegion(uint64_t region_id, std::v
     region_cmd_to_add->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
     region_cmd_to_add->set_region_cmd_type(::dingodb::pb::coordinator::RegionCmdType::CMD_CHANGE_PEER);
     region_cmd_to_add->set_region_id(region_id);
-    region_cmd_to_add->set_create_timestamp(
-        std::chrono::time_point_cast<std::chrono::microseconds>(std::chrono::system_clock::now())
-            .time_since_epoch()
-            .count());
+    region_cmd_to_add->set_create_timestamp(butil::gettimeofday_ms());
 
     auto* region_definition = region_cmd_to_add->mutable_change_peer_request()->mutable_region_definition();
     region_definition->CopyFrom(region.definition());
@@ -855,10 +895,7 @@ pb::error::Errno CoordinatorControl::ChangePeerRegion(uint64_t region_id, std::v
     region_cmd_to_add->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
     region_cmd_to_add->set_region_cmd_type(::dingodb::pb::coordinator::RegionCmdType::CMD_CREATE);
     region_cmd_to_add->set_region_id(region_id);
-    region_cmd_to_add->set_create_timestamp(
-        std::chrono::time_point_cast<std::chrono::microseconds>(std::chrono::system_clock::now())
-            .time_since_epoch()
-            .count());
+    region_cmd_to_add->set_create_timestamp(butil::gettimeofday_ms());
 
     auto* region_definition = region_cmd_to_add->mutable_create_request()->mutable_region_definition();
     region_definition->CopyFrom(store_to_add_peer);  // new create region on store
@@ -878,10 +915,7 @@ pb::error::Errno CoordinatorControl::ChangePeerRegion(uint64_t region_id, std::v
     region_cmd_to_add->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
     region_cmd_to_add->set_region_cmd_type(::dingodb::pb::coordinator::RegionCmdType::CMD_CHANGE_PEER);
     region_cmd_to_add->set_region_id(region_id);
-    region_cmd_to_add->set_create_timestamp(
-        std::chrono::time_point_cast<std::chrono::microseconds>(std::chrono::system_clock::now())
-            .time_since_epoch()
-            .count());
+    region_cmd_to_add->set_create_timestamp(butil::gettimeofday_ms());
 
     auto* region_definition = region_cmd_to_add->mutable_change_peer_request()->mutable_region_definition();
     region_definition->CopyFrom(new_region_definition);
@@ -1138,8 +1172,9 @@ int CoordinatorControl::CreateExecutor(uint64_t cluster_id, uint64_t& executor_i
 
   pb::common::Executor executor;
   executor.set_id(executor_id);
-  executor.mutable_keyring()->assign(keyring);
+  executor.set_keyring(keyring);
   executor.set_state(::dingodb::pb::common::ExecutorState::EXECUTOR_NEW);
+  executor.set_create_timestamp(butil::gettimeofday_ms());
 
   // update meta_increment
   GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_EXECUTOR, meta_increment);
@@ -1156,10 +1191,10 @@ int CoordinatorControl::CreateExecutor(uint64_t cluster_id, uint64_t& executor_i
   return 0;
 }
 
-int CoordinatorControl::DeleteExecutor(uint64_t cluster_id, uint64_t executor_id, std::string keyring,
-                                       pb::coordinator_internal::MetaIncrement& meta_increment) {
+pb::error::Errno CoordinatorControl::DeleteExecutor(uint64_t cluster_id, uint64_t executor_id, std::string keyring,
+                                                    pb::coordinator_internal::MetaIncrement& meta_increment) {
   if (cluster_id <= 0 || executor_id <= 0 || keyring.length() <= 0) {
-    return -1;
+    return pb::error::EILLEGAL_PARAMTETERS;
   }
 
   pb::common::Executor executor_to_delete;
@@ -1168,14 +1203,14 @@ int CoordinatorControl::DeleteExecutor(uint64_t cluster_id, uint64_t executor_id
     int ret = executor_map_.Get(executor_id, executor_to_delete);
     if (ret < 0) {
       DINGO_LOG(INFO) << "DeleteExecutor executor_id not exists, id=" << executor_id;
-      return -1;
+      return pb::error::EEXECUTOR_NOT_FOUND;
     }
 
     if (keyring == executor_to_delete.keyring()) {
       DINGO_LOG(INFO) << "DeleteExecutor executor_id id=" << executor_id
                       << " keyring not equal, input keyring=" << keyring
                       << " but executor's keyring=" << executor_to_delete.keyring();
-      return -1;
+      return pb::error::Errno::EKEYRING_ILLEGAL;
     }
   }
 
@@ -1191,7 +1226,7 @@ int CoordinatorControl::DeleteExecutor(uint64_t cluster_id, uint64_t executor_id
   // on_apply
   // executor_map_epoch++;                                  // raft_kv_put
   // executor_map_.insert(std::make_pair(executor_id, executor));  // raft_kv_put
-  return 0;
+  return pb::error::Errno::OK;
 }
 
 uint64_t CoordinatorControl::UpdateExecutorMap(const pb::common::Executor& executor,

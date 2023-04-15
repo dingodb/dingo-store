@@ -75,9 +75,6 @@ void CoordinatorServiceImpl::CreateExecutor(google::protobuf::RpcController *con
     response->set_executor_id(executor_id);
     response->set_keyring(keyring);
   } else {
-    brpc::Controller *brpc_controller = static_cast<brpc::Controller *>(controller);
-    brpc_controller->SetFailed(pb::error::EILLEGAL_PARAMTETERS, "Need legal cluster_id");
-
     auto *error = response->mutable_error();
     error->set_errcode(Errno::EILLEGAL_PARAMTETERS);
     return;
@@ -111,9 +108,6 @@ void CoordinatorServiceImpl::DeleteExecutor(google::protobuf::RpcController *con
   }
 
   if (request->executor_id() == 0) {
-    brpc::Controller *brpc_controller = static_cast<brpc::Controller *>(controller);
-    brpc_controller->SetFailed(pb::error::EILLEGAL_PARAMTETERS, "Need legal executor_id");
-
     auto *error = response->mutable_error();
     error->set_errcode(Errno::EILLEGAL_PARAMTETERS);
     return;
@@ -125,13 +119,10 @@ void CoordinatorServiceImpl::DeleteExecutor(google::protobuf::RpcController *con
   uint64_t const executor_id = request->executor_id();
   std::string const keyring = request->keyring();
   auto local_ctl = this->coordinator_control_;
-  int const ret = local_ctl->DeleteExecutor(request->cluster_id(), executor_id, keyring, meta_increment);
-  if (ret != 0) {
-    brpc::Controller *brpc_controller = static_cast<brpc::Controller *>(controller);
-    brpc_controller->SetFailed(pb::error::ESTORE_NOTEXIST_RAFTENGINE, "DeleteExecutor failed");
-
+  auto ret = local_ctl->DeleteExecutor(request->cluster_id(), executor_id, keyring, meta_increment);
+  if (ret != pb::error::Errno::OK) {
     auto *error = response->mutable_error();
-    error->set_errcode(Errno::EILLEGAL_PARAMTETERS);
+    error->set_errcode(ret);
 
     DINGO_LOG(ERROR) << "Deleteexecutor failed:  executor_id=" << executor_id << ", keyring=" << keyring;
     return;
@@ -174,8 +165,6 @@ void CoordinatorServiceImpl::CreateStore(google::protobuf::RpcController *contro
     response->set_store_id(store_id);
     response->set_keyring(keyring);
   } else {
-    brpc::Controller *brpc_controller = static_cast<brpc::Controller *>(controller);
-    brpc_controller->SetFailed(pb::error::EILLEGAL_PARAMTETERS, "Need legal cluster_id");
     response->mutable_error()->set_errcode(ret);
     return;
   }
@@ -212,9 +201,6 @@ void CoordinatorServiceImpl::DeleteStore(google::protobuf::RpcController *contro
   }
 
   if (request->store_id() == 0) {
-    brpc::Controller *brpc_controller = static_cast<brpc::Controller *>(controller);
-    brpc_controller->SetFailed(pb::error::EILLEGAL_PARAMTETERS, "Need legal store_id");
-
     auto *error = response->mutable_error();
     error->set_errcode(Errno::EILLEGAL_PARAMTETERS);
     return;
@@ -228,12 +214,8 @@ void CoordinatorServiceImpl::DeleteStore(google::protobuf::RpcController *contro
   auto local_ctl = this->coordinator_control_;
   auto ret = local_ctl->DeleteStore(request->cluster_id(), store_id, keyring, meta_increment);
   if (ret != pb::error::Errno::OK) {
-    brpc::Controller *brpc_controller = static_cast<brpc::Controller *>(controller);
-    brpc_controller->SetFailed(pb::error::ESTORE_NOTEXIST_RAFTENGINE, "DeleteStore failed");
-
-    response->mutable_error()->set_errcode(ret);
-
     DINGO_LOG(ERROR) << "DeleteStore failed:  store_id=" << store_id << ", keyring=" << keyring;
+    response->mutable_error()->set_errcode(ret);
     return;
   }
 

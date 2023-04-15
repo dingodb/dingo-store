@@ -166,8 +166,8 @@ class CoordinatorControl : public MetaControl {
   // delete executor
   // in: cluster_id, executor_id, keyring
   // return: 0 or -1
-  int DeleteExecutor(uint64_t cluster_id, uint64_t executor_id, std::string keyring,
-                     pb::coordinator_internal::MetaIncrement &meta_increment);
+  pb::error::Errno DeleteExecutor(uint64_t cluster_id, uint64_t executor_id, std::string keyring,
+                                  pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // update executor map with new Executor info
   // return new epoch
@@ -177,6 +177,10 @@ class CoordinatorControl : public MetaControl {
   // update store map with new Store info
   // return new epoch
   uint64_t UpdateStoreMap(const pb::common::Store &store, pb::coordinator_internal::MetaIncrement &meta_increment);
+
+  // try to set store offline
+  // return bool
+  bool TrySetStoreToOffline(uint64_t store_id);
 
   // get storemap
   void GetStoreMap(pb::common::StoreMap &store_map);

@@ -82,8 +82,7 @@ void NodeServiceImpl::GetLogLevel(google::protobuf::RpcController* controller,
 
   if (min_log_level > pb::node::FATAL) {
     DINGO_LOG(ERROR) << "Invalid Log Level:" << min_log_level;
-    brpc::Controller* brpc_controller = static_cast<brpc::Controller*>(controller);
-    brpc_controller->SetFailed(pb::error::EINTERNAL, "Invalid LogLevel");
+    response->mutable_error()->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
     return;
   }
 
