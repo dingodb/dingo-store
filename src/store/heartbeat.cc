@@ -17,6 +17,7 @@
 #include <map>
 
 #include "butil/scoped_lock.h"
+#include "butil/time.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "coordinator/coordinator_control.h"
@@ -50,6 +51,21 @@ void Heartbeat::SendCoordinatorPushToStore(void* arg) {
     return;
   }
   DINGO_LOG(DEBUG) << "SendCoordinatorPushToStore... this is leader";
+
+  // update store_state by last_seen_timestamp
+  // here we only update store_state to offline if last_seen_timestamp is too old
+  // we will not update store_state to online here
+  // in on_apply of store_heartbeat, we will update store_state to online
+  pb::common::StoreMap store_map_temp;
+  coordinator_control->GetStoreMap(store_map_temp);
+  for (const auto& it : store_map_temp.stores()) {
+    if (it.state() == pb::common::StoreState::STORE_NORMAL) {
+      if (it.last_seen_timestamp() + (60 * 1000) < butil::gettimeofday_ms()) {
+        DINGO_LOG(INFO) << "SendCoordinatorPushToStore... update store " << it.id() << " state to offline";
+        coordinator_control->TrySetStoreToOffline(it.id());
+      }
+    }
+  }
 
   butil::FlatMap<uint64_t, pb::common::Store> store_to_push;
   store_to_push.init(1000, 80);  // notice: FlagMap must init before use
@@ -205,7 +221,7 @@ static std::vector<std::shared_ptr<pb::common::Store> > GetDeletedStore(
     const google::protobuf::RepeatedPtrField<pb::common::Store>& remote_stores) {
   std::vector<std::shared_ptr<pb::common::Store> > stores;
   for (const auto& store : remote_stores) {
-    if (store.state() != pb::common::STORE_OFFLINE && store.state() != pb::common::STORE_OUT) {
+    if (store.state() != pb::common::STORE_OFFLINE) {
       continue;
     }
 

@@ -35,11 +35,11 @@
 #include "engine/raft_meta_engine.h"
 #include "engine/raw_rocks_engine.h"
 #include "engine/rocks_engine.h"
-#include "scan/scan_manager.h"
 #include "meta/meta_reader.h"
 #include "meta/meta_writer.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
+#include "scan/scan_manager.h"
 #include "store/heartbeat.h"
 
 namespace dingodb {
@@ -147,8 +147,7 @@ butil::Status Server::StartMetaRegion(std::shared_ptr<Config> config,       // N
   region->set_id(Constant::kCoordinatorRegionId);
   region->set_table_id(Constant::kCoordinatorTableId);
   region->set_schema_id(Constant::kCoordinatorSchemaId);
-  uint64_t timestamp_us = butil::gettimeofday_ms();
-  region->set_create_timestamp(timestamp_us);
+  region->set_create_timestamp(butil::gettimeofday_ms());
   region->set_state(pb::common::RegionState::REGION_NEW);
   region->set_name("COORDINATOR");
 

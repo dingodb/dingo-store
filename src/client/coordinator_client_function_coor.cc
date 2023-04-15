@@ -200,6 +200,13 @@ void SendGetStoreMap(brpc::Controller& cntl, dingodb::pb::coordinator::Coordinat
     // bthread_usleep(FLAGS_timeout_ms * 1000L);
   }
 
+  // print all store's id, state, in_state, create_timestamp, last_seen_timestamp
+  for (auto const& store : response.storemap().stores()) {
+    DINGO_LOG(INFO) << "store_id=" << store.id() << " state=" << store.state() << " in_state=" << store.in_state()
+                    << " create_timestamp=" << store.create_timestamp()
+                    << " last_seen_timestamp=" << store.last_seen_timestamp();
+  }
+
   if (FLAGS_log_each_request) {
     DINGO_LOG(INFO) << "Received response"
                     << " get_store_map=" << request.epoch()
@@ -441,7 +448,7 @@ void SendStoreHearbeat(brpc::Controller& cntl, dingodb::pb::coordinator::Coordin
     region->set_table_id(2);
 
     // mock create ts
-    region->set_create_timestamp(1677496540);
+    region->set_create_timestamp(butil::gettimeofday_ms());
   }
 
   // DINGO_LOG(INFO) << request.DebugString();
@@ -944,10 +951,7 @@ void SendAddStoreOperation(brpc::Controller& cntl, dingodb::pb::coordinator::Coo
     auto* region_cmd = request.mutable_store_operation()->add_region_cmds();
     region_cmd->set_region_id(FLAGS_region_id);
     region_cmd->set_region_cmd_type(::dingodb::pb::coordinator::RegionCmdType::CMD_NONE);
-    region_cmd->set_create_timestamp(
-        std::chrono::time_point_cast<std::chrono::microseconds>(std::chrono::system_clock::now())
-            .time_since_epoch()
-            .count());
+    region_cmd->set_create_timestamp(butil::gettimeofday_ms());
   } else {
     DINGO_LOG(ERROR) << "region_id is empty";
     return;
