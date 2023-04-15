@@ -59,15 +59,20 @@ message KeyValue {
 }
 
 enum CoordinatorState {
-  COORDINATOR_NORMAL = 0;
-  COORDINATOR_OFFLINE = 1;
+  COORDINATOR_NEW = 0;
+  COORDINATOR_NORMAL = 1;
+  COORDINATOR_OFFLINE = 2;
 }
 
 enum StoreState {
-  STORE_NORMAL = 0;
-  STORE_NEW = 1;      // a new store, wait to startup and join raft
+  STORE_NEW = 0;  // a new store, wait to startup and join raft
+  STORE_NORMAL = 1;
   STORE_OFFLINE = 2;  // miss hearteat
-  STORE_OUT = 3;      // up but no data will distribute to this store
+}
+
+enum StoreInState {
+  STORE_IN = 0;   // can replicate data to this store
+  STORE_OUT = 1;  // cant not replicate data to this store
 }
 
 enum ExecutorState {
@@ -144,6 +149,8 @@ message CoordinatorMap {
   repeated Coordinator coordinators = 2;
 }
 
+// Executor
+//  all fieleds can only be updated by coordinator
 message Executor {
   uint64 id = 1;
   uint64 epoch = 2;
@@ -151,6 +158,8 @@ message Executor {
   Location server_location = 4;
   string resource_tag = 5;
   string keyring = 6;
+  uint64 create_timestamp = 7;
+  uint64 last_seen_timestamp = 8;
 }
 
 message ExecutorMap {
@@ -158,14 +167,18 @@ message ExecutorMap {
   repeated Executor executors = 2;
 }
 
+// Store
 message Store {
-  uint64 id = 1;
-  uint64 epoch = 2;
-  StoreState state = 3;
-  Location server_location = 4;
-  Location raft_location = 5;
-  string resource_tag = 6;
-  string keyring = 7;
+  uint64 id = 1;                    // only updated by coordinator
+  uint64 epoch = 2;                 // only updated by coordinator
+  StoreState state = 3;             // only updated by coordinator
+  StoreInState in_state = 4;        // only updated by coordinator
+  Location server_location = 5;     // store can only update this field in the first heartbeat
+  Location raft_location = 6;       // store can only update this field in the first heartbeat
+  string resource_tag = 7;          // only updated by coordinator
+  string keyring = 8;               // only updated by coordinator
+  uint64 create_timestamp = 9;      // only updated by coordinator
+  uint64 last_seen_timestamp = 10;  // only updated by coordinator
 }
 
 message StoreMap {
