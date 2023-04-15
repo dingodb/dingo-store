@@ -878,28 +878,34 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         store_operation_in_map.set_id(store_operation.id());
         store_operation_map_.Get(store_operation_in_map.id(), store_operation_in_map);
 
-        if (store_operation_in_map.region_cmds_size() > 0 && store_operation.store_operation().region_cmds_size() > 0) {
-          // erase region_cmd in store_operation_map_ if region_id & region_cmd_type is same
-          for (const auto& region_cmd : store_operation.store_operation().region_cmds()) {
-            for (auto region_cmd_in_map = store_operation_in_map.mutable_region_cmds()->begin();
-                 region_cmd_in_map != store_operation_in_map.mutable_region_cmds()->end(); region_cmd_in_map++) {
-              if (region_cmd_in_map->region_id() == region_cmd.region_id() &&
-                  region_cmd_in_map->region_cmd_type() == region_cmd.region_cmd_type()) {
-                store_operation_in_map.mutable_region_cmds()->erase(region_cmd_in_map);
-                break;
-              }
+        // delete region_cmd by id
+        for (const auto& region_cmd : store_operation.store_operation().region_cmds()) {
+          for (auto region_cmd_in_map = store_operation_in_map.mutable_region_cmds()->begin();
+               region_cmd_in_map != store_operation_in_map.mutable_region_cmds()->end(); region_cmd_in_map++) {
+            if (region_cmd_in_map->id() == region_cmd.id()) {
+              store_operation_in_map.mutable_region_cmds()->erase(region_cmd_in_map);
+              DINGO_LOG(INFO) << "delete a region_cmd from store_operation, store_id=" << store_operation.id()
+                              << ", region_cmd_id=" << region_cmd.id() << " region_id=" << region_cmd.region_id()
+                              << " region_cmd_type=" << region_cmd.region_cmd_type();
+              DINGO_LOG(DEBUG) << "delete a region_cmd from store_operation, store_id=" << store_operation.id()
+                               << ", region_cmd=" << region_cmd.ShortDebugString();
             }
           }
+        }
 
-          if (store_operation_in_map.region_cmds_size() == 0) {
-            store_operation_map_.Erase(store_operation.id());
-            // meta_delete_kv
-            meta_delete_to_kv.push_back(store_operation_meta_->TransformToKvValue(store_operation_in_map));
-          } else {
-            store_operation_map_.Put(store_operation.id(), store_operation_in_map);
-            // meta_write_kv
-            meta_write_to_kv.push_back(store_operation_meta_->TransformToKvValue(store_operation_in_map));
-          }
+        if (store_operation_in_map.region_cmds_size() == 0) {
+          store_operation_map_.Erase(store_operation.id());
+          // meta_delete_kv
+          meta_delete_to_kv.push_back(store_operation_meta_->TransformToKvValue(store_operation_in_map));
+
+          DINGO_LOG(INFO) << "store_operation_map_.Erase, store_id=" << store_operation.id();
+        } else {
+          store_operation_map_.Put(store_operation.id(), store_operation_in_map);
+          // meta_write_kv
+          meta_write_to_kv.push_back(store_operation_meta_->TransformToKvValue(store_operation_in_map));
+
+          DINGO_LOG(INFO) << "store_operation_map_.Put in DELETE, store_id=" << store_operation.id()
+                          << " new region_cmd count=" << store_operation_in_map.region_cmds_size();
         }
 
         DINGO_LOG(INFO) << "store_operation_map_ DELETE, store_operation=" << store_operation.ShortDebugString();
