@@ -14,6 +14,7 @@
 
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
+#include <cstdio>
 #endif
 #include <dlfcn.h>
 #include <libunwind.h>
@@ -68,6 +69,7 @@ static void SignalHandler(int signo) {
   unw_getcontext(&context);
   unw_init_local(&cursor, &context);
   int i = 0;
+  char buffer[2048];
 
   do {
     unw_word_t ip, offset;
@@ -84,13 +86,28 @@ static void SignalHandler(int signo) {
 
     if (dladdr((void *)pc, &info)) {
       // Print the frame number, instruction pointer, .so filename, and symbol name
-      printf("Frame %d: [0x%016zx] %32s : %s + 0x%lx\n", i++, (size_t)((void *)ip), info.dli_fname, symbol,
-             offset);  // NOLINT
+      // printf("Frame %d: [0x%016zx] %32s : %s + 0x%lx\n", i++, (size_t)((void *)ip), info.dli_fname, symbol,
+      //        offset);  // NOLINT
+
+      auto ret = std::snprintf(buffer, sizeof(buffer), "Frame %d: [0x%016zx] %32s : %s + 0x%lx", i++,
+                               (size_t)((void *)ip), info.dli_fname, symbol, offset);
+      if (ret > 0) {
+        printf("%s\n", buffer);
+        DINGO_LOG(ERROR) << buffer;
+      }
     }
 
   } while (unw_step(&cursor) > 0);
 
-  exit(0);
+  if (signo == SIGTERM) {
+    // TODO: graceful shutdown
+    DINGO_LOG(ERROR) << "graceful shutdown";
+    exit(0);
+  } else {
+    // abort to generate core dump
+    DINGO_LOG(ERROR) << "abort to generate core dump";
+    abort();
+  }
 }
 
 void SetupSignalHandler() {
