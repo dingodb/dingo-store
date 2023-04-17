@@ -879,34 +879,34 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         store_operation_map_.Get(store_operation_in_map.id(), store_operation_in_map);
 
         // delete region_cmd by id
-        for (const auto& region_cmd : store_operation.store_operation().region_cmds()) {
-          for (auto region_cmd_in_map = store_operation_in_map.mutable_region_cmds()->begin();
-               region_cmd_in_map != store_operation_in_map.mutable_region_cmds()->end(); region_cmd_in_map++) {
-            if (region_cmd_in_map->id() == region_cmd.id()) {
-              store_operation_in_map.mutable_region_cmds()->erase(region_cmd_in_map);
+        pb::coordinator::StoreOperation store_operation_residual;
+        store_operation_residual.set_id(store_operation.id());
+
+        for (int i = 0; i < store_operation_in_map.region_cmds_size(); i++) {
+          bool is_delete = false;
+          for (const auto& region_cmd : store_operation.store_operation().region_cmds()) {
+            if (store_operation_in_map.region_cmds(i).id() == region_cmd.id()) {
+              is_delete = true;
+
               DINGO_LOG(INFO) << "delete a region_cmd from store_operation, store_id=" << store_operation.id()
                               << ", region_cmd_id=" << region_cmd.id() << " region_id=" << region_cmd.region_id()
                               << " region_cmd_type=" << region_cmd.region_cmd_type();
               DINGO_LOG(DEBUG) << "delete a region_cmd from store_operation, store_id=" << store_operation.id()
                                << ", region_cmd=" << region_cmd.ShortDebugString();
+              break;
             }
+          }
+          if (!is_delete) {
+            store_operation_residual.add_region_cmds()->CopyFrom(store_operation_in_map.region_cmds(i));
           }
         }
 
-        if (store_operation_in_map.region_cmds_size() == 0) {
-          store_operation_map_.Erase(store_operation.id());
-          // meta_delete_kv
-          meta_delete_to_kv.push_back(store_operation_meta_->TransformToKvValue(store_operation_in_map));
+        store_operation_map_.Put(store_operation.id(), store_operation_residual);
+        // meta_write_kv
+        meta_write_to_kv.push_back(store_operation_meta_->TransformToKvValue(store_operation_residual));
 
-          DINGO_LOG(INFO) << "store_operation_map_.Erase, store_id=" << store_operation.id();
-        } else {
-          store_operation_map_.Put(store_operation.id(), store_operation_in_map);
-          // meta_write_kv
-          meta_write_to_kv.push_back(store_operation_meta_->TransformToKvValue(store_operation_in_map));
-
-          DINGO_LOG(INFO) << "store_operation_map_.Put in DELETE, store_id=" << store_operation.id()
-                          << " new region_cmd count=" << store_operation_in_map.region_cmds_size();
-        }
+        DINGO_LOG(INFO) << "store_operation_map_.Put in DELETE, store_id=" << store_operation.id()
+                        << " new region_cmd count=" << store_operation_in_map.region_cmds_size();
 
         DINGO_LOG(INFO) << "store_operation_map_ DELETE, store_operation=" << store_operation.ShortDebugString();
       }
@@ -926,6 +926,18 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
 // SubmitMetaIncrement
 // commit meta increment to raft meta engine, with no closure
 int CoordinatorControl::SubmitMetaIncrement(pb::coordinator_internal::MetaIncrement& meta_increment) {
+  DINGO_LOG(INFO) << "SubmitMetaIncrement meta_increment byte_size=" << meta_increment.ByteSizeLong();
+  DINGO_LOG(INFO) << "SubmitMetaIncrement 0.idepochs_size=" << meta_increment.idepochs_size();
+  DINGO_LOG(INFO) << "SubmitMetaIncrement 1.coordinators_size=" << meta_increment.coordinators_size();
+  DINGO_LOG(INFO) << "SubmitMetaIncrement 2.stores_size=" << meta_increment.stores_size();
+  DINGO_LOG(INFO) << "SubmitMetaIncrement 3.tables_size=" << meta_increment.tables_size();
+  DINGO_LOG(INFO) << "SubmitMetaIncrement 4.executors_size=" << meta_increment.executors_size();
+  DINGO_LOG(INFO) << "SubmitMetaIncrement 5.regions_size=" << meta_increment.regions_size();
+  DINGO_LOG(INFO) << "SubmitMetaIncrement 6.tables_size=" << meta_increment.tables_size();
+  DINGO_LOG(INFO) << "SubmitMetaIncrement 7.store_metrics_size=" << meta_increment.store_metrics_size();
+  DINGO_LOG(INFO) << "SubmitMetaIncrement 8.tables_metrics_size=" << meta_increment.table_metrics_size();
+  DINGO_LOG(INFO) << "SubmitMetaIncrement 9.store_operations_size=" << meta_increment.store_operations_size();
+
   std::shared_ptr<Context> const ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
