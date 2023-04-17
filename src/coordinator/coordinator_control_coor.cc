@@ -1381,6 +1381,40 @@ void CoordinatorControl::UpdateRegionMapAndStoreOperation(const pb::common::Stor
         DINGO_LOG(INFO) << "CMD_DELETE store_id=" << store_metrics.id() << "region_id = " << it.region_id()
                         << " exists, but state is not DELETED or DELETING";
       }
+    } else if (it.region_cmd_type() == pb::coordinator::RegionCmdType::CMD_SPLIT) {
+      // check CMD_SPLIT region_id exists
+      if (!store_metrics.region_metrics_map().contains(it.region_id())) {
+        DINGO_LOG(INFO) << "CMD_SPLIT store_id=" << store_metrics.id() << "region_id = " << it.region_id()
+                        << " not exists";
+        auto* region_cmd_for_delete = store_operation_increment_store_operation->add_region_cmds();
+        region_cmd_for_delete->CopyFrom(it);
+      } else if (store_metrics.region_metrics_map().at(it.region_id()).store_region_state() ==
+                 pb::common::StoreRegionState::SPLITTING) {
+        DINGO_LOG(INFO) << "CMD_SPLIT store_id=" << store_metrics.id() << "region_id = " << it.region_id()
+                        << " exists, and state is SPLITTING, it's same as expected";
+        auto* region_cmd_for_delete = store_operation_increment_store_operation->add_region_cmds();
+        region_cmd_for_delete->CopyFrom(it);
+      } else {
+        DINGO_LOG(INFO) << "CMD_SPLIT store_id=" << store_metrics.id() << "region_id = " << it.region_id()
+                        << " exists, but state is not SPLITTING";
+      }
+    } else if (it.region_cmd_type() == pb::coordinator::RegionCmdType::CMD_MERGE) {
+      // check CMD_MERGE region_id exists
+      if (!store_metrics.region_metrics_map().contains(it.region_id())) {
+        DINGO_LOG(INFO) << "CMD_MERGE store_id=" << store_metrics.id() << "region_id = " << it.region_id()
+                        << " not exists";
+        auto* region_cmd_for_delete = store_operation_increment_store_operation->add_region_cmds();
+        region_cmd_for_delete->CopyFrom(it);
+      } else if (store_metrics.region_metrics_map().at(it.region_id()).store_region_state() ==
+                 pb::common::StoreRegionState::MERGING) {
+        DINGO_LOG(INFO) << "CMD_MERGE store_id=" << store_metrics.id() << "region_id = " << it.region_id()
+                        << " exists, but state is MERGING";
+        auto* region_cmd_for_delete = store_operation_increment_store_operation->add_region_cmds();
+        region_cmd_for_delete->CopyFrom(it);
+      } else {
+        DINGO_LOG(INFO) << "CMD_MERGE store_id=" << store_metrics.id() << "region_id = " << it.region_id()
+                        << " exists, but state is not MERGING";
+      }
     }
   }
 }

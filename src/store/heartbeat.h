@@ -22,6 +22,7 @@
 #include "meta/store_meta_manager.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
+#include "proto/push.pb.h"
 #include "server/server.h"
 
 namespace dingodb {
@@ -37,6 +38,9 @@ class Heartbeat {
 
   static void HandleStoreHeartbeatResponse(std::shared_ptr<StoreMetaManager> store_meta,
                                            const pb::coordinator::StoreHeartbeatResponse& response);
+  static void HandleStoreOperationRequest(std::shared_ptr<StoreMetaManager> store_meta,
+                                          const pb::coordinator::StoreOperation& store_operation,
+                                          pb::push::PushStoreOperationResponse& store_operation_response);
 };
 
 }  // namespace dingodb

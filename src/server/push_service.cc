@@ -42,4 +42,20 @@ void PushServiceImpl::PushHeartbeat(google::protobuf::RpcController* controller,
   Heartbeat::HandleStoreHeartbeatResponse(store_meta, heartbeat_response);
 }
 
+void PushServiceImpl::PushStoreOperation(google::protobuf::RpcController* controller,
+                                         const dingodb::pb::push::PushStoreOperationRequest* request,
+                                         dingodb::pb::push::PushStoreOperationResponse*,
+                                         google::protobuf::Closure* done) {
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard const done_guard(done);
+  DINGO_LOG(DEBUG) << "PushStoreOperation request: " << request->DebugString();
+
+  // call HandleStoreOperationResponse
+  const auto& store_operation = request->store_operation();
+  auto store_meta = Server::GetInstance()->GetStoreMetaManager();
+
+  pb::push::PushStoreOperationResponse store_operation_response;
+  Heartbeat::HandleStoreOperationRequest(store_meta, store_operation, store_operation_response);
+}
+
 }  // namespace dingodb
