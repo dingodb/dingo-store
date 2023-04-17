@@ -28,6 +28,10 @@ class PushServiceImpl : public pb::push::PushService {
   void PushHeartbeat(google::protobuf::RpcController* controller,
                      const dingodb::pb::push::PushHeartbeatRequest* request,
                      dingodb::pb::push::PushHeartbeatResponse* /*response*/, google::protobuf::Closure* done) override;
+  void PushStoreOperation(google::protobuf::RpcController* controller,
+                          const dingodb::pb::push::PushStoreOperationRequest* request,
+                          dingodb::pb::push::PushStoreOperationResponse* /*response*/,
+                          google::protobuf::Closure* done) override;
 };
 
 }  // namespace dingodb

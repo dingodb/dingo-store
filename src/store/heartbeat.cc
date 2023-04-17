@@ -24,6 +24,7 @@
 #include "coordinator/coordinator_interaction.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
+#include "proto/error.pb.h"
 #include "proto/push.pb.h"
 #include "server/server.h"
 
@@ -52,7 +53,7 @@ void Heartbeat::SendCoordinatorPushToStore(void* arg) {
   }
   DINGO_LOG(DEBUG) << "SendCoordinatorPushToStore... this is leader";
 
-  // update store_state by last_seen_timestamp
+  // update store_state by last_seen_timestamp and send store operation to store
   // here we only update store_state to offline if last_seen_timestamp is too old
   // we will not update store_state to online here
   // in on_apply of store_heartbeat, we will update store_state to online
@@ -63,6 +64,73 @@ void Heartbeat::SendCoordinatorPushToStore(void* arg) {
       if (it.last_seen_timestamp() + (60 * 1000) < butil::gettimeofday_ms()) {
         DINGO_LOG(INFO) << "SendCoordinatorPushToStore... update store " << it.id() << " state to offline";
         coordinator_control->TrySetStoreToOffline(it.id());
+        continue;
+      }
+    } else {
+      continue;
+    }
+
+    // send store_operation
+    pb::coordinator::StoreOperation store_operation;
+    coordinator_control->GetStoreOperation(it.id(), store_operation);
+    if (store_operation.region_cmds_size() > 0) {
+      DINGO_LOG(INFO) << "SendCoordinatorPushToStore... send store_operation to store " << it.id();
+
+      // send store_operation to store
+      // build send location string
+      auto store_server_location_string =
+          it.server_location().host() + ":" + std::to_string(it.server_location().port());
+
+      // send rpc
+      braft::PeerId remote_node(store_server_location_string);
+
+      // rpc
+      brpc::Channel channel;
+      if (channel.Init(remote_node.addr, nullptr) != 0) {
+        DINGO_LOG(ERROR) << "SendCoordinatorPushToStore Fail to init channel to " << remote_node;
+        return;
+      }
+
+      // start rpc
+      pb::push::PushService_Stub stub(&channel);
+
+      brpc::Controller cntl;
+      cntl.set_timeout_ms(500L);
+
+      // prepare request and response
+      pb::push::PushStoreOperationRequest request;
+      pb::push::PushStoreOperationResponse response;
+
+      request.mutable_store_operation()->CopyFrom(store_operation);
+
+      stub.PushStoreOperation(&cntl, &request, &response, nullptr);
+      if (cntl.Failed()) {
+        DINGO_LOG(WARNING) << "SendCoordinatorPushToStore Fail to send request to : " << cntl.ErrorText();
+        continue;
+      }
+
+      // check response
+      if (response.error().errcode() == pb::error::Errno::OK) {
+        DINGO_LOG(INFO) << "SendCoordinatorPushToStore... send store_operation to store " << it.id()
+                        << " all success, will delete these region_cmds";
+        // TODO: delete store_operation
+      } else {
+        DINGO_LOG(WARNING) << "SendCoordinatorPushToStore... send store_operation to store " << it.id()
+                           << " failed, will check each region_cmd result";
+        for (const auto& it_cmd : response.region_cmd_results()) {
+          if (it_cmd.error().errcode() == pb::error::Errno::OK) {
+            DINGO_LOG(INFO) << "SendCoordinatorPushToStore... send store_operation to store_id=" << it.id()
+                            << " region_cmd_id=" << it_cmd.region_cmd_id() << " result=" << it_cmd.error().errcode()
+                            << " success, will delete this region_cmd";
+            // TODO: delete store_operation
+          } else if (it_cmd.error().errcode() == pb::error::Errno::ERAFT_NOTLEADER) {
+            // TODO: redirect request to new leader
+          } else {
+            DINGO_LOG(INFO) << "SendCoordinatorPushToStore... send store_operation to store_id=" << it.id()
+                            << " region_cmd_id=" << it_cmd.region_cmd_id() << " result=" << it_cmd.error().errcode()
+                            << " failed, will try this region_cmd future";
+          }
+        }
       }
     }
   }
@@ -352,6 +420,21 @@ void Heartbeat::HandleStoreHeartbeatResponse(std::shared_ptr<dingodb::StoreMetaM
     std::shared_ptr<Context> ctx = std::make_shared<Context>();
     // store_control->DeleteRegion(ctx, region->id());
   }
+}
+
+void Heartbeat::HandleStoreOperationRequest(std::shared_ptr<dingodb::StoreMetaManager> store_meta,
+                                            const pb::coordinator::StoreOperation& store_operation,
+                                            pb::push::PushStoreOperationResponse& store_operation_response) {
+  auto store_control = Server::GetInstance()->GetStoreControl();
+  auto store_id = store_operation.id();
+  auto store = store_meta->GetStore(store_id);
+  if (store == nullptr) {
+    DINGO_LOG(ERROR) << "store not found, store id: " << store_id;
+    return;
+  }
+
+  // process region_cmds here.
+  store_operation_response.mutable_error()->set_errcode(::dingodb::pb::error::Errno::OK);
 }
 
 }  // namespace dingodb

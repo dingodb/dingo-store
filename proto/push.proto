@@ -30,7 +30,22 @@ message PushHeartbeatResponse {
   dingodb.pb.error.Error error = 1;
 }
 
+message RegionCmdResult {
+  uint64 region_cmd_id = 1;
+  dingodb.pb.error.Error error = 2;
+}
+
+message PushStoreOperationRequest {
+  dingodb.pb.coordinator.StoreOperation store_operation = 1;
+}
+
+message PushStoreOperationResponse {
+  dingodb.pb.error.Error error = 1;  // if this is OK, ignore region_cmd_results, else check every region_cmd_result
+  repeated RegionCmdResult region_cmd_results = 2;
+}
+
 service PushService {
   // Hello
   rpc PushHeartbeat(PushHeartbeatRequest) returns (PushHeartbeatResponse);
+  rpc PushStoreOperation(PushStoreOperationRequest) returns (PushStoreOperationResponse);
 }
