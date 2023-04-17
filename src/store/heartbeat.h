@@ -32,6 +32,9 @@ class Heartbeat {
   Heartbeat();
   ~Heartbeat();
 
+  static butil::Status RpcSendPushStoreOperation(const pb::common::Location& location,
+                                                 const pb::push::PushStoreOperationRequest& request,
+                                                 pb::push::PushStoreOperationResponse& response);
   static void SendStoreHeartbeat(void* arg);
   static void SendCoordinatorPushToStore(void* arg);
   static void CalculateTableMetrics(void* arg);
