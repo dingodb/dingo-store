@@ -65,8 +65,8 @@ enum CoordinatorState {
 }
 
 enum StoreState {
-  STORE_NEW = 0;  // a new store, wait to startup and join raft
-  STORE_NORMAL = 1;
+  STORE_NEW = 0;      // a new store, wait to startup and join raft
+  STORE_NORMAL = 1;   // normal state
   STORE_OFFLINE = 2;  // miss hearteat
 }
 
@@ -76,8 +76,8 @@ enum StoreInState {
 }
 
 enum ExecutorState {
-  EXECUTOR_NORMAL = 0;
-  EXECUTOR_NEW = 1;      // a new store, wait to startup and join raft
+  EXECUTOR_NEW = 0;      // a new store, wait to startup and join raft
+  EXECUTOR_NORMAL = 1;   // normal state
   EXECUTOR_OFFLINE = 2;  // miss hearteat
 }
 

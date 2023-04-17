@@ -88,6 +88,20 @@ void Heartbeat::SendCoordinatorPushToStore(void* arg) {
   }
   DINGO_LOG(DEBUG) << "SendCoordinatorPushToStore... this is leader";
 
+  pb::common::ExecutorMap executor_map_temp;
+  coordinator_control->GetExecutorMap(executor_map_temp);
+  for (const auto& it : executor_map_temp.executors()) {
+    if (it.state() == pb::common::ExecutorState::EXECUTOR_NORMAL) {
+      if (it.last_seen_timestamp() + (60 * 1000) < butil::gettimeofday_ms()) {
+        DINGO_LOG(INFO) << "SendCoordinatorPushToExecutor... update executor " << it.id() << " state to offline";
+        coordinator_control->TrySetExecutorToOffline(it.id());
+        continue;
+      }
+    } else {
+      continue;
+    }
+  }
+
   // update store_state by last_seen_timestamp and send store operation to store
   // here we only update store_state to offline if last_seen_timestamp is too old
   // we will not update store_state to online here

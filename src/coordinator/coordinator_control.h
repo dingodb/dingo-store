@@ -174,6 +174,10 @@ class CoordinatorControl : public MetaControl {
   uint64_t UpdateExecutorMap(const pb::common::Executor &executor,
                              pb::coordinator_internal::MetaIncrement &meta_increment);
 
+  // try to set executor offline
+  // return bool
+  bool TrySetExecutorToOffline(uint64_t executor_id);
+
   // update store map with new Store info
   // return new epoch
   uint64_t UpdateStoreMap(const pb::common::Store &store, pb::coordinator_internal::MetaIncrement &meta_increment);
