@@ -16,16 +16,11 @@
 
 package io.dingodb.client.operation;
 
-import com.google.protobuf.ByteString;
 import io.dingodb.client.ContextForStore;
 import io.dingodb.client.IStoreOperation;
 import io.dingodb.client.ResultForStore;
-import io.dingodb.common.Common;
+import io.dingodb.sdk.common.DingoCommonId;
 import io.dingodb.sdk.service.store.StoreServiceClient;
-import io.dingodb.error.ErrorOuterClass;
-import io.dingodb.store.Store;
-
-import java.util.stream.Collectors;
 
 public class PutOperation implements IStoreOperation {
 
@@ -39,21 +34,8 @@ public class PutOperation implements IStoreOperation {
     }
 
     @Override
-    public ResultForStore doOperation(StoreServiceClient storeServiceClient, ContextForStore contextForStore) {
-        Store.KvBatchPutRequest request = Store.KvBatchPutRequest.newBuilder()
-                .setRegionId(contextForStore.getRegionId().getEntityId())
-                .addAllKvs(contextForStore.getRecordList().stream()
-                    .map(kv ->
-                        Common.KeyValue.newBuilder()
-                            .setKey(ByteString.copyFrom(kv.getKey()))
-                            .setValue(ByteString.copyFrom(kv.getValue()))
-                            .build())
-                    .collect(Collectors.toList()))
-                .build();
-
-        Store.KvBatchPutResponse response = storeServiceClient.kvBatchPut(request);
-        ErrorOuterClass.Error error = response.getError();
-
-        return new ResultForStore(error.getErrcodeValue(), error.getErrmsg());
+    public ResultForStore doOperation(DingoCommonId tableId, StoreServiceClient storeServiceClient, ContextForStore contextForStore) {
+        boolean isSuccess = storeServiceClient.kvBatchPut(tableId, contextForStore.getRegionId(), contextForStore.getRecordList());
+        return new ResultForStore(isSuccess ? 0 : -1, "");
     }
 }

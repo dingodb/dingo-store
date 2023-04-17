@@ -16,7 +16,7 @@
 
 package io.dingodb.client;
 
-import io.dingodb.meta.Meta;
+import io.dingodb.sdk.common.DingoCommonId;
 import io.dingodb.sdk.common.KeyValue;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -32,7 +32,7 @@ public class ContextForStore {
 
     private final List<byte[]> startKeyInBytes;
     private final List<KeyValue> recordList;
-    private final Meta.DingoCommonId regionId;
+    private final DingoCommonId regionId;
 
     public KeyValue getRecordByKey(byte[] key) {
         if (recordList == null) {

@@ -43,7 +43,7 @@ public class DingoClient {
     }
 
     public DingoClient(String coordinatorSvr, Integer retryTimes) {
-        this(coordinatorSvr, "DINGO_ROOT", retryTimes);
+        this(coordinatorSvr, "root", retryTimes);
     }
 
     public DingoClient(String coordinatorSvr, String schema, Integer retryTimes) {

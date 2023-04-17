@@ -16,7 +16,7 @@
 
 package io.dingodb.client;
 
-import io.dingodb.common.Common;
+import io.dingodb.sdk.common.KeyValue;
 import lombok.Getter;
 
 import java.util.List;
@@ -25,13 +25,13 @@ import java.util.List;
 public class ResultForStore {
     private final int code;
     private final String errorMessage;
-    private final List<Common.KeyValue> records;
+    private final List<KeyValue> records;
 
     public ResultForStore(int code, String errorMessage) {
         this(code, errorMessage, null);
     }
 
-    public ResultForStore(int code, String errorMessage, List<Common.KeyValue> records) {
+    public ResultForStore(int code, String errorMessage, List<KeyValue> records) {
         this.code = code;
         this.errorMessage = errorMessage;
         this.records = records;

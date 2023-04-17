@@ -16,7 +16,6 @@
 
 package io.dingodb.sdk.common.partition;
 
-import io.dingodb.sdk.common.codec.DingoKeyValueCodec;
 import io.dingodb.sdk.common.codec.KeyValueCodec;
 import io.dingodb.sdk.common.utils.ByteArrayUtils;
 import io.dingodb.sdk.common.utils.ByteArrayUtils.ComparableByteArray;

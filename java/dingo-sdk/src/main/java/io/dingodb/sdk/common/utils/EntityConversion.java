@@ -20,10 +20,16 @@ import com.google.protobuf.ByteString;
 import io.dingodb.common.Common;
 import io.dingodb.meta.Meta;
 import io.dingodb.sdk.common.DingoClientException;
+import io.dingodb.sdk.common.DingoCommonId;
+import io.dingodb.sdk.common.KeyValue;
+import io.dingodb.sdk.common.Location;
+import io.dingodb.sdk.common.Range;
+import io.dingodb.sdk.common.SDKCommonId;
 import io.dingodb.sdk.common.codec.KeyValueCodec;
-import io.dingodb.sdk.common.partition.PartitionDetailDefinition;
+import io.dingodb.sdk.common.partition.PartitionDetail;
 import io.dingodb.sdk.common.table.Column;
 import io.dingodb.sdk.common.table.ColumnDefinition;
+import io.dingodb.sdk.common.table.RangeDistribution;
 import io.dingodb.sdk.common.table.Table;
 import io.dingodb.sdk.common.table.TableDefinition;
 import io.dingodb.sdk.common.table.metric.TableMetrics;
@@ -106,6 +112,55 @@ public class EntityConversion {
         );
     }
 
+    public static KeyValue mapping(Common.KeyValue keyValue) {
+        return new KeyValue(keyValue.getKey().toByteArray(), keyValue.getValue().toByteArray());
+    }
+
+    public static Common.KeyValue mapping(KeyValue keyValue) {
+        return Common.KeyValue.newBuilder()
+                .setKey(ByteString.copyFrom(keyValue.getKey()))
+                .setValue(ByteString.copyFrom(keyValue.getValue()))
+                .build();
+    }
+
+    public static RangeDistribution mapping(Meta.RangeDistribution rangeDistribution) {
+        return new RangeDistribution(
+                mapping(rangeDistribution.getId()),
+                mapping(rangeDistribution.getRange()),
+                mapping(rangeDistribution.getLeader()),
+                rangeDistribution.getVotersList().stream().map(EntityConversion::mapping).collect(Collectors.toList()));
+    }
+
+    public static Location mapping(Common.Location location) {
+        return new Location(location.getHost(), location.getPort());
+    }
+
+    public static Range mapping(Common.Range range) {
+        return new Range(range.getStartKey().toByteArray(), range.getEndKey().toByteArray());
+    }
+
+    public static Common.Range mapping(Range range) {
+        return Common.Range.newBuilder()
+                .setStartKey(ByteString.copyFrom(range.getStartKey()))
+                .setEndKey(ByteString.copyFrom(range.getEndKey()))
+                .build();
+    }
+
+    public static Meta.DingoCommonId mapping(DingoCommonId commonId) {
+        return Meta.DingoCommonId.newBuilder()
+                .setEntityType(Meta.EntityType.valueOf(commonId.type().name()))
+                .setParentEntityId(commonId.parentId())
+                .setEntityId(commonId.entityId())
+                .build();
+    }
+
+    public static DingoCommonId mapping(Meta.DingoCommonId commonId) {
+        return new SDKCommonId(
+                DingoCommonId.Type.valueOf(commonId.getEntityType().name()),
+                commonId.getParentEntityId(),
+                commonId.getEntityId());
+    }
+
     public static Meta.PartitionRule calcRange(Table table, Meta.DingoCommonId tableId) {
         KeyValueCodec codec = table.createCodec(tableId);
         if (table.getPartDefinition() == null) {
@@ -125,11 +180,11 @@ public class EntityConversion {
         }
         List<Integer> keyList = table.getKeyColumnIndices();
         int columnCount = table.getColumns().size();
-        List<PartitionDetailDefinition> partDetails = table.getPartDefinition().details();
+        List<PartitionDetail> partDetails = table.getPartDefinition().details();
 
         List<Column> cols = keyList.stream().map(table::getColumn).collect(Collectors.toList());
 
-        for (PartitionDetailDefinition partDetail : partDetails) {
+        for (PartitionDetail partDetail : partDetails) {
             if (partDetail.getOperand().size() > keyList.size()) {
                 throw new IllegalArgumentException(
                     "Partition values count must be <= key columns count, but values count is "
@@ -150,7 +205,7 @@ public class EntityConversion {
         }
 
         Iterator<byte[]> keys = partDetails.stream()
-                .map(PartitionDetailDefinition::getOperand)
+                .map(PartitionDetail::getOperand)
                 .map(operand -> operand.toArray(new Object[columnCount]))
                 .map(NoBreakFunctions.wrap(codec::encodeKey))
                 .collect(Collectors.toCollection(() -> new TreeSet<>(ByteArrayUtils::compare)))

@@ -24,9 +24,9 @@ public class PartitionRule implements Partition {
 
     List<String> cols;
 
-    List<PartitionDetailDefinition> details;
+    List<PartitionDetail> details;
 
-    public PartitionRule(String strategy, List<String> cols, List<PartitionDetailDefinition> details) {
+    public PartitionRule(String strategy, List<String> cols, List<PartitionDetail> details) {
         this.strategy = strategy;
         this.cols = cols;
         this.details = details;
@@ -43,7 +43,7 @@ public class PartitionRule implements Partition {
     }
 
     @Override
-    public List<PartitionDetailDefinition> details() {
+    public List<PartitionDetail> details() {
         return details;
     }
 }
