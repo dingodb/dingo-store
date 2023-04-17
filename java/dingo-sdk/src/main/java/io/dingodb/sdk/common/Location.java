@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.dingodb.sdk.common.table.metric;
+package io.dingodb.sdk.common;
 
 import lombok.AllArgsConstructor;
 import lombok.EqualsAndHashCode;
@@ -23,10 +23,8 @@ import lombok.Getter;
 @Getter
 @AllArgsConstructor
 @EqualsAndHashCode
-public class TableMetrics {
+public class Location {
 
-    private byte[] minKey;
-    private byte[] maxKey;
-    private long rowCount;
-    private long partCount;
+    private String host;
+    private int port;
 }

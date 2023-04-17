@@ -36,18 +36,8 @@ public class TableDefinition implements Table {
     private Map<String, String> properties;
 
     @Override
-    public void setName(String name) {
-        this.name = name;
-    }
-
-    @Override
     public String getName() {
         return this.name;
-    }
-
-    @Override
-    public void setColumnDefinitions(List<Column> columns) {
-        this.columns = columns;
     }
 
     @Override
@@ -56,18 +46,8 @@ public class TableDefinition implements Table {
     }
 
     @Override
-    public void setVersion(int version) {
-        this.version = version;
-    }
-
-    @Override
     public int getVersion() {
         return this.version;
-    }
-
-    @Override
-    public void setTtl(int ttl) {
-        this.ttl = ttl;
     }
 
     @Override
@@ -76,28 +56,13 @@ public class TableDefinition implements Table {
     }
 
     @Override
-    public void setPartitionDefinition(Partition partDefinition) {
-        this.partition = partDefinition;
-    }
-
-    @Override
     public Partition getPartDefinition() {
         return this.partition;
     }
 
     @Override
-    public void setEngine(String engine) {
-        this.engine = engine;
-    }
-
-    @Override
     public String getEngine() {
         return this.engine;
-    }
-
-    @Override
-    public void setProperties(Map<String, String> properties) {
-        this.properties = properties;
     }
 
     @Override

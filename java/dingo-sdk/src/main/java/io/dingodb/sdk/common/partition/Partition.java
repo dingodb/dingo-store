@@ -24,5 +24,5 @@ public interface Partition {
 
     List<String> cols();
 
-    List<PartitionDetailDefinition> details();
+    List<PartitionDetail> details();
 }

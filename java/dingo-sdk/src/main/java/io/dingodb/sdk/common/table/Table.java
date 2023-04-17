@@ -31,25 +31,18 @@ import java.util.Map;
 
 public interface Table {
 
-    void setName(String name);
     String getName();
 
-    void setColumnDefinitions(List<Column> columns);
     List<Column> getColumns();
 
-    void setVersion(int version);
     int getVersion();
 
-    void setTtl(int ttl);
     int getTtl();
 
-    void setPartitionDefinition(Partition partDefinition);
     Partition getPartDefinition();
 
-    void setEngine(String engine);
     String getEngine();
 
-    void setProperties(Map<String, String> properties);
     Map<String, String> getProperties();
 
     default int getPrimaryKeyCount() {

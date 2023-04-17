@@ -16,16 +16,13 @@
 
 package io.dingodb.client.operation;
 
-import com.google.protobuf.ByteString;
 import io.dingodb.client.ContextForStore;
 import io.dingodb.client.IStoreOperation;
 import io.dingodb.client.ResultForStore;
-import io.dingodb.common.Common;
-import io.dingodb.error.ErrorOuterClass;
+import io.dingodb.sdk.common.DingoCommonId;
 import io.dingodb.sdk.service.store.StoreServiceClient;
-import io.dingodb.store.Store;
 
-import java.util.stream.Collectors;
+import java.util.List;
 
 public class PutIfAbsentOperation implements IStoreOperation {
 
@@ -39,21 +36,11 @@ public class PutIfAbsentOperation implements IStoreOperation {
     }
 
     @Override
-    public ResultForStore doOperation(StoreServiceClient storeServiceClient, ContextForStore contextForStore) {
-        Store.KvBatchPutIfAbsentRequest request = Store.KvBatchPutIfAbsentRequest.newBuilder()
-                .setRegionId(contextForStore.getRegionId().getEntityId())
-                .addAllKvs(contextForStore.getRecordList().stream()
-                        .map(kv ->
-                                Common.KeyValue.newBuilder()
-                                        .setKey(ByteString.copyFrom(kv.getKey()))
-                                        .setValue(ByteString.copyFrom(kv.getValue()))
-                                        .build())
-                        .collect(Collectors.toList()))
-                .build();
+    public ResultForStore doOperation(DingoCommonId tableId, StoreServiceClient storeServiceClient, ContextForStore contextForStore) {
+        List<Boolean> booleans = storeServiceClient.kvBatchPutIfAbsent(
+                tableId,
+                contextForStore.getRegionId(), contextForStore.getRecordList());
 
-        Store.KvBatchPutIfAbsentResponse response = storeServiceClient.kvBatchPutIfAbsent(request);
-        ErrorOuterClass.Error error = response.getError();
-
-        return new ResultForStore(error.getErrcodeValue(), error.getErrmsg());
+        return new ResultForStore(booleans.size() > 0 ? 0 : -1, "");
     }
 }

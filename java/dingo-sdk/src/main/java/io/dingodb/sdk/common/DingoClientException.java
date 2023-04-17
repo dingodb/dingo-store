@@ -17,10 +17,12 @@
 package io.dingodb.sdk.common;
 
 import io.dingodb.error.ErrorOuterClass;
+import lombok.Getter;
 
-public class DingoClientException extends IllegalArgumentException {
+public class DingoClientException extends RuntimeException {
 
-    protected int errorCode;
+    @Getter
+    private int errorCode;
 
     public DingoClientException(int errorCode, String message) {
         super(message);
@@ -51,6 +53,28 @@ public class DingoClientException extends IllegalArgumentException {
         public InvalidStoreLeader(String tableName) {
             super(ErrorOuterClass.Errno.ERAFT_NOTLEADER_VALUE,
                     "Invalid store leader, the store leader is empty, and the table name is: " + tableName);
+        }
+    }
+
+    public static final class MetaServiceException extends DingoClientException {
+
+        public MetaServiceException(String message) {
+            super(message);
+        }
+
+        public MetaServiceException(int errorCode, String message) {
+            super(errorCode, message);
+        }
+    }
+
+    public static final class StoreServiceException extends DingoClientException {
+
+        public StoreServiceException(String message) {
+            super(message);
+        }
+
+        public StoreServiceException(int errorCode, String message) {
+            super(errorCode, message);
         }
     }
 }

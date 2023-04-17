@@ -16,16 +16,14 @@
 
 package io.dingodb.client.operation;
 
-import com.google.protobuf.ByteString;
 import io.dingodb.client.ContextForStore;
 import io.dingodb.client.IStoreOperation;
 import io.dingodb.client.ResultForStore;
+import io.dingodb.sdk.common.DingoCommonId;
+import io.dingodb.sdk.common.KeyValue;
 import io.dingodb.sdk.service.store.StoreServiceClient;
-import io.dingodb.error.ErrorOuterClass;
-import io.dingodb.store.Store;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 public class GetOperation implements IStoreOperation {
 
@@ -40,19 +38,12 @@ public class GetOperation implements IStoreOperation {
     }
 
     @Override
-    public ResultForStore doOperation(StoreServiceClient storeServiceClient, ContextForStore contextForStore) {
-        List<ByteString> bytes = contextForStore.getStartKeyInBytes().stream()
-            .map(ByteString::copyFrom)
-            .collect(Collectors.toList());
+    public ResultForStore doOperation(DingoCommonId tableId, StoreServiceClient storeServiceClient, ContextForStore contextForStore) {
+        List<KeyValue> keyValues = storeServiceClient.kvBatchGet(
+                tableId,
+                contextForStore.getRegionId(),
+                contextForStore.getStartKeyInBytes());
 
-        Store.KvBatchGetRequest request = Store.KvBatchGetRequest.newBuilder()
-            .setRegionId(contextForStore.getRegionId().getEntityId())
-            .addAllKeys(bytes)
-            .build();
-
-        Store.KvBatchGetResponse response = storeServiceClient.kvBatchGet(request);
-        ErrorOuterClass.Error error = response.getError();
-
-        return new ResultForStore(error.getErrcodeValue(), error.getErrmsg(), response.getKvsList());
+        return new ResultForStore(0, "", keyValues);
     }
 }

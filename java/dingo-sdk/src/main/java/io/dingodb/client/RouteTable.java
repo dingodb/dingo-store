@@ -16,11 +16,14 @@
 
 package io.dingodb.client;
 
+import io.dingodb.sdk.common.DingoClientException;
+import io.dingodb.sdk.common.DingoCommonId;
 import io.dingodb.sdk.common.codec.KeyValueCodec;
+import io.dingodb.sdk.common.table.RangeDistribution;
+import io.dingodb.sdk.service.meta.MetaClient;
 import io.dingodb.sdk.service.store.StoreServiceClient;
 import io.dingodb.sdk.common.utils.ByteArrayUtils;
 import io.dingodb.sdk.common.partition.PartitionStrategy;
-import io.dingodb.meta.Meta;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 
@@ -29,18 +32,22 @@ import java.util.NavigableMap;
 @AllArgsConstructor
 public class RouteTable {
 
-    private Meta.DingoCommonId tableId;
+    @Getter
+    private DingoCommonId tableId;
 
     @Getter
     private KeyValueCodec codec;
-    private NavigableMap<ByteArrayUtils.ComparableByteArray, Meta.RangeDistribution> partRange;
+    private NavigableMap<ByteArrayUtils.ComparableByteArray, RangeDistribution> partRange;
     private PartitionStrategy<ByteArrayUtils.ComparableByteArray> partitionStrategy;
 
-    public StoreServiceClient getLeaderStoreService(String leaderAddress) {
-        return new StoreServiceClient(leaderAddress);
+    public StoreServiceClient getLeaderStoreService(MetaClient metaClient) {
+        return new StoreServiceClient(metaClient);
     }
 
-    public Meta.RangeDistribution getPartByKey(byte[] keyInBytes) {
+    public RangeDistribution getPartByKey(byte[] keyInBytes) {
+        if (partRange == null) {
+            throw new DingoClientException("The tableRange is empty");
+        }
         ByteArrayUtils.ComparableByteArray byteArray = partitionStrategy.calcPartId(keyInBytes);
         return partRange.get(byteArray);
     }

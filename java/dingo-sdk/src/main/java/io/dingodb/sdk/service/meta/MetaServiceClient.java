@@ -17,7 +17,9 @@
 package io.dingodb.sdk.service.meta;
 
 import io.dingodb.sdk.common.DingoClientException;
+import io.dingodb.sdk.common.DingoCommonId;
 import io.dingodb.sdk.common.concurrent.Executors;
+import io.dingodb.sdk.common.table.RangeDistribution;
 import io.dingodb.sdk.common.table.metric.TableMetrics;
 import io.dingodb.sdk.common.utils.EntityConversion;
 import io.dingodb.sdk.common.utils.Optional;
@@ -29,6 +31,7 @@ import io.dingodb.meta.MetaServiceGrpc;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.experimental.Accessors;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
 import java.util.Map;
@@ -37,10 +40,12 @@ import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.function.Function;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import static io.dingodb.sdk.common.utils.EntityConversion.mapping;
 
+@Slf4j
 @Accessors(fluent = true)
 public class MetaServiceClient {
 
@@ -57,12 +62,14 @@ public class MetaServiceClient {
             .build();
 
     private final Map<String, Meta.DingoCommonId> metaServiceIdCache = new ConcurrentSkipListMap<>();
-    private final Map<Meta.DingoCommonId, Table> tableDefinitionCache = new ConcurrentHashMap<>();
+    private final Map<DingoCommonId, Table> tableDefinitionCache = new ConcurrentHashMap<>();
     private final Map<Meta.DingoCommonId, MetaServiceClient> metaServiceCache = new ConcurrentHashMap<>();
     private final Map<String, Meta.DingoCommonId> tableIdCache = new ConcurrentHashMap<>();
 
     private MetaServiceGrpc.MetaServiceBlockingStub metaBlockingStub;
 
+    private Pattern pattern = Pattern.compile("^[A-Z_][A-Z\\d_]+$");
+    private Pattern warnPattern = Pattern.compile(".*[a-z]+.*");
     private String ROOT_NAME = "DINGO_ROOT";
     private Meta.DingoCommonId parentId;
     @Getter
@@ -72,22 +79,24 @@ public class MetaServiceClient {
 
     private ServiceConnector connector;
 
-    public MetaServiceClient(ServiceConnector connector) {
+    public MetaServiceClient(ServiceConnector<MetaServiceGrpc.MetaServiceBlockingStub> connector) {
         this.parentId = ROOT_SCHEMA_ID;
         this.id = DINGO_SCHEMA_ID;
         this.name = ROOT_NAME;
         this.connector = connector;
-        this.connector.initConnection();
-        this.metaBlockingStub = this.connector.getMetaBlockingStub();
+        this.metaBlockingStub = connector.getBlockingStub();
         Executors.execute("meta-service-client-reload", this::reload);
     }
 
-    private MetaServiceClient(Meta.DingoCommonId id, String name, ServiceConnector connector) {
+    private MetaServiceClient(
+            Meta.DingoCommonId id,
+            String name,
+            ServiceConnector<MetaServiceGrpc.MetaServiceBlockingStub> connector) {
         this.parentId = ROOT_SCHEMA_ID;
         this.connector = connector;
         this.id = id;
         this.name = name;
-        this.metaBlockingStub = connector.getMetaBlockingStub();
+        this.metaBlockingStub = connector.getBlockingStub();
     }
 
     public void close() {
@@ -170,10 +179,11 @@ public class MetaServiceClient {
         Meta.DingoCommonId tableId = tableDefinitionWithId.getTableId();
         String name = tableDefinitionWithId.getTableDefinition().getName();
         tableIdCache.computeIfAbsent(name, __ -> tableId);
-        tableDefinitionCache.computeIfAbsent(tableId, __ -> mapping(tableDefinitionWithId.getTableDefinition()));
+        tableDefinitionCache.computeIfAbsent(mapping(tableId), __ -> mapping(tableDefinitionWithId.getTableDefinition()));
     }
 
     public boolean createTable(@NonNull String tableName, @NonNull Table table) {
+        tableName = cleanTableName(tableName);
         if (Optional.mapOrNull(getTableId(tableName), this::getTableDefinition) != null) {
             throw new DingoClientException("Table " + tableName + " already exists");
         }
@@ -195,18 +205,19 @@ public class MetaServiceClient {
         Meta.CreateTableResponse response = metaBlockingStub.createTable(request);
 
         tableIdCache.put(tableName, tableId);
-        tableDefinitionCache.put(tableId, table);
+        tableDefinitionCache.put(mapping(tableId), table);
 
         return response.getError().getErrcodeValue() == 0;
     }
 
     public synchronized boolean dropTable(@NonNull String tableName) {
-        Meta.DingoCommonId tableId = getTableId(tableName);
+        tableName = cleanTableName(tableName);
+        DingoCommonId tableId = getTableId(tableName);
         if (tableId == null) {
             throw new DingoClientException("Table " + tableName + " does not exist");
         }
         Meta.DropTableRequest request = Meta.DropTableRequest.newBuilder()
-                .setTableId(tableId)
+                .setTableId(mapping(tableId))
                 .build();
 
         Meta.DropTableResponse response = metaBlockingStub.dropTable(request);
@@ -216,7 +227,8 @@ public class MetaServiceClient {
         return response.getError().getErrcodeValue() == 0;
     }
 
-    public Meta.DingoCommonId getTableId(@NonNull String tableName) {
+    public DingoCommonId getTableId(@NonNull String tableName) {
+        tableName = cleanTableName(tableName);
         Meta.DingoCommonId tableId = tableIdCache.get(tableName);
         if (tableId == null) {
             Meta.GetTableByNameRequest request = Meta.GetTableByNameRequest.newBuilder()
@@ -231,7 +243,7 @@ public class MetaServiceClient {
                 tableId = tableIdCache.get(tableName);
             }
         }
-        return tableId;
+        return Optional.mapOrNull(tableId, EntityConversion::mapping);
     }
 
     public Map<String, Table> getTableDefinitions() {
@@ -251,30 +263,38 @@ public class MetaServiceClient {
         return response.getTableDefinitionWithIdsList();
     }
 
-    public Table getTableDefinition(@NonNull String name) {
-        Meta.DingoCommonId tableId = getTableId(name);
+    public Table getTableDefinition(@NonNull String tableName) {
+        cleanTableName(tableName);
+        DingoCommonId tableId = getTableId(tableName);
+        if (tableId == null) {
+            throw new DingoClientException("Table " + tableName + " does not exist");
+        }
         return getTableDefinition(tableId);
     }
 
-    public Table getTableDefinition(@NonNull Meta.DingoCommonId tableId) {
+    public Table getTableDefinition(@NonNull DingoCommonId tableId) {
         Table table = tableDefinitionCache.get(tableId);
         if (table == null) {
-            Meta.GetTableRequest request = Meta.GetTableRequest.newBuilder().setTableId(tableId).build();
+            Meta.GetTableRequest request = Meta.GetTableRequest.newBuilder().setTableId(mapping(tableId)).build();
             Meta.GetTableResponse response = metaBlockingStub.getTable(request);
             table = mapping(response.getTableDefinitionWithId().getTableDefinition());
         }
         return table;
     }
 
-    public NavigableMap<ByteArrayUtils.ComparableByteArray, Meta.RangeDistribution> getRangeDistribution(String tableName) {
-        Meta.DingoCommonId tableId = getTableId(tableName);
+    public NavigableMap<ByteArrayUtils.ComparableByteArray, RangeDistribution> getRangeDistribution(String tableName) {
+        tableName = cleanTableName(tableName);
+        DingoCommonId tableId = getTableId(tableName);
+        if (tableId == null) {
+            throw new DingoClientException("Table " + tableName + " does not exist");
+        }
         return getRangeDistribution(tableId);
     }
 
-    public NavigableMap<ByteArrayUtils.ComparableByteArray, Meta.RangeDistribution> getRangeDistribution(Meta.DingoCommonId id) {
-        NavigableMap<ByteArrayUtils.ComparableByteArray, Meta.RangeDistribution> result = new TreeMap<>();
+    public NavigableMap<ByteArrayUtils.ComparableByteArray, RangeDistribution> getRangeDistribution(DingoCommonId id) {
+        NavigableMap<ByteArrayUtils.ComparableByteArray, RangeDistribution> result = new TreeMap<>();
         Meta.GetTableRangeRequest request = Meta.GetTableRangeRequest.newBuilder()
-                .setTableId(id)
+                .setTableId(mapping(id))
                 .build();
 
         Meta.GetTableRangeResponse response = metaBlockingStub.getTableRange(request);
@@ -282,21 +302,37 @@ public class MetaServiceClient {
         for (Meta.RangeDistribution tablePart : response.getTableRange().getRangeDistributionList()) {
             result.put(new ByteArrayUtils.ComparableByteArray(
                             tablePart.getRange().getStartKey().toByteArray()),
-                    tablePart);
+                    mapping(tablePart));
         }
         return result;
     }
 
     public TableMetrics getTableMetrics(String tableName) {
-        return Optional.ofNullable(getTableId(tableName))
-                .map(tableId -> {
+        tableName = cleanTableName(tableName);
+        DingoCommonId tableId = getTableId(tableName);
+        if (tableId == null) {
+            throw new DingoClientException("Table " + tableName + " does not exist");
+        }
+        return Optional.ofNullable(tableId)
+                .map(__ -> {
                     Meta.GetTableMetricsRequest request = Meta.GetTableMetricsRequest.newBuilder()
-                            .setTableId(tableId)
+                            .setTableId(mapping(__))
                             .build();
                     Meta.GetTableMetricsResponse response = metaBlockingStub.getTableMetrics(request);
                     Meta.TableMetricsWithId metrics = response.getTableMetrics();
                     return metrics.getTableMetrics();
                 })
                 .mapOrNull(EntityConversion::mapping);
+    }
+
+    private String cleanTableName(String tableName) {
+        if (warnPattern.matcher(tableName).matches()) {
+            log.warn("Table name currently only supports uppercase letters, LowerCase -> UpperCase");
+            tableName = tableName.toUpperCase();
+        }
+        if (!pattern.matcher(tableName).matches()) {
+            throw new DingoClientException("Table name currently only supports uppercase letters, digits, and underscores");
+        }
+        return tableName;
     }
 }

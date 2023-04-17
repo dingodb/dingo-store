@@ -14,19 +14,19 @@
  * limitations under the License.
  */
 
-package io.dingodb.sdk.common.table.metric;
+package io.dingodb.sdk.common;
 
-import lombok.AllArgsConstructor;
-import lombok.EqualsAndHashCode;
-import lombok.Getter;
+public interface DingoCommonId {
 
-@Getter
-@AllArgsConstructor
-@EqualsAndHashCode
-public class TableMetrics {
+    Type type();
 
-    private byte[] minKey;
-    private byte[] maxKey;
-    private long rowCount;
-    private long partCount;
+    long parentId();
+
+    long entityId();
+
+    enum Type {
+        ENTITY_TYPE_SCHEMA,
+        ENTITY_TYPE_TABLE,
+        ENTITY_TYPE_PART;
+    }
 }

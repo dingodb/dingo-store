@@ -35,16 +35,16 @@ public class GrpcConnection {
         return Grpc.newChannelBuilder(target, InsecureChannelCredentials.create()).build();
     }
 
-    public static AbstractBlockingStub<?> newBlockingStub(@NonNull ManagedChannel channel, String ident) throws UnsupportedDataTypeException {
-        switch (ident.toUpperCase()) {
-            case "STORE":
+    public static AbstractBlockingStub<?> newBlockingStub(@NonNull ManagedChannel channel, GrpcType type) throws UnsupportedDataTypeException {
+        switch (type) {
+            case STORE:
                 return StoreServiceGrpc.newBlockingStub(channel);
-            case "META":
+            case META:
                 return MetaServiceGrpc.newBlockingStub(channel);
-            case "COORDINATOR":
+            case COORDINATOR:
                 return CoordinatorServiceGrpc.newBlockingStub(channel);
             default:
-                throw new UnsupportedDataTypeException(ident);
+                throw new UnsupportedDataTypeException(type.name());
         }
     }
 
@@ -71,5 +71,11 @@ public class GrpcConnection {
                 log.error("Unexpected exception while waiting for channel termination", e);
             }
         }
+    }
+
+    public enum GrpcType {
+        STORE,
+        META,
+        COORDINATOR;
     }
 }

@@ -17,7 +17,6 @@
 package io.dingodb.sdk.service.meta;
 
 import io.dingodb.sdk.service.connector.CoordinatorConnector;
-import io.dingodb.sdk.service.connector.ServiceConnector;
 import lombok.experimental.Delegate;
 
 public class MetaClient {

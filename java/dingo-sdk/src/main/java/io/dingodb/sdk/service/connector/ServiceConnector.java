@@ -16,82 +16,53 @@
 
 package io.dingodb.sdk.service.connector;
 
-import io.dingodb.common.Common;
-import io.dingodb.coordinator.Coordinator;
-import io.dingodb.coordinator.CoordinatorServiceGrpc;
+import io.dingodb.sdk.common.Location;
 import io.dingodb.sdk.common.utils.GrpcConnection;
-import io.dingodb.meta.MetaServiceGrpc;
 import io.grpc.ConnectivityState;
 import io.grpc.ManagedChannel;
-import lombok.Getter;
+import io.grpc.stub.AbstractBlockingStub;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArraySet;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 @Slf4j
-public class ServiceConnector {
+public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
 
-    private ManagedChannel channel;
-    @Getter
-    private MetaServiceGrpc.MetaServiceBlockingStub metaBlockingStub;
+    protected ManagedChannel channel;
+    protected S blockingStub;
 
-    private Set<Common.Location> locations = new CopyOnWriteArraySet<>();
+    protected Location leader;
+    protected Set<Location> locations = new CopyOnWriteArraySet<>();
 
-    private AtomicBoolean isShutdown = new AtomicBoolean(false);
-
-    public ServiceConnector(Set<Common.Location> locations) {
+    public ServiceConnector(Location leader, Set<Location> locations) {
+        this.leader = leader;
         this.locations.addAll(locations);
-        initConnection();
+        refresh();
     }
 
-    public Set<Common.Location> getLocations() {
+    public S getBlockingStub() {
+        if (channel == null || blockingStub == null) {
+            return null;
+        }
+        if (channel.getState(true) == ConnectivityState.TRANSIENT_FAILURE) {
+            refresh();
+        }
+        return blockingStub;
+    }
+
+    public abstract void refresh();
+
+    protected synchronized void onChannelConnected() {
+        channel.notifyWhenStateChanged(ConnectivityState.IDLE, this::refresh);
+        // channel.notifyWhenStateChanged(ConnectivityState.TRANSIENT_FAILURE, this::refresh);
+    }
+
+    public Set<Location> getLocations() {
         return locations;
-    }
-
-    public Common.Location getLeader() {
-        for (Common.Location location : locations) {
-            String target = location.getHost() + ":" + location.getPort();
-            channel = GrpcConnection.newChannel(target);
-            ConnectivityState state = channel.getState(true);
-            if (state == ConnectivityState.CONNECTING || state == ConnectivityState.READY || state == ConnectivityState.IDLE) {
-                CoordinatorServiceGrpc.CoordinatorServiceBlockingStub blockingStub =
-                        CoordinatorServiceGrpc.newBlockingStub(channel);
-                Coordinator.GetCoordinatorMapResponse response = blockingStub.getCoordinatorMap(
-                        Coordinator.GetCoordinatorMapRequest.newBuilder().setClusterId(0).build());
-
-                Common.Location leaderLocation = response.getLeaderLocation();
-                GrpcConnection.shutdownManagedChannel(channel, log);
-                if (!leaderLocation.getHost().isEmpty()) {
-                    target = leaderLocation.getHost() + ":" + leaderLocation.getPort();
-                    channel = GrpcConnection.newChannel(target);
-                    metaBlockingStub = MetaServiceGrpc.newBlockingStub(channel);
-                    return leaderLocation;
-                }
-            }
-        }
-        return null;
-    }
-
-    public void initConnection() {
-        connection();
-        channel.notifyWhenStateChanged(ConnectivityState.TRANSIENT_FAILURE, this::connection);
-        channel.notifyWhenStateChanged(ConnectivityState.SHUTDOWN, this::connection);
-    }
-
-    private void connection() {
-        if (isShutdown.get()) {
-            return;
-        }
-        if (channel != null) {
-            return;
-        }
-        getLeader();
     }
 
     public void shutdown() {
         GrpcConnection.shutdownManagedChannel(channel, log);
-        isShutdown.set(true);
     }
 }
