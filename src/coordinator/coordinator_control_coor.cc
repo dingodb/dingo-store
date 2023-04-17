@@ -318,6 +318,21 @@ bool CoordinatorControl::TrySetStoreToOffline(uint64_t store_id) {
   return false;
 }
 
+bool CoordinatorControl::TrySetExecutorToOffline(uint64_t executor_id) {
+  pb::common::Executor executor_to_update;
+  int ret = executor_map_.Get(executor_id, executor_to_update);
+  if (ret > 0) {
+    if (executor_to_update.state() == pb::common::ExecutorState::EXECUTOR_NORMAL &&
+        executor_to_update.last_seen_timestamp() + (60 * 1000) < butil::gettimeofday_ms()) {
+      // update executor's state to EXECUTOR_OFFLINE
+      executor_to_update.set_state(pb::common::ExecutorState::EXECUTOR_OFFLINE);
+      executor_map_.Put(executor_id, executor_to_update);
+      return true;
+    }
+  }
+  return false;
+}
+
 void CoordinatorControl::GetRegionMap(pb::common::RegionMap& region_map) {
   region_map.set_epoch(GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_REGION));
   {
@@ -1229,6 +1244,7 @@ pb::error::Errno CoordinatorControl::DeleteExecutor(uint64_t cluster_id, uint64_
   return pb::error::Errno::OK;
 }
 
+// UpdateExecutorMap
 uint64_t CoordinatorControl::UpdateExecutorMap(const pb::common::Executor& executor,
                                                pb::coordinator_internal::MetaIncrement& meta_increment) {
   uint64_t executor_map_epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_EXECUTOR);
@@ -1238,10 +1254,13 @@ uint64_t CoordinatorControl::UpdateExecutorMap(const pb::common::Executor& execu
     // BAIDU_SCOPED_LOCK(executor_map_mutex_);
     pb::common::Executor executor_to_update;
     int ret = executor_map_.Get(executor.id(), executor_to_update);
-    // auto* temp_executor = executor_map_.seek(executor.id());
-    // if (executor_map_.find(executor.id()) != executor_map_.end()) {
     if (ret > 0) {
-      if (executor_to_update.state() != executor.state()) {
+      if (executor_to_update.state() == pb::common::ExecutorState::EXECUTOR_NEW) {
+        // this is a new executor's first heartbeat
+        // so we need to update the executor's state to executor_NORMAL
+        // and update the executor's server_location
+        // and update the executor's raft_location
+        // and update the executor's last_seen_timestamp
         DINGO_LOG(INFO) << "executor STATUS CHANGE executor_id = " << executor.id()
                         << " old status = " << executor_to_update.state() << " new status = " << executor.state();
 
@@ -1252,13 +1271,32 @@ uint64_t CoordinatorControl::UpdateExecutorMap(const pb::common::Executor& execu
         executor_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
 
         auto* executor_increment_executor = executor_increment->mutable_executor();
-        executor_increment_executor->CopyFrom(executor);
+        executor_increment_executor->CopyFrom(
+            executor_to_update);  // only update server_location & raft_location & state
 
-        // on_apply
-        // executor_map_epoch++;              // raft_kv_put
-        // executor_map_[executor.id()] = executor;  // raft_kv_put
+        // only update server_location & raft_location & state & last_seen_timestamp
+        executor_increment_executor->mutable_server_location()->CopyFrom(executor.server_location());
+        executor_increment_executor->set_state(pb::common::ExecutorState::EXECUTOR_NORMAL);
+        executor_increment_executor->set_last_seen_timestamp(butil::gettimeofday_ms());
+      } else {
+        // this is normall heartbeat,
+        // so only need to update state & last_seen_timestamp, no need to update epoch
+        auto* executor_increment = meta_increment.add_executors();
+        executor_increment->set_id(executor.id());
+        executor_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
+
+        auto* executor_increment_executor = executor_increment->mutable_executor();
+        executor_increment_executor->CopyFrom(
+            executor_to_update);  // only update server_location & raft_location & state
+
+        // only update state & last_seen_timestamp
+        executor_increment_executor->set_state(pb::common::ExecutorState::EXECUTOR_NORMAL);
+        executor_increment_executor->set_last_seen_timestamp(butil::gettimeofday_ms());
       }
     } else {
+      // this is a special new executor's first heartbeat
+      // only executor using keyring=TO_BE_CONTINUED can get into this branch
+      // so we just add this executor into executor_map_
       DINGO_LOG(INFO) << "NEED ADD NEW executor executor_id = " << executor.id();
 
       // update meta_increment
@@ -1269,10 +1307,11 @@ uint64_t CoordinatorControl::UpdateExecutorMap(const pb::common::Executor& execu
 
       auto* executor_increment_executor = executor_increment->mutable_executor();
       executor_increment_executor->CopyFrom(executor);
+      executor_increment_executor->set_state(pb::common::ExecutorState::EXECUTOR_NORMAL);
+      executor_increment_executor->set_last_seen_timestamp(butil::gettimeofday_ms());
 
-      // on_apply
-      // executor_map_epoch++;                                    // raft_kv_put
-      // executor_map_.insert(std::make_pair(executor.id(), executor));  // raft_kv_put
+      // setup create_timestamp
+      executor_increment_executor->set_create_timestamp(butil::gettimeofday_ms());
     }
   }
 
