@@ -49,7 +49,6 @@ DEFINE_int64(store_id, 0, "store_id");
 DEFINE_int64(region_id, 0, "region_id");
 DEFINE_int64(region_cmd_id, 0, "region_cmd_id");
 DEFINE_string(store_ids, "1001,1002,1003", "store_ids splited by ,");
-DEFINE_bool(show_version, true, "show version");
 
 void* Sender(void* /*arg*/) {
   // get leader location
@@ -191,7 +190,7 @@ void* Sender(void* /*arg*/) {
 int main(int argc, char* argv[]) {
   google::ParseCommandLineFlags(&argc, &argv, true);
 
-  if (FLAGS_show_version) {
+  if (dingodb::FLAGS_show_version) {
     printf("Dingo-Store version:[%s] with git commit hash:[%s]\n", FLAGS_git_tag_name.c_str(),
            FLAGS_git_commit_hash.c_str());
     exit(-1);
