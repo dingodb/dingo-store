@@ -284,6 +284,7 @@ message DeleteExecutorUserResponse {
 message UpdateExecutorUserRequest {
   uint64 cluster_id = 1;  // set to 0 now
   dingodb.pb.common.ExecutorUser executor_user = 2;
+  dingodb.pb.common.ExecutorUser executor_user_update = 3;  // user name is ignored, only update keyring
 }
 
 message UpdateExecutorUserResponse {

@@ -1293,21 +1293,29 @@ pb::error::Errno CoordinatorControl::CreateExecutorUser(uint64_t cluster_id, pb:
   return pb::error::Errno::OK;
 }
 
-pb::error::Errno CoordinatorControl::UpdateExecutorUser(uint64_t cluster_id, pb::common::ExecutorUser& executor_user,
+pb::error::Errno CoordinatorControl::UpdateExecutorUser(uint64_t cluster_id,
+                                                        const pb::common::ExecutorUser& executor_user,
+                                                        const pb::common::ExecutorUser& executor_user_update,
                                                         pb::coordinator_internal::MetaIncrement& meta_increment) {
   if (cluster_id <= 0) {
     return pb::error::Errno::EILLEGAL_PARAMTETERS;
   }
 
-  if (!executor_user_map_.Exists(executor_user.user())) {
+  pb::coordinator_internal::ExecutorUserInternal executor_user_internal;
+  int ret = executor_user_map_.Get(executor_user.user(), executor_user_internal);
+  if (ret < 0) {
     DINGO_LOG(INFO) << "UpdateExecutorUser user not exists, user=" << executor_user.user();
     return pb::error::Errno::EUSER_NOT_EXIST;
   }
 
-  // executor_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_EXECUTOR, meta_increment);
-  if (executor_user.keyring().length() <= 0) {
-    executor_user.set_keyring(Helper::GenerateRandomString(16));
+  if (executor_user.keyring().length() > 0 && executor_user.keyring() != executor_user_internal.keyring()) {
+    DINGO_LOG(INFO) << "UpdateExecutorUser user keyring not equal, user=" << executor_user.user()
+                    << " input keyring=" << executor_user.keyring()
+                    << " but executor_user's keyring=" << executor_user_internal.keyring();
+    return pb::error::Errno::EKEYRING_ILLEGAL;
   }
+
+  // executor_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_EXECUTOR, meta_increment);
 
   // update meta_increment
   // GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_EXECUTOR, meta_increment);
@@ -1315,7 +1323,7 @@ pb::error::Errno CoordinatorControl::UpdateExecutorUser(uint64_t cluster_id, pb:
   executor_increment->set_id(executor_user.user());
   executor_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
   executor_increment->mutable_executor_user()->set_id(executor_user.user());
-  executor_increment->mutable_executor_user()->set_keyring(executor_user.keyring());
+  executor_increment->mutable_executor_user()->set_keyring(executor_user_update.keyring());
 
   return pb::error::Errno::OK;
 }
@@ -1326,9 +1334,17 @@ pb::error::Errno CoordinatorControl::DeleteExecutorUser(uint64_t cluster_id, pb:
     return pb::error::Errno::EILLEGAL_PARAMTETERS;
   }
 
-  if (!executor_user_map_.Exists(executor_user.user())) {
+  pb::coordinator_internal::ExecutorUserInternal executor_user_in_map;
+  int ret = executor_user_map_.Get(executor_user.user(), executor_user_in_map);
+  if (ret < 0) {
     DINGO_LOG(INFO) << "DeleteExecutorUser user not exists, user=" << executor_user.user();
     return pb::error::Errno::EUSER_NOT_EXIST;
+  }
+
+  if (executor_user.keyring().length() > 0 && executor_user.keyring() != executor_user_in_map.keyring()) {
+    DINGO_LOG(INFO) << "DeleteExecutorUser keyring not equal, input keyring=" << executor_user.keyring()
+                    << " but executor_user's keyring=" << executor_user_in_map.keyring();
+    return pb::error::Errno::EKEYRING_ILLEGAL;
   }
 
   // executor_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_EXECUTOR, meta_increment);

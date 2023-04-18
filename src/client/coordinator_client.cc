@@ -34,8 +34,10 @@ DEFINE_int32(req_num, 1, "Number of requests");
 DEFINE_string(method, "Hello", "Request method");
 DEFINE_string(id, "", "Request parameter id, for example: table_id for CreateTable/DropTable");
 DEFINE_string(name, "", "Request parameter name, for example: table_id for GetSchemaByName/GetTableByName");
+DEFINE_string(user, "", "Request parameter user");
 DEFINE_string(level, "", "Request log level [DEBUG, INFO, WARNING, ERROR, FATAL]");
 DEFINE_string(keyring, "", "Request parameter keyring");
+DEFINE_string(new_keyring, "", "Request parameter new_keyring");
 DEFINE_string(coordinator_addr, "", "coordinator servr addr, for example: 127.0.0.1:8001");
 DEFINE_string(group, "0", "Id of the replication group, now coordinator use 0 as groupid");
 DEFINE_int64(split_from_id, 0, "split_from_id");
@@ -109,6 +111,14 @@ void* Sender(void* /*arg*/) {
     SendCreateExecutor(cntl, coordinator_stub);
   } else if (FLAGS_method == "DeleteExecutor") {
     SendDeleteExecutor(cntl, coordinator_stub);
+  } else if (FLAGS_method == "CreateExecutorUser") {
+    SendCreateExecutorUser(cntl, coordinator_stub);
+  } else if (FLAGS_method == "UpdateExecutorUser") {
+    SendUpdateExecutorUser(cntl, coordinator_stub);
+  } else if (FLAGS_method == "DeleteExecutorUser") {
+    SendDeleteExecutorUser(cntl, coordinator_stub);
+  } else if (FLAGS_method == "GetExecutorUserMap") {
+    SendGetExecutorUserMap(cntl, coordinator_stub);
   } else if (FLAGS_method == "GetStoreMap") {
     SendGetStoreMap(cntl, coordinator_stub);
   } else if (FLAGS_method == "GetExecutorMap") {

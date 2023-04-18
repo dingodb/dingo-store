@@ -160,8 +160,7 @@ void CoordinatorServiceImpl::CreateExecutorUser(google::protobuf::RpcController 
   // create executor user
   pb::common::ExecutorUser executor_user;
   executor_user.CopyFrom(request->executor_user());
-  auto local_ctl = this->coordinator_control_;
-  auto ret = local_ctl->CreateExecutorUser(request->cluster_id(), executor_user, meta_increment);
+  auto ret = this->coordinator_control_->CreateExecutorUser(request->cluster_id(), executor_user, meta_increment);
   if (ret == pb::error::Errno::OK) {
     response->mutable_executor_user()->CopyFrom(executor_user);
   } else {
@@ -204,13 +203,11 @@ void CoordinatorServiceImpl::UpdateExecutorUser(google::protobuf::RpcController 
 
   pb::coordinator_internal::MetaIncrement meta_increment;
 
-  // create executor user
-  pb::common::ExecutorUser executor_user;
-  executor_user.CopyFrom(request->executor_user());
-  auto local_ctl = this->coordinator_control_;
-  auto ret = local_ctl->UpdateExecutorUser(request->cluster_id(), executor_user, meta_increment);
+  auto ret = this->coordinator_control_->UpdateExecutorUser(request->cluster_id(), request->executor_user(),
+                                                            request->executor_user_update(), meta_increment);
   if (ret == pb::error::Errno::OK) {
-    response->mutable_executor_user()->CopyFrom(executor_user);
+    response->mutable_executor_user()->CopyFrom(request->executor_user_update());
+    response->mutable_executor_user()->set_user(request->executor_user().user());
   } else {
     response->mutable_error()->set_errcode(ret);
     return;

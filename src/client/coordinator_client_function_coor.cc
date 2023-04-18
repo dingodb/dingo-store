@@ -28,7 +28,9 @@ DECLARE_int32(timeout_ms);
 DECLARE_string(id);
 DECLARE_string(level);
 DECLARE_string(name);
+DECLARE_string(user);
 DECLARE_string(keyring);
+DECLARE_string(new_keyring);
 DECLARE_string(coordinator_addr);
 DECLARE_int64(split_from_id);
 DECLARE_int64(split_to_id);
@@ -386,6 +388,128 @@ void SendDeleteExecutor(brpc::Controller& cntl, dingodb::pb::coordinator::Coordi
   if (FLAGS_log_each_request) {
     DINGO_LOG(INFO) << "Received response"
                     << " create executor cluster_id =" << request.cluster_id()
+                    << " request_attachment=" << cntl.request_attachment().size()
+                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+    DINGO_LOG(INFO) << response.DebugString();
+  }
+}
+
+void SendCreateExecutorUser(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
+  dingodb::pb::coordinator::CreateExecutorUserRequest request;
+  dingodb::pb::coordinator::CreateExecutorUserResponse response;
+
+  if (FLAGS_user.empty()) {
+    DINGO_LOG(WARNING) << "user is empty";
+    return;
+  }
+  request.mutable_executor_user()->set_user(FLAGS_user);
+
+  if (FLAGS_keyring.empty()) {
+    DINGO_LOG(WARNING) << "keyring is empty, coordinator will generate a random keyring";
+  } else {
+    request.mutable_executor_user()->set_keyring(FLAGS_keyring);
+  }
+
+  request.set_cluster_id(1);
+  stub.CreateExecutorUser(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorCode() << "[" << cntl.ErrorText() << "]";
+    // bthread_usleep(FLAGS_timeout_ms * 1000L);
+  }
+
+  if (FLAGS_log_each_request) {
+    DINGO_LOG(INFO) << "Received response"
+                    << " create executor user cluster_id =" << request.cluster_id()
+                    << " request_attachment=" << cntl.request_attachment().size()
+                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+    DINGO_LOG(INFO) << response.DebugString();
+  }
+}
+
+void SendUpdateExecutorUser(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
+  dingodb::pb::coordinator::UpdateExecutorUserRequest request;
+  dingodb::pb::coordinator::UpdateExecutorUserResponse response;
+
+  if (FLAGS_user.empty()) {
+    DINGO_LOG(WARNING) << "user is empty";
+    return;
+  }
+  request.mutable_executor_user()->set_user(FLAGS_user);
+
+  if (FLAGS_keyring.empty()) {
+    DINGO_LOG(WARNING) << "keyring is empty";
+    return;
+  }
+  request.mutable_executor_user()->set_keyring(FLAGS_keyring);
+
+  if (FLAGS_new_keyring.empty()) {
+    DINGO_LOG(WARNING) << "new_keyring is empty";
+    return;
+  }
+  request.mutable_executor_user_update()->set_keyring(FLAGS_new_keyring);
+
+  request.set_cluster_id(1);
+  stub.UpdateExecutorUser(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorCode() << "[" << cntl.ErrorText() << "]";
+    // bthread_usleep(FLAGS_timeout_ms * 1000L);
+  }
+
+  if (FLAGS_log_each_request) {
+    DINGO_LOG(INFO) << "Received response"
+                    << " update executor user cluster_id =" << request.cluster_id()
+                    << " request_attachment=" << cntl.request_attachment().size()
+                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+    DINGO_LOG(INFO) << response.DebugString();
+  }
+}
+
+void SendDeleteExecutorUser(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
+  dingodb::pb::coordinator::DeleteExecutorUserRequest request;
+  dingodb::pb::coordinator::DeleteExecutorUserResponse response;
+
+  if (FLAGS_user.empty()) {
+    DINGO_LOG(WARNING) << "user is empty";
+    return;
+  }
+  request.mutable_executor_user()->set_user(FLAGS_user);
+
+  if (FLAGS_keyring.empty()) {
+    DINGO_LOG(WARNING) << "keyring is empty";
+    return;
+  }
+  request.mutable_executor_user()->set_keyring(FLAGS_keyring);
+
+  request.set_cluster_id(1);
+  stub.DeleteExecutorUser(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorCode() << "[" << cntl.ErrorText() << "]";
+    // bthread_usleep(FLAGS_timeout_ms * 1000L);
+  }
+
+  if (FLAGS_log_each_request) {
+    DINGO_LOG(INFO) << "Received response"
+                    << " delete executor user cluster_id =" << request.cluster_id()
+                    << " request_attachment=" << cntl.request_attachment().size()
+                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+    DINGO_LOG(INFO) << response.DebugString();
+  }
+}
+
+void SendGetExecutorUserMap(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
+  dingodb::pb::coordinator::GetExecutorUserMapRequest request;
+  dingodb::pb::coordinator::GetExecutorUserMapResponse response;
+
+  request.set_cluster_id(1);
+  stub.GetExecutorUserMap(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorCode() << "[" << cntl.ErrorText() << "]";
+    // bthread_usleep(FLAGS_timeout_ms * 1000L);
+  }
+
+  if (FLAGS_log_each_request) {
+    DINGO_LOG(INFO) << "Received response"
+                    << " get executor user map cluster_id =" << request.cluster_id()
                     << " request_attachment=" << cntl.request_attachment().size()
                     << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
     DINGO_LOG(INFO) << response.DebugString();

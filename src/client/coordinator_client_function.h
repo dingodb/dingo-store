@@ -45,11 +45,15 @@ void SendGetCoordinatorMap(brpc::Controller& cntl, dingodb::pb::coordinator::Coo
 void SendGetRegionMap(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
 void SendCreateStore(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
 void SendDeleteStore(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
-void SendCreateExecutor(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
-void SendDeleteExecutor(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
 void SendStoreHearbeat(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub,
                        uint64_t store_id);
 void SendGetStoreMetrics(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
+void SendCreateExecutor(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
+void SendDeleteExecutor(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
+void SendCreateExecutorUser(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
+void SendUpdateExecutorUser(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
+void SendDeleteExecutorUser(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
+void SendGetExecutorUserMap(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
 
 // region
 void SendQueryRegion(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
