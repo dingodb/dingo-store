@@ -247,13 +247,6 @@ bool CoordinatorControl::LoadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapsh
 bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::MetaSnapshotFile& meta_snapshot_file) {
   DINGO_LOG(INFO) << "Coordinator start to LoadMetaFromSnapshotFile";
 
-  // clean all data of rocksdb
-  if (!meta_writer_->DeleteRange(std::string(10, '\0'), std::string(10, '\xff'))) {
-    DINGO_LOG(ERROR) << "Coordinator delete range failed in LoadMetaFromSnapshotFile";
-    return false;
-  }
-  DINGO_LOG(INFO) << "Coordinator delete range success in LoadMetaFromSnapshotFile";
-
   std::vector<pb::common::KeyValue> kvs;
 
   // 0.id_epoch map
@@ -266,6 +259,20 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
     if (!id_epoch_meta_->Recover(kvs)) {
       return false;
     }
+
+    // remove data in rocksdb
+    if (!meta_writer_->DeleteRange(id_epoch_meta_->internal_prefix, id_epoch_meta_->internal_prefix)) {
+      DINGO_LOG(ERROR) << "Coordinator delete id_epoch_meta_ range failed in LoadMetaFromSnapshotFile";
+      return false;
+    }
+    DINGO_LOG(INFO) << "Coordinator delete range id_epoch_meta_ success in LoadMetaFromSnapshotFile";
+
+    // write data to rocksdb
+    if (!meta_writer_->Put(kvs)) {
+      DINGO_LOG(ERROR) << "Coordinator write id_epoch_meta_ failed in LoadMetaFromSnapshotFile";
+      return false;
+    }
+    DINGO_LOG(INFO) << "Coordinator put id_epoch_meta_ success in LoadMetaFromSnapshotFile";
   }
   DINGO_LOG(INFO) << "LoadSnapshot id_epoch_meta, count=" << kvs.size();
   kvs.clear();
@@ -280,6 +287,20 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
     if (!coordinator_meta_->Recover(kvs)) {
       return false;
     }
+
+    // remove data in rocksdb
+    if (!meta_writer_->DeleteRange(coordinator_meta_->internal_prefix, coordinator_meta_->internal_prefix)) {
+      DINGO_LOG(ERROR) << "Coordinator delete coordinator_meta_ range failed in LoadMetaFromSnapshotFile";
+      return false;
+    }
+    DINGO_LOG(INFO) << "Coordinator delete range coordinator_meta_ success in LoadMetaFromSnapshotFile";
+
+    // write data to rocksdb
+    if (!meta_writer_->Put(kvs)) {
+      DINGO_LOG(ERROR) << "Coordinator write coordinator_meta_ failed in LoadMetaFromSnapshotFile";
+      return false;
+    }
+    DINGO_LOG(INFO) << "Coordinator put coordinator_meta_ success in LoadMetaFromSnapshotFile";
   }
   DINGO_LOG(INFO) << "LoadSnapshot coordinator_meta, count=" << kvs.size();
   kvs.clear();
@@ -294,6 +315,20 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
     if (!store_meta_->Recover(kvs)) {
       return false;
     }
+
+    // remove data in rocksdb
+    if (!meta_writer_->DeleteRange(store_meta_->internal_prefix, store_meta_->internal_prefix)) {
+      DINGO_LOG(ERROR) << "Coordinator delete store_meta_ range failed in LoadMetaFromSnapshotFile";
+      return false;
+    }
+    DINGO_LOG(INFO) << "Coordinator delete range store_meta_ success in LoadMetaFromSnapshotFile";
+
+    // write data to rocksdb
+    if (!meta_writer_->Put(kvs)) {
+      DINGO_LOG(ERROR) << "Coordinator write store_meta_ failed in LoadMetaFromSnapshotFile";
+      return false;
+    }
+    DINGO_LOG(INFO) << "Coordinator put store_meta_ success in LoadMetaFromSnapshotFile";
   }
   DINGO_LOG(INFO) << "LoadSnapshot store_meta, count=" << kvs.size();
   kvs.clear();
@@ -308,6 +343,20 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
     if (!executor_meta_->Recover(kvs)) {
       return false;
     }
+
+    // remove data in rocksdb
+    if (!meta_writer_->DeleteRange(executor_meta_->internal_prefix, executor_meta_->internal_prefix)) {
+      DINGO_LOG(ERROR) << "Coordinator delete executor_meta_ range failed in LoadMetaFromSnapshotFile";
+      return false;
+    }
+    DINGO_LOG(INFO) << "Coordinator delete range executor_meta_ success in LoadMetaFromSnapshotFile";
+
+    // write data to rocksdb
+    if (!meta_writer_->Put(kvs)) {
+      DINGO_LOG(ERROR) << "Coordinator write executor_meta_ failed in LoadMetaFromSnapshotFile";
+      return false;
+    }
+    DINGO_LOG(INFO) << "Coordinator put executor_meta_ success in LoadMetaFromSnapshotFile";
   }
   DINGO_LOG(INFO) << "LoadSnapshot executor_meta, count=" << kvs.size();
   kvs.clear();
@@ -322,6 +371,20 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
     if (!schema_meta_->Recover(kvs)) {
       return false;
     }
+
+    // remove data in rocksdb
+    if (!meta_writer_->DeleteRange(schema_meta_->internal_prefix, schema_meta_->internal_prefix)) {
+      DINGO_LOG(ERROR) << "Coordinator delete schema_meta_ range failed in LoadMetaFromSnapshotFile";
+      return false;
+    }
+    DINGO_LOG(INFO) << "Coordinator delete range schema_meta_ success in LoadMetaFromSnapshotFile";
+
+    // write data to rocksdb
+    if (!meta_writer_->Put(kvs)) {
+      DINGO_LOG(ERROR) << "Coordinator write schema_meta_ failed in LoadMetaFromSnapshotFile";
+      return false;
+    }
+    DINGO_LOG(INFO) << "Coordinator put schema_meta_ success in LoadMetaFromSnapshotFile";
   }
   DINGO_LOG(INFO) << "LoadSnapshot schema_meta, count=" << kvs.size();
   kvs.clear();
@@ -336,6 +399,20 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
     if (!region_meta_->Recover(kvs)) {
       return false;
     }
+
+    // remove data in rocksdb
+    if (!meta_writer_->DeleteRange(region_meta_->internal_prefix, region_meta_->internal_prefix)) {
+      DINGO_LOG(ERROR) << "Coordinator delete region_meta_ range failed in LoadMetaFromSnapshotFile";
+      return false;
+    }
+    DINGO_LOG(INFO) << "Coordinator delete range region_meta_ success in LoadMetaFromSnapshotFile";
+
+    // write data to rocksdb
+    if (!meta_writer_->Put(kvs)) {
+      DINGO_LOG(ERROR) << "Coordinator write region_meta_ failed in LoadMetaFromSnapshotFile";
+      return false;
+    }
+    DINGO_LOG(INFO) << "Coordinator put region_meta_ success in LoadMetaFromSnapshotFile";
   }
   DINGO_LOG(INFO) << "LoadSnapshot region_meta, count=" << kvs.size();
   kvs.clear();
@@ -350,6 +427,20 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
     if (!table_meta_->Recover(kvs)) {
       return false;
     }
+
+    // remove data in rocksdb
+    if (!meta_writer_->DeleteRange(table_meta_->internal_prefix, table_meta_->internal_prefix)) {
+      DINGO_LOG(ERROR) << "Coordinator delete table_meta_ range failed in LoadMetaFromSnapshotFile";
+      return false;
+    }
+    DINGO_LOG(INFO) << "Coordinator delete range table_meta_ success in LoadMetaFromSnapshotFile";
+
+    // write data to rocksdb
+    if (!meta_writer_->Put(kvs)) {
+      DINGO_LOG(ERROR) << "Coordinator write table_meta_ failed in LoadMetaFromSnapshotFile";
+      return false;
+    }
+    DINGO_LOG(INFO) << "Coordinator put table_meta_ success in LoadMetaFromSnapshotFile";
   }
   DINGO_LOG(INFO) << "LoadSnapshot table_meta, count=" << kvs.size();
   kvs.clear();
@@ -365,6 +456,20 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
       return false;
     }
   }
+  {  // remove data in rocksdb
+    if (!meta_writer_->DeleteRange(store_metrics_meta_->internal_prefix, store_metrics_meta_->internal_prefix)) {
+      DINGO_LOG(ERROR) << "Coordinator delete store_metrics_meta_ range failed in LoadMetaFromSnapshotFile";
+      return false;
+    }
+    DINGO_LOG(INFO) << "Coordinator delete range store_metrics_meta_ success in LoadMetaFromSnapshotFile";
+
+    // write data to rocksdb
+    if (!meta_writer_->Put(kvs)) {
+      DINGO_LOG(ERROR) << "Coordinator write store_metrics_meta_ failed in LoadMetaFromSnapshotFile";
+      return false;
+    }
+    DINGO_LOG(INFO) << "Coordinator put store_metrics_meta_ success in LoadMetaFromSnapshotFile";
+  }
   DINGO_LOG(INFO) << "LoadSnapshot store_metrics_meta, count=" << kvs.size();
   kvs.clear();
 
@@ -378,6 +483,20 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
     if (!table_metrics_meta_->Recover(kvs)) {
       return false;
     }
+
+    // remove data in rocksdb
+    if (!meta_writer_->DeleteRange(table_metrics_meta_->internal_prefix, table_metrics_meta_->internal_prefix)) {
+      DINGO_LOG(ERROR) << "Coordinator delete table_metrics_meta_ range failed in LoadMetaFromSnapshotFile";
+      return false;
+    }
+    DINGO_LOG(INFO) << "Coordinator delete range table_metrics_meta_ success in LoadMetaFromSnapshotFile";
+
+    // write data to rocksdb
+    if (!meta_writer_->Put(kvs)) {
+      DINGO_LOG(ERROR) << "Coordinator write table_metrics_meta_ failed in LoadMetaFromSnapshotFile";
+      return false;
+    }
+    DINGO_LOG(INFO) << "Coordinator put table_metrics_meta_ success in LoadMetaFromSnapshotFile";
   }
   DINGO_LOG(INFO) << "LoadSnapshot table_metrics_meta, count=" << kvs.size();
   kvs.clear();
@@ -387,9 +506,26 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
   for (int i = 0; i < meta_snapshot_file.store_operation_map_kvs_size(); i++) {
     kvs.push_back(meta_snapshot_file.table_metrics_map_kvs(i));
   }
-  if (!store_operation_meta_->Recover(kvs)) {
-    return false;
+  {
+    if (!store_operation_meta_->Recover(kvs)) {
+      return false;
+    }
+
+    // remove data in rocksdb
+    if (!meta_writer_->DeleteRange(store_operation_meta_->internal_prefix, store_operation_meta_->internal_prefix)) {
+      DINGO_LOG(ERROR) << "Coordinator delete store_operation_meta_ range failed in LoadMetaFromSnapshotFile";
+      return false;
+    }
+    DINGO_LOG(INFO) << "Coordinator delete range store_operation_meta_ success in LoadMetaFromSnapshotFile";
+
+    // write data to rocksdb
+    if (!meta_writer_->Put(kvs)) {
+      DINGO_LOG(ERROR) << "Coordinator write store_operation_meta_ failed in LoadMetaFromSnapshotFile";
+      return false;
+    }
+    DINGO_LOG(INFO) << "Coordinator put store_operation_meta_ success in LoadMetaFromSnapshotFile";
   }
+
   DINGO_LOG(INFO) << "LoadSnapshot store_operation_meta, count=" << kvs.size();
   kvs.clear();
 
@@ -398,8 +534,24 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
   for (int i = 0; i < meta_snapshot_file.executor_user_map_kvs_size(); i++) {
     kvs.push_back(meta_snapshot_file.table_metrics_map_kvs(i));
   }
-  if (!executor_user_meta_->Recover(kvs)) {
-    return false;
+  {
+    if (!executor_user_meta_->Recover(kvs)) {
+      return false;
+    }
+
+    // remove data in rocksdb
+    if (!meta_writer_->DeleteRange(executor_user_meta_->internal_prefix, executor_user_meta_->internal_prefix)) {
+      DINGO_LOG(ERROR) << "Coordinator delete executor_user_meta_ range failed in LoadMetaFromSnapshotFile";
+      return false;
+    }
+    DINGO_LOG(INFO) << "Coordinator delete range executor_user_meta_ success in LoadMetaFromSnapshotFile";
+
+    // write data to rocksdb
+    if (!meta_writer_->Put(kvs)) {
+      DINGO_LOG(ERROR) << "Coordinator write executor_user_meta_ failed in LoadMetaFromSnapshotFile";
+      return false;
+    }
+    DINGO_LOG(INFO) << "Coordinator put executor_user_meta_ success in LoadMetaFromSnapshotFile";
   }
   DINGO_LOG(INFO) << "LoadSnapshot executor_user_meta, count=" << kvs.size();
   kvs.clear();
@@ -442,6 +594,7 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
       table_name_map_safe_temp_.Put(it.second.definition().name(), it.first);
     }
   }
+
   DINGO_LOG(INFO) << "LoadSnapshot table_name_map_safe_temp, count=" << table_name_map_safe_temp_.Size();
 
   return true;

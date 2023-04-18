@@ -18,6 +18,7 @@
 #include "common/context.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "proto/common.pb.h"
 
 namespace dingodb {
 
@@ -75,11 +76,13 @@ bool MetaWriter::DeleteRange(const std::string& start_key, const std::string& en
   DINGO_LOG(DEBUG) << "DeleteRange meta data, start_key: " << start_key << " end_key: " << end_key;
   auto writer = engine_->NewWriter(Constant::kStoreMetaCF);
 
-  pb::common::Range range;
-  range.set_start_key(start_key);
-  range.set_end_key(end_key);
+  pb::common::RangeWithOptions range_with_options;
+  range_with_options.mutable_range()->set_start_key(start_key);
+  range_with_options.mutable_range()->set_end_key(end_key);
+  range_with_options.set_with_start(true);
+  range_with_options.set_with_end(true);
 
-  auto status = writer->KvDeleteRange(range);
+  auto status = writer->KvDeleteRange(range_with_options);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << "Meta delete_range failed, errcode: " << status.error_code() << " " << status.error_str();
     return false;
