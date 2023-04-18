@@ -1035,7 +1035,7 @@ butil::Status RawRocksEngine::Writer::KvDeleteRange(const pb::common::Range& ran
 butil::Status RawRocksEngine::Writer::KvDeleteRange(const pb::common::RangeWithOptions& range) {
   std::string real_start_key;
   std::string real_end_key;
-  butil::Status s = Helper::KvDeleteRangeParamCheck(range, &real_start_key, &real_end_key);
+  butil::Status s = KvDeleteRangeParamCheck(range, &real_start_key, &real_end_key);
   if (!s.ok()) {
     DINGO_LOG(ERROR) << butil::StringPrintf("Helper::KvDeleteRangeParamCheck failed : %s", s.error_str().c_str());
     return s;
@@ -1056,7 +1056,7 @@ butil::Status RawRocksEngine::Writer::KvBatchDeleteRange(const std::vector<pb::c
   for (const auto& range : ranges) {
     std::string real_start_key;
     std::string real_end_key;
-    butil::Status status = Helper::KvDeleteRangeParamCheck(range, &real_start_key, &real_end_key);
+    butil::Status status = KvDeleteRangeParamCheck(range, &real_start_key, &real_end_key);
     if (!status.ok()) {
       DINGO_LOG(ERROR) << butil::StringPrintf("Helper::KvDeleteRangeParamCheck failed : %s index : %lu",
                                               status.error_str().c_str(), i);
@@ -1230,47 +1230,62 @@ butil::Status RawRocksEngine::Writer::KvBatchDeleteRangeCore(
   return butil::Status();
 }
 
-// // original_key + 1. note overflow
-// bool RawRocksEngine::Writer::Increment(const std::string& original_key, std::string* key) {
-//   if (BAIDU_UNLIKELY(original_key.empty())) {
-//     DINGO_LOG(ERROR) << butil::StringPrintf("original_key empty");
-//     return false;
-//   }
+butil::Status RawRocksEngine::Writer::KvDeleteRangeParamCheck(const pb::common::RangeWithOptions& range,
+                                                              std::string* real_start_key, std::string* real_end_key) {
+  if (BAIDU_UNLIKELY(range.range().start_key().empty() || range.range().end_key().empty())) {
+    DINGO_LOG(ERROR) << butil::StringPrintf("start_key or end_key empty. not support");
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
+  }
 
-//   if (!key) {
-//     DINGO_LOG(ERROR) << butil::StringPrintf("key is nullptr. not support");
-//     return false;
-//   }
+  if (BAIDU_UNLIKELY(range.range().start_key() > range.range().end_key())) {
+    DINGO_LOG(ERROR) << butil::StringPrintf("start_key > end_key  not support");
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
 
-//   std::string s(original_key.size(), static_cast<char>(0xFF));
-//   auto n = memcmp(original_key.c_str(), s.c_str(), s.size());
-//   if (BAIDU_UNLIKELY(0 == n)) {
-//     return false;
-//   }
+  } else if (BAIDU_UNLIKELY(range.range().start_key() == range.range().end_key())) {
+    if (!range.with_start() || !range.with_end()) {
+      DINGO_LOG(ERROR) << butil::StringPrintf(
+          "start_key == end_key with_start != true or with_end != true. not support");
+      return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
+    }
+  }
 
-//   *key = std::move(s);
-//   *key = original_key;
+  std::string internal_real_start_key;
+  if (!range.with_start()) {
+    internal_real_start_key = Helper::Increment(range.range().start_key());
+  } else {
+    internal_real_start_key = range.range().start_key();
+  }
 
-//   unsigned char carry = 1;
-//   for (auto size = key->size() - 1; size >= 0; --size) {
-//     if ((*key)[size] == static_cast<char>(0xFF)) {
-//       (*key)[size] = static_cast<char>(0);
-//     } else {
-//       unsigned char value = static_cast<unsigned char>((*key)[size]) + carry;
-//       (*key)[size] = static_cast<char>(value);
-//       carry = 0;
-//       break;
-//     }
-//   }
+  std::string internal_real_end_key;
+  if (range.with_end()) {
+    internal_real_end_key = Helper::Increment(range.range().end_key());
+  } else {
+    internal_real_end_key = range.range().end_key();
+  }
 
-//   return true;
-// }
+  // parameter check again
+  if (BAIDU_UNLIKELY(internal_real_start_key > internal_real_end_key)) {
+    DINGO_LOG(ERROR) << butil::StringPrintf("real_start_key > real_end_key  not support");
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
 
-// bool RawRocksEngine::Writer::KeyIsEndOfAllTable(const std::string& key) {
-//   std::string s(key.size(), static_cast<char>(0xFF));
-//   auto n = memcmp(key.c_str(), s.c_str(), s.size());
-//   return BAIDU_UNLIKELY(0 == n);
-// }
+  } else if (BAIDU_UNLIKELY(internal_real_start_key == internal_real_end_key)) {
+    if (!range.with_start() || !range.with_end()) {
+      DINGO_LOG(ERROR) << butil::StringPrintf(
+          "real_start_key == real_end_key with_start != true or with_end != true. not support");
+      return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
+    }
+  }
+
+  if (real_start_key) {
+    *real_start_key = internal_real_start_key;
+  }
+
+  if (real_end_key) {
+    *real_end_key = internal_real_end_key;
+  }
+
+  return butil::Status();
+}
 
 butil::Status RawRocksEngine::SstFileWriter::SaveFile(const std::vector<pb::common::KeyValue>& kvs,
                                                       const std::string& filename) {

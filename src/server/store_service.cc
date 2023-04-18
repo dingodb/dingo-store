@@ -515,13 +515,84 @@ void StoreServiceImpl::KvBatchDelete(google::protobuf::RpcController* controller
   }
 }
 
+butil::Status KvDeleteRangeParamCheck(const pb::common::RangeWithOptions& range, std::string* real_start_key,
+                                      std::string* real_end_key) {
+  if (BAIDU_UNLIKELY(range.range().start_key().empty() || range.range().end_key().empty())) {
+    DINGO_LOG(ERROR) << butil::StringPrintf("start_key or end_key empty. not support");
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
+  }
+
+  if (BAIDU_UNLIKELY(range.range().start_key() > range.range().end_key())) {
+    DINGO_LOG(ERROR) << butil::StringPrintf("start_key > end_key  not support");
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
+
+  } else if (BAIDU_UNLIKELY(range.range().start_key() == range.range().end_key())) {
+    if (!range.with_start() || !range.with_end()) {
+      DINGO_LOG(ERROR) << butil::StringPrintf(
+          "start_key == end_key with_start != true or with_end != true. not support");
+      return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
+    }
+  }
+
+  // Design constraints We do not allow tables with all 0xFF because there are too many tables and we cannot handle
+  // them
+  if (Helper::KeyIsEndOfAllTable(range.range().start_key()) || Helper::KeyIsEndOfAllTable(range.range().start_key())) {
+    DINGO_LOG(ERROR) << butil::StringPrintf("real_start_key or real_end_key all 0xFF. not support");
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
+  }
+
+  std::string internal_real_start_key;
+  if (!range.with_start()) {
+    internal_real_start_key = Helper::Increment(range.range().start_key());
+  } else {
+    internal_real_start_key = range.range().start_key();
+  }
+
+  std::string internal_real_end_key;
+  if (range.with_end()) {
+    internal_real_end_key = Helper::Increment(range.range().end_key());
+  } else {
+    internal_real_end_key = range.range().end_key();
+  }
+
+  // parameter check again
+  if (BAIDU_UNLIKELY(internal_real_start_key > internal_real_end_key)) {
+    DINGO_LOG(ERROR) << butil::StringPrintf("real_start_key > real_end_key  not support");
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
+
+  } else if (BAIDU_UNLIKELY(internal_real_start_key == internal_real_end_key)) {
+    if (!range.with_start() || !range.with_end()) {
+      DINGO_LOG(ERROR) << butil::StringPrintf(
+          "real_start_key == real_end_key with_start != true or with_end != true. not support");
+      return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
+    }
+  }
+
+  // Design constraints We do not allow tables with all 0xFF because there are too many tables and we cannot handle
+  // them
+  if (Helper::KeyIsEndOfAllTable(internal_real_start_key) || Helper::KeyIsEndOfAllTable(internal_real_end_key)) {
+    DINGO_LOG(ERROR) << butil::StringPrintf("real_start_key or real_end_key all 0xFF. not support");
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
+  }
+
+  if (real_start_key) {
+    *real_start_key = internal_real_start_key;
+  }
+
+  if (real_end_key) {
+    *real_end_key = internal_real_end_key;
+  }
+
+  return butil::Status();
+}
+
 butil::Status ValidateKvDeleteRangeRequest(const dingodb::pb::store::KvDeleteRangeRequest* request) {
   // Check is exist region.
   if (!Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->IsExistRegion(request->region_id())) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
   }
 
-  butil::Status s = Helper::KvDeleteRangeParamCheck(request->range(), nullptr, nullptr);
+  butil::Status s = KvDeleteRangeParamCheck(request->range(), nullptr, nullptr);
   if (!s.ok()) {
     DINGO_LOG(ERROR) << butil::StringPrintf("Helper::KvDeleteRangeParamCheck failed : %s", s.error_str().c_str());
     return s;

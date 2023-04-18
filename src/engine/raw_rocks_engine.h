@@ -225,6 +225,8 @@ class RawRocksEngine : public RawEngine {
 
     butil::Status KvBatchDeleteRangeCore(const std::vector<std::pair<std::string, std::string>>& key_pairs);
 
+    static butil::Status KvDeleteRangeParamCheck(const pb::common::RangeWithOptions& range, std::string* real_start_key,
+                                                 std::string* real_end_key);
     // // original_key + 1. note overflow
     // static bool Increment(const std::string& original_key, std::string* key);
 
