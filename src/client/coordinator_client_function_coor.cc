@@ -347,6 +347,30 @@ void SendCreateExecutor(brpc::Controller& cntl, dingodb::pb::coordinator::Coordi
   dingodb::pb::coordinator::CreateExecutorRequest request;
   dingodb::pb::coordinator::CreateExecutorResponse response;
 
+  if (FLAGS_user.empty()) {
+    DINGO_LOG(WARNING) << "user is empty";
+    return;
+  }
+  request.mutable_executor()->mutable_executor_user()->set_user(FLAGS_user);
+
+  if (FLAGS_keyring.empty()) {
+    DINGO_LOG(WARNING) << "keyring is empty";
+    return;
+  }
+  request.mutable_executor()->mutable_executor_user()->set_keyring(FLAGS_keyring);
+
+  if (FLAGS_host.empty()) {
+    DINGO_LOG(WARNING) << "host is empty";
+    return;
+  }
+  request.mutable_executor()->mutable_server_location()->set_host(FLAGS_host);
+
+  if (FLAGS_port == 0) {
+    DINGO_LOG(WARNING) << "port is empty";
+    return;
+  }
+  request.mutable_executor()->mutable_server_location()->set_port(FLAGS_port);
+
   request.set_cluster_id(1);
   stub.CreateExecutor(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
@@ -372,14 +396,19 @@ void SendDeleteExecutor(brpc::Controller& cntl, dingodb::pb::coordinator::Coordi
     DINGO_LOG(WARNING) << "id is empty";
     return;
   }
-  request.set_executor_id(FLAGS_id);
+  request.mutable_executor()->set_id(FLAGS_id);
+
+  if (FLAGS_user.empty()) {
+    DINGO_LOG(WARNING) << "user is empty";
+    return;
+  }
+  request.mutable_executor()->mutable_executor_user()->set_user(FLAGS_user);
 
   if (FLAGS_keyring.empty()) {
     DINGO_LOG(WARNING) << "keyring is empty";
     return;
   }
-  auto* keyring = request.mutable_keyring();
-  keyring->assign(FLAGS_keyring);
+  request.mutable_executor()->mutable_executor_user()->set_keyring(FLAGS_keyring);
 
   stub.DeleteExecutor(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {

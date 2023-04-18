@@ -244,18 +244,17 @@ message DeleteStoreResponse {
 
 message CreateExecutorRequest {
   uint64 cluster_id = 1;
+  dingodb.pb.common.Executor executor = 2;
 }
 
 message CreateExecutorResponse {
   dingodb.pb.error.Error error = 1;
-  string executor_id = 2;
-  string keyring = 3;
+  dingodb.pb.common.Executor executor = 2;
 }
 
 message DeleteExecutorRequest {
   uint64 cluster_id = 1;
-  string executor_id = 2;
-  string keyring = 3;
+  dingodb.pb.common.Executor executor = 2;
 }
 
 message DeleteExecutorResponse {

@@ -158,15 +158,16 @@ class CoordinatorControl : public MetaControl {
 
   // create executor
   // in: cluster_id
-  // out: executor_id, keyring
-  // return: 0 or -1
-  int CreateExecutor(uint64_t cluster_id, std::string &executor_id, std::string &keyring,
-                     pb::coordinator_internal::MetaIncrement &meta_increment);
+  // in: executor
+  // out: executor
+  // return: errno
+  pb::error::Errno CreateExecutor(uint64_t cluster_id, pb::common::Executor &executor,
+                                  pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // delete executor
-  // in: cluster_id, executor_id, keyring
+  // in: cluster_id, executor
   // return: 0 or -1
-  pb::error::Errno DeleteExecutor(uint64_t cluster_id, std::string executor_id, std::string keyring,
+  pb::error::Errno DeleteExecutor(uint64_t cluster_id, const pb::common::Executor &executor,
                                   pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // create executor_user
@@ -327,9 +328,9 @@ class CoordinatorControl : public MetaControl {
   // return: 0 or -1
   int ValidateStore(uint64_t store_id, const std::string &keyring);
 
-  // validate executor keyring
-  // return: 0 or -1
-  int ValidateExecutor(const std::string &executor_id, const pb::common::ExecutorUser &executor_user);
+  // validate executor_user
+  // return: bool
+  bool ValidateExecutorUser(const pb::common::ExecutorUser &executor_user);
 
   // calculate table metrics
   void CalculateTableMetrics();

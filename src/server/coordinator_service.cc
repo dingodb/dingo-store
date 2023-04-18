@@ -67,16 +67,13 @@ void CoordinatorServiceImpl::CreateExecutor(google::protobuf::RpcController *con
   pb::coordinator_internal::MetaIncrement meta_increment;
 
   // create executor
-  std::string executor_id;
-  std::string keyring;
-  auto local_ctl = this->coordinator_control_;
-  int const ret = local_ctl->CreateExecutor(request->cluster_id(), executor_id, keyring, meta_increment);
-  if (ret == 0) {
-    response->set_executor_id(executor_id);
-    response->set_keyring(keyring);
+  pb::common::Executor executor_to_create;
+  executor_to_create.CopyFrom(request->executor());
+  auto ret = coordinator_control_->CreateExecutor(request->cluster_id(), executor_to_create, meta_increment);
+  if (ret == pb::error::Errno::OK) {
+    response->mutable_executor()->CopyFrom(executor_to_create);
   } else {
-    auto *error = response->mutable_error();
-    error->set_errcode(Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
     return;
   }
 
@@ -107,26 +104,21 @@ void CoordinatorServiceImpl::DeleteExecutor(google::protobuf::RpcController *con
     return RedirectResponse(response);
   }
 
-  if (request->executor_id().length() <= 0) {
-    auto *error = response->mutable_error();
-    error->set_errcode(Errno::EILLEGAL_PARAMTETERS);
+  if (request->executor().id().length() <= 0) {
+    response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
     return;
   }
 
   pb::coordinator_internal::MetaIncrement meta_increment;
 
   // delete executor
-  std::string const executor_id = request->executor_id();
-  std::string const keyring = request->keyring();
-  auto local_ctl = this->coordinator_control_;
-  auto ret = local_ctl->DeleteExecutor(request->cluster_id(), executor_id, keyring, meta_increment);
+  auto ret = coordinator_control_->DeleteExecutor(request->cluster_id(), request->executor(), meta_increment);
   if (ret != pb::error::Errno::OK) {
-    auto *error = response->mutable_error();
-    error->set_errcode(ret);
-
-    DINGO_LOG(ERROR) << "Deleteexecutor failed:  executor_id=" << executor_id << ", keyring=" << keyring;
+    response->mutable_error()->set_errcode(ret);
+    DINGO_LOG(ERROR) << "DeleteExecutor failed:  executor_id=" << request->executor().id();
     return;
   }
+  DINGO_LOG(INFO) << "DeleteExecutor success:  executor_id=" << request->executor().id();
 
   // prepare for raft process
   CoordinatorClosure<pb::coordinator::DeleteExecutorRequest, pb::coordinator::DeleteExecutorResponse>
@@ -423,8 +415,8 @@ void CoordinatorServiceImpl::ExecutorHeartbeat(google::protobuf::RpcController *
     executor.set_id(executor.server_location().host() + ":" + std::to_string(executor.server_location().port()));
   }
 
-  int const ret = this->coordinator_control_->ValidateExecutor(executor.id(), executor.executor_user());
-  if (ret) {
+  auto ret = coordinator_control_->ValidateExecutorUser(executor.executor_user());
+  if (!ret) {
     DINGO_LOG(ERROR) << "ExecutorHeartBeat ValidateExecutor failed, reject heardbeat, executor_id="
                      << request->executor().id() << " keyring=" << request->executor().executor_user().keyring();
     return;
