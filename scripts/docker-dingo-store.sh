@@ -52,14 +52,14 @@ function deploy_store() {
   if [ ! -d "$dstpath/data" ]; then
     mkdir "$dstpath/data"
   fi
-  if [ ! -d "$dstpath/data/store" ]; then
-    mkdir "$dstpath/data/store"
+  if [ ! -d "$dstpath/data/${role}" ]; then
+    mkdir "$dstpath/data/${role}"
   fi
-  if [ ! -d "$dstpath/data/store/raft" ]; then
-    mkdir "$dstpath/data/store/raft"
+  if [ ! -d "$dstpath/data/${role}/raft" ]; then
+    mkdir "$dstpath/data/${role}/raft"
   fi
-  if [ ! -d "$dstpath/data/store/db" ]; then
-    mkdir "$dstpath/data/store/db"
+  if [ ! -d "$dstpath/data/${role}/db" ]; then
+    mkdir "$dstpath/data/${role}/db"
   fi
 
   cp $srcpath/build/bin/dingodb_server $dstpath/bin/
