@@ -24,6 +24,7 @@ import io.dingodb.sdk.common.DingoCommonId;
 import io.dingodb.sdk.common.KeyValue;
 import io.dingodb.sdk.common.Location;
 import io.dingodb.sdk.common.Range;
+import io.dingodb.sdk.common.RangeWithOptions;
 import io.dingodb.sdk.common.SDKCommonId;
 import io.dingodb.sdk.common.codec.KeyValueCodec;
 import io.dingodb.sdk.common.partition.PartitionDetail;
@@ -71,7 +72,7 @@ public class EntityConversion {
                 .collect(Collectors.toList());
 
         return Meta.TableDefinition.newBuilder()
-                .setName(table.getName())
+                .setName(table.getName().toUpperCase())
                 .setVersion(table.getVersion())
                 .setTtl(table.getTtl())
                 .setTablePartition(calcRange(table, tableId))
@@ -143,6 +144,22 @@ public class EntityConversion {
         return Common.Range.newBuilder()
                 .setStartKey(ByteString.copyFrom(range.getStartKey()))
                 .setEndKey(ByteString.copyFrom(range.getEndKey()))
+                .build();
+    }
+
+    public static RangeWithOptions mapping(Common.RangeWithOptions options) {
+        return new RangeWithOptions(
+                mapping(options.getRange()),
+                options.getWithStart(),
+                options.getWithEnd()
+        );
+    }
+
+    public static Common.RangeWithOptions mapping(RangeWithOptions options) {
+        return Common.RangeWithOptions.newBuilder()
+                .setRange(mapping(options.getRange()))
+                .setWithStart(options.isWithStart())
+                .setWithEnd(options.isWithEnd())
                 .build();
     }
 

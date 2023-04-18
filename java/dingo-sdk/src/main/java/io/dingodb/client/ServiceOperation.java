@@ -28,13 +28,11 @@ import io.dingodb.sdk.common.table.Column;
 import io.dingodb.sdk.common.table.RangeDistribution;
 import io.dingodb.sdk.common.utils.Parameters;
 import io.dingodb.sdk.service.store.StoreServiceClient;
-import io.dingodb.common.Common;
 import io.dingodb.sdk.common.concurrent.Executors;
 import io.dingodb.sdk.common.partition.RangeStrategy;
 import io.dingodb.sdk.service.meta.MetaClient;
 import io.dingodb.sdk.common.table.Table;
 import io.dingodb.sdk.common.utils.ByteArrayUtils;
-import io.dingodb.meta.Meta;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
@@ -47,8 +45,6 @@ import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.stream.Collectors;
-
-import static io.dingodb.sdk.common.utils.EntityConversion.mapping;
 
 @Slf4j
 public class ServiceOperation {
