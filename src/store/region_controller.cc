@@ -193,7 +193,6 @@ butil::Status SplitRegionTask::ValidateSplitRegion(std::shared_ptr<StoreRegionMe
   }
 
   if (parent_region->state() == pb::common::StoreRegionState::NEW ||
-      parent_region->state() == pb::common::StoreRegionState::SPLITTING ||
       parent_region->state() == pb::common::StoreRegionState::MERGING ||
       parent_region->state() == pb::common::StoreRegionState::DELETING ||
       parent_region->state() == pb::common::StoreRegionState::DELETED) {
