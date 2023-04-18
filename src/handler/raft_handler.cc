@@ -45,7 +45,7 @@ void PutIfAbsentHandler::Handle(std::shared_ptr<Context> ctx, std::shared_ptr<Ra
   bool key_state;
   const auto &request = req.put_if_absent();
   auto writer = engine->NewWriter(request.cf_name());
-  bool const is_write_batch = (request.kvs().size() == 1);
+  bool const is_write_batch = (request.kvs().size() != 1);
   if (!is_write_batch) {
     status = writer->KvPutIfAbsent(request.kvs().Get(0), key_state);
   } else {
@@ -54,19 +54,22 @@ void PutIfAbsentHandler::Handle(std::shared_ptr<Context> ctx, std::shared_ptr<Ra
 
   if (ctx) {
     ctx->SetStatus(status);
-    if (request.kvs().size() != 1) {
+    if (is_write_batch) {
       auto *response = dynamic_cast<pb::store::KvBatchPutIfAbsentResponse *>(ctx->Response());
       // std::vector<bool> must do not use foreach
       for (auto &&key_state : key_states) {
         response->add_key_states(key_state);
       }
     } else {  // only one key
-      if (!is_write_batch) {
-        auto *response = dynamic_cast<pb::store::KvPutIfAbsentResponse *>(ctx->Response());
+      pb::store::KvPutIfAbsentResponse *response = dynamic_cast<pb::store::KvPutIfAbsentResponse *>(ctx->Response());
+      if (response) {
         response->set_key_state(key_state);
       } else {
-        auto *response = dynamic_cast<pb::store::KvBatchPutIfAbsentResponse *>(ctx->Response());
-        response->add_key_states(key_state);
+        pb::store::KvBatchPutIfAbsentResponse *response =
+            dynamic_cast<pb::store::KvBatchPutIfAbsentResponse *>(ctx->Response());
+        if (response) {
+          response->add_key_states(key_state);
+        }
       }
     }
   }

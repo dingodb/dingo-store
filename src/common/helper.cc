@@ -359,61 +359,6 @@ bool Helper::KeyIsEndOfAllTable(const std::string& key) {
   return true;
 }
 
-butil::Status Helper::KvDeleteRangeParamCheck(const pb::common::RangeWithOptions& range, std::string* real_start_key,
-                                              std::string* real_end_key) {
-  if (BAIDU_UNLIKELY(range.range().start_key().empty() || range.range().end_key().empty())) {
-    DINGO_LOG(ERROR) << butil::StringPrintf("start_key or end_key empty. not support");
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
-  }
-
-  if (BAIDU_UNLIKELY(range.range().start_key() > range.range().end_key())) {
-    DINGO_LOG(ERROR) << butil::StringPrintf("start_key > end_key  not support");
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
-
-  } else if (BAIDU_UNLIKELY(range.range().start_key() == range.range().end_key())) {
-    if (!range.with_start() || !range.with_end()) {
-      DINGO_LOG(ERROR) << butil::StringPrintf(
-          "start_key == end_key with_start != true or with_end != true. not support");
-      return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
-    }
-  }
-
-  std::string internal_real_start_key =
-      range.with_start() ? range.range().start_key() : Helper::Increment(range.range().start_key());
-  std::string internal_real_end_key =
-      range.with_end() ? Helper::Increment(range.range().end_key()) : range.range().end_key();
-
-  // parameter check again
-  if (BAIDU_UNLIKELY(internal_real_start_key > internal_real_end_key)) {
-    DINGO_LOG(ERROR) << butil::StringPrintf("real_start_key > real_end_key  not support");
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
-
-  } else if (BAIDU_UNLIKELY(internal_real_start_key == internal_real_end_key)) {
-    if (!range.with_start() || !range.with_end()) {
-      DINGO_LOG(ERROR) << butil::StringPrintf(
-          "real_start_key == real_end_key with_start != true or with_end != true. not support");
-      return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
-    }
-  }
-
-  // Design constraints We do not allow tables with all 0xFF because there are too many tables and we cannot handle
-  // them
-  if (Helper::KeyIsEndOfAllTable(internal_real_start_key) || Helper::KeyIsEndOfAllTable(internal_real_end_key)) {
-    DINGO_LOG(ERROR) << butil::StringPrintf("real_start_key or real_end_key all 0xFF. not support");
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
-  }
-
-  if (real_start_key) {
-    *real_start_key = internal_real_start_key;
-  }
-
-  if (real_end_key) {
-    *real_end_key = internal_real_end_key;
-  }
-
-  return butil::Status();
-}
-
 bool Helper::GetDiskCapacity(const std::string& path, std::map<std::string, uint64_t>& output) {
   struct statvfs stat;
   if (statvfs(path.c_str(), &stat) != 0) {

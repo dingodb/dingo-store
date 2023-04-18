@@ -1048,6 +1048,15 @@ TEST_F(RawRocksEngineTest, KvBatchPutIfAbsentNonAtomic) {
     std::string value;
     ok = reader->KvGet("key1111", value);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    ok = reader->KvGet("key1", value);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    ok = reader->KvGet("key2", value);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    ok = reader->KvGet("key", value);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
   // normal key all not exist
@@ -1121,6 +1130,56 @@ TEST_F(RawRocksEngineTest, KvBatchPutIfAbsentNonAtomic) {
     butil::Status ok = writer->KvBatchPutIfAbsent(kvs, key_states, false);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(kvs.size(), key_states.size());
+  }
+
+  // KvPutIfAbsent one data and KvBatchPutIfAbsent put two data
+  {
+    pb::common::KeyValue kv;
+    kv.set_key("key205");
+    kv.set_value("value205");
+    bool key_state = false;
+
+    butil::Status ok = writer->KvPutIfAbsent(kv, key_state);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    std::vector<std::string> keys;
+    std::vector<pb::common::KeyValue> kvs;
+    std::vector<bool> key_states;
+
+    kv.set_key("key205");
+    kv.set_value("value205");
+    kvs.push_back(kv);
+
+    kv.set_key("key206");
+    kv.set_value("value206");
+    kvs.push_back(kv);
+
+    kv.set_key("key207");
+    kv.set_value("value207");
+    kvs.push_back(kv);
+
+    kv.set_key("key208");
+    kv.set_value("value208");
+    kvs.push_back(kv);
+
+    ok = writer->KvBatchPutIfAbsent(kvs, key_states, false);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    EXPECT_EQ(kvs.size(), key_states.size());
+
+    std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
+
+    std::string value;
+    ok = reader->KvGet("key205", value);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    ok = reader->KvGet("key206", value);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    ok = reader->KvGet("key207", value);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    ok = reader->KvGet("key208", value);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 }
 
