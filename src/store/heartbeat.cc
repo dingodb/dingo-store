@@ -47,6 +47,8 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
   auto metrics_manager = Server::GetInstance()->GetStoreMetricsManager();
   auto* mut_store_metrics = request.mutable_store_metrics();
   mut_store_metrics->CopyFrom(*metrics_manager->GetStoreMetrics()->Metrics());
+  // setup id for store_metrics here, coordinator need this id to update store_metrics
+  mut_store_metrics->set_id(Server::GetInstance()->Id());
 
   auto* mut_region_metrics_map = mut_store_metrics->mutable_region_metrics_map();
   auto region_metrics = metrics_manager->GetStoreRegionMetrics();
