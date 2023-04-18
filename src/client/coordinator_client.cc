@@ -119,6 +119,8 @@ void* Sender(void* /*arg*/) {
     SendDeleteExecutorUser(cntl, coordinator_stub);
   } else if (FLAGS_method == "GetExecutorUserMap") {
     SendGetExecutorUserMap(cntl, coordinator_stub);
+  } else if (FLAGS_method == "ExecutorHeartbeat") {
+    SendExecutorHeartbeat(cntl, coordinator_stub);
   } else if (FLAGS_method == "GetStoreMap") {
     SendGetStoreMap(cntl, coordinator_stub);
   } else if (FLAGS_method == "GetExecutorMap") {
