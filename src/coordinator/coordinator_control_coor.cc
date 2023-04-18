@@ -985,7 +985,7 @@ pb::error::Errno CoordinatorControl::AddStoreOperation(const pb::coordinator::St
           DINGO_LOG(ERROR) << "AddStoreOperation store operation region cmd ongoing conflict, unable to add new "
                               "region_cmd, store_id = "
                            << store_id << ", region_id = " << it.region_id();
-          return pb::error::Errno::EREGION_CMD_ONGING_CONFLICT;
+          return pb::error::Errno::EREGION_CMD_ONGOING_CONFLICT;
         }
       }
     }

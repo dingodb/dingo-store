@@ -97,7 +97,7 @@ butil::Status DeleteRegionTask::ValidateDeleteRegion(std::shared_ptr<StoreMetaMa
                                                      std::shared_ptr<pb::store_internal::Region> region) {
   if (region->state() == pb::common::StoreRegionState::DELETING ||
       region->state() == pb::common::StoreRegionState::DELETED) {
-    return butil::Status(pb::error::EREGION_STATE, "Region is deleting or deleted.");
+    return butil::Status(pb::error::EREGION_ALREADY_DELETED, "Region is deleting or deleted.");
   }
 
   if (region->state() == pb::common::StoreRegionState::SPLITTING ||
@@ -186,6 +186,10 @@ butil::Status SplitRegionTask::ValidateSplitRegion(std::shared_ptr<StoreRegionMe
   auto range = parent_region->definition().range();
   if (range.start_key().compare(split_key) >= 0 || range.end_key().compare(split_key) <= 0) {
     return butil::Status(pb::error::EKEY_SPLIT, "Split key is invalid.");
+  }
+
+  if (parent_region->state() == pb::common::StoreRegionState::SPLITTING) {
+    return butil::Status(pb::error::EREGION_ALREADY_SPLIT, "Parent region state is splitting.");
   }
 
   if (parent_region->state() == pb::common::StoreRegionState::NEW ||
