@@ -235,7 +235,8 @@ void CoordinatorPushTask::SendCoordinatorPushToStore(std::shared_ptr<Coordinator
         DINGO_LOG(WARNING) << "SendCoordinatorPushToStore... send store_operation to store " << it.id()
                            << " failed, will check each region_cmd result";
         for (const auto& it_cmd : response.region_cmd_results()) {
-          if (it_cmd.error().errcode() == pb::error::Errno::OK) {
+          if (it_cmd.error().errcode() == pb::error::Errno::OK ||
+              it_cmd.error().errcode() == pb::error::Errno::EREGION_CMD_ONGING_CONFLICT) {
             DINGO_LOG(INFO) << "SendCoordinatorPushToStore... send store_operation to store_id=" << it.id()
                             << " region_cmd_id=" << it_cmd.region_cmd_id() << " result=" << it_cmd.error().errcode()
                             << " success, will delete this region_cmd";
