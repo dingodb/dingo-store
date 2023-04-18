@@ -229,6 +229,18 @@ bool CoordinatorControl::LoadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapsh
   DINGO_LOG(INFO) << "Snapshot store_operation_meta_, count=" << kvs.size();
   kvs.clear();
 
+  // 10.executor_user map
+  if (!meta_reader_->Scan(snapshot, executor_user_meta_->Prefix(), kvs)) {
+    return false;
+  }
+
+  for (const auto& kv : kvs) {
+    auto* snapshot_file_kv = meta_snapshot_file.add_executor_user_map_kvs();
+    snapshot_file_kv->CopyFrom(kv);
+  }
+  DINGO_LOG(INFO) << "Snapshot executor_user_meta_, count=" << kvs.size();
+  kvs.clear();
+
   return true;
 }
 
@@ -379,6 +391,17 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
     return false;
   }
   DINGO_LOG(INFO) << "LoadSnapshot store_operation_meta, count=" << kvs.size();
+  kvs.clear();
+
+  // 10.executor_user map
+  kvs.reserve(meta_snapshot_file.executor_user_map_kvs_size());
+  for (int i = 0; i < meta_snapshot_file.executor_user_map_kvs_size(); i++) {
+    kvs.push_back(meta_snapshot_file.table_metrics_map_kvs(i));
+  }
+  if (!executor_user_meta_->Recover(kvs)) {
+    return false;
+  }
+  DINGO_LOG(INFO) << "LoadSnapshot executor_user_meta, count=" << kvs.size();
   kvs.clear();
 
   // init id_epoch_map_temp_

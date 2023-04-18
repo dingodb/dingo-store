@@ -95,6 +95,10 @@ CoordinatorControl::~CoordinatorControl() {
   delete table_meta_;
   delete id_epoch_meta_;
   delete executor_meta_;
+  delete store_metrics_meta_;
+  delete table_metrics_meta_;
+  delete store_operation_meta_;
+  delete executor_user_meta_;
 }
 
 bool CoordinatorControl::Recover() {
@@ -236,6 +240,19 @@ bool CoordinatorControl::Recover() {
     }
   }
   DINGO_LOG(INFO) << "Recover store_operation_meta_, count=" << kvs.size();
+  kvs.clear();
+
+  // 10.executor_user map
+  if (!meta_reader_->Scan(executor_user_meta_->Prefix(), kvs)) {
+    return false;
+  }
+  {
+    // BAIDU_SCOPED_LOCK(store_operation_map_mutex_);
+    if (!executor_user_meta_->Recover(kvs)) {
+      return false;
+    }
+  }
+  DINGO_LOG(INFO) << "Recover executor_user_meta_, count=" << kvs.size();
   kvs.clear();
 
   // copy id_epoch_map_ to id_epoch_map_safe_temp_
