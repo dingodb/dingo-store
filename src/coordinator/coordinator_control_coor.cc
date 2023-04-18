@@ -100,6 +100,7 @@ void CoordinatorControl::GetStoreMap(pb::common::StoreMap& store_map) {
   {
     // BAIDU_SCOPED_LOCK(store_map_mutex_);
     butil::FlatMap<uint64_t, pb::common::Store> store_map_copy;
+    store_map_copy.init(100);
     store_map_.GetFlatMapCopy(store_map_copy);
 
     for (auto& element : store_map_copy) {
@@ -338,6 +339,7 @@ void CoordinatorControl::GetRegionMap(pb::common::RegionMap& region_map) {
   {
     // BAIDU_SCOPED_LOCK(region_map_mutex_);
     butil::FlatMap<uint64_t, pb::common::Region> region_map_copy;
+    region_map_copy.init(30000);
     region_map_.GetFlatMapCopy(region_map_copy);
     for (auto& elemnt : region_map_copy) {
       auto* tmp_region = region_map.add_regions();
@@ -380,6 +382,7 @@ pb::error::Errno CoordinatorControl::CreateRegion(const std::string& region_name
   // if store_ids is not null, select store with store_ids
   // or when resource_tag exists, select store with resource_tag
   butil::FlatMap<uint64_t, pb::common::Store> store_map_copy;
+  store_map_copy.init(100);
   store_map_.GetFlatMapCopy(store_map_copy);
 
   // select store for region
@@ -1134,6 +1137,7 @@ void CoordinatorControl::GetExecutorMap(pb::common::ExecutorMap& executor_map) {
   {
     // BAIDU_SCOPED_LOCK(executor_map_mutex_);
     butil::FlatMap<std::string, pb::common::Executor> executor_map_copy;
+    executor_map_copy.init(100);
     executor_map_.GetFlatMapCopy(executor_map_copy);
     for (auto& element : executor_map_copy) {
       auto* tmp_region = executor_map.add_executors();
@@ -1153,6 +1157,7 @@ pb::error::Errno CoordinatorControl::GetExecutorUserMap(uint64_t cluster_id,
   {
     // BAIDU_SCOPED_LOCK(executor_user_map_mutex_);
     butil::FlatMap<std::string, pb::coordinator_internal::ExecutorUserInternal> executor_user_map_copy;
+    executor_user_map_copy.init(100);
     executor_user_map_.GetFlatMapCopy(executor_user_map_copy);
     for (auto& element : executor_user_map_copy) {
       auto* tmp_region = executor_user_map.add_executor_users();

@@ -913,6 +913,7 @@ void CoordinatorControl::CalculateTableMetrics() {
   // BAIDU_SCOPED_LOCK(table_metrics_map_mutex_);
 
   butil::FlatMap<uint64_t, pb::coordinator_internal::TableMetricsInternal> temp_table_metrics_map;
+  temp_table_metrics_map.init(10000);
   table_metrics_map_.GetFlatMapCopy(temp_table_metrics_map);
 
   for (auto table_metrics_internal : temp_table_metrics_map) {

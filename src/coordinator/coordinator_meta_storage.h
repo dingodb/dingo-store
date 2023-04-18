@@ -250,6 +250,7 @@ class MetaSafeMapStorage {
   }
 
   bool Recover(const std::vector<pb::common::KeyValue> &kvs) {
+    elements_->Clear();
     TransformFromKv(kvs);
     return true;
   }
@@ -306,6 +307,7 @@ class MetaSafeMapStorage {
 
   std::vector<pb::common::KeyValue> TransformToKvWithAll() {
     butil::FlatMap<uint64_t, T> temp_map;
+    temp_map.init(10000);
     elements_->GetFlatMapCopy(temp_map);
 
     std::vector<pb::common::KeyValue> kvs;
@@ -353,9 +355,9 @@ class MetaSafeStringMapStorage {
  public:
   const std::string internal_prefix;
   MetaSafeStringMapStorage(DingoSafeMap<std::string, T> *elements_ptr)
-      : internal_prefix(std::string("meta_map_safe") + typeid(T).name()), elements_(elements_ptr){};
+      : internal_prefix(std::string("meta_map_safe_string") + typeid(T).name()), elements_(elements_ptr){};
   MetaSafeStringMapStorage(DingoSafeMap<std::string, T> *elements_ptr, const std::string &prefix)
-      : internal_prefix(std::string("meta_map_safe") + prefix), elements_(elements_ptr){};
+      : internal_prefix(std::string("meta_map_safe_string") + prefix), elements_(elements_ptr){};
   ~MetaSafeStringMapStorage() = default;
 
   std::string Prefix() { return internal_prefix; }
@@ -366,6 +368,7 @@ class MetaSafeStringMapStorage {
   }
 
   bool Recover(const std::vector<pb::common::KeyValue> &kvs) {
+    elements_->Clear();
     TransformFromKv(kvs);
     return true;
   }
@@ -386,7 +389,7 @@ class MetaSafeStringMapStorage {
     return s;
   }
 
-  std::string GenKey(std::string id) { return butil::StringPrintf("%s_%lu", internal_prefix.c_str(), id); }
+  std::string GenKey(std::string id) { return butil::StringPrintf("%s_%s", internal_prefix.c_str(), id.c_str()); }
 
   std::shared_ptr<pb::common::KeyValue> TransformToKv(std::string id) {
     // std::shared_lock<std::shared_mutex> lock(mutex_);
@@ -416,6 +419,7 @@ class MetaSafeStringMapStorage {
 
   std::vector<pb::common::KeyValue> TransformToKvWithAll() {
     butil::FlatMap<std::string, T> temp_map;
+    temp_map.init(10000);
     elements_->GetFlatMapCopy(temp_map);
 
     std::vector<pb::common::KeyValue> kvs;
@@ -475,6 +479,7 @@ class MetaMapStorage {
   }
 
   bool Recover(const std::vector<pb::common::KeyValue> &kvs) {
+    elements_->clear();
     TransformFromKv(kvs);
     return true;
   }
