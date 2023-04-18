@@ -307,6 +307,7 @@ std::shared_ptr<pb::store_internal::RaftMeta> StoreRaftMeta::NewRaftMeta(uint64_
 void StoreRaftMeta::AddRaftMeta(std::shared_ptr<pb::store_internal::RaftMeta> raft_meta) {
   {
     BAIDU_SCOPED_LOCK(mutex_);
+    DINGO_LOG(INFO) << "Add raft meta " << raft_meta->region_id();
     if (raft_metas_.find(raft_meta->region_id()) != raft_metas_.end()) {
       DINGO_LOG(WARNING) << butil::StringPrintf("raft meta %lu already exist!", raft_meta->region_id());
       return;
