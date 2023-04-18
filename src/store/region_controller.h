@@ -107,10 +107,11 @@ class ChangeRegionTask : public TaskRunnable {
   void Run() override;
 
   static butil::Status ValidateChangeRegion(std::shared_ptr<StoreMetaManager> store_meta_manager,
-                                            std::shared_ptr<pb::store_internal::Region> region);
+                                            const pb::common::RegionDefinition& region_definition);
 
  private:
-  static butil::Status ChangeRegion(std::shared_ptr<Context> ctx, std::shared_ptr<pb::store_internal::Region> region);
+  static butil::Status ChangeRegion(std::shared_ptr<Context> ctx,
+                                    const pb::common::RegionDefinition& region_definition);
 
   std::shared_ptr<Context> ctx_;
   std::shared_ptr<pb::coordinator::RegionCmd> region_cmd_;
@@ -150,7 +151,7 @@ class RegionControlExecutor {
 class RegionCommandManager : public TransformKvAble {
  public:
   RegionCommandManager(std::shared_ptr<MetaReader> meta_reader, std::shared_ptr<MetaWriter> meta_writer)
-      : TransformKvAble(Constant::kStoreRaftMetaPrefix), meta_reader_(meta_reader), meta_writer_(meta_writer) {
+      : TransformKvAble(Constant::kStoreRegionControllerPrefix), meta_reader_(meta_reader), meta_writer_(meta_writer) {
     bthread_mutex_init(&mutex_, nullptr);
   }
   ~RegionCommandManager() override { bthread_mutex_destroy(&mutex_); }

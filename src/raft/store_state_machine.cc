@@ -58,7 +58,7 @@ bool StoreStateMachine::Init() {
   // Recover applied index
   auto store_raft_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRaftMeta();
   auto raft_meta = store_raft_meta->GetRaftMeta(node_id_);
-  if (raft_meta) {
+  if (raft_meta != nullptr) {
     DINGO_LOG(INFO) << "applied_index: " << raft_meta->applied_index();
     applied_index_ = raft_meta->applied_index();
 

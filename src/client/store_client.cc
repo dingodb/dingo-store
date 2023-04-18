@@ -219,6 +219,7 @@ void TestBatchPutGet(uint64_t region_id, int num) {
     std::string redirect_addr = {};
     latencys.push_back(SendKvPut(stub, region_id, it.first, it.second, redirect_addr));
     if (!redirect_addr.empty()) {
+      DINGO_LOG(INFO) << "redirect_addr: " << redirect_addr;
       stub = stubs[redirect_addr];
     }
   }

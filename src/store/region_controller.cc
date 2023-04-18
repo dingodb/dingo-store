@@ -95,6 +95,9 @@ void CreateRegionTask::Run() {
 
 butil::Status DeleteRegionTask::ValidateDeleteRegion(std::shared_ptr<StoreMetaManager> /*store_meta_manager*/,
                                                      std::shared_ptr<pb::store_internal::Region> region) {
+  if (region == nullptr) {
+    return butil::Status(pb::error::EREGION_NOT_FOUND, "Region is not exist, can't delete.");
+  }
   if (region->state() == pb::common::StoreRegionState::DELETING ||
       region->state() == pb::common::StoreRegionState::DELETED) {
     return butil::Status(pb::error::EREGION_ALREADY_DELETED, "Region is deleting or deleted.");
@@ -228,8 +231,9 @@ butil::Status SplitRegionTask::SplitRegion() {
 }
 
 butil::Status ChangeRegionTask::ValidateChangeRegion(std::shared_ptr<StoreMetaManager> store_meta_manager,
-                                                     std::shared_ptr<pb::store_internal::Region> region) {
-  if (!store_meta_manager->GetStoreRegionMeta()->IsExistRegion(region->id())) {
+                                                     const pb::common::RegionDefinition& region_definition) {
+  auto region = store_meta_manager->GetStoreRegionMeta()->GetRegion(region_definition.id());
+  if (region == nullptr) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Region not exist, cant't change.");
   }
 
@@ -241,18 +245,20 @@ butil::Status ChangeRegionTask::ValidateChangeRegion(std::shared_ptr<StoreMetaMa
 }
 
 butil::Status ChangeRegionTask::ChangeRegion(std::shared_ptr<Context> ctx,
-                                             std::shared_ptr<pb::store_internal::Region> region) {
+                                             const pb::common::RegionDefinition& region_definition) {
   auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
-  DINGO_LOG(DEBUG) << butil::StringPrintf("Change region %lu, %s", region->id(), region->ShortDebugString().c_str());
+  DINGO_LOG(DEBUG) << butil::StringPrintf("Change region %lu, %s", region_definition.id(),
+                                          region_definition.ShortDebugString().c_str());
+
   // Valiate region
-  auto status = ValidateChangeRegion(store_meta_manager, region);
+  auto status = ValidateChangeRegion(store_meta_manager, region_definition);
   if (!status.ok()) {
     return status;
   }
 
-  auto filter_peers_by_role = [region](pb::common::PeerRole role) -> std::vector<pb::common::Peer> {
+  auto filter_peers_by_role = [region_definition](pb::common::PeerRole role) -> std::vector<pb::common::Peer> {
     std::vector<pb::common::Peer> peers;
-    for (const auto& peer : region->definition().peers()) {
+    for (const auto& peer : region_definition.peers()) {
       if (peer.role() == role) {
         peers.push_back(peer);
       }
@@ -263,21 +269,18 @@ butil::Status ChangeRegionTask::ChangeRegion(std::shared_ptr<Context> ctx,
   auto engine = Server::GetInstance()->GetEngine();
   if (engine->GetID() == pb::common::ENG_RAFT_STORE) {
     auto raft_kv_engine = std::dynamic_pointer_cast<RaftKvEngine>(engine);
-    return raft_kv_engine->ChangeNode(ctx, region->id(), filter_peers_by_role(pb::common::VOTER));
+    return raft_kv_engine->ChangeNode(ctx, region_definition.id(), filter_peers_by_role(pb::common::VOTER));
   }
 
   return butil::Status();
 }
 
 void ChangeRegionTask::Run() {
-  auto region = std::make_shared<pb::store_internal::Region>();
-  region->set_id(region_cmd_->region_id());
-  region->mutable_definition()->CopyFrom(region_cmd_->create_request().region_definition());
-  region->set_state(pb::common::StoreRegionState::NEW);
-
-  auto status = ChangeRegion(ctx_, region);
+  auto status = ChangeRegion(ctx_, region_cmd_->change_peer_request().region_definition());
   if (!status.ok()) {
-    DINGO_LOG(DEBUG) << butil::StringPrintf("Change region %lu failed, %s", region->id(), status.error_cstr());
+    DINGO_LOG(DEBUG) << butil::StringPrintf("Change region %lu failed, %s",
+                                            region_cmd_->change_peer_request().region_definition().id(),
+                                            status.error_cstr());
   }
 
   Server::GetInstance()->GetRegionCommandManager()->UpdateCommandStatus(region_cmd_,

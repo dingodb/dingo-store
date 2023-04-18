@@ -74,8 +74,8 @@ void PushServiceImpl::PushStoreOperation(google::protobuf::RpcController* contro
             SplitRegionTask::ValidateSplitRegion(store_meta_manager->GetStoreRegionMeta(), command.split_request());
         break;
       case pb::coordinator::CMD_CHANGE_PEER:
-        status = ChangeRegionTask::ValidateChangeRegion(
-            store_meta_manager, store_meta_manager->GetStoreRegionMeta()->GetRegion(command.region_id()));
+        status = ChangeRegionTask::ValidateChangeRegion(store_meta_manager,
+                                                        command.change_peer_request().region_definition());
         break;
       default:
         DINGO_LOG(ERROR) << "Unknown command type: " << command.region_cmd_type();
@@ -105,6 +105,7 @@ void PushServiceImpl::PushStoreOperation(google::protobuf::RpcController* contro
 
   if (!response->region_cmd_results().empty()) {
     response->mutable_error()->CopyFrom(response->region_cmd_results(0).error());
+    DINGO_LOG(DEBUG) << "PushStoreOperation response: " << response->ShortDebugString();
   }
 }
 
