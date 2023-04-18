@@ -14,9 +14,8 @@ RUN sed -i 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/CentOS-* && sed -i 's|#
 
 COPY ./dingo-store.tar.gz  /opt
 
-RUN cd /opt && mkdir dingo-store && tar -zxvf dingo-store.tar.gz -C dingo-store && chmod +x -R /opt/dingo-store/*
+RUN cd /opt && mkdir dingo-store && tar -zxvf dingo-store.tar.gz -C dingo-store && chmod +x -R /opt/dingo-store/* && sed -i 's/electionTimeout: [0-9]\+/electionTimeout: 30000/g' /opt/dingo-store/conf/store.template.yaml && sed -i 's/electionTimeout: [0-9]\+/electionTimeout: 30000/g' /opt/dingo-store/conf/coordinator.template.yaml
 
-COPY ./conf /opt/dingo-store/conf
 
 ENV JAVA_HOME /usr/lib/jvm/java-1.8.0-openjdk
 ENV PATH=/opt/rh/gcc-toolset-11/root/usr/bin:$PATH
