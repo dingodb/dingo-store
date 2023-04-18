@@ -147,21 +147,30 @@ message CoordinatorMap {
   repeated Coordinator coordinators = 2;
 }
 
+message ExecutorUser {
+  string user = 1;
+  string keyring = 2;
+}
+
+message ExecutorUserMap {
+  uint64 epoch = 1;
+  repeated ExecutorUser executor_users = 2;
+}
+
 // Executor
-//  all fieleds can only be updated by coordinator
 message Executor {
-  uint64 id = 1;
-  uint64 epoch = 2;
-  ExecutorState state = 3;
-  Location server_location = 4;
-  string resource_tag = 5;
-  string keyring = 6;
-  uint64 create_timestamp = 7;
-  uint64 last_seen_timestamp = 8;
+  string id = 1;                   // only updated by coordinator, sdk can ignore this field now
+  uint64 epoch = 2;                // unused
+  ExecutorState state = 3;         // only updated by coordinator, sdk can ignore this field now
+  Location server_location = 4;    // sdk set this field in heartbeat, only updated by sdk
+  ExecutorUser executor_user = 5;  // sdk set this field in heartbeat, only updated by coordinator
+  string resource_tag = 6;         // only updated by coordinator
+  uint64 create_timestamp = 7;     // only updated by coordinator
+  uint64 last_seen_timestamp = 8;  // only updated by coordinator
 }
 
 message ExecutorMap {
-  uint64 epoch = 1;
+  uint64 epoch = 1;  // now unused
   repeated Executor executors = 2;
 }
 

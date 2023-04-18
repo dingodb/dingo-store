@@ -67,7 +67,7 @@ void CoordinatorServiceImpl::CreateExecutor(google::protobuf::RpcController *con
   pb::coordinator_internal::MetaIncrement meta_increment;
 
   // create executor
-  uint64_t executor_id = 0;
+  std::string executor_id;
   std::string keyring;
   auto local_ctl = this->coordinator_control_;
   int const ret = local_ctl->CreateExecutor(request->cluster_id(), executor_id, keyring, meta_increment);
@@ -107,7 +107,7 @@ void CoordinatorServiceImpl::DeleteExecutor(google::protobuf::RpcController *con
     return RedirectResponse(response);
   }
 
-  if (request->executor_id() == 0) {
+  if (request->executor_id().length() <= 0) {
     auto *error = response->mutable_error();
     error->set_errcode(Errno::EILLEGAL_PARAMTETERS);
     return;
@@ -116,7 +116,7 @@ void CoordinatorServiceImpl::DeleteExecutor(google::protobuf::RpcController *con
   pb::coordinator_internal::MetaIncrement meta_increment;
 
   // delete executor
-  uint64_t const executor_id = request->executor_id();
+  std::string const executor_id = request->executor_id();
   std::string const keyring = request->keyring();
   auto local_ctl = this->coordinator_control_;
   auto ret = local_ctl->DeleteExecutor(request->cluster_id(), executor_id, keyring, meta_increment);
@@ -140,6 +140,166 @@ void CoordinatorServiceImpl::DeleteExecutor(google::protobuf::RpcController *con
 
   // this is a async operation will be block by closure
   engine_->MetaPut(ctx, meta_increment);
+}
+
+void CoordinatorServiceImpl::CreateExecutorUser(google::protobuf::RpcController *controller,
+                                                const pb::coordinator::CreateExecutorUserRequest *request,
+                                                pb::coordinator::CreateExecutorUserResponse *response,
+                                                google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+  auto is_leader = this->coordinator_control_->IsLeader();
+  DINGO_LOG(INFO) << "Receive Create Executor User Request: IsLeader:" << is_leader
+                  << ", Request: " << request->DebugString();
+
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  pb::coordinator_internal::MetaIncrement meta_increment;
+
+  // create executor user
+  pb::common::ExecutorUser executor_user;
+  executor_user.CopyFrom(request->executor_user());
+  auto local_ctl = this->coordinator_control_;
+  auto ret = local_ctl->CreateExecutorUser(request->cluster_id(), executor_user, meta_increment);
+  if (ret == pb::error::Errno::OK) {
+    response->mutable_executor_user()->CopyFrom(executor_user);
+  } else {
+    auto *error = response->mutable_error();
+    error->set_errcode(ret);
+    return;
+  }
+
+  if (meta_increment.ByteSizeLong() == 0) {
+    DINGO_LOG(WARNING) << "CreateExecutorUser: meta_increment is empty";
+    return;
+  }
+
+  // prepare for raft process
+  CoordinatorClosure<pb::coordinator::CreateExecutorUserRequest,
+                     pb::coordinator::CreateExecutorUserResponse> *meta_put_closure =
+      new CoordinatorClosure<pb::coordinator::CreateExecutorUserRequest, pb::coordinator::CreateExecutorUserResponse>(
+          request, response, done_guard.release());
+
+  std::shared_ptr<Context> const ctx =
+      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
+  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+
+  // this is a async operation will be block by closure
+  engine_->MetaPut(ctx, meta_increment);
+}
+
+void CoordinatorServiceImpl::UpdateExecutorUser(google::protobuf::RpcController *controller,
+                                                const pb::coordinator::UpdateExecutorUserRequest *request,
+                                                pb::coordinator::UpdateExecutorUserResponse *response,
+                                                google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+  auto is_leader = this->coordinator_control_->IsLeader();
+  DINGO_LOG(INFO) << "Receive Update Executor User Request: IsLeader:" << is_leader
+                  << ", Request: " << request->DebugString();
+
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  pb::coordinator_internal::MetaIncrement meta_increment;
+
+  // create executor user
+  pb::common::ExecutorUser executor_user;
+  executor_user.CopyFrom(request->executor_user());
+  auto local_ctl = this->coordinator_control_;
+  auto ret = local_ctl->UpdateExecutorUser(request->cluster_id(), executor_user, meta_increment);
+  if (ret == pb::error::Errno::OK) {
+    response->mutable_executor_user()->CopyFrom(executor_user);
+  } else {
+    response->mutable_error()->set_errcode(ret);
+    return;
+  }
+
+  if (meta_increment.ByteSizeLong() == 0) {
+    DINGO_LOG(WARNING) << "UpdateExecutorUser: meta_increment is empty";
+    return;
+  }
+
+  // prepare for raft process
+  CoordinatorClosure<pb::coordinator::UpdateExecutorUserRequest,
+                     pb::coordinator::UpdateExecutorUserResponse> *meta_put_closure =
+      new CoordinatorClosure<pb::coordinator::UpdateExecutorUserRequest, pb::coordinator::UpdateExecutorUserResponse>(
+          request, response, done_guard.release());
+
+  std::shared_ptr<Context> const ctx =
+      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
+  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+
+  // this is a async operation will be block by closure
+  engine_->MetaPut(ctx, meta_increment);
+}
+
+void CoordinatorServiceImpl::DeleteExecutorUser(google::protobuf::RpcController *controller,
+                                                const pb::coordinator::DeleteExecutorUserRequest *request,
+                                                pb::coordinator::DeleteExecutorUserResponse *response,
+                                                google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+  auto is_leader = this->coordinator_control_->IsLeader();
+  DINGO_LOG(INFO) << "Receive Delete Executor User Request: IsLeader:" << is_leader
+                  << ", Request: " << request->DebugString();
+
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  pb::coordinator_internal::MetaIncrement meta_increment;
+
+  // create executor user
+  pb::common::ExecutorUser executor_user;
+  executor_user.CopyFrom(request->executor_user());
+  auto local_ctl = this->coordinator_control_;
+  auto ret = local_ctl->DeleteExecutorUser(request->cluster_id(), executor_user, meta_increment);
+  if (ret != pb::error::Errno::OK) {
+    response->mutable_error()->set_errcode(ret);
+    return;
+  }
+
+  if (meta_increment.ByteSizeLong() == 0) {
+    DINGO_LOG(WARNING) << "DeleteExecutorUser: meta_increment is empty";
+    return;
+  }
+
+  // prepare for raft process
+  CoordinatorClosure<pb::coordinator::DeleteExecutorUserRequest,
+                     pb::coordinator::DeleteExecutorUserResponse> *meta_put_closure =
+      new CoordinatorClosure<pb::coordinator::DeleteExecutorUserRequest, pb::coordinator::DeleteExecutorUserResponse>(
+          request, response, done_guard.release());
+
+  std::shared_ptr<Context> const ctx =
+      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
+  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+
+  // this is a async operation will be block by closure
+  engine_->MetaPut(ctx, meta_increment);
+}
+
+void CoordinatorServiceImpl::GetExecutorUserMap(google::protobuf::RpcController * /*controller*/,
+                                                const pb::coordinator::GetExecutorUserMapRequest *request,
+                                                pb::coordinator::GetExecutorUserMapResponse *response,
+                                                google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+  auto is_leader = this->coordinator_control_->IsLeader();
+  DINGO_LOG(INFO) << "Receive Get Executor User Map Request: IsLeader:" << is_leader
+                  << ", Request: " << request->DebugString();
+
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  pb::common::ExecutorUserMap executor_user_map;
+  auto ret = this->coordinator_control_->GetExecutorUserMap(request->cluster_id(), executor_user_map);
+  if (ret != pb::error::Errno::OK) {
+    response->mutable_error()->set_errcode(ret);
+    return;
+  }
+
+  response->mutable_executor_user_map()->CopyFrom(executor_user_map);
 }
 
 void CoordinatorServiceImpl::CreateStore(google::protobuf::RpcController *controller,
@@ -258,24 +418,25 @@ void CoordinatorServiceImpl::ExecutorHeartbeat(google::protobuf::RpcController *
     return;
   }
 
-  if (request->executor().id() == 0) {
-    auto *error = response->mutable_error();
-    error->set_errcode(Errno::EILLEGAL_PARAMTETERS);
-    DINGO_LOG(ERROR) << "ExecutorHeartBeat executor_id is 0, reject heartbeat";
-    return;
+  pb::common::Executor executor = request->executor();
+
+  if (executor.id().length() <= 0) {
+    DINGO_LOG(DEBUG) << "ExecutorHeartBeat generate executor_id, executor_id=" << executor.server_location().host()
+                     << ":" << executor.server_location().port();
+    executor.set_id(executor.server_location().host() + ":" + std::to_string(executor.server_location().port()));
   }
 
-  int const ret = this->coordinator_control_->ValidateExecutor(request->executor().id(), request->executor().keyring());
+  int const ret = this->coordinator_control_->ValidateExecutor(executor.id(), executor.executor_user());
   if (ret) {
     DINGO_LOG(ERROR) << "ExecutorHeartBeat ValidateExecutor failed, reject heardbeat, executor_id="
-                     << request->executor().id() << " keyring=" << request->executor().keyring();
+                     << request->executor().id() << " keyring=" << request->executor().executor_user().keyring();
     return;
   }
 
   pb::coordinator_internal::MetaIncrement meta_increment;
 
   // update executor map
-  int const new_executormap_epoch = this->coordinator_control_->UpdateExecutorMap(request->executor(), meta_increment);
+  int const new_executormap_epoch = this->coordinator_control_->UpdateExecutorMap(executor, meta_increment);
 
   // if no need to update meta, just return
   if (meta_increment.ByteSizeLong() == 0) {

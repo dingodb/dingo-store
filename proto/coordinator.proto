@@ -248,18 +248,47 @@ message CreateExecutorRequest {
 
 message CreateExecutorResponse {
   dingodb.pb.error.Error error = 1;
-  uint64 executor_id = 2;
+  string executor_id = 2;
   string keyring = 3;
 }
 
 message DeleteExecutorRequest {
   uint64 cluster_id = 1;
-  uint64 executor_id = 2;
+  string executor_id = 2;
   string keyring = 3;
 }
 
 message DeleteExecutorResponse {
   dingodb.pb.error.Error error = 1;
+}
+
+message CreateExecutorUserRequest {
+  uint64 cluster_id = 1;  // set to 0 now
+  dingodb.pb.common.ExecutorUser executor_user = 2;
+}
+
+message CreateExecutorUserResponse {
+  dingodb.pb.error.Error error = 1;
+  dingodb.pb.common.ExecutorUser executor_user = 2;
+}
+
+message DeleteExecutorUserRequest {
+  uint64 cluster_id = 1;  // set to 0 now
+  dingodb.pb.common.ExecutorUser executor_user = 2;
+}
+
+message DeleteExecutorUserResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
+message UpdateExecutorUserRequest {
+  uint64 cluster_id = 1;  // set to 0 now
+  dingodb.pb.common.ExecutorUser executor_user = 2;
+}
+
+message UpdateExecutorUserResponse {
+  dingodb.pb.error.Error error = 1;
+  dingodb.pb.common.ExecutorUser executor_user = 2;
 }
 
 message GetExecutorMapRequest {
@@ -270,6 +299,17 @@ message GetExecutorMapResponse {
   dingodb.pb.error.Error error = 1;
   uint64 epoch = 2;
   dingodb.pb.common.ExecutorMap executormap = 3;
+}
+
+message GetExecutorUserMapRequest {
+  uint64 cluster_id = 1;  // set to 0 now
+  uint64 epoch = 2;       // set to 0 now
+}
+
+message GetExecutorUserMapResponse {
+  dingodb.pb.error.Error error = 1;
+  uint64 epoch = 2;
+  dingodb.pb.common.ExecutorUserMap executor_user_map = 3;
 }
 
 message CleanStoreOperationRequest {
@@ -380,6 +420,10 @@ service CoordinatorService {
   rpc CreateExecutor(CreateExecutorRequest) returns (CreateExecutorResponse);
   rpc DeleteExecutor(DeleteExecutorRequest) returns (DeleteExecutorResponse);
   rpc GetExecutorMap(GetExecutorMapRequest) returns (GetExecutorMapResponse);
+  rpc CreateExecutorUser(CreateExecutorUserRequest) returns (CreateExecutorUserResponse);
+  rpc DeleteExecutorUser(DeleteExecutorUserRequest) returns (DeleteExecutorUserResponse);
+  rpc UpdateExecutorUser(UpdateExecutorUserRequest) returns (UpdateExecutorUserResponse);
+  rpc GetExecutorUserMap(GetExecutorUserMapRequest) returns (GetExecutorUserMapResponse);
 
   // Coordinator
   rpc GetCoordinatorMap(GetCoordinatorMapRequest) returns (GetCoordinatorMapResponse);

@@ -59,10 +59,12 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   region_meta_ = new MetaSafeMapStorage<pb::common::Region>(&region_map_);
   table_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::TableInternal>(&table_map_);
   id_epoch_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::IdEpochInternal>(&id_epoch_map_);
-  executor_meta_ = new MetaSafeMapStorage<pb::common::Executor>(&executor_map_);
+  executor_meta_ = new MetaSafeStringMapStorage<pb::common::Executor>(&executor_map_);
   store_metrics_meta_ = new MetaMapStorage<pb::common::StoreMetrics>(&store_metrics_map_);
   table_metrics_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::TableMetricsInternal>(&table_metrics_map_);
   store_operation_meta_ = new MetaSafeMapStorage<pb::coordinator::StoreOperation>(&store_operation_map_);
+  executor_user_meta_ =
+      new MetaSafeStringMapStorage<pb::coordinator_internal::ExecutorUserInternal>(&executor_user_map_);
 
   // init FlatMap
   store_need_push_.init(100, 80);
@@ -82,6 +84,7 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   store_map_.Init(100);                   // store_map_ is a small map
   executor_map_.Init(100);                // executor_map_ is a small map
   table_metrics_map_.Init(10000);         // table_metrics_map_ is a big map
+  executor_user_map_.Init(100);           // executor_user_map_ is a small map
 }
 
 CoordinatorControl::~CoordinatorControl() {

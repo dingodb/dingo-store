@@ -368,7 +368,7 @@ void SendDeleteExecutor(brpc::Controller& cntl, dingodb::pb::coordinator::Coordi
     DINGO_LOG(WARNING) << "id is empty";
     return;
   }
-  request.set_executor_id(std::stol(FLAGS_id));
+  request.set_executor_id(FLAGS_id);
 
   if (FLAGS_keyring.empty()) {
     DINGO_LOG(WARNING) << "keyring is empty";

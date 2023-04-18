@@ -318,7 +318,7 @@ bool CoordinatorControl::TrySetStoreToOffline(uint64_t store_id) {
   return false;
 }
 
-bool CoordinatorControl::TrySetExecutorToOffline(uint64_t executor_id) {
+bool CoordinatorControl::TrySetExecutorToOffline(std::string executor_id) {
   pb::common::Executor executor_to_update;
   int ret = executor_map_.Get(executor_id, executor_to_update);
   if (ret > 0) {
@@ -1133,7 +1133,7 @@ void CoordinatorControl::GetExecutorMap(pb::common::ExecutorMap& executor_map) {
   executor_map.set_epoch(executor_map_epoch);
   {
     // BAIDU_SCOPED_LOCK(executor_map_mutex_);
-    butil::FlatMap<uint64_t, pb::common::Executor> executor_map_copy;
+    butil::FlatMap<std::string, pb::common::Executor> executor_map_copy;
     executor_map_.GetFlatMapCopy(executor_map_copy);
     for (auto& element : executor_map_copy) {
       auto* tmp_region = executor_map.add_executors();
@@ -1142,52 +1142,74 @@ void CoordinatorControl::GetExecutorMap(pb::common::ExecutorMap& executor_map) {
   }
 }
 
-void CoordinatorControl::GetPushExecutorMap(butil::FlatMap<uint64_t, pb::common::Executor>& executor_to_push) {
+pb::error::Errno CoordinatorControl::GetExecutorUserMap(uint64_t cluster_id,
+                                                        pb::common::ExecutorUserMap& executor_user_map) {
+  if (cluster_id < 0) {
+    return pb::error::Errno::EILLEGAL_PARAMTETERS;
+  }
+
+  // uint64_t executor_user_map_epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_EXECUTOR_USER);
+  // executor_user_map.set_epoch(executor_user_map_epoch);
+  {
+    // BAIDU_SCOPED_LOCK(executor_user_map_mutex_);
+    butil::FlatMap<std::string, pb::coordinator_internal::ExecutorUserInternal> executor_user_map_copy;
+    executor_user_map_.GetFlatMapCopy(executor_user_map_copy);
+    for (auto& element : executor_user_map_copy) {
+      auto* tmp_region = executor_user_map.add_executor_users();
+      tmp_region->set_user(element.second.id());
+      tmp_region->set_keyring(element.second.keyring());
+    }
+  }
+  return pb::error::OK;
+}
+
+void CoordinatorControl::GetPushExecutorMap(butil::FlatMap<std::string, pb::common::Executor>& executor_to_push) {
   BAIDU_SCOPED_LOCK(executor_need_push_mutex_);
   executor_to_push.swap(executor_need_push_);
 }
 
-int CoordinatorControl::ValidateExecutor(uint64_t executor_id, const std::string& keyring) {
-  if (keyring == std::string("TO_BE_CONTINUED")) {
+int CoordinatorControl::ValidateExecutor(const std::string& executor_id,
+                                         const pb::common::ExecutorUser& executor_user) {
+  if (executor_user.keyring() == std::string("TO_BE_CONTINUED")) {
     DINGO_LOG(INFO) << "ValidateExecutor executor_id=" << executor_id << " debug pass with TO_BE_CONTINUED";
     return 0;
   }
 
-  {
-    // BAIDU_SCOPED_LOCK(executor_map_mutex_);
-    pb::common::Executor executor_in_map;
-    int ret = executor_map_.Get(executor_id, executor_in_map);
-    // auto* executor_in_map = executor_map_.seek(executor_id);
-    if (ret > 0) {
-      if (executor_in_map.keyring() == keyring) {
-        DINGO_LOG(INFO) << "ValidateExecutor executor_id=" << executor_id << " succcess";
-        return 0;
-      }
-
-      DINGO_LOG(INFO) << "ValidateExecutor executor_id=" << executor_id
-                      << "keyring wrong fail input_keyring=" << keyring
-                      << " correct_keyring=" << executor_in_map.keyring();
-      return -1;
+  pb::coordinator_internal::ExecutorUserInternal executor_user_in_map;
+  int ret = executor_user_map_.Get(executor_user.user(), executor_user_in_map);
+  // auto* executor_in_map = executor_map_.seek(executor_id);
+  if (ret > 0) {
+    if (executor_user_in_map.id() == executor_user.user() &&
+        executor_user_in_map.keyring() == executor_user.keyring()) {
+      DINGO_LOG(INFO) << "ValidateExecutor executor_id=" << executor_id << " succcess";
+      return 0;
     }
+
+    DINGO_LOG(INFO) << "ValidateExecutor executor_id=" << executor_id
+                    << "user or keyring wrong fail, input_user=" << executor_user.user()
+                    << "  input_keyring=" << executor_user.keyring();
+    return -1;
   }
 
-  DINGO_LOG(INFO) << "ValidateExecutor executor_id=" << executor_id << " not exist fail";
+  DINGO_LOG(INFO) << "ValidateExecutor executor_id=" << executor_id << " user " << executor_user.user()
+                  << " not exist fail";
 
   return -1;
 }
 
-int CoordinatorControl::CreateExecutor(uint64_t cluster_id, uint64_t& executor_id, std::string& keyring,
+int CoordinatorControl::CreateExecutor(uint64_t cluster_id, std::string& executor_id, std::string& keyring,
                                        pb::coordinator_internal::MetaIncrement& meta_increment) {
   if (cluster_id <= 0) {
     return -1;
   }
 
-  executor_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_EXECUTOR, meta_increment);
+  // executor_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_EXECUTOR, meta_increment);
   keyring = Helper::GenerateRandomString(16);
 
   pb::common::Executor executor;
   executor.set_id(executor_id);
-  executor.set_keyring(keyring);
+  // executor.set_keyring(keyring);
+  executor.mutable_executor_user()->set_keyring(keyring);
   executor.set_state(::dingodb::pb::common::ExecutorState::EXECUTOR_NEW);
   executor.set_create_timestamp(butil::gettimeofday_ms());
 
@@ -1206,9 +1228,9 @@ int CoordinatorControl::CreateExecutor(uint64_t cluster_id, uint64_t& executor_i
   return 0;
 }
 
-pb::error::Errno CoordinatorControl::DeleteExecutor(uint64_t cluster_id, uint64_t executor_id, std::string keyring,
+pb::error::Errno CoordinatorControl::DeleteExecutor(uint64_t cluster_id, std::string executor_id, std::string keyring,
                                                     pb::coordinator_internal::MetaIncrement& meta_increment) {
-  if (cluster_id <= 0 || executor_id <= 0 || keyring.length() <= 0) {
+  if (cluster_id <= 0 || executor_id.length() <= 0 || keyring.length() <= 0) {
     return pb::error::EILLEGAL_PARAMTETERS;
   }
 
@@ -1221,10 +1243,10 @@ pb::error::Errno CoordinatorControl::DeleteExecutor(uint64_t cluster_id, uint64_
       return pb::error::EEXECUTOR_NOT_FOUND;
     }
 
-    if (keyring == executor_to_delete.keyring()) {
+    if (keyring == executor_to_delete.executor_user().keyring()) {
       DINGO_LOG(INFO) << "DeleteExecutor executor_id id=" << executor_id
                       << " keyring not equal, input keyring=" << keyring
-                      << " but executor's keyring=" << executor_to_delete.keyring();
+                      << " but executor's keyring=" << executor_to_delete.executor_user().keyring();
       return pb::error::Errno::EKEYRING_ILLEGAL;
     }
   }
@@ -1241,6 +1263,84 @@ pb::error::Errno CoordinatorControl::DeleteExecutor(uint64_t cluster_id, uint64_
   // on_apply
   // executor_map_epoch++;                                  // raft_kv_put
   // executor_map_.insert(std::make_pair(executor_id, executor));  // raft_kv_put
+  return pb::error::Errno::OK;
+}
+
+pb::error::Errno CoordinatorControl::CreateExecutorUser(uint64_t cluster_id, pb::common::ExecutorUser& executor_user,
+                                                        pb::coordinator_internal::MetaIncrement& meta_increment) {
+  if (cluster_id <= 0) {
+    return pb::error::Errno::EILLEGAL_PARAMTETERS;
+  }
+
+  if (executor_user_map_.Exists(executor_user.user())) {
+    DINGO_LOG(INFO) << "CreateExecutorUser user already exists, user=" << executor_user.user();
+    return pb::error::Errno::EUSER_ALREADY_EXIST;
+  }
+
+  // executor_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_EXECUTOR, meta_increment);
+  if (executor_user.keyring().length() <= 0) {
+    executor_user.set_keyring(Helper::GenerateRandomString(16));
+  }
+
+  // update meta_increment
+  // GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_EXECUTOR, meta_increment);
+  auto* executor_increment = meta_increment.add_executor_users();
+  executor_increment->set_id(executor_user.user());
+  executor_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
+  executor_increment->mutable_executor_user()->set_id(executor_user.user());
+  executor_increment->mutable_executor_user()->set_keyring(executor_user.keyring());
+
+  return pb::error::Errno::OK;
+}
+
+pb::error::Errno CoordinatorControl::UpdateExecutorUser(uint64_t cluster_id, pb::common::ExecutorUser& executor_user,
+                                                        pb::coordinator_internal::MetaIncrement& meta_increment) {
+  if (cluster_id <= 0) {
+    return pb::error::Errno::EILLEGAL_PARAMTETERS;
+  }
+
+  if (!executor_user_map_.Exists(executor_user.user())) {
+    DINGO_LOG(INFO) << "UpdateExecutorUser user not exists, user=" << executor_user.user();
+    return pb::error::Errno::EUSER_NOT_EXIST;
+  }
+
+  // executor_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_EXECUTOR, meta_increment);
+  if (executor_user.keyring().length() <= 0) {
+    executor_user.set_keyring(Helper::GenerateRandomString(16));
+  }
+
+  // update meta_increment
+  // GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_EXECUTOR, meta_increment);
+  auto* executor_increment = meta_increment.add_executor_users();
+  executor_increment->set_id(executor_user.user());
+  executor_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
+  executor_increment->mutable_executor_user()->set_id(executor_user.user());
+  executor_increment->mutable_executor_user()->set_keyring(executor_user.keyring());
+
+  return pb::error::Errno::OK;
+}
+
+pb::error::Errno CoordinatorControl::DeleteExecutorUser(uint64_t cluster_id, pb::common::ExecutorUser& executor_user,
+                                                        pb::coordinator_internal::MetaIncrement& meta_increment) {
+  if (cluster_id <= 0) {
+    return pb::error::Errno::EILLEGAL_PARAMTETERS;
+  }
+
+  if (!executor_user_map_.Exists(executor_user.user())) {
+    DINGO_LOG(INFO) << "DeleteExecutorUser user not exists, user=" << executor_user.user();
+    return pb::error::Errno::EUSER_NOT_EXIST;
+  }
+
+  // executor_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_EXECUTOR, meta_increment);
+
+  // update meta_increment
+  // GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_EXECUTOR, meta_increment);
+  auto* executor_increment = meta_increment.add_executor_users();
+  executor_increment->set_id(executor_user.user());
+  executor_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
+  executor_increment->mutable_executor_user()->set_id(executor_user.user());
+  executor_increment->mutable_executor_user()->set_keyring(executor_user.keyring());
+
   return pb::error::Errno::OK;
 }
 
@@ -1588,7 +1688,7 @@ void CoordinatorControl::GetMemoryInfo(pb::coordinator::CoordinatorMemoryInfo& m
     BAIDU_SCOPED_LOCK(executor_need_push_mutex_);
     memory_info.set_executor_need_push_count(executor_need_push_.size());
     for (auto& it : executor_need_push_) {
-      memory_info.set_executor_need_push_size(memory_info.executor_need_push_size() + sizeof(it.first) +
+      memory_info.set_executor_need_push_size(memory_info.executor_need_push_size() + it.first.size() +
                                               it.second.ByteSizeLong());
     }
     memory_info.set_total_size(memory_info.total_size() + memory_info.executor_need_push_size());
