@@ -26,6 +26,8 @@
 DECLARE_bool(log_each_request);
 DECLARE_int32(timeout_ms);
 DECLARE_string(id);
+DECLARE_string(host);
+DECLARE_int32(port);
 DECLARE_string(level);
 DECLARE_string(name);
 DECLARE_string(user);
@@ -520,19 +522,19 @@ void SendExecutorHeartbeat(brpc::Controller& cntl, dingodb::pb::coordinator::Coo
   dingodb::pb::coordinator::ExecutorHeartbeatRequest request;
   dingodb::pb::coordinator::ExecutorHeartbeatResponse response;
 
-  if (FLAGS_id.empty()) {
-    DINGO_LOG(WARNING) << "id is empty";
-    return;
-  }
-
   request.set_self_executormap_epoch(1);
   // mock executor
   auto* executor = request.mutable_executor();
-  executor->set_id(FLAGS_id);
+  if (!FLAGS_id.empty()) {
+    executor->set_id(FLAGS_id);
+  } else if (!FLAGS_host.empty()) {
+    executor->mutable_server_location()->set_host(FLAGS_host);
+    executor->mutable_server_location()->set_port(FLAGS_port);
+  } else {
+    DINGO_LOG(WARNING) << "id or host can not empty";
+    return;
+  }
   executor->set_state(::dingodb::pb::common::ExecutorState::EXECUTOR_NORMAL);
-  auto* server_location = executor->mutable_server_location();
-  server_location->set_host("127.0.0.1");
-  server_location->set_port(188888);
 
   auto* user = executor->mutable_executor_user();
   if (FLAGS_user.empty()) {
