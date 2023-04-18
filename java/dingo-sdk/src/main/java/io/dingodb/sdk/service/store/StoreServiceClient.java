@@ -21,7 +21,7 @@ import io.dingodb.error.ErrorOuterClass;
 import io.dingodb.sdk.common.DingoClientException;
 import io.dingodb.sdk.common.DingoCommonId;
 import io.dingodb.sdk.common.KeyValue;
-import io.dingodb.sdk.common.Range;
+import io.dingodb.sdk.common.RangeWithOptions;
 import io.dingodb.sdk.common.table.RangeDistribution;
 import io.dingodb.sdk.common.utils.EntityConversion;
 import io.dingodb.sdk.service.connector.ServiceConnector;
@@ -162,14 +162,14 @@ public class StoreServiceClient {
         }, 10, tableId, regionId);
     }
 
-    public boolean kvDeleteRange(DingoCommonId tableId, DingoCommonId regionId, Range range) {
+    public boolean kvDeleteRange(DingoCommonId tableId, DingoCommonId regionId, RangeWithOptions options) {
         return exec(stub -> {
-            /*Store.KvDeleteRangeRequest req = Store.KvDeleteRangeRequest.newBuilder()
+            Store.KvDeleteRangeRequest req = Store.KvDeleteRangeRequest.newBuilder()
                     .setRegionId(regionId.entityId())
-                    .setRange(mapping(range))
+                    .setRange(mapping(options))
                     .build();
             Store.KvDeleteRangeResponse res = stub.kvDeleteRange(req);
-            check(res.getError());*/
+            check(res.getError());
             return true;
         }, 10, tableId, regionId);
     }
