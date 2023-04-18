@@ -461,6 +461,7 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
       DINGO_LOG(INFO) << "7.store_metrics_size=" << meta_increment.store_metrics_size();
       DINGO_LOG(INFO) << "8.tables_metrics_size=" << meta_increment.table_metrics_size();
       DINGO_LOG(INFO) << "9.store_operations_size=" << meta_increment.store_operations_size();
+      DINGO_LOG(INFO) << "10.executor_users_size=" << meta_increment.executor_users_size();
     } else {
       DINGO_LOG(WARNING) << "meta_increment.ByteSizeLong() == 0, just return";
       return;
@@ -913,6 +914,33 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
     }
   }
 
+  // 10.executor_user_map
+  {
+    DINGO_LOG(INFO) << "executor_user_map increment size=" << meta_increment.executor_users_size();
+
+    for (int i = 0; i < meta_increment.executor_users_size(); i++) {
+      const auto& executor_user = meta_increment.executor_users(i);
+      if (executor_user.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
+        executor_user_map_.Put(executor_user.id(), executor_user.executor_user());
+
+        // meta_write_kv
+        meta_write_to_kv.push_back(executor_user_meta_->TransformToKvValue(executor_user.executor_user()));
+
+      } else if (executor_user.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
+        executor_user_map_.Put(executor_user.id(), executor_user.executor_user());
+
+        // meta_write_kv
+        meta_write_to_kv.push_back(executor_user_meta_->TransformToKvValue(executor_user.executor_user()));
+
+      } else if (executor_user.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
+        executor_user_map_.Erase(executor_user.id());
+
+        // meta_delete_kv
+        meta_delete_to_kv.push_back(executor_user_meta_->TransformToKvValue(executor_user.executor_user()));
+      }
+    }
+  }
+
   // write update to local engine, begin
   if ((!meta_write_to_kv.empty()) || (!meta_delete_to_kv.empty())) {
     if (!meta_writer_->PutAndDelete(meta_write_to_kv, meta_delete_to_kv)) {
@@ -937,6 +965,7 @@ int CoordinatorControl::SubmitMetaIncrement(pb::coordinator_internal::MetaIncrem
   DINGO_LOG(INFO) << "SubmitMetaIncrement 7.store_metrics_size=" << meta_increment.store_metrics_size();
   DINGO_LOG(INFO) << "SubmitMetaIncrement 8.tables_metrics_size=" << meta_increment.table_metrics_size();
   DINGO_LOG(INFO) << "SubmitMetaIncrement 9.store_operations_size=" << meta_increment.store_operations_size();
+  DINGO_LOG(INFO) << "SubmitMetaIncrement 10.executor_users_size=" << meta_increment.executor_users_size();
 
   std::shared_ptr<Context> const ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kCoordinatorRegionId);

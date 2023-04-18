@@ -54,6 +54,12 @@ message CoordinatorInternal {
   dingodb.pb.common.Location raft_location = 3;
 }
 
+// ExecutorInternal
+message ExecutorUserInternal {
+  string id = 1;  // this is user name
+  string keyring = 2;
+}
+
 enum IdEpochType {
   ID_NONE = 0;  // this is a placeholder
 
@@ -117,7 +123,7 @@ message MetaIncrementTableMetrics {
 }
 
 message MetaIncrementExecutor {
-  uint64 id = 1;
+  string id = 1;
   dingodb.pb.common.Executor executor = 2;
   MetaIncrementOpType op_type = 3;
 }
@@ -138,7 +144,7 @@ message MetaIncrementSchema {
 
 message MetaIncrementTable {
   uint64 id = 1;
-  dingodb.pb.coordinator_internal.TableInternal table = 2;
+  TableInternal table = 2;
   MetaIncrementOpType op_type = 3;
   uint64 schema_id = 4;  // the table's schema
 }
@@ -155,6 +161,12 @@ message MetaIncrementStoreOperation {
   MetaIncrementOpType op_type = 3;
 }
 
+message MetaIncrementExecutorUser {
+  string id = 1;  // this is executor_user_name
+  ExecutorUserInternal executor_user = 2;
+  MetaIncrementOpType op_type = 3;
+}
+
 // MetaIncrement stores meta data need to be inserted or updated
 message MetaIncrement {
   repeated MetaIncrementCoordinator coordinators = 1;
@@ -167,6 +179,7 @@ message MetaIncrement {
   repeated MetaIncrementStoreMetrics store_metrics = 8;
   repeated MetaIncrementTableMetrics table_metrics = 9;
   repeated MetaIncrementStoreOperation store_operations = 10;
+  repeated MetaIncrementExecutorUser executor_users = 11;
 }
 
 // snapshot pb file message
@@ -181,4 +194,5 @@ message MetaSnapshotFile {
   repeated dingodb.pb.common.KeyValue store_metrics_map_kvs = 8;
   repeated dingodb.pb.common.KeyValue table_metrics_map_kvs = 9;
   repeated dingodb.pb.common.KeyValue store_operation_map_kvs = 10;
+  repeated dingodb.pb.common.KeyValue executor_user_map_kvs = 11;
 }

@@ -77,6 +77,22 @@ class CoordinatorServiceImpl : public pb::coordinator::CoordinatorService {
   void GetExecutorMap(google::protobuf::RpcController* controller,
                       const pb::coordinator::GetExecutorMapRequest* request,
                       pb::coordinator::GetExecutorMapResponse* response, google::protobuf::Closure* done) override;
+  void CreateExecutorUser(google::protobuf::RpcController* controller,
+                          const pb::coordinator::CreateExecutorUserRequest* request,
+                          pb::coordinator::CreateExecutorUserResponse* response,
+                          google::protobuf::Closure* done) override;
+  void UpdateExecutorUser(google::protobuf::RpcController* controller,
+                          const pb::coordinator::UpdateExecutorUserRequest* request,
+                          pb::coordinator::UpdateExecutorUserResponse* response,
+                          google::protobuf::Closure* done) override;
+  void DeleteExecutorUser(google::protobuf::RpcController* controller,
+                          const pb::coordinator::DeleteExecutorUserRequest* request,
+                          pb::coordinator::DeleteExecutorUserResponse* response,
+                          google::protobuf::Closure* done) override;
+  void GetExecutorUserMap(google::protobuf::RpcController* controller,
+                          const pb::coordinator::GetExecutorUserMapRequest* request,
+                          pb::coordinator::GetExecutorUserMapResponse* response,
+                          google::protobuf::Closure* done) override;
 
   void GetCoordinatorMap(google::protobuf::RpcController* controller,
                          const pb::coordinator::GetCoordinatorMapRequest* request,

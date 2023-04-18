@@ -160,14 +160,41 @@ class CoordinatorControl : public MetaControl {
   // in: cluster_id
   // out: executor_id, keyring
   // return: 0 or -1
-  int CreateExecutor(uint64_t cluster_id, uint64_t &executor_id, std::string &keyring,
+  int CreateExecutor(uint64_t cluster_id, std::string &executor_id, std::string &keyring,
                      pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // delete executor
   // in: cluster_id, executor_id, keyring
   // return: 0 or -1
-  pb::error::Errno DeleteExecutor(uint64_t cluster_id, uint64_t executor_id, std::string keyring,
+  pb::error::Errno DeleteExecutor(uint64_t cluster_id, std::string executor_id, std::string keyring,
                                   pb::coordinator_internal::MetaIncrement &meta_increment);
+
+  // create executor_user
+  // in: cluster_id
+  // out: executor_user
+  // return: errno
+  pb::error::Errno CreateExecutorUser(uint64_t cluster_id, pb::common::ExecutorUser &executor_user,
+                                      pb::coordinator_internal::MetaIncrement &meta_increment);
+
+  // update executor_user
+  // in: cluster_id
+  // out: executor_user
+  // return: errno
+  pb::error::Errno UpdateExecutorUser(uint64_t cluster_id, pb::common::ExecutorUser &executor_user,
+                                      pb::coordinator_internal::MetaIncrement &meta_increment);
+
+  // delete executor_user
+  // in: cluster_id
+  // out: executor_user
+  // return: errno
+  pb::error::Errno DeleteExecutorUser(uint64_t cluster_id, pb::common::ExecutorUser &executor_user,
+                                      pb::coordinator_internal::MetaIncrement &meta_increment);
+
+  // get executor_user_map
+  // in: cluster_id
+  // out: executor_user_map
+  // return: errno
+  pb::error::Errno GetExecutorUserMap(uint64_t cluster_id, pb::common::ExecutorUserMap &executor_user_map);
 
   // update executor map with new Executor info
   // return new epoch
@@ -176,7 +203,7 @@ class CoordinatorControl : public MetaControl {
 
   // try to set executor offline
   // return bool
-  bool TrySetExecutorToOffline(uint64_t executor_id);
+  bool TrySetExecutorToOffline(std::string executor_id);
 
   // update store map with new Store info
   // return new epoch
@@ -219,7 +246,7 @@ class CoordinatorControl : public MetaControl {
 
   // get push executormap
   // this function will use std::swap to empty the class member executor_need_push_
-  void GetPushExecutorMap(butil::FlatMap<uint64_t, pb::common::Executor> &executor_to_push);
+  void GetPushExecutorMap(butil::FlatMap<std::string, pb::common::Executor> &executor_to_push);
 
   // update region map with new Region info
   // return new epoch
@@ -301,7 +328,7 @@ class CoordinatorControl : public MetaControl {
 
   // validate executor keyring
   // return: 0 or -1
-  int ValidateExecutor(uint64_t executor_id, const std::string &keyring);
+  int ValidateExecutor(const std::string &executor_id, const pb::common::ExecutorUser &executor_user);
 
   // calculate table metrics
   void CalculateTableMetrics();
@@ -354,9 +381,9 @@ class CoordinatorControl : public MetaControl {
   bthread_mutex_t store_need_push_mutex_;
 
   // 3.executors
-  DingoSafeMap<uint64_t, pb::common::Executor> executor_map_;
-  MetaSafeMapStorage<pb::common::Executor> *executor_meta_;  // need construct
-  butil::FlatMap<uint64_t, pb::common::Executor>
+  DingoSafeMap<std::string, pb::common::Executor> executor_map_;
+  MetaSafeStringMapStorage<pb::common::Executor> *executor_meta_;  // need construct
+  butil::FlatMap<std::string, pb::common::Executor>
       executor_need_push_;  // will send push msg to these executors in crontab
   bthread_mutex_t executor_need_push_mutex_;
 
@@ -394,6 +421,11 @@ class CoordinatorControl : public MetaControl {
   DingoSafeMap<uint64_t, pb::coordinator::StoreOperation> store_operation_map_;
   MetaSafeMapStorage<pb::coordinator::StoreOperation> *store_operation_meta_;
   bthread_mutex_t store_operation_map_mutex_;  // may need a write lock
+
+  // 10.executor_user
+  DingoSafeMap<std::string, pb::coordinator_internal::ExecutorUserInternal>
+      executor_user_map_;  // executor_user -> keyring
+  MetaSafeStringMapStorage<pb::coordinator_internal::ExecutorUserInternal> *executor_user_meta_;  // need construct
 
   // root schema write to raft
   bool root_schema_writed_to_raft_;
