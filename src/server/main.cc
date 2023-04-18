@@ -16,6 +16,7 @@
 #define _GNU_SOURCE
 #include <cstdio>
 #endif
+#include <cxxabi.h>
 #include <dlfcn.h>
 #include <libunwind.h>
 #include <unistd.h>
@@ -82,18 +83,28 @@ static void SignalHandler(int signo) {
 
     // Get the instruction pointer and symbol name for this frame
     unw_get_reg(&cursor, UNW_REG_IP, &ip);
-    unw_get_proc_name(&cursor, symbol, sizeof(symbol), &offset);
 
-    if (dladdr((void *)pc, &info)) {
-      // Print the frame number, instruction pointer, .so filename, and symbol name
-      // printf("Frame %d: [0x%016zx] %32s : %s + 0x%lx\n", i++, (size_t)((void *)ip), info.dli_fname, symbol,
-      //        offset);  // NOLINT
+    if (unw_get_proc_name(&cursor, symbol, sizeof(symbol), &offset) == 0) {
+      char *nameptr = symbol;
+      // Demangle the symbol name
+      int demangle_status;
+      char *demangled = abi::__cxa_demangle(symbol, nullptr, nullptr, &demangle_status);
+      if (demangled) {
+        nameptr = demangled;
+      }
+      // std::cout << "  " << nameptr << " + " << offset << " (0x" << std::hex << pc << ")" << std::endl;
 
-      auto ret = std::snprintf(buffer, sizeof(buffer), "Frame %d: [0x%016zx] %32s : %s + 0x%lx", i++,
-                               (size_t)((void *)ip), info.dli_fname, symbol, offset);
-      if (ret > 0) {
-        printf("%s\n", buffer);
-        DINGO_LOG(ERROR) << buffer;
+      if (!dladdr((void *)pc, &info)) {
+        DINGO_LOG(ERROR) << "Frame [" << i++ << "] symbol=[" << nameptr << " + " << offset << "] (0x" << std::hex << pc
+                         << ") ";
+      } else {
+        DINGO_LOG(ERROR) << "Frame [" << i++ << "] symbol=[" << nameptr << " + " << offset << "] (0x" << std::hex << pc
+                         << ") "
+                         << " fname=[" << info.dli_fname << "] saddr=[" << info.dli_saddr << "] fbase=["
+                         << info.dli_fbase << "]";
+      }
+      if (demangled) {
+        free(demangled);
       }
     }
 
@@ -105,7 +116,7 @@ static void SignalHandler(int signo) {
     exit(0);
   } else {
     // abort to generate core dump
-    DINGO_LOG(ERROR) << "abort to generate core dump";
+    DINGO_LOG(ERROR) << "abort to generate core dump for signo=" << signo << " " << strsignal(signo);
     abort();
   }
 }
