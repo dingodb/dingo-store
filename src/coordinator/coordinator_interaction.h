@@ -60,14 +60,15 @@ butil::Status CoordinatorInteraction::SendRequest(const std::string& api_name, c
   const ::google::protobuf::ServiceDescriptor* service_desc = pb::coordinator::CoordinatorService::descriptor();
   const ::google::protobuf::MethodDescriptor* method = service_desc->FindMethodByName(api_name);
 
-  DINGO_LOG(DEBUG) << "send request to coordinator api " << api_name << " request: " << request.ShortDebugString();
+  // DINGO_LOG(DEBUG) << "send request to coordinator api " << api_name << " request: " << request.ShortDebugString();
   int retry_count = 0;
   do {
     brpc::Controller cntl;
     cntl.set_log_id(butil::fast_rand());
     const int leader_index = GetLeader();
     channels_[leader_index]->CallMethod(method, &cntl, &request, &response, nullptr);
-    DINGO_LOG(DEBUG) << "send request to coordinator api " << api_name << " response: " << response.ShortDebugString();
+    // DINGO_LOG(DEBUG) << "send request to coordinator api " << api_name << " response: " <<
+    // response.ShortDebugString();
     if (cntl.Failed()) {
       DINGO_LOG(ERROR) << butil::StringPrintf("%s response failed, %lu %d %s", api_name.c_str(), cntl.log_id(),
                                               cntl.ErrorCode(), cntl.ErrorText().c_str());

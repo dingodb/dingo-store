@@ -102,6 +102,7 @@ bool StoreRegionMeta::Init() {
     DINGO_LOG(ERROR) << "Scan store region meta failed!";
     return false;
   }
+  DINGO_LOG(INFO) << "Init store region meta num: " << kvs.size();
 
   if (!kvs.empty()) {
     TransformFromKv(kvs);
@@ -121,6 +122,7 @@ void StoreRegionMeta::AddRegion(std::shared_ptr<pb::store_internal::Region> regi
       return;
     }
 
+    region->add_history_states(pb::common::StoreRegionState::NEW);
     regions_.insert(std::make_pair(region->id(), region));
   }
 
@@ -194,7 +196,10 @@ void StoreRegionMeta::UpdateState(std::shared_ptr<pb::store_internal::Region> re
       break;
   }
 
-  meta_writer_->Put(TransformToKv(region));
+  if (successed) {
+    region->add_history_states(new_state);
+    meta_writer_->Put(TransformToKv(region));
+  }
 
   DINGO_LOG(DEBUG) << butil::StringPrintf(
       "Update region state %ld %s to %s %s", region->id(), pb::common::StoreRegionState_Name(cur_state).c_str(),
@@ -283,6 +288,7 @@ bool StoreRaftMeta::Init() {
     DINGO_LOG(ERROR) << "Scan store raft meta failed!";
     return false;
   }
+  DINGO_LOG(INFO) << "Init store raft meta num: " << kvs.size();
 
   if (!kvs.empty()) {
     TransformFromKv(kvs);

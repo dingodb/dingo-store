@@ -16,6 +16,7 @@ syntax = "proto3";
 
 import "common.proto";
 import "error.proto";
+import "store_internal.proto";
 
 package dingodb.pb.store;
 
@@ -208,6 +209,30 @@ message KvScanReleaseResponse {
   dingodb.pb.error.Error error = 1;
 }
 
+enum DebugType {
+  NONE = 0;
+  STORE_REGION_META_STAT = 1;
+  STORE_REGION_META_DETAILS = 2;
+}
+
+message DebugRequest {
+  DebugType type = 1;  // debug type
+  repeated uint64 region_ids = 2;
+}
+
+message DebugResponse {
+  message RegionMetaStat {
+    map<string, int32> state_counts = 1;
+  }
+
+  message RegionMetaDetails {
+    repeated dingodb.pb.store_internal.Region regions = 1;
+  }
+
+  RegionMetaStat region_meta_stat = 1;
+  RegionMetaDetails region_meta_details = 2;
+}
+
 service StoreService {
   // region
   rpc AddRegion(AddRegionRequest) returns (AddRegionResponse);
@@ -228,4 +253,7 @@ service StoreService {
   rpc KvScanBegin(KvScanBeginRequest) returns (KvScanBeginResponse);
   rpc KvScanContinue(KvScanContinueRequest) returns (KvScanContinueResponse);
   rpc KvScanRelease(KvScanReleaseRequest) returns (KvScanReleaseResponse);
+
+  // debug
+  rpc Debug(DebugRequest) returns (DebugResponse);
 };

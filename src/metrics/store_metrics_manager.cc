@@ -46,6 +46,7 @@ bool StoreRegionMetrics::Init() {
     DINGO_LOG(ERROR) << "Scan store region metrics failed!";
     return false;
   }
+  DINGO_LOG(INFO) << "Init Store region metrics num: " << kvs.size();
 
   if (!kvs.empty()) {
     TransformFromKv(kvs);
