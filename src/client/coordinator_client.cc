@@ -33,6 +33,8 @@ DEFINE_int32(timeout_ms, 500, "Timeout for each request");
 DEFINE_int32(req_num, 1, "Number of requests");
 DEFINE_string(method, "Hello", "Request method");
 DEFINE_string(id, "", "Request parameter id, for example: table_id for CreateTable/DropTable");
+DEFINE_string(host, "127.0.0.1", "Request parameter host");
+DEFINE_int32(port, 18888, "Request parameter port");
 DEFINE_string(name, "", "Request parameter name, for example: table_id for GetSchemaByName/GetTableByName");
 DEFINE_string(user, "", "Request parameter user");
 DEFINE_string(level, "", "Request log level [DEBUG, INFO, WARNING, ERROR, FATAL]");
