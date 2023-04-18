@@ -180,7 +180,8 @@ class CoordinatorControl : public MetaControl {
   // in: cluster_id
   // out: executor_user
   // return: errno
-  pb::error::Errno UpdateExecutorUser(uint64_t cluster_id, pb::common::ExecutorUser &executor_user,
+  pb::error::Errno UpdateExecutorUser(uint64_t cluster_id, const pb::common::ExecutorUser &executor_user,
+                                      const pb::common::ExecutorUser &executor_user_update,
                                       pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // delete executor_user
