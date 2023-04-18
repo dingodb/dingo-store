@@ -81,25 +81,26 @@ void PushServiceImpl::PushStoreOperation(google::protobuf::RpcController* contro
         DINGO_LOG(ERROR) << "Unknown command type: " << command.region_cmd_type();
     }
 
-    auto error_func = [response](uint64_t command_id, butil::Status status) {
+    auto error_func = [response](uint64_t command_id, ::dingodb::pb::coordinator::RegionCmdType region_cmd_type,
+                                 butil::Status status) {
       auto* result = response->add_region_cmd_results();
       result->set_region_cmd_id(command_id);
+      result->set_region_cmd_type(region_cmd_type);
       auto* mut_err = result->mutable_error();
       mut_err->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
       mut_err->set_errmsg(status.error_str());
     };
 
     if (!status.ok()) {
-      error_func(command.id(), status);
+      error_func(command.id(), command.region_cmd_type(), status);
       continue;
     }
 
     std::shared_ptr<Context> ctx = std::make_shared<Context>();
     status =
         region_controller->DispatchRegionControlCommand(ctx, std::make_shared<pb::coordinator::RegionCmd>(command));
-    if (!status.ok()) {
-      error_func(command.id(), status);
-    }
+    // coordinator need to get all region_cmd results, so add all results to response here
+    error_func(command.id(), command.region_cmd_type(), status);
   }
 
   if (!response->region_cmd_results().empty()) {

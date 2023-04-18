@@ -31,8 +31,9 @@ message PushHeartbeatResponse {
 }
 
 message RegionCmdResult {
-  uint64 region_cmd_id = 1;
-  dingodb.pb.error.Error error = 2;
+  dingodb.pb.error.Error error = 1;
+  uint64 region_cmd_id = 2;
+  dingodb.pb.coordinator.RegionCmdType region_cmd_type = 3;
 }
 
 message PushStoreOperationRequest {
