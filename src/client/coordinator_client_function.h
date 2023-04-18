@@ -54,6 +54,7 @@ void SendCreateExecutorUser(brpc::Controller& cntl, dingodb::pb::coordinator::Co
 void SendUpdateExecutorUser(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
 void SendDeleteExecutorUser(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
 void SendGetExecutorUserMap(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
+void SendExecutorHeartbeat(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
 
 // region
 void SendQueryRegion(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);

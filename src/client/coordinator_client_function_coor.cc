@@ -516,6 +516,53 @@ void SendGetExecutorUserMap(brpc::Controller& cntl, dingodb::pb::coordinator::Co
   }
 }
 
+void SendExecutorHeartbeat(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
+  dingodb::pb::coordinator::ExecutorHeartbeatRequest request;
+  dingodb::pb::coordinator::ExecutorHeartbeatResponse response;
+
+  if (FLAGS_id.empty()) {
+    DINGO_LOG(WARNING) << "id is empty";
+    return;
+  }
+
+  request.set_self_executormap_epoch(1);
+  // mock executor
+  auto* executor = request.mutable_executor();
+  executor->set_id(FLAGS_id);
+  executor->set_state(::dingodb::pb::common::ExecutorState::EXECUTOR_NORMAL);
+  auto* server_location = executor->mutable_server_location();
+  server_location->set_host("127.0.0.1");
+  server_location->set_port(188888);
+
+  auto* user = executor->mutable_executor_user();
+  if (FLAGS_user.empty()) {
+    DINGO_LOG(WARNING) << "user is empty,use default";
+    user->set_user("administrator");
+  } else {
+    user->set_user(FLAGS_user);
+  }
+
+  if (FLAGS_keyring.empty()) {
+    user->set_keyring("TO_BE_CONTINUED");
+  } else {
+    user->set_keyring(FLAGS_keyring);
+  }
+
+  stub.ExecutorHeartbeat(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorCode() << "[" << cntl.ErrorText() << "]";
+    // bthread_usleep(FLAGS_timeout_ms * 1000L);
+  }
+
+  if (FLAGS_log_each_request) {
+    DINGO_LOG(INFO) << "Received response"
+                    << " executor heartbeat executor_id=" << request.executor().id()
+                    << " request_attachment=" << cntl.request_attachment().size()
+                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+    DINGO_LOG(INFO) << response.DebugString();
+  }
+}
+
 void SendStoreHearbeat(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub,
                        uint64_t store_id) {
   dingodb::pb::coordinator::StoreHeartbeatRequest request;
