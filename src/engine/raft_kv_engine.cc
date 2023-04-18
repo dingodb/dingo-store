@@ -50,6 +50,7 @@ bool RaftKvEngine::Recover() {
   auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
   auto regions = store_region_meta->GetAllRegion();
 
+  int count = 0;
   auto ctx = std::make_shared<Context>();
   auto listener_factory = std::make_shared<StoreSmEventListenerFactory>();
   for (auto& region : regions) {
@@ -59,8 +60,11 @@ bool RaftKvEngine::Recover() {
         region->state() == pb::common::StoreRegionState::SPLITTING ||
         region->state() == pb::common::StoreRegionState::MERGING) {
       AddNode(ctx, region, listener_factory->Build());
+      ++count;
     }
   }
+
+  DINGO_LOG(INFO) << "Recover Raft node num: " << count;
 
   return true;
 }

@@ -14,7 +14,9 @@
 
 #include "server/store_service.h"
 
+#include <cstdint>
 #include <memory>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -26,6 +28,7 @@
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
 #include "proto/error.pb.h"
+#include "proto/store.pb.h"
 #include "server.h"
 #include "server/server.h"
 
@@ -738,6 +741,48 @@ void StoreServiceImpl::KvScanRelease(google::protobuf::RpcController* controller
   }
 }
 
+void StoreServiceImpl::Debug(google::protobuf::RpcController* controller,
+                             const ::dingodb::pb::store::DebugRequest* request,
+                             ::dingodb::pb::store::DebugResponse* response, ::google::protobuf::Closure* done) {
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(done);
+
+  if (request->type() == pb::store::DebugType::STORE_REGION_META_STAT) {
+    auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+    auto regions = store_region_meta->GetAllRegion();
+
+    std::map<std::string, int32_t> state_counts;
+    for (auto& region : regions) {
+      std::string name = pb::common::StoreRegionState_Name(region->state());
+      if (state_counts.find(name) == state_counts.end()) {
+        state_counts[name] = 0;
+      }
+      ++state_counts[name];
+    }
+
+    for (auto [name, count] : state_counts) {
+      response->mutable_region_meta_stat()->mutable_state_counts()->insert({name, count});
+    }
+
+  } else if (request->type() == pb::store::DebugType::STORE_REGION_META_DETAILS) {
+    auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+    std::vector<std::shared_ptr<pb::store_internal::Region>> regions;
+    if (request->region_ids().empty()) {
+      regions = store_region_meta->GetAllRegion();
+    } else {
+      for (auto region_id : request->region_ids()) {
+        auto region = store_region_meta->GetRegion(region_id);
+        if (region != nullptr) {
+          regions.push_back(region);
+        }
+      }
+    }
+
+    for (auto& region : regions) {
+      response->mutable_region_meta_details()->add_regions()->CopyFrom(*region);
+    }
+  }
+}
 void StoreServiceImpl::SetStorage(std::shared_ptr<Storage> storage) { storage_ = storage; }
 
 }  // namespace dingodb

@@ -462,7 +462,6 @@ std::shared_ptr<RegionControlExecutor> RegionController::GetRegionControlExecuto
 
   auto it = executors_.find(region_id);
   if (it == executors_.end()) {
-    DINGO_LOG(ERROR) << "Not find region control executor, regoin: " << region_id;
     return nullptr;
   }
 
@@ -490,6 +489,7 @@ butil::Status RegionController::DispatchRegionControlCommand(std::shared_ptr<Con
 
   auto executor = GetRegionControlExecutor(command->region_id());
   if (executor == nullptr) {
+    DINGO_LOG(ERROR) << "Not find region control executor, regoin: " << command->region_id();
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Not find regon control executor");
   }
 

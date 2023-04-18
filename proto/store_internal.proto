@@ -40,4 +40,5 @@ message Region {
   dingodb.pb.common.RegionDefinition definition = 2;
   uint64 leader_id = 3;
   dingodb.pb.common.StoreRegionState state = 4;
+  repeated dingodb.pb.common.StoreRegionState history_states = 5;
 }
