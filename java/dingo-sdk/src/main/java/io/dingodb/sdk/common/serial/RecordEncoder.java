@@ -34,7 +34,6 @@ public class RecordEncoder {
         this.schemaVersion = schemaVersion;
         this.schemas = schemas;
         this.commonId = commonId;
-        Utils.sortSchema(this.schemas);
         int[] size = Utils.getApproPerRecordSize(schemas);
         this.keyBufSize = size[0];
         this.valueBufSize = size[1];

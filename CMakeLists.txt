@@ -190,6 +190,8 @@ file(GLOB SERVER_SRCS ${PROJECT_SOURCE_DIR}/src/server/*.cc)
 file(GLOB SCAN_SRCS ${PROJECT_SOURCE_DIR}/src/scan/*.cc)
 file(GLOB METRICS_SRCS ${PROJECT_SOURCE_DIR}/src/metrics/*.cc)
 file(GLOB VERSION_SRCS ${PROJECT_SOURCE_DIR}/src/common/version.cc)
+file(GLOB SERIAL1_SRCS ${PROJECT_SOURCE_DIR}/src/serial/*.cc)
+file(GLOB SERIAL2_SRCS ${PROJECT_SOURCE_DIR}/src/serial/schema/*.cc)
 
 list(REMOVE_ITEM SERVER_SRCS "${PROJECT_SOURCE_DIR}/src/server/main.cc")
 
@@ -208,7 +210,9 @@ add_library(DINGODB_OBJS
             ${STORE_SRCS}
             ${SERVER_SRCS}
             ${SCAN_SRCS}
-            ${METRICS_SRCS})
+            ${METRICS_SRCS}
+            ${SERIAL1_SRCS}
+            ${SERIAL2_SRCS})
 
 # bin output dir
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin)
