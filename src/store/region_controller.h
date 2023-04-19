@@ -56,7 +56,8 @@ class CreateRegionTask : public TaskRunnable {
   static butil::Status ValidateCreateRegion(std::shared_ptr<StoreMetaManager> store_meta_manager, uint64_t region_id);
 
  private:
-  static butil::Status CreateRegion(std::shared_ptr<Context> ctx, std::shared_ptr<pb::store_internal::Region> region);
+  static butil::Status CreateRegion(std::shared_ptr<Context> ctx, std::shared_ptr<pb::store_internal::Region> region,
+                                    uint64_t split_from_region_id);
 
   std::shared_ptr<Context> ctx_;
   std::shared_ptr<pb::coordinator::RegionCmd> region_cmd_;
@@ -198,10 +199,6 @@ class RegionController {
   bool Init();
   void Destroy();
 
-  bool Register(uint64_t region_id);
-
-  std::shared_ptr<RegionControlExecutor> GetRegionControlExecutor(uint64_t region_id);
-
   butil::Status DispatchRegionControlCommand(std::shared_ptr<Context> ctx,
                                              std::shared_ptr<pb::coordinator::RegionCmd> command);
 
@@ -210,6 +207,10 @@ class RegionController {
   static std::map<pb::coordinator::RegionCmdType, TaskBuildFunc> task_builders;
 
  private:
+  bool RegisterExecutor(uint64_t region_id);
+
+  std::shared_ptr<RegionControlExecutor> GetRegionControlExecutor(uint64_t region_id);
+
   bthread_mutex_t mutex_;
   std::unordered_map<uint64_t, std::shared_ptr<RegionControlExecutor>> executors_;
 };

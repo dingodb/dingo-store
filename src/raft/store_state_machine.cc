@@ -50,20 +50,21 @@ void StoreClosure::Run() {
   }
 }
 
-StoreStateMachine::StoreStateMachine(std::shared_ptr<RawEngine> engine, uint64_t node_id,
+StoreStateMachine::StoreStateMachine(std::shared_ptr<RawEngine> engine,
+                                     std::shared_ptr<pb::store_internal::Region> region,
                                      std::shared_ptr<EventListenerCollection> listeners)
-    : engine_(engine), node_id_(node_id), listeners_(listeners), applied_term_(0), applied_index_(0) {}
+    : engine_(engine), region_(region), listeners_(listeners), applied_term_(0), applied_index_(0) {}
 
 bool StoreStateMachine::Init() {
   // Recover applied index
   auto store_raft_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRaftMeta();
-  auto raft_meta = store_raft_meta->GetRaftMeta(node_id_);
+  auto raft_meta = store_raft_meta->GetRaftMeta(region_->id());
   if (raft_meta != nullptr) {
     DINGO_LOG(INFO) << "applied_index: " << raft_meta->applied_index();
     applied_index_ = raft_meta->applied_index();
 
   } else {
-    raft_meta = StoreRaftMeta::NewRaftMeta(node_id_);
+    raft_meta = StoreRaftMeta::NewRaftMeta(region_->id());
     store_raft_meta->AddRaftMeta(raft_meta);
   }
 
@@ -99,6 +100,7 @@ void StoreStateMachine::on_apply(braft::Iterator& iter) {
         iter.term(), iter.index(), applied_index_, raft_cmd->ShortDebugString().c_str());
     // Build event
     auto event = std::make_shared<SmApplyEvent>();
+    event->region = region_;
     event->engine = engine_;
     event->done = iter.done();
     event->raft_cmd = raft_cmd;
@@ -119,21 +121,21 @@ void StoreStateMachine::on_apply(braft::Iterator& iter) {
 }
 
 void StoreStateMachine::on_shutdown() {
-  DINGO_LOG(INFO) << "on_shutdown, region: " << node_id_;
+  DINGO_LOG(INFO) << "on_shutdown, region: " << region_->id();
   auto event = std::make_shared<SmShutdownEvent>();
   DispatchEvent(EventType::kSmShutdown, event);
 }
 
 void StoreStateMachine::on_snapshot_save(braft::SnapshotWriter* writer, braft::Closure* done) {
-  DINGO_LOG(INFO) << "on_snapshot_save, region: " << node_id_;
+  DINGO_LOG(INFO) << "on_snapshot_save, region: " << region_->id();
   auto event = std::make_shared<SmSnapshotSaveEvent>();
   event->engine = engine_;
   event->writer = writer;
   event->done = done;
-  event->node_id = node_id_;
+  event->node_id = region_->id();
 
   DispatchEvent(EventType::kSmSnapshotSave, event);
-  DINGO_LOG(INFO) << "on_snapshot_save done, region: " << node_id_;
+  DINGO_LOG(INFO) << "on_snapshot_save done, region: " << region_->id();
 }
 
 // Load snapshot timing
@@ -155,7 +157,7 @@ void StoreStateMachine::on_snapshot_save(braft::SnapshotWriter* writer, braft::C
 //      2>. load snapshot files
 //      3>. applied_index = max_index
 int StoreStateMachine::on_snapshot_load(braft::SnapshotReader* reader) {
-  DINGO_LOG(INFO) << "on_snapshot_load, region: " << node_id_;
+  DINGO_LOG(INFO) << "on_snapshot_load, region: " << region_->id();
   braft::SnapshotMeta meta;
   reader->load_meta(&meta);
   DINGO_LOG(INFO) << butil::StringPrintf("load snapshot(%ld-%ld) applied_index(%lu)", meta.last_included_term(),
@@ -165,7 +167,7 @@ int StoreStateMachine::on_snapshot_load(braft::SnapshotReader* reader) {
     auto event = std::make_shared<SmSnapshotLoadEvent>();
     event->engine = engine_;
     event->reader = reader;
-    event->node_id = node_id_;
+    event->node_id = region_->id();
     DispatchEvent(EventType::kSmSnapshotLoad, event);
     applied_index_ = meta.last_included_index();
   }
@@ -174,17 +176,17 @@ int StoreStateMachine::on_snapshot_load(braft::SnapshotReader* reader) {
 }
 
 void StoreStateMachine::on_leader_start(int64_t term) {
-  DINGO_LOG(INFO) << "on_leader_start, region: " << node_id_ << " term: " << term;
+  DINGO_LOG(INFO) << "on_leader_start, region: " << region_->id() << " term: " << term;
 
   auto event = std::make_shared<SmLeaderStartEvent>();
   event->term = term;
-  event->node_id = node_id_;
+  event->node_id = region_->id();
 
   DispatchEvent(EventType::kSmLeaderStart, event);
 }
 
 void StoreStateMachine::on_leader_stop(const butil::Status& status) {
-  DINGO_LOG(INFO) << "on_leader_stop, region: " << node_id_ << " error: " << status.error_code() << " "
+  DINGO_LOG(INFO) << "on_leader_stop, region: " << region_->id() << " error: " << status.error_code() << " "
                   << status.error_str();
   auto event = std::make_shared<SmLeaderStopEvent>();
   event->status = status;
@@ -193,7 +195,7 @@ void StoreStateMachine::on_leader_stop(const butil::Status& status) {
 }
 
 void StoreStateMachine::on_error(const braft::Error& e) {
-  DINGO_LOG(INFO) << butil::StringPrintf("on_error region: %ld type(%d) %d %s", node_id_, e.type(),
+  DINGO_LOG(INFO) << butil::StringPrintf("on_error region: %ld type(%d) %d %s", region_->id(), e.type(),
                                          e.status().error_code(), e.status().error_cstr());
 
   auto event = std::make_shared<SmErrorEvent>();
@@ -203,7 +205,7 @@ void StoreStateMachine::on_error(const braft::Error& e) {
 }
 
 void StoreStateMachine::on_configuration_committed(const braft::Configuration& conf) {
-  DINGO_LOG(INFO) << "on_configuration_committed, region: " << node_id_;
+  DINGO_LOG(INFO) << "on_configuration_committed, region: " << region_->id();
 
   auto event = std::make_shared<SmConfigurationCommittedEvent>();
   event->conf = conf;
@@ -212,15 +214,15 @@ void StoreStateMachine::on_configuration_committed(const braft::Configuration& c
 }
 
 void StoreStateMachine::on_start_following(const braft::LeaderChangeContext& ctx) {
-  DINGO_LOG(INFO) << "on_start_following, region: " << node_id_;
+  DINGO_LOG(INFO) << "on_start_following, region: " << region_->id();
   auto event = std::make_shared<SmStartFollowingEvent>(ctx);
-  event->node_id = node_id_;
+  event->node_id = region_->id();
 
   DispatchEvent(EventType::kSmStartFollowing, event);
 }
 
 void StoreStateMachine::on_stop_following(const braft::LeaderChangeContext& ctx) {
-  DINGO_LOG(INFO) << "on_stop_following, region: " << node_id_;
+  DINGO_LOG(INFO) << "on_stop_following, region: " << region_->id();
   auto event = std::make_shared<SmStopFollowingEvent>(ctx);
 
   DispatchEvent(EventType::kSmStopFollowing, event);

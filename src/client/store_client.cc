@@ -95,7 +95,11 @@ std::shared_ptr<dingodb::pb::store::StoreService_Stub> GenStoreServiceStub(const
 std::string GetRedirectAddr(const dingodb::pb::error::Error& error) {
   if (error.errcode() == dingodb::pb::error::ERAFT_NOTLEADER) {
     const auto& location = error.leader_location();
-    return butil::StringPrintf("%s:%d", location.host().c_str(), location.port());
+    if (!location.host().empty()) {
+      return butil::StringPrintf("%s:%d", location.host().c_str(), location.port());
+    } else {
+      return "NO_LEADER";
+    }
   }
 
   return "";
@@ -218,8 +222,9 @@ void TestBatchPutGet(uint64_t region_id, int num) {
   for (auto& it : dataset) {
     std::string redirect_addr = {};
     latencys.push_back(SendKvPut(stub, region_id, it.first, it.second, redirect_addr));
-    if (!redirect_addr.empty()) {
-      DINGO_LOG(INFO) << "redirect_addr: " << redirect_addr;
+    if (redirect_addr == "NO_LEADER") {
+      bthread_usleep(1000 * 1000L);
+    } else if (!redirect_addr.empty()) {
       stub = stubs[redirect_addr];
     }
   }
@@ -592,14 +597,17 @@ void* OperationRegionRoutine(void* arg) {
   for (int i = 0; i < param->region_count; ++i) {
     uint64_t region_id = param->start_region_id + i;
 
+    DINGO_LOG(INFO) << "======Create region " << region_id;
     // Create region
     for (const auto& [_, stub] : param->stubs) {
       AddRegion(stub, region_id, param->raft_addrs);
     }
 
+    DINGO_LOG(INFO) << "======Put region " << region_id;
     // Put/Get
     TestBatchPutGet(region_id, FLAGS_req_num);
 
+    DINGO_LOG(INFO) << "======Delete region " << region_id;
     // Destroy region
     for (const auto& [_, stub] : param->stubs) {
       DestroyRegion(stub, region_id);

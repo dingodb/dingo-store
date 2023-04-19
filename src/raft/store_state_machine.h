@@ -49,7 +49,7 @@ class StoreClosure : public braft::Closure {
 //                           on_apply
 class StoreStateMachine : public braft::StateMachine {
  public:
-  explicit StoreStateMachine(std::shared_ptr<RawEngine> engine, uint64_t node_id,
+  explicit StoreStateMachine(std::shared_ptr<RawEngine> engine, std::shared_ptr<pb::store_internal::Region> region,
                              std::shared_ptr<EventListenerCollection> listeners);
   ~StoreStateMachine() override = default;
 
@@ -69,7 +69,7 @@ class StoreStateMachine : public braft::StateMachine {
  private:
   void DispatchEvent(dingodb::EventType, std::shared_ptr<dingodb::Event> event);
 
-  uint64_t node_id_;
+  std::shared_ptr<pb::store_internal::Region> region_;
   std::shared_ptr<RawEngine> engine_;
   std::shared_ptr<EventListenerCollection> listeners_;
 

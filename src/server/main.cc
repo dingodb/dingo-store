@@ -144,7 +144,7 @@ int main(int argc, char *argv[]) {
     exit(-1);
   }
 
-  SetupSignalHandler();
+  // SetupSignalHandler();
 
   dingodb::pb::common::ClusterRole role = dingodb::pb::common::COORDINATOR;
 

@@ -39,7 +39,8 @@ butil::Status CreateRegionTask::ValidateCreateRegion(std::shared_ptr<StoreMetaMa
 }
 
 butil::Status CreateRegionTask::CreateRegion(std::shared_ptr<Context> ctx,
-                                             std::shared_ptr<pb::store_internal::Region> region) {
+                                             std::shared_ptr<pb::store_internal::Region> region,
+                                             uint64_t split_from_region_id) {
   auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
   DINGO_LOG(DEBUG) << butil::StringPrintf("Create region %lu, %s", region->id(), region->ShortDebugString().c_str());
 
@@ -68,7 +69,12 @@ butil::Status CreateRegionTask::CreateRegion(std::shared_ptr<Context> ctx,
   }
 
   DINGO_LOG(DEBUG) << butil::StringPrintf("Create region %lu update region state NORMAL", region->id());
-  store_region_meta->UpdateState(region, pb::common::StoreRegionState::NORMAL);
+  if (split_from_region_id == 0) {
+    store_region_meta->UpdateState(region, pb::common::StoreRegionState::NORMAL);
+  } else {
+    // Todo: STANDBY
+    store_region_meta->UpdateState(region, pb::common::StoreRegionState::STANDBY);
+  }
 
   // Add region metrics
   DINGO_LOG(DEBUG) << butil::StringPrintf("Create region %lu add region metrics", region->id());
@@ -84,7 +90,7 @@ void CreateRegionTask::Run() {
   region->mutable_definition()->CopyFrom(region_cmd_->create_request().region_definition());
   region->set_state(pb::common::StoreRegionState::NEW);
 
-  auto status = CreateRegion(ctx_, region);
+  auto status = CreateRegion(ctx_, region, region_cmd_->create_request().split_from_region_id());
   if (!status.ok()) {
     DINGO_LOG(DEBUG) << butil::StringPrintf("Create region %lu failed, %s", region->id(), status.error_cstr());
   }
@@ -202,6 +208,19 @@ butil::Status SplitRegionTask::ValidateSplitRegion(std::shared_ptr<StoreRegionMe
     return butil::Status(pb::error::EREGION_STATE, "Parent region state not allow split.");
   }
 
+  auto engine = Server::GetInstance()->GetEngine();
+  if (engine->GetID() == pb::common::ENG_RAFT_STORE) {
+    auto raft_kv_engine = std::dynamic_pointer_cast<RaftKvEngine>(engine);
+    auto node = raft_kv_engine->GetNode(parent_region_id);
+    if (node == nullptr) {
+      return butil::Status(pb::error::ERAFT_NOTNODE, "No found raft node.");
+    }
+
+    if (!node->IsLeader()) {
+      return butil::Status(pb::error::ERAFT_NOTLEADER, node->GetLeaderId().to_string());
+    }
+  }
+
   return butil::Status();
 }
 
@@ -222,6 +241,7 @@ butil::Status SplitRegionTask::SplitRegion() {
 
   write_data.AddDatums(std::static_pointer_cast<DatumAble>(datum));
 
+  ctx_->SetRegionId(datum->from_region_id);
   return Server::GetInstance()->GetEngine()->AsyncWrite(
       ctx_, write_data, [](std::shared_ptr<Context>, butil::Status status) {
         if (!status.ok()) {
@@ -329,6 +349,7 @@ bool RegionControlExecutor::Init() {
 }
 
 bool RegionControlExecutor::Execute(TaskRunnable* task) {
+  DINGO_LOG(INFO) << "Execute region control...";
   if (bthread::execution_queue_execute(queue_id_, task) != 0) {
     DINGO_LOG(ERROR) << "region execution queue execute failed, regoin: " << region_id_;
     return false;
@@ -434,7 +455,7 @@ bool RegionController::Init() {
   auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
   auto regions = store_meta_manager->GetStoreRegionMeta()->GetAllAliveRegion();
   for (auto& region : regions) {
-    if (!Register(region->id())) {
+    if (!RegisterExecutor(region->id())) {
       DINGO_LOG(ERROR) << "Register region control executor failed, region: " << region->id();
       return false;
     }
@@ -450,11 +471,13 @@ void RegionController::Destroy() {
   }
 }
 
-bool RegionController::Register(uint64_t region_id) {
+bool RegionController::RegisterExecutor(uint64_t region_id) {
   BAIDU_SCOPED_LOCK(mutex_);
 
   if (executors_.find(region_id) == executors_.end()) {
-    executors_.insert({region_id, std::make_shared<RegionControlExecutor>(region_id)});
+    auto executor = std::make_shared<RegionControlExecutor>(region_id);
+    executor->Init();
+    executors_.insert({region_id, executor});
   }
 
   return true;
@@ -484,10 +507,7 @@ butil::Status RegionController::DispatchRegionControlCommand(std::shared_ptr<Con
 
   // Create region, need to add region control executor
   if (command->region_cmd_type() == pb::coordinator::RegionCmdType::CMD_CREATE) {
-    auto executor = GetRegionControlExecutor(command->region_id());
-    if (executor == nullptr) {
-      Register(command->region_id());
-    }
+    RegisterExecutor(command->region_id());
   }
 
   auto executor = GetRegionControlExecutor(command->region_id());
@@ -501,6 +521,7 @@ butil::Status RegionController::DispatchRegionControlCommand(std::shared_ptr<Con
     DINGO_LOG(ERROR) << "Not exist region control command";
     return butil::Status(pb::error::EINTERNAL, "Not exist region control command");
   }
+
   // Free at ExecuteRoutine()
   TaskRunnable* task = it->second(ctx, command);
   if (task == nullptr) {

@@ -17,15 +17,32 @@
 #include <cstddef>
 #include <vector>
 
+#include "butil/strings/stringprintf.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "proto/common.pb.h"
 #include "server/server.h"
 
 namespace dingodb {
 
-void PutHandler::Handle(std::shared_ptr<Context> ctx, std::shared_ptr<RawEngine> engine, const pb::raft::Request &req) {
+void PutHandler::Handle(std::shared_ptr<Context> ctx, std::shared_ptr<pb::store_internal::Region> region,
+                        std::shared_ptr<RawEngine> engine, const pb::raft::Request &req) {
   butil::Status status;
   const auto &request = req.put();
+  // region is spliting, check key out range
+  if (region->state() == pb::common::StoreRegionState::SPLITTING) {
+    const auto &range = region->definition().range();
+    for (const auto &kv : request.kvs()) {
+      if (range.end_key().compare(kv.key()) <= 0) {
+        if (ctx) {
+          status.set_error(pb::error::EREGION_REDIRECT, "Region is spliting, please update route");
+          ctx->SetStatus(status);
+        }
+        return;
+      }
+    }
+  }
+
   auto writer = engine->NewWriter(request.cf_name());
   if (request.kvs().size() == 1) {
     status = writer->KvPut(request.kvs().Get(0));
@@ -38,12 +55,26 @@ void PutHandler::Handle(std::shared_ptr<Context> ctx, std::shared_ptr<RawEngine>
   }
 }
 
-void PutIfAbsentHandler::Handle(std::shared_ptr<Context> ctx, std::shared_ptr<RawEngine> engine,
-                                const pb::raft::Request &req) {
+void PutIfAbsentHandler::Handle(std::shared_ptr<Context> ctx, std::shared_ptr<pb::store_internal::Region> region,
+                                std::shared_ptr<RawEngine> engine, const pb::raft::Request &req) {
   butil::Status status;
+  const auto &request = req.put_if_absent();
+  // region is spliting, check key out range
+  if (region->state() == pb::common::StoreRegionState::SPLITTING) {
+    const auto &range = region->definition().range();
+    for (const auto &kv : request.kvs()) {
+      if (range.end_key().compare(kv.key()) <= 0) {
+        if (ctx) {
+          status.set_error(pb::error::EREGION_REDIRECT, "Region is spliting, please update route");
+          ctx->SetStatus(status);
+        }
+        return;
+      }
+    }
+  }
+
   std::vector<bool> key_states;  // NOLINT
   bool key_state;
-  const auto &request = req.put_if_absent();
   auto writer = engine->NewWriter(request.cf_name());
   bool const is_write_batch = (request.kvs().size() != 1);
   if (!is_write_batch) {
@@ -75,10 +106,24 @@ void PutIfAbsentHandler::Handle(std::shared_ptr<Context> ctx, std::shared_ptr<Ra
   }
 }
 
-void DeleteRangeHandler::Handle(std::shared_ptr<Context> ctx, std::shared_ptr<RawEngine> engine,
-                                const pb::raft::Request &req) {
+void DeleteRangeHandler::Handle(std::shared_ptr<Context> ctx, std::shared_ptr<pb::store_internal::Region> region,
+                                std::shared_ptr<RawEngine> engine, const pb::raft::Request &req) {
   butil::Status status;
   const auto &request = req.delete_range();
+  // region is spliting, check key out range
+  if (region->state() == pb::common::StoreRegionState::SPLITTING) {
+    const auto &range = region->definition().range();
+    for (const auto &delete_range : request.ranges()) {
+      if (range.end_key().compare(delete_range.range().end_key()) <= 0) {
+        if (ctx) {
+          status.set_error(pb::error::EREGION_REDIRECT, "Region is spliting, please update route");
+          ctx->SetStatus(status);
+        }
+        return;
+      }
+    }
+  }
+
   auto reader = engine->NewReader(request.cf_name());
   auto writer = engine->NewWriter(request.cf_name());
   uint64_t delete_count = 0;
@@ -134,10 +179,24 @@ void DeleteRangeHandler::Handle(std::shared_ptr<Context> ctx, std::shared_ptr<Ra
   }
 }
 
-void DeleteBatchHandler::Handle(std::shared_ptr<Context> ctx, std::shared_ptr<RawEngine> engine,
-                                const pb::raft::Request &req) {
+void DeleteBatchHandler::Handle(std::shared_ptr<Context> ctx, std::shared_ptr<pb::store_internal::Region> region,
+                                std::shared_ptr<RawEngine> engine, const pb::raft::Request &req) {
   butil::Status status;
   const auto &request = req.delete_batch();
+  // region is spliting, check key out range
+  if (region->state() == pb::common::StoreRegionState::SPLITTING) {
+    const auto &range = region->definition().range();
+    for (const auto &key : request.keys()) {
+      if (range.end_key().compare(key) <= 0) {
+        if (ctx) {
+          status.set_error(pb::error::EREGION_REDIRECT, "Region is spliting, please update route");
+          ctx->SetStatus(status);
+        }
+        return;
+      }
+    }
+  }
+
   auto writer = engine->NewWriter(request.cf_name());
   if (request.keys().size() == 1) {
     status = writer->KvDelete(request.keys().Get(0));
@@ -152,21 +211,28 @@ void DeleteBatchHandler::Handle(std::shared_ptr<Context> ctx, std::shared_ptr<Ra
 
 void SplitHandler::SplitClosure::Run() {
   std::unique_ptr<SplitClosure> self_guard(this);
-  DINGO_LOG(INFO) << "SplitHandler::SplitClosure::Run...";
+  if (!status().ok()) {
+    DINGO_LOG(INFO) << butil::StringPrintf("split region %ld, finish snapshot failed", region_->id());
+  } else {
+    DINGO_LOG(INFO) << butil::StringPrintf("split region %ld, finish snapshot success", region_->id());
+  }
 
   auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
 
   store_region_meta->UpdateState(region_, pb::common::StoreRegionState::NORMAL);
 }
 
-void SplitHandler::Handle(std::shared_ptr<Context>, std::shared_ptr<RawEngine>, const pb::raft::Request &req) {
+void SplitHandler::Handle(std::shared_ptr<Context>, std::shared_ptr<pb::store_internal::Region> from_region,
+                          std::shared_ptr<RawEngine>, const pb::raft::Request &req) {
   const auto &request = req.split();
   auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
-  auto from_region = store_region_meta->GetRegion(request.from_region_id());
   auto to_region = store_region_meta->GetRegion(request.to_region_id());
+
+  DINGO_LOG(INFO) << butil::StringPrintf("split region %ld to %ld, begin...", from_region->id(), to_region->id());
+
   // Set parent range
   auto *range = from_region->mutable_definition()->mutable_range();
-  auto end_key = range->start_key();
+  auto end_key = range->end_key();
   range->set_end_key(request.split_key());
 
   // Set child range
@@ -177,15 +243,19 @@ void SplitHandler::Handle(std::shared_ptr<Context>, std::shared_ptr<RawEngine>, 
   // Set region state spliting
   store_region_meta->UpdateState(from_region, pb::common::StoreRegionState::SPLITTING);
 
+  DINGO_LOG(INFO) << butil::StringPrintf("split region %ld to %ld, parent do snapshot", from_region->id(),
+                                         to_region->id());
   // Do parent region snapshot
   auto engine = Server::GetInstance()->GetEngine();
   std::shared_ptr<Context> from_ctx = std::make_shared<Context>();
-  from_ctx->SetDone(new SplitHandler::SplitClosure(from_region));
+  from_ctx->SetDone(new SplitHandler::SplitClosure(from_region, false));
   engine->DoSnapshot(from_ctx, from_region->id());
 
+  DINGO_LOG(INFO) << butil::StringPrintf("split region %ld to %ld, child do snapshot", from_region->id(),
+                                         to_region->id());
   // Do child region snapshot
   std::shared_ptr<Context> to_ctx = std::make_shared<Context>();
-  to_ctx->SetDone(new SplitHandler::SplitClosure(to_region));
+  to_ctx->SetDone(new SplitHandler::SplitClosure(to_region, true));
   engine->DoSnapshot(to_ctx, to_region->id());
 }
 

@@ -75,13 +75,12 @@ pb::common::Engine RaftKvEngine::GetID() { return pb::common::ENG_RAFT_STORE; }
 
 std::shared_ptr<RawEngine> RaftKvEngine::GetRawEngine() { return engine_; }
 
-butil::Status RaftKvEngine::AddNode(std::shared_ptr<Context> ctx,
-                                    const std::shared_ptr<pb::store_internal::Region> region,
+butil::Status RaftKvEngine::AddNode(std::shared_ptr<Context> ctx, std::shared_ptr<pb::store_internal::Region> region,
                                     std::shared_ptr<EventListenerCollection> listeners) {
   DINGO_LOG(INFO) << "RaftkvEngine add region, region_id " << region->id();
 
   // construct StoreStateMachine
-  auto* state_machine = new StoreStateMachine(engine_, region->id(), listeners);
+  auto* state_machine = new StoreStateMachine(engine_, region, listeners);
   if (!state_machine->Init()) {
     return butil::Status(pb::error::ERAFT_INIT, "State machine init failed");
   }

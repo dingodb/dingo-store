@@ -153,7 +153,7 @@ void StoreRegionMeta::UpdateState(std::shared_ptr<pb::store_internal::Region> re
   auto cur_state = region->state();
   switch (cur_state) {
     case pb::common::StoreRegionState::NEW:
-      if (new_state == pb::common::StoreRegionState::NORMAL) {
+      if (new_state == pb::common::StoreRegionState::NORMAL || new_state == pb::common::StoreRegionState::STANDBY) {
         region->set_state(new_state);
         successed = true;
       }
