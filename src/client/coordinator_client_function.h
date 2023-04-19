@@ -87,3 +87,7 @@ void SendDropTable(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& 
 void SendDropSchema(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub);
 void SendCreateSchema(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub);
 void SendGetTableMetrics(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub);
+
+// raft_control functions
+void SendRaftAddPeer(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
+void SendRaftRemovePeer(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);

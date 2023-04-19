@@ -117,6 +117,7 @@ class Helper {
   // in: raft_location
   // out: server_location
   static void GetServerLocation(const pb::common::Location& raft_location, pb::common::Location& server_location);
+  static void GetRaftLocation(const pb::common::Location& server_location, pb::common::Location& raft_location);
 
   // generate random string for keyring
   static std::string GenerateRandomString(int length);

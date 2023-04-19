@@ -232,6 +232,7 @@ message GetCoordinatorMapResponse {
   uint64 epoch = 1;
   dingodb.pb.common.Location leader_location = 2;
   repeated dingodb.pb.common.Location coordinator_locations = 3;
+  dingodb.pb.common.Location leader_location_autoincrement = 4;  // the leader for autoincrement
 }
 
 message DeleteStoreRequest {
@@ -405,6 +406,41 @@ message ChangePeerRegionResponse {
   dingodb.pb.error.Error error = 1;
 }
 
+enum RaftControlOp {
+  None = 0;            // just a placeholder
+  AddPeer = 1;         // only to leader
+  RemovePeer = 2;      // only to leader
+  SetPeer = 3;         // only to leader
+  TransferLeader = 4;  // only to leader
+  Snapshot = 5;        // to leader and follower
+  GetLeader = 6;       // get leader
+  ShutDown = 7;        // leader and follower both can do, only shutdown not remove from raft group
+  Vote = 8;            // call node vote
+  ResetVoteTime = 9;   // call reset reset_election_timeout_ms
+};
+
+enum RaftControlNodeIndex {
+  CoordinatorNodeIndex = 0;
+  AutoIncrementNodeIndex = 1;
+};
+
+message RaftControlRequest {
+  RaftControlOp op_type = 1;
+  RaftControlNodeIndex node_index = 2;
+  string new_leader = 3;
+  string add_peer = 4;     // the peer to add
+  string remove_peer = 5;  // the peer to remove
+  repeated string old_peers = 6;
+  repeated string new_peers = 7;
+  int64 election_time = 8;
+  bool force = 9;
+};
+
+message RaftControlResponse {
+  dingodb.pb.error.Error error = 1;
+  string leader = 2;
+};
+
 service CoordinatorService {
   // Hello
   rpc Hello(HelloRequest) returns (HelloResponse);
@@ -445,4 +481,7 @@ service CoordinatorService {
   rpc CleanStoreOperation(CleanStoreOperationRequest) returns (CleanStoreOperationResponse);
   rpc AddStoreOperation(AddStoreOperationRequest) returns (AddStoreOperationResponse);
   rpc RemoveStoreOperation(RemoveStoreOperationRequest) returns (RemoveStoreOperationResponse);
+
+  // RaftControl
+  rpc RaftControl(RaftControlRequest) returns (RaftControlResponse);
 }

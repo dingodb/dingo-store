@@ -37,12 +37,13 @@ class RaftNode {
 
   int Init(const std::string& init_conf);
   void Destroy();
-
+  std::string GetRaftGroupName() const;
   butil::Status Commit(std::shared_ptr<Context> ctx, std::shared_ptr<pb::raft::RaftCmdRequest> raft_cmd);
 
   bool IsLeader();
   bool IsLeaderLeaseValid();
   braft::PeerId GetLeaderId();
+  braft::PeerId GetPeerId();
 
   void Shutdown(braft::Closure* done);
   void Join();

@@ -23,6 +23,7 @@
 #include "common/logging.h"
 #include "common/version.h"
 #include "gflags/gflags.h"
+#include "proto/coordinator.pb.h"
 
 DEFINE_string(git_commit_hash, GIT_VERSION, "current git commit version");
 DEFINE_string(git_tag_name, GIT_TAG_NAME, "current dingo version");
@@ -53,6 +54,7 @@ DEFINE_int64(store_id, 0, "store_id");
 DEFINE_int64(region_id, 0, "region_id");
 DEFINE_int64(region_cmd_id, 0, "region_cmd_id");
 DEFINE_string(store_ids, "1001,1002,1003", "store_ids splited by ,");
+DEFINE_int64(index, 0, "index");
 
 void* Sender(void* /*arg*/) {
   // get leader location
@@ -93,6 +95,7 @@ void* Sender(void* /*arg*/) {
     return nullptr;
   }
   dingodb::pb::node::NodeService_Stub node_stub(&channel_node);
+  dingodb::pb::coordinator::CoordinatorService_Stub raft_control_stub(&channel_node);
 
   brpc::Controller cntl;
   cntl.set_timeout_ms(FLAGS_timeout_ms);
@@ -193,6 +196,10 @@ void* Sender(void* /*arg*/) {
     SendGetTableRange(cntl, meta_stub);
   } else if (FLAGS_method == "GetTableMetrics") {
     SendGetTableMetrics(cntl, meta_stub);
+  } else if (FLAGS_method == "RaftAddPeer") {
+    SendRaftAddPeer(cntl, raft_control_stub);
+  } else if (FLAGS_method == "RaftRemovePeer") {
+    SendRaftRemovePeer(cntl, raft_control_stub);
   } else {
     DINGO_LOG(INFO) << " method illegal , exit";
     return nullptr;

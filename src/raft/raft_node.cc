@@ -16,6 +16,7 @@
 
 #include <filesystem>
 #include <memory>
+#include <string>
 #include <utility>
 
 #include "butil/strings/stringprintf.h"
@@ -42,6 +43,8 @@ RaftNode::~RaftNode() {
     fsm_ = nullptr;
   }
 }
+
+std::string RaftNode::GetRaftGroupName() const { return raft_group_name_; }
 
 // init_conf: 127.0.0.1:8201:0,127.0.0.1:8202:0,127.0.0.1:8203:0
 int RaftNode::Init(const std::string& init_conf) {
@@ -106,6 +109,7 @@ bool RaftNode::IsLeader() { return node_->is_leader(); }
 bool RaftNode::IsLeaderLeaseValid() { return node_->is_leader_lease_valid(); }
 
 braft::PeerId RaftNode::GetLeaderId() { return node_->leader_id(); }
+braft::PeerId RaftNode::GetPeerId() { return node_->node_id().peer_id; }
 
 void RaftNode::Shutdown(braft::Closure* done) { node_->shutdown(done); }
 void RaftNode::Join() { node_->join(); }

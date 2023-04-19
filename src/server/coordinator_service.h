@@ -16,14 +16,56 @@
 #define DINGODB_COORDINATOR_SERVICE_H_
 
 #include <memory>
+#include <string>
 
 #include "brpc/controller.h"
 #include "brpc/server.h"
+#include "common/helper.h"
+#include "common/logging.h"
 #include "coordinator/coordinator_control.h"
 #include "engine/engine.h"
 #include "proto/coordinator.pb.h"
+#include "raft/raft_node.h"
 
 namespace dingodb {
+
+class RaftControlClosure : public braft::Closure {
+ public:
+  RaftControlClosure(google::protobuf::RpcController* controller, const pb::coordinator::RaftControlRequest* request,
+                     pb::coordinator::RaftControlResponse* response, google::protobuf::Closure* done,
+                     std::shared_ptr<RaftNode> raft_node)
+      : controller_(controller), request_(request), response_(response), done_(done), raft_node_(raft_node) {}
+
+  ~RaftControlClosure() override = default;
+
+  void Run() override {
+    brpc::Controller* cntl = static_cast<brpc::Controller*>(controller_);
+    uint64_t log_id = 0;
+    if (cntl->has_log_id()) {
+      log_id = cntl->log_id();
+    }
+
+    if (status().ok()) {
+      DINGO_LOG(INFO) << "raft control success, type:" << request_->op_type()
+                      << ", remote_side:" << butil::endpoint2str(cntl->remote_side()) << ", log_id:" << log_id;
+    } else {
+      DINGO_LOG(WARNING) << "raft control failed, type:" << request_->op_type() << ", status:" << status().error_code()
+                         << ":" << status().error_cstr() << ", remote_side:" << butil::endpoint2str(cntl->remote_side())
+                         << ", log_id:" << log_id;
+      response_->mutable_error()->set_errcode(::dingodb::pb::error::Errno::EINTERNAL);
+      response_->set_leader(butil::endpoint2str(raft_node_->GetLeaderId().addr).c_str());
+    }
+    done_->Run();
+    delete this;
+  }
+
+ private:
+  google::protobuf::RpcController* controller_;
+  const pb::coordinator::RaftControlRequest* request_;
+  pb::coordinator::RaftControlResponse* response_;
+  google::protobuf::Closure* done_;
+  std::shared_ptr<RaftNode> raft_node_;
+};
 
 class CoordinatorServiceImpl : public pb::coordinator::CoordinatorService {
   using Errno = pb::error::Errno;
@@ -41,9 +83,32 @@ class CoordinatorServiceImpl : public pb::coordinator::CoordinatorService {
     error_in_response->set_errcode(Errno::ERAFT_NOTLEADER);
   }
 
+  template <typename T>
+  void RedirectResponse(std::shared_ptr<RaftNode> raft_node, T response) {
+    // parse leader raft location from string
+    auto leader_string = raft_node->GetLeaderId().to_string();
+
+    pb::common::Location leader_raft_location;
+    int ret = Helper::PeerIdToLocation(raft_node->GetLeaderId(), leader_raft_location);
+    if (ret < 0) {
+      return;
+    }
+
+    // GetServerLocation
+    pb::common::Location leader_server_location;
+    coordinator_control_->GetServerLocation(leader_raft_location, leader_server_location);
+
+    auto* error_in_response = response->mutable_error();
+    error_in_response->mutable_leader_location()->CopyFrom(leader_server_location);
+    error_in_response->set_errcode(pb::error::Errno::ERAFT_NOTLEADER);
+  }
+
   void SetKvEngine(std::shared_ptr<Engine> engine) { engine_ = engine; };
   void SetControl(std::shared_ptr<CoordinatorControl> coordinator_control) {
     this->coordinator_control_ = coordinator_control;
+  };
+  void SetAutoIncrementControl(std::shared_ptr<CoordinatorControl> autoincrement_control) {
+    this->autoincrement_control_ = autoincrement_control;
   };
 
   void Hello(google::protobuf::RpcController* controller, const pb::coordinator::HelloRequest* request,
@@ -135,8 +200,13 @@ class CoordinatorServiceImpl : public pb::coordinator::CoordinatorService {
                             pb::coordinator::RemoveStoreOperationResponse* response,
                             google::protobuf::Closure* done) override;
 
+  // RaftControl service
+  void RaftControl(google::protobuf::RpcController* controller, const pb::coordinator::RaftControlRequest* request,
+                   pb::coordinator::RaftControlResponse* response, google::protobuf::Closure* done) override;
+
  private:
   std::shared_ptr<CoordinatorControl> coordinator_control_;
+  std::shared_ptr<CoordinatorControl> autoincrement_control_;
   std::shared_ptr<Engine> engine_;
 };
 

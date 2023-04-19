@@ -45,6 +45,7 @@ DECLARE_int64(store_id);
 DECLARE_int64(region_id);
 DECLARE_int64(region_cmd_id);
 DECLARE_string(store_ids);
+DECLARE_int64(index);
 
 std::string MessageToJsonString(const google::protobuf::Message& message) {
   std::string json_string;
@@ -1193,6 +1194,76 @@ void SendRemoveStoreOperation(brpc::Controller& cntl, dingodb::pb::coordinator::
   }
 
   stub.RemoveStoreOperation(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    // bthread_usleep(FLAGS_timeout_ms * 1000L);
+  }
+
+  if (FLAGS_log_each_request) {
+    DINGO_LOG(INFO) << "Received response"
+                    << " request_attachment=" << cntl.request_attachment().size()
+                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+    DINGO_LOG_INFO << response.DebugString();
+  }
+}
+
+void SendRaftAddPeer(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
+  dingodb::pb::coordinator::RaftControlRequest request;
+  dingodb::pb::coordinator::RaftControlResponse response;
+
+  if (!FLAGS_host.empty() && FLAGS_port != 0) {
+    request.set_add_peer(FLAGS_host + ":" + std::to_string(FLAGS_port));
+  } else {
+    DINGO_LOG(ERROR) << "host or port is empty";
+    return;
+  }
+  request.set_op_type(::dingodb::pb::coordinator::RaftControlOp::AddPeer);
+
+  if (FLAGS_index == 0) {
+    request.set_node_index(dingodb::pb::coordinator::RaftControlNodeIndex::CoordinatorNodeIndex);
+  } else if (FLAGS_index == 1) {
+    request.set_node_index(dingodb::pb::coordinator::RaftControlNodeIndex::AutoIncrementNodeIndex);
+  } else {
+    DINGO_LOG(ERROR) << "index is error";
+    return;
+  }
+
+  stub.RaftControl(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    // bthread_usleep(FLAGS_timeout_ms * 1000L);
+  }
+
+  if (FLAGS_log_each_request) {
+    DINGO_LOG(INFO) << "Received response"
+                    << " request_attachment=" << cntl.request_attachment().size()
+                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+    DINGO_LOG_INFO << response.DebugString();
+  }
+}
+
+void SendRaftRemovePeer(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
+  dingodb::pb::coordinator::RaftControlRequest request;
+  dingodb::pb::coordinator::RaftControlResponse response;
+
+  if (!FLAGS_host.empty() && FLAGS_port != 0) {
+    request.set_remove_peer(FLAGS_host + ":" + std::to_string(FLAGS_port));
+  } else {
+    DINGO_LOG(ERROR) << "host or port is empty";
+    return;
+  }
+  request.set_op_type(::dingodb::pb::coordinator::RaftControlOp::RemovePeer);
+
+  if (FLAGS_index == 0) {
+    request.set_node_index(dingodb::pb::coordinator::RaftControlNodeIndex::CoordinatorNodeIndex);
+  } else if (FLAGS_index == 1) {
+    request.set_node_index(dingodb::pb::coordinator::RaftControlNodeIndex::AutoIncrementNodeIndex);
+  } else {
+    DINGO_LOG(ERROR) << "index is error";
+    return;
+  }
+
+  stub.RaftControl(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
     DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
     // bthread_usleep(FLAGS_timeout_ms * 1000L);
