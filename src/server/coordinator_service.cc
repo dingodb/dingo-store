@@ -670,12 +670,24 @@ void CoordinatorServiceImpl::CreateRegion(google::protobuf::RpcController *contr
   pb::common::Range range = request->range();
   uint64_t schema_id = request->schema_id();
   uint64_t table_id = request->table_id();
+  uint64_t split_from_region_id = request->split_from_region_id();
   uint64_t new_region_id = 0;
 
-  auto ret = coordinator_control_->CreateRegion(region_name, resource_tag, replica_num, range, schema_id, table_id,
-                                                new_region_id, meta_increment);
+  pb::error::Errno ret = pb::error::Errno::OK;
+  if (split_from_region_id > 0) {
+    ret = coordinator_control_->CreateRegionForSplit(region_name, resource_tag, replica_num, range, schema_id, table_id,
+                                                     split_from_region_id, new_region_id, meta_increment);
+  } else {
+    ret = coordinator_control_->CreateRegion(region_name, resource_tag, replica_num, range, schema_id, table_id,
+                                             new_region_id, meta_increment);
+  }
   response->mutable_error()->set_errcode(ret);
   response->set_region_id(new_region_id);
+
+  if (ret != pb::error::Errno::OK) {
+    DINGO_LOG(ERROR) << "Create Region Failed, errno=" << ret << " Request:" << request->DebugString();
+    return;
+  }
 
   // if meta_increment is empty, means no need to update meta
   if (meta_increment.ByteSizeLong() == 0) {

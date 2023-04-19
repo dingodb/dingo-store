@@ -362,19 +362,44 @@ pb::error::Errno CoordinatorControl::QueryRegion(uint64_t region_id, pb::common:
   return pb::error::Errno::OK;
 }
 
+pb::error::Errno CoordinatorControl::CreateRegionForSplit(const std::string& region_name,
+                                                          const std::string& resource_tag, int32_t replica_num,
+                                                          pb::common::Range region_range, uint64_t schema_id,
+                                                          uint64_t table_id, uint64_t split_from_region_id,
+                                                          uint64_t& new_region_id,
+                                                          pb::coordinator_internal::MetaIncrement& meta_increment) {
+  std::vector<uint64_t> store_ids;
+
+  pb::common::Region split_from_region;
+  int ret = region_map_.Get(split_from_region_id, split_from_region);
+  if (ret < 0) {
+    DINGO_LOG(INFO) << "CreateRegionForSplit region_id not exists, id=" << split_from_region_id;
+    return pb::error::Errno::EREGION_NOT_FOUND;
+  }
+
+  for (const auto& peer : split_from_region.peers()) {
+    store_ids.push_back(peer.store_id());
+  }
+
+  // create region with split_from_region_id & store_ids
+  return CreateRegion(region_name, resource_tag, replica_num, region_range, schema_id, table_id, store_ids,
+                      split_from_region_id, new_region_id, meta_increment);
+}
+
 pb::error::Errno CoordinatorControl::CreateRegion(const std::string& region_name, const std::string& resource_tag,
                                                   int32_t replica_num, pb::common::Range region_range,
                                                   uint64_t schema_id, uint64_t table_id, uint64_t& new_region_id,
                                                   pb::coordinator_internal::MetaIncrement& meta_increment) {
   std::vector<uint64_t> store_ids;
-  return CreateRegion(region_name, resource_tag, replica_num, region_range, schema_id, table_id, store_ids,
+  return CreateRegion(region_name, resource_tag, replica_num, region_range, schema_id, table_id, store_ids, 0,
                       new_region_id, meta_increment);
 }
 
 pb::error::Errno CoordinatorControl::CreateRegion(const std::string& region_name, const std::string& resource_tag,
                                                   int32_t replica_num, pb::common::Range region_range,
                                                   uint64_t schema_id, uint64_t table_id,
-                                                  std::vector<uint64_t>& store_ids, uint64_t& new_region_id,
+                                                  std::vector<uint64_t>& store_ids, uint64_t split_from_region_id,
+                                                  uint64_t& new_region_id,
                                                   pb::coordinator_internal::MetaIncrement& meta_increment) {
   std::vector<pb::common::Store> stores_for_regions;
   std::vector<pb::common::Store> selected_stores_for_regions;
@@ -492,6 +517,8 @@ pb::error::Errno CoordinatorControl::CreateRegion(const std::string& region_name
     region_cmd->set_region_cmd_type(::dingodb::pb::coordinator::RegionCmdType::CMD_CREATE);
     auto* create_request = region_cmd->mutable_create_request();
     create_request->mutable_region_definition()->CopyFrom(*region_definition);
+    create_request->set_split_from_region_id(
+        split_from_region_id);  // setup split_from_region_id for creating sub region for split
 
     store_operations.push_back(store_operation);
   }
