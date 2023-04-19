@@ -225,6 +225,7 @@ int main(int argc, char *argv[]) {
 
   if (is_coodinator) {
     coordinator_service.SetControl(dingo_server->GetCoordinatorControl());
+    coordinator_service.SetAutoIncrementControl(dingo_server->GetCoordinatorControl());
     meta_service.SetControl(dingo_server->GetCoordinatorControl());
 
     // the Engine should be init success

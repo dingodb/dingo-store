@@ -20,9 +20,11 @@
 #include <string>
 #include <vector>
 
+#include "braft/configuration.h"
 #include "brpc/controller.h"
 #include "butil/containers/flat_map.h"
 #include "common/constant.h"
+#include "common/helper.h"
 #include "common/logging.h"
 #include "coordinator/coordinator_closure.h"
 #include "proto/common.pb.h"
@@ -622,6 +624,10 @@ void CoordinatorServiceImpl::GetCoordinatorMap(google::protobuf::RpcController *
     auto *location = response->add_coordinator_locations();
     location->CopyFrom(member_location);
   }
+
+  // get autoincrement leader location
+  auto *autoincrement_leader_location = response->mutable_leader_location_autoincrement();
+  this->autoincrement_control_->GetLeaderLocation(*autoincrement_leader_location);
 }
 
 // Region services
@@ -1076,6 +1082,95 @@ void CoordinatorServiceImpl::RemoveStoreOperation(google::protobuf::RpcControlle
 
   // this is a async operation will be block by closure
   engine_->MetaPut(ctx, meta_increment);
+}
+
+void CoordinatorServiceImpl::RaftControl(google::protobuf::RpcController *controller,
+                                         const pb::coordinator::RaftControlRequest *request,
+                                         pb::coordinator::RaftControlResponse *response,
+                                         google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+  DINGO_LOG(INFO) << "Receive RaftControl Request:" << request->DebugString();
+
+  brpc::Controller *cntl = static_cast<brpc::Controller *>(controller);
+  uint64_t log_id = 0;
+  if (cntl->has_log_id()) {
+    log_id = cntl->log_id();
+  }
+
+  auto raft_node = this->coordinator_control_->GetRaftNode();
+  if (request->node_index() == pb::coordinator::RaftControlNodeIndex::AutoIncrementNodeIndex) {
+    raft_node = this->autoincrement_control_->GetRaftNode();
+  }
+
+  auto is_leader = raft_node->IsLeader();
+  if (!is_leader) {
+    return RedirectResponse(raft_node, response);
+  }
+
+  switch (request->op_type()) {
+    case pb::coordinator::RaftControlOp::None: {
+      response->mutable_error()->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
+      response->mutable_error()->set_errmsg("op_type is None, for test only");
+      DINGO_LOG(ERROR) << "node:" << raft_node->GetRaftGroupName() << " " << raft_node->GetPeerId().to_string()
+                       << " op_type is None, log_id:" << log_id;
+      return;
+    }
+    case pb::coordinator::RaftControlOp::AddPeer: {
+      // get raft location from add_peer
+      // auto endpoint = Helper::StrToEndPoint(request->add_peer());
+      // auto location = Helper::EndPointToLocation(endpoint);
+
+      // pb::common::Location raft_location;
+      // coordinator_control_->GetRaftLocation(location, raft_location);
+      // if (raft_location.ByteSizeLong() == 0) {
+      //   response->mutable_error()->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
+      //   response->mutable_error()->set_errmsg("add_peer not found, peer is " + request->add_peer());
+      //   DINGO_LOG(ERROR) << "node:" << raft_node->GetRaftGroupName() << " " << raft_node->GetPeerId().to_string()
+      //                    << " location:" << location.DebugString() << "add_peer=" << request->add_peer()
+      //                    << " not found, log_id:" << log_id;
+      //   return;
+      // }
+
+      // braft::PeerId add_peer(Helper::LocationToEndPoint(raft_location));
+
+      DINGO_LOG(INFO) << "AddPeer:" << request->add_peer();
+      braft::PeerId add_peer(Helper::StrToEndPoint(request->add_peer()));
+      RaftControlClosure *add_peer_done =
+          new RaftControlClosure(cntl, request, response, done_guard.release(), raft_node);
+      raft_node->AddPeer(add_peer, add_peer_done);
+      return;
+    }
+    case pb::coordinator::RaftControlOp::RemovePeer: {
+      // get raft location from remove_peer
+      // auto endpoint = Helper::StrToEndPoint(request->remove_peer());
+      // auto location = Helper::EndPointToLocation(endpoint);
+
+      // pb::common::Location raft_location;
+      // coordinator_control_->GetRaftLocation(location, raft_location);
+      // if (raft_location.ByteSizeLong() == 0) {
+      //   response->mutable_error()->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
+      //   response->mutable_error()->set_errmsg("remove_peer not found, peer is " + request->remove_peer());
+      //   DINGO_LOG(ERROR) << "node:" << raft_node->GetRaftGroupName() << " " << raft_node->GetPeerId().to_string()
+      //                    << " location:" << location.DebugString() << "remove_peer=" << request->remove_peer()
+      //                    << " not found, log_id:" << log_id;
+      //   return;
+      // }
+
+      // braft::PeerId remove_peer(Helper::LocationToEndPoint(raft_location));
+
+      DINGO_LOG(INFO) << "RemovePeer:" << request->remove_peer();
+      braft::PeerId remove_peer(Helper::StrToEndPoint(request->remove_peer()));
+      RaftControlClosure *remove_peer_done =
+          new RaftControlClosure(cntl, request, response, done_guard.release(), raft_node);
+      raft_node->RemovePeer(remove_peer, remove_peer_done);
+      return;
+    }
+    default:
+      response->mutable_error()->set_errcode(::dingodb::pb::error::Errno::EOP_NOT_SUPPORTED);
+      DINGO_LOG(ERROR) << "node:" << raft_node->GetRaftGroupName() << " " << raft_node->GetPeerId().to_string()
+                       << " unsupport request type:" << request->op_type() << ", log_id:" << log_id;
+      return;
+  }
 }
 
 }  // namespace dingodb

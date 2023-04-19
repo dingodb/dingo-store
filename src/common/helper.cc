@@ -266,7 +266,7 @@ butil::EndPoint Helper::QueryServerEndpointByRaftEndpoint(std::map<uint64_t, std
                                                           butil::EndPoint endpoint) {
   butil::EndPoint result;
   std::string host(butil::ip2str(endpoint.ip).c_str());
-  for (auto it : stores) {
+  for (const auto& it : stores) {
     if (it.second->raft_location().host() == host && it.second->raft_location().port() == endpoint.port) {
       str2endpoint(it.second->server_location().host().c_str(), it.second->server_location().port(), &result);
     }
@@ -319,6 +319,52 @@ void Helper::GetServerLocation(const pb::common::Location& raft_location, pb::co
                   << response.node_info().server_location().port();
 
   server_location.CopyFrom(response.node_info().server_location());
+}
+
+void Helper::GetRaftLocation(const pb::common::Location& server_location, pb::common::Location& raft_location) {
+  // validate server_location
+  // TODO: how to support ipv6
+  if (server_location.host().length() <= 0 || server_location.port() <= 0) {
+    DINGO_LOG(ERROR) << "GetServiceLocation illegal server_location=" << server_location.host() << ":"
+                     << server_location.port();
+    return;
+  }
+
+  // find in cache
+  auto server_location_string = server_location.host() + ":" + std::to_string(server_location.port());
+
+  // cache miss, use rpc to get remote_node server location, and store in cache
+  braft::PeerId remote_node(server_location_string);
+
+  // rpc
+  brpc::Channel channel;
+  if (channel.Init(remote_node.addr, nullptr) != 0) {
+    DINGO_LOG(ERROR) << "Fail to init channel to " << remote_node;
+    return;
+  }
+
+  pb::node::NodeService_Stub stub(&channel);
+
+  brpc::Controller cntl;
+  cntl.set_timeout_ms(1000L);
+
+  pb::node::GetNodeInfoRequest request;
+  pb::node::GetNodeInfoResponse response;
+
+  std::string key = "Hello";
+  request.set_cluster_id(0);
+  stub.GetNodeInfo(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    return;
+  }
+
+  DINGO_LOG(INFO) << "Received response"
+                  << " cluster_id=" << request.cluster_id() << " latency=" << cntl.latency_us()
+                  << " raft_location=" << response.node_info().raft_location().host() << ":"
+                  << response.node_info().raft_location().port();
+
+  raft_location.CopyFrom(response.node_info().raft_location());
 }
 
 std::string Helper::GenerateRandomString(int length) {

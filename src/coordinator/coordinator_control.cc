@@ -356,6 +356,29 @@ void CoordinatorControl::GetServerLocation(pb::common::Location& raft_location, 
   }
 }
 
+void CoordinatorControl::GetRaftLocation(pb::common::Location& server_location, pb::common::Location& raft_location) {
+  // find in cache
+  auto server_location_string = server_location.host() + ":" + std::to_string(server_location.port());
+  if (coordinator_location_cache_.find(server_location_string) != coordinator_location_cache_.end()) {
+    raft_location.CopyFrom(coordinator_location_cache_[server_location_string]);
+    DINGO_LOG(INFO) << "GetServiceLocation Cache Hit server_location=" << server_location.host() << ":"
+                    << server_location.port();
+    return;
+  }
+
+  Helper::GetServerLocation(server_location, raft_location);
+
+  // add to cache if get raft_location
+  if (raft_location.host().length() > 0 && raft_location.port() > 0) {
+    DINGO_LOG(INFO) << "GetServiceLocation Cache Miss, add new cache server_location=" << server_location.host() << ":"
+                    << server_location.port();
+    coordinator_location_cache_[server_location_string] = raft_location;
+  } else {
+    DINGO_LOG(INFO) << "GetServiceLocation Cache Miss, can't get raft_location, server_location="
+                    << server_location.host() << ":" << server_location.port();
+  }
+}
+
 void CoordinatorControl::GetLeaderLocation(pb::common::Location& leader_server_location) {
   if (raft_node_ == nullptr) {
     DINGO_LOG(ERROR) << "GetLeaderLocation raft_node_ is nullptr";

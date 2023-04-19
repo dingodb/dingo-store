@@ -44,6 +44,7 @@ class MetaControl {
 
   // set raft_node to coordinator_control
   virtual void SetRaftNode(std::shared_ptr<RaftNode> raft_node) = 0;
+  virtual std::shared_ptr<RaftNode> GetRaftNode() = 0;
 
   // on_apply callback
   virtual void ApplyMetaIncrement(pb::coordinator_internal::MetaIncrement &meta_increment, bool id_leader,

@@ -126,7 +126,7 @@ void StoreServiceImpl::Snapshot(google::protobuf::RpcController* controller, con
   }
 }
 
-butil::Status ValidateRegion(uint64_t region_id, const std::vector<std::string_view>& keys) {
+butil::Status ValidateRegion(uint64_t region_id, const std::vector<std::string_view>& /*keys*/) {
   // Todo: use double buffer map replace.
   auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
   auto region = store_region_meta->GetRegion(region_id);

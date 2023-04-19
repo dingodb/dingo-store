@@ -74,6 +74,7 @@ class CoordinatorControl : public MetaControl {
   // in: raft_location
   // out: server_location
   void GetServerLocation(pb::common::Location &raft_location, pb::common::Location &server_location);
+  void GetRaftLocation(pb::common::Location &server_location, pb::common::Location &raft_location);
 
   // query region info
   pb::error::Errno QueryRegion(uint64_t region_id, pb::common::Region &region);
@@ -350,6 +351,7 @@ class CoordinatorControl : public MetaControl {
 
   // set raft_node to coordinator_control
   void SetRaftNode(std::shared_ptr<RaftNode> raft_node) override;  // for raft fsm
+  std::shared_ptr<RaftNode> GetRaftNode() override;                // for raft fsm
 
   // on_apply callback
   void ApplyMetaIncrement(pb::coordinator_internal::MetaIncrement &meta_increment, bool id_leader, uint64_t term,

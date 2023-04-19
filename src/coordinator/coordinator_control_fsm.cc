@@ -23,6 +23,7 @@
 
 #include "braft/configuration.h"
 #include "brpc/channel.h"
+#include "brpc/closure_guard.h"
 #include "butil/scoped_lock.h"
 #include "butil/strings/string_split.h"
 #include "common/constant.h"
@@ -36,12 +37,14 @@
 #include "proto/coordinator_internal.pb.h"
 #include "proto/meta.pb.h"
 #include "proto/node.pb.h"
+#include "raft/raft_node.h"
 
 namespace dingodb {
 
 bool CoordinatorControl::IsLeader() { return leader_term_.load(butil::memory_order_acquire) > 0; }
 void CoordinatorControl::SetLeaderTerm(int64_t term) { leader_term_.store(term, butil::memory_order_release); }
 void CoordinatorControl::SetRaftNode(std::shared_ptr<RaftNode> raft_node) { raft_node_ = raft_node; }
+std::shared_ptr<RaftNode> CoordinatorControl::GetRaftNode() { return raft_node_; }
 
 int CoordinatorControl::GetAppliedTermAndIndex(uint64_t& term, uint64_t& index) {
   id_epoch_map_safe_temp_.GetPresentId(pb::coordinator_internal::IdEpochType::RAFT_APPLY_TERM, term);
@@ -600,6 +603,47 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
   return true;
 }
 
+void LogMetaIncrementSize(pb::coordinator_internal::MetaIncrement& meta_increment) {
+  if (meta_increment.ByteSizeLong() > 0) {
+    DINGO_LOG(INFO) << "meta_increment byte_size=" << meta_increment.ByteSizeLong();
+  } else {
+    return;
+  }
+  if (meta_increment.idepochs_size() > 0) {
+    DINGO_LOG(INFO) << "0.idepochs_size=" << meta_increment.idepochs_size();
+  }
+  if (meta_increment.coordinators_size() > 0) {
+    DINGO_LOG(INFO) << "1.coordinators_size=" << meta_increment.coordinators_size();
+  }
+  if (meta_increment.stores_size() > 0) {
+    DINGO_LOG(INFO) << "2.stores_size=" << meta_increment.stores_size();
+  }
+  if (meta_increment.tables_size() > 0) {
+    DINGO_LOG(INFO) << "3.tables_size=" << meta_increment.tables_size();
+  }
+  if (meta_increment.executors_size() > 0) {
+    DINGO_LOG(INFO) << "4.executors_size=" << meta_increment.executors_size();
+  }
+  if (meta_increment.regions_size() > 0) {
+    DINGO_LOG(INFO) << "5.regions_size=" << meta_increment.regions_size();
+  }
+  if (meta_increment.store_metrics_size() > 0) {
+    DINGO_LOG(INFO) << "6.store_metrics_size=" << meta_increment.store_metrics_size();
+  }
+  if (meta_increment.table_metrics_size() > 0) {
+    DINGO_LOG(INFO) << "7.table_metrics_size=" << meta_increment.table_metrics_size();
+  }
+  if (meta_increment.store_operations_size() > 0) {
+    DINGO_LOG(INFO) << "8.store_operations_size=" << meta_increment.store_operations_size();
+  }
+  if (meta_increment.executor_users_size() > 0) {
+    DINGO_LOG(INFO) << "9.executor_users_size=" << meta_increment.executor_users_size();
+  }
+  if (meta_increment.executor_users_size() > 0) {
+    DINGO_LOG(INFO) << "9.executor_users_size=" << meta_increment.executor_users_size();
+  }
+}
+
 // ApplyMetaIncrement is on_apply callback
 void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrement& meta_increment,
                                             [[maybe_unused]] bool id_leader, uint64_t term, uint64_t index) {
@@ -626,18 +670,7 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
       DINGO_LOG(INFO) << "NORMAL ApplyMetaIncrement index <= applied_index && term <<= applied_term [index=" << index
                       << "][applied_index=" << applied_index << "]"
                       << "[term=" << term << "][applied_term=" << applied_term;
-      DINGO_LOG(INFO) << "meta_increment byte_size=" << meta_increment.ByteSizeLong();
-      DINGO_LOG(INFO) << "0.idepochs_size=" << meta_increment.idepochs_size();
-      DINGO_LOG(INFO) << "1.coordinators_size=" << meta_increment.coordinators_size();
-      DINGO_LOG(INFO) << "2.stores_size=" << meta_increment.stores_size();
-      DINGO_LOG(INFO) << "3.tables_size=" << meta_increment.tables_size();
-      DINGO_LOG(INFO) << "4.executors_size=" << meta_increment.executors_size();
-      DINGO_LOG(INFO) << "5.regions_size=" << meta_increment.regions_size();
-      DINGO_LOG(INFO) << "6.tables_size=" << meta_increment.tables_size();
-      DINGO_LOG(INFO) << "7.store_metrics_size=" << meta_increment.store_metrics_size();
-      DINGO_LOG(INFO) << "8.tables_metrics_size=" << meta_increment.table_metrics_size();
-      DINGO_LOG(INFO) << "9.store_operations_size=" << meta_increment.store_operations_size();
-      DINGO_LOG(INFO) << "10.executor_users_size=" << meta_increment.executor_users_size();
+      LogMetaIncrementSize(meta_increment);
     } else {
       DINGO_LOG(WARNING) << "meta_increment.ByteSizeLong() == 0, just return";
       return;
@@ -1130,18 +1163,7 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
 // SubmitMetaIncrement
 // commit meta increment to raft meta engine, with no closure
 int CoordinatorControl::SubmitMetaIncrement(pb::coordinator_internal::MetaIncrement& meta_increment) {
-  DINGO_LOG(INFO) << "SubmitMetaIncrement meta_increment byte_size=" << meta_increment.ByteSizeLong();
-  DINGO_LOG(INFO) << "SubmitMetaIncrement 0.idepochs_size=" << meta_increment.idepochs_size();
-  DINGO_LOG(INFO) << "SubmitMetaIncrement 1.coordinators_size=" << meta_increment.coordinators_size();
-  DINGO_LOG(INFO) << "SubmitMetaIncrement 2.stores_size=" << meta_increment.stores_size();
-  DINGO_LOG(INFO) << "SubmitMetaIncrement 3.tables_size=" << meta_increment.tables_size();
-  DINGO_LOG(INFO) << "SubmitMetaIncrement 4.executors_size=" << meta_increment.executors_size();
-  DINGO_LOG(INFO) << "SubmitMetaIncrement 5.regions_size=" << meta_increment.regions_size();
-  DINGO_LOG(INFO) << "SubmitMetaIncrement 6.tables_size=" << meta_increment.tables_size();
-  DINGO_LOG(INFO) << "SubmitMetaIncrement 7.store_metrics_size=" << meta_increment.store_metrics_size();
-  DINGO_LOG(INFO) << "SubmitMetaIncrement 8.tables_metrics_size=" << meta_increment.table_metrics_size();
-  DINGO_LOG(INFO) << "SubmitMetaIncrement 9.store_operations_size=" << meta_increment.store_operations_size();
-  DINGO_LOG(INFO) << "SubmitMetaIncrement 10.executor_users_size=" << meta_increment.executor_users_size();
+  LogMetaIncrementSize(meta_increment);
 
   std::shared_ptr<Context> const ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
