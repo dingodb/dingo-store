@@ -77,7 +77,7 @@ public class ServiceOperation {
         }
         int code = -1;
         String message = "";
-        Result result;
+        Result result = null;
         do {
             try {
                 KeyValueCodec codec = routeTable.getCodec();
@@ -101,35 +101,33 @@ public class ServiceOperation {
 
                 List<Common.KeyValue> keyValueList = new ArrayList<>();
                 for (Future<ResultForStore> future : futures) {
+                    ResultForStore resultForStore = null;
                     try {
-                        ResultForStore resultForStore = future.get();
-                        code = resultForStore.getCode();
-                        if (code != 0) {
-                            message = resultForStore.getErrorMessage();
-                            throw new RuntimeException(message);
-                        }
-                        if (resultForStore.getRecords() != null && resultForStore.getRecords().size() > 0) {
-                            keyValueList.addAll(resultForStore.getRecords());
-                        }
-
-                    } catch (InterruptedException | ExecutionException e) {
-                        throw new RuntimeException(e);
+                        resultForStore = future.get();
+                    } catch (DingoClientException | InterruptedException | ExecutionException ex) {
+                        throw new DingoClientException(ex.getMessage());
+                    }
+                    code = resultForStore.getCode();
+                    if (code != 0) {
+                        message = resultForStore.getErrorMessage();
+                        throw new DingoClientException(message);
+                    }
+                    if (resultForStore.getRecords() != null && resultForStore.getRecords().size() > 0) {
+                        keyValueList.addAll(resultForStore.getRecords());
                     }
                 }
                 ResultForStore resultForStore = new ResultForStore(code, message, keyValueList);
                 result = getResult(resultForStore, codec, getTableDefinition(tableName).getColumns());
             } catch (DingoClientException ex) {
-                log.error("Execute operation:{} failed, retry times:{} ", type, retryTimes, ex);
-                result = new Result(code == 0, ex.getMessage());
-            } finally {
                 if (code != 0 && retryTimes > 0) {
                     try {
-                        Thread.sleep(200);
+                        Thread.sleep(1000);
                     } catch (InterruptedException e) {
                         e.printStackTrace();
                     }
                     routeTable = getAndRefreshRouteTable(tableName, true);
                 }
+                log.error("Operation: {} execution failed, refreshing routing table, retry times:{} ", type, retryTimes, ex);
             }
         } while (code != 0 && --retryTimes > 0);
 
