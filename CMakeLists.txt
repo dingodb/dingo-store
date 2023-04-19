@@ -220,8 +220,8 @@ execute_process(
 )
 
 execute_process(
-    COMMAND git describe --tags --abbrev=0
-    OUTPUT_VARIABLE GIT_TAG
+    COMMAND git describe --abbrev=0 --tags --always
+    OUTPUT_VARIABLE GIT_TAG_NAME
     OUTPUT_STRIP_TRAILING_WHITESPACE
 )
 
