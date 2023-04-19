@@ -761,6 +761,7 @@ void SendCreateRegionForSplit(brpc::Controller& cntl, dingodb::pb::coordinator::
   for (auto it : new_region_store_ids) {
     request.add_store_ids(it);
   }
+  request.set_split_from_region_id(region_id_split);  // set split from region id
 
   cntl.Reset();
   stub.CreateRegion(&cntl, &request, &response, nullptr);

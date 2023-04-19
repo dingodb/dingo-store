@@ -24,6 +24,8 @@ option cc_generic_services = true;
 
 message CreateRequest {
   dingodb.pb.common.RegionDefinition region_definition = 1;  // region definition
+  uint64 split_from_region_id = 2;  // this is a sub-region, its state need to be STANDBY, will split from region id, if
+                                    // this value is 0, means this is a normal new region
 }
 
 message DeleteRequest {
@@ -351,9 +353,10 @@ message CreateRegionRequest {
   string resource_tag = 2;
   uint64 replica_num = 3;
   dingodb.pb.common.Range range = 4;
-  uint64 schema_id = 5;           // optional
-  uint64 table_id = 6;            // optional
-  repeated uint64 store_ids = 7;  // optional if not set, will create choose from all stores
+  uint64 schema_id = 5;             // optional
+  uint64 table_id = 6;              // optional
+  repeated uint64 store_ids = 7;    // optional if not set, will create choose from all stores
+  uint64 split_from_region_id = 8;  // optional, if set, will split from this region
 }
 
 message CreateRegionResponse {
