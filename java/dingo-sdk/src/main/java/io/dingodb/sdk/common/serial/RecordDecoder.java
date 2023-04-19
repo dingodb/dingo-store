@@ -32,7 +32,6 @@ public class RecordDecoder {
         this.schemaVersion = schemaVersion;
         this.schemas = schemas;
         this.commonId = commonId;
-        Utils.sortSchema(this.schemas);
     }
 
     public Object[] decode(KeyValue keyValue) {
