@@ -30,6 +30,7 @@
     <modules>
         <module>dingo-sdk</module>
         <module>dingo-java-sdk-example</module>
+        <module>dingo-mysql-init</module>
     </modules>
     <packaging>pom</packaging>
 
