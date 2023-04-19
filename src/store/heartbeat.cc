@@ -217,6 +217,10 @@ void CoordinatorPushTask::SendCoordinatorPushToStore(std::shared_ptr<Coordinator
       request.mutable_store_operation()->CopyFrom(store_operation);
 
       // send rpcs
+      if (!it.has_server_location()) {
+        DINGO_LOG(ERROR) << "SendCoordinatorPushToStore... store " << it.id() << " has no server_location";
+        continue;
+      }
       auto status = Heartbeat::RpcSendPushStoreOperation(it.server_location(), request, response);
 
       // check response
@@ -269,6 +273,7 @@ void CoordinatorPushTask::SendCoordinatorPushToStore(std::shared_ptr<Coordinator
               DINGO_LOG(ERROR) << "SendCoordinatorPushToStore... send store_operation to store_id=" << it.id()
                                << " region_cmd_id=" << it_cmd.region_cmd_id() << " result=" << it_cmd.error().errcode()
                                << " failed, but no leader_location in response";
+              continue;  // will retry next time
             }
 
             auto status = Heartbeat::RpcSendPushStoreOperation(response.error().leader_location(), request, response);
