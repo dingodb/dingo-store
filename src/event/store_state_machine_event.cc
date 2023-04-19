@@ -28,7 +28,7 @@ void SmApplyEventListener::OnEvent(std::shared_ptr<Event> event) {
   for (const auto& req : the_event->raft_cmd->requests()) {
     auto handler = handler_collection_->GetHandler(static_cast<HandlerType>(req.cmd_type()));
     if (handler) {
-      handler->Handle(ctx, the_event->engine, req);
+      handler->Handle(ctx, the_event->region, the_event->engine, req);
     } else {
       DINGO_LOG(ERROR) << "Unknown raft cmd type " << req.cmd_type();
     }

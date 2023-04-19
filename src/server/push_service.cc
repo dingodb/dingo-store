@@ -24,6 +24,7 @@
 #include "proto/coordinator.pb.h"
 #include "proto/push.pb.h"
 #include "server/server.h"
+#include "server/service_helper.h"
 #include "store/heartbeat.h"
 #include "store/region_controller.h"
 
@@ -37,7 +38,7 @@ void PushServiceImpl::PushHeartbeat(google::protobuf::RpcController* controller,
                                     google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard const done_guard(done);
-  DINGO_LOG(DEBUG) << "PushHeartbeat request: " << request->ShortDebugString();
+  // DINGO_LOG(DEBUG) << "PushHeartbeat request: " << request->ShortDebugString();
 
   // call HandleStoreHeartbeatResponse
   const auto& heartbeat_response = request->heartbeat_response();
@@ -56,6 +57,24 @@ void PushServiceImpl::PushStoreOperation(google::protobuf::RpcController* contro
   if (request->store_operation().id() != Server::GetInstance()->Id()) {
     return;
   }
+
+  auto error_func = [response](uint64_t command_id, ::dingodb::pb::coordinator::RegionCmdType region_cmd_type,
+                               butil::Status status) {
+    auto* result = response->add_region_cmd_results();
+    result->set_region_cmd_id(command_id);
+    result->set_region_cmd_type(region_cmd_type);
+
+    if (!status.ok()) {
+      auto* mut_err = result->mutable_error();
+      mut_err->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
+      if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+        mut_err->set_errmsg("Not leader, please redirect leader.");
+        ServiceHelper::RedirectLeader(status.error_str(), result);
+      } else {
+        mut_err->set_errmsg(status.error_str());
+      }
+    }
+  };
 
   auto region_controller = Server::GetInstance()->GetRegionController();
   for (const auto& command : request->store_operation().region_cmds()) {
@@ -80,17 +99,6 @@ void PushServiceImpl::PushStoreOperation(google::protobuf::RpcController* contro
       default:
         DINGO_LOG(ERROR) << "Unknown command type: " << command.region_cmd_type();
     }
-
-    auto error_func = [response](uint64_t command_id, ::dingodb::pb::coordinator::RegionCmdType region_cmd_type,
-                                 butil::Status status) {
-      auto* result = response->add_region_cmd_results();
-      result->set_region_cmd_id(command_id);
-      result->set_region_cmd_type(region_cmd_type);
-      auto* mut_err = result->mutable_error();
-      mut_err->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
-      mut_err->set_errmsg(status.error_str());
-    };
-
     if (!status.ok()) {
       error_func(command.id(), command.region_cmd_type(), status);
       continue;

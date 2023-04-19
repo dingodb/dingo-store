@@ -28,6 +28,7 @@ struct SmApplyEvent : public Event {
   SmApplyEvent() : Event(EventSource::kRaftStateMachine, EventType::kSmApply) {}
   ~SmApplyEvent() override = default;
 
+  std::shared_ptr<pb::store_internal::Region> region;
   std::shared_ptr<RawEngine> engine;
   braft::Closure* done;
   std::shared_ptr<pb::raft::RaftCmdRequest> raft_cmd;

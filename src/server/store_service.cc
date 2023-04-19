@@ -29,37 +29,14 @@
 #include "proto/coordinator.pb.h"
 #include "proto/error.pb.h"
 #include "proto/store.pb.h"
-#include "server.h"
 #include "server/server.h"
+#include "server/service_helper.h"
 
 using dingodb::pb::error::Errno;
 
 namespace dingodb {
 
 StoreServiceImpl::StoreServiceImpl() = default;
-
-// Set error response leader location.
-// Priority from local storemap query, and then from remote node query.
-template <typename T>
-void RedirectLeader(std::string addr, T* response) {
-  DINGO_LOG(INFO) << "Redirect leader " << addr;
-  auto raft_endpoint = Helper::StrToEndPoint(addr);
-  if (raft_endpoint.port == 0) return;
-
-  // From local store map query.
-  butil::EndPoint server_endpoint = Helper::QueryServerEndpointByRaftEndpoint(
-      Server::GetInstance()->GetStoreMetaManager()->GetStoreServerMeta()->GetAllStore(), raft_endpoint);
-  if (server_endpoint.port == 0) {
-    // From remote node query.
-    pb::common::Location server_location;
-    Helper::GetServerLocation(Helper::EndPointToLocation(raft_endpoint), server_location);
-    if (server_location.port() > 0) {
-      server_endpoint = Helper::LocationToEndPoint(server_location);
-    }
-  }
-
-  Helper::SetPbMessageErrorLeader(server_endpoint, response);
-}
 
 void StoreServiceImpl::AddRegion(google::protobuf::RpcController* controller,
                                  const dingodb::pb::store::AddRegionRequest* request,
@@ -70,6 +47,7 @@ void StoreServiceImpl::AddRegion(google::protobuf::RpcController* controller,
   auto region_controller = Server::GetInstance()->GetRegionController();
 
   auto command = std::make_shared<pb::coordinator::RegionCmd>();
+  command->set_id(Helper::Timestamp());
   command->set_region_id(request->region().id());
   command->set_region_cmd_type(pb::coordinator::CMD_CREATE);
   command->mutable_create_request()->mutable_region_definition()->CopyFrom(request->region());
@@ -91,6 +69,7 @@ void StoreServiceImpl::ChangeRegion(google::protobuf::RpcController* controller,
   auto region_controller = Server::GetInstance()->GetRegionController();
 
   auto command = std::make_shared<pb::coordinator::RegionCmd>();
+  command->set_id(Helper::Timestamp());
   command->set_region_id(request->region().id());
   command->set_region_cmd_type(pb::coordinator::CMD_CHANGE_PEER);
   command->mutable_change_peer_request()->mutable_region_definition()->CopyFrom(request->region());
@@ -114,6 +93,7 @@ void StoreServiceImpl::DestroyRegion(google::protobuf::RpcController* controller
   auto region_controller = Server::GetInstance()->GetRegionController();
 
   auto command = std::make_shared<pb::coordinator::RegionCmd>();
+  command->set_id(Helper::Timestamp());
   command->set_region_id(request->region_id());
   command->set_region_cmd_type(pb::coordinator::CMD_DELETE);
   command->mutable_delete_request()->set_region_id(request->region_id());
@@ -134,6 +114,7 @@ void StoreServiceImpl::Snapshot(google::protobuf::RpcController* controller, con
   auto region_controller = Server::GetInstance()->GetRegionController();
 
   auto command = std::make_shared<pb::coordinator::RegionCmd>();
+  command->set_id(Helper::Timestamp());
   command->set_region_id(request->region_id());
   command->set_region_cmd_type(pb::coordinator::CMD_SNAPSHOT);
 
@@ -216,7 +197,7 @@ void StoreServiceImpl::KvGet(google::protobuf::RpcController* controller,
     err->set_errmsg(status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       err->set_errmsg("Not leader, please redirect leader.");
-      RedirectLeader(status.error_str(), response);
+      ServiceHelper::RedirectLeader(status.error_str(), response);
     }
     return;
   }
@@ -269,7 +250,7 @@ void StoreServiceImpl::KvBatchGet(google::protobuf::RpcController* controller,
     err->set_errmsg(status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       err->set_errmsg("Not leader, please redirect leader.");
-      RedirectLeader(status.error_str(), response);
+      ServiceHelper::RedirectLeader(status.error_str(), response);
     }
     return;
   }
@@ -317,7 +298,7 @@ void StoreServiceImpl::KvPut(google::protobuf::RpcController* controller,
     err->set_errmsg(status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       err->set_errmsg("Not leader, please redirect leader.");
-      RedirectLeader(status.error_str(), response);
+      ServiceHelper::RedirectLeader(status.error_str(), response);
     }
     brpc::ClosureGuard done_guard(done);
   }
@@ -365,7 +346,7 @@ void StoreServiceImpl::KvBatchPut(google::protobuf::RpcController* controller,
     err->set_errmsg(status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       err->set_errmsg("Not leader, please redirect leader.");
-      RedirectLeader(status.error_str(), response);
+      ServiceHelper::RedirectLeader(status.error_str(), response);
     }
     brpc::ClosureGuard done_guard(done);
   }
@@ -411,7 +392,7 @@ void StoreServiceImpl::KvPutIfAbsent(google::protobuf::RpcController* controller
     err->set_errmsg(status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       err->set_errmsg("Not leader, please redirect leader.");
-      RedirectLeader(status.error_str(), response);
+      ServiceHelper::RedirectLeader(status.error_str(), response);
     }
     brpc::ClosureGuard done_guard(done);
   }
@@ -461,7 +442,7 @@ void StoreServiceImpl::KvBatchPutIfAbsent(google::protobuf::RpcController* contr
     err->set_errmsg(status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       err->set_errmsg("Not leader, please redirect leader.");
-      RedirectLeader(status.error_str(), response);
+      ServiceHelper::RedirectLeader(status.error_str(), response);
     }
     brpc::ClosureGuard const done_guard(done);
   }
@@ -509,7 +490,7 @@ void StoreServiceImpl::KvBatchDelete(google::protobuf::RpcController* controller
     err->set_errmsg(status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       err->set_errmsg("Not leader, please redirect leader.");
-      RedirectLeader(status.error_str(), response);
+      ServiceHelper::RedirectLeader(status.error_str(), response);
     }
     brpc::ClosureGuard const done_guard(done);
   }
@@ -641,7 +622,7 @@ void StoreServiceImpl::KvDeleteRange(google::protobuf::RpcController* controller
     err->set_errmsg(status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       err->set_errmsg("Not leader, please redirect leader.");
-      RedirectLeader(status.error_str(), response);
+      ServiceHelper::RedirectLeader(status.error_str(), response);
     }
     brpc::ClosureGuard const done_guard(done);
   }
@@ -700,7 +681,7 @@ void StoreServiceImpl::KvScanBegin(google::protobuf::RpcController* controller,
     err->set_errmsg(status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       err->set_errmsg("Not leader, please redirect leader.");
-      RedirectLeader(status.error_str(), response);
+      ServiceHelper::RedirectLeader(status.error_str(), response);
     }
     return;
   }
@@ -756,7 +737,7 @@ void StoreServiceImpl::KvScanContinue(google::protobuf::RpcController* controlle
     err->set_errmsg(status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       err->set_errmsg("Not leader, please redirect leader.");
-      RedirectLeader(status.error_str(), response);
+      ServiceHelper::RedirectLeader(status.error_str(), response);
     }
     return;
   }
@@ -806,7 +787,7 @@ void StoreServiceImpl::KvScanRelease(google::protobuf::RpcController* controller
     err->set_errmsg(status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       err->set_errmsg("Not leader, please redirect leader.");
-      RedirectLeader(status.error_str(), response);
+      ServiceHelper::RedirectLeader(status.error_str(), response);
     }
     return;
   }
