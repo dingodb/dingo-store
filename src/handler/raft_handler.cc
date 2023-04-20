@@ -131,10 +131,12 @@ void DeleteRangeHandler::Handle(std::shared_ptr<Context> ctx, std::shared_ptr<pb
   auto writer = engine->NewWriter(request.cf_name());
   uint64_t delete_count = 0;
   if (1 == request.ranges().size()) {
+    uint64_t internal_delete_count = 0;
     status = reader->KvCount(request.ranges()[0], &delete_count);
     if (status.ok() && 0 != delete_count) {
       status = writer->KvDeleteRange(request.ranges()[0]);
     }
+    delete_count = internal_delete_count;
   } else {
     auto snapshot = engine->GetSnapshot();
     for (const auto &range : request.ranges()) {
@@ -233,6 +235,9 @@ void SplitHandler::SplitClosure::Run() {
   auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
 
   store_region_meta->UpdateState(region_, pb::common::StoreRegionState::NORMAL);
+  if (!is_child_) {
+    Heartbeat::TriggerStoreHeartbeat(nullptr);
+  }
 }
 
 void SplitHandler::Handle(std::shared_ptr<Context>, std::shared_ptr<pb::store_internal::Region> from_region,
@@ -279,6 +284,7 @@ void SplitHandler::Handle(std::shared_ptr<Context>, std::shared_ptr<pb::store_in
   std::shared_ptr<Context> to_ctx = std::make_shared<Context>();
   to_ctx->SetDone(new SplitHandler::SplitClosure(to_region, true));
   engine->DoSnapshot(to_ctx, to_region->id());
+  Heartbeat::TriggerStoreHeartbeat(nullptr);
 }
 
 std::shared_ptr<HandlerCollection> RaftApplyHandlerFactory::Build() {

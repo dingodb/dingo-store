@@ -126,7 +126,18 @@ class Helper {
   // Create hard link
   static bool Link(const std::string& old_path, const std::string& new_path);
 
+  // millisecond timestamp
+  static uint64_t TimestampMs();
+  // second timestamp
   static uint64_t Timestamp();
+
+  // format millisecond timestamp
+  static std::string FormatMsTime(uint64_t timestamp, const std::string& format);
+  // format second timestamp
+  static std::string FormatTime(uint64_t timestamp, const std::string& format);
+
+  // format: "2021-01-01T00:00:00.000Z"
+  static std::string GetNowFormatMsTime();
 
   // end key of all table
   // We are based on this assumption. In general, it is rare to see all 0xFF

@@ -241,7 +241,7 @@ std::map<std::string, std::string> GenDataset(int n) {
   return dataset;
 }
 
-void TestBatchPutGet(uint64_t region_id, int num) {
+void BatchPutGet(uint64_t region_id, int num) {
   std::vector<std::string> addrs;
   butil::SplitString(FLAGS_addrs, ',', &addrs);
 
@@ -279,6 +279,53 @@ void TestBatchPutGet(uint64_t region_id, int num) {
 
   sum = std::accumulate(latencys.begin(), latencys.end(), static_cast<int64_t>(0));
   DINGO_LOG(INFO) << "Get average latency: " << sum / latencys.size() << " us";
+}
+
+struct BatchPutGetParam {
+  uint64_t region_id;
+  int32_t req_num;
+  int32_t thread_no;
+
+  std::map<std::string, std::shared_ptr<dingodb::pb::store::StoreService_Stub>> stubs;
+};
+
+void* BatchPutGetRoutine(void* arg) {
+  std::unique_ptr<BatchPutGetParam> param(static_cast<BatchPutGetParam*>(arg));
+
+  DINGO_LOG(INFO) << "========thread: " << param->thread_no;
+  BatchPutGet(param->region_id, param->req_num);
+
+  return nullptr;
+}
+
+void TestBatchPutGet(uint64_t region_id, int req_num) {
+  int count = 0;
+  std::vector<std::string> addrs;
+  butil::SplitString(FLAGS_addrs, ',', &addrs);
+
+  std::map<std::string, std::shared_ptr<dingodb::pb::store::StoreService_Stub>> stubs;
+  for (auto& addr : addrs) {
+    stubs.insert({addr, GenStoreServiceStub(addr)});
+  }
+
+  std::vector<bthread_t> tids;
+  tids.resize(FLAGS_thread_num);
+  for (int i = 0; i < FLAGS_thread_num; ++i) {
+    BatchPutGetParam* param = new BatchPutGetParam;
+    param->req_num = req_num;
+    param->region_id = region_id;
+    param->thread_no = i;
+    param->stubs = stubs;
+
+    if (bthread_start_background(&tids[i], nullptr, BatchPutGetRoutine, param) != 0) {
+      DINGO_LOG(ERROR) << "Fail to create bthread";
+      continue;
+    }
+  }
+
+  for (int i = 0; i < FLAGS_thread_num; ++i) {
+    bthread_join(tids[i], nullptr);
+  }
 }
 
 std::string SendKvBatchPut(std::shared_ptr<dingodb::pb::store::StoreService_Stub> stub) {
@@ -558,7 +605,7 @@ void SendCreateTable(std::shared_ptr<dingodb::pb::meta::MetaService_Stub> stub) 
 
   // string name = 1;
   auto* table_definition = request.mutable_table_definition();
-  table_definition->set_name("zihui_table_" + std::to_string(dingodb::Helper::Timestamp()));
+  table_definition->set_name("zihui_table_" + std::to_string(dingodb::Helper::TimestampMs()));
   // repeated ColumnDefinition columns = 2;
   for (int i = 0; i < 3; i++) {
     auto* column = table_definition->add_columns();
@@ -662,7 +709,7 @@ void* OperationRegionRoutine(void* arg) {
     bthread_usleep(3 * 1000 * 1000L);
     DINGO_LOG(INFO) << "======Put region " << region_id;
     // Put/Get
-    TestBatchPutGet(region_id, FLAGS_req_num);
+    BatchPutGet(region_id, FLAGS_req_num);
 
     bthread_usleep(3 * 1000 * 1000L);
 
@@ -714,6 +761,7 @@ void TestRegionLifecycle() {
 
 void* Sender(void*) {
   for (int i = 0; i < FLAGS_round_num; ++i) {
+    DINGO_LOG(INFO) << "=====Round: " << i;
     auto store_stub = GenStoreServiceStub(FLAGS_addr);
 
     if (FLAGS_method == "AddRegion") {

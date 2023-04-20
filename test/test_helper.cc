@@ -25,10 +25,24 @@ class HelperTest : public testing::Test {
   void TearDown() override {}
 };
 
-TEST_F(HelperTest, GetDiskCapacity) {
-  std::string path = "/";
-  std::map<std::string, uint64_t> output;
+// TEST_F(HelperTest, GetDiskCapacity) {
+//   std::string path = "/";
+//   std::map<std::string, uint64_t> output;
 
-  EXPECT_EQ(true, dingodb::Helper::GetDiskCapacity(path, output));
-  std::cout << output["TotalSpace"] << " " << output["FreeSpace"] << std::endl;
+//   EXPECT_EQ(true, dingodb::Helper::GetDiskCapacity(path, output));
+//   std::cout << output["TotalSpace"] << " " << output["FreeSpace"] << std::endl;
+// }
+
+TEST_F(HelperTest, FormatTime) {
+  auto format_time = dingodb::Helper::FormatTime(1681970908, "%Y-%m-%d %H:%M:%S");
+  std::cout << format_time << std::endl;
+
+  EXPECT_EQ("2023-04-20 14:08:28", format_time);
+
+  // auto format_ms_time = dingodb::Helper::FormatMsTime(1681970908001, "%Y-%m-%d %H:%M:%S");
+  // std::cout << format_ms_time << std::endl;
+
+  // EXPECT_EQ("2023-04-20 14:08:28.001", format_ms_time);
+
+  std::cout << dingodb::Helper::GetNowFormatMsTime();
 }

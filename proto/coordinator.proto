@@ -62,6 +62,7 @@ enum RegionCmdType {
 enum RegionCmdStatus {
   STATUS_NONE = 0;
   STATUS_DONE = 1;
+  STATUS_FAIL = 2;
 }
 
 // RegionCmd

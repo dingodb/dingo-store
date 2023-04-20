@@ -75,7 +75,7 @@ butil::Status CreateRegionTask::CreateRegion(std::shared_ptr<Context> ctx,
     store_region_meta->UpdateState(region, pb::common::StoreRegionState::NORMAL);
   } else {
     // Todo: STANDBY
-    store_region_meta->UpdateState(region, pb::common::StoreRegionState::STANDBY);
+    store_region_meta->UpdateState(region, pb::common::StoreRegionState::NORMAL);
   }
 
   // Add region metrics

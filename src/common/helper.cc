@@ -14,11 +14,13 @@
 
 #include "common/helper.h"
 
+#include <bits/chrono.h>
 #include <sys/statvfs.h>
 #include <unistd.h>
 
 #include <chrono>
 #include <cstdint>
+#include <iomanip>
 #include <regex>
 
 #include "brpc/channel.h"
@@ -390,9 +392,43 @@ bool Helper::Link(const std::string& old_path, const std::string& new_path) {
   return ::link(old_path.c_str(), new_path.c_str()) == 0;
 }
 
-uint64_t Helper::Timestamp() {
+uint64_t Helper::TimestampMs() {
   return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
       .count();
+}
+
+uint64_t Helper::Timestamp() {
+  return std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+}
+
+std::string Helper::FormatMsTime(uint64_t timestamp, const std::string& format) {
+  std::chrono::time_point<std::chrono::system_clock, std::chrono::milliseconds> tp(
+      (std::chrono::milliseconds(timestamp)));
+
+  auto in_time_t = std::chrono::system_clock::to_time_t(tp);
+  std::stringstream ss;
+  ss << std::put_time(std::localtime(&in_time_t), format.c_str()) << "." << timestamp % 1000;
+  return ss.str();
+}
+
+std::string Helper::FormatTime(uint64_t timestamp, const std::string& format) {
+  std::chrono::time_point<std::chrono::system_clock, std::chrono::seconds> tp((std::chrono::seconds(timestamp)));
+
+  auto in_time_t = std::chrono::system_clock::to_time_t(tp);
+  std::stringstream ss;
+  ss << std::put_time(std::localtime(&in_time_t), format.c_str());
+  return ss.str();
+}
+
+std::string Helper::GetNowFormatMsTime() {
+  uint64_t timestamp = TimestampMs();
+  std::chrono::time_point<std::chrono::system_clock, std::chrono::milliseconds> tp(
+      (std::chrono::milliseconds(timestamp)));
+
+  auto in_time_t = std::chrono::system_clock::to_time_t(tp);
+  std::stringstream ss;
+  ss << std::put_time(std::localtime(&in_time_t), "%Y-%m-%dT%H:%M:%S.000Z");
+  return ss.str();
 }
 
 // end key of all table
