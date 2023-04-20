@@ -39,6 +39,7 @@ enum RawEngine { RAW_ENG_ROCKSDB = 0; };
 message Location {
   string host = 1;
   int32 port = 2;
+  int32 index = 3;  // corresponding braft peerId idx
 }
 
 message Range {

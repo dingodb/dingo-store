@@ -50,6 +50,7 @@ class StoreClosure : public braft::Closure {
 class StoreStateMachine : public braft::StateMachine {
  public:
   explicit StoreStateMachine(std::shared_ptr<RawEngine> engine, std::shared_ptr<pb::store_internal::Region> region,
+                             std::shared_ptr<pb::store_internal::RaftMeta> raft_meta,
                              std::shared_ptr<EventListenerCollection> listeners);
   ~StoreStateMachine() override = default;
 

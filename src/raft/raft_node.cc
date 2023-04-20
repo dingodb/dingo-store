@@ -29,10 +29,9 @@
 
 namespace dingodb {
 
-RaftNode::RaftNode(pb::common::ClusterRole role, uint64_t node_id, const std::string& raft_group_name,
-                   braft::PeerId peer_id, braft::StateMachine* fsm)
-    : role_(role),
-      node_id_(node_id),
+RaftNode::RaftNode(uint64_t node_id, const std::string& raft_group_name, braft::PeerId peer_id,
+                   braft::StateMachine* fsm)
+    : node_id_(node_id),
       raft_group_name_(raft_group_name),
       node_(new braft::Node(raft_group_name, peer_id)),
       fsm_(fsm) {}
@@ -47,15 +46,13 @@ RaftNode::~RaftNode() {
 std::string RaftNode::GetRaftGroupName() const { return raft_group_name_; }
 
 // init_conf: 127.0.0.1:8201:0,127.0.0.1:8202:0,127.0.0.1:8203:0
-int RaftNode::Init(const std::string& init_conf) {
+int RaftNode::Init(const std::string& init_conf, std::shared_ptr<Config> config) {
   DINGO_LOG(INFO) << "raft init node_id: " << node_id_ << " init_conf: " << init_conf;
   braft::NodeOptions node_options;
   if (node_options.initial_conf.parse_from(init_conf) != 0) {
     DINGO_LOG(ERROR) << "Fail to parse configuration";
     return -1;
   }
-
-  auto config = ConfigManager::GetInstance()->GetConfig(role_);
 
   node_options.election_timeout_ms = config->GetInt("raft.electionTimeout");
   node_options.fsm = fsm_;
@@ -124,7 +121,7 @@ void RaftNode::ChangePeers(const std::vector<pb::common::Peer>& peers, braft::Cl
   braft::Configuration config;
   for (const auto& peer : peers) {
     butil::EndPoint const endpoint = Helper::LocationToEndPoint(peer.raft_location());
-    config.add_peer(braft::PeerId(endpoint));
+    config.add_peer(braft::PeerId(endpoint, peer.raft_location().index()));
   }
 
   node_->change_peers(config, done);

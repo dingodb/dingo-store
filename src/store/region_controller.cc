@@ -62,9 +62,13 @@ butil::Status CreateRegionTask::CreateRegion(std::shared_ptr<Context> ctx,
   DINGO_LOG(DEBUG) << butil::StringPrintf("Create region %lu add raft node", region->id());
   auto engine = Server::GetInstance()->GetEngine();
   if (engine->GetID() == pb::common::ENG_RAFT_STORE) {
-    auto raft_kv_engine = std::dynamic_pointer_cast<RaftKvEngine>(engine);
+    auto raft_meta = StoreRaftMeta::NewRaftMeta(region->id());
+    Server::GetInstance()->GetStoreMetaManager()->GetStoreRaftMeta()->AddRaftMeta(raft_meta);
+
     auto listener_factory = std::make_shared<StoreSmEventListenerFactory>();
-    status = raft_kv_engine->AddNode(ctx, region, listener_factory->Build());
+
+    auto raft_kv_engine = std::dynamic_pointer_cast<RaftKvEngine>(engine);
+    status = raft_kv_engine->AddNode(ctx, region, raft_meta, listener_factory->Build());
     if (!status.ok()) {
       return status;
     }
@@ -267,6 +271,19 @@ butil::Status ChangeRegionTask::ValidateChangeRegion(std::shared_ptr<StoreMetaMa
 
   if (region->state() != pb::common::StoreRegionState::NORMAL) {
     return butil::Status(pb::error::EREGION_STATE, "Region state not allow change.");
+  }
+
+  auto engine = Server::GetInstance()->GetEngine();
+  if (engine->GetID() == pb::common::ENG_RAFT_STORE) {
+    auto raft_kv_engine = std::dynamic_pointer_cast<RaftKvEngine>(engine);
+    auto node = raft_kv_engine->GetNode(region_definition.id());
+    if (node == nullptr) {
+      return butil::Status(pb::error::ERAFT_NOTNODE, "No found raft node.");
+    }
+
+    if (!node->IsLeader()) {
+      return butil::Status(pb::error::ERAFT_NOTLEADER, node->GetLeaderId().to_string());
+    }
   }
 
   return butil::Status();

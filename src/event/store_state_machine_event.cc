@@ -55,21 +55,27 @@ void SmLeaderStartEventListener::OnEvent(std::shared_ptr<Event> event) {
   auto the_event = std::dynamic_pointer_cast<SmLeaderStartEvent>(event);
 
   // Update region meta
-  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
-  if (store_region_meta) {
-    store_region_meta->UpdateLeaderId(the_event->node_id, Server::GetInstance()->Id());
-  }
+  auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
+  if (store_meta_manager != nullptr) {
+    auto store_region_meta = store_meta_manager->GetStoreRegionMeta();
+    if (store_region_meta) {
+      store_region_meta->UpdateLeaderId(the_event->node_id, Server::GetInstance()->Id());
+    }
 
-  // trigger heartbeat
-  Heartbeat::TriggerStoreHeartbeat(nullptr);
+    // trigger heartbeat
+    Heartbeat::TriggerStoreHeartbeat(nullptr);
+  }
 }
 
 void SmStartFollowingEventListener::OnEvent(std::shared_ptr<Event> event) {
   auto the_event = std::dynamic_pointer_cast<SmStartFollowingEvent>(event);
   // Update region meta
-  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
-  if (store_region_meta) {
-    store_region_meta->UpdateLeaderId(the_event->node_id, 0);
+  auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
+  if (store_meta_manager != nullptr) {
+    auto store_region_meta = store_meta_manager->GetStoreRegionMeta();
+    if (store_region_meta) {
+      store_region_meta->UpdateLeaderId(the_event->node_id, 0);
+    }
   }
 }
 

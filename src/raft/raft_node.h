@@ -22,6 +22,7 @@
 #include <string>
 
 #include "common/context.h"
+#include "config/config.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "proto/raft.pb.h"
@@ -31,11 +32,10 @@ namespace dingodb {
 // Encapsulation braft node
 class RaftNode {
  public:
-  RaftNode(pb::common::ClusterRole role, uint64_t node_id, const std::string& raft_group_name, braft::PeerId peer_id,
-           braft::StateMachine* fsm);
+  RaftNode(uint64_t node_id, const std::string& raft_group_name, braft::PeerId peer_id, braft::StateMachine* fsm);
   ~RaftNode();
 
-  int Init(const std::string& init_conf);
+  int Init(const std::string& init_conf, std::shared_ptr<Config> config);
   void Destroy();
   std::string GetRaftGroupName() const;
   butil::Status Commit(std::shared_ptr<Context> ctx, std::shared_ptr<pb::raft::RaftCmdRequest> raft_cmd);
@@ -60,7 +60,6 @@ class RaftNode {
 
  private:
   std::string path_;
-  pb::common::ClusterRole role_;
   uint64_t node_id_;
   std::string raft_group_name_;
   std::unique_ptr<braft::Node> node_;
