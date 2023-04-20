@@ -48,18 +48,24 @@ bool RaftKvEngine::Init(std::shared_ptr<Config> config) {
 // Invoke when server starting.
 bool RaftKvEngine::Recover() {
   auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+  auto store_raft_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRaftMeta();
   auto regions = store_region_meta->GetAllRegion();
 
   int count = 0;
   auto ctx = std::make_shared<Context>();
   auto listener_factory = std::make_shared<StoreSmEventListenerFactory>();
   for (auto& region : regions) {
+    auto raft_meta = store_raft_meta->GetRaftMeta(region->id());
+    if (raft_meta == nullptr) {
+      DINGO_LOG(ERROR) << "Recover raft meta not found: " << region->id();
+      continue;
+    }
     if (region->state() == pb::common::StoreRegionState::NEW ||
         region->state() == pb::common::StoreRegionState::NORMAL ||
         region->state() == pb::common::StoreRegionState::STANDBY ||
         region->state() == pb::common::StoreRegionState::SPLITTING ||
         region->state() == pb::common::StoreRegionState::MERGING) {
-      AddNode(ctx, region, listener_factory->Build());
+      AddNode(ctx, region, raft_meta, listener_factory->Build());
       ++count;
     }
   }
@@ -76,20 +82,20 @@ pb::common::Engine RaftKvEngine::GetID() { return pb::common::ENG_RAFT_STORE; }
 std::shared_ptr<RawEngine> RaftKvEngine::GetRawEngine() { return engine_; }
 
 butil::Status RaftKvEngine::AddNode(std::shared_ptr<Context> ctx, std::shared_ptr<pb::store_internal::Region> region,
+                                    std::shared_ptr<pb::store_internal::RaftMeta> raft_meta,
                                     std::shared_ptr<EventListenerCollection> listeners) {
   DINGO_LOG(INFO) << "RaftkvEngine add region, region_id " << region->id();
 
-  // construct StoreStateMachine
-  auto* state_machine = new StoreStateMachine(engine_, region, listeners);
+  auto* state_machine = new StoreStateMachine(engine_, region, raft_meta, listeners);
   if (!state_machine->Init()) {
     return butil::Status(pb::error::ERAFT_INIT, "State machine init failed");
   }
 
-  std::shared_ptr<RaftNode> node =
-      std::make_shared<RaftNode>(ctx->ClusterRole(), region->id(), region->definition().name(),
-                                 braft::PeerId(Server::GetInstance()->RaftEndpoint()), state_machine);
+  std::shared_ptr<RaftNode> node = std::make_shared<RaftNode>(
+      region->id(), region->definition().name(), braft::PeerId(Server::GetInstance()->RaftEndpoint()), state_machine);
 
-  if (node->Init(Helper::FormatPeers(Helper::ExtractLocations(region->definition().peers()))) != 0) {
+  if (node->Init(Helper::FormatPeers(Helper::ExtractLocations(region->definition().peers())),
+                 ConfigManager::GetInstance()->GetConfig(ctx->ClusterRole())) != 0) {
     node->Destroy();
     return butil::Status(pb::error::ERAFT_INIT, "Raft init failed");
   }

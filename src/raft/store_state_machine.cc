@@ -52,26 +52,16 @@ void StoreClosure::Run() {
 
 StoreStateMachine::StoreStateMachine(std::shared_ptr<RawEngine> engine,
                                      std::shared_ptr<pb::store_internal::Region> region,
+                                     std::shared_ptr<pb::store_internal::RaftMeta> raft_meta,
                                      std::shared_ptr<EventListenerCollection> listeners)
-    : engine_(engine), region_(region), listeners_(listeners), applied_term_(0), applied_index_(0) {}
+    : engine_(engine),
+      region_(region),
+      raft_meta_(raft_meta),
+      listeners_(listeners),
+      applied_term_(0),
+      applied_index_(raft_meta->applied_index()) {}
 
-bool StoreStateMachine::Init() {
-  // Recover applied index
-  auto store_raft_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRaftMeta();
-  auto raft_meta = store_raft_meta->GetRaftMeta(region_->id());
-  if (raft_meta != nullptr) {
-    DINGO_LOG(INFO) << "applied_index: " << raft_meta->applied_index();
-    applied_index_ = raft_meta->applied_index();
-
-  } else {
-    raft_meta = StoreRaftMeta::NewRaftMeta(region_->id());
-    store_raft_meta->AddRaftMeta(raft_meta);
-  }
-
-  raft_meta_ = raft_meta;
-
-  return true;
-}
+bool StoreStateMachine::Init() { return true; }
 
 void StoreStateMachine::DispatchEvent(dingodb::EventType event_type, std::shared_ptr<dingodb::Event> event) {
   for (auto& listener : listeners_->Get(event_type)) {

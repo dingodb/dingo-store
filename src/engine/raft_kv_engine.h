@@ -32,6 +32,7 @@ class RaftControlAble {
   virtual ~RaftControlAble() = default;
 
   virtual butil::Status AddNode(std::shared_ptr<Context> ctx, std::shared_ptr<pb::store_internal::Region> region,
+                                std::shared_ptr<pb::store_internal::RaftMeta> raft_meta,
                                 std::shared_ptr<EventListenerCollection> listeners) = 0;
   virtual butil::Status DestroyNode(std::shared_ptr<Context> ctx, uint64_t region_id) = 0;
   virtual butil::Status ChangeNode(std::shared_ptr<Context> ctx, uint64_t region_id,
@@ -56,6 +57,7 @@ class RaftKvEngine : public Engine, public RaftControlAble {
   std::shared_ptr<RawEngine> GetRawEngine() override;
 
   butil::Status AddNode(std::shared_ptr<Context> ctx, std::shared_ptr<pb::store_internal::Region> region,
+                        std::shared_ptr<pb::store_internal::RaftMeta> raft_meta,
                         std::shared_ptr<EventListenerCollection> listeners) override;
   butil::Status ChangeNode(std::shared_ptr<Context> ctx, uint64_t region_id,
                            std::vector<pb::common::Peer> peers) override;
@@ -81,7 +83,8 @@ class RaftKvEngine : public Engine, public RaftControlAble {
     butil::Status KvCount(std::shared_ptr<Context> ctx, const std::string& start_key, const std::string& end_key,
                           int64_t& count) override;
 
-    butil::Status KvCount(std::shared_ptr<Context> ctx, const pb::common::RangeWithOptions& range, uint64_t* count) override;
+    butil::Status KvCount(std::shared_ptr<Context> ctx, const pb::common::RangeWithOptions& range,
+                          uint64_t* count) override;
 
    private:
     std::shared_ptr<RawEngine::Reader> reader_;
