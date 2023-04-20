@@ -82,7 +82,10 @@ class ScanTest : public testing::Test {
     raw_raw_rocks_engine_ = std::make_shared<RawRocksEngine>();
   }
 
-  static void TearDownTestSuite() { raw_raw_rocks_engine_->Close(); }
+  static void TearDownTestSuite() {
+    // std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    raw_raw_rocks_engine_->Close();
+  }
 
   void SetUp() override {}
   void TearDown() override {}

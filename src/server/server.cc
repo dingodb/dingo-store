@@ -243,6 +243,7 @@ bool Server::InitCrontabManager() {
     crontab_manager_->AddAndRunCrontab(metrics_crontab);
 
     // Add scan crontab
+    ScanManager::GetInstance()->Init(config);
     std::shared_ptr<Crontab> scan_crontab = std::make_shared<Crontab>();
     ScanManager::GetInstance()->Init(config);
     scan_crontab->name = "SCAN";

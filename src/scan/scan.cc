@@ -15,10 +15,12 @@
 #include "scan/scan.h"
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <utility>
 #include <vector>
 
+#include "bthread/mutex.h"
 #include "butil/compiler_specific.h"
 #include "butil/macros.h"
 #include "butil/strings/stringprintf.h"
@@ -28,6 +30,9 @@
 #include "engine/write_data.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
+#if defined(ENABLE_SCAN_OPTIMIZATION)
+#include "bthread/bthread.h"
+#endif
 
 namespace dingodb {
 
@@ -49,7 +54,12 @@ ScanContext::ScanContext()
       engine_(nullptr),
       iter_(nullptr),
       is_already_call_start_(false),
-      last_time_ms_() {
+      last_time_ms_()
+#if defined(ENABLE_SCAN_OPTIMIZATION)
+      ,
+      seek_state_(SeekState::kUninit)
+#endif
+{
   bthread_mutex_init(&mutex_, nullptr);
 }
 ScanContext::~ScanContext() { Close(); }
@@ -151,6 +161,61 @@ void ScanContext::GetKeyValue(std::vector<pb::common::KeyValue>& kvs) {
   }
 }
 
+#if defined(ENABLE_SCAN_OPTIMIZATION)
+butil::Status ScanContext::AsyncWork() {
+  auto lambda_call = [this]() {
+    BAIDU_SCOPED_LOCK(mutex_);
+    seek_state_ = ScanContext::SeekState::kInitting;
+    if (!is_already_call_start_) {
+      iter_->Start();
+      is_already_call_start_ = true;
+    }
+    last_time_ms_ = GetCurrentTime();
+    seek_state_ = SeekState::kInitted;
+  };
+
+  std::function<void()>* call = new std::function<void()>;
+  *call = lambda_call;
+  bthread_t th;
+
+  int ret = bthread_start_background(
+      &th, nullptr,
+      [](void* arg) -> void* {
+        auto* call = static_cast<std::function<void()>*>(arg);
+        (*call)();
+        delete call;
+        return nullptr;
+      },
+      call);
+  if (ret != 0) {
+    state_ = ScanState::kError;
+    DINGO_LOG(ERROR) << butil::StringPrintf("bthread_start_background fail");
+    return butil::Status(pb::error::EINTERNAL, "scan_id is empty");
+  }
+
+  return butil::Status();
+}
+
+void ScanContext::WaitForReady() {
+  int i = 0;
+  while (ScanContext::SeekState::kUninit == seek_state_) {
+    if (i++ >= 1000) {
+      bthread_yield();
+      i = 0;
+    }
+  }
+}
+butil::Status ScanContext::SeekCheck() {
+  if (ScanContext::SeekState::kInitted != seek_state_) {
+    state_ = ScanState::kError;
+    DINGO_LOG(ERROR) << butil::StringPrintf("ScanHandler::ScanContinue failed  state wrong : %d",
+                                            static_cast<int>(seek_state_));
+    return butil::Status(pb::error::EINTERNAL, "Internal error : wrong state");
+  }
+  return butil::Status();
+}
+#endif
+
 bool ScanContext::IsRecyclable() {
   bool ret = false;
   // speedup
@@ -225,7 +290,18 @@ butil::Status ScanHandler::ScanBegin(std::shared_ptr<ScanContext> context, uint6
 
   if (context->max_fetch_cnt_ > 0) {
     context->GetKeyValue(*kvs);
+#if defined(ENABLE_SCAN_OPTIMIZATION)
+    context->seek_state_ = ScanContext::SeekState::kInitted;
+#endif
   }
+#if defined(ENABLE_SCAN_OPTIMIZATION)
+  else {  // NOLINT
+    butil::Status s = context->AsyncWork();
+    if (!s.ok()) {
+      return s;
+    }
+  }
+#endif
 
   context->state_ = ScanState::kBegun;
 
@@ -246,12 +322,25 @@ butil::Status ScanHandler::ScanContinue(std::shared_ptr<ScanContext> context, co
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "max_fetch_cnt == 0");
   }
 
+#if defined(ENABLE_SCAN_OPTIMIZATION)
+  context->WaitForReady();
+#endif
+
   BAIDU_SCOPED_LOCK(context->mutex_);
   if (ScanState::kBegun != context->state_ && ScanState::kContinued != context->state_) {
     context->state_ = ScanState::kError;
     DINGO_LOG(ERROR) << butil::StringPrintf("ScanHandler::ScanContinue failed : %d", static_cast<int>(context->state_));
     return butil::Status(pb::error::EINTERNAL, "Internal error : wrong state");
   }
+
+#if defined(ENABLE_SCAN_OPTIMIZATION)
+  butil::Status s = context->SeekCheck();
+  if (!s.ok()) {
+    DINGO_LOG(ERROR) << butil::StringPrintf("ScanHandler::ScanContinue SeekCheck  failed  state wrong : %d",
+                                            static_cast<int>(context->seek_state_));
+    return butil::Status(pb::error::EINTERNAL, "Internal error : wrong state");
+  }
+#endif
 
   context->max_fetch_cnt_ = max_fetch_cnt;
 
@@ -272,12 +361,25 @@ butil::Status ScanHandler::ScanRelease(std::shared_ptr<ScanContext> context,
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "scan_id is empty");
   }
 
+#if defined(ENABLE_SCAN_OPTIMIZATION)
+  context->WaitForReady();
+#endif
+
   BAIDU_SCOPED_LOCK(context->mutex_);
   if (ScanState::kBegun != context->state_ && ScanState::kContinued != context->state_) {
     context->state_ = ScanState::kError;
-    DINGO_LOG(ERROR) << butil::StringPrintf("ScanHandler::ScanContinue failed : %d", static_cast<int>(context->state_));
+    DINGO_LOG(ERROR) << butil::StringPrintf("ScanHandler::ScanRelease failed : %d", static_cast<int>(context->state_));
     return butil::Status(pb::error::EINTERNAL, "Internal error : wrong state");
   }
+
+#if defined(ENABLE_SCAN_OPTIMIZATION)
+  butil::Status s = context->SeekCheck();
+  if (!s.ok()) {
+    DINGO_LOG(ERROR) << butil::StringPrintf("ScanHandler::ScanContinue SeekCheck  failed  state wrong : %d",
+                                            static_cast<int>(context->seek_state_));
+    return butil::Status(pb::error::EINTERNAL, "Internal error : wrong state");
+  }
+#endif
 
   context->state_ = ScanState::kReleasing;
 
