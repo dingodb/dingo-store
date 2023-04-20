@@ -101,13 +101,7 @@ void NodeServiceImpl::ChangeLogLevel(google::protobuf::RpcController* /* control
   DINGO_LOG(INFO) << "ChangeLogLevel=>Receive Request:" << request->DebugString();
 
   const LogLevel log_level = request->log_level();
-  if (log_level == pb::node::DEBUG) {
-    DingoLogger::SetMinLogLevel(0);
-    DingoLogger::SetMinVerboseLevel(kGlobalValueOfDebug);
-  } else {
-    DingoLogger::SetMinLogLevel(static_cast<int>(log_level) - 1);
-    DingoLogger::SetMinVerboseLevel(1);
-  }
+  DingoLogger::ChangeGlogLevelUsingDingoLevel(log_level);
 
   const LogDetail& log_detail = request->log_detail();
   DingoLogger::SetLogBuffSecs(log_detail.log_buf_secs());

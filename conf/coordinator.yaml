@@ -29,10 +29,11 @@ store:
     prefix_extractor: 8
     max_bytes_for_level_base: 134217728
     target_file_size_base: 67108864
-  default:
-  instruction:
-    max_write_buffer_number: 3
   columnFamilies:
     - default
     - meta
   collectStatsInterval: 5
+  store:
+    scan_interval_ms: 30000 # ms
+log_level:
+    INFO 

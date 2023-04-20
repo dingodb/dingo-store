@@ -16,6 +16,7 @@
 #define DINGODB_COMMON_LOGGING_H_
 
 #include "glog/logging.h"
+#include "proto/node.pb.h"
 
 namespace dingodb {
 
@@ -38,13 +39,12 @@ static constexpr int kGlobalValueOfDebug = DINGO_DEBUG;
 
 class DingoLogger {
  public:
-  static void InitLogger(const std::string& log_dir, const std::string& role);
+  static void InitLogger(const std::string& log_dir, const std::string& role, const pb::node::LogLevel& level);
   // LogLevel and Log Verbose
   static void SetMinLogLevel(int level);
   static int GetMinLogLevel();
   static void SetMinVerboseLevel(int v);
   static int GetMinVerboseLevel();
-
   static int GetLogBuffSecs();
   static void SetLogBuffSecs(uint32_t secs);
 
@@ -53,7 +53,8 @@ class DingoLogger {
 
   static bool GetStoppingWhenDiskFull();
   static void SetStoppingWhenDiskFull(bool is_stop);
-  static void CustomPrefix(std::ostream& s, const google::LogMessageInfo& l, void*);
+  static void ChangeGlogLevelUsingDingoLevel(const pb::node::LogLevel& level);
+  static void CustomLogFormatPrefix(std::ostream& s, const google::LogMessageInfo& l, void*);
 };
 
 }  // namespace dingodb

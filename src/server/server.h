@@ -85,6 +85,8 @@ class Server {
 
   bool InitStoreMetricsManager();
 
+  dingodb::pb::node::LogLevel GetDingoLogLevel(std::shared_ptr<dingodb::Config> config);
+
   // Init Heartbeat
   bool InitHeartbeat();
 
