@@ -35,3 +35,5 @@ store:
   collectStatsInterval: 5
   store:
     scan_interval_ms: 30000 # ms
+log_level:
+    INFO 

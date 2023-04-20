@@ -17,18 +17,20 @@
 #include <iomanip>
 
 #include "butil/strings/stringprintf.h"
+#include "proto/node.pb.h"
 
 namespace dingodb {
 
-void DingoLogger::InitLogger(const std::string& log_dir, const std::string& role) {
+void DingoLogger::InitLogger(const std::string& log_dir, const std::string& role, const pb::node::LogLevel& level) {
   FLAGS_logbufsecs = 0;
   FLAGS_max_log_size = 80;
   FLAGS_stop_logging_if_full_disk = true;
   FLAGS_minloglevel = google::GLOG_INFO;
   FLAGS_logbuflevel = google::GLOG_INFO;
+  ChangeGlogLevelUsingDingoLevel(level);
 
   const std::string program_name = butil::StringPrintf("./%s", role.c_str());
-  google::InitGoogleLogging(program_name.c_str(), &CustomPrefix);
+  google::InitGoogleLogging(program_name.c_str(), &CustomLogFormatPrefix);
   google::SetLogDestination(google::GLOG_INFO,
                             butil::StringPrintf("%s/%s.info.log.", log_dir.c_str(), role.c_str()).c_str());
   google::SetLogDestination(google::GLOG_WARNING,
@@ -58,11 +60,21 @@ bool DingoLogger::GetStoppingWhenDiskFull() { return FLAGS_stop_logging_if_full_
 
 void DingoLogger::SetStoppingWhenDiskFull(bool is_stop) { FLAGS_stop_logging_if_full_disk = is_stop; }
 
-void DingoLogger::CustomPrefix(std::ostream& s, const google::LogMessageInfo& l, void*) {
+void DingoLogger::CustomLogFormatPrefix(std::ostream& s, const google::LogMessageInfo& l, void*) {
   s << "[" << l.severity[0] << std::setw(4) << "][" << 1900 + l.time.year() << std::setw(2) << 1 + l.time.month()
     << std::setw(2) << l.time.day() << ' ' << std::setw(2) << l.time.hour() << ':' << std::setw(2) << l.time.min()
     << ':' << std::setw(2) << l.time.sec() << "." << std::setw(6) << l.time.usec() << std::setw(5) << "]["
     << l.thread_id << "][" << l.filename << ':' << l.line_number << "]";
+}
+
+void DingoLogger::ChangeGlogLevelUsingDingoLevel(const pb::node::LogLevel& log_level) {
+  if (log_level == pb::node::DEBUG) {
+    DingoLogger::SetMinLogLevel(0);
+    DingoLogger::SetMinVerboseLevel(kGlobalValueOfDebug);
+  } else {
+    DingoLogger::SetMinLogLevel(static_cast<int>(log_level) - 1);
+    DingoLogger::SetMinVerboseLevel(1);
+  }
 }
 
 }  // namespace dingodb

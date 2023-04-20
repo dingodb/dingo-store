@@ -39,6 +39,7 @@
 #include "meta/meta_writer.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
+#include "proto/node.pb.h"
 #include "scan/scan_manager.h"
 #include "store/heartbeat.h"
 
@@ -58,14 +59,36 @@ bool Server::InitConfig(const std::string& filename) {
   return true;
 }
 
+dingodb::pb::node::LogLevel Server::GetDingoLogLevel(std::shared_ptr<dingodb::Config> config) {
+  using dingodb::pb::node::LogLevel;
+  LogLevel log_level = LogLevel::INFO;
+
+  std::string const input_log_level = config->GetString("log_level");
+  if (dingodb::Helper::IsEqualIgnoreCase(LogLevel_Name(LogLevel::DEBUG), input_log_level)) {
+    log_level = LogLevel::DEBUG;
+  } else if (dingodb::Helper::IsEqualIgnoreCase(LogLevel_Name(LogLevel::WARNING), input_log_level)) {
+    log_level = LogLevel::WARNING;
+  } else if (dingodb::Helper::IsEqualIgnoreCase(LogLevel_Name(LogLevel::ERROR), input_log_level)) {
+    log_level = LogLevel::ERROR;
+  } else if (dingodb::Helper::IsEqualIgnoreCase(LogLevel_Name(LogLevel::FATAL), input_log_level)) {
+    log_level = LogLevel::FATAL;
+  } else {
+    log_level = LogLevel::INFO;
+  }
+  return log_level;
+}
+
 bool Server::InitLog() {
   auto config = ConfigManager::GetInstance()->GetConfig(role_);
 
+  dingodb::pb::node::LogLevel const log_level = GetDingoLogLevel(config);
+
   FLAGS_log_dir = config->GetString("log.logPath");
   auto role_name = pb::common::ClusterRole_Name(role_);
-  DingoLogger::InitLogger(FLAGS_log_dir, role_name);
+  DingoLogger::InitLogger(FLAGS_log_dir, role_name, log_level);
 
-  DINGO_LOG(INFO) << "log_dir: " << FLAGS_log_dir << " role:" << role_name;
+  DINGO_LOG(INFO) << "log_dir: " << FLAGS_log_dir << " role:" << role_name
+                  << " LogLevel:" << dingodb::pb::node::LogLevel_Name(log_level);
 
   return true;
 }

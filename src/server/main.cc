@@ -15,6 +15,10 @@
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
 #include <cstdio>
+#include <memory>
+#include <ostream>
+#include <sstream>
+
 #endif
 #include <cxxabi.h>
 #include <dlfcn.h>
@@ -95,13 +99,21 @@ static void SignalHandler(int signo) {
       // std::cout << "  " << nameptr << " + " << offset << " (0x" << std::hex << pc << ")" << std::endl;
 
       if (!dladdr((void *)pc, &info)) {
-        DINGO_LOG(ERROR) << "Frame [" << i++ << "] symbol=[" << nameptr << " + " << offset << "] (0x" << std::hex << pc
-                         << ") ";
+        std::stringstream string_stream;
+        string_stream << "Frame [" << i++ << "] symbol=[" << nameptr << " + " << offset << "] (0x" << std::hex << pc
+                      << ") ";
+        std::string const error_msg = string_stream.str();
+        DINGO_LOG(ERROR) << error_msg;
+        std::cout << error_msg;
       } else {
-        DINGO_LOG(ERROR) << "Frame [" << i++ << "] symbol=[" << nameptr << " + " << offset << "] (0x" << std::hex << pc
-                         << ") "
-                         << " fname=[" << info.dli_fname << "] saddr=[" << info.dli_saddr << "] fbase=["
-                         << info.dli_fbase << "]";
+        std::stringstream string_stream;
+        string_stream << "Frame [" << i++ << "] symbol=[" << nameptr << " + " << offset << "] (0x" << std::hex << pc
+                      << ") "
+                      << " fname=[" << info.dli_fname << "] saddr=[" << info.dli_saddr << "] fbase=[" << info.dli_fbase
+                      << "]";
+        std::string const error_msg = string_stream.str();
+        DINGO_LOG(ERROR) << error_msg;
+        std::cout << error_msg;
       }
       if (demangled) {
         free(demangled);
@@ -173,7 +185,10 @@ int main(int argc, char *argv[]) {
     DINGO_LOG(ERROR) << "InitConfig failed!";
     return -1;
   }
-  if (!dingo_server->InitLog()) {
+
+  std::shared_ptr<dingodb::Config> const config = dingodb::ConfigManager::GetInstance()->GetConfig(role);
+  auto placeholder = dingo_server->InitLog();
+  if (!placeholder) {
     DINGO_LOG(ERROR) << "InitLog failed!";
     return -1;
   }
@@ -182,7 +197,6 @@ int main(int argc, char *argv[]) {
     return -1;
   }
 
-  std::shared_ptr<dingodb::Config> const config = dingodb::ConfigManager::GetInstance()->GetConfig(role);
   dingo_server->SetServerEndpoint(GetServerEndPoint(config));
   dingo_server->SetRaftEndpoint(GetRaftEndPoint(config));
 
