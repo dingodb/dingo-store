@@ -29,7 +29,7 @@ import java.util.NavigableSet;
 import java.util.SortedSet;
 import java.util.TreeMap;
 
-public class RangeStrategy extends PartitionStrategy<ComparableByteArray> {
+public class RangeStrategy extends DistributionStrategy<ComparableByteArray> {
 
     private final NavigableSet<ComparableByteArray> ranges;
 

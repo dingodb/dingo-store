@@ -26,6 +26,7 @@ import io.dingodb.sdk.common.table.TableDefinition;
 import java.sql.Timestamp;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -116,7 +117,7 @@ public class MysqlInit {
         System.out.println("create user table is success:" + isSuccess);
         sleep();
 
-        Map<String, Object> map = Maps.newLinkedHashMap();
+        LinkedHashMap<String, Object> map = Maps.newLinkedHashMap();
         map.put(c1.getName(), "%");
         map.put(c2.getName(), "root");
         List<ColumnDefinition> privilegeColumns = Arrays.asList(c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14,
@@ -141,9 +142,7 @@ public class MysqlInit {
 
         List<String> keyNames = Arrays.asList(c1.getName(), c2.getName());
 
-        List<Record> records = Collections.singletonList(new Record(keyNames, map));
-
-        boolean result = mysqlClient.upsert(tableName, records);
+        boolean result = mysqlClient.upsert(tableName, new Record(keyNames, map));
         if (result) {
             System.out.println("init root user success");
         } else {

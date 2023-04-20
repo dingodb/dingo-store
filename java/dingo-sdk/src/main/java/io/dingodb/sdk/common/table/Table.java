@@ -45,6 +45,8 @@ public interface Table {
 
     Map<String, String> getProperties();
 
+    int getReplica();
+
     default int getPrimaryKeyCount() {
         int count = 0;
         for (Column column : getColumns()) {

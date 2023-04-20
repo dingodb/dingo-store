@@ -24,7 +24,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
-public abstract class PartitionStrategy<I> {
+public abstract class DistributionStrategy<I> {
 
     public abstract int getPartNum();
 

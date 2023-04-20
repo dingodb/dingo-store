@@ -686,7 +686,7 @@ void StoreServiceImpl::KvScanBegin(google::protobuf::RpcController* controller,
     return;
   }
 
-  if (!response->kvs().empty()) {
+  if (!kvs.empty()) {
     Helper::VectorToPbRepeated(kvs, response->mutable_kvs());
   }
 
@@ -742,7 +742,7 @@ void StoreServiceImpl::KvScanContinue(google::protobuf::RpcController* controlle
     return;
   }
 
-  if (!response->kvs().empty()) {
+  if (!kvs.empty()) {
     Helper::VectorToPbRepeated(kvs, response->mutable_kvs());
   }
 }

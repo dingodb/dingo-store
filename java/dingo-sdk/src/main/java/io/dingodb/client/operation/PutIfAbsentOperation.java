@@ -16,15 +16,24 @@
 
 package io.dingodb.client.operation;
 
-import io.dingodb.client.ContextForStore;
-import io.dingodb.client.IStoreOperation;
-import io.dingodb.client.ResultForStore;
+import io.dingodb.client.ArrayWrapperList;
+import io.dingodb.client.OperationContext;
+import io.dingodb.client.Record;
+import io.dingodb.client.RouteTable;
 import io.dingodb.sdk.common.DingoCommonId;
-import io.dingodb.sdk.service.store.StoreServiceClient;
+import io.dingodb.sdk.common.KeyValue;
+import io.dingodb.sdk.common.table.Table;
+import io.dingodb.sdk.common.utils.Any;
 
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.NavigableSet;
+import java.util.TreeSet;
 
-public class PutIfAbsentOperation implements IStoreOperation {
+public class PutIfAbsentOperation implements Operation {
 
     private static final PutIfAbsentOperation INSTANCE = new PutIfAbsentOperation();
 
@@ -36,11 +45,44 @@ public class PutIfAbsentOperation implements IStoreOperation {
     }
 
     @Override
-    public ResultForStore doOperation(DingoCommonId tableId, StoreServiceClient storeServiceClient, ContextForStore contextForStore) {
-        List<Boolean> booleans = storeServiceClient.kvBatchPutIfAbsent(
-                tableId,
-                contextForStore.getRegionId(), contextForStore.getRecordList());
+    public Operation.Fork fork(Any parameters, Table table, RouteTable routeTable) {
+        try {
+            List<Record> records = parameters.getValue();
+            NavigableSet<Task> subTasks = new TreeSet<>(Comparator.comparingLong(t -> t.getRegionId().entityId()));
+            Map<DingoCommonId, Any> subTaskMap = new HashMap<>();
+            for (int i = 0; i < records.size(); i++) {
+                Record record = records.get(i);
+                KeyValue keyValue = routeTable.getCodec().encode(record.getValues().toArray());
 
-        return new ResultForStore(booleans.size() > 0 ? 0 : -1, "");
+                Map<KeyValue, Integer> regionParams = subTaskMap.computeIfAbsent(
+                    routeTable.calcRegionId(keyValue.getKey()), k -> new Any(new HashMap<>())
+                ).getValue();
+
+                regionParams.put(keyValue, i);
+            }
+            subTaskMap.forEach((k, v) -> subTasks.add(new Task(k, v)));
+            return new Fork(new Boolean[records.size()], subTasks, true);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    @Override
+    public void exec(OperationContext context) {
+        Map<KeyValue, Integer> parameters = context.parameters();
+        ArrayList<KeyValue> keyValues = new ArrayList<>(parameters.keySet());
+        List<Boolean> result = context.getStoreService().kvBatchPutIfAbsent(
+            context.getTableId(),
+            context.getRegionId(),
+            keyValues
+        );
+        for (int i = 0; i < keyValues.size(); i++) {
+            context.<Boolean[]>result()[parameters.get(keyValues.get(i))] = result.get(i);
+        }
+    }
+
+    @Override
+    public <R> R reduce(Fork fork) {
+        return (R) new ArrayWrapperList<>(fork.<Boolean[]>result());
     }
 }

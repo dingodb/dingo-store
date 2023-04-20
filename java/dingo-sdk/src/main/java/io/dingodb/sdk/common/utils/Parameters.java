@@ -41,6 +41,20 @@ public final class Parameters {
     /**
      * If check function return is false, throw exception, else return input.
      * @param input check object
+     * @param message error message
+     * @return input
+     */
+    public static <T> T check(
+        T input,
+        Predicate<T> checkFunction,
+        String message
+    ) {
+        return check(input, checkFunction, () -> new RuntimeException(message));
+    }
+
+    /**
+     * If check function return is false, throw exception, else return input.
+     * @param input check object
      * @param throwableSupplier throwable supplier
      * @return input
      */

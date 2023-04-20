@@ -17,24 +17,30 @@
 package io.dingodb.sdk.service.store;
 
 import com.google.protobuf.ByteString;
+import io.dingodb.common.Common;
 import io.dingodb.error.ErrorOuterClass;
 import io.dingodb.sdk.common.DingoClientException;
 import io.dingodb.sdk.common.DingoCommonId;
 import io.dingodb.sdk.common.KeyValue;
+import io.dingodb.sdk.common.Location;
+import io.dingodb.sdk.common.Range;
 import io.dingodb.sdk.common.RangeWithOptions;
+import io.dingodb.sdk.common.SDKCommonId;
 import io.dingodb.sdk.common.table.RangeDistribution;
 import io.dingodb.sdk.common.utils.EntityConversion;
 import io.dingodb.sdk.service.connector.ServiceConnector;
-import io.dingodb.sdk.service.connector.StoreConnector;
-import io.dingodb.sdk.service.meta.MetaClient;
+import io.dingodb.sdk.service.connector.StoreServiceConnector;
+import io.dingodb.sdk.service.meta.MetaServiceClient;
 import io.dingodb.store.Store;
 import io.dingodb.store.StoreServiceGrpc;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import static io.dingodb.sdk.common.utils.EntityConversion.mapping;
@@ -42,24 +48,36 @@ import static io.dingodb.sdk.common.utils.EntityConversion.mapping;
 @Slf4j
 public class StoreServiceClient {
 
-    private Map<DingoCommonId, StoreConnector> connectorCache = new ConcurrentHashMap<>();
-    private Map<DingoCommonId, RangeDistribution> rangeDistributionCache = new ConcurrentHashMap<>();
+    private final Map<DingoCommonId, StoreServiceConnector> connectorCache = new ConcurrentHashMap<>();
+    private final MetaServiceClient rootMetaService;
 
-    private MetaClient metaClient;
-
-    public StoreServiceClient(MetaClient metaClient) {
-        this.metaClient = metaClient;
+    public StoreServiceClient(MetaServiceClient rootMetaService) {
+        this.rootMetaService = rootMetaService;
     }
 
-    public StoreConnector getStoreConnector(DingoCommonId tableId, DingoCommonId regionId) {
-        rangeDistributionCache.computeIfAbsent(regionId,
-                __ -> metaClient.getRangeDistribution(tableId).values().stream()
-                        .filter(range -> range.getId().equals(regionId))
-                        .findAny().orElse(null)
+    public Supplier<Location> locationSupplier(DingoCommonId schemaId, DingoCommonId tableId, DingoCommonId regionId) {
+        return () -> rootMetaService.getSubMetaService(schemaId).getRangeDistribution(tableId).values().stream()
+            .filter(rd -> rd.getId().equals(regionId))
+            .findAny()
+            .map(RangeDistribution::getLeader)
+            .orElse(null);
+    }
+
+    public StoreServiceConnector getStoreConnector(DingoCommonId tableId, DingoCommonId regionId) {
+        // Schema parent is root, table parent is schema, so use root schema id and table parent id create schema id.
+        SDKCommonId schemaId = new SDKCommonId(
+            DingoCommonId.Type.ENTITY_TYPE_SCHEMA, rootMetaService.id().getEntityId(), tableId.parentId()
         );
-        RangeDistribution rangeDistribution = rangeDistributionCache.get(regionId);
-        return connectorCache.computeIfAbsent(regionId, __ ->
-                new StoreConnector(metaClient, tableId, rangeDistribution.getLeader(), rangeDistribution.getVoters())
+        return connectorCache.computeIfAbsent(
+            regionId,
+            __ -> new StoreServiceConnector(
+                locationSupplier(schemaId, tableId, regionId),
+                rootMetaService.getRangeDistribution(tableId).values().stream()
+                    .filter(rd -> rd.getId().equals(regionId))
+                    .findAny()
+                    .map(RangeDistribution::getVoters)
+                    .orElseThrow(() -> new RuntimeException("Cannot find region or region not have voters. "))
+            )
         );
     }
 
@@ -74,8 +92,7 @@ public class StoreServiceClient {
                     .setKey(ByteString.copyFrom(key))
                     .build();
             Store.KvGetResponse res = stub.kvGet(req);
-            check(res.getError());
-            return res.getValue().toByteArray();
+            return new ServiceConnector.Response<>(res.getError(), res.getValue().toByteArray());
         }, 10, tableId, regionId);
     }
 
@@ -85,13 +102,29 @@ public class StoreServiceClient {
                     .setRegionId(regionId.entityId())
                     .addAllKeys(keys.stream().map(ByteString::copyFrom).collect(Collectors.toList()))
                     .build();
-            if (stub == null) {
-                throw new DingoClientException(-1, "blockingStub is null");
-            }
             Store.KvBatchGetResponse res = stub.kvBatchGet(req);
-            check(res.getError());
-            return res.getKvsList().stream().map(EntityConversion::mapping).collect(Collectors.toList());
+            return new ServiceConnector.Response<>(
+                res.getError(),
+                res.getKvsList().stream().map(EntityConversion::mapping).collect(Collectors.toList())
+            );
         }, 10, tableId, regionId);
+    }
+
+    public Iterator<KeyValue> scan(
+        DingoCommonId tableId, DingoCommonId regionId, Range range, boolean withStart, boolean withEnd
+    ) {
+        return new ScanIterator(getStoreConnector(tableId, regionId).getStub(),
+               regionId.entityId(),
+               Common.RangeWithOptions.newBuilder()
+               .setRange(
+                   Common.Range.newBuilder()
+                       .setStartKey(ByteString.copyFrom(range.getStartKey()))
+                       .setEndKey(ByteString.copyFrom(range.getEndKey()))
+                       .build())
+               .setWithStart(withStart)
+               .setWithEnd(withEnd)
+               .build(),
+               false);
     }
 
     public boolean kvPut(DingoCommonId tableId, DingoCommonId regionId, KeyValue keyValue) {
@@ -101,8 +134,7 @@ public class StoreServiceClient {
                 .setKv(mapping(keyValue))
                 .build();
             Store.KvPutResponse res = stub.kvPut(req);
-            check(res.getError());
-            return true;
+            return new ServiceConnector.Response<>(res.getError(), true);
         }, 10, tableId, regionId);
     }
 
@@ -116,8 +148,7 @@ public class StoreServiceClient {
                 throw new DingoClientException(-1, "blockingStub is null");
             }
             Store.KvBatchPutResponse res = stub.kvBatchPut(req);
-            check(res.getError());
-            return true;
+            return new ServiceConnector.Response<>(res.getError(), true);
         }, 10, tableId, regionId);
     }
 
@@ -128,8 +159,7 @@ public class StoreServiceClient {
                     .setKv(mapping(keyValue))
                     .build();
             Store.KvPutIfAbsentResponse res = stub.kvPutIfAbsent(req);
-            check(res.getError());
-            return res.getKeyState();
+            return new ServiceConnector.Response<>(res.getError(), res.getKeyState());
         }, 10, tableId, regionId);
     }
 
@@ -145,8 +175,7 @@ public class StoreServiceClient {
                     .setIsAtomic(isAtomic)
                     .build();
             Store.KvBatchPutIfAbsentResponse res = stub.kvBatchPutIfAbsent(req);
-            check(res.getError());
-            return res.getKeyStatesList();
+            return new ServiceConnector.Response<>(res.getError(), res.getKeyStatesList());
         }, 10, tableId, regionId);
     }
 
@@ -157,47 +186,29 @@ public class StoreServiceClient {
                     .addAllKeys(keys.stream().map(ByteString::copyFrom).collect(Collectors.toList()))
                     .build();
             Store.KvBatchDeleteResponse res = stub.kvBatchDelete(req);
-            check(res.getError());
-            return true;
+            return new ServiceConnector.Response<>(res.getError(), true);
         }, 10, tableId, regionId);
     }
 
-    public boolean kvDeleteRange(DingoCommonId tableId, DingoCommonId regionId, RangeWithOptions options) {
+    public long kvDeleteRange(DingoCommonId tableId, DingoCommonId regionId, RangeWithOptions options) {
         return exec(stub -> {
             Store.KvDeleteRangeRequest req = Store.KvDeleteRangeRequest.newBuilder()
                     .setRegionId(regionId.entityId())
                     .setRange(mapping(options))
                     .build();
             Store.KvDeleteRangeResponse res = stub.kvDeleteRange(req);
-            check(res.getError());
-            return true;
+            return new ServiceConnector.Response<>(res.getError(), res.getDeleteCount());
         }, 10, tableId, regionId);
     }
 
     private <R> R exec(
-            Function<StoreServiceGrpc.StoreServiceBlockingStub, R> function,
+            Function<StoreServiceGrpc.StoreServiceBlockingStub, ServiceConnector.Response<R>> function,
             int retryTimes,
             DingoCommonId tableId,
             DingoCommonId regionId
     ) {
-        try {
-            return function.apply(getStoreConnector(tableId, regionId).getBlockingStub());
-        } catch (DingoClientException ex) {
-            if (ex.getErrorCode() != 0 && retryTimes > 0) {
-                try {
-                    Thread.sleep(2000);
-                } catch (InterruptedException e) {
-                    throw new RuntimeException(e);
-                }
-                rangeDistributionCache.remove(regionId);
-                connectorCache.remove(regionId);
-                System.out.println("---- retry is :" + retryTimes);
-                return exec(function, retryTimes - 1, tableId, regionId);
-            }
-            throw ex;
-        } catch (Exception e) {
-            throw new RuntimeException("Retry attempts exhausted, failed to execute operation, e: " + e);
-        }
+        return getStoreConnector(tableId, regionId).exec(function, retryTimes, err -> true).getResponse();
+
     }
 
     private void check(ErrorOuterClass.Error error) {

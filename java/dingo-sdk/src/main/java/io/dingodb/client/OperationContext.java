@@ -18,34 +18,36 @@ package io.dingodb.client;
 
 import io.dingodb.sdk.common.DingoCommonId;
 import io.dingodb.sdk.common.KeyValue;
+import io.dingodb.sdk.common.codec.KeyValueCodec;
+import io.dingodb.sdk.common.table.Table;
+import io.dingodb.sdk.common.utils.Any;
+import io.dingodb.sdk.service.store.StoreServiceClient;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 
-import java.util.Arrays;
-import java.util.List;
-
 @Builder
 @Getter
 @AllArgsConstructor
-public class ContextForStore {
+public class OperationContext {
 
-    private final List<byte[]> startKeyInBytes;
-    private final List<KeyValue> recordList;
+    private final DingoCommonId tableId;
     private final DingoCommonId regionId;
+    private final Table table;
+    private final KeyValueCodec codec;
 
-    public KeyValue getRecordByKey(byte[] key) {
-        if (recordList == null) {
-            return null;
-        }
+    private final StoreServiceClient storeService;
 
-        KeyValue result = null;
-        for (KeyValue record : recordList) {
-            if (Arrays.equals(record.getKey(), key)) {
-                result = record;
-                break;
-            }
-        }
-        return result;
+    private final int seq;
+    private final Any parameters;
+    private final Any result;
+
+    public <P> P parameters() {
+        return parameters.getValue();
     }
+
+    public <R> R result() {
+        return result.getValue();
+    }
+
 }
