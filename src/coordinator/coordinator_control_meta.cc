@@ -421,6 +421,10 @@ pb::error::Errno CoordinatorControl::CreateTable(uint64_t schema_id, const pb::m
   // extract part info, create region for each part
 
   std::vector<uint64_t> new_region_ids;
+  int32_t replica = table_definition.replica();
+  if (replica < 1) {
+    replica = 3;
+  }
   for (int i = 0; i < range_partition.ranges_size(); i++) {
     // int ret = CreateRegion(const std::string &region_name, const std::string
     // &resource_tag, int32_t replica_num, pb::common::Range region_range,
@@ -428,8 +432,11 @@ pb::error::Errno CoordinatorControl::CreateTable(uint64_t schema_id, const pb::m
     std::string const region_name = std::to_string(schema_id) + std::string("_") + table_definition.name() +
                                     std::string("_part_") + std::to_string(i);
     uint64_t new_region_id;
-    auto ret = CreateRegion(region_name, "", 3, range_partition.ranges(i), schema_id, new_table_id, new_region_id,
-                            meta_increment);
+    
+    auto ret = CreateRegion(
+        region_name, "", replica, range_partition.ranges(i), schema_id, new_table_id, new_region_id, meta_increment
+    );
+
     if (ret != pb::error::Errno::OK) {
       DINGO_LOG(ERROR) << "CreateRegion failed in CreateTable table_name=" << table_definition.name();
       break;

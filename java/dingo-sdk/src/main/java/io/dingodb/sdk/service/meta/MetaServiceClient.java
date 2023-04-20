@@ -16,18 +16,18 @@
 
 package io.dingodb.sdk.service.meta;
 
+import io.dingodb.meta.Meta;
+import io.dingodb.meta.MetaServiceGrpc;
 import io.dingodb.sdk.common.DingoClientException;
 import io.dingodb.sdk.common.DingoCommonId;
 import io.dingodb.sdk.common.concurrent.Executors;
 import io.dingodb.sdk.common.table.RangeDistribution;
+import io.dingodb.sdk.common.table.Table;
 import io.dingodb.sdk.common.table.metric.TableMetrics;
+import io.dingodb.sdk.common.utils.ByteArrayUtils;
 import io.dingodb.sdk.common.utils.EntityConversion;
 import io.dingodb.sdk.common.utils.Optional;
 import io.dingodb.sdk.service.connector.ServiceConnector;
-import io.dingodb.sdk.common.table.Table;
-import io.dingodb.sdk.common.utils.ByteArrayUtils;
-import io.dingodb.meta.Meta;
-import io.dingodb.meta.MetaServiceGrpc;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.experimental.Accessors;
@@ -66,8 +66,6 @@ public class MetaServiceClient {
     private final Map<Meta.DingoCommonId, MetaServiceClient> metaServiceCache = new ConcurrentHashMap<>();
     private final Map<String, Meta.DingoCommonId> tableIdCache = new ConcurrentHashMap<>();
 
-    private MetaServiceGrpc.MetaServiceBlockingStub metaBlockingStub;
-
     private Pattern pattern = Pattern.compile("^[A-Z_][A-Z\\d_]+$");
     private Pattern warnPattern = Pattern.compile(".*[a-z]+.*");
     private String ROOT_NAME = "DINGO_ROOT";
@@ -77,14 +75,13 @@ public class MetaServiceClient {
     @Getter
     private final String name;
 
-    private ServiceConnector connector;
+    private ServiceConnector<MetaServiceGrpc.MetaServiceBlockingStub> connector;
 
     public MetaServiceClient(ServiceConnector<MetaServiceGrpc.MetaServiceBlockingStub> connector) {
         this.parentId = ROOT_SCHEMA_ID;
-        this.id = DINGO_SCHEMA_ID;
+        this.id = ROOT_SCHEMA_ID;
         this.name = ROOT_NAME;
         this.connector = connector;
-        this.metaBlockingStub = connector.getBlockingStub();
         Executors.execute("meta-service-client-reload", this::reload);
     }
 
@@ -96,7 +93,6 @@ public class MetaServiceClient {
         this.connector = connector;
         this.id = id;
         this.name = name;
-        this.metaBlockingStub = connector.getBlockingStub();
     }
 
     public void close() {
@@ -127,8 +123,10 @@ public class MetaServiceClient {
                 .setSchemaName(name)
                 .build();
 
-        Meta.CreateSchemaResponse response = metaBlockingStub.createSchema(request);
-        Meta.Schema schema = response.getSchema();
+        Meta.Schema schema = connector.exec(stub -> {
+            Meta.CreateSchemaResponse res = stub.createSchema(request);
+            return new ServiceConnector.Response<>(res.getError(), res);
+        }).getResponse().getSchema();
 
         addMetaServiceCache(schema);
     }
@@ -137,8 +135,11 @@ public class MetaServiceClient {
         Meta.GetSchemasRequest request = Meta.GetSchemasRequest.newBuilder()
                 .setSchemaId(id)
                 .build();
+        Meta.GetSchemasResponse response = connector.exec(stub -> {
+            Meta.GetSchemasResponse res = stub.getSchemas(request);
+            return new ServiceConnector.Response<>(res.getError(), res);
+        }).getResponse();
 
-        Meta.GetSchemasResponse response = metaBlockingStub.getSchemas(request);
         return response.getSchemasList();
     }
 
@@ -148,19 +149,39 @@ public class MetaServiceClient {
     }
 
     public MetaServiceClient getSubMetaService(String name) {
-        MetaServiceClient metaService = Optional.mapOrNull(metaServiceIdCache.get(name), metaServiceCache::get);
-        if (metaService == null) {
+        Meta.DingoCommonId schemaId = metaServiceIdCache.get(name);
+        MetaServiceClient metaService;
+        if (schemaId == null) {
             Meta.GetSchemaByNameRequest request = Meta.GetSchemaByNameRequest.newBuilder().setSchemaName(name).build();
-            Meta.GetSchemaByNameResponse response = metaBlockingStub.getSchemaByName(request);
+
+            Meta.GetSchemaByNameResponse response = connector.exec(stub -> {
+                Meta.GetSchemaByNameResponse res = stub.getSchemaByName(request);
+                return new ServiceConnector.Response<>(res.getError(), res);
+            }).getResponse();
+
             if (response.getSchema().getName().isEmpty()) {
                 return null;
             }
             metaService = Optional.ofNullable(response.getSchema())
-                    .ifPresent(this::addMetaServiceCache)
-                    .map(Meta.Schema::getId)
-                    .mapOrNull(metaServiceCache::get);
+                .ifPresent(this::addMetaServiceCache)
+                .map(Meta.Schema::getId)
+                .mapOrNull(metaServiceCache::get);
+        } else {
+            metaService = getSubMetaService(schemaId);
         }
         return metaService;
+    }
+
+    public MetaServiceClient getSubMetaService(DingoCommonId schemaId) {
+        return getSubMetaService(Meta.DingoCommonId.newBuilder()
+            .setEntityType(Meta.EntityType.ENTITY_TYPE_SCHEMA)
+            .setParentEntityId(schemaId.parentId())
+            .setEntityId(schemaId.entityId())
+            .build());
+    }
+
+    private MetaServiceClient getSubMetaService(Meta.DingoCommonId schemaId) {
+        return metaServiceCache.get(schemaId);
     }
 
     public boolean dropSubMetaService(String name) {
@@ -169,7 +190,10 @@ public class MetaServiceClient {
                     Meta.DropSchemaRequest request = Meta.DropSchemaRequest.newBuilder()
                             .setSchemaId(metaServiceIdCache.get(name))
                             .build();
-                    Meta.DropSchemaResponse response = metaBlockingStub.dropSchema(request);
+                    Meta.DropSchemaResponse response = connector.exec(stub -> {
+                        Meta.DropSchemaResponse res = stub.dropSchema(request);
+                        return new ServiceConnector.Response<>(res.getError(), res);
+                    }).getResponse();
                     return response.getError().getErrcodeValue() == 0;
                 })
                 .orElse(false);
@@ -191,7 +215,10 @@ public class MetaServiceClient {
                 .setSchemaId(id)
                 .build();
 
-        Meta.CreateTableIdResponse createTableIdResponse = metaBlockingStub.createTableId(createTableIdRequest);
+        Meta.CreateTableIdResponse createTableIdResponse = connector.exec(stub -> {
+            Meta.CreateTableIdResponse res = stub.createTableId(createTableIdRequest);
+            return new ServiceConnector.Response<>(res.getError(), res);
+        }).getResponse();
         Meta.DingoCommonId tableId = createTableIdResponse.getTableId();
 
         Meta.TableDefinition definition = mapping(table, tableId);
@@ -202,7 +229,11 @@ public class MetaServiceClient {
                 .setTableDefinition(definition)
                 .build();
 
-        Meta.CreateTableResponse response = metaBlockingStub.createTable(request);
+        Meta.CreateTableResponse response = connector.exec(stub -> {
+            Meta.CreateTableResponse res = stub.createTable(request);
+            return new ServiceConnector.Response<>(res.getError(), res);
+        }).getResponse();
+
 
         tableIdCache.put(tableName, tableId);
         tableDefinitionCache.put(mapping(tableId), table);
@@ -220,7 +251,10 @@ public class MetaServiceClient {
                 .setTableId(mapping(tableId))
                 .build();
 
-        Meta.DropTableResponse response = metaBlockingStub.dropTable(request);
+        Meta.DropTableResponse response = connector.exec(stub -> {
+            Meta.DropTableResponse res = stub.dropTable(request);
+            return new ServiceConnector.Response<>(res.getError(), res);
+        }).getResponse();
         tableIdCache.remove(tableName);
         tableDefinitionCache.remove(tableId);
 
@@ -235,7 +269,11 @@ public class MetaServiceClient {
                     .setSchemaId(id)
                     .setTableName(tableName)
                     .build();
-            Meta.GetTableByNameResponse response = metaBlockingStub.getTableByName(request);
+
+            Meta.GetTableByNameResponse response = connector.exec(stub -> {
+                Meta.GetTableByNameResponse res = stub.getTableByName(request);
+                return new ServiceConnector.Response<>(res.getError(), res);
+            }).getResponse();
 
             Meta.TableDefinitionWithId withId = response.getTableDefinitionWithId();
             if (withId.getTableDefinition().getName().equals(tableName)) {
@@ -259,7 +297,10 @@ public class MetaServiceClient {
                 .setSchemaId(id)
                 .build();
 
-        Meta.GetTablesResponse response = metaBlockingStub.getTables(request);
+        Meta.GetTablesResponse response = connector.exec(stub -> {
+            Meta.GetTablesResponse res = stub.getTables(request);
+            return new ServiceConnector.Response<>(res.getError(), res);
+        }).getResponse();
         return response.getTableDefinitionWithIdsList();
     }
 
@@ -276,7 +317,10 @@ public class MetaServiceClient {
         Table table = tableDefinitionCache.get(tableId);
         if (table == null) {
             Meta.GetTableRequest request = Meta.GetTableRequest.newBuilder().setTableId(mapping(tableId)).build();
-            Meta.GetTableResponse response = metaBlockingStub.getTable(request);
+            Meta.GetTableResponse response = connector.exec(stub -> {
+                Meta.GetTableResponse res = stub.getTable(request);
+                return new ServiceConnector.Response<>(res.getError(), res);
+            }).getResponse();
             table = mapping(response.getTableDefinitionWithId().getTableDefinition());
         }
         return table;
@@ -297,7 +341,10 @@ public class MetaServiceClient {
                 .setTableId(mapping(id))
                 .build();
 
-        Meta.GetTableRangeResponse response = metaBlockingStub.getTableRange(request);
+        Meta.GetTableRangeResponse response = connector.exec(stub -> {
+            Meta.GetTableRangeResponse res = stub.getTableRange(request);
+            return new ServiceConnector.Response<>(res.getError(), res);
+        }).getResponse();
 
         for (Meta.RangeDistribution tablePart : response.getTableRange().getRangeDistributionList()) {
             result.put(new ByteArrayUtils.ComparableByteArray(
@@ -318,7 +365,10 @@ public class MetaServiceClient {
                     Meta.GetTableMetricsRequest request = Meta.GetTableMetricsRequest.newBuilder()
                             .setTableId(mapping(__))
                             .build();
-                    Meta.GetTableMetricsResponse response = metaBlockingStub.getTableMetrics(request);
+                    Meta.GetTableMetricsResponse response = connector.exec(stub -> {
+                        Meta.GetTableMetricsResponse res = stub.getTableMetrics(request);
+                        return new ServiceConnector.Response<>(res.getError(), res);
+                    }).getResponse();
                     Meta.TableMetricsWithId metrics = response.getTableMetrics();
                     return metrics.getTableMetrics();
                 })

@@ -44,11 +44,17 @@ public class Optional<T> {
         return of(java.util.Optional.ofNullable(value));
     }
 
-    public static <T> Optional<T> ofNullable(T value, Supplier supplier) {
+    public static <T> Optional<T> ofNullable(T value, Supplier<T> supplier) {
         if (value == null) {
-            return (Optional<T>) of(supplier.get());
+            return of(supplier.get());
         } else {
             return of(java.util.Optional.ofNullable(value));
+        }
+    }
+
+    public static <T> void or(T value, Consumer<T> present) {
+        if (value != null) {
+            present.accept(value);
         }
     }
 

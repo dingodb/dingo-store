@@ -24,7 +24,6 @@ import java.util.List;
 import java.util.Map;
 
 @Builder
-@AllArgsConstructor
 public class TableDefinition implements Table {
 
     private String name;
@@ -34,6 +33,24 @@ public class TableDefinition implements Table {
     private Partition partition;
     private String engine;
     private Map<String, String> properties;
+    private int replica;
+
+    @Deprecated
+    public TableDefinition(String name, List<Column> columns, int version, int ttl, Partition partition, String engine, Map<String, String> properties) {
+        this(name, columns, version, ttl, partition, engine, properties, 3);
+    }
+
+    @Deprecated
+    public TableDefinition(String name, List<Column> columns, int version, int ttl, Partition partition, String engine, Map<String, String> properties, int replica) {
+        this.name = name;
+        this.columns = columns;
+        this.version = version;
+        this.ttl = ttl;
+        this.partition = partition;
+        this.engine = engine;
+        this.properties = properties;
+        this.replica = replica;
+    }
 
     @Override
     public String getName() {
@@ -70,4 +87,8 @@ public class TableDefinition implements Table {
         return this.properties;
     }
 
+    @Override
+    public int getReplica() {
+        return replica;
+    }
 }

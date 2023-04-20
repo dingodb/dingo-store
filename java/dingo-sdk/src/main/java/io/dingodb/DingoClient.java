@@ -16,25 +16,29 @@
 
 package io.dingodb;
 
-import io.dingodb.client.ContextForClient;
 import io.dingodb.client.Key;
+import io.dingodb.client.OperationService;
 import io.dingodb.client.Record;
-import io.dingodb.client.Result;
-import io.dingodb.client.ServiceOperation;
-import io.dingodb.client.operation.StoreOperationType;
-import io.dingodb.client.Value;
+import io.dingodb.client.operation.DeleteOperation;
+import io.dingodb.client.operation.GetOperation;
+import io.dingodb.client.operation.PutIfAbsentOperation;
+import io.dingodb.client.operation.PutOperation;
+import io.dingodb.client.operation.ScanOperation;
 import io.dingodb.sdk.common.DingoClientException;
 import io.dingodb.sdk.common.table.Table;
+import io.dingodb.sdk.common.utils.Optional;
 
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
-import java.util.stream.Collectors;
+
+import static io.dingodb.sdk.service.connector.MetaServiceConnector.getMetaServiceConnector;
 
 public class DingoClient {
 
-    private UnifyStoreConnection connection;
+    private final String schema;
 
-    private ServiceOperation serviceOperation;
+    private OperationService operationService;
 
     public static Integer retryTimes = 20;
 
@@ -43,59 +47,43 @@ public class DingoClient {
     }
 
     public DingoClient(String coordinatorSvr, Integer retryTimes) {
-        this(coordinatorSvr, "root", retryTimes);
+        this(coordinatorSvr, "DINGO", retryTimes);
     }
 
     public DingoClient(String coordinatorSvr, String schema, Integer retryTimes) {
-        connection = new UnifyStoreConnection(coordinatorSvr, schema, retryTimes);
-        DingoClient.retryTimes = retryTimes;
+        operationService = new OperationService(getMetaServiceConnector(coordinatorSvr), retryTimes);
+        this.schema = schema;
     }
 
     public boolean open() {
-        connection.initConnection();
-        serviceOperation = new ServiceOperation(connection, retryTimes);
+        operationService.init();
         return true;
     }
 
     public boolean createTable(Table table) {
-        boolean isSuccess = connection.getMetaClient().createTable(table.getName(), table);
-        serviceOperation.updateCacheOfTableDefinition(table.getName(), table);
+        boolean isSuccess = operationService.createTable(schema, table.getName(), table);
         return isSuccess;
     }
 
     public boolean dropTable(String tableName) {
-        boolean isSuccess = connection.getMetaClient().dropTable(tableName);
-        serviceOperation.removeCacheOfTableDefinition(tableName);
+        boolean isSuccess = operationService.dropTable(schema, tableName);
         return isSuccess;
     }
 
-    public boolean upsert(String tableName, List<Record> records) {
-        List<Key> keys = getKeys(tableName, records);
-        Result result = serviceOperation.operation(
-                tableName,
-                StoreOperationType.PUT,
-                ContextForClient.builder().keyList(keys).records(records).build());
-
-        return result.isSuccess();
+    public boolean upsert(String tableName, Record record) {
+        return upsert(tableName, Collections.singletonList(record)).get(0);
     }
 
-    public boolean putIfAbsent(final String tableName, List<Record> records) {
-        List<Key> keys = getKeys(tableName, records);
-        Result result = serviceOperation.operation(
-                tableName,
-                StoreOperationType.PUT_IF_ABSENT,
-                ContextForClient.builder().keyList(keys).records(records).build());
-        return result.isSuccess();
+    public List<Boolean> upsert(String tableName, List<Record> records) {
+        return operationService.exec(schema, tableName, PutOperation.getInstance(), records);
     }
 
-    private List<Key> getKeys(String tableName, List<Record> records) {
-        List<Key> keys = records.stream()
-                .map(__ ->
-                        new Key(tableName, __.getKeyValues().stream()
-                                .map(Value::get)
-                                .collect(Collectors.toList())))
-                .collect(Collectors.toList());
-        return keys;
+    public boolean putIfAbsent(String tableName, Record record) {
+        return putIfAbsent(tableName, Collections.singletonList(record)).get(0);
+    }
+
+    public List<Boolean> putIfAbsent(String tableName, List<Record> records) {
+        return operationService.exec(schema, tableName, PutIfAbsentOperation.getInstance(), records);
     }
 
     public Record get(String tableName, Key key) {
@@ -107,44 +95,35 @@ public class DingoClient {
     }
 
     public List<Record> get(String tableName, List<Key> keys) {
-        Result result = serviceOperation.operation(
-                tableName,
-                StoreOperationType.GET,
-                ContextForClient.builder().keyList(keys).build()
-        );
-        return result.getValues();
+        return operationService.exec(schema, tableName, GetOperation.getInstance(), keys);
     }
 
     public Record get(final String tableName, final Key firstKey, List<String> colNames) {
-        Record record = get(tableName, firstKey);
+        return Optional.mapOrNull(get(tableName, firstKey), r -> r.extract(colNames));
+    }
 
-        if (record == null) {
-            return null;
-        }
-        return Record.toRecordByColumn(record, colNames);
+    public Iterator<Record> scan(final String tableName, Key begin, Key end, boolean withBegin, boolean withEnd) {
+        return operationService.exec(
+            schema, tableName, ScanOperation.getInstance(), new ScanOperation.KeyScan(begin, end, withBegin, withEnd)
+        );
     }
 
     public boolean delete(final String tableName, Key key) {
-        return delete(tableName, Collections.singletonList(key));
+        return delete(tableName, Collections.singletonList(key)).get(0);
     }
 
-    public boolean delete(final String tableName, List<Key> keys) {
-        Result result = serviceOperation.operation(
-                tableName,
-                StoreOperationType.DELETE,
-                ContextForClient.builder().keyList(keys).build()
-        );
-        return result.isSuccess();
+    public List<Boolean> delete(final String tableName, List<Key> keys) {
+        return operationService.exec(schema, tableName, DeleteOperation.getInstance(), keys);
     }
 
     public Table getTableDefinition(final String tableName) {
         if (tableName == null || tableName.isEmpty()) {
             throw new DingoClientException("Invalid table name: " + tableName);
         }
-        return serviceOperation.getTableDefinition(tableName);
+        return operationService.getTableDefinition(schema, tableName);
     }
 
     public void close() {
-        serviceOperation.close();
+        operationService.close();
     }
 }

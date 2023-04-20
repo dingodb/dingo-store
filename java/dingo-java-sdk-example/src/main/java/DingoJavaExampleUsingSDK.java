@@ -11,6 +11,7 @@ import io.dingodb.sdk.common.table.TableDefinition;
 
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 public class DingoJavaExampleUsingSDK {
@@ -51,7 +52,9 @@ public class DingoJavaExampleUsingSDK {
                 0,
                 null,
                 Common.Engine.ENG_ROCKSDB.name(),
-                null);
+                null,
+                3
+        );
 
         if (isReCreateTable) {
             try {
@@ -69,10 +72,10 @@ public class DingoJavaExampleUsingSDK {
 
         Long test_count = recordCnt;
         for (Long i = 0L; i < test_count; i++) {
-            Map<String, Object> map = Maps.newLinkedHashMap();
+            LinkedHashMap<String, Object> map = Maps.newLinkedHashMap();
             map.put(c1.getName(), keyPrefix + i);
             map.put(c2.getName(), keyPrefix + "=zhangsan=>" + i);
-            boolean test = dingoClient.upsert(tableName, Collections.singletonList(new Record(c1.getName(), map)));
+            boolean test = dingoClient.upsert(tableName, new Record(c1.getName(), map));
             if (i % 1000 == 0) {
                 System.out.println("Write key: " + i);
             }

@@ -244,6 +244,7 @@ bool Server::InitCrontabManager() {
 
     // Add scan crontab
     std::shared_ptr<Crontab> scan_crontab = std::make_shared<Crontab>();
+    ScanManager::GetInstance()->Init(config);
     scan_crontab->name = "SCAN";
     uint64_t scan_interval = config->GetInt(Constant::kStoreScan + "." + Constant::kStoreScanScanIntervalMs);
     if (scan_interval <= 0) {

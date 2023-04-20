@@ -14,26 +14,25 @@
  * limitations under the License.
  */
 
-package io.dingodb.client;
+package io.dingodb.sdk.common.utils;
 
-import io.dingodb.sdk.common.KeyValue;
-import lombok.Getter;
+import lombok.EqualsAndHashCode;
 
-import java.util.List;
+@EqualsAndHashCode
+public class Any {
 
-@Getter
-public class ResultForStore {
-    private final int code;
-    private final String errorMessage;
-    private final List<KeyValue> records;
-
-    public ResultForStore(int code, String errorMessage) {
-        this(code, errorMessage, null);
+    public static Any wrap(Object value) {
+        return new Any(value);
     }
 
-    public ResultForStore(int code, String errorMessage, List<KeyValue> records) {
-        this.code = code;
-        this.errorMessage = errorMessage;
-        this.records = records;
+    private final Object value;
+
+    public Any(Object value) {
+        this.value = value;
     }
+
+    public <T> T getValue() {
+        return (T) value;
+    }
+
 }

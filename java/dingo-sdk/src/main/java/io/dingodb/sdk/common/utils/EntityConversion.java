@@ -77,6 +77,7 @@ public class EntityConversion {
                 .setTtl(table.getTtl())
                 .setTablePartition(calcRange(table, tableId))
                 .setEngine(Common.Engine.valueOf(table.getEngine()))
+                .setReplica(table.getReplica())
                 .addAllColumns(columnDefinitions).build();
     }
 
@@ -88,7 +89,9 @@ public class EntityConversion {
                 (int) tableDefinition.getTtl(),
                 null,
                 tableDefinition.getEngine().name(),
-                tableDefinition.getPropertiesMap());
+                tableDefinition.getPropertiesMap(),
+                tableDefinition.getReplica()
+        );
     }
 
     public static Column mapping(Meta.ColumnDefinition definition) {

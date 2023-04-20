@@ -27,4 +27,9 @@ public class Location {
 
     private String host;
     private int port;
+
+    @Override
+    public String toString() {
+        return host + ":" + port;
+    }
 }
