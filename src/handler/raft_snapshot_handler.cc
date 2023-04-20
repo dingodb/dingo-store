@@ -15,7 +15,9 @@
 #include "handler/raft_snapshot_handler.h"
 
 #include <filesystem>
+#include <string>
 
+#include "butil/strings/stringprintf.h"
 #include "common/constant.h"
 #include "common/helper.h"
 #include "google/protobuf/message.h"
@@ -109,7 +111,9 @@ bool RaftSnapshot::SaveSnapshot(braft::SnapshotWriter* writer,
                                          Helper::StringToHex(region->definition().range().end_key()).c_str());
   auto raw_engine = std::dynamic_pointer_cast<RawRocksEngine>(engine_);
 
-  std::string checkpoint_dir = raw_engine->DbPath() + "/checkpoint_" + std::to_string(Helper::Timestamp());
+  std::filesystem::path db_path(raw_engine->DbPath());
+  std::string checkpoint_dir = butil::StringPrintf("%s/checkpoint_%lu_%lu", db_path.parent_path().string().c_str(),
+                                                   region->definition().id(), Helper::TimestampMs());
   if (!std::filesystem::create_directories(checkpoint_dir)) {
     DINGO_LOG(ERROR) << "Create directory failed: " << checkpoint_dir;
     return false;
