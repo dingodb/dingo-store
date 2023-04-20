@@ -681,7 +681,7 @@ void CoordinatorServiceImpl::CreateRegion(google::protobuf::RpcController *contr
 
   pb::error::Errno ret = pb::error::Errno::OK;
   if (split_from_region_id > 0) {
-    ret = coordinator_control_->CreateRegionForSplit(region_name, resource_tag, replica_num, range, schema_id, table_id,
+    ret = coordinator_control_->CreateRegionForSplit(region_name, resource_tag, range, schema_id, table_id,
                                                      split_from_region_id, new_region_id, meta_increment);
   } else {
     ret = coordinator_control_->CreateRegion(region_name, resource_tag, replica_num, range, schema_id, table_id,
