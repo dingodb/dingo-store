@@ -26,13 +26,15 @@ namespace dingodb {
 #define DINGO_DEBUG 79
 static constexpr int kGlobalValueOfDebug = DINGO_DEBUG;
 
+#define CURRENT_FUNC_NAME "[" << __func__ << "] "
+
 #define DINGO_LOG(level) DINGO_LOG_##level
 
-#define DINGO_LOG_DEBUG VLOG(DINGO_DEBUG)
-#define DINGO_LOG_INFO LOG(INFO)
-#define DINGO_LOG_WARNING LOG(WARNING)
-#define DINGO_LOG_ERROR LOG(ERROR)
-#define DINGO_LOG_FATAL LOG(FATAL)
+#define DINGO_LOG_DEBUG VLOG(DINGO_DEBUG) << CURRENT_FUNC_NAME
+#define DINGO_LOG_INFO LOG(INFO) << CURRENT_FUNC_NAME
+#define DINGO_LOG_WARNING LOG(WARNING) << CURRENT_FUNC_NAME
+#define DINGO_LOG_ERROR LOG(ERROR) << CURRENT_FUNC_NAME
+#define DINGO_LOG_FATAL LOG(FATAL) << CURRENT_FUNC_NAME
 
 class DingoLogger {
  public:
@@ -51,6 +53,7 @@ class DingoLogger {
 
   static bool GetStoppingWhenDiskFull();
   static void SetStoppingWhenDiskFull(bool is_stop);
+  static void CustomPrefix(std::ostream& s, const google::LogMessageInfo& l, void*);
 };
 
 }  // namespace dingodb

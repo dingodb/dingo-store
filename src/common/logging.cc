@@ -14,6 +14,8 @@
 
 #include "common/logging.h"
 
+#include <iomanip>
+
 #include "butil/strings/stringprintf.h"
 
 namespace dingodb {
@@ -26,7 +28,7 @@ void DingoLogger::InitLogger(const std::string& log_dir, const std::string& role
   FLAGS_logbuflevel = google::GLOG_INFO;
 
   const std::string program_name = butil::StringPrintf("./%s", role.c_str());
-  google::InitGoogleLogging(program_name.c_str());
+  google::InitGoogleLogging(program_name.c_str(), &CustomPrefix);
   google::SetLogDestination(google::GLOG_INFO,
                             butil::StringPrintf("%s/%s.info.log.", log_dir.c_str(), role.c_str()).c_str());
   google::SetLogDestination(google::GLOG_WARNING,
@@ -55,5 +57,12 @@ void DingoLogger::SetMaxLogSize(uint32_t max_log_size) { FLAGS_max_log_size = ma
 bool DingoLogger::GetStoppingWhenDiskFull() { return FLAGS_stop_logging_if_full_disk; }
 
 void DingoLogger::SetStoppingWhenDiskFull(bool is_stop) { FLAGS_stop_logging_if_full_disk = is_stop; }
+
+void DingoLogger::CustomPrefix(std::ostream& s, const google::LogMessageInfo& l, void*) {
+  s << "[" << l.severity[0] << std::setw(4) << "][" << 1900 + l.time.year() << std::setw(2) << 1 + l.time.month()
+    << std::setw(2) << l.time.day() << ' ' << std::setw(2) << l.time.hour() << ':' << std::setw(2) << l.time.min()
+    << ':' << std::setw(2) << l.time.sec() << "." << std::setw(6) << l.time.usec() << std::setw(5) << "]["
+    << l.thread_id << "][" << l.filename << ':' << l.line_number << "]";
+}
 
 }  // namespace dingodb
