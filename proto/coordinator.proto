@@ -90,21 +90,15 @@ message StoreOperation {
 // Store report self status and region (this node is leader) status
 message StoreHeartbeatRequest {
   uint64 self_storemap_epoch = 1;                    // storemap epoch in this Store
-  uint64 self_regionmap_epoch = 2;                   // regionmap epoch in this Store
-  dingodb.pb.common.Store store = 3;                 // self store info
-  repeated dingodb.pb.common.Region regions = 4;     // self region info
-  dingodb.pb.common.StoreMetrics store_metrics = 5;  // self store metrics
+  dingodb.pb.common.Store store = 2;                 // self store info
+  dingodb.pb.common.StoreMetrics store_metrics = 3;  // self store metrics
 }
 
 // StoreHeartbeatResponse
 message StoreHeartbeatResponse {
   dingodb.pb.error.Error error = 1;
-  uint64 storemap_epoch = 2;                  // the lates epoch of storemap
-  uint64 regionmap_epoch = 3;                 // the lates epoch of regionmap
-  dingodb.pb.common.StoreMap storemap = 4;    // new storemap
-  dingodb.pb.common.RegionMap regionmap = 5;  // new regionmap, will be deprecated in future version
-  // use PushStoreOperation to push operation to store
-  StoreOperation store_operation = 6;  // operations need to be done, will be deprecated in future version
+  uint64 storemap_epoch = 2;                // the lates epoch of storemap
+  dingodb.pb.common.StoreMap storemap = 3;  // new storemap
 }
 
 message ExecutorHeartbeatRequest {
