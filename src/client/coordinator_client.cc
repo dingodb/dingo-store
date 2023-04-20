@@ -150,6 +150,8 @@ void* Sender(void* /*arg*/) {
     SendAddPeerRegion(cntl, coordinator_stub);
   } else if (FLAGS_method == "RemovePeerRegion") {
     SendRemovePeerRegion(cntl, coordinator_stub);
+  } else if (FLAGS_method == "GetOrphanRegion") {
+    SendGetOrphanRegion(cntl, coordinator_stub);
   } else if (FLAGS_method == "GetStoreOperation") {
     SendGetStoreOperation(cntl, coordinator_stub);
   } else if (FLAGS_method == "CleanStoreOperation") {

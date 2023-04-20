@@ -940,6 +940,31 @@ void CoordinatorServiceImpl::ChangePeerRegion(google::protobuf::RpcController *c
   engine_->MetaPut(ctx, meta_increment);
 }
 
+void CoordinatorServiceImpl::GetOrphanRegion(google::protobuf::RpcController * /*controller*/,
+                                             const pb::coordinator::GetOrphanRegionRequest *request,
+                                             pb::coordinator::GetOrphanRegionResponse *response,
+                                             google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+  DINGO_LOG(DEBUG) << "Receive Get Orphan Region Request:" << request->DebugString();
+
+  auto is_leader = this->coordinator_control_->IsLeader();
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  std::map<uint64_t, pb::common::RegionMetrics> orphan_regions;
+  auto ret = this->coordinator_control_->GetOrphanRegion(request->store_id(), orphan_regions);
+  response->mutable_error()->set_errcode(ret);
+
+  if (orphan_regions.empty()) {
+    return;
+  }
+
+  for (const auto &it : orphan_regions) {
+    response->mutable_orphan_regions()->insert({it.first, it.second});
+  }
+}
+
 // StoreOperation service
 void CoordinatorServiceImpl::GetStoreOperation(google::protobuf::RpcController * /*controller*/,
                                                const pb::coordinator::GetStoreOperationRequest *request,

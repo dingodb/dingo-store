@@ -181,6 +181,9 @@ class CoordinatorServiceImpl : public pb::coordinator::CoordinatorService {
   void ChangePeerRegion(google::protobuf::RpcController* controller,
                         const pb::coordinator::ChangePeerRegionRequest* request,
                         pb::coordinator::ChangePeerRegionResponse* response, google::protobuf::Closure* done) override;
+  void GetOrphanRegion(google::protobuf::RpcController* controller,
+                       const pb::coordinator::GetOrphanRegionRequest* request,
+                       pb::coordinator::GetOrphanRegionResponse* response, google::protobuf::Closure* done) override;
 
   // StoreOperation service
   void GetStoreOperation(google::protobuf::RpcController* controller,

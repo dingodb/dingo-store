@@ -117,10 +117,15 @@ void CoordinatorControl::GetStoreMetrics(std::vector<pb::common::StoreMetrics>& 
   }
 }
 
-void CoordinatorControl::GetOrphanRegion(std::map<uint64_t, pb::common::RegionMetrics>& orphan_regions) {
+pb::error::Errno CoordinatorControl::GetOrphanRegion(uint64_t store_id,
+                                                     std::map<uint64_t, pb::common::RegionMetrics>& orphan_regions) {
   BAIDU_SCOPED_LOCK(this->store_metrics_map_mutex_);
 
   for (const auto& it : this->store_metrics_map_) {
+    if (it.first != store_id && store_id != 0) {
+      continue;
+    }
+
     const auto& store_metrics = it.second;
     for (const auto& region : store_metrics.region_metrics_map()) {
       if (region.second.store_region_state() == pb::common::StoreRegionState::ORPHAN) {
@@ -128,6 +133,8 @@ void CoordinatorControl::GetOrphanRegion(std::map<uint64_t, pb::common::RegionMe
       }
     }
   }
+
+  return pb::error::Errno::OK;
 }
 
 void CoordinatorControl::GetPushStoreMap(butil::FlatMap<uint64_t, pb::common::Store>& store_to_push) {
@@ -754,8 +761,11 @@ pb::error::Errno CoordinatorControl::SplitRegion(uint64_t split_from_region_id, 
 
   // validate split_from_region and split_to_region has NORMAL status
   if (split_from_region.state() != ::dingodb::pb::common::RegionState::REGION_NORMAL ||
-      split_to_region.state() != ::dingodb::pb::common::RegionState::REGION_NORMAL) {
-    DINGO_LOG(ERROR) << "SplitRegion split_from_region or split_to_region is not NORMAL";
+      split_to_region.state() != ::dingodb::pb::common::RegionState::REGION_STANDBY) {
+    DINGO_LOG(ERROR) << "SplitRegion split_from_region or split_to_region is not ready for split, "
+                        "split_from_region_id = "
+                     << split_from_region_id << " from_state=" << split_from_region.state()
+                     << ", split_to_region_id = " << split_to_region_id << " to_state=" << split_to_region.state();
     return pb::error::Errno::ESPLIT_STATUS_ILLEGAL;
   }
 
@@ -768,16 +778,32 @@ pb::error::Errno CoordinatorControl::SplitRegion(uint64_t split_from_region_id, 
   region_cmd.mutable_split_request()->set_split_to_region_id(split_to_region_id);
   region_cmd.set_create_timestamp(butil::gettimeofday_ms());
 
-  for (auto it : split_from_region_peers) {
-    auto* store_operation_increment = meta_increment.add_store_operations();
-    store_operation_increment->set_id(it);  // this store id
-    store_operation_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
-    auto* store_operation = store_operation_increment->mutable_store_operation();
-    store_operation->set_id(it);
-    auto* region_cmd_to_add = store_operation->add_region_cmds();
-    region_cmd_to_add->CopyFrom(region_cmd);
-    region_cmd_to_add->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
+  // for (auto it : split_from_region_peers) {
+  //   auto* store_operation_increment = meta_increment.add_store_operations();
+  //   store_operation_increment->set_id(it);  // this store id
+  //   store_operation_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
+  //   auto* store_operation = store_operation_increment->mutable_store_operation();
+  //   store_operation->set_id(it);
+  //   auto* region_cmd_to_add = store_operation->add_region_cmds();
+  //   region_cmd_to_add->CopyFrom(region_cmd);
+  //   region_cmd_to_add->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
+  // }
+
+  // only send split region_cmd to split_from_region_id's leader store id
+  if (split_from_region.leader_store_id() == 0) {
+    DINGO_LOG(ERROR) << "SplitRegion split_from_region_id's leader_store_id is 0, split_from_region_id="
+                     << split_from_region_id << ", split_to_region_id=" << split_to_region_id;
+    return pb::error::Errno::ESPLIT_STATUS_ILLEGAL;
   }
+
+  auto* store_operation_increment = meta_increment.add_store_operations();
+  store_operation_increment->set_id(split_from_region.leader_store_id());  // this store id
+  store_operation_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
+  auto* store_operation = store_operation_increment->mutable_store_operation();
+  store_operation->set_id(split_from_region.leader_store_id());
+  auto* region_cmd_to_add = store_operation->add_region_cmds();
+  region_cmd_to_add->CopyFrom(region_cmd);
+  region_cmd_to_add->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
 
   return pb::error::Errno::OK;
 }
@@ -849,16 +875,32 @@ pb::error::Errno CoordinatorControl::MergeRegion(uint64_t merge_from_region_id, 
   region_cmd.mutable_merge_request()->set_merge_from_region_id(merge_from_region_id);
   region_cmd.mutable_merge_request()->set_merge_to_region_id(merge_to_region_id);
 
-  for (auto it : merge_from_region_peers) {
-    auto* store_operation_increment = meta_increment.add_store_operations();
-    store_operation_increment->set_id(it);  // this store id
-    store_operation_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
-    auto* store_operation = store_operation_increment->mutable_store_operation();
-    store_operation->set_id(it);
-    auto* region_cmd_to_add = store_operation->add_region_cmds();
-    region_cmd_to_add->CopyFrom(region_cmd);
-    region_cmd_to_add->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
+  // for (auto it : merge_from_region_peers) {
+  //   auto* store_operation_increment = meta_increment.add_store_operations();
+  //   store_operation_increment->set_id(it);  // this store id
+  //   store_operation_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
+  //   auto* store_operation = store_operation_increment->mutable_store_operation();
+  //   store_operation->set_id(it);
+  //   auto* region_cmd_to_add = store_operation->add_region_cmds();
+  //   region_cmd_to_add->CopyFrom(region_cmd);
+  //   region_cmd_to_add->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
+  // }
+
+  // only send merge region_cmd to merge_from_region_id's leader store id
+  if (merge_from_region.leader_store_id() == 0) {
+    DINGO_LOG(ERROR) << "MergeRegion merge_from_region_id's leader_store_id is 0, merge_from_region_id="
+                     << merge_from_region_id << ", merge_to_region_id=" << merge_to_region_id;
+    return pb::error::Errno::EMERGE_STATUS_ILLEGAL;
   }
+
+  auto* store_operation_increment = meta_increment.add_store_operations();
+  store_operation_increment->set_id(merge_from_region.leader_store_id());
+  store_operation_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
+  auto* store_operation = store_operation_increment->mutable_store_operation();
+  store_operation->set_id(merge_from_region.leader_store_id());
+  auto* region_cmd_to_add = store_operation->add_region_cmds();
+  region_cmd_to_add->CopyFrom(region_cmd);
+  region_cmd_to_add->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
 
   return pb::error::Errno::OK;
 }

@@ -227,7 +227,7 @@ class CoordinatorControl : public MetaControl {
   void GetStoreMetrics(std::vector<pb::common::StoreMetrics> &store_metrics);
 
   // get orphan region
-  void GetOrphanRegion(std::map<uint64_t, pb::common::RegionMetrics> &orphan_regions);
+  pb::error::Errno GetOrphanRegion(uint64_t store_id, std::map<uint64_t, pb::common::RegionMetrics> &orphan_regions);
 
   // get store operation
   void GetStoreOperation(uint64_t store_id, pb::coordinator::StoreOperation &store_operation);

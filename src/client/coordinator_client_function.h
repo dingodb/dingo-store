@@ -65,6 +65,7 @@ void SendSplitRegion(brpc::Controller& cntl, dingodb::pb::coordinator::Coordinat
 void SendMergeRegion(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
 void SendAddPeerRegion(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
 void SendRemovePeerRegion(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
+void SendGetOrphanRegion(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
 
 // store operation
 void SendGetStoreOperation(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
