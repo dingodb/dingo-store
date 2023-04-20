@@ -483,13 +483,13 @@ void CoordinatorServiceImpl::StoreHeartbeat(google::protobuf::RpcController *con
   int const new_storemap_epoch = this->coordinator_control_->UpdateStoreMap(request->store(), meta_increment);
 
   // update region map
-  std::vector<pb::common::Region> regions;
-  for (const auto &x : request->regions()) {
-    regions.push_back(x);
-  }
+  // std::vector<pb::common::Region> regions;
+  // for (const auto &x : request->regions()) {
+  //   regions.push_back(x);
+  // }
 
   // call UpdateRegionMap
-  uint64_t const new_regionmap_epoch = this->coordinator_control_->UpdateRegionMap(regions, meta_increment);
+  // uint64_t const new_regionmap_epoch = this->coordinator_control_->UpdateRegionMap(regions, meta_increment);
 
   // update store metrics
   if (request->has_store_metrics()) {
@@ -506,7 +506,7 @@ void CoordinatorServiceImpl::StoreHeartbeat(google::protobuf::RpcController *con
   CoordinatorClosure<pb::coordinator::StoreHeartbeatRequest, pb::coordinator::StoreHeartbeatResponse>
       *meta_put_closure =
           new CoordinatorClosure<pb::coordinator::StoreHeartbeatRequest, pb::coordinator::StoreHeartbeatResponse>(
-              request, response, done_guard.release(), new_regionmap_epoch, new_storemap_epoch,
+              request, response, done_guard.release(), /*new_regionmap_epoch,*/ new_storemap_epoch,
               this->coordinator_control_);
 
   std::shared_ptr<Context> const ctx =

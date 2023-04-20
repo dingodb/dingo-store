@@ -57,13 +57,11 @@ class CoordinatorClosure<pb::coordinator::StoreHeartbeatRequest, pb::coordinator
  public:
   CoordinatorClosure(const pb::coordinator::StoreHeartbeatRequest* request,
                      pb::coordinator::StoreHeartbeatResponse* response, google::protobuf::Closure* done,
-                     uint64_t new_regionmap_epoch, uint64_t new_storemap_epoch,
-                     std::shared_ptr<CoordinatorControl> coordinator_control)
+                     uint64_t new_storemap_epoch, std::shared_ptr<CoordinatorControl> coordinator_control)
       : request_(request),
         response_(response),
         done_(done),
         coordinator_control_(coordinator_control),
-        new_regionmap_epoch_(new_regionmap_epoch),
         new_storemap_epoch_(new_storemap_epoch) {}
   ~CoordinatorClosure() override = default;
 
@@ -75,24 +73,25 @@ class CoordinatorClosure<pb::coordinator::StoreHeartbeatRequest, pb::coordinator
     std::unique_ptr<CoordinatorClosure<pb::coordinator::StoreHeartbeatRequest, pb::coordinator::StoreHeartbeatResponse>>
         self_guard(this);
     // Repsond this RPC.
-    auto* new_regionmap = response()->mutable_regionmap();
-    coordinator_control_->GetRegionMap(*new_regionmap);
+    // auto* new_regionmap = response()->mutable_regionmap();
+    // coordinator_control_->GetRegionMap(*new_regionmap);
 
     auto* new_storemap = response()->mutable_storemap();
     coordinator_control_->GetStoreMap(*new_storemap);
 
     response()->set_storemap_epoch(new_storemap_epoch_);
-    response()->set_regionmap_epoch(new_regionmap_epoch_);
+    // response()->set_regionmap_epoch(new_regionmap_epoch_);
 
     // add store operation
-    auto store_id = request_->store().id();
-    auto* store_operation_to_push = response_->mutable_store_operation();
-    coordinator_control_->GetStoreOperation(store_id, *store_operation_to_push);
-    if (store_operation_to_push->region_cmds_size() > 0) {
-      DINGO_LOG(INFO) << "Coordinator Closure will send to store with store_operation, store_id=" << store_id
-                      << " region_cmd_size=" << store_operation_to_push->region_cmds_size();
-      DINGO_LOG(DEBUG) << "store_id=" << store_id << " store_operation=" << store_operation_to_push->ShortDebugString();
-    }
+    // auto store_id = request_->store().id();
+    // auto* store_operation_to_push = response_->mutable_store_operation();
+    // coordinator_control_->GetStoreOperation(store_id, *store_operation_to_push);
+    // if (store_operation_to_push->region_cmds_size() > 0) {
+    //   DINGO_LOG(INFO) << "Coordinator Closure will send to store with store_operation, store_id=" << store_id
+    //                   << " region_cmd_size=" << store_operation_to_push->region_cmds_size();
+    //   DINGO_LOG(DEBUG) << "store_id=" << store_id << " store_operation=" <<
+    //   store_operation_to_push->ShortDebugString();
+    // }
 
     brpc::ClosureGuard const done_guard(done_);
     DINGO_LOG(DEBUG) << "Coordinator Closure return Heartbeat respone [" << response_->DebugString()

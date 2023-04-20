@@ -38,7 +38,7 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
   auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
 
   request.set_self_storemap_epoch(store_meta_manager->GetStoreServerMeta()->GetEpoch());
-  request.set_self_regionmap_epoch(store_meta_manager->GetStoreRegionMeta()->GetEpoch());
+  // request.set_self_regionmap_epoch(store_meta_manager->GetStoreRegionMeta()->GetEpoch());
 
   // store
   request.mutable_store()->CopyFrom(*store_meta_manager->GetStoreServerMeta()->GetStore(Server::GetInstance()->Id()));
@@ -321,14 +321,14 @@ void CoordinatorPushTask::SendCoordinatorPushToStore(std::shared_ptr<Coordinator
   // generate new heartbeat response
   pb::coordinator::StoreHeartbeatResponse heartbeat_response;
   {
-    auto* new_regionmap = heartbeat_response.mutable_regionmap();
-    coordinator_control->GetRegionMap(*new_regionmap);
+    // auto* new_regionmap = heartbeat_response.mutable_regionmap();
+    // coordinator_control->GetRegionMap(*new_regionmap);
 
     auto* new_storemap = heartbeat_response.mutable_storemap();
     coordinator_control->GetStoreMap(*new_storemap);
 
     heartbeat_response.set_storemap_epoch(new_storemap->epoch());
-    heartbeat_response.set_regionmap_epoch(new_regionmap->epoch());
+    // heartbeat_response.set_regionmap_epoch(new_regionmap->epoch());
 
     DINGO_LOG(INFO) << "SendCoordinatorPushToStore will send to store with response:"
                     << heartbeat_response.ShortDebugString();
@@ -367,13 +367,13 @@ void CoordinatorPushTask::SendCoordinatorPushToStore(std::shared_ptr<Coordinator
     }
 
     // add StoreOperation
-    pb::coordinator::StoreOperation store_operation;
-    coordinator_control->GetStoreOperation(store_need_send.id(), store_operation);
-    heartbeat_response.mutable_store_operation()->CopyFrom(store_operation);
-    if (store_operation.region_cmds_size() > 0) {
-      DINGO_LOG(INFO) << "SendCoordinatorPushToStore will send to store with store_operation:"
-                      << store_operation.ShortDebugString();
-    }
+    // pb::coordinator::StoreOperation store_operation;
+    // coordinator_control->GetStoreOperation(store_need_send.id(), store_operation);
+    // heartbeat_response.mutable_store_operation()->CopyFrom(store_operation);
+    // if (store_operation.region_cmds_size() > 0) {
+    //   DINGO_LOG(INFO) << "SendCoordinatorPushToStore will send to store with store_operation:"
+    //                   << store_operation.ShortDebugString();
+    // }
 
     // start rpc
     pb::push::PushService_Stub stub(&channel);

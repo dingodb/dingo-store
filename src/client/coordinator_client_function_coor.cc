@@ -601,7 +601,7 @@ void SendStoreHearbeat(brpc::Controller& cntl, dingodb::pb::coordinator::Coordin
   dingodb::pb::coordinator::StoreHeartbeatResponse response;
 
   request.set_self_storemap_epoch(1);
-  request.set_self_regionmap_epoch(1);
+  // request.set_self_regionmap_epoch(1);
   // mock store
   auto* store = request.mutable_store();
   store->set_id(store_id);
@@ -615,44 +615,44 @@ void SendStoreHearbeat(brpc::Controller& cntl, dingodb::pb::coordinator::Coordin
   store->set_resource_tag("DINGO_DEFAULT");
 
   // mock regions
-  for (int i = 0; i < 3; i++) {
-    auto* region = request.add_regions();
-    region->set_id(store_id * 100 + i);
-    region->set_epoch(1);
-    std::string region_name("test_region_");
-    region_name.append(std::to_string(i));
-    region->set_name(region_name);
-    region->set_state(::dingodb::pb::common::RegionState::REGION_NORMAL);
-    region->set_leader_store_id(1);
+  // for (int i = 0; i < 3; i++) {
+  //   auto* region = request.add_regions();
+  //   region->set_id(store_id * 100 + i);
+  //   region->set_epoch(1);
+  //   std::string region_name("test_region_");
+  //   region_name.append(std::to_string(i));
+  //   region->set_name(region_name);
+  //   region->set_state(::dingodb::pb::common::RegionState::REGION_NORMAL);
+  //   region->set_leader_store_id(1);
 
-    // mock peers
-    for (int j = 0; j < 3; j++) {
-      auto* peer = region->add_peers();
-      peer->set_store_id(store_id);
-      auto* server_location = peer->mutable_server_location();
-      server_location->set_host("127.0.0.1");
-      server_location->set_port(19191);
-      auto* raft_location = peer->mutable_server_location();
-      raft_location->set_host("127.0.0.1");
-      raft_location->set_port(19192);
-    }
+  //   // mock peers
+  //   for (int j = 0; j < 3; j++) {
+  //     auto* peer = region->add_peers();
+  //     peer->set_store_id(store_id);
+  //     auto* server_location = peer->mutable_server_location();
+  //     server_location->set_host("127.0.0.1");
+  //     server_location->set_port(19191);
+  //     auto* raft_location = peer->mutable_server_location();
+  //     raft_location->set_host("127.0.0.1");
+  //     raft_location->set_port(19192);
+  //   }
 
-    // mock range
-    auto* range = region->mutable_range();
-    const char start_key[] = {0, 0, 0, 0};
-    const char end_key[] = {static_cast<char>(255), static_cast<char>(255), static_cast<char>(255),
-                            static_cast<char>(255)};
+  //   // mock range
+  //   auto* range = region->mutable_range();
+  //   const char start_key[] = {0, 0, 0, 0};
+  //   const char end_key[] = {static_cast<char>(255), static_cast<char>(255), static_cast<char>(255),
+  //                           static_cast<char>(255)};
 
-    range->set_start_key(std::string(start_key));
-    range->set_end_key(std::string(end_key));
+  //   range->set_start_key(std::string(start_key));
+  //   range->set_end_key(std::string(end_key));
 
-    // mock meta
-    region->set_schema_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
-    region->set_table_id(2);
+  //   // mock meta
+  //   region->set_schema_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+  //   region->set_table_id(2);
 
-    // mock create ts
-    region->set_create_timestamp(butil::gettimeofday_ms());
-  }
+  //   // mock create ts
+  //   region->set_create_timestamp(butil::gettimeofday_ms());
+  // }
 
   // DINGO_LOG(INFO) << request.DebugString();
 
