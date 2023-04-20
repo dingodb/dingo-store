@@ -233,7 +233,7 @@ if (NOT GIT_TAG_NAME)
     set(GIT_TAG_NAME "unknown")
 endif()
 
-
+add_definitions(-DGLOG_CUSTOM_PREFIX_SUPPORT=ON)
 add_definitions(-DGIT_VERSION="${GIT_VERSION}")
 add_definitions(-DGIT_TAG_NAME="${GIT_TAG_NAME}")
 
