@@ -145,12 +145,12 @@ butil::Status ValidateRegion(uint64_t region_id, const std::vector<std::string_v
     return butil::Status(pb::error::EREGION_UNAVAILABLE, "Region is deleting");
   }
 
-  // auto range = region->definition().range();
-  // for (const auto& key : keys) {
-  //   if (range.start_key().compare(key) > 0 || range.end_key().compare(key) < 0) {
-  //     return butil::Status(pb::error::EKEY_OUT_OF_RANGE, "Key out of range");
-  //   }
-  // }
+  auto range = region->definition().range();
+  for (const auto& key : keys) {
+    if (range.start_key().compare(key) > 0 || range.end_key().compare(key) <= 0) {
+      return butil::Status(pb::error::EKEY_OUT_OF_RANGE, "Key out of range");
+    }
+  }
 
   return butil::Status();
 }
@@ -832,6 +832,22 @@ void StoreServiceImpl::Debug(google::protobuf::RpcController* controller,
 
     for (auto& region : regions) {
       response->mutable_region_meta_details()->add_regions()->CopyFrom(*region);
+    }
+  } else if (request->type() == pb::store::DebugType::STORE_REGION_CONTROL_COMMAND) {
+    std::vector<std::shared_ptr<pb::coordinator::RegionCmd>> commands;
+    if (request->region_ids().empty()) {
+      commands = Server::GetInstance()->GetRegionCommandManager()->GetAllCommand();
+    } else {
+      for (auto region_id : request->region_ids()) {
+        auto command = Server::GetInstance()->GetRegionCommandManager()->GetCommand(region_id);
+        if (command != nullptr) {
+          commands.push_back(command);
+        }
+      }
+    }
+
+    for (auto& command : commands) {
+      response->mutable_region_control_command()->add_region_cmds()->CopyFrom(*command);
     }
   }
 }

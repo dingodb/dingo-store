@@ -20,9 +20,11 @@
 #include <functional>
 #include <memory>
 #include <unordered_map>
+#include <vector>
 
 #include "bthread/execution_queue.h"
 #include "butil/macros.h"
+#include "butil/status.h"
 #include "butil/strings/stringprintf.h"
 #include "common/constant.h"
 #include "common/context.h"
@@ -169,6 +171,8 @@ class RegionCommandManager : public TransformKvAble {
                            pb::coordinator::RegionCmdStatus status);
   void UpdateCommandStatus(uint64_t command_id, pb::coordinator::RegionCmdStatus status);
   std::shared_ptr<pb::coordinator::RegionCmd> GetCommand(uint64_t command_id);
+  std::vector<std::shared_ptr<pb::coordinator::RegionCmd>> GetCommands(pb::coordinator::RegionCmdStatus status);
+  std::vector<std::shared_ptr<pb::coordinator::RegionCmd>> GetAllCommand();
 
   std::shared_ptr<pb::common::KeyValue> TransformToKv(uint64_t command_id) override;
   std::shared_ptr<pb::common::KeyValue> TransformToKv(std::shared_ptr<google::protobuf::Message> obj) override;
@@ -197,6 +201,7 @@ class RegionController {
   const RegionController& operator=(const RegionController&) = delete;
 
   bool Init();
+  bool Recover();
   void Destroy();
 
   butil::Status DispatchRegionControlCommand(std::shared_ptr<Context> ctx,
@@ -210,6 +215,8 @@ class RegionController {
   bool RegisterExecutor(uint64_t region_id);
 
   std::shared_ptr<RegionControlExecutor> GetRegionControlExecutor(uint64_t region_id);
+  butil::Status InnerDispatchRegionControlCommand(std::shared_ptr<Context> ctx,
+                                                  std::shared_ptr<pb::coordinator::RegionCmd> command);
 
   bthread_mutex_t mutex_;
   std::unordered_map<uint64_t, std::shared_ptr<RegionControlExecutor>> executors_;

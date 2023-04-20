@@ -52,7 +52,17 @@ DEFINE_int32(table_id, 0, "table id");
 bvar::LatencyRecorder g_latency_recorder("dingo-store");
 
 const char kAlphabet[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r',
-                          's', 't', 'o', 'v', 'w', 'x', 'y', 'z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'};
+                          's', 't', 'u', 'v', 'w', 'x', 'y', 'z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'};
+
+const char kAlphabetV2[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
+                            'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y'};
+
+int GetRandInt() {
+  std::random_device rd;
+  std::mt19937 gen(rd());
+  std::uniform_int_distribution<std::mt19937::result_type> distrib(1, 1000000000);
+  return distrib(gen);
+}
 
 // rand string
 std::string GenRandomString(int len) {
@@ -64,6 +74,20 @@ std::string GenRandomString(int len) {
   std::uniform_int_distribution<std::mt19937::result_type> distrib(1, 1000000000);
   for (int i = 0; i < len; ++i) {
     result.append(1, kAlphabet[distrib(rng) % alphabet_len]);
+  }
+
+  return result;
+}
+
+std::string GenRandomStringV2(int len) {
+  std::string result;
+  int alphabet_len = sizeof(kAlphabetV2);
+
+  std::mt19937 rng;
+  rng.seed(std::random_device()());
+  std::uniform_int_distribution<std::mt19937::result_type> distrib(1, 1000000000);
+  for (int i = 0; i < len; ++i) {
+    result.append(1, kAlphabetV2[distrib(rng) % alphabet_len]);
   }
 
   return result;
@@ -131,6 +155,10 @@ int64_t SendKvGet(std::shared_ptr<dingodb::pb::store::StoreService_Stub> stub, u
   stub->KvGet(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
     DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+  } else {
+    if (response.error().errcode() != dingodb::pb::error::OK) {
+      DINGO_LOG(ERROR) << " request=" << request.ShortDebugString() << " response=" << response.ShortDebugString();
+    }
   }
 
   value = response.value();
@@ -158,6 +186,10 @@ void SendKvBatchGet(std::shared_ptr<dingodb::pb::store::StoreService_Stub> stub)
   stub->KvBatchGet(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
     DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+  } else {
+    if (response.error().errcode() != dingodb::pb::error::OK) {
+      DINGO_LOG(ERROR) << " request=" << request.ShortDebugString() << " response=" << response.ShortDebugString();
+    }
   }
 
   if (FLAGS_log_each_request) {
@@ -182,6 +214,10 @@ int64_t SendKvPut(std::shared_ptr<dingodb::pb::store::StoreService_Stub> stub, u
   stub->KvPut(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
     DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+  } else {
+    if (response.error().errcode() != dingodb::pb::error::OK) {
+      DINGO_LOG(ERROR) << " request=" << request.ShortDebugString() << " response=" << response.ShortDebugString();
+    }
   }
 
   if (FLAGS_log_each_request) {
@@ -198,7 +234,7 @@ std::map<std::string, std::string> GenDataset(int n) {
   std::map<std::string, std::string> dataset;
 
   for (int i = 0; i < n; ++i) {
-    std::string key = GenRandomString(32);
+    std::string key = GenRandomStringV2(32);
     dataset[key] = GenRandomString(256);
   }
 
@@ -219,9 +255,9 @@ void TestBatchPutGet(uint64_t region_id, int num) {
 
   std::vector<int64_t> latencys;
   latencys.reserve(dataset.size());
-  for (auto& it : dataset) {
+  for (auto& [key, value] : dataset) {
     std::string redirect_addr = {};
-    latencys.push_back(SendKvPut(stub, region_id, it.first, it.second, redirect_addr));
+    latencys.push_back(SendKvPut(stub, region_id, key, value, redirect_addr));
     if (redirect_addr == "NO_LEADER") {
       bthread_usleep(1000 * 1000L);
     } else if (!redirect_addr.empty()) {
@@ -233,11 +269,11 @@ void TestBatchPutGet(uint64_t region_id, int num) {
   DINGO_LOG(INFO) << "Put average latency: " << sum / latencys.size() << " us";
 
   latencys.clear();
-  for (auto& it : dataset) {
-    std::string value;
-    latencys.push_back(SendKvGet(stub, region_id, it.first, value));
-    if (value != it.second) {
-      DINGO_LOG(INFO) << "Not match...";
+  for (auto& [key, value] : dataset) {
+    std::string result_value;
+    latencys.push_back(SendKvGet(stub, region_id, key, result_value));
+    if (result_value != value) {
+      DINGO_LOG(INFO) << "Not match: " << key << " = " << result_value << " expected=" << value;
     }
   }
 
@@ -263,6 +299,10 @@ std::string SendKvBatchPut(std::shared_ptr<dingodb::pb::store::StoreService_Stub
   stub->KvBatchPut(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
     DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+  } else {
+    if (response.error().errcode() != dingodb::pb::error::OK) {
+      DINGO_LOG(ERROR) << " request=" << request.ShortDebugString() << " response=" << response.ShortDebugString();
+    }
   }
 
   if (FLAGS_log_each_request) {
@@ -288,6 +328,10 @@ void SendKvPutIfAbsent(std::shared_ptr<dingodb::pb::store::StoreService_Stub> st
   stub->KvPutIfAbsent(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
     DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+  } else {
+    if (response.error().errcode() != dingodb::pb::error::OK) {
+      DINGO_LOG(ERROR) << " request=" << request.ShortDebugString() << " response=" << response.ShortDebugString();
+    }
   }
 
   if (FLAGS_log_each_request) {
@@ -314,6 +358,10 @@ void SendKvBatchPutIfAbsent(std::shared_ptr<dingodb::pb::store::StoreService_Stu
   stub->KvBatchPutIfAbsent(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
     DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+  } else {
+    if (response.error().errcode() != dingodb::pb::error::OK) {
+      DINGO_LOG(ERROR) << " request=" << request.ShortDebugString() << " response=" << response.ShortDebugString();
+    }
   }
 
   if (FLAGS_log_each_request) {
@@ -353,7 +401,10 @@ void AddRegion(std::shared_ptr<dingodb::pb::store::StoreService_Stub> stub, uint
   stub->AddRegion(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
     DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
-    // bthread_usleep(FLAGS_timeout_ms * 1000L);
+  } else {
+    if (response.error().errcode() != dingodb::pb::error::OK) {
+      DINGO_LOG(ERROR) << " request=" << request.ShortDebugString() << " response=" << response.ShortDebugString();
+    }
   }
 
   if (FLAGS_log_each_request) {
@@ -480,6 +531,10 @@ void DestroyRegion(std::shared_ptr<dingodb::pb::store::StoreService_Stub> stub, 
   stub->DestroyRegion(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
     DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+  } else {
+    if (response.error().errcode() != dingodb::pb::error::OK) {
+      DINGO_LOG(ERROR) << " request=" << request.ShortDebugString() << " response=" << response.ShortDebugString();
+    }
   }
 
   if (FLAGS_log_each_request) {
@@ -594,6 +649,7 @@ void SendSnapshot(std::shared_ptr<dingodb::pb::store::StoreService_Stub> stub) {
 void* OperationRegionRoutine(void* arg) {
   std::unique_ptr<AddRegionParam> param(static_cast<AddRegionParam*>(arg));
 
+  bthread_usleep((GetRandInt() % 1000) * 1000L);
   for (int i = 0; i < param->region_count; ++i) {
     uint64_t region_id = param->start_region_id + i;
 
@@ -603,9 +659,12 @@ void* OperationRegionRoutine(void* arg) {
       AddRegion(stub, region_id, param->raft_addrs);
     }
 
+    bthread_usleep(3 * 1000 * 1000L);
     DINGO_LOG(INFO) << "======Put region " << region_id;
     // Put/Get
     TestBatchPutGet(region_id, FLAGS_req_num);
+
+    bthread_usleep(3 * 1000 * 1000L);
 
     DINGO_LOG(INFO) << "======Delete region " << region_id;
     // Destroy region
@@ -697,7 +756,7 @@ void* Sender(void*) {
       DINGO_LOG(ERROR) << "unknown method " << FLAGS_method;
     }
 
-    bthread_usleep(FLAGS_timeout_ms * 1000L);
+    bthread_usleep(1000 * 1000L);
   }
 
   return nullptr;

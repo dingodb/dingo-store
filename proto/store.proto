@@ -17,6 +17,7 @@ syntax = "proto3";
 import "common.proto";
 import "error.proto";
 import "store_internal.proto";
+import "coordinator.proto";
 
 package dingodb.pb.store;
 
@@ -217,6 +218,7 @@ enum DebugType {
   NONE = 0;
   STORE_REGION_META_STAT = 1;
   STORE_REGION_META_DETAILS = 2;
+  STORE_REGION_CONTROL_COMMAND = 3;
 }
 
 message DebugRequest {
@@ -233,8 +235,13 @@ message DebugResponse {
     repeated dingodb.pb.store_internal.Region regions = 1;
   }
 
+  message RegionControlCommand {
+    repeated dingodb.pb.coordinator.RegionCmd region_cmds = 1;
+  }
+
   RegionMetaStat region_meta_stat = 1;
   RegionMetaDetails region_meta_details = 2;
+  RegionControlCommand region_control_command = 3;
 }
 
 service StoreService {
