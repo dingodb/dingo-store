@@ -35,13 +35,13 @@ class ClusterStatImpl : public pb::cluster::ClusterStat, public brpc::Tabbed {
 
  private:
   std::shared_ptr<CoordinatorControl> controller_;
-  std::string GetTabHead();
-  bool GetRegionInfo(uint64_t region_id, const pb::common::RegionMap& region_map, pb::common::Region& result);
-  void PrintSchema(std::ostream& os, const std::string& schema_name) const;
-  void PrintRegionNode(std::ostream& os, const pb::common::Region& region) const;
-  void PrintTableDefinition(std::ostream& os, const pb::meta::TableDefinition& table_definition) const;
-  void PrintTableRegions(std::ostream& os, const pb::common::RegionMap& region_map,
-                         const pb::meta::TableRange& table_range);
+  static std::string GetTabHead();
+  static bool GetRegionInfo(uint64_t region_id, const pb::common::RegionMap& region_map, pb::common::Region& result);
+  static void PrintSchema(std::ostream& os, const std::string& schema_name);
+  static void PrintRegionNode(std::ostream& os, const pb::common::Region& region);
+  static void PrintTableDefinition(std::ostream& os, const pb::meta::TableDefinition& table_definition);
+  static void PrintTableRegions(std::ostream& os, const pb::common::RegionMap& region_map,
+                                const pb::meta::TableRange& table_range);
 };
 
 }  // namespace dingodb

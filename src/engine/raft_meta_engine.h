@@ -17,6 +17,7 @@
 
 #include "common/meta_control.h"
 #include "engine/raft_kv_engine.h"
+#include "proto/common.pb.h"
 
 namespace dingodb {
 class RaftMetaEngine : public RaftKvEngine {
@@ -27,7 +28,8 @@ class RaftMetaEngine : public RaftKvEngine {
   bool Init(std::shared_ptr<Config> config) override;
   bool Recover() override;
 
-  butil::Status InitCoordinatorRegion(std::shared_ptr<Context> ctx, std::shared_ptr<pb::common::Region> region);
+  butil::Status InitCoordinatorRegion(std::shared_ptr<Context> ctx,
+                                      std::shared_ptr<pb::common::RegionDefinition> region);
 
   butil::Status MetaPut(std::shared_ptr<Context> ctx, const pb::coordinator_internal::MetaIncrement& meta) override;
 

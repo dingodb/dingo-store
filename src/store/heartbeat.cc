@@ -163,14 +163,25 @@ void HeartbeatTask::HandleStoreHeartbeatResponse(std::shared_ptr<dingodb::StoreM
   }
 }
 
-// this is for coordinator
-void CoordinatorPushTask::SendCoordinatorPushToStore(std::shared_ptr<CoordinatorControl> coordinator_control) {
+void CoordinatorRecycleOrphanTask::CoordinatorRecycleOrphan(std::shared_ptr<CoordinatorControl> coordinator_control) {
   if (!coordinator_control->IsLeader()) {
-    DINGO_LOG(DEBUG) << "SendCoordinatorPushToStore... this is follower";
+    DINGO_LOG(DEBUG) << "CoordinatorRecycleOrphan... this is follower";
     return;
   }
-  DINGO_LOG(DEBUG) << "SendCoordinatorPushToStore... this is leader";
+  DINGO_LOG(DEBUG) << "CoordinatorRecycleOrphan... this is leader";
 
+  // TODO: implement this
+}
+
+// this is for coordinator
+void CoordinatorUpdateStateTask::CoordinatorUpdateState(std::shared_ptr<CoordinatorControl> coordinator_control) {
+  if (!coordinator_control->IsLeader()) {
+    DINGO_LOG(DEBUG) << "CoordinatorUpdateState... this is follower";
+    return;
+  }
+  DINGO_LOG(DEBUG) << "CoordinatorUpdateState... this is leader";
+
+  // update executor_state by last_seen_timestamp
   pb::common::ExecutorMap executor_map_temp;
   coordinator_control->GetExecutorMap(executor_map_temp);
   for (const auto& it : executor_map_temp.executors()) {
@@ -184,6 +195,50 @@ void CoordinatorPushTask::SendCoordinatorPushToStore(std::shared_ptr<Coordinator
       continue;
     }
   }
+
+  // update region_state by last_update_timestamp
+  pb::common::RegionMap region_map_temp;
+  coordinator_control->GetRegionMap(region_map_temp);
+  for (const auto& it : region_map_temp.regions()) {
+    if (it.state() != pb::common::RegionState::REGION_NEW) {
+      if (it.last_update_timestamp() + (60 * 1000) < butil::gettimeofday_ms()) {
+        DINGO_LOG(INFO) << "SendCoordinatorPushToExecutor... update region " << it.id() << " state to offline";
+        coordinator_control->TrySetRegionToDown(it.id());
+        continue;
+      }
+    } else {
+      continue;
+    }
+  }
+
+  // now update store state in SendCoordinatorPushToStore
+
+  // update store_state by last_seen_timestamp and send store operation to store
+  // here we only update store_state to offline if last_seen_timestamp is too old
+  // we will not update store_state to online here
+  // in on_apply of store_heartbeat, we will update store_state to online
+  // pb::common::StoreMap store_map_temp;
+  // coordinator_control->GetStoreMap(store_map_temp);
+  // for (const auto& it : store_map_temp.stores()) {
+  //   if (it.state() == pb::common::StoreState::STORE_NORMAL) {
+  //     if (it.last_seen_timestamp() + (60 * 1000) < butil::gettimeofday_ms()) {
+  //       DINGO_LOG(INFO) << "SendCoordinatorPushToStore... update store " << it.id() << " state to offline";
+  //       coordinator_control->TrySetStoreToOffline(it.id());
+  //       continue;
+  //     }
+  //   } else {
+  //     continue;
+  //   }
+  // }
+}
+
+// this is for coordinator
+void CoordinatorPushTask::SendCoordinatorPushToStore(std::shared_ptr<CoordinatorControl> coordinator_control) {
+  if (!coordinator_control->IsLeader()) {
+    DINGO_LOG(DEBUG) << "SendCoordinatorPushToStore... this is follower";
+    return;
+  }
+  DINGO_LOG(DEBUG) << "SendCoordinatorPushToStore... this is leader";
 
   // update store_state by last_seen_timestamp and send store operation to store
   // here we only update store_state to offline if last_seen_timestamp is too old
@@ -457,6 +512,18 @@ void Heartbeat::TriggerStoreHeartbeat(void*) {
 void Heartbeat::TriggerCoordinatorPushToStore(void*) {
   // Free at ExecuteRoutine()
   TaskRunnable* task = new CoordinatorPushTask(Server::GetInstance()->GetCoordinatorControl());
+  Server::GetInstance()->GetHeartbeat()->Execute(task);
+}
+
+void Heartbeat::TriggerCoordinatorUpdateState(void*) {
+  // Free at ExecuteRoutine()
+  TaskRunnable* task = new CoordinatorUpdateStateTask(Server::GetInstance()->GetCoordinatorControl());
+  Server::GetInstance()->GetHeartbeat()->Execute(task);
+}
+
+void Heartbeat::TriggerCoordinatorRecycleOrphan(void*) {
+  // Free at ExecuteRoutine()
+  TaskRunnable* task = new CoordinatorRecycleOrphanTask(Server::GetInstance()->GetCoordinatorControl());
   Server::GetInstance()->GetHeartbeat()->Execute(task);
 }
 

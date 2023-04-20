@@ -159,12 +159,12 @@ butil::Status Server::StartMetaRegion(std::shared_ptr<Config> config,       // N
    *    1) Region ID
    *    2) Region PeerList
    */
-  std::shared_ptr<pb::common::Region> region = std::make_shared<pb::common::Region>();
+  std::shared_ptr<pb::common::RegionDefinition> region = std::make_shared<pb::common::RegionDefinition>();
   region->set_id(Constant::kCoordinatorRegionId);
   region->set_table_id(Constant::kCoordinatorTableId);
   region->set_schema_id(Constant::kCoordinatorSchemaId);
-  region->set_create_timestamp(butil::gettimeofday_ms());
-  region->set_state(pb::common::RegionState::REGION_NEW);
+  // region->set_create_timestamp(butil::gettimeofday_ms());
+  // region->set_state(pb::common::RegionState::REGION_NEW);
   region->set_name("COORDINATOR");
 
   std::string coordinator_list = config->GetString("coordinator.peers");
@@ -271,6 +271,15 @@ bool Server::InitCrontabManager() {
 
     crontab_manager_->AddAndRunCrontab(push_crontab);
 
+    // Add update state crontab
+    std::shared_ptr<Crontab> update_crontab = std::make_shared<Crontab>();
+    update_crontab->name = "UPDATE";
+    update_crontab->interval = push_interval * 10;
+    update_crontab->func = Heartbeat::TriggerCoordinatorUpdateState;
+    update_crontab->arg = nullptr;
+
+    crontab_manager_->AddAndRunCrontab(update_crontab);
+
     // Add calculate crontab
     std::shared_ptr<Crontab> calc_crontab = std::make_shared<Crontab>();
     calc_crontab->name = "CALCULATE";
@@ -279,6 +288,15 @@ bool Server::InitCrontabManager() {
     calc_crontab->arg = nullptr;
 
     crontab_manager_->AddAndRunCrontab(calc_crontab);
+
+    // Add recycle orphan crontab
+    std::shared_ptr<Crontab> recycle_crontab = std::make_shared<Crontab>();
+    recycle_crontab->name = "RECYCLE";
+    recycle_crontab->interval = push_interval * 600;
+    recycle_crontab->func = Heartbeat::TriggerCoordinatorRecycleOrphan;
+    recycle_crontab->arg = nullptr;
+
+    crontab_manager_->AddAndRunCrontab(recycle_crontab);
   }
 
   return true;

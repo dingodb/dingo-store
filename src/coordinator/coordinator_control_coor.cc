@@ -117,6 +117,19 @@ void CoordinatorControl::GetStoreMetrics(std::vector<pb::common::StoreMetrics>& 
   }
 }
 
+void CoordinatorControl::GetOrphanRegion(std::map<uint64_t, pb::common::RegionMetrics>& orphan_regions) {
+  BAIDU_SCOPED_LOCK(this->store_metrics_map_mutex_);
+
+  for (const auto& it : this->store_metrics_map_) {
+    const auto& store_metrics = it.second;
+    for (const auto& region : store_metrics.region_metrics_map()) {
+      if (region.second.store_region_state() == pb::common::StoreRegionState::ORPHAN) {
+        orphan_regions.insert(std::make_pair(it.first, region.second));
+      }
+    }
+  }
+}
+
 void CoordinatorControl::GetPushStoreMap(butil::FlatMap<uint64_t, pb::common::Store>& store_to_push) {
   BAIDU_SCOPED_LOCK(store_need_push_mutex_);
   store_to_push.swap(store_need_push_);
@@ -304,6 +317,21 @@ uint64_t CoordinatorControl::UpdateStoreMap(const pb::common::Store& store,
   return store_map_epoch;
 }
 
+bool CoordinatorControl::TrySetRegionToDown(uint64_t region_id) {
+  pb::common::Region region_to_update;
+  int ret = region_map_.Get(region_id, region_to_update);
+  if (ret > 0) {
+    if (region_to_update.state() != pb::common::RegionState::REGION_NEW &&
+        region_to_update.last_update_timestamp() + (60 * 1000) < butil::gettimeofday_ms()) {
+      // update region's state to REGION_DOWN
+      region_to_update.set_state(pb::common::RegionState::REGION_DOWN);
+      region_map_.Put(region_id, region_to_update);
+      return true;
+    }
+  }
+  return false;
+}
+
 bool CoordinatorControl::TrySetStoreToOffline(uint64_t store_id) {
   pb::common::Store store_to_update;
   int ret = store_map_.Get(store_id, store_to_update);
@@ -377,7 +405,7 @@ pb::error::Errno CoordinatorControl::CreateRegionForSplit(const std::string& reg
     return pb::error::Errno::EREGION_NOT_FOUND;
   }
 
-  for (const auto& peer : split_from_region.peers()) {
+  for (const auto& peer : split_from_region.definition().peers()) {
     store_ids.push_back(peer.store_id());
   }
 
@@ -464,28 +492,31 @@ pb::error::Errno CoordinatorControl::CreateRegion(const std::string& region_name
   pb::common::Region new_region;
   new_region.set_id(create_region_id);
   new_region.set_epoch(1);
-  new_region.set_name(region_name + std::string("_") + std::to_string(create_region_id));
+  // new_region.set_name(region_name + std::string("_") + std::to_string(create_region_id));
   new_region.set_state(::dingodb::pb::common::RegionState::REGION_NEW);
-  auto* range = new_region.mutable_range();
-  range->CopyFrom(region_range);
+  new_region.set_create_timestamp(butil::gettimeofday_ms());
+  // auto* range = new_region.mutable_range();
+  // range->CopyFrom(region_range);
   // add store_id and its peer location to region
-  for (int i = 0; i < replica_num; i++) {
-    auto store = selected_stores_for_regions[i];
-    auto* peer = new_region.add_peers();
-    peer->set_store_id(store.id());
-    peer->set_role(::dingodb::pb::common::PeerRole::VOTER);
-    peer->mutable_server_location()->CopyFrom(store.server_location());
-    peer->mutable_raft_location()->CopyFrom(store.raft_location());
-  }
+  // for (int i = 0; i < replica_num; i++) {
+  //   auto store = selected_stores_for_regions[i];
+  //   auto* peer = new_region.add_peers();
+  //   peer->set_store_id(store.id());
+  //   peer->set_role(::dingodb::pb::common::PeerRole::VOTER);
+  //   peer->mutable_server_location()->CopyFrom(store.server_location());
+  //   peer->mutable_raft_location()->CopyFrom(store.raft_location());
+  // }
 
-  new_region.set_schema_id(schema_id);
-  new_region.set_table_id(table_id);
+  // new_region.set_schema_id(schema_id);
+  // new_region.set_table_id(table_id);
 
   // create region definition begin
   auto* region_definition = new_region.mutable_metrics()->mutable_region_definition();
   region_definition->set_id(create_region_id);
   region_definition->set_name(region_name + std::string("_") + std::to_string(create_region_id));
   region_definition->set_epoch(1);
+  region_definition->set_schema_id(schema_id);
+  region_definition->set_table_id(table_id);
   auto* range_in_definition = region_definition->mutable_range();
   range_in_definition->CopyFrom(region_range);
 
@@ -577,10 +608,11 @@ pb::error::Errno CoordinatorControl::DropRegion(uint64_t region_id,
         region_increment_region->set_state(::dingodb::pb::common::RegionState::REGION_DELETE);
 
         // add store operations to meta_increment
-        for (int i = 0; i < region_to_delete.peers_size(); i++) {
-          auto* peer = region_to_delete.mutable_peers(i);
+        // for (int i = 0; i < region_to_delete.peers_size(); i++) {
+        //   auto* peer = region_to_delete.mutable_peers(i);
+        for (const auto& peer : region_to_delete.definition().peers()) {
           pb::coordinator::StoreOperation store_operation;
-          store_operation.set_id(peer->store_id());
+          store_operation.set_id(peer.store_id());
           auto* region_cmd = store_operation.add_region_cmds();
           region_cmd->set_region_id(region_id);
           region_cmd->set_region_cmd_type(::dingodb::pb::coordinator::RegionCmdType::CMD_DELETE);
@@ -695,20 +727,20 @@ pb::error::Errno CoordinatorControl::SplitRegion(uint64_t split_from_region_id, 
   }
 
   // validate split_from_region and split_to_region has same peers
-  if (split_from_region.peers_size() != split_to_region.peers_size()) {
+  if (split_from_region.definition().peers_size() != split_to_region.definition().peers_size()) {
     DINGO_LOG(ERROR) << "SplitRegion split_from_region and split_to_region has different peers size";
     return pb::error::Errno::ESPLIT_PEER_NOT_MATCH;
   }
 
   std::vector<uint64_t> split_from_region_peers;
   std::vector<uint64_t> split_to_region_peers;
-  split_from_region_peers.reserve(split_from_region.peers_size());
-  for (int i = 0; i < split_from_region.peers_size(); i++) {
-    split_from_region_peers.push_back(split_to_region.peers(i).store_id());
+  split_from_region_peers.reserve(split_from_region.definition().peers_size());
+  for (int i = 0; i < split_from_region.definition().peers_size(); i++) {
+    split_from_region_peers.push_back(split_to_region.definition().peers(i).store_id());
   }
-  split_to_region_peers.reserve(split_to_region.peers_size());
-  for (int i = 0; i < split_to_region.peers_size(); i++) {
-    split_to_region_peers.push_back(split_to_region.peers(i).store_id());
+  split_to_region_peers.reserve(split_to_region.definition().peers_size());
+  for (int i = 0; i < split_to_region.definition().peers_size(); i++) {
+    split_to_region_peers.push_back(split_to_region.definition().peers(i).store_id());
   }
   std::sort(split_from_region_peers.begin(), split_from_region_peers.end());
   std::sort(split_to_region_peers.begin(), split_to_region_peers.end());
@@ -775,20 +807,20 @@ pb::error::Errno CoordinatorControl::MergeRegion(uint64_t merge_from_region_id, 
   }
 
   // validate merge_from_region and merge_to_region has same peers
-  if (merge_from_region.peers_size() != merge_to_region.peers_size()) {
+  if (merge_from_region.definition().peers_size() != merge_to_region.definition().peers_size()) {
     DINGO_LOG(ERROR) << "MergeRegion merge_from_region and merge_to_region has different peers size";
     return pb::error::Errno::EMERGE_PEER_NOT_MATCH;
   }
 
   std::vector<uint64_t> merge_from_region_peers;
   std::vector<uint64_t> merge_to_region_peers;
-  merge_from_region_peers.reserve(merge_from_region.peers_size());
-  for (int i = 0; i < merge_from_region.peers_size(); i++) {
-    merge_from_region_peers.push_back(merge_to_region.peers(i).store_id());
+  merge_from_region_peers.reserve(merge_from_region.definition().peers_size());
+  for (int i = 0; i < merge_from_region.definition().peers_size(); i++) {
+    merge_from_region_peers.push_back(merge_to_region.definition().peers(i).store_id());
   }
-  merge_to_region_peers.reserve(merge_to_region.peers_size());
-  for (int i = 0; i < merge_to_region.peers_size(); i++) {
-    merge_to_region_peers.push_back(merge_to_region.peers(i).store_id());
+  merge_to_region_peers.reserve(merge_to_region.definition().peers_size());
+  for (int i = 0; i < merge_to_region.definition().peers_size(); i++) {
+    merge_to_region_peers.push_back(merge_to_region.definition().peers(i).store_id());
   }
   std::sort(merge_from_region_peers.begin(), merge_from_region_peers.end());
   std::sort(merge_to_region_peers.begin(), merge_to_region_peers.end());
@@ -805,7 +837,7 @@ pb::error::Errno CoordinatorControl::MergeRegion(uint64_t merge_from_region_id, 
   }
 
   // validate merge_from_region and merge_to_region has same start_key and end_key
-  if (merge_from_region.range().start_key() != merge_to_region.range().end_key()) {
+  if (merge_from_region.definition().range().start_key() != merge_to_region.definition().range().end_key()) {
     DINGO_LOG(ERROR) << "MergeRegion merge_from_region and merge_to_region has different start_key or end_key";
     return pb::error::Errno::EMERGE_RANGE_NOT_MATCH;
   }
@@ -843,17 +875,17 @@ pb::error::Errno CoordinatorControl::ChangePeerRegion(uint64_t region_id, std::v
   }
 
   // validate new_store_ids
-  if (new_store_ids.size() != (region.peers_size() + 1) || new_store_ids.size() != (region.peers_size() - 1) ||
-      new_store_ids.empty()) {
+  if (new_store_ids.size() != (region.definition().peers_size() + 1) ||
+      new_store_ids.size() != (region.definition().peers_size() - 1) || new_store_ids.empty()) {
     DINGO_LOG(ERROR) << "ChangePeerRegion new_store_ids size not match, region_id = " << region_id;
     return pb::error::Errno::EILLEGAL_PARAMTETERS;
   }
 
   // validate new_store_ids only has one new store or only less one store
   std::vector<uint64_t> old_store_ids;
-  old_store_ids.reserve(region.peers_size());
-  for (int i = 0; i < region.peers_size(); i++) {
-    old_store_ids.push_back(region.peers(i).store_id());
+  old_store_ids.reserve(region.definition().peers_size());
+  for (int i = 0; i < region.definition().peers_size(); i++) {
+    old_store_ids.push_back(region.definition().peers(i).store_id());
   }
 
   std::vector<uint64_t> new_store_ids_diff_more;
@@ -901,10 +933,10 @@ pb::error::Errno CoordinatorControl::ChangePeerRegion(uint64_t region_id, std::v
     region_definition->clear_peers();  // this region on store will be deleted in the future
 
     // calculate new peers
-    for (int i = 0; i < region.peers_size(); i++) {
-      if (region.peers(i).store_id() != new_store_ids_diff_less.at(0)) {
+    for (int i = 0; i < region.definition().peers_size(); i++) {
+      if (region.definition().peers(i).store_id() != new_store_ids_diff_less.at(0)) {
         auto* peer = new_region_definition.add_peers();
-        peer->CopyFrom(region.peers(i));
+        peer->CopyFrom(region.definition().peers(i));
       }
     }
   } else if (new_store_ids_diff_more.size() == 1) {
@@ -926,9 +958,9 @@ pb::error::Errno CoordinatorControl::ChangePeerRegion(uint64_t region_id, std::v
     peer->mutable_raft_location()->CopyFrom(store_to_add_peer.raft_location());
 
     // add old peer to new_region_definition
-    for (int i = 0; i < region.peers_size(); i++) {
+    for (int i = 0; i < region.definition().peers_size(); i++) {
       auto* peer = new_region_definition.add_peers();
-      peer->CopyFrom(region.peers(i));
+      peer->CopyFrom(region.definition().peers(i));
     }
 
     auto* store_operation_increment = meta_increment.add_store_operations();
@@ -1128,11 +1160,12 @@ uint64_t CoordinatorControl::UpdateRegionMap(std::vector<pb::common::Region>& re
         // region_map_epoch++;                        // raft_kv_put
       } else if (region.id() == 0) {
         DINGO_LOG(INFO) << " found illegal null region in heartbeat, region_id=0"
-                        << " name=" << region.name() << " leader_store_id=" << region.leader_store_id()
+                        << " name=" << region.definition().name() << " leader_store_id=" << region.leader_store_id()
                         << " state=" << region.state();
       } else {
-        DINGO_LOG(INFO) << " found illegal region in heartbeat, region_id=" << region.id() << " name=" << region.name()
-                        << " leader_store_id=" << region.leader_store_id() << " state=" << region.state();
+        DINGO_LOG(INFO) << " found illegal region in heartbeat, region_id=" << region.id()
+                        << " name=" << region.definition().name() << " leader_store_id=" << region.leader_store_id()
+                        << " state=" << region.state();
 
         auto* region_increment = meta_increment.add_regions();
         region_increment->set_id(region.id());
@@ -1483,46 +1516,134 @@ void CoordinatorControl::UpdateRegionMapAndStoreOperation(const pb::common::Stor
       continue;
     }
 
+    // use leader store's region_metrics to update region_map
     if (region_metrics.braft_status().raft_state() != pb::common::RaftNodeState::STATE_LEADER) {
       continue;
     }
 
     // update region_map
-    {
-      // BAIDU_SCOPED_LOCK(region_map_mutex_);
-      pb::common::Region region_to_update;
-      int ret = region_map_.Get(region_metrics.id(), region_to_update);
-      // auto* temp_region = region_map_.seek(region_metrics.id());
-      if (ret > 0) {
-        if (region_to_update.leader_store_id() != store_metrics.id()) {
-          DINGO_LOG(INFO) << "region leader change region_id = " << region_metrics.id()
-                          << " old leader_store_id = " << region_to_update.leader_store_id()
-                          << " new leader_store_id = " << store_metrics.id();
+    pb::common::Region region_to_update;
+    int ret = region_map_.Get(region_metrics.id(), region_to_update);
+    if (ret < 0) {
+      DINGO_LOG(ERROR) << "ERROR: UpdateRegionMapAndStoreOperation region not exists, region_id = "
+                       << region_metrics.id();
+      continue;
+    }
 
-          // update meta_increment
-          auto* region_increment = meta_increment.add_regions();
-          region_increment->set_id(region_metrics.id());
-          region_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
+    // when region leader change or region state change, we need to update region_map_
+    // or when region last_update_timestamp is too old, we need to update region_map_
+    bool need_update_region = false;
+    bool need_update_region_definition = false;
+    if (region_to_update.leader_store_id() != store_metrics.id()) {
+      DINGO_LOG(INFO) << "region leader change region_id = " << region_metrics.id()
+                      << " old leader_store_id = " << region_to_update.leader_store_id()
+                      << " new leader_store_id = " << store_metrics.id();
+      need_update_region = true;
+    }
 
-          auto* region_increment_region = region_increment->mutable_region();
-          region_increment_region->CopyFrom(region_to_update);
-          region_increment_region->set_leader_store_id(store_metrics.id());
-          region_increment_region->mutable_metrics()->CopyFrom(region_metrics);
+    if (region_to_update.metrics().store_region_state() != region_metrics.store_region_state()) {
+      DINGO_LOG(INFO) << "region state change region_id = " << region_metrics.id()
+                      << " old state = " << region_to_update.metrics().store_region_state()
+                      << " new state = " << region_metrics.store_region_state();
+      need_update_region = true;
+    }
 
-          if (region_metrics.store_region_state() == pb::common::StoreRegionState::NORMAL) {
-            region_increment_region->set_state(::dingodb::pb::common::RegionState::REGION_NORMAL);
-          } else if (region_metrics.store_region_state() == pb::common::StoreRegionState::SPLITTING) {
-            region_increment_region->set_state(::dingodb::pb::common::RegionState::REGION_SPLITTING);
-          }
+    if (region_to_update.last_update_timestamp() + 60 * 1000 < butil::gettimeofday_ms()) {
+      DINGO_LOG(INFO) << "region last_update_timestamp too old region_id = " << region_metrics.id()
+                      << " last_update_timestamp = " << region_to_update.last_update_timestamp()
+                      << " now = " << butil::gettimeofday_ms();
+      need_update_region = true;
+    }
 
-          // on_apply
-          // region_map_[region_metrics.id()].set_leader_store_id(store_metrics.id());
-        }
-      } else {
-        DINGO_LOG(ERROR) << "ERROR: UpdateRegionMapAndStoreOperation region not exists, region_id = "
-                         << region_metrics.id();
+    if (region_to_update.definition().range().start_key() != region_metrics.region_definition().range().start_key() ||
+        region_to_update.definition().range().end_key() != region_metrics.region_definition().range().end_key()) {
+      DINGO_LOG(INFO) << "region range change region_id = " << region_metrics.id() << " old range = ["
+                      << region_to_update.definition().range().start_key() << ", "
+                      << region_to_update.definition().range().end_key() << ")"
+                      << " new range = [" << region_metrics.region_definition().range().start_key() << ", "
+                      << region_metrics.region_definition().range().end_key() << ")";
+      need_update_region = true;
+      need_update_region_definition = true;
+    }
+
+    if (!need_update_region) {
+      DINGO_LOG(DEBUG) << "region no need to update region_id = " << region_metrics.id()
+                       << " last_update_timestamp = " << region_to_update.last_update_timestamp()
+                       << " now = " << butil::gettimeofday_ms();
+      continue;
+    }
+
+    // update meta_increment
+    auto* region_increment = meta_increment.add_regions();
+    region_increment->set_id(region_metrics.id());
+    region_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
+
+    auto* region_increment_region = region_increment->mutable_region();
+    region_increment_region->CopyFrom(region_to_update);
+
+    // update leader_store_id
+    region_increment_region->set_leader_store_id(store_metrics.id());
+
+    // update last_update_timestamp
+    region_increment_region->set_last_update_timestamp(butil::gettimeofday_ms());
+
+    // update region metrics
+    region_increment_region->mutable_metrics()->CopyFrom(region_metrics);
+
+    if (region_metrics.store_region_state() == pb::common::StoreRegionState::NORMAL) {
+      region_increment_region->set_state(::dingodb::pb::common::RegionState::REGION_NORMAL);
+    } else if (region_metrics.store_region_state() == pb::common::StoreRegionState::SPLITTING) {
+      region_increment_region->set_state(::dingodb::pb::common::RegionState::REGION_SPLITTING);
+    } else if (region_metrics.store_region_state() == pb::common::StoreRegionState::MERGING) {
+      region_increment_region->set_state(::dingodb::pb::common::RegionState::REGION_MERGING);
+    } else if (region_metrics.store_region_state() == pb::common::StoreRegionState::DELETING) {
+      region_increment_region->set_state(::dingodb::pb::common::RegionState::REGION_DELETING);
+    } else if (region_metrics.store_region_state() == pb::common::StoreRegionState::DELETED) {
+      region_increment_region->set_state(::dingodb::pb::common::RegionState::REGION_DELETED);
+    } else if (region_metrics.store_region_state() == pb::common::StoreRegionState::STANDBY) {
+      region_increment_region->set_state(::dingodb::pb::common::RegionState::REGION_STANDBY);
+    } else {
+      DINGO_LOG(ERROR) << "ERROR: UpdateRegionMapAndStoreOperation region state error, store_id=" << store_metrics.id()
+                       << " region_id = " << region_metrics.id() << " state = " << region_metrics.store_region_state();
+      continue;
+    }
+
+    // for split and merge, we need to update region definition
+    if (need_update_region_definition) {
+      region_increment_region->mutable_definition()->CopyFrom(region_metrics.region_definition());
+    }
+
+    // update RegionRaftStatus
+    if (region_metrics.has_braft_status()) {
+      DINGO_LOG(ERROR) << "region braft_status not found in heartbeat region_id = " << region_metrics.id();
+      continue;
+    }
+
+    auto region_raft_status = ::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_HEALTHY;
+    for (const auto& follower : region_metrics.braft_status().stable_followers()) {
+      if (follower.second.next_index() < region_metrics.braft_status().last_index() + 10) {
+        region_raft_status = region_raft_status < ::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_LAGGY
+                                 ? region_raft_status
+                                 : ::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_LAGGY;
+      }
+
+      if (follower.second.installing_snapshot()) {
+        region_raft_status = region_raft_status < ::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_RECOVERING
+                                 ? region_raft_status
+                                 : ::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_RECOVERING;
       }
     }
+
+    // if peer cannot connected, ustable_followers_size will not be 0
+    // so we need set replica status to DEGRAED
+    if (region_metrics.braft_status().unstable_followers_size() > 0) {
+      region_raft_status = ::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_CONSECUTIVE_ERROR;
+      region_increment_region->set_replica_status(::dingodb::pb::common::ReplicaStatus::REPLICA_DEGRAED);
+    } else {
+      region_increment_region->set_replica_status(::dingodb::pb::common::ReplicaStatus::REPLICA_NORMAL);
+    }
+
+    region_increment_region->set_raft_status(region_raft_status);
   }
 
   // update store operation

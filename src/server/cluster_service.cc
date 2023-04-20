@@ -118,16 +118,16 @@ bool ClusterStatImpl::GetRegionInfo(uint64_t region_id, const pb::common::Region
   return is_found;
 }
 
-void ClusterStatImpl::PrintSchema(std::ostream& os, const std::string& schema_name) const {
+void ClusterStatImpl::PrintSchema(std::ostream& os, const std::string& schema_name) {
   os << "<p style=\"text-align: center; font-size: 25px;\"><strong>Schema:" + schema_name + "</strong></p>";
 }
 
-void ClusterStatImpl::PrintRegionNode(std::ostream& os, const pb::common::Region& region) const {
+void ClusterStatImpl::PrintRegionNode(std::ostream& os, const pb::common::Region& region) {
   std::string leader_info = "<li>Leader:";
   std::string follower_info = "<li>Follower:";
   std::string range_info = "<li>Range:[";
   int64_t const leader_store_id = region.leader_store_id();
-  for (const auto& peer : region.peers()) {
+  for (const auto& peer : region.definition().peers()) {
     std::string ip_port;
     ip_port += peer.raft_location().host();
     ip_port += ":";
@@ -152,7 +152,7 @@ void ClusterStatImpl::PrintRegionNode(std::ostream& os, const pb::common::Region
   leader_info += "</li>";
   follower_info += "</li>";
 
-  range_info += region.range().ShortDebugString();
+  range_info += region.definition().range().ShortDebugString();
   range_info += "] </li>";
 
   os << "<li>RegionID:";
@@ -199,7 +199,7 @@ std::string ClusterStatImpl::GetTabHead() {
   return source_str;
 }
 
-void ClusterStatImpl::PrintTableDefinition(std::ostream& os, const pb::meta::TableDefinition& table_definition) const {
+void ClusterStatImpl::PrintTableDefinition(std::ostream& os, const pb::meta::TableDefinition& table_definition) {
   /*
    * <li>Columns
    *  <ul>

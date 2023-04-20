@@ -867,9 +867,9 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         // only create region will push to store now
         {
           BAIDU_SCOPED_LOCK(store_need_push_mutex_);
-          for (int j = 0; j < region.region().peers_size(); j++) {
-            uint64_t store_id = region.region().peers(j).store_id();
-            DINGO_LOG(INFO) << " add_store_for_push, peers_size=" << region.region().peers_size()
+          for (int j = 0; j < region.region().definition().peers_size(); j++) {
+            uint64_t store_id = region.region().definition().peers(j).store_id();
+            DINGO_LOG(INFO) << " add_store_for_push, peers_size=" << region.region().definition().peers_size()
                             << " store_id =" << store_id;
 
             if (store_need_push_.seek(store_id) == nullptr) {

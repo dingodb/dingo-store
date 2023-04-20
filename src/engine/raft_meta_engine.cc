@@ -53,7 +53,7 @@ bool RaftMetaEngine::Init(std::shared_ptr<Config> config) {
 bool RaftMetaEngine::Recover() { return true; }
 
 butil::Status RaftMetaEngine::InitCoordinatorRegion(std::shared_ptr<Context> ctx,
-                                                    const std::shared_ptr<pb::common::Region> region) {
+                                                    const std::shared_ptr<pb::common::RegionDefinition> region) {
   DINGO_LOG(INFO) << "RaftkvEngine add region, region_id " << region->id();
 
   // construct MetaStatMachine here

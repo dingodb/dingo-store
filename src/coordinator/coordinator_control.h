@@ -226,6 +226,9 @@ class CoordinatorControl : public MetaControl {
   // get store metrics
   void GetStoreMetrics(std::vector<pb::common::StoreMetrics> &store_metrics);
 
+  // get orphan region
+  void GetOrphanRegion(std::map<uint64_t, pb::common::RegionMetrics> &orphan_regions);
+
   // get store operation
   void GetStoreOperation(uint64_t store_id, pb::coordinator::StoreOperation &store_operation);
   void GetStoreOperations(butil::FlatMap<uint64_t, pb::coordinator::StoreOperation> &store_operations);
@@ -259,6 +262,10 @@ class CoordinatorControl : public MetaControl {
   // return new epoch
   uint64_t UpdateRegionMap(std::vector<pb::common::Region> &regions,
                            pb::coordinator_internal::MetaIncrement &meta_increment);
+
+  // try to set region to down
+  // return bool
+  bool TrySetRegionToDown(uint64_t region_id);
 
   // get regionmap
   void GetRegionMap(pb::common::RegionMap &region_map);
