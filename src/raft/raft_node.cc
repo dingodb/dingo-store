@@ -169,7 +169,7 @@ std::shared_ptr<pb::common::BRaftStatus> RaftNode::GetStatus() {
   }
 
   auto* unstable_follower = braft_status->mutable_unstable_followers();
-  for (auto [peer_id, peer_status] : status.stable_followers) {
+  for (auto [peer_id, peer_status] : status.unstable_followers) {
     pb::common::RaftPeerStatus braft_peer_status;
     braft_peer_status.set_valid(peer_status.valid);
     braft_peer_status.set_installing_snapshot(peer_status.installing_snapshot);

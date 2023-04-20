@@ -59,7 +59,7 @@ bool Server::InitConfig(const std::string& filename) {
   return true;
 }
 
-dingodb::pb::node::LogLevel Server::GetDingoLogLevel(std::shared_ptr<dingodb::Config> config) {
+pb::node::LogLevel Server::GetDingoLogLevel(std::shared_ptr<dingodb::Config> config) {
   using dingodb::pb::node::LogLevel;
   LogLevel log_level = LogLevel::INFO;
 

@@ -398,7 +398,7 @@ pb::error::Errno CoordinatorControl::QueryRegion(uint64_t region_id, pb::common:
 }
 
 pb::error::Errno CoordinatorControl::CreateRegionForSplit(const std::string& region_name,
-                                                          const std::string& resource_tag, int32_t replica_num,
+                                                          const std::string& resource_tag,
                                                           pb::common::Range region_range, uint64_t schema_id,
                                                           uint64_t table_id, uint64_t split_from_region_id,
                                                           uint64_t& new_region_id,
@@ -417,7 +417,7 @@ pb::error::Errno CoordinatorControl::CreateRegionForSplit(const std::string& reg
   }
 
   // create region with split_from_region_id & store_ids
-  return CreateRegion(region_name, resource_tag, replica_num, region_range, schema_id, table_id, store_ids,
+  return CreateRegion(region_name, resource_tag, store_ids.size(), region_range, schema_id, table_id, store_ids,
                       split_from_region_id, new_region_id, meta_increment);
 }
 
@@ -1655,13 +1655,10 @@ void CoordinatorControl::UpdateRegionMapAndStoreOperation(const pb::common::Stor
       region_increment_region->mutable_definition()->CopyFrom(region_metrics.region_definition());
     }
 
-    // update RegionRaftStatus
-    if (region_metrics.has_braft_status()) {
-      DINGO_LOG(ERROR) << "region braft_status not found in heartbeat region_id = " << region_metrics.id();
-      continue;
-    }
-
     auto region_raft_status = ::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_HEALTHY;
+    auto region_replica_status = ::dingodb::pb::common::ReplicaStatus::REPLICA_NORMAL;
+
+    uint32_t consecutive_error_follower_count = 0;
     for (const auto& follower : region_metrics.braft_status().stable_followers()) {
       if (follower.second.next_index() < region_metrics.braft_status().last_index() + 10) {
         region_raft_status = region_raft_status < ::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_LAGGY
@@ -1674,16 +1671,33 @@ void CoordinatorControl::UpdateRegionMapAndStoreOperation(const pb::common::Stor
                                  ? region_raft_status
                                  : ::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_RECOVERING;
       }
+
+      if (follower.second.consecutive_error_times() > 10) {
+        region_raft_status = region_raft_status < ::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_CONSECUTIVE_ERROR
+                                 ? region_raft_status
+                                 : ::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_CONSECUTIVE_ERROR;
+
+        consecutive_error_follower_count++;
+      }
     }
+
+    if (consecutive_error_follower_count == 0) {
+      region_replica_status = ::dingodb::pb::common::ReplicaStatus::REPLICA_NORMAL;
+    } else if (consecutive_error_follower_count < region_metrics.braft_status().stable_followers_size()) {
+      region_replica_status = ::dingodb::pb::common::ReplicaStatus::REPLICA_DEGRAED;
+    } else {
+      region_replica_status = ::dingodb::pb::common::ReplicaStatus::REPLICA_UNAVAILABLE;
+    }
+    region_increment_region->set_replica_status(region_replica_status);
 
     // if peer cannot connected, ustable_followers_size will not be 0
     // so we need set replica status to DEGRAED
-    if (region_metrics.braft_status().unstable_followers_size() > 0) {
-      region_raft_status = ::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_CONSECUTIVE_ERROR;
-      region_increment_region->set_replica_status(::dingodb::pb::common::ReplicaStatus::REPLICA_DEGRAED);
-    } else {
-      region_increment_region->set_replica_status(::dingodb::pb::common::ReplicaStatus::REPLICA_NORMAL);
-    }
+    // if (region_metrics.braft_status().unstable_followers_size() > 0) {
+    //   region_raft_status = ::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_CONSECUTIVE_ERROR;
+    //   region_increment_region->set_replica_status(::dingodb::pb::common::ReplicaStatus::REPLICA_DEGRAED);
+    // } else {
+    //   region_increment_region->set_replica_status(::dingodb::pb::common::ReplicaStatus::REPLICA_NORMAL);
+    // }
 
     region_increment_region->set_raft_status(region_raft_status);
   }

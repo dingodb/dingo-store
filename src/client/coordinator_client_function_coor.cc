@@ -287,7 +287,9 @@ void SendGetRegionMap(brpc::Controller& cntl, dingodb::pb::coordinator::Coordina
     for (const auto& region : response.regionmap().regions()) {
       DINGO_LOG(INFO) << "Region id=" << region.id() << " name=" << region.definition().name()
                       << " state=" << dingodb::pb::common::RegionState_Name(region.state())
-                      << " leader_store_id=" << region.leader_store_id();
+                      << " leader_store_id=" << region.leader_store_id()
+                      << " replica_state=" << dingodb::pb::common::ReplicaStatus_Name(region.replica_status())
+                      << " raft_status=" << dingodb::pb::common::RegionRaftStatus_Name(region.raft_status());
     }
 
     // DINGO_LOG(INFO) << response.DebugString();
@@ -767,6 +769,8 @@ void SendCreateRegionForSplit(brpc::Controller& cntl, dingodb::pb::coordinator::
     request.add_store_ids(it);
   }
   request.set_split_from_region_id(region_id_split);  // set split from region id
+
+  DINGO_LOG(INFO) << "Create region request: " << request.DebugString();
 
   cntl.Reset();
   stub.CreateRegion(&cntl, &request, &response, nullptr);
