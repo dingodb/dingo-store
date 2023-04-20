@@ -732,8 +732,8 @@ void CoordinatorControl::GetTableRange(uint64_t schema_id, uint64_t table_id, pb
     auto* leader_location = range_distribution->mutable_leader();
 
     // range_distribution voter & learner locations
-    for (int j = 0; j < part_region.peers_size(); j++) {
-      const auto& part_peer = part_region.peers(j);
+    for (int j = 0; j < part_region.definition().peers_size(); j++) {
+      const auto& part_peer = part_region.definition().peers(j);
       if (part_peer.store_id() == part_region.leader_store_id()) {
         leader_location->CopyFrom(part_peer.server_location());
       }
@@ -845,50 +845,43 @@ uint64_t CoordinatorControl::CalculateTableMetricsSingle(uint64_t table_id, pb::
   std::string min_key(10, '\x00');
   std::string max_key(10, '\xFF');
 
-  {
-    BAIDU_SCOPED_LOCK(store_metrics_map_mutex_);
+  for (int i = 0; i < table_internal.partitions_size(); i++) {
+    // part id
+    uint64_t region_id = table_internal.partitions(i).region_id();
 
-    for (int i = 0; i < table_internal.partitions_size(); i++) {
-      // part id
-      uint64_t region_id = table_internal.partitions(i).region_id();
-
-      // get region
-      pb::common::Region part_region;
-      {
-        // BAIDU_SCOPED_LOCK(region_map_mutex_);
-        int ret = region_map_.Get(region_id, part_region);
-        if (ret < 0) {
-          DINGO_LOG(ERROR) << "ERROR cannot find region in regionmap_ while GetTable, table_id =" << table_id
-                           << " region_id=" << region_id;
-          continue;
-        }
+    // get region
+    pb::common::Region part_region;
+    {
+      // BAIDU_SCOPED_LOCK(region_map_mutex_);
+      int ret = region_map_.Get(region_id, part_region);
+      if (ret < 0) {
+        DINGO_LOG(ERROR) << "ERROR cannot find region in regionmap_ while GetTable, table_id =" << table_id
+                         << " region_id=" << region_id;
+        continue;
       }
+    }
 
-      auto* temp_store_metrics = store_metrics_map_.seek(part_region.leader_store_id());
-      // if (store_metrics_map_.find(part_region.leader_store_id()) != store_metrics_map_.end()) {
-      if (temp_store_metrics != nullptr) {
-        // pb::common::StoreMetrics& store_metrics = store_metrics_map_.at(part_region.leader_store_id());
-        const auto& region_metrics = temp_store_metrics->region_metrics_map();
+    if (!part_region.has_metrics()) {
+      DINGO_LOG(ERROR) << "ERROR region has no metrics, table_id =" << table_id << " region_id=" << region_id;
+      continue;
+    }
 
-        if (region_metrics.find(part_region.id()) != region_metrics.end()) {
-          row_count += region_metrics.at(region_id).row_count();
+    const auto& region_metrics = part_region.metrics();
+    row_count += region_metrics.row_count();
 
-          if (min_key.empty()) {
-            min_key = region_metrics.at(region_id).min_key();
-          } else {
-            if (min_key.compare(region_metrics.at(region_id).min_key()) > 0) {
-              min_key = region_metrics.at(region_id).min_key();
-            }
-          }
+    if (min_key.empty()) {
+      min_key = region_metrics.min_key();
+    } else {
+      if (min_key.compare(region_metrics.min_key()) > 0) {
+        min_key = region_metrics.min_key();
+      }
+    }
 
-          if (max_key.empty()) {
-            max_key = region_metrics.at(region_id).max_key();
-          } else {
-            if (max_key.compare(region_metrics.at(region_id).max_key()) < 0) {
-              max_key = region_metrics.at(region_id).max_key();
-            }
-          }
-        }
+    if (max_key.empty()) {
+      max_key = region_metrics.max_key();
+    } else {
+      if (max_key.compare(region_metrics.max_key()) < 0) {
+        max_key = region_metrics.max_key();
       }
     }
   }

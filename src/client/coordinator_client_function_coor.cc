@@ -282,10 +282,14 @@ void SendGetRegionMap(brpc::Controller& cntl, dingodb::pb::coordinator::Coordina
                     << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us()
                     << " response=" << MessageToJsonString(response);
     for (const auto& region : response.regionmap().regions()) {
-      DINGO_LOG(INFO) << "Region id=" << region.id() << " name=" << region.name()
+      DINGO_LOG(INFO) << region.DebugString();
+    }
+    for (const auto& region : response.regionmap().regions()) {
+      DINGO_LOG(INFO) << "Region id=" << region.id() << " name=" << region.definition().name()
                       << " state=" << dingodb::pb::common::RegionState_Name(region.state())
                       << " leader_store_id=" << region.leader_store_id();
     }
+
     // DINGO_LOG(INFO) << response.DebugString();
   }
 }
@@ -734,20 +738,20 @@ void SendCreateRegionForSplit(brpc::Controller& cntl, dingodb::pb::coordinator::
     return;
   }
 
-  if (query_response.region().peers_size() == 0) {
+  if (query_response.region().definition().peers_size() == 0) {
     DINGO_LOG(ERROR) << "region not found";
     return;
   }
 
   dingodb::pb::common::RegionDefinition new_region_definition;
   new_region_definition.CopyFrom(query_response.region().definition());
-  new_region_definition.mutable_range()->set_start_key(query_response.region().range().end_key());
-  new_region_definition.mutable_range()->set_end_key(query_response.region().range().start_key());
-  new_region_definition.set_name(query_response.region().name() + "_split");
+  new_region_definition.mutable_range()->set_start_key(query_response.region().definition().range().end_key());
+  new_region_definition.mutable_range()->set_end_key(query_response.region().definition().range().start_key());
+  new_region_definition.set_name(query_response.region().definition().name() + "_split");
   new_region_definition.set_id(0);
 
   std::vector<uint64_t> new_region_store_ids;
-  for (const auto& it : query_response.region().peers()) {
+  for (const auto& it : query_response.region().definition().peers()) {
     new_region_store_ids.push_back(it.store_id());
   }
 
@@ -757,8 +761,8 @@ void SendCreateRegionForSplit(brpc::Controller& cntl, dingodb::pb::coordinator::
   request.set_region_name(new_region_definition.name());
   request.set_replica_num(new_region_definition.peers_size());
   request.mutable_range()->CopyFrom(new_region_definition.range());
-  request.set_schema_id(query_response.region().schema_id());
-  request.set_table_id(query_response.region().table_id());
+  request.set_schema_id(query_response.region().definition().schema_id());
+  request.set_table_id(query_response.region().definition().table_id());
   for (auto it : new_region_store_ids) {
     request.add_store_ids(it);
   }
@@ -863,17 +867,17 @@ void SendSplitRegion(brpc::Controller& cntl, dingodb::pb::coordinator::Coordinat
       return;
     }
 
-    if (query_response.region().range().start_key().empty()) {
+    if (query_response.region().definition().range().start_key().empty()) {
       DINGO_LOG(ERROR) << "split from region " << FLAGS_split_from_id << " has no start_key";
       return;
     }
 
-    if (query_response.region().range().end_key().empty()) {
+    if (query_response.region().definition().range().end_key().empty()) {
       DINGO_LOG(ERROR) << "split from region " << FLAGS_split_from_id << " has no end_key";
       return;
     }
 
-    std::string mid_key = query_response.region().range().start_key();
+    std::string mid_key = query_response.region().definition().range().start_key();
     mid_key.push_back(0x80);
 
     request.mutable_split_request()->set_split_watershed_key(mid_key);
@@ -977,13 +981,13 @@ void SendAddPeerRegion(brpc::Controller& cntl, dingodb::pb::coordinator::Coordin
     return;
   }
 
-  if (query_response.region().peers_size() == 0) {
+  if (query_response.region().definition().peers_size() == 0) {
     DINGO_LOG(ERROR) << "region not found";
     return;
   }
 
   // validate peer not exists in region peers
-  for (const auto& peer : query_response.region().peers()) {
+  for (const auto& peer : query_response.region().definition().peers()) {
     if (peer.store_id() == store_id) {
       DINGO_LOG(ERROR) << "peer already exists";
       return;
@@ -1036,14 +1040,14 @@ void SendRemovePeerRegion(brpc::Controller& cntl, dingodb::pb::coordinator::Coor
     return;
   }
 
-  if (query_response.region().peers_size() == 0) {
+  if (query_response.region().definition().peers_size() == 0) {
     DINGO_LOG(ERROR) << "region not found";
     return;
   }
 
   // validate peer not exists in region peers
   bool found = false;
-  for (const auto& peer : query_response.region().peers()) {
+  for (const auto& peer : query_response.region().definition().peers()) {
     if (peer.store_id() == store_id) {
       found = true;
       break;

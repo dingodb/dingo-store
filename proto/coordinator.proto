@@ -400,6 +400,16 @@ message ChangePeerRegionResponse {
   dingodb.pb.error.Error error = 1;
 }
 
+message GetOrphanRegionRequest {
+  uint64 cluster_id = 1;
+  uint64 store_id = 2;
+}
+
+message GetOrphanRegionResponse {
+  dingodb.pb.error.Error error = 1;
+  map<uint64, dingodb.pb.common.RegionMetrics> orphan_regions = 2;
+}
+
 enum RaftControlOp {
   None = 0;            // just a placeholder
   AddPeer = 1;         // only to leader
@@ -469,6 +479,7 @@ service CoordinatorService {
   rpc SplitRegion(SplitRegionRequest) returns (SplitRegionResponse);
   rpc MergeRegion(MergeRegionRequest) returns (MergeRegionResponse);
   rpc ChangePeerRegion(ChangePeerRegionRequest) returns (ChangePeerRegionResponse);
+  rpc GetOrphanRegion(GetOrphanRegionRequest) returns (GetOrphanRegionResponse);
 
   // StoreOperation
   rpc GetStoreOperation(GetStoreOperationRequest) returns (GetStoreOperationResponse);

@@ -82,36 +82,33 @@ enum ExecutorState {
 }
 
 enum RegionState {
-  REGION_NORMAL = 0;
+  REGION_NEW = 0;  // create new region
+  REGION_NORMAL = 1;
 
-  REGION_NEW = 1;  // create new region
+  REGION_EXPAND = 2;     // start to expand
+  REGION_EXPANDING = 3;  // leader start to expand region
+  REGION_EXPANDED = 4;   // new peer joined raft
 
-  REGION_DEGRADED = 2;     // region has less than 3 peer
-  REGION_UNAVAILABLE = 3;  // region has no leader elected
+  REGION_SHRINK = 5;      // start to shrink
+  REGION_SHIRINKING = 6;  // leader start to shrink region
+  REGION_SHRANK = 7;      // shrink finish, maybe we don't need this state
 
-  REGION_EXPAND = 4;     // start to expand
-  REGION_EXPANDING = 5;  // leader start to expand region
-  REGION_EXPANDED = 6;   // new peer joined raft
+  REGION_DELETE = 8;    // region need to delete
+  REGION_DELETING = 9;  // region is deleting
+  REGION_DELETED = 10;  // region is deleted
 
-  REGION_SHRINK = 7;      // start to shrink
-  REGION_SHIRINKING = 8;  // leader start to shrink region
-  REGION_SHRANK = 9;      // shrink finish, maybe we don't need this state
+  REGION_SPLIT = 11;      // region need to split
+  REGION_SPLITTING = 12;  // region is splitting
+  REGION_SPLITED = 13;    // region is splited (split's past tense is split, not splited, use as a symbol here)
 
-  REGION_DELETE = 10;    // region need to delete
-  REGION_DELETING = 11;  // region is deleting
-  REGION_DELETED = 12;   // region is deleted
-
-  REGION_SPLIT = 13;      // region need to split
-  REGION_SPLITTING = 14;  // region is splitting
-  REGION_SPLITED = 15;    // region is splited (split's past tense is split, not splited, use as a symbol here)
-
-  REGION_MERGE = 16;    // region need to merge
-  REGION_MERGING = 17;  // region is mergting
-  REGION_MERGED = 18;   // region is merged
+  REGION_MERGE = 14;    // region need to merge
+  REGION_MERGING = 15;  // region is mergting
+  REGION_MERGED = 16;   // region is merged
 
   // other state add here
   REGION_ILLEGAL = 20;  // region is not create by coordinator
   REGION_DOWN = 21;     // region is offline
+  REGION_STANDBY = 22;  // region is standby, used in split
 }
 
 // StoreRegionState
@@ -130,9 +127,18 @@ enum StoreRegionState {
 // RegionRaftStatus
 // region's raft status
 enum RegionRaftStatus {
-  HEALTHY = 0;
-  LAGGY = 1;
-  RECOVERING = 2;
+  REGION_RAFT_NONE = 0;
+  REGION_RAFT_HEALTHY = 1;
+  REGION_RAFT_LAGGY = 3;
+  REGION_RAFT_RECOVERING = 4;
+  REGION_RAFT_CONSECUTIVE_ERROR = 5;
+}
+
+enum ReplicaStatus {
+  REPLICA_NONE = 0;
+  REPLICA_NORMAL = 1;
+  REPLICA_DEGRAED = 2;
+  REPLICA_UNAVAILABLE = 3;
 }
 
 message Coordinator {
@@ -205,37 +211,6 @@ message Peer {
   Location raft_location = 4;
 }
 
-message Region {
-  // store info
-  uint64 id = 1;
-  uint64 epoch = 2;
-  string name = 3;
-  RegionState state = 4;
-  RegionRaftStatus raft_status = 5;
-
-  int64 leader_store_id = 6;
-  repeated Peer peers = 7;
-  Range range = 8;
-
-  // meta info
-  uint64 schema_id = 9;
-  uint64 table_id = 10;
-
-  // other
-  uint64 create_timestamp = 11;
-
-  // region definition
-  RegionDefinition definition = 12;
-
-  // region metrics
-  RegionMetrics metrics = 13;
-}
-
-message RegionMap {
-  uint64 epoch = 1;
-  repeated Region regions = 2;
-}
-
 // RegionDefinition
 message RegionDefinition {
   // store info
@@ -248,6 +223,32 @@ message RegionDefinition {
   // meta info
   uint64 schema_id = 6;
   uint64 table_id = 7;
+}
+
+message Region {
+  // store info
+  uint64 id = 1;
+  uint64 epoch = 2;
+  RegionState state = 3;
+  RegionRaftStatus raft_status = 4;
+  ReplicaStatus replica_status = 5;
+
+  int64 leader_store_id = 6;
+
+  // region definition
+  RegionDefinition definition = 7;
+
+  // region metrics
+  RegionMetrics metrics = 8;
+
+  // other
+  uint64 create_timestamp = 9;
+  uint64 last_update_timestamp = 10;
+}
+
+message RegionMap {
+  uint64 epoch = 1;
+  repeated Region regions = 2;
 }
 
 // RaftNodeStatus

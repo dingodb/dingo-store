@@ -60,6 +60,34 @@ class CoordinatorPushTask : public TaskRunnable {
   std::shared_ptr<CoordinatorControl> coordinator_control_;
 };
 
+class CoordinatorUpdateStateTask : public TaskRunnable {
+ public:
+  CoordinatorUpdateStateTask(std::shared_ptr<CoordinatorControl> coordinator_control)
+      : coordinator_control_(coordinator_control) {}
+  ~CoordinatorUpdateStateTask() override = default;
+
+  void Run() override { CoordinatorUpdateState(coordinator_control_); }
+
+ private:
+  static void CoordinatorUpdateState(std::shared_ptr<CoordinatorControl> coordinator_control);
+
+  std::shared_ptr<CoordinatorControl> coordinator_control_;
+};
+
+class CoordinatorRecycleOrphanTask : public TaskRunnable {
+ public:
+  CoordinatorRecycleOrphanTask(std::shared_ptr<CoordinatorControl> coordinator_control)
+      : coordinator_control_(coordinator_control) {}
+  ~CoordinatorRecycleOrphanTask() override = default;
+
+  void Run() override { CoordinatorRecycleOrphan(coordinator_control_); }
+
+ private:
+  static void CoordinatorRecycleOrphan(std::shared_ptr<CoordinatorControl> coordinator_control);
+
+  std::shared_ptr<CoordinatorControl> coordinator_control_;
+};
+
 class CalculateTableMetricsTask : public TaskRunnable {
  public:
   CalculateTableMetricsTask(std::shared_ptr<CoordinatorControl> coordinator_control)
@@ -87,6 +115,8 @@ class Heartbeat {
 
   static void TriggerStoreHeartbeat(void*);
   static void TriggerCoordinatorPushToStore(void*);
+  static void TriggerCoordinatorUpdateState(void*);
+  static void TriggerCoordinatorRecycleOrphan(void*);
   static void TriggerCalculateTableMetrics(void*);
 
   static butil::Status RpcSendPushStoreOperation(const pb::common::Location& location,
