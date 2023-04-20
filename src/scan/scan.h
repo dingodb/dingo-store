@@ -15,6 +15,7 @@
 #ifndef DINGODB_ENGINE_SCAN_H_  // NOLINT
 #define DINGODB_ENGINE_SCAN_H_
 
+#include <atomic>
 #include <chrono>  // NOLINT
 #include <cstdint>
 #include <memory>
@@ -29,6 +30,13 @@
 #include "proto/error.pb.h"
 
 namespace dingodb {
+
+// enable scan optimization switch to speed up scan execution if enabled
+#ifndef ENABLE_SCAN_OPTIMIZATION
+#define ENABLE_SCAN_OPTIMIZATION
+#endif
+
+//#undef ENABLE_SCAN_OPTIMIZATION
 
 enum class ScanState : unsigned char {
   kUninit = 0,
@@ -75,6 +83,11 @@ class ScanContext {
   void Close();
   static std::chrono::milliseconds GetCurrentTime();
   void GetKeyValue(std::vector<pb::common::KeyValue>& kvs);  // NOLINT
+#if defined(ENABLE_SCAN_OPTIMIZATION)
+  butil::Status AsyncWork();
+  void WaitForReady();
+  butil::Status SeekCheck();
+#endif
 
   std::string scan_id_;
 
@@ -103,6 +116,16 @@ class ScanContext {
   std::chrono::milliseconds last_time_ms_;
 
   bthread_mutex_t mutex_;
+
+#if defined(ENABLE_SCAN_OPTIMIZATION)
+  enum class SeekState : unsigned char {
+    kUninit = 0,
+    kInitting = 1,
+    kInitted = 2,
+  };
+  // default = kUninit
+  volatile SeekState seek_state_;
+#endif
 
   // timeout millisecond to destroy
   static uint64_t timeout_ms_;

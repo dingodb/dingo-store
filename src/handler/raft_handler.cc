@@ -131,46 +131,31 @@ void DeleteRangeHandler::Handle(std::shared_ptr<Context> ctx, std::shared_ptr<pb
     status = reader->KvCount(request.ranges()[0], &delete_count);
     if (status.ok() && 0 != delete_count) {
       status = writer->KvDeleteRange(request.ranges()[0]);
-      if (!status.ok()) {
-        delete_count = 0;
-      }
-    } else {
-      delete_count = 0;
     }
   } else {
-    uint64_t internal_delete_count = 0;
-    {
-      auto snapshot = engine->GetSnapshot();
-      for (const auto &range : request.ranges()) {
-        uint64_t delete_count = 0;
-        status = reader->KvCount(snapshot, range, &internal_delete_count);
-        if (!status.ok()) {
-          break;
-        }
-        delete_count += internal_delete_count;
+    auto snapshot = engine->GetSnapshot();
+    for (const auto &range : request.ranges()) {
+      uint64_t internal_delete_count = 0;
+      status = reader->KvCount(snapshot, range, &internal_delete_count);
+      if (!status.ok()) {
+        delete_count = 0;
+        break;
       }
+      delete_count += internal_delete_count;
     }
 
     if (status.ok() && 0 != delete_count) {
       status = writer->KvBatchDeleteRange(Helper::PbRepeatedToVector(request.ranges()));
-      if (!status.ok()) {
-        delete_count = 0;
-      }
-    } else {
-      delete_count = 0;
     }
   }
 
-  if (ctx) {
-    if (1 == request.ranges().empty()) {
-      auto *response = dynamic_cast<pb::store::KvDeleteRangeResponse *>(ctx->Response());
-      if (status.ok()) {
-      } else {
-        delete_count = 0;
-        // Note: The caller requires that if the parameter is wrong, no error will be reported and it will be returned.
-        if (pb::error::EILLEGAL_PARAMTETERS == static_cast<pb::error::Errno>(status.error_code())) {
-          status.set_error(pb::error::OK, "");
-        }
+  if (ctx && ctx->Response()) {
+    auto *response = dynamic_cast<pb::store::KvDeleteRangeResponse *>(ctx->Response());
+    if (response) {
+      // Note: The caller requires that if the parameter is wrong, no error will be reported and it will be
+      // returned.
+      if (!status.ok() && pb::error::EILLEGAL_PARAMTETERS == static_cast<pb::error::Errno>(status.error_code())) {
+        status.set_error(pb::error::OK, "");
       }
 
       ctx->SetStatus(status);
