@@ -14,8 +14,10 @@
 
 #include "store/region_controller.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 
 #include "butil/status.h"
 #include "common/constant.h"
@@ -95,8 +97,9 @@ void CreateRegionTask::Run() {
     DINGO_LOG(DEBUG) << butil::StringPrintf("Create region %lu failed, %s", region->id(), status.error_cstr());
   }
 
-  Server::GetInstance()->GetRegionCommandManager()->UpdateCommandStatus(region_cmd_,
-                                                                        pb::coordinator::RegionCmdStatus::STATUS_DONE);
+  Server::GetInstance()->GetRegionCommandManager()->UpdateCommandStatus(
+      region_cmd_,
+      status.ok() ? pb::coordinator::RegionCmdStatus::STATUS_DONE : pb::coordinator::RegionCmdStatus::STATUS_FAIL);
 }
 
 butil::Status DeleteRegionTask::ValidateDeleteRegion(std::shared_ptr<StoreMetaManager> /*store_meta_manager*/,
@@ -165,16 +168,9 @@ void DeleteRegionTask::Run() {
                                             status.error_cstr());
   }
 
-  Server::GetInstance()->GetRegionCommandManager()->UpdateCommandStatus(region_cmd_,
-                                                                        pb::coordinator::RegionCmdStatus::STATUS_DONE);
-}
-
-void SplitRegionTask::Run() {
-  auto status = SplitRegion();
-  if (!status.ok()) {
-    DINGO_LOG(DEBUG) << butil::StringPrintf("Split region %lu failed, %s",
-                                            region_cmd_->split_request().split_from_region_id(), status.error_cstr());
-  }
+  Server::GetInstance()->GetRegionCommandManager()->UpdateCommandStatus(
+      region_cmd_,
+      status.ok() ? pb::coordinator::RegionCmdStatus::STATUS_DONE : pb::coordinator::RegionCmdStatus::STATUS_FAIL);
 }
 
 butil::Status SplitRegionTask::ValidateSplitRegion(std::shared_ptr<StoreRegionMeta> store_region_meta,
@@ -250,6 +246,18 @@ butil::Status SplitRegionTask::SplitRegion() {
       });
 }
 
+void SplitRegionTask::Run() {
+  auto status = SplitRegion();
+  if (!status.ok()) {
+    DINGO_LOG(DEBUG) << butil::StringPrintf("Split region %lu failed, %s",
+                                            region_cmd_->split_request().split_from_region_id(), status.error_cstr());
+  }
+
+  Server::GetInstance()->GetRegionCommandManager()->UpdateCommandStatus(
+      region_cmd_,
+      status.ok() ? pb::coordinator::RegionCmdStatus::STATUS_DONE : pb::coordinator::RegionCmdStatus::STATUS_FAIL);
+}
+
 butil::Status ChangeRegionTask::ValidateChangeRegion(std::shared_ptr<StoreMetaManager> store_meta_manager,
                                                      const pb::common::RegionDefinition& region_definition) {
   auto region = store_meta_manager->GetStoreRegionMeta()->GetRegion(region_definition.id());
@@ -303,8 +311,9 @@ void ChangeRegionTask::Run() {
                                             status.error_cstr());
   }
 
-  Server::GetInstance()->GetRegionCommandManager()->UpdateCommandStatus(region_cmd_,
-                                                                        pb::coordinator::RegionCmdStatus::STATUS_DONE);
+  Server::GetInstance()->GetRegionCommandManager()->UpdateCommandStatus(
+      region_cmd_,
+      status.ok() ? pb::coordinator::RegionCmdStatus::STATUS_DONE : pb::coordinator::RegionCmdStatus::STATUS_FAIL);
 }
 
 butil::Status SnapshotRegionTask::Snapshot(std::shared_ptr<Context> ctx, uint64_t region_id) {
@@ -319,8 +328,9 @@ void SnapshotRegionTask::Run() {
                                             status.error_cstr());
   }
 
-  Server::GetInstance()->GetRegionCommandManager()->UpdateCommandStatus(region_cmd_,
-                                                                        pb::coordinator::RegionCmdStatus::STATUS_DONE);
+  Server::GetInstance()->GetRegionCommandManager()->UpdateCommandStatus(
+      region_cmd_,
+      status.ok() ? pb::coordinator::RegionCmdStatus::STATUS_DONE : pb::coordinator::RegionCmdStatus::STATUS_FAIL);
 }
 
 static int ExecuteRoutine(void*, bthread::TaskIterator<TaskRunnable*>& iter) {
@@ -422,6 +432,37 @@ std::shared_ptr<pb::coordinator::RegionCmd> RegionCommandManager::GetCommand(uin
   return it->second;
 }
 
+std::vector<std::shared_ptr<pb::coordinator::RegionCmd>> RegionCommandManager::GetCommands(
+    pb::coordinator::RegionCmdStatus status) {
+  BAIDU_SCOPED_LOCK(mutex_);
+  std::vector<std::shared_ptr<pb::coordinator::RegionCmd>> commands;
+  for (auto& [_, command] : region_commands_) {
+    if (command->status() == status) {
+      commands.push_back(command);
+    }
+  }
+
+  std::sort(commands.begin(), commands.end(),
+            [](const std::shared_ptr<pb::coordinator::RegionCmd>& a,
+               const std::shared_ptr<pb::coordinator::RegionCmd>& b) { return a->id() < b->id(); });
+
+  return commands;
+}
+
+std::vector<std::shared_ptr<pb::coordinator::RegionCmd>> RegionCommandManager::GetAllCommand() {
+  BAIDU_SCOPED_LOCK(mutex_);
+  std::vector<std::shared_ptr<pb::coordinator::RegionCmd>> commands;
+  for (auto& [_, command] : region_commands_) {
+    commands.push_back(command);
+  }
+
+  std::sort(commands.begin(), commands.end(),
+            [](const std::shared_ptr<pb::coordinator::RegionCmd>& a,
+               const std::shared_ptr<pb::coordinator::RegionCmd>& b) { return a->id() < b->id(); });
+
+  return commands;
+}
+
 std::shared_ptr<pb::common::KeyValue> RegionCommandManager::TransformToKv(uint64_t command_id) {
   auto region_cmd = GetCommand(command_id);
   if (region_cmd == nullptr) {
@@ -464,6 +505,22 @@ bool RegionController::Init() {
   return true;
 }
 
+bool RegionController::Recover() {
+  auto commands =
+      Server::GetInstance()->GetRegionCommandManager()->GetCommands(pb::coordinator::RegionCmdStatus::STATUS_NONE);
+
+  for (auto& command : commands) {
+    auto ctx = std::make_shared<Context>();
+
+    auto status = InnerDispatchRegionControlCommand(ctx, command);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << "Recover region control command failed, error: " << status.error_str();
+    }
+  }
+
+  return true;
+}
+
 void RegionController::Destroy() {
   BAIDU_SCOPED_LOCK(mutex_);
   for (auto [_, executor] : executors_) {
@@ -494,17 +551,8 @@ std::shared_ptr<RegionControlExecutor> RegionController::GetRegionControlExecuto
   return it->second;
 }
 
-butil::Status RegionController::DispatchRegionControlCommand(std::shared_ptr<Context> ctx,
-                                                             std::shared_ptr<pb::coordinator::RegionCmd> command) {
-  // Check repeat region command
-  auto region_command_manager = Server::GetInstance()->GetRegionCommandManager();
-  if (region_command_manager->IsExist(command->id())) {
-    return butil::Status(pb::error::EREGION_REPEAT_COMMAND, "Repeat region control command");
-  }
-
-  // Save region command
-  region_command_manager->AddCommand(command);
-
+butil::Status RegionController::InnerDispatchRegionControlCommand(std::shared_ptr<Context> ctx,
+                                                                  std::shared_ptr<pb::coordinator::RegionCmd> command) {
   // Create region, need to add region control executor
   if (command->region_cmd_type() == pb::coordinator::RegionCmdType::CMD_CREATE) {
     RegisterExecutor(command->region_id());
@@ -533,6 +581,20 @@ butil::Status RegionController::DispatchRegionControlCommand(std::shared_ptr<Con
   }
 
   return butil::Status();
+}
+
+butil::Status RegionController::DispatchRegionControlCommand(std::shared_ptr<Context> ctx,
+                                                             std::shared_ptr<pb::coordinator::RegionCmd> command) {
+  // Check repeat region command
+  auto region_command_manager = Server::GetInstance()->GetRegionCommandManager();
+  if (region_command_manager->IsExist(command->id())) {
+    return butil::Status(pb::error::EREGION_REPEAT_COMMAND, "Repeat region control command");
+  }
+
+  // Save region command
+  region_command_manager->AddCommand(command);
+
+  return InnerDispatchRegionControlCommand(ctx, command);
 }
 
 std::map<pb::coordinator::RegionCmdType, typename RegionController::TaskBuildFunc> RegionController::task_builders = {

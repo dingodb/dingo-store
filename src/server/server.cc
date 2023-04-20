@@ -333,6 +333,11 @@ bool Server::Recover() {
       DINGO_LOG(ERROR) << "Recover engine failed, engine " << engine_->GetName();
       return false;
     }
+
+    if (!region_controller_->Recover()) {
+      DINGO_LOG(ERROR) << "Recover region controller failed";
+      return false;
+    }
   }
 
   return true;
