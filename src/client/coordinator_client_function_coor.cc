@@ -1089,6 +1089,36 @@ void SendRemovePeerRegion(brpc::Controller& cntl, dingodb::pb::coordinator::Coor
   }
 }
 
+void SendGetOrphanRegion(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
+  dingodb::pb::coordinator::GetOrphanRegionRequest request;
+  dingodb::pb::coordinator::GetOrphanRegionResponse response;
+
+  if (!FLAGS_id.empty()) {
+    request.set_store_id(std::stoull(FLAGS_id));
+  }
+
+  stub.GetOrphanRegion(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    // bthread_usleep(FLAGS_timeout_ms * 1000L);
+  }
+
+  DINGO_LOG(INFO) << "Received response"
+                  << " request_attachment=" << cntl.request_attachment().size()
+                  << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+  DINGO_LOG(INFO) << "orphan_regions_size=" << response.orphan_regions_size();
+
+  for (const auto& it : response.orphan_regions()) {
+    DINGO_LOG(INFO) << "store_id=" << it.first << " region_id=" << it.second.id();
+    DINGO_LOG(INFO) << it.second.DebugString();
+  }
+
+  for (const auto& it : response.orphan_regions()) {
+    DINGO_LOG(INFO) << "store_id=" << it.first << " region_id=" << it.second.id()
+                    << " region_name=" << it.second.region_definition().name();
+  }
+}
+
 // store operation
 void SendGetStoreOperation(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
   dingodb::pb::coordinator::GetStoreOperationRequest request;
