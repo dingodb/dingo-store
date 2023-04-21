@@ -51,8 +51,15 @@ public class StoreServiceClient {
     private final Map<DingoCommonId, StoreServiceConnector> connectorCache = new ConcurrentHashMap<>();
     private final MetaServiceClient rootMetaService;
 
+    private Integer retryTimes;
+
     public StoreServiceClient(MetaServiceClient rootMetaService) {
+        this(rootMetaService, 20);
+    }
+
+    public StoreServiceClient(MetaServiceClient rootMetaService, Integer retryTimes) {
         this.rootMetaService = rootMetaService;
+        this.retryTimes = retryTimes;
     }
 
     public Supplier<Location> locationSupplier(DingoCommonId schemaId, DingoCommonId tableId, DingoCommonId regionId) {
@@ -93,7 +100,7 @@ public class StoreServiceClient {
                     .build();
             Store.KvGetResponse res = stub.kvGet(req);
             return new ServiceConnector.Response<>(res.getError(), res.getValue().toByteArray());
-        }, 10, tableId, regionId);
+        }, retryTimes, tableId, regionId);
     }
 
     public List<KeyValue> kvBatchGet(DingoCommonId tableId, DingoCommonId regionId, List<byte[]> keys) {
@@ -107,7 +114,7 @@ public class StoreServiceClient {
                 res.getError(),
                 res.getKvsList().stream().map(EntityConversion::mapping).collect(Collectors.toList())
             );
-        }, 10, tableId, regionId);
+        }, retryTimes, tableId, regionId);
     }
 
     public Iterator<KeyValue> scan(
@@ -135,7 +142,7 @@ public class StoreServiceClient {
                 .build();
             Store.KvPutResponse res = stub.kvPut(req);
             return new ServiceConnector.Response<>(res.getError(), true);
-        }, 10, tableId, regionId);
+        }, retryTimes, tableId, regionId);
     }
 
     public boolean kvBatchPut(DingoCommonId tableId, DingoCommonId regionId, List<KeyValue> keyValues) {
@@ -149,7 +156,7 @@ public class StoreServiceClient {
             }
             Store.KvBatchPutResponse res = stub.kvBatchPut(req);
             return new ServiceConnector.Response<>(res.getError(), true);
-        }, 10, tableId, regionId);
+        }, retryTimes, tableId, regionId);
     }
 
     public boolean kvPutIfAbsent(DingoCommonId tableId, DingoCommonId regionId, KeyValue keyValue) {
@@ -160,7 +167,7 @@ public class StoreServiceClient {
                     .build();
             Store.KvPutIfAbsentResponse res = stub.kvPutIfAbsent(req);
             return new ServiceConnector.Response<>(res.getError(), res.getKeyState());
-        }, 10, tableId, regionId);
+        }, retryTimes, tableId, regionId);
     }
 
     public List<Boolean> kvBatchPutIfAbsent(DingoCommonId tableId, DingoCommonId regionId, List<KeyValue> keyValues) {
@@ -176,7 +183,7 @@ public class StoreServiceClient {
                     .build();
             Store.KvBatchPutIfAbsentResponse res = stub.kvBatchPutIfAbsent(req);
             return new ServiceConnector.Response<>(res.getError(), res.getKeyStatesList());
-        }, 10, tableId, regionId);
+        }, retryTimes, tableId, regionId);
     }
 
     public boolean kvBatchDelete(DingoCommonId tableId, DingoCommonId regionId, List<byte[]> keys) {
@@ -187,7 +194,7 @@ public class StoreServiceClient {
                     .build();
             Store.KvBatchDeleteResponse res = stub.kvBatchDelete(req);
             return new ServiceConnector.Response<>(res.getError(), true);
-        }, 10, tableId, regionId);
+        }, retryTimes, tableId, regionId);
     }
 
     public long kvDeleteRange(DingoCommonId tableId, DingoCommonId regionId, RangeWithOptions options) {
@@ -198,7 +205,7 @@ public class StoreServiceClient {
                     .build();
             Store.KvDeleteRangeResponse res = stub.kvDeleteRange(req);
             return new ServiceConnector.Response<>(res.getError(), res.getDeleteCount());
-        }, 10, tableId, regionId);
+        }, retryTimes, tableId, regionId);
     }
 
     private <R> R exec(

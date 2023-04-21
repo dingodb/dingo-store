@@ -20,8 +20,6 @@ import io.dingodb.sdk.common.DingoClientException;
 import io.dingodb.sdk.common.DingoCommonId;
 import io.dingodb.sdk.common.codec.KeyValueCodec;
 import io.dingodb.sdk.common.table.RangeDistribution;
-import io.dingodb.sdk.service.meta.MetaServiceClient;
-import io.dingodb.sdk.service.store.StoreServiceClient;
 import io.dingodb.sdk.common.utils.ByteArrayUtils;
 import io.dingodb.sdk.common.partition.DistributionStrategy;
 import lombok.AllArgsConstructor;
@@ -40,10 +38,6 @@ public class RouteTable {
     @Getter
     private NavigableMap<ByteArrayUtils.ComparableByteArray, RangeDistribution> rangeDistribution;
     private DistributionStrategy<ByteArrayUtils.ComparableByteArray> distributionStrategy;
-
-    public StoreServiceClient getLeaderStoreService(MetaServiceClient metaClient) {
-        return new StoreServiceClient(metaClient);
-    }
 
     public RangeDistribution getRangeDistribution(byte[] key) {
         if (rangeDistribution == null) {
