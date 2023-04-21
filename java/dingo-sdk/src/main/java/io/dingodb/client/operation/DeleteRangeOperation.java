@@ -17,15 +17,13 @@
 package io.dingodb.client.operation;
 
 import io.dingodb.client.OperationContext;
-import io.dingodb.client.Record;
 import io.dingodb.client.RouteTable;
-import io.dingodb.sdk.common.KeyValue;
+import io.dingodb.sdk.common.RangeWithOptions;
 import io.dingodb.sdk.common.codec.KeyValueCodec;
 import io.dingodb.sdk.common.table.Table;
 import io.dingodb.sdk.common.utils.Any;
 import io.dingodb.sdk.common.utils.ByteArrayUtils;
 import io.dingodb.sdk.common.utils.ByteArrayUtils.ComparableByteArray;
-import io.dingodb.sdk.common.utils.LinkedIterator;
 
 import java.util.Arrays;
 import java.util.Comparator;
@@ -36,55 +34,16 @@ import java.util.stream.Collectors;
 
 import static io.dingodb.sdk.common.utils.Any.wrap;
 
-public class ScanOperation implements Operation {
+public class DeleteRangeOperation implements Operation {
 
-    private static final ScanOperation INSTANCE = new ScanOperation();
 
-    private ScanOperation() {
+    private static final DeleteRangeOperation INSTANCE = new DeleteRangeOperation();
+
+    private DeleteRangeOperation() {
     }
 
-    public static ScanOperation getInstance() {
+    public static DeleteRangeOperation getInstance() {
         return INSTANCE;
-    }
-
-    @Override
-    public Operation.Fork fork(Any parameters, Table table, RouteTable routeTable) {
-        try {
-            KeyValueCodec codec = routeTable.getCodec();
-            OpKeyRange keyRange = parameters.getValue();
-            OpRange range = new OpRange(
-                codec.encodeKey(keyRange.start.getUserKey().toArray(new Object[table.getColumns().size()])),
-                codec.encodeKey(keyRange.end.getUserKey().toArray(new Object[table.getColumns().size()])),
-                keyRange.withStart,
-                keyRange.withEnd
-            );
-            NavigableSet<Task> subTasks = routeTable.getRangeDistribution()
-                .subMap(
-                    new ComparableByteArray(range.getRange().getStartKey()), range.isWithStart(),
-                    new ComparableByteArray(range.getRange().getEndKey()), range.isWithEnd()
-                ).values().stream()
-                .map(rd -> new Task(
-                    rd.getId(),
-                    wrap(new OpRange(rd.getRange().getStartKey(), rd.getRange().getEndKey(), true, false)))
-                ).collect(Collectors.toCollection(() -> new TreeSet<>(getComparator())));
-            Task task = subTasks.pollFirst();
-            if (task == null) {
-                return new Fork(new Iterator[0], subTasks, true);
-            }
-            OpRange taskScan = task.parameters();
-            subTasks.add(new Task(
-                task.getRegionId(),
-                wrap(new OpRange(range.getStartKey(), taskScan.getEndKey(), range.withStart, taskScan.withEnd))
-            ));
-            task = subTasks.pollLast();
-            subTasks.add(new Task(
-                task.getRegionId(),
-                wrap(new OpRange(taskScan.getStartKey(), range.getEndKey(), taskScan.withStart, range.withEnd))
-            ));
-            return new Fork(new Iterator[subTasks.size()], subTasks, true);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
     }
 
     private Comparator<Task> getComparator() {
@@ -92,21 +51,53 @@ public class ScanOperation implements Operation {
     }
 
     @Override
-    public void exec(OperationContext context) {
-        OpRange scan = context.parameters();
+    public Fork fork(Any parameters, Table table, RouteTable routeTable) {
+        try {
+            KeyValueCodec codec = routeTable.getCodec();
+            OpKeyRange keyRange = parameters.getValue();
+            OpRange range = new OpRange(
+                codec.encodeKey(keyRange.start.getUserKey().toArray(new Object[table.getColumns().size()])),
+                codec.encodeKey(keyRange.end.getUserKey().toArray(new Object[table.getColumns().size()])), keyRange.withStart,
+                keyRange.withEnd
+            );
+            NavigableSet<Task> subTasks = routeTable.getRangeDistribution()
+                .subMap(new ComparableByteArray(range.getRange().getStartKey()), range.isWithStart(), new ComparableByteArray(range.getRange().getEndKey()), range.isWithEnd())
+                .values()
+                .stream()
+                .map(rd -> new Task(rd.getId(),
+                    wrap(new OpRange(rd.getRange().getStartKey(), rd.getRange().getEndKey(), true, false))
+                ))
+                .collect(Collectors.toCollection(() -> new TreeSet<>(getComparator())));
+            Task task = subTasks.pollFirst();
+            if (task == null) {
+                return new Fork(new Iterator[0], subTasks, true);
+            }
+            OpRange taskRange = task.parameters();
+            subTasks.add(new Task(
+                task.getRegionId(),
+                wrap(new OpRange(range.getStartKey(), taskRange.getEndKey(), range.withStart, taskRange.withEnd))
+            ));
+            task = subTasks.pollLast();
+            subTasks.add(new Task(
+                task.getRegionId(),
+                wrap(new OpRange(taskRange.getStartKey(), range.getEndKey(), taskRange.withStart, range.withEnd))
+            ));
+            return new Fork(new long[subTasks.size()], subTasks, true);
 
-        Iterator<KeyValue> scanResult = context.getStoreService()
-            .scan(context.getTableId(), context.getRegionId(), scan.range, scan.withStart, scan.withEnd);
-
-        context.<Iterator<Record>[]>result()[context.getSeq()] = new RecordIterator(
-            context.getTable().getColumns(), context.getCodec(), scanResult
-        );
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Override
-    public <R> R reduce(Fork fork) {
-        LinkedIterator<Record> result = new LinkedIterator<>();
-        Arrays.stream(fork.<Iterator<Record>[]>result()).forEach(result::append);
-        return (R) result;
+    public void exec(OperationContext context) {
+        OpRange range = context.parameters();
+        context.<long[]>result()[context.getSeq()] = context.getStoreService()
+            .kvDeleteRange(context.getTableId(), context.getRegionId(), new RangeWithOptions(range.range, range.withStart, range.withEnd));
+    }
+
+    @Override
+    public <R> R reduce(Fork context) {
+        return (R) (Long) Arrays.stream(context.<long[]>result()).reduce(Long::sum).orElse(0L);
     }
 }

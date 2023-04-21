@@ -16,11 +16,9 @@
 
 package io.dingodb.sdk.common.table;
 
-import lombok.AllArgsConstructor;
 import lombok.Builder;
 
 @Builder
-@AllArgsConstructor
 public class ColumnDefinition implements Column {
 
     private String name;
@@ -32,9 +30,30 @@ public class ColumnDefinition implements Column {
     private int primary;
     private String defaultValue;
 
+    @Deprecated
+    public ColumnDefinition(
+        String name,
+        String type,
+        String elementType,
+        int precision,
+        int scale,
+        boolean nullable,
+        int primary,
+        String defaultValue
+    ) {
+        this.name = name;
+        this.type = type;
+        this.elementType = elementType;
+        this.precision = precision;
+        this.scale = scale;
+        this.nullable = nullable;
+        this.primary = primary;
+        this.defaultValue = defaultValue;
+    }
+
     @Override
     public String getName() {
-        return name;
+        return name.toUpperCase();
     }
 
     @Override
