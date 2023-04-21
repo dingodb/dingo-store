@@ -15,12 +15,15 @@
 #include "handler/raft_handler.h"
 
 #include <cstddef>
+#include <string>
 #include <vector>
 
 #include "butil/strings/stringprintf.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "engine/raw_engine.h"
 #include "proto/common.pb.h"
+#include "proto/error.pb.h"
 #include "server/server.h"
 
 namespace dingodb {
@@ -182,6 +185,19 @@ void DeleteBatchHandler::Handle(std::shared_ptr<Context> ctx, std::shared_ptr<pb
     }
   }
 
+  auto reader = engine->NewReader(request.cf_name());
+  std::vector<bool> key_states(request.keys().size(), false);
+  auto snapshot = engine->GetSnapshot();
+  size_t i = 0;
+  for (const auto &key : request.keys()) {
+    std::string value;
+    status = reader->KvGet(snapshot, key, value);
+    if (status.ok()) {
+      key_states[i] = true;
+    }
+    i++;
+  }
+
   auto writer = engine->NewWriter(request.cf_name());
   if (request.keys().size() == 1) {
     status = writer->KvDelete(request.keys().Get(0));
@@ -189,8 +205,20 @@ void DeleteBatchHandler::Handle(std::shared_ptr<Context> ctx, std::shared_ptr<pb
     status = writer->KvBatchDelete(Helper::PbRepeatedToVector(request.keys()));
   }
 
-  if (ctx) {
+  if (ctx && ctx->Response()) {
+    auto *response = dynamic_cast<pb::store::KvBatchDeleteResponse *>(ctx->Response());
+
+    // Note: The caller requires that if the parameter is wrong, no error will be reported and it will be
+    // returned.
+    if (!status.ok() && pb::error::EKEY_EMPTY == static_cast<pb::error::Errno>(status.error_code())) {
+      key_states.resize(request.keys().size(), false);
+      status.set_error(pb::error::OK, "");
+    }
+
     ctx->SetStatus(status);
+    for (const auto &state : key_states) {
+      response->add_key_states(state);
+    }
   }
 }
 
