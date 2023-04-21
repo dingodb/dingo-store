@@ -42,6 +42,7 @@ DEFINE_string(level, "", "Request log level [DEBUG, INFO, WARNING, ERROR, FATAL]
 DEFINE_string(keyring, "", "Request parameter keyring");
 DEFINE_string(new_keyring, "", "Request parameter new_keyring");
 DEFINE_string(coordinator_addr, "", "coordinator servr addr, for example: 127.0.0.1:8001");
+DEFINE_string(addr, "", "coordinator servr addr, for example: 127.0.0.1:8001");
 DEFINE_string(group, "0", "Id of the replication group, now coordinator use 0 as groupid");
 DEFINE_int64(split_from_id, 0, "split_from_id");
 DEFINE_int64(split_to_id, 0, "split_to_id");
@@ -219,8 +220,12 @@ int main(int argc, char* argv[]) {
     exit(-1);
   }
 
+  if (!FLAGS_addr.empty()) {
+    FLAGS_coordinator_addr = FLAGS_addr;
+  }
+
   if (FLAGS_coordinator_addr.empty()) {
-    DINGO_LOG(ERROR) << "Please set --conf or --coordinator_addr";
+    DINGO_LOG(ERROR) << "Please set --addr or --coordinator_addr";
     return -1;
   }
 
