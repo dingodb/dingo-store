@@ -26,6 +26,12 @@ import io.dingodb.sdk.common.Location;
 import io.dingodb.sdk.common.Range;
 import io.dingodb.sdk.common.RangeWithOptions;
 import io.dingodb.sdk.common.SDKCommonId;
+import io.dingodb.sdk.common.cluster.Executor;
+import io.dingodb.sdk.common.cluster.ExecutorMap;
+import io.dingodb.sdk.common.cluster.ExecutorUser;
+import io.dingodb.sdk.common.cluster.InternalExecutor;
+import io.dingodb.sdk.common.cluster.InternalExecutorMap;
+import io.dingodb.sdk.common.cluster.InternalExecutorUser;
 import io.dingodb.sdk.common.codec.KeyValueCodec;
 import io.dingodb.sdk.common.partition.PartitionDetail;
 import io.dingodb.sdk.common.table.Column;
@@ -139,6 +145,10 @@ public class EntityConversion {
         return new Location(location.getHost(), location.getPort());
     }
 
+    public static Common.Location mapping(Location location) {
+        return Common.Location.newBuilder().setHost(location.getHost()).setPort(location.getPort()).build();
+    }
+
     public static Range mapping(Common.Range range) {
         return new Range(range.getStartKey().toByteArray(), range.getEndKey().toByteArray());
     }
@@ -179,6 +189,45 @@ public class EntityConversion {
                 DingoCommonId.Type.valueOf(commonId.getEntityType().name()),
                 commonId.getParentEntityId(),
                 commonId.getEntityId());
+    }
+
+    public static Common.Executor mapping(Executor executor) {
+        return Common.Executor.newBuilder()
+                .setServerLocation(mapping(executor.serverLocation()))
+                .setExecutorUser(mapping(executor.executorUser()))
+                .build();
+    }
+
+    public static Executor mapping(Common.Executor executor) {
+        return new InternalExecutor(
+                mapping(executor.getServerLocation()),
+                mapping(executor.getExecutorUser()),
+                executor.getResourceTag()
+        );
+    }
+
+    public static Common.ExecutorUser mapping(ExecutorUser executorUser) {
+        return Common.ExecutorUser.newBuilder()
+                .setUser(executorUser.getUser())
+                .setKeyring(executorUser.getKeyring())
+                .build();
+    }
+
+    public static ExecutorUser mapping(Common.ExecutorUser executorUser) {
+        return new InternalExecutorUser(
+                executorUser.getUser(),
+                executorUser.getKeyring()
+        );
+    }
+
+    public static ExecutorMap mapping(Common.ExecutorMap executorMap) {
+        return new InternalExecutorMap(
+                executorMap.getEpoch(),
+                executorMap.getExecutorsList()
+                        .stream()
+                        .map(EntityConversion::mapping)
+                        .collect(Collectors.toList())
+        );
     }
 
     public static Meta.PartitionRule calcRange(Table table, Meta.DingoCommonId tableId) {

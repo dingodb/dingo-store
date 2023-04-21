@@ -65,10 +65,11 @@ public class MetaServiceClient {
     private final Map<DingoCommonId, Table> tableDefinitionCache = new ConcurrentHashMap<>();
     private final Map<Meta.DingoCommonId, MetaServiceClient> metaServiceCache = new ConcurrentHashMap<>();
     private final Map<String, Meta.DingoCommonId> tableIdCache = new ConcurrentHashMap<>();
+    private final Map<DingoCommonId, TableMetrics> tableMetricsCache = new ConcurrentHashMap<>();
 
     private Pattern pattern = Pattern.compile("^[A-Z_][A-Z\\d_]+$");
     private Pattern warnPattern = Pattern.compile(".*[a-z]+.*");
-    private String ROOT_NAME = "DINGO_ROOT";
+    private String ROOT_NAME = "root";
     private Meta.DingoCommonId parentId;
     @Getter
     private Meta.DingoCommonId id;
@@ -361,7 +362,7 @@ public class MetaServiceClient {
         if (tableId == null) {
             throw new DingoClientException("Table " + tableName + " does not exist");
         }
-        return Optional.ofNullable(tableId)
+        return tableMetricsCache.computeIfAbsent(tableId, ___ -> Optional.ofNullable(tableId)
                 .map(__ -> {
                     Meta.GetTableMetricsRequest request = Meta.GetTableMetricsRequest.newBuilder()
                             .setTableId(mapping(__))
@@ -370,10 +371,9 @@ public class MetaServiceClient {
                         Meta.GetTableMetricsResponse res = stub.getTableMetrics(request);
                         return new ServiceConnector.Response<>(res.getError(), res);
                     }).getResponse();
-                    Meta.TableMetricsWithId metrics = response.getTableMetrics();
-                    return metrics.getTableMetrics();
+                    return response.getTableMetrics().getTableMetrics();
                 })
-                .mapOrNull(EntityConversion::mapping);
+                .mapOrNull(EntityConversion::mapping));
     }
 
     private String cleanTableName(String name) {

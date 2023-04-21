@@ -107,15 +107,11 @@ public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
                 channel.shutdown();
             }
             for (Location location : locations) {
-                try {
-                    channel = transformToLeaderChannel(newChannel(location.getHost(), location.getPort()));
-                    if (channel != null) {
-                        stub = newStub(channel);
-                        channelRef.compareAndSet(null, channel);
-                        return stub != null;
-                    }
-                } catch (Exception e) {
-                    log.warn("Connect {} and transform to leader error.", location, e);
+                channel = transformToLeaderChannel(newChannel(location.getHost(), location.getPort()));
+                if (channel != null) {
+                    stub = newStub(channel);
+                    channelRef.compareAndSet(null, channel);
+                    return stub != null;
                 }
             }
             return stub != null;
@@ -126,7 +122,12 @@ public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
     }
 
     protected ManagedChannel newChannel(String host, int port) {
-        return Grpc.newChannelBuilder(host + ":" + port, InsecureChannelCredentials.create()).build();
+        try {
+            return Grpc.newChannelBuilder(host + ":" + port, InsecureChannelCredentials.create()).build();
+        } catch (Exception e) {
+            log.warn("Connect {}:{} and transform to leader error.", host, port, e);
+        }
+        return null;
     }
 
     protected abstract ManagedChannel transformToLeaderChannel(ManagedChannel channel);
