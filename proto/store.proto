@@ -126,6 +126,10 @@ message KvBatchDeleteRequest {
 
 message KvBatchDeleteResponse {
   dingodb.pb.error.Error error = 1;
+  // return the execution status of each key
+  // key_states[index] = true, delete success
+  // key_states[index] = false, key not exist
+  repeated bool key_states = 2;
 }
 
 message KvDeleteRangeRequest {
