@@ -698,26 +698,32 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
       if (idepoch.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
         int ret = id_epoch_map_.UpdatePresentId(idepoch.id(), idepoch.idepoch().value());
         if (ret > 0) {
-          DINGO_LOG(DEBUG) << "ApplyMetaIncrement CREATE, success [id=" << idepoch.id() << "]"
-                           << " value=" << idepoch.idepoch().value();
+          DINGO_LOG(INFO) << "ApplyMetaIncrement idepoch CREATE, success [id=" << idepoch.id() << "]"
+                          << " value=" << idepoch.idepoch().value();
           meta_write_to_kv.push_back(id_epoch_meta_->TransformToKvValue(idepoch.idepoch()));
         } else {
-          DINGO_LOG(WARNING) << "ApplyMetaIncrement CREATE, but UpdatePresentId failed, [id=" << idepoch.id() << "]"
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement idepoch CREATE, but UpdatePresentId failed, [id=" << idepoch.id()
+                             << "]"
                              << " value=" << idepoch.idepoch().value();
         }
       } else if (idepoch.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
         int ret = id_epoch_map_.UpdatePresentId(idepoch.id(), idepoch.idepoch().value());
         if (ret > 0) {
-          DINGO_LOG(DEBUG) << "ApplyMetaIncrement UPDATE, success [id=" << idepoch.id() << "]"
-                           << " value=" << idepoch.idepoch().value();
+          DINGO_LOG(INFO) << "ApplyMetaIncrement idepoch UPDATE, success [id=" << idepoch.id() << "]"
+                          << " value=" << idepoch.idepoch().value();
           meta_write_to_kv.push_back(id_epoch_meta_->TransformToKvValue(idepoch.idepoch()));
         } else {
-          DINGO_LOG(WARNING) << "ApplyMetaIncrement UPDATE, but UpdatePresentId failed, [id=" << idepoch.id() << "]"
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement idepoch UPDATE, but UpdatePresentId failed, [id=" << idepoch.id()
+                             << "]"
                              << " value=" << idepoch.idepoch().value();
         }
       } else if (idepoch.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
-        id_epoch_map_.Erase(idepoch.id());
-        DINGO_LOG(DEBUG) << "ApplyMetaIncrement DELETE, [id=" << idepoch.id() << "]";
+        int ret = id_epoch_map_.Erase(idepoch.id());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement idepoch DELETE, success [id=" << idepoch.id() << "]";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement idepoch DELETE, but Erase failed, [id=" << idepoch.id() << "]";
+        }
         meta_delete_to_kv.push_back(id_epoch_meta_->TransformToKvValue(idepoch.idepoch()));
       }
     }
@@ -730,7 +736,13 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
       const auto& coordinator = meta_increment.coordinators(i);
       if (coordinator.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
         // coordinator_map_[coordinator.id()] = coordinator.coordinator();
-        coordinator_map_.Put(coordinator.id(), coordinator.coordinator());
+        int ret = coordinator_map_.Put(coordinator.id(), coordinator.coordinator());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement coordinator CREATE, success [id=" << coordinator.id() << "]";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement coordinator CREATE, but Put failed, [id=" << coordinator.id()
+                             << "]";
+        }
 
         // meta_write_kv
         meta_write_to_kv.push_back(coordinator_meta_->TransformToKvValue(coordinator.coordinator()));
@@ -738,13 +750,25 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
       } else if (coordinator.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
         // auto& update_coordinator = coordinator_map_[coordinator.id()];
         // update_coordinator.CopyFrom(coordinator.coordinator());
-        coordinator_map_.Put(coordinator.id(), coordinator.coordinator());
+        int ret = coordinator_map_.Put(coordinator.id(), coordinator.coordinator());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement coordinator UPDATE, success [id=" << coordinator.id() << "]";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement coordinator UPDATE, but Put failed, [id=" << coordinator.id()
+                             << "]";
+        }
 
         // meta_write_kv
         meta_write_to_kv.push_back(coordinator_meta_->TransformToKvValue(coordinator.coordinator()));
 
       } else if (coordinator.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
-        coordinator_map_.Erase(coordinator.id());
+        int ret = coordinator_map_.Erase(coordinator.id());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement coordinator DELETE, success [id=" << coordinator.id() << "]";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement coordinator DELETE, but Erase failed, [id=" << coordinator.id()
+                             << "]";
+        }
 
         // meta_delete_kv
         meta_delete_to_kv.push_back(coordinator_meta_->TransformToKvValue(coordinator.coordinator()));
@@ -759,7 +783,12 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
       const auto& store = meta_increment.stores(i);
       if (store.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
         // store_map_[store.id()] = store.store();
-        store_map_.Put(store.id(), store.store());
+        int ret = store_map_.Put(store.id(), store.store());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement store CREATE, success [id=" << store.id() << "]";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement store CREATE, but Put failed, [id=" << store.id() << "]";
+        }
 
         // meta_write_kv
         meta_write_to_kv.push_back(store_meta_->TransformToKvValue(store.store()));
@@ -767,13 +796,23 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
       } else if (store.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
         // auto& update_store = store_map_[store.id()];
         // update_store.CopyFrom(store.store());
-        store_map_.Put(store.id(), store.store());
+        int ret = store_map_.Put(store.id(), store.store());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement store UPDATE, success [id=" << store.id() << "]";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement store UPDATE, but Put failed, [id=" << store.id() << "]";
+        }
 
         // meta_write_kv
         meta_write_to_kv.push_back(store_meta_->TransformToKvValue(store.store()));
 
       } else if (store.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
-        store_map_.Erase(store.id());
+        int ret = store_map_.Erase(store.id());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement store DELETE, success [id=" << store.id() << "]";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement store DELETE, but Erase failed, [id=" << store.id() << "]";
+        }
 
         // meta_delete_kv
         meta_delete_to_kv.push_back(store_meta_->TransformToKvValue(store.store()));
@@ -788,7 +827,12 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
       const auto& executor = meta_increment.executors(i);
       if (executor.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
         // executor_map_[executor.id()] = executor.executor();
-        executor_map_.Put(executor.id(), executor.executor());
+        int ret = executor_map_.Put(executor.id(), executor.executor());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement executor CREATE, success [id=" << executor.id() << "]";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement executor CREATE, but Put failed, [id=" << executor.id() << "]";
+        }
 
         // meta_write_kv
         meta_write_to_kv.push_back(executor_meta_->TransformToKvValue(executor.executor()));
@@ -796,13 +840,23 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
       } else if (executor.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
         // auto& update_executor = executor_map_[executor.id()];
         // update_executor.CopyFrom(executor.executor());
-        executor_map_.Put(executor.id(), executor.executor());
+        int ret = executor_map_.Put(executor.id(), executor.executor());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement executor UPDATE, success [id=" << executor.id() << "]";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement executor UPDATE, but Put failed, [id=" << executor.id() << "]";
+        }
 
         // meta_write_kv
         meta_write_to_kv.push_back(executor_meta_->TransformToKvValue(executor.executor()));
 
       } else if (executor.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
-        executor_map_.Erase(executor.id());
+        int ret = executor_map_.Erase(executor.id());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement executor DELETE, success [id=" << executor.id() << "]";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement executor DELETE, but Erase failed, [id=" << executor.id() << "]";
+        }
 
         // meta_delete_kv
         meta_delete_to_kv.push_back(executor_meta_->TransformToKvValue(executor.executor()));
@@ -819,21 +873,21 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         // schema_map_[schema.id()] = schema.schema_internal();
         int ret = schema_map_.PutIfAbsent(schema.id(), schema.schema_internal());
         if (ret > 0) {
-          DINGO_LOG(INFO) << "ApplyMetaIncrement CREATE, [id=" << schema.id() << "] success";
+          DINGO_LOG(INFO) << "ApplyMetaIncrement schema CREATE, [id=" << schema.id() << "] success";
 
           // meta_write_kv
           meta_write_to_kv.push_back(schema_meta_->TransformToKvValue(schema.schema_internal()));
         } else {
-          DINGO_LOG(WARNING) << "ApplyMetaIncrement CREATE, [id=" << schema.id() << "] failed";
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement schema CREATE, [id=" << schema.id() << "] failed";
         }
       } else if (schema.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
         // auto& update_schema = schema_map_[schema.id()];
         // update_schema.CopyFrom(schema.schema_internal());
         int ret = schema_map_.Put(schema.id(), schema.schema_internal());
         if (ret > 0) {
-          DINGO_LOG(INFO) << "ApplyMetaIncrement UPDATE, [id=" << schema.id() << "] success";
+          DINGO_LOG(INFO) << "ApplyMetaIncrement schema UPDATE, [id=" << schema.id() << "] success";
         } else {
-          DINGO_LOG(WARNING) << "ApplyMetaIncrement UPDATE, [id=" << schema.id() << "] failed";
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement schema UPDATE, [id=" << schema.id() << "] failed";
         }
 
         // meta_write_kv
@@ -842,9 +896,9 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
       } else if (schema.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
         int ret = schema_map_.Erase(schema.id());
         if (ret > 0) {
-          DINGO_LOG(INFO) << "ApplyMetaIncrement DELETE, [id=" << schema.id() << "] success";
+          DINGO_LOG(INFO) << "ApplyMetaIncrement schema DELETE, [id=" << schema.id() << "] success";
         } else {
-          DINGO_LOG(WARNING) << "ApplyMetaIncrement DELETE, [id=" << schema.id() << "] failed";
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement schema DELETE, [id=" << schema.id() << "] failed";
         }
 
         // meta_delete_kv
@@ -861,7 +915,12 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
       if (region.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
         // add region to region_map
         // region_map_[region.id()] = region.region();
-        region_map_.Put(region.id(), region.region());
+        int ret = region_map_.Put(region.id(), region.region());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement region CREATE, [id=" << region.id() << "] success";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement region CREATE, [id=" << region.id() << "] failed";
+        }
 
         // add_store_for_push
         // only create region will push to store now
@@ -896,14 +955,24 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         // update region to region_map
         // auto& update_region = region_map_[region.id()];
         // update_region.CopyFrom(region.region());
-        region_map_.Put(region.id(), region.region());
+        int ret = region_map_.Put(region.id(), region.region());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement region UPDATE, [id=" << region.id() << "] success";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement region UPDATE, [id=" << region.id() << "] failed";
+        }
 
         // meta_write_kv
         meta_write_to_kv.push_back(region_meta_->TransformToKvValue(region.region()));
 
       } else if (region.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
         // remove region from region_map
-        region_map_.Erase(region.id());
+        int ret = region_map_.Erase(region.id());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement region DELETE, [id=" << region.id() << "] success";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement region DELETE, [id=" << region.id() << "] failed";
+        }
 
         // meta_delete_kv
         meta_delete_to_kv.push_back(region_meta_->TransformToKvValue(region.region()));
@@ -922,14 +991,19 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
 
         // add table to table_map
         // table_map_[table.id()] = table.table();
-        table_map_.Put(table.id(), table.table());
+        int ret = table_map_.Put(table.id(), table.table());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement table CREATE, [id=" << table.id() << "] success";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement table CREATE, [id=" << table.id() << "] failed";
+        }
 
         // meta_write_kv
         meta_write_to_kv.push_back(table_meta_->TransformToKvValue(table.table()));
 
         // add table to parent schema
         pb::coordinator_internal::SchemaInternal schema_to_update;
-        int ret = schema_map_.Get(table.schema_id(), schema_to_update);
+        ret = schema_map_.Get(table.schema_id(), schema_to_update);
         // auto* schema = schema_map_.seek(table.schema_id());
         if (ret > 0) {
           // add new created table's id to its parent schema's table_ids
@@ -949,21 +1023,47 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         // update table to table_map
         // auto& update_table = table_map_[table.id()];
         // update_table.CopyFrom(table.table());
-        table_map_.Put(table.id(), table.table());
+        pb::coordinator_internal::TableInternal table_internal;
+        int ret = table_map_.Get(table.id(), table_internal);
+        if (ret > 0) {
+          if (table.table().has_definition()) {
+            table_internal.mutable_definition()->CopyFrom(table.table().definition());
+          }
+          if (table.table().partitions_size() > 0) {
+            table_internal.clear_partitions();
+            for (const auto& it : table.table().partitions()) {
+              table_internal.add_partitions()->CopyFrom(it);
+            }
+          }
+          ret = table_map_.Put(table.id(), table_internal);
+          if (ret > 0) {
+            DINGO_LOG(INFO) << "ApplyMetaIncrement table UPDATE, [id=" << table.id() << "] success";
+          } else {
+            DINGO_LOG(WARNING) << "ApplyMetaIncrement table UPDATE, [id=" << table.id() << "] failed";
+          }
 
-        // meta_write_kv
-        meta_write_to_kv.push_back(table_meta_->TransformToKvValue(table.table()));
+          // meta_write_kv
+          meta_write_to_kv.push_back(table_meta_->TransformToKvValue(table_internal));
+        } else {
+          DINGO_LOG(ERROR) << " UPDATE TABLE apply illegal table_id=" << table.id()
+                           << " table_name=" << table.table().definition().name();
+        }
 
       } else if (table.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
         // need to update schema, so acquire lock
         // BAIDU_SCOPED_LOCK(schema_map_mutex_);
 
         // delete table from table_map
-        table_map_.Erase(table.id());
+        int ret = table_map_.Erase(table.id());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement table DELETE, [id=" << table.id() << "] success";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement table DELETE, [id=" << table.id() << "] failed";
+        }
 
         // delete from parent schema
         pb::coordinator_internal::SchemaInternal schema_to_update;
-        int ret = schema_map_.Get(table.schema_id(), schema_to_update);
+        ret = schema_map_.Get(table.schema_id(), schema_to_update);
 
         if (ret > 0) {
           // according to the doc, we must use CopyFrom for protobuf message data structure here
@@ -1003,6 +1103,7 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
       const auto& store_metrics = meta_increment.store_metrics(i);
       if (store_metrics.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
         store_metrics_map_[store_metrics.id()] = store_metrics.store_metrics();
+        DINGO_LOG(INFO) << "ApplyMetaIncrement store_metrics CREATE, [id=" << store_metrics.id() << "] success";
 
         // meta_write_kv
         meta_write_to_kv.push_back(store_metrics_meta_->TransformToKvValue(store_metrics.store_metrics()));
@@ -1010,12 +1111,14 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
       } else if (store_metrics.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
         auto& update_store = store_metrics_map_[store_metrics.id()];
         update_store.CopyFrom(store_metrics.store_metrics());
+        DINGO_LOG(INFO) << "ApplyMetaIncrement store_metrics UPDATE, [id=" << store_metrics.id() << "] success";
 
         // meta_write_kv
         meta_write_to_kv.push_back(store_metrics_meta_->TransformToKvValue(store_metrics.store_metrics()));
 
       } else if (store_metrics.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
         store_metrics_map_.erase(store_metrics.id());
+        DINGO_LOG(INFO) << "ApplyMetaIncrement store_metrics DELETE, [id=" << store_metrics.id() << "] success";
 
         // meta_delete_kv
         meta_delete_to_kv.push_back(store_metrics_meta_->TransformToKvValue(store_metrics.store_metrics()));
@@ -1030,7 +1133,12 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
       const auto& table_metrics = meta_increment.table_metrics(i);
       if (table_metrics.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
         // table_metrics_map_[table_metrics.id()] = table_metrics.table_metrics();
-        table_metrics_map_.Put(table_metrics.id(), table_metrics.table_metrics());
+        int ret = table_metrics_map_.Put(table_metrics.id(), table_metrics.table_metrics());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement table_metrics CREATE, [id=" << table_metrics.id() << "] success";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement table_metrics CREATE, [id=" << table_metrics.id() << "] failed";
+        }
 
         // meta_write_kv
         meta_write_to_kv.push_back(table_metrics_meta_->TransformToKvValue(table_metrics.table_metrics()));
@@ -1038,13 +1146,23 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
       } else if (table_metrics.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
         // auto& update_table = table_metrics_map_[table_metrics.id()];
         // update_table.CopyFrom(table_metrics.table_metrics());
-        table_metrics_map_.Put(table_metrics.id(), table_metrics.table_metrics());
+        int ret = table_metrics_map_.Put(table_metrics.id(), table_metrics.table_metrics());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement table_metrics UPDATE, [id=" << table_metrics.id() << "] success";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement table_metrics UPDATE, [id=" << table_metrics.id() << "] failed";
+        }
 
         // meta_write_kv
         meta_write_to_kv.push_back(table_metrics_meta_->TransformToKvValue(table_metrics.table_metrics()));
 
       } else if (table_metrics.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
-        table_metrics_map_.Erase(table_metrics.id());
+        int ret = table_metrics_map_.Erase(table_metrics.id());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement table_metrics DELETE, [id=" << table_metrics.id() << "] success";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement table_metrics DELETE, [id=" << table_metrics.id() << "] failed";
+        }
 
         // meta_delete_kv
         meta_delete_to_kv.push_back(table_metrics_meta_->TransformToKvValue(table_metrics.table_metrics()));
@@ -1068,7 +1186,12 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         for (const auto& region_cmd : store_operation.store_operation().region_cmds()) {
           store_operation_in_map.add_region_cmds()->CopyFrom(region_cmd);
         }
-        store_operation_map_.Put(store_operation.id(), store_operation_in_map);
+        int ret = store_operation_map_.Put(store_operation.id(), store_operation_in_map);
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement store_operation CREATE, [id=" << store_operation.id() << "] success";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement store_operation CREATE, [id=" << store_operation.id() << "] failed";
+        }
 
         // meta_write_kv
         meta_write_to_kv.push_back(store_operation_meta_->TransformToKvValue(store_operation_in_map));
@@ -1111,7 +1234,13 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
           }
         }
 
-        store_operation_map_.Put(store_operation.id(), store_operation_residual);
+        int ret = store_operation_map_.Put(store_operation.id(), store_operation_residual);
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement store_operation DELETE, [id=" << store_operation.id() << "] success";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement store_operation DELETE, [id=" << store_operation.id() << "] failed";
+        }
+
         // meta_write_kv
         meta_write_to_kv.push_back(store_operation_meta_->TransformToKvValue(store_operation_residual));
 
@@ -1130,19 +1259,34 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
     for (int i = 0; i < meta_increment.executor_users_size(); i++) {
       const auto& executor_user = meta_increment.executor_users(i);
       if (executor_user.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
-        executor_user_map_.Put(executor_user.id(), executor_user.executor_user());
+        int ret = executor_user_map_.Put(executor_user.id(), executor_user.executor_user());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement executor_user CREATE, [id=" << executor_user.id() << "] success";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement executor_user CREATE, [id=" << executor_user.id() << "] failed";
+        }
 
         // meta_write_kv
         meta_write_to_kv.push_back(executor_user_meta_->TransformToKvValue(executor_user.executor_user()));
 
       } else if (executor_user.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
-        executor_user_map_.Put(executor_user.id(), executor_user.executor_user());
+        int ret = executor_user_map_.Put(executor_user.id(), executor_user.executor_user());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement executor_user UPDATE, [id=" << executor_user.id() << "] success";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement executor_user UPDATE, [id=" << executor_user.id() << "] failed";
+        }
 
         // meta_write_kv
         meta_write_to_kv.push_back(executor_user_meta_->TransformToKvValue(executor_user.executor_user()));
 
       } else if (executor_user.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
-        executor_user_map_.Erase(executor_user.id());
+        int ret = executor_user_map_.Erase(executor_user.id());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement executor_user DELETE, [id=" << executor_user.id() << "] success";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement executor_user DELETE, [id=" << executor_user.id() << "] failed";
+        }
 
         // meta_delete_kv
         meta_delete_to_kv.push_back(executor_user_meta_->TransformToKvValue(executor_user.executor_user()));

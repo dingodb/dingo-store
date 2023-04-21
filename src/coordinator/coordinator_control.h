@@ -97,8 +97,11 @@ class CoordinatorControl : public MetaControl {
 
   // drop region
   // in:  region_id
+  // in:  need_update_table_range
   // return: errno
   pb::error::Errno DropRegion(uint64_t region_id, pb::coordinator_internal::MetaIncrement &meta_increment);
+  pb::error::Errno DropRegion(uint64_t region_id, bool need_update_table_range,
+                              pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // drop region permanently
   // in:  region_id
