@@ -15,7 +15,8 @@ raft:
   electionTimeout: 1000 # ms
   snapshotInterval: 0 # s
 log:
-  logPath: $BASE_PATH$/log
+  level: INFO
+  path: $BASE_PATH$/log
 store:
   dbPath: $BASE_PATH$/data/store/db
   base:
@@ -38,5 +39,3 @@ store:
     timeout_ms: 60000 # ms
     max_bytes_rpc: 4194304
     max_fetch_cnt_by_server: 1000
-log_level:
-    INFO
