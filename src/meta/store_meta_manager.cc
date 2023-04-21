@@ -160,13 +160,14 @@ void StoreRegionMeta::UpdateState(std::shared_ptr<pb::store_internal::Region> re
       break;
     case pb::common::StoreRegionState::NORMAL:
       if (new_state == pb::common::StoreRegionState::STANDBY || new_state == pb::common::StoreRegionState::SPLITTING ||
-          new_state == pb::common::StoreRegionState::MERGING || new_state == pb::common::StoreRegionState::DELETING) {
+          new_state == pb::common::StoreRegionState::MERGING || new_state == pb::common::StoreRegionState::DELETING ||
+          new_state == pb::common::StoreRegionState::ORPHAN) {
         region->set_state(new_state);
         successed = true;
       }
       break;
     case pb::common::StoreRegionState::STANDBY:
-      if (new_state == pb::common::StoreRegionState::NORMAL) {
+      if (new_state == pb::common::StoreRegionState::NORMAL || new_state == pb::common::StoreRegionState::ORPHAN) {
         region->set_state(new_state);
         successed = true;
       }

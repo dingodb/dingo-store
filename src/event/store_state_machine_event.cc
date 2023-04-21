@@ -14,7 +14,9 @@
 
 #include "event/store_state_machine_event.h"
 
+#include "common/logging.h"
 #include "handler/raft_snapshot_handler.h"
+#include "proto/common.pb.h"
 #include "store/heartbeat.h"
 
 namespace dingodb {
@@ -55,26 +57,43 @@ void SmLeaderStartEventListener::OnEvent(std::shared_ptr<Event> event) {
   auto the_event = std::dynamic_pointer_cast<SmLeaderStartEvent>(event);
 
   // Update region meta
-  auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
-  if (store_meta_manager != nullptr) {
-    auto store_region_meta = store_meta_manager->GetStoreRegionMeta();
-    if (store_region_meta) {
-      store_region_meta->UpdateLeaderId(the_event->node_id, Server::GetInstance()->Id());
-    }
-
-    // trigger heartbeat
-    Heartbeat::TriggerStoreHeartbeat(nullptr);
+  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+  if (store_region_meta) {
+    store_region_meta->UpdateLeaderId(the_event->node_id, Server::GetInstance()->Id());
   }
+
+  // trigger heartbeat
+  Heartbeat::TriggerStoreHeartbeat(nullptr);
 }
 
 void SmStartFollowingEventListener::OnEvent(std::shared_ptr<Event> event) {
   auto the_event = std::dynamic_pointer_cast<SmStartFollowingEvent>(event);
   // Update region meta
-  auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
-  if (store_meta_manager != nullptr) {
-    auto store_region_meta = store_meta_manager->GetStoreRegionMeta();
-    if (store_region_meta) {
-      store_region_meta->UpdateLeaderId(the_event->node_id, 0);
+  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+  if (store_region_meta) {
+    store_region_meta->UpdateLeaderId(the_event->node_id, 0);
+  }
+}
+
+void SmStopFollowingEventListener::OnEvent(std::shared_ptr<Event> event) {
+  auto the_event = std::dynamic_pointer_cast<SmStopFollowingEvent>(event);
+  // Update region state ORPHAN, when ListPeers is empty
+  // The node removed by raft group
+  auto engine = Server::GetInstance()->GetEngine();
+  if (engine->GetID() == pb::common::ENG_RAFT_STORE) {
+    auto raft_kv_engine = std::dynamic_pointer_cast<RaftKvEngine>(engine);
+    auto node = raft_kv_engine->GetNode(the_event->node_id);
+    if (node == nullptr) {
+      DINGO_LOG(ERROR) << "Not found node " << the_event->node_id;
+      return;
+    }
+    std::vector<braft::PeerId> peers;
+    node->ListPeers(&peers);
+    if (!peers.empty()) return;
+
+    auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+    if (store_region_meta != nullptr) {
+      store_region_meta->UpdateState(the_event->node_id, pb::common::StoreRegionState::ORPHAN);
     }
   }
 }

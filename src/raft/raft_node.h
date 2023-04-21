@@ -37,7 +37,10 @@ class RaftNode {
 
   int Init(const std::string& init_conf, std::shared_ptr<Config> config);
   void Destroy();
-  std::string GetRaftGroupName() const;
+
+  std::string GetRaftGroupName() const { return raft_group_name_; }
+  uint64_t GetNodeId() const { return node_id_; }
+
   butil::Status Commit(std::shared_ptr<Context> ctx, std::shared_ptr<pb::raft::RaftCmdRequest> raft_cmd);
 
   bool IsLeader();
