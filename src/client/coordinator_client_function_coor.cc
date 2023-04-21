@@ -1003,7 +1003,7 @@ void SendAddPeerRegion(brpc::Controller& cntl, dingodb::pb::coordinator::Coordin
   dingodb::pb::coordinator::ChangePeerRegionResponse change_peer_response;
 
   auto* new_definition = change_peer_request.mutable_change_peer_request()->mutable_region_definition();
-  new_definition->CopyFrom(query_response.region());
+  new_definition->CopyFrom(query_response.region().definition());
   auto* new_peer_to_add = new_definition->add_peers();
   new_peer_to_add->CopyFrom(new_peer);
 
