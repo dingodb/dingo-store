@@ -403,6 +403,10 @@ pb::error::Errno CoordinatorControl::CreateRegionForSplit(const std::string& reg
                                                           uint64_t table_id, uint64_t split_from_region_id,
                                                           uint64_t& new_region_id,
                                                           pb::coordinator_internal::MetaIncrement& meta_increment) {
+  if (split_from_region_id <= 0) {
+    return pb::error::Errno::EILLEGAL_PARAMTETERS;
+  }
+
   std::vector<uint64_t> store_ids;
 
   pb::common::Region split_from_region;
@@ -580,6 +584,31 @@ pb::error::Errno CoordinatorControl::CreateRegion(const std::string& region_name
     DINGO_LOG(INFO) << "store_operation_increment = " << store_operation_increment->DebugString();
   }
 
+  // need to update table's range distribution
+  if (split_from_region_id > 0 && table_id > 0) {
+    pb::coordinator_internal::TableInternal table_internal;
+    int ret = table_map_.Get(table_id, table_internal);
+    if (ret < 0) {
+      DINGO_LOG(INFO) << "CreateRegionForSplit table_id not exists, id=" << table_id;
+      return pb::error::Errno::ETABLE_NOT_FOUND;
+    }
+
+    // update table's range distribution
+    auto* update_table_internal = meta_increment.add_tables();
+    update_table_internal->set_id(table_id);
+    update_table_internal->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
+    auto* update_table_internal_table = update_table_internal->mutable_table();
+    update_table_internal_table->set_id(table_id);
+    for (const auto& it : table_internal.partitions()) {
+      update_table_internal_table->add_partitions()->CopyFrom(it);
+    }
+
+    auto* new_partition = update_table_internal_table->add_partitions();
+    // new_partition->mutable_range()->set_start_key(region_range.start_key());
+    // new_partition->mutable_range()->set_end_key(region_range.end_key());
+    new_partition->set_region_id(create_region_id);
+  }
+
   // on_apply
   // region_map_epoch++;                                               // raft_kv_put
   // region_map_.insert(std::make_pair(create_region_id, new_region));  // raft_kv_put
@@ -590,6 +619,11 @@ pb::error::Errno CoordinatorControl::CreateRegion(const std::string& region_name
 }
 
 pb::error::Errno CoordinatorControl::DropRegion(uint64_t region_id,
+                                                pb::coordinator_internal::MetaIncrement& meta_increment) {
+  return DropRegion(region_id, false, meta_increment);
+}
+
+pb::error::Errno CoordinatorControl::DropRegion(uint64_t region_id, bool need_update_table_range,
                                                 pb::coordinator_internal::MetaIncrement& meta_increment) {
   // set region state to DELETE
   bool need_update_epoch = false;
@@ -630,6 +664,29 @@ pb::error::Errno CoordinatorControl::DropRegion(uint64_t region_id,
           store_operation_increment->set_id(store_operation.id());
           store_operation_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
           store_operation_increment->mutable_store_operation()->CopyFrom(store_operation);
+        }
+
+        // need to update table's range distribution if table_id > 0
+        if (need_update_table_range && region_to_delete.definition().table_id() > 0) {
+          pb::coordinator_internal::TableInternal table_internal;
+          int ret = table_map_.Get(region_to_delete.definition().table_id(), table_internal);
+          if (ret < 0) {
+            DINGO_LOG(WARNING) << "DropRegion table_id not exists, region_id=" << region_id
+                               << " region_id=" << region_to_delete.definition().table_id();
+            // return pb::error::Errno::ETABLE_NOT_FOUND;
+          } else {
+            // update table's range distribution
+            auto* update_table_internal = meta_increment.add_tables();
+            update_table_internal->set_id(region_to_delete.definition().table_id());
+            update_table_internal->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
+            auto* update_table_internal_table = update_table_internal->mutable_table();
+            update_table_internal_table->set_id(region_to_delete.definition().table_id());
+            for (const auto& it : table_internal.partitions()) {
+              if (it.region_id() != region_id) {
+                update_table_internal_table->add_partitions()->CopyFrom(it);
+              }
+            }
+          }
         }
 
         // on_apply

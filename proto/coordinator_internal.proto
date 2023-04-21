@@ -23,8 +23,7 @@ package dingodb.pb.coordinator_internal;
 // TableRegionInternal is storage structure for coordinator
 // TableRegionInternal is not table partition in SQL, its only use for storage.
 message TableRegionInternal {
-  uint64 region_id = 1;               // the region id of this part
-  dingodb.pb.common.Range range = 2;  // the range of this part
+  uint64 region_id = 1;  // the region id of this part
 }
 
 // TableInternal is storage structure for coordinator

@@ -432,10 +432,9 @@ pb::error::Errno CoordinatorControl::CreateTable(uint64_t schema_id, const pb::m
     std::string const region_name = std::to_string(schema_id) + std::string("_") + table_definition.name() +
                                     std::string("_part_") + std::to_string(i);
     uint64_t new_region_id;
-    
-    auto ret = CreateRegion(
-        region_name, "", replica, range_partition.ranges(i), schema_id, new_table_id, new_region_id, meta_increment
-    );
+
+    auto ret = CreateRegion(region_name, "", replica, range_partition.ranges(i), schema_id, new_table_id, new_region_id,
+                            meta_increment);
 
     if (ret != pb::error::Errno::OK) {
       DINGO_LOG(ERROR) << "CreateRegion failed in CreateTable table_name=" << table_definition.name();
@@ -471,12 +470,12 @@ pb::error::Errno CoordinatorControl::CreateTable(uint64_t schema_id, const pb::m
   definition->CopyFrom(table_definition);
 
   // set part for table_internal
-  for (int i = 0; i < new_region_ids.size(); i++) {
+  for (unsigned long new_region_id : new_region_ids) {
     // create part and set region_id & range
     auto* part_internal = table_internal.add_partitions();
-    part_internal->set_region_id(new_region_ids[i]);
-    auto* part_range = part_internal->mutable_range();
-    part_range->CopyFrom(range_partition.ranges(i));
+    part_internal->set_region_id(new_region_id);
+    // auto* part_range = part_internal->mutable_range();
+    // part_range->CopyFrom(range_partition.ranges(i));
   }
 
   // add table_internal to table_map_
@@ -722,10 +721,6 @@ void CoordinatorControl::GetTableRange(uint64_t schema_id, uint64_t table_id, pb
     common_id_region->set_parent_entity_id(table_id);
     common_id_region->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_PART);
 
-    // range_distribution range
-    auto* part_range = range_distribution->mutable_range();
-    part_range->CopyFrom(table_internal.partitions(i).range());
-
     // get region
     pb::common::Region part_region;
     int ret = region_map_.Get(region_id, part_region);
@@ -734,6 +729,11 @@ void CoordinatorControl::GetTableRange(uint64_t schema_id, uint64_t table_id, pb
                        << " region_id=" << region_id;
       continue;
     }
+
+    // range_distribution range
+    auto* part_range = range_distribution->mutable_range();
+    // part_range->CopyFrom(table_internal.partitions(i).range());
+    part_range->CopyFrom(part_region.definition().range());
 
     // range_distribution leader location
     auto* leader_location = range_distribution->mutable_leader();
