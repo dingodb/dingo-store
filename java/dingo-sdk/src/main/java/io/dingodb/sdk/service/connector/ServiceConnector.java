@@ -31,6 +31,7 @@ import lombok.extern.slf4j.Slf4j;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.LockSupport;
 import java.util.function.Function;
@@ -38,6 +39,8 @@ import java.util.function.Predicate;
 
 @Slf4j
 public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
+
+    private final AtomicBoolean refresh = new AtomicBoolean();
 
     @Getter
     @AllArgsConstructor
@@ -92,25 +95,34 @@ public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
         throw new RuntimeException("Retry attempts exhausted, failed to exec operation.");
     }
 
-    public synchronized boolean refresh() {
-        stub = null;
-        ManagedChannel channel  = channelRef.get();
-        channelRef.compareAndSet(channel, null);
-        if (channel != null && !channel.isShutdown()) {
-            channel.shutdown();
+    public boolean refresh() {
+        if (!refresh.compareAndSet(false, true)) {
+            return false;
         }
-        for (Location location : locations) {
-            try {
-                channel = transformToLeaderChannel(newChannel(location.getHost(), location.getPort()));
-                if (channel != null) {
-                    stub = newStub(channel);
-                    channelRef.compareAndSet(null, channel);
-                }
-            } catch (Exception e) {
-                log.warn("Connect {} and transform to leader error.", location, e);
+        try {
+            stub = null;
+            ManagedChannel channel  = channelRef.get();
+            channelRef.compareAndSet(channel, null);
+            if (channel != null && !channel.isShutdown()) {
+                channel.shutdown();
             }
+            for (Location location : locations) {
+                try {
+                    channel = transformToLeaderChannel(newChannel(location.getHost(), location.getPort()));
+                    if (channel != null) {
+                        stub = newStub(channel);
+                        channelRef.compareAndSet(null, channel);
+                        return stub != null;
+                    }
+                } catch (Exception e) {
+                    log.warn("Connect {} and transform to leader error.", location, e);
+                }
+            }
+            return stub != null;
+        } finally {
+            refresh.set(false);
         }
-        return stub != null;
+
     }
 
     protected ManagedChannel newChannel(String host, int port) {

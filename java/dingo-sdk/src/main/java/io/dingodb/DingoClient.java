@@ -20,7 +20,9 @@ import io.dingodb.client.Key;
 import io.dingodb.client.OperationService;
 import io.dingodb.client.Record;
 import io.dingodb.client.operation.DeleteOperation;
+import io.dingodb.client.operation.DeleteRangeOperation;
 import io.dingodb.client.operation.GetOperation;
+import io.dingodb.client.operation.OpKeyRange;
 import io.dingodb.client.operation.PutIfAbsentOperation;
 import io.dingodb.client.operation.PutOperation;
 import io.dingodb.client.operation.ScanOperation;
@@ -104,7 +106,7 @@ public class DingoClient {
 
     public Iterator<Record> scan(final String tableName, Key begin, Key end, boolean withBegin, boolean withEnd) {
         return operationService.exec(
-            schema, tableName, ScanOperation.getInstance(), new ScanOperation.KeyScan(begin, end, withBegin, withEnd)
+            schema, tableName, ScanOperation.getInstance(), new OpKeyRange(begin, end, withBegin, withEnd)
         );
     }
 
@@ -114,6 +116,15 @@ public class DingoClient {
 
     public List<Boolean> delete(final String tableName, List<Key> keys) {
         return operationService.exec(schema, tableName, DeleteOperation.getInstance(), keys);
+    }
+
+    public long delete(String tableName, Key begin, Key end, boolean withBegin, boolean withEnd) {
+        return operationService.exec(
+            schema,
+            tableName,
+            DeleteRangeOperation.getInstance(),
+            new OpKeyRange(begin, end, withBegin, withEnd)
+        );
     }
 
     public Table getTableDefinition(final String tableName) {

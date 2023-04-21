@@ -44,12 +44,16 @@ public final class Record {
     private final Column[] columns;
     private final Value[] values;
 
+    public Record(List<Column> columns, List<Object> values) {
+        this(columns, values.toArray());
+    }
+
     public Record(List<Column> columns, Object[] values) {
         this(columns.toArray(new Column[columns.size()]), Stream.of(values).map(Value::get).toArray(Value[]::new));
     }
 
     public Record(Column[] columns, Object[] values) {
-        this(columns, Stream.of(values).toArray(Value[]::new));
+        this(columns, Stream.of(values).map(Value::get).toArray(Value[]::new));
     }
 
     public Record(Column[] columns, Value[] values) {
@@ -73,7 +77,7 @@ public final class Record {
         values = new Value[valueMap.size()];
         for (Map.Entry<String, Object> entry : valueMap.entrySet()) {
             ColumnDefinition column = ColumnDefinition.builder()
-                .name(entry.getKey())
+                .name(entry.getKey().toUpperCase())
                 .primary(keyColumns.contains(entry.getKey()) ? primary++ : -1)
                 .build();
             Value value = Value.get(entry.getValue());

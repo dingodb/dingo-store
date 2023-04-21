@@ -211,6 +211,7 @@ public class MetaServiceClient {
         if (Optional.mapOrNull(getTableId(tableName), this::getTableDefinition) != null) {
             throw new DingoClientException("Table " + tableName + " already exists");
         }
+
         Meta.CreateTableIdRequest createTableIdRequest = Meta.CreateTableIdRequest.newBuilder()
                 .setSchemaId(id)
                 .build();
@@ -375,14 +376,22 @@ public class MetaServiceClient {
                 .mapOrNull(EntityConversion::mapping);
     }
 
-    private String cleanTableName(String tableName) {
-        if (warnPattern.matcher(tableName).matches()) {
-            log.warn("Table name currently only supports uppercase letters, LowerCase -> UpperCase");
-            tableName = tableName.toUpperCase();
+    private String cleanTableName(String name) {
+        return cleanName(name, "Table");
+    }
+
+    private String cleanColumnName(String name) {
+        return cleanName(name, "Column");
+    }
+
+    private String cleanName(String name, String source) {
+        if (warnPattern.matcher(name).matches()) {
+            log.warn("{} name currently only supports uppercase letters, LowerCase -> UpperCase", source);
+            name = name.toUpperCase();
         }
-        if (!pattern.matcher(tableName).matches()) {
-            throw new DingoClientException("Table name currently only supports uppercase letters, digits, and underscores");
+        if (!pattern.matcher(name).matches()) {
+            throw new DingoClientException(source + " name currently only supports uppercase letters, digits, and underscores");
         }
-        return tableName;
+        return name;
     }
 }
