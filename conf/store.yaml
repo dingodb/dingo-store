@@ -15,7 +15,8 @@ raft:
   electionTimeout: 1000 # ms
   snapshotInterval: 3600 # s
 log:
-  logPath: /opt/dingo-poc/store/log
+  level: INFO
+  path: /opt/dingo-poc/store/log
 store:
   dbPath: ./rocks_example
   base:
@@ -38,5 +39,3 @@ store:
     timeout_ms: 60000 # ms
     max_bytes_rpc: 4194304
     max_fetch_cnt_by_server: 1000
-log_level:
-    INFO

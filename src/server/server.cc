@@ -63,7 +63,7 @@ pb::node::LogLevel Server::GetDingoLogLevel(std::shared_ptr<dingodb::Config> con
   using dingodb::pb::node::LogLevel;
   LogLevel log_level = LogLevel::INFO;
 
-  std::string const input_log_level = config->GetString("log_level");
+  std::string const input_log_level = config->GetString("log.level");
   if (dingodb::Helper::IsEqualIgnoreCase(LogLevel_Name(LogLevel::DEBUG), input_log_level)) {
     log_level = LogLevel::DEBUG;
   } else if (dingodb::Helper::IsEqualIgnoreCase(LogLevel_Name(LogLevel::WARNING), input_log_level)) {
@@ -83,7 +83,7 @@ bool Server::InitLog() {
 
   dingodb::pb::node::LogLevel const log_level = GetDingoLogLevel(config);
 
-  FLAGS_log_dir = config->GetString("log.logPath");
+  FLAGS_log_dir = config->GetString("log.path");
   auto role_name = pb::common::ClusterRole_Name(role_);
   DingoLogger::InitLogger(FLAGS_log_dir, role_name, log_level);
 

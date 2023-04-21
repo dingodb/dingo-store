@@ -15,7 +15,8 @@ raft:
   electionTimeout: 1000 # ms
   snapshotInterval: 3600 # s
 log:
-  logPath: ./log
+  level: INFO
+  path: ./log
 store:
   dbPath: ./data/coordinator/db
   base:
@@ -35,5 +36,3 @@ store:
   collectStatsInterval: 5
   store:
     scan_interval_ms: 30000 # ms
-log_level:
-    INFO 
