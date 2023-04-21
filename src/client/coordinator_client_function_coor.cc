@@ -1068,7 +1068,7 @@ void SendRemovePeerRegion(brpc::Controller& cntl, dingodb::pb::coordinator::Coor
   dingodb::pb::coordinator::ChangePeerRegionResponse change_peer_response;
 
   auto* new_definition = change_peer_request.mutable_change_peer_request()->mutable_region_definition();
-  new_definition->CopyFrom(query_response.region());
+  new_definition->CopyFrom(query_response.region().definition());
   for (int i = 0; i < new_definition->peers_size(); i++) {
     if (new_definition->peers(i).store_id() == store_id) {
       new_definition->mutable_peers()->SwapElements(i, new_definition->peers_size() - 1);

@@ -974,9 +974,10 @@ pb::error::Errno CoordinatorControl::ChangePeerRegion(uint64_t region_id, std::v
   }
 
   // validate new_store_ids
-  if (new_store_ids.size() != (region.definition().peers_size() + 1) ||
-      new_store_ids.size() != (region.definition().peers_size() - 1) || new_store_ids.empty()) {
-    DINGO_LOG(ERROR) << "ChangePeerRegion new_store_ids size not match, region_id = " << region_id;
+  if (new_store_ids.size() != (region.definition().peers_size() + 1) &&
+      new_store_ids.size() != (region.definition().peers_size() - 1) && (!new_store_ids.empty())) {
+    DINGO_LOG(ERROR) << "ChangePeerRegion new_store_ids size not match, region_id = " << region_id
+                     << " old_size = " << region.definition().peers_size() << " new_size = " << new_store_ids.size();
     return pb::error::Errno::EILLEGAL_PARAMTETERS;
   }
 
@@ -998,13 +999,12 @@ pb::error::Errno CoordinatorControl::ChangePeerRegion(uint64_t region_id, std::v
   std::set_difference(old_store_ids.begin(), old_store_ids.end(), new_store_ids.begin(), new_store_ids.end(),
                       std::inserter(new_store_ids_diff_less, new_store_ids_diff_less.begin()));
 
-  if (new_store_ids_diff_more.size() != 1 || new_store_ids_diff_less.size() != 1) {
-    DINGO_LOG(ERROR) << "ChangePeerRegion new_store_ids can only has one new store, region_id = " << region_id;
-    return pb::error::Errno::EILLEGAL_PARAMTETERS;
-  }
-
-  if (new_store_ids_diff_less.size() == 1 && new_store_ids_diff_more.size() == 1) {
-    DINGO_LOG(ERROR) << "ChangePeerRegion new_store_ids only has one new store, region_id = " << region_id;
+  if (new_store_ids_diff_more.size() + new_store_ids_diff_less.size() != 1) {
+    DINGO_LOG(ERROR) << "ChangePeerRegion new_store_ids can only has one diff store, region_id = " << region_id
+                     << " new_store_ids_diff_more.size() = " << new_store_ids_diff_more.size()
+                     << " new_store_ids_diff_less.size() = " << new_store_ids_diff_less.size();
+    for (auto it : new_store_ids_diff_more) DINGO_LOG(ERROR) << "new_store_ids_diff_more = " << it;
+    for (auto it : new_store_ids_diff_less) DINGO_LOG(ERROR) << "new_store_ids_diff_less = " << it;
     return pb::error::Errno::EILLEGAL_PARAMTETERS;
   }
 
@@ -1016,20 +1016,21 @@ pb::error::Errno CoordinatorControl::ChangePeerRegion(uint64_t region_id, std::v
   // generate store operation for stores
   if (new_store_ids_diff_less.size() == 1) {
     // shrink region
-    auto* store_operation_increment = meta_increment.add_store_operations();
-    store_operation_increment->set_id(new_store_ids_diff_less.at(0));  // this store id
-    store_operation_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
-    auto* store_operation = store_operation_increment->mutable_store_operation();
-    store_operation->set_id(new_store_ids_diff_less.at(0));
-    auto* region_cmd_to_add = store_operation->add_region_cmds();
-    region_cmd_to_add->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
-    region_cmd_to_add->set_region_cmd_type(::dingodb::pb::coordinator::RegionCmdType::CMD_CHANGE_PEER);
-    region_cmd_to_add->set_region_id(region_id);
-    region_cmd_to_add->set_create_timestamp(butil::gettimeofday_ms());
+    // auto* store_operation_increment = meta_increment.add_store_operations();
+    // store_operation_increment->set_id(new_store_ids_diff_less.at(0));  // this store id
+    // store_operation_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
+    // auto* store_operation = store_operation_increment->mutable_store_operation();
+    // store_operation->set_id(new_store_ids_diff_less.at(0));
+    // auto* region_cmd_to_add = store_operation->add_region_cmds();
+    // region_cmd_to_add->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
+    // region_cmd_to_add->set_region_cmd_type(::dingodb::pb::coordinator::RegionCmdType::CMD_DELETE);
+    // region_cmd_to_add->set_region_id(region_id);
+    // region_cmd_to_add->set_create_timestamp(butil::gettimeofday_ms());
+    // region_cmd_to_add->mutable_delete_request()->set_region_id(region_id);
 
-    auto* region_definition = region_cmd_to_add->mutable_change_peer_request()->mutable_region_definition();
-    region_definition->CopyFrom(region.definition());
-    region_definition->clear_peers();  // this region on store will be deleted in the future
+    // auto* region_definition = region_cmd_to_add->mutable_change_peer_request()->mutable_region_definition();
+    // region_definition->CopyFrom(region.definition());
+    // region_definition->clear_peers();  // this region on store will be deleted in the future
 
     // calculate new peers
     for (int i = 0; i < region.definition().peers_size(); i++) {
@@ -1074,28 +1075,47 @@ pb::error::Errno CoordinatorControl::ChangePeerRegion(uint64_t region_id, std::v
     region_cmd_to_add->set_create_timestamp(butil::gettimeofday_ms());
 
     auto* region_definition = region_cmd_to_add->mutable_create_request()->mutable_region_definition();
-    region_definition->CopyFrom(store_to_add_peer);  // new create region on store
+    region_definition->CopyFrom(new_region_definition);
   } else {
     DINGO_LOG(ERROR) << "ChangePeerRegion new_store_ids not match, region_id = " << region_id;
     return pb::error::Errno::EILLEGAL_PARAMTETERS;
   }
 
-  // generate store operation for old_store_id
-  for (auto it : old_store_ids) {
-    auto* store_operation_increment = meta_increment.add_store_operations();
-    store_operation_increment->set_id(it);  // this store id
-    store_operation_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
-    auto* store_operation = store_operation_increment->mutable_store_operation();
-    store_operation->set_id(it);
-    auto* region_cmd_to_add = store_operation->add_region_cmds();
-    region_cmd_to_add->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
-    region_cmd_to_add->set_region_cmd_type(::dingodb::pb::coordinator::RegionCmdType::CMD_CHANGE_PEER);
-    region_cmd_to_add->set_region_id(region_id);
-    region_cmd_to_add->set_create_timestamp(butil::gettimeofday_ms());
-
-    auto* region_definition = region_cmd_to_add->mutable_change_peer_request()->mutable_region_definition();
-    region_definition->CopyFrom(new_region_definition);
+  if (region.leader_store_id() == 0) {
+    DINGO_LOG(ERROR) << "ChangePeerRegion region.leader_store_id() == 0, region_id = " << region_id;
+    return pb::error::Errno::ECHANGE_PEER_STATUS_ILLEGAL;
   }
+
+  auto* store_operation_increment = meta_increment.add_store_operations();
+  store_operation_increment->set_id(region.leader_store_id());  // this store id
+  store_operation_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
+  auto* store_operation = store_operation_increment->mutable_store_operation();
+  store_operation->set_id(region.leader_store_id());
+  auto* region_cmd_to_add = store_operation->add_region_cmds();
+  region_cmd_to_add->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
+  region_cmd_to_add->set_region_cmd_type(::dingodb::pb::coordinator::RegionCmdType::CMD_CHANGE_PEER);
+  region_cmd_to_add->set_region_id(region_id);
+  region_cmd_to_add->set_create_timestamp(butil::gettimeofday_ms());
+
+  auto* region_definition = region_cmd_to_add->mutable_change_peer_request()->mutable_region_definition();
+  region_definition->CopyFrom(new_region_definition);
+
+  // generate store operation for old_store_id
+  // for (auto it : old_store_ids) {
+  //   auto* store_operation_increment = meta_increment.add_store_operations();
+  //   store_operation_increment->set_id(it);  // this store id
+  //   store_operation_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
+  //   auto* store_operation = store_operation_increment->mutable_store_operation();
+  //   store_operation->set_id(it);
+  //   auto* region_cmd_to_add = store_operation->add_region_cmds();
+  //   region_cmd_to_add->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
+  //   region_cmd_to_add->set_region_cmd_type(::dingodb::pb::coordinator::RegionCmdType::CMD_CHANGE_PEER);
+  //   region_cmd_to_add->set_region_id(region_id);
+  //   region_cmd_to_add->set_create_timestamp(butil::gettimeofday_ms());
+
+  //   auto* region_definition = region_cmd_to_add->mutable_change_peer_request()->mutable_region_definition();
+  //   region_definition->CopyFrom(new_region_definition);
+  // }
 
   return pb::error::Errno::OK;
 }
