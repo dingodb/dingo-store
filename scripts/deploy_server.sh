@@ -7,6 +7,7 @@ if [[ ! -d "$mydir" ]]; then mydir="$PWD"; fi
 
 
 DEFINE_string role 'store' 'server role'
+DEFINE_integer server_num 3 'server number'
 DEFINE_boolean clean_db 1 'clean db'
 DEFINE_boolean clean_raft 1 'clean raft'
 DEFINE_boolean clean_log 0 'clean log'
@@ -25,7 +26,7 @@ if [ ! -d "$DIST_DIR" ]; then
   mkdir "$DIST_DIR"
 fi
 
-SERVER_NUM=3
+SERVER_NUM=${FLAGS_server_num}
 INSTANCE_START_ID=1000
 SERVER_HOST=127.0.0.1
 SERVER_START_PORT=20000

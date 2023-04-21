@@ -15,11 +15,13 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <cstdint>
 #include <filesystem>
 #include <iostream>
 #include <iterator>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "braft/configuration.h"
 #include "butil/endpoint.h"
@@ -82,47 +84,67 @@ std::string GetRaftInitConf(const std::vector<std::string>& raft_addrs) {
   return s;
 }
 
-std::vector<std::shared_ptr<dingodb::RaftNode>> BootRaftGroup(const std::vector<std::string>& raft_addrs,
+struct Peer {
+  std::shared_ptr<dingodb::pb::store_internal::Region> region;
+  std::string addr;
+};
+
+std::shared_ptr<dingodb::pb::store_internal::Region> BuildRegion(uint64_t region_id, const std::string& raft_group_name,
+                                                                 std::vector<std::string>& raft_addrs) {
+  auto region = std::make_shared<dingodb::pb::store_internal::Region>();
+  region->set_id(region_id);
+  auto* region_definition = region->mutable_definition();
+  region_definition->set_id(region_id);
+  region_definition->set_name(raft_group_name);
+  auto* range = region_definition->mutable_range();
+  range->set_start_key("a");
+  range->set_end_key("z");
+
+  for (const auto& inner_addr : raft_addrs) {
+    std::vector<std::string> host_port_index;
+    butil::SplitString(inner_addr, ':', &host_port_index);
+
+    auto* peer = region_definition->add_peers();
+    auto* raft_loc = peer->mutable_raft_location();
+    raft_loc->set_host(host_port_index[0]);
+    raft_loc->set_port(std::stoi(host_port_index[1]));
+    raft_loc->set_index(std::stoi(host_port_index[2]));
+  }
+
+  return region;
+}
+
+std::vector<std::shared_ptr<dingodb::RaftNode>> BootRaftGroup(std::vector<Peer>& peers,
                                                               std::shared_ptr<dingodb::Config> config) {
   std::vector<std::shared_ptr<dingodb::RaftNode>> nodes;
   int peer_count = 0;
-  for (const auto& addr : raft_addrs) {
-    // build region
-    auto region = std::make_shared<dingodb::pb::store_internal::Region>();
-    region->set_id(10000 + (++peer_count));
-    auto* region_definition = region->mutable_definition();
-    region_definition->set_id(region->id());
-    region_definition->set_name("uint-test");
-    auto* range = region_definition->mutable_range();
-    range->set_start_key("a");
-    range->set_end_key("z");
-
-    int count = 0;
-    for (const auto& inner_addr : raft_addrs) {
-      std::vector<std::string> host_port;
-      butil::SplitString(inner_addr, ':', &host_port);
-
-      auto* peer = region_definition->add_peers();
-      peer->set_store_id(1000 + (++count));
-      auto* raft_loc = peer->mutable_raft_location();
-      raft_loc->set_host(host_port[0]);
-      raft_loc->set_port(std::stoi(host_port[1]));
-    }
-
+  for (auto& peer : peers) {
+    auto region = peer.region;
     // build state machine
     auto raft_meta = dingodb::StoreRaftMeta::NewRaftMeta(region->id());
-    auto listener_factory = std::make_shared<dingodb::StoreSmEventListenerFactory>();
-    auto* state_machine = new dingodb::StoreStateMachine(nullptr, region, raft_meta, listener_factory->Build());
+    auto* state_machine = new dingodb::StoreStateMachine(nullptr, region, raft_meta, nullptr);
     if (!state_machine->Init()) {
       std::cout << "Init state machine failed";
       return {};
     }
 
+    std::string init_conf;
+    int i = 0;
+    for (const auto& peer : region->definition().peers()) {
+      std::string addr = butil::StringPrintf("%s:%d:%d", peer.raft_location().host().c_str(),
+                                             peer.raft_location().port(), peer.raft_location().index());
+      init_conf += addr;
+      if (i + 1 < region->definition().peers().size()) {
+        init_conf += ",";
+      }
+      ++i;
+    }
+
     // build braft node
-    auto node = std::make_shared<dingodb::RaftNode>(region->id(), region_definition->name(), braft::PeerId(addr),
+    auto node = std::make_shared<dingodb::RaftNode>(region->id(), region->definition().name(), braft::PeerId(peer.addr),
                                                     state_machine);
 
-    if (node->Init(GetRaftInitConf(raft_addrs), config) != 0) {
+    if (node->Init(init_conf, config) != 0) {
       node->Destroy();
       break;
     }
@@ -155,8 +177,17 @@ class RaftNodeTest : public testing::Test {
       return;
     }
 
-    std::vector<std::string> raft_addrs = {"127.0.0.1:17001:0", "127.0.0.1:17001:2", "127.0.0.1:17001:3"};
-    nodes = BootRaftGroup(raft_addrs, config);
+    std::vector<std::string> raft_addrs = {"127.0.0.1:17001:1", "127.0.0.1:17001:2", "127.0.0.1:17001:3"};
+    std::vector<Peer> peers;
+    int count = 0;
+    for (const auto& raft_addr : raft_addrs) {
+      ++count;
+      Peer peer;
+      peer.addr = raft_addr;
+      peer.region = BuildRegion(1000 + count, "unit_test", raft_addrs);
+      peers.push_back(peer);
+    }
+    nodes = BootRaftGroup(peers, config);
 
     bthread_usleep(5 * 1000 * 1000L);
   }
@@ -189,25 +220,79 @@ std::shared_ptr<dingodb::Config> RaftNodeTest::config = nullptr;
 std::unique_ptr<brpc::Server> RaftNodeTest::raft_server = nullptr;
 std::vector<std::shared_ptr<dingodb::RaftNode>> RaftNodeTest::nodes = {};
 
-TEST_F(RaftNodeTest, ChangePeer) {
-  std::vector<dingodb::pb::common::Peer> peers;
-  dingodb::pb::common::Peer peer;
-  auto* raft_location = peer.mutable_raft_location();
-  raft_location->set_host("127.0.0.1");
-  raft_location->set_port(17001);
-  raft_location->set_index(0);
+// Add one peer, from 127.0.0.1:17001:1,127.0.0.1:17001:2,127.0.0.1:17001:3
+// to 127.0.0.1:17001:1,127.0.0.1:17001:2,127.0.0.1:17001:3,127.0.0.1:17001:4
+TEST_F(RaftNodeTest, AddOnePeer) {
+  // Add one peer
+  std::cout << "====Add one peer" << std::endl;
+  std::vector<std::string> raft_addrs = {"127.0.0.1:17001:1", "127.0.0.1:17001:2", "127.0.0.1:17001:3",
+                                         "127.0.0.1:17001:4"};
+  std::vector<Peer> peers;
+  Peer peer;
+  peer.addr = "127.0.0.1:17001:4";
+  peer.region = BuildRegion(1004, "unit_test", raft_addrs);
   peers.push_back(peer);
+
+  auto new_nodes = BootRaftGroup(peers, config);
+  for (auto& new_node : new_nodes) {
+    RaftNodeTest::nodes.push_back(new_node);
+  }
+
+  bthread_usleep(3 * 1000 * 1000L);
+
+  // Change peers
+  std::cout << "====Change peer" << std::endl;
+  std::vector<dingodb::pb::common::Peer> pb_peers;
+  {
+    dingodb::pb::common::Peer pb_peer;
+    auto* raft_location = pb_peer.mutable_raft_location();
+    raft_location->set_host("127.0.0.1");
+    raft_location->set_port(17001);
+    raft_location->set_index(1);
+    pb_peers.push_back(pb_peer);
+  }
+  {
+    dingodb::pb::common::Peer pb_peer;
+    auto* raft_location = pb_peer.mutable_raft_location();
+    raft_location->set_host("127.0.0.1");
+    raft_location->set_port(17001);
+    raft_location->set_index(2);
+    pb_peers.push_back(pb_peer);
+  }
+  {
+    dingodb::pb::common::Peer pb_peer;
+    auto* raft_location = pb_peer.mutable_raft_location();
+    raft_location->set_host("127.0.0.1");
+    raft_location->set_port(17001);
+    raft_location->set_index(3);
+    pb_peers.push_back(pb_peer);
+  }
+  {
+    dingodb::pb::common::Peer pb_peer;
+    auto* raft_location = pb_peer.mutable_raft_location();
+    raft_location->set_host("127.0.0.1");
+    raft_location->set_port(17001);
+    raft_location->set_index(4);
+    pb_peers.push_back(pb_peer);
+  }
 
   for (auto& node : RaftNodeTest::nodes) {
     if (node->IsLeader()) {
-      node->ChangePeers(peers, nullptr);
+      node->ChangePeers(pb_peers, nullptr);
     }
   }
 
   bthread_usleep(3 * 1000 * 1000L);
 
+  std::cout << "====Watch peer" << std::endl;
+
   for (auto& node : RaftNodeTest::nodes) {
-    std::cout << "leader id: " << node->GetLeaderId().to_string() << std::endl;
+    std::cout << "region id: " << node->GetNodeId() << " leader id: " << node->GetLeaderId().to_string() << std::endl;
+    std::vector<braft::PeerId> tmp_peers;
+    node->ListPeers(&tmp_peers);
+    for (auto& peer : tmp_peers) {
+      std::cout << "region id: " << node->GetNodeId() << " peer: " << peer.to_string() << std::endl;
+    }
   }
 
   bthread_usleep(5 * 1000 * 1000L);

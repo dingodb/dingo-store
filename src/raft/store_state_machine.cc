@@ -64,6 +64,8 @@ StoreStateMachine::StoreStateMachine(std::shared_ptr<RawEngine> engine,
 bool StoreStateMachine::Init() { return true; }
 
 void StoreStateMachine::DispatchEvent(dingodb::EventType event_type, std::shared_ptr<dingodb::Event> event) {
+  if (listeners_ == nullptr) return;
+
   for (auto& listener : listeners_->Get(event_type)) {
     listener->OnEvent(event);
   }
@@ -204,7 +206,7 @@ void StoreStateMachine::on_configuration_committed(const braft::Configuration& c
 }
 
 void StoreStateMachine::on_start_following(const braft::LeaderChangeContext& ctx) {
-  DINGO_LOG(INFO) << "on_start_following, region: " << region_->id();
+  DINGO_LOG(INFO) << "on_start_following, region: " << region_->id() << " error: " << ctx.status().error_str();
   auto event = std::make_shared<SmStartFollowingEvent>(ctx);
   event->node_id = region_->id();
 
@@ -212,8 +214,9 @@ void StoreStateMachine::on_start_following(const braft::LeaderChangeContext& ctx
 }
 
 void StoreStateMachine::on_stop_following(const braft::LeaderChangeContext& ctx) {
-  DINGO_LOG(INFO) << "on_stop_following, region: " << region_->id();
+  DINGO_LOG(INFO) << "on_stop_following, region: " << region_->id() << " error: " << ctx.status().error_str();
   auto event = std::make_shared<SmStopFollowingEvent>(ctx);
+  event->node_id = region_->id();
 
   DispatchEvent(EventType::kSmStopFollowing, event);
 }

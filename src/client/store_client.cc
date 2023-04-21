@@ -48,6 +48,7 @@ DEFINE_string(key, "hello", "Request key");
 DEFINE_int32(region_id, 111111, "region id");
 DEFINE_int32(region_count, 1, "region count");
 DEFINE_int32(table_id, 0, "table id");
+DEFINE_string(raft_group, "store_default_test", "raft group");
 
 bvar::LatencyRecorder g_latency_recorder("dingo-store");
 
@@ -428,7 +429,7 @@ void AddRegion(std::shared_ptr<dingodb::pb::store::StoreService_Stub> stub, uint
   dingodb::pb::common::RegionDefinition* region = request.mutable_region();
   region->set_id(region_id);
   region->set_epoch(1);
-  region->set_name("test-" + std::to_string(region_id));
+  region->set_name(FLAGS_raft_group);
   dingodb::pb::common::Range* range = region->mutable_range();
   range->set_start_key("a");
   range->set_end_key("z");
@@ -533,10 +534,10 @@ void SendChangeRegion(std::shared_ptr<dingodb::pb::store::StoreService_Stub> stu
   dingodb::pb::common::RegionDefinition* region = request.mutable_region();
   region->set_id(FLAGS_region_id);
   region->set_epoch(1);
-  region->set_name("test-" + std::to_string(FLAGS_region_id));
+  region->set_name(FLAGS_raft_group);
   dingodb::pb::common::Range* range = region->mutable_range();
-  range->set_start_key("0000000");
-  range->set_end_key("11111111");
+  range->set_start_key("a");
+  range->set_end_key("z");
   auto* peer = region->add_peers();
   peer->set_store_id(1001);
   auto* raft_loc = peer->mutable_raft_location();
@@ -549,11 +550,17 @@ void SendChangeRegion(std::shared_ptr<dingodb::pb::store::StoreService_Stub> stu
   raft_loc->set_host("127.0.0.1");
   raft_loc->set_port(10102);
 
+  // peer = region->add_peers();
+  // peer->set_store_id(1003);
+  // raft_loc = peer->mutable_raft_location();
+  // raft_loc->set_host("127.0.0.1");
+  // raft_loc->set_port(10103);
+
   peer = region->add_peers();
-  peer->set_store_id(1003);
+  peer->set_store_id(1004);
   raft_loc = peer->mutable_raft_location();
   raft_loc->set_host("127.0.0.1");
-  raft_loc->set_port(10103);
+  raft_loc->set_port(10104);
 
   stub->ChangeRegion(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {

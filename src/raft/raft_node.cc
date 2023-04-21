@@ -43,8 +43,6 @@ RaftNode::~RaftNode() {
   }
 }
 
-std::string RaftNode::GetRaftGroupName() const { return raft_group_name_; }
-
 // init_conf: 127.0.0.1:8201:0,127.0.0.1:8202:0,127.0.0.1:8203:0
 int RaftNode::Init(const std::string& init_conf, std::shared_ptr<Config> config) {
   DINGO_LOG(INFO) << "raft init node_id: " << node_id_ << " init_conf: " << init_conf;

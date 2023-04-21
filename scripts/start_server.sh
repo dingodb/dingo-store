@@ -5,6 +5,7 @@ if [[ ! -d "$mydir" ]]; then mydir="$PWD"; fi
 . $mydir/shflags
 
 DEFINE_string role 'store' 'server role'
+DEFINE_integer server_num 3 'server number'
 
 # parse the command-line
 FLAGS "$@" || exit 1
@@ -15,7 +16,7 @@ echo "role: ${FLAGS_role}"
 BASE_DIR=$(dirname $(cd $(dirname $0); pwd))
 DIST_DIR=$BASE_DIR/dist
 
-SERVER_NUM=3
+SERVER_NUM=${FLAGS_server_num}
 
 ulimit -c unlimited
 

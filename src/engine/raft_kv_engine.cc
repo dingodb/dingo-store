@@ -60,8 +60,7 @@ bool RaftKvEngine::Recover() {
       DINGO_LOG(ERROR) << "Recover raft meta not found: " << region->id();
       continue;
     }
-    if (region->state() == pb::common::StoreRegionState::NEW ||
-        region->state() == pb::common::StoreRegionState::NORMAL ||
+    if (region->state() == pb::common::StoreRegionState::NORMAL ||
         region->state() == pb::common::StoreRegionState::STANDBY ||
         region->state() == pb::common::StoreRegionState::SPLITTING ||
         region->state() == pb::common::StoreRegionState::MERGING) {

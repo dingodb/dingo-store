@@ -202,6 +202,7 @@ struct SmStopFollowingEvent : public Event {
   ~SmStopFollowingEvent() override = default;
 
   const braft::LeaderChangeContext& ctx;
+  uint64_t node_id;
 };
 
 class SmStopFollowingEventListener : public EventListener {
@@ -210,7 +211,7 @@ class SmStopFollowingEventListener : public EventListener {
   ~SmStopFollowingEventListener() override = default;
 
   EventType GetType() override { return EventType::kSmStopFollowing; }
-  void OnEvent(std::shared_ptr<Event> event) override {}
+  void OnEvent(std::shared_ptr<Event> event) override;
 };
 
 class StoreSmEventListenerFactory : public EventListenerFactory {

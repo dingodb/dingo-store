@@ -33,7 +33,8 @@ namespace dingodb {
 
 butil::Status CreateRegionTask::ValidateCreateRegion(std::shared_ptr<StoreMetaManager> store_meta_manager,
                                                      uint64_t region_id) {
-  if (store_meta_manager->GetStoreRegionMeta()->IsExistRegion(region_id)) {
+  auto region = store_meta_manager->GetStoreRegionMeta()->GetRegion(region_id);
+  if (region != nullptr && region->state() != pb::common::StoreRegionState::NEW) {
     return butil::Status(pb::error::EREGION_ALREADY_EXIST, "Region already exist");
   }
 
@@ -78,8 +79,7 @@ butil::Status CreateRegionTask::CreateRegion(std::shared_ptr<Context> ctx,
   if (split_from_region_id == 0) {
     store_region_meta->UpdateState(region, pb::common::StoreRegionState::NORMAL);
   } else {
-    // Todo: STANDBY
-    store_region_meta->UpdateState(region, pb::common::StoreRegionState::NORMAL);
+    store_region_meta->UpdateState(region, pb::common::StoreRegionState::STANDBY);
   }
 
   // Add region metrics
