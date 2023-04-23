@@ -36,6 +36,7 @@
 #include "common/logging.h"
 #include "coordinator/coordinator_control.h"
 #include "engine/snapshot.h"
+#include "gflags/gflags.h"
 #include "google/protobuf/unknown_field_set.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
@@ -45,6 +46,11 @@
 #include "proto/node.pb.h"
 
 namespace dingodb {
+
+DEFINE_int32(
+    region_update_timeout, 20,
+    "region update timeout in seconds, will not update region info if no state change and (now - last_update_time) > "
+    "region_update_timeout");
 
 // TODO: add epoch logic
 void CoordinatorControl::GetCoordinatorMap(uint64_t cluster_id, uint64_t& epoch, pb::common::Location& leader_location,
@@ -655,6 +661,7 @@ pb::error::Errno CoordinatorControl::DropRegion(uint64_t region_id, bool need_up
           pb::coordinator::StoreOperation store_operation;
           store_operation.set_id(peer.store_id());
           auto* region_cmd = store_operation.add_region_cmds();
+          region_cmd->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
           region_cmd->set_region_id(region_id);
           region_cmd->set_region_cmd_type(::dingodb::pb::coordinator::RegionCmdType::CMD_DELETE);
           auto* delete_request = region_cmd->mutable_delete_request();
@@ -1629,31 +1636,34 @@ void CoordinatorControl::UpdateRegionMapAndStoreOperation(const pb::common::Stor
   // update region_map
   for (const auto& it : store_metrics.region_metrics_map()) {
     const auto& region_metrics = it.second;
-    if (!region_metrics.has_braft_status()) {
-      DINGO_LOG(ERROR) << "region_metrics has no braft_status,store_id=" << store_metrics.id()
-                       << " region_id=" << region_metrics.id();
-      continue;
-    }
 
     // use leader store's region_metrics to update region_map
+    // if region's store_region_stat is deleting or deleted, there will be no leaders in this region
+    // so we need to update region state using any node of this region
     if (region_metrics.braft_status().raft_state() != pb::common::RaftNodeState::STATE_LEADER) {
-      continue;
-    }
-
-    // update region_map
-    pb::common::Region region_to_update;
-    int ret = region_map_.Get(region_metrics.id(), region_to_update);
-    if (ret < 0) {
-      DINGO_LOG(ERROR) << "ERROR: UpdateRegionMapAndStoreOperation region not exists, region_id = "
-                       << region_metrics.id();
-      continue;
+      if (region_metrics.store_region_state() != pb::common::StoreRegionState::DELETING &&
+          region_metrics.store_region_state() != pb::common::StoreRegionState::DELETED) {
+        continue;
+      }
     }
 
     // when region leader change or region state change, we need to update region_map_
     // or when region last_update_timestamp is too old, we need to update region_map_
     bool need_update_region = false;
     bool need_update_region_definition = false;
-    if (region_to_update.leader_store_id() != store_metrics.id()) {
+
+    // update region_map
+    pb::common::Region region_to_update;
+    int ret = region_map_.Get(region_metrics.id(), region_to_update);
+    if (ret < 0) {
+      DINGO_LOG(WARNING)
+          << "region deleted and coordinator has purged it, something wrong in store, need to purge this "
+             "region on store again, region_id = "
+          << region_metrics.id();
+      continue;
+    }
+
+    if (region_metrics.has_braft_status() && region_to_update.leader_store_id() != store_metrics.id()) {
       DINGO_LOG(INFO) << "region leader change region_id = " << region_metrics.id()
                       << " old leader_store_id = " << region_to_update.leader_store_id()
                       << " new leader_store_id = " << store_metrics.id();
@@ -1667,7 +1677,12 @@ void CoordinatorControl::UpdateRegionMapAndStoreOperation(const pb::common::Stor
       need_update_region = true;
     }
 
-    if (region_to_update.last_update_timestamp() + 60 * 1000 < butil::gettimeofday_ms()) {
+    // if region is updated to REGION_DELETED, there is no need to update region by timestamp
+    // once region is deleted, all stores will update this region's store_region_state, after the last store reported
+    // region's state to DELETED, there is no need to update the region's state in region_map, after timeout, we will
+    // trigger purge_request to store to purge this region's meta
+    if (region_to_update.last_update_timestamp() + FLAGS_region_update_timeout * 1000 < butil::gettimeofday_ms() &&
+        region_to_update.state() != pb::common::RegionState::REGION_DELETED) {
       DINGO_LOG(INFO) << "region last_update_timestamp too old region_id = " << region_metrics.id()
                       << " last_update_timestamp = " << region_to_update.last_update_timestamp()
                       << " now = " << butil::gettimeofday_ms();

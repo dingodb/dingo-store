@@ -47,6 +47,10 @@ message ChangePeerRequest {
   dingodb.pb.common.RegionDefinition region_definition = 1;  // region definition contains new peer
 }
 
+message PurgeRequest {
+  uint64 region_id = 1;  // region id to be purged
+}
+
 // RegionCmdType
 enum RegionCmdType {
   CMD_NONE = 0;  // this is a placeholder
@@ -56,6 +60,7 @@ enum RegionCmdType {
   CMD_MERGE = 4;
   CMD_CHANGE_PEER = 5;
   CMD_SNAPSHOT = 6;
+  CMD_PURGE = 7;  // purge region's meta for deleted region
 }
 
 // Regino cmd status
@@ -77,6 +82,8 @@ message RegionCmd {
     SplitRequest split_request = 13;             // split parameters
     MergeRequest merge_request = 14;             // merge parameters
     ChangePeerRequest change_peer_request = 15;  // change peer parameters
+    PurgeRequest purge_request = 16;  // purge region meta on store, this region is deleted and already purge on
+                                      // coordinator, so store can purge this region's meta data
   }
 
   RegionCmdStatus status = 50;  // the status of this cmd
