@@ -1,0 +1,360 @@
+  [
+    {
+      "name": "Host",
+      "type": "varchar",
+      "scale": 60,
+      "primary": 0,
+      "nullable": false
+    },
+    {
+      "name": "User",
+      "type": "varchar",
+      "scale": 32,
+      "primary": 1,
+      "nullable": false
+    },
+    {
+      "name": "Select_priv",
+      "type": "varchar",
+      "scale": 2,
+      "default": "'N'",
+      "primary": -1,
+      "nullable": false
+    },
+    {
+      "name": "Insert_priv",
+      "type": "varchar",
+      "scale": 2,
+      "default": "'N'",
+      "primary": -1,
+      "nullable": false
+    },
+    {
+      "name": "Update_priv",
+      "type": "varchar",
+      "scale": 2,
+      "default": "'N'",
+      "primary": -1,
+      "nullable": false
+    },
+    {
+      "name": "Delete_priv",
+      "type": "varchar",
+      "scale": 2,
+      "default": "'N'",
+      "primary": -1,
+      "nullable": false
+    },
+    {
+      "name": "Create_priv",
+      "type": "varchar",
+      "scale": 2,
+      "default": "'N'",
+      "primary": -1,
+      "nullable": false
+    },
+    {
+      "name": "Drop_priv",
+      "type": "varchar",
+      "scale": 2,
+      "default": "'N'",
+      "primary": -1,
+      "nullable": false
+    },
+    {
+      "name": "Reload_priv",
+      "type": "varchar",
+      "scale": 2,
+      "default": "'N'",
+      "primary": -1,
+      "nullable": false
+    },
+    {
+      "name": "Shutdown_priv",
+      "type": "varchar",
+      "scale": 2,
+      "default": "'N'",
+      "primary": -1,
+      "nullable": false
+    },
+    {
+      "name": "Process_priv",
+      "type": "varchar",
+      "scale": 2,
+      "default": "'N'",
+      "primary": -1,
+      "nullable": false
+    },
+    {
+      "name": "File_priv",
+      "type": "varchar",
+      "scale": 2,
+      "default": "'N'",
+      "primary": -1,
+      "nullable": false
+    },
+    {
+      "name": "Grant_priv",
+      "type": "varchar",
+      "scale": 2,
+      "default": "'N'",
+      "primary": -1,
+      "nullable": false
+    },
+    {
+      "name": "References_priv",
+      "type": "varchar",
+      "scale": 2,
+      "default": "'N'",
+      "primary": -1,
+      "nullable": false
+    },
+    {
+      "name": "Index_priv",
+      "type": "varchar",
+      "scale": 2,
+      "default": "'N'",
+      "primary": -1,
+      "nullable": false
+    },
+    {
+      "name": "Alter_priv",
+      "type": "varchar",
+      "scale": 2,
+      "default": "'N'",
+      "primary": -1,
+      "nullable": false
+    },
+    {
+      "name": "Show_db_priv",
+      "type": "varchar",
+      "scale": 2,
+      "default": "'N'",
+      "primary": -1,
+      "nullable": false
+    },
+    {
+      "name": "Super_priv",
+      "type": "varchar",
+      "scale": 2,
+      "default": "'N'",
+      "primary": -1,
+      "nullable": false
+    },
+    {
+      "name": "Create_tmp_table_priv",
+      "type": "varchar",
+      "scale": 2,
+      "default": "'N'",
+      "primary": -1,
+      "nullable": false
+    },
+    {
+      "name": "Lock_tables_priv",
+      "type": "varchar",
+      "scale": 2,
+      "default": "'N'",
+      "primary": -1,
+      "nullable": false
+    },
+    {
+      "name": "Execute_priv",
+      "type": "varchar",
+      "scale": 2,
+      "default": "'N'",
+      "primary": -1,
+      "nullable": false
+    },
+    {
+      "name": "Repl_slave_priv",
+      "type": "varchar",
+      "scale": 2,
+      "default": "'N'",
+      "primary": -1,
+      "nullable": false
+    },
+    {
+      "name": "Repl_client_priv",
+      "type": "varchar",
+      "scale": 2,
+      "default": "'N'",
+      "primary": -1,
+      "nullable": false
+    },
+    {
+      "name": "Create_view_priv",
+      "type": "varchar",
+      "scale": 2,
+      "default": "'N'",
+      "primary": -1,
+      "nullable": false
+    },
+    {
+      "name": "Show_view_priv",
+      "type": "varchar",
+      "scale": 2,
+      "default": "'N'",
+      "primary": -1,
+      "nullable": false
+    },
+    {
+      "name": "Create_routine_priv",
+      "type": "varchar",
+      "scale": 2,
+      "default": "'N'",
+      "primary": -1,
+      "nullable": false
+    },
+    {
+      "name": "Alter_routine_priv",
+      "type": "varchar",
+      "scale": 2,
+      "default": "'N'",
+      "primary": -1,
+      "nullable": false
+    },
+    {
+      "name": "Create_user_priv",
+      "type": "varchar",
+      "scale": 2,
+      "default": "'N'",
+      "primary": -1,
+      "nullable": false
+    },
+    {
+      "name": "Event_priv",
+      "type": "varchar",
+      "scale": 2,
+      "default": "'N'",
+      "primary": -1,
+      "nullable": false
+    },
+    {
+      "name": "Trigger_priv",
+      "type": "varchar",
+      "scale": 2,
+      "default": "'N'",
+      "primary": -1,
+      "nullable": false
+    },
+    {
+      "name": "Create_tablespace_priv",
+      "type": "varchar",
+      "scale": 2,
+      "default": "'N'",
+      "primary": -1,
+      "nullable": false
+    },
+    {
+      "name": "ssl_type",
+      "type": "varchar",
+      "scale": 32,
+      "default": "",
+      "primary": -1,
+      "nullable": true
+    },
+    {
+      "name": "ssl_cipher",
+      "type": "varchar",
+      "scale": 65535,
+      "default": "",
+      "primary": -1,
+      "nullable": true
+    },
+    {
+      "name": "x509_issuer",
+      "type": "varchar",
+      "scale": 65535,
+      "default": "",
+      "primary": -1,
+      "nullable": true
+    },
+    {
+      "name": "x509_subject",
+      "type": "varchar",
+      "scale": 65535,
+      "default": "",
+      "primary": -1,
+      "nullable": true
+    },
+    {
+      "name": "max_questions",
+      "type": "integer",
+      "scale": 11,
+      "default": 0,
+      "primary": -1,
+      "nullable": true
+    },
+    {
+      "name": "max_updates",
+      "type": "integer",
+      "scale": 11,
+      "default": 0,
+      "primary": -1,
+      "nullable": true
+    },
+    {
+      "name": "max_connections",
+      "type": "integer",
+      "scale": 11,
+      "default": 0,
+      "primary": -1,
+      "nullable": true
+    },
+    {
+      "name": "max_user_connections",
+      "type": "integer",
+      "scale": 11,
+      "default": 0,
+      "primary": -1,
+      "nullable": true
+    },
+    {
+      "name": "plugin",
+      "type": "varchar",
+      "scale": 64,
+      "default": "'mysql_native_password'",
+      "primary": -1,
+      "nullable": false
+    },
+    {
+      "name": "authentication_string",
+      "type": "varchar",
+      "scale": 65535,
+      "default": "",
+      "primary": -1,
+      "nullable": true
+    },
+    {
+      "name": "password_expired",
+      "type": "varchar",
+      "scale": 2,
+      "default": "'N'",
+      "primary": -1,
+      "nullable": false
+    },
+    {
+      "name": "password_last_changed",
+      "type": "timestamp",
+      "scale": 0,
+      "primary": -1,
+      "nullable": true
+    },
+    {
+      "name": "password_lifetime",
+      "type": "integer",
+      "scale": 5,
+      "default": 0,
+      "primary": -1,
+      "nullable": true
+    },
+    {
+      "name": "account_locked",
+      "type": "varchar",
+      "scale": 2,
+      "default": "'N'",
+      "primary": -1,
+      "nullable": false
+    }
+  ]
+
