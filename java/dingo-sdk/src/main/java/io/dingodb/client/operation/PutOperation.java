@@ -52,6 +52,8 @@ public class PutOperation implements Operation {
             Map<DingoCommonId, Any> subTaskMap = new HashMap<>();
             for (int i = 0; i < records.size(); i++) {
                 Record record = records.get(i);
+                checkParameters(table, record);
+
                 KeyValue keyValue = routeTable.getCodec().encode(record.getValues().toArray());
 
                 Map<KeyValue, Integer> regionParams = subTaskMap.computeIfAbsent(

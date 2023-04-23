@@ -40,21 +40,20 @@ public class DingoJavaExampleUsingSDK {
         DingoClient dingoClient = new DingoClient(coordinatorAddress, 10);
         dingoClient.open();
 
-        ColumnDefinition c1 = new ColumnDefinition("id", "varchar", "", 0, 0, false, 0, "");
-        ColumnDefinition c2 = new ColumnDefinition("name", "varchar", "", 0, 0, false, -1, "");
+        ColumnDefinition c1 = ColumnDefinition.builder().name("id").type("varchar").nullable(false).primary(0).build();
+        ColumnDefinition c2 = ColumnDefinition.builder().name("name").type("varchar").nullable(false).primary(-1).build();
 
         PartitionDetailDefinition detailDefinition = new PartitionDetailDefinition(null, null, Arrays.asList(new Object[]{"1"}));
         PartitionRule partitionRule = new PartitionRule(null, null, Arrays.asList(detailDefinition));
 
-        TableDefinition tableDefinition = new TableDefinition(tableName,
-                Arrays.asList(c1, c2),
-                1,
-                0,
-                null,
-                Common.Engine.ENG_ROCKSDB.name(),
-                null,
-                3
-        );
+
+        TableDefinition tableDefinition = TableDefinition.builder()
+                .name(tableName)
+                .columns(Arrays.asList(c1, c2))
+                .version(1)
+                .engine(Common.Engine.ENG_ROCKSDB.name())
+                .replica(3)
+                .build();
 
         if (isReCreateTable) {
             try {
@@ -72,10 +71,8 @@ public class DingoJavaExampleUsingSDK {
 
         Long test_count = recordCnt;
         for (Long i = 0L; i < test_count; i++) {
-            LinkedHashMap<String, Object> map = Maps.newLinkedHashMap();
-            map.put(c1.getName(), keyPrefix + i);
-            map.put(c2.getName(), keyPrefix + "=zhangsan=>" + i);
-            boolean test = dingoClient.upsert(tableName, new Record(c1.getName(), map));
+            boolean test = dingoClient.upsert(tableName, new Record(tableDefinition.getColumns(),
+                    new Value[]{Value.get(keyPrefix + i), Value.get(keyPrefix + "=zhangsan=>" + i)}));
             if (i % 1000 == 0) {
                 System.out.println("Write key: " + i);
             }

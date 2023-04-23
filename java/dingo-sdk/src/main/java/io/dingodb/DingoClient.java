@@ -63,13 +63,11 @@ public class DingoClient {
     }
 
     public boolean createTable(Table table) {
-        boolean isSuccess = operationService.createTable(schema, table.getName(), table);
-        return isSuccess;
+        return operationService.createTable(schema, table.getName(), table);
     }
 
     public boolean dropTable(String tableName) {
-        boolean isSuccess = operationService.dropTable(schema, tableName);
-        return isSuccess;
+        return operationService.dropTable(schema, tableName);
     }
 
     public boolean upsert(String tableName, Record record) {

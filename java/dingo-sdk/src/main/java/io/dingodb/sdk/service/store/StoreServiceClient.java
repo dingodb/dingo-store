@@ -186,14 +186,14 @@ public class StoreServiceClient {
         }, retryTimes, tableId, regionId);
     }
 
-    public boolean kvBatchDelete(DingoCommonId tableId, DingoCommonId regionId, List<byte[]> keys) {
+    public List<Boolean> kvBatchDelete(DingoCommonId tableId, DingoCommonId regionId, List<byte[]> keys) {
         return exec(stub -> {
             Store.KvBatchDeleteRequest req = Store.KvBatchDeleteRequest.newBuilder()
                     .setRegionId(regionId.entityId())
                     .addAllKeys(keys.stream().map(ByteString::copyFrom).collect(Collectors.toList()))
                     .build();
             Store.KvBatchDeleteResponse res = stub.kvBatchDelete(req);
-            return new ServiceConnector.Response<>(res.getError(), true);
+            return new ServiceConnector.Response<>(res.getError(), res.getKeyStatesList());
         }, retryTimes, tableId, regionId);
     }
 
