@@ -16,209 +16,264 @@
 
 package io.dingodb.mysql;
 
+import com.alibaba.fastjson.JSON;
 import com.google.common.collect.Maps;
-import io.dingodb.DingoClient;
-import io.dingodb.client.Record;
 import io.dingodb.common.Common;
+import io.dingodb.sdk.common.DingoCommonId;
+import io.dingodb.sdk.common.KeyValue;
+import io.dingodb.sdk.common.codec.DingoKeyValueCodec;
+import io.dingodb.sdk.common.codec.KeyValueCodec;
+import io.dingodb.sdk.common.table.Column;
 import io.dingodb.sdk.common.table.ColumnDefinition;
+import io.dingodb.sdk.common.table.RangeDistribution;
+import io.dingodb.sdk.common.table.Table;
 import io.dingodb.sdk.common.table.TableDefinition;
+import io.dingodb.sdk.common.utils.ByteArrayUtils;
+import io.dingodb.sdk.service.connector.MetaServiceConnector;
+import io.dingodb.sdk.service.connector.ServiceConnector;
+import io.dingodb.sdk.service.meta.MetaServiceClient;
+import io.dingodb.sdk.service.store.StoreServiceClient;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.sql.Timestamp;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.LinkedHashMap;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.NavigableMap;
+import java.util.stream.Collectors;
 
 public class MysqlInit {
 
-    static DingoClient mysqlClient = null;
+    static MetaServiceClient rootMeta;
 
-    static DingoClient informationClient = null;
+    static StoreServiceClient storeServiceClient;
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws IOException {
         if (args.length < 1) {
             System.out.println("Usage: java -cp mysql-init.jar io.dingodb.mysql.MysqlInit <coordinatorSvr>");
             return;
         }
         String coordinatorSvr = args[0];
-        System.out.println("coordinator:" + coordinatorSvr);
-        mysqlClient = new DingoClient(coordinatorSvr, "mysql", 10);
-        mysqlClient.open();
-        informationClient = new DingoClient(coordinatorSvr, "information_schema", 10);
-        informationClient.open();
-
+        initMetaStore(coordinatorSvr);
+        System.out.println("init meta store success");
         initUser("USER");
-        initDb("DB");
-        initTablesPriv("TABLES_PRIV");
+        initDbPrivilege("DB");
+        initTablePrivilege("TABLES_PRIV");
         initGlobalVariables("GLOBAL_VARIABLES");
-        mysqlClient.close();
-        informationClient.close();
+        close();
     }
 
-    public static void initUser(String tableName) {
-        ColumnDefinition c1 = new ColumnDefinition("Host", "varchar", "", 0, 60, false, 0, "");
-        ColumnDefinition c2 = new ColumnDefinition("User", "varchar", "", 0, 32, false, 1, "");
-        ColumnDefinition c3 = new ColumnDefinition("Select_priv", "varchar", "", 0, 2, false, -1, "N");
-        ColumnDefinition c4 = new ColumnDefinition("Insert_priv", "varchar", "", 0, 2, false, -1, "N");
-        ColumnDefinition c5 = new ColumnDefinition("Update_priv", "varchar", "", 0, 2, false, -1, "N");
-        ColumnDefinition c6 = new ColumnDefinition("Delete_priv", "varchar", "", 0, 2, false, -1, "N");
-        ColumnDefinition c7 = new ColumnDefinition("Create_priv", "varchar", "", 0, 2, false, -1, "N");
-        ColumnDefinition c8 = new ColumnDefinition("Drop_priv", "varchar", "", 0, 2, false, -1, "N");
-        ColumnDefinition c9 = new ColumnDefinition("Reload_priv", "varchar", "", 0, 2, false, -1, "N");
-        ColumnDefinition c10 = new ColumnDefinition("Shutdown_priv", "varchar", "", 0, 2, false, -1, "N");
-        ColumnDefinition c11 = new ColumnDefinition("Process_priv", "varchar", "", 0, 2, false, -1, "N");
-        ColumnDefinition c12 = new ColumnDefinition("File_priv", "varchar", "", 0, 2, false, -1, "N");
-        ColumnDefinition c13 = new ColumnDefinition("Grant_priv", "varchar", "", 0, 2, false, -1, "N");
-        ColumnDefinition c14 = new ColumnDefinition("References_priv", "varchar", "", 0, 2, false, -1, "N");
-        ColumnDefinition c15 = new ColumnDefinition("Index_priv", "varchar", "", 0, 2, false, -1, "N");
-        ColumnDefinition c16 = new ColumnDefinition("Alter_priv", "varchar", "", 0, 2, false, -1, "N");
-        ColumnDefinition c17 = new ColumnDefinition("Show_db_priv", "varchar", "", 0, 2, false, -1, "N");
-        ColumnDefinition c18 = new ColumnDefinition("Super_priv", "varchar", "", 0, 2, false, -1, "N");
-        ColumnDefinition c19 = new ColumnDefinition("Create_tmp_table_priv", "varchar", "", 0, 2, false, -1, "N");
-        ColumnDefinition c20 = new ColumnDefinition("Lock_tables_priv", "varchar", "", 0, 2, false, -1, "N");
-        ColumnDefinition c21 = new ColumnDefinition("Execute_priv", "varchar", "", 0, 2, false, -1, "N");
-        ColumnDefinition c22 = new ColumnDefinition("Repl_slave_priv", "varchar", "", 0, 2, false, -1, "N");
-        ColumnDefinition c23 = new ColumnDefinition("Repl_client_priv", "varchar", "", 0, 2, false, -1, "N");
-        ColumnDefinition c24 = new ColumnDefinition("Create_view_priv", "varchar", "", 0, 2, false, -1, "N");
-        ColumnDefinition c25 = new ColumnDefinition("Show_view_priv", "varchar", "", 0, 2, false, -1, "N");
-        ColumnDefinition c26 = new ColumnDefinition("Create_routine_priv", "varchar", "", 0, 2, false, -1, "N");
-        ColumnDefinition c27 = new ColumnDefinition("Alter_routine_priv", "varchar", "", 0, 2, false, -1, "N");
-        ColumnDefinition c28 = new ColumnDefinition("Create_user_priv", "varchar", "", 0, 2, false, -1, "N");
-        ColumnDefinition c29 = new ColumnDefinition("Event_priv", "varchar", "", 0, 2, false, -1, "N");
-        ColumnDefinition c30 = new ColumnDefinition("Trigger_priv", "varchar", "", 0, 2, false, -1, "N");
-        ColumnDefinition c31 = new ColumnDefinition("Create_tablespace_priv", "varchar", "", 0, 2, false, -1, "N");
-        ColumnDefinition c32 = new ColumnDefinition("ssl_type", "varchar", "", 0, 32, false, -1, "");
-        ColumnDefinition c33 = new ColumnDefinition("ssl_cipher", "varchar", "", 0, 65535, false, -1, "");
-        ColumnDefinition c34 = new ColumnDefinition("x509_issuer", "varchar", "", 0, 65535, false, -1, "");
-        ColumnDefinition c35 = new ColumnDefinition("x509_subject", "varchar", "", 0, 65535, false, -1, "");
-        ColumnDefinition c36 = new ColumnDefinition("max_questions", "integer", "", 0, 11, false, -1, "0");
-        ColumnDefinition c37 = new ColumnDefinition("max_updates", "integer", "", 0, 11, false, -1, "0");
-        ColumnDefinition c38 = new ColumnDefinition("max_connections", "integer", "", 0, 11, false, -1, "0");
-        ColumnDefinition c39 = new ColumnDefinition("max_user_connections", "integer", "", 0, 11, false, -1, "0");
-        ColumnDefinition c40 = new ColumnDefinition("plugin", "varchar", "", 0, 64, false, -1, "mysql_native_password");
-        ColumnDefinition c41 = new ColumnDefinition("authentication_string", "varchar", "", 0, 65535, true, -1, "");
-        ColumnDefinition c42 = new ColumnDefinition("password_expired", "varchar", "", 0, 2, false, -1, "N");
-        ColumnDefinition c43 = new ColumnDefinition("password_last_changed", "timestamp", "", 0, 0, true, -1, "");
-        ColumnDefinition c44 = new ColumnDefinition("password_lifetime", "integer", "", 0, 5, true, -1, "");
-        ColumnDefinition c45 = new ColumnDefinition("account_locked", "varchar", "", 0, 2, false, -1, "N");
-
-        TableDefinition tableDefinition = new TableDefinition(tableName,
-                Arrays.asList(c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15, c16, c17,
-                        c18, c19, c20, c21, c22, c23,
-                        c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42,
-                        c43, c44, c45),
-                1,
-                0,
-                null,
-                Common.Engine.ENG_ROCKSDB.name(),
-                null);
-        boolean isSuccess = mysqlClient.createTable(tableDefinition);
-        System.out.println("create user table is success:" + isSuccess);
+    public static void initUser(String tableName) throws IOException {
+        TableDefinition tableDefinition = getTableDefinition(tableName);
+        MetaServiceClient mysqlMetaClient = rootMeta.getSubMetaService("mysql");
+        try {
+            mysqlMetaClient.createTable(tableName, tableDefinition);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
         sleep();
+        DingoCommonId tableId = mysqlMetaClient.getTableId(tableName);
+        Map<String, Object> userValuesMap = getUserObjectMap(tableName);
+        Object[] userValues = userValuesMap.values().toArray();
+        KeyValueCodec codec = new DingoKeyValueCodec(tableDefinition.getDingoType(),
+                tableDefinition.getKeyMapping(),
+                tableId.entityId());
+        KeyValue keyValue = codec.encode(userValues);
 
-        LinkedHashMap<String, Object> map = Maps.newLinkedHashMap();
-        map.put(c1.getName(), "%");
-        map.put(c2.getName(), "root");
-        List<ColumnDefinition> privilegeColumns = Arrays.asList(c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14,
-                c15, c16, c17, c18, c19, c20, c21, c22, c23, c24, c25, c26, c27, c28, c29, c30, c31);
-        for (ColumnDefinition columnDefinition : privilegeColumns) {
-            map.put(columnDefinition.getName(), "Y");
+        NavigableMap<ByteArrayUtils.ComparableByteArray, RangeDistribution> rangeDistribution
+                = mysqlMetaClient.getRangeDistribution(tableId);
+        if (rangeDistribution == null) {
+            return;
         }
-        List<ColumnDefinition> nullColumns = Arrays.asList(c32, c33, c34, c35);
-        for (ColumnDefinition columnDefinition : nullColumns) {
-            map.put(columnDefinition.getName(), "");
-        }
-        map.put(c36.getName(), 0);
-        map.put(c37.getName(), 0);
-        map.put(c38.getName(), 0);
-        map.put(c39.getName(), 0);
-        map.put(c40.getName(), "mysql_native_password");
-        map.put(c41.getName(), "");
-        map.put(c42.getName(), "N");
-        map.put(c43.getName(), new Timestamp(System.currentTimeMillis()));
-        map.put(c44.getName(), 0);
-        map.put(c45.getName(), "N");
-
-        List<String> keyNames = Arrays.asList(c1.getName(), c2.getName());
-
-        boolean result = mysqlClient.upsert(tableName, new Record(keyNames, map));
-        if (result) {
-            System.out.println("init root user success");
-        } else {
-            System.out.println("init root user fail");
-        }
+        DingoCommonId regionId = rangeDistribution.firstEntry().getValue().getId();
+        storeServiceClient.kvPut(tableId, regionId, keyValue);
+        System.out.println("init user success");
     }
 
-    public static void initDb(String tableName) {
-        ColumnDefinition c1 = new ColumnDefinition("Host", "varchar", "", 0, 60, false, 0, "");
-        ColumnDefinition c2 = new ColumnDefinition("User", "varchar", "", 0, 64, false, 1, "");
-        ColumnDefinition c3 = new ColumnDefinition("Db", "varchar", "", 0, 32, false, 2, "");
-        ColumnDefinition c4 = new ColumnDefinition("Select_priv", "varchar", "", 0, 2, false, -1, "N");
-        ColumnDefinition c5 = new ColumnDefinition("Insert_priv", "varchar", "", 0, 2, false, -1, "N");
-        ColumnDefinition c6 = new ColumnDefinition("Update_priv", "varchar", "", 0, 2, false, -1, "N");
-        ColumnDefinition c7 = new ColumnDefinition("Delete_priv", "varchar", "", 0, 2, false, -1, "N");
-        ColumnDefinition c8 = new ColumnDefinition("Create_priv", "varchar", "", 0, 2, false, -1, "N");
-        ColumnDefinition c9 = new ColumnDefinition("Drop_priv", "varchar", "", 0, 2, false, -1, "N");
-        ColumnDefinition c10 = new ColumnDefinition("Grant_priv", "varchar", "", 0, 2, false, -1, "N");
-        ColumnDefinition c11 = new ColumnDefinition("References_priv", "varchar", "", 0, 2, false, -1, "N");
-        ColumnDefinition c12 = new ColumnDefinition("Index_priv", "varchar", "", 0, 2, false, -1, "N");
-        ColumnDefinition c13 = new ColumnDefinition("Alter_priv", "varchar", "", 0, 2, false, -1, "N");
-        ColumnDefinition c14 = new ColumnDefinition("Create_tmp_table_priv", "varchar", "", 0, 2, false, -1, "N");
-        ColumnDefinition c15 = new ColumnDefinition("Lock_tables_priv", "varchar", "", 0, 2, false, -1, "N");
-        ColumnDefinition c16 = new ColumnDefinition("Create_view_priv", "varchar", "", 0, 2, false, -1, "N");
-        ColumnDefinition c17 = new ColumnDefinition("Show_view_priv", "varchar", "", 0, 2, false, -1, "N");
-        ColumnDefinition c18 = new ColumnDefinition("Create_routine_priv", "varchar", "", 0, 2, false, -1, "N");
-        ColumnDefinition c19 = new ColumnDefinition("Alter_routine_priv", "varchar", "", 0, 2, false, -1, "N");
-        ColumnDefinition c20 = new ColumnDefinition("Execute_priv", "varchar", "", 0, 2, false, -1, "N");
-        ColumnDefinition c21 = new ColumnDefinition("Event_priv", "varchar", "", 0, 2, false, -1, "N");
-        ColumnDefinition c22 = new ColumnDefinition("Trigger_priv", "varchar", "", 0, 2, false, -1, "N");
+    public static void initMetaStore(String coordinatorSvr) {
+        ServiceConnector connector = MetaServiceConnector.getMetaServiceConnector(coordinatorSvr);
+        rootMeta = new MetaServiceClient(connector);
 
-        TableDefinition tableDefinition = new TableDefinition(tableName,
-                Arrays.asList(c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15, c16, c17,
-                        c18, c19, c20, c21, c22),
+        storeServiceClient = new StoreServiceClient(rootMeta);
+    }
+
+    public static void initDbPrivilege(String tableName) throws IOException {
+        TableDefinition tableDefinition = getTableDefinition(tableName);
+        MetaServiceClient mysqlMetaClient = rootMeta.getSubMetaService("mysql");
+        try {
+            mysqlMetaClient.createTable(tableName, tableDefinition);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        System.out.println("init db privilege success");
+    }
+
+    public static void initTablePrivilege(String tableName) throws IOException {
+        TableDefinition tableDefinition = getTableDefinition(tableName);
+        MetaServiceClient mysqlMetaClient = rootMeta.getSubMetaService("mysql");
+        try {
+            mysqlMetaClient.createTable(tableName, tableDefinition);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        System.out.println("init table privilege success");
+    }
+
+    public static void initGlobalVariables(String tableName) throws IOException {
+        TableDefinition tableDefinition = getTableDefinition(tableName);
+        MetaServiceClient informationMetaClient = rootMeta.getSubMetaService("information_schema");
+        try {
+            informationMetaClient.createTable(tableName, tableDefinition);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        sleep();
+        DingoCommonId tableId = informationMetaClient.getTableId(tableName);
+
+        KeyValueCodec codec = new DingoKeyValueCodec(tableDefinition.getDingoType(),
+                tableDefinition.getKeyMapping(), tableId.entityId());
+        List<Object[]> values = initGlobalVariables();
+        List<KeyValue> keyValueList = values.stream().map(value -> {
+            try {
+                return codec.encode(value);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }).collect(Collectors.toList());
+        NavigableMap<ByteArrayUtils.ComparableByteArray, RangeDistribution> rangeDistribution
+                = informationMetaClient.getRangeDistribution(tableId);
+        if (rangeDistribution == null) {
+            return;
+        }
+
+        DingoCommonId regionId = rangeDistribution.firstEntry().getValue().getId();
+        storeServiceClient.kvBatchPut(tableId, regionId, keyValueList);
+        System.out.println("init global variables success");
+    }
+
+    public static List<Object[]> initGlobalVariables() {
+        List<Object[]> values = new ArrayList<>();
+        values.add(new Object[]{"version_comment", "Ubuntu"});
+        values.add(new Object[]{"wait_timeout", "28800"});
+        values.add(new Object[]{"interactive_timeout", "28800"});
+        values.add(new Object[]{"max_allowed_packet", "16777216"});
+        values.add(new Object[]{"max_connections", "151"});
+        values.add(new Object[]{"max_connect_errors", "10"});
+        values.add(new Object[]{"max_user_connections", "151"});
+        values.add(new Object[]{"net_buffer_length", "16384"});
+        values.add(new Object[]{"table_cache", "2000"});
+        values.add(new Object[]{"table_definition_cache", "2000"});
+        values.add(new Object[]{"thread_cache", "2000"});
+        values.add(new Object[]{"thread_stack", "262144"});
+        values.add(new Object[]{"thread_concurrency", "10"});
+        values.add(new Object[]{"transaction_isolation", ""});
+        values.add(new Object[]{"time_zone", "SYSTEM"});
+        values.add(new Object[]{"system_time_zone", "UTC"});
+        values.add(new Object[]{"character_set_client", "utf8"});
+        values.add(new Object[]{"sql_mode", ""});
+        values.add(new Object[]{"query_cache_type", "OFF"});
+        values.add(new Object[]{"query_cache_size", "16777216"});
+        values.add(new Object[]{"performance_schema", "0"});
+        values.add(new Object[]{"net_write_timeout", "60"});
+        values.add(new Object[]{"net_read_timeout", "60"});
+        values.add(new Object[]{"lower_case_table_names", "0"});
+        values.add(new Object[]{"license", "GPL"});
+        values.add(new Object[]{"version", "5.7.24"});
+        values.add(new Object[]{"version_compile_os", "Linux"});
+        values.add(new Object[]{"version_compile_machine", "x86_64"});
+        values.add(new Object[]{"init_connect", ""});
+        values.add(new Object[]{"collation_connection", "utf8_general_ci"});
+        values.add(new Object[]{"collation_server", "latin1_swedish_ci"});
+        values.add(new Object[]{"character_set_server", "latin1"});
+        values.add(new Object[]{"character_set_results", "utf8"});
+        values.add(new Object[]{"character_set_client", "utf8"});
+        values.add(new Object[]{"character_set_connection", "utf8"});
+        values.add(new Object[]{"auto_increment_increment", "1"});
+        return values;
+    }
+
+
+    private static TableDefinition getTableDefinition(String tableName) throws IOException {
+        List<Column> columns = getColumnList(tableName);
+        return new TableDefinition(tableName,
+                columns,
                 1,
                 0,
                 null,
                 Common.Engine.ENG_ROCKSDB.name(),
                 null);
-        boolean isSuccess = mysqlClient.createTable(tableDefinition);
-        System.out.println("create db privilege result:" + isSuccess);
     }
 
-    public static void initTablesPriv(String tableName) {
-        ColumnDefinition c1 = new ColumnDefinition("Host", "varchar", "", 0, 60, false, 0, "");
-        ColumnDefinition c2 = new ColumnDefinition("User", "varchar", "", 0, 32, false, 1, "");
-        ColumnDefinition c3 = new ColumnDefinition("Db", "varchar", "", 0, 64, false, 2, "");
-        ColumnDefinition c4 = new ColumnDefinition("Table_name", "varchar", "", 0, 64, false, 3, "");
-        ColumnDefinition c5 = new ColumnDefinition("Grantor", "varchar", "", 0, 93, true, -1, "N");
-        ColumnDefinition c6 = new ColumnDefinition("Timestamp", "timestamp", "", 0, 0, true, -1, "N");
-        ColumnDefinition c7 = new ColumnDefinition("Table_priv", "varchar", "", 0, 1024, true, -1, "N");
-        ColumnDefinition c8 = new ColumnDefinition("Column_priv", "varchar", "", 0, 1024, true, -1, "N");
-
-        TableDefinition tableDefinition = new TableDefinition(tableName,
-                Arrays.asList(c1, c2, c3, c4, c5, c6, c7, c8),
-                1,
-                0,
-                null,
-                Common.Engine.ENG_ROCKSDB.name(),
-                null);
-        boolean isSuccess = mysqlClient.createTable(tableDefinition);
-        System.out.println("create table privilege result:" + isSuccess);
+    private static List<Column> getColumnList(String tableName) throws IOException {
+        String jsonFile;
+        switch (tableName) {
+            case "USER":
+                jsonFile = "/table-mysql-user.json";
+                break;
+            case "DB":
+                jsonFile = "/table-mysql-db.json";
+                break;
+            case "TABLES_PRIV":
+                jsonFile = "/table-mysql-tables_priv.json";
+                break;
+            case "GLOBAL_VARIABLES":
+                jsonFile = "/table-information-global_variables.json";
+                break;
+            default:
+                throw new RuntimeException("table not found");
+        }
+        InputStream is = MysqlInit.class.getResourceAsStream(jsonFile);
+        assert is != null;
+        byte[] bytes = new byte[is.available()];
+        is.read(bytes);
+        is.close();
+        List<ColumnDefinition> definitions =  JSON.parseArray(new String(bytes), ColumnDefinition.class);
+        return definitions.stream().map(columnDefinition -> {
+            return (Column)columnDefinition;
+        }).collect(Collectors.toList());
     }
 
-    public static void initGlobalVariables(String tableName) {
-        ColumnDefinition c1 = new ColumnDefinition("VARIABLE_NAME", "varchar", "", 0, 64, false, 0, "");
-        ColumnDefinition c2 = new ColumnDefinition("VARIABLE_VALUE", "varchar", "", 0, 1024, true, -1, "");
-        TableDefinition tableDefinition = new TableDefinition(tableName,
-                Arrays.asList(c1, c2),
-                1,
-                0,
-                null,
-                Common.Engine.ENG_ROCKSDB.name(),
-                null);
-        boolean isSuccess = informationClient.createTable(tableDefinition);
-        System.out.println("create global variables result:" + isSuccess);
+    private static Map<String, Object> getUserObjectMap(String tableName) {
+        MetaServiceClient mysqlMetaClient = rootMeta.getSubMetaService("mysql");
+        Table table = mysqlMetaClient.getTableDefinition(tableName);
+
+        List<Column> columnList = table.getColumns();
+        Map<String, Object> map = Maps.newLinkedHashMap();
+        columnList.forEach(column -> {
+            switch (column.getName()) {
+                case "USER":
+                    map.put(column.getName(), "root");
+                    break;
+                case "HOST":
+                    map.put(column.getName(), "%");
+                    break;
+                case "AUTHENTICATION_STRING":
+                case "SSL_TYPE":
+                case "SSL_CIPHER":
+                case "X509_ISSUER":
+                case "X509_SUBJECT":
+                    map.put(column.getName(), "");
+                    break;
+                case "PASSWORD_LIFETIME":
+                case "MAX_QUESTIONS":
+                case "MAX_UPDATES":
+                case "MAX_CONNECTIONS":
+                case "MAX_USER_CONNECTIONS":
+                    map.put(column.getName(), 0);
+                    break;
+                case "PLUGIN":
+                    map.put(column.getName(), "mysql_native_password");
+                    break;
+                case "PASSWORD_LAST_CHANGED":
+                    map.put(column.getName(), new Timestamp(System.currentTimeMillis()));
+                    break;
+                default:
+                    map.put(column.getName(), "N");
+
+            }
+        });
+        return map;
     }
 
     private static void sleep() {
@@ -228,4 +283,10 @@ public class MysqlInit {
             throw new RuntimeException(e);
         }
     }
+
+    public static void close() {
+        rootMeta.close();
+        storeServiceClient.shutdown();
+    }
+
 }
