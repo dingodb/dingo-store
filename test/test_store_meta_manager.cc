@@ -15,6 +15,7 @@
 #include <gtest/gtest.h>
 
 #include <iostream>
+#include <memory>
 #include <string>
 
 #include "meta/store_meta_manager.h"
@@ -25,10 +26,21 @@ class StoreRegionMetaTest : public testing::Test {
   void TearDown() override {}
 };
 
-TEST(StoreRegionMetaTest, ParseRegionId) {
+TEST_F(StoreRegionMetaTest, ParseRegionId) {
   dingodb::StoreRegionMeta store_region_meta(nullptr, nullptr);
 
   uint64_t region_id = store_region_meta.ParseRegionId("META_REGION_11111");
 
   EXPECT_EQ(11111, region_id);
+}
+
+TEST_F(StoreRegionMetaTest, AddRegion) {
+  auto store_region_mata = std::make_shared<dingodb::StoreRegionMeta>(nullptr, nullptr);
+  dingodb::pb::common::RegionDefinition definition;
+  definition.set_id(1001);
+  store_region_mata->AddRegion(dingodb::store::Region::New(definition));
+  auto region = store_region_mata->GetRegion(1001);
+  if (region != nullptr) {
+    std::cout << "region id: " << region->Id() << std::endl;
+  }
 }

@@ -15,14 +15,18 @@
 #ifndef DINGODB_STORE_META_MANAGER_H_
 #define DINGODB_STORE_META_MANAGER_H_
 
+#include <atomic>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <shared_mutex>
+#include <string>
 #include <vector>
 
 #include "bthread/types.h"
 #include "butil/endpoint.h"
 #include "common/constant.h"
+#include "common/safe_map.h"
 #include "engine/engine.h"
 #include "meta/meta_reader.h"
 #include "meta/meta_writer.h"
@@ -32,11 +36,54 @@
 
 namespace dingodb {
 
+namespace store {
+
+// Warp pb region for atomic/metux
+class Region {
+ public:
+  Region() { bthread_mutex_init(&mutex_, nullptr); };
+  ~Region() { bthread_mutex_destroy(&mutex_); }
+
+  Region(const Region&) = delete;
+  void operator=(const Region&) = delete;
+
+  static std::shared_ptr<Region> New(const pb::common::RegionDefinition& definition);
+
+  std::string Serialize();
+  void DeSerialize(const std::string& data);
+
+  uint64_t Id() const { return inner_region_.id(); }
+  const std::string& Name() const { return inner_region_.definition().name(); }
+
+  uint64_t LeaderId();
+  void SetLeaderId(uint64_t leader_id);
+
+  const pb::common::Range& Range();
+  void SetRange(const pb::common::Range& range);
+
+  std::vector<pb::common::Peer> Peers() const;
+
+  pb::common::StoreRegionState State() const;
+  void SetState(pb::common::StoreRegionState state);
+  void AppendHistoryState(pb::common::StoreRegionState state) { inner_region_.add_history_states(state); }
+
+  const pb::store_internal::Region& InnerRegion() const { return inner_region_; }
+
+ private:
+  bthread_mutex_t mutex_;
+  pb::store_internal::Region inner_region_;
+  std::atomic<pb::common::StoreRegionState> state_;
+};
+
+using RegionPtr = std::shared_ptr<Region>;
+
+}  // namespace store
+
 // Manage store server store data
 class StoreServerMeta {
  public:
-  StoreServerMeta();
-  ~StoreServerMeta();
+  StoreServerMeta() { bthread_mutex_init(&mutex_, nullptr); }
+  ~StoreServerMeta() { bthread_mutex_destroy(&mutex_); }
 
   StoreServerMeta(const StoreServerMeta&) = delete;
   const StoreServerMeta& operator=(const StoreServerMeta&) = delete;
@@ -65,44 +112,44 @@ class StoreRegionMeta : public TransformKvAble {
  public:
   StoreRegionMeta(std::shared_ptr<MetaReader> meta_reader, std::shared_ptr<MetaWriter> meta_writer)
       : TransformKvAble(Constant::kStoreRegionMetaPrefix), meta_reader_(meta_reader), meta_writer_(meta_writer) {
-    bthread_mutex_init(&mutex_, nullptr);
+    regions_.Init(Constant::kStoreRegionMetaInitCapacity);
   }
-  ~StoreRegionMeta() override { bthread_mutex_destroy(&mutex_); }
+  ~StoreRegionMeta() override = default;
+
+  StoreRegionMeta(const StoreRegionMeta&) = delete;
+  void operator=(const StoreRegionMeta&) = delete;
 
   bool Init();
 
   uint64_t GetEpoch();
 
-  bool IsExistRegion(uint64_t region_id);
-  void AddRegion(std::shared_ptr<pb::store_internal::Region> region);
+  void AddRegion(store::RegionPtr region);
   void DeleteRegion(uint64_t region_id);
-  void UpdateRegion(std::shared_ptr<pb::store_internal::Region> region);
+  void UpdateRegion(store::RegionPtr region);
 
-  void UpdateState(std::shared_ptr<pb::store_internal::Region> region, pb::common::StoreRegionState new_state);
+  void UpdateState(store::RegionPtr region, pb::common::StoreRegionState new_state);
   void UpdateState(uint64_t region_id, pb::common::StoreRegionState new_state);
 
-  void UpdateLeaderId(std::shared_ptr<pb::store_internal::Region> region, uint64_t leader_id);
+  void UpdateLeaderId(store::RegionPtr region, uint64_t leader_id);
   void UpdateLeaderId(uint64_t region_id, uint64_t leader_id);
 
-  std::shared_ptr<pb::store_internal::Region> GetRegion(uint64_t region_id);
-  std::vector<std::shared_ptr<pb::store_internal::Region>> GetAllRegion();
-  std::vector<std::shared_ptr<pb::store_internal::Region>> GetAllAliveRegion();
-
-  std::shared_ptr<pb::common::KeyValue> TransformToKv(uint64_t region_id) override;
-  std::shared_ptr<pb::common::KeyValue> TransformToKv(std::shared_ptr<google::protobuf::Message> obj) override;
-
-  void TransformFromKv(const std::vector<pb::common::KeyValue>& kvs) override;
+  bool IsExistRegion(uint64_t region_id);
+  store::RegionPtr GetRegion(uint64_t region_id);
+  std::vector<store::RegionPtr> GetAllRegion();
+  std::vector<store::RegionPtr> GetAllAliveRegion();
 
  private:
+  std::shared_ptr<pb::common::KeyValue> TransformToKv(void* obj) override;
+  void TransformFromKv(const std::vector<pb::common::KeyValue>& kvs) override;
+
   // Read meta data from persistence storage.
   std::shared_ptr<MetaReader> meta_reader_;
   // Write meta data to persistence storage.
   std::shared_ptr<MetaWriter> meta_writer_;
 
-  bthread_mutex_t mutex_;
   // Store all region meta data in this server.
-  // Todo: use class wrap pb::store_internal::Region for mutex
-  std::map<uint64_t, std::shared_ptr<pb::store_internal::Region>> regions_;
+  using RegionMap = DingoSafeMap<uint64_t, store::RegionPtr>;
+  RegionMap regions_;
 };
 
 class StoreRaftMeta : public TransformKvAble {
@@ -113,28 +160,33 @@ class StoreRaftMeta : public TransformKvAble {
   }
   ~StoreRaftMeta() override { bthread_mutex_destroy(&mutex_); }
 
+  StoreRaftMeta(const StoreRaftMeta&) = delete;
+  void operator=(const StoreRaftMeta&) = delete;
+
+  using RaftMetaPtr = std::shared_ptr<pb::store_internal::RaftMeta>;
+
   bool Init();
 
-  static std::shared_ptr<pb::store_internal::RaftMeta> NewRaftMeta(uint64_t region_id);
+  static RaftMetaPtr NewRaftMeta(uint64_t region_id);
 
-  void AddRaftMeta(std::shared_ptr<pb::store_internal::RaftMeta> raft_meta);
-  void UpdateRaftMeta(std::shared_ptr<pb::store_internal::RaftMeta> raft_meta);
+  void AddRaftMeta(RaftMetaPtr raft_meta);
+  void UpdateRaftMeta(RaftMetaPtr raft_meta);
   void DeleteRaftMeta(uint64_t region_id);
-  std::shared_ptr<pb::store_internal::RaftMeta> GetRaftMeta(uint64_t region_id);
-
-  std::shared_ptr<pb::common::KeyValue> TransformToKv(uint64_t region_id) override;
-  std::shared_ptr<pb::common::KeyValue> TransformToKv(std::shared_ptr<google::protobuf::Message> obj) override;
-
-  void TransformFromKv(const std::vector<pb::common::KeyValue>& kvs) override;
+  RaftMetaPtr GetRaftMeta(uint64_t region_id);
 
  private:
+  std::shared_ptr<pb::common::KeyValue> TransformToKv(void* obj) override;
+  void TransformFromKv(const std::vector<pb::common::KeyValue>& kvs) override;
+
   // Read meta data from persistence storage.
   std::shared_ptr<MetaReader> meta_reader_;
   // Write meta data to persistence storage.
   std::shared_ptr<MetaWriter> meta_writer_;
 
   bthread_mutex_t mutex_;
-  std::map<uint64_t, std::shared_ptr<pb::store_internal::RaftMeta>> raft_metas_;
+
+  using RaftMetaMap = std::map<uint64_t, RaftMetaPtr>;
+  RaftMetaMap raft_metas_;
 };
 
 // Manage store server meta data, like store and region.

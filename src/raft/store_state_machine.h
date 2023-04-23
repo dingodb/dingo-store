@@ -22,6 +22,7 @@
 #include "common/context.h"
 #include "engine/raw_engine.h"
 #include "event/event.h"
+#include "meta/store_meta_manager.h"
 #include "proto/raft.pb.h"
 #include "proto/store_internal.pb.h"
 
@@ -49,7 +50,7 @@ class StoreClosure : public braft::Closure {
 //                           on_apply
 class StoreStateMachine : public braft::StateMachine {
  public:
-  explicit StoreStateMachine(std::shared_ptr<RawEngine> engine, std::shared_ptr<pb::store_internal::Region> region,
+  explicit StoreStateMachine(std::shared_ptr<RawEngine> engine, store::RegionPtr region,
                              std::shared_ptr<pb::store_internal::RaftMeta> raft_meta,
                              std::shared_ptr<EventListenerCollection> listeners);
   ~StoreStateMachine() override = default;
@@ -70,7 +71,7 @@ class StoreStateMachine : public braft::StateMachine {
  private:
   void DispatchEvent(dingodb::EventType, std::shared_ptr<dingodb::Event> event);
 
-  std::shared_ptr<pb::store_internal::Region> region_;
+  store::RegionPtr region_;
   std::shared_ptr<RawEngine> engine_;
   std::shared_ptr<EventListenerCollection> listeners_;
 

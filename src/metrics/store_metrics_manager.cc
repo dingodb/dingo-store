@@ -68,7 +68,7 @@ void StoreRegionMetrics::AddMetrics(std::shared_ptr<pb::common::RegionMetrics> m
     metricses_.insert_or_assign(metrics->id(), metrics);
   }
 
-  meta_writer_->Put(TransformToKv(metrics));
+  meta_writer_->Put(TransformToKv(&metrics));
 }
 
 void StoreRegionMetrics::DeleteMetrics(uint64_t region_id) {
@@ -101,19 +101,8 @@ std::vector<std::shared_ptr<pb::common::RegionMetrics>> StoreRegionMetrics::GetA
   return metricses;
 }
 
-std::shared_ptr<pb::common::KeyValue> StoreRegionMetrics::TransformToKv(uint64_t region_id) {
-  BAIDU_SCOPED_LOCK(mutex_);
-  auto it = metricses_.find(region_id);
-  if (it == metricses_.end()) {
-    return nullptr;
-  }
-
-  return TransformToKv(it->second);
-}
-
-std::shared_ptr<pb::common::KeyValue> StoreRegionMetrics::TransformToKv(
-    std::shared_ptr<google::protobuf::Message> obj) {
-  auto region_metrics = std::dynamic_pointer_cast<pb::common::RegionMetrics>(obj);
+std::shared_ptr<pb::common::KeyValue> StoreRegionMetrics::TransformToKv(void* obj) {
+  auto region_metrics = *static_cast<std::shared_ptr<pb::common::RegionMetrics>*>(obj);
   std::shared_ptr<pb::common::KeyValue> kv = std::make_shared<pb::common::KeyValue>();
   kv->set_key(GenKey(region_metrics->id()));
   kv->set_value(region_metrics->SerializeAsString());

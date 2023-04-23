@@ -55,11 +55,7 @@ class TransformKvAble {
   }
 
   // Transform other format to kv.
-  virtual std::shared_ptr<pb::common::KeyValue> TransformToKv(uint64_t /*id*/) {
-    DINGO_LOG(ERROR) << "Not support";
-    return nullptr;
-  }
-  virtual std::shared_ptr<pb::common::KeyValue> TransformToKv(std::shared_ptr<google::protobuf::Message> /*obj*/) {
+  virtual std::shared_ptr<pb::common::KeyValue> TransformToKv(void* /*obj*/) {
     DINGO_LOG(ERROR) << "Not support";
     return nullptr;
   }

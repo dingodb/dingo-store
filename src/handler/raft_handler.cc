@@ -28,13 +28,13 @@
 
 namespace dingodb {
 
-void PutHandler::Handle(std::shared_ptr<Context> ctx, std::shared_ptr<pb::store_internal::Region> region,
-                        std::shared_ptr<RawEngine> engine, const pb::raft::Request &req) {
+void PutHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
+                        const pb::raft::Request &req) {
   butil::Status status;
   const auto &request = req.put();
   // region is spliting, check key out range
-  if (region->state() == pb::common::StoreRegionState::SPLITTING) {
-    const auto &range = region->definition().range();
+  if (region->State() == pb::common::StoreRegionState::SPLITTING) {
+    const auto &range = region->Range();
     for (const auto &kv : request.kvs()) {
       if (range.end_key().compare(kv.key()) <= 0) {
         if (ctx) {
@@ -58,13 +58,13 @@ void PutHandler::Handle(std::shared_ptr<Context> ctx, std::shared_ptr<pb::store_
   }
 }
 
-void PutIfAbsentHandler::Handle(std::shared_ptr<Context> ctx, std::shared_ptr<pb::store_internal::Region> region,
+void PutIfAbsentHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region,
                                 std::shared_ptr<RawEngine> engine, const pb::raft::Request &req) {
   butil::Status status;
   const auto &request = req.put_if_absent();
   // region is spliting, check key out range
-  if (region->state() == pb::common::StoreRegionState::SPLITTING) {
-    const auto &range = region->definition().range();
+  if (region->State() == pb::common::StoreRegionState::SPLITTING) {
+    const auto &range = region->Range();
     for (const auto &kv : request.kvs()) {
       if (range.end_key().compare(kv.key()) <= 0) {
         if (ctx) {
@@ -109,13 +109,13 @@ void PutIfAbsentHandler::Handle(std::shared_ptr<Context> ctx, std::shared_ptr<pb
   }
 }
 
-void DeleteRangeHandler::Handle(std::shared_ptr<Context> ctx, std::shared_ptr<pb::store_internal::Region> region,
+void DeleteRangeHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region,
                                 std::shared_ptr<RawEngine> engine, const pb::raft::Request &req) {
   butil::Status status;
   const auto &request = req.delete_range();
   // region is spliting, check key out range
-  if (region->state() == pb::common::StoreRegionState::SPLITTING) {
-    const auto &range = region->definition().range();
+  if (region->State() == pb::common::StoreRegionState::SPLITTING) {
+    const auto &range = region->Range();
     for (const auto &delete_range : request.ranges()) {
       if (range.end_key().compare(delete_range.range().end_key()) <= 0) {
         if (ctx) {
@@ -169,13 +169,13 @@ void DeleteRangeHandler::Handle(std::shared_ptr<Context> ctx, std::shared_ptr<pb
   }
 }
 
-void DeleteBatchHandler::Handle(std::shared_ptr<Context> ctx, std::shared_ptr<pb::store_internal::Region> region,
+void DeleteBatchHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region,
                                 std::shared_ptr<RawEngine> engine, const pb::raft::Request &req) {
   butil::Status status;
   const auto &request = req.delete_batch();
   // region is spliting, check key out range
-  if (region->state() == pb::common::StoreRegionState::SPLITTING) {
-    const auto &range = region->definition().range();
+  if (region->State() == pb::common::StoreRegionState::SPLITTING) {
+    const auto &range = region->Range();
     for (const auto &key : request.keys()) {
       if (range.end_key().compare(key) <= 0) {
         if (ctx) {
@@ -227,9 +227,9 @@ void DeleteBatchHandler::Handle(std::shared_ptr<Context> ctx, std::shared_ptr<pb
 void SplitHandler::SplitClosure::Run() {
   std::unique_ptr<SplitClosure> self_guard(this);
   if (!status().ok()) {
-    DINGO_LOG(INFO) << butil::StringPrintf("split region %ld, finish snapshot failed", region_->id());
+    DINGO_LOG(INFO) << butil::StringPrintf("split region %ld, finish snapshot failed", region_->Id());
   } else {
-    DINGO_LOG(INFO) << butil::StringPrintf("split region %ld, finish snapshot success", region_->id());
+    DINGO_LOG(INFO) << butil::StringPrintf("split region %ld, finish snapshot success", region_->Id());
   }
 
   auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
@@ -240,8 +240,8 @@ void SplitHandler::SplitClosure::Run() {
   }
 }
 
-void SplitHandler::Handle(std::shared_ptr<Context>, std::shared_ptr<pb::store_internal::Region> from_region,
-                          std::shared_ptr<RawEngine>, const pb::raft::Request &req) {
+void SplitHandler::Handle(std::shared_ptr<Context>, store::RegionPtr from_region, std::shared_ptr<RawEngine>,
+                          const pb::raft::Request &req) {
   const auto &request = req.split();
   auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
   // Set region state spliting
@@ -249,41 +249,45 @@ void SplitHandler::Handle(std::shared_ptr<Context>, std::shared_ptr<pb::store_in
 
   auto to_region = store_region_meta->GetRegion(request.to_region_id());
   if (to_region == nullptr) {
-    DINGO_LOG(ERROR) << butil::StringPrintf("split region %ld to %ld, child region not found", from_region->id(),
-                                            to_region->id());
+    DINGO_LOG(ERROR) << butil::StringPrintf("split region %ld to %ld, child region not found", from_region->Id(),
+                                            to_region->Id());
     return;
   }
-  DINGO_LOG(DEBUG) << butil::StringPrintf("split region %ld to %ld, begin...", from_region->id(), to_region->id());
+  DINGO_LOG(DEBUG) << butil::StringPrintf("split region %ld to %ld, begin...", from_region->Id(), to_region->Id());
 
-  auto *from_range = from_region->mutable_definition()->mutable_range();
-  auto *to_range = to_region->mutable_definition()->mutable_range();
+  pb::common::Range to_range;
   // Set child range
-  to_range->set_start_key(request.split_key());
-  if (to_range->end_key().compare(request.split_key()) < 0) {
-    to_range->set_end_key(from_range->end_key());
+  to_range.set_start_key(request.split_key());
+  to_range.set_end_key(to_region->Range().end_key());
+  if (to_range.end_key().compare(request.split_key()) < 0) {
+    to_range.set_end_key(from_region->Range().end_key());
   }
+  to_region->SetRange(to_range);
 
   // Set parent range
-  from_range->set_end_key(request.split_key());
+  pb::common::Range from_range;
+  from_range.set_start_key(from_region->Range().start_key());
+  from_range.set_end_key(request.split_key());
+  from_region->SetRange(from_range);
   DINGO_LOG(DEBUG) << butil::StringPrintf(
-      "split region %ld to %ld, from region range[%s-%s] to region range[%s-%s]", from_region->id(), to_region->id(),
-      Helper::StringToHex(from_range->start_key()).c_str(), Helper::StringToHex(from_range->end_key()).c_str(),
-      Helper::StringToHex(to_range->start_key()).c_str(), Helper::StringToHex(to_range->end_key()).c_str());
+      "split region %ld to %ld, from region range[%s-%s] to region range[%s-%s]", from_region->Id(), to_region->Id(),
+      Helper::StringToHex(from_range.start_key()).c_str(), Helper::StringToHex(from_range.end_key()).c_str(),
+      Helper::StringToHex(to_range.start_key()).c_str(), Helper::StringToHex(to_range.end_key()).c_str());
 
-  DINGO_LOG(DEBUG) << butil::StringPrintf("split region %ld to %ld, parent do snapshot", from_region->id(),
-                                          to_region->id());
+  DINGO_LOG(DEBUG) << butil::StringPrintf("split region %ld to %ld, parent do snapshot", from_region->Id(),
+                                          to_region->Id());
   // Do parent region snapshot
   auto engine = Server::GetInstance()->GetEngine();
   std::shared_ptr<Context> from_ctx = std::make_shared<Context>();
   from_ctx->SetDone(new SplitHandler::SplitClosure(from_region, false));
-  engine->DoSnapshot(from_ctx, from_region->id());
+  engine->DoSnapshot(from_ctx, from_region->Id());
 
-  DINGO_LOG(DEBUG) << butil::StringPrintf("split region %ld to %ld, child do snapshot", from_region->id(),
-                                          to_region->id());
+  DINGO_LOG(DEBUG) << butil::StringPrintf("split region %ld to %ld, child do snapshot", from_region->Id(),
+                                          to_region->Id());
   // Do child region snapshot
   std::shared_ptr<Context> to_ctx = std::make_shared<Context>();
   to_ctx->SetDone(new SplitHandler::SplitClosure(to_region, true));
-  engine->DoSnapshot(to_ctx, to_region->id());
+  engine->DoSnapshot(to_ctx, to_region->Id());
   Heartbeat::TriggerStoreHeartbeat(nullptr);
 }
 

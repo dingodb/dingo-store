@@ -15,7 +15,9 @@
 #ifndef DINGODB_COMMON_SAFE_MAP_H_
 #define DINGODB_COMMON_SAFE_MAP_H_
 
+#include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <vector>
 
 #include "butil/containers/doubly_buffered_data.h"
@@ -86,10 +88,30 @@ class DingoSafeMap {
       if (it == ptr->end()) {
         break;
       }
-      keys->push_back(it->first);
+      keys.push_back(it->first);
     }
 
     return keys.size();
+  }
+
+  // GetAllValues
+  // get all values of the map
+  int GetAllValues(std::vector<T_VALUE> &values, std::function<bool(T_VALUE)> filter = nullptr) {
+    TypeScopedPtr ptr;
+    if (safe_map.Read(&ptr) != 0) {
+      return -1;
+    }
+
+    for (typename TypeFlatMap::const_iterator it = ptr->begin(); it != ptr->end(); ++it) {
+      if (it == ptr->end()) {
+        break;
+      }
+      if (filter == nullptr || filter(it->second)) {
+        values.push_back(it->second);
+      }
+    }
+
+    return values.size();
   }
 
   // GetAllKeyValues
@@ -104,8 +126,8 @@ class DingoSafeMap {
       if (it == ptr->end()) {
         break;
       }
-      keys->push_back(it->first);
-      values->push_back(it->second);
+      keys.push_back(it->first);
+      values.push_back(it->second);
     }
 
     return keys.size();
