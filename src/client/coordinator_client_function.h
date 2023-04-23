@@ -32,7 +32,7 @@
 std::string MessageToJsonString(const google::protobuf::Message& message);
 
 // common functions
-std::string GetLeaderLocation();
+std::string GetLeaderLocation(uint32_t service_type);
 
 // coordinator service functions
 void SendGetNodeInfo(brpc::Controller& cntl, dingodb::pb::node::NodeService_Stub& stub);
@@ -92,3 +92,10 @@ void SendGetTableMetrics(brpc::Controller& cntl, dingodb::pb::meta::MetaService_
 // raft_control functions
 void SendRaftAddPeer(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
 void SendRaftRemovePeer(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
+
+// auto increment functions
+void SendGetAutoIncrement(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub);
+void SendCreateAutoIncrement(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub);
+void SendUpdateAutoIncrement(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub);
+void SendGenerateAutoIncrement(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub);
+void SendDeleteAutoIncrement(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub);

@@ -30,6 +30,7 @@
 #include "proto/coordinator_internal.pb.h"
 #include "proto/error.pb.h"
 #include "proto/raft.pb.h"
+#include "raft/auto_increment_state_machine.h"
 #include "raft/meta_state_machine.h"
 #include "raft/store_state_machine.h"
 #include "server/server.h"
@@ -40,8 +41,7 @@ namespace dingodb {
 // Invoke when server starting.
 // Coordinator do this in CoordinatorControl
 
-RaftMetaEngine::RaftMetaEngine(std::shared_ptr<RawEngine> engine, std::shared_ptr<MetaControl> meta_control)
-    : meta_control_(meta_control), RaftKvEngine(engine) {}
+RaftMetaEngine::RaftMetaEngine(std::shared_ptr<RawEngine> engine) :RaftKvEngine(engine) {}
 
 RaftMetaEngine::~RaftMetaEngine() = default;
 
@@ -53,15 +53,16 @@ bool RaftMetaEngine::Init(std::shared_ptr<Config> config) {
 bool RaftMetaEngine::Recover() { return true; }
 
 butil::Status RaftMetaEngine::InitCoordinatorRegion(std::shared_ptr<Context> ctx,
-                                                    const std::shared_ptr<pb::common::RegionDefinition> region) {
+      const std::shared_ptr<pb::common::RegionDefinition> region,
+      const std::shared_ptr<MetaControl>& meta_control) {
   DINGO_LOG(INFO) << "RaftkvEngine add region, region_id " << region->id();
 
   // construct MetaStatMachine here
-  braft::StateMachine* state_machine = new MetaStateMachine(engine_, meta_control_);
+  braft::StateMachine* state_machine = new MetaStateMachine(engine_, meta_control);
 
-  std::string const meta_raft_name = butil::StringPrintf("%s-%ld", "Coordinator", region->id());
-  std::shared_ptr<RaftNode> const node = std::make_shared<RaftNode>(
-      region->id(), meta_raft_name, braft::PeerId(Server::GetInstance()->RaftEndpoint()), state_machine);
+  std::string const meta_raft_name = butil::StringPrintf("%s-%ld", region->name().c_str(), region->id());
+  std::shared_ptr<RaftNode> const node = std::make_shared<RaftNode>(region->id(), meta_raft_name,
+    braft::PeerId(Server::GetInstance()->RaftEndpoint()), state_machine);
 
   if (node->Init(Helper::FormatPeers(Helper::ExtractLocations(region->peers())),
                  ConfigManager::GetInstance()->GetConfig(ctx->ClusterRole())) != 0) {
@@ -72,7 +73,33 @@ butil::Status RaftMetaEngine::InitCoordinatorRegion(std::shared_ptr<Context> ctx
   raft_node_manager_->AddNode(region->id(), node);
 
   // set raft_node to coordinator_control
-  meta_control_->SetRaftNode(node);
+  meta_control->SetRaftNode(node);
+
+  return butil::Status();
+}
+
+butil::Status RaftMetaEngine::InitAutoIncrementRegion(std::shared_ptr<Context> ctx,
+      const std::shared_ptr<pb::common::RegionDefinition>& region,
+      const std::shared_ptr<MetaControl>& meta_control) {
+  DINGO_LOG(INFO) << "RaftMetaEngine add auto increment region, region_id " << region->id();
+
+  braft::StateMachine* state_machine = new AutoIncrementStateMachine(meta_control);
+
+  std::string const meta_raft_name = butil::StringPrintf("%s-%ld", region->name().c_str(), region->id());
+  std::shared_ptr<RaftNode> const node = std::make_shared<RaftNode>(region->id(), meta_raft_name,
+    braft::PeerId(Server::GetInstance()->RaftEndpoint()), state_machine);
+  
+
+  if (node->Init(Helper::FormatPeers(Helper::ExtractLocations(region->peers())),
+                 ConfigManager::GetInstance()->GetConfig(ctx->ClusterRole())) != 0) {
+    node->Destroy();
+    return butil::Status(pb::error::ERAFT_INIT, "Raft init failed");
+  }
+
+  raft_node_manager_->AddNode(region->id(), node);
+
+  // set raft_node to auto increment control
+  meta_control->SetRaftNode(node);
 
   return butil::Status();
 }

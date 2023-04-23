@@ -58,7 +58,7 @@ void MetaStateMachine::HandleMetaProcess(bool is_leader, uint64_t term, uint64_t
   // CoordinatorControl* controller = dynamic_cast<CoordinatorControl*>(meta_control_);
   if (raft_cmd.requests_size() > 0) {
     auto meta_increment = raft_cmd.requests(0).meta_req().meta_increment();
-    meta_control_->ApplyMetaIncrement(meta_increment, is_leader, term, index);
+    meta_control_->ApplyMetaIncrement(meta_increment, is_leader, term, index, nullptr);
   }
 }
 

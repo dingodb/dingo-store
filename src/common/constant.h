@@ -23,7 +23,10 @@ namespace dingodb {
 class Constant {
  public:
   // Define Global Region Id for Coordinator(As only One)
-  static const int64_t kCoordinatorRegionId = 0;
+  static const uint64_t kCoordinatorRegionId = 0;
+
+  // Define Global Region Id for auto increment
+  static const uint64_t kAutoIncrementRegionId = 1;
 
   // Define Global TableID for Coordinator(As only one)
   static const uint64_t kCoordinatorTableId = 0;
@@ -67,6 +70,9 @@ class Constant {
   inline static const std::string kStoreScanMaxBytesRpc = "max_bytes_rpc";
   inline static const std::string kStoreScanMaxFetchCntByServer = "max_fetch_cnt_by_server";
   inline static const std::string kStoreScanScanIntervalMs = "scan_interval_ms";
+
+  inline static const std::string kMetaRegionName = "COORDINATOR";
+  inline static const std::string kAutoIncrementRegionName = "AUTO_INCREMENT";
 };
 
 }  // namespace dingodb

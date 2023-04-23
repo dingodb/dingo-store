@@ -20,6 +20,7 @@
 
 #include "brpc/channel.h"
 #include "common/meta_control.h"
+#include "coordinator/auto_increment_control.h"
 #include "coordinator/coordinator_control.h"
 #include "coordinator/coordinator_interaction.h"
 #include "crontab/crontab.h"
@@ -90,7 +91,9 @@ class Server {
   // Init Heartbeat
   bool InitHeartbeat();
 
-  butil::Status StartMetaRegion(std::shared_ptr<Config> config, std::shared_ptr<Engine> kv_engine);
+  butil::Status StartMetaRegion(const std::shared_ptr<Config>& config, std::shared_ptr<Engine>& kv_engine);
+
+  butil::Status StartAutoIncrementRegion(const std::shared_ptr<Config>& config, std::shared_ptr<Engine>& kv_engine);
 
   // Recover server state, include store/region/raft.
   bool Recover();
@@ -119,6 +122,13 @@ class Server {
   std::shared_ptr<RegionController> GetRegionController() { return region_controller_; }
   std::shared_ptr<RegionCommandManager> GetRegionCommandManager() { return region_command_manager_; }
   std::shared_ptr<CoordinatorControl> GetCoordinatorControl() { return coordinator_control_; }
+  std::shared_ptr<AutoIncrementControl>& GetAutoIncrementControlReference() {
+    return auto_increment_control_;
+  }
+
+  void SetEndpoints(const std::vector<butil::EndPoint> endpoints) {
+    endpoints_ = endpoints;
+  }
 
   std::shared_ptr<Heartbeat> GetHeartbeat() { return heartbeat_; }
 
@@ -128,6 +138,9 @@ class Server {
  private:
   Server() = default;
   ~Server() = default;
+
+  std::shared_ptr<pb::common::RegionDefinition> CreateCoordinatorRegion(const std::shared_ptr<Config>& config,
+    const uint64_t region_id, const std::string& region_name, std::shared_ptr<Context>& ctx);
 
   friend struct DefaultSingletonTraits<Server>;
 
@@ -143,6 +156,7 @@ class Server {
   butil::EndPoint server_endpoint_;
   // Raft ip and port.
   butil::EndPoint raft_endpoint_;
+  std::vector<butil::EndPoint> endpoints_;
 
   // coordinator interaction
   std::shared_ptr<CoordinatorInteraction> coordinator_interaction_;
@@ -172,6 +186,8 @@ class Server {
 
   // This is store and coordinator heartbeat.
   std::shared_ptr<Heartbeat> heartbeat_;
+  // This is manage auto increment meta data,
+  std::shared_ptr<AutoIncrementControl> auto_increment_control_;
 };
 
 }  // namespace dingodb

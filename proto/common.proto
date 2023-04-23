@@ -323,3 +323,10 @@ message StoreMetrics {
   // this map contains all region's metrics include follower on this store
   map<uint64, dingodb.pb.common.RegionMetrics> region_metrics_map = 4;
 }
+
+// CoordinatorServiceType
+enum CoordinatorServiceType {
+  ServiceTypeCoordinator = 0;
+  ServiceTypeMeta = 1;
+  ServiceTypeAutoIncrement = 2;
+}

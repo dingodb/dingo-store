@@ -626,8 +626,7 @@ void CoordinatorServiceImpl::GetCoordinatorMap(google::protobuf::RpcController *
   }
 
   // get autoincrement leader location
-  auto *autoincrement_leader_location = response->mutable_leader_location_autoincrement();
-  this->autoincrement_control_->GetLeaderLocation(*autoincrement_leader_location);
+  auto_increment_control_->GetLeaderLocation(response->mutable_auto_increment_leader_location());
 }
 
 // Region services
@@ -1124,7 +1123,7 @@ void CoordinatorServiceImpl::RaftControl(google::protobuf::RpcController *contro
 
   auto raft_node = this->coordinator_control_->GetRaftNode();
   if (request->node_index() == pb::coordinator::RaftControlNodeIndex::AutoIncrementNodeIndex) {
-    raft_node = this->autoincrement_control_->GetRaftNode();
+    raft_node = this->auto_increment_control_->GetRaftNode();
   }
 
   auto is_leader = raft_node->IsLeader();

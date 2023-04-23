@@ -47,8 +47,8 @@ class MetaControl {
   virtual std::shared_ptr<RaftNode> GetRaftNode() = 0;
 
   // on_apply callback
-  virtual void ApplyMetaIncrement(pb::coordinator_internal::MetaIncrement &meta_increment, bool id_leader,
-                                  uint64_t term, uint64_t index) = 0;
+  virtual void ApplyMetaIncrement(pb::coordinator_internal::MetaIncrement &meta_increment, bool is_leader,
+                                  uint64_t term, uint64_t index, google::protobuf::Message* response) = 0;
 
   // prepare snapshot for raft snapshot
   // return: Snapshot

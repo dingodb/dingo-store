@@ -19,6 +19,7 @@
 
 #include "brpc/controller.h"
 #include "brpc/server.h"
+#include "coordinator/auto_increment_control.h"
 #include "coordinator/coordinator_control.h"
 #include "engine/engine.h"
 #include "proto/meta.pb.h"
@@ -42,9 +43,20 @@ class MetaServiceImpl : public pb::meta::MetaService {
     error_in_response->set_errcode(Errno::ERAFT_NOTLEADER);
   }
 
+  template <typename T>
+  void RedirectAutoIncrementResponse(T response) {
+    auto* error_in_response = response->mutable_error();
+    auto_increment_control_->GetLeaderLocation(error_in_response->mutable_leader_location());
+    error_in_response->set_errcode(Errno::ERAFT_NOTLEADER);
+  }
+
   void SetKvEngine(std::shared_ptr<Engine> engine) { engine_ = engine; };
   void SetControl(std::shared_ptr<CoordinatorControl> coordinator_control) {
     this->coordinator_control_ = coordinator_control;
+  };
+
+  void SetAutoImcrementControl(std::shared_ptr<AutoIncrementControl>& auto_increment_control) {
+    auto_increment_control_ = auto_increment_control;
   };
 
   void GetSchemas(google::protobuf::RpcController* controller, const pb::meta::GetSchemasRequest* request,
@@ -75,8 +87,30 @@ class MetaServiceImpl : public pb::meta::MetaService {
   void DropSchema(google::protobuf::RpcController* controller, const pb::meta::DropSchemaRequest* request,
                   pb::meta::DropSchemaResponse* response, google::protobuf::Closure* done) override;
 
+  void GetAutoIncrement(google::protobuf::RpcController* controller,
+                       const pb::meta::GetAutoIncrementRequest* request,
+                       pb::meta::GetAutoIncrementResponse* response,
+                       google::protobuf::Closure* done);
+  void CreateAutoIncrement(google::protobuf::RpcController* controller,
+                      const pb::meta::CreateAutoIncrementRequest* request,
+                      pb::meta::CreateAutoIncrementResponse* response,
+                      google::protobuf::Closure* done);
+  void UpdateAutoIncrement(google::protobuf::RpcController* controller,
+                       const ::dingodb::pb::meta::UpdateAutoIncrementRequest* request,
+                       pb::meta::UpdateAutoIncrementResponse* response,
+                       google::protobuf::Closure* done);
+  void GenerateAutoIncrement(google::protobuf::RpcController* controller,
+                       const ::dingodb::pb::meta::GenerateAutoIncrementRequest* request,
+                       pb::meta::GenerateAutoIncrementResponse* response,
+                       google::protobuf::Closure* done);
+  void DeleteAutoIncrement(google::protobuf::RpcController* controller,
+                       const ::dingodb::pb::meta::DeleteAutoIncrementRequest* request,
+                       pb::meta::DeleteAutoIncrementResponse* response,
+                       google::protobuf::Closure* done);
+
  private:
   std::shared_ptr<CoordinatorControl> coordinator_control_;
+  std::shared_ptr<AutoIncrementControl> auto_increment_control_;
   std::shared_ptr<Engine> engine_;
 };
 

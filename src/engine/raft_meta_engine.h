@@ -22,21 +22,24 @@
 namespace dingodb {
 class RaftMetaEngine : public RaftKvEngine {
  public:
-  RaftMetaEngine(std::shared_ptr<RawEngine> engine, std::shared_ptr<MetaControl> meta_control);
+  RaftMetaEngine(std::shared_ptr<RawEngine> engine);
   ~RaftMetaEngine() override;
 
   bool Init(std::shared_ptr<Config> config) override;
   bool Recover() override;
 
   butil::Status InitCoordinatorRegion(std::shared_ptr<Context> ctx,
-                                      std::shared_ptr<pb::common::RegionDefinition> region);
+    std::shared_ptr<pb::common::RegionDefinition> region, const std::shared_ptr<MetaControl>& meta_control);
+  butil::Status InitAutoIncrementRegion(std::shared_ptr<Context> ctx,
+    const std::shared_ptr<pb::common::RegionDefinition>& region,
+    const std::shared_ptr<MetaControl>& meta_control);
 
   butil::Status MetaPut(std::shared_ptr<Context> ctx, const pb::coordinator_internal::MetaIncrement& meta) override;
 
  private:
-  std::shared_ptr<MetaControl> meta_control_;
 };
 
 }  // namespace dingodb
 
 #endif  // DINGODB_ENGINE_RAFT_META_ENGINE_H_H  // NOLINT
+

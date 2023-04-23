@@ -123,7 +123,7 @@ std::vector<pb::common::Location> Helper::ExtractLocations(
 
 // format: 127.0.0.1:8201:0
 std::string Helper::LocationToString(const pb::common::Location& location) {
-  return butil::StringPrintf("%s:%d:0", location.host().c_str(), location.port());
+  return butil::StringPrintf("%s:%d:%ld", location.host().c_str(), location.port(), location.index());
 }
 
 butil::EndPoint Helper::LocationToEndPoint(const pb::common::Location& location) {

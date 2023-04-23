@@ -22,6 +22,7 @@
 #include "brpc/server.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "coordinator/auto_increment_control.h"
 #include "coordinator/coordinator_control.h"
 #include "engine/engine.h"
 #include "proto/coordinator.pb.h"
@@ -107,8 +108,8 @@ class CoordinatorServiceImpl : public pb::coordinator::CoordinatorService {
   void SetControl(std::shared_ptr<CoordinatorControl> coordinator_control) {
     this->coordinator_control_ = coordinator_control;
   };
-  void SetAutoIncrementControl(std::shared_ptr<CoordinatorControl> autoincrement_control) {
-    this->autoincrement_control_ = autoincrement_control;
+  void SetAutoImcrementControl(std::shared_ptr<AutoIncrementControl>& auto_increment_control) {
+    auto_increment_control_ = auto_increment_control;
   };
 
   void Hello(google::protobuf::RpcController* controller, const pb::coordinator::HelloRequest* request,
@@ -209,7 +210,7 @@ class CoordinatorServiceImpl : public pb::coordinator::CoordinatorService {
 
  private:
   std::shared_ptr<CoordinatorControl> coordinator_control_;
-  std::shared_ptr<CoordinatorControl> autoincrement_control_;
+  std::shared_ptr<AutoIncrementControl> auto_increment_control_;
   std::shared_ptr<Engine> engine_;
 };
 
