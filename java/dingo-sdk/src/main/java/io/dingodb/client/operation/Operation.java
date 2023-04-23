@@ -17,10 +17,12 @@
 package io.dingodb.client.operation;
 
 import io.dingodb.client.OperationContext;
+import io.dingodb.client.Record;
 import io.dingodb.client.RouteTable;
 import io.dingodb.sdk.common.DingoCommonId;
 import io.dingodb.sdk.common.table.Table;
 import io.dingodb.sdk.common.utils.Any;
+import io.dingodb.sdk.common.utils.Parameters;
 import lombok.AllArgsConstructor;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
@@ -60,4 +62,9 @@ public interface Operation {
 
     <R> R reduce(Fork context);
 
+    default void checkParameters(Table table, Record record) {
+        table.getColumns().stream()
+            .filter(c -> !c.isNullable())
+            .forEach(c -> Parameters.nonNull((record.getValue(c.getName())), "Non-null columns cannot be null"));
+    }
 }

@@ -17,8 +17,10 @@
 package io.dingodb.sdk.common.table;
 
 import lombok.Builder;
+import lombok.ToString;
 
 @Builder
+@ToString
 public class ColumnDefinition implements Column {
 
     private String name;

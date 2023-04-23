@@ -18,6 +18,7 @@ package io.dingodb.client;
 
 import io.dingodb.sdk.common.table.Column;
 import io.dingodb.sdk.common.table.ColumnDefinition;
+import io.dingodb.sdk.common.utils.Optional;
 import io.dingodb.sdk.common.utils.Parameters;
 import lombok.EqualsAndHashCode;
 import lombok.ToString;
@@ -115,7 +116,8 @@ public final class Record {
         Value[] values = new Value[cols.size()];
         int index;
         for (int i = 0; i < cols.size(); i++) {
-            index = Parameters.nonNull(columnIndex.get(cols.get(i)), cols.get(i));
+            String col = cols.get(i).toUpperCase();
+            index = Parameters.nonNull(columnIndex.get(col), col);
             columns[i] = this.columns[index];
             values[i] = this.values[index];
         }
@@ -126,7 +128,7 @@ public final class Record {
      * Get column value given column name.
      */
     public <T> T getValue(String name) {
-        return (T) values[columnIndex.get(name)];
+        return (T) Optional.ofNullable(columnIndex.get(name)).map(i -> values[i].getObject()).orNull();
     }
 
     /**
