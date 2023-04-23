@@ -26,6 +26,7 @@
 #include "common/logging.h"
 #include "proto/coordinator.pb.h"
 #include "proto/error.pb.h"
+#include "proto/meta.pb.h"
 
 namespace dingodb {
 
@@ -40,7 +41,7 @@ class CoordinatorInteraction {
   CoordinatorInteraction(const CoordinatorInteraction&) = delete;
   const CoordinatorInteraction& operator=(const CoordinatorInteraction&) = delete;
 
-  bool Init(const std::string& addr);
+  bool Init(const std::string& addr, uint32_t service_type);
 
   int GetLeader();
   void NextLeader(int leader_index);
@@ -48,17 +49,32 @@ class CoordinatorInteraction {
   template <typename Request, typename Response>
   butil::Status SendRequest(const std::string& api_name, const Request& request, Response& response);
 
+  const ::google::protobuf::ServiceDescriptor* GetServiceDescriptor();
+
+  static CoordinatorInteraction* GetAutoIncrementInstance() {
+    static CoordinatorInteraction instance;
+    return &instance;
+  }
+
  private:
   std::atomic<int> leader_index_;
   std::vector<butil::EndPoint> endpoints_;
   std::vector<std::unique_ptr<brpc::Channel> > channels_;
+  uint32_t service_type_;
 };
 
 template <typename Request, typename Response>
 butil::Status CoordinatorInteraction::SendRequest(const std::string& api_name, const Request& request,
                                                   Response& response) {
-  const ::google::protobuf::ServiceDescriptor* service_desc = pb::coordinator::CoordinatorService::descriptor();
+  const ::google::protobuf::ServiceDescriptor* service_desc = GetServiceDescriptor();
+  if (service_desc == nullptr) {
+      return butil::Status(pb::error::ESERVICE_TYPE_NOT_FOUND, "Service type not found");
+  }
+
   const ::google::protobuf::MethodDescriptor* method = service_desc->FindMethodByName(api_name);
+  if (method == nullptr) {
+    return butil::Status(pb::error::ESERVICE_METHOD_NOT_FOUND, "Service method not found");
+  }
 
   // DINGO_LOG(DEBUG) << "send request to coordinator api " << api_name << " request: " << request.ShortDebugString();
   int retry_count = 0;

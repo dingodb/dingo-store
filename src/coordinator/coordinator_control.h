@@ -364,8 +364,8 @@ class CoordinatorControl : public MetaControl {
   std::shared_ptr<RaftNode> GetRaftNode() override;                // for raft fsm
 
   // on_apply callback
-  void ApplyMetaIncrement(pb::coordinator_internal::MetaIncrement &meta_increment, bool id_leader, uint64_t term,
-                          uint64_t index) override;  // for raft fsm
+  void ApplyMetaIncrement(pb::coordinator_internal::MetaIncrement &meta_increment, bool is_leader, uint64_t term,
+                          uint64_t index, google::protobuf::Message* response) override;  // for raft fsm
 
   // prepare snapshot for raft snapshot
   // return: Snapshot

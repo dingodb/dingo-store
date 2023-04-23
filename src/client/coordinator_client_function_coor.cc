@@ -58,7 +58,7 @@ std::string MessageToJsonString(const google::protobuf::Message& message) {
   return json_string;
 }
 
-std::string GetLeaderLocation() {
+std::string GetLeaderLocation(uint32_t service_type) {
   braft::PeerId leader;
   if (!FLAGS_coordinator_addr.empty()) {
     if (leader.parse(FLAGS_coordinator_addr) != 0) {
@@ -92,6 +92,12 @@ std::string GetLeaderLocation() {
 
   auto leader_location = response.leader_location().host() + ":" + std::to_string(response.leader_location().port());
   DINGO_LOG(INFO) << "leader_location: " << leader_location;
+  auto auto_increment_leader_location = response.auto_increment_leader_location().host() + ":" +
+    std::to_string(response.auto_increment_leader_location().port());
+  DINGO_LOG(INFO) << " auto_increment_leader_location: " << auto_increment_leader_location;
+  if (service_type == dingodb::pb::common::CoordinatorServiceType::ServiceTypeAutoIncrement) {
+    return auto_increment_leader_location;
+  }
   return leader_location;
 }
 

@@ -67,6 +67,12 @@ butil::EndPoint GetRaftEndPoint(std::shared_ptr<dingodb::Config> config) {
   return dingodb::Helper::GetEndPoint(host, port);
 }
 
+std::vector<butil::EndPoint> GetEndpoints(const std::shared_ptr<dingodb::Config>& config, const std::string peer_nodes_name) {
+  std::vector<butil::EndPoint> peer_nodes;
+  std::string coordinator_list = config->GetString(peer_nodes_name);
+  return dingodb::Helper::StrToEndpoints(coordinator_list);
+}
+
 static void SignalHandler(int signo) {
   printf("========== handle signal '%d' ==========\n", signo);
   unw_context_t context;
@@ -238,9 +244,18 @@ int main(int argc, char *argv[]) {
   }
 
   if (is_coodinator) {
+    if (!dingodb::CoordinatorInteraction::GetAutoIncrementInstance()->Init(config->GetString("coordinator.peers"),
+        dingodb::pb::common::CoordinatorServiceType::ServiceTypeAutoIncrement)) {
+      DINGO_LOG(ERROR) << "InitCoordinatorInteraction, auto increment instance init failed!";
+      return -1;
+    }
+
+    dingo_server->SetEndpoints(GetEndpoints(config, "coordinator.peers"));
+
     coordinator_service.SetControl(dingo_server->GetCoordinatorControl());
-    coordinator_service.SetAutoIncrementControl(dingo_server->GetCoordinatorControl());
+    coordinator_service.SetAutoImcrementControl(dingo_server->GetAutoIncrementControlReference());
     meta_service.SetControl(dingo_server->GetCoordinatorControl());
+    meta_service.SetAutoImcrementControl(dingo_server->GetAutoIncrementControlReference());
 
     // the Engine should be init success
     auto engine = dingo_server->GetEngine();
@@ -276,9 +291,15 @@ int main(int argc, char *argv[]) {
     DINGO_LOG(INFO) << "Raft server is running on " << raft_server.listen_address();
 
     // start meta region
-    butil::Status const status = dingo_server->StartMetaRegion(config, engine);
+    butil::Status status = dingo_server->StartMetaRegion(config, engine);
     if (!status.ok()) {
-      DINGO_LOG(INFO) << "Init RaftNode and StateMachine Failed:" << status;
+      DINGO_LOG(ERROR) << "Init Meta RaftNode and StateMachine Failed:" << status;
+      return -1;
+    }
+
+    status = dingo_server->StartAutoIncrementRegion(config, engine);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << "Init Auto Increment RaftNode and StateMachine Failed:" << status;
       return -1;
     }
 

@@ -131,10 +131,20 @@ bool Server::InitEngine() {
     }
 
     // init raft_meta_engine
-    engine_ = std::make_shared<RaftMetaEngine>(raw_engine_, coordinator_control_);
+    engine_ = std::make_shared<RaftMetaEngine>(raw_engine_);
 
     // set raft_meta_engine to coordinator_control
     coordinator_control_->SetKvEngine(engine_);
+
+    auto_increment_control_ = std::make_shared<AutoIncrementControl>();
+    if (!auto_increment_control_->Recover()) {
+      DINGO_LOG(ERROR) << "auto_increment_control_->Recover Failed";
+      return false;
+    }
+    if (!auto_increment_control_->Init()) {
+      DINGO_LOG(ERROR) << "auto_increment_control_->Init Failed";
+      return false;
+    }
   } else {
     engine_ = std::make_shared<RaftKvEngine>(raw_engine_);
     if (!engine_->Init(config)) {
@@ -146,56 +156,31 @@ bool Server::InitEngine() {
   return true;
 }
 
-butil::Status Server::StartMetaRegion(std::shared_ptr<Config> config,       // NOLINT
-                                      std::shared_ptr<Engine> kv_engine) {  // NOLINT
-  /**
-   * 1. construct context(must contains role)
-   */
+butil::Status Server::StartMetaRegion(const std::shared_ptr<Config>& config, // NOLINT
+                                      std::shared_ptr<Engine>& kv_engine) {  // NOLINT
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
-  ctx->SetClusterRole(pb::common::COORDINATOR);
+  std::shared_ptr<pb::common::RegionDefinition> region = CreateCoordinatorRegion(config, Constant::kCoordinatorRegionId
+      , Constant::kMetaRegionName, ctx);
 
-  /*
-   * 2. construct region list
-   *    1) Region ID
-   *    2) Region PeerList
-   */
-  std::shared_ptr<pb::common::RegionDefinition> region = std::make_shared<pb::common::RegionDefinition>();
-  region->set_id(Constant::kCoordinatorRegionId);
-  region->set_table_id(Constant::kCoordinatorTableId);
-  region->set_schema_id(Constant::kCoordinatorSchemaId);
-  // region->set_create_timestamp(butil::gettimeofday_ms());
-  // region->set_state(pb::common::RegionState::REGION_NEW);
-  region->set_name("COORDINATOR");
-
-  std::string coordinator_list = config->GetString("coordinator.peers");
-  std::vector<butil::EndPoint> peer_nodes = Helper::StrToEndpoints(coordinator_list);
-
-  for (auto& peer_node : peer_nodes) {
-    auto* peer = region->add_peers();
-    auto* location = peer->mutable_raft_location();
-    location->set_host(butil::ip2str(peer_node.ip).c_str());
-    location->set_port(peer_node.port);
-    DINGO_LOG(INFO) << "COORDINATOR set peer node:" << (butil::ip2str(peer_node.ip).c_str()) << ":" << peer_node.port;
-  }
-
-  dingodb::pb::common::Range* range = region->mutable_range();
-  range->set_start_key("0000");
-  range->set_end_key("FFFF");
-
-  DINGO_LOG(INFO) << "Create Region Request:" << region->DebugString();
   auto raft_engine = std::dynamic_pointer_cast<RaftMetaEngine>(kv_engine);
-  butil::Status status = raft_engine->InitCoordinatorRegion(ctx, region);
+  return raft_engine->InitCoordinatorRegion(ctx, region, coordinator_control_);
+}
 
-  // set node-manager to coordinator_control here
+butil::Status Server::StartAutoIncrementRegion(const std::shared_ptr<Config>& config, std::shared_ptr<Engine>& kv_engine) {
+  std::shared_ptr<Context> ctx = std::make_shared<Context>();
+  std::shared_ptr<pb::common::RegionDefinition> region = CreateCoordinatorRegion(config, Constant::kAutoIncrementRegionId
+      , Constant::kAutoIncrementRegionName, ctx);
 
-  return status;
+  auto raft_engine = std::dynamic_pointer_cast<RaftMetaEngine>(kv_engine);
+  return raft_engine->InitAutoIncrementRegion(ctx, region, auto_increment_control_);
 }
 
 bool Server::InitCoordinatorInteraction() {
   coordinator_interaction_ = std::make_shared<CoordinatorInteraction>();
 
   auto config = ConfigManager::GetInstance()->GetConfig(role_);
-  return coordinator_interaction_->Init(config->GetString("cluster.coordinators"));
+  return coordinator_interaction_->Init(config->GetString("cluster.coordinators"),
+    pb::common::CoordinatorServiceType::ServiceTypeCoordinator);
 }
 
 bool Server::InitStorage() {
@@ -355,6 +340,40 @@ void Server::Destroy() {
   store_controller_->Destroy();
 
   google::ShutdownGoogleLogging();
+}
+
+std::shared_ptr<pb::common::RegionDefinition> Server::CreateCoordinatorRegion(const std::shared_ptr<Config>& config,
+            const uint64_t region_id, const std::string& region_name, std::shared_ptr<Context>& ctx) {
+  /**
+   * 1. context must contains role)
+   */
+  ctx->SetClusterRole(pb::common::COORDINATOR);
+
+  /*
+   * 2. construct region list
+   *    1) Region ID
+   *    2) Region PeerList
+   */
+  std::shared_ptr<pb::common::RegionDefinition> region = std::make_shared<pb::common::RegionDefinition>();
+  region->set_id(region_id);
+  region->set_table_id(Constant::kCoordinatorTableId);
+  region->set_schema_id(Constant::kCoordinatorSchemaId);
+  region->set_name(region_name);
+
+  for (auto& endpoint : endpoints_) {
+    auto* peer = region->add_peers();
+    auto* location = peer->mutable_raft_location();
+    location->set_host(butil::ip2str(endpoint.ip).c_str());
+    location->set_port(endpoint.port);
+    DINGO_LOG(INFO) << region_name << " set peer node:" << (butil::ip2str(endpoint.ip).c_str()) << ":" << endpoint.port;
+  }
+
+  dingodb::pb::common::Range* range = region->mutable_range();
+  range->set_start_key("0000");
+  range->set_end_key("FFFF");
+
+  DINGO_LOG(INFO) << region_name<< " Create Region Request:" << region->DebugString();
+  return region;
 }
 
 }  // namespace dingodb

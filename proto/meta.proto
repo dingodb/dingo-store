@@ -106,7 +106,7 @@ message ColumnDefinition {
   int32 indexOfKey = 7;
   bool has_default_val = 8;
   string default_val = 9;
-  bool auto_increment = 10;
+  bool is_auto_increment = 10;
 }
 
 // Information about Index.
@@ -152,6 +152,7 @@ message TableDefinition {
   dingodb.pb.common.Engine engine = 7;
   map<string, string> properties = 8;
   uint32 replica = 9;
+  uint64 auto_increment = 10;
 }
 
 // This Part is mainly equal to the Part in DingoDB 0.5.x
@@ -318,6 +319,15 @@ message GetAutoIncrementResponse {
   uint64 start_id = 2;
 }
 
+message CreateAutoIncrementRequest {
+  DingoCommonId table_id = 1;
+  uint64 start_id = 2;
+}
+
+message CreateAutoIncrementResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
 message UpdateAutoIncrementRequest {
   DingoCommonId table_id = 1;
   uint64 start_id = 2;
@@ -339,6 +349,14 @@ message GenerateAutoIncrementResponse {
   dingodb.pb.error.Error error = 1;
   uint64 start_id = 2;
   uint64 end_id = 3;
+}
+
+message DeleteAutoIncrementRequest {
+  DingoCommonId table_id = 1;
+}
+
+message DeleteAutoIncrementResponse {
+  dingodb.pb.error.Error error = 1;
 }
 
 service MetaService {
@@ -413,6 +431,11 @@ service MetaService {
   // out: start_id
   rpc GetAutoIncrement(GetAutoIncrementRequest) returns (GetAutoIncrementResponse);
 
+  // CreateAutoIncrement
+  // in: table_id start_id
+  // out: error code
+  rpc CreateAutoIncrement(CreateAutoIncrementRequest) returns (CreateAutoIncrementResponse);
+
   // UpdateAutoIncrement
   // in: table_id start_id force
   // out: error code
@@ -422,6 +445,11 @@ service MetaService {
   // in: table_id count auto_increment_increment auto_increment_offset
   // out: start_id, end_id
   rpc GenerateAutoIncrement(GenerateAutoIncrementRequest) returns (GenerateAutoIncrementResponse);
+
+  // DeleteAutoIncrement
+  // in: table_id
+  // out: error code
+  rpc DeleteAutoIncrement(DeleteAutoIncrementRequest) returns (DeleteAutoIncrementResponse);
 
   // TODO
   // Operation about User, such as create/drop/grant.

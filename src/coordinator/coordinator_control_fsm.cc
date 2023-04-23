@@ -645,8 +645,8 @@ void LogMetaIncrementSize(pb::coordinator_internal::MetaIncrement& meta_incremen
 }
 
 // ApplyMetaIncrement is on_apply callback
-void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrement& meta_increment,
-                                            [[maybe_unused]] bool id_leader, uint64_t term, uint64_t index) {
+void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrement& meta_increment, bool is_leader,
+                                            uint64_t term, uint64_t index, google::protobuf::Message* response) {
   // prepare data to write to kv engine
   std::vector<pb::common::KeyValue> meta_write_to_kv;
   std::vector<pb::common::KeyValue> meta_delete_to_kv;
@@ -1018,7 +1018,6 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
           DINGO_LOG(ERROR) << " CREATE TABLE apply illegal schema_id=" << table.schema_id()
                            << " table_id=" << table.id() << " table_name=" << table.table().definition().name();
         }
-
       } else if (table.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
         // update table to table_map
         // auto& update_table = table_map_[table.id()];
@@ -1321,3 +1320,4 @@ int CoordinatorControl::SubmitMetaIncrement(pb::coordinator_internal::MetaIncrem
 }
 
 }  // namespace dingodb
+

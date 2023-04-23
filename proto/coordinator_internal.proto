@@ -87,6 +87,29 @@ message IdEpochInternal {
   uint64 value = 2;
 }
 
+message AutoIncrementStorageElement {
+  uint64 table_id = 1;
+  uint64 start_id = 2;
+}
+
+message AutoIncrementStorage {
+  repeated AutoIncrementStorageElement elements = 1;
+}
+
+enum AutoIncrementUpdateType {
+  READ_MODIFY_WRITE = 0;
+  UPDATE_ONLY = 1;
+}
+
+message IncrementInternal {
+  uint64 start_id = 1;
+  uint64 source_start_id = 2;
+  AutoIncrementUpdateType update_type = 3;
+  uint32 generate_count = 4;
+  uint32 increment = 5;
+  uint32 offset = 6;
+}
+
 message IdEpochInternals {
   repeated IdEpochInternal next_id = 1;
 }
@@ -166,6 +189,12 @@ message MetaIncrementExecutorUser {
   MetaIncrementOpType op_type = 3;
 }
 
+message MetaIncrementAutoIncrement {
+  uint64 id = 1;
+  IncrementInternal increment = 2;
+  MetaIncrementOpType op_type = 3;
+}
+
 // MetaIncrement stores meta data need to be inserted or updated
 message MetaIncrement {
   repeated MetaIncrementCoordinator coordinators = 1;
@@ -179,6 +208,7 @@ message MetaIncrement {
   repeated MetaIncrementTableMetrics table_metrics = 9;
   repeated MetaIncrementStoreOperation store_operations = 10;
   repeated MetaIncrementExecutorUser executor_users = 11;
+  repeated MetaIncrementAutoIncrement auto_increment = 12;
 }
 
 // snapshot pb file message

@@ -56,10 +56,11 @@ DEFINE_int64(region_id, 0, "region_id");
 DEFINE_int64(region_cmd_id, 0, "region_cmd_id");
 DEFINE_string(store_ids, "1001,1002,1003", "store_ids splited by ,");
 DEFINE_int64(index, 0, "index");
+DEFINE_uint32(service_type, 0, "service type for getting leader, 0: meta or coordinator, 2: auto increment");
 
 void* Sender(void* /*arg*/) {
   // get leader location
-  std::string leader_location = GetLeaderLocation();
+  std::string leader_location = GetLeaderLocation(FLAGS_service_type);
   if (leader_location.empty()) {
     DINGO_LOG(WARNING) << "GetLeaderLocation failed, use coordinator_addr instead";
     leader_location = FLAGS_coordinator_addr;
@@ -203,6 +204,16 @@ void* Sender(void* /*arg*/) {
     SendRaftAddPeer(cntl, raft_control_stub);
   } else if (FLAGS_method == "RaftRemovePeer") {
     SendRaftRemovePeer(cntl, raft_control_stub);
+  } else if (FLAGS_method == "GetAutoIncrement") { // auto increment
+    SendGetAutoIncrement(cntl, meta_stub);
+  } else if (FLAGS_method == "CreateAutoIncrement") {
+    SendCreateAutoIncrement(cntl, meta_stub);
+  } else if (FLAGS_method == "UpdateAutoIncrement") {
+    SendUpdateAutoIncrement(cntl, meta_stub);
+  } else if (FLAGS_method == "GenerateAutoIncrement") {
+    SendGenerateAutoIncrement(cntl, meta_stub);
+  } else if (FLAGS_method == "DeleteAutoIncrement") {
+    SendDeleteAutoIncrement(cntl, meta_stub);
   } else {
     DINGO_LOG(INFO) << " method illegal , exit";
     return nullptr;

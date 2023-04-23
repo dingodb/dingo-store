@@ -243,7 +243,12 @@ add_definitions(-DGIT_TAG_NAME="${GIT_TAG_NAME}")
 
 add_executable(dingodb_server src/server/main.cc $<TARGET_OBJECTS:DINGODB_OBJS> $<TARGET_OBJECTS:PROTO_OBJS>)
 add_executable(dingodb_client_store src/client/store_client.cc ${VERSION_SRCS} ${COMMON_SRCS} $<TARGET_OBJECTS:PROTO_OBJS>)
-add_executable(dingodb_client_coordinator src/client/coordinator_client.cc src/client/coordinator_client_function_coor.cc src/client/coordinator_client_function_meta.cc ${VERSION_SRCS} $<TARGET_OBJECTS:PROTO_OBJS>)
+add_executable(dingodb_client_coordinator
+               src/client/coordinator_client.cc
+               src/client/coordinator_client_function_coor.cc
+               src/client/coordinator_client_function_meta.cc
+               src/client/coordinator_client_function_auto_increment.cc
+               ${VERSION_SRCS} $<TARGET_OBJECTS:PROTO_OBJS>)
 
 add_dependencies(DINGODB_OBJS ${DEPEND_LIBS})
 add_dependencies(dingodb_server ${DEPEND_LIBS})

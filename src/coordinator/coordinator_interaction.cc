@@ -18,7 +18,8 @@
 
 namespace dingodb {
 
-bool CoordinatorInteraction::Init(const std::string& addr) {
+bool CoordinatorInteraction::Init(const std::string& addr, uint32_t service_type) {
+  service_type_ = service_type;
   endpoints_ = Helper::StrToEndpoints(addr);
   if (endpoints_.empty()) {
     DINGO_LOG(ERROR) << "Parse addr failed " << addr;
@@ -44,6 +45,19 @@ int CoordinatorInteraction::GetLeader() { return leader_index_.load(); }
 void CoordinatorInteraction::NextLeader(int leader_index) {
   int const next_leader_index = (leader_index + 1) % endpoints_.size();
   leader_index_.compare_exchange_weak(leader_index, next_leader_index);
+}
+
+const ::google::protobuf::ServiceDescriptor* CoordinatorInteraction::GetServiceDescriptor() {
+  switch (service_type_) {
+    case pb::common::CoordinatorServiceType::ServiceTypeCoordinator: {
+      return pb::coordinator::CoordinatorService::descriptor();
+    }
+    case pb::common::CoordinatorServiceType::ServiceTypeMeta:
+    case pb::common::CoordinatorServiceType::ServiceTypeAutoIncrement: {
+      return pb::meta::MetaService::descriptor();
+    }
+  }
+  return nullptr;
 }
 
 }  // namespace dingodb

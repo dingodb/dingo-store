@@ -30,6 +30,7 @@
 #include "butil/strings/string_split.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "coordinator/auto_increment_control.h"
 #include "coordinator/coordinator_control.h"
 #include "engine/snapshot.h"
 #include "google/protobuf/unknown_field_set.h"
@@ -376,6 +377,14 @@ pb::error::Errno CoordinatorControl::CreateTable(uint64_t schema_id, const pb::m
     }
   }
 
+  bool has_auto_increment_column = false;
+  pb::error::Errno ret = AutoIncrementControl::CheckAutoIncrementInTableDefinition(table_definition,
+    has_auto_increment_column);
+  if (ret != pb::error::Errno::OK) {
+    DINGO_LOG(ERROR) << "check auto increment in table definition error.";
+    return ret;
+  }
+
   // validate part information
   if (!table_definition.has_table_partition()) {
     DINGO_LOG(ERROR) << "no table_partition provided ";
@@ -500,6 +509,17 @@ pb::error::Errno CoordinatorControl::CreateTable(uint64_t schema_id, const pb::m
   // table_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
   // raft_kv_put
 
+  // create auto increment
+  if (has_auto_increment_column) {
+    butil::Status status = AutoIncrementControl::SendCreateAutoIncrementInternal(new_table_id,
+      table_definition.auto_increment());
+    if (status.error_code() != pb::error::Errno::OK) {
+      DINGO_LOG(ERROR) << "send create auto increment internal error, code: " << status.error_code() <<
+         ", message: " << status.error_str();
+      return pb::error::Errno::EAUTO_INCREMENT_WHILE_CREAT_TABLE;
+    }
+  }
+
   return pb::error::Errno::OK;
 }
 
@@ -551,6 +571,12 @@ pb::error::Errno CoordinatorControl::DropTable(uint64_t schema_id, uint64_t tabl
 
   // delete table_name from table_name_safe_map_temp_
   table_name_map_safe_temp_.Erase(table_internal.definition().name());
+
+  bool has_auto_increment_column = false;
+  AutoIncrementControl::CheckAutoIncrementInTableDefinition(table_internal.definition(), has_auto_increment_column);
+  if (has_auto_increment_column) {
+    AutoIncrementControl::SendDeleteAutoIncrementInternal(table_id);
+  }
 
   return pb::error::Errno::OK;
 }

@@ -125,6 +125,56 @@ class BthreadCond {
   bthread_mutex_t mutex_;
 };
 
+// wrapper bthread functions for c++ style
+class Bthread {
+ public:
+  Bthread() {}
+  explicit Bthread(const bthread_attr_t* attr) : attr_(attr) {}
+
+  void run(const std::function<void()>& call) {
+    std::function<void()>* func_call = new std::function<void()>;
+    *func_call = call;
+    int ret = bthread_start_background(&tid_, attr_,
+    [](void*p) -> void* {
+      auto call = static_cast<std::function<void()>*>(p);
+      (*call)();
+      delete call;
+      return NULL;
+    }, func_call);
+    if (ret != 0) {
+      DINGO_LOG(FATAL) << "bthread_start_background fail.";
+    }
+  }
+
+  void run_urgent(const std::function<void()>& call) {
+    std::function<void()>* func_call = new std::function<void()>;
+    *func_call = call;
+    int ret = bthread_start_urgent(&tid_, attr_,
+      [](void*p) -> void* {
+        auto call = static_cast<std::function<void()>*>(p);
+        (*call)();
+        delete call;
+        return NULL;
+      }, func_call);
+    if (ret != 0) {
+      DINGO_LOG(FATAL) << "bthread_start_urgent fail";
+    }
+  }
+
+  void join() {
+    bthread_join(tid_, NULL);
+  }
+
+  bthread_t id() {
+    return tid_;
+  }
+
+ private:
+  bthread_t tid_;
+  const bthread_attr_t* attr_ = NULL;
+};
+
 };  // namespace dingodb
 
 #endif  // DINGODB_COMMON_SYNCHRONIZATION_H_
+
