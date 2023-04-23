@@ -61,24 +61,24 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
   auto region_metas = store_meta_manager->GetStoreRegionMeta()->GetAllRegion();
   for (const auto& region : region_metas) {
     pb::common::RegionMetrics tmp_region_metrics;
-    auto metrics = region_metrics->GetMetrics(region->id());
+    auto metrics = region_metrics->GetMetrics(region->Id());
     if (metrics != nullptr) {
       tmp_region_metrics.CopyFrom(*metrics);
     }
 
-    tmp_region_metrics.set_id(region->id());
-    tmp_region_metrics.set_leader_store_id(region->leader_id());
-    tmp_region_metrics.set_store_region_state(region->state());
-    tmp_region_metrics.mutable_region_definition()->CopyFrom(region->definition());
+    tmp_region_metrics.set_id(region->Id());
+    tmp_region_metrics.set_leader_store_id(region->LeaderId());
+    tmp_region_metrics.set_store_region_state(region->State());
+    tmp_region_metrics.mutable_region_definition()->CopyFrom(region->InnerRegion().definition());
 
     if (raft_kv_engine != nullptr) {
-      auto raft_node = raft_kv_engine->GetNode(region->id());
+      auto raft_node = raft_kv_engine->GetNode(region->Id());
       if (raft_node != nullptr) {
         tmp_region_metrics.mutable_braft_status()->CopyFrom(*raft_node->GetStatus());
       }
     }
 
-    mut_region_metrics_map->insert({region->id(), tmp_region_metrics});
+    mut_region_metrics_map->insert({region->Id(), tmp_region_metrics});
   }
 
   auto region_metricses = metrics_manager->GetStoreRegionMetrics()->GetAllMetrics();

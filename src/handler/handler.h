@@ -20,6 +20,7 @@
 #include "braft/snapshot.h"
 #include "common/context.h"
 #include "engine/raw_engine.h"
+#include "meta/store_meta_manager.h"
 #include "proto/raft.pb.h"
 
 namespace dingodb {
@@ -46,8 +47,8 @@ class Handler {
   virtual HandlerType GetType() = 0;
   virtual void Handle(std::shared_ptr<Context> ctx, std::shared_ptr<RawEngine> engine,
                       const pb::raft::Request &req) = 0;
-  virtual void Handle(std::shared_ptr<Context> ctx, std::shared_ptr<pb::store_internal::Region> region,
-                      std::shared_ptr<RawEngine> engine, const pb::raft::Request &req) = 0;
+  virtual void Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
+                      const pb::raft::Request &req) = 0;
 
   virtual void Handle(uint64_t region_id, std::shared_ptr<RawEngine> engine, braft::SnapshotWriter *writer,
                       braft::Closure *done) = 0;
@@ -63,7 +64,7 @@ class BaseHandler : public Handler {
     DINGO_LOG(ERROR) << "Not support handle...";
   }
 
-  void Handle(std::shared_ptr<Context>, std::shared_ptr<pb::store_internal::Region>, std::shared_ptr<RawEngine>,
+  void Handle(std::shared_ptr<Context>, store::RegionPtr, std::shared_ptr<RawEngine>,
               const pb::raft::Request &) override {
     DINGO_LOG(ERROR) << "Not support handle...";
   }

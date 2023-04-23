@@ -58,7 +58,7 @@ class CreateRegionTask : public TaskRunnable {
   static butil::Status ValidateCreateRegion(std::shared_ptr<StoreMetaManager> store_meta_manager, uint64_t region_id);
 
  private:
-  static butil::Status CreateRegion(std::shared_ptr<Context> ctx, std::shared_ptr<pb::store_internal::Region> region,
+  static butil::Status CreateRegion(std::shared_ptr<Context> ctx, store::RegionPtr region,
                                     uint64_t split_from_region_id);
 
   std::shared_ptr<Context> ctx_;
@@ -74,7 +74,7 @@ class DeleteRegionTask : public TaskRunnable {
   void Run() override;
 
   static butil::Status ValidateDeleteRegion(std::shared_ptr<StoreMetaManager> /*store_meta_manager*/,
-                                            std::shared_ptr<pb::store_internal::Region> region);
+                                            store::RegionPtr region);
 
  private:
   static butil::Status DeleteRegion(std::shared_ptr<Context> ctx, uint64_t region_id);
@@ -174,12 +174,10 @@ class RegionCommandManager : public TransformKvAble {
   std::vector<std::shared_ptr<pb::coordinator::RegionCmd>> GetCommands(pb::coordinator::RegionCmdStatus status);
   std::vector<std::shared_ptr<pb::coordinator::RegionCmd>> GetAllCommand();
 
-  std::shared_ptr<pb::common::KeyValue> TransformToKv(uint64_t command_id) override;
-  std::shared_ptr<pb::common::KeyValue> TransformToKv(std::shared_ptr<google::protobuf::Message> obj) override;
-
+ private:
+  std::shared_ptr<pb::common::KeyValue> TransformToKv(void* obj) override;
   void TransformFromKv(const std::vector<pb::common::KeyValue>& kvs) override;
 
- private:
   // Read meta data from persistence storage.
   std::shared_ptr<MetaReader> meta_reader_;
   // Write meta data to persistence storage.

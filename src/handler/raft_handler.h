@@ -27,32 +27,32 @@ namespace dingodb {
 class PutHandler : public BaseHandler {
  public:
   HandlerType GetType() override { return HandlerType::kPut; }
-  void Handle(std::shared_ptr<Context> ctx, std::shared_ptr<pb::store_internal::Region> region,
-              std::shared_ptr<RawEngine> engine, const pb::raft::Request &req) override;
+  void Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
+              const pb::raft::Request &req) override;
 };
 
 // PutIfAbsentRequest
 class PutIfAbsentHandler : public BaseHandler {
  public:
   HandlerType GetType() override { return HandlerType::kPutIfabsent; }
-  void Handle(std::shared_ptr<Context> ctx, std::shared_ptr<pb::store_internal::Region> region,
-              std::shared_ptr<RawEngine> engine, const pb::raft::Request &req) override;
+  void Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
+              const pb::raft::Request &req) override;
 };
 
 // DeleteRangeRequest
 class DeleteRangeHandler : public BaseHandler {
  public:
   HandlerType GetType() override { return HandlerType::kDeleteRange; }
-  void Handle(std::shared_ptr<Context> ctx, std::shared_ptr<pb::store_internal::Region> region,
-              std::shared_ptr<RawEngine> engine, const pb::raft::Request &req) override;
+  void Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
+              const pb::raft::Request &req) override;
 };
 
 // DeleteBatchRequest
 class DeleteBatchHandler : public BaseHandler {
  public:
   HandlerType GetType() override { return HandlerType::kDeleteBatch; }
-  void Handle(std::shared_ptr<Context> ctx, std::shared_ptr<pb::store_internal::Region> region,
-              std::shared_ptr<RawEngine> engine, const pb::raft::Request &req) override;
+  void Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
+              const pb::raft::Request &req) override;
 };
 
 // SplitHandler
@@ -60,20 +60,19 @@ class SplitHandler : public BaseHandler {
  public:
   class SplitClosure : public braft::Closure {
    public:
-    SplitClosure(std::shared_ptr<pb::store_internal::Region> region, bool is_child)
-        : region_(region), is_child_(is_child) {}
+    SplitClosure(store::RegionPtr region, bool is_child) : region_(region), is_child_(is_child) {}
     ~SplitClosure() override = default;
 
     void Run() override;
 
    private:
     bool is_child_;
-    std::shared_ptr<pb::store_internal::Region> region_;
+    store::RegionPtr region_;
   };
 
   HandlerType GetType() override { return HandlerType::kSplit; }
-  void Handle(std::shared_ptr<Context> ctx, std::shared_ptr<pb::store_internal::Region> region,
-              std::shared_ptr<RawEngine> engine, const pb::raft::Request &req) override;
+  void Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
+              const pb::raft::Request &req) override;
 };
 
 class RaftApplyHandlerFactory : public HandlerFactory {

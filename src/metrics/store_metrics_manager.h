@@ -68,8 +68,7 @@ class StoreRegionMetrics : public TransformKvAble {
   std::shared_ptr<pb::common::RegionMetrics> GetMetrics(uint64_t region_id);
   std::vector<std::shared_ptr<pb::common::RegionMetrics>> GetAllMetrics();
 
-  std::shared_ptr<pb::common::KeyValue> TransformToKv(uint64_t region_id) override;
-  std::shared_ptr<pb::common::KeyValue> TransformToKv(std::shared_ptr<google::protobuf::Message> obj) override;
+  std::shared_ptr<pb::common::KeyValue> TransformToKv(void* obj) override;
 
   void TransformFromKv(const std::vector<pb::common::KeyValue>& kvs) override;
 

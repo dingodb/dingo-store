@@ -47,6 +47,9 @@ class Constant {
   // Define region controller prefix.
   inline static const std::string kStoreRegionControllerPrefix = "CONTROLLER_REGION";
 
+  // flat map init capacity
+  static const uint64_t kStoreRegionMetaInitCapacity = 1024;
+
   // rocksdb config
   inline static const std::string kDbPath = "store.dbPath";
   inline static const std::string kColumnFamilies = "store.columnFamilies";

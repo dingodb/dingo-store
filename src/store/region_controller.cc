@@ -34,36 +34,36 @@ namespace dingodb {
 butil::Status CreateRegionTask::ValidateCreateRegion(std::shared_ptr<StoreMetaManager> store_meta_manager,
                                                      uint64_t region_id) {
   auto region = store_meta_manager->GetStoreRegionMeta()->GetRegion(region_id);
-  if (region != nullptr && region->state() != pb::common::StoreRegionState::NEW) {
+  if (region != nullptr && region->State() != pb::common::StoreRegionState::NEW) {
     return butil::Status(pb::error::EREGION_ALREADY_EXIST, "Region already exist");
   }
 
   return butil::Status();
 }
 
-butil::Status CreateRegionTask::CreateRegion(std::shared_ptr<Context> ctx,
-                                             std::shared_ptr<pb::store_internal::Region> region,
+butil::Status CreateRegionTask::CreateRegion(std::shared_ptr<Context> ctx, store::RegionPtr region,
                                              uint64_t split_from_region_id) {
   auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
-  DINGO_LOG(DEBUG) << butil::StringPrintf("Create region %lu, %s", region->id(), region->ShortDebugString().c_str());
+  DINGO_LOG(DEBUG) << butil::StringPrintf("Create region %lu, %s", region->Id(),
+                                          region->InnerRegion().ShortDebugString().c_str());
 
   // Valiate region
-  auto status = ValidateCreateRegion(store_meta_manager, region->id());
+  auto status = ValidateCreateRegion(store_meta_manager, region->Id());
   if (!status.ok()) {
     return status;
   }
 
   // Add region to store region meta manager
-  DINGO_LOG(DEBUG) << butil::StringPrintf("Create region %lu save region meta", region->id());
+  DINGO_LOG(DEBUG) << butil::StringPrintf("Create region %lu save region meta", region->Id());
   auto store_region_meta = store_meta_manager->GetStoreRegionMeta();
-  region->set_state(pb::common::StoreRegionState::NEW);
+  region->SetState(pb::common::StoreRegionState::NEW);
   store_region_meta->AddRegion(region);
 
   // Add raft node
-  DINGO_LOG(DEBUG) << butil::StringPrintf("Create region %lu add raft node", region->id());
+  DINGO_LOG(DEBUG) << butil::StringPrintf("Create region %lu add raft node", region->Id());
   auto engine = Server::GetInstance()->GetEngine();
   if (engine->GetID() == pb::common::ENG_RAFT_STORE) {
-    auto raft_meta = StoreRaftMeta::NewRaftMeta(region->id());
+    auto raft_meta = StoreRaftMeta::NewRaftMeta(region->Id());
     Server::GetInstance()->GetStoreMetaManager()->GetStoreRaftMeta()->AddRaftMeta(raft_meta);
 
     auto listener_factory = std::make_shared<StoreSmEventListenerFactory>();
@@ -75,7 +75,7 @@ butil::Status CreateRegionTask::CreateRegion(std::shared_ptr<Context> ctx,
     }
   }
 
-  DINGO_LOG(DEBUG) << butil::StringPrintf("Create region %lu update region state NORMAL", region->id());
+  DINGO_LOG(DEBUG) << butil::StringPrintf("Create region %lu update region state NORMAL", region->Id());
   if (split_from_region_id == 0) {
     store_region_meta->UpdateState(region, pb::common::StoreRegionState::NORMAL);
   } else {
@@ -83,22 +83,19 @@ butil::Status CreateRegionTask::CreateRegion(std::shared_ptr<Context> ctx,
   }
 
   // Add region metrics
-  DINGO_LOG(DEBUG) << butil::StringPrintf("Create region %lu add region metrics", region->id());
+  DINGO_LOG(DEBUG) << butil::StringPrintf("Create region %lu add region metrics", region->Id());
   Server::GetInstance()->GetStoreMetricsManager()->GetStoreRegionMetrics()->AddMetrics(
-      StoreRegionMetrics::NewMetrics(region->id()));
+      StoreRegionMetrics::NewMetrics(region->Id()));
 
   return butil::Status();
 }
 
 void CreateRegionTask::Run() {
-  auto region = std::make_shared<pb::store_internal::Region>();
-  region->set_id(region_cmd_->region_id());
-  region->mutable_definition()->CopyFrom(region_cmd_->create_request().region_definition());
-  region->set_state(pb::common::StoreRegionState::NEW);
+  auto region = store::Region::New(region_cmd_->create_request().region_definition());
 
   auto status = CreateRegion(ctx_, region, region_cmd_->create_request().split_from_region_id());
   if (!status.ok()) {
-    DINGO_LOG(DEBUG) << butil::StringPrintf("Create region %lu failed, %s", region->id(), status.error_cstr());
+    DINGO_LOG(DEBUG) << butil::StringPrintf("Create region %lu failed, %s", region->Id(), status.error_cstr());
   }
 
   Server::GetInstance()->GetRegionCommandManager()->UpdateCommandStatus(
@@ -107,17 +104,17 @@ void CreateRegionTask::Run() {
 }
 
 butil::Status DeleteRegionTask::ValidateDeleteRegion(std::shared_ptr<StoreMetaManager> /*store_meta_manager*/,
-                                                     std::shared_ptr<pb::store_internal::Region> region) {
+                                                     store::RegionPtr region) {
   if (region == nullptr) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Region is not exist, can't delete.");
   }
-  if (region->state() == pb::common::StoreRegionState::DELETING ||
-      region->state() == pb::common::StoreRegionState::DELETED) {
+  if (region->State() == pb::common::StoreRegionState::DELETING ||
+      region->State() == pb::common::StoreRegionState::DELETED) {
     return butil::Status(pb::error::EREGION_ALREADY_DELETED, "Region is deleting or deleted.");
   }
 
-  if (region->state() == pb::common::StoreRegionState::SPLITTING ||
-      region->state() == pb::common::StoreRegionState::MERGING) {
+  if (region->State() == pb::common::StoreRegionState::SPLITTING ||
+      region->State() == pb::common::StoreRegionState::MERGING) {
     return butil::Status(pb::error::EREGION_STATE, "Region state not allow delete.");
   }
 
@@ -146,7 +143,7 @@ butil::Status DeleteRegionTask::DeleteRegion(std::shared_ptr<Context> ctx, uint6
   // Delete data
   DINGO_LOG(DEBUG) << butil::StringPrintf("Delete region %lu delete data", region_id);
   auto writer = engine->GetRawEngine()->NewWriter(Constant::kStoreDataCF);
-  writer->KvDeleteRange(region->definition().range());
+  writer->KvDeleteRange(region->Range());
 
   // Raft kv engine
   if (engine->GetID() == pb::common::ENG_RAFT_STORE) {
@@ -192,19 +189,19 @@ butil::Status SplitRegionTask::ValidateSplitRegion(std::shared_ptr<StoreRegionMe
   }
 
   const auto& split_key = split_request.split_watershed_key();
-  auto range = parent_region->definition().range();
+  auto range = parent_region->Range();
   if (range.start_key().compare(split_key) >= 0 || range.end_key().compare(split_key) <= 0) {
     return butil::Status(pb::error::EKEY_SPLIT, "Split key is invalid.");
   }
 
-  if (parent_region->state() == pb::common::StoreRegionState::SPLITTING) {
+  if (parent_region->State() == pb::common::StoreRegionState::SPLITTING) {
     return butil::Status(pb::error::EREGION_ALREADY_SPLIT, "Parent region state is splitting.");
   }
 
-  if (parent_region->state() == pb::common::StoreRegionState::NEW ||
-      parent_region->state() == pb::common::StoreRegionState::MERGING ||
-      parent_region->state() == pb::common::StoreRegionState::DELETING ||
-      parent_region->state() == pb::common::StoreRegionState::DELETED) {
+  if (parent_region->State() == pb::common::StoreRegionState::NEW ||
+      parent_region->State() == pb::common::StoreRegionState::MERGING ||
+      parent_region->State() == pb::common::StoreRegionState::DELETING ||
+      parent_region->State() == pb::common::StoreRegionState::DELETED) {
     return butil::Status(pb::error::EREGION_STATE, "Parent region state not allow split.");
   }
 
@@ -269,7 +266,7 @@ butil::Status ChangeRegionTask::ValidateChangeRegion(std::shared_ptr<StoreMetaMa
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Region not exist, cant't change.");
   }
 
-  if (region->state() != pb::common::StoreRegionState::NORMAL) {
+  if (region->State() != pb::common::StoreRegionState::NORMAL) {
     return butil::Status(pb::error::EREGION_STATE, "Region state not allow change.");
   }
 
@@ -423,13 +420,13 @@ void RegionCommandManager::AddCommand(std::shared_ptr<pb::coordinator::RegionCmd
     region_commands_.insert(std::make_pair(region_cmd->id(), region_cmd));
   }
 
-  meta_writer_->Put(TransformToKv(region_cmd));
+  meta_writer_->Put(TransformToKv(&region_cmd));
 }
 
 void RegionCommandManager::UpdateCommandStatus(std::shared_ptr<pb::coordinator::RegionCmd> region_cmd,
                                                pb::coordinator::RegionCmdStatus status) {
   region_cmd->set_status(status);
-  meta_writer_->Put(TransformToKv(region_cmd));
+  meta_writer_->Put(TransformToKv(&region_cmd));
 }
 
 void RegionCommandManager::UpdateCommandStatus(uint64_t command_id, pb::coordinator::RegionCmdStatus status) {
@@ -480,18 +477,8 @@ std::vector<std::shared_ptr<pb::coordinator::RegionCmd>> RegionCommandManager::G
   return commands;
 }
 
-std::shared_ptr<pb::common::KeyValue> RegionCommandManager::TransformToKv(uint64_t command_id) {
-  auto region_cmd = GetCommand(command_id);
-  if (region_cmd == nullptr) {
-    return nullptr;
-  }
-
-  return TransformToKv(region_cmd);
-}
-
-std::shared_ptr<pb::common::KeyValue> RegionCommandManager::TransformToKv(
-    std::shared_ptr<google::protobuf::Message> obj) {
-  auto region_cmd = std::dynamic_pointer_cast<pb::coordinator::RegionCmd>(obj);
+std::shared_ptr<pb::common::KeyValue> RegionCommandManager::TransformToKv(void* obj) {
+  auto region_cmd = *static_cast<std::shared_ptr<pb::coordinator::RegionCmd>*>(obj);
   std::shared_ptr<pb::common::KeyValue> kv = std::make_shared<pb::common::KeyValue>();
   kv->set_key(GenKey(region_cmd->id()));
   kv->set_value(region_cmd->SerializeAsString());
@@ -513,8 +500,8 @@ bool RegionController::Init() {
   auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
   auto regions = store_meta_manager->GetStoreRegionMeta()->GetAllAliveRegion();
   for (auto& region : regions) {
-    if (!RegisterExecutor(region->id())) {
-      DINGO_LOG(ERROR) << "Register region control executor failed, region: " << region->id();
+    if (!RegisterExecutor(region->Id())) {
+      DINGO_LOG(ERROR) << "Register region control executor failed, region: " << region->Id();
       return false;
     }
   }

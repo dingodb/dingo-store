@@ -30,6 +30,7 @@
 #include "common/helper.h"
 #include "config/yaml_config.h"
 #include "event/store_state_machine_event.h"
+#include "meta/store_meta_manager.h"
 #include "proto/common.pb.h"
 #include "raft/raft_node.h"
 #include "raft/store_state_machine.h"
@@ -85,18 +86,16 @@ std::string GetRaftInitConf(const std::vector<std::string>& raft_addrs) {
 }
 
 struct Peer {
-  std::shared_ptr<dingodb::pb::store_internal::Region> region;
+  dingodb::store::RegionPtr region;
   std::string addr;
 };
 
-std::shared_ptr<dingodb::pb::store_internal::Region> BuildRegion(uint64_t region_id, const std::string& raft_group_name,
-                                                                 std::vector<std::string>& raft_addrs) {
-  auto region = std::make_shared<dingodb::pb::store_internal::Region>();
-  region->set_id(region_id);
-  auto* region_definition = region->mutable_definition();
-  region_definition->set_id(region_id);
-  region_definition->set_name(raft_group_name);
-  auto* range = region_definition->mutable_range();
+dingodb::store::RegionPtr BuildRegion(uint64_t region_id, const std::string& raft_group_name,
+                                      std::vector<std::string>& raft_addrs) {
+  dingodb::pb::common::RegionDefinition region_definition;
+  region_definition.set_id(region_id);
+  region_definition.set_name(raft_group_name);
+  auto* range = region_definition.mutable_range();
   range->set_start_key("a");
   range->set_end_key("z");
 
@@ -104,14 +103,14 @@ std::shared_ptr<dingodb::pb::store_internal::Region> BuildRegion(uint64_t region
     std::vector<std::string> host_port_index;
     butil::SplitString(inner_addr, ':', &host_port_index);
 
-    auto* peer = region_definition->add_peers();
+    auto* peer = region_definition.add_peers();
     auto* raft_loc = peer->mutable_raft_location();
     raft_loc->set_host(host_port_index[0]);
     raft_loc->set_port(std::stoi(host_port_index[1]));
     raft_loc->set_index(std::stoi(host_port_index[2]));
   }
 
-  return region;
+  return dingodb::store::Region::New(region_definition);
 }
 
 std::vector<std::shared_ptr<dingodb::RaftNode>> BootRaftGroup(std::vector<Peer>& peers,
@@ -121,7 +120,7 @@ std::vector<std::shared_ptr<dingodb::RaftNode>> BootRaftGroup(std::vector<Peer>&
   for (auto& peer : peers) {
     auto region = peer.region;
     // build state machine
-    auto raft_meta = dingodb::StoreRaftMeta::NewRaftMeta(region->id());
+    auto raft_meta = dingodb::StoreRaftMeta::NewRaftMeta(region->Id());
     auto* state_machine = new dingodb::StoreStateMachine(nullptr, region, raft_meta, nullptr);
     if (!state_machine->Init()) {
       std::cout << "Init state machine failed";
@@ -130,19 +129,19 @@ std::vector<std::shared_ptr<dingodb::RaftNode>> BootRaftGroup(std::vector<Peer>&
 
     std::string init_conf;
     int i = 0;
-    for (const auto& peer : region->definition().peers()) {
+    for (const auto& peer : region->Peers()) {
       std::string addr = butil::StringPrintf("%s:%d:%d", peer.raft_location().host().c_str(),
                                              peer.raft_location().port(), peer.raft_location().index());
       init_conf += addr;
-      if (i + 1 < region->definition().peers().size()) {
+      if (i + 1 < region->Peers().size()) {
         init_conf += ",";
       }
       ++i;
     }
 
     // build braft node
-    auto node = std::make_shared<dingodb::RaftNode>(region->id(), region->definition().name(), braft::PeerId(peer.addr),
-                                                    state_machine);
+    auto node =
+        std::make_shared<dingodb::RaftNode>(region->Id(), region->Name(), braft::PeerId(peer.addr), state_machine);
 
     if (node->Init(init_conf, config) != 0) {
       node->Destroy();

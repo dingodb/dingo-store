@@ -134,18 +134,18 @@ butil::Status ValidateRegion(uint64_t region_id, const std::vector<std::string_v
   if (!region) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
   }
-  if (region->state() == pb::common::StoreRegionState::NEW) {
+  if (region->State() == pb::common::StoreRegionState::NEW) {
     return butil::Status(pb::error::EREGION_UNAVAILABLE, "Region is new, waiting later");
   }
-  if (region->state() == pb::common::StoreRegionState::STANDBY) {
+  if (region->State() == pb::common::StoreRegionState::STANDBY) {
     return butil::Status(pb::error::EREGION_UNAVAILABLE, "Region is standby, waiting later");
   }
-  if (region->state() == pb::common::StoreRegionState::DELETED ||
-      region->state() == pb::common::StoreRegionState::DELETING) {
+  if (region->State() == pb::common::StoreRegionState::DELETED ||
+      region->State() == pb::common::StoreRegionState::DELETING) {
     return butil::Status(pb::error::EREGION_UNAVAILABLE, "Region is deleting");
   }
 
-  auto range = region->definition().range();
+  auto range = region->Range();
   for (const auto& key : keys) {
     if (range.start_key().compare(key) > 0 || range.end_key().compare(key) <= 0) {
       return butil::Status(pb::error::EKEY_OUT_OF_RANGE, "Key out of range");
@@ -805,7 +805,7 @@ void StoreServiceImpl::Debug(google::protobuf::RpcController* controller,
 
     std::map<std::string, int32_t> state_counts;
     for (auto& region : regions) {
-      std::string name = pb::common::StoreRegionState_Name(region->state());
+      std::string name = pb::common::StoreRegionState_Name(region->State());
       if (state_counts.find(name) == state_counts.end()) {
         state_counts[name] = 0;
       }
@@ -818,7 +818,7 @@ void StoreServiceImpl::Debug(google::protobuf::RpcController* controller,
 
   } else if (request->type() == pb::store::DebugType::STORE_REGION_META_DETAILS) {
     auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
-    std::vector<std::shared_ptr<pb::store_internal::Region>> regions;
+    std::vector<store::RegionPtr> regions;
     if (request->region_ids().empty()) {
       regions = store_region_meta->GetAllRegion();
     } else {
@@ -831,7 +831,7 @@ void StoreServiceImpl::Debug(google::protobuf::RpcController* controller,
     }
 
     for (auto& region : regions) {
-      response->mutable_region_meta_details()->add_regions()->CopyFrom(*region);
+      response->mutable_region_meta_details()->add_regions()->CopyFrom(region->InnerRegion());
     }
   } else if (request->type() == pb::store::DebugType::STORE_REGION_CONTROL_COMMAND) {
     std::vector<std::shared_ptr<pb::coordinator::RegionCmd>> commands;

@@ -43,6 +43,7 @@ class Helper {
   static void SortPeers(std::vector<pb::common::Peer>& peers);
   static std::vector<pb::common::Location> ExtractLocations(
       const google::protobuf::RepeatedPtrField<pb::common::Peer>& peers);
+  static std::vector<pb::common::Location> ExtractLocations(const std::vector<pb::common::Peer>& peers);
 
   // format: 127.0.0.1:8201:0
   static std::string LocationToString(const pb::common::Location& location);

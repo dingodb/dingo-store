@@ -115,6 +115,16 @@ bool Helper::IsDifferencePeers(const std::vector<pb::common::Peer>& peers,
 std::vector<pb::common::Location> Helper::ExtractLocations(
     const google::protobuf::RepeatedPtrField<pb::common::Peer>& peers) {
   std::vector<pb::common::Location> locations;
+  locations.reserve(peers.size());
+  for (const auto& peer : peers) {
+    locations.push_back(peer.raft_location());
+  }
+  return locations;
+}
+
+std::vector<pb::common::Location> Helper::ExtractLocations(const std::vector<pb::common::Peer>& peers) {
+  std::vector<pb::common::Location> locations;
+  locations.reserve(peers.size());
   for (const auto& peer : peers) {
     locations.push_back(peer.raft_location());
   }

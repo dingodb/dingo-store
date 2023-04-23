@@ -37,23 +37,21 @@ class RaftSnapshot {
 
   // Generate snapshot file function
   using GenSnapshotFileFunc = std::function<std::vector<pb::store_internal::SstFileInfo>(
-      const std::string checkpoint_dir, std::shared_ptr<dingodb::pb::store_internal::Region> region)>;
+      const std::string checkpoint_dir, store::RegionPtr region)>;
 
   // Scan region, generate sst snapshot file
-  std::vector<pb::store_internal::SstFileInfo> GenSnapshotFileByScan(
-      const std::string& checkpoint_dir, std::shared_ptr<dingodb::pb::store_internal::Region> region);
+  std::vector<pb::store_internal::SstFileInfo> GenSnapshotFileByScan(const std::string& checkpoint_dir,
+                                                                     store::RegionPtr region);
   // Do Checkpoint and hard link, generate sst snapshot file
-  std::vector<pb::store_internal::SstFileInfo> GenSnapshotFileByCheckpoint(
-      const std::string& checkpoint_dir, std::shared_ptr<dingodb::pb::store_internal::Region> region);
+  std::vector<pb::store_internal::SstFileInfo> GenSnapshotFileByCheckpoint(const std::string& checkpoint_dir,
+                                                                           store::RegionPtr region);
 
-  bool SaveSnapshot(braft::SnapshotWriter* writer, std::shared_ptr<dingodb::pb::store_internal::Region> region,
-                    GenSnapshotFileFunc func);
+  bool SaveSnapshot(braft::SnapshotWriter* writer, store::RegionPtr region, GenSnapshotFileFunc func);
 
-  bool LoadSnapshot(braft::SnapshotReader* reader, std::shared_ptr<dingodb::pb::store_internal::Region> region);
+  bool LoadSnapshot(braft::SnapshotReader* reader, store::RegionPtr region);
 
  private:
-  bool ValidateSnapshotFile(std::shared_ptr<dingodb::pb::store_internal::Region>& region,
-                            std::unique_ptr<pb::store_internal::SstFileInfo> filemeta);
+  bool ValidateSnapshotFile(store::RegionPtr& region, std::unique_ptr<pb::store_internal::SstFileInfo> filemeta);
 
   std::shared_ptr<RawEngine> engine_;
   std::shared_ptr<Snapshot> engine_snapshot_;

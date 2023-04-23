@@ -32,6 +32,7 @@
 #include "config/yaml_config.h"
 #include "engine/raw_rocks_engine.h"
 #include "handler/raft_snapshot_handler.h"
+#include "meta/store_meta_manager.h"
 #include "proto/common.pb.h"
 #include "proto/store_internal.pb.h"
 #include "server/server.h"
@@ -155,13 +156,13 @@ TEST_F(RaftSnapshotTest, RaftSnapshot) {
     LOG(ERROR) << "LocalSnapshotStorage init failed";
   }
 
-  auto region = std::make_shared<dingodb::pb::store_internal::Region>();
-  auto* definition = region->mutable_definition();
-  definition->set_id(111);
-  definition->set_name("test-snapshot");
-  auto* range = definition->mutable_range();
+  dingodb::pb::common::RegionDefinition definition;
+  definition.set_id(111);
+  definition.set_name("test-snapshot");
+  auto* range = definition.mutable_range();
   range->set_start_key("bb");
   range->set_end_key("cc");
+  auto region = dingodb::store::Region::New(definition);
 
   auto* snapshot_writer = snapshot_storage->create();
   auto gen_snapshot_file_func = std::bind(&dingodb::RaftSnapshot::GenSnapshotFileByScan, raft_snapshot.get(),
