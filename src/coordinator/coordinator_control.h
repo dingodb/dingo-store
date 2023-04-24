@@ -22,6 +22,7 @@
 #include <string>
 #include <vector>
 
+#include "braft/raft.h"
 #include "brpc/controller.h"
 #include "brpc/server.h"
 #include "bthread/types.h"
@@ -45,6 +46,22 @@
 
 namespace dingodb {
 
+class AtomicGuard {
+ public:
+  AtomicGuard(std::atomic<bool> &flag) : m_flag_(flag) { m_flag_.store(true); }
+  ~AtomicGuard() {
+    if (!released_) {
+      m_flag_.store(false);
+    }
+  }
+
+  void Release() { released_ = true; }
+
+ private:
+  bool released_ = false;
+  std::atomic<bool> &m_flag_;
+};
+
 class CoordinatorControl : public MetaControl {
  public:
   CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, std::shared_ptr<MetaWriter> meta_writer,
@@ -63,6 +80,7 @@ class CoordinatorControl : public MetaControl {
   // in:  meta_increment
   // return: 0 or -1
   int SubmitMetaIncrement(pb::coordinator_internal::MetaIncrement &meta_increment);
+  int SubmitMetaIncrement(google::protobuf::Closure *done, pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // GetMemoryInfo
   void GetMemoryInfo(pb::coordinator::CoordinatorMemoryInfo &memory_info);
@@ -94,6 +112,8 @@ class CoordinatorControl : public MetaControl {
                                         pb::common::Range region_range, uint64_t schema_id, uint64_t table_id,
                                         uint64_t split_from_region_id, uint64_t &new_region_id,
                                         pb::coordinator_internal::MetaIncrement &meta_increment);
+  pb::error::Errno CreateRegionForSplitInternal(uint64_t split_from_region_id, uint64_t &new_region_id,
+                                                pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // drop region
   // in:  region_id
@@ -120,6 +140,8 @@ class CoordinatorControl : public MetaControl {
   // change peer region
   pb::error::Errno ChangePeerRegion(uint64_t region_id, std::vector<uint64_t> &new_store_ids,
                                     pb::coordinator_internal::MetaIncrement &meta_increment);
+  pb::error::Errno ChangePeerRegionWithTaskList(uint64_t region_id, std::vector<uint64_t> &new_store_ids,
+                                                pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // create schema
   // in: parent_schema_id
@@ -365,7 +387,7 @@ class CoordinatorControl : public MetaControl {
 
   // on_apply callback
   void ApplyMetaIncrement(pb::coordinator_internal::MetaIncrement &meta_increment, bool is_leader, uint64_t term,
-                          uint64_t index, google::protobuf::Message* response) override;  // for raft fsm
+                          uint64_t index, google::protobuf::Message *response) override;  // for raft fsm
 
   // prepare snapshot for raft snapshot
   // return: Snapshot
@@ -378,6 +400,19 @@ class CoordinatorControl : public MetaControl {
   // LoadMetaFromSnapshotFile
   bool LoadMetaFromSnapshotFile(
       pb::coordinator_internal::MetaSnapshotFile &meta_snapshot_file) override;  // for raft fsm
+
+  void GetTaskList(butil::FlatMap<uint64_t, pb::coordinator::TaskList> &task_lists);
+
+  // check if task in task_lis can advance
+  // if task advance, this function will contruct meta_increment and apply to state_machine
+  pb::error::Errno ProcessTaskList();
+
+  // process single task
+  pb::error::Errno ProcessSingleTaskList(const pb::coordinator::TaskList &task_list,
+                                         pb::coordinator_internal::MetaIncrement &meta_increment);
+  void ReleaseProcessTaskListStatus(const butil::Status &);
+
+  bool DoTaskPreCheck(const pb::coordinator::TaskPreCheck &task_pre_check);
 
  private:
   // ids_epochs_temp (out of state machine, only for leader use)
@@ -445,6 +480,10 @@ class CoordinatorControl : public MetaControl {
       executor_user_map_;  // executor_user -> keyring
   MetaSafeStringMapStorage<pb::coordinator_internal::ExecutorUserInternal> *executor_user_meta_;  // need construct
 
+  // 11.task_list
+  DingoSafeMap<uint64_t, pb::coordinator::TaskList> task_list_map_;  // task_list_id -> task_list
+  MetaSafeMapStorage<pb::coordinator::TaskList> *task_list_meta_;    // need construct
+
   // root schema write to raft
   bool root_schema_writed_to_raft_;
 
@@ -467,6 +506,7 @@ class CoordinatorControl : public MetaControl {
 
   // raft kv engine
   std::shared_ptr<Engine> engine_;
+  butil::atomic<bool> is_processing_task_list_;
 };
 
 }  // namespace dingodb

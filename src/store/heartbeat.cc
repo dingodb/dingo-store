@@ -282,6 +282,18 @@ void CoordinatorUpdateStateTask::CoordinatorUpdateState(std::shared_ptr<Coordina
 }
 
 // this is for coordinator
+void CoordinatorTaskListProcessTask::CoordinatorTaskListProcess(
+    std::shared_ptr<CoordinatorControl> coordinator_control) {
+  if (!coordinator_control->IsLeader()) {
+    DINGO_LOG(DEBUG) << "CoordinatorUpdateState... this is follower";
+    return;
+  }
+  DINGO_LOG(DEBUG) << "CoordinatorUpdateState... this is leader";
+
+  coordinator_control->ProcessTaskList();
+}
+
+// this is for coordinator
 void CoordinatorPushTask::SendCoordinatorPushToStore(std::shared_ptr<CoordinatorControl> coordinator_control) {
   if (!coordinator_control->IsLeader()) {
     DINGO_LOG(DEBUG) << "SendCoordinatorPushToStore... this is follower";
@@ -567,6 +579,12 @@ void Heartbeat::TriggerCoordinatorPushToStore(void*) {
 void Heartbeat::TriggerCoordinatorUpdateState(void*) {
   // Free at ExecuteRoutine()
   TaskRunnable* task = new CoordinatorUpdateStateTask(Server::GetInstance()->GetCoordinatorControl());
+  Server::GetInstance()->GetHeartbeat()->Execute(task);
+}
+
+void Heartbeat::TriggerCoordinatorTaskListProcess(void*) {
+  // Free at ExecuteRoutine()
+  TaskRunnable* task = new CoordinatorTaskListProcessTask(Server::GetInstance()->GetCoordinatorControl());
   Server::GetInstance()->GetHeartbeat()->Execute(task);
 }
 

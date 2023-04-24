@@ -156,6 +156,8 @@ void* Sender(void* /*arg*/) {
     SendGetOrphanRegion(cntl, coordinator_stub);
   } else if (FLAGS_method == "GetStoreOperation") {
     SendGetStoreOperation(cntl, coordinator_stub);
+  } else if (FLAGS_method == "GetTaskList") {
+    SendGetTaskList(cntl, coordinator_stub);
   } else if (FLAGS_method == "CleanStoreOperation") {
     SendCleanStoreOperation(cntl, coordinator_stub);
   } else if (FLAGS_method == "AddStoreOperation") {
@@ -204,7 +206,7 @@ void* Sender(void* /*arg*/) {
     SendRaftAddPeer(cntl, raft_control_stub);
   } else if (FLAGS_method == "RaftRemovePeer") {
     SendRaftRemovePeer(cntl, raft_control_stub);
-  } else if (FLAGS_method == "GetAutoIncrement") { // auto increment
+  } else if (FLAGS_method == "GetAutoIncrement") {  // auto increment
     SendGetAutoIncrement(cntl, meta_stub);
   } else if (FLAGS_method == "CreateAutoIncrement") {
     SendCreateAutoIncrement(cntl, meta_stub);

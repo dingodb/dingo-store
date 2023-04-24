@@ -73,6 +73,9 @@ void SendCleanStoreOperation(brpc::Controller& cntl, dingodb::pb::coordinator::C
 void SendAddStoreOperation(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
 void SendRemoveStoreOperation(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
 
+// task list
+void SendGetTaskList(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
+
 // meta service functions
 void SendGetSchemas(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub);
 void SendGetSchema(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub);

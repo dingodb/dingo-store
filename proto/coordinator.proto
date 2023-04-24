@@ -22,6 +22,49 @@ package dingodb.pb.coordinator;
 option java_package = "io.dingodb.coordinator";
 option cc_generic_services = true;
 
+enum TaskPreCheckType {
+  NONE = 0;  // this is a placeholder
+  REGION_CHECK = 1;
+  STORE_REGION_CHECK = 2;
+}
+
+message RegionCheck {
+  uint64 region_id = 1;
+  dingodb.pb.common.Range range = 2;
+  dingodb.pb.common.RegionState state = 3;
+  dingodb.pb.common.RegionRaftStatus raft_status = 4;
+  dingodb.pb.common.ReplicaStatus replica_status = 5;
+  repeated dingodb.pb.common.Peer peers = 6;
+}
+
+message StoreRegionCheck {
+  uint64 store_id = 1;
+  uint64 region_id = 2;
+  dingodb.pb.common.Range range = 3;
+  dingodb.pb.common.StoreRegionState store_region_state = 4;
+  dingodb.pb.common.RaftNodeState raft_node_status = 5;
+  repeated dingodb.pb.common.Peer peers = 6;
+}
+
+message TaskPreCheck {
+  TaskPreCheckType type = 1;
+  oneof PreCheck {
+    RegionCheck region_check = 2;
+    StoreRegionCheck store_region_check = 3;
+  }
+}
+
+message Task {
+  TaskPreCheck pre_check = 1;
+  repeated dingodb.pb.coordinator.StoreOperation store_operations = 2;
+}
+
+message TaskList {
+  uint64 id = 1;         // this is the id of coordinator task list
+  uint64 next_step = 2;  // the next index of tasks to execute
+  repeated Task tasks = 3;
+}
+
 message CreateRequest {
   dingodb.pb.common.RegionDefinition region_definition = 1;  // region definition
   uint64 split_from_region_id = 2;  // this is a sub-region, its state need to be STANDBY, will split from region id, if
@@ -86,6 +129,7 @@ message RegionCmd {
                                       // coordinator, so store can purge this region's meta data
   }
 
+  bool is_notify = 40;          // store need to notify coordinator when this cmd is done
   RegionCmdStatus status = 50;  // the status of this cmd
 }
 
@@ -342,6 +386,15 @@ message RemoveStoreOperationResponse {
   dingodb.pb.error.Error error = 1;
 }
 
+message GetTaskListRequest {
+  uint64 cluster_id = 1;
+}
+
+message GetTaskListResponse {
+  dingodb.pb.error.Error error = 1;
+  repeated TaskList task_lists = 2;
+}
+
 message QueryRegionRequest {
   uint64 region_id = 1;
 }
@@ -494,6 +547,9 @@ service CoordinatorService {
   rpc CleanStoreOperation(CleanStoreOperationRequest) returns (CleanStoreOperationResponse);
   rpc AddStoreOperation(AddStoreOperationRequest) returns (AddStoreOperationResponse);
   rpc RemoveStoreOperation(RemoveStoreOperationRequest) returns (RemoveStoreOperationResponse);
+
+  // TaskList
+  rpc GetTaskList(GetTaskListRequest) returns (GetTaskListResponse);
 
   // RaftControl
   rpc RaftControl(RaftControlRequest) returns (RaftControlResponse);

@@ -93,7 +93,7 @@ std::string GetLeaderLocation(uint32_t service_type) {
   auto leader_location = response.leader_location().host() + ":" + std::to_string(response.leader_location().port());
   DINGO_LOG(INFO) << "leader_location: " << leader_location;
   auto auto_increment_leader_location = response.auto_increment_leader_location().host() + ":" +
-    std::to_string(response.auto_increment_leader_location().port());
+                                        std::to_string(response.auto_increment_leader_location().port());
   DINGO_LOG(INFO) << " auto_increment_leader_location: " << auto_increment_leader_location;
   if (service_type == dingodb::pb::common::CoordinatorServiceType::ServiceTypeAutoIncrement) {
     return auto_increment_leader_location;
@@ -1308,6 +1308,24 @@ void SendRaftRemovePeer(brpc::Controller& cntl, dingodb::pb::coordinator::Coordi
   }
 
   stub.RaftControl(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    // bthread_usleep(FLAGS_timeout_ms * 1000L);
+  }
+
+  if (FLAGS_log_each_request) {
+    DINGO_LOG(INFO) << "Received response"
+                    << " request_attachment=" << cntl.request_attachment().size()
+                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+    DINGO_LOG_INFO << response.DebugString();
+  }
+}
+
+void SendGetTaskList(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
+  dingodb::pb::coordinator::GetTaskListRequest request;
+  dingodb::pb::coordinator::GetTaskListResponse response;
+
+  stub.GetTaskList(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
     DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
     // bthread_usleep(FLAGS_timeout_ms * 1000L);

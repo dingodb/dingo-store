@@ -51,6 +51,7 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   bthread_mutex_init(&store_metrics_map_mutex_, nullptr);
   bthread_mutex_init(&store_operation_map_mutex_, nullptr);
   root_schema_writed_to_raft_ = false;
+  is_processing_task_list_.store(false);
 
   // the data structure below will write to raft
   coordinator_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::CoordinatorInternal>(&coordinator_map_);
@@ -65,6 +66,7 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   store_operation_meta_ = new MetaSafeMapStorage<pb::coordinator::StoreOperation>(&store_operation_map_);
   executor_user_meta_ =
       new MetaSafeStringMapStorage<pb::coordinator_internal::ExecutorUserInternal>(&executor_user_map_);
+  task_list_meta_ = new MetaSafeMapStorage<pb::coordinator::TaskList>(&task_list_map_);
 
   // init FlatMap
   store_need_push_.init(100, 80);
@@ -85,6 +87,7 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   executor_map_.Init(100);                // executor_map_ is a small map
   table_metrics_map_.Init(10000);         // table_metrics_map_ is a big map
   executor_user_map_.Init(100);           // executor_user_map_ is a small map
+  task_list_map_.Init(100);               // task_list_map_ is a small map
 }
 
 CoordinatorControl::~CoordinatorControl() {
@@ -253,6 +256,19 @@ bool CoordinatorControl::Recover() {
     }
   }
   DINGO_LOG(INFO) << "Recover executor_user_meta_, count=" << kvs.size();
+  kvs.clear();
+
+  // 11.task_list map
+  if (!meta_reader_->Scan(task_list_meta_->Prefix(), kvs)) {
+    return false;
+  }
+  {
+    // BAIDU_SCOPED_LOCK(task_list_map_mutex_);
+    if (!task_list_meta_->Recover(kvs)) {
+      return false;
+    }
+  }
+  DINGO_LOG(INFO) << "Recover task_list_meta_, count=" << kvs.size();
   kvs.clear();
 
   // copy id_epoch_map_ to id_epoch_map_safe_temp_

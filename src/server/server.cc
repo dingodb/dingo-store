@@ -156,20 +156,21 @@ bool Server::InitEngine() {
   return true;
 }
 
-butil::Status Server::StartMetaRegion(const std::shared_ptr<Config>& config, // NOLINT
-                                      std::shared_ptr<Engine>& kv_engine) {  // NOLINT
+butil::Status Server::StartMetaRegion(const std::shared_ptr<Config>& config,  // NOLINT
+                                      std::shared_ptr<Engine>& kv_engine) {   // NOLINT
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
-  std::shared_ptr<pb::common::RegionDefinition> region = CreateCoordinatorRegion(config, Constant::kCoordinatorRegionId
-      , Constant::kMetaRegionName, ctx);
+  std::shared_ptr<pb::common::RegionDefinition> region =
+      CreateCoordinatorRegion(config, Constant::kCoordinatorRegionId, Constant::kMetaRegionName, ctx);
 
   auto raft_engine = std::dynamic_pointer_cast<RaftMetaEngine>(kv_engine);
   return raft_engine->InitCoordinatorRegion(ctx, region, coordinator_control_);
 }
 
-butil::Status Server::StartAutoIncrementRegion(const std::shared_ptr<Config>& config, std::shared_ptr<Engine>& kv_engine) {
+butil::Status Server::StartAutoIncrementRegion(const std::shared_ptr<Config>& config,
+                                               std::shared_ptr<Engine>& kv_engine) {
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
-  std::shared_ptr<pb::common::RegionDefinition> region = CreateCoordinatorRegion(config, Constant::kAutoIncrementRegionId
-      , Constant::kAutoIncrementRegionName, ctx);
+  std::shared_ptr<pb::common::RegionDefinition> region =
+      CreateCoordinatorRegion(config, Constant::kAutoIncrementRegionId, Constant::kAutoIncrementRegionName, ctx);
 
   auto raft_engine = std::dynamic_pointer_cast<RaftMetaEngine>(kv_engine);
   return raft_engine->InitAutoIncrementRegion(ctx, region, auto_increment_control_);
@@ -180,7 +181,7 @@ bool Server::InitCoordinatorInteraction() {
 
   auto config = ConfigManager::GetInstance()->GetConfig(role_);
   return coordinator_interaction_->Init(config->GetString("cluster.coordinators"),
-    pb::common::CoordinatorServiceType::ServiceTypeCoordinator);
+                                        pb::common::CoordinatorServiceType::ServiceTypeCoordinator);
 }
 
 bool Server::InitStorage() {
@@ -267,6 +268,15 @@ bool Server::InitCrontabManager() {
 
     crontab_manager_->AddAndRunCrontab(update_crontab);
 
+    // Add task list process crontab
+    std::shared_ptr<Crontab> tasklist_crontab = std::make_shared<Crontab>();
+    tasklist_crontab->name = "TASKLIST";
+    tasklist_crontab->interval = push_interval;
+    tasklist_crontab->func = Heartbeat::TriggerCoordinatorTaskListProcess;
+    tasklist_crontab->arg = nullptr;
+
+    crontab_manager_->AddAndRunCrontab(tasklist_crontab);
+
     // Add calculate crontab
     std::shared_ptr<Crontab> calc_crontab = std::make_shared<Crontab>();
     calc_crontab->name = "CALCULATE";
@@ -343,7 +353,9 @@ void Server::Destroy() {
 }
 
 std::shared_ptr<pb::common::RegionDefinition> Server::CreateCoordinatorRegion(const std::shared_ptr<Config>& config,
-            const uint64_t region_id, const std::string& region_name, std::shared_ptr<Context>& ctx) {
+                                                                              const uint64_t region_id,
+                                                                              const std::string& region_name,
+                                                                              std::shared_ptr<Context>& ctx) {
   /**
    * 1. context must contains role)
    */
@@ -372,7 +384,7 @@ std::shared_ptr<pb::common::RegionDefinition> Server::CreateCoordinatorRegion(co
   range->set_start_key("0000");
   range->set_end_key("FFFF");
 
-  DINGO_LOG(INFO) << region_name<< " Create Region Request:" << region->DebugString();
+  DINGO_LOG(INFO) << region_name << " Create Region Request:" << region->DebugString();
   return region;
 }
 
