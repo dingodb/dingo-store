@@ -395,6 +395,14 @@ message GetTaskListResponse {
   repeated TaskList task_lists = 2;
 }
 
+message CleanTaskListRequest {
+  uint64 task_list_id = 1;
+}
+
+message CleanTaskListResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
 message QueryRegionRequest {
   uint64 region_id = 1;
 }
@@ -550,6 +558,7 @@ service CoordinatorService {
 
   // TaskList
   rpc GetTaskList(GetTaskListRequest) returns (GetTaskListResponse);
+  rpc CleanTaskList(CleanTaskListRequest) returns (CleanTaskListResponse);
 
   // RaftControl
   rpc RaftControl(RaftControlRequest) returns (RaftControlResponse);

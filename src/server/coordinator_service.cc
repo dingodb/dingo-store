@@ -1133,6 +1133,44 @@ void CoordinatorServiceImpl::GetTaskList(google::protobuf::RpcController * /*con
   }
 }
 
+void CoordinatorServiceImpl::CleanTaskList(google::protobuf::RpcController *controller,
+                                           const pb::coordinator::CleanTaskListRequest *request,
+                                           pb::coordinator::CleanTaskListResponse *response,
+                                           google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+  auto is_leader = this->coordinator_control_->IsLeader();
+  DINGO_LOG(DEBUG) << "Receive Clean TaskList Request, IsLeader:" << is_leader
+                   << ", Request:" << request->DebugString();
+
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  pb::coordinator_internal::MetaIncrement meta_increment;
+
+  auto task_list_id = request->task_list_id();
+
+  auto ret = this->coordinator_control_->CleanTaskList(task_list_id, meta_increment);
+  response->mutable_error()->set_errcode(ret);
+
+  if (meta_increment.ByteSizeLong() == 0) {
+    return;
+  }
+
+  // prepare for raft process
+  CoordinatorClosure<pb::coordinator::CleanTaskListRequest, pb::coordinator::CleanTaskListResponse>
+      *meta_clean_task_list_closure =
+          new CoordinatorClosure<pb::coordinator::CleanTaskListRequest, pb::coordinator::CleanTaskListResponse>(
+              request, response, done_guard.release());
+
+  std::shared_ptr<Context> const ctx =
+      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_clean_task_list_closure);
+  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+
+  // this is a async operation will be block by closure
+  engine_->MetaPut(ctx, meta_increment);
+}
+
 // raft control
 void CoordinatorServiceImpl::RaftControl(google::protobuf::RpcController *controller,
                                          const pb::coordinator::RaftControlRequest *request,

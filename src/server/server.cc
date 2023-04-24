@@ -352,7 +352,7 @@ void Server::Destroy() {
   google::ShutdownGoogleLogging();
 }
 
-std::shared_ptr<pb::common::RegionDefinition> Server::CreateCoordinatorRegion(const std::shared_ptr<Config>& config,
+std::shared_ptr<pb::common::RegionDefinition> Server::CreateCoordinatorRegion(const std::shared_ptr<Config>& /*config*/,
                                                                               const uint64_t region_id,
                                                                               const std::string& region_name,
                                                                               std::shared_ptr<Context>& ctx) {

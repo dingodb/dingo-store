@@ -2563,7 +2563,6 @@ pb::error::Errno CoordinatorControl::ProcessTaskList() {
   pb::coordinator_internal::MetaIncrement meta_increment;
 
   for (const auto& it : task_list_map) {
-    auto store_id = it.first;
     const auto& task_list = it.second;
 
     ProcessSingleTaskList(task_list, meta_increment);
@@ -2579,6 +2578,35 @@ pb::error::Errno CoordinatorControl::ProcessTaskList() {
   // prepare for raft process
   atomic_guard.Release();
   SubmitMetaIncrement(done, meta_increment);
+
+  return pb::error::Errno::OK;
+}
+
+pb::error::Errno CoordinatorControl::CleanTaskList(uint64_t task_list_id,
+                                                   pb::coordinator_internal::MetaIncrement& meta_increment) {
+  butil::FlatMap<uint64_t, pb::coordinator::TaskList> task_list_map;
+  task_list_map.init(100);
+  auto ret = task_list_map_.GetFlatMapCopy(task_list_map);
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << "task_list_map_.GetFlatMapCopy failed";
+    return pb::error::EINTERNAL;
+  }
+
+  if (task_list_map.empty()) {
+    DINGO_LOG(INFO) << "task_list_map is empty";
+    return pb::error::Errno::OK;
+  }
+
+  for (const auto& it : task_list_map) {
+    const auto& task_list = it.second;
+
+    if (task_list_id == 0 || task_list.id() == task_list_id) {
+      auto* task_list_increment = meta_increment.add_task_lists();
+      task_list_increment->set_id(task_list.id());
+      task_list_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
+      task_list_increment->mutable_task_list()->CopyFrom(task_list);
+    }
+  }
 
   return pb::error::Errno::OK;
 }
