@@ -599,6 +599,7 @@ pb::error::Errno CoordinatorControl::CreateRegion(const std::string& region_name
     region_cmd->set_create_timestamp(butil::gettimeofday_ms());
     region_cmd->set_region_id(create_region_id);
     region_cmd->set_region_cmd_type(::dingodb::pb::coordinator::RegionCmdType::CMD_CREATE);
+    region_cmd->set_is_notify(true);  // for create region, we need immediately heartbeat
     auto* create_request = region_cmd->mutable_create_request();
     create_request->mutable_region_definition()->CopyFrom(*region_definition);
     create_request->set_split_from_region_id(
@@ -982,6 +983,7 @@ pb::error::Errno CoordinatorControl::SplitRegionWithTaskList(uint64_t split_from
   region_cmd.mutable_split_request()->set_split_from_region_id(split_from_region_id);
   region_cmd.mutable_split_request()->set_split_to_region_id(new_region_id);
   region_cmd.set_create_timestamp(butil::gettimeofday_ms());
+  region_cmd.set_is_notify(true);  // notify store to do immediately heartbeat
 
   auto* store_operation_split = split_region_task->add_store_operations();
   store_operation_split->set_id(split_from_region.leader_store_id());
