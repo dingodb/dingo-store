@@ -644,42 +644,42 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
 
 void LogMetaIncrementSize(pb::coordinator_internal::MetaIncrement& meta_increment) {
   if (meta_increment.ByteSizeLong() > 0) {
-    DINGO_LOG(INFO) << "meta_increment byte_size=" << meta_increment.ByteSizeLong();
+    DINGO_LOG(DEBUG) << "meta_increment byte_size=" << meta_increment.ByteSizeLong();
   } else {
     return;
   }
   if (meta_increment.idepochs_size() > 0) {
-    DINGO_LOG(INFO) << "0.idepochs_size=" << meta_increment.idepochs_size();
+    DINGO_LOG(DEBUG) << "0.idepochs_size=" << meta_increment.idepochs_size();
   }
   if (meta_increment.coordinators_size() > 0) {
-    DINGO_LOG(INFO) << "1.coordinators_size=" << meta_increment.coordinators_size();
+    DINGO_LOG(DEBUG) << "1.coordinators_size=" << meta_increment.coordinators_size();
   }
   if (meta_increment.stores_size() > 0) {
-    DINGO_LOG(INFO) << "2.stores_size=" << meta_increment.stores_size();
+    DINGO_LOG(DEBUG) << "2.stores_size=" << meta_increment.stores_size();
   }
   if (meta_increment.tables_size() > 0) {
-    DINGO_LOG(INFO) << "3.tables_size=" << meta_increment.tables_size();
+    DINGO_LOG(DEBUG) << "3.tables_size=" << meta_increment.tables_size();
   }
   if (meta_increment.executors_size() > 0) {
-    DINGO_LOG(INFO) << "4.executors_size=" << meta_increment.executors_size();
+    DINGO_LOG(DEBUG) << "4.executors_size=" << meta_increment.executors_size();
   }
   if (meta_increment.regions_size() > 0) {
-    DINGO_LOG(INFO) << "5.regions_size=" << meta_increment.regions_size();
+    DINGO_LOG(DEBUG) << "5.regions_size=" << meta_increment.regions_size();
   }
   if (meta_increment.store_metrics_size() > 0) {
-    DINGO_LOG(INFO) << "6.store_metrics_size=" << meta_increment.store_metrics_size();
+    DINGO_LOG(DEBUG) << "6.store_metrics_size=" << meta_increment.store_metrics_size();
   }
   if (meta_increment.table_metrics_size() > 0) {
-    DINGO_LOG(INFO) << "7.table_metrics_size=" << meta_increment.table_metrics_size();
+    DINGO_LOG(DEBUG) << "7.table_metrics_size=" << meta_increment.table_metrics_size();
   }
   if (meta_increment.store_operations_size() > 0) {
-    DINGO_LOG(INFO) << "8.store_operations_size=" << meta_increment.store_operations_size();
+    DINGO_LOG(DEBUG) << "8.store_operations_size=" << meta_increment.store_operations_size();
   }
   if (meta_increment.executor_users_size() > 0) {
-    DINGO_LOG(INFO) << "9.executor_users_size=" << meta_increment.executor_users_size();
+    DINGO_LOG(DEBUG) << "9.executor_users_size=" << meta_increment.executor_users_size();
   }
   if (meta_increment.executor_users_size() > 0) {
-    DINGO_LOG(INFO) << "9.executor_users_size=" << meta_increment.executor_users_size();
+    DINGO_LOG(DEBUG) << "9.executor_users_size=" << meta_increment.executor_users_size();
   }
 }
 
