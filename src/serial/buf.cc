@@ -21,7 +21,7 @@ Buf::Buf(int size) {
   this->buf_.resize(size);
   this->reverse_pos_ = size - 1;
 }
-Buf::Buf(string* buf) {
+Buf::Buf(std::string* buf) {
   this->buf_.resize(buf->size());
   this->buf_.assign(buf->begin(), buf->end());
   this->reverse_pos_ = this->buf_.size() - 1;
@@ -36,7 +36,8 @@ void Buf::SetForwardPos(int fp) {
 void Buf::SetReversePos(int rp) {
   this->reverse_pos_ = rp;
 }
-vector<uint8_t>* Buf::GetBuf() {
+
+std::vector<uint8_t>* Buf::GetBuf() {
   return &buf_;
 }
 void Buf::Write(uint8_t b) {
@@ -109,7 +110,7 @@ void Buf::EnsureRemainder(int length) {
     } else {
       new_size = buf_.size() + 100;
     }
-    vector<uint8_t> new_buf(new_size);
+    std::vector<uint8_t> new_buf(new_size);
     for (int i = 0; i < forward_pos_; i++) {
       new_buf.at(i) = buf_.at(i);
     }
@@ -123,12 +124,12 @@ void Buf::EnsureRemainder(int length) {
     buf_ = new_buf;
   }
 }
-string* Buf::GetBytes() {
+std::string* Buf::GetBytes() {
   int empty_size = reverse_pos_ - forward_pos_ + 1;
   if (empty_size == 0) {
     char u8[buf_.size()];
     copy(buf_.begin(), buf_.end(), u8);
-    string* s = new string(u8, buf_.size());
+    std::string* s = new std::string(u8, buf_.size());
     return s;
   }
   if (empty_size > 0) {
@@ -141,7 +142,7 @@ string* Buf::GetBytes() {
     for (int i = forward_pos_; i < final_size; i++) {
       u8[i] = buf_.at(curr++);
     }
-    string* s = new string(u8, final_size);
+    std::string* s = new std::string(u8, final_size);
     return s;
   }
   if (empty_size < 0) {

@@ -19,24 +19,22 @@
 #include <string>
 #include <vector>
 
-using namespace std;
-
 namespace dingodb {
 
 class Buf {
  private:
-  vector<uint8_t> buf_;
+  std::vector<uint8_t> buf_;
   int forward_pos_ = 0;
   int reverse_pos_ = 0;
   int count_ = 0;
 
  public:
   Buf(int size);
-  Buf(string* buf);
+  Buf(std::string* buf);
   ~Buf();
   void SetForwardPos(int fp);
   void SetReversePos(int rp);
-  vector<uint8_t>* GetBuf();
+  std::vector<uint8_t>* GetBuf();
   void Write(uint8_t b);
   void WriteInt(int32_t i);
   void WriteLong(int64_t l);
@@ -51,7 +49,7 @@ class Buf {
   void Skip(int size);
   void ReverseSkip(int size);
   void EnsureRemainder(int length);
-  string* GetBytes();
+  std::string* GetBytes();
 };
 
 }  // namespace dingodb

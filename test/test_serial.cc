@@ -15,13 +15,18 @@
 #include <gtest/gtest.h>
 #include <algorithm>
 #include <bitset>
+#include <new>
 #include <optional>
 #include <functional>
+#include "serial/schema/base_schema.h"
 
 #include <serial/record_decoder.h>
 #include <serial/record_encoder.h>
+#include <serial/utils.h>
+#include <proto/meta.pb.h>
 
 using namespace dingodb;
+using namespace std;
 
 class DingoSerialTest : public testing::Test {
  private:
@@ -671,4 +676,145 @@ TEST_F(DingoSerialTest, recordTest) {
   delete record3;
   delete kv;
   delete rd;
+}
+
+
+TEST_F(DingoSerialTest, tabledefinitionTest) {
+  pb::meta::TableDefinition td;
+  td.set_name("test");
+
+  pb::meta::ColumnDefinition *cd1 = td.add_columns();
+  cd1->set_name("id");
+  cd1->set_element_type(pb::meta::ELEM_TYPE_INT32);
+  cd1->set_nullable(false);
+  cd1->set_indexofkey(0);
+
+  pb::meta::ColumnDefinition *cd2 = td.add_columns();
+  cd2->set_name("name");
+  cd2->set_element_type(pb::meta::ELEM_TYPE_STRING);
+  cd2->set_nullable(false);
+  cd2->set_indexofkey(0);
+
+  pb::meta::ColumnDefinition *cd3 = td.add_columns();
+  cd3->set_name("gender");
+  cd3->set_element_type(pb::meta::ELEM_TYPE_STRING);
+  cd3->set_nullable(false);
+  cd3->set_indexofkey(0);
+
+  pb::meta::ColumnDefinition *cd4 = td.add_columns();
+  cd4->set_name("score");
+  cd4->set_element_type(pb::meta::ELEM_TYPE_INT64);
+  cd4->set_nullable(false);
+  cd4->set_indexofkey(0);
+
+  pb::meta::ColumnDefinition *cd5 = td.add_columns();
+  cd5->set_name("addr");
+  cd5->set_element_type(pb::meta::ELEM_TYPE_STRING);
+  cd5->set_nullable(true);
+  cd5->set_indexofkey(-1);
+
+  pb::meta::ColumnDefinition *cd6 = td.add_columns();
+  cd6->set_name("exist");
+  cd6->set_element_type(pb::meta::ELEM_TYPE_BOOLEAN);
+  cd6->set_nullable(false);
+  cd6->set_indexofkey(-1);
+
+  pb::meta::ColumnDefinition *cd7 = td.add_columns();
+  cd7->set_name("pic");
+  cd7->set_element_type(pb::meta::ELEM_TYPE_BYTES);
+  cd7->set_nullable(true);
+  cd7->set_indexofkey(-1);
+
+  pb::meta::ColumnDefinition *cd8 = td.add_columns();
+  cd8->set_name("testNull");
+  cd8->set_element_type(pb::meta::ELEM_TYPE_INT32);
+  cd8->set_nullable(true);
+  cd8->set_indexofkey(-1);
+
+  pb::meta::ColumnDefinition *cd9 = td.add_columns();
+  cd9->set_name("age");
+  cd9->set_element_type(pb::meta::ELEM_TYPE_INT32);
+  cd9->set_nullable(false);
+  cd9->set_indexofkey(-1);
+
+  pb::meta::ColumnDefinition *cd10 = td.add_columns();
+  cd10->set_name("prev");
+  cd10->set_element_type(pb::meta::ELEM_TYPE_INT64);
+  cd10->set_nullable(false);
+  cd10->set_indexofkey(-1);
+
+  pb::meta::ColumnDefinition *cd11 = td.add_columns();
+  cd11->set_name("salary");
+  cd11->set_element_type(pb::meta::ELEM_TYPE_DOUBLE);
+  cd11->set_nullable(true);
+  cd11->set_indexofkey(-1);
+
+  vector<BaseSchema*>* schemas = TableDefinitionToDingoSchema(td);
+  BaseSchema* id = schemas->at(0);
+  EXPECT_EQ(id->GetIndex(), 0);
+  EXPECT_EQ(id->GetType(), BaseSchema::Type::kInteger);
+  EXPECT_FALSE(id->AllowNull());
+  EXPECT_TRUE(id->IsKey());
+
+  BaseSchema* name = schemas->at(1);
+  EXPECT_EQ(name->GetIndex(), 1);
+  EXPECT_EQ(name->GetType(), BaseSchema::Type::kString);
+  EXPECT_FALSE(name->AllowNull());
+  EXPECT_TRUE(name->IsKey());
+
+  BaseSchema* gender = schemas->at(2);
+  EXPECT_EQ(gender->GetIndex(), 2);
+  EXPECT_EQ(gender->GetType(), BaseSchema::Type::kString);
+  EXPECT_FALSE(gender->AllowNull());
+  EXPECT_TRUE(gender->IsKey());
+
+  BaseSchema* score = schemas->at(3);
+  EXPECT_EQ(score->GetIndex(), 3);
+  EXPECT_EQ(score->GetType(), BaseSchema::Type::kLong);
+  EXPECT_FALSE(score->AllowNull());
+  EXPECT_TRUE(score->IsKey());
+
+  BaseSchema* addr = schemas->at(4);
+  EXPECT_EQ(addr->GetIndex(), 4);
+  EXPECT_EQ(addr->GetType(), BaseSchema::Type::kString);
+  EXPECT_TRUE(addr->AllowNull());
+  EXPECT_FALSE(addr->IsKey());
+
+  BaseSchema* exist = schemas->at(5);
+  EXPECT_EQ(exist->GetIndex(), 5);
+  EXPECT_EQ(exist->GetType(), BaseSchema::Type::kBool);
+  EXPECT_FALSE(exist->AllowNull());
+  EXPECT_FALSE(exist->IsKey());
+
+  BaseSchema* pic = schemas->at(6);
+  EXPECT_EQ(pic->GetIndex(), 6);
+  EXPECT_EQ(pic->GetType(), BaseSchema::Type::kString);
+  EXPECT_TRUE(pic->AllowNull());
+  EXPECT_FALSE(pic->IsKey());
+
+  BaseSchema* test_null = schemas->at(7);
+  EXPECT_EQ(test_null->GetIndex(), 7);
+  EXPECT_EQ(test_null->GetType(), BaseSchema::Type::kInteger);
+  EXPECT_TRUE(test_null->AllowNull());
+  EXPECT_FALSE(test_null->IsKey());
+
+  BaseSchema* age = schemas->at(8);
+  EXPECT_EQ(age->GetIndex(), 8);
+  EXPECT_EQ(age->GetType(), BaseSchema::Type::kInteger);
+  EXPECT_FALSE(age->AllowNull());
+  EXPECT_FALSE(age->IsKey());
+
+  BaseSchema* prev = schemas->at(9);
+  EXPECT_EQ(prev->GetIndex(), 9);
+  EXPECT_EQ(prev->GetType(), BaseSchema::Type::kLong);
+  EXPECT_FALSE(prev->AllowNull());
+  EXPECT_FALSE(prev->IsKey()); 
+
+  BaseSchema* salary = schemas->at(10);
+  EXPECT_EQ(salary->GetIndex(), 10);
+  EXPECT_EQ(salary->GetType(), BaseSchema::Type::kDouble);
+  EXPECT_TRUE(salary->AllowNull());
+  EXPECT_FALSE(salary->IsKey()); 
+
+  delete schemas;
 }

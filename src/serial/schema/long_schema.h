@@ -19,13 +19,11 @@
 #include <optional>
 #include "dingo_schema.h"
 
-using namespace std;
-
 namespace dingodb {
 
 template <>
 
-class DingoSchema<optional<int64_t>> : public BaseSchema {
+class DingoSchema<std::optional<int64_t>> : public BaseSchema {
  private:
   int index_;
   bool key_, allow_null_;
@@ -45,11 +43,11 @@ class DingoSchema<optional<int64_t>> : public BaseSchema {
   void SetIndex(int index);
   void SetIsKey(bool key);
   void SetAllowNull(bool allow_null);
-  void EncodeKey(Buf* buf, optional<int64_t> data);
-  optional<int64_t> DecodeKey(Buf* buf);
+  void EncodeKey(Buf* buf, std::optional<int64_t> data);
+  std::optional<int64_t> DecodeKey(Buf* buf);
   void SkipKey(Buf* buf);
-  void EncodeValue(Buf* buf, optional<int64_t> data);
-  optional<int64_t> DecodeValue(Buf* buf);
+  void EncodeValue(Buf* buf, std::optional<int64_t> data);
+  std::optional<int64_t> DecodeValue(Buf* buf);
   void SkipValue(Buf* buf);
 };
 

@@ -32,14 +32,14 @@ class RecordDecoder {
  private:
   int codec_version_ = 0;
   int schema_version_;
-  vector<BaseSchema*>* schemas_;
+  std::vector<BaseSchema*>* schemas_;
   long common_id_;
 
  public:
-  RecordDecoder(int schema_version, vector<BaseSchema*>* schemas,
+  RecordDecoder(int schema_version, std::vector<BaseSchema*>* schemas,
                 long common_id);
-  vector<any>* Decode(KeyValue* key_value);
-  vector<any>* Decode(KeyValue* key_value, vector<int>* column_indexes);
+  std::vector<std::any>* Decode(KeyValue* key_value);
+  std::vector<std::any>* Decode(KeyValue* key_value, std::vector<int>* column_indexes);
 };
 
 }  // namespace dingodb

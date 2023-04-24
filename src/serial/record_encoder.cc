@@ -17,7 +17,7 @@
 
 namespace dingodb {
 
-RecordEncoder::RecordEncoder(int schema_version, vector<BaseSchema*>*  schemas,
+RecordEncoder::RecordEncoder(int schema_version, std::vector<BaseSchema*>*  schemas,
                              long common_id) {
   this->schema_version_ = schema_version;
   this->schemas_ = schemas;
@@ -27,117 +27,122 @@ RecordEncoder::RecordEncoder(int schema_version, vector<BaseSchema*>*  schemas,
   this->value_buf_size_ = size[1];
   delete[] size;
 }
-KeyValue* RecordEncoder::Encode(vector<any>*  record) {
-  string* key = EncodeKey(record);
-  string* value = EncodeValue(record);
+KeyValue* RecordEncoder::Encode(std::vector<std::any>*  record) {
+  std::string* key = EncodeKey(record);
+  std::string* value = EncodeValue(record);
   KeyValue* keyvalue = new KeyValue(key, value);
   return keyvalue;
 }
-string* RecordEncoder::EncodeKey(vector<any>*  record) {
+std::string* RecordEncoder::EncodeKey(std::vector<std::any>*  record) {
   Buf* key_buf = new Buf(key_buf_size_);
   key_buf->EnsureRemainder(12);
   key_buf->WriteLong(common_id_);
   key_buf->ReverseWriteInt(codec_version_);
   for (BaseSchema *bs : *schemas_) {
-     BaseSchema::Type type = bs->GetType();
-    switch (type) {
-      case BaseSchema::kBool: {
-        DingoSchema<optional<bool>>* bos = static_cast<DingoSchema<optional<bool>>*>(bs);
-        if (bos->IsKey()) {
-          bos->EncodeKey(key_buf, any_cast<optional<bool>>(record->at(bos->GetIndex())));
+    
+    if (bs != nullptr) {
+      BaseSchema::Type type = bs->GetType();
+      switch (type) {
+        case BaseSchema::kBool: {
+          DingoSchema<std::optional<bool>>* bos = static_cast<DingoSchema<std::optional<bool>>*>(bs);
+          if (bos->IsKey()) {
+            bos->EncodeKey(key_buf, std::any_cast<std::optional<bool>>(record->at(bos->GetIndex())));
+          }
+          break;
         }
-        break;
-      }
-      case BaseSchema::kInteger: {
-        DingoSchema<optional<int32_t>>* is = static_cast<DingoSchema<optional<int32_t>>*>(bs);
-        if (is->IsKey()) {
-          is->EncodeKey(key_buf, any_cast<optional<int32_t>>(record->at(is->GetIndex())));
+        case BaseSchema::kInteger: {
+          DingoSchema<std::optional<int32_t>>* is = static_cast<DingoSchema<std::optional<int32_t>>*>(bs);
+          if (is->IsKey()) {
+            is->EncodeKey(key_buf, std::any_cast<std::optional<int32_t>>(record->at(is->GetIndex())));
+          }
+          break;
         }
-        break;
-      }
-      case BaseSchema::kLong: {
-        DingoSchema<optional<int64_t>>* ls = static_cast<DingoSchema<optional<int64_t>>*>(bs);
-        if (ls->IsKey()) {
-          ls->EncodeKey(key_buf, any_cast<optional<int64_t>>(record->at(ls->GetIndex())));
+        case BaseSchema::kLong: {
+          DingoSchema<std::optional<int64_t>>* ls = static_cast<DingoSchema<std::optional<int64_t>>*>(bs);
+          if (ls->IsKey()) {
+            ls->EncodeKey(key_buf, std::any_cast<std::optional<int64_t>>(record->at(ls->GetIndex())));
+          }
+          break;
         }
-        break;
-      }
-      case BaseSchema::kDouble: {
-        DingoSchema<optional<double>>* ds = static_cast<DingoSchema<optional<double>>*>(bs);
-        if (ds->IsKey()) {
-          ds->EncodeKey(key_buf, any_cast<optional<double>>(record->at(ds->GetIndex())));
+        case BaseSchema::kDouble: {
+          DingoSchema<std::optional<double>>* ds = static_cast<DingoSchema<std::optional<double>>*>(bs);
+          if (ds->IsKey()) {
+            ds->EncodeKey(key_buf, std::any_cast<std::optional<double>>(record->at(ds->GetIndex())));
+          }
+          break;
         }
-        break;
-      }
-      case BaseSchema::kString: {
-        DingoSchema<optional<reference_wrapper<string>>>* ss = static_cast<DingoSchema<optional<reference_wrapper<string>>>*>(bs);
-        if (ss->IsKey()) {
-          ss->EncodeKey(key_buf, any_cast<optional<reference_wrapper<string>>>(record->at(ss->GetIndex())));
+        case BaseSchema::kString: {
+          DingoSchema<std::optional<std::reference_wrapper<std::string>>>* ss = static_cast<DingoSchema<std::optional<std::reference_wrapper<std::string>>>*>(bs);
+          if (ss->IsKey()) {
+            ss->EncodeKey(key_buf, std::any_cast<std::optional<std::reference_wrapper<std::string>>>(record->at(ss->GetIndex())));
+          }
+          break;
         }
-        break;
-      }
-      default: {
-        break;
+        default: {
+          break;
+        }
       }
     }
   }
-  string* key = key_buf->GetBytes();
+  std::string* key = key_buf->GetBytes();
   delete key_buf;
   return key;
 }
-string* RecordEncoder::EncodeValue(vector<any>*  record) {
+std::string* RecordEncoder::EncodeValue(std::vector<std::any>*  record) {
   Buf* value_buf = new Buf(value_buf_size_);
   value_buf->EnsureRemainder(4);
   value_buf->WriteInt(schema_version_);
   for (BaseSchema *bs : *schemas_) {
-     BaseSchema::Type type = bs->GetType();
-    switch (type) {
-      case BaseSchema::kBool: {
-        DingoSchema<optional<bool>>* bos = static_cast<DingoSchema<optional<bool>>*>(bs);
-        if (!bos->IsKey()) {
-          bos->EncodeValue(value_buf,
-                           any_cast<optional<bool>>(record->at(bos->GetIndex())));
+    if (bs != nullptr) {
+      BaseSchema::Type type = bs->GetType();
+      switch (type) {
+        case BaseSchema::kBool: {
+          DingoSchema<std::optional<bool>>* bos = static_cast<DingoSchema<std::optional<bool>>*>(bs);
+          if (!bos->IsKey()) {
+            bos->EncodeValue(value_buf,
+                            std::any_cast<std::optional<bool>>(record->at(bos->GetIndex())));
+          }
+          break;
         }
-        break;
-      }
-      case BaseSchema::kInteger: {
-        DingoSchema<optional<int32_t>>* is = static_cast<DingoSchema<optional<int32_t>>*>(bs);
-        if (!is->IsKey()) {
-          is->EncodeValue(value_buf,
-                          any_cast<optional<int32_t>>(record->at(is->GetIndex())));
+        case BaseSchema::kInteger: {
+          DingoSchema<std::optional<int32_t>>* is = static_cast<DingoSchema<std::optional<int32_t>>*>(bs);
+          if (!is->IsKey()) {
+            is->EncodeValue(value_buf,
+                            std::any_cast<std::optional<int32_t>>(record->at(is->GetIndex())));
+          }
+          break;
         }
-        break;
-      }
-      case BaseSchema::kLong: {
-        DingoSchema<optional<int64_t>>* ls = static_cast<DingoSchema<optional<int64_t>>*>(bs);
-        if (!ls->IsKey()) {
-          ls->EncodeValue(value_buf,
-                          any_cast<optional<int64_t>>(record->at(ls->GetIndex())));
+        case BaseSchema::kLong: {
+          DingoSchema<std::optional<int64_t>>* ls = static_cast<DingoSchema<std::optional<int64_t>>*>(bs);
+          if (!ls->IsKey()) {
+            ls->EncodeValue(value_buf,
+                            std::any_cast<std::optional<int64_t>>(record->at(ls->GetIndex())));
+          }
+          break;
         }
-        break;
-      }
-      case BaseSchema::kDouble: {
-        DingoSchema<optional<double>>* ds = static_cast<DingoSchema<optional<double>>*>(bs);
-        if (!ds->IsKey()) {
-          ds->EncodeValue(value_buf,
-                          any_cast<optional<double>>(record->at(ds->GetIndex())));
+        case BaseSchema::kDouble: {
+          DingoSchema<std::optional<double>>* ds = static_cast<DingoSchema<std::optional<double>>*>(bs);
+          if (!ds->IsKey()) {
+            ds->EncodeValue(value_buf,
+                            std::any_cast<std::optional<double>>(record->at(ds->GetIndex())));
+          }
+          break;
         }
-        break;
-      }
-      case BaseSchema::kString: {
-        DingoSchema<optional<reference_wrapper<string>>>* ss = static_cast<DingoSchema<optional<reference_wrapper<string>>>*>(bs);
-        if (!ss->IsKey()) {
-          ss->EncodeValue(value_buf,
-                          any_cast<optional<reference_wrapper<string>>>(record->at(ss->GetIndex())));
+        case BaseSchema::kString: {
+          DingoSchema<std::optional<std::reference_wrapper<std::string>>>* ss = static_cast<DingoSchema<std::optional<std::reference_wrapper<std::string>>>*>(bs);
+          if (!ss->IsKey()) {
+            ss->EncodeValue(value_buf,
+                            std::any_cast<std::optional<std::reference_wrapper<std::string>>>(record->at(ss->GetIndex())));
+          }
+          break;
         }
-        break;
-      }
-      default: {
-        break;
+        default: {
+          break;
+        }
       }
     }
   }
-  string* value = value_buf->GetBytes();
+  std::string* value = value_buf->GetBytes();
   delete value_buf;
   return value;
 }
