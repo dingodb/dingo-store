@@ -74,6 +74,20 @@ class CoordinatorUpdateStateTask : public TaskRunnable {
   std::shared_ptr<CoordinatorControl> coordinator_control_;
 };
 
+class CoordinatorTaskListProcessTask : public TaskRunnable {
+ public:
+  CoordinatorTaskListProcessTask(std::shared_ptr<CoordinatorControl> coordinator_control)
+      : coordinator_control_(coordinator_control) {}
+  ~CoordinatorTaskListProcessTask() override = default;
+
+  void Run() override { CoordinatorTaskListProcess(coordinator_control_); }
+
+ private:
+  static void CoordinatorTaskListProcess(std::shared_ptr<CoordinatorControl> coordinator_control);
+
+  std::shared_ptr<CoordinatorControl> coordinator_control_;
+};
+
 class CoordinatorRecycleOrphanTask : public TaskRunnable {
  public:
   CoordinatorRecycleOrphanTask(std::shared_ptr<CoordinatorControl> coordinator_control)
@@ -116,6 +130,7 @@ class Heartbeat {
   static void TriggerStoreHeartbeat(void*);
   static void TriggerCoordinatorPushToStore(void*);
   static void TriggerCoordinatorUpdateState(void*);
+  static void TriggerCoordinatorTaskListProcess(void*);
   static void TriggerCoordinatorRecycleOrphan(void*);
   static void TriggerCalculateTableMetrics(void*);
 

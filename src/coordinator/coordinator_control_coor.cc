@@ -25,10 +25,13 @@
 #include <utility>
 #include <vector>
 
+#include "braft/closure_helper.h"
 #include "braft/configuration.h"
+#include "braft/raft.h"
 #include "brpc/channel.h"
 #include "butil/containers/flat_map.h"
 #include "butil/scoped_lock.h"
+#include "butil/status.h"
 #include "butil/strings/string_split.h"
 #include "butil/synchronization/lock.h"
 #include "butil/time.h"
@@ -403,6 +406,39 @@ pb::error::Errno CoordinatorControl::QueryRegion(uint64_t region_id, pb::common:
   return pb::error::Errno::OK;
 }
 
+pb::error::Errno CoordinatorControl::CreateRegionForSplitInternal(
+    uint64_t split_from_region_id, uint64_t& new_region_id, pb::coordinator_internal::MetaIncrement& meta_increment) {
+  if (split_from_region_id <= 0) {
+    return pb::error::Errno::EILLEGAL_PARAMTETERS;
+  }
+
+  std::vector<uint64_t> store_ids;
+
+  pb::common::Region split_from_region;
+  int ret = region_map_.Get(split_from_region_id, split_from_region);
+  if (ret < 0) {
+    DINGO_LOG(INFO) << "CreateRegionForSplit region_id not exists, id=" << split_from_region_id;
+    return pb::error::Errno::EREGION_NOT_FOUND;
+  }
+
+  for (const auto& peer : split_from_region.definition().peers()) {
+    store_ids.push_back(peer.store_id());
+  }
+
+  split_from_region.mutable_definition()->set_name(split_from_region.definition().name() + "_split");
+
+  new_region_id = GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_REGION, meta_increment);
+  if (new_region_id <= 0) {
+    return pb::error::Errno::EINTERNAL;
+  }
+
+  // create region with split_from_region_id & store_ids
+  return CreateRegion(split_from_region.definition().name(), "", store_ids.size(),
+                      split_from_region.definition().range(), split_from_region.definition().schema_id(),
+                      split_from_region.definition().table_id(), store_ids, split_from_region_id, new_region_id,
+                      meta_increment);
+}
+
 pb::error::Errno CoordinatorControl::CreateRegionForSplit(const std::string& region_name,
                                                           const std::string& resource_tag,
                                                           pb::common::Range region_range, uint64_t schema_id,
@@ -499,7 +535,12 @@ pb::error::Errno CoordinatorControl::CreateRegion(const std::string& region_name
   }
 
   // generate new region
-  uint64_t const create_region_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION, meta_increment);
+  if (new_region_id <= 0) {
+    new_region_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION, meta_increment);
+  }
+
+  uint64_t const create_region_id = new_region_id;
+
   if (region_map_.Exists(create_region_id)) {
     DINGO_LOG(ERROR) << "create_region_id =" << create_region_id << " is illegal, cannot create region!!";
     return pb::error::Errno::EREGION_UNAVAILABLE;
@@ -619,7 +660,7 @@ pb::error::Errno CoordinatorControl::CreateRegion(const std::string& region_name
   // region_map_epoch++;                                               // raft_kv_put
   // region_map_.insert(std::make_pair(create_region_id, new_region));  // raft_kv_put
 
-  new_region_id = create_region_id;
+  // new_region_id = create_region_id;
 
   return pb::error::Errno::OK;
 }
@@ -1123,6 +1164,181 @@ pb::error::Errno CoordinatorControl::ChangePeerRegion(uint64_t region_id, std::v
   //   auto* region_definition = region_cmd_to_add->mutable_change_peer_request()->mutable_region_definition();
   //   region_definition->CopyFrom(new_region_definition);
   // }
+
+  return pb::error::Errno::OK;
+}
+
+// ChangePeerRegionWithTaskList
+pb::error::Errno CoordinatorControl::ChangePeerRegionWithTaskList(
+    uint64_t region_id, std::vector<uint64_t>& new_store_ids, pb::coordinator_internal::MetaIncrement& meta_increment) {
+  // validate region_id
+  pb::common::Region region;
+  int ret = region_map_.Get(region_id, region);
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << "ChangePeerRegion region not exists, id = " << region_id;
+    return pb::error::Errno::EREGION_NOT_FOUND;
+  }
+
+  // validate new_store_ids
+  if (new_store_ids.size() != (region.definition().peers_size() + 1) &&
+      new_store_ids.size() != (region.definition().peers_size() - 1) && (!new_store_ids.empty())) {
+    DINGO_LOG(ERROR) << "ChangePeerRegion new_store_ids size not match, region_id = " << region_id
+                     << " old_size = " << region.definition().peers_size() << " new_size = " << new_store_ids.size();
+    return pb::error::Errno::EILLEGAL_PARAMTETERS;
+  }
+
+  // validate new_store_ids only has one new store or only less one store
+  std::vector<uint64_t> old_store_ids;
+  old_store_ids.reserve(region.definition().peers_size());
+  for (int i = 0; i < region.definition().peers_size(); i++) {
+    old_store_ids.push_back(region.definition().peers(i).store_id());
+  }
+
+  std::vector<uint64_t> new_store_ids_diff_more;
+  std::vector<uint64_t> new_store_ids_diff_less;
+
+  std::sort(new_store_ids.begin(), new_store_ids.end());
+  std::sort(old_store_ids.begin(), old_store_ids.end());
+
+  std::set_difference(new_store_ids.begin(), new_store_ids.end(), old_store_ids.begin(), old_store_ids.end(),
+                      std::inserter(new_store_ids_diff_more, new_store_ids_diff_more.begin()));
+  std::set_difference(old_store_ids.begin(), old_store_ids.end(), new_store_ids.begin(), new_store_ids.end(),
+                      std::inserter(new_store_ids_diff_less, new_store_ids_diff_less.begin()));
+
+  if (new_store_ids_diff_more.size() + new_store_ids_diff_less.size() != 1) {
+    DINGO_LOG(ERROR) << "ChangePeerRegion new_store_ids can only has one diff store, region_id = " << region_id
+                     << " new_store_ids_diff_more.size() = " << new_store_ids_diff_more.size()
+                     << " new_store_ids_diff_less.size() = " << new_store_ids_diff_less.size();
+    for (auto it : new_store_ids_diff_more) DINGO_LOG(ERROR) << "new_store_ids_diff_more = " << it;
+    for (auto it : new_store_ids_diff_less) DINGO_LOG(ERROR) << "new_store_ids_diff_less = " << it;
+    return pb::error::Errno::EILLEGAL_PARAMTETERS;
+  }
+
+  // this is the new definition of region
+  pb::common::RegionDefinition new_region_definition;
+  new_region_definition.CopyFrom(region.definition());
+  new_region_definition.clear_peers();
+
+  // generate store operation for stores
+  if (new_store_ids_diff_less.size() == 1) {
+    // calculate new peers
+    for (int i = 0; i < region.definition().peers_size(); i++) {
+      if (region.definition().peers(i).store_id() != new_store_ids_diff_less.at(0)) {
+        auto* peer = new_region_definition.add_peers();
+        peer->CopyFrom(region.definition().peers(i));
+      }
+    }
+
+    if (region.leader_store_id() == 0) {
+      DINGO_LOG(ERROR) << "ChangePeerRegion region.leader_store_id() == 0, region_id = " << region_id;
+      return pb::error::Errno::ECHANGE_PEER_STATUS_ILLEGAL;
+    }
+
+    // build new task_list
+    auto* task_list_increment = meta_increment.add_task_lists();
+    task_list_increment->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_TASK_LIST, meta_increment));
+    task_list_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
+    auto* increment_task_list = task_list_increment->mutable_task_list();
+    increment_task_list->set_id(task_list_increment->id());
+
+    // this is change_peer task
+    auto* new_task = increment_task_list->add_tasks();
+    auto* store_operation_change = new_task->add_store_operations();
+    store_operation_change->set_id(region.leader_store_id());
+    auto* region_cmd_to_change = store_operation_change->add_region_cmds();
+    region_cmd_to_change->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
+    region_cmd_to_change->set_region_cmd_type(::dingodb::pb::coordinator::RegionCmdType::CMD_CHANGE_PEER);
+    region_cmd_to_change->set_region_id(region_id);
+    region_cmd_to_change->set_create_timestamp(butil::gettimeofday_ms());
+
+    auto* region_definition = region_cmd_to_change->mutable_change_peer_request()->mutable_region_definition();
+    region_definition->CopyFrom(new_region_definition);
+
+    // this is delete_region task
+    auto* delete_region_task = increment_task_list->add_tasks();
+    auto* region_check = delete_region_task->mutable_pre_check();
+    region_check->set_type(::dingodb::pb::coordinator::TaskPreCheckType::REGION_CHECK);
+    region_check->mutable_region_check()->set_region_id(region_id);
+    region_check->mutable_region_check()->mutable_peers()->CopyFrom(new_region_definition.peers());
+
+    auto* store_operation_delete = delete_region_task->add_store_operations();
+    store_operation_delete->set_id(new_store_ids_diff_less.at(0));
+    auto* region_cmd_to_delete = store_operation_delete->add_region_cmds();
+    region_cmd_to_delete->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
+    region_cmd_to_delete->set_region_cmd_type(::dingodb::pb::coordinator::RegionCmdType::CMD_DELETE);
+    region_cmd_to_delete->set_region_id(region_id);
+    region_cmd_to_delete->set_create_timestamp(butil::gettimeofday_ms());
+    region_cmd_to_delete->mutable_delete_request()->set_region_id(region_id);
+
+  } else if (new_store_ids_diff_more.size() == 1) {
+    // expand region
+    // calculate new peers
+    // validate new_store_ids_diff_more is legal
+    pb::common::Store store_to_add_peer;
+    int ret = store_map_.Get(new_store_ids_diff_more.at(0), store_to_add_peer);
+    if (ret < 0) {
+      DINGO_LOG(ERROR) << "ChangePeerRegion new_store_ids_diff_more not exists, region_id = " << region_id;
+      return pb::error::Errno::ESTORE_NOT_FOUND;
+    }
+
+    // generate new peer from store
+    auto* peer = new_region_definition.add_peers();
+    peer->set_store_id(store_to_add_peer.id());
+    peer->set_role(::dingodb::pb::common::PeerRole::VOTER);
+    peer->mutable_server_location()->CopyFrom(store_to_add_peer.server_location());
+    peer->mutable_raft_location()->CopyFrom(store_to_add_peer.raft_location());
+
+    // add old peer to new_region_definition
+    for (int i = 0; i < region.definition().peers_size(); i++) {
+      auto* peer = new_region_definition.add_peers();
+      peer->CopyFrom(region.definition().peers(i));
+    }
+
+    if (region.leader_store_id() == 0) {
+      DINGO_LOG(ERROR) << "ChangePeerRegion region.leader_store_id() == 0, region_id = " << region_id;
+      return pb::error::Errno::ECHANGE_PEER_STATUS_ILLEGAL;
+    }
+
+    // build new task_list
+    auto* task_list_increment = meta_increment.add_task_lists();
+    task_list_increment->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_TASK_LIST, meta_increment));
+    task_list_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
+    auto* increment_task_list = task_list_increment->mutable_task_list();
+    increment_task_list->set_id(task_list_increment->id());
+    auto* new_task = increment_task_list->add_tasks();
+
+    // this create region task
+    auto* store_operation_add = new_task->add_store_operations();
+    store_operation_add->set_id(new_store_ids_diff_more.at(0));
+    auto* region_cmd_to_add = store_operation_add->add_region_cmds();
+    region_cmd_to_add->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
+    region_cmd_to_add->set_region_cmd_type(::dingodb::pb::coordinator::RegionCmdType::CMD_CREATE);
+    region_cmd_to_add->set_region_id(region_id);
+    region_cmd_to_add->set_create_timestamp(butil::gettimeofday_ms());
+
+    auto* region_definition = region_cmd_to_add->mutable_create_request()->mutable_region_definition();
+    region_definition->CopyFrom(new_region_definition);
+
+    // this change peer task
+    auto* change_peer_task = increment_task_list->add_tasks();
+    auto* region_check = change_peer_task->mutable_pre_check();
+    region_check->set_type(::dingodb::pb::coordinator::TaskPreCheckType::STORE_REGION_CHECK);
+    region_check->mutable_store_region_check()->set_store_id(new_store_ids_diff_more.at(0));
+    region_check->mutable_store_region_check()->set_region_id(region_id);
+
+    auto* store_operation_change = change_peer_task->add_store_operations();
+    store_operation_change->set_id(region.leader_store_id());
+    auto* region_cmd_to_change = store_operation_change->add_region_cmds();
+    region_cmd_to_change->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
+    region_cmd_to_change->set_region_cmd_type(::dingodb::pb::coordinator::RegionCmdType::CMD_CHANGE_PEER);
+    region_cmd_to_change->set_region_id(region_id);
+    region_cmd_to_change->set_create_timestamp(butil::gettimeofday_ms());
+
+    region_cmd_to_change->mutable_change_peer_request()->mutable_region_definition()->CopyFrom(new_region_definition);
+  } else {
+    DINGO_LOG(ERROR) << "ChangePeerRegion new_store_ids not match, region_id = " << region_id;
+    return pb::error::Errno::EILLEGAL_PARAMTETERS;
+  }
 
   return pb::error::Errno::OK;
 }
@@ -2056,6 +2272,228 @@ void CoordinatorControl::GetStoreOperations(
   // for (auto& it : store_opertion_kvs) {
   //   DINGO_LOG(DEBUG) << "store_operation_meta_ key=" << it.key() << " value=" << it.value();
   // }
+}
+
+void CoordinatorControl::GetTaskList(butil::FlatMap<uint64_t, pb::coordinator::TaskList>& task_lists) {
+  task_list_map_.GetFlatMapCopy(task_lists);
+}
+
+bool CoordinatorControl::DoTaskPreCheck(const pb::coordinator::TaskPreCheck& task_pre_check) {
+  if (task_pre_check.type() == pb::coordinator::TaskPreCheckType::REGION_CHECK) {
+    pb::common::Region region;
+    int ret = region_map_.Get(task_pre_check.region_check().region_id(), region);
+    if (ret < 0) {
+      DINGO_LOG(INFO) << "region_map_.Get(" << task_pre_check.region_check().region_id() << ") failed";
+      return false;
+    }
+
+    bool check_passed = true;
+    const auto& region_check = task_pre_check.region_check();
+
+    if (region_check.state() != 0 && region_check.state() != region.state()) {
+      check_passed = false;
+    }
+
+    if (region_check.raft_status() != 0 && region_check.raft_status() != region.raft_status()) {
+      check_passed = false;
+    }
+
+    if (region_check.replica_status() != 0 && region_check.replica_status() != region.replica_status()) {
+      check_passed = false;
+    }
+
+    if (region_check.has_range()) {
+      if (region_check.range().start_key() != region.definition().range().start_key() ||
+          region_check.range().end_key() != region.definition().range().end_key()) {
+        check_passed = false;
+      }
+    }
+
+    if (region_check.peers_size() > 0) {
+      std::vector<uint64_t> peers_to_check;
+      std::vector<uint64_t> peers_of_region;
+
+      for (const auto& it : region_check.peers()) {
+        peers_to_check.push_back(it.store_id());
+      }
+      for (const auto& it : region.definition().peers()) {
+        peers_of_region.push_back(it.store_id());
+      }
+
+      std::sort(peers_to_check.begin(), peers_to_check.end());
+      std::sort(peers_of_region.begin(), peers_of_region.end());
+
+      if (!std::equal(peers_to_check.begin(), peers_to_check.end(), peers_of_region.begin(), peers_of_region.end())) {
+        check_passed = false;
+      }
+    }
+
+    DINGO_LOG(INFO) << "task pre check passed, check_type=REGION_CHECK";
+
+    return check_passed;
+  } else if (task_pre_check.type() == pb::coordinator::TaskPreCheckType::STORE_REGION_CHECK) {
+    pb::common::RegionMetrics region;
+    {
+      BAIDU_SCOPED_LOCK(store_metrics_map_mutex_);
+      auto* ret = store_metrics_map_.seek(task_pre_check.store_region_check().store_id());
+      if (ret == nullptr) {
+        DINGO_LOG(INFO) << "store_metrics_map_.seek(" << task_pre_check.store_region_check().store_id() << ") failed";
+        return false;
+      }
+
+      const auto& region_metrics_map = ret->region_metrics_map();
+      if (region_metrics_map.find(task_pre_check.store_region_check().region_id()) == region_metrics_map.end()) {
+        DINGO_LOG(INFO) << "region_metrics_map.find(" << task_pre_check.store_region_check().region_id() << ") failed";
+        return false;
+      }
+
+      region = region_metrics_map.at(task_pre_check.store_region_check().region_id());
+    }
+
+    bool check_passed = true;
+    const auto& region_check = task_pre_check.store_region_check();
+
+    if (region_check.store_region_state() != 0 && region_check.store_region_state() != region.store_region_state()) {
+      check_passed = false;
+    }
+
+    if (region_check.raft_node_status() != 0 && region_check.raft_node_status() != region.braft_status().raft_state()) {
+      check_passed = false;
+    }
+
+    if (region_check.has_range()) {
+      if (region_check.range().start_key() != region.region_definition().range().start_key() ||
+          region_check.range().end_key() != region.region_definition().range().end_key()) {
+        check_passed = false;
+      }
+    }
+
+    if (region_check.peers_size() > 0) {
+      std::vector<uint64_t> peers_to_check;
+      std::vector<uint64_t> peers_of_region;
+
+      for (const auto& it : region_check.peers()) {
+        peers_to_check.push_back(it.store_id());
+      }
+      for (const auto& it : region.region_definition().peers()) {
+        peers_of_region.push_back(it.store_id());
+      }
+
+      std::sort(peers_to_check.begin(), peers_to_check.end());
+      std::sort(peers_of_region.begin(), peers_of_region.end());
+
+      if (!std::equal(peers_to_check.begin(), peers_to_check.end(), peers_of_region.begin(), peers_of_region.end())) {
+        check_passed = false;
+      }
+    }
+
+    DINGO_LOG(INFO) << "task pre check passed, check_type=REGION_CHECK";
+    return check_passed;
+  } else {
+    DINGO_LOG(INFO) << "task pre check passed, check_type=NONE";
+    return true;
+  }
+}
+
+pb::error::Errno CoordinatorControl::ProcessSingleTaskList(const pb::coordinator::TaskList& task_list,
+                                                           pb::coordinator_internal::MetaIncrement& meta_increment) {
+  if (task_list.ByteSizeLong() == 0) {
+    DINGO_LOG(ERROR) << "task_to_process.ByteSizeLong() == 0";
+    return pb::error::EINTERNAL;
+  }
+
+  // check step
+  if (task_list.next_step() == task_list.tasks_size()) {
+    DINGO_LOG(INFO) << "task_list.next_step() == task_list.tasks_size() - 1, will delete this task_list";
+    auto* task_list_increment = meta_increment.add_task_lists();
+    task_list_increment->set_id(task_list.id());
+    task_list_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
+    task_list_increment->mutable_task_list()->CopyFrom(task_list);
+
+    return pb::error::Errno::OK;
+  }
+
+  // process task
+  const auto& task = task_list.tasks(task_list.next_step());
+
+  DINGO_LOG(INFO) << "process task=" << task.DebugString();
+
+  // do pre check
+  bool can_advance_task = DoTaskPreCheck(task.pre_check());
+
+  // advance task
+  if (!can_advance_task) {
+    DINGO_LOG(INFO) << "can not advance task, skip this task_list, task_list=" << task_list.ShortDebugString();
+    return pb::error::Errno::OK;
+  }
+
+  // do task, send all store_operations
+  for (const auto& it : task.store_operations()) {
+    auto* store_operation_increment = meta_increment.add_store_operations();
+    store_operation_increment->set_id(it.id());
+    store_operation_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
+    store_operation_increment->mutable_store_operation()->CopyFrom(it);
+  }
+
+  // advance step, update task_list
+  auto* task_list_increment = meta_increment.add_task_lists();
+  task_list_increment->set_id(task_list.id());
+  task_list_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
+  task_list_increment->mutable_task_list()->CopyFrom(task_list);
+  task_list_increment->mutable_task_list()->set_next_step(task_list.next_step() + 1);
+
+  DINGO_LOG(INFO) << "task_list id=" << task_list.id() << " step=" << task_list.next_step()
+                  << " advance+1 total_task_count=" << task_list.tasks_size();
+
+  return pb::error::Errno::OK;
+}
+
+// is processing task list
+void CoordinatorControl::ReleaseProcessTaskListStatus(const butil::Status&) { is_processing_task_list_.store(false); }
+
+pb::error::Errno CoordinatorControl::ProcessTaskList() {
+  if (is_processing_task_list_.load()) {
+    DINGO_LOG(INFO) << "is_processing_task_list is true, skip process task list";
+    return pb::error::Errno::OK;
+  }
+  DINGO_LOG(INFO) << "start process task lists";
+
+  AtomicGuard atomic_guard(is_processing_task_list_);
+
+  butil::FlatMap<uint64_t, pb::coordinator::TaskList> task_list_map;
+  task_list_map.init(100);
+  auto ret = task_list_map_.GetFlatMapCopy(task_list_map);
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << "task_list_map_.GetFlatMapCopy failed";
+    return pb::error::EINTERNAL;
+  }
+
+  if (task_list_map.empty()) {
+    DINGO_LOG(DEBUG) << "task_list_map is empty";
+    return pb::error::Errno::OK;
+  }
+
+  pb::coordinator_internal::MetaIncrement meta_increment;
+
+  for (const auto& it : task_list_map) {
+    auto store_id = it.first;
+    const auto& task_list = it.second;
+
+    ProcessSingleTaskList(task_list, meta_increment);
+  }
+
+  if (meta_increment.ByteSizeLong() == 0) {
+    return pb::error::Errno::OK;
+  }
+
+  // this callback will destruct by itself, so we don't need to delete it
+  auto* done = braft::NewCallback(this, &CoordinatorControl::ReleaseProcessTaskListStatus);
+
+  // prepare for raft process
+  atomic_guard.Release();
+  SubmitMetaIncrement(done, meta_increment);
+
+  return pb::error::Errno::OK;
 }
 
 }  // namespace dingodb

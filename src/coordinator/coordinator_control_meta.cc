@@ -378,8 +378,8 @@ pb::error::Errno CoordinatorControl::CreateTable(uint64_t schema_id, const pb::m
   }
 
   bool has_auto_increment_column = false;
-  pb::error::Errno ret = AutoIncrementControl::CheckAutoIncrementInTableDefinition(table_definition,
-    has_auto_increment_column);
+  pb::error::Errno ret =
+      AutoIncrementControl::CheckAutoIncrementInTableDefinition(table_definition, has_auto_increment_column);
   if (ret != pb::error::Errno::OK) {
     DINGO_LOG(ERROR) << "check auto increment in table definition error.";
     return ret;
@@ -440,7 +440,7 @@ pb::error::Errno CoordinatorControl::CreateTable(uint64_t schema_id, const pb::m
     // uint64_t schema_id, uint64_t table_id, uint64_t &new_region_id)
     std::string const region_name = std::to_string(schema_id) + std::string("_") + table_definition.name() +
                                     std::string("_part_") + std::to_string(i);
-    uint64_t new_region_id;
+    uint64_t new_region_id = 0;
 
     auto ret = CreateRegion(region_name, "", replica, range_partition.ranges(i), schema_id, new_table_id, new_region_id,
                             meta_increment);
@@ -511,11 +511,11 @@ pb::error::Errno CoordinatorControl::CreateTable(uint64_t schema_id, const pb::m
 
   // create auto increment
   if (has_auto_increment_column) {
-    butil::Status status = AutoIncrementControl::SendCreateAutoIncrementInternal(new_table_id,
-      table_definition.auto_increment());
+    butil::Status status =
+        AutoIncrementControl::SendCreateAutoIncrementInternal(new_table_id, table_definition.auto_increment());
     if (status.error_code() != pb::error::Errno::OK) {
-      DINGO_LOG(ERROR) << "send create auto increment internal error, code: " << status.error_code() <<
-         ", message: " << status.error_str();
+      DINGO_LOG(ERROR) << "send create auto increment internal error, code: " << status.error_code()
+                       << ", message: " << status.error_str();
       return pb::error::Errno::EAUTO_INCREMENT_WHILE_CREAT_TABLE;
     }
   }

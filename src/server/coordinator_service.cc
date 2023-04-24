@@ -917,7 +917,8 @@ void CoordinatorServiceImpl::ChangePeerRegion(google::protobuf::RpcController *c
     new_store_ids.push_back(it.store_id());
   }
 
-  auto ret = this->coordinator_control_->ChangePeerRegion(region_definition.id(), new_store_ids, meta_increment);
+  auto ret =
+      this->coordinator_control_->ChangePeerRegionWithTaskList(region_definition.id(), new_store_ids, meta_increment);
   response->mutable_error()->set_errcode(ret);
 
   // if meta_increment is empty, means no need to update meta
@@ -1108,6 +1109,31 @@ void CoordinatorServiceImpl::RemoveStoreOperation(google::protobuf::RpcControlle
   engine_->MetaPut(ctx, meta_increment);
 }
 
+// task list
+void CoordinatorServiceImpl::GetTaskList(google::protobuf::RpcController * /*controller*/,
+                                         const pb::coordinator::GetTaskListRequest *request,
+                                         pb::coordinator::GetTaskListResponse *response,
+                                         google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+  auto is_leader = this->coordinator_control_->IsLeader();
+  DINGO_LOG(DEBUG) << "Receive Get StoreOperation Request, IsLeader:" << is_leader
+                   << ", Request:" << request->DebugString();
+
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  butil::FlatMap<uint64_t, pb::coordinator::TaskList> task_lists;
+  task_lists.init(100);
+  coordinator_control_->GetTaskList(task_lists);
+
+  for (const auto &it : task_lists) {
+    auto *new_task_list = response->add_task_lists();
+    new_task_list->CopyFrom(it.second);
+  }
+}
+
+// raft control
 void CoordinatorServiceImpl::RaftControl(google::protobuf::RpcController *controller,
                                          const pb::coordinator::RaftControlRequest *request,
                                          pb::coordinator::RaftControlResponse *response,

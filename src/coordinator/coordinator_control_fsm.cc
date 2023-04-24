@@ -244,6 +244,18 @@ bool CoordinatorControl::LoadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapsh
   DINGO_LOG(INFO) << "Snapshot executor_user_meta_, count=" << kvs.size();
   kvs.clear();
 
+  // 11.task_list map
+  if (!meta_reader_->Scan(snapshot, task_list_meta_->Prefix(), kvs)) {
+    return false;
+  }
+
+  for (const auto& kv : kvs) {
+    auto* snapshot_file_kv = meta_snapshot_file.add_task_list_map_kvs();
+    snapshot_file_kv->CopyFrom(kv);
+  }
+  DINGO_LOG(INFO) << "Snapshot task_list_meta_, count=" << kvs.size();
+  kvs.clear();
+
   return true;
 }
 
@@ -559,6 +571,33 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
   DINGO_LOG(INFO) << "LoadSnapshot executor_user_meta, count=" << kvs.size();
   kvs.clear();
 
+  // 11.task_list map
+  kvs.reserve(meta_snapshot_file.task_list_map_kvs_size());
+  for (int i = 0; i < meta_snapshot_file.task_list_map_kvs_size(); i++) {
+    kvs.push_back(meta_snapshot_file.table_metrics_map_kvs(i));
+  }
+  {
+    if (!task_list_meta_->Recover(kvs)) {
+      return false;
+    }
+
+    // remove data in rocksdb
+    if (!meta_writer_->DeleteRange(task_list_meta_->internal_prefix, task_list_meta_->internal_prefix)) {
+      DINGO_LOG(ERROR) << "Coordinator delete task_list_meta_ range failed in LoadMetaFromSnapshotFile";
+      return false;
+    }
+    DINGO_LOG(INFO) << "Coordinator delete range task_list_meta_ success in LoadMetaFromSnapshotFile";
+
+    // write data to rocksdb
+    if (!meta_writer_->Put(kvs)) {
+      DINGO_LOG(ERROR) << "Coordinator write task_list_meta_ failed in LoadMetaFromSnapshotFile";
+      return false;
+    }
+    DINGO_LOG(INFO) << "Coordinator put task_list_meta_ success in LoadMetaFromSnapshotFile";
+  }
+  DINGO_LOG(INFO) << "LoadSnapshot task_list_meta, count=" << kvs.size();
+  kvs.clear();
+
   // init id_epoch_map_temp_
   // copy id_epoch_map_ to id_epoch_map_temp_
   {
@@ -645,8 +684,8 @@ void LogMetaIncrementSize(pb::coordinator_internal::MetaIncrement& meta_incremen
 }
 
 // ApplyMetaIncrement is on_apply callback
-void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrement& meta_increment, bool is_leader,
-                                            uint64_t term, uint64_t index, google::protobuf::Message* response) {
+void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrement& meta_increment, bool /*is_leader*/,
+                                            uint64_t term, uint64_t index, google::protobuf::Message* /*response*/) {
   // prepare data to write to kv engine
   std::vector<pb::common::KeyValue> meta_write_to_kv;
   std::vector<pb::common::KeyValue> meta_delete_to_kv;
@@ -674,6 +713,10 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
     } else {
       DINGO_LOG(WARNING) << "meta_increment.ByteSizeLong() == 0, just return";
       return;
+    }
+
+    if (meta_increment.idepochs_size() > 0) {
+      DINGO_LOG(INFO) << "0.idepochs_size=" << meta_increment.idepochs_size();
     }
 
     // 0.id & epoch
@@ -731,6 +774,10 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
 
   // 1.coordinator map
   {
+    if (meta_increment.coordinators_size() > 0) {
+      DINGO_LOG(INFO) << "1.coordinators_size=" << meta_increment.coordinators_size();
+    }
+
     // BAIDU_SCOPED_LOCK(coordinator_map_mutex_);
     for (int i = 0; i < meta_increment.coordinators_size(); i++) {
       const auto& coordinator = meta_increment.coordinators(i);
@@ -778,6 +825,10 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
 
   // 2.store map
   {
+    if (meta_increment.stores_size() > 0) {
+      DINGO_LOG(INFO) << "2.stores_size=" << meta_increment.stores_size();
+    }
+
     // BAIDU_SCOPED_LOCK(store_map_mutex_);
     for (int i = 0; i < meta_increment.stores_size(); i++) {
       const auto& store = meta_increment.stores(i);
@@ -822,6 +873,10 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
 
   // 3.executor map
   {
+    if (meta_increment.executors_size() > 0) {
+      DINGO_LOG(INFO) << "3.executors_size=" << meta_increment.executors_size();
+    }
+
     // BAIDU_SCOPED_LOCK(executor_map_mutex_);
     for (int i = 0; i < meta_increment.executors_size(); i++) {
       const auto& executor = meta_increment.executors(i);
@@ -866,6 +921,10 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
 
   // 4.schema map
   {
+    if (meta_increment.schemas_size() > 0) {
+      DINGO_LOG(INFO) << "4.schemas_size=" << meta_increment.schemas_size();
+    }
+
     // BAIDU_SCOPED_LOCK(schema_map_mutex_);
     for (int i = 0; i < meta_increment.schemas_size(); i++) {
       const auto& schema = meta_increment.schemas(i);
@@ -909,6 +968,10 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
 
   // 5.region map
   {
+    if (meta_increment.regions_size() > 0) {
+      DINGO_LOG(INFO) << "5.regions_size=" << meta_increment.regions_size();
+    }
+
     // BAIDU_SCOPED_LOCK(region_map_mutex_);
     for (int i = 0; i < meta_increment.regions_size(); i++) {
       const auto& region = meta_increment.regions(i);
@@ -982,6 +1045,10 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
 
   // 6.table map
   {
+    if (meta_increment.tables_size() > 0) {
+      DINGO_LOG(INFO) << "6.tables_size=" << meta_increment.tables_size();
+    }
+
     // BAIDU_SCOPED_LOCK(table_map_mutex_);
     for (int i = 0; i < meta_increment.tables_size(); i++) {
       const auto& table = meta_increment.tables(i);
@@ -1097,6 +1164,10 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
 
   // 7.store_metrics map
   {
+    if (meta_increment.store_metrics_size() > 0) {
+      DINGO_LOG(INFO) << "ApplyMetaIncrement store_metrics size=" << meta_increment.store_metrics_size();
+    }
+
     BAIDU_SCOPED_LOCK(store_metrics_map_mutex_);
     for (int i = 0; i < meta_increment.store_metrics_size(); i++) {
       const auto& store_metrics = meta_increment.store_metrics(i);
@@ -1127,6 +1198,10 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
 
   // 8.table_metrics map
   {
+    if (meta_increment.table_metrics_size() > 0) {
+      DINGO_LOG(INFO) << "ApplyMetaIncrement table_metrics size=" << meta_increment.table_metrics_size();
+    }
+
     // BAIDU_SCOPED_LOCK(table_metrics_map_mutex_);
     for (int i = 0; i < meta_increment.table_metrics_size(); i++) {
       const auto& table_metrics = meta_increment.table_metrics(i);
@@ -1173,7 +1248,9 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
   // only on_apply will really write store_operation_map_, so we don't need to lock it
   // store_operation only support CREATE and DELETE
   {
-    DINGO_LOG(INFO) << "store_operation increment size=" << meta_increment.store_operations_size();
+    if (meta_increment.store_operations_size() > 0) {
+      DINGO_LOG(INFO) << "store_operation increment size=" << meta_increment.store_operations_size();
+    }
 
     for (int i = 0; i < meta_increment.store_operations_size(); i++) {
       const auto& store_operation = meta_increment.store_operations(i);
@@ -1253,7 +1330,9 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
 
   // 10.executor_user_map
   {
-    DINGO_LOG(INFO) << "executor_user_map increment size=" << meta_increment.executor_users_size();
+    if (meta_increment.executor_users_size() > 0) {
+      DINGO_LOG(INFO) << "executor_user_map increment size=" << meta_increment.executor_users_size();
+    }
 
     for (int i = 0; i < meta_increment.executor_users_size(); i++) {
       const auto& executor_user = meta_increment.executor_users(i);
@@ -1293,6 +1372,50 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
     }
   }
 
+  // 11.task_list_map
+  {
+    if (meta_increment.task_lists_size() > 0) {
+      DINGO_LOG(INFO) << "task_list_map increment size=" << meta_increment.task_lists_size();
+    }
+
+    for (int i = 0; i < meta_increment.task_lists_size(); i++) {
+      const auto& task_list = meta_increment.task_lists(i);
+      if (task_list.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
+        int ret = task_list_map_.Put(task_list.id(), task_list.task_list());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement task_list CREATE, [id=" << task_list.id() << "] success";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement task_list CREATE, [id=" << task_list.id() << "] failed";
+        }
+
+        // meta_write_kv
+        meta_write_to_kv.push_back(task_list_meta_->TransformToKvValue(task_list.task_list()));
+
+      } else if (task_list.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
+        int ret = task_list_map_.Put(task_list.id(), task_list.task_list());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement task_list UPDATE, [id=" << task_list.id() << "] success";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement task_list UPDATE, [id=" << task_list.id() << "] failed";
+        }
+
+        // meta_write_kv
+        meta_write_to_kv.push_back(task_list_meta_->TransformToKvValue(task_list.task_list()));
+
+      } else if (task_list.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
+        int ret = task_list_map_.Erase(task_list.id());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement task_list DELETE, [id=" << task_list.id() << "] success";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement task_list DELETE, [id=" << task_list.id() << "] failed";
+        }
+
+        // meta_delete_kv
+        meta_delete_to_kv.push_back(task_list_meta_->TransformToKvValue(task_list.task_list()));
+      }
+    }
+  }
+
   // write update to local engine, begin
   if ((!meta_write_to_kv.empty()) || (!meta_delete_to_kv.empty())) {
     if (!meta_writer_->PutAndDelete(meta_write_to_kv, meta_delete_to_kv)) {
@@ -1306,10 +1429,19 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
 // SubmitMetaIncrement
 // commit meta increment to raft meta engine, with no closure
 int CoordinatorControl::SubmitMetaIncrement(pb::coordinator_internal::MetaIncrement& meta_increment) {
+  return SubmitMetaIncrement(nullptr, meta_increment);
+}
+
+int CoordinatorControl::SubmitMetaIncrement(google::protobuf::Closure* done,
+                                            pb::coordinator_internal::MetaIncrement& meta_increment) {
   LogMetaIncrementSize(meta_increment);
 
   std::shared_ptr<Context> const ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
+
+  if (done != nullptr) {
+    ctx->SetDone(done);
+  }
 
   auto status = engine_->MetaPut(ctx, meta_increment);
   if (!status.ok()) {
@@ -1320,4 +1452,3 @@ int CoordinatorControl::SubmitMetaIncrement(pb::coordinator_internal::MetaIncrem
 }
 
 }  // namespace dingodb
-

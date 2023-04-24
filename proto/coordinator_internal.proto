@@ -80,6 +80,7 @@ enum IdEpochType {
   RAFT_APPLY_INDEX = 22;
 
   ID_NEXT_REGION_CMD = 31;
+  ID_NEXT_TASK_LIST = 32;
 }
 
 message IdEpochInternal {
@@ -195,6 +196,12 @@ message MetaIncrementAutoIncrement {
   MetaIncrementOpType op_type = 3;
 }
 
+message MetaIncrementTaskList {
+  uint64 id = 1;  // this is task list id
+  dingodb.pb.coordinator.TaskList task_list = 2;
+  MetaIncrementOpType op_type = 3;
+}
+
 // MetaIncrement stores meta data need to be inserted or updated
 message MetaIncrement {
   repeated MetaIncrementCoordinator coordinators = 1;
@@ -208,7 +215,9 @@ message MetaIncrement {
   repeated MetaIncrementTableMetrics table_metrics = 9;
   repeated MetaIncrementStoreOperation store_operations = 10;
   repeated MetaIncrementExecutorUser executor_users = 11;
-  repeated MetaIncrementAutoIncrement auto_increment = 12;
+  repeated MetaIncrementTaskList task_lists = 12;
+
+  repeated MetaIncrementAutoIncrement auto_increment = 20;
 }
 
 // snapshot pb file message
@@ -224,4 +233,7 @@ message MetaSnapshotFile {
   repeated dingodb.pb.common.KeyValue table_metrics_map_kvs = 9;
   repeated dingodb.pb.common.KeyValue store_operation_map_kvs = 10;
   repeated dingodb.pb.common.KeyValue executor_user_map_kvs = 11;
+  repeated dingodb.pb.common.KeyValue task_list_map_kvs = 12;
+
+  repeated dingodb.pb.common.KeyValue auto_increment_map_kvs = 20;  // now unused, just a placeholder
 }
