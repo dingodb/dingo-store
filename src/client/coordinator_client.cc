@@ -158,6 +158,8 @@ void* Sender(void* /*arg*/) {
     SendGetStoreOperation(cntl, coordinator_stub);
   } else if (FLAGS_method == "GetTaskList") {
     SendGetTaskList(cntl, coordinator_stub);
+  } else if (FLAGS_method == "CleanTaskList") {
+    SendCleanTaskList(cntl, coordinator_stub);
   } else if (FLAGS_method == "CleanStoreOperation") {
     SendCleanStoreOperation(cntl, coordinator_stub);
   } else if (FLAGS_method == "AddStoreOperation") {

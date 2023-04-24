@@ -1333,3 +1333,27 @@ void SendGetTaskList(brpc::Controller& cntl, dingodb::pb::coordinator::Coordinat
     DINGO_LOG_INFO << response.DebugString();
   }
 }
+
+void SendCleanTaskList(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
+  dingodb::pb::coordinator::CleanTaskListRequest request;
+  dingodb::pb::coordinator::CleanTaskListResponse response;
+
+  if (FLAGS_id.empty()) {
+    DINGO_LOG(ERROR) << "id is empty, if you want to clean all task_list, set --id=0";
+    return;
+  }
+  request.set_task_list_id(std::stoull(FLAGS_id));
+
+  stub.CleanTaskList(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+    // bthread_usleep(FLAGS_timeout_ms * 1000L);
+  }
+
+  if (FLAGS_log_each_request) {
+    DINGO_LOG(INFO) << "Received response"
+                    << " request_attachment=" << cntl.request_attachment().size()
+                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
+    DINGO_LOG_INFO << response.DebugString();
+  }
+}

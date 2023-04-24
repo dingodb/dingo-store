@@ -417,6 +417,8 @@ class CoordinatorControl : public MetaControl {
 
   bool DoTaskPreCheck(const pb::coordinator::TaskPreCheck &task_pre_check);
 
+  pb::error::Errno CleanTaskList(uint64_t task_list_id, pb::coordinator_internal::MetaIncrement &meta_increment);
+
  private:
   // ids_epochs_temp (out of state machine, only for leader use)
   DingoSafeIdEpochMap id_epoch_map_safe_temp_;

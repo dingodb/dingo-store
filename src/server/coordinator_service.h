@@ -207,6 +207,8 @@ class CoordinatorServiceImpl : public pb::coordinator::CoordinatorService {
   // TaskList
   void GetTaskList(google::protobuf::RpcController* controller, const pb::coordinator::GetTaskListRequest* request,
                    pb::coordinator::GetTaskListResponse* response, google::protobuf::Closure* done) override;
+  void CleanTaskList(google::protobuf::RpcController* controller, const pb::coordinator::CleanTaskListRequest* request,
+                     pb::coordinator::CleanTaskListResponse* response, google::protobuf::Closure* done) override;
 
   // RaftControl service
   void RaftControl(google::protobuf::RpcController* controller, const pb::coordinator::RaftControlRequest* request,
