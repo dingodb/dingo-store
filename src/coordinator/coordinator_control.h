@@ -132,6 +132,9 @@ class CoordinatorControl : public MetaControl {
   pb::error::Errno SplitRegion(uint64_t split_from_region_id, uint64_t split_to_region_id,
                                std::string split_watershed_key,
                                pb::coordinator_internal::MetaIncrement &meta_increment);
+  pb::error::Errno SplitRegionWithTaskList(uint64_t split_from_region_id, uint64_t split_to_region_id,
+                                           std::string split_watershed_key,
+                                           pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // merge region
   pb::error::Errno MergeRegion(uint64_t merge_from_region_id, uint64_t merge_to_region_id,

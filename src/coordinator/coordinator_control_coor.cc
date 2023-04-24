@@ -427,11 +427,6 @@ pb::error::Errno CoordinatorControl::CreateRegionForSplitInternal(
 
   split_from_region.mutable_definition()->set_name(split_from_region.definition().name() + "_split");
 
-  new_region_id = GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_REGION, meta_increment);
-  if (new_region_id <= 0) {
-    return pb::error::Errno::EINTERNAL;
-  }
-
   // create region with split_from_region_id & store_ids
   return CreateRegion(split_from_region.definition().name(), "", store_ids.size(),
                       split_from_region.definition().range(), split_from_region.definition().schema_id(),
@@ -907,6 +902,90 @@ pb::error::Errno CoordinatorControl::SplitRegion(uint64_t split_from_region_id, 
   auto* store_operation = store_operation_increment->mutable_store_operation();
   store_operation->set_id(split_from_region.leader_store_id());
   auto* region_cmd_to_add = store_operation->add_region_cmds();
+  region_cmd_to_add->CopyFrom(region_cmd);
+  region_cmd_to_add->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
+
+  return pb::error::Errno::OK;
+}
+
+pb::error::Errno CoordinatorControl::SplitRegionWithTaskList(uint64_t split_from_region_id, uint64_t split_to_region_id,
+                                                             std::string split_watershed_key,
+                                                             pb::coordinator_internal::MetaIncrement& meta_increment) {
+  if (split_to_region_id > 0) {
+    return SplitRegion(split_from_region_id, split_to_region_id, split_watershed_key, meta_increment);
+  }
+
+  // validate split_from_region_id
+  pb::common::Region split_from_region;
+  int ret = region_map_.Get(split_from_region_id, split_from_region);
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << "SplitRegion from region not exists, id = " << split_from_region_id;
+    return pb::error::Errno::EREGION_NOT_FOUND;
+  }
+
+  // validate split_watershed_key
+  if (split_watershed_key.empty()) {
+    DINGO_LOG(ERROR) << "SplitRegion split_watershed_key is empty";
+    return pb::error::Errno::EILLEGAL_PARAMTETERS;
+  }
+
+  // validate split_from_region and split_to_region has NORMAL status
+  if (split_from_region.state() != ::dingodb::pb::common::RegionState::REGION_NORMAL) {
+    DINGO_LOG(ERROR) << "SplitRegion split_from_region is not ready for split, "
+                        "split_from_region_id = "
+                     << split_from_region_id << " from_state=" << split_from_region.state();
+    return pb::error::Errno::ESPLIT_STATUS_ILLEGAL;
+  }
+
+  // only send split region_cmd to split_from_region_id's leader store id
+  if (split_from_region.leader_store_id() == 0) {
+    DINGO_LOG(ERROR) << "SplitRegion split_from_region_id's leader_store_id is 0, split_from_region_id="
+                     << split_from_region_id << ", split_to_region_id=" << split_to_region_id;
+    return pb::error::Errno::ESPLIT_STATUS_ILLEGAL;
+  }
+
+  // call create_region to get store_operations
+  pb::coordinator_internal::MetaIncrement meta_increment_tmp;
+  uint64_t new_region_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION, meta_increment);
+  CreateRegionForSplitInternal(split_from_region_id, new_region_id, meta_increment_tmp);
+
+  auto* new_task_list_increment = meta_increment.add_task_lists();
+  new_task_list_increment->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_TASK_LIST, meta_increment));
+  new_task_list_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
+  auto* new_task_list = new_task_list_increment->mutable_task_list();
+  new_task_list->set_id(new_task_list_increment->id());
+
+  // build create_region task
+  auto* create_region_task = new_task_list->add_tasks();
+  for (const auto& it : meta_increment_tmp.store_operations()) {
+    const auto& store_operation = it.store_operation();
+    create_region_task->add_store_operations()->CopyFrom(store_operation);
+  }
+
+  // update region_map for new_region_id
+  for (const auto& it : meta_increment_tmp.regions()) {
+    meta_increment.add_regions()->CopyFrom(it);
+  }
+
+  // build split_region task
+  auto* split_region_task = new_task_list->add_tasks();
+  auto* region_check = split_region_task->mutable_pre_check();
+  region_check->set_type(::dingodb::pb::coordinator::TaskPreCheckType::REGION_CHECK);
+  region_check->mutable_region_check()->set_region_id(new_region_id);
+  region_check->mutable_region_check()->set_state(::dingodb::pb::common::RegionState::REGION_STANDBY);
+
+  // generate store operation for stores
+  pb::coordinator::RegionCmd region_cmd;
+  region_cmd.set_region_id(split_from_region_id);
+  region_cmd.set_region_cmd_type(::dingodb::pb::coordinator::RegionCmdType::CMD_SPLIT);
+  region_cmd.mutable_split_request()->set_split_watershed_key(split_watershed_key);
+  region_cmd.mutable_split_request()->set_split_from_region_id(split_from_region_id);
+  region_cmd.mutable_split_request()->set_split_to_region_id(new_region_id);
+  region_cmd.set_create_timestamp(butil::gettimeofday_ms());
+
+  auto* store_operation_split = split_region_task->add_store_operations();
+  store_operation_split->set_id(split_from_region.leader_store_id());
+  auto* region_cmd_to_add = store_operation_split->add_region_cmds();
   region_cmd_to_add->CopyFrom(region_cmd);
   region_cmd_to_add->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
 
@@ -1916,6 +1995,14 @@ void CoordinatorControl::UpdateRegionMapAndStoreOperation(const pb::common::Stor
       need_update_region_definition = true;
     }
 
+    if (region_to_update.definition().peers_size() != region_metrics.region_definition().peers_size()) {
+      DINGO_LOG(INFO) << "region peers size change region_id = " << region_metrics.id()
+                      << " old peers size = " << region_to_update.definition().peers_size()
+                      << " new peers size = " << region_metrics.region_definition().peers_size();
+      need_update_region = true;
+      need_update_region_definition = true;
+    }
+
     if (!need_update_region) {
       DINGO_LOG(DEBUG) << "region no need to update region_id = " << region_metrics.id()
                        << " last_update_timestamp = " << region_to_update.last_update_timestamp()
@@ -2456,7 +2543,7 @@ pb::error::Errno CoordinatorControl::ProcessTaskList() {
     DINGO_LOG(INFO) << "is_processing_task_list is true, skip process task list";
     return pb::error::Errno::OK;
   }
-  DINGO_LOG(INFO) << "start process task lists";
+  DINGO_LOG(DEBUG) << "start process task lists";
 
   AtomicGuard atomic_guard(is_processing_task_list_);
 

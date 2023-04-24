@@ -847,12 +847,7 @@ void SendSplitRegion(brpc::Controller& cntl, dingodb::pb::coordinator::Coordinat
   dingodb::pb::coordinator::SplitRegionRequest request;
   dingodb::pb::coordinator::SplitRegionResponse response;
 
-  if (FLAGS_split_to_id > 0) {
-    request.mutable_split_request()->set_split_to_region_id(FLAGS_split_to_id);
-  } else {
-    DINGO_LOG(ERROR) << "split_to_id is empty";
-    return;
-  }
+  request.mutable_split_request()->set_split_to_region_id(FLAGS_split_to_id);
 
   if (FLAGS_split_from_id > 0) {
     request.mutable_split_request()->set_split_from_region_id(FLAGS_split_from_id);

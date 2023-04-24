@@ -811,9 +811,9 @@ void CoordinatorServiceImpl::SplitRegion(google::protobuf::RpcController *contro
 
   auto split_request = request->split_request();
 
-  auto ret =
-      this->coordinator_control_->SplitRegion(split_request.split_from_region_id(), split_request.split_to_region_id(),
-                                              split_request.split_watershed_key(), meta_increment);
+  auto ret = this->coordinator_control_->SplitRegionWithTaskList(split_request.split_from_region_id(),
+                                                                 split_request.split_to_region_id(),
+                                                                 split_request.split_watershed_key(), meta_increment);
   response->mutable_error()->set_errcode(ret);
 
   // if meta_increment is empty, means no need to update meta
