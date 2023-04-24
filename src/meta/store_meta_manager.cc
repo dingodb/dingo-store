@@ -14,6 +14,7 @@
 
 #include "meta/store_meta_manager.h"
 
+#include <atomic>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -65,9 +66,9 @@ std::vector<pb::common::Peer> Region::Peers() const {
   return peers;
 }
 
-pb::common::StoreRegionState Region::State() const { return state_.load(); }
+pb::common::StoreRegionState Region::State() const { return state_.load(std::memory_order_relaxed); }
 void Region::SetState(pb::common::StoreRegionState state) {
-  state_.store(state);
+  state_.store(state, std::memory_order_relaxed);
   inner_region_.set_state(state);
 }
 
