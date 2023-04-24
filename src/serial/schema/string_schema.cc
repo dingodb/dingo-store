@@ -16,13 +16,13 @@
 
 namespace dingodb {
 
-int DingoSchema<optional<reference_wrapper<string>>>::GetDataLength() {
+int DingoSchema<std::optional<std::reference_wrapper<std::string>>>::GetDataLength() {
   return 0;
 }
-int DingoSchema<optional<reference_wrapper<string>>>::GetWithNullTagLength() {
+int DingoSchema<std::optional<std::reference_wrapper<std::string>>>::GetWithNullTagLength() {
   return 0;
 }
-void DingoSchema<optional<reference_wrapper<string>>>::InternalEncodeKey(Buf* buf, string &data) {
+void DingoSchema<std::optional<std::reference_wrapper<std::string>>>::InternalEncodeKey(Buf* buf, std::string &data) {
   int group_num = data.length() / 8;
   int size = (group_num + 1) * 9;
   int remainder_size = data.length() % 8;
@@ -52,7 +52,7 @@ void DingoSchema<optional<reference_wrapper<string>>>::InternalEncodeKey(Buf* bu
   buf->Write((uint8_t)(255 - remainder_zero));
   buf->ReverseWriteInt(size);
 }
-void DingoSchema<optional<reference_wrapper<string>>>::InternalEncodeValue(Buf* buf, string &data) {
+void DingoSchema<std::optional<std::reference_wrapper<std::string>>>::InternalEncodeValue(Buf* buf, std::string &data) {
   buf->EnsureRemainder(data.length() + 4);
   buf->WriteInt(data.length());
   for (char c : data) {
@@ -60,34 +60,34 @@ void DingoSchema<optional<reference_wrapper<string>>>::InternalEncodeValue(Buf* 
   }
 }
 
-BaseSchema::Type DingoSchema<optional<reference_wrapper<string>>>::GetType() {
+BaseSchema::Type DingoSchema<std::optional<std::reference_wrapper<std::string>>>::GetType() {
   return kString;
 }
-void DingoSchema<optional<reference_wrapper<string>>>::SetIndex(int index) {
+void DingoSchema<std::optional<std::reference_wrapper<std::string>>>::SetIndex(int index) {
   this->index_ = index;
 }
-int DingoSchema<optional<reference_wrapper<string>>>::GetIndex() {
+int DingoSchema<std::optional<std::reference_wrapper<std::string>>>::GetIndex() {
   return this->index_;
 }
-void DingoSchema<optional<reference_wrapper<string>>>::SetIsKey(bool key) {
+void DingoSchema<std::optional<std::reference_wrapper<std::string>>>::SetIsKey(bool key) {
   this->key_ = key;
 }
-bool DingoSchema<optional<reference_wrapper<string>>>::IsKey() {
+bool DingoSchema<std::optional<std::reference_wrapper<std::string>>>::IsKey() {
   return this->key_;
 }
-int DingoSchema<optional<reference_wrapper<string>>>::GetLength() {
+int DingoSchema<std::optional<std::reference_wrapper<std::string>>>::GetLength() {
   if (this->allow_null_) {
     return GetWithNullTagLength();
   }
   return GetDataLength();
 }
-void DingoSchema<optional<reference_wrapper<string>>>::SetAllowNull(bool allow_null) {
+void DingoSchema<std::optional<std::reference_wrapper<std::string>>>::SetAllowNull(bool allow_null) {
   this->allow_null_ = allow_null;
 }
-bool DingoSchema<optional<reference_wrapper<string>>>::AllowNull() {
+bool DingoSchema<std::optional<std::reference_wrapper<std::string>>>::AllowNull() {
   return this->allow_null_;
 }
-void DingoSchema<optional<reference_wrapper<string>>>::EncodeKey(Buf* buf, optional<reference_wrapper<string>> data) {
+void DingoSchema<std::optional<std::reference_wrapper<std::string>>>::EncodeKey(Buf* buf, std::optional<std::reference_wrapper<std::string>> data) {
   if (this->allow_null_) {
     if (data.has_value()) {
       buf->EnsureRemainder(1);
@@ -106,11 +106,11 @@ void DingoSchema<optional<reference_wrapper<string>>>::EncodeKey(Buf* buf, optio
     }
   }
 }
-optional<reference_wrapper<string>> DingoSchema<optional<reference_wrapper<string>>>::DecodeKey(Buf* buf) {
+std::optional<std::reference_wrapper<std::string>> DingoSchema<std::optional<std::reference_wrapper<std::string>>>::DecodeKey(Buf* buf) {
   if (this->allow_null_) {
     if (buf->Read() == this->k_null) {
       buf->ReverseSkipInt();
-      return nullopt;
+      return std::nullopt;
     }
   }
   int length = buf->ReverseReadInt();
@@ -137,17 +137,17 @@ optional<reference_wrapper<string>> DingoSchema<optional<reference_wrapper<strin
     }
   }
   buf->Skip(remainder_zero + 1);
-  string *s = new string(data, ori_length);
-  return optional<reference_wrapper<string>>{*s};
+  std::string *s = new std::string(data, ori_length);
+  return std::optional<std::reference_wrapper<std::string>>{*s};
 }
-void DingoSchema<optional<reference_wrapper<string>>>::SkipKey(Buf* buf) const {
+void DingoSchema<std::optional<std::reference_wrapper<std::string>>>::SkipKey(Buf* buf) const {
   if (this->allow_null_) {
     buf->Skip(buf->ReverseReadInt() + 1);
   } else {
     buf->Skip(buf->ReverseReadInt());
   }
 }
-void DingoSchema<optional<reference_wrapper<string>>>::EncodeValue(Buf* buf, optional<reference_wrapper<string>> data) {
+void DingoSchema<std::optional<std::reference_wrapper<std::string>>>::EncodeValue(Buf* buf, std::optional<std::reference_wrapper<std::string>> data) {
   if (this->allow_null_) {
     buf->EnsureRemainder(1);
     if (data.has_value()) {
@@ -164,10 +164,10 @@ void DingoSchema<optional<reference_wrapper<string>>>::EncodeValue(Buf* buf, opt
     }
   }
 }
-optional<reference_wrapper<string>> DingoSchema<optional<reference_wrapper<string>>>::DecodeValue(Buf* buf) {
+std::optional<std::reference_wrapper<std::string>> DingoSchema<std::optional<std::reference_wrapper<std::string>>>::DecodeValue(Buf* buf) {
   if (this->allow_null_) {
     if (buf->Read() == this->k_null) {
-      return nullopt;
+      return std::nullopt;
     }
   }
   int length = buf->ReadInt();
@@ -175,10 +175,10 @@ optional<reference_wrapper<string>> DingoSchema<optional<reference_wrapper<strin
   for (int i = 0; i < length; i++) {
     su8[i] = buf->Read();
   }
-  string *s = new string(su8, length);
-  return optional<reference_wrapper<string>>{*s};
+  std::string *s = new std::string(su8, length);
+  return std::optional<std::reference_wrapper<std::string>>{*s};
 }
-void DingoSchema<optional<reference_wrapper<string>>>::SkipValue(Buf* buf) const {
+void DingoSchema<std::optional<std::reference_wrapper<std::string>>>::SkipValue(Buf* buf) const {
   if (this->allow_null_) {
     if (buf->Read() == this->k_null) {
       return;

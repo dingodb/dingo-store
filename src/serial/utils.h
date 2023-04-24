@@ -16,17 +16,23 @@
 #define DINGO_SERIAL_UTILS_H_
 
 #include <vector>
+#include "proto/meta.pb.h"
 #include "schema/base_schema.h"
-
-using namespace std;
+#include "schema/boolean_schema.h"
+#include "schema/double_schema.h"
+#include "schema/integer_schema.h"
+#include "schema/long_schema.h"
+#include "schema/string_schema.h"
 
 namespace dingodb {
 
-void SortSchema(vector<BaseSchema*>* schemas);
+void SortSchema(std::vector<BaseSchema*>* schemas);
 
-int* GetApproPerRecordSize(vector<BaseSchema*>* schemas);
+int* GetApproPerRecordSize(std::vector<BaseSchema*>* schemas);
 
-bool VectorFindAndRemove(vector<int>* v, int t);
+bool VectorFindAndRemove(std::vector<int>* v, int t);
+
+std::vector<BaseSchema*>* TableDefinitionToDingoSchema(pb::meta::TableDefinition td);
 
 }  // namespace dingodb
 

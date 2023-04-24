@@ -32,17 +32,17 @@ class RecordEncoder {
  private:
   int codec_version_ = 0;
   int schema_version_;
-  vector<BaseSchema*>* schemas_;
+  std::vector<BaseSchema*>* schemas_;
   long common_id_;
   int key_buf_size_;
   int value_buf_size_;
 
  public:
-  RecordEncoder(int schema_version, vector<BaseSchema*>* schemas,
+  RecordEncoder(int schema_version, std::vector<BaseSchema*>* schemas,
                 long common_id);
-  KeyValue* Encode(vector<any>* record);
-  string* EncodeKey(vector<any>* record);
-  string* EncodeValue(vector<any>* record);
+  KeyValue* Encode(std::vector<std::any>* record);
+  std::string* EncodeKey(std::vector<std::any>* record);
+  std::string* EncodeValue(std::vector<std::any>* record);
 };
 
 }  // namespace dingodb

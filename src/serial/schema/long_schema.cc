@@ -16,13 +16,13 @@
 
 namespace dingodb {
 
-int DingoSchema<optional<int64_t>>::GetDataLength() {
+int DingoSchema<std::optional<int64_t>>::GetDataLength() {
   return 8;
 }
-int DingoSchema<optional<int64_t>>::GetWithNullTagLength() {
+int DingoSchema<std::optional<int64_t>>::GetWithNullTagLength() {
   return 9;
 }
-void DingoSchema<optional<int64_t>>::InternalEncodeNull(Buf* buf) {
+void DingoSchema<std::optional<int64_t>>::InternalEncodeNull(Buf* buf) {
   buf->Write(0);
   buf->Write(0);
   buf->Write(0);
@@ -32,7 +32,7 @@ void DingoSchema<optional<int64_t>>::InternalEncodeNull(Buf* buf) {
   buf->Write(0);
   buf->Write(0);
 }
-void DingoSchema<optional<int64_t>>::InternalEncodeKey(Buf* buf, int64_t data) {
+void DingoSchema<std::optional<int64_t>>::InternalEncodeKey(Buf* buf, int64_t data) {
   uint64_t* l = (uint64_t*)&data;
   buf->Write(*l >> 56 ^ 0x80);
   buf->Write(*l >> 48);
@@ -43,7 +43,7 @@ void DingoSchema<optional<int64_t>>::InternalEncodeKey(Buf* buf, int64_t data) {
   buf->Write(*l >> 8);
   buf->Write(*l);
 }
-void DingoSchema<optional<int64_t>>::InternalEncodeValue(Buf* buf, int64_t data) {
+void DingoSchema<std::optional<int64_t>>::InternalEncodeValue(Buf* buf, int64_t data) {
   uint64_t* l = (uint64_t*)&data;
   buf->Write(*l >> 56);
   buf->Write(*l >> 48);
@@ -55,34 +55,34 @@ void DingoSchema<optional<int64_t>>::InternalEncodeValue(Buf* buf, int64_t data)
   buf->Write(*l);
 }
 
-BaseSchema::Type DingoSchema<optional<int64_t>>::GetType() {
+BaseSchema::Type DingoSchema<std::optional<int64_t>>::GetType() {
   return kLong;
 }
-void DingoSchema<optional<int64_t>>::SetIndex(int index) {
+void DingoSchema<std::optional<int64_t>>::SetIndex(int index) {
   this->index_ = index;
 }
-int DingoSchema<optional<int64_t>>::GetIndex() {
+int DingoSchema<std::optional<int64_t>>::GetIndex() {
   return this->index_;
 }
-void DingoSchema<optional<int64_t>>::SetIsKey(bool key) {
+void DingoSchema<std::optional<int64_t>>::SetIsKey(bool key) {
   this->key_ = key;
 }
-bool DingoSchema<optional<int64_t>>::IsKey() {
+bool DingoSchema<std::optional<int64_t>>::IsKey() {
   return this->key_;
 }
-int DingoSchema<optional<int64_t>>::GetLength() {
+int DingoSchema<std::optional<int64_t>>::GetLength() {
   if (this->allow_null_ ) {
     return GetWithNullTagLength();
   }
   return GetDataLength();
 }
-void DingoSchema<optional<int64_t>>::SetAllowNull(bool allow_null) {
+void DingoSchema<std::optional<int64_t>>::SetAllowNull(bool allow_null) {
   this->allow_null_ = allow_null;
 }
-bool DingoSchema<optional<int64_t>>::AllowNull() {
+bool DingoSchema<std::optional<int64_t>>::AllowNull() {
   return this->allow_null_;
 }
-void DingoSchema<optional<int64_t>>::EncodeKey(Buf* buf, optional<int64_t> data) {
+void DingoSchema<std::optional<int64_t>>::EncodeKey(Buf* buf, std::optional<int64_t> data) {
   if (this->allow_null_ ) {
     buf->EnsureRemainder(GetWithNullTagLength());
     if (data.has_value()) {
@@ -101,11 +101,11 @@ void DingoSchema<optional<int64_t>>::EncodeKey(Buf* buf, optional<int64_t> data)
     }
   }
 }
-optional<int64_t> DingoSchema<optional<int64_t>>::DecodeKey(Buf* buf) {
+std::optional<int64_t> DingoSchema<std::optional<int64_t>>::DecodeKey(Buf* buf) {
   if (this->allow_null_ ) {
     if (buf->Read() == this->k_null) {
       buf->Skip(GetDataLength());
-      return nullopt;
+      return std::nullopt;
     }
   }
   uint64_t l = buf->Read() & 0xFF ^ 0x80;
@@ -115,10 +115,10 @@ optional<int64_t> DingoSchema<optional<int64_t>>::DecodeKey(Buf* buf) {
   }
   return l;
 }
-void DingoSchema<optional<int64_t>>::SkipKey(Buf* buf) {
+void DingoSchema<std::optional<int64_t>>::SkipKey(Buf* buf) {
   buf->Skip(GetLength());
 }
-void DingoSchema<optional<int64_t>>::EncodeValue(Buf* buf, optional<int64_t> data) {
+void DingoSchema<std::optional<int64_t>>::EncodeValue(Buf* buf, std::optional<int64_t> data) {
   if (this->allow_null_ ) {
     buf->EnsureRemainder(GetWithNullTagLength());
     if (data.has_value()) {
@@ -137,11 +137,11 @@ void DingoSchema<optional<int64_t>>::EncodeValue(Buf* buf, optional<int64_t> dat
     }
   }
 }
-optional<int64_t> DingoSchema<optional<int64_t>>::DecodeValue(Buf* buf) {
+std::optional<int64_t> DingoSchema<std::optional<int64_t>>::DecodeValue(Buf* buf) {
   if (this->allow_null_ ) {
     if (buf->Read() == this->k_null) {
       buf->Skip(GetDataLength());
-      return nullopt;
+      return std::nullopt;
     }
   }
   uint64_t l = buf->Read() & 0xFF;
@@ -151,7 +151,7 @@ optional<int64_t> DingoSchema<optional<int64_t>>::DecodeValue(Buf* buf) {
   }
   return l;
 }
-void DingoSchema<optional<int64_t>>::SkipValue(Buf* buf) {
+void DingoSchema<std::optional<int64_t>>::SkipValue(Buf* buf) {
   buf->Skip(GetLength());
 }
 

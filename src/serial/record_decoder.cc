@@ -16,13 +16,13 @@
 
 namespace dingodb {
 
-RecordDecoder::RecordDecoder(int schema_version, vector<BaseSchema*>*  schemas,
+RecordDecoder::RecordDecoder(int schema_version, std::vector<BaseSchema*>*  schemas,
                              long common_id) {
   this->schema_version_ = schema_version;
   this->schemas_ = schemas;
   this->common_id_ = common_id;
 }
-vector<any>* RecordDecoder::Decode(KeyValue*  key_value) {
+std::vector<std::any>* RecordDecoder::Decode(KeyValue*  key_value) {
   Buf* key_buf = new Buf(key_value->GetKey());
   Buf* value_buf = new Buf(key_value->GetValue());
   if (key_buf->ReadLong() != common_id_) {
@@ -34,57 +34,59 @@ vector<any>* RecordDecoder::Decode(KeyValue*  key_value) {
   if (value_buf->ReadInt() != schema_version_) {
     //"Wrong Schema Version"
   }
-  vector<any>* record = new vector<any>(schemas_->size());
+  std::vector<std::any>* record = new std::vector<std::any>(schemas_->size());
   for (BaseSchema *bs : *schemas_) {
-     BaseSchema::Type type = bs->GetType();
-    switch (type) {
-      case BaseSchema::kBool: {
-        DingoSchema<optional<bool>>* bos = static_cast<DingoSchema<optional<bool>>*>(bs);
-        if (bos->IsKey()) {
-          record->at(bos->GetIndex()) = bos->DecodeKey(key_buf);
-        } else {
-          record->at(bos->GetIndex()) = bos->DecodeValue(value_buf);
+    if (bs != nullptr) {
+      BaseSchema::Type type = bs->GetType();
+      switch (type) {
+        case BaseSchema::kBool: {
+          DingoSchema<std::optional<bool>>* bos = static_cast<DingoSchema<std::optional<bool>>*>(bs);
+          if (bos->IsKey()) {
+            record->at(bos->GetIndex()) = bos->DecodeKey(key_buf);
+          } else {
+            record->at(bos->GetIndex()) = bos->DecodeValue(value_buf);
+          }
+          break;
         }
-        break;
-      }
-      case BaseSchema::kInteger: {
-        DingoSchema<optional<int32_t>>* is = static_cast<DingoSchema<optional<int32_t>>*>(bs);
-        if (is->IsKey()) {
-          record->at(is->GetIndex()) = is->DecodeKey(key_buf);
-        } else {
-          record->at(is->GetIndex()) = is->DecodeValue(value_buf);
+        case BaseSchema::kInteger: {
+          DingoSchema<std::optional<int32_t>>* is = static_cast<DingoSchema<std::optional<int32_t>>*>(bs);
+          if (is->IsKey()) {
+            record->at(is->GetIndex()) = is->DecodeKey(key_buf);
+          } else {
+            record->at(is->GetIndex()) = is->DecodeValue(value_buf);
+          }
+          break;
         }
-        break;
-      }
-      case BaseSchema::kLong: {
-        DingoSchema<optional<int64_t>>* ls = static_cast<DingoSchema<optional<int64_t>>*>(bs);
-        if (ls->IsKey()) {
-          record->at(ls->GetIndex()) = ls->DecodeKey(key_buf);
-        } else {
-          record->at(ls->GetIndex()) = ls->DecodeValue(value_buf);
+        case BaseSchema::kLong: {
+          DingoSchema<std::optional<int64_t>>* ls = static_cast<DingoSchema<std::optional<int64_t>>*>(bs);
+          if (ls->IsKey()) {
+            record->at(ls->GetIndex()) = ls->DecodeKey(key_buf);
+          } else {
+            record->at(ls->GetIndex()) = ls->DecodeValue(value_buf);
+          }
+          break;
         }
-        break;
-      }
-      case BaseSchema::kDouble: {
-        DingoSchema<optional<double>>* ds = static_cast<DingoSchema<optional<double>>*>(bs);
-        if (ds->IsKey()) {
-          record->at(ds->GetIndex()) = ds->DecodeKey(key_buf);
-        } else {
-          record->at(ds->GetIndex()) = ds->DecodeValue(value_buf);
+        case BaseSchema::kDouble: {
+          DingoSchema<std::optional<double>>* ds = static_cast<DingoSchema<std::optional<double>>*>(bs);
+          if (ds->IsKey()) {
+            record->at(ds->GetIndex()) = ds->DecodeKey(key_buf);
+          } else {
+            record->at(ds->GetIndex()) = ds->DecodeValue(value_buf);
+          }
+          break;
         }
-        break;
-      }
-      case BaseSchema::kString: {
-        DingoSchema<optional<reference_wrapper<string>>>* ss = static_cast<DingoSchema<optional<reference_wrapper<string>>>*>(bs);
-        if (ss->IsKey()) {
-          record->at(ss->GetIndex()) = ss->DecodeKey(key_buf);
-        } else {
-          record->at(ss->GetIndex()) = ss->DecodeValue(value_buf);
+        case BaseSchema::kString: {
+          DingoSchema<std::optional<std::reference_wrapper<std::string>>>* ss = static_cast<DingoSchema<std::optional<std::reference_wrapper<std::string>>>*>(bs);
+          if (ss->IsKey()) {
+            record->at(ss->GetIndex()) = ss->DecodeKey(key_buf);
+          } else {
+            record->at(ss->GetIndex()) = ss->DecodeValue(value_buf);
+          }
+          break;
         }
-        break;
-      }
-      default: {
-        break;
+        default: {
+          break;
+        }
       }
     }
   }
@@ -92,8 +94,8 @@ vector<any>* RecordDecoder::Decode(KeyValue*  key_value) {
   delete value_buf;
   return record;
 }
-vector<any>* RecordDecoder::Decode(KeyValue*  key_value,
-                                   vector<int>*  column_indexes) {
+std::vector<std::any>* RecordDecoder::Decode(KeyValue*  key_value,
+                                   std::vector<int>*  column_indexes) {
   Buf* key_buf = new Buf(key_value->GetKey());
   Buf* value_buf = new Buf(key_value->GetValue());
   if (key_buf->ReadLong() != common_id_) {
@@ -105,102 +107,104 @@ vector<any>* RecordDecoder::Decode(KeyValue*  key_value,
   if (value_buf->ReadInt() != schema_version_) {
     //"Wrong Schema Version"
   }
-  vector<any>* record = new vector<any>(schemas_->size());
+  std::vector<std::any>* record = new std::vector<std::any>(schemas_->size());
   for (BaseSchema *bs : *schemas_) {
-     BaseSchema::Type type = bs->GetType();
-    switch (type) {
-      case BaseSchema::kBool: {
-        DingoSchema<optional<bool>>* bos = static_cast<DingoSchema<optional<bool>>*>(bs);
-        if (VectorFindAndRemove(column_indexes, bos->GetIndex())) {
-          if (bos->IsKey()) {
-            record->at(bos->GetIndex()) = bos->DecodeKey(key_buf);
+    if (bs != nullptr) {
+      BaseSchema::Type type = bs->GetType();
+      switch (type) {
+        case BaseSchema::kBool: {
+          DingoSchema<std::optional<bool>>* bos = static_cast<DingoSchema<std::optional<bool>>*>(bs);
+          if (VectorFindAndRemove(column_indexes, bos->GetIndex())) {
+            if (bos->IsKey()) {
+              record->at(bos->GetIndex()) = bos->DecodeKey(key_buf);
+            } else {
+              record->at(bos->GetIndex()) = bos->DecodeValue(value_buf);
+            }
           } else {
-            record->at(bos->GetIndex()) = bos->DecodeValue(value_buf);
+            record->at(bos->GetIndex()) = (std::optional<bool>) std::nullopt;
+            if (bos->IsKey()) {
+              bos->SkipKey(key_buf);
+            } else {
+              bos->SkipValue(value_buf);
+            }
           }
-        } else {
-          record->at(bos->GetIndex()) = (optional<bool>) nullopt;
-          if (bos->IsKey()) {
-            bos->SkipKey(key_buf);
-          } else {
-            bos->SkipValue(value_buf);
-          }
+          break;
         }
-        break;
-      }
-      case BaseSchema::kInteger: {
-        DingoSchema<optional<int32_t>>* is = static_cast<DingoSchema<optional<int32_t>>*>(bs);
-        if (VectorFindAndRemove(column_indexes, is->GetIndex())) {
-          if (is->IsKey()) {
-            record->at(is->GetIndex()) = is->DecodeKey(key_buf);
+        case BaseSchema::kInteger: {
+          DingoSchema<std::optional<int32_t>>* is = static_cast<DingoSchema<std::optional<int32_t>>*>(bs);
+          if (VectorFindAndRemove(column_indexes, is->GetIndex())) {
+            if (is->IsKey()) {
+              record->at(is->GetIndex()) = is->DecodeKey(key_buf);
+            } else {
+              record->at(is->GetIndex()) = is->DecodeValue(value_buf);
+            }
           } else {
-            record->at(is->GetIndex()) = is->DecodeValue(value_buf);
+            record->at(is->GetIndex()) = (std::optional<int32_t>) std::nullopt;
+            if (is->IsKey()) {
+              is->SkipKey(key_buf);
+            } else {
+              is->SkipValue(value_buf);
+            }
           }
-        } else {
-          record->at(is->GetIndex()) = (optional<int32_t>) nullopt;
-          if (is->IsKey()) {
-            is->SkipKey(key_buf);
-          } else {
-            is->SkipValue(value_buf);
-          }
+          break;
         }
-        break;
-      }
-      case BaseSchema::kLong: {
-        DingoSchema<optional<int64_t>>* ls = static_cast<DingoSchema<optional<int64_t>>*>(bs);
-        if (VectorFindAndRemove(column_indexes, ls->GetIndex())) {
-          if (ls->IsKey()) {
-            record->at(ls->GetIndex()) = ls->DecodeKey(key_buf);
+        case BaseSchema::kLong: {
+          DingoSchema<std::optional<int64_t>>* ls = static_cast<DingoSchema<std::optional<int64_t>>*>(bs);
+          if (VectorFindAndRemove(column_indexes, ls->GetIndex())) {
+            if (ls->IsKey()) {
+              record->at(ls->GetIndex()) = ls->DecodeKey(key_buf);
+            } else {
+              record->at(ls->GetIndex()) = ls->DecodeValue(value_buf);
+            }
           } else {
-            record->at(ls->GetIndex()) = ls->DecodeValue(value_buf);
+            record->at(ls->GetIndex()) = (std::optional<int64_t>) std::nullopt;
+            if (ls->IsKey()) {
+              ls->SkipKey(key_buf);
+            } else {
+              ls->SkipValue(value_buf);
+            }
           }
-        } else {
-          record->at(ls->GetIndex()) = (optional<int64_t>) nullopt;
-          if (ls->IsKey()) {
-            ls->SkipKey(key_buf);
-          } else {
-            ls->SkipValue(value_buf);
-          }
+          break;
         }
-        break;
-      }
-      case BaseSchema::kDouble: {
-        DingoSchema<optional<double>>* ds = static_cast<DingoSchema<optional<double>>*>(bs);
-        if (VectorFindAndRemove(column_indexes, ds->GetIndex())) {
-          if (ds->IsKey()) {
-            record->at(ds->GetIndex()) = ds->DecodeKey(key_buf);
+        case BaseSchema::kDouble: {
+          DingoSchema<std::optional<double>>* ds = static_cast<DingoSchema<std::optional<double>>*>(bs);
+          if (VectorFindAndRemove(column_indexes, ds->GetIndex())) {
+            if (ds->IsKey()) {
+              record->at(ds->GetIndex()) = ds->DecodeKey(key_buf);
+            } else {
+              record->at(ds->GetIndex()) = ds->DecodeValue(value_buf);
+            }
           } else {
-            record->at(ds->GetIndex()) = ds->DecodeValue(value_buf);
+            record->at(ds->GetIndex()) = (std::optional<double>) std::nullopt;
+            if (ds->IsKey()) {
+              ds->SkipKey(key_buf);
+            } else {
+              ds->SkipValue(value_buf);
+            }
           }
-        } else {
-          record->at(ds->GetIndex()) = (optional<double>) nullopt;
-          if (ds->IsKey()) {
-            ds->SkipKey(key_buf);
-          } else {
-            ds->SkipValue(value_buf);
-          }
+          break;
         }
-        break;
-      }
-      case BaseSchema::kString: {
-        DingoSchema<optional<reference_wrapper<string>>>* ss = static_cast<DingoSchema<optional<reference_wrapper<string>>>*>(bs);
-        if (VectorFindAndRemove(column_indexes, ss->GetIndex())) {
-          if (ss->IsKey()) {
-            record->at(ss->GetIndex()) = ss->DecodeKey(key_buf);
+        case BaseSchema::kString: {
+          DingoSchema<std::optional<std::reference_wrapper<std::string>>>* ss = static_cast<DingoSchema<std::optional<std::reference_wrapper<std::string>>>*>(bs);
+          if (VectorFindAndRemove(column_indexes, ss->GetIndex())) {
+            if (ss->IsKey()) {
+              record->at(ss->GetIndex()) = ss->DecodeKey(key_buf);
+            } else {
+              record->at(ss->GetIndex()) = ss->DecodeValue(value_buf);
+            }
           } else {
-            record->at(ss->GetIndex()) = ss->DecodeValue(value_buf);
+            record->at(ss->GetIndex()) = (std::optional<std::reference_wrapper<std::string>>) std::nullopt;
+            if (ss->IsKey()) {
+              ss->SkipKey(key_buf);
+            } else {
+              ss->SkipValue(value_buf);
+            }
           }
-        } else {
-          record->at(ss->GetIndex()) = (optional<reference_wrapper<string>>) nullopt;
-          if (ss->IsKey()) {
-            ss->SkipKey(key_buf);
-          } else {
-            ss->SkipValue(value_buf);
-          }
+          break;
         }
-        break;
-      }
-      default: {
-        break;
+        default: {
+          break;
+        }
       }
     }
   }

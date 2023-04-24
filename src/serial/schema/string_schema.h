@@ -20,21 +20,19 @@
 #include <functional>
 #include "dingo_schema.h"
 
-using namespace std;
-
 namespace dingodb {
 
 template <>
 
-class DingoSchema<optional<reference_wrapper<string>>> : public BaseSchema {
+class DingoSchema<std::optional<std::reference_wrapper<std::string>>> : public BaseSchema {
  private:
   int index_;
   bool key_, allow_null_;
 
   static int GetDataLength();
   static int GetWithNullTagLength();
-  static void InternalEncodeKey(Buf* buf, string &data);
-  static void InternalEncodeValue(Buf* buf, string &data);
+  static void InternalEncodeKey(Buf* buf, std::string &data);
+  static void InternalEncodeValue(Buf* buf, std::string &data);
 
  public:
   Type GetType() override;
@@ -45,11 +43,11 @@ class DingoSchema<optional<reference_wrapper<string>>> : public BaseSchema {
   void SetIndex(int index);
   void SetIsKey(bool key);
   void SetAllowNull(bool allow_null);
-  void EncodeKey(Buf* buf, optional<reference_wrapper<string>> data);
-  optional<reference_wrapper<string>> DecodeKey(Buf* buf);
+  void EncodeKey(Buf* buf, std::optional<std::reference_wrapper<std::string>> data);
+  std::optional<std::reference_wrapper<std::string>> DecodeKey(Buf* buf);
   void SkipKey(Buf* buf) const;
-  void EncodeValue(Buf* buf, optional<reference_wrapper<string>> data);
-  optional<reference_wrapper<string>> DecodeValue(Buf* buf);
+  void EncodeValue(Buf* buf, std::optional<std::reference_wrapper<std::string>> data);
+  std::optional<std::reference_wrapper<std::string>> DecodeValue(Buf* buf);
   void SkipValue(Buf* buf) const;
 };
 
