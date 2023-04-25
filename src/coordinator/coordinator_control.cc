@@ -304,7 +304,7 @@ bool CoordinatorControl::Recover() {
     table_map_copy.init(10000);
     table_map_.GetFlatMapCopy(table_map_copy);
     for (const auto& it : table_map_copy) {
-      table_name_map_safe_temp_.Put(it.second.definition().name(), it.first);
+      table_name_map_safe_temp_.Put(std::to_string(it.second.schema_id()) + it.second.definition().name(), it.first);
     }
   }
   DINGO_LOG(INFO) << "Recover table_name_map_safe_temp, count=" << table_name_map_safe_temp_.Size();

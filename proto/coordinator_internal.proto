@@ -31,6 +31,7 @@ message TableInternal {
   uint64 id = 1;
   dingodb.pb.meta.TableDefinition definition = 2;
   repeated TableRegionInternal partitions = 3;
+  uint64 schema_id = 4;
 }
 
 // TableMetricsInternal is storage structure for table_metrics
