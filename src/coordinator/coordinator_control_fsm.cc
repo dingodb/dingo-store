@@ -681,6 +681,8 @@ void LogMetaIncrementSize(pb::coordinator_internal::MetaIncrement& meta_incremen
   if (meta_increment.executor_users_size() > 0) {
     DINGO_LOG(DEBUG) << "9.executor_users_size=" << meta_increment.executor_users_size();
   }
+
+  DINGO_LOG(DEBUG) << meta_increment.DebugString();
 }
 
 // ApplyMetaIncrement is on_apply callback
