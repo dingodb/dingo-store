@@ -269,7 +269,7 @@ public class MysqlInit {
                     map.put(column.getName(), new Timestamp(System.currentTimeMillis()));
                     break;
                 default:
-                    map.put(column.getName(), "N");
+                    map.put(column.getName(), "Y");
 
             }
         });

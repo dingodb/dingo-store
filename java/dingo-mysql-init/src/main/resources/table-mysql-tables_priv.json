@@ -2,43 +2,43 @@
     {
       "name": "Host",
       "type": "varchar",
-      "scale": 60,
+      "scale": -2147483648,
       "primary": 0,
       "nullable": false
     },
     {
       "name": "User",
       "type": "varchar",
-      "scale": 32,
+      "scale": -2147483648,
       "primary": 1,
       "nullable": false
     },
     {
       "name": "Db",
       "type": "varchar",
-      "scale": 64,
+      "scale": -2147483648,
       "primary": 2,
       "nullable": false
     },
     {
       "name": "Table_name",
       "type": "varchar",
-      "scale": 64,
+      "scale": -2147483648,
       "primary": 3,
       "nullable": false
     },
     {
       "name": "Grantor",
       "type": "varchar",
-      "scale": 93,
       "default": "",
+      "scale": -2147483648,
       "primary": -1,
       "nullable": false
     },
     {
       "name": "Timestamp",
       "type": "timestamp",
-      "scale": 0,
+      "scale": -2147483648,
       "default": "",
       "primary": -1,
       "nullable": false
@@ -46,7 +46,7 @@
     {
       "name": "Table_priv",
       "type": "varchar",
-      "scale": 1024,
+      "scale": -2147483648,
       "default": "",
       "primary": -1,
       "nullable": true
@@ -54,8 +54,8 @@
     {
       "name": "Column_priv",
       "type": "varchar",
-      "scale": 1024,
       "default": "",
+      "scale": -2147483648,
       "primary": -1,
       "nullable": true
     }
