@@ -1091,6 +1091,132 @@ pb::error::Errno CoordinatorControl::MergeRegion(uint64_t merge_from_region_id, 
   return pb::error::Errno::OK;
 }
 
+pb::error::Errno CoordinatorControl::MergeRegionWithTaskList(uint64_t merge_from_region_id, uint64_t merge_to_region_id,
+                                                             pb::coordinator_internal::MetaIncrement& meta_increment) {
+  // validate merge_from_region_id
+  pb::common::Region merge_from_region;
+  int ret = region_map_.Get(merge_from_region_id, merge_from_region);
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << "MergeRegion from region not exists, id = " << merge_from_region_id;
+    return pb::error::Errno::EREGION_NOT_FOUND;
+  }
+
+  // validate merge_to_region_id
+  pb::common::Region merge_to_region;
+  ret = region_map_.Get(merge_to_region_id, merge_to_region);
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << "MergeRegion to region not exists, id = " << merge_from_region_id;
+    return pb::error::Errno::EREGION_NOT_FOUND;
+  }
+
+  // validate merge_from_region_id and merge_to_region_id
+  if (merge_from_region_id == merge_to_region_id) {
+    DINGO_LOG(ERROR) << "MergeRegion merge_from_region_id == merge_to_region_id";
+    return pb::error::Errno::EILLEGAL_PARAMTETERS;
+  }
+
+  // validate merge_from_region and merge_to_region has same peers
+  if (merge_from_region.definition().peers_size() != merge_to_region.definition().peers_size()) {
+    DINGO_LOG(ERROR) << "MergeRegion merge_from_region and merge_to_region has different peers size";
+    return pb::error::Errno::EMERGE_PEER_NOT_MATCH;
+  }
+
+  std::vector<uint64_t> merge_from_region_peers;
+  std::vector<uint64_t> merge_to_region_peers;
+  merge_from_region_peers.reserve(merge_from_region.definition().peers_size());
+  for (int i = 0; i < merge_from_region.definition().peers_size(); i++) {
+    merge_from_region_peers.push_back(merge_to_region.definition().peers(i).store_id());
+  }
+  merge_to_region_peers.reserve(merge_to_region.definition().peers_size());
+  for (int i = 0; i < merge_to_region.definition().peers_size(); i++) {
+    merge_to_region_peers.push_back(merge_to_region.definition().peers(i).store_id());
+  }
+  std::sort(merge_from_region_peers.begin(), merge_from_region_peers.end());
+  std::sort(merge_to_region_peers.begin(), merge_to_region_peers.end());
+  if (merge_from_region_peers != merge_to_region_peers) {
+    DINGO_LOG(ERROR) << "MergeRegion merge_from_region and merge_to_region has different peers";
+    return pb::error::Errno::EMERGE_PEER_NOT_MATCH;
+  }
+
+  // validate merge_from_region and merge_to_region status
+  if (merge_from_region.state() != ::dingodb::pb::common::RegionState::REGION_NORMAL ||
+      merge_to_region.state() != ::dingodb::pb::common::RegionState::REGION_NORMAL) {
+    DINGO_LOG(ERROR) << "MergeRegion merge_from_region or merge_to_region is not NORMAL";
+    return pb::error::Errno::EMERGE_STATUS_ILLEGAL;
+  }
+
+  // validate merge_from_region and merge_to_region has same start_key and end_key
+  if (merge_from_region.definition().range().start_key() != merge_to_region.definition().range().end_key()) {
+    DINGO_LOG(ERROR) << "MergeRegion merge_from_region and merge_to_region has different start_key or end_key";
+    return pb::error::Errno::EMERGE_RANGE_NOT_MATCH;
+  }
+
+  // generate store operation for stores
+  pb::coordinator::RegionCmd region_cmd;
+  region_cmd.set_region_id(merge_from_region_id);
+  region_cmd.set_region_cmd_type(pb::coordinator::RegionCmdType::CMD_MERGE);
+  region_cmd.mutable_merge_request()->set_merge_from_region_id(merge_from_region_id);
+  region_cmd.mutable_merge_request()->set_merge_to_region_id(merge_to_region_id);
+
+  // for (auto it : merge_from_region_peers) {
+  //   auto* store_operation_increment = meta_increment.add_store_operations();
+  //   store_operation_increment->set_id(it);  // this store id
+  //   store_operation_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
+  //   auto* store_operation = store_operation_increment->mutable_store_operation();
+  //   store_operation->set_id(it);
+  //   auto* region_cmd_to_add = store_operation->add_region_cmds();
+  //   region_cmd_to_add->CopyFrom(region_cmd);
+  //   region_cmd_to_add->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
+  // }
+
+  // only send merge region_cmd to merge_from_region_id's leader store id
+  if (merge_from_region.leader_store_id() == 0) {
+    DINGO_LOG(ERROR) << "MergeRegion merge_from_region_id's leader_store_id is 0, merge_from_region_id="
+                     << merge_from_region_id << ", merge_to_region_id=" << merge_to_region_id;
+    return pb::error::Errno::EMERGE_STATUS_ILLEGAL;
+  }
+
+  // build task list
+  auto* task_list_increment = meta_increment.add_task_lists();
+  task_list_increment->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_TASK_LIST, meta_increment));
+  task_list_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
+  auto* new_task_list = task_list_increment->mutable_task_list();
+  new_task_list->set_id(task_list_increment->id());
+
+  // build merege task
+  auto* merge_task = new_task_list->add_tasks();
+  auto* store_operation_merge = merge_task->add_store_operations();
+  store_operation_merge->set_id(merge_from_region.leader_store_id());
+  auto* region_cmd_to_add = store_operation_merge->add_region_cmds();
+  region_cmd_to_add->CopyFrom(region_cmd);
+  region_cmd_to_add->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
+
+  // build drop region task
+  auto* drop_region_task = new_task_list->add_tasks();
+  auto* task_pre_check_drop = drop_region_task->mutable_pre_check();
+  task_pre_check_drop->set_type(pb::coordinator::TaskPreCheckType::REGION_CHECK);
+  auto* region_check = task_pre_check_drop->mutable_region_check();
+  region_check->set_region_id(merge_from_region_id);
+  region_check->set_state(::dingodb::pb::common::RegionState::REGION_NORMAL);
+  region_check->mutable_range()->set_start_key(merge_from_region.definition().range().end_key());
+  region_check->mutable_range()->set_end_key(merge_from_region.definition().range().end_key());
+
+  // call drop_region to get store_operations
+  pb::coordinator_internal::MetaIncrement meta_increment_tmp;
+  DropRegion(merge_from_region_id, true, meta_increment_tmp);
+  for (const auto& it : meta_increment_tmp.store_operations()) {
+    const auto& store_operation = it.store_operation();
+    drop_region_task->add_store_operations()->CopyFrom(store_operation);
+  }
+
+  // update region_map for drop region
+  for (const auto& it : meta_increment_tmp.regions()) {
+    meta_increment.add_regions()->CopyFrom(it);
+  }
+
+  return pb::error::Errno::OK;
+}
+
 // ChangePeerRegion
 pb::error::Errno CoordinatorControl::ChangePeerRegion(uint64_t region_id, std::vector<uint64_t>& new_store_ids,
                                                       pb::coordinator_internal::MetaIncrement& meta_increment) {

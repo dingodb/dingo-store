@@ -139,6 +139,8 @@ class CoordinatorControl : public MetaControl {
   // merge region
   pb::error::Errno MergeRegion(uint64_t merge_from_region_id, uint64_t merge_to_region_id,
                                pb::coordinator_internal::MetaIncrement &meta_increment);
+  pb::error::Errno MergeRegionWithTaskList(uint64_t merge_from_region_id, uint64_t merge_to_region_id,
+                                           pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // change peer region
   pb::error::Errno ChangePeerRegion(uint64_t region_id, std::vector<uint64_t> &new_store_ids,

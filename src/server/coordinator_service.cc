@@ -857,8 +857,8 @@ void CoordinatorServiceImpl::MergeRegion(google::protobuf::RpcController *contro
 
   auto merge_request = request->merge_request();
 
-  auto ret = this->coordinator_control_->MergeRegion(merge_request.merge_from_region_id(),
-                                                     merge_request.merge_to_region_id(), meta_increment);
+  auto ret = this->coordinator_control_->MergeRegionWithTaskList(merge_request.merge_from_region_id(),
+                                                                 merge_request.merge_to_region_id(), meta_increment);
   response->mutable_error()->set_errcode(ret);
 
   // if meta_increment is empty, means no need to update meta
