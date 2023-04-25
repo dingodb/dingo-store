@@ -21,6 +21,7 @@
 #include <cstdint>
 #include <iomanip>
 #include <regex>
+#include <string>
 
 #include "brpc/channel.h"
 #include "brpc/controller.h"
@@ -133,7 +134,7 @@ std::vector<pb::common::Location> Helper::ExtractLocations(const std::vector<pb:
 
 // format: 127.0.0.1:8201:0
 std::string Helper::LocationToString(const pb::common::Location& location) {
-  return butil::StringPrintf("%s:%d:%ld", location.host().c_str(), location.port(), location.index());
+  return butil::StringPrintf("%s:%d:%d", location.host().c_str(), location.port(), location.index());
 }
 
 butil::EndPoint Helper::LocationToEndPoint(const pb::common::Location& location) {
@@ -162,6 +163,22 @@ std::string Helper::FormatPeers(const std::vector<pb::common::Location>& locatio
       s += ",";
     }
   }
+  return s;
+}
+
+// format: 127.0.0.1:8201:0,127.0.0.1:8202:0,127.0.0.1:8203:0
+std::string Helper::FormatPeers(const braft::Configuration& conf) {
+  std::vector<braft::PeerId> peers;
+  conf.list_peers(&peers);
+
+  std::string s;
+  for (int i = 0; i < peers.size(); ++i) {
+    s += peers[i].to_string();
+    if (i + 1 < peers.size()) {
+      s += ",";
+    }
+  }
+
   return s;
 }
 
@@ -286,26 +303,11 @@ butil::EndPoint Helper::QueryServerEndpointByRaftEndpoint(std::map<uint64_t, std
   return result;
 }
 
-void Helper::GetServerLocation(const pb::common::Location& raft_location, pb::common::Location& server_location) {
-  // validate raft_location
-  // TODO: how to support ipv6
-  if (raft_location.host().length() <= 0 || raft_location.port() <= 0) {
-    DINGO_LOG(ERROR) << "GetServiceLocation illegal raft_location=" << raft_location.host() << ":"
-                     << raft_location.port();
-    return;
-  }
-
-  // find in cache
-  auto raft_location_string = raft_location.host() + ":" + std::to_string(raft_location.port());
-
-  // cache miss, use rpc to get remote_node server location, and store in cache
-  braft::PeerId remote_node(raft_location_string);
-
-  // rpc
+pb::node::NodeInfo Helper::GetNodeInfo(const butil::EndPoint& endpoint) {
   brpc::Channel channel;
-  if (channel.Init(remote_node.addr, nullptr) != 0) {
-    DINGO_LOG(ERROR) << "Fail to init channel to " << remote_node;
-    return;
+  if (channel.Init(endpoint, nullptr) != 0) {
+    DINGO_LOG(ERROR) << "Fail to init channel to " << butil::endpoint2str(endpoint).c_str();
+    return {};
   }
 
   pb::node::NodeService_Stub stub(&channel);
@@ -316,12 +318,11 @@ void Helper::GetServerLocation(const pb::common::Location& raft_location, pb::co
   pb::node::GetNodeInfoRequest request;
   pb::node::GetNodeInfoResponse response;
 
-  std::string key = "Hello";
   request.set_cluster_id(0);
   stub.GetNodeInfo(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
-    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
-    return;
+    DINGO_LOG(ERROR) << "Fail to send request to : " << cntl.ErrorText();
+    return {};
   }
 
   DINGO_LOG(INFO) << "Received response"
@@ -329,7 +330,27 @@ void Helper::GetServerLocation(const pb::common::Location& raft_location, pb::co
                   << " server_location=" << response.node_info().server_location().host() << ":"
                   << response.node_info().server_location().port();
 
-  server_location.CopyFrom(response.node_info().server_location());
+  return response.node_info();
+}
+
+pb::node::NodeInfo Helper::GetNodeInfo(const std::string& host, int port) {
+  butil::EndPoint endpoint;
+  butil::str2endpoint(host.c_str(), port, &endpoint);
+  return GetNodeInfo(endpoint);
+}
+
+void Helper::GetServerLocation(const pb::common::Location& raft_location, pb::common::Location& server_location) {
+  // validate raft_location
+  // TODO: how to support ipv6
+  if (raft_location.host().length() <= 0 || raft_location.port() <= 0) {
+    DINGO_LOG(ERROR) << "GetServiceLocation illegal raft_location=" << raft_location.host() << ":"
+                     << raft_location.port();
+    return;
+  }
+
+  auto node_info = GetNodeInfo(raft_location.host(), raft_location.port());
+
+  server_location.CopyFrom(node_info.server_location());
 }
 
 void Helper::GetRaftLocation(const pb::common::Location& server_location, pb::common::Location& raft_location) {
@@ -341,41 +362,21 @@ void Helper::GetRaftLocation(const pb::common::Location& server_location, pb::co
     return;
   }
 
-  // find in cache
-  auto server_location_string = server_location.host() + ":" + std::to_string(server_location.port());
+  auto node_info = GetNodeInfo(server_location.host(), server_location.port());
 
-  // cache miss, use rpc to get remote_node server location, and store in cache
-  braft::PeerId remote_node(server_location_string);
+  raft_location.CopyFrom(node_info.raft_location());
+}
 
-  // rpc
-  brpc::Channel channel;
-  if (channel.Init(remote_node.addr, nullptr) != 0) {
-    DINGO_LOG(ERROR) << "Fail to init channel to " << remote_node;
-    return;
-  }
+pb::common::Peer Helper::GetPeerInfo(const butil::EndPoint& endpoint) {
+  pb::common::Peer peer;
 
-  pb::node::NodeService_Stub stub(&channel);
+  auto node_info = GetNodeInfo(endpoint);
+  peer.set_store_id(node_info.id());
+  peer.set_role(pb::common::PeerRole::VOTER);
+  peer.mutable_raft_location()->Swap(node_info.mutable_raft_location());
+  peer.mutable_server_location()->Swap(node_info.mutable_server_location());
 
-  brpc::Controller cntl;
-  cntl.set_timeout_ms(1000L);
-
-  pb::node::GetNodeInfoRequest request;
-  pb::node::GetNodeInfoResponse response;
-
-  std::string key = "Hello";
-  request.set_cluster_id(0);
-  stub.GetNodeInfo(&cntl, &request, &response, nullptr);
-  if (cntl.Failed()) {
-    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
-    return;
-  }
-
-  DINGO_LOG(INFO) << "Received response"
-                  << " cluster_id=" << request.cluster_id() << " latency=" << cntl.latency_us()
-                  << " raft_location=" << response.node_info().raft_location().host() << ":"
-                  << response.node_info().raft_location().port();
-
-  raft_location.CopyFrom(response.node_info().raft_location());
+  return peer;
 }
 
 std::string Helper::GenerateRandomString(int length) {

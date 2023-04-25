@@ -87,11 +87,11 @@ class Helper {
     return vec;
   }
 
-  static std::map<std::string, std::string> GenDataset(int n) {
+  static std::map<std::string, std::string> GenDataset(const std::string& prefix, int n) {
     std::map<std::string, std::string> dataset;
 
     for (int i = 0; i < n; ++i) {
-      std::string key = GenRandomStringV2(32);
+      std::string key = prefix + GenRandomStringV2(32);
       dataset[key] = GenRandomString(256);
     }
 

@@ -23,7 +23,7 @@ namespace client {
 // key/value
 void SendKvGet(ServerInteractionPtr interaction, uint64_t region_id, const std::string& key, std::string& value);
 void SendKvBatchGet(ServerInteractionPtr interaction, uint64_t region_id, const std::string& prefix, int count);
-void SendKvPut(ServerInteractionPtr interaction, uint64_t region_id, const std::string& key);
+void SendKvPut(ServerInteractionPtr interaction, uint64_t region_id, const std::string& key, std::string value = "");
 void SendKvBatchPut(ServerInteractionPtr interaction, uint64_t region_id, const std::string& prefix, int count);
 void SendKvPutIfAbsent(ServerInteractionPtr interaction, uint64_t region_id, const std::string& key);
 void SendKvBatchPutIfAbsent(ServerInteractionPtr interaction, uint64_t region_id, const std::string& prefix, int count);
@@ -39,9 +39,11 @@ void BatchSendAddRegion(ServerInteractionPtr interaction, int start_region_id, i
                         const std::string& raft_group, std::vector<std::string>& raft_addrs);
 
 // test
-void TestBatchPutGet(ServerInteractionPtr interaction, uint64_t region_id, int thread_num, int req_num);
+void TestBatchPutGet(ServerInteractionPtr interaction, uint64_t region_id, int thread_num, int req_num,
+                     const std::string& prefix);
 void TestRegionLifecycle(ServerInteractionPtr interaction, uint64_t region_id, const std::string& raft_group,
-                         std::vector<std::string>& raft_addrs, int region_count, int thread_num, int req_num);
+                         std::vector<std::string>& raft_addrs, int region_count, int thread_num, int req_num,
+                         const std::string& prefix);
 
 }  // namespace client
 

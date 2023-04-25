@@ -196,9 +196,10 @@ void StoreStateMachine::on_error(const braft::Error& e) {
 }
 
 void StoreStateMachine::on_configuration_committed(const braft::Configuration& conf) {
-  DINGO_LOG(INFO) << "on_configuration_committed, region: " << region_->Id();
+  DINGO_LOG(INFO) << "on_configuration_committed, region: " << region_->Id() << " peers: " << Helper::FormatPeers(conf);
 
   auto event = std::make_shared<SmConfigurationCommittedEvent>();
+  event->node_id = region_->Id();
   event->conf = conf;
 
   DispatchEvent(EventType::kSmConfigurationCommited, event);

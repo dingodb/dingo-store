@@ -49,7 +49,7 @@ class CoordinatorInteraction {
   template <typename Request, typename Response>
   butil::Status SendRequest(const std::string& api_name, const Request& request, Response& response);
 
-  const ::google::protobuf::ServiceDescriptor* GetServiceDescriptor();
+  const ::google::protobuf::ServiceDescriptor* GetServiceDescriptor() const;
 
   static CoordinatorInteraction* GetAutoIncrementInstance() {
     static CoordinatorInteraction instance;
@@ -68,7 +68,7 @@ butil::Status CoordinatorInteraction::SendRequest(const std::string& api_name, c
                                                   Response& response) {
   const ::google::protobuf::ServiceDescriptor* service_desc = GetServiceDescriptor();
   if (service_desc == nullptr) {
-      return butil::Status(pb::error::ESERVICE_TYPE_NOT_FOUND, "Service type not found");
+    return butil::Status(pb::error::ESERVICE_TYPE_NOT_FOUND, "Service type not found");
   }
 
   const ::google::protobuf::MethodDescriptor* method = service_desc->FindMethodByName(api_name);
@@ -76,14 +76,14 @@ butil::Status CoordinatorInteraction::SendRequest(const std::string& api_name, c
     return butil::Status(pb::error::ESERVICE_METHOD_NOT_FOUND, "Service method not found");
   }
 
-  // DINGO_LOG(DEBUG) << "send request to coordinator api " << api_name << " request: " << request.ShortDebugString();
+  // DINGO_LOG(DEBUG) << "send request api " << api_name << " request: " << request.ShortDebugString();
   int retry_count = 0;
   do {
     brpc::Controller cntl;
     cntl.set_log_id(butil::fast_rand());
     const int leader_index = GetLeader();
     channels_[leader_index]->CallMethod(method, &cntl, &request, &response, nullptr);
-    // DINGO_LOG(DEBUG) << "send request to coordinator api " << api_name << " response: " <<
+    // DINGO_LOG(DEBUG) << "send request api " << api_name << " response: " <<
     // response.ShortDebugString();
     if (cntl.Failed()) {
       DINGO_LOG(ERROR) << butil::StringPrintf("%s response failed, %lu %d %s", api_name.c_str(), cntl.log_id(),

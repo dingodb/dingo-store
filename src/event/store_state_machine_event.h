@@ -164,6 +164,7 @@ struct SmConfigurationCommittedEvent : public Event {
   SmConfigurationCommittedEvent() : Event(EventSource::kRaftStateMachine, EventType::kSmConfigurationCommited) {}
   ~SmConfigurationCommittedEvent() override = default;
 
+  uint64_t node_id;
   braft::Configuration conf;
 };
 
@@ -173,7 +174,7 @@ class SmConfigurationCommittedEventListener : public EventListener {
   ~SmConfigurationCommittedEventListener() override = default;
 
   EventType GetType() override { return EventType::kSmConfigurationCommited; }
-  void OnEvent(std::shared_ptr<Event> event) override {}
+  void OnEvent(std::shared_ptr<Event> event) override;
 };
 
 // State Machine StartFollowing

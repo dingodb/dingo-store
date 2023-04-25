@@ -13,9 +13,9 @@ raft:
   port: $RAFT_PORT$
   path: $BASE_PATH$/data/store/raft
   electionTimeout: 1000 # ms
-  snapshotInterval: 0 # s
+  snapshotInterval: 600 # s
 log:
-  level: INFO
+  level: DEBUG
   path: $BASE_PATH$/log
 store:
   dbPath: $BASE_PATH$/data/store/db

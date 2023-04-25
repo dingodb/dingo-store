@@ -24,6 +24,7 @@
 #include "butil/status.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
+#include "proto/node.pb.h"
 
 namespace dingodb {
 
@@ -58,6 +59,8 @@ class Helper {
   // format: 127.0.0.1:8201:0,127.0.0.1:8202:0,127.0.0.1:8203:0
   static std::string FormatPeers(const std::vector<pb::common::Location>& locations);
 
+  static std::string FormatPeers(const braft::Configuration& conf);
+
   // 127.0.0.1:8201,127.0.0.1:8202,127.0.0.1:8203 to EndPoint
   static butil::EndPoint StrToEndPoint(std::string str);
   static std::vector<butil::EndPoint> StrToEndpoints(const std::string& str);
@@ -68,6 +71,7 @@ class Helper {
 
   static bool IsEqualIgnoreCase(const std::string& str1, const std::string& str2);
 
+  // protobuf transform
   template <typename T>
   static std::vector<T> PbRepeatedToVector(const google::protobuf::RepeatedPtrField<T>& data) {
     std::vector<T> vec;
@@ -117,8 +121,11 @@ class Helper {
   // use raft_location to get server_location
   // in: raft_location
   // out: server_location
+  static pb::node::NodeInfo GetNodeInfo(const butil::EndPoint& endpoint);
+  static pb::node::NodeInfo GetNodeInfo(const std::string& host, int port);
   static void GetServerLocation(const pb::common::Location& raft_location, pb::common::Location& server_location);
   static void GetRaftLocation(const pb::common::Location& server_location, pb::common::Location& raft_location);
+  static pb::common::Peer GetPeerInfo(const butil::EndPoint& endpoint);
 
   // generate random string for keyring
   static std::string GenerateRandomString(int length);

@@ -44,14 +44,14 @@ void SendKvBatchGet(ServerInteractionPtr interaction, uint64_t region_id, const 
   interaction->SendRequest("StoreService", "KvBatchGet", request, response);
 }
 
-void SendKvPut(ServerInteractionPtr interaction, uint64_t region_id, const std::string& key) {
+void SendKvPut(ServerInteractionPtr interaction, uint64_t region_id, const std::string& key, std::string value) {
   dingodb::pb::store::KvPutRequest request;
   dingodb::pb::store::KvPutResponse response;
 
   request.set_region_id(region_id);
   auto* kv = request.mutable_kv();
   kv->set_key(key);
-  kv->set_value(Helper::GenRandomString(64));
+  kv->set_value(value.empty() ? Helper::GenRandomString(64) : value);
 
   interaction->SendRequest("StoreService", "KvPut", request, response);
 }
@@ -166,13 +166,13 @@ void SendSnapshot(ServerInteractionPtr interaction, uint64_t region_id) {
   interaction->SendRequest("StoreService", "Snapshot", request, response);
 }
 
-void BatchPutGet(ServerInteractionPtr interaction, uint64_t region_id, int req_num) {
-  auto dataset = Helper::GenDataset(req_num);
+void BatchPutGet(ServerInteractionPtr interaction, uint64_t region_id, const std::string& prefix, int req_num) {
+  auto dataset = Helper::GenDataset(prefix, req_num);
 
   std::vector<uint64_t> latencys;
   latencys.reserve(dataset.size());
   for (auto& [key, value] : dataset) {
-    SendKvPut(interaction, region_id, key);
+    SendKvPut(interaction, region_id, key, value);
 
     latencys.push_back(interaction->GetLatency());
   }
@@ -198,6 +198,7 @@ struct BatchPutGetParam {
   uint64_t region_id;
   int32_t req_num;
   int32_t thread_no;
+  std::string prefix;
   ServerInteractionPtr interaction;
 
   std::map<std::string, std::shared_ptr<dingodb::pb::store::StoreService_Stub>> stubs;
@@ -207,12 +208,13 @@ void* BatchPutGetRoutine(void* arg) {
   std::unique_ptr<BatchPutGetParam> param(static_cast<BatchPutGetParam*>(arg));
 
   DINGO_LOG(INFO) << "========thread: " << param->thread_no;
-  BatchPutGet(param->interaction, param->region_id, param->req_num);
+  BatchPutGet(param->interaction, param->region_id, param->prefix, param->req_num);
 
   return nullptr;
 }
 
-void TestBatchPutGet(ServerInteractionPtr interaction, uint64_t region_id, int thread_num, int req_num) {
+void TestBatchPutGet(ServerInteractionPtr interaction, uint64_t region_id, int thread_num, int req_num,
+                     const std::string& prefix) {
   std::vector<bthread_t> tids;
   tids.resize(thread_num);
   for (int i = 0; i < thread_num; ++i) {
@@ -221,6 +223,7 @@ void TestBatchPutGet(ServerInteractionPtr interaction, uint64_t region_id, int t
     param->region_id = region_id;
     param->thread_no = i;
     param->interaction = interaction;
+    param->prefix = prefix;
 
     if (bthread_start_background(&tids[i], nullptr, BatchPutGetRoutine, param) != 0) {
       DINGO_LOG(ERROR) << "Fail to create bthread";
@@ -238,6 +241,7 @@ struct AddRegionParam {
   int32_t region_count;
   std::string raft_group;
   int req_num;
+  std::string prefix;
 
   std::vector<std::string> raft_addrs;
   ServerInteractionPtr interaction;
@@ -307,7 +311,7 @@ void* OperationRegionRoutine(void* arg) {
     {
       bthread_usleep(3 * 1000 * 1000L);
       DINGO_LOG(INFO) << "======Put region " << region_id;
-      BatchPutGet(interaction, region_id, param->req_num);
+      BatchPutGet(interaction, region_id, param->prefix, param->req_num);
     }
 
     // Destroy region
@@ -329,7 +333,8 @@ void* OperationRegionRoutine(void* arg) {
 }
 
 void TestRegionLifecycle(ServerInteractionPtr interaction, uint64_t region_id, const std::string& raft_group,
-                         std::vector<std::string>& raft_addrs, int region_count, int thread_num, int req_num) {
+                         std::vector<std::string>& raft_addrs, int region_count, int thread_num, int req_num,
+                         const std::string& prefix) {
   int32_t step = region_count / thread_num;
   std::vector<bthread_t> tids;
   tids.resize(thread_num);
@@ -341,6 +346,7 @@ void TestRegionLifecycle(ServerInteractionPtr interaction, uint64_t region_id, c
     param->interaction = interaction;
     param->raft_group = raft_group;
     param->req_num = req_num;
+    param->prefix = prefix;
 
     if (bthread_start_background(&tids[i], nullptr, OperationRegionRoutine, param) != 0) {
       DINGO_LOG(ERROR) << "Fail to create bthread";

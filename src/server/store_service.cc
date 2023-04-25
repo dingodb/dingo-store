@@ -140,9 +140,11 @@ butil::Status ValidateRegion(uint64_t region_id, const std::vector<std::string_v
   if (region->State() == pb::common::StoreRegionState::STANDBY) {
     return butil::Status(pb::error::EREGION_UNAVAILABLE, "Region is standby, waiting later");
   }
-  if (region->State() == pb::common::StoreRegionState::DELETED ||
-      region->State() == pb::common::StoreRegionState::DELETING) {
+  if (region->State() == pb::common::StoreRegionState::DELETING) {
     return butil::Status(pb::error::EREGION_UNAVAILABLE, "Region is deleting");
+  }
+  if (region->State() == pb::common::StoreRegionState::DELETED) {
+    return butil::Status(pb::error::EREGION_UNAVAILABLE, "Region is deleted");
   }
 
   auto range = region->Range();

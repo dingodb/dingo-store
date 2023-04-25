@@ -62,6 +62,7 @@ class Region {
   void SetRange(const pb::common::Range& range);
 
   std::vector<pb::common::Peer> Peers() const;
+  void SetPeers(std::vector<pb::common::Peer>& peers);
 
   pb::common::StoreRegionState State() const;
   void SetState(pb::common::StoreRegionState state);
