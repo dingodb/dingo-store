@@ -66,6 +66,13 @@ std::vector<pb::common::Peer> Region::Peers() const {
   return peers;
 }
 
+void Region::SetPeers(std::vector<pb::common::Peer>& peers) {
+  google::protobuf::RepeatedPtrField<pb::common::Peer> tmp_peers;
+  tmp_peers.Add(peers.begin(), peers.end());
+
+  inner_region_.mutable_definition()->mutable_peers()->Swap(&tmp_peers);
+}
+
 pb::common::StoreRegionState Region::State() const { return state_.load(std::memory_order_relaxed); }
 void Region::SetState(pb::common::StoreRegionState state) {
   state_.store(state, std::memory_order_relaxed);

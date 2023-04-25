@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "client/store_client_function.h"
+#include "glog/logging.h"
 
 DEFINE_bool(log_each_request, true, "Print log for each request");
 DEFINE_int32(thread_num, 1, "Number of threads sending requests");
@@ -135,15 +136,21 @@ void Sender(client::ServerInteractionPtr interaction, const std::string& method,
 
     // Test
     if (method == "TestBatchPutGet") {
-      client::TestBatchPutGet(interaction, FLAGS_region_id, FLAGS_thread_num, FLAGS_req_num);
+      client::TestBatchPutGet(interaction, FLAGS_region_id, FLAGS_thread_num, FLAGS_req_num, FLAGS_prefix);
     } else if (method == "TestBatchPutGet") {
       client::TestRegionLifecycle(interaction, FLAGS_region_id, FLAGS_raft_group, raft_addrs, FLAGS_region_count,
-                                  FLAGS_thread_num, FLAGS_req_num);
+                                  FLAGS_thread_num, FLAGS_req_num, FLAGS_prefix);
     }
   }
 }
 
 int main(int argc, char* argv[]) {
+  FLAGS_minloglevel = google::GLOG_INFO;
+  FLAGS_logtostdout = true;
+  FLAGS_colorlogtostdout = true;
+  FLAGS_logbufsecs = 0;
+  google::InitGoogleLogging(argv[0]);
+
   google::ParseCommandLineFlags(&argc, &argv, true);
 
   client::ServerInteractionPtr interaction = std::make_shared<client::ServerInteraction>();

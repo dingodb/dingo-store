@@ -47,7 +47,7 @@ void CoordinatorInteraction::NextLeader(int leader_index) {
   leader_index_.compare_exchange_weak(leader_index, next_leader_index);
 }
 
-const ::google::protobuf::ServiceDescriptor* CoordinatorInteraction::GetServiceDescriptor() {
+const ::google::protobuf::ServiceDescriptor* CoordinatorInteraction::GetServiceDescriptor() const {
   switch (service_type_) {
     case pb::common::CoordinatorServiceType::ServiceTypeCoordinator: {
       return pb::coordinator::CoordinatorService::descriptor();

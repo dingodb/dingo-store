@@ -71,7 +71,11 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
     tmp_region_metrics.set_store_region_state(region->State());
     tmp_region_metrics.mutable_region_definition()->CopyFrom(region->InnerRegion().definition());
 
-    if (raft_kv_engine != nullptr) {
+    if ((region->State() == pb::common::StoreRegionState::NORMAL ||
+         region->State() == pb::common::StoreRegionState::STANDBY ||
+         region->State() == pb::common::StoreRegionState::SPLITTING ||
+         region->State() == pb::common::StoreRegionState::MERGING) &&
+        raft_kv_engine != nullptr) {
       auto raft_node = raft_kv_engine->GetNode(region->Id());
       if (raft_node != nullptr) {
         tmp_region_metrics.mutable_braft_status()->CopyFrom(*raft_node->GetStatus());

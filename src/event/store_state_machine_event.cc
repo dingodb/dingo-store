@@ -14,6 +14,11 @@
 
 #include "event/store_state_machine_event.h"
 
+#include <string_view>
+#include <vector>
+
+#include "butil/endpoint.h"
+#include "common/helper.h"
 #include "common/logging.h"
 #include "handler/raft_snapshot_handler.h"
 #include "proto/common.pb.h"
@@ -64,6 +69,52 @@ void SmLeaderStartEventListener::OnEvent(std::shared_ptr<Event> event) {
 
   // trigger heartbeat
   Heartbeat::TriggerStoreHeartbeat(nullptr);
+}
+
+void SmConfigurationCommittedEventListener::OnEvent(std::shared_ptr<Event> event) {
+  auto the_event = std::dynamic_pointer_cast<SmConfigurationCommittedEvent>(event);
+
+  // Update region definition peers
+  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+  if (store_region_meta) {
+    auto region = store_region_meta->GetRegion(the_event->node_id);
+
+    // Get last peer from braft configuration.
+    std::vector<braft::PeerId> peer_ids;
+    the_event->conf.list_peers(&peer_ids);
+
+    // Check and get changed peers.
+    auto get_changed_peers = [peer_ids, region](std::vector<pb::common::Peer>& changed_peers) -> bool {
+      bool has_new_peer = false;
+      for (const auto& peer_id : peer_ids) {
+        bool is_exist = false;
+        for (const auto& pb_peer : region->Peers()) {
+          if (std::string_view(pb_peer.raft_location().host()) ==
+                  std::string_view(butil::ip2str(peer_id.addr.ip).c_str()) &&
+              pb_peer.raft_location().port() == peer_id.addr.port) {
+            is_exist = true;
+            changed_peers.push_back(pb_peer);
+          }
+        }
+
+        // Not exist, get peer info used by api.
+        if (!is_exist) {
+          has_new_peer = true;
+          changed_peers.push_back(Helper::GetPeerInfo(peer_id.addr));
+        }
+      }
+
+      return has_new_peer;
+    };
+
+    std::vector<pb::common::Peer> changed_peers;
+    if (get_changed_peers(changed_peers)) {
+      DINGO_LOG(DEBUG) << "Peers have changed, update region definition peer";
+      region->SetPeers(changed_peers);
+      // Notify coordinator
+      Heartbeat::TriggerStoreHeartbeat(nullptr);
+    }
+  }
 }
 
 void SmStartFollowingEventListener::OnEvent(std::shared_ptr<Event> event) {
