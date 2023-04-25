@@ -70,9 +70,9 @@ public class MetaServiceClient {
     private Pattern pattern = Pattern.compile("^[A-Z_][A-Z\\d_]+$");
     private Pattern warnPattern = Pattern.compile(".*[a-z]+.*");
     private String ROOT_NAME = "root";
-    private Meta.DingoCommonId parentId;
+    private final Meta.DingoCommonId parentId;
     @Getter
-    private Meta.DingoCommonId id;
+    private final Meta.DingoCommonId id;
     @Getter
     private final String name;
 
@@ -104,11 +104,10 @@ public class MetaServiceClient {
         if (!tableDefinitionCache.isEmpty() || !metaServiceCache.isEmpty()) {
             return;
         }
-        if (id == null) {
-            id = DINGO_SCHEMA_ID;
-        }
         this.getSchemas(parentId).forEach(this::addMetaServiceCache);
-        this.getTableDefinitions(id).forEach(this::addTableCache);
+        if (!(id == ROOT_SCHEMA_ID)) {
+            this.getTableDefinitions(id).forEach(this::addTableCache);
+        }
     }
 
     private void addMetaServiceCache(Meta.Schema schema) {

@@ -120,18 +120,20 @@ public class StoreServiceClient {
     public Iterator<KeyValue> scan(
         DingoCommonId tableId, DingoCommonId regionId, Range range, boolean withStart, boolean withEnd
     ) {
-        return new ScanIterator(getStoreConnector(tableId, regionId).getStub(),
+        return new ScanIterator(getStoreConnector(tableId, regionId),
                regionId.entityId(),
                Common.RangeWithOptions.newBuilder()
-               .setRange(
-                   Common.Range.newBuilder()
-                       .setStartKey(ByteString.copyFrom(range.getStartKey()))
-                       .setEndKey(ByteString.copyFrom(range.getEndKey()))
-                       .build())
-               .setWithStart(withStart)
-               .setWithEnd(withEnd)
-               .build(),
-               false);
+                   .setRange(
+                       Common.Range.newBuilder()
+                           .setStartKey(ByteString.copyFrom(range.getStartKey()))
+                           .setEndKey(ByteString.copyFrom(range.getEndKey()))
+                           .build())
+                   .setWithStart(withStart)
+                   .setWithEnd(withEnd)
+                   .build(),
+               false,
+               retryTimes
+        );
     }
 
     public boolean kvPut(DingoCommonId tableId, DingoCommonId regionId, KeyValue keyValue) {

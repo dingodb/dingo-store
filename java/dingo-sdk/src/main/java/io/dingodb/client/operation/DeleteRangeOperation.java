@@ -20,6 +20,7 @@ import io.dingodb.client.OperationContext;
 import io.dingodb.client.RouteTable;
 import io.dingodb.sdk.common.RangeWithOptions;
 import io.dingodb.sdk.common.codec.KeyValueCodec;
+import io.dingodb.sdk.common.table.RangeDistribution;
 import io.dingodb.sdk.common.table.Table;
 import io.dingodb.sdk.common.utils.Any;
 import io.dingodb.sdk.common.utils.ByteArrayUtils;
@@ -27,7 +28,7 @@ import io.dingodb.sdk.common.utils.ByteArrayUtils.ComparableByteArray;
 
 import java.util.Arrays;
 import java.util.Comparator;
-import java.util.Iterator;
+import java.util.NavigableMap;
 import java.util.NavigableSet;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
@@ -60,17 +61,19 @@ public class DeleteRangeOperation implements Operation {
                 codec.encodeKey(keyRange.end.getUserKey().toArray(new Object[table.getColumns().size()])), keyRange.withStart,
                 keyRange.withEnd
             );
-            NavigableSet<Task> subTasks = routeTable.getRangeDistribution()
-                .subMap(new ComparableByteArray(range.getRange().getStartKey()), range.isWithStart(), new ComparableByteArray(range.getRange().getEndKey()), range.isWithEnd())
-                .values()
-                .stream()
+            NavigableMap<ComparableByteArray, RangeDistribution> rangeDistribution = routeTable.getRangeDistribution();
+            NavigableSet<Task> subTasks = rangeDistribution
+                .subMap(
+                    rangeDistribution.floorKey(new ComparableByteArray(range.getStartKey())), range.isWithStart(),
+                    rangeDistribution.floorKey(new ComparableByteArray(range.getRange().getEndKey())), range.isWithEnd()
+                ).values().stream()
                 .map(rd -> new Task(rd.getId(),
                     wrap(new OpRange(rd.getRange().getStartKey(), rd.getRange().getEndKey(), true, false))
                 ))
                 .collect(Collectors.toCollection(() -> new TreeSet<>(getComparator())));
             Task task = subTasks.pollFirst();
             if (task == null) {
-                return new Fork(new Iterator[0], subTasks, true);
+                return new Fork(new long[0], subTasks, true);
             }
             OpRange taskRange = task.parameters();
             subTasks.add(new Task(
@@ -78,6 +81,7 @@ public class DeleteRangeOperation implements Operation {
                 wrap(new OpRange(range.getStartKey(), taskRange.getEndKey(), range.withStart, taskRange.withEnd))
             ));
             task = subTasks.pollLast();
+            taskRange = task.parameters();
             subTasks.add(new Task(
                 task.getRegionId(),
                 wrap(new OpRange(taskRange.getStartKey(), range.getEndKey(), taskRange.withStart, range.withEnd))

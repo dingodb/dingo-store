@@ -18,44 +18,40 @@
 package io.dingodb.sdk.service.store;
 
 import com.google.protobuf.ByteString;
-import io.dingodb.DingoClient;
-import io.dingodb.client.Key;
-import io.dingodb.client.Record;
-import io.dingodb.client.Value;
 import io.dingodb.common.Common;
 import io.dingodb.common.Common.RangeWithOptions;
 import io.dingodb.sdk.common.DingoClientException;
 import io.dingodb.sdk.common.KeyValue;
-import io.dingodb.sdk.common.partition.PartitionDetailDefinition;
-import io.dingodb.sdk.common.partition.PartitionRule;
-import io.dingodb.sdk.common.table.ColumnDefinition;
-import io.dingodb.sdk.common.table.TableDefinition;
+import io.dingodb.sdk.service.connector.ServiceConnector;
+import io.dingodb.sdk.service.connector.StoreServiceConnector;
 import io.dingodb.store.Store;
-import io.dingodb.store.StoreServiceGrpc.StoreServiceBlockingStub;
+import io.dingodb.store.StoreServiceGrpc;
 
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.Iterator;
-import java.util.LinkedHashMap;
 import java.util.NoSuchElementException;
+import java.util.concurrent.atomic.AtomicReference;
 
 public class ScanIterator implements Iterator<KeyValue>, AutoCloseable {
 
-    private final StoreServiceBlockingStub stub;
+    private final AtomicReference<StoreServiceGrpc.StoreServiceBlockingStub> stub = new AtomicReference<>();
+    private final StoreServiceConnector connector;
     private final long regionId;
     private final RangeWithOptions range;
 
     private final ByteString scanId;
+    private final int retryTimes;
 
     private Iterator<KeyValue> delegateIterator = Collections.<KeyValue>emptyList().iterator();
     private boolean release = false;
 
     public ScanIterator(
-        StoreServiceBlockingStub stub, long regionId, RangeWithOptions range, boolean key_only
+        StoreServiceConnector connector, long regionId, RangeWithOptions range, boolean key_only, int retryTimes
     ) {
-        this.stub = stub;
+        this.connector = connector;
         this.regionId = regionId;
         this.range = range;
+        this.retryTimes = retryTimes;
         this.scanId = scanBegin();
     }
 
@@ -70,12 +66,15 @@ public class ScanIterator implements Iterator<KeyValue>, AutoCloseable {
     }
 
     public ByteString scanBegin() {
-        Store.KvScanBeginResponse response = stub.kvScanBegin(Store.KvScanBeginRequest.newBuilder()
-            .setRange(range)
-            .setRegionId(regionId)
-            .setMaxFetchCnt(0)
-            .build());
-        checkRes(response.getError(), "begin");
+        Store.KvScanBeginResponse response = connector.exec(stub -> {
+            Store.KvScanBeginResponse res = stub.kvScanBegin(Store.KvScanBeginRequest.newBuilder()
+                .setRange(range)
+                .setRegionId(regionId)
+                .setMaxFetchCnt(0)
+                .build());
+            this.stub.set(stub);
+            return new ServiceConnector.Response<>(res.getError(), res);
+        }, retryTimes, err -> true).getResponse();
         return response.getScanId();
     }
 
@@ -83,7 +82,7 @@ public class ScanIterator implements Iterator<KeyValue>, AutoCloseable {
         if (delegateIterator.hasNext()) {
             return;
         }
-        Store.KvScanContinueResponse response = stub.kvScanContinue(Store.KvScanContinueRequest.newBuilder()
+        Store.KvScanContinueResponse response = stub.get().kvScanContinue(Store.KvScanContinueRequest.newBuilder()
             .setScanId(scanId)
             .setRegionId(regionId)
             .setMaxFetchCnt(10)
@@ -97,7 +96,7 @@ public class ScanIterator implements Iterator<KeyValue>, AutoCloseable {
 
 
     public void scanRelease() {
-        Store.KvScanReleaseResponse response = stub.kvScanRelease(Store.KvScanReleaseRequest.newBuilder()
+        Store.KvScanReleaseResponse response = stub.get().kvScanRelease(Store.KvScanReleaseRequest.newBuilder()
             .setRegionId(regionId)
             .setScanId(scanId)
             .build());
