@@ -14,11 +14,17 @@
 
 #include "coordinator/auto_increment_control.h"
 
+#include <cstdint>
 #include <fstream>
+#include <memory>
+#include <string>
 
+#include "butil/containers/flat_map.h"
 #include "common/helper.h"
+#include "common/logging.h"
 #include "common/synchronization.h"
 #include "coordinator/coordinator_interaction.h"
+#include "engine/snapshot.h"
 
 namespace dingodb {
 
@@ -29,7 +35,7 @@ AutoIncrementControl::AutoIncrementControl() {
   // init bthread mutex
   bthread_mutex_init(&auto_increment_map_mutex_, nullptr);
 
-  CHECK_EQ(0, auto_increment_map_.init(256, 70) );
+  CHECK_EQ(0, auto_increment_map_.init(256, 70));
 }
 
 bool AutoIncrementControl::Init() {
@@ -54,15 +60,13 @@ pb::error::Errno AutoIncrementControl::GetAutoIncrement(uint64_t table_id, uint6
   return pb::error::Errno::OK;
 }
 
-pb::error::Errno AutoIncrementControl::CreateAutoIncrement(uint64_t table_id,
-                                            uint64_t start_id,
-                                            pb::coordinator_internal::MetaIncrement &meta_increment) {
+pb::error::Errno AutoIncrementControl::CreateAutoIncrement(uint64_t table_id, uint64_t start_id,
+                                                           pb::coordinator_internal::MetaIncrement& meta_increment) {
   DINGO_LOG(INFO) << "create auto increment.";
   {
     BAIDU_SCOPED_LOCK(auto_increment_map_mutex_);
     if (auto_increment_map_.seek(table_id) != nullptr) {
-      DINGO_LOG(WARNING) << "table id: " << table_id << " is exist, start id: "
-        << auto_increment_map_[table_id];
+      DINGO_LOG(WARNING) << "table id: " << table_id << " is exist, start id: " << auto_increment_map_[table_id];
       return pb::error::Errno::EAUTO_INCREMENT_EXIST;
     }
   }
@@ -75,10 +79,8 @@ pb::error::Errno AutoIncrementControl::CreateAutoIncrement(uint64_t table_id,
   return pb::error::Errno::OK;
 }
 
-pb::error::Errno AutoIncrementControl::UpdateAutoIncrement(uint64_t table_id,
-                                            uint64_t start_id,
-                                            bool force,
-                                            pb::coordinator_internal::MetaIncrement &meta_increment) {
+pb::error::Errno AutoIncrementControl::UpdateAutoIncrement(uint64_t table_id, uint64_t start_id, bool force,
+                                                           pb::coordinator_internal::MetaIncrement& meta_increment) {
   DINGO_LOG(INFO) << table_id << " | " << start_id << " | " << force;
   uint64_t source_start_id = 0;
   pb::error::Errno ret = GetAutoIncrement(table_id, source_start_id);
@@ -87,8 +89,7 @@ pb::error::Errno AutoIncrementControl::UpdateAutoIncrement(uint64_t table_id,
     return ret;
   }
   if (start_id <= source_start_id && !force) {
-    DINGO_LOG(WARNING) << "start id illegal, table id: " <<
-          table_id << "";
+    DINGO_LOG(WARNING) << "start id illegal, table id: " << table_id << "";
     return pb::error::Errno::EILLEGAL_PARAMTETERS;
   }
 
@@ -102,14 +103,11 @@ pb::error::Errno AutoIncrementControl::UpdateAutoIncrement(uint64_t table_id,
   return pb::error::Errno::OK;
 }
 
-
-pb::error::Errno AutoIncrementControl::GenerateAutoIncrement(uint64_t table_id,
-                                                uint32_t count,
-                                                uint32_t auto_increment_increment,
-                                                uint32_t auto_increment_offset,
-                                                pb::coordinator_internal::MetaIncrement &meta_increment) {
-  DINGO_LOG(INFO) << table_id << " | " << count << " | " << auto_increment_increment << " | "
-    << auto_increment_offset;
+pb::error::Errno AutoIncrementControl::GenerateAutoIncrement(uint64_t table_id, uint32_t count,
+                                                             uint32_t auto_increment_increment,
+                                                             uint32_t auto_increment_offset,
+                                                             pb::coordinator_internal::MetaIncrement& meta_increment) {
+  DINGO_LOG(INFO) << table_id << " | " << count << " | " << auto_increment_increment << " | " << auto_increment_offset;
   uint64_t source_start_id = 0;
   pb::error::Errno ret = GetAutoIncrement(table_id, source_start_id);
   if (ret != pb::error::Errno::OK) {
@@ -117,11 +115,11 @@ pb::error::Errno AutoIncrementControl::GenerateAutoIncrement(uint64_t table_id,
     return ret;
   }
 
-  if (count == 0 || count > kAutoIncrementGenerateCountMax ||
-      auto_increment_increment == 0 || auto_increment_increment > kAutoIncrementOffsetMax ||
-      auto_increment_offset == 0 || auto_increment_offset > kAutoIncrementOffsetMax) {
-    DINGO_LOG(WARNING) << "illegal parameters : "
-      << table_id << " | " << count << " | " << auto_increment_increment << " | " << auto_increment_offset;
+  if (count == 0 || count > kAutoIncrementGenerateCountMax || auto_increment_increment == 0 ||
+      auto_increment_increment > kAutoIncrementOffsetMax || auto_increment_offset == 0 ||
+      auto_increment_offset > kAutoIncrementOffsetMax) {
+    DINGO_LOG(WARNING) << "illegal parameters : " << table_id << " | " << count << " | " << auto_increment_increment
+                       << " | " << auto_increment_offset;
     return pb::error::Errno::EILLEGAL_PARAMTETERS;
   }
 
@@ -138,7 +136,7 @@ pb::error::Errno AutoIncrementControl::GenerateAutoIncrement(uint64_t table_id,
 }
 
 pb::error::Errno AutoIncrementControl::DeleteAutoIncrement(uint64_t table_id,
-                                        pb::coordinator_internal::MetaIncrement &meta_increment) {
+                                                           pb::coordinator_internal::MetaIncrement& meta_increment) {
   DINGO_LOG(INFO) << "table id" << table_id;
   {
     BAIDU_SCOPED_LOCK(auto_increment_map_mutex_);
@@ -166,7 +164,7 @@ void AutoIncrementControl::GetLeaderLocation(pb::common::Location* leader_server
   pb::common::Location leader_raft_location;
   int ret = Helper::PeerIdToLocation(raft_node_->GetLeaderId(), leader_raft_location);
   if (ret < 0) {
-    DINGO_LOG(ERROR) <<"get raft leader failed, ret: " << ret << ".";
+    DINGO_LOG(ERROR) << "get raft leader failed, ret: " << ret << ".";
     return;
   }
 
@@ -175,14 +173,13 @@ void AutoIncrementControl::GetLeaderLocation(pb::common::Location* leader_server
 }
 
 void AutoIncrementControl::GetServerLocation(pb::common::Location& raft_location,
-          pb::common::Location& server_location) {
+                                             pb::common::Location& server_location) {
   // find in cache
   auto raft_location_string = raft_location.host() + ":" + std::to_string(raft_location.port());
   auto it = auto_increment_location_cache_.find(raft_location_string);
   if (it != auto_increment_location_cache_.end()) {
     server_location = it->second;
-    DINGO_LOG(INFO) << "Cache Hit raft_location=" << raft_location.host() << ":"
-                    << raft_location.port();
+    DINGO_LOG(INFO) << "Cache Hit raft_location=" << raft_location.host() << ":" << raft_location.port();
     return;
   }
 
@@ -194,39 +191,31 @@ void AutoIncrementControl::GetServerLocation(pb::common::Location& raft_location
                     << raft_location.port();
     auto_increment_location_cache_[raft_location_string] = server_location;
   } else {
-    DINGO_LOG(INFO) << " Cache Miss, can't get server_location, raft_location="
-                    << raft_location.host() << ":" << raft_location.port();
+    DINGO_LOG(INFO) << " Cache Miss, can't get server_location, raft_location=" << raft_location.host() << ":"
+                    << raft_location.port();
   }
 }
 
-bool AutoIncrementControl::IsLeader() {
-  return leader_term_.load(butil::memory_order_acquire) > 0;
-}
+bool AutoIncrementControl::IsLeader() { return leader_term_.load(butil::memory_order_acquire) > 0; }
 
-void AutoIncrementControl::SetLeaderTerm(int64_t term) {
-  leader_term_.store(term, butil::memory_order_release);
-}
+void AutoIncrementControl::SetLeaderTerm(int64_t term) { leader_term_.store(term, butil::memory_order_release); }
 
-void AutoIncrementControl::OnLeaderStart(int64_t term) {
-  DINGO_LOG(INFO) << "OnLeaderStart, term=" << term;
-}
+void AutoIncrementControl::OnLeaderStart(int64_t term) { DINGO_LOG(INFO) << "OnLeaderStart, term=" << term; }
 
 // set raft_node to coordinator_control
-void AutoIncrementControl::SetRaftNode(std::shared_ptr<RaftNode> raft_node) {
-  raft_node_ = raft_node;
-}
+void AutoIncrementControl::SetRaftNode(std::shared_ptr<RaftNode> raft_node) { raft_node_ = raft_node; }
 
 // on_apply callback
-void AutoIncrementControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrement &meta_increment,
-                                              bool is_leader, uint64_t term,
-                                              uint64_t index, google::protobuf::Message* response) {
+void AutoIncrementControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrement& meta_increment, bool is_leader,
+                                              uint64_t /*term*/, uint64_t /*index*/,
+                                              google::protobuf::Message* response) {
   BAIDU_SCOPED_LOCK(auto_increment_map_mutex_);
   for (int i = 0; i < meta_increment.auto_increment_size(); i++) {
     const auto& auto_increment = meta_increment.auto_increment(i);
     uint64_t table_id = auto_increment.id();
     if (auto_increment.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
-      DINGO_LOG(INFO) << "create auto increment, table id: " << table_id << ", start id: " <<
-        auto_increment.increment().start_id();
+      DINGO_LOG(INFO) << "create auto increment, table id: " << table_id
+                      << ", start id: " << auto_increment.increment().start_id();
       auto_increment_map_[table_id] = auto_increment.increment().start_id();
     } else if (auto_increment.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
       uint64_t* start_id_ptr = auto_increment_map_.seek(table_id);
@@ -236,30 +225,30 @@ void AutoIncrementControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncr
       }
 
       uint64_t source_start_id = *start_id_ptr;
-      if (auto_increment.increment().update_type()
-          == pb::coordinator_internal::AutoIncrementUpdateType::READ_MODIFY_WRITE) {
+      if (auto_increment.increment().update_type() ==
+          pb::coordinator_internal::AutoIncrementUpdateType::READ_MODIFY_WRITE) {
         uint64_t end_id = GetGenerateEndId(source_start_id, auto_increment.increment().generate_count(),
-                                                auto_increment.increment().increment(),
-                                                auto_increment.increment().offset());
+                                           auto_increment.increment().increment(), auto_increment.increment().offset());
         // [source_start_id, end_id) has generated, so next start_id is end_id.
         if (is_leader && response != nullptr) {
-		  pb::meta::GenerateAutoIncrementResponse* generate_response =
-			  static_cast<pb::meta::GenerateAutoIncrementResponse*>(response);
+          pb::meta::GenerateAutoIncrementResponse* generate_response =
+              static_cast<pb::meta::GenerateAutoIncrementResponse*>(response);
           generate_response->set_start_id(source_start_id);
           generate_response->set_end_id(end_id);
         }
         auto_increment_map_[table_id] = end_id;
-        DINGO_LOG(INFO) << "generate auto increment: [" << source_start_id << ", " << end_id << ") request: " <<
-          auto_increment.DebugString();
+        DINGO_LOG(INFO) << "generate auto increment: [" << source_start_id << ", " << end_id
+                        << ") request: " << auto_increment.DebugString();
       } else {
         // check source start id
         if (source_start_id != auto_increment.increment().source_start_id()) {
-          DINGO_LOG(WARNING) << "start id compare not equal: " <<
-            source_start_id << " | " << auto_increment.increment().source_start_id();
+          DINGO_LOG(WARNING) << "start id compare not equal: " << source_start_id << " | "
+                             << auto_increment.increment().source_start_id();
         }
         auto_increment_map_[table_id] = auto_increment.increment().start_id();
-        DINGO_LOG(INFO) << "update auto increment, table id: " << table_id << ", old start id: " <<
-          auto_increment.increment().source_start_id() << ", start id: " << auto_increment.increment().start_id();
+        DINGO_LOG(INFO) << "update auto increment, table id: " << table_id
+                        << ", old start id: " << auto_increment.increment().source_start_id()
+                        << ", start id: " << auto_increment.increment().start_id();
       }
     } else if (auto_increment.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
       DINGO_LOG(INFO) << "delete auto increment " << auto_increment.DebugString();
@@ -268,17 +257,15 @@ void AutoIncrementControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncr
   }
 }
 
-uint64_t AutoIncrementControl::GetGenerateEndId(uint64_t start_id, uint32_t count,
-                                                uint32_t increment, uint32_t offset) {
+uint64_t AutoIncrementControl::GetGenerateEndId(uint64_t start_id, uint32_t count, uint32_t increment,
+                                                uint32_t offset) {
   if (increment == 0 || increment > kAutoIncrementOffsetMax) {
-    DINGO_LOG(WARNING) << "invalid auto_increment_increment: " <<
-      increment << ", set to default value 1.";
+    DINGO_LOG(WARNING) << "invalid auto_increment_increment: " << increment << ", set to default value 1.";
     increment = 1;
   }
 
   if (offset == 0 || offset > kAutoIncrementOffsetMax || offset > increment) {
-    DINGO_LOG(WARNING) << "invalid auto_increment_offset: " <<
-      offset << ", set to default value 1.";
+    DINGO_LOG(WARNING) << "invalid auto_increment_offset: " << offset << ", set to default value 1.";
     offset = 1;
   }
 
@@ -290,14 +277,13 @@ uint64_t AutoIncrementControl::GetGenerateEndId(uint64_t start_id, uint32_t coun
   return real_start_id + (count - 1) * increment + 1;
 }
 
-uint64_t AutoIncrementControl::GetRealStartId(uint64_t start_id,
-                                              uint32_t auto_increment_increment,
+uint64_t AutoIncrementControl::GetRealStartId(uint64_t start_id, uint32_t auto_increment_increment,
                                               uint32_t auto_increment_offset) {
   uint64_t remainder = start_id % auto_increment_increment;
   if (remainder < auto_increment_offset) {
     return start_id - remainder + auto_increment_offset;
   } else if (remainder > auto_increment_offset) {
-      return start_id - remainder + auto_increment_increment + auto_increment_offset;
+    return start_id - remainder + auto_increment_increment + auto_increment_offset;
   }
 
   if (auto_increment_offset == auto_increment_increment) {
@@ -325,10 +311,69 @@ int AutoIncrementControl::SaveAutoIncrement(std::string& auto_increment_data) {
   return 0;
 }
 
+int AutoIncrementControl::GetAppliedTermAndIndex(uint64_t& term, uint64_t& index) {
+  term = 0;
+  index = 0;
+  return 0;
+}
+
+std::shared_ptr<Snapshot> AutoIncrementControl::PrepareRaftSnapshot() {
+  butil::FlatMap<uint64_t, uint64_t>* flatmap_for_snapshot = new butil::FlatMap<uint64_t, uint64_t>();
+  flatmap_for_snapshot->init(1000);
+  {
+    BAIDU_SCOPED_LOCK(auto_increment_map_mutex_);
+    *flatmap_for_snapshot = auto_increment_map_;
+  }
+
+  return std::make_shared<AutoIncrementSnapshot>(flatmap_for_snapshot);
+}
+
+bool AutoIncrementControl::LoadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapshot,
+                                                  pb::coordinator_internal::MetaSnapshotFile& meta_snapshot_file) {
+  DINGO_LOG(INFO) << "AutoIncrementControl start to LoadMetaToSnapshotFile";
+
+  auto auto_increment_snapshot = std::dynamic_pointer_cast<AutoIncrementSnapshot>(snapshot);
+  if (auto_increment_snapshot == nullptr) {
+    DINGO_LOG(ERROR) << "Failed to dynamic cast snapshot to auto increment snapshot";
+    return false;
+  }
+
+  const auto* flatmap_of_snapshot = auto_increment_snapshot->GetSnapshot();
+
+  auto* auto_increment_elements = meta_snapshot_file.mutable_auto_increment_storage();
+  for (auto it : (*flatmap_of_snapshot)) {
+    auto* element = auto_increment_elements->add_elements();
+    element->set_table_id(it.first);
+    element->set_start_id(it.second);
+  }
+
+  DINGO_LOG(INFO) << "AutoIncrementControl LoadMetaToSnapshotFile success, elements_size="
+                  << flatmap_of_snapshot->size();
+
+  return true;
+}
+
+bool AutoIncrementControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::MetaSnapshotFile& meta_snapshot_file) {
+  DINGO_LOG(INFO) << "AutoIncrementControl start to LoadMetaFromSnapshotFile";
+
+  const auto& storage = meta_snapshot_file.auto_increment_storage();
+
+  BAIDU_SCOPED_LOCK(auto_increment_map_mutex_);
+  auto_increment_map_.clear();
+  for (int i = 0; i < storage.elements_size(); i++) {
+    const auto& element = storage.elements(i);
+    auto_increment_map_[element.table_id()] = auto_increment_map_[element.start_id()];
+  }
+
+  DINGO_LOG(INFO) << "AutoIncrementControl LoadMetaFromSnapshotFile success, elements_size=" << storage.elements_size();
+
+  return true;
+}
+
 int AutoIncrementControl::LoadAutoIncrement(const std::string& auto_increment_file) {
   std::ifstream auto_increment_data_fs(auto_increment_file);
   std::string auto_increment_data((std::istreambuf_iterator<char>(auto_increment_data_fs)),
-          std::istreambuf_iterator<char>());
+                                  std::istreambuf_iterator<char>());
 
   pb::coordinator_internal::AutoIncrementStorage storage;
   if (!storage.ParseFromString(auto_increment_data)) {
@@ -344,13 +389,13 @@ int AutoIncrementControl::LoadAutoIncrement(const std::string& auto_increment_fi
   return 0;
 }
 
-pb::error::Errno AutoIncrementControl:: CheckAutoIncrementInTableDefinition(
-  const pb::meta::TableDefinition& table_definition, bool& has_auto_increment_column) {
+pb::error::Errno AutoIncrementControl::CheckAutoIncrementInTableDefinition(
+    const pb::meta::TableDefinition& table_definition, bool& has_auto_increment_column) {
   has_auto_increment_column = false;
   for (int i = 0; i < table_definition.columns_size(); i++) {
     const auto& column = table_definition.columns(i);
     if (column.is_auto_increment()) {
-      if(has_auto_increment_column) {
+      if (has_auto_increment_column) {
         return pb::error::Errno::ETABLE_DEFINITION_ILLEGAL;
       } else {
         switch (column.element_type()) {
@@ -380,7 +425,8 @@ pb::error::Errno AutoIncrementControl:: CheckAutoIncrementInTableDefinition(
   return pb::error::Errno::OK;
 }
 
-butil::Status AutoIncrementControl::SendCreateAutoIncrementInternal(const uint64_t table_id, const uint64_t auto_increment) {
+butil::Status AutoIncrementControl::SendCreateAutoIncrementInternal(const uint64_t table_id,
+                                                                    const uint64_t auto_increment) {
   pb::meta::CreateAutoIncrementRequest request;
   pb::meta::CreateAutoIncrementResponse response;
 
@@ -389,8 +435,7 @@ butil::Status AutoIncrementControl::SendCreateAutoIncrementInternal(const uint64
   table_id_ptr->set_entity_id(table_id);
   request.set_start_id(auto_increment);
 
-  return CoordinatorInteraction::GetAutoIncrementInstance()->SendRequest("CreateAutoIncrement",
-    request, response);
+  return CoordinatorInteraction::GetAutoIncrementInstance()->SendRequest("CreateAutoIncrement", request, response);
 }
 
 void AutoIncrementControl::SendUpdateAutoIncrementInternal(const uint64_t table_id, const uint64_t auto_increment) {
@@ -409,11 +454,10 @@ void AutoIncrementControl::SendUpdateAutoIncrementInternal(const uint64_t table_
     request.set_start_id(auto_increment);
     request.set_force(true);
 
-    butil::Status status = CoordinatorInteraction::GetAutoIncrementInstance()->SendRequest("UpdateAutoIncrement",
-      request, response);
+    butil::Status status =
+        CoordinatorInteraction::GetAutoIncrementInstance()->SendRequest("UpdateAutoIncrement", request, response);
     if (status.error_code() != pb::error::Errno::OK) {
-      DINGO_LOG(ERROR) << "error, code: " << status.error_code() << ", message: " <<
-        status.error_str();
+      LOG(ERROR) << "error, code: " << status.error_code() << ", message: " << status.error_str();
     }
   };
 
@@ -430,11 +474,10 @@ void AutoIncrementControl::SendDeleteAutoIncrementInternal(const uint64_t table_
     table_id_ptr->set_entity_type(dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
     table_id_ptr->set_entity_id(table_id);
 
-    butil::Status status = CoordinatorInteraction::GetAutoIncrementInstance()->SendRequest("DeleteAutoIncrement",
-      request, response);
+    butil::Status status =
+        CoordinatorInteraction::GetAutoIncrementInstance()->SendRequest("DeleteAutoIncrement", request, response);
     if (status.error_code() != pb::error::Errno::OK) {
-      DINGO_LOG(ERROR) << "error, code: " << status.error_code() << ", message: " <<
-        status.error_str();
+      LOG(ERROR) << "error, code: " << status.error_code() << ", message: " << status.error_str();
     }
   };
 
@@ -443,4 +486,3 @@ void AutoIncrementControl::SendDeleteAutoIncrementInternal(const uint64_t table_
 }
 
 }  // namespace dingodb
-

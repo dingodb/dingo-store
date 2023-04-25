@@ -32,8 +32,9 @@
 
 namespace dingodb {
 
-MetaStateMachine::MetaStateMachine(std::shared_ptr<RawEngine> engine, std::shared_ptr<MetaControl> meta_control)
-    : engine_(engine), meta_control_(meta_control) {}
+MetaStateMachine::MetaStateMachine(std::shared_ptr<RawEngine> engine, std::shared_ptr<MetaControl> meta_control,
+                                   bool is_volatile)
+    : engine_(engine), meta_control_(meta_control), is_volatile_state_machine_(is_volatile) {}
 
 void MetaStateMachine::DispatchRequest(bool is_leader, uint64_t term, uint64_t index,
                                        const pb::raft::RaftCmdRequest& raft_cmd) {
@@ -143,7 +144,9 @@ void MetaStateMachine::on_snapshot_save(braft::SnapshotWriter* writer, braft::Cl
 int MetaStateMachine::on_snapshot_load(braft::SnapshotReader* reader) {
   DINGO_LOG(INFO) << "on_snapshot_load...";
   // Load snasphot from reader, replacing the running StateMachine
-  CHECK(!this->meta_control_->IsLeader()) << "Leader is not supposed to load snapshot";
+  if (!is_volatile_state_machine_) {
+    CHECK(!this->meta_control_->IsLeader()) << "Leader is not supposed to load snapshot";
+  }
   if (reader->get_file_meta("data", nullptr) != 0) {
     DINGO_LOG(ERROR) << "Fail to find `data' on " << reader->get_path();
     return -1;
