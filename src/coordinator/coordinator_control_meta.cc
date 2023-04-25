@@ -407,7 +407,7 @@ pb::error::Errno CoordinatorControl::CreateTable(uint64_t schema_id, const pb::m
 
   // check if table_name exists
   uint64_t value = 0;
-  table_name_map_safe_temp_.Get(table_definition.name(), value);
+  table_name_map_safe_temp_.Get(std::to_string(schema_id) + table_definition.name(), value);
   if (value != 0) {
     DINGO_LOG(INFO) << " Createtable table_name is exist " << table_definition.name();
     return pb::error::Errno::ETABLE_EXISTS;
@@ -420,7 +420,7 @@ pb::error::Errno CoordinatorControl::CreateTable(uint64_t schema_id, const pb::m
   }
 
   // update table_name_map_safe_temp_
-  if (table_name_map_safe_temp_.PutIfAbsent(table_definition.name(), new_table_id) < 0) {
+  if (table_name_map_safe_temp_.PutIfAbsent(std::to_string(schema_id) + table_definition.name(), new_table_id) < 0) {
     DINGO_LOG(INFO) << " CreateTable table_name" << table_definition.name()
                     << " is exist, when insert new_table_id=" << new_table_id;
     return pb::error::Errno::ETABLE_EXISTS;
@@ -465,7 +465,7 @@ pb::error::Errno CoordinatorControl::CreateTable(uint64_t schema_id, const pb::m
     }
 
     // remove table_name from map
-    table_name_map_safe_temp_.Erase(table_definition.name());
+    table_name_map_safe_temp_.Erase(std::to_string(schema_id) + table_definition.name());
     return pb::error::Errno::ETABLE_REGION_CREATE_FAILED;
   }
 
@@ -570,7 +570,7 @@ pb::error::Errno CoordinatorControl::DropTable(uint64_t schema_id, uint64_t tabl
   GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_TABLE, meta_increment);
 
   // delete table_name from table_name_safe_map_temp_
-  table_name_map_safe_temp_.Erase(table_internal.definition().name());
+  table_name_map_safe_temp_.Erase(std::to_string(schema_id) + table_internal.definition().name());
 
   bool has_auto_increment_column = false;
   AutoIncrementControl::CheckAutoIncrementInTableDefinition(table_internal.definition(), has_auto_increment_column);
@@ -702,7 +702,7 @@ void CoordinatorControl::GetTableByName(uint64_t schema_id, const std::string& t
   }
 
   uint64_t temp_table_id = 0;
-  table_name_map_safe_temp_.Get(table_name, temp_table_id);
+  table_name_map_safe_temp_.Get(std::to_string(schema_id) + table_name, temp_table_id);
 
   if (temp_table_id == 0) {
     DINGO_LOG(ERROR) << "ERRROR: table_name not found " << table_name;

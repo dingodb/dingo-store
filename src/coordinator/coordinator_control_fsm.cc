@@ -93,7 +93,7 @@ void CoordinatorControl::OnLeaderStart(int64_t term) {
     table_map_copy.init(10000);
     table_map_.GetFlatMapCopy(table_map_copy);
     for (const auto& it : table_map_copy) {
-      table_name_map_safe_temp_.Put(it.second.definition().name(), it.first);
+      table_name_map_safe_temp_.Put(std::to_string(it.second.schema_id()) + it.second.definition().name(), it.first);
     }
   }
   DINGO_LOG(INFO) << "OnLeaderStart init table_name_map_safe_temp_ finished, term=" << term
@@ -633,7 +633,7 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
     table_map_copy.init(10000);
     table_map_.GetFlatMapCopy(table_map_copy);
     for (const auto& it : table_map_copy) {
-      table_name_map_safe_temp_.Put(it.second.definition().name(), it.first);
+      table_name_map_safe_temp_.Put(std::to_string(it.second.schema_id()) + it.second.definition().name(), it.first);
     }
   }
 

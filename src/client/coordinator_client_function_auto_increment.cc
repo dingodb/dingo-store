@@ -12,9 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "coordinator_client_function.h"
-
 #include "common/logging.h"
+#include "coordinator_client_function.h"
 //#include "proto/common.pb.h"
 
 DEFINE_uint64(start_id, 1, "Start id of auto_increment.");
@@ -32,17 +31,18 @@ DECLARE_string(id);
 
 // ./dingodb_client_coordinator -service_type=2 -coordinator_addr=172.20.3.96:22001 -id=888 -method=GetAutoIncrement
 
-// ./dingodb_client_coordinator -service_type=2 -coordinator_addr=172.20.3.96:22001 -id=888 -generate_count=10000 -method=GenerateAutoIncrement
+// ./dingodb_client_coordinator -service_type=2 -coordinator_addr=172.20.3.96:22001 -id=888 -generate_count=10000
+// -method=GenerateAutoIncrement
 
-// ./dingodb_client_coordinator -service_type=2 -coordinator_addr=172.20.3.96:22001 -id=888 -start_id=110000 -method=UpdateAutoIncrement
+// ./dingodb_client_coordinator -service_type=2 -coordinator_addr=172.20.3.96:22001 -id=888 -start_id=110000
+// -method=UpdateAutoIncrement
 
 // ./dingodb_client_coordinator -service_type=2 -coordinator_addr=172.20.3.96:22001 -id=888 -method=DeleteAutoIncrement
 
 template <typename T>
-static void ProcessResponse(brpc::Controller& cntl,
-  T& response, std::string func_name) {
+static void ProcessResponse(brpc::Controller& cntl, T& response, std::string func_name) {
   if (cntl.Failed()) {
-  	DINGO_LOG(WARNING) << func_name << " Fail to send request to : " << cntl.ErrorText();
+    DINGO_LOG(WARNING) << func_name << " Fail to send request to : " << cntl.ErrorText();
     return;
   }
 
@@ -139,4 +139,3 @@ void SendDeleteAutoIncrement(brpc::Controller& cntl, dingodb::pb::meta::MetaServ
   stub.DeleteAutoIncrement(&cntl, &request, &response, nullptr);
   ProcessResponse<dingodb::pb::meta::DeleteAutoIncrementResponse>(cntl, response, __FUNCTION__);
 }
-
