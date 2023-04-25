@@ -18,6 +18,7 @@
 #include <new>
 #include <optional>
 #include <functional>
+#include "serial/keyvalue_codec.h"
 #include "serial/schema/base_schema.h"
 
 #include <serial/record_decoder.h>
@@ -489,6 +490,32 @@ TEST_F(DingoSerialTest, stringSchema) {
   EXPECT_FALSE(data8.has_value());
 }
 
+TEST_F(DingoSerialTest, stringPrefixSchema) {
+  DingoSchema<optional<reference_wrapper<string>>> b1;
+  b1.SetIndex(0);
+  b1.SetAllowNull(false);
+  b1.SetIsKey(true);
+  string data1 =
+      "test address test 中文 表情😊🏷️👌 test "
+      "测试测试测试三🤣😂😁🐱‍🐉👏";
+  Buf* bf1 = new Buf(1);
+  b1.EncodeKey(bf1, optional<reference_wrapper<string>>{data1});
+  string* bs1 = bf1->GetBytes();
+
+  Buf* bf2 = new Buf(1);
+  b1.EncodeKeyPrefix(bf2, optional<reference_wrapper<string>>{data1});
+  string* bs2 = bf2->GetBytes();
+  string bs3(*bs1, 0, bs2->length());
+
+  delete bf1;
+  delete bf2;
+
+  EXPECT_EQ(*bs2, bs3);
+
+  delete bs1;
+  delete bs2;
+}
+
 TEST_F(DingoSerialTest, recordTest) {
   InitVector();
   vector<BaseSchema*>* schemas = GetSchemas();
@@ -749,7 +776,7 @@ TEST_F(DingoSerialTest, tabledefinitionTest) {
   cd11->set_nullable(true);
   cd11->set_indexofkey(-1);
 
-  vector<BaseSchema*>* schemas = TableDefinitionToDingoSchema(td);
+  vector<BaseSchema*>* schemas = TableDefinitionToDingoSchema(&td);
   BaseSchema* id = schemas->at(0);
   EXPECT_EQ(id->GetIndex(), 0);
   EXPECT_EQ(id->GetType(), BaseSchema::Type::kInteger);
@@ -817,4 +844,202 @@ TEST_F(DingoSerialTest, tabledefinitionTest) {
   EXPECT_FALSE(salary->IsKey()); 
 
   delete schemas;
+}
+
+TEST_F(DingoSerialTest, keyvaluecodecTest) {
+  pb::meta::TableDefinition td;
+  td.set_name("test");
+
+  pb::meta::ColumnDefinition *cd1 = td.add_columns();
+  cd1->set_name("id");
+  cd1->set_element_type(pb::meta::ELEM_TYPE_INT32);
+  cd1->set_nullable(false);
+  cd1->set_indexofkey(0);
+
+  pb::meta::ColumnDefinition *cd2 = td.add_columns();
+  cd2->set_name("name");
+  cd2->set_element_type(pb::meta::ELEM_TYPE_STRING);
+  cd2->set_nullable(false);
+  cd2->set_indexofkey(0);
+
+  pb::meta::ColumnDefinition *cd3 = td.add_columns();
+  cd3->set_name("gender");
+  cd3->set_element_type(pb::meta::ELEM_TYPE_STRING);
+  cd3->set_nullable(false);
+  cd3->set_indexofkey(0);
+
+  pb::meta::ColumnDefinition *cd4 = td.add_columns();
+  cd4->set_name("score");
+  cd4->set_element_type(pb::meta::ELEM_TYPE_INT64);
+  cd4->set_nullable(false);
+  cd4->set_indexofkey(0);
+
+  pb::meta::ColumnDefinition *cd5 = td.add_columns();
+  cd5->set_name("addr");
+  cd5->set_element_type(pb::meta::ELEM_TYPE_STRING);
+  cd5->set_nullable(true);
+  cd5->set_indexofkey(-1);
+
+  pb::meta::ColumnDefinition *cd6 = td.add_columns();
+  cd6->set_name("exist");
+  cd6->set_element_type(pb::meta::ELEM_TYPE_BOOLEAN);
+  cd6->set_nullable(false);
+  cd6->set_indexofkey(-1);
+
+  pb::meta::ColumnDefinition *cd7 = td.add_columns();
+  cd7->set_name("pic");
+  cd7->set_element_type(pb::meta::ELEM_TYPE_BYTES);
+  cd7->set_nullable(true);
+  cd7->set_indexofkey(-1);
+
+  pb::meta::ColumnDefinition *cd8 = td.add_columns();
+  cd8->set_name("testNull");
+  cd8->set_element_type(pb::meta::ELEM_TYPE_INT32);
+  cd8->set_nullable(true);
+  cd8->set_indexofkey(-1);
+
+  pb::meta::ColumnDefinition *cd9 = td.add_columns();
+  cd9->set_name("age");
+  cd9->set_element_type(pb::meta::ELEM_TYPE_INT32);
+  cd9->set_nullable(false);
+  cd9->set_indexofkey(-1);
+
+  pb::meta::ColumnDefinition *cd10 = td.add_columns();
+  cd10->set_name("prev");
+  cd10->set_element_type(pb::meta::ELEM_TYPE_INT64);
+  cd10->set_nullable(false);
+  cd10->set_indexofkey(-1);
+
+  pb::meta::ColumnDefinition *cd11 = td.add_columns();
+  cd11->set_name("salary");
+  cd11->set_element_type(pb::meta::ELEM_TYPE_DOUBLE);
+  cd11->set_nullable(true);
+  cd11->set_indexofkey(-1);
+
+  vector<any> record1(11);
+  optional<int32_t> id = 0;
+  string *name = new string("tn");
+  string *gender = new string("f");
+  optional<int64_t> score = 214748364700L;
+  string *addr = new string(
+      "test address test 中文 表情😊🏷️👌 test "
+      "测试测试测试三🤣😂😁🐱‍🐉👏🐱‍💻✔🤳🤦‍♂️🤦‍♀️🙌测试测试测"
+      "试伍佰肆拾陆万伍仟陆佰伍拾肆元/n/r/r/ndfs肥肉士大夫");
+  optional<bool> exist = false;
+  optional<reference_wrapper<string>> pic = nullopt;
+  optional<int32_t> test_null = nullopt;
+  optional<int32_t> age = -20;
+  optional<int64_t> prev = -214748364700L;
+  optional<double> salary = 873485.4234;
+
+  record1.at(0) = id;
+  record1.at(1) = optional<reference_wrapper<string>>{*name};
+  record1.at(2) = optional<reference_wrapper<string>>{*gender};
+  record1.at(3) = score;
+  record1.at(4) = optional<reference_wrapper<string>>{*addr};
+  record1.at(5) = exist;
+  record1.at(6) = pic;
+  record1.at(7) = test_null;
+  record1.at(8) = age;
+  record1.at(9) = prev;
+  record1.at(10) = salary;
+
+  KeyValueCodec *codec = new KeyValueCodec(&td, 0);
+  KeyValue *kv = codec->Encode(&record1);
+  vector<any> *record2 = codec->Decode(kv);
+
+  optional<int32_t> r0 = any_cast<optional<int32_t>>(record2->at(0));
+  if (r0.has_value()) {
+    EXPECT_EQ(id, r0.value());
+  } else {
+    EXPECT_TRUE(0);
+  }
+
+  optional<reference_wrapper<string>> r1 = any_cast<optional<reference_wrapper<string>>>(record2->at(1));
+  if (r1.has_value()) {
+    EXPECT_EQ(*name, r1->get());
+    delete &r1->get();
+  } else {
+    EXPECT_TRUE(0);
+  }
+
+  optional<reference_wrapper<string>> r2 = any_cast<optional<reference_wrapper<string>>>(record2->at(2));
+  if (r2.has_value()) {
+    EXPECT_EQ(*gender, r2->get());
+    delete &r2->get();
+  } else {
+    EXPECT_TRUE(0);
+  }
+
+  optional<int64_t> r3 = any_cast<optional<int64_t>>(record2->at(3));
+  if (r3.has_value()) {
+    EXPECT_EQ(score, r3.value());
+  } else {
+    EXPECT_TRUE(0);
+  }
+
+  optional<reference_wrapper<string>> r4 = any_cast<optional<reference_wrapper<string>>>(record2->at(4));
+  if (r4.has_value()) {
+    EXPECT_EQ(*addr, r4->get());
+    delete &r4->get();
+  } else {
+    EXPECT_TRUE(0);
+  }
+
+  optional<bool> r5 = any_cast<optional<bool>>(record2->at(5));
+  if (r5.has_value()) {
+    EXPECT_FALSE(r5.value());
+  } else {
+    EXPECT_TRUE(0);
+  }
+
+  optional<reference_wrapper<string>> r6 = any_cast<optional<reference_wrapper<string>>>(record2->at(6));
+  if (r6.has_value()) {
+    EXPECT_TRUE(0);
+  } else {
+    EXPECT_TRUE(1);
+  }
+
+  optional<int32_t> r7 = any_cast<optional<int32_t>>(record2->at(7));
+  if (r7.has_value()) {
+    EXPECT_TRUE(0);
+  } else {
+    EXPECT_TRUE(1);
+  }
+
+  optional<int32_t> r8 = any_cast<optional<int32_t>>(record2->at(8));
+  if (r8.has_value()) {
+    EXPECT_EQ(age, r8.value());
+  } else {
+    EXPECT_TRUE(0);
+  }
+
+  optional<int64_t> r9 = any_cast<optional<int64_t>>(record2->at(9));
+  if (r9.has_value()) {
+    EXPECT_EQ(prev, r9.value());
+  } else {
+    EXPECT_TRUE(0);
+  }
+
+  optional<double> r10 = any_cast<optional<double>>(record2->at(10));
+  if (r10.has_value()) {
+    EXPECT_EQ(salary, r10.value());
+  } else {
+    EXPECT_TRUE(0);
+  }
+
+  string *key = codec->EncodeKey(&record1);
+  string *keyprefix = codec->EncodeKeyPrefix(&record1, 3);
+  EXPECT_EQ(*kv->GetKey(), *key);
+  string keyprefix_from_key(*key, 0, keyprefix->length());
+  EXPECT_EQ(keyprefix_from_key, *keyprefix);
+  
+  delete key;
+  delete keyprefix;
+  delete codec;
+  record2->clear();
+  record2->shrink_to_fit();
+  delete name;
+  delete gender;
+  delete addr;
 }

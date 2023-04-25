@@ -22,7 +22,7 @@ int DingoSchema<std::optional<std::reference_wrapper<std::string>>>::GetDataLeng
 int DingoSchema<std::optional<std::reference_wrapper<std::string>>>::GetWithNullTagLength() {
   return 0;
 }
-void DingoSchema<std::optional<std::reference_wrapper<std::string>>>::InternalEncodeKey(Buf* buf, std::string &data) {
+int DingoSchema<std::optional<std::reference_wrapper<std::string>>>::InternalEncodeKey(Buf* buf, std::string &data) {
   int group_num = data.length() / 8;
   int size = (group_num + 1) * 9;
   int remainder_size = data.length() % 8;
@@ -50,7 +50,7 @@ void DingoSchema<std::optional<std::reference_wrapper<std::string>>>::InternalEn
     buf->Write((uint8_t)0);
   }
   buf->Write((uint8_t)(255 - remainder_zero));
-  buf->ReverseWriteInt(size);
+  return size;
 }
 void DingoSchema<std::optional<std::reference_wrapper<std::string>>>::InternalEncodeValue(Buf* buf, std::string &data) {
   buf->EnsureRemainder(data.length() + 4);
@@ -92,11 +92,29 @@ void DingoSchema<std::optional<std::reference_wrapper<std::string>>>::EncodeKey(
     if (data.has_value()) {
       buf->EnsureRemainder(1);
       buf->Write(k_not_null);
-      InternalEncodeKey(buf, data->get());
+      buf->ReverseWriteInt(InternalEncodeKey(buf, data->get()));
     } else {;
       buf->EnsureRemainder(5);
       buf->Write(k_null);
       buf->ReverseWriteInt(0);
+    }
+  } else {
+    if (data.has_value()) {
+      buf->ReverseWriteInt(InternalEncodeKey(buf, data->get()));
+    } else {
+      // WRONG EMPTY DATA
+    }
+  }
+}
+void DingoSchema<std::optional<std::reference_wrapper<std::string>>>::EncodeKeyPrefix(Buf* buf, std::optional<std::reference_wrapper<std::string>> data) {
+  if (this->allow_null_) {
+    if (data.has_value()) {
+      buf->EnsureRemainder(1);
+      buf->Write(k_not_null);
+      InternalEncodeKey(buf, data->get());
+    } else {;
+      buf->EnsureRemainder(5);
+      buf->Write(k_null);
     }
   } else {
     if (data.has_value()) {

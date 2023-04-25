@@ -23,35 +23,30 @@ void SortSchema(std::vector<BaseSchema*>* schemas) {
   int flag = 1;
   for (int i = 0; i < schemas->size() - flag; i++) {
     BaseSchema* bs = schemas->at(i);
-    if ((!bs->IsKey()) && (bs->GetLength() == 0)) {
-      int target = schemas->size() - flag++;
-      BaseSchema* ts = schemas->at(target);
-      while ((ts->GetLength() == 0) || ts->IsKey()) {
-        target--;
-        if (target == i) {
-          return;
+    if (bs != nullptr) {
+      if ((!bs->IsKey()) && (bs->GetLength() == 0)) {
+        int target = schemas->size() - flag++;
+        BaseSchema* ts = schemas->at(target);
+        while ((ts->GetLength() == 0) || ts->IsKey()) {
+          target--;
+          if (target == i) {
+            return;
+          }
+          flag++;
         }
-        flag++;
+        schemas->at(i) = ts;
+        schemas->at(target) = bs;
       }
-      schemas->at(i) = ts;
-      schemas->at(target) = bs;
     }
   }
 }
-
 int32_t* GetApproPerRecordSize(std::vector<BaseSchema*>* schemas) {
   int32_t key_size = 8;
   int32_t value_size = 0;
-  for (auto *bs : *schemas) {
-    if (bs->IsKey()) {
-      if (bs->AllowNull()) {
-        key_size += (bs->GetLength() == 0 ? 100 : (bs->GetLength() + 1));
-      } else {
+  for (BaseSchema* bs : *schemas) {
+    if (bs != nullptr) {
+      if (bs->IsKey()) {
         key_size += (bs->GetLength() == 0 ? 100 : bs->GetLength());
-      }
-    } else {
-      if (bs->AllowNull()) {
-        value_size += (bs->GetLength() == 0 ? 100 : (bs->GetLength() + 1));
       } else {
         value_size += (bs->GetLength() == 0 ? 100 : bs->GetLength());
       }
@@ -62,7 +57,6 @@ int32_t* GetApproPerRecordSize(std::vector<BaseSchema*>* schemas) {
   size[1] = value_size;
   return size;
 }
-
 bool VectorFindAndRemove(std::vector<int>* v, int t) {
   for (std::vector<int>::iterator it = v->begin(); it != v->end(); it++) {
     if (*it == t) {
@@ -72,11 +66,10 @@ bool VectorFindAndRemove(std::vector<int>* v, int t) {
   }
   return false;
 }
-
-std::vector<BaseSchema*>* TableDefinitionToDingoSchema(pb::meta::TableDefinition td) {
-  std::vector<BaseSchema*> *schemas = new std::vector<BaseSchema*>(td.columns_size());
+std::vector<BaseSchema*>* TableDefinitionToDingoSchema(pb::meta::TableDefinition* td) {
+  std::vector<BaseSchema*> *schemas = new std::vector<BaseSchema*>(td->columns_size());
   int i = 0;
-  for (const pb::meta::ColumnDefinition& cd : td.columns()) {
+  for (const pb::meta::ColumnDefinition& cd : td->columns()) {
       pb::meta::ElementType type = cd.element_type();
       switch(type) {
         case pb::meta::ELEM_TYPE_DOUBLE: {
@@ -187,5 +180,136 @@ std::vector<BaseSchema*>* TableDefinitionToDingoSchema(pb::meta::TableDefinition
 
   return schemas;
 }
+std::vector<std::any>* ElementToSql(pb::meta::TableDefinition* td, std::vector<std::any>* record) {
+  for (int i = 0; i < td->columns_size(); i++) {
+    pb::meta::ColumnDefinition cd = td->columns().at(i);
+    switch (cd.sql_type()) {
+      case pb::meta::SQL_TYPE_BOOLEAN: {
+        break;
+      }
+      case pb::meta::SQL_TYPE_INTEGER: {
+        break;
+      }
+      case pb::meta::SQL_TYPE_BIGINT: {
+        break;
+      }
+      case pb::meta::SQL_TYPE_DOUBLE: {
+        break;
+      }
+      case pb::meta::SQL_TYPE_FLOAT: {
+        break;
+      }
+      case pb::meta::SQL_TYPE_DATE: {
+        record[i] = record[i]; //TODO
+        break;
+      }
+      case pb::meta::SQL_TYPE_TIME: {
+        record[i] = record[i]; //TODO
+        break;
+      }
+      case pb::meta::SQL_TYPE_TIMESTAMP: {
+        record[i] = record[i]; //TODO
+        break;
+      }
+      case pb::meta::SQL_TYPE_VARCHAR: {
+        record[i] = record[i]; //TODO
+        break;
+      }
+      case pb::meta::SQL_TYPE_ARRAY: {
+        record[i] = record[i]; //TODO
+        break;
+      }
+      case pb::meta::SQL_TYPE_MULTISET: {
+        record[i] = record[i]; //TODO
+        break;
+      }
+      case pb::meta::SQL_TYPE_BYTES: {
+        break;
+      }
+      case pb::meta::SQL_TYPE_ANY: {
+        record[i] = record[i]; //TODO
+        break;
+      }
+      case pb::meta::SqlType_INT_MIN_SENTINEL_DO_NOT_USE_: {
+        record[i] = record[i]; //TODO
+        break;
+      }
+      case pb::meta::SqlType_INT_MAX_SENTINEL_DO_NOT_USE_: {
+        record[i] = record[i]; //TODO
+        break;
+      }
+      default: {
+        break;
+      }
+    }
+  }
+  return record;
+}
+std::vector<std::any>* SqlToElement(pb::meta::TableDefinition* td, std::vector<std::any>* record) {
+  for (int i = 0; i < td->columns_size(); i++) {
+    pb::meta::ColumnDefinition cd = td->columns().at(i);
+    switch (cd.sql_type()) {
+      case pb::meta::SQL_TYPE_BOOLEAN: {
+        break;
+      }
+      case pb::meta::SQL_TYPE_INTEGER: {
+        break;
+      }
+      case pb::meta::SQL_TYPE_BIGINT: {
+        break;
+      }
+      case pb::meta::SQL_TYPE_DOUBLE: {
+        break;
+      }
+      case pb::meta::SQL_TYPE_FLOAT: {
+        break;
+      }
+      case pb::meta::SQL_TYPE_DATE: {
+        record[i] = record[i]; //TODO
+        break;
+      }
+      case pb::meta::SQL_TYPE_TIME: {
+        record[i] = record[i]; //TODO
+        break;
+      }
+      case pb::meta::SQL_TYPE_TIMESTAMP: {
+        record[i] = record[i]; //TODO
+        break;
+      }
+      case pb::meta::SQL_TYPE_VARCHAR: {
+        record[i] = record[i]; //TODO
+        break;
+      }
+      case pb::meta::SQL_TYPE_ARRAY: {
+        record[i] = record[i]; //TODO
+        break;
+      }
+      case pb::meta::SQL_TYPE_MULTISET: {
+        record[i] = record[i]; //TODO
+        break;
+      }
+      case pb::meta::SQL_TYPE_BYTES: {
+        break;
+      }
+      case pb::meta::SQL_TYPE_ANY: {
+        record[i] = record[i]; //TODO
+        break;
+      }
+      case pb::meta::SqlType_INT_MIN_SENTINEL_DO_NOT_USE_: {
+        record[i] = record[i]; //TODO
+        break;
+      }
+      case pb::meta::SqlType_INT_MAX_SENTINEL_DO_NOT_USE_: {
+        record[i] = record[i]; //TODO
+        break;
+      }
+      default: {
+        break;
+      }
+    }
+  }
+  return record;
+}
+
 
 }  // namespace dingodb

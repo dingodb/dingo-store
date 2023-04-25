@@ -1,4 +1,4 @@
-// Copyright (c) 2023 dingodb.com, Inc. All Rights Reserved
+ // Copyright (c) 2023 dingodb.com, Inc. All Rights Reserved
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,40 +12,35 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DINGO_SERIAL_RECORD_ENCODER_H_
-#define DINGO_SERIAL_RECORD_ENCODER_H_
+#ifndef DINGO_SERIAL_KEYVALUE_CODEC_H_
+#define DINGO_SERIAL_KEYVALUE_CODEC_H_
 
-#include "any"
-#include "optional"
-#include "functional"
-#include "keyvalue.h"
-#include "schema/boolean_schema.h"
-#include "schema/double_schema.h"
-#include "schema/integer_schema.h"
-#include "schema/long_schema.h"
-#include "schema/string_schema.h"
-#include "utils.h"
+#include <string>
+#include <vector>
+#include "proto/meta.pb.h"
+#include "serial/keyvalue.h"
+#include "serial/record_decoder.h"
+#include "serial/record_encoder.h"
+#include "serial/schema/base_schema.h"
 
 namespace dingodb {
 
-class RecordEncoder {
+class KeyValueCodec {
  private:
-  int codec_version_ = 0;
-  int schema_version_;
+  pb::meta::TableDefinition* td_;
   std::vector<BaseSchema*>* schemas_;
-  long common_id_;
-  int key_buf_size_;
-  int value_buf_size_;
-
+  RecordEncoder* re_;
+  RecordDecoder* rd_;
+  
  public:
-  RecordEncoder(int schema_version, std::vector<BaseSchema*>* schemas,
-                long common_id);
+  KeyValueCodec(pb::meta::TableDefinition* td, uint64_t common_id);
+  ~KeyValueCodec();
+  std::vector<std::any>* Decode(KeyValue* keyvalue);
   KeyValue* Encode(std::vector<std::any>* record);
   std::string* EncodeKey(std::vector<std::any>* record);
-  std::string* EncodeValue(std::vector<std::any>* record);
   std::string* EncodeKeyPrefix(std::vector<std::any>* record, int column_count);
-  std::string* EncodeMaxKeyPrefix() const;
-  std::string* EncodeMinKeyPrefix() const;
+  std::string* EncodeMaxKeyPrefix();
+  std::string* EncodeMinKeyPrefix();
 };
 
 }  // namespace dingodb

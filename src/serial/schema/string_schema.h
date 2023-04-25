@@ -31,7 +31,7 @@ class DingoSchema<std::optional<std::reference_wrapper<std::string>>> : public B
 
   static int GetDataLength();
   static int GetWithNullTagLength();
-  static void InternalEncodeKey(Buf* buf, std::string &data);
+  static int InternalEncodeKey(Buf* buf, std::string &data);
   static void InternalEncodeValue(Buf* buf, std::string &data);
 
  public:
@@ -44,6 +44,7 @@ class DingoSchema<std::optional<std::reference_wrapper<std::string>>> : public B
   void SetIsKey(bool key);
   void SetAllowNull(bool allow_null);
   void EncodeKey(Buf* buf, std::optional<std::reference_wrapper<std::string>> data);
+  void EncodeKeyPrefix(Buf* buf, std::optional<std::reference_wrapper<std::string>> data);
   std::optional<std::reference_wrapper<std::string>> DecodeKey(Buf* buf);
   void SkipKey(Buf* buf) const;
   void EncodeValue(Buf* buf, std::optional<std::reference_wrapper<std::string>> data);
