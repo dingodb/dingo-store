@@ -44,6 +44,7 @@ class DingoSchema<std::optional<int32_t>> : public BaseSchema {
   void SetIsKey(bool key);
   void SetAllowNull(bool allow_null);
   void EncodeKey(Buf* buf, std::optional<int32_t> data);
+  void EncodeKeyPrefix(Buf* buf, std::optional<int32_t> data);
   std::optional<int32_t> DecodeKey(Buf* buf);
   void SkipKey(Buf* buf);
   void EncodeValue(Buf* buf, std::optional<int32_t> data);

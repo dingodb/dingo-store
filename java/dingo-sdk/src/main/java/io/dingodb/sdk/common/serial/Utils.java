@@ -51,17 +51,9 @@ public final class Utils {
         int valueSize = 0;
         for (DingoSchema schema : schemas) {
             if (schema.isKey()) {
-                if (schema.isAllowNull()) {
-                    keySize += (schema.getLength() == 0 ? 100 : (schema.getLength() + 1));
-                } else {
-                    keySize += (schema.getLength() == 0 ? 100 : schema.getLength());
-                }
+                keySize += (schema.getLength() == 0 ? 100 : schema.getLength());
             } else {
-                if (schema.isAllowNull()) {
-                    valueSize += (schema.getLength() == 0 ? 100 : (schema.getLength() + 1));
-                } else {
-                    valueSize += (schema.getLength() == 0 ? 100 : schema.getLength());
-                }
+                valueSize += (schema.getLength() == 0 ? 100 : schema.getLength());
             }
         }
         return new int[] {keySize, valueSize};

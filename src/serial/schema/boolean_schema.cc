@@ -76,6 +76,9 @@ void DingoSchema<std::optional<bool>>::EncodeKey(Buf* buf, std::optional<bool> d
     }
   }
 }
+void DingoSchema<std::optional<bool>>::EncodeKeyPrefix(Buf* buf, std::optional<bool> data) {
+  EncodeKey(buf, data);
+}
 std::optional<bool> DingoSchema<std::optional<bool>>::DecodeKey(Buf* buf) {
   if (this->allow_null_) {
     if (buf->Read() == this->k_null) {

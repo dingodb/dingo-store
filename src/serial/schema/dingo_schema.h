@@ -27,6 +27,7 @@ class DingoSchema : public BaseSchema {
   virtual void SetIsKey(bool key) = 0;
   virtual void SetAllowNull(bool allow_null) = 0;
   virtual void EncodeKey(Buf* buf, T data) = 0;
+  virtual void EncodeKeyPrefix(Buf* buf, T data) = 0;
   virtual T DecodeKey(Buf* buf) = 0;
   virtual void SkipKey(Buf* buf) = 0;
   virtual void EncodeValue(Buf* buf, T data) = 0;
