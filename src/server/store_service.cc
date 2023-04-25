@@ -149,7 +149,7 @@ butil::Status ValidateRegion(uint64_t region_id, const std::vector<std::string_v
 
   auto range = region->Range();
   for (const auto& key : keys) {
-    if (range.start_key().compare(key) > 0 || range.end_key().compare(key) <= 0) {
+    if (range.start_key().compare(key) > 0 || range.end_key().compare(key) < 0) {
       return butil::Status(pb::error::EKEY_OUT_OF_RANGE, "Key out of range");
     }
   }
@@ -575,13 +575,15 @@ butil::Status ValidateKvDeleteRangeRequest(const dingodb::pb::store::KvDeleteRan
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
   }
 
-  butil::Status s = KvDeleteRangeParamCheck(request->range(), nullptr, nullptr);
+  std::string real_start_key;
+  std::string real_end_key;
+  butil::Status s = KvDeleteRangeParamCheck(request->range(), &real_start_key, &real_end_key);
   if (!s.ok()) {
     DINGO_LOG(ERROR) << butil::StringPrintf("Helper::KvDeleteRangeParamCheck failed : %s", s.error_str().c_str());
     return s;
   }
 
-  std::vector<std::string_view> keys = {request->range().range().start_key(), request->range().range().end_key()};
+  std::vector<std::string_view> keys = {real_start_key, real_end_key};
   auto status = ValidateRegion(request->region_id(), keys);
   if (!status.ok()) {
     return status;
@@ -631,20 +633,15 @@ void StoreServiceImpl::KvDeleteRange(google::protobuf::RpcController* controller
 }
 
 butil::Status ValidateKvScanBeginRequest(const dingodb::pb::store::KvScanBeginRequest* request) {
-  if (BAIDU_UNLIKELY(request->range().range().start_key().empty() || request->range().range().end_key().empty())) {
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
+  std::string real_start_key;
+  std::string real_end_key;
+  butil::Status s = KvDeleteRangeParamCheck(request->range(), &real_start_key, &real_end_key);
+  if (!s.ok()) {
+    DINGO_LOG(ERROR) << butil::StringPrintf("Helper::KvDeleteRangeParamCheck failed : %s", s.error_str().c_str());
+    return s;
   }
 
-  if (BAIDU_UNLIKELY(request->range().range().start_key() > request->range().range().end_key())) {
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
-
-  } else if (BAIDU_UNLIKELY(request->range().range().start_key() == request->range().range().end_key())) {
-    if (!request->range().with_start() || !request->range().with_end()) {
-      return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
-    }
-  }
-
-  std::vector<std::string_view> keys = {request->range().range().start_key(), request->range().range().end_key()};
+  std::vector<std::string_view> keys = {real_start_key, real_end_key};
   auto status = ValidateRegion(request->region_id(), keys);
   if (!status.ok()) {
     return status;
