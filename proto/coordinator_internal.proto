@@ -236,4 +236,5 @@ message MetaSnapshotFile {
   repeated dingodb.pb.common.KeyValue task_list_map_kvs = 12;
 
   repeated dingodb.pb.common.KeyValue auto_increment_map_kvs = 20;  // now unused, just a placeholder
+  AutoIncrementStorage auto_increment_storage = 21;
 }

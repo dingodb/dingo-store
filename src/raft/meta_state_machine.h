@@ -33,7 +33,8 @@ namespace dingodb {
 
 class MetaStateMachine : public braft::StateMachine {
  public:
-  MetaStateMachine(std::shared_ptr<RawEngine> engine, std::shared_ptr<MetaControl> meta_control);
+  MetaStateMachine(std::shared_ptr<RawEngine> engine, std::shared_ptr<MetaControl> meta_control,
+                   bool is_volatile = false);
   void on_apply(braft::Iterator& iter) override;
   void on_shutdown() override;
   void on_snapshot_save(braft::SnapshotWriter* writer, braft::Closure* done) override;
@@ -45,6 +46,8 @@ class MetaStateMachine : public braft::StateMachine {
   void on_start_following(const ::braft::LeaderChangeContext& ctx) override;
   void on_stop_following(const ::braft::LeaderChangeContext& ctx) override;
 
+  void SetVolatile(bool is_volatile_state_machine) { is_volatile_state_machine_ = is_volatile_state_machine; }
+
  private:
   // void DispatchRequest(StoreClosure* done, bool is_leader, const pb::raft::RaftCmdRequest& raft_cmd);
   void DispatchRequest(bool is_leader, uint64_t term, uint64_t index, const pb::raft::RaftCmdRequest& raft_cmd);
@@ -52,6 +55,7 @@ class MetaStateMachine : public braft::StateMachine {
   // void HandleMetaProcess(StoreClosure* done, bool is_leader, const pb::raft::RaftCmdRequest& raft_cmd);
   std::shared_ptr<RawEngine> engine_;
   std::shared_ptr<MetaControl> meta_control_;
+  bool is_volatile_state_machine_ = false;
 };
 
 }  // namespace dingodb
