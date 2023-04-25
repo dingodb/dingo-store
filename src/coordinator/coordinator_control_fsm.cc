@@ -1072,19 +1072,20 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
 
         // add table to parent schema
         pb::coordinator_internal::SchemaInternal schema_to_update;
-        ret = schema_map_.Get(table.schema_id(), schema_to_update);
+        ret = schema_map_.Get(table.table().schema_id(), schema_to_update);
         // auto* schema = schema_map_.seek(table.schema_id());
         if (ret > 0) {
           // add new created table's id to its parent schema's table_ids
           schema_to_update.add_table_ids(table.id());
-          schema_map_.Put(table.schema_id(), schema_to_update);
+          schema_map_.Put(table.table().schema_id(), schema_to_update);
 
-          DINGO_LOG(INFO) << "5.table map CREATE new_sub_table id=" << table.id() << " parent_id=" << table.schema_id();
+          DINGO_LOG(INFO) << "5.table map CREATE new_sub_table id=" << table.id()
+                          << " parent_id=" << table.table().schema_id();
 
           // meta_write_kv
           meta_write_to_kv.push_back(schema_meta_->TransformToKvValue(schema_to_update));
         } else {
-          DINGO_LOG(ERROR) << " CREATE TABLE apply illegal schema_id=" << table.schema_id()
+          DINGO_LOG(ERROR) << " CREATE TABLE apply illegal schema_id=" << table.table().schema_id()
                            << " table_id=" << table.id() << " table_name=" << table.table().definition().name();
         }
       } else if (table.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
@@ -1131,7 +1132,7 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
 
         // delete from parent schema
         pb::coordinator_internal::SchemaInternal schema_to_update;
-        ret = schema_map_.Get(table.schema_id(), schema_to_update);
+        ret = schema_map_.Get(table.table().schema_id(), schema_to_update);
 
         if (ret > 0) {
           // according to the doc, we must use CopyFrom for protobuf message data structure here
@@ -1147,16 +1148,17 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
             }
           }
           schema_to_update.CopyFrom(new_schema);
-          schema_map_.Put(table.schema_id(), schema_to_update);
+          schema_map_.Put(table.table().schema_id(), schema_to_update);
 
-          DINGO_LOG(INFO) << "5.table map DELETE new_sub_table id=" << table.id() << " parent_id=" << table.schema_id();
+          DINGO_LOG(INFO) << "5.table map DELETE new_sub_table id=" << table.id()
+                          << " parent_id=" << table.table().schema_id();
 
           // meta_write_kv
           meta_write_to_kv.push_back(schema_meta_->TransformToKvValue(schema_to_update));
 
         } else {
-          DINGO_LOG(ERROR) << " DROP TABLE apply illegal schema_id=" << table.schema_id() << " table_id=" << table.id()
-                           << " table_name=" << table.table().definition().name();
+          DINGO_LOG(ERROR) << " DROP TABLE apply illegal schema_id=" << table.table().schema_id()
+                           << " table_id=" << table.id() << " table_name=" << table.table().definition().name();
         }
         // meta_delete_kv
         meta_delete_to_kv.push_back(table_meta_->TransformToKvValue(table.table()));

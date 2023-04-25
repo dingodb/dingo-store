@@ -475,6 +475,7 @@ pb::error::Errno CoordinatorControl::CreateTable(uint64_t schema_id, const pb::m
   // create table_internal, set id & table_definition
   pb::coordinator_internal::TableInternal table_internal;
   table_internal.set_id(new_table_id);
+  table_internal.set_schema_id(schema_id);
   auto* definition = table_internal.mutable_definition();
   definition->CopyFrom(table_definition);
 
@@ -493,7 +494,7 @@ pb::error::Errno CoordinatorControl::CreateTable(uint64_t schema_id, const pb::m
   auto* table_increment = meta_increment.add_tables();
   table_increment->set_id(new_table_id);
   table_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
-  table_increment->set_schema_id(schema_id);
+  // table_increment->set_schema_id(schema_id);
 
   auto* table_increment_table = table_increment->mutable_table();
   table_increment_table->CopyFrom(table_internal);
@@ -561,7 +562,7 @@ pb::error::Errno CoordinatorControl::DropTable(uint64_t schema_id, uint64_t tabl
   auto* table_to_delete = meta_increment.add_tables();
   table_to_delete->set_id(table_id);
   table_to_delete->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
-  table_to_delete->set_schema_id(schema_id);
+  // table_to_delete->set_schema_id(schema_id);
 
   auto* table_to_delete_table = table_to_delete->mutable_table();
   table_to_delete_table->CopyFrom(table_internal);
