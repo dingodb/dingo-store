@@ -21,6 +21,7 @@ import io.dingodb.client.Record;
 import io.dingodb.client.RouteTable;
 import io.dingodb.sdk.common.KeyValue;
 import io.dingodb.sdk.common.codec.KeyValueCodec;
+import io.dingodb.sdk.common.table.RangeDistribution;
 import io.dingodb.sdk.common.table.Table;
 import io.dingodb.sdk.common.utils.Any;
 import io.dingodb.sdk.common.utils.ByteArrayUtils;
@@ -30,6 +31,7 @@ import io.dingodb.sdk.common.utils.LinkedIterator;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Iterator;
+import java.util.NavigableMap;
 import java.util.NavigableSet;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
@@ -58,10 +60,11 @@ public class ScanOperation implements Operation {
                 keyRange.withStart,
                 keyRange.withEnd
             );
-            NavigableSet<Task> subTasks = routeTable.getRangeDistribution()
+            NavigableMap<ComparableByteArray, RangeDistribution> rangeDistribution = routeTable.getRangeDistribution();
+            NavigableSet<Task> subTasks = rangeDistribution
                 .subMap(
-                    new ComparableByteArray(range.getRange().getStartKey()), range.isWithStart(),
-                    new ComparableByteArray(range.getRange().getEndKey()), range.isWithEnd()
+                    rangeDistribution.floorKey(new ComparableByteArray(range.getStartKey())), range.isWithStart(),
+                    rangeDistribution.floorKey(new ComparableByteArray(range.getRange().getEndKey())), range.isWithEnd()
                 ).values().stream()
                 .map(rd -> new Task(
                     rd.getId(),
@@ -77,6 +80,7 @@ public class ScanOperation implements Operation {
                 wrap(new OpRange(range.getStartKey(), taskScan.getEndKey(), range.withStart, taskScan.withEnd))
             ));
             task = subTasks.pollLast();
+            taskScan = task.parameters();
             subTasks.add(new Task(
                 task.getRegionId(),
                 wrap(new OpRange(taskScan.getStartKey(), range.getEndKey(), taskScan.withStart, range.withEnd))

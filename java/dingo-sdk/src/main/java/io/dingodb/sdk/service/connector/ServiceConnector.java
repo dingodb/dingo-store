@@ -49,7 +49,8 @@ public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
         private final R response;
     }
 
-    protected final AtomicReference<ManagedChannel> channelRef = new AtomicReference<>();
+    protected ManagedChannel channel;
+    protected final AtomicReference<S> stubRef = new AtomicReference<>();
     protected Set<Location> locations = new CopyOnWriteArraySet<>();
 
     protected S stub;
@@ -59,7 +60,7 @@ public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
     }
 
     public S getStub() {
-        return stub;
+        return stubRef.get();
     }
 
     public <R> Response<R> exec(Function<S, Response<R>> function) {
@@ -75,50 +76,46 @@ public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
         while (retryTimes-- > 0) {
             if ((stub = getStub()) == null) {
                 LockSupport.parkNanos(TimeUnit.SECONDS.toNanos(1));
-                refresh();
+                refresh(stub);
                 continue;
             }
             try {
                 Response<R> response = function.apply(stub);
                 if (response.getError().getErrcodeValue() != 0) {
                     if (retryCheck.test(response.error)) {
-                        LockSupport.parkNanos(TimeUnit.SECONDS.toNanos(1));
+                        refresh(stub);
                         continue;
                     }
                     throw new DingoClientException(response.getError().getErrcodeValue(), response.getError().getErrmsg());
                 }
                 return response;
             } catch (StatusRuntimeException ignore) {
-                LockSupport.parkNanos(TimeUnit.SECONDS.toNanos(1));
+                refresh(stub);
             }
         }
         throw new RuntimeException("Retry attempts exhausted, failed to exec operation.");
     }
 
-    public boolean refresh() {
+    public void refresh(S stub) {
         if (!refresh.compareAndSet(false, true)) {
-            return false;
+            return;
         }
         try {
-            stub = null;
-            ManagedChannel channel  = channelRef.get();
-            channelRef.compareAndSet(channel, null);
+            if (!stubRef.compareAndSet(stub, null)) {
+                return;
+            }
             if (channel != null && !channel.isShutdown()) {
                 channel.shutdown();
             }
             for (Location location : locations) {
                 channel = transformToLeaderChannel(newChannel(location.getHost(), location.getPort()));
                 if (channel != null) {
-                    stub = newStub(channel);
-                    channelRef.compareAndSet(null, channel);
-                    return stub != null;
+                    stubRef.set(newStub(channel));
                 }
             }
-            return stub != null;
         } finally {
             refresh.set(false);
         }
-
     }
 
     protected ManagedChannel newChannel(String host, int port) {
@@ -139,7 +136,6 @@ public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
     }
 
     public void shutdown() {
-        ManagedChannel channel = channelRef.getAndSet(null);
         if (channel != null && !channel.isShutdown()) {
             channel.shutdown();
         }
