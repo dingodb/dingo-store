@@ -18,6 +18,7 @@
 #include <cstring>
 #include <string>
 
+#include "brpc/channel.h"
 #include "bthread/bthread.h"
 #include "client/coordinator_client_function.h"
 #include "common/logging.h"
@@ -58,46 +59,51 @@ DEFINE_string(store_ids, "1001,1002,1003", "store_ids splited by ,");
 DEFINE_int64(index, 0, "index");
 DEFINE_uint32(service_type, 0, "service type for getting leader, 0: meta or coordinator, 2: auto increment");
 
+bool GetBrpcChannel(const std::string& location, brpc::Channel& channel) {
+  braft::PeerId node;
+  if (node.parse(location) != 0) {
+    DINGO_LOG(ERROR) << "Fail to parse node peer_id " << FLAGS_coordinator_addr;
+    return false;
+  }
+
+  // rpc for leader access
+  if (channel.Init(node.addr, nullptr) != 0) {
+    DINGO_LOG(ERROR) << "Fail to init channel to " << location;
+    bthread_usleep(FLAGS_timeout_ms * 1000L);
+    return false;
+  }
+
+  return true;
+}
+
 void* Sender(void* /*arg*/) {
   // get leader location
-  std::string leader_location = GetLeaderLocation(FLAGS_service_type);
+  std::string leader_location = GetLeaderLocation(0);
   if (leader_location.empty()) {
     DINGO_LOG(WARNING) << "GetLeaderLocation failed, use coordinator_addr instead";
     leader_location = FLAGS_coordinator_addr;
   }
 
-  braft::PeerId leader;
-  if (leader.parse(leader_location) != 0) {
-    DINGO_LOG(ERROR) << "Fail to parse leader peer_id " << leader_location;
-    return nullptr;
-  }
-
-  // get orignial node location
-  braft::PeerId node;
-  if (node.parse(FLAGS_coordinator_addr) != 0) {
-    DINGO_LOG(ERROR) << "Fail to parse node peer_id " << FLAGS_coordinator_addr;
-    return nullptr;
+  std::string auto_increment_leader_location = GetLeaderLocation(2);
+  if (auto_increment_leader_location.empty()) {
+    DINGO_LOG(WARNING) << "GetLeaderLocation failed, use coordinator_addr instead";
+    leader_location = FLAGS_coordinator_addr;
   }
 
   // rpc for leader access
-  brpc::Channel channel;
-  if (channel.Init(leader.addr, nullptr) != 0) {
-    DINGO_LOG(ERROR) << "Fail to init channel to " << leader;
-    bthread_usleep(FLAGS_timeout_ms * 1000L);
-    return nullptr;
-  }
-  dingodb::pb::coordinator::CoordinatorService_Stub coordinator_stub(&channel);
-  dingodb::pb::meta::MetaService_Stub meta_stub(&channel);
+  brpc::Channel coordinator_channel;
+  brpc::Channel auto_increment_channel;
+  brpc::Channel node_channel;
 
-  // rpc for node access
-  brpc::Channel channel_node;
-  if (channel_node.Init(node.addr, nullptr) != 0) {
-    DINGO_LOG(ERROR) << "Fail to init channel_node to " << node;
-    bthread_usleep(FLAGS_timeout_ms * 1000L);
-    return nullptr;
-  }
-  dingodb::pb::node::NodeService_Stub node_stub(&channel_node);
-  dingodb::pb::coordinator::CoordinatorService_Stub raft_control_stub(&channel_node);
+  GetBrpcChannel(leader_location, coordinator_channel);
+  GetBrpcChannel(auto_increment_leader_location, auto_increment_channel);
+  GetBrpcChannel(FLAGS_coordinator_addr, node_channel);
+
+  dingodb::pb::coordinator::CoordinatorService_Stub coordinator_stub(&coordinator_channel);
+  dingodb::pb::meta::MetaService_Stub meta_stub(&coordinator_channel);
+  dingodb::pb::meta::MetaService_Stub meta_auto_increment_stub(&auto_increment_channel);
+  dingodb::pb::node::NodeService_Stub node_stub(&node_channel);
+  dingodb::pb::coordinator::CoordinatorService_Stub raft_control_stub(&node_channel);
 
   brpc::Controller cntl;
   cntl.set_timeout_ms(FLAGS_timeout_ms);
@@ -209,15 +215,15 @@ void* Sender(void* /*arg*/) {
   } else if (FLAGS_method == "RaftRemovePeer") {
     SendRaftRemovePeer(cntl, raft_control_stub);
   } else if (FLAGS_method == "GetAutoIncrement") {  // auto increment
-    SendGetAutoIncrement(cntl, meta_stub);
+    SendGetAutoIncrement(cntl, meta_auto_increment_stub);
   } else if (FLAGS_method == "CreateAutoIncrement") {
-    SendCreateAutoIncrement(cntl, meta_stub);
+    SendCreateAutoIncrement(cntl, meta_auto_increment_stub);
   } else if (FLAGS_method == "UpdateAutoIncrement") {
-    SendUpdateAutoIncrement(cntl, meta_stub);
+    SendUpdateAutoIncrement(cntl, meta_auto_increment_stub);
   } else if (FLAGS_method == "GenerateAutoIncrement") {
-    SendGenerateAutoIncrement(cntl, meta_stub);
+    SendGenerateAutoIncrement(cntl, meta_auto_increment_stub);
   } else if (FLAGS_method == "DeleteAutoIncrement") {
-    SendDeleteAutoIncrement(cntl, meta_stub);
+    SendDeleteAutoIncrement(cntl, meta_auto_increment_stub);
   } else {
     DINGO_LOG(INFO) << " method illegal , exit";
     return nullptr;

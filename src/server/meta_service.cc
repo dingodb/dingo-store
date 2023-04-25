@@ -450,10 +450,9 @@ void MetaServiceImpl::DropTable(google::protobuf::RpcController *controller, con
   engine_->MetaPut(ctx, meta_increment);
 }
 
-void MetaServiceImpl::GetAutoIncrement(google::protobuf::RpcController* controller,
-                      const pb::meta::GetAutoIncrementRequest* request,
-                      pb::meta::GetAutoIncrementResponse* response,
-                      google::protobuf::Closure* done) {
+void MetaServiceImpl::GetAutoIncrement(google::protobuf::RpcController * /*controller*/,
+                                       const pb::meta::GetAutoIncrementRequest *request,
+                                       pb::meta::GetAutoIncrementResponse *response, google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
 
   if (!auto_increment_control_->IsLeader()) {
@@ -472,13 +471,12 @@ void MetaServiceImpl::GetAutoIncrement(google::protobuf::RpcController* controll
   }
 
   response->set_start_id(start_id);
-  return;
 }
 
-void MetaServiceImpl::CreateAutoIncrement(google::protobuf::RpcController* controller,
-                    const pb::meta::CreateAutoIncrementRequest* request,
-                    pb::meta::CreateAutoIncrementResponse* response,
-                    google::protobuf::Closure* done) {
+void MetaServiceImpl::CreateAutoIncrement(google::protobuf::RpcController *controller,
+                                          const pb::meta::CreateAutoIncrementRequest *request,
+                                          pb::meta::CreateAutoIncrementResponse *response,
+                                          google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
 
   if (!auto_increment_control_->IsLeader()) {
@@ -495,18 +493,18 @@ void MetaServiceImpl::CreateAutoIncrement(google::protobuf::RpcController* contr
     return;
   }
 
-  auto* closure = new CoordinatorClosure<pb::meta::CreateAutoIncrementRequest,
-      pb::meta::CreateAutoIncrementResponse>(request, response, done_guard.release());
-  std::shared_ptr<Context> ctx = std::make_shared<Context>(static_cast<brpc::Controller*>(controller), closure);
+  auto *closure = new CoordinatorClosure<pb::meta::CreateAutoIncrementRequest, pb::meta::CreateAutoIncrementResponse>(
+      request, response, done_guard.release());
+  std::shared_ptr<Context> ctx = std::make_shared<Context>(static_cast<brpc::Controller *>(controller), closure);
   ctx->SetRegionId(Constant::kAutoIncrementRegionId);
   // this is a async operation will be block by closure
   engine_->MetaPut(ctx, meta_increment);
 }
 
-void MetaServiceImpl::UpdateAutoIncrement(google::protobuf::RpcController* controller,
-                      const ::dingodb::pb::meta::UpdateAutoIncrementRequest* request,
-                      pb::meta::UpdateAutoIncrementResponse* response,
-                      google::protobuf::Closure* done) {
+void MetaServiceImpl::UpdateAutoIncrement(google::protobuf::RpcController *controller,
+                                          const ::dingodb::pb::meta::UpdateAutoIncrementRequest *request,
+                                          pb::meta::UpdateAutoIncrementResponse *response,
+                                          google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
 
   if (!auto_increment_control_->IsLeader()) {
@@ -517,27 +515,27 @@ void MetaServiceImpl::UpdateAutoIncrement(google::protobuf::RpcController* contr
 
   uint64_t table_id = request->table_id().entity_id();
   pb::coordinator_internal::MetaIncrement meta_increment;
-  pb::error::Errno ret = auto_increment_control_->UpdateAutoIncrement(table_id, request->start_id(),
-          request->force(), meta_increment);
+  pb::error::Errno ret =
+      auto_increment_control_->UpdateAutoIncrement(table_id, request->start_id(), request->force(), meta_increment);
   if (ret != pb::error::Errno::OK) {
     response->mutable_error()->set_errcode(ret);
-    DINGO_LOG(ERROR) << "update auto increment failed, " << table_id << " | " <<
-          request->start_id() << " | " << request->force();
+    DINGO_LOG(ERROR) << "update auto increment failed, " << table_id << " | " << request->start_id() << " | "
+                     << request->force();
     return;
   }
 
-  auto* closure = new CoordinatorClosure<pb::meta::UpdateAutoIncrementRequest,
-      pb::meta::UpdateAutoIncrementResponse>(request, response, done_guard.release());
-  std::shared_ptr<Context> ctx = std::make_shared<Context>(static_cast<brpc::Controller*>(controller), closure);
+  auto *closure = new CoordinatorClosure<pb::meta::UpdateAutoIncrementRequest, pb::meta::UpdateAutoIncrementResponse>(
+      request, response, done_guard.release());
+  std::shared_ptr<Context> ctx = std::make_shared<Context>(static_cast<brpc::Controller *>(controller), closure);
   ctx->SetRegionId(Constant::kAutoIncrementRegionId);
   // this is a async operation will be block by closure
   engine_->MetaPut(ctx, meta_increment);
 }
 
-void MetaServiceImpl::GenerateAutoIncrement(google::protobuf::RpcController* controller,
-                      const ::dingodb::pb::meta::GenerateAutoIncrementRequest* request,
-                      pb::meta::GenerateAutoIncrementResponse* response,
-                      google::protobuf::Closure* done)  {
+void MetaServiceImpl::GenerateAutoIncrement(google::protobuf::RpcController *controller,
+                                            const ::dingodb::pb::meta::GenerateAutoIncrementRequest *request,
+                                            pb::meta::GenerateAutoIncrementResponse *response,
+                                            google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
 
   if (!auto_increment_control_->IsLeader()) {
@@ -548,26 +546,28 @@ void MetaServiceImpl::GenerateAutoIncrement(google::protobuf::RpcController* con
 
   uint64_t table_id = request->table_id().entity_id();
   pb::coordinator_internal::MetaIncrement meta_increment;
-  pb::error::Errno ret = auto_increment_control_->GenerateAutoIncrement(table_id,
-        request->count(), request->auto_increment_increment(), request->auto_increment_offset(), meta_increment);
+  pb::error::Errno ret =
+      auto_increment_control_->GenerateAutoIncrement(table_id, request->count(), request->auto_increment_increment(),
+                                                     request->auto_increment_offset(), meta_increment);
   if (ret != pb::error::Errno::OK) {
     response->mutable_error()->set_errcode(ret);
     DINGO_LOG(ERROR) << "generate auto increment failed, " << ret << " | " << request->DebugString();
     return;
   }
 
-  auto* closure = new CoordinatorClosure<pb::meta::GenerateAutoIncrementRequest,
-      pb::meta::GenerateAutoIncrementResponse>(request, response, done_guard.release());
-  std::shared_ptr<Context> ctx = std::make_shared<Context>(static_cast<brpc::Controller*>(controller), closure);
+  auto *closure =
+      new CoordinatorClosure<pb::meta::GenerateAutoIncrementRequest, pb::meta::GenerateAutoIncrementResponse>(
+          request, response, done_guard.release());
+  std::shared_ptr<Context> ctx = std::make_shared<Context>(static_cast<brpc::Controller *>(controller), closure);
   ctx->SetRegionId(Constant::kAutoIncrementRegionId);
   // this is a async operation will be block by closure
   engine_->MetaPut(ctx, meta_increment);
 }
 
-void MetaServiceImpl::DeleteAutoIncrement(google::protobuf::RpcController* controller,
-                      const ::dingodb::pb::meta::DeleteAutoIncrementRequest* request,
-                      pb::meta::DeleteAutoIncrementResponse* response,
-                      google::protobuf::Closure* done) {
+void MetaServiceImpl::DeleteAutoIncrement(google::protobuf::RpcController *controller,
+                                          const ::dingodb::pb::meta::DeleteAutoIncrementRequest *request,
+                                          pb::meta::DeleteAutoIncrementResponse *response,
+                                          google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
 
   if (!auto_increment_control_->IsLeader()) {
@@ -585,9 +585,9 @@ void MetaServiceImpl::DeleteAutoIncrement(google::protobuf::RpcController* contr
     return;
   }
 
-  auto* closure = new CoordinatorClosure<pb::meta::DeleteAutoIncrementRequest,
-      pb::meta::DeleteAutoIncrementResponse>(request, response, done_guard.release());
-  std::shared_ptr<Context> ctx = std::make_shared<Context>(static_cast<brpc::Controller*>(controller), closure);
+  auto *closure = new CoordinatorClosure<pb::meta::DeleteAutoIncrementRequest, pb::meta::DeleteAutoIncrementResponse>(
+      request, response, done_guard.release());
+  std::shared_ptr<Context> ctx = std::make_shared<Context>(static_cast<brpc::Controller *>(controller), closure);
   ctx->SetRegionId(Constant::kAutoIncrementRegionId);
   // this is a async operation will be block by closure
   engine_->MetaPut(ctx, meta_increment);

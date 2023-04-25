@@ -27,7 +27,6 @@
 namespace dingodb {
 
 class MetaServiceImpl : public pb::meta::MetaService {
-
   using Errno = pb::error::Errno;
 
  public:
@@ -87,26 +86,21 @@ class MetaServiceImpl : public pb::meta::MetaService {
   void DropSchema(google::protobuf::RpcController* controller, const pb::meta::DropSchemaRequest* request,
                   pb::meta::DropSchemaResponse* response, google::protobuf::Closure* done) override;
 
-  void GetAutoIncrement(google::protobuf::RpcController* controller,
-                       const pb::meta::GetAutoIncrementRequest* request,
-                       pb::meta::GetAutoIncrementResponse* response,
-                       google::protobuf::Closure* done);
+  void GetAutoIncrement(google::protobuf::RpcController* controller, const pb::meta::GetAutoIncrementRequest* request,
+                        pb::meta::GetAutoIncrementResponse* response, google::protobuf::Closure* done) override;
   void CreateAutoIncrement(google::protobuf::RpcController* controller,
-                      const pb::meta::CreateAutoIncrementRequest* request,
-                      pb::meta::CreateAutoIncrementResponse* response,
-                      google::protobuf::Closure* done);
+                           const pb::meta::CreateAutoIncrementRequest* request,
+                           pb::meta::CreateAutoIncrementResponse* response, google::protobuf::Closure* done) override;
   void UpdateAutoIncrement(google::protobuf::RpcController* controller,
-                       const ::dingodb::pb::meta::UpdateAutoIncrementRequest* request,
-                       pb::meta::UpdateAutoIncrementResponse* response,
-                       google::protobuf::Closure* done);
+                           const ::dingodb::pb::meta::UpdateAutoIncrementRequest* request,
+                           pb::meta::UpdateAutoIncrementResponse* response, google::protobuf::Closure* done) override;
   void GenerateAutoIncrement(google::protobuf::RpcController* controller,
-                       const ::dingodb::pb::meta::GenerateAutoIncrementRequest* request,
-                       pb::meta::GenerateAutoIncrementResponse* response,
-                       google::protobuf::Closure* done);
+                             const ::dingodb::pb::meta::GenerateAutoIncrementRequest* request,
+                             pb::meta::GenerateAutoIncrementResponse* response,
+                             google::protobuf::Closure* done) override;
   void DeleteAutoIncrement(google::protobuf::RpcController* controller,
-                       const ::dingodb::pb::meta::DeleteAutoIncrementRequest* request,
-                       pb::meta::DeleteAutoIncrementResponse* response,
-                       google::protobuf::Closure* done);
+                           const ::dingodb::pb::meta::DeleteAutoIncrementRequest* request,
+                           pb::meta::DeleteAutoIncrementResponse* response, google::protobuf::Closure* done) override;
 
  private:
   std::shared_ptr<CoordinatorControl> coordinator_control_;
