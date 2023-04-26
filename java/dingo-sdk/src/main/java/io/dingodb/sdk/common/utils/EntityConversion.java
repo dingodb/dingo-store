@@ -84,33 +84,36 @@ public class EntityConversion {
                 .setTablePartition(calcRange(table, tableId))
                 .setEngine(Common.Engine.valueOf(table.getEngine()))
                 .setReplica(table.getReplica())
-                .addAllColumns(columnDefinitions).build();
+                .addAllColumns(columnDefinitions)
+                .setAutoIncrement(table.autoIncrement())
+                .build();
     }
 
     public static Table mapping(Meta.TableDefinition tableDefinition) {
-        return new TableDefinition(
-                tableDefinition.getName(),
-                tableDefinition.getColumnsList().stream().map(EntityConversion::mapping).collect(Collectors.toList()),
-                tableDefinition.getVersion(),
-                (int) tableDefinition.getTtl(),
-                null,
-                tableDefinition.getEngine().name(),
-                tableDefinition.getPropertiesMap(),
-                tableDefinition.getReplica()
-        );
+        return TableDefinition.builder()
+                .name(tableDefinition.getName())
+                .columns(tableDefinition.getColumnsList().stream().map(EntityConversion::mapping).collect(Collectors.toList()))
+                .version(tableDefinition.getVersion())
+                .ttl((int) tableDefinition.getTtl())
+                .partition(null)
+                .engine(tableDefinition.getEngine().name())
+                .properties(tableDefinition.getPropertiesMap())
+                .replica(tableDefinition.getReplica())
+                .build();
     }
 
     public static Column mapping(Meta.ColumnDefinition definition) {
-        return new ColumnDefinition(
-                definition.getName(),
-                mapping(definition.getSqlType()),
-                definition.getElementType().name(),
-                definition.getPrecision(),
-                definition.getScale(),
-                definition.getNullable(),
-                definition.getIndexOfKey(),
-                definition.getDefaultVal()
-        );
+        return ColumnDefinition.builder()
+                .name(definition.getName())
+                .type(mapping(definition.getSqlType()))
+                .elementType(definition.getElementType().name())
+                .precision(definition.getPrecision())
+                .scale(definition.getScale())
+                .nullable(definition.getNullable())
+                .primary(definition.getIndexOfKey())
+                .defaultValue(definition.getDefaultVal())
+                .isAutoIncrement(definition.getIsAutoIncrement())
+                .build();
     }
 
     public static TableMetrics mapping(Meta.TableMetrics metrics) {
@@ -280,18 +283,24 @@ public class EntityConversion {
                 .collect(Collectors.toCollection(() -> new TreeSet<>(ByteArrayUtils::compare)))
                 .iterator();
 
-        byte[] start = EMPTY_BYTES;
         Meta.RangePartition.Builder rangePartitionBuilder = Meta.RangePartition.newBuilder();
-        while (keys.hasNext()) {
-            rangePartitionBuilder
-                    .addRanges(Common.Range.newBuilder()
-                            .setStartKey(ByteString.copyFrom(start))
-                            .setEndKey(ByteString.copyFrom(start = keys.next()))
-                            .build());
+        Common.Range range;
+        try {
+            byte[] start = codec.encodeMinKeyPrefix();
+            while (keys.hasNext()) {
+                rangePartitionBuilder
+                        .addRanges(Common.Range.newBuilder()
+                                .setStartKey(ByteString.copyFrom(start))
+                                .setEndKey(ByteString.copyFrom(start = keys.next()))
+                                .build());
+            }
+            range = Common.Range.newBuilder()
+                    .setStartKey(ByteString.copyFrom(start))
+                    .setEndKey(ByteString.copyFrom(codec.encodeMaxKeyPrefix()))
+                    .build();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
         }
-        Common.Range range = Common.Range.newBuilder()
-                .setStartKey(ByteString.copyFrom(start))
-                .build();
         Meta.RangePartition rangePartition = rangePartitionBuilder.addRanges(range).build();
 
         return Meta.PartitionRule.newBuilder()
@@ -309,6 +318,7 @@ public class EntityConversion {
                 .setScale(column.getScale())
                 .setIndexOfKey(column.getPrimary())
                 .setSqlType(mapping(column.getType()))
+                .setIsAutoIncrement(column.isAutoIncrement())
                 .build();
     }
 

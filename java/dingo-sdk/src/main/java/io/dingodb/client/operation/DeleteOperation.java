@@ -72,12 +72,12 @@ public class DeleteOperation implements Operation {
     @Override
     public void exec(OperationContext context) {
         Map<byte[], Integer> parameters = context.parameters();
-        context.getStoreService().kvBatchDelete(
-            context.getTableId(),
-            context.getRegionId(),
-            new ArrayList<>(parameters.keySet())
+        List<Boolean> result = context.getStoreService().kvBatchDelete(
+                context.getTableId(),
+                context.getRegionId(),
+                new ArrayList<>(parameters.keySet())
         );
-        parameters.values().forEach(i -> context.<Boolean[]>result()[i] = true);
+        parameters.values().forEach(i -> context.<Boolean[]>result()[i] = result.get(i));
     }
 
     @Override

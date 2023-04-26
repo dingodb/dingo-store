@@ -47,6 +47,8 @@ public interface Table {
 
     int getReplica();
 
+    long autoIncrement();
+
     default int getPrimaryKeyCount() {
         int count = 0;
         for (Column column : getColumns()) {

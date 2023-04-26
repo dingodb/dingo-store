@@ -51,9 +51,9 @@ public class OperationService {
     private final MetaServiceClient rootMetaService;
     private final StoreServiceClient storeService;
 
-    public OperationService(MetaServiceConnector metaServiceConnector, int retryTimes) {
-        this.metaServiceConnector = metaServiceConnector;
-        this.rootMetaService = new MetaServiceClient(metaServiceConnector);
+    public OperationService(String coordinatorSvr, int retryTimes) {
+        this.rootMetaService = new MetaServiceClient(coordinatorSvr);
+        this.metaServiceConnector = (MetaServiceConnector) rootMetaService.getMetaConnector();
         this.storeService = new StoreServiceClient(rootMetaService, retryTimes);
     }
 

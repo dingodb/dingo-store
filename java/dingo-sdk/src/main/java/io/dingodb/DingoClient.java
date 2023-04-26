@@ -34,8 +34,6 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 
-import static io.dingodb.sdk.service.connector.MetaServiceConnector.getMetaServiceConnector;
-
 public class DingoClient {
 
     private final String schema;
@@ -53,7 +51,7 @@ public class DingoClient {
     }
 
     public DingoClient(String coordinatorSvr, String schema, Integer retryTimes) {
-        operationService = new OperationService(getMetaServiceConnector(coordinatorSvr), retryTimes);
+        operationService = new OperationService(coordinatorSvr, retryTimes);
         this.schema = schema;
     }
 

@@ -31,6 +31,7 @@ public class ColumnDefinition implements Column {
     private boolean nullable = true;
     private int primary;
     private String defaultValue;
+    private boolean isAutoIncrement;
 
     @Deprecated
     public ColumnDefinition(
@@ -41,7 +42,8 @@ public class ColumnDefinition implements Column {
         int scale,
         boolean nullable,
         int primary,
-        String defaultValue
+        String defaultValue,
+        boolean isAutoIncrement
     ) {
         this.name = name;
         this.type = type;
@@ -51,6 +53,7 @@ public class ColumnDefinition implements Column {
         this.nullable = nullable;
         this.primary = primary;
         this.defaultValue = defaultValue;
+        this.isAutoIncrement = isAutoIncrement;
     }
 
     @Override
@@ -93,4 +96,8 @@ public class ColumnDefinition implements Column {
         return defaultValue;
     }
 
+    @Override
+    public boolean isAutoIncrement() {
+        return isAutoIncrement;
+    }
 }

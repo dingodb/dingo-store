@@ -34,6 +34,7 @@ public class TableDefinition implements Table {
     private String engine;
     private Map<String, String> properties;
     private int replica;
+    private long autoIncrement = 1;
 
     @Deprecated
     public TableDefinition(String name, List<Column> columns, int version, int ttl, Partition partition, String engine, Map<String, String> properties) {
@@ -42,6 +43,11 @@ public class TableDefinition implements Table {
 
     @Deprecated
     public TableDefinition(String name, List<Column> columns, int version, int ttl, Partition partition, String engine, Map<String, String> properties, int replica) {
+        this(name, columns, version, ttl, partition, engine, properties, replica, 1);
+    }
+
+    @Deprecated
+    public TableDefinition(String name, List<Column> columns, int version, int ttl, Partition partition, String engine, Map<String, String> properties, int replica, long autoIncrement) {
         this.name = name;
         this.columns = columns;
         this.version = version;
@@ -50,6 +56,7 @@ public class TableDefinition implements Table {
         this.engine = engine;
         this.properties = properties;
         this.replica = replica;
+        this.autoIncrement = autoIncrement;
     }
 
     @Override
@@ -90,5 +97,10 @@ public class TableDefinition implements Table {
     @Override
     public int getReplica() {
         return replica;
+    }
+
+    @Override
+    public long autoIncrement() {
+        return autoIncrement;
     }
 }

@@ -31,6 +31,7 @@ import io.dingodb.sdk.common.utils.LinkedIterator;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Iterator;
+import java.util.List;
 import java.util.NavigableMap;
 import java.util.NavigableSet;
 import java.util.TreeSet;
@@ -54,18 +55,20 @@ public class ScanOperation implements Operation {
         try {
             KeyValueCodec codec = routeTable.getCodec();
             OpKeyRange keyRange = parameters.getValue();
+            List<Object> startKey = keyRange.start.getUserKey();
+            List<Object> endKey = keyRange.end.getUserKey();
             OpRange range = new OpRange(
-                codec.encodeKey(keyRange.start.getUserKey().toArray(new Object[table.getColumns().size()])),
-                codec.encodeKey(keyRange.end.getUserKey().toArray(new Object[table.getColumns().size()])),
+                codec.encodeKeyPrefix(startKey.toArray(new Object[table.getColumns().size()]), startKey.size()),
+                codec.encodeKeyPrefix(endKey.toArray(new Object[table.getColumns().size()]), endKey.size()),
                 keyRange.withStart,
                 keyRange.withEnd
             );
             NavigableMap<ComparableByteArray, RangeDistribution> rangeDistribution = routeTable.getRangeDistribution();
-            NavigableSet<Task> subTasks = rangeDistribution
+            NavigableSet<Task> subTasks = (rangeDistribution.size() == 1 ? rangeDistribution : rangeDistribution
                 .subMap(
-                    rangeDistribution.floorKey(new ComparableByteArray(range.getStartKey())), range.isWithStart(),
-                    rangeDistribution.floorKey(new ComparableByteArray(range.getRange().getEndKey())), range.isWithEnd()
-                ).values().stream()
+                    rangeDistribution.floorKey(new ComparableByteArray(range.getStartKey())), true,
+                    rangeDistribution.floorKey(new ComparableByteArray(range.getRange().getEndKey())), true
+                )).values().stream()
                 .map(rd -> new Task(
                     rd.getId(),
                     wrap(new OpRange(rd.getRange().getStartKey(), rd.getRange().getEndKey(), true, false)))

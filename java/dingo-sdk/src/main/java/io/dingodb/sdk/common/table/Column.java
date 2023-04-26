@@ -37,6 +37,8 @@ public interface Column {
 
     String getDefaultValue();
 
+    boolean isAutoIncrement();
+
     default DingoType getDingoType() {
         return DingoTypeFactory.fromName(getType(), getElementType(), isNullable());
     }
