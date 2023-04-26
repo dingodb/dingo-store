@@ -20,6 +20,7 @@ import io.dingodb.meta.Meta;
 import io.dingodb.meta.MetaServiceGrpc;
 import io.dingodb.sdk.common.DingoClientException;
 import io.dingodb.sdk.common.DingoCommonId;
+import io.dingodb.sdk.common.IncrementRange;
 import io.dingodb.sdk.common.concurrent.Executors;
 import io.dingodb.sdk.common.table.RangeDistribution;
 import io.dingodb.sdk.common.table.Table;
@@ -27,6 +28,8 @@ import io.dingodb.sdk.common.table.metric.TableMetrics;
 import io.dingodb.sdk.common.utils.ByteArrayUtils;
 import io.dingodb.sdk.common.utils.EntityConversion;
 import io.dingodb.sdk.common.utils.Optional;
+import io.dingodb.sdk.service.connector.AutoIncrementServiceConnector;
+import io.dingodb.sdk.service.connector.MetaServiceConnector;
 import io.dingodb.sdk.service.connector.ServiceConnector;
 import lombok.Getter;
 import lombok.NonNull;
@@ -67,6 +70,8 @@ public class MetaServiceClient {
     private final Map<String, Meta.DingoCommonId> tableIdCache = new ConcurrentHashMap<>();
     private final Map<DingoCommonId, TableMetrics> tableMetricsCache = new ConcurrentHashMap<>();
 
+    private final Map<DingoCommonId, IncrementRange> incrementCache = new ConcurrentHashMap<>();
+
     private Pattern pattern = Pattern.compile("^[A-Z_][A-Z\\d_]+$");
     private Pattern warnPattern = Pattern.compile(".*[a-z]+.*");
     private String ROOT_NAME = "root";
@@ -76,28 +81,48 @@ public class MetaServiceClient {
     @Getter
     private final String name;
 
-    private ServiceConnector<MetaServiceGrpc.MetaServiceBlockingStub> connector;
+    private Long count = 10000L;
+    private Integer increment = 1;
+    private Integer offset = 1;
 
-    public MetaServiceClient(ServiceConnector<MetaServiceGrpc.MetaServiceBlockingStub> connector) {
+    private ServiceConnector<MetaServiceGrpc.MetaServiceBlockingStub> metaConnector;
+    private ServiceConnector<MetaServiceGrpc.MetaServiceBlockingStub> incrementConnector;
+
+    public MetaServiceClient(String servers) {
         this.parentId = ROOT_SCHEMA_ID;
         this.id = ROOT_SCHEMA_ID;
         this.name = ROOT_NAME;
-        this.connector = connector;
+        this.metaConnector = MetaServiceConnector.getMetaServiceConnector(servers);
+        this.incrementConnector = AutoIncrementServiceConnector.getAutoIncrementServiceConnector(servers);
+        Executors.execute("meta-service-client-reload", this::reload);
+    }
+
+    @Deprecated
+    public MetaServiceClient(ServiceConnector<MetaServiceGrpc.MetaServiceBlockingStub> metaConnector) {
+        this.parentId = ROOT_SCHEMA_ID;
+        this.id = ROOT_SCHEMA_ID;
+        this.name = ROOT_NAME;
+        this.metaConnector = metaConnector;
         Executors.execute("meta-service-client-reload", this::reload);
     }
 
     private MetaServiceClient(
             Meta.DingoCommonId id,
             String name,
-            ServiceConnector<MetaServiceGrpc.MetaServiceBlockingStub> connector) {
+            ServiceConnector<MetaServiceGrpc.MetaServiceBlockingStub> metaConnector) {
         this.parentId = ROOT_SCHEMA_ID;
-        this.connector = connector;
+        this.metaConnector = metaConnector;
         this.id = id;
         this.name = name;
     }
 
+    public ServiceConnector<MetaServiceGrpc.MetaServiceBlockingStub> getMetaConnector() {
+        return metaConnector;
+    }
+
     public void close() {
-        connector.shutdown();
+        metaConnector.shutdown();
+        incrementConnector.shutdown();
     }
 
     private synchronized void reload() {
@@ -113,7 +138,7 @@ public class MetaServiceClient {
     private void addMetaServiceCache(Meta.Schema schema) {
         metaServiceIdCache.computeIfAbsent(schema.getName(), __ -> schema.getId());
         metaServiceCache.computeIfAbsent(
-                schema.getId(), __ -> new MetaServiceClient(schema.getId(), schema.getName(), connector)
+                schema.getId(), __ -> new MetaServiceClient(schema.getId(), schema.getName(), metaConnector)
         );
     }
 
@@ -123,7 +148,7 @@ public class MetaServiceClient {
                 .setSchemaName(name)
                 .build();
 
-        Meta.Schema schema = connector.exec(stub -> {
+        Meta.Schema schema = metaConnector.exec(stub -> {
             Meta.CreateSchemaResponse res = stub.createSchema(request);
             return new ServiceConnector.Response<>(res.getError(), res);
         }).getResponse().getSchema();
@@ -135,7 +160,7 @@ public class MetaServiceClient {
         Meta.GetSchemasRequest request = Meta.GetSchemasRequest.newBuilder()
                 .setSchemaId(id)
                 .build();
-        Meta.GetSchemasResponse response = connector.exec(stub -> {
+        Meta.GetSchemasResponse response = metaConnector.exec(stub -> {
             Meta.GetSchemasResponse res = stub.getSchemas(request);
             return new ServiceConnector.Response<>(res.getError(), res);
         }).getResponse();
@@ -154,7 +179,7 @@ public class MetaServiceClient {
         if (schemaId == null) {
             Meta.GetSchemaByNameRequest request = Meta.GetSchemaByNameRequest.newBuilder().setSchemaName(name).build();
 
-            Meta.GetSchemaByNameResponse response = connector.exec(stub -> {
+            Meta.GetSchemaByNameResponse response = metaConnector.exec(stub -> {
                 Meta.GetSchemaByNameResponse res = stub.getSchemaByName(request);
                 return new ServiceConnector.Response<>(res.getError(), res);
             }).getResponse();
@@ -190,7 +215,7 @@ public class MetaServiceClient {
                     Meta.DropSchemaRequest request = Meta.DropSchemaRequest.newBuilder()
                             .setSchemaId(metaServiceIdCache.get(name))
                             .build();
-                    Meta.DropSchemaResponse response = connector.exec(stub -> {
+                    Meta.DropSchemaResponse response = metaConnector.exec(stub -> {
                         Meta.DropSchemaResponse res = stub.dropSchema(request);
                         return new ServiceConnector.Response<>(res.getError(), res);
                     }).getResponse();
@@ -216,7 +241,7 @@ public class MetaServiceClient {
                 .setSchemaId(id)
                 .build();
 
-        Meta.CreateTableIdResponse createTableIdResponse = connector.exec(stub -> {
+        Meta.CreateTableIdResponse createTableIdResponse = metaConnector.exec(stub -> {
             Meta.CreateTableIdResponse res = stub.createTableId(createTableIdRequest);
             return new ServiceConnector.Response<>(res.getError(), res);
         }).getResponse();
@@ -230,7 +255,7 @@ public class MetaServiceClient {
                 .setTableDefinition(definition)
                 .build();
 
-        Meta.CreateTableResponse response = connector.exec(stub -> {
+        Meta.CreateTableResponse response = metaConnector.exec(stub -> {
             Meta.CreateTableResponse res = stub.createTable(request);
             return new ServiceConnector.Response<>(res.getError(), res);
         }).getResponse();
@@ -252,7 +277,7 @@ public class MetaServiceClient {
                 .setTableId(mapping(tableId))
                 .build();
 
-        Meta.DropTableResponse response = connector.exec(stub -> {
+        Meta.DropTableResponse response = metaConnector.exec(stub -> {
             Meta.DropTableResponse res = stub.dropTable(request);
             return new ServiceConnector.Response<>(res.getError(), res);
         }).getResponse();
@@ -271,7 +296,7 @@ public class MetaServiceClient {
                     .setTableName(tableName)
                     .build();
 
-            Meta.GetTableByNameResponse response = connector.exec(stub -> {
+            Meta.GetTableByNameResponse response = metaConnector.exec(stub -> {
                 Meta.GetTableByNameResponse res = stub.getTableByName(request);
                 return new ServiceConnector.Response<>(res.getError(), res);
             }).getResponse();
@@ -298,7 +323,7 @@ public class MetaServiceClient {
                 .setSchemaId(id)
                 .build();
 
-        Meta.GetTablesResponse response = connector.exec(stub -> {
+        Meta.GetTablesResponse response = metaConnector.exec(stub -> {
             Meta.GetTablesResponse res = stub.getTables(request);
             return new ServiceConnector.Response<>(res.getError(), res);
         }).getResponse();
@@ -318,7 +343,7 @@ public class MetaServiceClient {
         Table table = tableDefinitionCache.get(tableId);
         if (table == null) {
             Meta.GetTableRequest request = Meta.GetTableRequest.newBuilder().setTableId(mapping(tableId)).build();
-            Meta.GetTableResponse response = connector.exec(stub -> {
+            Meta.GetTableResponse response = metaConnector.exec(stub -> {
                 Meta.GetTableResponse res = stub.getTable(request);
                 return new ServiceConnector.Response<>(res.getError(), res);
             }).getResponse();
@@ -342,7 +367,7 @@ public class MetaServiceClient {
                 .setTableId(mapping(id))
                 .build();
 
-        Meta.GetTableRangeResponse response = connector.exec(stub -> {
+        Meta.GetTableRangeResponse response = metaConnector.exec(stub -> {
             Meta.GetTableRangeResponse res = stub.getTableRange(request);
             return new ServiceConnector.Response<>(res.getError(), res);
         }).getResponse();
@@ -366,13 +391,59 @@ public class MetaServiceClient {
                     Meta.GetTableMetricsRequest request = Meta.GetTableMetricsRequest.newBuilder()
                             .setTableId(mapping(__))
                             .build();
-                    Meta.GetTableMetricsResponse response = connector.exec(stub -> {
+                    Meta.GetTableMetricsResponse response = metaConnector.exec(stub -> {
                         Meta.GetTableMetricsResponse res = stub.getTableMetrics(request);
                         return new ServiceConnector.Response<>(res.getError(), res);
                     }).getResponse();
                     return response.getTableMetrics().getTableMetrics();
                 })
                 .mapOrNull(EntityConversion::mapping));
+    }
+
+    public void generateAutoIncrement(DingoCommonId tableId, Long count, Integer increment, Integer offset) {
+        Optional.ofNullable(incrementCache.get(tableId)).ifAbsent(() -> {
+            Meta.GenerateAutoIncrementRequest request = Meta.GenerateAutoIncrementRequest.newBuilder()
+                    .setTableId(mapping(tableId))
+                    .setCount(this.count = count)
+                    .setAutoIncrementIncrement(this.increment = increment)
+                    .setAutoIncrementOffset(this.offset = offset)
+                    .build();
+            Meta.GenerateAutoIncrementResponse response = incrementConnector.exec(stub -> {
+                Meta.GenerateAutoIncrementResponse res = stub.generateAutoIncrement(request);
+                return new ServiceConnector.Response<>(res.getError(), res);
+            }).getResponse();
+
+            IncrementRange incrementRange = new IncrementRange(tableId, count, increment, offset)
+                    .setStartId(response.getStartId())
+                    .setEndId(response.getEndId());
+            addAutoIncrementCache(tableId, incrementRange);
+        });
+    }
+
+    private void addAutoIncrementCache(DingoCommonId tableId, IncrementRange incrementRange) {
+        incrementCache.computeIfAbsent(tableId, __ -> incrementRange);
+    }
+
+    private void removeAutoIncrementCache(DingoCommonId tableId) {
+        incrementCache.remove(tableId);
+    }
+
+    public synchronized Long getIncrementId(DingoCommonId tableId) {
+        IncrementRange range = incrementCache.get(tableId);
+        if (range != null) {
+            Long incrementId = range.getAndIncrement();
+            if (incrementId == null) {
+                removeAutoIncrementCache(tableId);
+                generateAutoIncrement(tableId, range.getCount(), range.getIncrement(), range.getOffset());
+                range = incrementCache.get(tableId);
+            } else {
+                return incrementId;
+            }
+        } else {
+            generateAutoIncrement(tableId, count, increment, offset);
+            range = incrementCache.get(tableId);
+        }
+        return range.getAndIncrement();
     }
 
     private String cleanTableName(String name) {
