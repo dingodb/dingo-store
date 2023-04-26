@@ -71,6 +71,13 @@ int RaftNode::Init(const std::string& init_conf, std::shared_ptr<Config> config)
   return 0;
 }
 
+void RaftNode::Stop() {
+  DINGO_LOG(DEBUG) << butil::StringPrintf("Stop region %lu raft node shutdown", node_id_);
+  node_->shutdown(nullptr);
+  node_->join();
+  DINGO_LOG(DEBUG) << butil::StringPrintf("Stop region %lu finish raft node shutdown", node_id_);
+}
+
 void RaftNode::Destroy() {
   DINGO_LOG(DEBUG) << butil::StringPrintf("Delete region %lu raft node shutdown", node_id_);
   node_->shutdown(nullptr);

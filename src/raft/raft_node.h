@@ -36,6 +36,7 @@ class RaftNode {
   ~RaftNode();
 
   int Init(const std::string& init_conf, std::shared_ptr<Config> config);
+  void Stop();
   void Destroy();
 
   std::string GetRaftGroupName() const { return raft_group_name_; }

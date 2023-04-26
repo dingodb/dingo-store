@@ -134,6 +134,8 @@ class Helper {
   // Create hard link
   static bool Link(const std::string& old_path, const std::string& new_path);
 
+  // nanosecond timestamp
+  static uint64_t TimestampNs();
   // millisecond timestamp
   static uint64_t TimestampMs();
   // second timestamp

@@ -16,12 +16,14 @@
 
 #include <cstdint>
 
+#include "butil/status.h"
 #include "common/constant.h"
 #include "common/context.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
+#include "proto/error.pb.h"
 #include "proto/push.pb.h"
 #include "server/server.h"
 #include "server/service_helper.h"
@@ -80,25 +82,10 @@ void PushServiceImpl::PushStoreOperation(google::protobuf::RpcController* contro
   for (const auto& command : request->store_operation().region_cmds()) {
     butil::Status status;
     auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
-    switch (command.region_cmd_type()) {
-      case pb::coordinator::CMD_CREATE:
-        status = CreateRegionTask::ValidateCreateRegion(store_meta_manager, command.region_id());
-        break;
-      case pb::coordinator::CMD_DELETE:
-        status = DeleteRegionTask::ValidateDeleteRegion(
-            store_meta_manager, store_meta_manager->GetStoreRegionMeta()->GetRegion(command.region_id()));
-        break;
-      case pb::coordinator::CMD_SPLIT:
-        status =
-            SplitRegionTask::ValidateSplitRegion(store_meta_manager->GetStoreRegionMeta(), command.split_request());
-        break;
-      case pb::coordinator::CMD_CHANGE_PEER:
-        status = ChangeRegionTask::ValidateChangeRegion(store_meta_manager,
-                                                        command.change_peer_request().region_definition());
-        break;
-      default:
-        DINGO_LOG(ERROR) << "Unknown command type: " << command.region_cmd_type();
-    }
+
+    auto validate_func = RegionController::GetValidater(command.region_cmd_type());
+    status = (validate_func != nullptr) ? validate_func(command)
+                                        : butil::Status(pb::error::EINTERNAL, "Unknown region command");
     if (!status.ok()) {
       error_func(command.id(), command.region_cmd_type(), status);
       continue;

@@ -47,7 +47,7 @@ void StoreServiceImpl::AddRegion(google::protobuf::RpcController* controller,
   auto region_controller = Server::GetInstance()->GetRegionController();
 
   auto command = std::make_shared<pb::coordinator::RegionCmd>();
-  command->set_id(Helper::TimestampMs());
+  command->set_id(Helper::TimestampNs());
   command->set_region_id(request->region().id());
   command->set_region_cmd_type(pb::coordinator::CMD_CREATE);
   command->mutable_create_request()->mutable_region_definition()->CopyFrom(request->region());
@@ -69,7 +69,7 @@ void StoreServiceImpl::ChangeRegion(google::protobuf::RpcController* controller,
   auto region_controller = Server::GetInstance()->GetRegionController();
 
   auto command = std::make_shared<pb::coordinator::RegionCmd>();
-  command->set_id(Helper::TimestampMs());
+  command->set_id(Helper::TimestampNs());
   command->set_region_id(request->region().id());
   command->set_region_cmd_type(pb::coordinator::CMD_CHANGE_PEER);
   command->mutable_change_peer_request()->mutable_region_definition()->CopyFrom(request->region());
@@ -93,7 +93,7 @@ void StoreServiceImpl::DestroyRegion(google::protobuf::RpcController* controller
   auto region_controller = Server::GetInstance()->GetRegionController();
 
   auto command = std::make_shared<pb::coordinator::RegionCmd>();
-  command->set_id(Helper::TimestampMs());
+  command->set_id(Helper::TimestampNs());
   command->set_region_id(request->region_id());
   command->set_region_cmd_type(pb::coordinator::CMD_DELETE);
   command->mutable_delete_request()->set_region_id(request->region_id());
@@ -114,7 +114,7 @@ void StoreServiceImpl::Snapshot(google::protobuf::RpcController* controller, con
   auto region_controller = Server::GetInstance()->GetRegionController();
 
   auto command = std::make_shared<pb::coordinator::RegionCmd>();
-  command->set_id(Helper::TimestampMs());
+  command->set_id(Helper::TimestampNs());
   command->set_region_id(request->region_id());
   command->set_region_cmd_type(pb::coordinator::CMD_SNAPSHOT);
 

@@ -24,7 +24,7 @@ namespace dingodb {
 
 bool MetaWriter::Put(const std::shared_ptr<pb::common::KeyValue> kv) {
   if (kv == nullptr) return true;
-  DINGO_LOG(DEBUG) << "Put meta data, key: " << Helper::StringToHex(kv->key());
+  DINGO_LOG(DEBUG) << "Put meta data, key: " << kv->key();
   auto writer = engine_->NewWriter(Constant::kStoreMetaCF);
   auto status = writer->KvPut(*kv);
   if (!status.ok()) {

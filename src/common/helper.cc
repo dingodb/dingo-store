@@ -23,6 +23,7 @@
 #include <cstdio>
 #include <cstring>
 #include <iomanip>
+#include <ratio>
 #include <regex>
 #include <string>
 #include <utility>
@@ -581,6 +582,11 @@ uint64_t Helper::GenId() {
 
 bool Helper::Link(const std::string& old_path, const std::string& new_path) {
   return ::link(old_path.c_str(), new_path.c_str()) == 0;
+}
+
+uint64_t Helper::TimestampNs() {
+  return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch())
+      .count();
 }
 
 uint64_t Helper::TimestampMs() {

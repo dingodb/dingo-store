@@ -109,6 +109,18 @@ butil::Status RaftKvEngine::ChangeNode(std::shared_ptr<Context> /*ctx*/, uint64_
   return butil::Status();
 }
 
+butil::Status RaftKvEngine::StopNode(std::shared_ptr<Context> ctx, uint64_t region_id) {
+  auto node = raft_node_manager_->GetNode(region_id);
+  if (node == nullptr) {
+    return butil::Status(pb::error::ERAFT_NOTNODE, "Raft not node");
+  }
+  raft_node_manager_->DeleteNode(region_id);
+
+  node->Stop();
+
+  return butil::Status();
+}
+
 butil::Status RaftKvEngine::DestroyNode(std::shared_ptr<Context> /*ctx*/, uint64_t region_id) {
   auto node = raft_node_manager_->GetNode(region_id);
   if (node == nullptr) {

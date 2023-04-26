@@ -35,6 +35,7 @@ class RaftControlAble {
   virtual butil::Status AddNode(std::shared_ptr<Context> ctx, store::RegionPtr region,
                                 std::shared_ptr<pb::store_internal::RaftMeta> raft_meta,
                                 std::shared_ptr<EventListenerCollection> listeners) = 0;
+  virtual butil::Status StopNode(std::shared_ptr<Context> ctx, uint64_t region_id) = 0;
   virtual butil::Status DestroyNode(std::shared_ptr<Context> ctx, uint64_t region_id) = 0;
   virtual butil::Status ChangeNode(std::shared_ptr<Context> ctx, uint64_t region_id,
                                    std::vector<pb::common::Peer> peers) = 0;
@@ -62,6 +63,7 @@ class RaftKvEngine : public Engine, public RaftControlAble {
                         std::shared_ptr<EventListenerCollection> listeners) override;
   butil::Status ChangeNode(std::shared_ptr<Context> ctx, uint64_t region_id,
                            std::vector<pb::common::Peer> peers) override;
+  butil::Status StopNode(std::shared_ptr<Context> ctx, uint64_t region_id) override;
   butil::Status DestroyNode(std::shared_ptr<Context> ctx, uint64_t region_id) override;
   std::shared_ptr<RaftNode> GetNode(uint64_t region_id) override;
 

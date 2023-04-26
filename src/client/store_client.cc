@@ -104,6 +104,7 @@ void Sender(client::ServerInteractionPtr interaction, const std::string& method,
   butil::SplitString(FLAGS_raft_addrs, ',', &raft_addrs);
 
   for (int i = 0; i < round_num; ++i) {
+    DINGO_LOG(INFO) << "round: " << round_num;
     // Region operation
     if (method == "AddRegion") {
       client::SendAddRegion(interaction, FLAGS_region_id, FLAGS_raft_group, raft_addrs);

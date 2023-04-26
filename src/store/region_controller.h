@@ -55,9 +55,10 @@ class CreateRegionTask : public TaskRunnable {
 
   void Run() override;
 
-  static butil::Status ValidateCreateRegion(std::shared_ptr<StoreMetaManager> store_meta_manager, uint64_t region_id);
+  static butil::Status PreValidateCreateRegion(const pb::coordinator::RegionCmd& command);
 
  private:
+  static butil::Status ValidateCreateRegion(std::shared_ptr<StoreMetaManager> store_meta_manager, uint64_t region_id);
   static butil::Status CreateRegion(std::shared_ptr<Context> ctx, store::RegionPtr region,
                                     uint64_t split_from_region_id);
 
@@ -73,10 +74,11 @@ class DeleteRegionTask : public TaskRunnable {
 
   void Run() override;
 
-  static butil::Status ValidateDeleteRegion(std::shared_ptr<StoreMetaManager> /*store_meta_manager*/,
-                                            store::RegionPtr region);
+  static butil::Status PreValidateDeleteRegion(const pb::coordinator::RegionCmd& command);
 
  private:
+  static butil::Status ValidateDeleteRegion(std::shared_ptr<StoreMetaManager> /*store_meta_manager*/,
+                                            store::RegionPtr region);
   static butil::Status DeleteRegion(std::shared_ptr<Context> ctx, uint64_t region_id);
 
   std::shared_ptr<Context> ctx_;
@@ -91,10 +93,11 @@ class SplitRegionTask : public TaskRunnable {
 
   void Run() override;
 
-  static butil::Status ValidateSplitRegion(std::shared_ptr<StoreRegionMeta> store_region_meta,
-                                           const pb::coordinator::SplitRequest& split_request);
+  static butil::Status PreValidateSplitRegion(const pb::coordinator::RegionCmd& command);
 
  private:
+  static butil::Status ValidateSplitRegion(std::shared_ptr<StoreRegionMeta> store_region_meta,
+                                           const pb::coordinator::SplitRequest& split_request);
   butil::Status SplitRegion();
 
   std::shared_ptr<Context> ctx_;
@@ -109,10 +112,12 @@ class ChangeRegionTask : public TaskRunnable {
 
   void Run() override;
 
+  static butil::Status PreValidateChangeRegion(const pb::coordinator::RegionCmd& command);
+
+ private:
   static butil::Status ValidateChangeRegion(std::shared_ptr<StoreMetaManager> store_meta_manager,
                                             const pb::common::RegionDefinition& region_definition);
 
- private:
   static butil::Status ChangeRegion(std::shared_ptr<Context> ctx,
                                     const pb::common::RegionDefinition& region_definition);
 
@@ -135,10 +140,63 @@ class SnapshotRegionTask : public TaskRunnable {
   std::shared_ptr<pb::coordinator::RegionCmd> region_cmd_;
 };
 
-class RegionControlExecutor {
+// Clean region zombie, free region meta resource.
+class PurgeRegionTask : public TaskRunnable {
  public:
-  explicit RegionControlExecutor(uint64_t region_id) : region_id_(region_id), queue_id_({0}) {}
-  ~RegionControlExecutor() = default;
+  PurgeRegionTask(std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> region_cmd)
+      : ctx_(ctx), region_cmd_(region_cmd) {}
+  ~PurgeRegionTask() override = default;
+
+  void Run() override;
+
+  static butil::Status PreValidatePurgeRegion(const pb::coordinator::RegionCmd& command);
+
+ private:
+  static butil::Status ValidatePurgeRegion(store::RegionPtr region);
+  static butil::Status PurgeRegion(std::shared_ptr<Context> ctx, uint64_t region_id);
+
+  std::shared_ptr<Context> ctx_;
+  std::shared_ptr<pb::coordinator::RegionCmd> region_cmd_;
+};
+
+// Stop raft peer
+class StopRegionTask : public TaskRunnable {
+ public:
+  StopRegionTask(std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> region_cmd)
+      : ctx_(ctx), region_cmd_(region_cmd) {}
+  ~StopRegionTask() override = default;
+
+  void Run() override;
+
+  static butil::Status PreValidateStopRegion(const pb::coordinator::RegionCmd& command);
+
+ private:
+  static butil::Status ValidateStopRegion(store::RegionPtr region);
+  static butil::Status StopRegion(std::shared_ptr<Context> ctx, uint64_t region_id);
+
+  std::shared_ptr<Context> ctx_;
+  std::shared_ptr<pb::coordinator::RegionCmd> region_cmd_;
+};
+
+class DestroyRegionExecutorTask : public TaskRunnable {
+ public:
+  DestroyRegionExecutorTask(std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> region_cmd)
+      : ctx_(ctx), region_cmd_(region_cmd) {}
+  ~DestroyRegionExecutorTask() override = default;
+
+  void Run() override;
+
+ private:
+  static butil::Status DestroyRegionExecutor(std::shared_ptr<Context> ctx, uint64_t region_id);
+
+  std::shared_ptr<Context> ctx_;
+  std::shared_ptr<pb::coordinator::RegionCmd> region_cmd_;
+};
+
+class ControlExecutor {
+ public:
+  explicit ControlExecutor() : queue_id_({0}) {}
+  virtual ~ControlExecutor() = default;
 
   bool Init();
 
@@ -147,8 +205,16 @@ class RegionControlExecutor {
   void Stop();
 
  private:
-  uint64_t region_id_;
   bthread::ExecutionQueueId<TaskRunnable*> queue_id_;
+};
+
+class RegionControlExecutor : public ControlExecutor {
+ public:
+  explicit RegionControlExecutor(uint64_t region_id) : region_id_(region_id) {}
+  ~RegionControlExecutor() override = default;
+
+ private:
+  uint64_t region_id_;
 };
 
 class RegionCommandManager : public TransformKvAble {
@@ -202,22 +268,36 @@ class RegionController {
   bool Recover();
   void Destroy();
 
+  bool RegisterExecutor(uint64_t region_id);
+  void UnRegisterExecutor(uint64_t region_id);
+
   butil::Status DispatchRegionControlCommand(std::shared_ptr<Context> ctx,
                                              std::shared_ptr<pb::coordinator::RegionCmd> command);
 
-  using TaskBuildFunc =
-      std::function<TaskRunnable*(std::shared_ptr<Context>, std::shared_ptr<pb::coordinator::RegionCmd>)>;
-  static std::map<pb::coordinator::RegionCmdType, TaskBuildFunc> task_builders;
+  // For pre validate
+  using ValidateFunc = std::function<butil::Status(const pb::coordinator::RegionCmd&)>;
+  using ValidaterMap = std::map<pb::coordinator::RegionCmdType, ValidateFunc>;
+  // For pre validate
+  static ValidaterMap validaters;
+
+  static ValidateFunc GetValidater(pb::coordinator::RegionCmdType);
 
  private:
-  bool RegisterExecutor(uint64_t region_id);
-
   std::shared_ptr<RegionControlExecutor> GetRegionControlExecutor(uint64_t region_id);
   butil::Status InnerDispatchRegionControlCommand(std::shared_ptr<Context> ctx,
                                                   std::shared_ptr<pb::coordinator::RegionCmd> command);
 
   bthread_mutex_t mutex_;
   std::unordered_map<uint64_t, std::shared_ptr<RegionControlExecutor>> executors_;
+
+  // When have no regoin executor, used this executorm, like PURGE.
+  std::shared_ptr<ControlExecutor> share_executor_;
+
+  // task builder
+  using TaskBuildFunc =
+      std::function<TaskRunnable*(std::shared_ptr<Context>, std::shared_ptr<pb::coordinator::RegionCmd>)>;
+  using TaskBuilderMap = std::map<pb::coordinator::RegionCmdType, TaskBuildFunc>;
+  static TaskBuilderMap task_builders;
 };
 
 }  // namespace dingodb

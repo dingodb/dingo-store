@@ -68,8 +68,7 @@ bool MetaReader::Scan(std::shared_ptr<Snapshot> snapshot, const std::string& pre
     DINGO_LOG(ERROR) << "Meta scan failed, errcode: " << status.error_code() << " " << status.error_str();
     return false;
   }
-  DINGO_LOG(INFO) << "Scan meta data, prefix: " << Helper::StringToHex(prefix) << "-"
-                  << Helper::StringToHex(prefix_next) << ": " << kvs.size();
+  DINGO_LOG(DEBUG) << "Scan meta data, prefix: " << prefix << " count: " << kvs.size();
 
   return true;
 }
