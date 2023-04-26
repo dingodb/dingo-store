@@ -170,9 +170,9 @@ class RawRocksEngine : public RawEngine {
     butil::Status KvScan(std::shared_ptr<dingodb::Snapshot> snapshot, const std::string& start_key,
                          const std::string& end_key, std::vector<pb::common::KeyValue>& kvs) override;
 
-    butil::Status KvCount(const std::string& start_key, const std::string& end_key, int64_t& count) override;
+    butil::Status KvCount(const std::string& start_key, const std::string& end_key, uint64_t& count) override;
     butil::Status KvCount(std::shared_ptr<dingodb::Snapshot> snapshot, const std::string& start_key,
-                          const std::string& end_key, int64_t& count) override;
+                          const std::string& end_key, uint64_t& count) override;
 
     butil::Status KvCount(const pb::common::RangeWithOptions& range, uint64_t* count) override;
     butil::Status KvCount(std::shared_ptr<dingodb::Snapshot> snapshot, const pb::common::RangeWithOptions& range,
@@ -245,7 +245,7 @@ class RawRocksEngine : public RawEngine {
     SstFileWriter& operator=(SstFileWriter&& rhs) = delete;
 
     butil::Status SaveFile(const std::vector<pb::common::KeyValue>& kvs, const std::string& filename);
-    butil::Status SaveFile(std::shared_ptr<Iterator> iter, const std::string& filename);
+    butil::Status SaveFile(std::shared_ptr<dingodb::Iterator> iter, const std::string& filename);
 
     uint64_t GetSize() { return sst_writer_->FileSize(); }
 
@@ -289,13 +289,16 @@ class RawRocksEngine : public RawEngine {
   std::shared_ptr<dingodb::Snapshot> NewSnapshot() override;
   std::shared_ptr<RawEngine::Reader> NewReader(const std::string& cf_name) override;
   std::shared_ptr<RawEngine::Writer> NewWriter(const std::string& cf_name) override;
-  std::shared_ptr<Iterator> NewIterator(const std::string& cf_name, IteratorOptions options);
-  std::shared_ptr<Iterator> NewIterator(const std::string& cf_name, std::shared_ptr<Snapshot> snapshot,
-                                        IteratorOptions options);
+  std::shared_ptr<dingodb::Iterator> NewIterator(const std::string& cf_name, IteratorOptions options) override;
+  std::shared_ptr<dingodb::Iterator> NewIterator(const std::string& cf_name, std::shared_ptr<Snapshot> snapshot,
+                                                 IteratorOptions options);
   std::shared_ptr<SstFileWriter> NewSstFileWriter();
   std::shared_ptr<Checkpoint> NewCheckpoint();
 
   std::shared_ptr<ColumnFamily> GetColumnFamily(const std::string& cf_name);
+
+  std::vector<uint64_t> GetApproximateSizes(const std::string& cf_name,
+                                            std::vector<pb::common::Range>& ranges) override;
 
  private:
   bool InitCfConfig(const std::vector<std::string>& column_family);

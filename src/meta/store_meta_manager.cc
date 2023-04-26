@@ -37,6 +37,7 @@ std::shared_ptr<Region> Region::New(const pb::common::RegionDefinition& definiti
 }
 
 std::string Region::Serialize() { return inner_region_.SerializeAsString(); }
+
 void Region::DeSerialize(const std::string& data) {
   inner_region_.ParsePartialFromArray(data.data(), data.size());
   state_.store(inner_region_.state());
@@ -303,6 +304,22 @@ std::vector<store::RegionPtr> StoreRegionMeta::GetAllAliveRegion() {
 
   if (regions_.GetAllValues(regions, [](store::RegionPtr region) -> bool {
         return region->State() != pb::common::StoreRegionState::DELETED;
+      }) < 0) {
+    DINGO_LOG(ERROR) << "Get all regions failed!";
+    return regions;
+  }
+
+  return regions;
+}
+
+std::vector<store::RegionPtr> StoreRegionMeta::GetAllMetricsRegion() {
+  std::vector<store::RegionPtr> regions;
+  regions.reserve(regions_.Size());
+
+  if (regions_.GetAllValues(regions, [](store::RegionPtr region) -> bool {
+        return region->State() != pb::common::StoreRegionState::NORMAL ||
+               region->State() != pb::common::StoreRegionState::SPLITTING ||
+               region->State() != pb::common::StoreRegionState::MERGING;
       }) < 0) {
     DINGO_LOG(ERROR) << "Get all regions failed!";
     return regions;

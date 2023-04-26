@@ -21,6 +21,7 @@
 #include "engine/raw_engine.h"
 #include "event/event.h"
 #include "meta/store_meta_manager.h"
+#include "metrics/store_metrics_manager.h"
 #include "proto/error.pb.h"
 #include "proto/store.pb.h"
 #include "proto/store_internal.pb.h"
@@ -34,6 +35,7 @@ class RaftControlAble {
 
   virtual butil::Status AddNode(std::shared_ptr<Context> ctx, store::RegionPtr region,
                                 std::shared_ptr<pb::store_internal::RaftMeta> raft_meta,
+                                store::RegionMetricsPtr region_metrics,
                                 std::shared_ptr<EventListenerCollection> listeners) = 0;
   virtual butil::Status StopNode(std::shared_ptr<Context> ctx, uint64_t region_id) = 0;
   virtual butil::Status DestroyNode(std::shared_ptr<Context> ctx, uint64_t region_id) = 0;
@@ -59,7 +61,7 @@ class RaftKvEngine : public Engine, public RaftControlAble {
   std::shared_ptr<RawEngine> GetRawEngine() override;
 
   butil::Status AddNode(std::shared_ptr<Context> ctx, store::RegionPtr region,
-                        std::shared_ptr<pb::store_internal::RaftMeta> raft_meta,
+                        std::shared_ptr<pb::store_internal::RaftMeta> raft_meta, store::RegionMetricsPtr region_metrics,
                         std::shared_ptr<EventListenerCollection> listeners) override;
   butil::Status ChangeNode(std::shared_ptr<Context> ctx, uint64_t region_id,
                            std::vector<pb::common::Peer> peers) override;
@@ -84,7 +86,7 @@ class RaftKvEngine : public Engine, public RaftControlAble {
                          std::vector<pb::common::KeyValue>& kvs) override;
 
     butil::Status KvCount(std::shared_ptr<Context> ctx, const std::string& start_key, const std::string& end_key,
-                          int64_t& count) override;
+                          uint64_t& count) override;
 
     butil::Status KvCount(std::shared_ptr<Context> ctx, const pb::common::RangeWithOptions& range,
                           uint64_t* count) override;

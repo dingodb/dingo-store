@@ -121,7 +121,7 @@ std::vector<std::shared_ptr<dingodb::RaftNode>> BootRaftGroup(std::vector<Peer>&
     auto region = peer.region;
     // build state machine
     auto raft_meta = dingodb::StoreRaftMeta::NewRaftMeta(region->Id());
-    auto* state_machine = new dingodb::StoreStateMachine(nullptr, region, raft_meta, nullptr);
+    auto* state_machine = new dingodb::StoreStateMachine(nullptr, region, raft_meta, nullptr, nullptr);
     if (!state_machine->Init()) {
       std::cout << "Init state machine failed";
       return {};

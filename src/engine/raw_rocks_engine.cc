@@ -298,14 +298,13 @@ std::shared_ptr<RawEngine::Writer> RawRocksEngine::NewWriter(const std::string& 
   return std::make_shared<Writer>(txn_db_, column_family);
 }
 
-std::shared_ptr<RawRocksEngine::Iterator> RawRocksEngine::NewIterator(const std::string& cf_name,
-                                                                      IteratorOptions options) {
+std::shared_ptr<dingodb::Iterator> RawRocksEngine::NewIterator(const std::string& cf_name, IteratorOptions options) {
   return NewIterator(cf_name, NewSnapshot(), options);
 }
 
-std::shared_ptr<RawRocksEngine::Iterator> RawRocksEngine::NewIterator(const std::string& cf_name,
-                                                                      std::shared_ptr<Snapshot> snapshot,
-                                                                      IteratorOptions options) {
+std::shared_ptr<dingodb::Iterator> RawRocksEngine::NewIterator(const std::string& cf_name,
+                                                               std::shared_ptr<Snapshot> snapshot,
+                                                               IteratorOptions options) {
   auto column_family = GetColumnFamily(cf_name);
   if (column_family == nullptr) {
     return nullptr;
@@ -349,6 +348,28 @@ std::shared_ptr<RawRocksEngine::ColumnFamily> RawRocksEngine::GetColumnFamily(co
   }
 
   return iter->second;
+}
+
+std::vector<uint64_t> RawRocksEngine::GetApproximateSizes(const std::string& cf_name,
+                                                          std::vector<pb::common::Range>& ranges) {
+  rocksdb::SizeApproximationOptions options;
+
+  rocksdb::Range inner_ranges[ranges.size()];
+  for (int i = 0; i < ranges.size(); ++i) {
+    inner_ranges[i].start = ranges[i].start_key();
+    inner_ranges[i].limit = ranges[i].end_key();
+  }
+
+  uint64_t sizes[ranges.size()];
+  txn_db_->GetApproximateSizes(options, GetColumnFamily(cf_name)->GetHandle(), inner_ranges, ranges.size(), sizes);
+
+  std::vector<uint64_t> result;
+  result.reserve(ranges.size());
+  for (int i = 0; i < ranges.size(); ++i) {
+    result.push_back(sizes[i]);
+  }
+
+  return result;
 }
 
 template <typename T>
@@ -732,20 +753,20 @@ butil::Status RawRocksEngine::Reader::KvScan(std::shared_ptr<dingodb::Snapshot> 
 }
 
 butil::Status RawRocksEngine::Reader::KvCount(const std::string& start_key, const std::string& end_key,
-                                              int64_t& count) {
+                                              uint64_t& count) {
   auto snapshot = std::make_shared<RocksSnapshot>(txn_db_->GetSnapshot(), txn_db_);
   return KvCount(snapshot, start_key, end_key, count);
 }
 
 butil::Status RawRocksEngine::Reader::KvCount(std::shared_ptr<dingodb::Snapshot> snapshot, const std::string& start_key,
-                                              const std::string& end_key, int64_t& count) {
+                                              const std::string& end_key, uint64_t& count) {
   if (BAIDU_UNLIKELY(start_key.empty())) {
-    DINGO_LOG(ERROR) << butil::StringPrintf("start_key empty  not support");
+    DINGO_LOG(ERROR) << butil::StringPrintf("start_key empty not support");
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
 
   if (BAIDU_UNLIKELY(end_key.empty())) {
-    DINGO_LOG(ERROR) << butil::StringPrintf("end_key empty  not support");
+    DINGO_LOG(ERROR) << butil::StringPrintf("end_key empty not support");
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
 
@@ -768,6 +789,7 @@ butil::Status RawRocksEngine::Reader::KvCount(const pb::common::RangeWithOptions
 
   return KvCount(snapshot, range, count);
 }
+
 butil::Status RawRocksEngine::Reader::KvCount(std::shared_ptr<dingodb::Snapshot> snapshot,
                                               const pb::common::RangeWithOptions& range, uint64_t* count) {
   if (BAIDU_UNLIKELY(range.range().start_key().empty() || range.range().end_key().empty())) {
@@ -1294,7 +1316,7 @@ butil::Status RawRocksEngine::SstFileWriter::SaveFile(const std::vector<pb::comm
     return butil::Status(status.code(), status.ToString());
   }
 
-  for (auto& kv : kvs) {
+  for (const auto& kv : kvs) {
     status = sst_writer_->Put(kv.key(), kv.value());
     if (!status.ok()) {
       return butil::Status(status.code(), status.ToString());
@@ -1309,7 +1331,8 @@ butil::Status RawRocksEngine::SstFileWriter::SaveFile(const std::vector<pb::comm
   return butil::Status();
 }
 
-butil::Status RawRocksEngine::SstFileWriter::SaveFile(std::shared_ptr<Iterator> iter, const std::string& filename) {
+butil::Status RawRocksEngine::SstFileWriter::SaveFile(std::shared_ptr<dingodb::Iterator> iter,
+                                                      const std::string& filename) {
   auto status = sst_writer_->Open(filename);
   if (!status.ok()) {
     return butil::Status(status.code(), status.ToString());

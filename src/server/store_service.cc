@@ -832,6 +832,7 @@ void StoreServiceImpl::Debug(google::protobuf::RpcController* controller,
     for (auto& region : regions) {
       response->mutable_region_meta_details()->add_regions()->CopyFrom(region->InnerRegion());
     }
+
   } else if (request->type() == pb::store::DebugType::STORE_REGION_CONTROL_COMMAND) {
     std::vector<std::shared_ptr<pb::coordinator::RegionCmd>> commands;
     if (request->region_ids().empty()) {
@@ -848,6 +849,7 @@ void StoreServiceImpl::Debug(google::protobuf::RpcController* controller,
     for (auto& command : commands) {
       response->mutable_region_control_command()->add_region_cmds()->CopyFrom(*command);
     }
+
   } else if (request->type() == pb::store::DebugType::STORE_RAFT_META) {
     auto store_raft_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRaftMeta();
 
@@ -869,6 +871,22 @@ void StoreServiceImpl::Debug(google::protobuf::RpcController* controller,
 
     for (auto region_id : region_ids) {
       response->mutable_region_executor()->add_region_ids(region_id);
+    }
+
+  } else if (request->type() == pb::store::DebugType::STORE_REGION_METRICS) {
+    auto store_region_metrics = Server::GetInstance()->GetStoreMetricsManager()->GetStoreRegionMetrics();
+
+    std::vector<store::RegionMetricsPtr> region_metricses;
+    if (request->region_ids().empty()) {
+      region_metricses = store_region_metrics->GetAllMetrics();
+    } else {
+      for (auto region_id : request->region_ids()) {
+        region_metricses.push_back(store_region_metrics->GetMetrics(region_id));
+      }
+    }
+
+    for (auto& region_metrics : region_metricses) {
+      response->mutable_region_metrics()->add_region_metricses()->CopyFrom(region_metrics->InnerRegionMetrics());
     }
   }
 }

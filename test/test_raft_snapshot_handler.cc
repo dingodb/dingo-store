@@ -175,7 +175,7 @@ TEST_F(RaftSnapshotTest, RaftSnapshot) {
   snapshot_storage->close(snapshot_writer);
 
   // Count key before load snapshot
-  int64_t count = 0;
+  uint64_t count = 0;
   reader->KvCount(range->start_key(), range->end_key(), count);
   std::cout << "range key count: " << count << std::endl;
 

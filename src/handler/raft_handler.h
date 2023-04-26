@@ -28,7 +28,7 @@ class PutHandler : public BaseHandler {
  public:
   HandlerType GetType() override { return HandlerType::kPut; }
   void Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
-              const pb::raft::Request &req) override;
+              const pb::raft::Request &req, store::RegionMetricsPtr region_metrics) override;
 };
 
 // PutIfAbsentRequest
@@ -36,7 +36,7 @@ class PutIfAbsentHandler : public BaseHandler {
  public:
   HandlerType GetType() override { return HandlerType::kPutIfabsent; }
   void Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
-              const pb::raft::Request &req) override;
+              const pb::raft::Request &req, store::RegionMetricsPtr region_metrics) override;
 };
 
 // DeleteRangeRequest
@@ -44,7 +44,7 @@ class DeleteRangeHandler : public BaseHandler {
  public:
   HandlerType GetType() override { return HandlerType::kDeleteRange; }
   void Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
-              const pb::raft::Request &req) override;
+              const pb::raft::Request &req, store::RegionMetricsPtr region_metrics) override;
 };
 
 // DeleteBatchRequest
@@ -52,7 +52,7 @@ class DeleteBatchHandler : public BaseHandler {
  public:
   HandlerType GetType() override { return HandlerType::kDeleteBatch; }
   void Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
-              const pb::raft::Request &req) override;
+              const pb::raft::Request &req, store::RegionMetricsPtr region_metricss) override;
 };
 
 // SplitHandler
@@ -72,7 +72,7 @@ class SplitHandler : public BaseHandler {
 
   HandlerType GetType() override { return HandlerType::kSplit; }
   void Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
-              const pb::raft::Request &req) override;
+              const pb::raft::Request &req, store::RegionMetricsPtr region_metrics) override;
 };
 
 class RaftApplyHandlerFactory : public HandlerFactory {

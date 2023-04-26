@@ -1248,7 +1248,7 @@ TEST_F(RawRocksEngineTest, KvCount) {
   {
     std::string start_key;
     std::string end_key;
-    int64_t count = 0;
+    uint64_t count = 0;
 
     butil::Status ok = reader->KvCount(start_key, end_key, count);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_EMPTY);
@@ -1258,7 +1258,7 @@ TEST_F(RawRocksEngineTest, KvCount) {
   {
     std::string start_key = "key101";
     std::string end_key;
-    int64_t count = 0;
+    uint64_t count = 0;
 
     butil::Status ok = reader->KvCount(start_key, end_key, count);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_EMPTY);
@@ -1268,7 +1268,7 @@ TEST_F(RawRocksEngineTest, KvCount) {
   {
     std::string start_key = "key201";
     std::string end_key = "key204";
-    int64_t count = 0;
+    uint64_t count = 0;
 
     butil::Status ok = reader->KvCount(start_key, end_key, count);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);

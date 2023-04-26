@@ -21,6 +21,7 @@
 
 #include "common/context.h"
 #include "config/config.h"
+#include "engine/iterator.h"
 #include "engine/snapshot.h"
 #include "engine/write_data.h"
 #include "proto/common.pb.h"
@@ -76,9 +77,9 @@ class RawEngine {
     virtual butil::Status KvScan(std::shared_ptr<dingodb::Snapshot> snapshot, const std::string& start_key,
                                  const std::string& end_key, std::vector<pb::common::KeyValue>& kvs) = 0;
 
-    virtual butil::Status KvCount(const std::string& start_key, const std::string& end_key, int64_t& count) = 0;
+    virtual butil::Status KvCount(const std::string& start_key, const std::string& end_key, uint64_t& count) = 0;
     virtual butil::Status KvCount(std::shared_ptr<dingodb::Snapshot> snapshot, const std::string& start_key,
-                                  const std::string& end_key, int64_t& count) = 0;
+                                  const std::string& end_key, uint64_t& count) = 0;
 
     virtual butil::Status KvCount(const pb::common::RangeWithOptions& range, uint64_t* count) = 0;
     virtual butil::Status KvCount(std::shared_ptr<dingodb::Snapshot> snapshot,
@@ -127,6 +128,10 @@ class RawEngine {
   virtual std::shared_ptr<Snapshot> NewSnapshot() = 0;
   virtual std::shared_ptr<Reader> NewReader(const std::string& cf_name) = 0;
   virtual std::shared_ptr<RawEngine::Writer> NewWriter(const std::string& cf_name) = 0;
+  virtual std::shared_ptr<Iterator> NewIterator(const std::string& cf_name, IteratorOptions options) = 0;
+
+  virtual std::vector<uint64_t> GetApproximateSizes(const std::string& cf_name,
+                                                    std::vector<pb::common::Range>& ranges) = 0;
 
  protected:
   RawEngine() = default;

@@ -166,6 +166,61 @@ void SendSnapshot(ServerInteractionPtr interaction, uint64_t region_id) {
   interaction->SendRequest("StoreService", "Snapshot", request, response);
 }
 
+struct BatchPutGetParam {
+  uint64_t region_id;
+  int32_t req_num;
+  int32_t thread_no;
+  std::string prefix;
+  ServerInteractionPtr interaction;
+
+  std::map<std::string, std::shared_ptr<dingodb::pb::store::StoreService_Stub>> stubs;
+};
+
+void BatchPut(ServerInteractionPtr interaction, uint64_t region_id, const std::string& prefix, int req_num) {
+  std::vector<uint64_t> latencys;
+  for (int i = 0; i < req_num; ++i) {
+    std::string key = prefix + Helper::GenRandomStringV2(32);
+    std::string value = Helper::GenRandomString(256);
+    SendKvPut(interaction, region_id, key, value);
+    latencys.push_back(interaction->GetLatency());
+  }
+
+  int64_t sum = std::accumulate(latencys.begin(), latencys.end(), static_cast<uint64_t>(0));
+  DINGO_LOG(INFO) << "Put average latency: " << sum / latencys.size() << " us";
+}
+
+void TestBatchPut(ServerInteractionPtr interaction, uint64_t region_id, int thread_num, int req_num,
+                  const std::string& prefix) {
+  std::vector<bthread_t> tids;
+  tids.resize(thread_num);
+  for (int i = 0; i < thread_num; ++i) {
+    BatchPutGetParam* param = new BatchPutGetParam;
+    param->req_num = req_num;
+    param->region_id = region_id;
+    param->thread_no = i;
+    param->interaction = interaction;
+    param->prefix = prefix;
+
+    if (bthread_start_background(
+            &tids[i], nullptr,
+            [](void* arg) -> void* {
+              std::unique_ptr<BatchPutGetParam> param(static_cast<BatchPutGetParam*>(arg));
+
+              LOG(INFO) << "========thread: " << param->thread_no;
+              BatchPut(param->interaction, param->region_id, param->prefix, param->req_num);
+              return nullptr;
+            },
+            param) != 0) {
+      DINGO_LOG(ERROR) << "Fail to create bthread";
+      continue;
+    }
+  }
+
+  for (int i = 0; i < thread_num; ++i) {
+    bthread_join(tids[i], nullptr);
+  }
+}
+
 void BatchPutGet(ServerInteractionPtr interaction, uint64_t region_id, const std::string& prefix, int req_num) {
   auto dataset = Helper::GenDataset(prefix, req_num);
 
@@ -194,25 +249,6 @@ void BatchPutGet(ServerInteractionPtr interaction, uint64_t region_id, const std
   DINGO_LOG(INFO) << "Get average latency: " << sum / latencys.size() << " us";
 }
 
-struct BatchPutGetParam {
-  uint64_t region_id;
-  int32_t req_num;
-  int32_t thread_no;
-  std::string prefix;
-  ServerInteractionPtr interaction;
-
-  std::map<std::string, std::shared_ptr<dingodb::pb::store::StoreService_Stub>> stubs;
-};
-
-void* BatchPutGetRoutine(void* arg) {
-  std::unique_ptr<BatchPutGetParam> param(static_cast<BatchPutGetParam*>(arg));
-
-  DINGO_LOG(INFO) << "========thread: " << param->thread_no;
-  BatchPutGet(param->interaction, param->region_id, param->prefix, param->req_num);
-
-  return nullptr;
-}
-
 void TestBatchPutGet(ServerInteractionPtr interaction, uint64_t region_id, int thread_num, int req_num,
                      const std::string& prefix) {
   std::vector<bthread_t> tids;
@@ -225,7 +261,17 @@ void TestBatchPutGet(ServerInteractionPtr interaction, uint64_t region_id, int t
     param->interaction = interaction;
     param->prefix = prefix;
 
-    if (bthread_start_background(&tids[i], nullptr, BatchPutGetRoutine, param) != 0) {
+    if (bthread_start_background(
+            &tids[i], nullptr,
+            [](void* arg) -> void* {
+              std::unique_ptr<BatchPutGetParam> param(static_cast<BatchPutGetParam*>(arg));
+
+              LOG(INFO) << "========thread: " << param->thread_no;
+              BatchPutGet(param->interaction, param->region_id, param->prefix, param->req_num);
+
+              return nullptr;
+            },
+            param) != 0) {
       DINGO_LOG(ERROR) << "Fail to create bthread";
       continue;
     }

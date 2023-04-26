@@ -16,12 +16,66 @@
 
 #include <cstdint>
 #include <memory>
+#include <string>
+#include <vector>
 
+#include "butil/strings/stringprintf.h"
+#include "common/constant.h"
 #include "common/helper.h"
+#include "common/logging.h"
 #include "config/config_manager.h"
+#include "proto/common.pb.h"
 #include "server/server.h"
 
 namespace dingodb {
+
+namespace store {
+
+std::string RegionMetrics::Serialize() { return inner_region_metrics_.SerializeAsString(); }
+
+void RegionMetrics::DeSerialize(const std::string& data) {
+  inner_region_metrics_.ParsePartialFromArray(data.data(), data.size());
+}
+
+void RegionMetrics::UpdateMaxAndMinKey(const PbKeyValues& kvs) {
+  for (const auto& kv : kvs) {
+    if (kv.key() < inner_region_metrics_.min_key()) {
+      inner_region_metrics_.set_min_key(kv.key());
+    } else if (kv.key() > inner_region_metrics_.max_key()) {
+      inner_region_metrics_.set_max_key(kv.key());
+    }
+  }
+}
+
+void RegionMetrics::UpdateMaxAndMinKeyPolicy(const PbKeys& keys) {
+  for (const auto& key : keys) {
+    if (key == inner_region_metrics_.min_key()) {
+      need_update_min_key_ = true;
+    } else if (key == inner_region_metrics_.max_key()) {
+      need_update_max_key_ = true;
+    }
+  }
+}
+
+void RegionMetrics::UpdateMaxAndMinKeyPolicy(const PbRangeWithOptionses& ranges) {
+  for (const auto& range : ranges) {
+    if (range.range().start_key() <= inner_region_metrics_.min_key() &&
+        inner_region_metrics_.min_key() < range.range().end_key()) {
+      need_update_min_key_ = true;
+    }
+    if (range.range().start_key() <= inner_region_metrics_.max_key() &&
+        inner_region_metrics_.max_key() < range.range().end_key()) {
+      need_update_max_key_ = true;
+    }
+  }
+}
+
+void RegionMetrics::UpdateMaxAndMinKeyPolicy() {
+  need_update_min_key_ = true;
+  need_update_max_key_ = true;
+}
+
+}  // namespace store
 
 bool StoreMetrics::Init() { return CollectMetrics(); }
 
@@ -54,21 +108,125 @@ bool StoreRegionMetrics::Init() {
   return true;
 }
 
-bool StoreRegionMetrics::CollectMetrics() { return true; }
+std::string StoreRegionMetrics::GetRegionMinKey(store::RegionPtr region) {
+  IteratorOptions options;
+  auto iter = raw_engine_->NewIterator(Constant::kStoreDataCF, options);
+  iter->Seek(region->Range().start_key());
 
-std::shared_ptr<pb::common::RegionMetrics> StoreRegionMetrics::NewMetrics(uint64_t region_id) {
-  auto metrics = std::make_shared<pb::common::RegionMetrics>();
-  metrics->set_id(region_id);
+  if (!iter->Valid()) {
+    return "";
+  }
+
+  auto min_key = iter->Key();
+  return std::string(min_key.data(), min_key.size());
+}
+
+std::string StoreRegionMetrics::GetRegionMaxKey(store::RegionPtr region) {
+  IteratorOptions options;
+  auto iter = raw_engine_->NewIterator(Constant::kStoreDataCF, options);
+  iter->SeekForPrev(region->Range().end_key());
+
+  if (!iter->Valid()) {
+    return "";
+  }
+
+  auto max_key = iter->Key();
+  return std::string(max_key.data(), max_key.size());
+}
+
+uint64_t StoreRegionMetrics::GetRegionKeyCount(store::RegionPtr region) {
+  auto reader = raw_engine_->NewReader(Constant::kStoreDataCF);
+
+  uint64_t count = 0;
+  reader->KvCount(region->Range().start_key(), region->Range().end_key(), count);
+
+  return count;
+}
+
+std::vector<uint64_t> StoreRegionMetrics::GetRegionApproximateSize(std::vector<store::RegionPtr> regions) {
+  std::vector<pb::common::Range> ranges;
+  ranges.reserve(regions.size());
+  for (const auto& region : regions) {
+    ranges.push_back(region->Range());
+  }
+
+  return raw_engine_->GetApproximateSizes(Constant::kStoreDataCF, ranges);
+}
+
+bool StoreRegionMetrics::CollectMetrics() {
+  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+  auto store_raft_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRaftMeta();
+  auto region_metricses = GetAllMetrics();
+
+  std::vector<store::RegionPtr> need_collect_regions;
+  for (const auto& region_metrics : region_metricses) {
+    auto raft_meta = store_raft_meta->GetRaftMeta(region_metrics->Id());
+    uint64_t applied_index = raft_meta->applied_index();
+    if (region_metrics->LastLogIndex() >= applied_index) {
+      continue;
+    }
+
+    region_metrics->SetLastLogIndex(applied_index);
+
+    auto region = store_region_meta->GetRegion(region_metrics->Id());
+    need_collect_regions.push_back(region);
+
+    uint64_t start_time = Helper::TimestampMs();
+    // Get min key
+    bool is_collect_min_key = false;
+    if (region_metrics->NeedUpdateMinKey()) {
+      is_collect_min_key = true;
+      region_metrics->SetNeedUpdateMinKey(false);
+      region_metrics->SetMinKey(GetRegionMinKey(region));
+    }
+    // Get max key
+    bool is_collect_max_key = false;
+    if (region_metrics->NeedUpdateMaxKey()) {
+      is_collect_max_key = true;
+      region_metrics->SetNeedUpdateMaxKey(false);
+      region_metrics->SetMaxKey(GetRegionMaxKey(region));
+    }
+
+    // Get region key counts
+    region_metrics->SetKeyCount(GetRegionKeyCount(region));
+
+    DINGO_LOG(DEBUG) << butil::StringPrintf(
+        "Collect region metrics, region %lu min_key[%s] max_key[%s] key_count[true] region_size[true] elapsed[%lu ms]",
+        region->Id(), is_collect_min_key ? "true" : "false", is_collect_max_key ? "true" : "false",
+        Helper::TimestampMs() - start_time);
+
+    meta_writer_->Put(TransformToKv(region_metrics.get()));
+  }
+
+  // Get approximate size
+  uint64_t start_time = Helper::TimestampMs();
+  auto sizes = GetRegionApproximateSize(need_collect_regions);
+  for (int i = 0; i < sizes.size(); ++i) {
+    auto region_metrics = GetMetrics(need_collect_regions[i]->Id());
+    if (region_metrics != nullptr) {
+      region_metrics->SetRegionSize(sizes[i]);
+    }
+  }
+
+  DINGO_LOG(DEBUG) << butil::StringPrintf("Get region approximate size elapsed[%lu ms]",
+                                          Helper::TimestampMs() - start_time);
+
+  return true;
+}
+
+store::RegionMetricsPtr StoreRegionMetrics::NewMetrics(uint64_t region_id) {
+  auto metrics = std::make_shared<store::RegionMetrics>();
+  metrics->SetId(region_id);
   return metrics;
 }
 
-void StoreRegionMetrics::AddMetrics(std::shared_ptr<pb::common::RegionMetrics> metrics) {
+void StoreRegionMetrics::AddMetrics(store::RegionMetricsPtr metrics) {
   {
     BAIDU_SCOPED_LOCK(mutex_);
-    metricses_.insert_or_assign(metrics->id(), metrics);
+    metricses_.insert_or_assign(metrics->Id(), metrics);
   }
 
-  meta_writer_->Put(TransformToKv(&metrics));
+  meta_writer_->Put(TransformToKv(metrics.get()));
 }
 
 void StoreRegionMetrics::DeleteMetrics(uint64_t region_id) {
@@ -80,7 +238,7 @@ void StoreRegionMetrics::DeleteMetrics(uint64_t region_id) {
   meta_writer_->Delete(GenKey(region_id));
 }
 
-std::shared_ptr<pb::common::RegionMetrics> StoreRegionMetrics::GetMetrics(uint64_t region_id) {
+store::RegionMetricsPtr StoreRegionMetrics::GetMetrics(uint64_t region_id) {
   BAIDU_SCOPED_LOCK(mutex_);
   auto it = metricses_.find(region_id);
   if (it == metricses_.end()) {
@@ -90,9 +248,9 @@ std::shared_ptr<pb::common::RegionMetrics> StoreRegionMetrics::GetMetrics(uint64
   return it->second;
 }
 
-std::vector<std::shared_ptr<pb::common::RegionMetrics>> StoreRegionMetrics::GetAllMetrics() {
+std::vector<store::RegionMetricsPtr> StoreRegionMetrics::GetAllMetrics() {
   BAIDU_SCOPED_LOCK(mutex_);
-  std::vector<std::shared_ptr<pb::common::RegionMetrics>> metricses;
+  std::vector<store::RegionMetricsPtr> metricses;
   metricses.reserve(metricses_.size());
   for (auto [_, metrics] : metricses_) {
     metricses.push_back(metrics);
@@ -102,10 +260,10 @@ std::vector<std::shared_ptr<pb::common::RegionMetrics>> StoreRegionMetrics::GetA
 }
 
 std::shared_ptr<pb::common::KeyValue> StoreRegionMetrics::TransformToKv(void* obj) {
-  auto region_metrics = *static_cast<std::shared_ptr<pb::common::RegionMetrics>*>(obj);
-  std::shared_ptr<pb::common::KeyValue> kv = std::make_shared<pb::common::KeyValue>();
-  kv->set_key(GenKey(region_metrics->id()));
-  kv->set_value(region_metrics->SerializeAsString());
+  auto* region_metrics = static_cast<store::RegionMetrics*>(obj);
+  auto kv = std::make_shared<pb::common::KeyValue>();
+  kv->set_key(GenKey(region_metrics->Id()));
+  kv->set_value(region_metrics->Serialize());
 
   return kv;
 }
@@ -114,8 +272,8 @@ void StoreRegionMetrics::TransformFromKv(const std::vector<pb::common::KeyValue>
   BAIDU_SCOPED_LOCK(mutex_);
   for (const auto& kv : kvs) {
     uint64_t region_id = ParseRegionId(kv.key());
-    auto region_metrics = std::make_shared<pb::common::RegionMetrics>();
-    region_metrics->ParsePartialFromArray(kv.value().data(), kv.value().size());
+    auto region_metrics = std::make_shared<store::RegionMetrics>();
+    region_metrics->DeSerialize(kv.value());
     metricses_.insert_or_assign(region_id, region_metrics);
   }
 }

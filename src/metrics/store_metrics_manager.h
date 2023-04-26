@@ -15,18 +15,83 @@
 #ifndef DINGODB_STROE_METRICS_MANAGER_H_
 #define DINGODB_STROE_METRICS_MANAGER_H_
 
+#include <sys/types.h>
+
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "common/constant.h"
+#include "engine/raw_engine.h"
 #include "meta/meta_reader.h"
 #include "meta/meta_writer.h"
+#include "meta/store_meta_manager.h"
 #include "meta/transform_kv_able.h"
 #include "proto/common.pb.h"
 #include "proto/store_internal.pb.h"
 
 namespace dingodb {
+
+namespace store {
+
+class RegionMetrics {
+ public:
+  RegionMetrics() : last_log_index_(0), need_update_min_key_(true), need_update_max_key_(true) {}
+  ~RegionMetrics() = default;
+
+  std::string Serialize();
+  void DeSerialize(const std::string& data);
+
+  uint64_t LastLogIndex() const { return last_log_index_; }
+  void SetLastLogIndex(uint64_t last_log_index) { last_log_index_ = last_log_index; }
+
+  bool NeedUpdateMinKey() const { return need_update_min_key_; }
+  void SetNeedUpdateMinKey(bool need_update_min_key) { need_update_min_key_ = need_update_min_key; }
+
+  bool NeedUpdateMaxKey() const { return need_update_max_key_; }
+  void SetNeedUpdateMaxKey(bool need_update_max_key) { need_update_max_key_ = need_update_max_key; }
+
+  uint64_t Id() const { return inner_region_metrics_.id(); }
+  void SetId(uint64_t region_id) { inner_region_metrics_.set_id(region_id); }
+
+  const std::string& MinKey() const { return inner_region_metrics_.min_key(); }
+  void SetMinKey(const std::string& min_key) { inner_region_metrics_.set_min_key(min_key); }
+
+  const std::string& MaxKey() const { return inner_region_metrics_.max_key(); }
+  void SetMaxKey(const std::string& max_key) { inner_region_metrics_.set_max_key(max_key); }
+
+  uint64_t RegionSize() const { return inner_region_metrics_.region_size(); }
+  void SetRegionSize(uint64_t region_size) { inner_region_metrics_.set_region_size(region_size); }
+
+  uint64_t KeyCount() const { return inner_region_metrics_.row_count(); }
+  void SetKeyCount(uint64_t key_count) { inner_region_metrics_.set_row_count(key_count); }
+
+  const pb::common::RegionMetrics& InnerRegionMetrics() { return inner_region_metrics_; }
+
+  using PbKeyValues = google::protobuf::RepeatedPtrField<pb::common::KeyValue>;
+  using PbKeys = google::protobuf::RepeatedPtrField<std::string>;
+  using PbRangeWithOptionses = google::protobuf::RepeatedPtrField<pb::common::RangeWithOptions>;
+
+  void UpdateMaxAndMinKey(const PbKeyValues& kvs);
+  void UpdateMaxAndMinKeyPolicy(const PbKeys& keys);
+  void UpdateMaxAndMinKeyPolicy(const PbRangeWithOptionses& ranges);
+  void UpdateMaxAndMinKeyPolicy();
+
+ private:
+  // update metrics until raft log index
+  uint64_t last_log_index_;
+  // need update region min key
+  bool need_update_min_key_;
+  // need update region max key
+  bool need_update_max_key_;
+
+  pb::common::RegionMetrics inner_region_metrics_;
+};
+
+using RegionMetricsPtr = std::shared_ptr<RegionMetrics>;
+
+}  // namespace store
 
 class StoreMetrics {
  public:
@@ -48,8 +113,12 @@ class StoreMetrics {
 
 class StoreRegionMetrics : public TransformKvAble {
  public:
-  StoreRegionMetrics(std::shared_ptr<MetaReader> meta_reader, std::shared_ptr<MetaWriter> meta_writer)
-      : TransformKvAble(Constant::kStoreRegionMetricsPrefix), meta_reader_(meta_reader), meta_writer_(meta_writer) {
+  StoreRegionMetrics(std::shared_ptr<RawEngine> raw_engine, std::shared_ptr<MetaReader> meta_reader,
+                     std::shared_ptr<MetaWriter> meta_writer)
+      : TransformKvAble(Constant::kStoreRegionMetricsPrefix),
+        raw_engine_(raw_engine),
+        meta_reader_(meta_reader),
+        meta_writer_(meta_writer) {
     bthread_mutex_init(&mutex_, nullptr);
   }
   ~StoreRegionMetrics() override = default;
@@ -61,32 +130,39 @@ class StoreRegionMetrics : public TransformKvAble {
 
   bool CollectMetrics();
 
-  static std::shared_ptr<pb::common::RegionMetrics> NewMetrics(uint64_t region_id);
+  static store::RegionMetricsPtr NewMetrics(uint64_t region_id);
 
-  void AddMetrics(std::shared_ptr<pb::common::RegionMetrics> metrics);
+  void AddMetrics(store::RegionMetricsPtr metrics);
   void DeleteMetrics(uint64_t region_id);
-  std::shared_ptr<pb::common::RegionMetrics> GetMetrics(uint64_t region_id);
-  std::vector<std::shared_ptr<pb::common::RegionMetrics>> GetAllMetrics();
-
-  std::shared_ptr<pb::common::KeyValue> TransformToKv(void* obj) override;
-
-  void TransformFromKv(const std::vector<pb::common::KeyValue>& kvs) override;
+  store::RegionMetricsPtr GetMetrics(uint64_t region_id);
+  std::vector<store::RegionMetricsPtr> GetAllMetrics();
 
  private:
+  std::shared_ptr<pb::common::KeyValue> TransformToKv(void* obj) override;
+  void TransformFromKv(const std::vector<pb::common::KeyValue>& kvs) override;
+
+  std::string GetRegionMinKey(store::RegionPtr region);
+  std::string GetRegionMaxKey(store::RegionPtr region);
+  // Todo: later optimize
+  uint64_t GetRegionKeyCount(store::RegionPtr region);
+  std::vector<uint64_t> GetRegionApproximateSize(std::vector<store::RegionPtr> regions);
+
   // Read meta data from persistence storage.
   std::shared_ptr<MetaReader> meta_reader_;
   // Write meta data to persistence storage.
   std::shared_ptr<MetaWriter> meta_writer_;
 
+  std::shared_ptr<RawEngine> raw_engine_;
   bthread_mutex_t mutex_;
-  std::map<uint64_t, std::shared_ptr<pb::common::RegionMetrics>> metricses_;
+  std::map<uint64_t, store::RegionMetricsPtr> metricses_;
 };
 
 class StoreMetricsManager {
  public:
-  explicit StoreMetricsManager(std::shared_ptr<MetaReader> meta_reader, std::shared_ptr<MetaWriter> meta_writer)
+  explicit StoreMetricsManager(std::shared_ptr<RawEngine> raw_engine, std::shared_ptr<MetaReader> meta_reader,
+                               std::shared_ptr<MetaWriter> meta_writer)
       : store_metrics_(std::make_shared<StoreMetrics>()),
-        region_metrics_(std::make_shared<StoreRegionMetrics>(meta_reader, meta_writer)) {}
+        region_metrics_(std::make_shared<StoreRegionMetrics>(raw_engine, meta_reader, meta_writer)) {}
   ~StoreMetricsManager() = default;
 
   StoreMetricsManager(const StoreMetricsManager&) = delete;
