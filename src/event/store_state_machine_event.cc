@@ -104,7 +104,7 @@ void SmConfigurationCommittedEventListener::OnEvent(std::shared_ptr<Event> event
         }
       }
 
-      return has_new_peer;
+      return has_new_peer || changed_peers.size() != region->Peers().size();
     };
 
     std::vector<pb::common::Peer> changed_peers;
