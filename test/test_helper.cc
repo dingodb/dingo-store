@@ -15,6 +15,7 @@
 #include <gtest/gtest.h>
 
 #include <iostream>
+#include <iterator>
 #include <string>
 
 #include "common/helper.h"
@@ -46,3 +47,5 @@ TEST_F(HelperTest, FormatTime) {
 
   std::cout << dingodb::Helper::GetNowFormatMsTime();
 }
+
+TEST_F(HelperTest, TimestampNs) { std::cout << dingodb::Helper::TimestampNs() << std::endl; }

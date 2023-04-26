@@ -31,6 +31,12 @@
 
 namespace dingodb {
 
+butil::Status CreateRegionTask::PreValidateCreateRegion(const pb::coordinator::RegionCmd& command) {
+  auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
+
+  return ValidateCreateRegion(store_meta_manager, command.region_id());
+}
+
 butil::Status CreateRegionTask::ValidateCreateRegion(std::shared_ptr<StoreMetaManager> store_meta_manager,
                                                      uint64_t region_id) {
   auto region = store_meta_manager->GetStoreRegionMeta()->GetRegion(region_id);
@@ -103,6 +109,12 @@ void CreateRegionTask::Run() {
       status.ok() ? pb::coordinator::RegionCmdStatus::STATUS_DONE : pb::coordinator::RegionCmdStatus::STATUS_FAIL);
 }
 
+butil::Status DeleteRegionTask::PreValidateDeleteRegion(const pb::coordinator::RegionCmd& command) {
+  auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
+  return ValidateDeleteRegion(store_meta_manager,
+                              store_meta_manager->GetStoreRegionMeta()->GetRegion(command.region_id()));
+}
+
 butil::Status DeleteRegionTask::ValidateDeleteRegion(std::shared_ptr<StoreMetaManager> /*store_meta_manager*/,
                                                      store::RegionPtr region) {
   if (region == nullptr) {
@@ -153,11 +165,31 @@ butil::Status DeleteRegionTask::DeleteRegion(std::shared_ptr<Context> ctx, uint6
     raft_kv_engine->DestroyNode(ctx, region_id);
   }
 
-  // Delete meta data
+  // Update state
   DINGO_LOG(DEBUG) << butil::StringPrintf("Delete region %lu update region state DELETED", region_id);
   store_region_meta->UpdateState(region, pb::common::StoreRegionState::DELETED);
+
+  // Delete metrics
   DINGO_LOG(DEBUG) << butil::StringPrintf("Delete region %lu delete region metrics", region_id);
   Server::GetInstance()->GetStoreMetricsManager()->GetStoreRegionMetrics()->DeleteMetrics(region_id);
+
+  // Delete raft meta
+  store_meta_manager->GetStoreRaftMeta()->DeleteRaftMeta(region_id);
+
+  // Delete region executor
+  auto region_controller = Server::GetInstance()->GetRegionController();
+
+  auto command = std::make_shared<pb::coordinator::RegionCmd>();
+  command->set_id(Helper::TimestampNs());
+  command->set_region_id(region_id);
+  command->set_region_cmd_type(pb::coordinator::CMD_DESTROY_EXECUTOR);
+  command->mutable_destroy_executor_request()->set_region_id(region_id);
+
+  status = region_controller->DispatchRegionControlCommand(std::make_shared<Context>(), command);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << "Dispatch destroy region executor command failed, region: " << region_id
+                     << " error: " << status.error_code() << " " << status.error_str();
+  }
 
   return butil::Status();
 }
@@ -172,6 +204,12 @@ void DeleteRegionTask::Run() {
   Server::GetInstance()->GetRegionCommandManager()->UpdateCommandStatus(
       region_cmd_,
       status.ok() ? pb::coordinator::RegionCmdStatus::STATUS_DONE : pb::coordinator::RegionCmdStatus::STATUS_FAIL);
+}
+
+butil::Status SplitRegionTask::PreValidateSplitRegion(const pb::coordinator::RegionCmd& command) {
+  auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
+
+  return ValidateSplitRegion(store_meta_manager->GetStoreRegionMeta(), command.split_request());
 }
 
 butil::Status SplitRegionTask::ValidateSplitRegion(std::shared_ptr<StoreRegionMeta> store_region_meta,
@@ -257,6 +295,12 @@ void SplitRegionTask::Run() {
   Server::GetInstance()->GetRegionCommandManager()->UpdateCommandStatus(
       region_cmd_,
       status.ok() ? pb::coordinator::RegionCmdStatus::STATUS_DONE : pb::coordinator::RegionCmdStatus::STATUS_FAIL);
+}
+
+butil::Status ChangeRegionTask::PreValidateChangeRegion(const pb::coordinator::RegionCmd& command) {
+  auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
+
+  return ValidateChangeRegion(store_meta_manager, command.change_peer_request().region_definition());
 }
 
 butil::Status ChangeRegionTask::ValidateChangeRegion(std::shared_ptr<StoreMetaManager> store_meta_manager,
@@ -347,6 +391,121 @@ void SnapshotRegionTask::Run() {
       status.ok() ? pb::coordinator::RegionCmdStatus::STATUS_DONE : pb::coordinator::RegionCmdStatus::STATUS_FAIL);
 }
 
+butil::Status PurgeRegionTask::PreValidatePurgeRegion(const pb::coordinator::RegionCmd& command) {
+  auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
+
+  return ValidatePurgeRegion(store_meta_manager->GetStoreRegionMeta()->GetRegion(command.region_id()));
+}
+
+butil::Status PurgeRegionTask::ValidatePurgeRegion(store::RegionPtr region) {
+  if (region == nullptr) {
+    return butil::Status(pb::error::EREGION_NOT_FOUND, "Region is not exist, can't purge.");
+  }
+  if (region->State() != pb::common::StoreRegionState::DELETED) {
+    return butil::Status(pb::error::EREGION_ALREADY_DELETED, "Region is not deleted, can't purge.");
+  }
+
+  return butil::Status();
+}
+
+butil::Status PurgeRegionTask::PurgeRegion(std::shared_ptr<Context>, uint64_t region_id) {
+  DINGO_LOG(DEBUG) << butil::StringPrintf("Purge region %lu", region_id);
+  auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
+  auto store_region_meta = store_meta_manager->GetStoreRegionMeta();
+  store_region_meta->DeleteRegion(region_id);
+
+  return butil::Status();
+}
+
+void PurgeRegionTask::Run() {
+  auto status = PurgeRegion(ctx_, region_cmd_->delete_request().region_id());
+  if (!status.ok()) {
+    DINGO_LOG(DEBUG) << butil::StringPrintf("Purge region %lu failed, %s", region_cmd_->delete_request().region_id(),
+                                            status.error_cstr());
+  }
+
+  Server::GetInstance()->GetRegionCommandManager()->UpdateCommandStatus(
+      region_cmd_,
+      status.ok() ? pb::coordinator::RegionCmdStatus::STATUS_DONE : pb::coordinator::RegionCmdStatus::STATUS_FAIL);
+}
+
+butil::Status StopRegionTask::PreValidateStopRegion(const pb::coordinator::RegionCmd& command) {
+  auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
+
+  return ValidateStopRegion(store_meta_manager->GetStoreRegionMeta()->GetRegion(command.region_id()));
+}
+
+butil::Status StopRegionTask::ValidateStopRegion(store::RegionPtr region) {
+  if (region == nullptr) {
+    return butil::Status(pb::error::EREGION_NOT_FOUND, "Region is not exist, can't delete peer.");
+  }
+  if (region->State() != pb::common::StoreRegionState::ORPHAN) {
+    return butil::Status(pb::error::EREGION_ALREADY_DELETED, "Region is not orphan.");
+  }
+
+  return butil::Status();
+}
+
+butil::Status StopRegionTask::StopRegion(std::shared_ptr<Context> ctx, uint64_t region_id) {
+  auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
+  auto store_region_meta = store_meta_manager->GetStoreRegionMeta();
+  auto region = store_region_meta->GetRegion(region_id);
+
+  DINGO_LOG(DEBUG) << butil::StringPrintf("Stop region %lu", region_id);
+  // Valiate region
+  auto status = ValidateStopRegion(region);
+  if (!status.ok()) {
+    return status;
+  }
+
+  // Shutdown raft node
+  auto engine = Server::GetInstance()->GetEngine();
+  if (engine->GetID() == pb::common::ENG_RAFT_STORE) {
+    auto raft_kv_engine = std::dynamic_pointer_cast<RaftKvEngine>(engine);
+    // Delete raft
+    DINGO_LOG(DEBUG) << butil::StringPrintf("Delete peer %lu delete raft node", region_id);
+    raft_kv_engine->StopNode(ctx, region_id);
+  }
+
+  return butil::Status();
+}
+
+void StopRegionTask::Run() {
+  auto status = StopRegion(ctx_, region_cmd_->stop_request().region_id());
+  if (!status.ok()) {
+    DINGO_LOG(DEBUG) << butil::StringPrintf("Delete peer region %lu failed, %s",
+                                            region_cmd_->stop_request().region_id(), status.error_cstr());
+  }
+
+  Server::GetInstance()->GetRegionCommandManager()->UpdateCommandStatus(
+      region_cmd_,
+      status.ok() ? pb::coordinator::RegionCmdStatus::STATUS_DONE : pb::coordinator::RegionCmdStatus::STATUS_FAIL);
+}
+
+butil::Status DestroyRegionExecutorTask::DestroyRegionExecutor(std::shared_ptr<Context>, uint64_t region_id) {
+  auto regoin_controller = Server::GetInstance()->GetRegionController();
+  if (regoin_controller == nullptr) {
+    DINGO_LOG(ERROR) << "Region controller is nullptr";
+    return butil::Status(pb::error::EINTERNAL, "Region controller is nullptr");
+  }
+
+  regoin_controller->UnRegisterExecutor(region_id);
+
+  return butil::Status();
+}
+
+void DestroyRegionExecutorTask::Run() {
+  auto status = DestroyRegionExecutor(ctx_, region_cmd_->destroy_executor_request().region_id());
+  if (!status.ok()) {
+    DINGO_LOG(DEBUG) << butil::StringPrintf("Destroy executor region %lu failed, %s",
+                                            region_cmd_->destroy_executor_request().region_id(), status.error_cstr());
+  }
+
+  Server::GetInstance()->GetRegionCommandManager()->UpdateCommandStatus(
+      region_cmd_,
+      status.ok() ? pb::coordinator::RegionCmdStatus::STATUS_DONE : pb::coordinator::RegionCmdStatus::STATUS_FAIL);
+}
+
 static int ExecuteRoutine(void*, bthread::TaskIterator<TaskRunnable*>& iter) {
   std::unique_ptr<TaskRunnable> self_guard(*iter);
   if (iter.is_queue_stopped()) {
@@ -360,35 +519,34 @@ static int ExecuteRoutine(void*, bthread::TaskIterator<TaskRunnable*>& iter) {
   return 0;
 }
 
-bool RegionControlExecutor::Init() {
+bool ControlExecutor::Init() {
   bthread::ExecutionQueueOptions options;
   options.bthread_attr = BTHREAD_ATTR_NORMAL;
 
   if (bthread::execution_queue_start(&queue_id_, &options, ExecuteRoutine, nullptr) != 0) {
-    DINGO_LOG(ERROR) << "Start execution queue failed, region: " << region_id_;
+    DINGO_LOG(ERROR) << "Start execution queue failed";
     return false;
   }
 
   return true;
 }
 
-bool RegionControlExecutor::Execute(TaskRunnable* task) {
-  DINGO_LOG(INFO) << "Execute region control...";
+bool ControlExecutor::Execute(TaskRunnable* task) {
   if (bthread::execution_queue_execute(queue_id_, task) != 0) {
-    DINGO_LOG(ERROR) << "region execution queue execute failed, regoin: " << region_id_;
+    DINGO_LOG(ERROR) << "region execution queue execute failed";
     return false;
   }
   return true;
 }
 
-void RegionControlExecutor::Stop() {
+void ControlExecutor::Stop() {
   if (bthread::execution_queue_stop(queue_id_) != 0) {
-    DINGO_LOG(ERROR) << "region execution queue stop failed, regoin: " << region_id_;
+    DINGO_LOG(ERROR) << "region execution queue stop failed";
     return;
   }
 
   if (bthread::execution_queue_join(queue_id_) != 0) {
-    DINGO_LOG(ERROR) << "region execution queue join failed, regoin: " << region_id_;
+    DINGO_LOG(ERROR) << "region execution queue join failed";
   }
 }
 
@@ -497,6 +655,9 @@ void RegionCommandManager::TransformFromKv(const std::vector<pb::common::KeyValu
 }
 
 bool RegionController::Init() {
+  share_executor_ = std::make_shared<ControlExecutor>();
+  share_executor_->Init();
+
   auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
   auto regions = store_meta_manager->GetStoreRegionMeta()->GetAllAliveRegion();
   for (auto& region : regions) {
@@ -530,6 +691,8 @@ void RegionController::Destroy() {
   for (auto [_, executor] : executors_) {
     executor->Stop();
   }
+
+  share_executor_->Stop();
 }
 
 bool RegionController::RegisterExecutor(uint64_t region_id) {
@@ -542,6 +705,21 @@ bool RegionController::RegisterExecutor(uint64_t region_id) {
   }
 
   return true;
+}
+
+void RegionController::UnRegisterExecutor(uint64_t region_id) {
+  std::shared_ptr<RegionControlExecutor> executor;
+  {
+    BAIDU_SCOPED_LOCK(mutex_);
+    auto it = executors_.find(region_id);
+    if (it != executors_.end()) {
+      executor = it->second;
+      executors_.erase(it);
+    }
+  }
+  if (executor != nullptr) {
+    executor->Stop();
+  }
 }
 
 std::shared_ptr<RegionControlExecutor> RegionController::GetRegionControlExecutor(uint64_t region_id) {
@@ -562,7 +740,9 @@ butil::Status RegionController::InnerDispatchRegionControlCommand(std::shared_pt
     RegisterExecutor(command->region_id());
   }
 
-  auto executor = GetRegionControlExecutor(command->region_id());
+  auto executor = command->region_cmd_type() == pb::coordinator::RegionCmdType::CMD_PURGE
+                      ? share_executor_
+                      : GetRegionControlExecutor(command->region_id());
   if (executor == nullptr) {
     DINGO_LOG(ERROR) << "Not find region control executor, regoin: " << command->region_id();
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Not find regon control executor");
@@ -601,7 +781,17 @@ butil::Status RegionController::DispatchRegionControlCommand(std::shared_ptr<Con
   return InnerDispatchRegionControlCommand(ctx, command);
 }
 
-std::map<pb::coordinator::RegionCmdType, typename RegionController::TaskBuildFunc> RegionController::task_builders = {
+RegionController::ValidateFunc RegionController::GetValidater(pb::coordinator::RegionCmdType cmd_type) {
+  auto it = validaters.find(cmd_type);
+  if (it == validaters.end()) {
+    DINGO_LOG(ERROR) << "Unknown command type: " << pb::coordinator::RegionCmdType_Name(cmd_type);
+    return nullptr;
+  }
+
+  return it->second;
+}
+
+RegionController::TaskBuilderMap RegionController::task_builders = {
     {pb::coordinator::CMD_CREATE,
      [](std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command) -> TaskRunnable* {
        return new CreateRegionTask(ctx, command);
@@ -624,6 +814,27 @@ std::map<pb::coordinator::RegionCmdType, typename RegionController::TaskBuildFun
      [](std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command) -> TaskRunnable* {
        return new SnapshotRegionTask(ctx, command);
      }},
+    {pb::coordinator::CMD_PURGE,
+     [](std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command) -> TaskRunnable* {
+       return new PurgeRegionTask(ctx, command);
+     }},
+    {pb::coordinator::CMD_STOP,
+     [](std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command) -> TaskRunnable* {
+       return new StopRegionTask(ctx, command);
+     }},
+    {pb::coordinator::CMD_DESTROY_EXECUTOR,
+     [](std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command) -> TaskRunnable* {
+       return new DestroyRegionExecutorTask(ctx, command);
+     }},
+};
+
+RegionController::ValidaterMap RegionController::validaters = {
+    {pb::coordinator::CMD_CREATE, CreateRegionTask::PreValidateCreateRegion},
+    {pb::coordinator::CMD_DELETE, DeleteRegionTask::PreValidateDeleteRegion},
+    {pb::coordinator::CMD_SPLIT, SplitRegionTask::PreValidateSplitRegion},
+    {pb::coordinator::CMD_CHANGE_PEER, ChangeRegionTask::PreValidateChangeRegion},
+    {pb::coordinator::CMD_PURGE, PurgeRegionTask::PreValidatePurgeRegion},
+    {pb::coordinator::CMD_STOP, StopRegionTask::PreValidateStopRegion},
 };
 
 }  // namespace dingodb

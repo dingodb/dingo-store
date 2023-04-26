@@ -94,6 +94,14 @@ message PurgeRequest {
   uint64 region_id = 1;  // region id to be purged
 }
 
+message StopRequest {
+  uint64 region_id = 1;  // region id to be stop
+}
+
+message DestroyExecutorRequest {
+  uint64 region_id = 1;
+}
+
 // RegionCmdType
 enum RegionCmdType {
   CMD_NONE = 0;  // this is a placeholder
@@ -103,7 +111,9 @@ enum RegionCmdType {
   CMD_MERGE = 4;
   CMD_CHANGE_PEER = 5;
   CMD_SNAPSHOT = 6;
-  CMD_PURGE = 7;  // purge region's meta for deleted region
+  CMD_PURGE = 7;             // purge region's meta for deleted region
+  CMD_STOP = 8;              // when region state ORPHAN, stop region
+  CMD_DESTROY_EXECUTOR = 9;  // destroy region executor
 }
 
 // Regino cmd status
@@ -126,7 +136,10 @@ message RegionCmd {
     MergeRequest merge_request = 14;             // merge parameters
     ChangePeerRequest change_peer_request = 15;  // change peer parameters
     PurgeRequest purge_request = 16;  // purge region meta on store, this region is deleted and already purge on
-                                      // coordinator, so store can purge this region's meta data
+    // coordinator, so store can purge this region's meta data
+
+    StopRequest stop_request = 17;                         // when region state ORPHAN, stop region
+    DestroyExecutorRequest destroy_executor_request = 18;  // destroy region executor
   }
 
   bool is_notify = 40;          // store need to notify coordinator when this cmd is done

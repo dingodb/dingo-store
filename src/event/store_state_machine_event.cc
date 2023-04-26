@@ -22,6 +22,7 @@
 #include "common/logging.h"
 #include "handler/raft_snapshot_handler.h"
 #include "proto/common.pb.h"
+#include "proto/coordinator.pb.h"
 #include "store/heartbeat.h"
 
 namespace dingodb {
@@ -78,17 +79,18 @@ void SmConfigurationCommittedEventListener::OnEvent(std::shared_ptr<Event> event
   auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
   if (store_region_meta) {
     auto region = store_region_meta->GetRegion(the_event->node_id);
+    const auto& old_peers = region->Peers();
 
     // Get last peer from braft configuration.
-    std::vector<braft::PeerId> peer_ids;
-    the_event->conf.list_peers(&peer_ids);
+    std::vector<braft::PeerId> new_peers;
+    the_event->conf.list_peers(&new_peers);
 
     // Check and get changed peers.
-    auto get_changed_peers = [peer_ids, region](std::vector<pb::common::Peer>& changed_peers) -> bool {
+    auto get_changed_peers = [new_peers, old_peers](std::vector<pb::common::Peer>& changed_peers) -> bool {
       bool has_new_peer = false;
-      for (const auto& peer_id : peer_ids) {
+      for (const auto& peer_id : new_peers) {
         bool is_exist = false;
-        for (const auto& pb_peer : region->Peers()) {
+        for (const auto& pb_peer : old_peers) {
           if (std::string_view(pb_peer.raft_location().host()) ==
                   std::string_view(butil::ip2str(peer_id.addr.ip).c_str()) &&
               pb_peer.raft_location().port() == peer_id.addr.port) {
@@ -104,7 +106,7 @@ void SmConfigurationCommittedEventListener::OnEvent(std::shared_ptr<Event> event
         }
       }
 
-      return has_new_peer || changed_peers.size() != region->Peers().size();
+      return has_new_peer || changed_peers.size() != old_peers.size();
     };
 
     std::vector<pb::common::Peer> changed_peers;
@@ -145,6 +147,21 @@ void SmStopFollowingEventListener::OnEvent(std::shared_ptr<Event> event) {
     auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
     if (store_region_meta != nullptr) {
       store_region_meta->UpdateState(the_event->node_id, pb::common::StoreRegionState::ORPHAN);
+
+      // Stop raft node
+      auto region_controller = Server::GetInstance()->GetRegionController();
+
+      auto command = std::make_shared<pb::coordinator::RegionCmd>();
+      command->set_id(Helper::TimestampNs());
+      command->set_region_id(the_event->node_id);
+      command->set_region_cmd_type(pb::coordinator::CMD_STOP);
+      command->mutable_stop_request()->set_region_id(the_event->node_id);
+
+      auto status = region_controller->DispatchRegionControlCommand(std::make_shared<Context>(), command);
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << "Dispatch stop region command failed, region: " << the_event->node_id
+                         << " error: " << status.error_code() << " " << status.error_str();
+      }
     }
   }
 }

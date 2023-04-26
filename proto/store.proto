@@ -219,6 +219,7 @@ enum DebugType {
   STORE_REGION_META_STAT = 1;
   STORE_REGION_META_DETAILS = 2;
   STORE_REGION_CONTROL_COMMAND = 3;
+  STORE_RAFT_META = 4;
 }
 
 message DebugRequest {

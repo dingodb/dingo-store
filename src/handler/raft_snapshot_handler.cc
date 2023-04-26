@@ -121,6 +121,8 @@ bool RaftSnapshot::SaveSnapshot(braft::SnapshotWriter* writer, store::RegionPtr 
   auto sst_files = func(checkpoint_dir, region);
   if (sst_files.empty()) {
     DINGO_LOG(INFO) << "Generate sanshot file is empty";
+    // Clean temp checkpoint file
+    std::filesystem::remove_all(checkpoint_dir);
     return false;
   }
 
