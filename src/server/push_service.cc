@@ -91,9 +91,11 @@ void PushServiceImpl::PushStoreOperation(google::protobuf::RpcController* contro
       continue;
     }
 
-    std::shared_ptr<Context> ctx = std::make_shared<Context>();
-    status =
-        region_controller->DispatchRegionControlCommand(ctx, std::make_shared<pb::coordinator::RegionCmd>(command));
+    if (command.region_cmd_type() != pb::coordinator::CMD_PURGE) {
+      std::shared_ptr<Context> ctx = std::make_shared<Context>();
+      status =
+          region_controller->DispatchRegionControlCommand(ctx, std::make_shared<pb::coordinator::RegionCmd>(command));
+    }
     // coordinator need to get all region_cmd results, so add all results to response here
     error_func(command.id(), command.region_cmd_type(), status);
   }

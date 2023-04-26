@@ -138,6 +138,7 @@ class StoreRegionMeta : public TransformKvAble {
   store::RegionPtr GetRegion(uint64_t region_id);
   std::vector<store::RegionPtr> GetAllRegion();
   std::vector<store::RegionPtr> GetAllAliveRegion();
+  std::vector<store::RegionPtr> GetAllMetricsRegion();
 
  private:
   std::shared_ptr<pb::common::KeyValue> TransformToKv(void* obj) override;

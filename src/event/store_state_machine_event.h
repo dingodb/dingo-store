@@ -18,6 +18,7 @@
 #include "event/event.h"
 #include "handler/handler.h"
 #include "handler/raft_handler.h"
+#include "metrics/store_metrics_manager.h"
 #include "raft/store_state_machine.h"
 #include "server/server.h"
 
@@ -29,6 +30,7 @@ struct SmApplyEvent : public Event {
   ~SmApplyEvent() override = default;
 
   store::RegionPtr region;
+  store::RegionMetricsPtr region_metrics;
   std::shared_ptr<RawEngine> engine;
   braft::Closure* done;
   std::shared_ptr<pb::raft::RaftCmdRequest> raft_cmd;

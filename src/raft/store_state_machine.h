@@ -23,6 +23,7 @@
 #include "engine/raw_engine.h"
 #include "event/event.h"
 #include "meta/store_meta_manager.h"
+#include "metrics/store_metrics_manager.h"
 #include "proto/raft.pb.h"
 #include "proto/store_internal.pb.h"
 
@@ -52,6 +53,7 @@ class StoreStateMachine : public braft::StateMachine {
  public:
   explicit StoreStateMachine(std::shared_ptr<RawEngine> engine, store::RegionPtr region,
                              std::shared_ptr<pb::store_internal::RaftMeta> raft_meta,
+                             store::RegionMetricsPtr region_metrics,
                              std::shared_ptr<EventListenerCollection> listeners);
   ~StoreStateMachine() override = default;
 
@@ -78,6 +80,7 @@ class StoreStateMachine : public braft::StateMachine {
   int64_t applied_term_;
   int64_t applied_index_;
   std::shared_ptr<pb::store_internal::RaftMeta> raft_meta_;
+  store::RegionMetricsPtr region_metrics_;
 };
 
 }  // namespace dingodb

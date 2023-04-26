@@ -63,7 +63,7 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
     pb::common::RegionMetrics tmp_region_metrics;
     auto metrics = region_metrics->GetMetrics(region->Id());
     if (metrics != nullptr) {
-      tmp_region_metrics.CopyFrom(*metrics);
+      tmp_region_metrics.CopyFrom(metrics->InnerRegionMetrics());
     }
 
     tmp_region_metrics.set_id(region->Id());

@@ -365,11 +365,6 @@ int main(int argc, char *argv[]) {
     DINGO_LOG(INFO) << "Raft server is running on " << raft_server.listen_address();
   }
 
-  if (!dingo_server->InitCrontabManager()) {
-    DINGO_LOG(ERROR) << "InitCrontabManager failed!";
-    return -1;
-  }
-
   if (!dingo_server->Recover()) {
     DINGO_LOG(ERROR) << "Recover failed!";
     return -1;
@@ -379,6 +374,12 @@ int main(int argc, char *argv[]) {
     DINGO_LOG(ERROR) << "InitHeartbeat failed!";
     return -1;
   }
+
+  if (!dingo_server->InitCrontabManager()) {
+    DINGO_LOG(ERROR) << "InitCrontabManager failed!";
+    return -1;
+  }
+
   // Start server after raft server started.
   if (brpc_server.Start(dingo_server->ServerEndpoint(), nullptr) != 0) {
     DINGO_LOG(ERROR) << "Fail to start server!";

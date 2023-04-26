@@ -39,6 +39,8 @@ void BatchSendAddRegion(ServerInteractionPtr interaction, int start_region_id, i
                         const std::string& raft_group, std::vector<std::string>& raft_addrs);
 
 // test
+void TestBatchPut(ServerInteractionPtr interaction, uint64_t region_id, int thread_num, int req_num,
+                  const std::string& prefix);
 void TestBatchPutGet(ServerInteractionPtr interaction, uint64_t region_id, int thread_num, int req_num,
                      const std::string& prefix);
 void TestRegionLifecycle(ServerInteractionPtr interaction, uint64_t region_id, const std::string& raft_group,

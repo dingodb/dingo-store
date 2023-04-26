@@ -74,10 +74,13 @@ butil::Status CreateRegionTask::CreateRegion(std::shared_ptr<Context> ctx, store
     auto raft_meta = StoreRaftMeta::NewRaftMeta(region->Id());
     Server::GetInstance()->GetStoreMetaManager()->GetStoreRaftMeta()->AddRaftMeta(raft_meta);
 
+    auto region_metrics = StoreRegionMetrics::NewMetrics(region->Id());
+    Server::GetInstance()->GetStoreMetricsManager()->GetStoreRegionMetrics()->AddMetrics(region_metrics);
+
     auto listener_factory = std::make_shared<StoreSmEventListenerFactory>();
 
     auto raft_kv_engine = std::dynamic_pointer_cast<RaftKvEngine>(engine);
-    status = raft_kv_engine->AddNode(ctx, region, raft_meta, listener_factory->Build());
+    status = raft_kv_engine->AddNode(ctx, region, raft_meta, region_metrics, listener_factory->Build());
     if (!status.ok()) {
       return status;
     }

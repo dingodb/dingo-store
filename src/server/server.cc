@@ -316,7 +316,7 @@ bool Server::InitRegionCommandManager() {
 }
 
 bool Server::InitStoreMetricsManager() {
-  store_metrics_manager_ = std::make_shared<StoreMetricsManager>(std::make_shared<MetaReader>(raw_engine_),
+  store_metrics_manager_ = std::make_shared<StoreMetricsManager>(raw_engine_, std::make_shared<MetaReader>(raw_engine_),
                                                                  std::make_shared<MetaWriter>(raw_engine_));
   return store_metrics_manager_->Init();
 }

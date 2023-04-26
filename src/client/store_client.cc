@@ -17,6 +17,7 @@
 #include <string>
 #include <vector>
 
+#include "butil/strings/stringprintf.h"
 #include "client/store_client_function.h"
 #include "glog/logging.h"
 
@@ -104,7 +105,7 @@ void Sender(client::ServerInteractionPtr interaction, const std::string& method,
   butil::SplitString(FLAGS_raft_addrs, ',', &raft_addrs);
 
   for (int i = 0; i < round_num; ++i) {
-    DINGO_LOG(INFO) << "round: " << round_num;
+    DINGO_LOG(INFO) << butil::StringPrintf("round: %d / %d", i, round_num);
     // Region operation
     if (method == "AddRegion") {
       client::SendAddRegion(interaction, FLAGS_region_id, FLAGS_raft_group, raft_addrs);
@@ -136,9 +137,11 @@ void Sender(client::ServerInteractionPtr interaction, const std::string& method,
     }
 
     // Test
-    if (method == "TestBatchPutGet") {
-      client::TestBatchPutGet(interaction, FLAGS_region_id, FLAGS_thread_num, FLAGS_req_num, FLAGS_prefix);
+    if (method == "TestBatchPut") {
+      client::TestBatchPut(interaction, FLAGS_region_id, FLAGS_thread_num, FLAGS_req_num, FLAGS_prefix);
     } else if (method == "TestBatchPutGet") {
+      client::TestBatchPutGet(interaction, FLAGS_region_id, FLAGS_thread_num, FLAGS_req_num, FLAGS_prefix);
+    } else if (method == "TestRegionLifecycle") {
       client::TestRegionLifecycle(interaction, FLAGS_region_id, FLAGS_raft_group, raft_addrs, FLAGS_region_count,
                                   FLAGS_thread_num, FLAGS_req_num, FLAGS_prefix);
     }

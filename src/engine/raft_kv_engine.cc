@@ -14,6 +14,7 @@
 
 #include "engine/raft_kv_engine.h"
 
+#include <cstdint>
 #include <memory>
 
 #include "braft/raft.h"
@@ -39,16 +40,14 @@ RaftKvEngine::RaftKvEngine(std::shared_ptr<RawEngine> engine)
 
 RaftKvEngine::~RaftKvEngine() = default;
 
-bool RaftKvEngine::Init(std::shared_ptr<Config> config) {
-  DINGO_LOG(INFO) << "Now=> Int Raft Kv Engine with config[" << config->ToString();
-  return true;
-}
+bool RaftKvEngine::Init(std::shared_ptr<Config> /*config*/) { return true; }
 
 // Recover raft node from region meta data.
 // Invoke when server starting.
 bool RaftKvEngine::Recover() {
   auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
   auto store_raft_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRaftMeta();
+  auto store_region_metrics = Server::GetInstance()->GetStoreMetricsManager()->GetStoreRegionMetrics();
   auto regions = store_region_meta->GetAllRegion();
 
   int count = 0;
@@ -60,11 +59,16 @@ bool RaftKvEngine::Recover() {
       DINGO_LOG(ERROR) << "Recover raft meta not found: " << region->Id();
       continue;
     }
+    auto region_metrics = store_region_metrics->GetMetrics(region->Id());
+    if (region_metrics == nullptr) {
+      DINGO_LOG(WARNING) << "Recover region metrics not found: " << region->Id();
+    }
+
     if (region->State() == pb::common::StoreRegionState::NORMAL ||
         region->State() == pb::common::StoreRegionState::STANDBY ||
         region->State() == pb::common::StoreRegionState::SPLITTING ||
         region->State() == pb::common::StoreRegionState::MERGING) {
-      AddNode(ctx, region, raft_meta, listener_factory->Build());
+      AddNode(ctx, region, raft_meta, region_metrics, listener_factory->Build());
       ++count;
     }
   }
@@ -82,10 +86,11 @@ std::shared_ptr<RawEngine> RaftKvEngine::GetRawEngine() { return engine_; }
 
 butil::Status RaftKvEngine::AddNode(std::shared_ptr<Context> ctx, store::RegionPtr region,
                                     std::shared_ptr<pb::store_internal::RaftMeta> raft_meta,
+                                    store::RegionMetricsPtr region_metrics,
                                     std::shared_ptr<EventListenerCollection> listeners) {
   DINGO_LOG(INFO) << "RaftkvEngine add region, region_id " << region->Id();
 
-  auto* state_machine = new StoreStateMachine(engine_, region, raft_meta, listeners);
+  auto* state_machine = new StoreStateMachine(engine_, region, raft_meta, region_metrics, listeners);
   if (!state_machine->Init()) {
     return butil::Status(pb::error::ERAFT_INIT, "State machine init failed");
   }
@@ -208,7 +213,7 @@ butil::Status RaftKvEngine::Reader::KvScan(std::shared_ptr<Context> /*ctx*/, con
 }
 
 butil::Status RaftKvEngine::Reader::KvCount(std::shared_ptr<Context> /*ctx*/, const std::string& start_key,
-                                            const std::string& end_key, int64_t& count) {
+                                            const std::string& end_key, uint64_t& count) {
   return reader_->KvCount(start_key, end_key, count);
 }
 

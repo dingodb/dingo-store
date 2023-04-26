@@ -29,7 +29,7 @@
 namespace dingodb {
 
 void PutHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
-                        const pb::raft::Request &req) {
+                        const pb::raft::Request &req, store::RegionMetricsPtr region_metrics) {
   butil::Status status;
   const auto &request = req.put();
   // region is spliting, check key out range
@@ -56,10 +56,16 @@ void PutHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, s
   if (ctx) {
     ctx->SetStatus(status);
   }
+
+  // Update region metrics min/max key
+  if (region_metrics != nullptr) {
+    region_metrics->UpdateMaxAndMinKey(request.kvs());
+  }
 }
 
 void PutIfAbsentHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region,
-                                std::shared_ptr<RawEngine> engine, const pb::raft::Request &req) {
+                                std::shared_ptr<RawEngine> engine, const pb::raft::Request &req,
+                                store::RegionMetricsPtr region_metrics) {
   butil::Status status;
   const auto &request = req.put_if_absent();
   // region is spliting, check key out range
@@ -107,10 +113,16 @@ void PutIfAbsentHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
       }
     }
   }
+
+  // Update region metrics min/max key
+  if (region_metrics != nullptr) {
+    region_metrics->UpdateMaxAndMinKey(request.kvs());
+  }
 }
 
 void DeleteRangeHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region,
-                                std::shared_ptr<RawEngine> engine, const pb::raft::Request &req) {
+                                std::shared_ptr<RawEngine> engine, const pb::raft::Request &req,
+                                store::RegionMetricsPtr region_metrics) {
   butil::Status status;
   const auto &request = req.delete_range();
   // region is spliting, check key out range
@@ -167,10 +179,16 @@ void DeleteRangeHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
       response->set_delete_count(delete_count);
     }
   }
+
+  // Update region metrics min/max key policy
+  if (region_metrics != nullptr) {
+    region_metrics->UpdateMaxAndMinKeyPolicy(request.ranges());
+  }
 }
 
 void DeleteBatchHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region,
-                                std::shared_ptr<RawEngine> engine, const pb::raft::Request &req) {
+                                std::shared_ptr<RawEngine> engine, const pb::raft::Request &req,
+                                store::RegionMetricsPtr region_metrics) {
   butil::Status status;
   const auto &request = req.delete_batch();
   // region is spliting, check key out range
@@ -222,6 +240,11 @@ void DeleteBatchHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
       response->add_key_states(state);
     }
   }
+
+  // Update region metrics min/max key policy
+  if (region_metrics != nullptr) {
+    region_metrics->UpdateMaxAndMinKeyPolicy(request.keys());
+  }
 }
 
 void SplitHandler::SplitClosure::Run() {
@@ -241,7 +264,7 @@ void SplitHandler::SplitClosure::Run() {
 }
 
 void SplitHandler::Handle(std::shared_ptr<Context>, store::RegionPtr from_region, std::shared_ptr<RawEngine>,
-                          const pb::raft::Request &req) {
+                          const pb::raft::Request &req, store::RegionMetricsPtr region_metrics) {
   const auto &request = req.split();
   auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
   // Set region state spliting
@@ -289,6 +312,11 @@ void SplitHandler::Handle(std::shared_ptr<Context>, store::RegionPtr from_region
   to_ctx->SetDone(new SplitHandler::SplitClosure(to_region, true));
   engine->DoSnapshot(to_ctx, to_region->Id());
   Heartbeat::TriggerStoreHeartbeat(nullptr);
+
+  // Update region metrics min/max key policy
+  if (region_metrics != nullptr) {
+    region_metrics->UpdateMaxAndMinKeyPolicy();
+  }
 }
 
 std::shared_ptr<HandlerCollection> RaftApplyHandlerFactory::Build() {
