@@ -1325,9 +1325,10 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         meta_write_to_kv.push_back(store_operation_meta_->TransformToKvValue(store_operation_residual));
 
         DINGO_LOG(INFO) << "store_operation_map_.Put in DELETE, store_id=" << store_operation.id()
-                        << " new region_cmd count=" << store_operation_in_map.region_cmds_size();
-
-        DINGO_LOG(INFO) << "store_operation_map_ DELETE, store_operation=" << store_operation.ShortDebugString();
+                        << " region_cmd count change [" << store_operation_in_map.region_cmds_size() << ", "
+                        << store_operation_residual.region_cmds_size() << "]  orig_store_operation=["
+                        << store_operation.ShortDebugString() << "] new_store_operation=["
+                        << store_operation_residual.ShortDebugString() << "]";
       }
     }
   }
