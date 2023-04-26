@@ -132,8 +132,8 @@ void DeleteRangeHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
   uint64_t delete_count = 0;
   if (1 == request.ranges().size()) {
     uint64_t internal_delete_count = 0;
-    status = reader->KvCount(request.ranges()[0], &delete_count);
-    if (status.ok() && 0 != delete_count) {
+    status = reader->KvCount(request.ranges()[0], &internal_delete_count);
+    if (status.ok() && 0 != internal_delete_count) {
       status = writer->KvDeleteRange(request.ranges()[0]);
     }
     delete_count = internal_delete_count;
