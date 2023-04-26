@@ -1206,17 +1206,23 @@ pb::error::Errno CoordinatorControl::ChangePeerRegionWithTaskList(
 
   // generate store operation for stores
   if (new_store_ids_diff_less.size() == 1) {
+    if (region.leader_store_id() == new_store_ids_diff_less.at(0)) {
+      DINGO_LOG(ERROR) << "ChangePeerRegion region.leader_store_id() == new_store_ids_diff_less.at(0), region_id = "
+                       << region_id;
+      return pb::error::Errno::ECHANGE_PEER_UNABLE_TO_REMOVE_LEADER;
+    }
+
+    if (region.leader_store_id() == 0) {
+      DINGO_LOG(ERROR) << "ChangePeerRegion region.leader_store_id() == 0, region_id = " << region_id;
+      return pb::error::Errno::ECHANGE_PEER_STATUS_ILLEGAL;
+    }
+
     // calculate new peers
     for (int i = 0; i < region.definition().peers_size(); i++) {
       if (region.definition().peers(i).store_id() != new_store_ids_diff_less.at(0)) {
         auto* peer = new_region_definition.add_peers();
         peer->CopyFrom(region.definition().peers(i));
       }
-    }
-
-    if (region.leader_store_id() == 0) {
-      DINGO_LOG(ERROR) << "ChangePeerRegion region.leader_store_id() == 0, region_id = " << region_id;
-      return pb::error::Errno::ECHANGE_PEER_STATUS_ILLEGAL;
     }
 
     // build new task_list
@@ -1838,6 +1844,12 @@ void CoordinatorControl::UpdateRegionMapAndStoreOperation(const pb::common::Stor
   for (const auto& it : store_metrics.region_metrics_map()) {
     const auto& region_metrics = it.second;
 
+    // when region leader change or region state change, we need to update region_map_
+    // or when region last_update_timestamp is too old, we need to update region_map_
+    bool need_update_region = false;
+    bool need_update_region_definition = false;
+    bool region_metrics_is_not_leader = false;
+
     // use leader store's region_metrics to update region_map
     // if region's store_region_stat is deleting or deleted, there will be no leaders in this region
     // so we need to update region state using any node of this region
@@ -1846,12 +1858,8 @@ void CoordinatorControl::UpdateRegionMapAndStoreOperation(const pb::common::Stor
           region_metrics.store_region_state() != pb::common::StoreRegionState::DELETED) {
         continue;
       }
+      region_metrics_is_not_leader = true;
     }
-
-    // when region leader change or region state change, we need to update region_map_
-    // or when region last_update_timestamp is too old, we need to update region_map_
-    bool need_update_region = false;
-    bool need_update_region_definition = false;
 
     // update region_map
     pb::common::Region region_to_update;
@@ -1862,6 +1870,16 @@ void CoordinatorControl::UpdateRegionMapAndStoreOperation(const pb::common::Stor
              "region on store again, region_id = "
           << region_metrics.id();
       continue;
+    }
+
+    if (region_metrics_is_not_leader) {
+      if (region_to_update.state() != pb::common::RegionState::REGION_DELETE ||
+          region_to_update.state() != pb::common::RegionState::REGION_DELETING ||
+          region_to_update.state() != pb::common::RegionState::REGION_DELETED) {
+        DINGO_LOG(INFO) << "region is not deleted, follower can't update region_map, store_id=" << store_metrics.id()
+                        << " region_id = " << region_metrics.id();
+        continue;
+      }
     }
 
     if (region_metrics.has_braft_status() && region_to_update.leader_store_id() != store_metrics.id()) {
