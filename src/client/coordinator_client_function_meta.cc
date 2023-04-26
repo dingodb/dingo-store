@@ -272,6 +272,13 @@ void SendGetTableRange(brpc::Controller& cntl, dingodb::pb::meta::MetaService_St
                     << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
     DINGO_LOG(INFO) << response.DebugString();
   }
+
+  for (const auto& it : response.table_range().range_distribution()) {
+    DINGO_LOG(INFO) << "region_id=[" << it.id().entity_id() << "]"
+                    << "range=[" << StringToHex(it.range().start_key()) << "," << StringToHex(it.range().end_key())
+                    << "]"
+                    << " leader=[" << it.leader().host() << ":" << it.leader().port() << "]";
+  }
 }
 
 void SendCreateTableId(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub) {

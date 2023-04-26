@@ -614,7 +614,7 @@ butil::Status Heartbeat::RpcSendPushStoreOperation(const pb::common::Location& l
   // rpc
   brpc::Channel channel;
   if (channel.Init(remote_node.addr, nullptr) != 0) {
-    DINGO_LOG(ERROR) << "SendCoordinatorPushToStore... channel init failed";
+    DINGO_LOG(ERROR) << "... channel init failed";
     return butil::Status(pb::error::Errno::ESTORE_NOT_FOUND, "cannot connect store");
   }
 
@@ -624,13 +624,12 @@ butil::Status Heartbeat::RpcSendPushStoreOperation(const pb::common::Location& l
   pb::push::PushService_Stub(&channel).PushStoreOperation(&cntl, &request, &response, nullptr);
 
   if (cntl.Failed()) {
-    DINGO_LOG(ERROR) << "SendCoordinatorPushToStore... rpc failed, error code: " << cntl.ErrorCode()
-                     << ", error message: " << cntl.ErrorText();
+    DINGO_LOG(ERROR) << "... rpc failed, error code: " << cntl.ErrorCode() << ", error message: " << cntl.ErrorText();
     return butil::Status(cntl.ErrorCode(), cntl.ErrorText());
   }
 
   if (response.error().errcode() != pb::error::Errno::OK) {
-    DINGO_LOG(ERROR) << "SendCoordinatorPushToStore... rpc failed, error code: " << response.error().errcode()
+    DINGO_LOG(ERROR) << "... rpc failed, error code: " << response.error().errcode()
                      << ", error message: " << response.error().errmsg();
     return butil::Status(response.error().errcode(), response.error().errmsg());
   }
