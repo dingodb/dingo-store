@@ -300,10 +300,10 @@ void CoordinatorTaskListProcessTask::CoordinatorTaskListProcess(
 // this is for coordinator
 void CoordinatorPushTask::SendCoordinatorPushToStore(std::shared_ptr<CoordinatorControl> coordinator_control) {
   if (!coordinator_control->IsLeader()) {
-    DINGO_LOG(DEBUG) << "SendCoordinatorPushToStore... this is follower";
+    DINGO_LOG(DEBUG) << "... this is follower";
     return;
   }
-  DINGO_LOG(DEBUG) << "SendCoordinatorPushToStore... this is leader";
+  DINGO_LOG(DEBUG) << "... this is leader";
 
   // update store_state by last_seen_timestamp and send store operation to store
   // here we only update store_state to offline if last_seen_timestamp is too old
@@ -314,7 +314,7 @@ void CoordinatorPushTask::SendCoordinatorPushToStore(std::shared_ptr<Coordinator
   for (const auto& it : store_map_temp.stores()) {
     if (it.state() == pb::common::StoreState::STORE_NORMAL) {
       if (it.last_seen_timestamp() + (FLAGS_store_heartbeat_timeout * 1000) < butil::gettimeofday_ms()) {
-        DINGO_LOG(INFO) << "SendCoordinatorPushToStore... update store " << it.id() << " state to offline";
+        DINGO_LOG(INFO) << "... update store " << it.id() << " state to offline";
         coordinator_control->TrySetStoreToOffline(it.id());
         continue;
       }
@@ -326,7 +326,7 @@ void CoordinatorPushTask::SendCoordinatorPushToStore(std::shared_ptr<Coordinator
     pb::coordinator::StoreOperation store_operation;
     coordinator_control->GetStoreOperation(it.id(), store_operation);
     if (store_operation.region_cmds_size() > 0) {
-      DINGO_LOG(INFO) << "SendCoordinatorPushToStore... send store_operation to store " << it.id();
+      DINGO_LOG(INFO) << "... send store_operation to store " << it.id();
 
       // send store_operation to store
 
@@ -338,7 +338,7 @@ void CoordinatorPushTask::SendCoordinatorPushToStore(std::shared_ptr<Coordinator
 
       // send rpcs
       if (!it.has_server_location()) {
-        DINGO_LOG(ERROR) << "SendCoordinatorPushToStore... store " << it.id() << " has no server_location";
+        DINGO_LOG(ERROR) << "... store " << it.id() << " has no server_location";
         continue;
       }
       auto status = Heartbeat::RpcSendPushStoreOperation(it.server_location(), request, response);
@@ -346,7 +346,7 @@ void CoordinatorPushTask::SendCoordinatorPushToStore(std::shared_ptr<Coordinator
       // check response
       pb::coordinator_internal::MetaIncrement meta_increment;
       if (status.ok()) {
-        DINGO_LOG(INFO) << "SendCoordinatorPushToStore... send store_operation to store " << it.id()
+        DINGO_LOG(INFO) << "... send store_operation to store " << it.id()
                         << " all success, will delete these region_cmds";
         // delete store_operation
         auto* store_operation_increment = meta_increment.add_store_operations();
@@ -358,10 +358,11 @@ void CoordinatorPushTask::SendCoordinatorPushToStore(std::shared_ptr<Coordinator
 
         coordinator_control->SubmitMetaIncrement(meta_increment);
       } else {
-        DINGO_LOG(WARNING) << "SendCoordinatorPushToStore... send store_operation to store " << it.id()
+        DINGO_LOG(WARNING) << "... send store_operation to store " << it.id()
                            << " failed, will check each region_cmd result";
         for (const auto& it_cmd : response.region_cmd_results()) {
           if (it_cmd.error().errcode() == pb::error::Errno::OK ||
+              it_cmd.error().errcode() == pb::error::Errno::EREGION_REPEAT_COMMAND ||
               (it_cmd.region_cmd_type() == pb::coordinator::RegionCmdType::CMD_CREATE &&
                it_cmd.error().errcode() == pb::error::Errno::EREGION_ALREADY_EXIST) ||
               (it_cmd.region_cmd_type() == pb::coordinator::RegionCmdType::CMD_DELETE &&
@@ -372,8 +373,10 @@ void CoordinatorPushTask::SendCoordinatorPushToStore(std::shared_ptr<Coordinator
                it_cmd.error().errcode() == pb::error::Errno::EREGION_ALREADY_MERGED) ||
               (it_cmd.region_cmd_type() == pb::coordinator::RegionCmdType::CMD_CHANGE_PEER &&
                it_cmd.error().errcode() == pb::error::Errno::EREGION_ALREADY_PEER_CHANGED)) {
-            DINGO_LOG(INFO) << "SendCoordinatorPushToStore... send store_operation to store_id=" << it.id()
-                            << " region_cmd_id=" << it_cmd.region_cmd_id() << " result=" << it_cmd.error().errcode()
+            DINGO_LOG(INFO) << "... send store_operation to store_id=" << it.id()
+                            << " region_cmd_id=" << it_cmd.region_cmd_id() << " result=[" << it_cmd.error().errcode()
+                            << "]["
+                            << pb::error::Errno_descriptor()->FindValueByNumber(it_cmd.error().errcode())->name()
                             << " success, will delete this region_cmd";
             // delete store_operation
             auto* store_operation_increment = meta_increment.add_store_operations();
@@ -390,16 +393,20 @@ void CoordinatorPushTask::SendCoordinatorPushToStore(std::shared_ptr<Coordinator
           } else if (it_cmd.error().errcode() == pb::error::Errno::ERAFT_NOTLEADER) {
             // redirect request to new leader
             if (!response.error().has_leader_location()) {
-              DINGO_LOG(ERROR) << "SendCoordinatorPushToStore... send store_operation to store_id=" << it.id()
-                               << " region_cmd_id=" << it_cmd.region_cmd_id() << " result=" << it_cmd.error().errcode()
+              DINGO_LOG(ERROR) << "... send store_operation to store_id=" << it.id()
+                               << " region_cmd_id=" << it_cmd.region_cmd_id() << " result=[" << it_cmd.error().errcode()
+                               << "]["
+                               << pb::error::Errno_descriptor()->FindValueByNumber(it_cmd.error().errcode())->name()
                                << " failed, but no leader_location in response";
               continue;  // will retry next time
             }
 
             auto status = Heartbeat::RpcSendPushStoreOperation(response.error().leader_location(), request, response);
             if (status.ok()) {
-              DINGO_LOG(INFO) << "SendCoordinatorPushToStore... send store_operation to store_id=" << it.id()
-                              << " region_cmd_id=" << it_cmd.region_cmd_id() << " result=" << it_cmd.error().errcode()
+              DINGO_LOG(INFO) << "... send store_operation to store_id=" << it.id()
+                              << " region_cmd_id=" << it_cmd.region_cmd_id() << " result=[" << it_cmd.error().errcode()
+                              << "]["
+                              << pb::error::Errno_descriptor()->FindValueByNumber(it_cmd.error().errcode())->name()
                               << " failed, but redirect to new leader success";
 
               // delete store_operation
@@ -415,13 +422,17 @@ void CoordinatorPushTask::SendCoordinatorPushToStore(std::shared_ptr<Coordinator
               coordinator_control->SubmitMetaIncrement(meta_increment);
 
             } else {
-              DINGO_LOG(ERROR) << "SendCoordinatorPushToStore... send store_operation to store_id=" << it.id()
-                               << " region_cmd_id=" << it_cmd.region_cmd_id() << " result=" << it_cmd.error().errcode()
+              DINGO_LOG(ERROR) << "... send store_operation to store_id=" << it.id()
+                               << " region_cmd_id=" << it_cmd.region_cmd_id() << " result=[" << it_cmd.error().errcode()
+                               << "]["
+                               << pb::error::Errno_descriptor()->FindValueByNumber(it_cmd.error().errcode())->name()
                                << " failed, and redirect to new leader failed";
             }
           } else {
-            DINGO_LOG(INFO) << "SendCoordinatorPushToStore... send store_operation to store_id=" << it.id()
-                            << " region_cmd_id=" << it_cmd.region_cmd_id() << " result=" << it_cmd.error().errcode()
+            DINGO_LOG(INFO) << "... send store_operation to store_id=" << it.id()
+                            << " region_cmd_id=" << it_cmd.region_cmd_id() << " result=[" << it_cmd.error().errcode()
+                            << "]["
+                            << pb::error::Errno_descriptor()->FindValueByNumber(it_cmd.error().errcode())->name()
                             << " failed, will try this region_cmd future";
           }
         }
@@ -450,8 +461,7 @@ void CoordinatorPushTask::SendCoordinatorPushToStore(std::shared_ptr<Coordinator
     heartbeat_response.set_storemap_epoch(new_storemap->epoch());
     // heartbeat_response.set_regionmap_epoch(new_regionmap->epoch());
 
-    DINGO_LOG(INFO) << "SendCoordinatorPushToStore will send to store with response:"
-                    << heartbeat_response.ShortDebugString();
+    DINGO_LOG(INFO) << "will send to store with response:" << heartbeat_response.ShortDebugString();
   }
 
   // prepare request and response
@@ -467,8 +477,8 @@ void CoordinatorPushTask::SendCoordinatorPushToStore(std::shared_ptr<Coordinator
     const pb::common::Location& store_server_location = store_need_send.server_location();
 
     if (store_server_location.host().length() <= 0 || store_server_location.port() <= 0) {
-      DINGO_LOG(ERROR) << "SendCoordinatorPushToStore illegal store_server_location=" << store_server_location.host()
-                       << ":" << store_server_location.port();
+      DINGO_LOG(ERROR) << "illegal store_server_location=" << store_server_location.host() << ":"
+                       << store_server_location.port();
       return;
     }
 
@@ -482,7 +492,7 @@ void CoordinatorPushTask::SendCoordinatorPushToStore(std::shared_ptr<Coordinator
     // rpc
     brpc::Channel channel;
     if (channel.Init(remote_node.addr, nullptr) != 0) {
-      DINGO_LOG(ERROR) << "SendCoordinatorPushToStore Fail to init channel to " << remote_node;
+      DINGO_LOG(ERROR) << "Fail to init channel to " << remote_node;
       return;
     }
 
@@ -503,7 +513,7 @@ void CoordinatorPushTask::SendCoordinatorPushToStore(std::shared_ptr<Coordinator
 
     stub.PushHeartbeat(&cntl, &request, &response, nullptr);
     if (cntl.Failed()) {
-      DINGO_LOG(WARNING) << "SendCoordinatorPushToStore Fail to send request to : " << cntl.ErrorText();
+      DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
       return;
     }
 

@@ -153,7 +153,7 @@ void CoordinatorControl::GetPushStoreMap(butil::FlatMap<uint64_t, pb::common::St
 
 int CoordinatorControl::ValidateStore(uint64_t store_id, const std::string& keyring) {
   if (keyring == std::string("TO_BE_CONTINUED")) {
-    DINGO_LOG(INFO) << "ValidateStore store_id=" << store_id << " debug pass with TO_BE_CONTINUED";
+    DINGO_LOG(DEBUG) << "ValidateStore store_id=" << store_id << " debug pass with TO_BE_CONTINUED";
     return 0;
   }
 
@@ -2164,22 +2164,29 @@ void CoordinatorControl::UpdateRegionMapAndStoreOperation(const pb::common::Stor
     // update region metrics
     region_increment_region->mutable_metrics()->CopyFrom(region_metrics);
 
-    if (region_metrics.store_region_state() == pb::common::StoreRegionState::NORMAL) {
-      region_increment_region->set_state(::dingodb::pb::common::RegionState::REGION_NORMAL);
-    } else if (region_metrics.store_region_state() == pb::common::StoreRegionState::SPLITTING) {
-      region_increment_region->set_state(::dingodb::pb::common::RegionState::REGION_SPLITTING);
-    } else if (region_metrics.store_region_state() == pb::common::StoreRegionState::MERGING) {
-      region_increment_region->set_state(::dingodb::pb::common::RegionState::REGION_MERGING);
-    } else if (region_metrics.store_region_state() == pb::common::StoreRegionState::DELETING) {
-      region_increment_region->set_state(::dingodb::pb::common::RegionState::REGION_DELETING);
-    } else if (region_metrics.store_region_state() == pb::common::StoreRegionState::DELETED) {
-      region_increment_region->set_state(::dingodb::pb::common::RegionState::REGION_DELETED);
-    } else if (region_metrics.store_region_state() == pb::common::StoreRegionState::STANDBY) {
-      region_increment_region->set_state(::dingodb::pb::common::RegionState::REGION_STANDBY);
+    if (region_to_update.state() == pb::common::RegionState::REGION_DELETE ||
+        region_to_update.state() == pb::common::RegionState::REGION_DELETING ||
+        region_to_update.state() == pb::common::RegionState::REGION_DELETED) {
+      if (region_metrics.store_region_state() == pb::common::StoreRegionState::DELETED) {
+        region_increment_region->set_state(::dingodb::pb::common::RegionState::REGION_DELETED);
+      } else if (region_metrics.store_region_state() == pb::common::StoreRegionState::DELETING) {
+        region_increment_region->set_state(::dingodb::pb::common::RegionState::REGION_DELETING);
+      }
     } else {
-      DINGO_LOG(ERROR) << "ERROR: UpdateRegionMapAndStoreOperation region state error, store_id=" << store_metrics.id()
-                       << " region_id = " << region_metrics.id() << " state = " << region_metrics.store_region_state();
-      continue;
+      if (region_metrics.store_region_state() == pb::common::StoreRegionState::NORMAL) {
+        region_increment_region->set_state(::dingodb::pb::common::RegionState::REGION_NORMAL);
+      } else if (region_metrics.store_region_state() == pb::common::StoreRegionState::SPLITTING) {
+        region_increment_region->set_state(::dingodb::pb::common::RegionState::REGION_SPLITTING);
+      } else if (region_metrics.store_region_state() == pb::common::StoreRegionState::MERGING) {
+        region_increment_region->set_state(::dingodb::pb::common::RegionState::REGION_MERGING);
+      } else if (region_metrics.store_region_state() == pb::common::StoreRegionState::STANDBY) {
+        region_increment_region->set_state(::dingodb::pb::common::RegionState::REGION_STANDBY);
+      } else {
+        DINGO_LOG(ERROR) << "ERROR: UpdateRegionMapAndStoreOperation region state error, store_id="
+                         << store_metrics.id() << " region_id = " << region_metrics.id()
+                         << " state = " << region_metrics.store_region_state();
+        continue;
+      }
     }
 
     // for split and merge, we need to update region definition
