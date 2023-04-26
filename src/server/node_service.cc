@@ -65,7 +65,7 @@ void NodeServiceImpl::GetNodeInfo(google::protobuf::RpcController* /*controller*
   raft_location->set_port(server_->RaftEndpoint().port);
 }
 
-void NodeServiceImpl::GetLogLevel(google::protobuf::RpcController* controller,
+void NodeServiceImpl::GetLogLevel(google::protobuf::RpcController* /*controller*/,
                                   const pb::node::GetLogLevelRequest* request, pb::node::GetLogLevelResponse* response,
                                   google::protobuf::Closure* done) {
   brpc::ClosureGuard const done_guard(done);

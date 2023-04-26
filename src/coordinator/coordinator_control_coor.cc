@@ -427,11 +427,14 @@ pb::error::Errno CoordinatorControl::CreateRegionForSplitInternal(
 
   split_from_region.mutable_definition()->set_name(split_from_region.definition().name() + "_split");
 
+  auto new_range = split_from_region.definition().range();
+  new_range.set_start_key(split_from_region.definition().range().end_key());
+  new_range.set_end_key(split_from_region.definition().range().start_key());
+
   // create region with split_from_region_id & store_ids
-  return CreateRegion(split_from_region.definition().name(), "", store_ids.size(),
-                      split_from_region.definition().range(), split_from_region.definition().schema_id(),
-                      split_from_region.definition().table_id(), store_ids, split_from_region_id, new_region_id,
-                      meta_increment);
+  return CreateRegion(split_from_region.definition().name(), "", store_ids.size(), new_range,
+                      split_from_region.definition().schema_id(), split_from_region.definition().table_id(), store_ids,
+                      split_from_region_id, new_region_id, meta_increment);
 }
 
 pb::error::Errno CoordinatorControl::CreateRegionForSplit(const std::string& region_name,

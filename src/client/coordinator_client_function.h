@@ -104,5 +104,5 @@ void SendUpdateAutoIncrement(brpc::Controller& cntl, dingodb::pb::meta::MetaServ
 void SendGenerateAutoIncrement(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub);
 void SendDeleteAutoIncrement(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub);
 
-// misc
-std::string StringToHex(const std::string& str);
+// debug
+void SendDebug();

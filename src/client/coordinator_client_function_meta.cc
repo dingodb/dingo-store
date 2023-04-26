@@ -15,6 +15,7 @@
 #include <string>
 
 #include "client/coordinator_client_function.h"
+#include "common/helper.h"
 #include "common/logging.h"
 #include "proto/common.pb.h"
 #include "proto/meta.pb.h"
@@ -275,8 +276,8 @@ void SendGetTableRange(brpc::Controller& cntl, dingodb::pb::meta::MetaService_St
 
   for (const auto& it : response.table_range().range_distribution()) {
     DINGO_LOG(INFO) << "region_id=[" << it.id().entity_id() << "]"
-                    << "range=[" << StringToHex(it.range().start_key()) << "," << StringToHex(it.range().end_key())
-                    << "]"
+                    << "range=[" << dingodb::Helper::StringToHex(it.range().start_key()) << ","
+                    << dingodb::Helper::StringToHex(it.range().end_key()) << "]"
                     << " leader=[" << it.leader().host() << ":" << it.leader().port() << "]";
   }
 }

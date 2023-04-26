@@ -252,6 +252,7 @@ add_executable(dingodb_client_coordinator
                src/client/coordinator_client_function_coor.cc
                src/client/coordinator_client_function_meta.cc
                src/client/coordinator_client_function_auto_increment.cc
+               src/common/helper.cc
                ${VERSION_SRCS} $<TARGET_OBJECTS:PROTO_OBJS>)
 
 add_dependencies(DINGODB_OBJS ${DEPEND_LIBS})
