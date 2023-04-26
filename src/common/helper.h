@@ -99,7 +99,7 @@ class Helper {
     }
   }
 
-  static std::string Increment(const std::string& input);
+  static std::string StringIncrement(const std::string& input);
 
   static std::string StringToHex(const std::string& str);
 
@@ -152,6 +152,24 @@ class Helper {
   static bool KeyIsEndOfAllTable(const std::string& key);
 
   static bool GetDiskCapacity(const std::string& path, std::map<std::string, uint64_t>& output);
+
+  static void AlignByteArrays(std::string& a, std::string& b);
+  static std::string StringSubtract(const std::string& a, const std::string& b);
+  // Notice: String will add one element as a prefix of the result, this element is for the carry
+  // if you want the equal length of your input, you need to do substr by yourself
+  static std::string StringAdd(const std::string& input_a, const std::string& input_b);
+  static std::string StrintSubtract(const std::string& input_a, const std::string& input_b);
+  static std::string StringDivideByTwo(const std::string& array);
+
+  static void RightAlignByteArrays(std::string& a, std::string& b);
+  static std::string StringAddRightAlign(const std::string& input_a, const std::string& input_b);
+  static std::string StrintSubtractRightAlign(const std::string& input_a, const std::string& input_b);
+
+  static std::vector<uint8_t> SubtractByteArrays(const std::vector<uint8_t>& a, const std::vector<uint8_t>& b);
+  static std::vector<uint8_t> DivideByteArrayByTwo(const std::vector<uint8_t>& array);
+  // Notice: AddByteArrays will add one element as a prefix of the result, this element is for the carry
+  // if you want the equal length of your input, you need to do substr by yourself
+  static std::vector<uint8_t> AddByteArrays(const std::vector<uint8_t>& a, const std::vector<uint8_t>& b);
 };
 
 }  // namespace dingodb
