@@ -16,11 +16,14 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <iomanip>
 #include <string>
+#include <vector>
 
 #include "brpc/channel.h"
 #include "bthread/bthread.h"
 #include "client/coordinator_client_function.h"
+#include "common/helper.h"
 #include "common/logging.h"
 #include "common/version.h"
 #include "gflags/gflags.h"
@@ -58,18 +61,8 @@ DEFINE_int64(region_cmd_id, 0, "region_cmd_id");
 DEFINE_string(store_ids, "1001,1002,1003", "store_ids splited by ,");
 DEFINE_int64(index, 0, "index");
 DEFINE_uint32(service_type, 0, "service type for getting leader, 0: meta or coordinator, 2: auto increment");
-
-std::string StringToHex(const std::string& str) {
-  std::string result = "0x";
-  std::string tmp;
-  std::stringstream ss;
-  for (char const i : str) {
-    ss << std::hex << int(i) << std::endl;
-    ss >> tmp;
-    result += tmp;
-  }
-  return result;
-}
+DEFINE_string(start_key, "", "start_key");
+DEFINE_string(end_key, "", "end_key");
 
 bool GetBrpcChannel(const std::string& location, brpc::Channel& channel) {
   braft::PeerId node;
@@ -236,12 +229,55 @@ void* Sender(void* /*arg*/) {
     SendGenerateAutoIncrement(cntl, meta_auto_increment_stub);
   } else if (FLAGS_method == "DeleteAutoIncrement") {
     SendDeleteAutoIncrement(cntl, meta_auto_increment_stub);
+  } else if (FLAGS_method == "Debug") {
+    SendDebug();
   } else {
     DINGO_LOG(INFO) << " method illegal , exit";
     return nullptr;
   }
 
   return nullptr;
+}
+
+void SendDebug() {
+  std::string start_key(FLAGS_start_key);
+  std::string end_key(FLAGS_end_key);
+
+  auto s_diff = dingodb::Helper::StrintSubtract(start_key, end_key);
+  auto s_half_diff = dingodb::Helper::StringDivideByTwo(s_diff);
+  auto s_mid = dingodb::Helper::StringAdd(start_key, s_half_diff);
+
+  DINGO_LOG(INFO) << "start_key: " << dingodb::Helper::StringToHex(start_key);
+  DINGO_LOG(INFO) << "end_key: " << dingodb::Helper::StringToHex(end_key);
+  DINGO_LOG(INFO) << "s_diff: " << dingodb::Helper::StringToHex(s_diff);
+  DINGO_LOG(INFO) << "s_half_diff: " << dingodb::Helper::StringToHex(s_half_diff);
+  DINGO_LOG(INFO) << "s_mid: " << dingodb::Helper::StringToHex(s_mid.substr(1, s_mid.size() - 1));
+
+  if (start_key.size() < end_key.size()) {
+    start_key.resize(end_key.size(), 0);
+  } else {
+    end_key.resize(start_key.size(), 0);
+  }
+
+  std::vector<uint8_t> start_vec(start_key.begin(), start_key.end());
+  std::vector<uint8_t> end_vec(end_key.begin(), end_key.end());
+
+  // calc the mid value between start_vec and end_vec
+  std::vector<uint8_t> diff = dingodb::Helper::SubtractByteArrays(start_vec, end_vec);
+  std::vector<uint8_t> half_diff = dingodb::Helper::DivideByteArrayByTwo(diff);
+  std::vector<uint8_t> mid = dingodb::Helper::AddByteArrays(start_vec, half_diff);
+
+  std::string mid_key(mid.begin(), mid.end());
+
+  std::vector<uint8_t> half = dingodb::Helper::DivideByteArrayByTwo(start_vec);
+
+  DINGO_LOG(INFO) << "start_key:" << dingodb::Helper::StringToHex(start_key);
+  DINGO_LOG(INFO) << "end_key:" << dingodb::Helper::StringToHex(end_key);
+  DINGO_LOG(INFO) << "diff:" << dingodb::Helper::StringToHex(std::string(diff.begin(), diff.end()));
+  DINGO_LOG(INFO) << "half_diff:" << dingodb::Helper::StringToHex(std::string(half_diff.begin(), half_diff.end()));
+  DINGO_LOG(INFO) << "half:" << dingodb::Helper::StringToHex(std::string(half.begin(), half.end()));
+
+  DINGO_LOG(INFO) << "mid_key:" << dingodb::Helper::StringToHex(mid_key.substr(1, mid_key.size() - 1));
 }
 
 int main(int argc, char* argv[]) {

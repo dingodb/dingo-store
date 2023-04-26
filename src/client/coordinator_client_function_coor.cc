@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "client/coordinator_client_function.h"
+#include "common/helper.h"
 #include "common/logging.h"
 #include "gflags/gflags_declare.h"
 #include "proto/common.pb.h"
@@ -882,10 +883,15 @@ void SendSplitRegion(brpc::Controller& cntl, dingodb::pb::coordinator::Coordinat
       return;
     }
 
-    std::string mid_key = query_response.region().definition().range().start_key();
-    mid_key.push_back(0x80);
+    // calc the mid value between start_vec and end_vec
+    const auto& start_key = query_response.region().definition().range().start_key();
+    const auto& end_key = query_response.region().definition().range().end_key();
 
-    request.mutable_split_request()->set_split_watershed_key(mid_key);
+    auto diff = dingodb::Helper::StringSubtract(start_key, end_key);
+    auto half_diff = dingodb::Helper::StringDivideByTwo(diff);
+    auto mid = dingodb::Helper::StringAdd(start_key, half_diff);
+
+    request.mutable_split_request()->set_split_watershed_key(mid.substr(1, mid.size() - 1));
   }
 
   DINGO_LOG(INFO) << "split from region " << FLAGS_split_from_id << " to region " << FLAGS_split_to_id

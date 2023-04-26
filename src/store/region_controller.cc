@@ -239,12 +239,12 @@ butil::Status SplitRegionTask::SplitRegion() {
   write_data.AddDatums(std::static_pointer_cast<DatumAble>(datum));
 
   ctx_->SetRegionId(datum->from_region_id);
-  return Server::GetInstance()->GetEngine()->AsyncWrite(
-      ctx_, write_data, [](std::shared_ptr<Context>, butil::Status status) {
-        if (!status.ok()) {
-          DINGO_LOG(ERROR) << "Write split failed, " << status.error_str();
-        }
-      });
+  return Server::GetInstance()->GetEngine()->AsyncWrite(ctx_, write_data,
+                                                        [](std::shared_ptr<Context>, butil::Status status) {
+                                                          if (!status.ok()) {
+                                                            LOG(ERROR) << "Write split failed, " << status.error_str();
+                                                          }
+                                                        });
 }
 
 void SplitRegionTask::Run() {
