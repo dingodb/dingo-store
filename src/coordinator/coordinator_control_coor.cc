@@ -968,6 +968,12 @@ pb::error::Errno CoordinatorControl::SplitRegionWithTaskList(uint64_t split_from
     meta_increment.add_regions()->CopyFrom(it);
   }
 
+  // update table_map for new_region_id
+  // CreateRegion will update table_map if region is create for split
+  for (const auto& it : meta_increment_tmp.tables()) {
+    meta_increment.add_tables()->CopyFrom(it);
+  }
+
   // build split_region task
   auto* split_region_task = new_task_list->add_tasks();
   auto* region_check = split_region_task->mutable_pre_check();

@@ -59,6 +59,18 @@ DEFINE_string(store_ids, "1001,1002,1003", "store_ids splited by ,");
 DEFINE_int64(index, 0, "index");
 DEFINE_uint32(service_type, 0, "service type for getting leader, 0: meta or coordinator, 2: auto increment");
 
+std::string StringToHex(const std::string& str) {
+  std::string result = "0x";
+  std::string tmp;
+  std::stringstream ss;
+  for (char const i : str) {
+    ss << std::hex << int(i) << std::endl;
+    ss >> tmp;
+    result += tmp;
+  }
+  return result;
+}
+
 bool GetBrpcChannel(const std::string& location, brpc::Channel& channel) {
   braft::PeerId node;
   if (node.parse(location) != 0) {
