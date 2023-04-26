@@ -18,10 +18,15 @@
 #include <unistd.h>
 
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
+#include <cstdio>
+#include <cstring>
 #include <iomanip>
 #include <regex>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "brpc/channel.h"
 #include "brpc/controller.h"
@@ -238,7 +243,7 @@ bool Helper::IsEqualIgnoreCase(const std::string& str1, const std::string& str2)
                     [](const char c1, const char c2) { return std::tolower(c1) == std::tolower(c2); });
 }
 
-std::string Helper::Increment(const std::string& input) {
+std::string Helper::StringIncrement(const std::string& input) {
   std::string ret(input.size(), 0);
   int carry = 1;
   for (int i = input.size() - 1; i >= 0; --i) {
@@ -254,14 +259,190 @@ std::string Helper::Increment(const std::string& input) {
 }
 
 std::string Helper::StringToHex(const std::string& str) {
-  std::string result = "0x";
-  std::string tmp;
   std::stringstream ss;
-  for (char const i : str) {
-    ss << std::hex << int(i) << std::endl;
-    ss >> tmp;
-    result += tmp;
+  for (const auto& ch : str) {
+    ss << std::setw(2) << std::setfill('0') << std::hex << static_cast<int>(static_cast<unsigned char>(ch));
   }
+  return ss.str();
+}
+
+void Helper::AlignByteArrays(std::string& a, std::string& b) {
+  if (a.size() < b.size()) {
+    a.resize(b.size(), 0);
+  } else if (a.size() > b.size()) {
+    b.resize(a.size(), 0);
+  }
+}
+
+void Helper::RightAlignByteArrays(std::string& a, std::string& b) {
+  if (a.size() < b.size()) {
+    std::string tmp(b.size(), 0);
+
+    for (int i = 0; i < a.size(); ++i) {
+      tmp[i + b.size() - a.size()] = a[i];
+    }
+
+    std::swap(a, tmp);
+
+  } else if (a.size() > b.size()) {
+    std::string tmp(a.size(), 0);
+
+    for (int i = 0; i < b.size(); ++i) {
+      tmp[i + a.size() - b.size()] = b[i];
+    }
+
+    std::swap(b, tmp);
+  }
+}
+
+std::string Helper::StringSubtract(const std::string& a, const std::string& b) {
+  std::string a_copy = a;
+  std::string b_copy = b;
+  AlignByteArrays(a_copy, b_copy);
+
+  std::string result;
+  int8_t borrow = 0;
+  for (size_t i = 0; i < a_copy.size(); ++i) {
+    int16_t diff = static_cast<int16_t>(b_copy[i]) - static_cast<int16_t>(a_copy[i]) - borrow;
+    if (diff < 0) {
+      diff += 256;
+      borrow = 1;
+    } else {
+      borrow = 0;
+    }
+    result.push_back(diff);
+  }
+
+  return result;
+}
+
+// Notice: String will add one element as a prefix of the result, this element is for the carry
+// if you want the equal length of your input, you need to do substr by yourself
+std::string Helper::StringAdd(const std::string& input_a, const std::string& input_b) {
+  std::string a = input_a;
+  std::string b = input_b;
+  AlignByteArrays(a, b);
+
+  size_t max_length = std::max(a.size(), b.size());
+  std::string result(max_length + 1, 0);
+
+  for (size_t i = 0; i < max_length; ++i) {
+    uint8_t a_value = (i < a.size()) ? a[a.size() - 1 - i] : 0;
+    uint8_t b_value = (i < b.size()) ? b[b.size() - 1 - i] : 0;
+    uint16_t sum = static_cast<uint16_t>(a_value) + static_cast<uint16_t>(b_value) + result[max_length - i];
+    result[max_length - i] = sum & 0xFF;
+    result[max_length - i - 1] = (sum >> 8) & 0xFF;
+  }
+
+  return result;
+}
+
+// Notice: String will add one element as a prefix of the result, this element is for the carry
+// if you want the equal length of your input, you need to do substr by yourself
+std::string Helper::StringAddRightAlign(const std::string& input_a, const std::string& input_b) {
+  std::string a = input_a;
+  std::string b = input_b;
+  RightAlignByteArrays(a, b);
+
+  return StringAdd(a, b);
+}
+
+std::string Helper::StrintSubtract(const std::string& input_a, const std::string& input_b) {
+  std::string a = input_a;
+  std::string b = input_b;
+  AlignByteArrays(a, b);
+
+  size_t max_length = std::max(a.size(), b.size());
+
+  std::string result(max_length, 0);
+
+  int8_t borrow = 0;
+  for (size_t i = 0; i < max_length; ++i) {
+    uint8_t a_value = (i < a.size()) ? a[a.size() - 1 - i] : 0;
+    uint8_t b_value = (i < b.size()) ? b[b.size() - 1 - i] : 0;
+    int16_t diff = static_cast<int16_t>(b_value) - static_cast<int16_t>(a_value) - borrow;
+    if (diff < 0) {
+      diff += 256;
+      borrow = 1;
+    } else {
+      borrow = 0;
+    }
+    result[max_length - 1 - i] = diff;
+  }
+
+  return result;
+}
+
+std::string Helper::StrintSubtractRightAlign(const std::string& input_a, const std::string& input_b) {
+  std::string a = input_a;
+  std::string b = input_b;
+  RightAlignByteArrays(a, b);
+
+  return StrintSubtract(a, b);
+}
+
+std::string Helper::StringDivideByTwo(const std::string& array) {
+  std::string result(array.size(), 0);
+  uint16_t carry = 0;
+
+  for (size_t i = 0; i < array.size(); ++i) {
+    uint16_t value = (carry << 8) | array[i];
+    result[i] = value / 2;
+    carry = value % 2;
+  }
+
+  return result;
+}
+
+std::vector<uint8_t> Helper::SubtractByteArrays(const std::vector<uint8_t>& a, const std::vector<uint8_t>& b) {
+  size_t max_length = std::max(a.size(), b.size());
+
+  std::vector<uint8_t> result(max_length, 0);
+
+  int8_t borrow = 0;
+  for (size_t i = 0; i < max_length; ++i) {
+    uint8_t a_value = (i < a.size()) ? a[a.size() - 1 - i] : 0;
+    uint8_t b_value = (i < b.size()) ? b[b.size() - 1 - i] : 0;
+    int16_t diff = static_cast<int16_t>(b_value) - static_cast<int16_t>(a_value) - borrow;
+    if (diff < 0) {
+      diff += 256;
+      borrow = 1;
+    } else {
+      borrow = 0;
+    }
+    result[max_length - 1 - i] = diff;
+  }
+
+  return result;
+}
+
+std::vector<uint8_t> Helper::DivideByteArrayByTwo(const std::vector<uint8_t>& array) {
+  std::vector<uint8_t> result(array.size(), 0);
+  uint16_t carry = 0;
+
+  for (size_t i = 0; i < array.size(); ++i) {
+    uint16_t value = (carry << 8) | array[i];
+    result[i] = value / 2;
+    carry = value % 2;
+  }
+
+  return result;
+}
+
+// Notice: AddByteArrays will add one element as a prefix of the result, this element is for the carry
+// if you want the equal length of your input, you need to do substr by yourself
+std::vector<uint8_t> Helper::AddByteArrays(const std::vector<uint8_t>& a, const std::vector<uint8_t>& b) {
+  size_t max_length = std::max(a.size(), b.size());
+  std::vector<uint8_t> result(max_length + 1, 0);
+
+  for (size_t i = 0; i < max_length; ++i) {
+    uint8_t a_value = (i < a.size()) ? a[a.size() - 1 - i] : 0;
+    uint8_t b_value = (i < b.size()) ? b[b.size() - 1 - i] : 0;
+    uint16_t sum = static_cast<uint16_t>(a_value) + static_cast<uint16_t>(b_value) + result[max_length - i];
+    result[max_length - i] = sum & 0xFF;
+    result[max_length - i - 1] = (sum >> 8) & 0xFF;
+  }
+
   return result;
 }
 
