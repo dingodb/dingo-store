@@ -29,6 +29,7 @@
 #include "proto/coordinator.pb.h"
 #include "proto/error.pb.h"
 #include "server/server.h"
+#include "store/heartbeat.h"
 
 namespace dingodb {
 
@@ -108,6 +109,11 @@ void CreateRegionTask::Run() {
   Server::GetInstance()->GetRegionCommandManager()->UpdateCommandStatus(
       region_cmd_,
       status.ok() ? pb::coordinator::RegionCmdStatus::STATUS_DONE : pb::coordinator::RegionCmdStatus::STATUS_FAIL);
+
+  // Notify coordinator
+  if (region_cmd_->is_notify()) {
+    Heartbeat::TriggerStoreHeartbeat(nullptr);
+  }
 }
 
 butil::Status DeleteRegionTask::PreValidateDeleteRegion(const pb::coordinator::RegionCmd& command) {
@@ -205,6 +211,11 @@ void DeleteRegionTask::Run() {
   Server::GetInstance()->GetRegionCommandManager()->UpdateCommandStatus(
       region_cmd_,
       status.ok() ? pb::coordinator::RegionCmdStatus::STATUS_DONE : pb::coordinator::RegionCmdStatus::STATUS_FAIL);
+
+  // Notify coordinator
+  if (region_cmd_->is_notify()) {
+    Heartbeat::TriggerStoreHeartbeat(nullptr);
+  }
 }
 
 butil::Status SplitRegionTask::PreValidateSplitRegion(const pb::coordinator::RegionCmd& command) {
@@ -296,6 +307,11 @@ void SplitRegionTask::Run() {
   Server::GetInstance()->GetRegionCommandManager()->UpdateCommandStatus(
       region_cmd_,
       status.ok() ? pb::coordinator::RegionCmdStatus::STATUS_DONE : pb::coordinator::RegionCmdStatus::STATUS_FAIL);
+
+  // Notify coordinator
+  if (region_cmd_->is_notify()) {
+    Heartbeat::TriggerStoreHeartbeat(nullptr);
+  }
 }
 
 butil::Status ChangeRegionTask::PreValidateChangeRegion(const pb::coordinator::RegionCmd& command) {
@@ -373,6 +389,11 @@ void ChangeRegionTask::Run() {
   Server::GetInstance()->GetRegionCommandManager()->UpdateCommandStatus(
       region_cmd_,
       status.ok() ? pb::coordinator::RegionCmdStatus::STATUS_DONE : pb::coordinator::RegionCmdStatus::STATUS_FAIL);
+
+  // Notify coordinator
+  if (region_cmd_->is_notify()) {
+    Heartbeat::TriggerStoreHeartbeat(nullptr);
+  }
 }
 
 butil::Status SnapshotRegionTask::Snapshot(std::shared_ptr<Context> ctx, uint64_t region_id) {
@@ -428,6 +449,11 @@ void PurgeRegionTask::Run() {
   Server::GetInstance()->GetRegionCommandManager()->UpdateCommandStatus(
       region_cmd_,
       status.ok() ? pb::coordinator::RegionCmdStatus::STATUS_DONE : pb::coordinator::RegionCmdStatus::STATUS_FAIL);
+
+  // Notify coordinator
+  if (region_cmd_->is_notify()) {
+    Heartbeat::TriggerStoreHeartbeat(nullptr);
+  }
 }
 
 butil::Status StopRegionTask::PreValidateStopRegion(const pb::coordinator::RegionCmd& command) {
