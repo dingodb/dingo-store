@@ -54,10 +54,10 @@ public class AutoIncrementServiceConnector extends ServiceConnector<MetaServiceG
         Common.Location autoincrementLeader = CoordinatorServiceGrpc.newBlockingStub(channel)
                 .getCoordinatorMap(getCoordinatorMapRequest)
                 .getAutoIncrementLeaderLocation();
+        if (!channel.isShutdown()) {
+            channel.shutdown();
+        }
         if (!autoincrementLeader.getHost().isEmpty()) {
-            if (!channel.isShutdown()) {
-                channel.shutdown();
-            }
             return newChannel(autoincrementLeader.getHost(), autoincrementLeader.getPort());
         }
         return null;

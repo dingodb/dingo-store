@@ -109,15 +109,21 @@ public class MetaServiceClient {
     private MetaServiceClient(
             Meta.DingoCommonId id,
             String name,
-            ServiceConnector<MetaServiceGrpc.MetaServiceBlockingStub> metaConnector) {
+            ServiceConnector<MetaServiceGrpc.MetaServiceBlockingStub> metaConnector,
+            ServiceConnector<MetaServiceGrpc.MetaServiceBlockingStub> incrementConnector) {
         this.parentId = ROOT_SCHEMA_ID;
         this.metaConnector = metaConnector;
+        this.incrementConnector = incrementConnector;
         this.id = id;
         this.name = name;
     }
 
     public ServiceConnector<MetaServiceGrpc.MetaServiceBlockingStub> getMetaConnector() {
         return metaConnector;
+    }
+
+    public ServiceConnector<MetaServiceGrpc.MetaServiceBlockingStub> getIncrementConnector() {
+        return incrementConnector;
     }
 
     public void close() {
@@ -137,8 +143,8 @@ public class MetaServiceClient {
 
     private void addMetaServiceCache(Meta.Schema schema) {
         metaServiceIdCache.computeIfAbsent(schema.getName(), __ -> schema.getId());
-        metaServiceCache.computeIfAbsent(
-                schema.getId(), __ -> new MetaServiceClient(schema.getId(), schema.getName(), metaConnector)
+        metaServiceCache.computeIfAbsent(schema.getId(),
+                __ -> new MetaServiceClient(schema.getId(), schema.getName(), metaConnector, incrementConnector)
         );
     }
 
