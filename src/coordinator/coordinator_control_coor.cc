@@ -938,6 +938,15 @@ pb::error::Errno CoordinatorControl::SplitRegionWithTaskList(uint64_t split_from
     return pb::error::Errno::EILLEGAL_PARAMTETERS;
   }
 
+  if (split_from_region.definition().range().start_key().compare(split_watershed_key) >= 0 ||
+      split_from_region.definition().range().end_key().compare(split_watershed_key) <= 0) {
+    DINGO_LOG(ERROR) << "SplitRegion split_watershed_key is illegal, split_watershed_key = "
+                     << Helper::StringToHex(split_watershed_key) << ", split_from_region_id = " << split_from_region_id
+                     << " start_key=" << Helper::StringToHex(split_from_region.definition().range().start_key())
+                     << ", end_key=" << Helper::StringToHex(split_from_region.definition().range().end_key());
+    return pb::error::Errno::EKEY_SPLIT;
+  }
+
   // validate split_from_region and split_to_region has NORMAL status
   if (split_from_region.state() != ::dingodb::pb::common::RegionState::REGION_NORMAL ||
       split_from_region.raft_status() != ::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_HEALTHY) {

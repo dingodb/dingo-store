@@ -67,7 +67,8 @@ butil::EndPoint GetRaftEndPoint(std::shared_ptr<dingodb::Config> config) {
   return dingodb::Helper::GetEndPoint(host, port);
 }
 
-std::vector<butil::EndPoint> GetEndpoints(const std::shared_ptr<dingodb::Config>& config, const std::string peer_nodes_name) {
+std::vector<butil::EndPoint> GetEndpoints(const std::shared_ptr<dingodb::Config> &config,
+                                          const std::string peer_nodes_name) {
   std::vector<butil::EndPoint> peer_nodes;
   std::string coordinator_list = config->GetString(peer_nodes_name);
   return dingodb::Helper::StrToEndpoints(coordinator_list);
@@ -162,7 +163,7 @@ int main(int argc, char *argv[]) {
     exit(-1);
   }
 
-  // SetupSignalHandler();
+  SetupSignalHandler();
 
   dingodb::pb::common::ClusterRole role = dingodb::pb::common::COORDINATOR;
 
@@ -244,8 +245,9 @@ int main(int argc, char *argv[]) {
   }
 
   if (is_coodinator) {
-    if (!dingodb::CoordinatorInteraction::GetAutoIncrementInstance()->Init(config->GetString("coordinator.peers"),
-        dingodb::pb::common::CoordinatorServiceType::ServiceTypeAutoIncrement)) {
+    if (!dingodb::CoordinatorInteraction::GetAutoIncrementInstance()->Init(
+            config->GetString("coordinator.peers"),
+            dingodb::pb::common::CoordinatorServiceType::ServiceTypeAutoIncrement)) {
       DINGO_LOG(ERROR) << "InitCoordinatorInteraction, auto increment instance init failed!";
       return -1;
     }

@@ -22,6 +22,7 @@
 #include "gflags/gflags_declare.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
+#include "proto/error.pb.h"
 #include "proto/node.pb.h"
 
 DECLARE_bool(log_each_request);
@@ -891,15 +892,23 @@ void SendSplitRegion(brpc::Controller& cntl, dingodb::pb::coordinator::Coordinat
     const auto& start_key = query_response.region().definition().range().start_key();
     const auto& end_key = query_response.region().definition().range().end_key();
 
+    DINGO_LOG(INFO) << " start_key = " << dingodb::Helper::StringToHex(start_key);
+    DINGO_LOG(INFO) << " end_key   = " << dingodb::Helper::StringToHex(end_key);
+
     auto diff = dingodb::Helper::StringSubtract(start_key, end_key);
     auto half_diff = dingodb::Helper::StringDivideByTwo(diff);
     auto mid = dingodb::Helper::StringAdd(start_key, half_diff);
+
+    DINGO_LOG(INFO) << " diff      = " << dingodb::Helper::StringToHex(diff);
+    DINGO_LOG(INFO) << " half_diff = " << dingodb::Helper::StringToHex(half_diff);
+    DINGO_LOG(INFO) << " mid       = " << dingodb::Helper::StringToHex(mid);
 
     request.mutable_split_request()->set_split_watershed_key(mid.substr(1, mid.size() - 1));
   }
 
   DINGO_LOG(INFO) << "split from region " << FLAGS_split_from_id << " to region " << FLAGS_split_to_id
-                  << " with watershed key [" << FLAGS_split_key << "] will be sent";
+                  << " with watershed key ["
+                  << dingodb::Helper::StringToHex(request.split_request().split_watershed_key()) << "] will be sent";
 
   cntl.Reset();
   stub.SplitRegion(&cntl, &request, &response, nullptr);
@@ -908,11 +917,17 @@ void SendSplitRegion(brpc::Controller& cntl, dingodb::pb::coordinator::Coordinat
     // bthread_usleep(FLAGS_timeout_ms * 1000L);
   }
 
-  if (FLAGS_log_each_request) {
-    DINGO_LOG(INFO) << "Received response"
-                    << " request_attachment=" << cntl.request_attachment().size()
-                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
-    DINGO_LOG_INFO << response.DebugString();
+  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    DINGO_LOG(INFO) << "split from region " << FLAGS_split_from_id << " to region " << FLAGS_split_to_id
+                    << " with watershed key ["
+                    << dingodb::Helper::StringToHex(request.split_request().split_watershed_key())
+                    << "] failed, error: "
+                    << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name()
+                    << " " << response.error().errmsg();
+  } else {
+    DINGO_LOG(INFO) << "split from region " << FLAGS_split_from_id << " to region " << FLAGS_split_to_id
+                    << " with watershed key ["
+                    << dingodb::Helper::StringToHex(request.split_request().split_watershed_key()) << "] success";
   }
 }
 
@@ -1033,6 +1048,12 @@ void SendAddPeerRegion(brpc::Controller& cntl, dingodb::pb::coordinator::Coordin
                     << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
     DINGO_LOG_INFO << change_peer_response.DebugString();
   }
+
+  if (change_peer_response.has_error() && change_peer_response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    DINGO_LOG(ERROR) << "change peer error: " << change_peer_response.error().DebugString();
+  } else {
+    DINGO_LOG(INFO) << "change peer success";
+  }
 }
 
 void SendRemovePeerRegion(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub) {
@@ -1101,6 +1122,12 @@ void SendRemovePeerRegion(brpc::Controller& cntl, dingodb::pb::coordinator::Coor
                     << " request_attachment=" << cntl.request_attachment().size()
                     << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
     DINGO_LOG_INFO << change_peer_response.DebugString();
+  }
+
+  if (change_peer_response.has_error() && change_peer_response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    DINGO_LOG(ERROR) << "change peer error: " << change_peer_response.error().DebugString();
+  } else {
+    DINGO_LOG(INFO) << "change peer success";
   }
 }
 
