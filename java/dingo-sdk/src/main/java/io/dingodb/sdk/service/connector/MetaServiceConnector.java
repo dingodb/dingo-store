@@ -56,10 +56,10 @@ public class MetaServiceConnector extends ServiceConnector<MetaServiceGrpc.MetaS
         Common.Location leaderLocation = CoordinatorServiceGrpc.newBlockingStub(channel)
             .getCoordinatorMap(getCoordinatorMapRequest)
             .getLeaderLocation();
+        if (!channel.isShutdown()) {
+            channel.shutdown();
+        }
         if (!leaderLocation.getHost().isEmpty()) {
-            if (!channel.isShutdown()) {
-                channel.shutdown();
-            }
             return newChannel(leaderLocation.getHost(), leaderLocation.getPort());
         }
         return null;

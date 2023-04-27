@@ -111,6 +111,7 @@ public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
                 channel = transformToLeaderChannel(newChannel(location.getHost(), location.getPort()));
                 if (channel != null) {
                     stubRef.set(newStub(channel));
+                    return;
                 }
             }
         } finally {

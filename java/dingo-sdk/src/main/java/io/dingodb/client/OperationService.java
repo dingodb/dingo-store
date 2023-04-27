@@ -63,6 +63,7 @@ public class OperationService {
     public void close() {
         storeService.shutdown();
         metaServiceConnector.shutdown();
+        rootMetaService.getIncrementConnector().shutdown();
     }
 
     public <R> R exec(String schemaName, String tableName, Operation operation, Object parameters) {
