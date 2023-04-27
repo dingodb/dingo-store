@@ -50,6 +50,11 @@
 
 namespace dingodb {
 
+DECLARE_int32(executor_heartbeat_timeout);
+DECLARE_int32(store_heartbeat_timeout);
+DECLARE_int32(region_heartbeat_timeout);
+DECLARE_int32(region_delete_after_deleted_time);
+
 DEFINE_int32(
     region_update_timeout, 20,
     "region update timeout in seconds, will not update region info if no state change and (now - last_update_time) > "
@@ -345,7 +350,7 @@ bool CoordinatorControl::TrySetRegionToDown(uint64_t region_id) {
   int ret = region_map_.Get(region_id, region_to_update);
   if (ret > 0) {
     if (region_to_update.state() != pb::common::RegionState::REGION_NEW &&
-        region_to_update.last_update_timestamp() + (60 * 1000) < butil::gettimeofday_ms()) {
+        region_to_update.last_update_timestamp() + (FLAGS_region_update_timeout * 1000) < butil::gettimeofday_ms()) {
       // update region's state to REGION_DOWN
       region_to_update.set_state(pb::common::RegionState::REGION_DOWN);
       region_map_.Put(region_id, region_to_update);
@@ -360,7 +365,7 @@ bool CoordinatorControl::TrySetStoreToOffline(uint64_t store_id) {
   int ret = store_map_.Get(store_id, store_to_update);
   if (ret > 0) {
     if (store_to_update.state() == pb::common::StoreState::STORE_NORMAL &&
-        store_to_update.last_seen_timestamp() + (60 * 1000) < butil::gettimeofday_ms()) {
+        store_to_update.last_seen_timestamp() + (FLAGS_store_heartbeat_timeout * 1000) < butil::gettimeofday_ms()) {
       // update store's state to STORE_OFFLINE
       store_to_update.set_state(pb::common::StoreState::STORE_OFFLINE);
       store_map_.Put(store_id, store_to_update);
@@ -375,7 +380,8 @@ bool CoordinatorControl::TrySetExecutorToOffline(std::string executor_id) {
   int ret = executor_map_.Get(executor_id, executor_to_update);
   if (ret > 0) {
     if (executor_to_update.state() == pb::common::ExecutorState::EXECUTOR_NORMAL &&
-        executor_to_update.last_seen_timestamp() + (60 * 1000) < butil::gettimeofday_ms()) {
+        executor_to_update.last_seen_timestamp() + (FLAGS_executor_heartbeat_timeout * 1000) <
+            butil::gettimeofday_ms()) {
       // update executor's state to EXECUTOR_OFFLINE
       executor_to_update.set_state(pb::common::ExecutorState::EXECUTOR_OFFLINE);
       executor_map_.Put(executor_id, executor_to_update);
@@ -1974,8 +1980,8 @@ void CoordinatorControl::UpdateRegionMapAndStoreOperation(const pb::common::Stor
     }
 
     if (region_metrics_is_not_leader) {
-      if (region_to_update.state() != pb::common::RegionState::REGION_DELETE ||
-          region_to_update.state() != pb::common::RegionState::REGION_DELETING ||
+      if (region_to_update.state() != pb::common::RegionState::REGION_DELETE &&
+          region_to_update.state() != pb::common::RegionState::REGION_DELETING &&
           region_to_update.state() != pb::common::RegionState::REGION_DELETED) {
         DINGO_LOG(INFO) << "region is not deleted, follower can't update region_map, store_id=" << store_metrics.id()
                         << " region_id = " << region_metrics.id();
