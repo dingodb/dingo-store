@@ -122,13 +122,9 @@ class Server {
   std::shared_ptr<RegionController> GetRegionController() { return region_controller_; }
   std::shared_ptr<RegionCommandManager> GetRegionCommandManager() { return region_command_manager_; }
   std::shared_ptr<CoordinatorControl> GetCoordinatorControl() { return coordinator_control_; }
-  std::shared_ptr<AutoIncrementControl>& GetAutoIncrementControlReference() {
-    return auto_increment_control_;
-  }
+  std::shared_ptr<AutoIncrementControl>& GetAutoIncrementControlReference() { return auto_increment_control_; }
 
-  void SetEndpoints(const std::vector<butil::EndPoint> endpoints) {
-    endpoints_ = endpoints;
-  }
+  void SetEndpoints(const std::vector<butil::EndPoint> endpoints) { endpoints_ = endpoints; }
 
   std::shared_ptr<Heartbeat> GetHeartbeat() { return heartbeat_; }
 
@@ -140,7 +136,9 @@ class Server {
   ~Server() = default;
 
   std::shared_ptr<pb::common::RegionDefinition> CreateCoordinatorRegion(const std::shared_ptr<Config>& config,
-    const uint64_t region_id, const std::string& region_name, std::shared_ptr<Context>& ctx);
+                                                                        uint64_t region_id,
+                                                                        const std::string& region_name,
+                                                                        std::shared_ptr<Context>& ctx);
 
   friend struct DefaultSingletonTraits<Server>;
 

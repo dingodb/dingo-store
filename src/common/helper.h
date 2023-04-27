@@ -161,11 +161,14 @@ class Helper {
   // if you want the equal length of your input, you need to do substr by yourself
   static std::string StringAdd(const std::string& input_a, const std::string& input_b);
   static std::string StrintSubtract(const std::string& input_a, const std::string& input_b);
+
+  // Notice: if array % 2 != 0, the result size is array.size() + 1
   static std::string StringDivideByTwo(const std::string& array);
 
   static void RightAlignByteArrays(std::string& a, std::string& b);
   static std::string StringAddRightAlign(const std::string& input_a, const std::string& input_b);
   static std::string StrintSubtractRightAlign(const std::string& input_a, const std::string& input_b);
+  static std::string StringDivideByTwoRightAlign(const std::string& array);
 
   static std::vector<uint8_t> SubtractByteArrays(const std::vector<uint8_t>& a, const std::vector<uint8_t>& b);
   static std::vector<uint8_t> DivideByteArrayByTwo(const std::vector<uint8_t>& array);

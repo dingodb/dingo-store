@@ -372,12 +372,18 @@ void SendCreateTable(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub
   part_column->assign("test_part_column");
   auto* range_partition = partition_rule->mutable_range_partition();
 
-  for (int i = 0; i < 2; i++) {
+  if (with_table_id) {
     auto* part_range = range_partition->add_ranges();
-    auto* part_range_start = part_range->mutable_start_key();
-    part_range_start->assign(std::to_string(i * 100));
-    auto* part_range_end = part_range->mutable_end_key();
-    part_range_end->assign(std::to_string((i + 1) * 100));
+    part_range->set_start_key(EncodeUint64(std::stol(FLAGS_id)));
+    part_range->set_end_key(EncodeUint64(1 + std::stol(FLAGS_id)));
+  } else {
+    for (int i = 0; i < 2; i++) {
+      auto* part_range = range_partition->add_ranges();
+      auto* part_range_start = part_range->mutable_start_key();
+      part_range_start->assign(std::to_string(i * 100));
+      auto* part_range_end = part_range->mutable_end_key();
+      part_range_end->assign(std::to_string((i + 1) * 100));
+    }
   }
 
   stub.CreateTable(&cntl, &request, &response, nullptr);

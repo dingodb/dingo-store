@@ -814,7 +814,9 @@ void CoordinatorServiceImpl::SplitRegion(google::protobuf::RpcController *contro
   auto ret = this->coordinator_control_->SplitRegionWithTaskList(split_request.split_from_region_id(),
                                                                  split_request.split_to_region_id(),
                                                                  split_request.split_watershed_key(), meta_increment);
-  response->mutable_error()->set_errcode(ret);
+  if (ret != pb::error::OK) {
+    response->mutable_error()->set_errcode(ret);
+  }
 
   // if meta_increment is empty, means no need to update meta
   if (meta_increment.ByteSizeLong() == 0) {
@@ -859,7 +861,9 @@ void CoordinatorServiceImpl::MergeRegion(google::protobuf::RpcController *contro
 
   auto ret = this->coordinator_control_->MergeRegionWithTaskList(merge_request.merge_from_region_id(),
                                                                  merge_request.merge_to_region_id(), meta_increment);
-  response->mutable_error()->set_errcode(ret);
+  if (ret != pb::error::OK) {
+    response->mutable_error()->set_errcode(ret);
+  }
 
   // if meta_increment is empty, means no need to update meta
   if (meta_increment.ByteSizeLong() == 0) {
@@ -919,7 +923,10 @@ void CoordinatorServiceImpl::ChangePeerRegion(google::protobuf::RpcController *c
 
   auto ret =
       this->coordinator_control_->ChangePeerRegionWithTaskList(region_definition.id(), new_store_ids, meta_increment);
-  response->mutable_error()->set_errcode(ret);
+
+  if (ret != pb::error::OK) {
+    response->mutable_error()->set_errcode(ret);
+  }
 
   // if meta_increment is empty, means no need to update meta
   if (meta_increment.ByteSizeLong() == 0) {

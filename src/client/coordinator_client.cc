@@ -81,6 +81,74 @@ bool GetBrpcChannel(const std::string& location, brpc::Channel& channel) {
   return true;
 }
 
+std::string EncodeUint64(uint64_t value) {
+  std::string str(reinterpret_cast<const char*>(&value), sizeof(value));
+  std::reverse(str.begin(), str.end());
+  return str;
+}
+
+uint64_t DecodeUint64(const std::string& str) {
+  if (str.size() != sizeof(uint64_t)) {
+    throw std::invalid_argument("Invalid string size for uint64_t decoding");
+  }
+
+  std::string reversed_str(str.rbegin(), str.rend());
+  uint64_t value;
+  std::memcpy(&value, reversed_str.data(), sizeof(value));
+  return value;
+}
+
+void SendDebug() {
+  uint64_t test1 = 1001;
+  auto encode_result = EncodeUint64(test1);
+  DINGO_LOG(INFO) << encode_result.size();
+  DINGO_LOG(INFO) << dingodb::Helper::StringToHex(encode_result);
+
+  if (FLAGS_start_key.empty() || FLAGS_end_key.empty()) {
+    DINGO_LOG(ERROR) << "start_key or end_key is empty";
+    return;
+  }
+
+  std::string start_key(FLAGS_start_key);
+  std::string end_key(FLAGS_end_key);
+
+  auto s_diff = dingodb::Helper::StrintSubtract(start_key, end_key);
+  auto s_half_diff = dingodb::Helper::StringDivideByTwo(s_diff);
+  auto s_mid = dingodb::Helper::StringAdd(start_key, s_half_diff);
+
+  DINGO_LOG(INFO) << "start_key: " << dingodb::Helper::StringToHex(start_key);
+  DINGO_LOG(INFO) << "end_key: " << dingodb::Helper::StringToHex(end_key);
+  DINGO_LOG(INFO) << "s_diff: " << dingodb::Helper::StringToHex(s_diff);
+  DINGO_LOG(INFO) << "s_half_diff: " << dingodb::Helper::StringToHex(s_half_diff);
+  DINGO_LOG(INFO) << "s_mid: " << dingodb::Helper::StringToHex(s_mid.substr(1, s_mid.size() - 1));
+
+  if (start_key.size() < end_key.size()) {
+    start_key.resize(end_key.size(), 0);
+  } else {
+    end_key.resize(start_key.size(), 0);
+  }
+
+  std::vector<uint8_t> start_vec(start_key.begin(), start_key.end());
+  std::vector<uint8_t> end_vec(end_key.begin(), end_key.end());
+
+  // calc the mid value between start_vec and end_vec
+  std::vector<uint8_t> diff = dingodb::Helper::SubtractByteArrays(start_vec, end_vec);
+  std::vector<uint8_t> half_diff = dingodb::Helper::DivideByteArrayByTwo(diff);
+  std::vector<uint8_t> mid = dingodb::Helper::AddByteArrays(start_vec, half_diff);
+
+  std::string mid_key(mid.begin(), mid.end());
+
+  std::vector<uint8_t> half = dingodb::Helper::DivideByteArrayByTwo(start_vec);
+
+  DINGO_LOG(INFO) << "start_key:" << dingodb::Helper::StringToHex(start_key);
+  DINGO_LOG(INFO) << "end_key:" << dingodb::Helper::StringToHex(end_key);
+  DINGO_LOG(INFO) << "diff:" << dingodb::Helper::StringToHex(std::string(diff.begin(), diff.end()));
+  DINGO_LOG(INFO) << "half_diff:" << dingodb::Helper::StringToHex(std::string(half_diff.begin(), half_diff.end()));
+  DINGO_LOG(INFO) << "half:" << dingodb::Helper::StringToHex(std::string(half.begin(), half.end()));
+
+  DINGO_LOG(INFO) << "mid_key:" << dingodb::Helper::StringToHex(mid_key.substr(1, mid_key.size() - 1));
+}
+
 void* Sender(void* /*arg*/) {
   // get leader location
   std::string leader_location = GetLeaderLocation(0);
@@ -237,47 +305,6 @@ void* Sender(void* /*arg*/) {
   }
 
   return nullptr;
-}
-
-void SendDebug() {
-  std::string start_key(FLAGS_start_key);
-  std::string end_key(FLAGS_end_key);
-
-  auto s_diff = dingodb::Helper::StrintSubtract(start_key, end_key);
-  auto s_half_diff = dingodb::Helper::StringDivideByTwo(s_diff);
-  auto s_mid = dingodb::Helper::StringAdd(start_key, s_half_diff);
-
-  DINGO_LOG(INFO) << "start_key: " << dingodb::Helper::StringToHex(start_key);
-  DINGO_LOG(INFO) << "end_key: " << dingodb::Helper::StringToHex(end_key);
-  DINGO_LOG(INFO) << "s_diff: " << dingodb::Helper::StringToHex(s_diff);
-  DINGO_LOG(INFO) << "s_half_diff: " << dingodb::Helper::StringToHex(s_half_diff);
-  DINGO_LOG(INFO) << "s_mid: " << dingodb::Helper::StringToHex(s_mid.substr(1, s_mid.size() - 1));
-
-  if (start_key.size() < end_key.size()) {
-    start_key.resize(end_key.size(), 0);
-  } else {
-    end_key.resize(start_key.size(), 0);
-  }
-
-  std::vector<uint8_t> start_vec(start_key.begin(), start_key.end());
-  std::vector<uint8_t> end_vec(end_key.begin(), end_key.end());
-
-  // calc the mid value between start_vec and end_vec
-  std::vector<uint8_t> diff = dingodb::Helper::SubtractByteArrays(start_vec, end_vec);
-  std::vector<uint8_t> half_diff = dingodb::Helper::DivideByteArrayByTwo(diff);
-  std::vector<uint8_t> mid = dingodb::Helper::AddByteArrays(start_vec, half_diff);
-
-  std::string mid_key(mid.begin(), mid.end());
-
-  std::vector<uint8_t> half = dingodb::Helper::DivideByteArrayByTwo(start_vec);
-
-  DINGO_LOG(INFO) << "start_key:" << dingodb::Helper::StringToHex(start_key);
-  DINGO_LOG(INFO) << "end_key:" << dingodb::Helper::StringToHex(end_key);
-  DINGO_LOG(INFO) << "diff:" << dingodb::Helper::StringToHex(std::string(diff.begin(), diff.end()));
-  DINGO_LOG(INFO) << "half_diff:" << dingodb::Helper::StringToHex(std::string(half_diff.begin(), half_diff.end()));
-  DINGO_LOG(INFO) << "half:" << dingodb::Helper::StringToHex(std::string(half.begin(), half.end()));
-
-  DINGO_LOG(INFO) << "mid_key:" << dingodb::Helper::StringToHex(mid_key.substr(1, mid_key.size() - 1));
 }
 
 int main(int argc, char* argv[]) {

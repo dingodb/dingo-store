@@ -88,6 +88,7 @@ void SendGetTableByName(brpc::Controller& cntl, dingodb::pb::meta::MetaService_S
 void SendGetTableRange(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub);
 void SendCreateTableId(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub);
 void SendCreateTable(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub, bool with_table_id);
+void SendCreateTableOld(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub, bool with_table_id);
 void SendDropTable(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub);
 void SendDropSchema(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub);
 void SendCreateSchema(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub);
@@ -106,3 +107,5 @@ void SendDeleteAutoIncrement(brpc::Controller& cntl, dingodb::pb::meta::MetaServ
 
 // debug
 void SendDebug();
+std::string EncodeUint64(uint64_t value);
+uint64_t DecodeUint64(const std::string& str);

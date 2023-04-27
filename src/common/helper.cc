@@ -383,11 +383,21 @@ std::string Helper::StrintSubtractRightAlign(const std::string& input_a, const s
 }
 
 std::string Helper::StringDivideByTwo(const std::string& array) {
+  if (array.at(array.size() - 1) % 2 == 0) {
+    return StringDivideByTwoRightAlign(array);
+  } else {
+    std::string new_array = array;
+    new_array.push_back(0);
+    return StringDivideByTwoRightAlign(new_array);
+  }
+}
+
+std::string Helper::StringDivideByTwoRightAlign(const std::string& array) {
   std::string result(array.size(), 0);
   uint16_t carry = 0;
 
   for (size_t i = 0; i < array.size(); ++i) {
-    uint16_t value = (carry << 8) | array[i];
+    uint16_t value = (carry << 8) | static_cast<uint8_t>(array[i]);
     result[i] = value / 2;
     carry = value % 2;
   }
