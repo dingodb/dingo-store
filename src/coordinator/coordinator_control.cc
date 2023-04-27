@@ -104,6 +104,32 @@ CoordinatorControl::~CoordinatorControl() {
   delete executor_user_meta_;
 }
 
+// InitIds
+// Setup some initial ids for human readable
+void CoordinatorControl::InitIds() {
+  if (id_epoch_map_.GetPresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_COORINATOR) == 0) {
+    id_epoch_map_.UpdatePresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_COORINATOR, 22000);
+  }
+  if (id_epoch_map_.GetPresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_STORE) == 0) {
+    id_epoch_map_.UpdatePresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_STORE, 33000);
+  }
+  if (id_epoch_map_.GetPresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_EXECUTOR) == 0) {
+    id_epoch_map_.UpdatePresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_EXECUTOR, 44000);
+  }
+  if (id_epoch_map_.GetPresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_SCHEMA) == 0) {
+    id_epoch_map_.UpdatePresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_SCHEMA, 55000);
+  }
+  if (id_epoch_map_.GetPresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_TABLE) == 0) {
+    id_epoch_map_.UpdatePresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_TABLE, 66000);
+  }
+  if (id_epoch_map_.GetPresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION) == 0) {
+    id_epoch_map_.UpdatePresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION, 77000);
+  }
+  if (id_epoch_map_.GetPresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD) == 0) {
+    id_epoch_map_.UpdatePresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, 880000);
+  }
+}
+
 bool CoordinatorControl::Recover() {
   DINGO_LOG(INFO) << "Coordinator start to Recover";
 
@@ -119,6 +145,9 @@ bool CoordinatorControl::Recover() {
     if (!id_epoch_meta_->Recover(kvs)) {
       return false;
     }
+
+    // set id_epoch_map_ present id
+    InitIds();
 
     DINGO_LOG(WARNING) << "id_epoch_map_ size=" << id_epoch_map_.Size();
     DINGO_LOG(WARNING) << "term=" << id_epoch_map_.GetPresentId(pb::coordinator_internal::IdEpochType::RAFT_APPLY_TERM);

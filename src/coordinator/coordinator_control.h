@@ -357,6 +357,9 @@ class CoordinatorControl : public MetaControl {
   // get present id/epoch
   uint64_t GetPresentId(const pb::coordinator_internal::IdEpochType &key);
 
+  // init ids
+  void InitIds();
+
   // validate schema if exists
   // in: schema_id
   // return: true/false
