@@ -174,6 +174,7 @@ class StoreRaftMeta : public TransformKvAble {
   void UpdateRaftMeta(RaftMetaPtr raft_meta);
   void DeleteRaftMeta(uint64_t region_id);
   RaftMetaPtr GetRaftMeta(uint64_t region_id);
+  std::vector<RaftMetaPtr> GetAllRaftMeta();
 
  private:
   std::shared_ptr<pb::common::KeyValue> TransformToKv(void* obj) override;

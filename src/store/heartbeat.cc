@@ -534,13 +534,15 @@ void CalculateTableMetricsTask::CalculateTableMetrics(std::shared_ptr<Coordinato
 }
 
 int Heartbeat::ExecuteRoutine(void*, bthread::TaskIterator<TaskRunnable*>& iter) {
-  std::unique_ptr<TaskRunnable> self_guard(*iter);
   if (iter.is_queue_stopped()) {
     return 0;
   }
 
-  for (; iter; ++iter) {
-    (*iter)->Run();
+  {
+    std::unique_ptr<TaskRunnable> self_guard(*iter);
+    for (; iter; ++iter) {
+      (*iter)->Run();
+    }
   }
 
   return 0;

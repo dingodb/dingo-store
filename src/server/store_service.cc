@@ -848,6 +848,28 @@ void StoreServiceImpl::Debug(google::protobuf::RpcController* controller,
     for (auto& command : commands) {
       response->mutable_region_control_command()->add_region_cmds()->CopyFrom(*command);
     }
+  } else if (request->type() == pb::store::DebugType::STORE_RAFT_META) {
+    auto store_raft_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRaftMeta();
+
+    std::vector<StoreRaftMeta::RaftMetaPtr> raft_metas;
+    if (request->region_ids().empty()) {
+      raft_metas = store_raft_meta->GetAllRaftMeta();
+    } else {
+      for (auto region_id : request->region_ids()) {
+        raft_metas.push_back(store_raft_meta->GetRaftMeta(region_id));
+      }
+    }
+
+    for (auto& raft_meta : raft_metas) {
+      response->mutable_raft_meta()->add_raft_metas()->CopyFrom(*raft_meta);
+    }
+
+  } else if (request->type() == pb::store::DebugType::STORE_REGION_EXECUTOR) {
+    auto region_ids = Server::GetInstance()->GetRegionController()->GetAllRegion();
+
+    for (auto region_id : region_ids) {
+      response->mutable_region_executor()->add_region_ids(region_id);
+    }
   }
 }
 void StoreServiceImpl::SetStorage(std::shared_ptr<Storage> storage) { storage_ = storage; }

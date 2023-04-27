@@ -16,6 +16,7 @@
 
 #include <iostream>
 #include <iterator>
+#include <memory>
 #include <string>
 
 #include "common/helper.h"
@@ -48,4 +49,9 @@ TEST_F(HelperTest, FormatTime) {
   std::cout << dingodb::Helper::GetNowFormatMsTime();
 }
 
-TEST_F(HelperTest, TimestampNs) { std::cout << dingodb::Helper::TimestampNs() << std::endl; }
+TEST_F(HelperTest, TimestampNs) {
+  std::shared_ptr<int> abc;
+  if (abc == nullptr) {
+    std::cout << dingodb::Helper::TimestampNs() << std::endl;
+  }
+}
