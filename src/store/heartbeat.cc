@@ -217,7 +217,9 @@ void CoordinatorUpdateStateTask::CoordinatorUpdateState(std::shared_ptr<Coordina
       continue;
     }
 
-    if (it.state() != pb::common::RegionState::REGION_NEW && it.state() != pb::common::RegionState::REGION_DELETED) {
+    if (it.state() != pb::common::RegionState::REGION_NEW && it.state() != pb::common::RegionState::REGION_DELETE &&
+        it.state() != pb::common::RegionState::REGION_DELETING &&
+        it.state() != pb::common::RegionState::REGION_DELETED) {
       DINGO_LOG(INFO) << "CoordinatorUpdateState... update region " << it.id() << " state to offline";
       coordinator_control->TrySetRegionToDown(it.id());
     } else if (it.state() == pb::common::RegionState::REGION_DELETED &&
