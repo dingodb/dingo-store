@@ -920,6 +920,12 @@ pb::error::Errno CoordinatorControl::SplitRegion(uint64_t split_from_region_id, 
 pb::error::Errno CoordinatorControl::SplitRegionWithTaskList(uint64_t split_from_region_id, uint64_t split_to_region_id,
                                                              std::string split_watershed_key,
                                                              pb::coordinator_internal::MetaIncrement& meta_increment) {
+  if (!ValidateTaskListConflict(split_from_region_id, split_to_region_id)) {
+    DINGO_LOG(ERROR) << "SplitRegionWithTaskList validate task list conflict failed, split_from_region_id="
+                     << split_from_region_id << ", split_to_region_id=" << split_to_region_id;
+    return pb::error::Errno::ETASK_LIST_CONFLICT;
+  }
+
   if (split_to_region_id > 0) {
     return SplitRegion(split_from_region_id, split_to_region_id, split_watershed_key, meta_increment);
   }
@@ -1020,6 +1026,12 @@ pb::error::Errno CoordinatorControl::SplitRegionWithTaskList(uint64_t split_from
 
 pb::error::Errno CoordinatorControl::MergeRegionWithTaskList(uint64_t merge_from_region_id, uint64_t merge_to_region_id,
                                                              pb::coordinator_internal::MetaIncrement& meta_increment) {
+  if (!ValidateTaskListConflict(merge_from_region_id, merge_to_region_id)) {
+    DINGO_LOG(ERROR) << "mergeRegionWithTaskList validate task list conflict failed, merge_from_region_id="
+                     << merge_from_region_id << ", merge_to_region_id=" << merge_to_region_id;
+    return pb::error::Errno::ETASK_LIST_CONFLICT;
+  }
+
   // validate merge_from_region_id
   pb::common::Region merge_from_region;
   int ret = region_map_.Get(merge_from_region_id, merge_from_region);
@@ -1165,6 +1177,12 @@ pb::error::Errno CoordinatorControl::MergeRegionWithTaskList(uint64_t merge_from
 // ChangePeerRegionWithTaskList
 pb::error::Errno CoordinatorControl::ChangePeerRegionWithTaskList(
     uint64_t region_id, std::vector<uint64_t>& new_store_ids, pb::coordinator_internal::MetaIncrement& meta_increment) {
+  if (!ValidateTaskListConflict(region_id, region_id)) {
+    DINGO_LOG(ERROR) << "ChangePeerRegionWithTaskList validate task list conflict failed, change_peer_region_id="
+                     << region_id;
+    return pb::error::Errno::ETASK_LIST_CONFLICT;
+  }
+
   // validate region_id
   pb::common::Region region;
   int ret = region_map_.Get(region_id, region);
@@ -1370,6 +1388,51 @@ pb::error::Errno CoordinatorControl::ChangePeerRegionWithTaskList(
   }
 
   return pb::error::Errno::OK;
+}
+
+bool CoordinatorControl::ValidateTaskListConflict(uint64_t region_id, uint64_t second_region_id) {
+  // check task_list conflict
+  butil::FlatMap<uint64_t, pb::coordinator::TaskList> task_list_map_temp;
+  task_list_map_temp.init(1000);
+  int ret = task_list_map_.GetFlatMapCopy(task_list_map_temp);
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << "ValidateTaskListConflict task_list_map_.GetFlatMapCopy failed, region_id = " << region_id;
+    return false;
+  }
+
+  for (const auto& task_list : task_list_map_temp) {
+    for (const auto& task : task_list.second.tasks()) {
+      for (const auto& store_operation : task.store_operations()) {
+        for (const auto& region_cmd : store_operation.region_cmds()) {
+          if (region_cmd.region_id() == region_id || region_cmd.region_id() == second_region_id) {
+            DINGO_LOG(ERROR) << "ValidateTaskListConflict task_list conflict, region_id = " << region_id;
+            return false;
+          }
+        }
+      }
+    }
+  }
+
+  // check store operation conflict
+  butil::FlatMap<uint64_t, pb::coordinator::StoreOperation> store_operation_map_temp;
+  store_operation_map_temp.init(1000);
+  ret = store_operation_map_.GetFlatMapCopy(store_operation_map_temp);
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << "ValidateTaskListConflict store_operation_map_.GetFlatMapCopy failed, region_id = "
+                     << region_id;
+    return false;
+  }
+
+  for (const auto& store_operation : store_operation_map_temp) {
+    for (const auto& region_cmd : store_operation.second.region_cmds()) {
+      if (region_cmd.region_id() == region_id || region_cmd.region_id() == second_region_id) {
+        DINGO_LOG(ERROR) << "ValidateTaskListConflict store_operation conflict, region_id = " << region_id;
+        return false;
+      }
+    }
+  }
+
+  return true;
 }
 
 // CleanStoreOperation
