@@ -116,7 +116,7 @@ enum RegionCmdType {
   CMD_DESTROY_EXECUTOR = 9;  // destroy region executor
 }
 
-// Regino cmd status
+// Region cmd status
 enum RegionCmdStatus {
   STATUS_NONE = 0;
   STATUS_DONE = 1;
@@ -256,6 +256,7 @@ message GetStoreMapResponse {
 
 message GetStoreMetricsRequest {
   uint64 epoch = 1;
+  uint64 store_id = 2;
 }
 
 message GetStoreMetricsResponse {

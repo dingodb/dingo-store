@@ -688,6 +688,10 @@ void SendGetStoreMetrics(brpc::Controller& cntl, dingodb::pb::coordinator::Coord
   dingodb::pb::coordinator::GetStoreMetricsRequest request;
   dingodb::pb::coordinator::GetStoreMetricsResponse response;
 
+  if (!FLAGS_id.empty()) {
+    request.set_store_id(std::stoull(FLAGS_id));
+  }
+
   stub.GetStoreMetrics(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
     DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();

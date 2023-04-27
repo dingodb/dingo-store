@@ -250,7 +250,7 @@ class CoordinatorControl : public MetaControl {
   void GetStoreMap(pb::common::StoreMap &store_map);
 
   // get store metrics
-  void GetStoreMetrics(std::vector<pb::common::StoreMetrics> &store_metrics);
+  void GetStoreMetrics(uint64_t store_id, std::vector<pb::common::StoreMetrics> &store_metrics);
 
   // get orphan region
   pb::error::Errno GetOrphanRegion(uint64_t store_id, std::map<uint64_t, pb::common::RegionMetrics> &orphan_regions);

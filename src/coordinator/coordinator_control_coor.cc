@@ -119,10 +119,17 @@ void CoordinatorControl::GetStoreMap(pb::common::StoreMap& store_map) {
   }
 }
 
-void CoordinatorControl::GetStoreMetrics(std::vector<pb::common::StoreMetrics>& store_metrics) {
+void CoordinatorControl::GetStoreMetrics(uint64_t store_id, std::vector<pb::common::StoreMetrics>& store_metrics) {
   BAIDU_SCOPED_LOCK(store_metrics_map_mutex_);
-  for (auto& elemnt : store_metrics_map_) {
-    store_metrics.push_back(elemnt.second);
+  if (store_id == 0) {
+    for (auto& elemnt : store_metrics_map_) {
+      store_metrics.push_back(elemnt.second);
+    }
+  } else {
+    auto* it = store_metrics_map_.seek(store_id);
+    if (it != nullptr) {
+      store_metrics.push_back(*it);
+    }
   }
 }
 
@@ -1246,11 +1253,14 @@ pb::error::Errno CoordinatorControl::ChangePeerRegionWithTaskList(
     region_definition->CopyFrom(new_region_definition);
 
     // this is delete_region task
+    // precheck if reigon in RegionMap is REGION_NORMAL and REGION_RAFT_HEALTHY
     auto* delete_region_task = increment_task_list->add_tasks();
     auto* region_check = delete_region_task->mutable_pre_check();
     region_check->set_type(::dingodb::pb::coordinator::TaskPreCheckType::REGION_CHECK);
     region_check->mutable_region_check()->set_region_id(region_id);
     region_check->mutable_region_check()->mutable_peers()->CopyFrom(new_region_definition.peers());
+    region_check->mutable_region_check()->set_state(::dingodb::pb::common::RegionState::REGION_NORMAL);
+    region_check->mutable_region_check()->set_raft_status(::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_HEALTHY);
 
     auto* store_operation_delete = delete_region_task->add_store_operations();
     store_operation_delete->set_id(new_store_ids_diff_less.at(0));
@@ -1260,6 +1270,25 @@ pb::error::Errno CoordinatorControl::ChangePeerRegionWithTaskList(
     region_cmd_to_delete->set_region_id(region_id);
     region_cmd_to_delete->set_create_timestamp(butil::gettimeofday_ms());
     region_cmd_to_delete->mutable_delete_request()->set_region_id(region_id);
+
+    // this is purge_region task
+    // precheck if region on store is DELETED
+    auto* purge_region_task = increment_task_list->add_tasks();
+    auto* purge_region_check = purge_region_task->mutable_pre_check();
+    purge_region_check->set_type(::dingodb::pb::coordinator::TaskPreCheckType::STORE_REGION_CHECK);
+    purge_region_check->mutable_store_region_check()->set_store_id(new_store_ids_diff_less.at(0));
+    purge_region_check->mutable_store_region_check()->set_region_id(region_id);
+    purge_region_check->mutable_store_region_check()->set_store_region_state(
+        ::dingodb::pb::common::StoreRegionState::DELETED);
+
+    auto* store_operation_purge = purge_region_task->add_store_operations();
+    store_operation_purge->set_id(new_store_ids_diff_less.at(0));
+    auto* region_cmd_to_purge = store_operation_purge->add_region_cmds();
+    region_cmd_to_purge->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
+    region_cmd_to_purge->set_region_cmd_type(::dingodb::pb::coordinator::RegionCmdType::CMD_PURGE);
+    region_cmd_to_purge->set_region_id(region_id);
+    region_cmd_to_purge->set_create_timestamp(butil::gettimeofday_ms());
+    region_cmd_to_purge->mutable_purge_request()->set_region_id(region_id);
 
   } else if (new_store_ids_diff_more.size() == 1) {
     // expand region
