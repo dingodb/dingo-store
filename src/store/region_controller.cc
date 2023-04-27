@@ -418,9 +418,9 @@ butil::Status PurgeRegionTask::PurgeRegion(std::shared_ptr<Context>, uint64_t re
 }
 
 void PurgeRegionTask::Run() {
-  auto status = PurgeRegion(ctx_, region_cmd_->delete_request().region_id());
+  auto status = PurgeRegion(ctx_, region_cmd_->purge_request().region_id());
   if (!status.ok()) {
-    DINGO_LOG(DEBUG) << butil::StringPrintf("Purge region %lu failed, %s", region_cmd_->delete_request().region_id(),
+    DINGO_LOG(DEBUG) << butil::StringPrintf("Purge region %lu failed, %s", region_cmd_->purge_request().region_id(),
                                             status.error_cstr());
   }
 
