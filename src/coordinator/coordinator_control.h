@@ -418,6 +418,8 @@ class CoordinatorControl : public MetaControl {
   pb::error::Errno CleanTaskList(uint64_t task_list_id, pb::coordinator_internal::MetaIncrement &meta_increment);
 
  private:
+  bool ValidateTaskListConflict(uint64_t region_id, uint64_t second_region_id);
+
   // ids_epochs_temp (out of state machine, only for leader use)
   DingoSafeIdEpochMap id_epoch_map_safe_temp_;
 
