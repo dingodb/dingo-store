@@ -137,7 +137,7 @@ void SmStopFollowingEventListener::OnEvent(std::shared_ptr<Event> event) {
     auto raft_kv_engine = std::dynamic_pointer_cast<RaftKvEngine>(engine);
     auto node = raft_kv_engine->GetNode(the_event->node_id);
     if (node == nullptr) {
-      DINGO_LOG(ERROR) << "Not found node " << the_event->node_id;
+      DINGO_LOG(INFO) << "Not found node " << the_event->node_id;
       return;
     }
     std::vector<braft::PeerId> peers;

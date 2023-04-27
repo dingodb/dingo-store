@@ -20,6 +20,7 @@
 #include <memory>
 
 #include "butil/status.h"
+#include "butil/strings/stringprintf.h"
 #include "common/constant.h"
 #include "common/logging.h"
 #include "event/store_state_machine_event.h"
@@ -507,13 +508,15 @@ void DestroyRegionExecutorTask::Run() {
 }
 
 static int ExecuteRoutine(void*, bthread::TaskIterator<TaskRunnable*>& iter) {
-  std::unique_ptr<TaskRunnable> self_guard(*iter);
   if (iter.is_queue_stopped()) {
     return 0;
   }
 
-  for (; iter; ++iter) {
-    (*iter)->Run();
+  {
+    std::unique_ptr<TaskRunnable> self_guard(*iter);
+    for (; iter; ++iter) {
+      (*iter)->Run();
+    }
   }
 
   return 0;
@@ -695,6 +698,15 @@ void RegionController::Destroy() {
   share_executor_->Stop();
 }
 
+std::vector<uint64_t> RegionController::GetAllRegion() {
+  BAIDU_SCOPED_LOCK(mutex_);
+  std::vector<uint64_t> region_ids;
+  for (auto [region_id, _] : executors_) {
+    region_ids.push_back(region_id);
+  }
+  return region_ids;
+}
+
 bool RegionController::RegisterExecutor(uint64_t region_id) {
   BAIDU_SCOPED_LOCK(mutex_);
 
@@ -735,12 +747,17 @@ std::shared_ptr<RegionControlExecutor> RegionController::GetRegionControlExecuto
 
 butil::Status RegionController::InnerDispatchRegionControlCommand(std::shared_ptr<Context> ctx,
                                                                   std::shared_ptr<pb::coordinator::RegionCmd> command) {
+  DINGO_LOG(DEBUG) << butil::StringPrintf("Dispatch region control command, region %lu %lu %s", command->region_id(),
+                                          command->id(),
+                                          pb::coordinator::RegionCmdType_Name(command->region_cmd_type()).c_str());
+
   // Create region, need to add region control executor
   if (command->region_cmd_type() == pb::coordinator::RegionCmdType::CMD_CREATE) {
     RegisterExecutor(command->region_id());
   }
 
-  auto executor = command->region_cmd_type() == pb::coordinator::RegionCmdType::CMD_PURGE
+  auto executor = (command->region_cmd_type() == pb::coordinator::RegionCmdType::CMD_PURGE ||
+                   command->region_cmd_type() == pb::coordinator::RegionCmdType::CMD_DESTROY_EXECUTOR)
                       ? share_executor_
                       : GetRegionControlExecutor(command->region_id());
   if (executor == nullptr) {

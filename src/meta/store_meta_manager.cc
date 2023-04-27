@@ -395,6 +395,16 @@ StoreRaftMeta::RaftMetaPtr StoreRaftMeta::GetRaftMeta(uint64_t region_id) {
   return it->second;
 }
 
+std::vector<StoreRaftMeta::RaftMetaPtr> StoreRaftMeta::GetAllRaftMeta() {
+  BAIDU_SCOPED_LOCK(mutex_);
+  std::vector<StoreRaftMeta::RaftMetaPtr> raft_metas;
+  for (auto& [_, raft_meta] : raft_metas_) {
+    raft_metas.push_back(raft_meta);
+  }
+
+  return raft_metas;
+}
+
 std::shared_ptr<pb::common::KeyValue> StoreRaftMeta::TransformToKv(void* obj) {
   auto raft_meta = *static_cast<RaftMetaPtr*>(obj);
   std::shared_ptr<pb::common::KeyValue> kv = std::make_shared<pb::common::KeyValue>();

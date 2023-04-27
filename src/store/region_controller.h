@@ -178,6 +178,7 @@ class StopRegionTask : public TaskRunnable {
   std::shared_ptr<pb::coordinator::RegionCmd> region_cmd_;
 };
 
+// When regoin delete, destroy region executor
 class DestroyRegionExecutorTask : public TaskRunnable {
  public:
   DestroyRegionExecutorTask(std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> region_cmd)
@@ -220,7 +221,9 @@ class RegionControlExecutor : public ControlExecutor {
 class RegionCommandManager : public TransformKvAble {
  public:
   RegionCommandManager(std::shared_ptr<MetaReader> meta_reader, std::shared_ptr<MetaWriter> meta_writer)
-      : TransformKvAble(Constant::kStoreRegionControllerPrefix), meta_reader_(meta_reader), meta_writer_(meta_writer) {
+      : TransformKvAble(Constant::kStoreRegionControlCommandPrefix),
+        meta_reader_(meta_reader),
+        meta_writer_(meta_writer) {
     bthread_mutex_init(&mutex_, nullptr);
   }
   ~RegionCommandManager() override { bthread_mutex_destroy(&mutex_); }
@@ -267,6 +270,8 @@ class RegionController {
   bool Init();
   bool Recover();
   void Destroy();
+
+  std::vector<uint64_t> GetAllRegion();
 
   bool RegisterExecutor(uint64_t region_id);
   void UnRegisterExecutor(uint64_t region_id);

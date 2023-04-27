@@ -45,7 +45,7 @@ class Constant {
   // Define store region metrics prefix.
   inline static const std::string kStoreRegionMetricsPrefix = "METRICS_REGION";
   // Define region controller prefix.
-  inline static const std::string kStoreRegionControllerPrefix = "CONTROLLER_REGION";
+  inline static const std::string kStoreRegionControlCommandPrefix = "CONTROL_CMD";
 
   // flat map init capacity
   static const uint64_t kStoreRegionMetaInitCapacity = 1024;
