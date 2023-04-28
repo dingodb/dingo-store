@@ -49,6 +49,13 @@ public class MysqlInit {
 
     static StoreServiceClient storeServiceClient;
 
+    static final String USER = "USER";
+    static final String DB = "DB";
+    static final String TABLES_PRIV = "TABLES_PRIV";
+
+    static final String GLOBAL_VARIABLES = "GLOBAL_VARIABLES";
+
+
     public static void main(String[] args) throws IOException {
         if (args.length < 1) {
             System.out.println("Usage: java -cp mysql-init.jar io.dingodb.mysql.MysqlInit <coordinatorSvr>");
@@ -57,11 +64,16 @@ public class MysqlInit {
         String coordinatorSvr = args[0];
         initMetaStore(coordinatorSvr);
         System.out.println("init meta store success");
-        initUser("USER");
-        initDbPrivilege("DB");
-        initTablePrivilege("TABLES_PRIV");
-        initGlobalVariables("GLOBAL_VARIABLES");
+        initUser(USER);
+        initDbPrivilege(DB);
+        initTablePrivilege(TABLES_PRIV);
+        initGlobalVariables(GLOBAL_VARIABLES);
         close();
+        // check
+        initMetaStore(coordinatorSvr);
+        int code = check();
+        close();
+        System.exit(code);
     }
 
     public static void initUser(String tableName) throws IOException {
@@ -284,9 +296,51 @@ public class MysqlInit {
         }
     }
 
+    public static Integer check() {
+        MetaServiceClient mysqlMetaClient = rootMeta.getSubMetaService("mysql");
+        Map<String, Table> tableDefinitionMap  = mysqlMetaClient.getTableDefinitions();
+        boolean mysqlCheck = tableDefinitionMap.get(USER) != null && tableDefinitionMap.get(DB) != null
+                && tableDefinitionMap.get(TABLES_PRIV) != null;
+        if (mysqlCheck) {
+            DingoCommonId tableId = mysqlMetaClient.getTableId(USER);
+            TableDefinition tableDefinition = (TableDefinition) tableDefinitionMap.get(USER);
+            Object[] userKeys = new Object[tableDefinition.getColumns().size()];
+            userKeys[0] = "%";
+            userKeys[1] = "root";
+            KeyValueCodec codec = new DingoKeyValueCodec(tableDefinition.getDingoType(),
+                    tableDefinition.getKeyMapping(),
+                    tableId.entityId());
+            try {
+                byte[] key = codec.encodeKey(userKeys);
+                NavigableMap<ByteArrayUtils.ComparableByteArray, RangeDistribution> rangeDistribution
+                        = mysqlMetaClient.getRangeDistribution(tableId);
+                if (rangeDistribution == null) {
+                    return 1;
+                }
+                DingoCommonId regionId = rangeDistribution.firstEntry().getValue().getId();
+                byte[] res = storeServiceClient.kvGet(tableId, regionId, key);
+                if (res == null || res.length == 0) {
+                    return 1;
+                }
+            } catch (IOException e) {
+                return 1;
+            }
+
+        }
+
+        MetaServiceClient informationMetaClient = rootMeta.getSubMetaService("information_schema");
+        boolean informationSchemaCheck = informationMetaClient.getTableDefinitions().get("GLOBAL_VARIABLES") != null;
+        boolean check = mysqlCheck && informationSchemaCheck;
+        return check ? 0 : 1;
+    }
+
     public static void close() {
-        rootMeta.close();
-        storeServiceClient.shutdown();
+        try {
+            rootMeta.close();
+            storeServiceClient.shutdown();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
 }
