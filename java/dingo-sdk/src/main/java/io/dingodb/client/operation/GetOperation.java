@@ -74,6 +74,22 @@ public class GetOperation implements Operation {
     }
 
     @Override
+    public Fork fork(OperationContext context, RouteTable routeTable) {
+        Map<byte[], Integer> parameters = context.parameters();
+        NavigableSet<Task> subTasks = new TreeSet<>(Comparator.comparingLong(t -> t.getRegionId().entityId()));
+        Map<DingoCommonId, Any> subTaskMap = new HashMap<>();
+        for (Map.Entry<byte[], Integer> parameter : parameters.entrySet()) {
+            Map<byte[], Integer> regionParams = subTaskMap.computeIfAbsent(
+                    routeTable.calcRegionId(parameter.getKey()), k -> new Any(new HashMap<>())
+            ).getValue();
+
+            regionParams.put(parameter.getKey(), parameter.getValue());
+        }
+        subTaskMap.forEach((k, v) -> subTasks.add(new Task(k, v)));
+        return new Fork(context.result(), subTasks, true);
+    }
+
+    @Override
     public void exec(OperationContext context) {
         try {
             Map<byte[], Integer> parameters = context.parameters();

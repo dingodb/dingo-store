@@ -289,6 +289,7 @@ public class MetaServiceClient {
         }).getResponse();
         tableIdCache.remove(tableName);
         tableDefinitionCache.remove(tableId);
+        removeAutoIncrementCache(tableId);
 
         return response.getError().getErrcodeValue() == 0;
     }

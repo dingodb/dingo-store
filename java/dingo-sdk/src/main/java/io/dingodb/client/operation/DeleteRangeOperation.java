@@ -65,36 +65,29 @@ public class DeleteRangeOperation implements Operation {
                 keyRange.withStart,
                 keyRange.withEnd
             );
-            NavigableMap<ComparableByteArray, RangeDistribution> rangeDistribution = routeTable.getRangeDistribution();
-            NavigableSet<Task> subTasks = (rangeDistribution.size() == 1 ? rangeDistribution : rangeDistribution
-                .subMap(
-                    rangeDistribution.floorKey(new ComparableByteArray(range.getStartKey())), true,
-                    rangeDistribution.floorKey(new ComparableByteArray(range.getRange().getEndKey())), true
-                )).values().stream()
-                .map(rd -> new Task(rd.getId(),
-                    wrap(new OpRange(rd.getRange().getStartKey(), rd.getRange().getEndKey(), true, false))
-                ))
-                .collect(Collectors.toCollection(() -> new TreeSet<>(getComparator())));
+            NavigableSet<Task> subTasks = getSubTasks(routeTable, range);
             Task task = subTasks.pollFirst();
             if (task == null) {
                 return new Fork(new long[0], subTasks, true);
             }
-            OpRange taskRange = task.parameters();
-            subTasks.add(new Task(
-                task.getRegionId(),
-                wrap(new OpRange(range.getStartKey(), taskRange.getEndKey(), range.withStart, taskRange.withEnd))
-            ));
-            task = subTasks.pollLast();
-            taskRange = task.parameters();
-            subTasks.add(new Task(
-                task.getRegionId(),
-                wrap(new OpRange(taskRange.getStartKey(), range.getEndKey(), taskRange.withStart, range.withEnd))
-            ));
+            buildSubTasks(range, subTasks, task);
             return new Fork(new long[subTasks.size()], subTasks, true);
 
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
+    }
+
+    @Override
+    public Fork fork(OperationContext context, RouteTable routeTable) {
+        OpRange range = context.parameters();
+        NavigableSet<Task> subTasks = getSubTasks(routeTable, range);
+        Task task = subTasks.pollFirst();
+        if (task == null) {
+            return new Fork(new long[0], subTasks, true);
+        }
+        buildSubTasks(range, subTasks, task);
+        return new Fork(context.result(), subTasks, true);
     }
 
     @Override
@@ -107,5 +100,32 @@ public class DeleteRangeOperation implements Operation {
     @Override
     public <R> R reduce(Fork context) {
         return (R) (Long) Arrays.stream(context.<long[]>result()).reduce(Long::sum).orElse(0L);
+    }
+
+    private NavigableSet<Task> getSubTasks(RouteTable routeTable, OpRange range) {
+        NavigableMap<ComparableByteArray, RangeDistribution> rangeDistribution = routeTable.getRangeDistribution();
+        return (rangeDistribution.size() == 1 ? rangeDistribution : rangeDistribution
+                .subMap(
+                        rangeDistribution.floorKey(new ComparableByteArray(range.getStartKey())), true,
+                        rangeDistribution.floorKey(new ComparableByteArray(range.getRange().getEndKey())), true
+                )).values().stream()
+                .map(rd -> new Task(rd.getId(),
+                        wrap(new OpRange(rd.getRange().getStartKey(), rd.getRange().getEndKey(), true, false))
+                ))
+                .collect(Collectors.toCollection(() -> new TreeSet<>(getComparator())));
+    }
+
+    private void buildSubTasks(OpRange range, NavigableSet<Task> subTasks, Task task) {
+        OpRange taskRange = task.parameters();
+        subTasks.add(new Task(
+                task.getRegionId(),
+                wrap(new OpRange(range.getStartKey(), taskRange.getEndKey(), range.withStart, taskRange.withEnd))
+        ));
+        task = subTasks.pollLast();
+        taskRange = task.parameters();
+        subTasks.add(new Task(
+                task.getRegionId(),
+                wrap(new OpRange(taskRange.getStartKey(), range.getEndKey(), taskRange.withStart, range.withEnd))
+        ));
     }
 }

@@ -16,7 +16,6 @@
 
 package io.dingodb.sdk.common;
 
-import io.dingodb.error.ErrorOuterClass;
 import lombok.Getter;
 
 public class DingoClientException extends RuntimeException {
@@ -48,11 +47,9 @@ public class DingoClientException extends RuntimeException {
         this.errorCode = errorCode;
     }
 
-    public static final class InvalidStoreLeader extends DingoClientException {
-
-        public InvalidStoreLeader(String tableName) {
-            super(ErrorOuterClass.Errno.ERAFT_NOTLEADER_VALUE,
-                    "Invalid store leader, the store leader is empty, and the table name is: " + tableName);
+    public static final class InvalidRouteTableException extends DingoClientException {
+        public InvalidRouteTableException(String message) {
+            super(message);
         }
     }
 
