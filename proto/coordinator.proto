@@ -289,10 +289,11 @@ message GetCoordinatorMapRequest {
 }
 
 message GetCoordinatorMapResponse {
-  uint64 epoch = 1;
-  dingodb.pb.common.Location leader_location = 2;
-  repeated dingodb.pb.common.Location coordinator_locations = 3;
-  dingodb.pb.common.Location auto_increment_leader_location = 4;
+  dingodb.pb.error.Error error = 1;
+  uint64 epoch = 2;
+  dingodb.pb.common.Location leader_location = 3;
+  repeated dingodb.pb.common.Location coordinator_locations = 4;
+  dingodb.pb.common.Location auto_increment_leader_location = 5;
 }
 
 message DeleteStoreRequest {

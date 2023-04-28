@@ -12,11 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <memory>
 #include <string>
 
 #include "client/coordinator_client_function.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "coordinator/coordinator_interaction.h"
 #include "proto/common.pb.h"
 #include "proto/meta.pb.h"
 #include "proto/node.pb.h"
@@ -26,7 +28,7 @@ DECLARE_int32(timeout_ms);
 DECLARE_string(id);
 DECLARE_string(name);
 
-void SendGetSchemas(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub) {
+void SendGetSchemas(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
   dingodb::pb::meta::GetSchemasRequest request;
   dingodb::pb::meta::GetSchemasResponse response;
 
@@ -35,42 +37,21 @@ void SendGetSchemas(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub&
   schema_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
   schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
 
-  stub.GetSchemas(&cntl, &request, &response, nullptr);
-  if (cntl.Failed()) {
-    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
-    // bthread_usleep(FLAGS_timeout_ms * 1000L);
-  }
+  auto status = coordinator_interaction->SendRequest("GetSchemas", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG_INFO << response.DebugString();
 
-  if (FLAGS_log_each_request) {
-    DINGO_LOG(INFO) << "Received response"
-                    << " schema_id=" << request.schema_id().entity_id() << " schema_count=" << response.schemas_size()
-                    << " request_attachment=" << cntl.request_attachment().size()
-                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
-    // DINGO_LOG(INFO) << response.DebugString();
-    for (const auto& schema : response.schemas()) {
-      DINGO_LOG(INFO) << "schema_id=[" << schema.id().entity_id() << "]"
-                      << "schema_name=[" << schema.name() << "]"
-                      << "child_table_count=" << schema.table_ids_size();
-      for (const auto& child_table_id : schema.table_ids()) {
-        DINGO_LOG(INFO) << "child table_id=[" << child_table_id.entity_id() << "]";
-      }
+  for (const auto& schema : response.schemas()) {
+    DINGO_LOG(INFO) << "schema_id=[" << schema.id().entity_id() << "]"
+                    << "schema_name=[" << schema.name() << "]"
+                    << "child_table_count=" << schema.table_ids_size();
+    for (const auto& child_table_id : schema.table_ids()) {
+      DINGO_LOG(INFO) << "child table_id=[" << child_table_id.entity_id() << "]";
     }
-
-    // for (int32_t i = 0; i < response.schemas_size(); i++) {
-    //   DINGO_LOG(INFO) << "schema_id=[" << response.schemas(i).id().entity_id() << "]"
-    //             << "child_schema_count=" << response.schemas(i).schema_ids_size()
-    //             << "child_table_count=" << response.schemas(i).table_ids_size();
-    //   for (int32_t j = 0; j < response.schemas(i).schema_ids_size(); j++) {
-    //     DINGO_LOG(INFO) << "child schema_id=[" << response.schemas(i).schema_ids(j).entity_id() << "]";
-    //   }
-    //   for (int32_t j = 0; j < response.schemas(i).table_ids_size(); j++) {
-    //     DINGO_LOG(INFO) << "child table_id=[" << response.schemas(i).table_ids(j).entity_id() << "]";
-    //   }
-    // }
   }
 }
 
-void SendGetSchema(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub) {
+void SendGetSchema(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
   dingodb::pb::meta::GetSchemaRequest request;
   dingodb::pb::meta::GetSchemaResponse response;
 
@@ -84,29 +65,19 @@ void SendGetSchema(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& 
   }
   schema_id->set_entity_id(std::stol(FLAGS_id));
 
-  stub.GetSchema(&cntl, &request, &response, nullptr);
-  if (cntl.Failed()) {
-    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
-    // bthread_usleep(FLAGS_timeout_ms * 1000L);
-  }
+  auto status = coordinator_interaction->SendRequest("GetSchema", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG_INFO << response.DebugString();
 
-  if (FLAGS_log_each_request) {
-    DINGO_LOG(INFO) << "Received response"
-                    << " schema_id=" << request.schema_id().entity_id()
-                    << " table_id_count=" << response.schema().table_ids_size()
-                    << " request_attachment=" << cntl.request_attachment().size()
-                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
-    // DINGO_LOG(INFO) << response.DebugString();
-    DINGO_LOG(INFO) << "schema_id=[" << response.schema().id().entity_id() << "]"
-                    << "schema_name=[" << response.schema().name() << "]"
-                    << "child_table_count=" << response.schema().table_ids_size();
-    for (const auto& child_table_id : response.schema().table_ids()) {
-      DINGO_LOG(INFO) << "child table_id=[" << child_table_id.entity_id() << "]";
-    }
+  DINGO_LOG(INFO) << "schema_id=[" << response.schema().id().entity_id() << "]"
+                  << "schema_name=[" << response.schema().name() << "]"
+                  << "child_table_count=" << response.schema().table_ids_size();
+  for (const auto& child_table_id : response.schema().table_ids()) {
+    DINGO_LOG(INFO) << "child table_id=[" << child_table_id.entity_id() << "]";
   }
 }
 
-void SendGetSchemaByName(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub) {
+void SendGetSchemaByName(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
   dingodb::pb::meta::GetSchemaByNameRequest request;
   dingodb::pb::meta::GetSchemaByNameResponse response;
 
@@ -116,29 +87,19 @@ void SendGetSchemaByName(brpc::Controller& cntl, dingodb::pb::meta::MetaService_
   }
   request.set_schema_name(FLAGS_name);
 
-  stub.GetSchemaByName(&cntl, &request, &response, nullptr);
-  if (cntl.Failed()) {
-    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
-    // bthread_usleep(FLAGS_timeout_ms * 1000L);
-  }
+  auto status = coordinator_interaction->SendRequest("GetSchemaByName", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG_INFO << response.DebugString();
 
-  if (FLAGS_log_each_request) {
-    DINGO_LOG(INFO) << "Received response"
-                    << " schema_name=" << request.schema_name()
-                    << " table_id_count=" << response.schema().table_ids_size()
-                    << " request_attachment=" << cntl.request_attachment().size()
-                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
-    // DINGO_LOG(INFO) << response.DebugString();
-    DINGO_LOG(INFO) << "schema_id=[" << response.schema().id().entity_id() << "]"
-                    << "schema_name=[" << response.schema().name() << "]"
-                    << "child_table_count=" << response.schema().table_ids_size();
-    for (const auto& child_table_id : response.schema().table_ids()) {
-      DINGO_LOG(INFO) << "child table_id=[" << child_table_id.entity_id() << "]";
-    }
+  DINGO_LOG(INFO) << "schema_id=[" << response.schema().id().entity_id() << "]"
+                  << "schema_name=[" << response.schema().name() << "]"
+                  << "child_table_count=" << response.schema().table_ids_size();
+  for (const auto& child_table_id : response.schema().table_ids()) {
+    DINGO_LOG(INFO) << "child table_id=[" << child_table_id.entity_id() << "]";
   }
 }
 
-void SendGetTablesCount(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub) {
+void SendGetTablesCount(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
   dingodb::pb::meta::GetTablesRequest request;
   dingodb::pb::meta::GetTablesResponse response;
 
@@ -147,22 +108,12 @@ void SendGetTablesCount(brpc::Controller& cntl, dingodb::pb::meta::MetaService_S
   schema_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
   schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
 
-  stub.GetTables(&cntl, &request, &response, nullptr);
-  if (cntl.Failed()) {
-    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
-    // bthread_usleep(FLAGS_timeout_ms * 1000L);
-  }
-
-  if (FLAGS_log_each_request) {
-    DINGO_LOG(INFO) << "Received response"
-                    << " request schema_id=" << request.schema_id().entity_id()
-                    << " table_count=" << response.table_definition_with_ids_size()
-                    << " request_attachment=" << cntl.request_attachment().size()
-                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
-  }
+  auto status = coordinator_interaction->SendRequest("GetTables", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG_INFO << response.DebugString();
 }
 
-void SendGetTables(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub) {
+void SendGetTables(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
   dingodb::pb::meta::GetTablesRequest request;
   dingodb::pb::meta::GetTablesResponse response;
 
@@ -171,27 +122,17 @@ void SendGetTables(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& 
   schema_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
   schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
 
-  stub.GetTables(&cntl, &request, &response, nullptr);
-  if (cntl.Failed()) {
-    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
-    // bthread_usleep(FLAGS_timeout_ms * 1000L);
-  }
+  auto status = coordinator_interaction->SendRequest("GetTables", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG_INFO << response.DebugString();
 
-  if (FLAGS_log_each_request) {
-    DINGO_LOG(INFO) << "Received response"
-                    << " request schema_id=" << request.schema_id().entity_id()
-                    << " table_count=" << response.table_definition_with_ids_size()
-                    << " request_attachment=" << cntl.request_attachment().size()
-                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
-    // DINGO_LOG(INFO) << response.DebugString();
-    for (const auto& table_definition_with_id : response.table_definition_with_ids()) {
-      DINGO_LOG(INFO) << "table_id=[" << table_definition_with_id.table_id().entity_id() << "]"
-                      << "table_name=" << table_definition_with_id.table_definition().name();
-    }
+  for (const auto& table_definition_with_id : response.table_definition_with_ids()) {
+    DINGO_LOG(INFO) << "table_id=[" << table_definition_with_id.table_id().entity_id() << "]"
+                    << "table_name=" << table_definition_with_id.table_definition().name();
   }
 }
 
-void SendGetTable(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub) {
+void SendGetTable(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
   dingodb::pb::meta::GetTableRequest request;
   dingodb::pb::meta::GetTableResponse response;
 
@@ -205,22 +146,12 @@ void SendGetTable(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& s
   }
   table_id->set_entity_id(std::stol(FLAGS_id));
 
-  stub.GetTable(&cntl, &request, &response, nullptr);
-  if (cntl.Failed()) {
-    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
-    // bthread_usleep(FLAGS_timeout_ms * 1000L);
-  }
-
-  if (FLAGS_log_each_request) {
-    DINGO_LOG(INFO) << "Received response"
-                    << " table_id=" << request.table_id().entity_id()
-                    << " request_attachment=" << cntl.request_attachment().size()
-                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
-    DINGO_LOG(INFO) << response.DebugString();
-  }
+  auto status = coordinator_interaction->SendRequest("GetTable", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG_INFO << response.DebugString();
 }
 
-void SendGetTableByName(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub) {
+void SendGetTableByName(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
   dingodb::pb::meta::GetTableByNameRequest request;
   dingodb::pb::meta::GetTableByNameResponse response;
 
@@ -231,22 +162,12 @@ void SendGetTableByName(brpc::Controller& cntl, dingodb::pb::meta::MetaService_S
 
   request.set_table_name(FLAGS_name);
 
-  stub.GetTableByName(&cntl, &request, &response, nullptr);
-  if (cntl.Failed()) {
-    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
-    // bthread_usleep(FLAGS_timeout_ms * 1000L);
-  }
-
-  if (FLAGS_log_each_request) {
-    DINGO_LOG(INFO) << "Received response"
-                    << " table_name=" << request.table_name()
-                    << " request_attachment=" << cntl.request_attachment().size()
-                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
-    DINGO_LOG(INFO) << response.DebugString();
-  }
+  auto status = coordinator_interaction->SendRequest("GetTableByName", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG_INFO << response.DebugString();
 }
 
-void SendGetTableRange(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub) {
+void SendGetTableRange(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
   dingodb::pb::meta::GetTableRangeRequest request;
   dingodb::pb::meta::GetTableRangeResponse response;
 
@@ -260,19 +181,9 @@ void SendGetTableRange(brpc::Controller& cntl, dingodb::pb::meta::MetaService_St
   }
   table_id->set_entity_id(std::stol(FLAGS_id));
 
-  stub.GetTableRange(&cntl, &request, &response, nullptr);
-  if (cntl.Failed()) {
-    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
-    // bthread_usleep(FLAGS_timeout_ms * 1000L);
-  }
-
-  if (FLAGS_log_each_request) {
-    DINGO_LOG(INFO) << "Received response"
-                    << " table_id=" << request.table_id().entity_id()
-                    << " request_attachment=" << cntl.request_attachment().size()
-                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
-    DINGO_LOG(INFO) << response.DebugString();
-  }
+  auto status = coordinator_interaction->SendRequest("GetTableRange", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG_INFO << response.DebugString();
 
   for (const auto& it : response.table_range().range_distribution()) {
     DINGO_LOG(INFO) << "region_id=[" << it.id().entity_id() << "]"
@@ -282,7 +193,7 @@ void SendGetTableRange(brpc::Controller& cntl, dingodb::pb::meta::MetaService_St
   }
 }
 
-void SendCreateTableId(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub) {
+void SendCreateTableId(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
   dingodb::pb::meta::CreateTableIdRequest request;
   dingodb::pb::meta::CreateTableIdResponse response;
 
@@ -291,23 +202,12 @@ void SendCreateTableId(brpc::Controller& cntl, dingodb::pb::meta::MetaService_St
   schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
   schema_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
 
-  stub.CreateTableId(&cntl, &request, &response, nullptr);
-  if (cntl.Failed()) {
-    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
-    // bthread_usleep(FLAGS_timeout_ms * 1000L);
-  }
-
-  if (FLAGS_log_each_request) {
-    DINGO_LOG(INFO) << "Received response"
-                    << " request schema_id=" << request.schema_id().entity_id()
-                    << " request_attachment=" << cntl.request_attachment().size()
-                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
-    DINGO_LOG(INFO) << " request=" << request.DebugString();
-    DINGO_LOG(INFO) << " response=" << response.DebugString();
-  }
+  auto status = coordinator_interaction->SendRequest("CreateTableId", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG_INFO << response.DebugString();
 }
 
-void SendCreateTable(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub, bool with_table_id) {
+void SendCreateTable(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction, bool with_table_id) {
   dingodb::pb::meta::CreateTableRequest request;
   dingodb::pb::meta::CreateTableResponse response;
 
@@ -386,23 +286,12 @@ void SendCreateTable(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub
     }
   }
 
-  stub.CreateTable(&cntl, &request, &response, nullptr);
-  if (cntl.Failed()) {
-    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
-    // bthread_usleep(FLAGS_timeout_ms * 1000L);
-  }
-
-  if (FLAGS_log_each_request) {
-    DINGO_LOG(INFO) << "Received response"
-                    << " request schema_id=" << request.schema_id().entity_id()
-                    << " request_attachment=" << cntl.request_attachment().size()
-                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
-    DINGO_LOG(INFO) << " request=" << request.DebugString();
-    DINGO_LOG(INFO) << " response=" << response.DebugString();
-  }
+  auto status = coordinator_interaction->SendRequest("CreateTable", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG_INFO << response.DebugString();
 }
 
-void SendDropTable(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub) {
+void SendDropTable(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
   dingodb::pb::meta::DropTableRequest request;
   dingodb::pb::meta::DropTableResponse response;
 
@@ -415,23 +304,12 @@ void SendDropTable(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& 
   }
   table_id->set_entity_id(std::stol(FLAGS_id));
 
-  stub.DropTable(&cntl, &request, &response, nullptr);
-  if (cntl.Failed()) {
-    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
-    // bthread_usleep(FLAGS_timeout_ms * 1000L);
-  }
-
-  if (FLAGS_log_each_request) {
-    DINGO_LOG(INFO) << "Received response"
-                    << " request schema_id=" << request.table_id().parent_entity_id()
-                    << " request table_id=" << request.table_id().entity_id()
-                    << " request_attachment=" << cntl.request_attachment().size()
-                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
-    DINGO_LOG(INFO) << response.DebugString();
-  }
+  auto status = coordinator_interaction->SendRequest("DropTable", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG_INFO << response.DebugString();
 }
 
-void SendDropSchema(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub) {
+void SendDropSchema(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
   dingodb::pb::meta::DropSchemaRequest request;
   dingodb::pb::meta::DropSchemaResponse response;
 
@@ -444,24 +322,12 @@ void SendDropSchema(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub&
   }
   schema_id->set_entity_id(std::stol(FLAGS_id));
 
-  stub.DropSchema(&cntl, &request, &response, nullptr);
-  if (cntl.Failed()) {
-    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
-    // bthread_usleep(FLAGS_timeout_ms * 1000L);
-    return;
-  }
-
-  if (FLAGS_log_each_request) {
-    DINGO_LOG(INFO) << "Received response"
-                    << " request parent_schema_id=" << request.schema_id().parent_entity_id()
-                    << " request schema_id=" << request.schema_id().entity_id()
-                    << " request_attachment=" << cntl.request_attachment().size()
-                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
-    DINGO_LOG(INFO) << response.DebugString();
-  }
+  auto status = coordinator_interaction->SendRequest("DropSchema", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG_INFO << response.DebugString();
 }
 
-void SendCreateSchema(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub) {
+void SendCreateSchema(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
   dingodb::pb::meta::CreateSchemaRequest request;
   dingodb::pb::meta::CreateSchemaResponse response;
 
@@ -476,24 +342,13 @@ void SendCreateSchema(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stu
   parent_schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
 
   request.set_schema_name(FLAGS_name);
-  stub.CreateSchema(&cntl, &request, &response, nullptr);
-  if (cntl.Failed()) {
-    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
-    // bthread_usleep(FLAGS_timeout_ms * 1000L);
-    return;
-  }
 
-  if (FLAGS_log_each_request) {
-    DINGO_LOG(INFO) << "Received response"
-                    << " request parent_schema_id=" << request.parent_schema_id().entity_id()
-                    << " request schema_name=" << request.schema_name()
-                    << " request_attachment=" << cntl.request_attachment().size()
-                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
-    DINGO_LOG(INFO) << response.DebugString();
-  }
+  auto status = coordinator_interaction->SendRequest("CreateSchema", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG_INFO << response.DebugString();
 }
 
-void SendGetTableMetrics(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub) {
+void SendGetTableMetrics(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
   dingodb::pb::meta::GetTableMetricsRequest request;
   dingodb::pb::meta::GetTableMetricsResponse response;
 
@@ -506,18 +361,7 @@ void SendGetTableMetrics(brpc::Controller& cntl, dingodb::pb::meta::MetaService_
   }
   table_id->set_entity_id(std::stol(FLAGS_id));
 
-  stub.GetTableMetrics(&cntl, &request, &response, nullptr);
-  if (cntl.Failed()) {
-    DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
-    // bthread_usleep(FLAGS_timeout_ms * 1000L);
-  }
-
-  if (FLAGS_log_each_request) {
-    DINGO_LOG(INFO) << "Received response"
-                    << " request schema_id=" << request.table_id().parent_entity_id()
-                    << " request table_id=" << request.table_id().entity_id()
-                    << " request_attachment=" << cntl.request_attachment().size()
-                    << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
-    DINGO_LOG(INFO) << response.DebugString();
-  }
+  auto status = coordinator_interaction->SendRequest("GetTableMetrics", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG_INFO << response.DebugString();
 }

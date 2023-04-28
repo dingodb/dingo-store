@@ -66,7 +66,7 @@ bool CoordinatorInteraction::InitByNameService(const std::string& service_name, 
 
   use_service_name_ = true;
 
-  DINGO_LOG(INFO) << "Init channel by service_name " << service_name;
+  DINGO_LOG(INFO) << "Init channel by service_name " << service_name << " service_type=" << service_type;
 
   return true;
 }

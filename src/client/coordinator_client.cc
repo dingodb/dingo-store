@@ -17,16 +17,19 @@
 #include <cstdio>
 #include <cstring>
 #include <iomanip>
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "brpc/channel.h"
+#include "brpc/controller.h"
 #include "bthread/bthread.h"
 #include "client/coordinator_client_function.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "common/version.h"
 #include "gflags/gflags.h"
+#include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
 
 DEFINE_string(git_commit_hash, GIT_VERSION, "current git commit version");
@@ -63,6 +66,11 @@ DEFINE_int64(index, 0, "index");
 DEFINE_uint32(service_type, 0, "service type for getting leader, 0: meta or coordinator, 2: auto increment");
 DEFINE_string(start_key, "", "start_key");
 DEFINE_string(end_key, "", "end_key");
+DEFINE_string(coordinator_url, "", "coordinator url");
+DEFINE_string(url, "", "coordinator url");
+
+std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction;
+std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction_meta;
 
 bool GetBrpcChannel(const std::string& location, brpc::Channel& channel) {
   braft::PeerId node;
@@ -150,153 +158,120 @@ void SendDebug() {
 }
 
 void* Sender(void* /*arg*/) {
-  // get leader location
-  std::string leader_location = GetLeaderLocation(0);
-  if (leader_location.empty()) {
-    DINGO_LOG(WARNING) << "GetLeaderLocation failed, use coordinator_addr instead";
-    leader_location = FLAGS_coordinator_addr;
-  }
-
-  std::string auto_increment_leader_location = GetLeaderLocation(2);
-  if (auto_increment_leader_location.empty()) {
-    DINGO_LOG(WARNING) << "GetLeaderLocation failed, use coordinator_addr instead";
-    leader_location = FLAGS_coordinator_addr;
-  }
-
-  // rpc for leader access
-  brpc::Channel coordinator_channel;
-  brpc::Channel auto_increment_channel;
-  brpc::Channel node_channel;
-
-  GetBrpcChannel(leader_location, coordinator_channel);
-  GetBrpcChannel(auto_increment_leader_location, auto_increment_channel);
-  GetBrpcChannel(FLAGS_coordinator_addr, node_channel);
-
-  dingodb::pb::coordinator::CoordinatorService_Stub coordinator_stub(&coordinator_channel);
-  dingodb::pb::meta::MetaService_Stub meta_stub(&coordinator_channel);
-  dingodb::pb::meta::MetaService_Stub meta_auto_increment_stub(&auto_increment_channel);
-  dingodb::pb::node::NodeService_Stub node_stub(&node_channel);
-  dingodb::pb::coordinator::CoordinatorService_Stub raft_control_stub(&node_channel);
-
-  brpc::Controller cntl;
-  cntl.set_timeout_ms(FLAGS_timeout_ms);
-
-  if (FLAGS_method == "Hello") {
-    SendHello(cntl, coordinator_stub);
-  } else if (FLAGS_method == "StoreHeartbeat") {
-    SendStoreHearbeat(cntl, coordinator_stub, 100);
-    cntl.Reset();
-    SendStoreHearbeat(cntl, coordinator_stub, 200);
-    cntl.Reset();
-    SendStoreHearbeat(cntl, coordinator_stub, 300);
-  } else if (FLAGS_method == "CreateStore") {
-    SendCreateStore(cntl, coordinator_stub);
-  } else if (FLAGS_method == "DeleteStore") {
-    SendDeleteStore(cntl, coordinator_stub);
-  } else if (FLAGS_method == "CreateExecutor") {
-    SendCreateExecutor(cntl, coordinator_stub);
-  } else if (FLAGS_method == "DeleteExecutor") {
-    SendDeleteExecutor(cntl, coordinator_stub);
-  } else if (FLAGS_method == "CreateExecutorUser") {
-    SendCreateExecutorUser(cntl, coordinator_stub);
-  } else if (FLAGS_method == "UpdateExecutorUser") {
-    SendUpdateExecutorUser(cntl, coordinator_stub);
-  } else if (FLAGS_method == "DeleteExecutorUser") {
-    SendDeleteExecutorUser(cntl, coordinator_stub);
-  } else if (FLAGS_method == "GetExecutorUserMap") {
-    SendGetExecutorUserMap(cntl, coordinator_stub);
-  } else if (FLAGS_method == "ExecutorHeartbeat") {
-    SendExecutorHeartbeat(cntl, coordinator_stub);
-  } else if (FLAGS_method == "GetStoreMap") {
-    SendGetStoreMap(cntl, coordinator_stub);
-  } else if (FLAGS_method == "GetExecutorMap") {
-    SendGetExecutorMap(cntl, coordinator_stub);
-  } else if (FLAGS_method == "GetRegionMap") {
-    SendGetRegionMap(cntl, coordinator_stub);
-  } else if (FLAGS_method == "GetCoordinatorMap") {
-    SendGetCoordinatorMap(cntl, coordinator_stub);
-  } else if (FLAGS_method == "QueryRegion") {
-    SendQueryRegion(cntl, coordinator_stub);
-  } else if (FLAGS_method == "CreateRegionForSplit") {
-    SendCreateRegionForSplit(cntl, coordinator_stub);
-  } else if (FLAGS_method == "DropRegion") {
-    SendDropRegion(cntl, coordinator_stub);
-  } else if (FLAGS_method == "DropRegionPermanently") {
-    SendDropRegionPermanently(cntl, coordinator_stub);
-  } else if (FLAGS_method == "SplitRegion") {
-    SendSplitRegion(cntl, coordinator_stub);
-  } else if (FLAGS_method == "MergeRegion") {
-    SendMergeRegion(cntl, coordinator_stub);
-  } else if (FLAGS_method == "AddPeerRegion") {
-    SendAddPeerRegion(cntl, coordinator_stub);
-  } else if (FLAGS_method == "RemovePeerRegion") {
-    SendRemovePeerRegion(cntl, coordinator_stub);
-  } else if (FLAGS_method == "GetOrphanRegion") {
-    SendGetOrphanRegion(cntl, coordinator_stub);
-  } else if (FLAGS_method == "GetStoreOperation") {
-    SendGetStoreOperation(cntl, coordinator_stub);
-  } else if (FLAGS_method == "GetTaskList") {
-    SendGetTaskList(cntl, coordinator_stub);
-  } else if (FLAGS_method == "CleanTaskList") {
-    SendCleanTaskList(cntl, coordinator_stub);
-  } else if (FLAGS_method == "CleanStoreOperation") {
-    SendCleanStoreOperation(cntl, coordinator_stub);
-  } else if (FLAGS_method == "AddStoreOperation") {
-    SendAddStoreOperation(cntl, coordinator_stub);
-  } else if (FLAGS_method == "RemoveStoreOperation") {
-    SendRemoveStoreOperation(cntl, coordinator_stub);
-  } else if (FLAGS_method == "GetStoreMetrics") {
-    SendGetStoreMetrics(cntl, coordinator_stub);
-  } else if (FLAGS_method == "GetNodeInfo") {
-    SendGetNodeInfo(cntl, node_stub);
-  } else if (FLAGS_method == "GetLogLevel") {
-    SendGetLogLevel(cntl, node_stub);
-  } else if (FLAGS_method == "ChangeLogLevel") {
-    SendChangeLogLevel(cntl, node_stub);
-  } else if (FLAGS_method == "GetSchemas") {
-    SendGetSchemas(cntl, meta_stub);
-  } else if (FLAGS_method == "GetSchema") {
-    SendGetSchema(cntl, meta_stub);
-  } else if (FLAGS_method == "GetSchemaByName") {
-    SendGetSchemaByName(cntl, meta_stub);
-  } else if (FLAGS_method == "GetTables") {
-    SendGetTables(cntl, meta_stub);
-  } else if (FLAGS_method == "GetTablesCount") {
-    SendGetTablesCount(cntl, meta_stub);
-  } else if (FLAGS_method == "CreateTable") {
-    SendCreateTable(cntl, meta_stub, false);
-  } else if (FLAGS_method == "CreateTableWithId") {
-    SendCreateTable(cntl, meta_stub, true);
-  } else if (FLAGS_method == "CreateTableId") {
-    SendCreateTableId(cntl, meta_stub);
-  } else if (FLAGS_method == "DropTable") {
-    SendDropTable(cntl, meta_stub);
-  } else if (FLAGS_method == "CreateSchema") {
-    SendCreateSchema(cntl, meta_stub);
-  } else if (FLAGS_method == "DropSchema") {
-    SendDropSchema(cntl, meta_stub);
-  } else if (FLAGS_method == "GetTable") {
-    SendGetTable(cntl, meta_stub);
-  } else if (FLAGS_method == "GetTableByName") {
-    SendGetTableByName(cntl, meta_stub);
-  } else if (FLAGS_method == "GetTableRange") {
-    SendGetTableRange(cntl, meta_stub);
-  } else if (FLAGS_method == "GetTableMetrics") {
-    SendGetTableMetrics(cntl, meta_stub);
-  } else if (FLAGS_method == "RaftAddPeer") {
-    SendRaftAddPeer(cntl, raft_control_stub);
+  if (FLAGS_method == "RaftAddPeer") {  // raft control
+    SendRaftAddPeer();
   } else if (FLAGS_method == "RaftRemovePeer") {
-    SendRaftRemovePeer(cntl, raft_control_stub);
+    SendRaftRemovePeer();
+  } else if (FLAGS_method == "GetNodeInfo") {  // node control
+    SendGetNodeInfo();
+  } else if (FLAGS_method == "GetLogLevel") {
+    SendGetLogLevel();
+  } else if (FLAGS_method == "ChangeLogLevel") {
+    SendChangeLogLevel();
+  } else if (FLAGS_method == "Hello") {
+    SendHello(coordinator_interaction);
+  } else if (FLAGS_method == "StoreHeartbeat") {
+    SendStoreHearbeat(coordinator_interaction, 100);
+    SendStoreHearbeat(coordinator_interaction, 200);
+    SendStoreHearbeat(coordinator_interaction, 300);
+  } else if (FLAGS_method == "CreateStore") {
+    SendCreateStore(coordinator_interaction);
+  } else if (FLAGS_method == "DeleteStore") {
+    SendDeleteStore(coordinator_interaction);
+  } else if (FLAGS_method == "CreateExecutor") {
+    SendCreateExecutor(coordinator_interaction);
+  } else if (FLAGS_method == "DeleteExecutor") {
+    SendDeleteExecutor(coordinator_interaction);
+  } else if (FLAGS_method == "CreateExecutorUser") {
+    SendCreateExecutorUser(coordinator_interaction);
+  } else if (FLAGS_method == "UpdateExecutorUser") {
+    SendUpdateExecutorUser(coordinator_interaction);
+  } else if (FLAGS_method == "DeleteExecutorUser") {
+    SendDeleteExecutorUser(coordinator_interaction);
+  } else if (FLAGS_method == "GetExecutorUserMap") {
+    SendGetExecutorUserMap(coordinator_interaction);
+  } else if (FLAGS_method == "ExecutorHeartbeat") {
+    SendExecutorHeartbeat(coordinator_interaction);
+  } else if (FLAGS_method == "GetStoreMap") {
+    SendGetStoreMap(coordinator_interaction);
+  } else if (FLAGS_method == "GetExecutorMap") {
+    SendGetExecutorMap(coordinator_interaction);
+  } else if (FLAGS_method == "GetRegionMap") {
+    SendGetRegionMap(coordinator_interaction);
+  } else if (FLAGS_method == "GetCoordinatorMap") {
+    SendGetCoordinatorMap(coordinator_interaction);
+  } else if (FLAGS_method == "QueryRegion") {
+    SendQueryRegion(coordinator_interaction);
+  } else if (FLAGS_method == "CreateRegionForSplit") {
+    SendCreateRegionForSplit(coordinator_interaction);
+  } else if (FLAGS_method == "DropRegion") {
+    SendDropRegion(coordinator_interaction);
+  } else if (FLAGS_method == "DropRegionPermanently") {
+    SendDropRegionPermanently(coordinator_interaction);
+  } else if (FLAGS_method == "SplitRegion") {
+    SendSplitRegion(coordinator_interaction);
+  } else if (FLAGS_method == "MergeRegion") {
+    SendMergeRegion(coordinator_interaction);
+  } else if (FLAGS_method == "AddPeerRegion") {
+    SendAddPeerRegion(coordinator_interaction);
+  } else if (FLAGS_method == "RemovePeerRegion") {
+    SendRemovePeerRegion(coordinator_interaction);
+  } else if (FLAGS_method == "GetOrphanRegion") {
+    SendGetOrphanRegion(coordinator_interaction);
+  } else if (FLAGS_method == "GetStoreOperation") {
+    SendGetStoreOperation(coordinator_interaction);
+  } else if (FLAGS_method == "GetTaskList") {
+    SendGetTaskList(coordinator_interaction);
+  } else if (FLAGS_method == "CleanTaskList") {
+    SendCleanTaskList(coordinator_interaction);
+  } else if (FLAGS_method == "CleanStoreOperation") {
+    SendCleanStoreOperation(coordinator_interaction);
+  } else if (FLAGS_method == "AddStoreOperation") {
+    SendAddStoreOperation(coordinator_interaction);
+  } else if (FLAGS_method == "RemoveStoreOperation") {
+    SendRemoveStoreOperation(coordinator_interaction);
+  } else if (FLAGS_method == "GetStoreMetrics") {
+    SendGetStoreMetrics(coordinator_interaction);
+  } else if (FLAGS_method == "GetSchemas") {  // meta control
+    SendGetSchemas(coordinator_interaction_meta);
+  } else if (FLAGS_method == "GetSchema") {
+    SendGetSchema(coordinator_interaction_meta);
+  } else if (FLAGS_method == "GetSchemaByName") {
+    SendGetSchemaByName(coordinator_interaction_meta);
+  } else if (FLAGS_method == "GetTables") {
+    SendGetTables(coordinator_interaction_meta);
+  } else if (FLAGS_method == "GetTablesCount") {
+    SendGetTablesCount(coordinator_interaction_meta);
+  } else if (FLAGS_method == "CreateTable") {
+    SendCreateTable(coordinator_interaction_meta, false);
+  } else if (FLAGS_method == "CreateTableWithId") {
+    SendCreateTable(coordinator_interaction_meta, true);
+  } else if (FLAGS_method == "CreateTableId") {
+    SendCreateTableId(coordinator_interaction_meta);
+  } else if (FLAGS_method == "DropTable") {
+    SendDropTable(coordinator_interaction_meta);
+  } else if (FLAGS_method == "CreateSchema") {
+    SendCreateSchema(coordinator_interaction_meta);
+  } else if (FLAGS_method == "DropSchema") {
+    SendDropSchema(coordinator_interaction_meta);
+  } else if (FLAGS_method == "GetTable") {
+    SendGetTable(coordinator_interaction_meta);
+  } else if (FLAGS_method == "GetTableByName") {
+    SendGetTableByName(coordinator_interaction_meta);
+  } else if (FLAGS_method == "GetTableRange") {
+    SendGetTableRange(coordinator_interaction_meta);
+  } else if (FLAGS_method == "GetTableMetrics") {
+    SendGetTableMetrics(coordinator_interaction_meta);
   } else if (FLAGS_method == "GetAutoIncrement") {  // auto increment
-    SendGetAutoIncrement(cntl, meta_auto_increment_stub);
+    SendGetAutoIncrement(coordinator_interaction_meta);
   } else if (FLAGS_method == "CreateAutoIncrement") {
-    SendCreateAutoIncrement(cntl, meta_auto_increment_stub);
+    SendCreateAutoIncrement(coordinator_interaction_meta);
   } else if (FLAGS_method == "UpdateAutoIncrement") {
-    SendUpdateAutoIncrement(cntl, meta_auto_increment_stub);
+    SendUpdateAutoIncrement(coordinator_interaction_meta);
   } else if (FLAGS_method == "GenerateAutoIncrement") {
-    SendGenerateAutoIncrement(cntl, meta_auto_increment_stub);
+    SendGenerateAutoIncrement(coordinator_interaction_meta);
   } else if (FLAGS_method == "DeleteAutoIncrement") {
-    SendDeleteAutoIncrement(cntl, meta_auto_increment_stub);
+    SendDeleteAutoIncrement(coordinator_interaction_meta);
   } else if (FLAGS_method == "Debug") {
     SendDebug();
   } else {
@@ -316,13 +291,35 @@ int main(int argc, char* argv[]) {
     exit(-1);
   }
 
-  if (!FLAGS_addr.empty()) {
-    FLAGS_coordinator_addr = FLAGS_addr;
+  if (!FLAGS_url.empty()) {
+    FLAGS_coordinator_url = FLAGS_url;
   }
 
-  if (FLAGS_coordinator_addr.empty()) {
-    DINGO_LOG(ERROR) << "Please set --addr or --coordinator_addr";
-    return -1;
+  if (FLAGS_coordinator_url.empty()) {
+    DINGO_LOG(ERROR) << "coordinator url is empty, try to use file://./coor_list";
+    FLAGS_coordinator_url = "file://./coor_list";
+  }
+
+  if (!FLAGS_coordinator_url.empty()) {
+    coordinator_interaction = std::make_shared<dingodb::CoordinatorInteraction>();
+    if (!coordinator_interaction->InitByNameService(
+            FLAGS_coordinator_url, dingodb::pb::common::CoordinatorServiceType::ServiceTypeCoordinator)) {
+      DINGO_LOG(ERROR) << "Fail to init coordinator_interaction, please check parameter --url="
+                       << FLAGS_coordinator_url;
+      return -1;
+    }
+
+    coordinator_interaction_meta = std::make_shared<dingodb::CoordinatorInteraction>();
+    if (!coordinator_interaction_meta->InitByNameService(
+            FLAGS_coordinator_url, dingodb::pb::common::CoordinatorServiceType::ServiceTypeMeta)) {
+      DINGO_LOG(ERROR) << "Fail to init coordinator_interaction_meta, please check parameter --url="
+                       << FLAGS_coordinator_url;
+      return -1;
+    }
+  }
+
+  if (!FLAGS_addr.empty()) {
+    FLAGS_coordinator_addr = FLAGS_addr;
   }
 
   std::vector<bthread_t> tids;
@@ -335,7 +332,6 @@ int main(int argc, char* argv[]) {
     }
   }
 
-  // DINGO_LOG(INFO) << "Coordinator client is going to quit";
   for (int i = 0; i < FLAGS_thread_num; ++i) {
     bthread_join(tids[i], nullptr);
   }
