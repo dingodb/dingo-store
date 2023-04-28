@@ -26,6 +26,7 @@
 #include "butil/fast_rand.h"
 #include "butil/macros.h"
 #include "butil/scoped_lock.h"
+#include "butil/status.h"
 #include "butil/strings/stringprintf.h"
 #include "common/helper.h"
 #include "common/logging.h"
@@ -158,7 +159,7 @@ butil::Status CoordinatorInteraction::SendRequestByService(const std::string& ap
         ++retry_count;
         continue;
       } else if (response.error().errcode() == pb::error::Errno::OK) {
-        DINGO_LOG(DEBUG) << "connect with meta server success, leader_addr: "
+        DINGO_LOG(DEBUG) << "connect with meta server success. return OK, leader_addr: "
                          << butil::endpoint2str(leader_addr).c_str();
         return butil::Status();
       } else if (response.error().errcode() == pb::error::Errno::ERAFT_NOTLEADER) {
@@ -178,16 +179,16 @@ butil::Status CoordinatorInteraction::SendRequestByService(const std::string& ap
         ++retry_count;
         continue;
       } else {
-        DINGO_LOG(WARNING) << "connect with meta server fail. response errcode: " << response.error().errcode()
-                           << ", leader_addr: " << butil::endpoint2str(leader_addr).c_str();
-        ++retry_count;
-        continue;
+        DINGO_LOG(DEBUG) << "connect with meta server success. return response errcode: " << response.error().errcode()
+                         << ", leader_addr: " << butil::endpoint2str(leader_addr).c_str();
+        return butil::Status(response.error().errcode(), response.error().errmsg());
       }
     } else {
       name_service_channel_.CallMethod(method, &cntl, &request, &response, nullptr);
       if (cntl.Failed()) {
-        DINGO_LOG(WARNING) << "connect with meta server fail. channel CallMethod fail, leader_addr: "
-                           << butil::endpoint2str(leader_addr).c_str();
+        DINGO_LOG(WARNING)
+            << "name_service_channel_ connect with meta server fail. channel CallMethod fail, leader_addr: "
+            << butil::endpoint2str(leader_addr).c_str();
         ++retry_count;
         continue;
       } else if (response.error().errcode() == pb::error::Errno::ERAFT_NOTLEADER) {
@@ -197,14 +198,17 @@ butil::Status CoordinatorInteraction::SendRequestByService(const std::string& ap
 
           SetLeaderAddress(leader_endpoint);
 
-          DINGO_LOG(WARNING) << "connect with meta server success by service name, found new leader: "
-                             << butil::endpoint2str(cntl.remote_side()).c_str();
+          DINGO_LOG(WARNING)
+              << "name_service_channel_ connect with meta server success by service name, found new leader: "
+              << butil::endpoint2str(cntl.remote_side()).c_str();
           ++retry_count;
           continue;
         }
       } else {
-        DINGO_LOG(DEBUG) << "connect with meta server finished. response errcode: " << response.error().errcode()
-                         << ", leader_addr: " << butil::endpoint2str(leader_addr).c_str();
+        // call success, set leader
+        DINGO_LOG(INFO) << "name_service_channel_ connect with meta server finished. response errcode: "
+                        << response.error().errcode() << ", leader_addr: " << butil::endpoint2str(leader_addr).c_str();
+        SetLeaderAddress(cntl.remote_side());
         return butil::Status(response.error().errcode(), response.error().errmsg());
       }
     }
