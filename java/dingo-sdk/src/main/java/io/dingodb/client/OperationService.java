@@ -74,28 +74,42 @@ public class OperationService {
         RouteTable routeTable = getAndRefreshRouteTable(metaService, tableId, false);
 
         Operation.Fork fork = operation.fork(Any.wrap(parameters), table, routeTable);
-        List<OperationContext> contexts = generateContext(tableId, table, routeTable.getCodec(), fork);
-        AtomicReference<Throwable> error = new AtomicReference<>();
-        if (contexts.size() == 1) {
-            operation.exec(contexts.get(0));
-        } else {
-            CountDownLatch countDownLatch = new CountDownLatch(contexts.size());
-            contexts.forEach(context -> CompletableFuture
-                .runAsync(() -> operation.exec(context), Executors.executor("exec-operator"))
-                .whenComplete((r, e) -> {
-                         countDownLatch.countDown();
-                         error.set(e);
-                 }));
-            try {
-                countDownLatch.await();
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            }
-        }
+        AtomicReference<Throwable> error = getAtomicReference(operation, metaService, tableId, table, routeTable, fork);
+
         if (!fork.isIgnoreError() && error.get() != null) {
             throw new DingoClientException(-1, error.get());
         }
         return operation.reduce(fork);
+    }
+
+    private AtomicReference<Throwable> getAtomicReference(
+            Operation operation,
+            MetaServiceClient metaService,
+            DingoCommonId tableId,
+            Table table,
+            RouteTable routeTable,
+            Operation.Fork fork
+    ) {
+        List<OperationContext> contexts = generateContext(tableId, table, routeTable.getCodec(), fork);
+        AtomicReference<Throwable> error = new AtomicReference<>();
+        CountDownLatch countDownLatch = new CountDownLatch(contexts.size());
+        contexts.forEach(context -> CompletableFuture
+            .runAsync(() -> operation.exec(context), Executors.executor("exec-operator"))
+            .whenComplete((r, e) -> {
+                if (e != null && e.getCause() instanceof DingoClientException.InvalidRouteTableException) {
+                    RouteTable newRouteTable = getAndRefreshRouteTable(metaService, tableId, true);
+                    Operation.Fork newFork = operation.fork(context, newRouteTable);
+                    getAtomicReference(operation, metaService, tableId, table, newRouteTable, newFork);
+                }
+                countDownLatch.countDown();
+                error.set(e);
+             }));
+        try {
+            countDownLatch.await();
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+        return error;
     }
 
     private List<OperationContext> generateContext(

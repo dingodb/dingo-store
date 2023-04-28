@@ -37,6 +37,8 @@ import java.util.concurrent.locks.LockSupport;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
+import static io.dingodb.error.ErrorOuterClass.Errno.EREGION_REDIRECT;
+
 @Slf4j
 public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
 
@@ -82,6 +84,9 @@ public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
             try {
                 Response<R> response = function.apply(stub);
                 if (response.getError().getErrcodeValue() != 0) {
+                    if (response.getError().getErrcodeValue() == EREGION_REDIRECT.getNumber()) {
+                        throw new DingoClientException.InvalidRouteTableException(response.error.getErrmsg());
+                    }
                     if (retryCheck.test(response.error)) {
                         refresh(stub);
                         continue;

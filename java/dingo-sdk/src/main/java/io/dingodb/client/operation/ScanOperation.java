@@ -63,35 +63,28 @@ public class ScanOperation implements Operation {
                 keyRange.withStart,
                 keyRange.withEnd
             );
-            NavigableMap<ComparableByteArray, RangeDistribution> rangeDistribution = routeTable.getRangeDistribution();
-            NavigableSet<Task> subTasks = (rangeDistribution.size() == 1 ? rangeDistribution : rangeDistribution
-                .subMap(
-                    rangeDistribution.floorKey(new ComparableByteArray(range.getStartKey())), true,
-                    rangeDistribution.floorKey(new ComparableByteArray(range.getRange().getEndKey())), true
-                )).values().stream()
-                .map(rd -> new Task(
-                    rd.getId(),
-                    wrap(new OpRange(rd.getRange().getStartKey(), rd.getRange().getEndKey(), true, false)))
-                ).collect(Collectors.toCollection(() -> new TreeSet<>(getComparator())));
+            NavigableSet<Task> subTasks = getSubTasks(routeTable, range);
             Task task = subTasks.pollFirst();
             if (task == null) {
                 return new Fork(new Iterator[0], subTasks, true);
             }
-            OpRange taskScan = task.parameters();
-            subTasks.add(new Task(
-                task.getRegionId(),
-                wrap(new OpRange(range.getStartKey(), taskScan.getEndKey(), range.withStart, taskScan.withEnd))
-            ));
-            task = subTasks.pollLast();
-            taskScan = task.parameters();
-            subTasks.add(new Task(
-                task.getRegionId(),
-                wrap(new OpRange(taskScan.getStartKey(), range.getEndKey(), taskScan.withStart, range.withEnd))
-            ));
+            buildSubTasks(range, subTasks, task);
             return new Fork(new Iterator[subTasks.size()], subTasks, true);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
+    }
+
+    @Override
+    public Fork fork(OperationContext context, RouteTable routeTable) {
+        OpRange range = context.parameters();
+        NavigableSet<Task> subTasks = getSubTasks(routeTable, range);
+        Task task = subTasks.pollFirst();
+        if (task == null) {
+            return new Fork(new Iterator[0], subTasks, true);
+        }
+        buildSubTasks(range, subTasks, task);
+        return new Fork(context.result(), subTasks, true);
     }
 
     private Comparator<Task> getComparator() {
@@ -115,5 +108,33 @@ public class ScanOperation implements Operation {
         LinkedIterator<Record> result = new LinkedIterator<>();
         Arrays.stream(fork.<Iterator<Record>[]>result()).forEach(result::append);
         return (R) result;
+    }
+
+    private NavigableSet<Task> getSubTasks(RouteTable routeTable, OpRange range) {
+        NavigableMap<ComparableByteArray, RangeDistribution> rangeDistribution = routeTable.getRangeDistribution();
+        NavigableSet<Task> subTasks = (rangeDistribution.size() == 1 ? rangeDistribution : rangeDistribution
+                .subMap(
+                        rangeDistribution.floorKey(new ComparableByteArray(range.getStartKey())), true,
+                        rangeDistribution.floorKey(new ComparableByteArray(range.getRange().getEndKey())), true
+                )).values().stream()
+                .map(rd -> new Task(
+                        rd.getId(),
+                        wrap(new OpRange(rd.getRange().getStartKey(), rd.getRange().getEndKey(), true, false)))
+                ).collect(Collectors.toCollection(() -> new TreeSet<>(getComparator())));
+        return subTasks;
+    }
+
+    private void buildSubTasks(OpRange range, NavigableSet<Task> subTasks, Task task) {
+        OpRange taskScan = task.parameters();
+        subTasks.add(new Task(
+                task.getRegionId(),
+                wrap(new OpRange(range.getStartKey(), taskScan.getEndKey(), range.withStart, taskScan.withEnd))
+        ));
+        task = subTasks.pollLast();
+        taskScan = task.parameters();
+        subTasks.add(new Task(
+                task.getRegionId(),
+                wrap(new OpRange(taskScan.getStartKey(), range.getEndKey(), taskScan.withStart, range.withEnd))
+        ));
     }
 }

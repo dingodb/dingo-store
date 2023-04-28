@@ -60,6 +60,8 @@ public interface Operation {
 
     Fork fork(Any parameters, Table table, RouteTable routeTable);
 
+    Fork fork(OperationContext context, RouteTable routeTable);
+
     <R> R reduce(Fork context);
 
     default void checkParameters(Table table, Record record) {

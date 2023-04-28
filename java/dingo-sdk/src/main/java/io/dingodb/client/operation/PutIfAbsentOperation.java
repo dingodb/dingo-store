@@ -70,6 +70,24 @@ public class PutIfAbsentOperation implements Operation {
     }
 
     @Override
+    public Fork fork(OperationContext context, RouteTable routeTable) {
+        Map<KeyValue, Integer> parameters = context.parameters();
+        NavigableSet<Task> subTasks = new TreeSet<>(Comparator.comparingLong(t -> t.getRegionId().entityId()));
+        Map<DingoCommonId, Any> subTaskMap = new HashMap<>();
+        for (Map.Entry<KeyValue, Integer> parameter : parameters.entrySet()) {
+
+            Map<KeyValue, Integer> regionParams =  subTaskMap.computeIfAbsent(
+                routeTable.calcRegionId(parameter.getKey().getKey()), k -> new Any(new HashMap<>())
+            ).getValue();
+
+            regionParams.put(parameter.getKey(), parameter.getValue());
+        }
+        subTaskMap.forEach((k, v) -> subTasks.add(new Task(k, v)));
+
+        return new Fork(context.result(), subTasks, true);
+    }
+
+    @Override
     public void exec(OperationContext context) {
         Map<KeyValue, Integer> parameters = context.parameters();
         ArrayList<KeyValue> keyValues = new ArrayList<>(parameters.keySet());
