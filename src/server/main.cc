@@ -245,10 +245,8 @@ int main(int argc, char *argv[]) {
   }
 
   if (is_coodinator) {
-    if (!dingodb::CoordinatorInteraction::GetAutoIncrementInstance()->Init(
-            config->GetString("coordinator.peers"),
-            dingodb::pb::common::CoordinatorServiceType::ServiceTypeAutoIncrement)) {
-      DINGO_LOG(ERROR) << "InitCoordinatorInteraction, auto increment instance init failed!";
+    if (!dingo_server->InitCoordinatorInteractionForAutoIncrement()) {
+      DINGO_LOG(ERROR) << "InitCoordinatorInteractionForAutoIncrement failed!";
       return -1;
     }
 

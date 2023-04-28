@@ -26,6 +26,7 @@ if [ ! -d "$DIST_DIR" ]; then
   mkdir "$DIST_DIR"
 fi
 
+TMP_COORDINATOR_SERVICES=/tmp/coor_list
 SERVER_NUM=${FLAGS_server_num}
 COORDINATOR_INSTANCE_START_ID=22000
 STORE_INSTANCE_START_ID=33000
@@ -55,6 +56,7 @@ function deploy_store() {
   instance_id=$6
   coor_srv_peers=$7
   coor_raft_peers=$8
+  coor_service_file=$9
 
   echo "server ${dstpath}"
 
@@ -83,6 +85,8 @@ function deploy_store() {
   if [ ! -d "$dstpath/data/${role}/db" ]; then
     mkdir $dstpath/data/${role}/db
   fi
+
+  cp ${coor_service_file} $dstpath/conf/coor_list
 
   cp $srcpath/build/bin/dingodb_server $dstpath/bin/
   if [ "${FLAGS_replace_conf}" == "0" ]; then
@@ -113,10 +117,15 @@ function deploy_store() {
 COOR_SRV_PEERS=""
 COOR_RAFT_PEERS=""
 
+echo "# dingo-store coordinators">${TMP_COORDINATOR_SERVICES}
+
 for ((i=1; i<=$SERVER_NUM; ++i)); do
     COOR_SRV_PEERS=${COOR_SRV_PEERS}","$SERVER_HOST":"`expr $COORDINATOR_SERVER_START_PORT + $i`
     COOR_RAFT_PEERS=${COOR_RAFT_PEERS}","$SERVER_HOST":"`expr $COORDINATOR_RAFT_START_PORT + $i`
+
+    echo $SERVER_HOST":"`expr $COORDINATOR_SERVER_START_PORT + $i` >> ${TMP_COORDINATOR_SERVICES}
 done
+
 COOR_SRV_PEERS=${COOR_SRV_PEERS:1}
 COOR_RAFT_PEERS=${COOR_RAFT_PEERS:1}
 
@@ -127,9 +136,9 @@ for ((i=1; i<=$SERVER_NUM; ++i)); do
   program_dir=$BASE_DIR/dist/${FLAGS_role}${i}
 
 if [ $FLAGS_role == "coordinator" ]; then
-  deploy_store ${FLAGS_role} $BASE_DIR $program_dir `expr $COORDINATOR_SERVER_START_PORT + $i` `expr $COORDINATOR_RAFT_START_PORT + $i` `expr $COORDINATOR_INSTANCE_START_ID + $i` ${COOR_SRV_PEERS} ${COOR_RAFT_PEERS}
+  deploy_store ${FLAGS_role} $BASE_DIR $program_dir `expr $COORDINATOR_SERVER_START_PORT + $i` `expr $COORDINATOR_RAFT_START_PORT + $i` `expr $COORDINATOR_INSTANCE_START_ID + $i` ${COOR_SRV_PEERS} ${COOR_RAFT_PEERS} ${TMP_COORDINATOR_SERVICES}
 else
-  deploy_store ${FLAGS_role} $BASE_DIR $program_dir `expr $SERVER_START_PORT + $i` `expr $RAFT_START_PORT + $i` `expr $STORE_INSTANCE_START_ID + $i` ${COOR_SRV_PEERS} ${COOR_RAFT_PEERS}
+  deploy_store ${FLAGS_role} $BASE_DIR $program_dir `expr $SERVER_START_PORT + $i` `expr $RAFT_START_PORT + $i` `expr $STORE_INSTANCE_START_ID + $i` ${COOR_SRV_PEERS} ${COOR_RAFT_PEERS} ${TMP_COORDINATOR_SERVICES}
 fi
 
 done

@@ -14,9 +14,19 @@
 
 #include "coordinator/coordinator_interaction.h"
 
+#include <cstddef>
+#include <memory>
+
+#include "butil/scoped_lock.h"
 #include "common/helper.h"
+#include "common/logging.h"
+#include "gflags/gflags.h"
 
 namespace dingodb {
+
+DEFINE_string(coor_url, "",
+              "coor service name, e.g. file://<path>, list://<addr1>,<addr2>..., bns://<bns-name>, "
+              "consul://<service-name>, http://<url>, https://<url>");
 
 bool CoordinatorInteraction::Init(const std::string& addr, uint32_t service_type) {
   service_type_ = service_type;
@@ -28,7 +38,7 @@ bool CoordinatorInteraction::Init(const std::string& addr, uint32_t service_type
 
   for (auto& endpoint : endpoints_) {
     DINGO_LOG(INFO) << butil::StringPrintf("Init channel %s:%d", butil::ip2str(endpoint.ip).c_str(), endpoint.port);
-    std::unique_ptr<brpc::Channel> channel = std::make_unique<brpc::Channel>();
+    std::shared_ptr<brpc::Channel> channel = std::make_shared<brpc::Channel>();
     if (channel->Init(endpoint, nullptr) != 0) {
       DINGO_LOG(ERROR) << butil::StringPrintf("Init channel failed, %s:%d", butil::ip2str(endpoint.ip).c_str(),
                                               endpoint.port);
@@ -36,6 +46,27 @@ bool CoordinatorInteraction::Init(const std::string& addr, uint32_t service_type
     }
     channels_.push_back(std::move(channel));
   }
+
+  DINGO_LOG(INFO) << "Init channel " << addr;
+
+  return true;
+}
+
+bool CoordinatorInteraction::InitByNameService(const std::string& service_name, uint32_t service_type) {
+  service_type_ = service_type;
+
+  brpc::ChannelOptions channel_opt;
+  channel_opt.timeout_ms = 500;
+  channel_opt.connect_timeout_ms = 500;
+
+  if (name_service_channel_.Init(service_name.c_str(), "rr", &channel_opt) != 0) {
+    DINGO_LOG(ERROR) << butil::StringPrintf("Init channel failed by service_name, %s", service_name.c_str());
+    return false;
+  }
+
+  use_service_name_ = true;
+
+  DINGO_LOG(INFO) << "Init channel by service_name " << service_name;
 
   return true;
 }
@@ -58,6 +89,11 @@ const ::google::protobuf::ServiceDescriptor* CoordinatorInteraction::GetServiceD
     }
   }
   return nullptr;
+}
+
+void CoordinatorInteraction::SetLeaderAddress(const butil::EndPoint& addr) {
+  BAIDU_SCOPED_LOCK(leader_mutex_);
+  leader_addr_ = addr;
 }
 
 }  // namespace dingodb

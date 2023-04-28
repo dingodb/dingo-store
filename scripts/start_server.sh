@@ -26,8 +26,8 @@ function start_program() {
   echo "start server: ${root_dir}"
 
   cd ${root_dir}
-  
-  nohup ./bin/dingodb_server --role ${role}  --conf ./conf/${role}.yaml 2>&1 >./log/out &
+
+  nohup ./bin/dingodb_server --role ${role}  --conf ./conf/${role}.yaml --coor_url=file://./conf/coor_list 2>&1 >./log/out &
 }
 
 
@@ -36,7 +36,7 @@ for ((i=1; i<=$SERVER_NUM; ++i)); do
 
   # clean log
   rm -f ${program_dir}/log/*
-  
+
   start_program ${FLAGS_role} ${program_dir}
 done
 
