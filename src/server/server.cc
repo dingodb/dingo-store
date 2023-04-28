@@ -35,6 +35,7 @@
 #include "engine/raft_meta_engine.h"
 #include "engine/raw_rocks_engine.h"
 #include "engine/rocks_engine.h"
+#include "glog/logging.h"
 #include "meta/meta_reader.h"
 #include "meta/meta_writer.h"
 #include "proto/common.pb.h"
@@ -44,6 +45,8 @@
 #include "store/heartbeat.h"
 
 namespace dingodb {
+
+DECLARE_string(coor_url);
 
 void Server::SetRole(pb::common::ClusterRole role) { role_ = role; }
 
@@ -180,8 +183,29 @@ bool Server::InitCoordinatorInteraction() {
   coordinator_interaction_ = std::make_shared<CoordinatorInteraction>();
 
   auto config = ConfigManager::GetInstance()->GetConfig(role_);
-  return coordinator_interaction_->Init(config->GetString("cluster.coordinators"),
-                                        pb::common::CoordinatorServiceType::ServiceTypeCoordinator);
+
+  if (!FLAGS_coor_url.empty()) {
+    return coordinator_interaction_->InitByNameService(FLAGS_coor_url,
+                                                       pb::common::CoordinatorServiceType::ServiceTypeCoordinator);
+  } else {
+    return coordinator_interaction_->Init(config->GetString("cluster.coordinators"),
+                                          pb::common::CoordinatorServiceType::ServiceTypeCoordinator);
+  }
+}
+
+bool Server::InitCoordinatorInteractionForAutoIncrement() {
+  auto* coordinator_interaction = CoordinatorInteraction::GetAutoIncrementInstance();
+
+  auto config = ConfigManager::GetInstance()->GetConfig(role_);
+
+  if (!FLAGS_coor_url.empty()) {
+    return coordinator_interaction->InitByNameService(FLAGS_coor_url,
+                                                      pb::common::CoordinatorServiceType::ServiceTypeAutoIncrement);
+
+  } else {
+    return coordinator_interaction->Init(config->GetString("coordinator.peers"),
+                                         pb::common::CoordinatorServiceType::ServiceTypeAutoIncrement);
+  }
 }
 
 bool Server::InitStorage() {

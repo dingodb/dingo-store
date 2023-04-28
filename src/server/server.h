@@ -65,6 +65,7 @@ class Server {
 
   // Init coordinator interaction
   bool InitCoordinatorInteraction();
+  bool InitCoordinatorInteractionForAutoIncrement();
 
   // Init storage engine.
   bool InitStorage();
@@ -158,6 +159,7 @@ class Server {
 
   // coordinator interaction
   std::shared_ptr<CoordinatorInteraction> coordinator_interaction_;
+  std::shared_ptr<CoordinatorInteraction> coordinator_interaction_incr_;
 
   // All store engine, include MemEngine/RaftKvEngine/RocksEngine
   std::shared_ptr<Engine> engine_;
