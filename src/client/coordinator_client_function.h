@@ -12,10 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#ifndef DINGODB_COORDINATOR_CLIENT_FUNCTION_H_
+#define DINGODB_COORDINATOR_CLIENT_FUNCTION_H_
+
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <memory>
 #include <string>
 
 #include "braft/raft.h"
@@ -23,89 +27,88 @@
 #include "brpc/channel.h"
 #include "brpc/controller.h"
 #include "bthread/bthread.h"
+#include "coordinator/coordinator_interaction.h"
 #include "gflags/gflags.h"
 #include "google/protobuf/util/json_util.h"
 #include "proto/coordinator.pb.h"
 #include "proto/meta.pb.h"
 #include "proto/node.pb.h"
 
-std::string MessageToJsonString(const google::protobuf::Message& message);
-
-// common functions
-std::string GetLeaderLocation(uint32_t service_type);
-
-// coordinator service functions
-void SendGetNodeInfo(brpc::Controller& cntl, dingodb::pb::node::NodeService_Stub& stub);
-void SendGetLogLevel(brpc::Controller& cntl, dingodb::pb::node::NodeService_Stub& stub);
-void SendChangeLogLevel(brpc::Controller& cntl, dingodb::pb::node::NodeService_Stub& stub);
-void SendHello(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
-void SendGetStoreMap(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
-void SendGetExecutorMap(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
-void SendGetCoordinatorMap(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
-void SendGetRegionMap(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
-void SendCreateStore(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
-void SendDeleteStore(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
-void SendStoreHearbeat(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub,
-                       uint64_t store_id);
-void SendGetStoreMetrics(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
-void SendCreateExecutor(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
-void SendDeleteExecutor(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
-void SendCreateExecutorUser(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
-void SendUpdateExecutorUser(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
-void SendDeleteExecutorUser(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
-void SendGetExecutorUserMap(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
-void SendExecutorHeartbeat(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
-
-// region
-void SendQueryRegion(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
-void SendCreateRegionForSplit(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
-void SendDropRegion(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
-void SendDropRegionPermanently(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
-void SendSplitRegion(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
-void SendMergeRegion(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
-void SendAddPeerRegion(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
-void SendRemovePeerRegion(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
-void SendGetOrphanRegion(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
-
-// store operation
-void SendGetStoreOperation(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
-void SendCleanStoreOperation(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
-void SendAddStoreOperation(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
-void SendRemoveStoreOperation(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
-
-// task list
-void SendGetTaskList(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
-void SendCleanTaskList(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
-
-// meta service functions
-void SendGetSchemas(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub);
-void SendGetSchema(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub);
-void SendGetSchemaByName(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub);
-void SendGetTablesCount(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub);
-void SendGetTables(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub);
-void SendGetTable(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub);
-void SendGetTableByName(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub);
-void SendGetTableRange(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub);
-void SendCreateTableId(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub);
-void SendCreateTable(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub, bool with_table_id);
-void SendCreateTableOld(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub, bool with_table_id);
-void SendDropTable(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub);
-void SendDropSchema(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub);
-void SendCreateSchema(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub);
-void SendGetTableMetrics(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub);
+// node service functions
+void SendGetNodeInfo();
+void SendGetLogLevel();
+void SendChangeLogLevel();
 
 // raft_control functions
-void SendRaftAddPeer(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
-void SendRaftRemovePeer(brpc::Controller& cntl, dingodb::pb::coordinator::CoordinatorService_Stub& stub);
+void SendRaftAddPeer();
+void SendRaftRemovePeer();
+
+// coordinator service functions
+void SendHello(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendGetStoreMap(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendGetExecutorMap(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendGetCoordinatorMap(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendGetRegionMap(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendCreateStore(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendDeleteStore(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendStoreHearbeat(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction, uint64_t store_id);
+void SendGetStoreMetrics(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendCreateExecutor(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendDeleteExecutor(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendCreateExecutorUser(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendUpdateExecutorUser(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendDeleteExecutorUser(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendGetExecutorUserMap(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendExecutorHeartbeat(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+
+// region
+void SendQueryRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendCreateRegionForSplit(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendDropRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendDropRegionPermanently(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendSplitRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendMergeRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendAddPeerRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendRemovePeerRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendGetOrphanRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+
+// store operation
+void SendGetStoreOperation(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendCleanStoreOperation(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendAddStoreOperation(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendRemoveStoreOperation(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+
+// task list
+void SendGetTaskList(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendCleanTaskList(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+
+// meta service functions
+void SendGetSchemas(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendGetSchema(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendGetSchemaByName(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendGetTablesCount(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendGetTables(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendGetTable(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendGetTableByName(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendGetTableRange(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendCreateTableId(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendCreateTable(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction, bool with_table_id);
+void SendDropTable(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendDropSchema(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendCreateSchema(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendGetTableMetrics(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 
 // auto increment functions
-void SendGetAutoIncrement(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub);
-void SendCreateAutoIncrement(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub);
-void SendUpdateAutoIncrement(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub);
-void SendGenerateAutoIncrement(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub);
-void SendDeleteAutoIncrement(brpc::Controller& cntl, dingodb::pb::meta::MetaService_Stub& stub);
+void SendGetAutoIncrement(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendCreateAutoIncrement(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendUpdateAutoIncrement(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendGenerateAutoIncrement(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendDeleteAutoIncrement(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 
 // debug
 void SendDebug();
 std::string EncodeUint64(uint64_t value);
 uint64_t DecodeUint64(const std::string& str);
+bool GetBrpcChannel(const std::string& location, brpc::Channel& channel);
+
+#endif  // DINGODB_COORDINATOR_CLIENT_FUNCTION_H_

@@ -194,17 +194,17 @@ bool Server::InitCoordinatorInteraction() {
 }
 
 bool Server::InitCoordinatorInteractionForAutoIncrement() {
-  auto* coordinator_interaction = CoordinatorInteraction::GetAutoIncrementInstance();
+  coordinator_interaction_incr_ = std::make_shared<CoordinatorInteraction>();
 
   auto config = ConfigManager::GetInstance()->GetConfig(role_);
 
   if (!FLAGS_coor_url.empty()) {
-    return coordinator_interaction->InitByNameService(FLAGS_coor_url,
-                                                      pb::common::CoordinatorServiceType::ServiceTypeAutoIncrement);
+    return coordinator_interaction_incr_->InitByNameService(
+        FLAGS_coor_url, pb::common::CoordinatorServiceType::ServiceTypeAutoIncrement);
 
   } else {
-    return coordinator_interaction->Init(config->GetString("coordinator.peers"),
-                                         pb::common::CoordinatorServiceType::ServiceTypeAutoIncrement);
+    return coordinator_interaction_incr_->Init(config->GetString("coordinator.peers"),
+                                               pb::common::CoordinatorServiceType::ServiceTypeAutoIncrement);
   }
 }
 

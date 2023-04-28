@@ -63,11 +63,6 @@ class CoordinatorInteraction {
 
   const ::google::protobuf::ServiceDescriptor* GetServiceDescriptor() const;
 
-  static CoordinatorInteraction* GetAutoIncrementInstance() {
-    static CoordinatorInteraction instance;
-    return &instance;
-  }
-
   void SetLeaderAddress(const butil::EndPoint& addr);
 
  private:

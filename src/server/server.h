@@ -111,6 +111,7 @@ class Server {
   void SetRaftEndpoint(const butil::EndPoint& endpoint) { raft_endpoint_ = endpoint; }
 
   std::shared_ptr<CoordinatorInteraction> GetCoordinatorInteraction() { return coordinator_interaction_; }
+  std::shared_ptr<CoordinatorInteraction> GetCoordinatorInteractionIncr() { return coordinator_interaction_incr_; }
 
   std::shared_ptr<Engine> GetEngine() { return engine_; }
 

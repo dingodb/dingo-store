@@ -25,6 +25,7 @@
 #include "common/synchronization.h"
 #include "coordinator/coordinator_interaction.h"
 #include "engine/snapshot.h"
+#include "server/server.h"
 
 namespace dingodb {
 
@@ -435,7 +436,7 @@ butil::Status AutoIncrementControl::SendCreateAutoIncrementInternal(const uint64
   table_id_ptr->set_entity_id(table_id);
   request.set_start_id(auto_increment);
 
-  return CoordinatorInteraction::GetAutoIncrementInstance()->SendRequest("CreateAutoIncrement", request, response);
+  return Server::GetInstance()->GetCoordinatorInteractionIncr()->SendRequest("CreateAutoIncrement", request, response);
 }
 
 void AutoIncrementControl::SendUpdateAutoIncrementInternal(const uint64_t table_id, const uint64_t auto_increment) {
@@ -455,7 +456,7 @@ void AutoIncrementControl::SendUpdateAutoIncrementInternal(const uint64_t table_
     request.set_force(true);
 
     butil::Status status =
-        CoordinatorInteraction::GetAutoIncrementInstance()->SendRequest("UpdateAutoIncrement", request, response);
+        Server::GetInstance()->GetCoordinatorInteractionIncr()->SendRequest("UpdateAutoIncrement", request, response);
     if (status.error_code() != pb::error::Errno::OK) {
       LOG(ERROR) << "error, code: " << status.error_code() << ", message: " << status.error_str();
     }
@@ -475,7 +476,7 @@ void AutoIncrementControl::SendDeleteAutoIncrementInternal(const uint64_t table_
     table_id_ptr->set_entity_id(table_id);
 
     butil::Status status =
-        CoordinatorInteraction::GetAutoIncrementInstance()->SendRequest("DeleteAutoIncrement", request, response);
+        Server::GetInstance()->GetCoordinatorInteractionIncr()->SendRequest("DeleteAutoIncrement", request, response);
     if (status.error_code() != pb::error::Errno::OK) {
       LOG(ERROR) << "error, code: " << status.error_code() << ", message: " << status.error_str();
     }
