@@ -24,10 +24,6 @@
 
 namespace dingodb {
 
-DEFINE_string(coor_url, "",
-              "coor service name, e.g. file://<path>, list://<addr1>,<addr2>..., bns://<bns-name>, "
-              "consul://<service-name>, http://<url>, https://<url>");
-
 bool CoordinatorInteraction::Init(const std::string& addr, uint32_t service_type) {
   service_type_ = service_type;
   endpoints_ = Helper::StrToEndpoints(addr);

@@ -66,7 +66,7 @@ DEFINE_int64(index, 0, "index");
 DEFINE_uint32(service_type, 0, "service type for getting leader, 0: meta or coordinator, 2: auto increment");
 DEFINE_string(start_key, "", "start_key");
 DEFINE_string(end_key, "", "end_key");
-DEFINE_string(coordinator_url, "", "coordinator url");
+DEFINE_string(coor_url, "", "coordinator url");
 DEFINE_string(url, "", "coordinator url");
 
 std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction;
@@ -292,28 +292,26 @@ int main(int argc, char* argv[]) {
   }
 
   if (!FLAGS_url.empty()) {
-    FLAGS_coordinator_url = FLAGS_url;
+    FLAGS_coor_url = FLAGS_url;
   }
 
-  if (FLAGS_coordinator_url.empty()) {
+  if (FLAGS_coor_url.empty()) {
     DINGO_LOG(ERROR) << "coordinator url is empty, try to use file://./coor_list";
-    FLAGS_coordinator_url = "file://./coor_list";
+    FLAGS_coor_url = "file://./coor_list";
   }
 
-  if (!FLAGS_coordinator_url.empty()) {
+  if (!FLAGS_coor_url.empty()) {
     coordinator_interaction = std::make_shared<dingodb::CoordinatorInteraction>();
     if (!coordinator_interaction->InitByNameService(
-            FLAGS_coordinator_url, dingodb::pb::common::CoordinatorServiceType::ServiceTypeCoordinator)) {
-      DINGO_LOG(ERROR) << "Fail to init coordinator_interaction, please check parameter --url="
-                       << FLAGS_coordinator_url;
+            FLAGS_coor_url, dingodb::pb::common::CoordinatorServiceType::ServiceTypeCoordinator)) {
+      DINGO_LOG(ERROR) << "Fail to init coordinator_interaction, please check parameter --url=" << FLAGS_coor_url;
       return -1;
     }
 
     coordinator_interaction_meta = std::make_shared<dingodb::CoordinatorInteraction>();
     if (!coordinator_interaction_meta->InitByNameService(
-            FLAGS_coordinator_url, dingodb::pb::common::CoordinatorServiceType::ServiceTypeMeta)) {
-      DINGO_LOG(ERROR) << "Fail to init coordinator_interaction_meta, please check parameter --url="
-                       << FLAGS_coordinator_url;
+            FLAGS_coor_url, dingodb::pb::common::CoordinatorServiceType::ServiceTypeMeta)) {
+      DINGO_LOG(ERROR) << "Fail to init coordinator_interaction_meta, please check parameter --url=" << FLAGS_coor_url;
       return -1;
     }
   }
