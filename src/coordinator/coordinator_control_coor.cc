@@ -2383,6 +2383,21 @@ void CoordinatorControl::GetMemoryInfo(pb::coordinator::CoordinatorMemoryInfo& m
     memory_info.set_table_metrics_map_size(table_metrics_map_.MemorySize());
     memory_info.set_total_size(memory_info.total_size() + memory_info.table_metrics_map_size());
   }
+  {
+    memory_info.set_store_operation_map_count(store_operation_map_.Size());
+    memory_info.set_store_operation_map_size(store_operation_map_.MemorySize());
+    memory_info.set_total_size(memory_info.total_size() + memory_info.store_operation_map_size());
+  }
+  {
+    memory_info.set_executor_user_map_count(executor_user_map_.Size());
+    memory_info.set_executor_user_map_size(executor_user_map_.MemorySize());
+    memory_info.set_total_size(memory_info.total_size() + memory_info.executor_user_map_size());
+  }
+  {
+    memory_info.set_task_list_map_count(task_list_map_.Size());
+    memory_info.set_task_list_map_size(task_list_map_.MemorySize());
+    memory_info.set_total_size(memory_info.total_size() + memory_info.task_list_map_size());
+  }
 }
 
 void CoordinatorControl::GetStoreOperation(uint64_t store_id, pb::coordinator::StoreOperation& store_operation) {
