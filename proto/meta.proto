@@ -310,6 +310,18 @@ message DropTableResponse {
   dingodb.pb.error.Error error = 1;
 }
 
+message TableIncrement {
+  uint64 table_id = 1;
+  uint64 start_id = 2;
+}
+
+message GetAutoIncrementsRequest {}
+
+message GetAutoIncrementsResponse {
+  dingodb.pb.error.Error error = 1;
+  repeated TableIncrement table_increments = 2;
+}
+
 message GetAutoIncrementRequest {
   DingoCommonId table_id = 1;
 }
@@ -425,6 +437,10 @@ service MetaService {
   // in: parent_schema_id schema_name
   // out: Schema
   rpc DropSchema(DropSchemaRequest) returns (DropSchemaResponse);
+
+  // GetAutoIncrements
+  // out: list of table_id, start_id
+  rpc GetAutoIncrements(GetAutoIncrementsRequest) returns (GetAutoIncrementsResponse);
 
   // GetAutoIncrement
   // in: table_id

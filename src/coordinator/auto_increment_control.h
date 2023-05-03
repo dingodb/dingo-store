@@ -47,6 +47,7 @@ class AutoIncrementControl : public MetaControl {
   static bool Init();
   static bool Recover();
 
+  butil::Status GetAutoIncrements(butil::FlatMap<uint64_t, uint64_t> &auto_increments);
   butil::Status GetAutoIncrement(uint64_t table_id, uint64_t &start_id);
   butil::Status CreateAutoIncrement(uint64_t table_id, uint64_t start_id,
                                     pb::coordinator_internal::MetaIncrement &meta_increment);
@@ -58,7 +59,7 @@ class AutoIncrementControl : public MetaControl {
   butil::Status DeleteAutoIncrement(uint64_t table_id, pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // Get raft leader's server location
-  void GetLeaderLocation(pb::common::Location *leader_server_location_ptr);
+  void GetLeaderLocation(pb::common::Location &leader_server_location) override;
 
   // use raft_location to get server_location
   // in: raft_location

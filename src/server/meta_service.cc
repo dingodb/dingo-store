@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "brpc/controller.h"
+#include "butil/containers/flat_map.h"
 #include "common/constant.h"
 #include "common/logging.h"
 #include "coordinator/coordinator_closure.h"
@@ -457,6 +458,35 @@ void MetaServiceImpl::DropTable(google::protobuf::RpcController *controller, con
   engine_->MetaPut(ctx, meta_increment);
 }
 
+void MetaServiceImpl::GetAutoIncrements(google::protobuf::RpcController * /*controller*/,
+                                        const pb::meta::GetAutoIncrementsRequest *request,
+                                        pb::meta::GetAutoIncrementsResponse *response,
+                                        google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!auto_increment_control_->IsLeader()) {
+    return RedirectAutoIncrementResponse(response);
+  }
+
+  DINGO_LOG(DEBUG) << request->DebugString();
+
+  butil::FlatMap<uint64_t, uint64_t> auto_increments;
+  auto_increments.init(1024);
+  auto ret = auto_increment_control_->GetAutoIncrements(auto_increments);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "get auto increments failed";
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    return;
+  }
+
+  for (auto it : auto_increments) {
+    auto *auto_increment = response->add_table_increments();
+    auto_increment->set_table_id(it.first);
+    auto_increment->set_start_id(it.second);
+  }
+}
+
 void MetaServiceImpl::GetAutoIncrement(google::protobuf::RpcController * /*controller*/,
                                        const pb::meta::GetAutoIncrementRequest *request,
                                        pb::meta::GetAutoIncrementResponse *response, google::protobuf::Closure *done) {
@@ -490,7 +520,11 @@ void MetaServiceImpl::CreateAutoIncrement(google::protobuf::RpcController *contr
   if (!auto_increment_control_->IsLeader()) {
     return RedirectAutoIncrementResponse(response);
   }
+
   DINGO_LOG(DEBUG) << request->DebugString();
+  DINGO_LOG(INFO) << "CreateAutoIncrement request:  schema_id = [" << request->table_id().parent_entity_id() << "]"
+                  << " table_id = [" << request->table_id().entity_id() << "] start_id = [" << request->start_id()
+                  << "]";
 
   uint64_t table_id = request->table_id().entity_id();
   pb::coordinator_internal::MetaIncrement meta_increment;
@@ -507,7 +541,17 @@ void MetaServiceImpl::CreateAutoIncrement(google::protobuf::RpcController *contr
   std::shared_ptr<Context> ctx = std::make_shared<Context>(static_cast<brpc::Controller *>(controller), closure);
   ctx->SetRegionId(Constant::kAutoIncrementRegionId);
   // this is a async operation will be block by closure
-  engine_->MetaPut(ctx, meta_increment);
+  auto ret2 = engine_->MetaPut(ctx, meta_increment);
+  if (!ret2.ok()) {
+    DINGO_LOG(ERROR) << "failed, " << table_id << " | " << request->start_id() << " | " << ret2.error_str();
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret2.error_code()));
+    response->mutable_error()->set_errmsg(ret2.error_str());
+
+    if (ret2.error_code() == pb::error::Errno::ERAFT_NOTLEADER) {
+      RedirectAutoIncrementResponse(response);
+    }
+    return;
+  }
 }
 
 void MetaServiceImpl::UpdateAutoIncrement(google::protobuf::RpcController *controller,
@@ -528,7 +572,7 @@ void MetaServiceImpl::UpdateAutoIncrement(google::protobuf::RpcController *contr
       auto_increment_control_->UpdateAutoIncrement(table_id, request->start_id(), request->force(), meta_increment);
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << "update auto increment failed, " << table_id << " | " << request->start_id() << " | "
-                     << request->force();
+                     << request->force() << " | " << ret.error_str();
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
     response->mutable_error()->set_errmsg(ret.error_str());
     return;
@@ -539,7 +583,18 @@ void MetaServiceImpl::UpdateAutoIncrement(google::protobuf::RpcController *contr
   std::shared_ptr<Context> ctx = std::make_shared<Context>(static_cast<brpc::Controller *>(controller), closure);
   ctx->SetRegionId(Constant::kAutoIncrementRegionId);
   // this is a async operation will be block by closure
-  engine_->MetaPut(ctx, meta_increment);
+  auto ret2 = engine_->MetaPut(ctx, meta_increment);
+  if (!ret2.ok()) {
+    DINGO_LOG(ERROR) << "update auto increment failed, " << table_id << " | " << request->start_id() << " | "
+                     << request->force();
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret2.error_code()));
+    response->mutable_error()->set_errmsg(ret2.error_str());
+
+    if (ret2.error_code() == pb::error::Errno::ERAFT_NOTLEADER) {
+      RedirectAutoIncrementResponse(response);
+    }
+    return;
+  }
 }
 
 void MetaServiceImpl::GenerateAutoIncrement(google::protobuf::RpcController *controller,
@@ -572,7 +627,18 @@ void MetaServiceImpl::GenerateAutoIncrement(google::protobuf::RpcController *con
   std::shared_ptr<Context> ctx = std::make_shared<Context>(static_cast<brpc::Controller *>(controller), closure);
   ctx->SetRegionId(Constant::kAutoIncrementRegionId);
   // this is a async operation will be block by closure
-  engine_->MetaPut(ctx, meta_increment);
+  auto ret2 = engine_->MetaPut(ctx, meta_increment);
+  if (!ret2.ok()) {
+    DINGO_LOG(ERROR) << "generate auto increment failed, " << ret << " | " << request->DebugString() << " | "
+                     << ret2.error_str();
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret2.error_code()));
+    response->mutable_error()->set_errmsg(ret2.error_str());
+
+    if (ret2.error_code() == pb::error::Errno::ERAFT_NOTLEADER) {
+      RedirectAutoIncrementResponse(response);
+    }
+    return;
+  }
 }
 
 void MetaServiceImpl::DeleteAutoIncrement(google::protobuf::RpcController *controller,
@@ -602,7 +668,17 @@ void MetaServiceImpl::DeleteAutoIncrement(google::protobuf::RpcController *contr
   std::shared_ptr<Context> ctx = std::make_shared<Context>(static_cast<brpc::Controller *>(controller), closure);
   ctx->SetRegionId(Constant::kAutoIncrementRegionId);
   // this is a async operation will be block by closure
-  engine_->MetaPut(ctx, meta_increment);
+  auto ret2 = engine_->MetaPut(ctx, meta_increment);
+  if (!ret2.ok()) {
+    DINGO_LOG(ERROR) << "delete auto increment failed, " << table_id << " | " << ret2.error_str();
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret2.error_code()));
+    response->mutable_error()->set_errmsg(ret2.error_str());
+
+    if (ret2.error_code() == pb::error::Errno::ERAFT_NOTLEADER) {
+      RedirectAutoIncrementResponse(response);
+    }
+    return;
+  }
 }
 
 }  // namespace dingodb
