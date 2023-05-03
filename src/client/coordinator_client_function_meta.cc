@@ -213,7 +213,8 @@ void SendCreateTableId(std::shared_ptr<dingodb::CoordinatorInteraction> coordina
   DINGO_LOG_INFO << response.DebugString();
 }
 
-void SendCreateTable(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction, bool with_table_id) {
+void SendCreateTable(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction, bool with_table_id,
+                     bool with_increment) {
   dingodb::pb::meta::CreateTableRequest request;
   dingodb::pb::meta::CreateTableResponse response;
 
@@ -252,14 +253,22 @@ void SendCreateTable(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
     std::string column_name("test_columen_");
     column_name.append(std::to_string(i));
     column->set_name(column_name);
-    column->set_sql_type(::dingodb::pb::meta::SqlType::SQL_TYPE_INTEGER);
-    column->set_element_type(::dingodb::pb::meta::ElementType::ELEM_TYPE_BYTES);
+    column->set_sql_type(::dingodb::pb::meta::SqlType::SQL_TYPE_BIGINT);
+    column->set_element_type(::dingodb::pb::meta::ElementType::ELEM_TYPE_INT64);
     column->set_precision(100);
     column->set_nullable(false);
     column->set_indexofkey(7);
     column->set_has_default_val(false);
     column->set_default_val("0");
+
+    if (with_increment && i == 0) {
+      column->set_is_auto_increment(true);
+    }
   }
+  if (with_increment) {
+    table_definition->set_auto_increment(100);
+  }
+
   // map<string, Index> indexes = 3;
   // uint32 version = 4;
   table_definition->set_version(1);

@@ -244,9 +244,11 @@ void* Sender(void* /*arg*/) {
   } else if (FLAGS_method == "GetTablesCount") {
     SendGetTablesCount(coordinator_interaction_meta);
   } else if (FLAGS_method == "CreateTable") {
-    SendCreateTable(coordinator_interaction_meta, false);
+    SendCreateTable(coordinator_interaction_meta, false, false);
   } else if (FLAGS_method == "CreateTableWithId") {
-    SendCreateTable(coordinator_interaction_meta, true);
+    SendCreateTable(coordinator_interaction_meta, true, false);
+  } else if (FLAGS_method == "CreateTableWithIncrement") {
+    SendCreateTable(coordinator_interaction_meta, false, true);
   } else if (FLAGS_method == "CreateTableId") {
     SendCreateTableId(coordinator_interaction_meta);
   } else if (FLAGS_method == "DropTable") {
