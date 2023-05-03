@@ -38,7 +38,7 @@
 
 namespace dingodb {
 
-const int kMaxRetry = 3;
+const int kMaxRetry = 5;
 
 // For store interact with coordinator.
 class CoordinatorInteraction {
@@ -148,8 +148,9 @@ butil::Status CoordinatorInteraction::SendRequestByService(const std::string& ap
       channel->CallMethod(method, &cntl, &request, &response, nullptr);
 
       if (cntl.Failed()) {
-        DINGO_LOG(WARNING) << "connect with meta server fail. channel CallMethod fail, leader_addr: "
-                           << butil::endpoint2str(leader_addr).c_str();
+        DINGO_LOG(WARNING) << "connect with meta server fail. channel CallMethod " << api_name
+                           << " fail, leader_addr: " << butil::endpoint2str(leader_addr).c_str()
+                           << " errorcode:" << cntl.ErrorCode() << " error text:" << cntl.ErrorText();
         SetLeaderAddress(butil::EndPoint());
         ++retry_count;
         continue;
@@ -164,13 +165,15 @@ butil::Status CoordinatorInteraction::SendRequestByService(const std::string& ap
 
           SetLeaderAddress(leader_endpoint);
 
-          DINGO_LOG(WARNING) << "connect with meta server success, found new leader: "
-                             << butil::endpoint2str(cntl.remote_side()).c_str();
+          DINGO_LOG(WARNING) << "connect with meta server success, connected to:"
+                             << butil::endpoint2str(cntl.remote_side()).c_str()
+                             << " but not leader, leader_addr: " << butil::endpoint2str(leader_addr).c_str();
         } else {
           DINGO_LOG(WARNING) << "connect with meta server success, but no leader found: "
                              << butil::endpoint2str(cntl.remote_side()).c_str();
           SetLeaderAddress(butil::EndPoint());
         }
+        response.mutable_error()->set_errcode(pb::error::Errno::OK);
         ++retry_count;
         continue;
       } else {
@@ -181,9 +184,9 @@ butil::Status CoordinatorInteraction::SendRequestByService(const std::string& ap
     } else {
       name_service_channel_.CallMethod(method, &cntl, &request, &response, nullptr);
       if (cntl.Failed()) {
-        DINGO_LOG(WARNING)
-            << "name_service_channel_ connect with meta server fail. channel CallMethod fail, leader_addr: "
-            << butil::endpoint2str(leader_addr).c_str();
+        DINGO_LOG(WARNING) << "name_service_channel_ connect with meta server fail. channel CallMethod " << api_name
+                           << " fail, remote_side: " << butil::endpoint2str(cntl.remote_side()).c_str()
+                           << " error_code=" << cntl.ErrorCode() << " error_text=" << cntl.ErrorText();
         ++retry_count;
         continue;
       } else if (response.error().errcode() == pb::error::Errno::ERAFT_NOTLEADER) {
@@ -193,23 +196,27 @@ butil::Status CoordinatorInteraction::SendRequestByService(const std::string& ap
 
           SetLeaderAddress(leader_endpoint);
 
-          DINGO_LOG(WARNING)
-              << "name_service_channel_ connect with meta server success by service name, found new leader: "
-              << butil::endpoint2str(cntl.remote_side()).c_str();
-          ++retry_count;
-          continue;
+          DINGO_LOG(WARNING) << "name_service_channel_ connect with meta server success by service name, connected to: "
+                             << butil::endpoint2str(cntl.remote_side()).c_str()
+                             << " found new leader: " << leader_endpoint.ip << ":" << leader_endpoint.port;
         }
+        response.mutable_error()->set_errcode(pb::error::Errno::OK);
+        ++retry_count;
+        continue;
       } else {
         // call success, set leader
         DINGO_LOG(INFO) << "name_service_channel_ connect with meta server finished. response errcode: "
-                        << response.error().errcode() << ", leader_addr: " << butil::endpoint2str(leader_addr).c_str();
+                        << response.error().errcode()
+                        << ", leader_addr: " << butil::endpoint2str(cntl.remote_side()).c_str();
         SetLeaderAddress(cntl.remote_side());
         return butil::Status(response.error().errcode(), response.error().errmsg());
       }
     }
   } while (retry_count < kMaxRetry);
 
-  return butil::Status(pb::error::ERAFT_NOTLEADER, "Not raft leader");
+  return butil::Status(pb::error::EINTERNAL,
+                       "connect with meta server fail, no leader found or connect timeout, retry count: %d",
+                       retry_count);
 }
 
 template <typename Request, typename Response>
@@ -254,7 +261,9 @@ butil::Status CoordinatorInteraction::SendRequestByList(const std::string& api_n
 
   } while (retry_count < kMaxRetry);
 
-  return butil::Status(pb::error::ERAFT_NOTLEADER, "Not raft leader");
+  return butil::Status(pb::error::EINTERNAL,
+                       "connect with meta server fail, no leader found or connect timeout, retry count: %d",
+                       retry_count);
 }
 
 }  // namespace dingodb
