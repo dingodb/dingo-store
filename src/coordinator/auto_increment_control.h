@@ -47,15 +47,15 @@ class AutoIncrementControl : public MetaControl {
   static bool Init();
   static bool Recover();
 
-  pb::error::Errno GetAutoIncrement(uint64_t table_id, uint64_t &start_id);
-  pb::error::Errno CreateAutoIncrement(uint64_t table_id, uint64_t start_id,
-                                       pb::coordinator_internal::MetaIncrement &meta_increment);
-  pb::error::Errno UpdateAutoIncrement(uint64_t table_id, uint64_t start_id, bool force,
-                                       pb::coordinator_internal::MetaIncrement &meta_increment);
-  pb::error::Errno GenerateAutoIncrement(uint64_t table_id, uint32_t count, uint32_t auto_increment_increment,
-                                         uint32_t auto_increment_offset,
-                                         pb::coordinator_internal::MetaIncrement &meta_increment);
-  pb::error::Errno DeleteAutoIncrement(uint64_t table_id, pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status GetAutoIncrement(uint64_t table_id, uint64_t &start_id);
+  butil::Status CreateAutoIncrement(uint64_t table_id, uint64_t start_id,
+                                    pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status UpdateAutoIncrement(uint64_t table_id, uint64_t start_id, bool force,
+                                    pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status GenerateAutoIncrement(uint64_t table_id, uint32_t count, uint32_t auto_increment_increment,
+                                      uint32_t auto_increment_offset,
+                                      pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status DeleteAutoIncrement(uint64_t table_id, pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // Get raft leader's server location
   void GetLeaderLocation(pb::common::Location *leader_server_location_ptr);
@@ -87,8 +87,8 @@ class AutoIncrementControl : public MetaControl {
   int SaveAutoIncrement(std::string &auto_increment_data);
   int LoadAutoIncrement(const std::string &auto_increment_file);
 
-  static pb::error::Errno CheckAutoIncrementInTableDefinition(const pb::meta::TableDefinition &table_definition,
-                                                              bool &has_auto_increment_column);
+  static butil::Status CheckAutoIncrementInTableDefinition(const pb::meta::TableDefinition &table_definition,
+                                                           bool &has_auto_increment_column);
 
   static butil::Status SendCreateAutoIncrementInternal(uint64_t table_id, uint64_t auto_increment);
   static void SendUpdateAutoIncrementInternal(uint64_t table_id, uint64_t auto_increment);

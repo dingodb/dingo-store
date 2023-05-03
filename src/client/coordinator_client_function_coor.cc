@@ -753,7 +753,21 @@ void SendSplitRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
     DINGO_LOG(INFO) << " half_diff = " << dingodb::Helper::StringToHex(half_diff);
     DINGO_LOG(INFO) << " mid       = " << dingodb::Helper::StringToHex(mid);
 
-    request.mutable_split_request()->set_split_watershed_key(mid.substr(1, mid.size() - 1));
+    auto real_mid = mid.substr(1, mid.size() - 1);
+    DINGO_LOG(INFO) << " mid real  = " << dingodb::Helper::StringToHex(real_mid);
+
+    request.mutable_split_request()->set_split_watershed_key(real_mid);
+
+    if (query_response.region().definition().range().start_key().compare(real_mid) >= 0 ||
+        query_response.region().definition().range().end_key().compare(real_mid) <= 0) {
+      DINGO_LOG(ERROR) << "SplitRegion split_watershed_key is illegal, split_watershed_key = "
+                       << dingodb::Helper::StringToHex(real_mid)
+                       << ", query_response.region()_id = " << query_response.region().id() << " start_key="
+                       << dingodb::Helper::StringToHex(query_response.region().definition().range().start_key())
+                       << ", end_key="
+                       << dingodb::Helper::StringToHex(query_response.region().definition().range().end_key());
+      return;
+    }
   }
 
   DINGO_LOG(INFO) << "split from region " << FLAGS_split_from_id << " to region " << FLAGS_split_to_id
