@@ -14,6 +14,8 @@
 
 #include "server/coordinator_service.h"
 
+#include <sys/stat.h>
+
 #include <cstdint>
 #include <memory>
 #include <shared_mutex>
@@ -23,6 +25,7 @@
 #include "braft/configuration.h"
 #include "brpc/controller.h"
 #include "butil/containers/flat_map.h"
+#include "butil/status.h"
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
@@ -72,10 +75,11 @@ void CoordinatorServiceImpl::CreateExecutor(google::protobuf::RpcController *con
   pb::common::Executor executor_to_create;
   executor_to_create.CopyFrom(request->executor());
   auto ret = coordinator_control_->CreateExecutor(request->cluster_id(), executor_to_create, meta_increment);
-  if (ret == pb::error::Errno::OK) {
+  if (ret.ok()) {
     response->mutable_executor()->CopyFrom(executor_to_create);
   } else {
-    response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
     return;
   }
 
@@ -115,8 +119,9 @@ void CoordinatorServiceImpl::DeleteExecutor(google::protobuf::RpcController *con
 
   // delete executor
   auto ret = coordinator_control_->DeleteExecutor(request->cluster_id(), request->executor(), meta_increment);
-  if (ret != pb::error::Errno::OK) {
-    response->mutable_error()->set_errcode(ret);
+  if (!ret.ok()) {
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
     DINGO_LOG(ERROR) << "DeleteExecutor failed:  executor_id=" << request->executor().id();
     return;
   }
@@ -155,11 +160,12 @@ void CoordinatorServiceImpl::CreateExecutorUser(google::protobuf::RpcController 
   pb::common::ExecutorUser executor_user;
   executor_user.CopyFrom(request->executor_user());
   auto ret = this->coordinator_control_->CreateExecutorUser(request->cluster_id(), executor_user, meta_increment);
-  if (ret == pb::error::Errno::OK) {
+  if (ret.ok()) {
     response->mutable_executor_user()->CopyFrom(executor_user);
   } else {
     auto *error = response->mutable_error();
-    error->set_errcode(ret);
+    error->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    error->set_errmsg(ret.error_str());
     return;
   }
 
@@ -199,11 +205,12 @@ void CoordinatorServiceImpl::UpdateExecutorUser(google::protobuf::RpcController 
 
   auto ret = this->coordinator_control_->UpdateExecutorUser(request->cluster_id(), request->executor_user(),
                                                             request->executor_user_update(), meta_increment);
-  if (ret == pb::error::Errno::OK) {
+  if (ret.ok()) {
     response->mutable_executor_user()->CopyFrom(request->executor_user_update());
     response->mutable_executor_user()->set_user(request->executor_user().user());
   } else {
-    response->mutable_error()->set_errcode(ret);
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
     return;
   }
 
@@ -246,8 +253,9 @@ void CoordinatorServiceImpl::DeleteExecutorUser(google::protobuf::RpcController 
   executor_user.CopyFrom(request->executor_user());
   auto local_ctl = this->coordinator_control_;
   auto ret = local_ctl->DeleteExecutorUser(request->cluster_id(), executor_user, meta_increment);
-  if (ret != pb::error::Errno::OK) {
-    response->mutable_error()->set_errcode(ret);
+  if (!ret.ok()) {
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
     return;
   }
 
@@ -285,8 +293,10 @@ void CoordinatorServiceImpl::GetExecutorUserMap(google::protobuf::RpcController 
 
   pb::common::ExecutorUserMap executor_user_map;
   auto ret = this->coordinator_control_->GetExecutorUserMap(request->cluster_id(), executor_user_map);
-  if (ret != pb::error::Errno::OK) {
-    response->mutable_error()->set_errcode(ret);
+  if (!ret.ok()) {
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+
     return;
   }
 
@@ -312,11 +322,12 @@ void CoordinatorServiceImpl::CreateStore(google::protobuf::RpcController *contro
   std::string keyring;
   auto local_ctl = this->coordinator_control_;
   auto ret = local_ctl->CreateStore(request->cluster_id(), store_id, keyring, meta_increment);
-  if (ret == pb::error::Errno::OK) {
+  if (ret.ok()) {
     response->set_store_id(store_id);
     response->set_keyring(keyring);
   } else {
-    response->mutable_error()->set_errcode(ret);
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
     return;
   }
 
@@ -364,9 +375,10 @@ void CoordinatorServiceImpl::DeleteStore(google::protobuf::RpcController *contro
   std::string const keyring = request->keyring();
   auto local_ctl = this->coordinator_control_;
   auto ret = local_ctl->DeleteStore(request->cluster_id(), store_id, keyring, meta_increment);
-  if (ret != pb::error::Errno::OK) {
+  if (!ret.ok()) {
     DINGO_LOG(ERROR) << "DeleteStore failed:  store_id=" << store_id << ", keyring=" << keyring;
-    response->mutable_error()->set_errcode(ret);
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
     return;
   }
 
@@ -646,12 +658,12 @@ void CoordinatorServiceImpl::QueryRegion(google::protobuf::RpcController * /*con
 
   pb::common::Region region;
   auto ret = this->coordinator_control_->QueryRegion(region_id, region);
-  response->mutable_error()->set_errcode(ret);
 
-  if (ret == pb::error::Errno::OK) {
+  if (ret.ok()) {
     response->mutable_region()->CopyFrom(region);
   } else {
-    response->mutable_error()->set_errcode(ret);
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
   }
 }
 
@@ -678,7 +690,7 @@ void CoordinatorServiceImpl::CreateRegion(google::protobuf::RpcController *contr
   uint64_t split_from_region_id = request->split_from_region_id();
   uint64_t new_region_id = 0;
 
-  pb::error::Errno ret = pb::error::Errno::OK;
+  butil::Status ret = butil::Status::OK();
   if (split_from_region_id > 0) {
     ret = coordinator_control_->CreateRegionForSplit(region_name, resource_tag, range, schema_id, table_id,
                                                      split_from_region_id, new_region_id, meta_increment);
@@ -686,11 +698,12 @@ void CoordinatorServiceImpl::CreateRegion(google::protobuf::RpcController *contr
     ret = coordinator_control_->CreateRegion(region_name, resource_tag, replica_num, range, schema_id, table_id,
                                              new_region_id, meta_increment);
   }
-  response->mutable_error()->set_errcode(ret);
-  response->set_region_id(new_region_id);
 
-  if (ret != pb::error::Errno::OK) {
+  if (!ret.ok()) {
     DINGO_LOG(ERROR) << "Create Region Failed, errno=" << ret << " Request:" << request->DebugString();
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    response->set_region_id(new_region_id);
     return;
   }
 
@@ -730,7 +743,12 @@ void CoordinatorServiceImpl::DropRegion(google::protobuf::RpcController *control
   auto region_id = request->region_id();
 
   auto ret = this->coordinator_control_->DropRegion(region_id, true, meta_increment);
-  response->mutable_error()->set_errcode(ret);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "Drop Region Failed, errno=" << ret << " Request:" << request->DebugString();
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    return;
+  }
 
   // if meta_increment is empty, means no need to update meta
   if (meta_increment.ByteSizeLong() == 0) {
@@ -769,7 +787,12 @@ void CoordinatorServiceImpl::DropRegionPermanently(google::protobuf::RpcControll
   auto cluster_id = request->cluster_id();
 
   auto ret = this->coordinator_control_->DropRegionPermanently(region_id, meta_increment);
-  response->mutable_error()->set_errcode(ret);
+
+  if (!ret.ok()) {
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    return;
+  }
 
   if (meta_increment.ByteSizeLong() == 0) {
     return;
@@ -814,8 +837,10 @@ void CoordinatorServiceImpl::SplitRegion(google::protobuf::RpcController *contro
   auto ret = this->coordinator_control_->SplitRegionWithTaskList(split_request.split_from_region_id(),
                                                                  split_request.split_to_region_id(),
                                                                  split_request.split_watershed_key(), meta_increment);
-  if (ret != pb::error::OK) {
-    response->mutable_error()->set_errcode(ret);
+  if (!ret.ok()) {
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    return;
   }
 
   // if meta_increment is empty, means no need to update meta
@@ -861,8 +886,10 @@ void CoordinatorServiceImpl::MergeRegion(google::protobuf::RpcController *contro
 
   auto ret = this->coordinator_control_->MergeRegionWithTaskList(merge_request.merge_from_region_id(),
                                                                  merge_request.merge_to_region_id(), meta_increment);
-  if (ret != pb::error::OK) {
-    response->mutable_error()->set_errcode(ret);
+  if (!ret.ok()) {
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    return;
   }
 
   // if meta_increment is empty, means no need to update meta
@@ -924,8 +951,10 @@ void CoordinatorServiceImpl::ChangePeerRegion(google::protobuf::RpcController *c
   auto ret =
       this->coordinator_control_->ChangePeerRegionWithTaskList(region_definition.id(), new_store_ids, meta_increment);
 
-  if (ret != pb::error::OK) {
-    response->mutable_error()->set_errcode(ret);
+  if (!ret.ok()) {
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    return;
   }
 
   // if meta_increment is empty, means no need to update meta
@@ -961,7 +990,11 @@ void CoordinatorServiceImpl::GetOrphanRegion(google::protobuf::RpcController * /
 
   std::map<uint64_t, pb::common::RegionMetrics> orphan_regions;
   auto ret = this->coordinator_control_->GetOrphanRegion(request->store_id(), orphan_regions);
-  response->mutable_error()->set_errcode(ret);
+  if (!ret.ok()) {
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    return;
+  }
 
   if (orphan_regions.empty()) {
     return;
@@ -1021,7 +1054,13 @@ void CoordinatorServiceImpl::CleanStoreOperation(google::protobuf::RpcController
   auto store_id = request->store_id();
 
   auto ret = this->coordinator_control_->CleanStoreOperation(store_id, meta_increment);
-  response->mutable_error()->set_errcode(ret);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "CleanStoreOperation failed, store_id:" << store_id << ", errcode:" << ret.error_code()
+                     << ", errmsg:" << ret.error_str();
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    return;
+  }
 
   if (meta_increment.ByteSizeLong() == 0) {
     return;
@@ -1058,7 +1097,13 @@ void CoordinatorServiceImpl::AddStoreOperation(google::protobuf::RpcController *
   auto store_operation = request->store_operation();
 
   auto ret = this->coordinator_control_->AddStoreOperation(store_operation, meta_increment);
-  response->mutable_error()->set_errcode(ret);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "AddStoreOperation failed, store_id:" << store_operation.id()
+                     << ", errcode:" << ret.error_code() << ", errmsg:" << ret.error_str();
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    return;
+  }
 
   if (meta_increment.ByteSizeLong() == 0) {
     return;
@@ -1096,7 +1141,13 @@ void CoordinatorServiceImpl::RemoveStoreOperation(google::protobuf::RpcControlle
   auto region_cmd_id = request->region_cmd_id();
 
   auto ret = this->coordinator_control_->RemoveStoreOperation(store_id, region_cmd_id, meta_increment);
-  response->mutable_error()->set_errcode(ret);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "RemoveStoreOperation failed, store_id:" << store_id << ", region_cmd_id:" << region_cmd_id
+                     << ", errcode:" << ret.error_code() << ", errmsg:" << ret.error_str();
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    return;
+  }
 
   if (meta_increment.ByteSizeLong() == 0) {
     return;
@@ -1158,7 +1209,13 @@ void CoordinatorServiceImpl::CleanTaskList(google::protobuf::RpcController *cont
   auto task_list_id = request->task_list_id();
 
   auto ret = this->coordinator_control_->CleanTaskList(task_list_id, meta_increment);
-  response->mutable_error()->set_errcode(ret);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "CleanTaskList failed, task_list_id:" << task_list_id << ", errcode:" << ret.error_code()
+                     << ", errmsg:" << ret.error_str();
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    return;
+  }
 
   if (meta_increment.ByteSizeLong() == 0) {
     return;

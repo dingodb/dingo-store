@@ -25,6 +25,7 @@
 #include "brpc/channel.h"
 #include "brpc/closure_guard.h"
 #include "butil/scoped_lock.h"
+#include "butil/status.h"
 #include "butil/strings/string_split.h"
 #include "common/constant.h"
 #include "common/helper.h"
@@ -1433,12 +1434,12 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
 
 // SubmitMetaIncrement
 // commit meta increment to raft meta engine, with no closure
-int CoordinatorControl::SubmitMetaIncrement(pb::coordinator_internal::MetaIncrement& meta_increment) {
+butil::Status CoordinatorControl::SubmitMetaIncrement(pb::coordinator_internal::MetaIncrement& meta_increment) {
   return SubmitMetaIncrement(nullptr, meta_increment);
 }
 
-int CoordinatorControl::SubmitMetaIncrement(google::protobuf::Closure* done,
-                                            pb::coordinator_internal::MetaIncrement& meta_increment) {
+butil::Status CoordinatorControl::SubmitMetaIncrement(google::protobuf::Closure* done,
+                                                      pb::coordinator_internal::MetaIncrement& meta_increment) {
   LogMetaIncrementSize(meta_increment);
 
   std::shared_ptr<Context> const ctx = std::make_shared<Context>();
@@ -1451,9 +1452,9 @@ int CoordinatorControl::SubmitMetaIncrement(google::protobuf::Closure* done,
   auto status = engine_->MetaPut(ctx, meta_increment);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << "ApplyMetaIncrement failed, errno=" << status.error_code() << " errmsg=" << status.error_str();
-    return -1;
+    return status;
   }
-  return 0;
+  return butil::Status::OK();
 }
 
 }  // namespace dingodb

@@ -28,6 +28,7 @@
 #include "bthread/types.h"
 #include "butil/containers/flat_map.h"
 #include "butil/scoped_lock.h"
+#include "butil/status.h"
 #include "butil/strings/stringprintf.h"
 #include "common/logging.h"
 #include "common/meta_control.h"
@@ -79,8 +80,9 @@ class CoordinatorControl : public MetaControl {
   // SubmitMetaIncrement
   // in:  meta_increment
   // return: 0 or -1
-  int SubmitMetaIncrement(pb::coordinator_internal::MetaIncrement &meta_increment);
-  int SubmitMetaIncrement(google::protobuf::Closure *done, pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status SubmitMetaIncrement(pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status SubmitMetaIncrement(google::protobuf::Closure *done,
+                                    pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // GetMemoryInfo
   void GetMemoryInfo(pb::coordinator::CoordinatorMemoryInfo &memory_info);
@@ -95,139 +97,138 @@ class CoordinatorControl : public MetaControl {
   void GetRaftLocation(pb::common::Location &server_location, pb::common::Location &raft_location);
 
   // query region info
-  pb::error::Errno QueryRegion(uint64_t region_id, pb::common::Region &region);
+  butil::Status QueryRegion(uint64_t region_id, pb::common::Region &region);
 
   // create region
   // in: resource_tag
   // out: new region id
   // return: errno
-  pb::error::Errno CreateRegion(const std::string &region_name, const std::string &resource_tag, int32_t replica_num,
-                                pb::common::Range region_range, uint64_t schema_id, uint64_t table_id,
-                                uint64_t &new_region_id, pb::coordinator_internal::MetaIncrement &meta_increment);
-  pb::error::Errno CreateRegion(const std::string &region_name, const std::string &resource_tag, int32_t replica_num,
-                                pb::common::Range region_range, uint64_t schema_id, uint64_t table_id,
-                                std::vector<uint64_t> &store_ids, uint64_t split_from_region_id,
-                                uint64_t &new_region_id, pb::coordinator_internal::MetaIncrement &meta_increment);
-  pb::error::Errno CreateRegionForSplit(const std::string &region_name, const std::string &resource_tag,
-                                        pb::common::Range region_range, uint64_t schema_id, uint64_t table_id,
-                                        uint64_t split_from_region_id, uint64_t &new_region_id,
-                                        pb::coordinator_internal::MetaIncrement &meta_increment);
-  pb::error::Errno CreateRegionForSplitInternal(uint64_t split_from_region_id, uint64_t &new_region_id,
-                                                pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status CreateRegion(const std::string &region_name, const std::string &resource_tag, int32_t replica_num,
+                             pb::common::Range region_range, uint64_t schema_id, uint64_t table_id,
+                             uint64_t &new_region_id, pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status CreateRegion(const std::string &region_name, const std::string &resource_tag, int32_t replica_num,
+                             pb::common::Range region_range, uint64_t schema_id, uint64_t table_id,
+                             std::vector<uint64_t> &store_ids, uint64_t split_from_region_id, uint64_t &new_region_id,
+                             pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status CreateRegionForSplit(const std::string &region_name, const std::string &resource_tag,
+                                     pb::common::Range region_range, uint64_t schema_id, uint64_t table_id,
+                                     uint64_t split_from_region_id, uint64_t &new_region_id,
+                                     pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status CreateRegionForSplitInternal(uint64_t split_from_region_id, uint64_t &new_region_id,
+                                             pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // drop region
   // in:  region_id
   // in:  need_update_table_range
   // return: errno
-  pb::error::Errno DropRegion(uint64_t region_id, pb::coordinator_internal::MetaIncrement &meta_increment);
-  pb::error::Errno DropRegion(uint64_t region_id, bool need_update_table_range,
-                              pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status DropRegion(uint64_t region_id, pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status DropRegion(uint64_t region_id, bool need_update_table_range,
+                           pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // drop region permanently
   // in:  region_id
   // return: errno
-  pb::error::Errno DropRegionPermanently(uint64_t region_id, pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status DropRegionPermanently(uint64_t region_id, pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // split region
-  pb::error::Errno SplitRegion(uint64_t split_from_region_id, uint64_t split_to_region_id,
-                               std::string split_watershed_key,
-                               pb::coordinator_internal::MetaIncrement &meta_increment);
-  pb::error::Errno SplitRegionWithTaskList(uint64_t split_from_region_id, uint64_t split_to_region_id,
-                                           std::string split_watershed_key,
-                                           pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status SplitRegion(uint64_t split_from_region_id, uint64_t split_to_region_id, std::string split_watershed_key,
+                            pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status SplitRegionWithTaskList(uint64_t split_from_region_id, uint64_t split_to_region_id,
+                                        std::string split_watershed_key,
+                                        pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // merge region
-  pb::error::Errno MergeRegionWithTaskList(uint64_t merge_from_region_id, uint64_t merge_to_region_id,
-                                           pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status MergeRegionWithTaskList(uint64_t merge_from_region_id, uint64_t merge_to_region_id,
+                                        pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // change peer region
-  pb::error::Errno ChangePeerRegionWithTaskList(uint64_t region_id, std::vector<uint64_t> &new_store_ids,
-                                                pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status ChangePeerRegionWithTaskList(uint64_t region_id, std::vector<uint64_t> &new_store_ids,
+                                             pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // create schema
   // in: parent_schema_id
   // in: schema_name
   // out: new schema_id
   // return: errno
-  pb::error::Errno CreateSchema(uint64_t parent_schema_id, std::string schema_name, uint64_t &new_schema_id,
-                                pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status CreateSchema(uint64_t parent_schema_id, std::string schema_name, uint64_t &new_schema_id,
+                             pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // drop schema
   // in: parent_schema_id
   // in: schema_id
   // return: 0 or -1
-  pb::error::Errno DropSchema(uint64_t parent_schema_id, uint64_t schema_id,
-                              pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status DropSchema(uint64_t parent_schema_id, uint64_t schema_id,
+                           pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // create schema
   // in: schema_id
   // out: new table_id
   // return: errno
-  pb::error::Errno CreateTableId(uint64_t schema_id, uint64_t &new_table_id,
-                                 pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status CreateTableId(uint64_t schema_id, uint64_t &new_table_id,
+                              pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // create schema
   // in: schema_id
   // in: table_definition
   // out: new table_id
   // return: errno
-  pb::error::Errno CreateTable(uint64_t schema_id, const pb::meta::TableDefinition &table_definition,
-                               uint64_t &new_table_id, pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status CreateTable(uint64_t schema_id, const pb::meta::TableDefinition &table_definition,
+                            uint64_t &new_table_id, pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // create store
   // in: cluster_id
   // out: store_id, keyring
   // return: 0 or -1
-  pb::error::Errno CreateStore(uint64_t cluster_id, uint64_t &store_id, std::string &keyring,
-                               pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status CreateStore(uint64_t cluster_id, uint64_t &store_id, std::string &keyring,
+                            pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // delete store
   // in: cluster_id, store_id, keyring
-  // return: 0 or -1
-  pb::error::Errno DeleteStore(uint64_t cluster_id, uint64_t store_id, std::string keyring,
-                               pb::coordinator_internal::MetaIncrement &meta_increment);
+  // return: errno
+  butil::Status DeleteStore(uint64_t cluster_id, uint64_t store_id, std::string keyring,
+                            pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // create executor
   // in: cluster_id
   // in: executor
   // out: executor
   // return: errno
-  pb::error::Errno CreateExecutor(uint64_t cluster_id, pb::common::Executor &executor,
-                                  pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status CreateExecutor(uint64_t cluster_id, pb::common::Executor &executor,
+                               pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // delete executor
   // in: cluster_id, executor
   // return: 0 or -1
-  pb::error::Errno DeleteExecutor(uint64_t cluster_id, const pb::common::Executor &executor,
-                                  pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status DeleteExecutor(uint64_t cluster_id, const pb::common::Executor &executor,
+                               pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // create executor_user
   // in: cluster_id
   // out: executor_user
   // return: errno
-  pb::error::Errno CreateExecutorUser(uint64_t cluster_id, pb::common::ExecutorUser &executor_user,
-                                      pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status CreateExecutorUser(uint64_t cluster_id, pb::common::ExecutorUser &executor_user,
+                                   pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // update executor_user
   // in: cluster_id
   // out: executor_user
   // return: errno
-  pb::error::Errno UpdateExecutorUser(uint64_t cluster_id, const pb::common::ExecutorUser &executor_user,
-                                      const pb::common::ExecutorUser &executor_user_update,
-                                      pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status UpdateExecutorUser(uint64_t cluster_id, const pb::common::ExecutorUser &executor_user,
+                                   const pb::common::ExecutorUser &executor_user_update,
+                                   pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // delete executor_user
   // in: cluster_id
   // out: executor_user
   // return: errno
-  pb::error::Errno DeleteExecutorUser(uint64_t cluster_id, pb::common::ExecutorUser &executor_user,
-                                      pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status DeleteExecutorUser(uint64_t cluster_id, pb::common::ExecutorUser &executor_user,
+                                   pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // get executor_user_map
   // in: cluster_id
   // out: executor_user_map
   // return: errno
-  pb::error::Errno GetExecutorUserMap(uint64_t cluster_id, pb::common::ExecutorUserMap &executor_user_map);
+  butil::Status GetExecutorUserMap(uint64_t cluster_id, pb::common::ExecutorUserMap &executor_user_map);
 
   // update executor map with new Executor info
   // return new epoch
@@ -253,7 +254,7 @@ class CoordinatorControl : public MetaControl {
   void GetStoreMetrics(uint64_t store_id, std::vector<pb::common::StoreMetrics> &store_metrics);
 
   // get orphan region
-  pb::error::Errno GetOrphanRegion(uint64_t store_id, std::map<uint64_t, pb::common::RegionMetrics> &orphan_regions);
+  butil::Status GetOrphanRegion(uint64_t store_id, std::map<uint64_t, pb::common::RegionMetrics> &orphan_regions);
 
   // get store operation
   void GetStoreOperation(uint64_t store_id, pb::coordinator::StoreOperation &store_operation);
@@ -262,12 +263,12 @@ class CoordinatorControl : public MetaControl {
   // CleanStoreOperation
   // in:  store_id
   // return: 0 or -1
-  pb::error::Errno CleanStoreOperation(uint64_t store_id, pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status CleanStoreOperation(uint64_t store_id, pb::coordinator_internal::MetaIncrement &meta_increment);
 
-  pb::error::Errno AddStoreOperation(const pb::coordinator::StoreOperation &store_operation,
+  butil::Status AddStoreOperation(const pb::coordinator::StoreOperation &store_operation,
+                                  pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status RemoveStoreOperation(uint64_t store_id, uint64_t region_cmd_id,
                                      pb::coordinator_internal::MetaIncrement &meta_increment);
-  pb::error::Errno RemoveStoreOperation(uint64_t store_id, uint64_t region_cmd_id,
-                                        pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // UpdateRegionMapAndStoreOperation
   void UpdateRegionMapAndStoreOperation(const pb::common::StoreMetrics &store_metrics,
@@ -331,7 +332,7 @@ class CoordinatorControl : public MetaControl {
   // in: schema_id
   // in: table_id
   // out: TableMetricsWithId
-  pb::error::Errno GetTableMetrics(uint64_t schema_id, uint64_t table_id, pb::meta::TableMetricsWithId &table_metrics);
+  butil::Status GetTableMetrics(uint64_t schema_id, uint64_t table_id, pb::meta::TableMetricsWithId &table_metrics);
 
   // update store metrics with new metrics
   // return new epoch
@@ -343,8 +344,8 @@ class CoordinatorControl : public MetaControl {
   // in: table_id
   // out: meta_increment
   // return: errno
-  pb::error::Errno DropTable(uint64_t schema_id, uint64_t table_id,
-                             pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status DropTable(uint64_t schema_id, uint64_t table_id,
+                          pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // get coordinator_map
   void GetCoordinatorMap(uint64_t cluster_id, uint64_t &epoch, pb::common::Location &leader_location,
@@ -409,16 +410,16 @@ class CoordinatorControl : public MetaControl {
 
   // check if task in task_lis can advance
   // if task advance, this function will contruct meta_increment and apply to state_machine
-  pb::error::Errno ProcessTaskList();
+  butil::Status ProcessTaskList();
 
   // process single task
-  pb::error::Errno ProcessSingleTaskList(const pb::coordinator::TaskList &task_list,
-                                         pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status ProcessSingleTaskList(const pb::coordinator::TaskList &task_list,
+                                      pb::coordinator_internal::MetaIncrement &meta_increment);
   void ReleaseProcessTaskListStatus(const butil::Status &);
 
   bool DoTaskPreCheck(const pb::coordinator::TaskPreCheck &task_pre_check);
 
-  pb::error::Errno CleanTaskList(uint64_t task_list_id, pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status CleanTaskList(uint64_t task_list_id, pb::coordinator_internal::MetaIncrement &meta_increment);
 
  private:
   bool ValidateTaskListConflict(uint64_t region_id, uint64_t second_region_id);

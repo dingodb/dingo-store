@@ -212,7 +212,10 @@ void MetaServiceImpl::GetTableMetrics(google::protobuf::RpcController * /*contro
   auto *table_metrics = response->mutable_table_metrics();
   auto ret = coordinator_control_->GetTableMetrics(request->table_id().parent_entity_id(),
                                                    request->table_id().entity_id(), *table_metrics);
-  response->mutable_error()->set_errcode(ret);
+  if (!ret.ok()) {
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+  }
 }
 
 void MetaServiceImpl::CreateTableId(google::protobuf::RpcController *controller,
@@ -235,11 +238,11 @@ void MetaServiceImpl::CreateTableId(google::protobuf::RpcController *controller,
   pb::coordinator_internal::MetaIncrement meta_increment;
 
   uint64_t new_table_id;
-  pb::error::Errno ret =
-      this->coordinator_control_->CreateTableId(request->schema_id().entity_id(), new_table_id, meta_increment);
-  if (ret != pb::error::Errno::OK) {
+  auto ret = this->coordinator_control_->CreateTableId(request->schema_id().entity_id(), new_table_id, meta_increment);
+  if (!ret.ok()) {
     DINGO_LOG(ERROR) << "CreateTableId failed in meta_service";
-    response->mutable_error()->set_errcode(ret);
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
     return;
   }
   DINGO_LOG(INFO) << "CreateTableId new_table_id=" << new_table_id;
@@ -292,11 +295,12 @@ void MetaServiceImpl::CreateTable(google::protobuf::RpcController *controller,
     }
   }
 
-  pb::error::Errno ret = this->coordinator_control_->CreateTable(
-      request->schema_id().entity_id(), request->table_definition(), new_table_id, meta_increment);
-  if (ret != pb::error::Errno::OK) {
+  auto ret = this->coordinator_control_->CreateTable(request->schema_id().entity_id(), request->table_definition(),
+                                                     new_table_id, meta_increment);
+  if (!ret.ok()) {
     DINGO_LOG(ERROR) << "CreateTable failed in meta_service, error code=" << ret;
-    response->mutable_error()->set_errcode(ret);
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
     return;
   }
   DINGO_LOG(INFO) << "CreateTable new_table_id=" << new_table_id;
@@ -342,10 +346,11 @@ void MetaServiceImpl::DropSchema(google::protobuf::RpcController *controller,
 
   uint64_t schema_id = request->schema_id().entity_id();
   uint64_t parent_schema_id = request->schema_id().parent_entity_id();
-  pb::error::Errno ret = this->coordinator_control_->DropSchema(parent_schema_id, schema_id, meta_increment);
-  if (ret != pb::error::Errno::OK) {
+  auto ret = this->coordinator_control_->DropSchema(parent_schema_id, schema_id, meta_increment);
+  if (!ret.ok()) {
     DINGO_LOG(ERROR) << "DropSchema failed, schema_id=" << schema_id << " ret = " << ret;
-    response->mutable_error()->set_errcode(ret);
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
     return;
   }
 
@@ -382,12 +387,13 @@ void MetaServiceImpl::CreateSchema(google::protobuf::RpcController *controller,
   pb::coordinator_internal::MetaIncrement meta_increment;
 
   uint64_t new_schema_id;
-  pb::error::Errno ret = this->coordinator_control_->CreateSchema(
-      request->parent_schema_id().entity_id(), request->schema_name(), new_schema_id, meta_increment);
-  if (ret != pb::error::Errno::OK) {
+  auto ret = this->coordinator_control_->CreateSchema(request->parent_schema_id().entity_id(), request->schema_name(),
+                                                      new_schema_id, meta_increment);
+  if (!ret.ok()) {
     DINGO_LOG(ERROR) << "CreateSchema schema_id = " << new_schema_id
                      << " parent_schema_id=" << request->parent_schema_id().entity_id() << " failed ret = " << ret;
-    response->mutable_error()->set_errcode(ret);
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
     return;
   }
 
@@ -429,11 +435,12 @@ void MetaServiceImpl::DropTable(google::protobuf::RpcController *controller, con
 
   pb::coordinator_internal::MetaIncrement meta_increment;
 
-  pb::error::Errno ret = this->coordinator_control_->DropTable(request->table_id().parent_entity_id(),
-                                                               request->table_id().entity_id(), meta_increment);
-  if (ret != pb::error::Errno::OK) {
-    response->mutable_error()->set_errcode(ret);
+  auto ret = this->coordinator_control_->DropTable(request->table_id().parent_entity_id(),
+                                                   request->table_id().entity_id(), meta_increment);
+  if (!ret.ok()) {
     DINGO_LOG(ERROR) << "DropTable failed in meta_service, table_id=" << request->table_id().entity_id();
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
     return;
   }
 
@@ -463,10 +470,11 @@ void MetaServiceImpl::GetAutoIncrement(google::protobuf::RpcController * /*contr
 
   uint64_t table_id = request->table_id().entity_id();
   uint64_t start_id = 0;
-  pb::error::Errno ret = auto_increment_control_->GetAutoIncrement(table_id, start_id);
-  if (ret != pb::error::Errno::OK) {
-    response->mutable_error()->set_errcode(ret);
+  auto ret = auto_increment_control_->GetAutoIncrement(table_id, start_id);
+  if (!ret.ok()) {
     DINGO_LOG(ERROR) << "get auto increment failed, " << table_id;
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
     return;
   }
 
@@ -486,10 +494,11 @@ void MetaServiceImpl::CreateAutoIncrement(google::protobuf::RpcController *contr
 
   uint64_t table_id = request->table_id().entity_id();
   pb::coordinator_internal::MetaIncrement meta_increment;
-  pb::error::Errno ret = auto_increment_control_->CreateAutoIncrement(table_id, request->start_id(), meta_increment);
-  if (ret != pb::error::Errno::OK) {
-    response->mutable_error()->set_errcode(ret);
+  auto ret = auto_increment_control_->CreateAutoIncrement(table_id, request->start_id(), meta_increment);
+  if (!ret.ok()) {
     DINGO_LOG(ERROR) << "failed, " << table_id << " | " << request->start_id();
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
     return;
   }
 
@@ -515,12 +524,13 @@ void MetaServiceImpl::UpdateAutoIncrement(google::protobuf::RpcController *contr
 
   uint64_t table_id = request->table_id().entity_id();
   pb::coordinator_internal::MetaIncrement meta_increment;
-  pb::error::Errno ret =
+  auto ret =
       auto_increment_control_->UpdateAutoIncrement(table_id, request->start_id(), request->force(), meta_increment);
-  if (ret != pb::error::Errno::OK) {
-    response->mutable_error()->set_errcode(ret);
+  if (!ret.ok()) {
     DINGO_LOG(ERROR) << "update auto increment failed, " << table_id << " | " << request->start_id() << " | "
                      << request->force();
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
     return;
   }
 
@@ -546,12 +556,13 @@ void MetaServiceImpl::GenerateAutoIncrement(google::protobuf::RpcController *con
 
   uint64_t table_id = request->table_id().entity_id();
   pb::coordinator_internal::MetaIncrement meta_increment;
-  pb::error::Errno ret =
+  auto ret =
       auto_increment_control_->GenerateAutoIncrement(table_id, request->count(), request->auto_increment_increment(),
                                                      request->auto_increment_offset(), meta_increment);
-  if (ret != pb::error::Errno::OK) {
-    response->mutable_error()->set_errcode(ret);
+  if (!ret.ok()) {
     DINGO_LOG(ERROR) << "generate auto increment failed, " << ret << " | " << request->DebugString();
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
     return;
   }
 
@@ -578,10 +589,11 @@ void MetaServiceImpl::DeleteAutoIncrement(google::protobuf::RpcController *contr
 
   uint64_t table_id = request->table_id().entity_id();
   pb::coordinator_internal::MetaIncrement meta_increment;
-  pb::error::Errno ret = auto_increment_control_->DeleteAutoIncrement(table_id, meta_increment);
-  if (ret != pb::error::Errno::OK) {
-    response->mutable_error()->set_errcode(ret);
+  auto ret = auto_increment_control_->DeleteAutoIncrement(table_id, meta_increment);
+  if (!ret.ok()) {
     DINGO_LOG(ERROR) << "delete auto increment failed, " << table_id;
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
     return;
   }
 

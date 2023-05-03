@@ -110,19 +110,19 @@ bool CoordinatorControl::ValidateSchema(uint64_t schema_id) {
 // out: meta_increment
 // return OK if success
 // return other if failed
-pb::error::Errno CoordinatorControl::CreateSchema(uint64_t parent_schema_id, std::string schema_name,
-                                                  uint64_t& new_schema_id,
-                                                  pb::coordinator_internal::MetaIncrement& meta_increment) {
+butil::Status CoordinatorControl::CreateSchema(uint64_t parent_schema_id, std::string schema_name,
+                                               uint64_t& new_schema_id,
+                                               pb::coordinator_internal::MetaIncrement& meta_increment) {
   // validate if parent_schema_id is root schema
   // only root schema can have sub schema
   if (parent_schema_id != ::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA) {
     DINGO_LOG(ERROR) << " CreateSchema parent_schema_id is not root schema " << parent_schema_id;
-    return pb::error::Errno::EILLEGAL_PARAMTETERS;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "parent_schema_id is not root schema");
   }
 
   if (schema_name.empty()) {
     DINGO_LOG(INFO) << " CreateSchema schema_name is illegal " << schema_name;
-    return pb::error::Errno::EILLEGAL_PARAMTETERS;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "schema_name is empty");
   }
 
   // check if schema_name exists
@@ -130,7 +130,7 @@ pb::error::Errno CoordinatorControl::CreateSchema(uint64_t parent_schema_id, std
   schema_name_map_safe_temp_.Get(schema_name, value);
   if (value != 0) {
     DINGO_LOG(INFO) << " CreateSchema schema_name is exist " << schema_name;
-    return pb::error::Errno::ESCHEMA_EXISTS;
+    return butil::Status(pb::error::Errno::ESCHEMA_EXISTS, "schema_name is exist");
   }
 
   // create new schema id
@@ -140,7 +140,7 @@ pb::error::Errno CoordinatorControl::CreateSchema(uint64_t parent_schema_id, std
   if (schema_name_map_safe_temp_.PutIfAbsent(schema_name, new_schema_id) < 0) {
     DINGO_LOG(INFO) << " CreateSchema schema_name" << schema_name
                     << " is exist, when insert new_schema_id=" << new_schema_id;
-    return pb::error::Errno::ESCHEMA_EXISTS;
+    return butil::Status(pb::error::Errno::ESCHEMA_EXISTS, "schema_name is exist");
   }
 
   // add new schema to  schema_map_
@@ -163,7 +163,7 @@ pb::error::Errno CoordinatorControl::CreateSchema(uint64_t parent_schema_id, std
   // on_apply
   //  schema_map_.insert(std::make_pair(new_schema_id, new_schema));  // raft_kv_put
 
-  return pb::error::Errno::OK;
+  return butil::Status::OK();
 }
 
 // DropSchema
@@ -171,16 +171,16 @@ pb::error::Errno CoordinatorControl::CreateSchema(uint64_t parent_schema_id, std
 // in: parent_schema_id
 // in: schema_id
 // return: 0 or -1
-pb::error::Errno CoordinatorControl::DropSchema(uint64_t parent_schema_id, uint64_t schema_id,
-                                                pb::coordinator_internal::MetaIncrement& meta_increment) {
+butil::Status CoordinatorControl::DropSchema(uint64_t parent_schema_id, uint64_t schema_id,
+                                             pb::coordinator_internal::MetaIncrement& meta_increment) {
   if (schema_id <= COORDINATOR_ID_OF_MAP_MIN) {
     DINGO_LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
-    return pb::error::Errno::EILLEGAL_PARAMTETERS;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "schema_id is illegal");
   }
 
   if (parent_schema_id < 0) {
     DINGO_LOG(ERROR) << "ERRROR: parent_schema_id illegal " << schema_id;
-    return pb::error::Errno::EILLEGAL_PARAMTETERS;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "parent_schema_id is illegal");
   }
 
   pb::coordinator_internal::SchemaInternal schema_internal_to_delete;
@@ -190,13 +190,13 @@ pb::error::Errno CoordinatorControl::DropSchema(uint64_t parent_schema_id, uint6
     int ret = schema_map_.Get(schema_id, schema_internal_to_delete);
     if (ret < 0) {
       DINGO_LOG(ERROR) << "ERRROR: schema_id not found" << schema_id;
-      return pb::error::Errno::ESCHEMA_NOT_FOUND;
+      return butil::Status(pb::error::Errno::ESCHEMA_NOT_FOUND, "schema_id not found");
     }
 
     if (schema_internal_to_delete.table_ids_size() > 0) {
-      DINGO_LOG(ERROR) << "ERRROR: schema is not null" << schema_id
+      DINGO_LOG(ERROR) << "ERRROR: schema is not empty" << schema_id
                        << " table_ids_size=" << schema_internal_to_delete.table_ids_size();
-      return pb::error::Errno::ESCHEMA_NOT_EMPTY;
+      return butil::Status(pb::error::Errno::ESCHEMA_NOT_EMPTY, "schema is not empty");
     }
   }
 
@@ -215,7 +215,7 @@ pb::error::Errno CoordinatorControl::DropSchema(uint64_t parent_schema_id, uint6
   // delete schema_name from schema_name_map_safe_temp_
   schema_name_map_safe_temp_.Erase(schema_internal_to_delete.name());
 
-  return pb::error::Errno::OK;
+  return butil::Status::OK();
 }
 
 // GetSchemas
@@ -335,15 +335,15 @@ void CoordinatorControl::GetSchemaByName(const std::string& schema_name, pb::met
 // in: schema_id
 // out: new_table_id, meta_increment
 // return: 0 success, -1 failed
-pb::error::Errno CoordinatorControl::CreateTableId(uint64_t schema_id, uint64_t& new_table_id,
-                                                   pb::coordinator_internal::MetaIncrement& meta_increment) {
+butil::Status CoordinatorControl::CreateTableId(uint64_t schema_id, uint64_t& new_table_id,
+                                                pb::coordinator_internal::MetaIncrement& meta_increment) {
   // validate schema_id is existed
   {
     // BAIDU_SCOPED_LOCK(schema_map_mutex_);
     bool ret = schema_map_.Exists(schema_id);
     if (!ret) {
       DINGO_LOG(ERROR) << "schema_id is illegal " << schema_id;
-      return pb::error::Errno::EILLEGAL_PARAMTETERS;
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "schema_id is illegal");
     }
   }
 
@@ -351,21 +351,21 @@ pb::error::Errno CoordinatorControl::CreateTableId(uint64_t schema_id, uint64_t&
   new_table_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_TABLE, meta_increment);
   DINGO_LOG(INFO) << "CreateTableId new_table_id=" << new_table_id;
 
-  return pb::error::Errno::OK;
+  return butil::Status::OK();
 }
 
 // CreateTable
 // in: schema_id, table_definition
 // out: new_table_id, meta_increment
 // return: 0 success, -1 failed
-pb::error::Errno CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta::TableDefinition& table_definition,
-                                                 uint64_t& new_table_id,
-                                                 pb::coordinator_internal::MetaIncrement& meta_increment) {
+butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta::TableDefinition& table_definition,
+                                              uint64_t& new_table_id,
+                                              pb::coordinator_internal::MetaIncrement& meta_increment) {
   // validate schema
   // root schema cannot create table
   if (schema_id < 0 || schema_id == ::dingodb::pb::meta::ROOT_SCHEMA) {
     DINGO_LOG(ERROR) << "schema_id is illegal " << schema_id;
-    return pb::error::Errno::EILLEGAL_PARAMTETERS;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "schema_id is illegal");
   }
 
   {
@@ -373,14 +373,14 @@ pb::error::Errno CoordinatorControl::CreateTable(uint64_t schema_id, const pb::m
     bool ret = schema_map_.Exists(schema_id);
     if (!ret) {
       DINGO_LOG(ERROR) << "schema_id is illegal " << schema_id;
-      return pb::error::Errno::EILLEGAL_PARAMTETERS;
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "schema_id is illegal");
     }
   }
 
   bool has_auto_increment_column = false;
-  pb::error::Errno ret =
+  butil::Status ret =
       AutoIncrementControl::CheckAutoIncrementInTableDefinition(table_definition, has_auto_increment_column);
-  if (ret != pb::error::Errno::OK) {
+  if (!ret.ok()) {
     DINGO_LOG(ERROR) << "check auto increment in table definition error.";
     return ret;
   }
@@ -388,21 +388,21 @@ pb::error::Errno CoordinatorControl::CreateTable(uint64_t schema_id, const pb::m
   // validate part information
   if (!table_definition.has_table_partition()) {
     DINGO_LOG(ERROR) << "no table_partition provided ";
-    return pb::error::Errno::ETABLE_DEFINITION_ILLEGAL;
+    return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "no table_partition provided");
   }
   auto const& table_partition = table_definition.table_partition();
   if (table_partition.has_hash_partition()) {
     DINGO_LOG(ERROR) << "hash_partiton is not supported";
-    return pb::error::Errno::ETABLE_DEFINITION_ILLEGAL;
+    return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "hash_partiton is not supported");
   } else if (!table_partition.has_range_partition()) {
     DINGO_LOG(ERROR) << "no range_partition provided ";
-    return pb::error::Errno::ETABLE_DEFINITION_ILLEGAL;
+    return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "no range_partition provided");
   }
 
   auto const& range_partition = table_partition.range_partition();
   if (range_partition.ranges_size() == 0) {
     DINGO_LOG(ERROR) << "no range provided ";
-    return pb::error::Errno::ETABLE_DEFINITION_ILLEGAL;
+    return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "no range provided");
   }
 
   // check if table_name exists
@@ -410,7 +410,7 @@ pb::error::Errno CoordinatorControl::CreateTable(uint64_t schema_id, const pb::m
   table_name_map_safe_temp_.Get(std::to_string(schema_id) + table_definition.name(), value);
   if (value != 0) {
     DINGO_LOG(INFO) << " Createtable table_name is exist " << table_definition.name();
-    return pb::error::Errno::ETABLE_EXISTS;
+    return butil::Status(pb::error::Errno::ETABLE_EXISTS, "table_name is exist");
   }
 
   // if new_table_id is not given, create a new table_id
@@ -423,7 +423,7 @@ pb::error::Errno CoordinatorControl::CreateTable(uint64_t schema_id, const pb::m
   if (table_name_map_safe_temp_.PutIfAbsent(std::to_string(schema_id) + table_definition.name(), new_table_id) < 0) {
     DINGO_LOG(INFO) << " CreateTable table_name" << table_definition.name()
                     << " is exist, when insert new_table_id=" << new_table_id;
-    return pb::error::Errno::ETABLE_EXISTS;
+    return butil::Status(pb::error::Errno::ETABLE_EXISTS, "table_name is exist");
   }
 
   // create table
@@ -445,7 +445,7 @@ pb::error::Errno CoordinatorControl::CreateTable(uint64_t schema_id, const pb::m
     auto ret = CreateRegion(region_name, "", replica, range_partition.ranges(i), schema_id, new_table_id, new_region_id,
                             meta_increment);
 
-    if (ret != pb::error::Errno::OK) {
+    if (!ret.ok()) {
       DINGO_LOG(ERROR) << "CreateRegion failed in CreateTable table_name=" << table_definition.name();
       break;
     }
@@ -458,7 +458,7 @@ pb::error::Errno CoordinatorControl::CreateTable(uint64_t schema_id, const pb::m
                      << " created=" << new_region_ids.size();
     for (auto region_id_to_delete : new_region_ids) {
       auto ret = DropRegion(region_id_to_delete, meta_increment);
-      if (ret != pb::error::Errno::OK) {
+      if (!ret.ok()) {
         DINGO_LOG(ERROR) << "DropRegion failed in CreateTable table_name=" << table_definition.name()
                          << " region_id =" << region_id_to_delete;
       }
@@ -466,7 +466,7 @@ pb::error::Errno CoordinatorControl::CreateTable(uint64_t schema_id, const pb::m
 
     // remove table_name from map
     table_name_map_safe_temp_.Erase(std::to_string(schema_id) + table_definition.name());
-    return pb::error::Errno::ETABLE_REGION_CREATE_FAILED;
+    return butil::Status(pb::error::Errno::ETABLE_REGION_CREATE_FAILED, "Not enough regions is created");
   }
 
   // bumper up EPOCH_REGION
@@ -517,27 +517,29 @@ pb::error::Errno CoordinatorControl::CreateTable(uint64_t schema_id, const pb::m
     if (status.error_code() != pb::error::Errno::OK) {
       DINGO_LOG(ERROR) << "send create auto increment internal error, code: " << status.error_code()
                        << ", message: " << status.error_str();
-      return pb::error::Errno::EAUTO_INCREMENT_WHILE_CREAT_TABLE;
+      return butil::Status(pb::error::Errno::EAUTO_INCREMENT_WHILE_CREAT_TABLE,
+                           "send create auto increment internal error, code: " + std::to_string(status.error_code()) +
+                               ", message: " + status.error_str());
     }
   }
 
-  return pb::error::Errno::OK;
+  return butil::Status::OK();
 }
 
 // DropTable
 // in: schema_id, table_id
 // out: meta_increment
 // return: errno
-pb::error::Errno CoordinatorControl::DropTable(uint64_t schema_id, uint64_t table_id,
-                                               pb::coordinator_internal::MetaIncrement& meta_increment) {
+butil::Status CoordinatorControl::DropTable(uint64_t schema_id, uint64_t table_id,
+                                            pb::coordinator_internal::MetaIncrement& meta_increment) {
   if (schema_id < 0) {
     DINGO_LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
-    return pb::error::Errno::EILLEGAL_PARAMTETERS;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "schema_id illegal");
   }
 
   if (!ValidateSchema(schema_id)) {
     DINGO_LOG(ERROR) << "ERRROR: schema_id not valid" << schema_id;
-    return pb::error::Errno::EILLEGAL_PARAMTETERS;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "schema_id not valid");
   }
 
   pb::coordinator_internal::TableInternal table_internal;
@@ -546,7 +548,7 @@ pb::error::Errno CoordinatorControl::DropTable(uint64_t schema_id, uint64_t tabl
     int ret = table_map_.Get(table_id, table_internal);
     if (ret < 0) {
       DINGO_LOG(ERROR) << "ERRROR: table_id not found" << table_id;
-      return pb::error::Errno::ETABLE_NOT_FOUND;
+      return butil::Status(pb::error::Errno::ETABLE_NOT_FOUND, "table_id not found");
     }
   }
 
@@ -579,7 +581,7 @@ pb::error::Errno CoordinatorControl::DropTable(uint64_t schema_id, uint64_t tabl
     AutoIncrementControl::SendDeleteAutoIncrementInternal(table_id);
   }
 
-  return pb::error::Errno::OK;
+  return butil::Status::OK();
 }
 
 // get tables
@@ -792,28 +794,28 @@ void CoordinatorControl::GetTableRange(uint64_t schema_id, uint64_t table_id, pb
 }
 
 // get table metrics
-pb::error::Errno CoordinatorControl::GetTableMetrics(uint64_t schema_id, uint64_t table_id,
-                                                     pb::meta::TableMetricsWithId& table_metrics) {
+butil::Status CoordinatorControl::GetTableMetrics(uint64_t schema_id, uint64_t table_id,
+                                                  pb::meta::TableMetricsWithId& table_metrics) {
   if (schema_id < 0) {
     DINGO_LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
-    return pb::error::Errno::EILLEGAL_PARAMTETERS;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "schema_id illegal");
   }
 
   if (table_metrics.id().entity_id() != 0) {
     DINGO_LOG(ERROR) << "ERRROR: table is not empty , table_id=" << table_metrics.id().entity_id();
-    return pb::error::Errno::EILLEGAL_PARAMTETERS;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "table is not empty");
   }
 
   if (!ValidateSchema(schema_id)) {
     DINGO_LOG(ERROR) << "ERRROR: schema_id not found" << schema_id;
-    return pb::error::Errno::ESCHEMA_NOT_FOUND;
+    return butil::Status(pb::error::Errno::ESCHEMA_NOT_FOUND, "schema_id not found");
   }
 
   {
     // BAIDU_SCOPED_LOCK(table_map_mutex_);
     if (!table_map_.Exists(table_id)) {
       DINGO_LOG(ERROR) << "ERRROR: table_id not found" << table_id;
-      return pb::error::Errno::ETABLE_NOT_FOUND;
+      return butil::Status(pb::error::Errno::ETABLE_NOT_FOUND, "table_id not found");
     }
   }
 
@@ -830,7 +832,7 @@ pb::error::Errno CoordinatorControl::GetTableMetrics(uint64_t schema_id, uint64_
       auto* table_metrics_single = table_metrics_internal.mutable_table_metrics();
       if (CalculateTableMetricsSingle(table_id, *table_metrics_single) < 0) {
         DINGO_LOG(ERROR) << "ERRROR: CalculateTableMetricsSingle failed" << table_id;
-        return pb::error::Errno::ETABLE_METRICS_FAILED;
+        return butil::Status(pb::error::Errno::ETABLE_METRICS_FAILED, "CalculateTableMetricsSingle failed");
       } else {
         table_metrics_internal.set_id(table_id);
         table_metrics_internal.mutable_table_metrics()->CopyFrom(*table_metrics_single);
@@ -859,7 +861,7 @@ pb::error::Errno CoordinatorControl::GetTableMetrics(uint64_t schema_id, uint64_
 
   table_metrics.mutable_table_metrics()->CopyFrom(table_metrics_internal.table_metrics());
 
-  return pb::error::Errno::OK;
+  return butil::Status::OK();
 }
 
 // CalculateTableMetricsSingle
