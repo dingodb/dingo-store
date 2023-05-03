@@ -19,6 +19,7 @@
 #include "common/helper.h"
 #include "common/logging.h"
 #include "coordinator/coordinator_interaction.h"
+#include "gflags/gflags_declare.h"
 #include "proto/common.pb.h"
 #include "proto/meta.pb.h"
 #include "proto/node.pb.h"
@@ -27,6 +28,7 @@ DECLARE_bool(log_each_request);
 DECLARE_int32(timeout_ms);
 DECLARE_string(id);
 DECLARE_string(name);
+DECLARE_int64(schema_id);
 
 void SendGetSchemas(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
   dingodb::pb::meta::GetSchemasRequest request;
@@ -60,7 +62,7 @@ void SendGetSchema(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_
   schema_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
 
   if (FLAGS_id.empty()) {
-    DINGO_LOG(WARNING) << "id is empty";
+    DINGO_LOG(WARNING) << "id is empty, this is schema_id";
     return;
   }
   schema_id->set_entity_id(std::stol(FLAGS_id));
@@ -82,7 +84,7 @@ void SendGetSchemaByName(std::shared_ptr<dingodb::CoordinatorInteraction> coordi
   dingodb::pb::meta::GetSchemaByNameResponse response;
 
   if (FLAGS_name.empty()) {
-    DINGO_LOG(WARNING) << "id is empty";
+    DINGO_LOG(WARNING) << "name is empty, this is schema_name";
     return;
   }
   request.set_schema_name(FLAGS_name);
@@ -122,6 +124,10 @@ void SendGetTables(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_
   schema_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
   schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
 
+  if (FLAGS_schema_id > 0) {
+    schema_id->set_entity_id(FLAGS_schema_id);
+  }
+
   auto status = coordinator_interaction->SendRequest("GetTables", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG_INFO << response.DebugString();
@@ -141,7 +147,7 @@ void SendGetTable(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_i
   table_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
 
   if (FLAGS_id.empty()) {
-    DINGO_LOG(WARNING) << "id is empty";
+    DINGO_LOG(WARNING) << "id is empty, this table_id";
     return;
   }
   table_id->set_entity_id(std::stol(FLAGS_id));
@@ -221,10 +227,14 @@ void SendCreateTable(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
   schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
   schema_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
 
+  if (FLAGS_schema_id > 0) {
+    schema_id->set_entity_id(FLAGS_schema_id);
+  }
+
   if (with_table_id) {
     auto* table_id = request.mutable_table_id();
     table_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
-    table_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
+    table_id->set_parent_entity_id(schema_id->entity_id());
     if (FLAGS_id.empty()) {
       DINGO_LOG(WARNING) << "id is empty";
       return;
