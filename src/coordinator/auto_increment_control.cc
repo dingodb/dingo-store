@@ -405,7 +405,8 @@ butil::Status AutoIncrementControl::CheckAutoIncrementInTableDefinition(
     const auto& column = table_definition.columns(i);
     if (column.is_auto_increment()) {
       if (has_auto_increment_column) {
-        return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "table definition illegal");
+        return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL,
+                             "table definition illegal, multi auto_increment column");
       } else {
         switch (column.element_type()) {
           case pb::meta::ElementType::ELEM_TYPE_INT32:
@@ -419,12 +420,14 @@ butil::Status AutoIncrementControl::CheckAutoIncrementInTableDefinition(
             if (table_definition.auto_increment() > 0) {
               has_auto_increment_column = true;
             } else {
-              return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "table definition illegal");
+              return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL,
+                                   "table definition illegal, auto_increment must be greater than 0");
             }
             break;
           }
           default: {
-            return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "table definition illegal");
+            return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL,
+                                 "table definition illegal, auto_increment column type illegal");
           }
         }
       }

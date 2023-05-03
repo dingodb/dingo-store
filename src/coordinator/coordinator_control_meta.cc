@@ -410,7 +410,8 @@ butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta
   table_name_map_safe_temp_.Get(std::to_string(schema_id) + table_definition.name(), value);
   if (value != 0) {
     DINGO_LOG(INFO) << " Createtable table_name is exist " << table_definition.name();
-    return butil::Status(pb::error::Errno::ETABLE_EXISTS, "table_name is exist");
+    return butil::Status(pb::error::Errno::ETABLE_EXISTS, "table_name[%s] is exist in get",
+                         table_definition.name().c_str());
   }
 
   // if new_table_id is not given, create a new table_id
@@ -437,7 +438,8 @@ butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta
   if (table_name_map_safe_temp_.PutIfAbsent(std::to_string(schema_id) + table_definition.name(), new_table_id) < 0) {
     DINGO_LOG(INFO) << " CreateTable table_name" << table_definition.name()
                     << " is exist, when insert new_table_id=" << new_table_id;
-    return butil::Status(pb::error::Errno::ETABLE_EXISTS, "table_name is exist");
+    return butil::Status(pb::error::Errno::ETABLE_EXISTS, "table_name[%s] is exist in put if absent",
+                         table_definition.name().c_str());
   }
 
   // create table
