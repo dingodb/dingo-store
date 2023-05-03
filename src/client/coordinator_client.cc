@@ -263,7 +263,9 @@ void* Sender(void* /*arg*/) {
     SendGetTableRange(coordinator_interaction_meta);
   } else if (FLAGS_method == "GetTableMetrics") {
     SendGetTableMetrics(coordinator_interaction_meta);
-  } else if (FLAGS_method == "GetAutoIncrement") {  // auto increment
+  } else if (FLAGS_method == "GetAutoIncrements") {  // auto increment
+    SendGetAutoIncrements(coordinator_interaction_meta);
+  } else if (FLAGS_method == "GetAutoIncrement") {
     SendGetAutoIncrement(coordinator_interaction_meta);
   } else if (FLAGS_method == "CreateAutoIncrement") {
     SendCreateAutoIncrement(coordinator_interaction_meta);

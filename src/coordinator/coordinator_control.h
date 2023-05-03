@@ -88,7 +88,7 @@ class CoordinatorControl : public MetaControl {
   void GetMemoryInfo(pb::coordinator::CoordinatorMemoryInfo &memory_info);
 
   // Get raft leader's server location for sdk use
-  void GetLeaderLocation(pb::common::Location &leader_server_location);
+  void GetLeaderLocation(pb::common::Location &leader_server_location) override;
 
   // use raft_location to get server_location
   // in: raft_location

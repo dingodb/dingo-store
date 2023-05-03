@@ -638,7 +638,9 @@ void CoordinatorServiceImpl::GetCoordinatorMap(google::protobuf::RpcController *
   }
 
   // get autoincrement leader location
-  auto_increment_control_->GetLeaderLocation(response->mutable_auto_increment_leader_location());
+  pb::common::Location auto_increment_leader_location;
+  auto_increment_control_->GetLeaderLocation(auto_increment_leader_location);
+  response->mutable_auto_increment_leader_location()->CopyFrom(auto_increment_leader_location);
 }
 
 // Region services

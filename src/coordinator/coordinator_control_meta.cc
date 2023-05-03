@@ -419,6 +419,20 @@ butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta
     DINGO_LOG(INFO) << "CreateTable new_table_id=" << new_table_id;
   }
 
+  // create auto increment
+  if (has_auto_increment_column) {
+    auto status =
+        AutoIncrementControl::SendCreateAutoIncrementInternal(new_table_id, table_definition.auto_increment());
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << "send create auto increment internal error, code: " << status.error_code()
+                       << ", message: " << status.error_str();
+      return butil::Status(pb::error::Errno::EAUTO_INCREMENT_WHILE_CREAT_TABLE,
+                           "send create auto increment internal error, code: " + std::to_string(status.error_code()) +
+                               ", message: " + status.error_str());
+    }
+    DINGO_LOG(INFO) << "CreateTable AutoIncrement send create auto increment internal success";
+  }
+
   // update table_name_map_safe_temp_
   if (table_name_map_safe_temp_.PutIfAbsent(std::to_string(schema_id) + table_definition.name(), new_table_id) < 0) {
     DINGO_LOG(INFO) << " CreateTable table_name" << table_definition.name()
@@ -509,19 +523,6 @@ butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta
   // table_id->set_parent_entity_id(schema_id);
   // table_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
   // raft_kv_put
-
-  // create auto increment
-  if (has_auto_increment_column) {
-    butil::Status status =
-        AutoIncrementControl::SendCreateAutoIncrementInternal(new_table_id, table_definition.auto_increment());
-    if (status.error_code() != pb::error::Errno::OK) {
-      DINGO_LOG(ERROR) << "send create auto increment internal error, code: " << status.error_code()
-                       << ", message: " << status.error_str();
-      return butil::Status(pb::error::Errno::EAUTO_INCREMENT_WHILE_CREAT_TABLE,
-                           "send create auto increment internal error, code: " + std::to_string(status.error_code()) +
-                               ", message: " + status.error_str());
-    }
-  }
 
   return butil::Status::OK();
 }

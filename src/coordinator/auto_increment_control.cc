@@ -63,9 +63,15 @@ butil::Status AutoIncrementControl::GetAutoIncrement(uint64_t table_id, uint64_t
   return butil::Status::OK();
 }
 
+butil::Status AutoIncrementControl::GetAutoIncrements(butil::FlatMap<uint64_t, uint64_t>& auto_increments) {
+  BAIDU_SCOPED_LOCK(auto_increment_map_mutex_);
+  auto_increments = auto_increment_map_;
+  return butil::Status::OK();
+}
+
 butil::Status AutoIncrementControl::CreateAutoIncrement(uint64_t table_id, uint64_t start_id,
                                                         pb::coordinator_internal::MetaIncrement& meta_increment) {
-  DINGO_LOG(INFO) << "create auto increment.";
+  DINGO_LOG(INFO) << "create auto increment table id: " << table_id << " start id: " << start_id << "";
   {
     BAIDU_SCOPED_LOCK(auto_increment_map_mutex_);
     if (auto_increment_map_.seek(table_id) != nullptr) {
@@ -155,7 +161,7 @@ butil::Status AutoIncrementControl::DeleteAutoIncrement(uint64_t table_id,
   return butil::Status::OK();
 }
 
-void AutoIncrementControl::GetLeaderLocation(pb::common::Location* leader_server_location_ptr) {
+void AutoIncrementControl::GetLeaderLocation(pb::common::Location& leader_server_location) {
   if (raft_node_ == nullptr) {
     DINGO_LOG(ERROR) << "raft_node_ is nullptr";
     return;
@@ -172,7 +178,7 @@ void AutoIncrementControl::GetLeaderLocation(pb::common::Location* leader_server
   }
 
   // GetServerLocation
-  GetServerLocation(leader_raft_location, *leader_server_location_ptr);
+  GetServerLocation(leader_raft_location, leader_server_location);
 }
 
 void AutoIncrementControl::GetServerLocation(pb::common::Location& raft_location,

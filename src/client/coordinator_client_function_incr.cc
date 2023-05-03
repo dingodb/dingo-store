@@ -35,6 +35,15 @@ DECLARE_string(id);
 // ./dingodb_client_coordinator -url=file://./coor_list -id=888 -start_id=110000 -method=UpdateAutoIncrement
 // ./dingodb_client_coordinator -url=file://./coor_list -id=888 -method=DeleteAutoIncrement
 
+void SendGetAutoIncrements(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  dingodb::pb::meta::GetAutoIncrementsRequest request;
+  dingodb::pb::meta::GetAutoIncrementsResponse response;
+
+  auto status = coordinator_interaction->SendRequest("GetAutoIncrements", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG_INFO << response.DebugString();
+}
+
 void SendGetAutoIncrement(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
   dingodb::pb::meta::GetAutoIncrementRequest request;
   dingodb::pb::meta::GetAutoIncrementResponse response;

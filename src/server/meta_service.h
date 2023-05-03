@@ -44,8 +44,11 @@ class MetaServiceImpl : public pb::meta::MetaService {
 
   template <typename T>
   void RedirectAutoIncrementResponse(T response) {
+    pb::common::Location leader_location;
+    this->auto_increment_control_->GetLeaderLocation(leader_location);
+
     auto* error_in_response = response->mutable_error();
-    auto_increment_control_->GetLeaderLocation(error_in_response->mutable_leader_location());
+    error_in_response->mutable_leader_location()->CopyFrom(leader_location);
     error_in_response->set_errcode(Errno::ERAFT_NOTLEADER);
   }
 
@@ -86,6 +89,8 @@ class MetaServiceImpl : public pb::meta::MetaService {
   void DropSchema(google::protobuf::RpcController* controller, const pb::meta::DropSchemaRequest* request,
                   pb::meta::DropSchemaResponse* response, google::protobuf::Closure* done) override;
 
+  void GetAutoIncrements(google::protobuf::RpcController* controller, const pb::meta::GetAutoIncrementsRequest* request,
+                         pb::meta::GetAutoIncrementsResponse* response, google::protobuf::Closure* done) override;
   void GetAutoIncrement(google::protobuf::RpcController* controller, const pb::meta::GetAutoIncrementRequest* request,
                         pb::meta::GetAutoIncrementResponse* response, google::protobuf::Closure* done) override;
   void CreateAutoIncrement(google::protobuf::RpcController* controller,
