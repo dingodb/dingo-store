@@ -52,6 +52,7 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   bthread_mutex_init(&store_operation_map_mutex_, nullptr);
   root_schema_writed_to_raft_ = false;
   is_processing_task_list_.store(false);
+  leader_term_.store(-1, butil::memory_order_release);
 
   // the data structure below will write to raft
   coordinator_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::CoordinatorInternal>(&coordinator_map_);
