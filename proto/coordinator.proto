@@ -274,6 +274,14 @@ message GetStoreMetricsResponse {
   repeated dingodb.pb.common.StoreMetrics store_metrics = 3;
 }
 
+message DeleteStoreMetricsRequest {
+  uint64 store_id = 1;
+}
+
+message DeleteStoreMetricsResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
 message GetStoreOperationRequest {
   uint64 store_id = 1;  // this is store_id, if 0, means get all store operation
 }
@@ -547,6 +555,7 @@ service CoordinatorService {
   rpc GetRegionMap(GetRegionMapRequest) returns (GetRegionMapResponse);
   rpc GetStoreMap(GetStoreMapRequest) returns (GetStoreMapResponse);
   rpc GetStoreMetrics(GetStoreMetricsRequest) returns (GetStoreMetricsResponse);
+  rpc DeleteStoreMetrics(DeleteStoreMetricsRequest) returns (DeleteStoreMetricsResponse);
 
   rpc CreateStore(CreateStoreRequest) returns (CreateStoreResponse);
   rpc DeleteStore(DeleteStoreRequest) returns (DeleteStoreResponse);

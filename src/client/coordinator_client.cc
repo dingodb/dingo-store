@@ -233,6 +233,8 @@ void* Sender(void* /*arg*/) {
     SendRemoveStoreOperation(coordinator_interaction);
   } else if (FLAGS_method == "GetStoreMetrics") {
     SendGetStoreMetrics(coordinator_interaction);
+  } else if (FLAGS_method == "DeleteStoreMetrics") {
+    SendDeleteStoreMetrics(coordinator_interaction);
   } else if (FLAGS_method == "GetSchemas") {  // meta control
     SendGetSchemas(coordinator_interaction_meta);
   } else if (FLAGS_method == "GetSchema") {

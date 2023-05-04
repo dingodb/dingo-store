@@ -253,6 +253,9 @@ class CoordinatorControl : public MetaControl {
   // get store metrics
   void GetStoreMetrics(uint64_t store_id, std::vector<pb::common::StoreMetrics> &store_metrics);
 
+  // delete store metrics
+  void DeleteStoreMetrics(uint64_t store_id);
+
   // get orphan region
   butil::Status GetOrphanRegion(uint64_t store_id, std::map<uint64_t, pb::common::RegionMetrics> &orphan_regions);
 

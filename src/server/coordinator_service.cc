@@ -573,6 +573,23 @@ void CoordinatorServiceImpl::GetStoreMetrics(google::protobuf::RpcController * /
   }
 }
 
+void CoordinatorServiceImpl::DeleteStoreMetrics(google::protobuf::RpcController * /*controller*/,
+                                                const pb::coordinator::DeleteStoreMetricsRequest *request,
+                                                pb::coordinator::DeleteStoreMetricsResponse *response,
+                                                google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+  auto is_leader = this->coordinator_control_->IsLeader();
+  DINGO_LOG(DEBUG) << "Receive Delete StoreMetrics Request, IsLeader:" << is_leader
+                   << ", Request:" << request->DebugString();
+
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  // get store metrics
+  this->coordinator_control_->DeleteStoreMetrics(request->store_id());
+}
+
 void CoordinatorServiceImpl::GetExecutorMap(google::protobuf::RpcController * /*controller*/,
                                             const pb::coordinator::GetExecutorMapRequest *request,
                                             pb::coordinator::GetExecutorMapResponse *response,
