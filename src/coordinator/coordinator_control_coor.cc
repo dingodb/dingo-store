@@ -35,6 +35,7 @@
 #include "butil/strings/string_split.h"
 #include "butil/synchronization/lock.h"
 #include "butil/time.h"
+#include "bvar/status.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "coordinator/coordinator_control.h"
@@ -142,8 +143,16 @@ void CoordinatorControl::DeleteStoreMetrics(uint64_t store_id) {
   BAIDU_SCOPED_LOCK(store_metrics_map_mutex_);
   if (store_id == 0) {
     store_metrics_map_.clear();
+    {
+      BAIDU_SCOPED_LOCK(store_bvar_map_mutex_);
+      store_bvar_map_.clear();
+    }
   } else {
     store_metrics_map_.erase(store_id);
+    {
+      BAIDU_SCOPED_LOCK(store_bvar_map_mutex_);
+      store_bvar_map_.erase(store_id);
+    }
   }
 }
 
@@ -413,6 +422,22 @@ void CoordinatorControl::GetRegionMap(pb::common::RegionMap& region_map) {
       tmp_region->CopyFrom(elemnt.second);
     }
   }
+}
+
+void CoordinatorControl::GetRegionIdsInMap(std::vector<uint64_t>& region_ids) { region_map_.GetAllKeys(region_ids); }
+
+void CoordinatorControl::CleanRegionBvars(const std::vector<uint64_t>& region_ids) {
+  BAIDU_SCOPED_LOCK(region_bvar_map_mutex_);
+  for (const auto& it : region_bvar_map_) {
+    if (std::find(region_ids.begin(), region_ids.end(), it.first) == region_ids.end()) {
+      region_bvar_map_.erase(it.first);
+    }
+  }
+}
+
+void CoordinatorControl::DeleteRegionBvar(uint64_t region_id) {
+  BAIDU_SCOPED_LOCK(region_bvar_map_mutex_);
+  region_bvar_map_.erase(region_id);
 }
 
 butil::Status CoordinatorControl::QueryRegion(uint64_t region_id, pb::common::Region& region) {
@@ -2163,6 +2188,21 @@ void CoordinatorControl::UpdateRegionMapAndStoreOperation(const pb::common::Stor
     // }
 
     region_increment_region->set_raft_status(region_raft_status);
+
+    {
+      // bvar region
+      BAIDU_SCOPED_LOCK(region_bvar_map_mutex_);
+      auto* ptr = region_bvar_map_.seek(region_metrics.id());
+      if (ptr == nullptr) {
+        std::shared_ptr<MetaBvarRegion> meta_bvar = std::make_shared<MetaBvarRegion>(region_metrics.id());
+        meta_bvar->SetRowCount(region_metrics.row_count());
+        meta_bvar->SetRegionSize(region_metrics.region_size());
+        region_bvar_map_.insert(region_metrics.id(), meta_bvar);
+      } else {
+        (*ptr)->SetRowCount(region_metrics.row_count());
+        (*ptr)->SetRegionSize(region_metrics.region_size());
+      }
+    }
   }
 
   // update store operation
@@ -2272,6 +2312,7 @@ uint64_t CoordinatorControl::UpdateStoreMetrics(const pb::common::StoreMetrics& 
       // on_apply
       // store_metrics_map_epoch++;              // raft_kv_put
       // store_metrics_map_[store_metrics.id()] = store;  // raft_kv_put
+
     } else {
       DINGO_LOG(INFO) << "NEED ADD NEW STORE store_metrics.id = " << store_metrics.id();
 
@@ -2287,6 +2328,21 @@ uint64_t CoordinatorControl::UpdateStoreMetrics(const pb::common::StoreMetrics& 
       // on_apply
       // store_metrics_map_epoch++;                                    // raft_kv_put
       // store_metrics_map_.insert(std::make_pair(store_metrics.id(), store));  // raft_kv_put
+    }
+
+    {
+      // bvar store
+      BAIDU_SCOPED_LOCK(store_bvar_map_mutex_);
+      auto* ptr = store_bvar_map_.seek(store_metrics.id());
+      if (ptr == nullptr) {
+        std::shared_ptr<MetaBvarStore> meta_bvar = std::make_shared<MetaBvarStore>(store_metrics.id());
+        meta_bvar->SetTotalCapacity(store_metrics.total_capacity());
+        meta_bvar->SetFreeCapacity(store_metrics.free_capacity());
+        store_bvar_map_.insert(store_metrics.id(), meta_bvar);
+      } else {
+        (*ptr)->SetTotalCapacity(store_metrics.total_capacity());
+        (*ptr)->SetFreeCapacity(store_metrics.free_capacity());
+      }
     }
   }
 

@@ -955,8 +955,30 @@ void CoordinatorControl::CalculateTableMetrics() {
     if (CalculateTableMetricsSingle(table_id, table_metrics) < 0) {
       DINGO_LOG(ERROR) << "ERRROR: CalculateTableMetricsSingle failed, remove metrics from map" << table_id;
       table_metrics_map_.Erase(table_id);
+
+      {
+        // bvar table
+        BAIDU_SCOPED_LOCK(table_bvar_map_mutex_);
+        table_bvar_map_.erase(table_id);
+      }
+
     } else {
       table_metrics_internal.second.mutable_table_metrics()->CopyFrom(table_metrics);
+
+      {
+        // bvar table
+        BAIDU_SCOPED_LOCK(table_bvar_map_mutex_);
+        auto* ptr = table_bvar_map_.seek(table_id);
+        if (ptr == nullptr) {
+          std::shared_ptr<MetaBvarTable> meta_bvar = std::make_shared<MetaBvarTable>(table_id);
+          meta_bvar->SetRowCount(table_metrics.rows_count());
+          meta_bvar->SetPartCount(table_metrics.part_count());
+          table_bvar_map_.insert(table_id, meta_bvar);
+        } else {
+          (*ptr)->SetRowCount(table_metrics.rows_count());
+          (*ptr)->SetPartCount(table_metrics.part_count());
+        }
+      }
     }
   }
 }

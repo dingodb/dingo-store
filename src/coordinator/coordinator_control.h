@@ -63,6 +63,54 @@ class AtomicGuard {
   std::atomic<bool> &m_flag_;
 };
 
+class MetaBvarStore {
+ public:
+  MetaBvarStore(uint64_t store_id) {
+    total_capacity_.expose_as("dingo_metrics_store", "total_capacity_" + std::to_string(store_id));
+    free_capacity_.expose_as("dingo_metrics_store", "free_capacity_" + std::to_string(store_id));
+  }
+  ~MetaBvarStore() = default;
+
+  void SetTotalCapacity(int64_t value) { total_capacity_.set_value(value); }
+  void SetFreeCapacity(int64_t value) { free_capacity_.set_value(value); }
+
+ private:
+  bvar::Status<uint64_t> total_capacity_;
+  bvar::Status<uint64_t> free_capacity_;
+};
+
+class MetaBvarRegion {
+ public:
+  MetaBvarRegion(uint64_t region_id) {
+    row_count_.expose_as("dingo_metrics_region", "row_count_" + std::to_string(region_id));
+    region_size_.expose_as("dingo_metrics_region", "region_size_" + std::to_string(region_id));
+  }
+  ~MetaBvarRegion() = default;
+
+  void SetRowCount(int64_t value) { row_count_.set_value(value); }
+  void SetRegionSize(int64_t value) { region_size_.set_value(value); }
+
+ private:
+  bvar::Status<uint64_t> row_count_;
+  bvar::Status<uint64_t> region_size_;
+};
+
+class MetaBvarTable {
+ public:
+  MetaBvarTable(uint64_t table_id) {
+    row_count_.expose_as("dingo_metrics_table", "row_count_" + std::to_string(table_id));
+    part_count_.expose_as("dingo_metrics_table", "part_count_" + std::to_string(table_id));
+  }
+  ~MetaBvarTable() = default;
+
+  void SetRowCount(int64_t value) { row_count_.set_value(value); }
+  void SetPartCount(int64_t value) { part_count_.set_value(value); }
+
+ private:
+  bvar::Status<uint64_t> row_count_;
+  bvar::Status<uint64_t> part_count_;
+};
+
 class CoordinatorControl : public MetaControl {
  public:
   CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, std::shared_ptr<MetaWriter> meta_writer,
@@ -299,6 +347,9 @@ class CoordinatorControl : public MetaControl {
 
   // get regionmap
   void GetRegionMap(pb::common::RegionMap &region_map);
+  void GetRegionIdsInMap(std::vector<uint64_t> &region_ids);
+  void CleanRegionBvars(const std::vector<uint64_t> &region_ids);
+  void DeleteRegionBvar(uint64_t region_id);
 
   // get schemas
   void GetSchemas(uint64_t schema_id, std::vector<pb::meta::Schema> &schemas);
@@ -519,6 +570,14 @@ class CoordinatorControl : public MetaControl {
   // raft kv engine
   std::shared_ptr<Engine> engine_;
   butil::atomic<bool> is_processing_task_list_;
+
+  // bvar
+  butil::FlatMap<uint64_t, std::shared_ptr<MetaBvarStore>> store_bvar_map_;
+  butil::FlatMap<uint64_t, std::shared_ptr<MetaBvarRegion>> region_bvar_map_;
+  butil::FlatMap<uint64_t, std::shared_ptr<MetaBvarTable>> table_bvar_map_;
+  bthread_mutex_t store_bvar_map_mutex_;
+  bthread_mutex_t region_bvar_map_mutex_;
+  bthread_mutex_t table_bvar_map_mutex_;
 };
 
 }  // namespace dingodb

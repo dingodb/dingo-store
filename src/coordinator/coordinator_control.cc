@@ -26,6 +26,8 @@
 
 #include "braft/configuration.h"
 #include "brpc/channel.h"
+#include "bthread/id.h"
+#include "bthread/types.h"
 #include "butil/containers/flat_map.h"
 #include "butil/scoped_lock.h"
 #include "butil/strings/string_split.h"
@@ -53,6 +55,9 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   root_schema_writed_to_raft_ = false;
   is_processing_task_list_.store(false);
   leader_term_.store(-1, butil::memory_order_release);
+  bthread_mutex_init(&store_bvar_map_mutex_, nullptr);
+  bthread_mutex_init(&region_bvar_map_mutex_, nullptr);
+  bthread_mutex_init(&table_bvar_map_mutex_, nullptr);
 
   // the data structure below will write to raft
   coordinator_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::CoordinatorInternal>(&coordinator_map_);
@@ -73,6 +78,9 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   store_need_push_.init(100, 80);
   executor_need_push_.init(100, 80);
   store_metrics_map_.init(100, 80);
+  store_bvar_map_.init(100, 80);
+  region_bvar_map_.init(1000, 80);
+  table_bvar_map_.init(500, 80);
 
   // init SafeMap
   id_epoch_map_.Init(100);                // id_epoch_map_ is a small map
