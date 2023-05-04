@@ -2484,6 +2484,30 @@ void CoordinatorControl::GetMemoryInfo(pb::coordinator::CoordinatorMemoryInfo& m
     memory_info.set_task_list_map_size(task_list_map_.MemorySize());
     memory_info.set_total_size(memory_info.total_size() + memory_info.task_list_map_size());
   }
+  {
+    BAIDU_SCOPED_LOCK(store_bvar_map_mutex_);
+    memory_info.set_store_bvar_map_count(store_bvar_map_.size());
+    for (auto& it : store_bvar_map_) {
+      memory_info.set_store_bvar_map_size(memory_info.store_bvar_map_size() + sizeof(it.first) + sizeof(*it.second));
+    }
+    memory_info.set_total_size(memory_info.total_size() + memory_info.store_bvar_map_size());
+  }
+  {
+    BAIDU_SCOPED_LOCK(region_bvar_map_mutex_);
+    memory_info.set_region_bvar_map_count(region_bvar_map_.size());
+    for (auto& it : region_bvar_map_) {
+      memory_info.set_region_bvar_map_size(memory_info.region_bvar_map_size() + sizeof(it.first) + sizeof(*it.second));
+    }
+    memory_info.set_total_size(memory_info.total_size() + memory_info.region_bvar_map_size());
+  }
+  {
+    BAIDU_SCOPED_LOCK(table_bvar_map_mutex_);
+    memory_info.set_table_bvar_map_count(table_bvar_map_.size());
+    for (auto& it : table_bvar_map_) {
+      memory_info.set_table_bvar_map_size(memory_info.table_bvar_map_size() + sizeof(it.first) + sizeof(*it.second));
+    }
+    memory_info.set_total_size(memory_info.total_size() + memory_info.table_bvar_map_size());
+  }
 }
 
 void CoordinatorControl::GetStoreOperation(uint64_t store_id, pb::coordinator::StoreOperation& store_operation) {
