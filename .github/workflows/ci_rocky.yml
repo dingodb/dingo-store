@@ -38,9 +38,21 @@ jobs:
       # Build your program with the given configuration
       run: cmake --build ./build --config ${{env.BUILD_TYPE}}
 
+    
+    - name: Download artifact
+        uses: dawidd6/action-download-artifact@v2
+        with:
+            github_token: ${{secrets.GITHUB_TOKEN}}
+            workflow: java_build.yml
+            name: dingo-mysql-init-0.6.0-SNAPSHOT.jar
+
+    - name: rename artifactory name
+        run: |
+            cp dingo-mysql-init-0.6.0-SNAPSHOT.jar build/bin
+
     - name: Archive the dingo directory
       run: |
-        tar -czvf dingo-store.tar.gz  scripts build/bin/dingodb* conf/ 
+        tar -czvf dingo-store.tar.gz  scripts build/bin/dingodb* build/bin/*.jar conf/ 
 
     - name: copy artifactory to another workflow
       uses: actions/upload-artifact@v2
