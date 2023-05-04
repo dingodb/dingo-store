@@ -5,7 +5,7 @@ x-shared-environment: &shared-env
   SERVER_HOST: ${DINGO_HOST_IP}
   RAFT_HOST: ${DINGO_HOST_IP}
   COOR_RAFT_PEERS: ${DINGO_HOST_IP}:22101,${DINGO_HOST_IP}:22102,${DINGO_HOST_IP}:22103
-  COOR_SRV_PEERS: ${DINGO_HOST_IP}:22001,${DINGO_HOST_IP}:22002,${DINGO_HOST_IP}:22003 
+  COOR_SRV_PEERS: ${DINGO_HOST_IP}:22001,${DINGO_HOST_IP}:22002,${DINGO_HOST_IP}:22003
 
 services:
   coordinator1:
@@ -91,3 +91,17 @@ services:
       SERVER_START_PORT: 20003
       INSTANCE_START_ID: 1003
       <<: *shared-env
+
+  mysql_init:
+    image: dingodatabase/dingo-store:latest
+    hostname: mysql_init
+    container_name: mysql_init
+    network_mode: host
+    depends_on:
+      - store1
+      - store2
+      - store3
+    environment:
+      SERVER_HOST: ${DINGO_HOST_IP}
+      COORDINATOR_SERVER_START_PORT: 22001
+    entrypoint: /opt/dingo-store/scripts/mysql_init
