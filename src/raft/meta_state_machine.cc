@@ -36,7 +36,7 @@ MetaStateMachine::MetaStateMachine(std::shared_ptr<MetaControl> meta_control, bo
     : meta_control_(meta_control), is_volatile_state_machine_(is_volatile) {}
 
 void MetaStateMachine::DispatchRequest(bool is_leader, uint64_t term, uint64_t index,
-            const pb::raft::RaftCmdRequest& raft_cmd, google::protobuf::Message* response) {
+                                       const pb::raft::RaftCmdRequest& raft_cmd, google::protobuf::Message* response) {
   for (const auto& req : raft_cmd.requests()) {
     switch (req.cmd_type()) {
       case pb::raft::CmdType::META_WRITE:
@@ -49,7 +49,8 @@ void MetaStateMachine::DispatchRequest(bool is_leader, uint64_t term, uint64_t i
 }
 
 void MetaStateMachine::HandleMetaProcess(bool is_leader, uint64_t term, uint64_t index,
-            const pb::raft::RaftCmdRequest& raft_cmd, google::protobuf::Message* response) {
+                                         const pb::raft::RaftCmdRequest& raft_cmd,
+                                         google::protobuf::Message* response) {
   // return response about diffrent Closure
   // todo
   // std::shared_ptr<Context> const ctx = done->GetCtx();
@@ -210,6 +211,7 @@ void MetaStateMachine::on_leader_start(int64_t term) {
 void MetaStateMachine::on_leader_stop(const butil::Status& status) {
   DINGO_LOG(INFO) << "on_leader_stop: " << status.error_code() << " " << status.error_str();
   meta_control_->SetLeaderTerm(-1);
+  meta_control_->OnLeaderStop();
 }
 
 void MetaStateMachine::on_error(const ::braft::Error& e) {

@@ -67,6 +67,7 @@ void CoordinatorControl::OnLeaderStart(int64_t term) {
     butil::FlatMap<uint64_t, pb::coordinator_internal::IdEpochInternal> temp_copy;
     temp_copy.init(100);
     id_epoch_map_.GetFlatMapCopy(temp_copy);
+    id_epoch_map_safe_temp_.Clear();
     id_epoch_map_safe_temp_.CopyFlatMap(temp_copy);
   }
   DINGO_LOG(INFO) << "OnLeaderStart init id_epoch_safe_map_temp_ finished, term=" << term
@@ -99,6 +100,26 @@ void CoordinatorControl::OnLeaderStart(int64_t term) {
   }
   DINGO_LOG(INFO) << "OnLeaderStart init table_name_map_safe_temp_ finished, term=" << term
                   << " count=" << table_name_map_safe_temp_.Size();
+
+  coordinator_bvar_.SetValue(1);
+  DINGO_LOG(INFO) << "OnLeaderStart finished, term=" << term;
+}
+
+void CoordinatorControl::OnLeaderStop() {
+  coordinator_bvar_.SetValue(0);
+  {
+    BAIDU_SCOPED_LOCK(store_bvar_map_mutex_);
+    store_bvar_map_.clear();
+  }
+  {
+    BAIDU_SCOPED_LOCK(region_bvar_map_mutex_);
+    region_bvar_map_.clear();
+  }
+  {
+    BAIDU_SCOPED_LOCK(table_bvar_map_mutex_);
+    table_bvar_map_.clear();
+  }
+  DINGO_LOG(INFO) << "OnLeaderStop finished";
 }
 
 std::shared_ptr<Snapshot> CoordinatorControl::PrepareRaftSnapshot() {

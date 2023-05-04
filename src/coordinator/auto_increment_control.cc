@@ -81,8 +81,8 @@ butil::Status AutoIncrementControl::CreateAutoIncrement(uint64_t table_id, uint6
   {
     BAIDU_SCOPED_LOCK(auto_increment_map_mutex_);
     if (auto_increment_map_.seek(table_id) != nullptr) {
-      DINGO_LOG(WARNING) << "auto increment table id: " << table_id << " is exist, start id: "
-        << auto_increment_map_[table_id];
+      DINGO_LOG(WARNING) << "auto increment table id: " << table_id
+                         << " is exist, start id: " << auto_increment_map_[table_id];
       return butil::Status(pb::error::Errno::EAUTO_INCREMENT_EXIST, "auto increment exist");
     }
   }
@@ -218,6 +218,8 @@ void AutoIncrementControl::SetLeaderTerm(int64_t term) { leader_term_.store(term
 
 void AutoIncrementControl::OnLeaderStart(int64_t term) { DINGO_LOG(INFO) << "OnLeaderStart, term=" << term; }
 
+void AutoIncrementControl::OnLeaderStop() { DINGO_LOG(INFO) << "OnLeaderStop"; }
+
 // set raft_node to coordinator_control
 void AutoIncrementControl::SetRaftNode(std::shared_ptr<RaftNode> raft_node) { raft_node_ = raft_node; }
 
@@ -254,8 +256,8 @@ void AutoIncrementControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncr
           DINGO_LOG(INFO) << "leader grenerate auto increment response: " << generate_response->ShortDebugString();
         }
         auto_increment_map_[table_id] = end_id;
-        DINGO_LOG(INFO) << "generate auto increment: [" << source_start_id << ", " << end_id << ") request: "
-          << auto_increment.ShortDebugString();
+        DINGO_LOG(INFO) << "generate auto increment: [" << source_start_id << ", " << end_id
+                        << ") request: " << auto_increment.ShortDebugString();
       } else {
         // check source start id
         if (source_start_id != auto_increment.increment().source_start_id()) {
@@ -439,11 +441,10 @@ butil::Status AutoIncrementControl::CheckAutoIncrementInTableDefinition(
   return butil::Status::OK();
 }
 
-butil::Status AutoIncrementControl::SyncSendCreateAutoIncrementInternal(const uint64_t table_id,
-                                                                        const uint64_t auto_increment) {
+butil::Status AutoIncrementControl::SyncSendCreateAutoIncrementInternal(uint64_t table_id, uint64_t auto_increment) {
   pb::meta::CreateAutoIncrementRequest request;
   pb::meta::CreateAutoIncrementResponse response;
-  
+
   auto* table_id_ptr = request.mutable_table_id();
   table_id_ptr->set_entity_type(dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
   table_id_ptr->set_entity_id(table_id);
@@ -451,7 +452,7 @@ butil::Status AutoIncrementControl::SyncSendCreateAutoIncrementInternal(const ui
   return Server::GetInstance()->GetCoordinatorInteractionIncr()->SendRequest("CreateAutoIncrement", request, response);
 }
 
-void AutoIncrementControl::AsyncSendUpdateAutoIncrementInternal(const uint64_t table_id, const uint64_t auto_increment) {
+void AutoIncrementControl::AsyncSendUpdateAutoIncrementInternal(uint64_t table_id, uint64_t auto_increment) {
   if (auto_increment == 0) {
     DINGO_LOG(ERROR) << "table id: " << table_id << ", auto_increment: " << auto_increment;
     return;
@@ -478,7 +479,7 @@ void AutoIncrementControl::AsyncSendUpdateAutoIncrementInternal(const uint64_t t
   bth.run(update_function);
 }
 
-void AutoIncrementControl::AsyncSendDeleteAutoIncrementInternal(const uint64_t table_id) {
+void AutoIncrementControl::AsyncSendDeleteAutoIncrementInternal(uint64_t table_id) {
   auto delete_function = [table_id]() {
     pb::meta::DeleteAutoIncrementRequest request;
     pb::meta::DeleteAutoIncrementResponse response;
