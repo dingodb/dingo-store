@@ -35,6 +35,7 @@ DEFINE_string(prefix, "", "key prefix");
 DEFINE_int32(region_id, 111111, "region id");
 DEFINE_int32(region_count, 1, "region count");
 DEFINE_int32(table_id, 0, "table id");
+DEFINE_string(table_name, "", "table name");
 DEFINE_string(raft_group, "store_default_test", "raft group");
 
 bvar::LatencyRecorder g_latency_recorder("dingo-store");
@@ -144,6 +145,16 @@ void Sender(client::ServerInteractionPtr interaction, const std::string& method,
     } else if (method == "TestRegionLifecycle") {
       client::TestRegionLifecycle(interaction, FLAGS_region_id, FLAGS_raft_group, raft_addrs, FLAGS_region_count,
                                   FLAGS_thread_num, FLAGS_req_num, FLAGS_prefix);
+    }
+
+    // Auto test
+    if (method == "AutoTest") {
+      auto ctx = std::make_shared<client::Context>();
+      ctx->table_name = FLAGS_table_name;
+      ctx->partition_num = 1;
+      ctx->req_num = FLAGS_req_num;
+
+      AutoTest(ctx);
     }
   }
 }

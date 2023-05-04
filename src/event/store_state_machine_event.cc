@@ -17,6 +17,7 @@
 #include <string_view>
 #include <vector>
 
+#include "braft/errno.pb.h"
 #include "butil/endpoint.h"
 #include "common/helper.h"
 #include "common/logging.h"
@@ -130,40 +131,6 @@ void SmStartFollowingEventListener::OnEvent(std::shared_ptr<Event> event) {
 
 void SmStopFollowingEventListener::OnEvent(std::shared_ptr<Event> event) {
   auto the_event = std::dynamic_pointer_cast<SmStopFollowingEvent>(event);
-  // Update region state ORPHAN, when ListPeers is empty
-  // The node removed by raft group
-  auto engine = Server::GetInstance()->GetEngine();
-  if (engine->GetID() == pb::common::ENG_RAFT_STORE) {
-    auto raft_kv_engine = std::dynamic_pointer_cast<RaftKvEngine>(engine);
-    auto node = raft_kv_engine->GetNode(the_event->node_id);
-    if (node == nullptr) {
-      DINGO_LOG(INFO) << "Not found node " << the_event->node_id;
-      return;
-    }
-    std::vector<braft::PeerId> peers;
-    node->ListPeers(&peers);
-    if (!peers.empty()) return;
-
-    auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
-    if (store_region_meta != nullptr) {
-      store_region_meta->UpdateState(the_event->node_id, pb::common::StoreRegionState::ORPHAN);
-
-      // Stop raft node
-      auto region_controller = Server::GetInstance()->GetRegionController();
-
-      auto command = std::make_shared<pb::coordinator::RegionCmd>();
-      command->set_id(Helper::TimestampNs());
-      command->set_region_id(the_event->node_id);
-      command->set_region_cmd_type(pb::coordinator::CMD_STOP);
-      command->mutable_stop_request()->set_region_id(the_event->node_id);
-
-      auto status = region_controller->DispatchRegionControlCommand(std::make_shared<Context>(), command);
-      if (!status.ok()) {
-        DINGO_LOG(ERROR) << "Dispatch stop region command failed, region: " << the_event->node_id
-                         << " error: " << status.error_code() << " " << status.error_str();
-      }
-    }
-  }
 }
 
 std::shared_ptr<EventListenerCollection> StoreSmEventListenerFactory::Build() {

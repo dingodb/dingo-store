@@ -210,7 +210,9 @@ void StoreStateMachine::on_configuration_committed(const braft::Configuration& c
 }
 
 void StoreStateMachine::on_start_following(const braft::LeaderChangeContext& ctx) {
-  DINGO_LOG(INFO) << "on_start_following, region: " << region_->Id() << " error: " << ctx.status().error_str();
+  DINGO_LOG(INFO) << butil::StringPrintf("on_start_following, region: %lu leader_id: %s error: %d %s", region_->Id(),
+                                         ctx.leader_id().to_string().c_str(), ctx.status().error_code(),
+                                         ctx.status().error_cstr());
   auto event = std::make_shared<SmStartFollowingEvent>(ctx);
   event->node_id = region_->Id();
 
@@ -218,7 +220,9 @@ void StoreStateMachine::on_start_following(const braft::LeaderChangeContext& ctx
 }
 
 void StoreStateMachine::on_stop_following(const braft::LeaderChangeContext& ctx) {
-  DINGO_LOG(INFO) << "on_stop_following, region: " << region_->Id() << " error: " << ctx.status().error_str();
+  DINGO_LOG(INFO) << butil::StringPrintf("on_stop_following, region: %lu leader_id: %s error: %d %s", region_->Id(),
+                                         ctx.leader_id().to_string().c_str(), ctx.status().error_code(),
+                                         ctx.status().error_cstr());
   auto event = std::make_shared<SmStopFollowingEvent>(ctx);
   event->node_id = region_->Id();
 

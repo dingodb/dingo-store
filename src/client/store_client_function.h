@@ -15,10 +15,28 @@
 #ifndef DINGODB_CLIENT_STORE_CLIENT_FUNCTION_H_
 #define DINGODB_CLIENT_STORE_CLIENT_FUNCTION_H_
 
+#include <memory>
+
 #include "client/client_helper.h"
 #include "client/client_interation.h"
 
 namespace client {
+
+struct Context {
+  std::unique_ptr<Context> Clone() const {
+    auto clone_ctx = std::make_unique<Context>();
+    clone_ctx->coordinator_interaction = coordinator_interaction;
+    clone_ctx->store_interaction = store_interaction;
+    return clone_ctx;
+  }
+
+  ServerInteractionPtr coordinator_interaction;
+  ServerInteractionPtr store_interaction;
+
+  std::string table_name;
+  int partition_num;
+  int req_num;
+};
 
 // key/value
 void SendKvGet(ServerInteractionPtr interaction, uint64_t region_id, const std::string& key, std::string& value);
@@ -46,6 +64,7 @@ void TestBatchPutGet(ServerInteractionPtr interaction, uint64_t region_id, int t
 void TestRegionLifecycle(ServerInteractionPtr interaction, uint64_t region_id, const std::string& raft_group,
                          std::vector<std::string>& raft_addrs, int region_count, int thread_num, int req_num,
                          const std::string& prefix);
+void AutoTest(std::shared_ptr<Context> ctx);
 
 }  // namespace client
 

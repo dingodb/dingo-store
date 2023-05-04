@@ -110,6 +110,7 @@ bool RaftNode::IsLeader() { return node_->is_leader(); }
 
 bool RaftNode::IsLeaderLeaseValid() { return node_->is_leader_lease_valid(); }
 
+bool RaftNode::HasLeader() { return node_->leader_id().to_string() != "0.0.0.0:0:0"; }
 braft::PeerId RaftNode::GetLeaderId() { return node_->leader_id(); }
 braft::PeerId RaftNode::GetPeerId() { return node_->node_id().peer_id; }
 
