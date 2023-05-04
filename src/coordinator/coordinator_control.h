@@ -63,6 +63,20 @@ class AtomicGuard {
   std::atomic<bool> &m_flag_;
 };
 
+class MetaBvarCoordinator {
+ public:
+  MetaBvarCoordinator() {
+    is_leader_.expose_as("dingo_metrics_coordinator", "is_leader");
+    is_leader_.set_value(0);
+  }
+  ~MetaBvarCoordinator() = default;
+
+  void SetValue(int64_t value) { is_leader_.set_value(value); }
+
+ private:
+  bvar::Status<uint64_t> is_leader_;
+};
+
 class MetaBvarStore {
  public:
   MetaBvarStore(uint64_t store_id) {
@@ -438,6 +452,7 @@ class CoordinatorControl : public MetaControl {
   bool IsLeader() override;                                              // for raft fsm
   void SetLeaderTerm(int64_t term) override;                             // for raft fsm
   void OnLeaderStart(int64_t term) override;                             // for raft fsm
+  void OnLeaderStop() override;                                          // for raft fsm
   int GetAppliedTermAndIndex(uint64_t &term, uint64_t &index) override;  // for raft fsm
 
   // set raft_node to coordinator_control
@@ -578,6 +593,7 @@ class CoordinatorControl : public MetaControl {
   bthread_mutex_t store_bvar_map_mutex_;
   bthread_mutex_t region_bvar_map_mutex_;
   bthread_mutex_t table_bvar_map_mutex_;
+  MetaBvarCoordinator coordinator_bvar_;
 };
 
 }  // namespace dingodb
