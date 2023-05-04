@@ -39,6 +39,8 @@ AutoIncrementControl::AutoIncrementControl() {
   bthread_mutex_init(&auto_increment_map_mutex_, nullptr);
 
   CHECK_EQ(0, auto_increment_map_.init(256, 70));
+
+  leader_term_.store(-1, butil::memory_order_release);
 }
 
 bool AutoIncrementControl::Init() {
