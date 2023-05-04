@@ -423,11 +423,11 @@ butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta
   // create auto increment
   if (has_auto_increment_column) {
     auto status =
-        AutoIncrementControl::SendCreateAutoIncrementInternal(new_table_id, table_definition.auto_increment());
+        AutoIncrementControl::SyncSendCreateAutoIncrementInternal(new_table_id, table_definition.auto_increment());
     if (!status.ok()) {
       DINGO_LOG(ERROR) << "send create auto increment internal error, code: " << status.error_code()
                        << ", message: " << status.error_str();
-      return butil::Status(pb::error::Errno::EAUTO_INCREMENT_WHILE_CREAT_TABLE,
+      return butil::Status(pb::error::Errno::EAUTO_INCREMENT_WHILE_CREATING_TABLE,
                            "send create auto increment internal error, code: " + std::to_string(status.error_code()) +
                                ", message: " + status.error_str());
     }
@@ -579,9 +579,10 @@ butil::Status CoordinatorControl::DropTable(uint64_t schema_id, uint64_t table_i
   table_name_map_safe_temp_.Erase(std::to_string(schema_id) + table_internal.definition().name());
 
   bool has_auto_increment_column = false;
-  AutoIncrementControl::CheckAutoIncrementInTableDefinition(table_internal.definition(), has_auto_increment_column);
+  AutoIncrementControl::CheckAutoIncrementInTableDefinition(table_internal.definition(),
+    has_auto_increment_column);
   if (has_auto_increment_column) {
-    AutoIncrementControl::SendDeleteAutoIncrementInternal(table_id);
+    AutoIncrementControl::AsyncSendDeleteAutoIncrementInternal(table_id);
   }
 
   return butil::Status::OK();

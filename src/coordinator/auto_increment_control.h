@@ -91,9 +91,9 @@ class AutoIncrementControl : public MetaControl {
   static butil::Status CheckAutoIncrementInTableDefinition(const pb::meta::TableDefinition &table_definition,
                                                            bool &has_auto_increment_column);
 
-  static butil::Status SendCreateAutoIncrementInternal(uint64_t table_id, uint64_t auto_increment);
-  static void SendUpdateAutoIncrementInternal(uint64_t table_id, uint64_t auto_increment);
-  static void SendDeleteAutoIncrementInternal(uint64_t table_id);
+  static butil::Status SyncSendCreateAutoIncrementInternal(const uint64_t table_id, const uint64_t auto_increment);
+  static void AsyncSendUpdateAutoIncrementInternal(const uint64_t table_id, const uint64_t auto_increment);
+  static void AsyncSendDeleteAutoIncrementInternal(const uint64_t table_id);
 
  private:
   static uint64_t GetGenerateEndId(uint64_t start_id, uint32_t count, uint32_t increment, uint32_t offset);

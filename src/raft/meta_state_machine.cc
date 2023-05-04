@@ -32,16 +32,15 @@
 
 namespace dingodb {
 
-MetaStateMachine::MetaStateMachine(std::shared_ptr<RawEngine> engine, std::shared_ptr<MetaControl> meta_control,
-                                   bool is_volatile)
-    : engine_(engine), meta_control_(meta_control), is_volatile_state_machine_(is_volatile) {}
+MetaStateMachine::MetaStateMachine(std::shared_ptr<MetaControl> meta_control, bool is_volatile)
+    : meta_control_(meta_control), is_volatile_state_machine_(is_volatile) {}
 
 void MetaStateMachine::DispatchRequest(bool is_leader, uint64_t term, uint64_t index,
-                                       const pb::raft::RaftCmdRequest& raft_cmd) {
+            const pb::raft::RaftCmdRequest& raft_cmd, google::protobuf::Message* response) {
   for (const auto& req : raft_cmd.requests()) {
     switch (req.cmd_type()) {
       case pb::raft::CmdType::META_WRITE:
-        HandleMetaProcess(is_leader, term, index, raft_cmd);
+        HandleMetaProcess(is_leader, term, index, raft_cmd, response);
         break;
       default:
         DINGO_LOG(ERROR) << "Unknown raft cmd type " << req.cmd_type();
@@ -50,7 +49,7 @@ void MetaStateMachine::DispatchRequest(bool is_leader, uint64_t term, uint64_t i
 }
 
 void MetaStateMachine::HandleMetaProcess(bool is_leader, uint64_t term, uint64_t index,
-                                         const pb::raft::RaftCmdRequest& raft_cmd) {
+            const pb::raft::RaftCmdRequest& raft_cmd, google::protobuf::Message* response) {
   // return response about diffrent Closure
   // todo
   // std::shared_ptr<Context> const ctx = done->GetCtx();
@@ -59,7 +58,7 @@ void MetaStateMachine::HandleMetaProcess(bool is_leader, uint64_t term, uint64_t
   // CoordinatorControl* controller = dynamic_cast<CoordinatorControl*>(meta_control_);
   if (raft_cmd.requests_size() > 0) {
     auto meta_increment = raft_cmd.requests(0).meta_req().meta_increment();
-    meta_control_->ApplyMetaIncrement(meta_increment, is_leader, term, index, nullptr);
+    meta_control_->ApplyMetaIncrement(meta_increment, is_leader, term, index, response);
   }
 }
 
@@ -69,9 +68,11 @@ void MetaStateMachine::on_apply(braft::Iterator& iter) {
 
     // Leader Node, then we should apply the data to memory and rocksdb
     bool is_leader = false;
+    google::protobuf::Message* response = nullptr;
     pb::raft::RaftCmdRequest raft_cmd;
     if (iter.done()) {
       StoreClosure* store_closure = dynamic_cast<StoreClosure*>(iter.done());
+      response = store_closure->GetCtx()->Response();
       raft_cmd = *(store_closure->GetRequest());
       is_leader = true;
     } else {
@@ -83,7 +84,7 @@ void MetaStateMachine::on_apply(braft::Iterator& iter) {
                                             raft_cmd.header().region_id(), iter.term(), iter.index(),
                                             raft_cmd.DebugString().c_str());
 
-    DispatchRequest(is_leader, iter.term(), iter.index(), raft_cmd);
+    DispatchRequest(is_leader, iter.term(), iter.index(), raft_cmd, response);
   }
 }
 

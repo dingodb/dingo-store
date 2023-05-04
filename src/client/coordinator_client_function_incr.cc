@@ -29,6 +29,7 @@ DECLARE_string(id);
 
 // usage example:
 
+// ./dingodb_client_coordinator -url=file://./coor_list -method=GetCoordinatorMap 
 // ./dingodb_client_coordinator -url=file://./coor_list -id=888 -method=CreateAutoIncrement
 // ./dingodb_client_coordinator -url=file://./coor_list -id=888 -method=GetAutoIncrement
 // ./dingodb_client_coordinator -url=file://./coor_list -id=888 -generate_count=10000 -method=GenerateAutoIncrement
