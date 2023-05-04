@@ -114,6 +114,8 @@ class Helper {
 
     return endpoints;
   }
+
+  static bool RandomChoice() { return GetRandInt() % 2 == 0; }
 };
 
 }  // namespace client

@@ -15,7 +15,12 @@
 #include "client/store_client_function.h"
 
 #include <cstdint>
+#include <functional>
+#include <memory>
 #include <string>
+#include <vector>
+
+#include "client/client_helper.h"
 
 namespace client {
 
@@ -402,6 +407,253 @@ void TestRegionLifecycle(ServerInteractionPtr interaction, uint64_t region_id, c
 
   for (int i = 0; i < thread_num; ++i) {
     bthread_join(tids[i], nullptr);
+  }
+}
+
+dingodb::pb::meta::CreateTableRequest BuildCreateTableRequest(const std::string& table_name, int partition_num) {
+  dingodb::pb::meta::CreateTableRequest request;
+
+  auto* schema_id = request.mutable_schema_id();
+  schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
+  schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+  schema_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
+
+  // string name = 1;
+  auto* table_definition = request.mutable_table_definition();
+  table_definition->set_name(table_name);
+
+  // repeated ColumnDefinition columns = 2;
+  for (int i = 0; i < 3; i++) {
+    auto* column = table_definition->add_columns();
+    std::string column_name("test_columen_");
+    column_name.append(std::to_string(i));
+    column->set_name(column_name);
+    column->set_sql_type(::dingodb::pb::meta::SqlType::SQL_TYPE_INTEGER);
+    column->set_element_type(::dingodb::pb::meta::ElementType::ELEM_TYPE_BYTES);
+    column->set_precision(100);
+    column->set_nullable(false);
+    column->set_indexofkey(7);
+    column->set_has_default_val(false);
+    column->set_default_val("0");
+  }
+
+  table_definition->set_version(1);
+  table_definition->set_ttl(0);
+  table_definition->set_engine(::dingodb::pb::common::Engine::ENG_ROCKSDB);
+  auto* prop = table_definition->mutable_properties();
+  (*prop)["test property"] = "test_property_value";
+
+  auto* partition_rule = table_definition->mutable_table_partition();
+  auto* part_column = partition_rule->add_columns();
+  part_column->assign("test_part_column");
+  auto* range_partition = partition_rule->mutable_range_partition();
+
+  for (int i = 0; i < partition_num; i++) {
+    auto* part_range = range_partition->add_ranges();
+    auto* part_range_start = part_range->mutable_start_key();
+    part_range_start->assign(std::to_string(i * 100));
+    auto* part_range_end = part_range->mutable_end_key();
+    part_range_end->assign(std::to_string((i + 1) * 100));
+  }
+
+  return request;
+}
+
+uint64_t SendCreateTable(ServerInteractionPtr interaction, const std::string& table_name, int partition_num) {
+  auto request = BuildCreateTableRequest(table_name, partition_num);
+
+  dingodb::pb::meta::CreateTableResponse response;
+  interaction->SendRequest("CoordinatorService", "CreateTable", request, response);
+
+  DINGO_LOG(INFO) << "response=" << response.DebugString();
+  return response.table_id().entity_id();
+}
+
+dingodb::pb::meta::TableRange SendGetTableRange(ServerInteractionPtr interaction, uint64_t table_id) {
+  dingodb::pb::meta::GetTableRangeRequest request;
+  dingodb::pb::meta::GetTableRangeResponse response;
+
+  auto* mut_table_id = request.mutable_table_id();
+  mut_table_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
+  mut_table_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+  mut_table_id->set_entity_id(table_id);
+
+  interaction->SendRequest("CoordinatorService", "GetTableRange", request, response);
+
+  return response.table_range();
+}
+
+void SendDropTable(ServerInteractionPtr interaction, uint64_t table_id) {
+  dingodb::pb::meta::DropTableRequest request;
+  dingodb::pb::meta::DropTableResponse response;
+
+  auto* mut_table_id = request.mutable_table_id();
+  mut_table_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
+  mut_table_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+  mut_table_id->set_entity_id(table_id);
+
+  interaction->SendRequest("CoordinatorService", "DropTable", request, response);
+}
+
+void* CreateAndPutAndGetAndDestroyTableRoutine(void* arg) {
+  std::shared_ptr<Context> ctx(static_cast<Context*>(arg));
+
+  uint64_t table_id = SendCreateTable(ctx->coordinator_interaction, ctx->table_name, ctx->partition_num);
+
+  for (;;) {
+    auto table_range = SendGetTableRange(ctx->coordinator_interaction, table_id);
+
+    for (const auto& range_dist : table_range.range_distribution()) {
+      uint64_t region_id = range_dist.id().entity_id();
+      std::string prefix = range_dist.range().start_key();
+
+      BatchPutGet(ctx->store_interaction, region_id, prefix, ctx->req_num);
+    }
+  }
+
+  SendDropTable(ctx->coordinator_interaction, table_id);
+
+  return nullptr;
+}
+
+uint64_t SendGetTableByName(ServerInteractionPtr interaction, const std::string& table_name) {
+  dingodb::pb::meta::GetTableByNameRequest request;
+  dingodb::pb::meta::GetTableByNameResponse response;
+
+  request.set_table_name(table_name);
+
+  interaction->SendRequest("CoordinatorService", "GetTableByName", request, response);
+
+  return response.table_definition_with_id().table_id().entity_id();
+}
+
+dingodb::pb::common::StoreMap SendGetStoreMap(ServerInteractionPtr interaction) {
+  dingodb::pb::coordinator::GetStoreMapRequest request;
+  dingodb::pb::coordinator::GetStoreMapResponse response;
+
+  request.set_epoch(1);
+
+  interaction->SendRequest("CoordinatorService", "GetStoreMap", request, response);
+
+  return response.storemap();
+}
+
+dingodb::pb::common::Region SendQueryRegion(ServerInteractionPtr interaction, uint64_t region_id) {
+  dingodb::pb::coordinator::QueryRegionRequest request;
+  dingodb::pb::coordinator::QueryRegionResponse response;
+
+  interaction->SendRequest("CoordinatorService", "QueryRegion", request, response);
+
+  request.set_region_id(region_id);
+
+  return response.region();
+}
+
+void SendChangePeer(ServerInteractionPtr interaction, const dingodb::pb::common::RegionDefinition& region_definition) {
+  dingodb::pb::coordinator::ChangePeerRegionRequest request;
+  dingodb::pb::coordinator::ChangePeerRegionResponse response;
+
+  auto* mut_definition = request.mutable_change_peer_request()->mutable_region_definition();
+  mut_definition->CopyFrom(region_definition);
+
+  interaction->SendRequest("CoordinatorService", "ChangePeerRegion", request, response);
+}
+
+void* ExpandAndShrinkAndSplitRegion(void* arg) {
+  std::shared_ptr<Context> ctx(static_cast<Context*>(arg));
+
+  uint64_t table_id = SendGetTableByName(ctx->coordinator_interaction, ctx->table_name);
+
+  for (;;) {
+    auto store_map = SendGetStoreMap(ctx->coordinator_interaction);
+
+    auto table_range = SendGetTableRange(ctx->coordinator_interaction, table_id);
+
+    // Traverse region
+    for (const auto& range_dist : table_range.range_distribution()) {
+      uint64_t region_id = range_dist.id().entity_id();
+
+      auto region = SendQueryRegion(ctx->coordinator_interaction, region_id);
+
+      // Expand region
+      if (Helper::RandomChoice()) {
+        // Traverse store, get add new peer.
+        dingodb::pb::common::Peer expand_peer;
+        for (const auto& store : store_map.stores()) {
+          bool is_exist = false;
+          for (const auto& peer : region.definition().peers()) {
+            if (store.id() == peer.store_id()) {
+              is_exist = true;
+            }
+          }
+
+          // Store not exist at the raft group, may add peer.
+          if (!is_exist && Helper::RandomChoice()) {
+            expand_peer.set_store_id(store.id());
+            expand_peer.set_role(dingodb::pb::common::PeerRole::VOTER);
+            expand_peer.mutable_server_location()->CopyFrom(store.server_location());
+            expand_peer.mutable_raft_location()->CopyFrom(store.raft_location());
+            break;
+          }
+        }
+
+        // Add new peer.
+        if (expand_peer.store_id() != 0) {
+          dingodb::pb::common::RegionDefinition region_definition;
+          region_definition.CopyFrom(region.definition());
+          *region_definition.add_peers() = expand_peer;
+
+          SendChangePeer(ctx->coordinator_interaction, region_definition);
+        }
+      } else {  // Shrink region
+        if (region.definition().peers().size() <= 3) {
+          continue;
+        }
+
+        dingodb::pb::common::Peer shrink_peer;
+        for (const auto& peer : region.definition().peers()) {
+          if (peer.store_id() != region.leader_store_id() && Helper::RandomChoice()) {
+            shrink_peer = peer;
+            break;
+          }
+        }
+
+        if (shrink_peer.store_id() != 0) {
+          dingodb::pb::common::RegionDefinition region_definition;
+          region_definition.CopyFrom(region.definition());
+          region_definition.mutable_peers()->Clear();
+          for (const auto& peer : region.definition().peers()) {
+            if (peer.store_id() != shrink_peer.store_id()) {
+              *region_definition.add_peers() = peer;
+            }
+          }
+
+          SendChangePeer(ctx->coordinator_interaction, region.definition());
+        }
+      }
+    }
+  }
+
+  return nullptr;
+}
+
+void AutoTest(std::shared_ptr<Context> ctx) {
+  std::vector<bthread_t> tids;
+  std::vector<std::function<void*(void*)>> funcs = {CreateAndPutAndGetAndDestroyTableRoutine,
+                                                    ExpandAndShrinkAndSplitRegion};
+
+  // Thread: Create table / Put data / Get data / Destroy table
+  // Thread: Expand/Shrink/Split region
+  // Thread: Random kill/launch Node
+  for (int i = 0; i < funcs.size(); ++i) {
+    if (bthread_start_background(&tids[i], nullptr, funcs[i].target<void*(void*)>(), ctx->Clone().release()) != 0) {
+      DINGO_LOG(ERROR) << "Fail to create bthread";
+      return;
+    }
+  }
+
+  for (auto& tid : tids) {
+    bthread_join(tid, nullptr);
   }
 }
 

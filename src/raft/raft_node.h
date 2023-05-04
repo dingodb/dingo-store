@@ -46,12 +46,14 @@ class RaftNode {
 
   bool IsLeader();
   bool IsLeaderLeaseValid();
+  bool HasLeader();
   braft::PeerId GetLeaderId();
   braft::PeerId GetPeerId();
 
   void Shutdown(braft::Closure* done);
   void Join();
 
+  // Only leader can list peers.
   butil::Status ListPeers(std::vector<braft::PeerId>* peers);
   void AddPeer(const braft::PeerId& peer, braft::Closure* done);
   void RemovePeer(const braft::PeerId& peer, braft::Closure* done);

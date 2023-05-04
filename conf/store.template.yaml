@@ -15,7 +15,7 @@ raft:
   electionTimeout: 1000 # ms
   snapshotInterval: 600 # s
 log:
-  level: DEBUG
+  level: INFO
   path: $BASE_PATH$/log
 store:
   dbPath: $BASE_PATH$/data/store/db

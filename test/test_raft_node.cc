@@ -85,11 +85,6 @@ std::string GetRaftInitConf(const std::vector<std::string>& raft_addrs) {
   return s;
 }
 
-struct Peer {
-  dingodb::store::RegionPtr region;
-  std::string addr;
-};
-
 dingodb::store::RegionPtr BuildRegion(uint64_t region_id, const std::string& raft_group_name,
                                       std::vector<std::string>& raft_addrs) {
   dingodb::pb::common::RegionDefinition region_definition;
@@ -113,41 +108,61 @@ dingodb::store::RegionPtr BuildRegion(uint64_t region_id, const std::string& raf
   return dingodb::store::Region::New(region_definition);
 }
 
-std::vector<std::shared_ptr<dingodb::RaftNode>> BootRaftGroup(std::vector<Peer>& peers,
-                                                              std::shared_ptr<dingodb::Config> config) {
+std::string FormatLocation(const dingodb::pb::common::Location& location) {
+  return butil::StringPrintf("%s:%d:%d", location.host().c_str(), location.port(), location.index());
+}
+
+std::string FormatPeers(const std::vector<dingodb::pb::common::Peer> peers) {
+  std::string result;
+  int i = 0;
+  for (const auto& peer : peers) {
+    std::string addr = FormatLocation(peer.raft_location());
+    result += addr;
+    if (i + 1 < peers.size()) {
+      result += ",";
+    }
+    ++i;
+  }
+
+  return result;
+}
+
+std::shared_ptr<dingodb::RaftNode> LaunchRaftNode(std::shared_ptr<dingodb::Config> config,
+                                                  dingodb::store::RegionPtr region, uint64_t node_id,
+                                                  const dingodb::pb::common::Peer& peer, std::string init_conf) {
+  // build state machine
+  auto raft_meta = dingodb::StoreRaftMeta::NewRaftMeta(region->Id());
+  auto* state_machine = new dingodb::StoreStateMachine(nullptr, region, raft_meta, nullptr, nullptr);
+  if (!state_machine->Init()) {
+    std::cout << "Init state machine failed";
+    return nullptr;
+  }
+
+  // std::string init_conf = FormatPeers(region->Peers());
+
+  // build braft node
+  auto node = std::make_shared<dingodb::RaftNode>(node_id, region->Name(),
+                                                  braft::PeerId(FormatLocation(peer.raft_location())), state_machine);
+
+  if (node->Init(init_conf, config) != 0) {
+    node->Destroy();
+    return nullptr;
+  }
+
+  return node;
+}
+
+std::vector<std::shared_ptr<dingodb::RaftNode>> LaunchRaftGroup(std::shared_ptr<dingodb::Config> config,
+                                                                dingodb::store::RegionPtr region) {
   std::vector<std::shared_ptr<dingodb::RaftNode>> nodes;
-  int peer_count = 0;
-  for (auto& peer : peers) {
-    auto region = peer.region;
-    // build state machine
-    auto raft_meta = dingodb::StoreRaftMeta::NewRaftMeta(region->Id());
-    auto* state_machine = new dingodb::StoreStateMachine(nullptr, region, raft_meta, nullptr, nullptr);
-    if (!state_machine->Init()) {
-      std::cout << "Init state machine failed";
-      return {};
-    }
 
-    std::string init_conf;
-    int i = 0;
-    for (const auto& peer : region->Peers()) {
-      std::string addr = butil::StringPrintf("%s:%d:%d", peer.raft_location().host().c_str(),
-                                             peer.raft_location().port(), peer.raft_location().index());
-      init_conf += addr;
-      if (i + 1 < region->Peers().size()) {
-        init_conf += ",";
-      }
-      ++i;
+  int count = 0;
+  std::string init_conf = FormatPeers(region->Peers());
+  for (auto& peer : region->Peers()) {
+    auto node = LaunchRaftNode(config, region, region->Id() + (++count), peer, init_conf);
+    if (node != nullptr) {
+      nodes.push_back(node);
     }
-
-    // build braft node
-    auto node =
-        std::make_shared<dingodb::RaftNode>(region->Id(), region->Name(), braft::PeerId(peer.addr), state_machine);
-
-    if (node->Init(init_conf, config) != 0) {
-      node->Destroy();
-      break;
-    }
-    nodes.push_back(node);
   }
 
   return nodes;
@@ -156,6 +171,11 @@ std::vector<std::shared_ptr<dingodb::RaftNode>> BootRaftGroup(std::vector<Peer>&
 class RaftNodeTest : public testing::Test {
  protected:
   static void SetUpTestSuite() {
+    FLAGS_minloglevel = google::GLOG_INFO;
+    FLAGS_logtostdout = true;
+    FLAGS_colorlogtostdout = true;
+    FLAGS_logbufsecs = 0;
+
     raft_server = std::make_unique<brpc::Server>();
 
     butil::EndPoint endpoint;
@@ -175,29 +195,9 @@ class RaftNodeTest : public testing::Test {
       std::cout << "Load config failed" << std::endl;
       return;
     }
-
-    std::vector<std::string> raft_addrs = {"127.0.0.1:17001:1", "127.0.0.1:17001:2", "127.0.0.1:17001:3"};
-    std::vector<Peer> peers;
-    int count = 0;
-    for (const auto& raft_addr : raft_addrs) {
-      ++count;
-      Peer peer;
-      peer.addr = raft_addr;
-      peer.region = BuildRegion(1000 + count, "unit_test", raft_addrs);
-      peers.push_back(peer);
-    }
-    nodes = BootRaftGroup(peers, config);
-
-    bthread_usleep(5 * 1000 * 1000L);
   }
 
   static void TearDownTestSuite() {
-    for (auto& node : nodes) {
-      node->Destroy();
-    }
-
-    nodes.clear();
-
     raft_server->Stop(0);
     raft_server->Join();
 
@@ -212,32 +212,106 @@ class RaftNodeTest : public testing::Test {
  public:
   static std::shared_ptr<dingodb::Config> config;
   static std::unique_ptr<brpc::Server> raft_server;
-  static std::vector<std::shared_ptr<dingodb::RaftNode>> nodes;
 };
 
 std::shared_ptr<dingodb::Config> RaftNodeTest::config = nullptr;
 std::unique_ptr<brpc::Server> RaftNodeTest::raft_server = nullptr;
-std::vector<std::shared_ptr<dingodb::RaftNode>> RaftNodeTest::nodes = {};
 
 // Add one peer, from 127.0.0.1:17001:1,127.0.0.1:17001:2,127.0.0.1:17001:3
 // to 127.0.0.1:17001:1,127.0.0.1:17001:2,127.0.0.1:17001:3,127.0.0.1:17001:4
-TEST_F(RaftNodeTest, AddOnePeer) {
+// TEST_F(RaftNodeTest, AddOnePeer) {
+//   // Add one peer
+//   std::cout << "====Add one peer" << std::endl;
+
+//   std::vector<std::string> raft_addrs = {"127.0.0.1:17001:1", "127.0.0.1:17001:2", "127.0.0.1:17001:3"};
+
+//   auto region = BuildRegion(1000, "unit_test", raft_addrs);
+//   auto inner_nodes = LaunchRaftGroup(config, region);
+
+//   // launch new peer
+//   dingodb::pb::common::Peer peer;
+//   auto* raft_loc = peer.mutable_raft_location();
+//   raft_loc->set_host("127.0.0.1");
+//   raft_loc->set_port(17001);
+//   raft_loc->set_index(4);
+
+//   auto new_node = LaunchRaftNode(config, region, 20001, peer, "");
+//   inner_nodes.push_back(new_node);
+
+//   bthread_usleep(3 * 1000 * 1000L);
+
+//   // Change peers
+//   std::cout << "====Change peer" << std::endl;
+//   std::vector<dingodb::pb::common::Peer> pb_peers;
+//   {
+//     dingodb::pb::common::Peer pb_peer;
+//     auto* raft_location = pb_peer.mutable_raft_location();
+//     raft_location->set_host("127.0.0.1");
+//     raft_location->set_port(17001);
+//     raft_location->set_index(1);
+//     pb_peers.push_back(pb_peer);
+//   }
+//   {
+//     dingodb::pb::common::Peer pb_peer;
+//     auto* raft_location = pb_peer.mutable_raft_location();
+//     raft_location->set_host("127.0.0.1");
+//     raft_location->set_port(17001);
+//     raft_location->set_index(2);
+//     pb_peers.push_back(pb_peer);
+//   }
+//   {
+//     dingodb::pb::common::Peer pb_peer;
+//     auto* raft_location = pb_peer.mutable_raft_location();
+//     raft_location->set_host("127.0.0.1");
+//     raft_location->set_port(17001);
+//     raft_location->set_index(3);
+//     pb_peers.push_back(pb_peer);
+//   }
+//   {
+//     dingodb::pb::common::Peer pb_peer;
+//     auto* raft_location = pb_peer.mutable_raft_location();
+//     raft_location->set_host("127.0.0.1");
+//     raft_location->set_port(17001);
+//     raft_location->set_index(4);
+//     pb_peers.push_back(pb_peer);
+//   }
+
+//   for (auto& node : inner_nodes) {
+//     if (node->IsLeader()) {
+//       node->ChangePeers(pb_peers, nullptr);
+//     }
+//   }
+
+//   bthread_usleep(3 * 1000 * 1000L);
+
+//   std::cout << "====Watch peer" << std::endl;
+
+//   for (auto& node : inner_nodes) {
+//     std::cout << "region id: " << node->GetNodeId() << " leader id: " << node->GetLeaderId().to_string() <<
+//     std::endl; std::vector<braft::PeerId> tmp_peers; node->ListPeers(&tmp_peers); for (auto& peer : tmp_peers) {
+//       std::cout << "region id: " << node->GetNodeId() << " peer: " << peer.to_string() << std::endl;
+//     }
+//   }
+
+//   bthread_usleep(5 * 1000 * 1000L);
+//   for (auto& node : inner_nodes) {
+//     node->Destroy();
+//   }
+
+//   inner_nodes.clear();
+// }
+
+TEST_F(RaftNodeTest, DeleteOnePeer) {
   // Add one peer
-  std::cout << "====Add one peer" << std::endl;
+  std::cout << "====Delete one peer" << std::endl;
+
   std::vector<std::string> raft_addrs = {"127.0.0.1:17001:1", "127.0.0.1:17001:2", "127.0.0.1:17001:3",
                                          "127.0.0.1:17001:4"};
-  std::vector<Peer> peers;
-  Peer peer;
-  peer.addr = "127.0.0.1:17001:4";
-  peer.region = BuildRegion(1004, "unit_test", raft_addrs);
-  peers.push_back(peer);
 
-  auto new_nodes = BootRaftGroup(peers, config);
-  for (auto& new_node : new_nodes) {
-    RaftNodeTest::nodes.push_back(new_node);
-  }
+  auto region = BuildRegion(1000, "unit_test", raft_addrs);
+  auto inner_nodes = LaunchRaftGroup(config, region);
 
-  bthread_usleep(3 * 1000 * 1000L);
+  bthread_usleep(5 * 1000 * 1000L);
 
   // Change peers
   std::cout << "====Change peer" << std::endl;
@@ -266,16 +340,8 @@ TEST_F(RaftNodeTest, AddOnePeer) {
     raft_location->set_index(3);
     pb_peers.push_back(pb_peer);
   }
-  {
-    dingodb::pb::common::Peer pb_peer;
-    auto* raft_location = pb_peer.mutable_raft_location();
-    raft_location->set_host("127.0.0.1");
-    raft_location->set_port(17001);
-    raft_location->set_index(4);
-    pb_peers.push_back(pb_peer);
-  }
 
-  for (auto& node : RaftNodeTest::nodes) {
+  for (auto& node : inner_nodes) {
     if (node->IsLeader()) {
       node->ChangePeers(pb_peers, nullptr);
     }
@@ -285,14 +351,24 @@ TEST_F(RaftNodeTest, AddOnePeer) {
 
   std::cout << "====Watch peer" << std::endl;
 
-  for (auto& node : RaftNodeTest::nodes) {
+  for (auto& node : inner_nodes) {
     std::cout << "region id: " << node->GetNodeId() << " leader id: " << node->GetLeaderId().to_string() << std::endl;
     std::vector<braft::PeerId> tmp_peers;
     node->ListPeers(&tmp_peers);
     for (auto& peer : tmp_peers) {
       std::cout << "region id: " << node->GetNodeId() << " peer: " << peer.to_string() << std::endl;
     }
+
+    auto status = node->GetStatus();
+    if (status != nullptr) {
+      std::cout << "region id: " << node->GetNodeId() << " status: " << status->ShortDebugString() << std::endl;
+    }
   }
 
   bthread_usleep(5 * 1000 * 1000L);
+  for (auto& node : inner_nodes) {
+    node->Destroy();
+  }
+
+  inner_nodes.clear();
 }
