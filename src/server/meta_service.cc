@@ -496,7 +496,7 @@ void MetaServiceImpl::GetAutoIncrement(google::protobuf::RpcController * /*contr
     return RedirectAutoIncrementResponse(response);
   }
 
-  DINGO_LOG(DEBUG) << request->DebugString();
+  DINGO_LOG(INFO) << request->ShortDebugString();
 
   uint64_t table_id = request->table_id().entity_id();
   uint64_t start_id = 0;
@@ -520,11 +520,7 @@ void MetaServiceImpl::CreateAutoIncrement(google::protobuf::RpcController *contr
   if (!auto_increment_control_->IsLeader()) {
     return RedirectAutoIncrementResponse(response);
   }
-
-  DINGO_LOG(DEBUG) << request->DebugString();
-  DINGO_LOG(INFO) << "CreateAutoIncrement request:  schema_id = [" << request->table_id().parent_entity_id() << "]"
-                  << " table_id = [" << request->table_id().entity_id() << "] start_id = [" << request->start_id()
-                  << "]";
+  DINGO_LOG(INFO) << request->ShortDebugString();
 
   uint64_t table_id = request->table_id().entity_id();
   pb::coordinator_internal::MetaIncrement meta_increment;
@@ -536,9 +532,9 @@ void MetaServiceImpl::CreateAutoIncrement(google::protobuf::RpcController *contr
     return;
   }
 
-  auto *closure = new CoordinatorClosure<pb::meta::CreateAutoIncrementRequest, pb::meta::CreateAutoIncrementResponse>(
-      request, response, done_guard.release());
-  std::shared_ptr<Context> ctx = std::make_shared<Context>(static_cast<brpc::Controller *>(controller), closure);
+  auto* closure = new CoordinatorClosure<pb::meta::CreateAutoIncrementRequest,
+      pb::meta::CreateAutoIncrementResponse>(request, response, done_guard.release());
+  std::shared_ptr<Context> ctx = std::make_shared<Context>(static_cast<brpc::Controller*>(controller), closure, response);
   ctx->SetRegionId(Constant::kAutoIncrementRegionId);
   // this is a async operation will be block by closure
   auto ret2 = engine_->MetaPut(ctx, meta_increment);
@@ -564,7 +560,7 @@ void MetaServiceImpl::UpdateAutoIncrement(google::protobuf::RpcController *contr
     return RedirectAutoIncrementResponse(response);
   }
 
-  DINGO_LOG(DEBUG) << request->DebugString();
+  DINGO_LOG(INFO) << request->ShortDebugString();
 
   uint64_t table_id = request->table_id().entity_id();
   pb::coordinator_internal::MetaIncrement meta_increment;
@@ -607,7 +603,7 @@ void MetaServiceImpl::GenerateAutoIncrement(google::protobuf::RpcController *con
     return RedirectAutoIncrementResponse(response);
   }
 
-  DINGO_LOG(DEBUG) << request->DebugString();
+  DINGO_LOG(INFO) << request->ShortDebugString();
 
   uint64_t table_id = request->table_id().entity_id();
   pb::coordinator_internal::MetaIncrement meta_increment;
@@ -621,10 +617,10 @@ void MetaServiceImpl::GenerateAutoIncrement(google::protobuf::RpcController *con
     return;
   }
 
-  auto *closure =
-      new CoordinatorClosure<pb::meta::GenerateAutoIncrementRequest, pb::meta::GenerateAutoIncrementResponse>(
-          request, response, done_guard.release());
-  std::shared_ptr<Context> ctx = std::make_shared<Context>(static_cast<brpc::Controller *>(controller), closure);
+  auto* closure = new CoordinatorClosure<pb::meta::GenerateAutoIncrementRequest,
+      pb::meta::GenerateAutoIncrementResponse>(request, response, done_guard.release());
+  std::shared_ptr<Context> ctx = std::make_shared<Context>(static_cast<brpc::Controller*>(controller),
+      closure, response);
   ctx->SetRegionId(Constant::kAutoIncrementRegionId);
   // this is a async operation will be block by closure
   auto ret2 = engine_->MetaPut(ctx, meta_increment);
@@ -651,7 +647,7 @@ void MetaServiceImpl::DeleteAutoIncrement(google::protobuf::RpcController *contr
     return RedirectAutoIncrementResponse(response);
   }
 
-  DINGO_LOG(DEBUG) << request->DebugString();
+  DINGO_LOG(INFO) << request->ShortDebugString();
 
   uint64_t table_id = request->table_id().entity_id();
   pb::coordinator_internal::MetaIncrement meta_increment;

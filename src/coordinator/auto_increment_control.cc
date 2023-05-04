@@ -55,11 +55,15 @@ bool AutoIncrementControl::Recover() {
 
 butil::Status AutoIncrementControl::GetAutoIncrement(uint64_t table_id, uint64_t& start_id) {
   DINGO_LOG(INFO) << table_id << " | " << start_id;
-  BAIDU_SCOPED_LOCK(auto_increment_map_mutex_);
-  uint64_t* start_id_ptr = auto_increment_map_.seek(table_id);
+  uint64_t* start_id_ptr = nullptr;
+  {
+    BAIDU_SCOPED_LOCK(auto_increment_map_mutex_);
+    start_id_ptr = auto_increment_map_.seek(table_id);
+  }
+
   if (start_id_ptr == nullptr) {
-    DINGO_LOG(WARNING) << " cannot find table id: " << table_id;
-    return butil::Status(pb::error::Errno::ETABLE_NOT_FOUND, "table not found");
+    DINGO_LOG(WARNING) << " cannot find auto increment, table id: " << table_id;
+    return butil::Status(pb::error::Errno::EAUTO_INCREMENT_NOT_FOUND, "auto increment not found");
   }
   start_id = *start_id_ptr;
   return butil::Status::OK();
@@ -77,7 +81,8 @@ butil::Status AutoIncrementControl::CreateAutoIncrement(uint64_t table_id, uint6
   {
     BAIDU_SCOPED_LOCK(auto_increment_map_mutex_);
     if (auto_increment_map_.seek(table_id) != nullptr) {
-      DINGO_LOG(WARNING) << "table id: " << table_id << " is exist, start id: " << auto_increment_map_[table_id];
+      DINGO_LOG(WARNING) << "auto increment table id: " << table_id << " is exist, start id: "
+        << auto_increment_map_[table_id];
       return butil::Status(pb::error::Errno::EAUTO_INCREMENT_EXIST, "auto increment exist");
     }
   }
@@ -246,10 +251,11 @@ void AutoIncrementControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncr
               static_cast<pb::meta::GenerateAutoIncrementResponse*>(response);
           generate_response->set_start_id(source_start_id);
           generate_response->set_end_id(end_id);
+          DINGO_LOG(INFO) << "leader grenerate auto increment response: " << generate_response->ShortDebugString();
         }
         auto_increment_map_[table_id] = end_id;
-        DINGO_LOG(INFO) << "generate auto increment: [" << source_start_id << ", " << end_id
-                        << ") request: " << auto_increment.DebugString();
+        DINGO_LOG(INFO) << "generate auto increment: [" << source_start_id << ", " << end_id << ") request: "
+          << auto_increment.ShortDebugString();
       } else {
         // check source start id
         if (source_start_id != auto_increment.increment().source_start_id()) {
@@ -262,7 +268,7 @@ void AutoIncrementControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncr
                         << ", start id: " << auto_increment.increment().start_id();
       }
     } else if (auto_increment.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
-      DINGO_LOG(INFO) << "delete auto increment " << auto_increment.DebugString();
+      DINGO_LOG(INFO) << "delete auto increment " << auto_increment.ShortDebugString();
       auto_increment_map_.erase(table_id);
     }
   }
@@ -410,15 +416,9 @@ butil::Status AutoIncrementControl::CheckAutoIncrementInTableDefinition(
         return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL,
                              "table definition illegal, multi auto_increment column");
       } else {
-        switch (column.element_type()) {
-          case pb::meta::ElementType::ELEM_TYPE_INT32:
-          case pb::meta::ElementType::ELEM_TYPE_INT64:
-          case pb::meta::ElementType::ELEM_TYPE_UINT32:
-          case pb::meta::ElementType::ELEM_TYPE_UINT64:
-          case pb::meta::ElementType::ELEM_TYPE_FIX32:
-          case pb::meta::ElementType::ELEM_TYPE_FIX64:
-          case pb::meta::ElementType::ELEM_TYPE_SFIX32:
-          case pb::meta::ElementType::ELEM_TYPE_SFIX64: {
+        switch (column.sql_type()) {
+          case pb::meta::SqlType::SQL_TYPE_INTEGER:
+          case pb::meta::SqlType::SQL_TYPE_BIGINT: {
             if (table_definition.auto_increment() > 0) {
               has_auto_increment_column = true;
             } else {
@@ -439,20 +439,19 @@ butil::Status AutoIncrementControl::CheckAutoIncrementInTableDefinition(
   return butil::Status::OK();
 }
 
-butil::Status AutoIncrementControl::SendCreateAutoIncrementInternal(const uint64_t table_id,
-                                                                    const uint64_t auto_increment) {
+butil::Status AutoIncrementControl::SyncSendCreateAutoIncrementInternal(const uint64_t table_id,
+                                                                        const uint64_t auto_increment) {
   pb::meta::CreateAutoIncrementRequest request;
   pb::meta::CreateAutoIncrementResponse response;
-
+  
   auto* table_id_ptr = request.mutable_table_id();
   table_id_ptr->set_entity_type(dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
   table_id_ptr->set_entity_id(table_id);
   request.set_start_id(auto_increment);
-
   return Server::GetInstance()->GetCoordinatorInteractionIncr()->SendRequest("CreateAutoIncrement", request, response);
 }
 
-void AutoIncrementControl::SendUpdateAutoIncrementInternal(const uint64_t table_id, const uint64_t auto_increment) {
+void AutoIncrementControl::AsyncSendUpdateAutoIncrementInternal(const uint64_t table_id, const uint64_t auto_increment) {
   if (auto_increment == 0) {
     DINGO_LOG(ERROR) << "table id: " << table_id << ", auto_increment: " << auto_increment;
     return;
@@ -479,7 +478,7 @@ void AutoIncrementControl::SendUpdateAutoIncrementInternal(const uint64_t table_
   bth.run(update_function);
 }
 
-void AutoIncrementControl::SendDeleteAutoIncrementInternal(const uint64_t table_id) {
+void AutoIncrementControl::AsyncSendDeleteAutoIncrementInternal(const uint64_t table_id) {
   auto delete_function = [table_id]() {
     pb::meta::DeleteAutoIncrementRequest request;
     pb::meta::DeleteAutoIncrementResponse response;

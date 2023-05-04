@@ -24,7 +24,7 @@
 #include "common/context.h"
 #include "common/meta_control.h"
 #include "coordinator/coordinator_control.h"
-#include "engine/engine.h"
+//#include "engine/engine.h"
 #include "proto/common.pb.h"
 #include "proto/raft.pb.h"
 #include "raft/store_state_machine.h"
@@ -33,8 +33,7 @@ namespace dingodb {
 
 class MetaStateMachine : public braft::StateMachine {
  public:
-  MetaStateMachine(std::shared_ptr<RawEngine> engine, std::shared_ptr<MetaControl> meta_control,
-                   bool is_volatile = false);
+  MetaStateMachine(std::shared_ptr<MetaControl> meta_control, bool is_volatile = false);
   void on_apply(braft::Iterator& iter) override;
   void on_shutdown() override;
   void on_snapshot_save(braft::SnapshotWriter* writer, braft::Closure* done) override;
@@ -49,11 +48,10 @@ class MetaStateMachine : public braft::StateMachine {
   void SetVolatile(bool is_volatile_state_machine) { is_volatile_state_machine_ = is_volatile_state_machine; }
 
  private:
-  // void DispatchRequest(StoreClosure* done, bool is_leader, const pb::raft::RaftCmdRequest& raft_cmd);
-  void DispatchRequest(bool is_leader, uint64_t term, uint64_t index, const pb::raft::RaftCmdRequest& raft_cmd);
-  void HandleMetaProcess(bool is_leader, uint64_t term, uint64_t index, const pb::raft::RaftCmdRequest& raft_cmd);
-  // void HandleMetaProcess(StoreClosure* done, bool is_leader, const pb::raft::RaftCmdRequest& raft_cmd);
-  std::shared_ptr<RawEngine> engine_;
+  void DispatchRequest(bool is_leader, uint64_t term, uint64_t index, const pb::raft::RaftCmdRequest& raft_cmd,
+		  google::protobuf::Message* response);
+  void HandleMetaProcess(bool is_leader, uint64_t term, uint64_t index, const pb::raft::RaftCmdRequest& raft_cmd,
+		  google::protobuf::Message* response);
   std::shared_ptr<MetaControl> meta_control_;
   bool is_volatile_state_machine_ = false;
 };

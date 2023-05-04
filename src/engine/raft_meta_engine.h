@@ -29,10 +29,8 @@ class RaftMetaEngine : public RaftKvEngine {
   bool Recover() override;
 
   butil::Status InitCoordinatorRegion(std::shared_ptr<Context> ctx,
-    std::shared_ptr<pb::common::RegionDefinition> region, const std::shared_ptr<MetaControl>& meta_control);
-  butil::Status InitAutoIncrementRegion(std::shared_ptr<Context> ctx,
-    const std::shared_ptr<pb::common::RegionDefinition>& region,
-    const std::shared_ptr<MetaControl>& meta_control);
+      std::shared_ptr<pb::common::RegionDefinition> region,
+      const std::shared_ptr<MetaControl>& meta_control, bool is_volatile);
 
   butil::Status MetaPut(std::shared_ptr<Context> ctx, const pb::coordinator_internal::MetaIncrement& meta) override;
 

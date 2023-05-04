@@ -168,7 +168,7 @@ butil::Status Server::StartMetaRegion(const std::shared_ptr<Config>& config,  //
       CreateCoordinatorRegion(config, Constant::kCoordinatorRegionId, Constant::kMetaRegionName, ctx);
 
   auto raft_engine = std::dynamic_pointer_cast<RaftMetaEngine>(kv_engine);
-  return raft_engine->InitCoordinatorRegion(ctx, region, coordinator_control_);
+  return raft_engine->InitCoordinatorRegion(ctx, region, coordinator_control_, false);
 }
 
 butil::Status Server::StartAutoIncrementRegion(const std::shared_ptr<Config>& config,
@@ -178,7 +178,7 @@ butil::Status Server::StartAutoIncrementRegion(const std::shared_ptr<Config>& co
       CreateCoordinatorRegion(config, Constant::kAutoIncrementRegionId, Constant::kAutoIncrementRegionName, ctx);
 
   auto raft_engine = std::dynamic_pointer_cast<RaftMetaEngine>(kv_engine);
-  return raft_engine->InitAutoIncrementRegion(ctx, region, auto_increment_control_);
+  return raft_engine->InitCoordinatorRegion(ctx, region, auto_increment_control_, true);
 }
 
 bool Server::InitCoordinatorInteraction() {
