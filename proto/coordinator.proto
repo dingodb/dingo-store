@@ -228,7 +228,16 @@ message CoordinatorMemoryInfo {
   uint64 task_list_map_count = 32;
   uint64 task_list_map_size = 33;
 
-  repeated dingodb.pb.common.KeyValue id_epoch_values = 40;
+  uint64 store_bvar_map_count = 34;
+  uint64 store_bvar_map_size = 35;
+
+  uint64 region_bvar_map_count = 36;
+  uint64 region_bvar_map_size = 37;
+
+  uint64 table_bvar_map_count = 38;
+  uint64 table_bvar_map_size = 39;
+
+  repeated dingodb.pb.common.KeyValue id_epoch_values = 50;
 }
 
 message HelloRequest {
