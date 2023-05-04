@@ -596,6 +596,21 @@ void SendGetStoreMetrics(std::shared_ptr<dingodb::CoordinatorInteraction> coordi
 
   auto status = coordinator_interaction->SendRequest("GetStoreMetrics", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
+  for (const auto& it : response.store_metrics()) {
+    DINGO_LOG(INFO) << it.DebugString();
+  }
+}
+
+void SendDeleteStoreMetrics(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  dingodb::pb::coordinator::DeleteStoreMetricsRequest request;
+  dingodb::pb::coordinator::DeleteStoreMetricsResponse response;
+
+  if (!FLAGS_id.empty()) {
+    request.set_store_id(std::stoull(FLAGS_id));
+  }
+
+  auto status = coordinator_interaction->SendRequest("DeleteStoreMetrics", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
 

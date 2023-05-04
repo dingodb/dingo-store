@@ -138,6 +138,15 @@ void CoordinatorControl::GetStoreMetrics(uint64_t store_id, std::vector<pb::comm
   }
 }
 
+void CoordinatorControl::DeleteStoreMetrics(uint64_t store_id) {
+  BAIDU_SCOPED_LOCK(store_metrics_map_mutex_);
+  if (store_id == 0) {
+    store_metrics_map_.clear();
+  } else {
+    store_metrics_map_.erase(store_id);
+  }
+}
+
 butil::Status CoordinatorControl::GetOrphanRegion(uint64_t store_id,
                                                   std::map<uint64_t, pb::common::RegionMetrics>& orphan_regions) {
   BAIDU_SCOPED_LOCK(this->store_metrics_map_mutex_);
