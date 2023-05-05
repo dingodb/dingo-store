@@ -40,6 +40,7 @@
 #include "engine/snapshot.h"
 #include "meta/meta_reader.h"
 #include "meta/meta_writer.h"
+#include "metrics/coordinator_bvar_metrics.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
 #include "proto/coordinator_internal.pb.h"
@@ -595,7 +596,11 @@ class CoordinatorControl : public MetaControl {
   bthread_mutex_t store_bvar_map_mutex_;
   bthread_mutex_t region_bvar_map_mutex_;
   bthread_mutex_t table_bvar_map_mutex_;
+
   MetaBvarCoordinator coordinator_bvar_;
+  std::shared_ptr<CoordinatorBvarMetricsStore> coordinator_bvar_metrics_store_;
+  std::shared_ptr<CoordinatorBvarMetricsRegion> coordinator_bvar_metrics_region_;
+  std::shared_ptr<CoordinatorBvarMetricsTable> coordinator_bvar_metrics_table_;
 };
 
 }  // namespace dingodb

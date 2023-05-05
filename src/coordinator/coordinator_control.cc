@@ -97,6 +97,11 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   table_metrics_map_.Init(10000);         // table_metrics_map_ is a big map
   executor_user_map_.Init(100);           // executor_user_map_ is a small map
   task_list_map_.Init(100);               // task_list_map_ is a small map
+
+  // init mbvar
+  coordinator_bvar_metrics_store_ = std::make_shared<CoordinatorBvarMetricsStore>();
+  coordinator_bvar_metrics_region_ = std::make_shared<CoordinatorBvarMetricsRegion>();
+  coordinator_bvar_metrics_table_ = std::make_shared<CoordinatorBvarMetricsTable>();
 }
 
 CoordinatorControl::~CoordinatorControl() {

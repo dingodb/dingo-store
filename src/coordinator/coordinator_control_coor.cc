@@ -42,6 +42,7 @@
 #include "engine/snapshot.h"
 #include "gflags/gflags.h"
 #include "google/protobuf/unknown_field_set.h"
+#include "metrics/coordinator_bvar_metrics.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
 #include "proto/coordinator_internal.pb.h"
@@ -142,6 +143,9 @@ void CoordinatorControl::GetStoreMetrics(uint64_t store_id, std::vector<pb::comm
 void CoordinatorControl::DeleteStoreMetrics(uint64_t store_id) {
   BAIDU_SCOPED_LOCK(store_metrics_map_mutex_);
   if (store_id == 0) {
+    for (const auto& it : store_metrics_map_) {
+      coordinator_bvar_metrics_store_->DeleteStoreBvar(it.first);
+    }
     store_metrics_map_.clear();
     {
       BAIDU_SCOPED_LOCK(store_bvar_map_mutex_);
@@ -153,6 +157,7 @@ void CoordinatorControl::DeleteStoreMetrics(uint64_t store_id) {
       BAIDU_SCOPED_LOCK(store_bvar_map_mutex_);
       store_bvar_map_.erase(store_id);
     }
+    coordinator_bvar_metrics_store_->DeleteStoreBvar(store_id);
   }
 }
 
@@ -431,6 +436,7 @@ void CoordinatorControl::CleanRegionBvars(const std::vector<uint64_t>& region_id
   for (const auto& it : region_bvar_map_) {
     if (std::find(region_ids.begin(), region_ids.end(), it.first) == region_ids.end()) {
       region_bvar_map_.erase(it.first);
+      coordinator_bvar_metrics_region_->DeleteRegionBvar(it.first);
     }
   }
 }
@@ -438,6 +444,7 @@ void CoordinatorControl::CleanRegionBvars(const std::vector<uint64_t>& region_id
 void CoordinatorControl::DeleteRegionBvar(uint64_t region_id) {
   BAIDU_SCOPED_LOCK(region_bvar_map_mutex_);
   region_bvar_map_.erase(region_id);
+  coordinator_bvar_metrics_region_ = std::make_shared<CoordinatorBvarMetricsRegion>();
 }
 
 butil::Status CoordinatorControl::QueryRegion(uint64_t region_id, pb::common::Region& region) {
@@ -2203,6 +2210,9 @@ void CoordinatorControl::UpdateRegionMapAndStoreOperation(const pb::common::Stor
         (*ptr)->SetRegionSize(region_metrics.region_size());
       }
     }
+    // mbvar region
+    coordinator_bvar_metrics_region_->UpdateRegionBvar(region_metrics.id(), region_metrics.row_count(),
+                                                       region_metrics.region_size());
   }
 
   // update store operation
@@ -2344,6 +2354,9 @@ uint64_t CoordinatorControl::UpdateStoreMetrics(const pb::common::StoreMetrics& 
         (*ptr)->SetFreeCapacity(store_metrics.free_capacity());
       }
     }
+    // mbvar store
+    coordinator_bvar_metrics_store_->UpdateStoreBvar(store_metrics.id(), store_metrics.total_capacity(),
+                                                     store_metrics.free_capacity());
   }
 
   //   if (need_update_epoch) {

@@ -119,6 +119,11 @@ void CoordinatorControl::OnLeaderStop() {
     BAIDU_SCOPED_LOCK(table_bvar_map_mutex_);
     table_bvar_map_.clear();
   }
+
+  coordinator_bvar_metrics_store_->Clear();
+  coordinator_bvar_metrics_region_->Clear();
+  coordinator_bvar_metrics_table_->Clear();
+
   DINGO_LOG(INFO) << "OnLeaderStop finished";
 }
 
