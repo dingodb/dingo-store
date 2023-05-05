@@ -125,8 +125,8 @@ butil::Status CoordinatorInteraction::SendRequestByService(const std::string& ap
       if (ret < 0) {
         // create new channel
         brpc::ChannelOptions channel_opt;
-        channel_opt.timeout_ms = 500;
-        channel_opt.connect_timeout_ms = 500;
+        channel_opt.timeout_ms = 1000;
+        channel_opt.connect_timeout_ms = 1000;
         std::shared_ptr<brpc::Channel> short_channel = std::make_shared<brpc::Channel>();
         if (short_channel->Init(leader_addr, &channel_opt) != 0) {
           DINGO_LOG(WARNING) << "connect with meta server fail. channel Init fail, leader_addr: "

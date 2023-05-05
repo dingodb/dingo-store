@@ -81,9 +81,16 @@ butil::Status AutoIncrementControl::CreateAutoIncrement(uint64_t table_id, uint6
   {
     BAIDU_SCOPED_LOCK(auto_increment_map_mutex_);
     if (auto_increment_map_.seek(table_id) != nullptr) {
-      DINGO_LOG(WARNING) << "auto increment table id: " << table_id
-                         << " is exist, start id: " << auto_increment_map_[table_id];
-      return butil::Status(pb::error::Errno::EAUTO_INCREMENT_EXIST, "auto increment exist");
+      if (auto_increment_map_[table_id] == start_id) {
+        DINGO_LOG(WARNING) << "auto increment table id: " << table_id
+                           << " is exist, start id is equal: " << auto_increment_map_[table_id]
+                           << " maybe this is a retry request";
+        return butil::Status::OK();
+      } else {
+        DINGO_LOG(WARNING) << "auto increment table id: " << table_id
+                           << " is exist, start id: " << auto_increment_map_[table_id];
+        return butil::Status(pb::error::Errno::EAUTO_INCREMENT_EXIST, "auto increment exist");
+      }
     }
   }
 

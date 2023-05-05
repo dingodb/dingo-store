@@ -579,8 +579,7 @@ butil::Status CoordinatorControl::DropTable(uint64_t schema_id, uint64_t table_i
   table_name_map_safe_temp_.Erase(std::to_string(schema_id) + table_internal.definition().name());
 
   bool has_auto_increment_column = false;
-  AutoIncrementControl::CheckAutoIncrementInTableDefinition(table_internal.definition(),
-    has_auto_increment_column);
+  AutoIncrementControl::CheckAutoIncrementInTableDefinition(table_internal.definition(), has_auto_increment_column);
   if (has_auto_increment_column) {
     AutoIncrementControl::AsyncSendDeleteAutoIncrementInternal(table_id);
   }
