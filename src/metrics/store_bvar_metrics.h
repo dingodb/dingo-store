@@ -29,14 +29,14 @@ namespace dingodb {
 class StoreBvarMetrics {
  public:
   StoreBvarMetrics()
-      : leader_switch_time_("store_raft_leader_switch_time", {"region"}),
-        leader_switch_count_("store_raft_leader_switch_count", {"region"}),
-        commit_count_per_second_("store_raft_commit_count_per_second", {"region"}),
-        apply_count_per_second_("store_raft_apply_count_per_second", {"region"}) {
-    leader_switch_time_.expose("store_raft_leader_switch_time");
-    leader_switch_count_.expose("store_raft_leader_switch_count");
-    commit_count_per_second_.expose("store_raft_commit_count_per_second");
-    apply_count_per_second_.expose("store_raft_apply_count_per_second");
+      : leader_switch_time_("dingo_metrics_store_raft_leader_switch_time", {"region"}),
+        leader_switch_count_("dingo_metrics_store_raft_leader_switch_count", {"region"}),
+        commit_count_per_second_("dingo_metrics_store_raft_commit_count_per_second", {"region"}),
+        apply_count_per_second_("dingo_metrics_store_raft_apply_count_per_second", {"region"}) {
+    leader_switch_time_.expose("dingo_metrics_store_raft_leader_switch_time");
+    leader_switch_count_.expose("dingo_metrics_store_raft_leader_switch_count");
+    commit_count_per_second_.expose("dingo_metrics_store_raft_commit_count_per_second");
+    apply_count_per_second_.expose("dingo_metrics_store_raft_apply_count_per_second");
   }
   ~StoreBvarMetrics() = default;
 

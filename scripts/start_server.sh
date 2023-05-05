@@ -27,7 +27,7 @@ function start_program() {
 
   cd ${root_dir}
 
-  nohup ./bin/dingodb_server --role ${role}  --conf ./conf/${role}.yaml --coor_url=file://./conf/coor_list --bvar_max_dump_multi_dimension_metric_number=100 2>&1 >./log/out &
+  nohup ./bin/dingodb_server --role ${role}  --conf ./conf/${role}.yaml --coor_url=file://./conf/coor_list 2>&1 >./log/out &
 }
 
 for ((i=1; i<=$SERVER_NUM; ++i)); do
