@@ -47,3 +47,6 @@
 [submodule "contrib/gperftools"]
 	path = contrib/gperftools
 	url = https://github.com/gperftools/gperftools
+[submodule "contrib/fmt"]
+	path = contrib/fmt
+	url = https://github.com/fmtlib/fmt
