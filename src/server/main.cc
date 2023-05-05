@@ -53,6 +53,12 @@ DEFINE_string(role, "", "server role [store|coordinator]");
 DEFINE_string(git_commit_hash, GIT_VERSION, "current git commit version");
 DEFINE_string(git_tag_name, GIT_TAG_NAME, "current dingo version");
 
+namespace bvar {
+DECLARE_int32(bvar_max_dump_multi_dimension_metric_number);
+}
+
+const int kBvarMaxDumpMultiDimensionMetricNumberDefault = 100;
+
 // Get server endpoint from config
 butil::EndPoint GetServerEndPoint(std::shared_ptr<dingodb::Config> config) {
   const std::string host = config->GetString("server.host");
@@ -164,6 +170,12 @@ int main(int argc, char *argv[]) {
   }
 
   SetupSignalHandler();
+
+  // Open bvar multi dimesion metrics.
+  bvar::FLAGS_bvar_max_dump_multi_dimension_metric_number =
+      (bvar::FLAGS_bvar_max_dump_multi_dimension_metric_number == 0)
+          ? kBvarMaxDumpMultiDimensionMetricNumberDefault
+          : bvar::FLAGS_bvar_max_dump_multi_dimension_metric_number;
 
   dingodb::pb::common::ClusterRole role = dingodb::pb::common::COORDINATOR;
 
