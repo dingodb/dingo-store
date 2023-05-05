@@ -69,6 +69,7 @@ DEFINE_string(end_key, "", "end_key");
 DEFINE_string(coor_url, "", "coordinator url");
 DEFINE_string(url, "", "coordinator url");
 DEFINE_int64(schema_id, 0, "schema_id");
+DEFINE_int64(replica, 0, "replica num");
 
 std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction;
 std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction_meta;

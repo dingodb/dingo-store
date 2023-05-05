@@ -29,6 +29,7 @@ DECLARE_int32(timeout_ms);
 DECLARE_string(id);
 DECLARE_string(name);
 DECLARE_int64(schema_id);
+DECLARE_int64(replica);
 
 void SendGetSchemas(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
   dingodb::pb::meta::GetSchemasRequest request;
@@ -246,6 +247,10 @@ void SendCreateTable(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
   // string name = 1;
   auto* table_definition = request.mutable_table_definition();
   table_definition->set_name(FLAGS_name);
+
+  if (FLAGS_replica > 0) {
+    table_definition->set_replica(FLAGS_replica);
+  }
 
   // repeated ColumnDefinition columns = 2;
   for (int i = 0; i < 3; i++) {
