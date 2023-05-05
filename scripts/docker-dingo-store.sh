@@ -97,7 +97,7 @@ deploy() {
   # COORDINATOR_RAFT_START_PORT=22101
   # RAFT_START_PORT=20101
   # SERVER_START_PORT=20001
-  echo "# dingo-store coordinators">${TMP_COORDINATOR_SERVICES}
+  echo "# dingo-store coordinators" > ${TMP_COORDINATOR_SERVICES}
   echo $COOR_SRV_PEERS | tr ',' '\n' >> ${TMP_COORDINATOR_SERVICES}
   program_dir=$BASE_DIR/dist/${FLAGS_role}1
   if [ $FLAGS_role == "coordinator" ]; then
@@ -123,7 +123,7 @@ function start_program() {
   cd ${root_dir}
 
   # nohup ./bin/dingodb_server --role ${role}  --conf ./conf/${role}.yaml 2>&1 >./log/out &
-  ./bin/dingodb_server --role ${role}  --conf ./conf/${role}.yaml
+  ${root_dir}/bin/dingodb_server --role ${role}  --conf ./conf/${role}.yaml --coor_url=file://./conf/coor_list
 }
 
 
