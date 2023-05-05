@@ -66,6 +66,7 @@ include(rocksdb)
 include(brpc)
 include(braft)
 include(yaml-cpp)
+include(fmt)
 include(libunwind)
 include(gperftools)
 
@@ -121,6 +122,7 @@ include_directories(${GTEST_INCLUDE_DIR})
 include_directories(${GFLAGS_INCLUDE_DIR})
 include_directories(${ROCKSDB_INCLUDE_DIR})
 include_directories(${YAMLCPP_INCLUDE_DIR})
+include_directories(${FMT_INCLUDE_DIR})
 include_directories(${OPENSSL_INCLUDE_DIR})
 include_directories(${LIBUNWIND_INCLUDE_DIR})
 include_directories(${GPERFTOOLS_INCLUDE_DIR})
@@ -137,6 +139,7 @@ set(DYNAMIC_LIB
     ${LZ4_LIBRARIES}
     ${ZSTD_LIBRARIES}
     ${YAMLCPP_LIBRARIES}
+    ${FMT_LIBRARIES}
     ${ZLIB_LIBRARIES}
     ${OPENSSL_LIBRARIES}
     ${CRYPTO_LIBRARIES}
@@ -165,6 +168,7 @@ set(DEPEND_LIBS
     zstd
     glog
     yamlcpp
+    fmt
     gtest
     libunwind
     )
