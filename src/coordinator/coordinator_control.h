@@ -15,6 +15,8 @@
 #ifndef DINGODB_COORDINATOR_CONTROL_H_
 #define DINGODB_COORDINATOR_CONTROL_H_
 
+#include <fmt/core.h>
+
 #include <cstdint>
 #include <map>
 #include <memory>
