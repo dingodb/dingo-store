@@ -13,8 +13,6 @@
 // limitations under the License.
 
 #include "boolean_schema.h"
-#include <new>
-#include <optional>
 
 namespace dingodb {
 

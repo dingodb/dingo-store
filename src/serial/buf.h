@@ -27,11 +27,16 @@ class Buf {
   int forward_pos_ = 0;
   int reverse_pos_ = 0;
   int count_ = 0;
+  bool le_;
 
  public:
+  Buf(int size, bool le);
   Buf(int size);
+  Buf(std::string* buf, bool le);
   Buf(std::string* buf);
   ~Buf();
+  void Init(int size);
+  void Init(std::string* buf);
   void SetForwardPos(int fp);
   void SetReversePos(int rp);
   std::vector<uint8_t>* GetBuf();

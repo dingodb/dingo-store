@@ -13,22 +13,38 @@
 // limitations under the License.
 
 #include "buf.h"
-#include <bitset>
+#include "serial/utils.h"
 
 namespace dingodb {
 
 Buf::Buf(int size) {
-  this->buf_.resize(size);
-  this->reverse_pos_ = size - 1;
+  Init(size);
+  this->le_ = IsLE();
+}
+Buf::Buf(int size, bool le) {
+  Init(size);
+  this->le_ = le;
 }
 Buf::Buf(std::string* buf) {
-  this->buf_.resize(buf->size());
-  this->buf_.assign(buf->begin(), buf->end());
-  this->reverse_pos_ = this->buf_.size() - 1;
+  Init(buf);
+  this->le_ = IsLE();
+}
+Buf::Buf(std::string* buf, bool le) {
+  Init(buf);
+  this->le_ = le;
 }
 Buf::~Buf() {
   this->buf_.clear();
   this->buf_.shrink_to_fit();
+}
+void Buf::Init(int size) {
+  this->buf_.resize(size);
+  this->reverse_pos_ = size - 1;
+}
+void Buf::Init(std::string* buf) {
+  this->buf_.resize(buf->size());
+  this->buf_.assign(buf->begin(), buf->end());
+  this->reverse_pos_ = this->buf_.size() - 1;
 }
 void Buf::SetForwardPos(int fp) {
   this->forward_pos_ = fp;
@@ -45,44 +61,80 @@ void Buf::Write(uint8_t b) {
 }
 void Buf::WriteInt(int32_t i) {
   uint32_t* ii = (uint32_t*)&i;
-  Write(*ii >> 24);
-  Write(*ii >> 16);
-  Write(*ii >> 8);
-  Write(*ii);
+  if (this->le_) {
+    Write(*ii >> 24);
+    Write(*ii >> 16);
+    Write(*ii >> 8);
+    Write(*ii);
+  } else {
+    Write(*ii);
+    Write(*ii >> 8);
+    Write(*ii >> 16);
+    Write(*ii >> 24);
+  }
 }
 void Buf::WriteLong(int64_t l) {
   uint64_t* ll = (uint64_t*)&l;
-  Write(*ll >> 56);
-  Write(*ll >> 48);
-  Write(*ll >> 40);
-  Write(*ll >> 32);
-  Write(*ll >> 24);
-  Write(*ll >> 16);
-  Write(*ll >> 8);
-  Write(*ll);
+  if (this->le_) {
+    Write(*ll >> 56);
+    Write(*ll >> 48);
+    Write(*ll >> 40);
+    Write(*ll >> 32);
+    Write(*ll >> 24);
+    Write(*ll >> 16);
+    Write(*ll >> 8);
+    Write(*ll);
+  } else {
+    Write(*ll);
+    Write(*ll >> 8);
+    Write(*ll >> 16);
+    Write(*ll >> 24);
+    Write(*ll >> 32);
+    Write(*ll >> 40);
+    Write(*ll >> 48);
+    Write(*ll >> 56);
+  }
 }
 void Buf::ReverseWrite(uint8_t b) {
   buf_.at(reverse_pos_--) = b;
 }
 void Buf::ReverseWriteInt(int32_t i) {
   uint32_t* ii = (uint32_t*)&i;
-  ReverseWrite(*ii >> 24);
-  ReverseWrite(*ii >> 16);
-  ReverseWrite(*ii >> 8);
-  ReverseWrite(*ii);
+  if (this->le_) {
+    ReverseWrite(*ii >> 24);
+    ReverseWrite(*ii >> 16);
+    ReverseWrite(*ii >> 8);
+    ReverseWrite(*ii);
+  } else {
+    ReverseWrite(*ii);
+    ReverseWrite(*ii >> 8);
+    ReverseWrite(*ii >> 16);
+    ReverseWrite(*ii >> 24);
+  }
 }
 uint8_t Buf::Read() {
   return buf_.at(forward_pos_++);
 }
 int32_t Buf::ReadInt() {
-  return ((Read() & 0xFF) << 24) | ((Read() & 0xFF) << 16) |
-         ((Read() & 0xFF) << 8) | (Read() & 0xFF);
+  if (this->le_) {
+    return ((Read() & 0xFF) << 24) | ((Read() & 0xFF) << 16) |
+          ((Read() & 0xFF) << 8) | (Read() & 0xFF);
+  } else {
+    return (Read() & 0xFF) | ((Read() & 0xFF) << 8) |
+          ((Read() & 0xFF) << 16) | ((Read() & 0xFF) << 24);
+  }
 }
 int64_t Buf::ReadLong() {
   uint64_t l = Read() & 0xFF;
-  for (int i = 0; i < 7; i++) {
-    l <<= 8;
-    l |= Read() & 0xFF;
+  if (this->le_) {
+    for (int i = 0; i < 7; i++) {
+      l <<= 8;
+      l |= Read() & 0xFF;
+    }
+  } else {
+    for (int i = 1; i < 8; i++) {
+      l |= (((uint64_t)Read() & 0xFF) << (8 * i));
+    }
   }
   return l;
 }
@@ -90,8 +142,13 @@ uint8_t Buf::ReverseRead() {
   return buf_.at(reverse_pos_--);
 }
 int32_t Buf::ReverseReadInt() {
-  return ((ReverseRead() & 0xFF) << 24) | ((ReverseRead() & 0xFF) << 16) |
-         ((ReverseRead() & 0xFF) << 8) | (ReverseRead() & 0xFF);
+  if (this->le_) {
+    return ((ReverseRead() & 0xFF) << 24) | ((ReverseRead() & 0xFF) << 16) |
+          ((ReverseRead() & 0xFF) << 8) | (ReverseRead() & 0xFF);
+  } else {
+    return (ReverseRead() & 0xFF) | ((ReverseRead() & 0xFF) << 8) |
+          ((ReverseRead() & 0xFF) << 16) | ((ReverseRead() & 0xFF) << 24);
+  }
 }
 void Buf::ReverseSkipInt() {
   reverse_pos_ -= 4;

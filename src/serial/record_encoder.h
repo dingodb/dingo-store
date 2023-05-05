@@ -36,9 +36,14 @@ class RecordEncoder {
   long common_id_;
   int key_buf_size_;
   int value_buf_size_;
+  bool le_;
 
  public:
   RecordEncoder(int schema_version, std::vector<BaseSchema*>* schemas,
+                long common_id);
+  RecordEncoder(int schema_version, std::vector<BaseSchema*>* schemas,
+                long common_id, bool le);
+  void Init(int schema_version, std::vector<BaseSchema*>* schemas,
                 long common_id);
   KeyValue* Encode(std::vector<std::any>* record);
   std::string* EncodeKey(std::vector<std::any>* record);

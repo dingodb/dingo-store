@@ -15,6 +15,7 @@
 #ifndef DINGO_SERIAL_UTILS_H_
 #define DINGO_SERIAL_UTILS_H_
 
+#include <iostream>
 #include <vector>
 #include <any>
 #include "proto/meta.pb.h"
@@ -28,11 +29,13 @@
 namespace dingodb {
 
 void SortSchema(std::vector<BaseSchema*>* schemas);
+void FormatSchema(std::vector<BaseSchema*>* schemas, bool le);
 int* GetApproPerRecordSize(std::vector<BaseSchema*>* schemas);
 bool VectorFindAndRemove(std::vector<int>* v, int t);
 std::vector<BaseSchema*>* TableDefinitionToDingoSchema(pb::meta::TableDefinition* td);
 std::vector<std::any>* ElementToSql(pb::meta::TableDefinition* td, std::vector<std::any>* record);
 std::vector<std::any>* SqlToElement(pb::meta::TableDefinition* td, std::vector<std::any>* record);
+bool IsLE();
 
 }  // namespace dingodb
 

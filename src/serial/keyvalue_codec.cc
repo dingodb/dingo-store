@@ -23,8 +23,9 @@ namespace dingodb {
   KeyValueCodec::KeyValueCodec(pb::meta::TableDefinition* td, uint64_t common_id) {
     this->td_ = td;
     this->schemas_ = TableDefinitionToDingoSchema(td);
-    this->re_ = new RecordEncoder(0, this->schemas_, common_id);
-    this->rd_ = new RecordDecoder(0, this->schemas_, common_id);
+    bool le = IsLE();
+    this->re_ = new RecordEncoder(0, this->schemas_, common_id, le);
+    this->rd_ = new RecordDecoder(0, this->schemas_, common_id, le);
   }
   KeyValueCodec::~KeyValueCodec() {
     delete schemas_;
