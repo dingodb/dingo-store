@@ -79,6 +79,8 @@ butil::Status ServerInteraction::SendRequest(const std::string& service_name, co
   if (service_name == "CoordinatorService") {
     service_desc =
         const_cast<google::protobuf::ServiceDescriptor*>(dingodb::pb::coordinator::CoordinatorService::descriptor());
+  } else if (service_name == "MetaService") {
+    service_desc = const_cast<google::protobuf::ServiceDescriptor*>(dingodb::pb::meta::MetaService::descriptor());
   } else if (service_name == "StoreService") {
     service_desc = const_cast<google::protobuf::ServiceDescriptor*>(dingodb::pb::store::StoreService::descriptor());
   } else {

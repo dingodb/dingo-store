@@ -18,6 +18,9 @@
 #include <memory>
 #include <ostream>
 #include <sstream>
+#include <string>
+
+#include "gflags/gflags_declare.h"
 
 #endif
 #include <cxxabi.h>
@@ -55,7 +58,7 @@ DEFINE_string(git_tag_name, GIT_TAG_NAME, "current dingo version");
 
 namespace bvar {
 DECLARE_int32(bvar_max_dump_multi_dimension_metric_number);
-}
+}  // namespace bvar
 
 const int kBvarMaxDumpMultiDimensionMetricNumberDefault = 100;
 
@@ -160,6 +163,21 @@ void SetupSignalHandler() {
   }
 }
 
+// Modify gflag variable
+bool SetGflagVariable() {
+  // Open bvar multi dimesion metrics.
+  if (bvar::FLAGS_bvar_max_dump_multi_dimension_metric_number == 0) {
+    if (google::SetCommandLineOption("bvar_max_dump_multi_dimension_metric_number",
+                                     std::to_string(kBvarMaxDumpMultiDimensionMetricNumberDefault).c_str())
+            .empty()) {
+      DINGO_LOG(ERROR) << "Fail to set bvar_max_dump_multi_dimension_metric_number";
+      return false;
+    }
+  }
+
+  return true;
+}
+
 int main(int argc, char *argv[]) {
   google::ParseCommandLineFlags(&argc, &argv, true);
 
@@ -171,11 +189,9 @@ int main(int argc, char *argv[]) {
 
   SetupSignalHandler();
 
-  // Open bvar multi dimesion metrics.
-  bvar::FLAGS_bvar_max_dump_multi_dimension_metric_number =
-      (bvar::FLAGS_bvar_max_dump_multi_dimension_metric_number == 0)
-          ? kBvarMaxDumpMultiDimensionMetricNumberDefault
-          : bvar::FLAGS_bvar_max_dump_multi_dimension_metric_number;
+  if (!SetGflagVariable()) {
+    return -1;
+  }
 
   dingodb::pb::common::ClusterRole role = dingodb::pb::common::COORDINATOR;
 

@@ -27,6 +27,10 @@ struct Context {
     auto clone_ctx = std::make_unique<Context>();
     clone_ctx->coordinator_interaction = coordinator_interaction;
     clone_ctx->store_interaction = store_interaction;
+    clone_ctx->table_name = table_name;
+    clone_ctx->partition_num = partition_num;
+    clone_ctx->req_num = req_num;
+
     return clone_ctx;
   }
 

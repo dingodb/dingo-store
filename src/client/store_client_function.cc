@@ -20,6 +20,7 @@
 #include <string>
 #include <vector>
 
+#include "bthread/bthread.h"
 #include "client/client_helper.h"
 
 namespace client {
@@ -463,7 +464,7 @@ uint64_t SendCreateTable(ServerInteractionPtr interaction, const std::string& ta
   auto request = BuildCreateTableRequest(table_name, partition_num);
 
   dingodb::pb::meta::CreateTableResponse response;
-  interaction->SendRequest("CoordinatorService", "CreateTable", request, response);
+  interaction->SendRequest("MetaService", "CreateTable", request, response);
 
   DINGO_LOG(INFO) << "response=" << response.DebugString();
   return response.table_id().entity_id();
@@ -478,7 +479,7 @@ dingodb::pb::meta::TableRange SendGetTableRange(ServerInteractionPtr interaction
   mut_table_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
   mut_table_id->set_entity_id(table_id);
 
-  interaction->SendRequest("CoordinatorService", "GetTableRange", request, response);
+  interaction->SendRequest("MetaService", "GetTableRange", request, response);
 
   return response.table_range();
 }
@@ -492,18 +493,25 @@ void SendDropTable(ServerInteractionPtr interaction, uint64_t table_id) {
   mut_table_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
   mut_table_id->set_entity_id(table_id);
 
-  interaction->SendRequest("CoordinatorService", "DropTable", request, response);
+  interaction->SendRequest("MetaService", "DropTable", request, response);
 }
 
+// Create table / Put data / Get data / Destroy table
 void* CreateAndPutAndGetAndDestroyTableRoutine(void* arg) {
   std::shared_ptr<Context> ctx(static_cast<Context*>(arg));
 
+  DINGO_LOG(INFO) << "======= Create table " << ctx->table_name;
   uint64_t table_id = SendCreateTable(ctx->coordinator_interaction, ctx->table_name, ctx->partition_num);
 
-  for (;;) {
+  DINGO_LOG(INFO) << "======= Put/Get table " << ctx->table_name;
+  for (int i = 0; i < 10; ++i) {
     auto table_range = SendGetTableRange(ctx->coordinator_interaction, table_id);
 
     for (const auto& range_dist : table_range.range_distribution()) {
+      if (range_dist.leader().host().empty()) {
+        bthread_usleep(1 * 1000 * 1000);
+        continue;
+      }
       uint64_t region_id = range_dist.id().entity_id();
       std::string prefix = range_dist.range().start_key();
 
@@ -511,6 +519,7 @@ void* CreateAndPutAndGetAndDestroyTableRoutine(void* arg) {
     }
   }
 
+  DINGO_LOG(INFO) << "======= Drop table " << ctx->table_name;
   SendDropTable(ctx->coordinator_interaction, table_id);
 
   return nullptr;
@@ -559,6 +568,7 @@ void SendChangePeer(ServerInteractionPtr interaction, const dingodb::pb::common:
   interaction->SendRequest("CoordinatorService", "ChangePeerRegion", request, response);
 }
 
+// Expand/Shrink/Split region
 void* ExpandAndShrinkAndSplitRegion(void* arg) {
   std::shared_ptr<Context> ctx(static_cast<Context*>(arg));
 
@@ -638,16 +648,17 @@ void* ExpandAndShrinkAndSplitRegion(void* arg) {
 }
 
 void AutoTest(std::shared_ptr<Context> ctx) {
+  std::vector<std::function<void*(void*)>> funcs = {CreateAndPutAndGetAndDestroyTableRoutine};
   std::vector<bthread_t> tids;
-  std::vector<std::function<void*(void*)>> funcs = {CreateAndPutAndGetAndDestroyTableRoutine,
-                                                    ExpandAndShrinkAndSplitRegion};
+  tids.resize(funcs.size());
 
   // Thread: Create table / Put data / Get data / Destroy table
   // Thread: Expand/Shrink/Split region
   // Thread: Random kill/launch Node
   for (int i = 0; i < funcs.size(); ++i) {
-    if (bthread_start_background(&tids[i], nullptr, funcs[i].target<void*(void*)>(), ctx->Clone().release()) != 0) {
-      DINGO_LOG(ERROR) << "Fail to create bthread";
+    int ret = bthread_start_background(&tids[i], nullptr, *funcs[i].target<void* (*)(void*)>(), ctx->Clone().release());
+    if (ret != 0) {
+      DINGO_LOG(ERROR) << "Create bthread failed, ret: " << ret;
       return;
     }
   }
