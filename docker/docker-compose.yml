@@ -104,4 +104,5 @@ services:
     environment:
       SERVER_HOST: ${DINGO_HOST_IP}
       COORDINATOR_SERVER_START_PORT: 22001
-    entrypoint: /opt/dingo-store/scripts/mysql_init
+    entrypoint: [ "/bin/sh", "-c" ]
+    command: /opt/dingo-store/scripts/mysql_init.sh
