@@ -410,8 +410,8 @@ butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta
   table_name_map_safe_temp_.Get(std::to_string(schema_id) + table_definition.name(), value);
   if (value != 0) {
     DINGO_LOG(INFO) << " Createtable table_name is exist " << table_definition.name();
-    return butil::Status(pb::error::Errno::ETABLE_EXISTS, "table_name[%s] is exist in get",
-                         table_definition.name().c_str());
+    return butil::Status(pb::error::Errno::ETABLE_EXISTS,
+                         fmt::format("table_name[{}] is exist in get", table_definition.name().c_str()));
   }
 
   // if new_table_id is not given, create a new table_id
@@ -425,11 +425,11 @@ butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta
     auto status =
         AutoIncrementControl::SyncSendCreateAutoIncrementInternal(new_table_id, table_definition.auto_increment());
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << "send create auto increment internal error, code: " << status.error_code()
-                       << ", message: " << status.error_str();
+      DINGO_LOG(ERROR) << fmt::format("send create auto increment internal error, code: {}, message: {} ",
+                                      status.error_code(), status.error_str());
       return butil::Status(pb::error::Errno::EAUTO_INCREMENT_WHILE_CREATING_TABLE,
-                           "send create auto increment internal error, code: " + std::to_string(status.error_code()) +
-                               ", message: " + status.error_str());
+                           fmt::format("send create auto increment internal error, code: {}, message: {}",
+                                       status.error_code(), status.error_str()));
     }
     DINGO_LOG(INFO) << "CreateTable AutoIncrement send create auto increment internal success";
   }
@@ -438,8 +438,8 @@ butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta
   if (table_name_map_safe_temp_.PutIfAbsent(std::to_string(schema_id) + table_definition.name(), new_table_id) < 0) {
     DINGO_LOG(INFO) << " CreateTable table_name" << table_definition.name()
                     << " is exist, when insert new_table_id=" << new_table_id;
-    return butil::Status(pb::error::Errno::ETABLE_EXISTS, "table_name[%s] is exist in put if absent",
-                         table_definition.name().c_str());
+    return butil::Status(pb::error::Errno::ETABLE_EXISTS,
+                         fmt::format("table_name[{}] is exist in put if absent", table_definition.name().c_str()));
   }
 
   // create table
@@ -460,7 +460,6 @@ butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta
 
     auto ret = CreateRegion(region_name, "", replica, range_partition.ranges(i), schema_id, new_table_id, new_region_id,
                             meta_increment);
-
     if (!ret.ok()) {
       DINGO_LOG(ERROR) << "CreateRegion failed in CreateTable table_name=" << table_definition.name();
       break;
@@ -683,14 +682,14 @@ void CoordinatorControl::GetTable(uint64_t schema_id, uint64_t table_id,
     table_definition_with_id.mutable_table_definition()->CopyFrom(table_internal.definition());
   }
 
-  DINGO_LOG(DEBUG) << "GetTable schema_id=" << schema_id << " table_id=" << table_id
-                   << " table_definition_with_id=" << table_definition_with_id.DebugString();
+  DINGO_LOG(DEBUG) << fmt::format("GetTable schema_id={} table_id={} table_definition_with_id={}", schema_id, table_id,
+                                  table_definition_with_id.DebugString());
 }
 
 // get table by name
 void CoordinatorControl::GetTableByName(uint64_t schema_id, const std::string& table_name,
                                         pb::meta::TableDefinitionWithId& table_definition) {
-  DINGO_LOG(INFO) << "GetTableByName in control schema_id=" << schema_id << " table_name=" << table_name;
+  DINGO_LOG(INFO) << fmt::format("GetTableByName in control schema_id={} table_name={}", schema_id, table_name);
 
   if (schema_id < 0) {
     DINGO_LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
@@ -717,8 +716,8 @@ void CoordinatorControl::GetTableByName(uint64_t schema_id, const std::string& t
 
   GetTable(schema_id, temp_table_id, table_definition);
 
-  DINGO_LOG(DEBUG) << "GetTableByName schema_id=" << schema_id << " table_name=" << table_name
-                   << " table_definition=" << table_definition.DebugString();
+  DINGO_LOG(DEBUG) << fmt::format("GetTableByName schema_id={} table_name={} table_definition={}", schema_id,
+                                  table_name, table_definition.DebugString());
 }
 
 // get table range
@@ -757,8 +756,8 @@ void CoordinatorControl::GetTableRange(uint64_t schema_id, uint64_t table_id, pb
     pb::common::Region part_region;
     int ret = region_map_.Get(region_id, part_region);
     if (ret < 0) {
-      DINGO_LOG(ERROR) << "ERROR cannot find region in regionmap_ while GetTable, table_id =" << table_id
-                       << " region_id=" << region_id;
+      DINGO_LOG(ERROR) << fmt::format("ERROR cannot find region in regionmap_ while GetTable, table_id={} region_id={}",
+                                      table_id, region_id);
       continue;
     }
 
@@ -843,11 +842,10 @@ butil::Status CoordinatorControl::GetTableMetrics(uint64_t schema_id, uint64_t t
         // temp_table_metrics->CopyFrom(table_metrics_internal);
         table_metrics_map_.Put(table_id, table_metrics_internal);
 
-        DINGO_LOG(INFO) << "table_metrics first calculated, table_id=" << table_id
-                        << " row_count=" << table_metrics_single->rows_count()
-                        << " min_key=" << table_metrics_single->min_key()
-                        << " max_key=" << table_metrics_single->max_key()
-                        << " part_count=" << table_metrics_single->part_count();
+        DINGO_LOG(INFO) << fmt::format(
+            "table_metrics first calculated, table_id={} row_count={} min_key={} max_key={} part_count={}", table_id,
+            table_metrics_single->rows_count(), table_metrics_single->min_key(), table_metrics_single->max_key(),
+            table_metrics_single->part_count());
       }
     } else {
       // construct TableMetrics from table_metrics_internal
@@ -894,14 +892,14 @@ uint64_t CoordinatorControl::CalculateTableMetricsSingle(uint64_t table_id, pb::
       // BAIDU_SCOPED_LOCK(region_map_mutex_);
       int ret = region_map_.Get(region_id, part_region);
       if (ret < 0) {
-        DINGO_LOG(ERROR) << "ERROR cannot find region in regionmap_ while GetTable, table_id =" << table_id
-                         << " region_id=" << region_id;
+        DINGO_LOG(ERROR) << fmt::format(
+            "ERROR cannot find region in regionmap_ while GetTable, table_id={} region_id={}", table_id, region_id);
         continue;
       }
     }
 
     if (!part_region.has_metrics()) {
-      DINGO_LOG(ERROR) << "ERROR region has no metrics, table_id =" << table_id << " region_id=" << region_id;
+      DINGO_LOG(ERROR) << fmt::format("ERROR region has no metrics, table_id={} region_id={}", table_id, region_id);
       continue;
     }
 
@@ -930,9 +928,11 @@ uint64_t CoordinatorControl::CalculateTableMetricsSingle(uint64_t table_id, pb::
   table_metrics.set_max_key(max_key);
   table_metrics.set_part_count(table_internal.partitions_size());
 
-  DINGO_LOG(DEBUG) << "table_metrics calculated in CalculateTableMetricsSingle, table_id=" << table_id
-                   << " row_count=" << table_metrics.rows_count() << " min_key=" << table_metrics.min_key()
-                   << " max_key=" << table_metrics.max_key() << " part_count=" << table_metrics.part_count();
+  DINGO_LOG(DEBUG) << fmt::format(
+      "table_metrics calculated in CalculateTableMetricsSingle, table_id={} row_count={} min_key={} max_key={} "
+      "part_count={}",
+      table_id, table_metrics.rows_count(), table_metrics.min_key(), table_metrics.max_key(),
+      table_metrics.part_count());
 
   return 0;
 }
