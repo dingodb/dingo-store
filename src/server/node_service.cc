@@ -18,6 +18,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "brpc/controller.h"
@@ -107,6 +108,168 @@ void NodeServiceImpl::ChangeLogLevel(google::protobuf::RpcController* /* control
   DingoLogger::SetLogBuffSecs(log_detail.log_buf_secs());
   DingoLogger::SetMaxLogSize(log_detail.max_log_size());
   DingoLogger::SetStoppingWhenDiskFull(log_detail.stop_logging_if_full_disk());
+}
+
+class PrometheusMetricsDumper : public bvar::Dumper {
+ public:
+  explicit PrometheusMetricsDumper(butil::IOBufBuilder* os, const std::string& server_prefix)
+      : os_(os), server_prefix_(server_prefix) {}
+
+  bool dump(const std::string& name, const butil::StringPiece& desc) override;
+
+  PrometheusMetricsDumper(const PrometheusMetricsDumper&) = delete;
+  const PrometheusMetricsDumper& operator=(const PrometheusMetricsDumper&) = delete;
+
+ private:
+  // Return true iff name ends with suffix output by LatencyRecorder.
+  bool DumpLatencyRecorderSuffix(const butil::StringPiece& name, const butil::StringPiece& desc);
+
+  // 6 is the number of bvars in LatencyRecorder that indicating percentiles
+  static const int kNpercentiles = 6;
+
+  struct SummaryItems {
+    std::string latency_percentiles[kNpercentiles];
+    int64_t latency_avg;
+    int64_t count;
+    std::string metric_name;
+
+    bool IsComplete() const { return !metric_name.empty(); }
+  };
+  const SummaryItems* ProcessLatencyRecorderSuffix(const butil::StringPiece& name, const butil::StringPiece& desc);
+
+  butil::IOBufBuilder* os_;
+  const std::string server_prefix_;
+  std::map<std::string, SummaryItems> m_;
+};
+
+bool PrometheusMetricsDumper::dump(const std::string& name, const butil::StringPiece& desc) {
+  if (!desc.empty() && desc[0] == '"') {
+    // there is no necessary to monitor string in prometheus
+    return true;
+  }
+  if (DumpLatencyRecorderSuffix(name, desc)) {
+    // Has encountered name with suffix exposed by LatencyRecorder,
+    // Leave it to DumpLatencyRecorderSuffix to output Summary.
+    return true;
+  }
+
+  auto get_metrics_name = [](const std::string& name) -> std::string_view {
+    auto pos = name.find_last_of('{');
+    if (pos == std::string::npos) {
+      return name;
+    }
+    return std::string_view(name.data(), pos);
+  };
+
+  *os_ << "# HELP " << name << '\n'
+       << "# TYPE " << get_metrics_name(name) << " gauge" << '\n'
+       << name << " " << desc << '\n';
+  return true;
+}
+
+const PrometheusMetricsDumper::SummaryItems* PrometheusMetricsDumper::ProcessLatencyRecorderSuffix(
+    const butil::StringPiece& name, const butil::StringPiece& desc) {
+  static std::string latency_names[] = {butil::string_printf("_latency_%d", (int)bvar::FLAGS_bvar_latency_p1),
+                                        butil::string_printf("_latency_%d", (int)bvar::FLAGS_bvar_latency_p2),
+                                        butil::string_printf("_latency_%d", (int)bvar::FLAGS_bvar_latency_p3),
+                                        "_latency_999",
+                                        "_latency_9999",
+                                        "_max_latency"};
+  CHECK(kNpercentiles == arraysize(latency_names));
+  const std::string desc_str = desc.as_string();
+  butil::StringPiece metric_name(name);
+  for (int i = 0; i < kNpercentiles; ++i) {
+    if (!metric_name.ends_with(latency_names[i])) {
+      continue;
+    }
+    metric_name.remove_suffix(latency_names[i].size());
+    SummaryItems* si = &m_[metric_name.as_string()];
+    si->latency_percentiles[i] = desc_str;
+    if (i == kNpercentiles - 1) {
+      // '_max_latency' is the last suffix name that appear in the sorted bvar
+      // list, which means all related percentiles have been gathered and we are
+      // ready to output a Summary.
+      si->metric_name = metric_name.as_string();
+    }
+    return si;
+  }
+  // Get the average of latency in recent window size
+  if (metric_name.ends_with("_latency")) {
+    metric_name.remove_suffix(8);
+    SummaryItems* si = &m_[metric_name.as_string()];
+    si->latency_avg = strtoll(desc_str.data(), nullptr, 10);
+    return si;
+  }
+  if (metric_name.ends_with("_count")) {
+    metric_name.remove_suffix(6);
+    SummaryItems* si = &m_[metric_name.as_string()];
+    si->count = strtoll(desc_str.data(), nullptr, 10);
+    return si;
+  }
+  return nullptr;
+}
+
+bool PrometheusMetricsDumper::DumpLatencyRecorderSuffix(const butil::StringPiece& name,
+                                                        const butil::StringPiece& desc) {
+  if (!name.starts_with(server_prefix_)) {
+    return false;
+  }
+  const SummaryItems* si = ProcessLatencyRecorderSuffix(name, desc);
+  if (!si) {
+    return false;
+  }
+  if (!si->IsComplete()) {
+    return true;
+  }
+  *os_ << "# HELP " << si->metric_name << '\n'
+       << "# TYPE " << si->metric_name << " summary\n"
+       << si->metric_name << "{quantile=\"" << (double)(bvar::FLAGS_bvar_latency_p1) / 100 << "\"} "
+       << si->latency_percentiles[0] << '\n'
+       << si->metric_name << "{quantile=\"" << (double)(bvar::FLAGS_bvar_latency_p2) / 100 << "\"} "
+       << si->latency_percentiles[1] << '\n'
+       << si->metric_name << "{quantile=\"" << (double)(bvar::FLAGS_bvar_latency_p3) / 100 << "\"} "
+       << si->latency_percentiles[2] << '\n'
+       << si->metric_name << "{quantile=\"0.999\"} " << si->latency_percentiles[3] << '\n'
+       << si->metric_name << "{quantile=\"0.9999\"} " << si->latency_percentiles[4] << '\n'
+       << si->metric_name << "{quantile=\"1\"} " << si->latency_percentiles[5] << '\n'
+       << si->metric_name << "{quantile=\"avg\"} " << si->latency_avg << '\n'
+       << si->metric_name
+       << "_sum "
+       // There is no sum of latency in bvar output, just use
+       // average * count as approximation
+       << si->latency_avg * si->count << '\n'
+       << si->metric_name << "_count " << si->count << '\n';
+  return true;
+}
+
+int DumpPrometheusMetricsToIOBuf(butil::IOBuf* output) {
+  butil::IOBufBuilder os;
+  PrometheusMetricsDumper dumper(&os, "rpc_server");
+  const int ndump = bvar::Variable::dump_exposed(&dumper, nullptr);
+  if (ndump < 0) {
+    return -1;
+  }
+  os.move_to(*output);
+
+  PrometheusMetricsDumper dumper_md(&os, "rpc_server");
+  const int ndump_md = bvar::MVariable::dump_exposed(&dumper_md, nullptr);
+  if (ndump_md < 0) {
+    return -1;
+  }
+  output->append(butil::IOBuf::Movable(os.buf()));
+  return 0;
+}
+
+void NodeServiceImpl::DingoMetrics(google::protobuf::RpcController* controller,
+                                   const pb::node::MetricsRequest* /*request*/, pb::node::MetricsResponse* /*response*/,
+                                   google::protobuf::Closure* done) {
+  brpc::ClosureGuard done_guard(done);
+  brpc::Controller* cntl = static_cast<brpc::Controller*>(controller);
+  cntl->http_response().set_content_type("text/plain");
+  if (DumpPrometheusMetricsToIOBuf(&cntl->response_attachment()) != 0) {
+    cntl->SetFailed("Fail to dump metrics");
+    return;
+  }
 }
 
 }  // namespace dingodb

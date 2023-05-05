@@ -71,6 +71,9 @@ message ChangeLogLevelResponse {
   dingodb.pb.error.Error error = 1;
 };
 
+message MetricsRequest {};
+message MetricsResponse {};
+
 service NodeService {
   // GetNodeInfo
   // in: cluster_id
@@ -81,4 +84,6 @@ service NodeService {
   rpc GetLogLevel(GetLogLevelRequest) returns (GetLogLevelResponse);
   // Change the LogLevel
   rpc ChangeLogLevel(ChangeLogLevelRequest) returns (ChangeLogLevelResponse);
+
+  rpc DingoMetrics(MetricsRequest) returns (MetricsResponse);
 }
