@@ -16,15 +16,26 @@
 
 namespace dingodb {
 
-RecordDecoder::RecordDecoder(int schema_version, std::vector<BaseSchema*>*  schemas,
+RecordDecoder::RecordDecoder(int schema_version, std::vector<BaseSchema*>* schemas,
+                             long common_id) {
+  this->le_ = IsLE();
+  Init(schema_version, schemas, common_id);
+}
+RecordDecoder::RecordDecoder(int schema_version, std::vector<BaseSchema*>* schemas,
+                             long common_id, bool le) {
+  this->le_ = le;
+  Init(schema_version, schemas, common_id);
+}
+void RecordDecoder::Init(int schema_version, std::vector<BaseSchema*>* schemas,
                              long common_id) {
   this->schema_version_ = schema_version;
+  FormatSchema(schemas, this->le_);
   this->schemas_ = schemas;
   this->common_id_ = common_id;
 }
 std::vector<std::any>* RecordDecoder::Decode(KeyValue*  key_value) {
-  Buf* key_buf = new Buf(key_value->GetKey());
-  Buf* value_buf = new Buf(key_value->GetValue());
+  Buf* key_buf = new Buf(key_value->GetKey(), this->le_);
+  Buf* value_buf = new Buf(key_value->GetValue(), this->le_);
   if (key_buf->ReadLong() != common_id_) {
     //"Wrong Common Id"
   }
@@ -96,8 +107,8 @@ std::vector<std::any>* RecordDecoder::Decode(KeyValue*  key_value) {
 }
 std::vector<std::any>* RecordDecoder::Decode(KeyValue*  key_value,
                                    std::vector<int>*  column_indexes) {
-  Buf* key_buf = new Buf(key_value->GetKey());
-  Buf* value_buf = new Buf(key_value->GetValue());
+  Buf* key_buf = new Buf(key_value->GetKey(), this->le_);
+  Buf* value_buf = new Buf(key_value->GetValue(), this->le_);
   if (key_buf->ReadLong() != common_id_) {
     //"Wrong Common Id"
   }

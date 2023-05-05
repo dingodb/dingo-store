@@ -13,9 +13,6 @@
 // limitations under the License.
 
 #include "utils.h"
-#include <iostream>
-#include "proto/meta.pb.h"
-#include "serial/schema/base_schema.h"
 
 namespace dingodb {
 
@@ -36,6 +33,33 @@ void SortSchema(std::vector<BaseSchema*>* schemas) {
         }
         schemas->at(i) = ts;
         schemas->at(target) = bs;
+      }
+    }
+  }
+}
+void FormatSchema(std::vector<BaseSchema *> *schemas, bool le) {
+  for (BaseSchema* bs : *schemas) {
+    if (bs != nullptr) {
+      BaseSchema::Type type = bs->GetType();
+      switch (type) {
+        case BaseSchema::kInteger: {
+          DingoSchema<std::optional<int32_t>>* is = static_cast<DingoSchema<std::optional<int32_t>>*>(bs);
+          is->SetIsLe(le);
+          break;
+        }
+        case BaseSchema::kLong: {
+          DingoSchema<std::optional<int64_t>>* ls = static_cast<DingoSchema<std::optional<int64_t>>*>(bs);
+          ls->SetIsLe(le);
+          break;
+        }
+        case BaseSchema::kDouble: {
+          DingoSchema<std::optional<double>>* ds = static_cast<DingoSchema<std::optional<double>>*>(bs);
+          ds->SetIsLe(le);
+          break;
+        }
+        default: {
+          break;
+        }
       }
     }
   }
@@ -310,6 +334,10 @@ std::vector<std::any>* SqlToElement(pb::meta::TableDefinition* td, std::vector<s
   }
   return record;
 }
-
+bool IsLE() {
+  uint32_t i = 1;
+  char* c = (char*) &i;
+  return *c == 1;
+}
 
 }  // namespace dingodb

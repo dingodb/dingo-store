@@ -27,12 +27,15 @@ class DingoSchema<std::optional<int32_t>> : public BaseSchema {
  private:
   int index_;
   bool key_, allow_null_;
+  bool le_ = true;
 
   static int GetDataLength();
   static int GetWithNullTagLength();
   static void InternalEncodeNull(Buf* buf);
-  static void InternalEncodeKey(Buf* buf, int32_t data);
-  static void InternalEncodeValue(Buf* buf, int32_t data);
+  static void LeInternalEncodeKey(Buf* buf, int32_t data);
+  static void BeInternalEncodeKey(Buf* buf, int32_t data);
+  static void LeInternalEncodeValue(Buf* buf, int32_t data);
+  static void BeInternalEncodeValue(Buf* buf, int32_t data);
 
  public:
   Type GetType() override;
@@ -43,6 +46,7 @@ class DingoSchema<std::optional<int32_t>> : public BaseSchema {
   void SetIndex(int index);
   void SetIsKey(bool key);
   void SetAllowNull(bool allow_null);
+  void SetIsLe(bool le);
   void EncodeKey(Buf* buf, std::optional<int32_t> data);
   void EncodeKeyPrefix(Buf* buf, std::optional<int32_t> data);
   std::optional<int32_t> DecodeKey(Buf* buf);

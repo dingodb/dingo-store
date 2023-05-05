@@ -13,13 +13,23 @@
 // limitations under the License.
 
 #include "record_encoder.h"
-#include "serial/schema/base_schema.h"
 
 namespace dingodb {
 
 RecordEncoder::RecordEncoder(int schema_version, std::vector<BaseSchema*>*  schemas,
                              long common_id) {
+  this->le_ = IsLE();
+  Init(schema_version, schemas, common_id);
+}
+RecordEncoder::RecordEncoder(int schema_version, std::vector<BaseSchema*>*  schemas,
+                             long common_id, bool le) {
+  this->le_ = le;
+  Init(schema_version, schemas, common_id);
+}
+void RecordEncoder::Init(int schema_version, std::vector<BaseSchema*>*  schemas,
+                             long common_id) {
   this->schema_version_ = schema_version;
+  FormatSchema(schemas, this-le_);
   this->schemas_ = schemas;
   this->common_id_ = common_id;
   int32_t* size = GetApproPerRecordSize(schemas);
@@ -34,7 +44,7 @@ KeyValue* RecordEncoder::Encode(std::vector<std::any>*  record) {
   return keyvalue;
 }
 std::string* RecordEncoder::EncodeKey(std::vector<std::any>*  record) {
-  Buf* key_buf = new Buf(key_buf_size_);
+  Buf* key_buf = new Buf(key_buf_size_, this->le_);
   key_buf->EnsureRemainder(12);
   key_buf->WriteLong(common_id_);
   key_buf->ReverseWriteInt(codec_version_);
@@ -88,7 +98,7 @@ std::string* RecordEncoder::EncodeKey(std::vector<std::any>*  record) {
   return key;
 }
 std::string* RecordEncoder::EncodeValue(std::vector<std::any>*  record) {
-  Buf* value_buf = new Buf(value_buf_size_);
+  Buf* value_buf = new Buf(value_buf_size_, this->le_);
   value_buf->EnsureRemainder(4);
   value_buf->WriteInt(schema_version_);
   for (BaseSchema *bs : *schemas_) {
@@ -146,7 +156,7 @@ std::string* RecordEncoder::EncodeValue(std::vector<std::any>*  record) {
   return value;
 }
 std::string* RecordEncoder::EncodeKeyPrefix(std::vector<std::any>*  record, int column_count) {
-  Buf* key_prefix_buf = new Buf(key_buf_size_);
+  Buf* key_prefix_buf = new Buf(key_buf_size_, this->le_);
   key_prefix_buf->EnsureRemainder(8);
   key_prefix_buf->WriteLong(common_id_);
   for (BaseSchema *bs : *schemas_) {
@@ -207,7 +217,7 @@ std::string* RecordEncoder::EncodeMaxKeyPrefix() const {
     // "CommonId reach max! Cannot generate Max Key Prefix"
     return nullptr;
   }
-  Buf* max_key_prefix_buf = new Buf(key_buf_size_);
+  Buf* max_key_prefix_buf = new Buf(key_buf_size_, this->le_);
   max_key_prefix_buf->EnsureRemainder(8);
   max_key_prefix_buf->WriteLong(common_id_ + 1);
   std::string* max_key_prefix = max_key_prefix_buf->GetBytes();
@@ -215,7 +225,7 @@ std::string* RecordEncoder::EncodeMaxKeyPrefix() const {
   return max_key_prefix;
 }
 std::string* RecordEncoder::EncodeMinKeyPrefix() const {
-  Buf* min_key_prefix_buf = new Buf(key_buf_size_);
+  Buf* min_key_prefix_buf = new Buf(key_buf_size_, this->le_);
   min_key_prefix_buf->EnsureRemainder(8);
   min_key_prefix_buf->WriteLong(common_id_);
   std::string* min_key_prefix = min_key_prefix_buf->GetBytes();

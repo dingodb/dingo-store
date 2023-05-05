@@ -34,9 +34,14 @@ class RecordDecoder {
   int schema_version_;
   std::vector<BaseSchema*>* schemas_;
   long common_id_;
+  bool le_;
 
  public:
   RecordDecoder(int schema_version, std::vector<BaseSchema*>* schemas,
+                long common_id);
+  RecordDecoder(int schema_version, std::vector<BaseSchema*>* schemas,
+                long common_id, bool le);
+  void Init(int schema_version, std::vector<BaseSchema*>* schemas,
                 long common_id);
   std::vector<std::any>* Decode(KeyValue* key_value);
   std::vector<std::any>* Decode(KeyValue* key_value, std::vector<int>* column_indexes);
