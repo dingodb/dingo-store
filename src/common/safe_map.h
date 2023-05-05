@@ -18,6 +18,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <set>
 #include <vector>
 
 #include "butil/containers/doubly_buffered_data.h"
@@ -89,6 +90,24 @@ class DingoSafeMap {
         break;
       }
       keys.push_back(it->first);
+    }
+
+    return keys.size();
+  }
+
+  // GetAllKeys
+  // get all keys of the map
+  int GetAllKeys(std::set<T_KEY> &keys) {
+    TypeScopedPtr ptr;
+    if (safe_map.Read(&ptr) != 0) {
+      return -1;
+    }
+
+    for (typename TypeFlatMap::const_iterator it = ptr->begin(); it != ptr->end(); ++it) {
+      if (it == ptr->end()) {
+        break;
+      }
+      keys.insert(it->first);
     }
 
     return keys.size();

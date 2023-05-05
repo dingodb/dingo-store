@@ -16,8 +16,10 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <map>
 #include <memory>
+#include <set>
 #include <vector>
 
 #include "butil/scoped_lock.h"
@@ -183,13 +185,7 @@ void CoordinatorRecycleOrphanTask::CoordinatorRecycleOrphan(std::shared_ptr<Coor
   }
   DINGO_LOG(DEBUG) << "CoordinatorRecycleOrphan... this is leader";
 
-  // recycle region bvar
-  std::vector<uint64_t> region_ids;
-  coordinator_control->GetRegionIdsInMap(region_ids);
-
-  std::sort(region_ids.begin(), region_ids.end());
-
-  coordinator_control->CleanRegionBvars(region_ids);
+  coordinator_control->CleanRegionBvars();
 }
 
 // this is for coordinator
