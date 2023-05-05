@@ -40,15 +40,15 @@ jobs:
 
     
     - name: Download artifact
-        uses: dawidd6/action-download-artifact@v2
-        with:
-            github_token: ${{secrets.GITHUB_TOKEN}}
-            workflow: java_build.yml
-            name: dingo-mysql-init-0.6.0-SNAPSHOT.jar
+      uses: dawidd6/action-download-artifact@v2
+      with:
+          github_token: ${{secrets.GITHUB_TOKEN}}
+          workflow: java_build.yml
+          name: dingo-mysql-init-0.6.0-SNAPSHOT.jar
 
     - name: rename artifactory name
-        run: |
-            cp dingo-mysql-init-0.6.0-SNAPSHOT.jar build/bin
+      run: |
+          cp dingo-mysql-init-0.6.0-SNAPSHOT.jar build/bin
 
     - name: Archive the dingo directory
       run: |

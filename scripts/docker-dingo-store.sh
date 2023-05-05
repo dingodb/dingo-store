@@ -18,6 +18,7 @@ eval set -- "${FLAGS_ARGV}"
 
 BASE_DIR=$(dirname $(cd $(dirname $0); pwd))
 DIST_DIR=$BASE_DIR/dist
+TMP_COORDINATOR_SERVICES=$mydir/coor_list_`whoami`_`date +%s`
 
 if [ ! -d "$DIST_DIR" ]; then
   mkdir "$DIST_DIR"
@@ -33,6 +34,7 @@ function deploy_store() {
   instance_id=$6
   coor_srv_peers=$7
   coor_raft_peers=$8
+  coor_service_file=$9
 
   echo "server ${dstpath}"
 
@@ -61,6 +63,8 @@ function deploy_store() {
   if [ ! -d "$dstpath/data/${role}/db" ]; then
     mkdir "$dstpath/data/${role}/db"
   fi
+  
+  cp ${coor_service_file} $dstpath/conf/coor_list
 
   cp $srcpath/build/bin/dingodb_server $dstpath/bin/
   if [ "${FLAGS_replace_conf}" == "0" ]; then
@@ -93,12 +97,19 @@ deploy() {
   # COORDINATOR_RAFT_START_PORT=22101
   # RAFT_START_PORT=20101
   # SERVER_START_PORT=20001
+  echo "# dingo-store coordinators">${TMP_COORDINATOR_SERVICES}
+  echo $COOR_SRV_PEERS | tr ',' '\n' >> ${TMP_COORDINATOR_SERVICES}
   program_dir=$BASE_DIR/dist/${FLAGS_role}1
   if [ $FLAGS_role == "coordinator" ]; then
-    deploy_store ${FLAGS_role} $BASE_DIR $program_dir $COORDINATOR_SERVER_START_PORT $COORDINATOR_RAFT_START_PORT $INSTANCE_START_ID ${COOR_SRV_PEERS:-fail} ${COOR_RAFT_PEERS}
+    deploy_store ${FLAGS_role} $BASE_DIR $program_dir $COORDINATOR_SERVER_START_PORT $COORDINATOR_RAFT_START_PORT $INSTANCE_START_ID ${COOR_SRV_PEERS:-fail} ${COOR_RAFT_PEERS} ${TMP_COORDINATOR_SERVICES}
+
   else
-    deploy_store ${FLAGS_role} $BASE_DIR $program_dir $SERVER_START_PORT $RAFT_START_PORT $INSTANCE_START_ID ${COOR_SRV_PEERS} ${COOR_RAFT_PEERS:-fail}
+    deploy_store ${FLAGS_role} $BASE_DIR $program_dir $SERVER_START_PORT $RAFT_START_PORT $INSTANCE_START_ID ${COOR_SRV_PEERS} ${COOR_RAFT_PEERS:-fail} ${TMP_COORDINATOR_SERVICES}
   fi
+  echo "unlink..."${TMP_COORDINATOR_SERVICES}
+
+  unlink ${TMP_COORDINATOR_SERVICES}
+  echo "Finish..."
 
 
 }
