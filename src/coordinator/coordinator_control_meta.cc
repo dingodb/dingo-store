@@ -960,6 +960,8 @@ void CoordinatorControl::CalculateTableMetrics() {
         BAIDU_SCOPED_LOCK(table_bvar_map_mutex_);
         table_bvar_map_.erase(table_id);
       }
+      // mbvar table
+      coordinator_bvar_metrics_table_->DeleteTableBvar(table_id);
 
     } else {
       table_metrics_internal.second.mutable_table_metrics()->CopyFrom(table_metrics);
@@ -978,6 +980,9 @@ void CoordinatorControl::CalculateTableMetrics() {
           (*ptr)->SetPartCount(table_metrics.part_count());
         }
       }
+      // mbvar table
+      coordinator_bvar_metrics_table_->UpdateTableBvar(table_id, table_metrics.rows_count(),
+                                                       table_metrics.part_count());
     }
   }
 }
