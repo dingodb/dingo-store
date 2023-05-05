@@ -28,6 +28,7 @@ DEFINE_int32(round_num, 1, "Round of requests");
 DEFINE_int32(timeout_ms, 500, "Timeout for each request");
 DEFINE_string(addrs, "127.0.0.1:10001,127.0.0.1:10002,127.0.0.1:10003", "server addrs");
 DEFINE_string(raft_addrs, "127.0.0.1:10101:0,127.0.0.1:10102:0,127.0.0.1:10103:0", "raft addrs");
+DEFINE_string(coor_addrs, "127.0.0.1:10101:0,127.0.0.1:10102:0,127.0.0.1:10103:0", "corr addrs");
 DEFINE_string(method, "KvGet", "Request method");
 DEFINE_string(key, "", "Request key");
 DEFINE_string(value, "", "Request values");
@@ -37,6 +38,7 @@ DEFINE_int32(region_count, 1, "region count");
 DEFINE_int32(table_id, 0, "table id");
 DEFINE_string(table_name, "", "table name");
 DEFINE_string(raft_group, "store_default_test", "raft group");
+DEFINE_int32(partition_num, 1, "table partition num");
 
 bvar::LatencyRecorder g_latency_recorder("dingo-store");
 
@@ -45,7 +47,9 @@ const std::map<std::string, std::vector<std::string>> kParamConstraint = {
     {"RaftAddrs", {"AddRegion", "ChangeRegion", "BatchAddRegion", "TestBatchPutGet"}},
     {"ThreadNum", {"BatchAddRegion", "TestBatchPutGet", "TestBatchPutGet"}},
     {"RegionCount", {"BatchAddRegion", "TestBatchPutGet"}},
-    {"ReqNum", {"KvBatchGet", "TestBatchPutGet", "TestBatchPutGet"}},
+    {"ReqNum", {"KvBatchGet", "TestBatchPutGet", "TestBatchPutGet", "AutoTest"}},
+    {"TableName", {"AutoTest"}},
+    {"PartitionNum", {"AutoTest"}},
 };
 
 void ValidateParam() {
@@ -94,6 +98,24 @@ void ValidateParam() {
     for (const auto& method : methods) {
       if (method == FLAGS_method) {
         DINGO_LOG(FATAL) << "missing param req_num error";
+      }
+    }
+  }
+
+  if (FLAGS_table_name.empty()) {
+    auto methods = kParamConstraint.find("TableName")->second;
+    for (const auto& method : methods) {
+      if (method == FLAGS_method) {
+        DINGO_LOG(FATAL) << "missing param table_name error";
+      }
+    }
+  }
+
+  if (FLAGS_partition_num == 0) {
+    auto methods = kParamConstraint.find("PartitionNum")->second;
+    for (const auto& method : methods) {
+      if (method == FLAGS_method) {
+        DINGO_LOG(FATAL) << "missing param partition_num error";
       }
     }
   }
@@ -151,8 +173,14 @@ void Sender(client::ServerInteractionPtr interaction, const std::string& method,
     if (method == "AutoTest") {
       auto ctx = std::make_shared<client::Context>();
       ctx->table_name = FLAGS_table_name;
-      ctx->partition_num = 1;
+      ctx->partition_num = FLAGS_partition_num;
       ctx->req_num = FLAGS_req_num;
+      ctx->store_interaction = interaction;
+
+      client::ServerInteractionPtr coor_interaction = std::make_shared<client::ServerInteraction>();
+      coor_interaction->Init(FLAGS_coor_addrs);
+
+      ctx->coordinator_interaction = coor_interaction;
 
       AutoTest(ctx);
     }
