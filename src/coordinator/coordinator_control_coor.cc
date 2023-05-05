@@ -431,12 +431,23 @@ void CoordinatorControl::GetRegionMap(pb::common::RegionMap& region_map) {
 
 void CoordinatorControl::GetRegionIdsInMap(std::vector<uint64_t>& region_ids) { region_map_.GetAllKeys(region_ids); }
 
-void CoordinatorControl::CleanRegionBvars(const std::vector<uint64_t>& region_ids) {
-  BAIDU_SCOPED_LOCK(region_bvar_map_mutex_);
-  for (const auto& it : region_bvar_map_) {
-    if (std::find(region_ids.begin(), region_ids.end(), it.first) == region_ids.end()) {
-      region_bvar_map_.erase(it.first);
-      coordinator_bvar_metrics_region_->DeleteRegionBvar(it.first);
+void CoordinatorControl::CleanRegionBvars() {
+  std::set<uint64_t> region_ids_set;
+  region_map_.GetAllKeys(region_ids_set);
+  std::vector<uint64_t> region_ids_to_delete;
+
+  {
+    BAIDU_SCOPED_LOCK(region_bvar_map_mutex_);
+    for (const auto& it : region_bvar_map_) {
+      if (region_ids_set.find(it.first) == region_ids_set.end()) {
+        DINGO_LOG(INFO) << "CleanRegionBvars region_id=" << it.first;
+        region_ids_to_delete.push_back(it.first);
+      }
+    }
+
+    for (auto it : region_ids_to_delete) {
+      region_bvar_map_.erase(it);
+      coordinator_bvar_metrics_region_->DeleteRegionBvar(it);
     }
   }
 }

@@ -315,7 +315,7 @@ bool Server::InitCrontabManager() {
     // Add recycle orphan crontab
     std::shared_ptr<Crontab> recycle_crontab = std::make_shared<Crontab>();
     recycle_crontab->name = "RECYCLE";
-    recycle_crontab->interval = push_interval * 600;
+    recycle_crontab->interval = push_interval * 60;
     recycle_crontab->func = Heartbeat::TriggerCoordinatorRecycleOrphan;
     recycle_crontab->arg = nullptr;
 
