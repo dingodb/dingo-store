@@ -16,6 +16,7 @@
 #define DINGODB_RAFT_STATE_MACHINE_H_
 
 #include <cstdint>
+#include <string>
 
 #include "braft/raft.h"
 #include "brpc/controller.h"
@@ -74,12 +75,14 @@ class StoreStateMachine : public braft::StateMachine {
   void DispatchEvent(dingodb::EventType, std::shared_ptr<dingodb::Event> event);
 
   store::RegionPtr region_;
+  std::string str_node_id_;
   std::shared_ptr<RawEngine> engine_;
   std::shared_ptr<EventListenerCollection> listeners_;
 
   int64_t applied_term_;
   int64_t applied_index_;
   std::shared_ptr<pb::store_internal::RaftMeta> raft_meta_;
+
   store::RegionMetricsPtr region_metrics_;
 };
 

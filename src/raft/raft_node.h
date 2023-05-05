@@ -67,7 +67,9 @@ class RaftNode {
  private:
   std::string path_;
   uint64_t node_id_;
+  std::string str_node_id_;
   std::string raft_group_name_;
+
   std::unique_ptr<braft::Node> node_;
   braft::StateMachine* fsm_;
 };

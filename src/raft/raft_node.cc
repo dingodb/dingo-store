@@ -23,6 +23,7 @@
 #include "common/helper.h"
 #include "common/logging.h"
 #include "config/config_manager.h"
+#include "metrics/store_bvar_metrics.h"
 #include "proto/common.pb.h"
 #include "raft/store_state_machine.h"
 #include "server/server.h"
@@ -32,6 +33,7 @@ namespace dingodb {
 RaftNode::RaftNode(uint64_t node_id, const std::string& raft_group_name, braft::PeerId peer_id,
                    braft::StateMachine* fsm)
     : node_id_(node_id),
+      str_node_id_(std::to_string(node_id)),
       raft_group_name_(raft_group_name),
       node_(new braft::Node(raft_group_name, peer_id)),
       fsm_(fsm) {}
@@ -102,6 +104,8 @@ butil::Status RaftNode::Commit(std::shared_ptr<Context> ctx, std::shared_ptr<pb:
   task.data = &data;
   task.done = new StoreClosure(ctx, raft_cmd);
   node_->apply(task);
+
+  StoreBvarMetrics::GetInstance().IncCommitCountPerSecond(str_node_id_);
 
   return butil::Status();
 }

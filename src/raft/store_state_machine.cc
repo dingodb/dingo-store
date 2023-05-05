@@ -15,6 +15,7 @@
 #include "raft/store_state_machine.h"
 
 #include <memory>
+#include <string>
 
 #include "braft/util.h"
 #include "butil/strings/stringprintf.h"
@@ -22,6 +23,7 @@
 #include "common/logging.h"
 #include "event/store_state_machine_event.h"
 #include "meta/store_meta_manager.h"
+#include "metrics/store_bvar_metrics.h"
 #include "proto/error.pb.h"
 #include "proto/raft.pb.h"
 #include "server/server.h"
@@ -56,6 +58,7 @@ StoreStateMachine::StoreStateMachine(std::shared_ptr<RawEngine> engine, store::R
                                      std::shared_ptr<EventListenerCollection> listeners)
     : engine_(engine),
       region_(region),
+      str_node_id_(std::to_string(region->Id())),
       raft_meta_(raft_meta),
       region_metrics_(region_metrics),
       listeners_(listeners),
@@ -105,6 +108,9 @@ void StoreStateMachine::on_apply(braft::Iterator& iter) {
 
     raft_meta_->set_term(applied_term_);
     raft_meta_->set_applied_index(applied_index_);
+
+    // bvar metrics
+    StoreBvarMetrics::GetInstance().IncApplyCountPerSecond(str_node_id_);
   }
 
   // Persistence applied index
@@ -178,6 +184,10 @@ void StoreStateMachine::on_leader_start(int64_t term) {
   event->node_id = region_->Id();
 
   DispatchEvent(EventType::kSmLeaderStart, event);
+
+  // bvar metrics
+  StoreBvarMetrics::GetInstance().UpdateLeaderSwitchCount(str_node_id_, term);
+  StoreBvarMetrics::GetInstance().UpdateLeaderSwitchTime(str_node_id_);
 }
 
 void StoreStateMachine::on_leader_stop(const butil::Status& status) {
@@ -217,6 +227,10 @@ void StoreStateMachine::on_start_following(const braft::LeaderChangeContext& ctx
   event->node_id = region_->Id();
 
   DispatchEvent(EventType::kSmStartFollowing, event);
+
+  // bvar metrics
+  StoreBvarMetrics::GetInstance().UpdateLeaderSwitchCount(str_node_id_, ctx.term());
+  StoreBvarMetrics::GetInstance().UpdateLeaderSwitchTime(str_node_id_);
 }
 
 void StoreStateMachine::on_stop_following(const braft::LeaderChangeContext& ctx) {
