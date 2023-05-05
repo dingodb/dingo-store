@@ -36,6 +36,8 @@ class NodeServiceImpl : public pb::node::NodeService {
                    pb::node::GetLogLevelResponse* response, google::protobuf::Closure* done) override;
   void ChangeLogLevel(google::protobuf::RpcController* controller, const pb::node::ChangeLogLevelRequest* request,
                       pb::node::ChangeLogLevelResponse* response, google::protobuf::Closure* done) override;
+  void DingoMetrics(google::protobuf::RpcController* controller, const pb::node::MetricsRequest* request,
+                    pb::node::MetricsResponse* response, google::protobuf::Closure* done) override;
 
   void SetServer(dingodb::Server* server);
 
