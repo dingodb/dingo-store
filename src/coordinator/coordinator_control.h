@@ -590,17 +590,10 @@ class CoordinatorControl : public MetaControl {
   butil::atomic<bool> is_processing_task_list_;
 
   // bvar
-  butil::FlatMap<uint64_t, std::shared_ptr<MetaBvarStore>> store_bvar_map_;
-  butil::FlatMap<uint64_t, std::shared_ptr<MetaBvarRegion>> region_bvar_map_;
-  butil::FlatMap<uint64_t, std::shared_ptr<MetaBvarTable>> table_bvar_map_;
-  bthread_mutex_t store_bvar_map_mutex_;
-  bthread_mutex_t region_bvar_map_mutex_;
-  bthread_mutex_t table_bvar_map_mutex_;
-
   MetaBvarCoordinator coordinator_bvar_;
-  std::shared_ptr<CoordinatorBvarMetricsStore> coordinator_bvar_metrics_store_;
-  std::shared_ptr<CoordinatorBvarMetricsRegion> coordinator_bvar_metrics_region_;
-  std::shared_ptr<CoordinatorBvarMetricsTable> coordinator_bvar_metrics_table_;
+  CoordinatorBvarMetricsStore coordinator_bvar_metrics_store_;
+  CoordinatorBvarMetricsRegion coordinator_bvar_metrics_region_;
+  CoordinatorBvarMetricsTable coordinator_bvar_metrics_table_;
 };
 
 }  // namespace dingodb

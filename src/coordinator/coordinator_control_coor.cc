@@ -144,20 +144,12 @@ void CoordinatorControl::DeleteStoreMetrics(uint64_t store_id) {
   BAIDU_SCOPED_LOCK(store_metrics_map_mutex_);
   if (store_id == 0) {
     for (const auto& it : store_metrics_map_) {
-      coordinator_bvar_metrics_store_->DeleteStoreBvar(it.first);
+      coordinator_bvar_metrics_store_.DeleteStoreBvar(it.first);
     }
     store_metrics_map_.clear();
-    {
-      BAIDU_SCOPED_LOCK(store_bvar_map_mutex_);
-      store_bvar_map_.clear();
-    }
   } else {
     store_metrics_map_.erase(store_id);
-    {
-      BAIDU_SCOPED_LOCK(store_bvar_map_mutex_);
-      store_bvar_map_.erase(store_id);
-    }
-    coordinator_bvar_metrics_store_->DeleteStoreBvar(store_id);
+    coordinator_bvar_metrics_store_.DeleteStoreBvar(store_id);
   }
 }
 
@@ -431,31 +423,10 @@ void CoordinatorControl::GetRegionMap(pb::common::RegionMap& region_map) {
 
 void CoordinatorControl::GetRegionIdsInMap(std::vector<uint64_t>& region_ids) { region_map_.GetAllKeys(region_ids); }
 
-void CoordinatorControl::CleanRegionBvars() {
-  std::set<uint64_t> region_ids_set;
-  region_map_.GetAllKeys(region_ids_set);
-  std::vector<uint64_t> region_ids_to_delete;
-
-  {
-    BAIDU_SCOPED_LOCK(region_bvar_map_mutex_);
-    for (const auto& it : region_bvar_map_) {
-      if (region_ids_set.find(it.first) == region_ids_set.end()) {
-        DINGO_LOG(INFO) << "CleanRegionBvars region_id=" << it.first;
-        region_ids_to_delete.push_back(it.first);
-      }
-    }
-
-    for (auto it : region_ids_to_delete) {
-      region_bvar_map_.erase(it);
-      coordinator_bvar_metrics_region_->DeleteRegionBvar(it);
-    }
-  }
-}
+void CoordinatorControl::CleanRegionBvars() {}
 
 void CoordinatorControl::DeleteRegionBvar(uint64_t region_id) {
-  BAIDU_SCOPED_LOCK(region_bvar_map_mutex_);
-  region_bvar_map_.erase(region_id);
-  coordinator_bvar_metrics_region_ = std::make_shared<CoordinatorBvarMetricsRegion>();
+  coordinator_bvar_metrics_region_.DeleteRegionBvar(region_id);
 }
 
 butil::Status CoordinatorControl::QueryRegion(uint64_t region_id, pb::common::Region& region) {
@@ -2207,23 +2178,11 @@ void CoordinatorControl::UpdateRegionMapAndStoreOperation(const pb::common::Stor
 
     region_increment_region->set_raft_status(region_raft_status);
 
-    {
-      // bvar region
-      BAIDU_SCOPED_LOCK(region_bvar_map_mutex_);
-      auto* ptr = region_bvar_map_.seek(region_metrics.id());
-      if (ptr == nullptr) {
-        std::shared_ptr<MetaBvarRegion> meta_bvar = std::make_shared<MetaBvarRegion>(region_metrics.id());
-        meta_bvar->SetRowCount(region_metrics.row_count());
-        meta_bvar->SetRegionSize(region_metrics.region_size());
-        region_bvar_map_.insert(region_metrics.id(), meta_bvar);
-      } else {
-        (*ptr)->SetRowCount(region_metrics.row_count());
-        (*ptr)->SetRegionSize(region_metrics.region_size());
-      }
-    }
     // mbvar region
-    coordinator_bvar_metrics_region_->UpdateRegionBvar(region_metrics.id(), region_metrics.row_count(),
-                                                       region_metrics.region_size());
+    if (region_to_update.state() != pb::common::RegionState::REGION_DELETED) {
+      coordinator_bvar_metrics_region_.UpdateRegionBvar(region_metrics.id(), region_metrics.row_count(),
+                                                        region_metrics.region_size());
+    }
   }
 
   // update store operation
@@ -2351,23 +2310,9 @@ uint64_t CoordinatorControl::UpdateStoreMetrics(const pb::common::StoreMetrics& 
       // store_metrics_map_.insert(std::make_pair(store_metrics.id(), store));  // raft_kv_put
     }
 
-    {
-      // bvar store
-      BAIDU_SCOPED_LOCK(store_bvar_map_mutex_);
-      auto* ptr = store_bvar_map_.seek(store_metrics.id());
-      if (ptr == nullptr) {
-        std::shared_ptr<MetaBvarStore> meta_bvar = std::make_shared<MetaBvarStore>(store_metrics.id());
-        meta_bvar->SetTotalCapacity(store_metrics.total_capacity());
-        meta_bvar->SetFreeCapacity(store_metrics.free_capacity());
-        store_bvar_map_.insert(store_metrics.id(), meta_bvar);
-      } else {
-        (*ptr)->SetTotalCapacity(store_metrics.total_capacity());
-        (*ptr)->SetFreeCapacity(store_metrics.free_capacity());
-      }
-    }
     // mbvar store
-    coordinator_bvar_metrics_store_->UpdateStoreBvar(store_metrics.id(), store_metrics.total_capacity(),
-                                                     store_metrics.free_capacity());
+    coordinator_bvar_metrics_store_.UpdateStoreBvar(store_metrics.id(), store_metrics.total_capacity(),
+                                                    store_metrics.free_capacity());
   }
 
   //   if (need_update_epoch) {
@@ -2507,30 +2452,6 @@ void CoordinatorControl::GetMemoryInfo(pb::coordinator::CoordinatorMemoryInfo& m
     memory_info.set_task_list_map_count(task_list_map_.Size());
     memory_info.set_task_list_map_size(task_list_map_.MemorySize());
     memory_info.set_total_size(memory_info.total_size() + memory_info.task_list_map_size());
-  }
-  {
-    BAIDU_SCOPED_LOCK(store_bvar_map_mutex_);
-    memory_info.set_store_bvar_map_count(store_bvar_map_.size());
-    for (auto& it : store_bvar_map_) {
-      memory_info.set_store_bvar_map_size(memory_info.store_bvar_map_size() + sizeof(it.first) + sizeof(*it.second));
-    }
-    memory_info.set_total_size(memory_info.total_size() + memory_info.store_bvar_map_size());
-  }
-  {
-    BAIDU_SCOPED_LOCK(region_bvar_map_mutex_);
-    memory_info.set_region_bvar_map_count(region_bvar_map_.size());
-    for (auto& it : region_bvar_map_) {
-      memory_info.set_region_bvar_map_size(memory_info.region_bvar_map_size() + sizeof(it.first) + sizeof(*it.second));
-    }
-    memory_info.set_total_size(memory_info.total_size() + memory_info.region_bvar_map_size());
-  }
-  {
-    BAIDU_SCOPED_LOCK(table_bvar_map_mutex_);
-    memory_info.set_table_bvar_map_count(table_bvar_map_.size());
-    for (auto& it : table_bvar_map_) {
-      memory_info.set_table_bvar_map_size(memory_info.table_bvar_map_size() + sizeof(it.first) + sizeof(*it.second));
-    }
-    memory_info.set_total_size(memory_info.total_size() + memory_info.table_bvar_map_size());
   }
 }
 

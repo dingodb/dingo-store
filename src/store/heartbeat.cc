@@ -260,6 +260,9 @@ void CoordinatorUpdateStateTask::CoordinatorUpdateState(std::shared_ptr<Coordina
       region_delete_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
       region_delete_increment->mutable_region()->CopyFrom(it);
 
+      // mbvar
+      coordinator_control->DeleteRegionBvar(it.id());
+
       DINGO_LOG(INFO) << "CoordinatorUpdateState... purge region delete region_map " << it.id() << " from store "
                       << it.id() << " region_cmd_type " << region_delete_increment->region().DebugString()
                       << " request=" << meta_increment.DebugString();

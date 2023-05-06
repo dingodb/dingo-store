@@ -107,22 +107,9 @@ void CoordinatorControl::OnLeaderStart(int64_t term) {
 
 void CoordinatorControl::OnLeaderStop() {
   coordinator_bvar_.SetValue(0);
-  {
-    BAIDU_SCOPED_LOCK(store_bvar_map_mutex_);
-    store_bvar_map_.clear();
-  }
-  {
-    BAIDU_SCOPED_LOCK(region_bvar_map_mutex_);
-    region_bvar_map_.clear();
-  }
-  {
-    BAIDU_SCOPED_LOCK(table_bvar_map_mutex_);
-    table_bvar_map_.clear();
-  }
-
-  coordinator_bvar_metrics_store_->Clear();
-  coordinator_bvar_metrics_region_->Clear();
-  coordinator_bvar_metrics_table_->Clear();
+  coordinator_bvar_metrics_store_.Clear();
+  coordinator_bvar_metrics_region_.Clear();
+  coordinator_bvar_metrics_table_.Clear();
 
   DINGO_LOG(INFO) << "OnLeaderStop finished";
 }
