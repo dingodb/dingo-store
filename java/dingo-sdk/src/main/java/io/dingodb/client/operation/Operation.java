@@ -16,11 +16,13 @@
 
 package io.dingodb.client.operation;
 
+import io.dingodb.client.Key;
 import io.dingodb.client.OperationContext;
 import io.dingodb.client.Record;
 import io.dingodb.client.RouteTable;
 import io.dingodb.sdk.common.DingoCommonId;
 import io.dingodb.sdk.common.table.Table;
+import io.dingodb.sdk.common.type.TupleMapping;
 import io.dingodb.sdk.common.utils.Any;
 import io.dingodb.sdk.common.utils.Parameters;
 import lombok.AllArgsConstructor;
@@ -63,6 +65,12 @@ public interface Operation {
     Fork fork(OperationContext context, RouteTable routeTable);
 
     <R> R reduce(Fork context);
+
+    default Object[] mapKey(Table table, Key key, TupleMapping keyMapping) {
+        Object[] dst = new Object[table.getColumns().size()];
+        keyMapping.map(dst, key.getUserKey().toArray(new Object[table.getColumns().size()]));
+        return dst;
+    }
 
     default void checkParameters(Table table, Record record) {
         table.getColumns().stream()
