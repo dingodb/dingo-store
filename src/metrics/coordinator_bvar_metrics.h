@@ -36,12 +36,18 @@ class CoordinatorBvarMetricsStore {
   }
   ~CoordinatorBvarMetricsStore() = default;
 
-  CoordinatorBvarMetricsStore(const CoordinatorBvarMetricsStore&) = delete;
-  void operator=(const CoordinatorBvarMetricsStore&) = delete;
+  CoordinatorBvarMetricsStore(const CoordinatorBvarMetricsStore &) = delete;
+  void operator=(const CoordinatorBvarMetricsStore &) = delete;
 
   void UpdateStoreBvar(uint64_t store_id, uint64_t total_capacity, uint64_t free_capacity) {
-    store_metrics_.get_stats({std::to_string(store_id), "total_capacity"})->set_value(total_capacity);
-    store_metrics_.get_stats({std::to_string(store_id), "free_capacity"})->set_value(free_capacity);
+    auto *stats = store_metrics_.get_stats({std::to_string(store_id), "total_capacity"});
+    if (stats) {
+      stats->set_value(total_capacity);
+    }
+    auto *stats2 = store_metrics_.get_stats({std::to_string(store_id), "free_capacity"});
+    if (stats2) {
+      stats2->set_value(free_capacity);
+    }
   }
 
   void DeleteStoreBvar(uint64_t store_id) {
@@ -62,12 +68,18 @@ class CoordinatorBvarMetricsRegion {
   }
   ~CoordinatorBvarMetricsRegion() = default;
 
-  CoordinatorBvarMetricsRegion(const CoordinatorBvarMetricsRegion&) = delete;
-  void operator=(const CoordinatorBvarMetricsRegion&) = delete;
+  CoordinatorBvarMetricsRegion(const CoordinatorBvarMetricsRegion &) = delete;
+  void operator=(const CoordinatorBvarMetricsRegion &) = delete;
 
   void UpdateRegionBvar(uint64_t region_id, uint64_t region_row_count, uint64_t region_size) {
-    region_metrics_.get_stats({std::to_string(region_id), "row_count"})->set_value(region_row_count);
-    region_metrics_.get_stats({std::to_string(region_id), "size"})->set_value(region_size);
+    auto *stats = region_metrics_.get_stats({std::to_string(region_id), "row_count"});
+    if (stats) {
+      stats->set_value(region_row_count);
+    }
+    auto *stats2 = region_metrics_.get_stats({std::to_string(region_id), "size"});
+    if (stats2) {
+      stats2->set_value(region_size);
+    }
   }
 
   void DeleteRegionBvar(uint64_t region_id) {
@@ -88,12 +100,18 @@ class CoordinatorBvarMetricsTable {
   }
   ~CoordinatorBvarMetricsTable() = default;
 
-  CoordinatorBvarMetricsTable(const CoordinatorBvarMetricsTable&) = delete;
-  void operator=(const CoordinatorBvarMetricsTable&) = delete;
+  CoordinatorBvarMetricsTable(const CoordinatorBvarMetricsTable &) = delete;
+  void operator=(const CoordinatorBvarMetricsTable &) = delete;
 
   void UpdateTableBvar(uint64_t table_id, uint64_t table_row_count, uint64_t table_part_count) {
-    table_metrics_.get_stats({std::to_string(table_id), "row_count"})->set_value(table_row_count);
-    table_metrics_.get_stats({std::to_string(table_id), "part_count"})->set_value(table_part_count);
+    auto *stats = table_metrics_.get_stats({std::to_string(table_id), "row_count"});
+    if (stats) {
+      stats->set_value(table_row_count);
+    }
+    auto *stats2 = table_metrics_.get_stats({std::to_string(table_id), "part_count"});
+    if (stats2) {
+      stats2->set_value(table_part_count);
+    }
   }
 
   void DeleteTableBvar(uint64_t table_id) {
