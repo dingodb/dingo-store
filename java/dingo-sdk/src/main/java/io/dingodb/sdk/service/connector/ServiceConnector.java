@@ -37,7 +37,7 @@ import java.util.concurrent.locks.LockSupport;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
-import static io.dingodb.error.ErrorOuterClass.Errno.EREGION_REDIRECT;
+import static io.dingodb.sdk.common.utils.ErrorCodeUtils.refreshCode;
 
 @Slf4j
 public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
@@ -84,7 +84,7 @@ public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
             try {
                 Response<R> response = function.apply(stub);
                 if (response.getError().getErrcodeValue() != 0) {
-                    if (response.getError().getErrcodeValue() == EREGION_REDIRECT.getNumber()) {
+                    if (refreshCode.contains(response.getError().getErrcodeValue())) {
                         throw new DingoClientException.InvalidRouteTableException(response.error.getErrmsg());
                     }
                     if (retryCheck.test(response.error)) {
@@ -112,8 +112,17 @@ public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
             if (channel != null && !channel.isShutdown()) {
                 channel.shutdown();
             }
+            if (locations.isEmpty()) {
+                throw new DingoClientException("Invalid locations");
+            }
             for (Location location : locations) {
-                channel = transformToLeaderChannel(newChannel(location.getHost(), location.getPort()));
+                try {
+                    channel = newChannel(location.getHost(), location.getPort());
+                    channel = transformToLeaderChannel(channel);
+                } catch (StatusRuntimeException ignore) {
+                    locations.remove(location);
+                    refresh(stub);
+                }
                 if (channel != null) {
                     stubRef.set(newStub(channel));
                     return;

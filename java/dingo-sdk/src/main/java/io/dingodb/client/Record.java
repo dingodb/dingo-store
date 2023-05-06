@@ -16,6 +16,7 @@
 
 package io.dingodb.client;
 
+import io.dingodb.sdk.common.DingoClientException;
 import io.dingodb.sdk.common.table.Column;
 import io.dingodb.sdk.common.table.ColumnDefinition;
 import io.dingodb.sdk.common.utils.Optional;
@@ -29,6 +30,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -117,7 +119,8 @@ public final class Record {
         int index;
         for (int i = 0; i < cols.size(); i++) {
             String col = cols.get(i).toUpperCase();
-            index = Parameters.nonNull(columnIndex.get(col), col);
+            index = Parameters.check(columnIndex.get(col), Objects::nonNull,
+                    () -> new DingoClientException("column name: " + col + " that does not exist"));
             columns[i] = this.columns[index];
             values[i] = this.values[index];
         }
