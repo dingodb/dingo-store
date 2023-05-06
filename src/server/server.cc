@@ -190,8 +190,8 @@ bool Server::InitCoordinatorInteraction() {
     return coordinator_interaction_->InitByNameService(FLAGS_coor_url,
                                                        pb::common::CoordinatorServiceType::ServiceTypeCoordinator);
   } else {
-    return coordinator_interaction_->Init(config->GetString("cluster.coordinators"),
-                                          pb::common::CoordinatorServiceType::ServiceTypeCoordinator);
+    DINGO_LOG(ERROR) << "FLAGS_coor_url is empty";
+    return false;
   }
 }
 

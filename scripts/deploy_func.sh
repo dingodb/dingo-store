@@ -5,9 +5,8 @@ function deploy_store() {
   server_port=$4
   raft_port=$5
   instance_id=$6
-  coor_srv_peers=$7
-  coor_raft_peers=$8
-  coor_service_file=$9
+  coor_raft_peers=$7
+  coor_service_file=$8
 
   echo "server ${dstpath}"
 
@@ -50,7 +49,6 @@ function deploy_store() {
     sed  -i 's,\$RAFT_PORT\$,'"$raft_port"',g'              $dstpath/conf/${role}.yaml
     sed  -i 's,\$BASE_PATH\$,'"$dstpath"',g'                $dstpath/conf/${role}.yaml
 
-    sed  -i 's|\$COORDINATOR_SERVICE_PEERS\$|'"$coor_srv_peers"'|g'    $dstpath/conf/${role}.yaml
     sed  -i 's|\$COORDINATOR_RAFT_PEERS\$|'"$coor_raft_peers"'|g'  $dstpath/conf/${role}.yaml
   fi
 
