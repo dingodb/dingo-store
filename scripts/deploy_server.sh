@@ -26,7 +26,7 @@ if [ ! -d "$DIST_DIR" ]; then
   mkdir "$DIST_DIR"
 fi
 
-TMP_COORDINATOR_SERVICES=/tmp/coor_list_`whoami`_`date +%s`
+TMP_COORDINATOR_SERVICES=$BASE_DIR/build/bin/coor_list
 SERVER_NUM=${FLAGS_server_num}
 COORDINATOR_INSTANCE_START_ID=22000
 STORE_INSTANCE_START_ID=33000
@@ -47,73 +47,6 @@ if [ "$USER" == "dylan" ]; then
   COORDINATOR_RAFT_START_PORT=12100
 fi
 
-function deploy_store() {
-  role=$1
-  srcpath=$2
-  dstpath=$3
-  server_port=$4
-  raft_port=$5
-  instance_id=$6
-  coor_srv_peers=$7
-  coor_raft_peers=$8
-  coor_service_file=$9
-
-  echo "server ${dstpath}"
-
-  if [ ! -d "$dstpath" ]; then
-    mkdir "$dstpath"
-  fi
-
-  if [ ! -d "$dstpath/bin" ]; then
-    mkdir "$dstpath/bin"
-  fi
-  if [ ! -d "$dstpath/conf" ]; then
-    mkdir "$dstpath/conf"
-  fi
-  if [ ! -d "$dstpath/log" ]; then
-    mkdir "$dstpath/log"
-  fi
-  if [ ! -d "$dstpath/data" ]; then
-    mkdir "$dstpath/data"
-  fi
-  if [ ! -d "$dstpath/data/${role}" ]; then
-    mkdir $dstpath/data/${role}
-  fi
-  if [ ! -d "$dstpath/data/${role}/raft" ]; then
-    mkdir $dstpath/data/${role}/raft
-  fi
-  if [ ! -d "$dstpath/data/${role}/db" ]; then
-    mkdir $dstpath/data/${role}/db
-  fi
-
-  cp ${coor_service_file} $dstpath/conf/coor_list
-
-  cp $srcpath/build/bin/dingodb_server $dstpath/bin/
-  if [ "${FLAGS_replace_conf}" == "0" ]; then
-    cp $srcpath/conf/${role}.template.yaml $dstpath/conf/${role}.yaml
-
-    sed  -i 's,\$INSTANCE_ID\$,'"$instance_id"',g'          $dstpath/conf/${role}.yaml
-    sed  -i 's,\$SERVER_HOST\$,'"$SERVER_HOST"',g'          $dstpath/conf/${role}.yaml
-    sed  -i 's,\$SERVER_PORT\$,'"$server_port"',g'          $dstpath/conf/${role}.yaml
-    sed  -i 's,\$RAFT_HOST\$,'"$RAFT_HOST"',g'              $dstpath/conf/${role}.yaml
-    sed  -i 's,\$RAFT_PORT\$,'"$raft_port"',g'              $dstpath/conf/${role}.yaml
-    sed  -i 's,\$BASE_PATH\$,'"$dstpath"',g'                $dstpath/conf/${role}.yaml
-
-    sed  -i 's|\$COORDINATOR_SERVICE_PEERS\$|'"$coor_srv_peers"'|g'    $dstpath/conf/${role}.yaml
-    sed  -i 's|\$COORDINATOR_RAFT_PEERS\$|'"$coor_raft_peers"'|g'  $dstpath/conf/${role}.yaml
-  fi
-
-  if [ "${FLAGS_clean_db}" == "0" ]; then
-    rm -rf $dstpath/data/${role}/db/*
-  fi
-  if [ "${FLAGS_clean_raft}" == "0" ]; then
-    rm -rf $dstpath/data/${role}/raft/*
-  fi
-  if [ "${FLAGS_clean_log}" == "0" ]; then
-    rm -rf $dstpath/log/*
-  fi
-}
-
 COOR_SRV_PEERS=""
 COOR_RAFT_PEERS=""
 
@@ -132,6 +65,8 @@ COOR_RAFT_PEERS=${COOR_RAFT_PEERS:1}
 echo "server peers: ${COOR_SRV_PEERS}"
 echo "raft peers: ${COOR_RAFT_PEERS}"
 
+source $mydir/deploy_func.sh
+
 for ((i=1; i<=$SERVER_NUM; ++i)); do
   program_dir=$BASE_DIR/dist/${FLAGS_role}${i}
 
@@ -143,9 +78,6 @@ fi
 
 done
 
-echo "unlink..."${TMP_COORDINATOR_SERVICES}
-
-unlink ${TMP_COORDINATOR_SERVICES}
 
 echo "Finish..."
 
