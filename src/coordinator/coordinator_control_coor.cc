@@ -1287,11 +1287,12 @@ butil::Status CoordinatorControl::ChangePeerRegionWithTaskList(
 
   // generate store operation for stores
   if (new_store_ids_diff_less.size() == 1) {
-    if (region.leader_store_id() == new_store_ids_diff_less.at(0)) {
+    if (region.leader_store_id() == new_store_ids_diff_less.at(0) && new_store_ids.size() < 3) {
       DINGO_LOG(ERROR) << "ChangePeerRegion region.leader_store_id() == new_store_ids_diff_less.at(0), region_id = "
-                       << region_id;
-      return butil::Status(pb::error::Errno::ECHANGE_PEER_UNABLE_TO_REMOVE_LEADER,
-                           "ChangePeerRegion region.leader_store_id() == new_store_ids_diff_less.at(0)");
+                       << region_id << " new_store_ids.size() = " << new_store_ids.size();
+      return butil::Status(
+          pb::error::Errno::ECHANGE_PEER_UNABLE_TO_REMOVE_LEADER,
+          "ChangePeerRegion region.leader_store_id() == new_store_ids_diff_less.at(0) and new_store_ids.size() < 3");
     }
 
     if (region.leader_store_id() == 0) {
