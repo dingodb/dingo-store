@@ -210,6 +210,10 @@ class CoordinatorControl : public MetaControl {
   butil::Status ChangePeerRegionWithTaskList(uint64_t region_id, std::vector<uint64_t> &new_store_ids,
                                              pb::coordinator_internal::MetaIncrement &meta_increment);
 
+  // transfer leader region
+  butil::Status TransferLeaderRegionWithTaskList(uint64_t region_id, uint64_t new_leader_store_id,
+                                                 pb::coordinator_internal::MetaIncrement &meta_increment);
+
   // create schema
   // in: parent_schema_id
   // in: schema_name

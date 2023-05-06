@@ -1135,6 +1135,67 @@ void SendRemovePeerRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coord
   }
 }
 
+void SendTransferLeaderRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  if (FLAGS_region_id == 0) {
+    DINGO_LOG(ERROR) << "region_id is empty";
+    return;
+  }
+
+  if (FLAGS_store_id == 0) {
+    DINGO_LOG(ERROR) << "store_id is empty";
+    return;
+  }
+
+  // query region
+  dingodb::pb::coordinator::QueryRegionRequest query_request;
+  dingodb::pb::coordinator::QueryRegionResponse query_response;
+
+  query_request.set_region_id(FLAGS_region_id);
+
+  auto status = coordinator_interaction->SendRequest("QueryRegion", query_request, query_response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+
+  if (query_response.region().definition().peers_size() == 0) {
+    DINGO_LOG(ERROR) << "region not found";
+    return;
+  }
+
+  // validate peer not exists in region peers
+  bool found = false;
+  for (const auto& peer : query_response.region().definition().peers()) {
+    if (peer.store_id() == FLAGS_store_id) {
+      found = true;
+      break;
+    }
+  }
+
+  if (!found) {
+    DINGO_LOG(ERROR) << "store_id not found";
+    return;
+  }
+
+  // generate tranfer leader
+  dingodb::pb::coordinator::TransferLeaderRegionRequest transfer_leader_request;
+  dingodb::pb::coordinator::TransferLeaderRegionResponse transfer_leader_response;
+
+  transfer_leader_request.set_region_id(FLAGS_region_id);
+  transfer_leader_request.set_leader_store_id(FLAGS_store_id);
+
+  DINGO_LOG(INFO) << "transfer leader: region_id=" << FLAGS_region_id << ", store_id=" << FLAGS_store_id;
+
+  auto status2 =
+      coordinator_interaction->SendRequest("TransferLeaderRegion", transfer_leader_request, transfer_leader_response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status2;
+  DINGO_LOG(INFO) << transfer_leader_response.DebugString();
+
+  if (transfer_leader_response.has_error() &&
+      transfer_leader_response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    DINGO_LOG(ERROR) << "transfer leader error: " << transfer_leader_response.error().DebugString();
+  } else {
+    DINGO_LOG(INFO) << "transfer leader success";
+  }
+}
+
 void SendGetOrphanRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
   dingodb::pb::coordinator::GetOrphanRegionRequest request;
   dingodb::pb::coordinator::GetOrphanRegionResponse response;
