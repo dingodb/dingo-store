@@ -55,9 +55,6 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   root_schema_writed_to_raft_ = false;
   is_processing_task_list_.store(false);
   leader_term_.store(-1, butil::memory_order_release);
-  bthread_mutex_init(&store_bvar_map_mutex_, nullptr);
-  bthread_mutex_init(&region_bvar_map_mutex_, nullptr);
-  bthread_mutex_init(&table_bvar_map_mutex_, nullptr);
 
   // the data structure below will write to raft
   coordinator_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::CoordinatorInternal>(&coordinator_map_);
@@ -78,9 +75,6 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   store_need_push_.init(100, 80);
   executor_need_push_.init(100, 80);
   store_metrics_map_.init(100, 80);
-  store_bvar_map_.init(100, 80);
-  region_bvar_map_.init(1000, 80);
-  table_bvar_map_.init(500, 80);
 
   // init SafeMap
   id_epoch_map_.Init(100);                // id_epoch_map_ is a small map
@@ -97,11 +91,6 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   table_metrics_map_.Init(10000);         // table_metrics_map_ is a big map
   executor_user_map_.Init(100);           // executor_user_map_ is a small map
   task_list_map_.Init(100);               // task_list_map_ is a small map
-
-  // init mbvar
-  coordinator_bvar_metrics_store_ = std::make_shared<CoordinatorBvarMetricsStore>();
-  coordinator_bvar_metrics_region_ = std::make_shared<CoordinatorBvarMetricsRegion>();
-  coordinator_bvar_metrics_table_ = std::make_shared<CoordinatorBvarMetricsTable>();
 }
 
 CoordinatorControl::~CoordinatorControl() {
