@@ -20,15 +20,7 @@ SERVER_NUM=${FLAGS_server_num}
 
 ulimit -c unlimited
 
-function start_program() {
-  role=$1
-  root_dir=$2
-  echo "start server: ${root_dir}"
-
-  cd ${root_dir}
-
-  nohup ./bin/dingodb_server --role ${role}  --conf ./conf/${role}.yaml --coor_url=file://./conf/coor_list 2>&1 >./log/out &
-}
+source $mydir/deploy_func.sh
 
 for ((i=1; i<=$SERVER_NUM; ++i)); do
   program_dir=$BASE_DIR/dist/${FLAGS_role}${i}
