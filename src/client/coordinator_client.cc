@@ -226,6 +226,8 @@ void* Sender(void* /*arg*/) {
     SendAddPeerRegion(coordinator_interaction);
   } else if (FLAGS_method == "RemovePeerRegion") {
     SendRemovePeerRegion(coordinator_interaction);
+  } else if (FLAGS_method == "TransferLeaderRegion") {
+    SendTransferLeaderRegion(coordinator_interaction);
   } else if (FLAGS_method == "GetOrphanRegion") {
     SendGetOrphanRegion(coordinator_interaction);
   } else if (FLAGS_method == "GetStoreOperation") {

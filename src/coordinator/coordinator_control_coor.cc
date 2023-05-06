@@ -1441,6 +1441,81 @@ butil::Status CoordinatorControl::ChangePeerRegionWithTaskList(
   return butil::Status::OK();
 }
 
+butil::Status CoordinatorControl::TransferLeaderRegionWithTaskList(
+    uint64_t region_id, uint64_t new_leader_store_id, pb::coordinator_internal::MetaIncrement& meta_increment) {
+  // check region_id exists
+  pb::common::Region region;
+  int ret = region_map_.Get(region_id, region);
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << "TransferLeaderRegion region_id not exists, region_id = " << region_id;
+    return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "TransferLeaderRegion region_id not exists");
+  }
+
+  if (region.state() != pb::common::RegionState::REGION_NORMAL) {
+    DINGO_LOG(ERROR) << "TransferLeaderRegion region.state() != REGION_NORMAL, region_id = " << region_id;
+    return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "TransferLeaderRegion region.state() != REGION_NORMAL");
+  }
+
+  if (region.leader_store_id() == new_leader_store_id) {
+    DINGO_LOG(ERROR) << "TransferLeaderRegion new_leader_store_id == old_leader_store_id, region_id = " << region_id;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
+                         "TransferLeaderRegion new_leader_store_id == old_leader_store_id");
+  }
+
+  if (region.leader_store_id() == 0) {
+    DINGO_LOG(ERROR) << "TransferLeaderRegion region.leader_store_id() == 0, region_id = " << region_id;
+    return butil::Status(pb::error::Errno::ECHANGE_PEER_STATUS_ILLEGAL,
+                         "TransferLeaderRegion region.leader_store_id() == 0");
+  }
+
+  // check new_leader_store_id exists
+  pb::common::Store store_to_transfer_leader;
+  ret = store_map_.Get(new_leader_store_id, store_to_transfer_leader);
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << "TransferLeaderRegion new_leader_store_id not exists, region_id = " << region_id;
+    return butil::Status(pb::error::Errno::ESTORE_NOT_FOUND, "TransferLeaderRegion new_leader_store_id not exists");
+  }
+
+  if (store_to_transfer_leader.state() != pb::common::StoreState::STORE_NORMAL) {
+    DINGO_LOG(ERROR) << "TransferLeaderRegion new_leader_store_id not running, region_id = " << region_id;
+    return butil::Status(pb::error::Errno::ESTORE_NOT_FOUND, "TransferLeaderRegion new_leader_store_id not running");
+  }
+
+  // check new_leader_store_id in region
+  bool new_leader_store_id_in_region = false;
+  for (int i = 0; i < region.definition().peers_size(); i++) {
+    if (region.definition().peers(i).store_id() == new_leader_store_id) {
+      new_leader_store_id_in_region = true;
+      break;
+    }
+  }
+  if (!new_leader_store_id_in_region) {
+    DINGO_LOG(ERROR) << "TransferLeaderRegion new_leader_store_id not in region, region_id = " << region_id;
+    return butil::Status(pb::error::Errno::ESTORE_NOT_FOUND, "TransferLeaderRegion new_leader_store_id not in region");
+  }
+
+  // build new task_list
+  auto* task_list_increment = meta_increment.add_task_lists();
+  task_list_increment->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_TASK_LIST, meta_increment));
+  task_list_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
+  auto* increment_task_list = task_list_increment->mutable_task_list();
+  increment_task_list->set_id(task_list_increment->id());
+  auto* new_task = increment_task_list->add_tasks();
+
+  // this transfer leader task
+  auto* store_operation_transfer = new_task->add_store_operations();
+  store_operation_transfer->set_id(region.leader_store_id());
+  auto* region_cmd_to_transfer = store_operation_transfer->add_region_cmds();
+  region_cmd_to_transfer->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
+  region_cmd_to_transfer->set_region_cmd_type(::dingodb::pb::coordinator::RegionCmdType::CMD_TRANSFER_LEADER);
+  region_cmd_to_transfer->set_region_id(region_id);
+  region_cmd_to_transfer->set_create_timestamp(butil::gettimeofday_ms());
+
+  region_cmd_to_transfer->mutable_transfer_leader_request()->set_leader_store_id(new_leader_store_id);
+
+  return butil::Status::OK();
+}
+
 bool CoordinatorControl::ValidateTaskListConflict(uint64_t region_id, uint64_t second_region_id) {
   // check task_list conflict
   butil::FlatMap<uint64_t, pb::coordinator::TaskList> task_list_map_temp;

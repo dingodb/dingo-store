@@ -996,6 +996,55 @@ void CoordinatorServiceImpl::ChangePeerRegion(google::protobuf::RpcController *c
   engine_->MetaPut(ctx, meta_increment);
 }
 
+void CoordinatorServiceImpl::TransferLeaderRegion(google::protobuf::RpcController *controller,
+                                                  const pb::coordinator::TransferLeaderRegionRequest *request,
+                                                  pb::coordinator::TransferLeaderRegionResponse *response,
+                                                  google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+  DINGO_LOG(DEBUG) << "Receive Transfer Leader Region Request:" << request->DebugString();
+
+  auto is_leader = this->coordinator_control_->IsLeader();
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  pb::coordinator_internal::MetaIncrement meta_increment;
+
+  // validate region_cmd
+  if (request->region_id() <= 0 || request->leader_store_id() <= 0) {
+    response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errmsg("region_id or leader_store_id is illegal");
+    return;
+  }
+
+  auto ret = this->coordinator_control_->TransferLeaderRegionWithTaskList(request->region_id(),
+                                                                          request->leader_store_id(), meta_increment);
+
+  if (!ret.ok()) {
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    return;
+  }
+
+  // if meta_increment is empty, means no need to update meta
+  if (meta_increment.ByteSizeLong() == 0) {
+    return;
+  }
+
+  // prepare for raft process
+  CoordinatorClosure<pb::coordinator::TransferLeaderRegionRequest, pb::coordinator::TransferLeaderRegionResponse>
+      *meta_transfer_leader_region_closure = new CoordinatorClosure<pb::coordinator::TransferLeaderRegionRequest,
+                                                                    pb::coordinator::TransferLeaderRegionResponse>(
+          request, response, done_guard.release());
+
+  std::shared_ptr<Context> const ctx =
+      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_transfer_leader_region_closure);
+  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+
+  // this is a async operation will be block by closure
+  engine_->MetaPut(ctx, meta_increment);
+}
+
 void CoordinatorServiceImpl::GetOrphanRegion(google::protobuf::RpcController * /*controller*/,
                                              const pb::coordinator::GetOrphanRegionRequest *request,
                                              pb::coordinator::GetOrphanRegionResponse *response,

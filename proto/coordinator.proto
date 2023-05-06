@@ -90,6 +90,10 @@ message ChangePeerRequest {
   dingodb.pb.common.RegionDefinition region_definition = 1;  // region definition contains new peer
 }
 
+message TransferLeaderRequest {
+  uint64 leader_store_id = 1;  // leader store id
+}
+
 message PurgeRequest {
   uint64 region_id = 1;  // region id to be purged
 }
@@ -110,10 +114,12 @@ enum RegionCmdType {
   CMD_SPLIT = 3;
   CMD_MERGE = 4;
   CMD_CHANGE_PEER = 5;
-  CMD_SNAPSHOT = 6;
-  CMD_PURGE = 7;             // purge region's meta for deleted region
-  CMD_STOP = 8;              // when region state ORPHAN, stop region
-  CMD_DESTROY_EXECUTOR = 9;  // destroy region executor
+  CMD_TRANSFER_LEADER = 6;
+  CMD_SNAPSHOT = 7;
+  CMD_PURGE = 8;  // purge region's meta for deleted region
+
+  CMD_STOP = 30;              // when region state ORPHAN, stop region
+  CMD_DESTROY_EXECUTOR = 31;  // destroy region executor
 }
 
 // Region cmd status
@@ -136,10 +142,11 @@ message RegionCmd {
     MergeRequest merge_request = 14;             // merge parameters
     ChangePeerRequest change_peer_request = 15;  // change peer parameters
     PurgeRequest purge_request = 16;  // purge region meta on store, this region is deleted and already purge on
+    TransferLeaderRequest transfer_leader_request = 17;  // change peer parameters
     // coordinator, so store can purge this region's meta data
 
-    StopRequest stop_request = 17;                         // when region state ORPHAN, stop region
-    DestroyExecutorRequest destroy_executor_request = 18;  // destroy region executor
+    StopRequest stop_request = 30;                         // when region state ORPHAN, stop region
+    DestroyExecutorRequest destroy_executor_request = 31;  // destroy region executor
   }
 
   bool is_notify = 40;          // store need to notify coordinator when this cmd is done
@@ -501,6 +508,15 @@ message ChangePeerRegionResponse {
   dingodb.pb.error.Error error = 1;
 }
 
+message TransferLeaderRegionRequest {
+  uint64 region_id = 1;
+  uint64 leader_store_id = 2;
+}
+
+message TransferLeaderRegionResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
 message GetOrphanRegionRequest {
   uint64 cluster_id = 1;
   uint64 store_id = 2;
@@ -581,6 +597,7 @@ service CoordinatorService {
   rpc SplitRegion(SplitRegionRequest) returns (SplitRegionResponse);
   rpc MergeRegion(MergeRegionRequest) returns (MergeRegionResponse);
   rpc ChangePeerRegion(ChangePeerRegionRequest) returns (ChangePeerRegionResponse);
+  rpc TransferLeaderRegion(TransferLeaderRegionRequest) returns (TransferLeaderRegionResponse);
   rpc GetOrphanRegion(GetOrphanRegionRequest) returns (GetOrphanRegionResponse);
 
   // StoreOperation
