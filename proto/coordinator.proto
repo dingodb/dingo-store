@@ -515,7 +515,7 @@ enum RaftControlOp {
   None = 0;            // just a placeholder
   AddPeer = 1;         // only to leader
   RemovePeer = 2;      // only to leader
-  SetPeer = 3;         // only to leader
+  ResetPeer = 3;       // only to leader
   TransferLeader = 4;  // only to leader
   Snapshot = 5;        // to leader and follower
   GetLeader = 6;       // get leader

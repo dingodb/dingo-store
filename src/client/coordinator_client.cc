@@ -43,6 +43,8 @@ DEFINE_string(method, "Hello", "Request method");
 DEFINE_string(id, "", "Request parameter id, for example: table_id for CreateTable/DropTable");
 DEFINE_string(host, "127.0.0.1", "Request parameter host");
 DEFINE_int32(port, 18888, "Request parameter port");
+DEFINE_string(peer, "", "Request parameter peer, for example: 127.0.0.1:22101");
+DEFINE_string(peers, "", "Request parameter peer, for example: 127.0.0.1:22101,127.0.0.1:22002,127.0.0.1:22103");
 DEFINE_string(name, "", "Request parameter name, for example: table_id for GetSchemaByName/GetTableByName");
 DEFINE_string(user, "", "Request parameter user");
 DEFINE_string(level, "", "Request log level [DEBUG, INFO, WARNING, ERROR, FATAL]");
@@ -164,6 +166,12 @@ void* Sender(void* /*arg*/) {
     SendRaftAddPeer();
   } else if (FLAGS_method == "RaftRemovePeer") {
     SendRaftRemovePeer();
+  } else if (FLAGS_method == "RaftTransferLeader") {
+    SendRaftTransferLeader();
+  } else if (FLAGS_method == "RaftSnapshot") {
+    SendRaftSnapshot();
+  } else if (FLAGS_method == "RaftResetPeer") {
+    SendRaftResetPeer();
   } else if (FLAGS_method == "GetNodeInfo") {  // node control
     SendGetNodeInfo();
   } else if (FLAGS_method == "GetLogLevel") {

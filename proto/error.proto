@@ -23,6 +23,40 @@ option cc_generic_services = true;
 
 enum Errno {
   OK = 0;
+  EBRAFT_EPERM = 1;     // Operation not permitted
+  EBRAFT_ENOENT = 2;    // No such file or directory
+  EBRAFT_ESRCH = 3;     // No such process
+  EBRAFT_EINTR = 4;     // Interrupted system call
+  EBRAFT_EIO = 5;       // I/O error
+  EBRAFT_ENXIO = 6;     // No such device or address
+  EBRAFT_E2BIG = 7;     // Argument list too long
+  EBRAFT_ENOEXEC = 8;   // Exec format error
+  EBRAFT_EBADF = 9;     // Bad file number
+  EBRAFT_ECHILD = 10;   // No child processes
+  EBRAFT_EAGAIN = 11;   // Try again
+  EBRAFT_ENOMEM = 12;   // Out of memory
+  EBRAFT_EACCES = 13;   // Permission denied
+  EBRAFT_EFAULT = 14;   // Bad address
+  EBRAFT_ENOTBLK = 15;  // Block device required
+  EBRAFT_EBUSY = 16;    // Device or resource busy
+  EBRAFT_EEXIST = 17;   // File exists
+  EBRAFT_EXDEV = 18;    // Cross-device link
+  EBRAFT_ENODEV = 19;   // No such device
+  EBRAFT_ENOTDIR = 20;  // Not a directory
+  EBRAFT_EISDIR = 21;   // Is a directory
+  EBRAFT_EINVAL = 22;   // Invalid argument
+  EBRAFT_ENFILE = 23;   // File table overflow
+  EBRAFT_EMFILE = 24;   // Too many open files
+  EBRAFT_ENOTTY = 25;   // Not a typewriter
+  EBRAFT_ETXTBSY = 26;  // Text file busy
+  EBRAFT_EFBIG = 27;    // File too large
+  EBRAFT_ENOSPC = 28;   // No space left on device
+  EBRAFT_ESPIPE = 29;   // Illegal seek
+  EBRAFT_EROFS = 30;    // Read-only file system
+  EBRAFT_EMLINK = 31;   // Too many links
+  EBRAFT_EPIPE = 32;    // Broken pipe
+  EBRAFT_EDOM = 33;     // Math argument out of domain of func
+  EBRAFT_ERANGE = 34;   // Math result not representable
 
   // universal [10000, 20000)
   EINTERNAL = 10000;

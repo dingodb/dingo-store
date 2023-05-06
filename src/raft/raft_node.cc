@@ -139,6 +139,8 @@ void RaftNode::ChangePeers(const std::vector<pb::common::Peer>& peers, braft::Cl
 
 butil::Status RaftNode::ResetPeers(const braft::Configuration& new_peers) { return node_->reset_peers(new_peers); }
 
+int RaftNode::TransferLeadershipTo(const braft::PeerId& peer) { return node_->transfer_leadership_to(peer); }
+
 void RaftNode::Snapshot(braft::Closure* done) { node_->snapshot(done); }
 
 std::shared_ptr<pb::common::BRaftStatus> RaftNode::GetStatus() {
