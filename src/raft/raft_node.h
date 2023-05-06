@@ -59,6 +59,7 @@ class RaftNode {
   void RemovePeer(const braft::PeerId& peer, braft::Closure* done);
   void ChangePeers(const std::vector<pb::common::Peer>& peers, braft::Closure* done);
   butil::Status ResetPeers(const braft::Configuration& new_peers);
+  int TransferLeadershipTo(const braft::PeerId& peer);
 
   void Snapshot(braft::Closure* done);
 

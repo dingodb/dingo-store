@@ -30,6 +30,7 @@
 #include "common/helper.h"
 #include "common/logging.h"
 #include "coordinator/coordinator_closure.h"
+#include "fmt/core.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
 #include "proto/coordinator_internal.pb.h"
@@ -1334,6 +1335,40 @@ void CoordinatorServiceImpl::RaftControl(google::protobuf::RpcController *contro
       RaftControlClosure *remove_peer_done =
           new RaftControlClosure(cntl, request, response, done_guard.release(), raft_node);
       raft_node->RemovePeer(remove_peer, remove_peer_done);
+      return;
+    }
+    case pb::coordinator::RaftControlOp::TransferLeader: {
+      DINGO_LOG(INFO) << "TransferLeader:" << request->new_leader();
+      braft::PeerId transfer_leader(Helper::StrToEndPoint(request->new_leader()));
+      auto errcode = raft_node->TransferLeadershipTo(transfer_leader);
+      if (errcode != 0) {
+        response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(errcode));
+      }
+      return;
+    }
+    case pb::coordinator::RaftControlOp::Snapshot: {
+      DINGO_LOG(INFO) << "Snapshot:" << request->node_index();
+      RaftControlClosure *snapshot_done =
+          new RaftControlClosure(cntl, request, response, done_guard.release(), raft_node);
+      raft_node->Snapshot(snapshot_done);
+      return;
+    }
+    case pb::coordinator::RaftControlOp::ResetPeer: {
+      DINGO_LOG(INFO) << fmt::format("SetPeer: {}", request->new_peers().size());
+      std::vector<braft::PeerId> new_peers;
+      for (const auto &peer : request->new_peers()) {
+        DINGO_LOG(INFO) << fmt::format("SetPeer: {}", peer);
+        new_peers.emplace_back(Helper::StrToEndPoint(peer));
+      }
+      braft::Configuration new_conf(new_peers);
+      auto status = raft_node->ResetPeers(new_conf);
+      if (!status.ok()) {
+        response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
+        response->mutable_error()->set_errmsg(status.error_str());
+        DINGO_LOG(ERROR) << "node:" << raft_node->GetRaftGroupName() << " " << raft_node->GetPeerId().to_string()
+                         << " reset peers failed, log_id:" << log_id;
+        return;
+      }
       return;
     }
     default:

@@ -42,6 +42,9 @@ void SendChangeLogLevel();
 // raft_control functions
 void SendRaftAddPeer();
 void SendRaftRemovePeer();
+void SendRaftTransferLeader();
+void SendRaftSnapshot();
+void SendRaftResetPeer();
 
 // coordinator service functions
 void SendHello(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
