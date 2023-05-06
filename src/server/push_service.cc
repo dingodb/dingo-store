@@ -57,6 +57,8 @@ void PushServiceImpl::PushStoreOperation(google::protobuf::RpcController* contro
   DINGO_LOG(DEBUG) << "PushStoreOperation request: " << request->ShortDebugString();
 
   if (request->store_operation().id() != Server::GetInstance()->Id()) {
+    DINGO_LOG(ERROR) << "PushStoreOperation request id: " << request->store_operation().id()
+                     << " not equal to server id: " << Server::GetInstance()->Id();
     return;
   }
 
@@ -87,14 +89,16 @@ void PushServiceImpl::PushStoreOperation(google::protobuf::RpcController* contro
     status = (validate_func != nullptr) ? validate_func(command)
                                         : butil::Status(pb::error::EINTERNAL, "Unknown region command");
     if (!status.ok()) {
+      DINGO_LOG(ERROR) << "PushStoreOperation validate error: " << status.error_str();
       error_func(command.id(), command.region_cmd_type(), status);
       continue;
     }
 
-    if (command.region_cmd_type() != pb::coordinator::CMD_PURGE) {
-      std::shared_ptr<Context> ctx = std::make_shared<Context>();
-      status =
-          region_controller->DispatchRegionControlCommand(ctx, std::make_shared<pb::coordinator::RegionCmd>(command));
+    std::shared_ptr<Context> ctx = std::make_shared<Context>();
+    status =
+        region_controller->DispatchRegionControlCommand(ctx, std::make_shared<pb::coordinator::RegionCmd>(command));
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << "PushStoreOperation dispatch error: " << status.error_str();
     }
     // coordinator need to get all region_cmd results, so add all results to response here
     error_func(command.id(), command.region_cmd_type(), status);
@@ -102,7 +106,7 @@ void PushServiceImpl::PushStoreOperation(google::protobuf::RpcController* contro
 
   if (!response->region_cmd_results().empty()) {
     response->mutable_error()->CopyFrom(response->region_cmd_results(0).error());
-    DINGO_LOG(DEBUG) << "PushStoreOperation response: " << response->ShortDebugString();
+    DINGO_LOG(INFO) << "PushStoreOperation response: " << response->ShortDebugString();
   }
 }
 
