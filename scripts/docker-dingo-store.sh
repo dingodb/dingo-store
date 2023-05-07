@@ -4,7 +4,6 @@ mydir="${BASH_SOURCE%/*}"
 if [[ ! -d "$mydir" ]]; then mydir="$PWD"; fi
 . $mydir/shflags
 
-
 DEFINE_string role 'store' 'server role'
 DEFINE_boolean clean_db 1 'clean db'
 DEFINE_boolean clean_raft 1 'clean raft'
@@ -14,7 +13,6 @@ DEFINE_boolean replace_conf 0 'replace conf'
 # parse the command-line
 FLAGS "$@" || exit 1
 eval set -- "${FLAGS_ARGV}"
-
 
 BASE_DIR=$(dirname $(cd $(dirname $0); pwd))
 DIST_DIR=$BASE_DIR/dist
@@ -36,13 +34,10 @@ deploy() {
   program_dir=$BASE_DIR/dist/${FLAGS_role}1
   if [ $FLAGS_role == "coordinator" ]; then
     deploy_store ${FLAGS_role} $BASE_DIR $program_dir $COORDINATOR_SERVER_START_PORT $COORDINATOR_RAFT_START_PORT $INSTANCE_START_ID ${COOR_RAFT_PEERS} ${TMP_COORDINATOR_SERVICES}
-
   else
     deploy_store ${FLAGS_role} $BASE_DIR $program_dir $SERVER_START_PORT $RAFT_START_PORT $INSTANCE_START_ID ${COOR_RAFT_PEERS:-fail} ${TMP_COORDINATOR_SERVICES}
   fi
-
 }
-
 
 function start_program_docker() {
   role=$1
@@ -55,8 +50,6 @@ function start_program_docker() {
   ${root_dir}/bin/dingodb_server --role ${role}  --conf ./conf/${role}.yaml --coor_url=file://./conf/coor_list
 }
 
-
-
 start() {
   #FLAGS_role=${FLAGS_role}
   i=1
@@ -66,9 +59,6 @@ start() {
   start_program_docker ${FLAGS_role} ${program_dir}    	
 }
 
-
-
-
 clean() 
 {
   rm -rf ../dist/*
@@ -76,48 +66,40 @@ clean()
   echo "rm -rf all cluster files"
 }
 
-
-
-
 stop() 
 {
-   k_pid=$(ps -ef | grep dingodb_server |grep -v grep|awk '{printf $2 "\n"}')
-   for i in $k_pid
-   do
-   echo $i 
-   $(kill -9 $i)
-   done
+  k_pid=$(pgrep dingodb_server)
+  for i in ${k_pid}
+  do
+    echo "${i}"
+    kill -9 "${i}"
+  done
 }
 
 usage()
 {
-        echo "Usage: $0 [deploy|start|stop|restart|cleanstart]"
+  echo "Usage: $0 [deploy|start|stop|restart|cleanstart]"
 }
 
 if [ $# -lt 1 ];then
-        usage
-        exit
+  usage
+  exit
 fi
 
 if [ "$1" = "deploy" ];then
-        deploy
-	
+  deploy
 elif [ "$1" = "start" ];then
-        start
-
+  start
 elif [ "$1" = "stop" ];then
-        stop
-
+  stop
 elif [ "$1" = "restart" ];then
-        stop
-        start
-
+  stop
+  start
 elif [ "$1" = "cleanstart" ];then
-        stop
-        clean
-        deploy
-        start
-
+  stop
+  clean
+  deploy
+  start
 else
-        usage
+  usage
 fi
