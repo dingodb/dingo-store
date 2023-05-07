@@ -63,7 +63,6 @@ function deploy_store() {
   fi
 }
 
-
 function start_program() {
   role=$1
   root_dir=$2

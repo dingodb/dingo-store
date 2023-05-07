@@ -14,7 +14,6 @@ eval set -- "${FLAGS_ARGV}"
 
 echo "role: ${FLAGS_role}"
 
-
 user=`whoami`
 echo "ps -fu ${user} | grep dingodb_server | grep ${FLAGS_role} | grep -v grep"
 process_no=`ps -fu ${user} | grep dingodb_server | grep ${FLAGS_role} | grep -v grep | awk '{print $2}' | xargs`
