@@ -39,7 +39,7 @@ void RegionMetrics::DeSerialize(const std::string& data) {
 
 void RegionMetrics::UpdateMaxAndMinKey(const PbKeyValues& kvs) {
   for (const auto& kv : kvs) {
-    if (kv.key() < inner_region_metrics_.min_key()) {
+    if (inner_region_metrics_.min_key().empty() || kv.key() < inner_region_metrics_.min_key()) {
       inner_region_metrics_.set_min_key(kv.key());
     } else if (kv.key() > inner_region_metrics_.max_key()) {
       inner_region_metrics_.set_max_key(kv.key());
