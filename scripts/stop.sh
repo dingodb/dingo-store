@@ -14,13 +14,11 @@ eval set -- "${FLAGS_ARGV}"
 
 echo "role: ${FLAGS_role}"
 
-user=`whoami`
-echo "ps -fu ${user} | grep dingodb_server | grep ${FLAGS_role} | grep -v grep"
-process_no=`ps -fu ${user} | grep dingodb_server | grep ${FLAGS_role} | grep -v grep | awk '{print $2}' | xargs`
+process_no=$(pgrep -f "dingodb_server.*${FLAGS_role}" -U `id -u`)
 
-if [ "$process_no" != "" ]; then
+if [ "${process_no}" != "" ]; then
   echo "pid to kill: ${process_no}"
-  kill -9 $process_no
+  kill -9 "${process_no}"
 else
   echo "not exist ${FLAGS_role} process"
 fi

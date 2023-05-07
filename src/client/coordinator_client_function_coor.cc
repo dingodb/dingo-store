@@ -458,10 +458,19 @@ void SendGetStoreMap(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
   DINGO_LOG(INFO) << response.DebugString();
 
   // print all store's id, state, in_state, create_timestamp, last_seen_timestamp
+  int32_t store_count_available = 0;
   for (auto const& store : response.storemap().stores()) {
+    if (store.state() == dingodb::pb::common::StoreState::STORE_NORMAL) {
+      store_count_available++;
+    }
     DINGO_LOG(INFO) << "store_id=" << store.id() << " state=" << store.state() << " in_state=" << store.in_state()
                     << " create_timestamp=" << store.create_timestamp()
                     << " last_seen_timestamp=" << store.last_seen_timestamp();
+  }
+
+  // don't modify this log, it is used by sdk
+  if (store_count_available > 0) {
+    DINGO_LOG(INFO) << "DINGODB_HAVE_STORE_AVAILABLE, store_count=" << store_count_available;
   }
 }
 
