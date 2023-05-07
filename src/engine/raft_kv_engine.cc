@@ -54,20 +54,20 @@ bool RaftKvEngine::Recover() {
   auto ctx = std::make_shared<Context>();
   auto listener_factory = std::make_shared<StoreSmEventListenerFactory>();
   for (auto& region : regions) {
-    auto raft_meta = store_raft_meta->GetRaftMeta(region->Id());
-    if (raft_meta == nullptr) {
-      DINGO_LOG(ERROR) << "Recover raft meta not found: " << region->Id();
-      continue;
-    }
-    auto region_metrics = store_region_metrics->GetMetrics(region->Id());
-    if (region_metrics == nullptr) {
-      DINGO_LOG(WARNING) << "Recover region metrics not found: " << region->Id();
-    }
-
     if (region->State() == pb::common::StoreRegionState::NORMAL ||
         region->State() == pb::common::StoreRegionState::STANDBY ||
         region->State() == pb::common::StoreRegionState::SPLITTING ||
         region->State() == pb::common::StoreRegionState::MERGING) {
+      auto raft_meta = store_raft_meta->GetRaftMeta(region->Id());
+      if (raft_meta == nullptr) {
+        DINGO_LOG(ERROR) << "Recover raft meta not found: " << region->Id();
+        continue;
+      }
+      auto region_metrics = store_region_metrics->GetMetrics(region->Id());
+      if (region_metrics == nullptr) {
+        DINGO_LOG(WARNING) << "Recover region metrics not found: " << region->Id();
+      }
+
       AddNode(ctx, region, raft_meta, region_metrics, listener_factory->Build());
       ++count;
     }

@@ -250,6 +250,7 @@ add_executable(dingodb_client_store
                src/client/store_client.cc
                src/client/client_interation.cc
                src/client/store_client_function.cc
+               src/common/helper.cc
                ${VERSION_SRCS} $<TARGET_OBJECTS:PROTO_OBJS>)
 add_executable(dingodb_client_coordinator
                src/client/coordinator_client.cc

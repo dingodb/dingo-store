@@ -14,6 +14,8 @@
 
 #include "client/store_client_function.h"
 
+#include <sys/stat.h>
+
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -22,6 +24,11 @@
 
 #include "bthread/bthread.h"
 #include "client/client_helper.h"
+#include "common/helper.h"
+#include "fmt/core.h"
+#include "glog/logging.h"
+
+const int kBatchSize = 1000;
 
 namespace client {
 
@@ -504,7 +511,8 @@ void* CreateAndPutAndGetAndDestroyTableRoutine(void* arg) {
   uint64_t table_id = SendCreateTable(ctx->coordinator_interaction, ctx->table_name, ctx->partition_num);
 
   DINGO_LOG(INFO) << "======= Put/Get table " << ctx->table_name;
-  for (int i = 0; i < 10; ++i) {
+  int batch_count = ctx->req_num / kBatchSize + 1;
+  for (int i = 0; i < batch_count; ++i) {
     auto table_range = SendGetTableRange(ctx->coordinator_interaction, table_id);
 
     for (const auto& range_dist : table_range.range_distribution()) {
@@ -515,7 +523,7 @@ void* CreateAndPutAndGetAndDestroyTableRoutine(void* arg) {
       uint64_t region_id = range_dist.id().entity_id();
       std::string prefix = range_dist.range().start_key();
 
-      BatchPutGet(ctx->store_interaction, region_id, prefix, ctx->req_num);
+      BatchPutGet(ctx->store_interaction, region_id, prefix, kBatchSize);
     }
   }
 
@@ -529,9 +537,14 @@ uint64_t SendGetTableByName(ServerInteractionPtr interaction, const std::string&
   dingodb::pb::meta::GetTableByNameRequest request;
   dingodb::pb::meta::GetTableByNameResponse response;
 
+  auto* schema_id = request.mutable_schema_id();
+  schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
+  schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+  schema_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
+
   request.set_table_name(table_name);
 
-  interaction->SendRequest("CoordinatorService", "GetTableByName", request, response);
+  interaction->SendRequest("MetaService", "GetTableByName", request, response);
 
   return response.table_definition_with_id().table_id().entity_id();
 }
@@ -551,9 +564,9 @@ dingodb::pb::common::Region SendQueryRegion(ServerInteractionPtr interaction, ui
   dingodb::pb::coordinator::QueryRegionRequest request;
   dingodb::pb::coordinator::QueryRegionResponse response;
 
-  interaction->SendRequest("CoordinatorService", "QueryRegion", request, response);
-
   request.set_region_id(region_id);
+
+  interaction->SendRequest("CoordinatorService", "QueryRegion", request, response);
 
   return response.region();
 }
@@ -568,22 +581,79 @@ void SendChangePeer(ServerInteractionPtr interaction, const dingodb::pb::common:
   interaction->SendRequest("CoordinatorService", "ChangePeerRegion", request, response);
 }
 
+void SendSplitRegion(ServerInteractionPtr interaction, const dingodb::pb::common::RegionDefinition& region_definition) {
+  dingodb::pb::coordinator::SplitRegionRequest request;
+  dingodb::pb::coordinator::SplitRegionResponse response;
+
+  request.mutable_split_request()->set_split_from_region_id(region_definition.id());
+
+  // calc the mid value between start_vec and end_vec
+  const auto& start_key = region_definition.range().start_key();
+  const auto& end_key = region_definition.range().end_key();
+
+  auto diff = dingodb::Helper::StringSubtract(start_key, end_key);
+  auto half_diff = dingodb::Helper::StringDivideByTwo(diff);
+  auto mid = dingodb::Helper::StringAdd(start_key, half_diff);
+  auto real_mid = mid.substr(1, mid.size() - 1);
+
+  DINGO_LOG(INFO) << fmt::format("split range: [{}, {}) diff: {} half_diff: {} mid: {} real_mid: {}",
+                                 dingodb::Helper::StringToHex(start_key), dingodb::Helper::StringToHex(end_key),
+                                 dingodb::Helper::StringToHex(diff), dingodb::Helper::StringToHex(half_diff),
+                                 dingodb::Helper::StringToHex(mid), dingodb::Helper::StringToHex(real_mid));
+
+  request.mutable_split_request()->set_split_watershed_key(real_mid);
+
+  interaction->SendRequest("CoordinatorService", "SplitRegion", request, response);
+}
+
+std::string FormatPeers(dingodb::pb::common::RegionDefinition definition) {
+  std::string str;
+  for (const auto& peer : definition.peers()) {
+    str +=
+        fmt::format("{}:{}:{}", peer.raft_location().host(), peer.raft_location().port(), peer.raft_location().index());
+    str += ",";
+  }
+
+  return str;
+}
+
 // Expand/Shrink/Split region
-void* ExpandAndShrinkAndSplitRegion(void* arg) {
+void* AutoExpandAndShrinkAndSplitRegion(void* arg) {
   std::shared_ptr<Context> ctx(static_cast<Context*>(arg));
 
-  uint64_t table_id = SendGetTableByName(ctx->coordinator_interaction, ctx->table_name);
-
   for (;;) {
-    auto store_map = SendGetStoreMap(ctx->coordinator_interaction);
+    uint64_t table_id = SendGetTableByName(ctx->coordinator_interaction, ctx->table_name);
+    if (table_id == 0) {
+      DINGO_LOG(INFO) << fmt::format("table: {} table_id: {}", ctx->table_name, table_id);
+      bthread_usleep(1 * 1000 * 1000);
+      continue;
+    }
 
+    auto store_map = SendGetStoreMap(ctx->coordinator_interaction);
     auto table_range = SendGetTableRange(ctx->coordinator_interaction, table_id);
 
     // Traverse region
     for (const auto& range_dist : table_range.range_distribution()) {
       uint64_t region_id = range_dist.id().entity_id();
+      if (region_id == 0) {
+        DINGO_LOG(INFO) << fmt::format("Get table range failed, table: {} region_id: {}", ctx->table_name, region_id);
+        continue;
+      }
 
       auto region = SendQueryRegion(ctx->coordinator_interaction, region_id);
+      if (region.id() == 0) {
+        DINGO_LOG(INFO) << fmt::format("Get region failed, table: {} region_id: {}", ctx->table_name, region_id);
+        continue;
+      }
+
+      DINGO_LOG(INFO) << fmt::format("region {} state {} row_count {} min_key {} max_key {} region_size {}", region_id,
+                                     static_cast<int>(region.state()), region.metrics().row_count(),
+                                     dingodb::Helper::StringToHex(region.metrics().min_key()),
+                                     dingodb::Helper::StringToHex(region.metrics().max_key()),
+                                     region.metrics().region_size());
+      if (region.state() != dingodb::pb::common::RegionState::REGION_NORMAL) {
+        continue;
+      }
 
       // Expand region
       if (Helper::RandomChoice()) {
@@ -612,8 +682,10 @@ void* ExpandAndShrinkAndSplitRegion(void* arg) {
           dingodb::pb::common::RegionDefinition region_definition;
           region_definition.CopyFrom(region.definition());
           *region_definition.add_peers() = expand_peer;
+          DINGO_LOG(INFO) << fmt::format("======= Expand region {}/{} region {} peers {}", ctx->table_name, table_id,
+                                         region.id(), FormatPeers(region_definition));
 
-          SendChangePeer(ctx->coordinator_interaction, region_definition);
+          // SendChangePeer(ctx->coordinator_interaction, region_definition);
         }
       } else {  // Shrink region
         if (region.definition().peers().size() <= 3) {
@@ -638,17 +710,28 @@ void* ExpandAndShrinkAndSplitRegion(void* arg) {
             }
           }
 
-          SendChangePeer(ctx->coordinator_interaction, region.definition());
+          DINGO_LOG(INFO) << fmt::format("======= Shrink region {}/{} region {} peers {}", ctx->table_name, table_id,
+                                         region.id(), FormatPeers(region_definition));
+
+          // SendChangePeer(ctx->coordinator_interaction, region.definition());
         }
       }
+
+      // Split region, when row count greater than 1 million.
+      if (region.metrics().row_count() > 1 * 1000 * 1000) {
+        SendSplitRegion(ctx->coordinator_interaction, region.definition());
+      }
     }
+
+    bthread_usleep(1 * 1000 * 1000);
   }
 
   return nullptr;
 }
 
 void AutoTest(std::shared_ptr<Context> ctx) {
-  std::vector<std::function<void*(void*)>> funcs = {CreateAndPutAndGetAndDestroyTableRoutine};
+  std::vector<std::function<void*(void*)>> funcs = {CreateAndPutAndGetAndDestroyTableRoutine,
+                                                    AutoExpandAndShrinkAndSplitRegion};
   std::vector<bthread_t> tids;
   tids.resize(funcs.size());
 

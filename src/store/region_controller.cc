@@ -67,15 +67,17 @@ butil::Status CreateRegionTask::CreateRegion(std::shared_ptr<Context> ctx, store
   region->SetState(pb::common::StoreRegionState::NEW);
   store_region_meta->AddRegion(region);
 
+  // Add region metrics
+  DINGO_LOG(DEBUG) << butil::StringPrintf("Create region %lu add region metrics", region->Id());
+  auto region_metrics = StoreRegionMetrics::NewMetrics(region->Id());
+  Server::GetInstance()->GetStoreMetricsManager()->GetStoreRegionMetrics()->AddMetrics(region_metrics);
+
   // Add raft node
   DINGO_LOG(DEBUG) << butil::StringPrintf("Create region %lu add raft node", region->Id());
   auto engine = Server::GetInstance()->GetEngine();
   if (engine->GetID() == pb::common::ENG_RAFT_STORE) {
     auto raft_meta = StoreRaftMeta::NewRaftMeta(region->Id());
     Server::GetInstance()->GetStoreMetaManager()->GetStoreRaftMeta()->AddRaftMeta(raft_meta);
-
-    auto region_metrics = StoreRegionMetrics::NewMetrics(region->Id());
-    Server::GetInstance()->GetStoreMetricsManager()->GetStoreRegionMetrics()->AddMetrics(region_metrics);
 
     auto listener_factory = std::make_shared<StoreSmEventListenerFactory>();
 
@@ -92,11 +94,6 @@ butil::Status CreateRegionTask::CreateRegion(std::shared_ptr<Context> ctx, store
   } else {
     store_region_meta->UpdateState(region, pb::common::StoreRegionState::STANDBY);
   }
-
-  // Add region metrics
-  DINGO_LOG(DEBUG) << butil::StringPrintf("Create region %lu add region metrics", region->Id());
-  Server::GetInstance()->GetStoreMetricsManager()->GetStoreRegionMetrics()->AddMetrics(
-      StoreRegionMetrics::NewMetrics(region->Id()));
 
   return butil::Status();
 }
