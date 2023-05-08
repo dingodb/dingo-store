@@ -89,12 +89,12 @@ public class PutOperation implements Operation {
 
     @Override
     public void exec(OperationContext context) {
-        context.getStoreService().kvBatchPut(
-            context.getTableId(),
-            context.getRegionId(),
-            new ArrayList<>(context.<Map<KeyValue, Integer>>parameters().keySet())
+        boolean result = context.getStoreService().kvBatchPut(
+                context.getTableId(),
+                context.getRegionId(),
+                new ArrayList<>(context.<Map<KeyValue, Integer>>parameters().keySet())
         );
-        context.<Map<KeyValue, Integer>>parameters().values().forEach(i -> context.<Boolean[]>result()[i] = true);
+        context.<Map<KeyValue, Integer>>parameters().values().forEach(i -> context.<Boolean[]>result()[i] = result);
     }
 
     @Override
