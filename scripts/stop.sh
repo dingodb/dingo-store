@@ -18,7 +18,7 @@ process_no=$(pgrep -f "dingodb_server.*${FLAGS_role}" -U `id -u`)
 
 if [ "${process_no}" != "" ]; then
   echo "pid to kill: ${process_no}"
-  kill -9 "${process_no}"
+  echo "${process_no}" | xargs kill
 else
   echo "not exist ${FLAGS_role} process"
 fi
