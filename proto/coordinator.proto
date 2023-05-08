@@ -91,7 +91,7 @@ message ChangePeerRequest {
 }
 
 message TransferLeaderRequest {
-  uint64 leader_store_id = 1;  // leader store id
+  dingodb.pb.common.Peer peer = 1;  // new leader peer
 }
 
 message PurgeRequest {

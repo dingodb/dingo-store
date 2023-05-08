@@ -120,7 +120,7 @@ static void SignalHandler(int signo) {
                       << ") ";
         std::string const error_msg = string_stream.str();
         DINGO_LOG(ERROR) << error_msg;
-        std::cout << error_msg;
+        std::cout << error_msg << std::endl;
       } else {
         std::stringstream string_stream;
         string_stream << "Frame [" << i++ << "] symbol=[" << nameptr << " + " << offset << "] (0x" << std::hex << pc
@@ -129,7 +129,7 @@ static void SignalHandler(int signo) {
                       << "]";
         std::string const error_msg = string_stream.str();
         DINGO_LOG(ERROR) << error_msg;
-        std::cout << error_msg;
+        std::cout << error_msg << std::endl;
       }
       if (demangled) {
         free(demangled);
