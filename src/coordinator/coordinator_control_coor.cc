@@ -1482,14 +1482,15 @@ butil::Status CoordinatorControl::TransferLeaderRegionWithTaskList(
   }
 
   // check new_leader_store_id in region
-  bool new_leader_store_id_in_region = false;
+  pb::common::Peer new_leader_peer;
   for (int i = 0; i < region.definition().peers_size(); i++) {
     if (region.definition().peers(i).store_id() == new_leader_store_id) {
-      new_leader_store_id_in_region = true;
+      new_leader_peer = region.definition().peers(i);
       break;
     }
   }
-  if (!new_leader_store_id_in_region) {
+
+  if (new_leader_peer.store_id() == 0) {
     DINGO_LOG(ERROR) << "TransferLeaderRegion new_leader_store_id not in region, region_id = " << region_id;
     return butil::Status(pb::error::Errno::ESTORE_NOT_FOUND, "TransferLeaderRegion new_leader_store_id not in region");
   }
@@ -1511,7 +1512,7 @@ butil::Status CoordinatorControl::TransferLeaderRegionWithTaskList(
   region_cmd_to_transfer->set_region_id(region_id);
   region_cmd_to_transfer->set_create_timestamp(butil::gettimeofday_ms());
 
-  region_cmd_to_transfer->mutable_transfer_leader_request()->set_leader_store_id(new_leader_store_id);
+  region_cmd_to_transfer->mutable_transfer_leader_request()->mutable_peer()->CopyFrom(new_leader_peer);
 
   return butil::Status::OK();
 }
