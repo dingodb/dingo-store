@@ -20,9 +20,11 @@
 #include <sstream>
 #include <string>
 
+#include "butil/string_printf.h"
 #include "gflags/gflags_declare.h"
 
 #endif
+#include <backtrace.h>
 #include <cxxabi.h>
 #include <dlfcn.h>
 #include <libunwind.h>
@@ -83,7 +85,140 @@ std::vector<butil::EndPoint> GetEndpoints(const std::shared_ptr<dingodb::Config>
   return dingodb::Helper::StrToEndpoints(coordinator_list);
 }
 
+struct DingoStackTraceInfo {
+  char *filename;
+  int lineno;
+  char *function;
+  uintptr_t pc;
+};
+
+/* Passed to backtrace callback function.  */
+struct DingoBacktraceData {
+  struct DingoStackTraceInfo *all;
+  size_t index;
+  size_t max;
+  int failed;
+};
+
+int BacktraceCallback(void *vdata, uintptr_t pc, const char *filename, int lineno, const char *function) {
+  struct DingoBacktraceData *data = (struct DingoBacktraceData *)vdata;
+  struct DingoStackTraceInfo *p;
+
+  if (data->index >= data->max) {
+    fprintf(stderr, "callback_one: callback called too many times\n");  // NOLINT
+    data->failed = 1;
+    return 1;
+  }
+
+  p = &data->all[data->index];
+
+  // filename
+  if (filename == nullptr)
+    p->filename = nullptr;
+  else {
+    p->filename = strdup(filename);
+    assert(p->filename != nullptr);
+  }
+
+  // lineno
+  p->lineno = lineno;
+
+  // function
+  if (function == nullptr)
+    p->function = nullptr;
+  else {
+    p->function = strdup(function);
+    assert(p->function != nullptr);
+  }
+
+  // pc
+  if (pc != 0) {
+    p->pc = pc;
+  }
+
+  ++data->index;
+
+  return 0;
+}
+
+/* An error callback passed to backtrace.  */
+
+void ErrorCallback(void *vdata, const char *msg, int errnum) {
+  struct DingoBacktraceData *data = (struct DingoBacktraceData *)vdata;
+
+  fprintf(stderr, "%s", msg);                                 // NOLINT
+  if (errnum > 0) fprintf(stderr, ": %s", strerror(errnum));  // NOLINT
+  fprintf(stderr, "\n");                                      // NOLINT
+  data->failed = 1;
+}
+
+// The signal handler
+#define MAX_STACKTRACE_SIZE 128
 static void SignalHandler(int signo) {
+  std::cerr << "Received signal " << signo << std::endl;
+  std::cerr << "Stack trace:" << std::endl;
+  DINGO_LOG(ERROR) << "Received signal " << signo;
+  DINGO_LOG(ERROR) << "Stack trace:";
+
+  struct backtrace_state *state = backtrace_create_state(nullptr, 0, ErrorCallback, nullptr);
+  if (state == nullptr) {
+    std::cerr << "state is null" << std::endl;
+  }
+
+  struct DingoStackTraceInfo all[MAX_STACKTRACE_SIZE];
+  struct DingoBacktraceData data;
+
+  data.all = &all[0];
+  data.index = 0;
+  data.max = MAX_STACKTRACE_SIZE;
+  data.failed = 0;
+
+  int i = backtrace_full(state, 0, BacktraceCallback, ErrorCallback, &data);
+  if (i != 0) {
+    std::cerr << "backtrace_full failed" << std::endl;
+    DINGO_LOG(ERROR) << "backtrace_full failed";
+  }
+
+  for (size_t x = 0; x < data.index; x++) {
+    int status;
+    char *nameptr = all[x].function;
+    char *demangled = abi::__cxa_demangle(all[x].function, nullptr, nullptr, &status);
+    if (status == 0 && demangled) {
+      nameptr = demangled;
+    }
+
+    Dl_info info = {};
+
+    if (!dladdr((void *)all[x].pc, &info)) {
+      auto error_msg = butil::string_printf("#%zu source[%s:%d] symbol[%s] pc[0x%0lx]", x, all[x].filename,
+                                            all[x].lineno, nameptr, static_cast<uint64_t>(all[x].pc));
+      DINGO_LOG(ERROR) << error_msg;
+      std::cout << error_msg << std::endl;
+    } else {
+      auto error_msg = butil::string_printf(
+          "#%zu source[%s:%d] symbol[%s] pc[0x%0lx] fname[%s] fbase[0x%lx] sname[%s] saddr[0x%lx] ", x, all[x].filename,
+          all[x].lineno, nameptr, static_cast<uint64_t>(all[x].pc), info.dli_fname, (uint64_t)info.dli_fbase,
+          info.dli_sname, (uint64_t)info.dli_saddr);
+      DINGO_LOG(ERROR) << error_msg;
+      std::cout << error_msg << std::endl;
+    }
+    if (demangled) {
+      free(demangled);
+    }
+  }
+
+  if (signo == SIGTERM) {
+    // TODO: graceful shutdown
+    DINGO_LOG(ERROR) << "graceful shutdown";
+    exit(0);
+  } else {
+    // abort to generate core dump
+    DINGO_LOG(ERROR) << "abort to generate core dump for signo=" << signo << " " << strsignal(signo);
+    abort();
+  }
+}
+
+static void SignalHandlerWithoutLineno(int signo) {
   printf("========== handle signal '%d' ==========\n", signo);
   unw_context_t context;
   unw_cursor_t cursor;

@@ -50,3 +50,6 @@
 [submodule "contrib/fmt"]
 	path = contrib/fmt
 	url = https://github.com/fmtlib/fmt
+[submodule "contrib/libbacktrace"]
+	path = contrib/libbacktrace
+	url = https://github.com/ianlancetaylor/libbacktrace

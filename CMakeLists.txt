@@ -68,6 +68,7 @@ include(braft)
 include(yaml-cpp)
 include(fmt)
 include(libunwind)
+include(libbacktrace)
 include(gperftools)
 
 message("protoc: ${PROTOBUF_PROTOC_EXECUTABLE}, proto inc: ${PROTOBUF_INCLUDE_DIRS}, lib: ${PROTOBUF_LIBRARIES}, ${PROTOBUF_PROTOC_LIBRARY}, protos: ${PROTO_FILES}")
@@ -125,6 +126,7 @@ include_directories(${YAMLCPP_INCLUDE_DIR})
 include_directories(${FMT_INCLUDE_DIR})
 include_directories(${OPENSSL_INCLUDE_DIR})
 include_directories(${LIBUNWIND_INCLUDE_DIR})
+include_directories(${LIBBACKTRACE_INCLUDE_DIR})
 include_directories(${GPERFTOOLS_INCLUDE_DIR})
 include_directories(${PROJECT_SOURCE_DIR}/src)
 
@@ -149,6 +151,7 @@ set(DYNAMIC_LIB
     ${LIBUNWIND_LIBRARIES}
     ${LIBUNWIND_GENERIC_LIBRARIES}
     ${LIBUNWIND_ARCH_LIBRARIES}
+    ${LIBBACKTRACE_LIBRARIES}
     # rt
     dl
     Threads::Threads
@@ -171,6 +174,7 @@ set(DEPEND_LIBS
     fmt
     gtest
     libunwind
+    libbacktrace
     )
 
 if(LINK_TCMALLOC)
