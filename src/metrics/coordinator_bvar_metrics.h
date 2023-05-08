@@ -49,7 +49,7 @@ class CoordinatorBvarMetricsStore {
       stats2->set_value(free_capacity);
     }
     auto *stats3 = store_metrics_.get_stats({std::to_string(store_id), "used_percent"});
-    if (stats3) {
+    if (stats3 && total_capacity > 0) {
       stats3->set_value(100 - (free_capacity * 100 / total_capacity));
     }
   }
