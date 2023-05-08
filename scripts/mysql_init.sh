@@ -1,4 +1,10 @@
 #!/bin/bash
+BASE_DIR=$(dirname $(cd $(dirname $0); pwd))
+TMP_COORDINATOR_SERVICES=$BASE_DIR/build/bin/coor_list
+
+echo "# dingo-store coordinators" > ${TMP_COORDINATOR_SERVICES}
+echo ${COOR_SRV_PEERS} | tr ',' '\n' >> ${TMP_COORDINATOR_SERVICES}
+
 
 cd /opt/dingo-store/build/bin/ || exit 1
 DINGODB_HAVE_STORE_AVAILABLE=0
