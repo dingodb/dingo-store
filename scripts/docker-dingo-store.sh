@@ -56,24 +56,19 @@ start() {
   program_dir=$BASE_DIR/dist/${FLAGS_role}${i}
   # clean log
   rm -f ${program_dir}/log/*
-  start_program_docker ${FLAGS_role} ${program_dir}    	
+  start_program_docker "${FLAGS_role}" "${program_dir}"
 }
 
-clean() 
+clean()
 {
   rm -rf ../dist/*
   sleep 1
   echo "rm -rf all cluster files"
 }
 
-stop() 
+stop()
 {
-  k_pid=$(pgrep dingodb_server)
-  for i in ${k_pid}
-  do
-    echo "${i}"
-    kill -9 "${i}"
-  done
+  pgrep dingodb_server | xargs kill
 }
 
 usage()
