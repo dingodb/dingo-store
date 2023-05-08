@@ -48,11 +48,16 @@ class CoordinatorBvarMetricsStore {
     if (stats2) {
       stats2->set_value(free_capacity);
     }
+    auto *stats3 = store_metrics_.get_stats({std::to_string(store_id), "used_percent"});
+    if (stats3) {
+      stats3->set_value(100 - (free_capacity * 100 / total_capacity));
+    }
   }
 
   void DeleteStoreBvar(uint64_t store_id) {
     store_metrics_.delete_stats({std::to_string(store_id), "total_capacity"});
     store_metrics_.delete_stats({std::to_string(store_id), "free_capacity"});
+    store_metrics_.delete_stats({std::to_string(store_id), "used_percent"});
   }
 
   void Clear() { store_metrics_.delete_stats(); }
