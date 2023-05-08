@@ -21,9 +21,9 @@
 
 #include "butil/containers/doubly_buffered_data.h"
 #include "butil/containers/flat_map.h"
-#include "butil/strings/stringprintf.h"
 #include "common/logging.h"
 #include "common/safe_map.h"
+#include "fmt/core.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator_internal.pb.h"
 
@@ -277,7 +277,7 @@ class MetaSafeMapStorage {
     return 0;
   }
 
-  std::string GenKey(uint64_t id) { return butil::StringPrintf("%s_%lu", internal_prefix.c_str(), id); }
+  std::string GenKey(uint64_t id) { return fmt::format("{}_{}", internal_prefix, id); }
 
   std::shared_ptr<pb::common::KeyValue> TransformToKv(uint64_t id) {
     // std::shared_lock<std::shared_mutex> lock(mutex_);
@@ -389,7 +389,7 @@ class MetaSafeStringMapStorage {
     return s;
   }
 
-  std::string GenKey(std::string id) { return butil::StringPrintf("%s_%s", internal_prefix.c_str(), id.c_str()); }
+  std::string GenKey(std::string id) { return fmt::format("{}_{}", internal_prefix, id); }
 
   std::shared_ptr<pb::common::KeyValue> TransformToKv(std::string id) {
     // std::shared_lock<std::shared_mutex> lock(mutex_);
@@ -506,7 +506,7 @@ class MetaMapStorage {
     return 0;
   }
 
-  std::string GenKey(uint64_t id) { return butil::StringPrintf("%s_%lu", internal_prefix.c_str(), id); }
+  std::string GenKey(uint64_t id) { return fmt::format("{}_{}", internal_prefix, id); }
 
   std::shared_ptr<pb::common::KeyValue> TransformToKv(uint64_t id) {
     // std::shared_lock<std::shared_mutex> lock(mutex_);

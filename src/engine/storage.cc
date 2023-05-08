@@ -16,11 +16,11 @@
 
 #include <vector>
 
-#include "butil/strings/stringprintf.h"
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "engine/write_data.h"
+#include "fmt/core.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "scan/scan.h"
@@ -117,9 +117,9 @@ butil::Status Storage::KvDeleteRange(std::shared_ptr<Context> ctx, const pb::com
 }
 
 butil::Status Storage::KvScanBegin([[maybe_unused]] std::shared_ptr<Context> ctx, const std::string& cf_name,
-                                   uint64_t region_id, const pb::common::RangeWithOptions& range, uint64_t max_fetch_cnt,
-                                   bool key_only, bool disable_auto_release, std::string* scan_id,
-                                   std::vector<pb::common::KeyValue>* kvs) {
+                                   uint64_t region_id, const pb::common::RangeWithOptions& range,
+                                   uint64_t max_fetch_cnt, bool key_only, bool disable_auto_release,
+                                   std::string* scan_id, std::vector<pb::common::KeyValue>* kvs) {
   ScanManager* manager = ScanManager::GetInstance();
   std::shared_ptr<ScanContext> scan = manager->CreateScan(scan_id);
 
@@ -127,7 +127,7 @@ butil::Status Storage::KvScanBegin([[maybe_unused]] std::shared_ptr<Context> ctx
 
   status = scan->Open(*scan_id, engine_->GetRawEngine(), cf_name);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << butil::StringPrintf("ScanContext::Open failed : %s", scan_id->c_str());
+    DINGO_LOG(ERROR) << fmt::format("ScanContext::Open failed : {}", *scan_id);
     manager->DeleteScan(*scan_id);
     *scan_id = "";
     return status;
@@ -135,7 +135,7 @@ butil::Status Storage::KvScanBegin([[maybe_unused]] std::shared_ptr<Context> ctx
 
   status = ScanHandler::ScanBegin(scan, region_id, range, max_fetch_cnt, key_only, disable_auto_release, kvs);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << butil::StringPrintf("ScanContext::ScanBegin failed: %s", scan_id->c_str());
+    DINGO_LOG(ERROR) << fmt::format("ScanContext::ScanBegin failed: {}", *scan_id);
     manager->DeleteScan(*scan_id);
     *scan_id = "";
     kvs->clear();
@@ -151,15 +151,15 @@ butil::Status Storage::KvScanContinue([[maybe_unused]] std::shared_ptr<Context> 
   std::shared_ptr<ScanContext> scan = manager->FindScan(scan_id);
   butil::Status status;
   if (!scan) {
-    DINGO_LOG(ERROR) << butil::StringPrintf("scan_id : %s not found", scan_id.c_str());
+    DINGO_LOG(ERROR) << fmt::format("scan_id : %s not found", scan_id.c_str());
     return butil::Status(pb::error::ESCAN_NOTFOUND, "Not found scan_id");
   }
 
   status = ScanHandler::ScanContinue(scan, scan_id, max_fetch_cnt, kvs);
   if (!status.ok()) {
     manager->DeleteScan(scan_id);
-    DINGO_LOG(ERROR) << butil::StringPrintf("ScanContext::ScanBegin failed scan : %s max_fetch_cnt : %lu",
-                                            scan_id.c_str(), max_fetch_cnt);
+    DINGO_LOG(ERROR) << fmt::format("ScanContext::ScanBegin failed scan : {} max_fetch_cnt : {}", scan_id,
+                                    max_fetch_cnt);
     return status;
   }
 
@@ -171,14 +171,14 @@ butil::Status Storage::KvScanRelease([[maybe_unused]] std::shared_ptr<Context> c
   std::shared_ptr<ScanContext> scan = manager->FindScan(scan_id);
   butil::Status status;
   if (!scan) {
-    DINGO_LOG(ERROR) << butil::StringPrintf("scan_id : %s not found", scan_id.c_str());
+    DINGO_LOG(ERROR) << fmt::format("scan_id : %s not found", scan_id.c_str());
     return butil::Status(pb::error::ESCAN_NOTFOUND, "Not found scan_id");
   }
 
   status = ScanHandler::ScanRelease(scan, scan_id);
   if (!status.ok()) {
     manager->DeleteScan(scan_id);
-    DINGO_LOG(ERROR) << butil::StringPrintf("ScanContext::ScanRelease failed : %s", scan_id.c_str());
+    DINGO_LOG(ERROR) << fmt::format("ScanContext::ScanRelease failed : {}", scan_id);
     return status;
   }
 

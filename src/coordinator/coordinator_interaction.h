@@ -27,10 +27,10 @@
 #include "butil/macros.h"
 #include "butil/scoped_lock.h"
 #include "butil/status.h"
-#include "butil/strings/stringprintf.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "common/safe_map.h"
+#include "fmt/core.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
 #include "proto/error.pb.h"
@@ -243,8 +243,8 @@ butil::Status CoordinatorInteraction::SendRequestByList(const std::string& api_n
     // DINGO_LOG(DEBUG) << "send request api " << api_name << " response: " <<
     // response.ShortDebugString();
     if (cntl.Failed()) {
-      DINGO_LOG(ERROR) << butil::StringPrintf("%s response failed, %lu %d %s", api_name.c_str(), cntl.log_id(),
-                                              cntl.ErrorCode(), cntl.ErrorText().c_str());
+      DINGO_LOG(ERROR) << fmt::format("{} response failed, {} {} {}", api_name, cntl.log_id(), cntl.ErrorCode(),
+                                      cntl.ErrorText());
       return butil::Status(cntl.ErrorCode(), cntl.ErrorText());
     }
 

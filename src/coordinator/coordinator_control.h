@@ -15,8 +15,6 @@
 #ifndef DINGODB_COORDINATOR_CONTROL_H_
 #define DINGODB_COORDINATOR_CONTROL_H_
 
-#include <fmt/core.h>
-
 #include <cstdint>
 #include <map>
 #include <memory>
@@ -31,13 +29,13 @@
 #include "butil/containers/flat_map.h"
 #include "butil/scoped_lock.h"
 #include "butil/status.h"
-#include "butil/strings/stringprintf.h"
 #include "common/logging.h"
 #include "common/meta_control.h"
 #include "common/safe_map.h"
 #include "coordinator/coordinator_meta_storage.h"
 #include "engine/engine.h"
 #include "engine/snapshot.h"
+#include "fmt/core.h"
 #include "meta/meta_reader.h"
 #include "meta/meta_writer.h"
 #include "metrics/coordinator_bvar_metrics.h"

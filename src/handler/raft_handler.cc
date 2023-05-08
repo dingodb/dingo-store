@@ -18,10 +18,10 @@
 #include <string>
 #include <vector>
 
-#include "butil/strings/stringprintf.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "engine/raw_engine.h"
+#include "fmt/core.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "server/server.h"
@@ -250,9 +250,9 @@ void DeleteBatchHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
 void SplitHandler::SplitClosure::Run() {
   std::unique_ptr<SplitClosure> self_guard(this);
   if (!status().ok()) {
-    DINGO_LOG(INFO) << butil::StringPrintf("split region %ld, finish snapshot failed", region_->Id());
+    DINGO_LOG(INFO) << fmt::format("split region {}, finish snapshot failed", region_->Id());
   } else {
-    DINGO_LOG(INFO) << butil::StringPrintf("split region %ld, finish snapshot success", region_->Id());
+    DINGO_LOG(INFO) << fmt::format("split region {}, finish snapshot success", region_->Id());
   }
 
   auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
@@ -272,11 +272,11 @@ void SplitHandler::Handle(std::shared_ptr<Context>, store::RegionPtr from_region
 
   auto to_region = store_region_meta->GetRegion(request.to_region_id());
   if (to_region == nullptr) {
-    DINGO_LOG(ERROR) << butil::StringPrintf("split region %ld to %ld, child region not found", from_region->Id(),
-                                            to_region->Id());
+    DINGO_LOG(ERROR) << fmt::format("split region {} to {}, child region not found", from_region->Id(),
+                                    to_region->Id());
     return;
   }
-  DINGO_LOG(DEBUG) << butil::StringPrintf("split region %ld to %ld, begin...", from_region->Id(), to_region->Id());
+  DINGO_LOG(DEBUG) << fmt::format("split region {} to {}, begin...", from_region->Id(), to_region->Id());
 
   pb::common::Range to_range;
   // Set child range
@@ -292,21 +292,19 @@ void SplitHandler::Handle(std::shared_ptr<Context>, store::RegionPtr from_region
   from_range.set_start_key(from_region->Range().start_key());
   from_range.set_end_key(request.split_key());
   from_region->SetRange(from_range);
-  DINGO_LOG(DEBUG) << butil::StringPrintf(
-      "split region %ld to %ld, from region range[%s-%s] to region range[%s-%s]", from_region->Id(), to_region->Id(),
-      Helper::StringToHex(from_range.start_key()).c_str(), Helper::StringToHex(from_range.end_key()).c_str(),
-      Helper::StringToHex(to_range.start_key()).c_str(), Helper::StringToHex(to_range.end_key()).c_str());
+  DINGO_LOG(DEBUG) << fmt::format("split region {} to {}, from region range[{}-{}] to region range[{}-{}]",
+                                  from_region->Id(), to_region->Id(), Helper::StringToHex(from_range.start_key()),
+                                  Helper::StringToHex(from_range.end_key()), Helper::StringToHex(to_range.start_key()),
+                                  Helper::StringToHex(to_range.end_key()));
 
-  DINGO_LOG(DEBUG) << butil::StringPrintf("split region %ld to %ld, parent do snapshot", from_region->Id(),
-                                          to_region->Id());
+  DINGO_LOG(DEBUG) << fmt::format("split region {} to {}, parent do snapshot", from_region->Id(), to_region->Id());
   // Do parent region snapshot
   auto engine = Server::GetInstance()->GetEngine();
   std::shared_ptr<Context> from_ctx = std::make_shared<Context>();
   from_ctx->SetDone(new SplitHandler::SplitClosure(from_region, false));
   engine->DoSnapshot(from_ctx, from_region->Id());
 
-  DINGO_LOG(DEBUG) << butil::StringPrintf("split region %ld to %ld, child do snapshot", from_region->Id(),
-                                          to_region->Id());
+  DINGO_LOG(DEBUG) << fmt::format("split region {} to {}, child do snapshot", from_region->Id(), to_region->Id());
   // Do child region snapshot
   std::shared_ptr<Context> to_ctx = std::make_shared<Context>();
   to_ctx->SetDone(new SplitHandler::SplitClosure(to_region, true));

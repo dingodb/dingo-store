@@ -16,7 +16,7 @@
 
 #include <iomanip>
 
-#include "butil/strings/stringprintf.h"
+#include "fmt/core.h"
 #include "proto/node.pb.h"
 
 namespace dingodb {
@@ -29,16 +29,12 @@ void DingoLogger::InitLogger(const std::string& log_dir, const std::string& role
   FLAGS_logbuflevel = google::GLOG_INFO;
   ChangeGlogLevelUsingDingoLevel(level);
 
-  const std::string program_name = butil::StringPrintf("./%s", role.c_str());
+  const std::string program_name = fmt::format("./{}", role);
   google::InitGoogleLogging(program_name.c_str(), &CustomLogFormatPrefix);
-  google::SetLogDestination(google::GLOG_INFO,
-                            butil::StringPrintf("%s/%s.info.log.", log_dir.c_str(), role.c_str()).c_str());
-  google::SetLogDestination(google::GLOG_WARNING,
-                            butil::StringPrintf("%s/%s.warn.log.", log_dir.c_str(), role.c_str()).c_str());
-  google::SetLogDestination(google::GLOG_ERROR,
-                            butil::StringPrintf("%s/%s.error.log.", log_dir.c_str(), role.c_str()).c_str());
-  google::SetLogDestination(google::GLOG_FATAL,
-                            butil::StringPrintf("%s/%s.fatal.log.", log_dir.c_str(), role.c_str()).c_str());
+  google::SetLogDestination(google::GLOG_INFO, fmt::format("{}/{}.info.log.", log_dir, role).c_str());
+  google::SetLogDestination(google::GLOG_WARNING, fmt::format("{}/{}.warn.log.", log_dir, role).c_str());
+  google::SetLogDestination(google::GLOG_ERROR, fmt::format("{}/{}.error.log.", log_dir, role).c_str());
+  google::SetLogDestination(google::GLOG_FATAL, fmt::format("{}/{}.fatal.log.", log_dir, role).c_str());
 }
 
 void DingoLogger::SetMinLogLevel(int level) { FLAGS_minloglevel = level; }

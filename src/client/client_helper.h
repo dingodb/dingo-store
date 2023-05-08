@@ -26,7 +26,6 @@
 #include "brpc/channel.h"
 #include "brpc/controller.h"
 #include "butil/strings/string_split.h"
-#include "butil/strings/stringprintf.h"
 #include "common/logging.h"
 #include "proto/meta.pb.h"
 #include "proto/store.pb.h"

@@ -18,7 +18,7 @@
 
 #include "butil/memory/singleton.h"
 #include "butil/scoped_lock.h"
-#include "butil/strings/stringprintf.h"
+#include "fmt/core.h"
 #include "proto/common.pb.h"
 
 namespace dingodb {
@@ -38,7 +38,7 @@ void ConfigManager::Register(pb::common::ClusterRole role, std::shared_ptr<Confi
   BAIDU_SCOPED_LOCK(mutex_);
   auto name = pb::common::ClusterRole_Name(role);
   if (configs_.find(name) != configs_.end()) {
-    DINGO_LOG(WARNING) << butil::StringPrintf("config %s already exist!", name.c_str());
+    DINGO_LOG(WARNING) << fmt::format("config {} already exist!", name);
     return;
   }
 
@@ -50,7 +50,7 @@ std::shared_ptr<Config> ConfigManager::GetConfig(pb::common::ClusterRole role) {
   auto name = pb::common::ClusterRole_Name(role);
   auto it = configs_.find(name);
   if (it == configs_.end()) {
-    DINGO_LOG(WARNING) << butil::StringPrintf("config %s not exist!", name.c_str());
+    DINGO_LOG(WARNING) << fmt::format("config {} not exist!", name);
     return nullptr;
   }
 

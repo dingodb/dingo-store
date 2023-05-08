@@ -20,7 +20,6 @@
 #include <memory>
 
 #include "butil/status.h"
-#include "butil/strings/stringprintf.h"
 #include "common/constant.h"
 #include "common/logging.h"
 #include "event/store_state_machine_event.h"
@@ -52,8 +51,7 @@ butil::Status CreateRegionTask::ValidateCreateRegion(std::shared_ptr<StoreMetaMa
 butil::Status CreateRegionTask::CreateRegion(std::shared_ptr<Context> ctx, store::RegionPtr region,
                                              uint64_t split_from_region_id) {
   auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
-  DINGO_LOG(DEBUG) << butil::StringPrintf("Create region %lu, %s", region->Id(),
-                                          region->InnerRegion().ShortDebugString().c_str());
+  DINGO_LOG(DEBUG) << fmt::format("Create region {}, {}", region->Id(), region->InnerRegion().ShortDebugString());
 
   // Valiate region
   auto status = ValidateCreateRegion(store_meta_manager, region->Id());
@@ -62,18 +60,18 @@ butil::Status CreateRegionTask::CreateRegion(std::shared_ptr<Context> ctx, store
   }
 
   // Add region to store region meta manager
-  DINGO_LOG(DEBUG) << butil::StringPrintf("Create region %lu save region meta", region->Id());
+  DINGO_LOG(DEBUG) << fmt::format("Create region {} save region meta", region->Id());
   auto store_region_meta = store_meta_manager->GetStoreRegionMeta();
   region->SetState(pb::common::StoreRegionState::NEW);
   store_region_meta->AddRegion(region);
 
   // Add region metrics
-  DINGO_LOG(DEBUG) << butil::StringPrintf("Create region %lu add region metrics", region->Id());
+  DINGO_LOG(DEBUG) << fmt::format("Create region {} add region metrics", region->Id());
   auto region_metrics = StoreRegionMetrics::NewMetrics(region->Id());
   Server::GetInstance()->GetStoreMetricsManager()->GetStoreRegionMetrics()->AddMetrics(region_metrics);
 
   // Add raft node
-  DINGO_LOG(DEBUG) << butil::StringPrintf("Create region %lu add raft node", region->Id());
+  DINGO_LOG(DEBUG) << fmt::format("Create region {} add raft node", region->Id());
   auto engine = Server::GetInstance()->GetEngine();
   if (engine->GetID() == pb::common::ENG_RAFT_STORE) {
     auto raft_meta = StoreRaftMeta::NewRaftMeta(region->Id());
@@ -88,7 +86,7 @@ butil::Status CreateRegionTask::CreateRegion(std::shared_ptr<Context> ctx, store
     }
   }
 
-  DINGO_LOG(DEBUG) << butil::StringPrintf("Create region %lu update region state NORMAL", region->Id());
+  DINGO_LOG(DEBUG) << fmt::format("Create region {} update region state NORMAL", region->Id());
   if (split_from_region_id == 0) {
     store_region_meta->UpdateState(region, pb::common::StoreRegionState::NORMAL);
   } else {
@@ -103,7 +101,7 @@ void CreateRegionTask::Run() {
 
   auto status = CreateRegion(ctx_, region, region_cmd_->create_request().split_from_region_id());
   if (!status.ok()) {
-    DINGO_LOG(DEBUG) << butil::StringPrintf("Create region %lu failed, %s", region->Id(), status.error_cstr());
+    DINGO_LOG(DEBUG) << fmt::format("Create region {} failed, {}", region->Id(), status.error_str());
   }
 
   Server::GetInstance()->GetRegionCommandManager()->UpdateCommandStatus(
@@ -145,7 +143,7 @@ butil::Status DeleteRegionTask::DeleteRegion(std::shared_ptr<Context> ctx, uint6
   auto store_region_meta = store_meta_manager->GetStoreRegionMeta();
   auto region = store_region_meta->GetRegion(region_id);
 
-  DINGO_LOG(DEBUG) << butil::StringPrintf("Delete region %lu", region_id);
+  DINGO_LOG(DEBUG) << fmt::format("Delete region {}", region_id);
   // Valiate region
   auto status = ValidateDeleteRegion(store_meta_manager, region);
   if (!status.ok()) {
@@ -153,14 +151,14 @@ butil::Status DeleteRegionTask::DeleteRegion(std::shared_ptr<Context> ctx, uint6
   }
 
   // Update state
-  DINGO_LOG(DEBUG) << butil::StringPrintf("Delete region %lu update region state DELETING", region_id);
+  DINGO_LOG(DEBUG) << fmt::format("Delete region {} update region state DELETING", region_id);
   store_region_meta->UpdateState(region, pb::common::StoreRegionState::DELETING);
 
   // Shutdown raft node
   auto engine = Server::GetInstance()->GetEngine();
 
   // Delete data
-  DINGO_LOG(DEBUG) << butil::StringPrintf("Delete region %lu delete data", region_id);
+  DINGO_LOG(DEBUG) << fmt::format("Delete region {} delete data", region_id);
   auto writer = engine->GetRawEngine()->NewWriter(Constant::kStoreDataCF);
   writer->KvDeleteRange(region->Range());
 
@@ -168,16 +166,16 @@ butil::Status DeleteRegionTask::DeleteRegion(std::shared_ptr<Context> ctx, uint6
   if (engine->GetID() == pb::common::ENG_RAFT_STORE) {
     auto raft_kv_engine = std::dynamic_pointer_cast<RaftKvEngine>(engine);
     // Delete raft
-    DINGO_LOG(DEBUG) << butil::StringPrintf("Delete region %lu delete raft node", region_id);
+    DINGO_LOG(DEBUG) << fmt::format("Delete region {} delete raft node", region_id);
     raft_kv_engine->DestroyNode(ctx, region_id);
   }
 
   // Update state
-  DINGO_LOG(DEBUG) << butil::StringPrintf("Delete region %lu update region state DELETED", region_id);
+  DINGO_LOG(DEBUG) << fmt::format("Delete region {} update region state DELETED", region_id);
   store_region_meta->UpdateState(region, pb::common::StoreRegionState::DELETED);
 
   // Delete metrics
-  DINGO_LOG(DEBUG) << butil::StringPrintf("Delete region %lu delete region metrics", region_id);
+  DINGO_LOG(DEBUG) << fmt::format("Delete region {} delete region metrics", region_id);
   Server::GetInstance()->GetStoreMetricsManager()->GetStoreRegionMetrics()->DeleteMetrics(region_id);
 
   // Delete raft meta
@@ -204,8 +202,8 @@ butil::Status DeleteRegionTask::DeleteRegion(std::shared_ptr<Context> ctx, uint6
 void DeleteRegionTask::Run() {
   auto status = DeleteRegion(ctx_, region_cmd_->delete_request().region_id());
   if (!status.ok()) {
-    DINGO_LOG(DEBUG) << butil::StringPrintf("Delete region %lu failed, %s", region_cmd_->delete_request().region_id(),
-                                            status.error_cstr());
+    DINGO_LOG(DEBUG) << fmt::format("Delete region {} failed, {}", region_cmd_->delete_request().region_id(),
+                                    status.error_str());
   }
 
   Server::GetInstance()->GetRegionCommandManager()->UpdateCommandStatus(
@@ -300,8 +298,8 @@ butil::Status SplitRegionTask::SplitRegion() {
 void SplitRegionTask::Run() {
   auto status = SplitRegion();
   if (!status.ok()) {
-    DINGO_LOG(DEBUG) << butil::StringPrintf("Split region %lu failed, %s",
-                                            region_cmd_->split_request().split_from_region_id(), status.error_cstr());
+    DINGO_LOG(DEBUG) << fmt::format("Split region {} failed, {}", region_cmd_->split_request().split_from_region_id(),
+                                    status.error_str());
   }
 
   Server::GetInstance()->GetRegionCommandManager()->UpdateCommandStatus(
@@ -350,8 +348,7 @@ butil::Status ChangeRegionTask::ValidateChangeRegion(std::shared_ptr<StoreMetaMa
 butil::Status ChangeRegionTask::ChangeRegion(std::shared_ptr<Context> ctx,
                                              const pb::common::RegionDefinition& region_definition) {
   auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
-  DINGO_LOG(DEBUG) << butil::StringPrintf("Change region %lu, %s", region_definition.id(),
-                                          region_definition.ShortDebugString().c_str());
+  DINGO_LOG(DEBUG) << fmt::format("Change region {}, {}", region_definition.id(), region_definition.ShortDebugString());
 
   // Valiate region
   auto status = ValidateChangeRegion(store_meta_manager, region_definition);
@@ -381,9 +378,8 @@ butil::Status ChangeRegionTask::ChangeRegion(std::shared_ptr<Context> ctx,
 void ChangeRegionTask::Run() {
   auto status = ChangeRegion(ctx_, region_cmd_->change_peer_request().region_definition());
   if (!status.ok()) {
-    DINGO_LOG(DEBUG) << butil::StringPrintf("Change region %lu failed, %s",
-                                            region_cmd_->change_peer_request().region_definition().id(),
-                                            status.error_cstr());
+    DINGO_LOG(DEBUG) << fmt::format("Change region {} failed, {}",
+                                    region_cmd_->change_peer_request().region_definition().id(), status.error_str());
   }
 
   Server::GetInstance()->GetRegionCommandManager()->UpdateCommandStatus(
@@ -468,8 +464,7 @@ butil::Status SnapshotRegionTask::Snapshot(std::shared_ptr<Context> ctx, uint64_
 void SnapshotRegionTask::Run() {
   auto status = Snapshot(ctx_, region_cmd_->region_id());
   if (!status.ok()) {
-    DINGO_LOG(DEBUG) << butil::StringPrintf("Snapshot region %lu failed, %s", region_cmd_->region_id(),
-                                            status.error_cstr());
+    DINGO_LOG(DEBUG) << fmt::format("Snapshot region {} failed, {}", region_cmd_->region_id(), status.error_str());
   }
 
   Server::GetInstance()->GetRegionCommandManager()->UpdateCommandStatus(
@@ -495,7 +490,7 @@ butil::Status PurgeRegionTask::ValidatePurgeRegion(store::RegionPtr region) {
 }
 
 butil::Status PurgeRegionTask::PurgeRegion(std::shared_ptr<Context>, uint64_t region_id) {
-  DINGO_LOG(DEBUG) << butil::StringPrintf("Purge region %lu", region_id);
+  DINGO_LOG(DEBUG) << fmt::format("Purge region {}", region_id);
   auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
   auto store_region_meta = store_meta_manager->GetStoreRegionMeta();
   store_region_meta->DeleteRegion(region_id);
@@ -506,8 +501,8 @@ butil::Status PurgeRegionTask::PurgeRegion(std::shared_ptr<Context>, uint64_t re
 void PurgeRegionTask::Run() {
   auto status = PurgeRegion(ctx_, region_cmd_->purge_request().region_id());
   if (!status.ok()) {
-    DINGO_LOG(DEBUG) << butil::StringPrintf("Purge region %lu failed, %s", region_cmd_->purge_request().region_id(),
-                                            status.error_cstr());
+    DINGO_LOG(DEBUG) << fmt::format("Purge region {} failed, %s", region_cmd_->purge_request().region_id(),
+                                    status.error_str());
   }
 
   Server::GetInstance()->GetRegionCommandManager()->UpdateCommandStatus(
@@ -542,7 +537,7 @@ butil::Status StopRegionTask::StopRegion(std::shared_ptr<Context> ctx, uint64_t 
   auto store_region_meta = store_meta_manager->GetStoreRegionMeta();
   auto region = store_region_meta->GetRegion(region_id);
 
-  DINGO_LOG(DEBUG) << butil::StringPrintf("Stop region %lu", region_id);
+  DINGO_LOG(DEBUG) << fmt::format("Stop region {}", region_id);
   // Valiate region
   auto status = ValidateStopRegion(region);
   if (!status.ok()) {
@@ -554,7 +549,7 @@ butil::Status StopRegionTask::StopRegion(std::shared_ptr<Context> ctx, uint64_t 
   if (engine->GetID() == pb::common::ENG_RAFT_STORE) {
     auto raft_kv_engine = std::dynamic_pointer_cast<RaftKvEngine>(engine);
     // Delete raft
-    DINGO_LOG(DEBUG) << butil::StringPrintf("Delete peer %lu delete raft node", region_id);
+    DINGO_LOG(DEBUG) << fmt::format("Delete peer {} delete raft node", region_id);
     raft_kv_engine->StopNode(ctx, region_id);
   }
 
@@ -564,8 +559,8 @@ butil::Status StopRegionTask::StopRegion(std::shared_ptr<Context> ctx, uint64_t 
 void StopRegionTask::Run() {
   auto status = StopRegion(ctx_, region_cmd_->stop_request().region_id());
   if (!status.ok()) {
-    DINGO_LOG(DEBUG) << butil::StringPrintf("Delete peer region %lu failed, %s",
-                                            region_cmd_->stop_request().region_id(), status.error_cstr());
+    DINGO_LOG(DEBUG) << fmt::format("Delete peer region {} failed, {}", region_cmd_->stop_request().region_id(),
+                                    status.error_str());
   }
 
   Server::GetInstance()->GetRegionCommandManager()->UpdateCommandStatus(
@@ -588,8 +583,8 @@ butil::Status DestroyRegionExecutorTask::DestroyRegionExecutor(std::shared_ptr<C
 void DestroyRegionExecutorTask::Run() {
   auto status = DestroyRegionExecutor(ctx_, region_cmd_->destroy_executor_request().region_id());
   if (!status.ok()) {
-    DINGO_LOG(DEBUG) << butil::StringPrintf("Destroy executor region %lu failed, %s",
-                                            region_cmd_->destroy_executor_request().region_id(), status.error_cstr());
+    DINGO_LOG(DEBUG) << fmt::format("Destroy executor region {} failed, {}",
+                                    region_cmd_->destroy_executor_request().region_id(), status.error_str());
   }
 
   Server::GetInstance()->GetRegionCommandManager()->UpdateCommandStatus(
@@ -837,9 +832,8 @@ std::shared_ptr<RegionControlExecutor> RegionController::GetRegionControlExecuto
 
 butil::Status RegionController::InnerDispatchRegionControlCommand(std::shared_ptr<Context> ctx,
                                                                   std::shared_ptr<pb::coordinator::RegionCmd> command) {
-  DINGO_LOG(DEBUG) << butil::StringPrintf("Dispatch region control command, region %lu %lu %s", command->region_id(),
-                                          command->id(),
-                                          pb::coordinator::RegionCmdType_Name(command->region_cmd_type()).c_str());
+  DINGO_LOG(DEBUG) << fmt::format("Dispatch region control command, region {} {} {}", command->region_id(),
+                                  command->id(), pb::coordinator::RegionCmdType_Name(command->region_cmd_type()));
 
   // Create region, need to add region control executor
   if (command->region_cmd_type() == pb::coordinator::RegionCmdType::CMD_CREATE) {

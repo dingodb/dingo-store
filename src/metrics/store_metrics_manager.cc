@@ -19,11 +19,11 @@
 #include <string>
 #include <vector>
 
-#include "butil/strings/stringprintf.h"
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "config/config_manager.h"
+#include "fmt/core.h"
 #include "proto/common.pb.h"
 #include "server/server.h"
 
@@ -190,8 +190,8 @@ bool StoreRegionMetrics::CollectMetrics() {
     // Get region key counts
     region_metrics->SetKeyCount(GetRegionKeyCount(region));
 
-    DINGO_LOG(DEBUG) << butil::StringPrintf(
-        "Collect region metrics, region %lu min_key[%s] max_key[%s] key_count[true] region_size[true] elapsed[%lu ms]",
+    DINGO_LOG(DEBUG) << fmt::format(
+        "Collect region metrics, region {} min_key[{}] max_key[{}] key_count[true] region_size[true] elapsed[{} ms]",
         region->Id(), is_collect_min_key ? "true" : "false", is_collect_max_key ? "true" : "false",
         Helper::TimestampMs() - start_time);
 
@@ -208,8 +208,7 @@ bool StoreRegionMetrics::CollectMetrics() {
     }
   }
 
-  DINGO_LOG(DEBUG) << butil::StringPrintf("Get region approximate size elapsed[%lu ms]",
-                                          Helper::TimestampMs() - start_time);
+  DINGO_LOG(DEBUG) << fmt::format("Get region approximate size elapsed[{} ms]", Helper::TimestampMs() - start_time);
 
   return true;
 }

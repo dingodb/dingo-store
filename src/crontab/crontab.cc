@@ -15,8 +15,8 @@
 #include "crontab/crontab.h"
 
 #include "bthread/bthread.h"
-#include "butil/strings/stringprintf.h"
 #include "common/logging.h"
+#include "fmt/core.h"
 
 namespace dingodb {
 
@@ -33,7 +33,7 @@ void CrontabManager::Run(void* arg) {
     try {
       crontab->func(crontab->arg);
     } catch (...) {
-      DINGO_LOG(ERROR) << butil::StringPrintf("Crontab %u %s happen exception", crontab->id, crontab->name.c_str());
+      DINGO_LOG(ERROR) << fmt::format("Crontab {} {} happen exception", crontab->id, crontab->name);
     }
     ++crontab->run_count;
   } else {

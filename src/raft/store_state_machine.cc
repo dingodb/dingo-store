@@ -18,10 +18,10 @@
 #include <string>
 
 #include "braft/util.h"
-#include "butil/strings/stringprintf.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "event/store_state_machine_event.h"
+#include "fmt/core.h"
 #include "meta/store_meta_manager.h"
 #include "metrics/store_bvar_metrics.h"
 #include "proto/error.pb.h"
@@ -37,8 +37,8 @@ void StoreClosure::Run() {
   std::unique_ptr<StoreClosure> self_guard(this);
   brpc::ClosureGuard const done_guard(ctx_->IsSyncMode() ? nullptr : ctx_->Done());
   if (!status().ok()) {
-    DINGO_LOG(ERROR) << butil::StringPrintf("raft log commit failed, region[%ld] %d:%s", ctx_->RegionId(),
-                                            status().error_code(), status().error_cstr());
+    DINGO_LOG(ERROR) << fmt::format("raft log commit failed, region[{}] {}:{}", ctx_->RegionId(), status().error_code(),
+                                    status().error_str());
 
     ctx_->SetStatus(status());
   }
@@ -91,9 +91,9 @@ void StoreStateMachine::on_apply(braft::Iterator& iter) {
       CHECK(raft_cmd->ParseFromZeroCopyStream(&wrapper));
     }
 
-    DINGO_LOG(DEBUG) << butil::StringPrintf(
-        "raft apply log on region[%ld-term:%ld-index:%ld] applied_index[%ld] cmd:[%s]", raft_cmd->header().region_id(),
-        iter.term(), iter.index(), applied_index_, raft_cmd->ShortDebugString().c_str());
+    DINGO_LOG(DEBUG) << fmt::format("raft apply log on region[{}-term:{}-index:{}] applied_index[{}] cmd:[{}]",
+                                    raft_cmd->header().region_id(), iter.term(), iter.index(), applied_index_,
+                                    raft_cmd->ShortDebugString());
     // Build event
     auto event = std::make_shared<SmApplyEvent>();
     event->region = region_;
@@ -161,8 +161,8 @@ int StoreStateMachine::on_snapshot_load(braft::SnapshotReader* reader) {
   DINGO_LOG(INFO) << "on_snapshot_load, region: " << region_->Id();
   braft::SnapshotMeta meta;
   reader->load_meta(&meta);
-  DINGO_LOG(INFO) << butil::StringPrintf("load snapshot(%ld-%ld) applied_index(%lu)", meta.last_included_term(),
-                                         meta.last_included_index(), applied_index_);
+  DINGO_LOG(INFO) << fmt::format("load snapshot({}-{}) applied_index({})", meta.last_included_term(),
+                                 meta.last_included_index(), applied_index_);
 
   if (meta.last_included_index() > applied_index_) {
     auto event = std::make_shared<SmSnapshotLoadEvent>();
@@ -200,8 +200,8 @@ void StoreStateMachine::on_leader_stop(const butil::Status& status) {
 }
 
 void StoreStateMachine::on_error(const braft::Error& e) {
-  DINGO_LOG(INFO) << butil::StringPrintf("on_error region: %ld type(%d) %d %s", region_->Id(), e.type(),
-                                         e.status().error_code(), e.status().error_cstr());
+  DINGO_LOG(INFO) << fmt::format("on_error region: {} type({}) {} {}", region_->Id(), static_cast<int>(e.type()),
+                                 e.status().error_code(), e.status().error_str());
 
   auto event = std::make_shared<SmErrorEvent>();
   event->e = e;
@@ -220,9 +220,8 @@ void StoreStateMachine::on_configuration_committed(const braft::Configuration& c
 }
 
 void StoreStateMachine::on_start_following(const braft::LeaderChangeContext& ctx) {
-  DINGO_LOG(INFO) << butil::StringPrintf("on_start_following, region: %lu leader_id: %s error: %d %s", region_->Id(),
-                                         ctx.leader_id().to_string().c_str(), ctx.status().error_code(),
-                                         ctx.status().error_cstr());
+  DINGO_LOG(INFO) << fmt::format("on_start_following, region: {} leader_id: {} error: {} {}", region_->Id(),
+                                 ctx.leader_id().to_string(), ctx.status().error_code(), ctx.status().error_str());
   auto event = std::make_shared<SmStartFollowingEvent>(ctx);
   event->node_id = region_->Id();
 
@@ -234,9 +233,8 @@ void StoreStateMachine::on_start_following(const braft::LeaderChangeContext& ctx
 }
 
 void StoreStateMachine::on_stop_following(const braft::LeaderChangeContext& ctx) {
-  DINGO_LOG(INFO) << butil::StringPrintf("on_stop_following, region: %lu leader_id: %s error: %d %s", region_->Id(),
-                                         ctx.leader_id().to_string().c_str(), ctx.status().error_code(),
-                                         ctx.status().error_cstr());
+  DINGO_LOG(INFO) << fmt::format("on_stop_following, region: {} leader_id: {} error: {} {}", region_->Id(),
+                                 ctx.leader_id().to_string(), ctx.status().error_code(), ctx.status().error_str());
   auto event = std::make_shared<SmStopFollowingEvent>(ctx);
   event->node_id = region_->Id();
 

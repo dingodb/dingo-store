@@ -27,11 +27,10 @@ bool ServerInteraction::Init(const std::string& addr) {
   }
 
   for (auto& endpoint : endpoints_) {
-    DINGO_LOG(INFO) << butil::StringPrintf("Init channel %s:%d", butil::ip2str(endpoint.ip).c_str(), endpoint.port);
+    DINGO_LOG(INFO) << fmt::format("Init channel {}:{}", butil::ip2str(endpoint.ip).c_str(), endpoint.port);
     std::unique_ptr<brpc::Channel> channel = std::make_unique<brpc::Channel>();
     if (channel->Init(endpoint, nullptr) != 0) {
-      DINGO_LOG(ERROR) << butil::StringPrintf("Init channel failed, %s:%d", butil::ip2str(endpoint.ip).c_str(),
-                                              endpoint.port);
+      DINGO_LOG(ERROR) << fmt::format("Init channel failed, {}:{}", butil::ip2str(endpoint.ip).c_str(), endpoint.port);
       return false;
     }
     channels_.push_back(std::move(channel));

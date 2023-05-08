@@ -17,9 +17,9 @@
 #include <filesystem>
 #include <string>
 
-#include "butil/strings/stringprintf.h"
 #include "common/constant.h"
 #include "common/helper.h"
+#include "fmt/core.h"
 #include "google/protobuf/message.h"
 #include "server/server.h"
 
@@ -51,8 +51,8 @@ std::vector<pb::store_internal::SstFileInfo> RaftSnapshot::GenSnapshotFileByScan
   auto sst_writer = raw_engine->NewSstFileWriter();
   auto status = sst_writer->SaveFile(iter, checkpoint_path);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << butil::StringPrintf("save file failed, path: %s error: %d %s", checkpoint_path.c_str(),
-                                            status.error_code(), status.error_cstr());
+    DINGO_LOG(ERROR) << fmt::format("save file failed, path: {} error: {} {}", checkpoint_path, status.error_code(),
+                                    status.error_str());
     return {};
   }
 
@@ -91,8 +91,8 @@ std::vector<pb::store_internal::SstFileInfo> RaftSnapshot::GenSnapshotFileByChec
   auto checkpoint = raw_engine->NewCheckpoint();
   auto status = checkpoint->Create(checkpoint_dir, raw_engine->GetColumnFamily(Constant::kStoreDataCF), sst_files);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << butil::StringPrintf("Create checkpoint failed, path: %s error: %d %s", checkpoint_dir.c_str(),
-                                            status.error_code(), status.error_cstr());
+    DINGO_LOG(ERROR) << fmt::format("Create checkpoint failed, path: {} error: {} {}", checkpoint_dir,
+                                    status.error_code(), status.error_str());
     return {};
   }
 
@@ -101,18 +101,18 @@ std::vector<pb::store_internal::SstFileInfo> RaftSnapshot::GenSnapshotFileByChec
 
 bool RaftSnapshot::SaveSnapshot(braft::SnapshotWriter* writer, store::RegionPtr region, GenSnapshotFileFunc func) {
   if (region->Range().start_key().empty() || region->Range().end_key().empty()) {
-    DINGO_LOG(ERROR) << butil::StringPrintf("Save snapshot region %ld failed, range is invalid", region->Id());
+    DINGO_LOG(ERROR) << fmt::format("Save snapshot region {} failed, range is invalid", region->Id());
     return false;
   }
 
-  DINGO_LOG(INFO) << butil::StringPrintf("Save snapshot region %ld range[%s-%s]", region->Id(),
-                                         Helper::StringToHex(region->Range().start_key()).c_str(),
-                                         Helper::StringToHex(region->Range().end_key()).c_str());
+  DINGO_LOG(INFO) << fmt::format("Save snapshot region {} range[{}-{}]", region->Id(),
+                                 Helper::StringToHex(region->Range().start_key()),
+                                 Helper::StringToHex(region->Range().end_key()));
   auto raw_engine = std::dynamic_pointer_cast<RawRocksEngine>(engine_);
 
   std::filesystem::path db_path(raw_engine->DbPath());
-  std::string checkpoint_dir = butil::StringPrintf("%s/checkpoint_%lu_%lu", db_path.parent_path().string().c_str(),
-                                                   region->Id(), Helper::TimestampMs());
+  std::string checkpoint_dir =
+      fmt::format("{}/checkpoint_{}_{}", db_path.parent_path().string(), region->Id(), Helper::TimestampMs());
   if (!std::filesystem::create_directories(checkpoint_dir)) {
     DINGO_LOG(ERROR) << "Create directory failed: " << checkpoint_dir;
     return false;
