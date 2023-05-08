@@ -324,7 +324,7 @@ butil::Status ChangeRegionTask::ValidateChangeRegion(std::shared_ptr<StoreMetaMa
                                                      const pb::common::RegionDefinition& region_definition) {
   auto region = store_meta_manager->GetStoreRegionMeta()->GetRegion(region_definition.id());
   if (region == nullptr) {
-    return butil::Status(pb::error::EREGION_NOT_FOUND, "Region not exist, cant't change.");
+    return butil::Status(pb::error::EREGION_NOT_FOUND, "Region not exist, can't change.");
   }
 
   if (region->State() != pb::common::StoreRegionState::NORMAL) {
@@ -384,6 +384,70 @@ void ChangeRegionTask::Run() {
     DINGO_LOG(DEBUG) << butil::StringPrintf("Change region %lu failed, %s",
                                             region_cmd_->change_peer_request().region_definition().id(),
                                             status.error_cstr());
+  }
+
+  Server::GetInstance()->GetRegionCommandManager()->UpdateCommandStatus(
+      region_cmd_,
+      status.ok() ? pb::coordinator::RegionCmdStatus::STATUS_DONE : pb::coordinator::RegionCmdStatus::STATUS_FAIL);
+
+  // Notify coordinator
+  if (region_cmd_->is_notify()) {
+    Heartbeat::TriggerStoreHeartbeat(nullptr);
+  }
+}
+
+butil::Status TransferLeaderTask::PreValidateTransferLeader(const pb::coordinator::RegionCmd& command) {
+  auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
+
+  return ValidateTransferLeader(store_meta_manager, command.region_id(), command.transfer_leader_request().peer());
+}
+
+butil::Status TransferLeaderTask::ValidateTransferLeader(std::shared_ptr<StoreMetaManager> store_meta_manager,
+                                                         uint64_t region_id, const pb::common::Peer& peer) {
+  auto region = store_meta_manager->GetStoreRegionMeta()->GetRegion(region_id);
+  if (region == nullptr) {
+    return butil::Status(pb::error::EREGION_NOT_FOUND, "Region not exist, can't transfer leader.");
+  }
+
+  if (region->State() != pb::common::StoreRegionState::NORMAL) {
+    return butil::Status(pb::error::EREGION_STATE, "Region state not allow transfer leader.");
+  }
+
+  if (peer.store_id() == Server::GetInstance()->Id()) {
+    return butil::Status(pb::error::ERAFT_TRANSFER_LEADER, "The peer is already leader, not need transfer.");
+  }
+
+  if (peer.raft_location().host().empty() || peer.raft_location().host() == "0.0.0.0") {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Raft location is invalid.");
+  }
+
+  return butil::Status();
+}
+
+butil::Status TransferLeaderTask::TransferLeader(std::shared_ptr<Context>, uint64_t region_id,
+                                                 const pb::common::Peer& peer) {
+  auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
+  DINGO_LOG(DEBUG) << fmt::format("Transfer leader {}, {}", region_id, peer.ShortDebugString());
+
+  auto status = ValidateTransferLeader(store_meta_manager, region_id, peer);
+  if (!status.ok()) {
+    return status;
+  }
+
+  auto engine = Server::GetInstance()->GetEngine();
+  if (engine->GetID() == pb::common::ENG_RAFT_STORE) {
+    auto raft_kv_engine = std::dynamic_pointer_cast<RaftKvEngine>(engine);
+    return raft_kv_engine->TransferLeader(region_id, peer);
+  }
+
+  return butil::Status();
+}
+
+void TransferLeaderTask::Run() {
+  auto status = TransferLeader(ctx_, region_cmd_->region_id(), region_cmd_->transfer_leader_request().peer());
+  if (!status.ok()) {
+    DINGO_LOG(DEBUG) << fmt::format("Transfer leader {} failed, {}",
+                                    region_cmd_->change_peer_request().region_definition().id(), status.error_cstr());
   }
 
   Server::GetInstance()->GetRegionCommandManager()->UpdateCommandStatus(
@@ -853,6 +917,10 @@ RegionController::TaskBuilderMap RegionController::task_builders = {
      [](std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command) -> TaskRunnable* {
        return new ChangeRegionTask(ctx, command);
      }},
+    {pb::coordinator::CMD_TRANSFER_LEADER,
+     [](std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command) -> TaskRunnable* {
+       return new TransferLeaderTask(ctx, command);
+     }},
     {pb::coordinator::CMD_SNAPSHOT,
      [](std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command) -> TaskRunnable* {
        return new SnapshotRegionTask(ctx, command);
@@ -876,6 +944,7 @@ RegionController::ValidaterMap RegionController::validaters = {
     {pb::coordinator::CMD_DELETE, DeleteRegionTask::PreValidateDeleteRegion},
     {pb::coordinator::CMD_SPLIT, SplitRegionTask::PreValidateSplitRegion},
     {pb::coordinator::CMD_CHANGE_PEER, ChangeRegionTask::PreValidateChangeRegion},
+    {pb::coordinator::CMD_TRANSFER_LEADER, TransferLeaderTask::PreValidateTransferLeader},
     {pb::coordinator::CMD_PURGE, PurgeRegionTask::PreValidatePurgeRegion},
     {pb::coordinator::CMD_STOP, StopRegionTask::PreValidateStopRegion},
 };

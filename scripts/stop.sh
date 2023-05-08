@@ -14,11 +14,11 @@ eval set -- "${FLAGS_ARGV}"
 
 echo "role: ${FLAGS_role}"
 
-process_no=$(pgrep -f "dingodb_server.*${FLAGS_role}" -U `id -u`)
+process_no=$(pgrep -f "dingodb_server.*${FLAGS_role}" -U `id -u` | xargs)
 
 if [ "${process_no}" != "" ]; then
   echo "pid to kill: ${process_no}"
-  echo "${process_no}" | xargs kill
+  kill -9 ${process_no}
 else
   echo "not exist ${FLAGS_role} process"
 fi

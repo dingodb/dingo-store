@@ -160,6 +160,10 @@ pb::common::Location Helper::EndPointToLocation(const butil::EndPoint& endpoint)
   return location;
 }
 
+braft::PeerId Helper::LocationToPeer(const pb::common::Location& location) {
+  return braft::PeerId(LocationToEndPoint(location), location.index());
+}
+
 // format: 127.0.0.1:8201:0,127.0.0.1:8202:0,127.0.0.1:8203:0
 std::string Helper::FormatPeers(const std::vector<pb::common::Location>& locations) {
   std::string s;

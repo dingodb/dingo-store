@@ -57,6 +57,8 @@ class Helper {
   static butil::EndPoint LocationToEndPoint(const pb::common::Location& location);
   static pb::common::Location EndPointToLocation(const butil::EndPoint& endpoint);
 
+  static braft::PeerId LocationToPeer(const pb::common::Location& location);
+
   // format: 127.0.0.1:8201:0,127.0.0.1:8202:0,127.0.0.1:8203:0
   static std::string FormatPeers(const std::vector<pb::common::Location>& locations);
 

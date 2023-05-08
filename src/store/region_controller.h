@@ -125,6 +125,25 @@ class ChangeRegionTask : public TaskRunnable {
   std::shared_ptr<pb::coordinator::RegionCmd> region_cmd_;
 };
 
+class TransferLeaderTask : public TaskRunnable {
+ public:
+  TransferLeaderTask(std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> region_cmd)
+      : ctx_(ctx), region_cmd_(region_cmd) {}
+  ~TransferLeaderTask() override = default;
+
+  void Run() override;
+
+  static butil::Status PreValidateTransferLeader(const pb::coordinator::RegionCmd& command);
+
+ private:
+  static butil::Status ValidateTransferLeader(std::shared_ptr<StoreMetaManager> store_meta_manager, uint64_t region_id,
+                                              const pb::common::Peer& peer);
+  static butil::Status TransferLeader(std::shared_ptr<Context> ctx, uint64_t region_id, const pb::common::Peer& peer);
+
+  std::shared_ptr<Context> ctx_;
+  std::shared_ptr<pb::coordinator::RegionCmd> region_cmd_;
+};
+
 class SnapshotRegionTask : public TaskRunnable {
  public:
   SnapshotRegionTask(std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> region_cmd)
