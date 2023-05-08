@@ -24,6 +24,7 @@
 #include "common/context.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "fmt/core.h"
 #include "meta/store_meta_manager.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
@@ -501,18 +502,17 @@ void StoreServiceImpl::KvBatchDelete(google::protobuf::RpcController* controller
 butil::Status KvDeleteRangeParamCheck(const pb::common::RangeWithOptions& range, std::string* real_start_key,
                                       std::string* real_end_key) {
   if (BAIDU_UNLIKELY(range.range().start_key().empty() || range.range().end_key().empty())) {
-    DINGO_LOG(ERROR) << butil::StringPrintf("start_key or end_key empty. not support");
+    DINGO_LOG(ERROR) << fmt::format("start_key or end_key empty. not support");
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
   }
 
   if (BAIDU_UNLIKELY(range.range().start_key() > range.range().end_key())) {
-    DINGO_LOG(ERROR) << butil::StringPrintf("start_key > end_key  not support");
+    DINGO_LOG(ERROR) << fmt::format("start_key > end_key  not support");
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
 
   } else if (BAIDU_UNLIKELY(range.range().start_key() == range.range().end_key())) {
     if (!range.with_start() || !range.with_end()) {
-      DINGO_LOG(ERROR) << butil::StringPrintf(
-          "start_key == end_key with_start != true or with_end != true. not support");
+      DINGO_LOG(ERROR) << fmt::format("start_key == end_key with_start != true or with_end != true. not support");
       return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
     }
   }
@@ -520,7 +520,7 @@ butil::Status KvDeleteRangeParamCheck(const pb::common::RangeWithOptions& range,
   // Design constraints We do not allow tables with all 0xFF because there are too many tables and we cannot handle
   // them
   if (Helper::KeyIsEndOfAllTable(range.range().start_key()) || Helper::KeyIsEndOfAllTable(range.range().start_key())) {
-    DINGO_LOG(ERROR) << butil::StringPrintf("real_start_key or real_end_key all 0xFF. not support");
+    DINGO_LOG(ERROR) << fmt::format("real_start_key or real_end_key all 0xFF. not support");
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
   }
 
@@ -540,12 +540,12 @@ butil::Status KvDeleteRangeParamCheck(const pb::common::RangeWithOptions& range,
 
   // parameter check again
   if (BAIDU_UNLIKELY(internal_real_start_key > internal_real_end_key)) {
-    DINGO_LOG(ERROR) << butil::StringPrintf("real_start_key > real_end_key  not support");
+    DINGO_LOG(ERROR) << fmt::format("real_start_key > real_end_key  not support");
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
 
   } else if (BAIDU_UNLIKELY(internal_real_start_key == internal_real_end_key)) {
     if (!range.with_start() || !range.with_end()) {
-      DINGO_LOG(ERROR) << butil::StringPrintf(
+      DINGO_LOG(ERROR) << fmt::format(
           "real_start_key == real_end_key with_start != true or with_end != true. not support");
       return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
     }
@@ -554,7 +554,7 @@ butil::Status KvDeleteRangeParamCheck(const pb::common::RangeWithOptions& range,
   // Design constraints We do not allow tables with all 0xFF because there are too many tables and we cannot handle
   // them
   if (Helper::KeyIsEndOfAllTable(internal_real_start_key) || Helper::KeyIsEndOfAllTable(internal_real_end_key)) {
-    DINGO_LOG(ERROR) << butil::StringPrintf("real_start_key or real_end_key all 0xFF. not support");
+    DINGO_LOG(ERROR) << fmt::format("real_start_key or real_end_key all 0xFF. not support");
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
   }
 
@@ -579,7 +579,7 @@ butil::Status ValidateKvDeleteRangeRequest(const dingodb::pb::store::KvDeleteRan
   std::string real_end_key;
   butil::Status s = KvDeleteRangeParamCheck(request->range(), &real_start_key, &real_end_key);
   if (!s.ok()) {
-    DINGO_LOG(ERROR) << butil::StringPrintf("Helper::KvDeleteRangeParamCheck failed : %s", s.error_str().c_str());
+    DINGO_LOG(ERROR) << fmt::format("Helper::KvDeleteRangeParamCheck failed : {}", s.error_str());
     return s;
   }
 
@@ -637,7 +637,7 @@ butil::Status ValidateKvScanBeginRequest(const dingodb::pb::store::KvScanBeginRe
   std::string real_end_key;
   butil::Status s = KvDeleteRangeParamCheck(request->range(), &real_start_key, &real_end_key);
   if (!s.ok()) {
-    DINGO_LOG(ERROR) << butil::StringPrintf("Helper::KvDeleteRangeParamCheck failed : %s", s.error_str().c_str());
+    DINGO_LOG(ERROR) << fmt::format("Helper::KvDeleteRangeParamCheck failed : {}", s.error_str());
     return s;
   }
 

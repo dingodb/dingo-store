@@ -19,10 +19,10 @@
 #include <string>
 #include <utility>
 
-#include "butil/strings/stringprintf.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "config/config_manager.h"
+#include "fmt/core.h"
 #include "metrics/store_bvar_metrics.h"
 #include "proto/common.pb.h"
 #include "raft/store_state_machine.h"
@@ -59,7 +59,7 @@ int RaftNode::Init(const std::string& init_conf, std::shared_ptr<Config> config)
   node_options.node_owns_fsm = false;
   node_options.snapshot_interval_s = config->GetInt("raft.snapshotInterval");
 
-  path_ = butil::StringPrintf("%s/%ld", config->GetString("raft.path").c_str(), node_id_);
+  path_ = fmt::format("{}/{}", config->GetString("raft.path"), node_id_);
   node_options.log_uri = "local://" + path_ + "/log";
   node_options.raft_meta_uri = "local://" + path_ + "/raft_meta";
   node_options.snapshot_uri = "local://" + path_ + "/snapshot";
@@ -74,21 +74,21 @@ int RaftNode::Init(const std::string& init_conf, std::shared_ptr<Config> config)
 }
 
 void RaftNode::Stop() {
-  DINGO_LOG(DEBUG) << butil::StringPrintf("Stop region %lu raft node shutdown", node_id_);
+  DINGO_LOG(DEBUG) << fmt::format("Stop region {} raft node shutdown", node_id_);
   node_->shutdown(nullptr);
   node_->join();
-  DINGO_LOG(DEBUG) << butil::StringPrintf("Stop region %lu finish raft node shutdown", node_id_);
+  DINGO_LOG(DEBUG) << fmt::format("Stop region {} finish raft node shutdown", node_id_);
 }
 
 void RaftNode::Destroy() {
-  DINGO_LOG(DEBUG) << butil::StringPrintf("Delete region %lu raft node shutdown", node_id_);
+  DINGO_LOG(DEBUG) << fmt::format("Delete region {} raft node shutdown", node_id_);
   node_->shutdown(nullptr);
   node_->join();
-  DINGO_LOG(DEBUG) << butil::StringPrintf("Delete region %lu finish raft node shutdown", node_id_);
+  DINGO_LOG(DEBUG) << fmt::format("Delete region {} finish raft node shutdown", node_id_);
 
   // Delete file directory
   std::filesystem::remove_all(path_);
-  DINGO_LOG(DEBUG) << butil::StringPrintf("Delete region %lu delete file directory", node_id_);
+  DINGO_LOG(DEBUG) << fmt::format("Delete region {} delete file directory", node_id_);
 }
 
 // Commit message to raft

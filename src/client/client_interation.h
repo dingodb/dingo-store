@@ -27,8 +27,8 @@
 #include "brpc/channel.h"
 #include "brpc/controller.h"
 #include "butil/strings/string_split.h"
-#include "butil/strings/stringprintf.h"
 #include "common/logging.h"
+#include "fmt/core.h"
 #include "glog/logging.h"
 #include "proto/meta.pb.h"
 #include "proto/store.pb.h"
@@ -101,8 +101,8 @@ butil::Status ServerInteraction::SendRequest(const std::string& service_name, co
                       << " response: " << response.ShortDebugString();
     }
     if (cntl.Failed()) {
-      DINGO_LOG(ERROR) << butil::StringPrintf("%s response failed, %lu %d %s", api_name.c_str(), cntl.log_id(),
-                                              cntl.ErrorCode(), cntl.ErrorText().c_str());
+      DINGO_LOG(ERROR) << fmt::format("{} response failed, {} {} {}", api_name, cntl.log_id(), cntl.ErrorCode(),
+                                      cntl.ErrorText());
       latency_ = cntl.latency_us();
       return butil::Status(cntl.ErrorCode(), cntl.ErrorText());
     }
@@ -113,8 +113,8 @@ butil::Status ServerInteraction::SendRequest(const std::string& service_name, co
         NextLeader(leader_index);
       } else {
         if (!FLAGS_log_each_request) {
-          DINGO_LOG(ERROR) << butil::StringPrintf("%s response failed, error %d %s", api_name.c_str(),
-                                                  response.error().errcode(), response.error().errmsg().c_str());
+          DINGO_LOG(ERROR) << fmt::format("{} response failed, error {} {}", api_name, response.error().errcode(),
+                                          response.error().errmsg());
         }
         latency_ = cntl.latency_us();
         return butil::Status(response.error().errcode(), response.error().errmsg());

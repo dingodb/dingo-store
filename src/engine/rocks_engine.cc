@@ -27,7 +27,6 @@
 #include <utility>
 #include <vector>
 
-#include "butil/strings/stringprintf.h"
 #include "config/config_manager.h"
 #include "engine/engine.h"
 #include "proto/error.pb.h"

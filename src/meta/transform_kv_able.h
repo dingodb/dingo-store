@@ -19,11 +19,8 @@
 #include <shared_mutex>
 #include <vector>
 
-#include "butil/strings/stringprintf.h"
-// #include "engine/engine.h"
-// #include "meta/meta_reader.h"
-// #include "meta/meta_writer.h"
 #include "common/logging.h"
+#include "fmt/core.h"
 #include "proto/common.pb.h"
 
 namespace dingodb {
@@ -36,7 +33,7 @@ class TransformKvAble {
   virtual ~TransformKvAble() = default;
 
   std::string Prefix() { return prefix_; }
-  virtual std::string GenKey(uint64_t id) { return butil::StringPrintf("%s_%lu", prefix_.c_str(), id); }
+  virtual std::string GenKey(uint64_t id) { return fmt::format("{}_{}", prefix_, id); }
 
   virtual uint64_t ParseRegionId(const std::string& str) {
     if (str.size() <= prefix_.size()) {

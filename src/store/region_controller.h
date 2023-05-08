@@ -25,7 +25,6 @@
 #include "bthread/execution_queue.h"
 #include "butil/macros.h"
 #include "butil/status.h"
-#include "butil/strings/stringprintf.h"
 #include "common/constant.h"
 #include "common/context.h"
 #include "meta/meta_reader.h"

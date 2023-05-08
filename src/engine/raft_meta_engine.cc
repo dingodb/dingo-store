@@ -54,13 +54,13 @@ bool RaftMetaEngine::Recover() { return true; }
 butil::Status RaftMetaEngine::InitCoordinatorRegion(std::shared_ptr<Context> ctx,
                                                     const std::shared_ptr<pb::common::RegionDefinition> region,
                                                     const std::shared_ptr<MetaControl>& meta_control,
-													bool is_volatile) {
+                                                    bool is_volatile) {
   DINGO_LOG(INFO) << "RaftkvEngine add region, region_id " << region->id();
 
   // construct MetaStatMachine here
   braft::StateMachine* state_machine = new MetaStateMachine(meta_control, is_volatile);
 
-  std::string const meta_raft_name = butil::StringPrintf("%s-%ld", region->name().c_str(), region->id());
+  std::string const meta_raft_name = fmt::format("{}-{}", region->name(), region->id());
   std::shared_ptr<RaftNode> const node = std::make_shared<RaftNode>(
       region->id(), meta_raft_name, braft::PeerId(Server::GetInstance()->RaftEndpoint()), state_machine);
 

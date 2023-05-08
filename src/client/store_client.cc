@@ -17,8 +17,8 @@
 #include <string>
 #include <vector>
 
-#include "butil/strings/stringprintf.h"
 #include "client/store_client_function.h"
+#include "fmt/core.h"
 #include "glog/logging.h"
 
 DEFINE_bool(log_each_request, true, "Print log for each request");
@@ -128,7 +128,7 @@ void Sender(client::ServerInteractionPtr interaction, const std::string& method,
   butil::SplitString(FLAGS_raft_addrs, ',', &raft_addrs);
 
   for (int i = 0; i < round_num; ++i) {
-    DINGO_LOG(INFO) << butil::StringPrintf("round: %d / %d", i, round_num);
+    DINGO_LOG(INFO) << fmt::format("round: {} / {}", i, round_num);
     // Region operation
     if (method == "AddRegion") {
       client::SendAddRegion(interaction, FLAGS_region_id, FLAGS_raft_group, raft_addrs);

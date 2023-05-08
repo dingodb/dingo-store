@@ -33,11 +33,10 @@ bool CoordinatorInteraction::Init(const std::string& addr, uint32_t service_type
   }
 
   for (auto& endpoint : endpoints_) {
-    DINGO_LOG(INFO) << butil::StringPrintf("Init channel %s:%d", butil::ip2str(endpoint.ip).c_str(), endpoint.port);
+    DINGO_LOG(INFO) << fmt::format("Init channel {}:{}", butil::ip2str(endpoint.ip).c_str(), endpoint.port);
     std::shared_ptr<brpc::Channel> channel = std::make_shared<brpc::Channel>();
     if (channel->Init(endpoint, nullptr) != 0) {
-      DINGO_LOG(ERROR) << butil::StringPrintf("Init channel failed, %s:%d", butil::ip2str(endpoint.ip).c_str(),
-                                              endpoint.port);
+      DINGO_LOG(ERROR) << fmt::format("Init channel failed, {}:{}", butil::ip2str(endpoint.ip).c_str(), endpoint.port);
       return false;
     }
     channels_.push_back(std::move(channel));
@@ -56,7 +55,7 @@ bool CoordinatorInteraction::InitByNameService(const std::string& service_name, 
   channel_opt.connect_timeout_ms = 500;
 
   if (name_service_channel_.Init(service_name.c_str(), "rr", &channel_opt) != 0) {
-    DINGO_LOG(ERROR) << butil::StringPrintf("Init channel failed by service_name, %s", service_name.c_str());
+    DINGO_LOG(ERROR) << fmt::format("Init channel failed by service_name, {}", service_name);
     return false;
   }
 

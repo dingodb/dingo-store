@@ -33,8 +33,8 @@
 #include "brpc/controller.h"
 #include "butil/endpoint.h"
 #include "butil/strings/string_split.h"
-#include "butil/strings/stringprintf.h"
 #include "common/logging.h"
+#include "fmt/core.h"
 #include "google/protobuf/util/json_util.h"
 #include "proto/node.pb.h"
 
@@ -140,7 +140,7 @@ std::vector<pb::common::Location> Helper::ExtractLocations(const std::vector<pb:
 
 // format: 127.0.0.1:8201:0
 std::string Helper::LocationToString(const pb::common::Location& location) {
-  return butil::StringPrintf("%s:%d:%d", location.host().c_str(), location.port(), location.index());
+  return fmt::format("{}:{}:{}", location.host(), location.port(), location.index());
 }
 
 butil::EndPoint Helper::LocationToEndPoint(const pb::common::Location& location) {

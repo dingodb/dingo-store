@@ -20,8 +20,8 @@
 #include <cstdint>
 #include <memory>
 
-#include "butil/strings/stringprintf.h"
 #include "common/logging.h"
+#include "fmt/core.h"
 #include "proto/common.pb.h"
 #include "server/server.h"
 
@@ -118,7 +118,7 @@ bool StoreServerMeta::IsExist(uint64_t store_id) {
 void StoreServerMeta::AddStore(std::shared_ptr<pb::common::Store> store) {
   BAIDU_SCOPED_LOCK(mutex_);
   if (stores_.find(store->id()) != stores_.end()) {
-    DINGO_LOG(WARNING) << butil::StringPrintf("store %lu already exist!", store->id());
+    DINGO_LOG(WARNING) << fmt::format("store {} already exist!", store->id());
     return;
   }
 
@@ -139,7 +139,7 @@ std::shared_ptr<pb::common::Store> StoreServerMeta::GetStore(uint64_t store_id) 
   BAIDU_SCOPED_LOCK(mutex_);
   auto it = stores_.find(store_id);
   if (it == stores_.end()) {
-    DINGO_LOG(WARNING) << butil::StringPrintf("region %lu not exist!", store_id);
+    DINGO_LOG(WARNING) << fmt::format("region {} not exist!", store_id);
     return nullptr;
   }
 
@@ -169,7 +169,7 @@ uint64_t StoreRegionMeta::GetEpoch() { return 0; }
 
 void StoreRegionMeta::AddRegion(store::RegionPtr region) {
   if (regions_.Get(region->Id()) != nullptr) {
-    DINGO_LOG(WARNING) << butil::StringPrintf("region %lu already exist!", region->Id());
+    DINGO_LOG(WARNING) << fmt::format("region {} already exist!", region->Id());
     return;
   }
 
@@ -255,9 +255,9 @@ void StoreRegionMeta::UpdateState(store::RegionPtr region, pb::common::StoreRegi
     }
   }
 
-  DINGO_LOG(DEBUG) << butil::StringPrintf(
-      "Update region state %ld %s to %s %s", region->Id(), pb::common::StoreRegionState_Name(cur_state).c_str(),
-      pb::common::StoreRegionState_Name(new_state).c_str(), (successed ? "true" : "false"));
+  DINGO_LOG(DEBUG) << fmt::format("Update region state {} {} to {} {}", region->Id(),
+                                  pb::common::StoreRegionState_Name(cur_state),
+                                  pb::common::StoreRegionState_Name(new_state), (successed ? "true" : "false"));
 }
 
 void StoreRegionMeta::UpdateState(uint64_t region_id, pb::common::StoreRegionState new_state) {
@@ -279,7 +279,7 @@ bool StoreRegionMeta::IsExistRegion(uint64_t region_id) { return GetRegion(regio
 store::RegionPtr StoreRegionMeta::GetRegion(uint64_t region_id) {
   auto region = regions_.Get(region_id);
   if (region == nullptr) {
-    DINGO_LOG(WARNING) << butil::StringPrintf("region %lu not exist!", region_id);
+    DINGO_LOG(WARNING) << fmt::format("region {} not exist!", region_id);
     return nullptr;
   }
 
@@ -373,7 +373,7 @@ void StoreRaftMeta::AddRaftMeta(RaftMetaPtr raft_meta) {
     BAIDU_SCOPED_LOCK(mutex_);
     DINGO_LOG(INFO) << "Add raft meta " << raft_meta->region_id();
     if (raft_metas_.find(raft_meta->region_id()) != raft_metas_.end()) {
-      DINGO_LOG(WARNING) << butil::StringPrintf("raft meta %lu already exist!", raft_meta->region_id());
+      DINGO_LOG(WARNING) << fmt::format("raft meta {} already exist!", raft_meta->region_id());
       return;
     }
 
@@ -405,7 +405,7 @@ StoreRaftMeta::RaftMetaPtr StoreRaftMeta::GetRaftMeta(uint64_t region_id) {
   BAIDU_SCOPED_LOCK(mutex_);
   auto it = raft_metas_.find(region_id);
   if (it == raft_metas_.end()) {
-    DINGO_LOG(WARNING) << butil::StringPrintf("raft meta %lu not exist!", region_id);
+    DINGO_LOG(WARNING) << fmt::format("raft meta {} not exist!", region_id);
     return nullptr;
   }
 

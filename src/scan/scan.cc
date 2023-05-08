@@ -23,11 +23,11 @@
 #include "bthread/mutex.h"
 #include "butil/compiler_specific.h"
 #include "butil/macros.h"
-#include "butil/strings/stringprintf.h"
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "engine/write_data.h"
+#include "fmt/core.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #if defined(ENABLE_SCAN_OPTIMIZATION)
@@ -73,24 +73,24 @@ void ScanContext::Init(uint64_t timeout_ms, uint64_t max_bytes_rpc, uint64_t max
 butil::Status ScanContext::Open(const std::string& scan_id, std::shared_ptr<RawEngine> engine,
                                 const std::string& cf_name) {
   if (BAIDU_UNLIKELY(scan_id.empty())) {
-    DINGO_LOG(ERROR) << butil::StringPrintf("scan_id empty not support");
+    DINGO_LOG(ERROR) << fmt::format("scan_id empty not support");
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "scan_id is empty");
   }
 
   if (BAIDU_UNLIKELY(!engine)) {
-    DINGO_LOG(ERROR) << butil::StringPrintf("engine empty not support");
+    DINGO_LOG(ERROR) << fmt::format("engine empty not support");
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "engine is empty");
   }
 
   if (BAIDU_UNLIKELY(cf_name.empty())) {
-    DINGO_LOG(ERROR) << butil::StringPrintf("cf_name empty not support");
+    DINGO_LOG(ERROR) << fmt::format("cf_name empty not support");
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "cf_name is empty");
   }
 
   BAIDU_SCOPED_LOCK(mutex_);
   if (ScanState::kUninit != state_) {
     state_ = ScanState::kError;
-    DINGO_LOG(ERROR) << butil::StringPrintf("ScanContext::Open failed : %d", static_cast<int>(state_));
+    DINGO_LOG(ERROR) << fmt::format("ScanContext::Open failed : {}", static_cast<int>(state_));
     return butil::Status(pb::error::EINTERNAL, "Internal error : wrong state");
   }
   state_ = ScanState::kOpening;
@@ -189,7 +189,7 @@ butil::Status ScanContext::AsyncWork() {
       call);
   if (ret != 0) {
     state_ = ScanState::kError;
-    DINGO_LOG(ERROR) << butil::StringPrintf("bthread_start_background fail");
+    DINGO_LOG(ERROR) << fmt::format("bthread_start_background fail");
     return butil::Status(pb::error::EINTERNAL, "scan_id is empty");
   }
 
@@ -208,8 +208,8 @@ void ScanContext::WaitForReady() {
 butil::Status ScanContext::SeekCheck() {
   if (ScanContext::SeekState::kInitted != seek_state_) {
     state_ = ScanState::kError;
-    DINGO_LOG(ERROR) << butil::StringPrintf("ScanHandler::ScanContinue failed  state wrong : %d",
-                                            static_cast<int>(seek_state_));
+    DINGO_LOG(ERROR) << fmt::format("ScanHandler::ScanContinue failed  state wrong : {}",
+                                    static_cast<int>(seek_state_));
     return butil::Status(pb::error::EINTERNAL, "Internal error : wrong state");
   }
   return butil::Status();
@@ -247,17 +247,17 @@ butil::Status ScanHandler::ScanBegin(std::shared_ptr<ScanContext> context, uint6
                                      const pb::common::RangeWithOptions& range, uint64_t max_fetch_cnt, bool key_only,
                                      bool disable_auto_release, std::vector<pb::common::KeyValue>* kvs) {
   if (BAIDU_UNLIKELY(range.range().start_key().empty() || range.range().end_key().empty())) {
-    DINGO_LOG(ERROR) << butil::StringPrintf("start_key or end_key empty not support ");
+    DINGO_LOG(ERROR) << fmt::format("start_key or end_key empty not support");
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
   }
 
   if (BAIDU_UNLIKELY(range.range().start_key() > range.range().end_key())) {
-    DINGO_LOG(ERROR) << butil::StringPrintf("range wrong ");
+    DINGO_LOG(ERROR) << fmt::format("range wrong");
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
 
   } else if (BAIDU_UNLIKELY(range.range().start_key() == range.range().end_key())) {
     if (!range.with_start() || !range.with_end()) {
-      DINGO_LOG(ERROR) << butil::StringPrintf("range wrong");
+      DINGO_LOG(ERROR) << fmt::format("range wrong");
       return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
     }
   }
@@ -265,7 +265,7 @@ butil::Status ScanHandler::ScanBegin(std::shared_ptr<ScanContext> context, uint6
   BAIDU_SCOPED_LOCK(context->mutex_);
   if (ScanState::kOpened != context->state_) {
     context->state_ = ScanState::kError;
-    DINGO_LOG(ERROR) << butil::StringPrintf("ScanHandler::ScanBegin failed : %d", static_cast<int>(context->state_));
+    DINGO_LOG(ERROR) << fmt::format("ScanHandler::ScanBegin failed : {}", static_cast<int>(context->state_));
     return butil::Status(pb::error::EINTERNAL, "Internal error : wrong state");
   }
 
@@ -284,7 +284,7 @@ butil::Status ScanHandler::ScanBegin(std::shared_ptr<ScanContext> context, uint6
 
   if (!context->iter_) {
     context->state_ = ScanState::kError;
-    DINGO_LOG(ERROR) << butil::StringPrintf("RawEngine::Reader::NewIterator failed");
+    DINGO_LOG(ERROR) << fmt::format("RawEngine::Reader::NewIterator failed");
     return butil::Status(pb::error::EINTERNAL, "Internal error : create iter failed");
   }
 
@@ -313,12 +313,12 @@ butil::Status ScanHandler::ScanBegin(std::shared_ptr<ScanContext> context, uint6
 butil::Status ScanHandler::ScanContinue(std::shared_ptr<ScanContext> context, const std::string& scan_id,
                                         uint64_t max_fetch_cnt, std::vector<pb::common::KeyValue>* kvs) {
   if (BAIDU_UNLIKELY(scan_id.empty() || scan_id != context->scan_id_)) {
-    DINGO_LOG(ERROR) << butil::StringPrintf("scan_id empty or unequal not support");
+    DINGO_LOG(ERROR) << fmt::format("scan_id empty or unequal not support");
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "scan_id is empty");
   }
 
   if (BAIDU_UNLIKELY(0 == max_fetch_cnt)) {
-    DINGO_LOG(ERROR) << butil::StringPrintf("max_fetch_cnt == 0 not support");
+    DINGO_LOG(ERROR) << fmt::format("max_fetch_cnt == 0 not support");
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "max_fetch_cnt == 0");
   }
 
@@ -329,15 +329,15 @@ butil::Status ScanHandler::ScanContinue(std::shared_ptr<ScanContext> context, co
   BAIDU_SCOPED_LOCK(context->mutex_);
   if (ScanState::kBegun != context->state_ && ScanState::kContinued != context->state_) {
     context->state_ = ScanState::kError;
-    DINGO_LOG(ERROR) << butil::StringPrintf("ScanHandler::ScanContinue failed : %d", static_cast<int>(context->state_));
+    DINGO_LOG(ERROR) << fmt::format("ScanHandler::ScanContinue failed : {}", static_cast<int>(context->state_));
     return butil::Status(pb::error::EINTERNAL, "Internal error : wrong state");
   }
 
 #if defined(ENABLE_SCAN_OPTIMIZATION)
   butil::Status s = context->SeekCheck();
   if (!s.ok()) {
-    DINGO_LOG(ERROR) << butil::StringPrintf("ScanHandler::ScanContinue SeekCheck  failed  state wrong : %d",
-                                            static_cast<int>(context->seek_state_));
+    DINGO_LOG(ERROR) << fmt::format("ScanHandler::ScanContinue SeekCheck  failed  state wrong : {}",
+                                    static_cast<int>(context->seek_state_));
     return butil::Status(pb::error::EINTERNAL, "Internal error : wrong state");
   }
 #endif
@@ -357,7 +357,7 @@ butil::Status ScanHandler::ScanContinue(std::shared_ptr<ScanContext> context, co
 butil::Status ScanHandler::ScanRelease(std::shared_ptr<ScanContext> context,
                                        [[maybe_unused]] const std::string& scan_id) {
   if (BAIDU_UNLIKELY(scan_id.empty() || scan_id != context->scan_id_)) {
-    DINGO_LOG(ERROR) << butil::StringPrintf("scan_id empty or unequal not support");
+    DINGO_LOG(ERROR) << fmt::format("scan_id empty or unequal not support");
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "scan_id is empty");
   }
 
@@ -368,15 +368,15 @@ butil::Status ScanHandler::ScanRelease(std::shared_ptr<ScanContext> context,
   BAIDU_SCOPED_LOCK(context->mutex_);
   if (ScanState::kBegun != context->state_ && ScanState::kContinued != context->state_) {
     context->state_ = ScanState::kError;
-    DINGO_LOG(ERROR) << butil::StringPrintf("ScanHandler::ScanRelease failed : %d", static_cast<int>(context->state_));
+    DINGO_LOG(ERROR) << fmt::format("ScanHandler::ScanRelease failed : {}", static_cast<int>(context->state_));
     return butil::Status(pb::error::EINTERNAL, "Internal error : wrong state");
   }
 
 #if defined(ENABLE_SCAN_OPTIMIZATION)
   butil::Status s = context->SeekCheck();
   if (!s.ok()) {
-    DINGO_LOG(ERROR) << butil::StringPrintf("ScanHandler::ScanContinue SeekCheck  failed  state wrong : %d",
-                                            static_cast<int>(context->seek_state_));
+    DINGO_LOG(ERROR) << fmt::format("ScanHandler::ScanContinue SeekCheck  failed  state wrong : {}",
+                                    static_cast<int>(context->seek_state_));
     return butil::Status(pb::error::EINTERNAL, "Internal error : wrong state");
   }
 #endif

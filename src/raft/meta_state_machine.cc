@@ -21,12 +21,12 @@
 #include <cstdint>
 #include <memory>
 
-#include "butil/strings/stringprintf.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "common/meta_control.h"
 #include "coordinator/coordinator_control.h"
 #include "engine/snapshot.h"
+#include "fmt/core.h"
 #include "proto/coordinator_internal.pb.h"
 #include "proto/error.pb.h"
 
@@ -81,9 +81,8 @@ void MetaStateMachine::on_apply(braft::Iterator& iter) {
       CHECK(raft_cmd.ParseFromZeroCopyStream(&wrapper));
     }
 
-    DINGO_LOG(DEBUG) << butil::StringPrintf("raft apply log on region[%ld-term:%ld-index:%ld] cmd:[%s]",
-                                            raft_cmd.header().region_id(), iter.term(), iter.index(),
-                                            raft_cmd.DebugString().c_str());
+    DINGO_LOG(DEBUG) << fmt::format("raft apply log on region[{}-term:{}-index:{}] cmd:[{}]",
+                                    raft_cmd.header().region_id(), iter.term(), iter.index(), raft_cmd.DebugString());
 
     DispatchRequest(is_leader, iter.term(), iter.index(), raft_cmd, response);
   }
@@ -215,8 +214,8 @@ void MetaStateMachine::on_leader_stop(const butil::Status& status) {
 }
 
 void MetaStateMachine::on_error(const ::braft::Error& e) {
-  DINGO_LOG(INFO) << butil::StringPrintf("on_error type(%d) %d %s", e.type(), e.status().error_code(),
-                                         e.status().error_cstr());
+  DINGO_LOG(INFO) << fmt::format("on_error type({}) {} {}", static_cast<int>(e.type()), e.status().error_code(),
+                                 e.status().error_str());
 }
 
 void MetaStateMachine::on_configuration_committed(const ::braft::Configuration& /*conf*/) {
