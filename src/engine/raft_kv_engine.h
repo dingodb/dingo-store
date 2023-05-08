@@ -43,6 +43,8 @@ class RaftControlAble {
                                    std::vector<pb::common::Peer> peers) = 0;
   virtual std::shared_ptr<RaftNode> GetNode(uint64_t region_id) = 0;
 
+  virtual butil::Status TransferLeader(uint64_t region_id, const pb::common::Peer& peer) = 0;
+
  protected:
   RaftControlAble() = default;
 };
@@ -68,6 +70,8 @@ class RaftKvEngine : public Engine, public RaftControlAble {
   butil::Status StopNode(std::shared_ptr<Context> ctx, uint64_t region_id) override;
   butil::Status DestroyNode(std::shared_ptr<Context> ctx, uint64_t region_id) override;
   std::shared_ptr<RaftNode> GetNode(uint64_t region_id) override;
+
+  butil::Status TransferLeader(uint64_t region_id, const pb::common::Peer& peer) override;
 
   std::shared_ptr<Snapshot> GetSnapshot() override { return nullptr; }
   butil::Status DoSnapshot(std::shared_ptr<Context> ctx, uint64_t region_id) override;
