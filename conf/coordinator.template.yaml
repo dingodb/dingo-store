@@ -5,20 +5,20 @@ cluster:
 server:
   host: $SERVER_HOST$
   port: $SERVER_PORT$
-  pushInterval: 1000 # ms
+  push_interval: 1000 # ms
 coordinator:
   peers: $COORDINATOR_RAFT_PEERS$
 raft:
   host: $RAFT_HOST$
   port: $RAFT_PORT$
   path: $BASE_PATH$/data/coordinator/raft
-  electionTimeout: 1000 # ms
-  snapshotInterval: 3600 # s
+  election_timeout: 1000 # ms
+  snapshot_interval: 3600 # s
 log:
   level: INFO
   path: $BASE_PATH$/log
 store:
-  dbPath: $BASE_PATH$/data/coordinator/db
+  path: $BASE_PATH$/data/coordinator/db
   base:
     block_size: 131072
     block_cache: 67108864
@@ -30,9 +30,8 @@ store:
     prefix_extractor: 8
     max_bytes_for_level_base: 134217728
     target_file_size_base: 67108864
-  columnFamilies:
+  column_families:
     - default
     - meta
-  collectStatsInterval: 5
   store:
     scan_interval_ms: 30000 # ms

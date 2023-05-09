@@ -51,8 +51,8 @@ class Constant {
   static const uint64_t kStoreRegionMetaInitCapacity = 1024;
 
   // rocksdb config
-  inline static const std::string kDbPath = "store.dbPath";
-  inline static const std::string kColumnFamilies = "store.columnFamilies";
+  inline static const std::string kDbPath = "store.path";
+  inline static const std::string kColumnFamilies = "store.column_families";
   inline static const std::string kBaseColumnFamily = "store.base";
 
   inline static const std::string kBlockSize = "block_size";
