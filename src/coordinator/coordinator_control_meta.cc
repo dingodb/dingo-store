@@ -465,6 +465,8 @@ butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta
       break;
     }
 
+    DINGO_LOG(INFO) << "CreateTable create region success, region_id=" << new_region_id;
+
     new_region_ids.push_back(new_region_id);
   }
 

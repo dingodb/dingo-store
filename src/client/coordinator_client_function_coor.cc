@@ -774,6 +774,15 @@ void SendGetStoreMetrics(std::shared_ptr<dingodb::CoordinatorInteraction> coordi
   for (const auto& it : response.store_metrics()) {
     DINGO_LOG(INFO) << it.DebugString();
   }
+
+  for (const auto& it : response.store_metrics()) {
+    std::string region_ids;
+    for (const auto& it2 : it.region_metrics_map()) {
+      region_ids += fmt::format("{},", it2.first);
+    }
+    DINGO_LOG(INFO) << fmt::format("store_id={},region_count={},region_ids={}", it.id(), it.region_metrics_map_size(),
+                                   region_ids);
+  }
 }
 
 void SendDeleteStoreMetrics(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {

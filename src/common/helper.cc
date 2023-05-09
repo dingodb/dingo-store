@@ -23,6 +23,7 @@
 #include <cstdio>
 #include <cstring>
 #include <iomanip>
+#include <random>
 #include <ratio>
 #include <regex>
 #include <string>
@@ -575,6 +576,15 @@ pb::common::Peer Helper::GetPeerInfo(const butil::EndPoint& endpoint) {
   peer.mutable_server_location()->Swap(node_info.mutable_server_location());
 
   return peer;
+}
+
+uint64_t Helper::GenerateRandomInteger(uint64_t min_value, uint64_t max_value) {
+  std::random_device rd;   // obtain a random seed from the hardware
+  std::mt19937 gen(rd());  // seed the generator
+
+  std::uniform_int_distribution<> dis(min_value, max_value);  // define the range
+
+  return dis(gen);  // generate the random number
 }
 
 std::string Helper::GenerateRandomString(int length) {

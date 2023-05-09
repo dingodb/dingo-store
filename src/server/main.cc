@@ -299,6 +299,21 @@ void SetupSignalHandler() {
     printf("Failed to setup signal handler for SIGSEGV\n");
     exit(-1);
   }
+  s = signal(SIGFPE, SignalHandler);
+  if (s == SIG_ERR) {
+    printf("Failed to setup signal handler for SIGFPE\n");
+    exit(-1);
+  }
+  s = signal(SIGBUS, SignalHandler);
+  if (s == SIG_ERR) {
+    printf("Failed to setup signal handler for SIGBUS\n");
+    exit(-1);
+  }
+  s = signal(SIGILL, SignalHandler);
+  if (s == SIG_ERR) {
+    printf("Failed to setup signal handler for SIGILL\n");
+    exit(-1);
+  }
 }
 
 // Modify gflag variable
