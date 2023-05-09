@@ -316,7 +316,8 @@ class RawRocksEngine : public RawEngine {
   static void CreateNewMap(const std::map<std::string, std::string>& base, const std::map<std::string, std::string>& cf,
                            std::map<std::string, std::string>& new_cf);  // NOLINT
 
-  bool RocksdbInit(const std::string& db_path, const std::vector<std::string>& column_family,
+  bool RocksdbInit(std::shared_ptr<Config> config, const std::string& db_path,
+                   const std::vector<std::string>& column_family,
                    std::vector<rocksdb::ColumnFamilyHandle*>& family_handles);  // NOLINT
 
   void SetColumnFamilyHandle(const std::vector<std::string>& column_family,

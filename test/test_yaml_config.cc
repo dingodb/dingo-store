@@ -52,6 +52,31 @@ TEST(ConfigTest, scalar_02) {
   EXPECT_EQ("127.0.0.1", config.GetString("host.ip"));
 }
 
+TEST(ConfigTest, scalar_double) {
+  dingodb::YamlConfig config;
+
+  const std::string yaml =
+      "server:\n"
+      "  worker_thread_ratio: 0.5";
+
+  config.Load(yaml);
+  EXPECT_EQ(0.5, config.GetDouble("server.worker_thread_ratio"));
+}
+
+TEST(ConfigTest, not_exist) {
+  dingodb::YamlConfig config;
+
+  const std::string yaml =
+      "host:\n"
+      "  port: 8400\n"
+      "  ip: 127.0.0.1";
+
+  config.Load(yaml);
+  EXPECT_EQ(0, config.GetInt("host.host.host"));
+  EXPECT_EQ(0.0, config.GetDouble("host.host.host"));
+  EXPECT_EQ("", config.GetString("host.host.host"));
+}
+
 TEST(ConfigTest, list_01) {
   dingodb::YamlConfig config;
 

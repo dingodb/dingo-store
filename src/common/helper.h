@@ -34,6 +34,7 @@ class Helper {
   using PbError = pb::error::Error;
 
  public:
+  static int GetCoreNum();
   static bool IsIp(const std::string& s);
 
   static butil::EndPoint GetEndPoint(const std::string& host, int port);

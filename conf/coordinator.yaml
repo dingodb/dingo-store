@@ -6,6 +6,8 @@ server:
   host: 127.0.0.1
   port: 19190
   push_interval: 1000 # ms
+  worker_thread_num: 10 # must >4, worker_thread_num priority worker_thread_ratio
+  # worker_thread_ratio: 0.5 # cpu core * ratio
 coordinator:
   peers: 127.0.0.1:8001,127.0.0.1:8002,127.0.0.1:8003
 raft:
@@ -19,6 +21,8 @@ log:
   path: ./log
 store:
   path: ./data/coordinator/db
+  background_thread_num: 16 # background_thread_num priority background_thread_ratio
+  # background_thread_ratio: 0.5 # cpu core * ratio
   base:
     block_size: 131072
     block_cache: 67108864

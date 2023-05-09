@@ -235,7 +235,7 @@ bool RawRocksEngine::Init(std::shared_ptr<Config> config) {
   SetColumnFamilyFromConfig(config, column_families);
 
   std::vector<rocksdb::ColumnFamilyHandle*> family_handles;
-  bool ret = RocksdbInit(db_path_, column_families, family_handles);
+  bool ret = RocksdbInit(config, db_path_, column_families, family_handles);
   if (BAIDU_UNLIKELY(!ret)) {
     DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Open : {} failed", db_path_);
     return false;
@@ -568,7 +568,20 @@ void RawRocksEngine::CreateNewMap(const std::map<std::string, std::string>& base
   }
 }
 
-bool RawRocksEngine::RocksdbInit(const std::string& db_path, const std::vector<std::string>& column_family,
+int GetBackgroundThreadNum(std::shared_ptr<dingodb::Config> config) {
+  int num = config->GetInt("store.background_thread_num");
+  if (num <= 0) {
+    double ratio = config->GetDouble("store.background_thread_ratio");
+    if (ratio > 0) {
+      num = std::round(ratio * static_cast<double>(dingodb::Helper::GetCoreNum()));
+    }
+  }
+
+  return num > 0 ? num : Constant::kRocksdbBackgroundThreadNumDefault;
+}
+
+bool RawRocksEngine::RocksdbInit(std::shared_ptr<Config> config, const std::string& db_path,
+                                 const std::vector<std::string>& column_family,
                                  std::vector<rocksdb::ColumnFamilyHandle*>& family_handles) {
   // cppcheck-suppress variableScope
   std::vector<rocksdb::ColumnFamilyDescriptor> column_families;
@@ -585,6 +598,8 @@ bool RawRocksEngine::RocksdbInit(const std::string& db_path, const std::vector<s
 
   db_options.create_if_missing = true;
   db_options.create_missing_column_families = true;
+
+  db_options.max_background_jobs = GetBackgroundThreadNum(config);
 
   rocksdb::TransactionDB* txn_db;
   rocksdb::Status s =

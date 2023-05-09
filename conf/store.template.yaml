@@ -7,6 +7,8 @@ server:
   port: $SERVER_PORT$
   heartbeat_interval: 10000 # ms
   metrics_collect_interval: 300000 # ms
+  worker_thread_num: 10 # must >4, worker_thread_num priority worker_thread_ratio
+  # worker_thread_ratio: 0.5 # cpu core * ratio
 raft:
   host: $RAFT_HOST$
   port: $RAFT_PORT$
@@ -18,6 +20,8 @@ log:
   path: $BASE_PATH$/log
 store:
   path: $BASE_PATH$/data/store/db
+  background_thread_num: 16 # background_thread_num priority background_thread_ratio
+  # background_thread_ratio: 0.5 # cpu core * ratio
   base:
     block_size: 131072
     block_cache: 67108864

@@ -43,6 +43,8 @@ namespace dingodb {
 using Errno = pb::error::Errno;
 using PbError = pb::error::Error;
 
+int Helper::GetCoreNum() { return sysconf(_SC_NPROCESSORS_ONLN); }
+
 bool Helper::IsIp(const std::string& s) {
   std::regex const reg(
       "(?=(\\b|\\D))(((\\d{1,2})|(1\\d{1,2})|(2[0-4]\\d)|(25[0-5]))\\.){3}(("

@@ -35,6 +35,7 @@
 
 #include "brpc/server.h"
 #include "butil/endpoint.h"
+#include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "common/version.h"
@@ -62,7 +63,9 @@ namespace bvar {
 DECLARE_int32(bvar_max_dump_multi_dimension_metric_number);
 }  // namespace bvar
 
-const int kBvarMaxDumpMultiDimensionMetricNumberDefault = 100;
+namespace bthread {
+DECLARE_int32(bthread_concurrency);
+}  // namespace bthread
 
 // Get server endpoint from config
 butil::EndPoint GetServerEndPoint(std::shared_ptr<dingodb::Config> config) {
@@ -302,8 +305,9 @@ void SetupSignalHandler() {
 bool SetGflagVariable() {
   // Open bvar multi dimesion metrics.
   if (bvar::FLAGS_bvar_max_dump_multi_dimension_metric_number == 0) {
-    if (google::SetCommandLineOption("bvar_max_dump_multi_dimension_metric_number",
-                                     std::to_string(kBvarMaxDumpMultiDimensionMetricNumberDefault).c_str())
+    if (google::SetCommandLineOption(
+            "bvar_max_dump_multi_dimension_metric_number",
+            std::to_string(dingodb::Constant::kBvarMaxDumpMultiDimensionMetricNumberDefault).c_str())
             .empty()) {
       DINGO_LOG(ERROR) << "Fail to set bvar_max_dump_multi_dimension_metric_number";
       return false;
@@ -311,6 +315,25 @@ bool SetGflagVariable() {
   }
 
   return true;
+}
+
+// Get worker thread num used by config
+int GetWorkerThreadNum(std::shared_ptr<dingodb::Config> config) {
+  int num = config->GetInt("server.worker_thread_num");
+  if (num <= 0) {
+    double ratio = config->GetDouble("server.worker_thread_ratio");
+    if (ratio > 0) {
+      num = std::round(ratio * static_cast<double>(dingodb::Helper::GetCoreNum()));
+    }
+  }
+
+  if (num < bthread::FLAGS_bthread_concurrency) {
+    if (google::SetCommandLineOption("bthread_concurrency", std::to_string(num).c_str()).empty()) {
+      DINGO_LOG(ERROR) << "Fail to set bthread_concurrency";
+    }
+  }
+
+  return num;
 }
 
 int main(int argc, char *argv[]) {
@@ -356,7 +379,7 @@ int main(int argc, char *argv[]) {
     return -1;
   }
 
-  std::shared_ptr<dingodb::Config> const config = dingodb::ConfigManager::GetInstance()->GetConfig(role);
+  auto const config = dingodb::ConfigManager::GetInstance()->GetConfig(role);
   auto placeholder = dingo_server->InitLog();
   if (!placeholder) {
     DINGO_LOG(ERROR) << "InitLog failed!";
@@ -391,6 +414,10 @@ int main(int argc, char *argv[]) {
 
   brpc::Server brpc_server;
   brpc::Server raft_server;
+
+  brpc::ServerOptions options;
+  options.num_threads = GetWorkerThreadNum(config);
+  DINGO_LOG(INFO) << "num_threads: " << options.num_threads;
 
   if (brpc_server.AddService(&node_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
     DINGO_LOG(ERROR) << "Fail to add node service to brpc_server!";
@@ -447,7 +474,7 @@ int main(int argc, char *argv[]) {
       return -1;
     }
 
-    if (raft_server.Start(dingo_server->RaftEndpoint(), nullptr) != 0) {
+    if (raft_server.Start(dingo_server->RaftEndpoint(), &options) != 0) {
       DINGO_LOG(ERROR) << "Fail to start raft server!";
       return -1;
     }
@@ -519,7 +546,8 @@ int main(int argc, char *argv[]) {
       DINGO_LOG(ERROR) << "Fail to add raft service!";
       return -1;
     }
-    if (raft_server.Start(dingo_server->RaftEndpoint(), nullptr) != 0) {
+
+    if (raft_server.Start(dingo_server->RaftEndpoint(), &options) != 0) {
       DINGO_LOG(ERROR) << "Fail to start raft server!";
       return -1;
     }
@@ -542,7 +570,7 @@ int main(int argc, char *argv[]) {
   }
 
   // Start server after raft server started.
-  if (brpc_server.Start(dingo_server->ServerEndpoint(), nullptr) != 0) {
+  if (brpc_server.Start(dingo_server->ServerEndpoint(), &options) != 0) {
     DINGO_LOG(ERROR) << "Fail to start server!";
     return -1;
   }
