@@ -72,6 +72,7 @@ DEFINE_string(coor_url, "", "coordinator url");
 DEFINE_string(url, "", "coordinator url");
 DEFINE_int64(schema_id, 0, "schema_id");
 DEFINE_int64(replica, 0, "replica num");
+DEFINE_string(state, "", "state string");
 
 std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction;
 std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction_meta;
@@ -188,6 +189,8 @@ void* Sender(void* /*arg*/) {
     SendCreateStore(coordinator_interaction);
   } else if (FLAGS_method == "DeleteStore") {
     SendDeleteStore(coordinator_interaction);
+  } else if (FLAGS_method == "UpdateStore") {
+    SendUpdateStore(coordinator_interaction);
   } else if (FLAGS_method == "CreateExecutor") {
     SendCreateExecutor(coordinator_interaction);
   } else if (FLAGS_method == "DeleteExecutor") {

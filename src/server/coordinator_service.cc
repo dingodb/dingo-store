@@ -373,8 +373,7 @@ void CoordinatorServiceImpl::DeleteStore(google::protobuf::RpcController *contro
   // delete store
   uint64_t const store_id = request->store_id();
   std::string const keyring = request->keyring();
-  auto local_ctl = this->coordinator_control_;
-  auto ret = local_ctl->DeleteStore(request->cluster_id(), store_id, keyring, meta_increment);
+  auto ret = coordinator_control_->DeleteStore(request->cluster_id(), store_id, keyring, meta_increment);
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << "DeleteStore failed:  store_id=" << store_id << ", keyring=" << keyring;
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
@@ -395,6 +394,48 @@ void CoordinatorServiceImpl::DeleteStore(google::protobuf::RpcController *contro
 
   std::shared_ptr<Context> const ctx =
       std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_delete_store_closure);
+  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+
+  // this is a async operation will be block by closure
+  engine_->MetaPut(ctx, meta_increment);
+}
+
+void CoordinatorServiceImpl::UpdateStore(google::protobuf::RpcController *controller,
+                                         const pb::coordinator::UpdateStoreRequest *request,
+                                         pb::coordinator::UpdateStoreResponse *response,
+                                         google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+  auto is_leader = this->coordinator_control_->IsLeader();
+  DINGO_LOG(INFO) << "Receive Update Store Request: IsLeader:" << is_leader << ", Request: " << request->DebugString();
+
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  pb::coordinator_internal::MetaIncrement meta_increment;
+
+  // update store
+  auto ret = coordinator_control_->UpdateStore(request->cluster_id(), request->store_id(), request->keyring(),
+                                               request->store_in_state(), meta_increment);
+  if (!ret.ok()) {
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    return;
+  }
+
+  if (meta_increment.ByteSizeLong() == 0) {
+    DINGO_LOG(ERROR) << "UpdateStore meta_incremnt=0:  store_id=" << request->store_id()
+                     << ", keyring=" << request->keyring();
+    return;
+  }
+
+  // prepare for raft process
+  CoordinatorClosure<pb::coordinator::UpdateStoreRequest, pb::coordinator::UpdateStoreResponse> *meta_put_closure =
+      new CoordinatorClosure<pb::coordinator::UpdateStoreRequest, pb::coordinator::UpdateStoreResponse>(
+          request, response, done_guard.release());
+
+  std::shared_ptr<Context> const ctx =
+      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
