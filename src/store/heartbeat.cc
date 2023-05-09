@@ -14,6 +14,8 @@
 
 #include "store/heartbeat.h"
 
+#include <sys/types.h>
+
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
@@ -101,10 +103,10 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
   }
 }
 
-static std::vector<std::shared_ptr<pb::common::Store> > GetNewStore(
-    std::map<uint64_t, std::shared_ptr<pb::common::Store> > local_stores,
+static std::vector<std::shared_ptr<pb::common::Store>> GetNewStore(
+    std::map<uint64_t, std::shared_ptr<pb::common::Store>> local_stores,
     const google::protobuf::RepeatedPtrField<dingodb::pb::common::Store>& remote_stores) {
-  std::vector<std::shared_ptr<pb::common::Store> > new_stores;
+  std::vector<std::shared_ptr<pb::common::Store>> new_stores;
   for (const auto& remote_store : remote_stores) {
     if (local_stores.find(remote_store.id()) == local_stores.end()) {
       new_stores.push_back(std::make_shared<pb::common::Store>(remote_store));
@@ -114,10 +116,10 @@ static std::vector<std::shared_ptr<pb::common::Store> > GetNewStore(
   return new_stores;
 }
 
-static std::vector<std::shared_ptr<pb::common::Store> > GetChangedStore(
-    std::map<uint64_t, std::shared_ptr<pb::common::Store> > local_stores,
+static std::vector<std::shared_ptr<pb::common::Store>> GetChangedStore(
+    std::map<uint64_t, std::shared_ptr<pb::common::Store>> local_stores,
     const google::protobuf::RepeatedPtrField<dingodb::pb::common::Store>& remote_stores) {
-  std::vector<std::shared_ptr<pb::common::Store> > changed_stores;
+  std::vector<std::shared_ptr<pb::common::Store>> changed_stores;
   for (const auto& remote_store : remote_stores) {
     if (remote_store.id() == 0) {
       continue;
@@ -134,22 +136,22 @@ static std::vector<std::shared_ptr<pb::common::Store> > GetChangedStore(
   return changed_stores;
 }
 
-static std::vector<std::shared_ptr<pb::common::Store> > GetDeletedStore(
-    std::map<uint64_t, std::shared_ptr<pb::common::Store> > local_stores,
+static std::vector<std::shared_ptr<pb::common::Store>> GetDeletedStore(
+    std::map<uint64_t, std::shared_ptr<pb::common::Store>> local_stores,
     const google::protobuf::RepeatedPtrField<pb::common::Store>& remote_stores) {
-  std::vector<std::shared_ptr<pb::common::Store> > stores;
+  std::set<uint64_t> remote_store_ids;
   for (const auto& store : remote_stores) {
-    if (store.state() != pb::common::STORE_OFFLINE && store.in_state() != pb::common::STORE_OUT) {
-      continue;
-    }
+    remote_store_ids.insert(store.id());
+  }
 
-    auto it = local_stores.find(store.id());
-    if (it != local_stores.end()) {
-      stores.push_back(it->second);
+  std::vector<std::shared_ptr<pb::common::Store>> stores_to_delete;
+  for (const auto& store : local_stores) {
+    if (remote_store_ids.find(store.first) == remote_store_ids.end()) {
+      stores_to_delete.push_back(store.second);
     }
   }
 
-  return stores;
+  return stores_to_delete;
 }
 
 void HeartbeatTask::HandleStoreHeartbeatResponse(std::shared_ptr<dingodb::StoreMetaManager> store_meta_manager,

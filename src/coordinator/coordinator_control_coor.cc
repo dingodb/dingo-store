@@ -576,6 +576,9 @@ butil::Status CoordinatorControl::SelectStore(int32_t replica_num, const std::st
       const auto& store = element.second;
       if (store.state() != pb::common::StoreState::STORE_NORMAL ||
           store.in_state() != pb::common::StoreInState::STORE_IN) {
+        DINGO_LOG(INFO) << "Store state not normal or in, store_id=" << store.id()
+                        << ", state=" << pb::common::StoreState_Name(store.state())
+                        << ", in_state=" << pb::common::StoreInState_Name(store.in_state());
         continue;
       }
 
