@@ -14,6 +14,8 @@
 
 #include "config/yaml_config.h"
 
+#include <typeinfo>
+
 #include "butil/strings/string_util.h"
 #include "common/logging.h"
 
@@ -45,6 +47,15 @@ int YamlConfig::GetInt(const std::string& key) {
     DINGO_LOG(FATAL) << "Config GetInt failed: " << key << " exception: " << e.what();
   }
   return -1;
+}
+
+double YamlConfig::GetDouble(const std::string& key) {
+  try {
+    return GetScalar<double>(key);
+  } catch (std::exception& e) {
+    DINGO_LOG(FATAL) << "Config GetDouble failed: " << key << " exception: " << e.what();
+  }
+  return -1.0;
 }
 
 std::string YamlConfig::GetString(const std::string& key) {
@@ -111,7 +122,7 @@ T YamlConfig::GetScalar(const std::string& key) {
     node = node[token];
   }
 
-  return node.as<T>();
+  return node.IsDefined() ? node.as<T>() : T();
 }
 
 // Get list value

@@ -7,6 +7,8 @@ server:
   port: 23000
   heartbeat_interval: 10000 # ms
   metrics_collect_interval: 300000 # ms
+  worker_thread_num: 10 # must >4, worker_thread_num priority worker_thread_ratio
+  # worker_thread_ratio: 0.5 # cpu core * ratio
 raft:
   host: 127.0.0.1
   port: 23100
@@ -18,6 +20,8 @@ log:
   path: /opt/dingo-poc/store/log
 store:
   path: ./rocks_example
+  background_thread_num: 16 # background_thread_num priority background_thread_ratio
+  # background_thread_ratio: 0.5 # cpu core * ratio
   base:
     block_size: 131072
     block_cache: 67108864

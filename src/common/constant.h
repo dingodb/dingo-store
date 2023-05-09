@@ -34,6 +34,9 @@ class Constant {
   // Define Global SchemaId for Coordinator(As only one)
   static const uint64_t kCoordinatorSchemaId = 0;
 
+  // Define mbvar metrics number
+  static const int kBvarMaxDumpMultiDimensionMetricNumberDefault = 100;
+
   // Define Store data column family.
   inline static const std::string kStoreDataCF = "default";
   // Define Store meta column family.
@@ -66,6 +69,8 @@ class Constant {
   inline static const std::string kMaxBytesForLevelBase = "max_bytes_for_level_base";
   inline static const std::string kTargetFileSizeBase = "target_file_size_base";
   inline static const std::string kMaxBytesForLevelMultiplier = "max_bytes_for_level_multiplier";
+
+  static const int kRocksdbBackgroundThreadNumDefault = 16;
 
   // scan config
   inline static const std::string kStoreScan = "store.scan";

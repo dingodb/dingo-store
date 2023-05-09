@@ -6,6 +6,8 @@ server:
   host: $SERVER_HOST$
   port: $SERVER_PORT$
   push_interval: 1000 # ms
+  worker_thread_num: 10 # must >4, worker_thread_num priority worker_thread_ratio
+  # worker_thread_ratio: 0.5 # cpu core * ratio
 coordinator:
   peers: $COORDINATOR_RAFT_PEERS$
 raft:
@@ -19,6 +21,8 @@ log:
   path: $BASE_PATH$/log
 store:
   path: $BASE_PATH$/data/coordinator/db
+  background_thread_num: 16 # background_thread_num priority background_thread_ratio
+  # background_thread_ratio: 0.5 # cpu core * ratio
   base:
     block_size: 131072
     block_cache: 67108864
