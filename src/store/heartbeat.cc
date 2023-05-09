@@ -309,6 +309,60 @@ void CoordinatorTaskListProcessTask::CoordinatorTaskListProcess(
   coordinator_control->ProcessTaskList();
 }
 
+bool CheckStoreOperationResult(pb::coordinator::RegionCmdType cmd_type, pb::error::Errno errcode) {
+  using pb::coordinator::RegionCmdType;
+  using pb::error::Errno;
+
+  if (errcode == Errno::OK || errcode == Errno::EREGION_REPEAT_COMMAND) {
+    return true;
+  }
+
+  switch (cmd_type) {
+    case RegionCmdType::CMD_CREATE:
+      DINGO_LOG(ERROR) << "CheckStoreOperationResult... create region failed, errcode=" << errcode;
+      if (errcode == Errno::EREGION_ALREADY_EXIST) {
+        return true;
+      }
+      break;
+    case RegionCmdType::CMD_DELETE:
+      DINGO_LOG(ERROR) << "CheckStoreOperationResult... delete region failed, errcode=" << errcode;
+      if (errcode == Errno::EREGION_ALREADY_DELETED || errcode == Errno::EREGION_NOT_FOUND) {
+        return true;
+      }
+      break;
+    case RegionCmdType::CMD_SPLIT:
+      DINGO_LOG(ERROR) << "CheckStoreOperationResult... split region failed, errcode=" << errcode;
+      if (errcode == Errno::EREGION_ALREADY_SPLIT) {
+        return true;
+      }
+      break;
+    case RegionCmdType::CMD_MERGE:
+      DINGO_LOG(ERROR) << "CheckStoreOperationResult... merge region failed, errcode=" << errcode;
+      if (errcode == Errno::EREGION_ALREADY_MERGED) {
+        return true;
+      }
+      break;
+    case RegionCmdType::CMD_CHANGE_PEER:
+      DINGO_LOG(ERROR) << "CheckStoreOperationResult... change peer region failed, errcode=" << errcode;
+      if (errcode == Errno::EREGION_ALREADY_PEER_CHANGED) {
+        return true;
+      }
+      break;
+    case RegionCmdType::CMD_PURGE:
+      DINGO_LOG(ERROR) << "CheckStoreOperationResult... purge region failed, errcode=" << errcode;
+      if (errcode == Errno::EREGION_NOT_FOUND) {
+        return true;
+      }
+      break;
+    default:
+      DINGO_LOG(ERROR) << "CheckStoreOperationResult... unknown region cmd type " << cmd_type
+                       << ", errcode=" << errcode;
+      break;
+  }
+
+  return false;
+}
+
 // this is for coordinator
 void CoordinatorPushTask::SendCoordinatorPushToStore(std::shared_ptr<CoordinatorControl> coordinator_control) {
   if (!coordinator_control->IsLeader()) {
@@ -337,118 +391,75 @@ void CoordinatorPushTask::SendCoordinatorPushToStore(std::shared_ptr<Coordinator
     // send store_operation
     pb::coordinator::StoreOperation store_operation;
     coordinator_control->GetStoreOperation(it.id(), store_operation);
-    if (store_operation.region_cmds_size() > 0) {
-      DINGO_LOG(INFO) << "... send store_operation to store " << it.id();
+    if (store_operation.region_cmds_size() < 0) {
+      DINGO_LOG(INFO) << "... store_operation.region_cmds_size() < 0";
+      continue;
+    }
 
-      // send store_operation to store
+    DINGO_LOG(INFO) << "... send store_operation to store " << it.id();
 
-      // prepare request and response
-      pb::push::PushStoreOperationRequest request;
-      pb::push::PushStoreOperationResponse response;
+    // send store_operation to store
+    // prepare request and response
+    pb::push::PushStoreOperationRequest request;
+    pb::push::PushStoreOperationResponse response;
 
-      request.mutable_store_operation()->CopyFrom(store_operation);
+    request.mutable_store_operation()->CopyFrom(store_operation);
 
-      // send rpcs
-      if (!it.has_server_location()) {
-        DINGO_LOG(ERROR) << "... store " << it.id() << " has no server_location";
+    // send rpcs
+    if (!it.has_server_location()) {
+      DINGO_LOG(ERROR) << "... store " << it.id() << " has no server_location";
+      continue;
+    }
+    auto status = Heartbeat::RpcSendPushStoreOperation(it.server_location(), request, response);
+
+    // check response
+    pb::coordinator_internal::MetaIncrement meta_increment;
+    if (status.ok()) {
+      DINGO_LOG(INFO) << "... send store_operation to store " << it.id()
+                      << " all success, will delete these region_cmds";
+      // delete store_operation
+      auto* store_operation_increment = meta_increment.add_store_operations();
+      store_operation_increment->set_id(it.id());
+      store_operation_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
+
+      auto* store_operation_increment_delete = store_operation_increment->mutable_store_operation();
+      store_operation_increment_delete->CopyFrom(store_operation);
+
+      coordinator_control->SubmitMetaIncrement(meta_increment);
+
+      continue;
+    }
+
+    DINGO_LOG(WARNING) << "... send store_operation to store " << it.id()
+                       << " failed, will check each region_cmd result";
+    for (const auto& it_cmd : response.region_cmd_results()) {
+      auto errcode = it_cmd.error().errcode();
+      auto cmd_type = it_cmd.region_cmd_type();
+
+      auto need_delete = CheckStoreOperationResult(cmd_type, errcode);
+      if (!need_delete) {
+        DINGO_LOG(INFO) << "... send store_operation to store_id=" << it.id()
+                        << " region_cmd_id=" << it_cmd.region_cmd_id() << " result=[" << it_cmd.error().errcode()
+                        << "][" << pb::error::Errno_descriptor()->FindValueByNumber(it_cmd.error().errcode())->name()
+                        << " failed, will try this region_cmd future";
         continue;
       }
-      auto status = Heartbeat::RpcSendPushStoreOperation(it.server_location(), request, response);
 
-      // check response
-      pb::coordinator_internal::MetaIncrement meta_increment;
-      if (status.ok()) {
-        DINGO_LOG(INFO) << "... send store_operation to store " << it.id()
-                        << " all success, will delete these region_cmds";
-        // delete store_operation
-        auto* store_operation_increment = meta_increment.add_store_operations();
-        store_operation_increment->set_id(it.id());
-        store_operation_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
+      DINGO_LOG(INFO) << "... send store_operation to store_id=" << it.id()
+                      << " region_cmd_id=" << it_cmd.region_cmd_id() << " result=[" << it_cmd.error().errcode() << "]["
+                      << pb::error::Errno_descriptor()->FindValueByNumber(it_cmd.error().errcode())->name()
+                      << " success, will delete this region_cmd";
+      // delete store_operation
+      auto* store_operation_increment = meta_increment.add_store_operations();
+      store_operation_increment->set_id(it.id());
+      store_operation_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
 
-        auto* store_operation_increment_delete = store_operation_increment->mutable_store_operation();
-        store_operation_increment_delete->CopyFrom(store_operation);
+      auto* store_operation_increment_delete = store_operation_increment->mutable_store_operation();
+      store_operation_increment_delete->set_id(it.id());
+      auto* region_cmd = store_operation_increment_delete->add_region_cmds();
+      region_cmd->set_id(it_cmd.region_cmd_id());
 
-        coordinator_control->SubmitMetaIncrement(meta_increment);
-      } else {
-        DINGO_LOG(WARNING) << "... send store_operation to store " << it.id()
-                           << " failed, will check each region_cmd result";
-        for (const auto& it_cmd : response.region_cmd_results()) {
-          if (it_cmd.error().errcode() == pb::error::Errno::OK ||
-              it_cmd.error().errcode() == pb::error::Errno::EREGION_REPEAT_COMMAND ||
-              (it_cmd.region_cmd_type() == pb::coordinator::RegionCmdType::CMD_CREATE &&
-               it_cmd.error().errcode() == pb::error::Errno::EREGION_ALREADY_EXIST) ||
-              (it_cmd.region_cmd_type() == pb::coordinator::RegionCmdType::CMD_DELETE &&
-               it_cmd.error().errcode() == pb::error::Errno::EREGION_ALREADY_DELETED) ||
-              (it_cmd.region_cmd_type() == pb::coordinator::RegionCmdType::CMD_SPLIT &&
-               it_cmd.error().errcode() == pb::error::Errno::EREGION_ALREADY_SPLIT) ||
-              (it_cmd.region_cmd_type() == pb::coordinator::RegionCmdType::CMD_MERGE &&
-               it_cmd.error().errcode() == pb::error::Errno::EREGION_ALREADY_MERGED) ||
-              (it_cmd.region_cmd_type() == pb::coordinator::RegionCmdType::CMD_CHANGE_PEER &&
-               it_cmd.error().errcode() == pb::error::Errno::EREGION_ALREADY_PEER_CHANGED)) {
-            DINGO_LOG(INFO) << "... send store_operation to store_id=" << it.id()
-                            << " region_cmd_id=" << it_cmd.region_cmd_id() << " result=[" << it_cmd.error().errcode()
-                            << "]["
-                            << pb::error::Errno_descriptor()->FindValueByNumber(it_cmd.error().errcode())->name()
-                            << " success, will delete this region_cmd";
-            // delete store_operation
-            auto* store_operation_increment = meta_increment.add_store_operations();
-            store_operation_increment->set_id(it.id());
-            store_operation_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
-
-            auto* store_operation_increment_delete = store_operation_increment->mutable_store_operation();
-            store_operation_increment_delete->set_id(it.id());
-            auto* region_cmd = store_operation_increment_delete->add_region_cmds();
-            region_cmd->set_id(it_cmd.region_cmd_id());
-
-            coordinator_control->SubmitMetaIncrement(meta_increment);
-
-          } else if (it_cmd.error().errcode() == pb::error::Errno::ERAFT_NOTLEADER) {
-            // redirect request to new leader
-            if (!response.error().has_leader_location()) {
-              DINGO_LOG(ERROR) << "... send store_operation to store_id=" << it.id()
-                               << " region_cmd_id=" << it_cmd.region_cmd_id() << " result=[" << it_cmd.error().errcode()
-                               << "]["
-                               << pb::error::Errno_descriptor()->FindValueByNumber(it_cmd.error().errcode())->name()
-                               << " failed, but no leader_location in response";
-              continue;  // will retry next time
-            }
-
-            auto status = Heartbeat::RpcSendPushStoreOperation(response.error().leader_location(), request, response);
-            if (status.ok()) {
-              DINGO_LOG(INFO) << "... send store_operation to store_id=" << it.id()
-                              << " region_cmd_id=" << it_cmd.region_cmd_id() << " result=[" << it_cmd.error().errcode()
-                              << "]["
-                              << pb::error::Errno_descriptor()->FindValueByNumber(it_cmd.error().errcode())->name()
-                              << " failed, but redirect to new leader success";
-
-              // delete store_operation
-              auto* store_operation_increment = meta_increment.add_store_operations();
-              store_operation_increment->set_id(it.id());
-              store_operation_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
-
-              auto* store_operation_increment_delete = store_operation_increment->mutable_store_operation();
-              store_operation_increment_delete->set_id(it.id());
-              auto* region_cmd = store_operation_increment_delete->add_region_cmds();
-              region_cmd->set_id(it_cmd.region_cmd_id());
-
-              coordinator_control->SubmitMetaIncrement(meta_increment);
-
-            } else {
-              DINGO_LOG(ERROR) << "... send store_operation to store_id=" << it.id()
-                               << " region_cmd_id=" << it_cmd.region_cmd_id() << " result=[" << it_cmd.error().errcode()
-                               << "]["
-                               << pb::error::Errno_descriptor()->FindValueByNumber(it_cmd.error().errcode())->name()
-                               << " failed, and redirect to new leader failed";
-            }
-          } else {
-            DINGO_LOG(INFO) << "... send store_operation to store_id=" << it.id()
-                            << " region_cmd_id=" << it_cmd.region_cmd_id() << " result=[" << it_cmd.error().errcode()
-                            << "]["
-                            << pb::error::Errno_descriptor()->FindValueByNumber(it_cmd.error().errcode())->name()
-                            << " failed, will try this region_cmd future";
-          }
-        }
-      }
+      coordinator_control->SubmitMetaIncrement(meta_increment);
     }
   }
 
@@ -633,30 +644,46 @@ butil::Status Heartbeat::RpcSendPushStoreOperation(const pb::common::Location& l
                                                    pb::push::PushStoreOperationResponse& response) {
   // build send location string
   auto store_server_location_string = location.host() + ":" + std::to_string(location.port());
-  braft::PeerId remote_node(store_server_location_string);
 
-  // rpc
-  brpc::Channel channel;
-  if (channel.Init(remote_node.addr, nullptr) != 0) {
-    DINGO_LOG(ERROR) << "... channel init failed";
-    return butil::Status(pb::error::Errno::ESTORE_NOT_FOUND, "cannot connect store");
-  }
+  int retry_times = 0;
 
-  brpc::Controller cntl;
-  cntl.set_timeout_ms(500L);
+  do {
+    braft::PeerId remote_node(store_server_location_string);
 
-  pb::push::PushService_Stub(&channel).PushStoreOperation(&cntl, &request, &response, nullptr);
+    // rpc
+    brpc::Channel channel;
+    if (channel.Init(remote_node.addr, nullptr) != 0) {
+      DINGO_LOG(ERROR) << "... channel init failed";
+      return butil::Status(pb::error::Errno::ESTORE_NOT_FOUND, "cannot connect store");
+    }
 
-  if (cntl.Failed()) {
-    DINGO_LOG(ERROR) << "... rpc failed, error code: " << cntl.ErrorCode() << ", error message: " << cntl.ErrorText();
-    return butil::Status(cntl.ErrorCode(), cntl.ErrorText());
-  }
+    brpc::Controller cntl;
+    cntl.set_timeout_ms(500L);
 
-  if (response.error().errcode() != pb::error::Errno::OK) {
-    DINGO_LOG(ERROR) << "... rpc failed, error code: " << response.error().errcode()
-                     << ", error message: " << response.error().errmsg();
-    return butil::Status(response.error().errcode(), response.error().errmsg());
-  }
+    pb::push::PushService_Stub(&channel).PushStoreOperation(&cntl, &request, &response, nullptr);
+
+    if (cntl.Failed()) {
+      DINGO_LOG(ERROR) << "... rpc failed, will retry, error code: " << cntl.ErrorCode()
+                       << ", error message: " << cntl.ErrorText();
+      continue;
+    }
+
+    auto errcode = response.error().errcode();
+    if (errcode == pb::error::Errno::OK) {
+      DINGO_LOG(INFO) << "... rpc success, will not retry";
+      return butil::Status::OK();
+    } else if (errcode == pb::error::Errno::ERAFT_NOTLEADER && response.error().has_leader_location()) {
+      DINGO_LOG(INFO) << "... rpc failed, ERAFT_NOTLEADER, will retry, error code: " << errcode
+                      << ", error message: " << response.error().errmsg();
+      store_server_location_string =
+          response.error().leader_location().host() + ":" + std::to_string(response.error().leader_location().port());
+      continue;
+    } else {
+      DINGO_LOG(ERROR) << "... rpc failed, error code: " << response.error().errcode()
+                       << ", error message: " << response.error().errmsg();
+      return butil::Status(response.error().errcode(), response.error().errmsg());
+    }
+  } while (retry_times++ < 3);
 
   return butil::Status::OK();
 }
