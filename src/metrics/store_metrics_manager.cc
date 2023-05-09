@@ -84,7 +84,7 @@ bool StoreMetrics::CollectMetrics() {
 
   auto config = ConfigManager::GetInstance()->GetConfig(pb::common::ClusterRole::STORE);
 
-  if (!Helper::GetDiskCapacity(config->GetString("store.dbPath"), output)) {
+  if (!Helper::GetDiskCapacity(config->GetString("store.path"), output)) {
     return false;
   }
 

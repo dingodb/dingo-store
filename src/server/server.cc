@@ -229,9 +229,9 @@ bool Server::InitCrontabManager() {
     // Add heartbeat crontab
     std::shared_ptr<Crontab> heartbeat_crontab = std::make_shared<Crontab>();
     heartbeat_crontab->name = "HEARTBEA";
-    uint64_t heartbeat_interval = config->GetInt("server.heartbeatInterval");
+    uint64_t heartbeat_interval = config->GetInt("server.heartbeat_interval");
     if (heartbeat_interval <= 0) {
-      DINGO_LOG(ERROR) << "config server.heartbeatInterval illegal";
+      DINGO_LOG(ERROR) << "config server.heartbeat_interval illegal";
       return false;
     }
     heartbeat_crontab->interval = heartbeat_interval;
@@ -243,9 +243,9 @@ bool Server::InitCrontabManager() {
     // Add store metrics crontab
     std::shared_ptr<Crontab> metrics_crontab = std::make_shared<Crontab>();
     metrics_crontab->name = "METRICS";
-    uint64_t metrics_interval = config->GetInt("server.metricsCollectInterval");
+    uint64_t metrics_interval = config->GetInt("server.metrics_collect_interval");
     if (metrics_interval <= 0) {
-      DINGO_LOG(ERROR) << "config server.metricsCollectInterval illegal";
+      DINGO_LOG(ERROR) << "config server.metrics_collect_interval illegal";
       return false;
     }
     metrics_crontab->interval = metrics_interval;
@@ -274,9 +274,9 @@ bool Server::InitCrontabManager() {
     // Add push crontab
     std::shared_ptr<Crontab> push_crontab = std::make_shared<Crontab>();
     push_crontab->name = "PUSH";
-    uint64_t push_interval = config->GetInt("server.pushInterval");
+    uint64_t push_interval = config->GetInt("server.push_interval");
     if (push_interval <= 0) {
-      DINGO_LOG(INFO) << "server.pushInterval illegal";
+      DINGO_LOG(INFO) << "server.push_interval illegal";
       return false;
     }
     push_crontab->interval = push_interval;

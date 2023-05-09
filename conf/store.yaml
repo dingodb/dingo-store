@@ -5,19 +5,19 @@ cluster:
 server:
   host: 127.0.0.1
   port: 23000
-  heartbeatInterval: 10000 # ms
-  metricsCollectInterval: 300000 # ms
+  heartbeat_interval: 10000 # ms
+  metrics_collect_interval: 300000 # ms
 raft:
   host: 127.0.0.1
   port: 23100
   path: /opt/dingo-poc/store/data/store/raft
-  electionTimeout: 1000 # ms
-  snapshotInterval: 3600 # s
+  election_timeout: 1000 # ms
+  snapshot_interval: 3600 # s
 log:
   level: INFO
   path: /opt/dingo-poc/store/log
 store:
-  dbPath: ./rocks_example
+  path: ./rocks_example
   base:
     block_size: 131072
     block_cache: 67108864
@@ -29,10 +29,9 @@ store:
     prefix_extractor: 8
     max_bytes_for_level_base: 134217728
     target_file_size_base: 67108864
-  columnFamilies:
+  column_families:
     - default
     - meta
-  collectStatsInterval: 5
   scan:
     scan_interval_ms: 60000 # ms
     timeout_ms: 60000 # ms
