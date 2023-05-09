@@ -15,6 +15,7 @@
 #ifndef DINGODB_COMMON_HELPER_H_
 #define DINGODB_COMMON_HELPER_H_
 
+#include <cstdint>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -133,6 +134,7 @@ class Helper {
 
   // generate random string for keyring
   static std::string GenerateRandomString(int length);
+  static uint64_t GenerateRandomInteger(uint64_t min_value, uint64_t max_value);
   static uint64_t GenId();
 
   // Create hard link

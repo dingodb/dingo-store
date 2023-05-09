@@ -510,13 +510,13 @@ butil::Status CoordinatorControl::CreateRegion(const std::string& region_name, c
                       new_region_id, meta_increment);
 }
 
-butil::Status CoordinatorControl::CreateRegion(const std::string& region_name, const std::string& resource_tag,
-                                               int32_t replica_num, pb::common::Range region_range, uint64_t schema_id,
-                                               uint64_t table_id, std::vector<uint64_t>& store_ids,
-                                               uint64_t split_from_region_id, uint64_t& new_region_id,
-                                               pb::coordinator_internal::MetaIncrement& meta_increment) {
+butil::Status CoordinatorControl::SelectStore(int32_t replica_num, const std::string& resource_tag,
+                                              std::vector<uint64_t>& store_ids,
+                                              std::vector<pb::common::Store>& selected_stores_for_regions) {
+  DINGO_LOG(INFO) << "SelectStore replica_num=" << replica_num << ", resource_tag=" << resource_tag
+                  << ", store_ids.size=" << store_ids.size();
+
   std::vector<pb::common::Store> stores_for_regions;
-  std::vector<pb::common::Store> selected_stores_for_regions;
 
   // if store_ids is not null, select store with store_ids
   // or when resource_tag exists, select store with resource_tag
@@ -528,7 +528,8 @@ butil::Status CoordinatorControl::CreateRegion(const std::string& region_name, c
   if (store_ids.empty()) {
     for (const auto& element : store_map_copy) {
       const auto& store = element.second;
-      if (store.state() != pb::common::StoreState::STORE_NORMAL) {
+      if (store.state() != pb::common::StoreState::STORE_NORMAL ||
+          store.in_state() != pb::common::StoreInState::STORE_IN) {
         continue;
       }
 
@@ -556,15 +557,90 @@ butil::Status CoordinatorControl::CreateRegion(const std::string& region_name, c
 
   // if not enough stores is selected, return -1
   if (stores_for_regions.size() < replica_num) {
-    DINGO_LOG(INFO) << "Not enough stores for create region";
+    DINGO_LOG(INFO) << "Not enough stores STORE_NORMAL for create region";
     return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE, "Not enough stores for create region");
   }
 
+  struct StoreMore {
+    pb::common::Store store;
+    uint64_t weight;
+    uint64_t region_num;
+    uint64_t free_capacity;
+    uint64_t total_capacity;
+  };
+
+  // check and sort store by capacity, regions_num
+  std::vector<StoreMore> store_more_vec;
+  {
+    BAIDU_SCOPED_LOCK(store_metrics_map_mutex_);
+    for (const auto& it : stores_for_regions) {
+      StoreMore store_more;
+      store_more.store = it;
+
+      auto* ptr = store_metrics_map_.seek(it.id());
+      if (ptr != nullptr) {
+        store_more.region_num = ptr->region_metrics_map_size() > 0 ? ptr->region_metrics_map_size() : 0;
+        store_more.free_capacity = ptr->free_capacity() > 0 ? ptr->free_capacity() : 0;
+        store_more.total_capacity = ptr->total_capacity() > 0 ? ptr->total_capacity() : 0;
+      } else {
+        store_more.region_num = 0;
+        store_more.free_capacity = 0;
+        store_more.total_capacity = 0;
+      }
+
+      if (store_more.total_capacity == 0) {
+        store_more.weight = 0;
+      } else {
+        store_more.weight =
+            store_more.free_capacity * 100 / store_more.total_capacity + (100 / (store_more.region_num + 1));
+      }
+
+      store_more.weight = Helper::GenerateRandomInteger(0, 20);
+
+      store_more_vec.push_back(store_more);
+      DINGO_LOG(INFO) << "store_more_vec.push_back store_id=" << store_more.store.id()
+                      << ", region_num=" << store_more.region_num << ", free_capacity=" << store_more.free_capacity
+                      << ", total_capacity=" << store_more.total_capacity << ", weight=" << store_more.weight;
+    }
+  }
+
+  // if not enough stores is selected, return -1
+  if (store_more_vec.size() < replica_num) {
+    DINGO_LOG(INFO) << "Not enough stores with metrics for create region";
+    return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE, "Not enough stores for create region");
+  }
+
+  // sort store by weight
+  std::sort(store_more_vec.begin(), store_more_vec.end(),
+            [](const StoreMore& a, const StoreMore& b) { return a.weight > b.weight; });
+
+  DINGO_LOG(INFO) << "store_more_vec.size=" << store_more_vec.size() << ", replica_num=" << replica_num;
+
   // select replica_num stores
-  // POC version select the first replica_num stores
+  std::string store_ids_str;
   selected_stores_for_regions.reserve(replica_num);
   for (int i = 0; i < replica_num; i++) {
-    selected_stores_for_regions.push_back(stores_for_regions[i]);
+    selected_stores_for_regions.push_back(store_more_vec[i].store);
+    store_ids_str += std::to_string(store_more_vec[i].store.id()) + ",";
+  }
+
+  DINGO_LOG(INFO) << "selected_stores_for_regions.size=" << selected_stores_for_regions.size()
+                  << ", store_ids_str=" << store_ids_str;
+
+  return butil::Status::OK();
+}
+
+butil::Status CoordinatorControl::CreateRegion(const std::string& region_name, const std::string& resource_tag,
+                                               int32_t replica_num, pb::common::Range region_range, uint64_t schema_id,
+                                               uint64_t table_id, std::vector<uint64_t>& store_ids,
+                                               uint64_t split_from_region_id, uint64_t& new_region_id,
+                                               pb::coordinator_internal::MetaIncrement& meta_increment) {
+  std::vector<pb::common::Store> selected_stores_for_regions;
+
+  // select store for region
+  auto ret = SelectStore(replica_num, resource_tag, store_ids, selected_stores_for_regions);
+  if (!ret.ok()) {
+    return ret;
   }
 
   // generate new region
