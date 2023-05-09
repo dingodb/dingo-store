@@ -202,6 +202,10 @@ public class MysqlInit {
         values.add(new Object[]{"character_set_client", "utf8"});
         values.add(new Object[]{"character_set_connection", "utf8"});
         values.add(new Object[]{"auto_increment_increment", "1"});
+        values.add(new Object[]{"auto_increment_offset", "1"});
+        values.add(new Object[]{"protocol_version", "10"});
+        values.add(new Object[]{"port", "3307"});
+        values.add(new Object[]{"default_storage_engine", "rocksdb"});
         return values;
     }
 
