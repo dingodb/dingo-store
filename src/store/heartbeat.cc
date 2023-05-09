@@ -235,26 +235,28 @@ void CoordinatorUpdateStateTask::CoordinatorUpdateState(std::shared_ptr<Coordina
       DINGO_LOG(INFO) << "CoordinatorUpdateState... start to purge region " << it.id();
 
       // construct store_operation to purge region
-      for (const auto& it_peer : it.definition().peers()) {
-        auto* purge_region_operation_increment = meta_increment.add_store_operations();
-        purge_region_operation_increment->set_id(it_peer.store_id());  // this is store_id
-        purge_region_operation_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
+      // for (const auto& it_peer : it.definition().peers()) {
+      //   auto* purge_region_operation_increment = meta_increment.add_store_operations();
+      //   purge_region_operation_increment->set_id(it_peer.store_id());  // this is store_id
+      //   purge_region_operation_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
 
-        auto* purge_region_operation = purge_region_operation_increment->mutable_store_operation();
-        purge_region_operation->set_id(it_peer.store_id());  // this is store_id
-        auto* purge_region_cmd = purge_region_operation->add_region_cmds();
-        purge_region_cmd->set_id(
-            coordinator_control->GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
-        purge_region_cmd->set_region_id(it.id());  // this is region_id
-        DINGO_LOG(INFO) << " purge set_region_id " << it.id();
-        purge_region_cmd->set_region_cmd_type(::dingodb::pb::coordinator::RegionCmdType::CMD_PURGE);
-        purge_region_cmd->set_create_timestamp(butil::gettimeofday_ms());
-        purge_region_cmd->mutable_purge_request()->set_region_id(it.id());  // this region_id
-        DINGO_LOG(INFO) << " purge_region_cmd set_region_id " << it.id();
+      //   auto* purge_region_operation = purge_region_operation_increment->mutable_store_operation();
+      //   purge_region_operation->set_id(it_peer.store_id());  // this is store_id
+      //   auto* purge_region_cmd = purge_region_operation->add_region_cmds();
+      //   purge_region_cmd->set_id(
+      //       coordinator_control->GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD,
+      //       meta_increment));
+      //   purge_region_cmd->set_region_id(it.id());  // this is region_id
+      //   DINGO_LOG(INFO) << " purge set_region_id " << it.id();
+      //   purge_region_cmd->set_region_cmd_type(::dingodb::pb::coordinator::RegionCmdType::CMD_PURGE);
+      //   purge_region_cmd->set_create_timestamp(butil::gettimeofday_ms());
+      //   purge_region_cmd->mutable_purge_request()->set_region_id(it.id());  // this region_id
+      //   DINGO_LOG(INFO) << " purge_region_cmd set_region_id " << it.id();
 
-        DINGO_LOG(INFO) << "CoordinatorUpdateState... purge region " << it.id() << " from store " << it_peer.store_id()
-                        << " region_cmd_type " << purge_region_cmd->region_cmd_type();
-      }
+      //   DINGO_LOG(INFO) << "CoordinatorUpdateState... purge region " << it.id() << " from store " <<
+      //   it_peer.store_id()
+      //                   << " region_cmd_type " << purge_region_cmd->region_cmd_type();
+      // }
 
       // delete regions
       auto* region_delete_increment = meta_increment.add_regions();

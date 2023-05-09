@@ -490,6 +490,29 @@ class CoordinatorControl : public MetaControl {
 
   void GetTaskList(butil::FlatMap<uint64_t, pb::coordinator::TaskList> &task_lists);
 
+  pb::coordinator::TaskList *CreateTaskList(pb::coordinator_internal::MetaIncrement &meta_increment);
+  void AddCreateTask(pb::coordinator::TaskList *task_list, uint64_t store_id, uint64_t region_id,
+                     const pb::common::RegionDefinition &region_definition,
+                     pb::coordinator_internal::MetaIncrement &meta_increment);
+  void AddDeleteTask(pb::coordinator::TaskList *task_list, uint64_t store_id, uint64_t region_id,
+                     pb::coordinator_internal::MetaIncrement &meta_increment);
+  void AddDeleteTaskWithCheck(pb::coordinator::TaskList *task_list, uint64_t store_id, uint64_t region_id,
+                              const ::google::protobuf::RepeatedPtrField< ::dingodb::pb::common::Peer> &peers,
+                              pb::coordinator_internal::MetaIncrement &meta_increment);
+  void AddPurgeTask(pb::coordinator::TaskList *task_list, uint64_t store_id, uint64_t region_id,
+                    pb::coordinator_internal::MetaIncrement &meta_increment);
+  void AddChangePeerTask(pb::coordinator::TaskList *task_list, uint64_t store_id, uint64_t region_id,
+                         const pb::common::RegionDefinition &region_definition,
+                         pb::coordinator_internal::MetaIncrement &meta_increment);
+  void AddTransferLeaderTask(pb::coordinator::TaskList *task_list, uint64_t store_id, uint64_t region_id,
+                             const pb::common::Peer &new_leader_peer,
+                             pb::coordinator_internal::MetaIncrement &meta_increment);
+  void AddMergeTask(pb::coordinator::TaskList *task_list, uint64_t store_id, uint64_t region_id,
+                    uint64_t merge_to_region_id, pb::coordinator_internal::MetaIncrement &meta_increment);
+  void AddSplitTask(pb::coordinator::TaskList *task_list, uint64_t store_id, uint64_t region_id,
+                    uint64_t split_to_region_id, const std::string &water_shed_key,
+                    pb::coordinator_internal::MetaIncrement &meta_increment);
+
   // check if task in task_lis can advance
   // if task advance, this function will contruct meta_increment and apply to state_machine
   butil::Status ProcessTaskList();
