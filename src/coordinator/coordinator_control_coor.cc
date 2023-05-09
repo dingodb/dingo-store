@@ -282,6 +282,52 @@ butil::Status CoordinatorControl::DeleteStore(uint64_t cluster_id, uint64_t stor
   return butil::Status::OK();
 }
 
+butil::Status CoordinatorControl::UpdateStore(uint64_t cluster_id, uint64_t store_id, std::string keyring,
+                                              pb::common::StoreInState in_state,
+                                              pb::coordinator_internal::MetaIncrement& meta_increment) {
+  if (cluster_id <= 0 || store_id <= 0 || keyring.length() <= 0) {
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
+                         "cluster_id <= 0 || store_id <= 0 || keyring.length() <= 0");
+  }
+
+  pb::common::Store store_to_update;
+  {
+    // BAIDU_SCOPED_LOCK(store_map_mutex_);
+    int ret = store_map_.Get(store_id, store_to_update);
+    if (ret < 0) {
+      DINGO_LOG(INFO) << "UpdateStore store_id not exists, id=" << store_id;
+      return butil::Status(pb::error::Errno::ESTORE_NOT_FOUND, "store_id not exists");
+    }
+
+    if (keyring != store_to_update.keyring() && keyring != std::string("TO_BE_CONTINUED")) {
+      DINGO_LOG(INFO) << "UpdateStore store_id id=" << store_id << " keyring not equal, input keyring=" << keyring
+                      << " but store's keyring=" << store_to_update.keyring();
+      return butil::Status(pb::error::Errno::EKEYRING_ILLEGAL, "keyring not equal");
+    }
+
+    if (store_to_update.in_state() == in_state) {
+      DINGO_LOG(INFO) << "UpdateStore store_id id=" << store_id << " already input state, no need to update";
+      return butil::Status::OK();
+    }
+
+    store_to_update.set_in_state(in_state);
+  }
+
+  // update meta_increment
+  GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_STORE, meta_increment);
+  auto* store_increment = meta_increment.add_stores();
+  store_increment->set_id(store_id);
+  store_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
+
+  auto* store_increment_store = store_increment->mutable_store();
+  store_increment_store->CopyFrom(store_to_update);
+
+  // on_apply
+  // store_map_epoch++;                                  // raft_kv_put
+  // store_map_.insert(std::make_pair(store_id, store));  // raft_kv_put
+  return butil::Status::OK();
+}
+
 // UpdateStoreMap
 uint64_t CoordinatorControl::UpdateStoreMap(const pb::common::Store& store,
                                             pb::coordinator_internal::MetaIncrement& meta_increment) {

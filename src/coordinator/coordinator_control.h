@@ -257,6 +257,12 @@ class CoordinatorControl : public MetaControl {
   butil::Status DeleteStore(uint64_t cluster_id, uint64_t store_id, std::string keyring,
                             pb::coordinator_internal::MetaIncrement &meta_increment);
 
+  // update store
+  // in: cluster_id, store_id, keyring
+  // return: errno
+  butil::Status UpdateStore(uint64_t cluster_id, uint64_t store_id, std::string keyring,
+                            pb::common::StoreInState in_state, pb::coordinator_internal::MetaIncrement &meta_increment);
+
   // create executor
   // in: cluster_id
   // in: executor

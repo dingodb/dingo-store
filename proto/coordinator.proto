@@ -330,6 +330,17 @@ message DeleteStoreResponse {
   dingodb.pb.error.Error error = 1;
 }
 
+message UpdateStoreRequest {
+  uint64 cluster_id = 1;
+  uint64 store_id = 2;
+  string keyring = 3;
+  dingodb.pb.common.StoreInState store_in_state = 4;
+}
+
+message UpdateStoreResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
 message CreateExecutorRequest {
   uint64 cluster_id = 1;
   dingodb.pb.common.Executor executor = 2;
@@ -575,6 +586,7 @@ service CoordinatorService {
 
   rpc CreateStore(CreateStoreRequest) returns (CreateStoreResponse);
   rpc DeleteStore(DeleteStoreRequest) returns (DeleteStoreResponse);
+  rpc UpdateStore(UpdateStoreRequest) returns (UpdateStoreResponse);
 
   // Executor
   rpc ExecutorHeartbeat(ExecutorHeartbeatRequest) returns (ExecutorHeartbeatResponse);

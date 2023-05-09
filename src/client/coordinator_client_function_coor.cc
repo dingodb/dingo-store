@@ -53,6 +53,7 @@ DECLARE_int64(region_id);
 DECLARE_int64(region_cmd_id);
 DECLARE_string(store_ids);
 DECLARE_int64(index);
+DECLARE_string(state);
 
 // raft control
 void SendRaftAddPeer() {
@@ -548,6 +549,41 @@ void SendDeleteStore(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
   keyring->assign(FLAGS_keyring);
 
   auto status = coordinator_interaction->SendRequest("DeleteStore", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG(INFO) << response.DebugString();
+}
+
+void SendUpdateStore(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  dingodb::pb::coordinator::UpdateStoreRequest request;
+  dingodb::pb::coordinator::UpdateStoreResponse response;
+
+  request.set_cluster_id(1);
+
+  if (FLAGS_id.empty()) {
+    DINGO_LOG(WARNING) << "id is empty";
+    return;
+  }
+  request.set_store_id(std::stol(FLAGS_id));
+
+  if (FLAGS_keyring.empty()) {
+    DINGO_LOG(WARNING) << "keyring is empty";
+    return;
+  }
+  auto* keyring = request.mutable_keyring();
+  keyring->assign(FLAGS_keyring);
+
+  if (!FLAGS_state.empty()) {
+    if (FLAGS_state == "IN") {
+      request.set_store_in_state(::dingodb::pb::common::StoreInState::STORE_IN);
+    } else if (FLAGS_state == "OUT") {
+      request.set_store_in_state(::dingodb::pb::common::StoreInState::STORE_OUT);
+    } else {
+      DINGO_LOG(WARNING) << "state is invalid, must be  IN or OUT";
+      return;
+    };
+  }
+
+  auto status = coordinator_interaction->SendRequest("UpdateStore", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }

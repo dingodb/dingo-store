@@ -133,6 +133,8 @@ class CoordinatorServiceImpl : public pb::coordinator::CoordinatorService {
                    pb::coordinator::CreateStoreResponse* response, google::protobuf::Closure* done) override;
   void DeleteStore(google::protobuf::RpcController* controller, const pb::coordinator::DeleteStoreRequest* request,
                    pb::coordinator::DeleteStoreResponse* response, google::protobuf::Closure* done) override;
+  void UpdateStore(google::protobuf::RpcController* controller, const pb::coordinator::UpdateStoreRequest* request,
+                   pb::coordinator::UpdateStoreResponse* response, google::protobuf::Closure* done) override;
 
   void ExecutorHeartbeat(google::protobuf::RpcController* controller,
                          const pb::coordinator::ExecutorHeartbeatRequest* request,
