@@ -55,3 +55,301 @@ TEST_F(HelperTest, TimestampNs) {
     std::cout << dingodb::Helper::TimestampNs() << std::endl;
   }
 }
+
+bool ValidateRangeInRange(const dingodb::pb::common::Range& range, const dingodb::pb::common::Range& sub_range) {
+  return (range.start_key().compare(sub_range.start_key()) <= 0 && range.end_key().compare(sub_range.end_key()) >= 0);
+}
+
+TEST_F(HelperTest, TransformRangeForValidate) {
+  dingodb::pb::common::Range region_range;
+  char start_key[] = {0x61, 0x64};
+  char end_key[] = {0x78, 0x65};
+  region_range.set_start_key(start_key, 2);
+  region_range.set_end_key(end_key, 2);
+
+  std::cout << "region_range: " << dingodb::Helper::StringToHex(region_range.start_key()) << " "
+            << dingodb::Helper::StringToHex(region_range.end_key()) << std::endl;
+
+  {
+    // [0x61, 0x78]
+    dingodb::pb::common::RangeWithOptions scan_range;
+    char start_key[] = {0x61};
+    char end_key[] = {0x78};
+    scan_range.mutable_range()->set_start_key(start_key, 1);
+    scan_range.set_with_start(true);
+    scan_range.mutable_range()->set_end_key(end_key, 1);
+    scan_range.set_with_end(true);
+    auto uniform_range = dingodb::Helper::TransformRangeForValidate(region_range, scan_range);
+    std::cout << "uniform_range: " << dingodb::Helper::StringToHex(uniform_range.start_key()) << " "
+              << dingodb::Helper::StringToHex(uniform_range.end_key()) << std::endl;
+
+    EXPECT_EQ(true, ValidateRangeInRange(region_range, uniform_range));
+  }
+
+  {
+    // [0x61, 0x78)
+    dingodb::pb::common::RangeWithOptions scan_range;
+    char start_key[] = {0x61};
+    char end_key[] = {0x78};
+    scan_range.mutable_range()->set_start_key(start_key, 1);
+    scan_range.set_with_start(true);
+    scan_range.mutable_range()->set_end_key(end_key, 1);
+    scan_range.set_with_end(false);
+    auto uniform_range = dingodb::Helper::TransformRangeForValidate(region_range, scan_range);
+
+    EXPECT_EQ(true, ValidateRangeInRange(region_range, uniform_range));
+  }
+
+  {
+    // (0x61, 0x78]
+    dingodb::pb::common::RangeWithOptions scan_range;
+    char start_key[] = {0x61};
+    char end_key[] = {0x78};
+    scan_range.mutable_range()->set_start_key(start_key, 1);
+    scan_range.set_with_start(false);
+    scan_range.mutable_range()->set_end_key(end_key, 1);
+    scan_range.set_with_end(true);
+    auto uniform_range = dingodb::Helper::TransformRangeForValidate(region_range, scan_range);
+
+    EXPECT_EQ(true, ValidateRangeInRange(region_range, uniform_range));
+  }
+
+  {
+    // (0x61, 0x78)
+    dingodb::pb::common::RangeWithOptions scan_range;
+    char start_key[] = {0x61};
+    char end_key[] = {0x78};
+    scan_range.mutable_range()->set_start_key(start_key, 1);
+    scan_range.set_with_start(false);
+    scan_range.mutable_range()->set_end_key(end_key, 1);
+    scan_range.set_with_end(false);
+    auto uniform_range = dingodb::Helper::TransformRangeForValidate(region_range, scan_range);
+
+    EXPECT_EQ(true, ValidateRangeInRange(region_range, uniform_range));
+  }
+
+  {
+    // [0x60, 0x77]
+    dingodb::pb::common::RangeWithOptions scan_range;
+    char start_key[] = {0x60};
+    char end_key[] = {0x77};
+    scan_range.mutable_range()->set_start_key(start_key, 1);
+    scan_range.set_with_start(true);
+    scan_range.mutable_range()->set_end_key(end_key, 1);
+    scan_range.set_with_end(true);
+    auto uniform_range = dingodb::Helper::TransformRangeForValidate(region_range, scan_range);
+
+    EXPECT_EQ(false, ValidateRangeInRange(region_range, uniform_range));
+  }
+
+  {
+    // (0x60, 0x77]
+    dingodb::pb::common::RangeWithOptions scan_range;
+    char start_key[] = {0x60};
+    char end_key[] = {0x77};
+    scan_range.mutable_range()->set_start_key(start_key, 1);
+    scan_range.set_with_start(false);
+    scan_range.mutable_range()->set_end_key(end_key, 1);
+    scan_range.set_with_end(true);
+    auto uniform_range = dingodb::Helper::TransformRangeForValidate(region_range, scan_range);
+
+    EXPECT_EQ(false, ValidateRangeInRange(region_range, uniform_range));
+  }
+
+  {
+    // [0x60, 0x77)
+    dingodb::pb::common::RangeWithOptions scan_range;
+    char start_key[] = {0x60};
+    char end_key[] = {0x77};
+    scan_range.mutable_range()->set_start_key(start_key, 1);
+    scan_range.set_with_start(true);
+    scan_range.mutable_range()->set_end_key(end_key, 1);
+    scan_range.set_with_end(false);
+    auto uniform_range = dingodb::Helper::TransformRangeForValidate(region_range, scan_range);
+
+    EXPECT_EQ(false, ValidateRangeInRange(region_range, uniform_range));
+  }
+
+  {
+    // (0x60, 0x77)
+    dingodb::pb::common::RangeWithOptions scan_range;
+    char start_key[] = {0x60};
+    char end_key[] = {0x77};
+    scan_range.mutable_range()->set_start_key(start_key, 1);
+    scan_range.set_with_start(false);
+    scan_range.mutable_range()->set_end_key(end_key, 1);
+    scan_range.set_with_end(false);
+    auto uniform_range = dingodb::Helper::TransformRangeForValidate(region_range, scan_range);
+
+    EXPECT_EQ(false, ValidateRangeInRange(region_range, uniform_range));
+  }
+
+  {
+    // [0x62, 0x79)
+    dingodb::pb::common::RangeWithOptions scan_range;
+    char start_key[] = {0x62};
+    char end_key[] = {0x79};
+    scan_range.mutable_range()->set_start_key(start_key, 1);
+    scan_range.set_with_start(true);
+    scan_range.mutable_range()->set_end_key(end_key, 1);
+    scan_range.set_with_end(false);
+    auto uniform_range = dingodb::Helper::TransformRangeForValidate(region_range, scan_range);
+
+    EXPECT_EQ(false, ValidateRangeInRange(region_range, uniform_range));
+  }
+
+  // ==================================================
+  {
+    // [0x6164, 0x7865]
+    dingodb::pb::common::RangeWithOptions scan_range;
+    char start_key[] = {0x61, 0x64};
+    char end_key[] = {0x78, 0x65};
+    scan_range.mutable_range()->set_start_key(start_key, 2);
+    scan_range.set_with_start(true);
+    scan_range.mutable_range()->set_end_key(end_key, 2);
+    scan_range.set_with_end(true);
+    auto uniform_range = dingodb::Helper::TransformRangeForValidate(region_range, scan_range);
+
+    EXPECT_EQ(false, ValidateRangeInRange(region_range, uniform_range));
+  }
+
+  {
+    // [0x6164, 0x7865)
+    dingodb::pb::common::RangeWithOptions scan_range;
+    char start_key[] = {0x61, 0x64};
+    char end_key[] = {0x78, 0x65};
+    scan_range.mutable_range()->set_start_key(start_key, 2);
+    scan_range.set_with_start(true);
+    scan_range.mutable_range()->set_end_key(end_key, 2);
+    scan_range.set_with_end(false);
+    auto uniform_range = dingodb::Helper::TransformRangeForValidate(region_range, scan_range);
+
+    EXPECT_EQ(true, ValidateRangeInRange(region_range, uniform_range));
+  }
+
+  {
+    // (0x6164, 0x7865]
+    dingodb::pb::common::RangeWithOptions scan_range;
+    char start_key[] = {0x61, 0x64};
+    char end_key[] = {0x78, 0x65};
+    scan_range.mutable_range()->set_start_key(start_key, 2);
+    scan_range.set_with_start(false);
+    scan_range.mutable_range()->set_end_key(end_key, 2);
+    scan_range.set_with_end(true);
+    auto uniform_range = dingodb::Helper::TransformRangeForValidate(region_range, scan_range);
+
+    EXPECT_EQ(false, ValidateRangeInRange(region_range, uniform_range));
+  }
+
+  {
+    // (0x6164, 0x7865)
+    dingodb::pb::common::RangeWithOptions scan_range;
+    char start_key[] = {0x61, 0x64};
+    char end_key[] = {0x78, 0x65};
+    scan_range.mutable_range()->set_start_key(start_key, 2);
+    scan_range.set_with_start(false);
+    scan_range.mutable_range()->set_end_key(end_key, 2);
+    scan_range.set_with_end(false);
+    auto uniform_range = dingodb::Helper::TransformRangeForValidate(region_range, scan_range);
+
+    EXPECT_EQ(true, ValidateRangeInRange(region_range, uniform_range));
+  }
+
+  {
+    // [0x6163, 0x7865]
+    dingodb::pb::common::RangeWithOptions scan_range;
+    char start_key[] = {0x61, 0x63};
+    char end_key[] = {0x78, 0x65};
+    scan_range.mutable_range()->set_start_key(start_key, 2);
+    scan_range.set_with_start(true);
+    scan_range.mutable_range()->set_end_key(end_key, 2);
+    scan_range.set_with_end(true);
+    auto uniform_range = dingodb::Helper::TransformRangeForValidate(region_range, scan_range);
+
+    EXPECT_EQ(false, ValidateRangeInRange(region_range, uniform_range));
+  }
+
+  {
+    // (0x6163, 0x7865)
+    dingodb::pb::common::RangeWithOptions scan_range;
+    char start_key[] = {0x61, 0x63};
+    char end_key[] = {0x78, 0x65};
+    scan_range.mutable_range()->set_start_key(start_key, 2);
+    scan_range.set_with_start(false);
+    scan_range.mutable_range()->set_end_key(end_key, 2);
+    scan_range.set_with_end(false);
+    auto uniform_range = dingodb::Helper::TransformRangeForValidate(region_range, scan_range);
+
+    EXPECT_EQ(true, ValidateRangeInRange(region_range, uniform_range));
+  }
+
+  // ========================================
+  {
+    // [0x616461, 0x786563]
+    dingodb::pb::common::RangeWithOptions scan_range;
+    char start_key[] = {0x61, 0x64, 0x61};
+    char end_key[] = {0x78, 0x65, 0x63};
+    scan_range.mutable_range()->set_start_key(start_key, 3);
+    scan_range.set_with_start(true);
+    scan_range.mutable_range()->set_end_key(end_key, 3);
+    scan_range.set_with_end(true);
+    auto uniform_range = dingodb::Helper::TransformRangeForValidate(region_range, scan_range);
+
+    EXPECT_EQ(false, ValidateRangeInRange(region_range, uniform_range));
+  }
+
+  {
+    // [0x616461, 0x786563)
+    dingodb::pb::common::RangeWithOptions scan_range;
+    char start_key[] = {0x61, 0x64, 0x61};
+    char end_key[] = {0x78, 0x65, 0x63};
+    scan_range.mutable_range()->set_start_key(start_key, 3);
+    scan_range.set_with_start(true);
+    scan_range.mutable_range()->set_end_key(end_key, 3);
+    scan_range.set_with_end(false);
+    auto uniform_range = dingodb::Helper::TransformRangeForValidate(region_range, scan_range);
+
+    EXPECT_EQ(false, ValidateRangeInRange(region_range, uniform_range));
+  }
+
+  {
+    // (0x616461, 0x786563]
+    dingodb::pb::common::RangeWithOptions scan_range;
+    char start_key[] = {0x61, 0x64, 0x61};
+    char end_key[] = {0x78, 0x65, 0x63};
+    scan_range.mutable_range()->set_start_key(start_key, 3);
+    scan_range.set_with_start(false);
+    scan_range.mutable_range()->set_end_key(end_key, 3);
+    scan_range.set_with_end(true);
+    auto uniform_range = dingodb::Helper::TransformRangeForValidate(region_range, scan_range);
+
+    EXPECT_EQ(false, ValidateRangeInRange(region_range, uniform_range));
+  }
+
+  {
+    // (0x616461, 0x786563)
+    dingodb::pb::common::RangeWithOptions scan_range;
+    char start_key[] = {0x61, 0x64, 0x61};
+    char end_key[] = {0x78, 0x65, 0x63};
+    scan_range.mutable_range()->set_start_key(start_key, 3);
+    scan_range.set_with_start(false);
+    scan_range.mutable_range()->set_end_key(end_key, 3);
+    scan_range.set_with_end(false);
+    auto uniform_range = dingodb::Helper::TransformRangeForValidate(region_range, scan_range);
+
+    EXPECT_EQ(false, ValidateRangeInRange(region_range, uniform_range));
+  }
+  {
+    // [0x616461, 0x786463]
+    dingodb::pb::common::RangeWithOptions scan_range;
+    char start_key[] = {0x61, 0x64, 0x61};
+    char end_key[] = {0x78, 0x64, 0x63};
+    scan_range.mutable_range()->set_start_key(start_key, 3);
+    scan_range.set_with_start(true);
+    scan_range.mutable_range()->set_end_key(end_key, 3);
+    scan_range.set_with_end(true);
+    auto uniform_range = dingodb::Helper::TransformRangeForValidate(region_range, scan_range);
+
+    EXPECT_EQ(true, ValidateRangeInRange(region_range, uniform_range));
+  }
+}

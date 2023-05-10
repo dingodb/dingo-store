@@ -42,12 +42,13 @@ message Location {
   int32 index = 3;  // corresponding braft peerId idx
 }
 
+// prefix range [start_key, end_key)
 message Range {
   bytes start_key = 1;
   bytes end_key = 2;
 }
 
-// prefix scan
+// prefix range
 message RangeWithOptions {
   Range range = 1;
   bool with_start = 2;

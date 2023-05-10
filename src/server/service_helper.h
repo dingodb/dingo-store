@@ -34,6 +34,13 @@ class ServiceHelper {
 
   template <typename T>
   static butil::EndPoint RedirectLeader(std::string addr);
+
+  static butil::Status ValidateRegionState(store::RegionPtr region);
+  static butil::Status ValidateRange(const pb::common::Range& range);
+  static butil::Status ValidateRangeWithOptions(const pb::common::RangeWithOptions& range);
+  static butil::Status ValidateKeyInRange(const pb::common::Range& range, const std::vector<std::string_view>& keys);
+  static butil::Status ValidateRangeInRange(const pb::common::Range& range, const pb::common::Range& sub_range);
+  static butil::Status ValidateRegion(uint64_t region_id, const std::vector<std::string_view>& keys);
 };
 
 template <typename T>
