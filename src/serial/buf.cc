@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "buf.h"
+
 #include "serial/utils.h"
 
 namespace dingodb {
@@ -21,44 +22,66 @@ Buf::Buf(int size) {
   Init(size);
   this->le_ = IsLE();
 }
+
 Buf::Buf(int size, bool le) {
   Init(size);
   this->le_ = le;
 }
+
 Buf::Buf(std::string* buf) {
   Init(buf);
   this->le_ = IsLE();
 }
+
 Buf::Buf(std::string* buf, bool le) {
   Init(buf);
   this->le_ = le;
 }
+
+Buf::Buf(const std::string& buf) {
+  Init(buf);
+  this->le_ = IsLE();
+}
+
+Buf::Buf(const std::string& buf, bool le) {
+  Init(buf);
+  this->le_ = le;
+}
+
 Buf::~Buf() {
   this->buf_.clear();
   this->buf_.shrink_to_fit();
 }
+
 void Buf::Init(int size) {
   this->buf_.resize(size);
   this->reverse_pos_ = size - 1;
 }
+
 void Buf::Init(std::string* buf) {
   this->buf_.resize(buf->size());
   this->buf_.assign(buf->begin(), buf->end());
   this->reverse_pos_ = this->buf_.size() - 1;
 }
-void Buf::SetForwardPos(int fp) {
-  this->forward_pos_ = fp;
-}
-void Buf::SetReversePos(int rp) {
-  this->reverse_pos_ = rp;
+
+void Buf::Init(const std::string& buf) {
+  this->buf_.resize(buf.size());
+  this->buf_.assign(buf.begin(), buf.end());
+  this->reverse_pos_ = this->buf_.size() - 1;
 }
 
-std::vector<uint8_t>* Buf::GetBuf() {
-  return &buf_;
+void Buf::SetForwardPos(int fp) { this->forward_pos_ = fp; }
+
+void Buf::SetReversePos(int rp) { this->reverse_pos_ = rp; }
+
+void Buf::Write(uint8_t b) { buf_.at(forward_pos_++) = b; }
+
+void Buf::Write(const std::string& data) {
+  for (auto it : data) {
+    buf_.at(forward_pos_++) = it;
+  }
 }
-void Buf::Write(uint8_t b) {
-  buf_.at(forward_pos_++) = b;
-}
+
 void Buf::WriteInt(int32_t i) {
   uint32_t* ii = (uint32_t*)&i;
   if (this->le_) {
@@ -73,6 +96,7 @@ void Buf::WriteInt(int32_t i) {
     Write(*ii >> 24);
   }
 }
+
 void Buf::WriteLong(int64_t l) {
   uint64_t* ll = (uint64_t*)&l;
   if (this->le_) {
@@ -95,9 +119,9 @@ void Buf::WriteLong(int64_t l) {
     Write(*ll >> 56);
   }
 }
-void Buf::ReverseWrite(uint8_t b) {
-  buf_.at(reverse_pos_--) = b;
-}
+
+void Buf::ReverseWrite(uint8_t b) { buf_.at(reverse_pos_--) = b; }
+
 void Buf::ReverseWriteInt(int32_t i) {
   uint32_t* ii = (uint32_t*)&i;
   if (this->le_) {
@@ -112,18 +136,17 @@ void Buf::ReverseWriteInt(int32_t i) {
     ReverseWrite(*ii >> 24);
   }
 }
-uint8_t Buf::Read() {
-  return buf_.at(forward_pos_++);
-}
+
+uint8_t Buf::Read() { return buf_.at(forward_pos_++); }
+
 int32_t Buf::ReadInt() {
   if (this->le_) {
-    return ((Read() & 0xFF) << 24) | ((Read() & 0xFF) << 16) |
-          ((Read() & 0xFF) << 8) | (Read() & 0xFF);
+    return ((Read() & 0xFF) << 24) | ((Read() & 0xFF) << 16) | ((Read() & 0xFF) << 8) | (Read() & 0xFF);
   } else {
-    return (Read() & 0xFF) | ((Read() & 0xFF) << 8) |
-          ((Read() & 0xFF) << 16) | ((Read() & 0xFF) << 24);
+    return (Read() & 0xFF) | ((Read() & 0xFF) << 8) | ((Read() & 0xFF) << 16) | ((Read() & 0xFF) << 24);
   }
 }
+
 int64_t Buf::ReadLong() {
   uint64_t l = Read() & 0xFF;
   if (this->le_) {
@@ -138,27 +161,25 @@ int64_t Buf::ReadLong() {
   }
   return l;
 }
-uint8_t Buf::ReverseRead() {
-  return buf_.at(reverse_pos_--);
-}
+
+uint8_t Buf::ReverseRead() { return buf_.at(reverse_pos_--); }
+
 int32_t Buf::ReverseReadInt() {
   if (this->le_) {
-    return ((ReverseRead() & 0xFF) << 24) | ((ReverseRead() & 0xFF) << 16) |
-          ((ReverseRead() & 0xFF) << 8) | (ReverseRead() & 0xFF);
+    return ((ReverseRead() & 0xFF) << 24) | ((ReverseRead() & 0xFF) << 16) | ((ReverseRead() & 0xFF) << 8) |
+           (ReverseRead() & 0xFF);
   } else {
-    return (ReverseRead() & 0xFF) | ((ReverseRead() & 0xFF) << 8) |
-          ((ReverseRead() & 0xFF) << 16) | ((ReverseRead() & 0xFF) << 24);
+    return (ReverseRead() & 0xFF) | ((ReverseRead() & 0xFF) << 8) | ((ReverseRead() & 0xFF) << 16) |
+           ((ReverseRead() & 0xFF) << 24);
   }
 }
-void Buf::ReverseSkipInt() {
-  reverse_pos_ -= 4;
-}
-void Buf::Skip(int size) {
-  forward_pos_ += size;
-}
-void Buf::ReverseSkip(int size) {
-  reverse_pos_ -= size;
-}
+
+void Buf::ReverseSkipInt() { reverse_pos_ -= 4; }
+
+void Buf::Skip(int size) { forward_pos_ += size; }
+
+void Buf::ReverseSkip(int size) { reverse_pos_ -= size; }
+
 void Buf::EnsureRemainder(int length) {
   if ((forward_pos_ + length - 1) > reverse_pos_) {
     int new_size;
@@ -181,31 +202,44 @@ void Buf::EnsureRemainder(int length) {
     buf_ = new_buf;
   }
 }
+
 std::string* Buf::GetBytes() {
+  std::string* s = new std::string();
+  int ret = GetBytes(*s);
+  if (ret < 0) {
+    delete s;
+    return nullptr;
+  }
+  return s;
+}
+
+int Buf::GetBytes(std::string& s) {
   int empty_size = reverse_pos_ - forward_pos_ + 1;
   if (empty_size == 0) {
-    char u8[buf_.size()];
-    copy(buf_.begin(), buf_.end(), u8);
-    std::string* s = new std::string(u8, buf_.size());
-    return s;
+    s.resize(buf_.size());
+    copy(buf_.begin(), buf_.end(), s.begin());
+
+    return buf_.size();
   }
   if (empty_size > 0) {
     int final_size = buf_.size() - empty_size;
-    char u8[final_size];
+    s.resize(final_size);
     for (int i = 0; i < forward_pos_; i++) {
-      u8[i] = buf_.at(i);
+      s[i] = buf_.at(i);
     }
     int curr = reverse_pos_ + 1;
     for (int i = forward_pos_; i < final_size; i++) {
-      u8[i] = buf_.at(curr++);
+      s[i] = buf_.at(curr++);
     }
-    std::string* s = new std::string(u8, final_size);
-    return s;
+    return final_size;
   }
+
   if (empty_size < 0) {
     //"Wrong Key Buf"
+    return -1;
   }
-  return nullptr;
+
+  return 0;
 }
 
 }  // namespace dingodb

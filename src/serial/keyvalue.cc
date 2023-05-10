@@ -20,25 +20,21 @@ KeyValue::KeyValue(std::string* key, std::string* value) {
   this->key_ = key;
   this->value_ = value;
 }
+
 KeyValue::~KeyValue() {
   delete this->key_;
   delete this->value_;
 }
+
 void KeyValue::Set(std::string* key, std::string* value) {
   this->key_ = key;
   this->value_ = value;
 }
-void KeyValue::SetKey(std::string* key) {
-  this->key_ = key;
-}
-void KeyValue::SetValue(std::string* value) {
-  this->value_ = value;
-}
-std::string* KeyValue::GetKey() {
-  return key_;
-}
-std::string* KeyValue::GetValue() {
-  return value_;
-}
+
+void KeyValue::SetKey(std::string* key) { this->key_ = key; }
+void KeyValue::SetValue(std::string* value) { this->value_ = value; }
+
+std::string* KeyValue::GetKey() const { return key_; }
+std::string* KeyValue::GetValue() const { return value_; }
 
 }  // namespace dingodb

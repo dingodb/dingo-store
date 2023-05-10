@@ -12,20 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <gtest/gtest.h>
-#include <algorithm>
-#include <bitset>
-#include <new>
-#include <optional>
-#include <functional>
 #include <byteswap.h>
-#include "serial/keyvalue_codec.h"
-#include "serial/schema/base_schema.h"
-
+#include <gtest/gtest.h>
+#include <proto/meta.pb.h>
 #include <serial/record_decoder.h>
 #include <serial/record_encoder.h>
 #include <serial/utils.h>
-#include <proto/meta.pb.h>
+
+#include <algorithm>
+#include <bitset>
+#include <functional>
+#include <memory>
+#include <new>
+#include <optional>
+#include <string>
+
+#include "serial/keyvalue_codec.h"
+#include "serial/schema/base_schema.h"
 
 using namespace dingodb;
 using namespace std;
@@ -44,13 +47,13 @@ class DingoSerialTest : public testing::Test {
     id->SetIsKey(true);
     schemas_->at(0) = id;
 
-    DingoSchema<optional<reference_wrapper<string>>>* name = new DingoSchema<optional<reference_wrapper<string>>>();
+    DingoSchema<optional<shared_ptr<string>>>* name = new DingoSchema<optional<shared_ptr<string>>>();
     name->SetIndex(1);
     name->SetAllowNull(false);
     name->SetIsKey(true);
     schemas_->at(1) = name;
 
-    DingoSchema<optional<reference_wrapper<string>>>* gender = new DingoSchema<optional<reference_wrapper<string>>>();
+    DingoSchema<optional<shared_ptr<string>>>* gender = new DingoSchema<optional<shared_ptr<string>>>();
     gender->SetIndex(2);
     gender->SetAllowNull(false);
     gender->SetIsKey(true);
@@ -62,7 +65,7 @@ class DingoSerialTest : public testing::Test {
     score->SetIsKey(true);
     schemas_->at(3) = score;
 
-    DingoSchema<optional<reference_wrapper<string>>>* addr = new DingoSchema<optional<reference_wrapper<string>>>();
+    DingoSchema<optional<shared_ptr<string>>>* addr = new DingoSchema<optional<shared_ptr<string>>>();
     addr->SetIndex(4);
     addr->SetAllowNull(true);
     addr->SetIsKey(false);
@@ -74,7 +77,7 @@ class DingoSerialTest : public testing::Test {
     exist->SetIsKey(false);
     schemas_->at(5) = exist;
 
-    DingoSchema<optional<reference_wrapper<string>>>* pic = new DingoSchema<optional<reference_wrapper<string>>>();
+    DingoSchema<optional<shared_ptr<string>>>* pic = new DingoSchema<optional<shared_ptr<string>>>();
     pic->SetIndex(6);
     pic->SetAllowNull(true);
     pic->SetIsKey(false);
@@ -105,7 +108,7 @@ class DingoSerialTest : public testing::Test {
     schemas_->at(10) = salary;
   }
   void DeleteSchemas() {
-    for (BaseSchema *bs : *schemas_) {
+    for (BaseSchema* bs : *schemas_) {
       delete bs;
     }
     schemas_->clear();
@@ -114,25 +117,26 @@ class DingoSerialTest : public testing::Test {
   void InitRecord() {
     record_ = new vector<any>(11);
     optional<int32_t> id = 0;
-    string *name = new string("tn");
-    string *gender = new string("f");
+    std::shared_ptr<std::string> name = std::make_shared<std::string>("tn");
+    std::shared_ptr<std::string> gender = std::make_shared<std::string>("f");
     optional<int64_t> score = 214748364700L;
-    string *addr = new string(
+    std::shared_ptr<std::string> addr = std::make_shared<std::string>(
         "test address test 中文 表情😊🏷️👌 test "
-        "测试测试测试三🤣😂😁🐱‍🐉👏🐱‍💻✔🤳🤦‍♂️🤦‍♀️🙌测试测试测"
+        "测试测试测试三🤣😂😁🐱‍🐉👏🐱‍💻✔🤳🤦‍♂️🤦‍♀️🙌测试测试"
+        "测"
         "试伍佰肆拾陆万伍仟陆佰伍拾肆元/n/r/r/ndfs肥肉士大夫");
     optional<bool> exist = false;
-    optional<reference_wrapper<string>> pic = nullopt;
+    optional<shared_ptr<string>> pic = nullopt;
     optional<int32_t> test_null = nullopt;
     optional<int32_t> age = -20;
     optional<int64_t> prev = -214748364700L;
     optional<double> salary = 873485.4234;
 
     record_->at(0) = id;
-    record_->at(1) = optional<reference_wrapper<string>>{*name};
-    record_->at(2) = optional<reference_wrapper<string>>{*gender};
+    record_->at(1) = optional<shared_ptr<string>>{name};
+    record_->at(2) = optional<shared_ptr<string>>{gender};
     record_->at(3) = score;
-    record_->at(4) = optional<reference_wrapper<string>>{*addr};
+    record_->at(4) = optional<shared_ptr<string>>{addr};
     record_->at(5) = exist;
     record_->at(6) = pic;
     record_->at(7) = test_null;
@@ -141,17 +145,14 @@ class DingoSerialTest : public testing::Test {
     record_->at(10) = salary;
   }
   void DeleteRecords() {
-    optional<reference_wrapper<string>> name = any_cast<optional<reference_wrapper<string>>>(record_->at(1));
+    optional<shared_ptr<string>> name = any_cast<optional<shared_ptr<string>>>(record_->at(1));
     if (name.has_value()) {
-      delete &name->get();
     }
-    optional<reference_wrapper<string>> gender = any_cast<optional<reference_wrapper<string>>>(record_->at(2));
+    optional<shared_ptr<string>> gender = any_cast<optional<shared_ptr<string>>>(record_->at(2));
     if (gender.has_value()) {
-      delete &gender->get();
     }
-    optional<reference_wrapper<string>> addr = any_cast<optional<reference_wrapper<string>>>(record_->at(4));
+    optional<shared_ptr<string>> addr = any_cast<optional<shared_ptr<string>>>(record_->at(4));
     if (addr.has_value()) {
-      delete &addr->get();
     }
     record_->clear();
     record_->shrink_to_fit();
@@ -295,12 +296,12 @@ TEST_F(DingoSerialTest, integerSchema) {
 
 TEST_F(DingoSerialTest, integerSchemaLeBe) {
   uint32_t data = 1543234;
-  //bitset<32> key_data("10000000000101111000110001000010");
+  // bitset<32> key_data("10000000000101111000110001000010");
   bitset<8> key_data_0("10000000");
   bitset<8> key_data_1("00010111");
   bitset<8> key_data_2("10001100");
   bitset<8> key_data_3("01000010");
-  //bitset<32> value_data("00000000000101111000110001000010");
+  // bitset<32> value_data("00000000000101111000110001000010");
   bitset<8> value_data_0("00000000");
   bitset<8> value_data_1("00010111");
   bitset<8> value_data_2("10001100");
@@ -324,7 +325,7 @@ TEST_F(DingoSerialTest, integerSchemaLeBe) {
   bitset<8> bs10(bs1->at(0));
   EXPECT_EQ(bs10, not_null_tag);
   bitset<8> bs11(bs1->at(1));
-  EXPECT_EQ(bs11, key_data_0);  
+  EXPECT_EQ(bs11, key_data_0);
   bitset<8> bs12(bs1->at(2));
   EXPECT_EQ(bs12, key_data_1);
   bitset<8> bs13(bs1->at(3));
@@ -345,7 +346,7 @@ TEST_F(DingoSerialTest, integerSchemaLeBe) {
   bitset<8> bs20(bs2->at(0));
   EXPECT_EQ(bs20, not_null_tag);
   bitset<8> bs21(bs2->at(1));
-  EXPECT_EQ(bs21, value_data_0);  
+  EXPECT_EQ(bs21, value_data_0);
   bitset<8> bs22(bs2->at(2));
   EXPECT_EQ(bs22, value_data_1);
   bitset<8> bs23(bs2->at(3));
@@ -362,12 +363,12 @@ TEST_F(DingoSerialTest, integerSchemaLeBe) {
 
 TEST_F(DingoSerialTest, integerSchemaFakeLeBe) {
   uint32_t data = bswap_32(1543234);
-  //bitset<32> key_data("10000000000101111000110001000010");
+  // bitset<32> key_data("10000000000101111000110001000010");
   bitset<8> key_data_0("10000000");
   bitset<8> key_data_1("00010111");
   bitset<8> key_data_2("10001100");
   bitset<8> key_data_3("01000010");
-  //bitset<32> value_data("00000000000101111000110001000010");
+  // bitset<32> value_data("00000000000101111000110001000010");
   bitset<8> value_data_0("00000000");
   bitset<8> value_data_1("00010111");
   bitset<8> value_data_2("10001100");
@@ -391,7 +392,7 @@ TEST_F(DingoSerialTest, integerSchemaFakeLeBe) {
   bitset<8> bs10(bs1->at(0));
   EXPECT_EQ(bs10, not_null_tag);
   bitset<8> bs11(bs1->at(1));
-  EXPECT_EQ(bs11, key_data_0);  
+  EXPECT_EQ(bs11, key_data_0);
   bitset<8> bs12(bs1->at(2));
   EXPECT_EQ(bs12, key_data_1);
   bitset<8> bs13(bs1->at(3));
@@ -412,7 +413,7 @@ TEST_F(DingoSerialTest, integerSchemaFakeLeBe) {
   bitset<8> bs20(bs2->at(0));
   EXPECT_EQ(bs20, not_null_tag);
   bitset<8> bs21(bs2->at(1));
-  EXPECT_EQ(bs21, value_data_0);  
+  EXPECT_EQ(bs21, value_data_0);
   bitset<8> bs22(bs2->at(2));
   EXPECT_EQ(bs22, value_data_1);
   bitset<8> bs23(bs2->at(3));
@@ -429,7 +430,7 @@ TEST_F(DingoSerialTest, integerSchemaFakeLeBe) {
 
 TEST_F(DingoSerialTest, longSchemaLeBe) {
   uint64_t data = 8237583920453957801;
-  //bitset<64> key_data("1111001001010001110001101110111001011010001000001011100010101001");
+  // bitset<64> key_data("1111001001010001110001101110111001011010001000001011100010101001");
   bitset<8> key_data_0("11110010");
   bitset<8> key_data_1("01010001");
   bitset<8> key_data_2("11000110");
@@ -438,7 +439,7 @@ TEST_F(DingoSerialTest, longSchemaLeBe) {
   bitset<8> key_data_5("00100000");
   bitset<8> key_data_6("10111000");
   bitset<8> key_data_7("10101001");
-  //bitset<64> value_data("0111001001010001110001101110111001011010001000001011100010101001");
+  // bitset<64> value_data("0111001001010001110001101110111001011010001000001011100010101001");
   bitset<8> value_data_0("01110010");
   bitset<8> value_data_1("01010001");
   bitset<8> value_data_2("11000110");
@@ -466,7 +467,7 @@ TEST_F(DingoSerialTest, longSchemaLeBe) {
   bitset<8> bs10(bs1->at(0));
   EXPECT_EQ(bs10, not_null_tag);
   bitset<8> bs11(bs1->at(1));
-  EXPECT_EQ(bs11, key_data_0);  
+  EXPECT_EQ(bs11, key_data_0);
   bitset<8> bs12(bs1->at(2));
   EXPECT_EQ(bs12, key_data_1);
   bitset<8> bs13(bs1->at(3));
@@ -495,7 +496,7 @@ TEST_F(DingoSerialTest, longSchemaLeBe) {
   bitset<8> bs20(bs2->at(0));
   EXPECT_EQ(bs20, not_null_tag);
   bitset<8> bs21(bs2->at(1));
-  EXPECT_EQ(bs21, value_data_0);  
+  EXPECT_EQ(bs21, value_data_0);
   bitset<8> bs22(bs2->at(2));
   EXPECT_EQ(bs22, value_data_1);
   bitset<8> bs23(bs2->at(3));
@@ -520,7 +521,7 @@ TEST_F(DingoSerialTest, longSchemaLeBe) {
 
 TEST_F(DingoSerialTest, longSchemaFakeLeBe) {
   uint64_t data = bswap_64(8237583920453957801);
-  //bitset<64> key_data("1111001001010001110001101110111001011010001000001011100010101001");
+  // bitset<64> key_data("1111001001010001110001101110111001011010001000001011100010101001");
   bitset<8> key_data_0("11110010");
   bitset<8> key_data_1("01010001");
   bitset<8> key_data_2("11000110");
@@ -529,7 +530,7 @@ TEST_F(DingoSerialTest, longSchemaFakeLeBe) {
   bitset<8> key_data_5("00100000");
   bitset<8> key_data_6("10111000");
   bitset<8> key_data_7("10101001");
-  //bitset<64> value_data("0111001001010001110001101110111001011010001000001011100010101001");
+  // bitset<64> value_data("0111001001010001110001101110111001011010001000001011100010101001");
   bitset<8> value_data_0("01110010");
   bitset<8> value_data_1("01010001");
   bitset<8> value_data_2("11000110");
@@ -557,7 +558,7 @@ TEST_F(DingoSerialTest, longSchemaFakeLeBe) {
   bitset<8> bs10(bs1->at(0));
   EXPECT_EQ(bs10, not_null_tag);
   bitset<8> bs11(bs1->at(1));
-  EXPECT_EQ(bs11, key_data_0);  
+  EXPECT_EQ(bs11, key_data_0);
   bitset<8> bs12(bs1->at(2));
   EXPECT_EQ(bs12, key_data_1);
   bitset<8> bs13(bs1->at(3));
@@ -586,7 +587,7 @@ TEST_F(DingoSerialTest, longSchemaFakeLeBe) {
   bitset<8> bs20(bs2->at(0));
   EXPECT_EQ(bs20, not_null_tag);
   bitset<8> bs21(bs2->at(1));
-  EXPECT_EQ(bs21, value_data_0);  
+  EXPECT_EQ(bs21, value_data_0);
   bitset<8> bs22(bs2->at(2));
   EXPECT_EQ(bs22, value_data_1);
   bitset<8> bs23(bs2->at(3));
@@ -611,7 +612,7 @@ TEST_F(DingoSerialTest, longSchemaFakeLeBe) {
 
 TEST_F(DingoSerialTest, doubleSchemaPosLeBe) {
   double data = 345235.32656;
-  //bitset<64> key_data("1100000100010101000100100100110101001110011001011011111010100001");
+  // bitset<64> key_data("1100000100010101000100100100110101001110011001011011111010100001");
   bitset<8> key_data_0("11000001");
   bitset<8> key_data_1("00010101");
   bitset<8> key_data_2("00010010");
@@ -620,7 +621,7 @@ TEST_F(DingoSerialTest, doubleSchemaPosLeBe) {
   bitset<8> key_data_5("01100101");
   bitset<8> key_data_6("10111110");
   bitset<8> key_data_7("10100001");
-  //bitset<64> value_data("0100000100010101000100100100110101001110011001011011111010100001");
+  // bitset<64> value_data("0100000100010101000100100100110101001110011001011011111010100001");
   bitset<8> value_data_0("01000001");
   bitset<8> value_data_1("00010101");
   bitset<8> value_data_2("00010010");
@@ -648,7 +649,7 @@ TEST_F(DingoSerialTest, doubleSchemaPosLeBe) {
   bitset<8> bs10(bs1->at(0));
   EXPECT_EQ(bs10, not_null_tag);
   bitset<8> bs11(bs1->at(1));
-  EXPECT_EQ(bs11, key_data_0);  
+  EXPECT_EQ(bs11, key_data_0);
   bitset<8> bs12(bs1->at(2));
   EXPECT_EQ(bs12, key_data_1);
   bitset<8> bs13(bs1->at(3));
@@ -677,7 +678,7 @@ TEST_F(DingoSerialTest, doubleSchemaPosLeBe) {
   bitset<8> bs20(bs2->at(0));
   EXPECT_EQ(bs20, not_null_tag);
   bitset<8> bs21(bs2->at(1));
-  EXPECT_EQ(bs21, value_data_0);  
+  EXPECT_EQ(bs21, value_data_0);
   bitset<8> bs22(bs2->at(2));
   EXPECT_EQ(bs22, value_data_1);
   bitset<8> bs23(bs2->at(3));
@@ -707,7 +708,7 @@ TEST_F(DingoSerialTest, doubleSchemaPosFakeLeBe) {
   uint64_t data_bits = bswap_64(ori_data_bits);
   double data;
   memcpy(&data, &data_bits, 8);
-  //bitset<64> key_data("1100000100010101000100100100110101001110010101100000010000011001");
+  // bitset<64> key_data("1100000100010101000100100100110101001110010101100000010000011001");
   bitset<8> key_data_0("11000001");
   bitset<8> key_data_1("00010101");
   bitset<8> key_data_2("00010010");
@@ -716,7 +717,7 @@ TEST_F(DingoSerialTest, doubleSchemaPosFakeLeBe) {
   bitset<8> key_data_5("01010110");
   bitset<8> key_data_6("00000100");
   bitset<8> key_data_7("00011001");
-  //bitset<64> value_data("0100000100010101000100100100110101001110010101100000010000011001");
+  // bitset<64> value_data("0100000100010101000100100100110101001110010101100000010000011001");
   bitset<8> value_data_0("01000001");
   bitset<8> value_data_1("00010101");
   bitset<8> value_data_2("00010010");
@@ -745,7 +746,7 @@ TEST_F(DingoSerialTest, doubleSchemaPosFakeLeBe) {
   bitset<8> bs10(bs1->at(0));
   EXPECT_EQ(bs10, not_null_tag);
   bitset<8> bs11(bs1->at(1));
-  EXPECT_EQ(bs11, key_data_0);  
+  EXPECT_EQ(bs11, key_data_0);
   bitset<8> bs12(bs1->at(2));
   EXPECT_EQ(bs12, key_data_1);
   bitset<8> bs13(bs1->at(3));
@@ -774,7 +775,7 @@ TEST_F(DingoSerialTest, doubleSchemaPosFakeLeBe) {
   bitset<8> bs20(bs2->at(0));
   EXPECT_EQ(bs20, not_null_tag);
   bitset<8> bs21(bs2->at(1));
-  EXPECT_EQ(bs21, value_data_0);  
+  EXPECT_EQ(bs21, value_data_0);
   bitset<8> bs22(bs2->at(2));
   EXPECT_EQ(bs22, value_data_1);
   bitset<8> bs23(bs2->at(3));
@@ -799,7 +800,7 @@ TEST_F(DingoSerialTest, doubleSchemaPosFakeLeBe) {
 
 TEST_F(DingoSerialTest, doubleSchemaNegLeBe) {
   double data = -345235.32656;
-  //bitset<64> key_data("0011111011101010111011011011001010110001100110100100000101011110");
+  // bitset<64> key_data("0011111011101010111011011011001010110001100110100100000101011110");
   bitset<8> key_data_0("00111110");
   bitset<8> key_data_1("11101010");
   bitset<8> key_data_2("11101101");
@@ -808,7 +809,7 @@ TEST_F(DingoSerialTest, doubleSchemaNegLeBe) {
   bitset<8> key_data_5("10011010");
   bitset<8> key_data_6("01000001");
   bitset<8> key_data_7("01011110");
-  //bitset<64> value_data("1100000100010101000100100100110101001110011001011011111010100001");
+  // bitset<64> value_data("1100000100010101000100100100110101001110011001011011111010100001");
   bitset<8> value_data_0("11000001");
   bitset<8> value_data_1("00010101");
   bitset<8> value_data_2("00010010");
@@ -836,7 +837,7 @@ TEST_F(DingoSerialTest, doubleSchemaNegLeBe) {
   bitset<8> bs10(bs1->at(0));
   EXPECT_EQ(bs10, not_null_tag);
   bitset<8> bs11(bs1->at(1));
-  EXPECT_EQ(bs11, key_data_0);  
+  EXPECT_EQ(bs11, key_data_0);
   bitset<8> bs12(bs1->at(2));
   EXPECT_EQ(bs12, key_data_1);
   bitset<8> bs13(bs1->at(3));
@@ -865,7 +866,7 @@ TEST_F(DingoSerialTest, doubleSchemaNegLeBe) {
   bitset<8> bs20(bs2->at(0));
   EXPECT_EQ(bs20, not_null_tag);
   bitset<8> bs21(bs2->at(1));
-  EXPECT_EQ(bs21, value_data_0);  
+  EXPECT_EQ(bs21, value_data_0);
   bitset<8> bs22(bs2->at(2));
   EXPECT_EQ(bs22, value_data_1);
   bitset<8> bs23(bs2->at(3));
@@ -895,7 +896,7 @@ TEST_F(DingoSerialTest, doubleSchemaNegFakeLeBe) {
   uint64_t data_bits = bswap_64(ori_data_bits);
   double data;
   memcpy(&data, &data_bits, 8);
-  //bitset<64> key_data("0011111011101010111011011011001010110001100110100100000101011110");
+  // bitset<64> key_data("0011111011101010111011011011001010110001100110100100000101011110");
   bitset<8> key_data_0("00111110");
   bitset<8> key_data_1("11101010");
   bitset<8> key_data_2("11101101");
@@ -904,7 +905,7 @@ TEST_F(DingoSerialTest, doubleSchemaNegFakeLeBe) {
   bitset<8> key_data_5("10011010");
   bitset<8> key_data_6("01000001");
   bitset<8> key_data_7("01011110");
-  //bitset<64> value_data("1100000100010101000100100100110101001110011001011011111010100001");
+  // bitset<64> value_data("1100000100010101000100100100110101001110011001011011111010100001");
   bitset<8> value_data_0("11000001");
   bitset<8> value_data_1("00010101");
   bitset<8> value_data_2("00010010");
@@ -932,7 +933,7 @@ TEST_F(DingoSerialTest, doubleSchemaNegFakeLeBe) {
   bitset<8> bs10(bs1->at(0));
   EXPECT_EQ(bs10, not_null_tag);
   bitset<8> bs11(bs1->at(1));
-  EXPECT_EQ(bs11, key_data_0);  
+  EXPECT_EQ(bs11, key_data_0);
   bitset<8> bs12(bs1->at(2));
   EXPECT_EQ(bs12, key_data_1);
   bitset<8> bs13(bs1->at(3));
@@ -961,7 +962,7 @@ TEST_F(DingoSerialTest, doubleSchemaNegFakeLeBe) {
   bitset<8> bs20(bs2->at(0));
   EXPECT_EQ(bs20, not_null_tag);
   bitset<8> bs21(bs2->at(1));
-  EXPECT_EQ(bs21, value_data_0);  
+  EXPECT_EQ(bs21, value_data_0);
   bitset<8> bs22(bs2->at(2));
   EXPECT_EQ(bs22, value_data_1);
   bitset<8> bs23(bs2->at(3));
@@ -1113,62 +1114,65 @@ TEST_F(DingoSerialTest, doubleSchema) {
 }
 
 TEST_F(DingoSerialTest, stringSchema) {
-  DingoSchema<optional<reference_wrapper<string>>> b1;
+  DingoSchema<optional<shared_ptr<string>>> b1;
   b1.SetIndex(0);
   b1.SetAllowNull(false);
   b1.SetIsKey(true);
-  string data1 =
-      "test address test 中文 表情😊🏷️👌 test "
-      "测试测试测试三🤣😂😁🐱‍🐉👏";
   Buf* bf1 = new Buf(1, this->le);
-  b1.EncodeKey(bf1, optional<reference_wrapper<string>>{data1});
+
+  std::shared_ptr<std::string> s_data1 = std::make_shared<std::string>(
+      "test address test 中文 表情😊🏷️👌 test "
+      "测试测试测试三🤣😂😁🐱‍🐉👏");
+  std::optional<std::shared_ptr<std::string>> data1{s_data1};
+
+  b1.EncodeKey(bf1, data1);
   string* bs1 = bf1->GetBytes();
   Buf* bf2 = new Buf(bs1, this->le);
   delete bs1;
-  optional<reference_wrapper<string>> data2 = b1.DecodeKey(bf2);
+  auto data2 = b1.DecodeKey(bf2);
   delete bf1;
   delete bf2;
   if (data2.has_value()) {
-    EXPECT_EQ(data1, data2->get());
-    delete &data2->get();
+    EXPECT_EQ(*data1.value(), *data2.value());
   } else {
     EXPECT_TRUE(0);
   }
 
-  DingoSchema<optional<reference_wrapper<string>>> b2;
+  DingoSchema<optional<shared_ptr<string>>> b2;
   b2.SetIndex(0);
   b2.SetAllowNull(true);
   b2.SetIsKey(false);
-  string data3 =
+  std::shared_ptr<std::string> s_data3 = std::make_shared<std::string>(
       "test address test 中文 表情😊🏷️👌 test "
-      "测试测试测试三🤣😂😁🐱‍🐉👏";
+      "测试测试测试三🤣😂😁🐱‍🐉👏");
+  std::optional<std::shared_ptr<std::string>> data3{s_data3};
+
   Buf* bf3 = new Buf(1, this->le);
-  b2.EncodeValue(bf3, optional<reference_wrapper<string>>{data3});
+  b2.EncodeValue(bf3, data3);
   string* bs2 = bf3->GetBytes();
   Buf* bf4 = new Buf(bs2, this->le);
   delete bs2;
-  optional<reference_wrapper<string>> data4 = b2.DecodeValue(bf4);
+  auto data4 = b2.DecodeValue(bf4);
   delete bf3;
   delete bf4;
   if (data4.has_value()) {
-    EXPECT_EQ(data3, data4->get());
-    delete &data4->get();
+    EXPECT_EQ(*data3.value(), *data4.value()) << "Line: " << __LINE__;
   } else {
-    EXPECT_TRUE(0);
+    EXPECT_TRUE(0) << "Line: " << __LINE__;
   }
 
-  optional<reference_wrapper<string>>data5 = nullopt;
+  std::optional<std::shared_ptr<std::string>> data5 = nullopt;
   Buf* bf5 = new Buf(1, this->le);
   b2.EncodeValue(bf5, data5);
   string* bs3 = bf5->GetBytes();
   Buf* bf6 = new Buf(bs3, this->le);
   delete bs3;
-  optional<reference_wrapper<string>> data6 = b2.DecodeValue(bf6);
+  auto data6 = b2.DecodeValue(bf6);
   delete bf5;
   delete bf6;
-  EXPECT_FALSE(data6.has_value());
+  EXPECT_FALSE(data6.has_value()) << "Line: " << __LINE__;
 
-  DingoSchema<optional<reference_wrapper<string>>> b3;
+  DingoSchema<optional<shared_ptr<string>>> b3;
   b3.SetIndex(0);
   b3.SetAllowNull(true);
   b3.SetIsKey(true);
@@ -1177,33 +1181,35 @@ TEST_F(DingoSerialTest, stringSchema) {
   string* bs4 = bf7->GetBytes();
   Buf* bf8 = new Buf(bs4, this->le);
   delete bs4;
-  optional<reference_wrapper<string>> data8 = b3.DecodeKey(bf8);
+  auto data8 = b3.DecodeKey(bf8);
   delete bf7;
   delete bf8;
-  EXPECT_FALSE(data8.has_value());
+  EXPECT_FALSE(data8.has_value()) << "Line: " << __LINE__;
 }
 
 TEST_F(DingoSerialTest, stringPrefixSchema) {
-  DingoSchema<optional<reference_wrapper<string>>> b1;
+  DingoSchema<std::optional<std::shared_ptr<std::string>>> b1;
   b1.SetIndex(0);
   b1.SetAllowNull(false);
   b1.SetIsKey(true);
-  string data1 =
+  std::shared_ptr<std::string> s_data1 = std::make_shared<std::string>(
       "test address test 中文 表情😊🏷️👌 test "
-      "测试测试测试三🤣😂😁🐱‍🐉👏";
+      "测试测试测试三🤣😂😁🐱‍🐉👏");
+  std::optional<std::shared_ptr<std::string>> data1{s_data1};
+
   Buf* bf1 = new Buf(1, this->le);
-  b1.EncodeKey(bf1, optional<reference_wrapper<string>>{data1});
+  b1.EncodeKey(bf1, data1);
   string* bs1 = bf1->GetBytes();
 
   Buf* bf2 = new Buf(1, this->le);
-  b1.EncodeKeyPrefix(bf2, optional<reference_wrapper<string>>{data1});
+  b1.EncodeKeyPrefix(bf2, data1);
   string* bs2 = bf2->GetBytes();
   string bs3(*bs1, 0, bs2->length());
 
   delete bf1;
   delete bf2;
 
-  EXPECT_EQ(*bs2, bs3);
+  EXPECT_EQ(*bs2, bs3) << "Line: " << __LINE__;
 
   delete bs1;
   delete bs2;
@@ -1240,7 +1246,7 @@ TEST_F(DingoSerialTest, bufLeBe) {
   bitset<8> bs10(bs1->at(0));
   EXPECT_EQ(bs10, bit0);
   bitset<8> bs11(bs1->at(1));
-  EXPECT_EQ(bs11, bit1);  
+  EXPECT_EQ(bs11, bit1);
   bitset<8> bs12(bs1->at(2));
   EXPECT_EQ(bs12, bit2);
   bitset<8> bs13(bs1->at(3));
@@ -1284,7 +1290,7 @@ TEST_F(DingoSerialTest, bufLeBe) {
   bitset<8> bs20(bs2->at(0));
   EXPECT_EQ(bs20, bit0);
   bitset<8> bs21(bs2->at(1));
-  EXPECT_EQ(bs21, bit1);  
+  EXPECT_EQ(bs21, bit1);
   bitset<8> bs22(bs2->at(2));
   EXPECT_EQ(bs22, bit2);
   bitset<8> bs23(bs2->at(3));
@@ -1334,65 +1340,63 @@ TEST_F(DingoSerialTest, recordTest) {
   RecordDecoder* rd = new RecordDecoder(0, schemas, 0L, this->le);
   vector<any>* record2 = rd->Decode(kv);
 
-  for (BaseSchema *bs : *schemas) {
+  for (BaseSchema* bs : *schemas) {
     BaseSchema::Type type = bs->GetType();
     switch (type) {
       case BaseSchema::kBool: {
         optional<bool> r1 = any_cast<optional<bool>>(record1->at(bs->GetIndex()));
         optional<bool> r2 = any_cast<optional<bool>>(record2->at(bs->GetIndex()));
         if (r1.has_value() && r2.has_value()) {
-            EXPECT_EQ(r1.value(), r2.value());
-          } else {
-            EXPECT_FALSE(r1.has_value());
-            EXPECT_FALSE(r2.has_value());
-          }
+          EXPECT_EQ(r1.value(), r2.value());
+        } else {
+          EXPECT_FALSE(r1.has_value());
+          EXPECT_FALSE(r2.has_value());
+        }
         break;
       }
       case BaseSchema::kInteger: {
         optional<int32_t> r1 = any_cast<optional<int32_t>>(record1->at(bs->GetIndex()));
         optional<int32_t> r2 = any_cast<optional<int32_t>>(record2->at(bs->GetIndex()));
         if (r1.has_value() && r2.has_value()) {
-            EXPECT_EQ(r1.value(), r2.value());
-          } else {
-            EXPECT_FALSE(r1.has_value());
-            EXPECT_FALSE(r2.has_value());
-          }
+          EXPECT_EQ(r1.value(), r2.value());
+        } else {
+          EXPECT_FALSE(r1.has_value());
+          EXPECT_FALSE(r2.has_value());
+        }
         break;
       }
       case BaseSchema::kLong: {
         optional<int64_t> r1 = any_cast<optional<int64_t>>(record1->at(bs->GetIndex()));
         optional<int64_t> r2 = any_cast<optional<int64_t>>(record2->at(bs->GetIndex()));
         if (r1.has_value() && r2.has_value()) {
-            EXPECT_EQ(r1.value(), r2.value());
-          } else {
-            EXPECT_FALSE(r1.has_value());
-            EXPECT_FALSE(r2.has_value());
-          }
+          EXPECT_EQ(r1.value(), r2.value());
+        } else {
+          EXPECT_FALSE(r1.has_value());
+          EXPECT_FALSE(r2.has_value());
+        }
         break;
       }
       case BaseSchema::kDouble: {
         optional<double> r1 = any_cast<optional<double>>(record1->at(bs->GetIndex()));
         optional<double> r2 = any_cast<optional<double>>(record2->at(bs->GetIndex()));
         if (r1.has_value() && r2.has_value()) {
-            EXPECT_EQ(r1.value(), r2.value());
-          } else {
-            EXPECT_FALSE(r1.has_value());
-            EXPECT_FALSE(r2.has_value());
-          }
+          EXPECT_EQ(r1.value(), r2.value());
+        } else {
+          EXPECT_FALSE(r1.has_value());
+          EXPECT_FALSE(r2.has_value());
+        }
         break;
       }
       case BaseSchema::kString: {
-        optional<reference_wrapper<string>> r1 = any_cast<optional<reference_wrapper<string>>>(record1->at(bs->GetIndex()));
-        optional<reference_wrapper<string>> r2 = any_cast<optional<reference_wrapper<string>>>(record2->at(bs->GetIndex()));
+        optional<shared_ptr<string>> r1 = any_cast<optional<shared_ptr<string>>>(record1->at(bs->GetIndex()));
+        optional<shared_ptr<string>> r2 = any_cast<optional<shared_ptr<string>>>(record2->at(bs->GetIndex()));
         if (r1.has_value() && r2.has_value()) {
-            EXPECT_EQ(r1->get(), r2->get());
-            delete &r2->get();
-          } else if (r2.has_value()) {
-            delete &r2->get();
-            EXPECT_TRUE(0);
-          } else {
-            EXPECT_FALSE(r1.has_value());
-          }
+          EXPECT_EQ(*r1.value(), *r2.value());
+        } else if (r2.has_value()) {
+          EXPECT_TRUE(0);
+        } else {
+          EXPECT_FALSE(r1.has_value());
+        }
         break;
       }
       default: {
@@ -1406,12 +1410,11 @@ TEST_F(DingoSerialTest, recordTest) {
   vector<int> index_temp{0, 1, 3, 5};
   vector<any>* record3 = rd->Decode(kv, &index);
 
-  for (BaseSchema *bs : *schemas) {
+  for (BaseSchema* bs : *schemas) {
     BaseSchema::Type type = bs->GetType();
     switch (type) {
       case BaseSchema::kBool: {
-        if (binary_search(index_temp.begin(), index_temp.end(),
-                          bs->GetIndex())) {
+        if (binary_search(index_temp.begin(), index_temp.end(), bs->GetIndex())) {
           optional<bool> r1 = any_cast<optional<bool>>(record1->at(bs->GetIndex()));
           optional<bool> r2 = any_cast<optional<bool>>(record3->at(bs->GetIndex()));
           if (r1.has_value() && r2.has_value()) {
@@ -1427,8 +1430,7 @@ TEST_F(DingoSerialTest, recordTest) {
         break;
       }
       case BaseSchema::kInteger: {
-        if (binary_search(index_temp.begin(), index_temp.end(),
-                          bs->GetIndex())) {
+        if (binary_search(index_temp.begin(), index_temp.end(), bs->GetIndex())) {
           optional<int32_t> r1 = any_cast<optional<int32_t>>(record1->at(bs->GetIndex()));
           optional<int32_t> r2 = any_cast<optional<int32_t>>(record3->at(bs->GetIndex()));
           if (r1.has_value() && r2.has_value()) {
@@ -1438,14 +1440,13 @@ TEST_F(DingoSerialTest, recordTest) {
             EXPECT_FALSE(r2.has_value());
           }
         } else {
-           optional<int32_t> r2 = any_cast< optional<int32_t>>(record3->at(bs->GetIndex()));
+          optional<int32_t> r2 = any_cast<optional<int32_t>>(record3->at(bs->GetIndex()));
           EXPECT_FALSE(r2.has_value());
         }
         break;
       }
       case BaseSchema::kLong: {
-        if (binary_search(index_temp.begin(), index_temp.end(),
-                          bs->GetIndex())) {
+        if (binary_search(index_temp.begin(), index_temp.end(), bs->GetIndex())) {
           optional<int64_t> r1 = any_cast<optional<int64_t>>(record1->at(bs->GetIndex()));
           optional<int64_t> r2 = any_cast<optional<int64_t>>(record3->at(bs->GetIndex()));
           if (r1.has_value() && r2.has_value()) {
@@ -1461,8 +1462,7 @@ TEST_F(DingoSerialTest, recordTest) {
         break;
       }
       case BaseSchema::kDouble: {
-        if (binary_search(index_temp.begin(), index_temp.end(),
-                          bs->GetIndex())) {
+        if (binary_search(index_temp.begin(), index_temp.end(), bs->GetIndex())) {
           optional<double> r1 = any_cast<optional<double>>(record1->at(bs->GetIndex()));
           optional<double> r2 = any_cast<optional<double>>(record3->at(bs->GetIndex()));
           if (r1.has_value() && r2.has_value()) {
@@ -1478,21 +1478,18 @@ TEST_F(DingoSerialTest, recordTest) {
         break;
       }
       case BaseSchema::kString: {
-        if (binary_search(index_temp.begin(), index_temp.end(),
-                          bs->GetIndex())) {
-          optional<reference_wrapper<string>> r1 = any_cast<optional<reference_wrapper<string>>>(record1->at(bs->GetIndex()));
-          optional<reference_wrapper<string>> r2 = any_cast<optional<reference_wrapper<string>>>(record3->at(bs->GetIndex()));
+        if (binary_search(index_temp.begin(), index_temp.end(), bs->GetIndex())) {
+          optional<shared_ptr<string>> r1 = any_cast<optional<shared_ptr<string>>>(record1->at(bs->GetIndex()));
+          optional<shared_ptr<string>> r2 = any_cast<optional<shared_ptr<string>>>(record3->at(bs->GetIndex()));
           if (r1.has_value() && r2.has_value()) {
-            EXPECT_EQ(r1->get(), r2->get());
-            delete &r2->get();
+            EXPECT_EQ(*r1.value(), *r2.value());
           } else if (r2.has_value()) {
-            delete &r2->get();
             EXPECT_TRUE(0);
           } else {
             EXPECT_FALSE(r1.has_value());
           }
         } else {
-          optional<reference_wrapper<string>> r2 = any_cast<optional<reference_wrapper<string>>>(record3->at(bs->GetIndex()));
+          optional<shared_ptr<string>> r2 = any_cast<optional<shared_ptr<string>>>(record3->at(bs->GetIndex()));
           EXPECT_FALSE(r2.has_value());
         }
         break;
@@ -1510,72 +1507,71 @@ TEST_F(DingoSerialTest, recordTest) {
   delete rd;
 }
 
-
 TEST_F(DingoSerialTest, tabledefinitionTest) {
   pb::meta::TableDefinition td;
   td.set_name("test");
 
-  pb::meta::ColumnDefinition *cd1 = td.add_columns();
+  pb::meta::ColumnDefinition* cd1 = td.add_columns();
   cd1->set_name("id");
   cd1->set_element_type(pb::meta::ELEM_TYPE_INT32);
   cd1->set_nullable(false);
   cd1->set_indexofkey(0);
 
-  pb::meta::ColumnDefinition *cd2 = td.add_columns();
+  pb::meta::ColumnDefinition* cd2 = td.add_columns();
   cd2->set_name("name");
   cd2->set_element_type(pb::meta::ELEM_TYPE_STRING);
   cd2->set_nullable(false);
   cd2->set_indexofkey(0);
 
-  pb::meta::ColumnDefinition *cd3 = td.add_columns();
+  pb::meta::ColumnDefinition* cd3 = td.add_columns();
   cd3->set_name("gender");
   cd3->set_element_type(pb::meta::ELEM_TYPE_STRING);
   cd3->set_nullable(false);
   cd3->set_indexofkey(0);
 
-  pb::meta::ColumnDefinition *cd4 = td.add_columns();
+  pb::meta::ColumnDefinition* cd4 = td.add_columns();
   cd4->set_name("score");
   cd4->set_element_type(pb::meta::ELEM_TYPE_INT64);
   cd4->set_nullable(false);
   cd4->set_indexofkey(0);
 
-  pb::meta::ColumnDefinition *cd5 = td.add_columns();
+  pb::meta::ColumnDefinition* cd5 = td.add_columns();
   cd5->set_name("addr");
   cd5->set_element_type(pb::meta::ELEM_TYPE_STRING);
   cd5->set_nullable(true);
   cd5->set_indexofkey(-1);
 
-  pb::meta::ColumnDefinition *cd6 = td.add_columns();
+  pb::meta::ColumnDefinition* cd6 = td.add_columns();
   cd6->set_name("exist");
   cd6->set_element_type(pb::meta::ELEM_TYPE_BOOLEAN);
   cd6->set_nullable(false);
   cd6->set_indexofkey(-1);
 
-  pb::meta::ColumnDefinition *cd7 = td.add_columns();
+  pb::meta::ColumnDefinition* cd7 = td.add_columns();
   cd7->set_name("pic");
   cd7->set_element_type(pb::meta::ELEM_TYPE_BYTES);
   cd7->set_nullable(true);
   cd7->set_indexofkey(-1);
 
-  pb::meta::ColumnDefinition *cd8 = td.add_columns();
+  pb::meta::ColumnDefinition* cd8 = td.add_columns();
   cd8->set_name("testNull");
   cd8->set_element_type(pb::meta::ELEM_TYPE_INT32);
   cd8->set_nullable(true);
   cd8->set_indexofkey(-1);
 
-  pb::meta::ColumnDefinition *cd9 = td.add_columns();
+  pb::meta::ColumnDefinition* cd9 = td.add_columns();
   cd9->set_name("age");
   cd9->set_element_type(pb::meta::ELEM_TYPE_INT32);
   cd9->set_nullable(false);
   cd9->set_indexofkey(-1);
 
-  pb::meta::ColumnDefinition *cd10 = td.add_columns();
+  pb::meta::ColumnDefinition* cd10 = td.add_columns();
   cd10->set_name("prev");
   cd10->set_element_type(pb::meta::ELEM_TYPE_INT64);
   cd10->set_nullable(false);
   cd10->set_indexofkey(-1);
 
-  pb::meta::ColumnDefinition *cd11 = td.add_columns();
+  pb::meta::ColumnDefinition* cd11 = td.add_columns();
   cd11->set_name("salary");
   cd11->set_element_type(pb::meta::ELEM_TYPE_DOUBLE);
   cd11->set_nullable(true);
@@ -1640,13 +1636,13 @@ TEST_F(DingoSerialTest, tabledefinitionTest) {
   EXPECT_EQ(prev->GetIndex(), 9);
   EXPECT_EQ(prev->GetType(), BaseSchema::Type::kLong);
   EXPECT_FALSE(prev->AllowNull());
-  EXPECT_FALSE(prev->IsKey()); 
+  EXPECT_FALSE(prev->IsKey());
 
   BaseSchema* salary = schemas->at(10);
   EXPECT_EQ(salary->GetIndex(), 10);
   EXPECT_EQ(salary->GetType(), BaseSchema::Type::kDouble);
   EXPECT_TRUE(salary->AllowNull());
-  EXPECT_FALSE(salary->IsKey()); 
+  EXPECT_FALSE(salary->IsKey());
 
   delete schemas;
 }
@@ -1655,67 +1651,67 @@ TEST_F(DingoSerialTest, keyvaluecodecTest) {
   pb::meta::TableDefinition td;
   td.set_name("test");
 
-  pb::meta::ColumnDefinition *cd1 = td.add_columns();
+  pb::meta::ColumnDefinition* cd1 = td.add_columns();
   cd1->set_name("id");
   cd1->set_element_type(pb::meta::ELEM_TYPE_INT32);
   cd1->set_nullable(false);
   cd1->set_indexofkey(0);
 
-  pb::meta::ColumnDefinition *cd2 = td.add_columns();
+  pb::meta::ColumnDefinition* cd2 = td.add_columns();
   cd2->set_name("name");
   cd2->set_element_type(pb::meta::ELEM_TYPE_STRING);
   cd2->set_nullable(false);
   cd2->set_indexofkey(0);
 
-  pb::meta::ColumnDefinition *cd3 = td.add_columns();
+  pb::meta::ColumnDefinition* cd3 = td.add_columns();
   cd3->set_name("gender");
   cd3->set_element_type(pb::meta::ELEM_TYPE_STRING);
   cd3->set_nullable(false);
   cd3->set_indexofkey(0);
 
-  pb::meta::ColumnDefinition *cd4 = td.add_columns();
+  pb::meta::ColumnDefinition* cd4 = td.add_columns();
   cd4->set_name("score");
   cd4->set_element_type(pb::meta::ELEM_TYPE_INT64);
   cd4->set_nullable(false);
   cd4->set_indexofkey(0);
 
-  pb::meta::ColumnDefinition *cd5 = td.add_columns();
+  pb::meta::ColumnDefinition* cd5 = td.add_columns();
   cd5->set_name("addr");
   cd5->set_element_type(pb::meta::ELEM_TYPE_STRING);
   cd5->set_nullable(true);
   cd5->set_indexofkey(-1);
 
-  pb::meta::ColumnDefinition *cd6 = td.add_columns();
+  pb::meta::ColumnDefinition* cd6 = td.add_columns();
   cd6->set_name("exist");
   cd6->set_element_type(pb::meta::ELEM_TYPE_BOOLEAN);
   cd6->set_nullable(false);
   cd6->set_indexofkey(-1);
 
-  pb::meta::ColumnDefinition *cd7 = td.add_columns();
+  pb::meta::ColumnDefinition* cd7 = td.add_columns();
   cd7->set_name("pic");
   cd7->set_element_type(pb::meta::ELEM_TYPE_BYTES);
   cd7->set_nullable(true);
   cd7->set_indexofkey(-1);
 
-  pb::meta::ColumnDefinition *cd8 = td.add_columns();
+  pb::meta::ColumnDefinition* cd8 = td.add_columns();
   cd8->set_name("testNull");
   cd8->set_element_type(pb::meta::ELEM_TYPE_INT32);
   cd8->set_nullable(true);
   cd8->set_indexofkey(-1);
 
-  pb::meta::ColumnDefinition *cd9 = td.add_columns();
+  pb::meta::ColumnDefinition* cd9 = td.add_columns();
   cd9->set_name("age");
   cd9->set_element_type(pb::meta::ELEM_TYPE_INT32);
   cd9->set_nullable(false);
   cd9->set_indexofkey(-1);
 
-  pb::meta::ColumnDefinition *cd10 = td.add_columns();
+  pb::meta::ColumnDefinition* cd10 = td.add_columns();
   cd10->set_name("prev");
   cd10->set_element_type(pb::meta::ELEM_TYPE_INT64);
   cd10->set_nullable(false);
   cd10->set_indexofkey(-1);
 
-  pb::meta::ColumnDefinition *cd11 = td.add_columns();
+  pb::meta::ColumnDefinition* cd11 = td.add_columns();
   cd11->set_name("salary");
   cd11->set_element_type(pb::meta::ELEM_TYPE_DOUBLE);
   cd11->set_nullable(true);
@@ -1723,25 +1719,25 @@ TEST_F(DingoSerialTest, keyvaluecodecTest) {
 
   vector<any> record1(11);
   optional<int32_t> id = 0;
-  string *name = new string("tn");
-  string *gender = new string("f");
+  std::shared_ptr<std::string> name = std::make_shared<std::string>("tn");
+  std::shared_ptr<std::string> gender = std::make_shared<std::string>("f");
   optional<int64_t> score = 214748364700L;
-  string *addr = new string(
+  std::shared_ptr<std::string> addr = std::make_shared<std::string>(
       "test address test 中文 表情😊🏷️👌 test "
       "测试测试测试三🤣😂😁🐱‍🐉👏🐱‍💻✔🤳🤦‍♂️🤦‍♀️🙌测试测试测"
       "试伍佰肆拾陆万伍仟陆佰伍拾肆元/n/r/r/ndfs肥肉士大夫");
   optional<bool> exist = false;
-  optional<reference_wrapper<string>> pic = nullopt;
+  optional<shared_ptr<string>> pic = nullopt;
   optional<int32_t> test_null = nullopt;
   optional<int32_t> age = -20;
   optional<int64_t> prev = -214748364700L;
   optional<double> salary = 873485.4234;
 
   record1.at(0) = id;
-  record1.at(1) = optional<reference_wrapper<string>>{*name};
-  record1.at(2) = optional<reference_wrapper<string>>{*gender};
+  record1.at(1) = optional<shared_ptr<string>>{name};
+  record1.at(2) = optional<shared_ptr<string>>{gender};
   record1.at(3) = score;
-  record1.at(4) = optional<reference_wrapper<string>>{*addr};
+  record1.at(4) = optional<shared_ptr<string>>{addr};
   record1.at(5) = exist;
   record1.at(6) = pic;
   record1.at(7) = test_null;
@@ -1749,9 +1745,9 @@ TEST_F(DingoSerialTest, keyvaluecodecTest) {
   record1.at(9) = prev;
   record1.at(10) = salary;
 
-  KeyValueCodec *codec = new KeyValueCodec(&td, 0);
-  KeyValue *kv = codec->Encode(&record1);
-  vector<any> *record2 = codec->Decode(kv);
+  KeyValueCodec* codec = new KeyValueCodec(&td, 0);
+  KeyValue* kv = codec->Encode(&record1);
+  vector<any>* record2 = codec->Decode(kv);
 
   optional<int32_t> r0 = any_cast<optional<int32_t>>(record2->at(0));
   if (r0.has_value()) {
@@ -1760,18 +1756,16 @@ TEST_F(DingoSerialTest, keyvaluecodecTest) {
     EXPECT_TRUE(0);
   }
 
-  optional<reference_wrapper<string>> r1 = any_cast<optional<reference_wrapper<string>>>(record2->at(1));
+  optional<shared_ptr<string>> r1 = any_cast<optional<shared_ptr<string>>>(record2->at(1));
   if (r1.has_value()) {
-    EXPECT_EQ(*name, r1->get());
-    delete &r1->get();
+    EXPECT_EQ(*name, *r1.value());
   } else {
     EXPECT_TRUE(0);
   }
 
-  optional<reference_wrapper<string>> r2 = any_cast<optional<reference_wrapper<string>>>(record2->at(2));
+  optional<shared_ptr<string>> r2 = any_cast<optional<shared_ptr<string>>>(record2->at(2));
   if (r2.has_value()) {
-    EXPECT_EQ(*gender, r2->get());
-    delete &r2->get();
+    EXPECT_EQ(*gender, *r2.value());
   } else {
     EXPECT_TRUE(0);
   }
@@ -1783,10 +1777,9 @@ TEST_F(DingoSerialTest, keyvaluecodecTest) {
     EXPECT_TRUE(0);
   }
 
-  optional<reference_wrapper<string>> r4 = any_cast<optional<reference_wrapper<string>>>(record2->at(4));
+  optional<shared_ptr<string>> r4 = any_cast<optional<shared_ptr<string>>>(record2->at(4));
   if (r4.has_value()) {
-    EXPECT_EQ(*addr, r4->get());
-    delete &r4->get();
+    EXPECT_EQ(*addr, *r4.value());
   } else {
     EXPECT_TRUE(0);
   }
@@ -1798,7 +1791,7 @@ TEST_F(DingoSerialTest, keyvaluecodecTest) {
     EXPECT_TRUE(0);
   }
 
-  optional<reference_wrapper<string>> r6 = any_cast<optional<reference_wrapper<string>>>(record2->at(6));
+  optional<shared_ptr<string>> r6 = any_cast<optional<shared_ptr<string>>>(record2->at(6));
   if (r6.has_value()) {
     EXPECT_TRUE(0);
   } else {
@@ -1833,18 +1826,15 @@ TEST_F(DingoSerialTest, keyvaluecodecTest) {
     EXPECT_TRUE(0);
   }
 
-  string *key = codec->EncodeKey(&record1);
-  string *keyprefix = codec->EncodeKeyPrefix(&record1, 3);
+  string* key = codec->EncodeKey(&record1);
+  string* keyprefix = codec->EncodeKeyPrefix(&record1, 3);
   EXPECT_EQ(*kv->GetKey(), *key);
   string keyprefix_from_key(*key, 0, keyprefix->length());
   EXPECT_EQ(keyprefix_from_key, *keyprefix);
-  
+
   delete key;
   delete keyprefix;
   delete codec;
   record2->clear();
   record2->shrink_to_fit();
-  delete name;
-  delete gender;
-  delete addr;
 }

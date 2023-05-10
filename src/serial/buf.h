@@ -34,13 +34,16 @@ class Buf {
   Buf(int size);
   Buf(std::string* buf, bool le);
   Buf(std::string* buf);
+  Buf(const std::string& buf, bool le);
+  Buf(const std::string& buf);
   ~Buf();
   void Init(int size);
   void Init(std::string* buf);
+  void Init(const std::string& buf);
   void SetForwardPos(int fp);
   void SetReversePos(int rp);
-  std::vector<uint8_t>* GetBuf();
   void Write(uint8_t b);
+  void Write(const std::string& data);
   void WriteInt(int32_t i);
   void WriteLong(int64_t l);
   void ReverseWrite(uint8_t b);
@@ -55,6 +58,7 @@ class Buf {
   void ReverseSkip(int size);
   void EnsureRemainder(int length);
   std::string* GetBytes();
+  int GetBytes(std::string& s);
 };
 
 }  // namespace dingodb

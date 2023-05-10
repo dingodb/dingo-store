@@ -16,9 +16,10 @@
 #define DINGO_SERIAL_RECORD_DECODER_H_
 
 #include "any"
-#include "optional"
 #include "functional"
 #include "keyvalue.h"
+#include "optional"
+#include "proto/common.pb.h"
 #include "schema/boolean_schema.h"
 #include "schema/double_schema.h"
 #include "schema/integer_schema.h"
@@ -37,14 +38,23 @@ class RecordDecoder {
   bool le_;
 
  public:
-  RecordDecoder(int schema_version, std::vector<BaseSchema*>* schemas,
-                long common_id);
-  RecordDecoder(int schema_version, std::vector<BaseSchema*>* schemas,
-                long common_id, bool le);
-  void Init(int schema_version, std::vector<BaseSchema*>* schemas,
-                long common_id);
+  RecordDecoder(int schema_version, std::vector<BaseSchema*>* schemas, long common_id);
+  RecordDecoder(int schema_version, std::vector<BaseSchema*>* schemas, long common_id, bool le);
+
+  void Init(int schema_version, std::vector<BaseSchema*>* schemas, long common_id);
+
   std::vector<std::any>* Decode(KeyValue* key_value);
+  int Decode(const KeyValue& key_value, std::vector<std::any>& record /*output*/);
+  int Decode(const pb::common::KeyValue& key_value, std::vector<std::any>& record /*output*/);
+  int Decode(const std::string& key, const std::string& value, std::vector<std::any>& record /*output*/);
+
   std::vector<std::any>* Decode(KeyValue* key_value, std::vector<int>* column_indexes);
+  int Decode(const KeyValue& key_value, const std::vector<int>& column_indexes,
+             std::vector<std::any>& record /*output*/);
+  int Decode(const pb::common::KeyValue& key_value, const std::vector<int>& column_indexes,
+             std::vector<std::any>& record /*output*/);
+  int Decode(const std::string& key, const std::string& value, const std::vector<int>& column_indexes,
+             std::vector<std::any>& record /*output*/);
 };
 
 }  // namespace dingodb
