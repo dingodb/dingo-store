@@ -89,7 +89,6 @@ public class StoreServiceClient {
     }
 
     public void shutdown() {
-        connectorCache.values().forEach(ServiceConnector::shutdown);
     }
 
     public byte[] kvGet(DingoCommonId tableId, DingoCommonId regionId, byte[] key) {

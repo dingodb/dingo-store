@@ -36,15 +36,12 @@ public class StoreServiceConnector extends ServiceConnector<StoreServiceGrpc.Sto
 
     @Override
     protected ManagedChannel transformToLeaderChannel(ManagedChannel channel) {
-        if (channel != null && !channel.isShutdown()) {
-            channel.shutdown();
-        }
         Location leader = leaderSupplier.get();
-        if (leader == null) {
+        if (leader == null || leader.getHost().isEmpty()) {
             return null;
         }
         locations = Collections.singleton(leader);
-        return newChannel(leader.getHost(), leader.getPort());
+        return newChannel(leader);
     }
 
     @Override

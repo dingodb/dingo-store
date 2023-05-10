@@ -27,6 +27,7 @@ import io.dingodb.sdk.common.table.RangeDistribution;
 import io.dingodb.sdk.common.table.Table;
 import io.dingodb.sdk.common.utils.Any;
 import io.dingodb.sdk.common.utils.ByteArrayUtils;
+import io.dingodb.sdk.common.utils.Optional;
 import io.dingodb.sdk.common.utils.Parameters;
 import io.dingodb.sdk.service.connector.MetaServiceConnector;
 import io.dingodb.sdk.service.meta.MetaServiceClient;
@@ -40,7 +41,6 @@ import java.util.NavigableMap;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.atomic.AtomicReference;
 
 @Slf4j
 public class OperationService {
@@ -50,11 +50,13 @@ public class OperationService {
     private final MetaServiceConnector metaServiceConnector;
     private final MetaServiceClient rootMetaService;
     private final StoreServiceClient storeService;
+    private final int retryTimes;
 
     public OperationService(String coordinatorSvr, int retryTimes) {
         this.rootMetaService = new MetaServiceClient(coordinatorSvr);
         this.metaServiceConnector = (MetaServiceConnector) rootMetaService.getMetaConnector();
         this.storeService = new StoreServiceClient(rootMetaService, retryTimes);
+        this.retryTimes = retryTimes;
     }
 
     public void init() {
@@ -62,8 +64,6 @@ public class OperationService {
 
     public void close() {
         storeService.shutdown();
-        metaServiceConnector.shutdown();
-        rootMetaService.getIncrementConnector().shutdown();
     }
 
     public <R> R exec(String schemaName, String tableName, Operation operation, Object parameters) {
@@ -74,40 +74,47 @@ public class OperationService {
         RouteTable routeTable = getAndRefreshRouteTable(metaService, tableId, false);
 
         Operation.Fork fork = operation.fork(Any.wrap(parameters), table, routeTable);
-        AtomicReference<Throwable> error = getAtomicReference(operation, metaService, tableId, table, routeTable, fork);
 
-        if (!fork.isIgnoreError() && error.get() != null) {
-            throw new DingoClientException(-1, error.get());
-        }
+        exec(operation, metaService, tableId, table, routeTable, fork, retryTimes).ifPresent(e -> {
+            if (!fork.isIgnoreError()) {
+                throw new DingoClientException(-1, e);
+            }
+        });
+
         return operation.reduce(fork);
     }
 
-    private AtomicReference<Throwable> getAtomicReference(
-            Operation operation,
-            MetaServiceClient metaService,
-            DingoCommonId tableId,
-            Table table,
-            RouteTable routeTable,
-            Operation.Fork fork
+    private Optional<Throwable> exec(
+        Operation operation,
+        MetaServiceClient metaService,
+        DingoCommonId tableId,
+        Table table,
+        RouteTable routeTable,
+        Operation.Fork fork,
+        int retry
     ) {
+        if (retry <= 0) {
+            return Optional.of(new RuntimeException("Exceeded the retry limit for performing " + operation.getClass()));
+        }
         List<OperationContext> contexts = generateContext(tableId, table, routeTable.getCodec(), fork);
-        AtomicReference<Throwable> error = new AtomicReference<>();
+        Optional<Throwable> error = Optional.empty();
         CountDownLatch countDownLatch = new CountDownLatch(contexts.size());
         contexts.forEach(context -> CompletableFuture
             .runAsync(() -> operation.exec(context), Executors.executor("exec-operator"))
-            .whenComplete((r, e) -> {
-                if (e != null && e.getCause() instanceof DingoClientException.InvalidRouteTableException) {
+            .thenApply(r -> Optional.<Throwable>empty())
+            .exceptionally(Optional::of)
+            .thenAccept(e -> {
+                e.map(err -> {
                     RouteTable newRouteTable = getAndRefreshRouteTable(metaService, tableId, true);
                     Operation.Fork newFork = operation.fork(context, newRouteTable);
-                    getAtomicReference(operation, metaService, tableId, table, newRouteTable, newFork);
-                }
+                    return exec(operation, metaService, tableId, table, newRouteTable, newFork, retry - 1).orNull();
+                }).ifPresent(error::ifAbsentSet);
                 countDownLatch.countDown();
-                error.set(e);
-             }));
+            }));
         try {
             countDownLatch.await();
         } catch (InterruptedException e) {
-            throw new RuntimeException(e);
+            log.warn("Exec {} interrupted.", operation.getClass());
         }
         return error;
     }

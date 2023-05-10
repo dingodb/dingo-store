@@ -27,6 +27,7 @@ import io.grpc.ManagedChannel;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 public class AutoIncrementServiceConnector extends ServiceConnector<MetaServiceGrpc.MetaServiceBlockingStub> {
@@ -52,11 +53,9 @@ public class AutoIncrementServiceConnector extends ServiceConnector<MetaServiceG
     @Override
     protected ManagedChannel transformToLeaderChannel(ManagedChannel channel) {
         Common.Location autoincrementLeader = CoordinatorServiceGrpc.newBlockingStub(channel)
-                .getCoordinatorMap(getCoordinatorMapRequest)
-                .getAutoIncrementLeaderLocation();
-        if (!channel.isShutdown()) {
-            channel.shutdown();
-        }
+            .withDeadlineAfter(1, TimeUnit.SECONDS)
+            .getCoordinatorMap(getCoordinatorMapRequest)
+            .getAutoIncrementLeaderLocation();
         if (!autoincrementLeader.getHost().isEmpty()) {
             return newChannel(autoincrementLeader.getHost(), autoincrementLeader.getPort());
         }

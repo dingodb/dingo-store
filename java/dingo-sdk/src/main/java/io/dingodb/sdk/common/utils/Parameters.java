@@ -49,7 +49,7 @@ public final class Parameters {
         Predicate<T> checkFunction,
         String message
     ) {
-        return check(input, checkFunction, () -> new RuntimeException(message));
+        return check(input, checkFunction, () -> new IllegalArgumentException(message));
     }
 
     /**
