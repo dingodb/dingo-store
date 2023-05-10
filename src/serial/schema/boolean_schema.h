@@ -17,6 +17,7 @@
 
 #include <iostream>
 #include <optional>
+
 #include "dingo_schema.h"
 
 namespace dingodb {

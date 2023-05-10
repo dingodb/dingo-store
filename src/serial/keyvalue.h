@@ -30,8 +30,8 @@ class KeyValue {
   void Set(std::string* key, std::string* value);
   void SetKey(std::string* key);
   void SetValue(std::string* value);
-  std::string* GetKey();
-  std::string* GetValue();
+  std::string* GetKey() const;
+  std::string* GetValue() const;
 };
 
 }  // namespace dingodb

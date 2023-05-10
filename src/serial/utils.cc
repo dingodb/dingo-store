@@ -14,6 +14,10 @@
 
 #include "utils.h"
 
+#include <cstdint>
+#include <memory>
+#include <vector>
+
 namespace dingodb {
 
 void SortSchema(std::vector<BaseSchema*>* schemas) {
@@ -37,7 +41,7 @@ void SortSchema(std::vector<BaseSchema*>* schemas) {
     }
   }
 }
-void FormatSchema(std::vector<BaseSchema *> *schemas, bool le) {
+void FormatSchema(std::vector<BaseSchema*>* schemas, bool le) {
   for (BaseSchema* bs : *schemas) {
     if (bs != nullptr) {
       BaseSchema::Type type = bs->GetType();
@@ -81,6 +85,7 @@ int32_t* GetApproPerRecordSize(std::vector<BaseSchema*>* schemas) {
   size[1] = value_size;
   return size;
 }
+
 bool VectorFindAndRemove(std::vector<int>* v, int t) {
   for (std::vector<int>::iterator it = v->begin(); it != v->end(); it++) {
     if (*it == t) {
@@ -90,176 +95,282 @@ bool VectorFindAndRemove(std::vector<int>* v, int t) {
   }
   return false;
 }
+
+bool VectorFind(const std::vector<int>& v, int t) {
+  for (int it : v) {
+    if (it == t) {
+      return true;
+    }
+  }
+  return false;
+}
+
 std::vector<BaseSchema*>* TableDefinitionToDingoSchema(pb::meta::TableDefinition* td) {
-  std::vector<BaseSchema*> *schemas = new std::vector<BaseSchema*>(td->columns_size());
+  std::vector<BaseSchema*>* schemas = new std::vector<BaseSchema*>(td->columns_size());
   int i = 0;
   for (const pb::meta::ColumnDefinition& cd : td->columns()) {
-      pb::meta::ElementType type = cd.element_type();
-      switch(type) {
-        case pb::meta::ELEM_TYPE_DOUBLE: {
-          DingoSchema<std::optional<double>> *double_schema = new DingoSchema<std::optional<double>>();
-          double_schema->SetAllowNull(cd.nullable());
-          double_schema->SetIndex(i);
-          double_schema->SetIsKey(cd.indexofkey() >= 0);
-          schemas->at(i++) = double_schema;
-          break;
-        }
-        case pb::meta::ELEM_TYPE_FLOAT: {
-          //TODO
-          schemas->at(i++) = nullptr;
-          break;
-        }
-        case pb::meta::ELEM_TYPE_INT32: {
-          DingoSchema<std::optional<int32_t>> *integer_schema = new DingoSchema<std::optional<int32_t>>();
-          integer_schema->SetAllowNull(cd.nullable());
-          integer_schema->SetIndex(i);
-          integer_schema->SetIsKey(cd.indexofkey() >= 0);
-          schemas->at(i++) = integer_schema;
-          break;
-        }
-        case pb::meta::ELEM_TYPE_INT64: {
-          DingoSchema<std::optional<int64_t>> *long_schema = new DingoSchema<std::optional<int64_t>>();
-          long_schema->SetAllowNull(cd.nullable());
-          long_schema->SetIndex(i);
-          long_schema->SetIsKey(cd.indexofkey() >= 0);
-          schemas->at(i++) = long_schema;
-          break;
-        }
-        case pb::meta::ELEM_TYPE_UINT32: {
-          DingoSchema<std::optional<int32_t>> *integer_schema = new DingoSchema<std::optional<int32_t>>();
-          integer_schema->SetAllowNull(cd.nullable());
-          integer_schema->SetIndex(i);
-          integer_schema->SetIsKey(cd.indexofkey() >= 0);
-          schemas->at(i++) = integer_schema;
-          break;
-        }
-        case pb::meta::ELEM_TYPE_UINT64: {
-          DingoSchema<std::optional<int64_t>> *long_schema = new DingoSchema<std::optional<int64_t>>();
-          long_schema->SetAllowNull(cd.nullable());
-          long_schema->SetIndex(i);
-          long_schema->SetIsKey(cd.indexofkey() >= 0);
-          schemas->at(i++) = long_schema;
-          break;
-        }
-        case pb::meta::ELEM_TYPE_BOOLEAN: {
-          DingoSchema<std::optional<bool>> *bool_schema = new DingoSchema<std::optional<bool>>();
-          bool_schema->SetAllowNull(cd.nullable());
-          bool_schema->SetIndex(i);
-          bool_schema->SetIsKey(cd.indexofkey() >= 0);
-          schemas->at(i++) = bool_schema;
-          break;
-        }
-        case pb::meta::ELEM_TYPE_STRING: {
-          DingoSchema<std::optional<std::reference_wrapper<std::string>>> *string_schema = new DingoSchema<std::optional<std::reference_wrapper<std::string>>>();
-          string_schema->SetAllowNull(cd.nullable());
-          string_schema->SetIndex(i);
-          string_schema->SetIsKey(cd.indexofkey() >= 0);
-          schemas->at(i++) = string_schema;
-          break;
-        }
-        case pb::meta::ELEM_TYPE_BYTES: {
-          DingoSchema<std::optional<std::reference_wrapper<std::string>>> *string_schema = new DingoSchema<std::optional<std::reference_wrapper<std::string>>>();
-          string_schema->SetAllowNull(cd.nullable());
-          string_schema->SetIndex(i);
-          string_schema->SetIsKey(cd.indexofkey() >= 0);
-          schemas->at(i++) = string_schema;
-          break;
-        }
-        case pb::meta::ELEM_TYPE_FIX32: {
-          //TODO
-          schemas->at(i++) = nullptr;
-          break;
-        }
-        case pb::meta::ELEM_TYPE_FIX64: {
-          //TODO
-          schemas->at(i++) = nullptr;
-          break;
-        }
-        case pb::meta::ELEM_TYPE_SFIX32: {
-          //TODO
-          schemas->at(i++) = nullptr;
-          break;
-        }
-        case pb::meta::ELEM_TYPE_SFIX64: {
-          //TODO
-          schemas->at(i++) = nullptr;
-          break;
-        }
-        case pb::meta::ElementType_INT_MIN_SENTINEL_DO_NOT_USE_: {
-          //TODO
-          schemas->at(i++) = nullptr;
-          break;
-        }
-        case pb::meta::ElementType_INT_MAX_SENTINEL_DO_NOT_USE_: {
-          //TODO
-          schemas->at(i++) = nullptr;
-          break;
-        }
-        default: {
-          schemas->at(i++) = nullptr;
-          break;
-        }
+    pb::meta::ElementType type = cd.element_type();
+    switch (type) {
+      case pb::meta::ELEM_TYPE_DOUBLE: {
+        DingoSchema<std::optional<double>>* double_schema = new DingoSchema<std::optional<double>>();
+        double_schema->SetAllowNull(cd.nullable());
+        double_schema->SetIndex(i);
+        double_schema->SetIsKey(cd.indexofkey() >= 0);
+        schemas->at(i++) = double_schema;
+        break;
       }
+      case pb::meta::ELEM_TYPE_FLOAT: {
+        // TODO
+        schemas->at(i++) = nullptr;
+        break;
+      }
+      case pb::meta::ELEM_TYPE_INT32: {
+        DingoSchema<std::optional<int32_t>>* integer_schema = new DingoSchema<std::optional<int32_t>>();
+        integer_schema->SetAllowNull(cd.nullable());
+        integer_schema->SetIndex(i);
+        integer_schema->SetIsKey(cd.indexofkey() >= 0);
+        schemas->at(i++) = integer_schema;
+        break;
+      }
+      case pb::meta::ELEM_TYPE_INT64: {
+        DingoSchema<std::optional<int64_t>>* long_schema = new DingoSchema<std::optional<int64_t>>();
+        long_schema->SetAllowNull(cd.nullable());
+        long_schema->SetIndex(i);
+        long_schema->SetIsKey(cd.indexofkey() >= 0);
+        schemas->at(i++) = long_schema;
+        break;
+      }
+      case pb::meta::ELEM_TYPE_UINT32: {
+        DingoSchema<std::optional<int32_t>>* integer_schema = new DingoSchema<std::optional<int32_t>>();
+        integer_schema->SetAllowNull(cd.nullable());
+        integer_schema->SetIndex(i);
+        integer_schema->SetIsKey(cd.indexofkey() >= 0);
+        schemas->at(i++) = integer_schema;
+        break;
+      }
+      case pb::meta::ELEM_TYPE_UINT64: {
+        DingoSchema<std::optional<int64_t>>* long_schema = new DingoSchema<std::optional<int64_t>>();
+        long_schema->SetAllowNull(cd.nullable());
+        long_schema->SetIndex(i);
+        long_schema->SetIsKey(cd.indexofkey() >= 0);
+        schemas->at(i++) = long_schema;
+        break;
+      }
+      case pb::meta::ELEM_TYPE_BOOLEAN: {
+        DingoSchema<std::optional<bool>>* bool_schema = new DingoSchema<std::optional<bool>>();
+        bool_schema->SetAllowNull(cd.nullable());
+        bool_schema->SetIndex(i);
+        bool_schema->SetIsKey(cd.indexofkey() >= 0);
+        schemas->at(i++) = bool_schema;
+        break;
+      }
+      case pb::meta::ELEM_TYPE_STRING: {
+        DingoSchema<std::optional<std::shared_ptr<std::string>>>* string_schema =
+            new DingoSchema<std::optional<std::shared_ptr<std::string>>>();
+        string_schema->SetAllowNull(cd.nullable());
+        string_schema->SetIndex(i);
+        string_schema->SetIsKey(cd.indexofkey() >= 0);
+        schemas->at(i++) = string_schema;
+        break;
+      }
+      case pb::meta::ELEM_TYPE_BYTES: {
+        DingoSchema<std::optional<std::shared_ptr<std::string>>>* string_schema =
+            new DingoSchema<std::optional<std::shared_ptr<std::string>>>();
+        string_schema->SetAllowNull(cd.nullable());
+        string_schema->SetIndex(i);
+        string_schema->SetIsKey(cd.indexofkey() >= 0);
+        schemas->at(i++) = string_schema;
+        break;
+      }
+      case pb::meta::ELEM_TYPE_FIX32: {
+        // TODO
+        schemas->at(i++) = nullptr;
+        break;
+      }
+      case pb::meta::ELEM_TYPE_FIX64: {
+        // TODO
+        schemas->at(i++) = nullptr;
+        break;
+      }
+      case pb::meta::ELEM_TYPE_SFIX32: {
+        // TODO
+        schemas->at(i++) = nullptr;
+        break;
+      }
+      case pb::meta::ELEM_TYPE_SFIX64: {
+        // TODO
+        schemas->at(i++) = nullptr;
+        break;
+      }
+      case pb::meta::ElementType_INT_MIN_SENTINEL_DO_NOT_USE_: {
+        // TODO
+        schemas->at(i++) = nullptr;
+        break;
+      }
+      case pb::meta::ElementType_INT_MAX_SENTINEL_DO_NOT_USE_: {
+        // TODO
+        schemas->at(i++) = nullptr;
+        break;
+      }
+      default: {
+        schemas->at(i++) = nullptr;
+        break;
+      }
+    }
   }
 
   return schemas;
 }
+
+int ElementToSql(const pb::meta::TableDefinition& td, const std::vector<std::any>& record,
+                 std::vector<std::any>& sql_record) {
+  sql_record.resize(td.columns_size());
+  for (int i = 0; i < td.columns_size(); i++) {
+    pb::meta::ColumnDefinition cd = td.columns().at(i);
+    switch (cd.sql_type()) {
+      case pb::meta::SQL_TYPE_BOOLEAN: {
+        sql_record[i] = record[i];
+        break;
+      }
+      case pb::meta::SQL_TYPE_INTEGER: {
+        sql_record[i] = record[i];
+        break;
+      }
+      case pb::meta::SQL_TYPE_BIGINT: {
+        sql_record[i] = record[i];
+        break;
+      }
+      case pb::meta::SQL_TYPE_DOUBLE: {
+        sql_record[i] = record[i];
+        break;
+      }
+      case pb::meta::SQL_TYPE_FLOAT: {
+        sql_record[i] = record[i];
+        break;
+      }
+      case pb::meta::SQL_TYPE_DATE: {
+        sql_record[i] = record[i];
+        break;
+      }
+      case pb::meta::SQL_TYPE_TIME: {
+        sql_record[i] = record[i];
+        break;
+      }
+      case pb::meta::SQL_TYPE_TIMESTAMP: {
+        sql_record[i] = record[i];
+        break;
+      }
+      case pb::meta::SQL_TYPE_VARCHAR: {
+        sql_record[i] = record[i];
+        break;
+      }
+      case pb::meta::SQL_TYPE_ARRAY: {
+        sql_record[i] = record[i];
+        break;
+      }
+      case pb::meta::SQL_TYPE_MULTISET: {
+        sql_record[i] = record[i];
+        break;
+      }
+      case pb::meta::SQL_TYPE_BYTES: {
+        sql_record[i] = record[i];
+        break;
+      }
+      case pb::meta::SQL_TYPE_ANY: {
+        sql_record[i] = record[i];
+        break;
+      }
+      case pb::meta::SqlType_INT_MIN_SENTINEL_DO_NOT_USE_: {
+        sql_record[i] = record[i];
+        break;
+      }
+      case pb::meta::SqlType_INT_MAX_SENTINEL_DO_NOT_USE_: {
+        sql_record[i] = record[i];
+        break;
+      }
+      default: {
+        break;
+      }
+    }
+  }
+
+  return 0;
+}
+
 std::vector<std::any>* ElementToSql(pb::meta::TableDefinition* td, std::vector<std::any>* record) {
-  for (int i = 0; i < td->columns_size(); i++) {
-    pb::meta::ColumnDefinition cd = td->columns().at(i);
+  std::vector<std::any>* sql_record = new std::vector<std::any>(td->columns_size());
+  int ret = ElementToSql(*td, *record, *sql_record);
+  if (ret < 0) {
+    delete sql_record;
+    return nullptr;
+  }
+  return sql_record;
+}
+
+int SqlToElement(const pb::meta::TableDefinition& td, const std::vector<std::any>& sql_record,
+                 std::vector<std::any>& element_record) {
+  element_record.resize(td.columns_size());
+  for (int i = 0; i < td.columns_size(); i++) {
+    pb::meta::ColumnDefinition cd = td.columns().at(i);
     switch (cd.sql_type()) {
       case pb::meta::SQL_TYPE_BOOLEAN: {
+        element_record[i] = sql_record[i];
         break;
       }
       case pb::meta::SQL_TYPE_INTEGER: {
+        element_record[i] = sql_record[i];
         break;
       }
       case pb::meta::SQL_TYPE_BIGINT: {
+        element_record[i] = sql_record[i];
         break;
       }
       case pb::meta::SQL_TYPE_DOUBLE: {
+        element_record[i] = sql_record[i];
         break;
       }
       case pb::meta::SQL_TYPE_FLOAT: {
+        element_record[i] = sql_record[i];
         break;
       }
       case pb::meta::SQL_TYPE_DATE: {
-        record[i] = record[i]; //TODO
+        element_record[i] = sql_record[i];
         break;
       }
       case pb::meta::SQL_TYPE_TIME: {
-        record[i] = record[i]; //TODO
+        element_record[i] = sql_record[i];
         break;
       }
       case pb::meta::SQL_TYPE_TIMESTAMP: {
-        record[i] = record[i]; //TODO
+        element_record[i] = sql_record[i];
         break;
       }
       case pb::meta::SQL_TYPE_VARCHAR: {
-        record[i] = record[i]; //TODO
+        element_record[i] = sql_record[i];
         break;
       }
       case pb::meta::SQL_TYPE_ARRAY: {
-        record[i] = record[i]; //TODO
+        element_record[i] = sql_record[i];
         break;
       }
       case pb::meta::SQL_TYPE_MULTISET: {
-        record[i] = record[i]; //TODO
+        element_record[i] = sql_record[i];
         break;
       }
       case pb::meta::SQL_TYPE_BYTES: {
+        element_record[i] = sql_record[i];
         break;
       }
       case pb::meta::SQL_TYPE_ANY: {
-        record[i] = record[i]; //TODO
+        element_record[i] = sql_record[i];
         break;
       }
       case pb::meta::SqlType_INT_MIN_SENTINEL_DO_NOT_USE_: {
-        record[i] = record[i]; //TODO
+        element_record[i] = sql_record[i];
         break;
       }
       case pb::meta::SqlType_INT_MAX_SENTINEL_DO_NOT_USE_: {
-        record[i] = record[i]; //TODO
+        element_record[i] = sql_record[i];
         break;
       }
       default: {
@@ -267,76 +378,22 @@ std::vector<std::any>* ElementToSql(pb::meta::TableDefinition* td, std::vector<s
       }
     }
   }
-  return record;
+  return 0;
 }
+
 std::vector<std::any>* SqlToElement(pb::meta::TableDefinition* td, std::vector<std::any>* record) {
-  for (int i = 0; i < td->columns_size(); i++) {
-    pb::meta::ColumnDefinition cd = td->columns().at(i);
-    switch (cd.sql_type()) {
-      case pb::meta::SQL_TYPE_BOOLEAN: {
-        break;
-      }
-      case pb::meta::SQL_TYPE_INTEGER: {
-        break;
-      }
-      case pb::meta::SQL_TYPE_BIGINT: {
-        break;
-      }
-      case pb::meta::SQL_TYPE_DOUBLE: {
-        break;
-      }
-      case pb::meta::SQL_TYPE_FLOAT: {
-        break;
-      }
-      case pb::meta::SQL_TYPE_DATE: {
-        record[i] = record[i]; //TODO
-        break;
-      }
-      case pb::meta::SQL_TYPE_TIME: {
-        record[i] = record[i]; //TODO
-        break;
-      }
-      case pb::meta::SQL_TYPE_TIMESTAMP: {
-        record[i] = record[i]; //TODO
-        break;
-      }
-      case pb::meta::SQL_TYPE_VARCHAR: {
-        record[i] = record[i]; //TODO
-        break;
-      }
-      case pb::meta::SQL_TYPE_ARRAY: {
-        record[i] = record[i]; //TODO
-        break;
-      }
-      case pb::meta::SQL_TYPE_MULTISET: {
-        record[i] = record[i]; //TODO
-        break;
-      }
-      case pb::meta::SQL_TYPE_BYTES: {
-        break;
-      }
-      case pb::meta::SQL_TYPE_ANY: {
-        record[i] = record[i]; //TODO
-        break;
-      }
-      case pb::meta::SqlType_INT_MIN_SENTINEL_DO_NOT_USE_: {
-        record[i] = record[i]; //TODO
-        break;
-      }
-      case pb::meta::SqlType_INT_MAX_SENTINEL_DO_NOT_USE_: {
-        record[i] = record[i]; //TODO
-        break;
-      }
-      default: {
-        break;
-      }
-    }
+  std::vector<std::any>* element_record = new std::vector<std::any>(td->columns_size());
+  int ret = SqlToElement(*td, *record, *element_record);
+  if (ret < 0) {
+    delete element_record;
+    return nullptr;
   }
-  return record;
+  return element_record;
 }
+
 bool IsLE() {
   uint32_t i = 1;
-  char* c = (char*) &i;
+  char* c = (char*)&i;
   return *c == 1;
 }
 

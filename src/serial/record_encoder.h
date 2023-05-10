@@ -16,9 +16,9 @@
 #define DINGO_SERIAL_RECORD_ENCODER_H_
 
 #include "any"
-#include "optional"
 #include "functional"
 #include "keyvalue.h"
+#include "optional"
 #include "schema/boolean_schema.h"
 #include "schema/double_schema.h"
 #include "schema/integer_schema.h"
@@ -39,18 +39,29 @@ class RecordEncoder {
   bool le_;
 
  public:
-  RecordEncoder(int schema_version, std::vector<BaseSchema*>* schemas,
-                long common_id);
-  RecordEncoder(int schema_version, std::vector<BaseSchema*>* schemas,
-                long common_id, bool le);
-  void Init(int schema_version, std::vector<BaseSchema*>* schemas,
-                long common_id);
+  RecordEncoder(int schema_version, std::vector<BaseSchema*>* schemas, long common_id);
+  RecordEncoder(int schema_version, std::vector<BaseSchema*>* schemas, long common_id, bool le);
+
+  void Init(int schema_version, std::vector<BaseSchema*>* schemas, long common_id);
+
   KeyValue* Encode(std::vector<std::any>* record);
+  int Encode(const std::vector<std::any>& record, pb::common::KeyValue& key_value /*output*/);
+  int Encode(const std::vector<std::any>& record, std::string& key, std::string& value);
+
   std::string* EncodeKey(std::vector<std::any>* record);
+  int EncodeKey(const std::vector<std::any>& record, std::string& output);
+
   std::string* EncodeValue(std::vector<std::any>* record);
+  int EncodeValue(const std::vector<std::any>& record, std::string& output);
+
   std::string* EncodeKeyPrefix(std::vector<std::any>* record, int column_count);
+  int EncodeKeyPrefix(const std::vector<std::any>& record, int column_count, std::string& output);
+
   std::string* EncodeMaxKeyPrefix() const;
+  int EncodeMaxKeyPrefix(std::string& output) const;
+
   std::string* EncodeMinKeyPrefix() const;
+  int EncodeMinKeyPrefix(std::string& output) const;
 };
 
 }  // namespace dingodb
