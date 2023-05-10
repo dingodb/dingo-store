@@ -251,7 +251,8 @@ bool Helper::IsEqualIgnoreCase(const std::string& str1, const std::string& str2)
                     [](const char c1, const char c2) { return std::tolower(c1) == std::tolower(c2); });
 }
 
-std::string Helper::StringIncrement(const std::string& input) {
+// Next prefix
+std::string Helper::PrefixNext(const std::string& input) {
   std::string ret(input.size(), 0);
   int carry = 1;
   for (int i = input.size() - 1; i >= 0; --i) {
@@ -264,6 +265,57 @@ std::string Helper::StringIncrement(const std::string& input) {
   }
 
   return (carry == 0) ? ret : input;
+}
+
+// Transform RangeWithOptions to Range for validate
+pb::common::Range Helper::TransformRangeForValidate(const pb::common::Range& region_range,
+                                                    const pb::common::RangeWithOptions& other_range) {
+  pb::common::Range range;
+
+  const auto& r_start_key = region_range.start_key();
+  const auto& r_end_key = region_range.end_key();
+  const auto& o_start_key = other_range.range().start_key();
+  const auto& o_end_key = other_range.range().end_key();
+
+  // adjust start_key
+  if (o_start_key.size() < r_start_key.size() &&
+      memcmp(o_start_key.c_str(), r_start_key.c_str(), o_start_key.size()) == 0) {
+    range.set_start_key(PrefixNext(o_start_key));
+  } else {
+    range.set_start_key(other_range.with_start() ? o_start_key : PrefixNext(o_start_key));
+  }
+
+  // adjust end_key
+  if (o_end_key.size() < r_end_key.size() && memcmp(o_end_key.c_str(), r_end_key.c_str(), o_end_key.size()) == 0) {
+    range.set_end_key(o_end_key);
+  } else {
+    range.set_end_key(other_range.with_end() ? PrefixNext(o_end_key) : o_end_key);
+  }
+
+  return range;
+}
+
+// Transform RangeWithOptions to Range for scan/deleteRange
+pb::common::Range Helper::TransformRangeWithOptions(const pb::common::RangeWithOptions& range_with_options) {
+  pb::common::Range range;
+
+  range.set_start_key(range_with_options.with_start() ? range_with_options.range().start_key()
+                                                      : PrefixNext(range_with_options.range().start_key()));
+
+  range.set_end_key(range_with_options.with_end() ? PrefixNext(range_with_options.range().end_key())
+                                                  : range_with_options.range().end_key());
+
+  return range;
+}
+
+// Take range intersection
+pb::common::Range Helper::IntersectRange(const pb::common::Range& range1, const pb::common::Range& range2) {
+  pb::common::Range range;
+
+  range.set_start_key((range1.start_key() <= range2.start_key()) ? range2.start_key() : range1.start_key());
+  range.set_end_key((range1.end_key() <= range2.end_key()) ? range1.end_key() : range2.end_key());
+
+  return range;
 }
 
 std::string Helper::StringToHex(const std::string& str) {

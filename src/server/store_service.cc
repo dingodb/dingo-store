@@ -127,44 +127,13 @@ void StoreServiceImpl::Snapshot(google::protobuf::RpcController* controller, con
   }
 }
 
-butil::Status ValidateRegion(uint64_t region_id, const std::vector<std::string_view>& keys) {
-  // Todo: use double buffer map replace.
-  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
-  auto region = store_region_meta->GetRegion(region_id);
-  // Check is exist region.
-  if (!region) {
-    return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
-  }
-  if (region->State() == pb::common::StoreRegionState::NEW) {
-    return butil::Status(pb::error::EREGION_UNAVAILABLE, "Region is new, waiting later");
-  }
-  if (region->State() == pb::common::StoreRegionState::STANDBY) {
-    return butil::Status(pb::error::EREGION_UNAVAILABLE, "Region is standby, waiting later");
-  }
-  if (region->State() == pb::common::StoreRegionState::DELETING) {
-    return butil::Status(pb::error::EREGION_UNAVAILABLE, "Region is deleting");
-  }
-  if (region->State() == pb::common::StoreRegionState::DELETED) {
-    return butil::Status(pb::error::EREGION_UNAVAILABLE, "Region is deleted");
-  }
-
-  auto range = region->Range();
-  for (const auto& key : keys) {
-    if (range.start_key().compare(key) > 0 || range.end_key().compare(key) < 0) {
-      return butil::Status(pb::error::EKEY_OUT_OF_RANGE, "Key out of range");
-    }
-  }
-
-  return butil::Status();
-}
-
 butil::Status ValidateKvGetRequest(const dingodb::pb::store::KvGetRequest* request) {
   if (request->key().empty()) {
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
 
   std::vector<std::string_view> keys = {request->key()};
-  auto status = ValidateRegion(request->region_id(), keys);
+  auto status = ServiceHelper::ValidateRegion(request->region_id(), keys);
   if (!status.ok()) {
     return status;
   }
@@ -219,7 +188,7 @@ butil::Status ValidateKvBatchGetRequest(const dingodb::pb::store::KvBatchGetRequ
     keys.push_back(key);
   }
 
-  auto status = ValidateRegion(request->region_id(), keys);
+  auto status = ServiceHelper::ValidateRegion(request->region_id(), keys);
   if (!status.ok()) {
     return status;
   }
@@ -267,7 +236,7 @@ butil::Status ValidateKvPutRequest(const dingodb::pb::store::KvPutRequest* reque
   }
 
   std::vector<std::string_view> keys = {request->kv().key()};
-  auto status = ValidateRegion(request->region_id(), keys);
+  auto status = ServiceHelper::ValidateRegion(request->region_id(), keys);
   if (!status.ok()) {
     return status;
   }
@@ -317,7 +286,7 @@ butil::Status ValidateKvBatchPutRequest(const dingodb::pb::store::KvBatchPutRequ
     keys.push_back(kv.key());
   }
 
-  auto status = ValidateRegion(request->region_id(), keys);
+  auto status = ServiceHelper::ValidateRegion(request->region_id(), keys);
   if (!status.ok()) {
     return status;
   }
@@ -361,7 +330,7 @@ butil::Status ValidateKvPutIfAbsentRequest(const dingodb::pb::store::KvPutIfAbse
   }
 
   std::vector<std::string_view> keys = {request->kv().key()};
-  auto status = ValidateRegion(request->region_id(), keys);
+  auto status = ServiceHelper::ValidateRegion(request->region_id(), keys);
   if (!status.ok()) {
     return status;
   }
@@ -411,7 +380,7 @@ butil::Status ValidateKvBatchPutIfAbsentRequest(const dingodb::pb::store::KvBatc
     keys.push_back(kv.key());
   }
 
-  auto status = ValidateRegion(request->region_id(), keys);
+  auto status = ServiceHelper::ValidateRegion(request->region_id(), keys);
   if (!status.ok()) {
     return status;
   }
@@ -461,7 +430,7 @@ butil::Status ValidateKvBatchDeleteRequest(const dingodb::pb::store::KvBatchDele
     keys.push_back(key);
   }
 
-  auto status = ValidateRegion(request->region_id(), keys);
+  auto status = ServiceHelper::ValidateRegion(request->region_id(), keys);
   if (!status.ok()) {
     return status;
   }
@@ -499,92 +468,25 @@ void StoreServiceImpl::KvBatchDelete(google::protobuf::RpcController* controller
   }
 }
 
-butil::Status KvDeleteRangeParamCheck(const pb::common::RangeWithOptions& range, std::string* real_start_key,
-                                      std::string* real_end_key) {
-  if (BAIDU_UNLIKELY(range.range().start_key().empty() || range.range().end_key().empty())) {
-    DINGO_LOG(ERROR) << fmt::format("start_key or end_key empty. not support");
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
-  }
-
-  if (BAIDU_UNLIKELY(range.range().start_key() > range.range().end_key())) {
-    DINGO_LOG(ERROR) << fmt::format("start_key > end_key  not support");
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
-
-  } else if (BAIDU_UNLIKELY(range.range().start_key() == range.range().end_key())) {
-    if (!range.with_start() || !range.with_end()) {
-      DINGO_LOG(ERROR) << fmt::format("start_key == end_key with_start != true or with_end != true. not support");
-      return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
-    }
-  }
-
-  // Design constraints We do not allow tables with all 0xFF because there are too many tables and we cannot handle
-  // them
-  if (Helper::KeyIsEndOfAllTable(range.range().start_key()) || Helper::KeyIsEndOfAllTable(range.range().start_key())) {
-    DINGO_LOG(ERROR) << fmt::format("real_start_key or real_end_key all 0xFF. not support");
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
-  }
-
-  std::string internal_real_start_key;
-  if (!range.with_start()) {
-    internal_real_start_key = Helper::StringIncrement(range.range().start_key());
-  } else {
-    internal_real_start_key = range.range().start_key();
-  }
-
-  std::string internal_real_end_key;
-  if (range.with_end()) {
-    internal_real_end_key = Helper::StringIncrement(range.range().end_key());
-  } else {
-    internal_real_end_key = range.range().end_key();
-  }
-
-  // parameter check again
-  if (BAIDU_UNLIKELY(internal_real_start_key > internal_real_end_key)) {
-    DINGO_LOG(ERROR) << fmt::format("real_start_key > real_end_key  not support");
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
-
-  } else if (BAIDU_UNLIKELY(internal_real_start_key == internal_real_end_key)) {
-    if (!range.with_start() || !range.with_end()) {
-      DINGO_LOG(ERROR) << fmt::format(
-          "real_start_key == real_end_key with_start != true or with_end != true. not support");
-      return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
-    }
-  }
-
-  // Design constraints We do not allow tables with all 0xFF because there are too many tables and we cannot handle
-  // them
-  if (Helper::KeyIsEndOfAllTable(internal_real_start_key) || Helper::KeyIsEndOfAllTable(internal_real_end_key)) {
-    DINGO_LOG(ERROR) << fmt::format("real_start_key or real_end_key all 0xFF. not support");
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
-  }
-
-  if (real_start_key) {
-    *real_start_key = internal_real_start_key;
-  }
-
-  if (real_end_key) {
-    *real_end_key = internal_real_end_key;
-  }
-
-  return butil::Status();
-}
-
 butil::Status ValidateKvDeleteRangeRequest(const dingodb::pb::store::KvDeleteRangeRequest* request) {
-  // Check is exist region.
-  if (!Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->IsExistRegion(request->region_id())) {
+  auto region = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(request->region_id());
+  if (region == nullptr) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
   }
 
-  std::string real_start_key;
-  std::string real_end_key;
-  butil::Status s = KvDeleteRangeParamCheck(request->range(), &real_start_key, &real_end_key);
-  if (!s.ok()) {
-    DINGO_LOG(ERROR) << fmt::format("Helper::KvDeleteRangeParamCheck failed : {}", s.error_str());
-    return s;
+  auto status = ServiceHelper::ValidateRangeWithOptions(request->range());
+  if (!status.ok()) {
+    return status;
   }
 
-  std::vector<std::string_view> keys = {real_start_key, real_end_key};
-  auto status = ValidateRegion(request->region_id(), keys);
+  status = ServiceHelper::ValidateRegionState(region);
+  if (!status.ok()) {
+    return status;
+  }
+
+  auto uniform_range = Helper::TransformRangeForValidate(region->Range(), request->range());
+
+  status = ServiceHelper::ValidateRangeInRange(region->Range(), uniform_range);
   if (!status.ok()) {
     return status;
   }
@@ -633,16 +535,24 @@ void StoreServiceImpl::KvDeleteRange(google::protobuf::RpcController* controller
 }
 
 butil::Status ValidateKvScanBeginRequest(const dingodb::pb::store::KvScanBeginRequest* request) {
-  std::string real_start_key;
-  std::string real_end_key;
-  butil::Status s = KvDeleteRangeParamCheck(request->range(), &real_start_key, &real_end_key);
-  if (!s.ok()) {
-    DINGO_LOG(ERROR) << fmt::format("Helper::KvDeleteRangeParamCheck failed : {}", s.error_str());
-    return s;
+  auto region = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(request->region_id());
+  if (region == nullptr) {
+    return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
   }
 
-  std::vector<std::string_view> keys = {real_start_key, real_end_key};
-  auto status = ValidateRegion(request->region_id(), keys);
+  auto status = ServiceHelper::ValidateRangeWithOptions(request->range());
+  if (!status.ok()) {
+    return status;
+  }
+
+  status = ServiceHelper::ValidateRegionState(region);
+  if (!status.ok()) {
+    return status;
+  }
+
+  auto uniform_range = Helper::TransformRangeForValidate(region->Range(), request->range());
+
+  status = ServiceHelper::ValidateRangeInRange(region->Range(), uniform_range);
   if (!status.ok()) {
     return status;
   }

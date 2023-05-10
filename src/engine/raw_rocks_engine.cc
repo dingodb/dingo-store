@@ -1281,14 +1281,14 @@ butil::Status RawRocksEngine::Writer::KvDeleteRangeParamCheck(const pb::common::
 
   std::string internal_real_start_key;
   if (!range.with_start()) {
-    internal_real_start_key = Helper::StringIncrement(range.range().start_key());
+    internal_real_start_key = Helper::PrefixNext(range.range().start_key());
   } else {
     internal_real_start_key = range.range().start_key();
   }
 
   std::string internal_real_end_key;
   if (range.with_end()) {
-    internal_real_end_key = Helper::StringIncrement(range.range().end_key());
+    internal_real_end_key = Helper::PrefixNext(range.range().end_key());
   } else {
     internal_real_end_key = range.range().end_key();
   }

@@ -104,7 +104,16 @@ class Helper {
     }
   }
 
-  static std::string StringIncrement(const std::string& input);
+  static std::string PrefixNext(const std::string& input);
+
+  // Transform RangeWithOptions to Range for validate
+  static pb::common::Range TransformRangeForValidate(const pb::common::Range& region_range,
+                                                     const pb::common::RangeWithOptions& other_range);
+  // Transform RangeWithOptions to Range for scan/deleteRange
+  static pb::common::Range TransformRangeWithOptions(const pb::common::RangeWithOptions& range_with_options);
+
+  // Take range intersection
+  static pb::common::Range IntersectRange(const pb::common::Range& range1, const pb::common::Range& range2);
 
   static std::string StringToHex(const std::string& str);
 
