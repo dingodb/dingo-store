@@ -2587,7 +2587,7 @@ void CoordinatorControl::AddDeleteTaskWithCheck(
     const ::google::protobuf::RepeatedPtrField< ::dingodb::pb::common::Peer>& peers,
     pb::coordinator_internal::MetaIncrement& meta_increment) {
   // this is delete_region task
-  // precheck if reigon in RegionMap is REGION_NORMAL and REGION_RAFT_HEALTHY
+  // precheck if region in RegionMap is REGION_NORMAL and REGION_RAFT_HEALTHY
   auto* delete_region_task = task_list->add_tasks();
   auto* region_check = delete_region_task->mutable_pre_check();
   region_check->set_type(::dingodb::pb::coordinator::TaskPreCheckType::REGION_CHECK);

@@ -200,27 +200,11 @@ class DingoSafeMap {
     }
   }
 
-  // Copy
-  // copy the map with SafeMap input_map
-  int Copy(const TypeSafeMap &input_map) {
-    if (safe_map.Modify(InnerCopySafeMap, input_map) > 0) {
-      return 1;
-    } else {
-      return -1;
-    }
-  }
-
   // GetFlatMapCopy
   // get a copy of the internal flat map
   // used to get all key-value pairs from safe map
   // the out_map must be initialized before call this function
   int GetFlatMapCopy(TypeFlatMap &out_map) {
-    // if (safe_map.Modify(InnerGetFlatMapCopy, out_map) > 0) {
-    //   return 1;
-    // } else {
-    //   return -1;
-    // }
-
     TypeScopedPtr ptr;
     if (safe_map.Read(&ptr) != 0) {
       return -1;
@@ -322,26 +306,6 @@ class DingoSafeMap {
     return 1;
   }
 
-  // static size_t InnerGetFlatMapCopy(TypeFlatMap &map, const TypeFlatMap &out_map) {
-  //   // Notice: The brpc's template restrict to return value in Modify process, but we need to do this, so use a
-  //   // const_cast to modify the input parameter here
-  //   auto &mutable_out_map = const_cast<TypeFlatMap &>(out_map);
-
-  //   if (!static_cast<bool>(mutable_out_map.initialized())) {
-  //     mutable_out_map.init(1024);
-  //   }
-  //   mutable_out_map = map;
-  //   return 1;
-  // }
-
-  static size_t InnerCopySafeMap(TypeFlatMap &map, const TypeSafeMap &input_map) {
-    // Notice: The brpc's template restrict to return value in Modify process, but we need to do this, so use a
-    // const_cast to modify the input parameter here
-    auto &mutable_input_map = const_cast<TypeSafeMap &>(input_map);
-    mutable_input_map.CopyFlatMap(map);
-    return 1;
-  }
-
   static size_t InnerErase(TypeFlatMap &map, const T_KEY &key) {
     map.erase(key);
     return 1;
@@ -403,7 +367,6 @@ class DingoSafeMap {
       return 0;
     }
 
-    *value_ptr = value;
     return 1;
   }
 
