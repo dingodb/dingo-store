@@ -23,6 +23,7 @@ import io.dingodb.sdk.common.Location;
 import io.grpc.ManagedChannel;
 
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 public class CoordinatorServiceConnector extends ServiceConnector<CoordinatorServiceGrpc.CoordinatorServiceBlockingStub> {
 
@@ -36,11 +37,9 @@ public class CoordinatorServiceConnector extends ServiceConnector<CoordinatorSer
     @Override
     protected ManagedChannel transformToLeaderChannel(ManagedChannel channel) {
         Common.Location leaderLocation = CoordinatorServiceGrpc.newBlockingStub(channel)
-                .getCoordinatorMap(getCoordinatorMapRequest)
-                .getLeaderLocation();
-        if (!channel.isShutdown()) {
-            channel.shutdown();
-        }
+            .withDeadlineAfter(1, TimeUnit.SECONDS)
+            .getCoordinatorMap(getCoordinatorMapRequest)
+            .getLeaderLocation();
         if (!leaderLocation.getHost().isEmpty()) {
             return newChannel(leaderLocation.getHost(), leaderLocation.getPort());
         }

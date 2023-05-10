@@ -69,7 +69,7 @@ public class ScanOperation implements Operation {
                 return new Fork(new Iterator[0], subTasks, true);
             }
             buildSubTasks(range, subTasks, task);
-            return new Fork(new Iterator[subTasks.size()], subTasks, true);
+            return new Fork(new Iterator[subTasks.size()], subTasks, false);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }

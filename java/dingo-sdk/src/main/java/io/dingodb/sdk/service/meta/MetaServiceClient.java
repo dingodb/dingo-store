@@ -127,8 +127,6 @@ public class MetaServiceClient {
     }
 
     public void close() {
-        metaConnector.shutdown();
-        incrementConnector.shutdown();
     }
 
     private synchronized void reload() {

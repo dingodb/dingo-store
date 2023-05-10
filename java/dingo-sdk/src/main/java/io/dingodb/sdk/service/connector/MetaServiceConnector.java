@@ -22,12 +22,14 @@ import io.dingodb.coordinator.CoordinatorServiceGrpc;
 import io.dingodb.meta.MetaServiceGrpc;
 import io.dingodb.sdk.common.Location;
 import io.dingodb.sdk.common.utils.Optional;
+import io.grpc.CallOptions;
 import io.grpc.ManagedChannel;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -54,11 +56,9 @@ public class MetaServiceConnector extends ServiceConnector<MetaServiceGrpc.MetaS
     @Override
     public ManagedChannel transformToLeaderChannel(ManagedChannel channel) {
         Common.Location leaderLocation = CoordinatorServiceGrpc.newBlockingStub(channel)
+            .withDeadlineAfter(1, TimeUnit.SECONDS)
             .getCoordinatorMap(getCoordinatorMapRequest)
             .getLeaderLocation();
-        if (!channel.isShutdown()) {
-            channel.shutdown();
-        }
         if (!leaderLocation.getHost().isEmpty()) {
             return newChannel(leaderLocation.getHost(), leaderLocation.getPort());
         }

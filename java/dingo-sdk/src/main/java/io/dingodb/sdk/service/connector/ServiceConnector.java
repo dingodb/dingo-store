@@ -19,8 +19,7 @@ package io.dingodb.sdk.service.connector;
 import io.dingodb.error.ErrorOuterClass;
 import io.dingodb.sdk.common.DingoClientException;
 import io.dingodb.sdk.common.Location;
-import io.grpc.Grpc;
-import io.grpc.InsecureChannelCredentials;
+import io.dingodb.sdk.common.utils.Optional;
 import io.grpc.ManagedChannel;
 import io.grpc.StatusRuntimeException;
 import io.grpc.stub.AbstractBlockingStub;
@@ -28,6 +27,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.TimeUnit;
@@ -38,6 +38,7 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 
 import static io.dingodb.sdk.common.utils.ErrorCodeUtils.refreshCode;
+import static io.dingodb.sdk.common.utils.NoBreakFunctions.wrap;
 
 @Slf4j
 public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
@@ -51,7 +52,6 @@ public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
         private final R response;
     }
 
-    protected ManagedChannel channel;
     protected final AtomicReference<S> stubRef = new AtomicReference<>();
     protected Set<Location> locations = new CopyOnWriteArraySet<>();
 
@@ -84,6 +84,10 @@ public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
             try {
                 Response<R> response = function.apply(stub);
                 if (response.getError().getErrcodeValue() != 0) {
+                    log.warn(
+                        "Exec {} failed, code: [{}], message: {}.",
+                        function.getClass(), response.error.getErrcode(), response.error.getErrmsg()
+                    );
                     if (refreshCode.contains(response.getError().getErrcodeValue())) {
                         throw new DingoClientException.InvalidRouteTableException(response.error.getErrmsg());
                     }
@@ -94,7 +98,8 @@ public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
                     throw new DingoClientException(response.getError().getErrcodeValue(), response.getError().getErrmsg());
                 }
                 return response;
-            } catch (StatusRuntimeException ignore) {
+            } catch (StatusRuntimeException e) {
+                log.warn("Exec {} failed: {}.", function.getClass(), e.getMessage());
                 refresh(stub);
             }
         }
@@ -109,22 +114,14 @@ public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
             if (!stubRef.compareAndSet(stub, null)) {
                 return;
             }
-            if (channel != null && !channel.isShutdown()) {
-                channel.shutdown();
-            }
-            if (locations.isEmpty()) {
-                throw new DingoClientException("Invalid locations");
-            }
             for (Location location : locations) {
-                try {
-                    channel = newChannel(location.getHost(), location.getPort());
-                    channel = transformToLeaderChannel(channel);
-                } catch (StatusRuntimeException ignore) {
-                    locations.remove(location);
-                    refresh(stub);
-                }
-                if (channel != null) {
-                    stubRef.set(newStub(channel));
+                if (Optional.of(location)
+                    .map(this::newChannel)
+                    .map(wrap(this::transformToLeaderChannel))
+                    .map(this::newStub)
+                    .ifPresent(stubRef::set)
+                    .isPresent()
+                ) {
                     return;
                 }
             }
@@ -132,14 +129,18 @@ public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
             refresh.set(false);
         }
     }
-
-    protected ManagedChannel newChannel(String host, int port) {
+    
+    protected ManagedChannel newChannel(Location location) {
         try {
-            return Grpc.newChannelBuilder(host + ":" + port, InsecureChannelCredentials.create()).build();
+            return ChannelManager.getChannel(location);
         } catch (Exception e) {
-            log.warn("Connect {}:{} and transform to leader error.", host, port, e);
+            log.warn("Connect {}:{} error", location, e);
         }
         return null;
+    } 
+
+    protected ManagedChannel newChannel(String host, int port) {
+        return newChannel(new Location(host, port));
     }
 
     protected abstract ManagedChannel transformToLeaderChannel(ManagedChannel channel);
@@ -150,9 +151,4 @@ public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
         return locations;
     }
 
-    public void shutdown() {
-        if (channel != null && !channel.isShutdown()) {
-            channel.shutdown();
-        }
-    }
 }
