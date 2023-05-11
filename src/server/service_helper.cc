@@ -51,17 +51,27 @@ butil::Status ServiceHelper::ValidateRange(const pb::common::Range& range) {
 }
 
 butil::Status ServiceHelper::ValidateRangeWithOptions(const pb::common::RangeWithOptions& range) {
-  if (BAIDU_UNLIKELY(range.range().start_key().empty() || range.range().end_key().empty())) {
+  const std::string& start_key = range.range().start_key();
+  const std::string& end_key = range.range().end_key();
+
+  if (BAIDU_UNLIKELY(start_key.empty() || end_key.empty())) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Range key is empty");
   }
 
-  if (BAIDU_UNLIKELY(range.range().start_key() > range.range().end_key())) {
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Range is invalid");
-
-  } else if (BAIDU_UNLIKELY(range.range().start_key() == range.range().end_key())) {
-    if (!range.with_start() || !range.with_end()) {
-      return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Range is invalid");
+  if (BAIDU_UNLIKELY(start_key.size() == end_key.size())) {
+    if (start_key < end_key || (start_key == end_key && range.with_start() && range.with_end())) {
+      return butil::Status();
     }
+
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Range is invalid");
+  }
+
+  // change to prefix comparison here.
+  size_t min_size = std::min(start_key.size(), end_key.size());
+
+  // min
+  if (BAIDU_UNLIKELY(memcmp(start_key.c_str(), end_key.c_str(), min_size) > 0)) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Range is invalid");
   }
 
   return butil::Status();
