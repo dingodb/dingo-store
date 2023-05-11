@@ -49,6 +49,7 @@
 #include "rocksdb/filter_policy.h"
 #include "rocksdb/iterator.h"
 #include "rocksdb/slice.h"
+#include "rocksdb/status.h"
 #include "rocksdb/table.h"
 #include "rocksdb/utilities/transaction_db.h"
 #include "rocksdb/write_batch.h"
@@ -1355,7 +1356,11 @@ butil::Status RawRocksEngine::SstFileWriter::SaveFile(std::shared_ptr<dingodb::I
 
   status = sst_writer_->Finish();
   if (!status.ok()) {
-    return butil::Status(status.code(), status.ToString());
+    return butil::Status((status.code() == rocksdb::Status::Code::kInvalidArgument &&
+                          status.ToString().find("no entries") != std::string::npos)
+                             ? pb::error::ENO_ENTRIES
+                             : static_cast<int>(status.code()),
+                         status.ToString());
   }
 
   return butil::Status();

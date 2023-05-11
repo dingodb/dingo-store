@@ -16,6 +16,7 @@
 #define DINGODB_RAFT_SNAPSHOT_H_
 
 #include "braft/snapshot.h"
+#include "butil/status.h"
 #include "engine/raw_engine.h"
 #include "engine/raw_rocks_engine.h"
 #include "handler/handler.h"
@@ -36,15 +37,15 @@ class RaftSnapshot {
   const RaftSnapshot& operator=(const RaftSnapshot&) = delete;
 
   // Generate snapshot file function
-  using GenSnapshotFileFunc = std::function<std::vector<pb::store_internal::SstFileInfo>(
-      const std::string checkpoint_dir, store::RegionPtr region)>;
+  using GenSnapshotFileFunc =
+      std::function<butil::Status(const std::string, store::RegionPtr, std::vector<pb::store_internal::SstFileInfo>&)>;
 
   // Scan region, generate sst snapshot file
-  std::vector<pb::store_internal::SstFileInfo> GenSnapshotFileByScan(const std::string& checkpoint_dir,
-                                                                     store::RegionPtr region);
+  butil::Status GenSnapshotFileByScan(const std::string& checkpoint_dir, store::RegionPtr region,
+                                      std::vector<pb::store_internal::SstFileInfo>& sst_files);
   // Do Checkpoint and hard link, generate sst snapshot file
-  std::vector<pb::store_internal::SstFileInfo> GenSnapshotFileByCheckpoint(const std::string& checkpoint_dir,
-                                                                           store::RegionPtr region);
+  butil::Status GenSnapshotFileByCheckpoint(const std::string& checkpoint_dir, store::RegionPtr region,
+                                            std::vector<pb::store_internal::SstFileInfo>& sst_files);
 
   bool SaveSnapshot(braft::SnapshotWriter* writer, store::RegionPtr region, GenSnapshotFileFunc func);
 

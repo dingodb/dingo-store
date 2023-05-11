@@ -113,7 +113,8 @@ butil::Status ServerInteraction::SendRequest(const std::string& service_name, co
         NextLeader(leader_index);
       } else {
         if (!FLAGS_log_each_request) {
-          DINGO_LOG(ERROR) << fmt::format("{} response failed, error {} {}", api_name, response.error().errcode(),
+          DINGO_LOG(ERROR) << fmt::format("{} response failed, error {} {}", api_name,
+                                          dingodb::pb::error::Errno_Name(response.error().errcode()),
                                           response.error().errmsg());
         }
         latency_ = cntl.latency_us();
