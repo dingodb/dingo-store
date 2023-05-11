@@ -143,6 +143,81 @@ message KvDeleteRangeResponse {
   uint64 delete_count = 2;
 }
 
+// aggregation type
+enum AggregationType {
+  AGGREGATION_NONE = 0;
+  SUM = 1;
+  COUNT = 2;
+  COUNTWITHNULL = 3;  // null is counted in count
+  MAX = 4;
+  MIN = 5;
+}
+
+// aggregation operation
+message AggregationOperator {
+  // aggregation operator
+  AggregationType oper = 1;
+
+  // Specify the index column here is currently only specifying a certain column.
+  // such as 0, 1 (-1 = all)
+  int32 index_of_column = 2;
+}
+
+message Schema {
+  enum Type {
+    BOOL = 0;
+    INTERGER = 1;
+    LONG = 2;
+    DOUBLE = 3;
+    STRING = 4;
+  };
+
+  // type of data
+  Type type = 1;
+
+  // Is primary key
+  bool is_key = 2;
+
+  // is allowed to be empty
+  bool is_nullable = 3;
+
+  // index position starts from 0
+  int32 index = 4;
+}
+
+message Coprocessor {
+  // the version of the serialized data
+  int32 schema_version = 1;
+
+  message SchemaWrapper {
+    repeated Schema schema = 1;
+    int64 common_id = 2;
+  }
+
+  // original schema
+  SchemaWrapper original_schema = 2;
+
+  // return schema
+  SchemaWrapper result_schema = 3;
+
+  // Column selection in the table list selection
+  // For example, [0, 2, 4, 7] selects the index subscript of the column.
+  // If the length of the array is 0, it means all
+  repeated int32 selection_columns = 4;
+
+  // The operator pushes down the expression binary filter to use empty to indicate that there is no expression and no
+  // filtering
+  bytes expression = 5;
+
+  // It is allowed to be empty, indicating that there is no group by. For example, group by name, age; [0, 1]
+  repeated int32 group_by_columns = 6;
+
+  // group by expression
+  // The list that needs to be aggregated is allowed to be empty, that is, not aggregated sum(salary), count(age),
+  // count(salary). but group_by_columns is not allowed to be empty
+  repeated AggregationOperator aggregation_operators = 7;
+}
+
 message KvScanBeginRequest {
   // region id
   uint64 region_id = 1;
@@ -165,6 +240,12 @@ message KvScanBeginRequest {
   // after reading all the data, the default is false,
   // and the default is automatically released
   bool disable_auto_release = 5;
+
+  // Whether to enable operator pushdown, enabled by default (false: means enabled, true: means disabled)
+  bool disable_coprocessor = 6;
+
+  // coprocessor
+  Coprocessor coprocessor = 7;
 }
 
 message KvScanBeginResponse {
