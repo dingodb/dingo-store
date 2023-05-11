@@ -15,6 +15,7 @@
 #ifndef DINGO_SERIAL_KEYVALUE_CODEC_H_
 #define DINGO_SERIAL_KEYVALUE_CODEC_H_
 
+#include <any>
 #include <memory>
 #include <string>
 #include <vector>
@@ -39,14 +40,13 @@ class KeyValueCodec {
   KeyValueCodec(std::shared_ptr<pb::meta::TableDefinition> td, uint64_t common_id);
   ~KeyValueCodec();
 
-  std::vector<std::any>* Decode(KeyValue* keyvalue);
-  KeyValue* Encode(std::vector<std::any>* record);
-
   int Decode(const std::string& key, const std::string& value, std::vector<std::any>& record /*output*/);
-  int Encode(const std::vector<std::any>& record, std::string& key /*output*/, std::string& value /*output*/);
-
   int Decode(const pb::common::KeyValue& key_value, std::vector<std::any>& record /*output*/);
+  int Decode(KeyValue& keyvalue, std::vector<std::any>& record /*output*/);
+
+  int Encode(const std::vector<std::any>& record, std::string& key /*output*/, std::string& value /*output*/);
   int Encode(const std::vector<std::any>& record, pb::common::KeyValue& key_value /*output*/);
+  int Encode(const std::vector<std::any>& record, KeyValue& keyvalue /*output*/);
 
   int EncodeKey(const std::vector<std::any>& record, std::string& output);
 

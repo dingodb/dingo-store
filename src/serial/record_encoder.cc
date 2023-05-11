@@ -121,6 +121,7 @@ int RecordEncoder::EncodeKey(const std::vector<std::any>& record, std::string& o
       }
     }
   }
+
   key_buf->GetBytes(output);
   delete key_buf;
   return 0;
@@ -130,6 +131,7 @@ int RecordEncoder::EncodeValue(const std::vector<std::any>& record, std::string&
   Buf* value_buf = new Buf(value_buf_size_, this->le_);
   value_buf->EnsureRemainder(4);
   value_buf->WriteInt(schema_version_);
+
   for (const auto& bs : *schemas_) {
     if (bs) {
       BaseSchema::Type type = bs->GetType();
@@ -187,6 +189,7 @@ int RecordEncoder::EncodeKeyPrefix(const std::vector<std::any>& record, int colu
   Buf* key_prefix_buf = new Buf(key_buf_size_, this->le_);
   key_prefix_buf->EnsureRemainder(8);
   key_prefix_buf->WriteLong(common_id_);
+
   for (const auto& bs : *schemas_) {
     if (bs) {
       BaseSchema::Type type = bs->GetType();
@@ -232,6 +235,7 @@ int RecordEncoder::EncodeKeyPrefix(const std::vector<std::any>& record, int colu
         }
       }
     }
+
     column_count--;
     if (column_count <= 0) {
       break;

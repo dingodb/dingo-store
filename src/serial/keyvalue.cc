@@ -14,22 +14,24 @@
 
 #include "keyvalue.h"
 
+#include <memory>
+#include <string>
+
 namespace dingodb {
 
-KeyValue::KeyValue(std::string* key, std::string* value) {
+KeyValue::KeyValue() : key_(std::make_shared<std::string>()), value_(std::make_shared<std::string>()) {}
+
+KeyValue::KeyValue(std::shared_ptr<std::string> key, std::shared_ptr<std::string> value) : key_(key), value_(value) {}
+
+void KeyValue::Set(std::shared_ptr<std::string> key, std::shared_ptr<std::string> value) {
   this->key_ = key;
   this->value_ = value;
 }
 
-void KeyValue::Set(std::string* key, std::string* value) {
-  this->key_ = key;
-  this->value_ = value;
-}
+void KeyValue::SetKey(std::shared_ptr<std::string> key) { this->key_ = key; }
+void KeyValue::SetValue(std::shared_ptr<std::string> value) { this->value_ = value; }
 
-void KeyValue::SetKey(std::string* key) { this->key_ = key; }
-void KeyValue::SetValue(std::string* value) { this->value_ = value; }
-
-std::string* KeyValue::GetKey() const { return key_; }
-std::string* KeyValue::GetValue() const { return value_; }
+std::shared_ptr<std::string> KeyValue::GetKey() const { return key_; }
+std::shared_ptr<std::string> KeyValue::GetValue() const { return value_; }
 
 }  // namespace dingodb

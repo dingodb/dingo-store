@@ -126,8 +126,6 @@ int RecordDecoder::Decode(const pb::common::KeyValue& key_value, std::vector<std
   return Decode(key_value.key(), key_value.value(), record);
 }
 
-
-
 int RecordDecoder::Decode(const std::string& key, const std::string& value, const std::vector<int>& column_indexes,
                           std::vector<std::any>& record) {
   Buf* key_buf = new Buf(key, this->le_);
@@ -262,7 +260,5 @@ int RecordDecoder::Decode(const pb::common::KeyValue& key_value, const std::vect
                           std::vector<std::any>& record) {
   return Decode(key_value.key(), key_value.value(), column_indexes, record);
 }
-
-
 
 }  // namespace dingodb
