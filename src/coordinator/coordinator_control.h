@@ -335,8 +335,8 @@ class CoordinatorControl : public MetaControl {
   butil::Status GetOrphanRegion(uint64_t store_id, std::map<uint64_t, pb::common::RegionMetrics> &orphan_regions);
 
   // get store operation
-  void GetStoreOperation(uint64_t store_id, pb::coordinator::StoreOperation &store_operation);
-  void GetStoreOperations(butil::FlatMap<uint64_t, pb::coordinator::StoreOperation> &store_operations);
+  int GetStoreOperation(uint64_t store_id, pb::coordinator::StoreOperation &store_operation);
+  int GetStoreOperations(butil::FlatMap<uint64_t, pb::coordinator::StoreOperation> &store_operations);
 
   // CleanStoreOperation
   // in:  store_id

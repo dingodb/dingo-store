@@ -25,6 +25,7 @@
 #include <vector>
 
 #include "butil/scoped_lock.h"
+#include "butil/status.h"
 #include "butil/time.h"
 #include "common/helper.h"
 #include "common/logging.h"
@@ -392,9 +393,15 @@ void CoordinatorPushTask::SendCoordinatorPushToStore(std::shared_ptr<Coordinator
 
     // send store_operation
     pb::coordinator::StoreOperation store_operation;
-    coordinator_control->GetStoreOperation(it.id(), store_operation);
-    if (store_operation.region_cmds_size() < 0) {
-      DINGO_LOG(INFO) << "... store_operation.region_cmds_size() < 0";
+    int ret = coordinator_control->GetStoreOperation(it.id(), store_operation);
+    if (ret < 0) {
+      DINGO_LOG(DEBUG) << "... no store_operation for store " << it.id();
+      continue;
+    }
+
+    if (store_operation.region_cmds_size() <= 0) {
+      DINGO_LOG(DEBUG) << "... store_operation.region_cmds_size() <= 0, store_id=" << it.id()
+                       << " region_cmds_size=" << store_operation.region_cmds_size();
       continue;
     }
 
@@ -412,10 +419,17 @@ void CoordinatorPushTask::SendCoordinatorPushToStore(std::shared_ptr<Coordinator
       DINGO_LOG(ERROR) << "... store " << it.id() << " has no server_location";
       continue;
     }
+    if (it.server_location().port() <= 0 || it.server_location().port() > 65535) {
+      DINGO_LOG(ERROR) << "... store " << it.id() << " has invalid server_location.port "
+                       << it.server_location().port();
+      continue;
+    }
+
     auto status = Heartbeat::RpcSendPushStoreOperation(it.server_location(), request, response);
 
-    // check response
     pb::coordinator_internal::MetaIncrement meta_increment;
+
+    // check response
     if (status.ok()) {
       DINGO_LOG(INFO) << "... send store_operation to store " << it.id()
                       << " all success, will delete these region_cmds";
@@ -429,6 +443,12 @@ void CoordinatorPushTask::SendCoordinatorPushToStore(std::shared_ptr<Coordinator
 
       coordinator_control->SubmitMetaIncrement(meta_increment);
 
+      continue;
+    }
+
+    if (response.region_cmd_results_size() <= 0) {
+      DINGO_LOG(WARNING) << "... send store_operation to store " << it.id()
+                         << " failed, but no region_cmd result, will try this store future";
       continue;
     }
 
@@ -451,6 +471,7 @@ void CoordinatorPushTask::SendCoordinatorPushToStore(std::shared_ptr<Coordinator
                       << " region_cmd_id=" << it_cmd.region_cmd_id() << " result=[" << it_cmd.error().errcode() << "]["
                       << pb::error::Errno_descriptor()->FindValueByNumber(it_cmd.error().errcode())->name()
                       << " success, will delete this region_cmd";
+
       // delete store_operation
       auto* store_operation_increment = meta_increment.add_store_operations();
       store_operation_increment->set_id(it.id());
@@ -460,7 +481,9 @@ void CoordinatorPushTask::SendCoordinatorPushToStore(std::shared_ptr<Coordinator
       store_operation_increment_delete->set_id(it.id());
       auto* region_cmd = store_operation_increment_delete->add_region_cmds();
       region_cmd->set_id(it_cmd.region_cmd_id());
+    }
 
+    if (meta_increment.ByteSizeLong() > 0) {
       coordinator_control->SubmitMetaIncrement(meta_increment);
     }
   }
@@ -648,6 +671,7 @@ butil::Status Heartbeat::RpcSendPushStoreOperation(const pb::common::Location& l
   auto store_server_location_string = location.host() + ":" + std::to_string(location.port());
 
   int retry_times = 0;
+  int max_retry_times = 3;
 
   do {
     braft::PeerId remote_node(store_server_location_string);
@@ -674,20 +698,30 @@ butil::Status Heartbeat::RpcSendPushStoreOperation(const pb::common::Location& l
     if (errcode == pb::error::Errno::OK) {
       DINGO_LOG(INFO) << "... rpc success, will not retry";
       return butil::Status::OK();
-    } else if (errcode == pb::error::Errno::ERAFT_NOTLEADER && response.error().has_leader_location()) {
-      DINGO_LOG(INFO) << "... rpc failed, ERAFT_NOTLEADER, will retry, error code: " << errcode
-                      << ", error message: " << response.error().errmsg();
-      store_server_location_string =
-          response.error().leader_location().host() + ":" + std::to_string(response.error().leader_location().port());
-      continue;
+    } else if (errcode == pb::error::Errno::ERAFT_NOTLEADER) {
+      if (response.error().has_leader_location()) {
+        DINGO_LOG(WARNING) << "... rpc failed, ERAFT_NOTLEADER, will retry, error code: " << errcode
+                           << ", error message: " << response.error().errmsg()
+                           << ", leader location: " << response.error().leader_location().host() << ":"
+                           << response.error().leader_location().port();
+        store_server_location_string =
+            response.error().leader_location().host() + ":" + std::to_string(response.error().leader_location().port());
+        continue;
+      } else {
+        DINGO_LOG(WARNING) << "... rpc failed, ERAFT_NOTLEADER, will retry, error code: " << errcode
+                           << ", error message: " << response.error().errmsg();
+        continue;
+      }
     } else {
       DINGO_LOG(ERROR) << "... rpc failed, error code: " << response.error().errcode()
                        << ", error message: " << response.error().errmsg();
       return butil::Status(response.error().errcode(), response.error().errmsg());
     }
-  } while (retry_times++ < 3);
+  } while (++retry_times < max_retry_times);
 
-  return butil::Status::OK();
+  return butil::Status(pb::error::Errno::EINTERNAL,
+                       "connect with store server fail, no leader found or connect timeout, retry count: %d",
+                       retry_times);
 }
 
 }  // namespace dingodb
