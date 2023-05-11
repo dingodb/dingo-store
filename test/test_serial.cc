@@ -1334,18 +1334,20 @@ TEST_F(DingoSerialTest, recordTest) {
   InitRecord();
 
   vector<any>* record1 = GetRecord();
-  KeyValue* kv = re->Encode(record1);
+  pb::common::KeyValue kv;
+  (void)re->Encode(*record1, kv);
   delete re;
 
   RecordDecoder* rd = new RecordDecoder(0, schemas, 0L, this->le);
-  vector<any>* record2 = rd->Decode(kv);
+  vector<any> record2;
+  (void)rd->Decode(kv, record2);
 
   for (BaseSchema* bs : *schemas) {
     BaseSchema::Type type = bs->GetType();
     switch (type) {
       case BaseSchema::kBool: {
         optional<bool> r1 = any_cast<optional<bool>>(record1->at(bs->GetIndex()));
-        optional<bool> r2 = any_cast<optional<bool>>(record2->at(bs->GetIndex()));
+        optional<bool> r2 = any_cast<optional<bool>>(record2.at(bs->GetIndex()));
         if (r1.has_value() && r2.has_value()) {
           EXPECT_EQ(r1.value(), r2.value());
         } else {
@@ -1356,7 +1358,7 @@ TEST_F(DingoSerialTest, recordTest) {
       }
       case BaseSchema::kInteger: {
         optional<int32_t> r1 = any_cast<optional<int32_t>>(record1->at(bs->GetIndex()));
-        optional<int32_t> r2 = any_cast<optional<int32_t>>(record2->at(bs->GetIndex()));
+        optional<int32_t> r2 = any_cast<optional<int32_t>>(record2.at(bs->GetIndex()));
         if (r1.has_value() && r2.has_value()) {
           EXPECT_EQ(r1.value(), r2.value());
         } else {
@@ -1367,7 +1369,7 @@ TEST_F(DingoSerialTest, recordTest) {
       }
       case BaseSchema::kLong: {
         optional<int64_t> r1 = any_cast<optional<int64_t>>(record1->at(bs->GetIndex()));
-        optional<int64_t> r2 = any_cast<optional<int64_t>>(record2->at(bs->GetIndex()));
+        optional<int64_t> r2 = any_cast<optional<int64_t>>(record2.at(bs->GetIndex()));
         if (r1.has_value() && r2.has_value()) {
           EXPECT_EQ(r1.value(), r2.value());
         } else {
@@ -1378,7 +1380,7 @@ TEST_F(DingoSerialTest, recordTest) {
       }
       case BaseSchema::kDouble: {
         optional<double> r1 = any_cast<optional<double>>(record1->at(bs->GetIndex()));
-        optional<double> r2 = any_cast<optional<double>>(record2->at(bs->GetIndex()));
+        optional<double> r2 = any_cast<optional<double>>(record2.at(bs->GetIndex()));
         if (r1.has_value() && r2.has_value()) {
           EXPECT_EQ(r1.value(), r2.value());
         } else {
@@ -1389,7 +1391,7 @@ TEST_F(DingoSerialTest, recordTest) {
       }
       case BaseSchema::kString: {
         optional<shared_ptr<string>> r1 = any_cast<optional<shared_ptr<string>>>(record1->at(bs->GetIndex()));
-        optional<shared_ptr<string>> r2 = any_cast<optional<shared_ptr<string>>>(record2->at(bs->GetIndex()));
+        optional<shared_ptr<string>> r2 = any_cast<optional<shared_ptr<string>>>(record2.at(bs->GetIndex()));
         if (r1.has_value() && r2.has_value()) {
           EXPECT_EQ(*r1.value(), *r2.value());
         } else if (r2.has_value()) {
@@ -1404,11 +1406,12 @@ TEST_F(DingoSerialTest, recordTest) {
       }
     }
   }
-  delete record2;
+  // delete record2;
 
   vector<int> index{0, 1, 3, 5};
   vector<int> index_temp{0, 1, 3, 5};
-  vector<any>* record3 = rd->Decode(kv, &index);
+  vector<any> record3;
+  (void)rd->Decode(kv, index, record3);
 
   for (BaseSchema* bs : *schemas) {
     BaseSchema::Type type = bs->GetType();
@@ -1416,7 +1419,7 @@ TEST_F(DingoSerialTest, recordTest) {
       case BaseSchema::kBool: {
         if (binary_search(index_temp.begin(), index_temp.end(), bs->GetIndex())) {
           optional<bool> r1 = any_cast<optional<bool>>(record1->at(bs->GetIndex()));
-          optional<bool> r2 = any_cast<optional<bool>>(record3->at(bs->GetIndex()));
+          optional<bool> r2 = any_cast<optional<bool>>(record3.at(bs->GetIndex()));
           if (r1.has_value() && r2.has_value()) {
             EXPECT_EQ(r1.value(), r2.value());
           } else {
@@ -1424,7 +1427,7 @@ TEST_F(DingoSerialTest, recordTest) {
             EXPECT_FALSE(r2.has_value());
           }
         } else {
-          optional<bool> r2 = any_cast<optional<bool>>(record3->at(bs->GetIndex()));
+          optional<bool> r2 = any_cast<optional<bool>>(record3.at(bs->GetIndex()));
           EXPECT_FALSE(r2.has_value());
         }
         break;
@@ -1432,7 +1435,7 @@ TEST_F(DingoSerialTest, recordTest) {
       case BaseSchema::kInteger: {
         if (binary_search(index_temp.begin(), index_temp.end(), bs->GetIndex())) {
           optional<int32_t> r1 = any_cast<optional<int32_t>>(record1->at(bs->GetIndex()));
-          optional<int32_t> r2 = any_cast<optional<int32_t>>(record3->at(bs->GetIndex()));
+          optional<int32_t> r2 = any_cast<optional<int32_t>>(record3.at(bs->GetIndex()));
           if (r1.has_value() && r2.has_value()) {
             EXPECT_EQ(r1.value(), r2.value());
           } else {
@@ -1440,7 +1443,7 @@ TEST_F(DingoSerialTest, recordTest) {
             EXPECT_FALSE(r2.has_value());
           }
         } else {
-          optional<int32_t> r2 = any_cast<optional<int32_t>>(record3->at(bs->GetIndex()));
+          optional<int32_t> r2 = any_cast<optional<int32_t>>(record3.at(bs->GetIndex()));
           EXPECT_FALSE(r2.has_value());
         }
         break;
@@ -1448,7 +1451,7 @@ TEST_F(DingoSerialTest, recordTest) {
       case BaseSchema::kLong: {
         if (binary_search(index_temp.begin(), index_temp.end(), bs->GetIndex())) {
           optional<int64_t> r1 = any_cast<optional<int64_t>>(record1->at(bs->GetIndex()));
-          optional<int64_t> r2 = any_cast<optional<int64_t>>(record3->at(bs->GetIndex()));
+          optional<int64_t> r2 = any_cast<optional<int64_t>>(record3.at(bs->GetIndex()));
           if (r1.has_value() && r2.has_value()) {
             EXPECT_EQ(r1.value(), r2.value());
           } else {
@@ -1456,7 +1459,7 @@ TEST_F(DingoSerialTest, recordTest) {
             EXPECT_FALSE(r2.has_value());
           }
         } else {
-          optional<int64_t> r2 = any_cast<optional<int64_t>>(record3->at(bs->GetIndex()));
+          optional<int64_t> r2 = any_cast<optional<int64_t>>(record3.at(bs->GetIndex()));
           EXPECT_FALSE(r2.has_value());
         }
         break;
@@ -1464,7 +1467,7 @@ TEST_F(DingoSerialTest, recordTest) {
       case BaseSchema::kDouble: {
         if (binary_search(index_temp.begin(), index_temp.end(), bs->GetIndex())) {
           optional<double> r1 = any_cast<optional<double>>(record1->at(bs->GetIndex()));
-          optional<double> r2 = any_cast<optional<double>>(record3->at(bs->GetIndex()));
+          optional<double> r2 = any_cast<optional<double>>(record3.at(bs->GetIndex()));
           if (r1.has_value() && r2.has_value()) {
             EXPECT_EQ(r1.value(), r2.value());
           } else {
@@ -1472,7 +1475,7 @@ TEST_F(DingoSerialTest, recordTest) {
             EXPECT_FALSE(r2.has_value());
           }
         } else {
-          optional<double> r2 = any_cast<optional<double>>(record3->at(bs->GetIndex()));
+          optional<double> r2 = any_cast<optional<double>>(record3.at(bs->GetIndex()));
           EXPECT_FALSE(r2.has_value());
         }
         break;
@@ -1480,7 +1483,7 @@ TEST_F(DingoSerialTest, recordTest) {
       case BaseSchema::kString: {
         if (binary_search(index_temp.begin(), index_temp.end(), bs->GetIndex())) {
           optional<shared_ptr<string>> r1 = any_cast<optional<shared_ptr<string>>>(record1->at(bs->GetIndex()));
-          optional<shared_ptr<string>> r2 = any_cast<optional<shared_ptr<string>>>(record3->at(bs->GetIndex()));
+          optional<shared_ptr<string>> r2 = any_cast<optional<shared_ptr<string>>>(record3.at(bs->GetIndex()));
           if (r1.has_value() && r2.has_value()) {
             EXPECT_EQ(*r1.value(), *r2.value());
           } else if (r2.has_value()) {
@@ -1489,7 +1492,7 @@ TEST_F(DingoSerialTest, recordTest) {
             EXPECT_FALSE(r1.has_value());
           }
         } else {
-          optional<shared_ptr<string>> r2 = any_cast<optional<shared_ptr<string>>>(record3->at(bs->GetIndex()));
+          optional<shared_ptr<string>> r2 = any_cast<optional<shared_ptr<string>>>(record3.at(bs->GetIndex()));
           EXPECT_FALSE(r2.has_value());
         }
         break;
@@ -1502,8 +1505,8 @@ TEST_F(DingoSerialTest, recordTest) {
 
   DeleteSchemas();
   DeleteRecords();
-  delete record3;
-  delete kv;
+  //delete record3;
+  //delete kv;
   delete rd;
 }
 
@@ -1746,95 +1749,99 @@ TEST_F(DingoSerialTest, keyvaluecodecTest) {
   record1.at(10) = salary;
 
   KeyValueCodec* codec = new KeyValueCodec(&td, 0);
-  KeyValue* kv = codec->Encode(&record1);
-  vector<any>* record2 = codec->Decode(kv);
+  pb::common::KeyValue kv;
+  (void)codec->Encode(record1, kv);
+  vector<any> record2;
+  (void)codec->Decode(kv, record2);
 
-  optional<int32_t> r0 = any_cast<optional<int32_t>>(record2->at(0));
+  optional<int32_t> r0 = any_cast<optional<int32_t>>(record2.at(0));
   if (r0.has_value()) {
     EXPECT_EQ(id, r0.value());
   } else {
     EXPECT_TRUE(0);
   }
 
-  optional<shared_ptr<string>> r1 = any_cast<optional<shared_ptr<string>>>(record2->at(1));
+  optional<shared_ptr<string>> r1 = any_cast<optional<shared_ptr<string>>>(record2.at(1));
   if (r1.has_value()) {
     EXPECT_EQ(*name, *r1.value());
   } else {
     EXPECT_TRUE(0);
   }
 
-  optional<shared_ptr<string>> r2 = any_cast<optional<shared_ptr<string>>>(record2->at(2));
+  optional<shared_ptr<string>> r2 = any_cast<optional<shared_ptr<string>>>(record2.at(2));
   if (r2.has_value()) {
     EXPECT_EQ(*gender, *r2.value());
   } else {
     EXPECT_TRUE(0);
   }
 
-  optional<int64_t> r3 = any_cast<optional<int64_t>>(record2->at(3));
+  optional<int64_t> r3 = any_cast<optional<int64_t>>(record2.at(3));
   if (r3.has_value()) {
     EXPECT_EQ(score, r3.value());
   } else {
     EXPECT_TRUE(0);
   }
 
-  optional<shared_ptr<string>> r4 = any_cast<optional<shared_ptr<string>>>(record2->at(4));
+  optional<shared_ptr<string>> r4 = any_cast<optional<shared_ptr<string>>>(record2.at(4));
   if (r4.has_value()) {
     EXPECT_EQ(*addr, *r4.value());
   } else {
     EXPECT_TRUE(0);
   }
 
-  optional<bool> r5 = any_cast<optional<bool>>(record2->at(5));
+  optional<bool> r5 = any_cast<optional<bool>>(record2.at(5));
   if (r5.has_value()) {
     EXPECT_FALSE(r5.value());
   } else {
     EXPECT_TRUE(0);
   }
 
-  optional<shared_ptr<string>> r6 = any_cast<optional<shared_ptr<string>>>(record2->at(6));
+  optional<shared_ptr<string>> r6 = any_cast<optional<shared_ptr<string>>>(record2.at(6));
   if (r6.has_value()) {
     EXPECT_TRUE(0);
   } else {
     EXPECT_TRUE(1);
   }
 
-  optional<int32_t> r7 = any_cast<optional<int32_t>>(record2->at(7));
+  optional<int32_t> r7 = any_cast<optional<int32_t>>(record2.at(7));
   if (r7.has_value()) {
     EXPECT_TRUE(0);
   } else {
     EXPECT_TRUE(1);
   }
 
-  optional<int32_t> r8 = any_cast<optional<int32_t>>(record2->at(8));
+  optional<int32_t> r8 = any_cast<optional<int32_t>>(record2.at(8));
   if (r8.has_value()) {
     EXPECT_EQ(age, r8.value());
   } else {
     EXPECT_TRUE(0);
   }
 
-  optional<int64_t> r9 = any_cast<optional<int64_t>>(record2->at(9));
+  optional<int64_t> r9 = any_cast<optional<int64_t>>(record2.at(9));
   if (r9.has_value()) {
     EXPECT_EQ(prev, r9.value());
   } else {
     EXPECT_TRUE(0);
   }
 
-  optional<double> r10 = any_cast<optional<double>>(record2->at(10));
+  optional<double> r10 = any_cast<optional<double>>(record2.at(10));
   if (r10.has_value()) {
     EXPECT_EQ(salary, r10.value());
   } else {
     EXPECT_TRUE(0);
   }
 
-  string* key = codec->EncodeKey(&record1);
-  string* keyprefix = codec->EncodeKeyPrefix(&record1, 3);
-  EXPECT_EQ(*kv->GetKey(), *key);
-  string keyprefix_from_key(*key, 0, keyprefix->length());
-  EXPECT_EQ(keyprefix_from_key, *keyprefix);
+  string key;
+  (void)codec->EncodeKey(record1, key);
+  string keyprefix;
+  (void)codec->EncodeKeyPrefix(record1, 3, keyprefix);
+  EXPECT_EQ(kv.key(), key);
+  string keyprefix_from_key(key, 0, keyprefix.length());
+  EXPECT_EQ(keyprefix_from_key, keyprefix);
 
-  delete key;
-  delete keyprefix;
+  //delete key;
+  //delete keyprefix;
   delete codec;
-  record2->clear();
-  record2->shrink_to_fit();
+  record2.clear();
+  record2.shrink_to_fit();
 }

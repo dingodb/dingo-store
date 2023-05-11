@@ -25,36 +25,19 @@ RecordEncoder::RecordEncoder(int schema_version, std::vector<BaseSchema*>* schem
   this->le_ = IsLE();
   Init(schema_version, schemas, common_id);
 }
-
 RecordEncoder::RecordEncoder(int schema_version, std::vector<BaseSchema*>* schemas, long common_id, bool le) {
   this->le_ = le;
   Init(schema_version, schemas, common_id);
 }
-
 void RecordEncoder::Init(int schema_version, std::vector<BaseSchema*>* schemas, long common_id) {
   this->schema_version_ = schema_version;
-  FormatSchema(schemas, this - le_);
+  FormatSchema(schemas, this->le_);
   this->schemas_ = schemas;
   this->common_id_ = common_id;
   int32_t* size = GetApproPerRecordSize(schemas);
   this->key_buf_size_ = size[0];
   this->value_buf_size_ = size[1];
   delete[] size;
-}
-
-KeyValue* RecordEncoder::Encode(std::vector<std::any>* record) {
-  std::string* key = new std::string();
-  std::string* value = new std::string();
-
-  int ret = Encode(*record, *key, *value);
-  if (ret < 0) {
-    delete key;
-    delete value;
-    return nullptr;
-  }
-
-  KeyValue* keyvalue = new KeyValue(key, value);
-  return keyvalue;
 }
 
 int RecordEncoder::Encode(const std::vector<std::any>& record, std::string& key, std::string& value) {
@@ -138,12 +121,6 @@ int RecordEncoder::EncodeKey(const std::vector<std::any>& record, std::string& o
   return 0;
 }
 
-std::string* RecordEncoder::EncodeKey(std::vector<std::any>* record) {
-  std::string* key = new std::string();
-  EncodeKey(*record, *key);
-  return key;
-}
-
 int RecordEncoder::EncodeValue(const std::vector<std::any>& record, std::string& output) {
   Buf* value_buf = new Buf(value_buf_size_, this->le_);
   value_buf->EnsureRemainder(4);
@@ -202,60 +179,39 @@ int RecordEncoder::EncodeValue(const std::vector<std::any>& record, std::string&
   return ret;
 }
 
-std::string* RecordEncoder::EncodeValue(std::vector<std::any>* record) {
-  std::string* s = new std::string();
-  int ret = EncodeValue(*record, *s);
-  if (ret < 0) {
-    delete s;
-    return nullptr;
-  }
-
-  return s;
-}
-
 int RecordEncoder::EncodeKeyPrefix(const std::vector<std::any>& record, int column_count, std::string& output) {
   Buf* key_prefix_buf = new Buf(key_buf_size_, this->le_);
   key_prefix_buf->EnsureRemainder(8);
   key_prefix_buf->WriteLong(common_id_);
   for (BaseSchema* bs : *schemas_) {
-    if (bs != nullptr) {
+    if (bs != nullptr && bs->IsKey()) {
       BaseSchema::Type type = bs->GetType();
       switch (type) {
         case BaseSchema::kBool: {
           DingoSchema<std::optional<bool>>* bos = static_cast<DingoSchema<std::optional<bool>>*>(bs);
-          if (bos->IsKey()) {
-            bos->EncodeKeyPrefix(key_prefix_buf, std::any_cast<std::optional<bool>>(record.at(bos->GetIndex())));
-          }
+          bos->EncodeKeyPrefix(key_prefix_buf, std::any_cast<std::optional<bool>>(record.at(bos->GetIndex())));
           break;
         }
         case BaseSchema::kInteger: {
           DingoSchema<std::optional<int32_t>>* is = static_cast<DingoSchema<std::optional<int32_t>>*>(bs);
-          if (is->IsKey()) {
-            is->EncodeKeyPrefix(key_prefix_buf, std::any_cast<std::optional<int32_t>>(record.at(is->GetIndex())));
-          }
+          is->EncodeKeyPrefix(key_prefix_buf, std::any_cast<std::optional<int32_t>>(record.at(is->GetIndex())));
           break;
         }
         case BaseSchema::kLong: {
           DingoSchema<std::optional<int64_t>>* ls = static_cast<DingoSchema<std::optional<int64_t>>*>(bs);
-          if (ls->IsKey()) {
-            ls->EncodeKeyPrefix(key_prefix_buf, std::any_cast<std::optional<int64_t>>(record.at(ls->GetIndex())));
-          }
+          ls->EncodeKeyPrefix(key_prefix_buf, std::any_cast<std::optional<int64_t>>(record.at(ls->GetIndex())));
           break;
         }
         case BaseSchema::kDouble: {
           DingoSchema<std::optional<double>>* ds = static_cast<DingoSchema<std::optional<double>>*>(bs);
-          if (ds->IsKey()) {
-            ds->EncodeKeyPrefix(key_prefix_buf, std::any_cast<std::optional<double>>(record.at(ds->GetIndex())));
-          }
+          ds->EncodeKeyPrefix(key_prefix_buf, std::any_cast<std::optional<double>>(record.at(ds->GetIndex())));
           break;
         }
         case BaseSchema::kString: {
           DingoSchema<std::optional<std::shared_ptr<std::string>>>* ss =
               static_cast<DingoSchema<std::optional<std::shared_ptr<std::string>>>*>(bs);
-          if (ss->IsKey()) {
-            ss->EncodeKeyPrefix(key_prefix_buf,
-                                std::any_cast<std::optional<std::shared_ptr<std::string>>>(record.at(ss->GetIndex())));
-          }
+          ss->EncodeKeyPrefix(key_prefix_buf, std::any_cast<std::optional<std::shared_ptr<std::string>>>(
+                                                  record.at(ss->GetIndex())));
           break;
         }
         default: {
@@ -275,16 +231,6 @@ int RecordEncoder::EncodeKeyPrefix(const std::vector<std::any>& record, int colu
   return ret;
 }
 
-std::string* RecordEncoder::EncodeKeyPrefix(std::vector<std::any>* record, int column_count) {
-  std::string* s = new std::string();
-  int ret = EncodeKeyPrefix(*record, column_count, *s);
-  if (ret < 0) {
-    delete s;
-    return nullptr;
-  }
-  return s;
-}
-
 int RecordEncoder::EncodeMaxKeyPrefix(std::string& output) const {
   if (common_id_ == UINT64_MAX) {
     // "CommonId reach max! Cannot generate Max Key Prefix"
@@ -300,21 +246,6 @@ int RecordEncoder::EncodeMaxKeyPrefix(std::string& output) const {
   return ret;
 }
 
-std::string* RecordEncoder::EncodeMaxKeyPrefix() const {
-  if (common_id_ == UINT64_MAX) {
-    // "CommonId reach max! Cannot generate Max Key Prefix"
-    return nullptr;
-  }
-
-  std::string* s = new std::string();
-  int ret = EncodeMaxKeyPrefix(*s);
-  if (ret < 0) {
-    delete s;
-    return nullptr;
-  }
-  return s;
-}
-
 int RecordEncoder::EncodeMinKeyPrefix(std::string& output) const {
   Buf* min_key_prefix_buf = new Buf(key_buf_size_, this->le_);
   min_key_prefix_buf->EnsureRemainder(8);
@@ -323,16 +254,6 @@ int RecordEncoder::EncodeMinKeyPrefix(std::string& output) const {
   delete min_key_prefix_buf;
 
   return ret;
-}
-
-std::string* RecordEncoder::EncodeMinKeyPrefix() const {
-  std::string* s = new std::string();
-  int ret = EncodeMinKeyPrefix(*s);
-  if (ret < 0) {
-    delete s;
-    return nullptr;
-  }
-  return s;
 }
 
 }  // namespace dingodb

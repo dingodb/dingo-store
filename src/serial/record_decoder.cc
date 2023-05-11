@@ -123,15 +123,7 @@ int RecordDecoder::Decode(const pb::common::KeyValue& key_value, std::vector<std
   return Decode(key_value.key(), key_value.value(), record);
 }
 
-std::vector<std::any>* RecordDecoder::Decode(KeyValue* key_value) {
-  std::vector<std::any>* record = new std::vector<std::any>();
-  int ret = Decode(*key_value, *record);
-  if (ret != 0) {
-    delete record;
-    return nullptr;
-  }
-  return record;
-}
+
 
 int RecordDecoder::Decode(const std::string& key, const std::string& value, const std::vector<int>& column_indexes,
                           std::vector<std::any>& record) {
@@ -269,14 +261,6 @@ int RecordDecoder::Decode(const pb::common::KeyValue& key_value, const std::vect
   return Decode(key_value.key(), key_value.value(), column_indexes, record);
 }
 
-std::vector<std::any>* RecordDecoder::Decode(KeyValue* key_value, std::vector<int>* column_indexes) {
-  std::vector<std::any>* record = new std::vector<std::any>();
-  int ret = Decode(*key_value->GetKey(), *key_value->GetValue(), *column_indexes, *record);
-  if (ret < 0) {
-    delete record;
-    return nullptr;
-  }
-  return record;
-}
+
 
 }  // namespace dingodb
