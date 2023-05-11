@@ -325,7 +325,7 @@ public class EntityConversion {
     private static String mapping(Meta.SqlType sqlType) {
         switch (sqlType) {
             case SQL_TYPE_VARCHAR:
-                return "STRING";
+                return "VARCHAR";
             case SQL_TYPE_INTEGER:
                 return "INTEGER";
             case SQL_TYPE_BOOLEAN:
@@ -333,7 +333,7 @@ public class EntityConversion {
             case SQL_TYPE_DOUBLE:
                 return "DOUBLE";
             case SQL_TYPE_BIGINT:
-                return "LONG";
+                return "BIGINT";
             case SQL_TYPE_FLOAT:
                 return "FLOAT";
             case SQL_TYPE_DATE:
