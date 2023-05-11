@@ -17,6 +17,7 @@
 #include <filesystem>
 #include <string>
 
+#include "butil/status.h"
 #include "common/constant.h"
 #include "common/helper.h"
 #include "fmt/core.h"
@@ -33,8 +34,8 @@ struct SaveRaftSnapshotArg {
 };
 
 // Scan region, generate sst snapshot file
-std::vector<pb::store_internal::SstFileInfo> RaftSnapshot::GenSnapshotFileByScan(const std::string& checkpoint_dir,
-                                                                                 store::RegionPtr region) {
+butil::Status RaftSnapshot::GenSnapshotFileByScan(const std::string& checkpoint_dir, store::RegionPtr region,
+                                                  std::vector<pb::store_internal::SstFileInfo>& sst_files) {
   auto raw_engine = std::dynamic_pointer_cast<RawRocksEngine>(engine_);
   auto range = region->Range();
   // Build Iterator
@@ -51,9 +52,11 @@ std::vector<pb::store_internal::SstFileInfo> RaftSnapshot::GenSnapshotFileByScan
   auto sst_writer = raw_engine->NewSstFileWriter();
   auto status = sst_writer->SaveFile(iter, checkpoint_path);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << fmt::format("save file failed, path: {} error: {} {}", checkpoint_path, status.error_code(),
-                                    status.error_str());
-    return {};
+    if (status.error_code() != pb::error::ENO_ENTRIES) {
+      DINGO_LOG(ERROR) << fmt::format("save file failed, path: {} error: {} {}", checkpoint_path, status.error_code(),
+                                      status.error_str());
+    }
+    return status;
   }
 
   // Set sst file info
@@ -65,12 +68,13 @@ std::vector<pb::store_internal::SstFileInfo> RaftSnapshot::GenSnapshotFileByScan
   sst_file.set_end_key(range.end_key());
 
   DINGO_LOG(INFO) << "sst file info: " << sst_file.ShortDebugString();
+  sst_files.push_back(sst_file);
 
-  return {sst_file};
+  return butil::Status();
 }
 
 // Filter sst file by range
-std::vector<pb::store_internal::SstFileInfo> FilterSstFile(std::vector<pb::store_internal::SstFileInfo> sst_files,
+std::vector<pb::store_internal::SstFileInfo> FilterSstFile(std::vector<pb::store_internal::SstFileInfo>& sst_files,
                                                            const std::string& start_key, const std::string& end_key) {
   std::vector<pb::store_internal::SstFileInfo> filter_sst_files;
   for (auto& sst_file : sst_files) {
@@ -83,20 +87,21 @@ std::vector<pb::store_internal::SstFileInfo> FilterSstFile(std::vector<pb::store
 }
 
 // Do Checkpoint and hard link, generate sst snapshot file
-std::vector<pb::store_internal::SstFileInfo> RaftSnapshot::GenSnapshotFileByCheckpoint(
-    const std::string& checkpoint_dir, store::RegionPtr region) {
+butil::Status RaftSnapshot::GenSnapshotFileByCheckpoint(const std::string& checkpoint_dir, store::RegionPtr region,
+                                                        std::vector<pb::store_internal::SstFileInfo>& sst_files) {
   auto raw_engine = std::dynamic_pointer_cast<RawRocksEngine>(engine_);
 
-  std::vector<pb::store_internal::SstFileInfo> sst_files;
+  std::vector<pb::store_internal::SstFileInfo> tmp_sst_files;
   auto checkpoint = raw_engine->NewCheckpoint();
-  auto status = checkpoint->Create(checkpoint_dir, raw_engine->GetColumnFamily(Constant::kStoreDataCF), sst_files);
+  auto status = checkpoint->Create(checkpoint_dir, raw_engine->GetColumnFamily(Constant::kStoreDataCF), tmp_sst_files);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << fmt::format("Create checkpoint failed, path: {} error: {} {}", checkpoint_dir,
                                     status.error_code(), status.error_str());
-    return {};
+    return butil::Status();
   }
 
-  return FilterSstFile(sst_files, region->Range().start_key(), region->Range().end_key());
+  sst_files = FilterSstFile(tmp_sst_files, region->Range().start_key(), region->Range().end_key());
+  return butil::Status();
 }
 
 bool RaftSnapshot::SaveSnapshot(braft::SnapshotWriter* writer, store::RegionPtr region, GenSnapshotFileFunc func) {
@@ -118,9 +123,9 @@ bool RaftSnapshot::SaveSnapshot(braft::SnapshotWriter* writer, store::RegionPtr 
     return false;
   }
 
-  auto sst_files = func(checkpoint_dir, region);
-  if (sst_files.empty()) {
-    DINGO_LOG(INFO) << "Generate sanshot file is empty";
+  std::vector<pb::store_internal::SstFileInfo> sst_files;
+  auto status = func(checkpoint_dir, region, sst_files);
+  if (!status.ok() && status.error_code() != pb::error::ENO_ENTRIES) {
     // Clean temp checkpoint file
     std::filesystem::remove_all(checkpoint_dir);
     return false;
@@ -212,7 +217,7 @@ void RaftSaveSnapshotHanler::Handle(uint64_t region_id, std::shared_ptr<RawEngin
             Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(snapshot_arg->region_id);
 
         auto gen_snapshot_file_func = std::bind(&RaftSnapshot::GenSnapshotFileByScan, snapshot_arg->raft_snapshot,
-                                                std::placeholders::_1, std::placeholders::_2);
+                                                std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
         if (!snapshot_arg->raft_snapshot->SaveSnapshot(snapshot_arg->writer, region, gen_snapshot_file_func)) {
           DINGO_LOG(ERROR) << "Save snapshot failed, region: " << region->Id();
           if (snapshot_arg->done) {

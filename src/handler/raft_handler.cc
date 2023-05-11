@@ -250,15 +250,19 @@ void DeleteBatchHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
 void SplitHandler::SplitClosure::Run() {
   std::unique_ptr<SplitClosure> self_guard(this);
   if (!status().ok()) {
-    DINGO_LOG(INFO) << fmt::format("split region {}, finish snapshot failed", region_->Id());
+    DINGO_LOG(ERROR) << fmt::format("split region {}, finish snapshot failed", region_->Id());
   } else {
     DINGO_LOG(INFO) << fmt::format("split region {}, finish snapshot success", region_->Id());
   }
 
   auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+  if (is_child_) {
+    if (status().ok()) {
+      store_region_meta->UpdateState(region_, pb::common::StoreRegionState::NORMAL);
+    }
 
-  store_region_meta->UpdateState(region_, pb::common::StoreRegionState::NORMAL);
-  if (!is_child_) {
+  } else {
+    store_region_meta->UpdateState(region_, pb::common::StoreRegionState::NORMAL);
     Heartbeat::TriggerStoreHeartbeat(nullptr);
   }
 }
@@ -267,16 +271,23 @@ void SplitHandler::Handle(std::shared_ptr<Context>, store::RegionPtr from_region
                           const pb::raft::Request &req, store::RegionMetricsPtr region_metrics) {
   const auto &request = req.split();
   auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
-  // Set region state spliting
-  store_region_meta->UpdateState(from_region, pb::common::StoreRegionState::SPLITTING);
 
   auto to_region = store_region_meta->GetRegion(request.to_region_id());
   if (to_region == nullptr) {
-    DINGO_LOG(ERROR) << fmt::format("split region {} to {}, child region not found", from_region->Id(),
-                                    to_region->Id());
+    DINGO_LOG(ERROR) << fmt::format("split region {} to {}, child region not found", request.from_region_id(),
+                                    request.to_region_id());
     return;
   }
+
   DINGO_LOG(DEBUG) << fmt::format("split region {} to {}, begin...", from_region->Id(), to_region->Id());
+  if (to_region->State() != pb::common::StoreRegionState::STANDBY) {
+    DINGO_LOG(WARNING) << fmt::format("split region {} to {}, child region state is not standby", from_region->Id(),
+                                      to_region->Id());
+    return;
+  }
+
+  // Set region state spliting
+  store_region_meta->UpdateState(from_region, pb::common::StoreRegionState::SPLITTING);
 
   pb::common::Range to_range;
   // Set child range

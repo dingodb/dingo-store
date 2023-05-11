@@ -38,7 +38,9 @@ function deploy_store() {
 
   cp ${coor_service_file} $dstpath/conf/coor_list
   
-  unlink $dstpath/bin/dingodb_server
+  if [ -f "$dstpath/bin/dingodb_server" ]; then
+    unlink $dstpath/bin/dingodb_server
+  fi
   ln -s  $srcpath/build/bin/dingodb_server $dstpath/bin/dingodb_server
   if [ "${FLAGS_replace_conf}" == "0" ]; then
     cp $srcpath/conf/${role}.template.yaml $dstpath/conf/${role}.yaml

@@ -91,9 +91,9 @@ void StoreStateMachine::on_apply(braft::Iterator& iter) {
       CHECK(raft_cmd->ParseFromZeroCopyStream(&wrapper));
     }
 
-    DINGO_LOG(DEBUG) << fmt::format("raft apply log on region[{}-term:{}-index:{}] applied_index[{}] cmd:[{}]",
-                                    raft_cmd->header().region_id(), iter.term(), iter.index(), applied_index_,
-                                    raft_cmd->ShortDebugString());
+    // DINGO_LOG(DEBUG) << fmt::format("raft apply log on region[{}-term:{}-index:{}] applied_index[{}] cmd:[{}]",
+    //                                 raft_cmd->header().region_id(), iter.term(), iter.index(), applied_index_,
+    //                                 raft_cmd->ShortDebugString());
     // Build event
     auto event = std::make_shared<SmApplyEvent>();
     event->region = region_;
