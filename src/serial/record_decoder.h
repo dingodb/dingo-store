@@ -15,6 +15,8 @@
 #ifndef DINGO_SERIAL_RECORD_DECODER_H_
 #define DINGO_SERIAL_RECORD_DECODER_H_
 
+#include <memory>
+
 #include "any"
 #include "functional"
 #include "keyvalue.h"
@@ -33,15 +35,16 @@ class RecordDecoder {
  private:
   int codec_version_ = 0;
   int schema_version_;
-  std::vector<BaseSchema*>* schemas_;
+  std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> schemas_;
   long common_id_;
   bool le_;
 
  public:
-  RecordDecoder(int schema_version, std::vector<BaseSchema*>* schemas, long common_id);
-  RecordDecoder(int schema_version, std::vector<BaseSchema*>* schemas, long common_id, bool le);
+  RecordDecoder(int schema_version, std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> schemas, long common_id);
+  RecordDecoder(int schema_version, std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> schemas, long common_id,
+                bool le);
 
-  void Init(int schema_version, std::vector<BaseSchema*>* schemas, long common_id);
+  void Init(int schema_version, std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> schemas, long common_id);
 
 
   int Decode(const KeyValue& key_value, std::vector<std::any>& record /*output*/);

@@ -17,6 +17,7 @@
 
 #include <any>
 #include <iostream>
+#include <memory>
 #include <vector>
 
 #include "proto/meta.pb.h"
@@ -29,20 +30,21 @@
 
 namespace dingodb {
 
-void SortSchema(std::vector<BaseSchema*>* schemas);
-void FormatSchema(std::vector<BaseSchema*>* schemas, bool le);
-int* GetApproPerRecordSize(std::vector<BaseSchema*>* schemas);
+void SortSchema(std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> schemas);
+void FormatSchema(std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> schemas, bool le);
+int* GetApproPerRecordSize(std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> schemas);
 
 bool VectorFindAndRemove(std::vector<int>* v, int t);
 bool VectorFind(const std::vector<int>& v, int t);
 
-std::vector<BaseSchema*>* TableDefinitionToDingoSchema(pb::meta::TableDefinition* td);
+std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> TableDefinitionToDingoSchema(
+    std::shared_ptr<pb::meta::TableDefinition> td);
 
 std::vector<std::any>* ElementToSql(pb::meta::TableDefinition* td, std::vector<std::any>* record);
 int ElementToSql(const pb::meta::TableDefinition& td, const std::vector<std::any>& record,
                  std::vector<std::any>& sql_record);
 
-std::vector<std::any>* SqlToElement(pb::meta::TableDefinition* td, std::vector<std::any>* record);
+std::vector<std::any>* SqlToElement(std::shared_ptr<pb::meta::TableDefinition> td, std::vector<std::any>* record);
 int SqlToElement(const pb::meta::TableDefinition& td, const std::vector<std::any>& sql_record,
                  std::vector<std::any>& element_record);
 

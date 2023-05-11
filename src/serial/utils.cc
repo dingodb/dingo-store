@@ -18,16 +18,18 @@
 #include <memory>
 #include <vector>
 
+#include "serial/schema/base_schema.h"
+
 namespace dingodb {
 
-void SortSchema(std::vector<BaseSchema*>* schemas) {
+void SortSchema(std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> schemas) {
   int flag = 1;
   for (int i = 0; i < schemas->size() - flag; i++) {
-    BaseSchema* bs = schemas->at(i);
+    auto bs = schemas->at(i);
     if (bs != nullptr) {
       if ((!bs->IsKey()) && (bs->GetLength() == 0)) {
         int target = schemas->size() - flag++;
-        BaseSchema* ts = schemas->at(target);
+        auto ts = schemas->at(target);
         while ((ts->GetLength() == 0) || ts->IsKey()) {
           target--;
           if (target == i) {
@@ -41,23 +43,24 @@ void SortSchema(std::vector<BaseSchema*>* schemas) {
     }
   }
 }
-void FormatSchema(std::vector<BaseSchema*>* schemas, bool le) {
-  for (BaseSchema* bs : *schemas) {
+
+void FormatSchema(std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> schemas, bool le) {
+  for (auto& bs : *schemas) {
     if (bs != nullptr) {
       BaseSchema::Type type = bs->GetType();
       switch (type) {
         case BaseSchema::kInteger: {
-          DingoSchema<std::optional<int32_t>>* is = static_cast<DingoSchema<std::optional<int32_t>>*>(bs);
+          auto is = std::dynamic_pointer_cast<DingoSchema<std::optional<int32_t>>>(bs);
           is->SetIsLe(le);
           break;
         }
         case BaseSchema::kLong: {
-          DingoSchema<std::optional<int64_t>>* ls = static_cast<DingoSchema<std::optional<int64_t>>*>(bs);
+          auto ls = std::dynamic_pointer_cast<DingoSchema<std::optional<int64_t>>>(bs);
           ls->SetIsLe(le);
           break;
         }
         case BaseSchema::kDouble: {
-          DingoSchema<std::optional<double>>* ds = static_cast<DingoSchema<std::optional<double>>*>(bs);
+          auto ds = std::dynamic_pointer_cast<DingoSchema<std::optional<double>>>(bs);
           ds->SetIsLe(le);
           break;
         }
@@ -68,10 +71,12 @@ void FormatSchema(std::vector<BaseSchema*>* schemas, bool le) {
     }
   }
 }
-int32_t* GetApproPerRecordSize(std::vector<BaseSchema*>* schemas) {
+
+int32_t* GetApproPerRecordSize(std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> schemas) {
   int32_t key_size = 8;
   int32_t value_size = 0;
-  for (BaseSchema* bs : *schemas) {
+
+  for (const auto& bs : *schemas) {
     if (bs != nullptr) {
       if (bs->IsKey()) {
         key_size += (bs->GetLength() == 0 ? 100 : bs->GetLength());
@@ -80,9 +85,11 @@ int32_t* GetApproPerRecordSize(std::vector<BaseSchema*>* schemas) {
       }
     }
   }
+
   int32_t* size = new int32_t[2]();
   size[0] = key_size;
   size[1] = value_size;
+
   return size;
 }
 
@@ -105,14 +112,15 @@ bool VectorFind(const std::vector<int>& v, int t) {
   return false;
 }
 
-std::vector<BaseSchema*>* TableDefinitionToDingoSchema(pb::meta::TableDefinition* td) {
-  std::vector<BaseSchema*>* schemas = new std::vector<BaseSchema*>(td->columns_size());
+std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> TableDefinitionToDingoSchema(
+    std::shared_ptr<pb::meta::TableDefinition> td) {
+  auto schemas = std::make_shared<std::vector<std::shared_ptr<BaseSchema>>>(td->columns_size());
   int i = 0;
   for (const pb::meta::ColumnDefinition& cd : td->columns()) {
     pb::meta::ElementType type = cd.element_type();
     switch (type) {
       case pb::meta::ELEM_TYPE_DOUBLE: {
-        DingoSchema<std::optional<double>>* double_schema = new DingoSchema<std::optional<double>>();
+        auto double_schema = std::make_shared<DingoSchema<std::optional<double>>>();
         double_schema->SetAllowNull(cd.nullable());
         double_schema->SetIndex(i);
         double_schema->SetIsKey(cd.indexofkey() >= 0);
@@ -125,7 +133,7 @@ std::vector<BaseSchema*>* TableDefinitionToDingoSchema(pb::meta::TableDefinition
         break;
       }
       case pb::meta::ELEM_TYPE_INT32: {
-        DingoSchema<std::optional<int32_t>>* integer_schema = new DingoSchema<std::optional<int32_t>>();
+        auto integer_schema = std::make_shared<DingoSchema<std::optional<int32_t>>>();
         integer_schema->SetAllowNull(cd.nullable());
         integer_schema->SetIndex(i);
         integer_schema->SetIsKey(cd.indexofkey() >= 0);
@@ -133,7 +141,7 @@ std::vector<BaseSchema*>* TableDefinitionToDingoSchema(pb::meta::TableDefinition
         break;
       }
       case pb::meta::ELEM_TYPE_INT64: {
-        DingoSchema<std::optional<int64_t>>* long_schema = new DingoSchema<std::optional<int64_t>>();
+        auto long_schema = std::make_shared<DingoSchema<std::optional<int64_t>>>();
         long_schema->SetAllowNull(cd.nullable());
         long_schema->SetIndex(i);
         long_schema->SetIsKey(cd.indexofkey() >= 0);
@@ -141,7 +149,7 @@ std::vector<BaseSchema*>* TableDefinitionToDingoSchema(pb::meta::TableDefinition
         break;
       }
       case pb::meta::ELEM_TYPE_UINT32: {
-        DingoSchema<std::optional<int32_t>>* integer_schema = new DingoSchema<std::optional<int32_t>>();
+        auto integer_schema = std::make_shared<DingoSchema<std::optional<int32_t>>>();
         integer_schema->SetAllowNull(cd.nullable());
         integer_schema->SetIndex(i);
         integer_schema->SetIsKey(cd.indexofkey() >= 0);
@@ -149,7 +157,7 @@ std::vector<BaseSchema*>* TableDefinitionToDingoSchema(pb::meta::TableDefinition
         break;
       }
       case pb::meta::ELEM_TYPE_UINT64: {
-        DingoSchema<std::optional<int64_t>>* long_schema = new DingoSchema<std::optional<int64_t>>();
+        auto long_schema = std::make_shared<DingoSchema<std::optional<int64_t>>>();
         long_schema->SetAllowNull(cd.nullable());
         long_schema->SetIndex(i);
         long_schema->SetIsKey(cd.indexofkey() >= 0);
@@ -157,7 +165,7 @@ std::vector<BaseSchema*>* TableDefinitionToDingoSchema(pb::meta::TableDefinition
         break;
       }
       case pb::meta::ELEM_TYPE_BOOLEAN: {
-        DingoSchema<std::optional<bool>>* bool_schema = new DingoSchema<std::optional<bool>>();
+        auto bool_schema = std::make_shared<DingoSchema<std::optional<bool>>>();
         bool_schema->SetAllowNull(cd.nullable());
         bool_schema->SetIndex(i);
         bool_schema->SetIsKey(cd.indexofkey() >= 0);
@@ -165,8 +173,7 @@ std::vector<BaseSchema*>* TableDefinitionToDingoSchema(pb::meta::TableDefinition
         break;
       }
       case pb::meta::ELEM_TYPE_STRING: {
-        DingoSchema<std::optional<std::shared_ptr<std::string>>>* string_schema =
-            new DingoSchema<std::optional<std::shared_ptr<std::string>>>();
+        auto string_schema = std::make_shared<DingoSchema<std::optional<std::shared_ptr<std::string>>>>();
         string_schema->SetAllowNull(cd.nullable());
         string_schema->SetIndex(i);
         string_schema->SetIsKey(cd.indexofkey() >= 0);
@@ -174,8 +181,7 @@ std::vector<BaseSchema*>* TableDefinitionToDingoSchema(pb::meta::TableDefinition
         break;
       }
       case pb::meta::ELEM_TYPE_BYTES: {
-        DingoSchema<std::optional<std::shared_ptr<std::string>>>* string_schema =
-            new DingoSchema<std::optional<std::shared_ptr<std::string>>>();
+        auto string_schema = std::make_shared<DingoSchema<std::optional<std::shared_ptr<std::string>>>>();
         string_schema->SetAllowNull(cd.nullable());
         string_schema->SetIndex(i);
         string_schema->SetIsKey(cd.indexofkey() >= 0);
@@ -381,7 +387,7 @@ int SqlToElement(const pb::meta::TableDefinition& td, const std::vector<std::any
   return 0;
 }
 
-std::vector<std::any>* SqlToElement(pb::meta::TableDefinition* td, std::vector<std::any>* record) {
+std::vector<std::any>* SqlToElement(std::shared_ptr<pb::meta::TableDefinition> td, std::vector<std::any>* record) {
   std::vector<std::any>* element_record = new std::vector<std::any>(td->columns_size());
   int ret = SqlToElement(*td, *record, *element_record);
   if (ret < 0) {

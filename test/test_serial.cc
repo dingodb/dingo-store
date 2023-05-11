@@ -35,85 +35,85 @@ using namespace std;
 
 class DingoSerialTest : public testing::Test {
  private:
-  vector<BaseSchema*>* schemas_;
+  std::shared_ptr<vector<std::shared_ptr<BaseSchema>>> schemas_;
   vector<any>* record_;
 
  public:
   void InitVector() {
-    schemas_ = new vector<BaseSchema*>(11);
-    DingoSchema<optional<int32_t>>* id = new DingoSchema<optional<int32_t>>();
+    schemas_ = std::make_shared<vector<std::shared_ptr<BaseSchema>>>(11);
+
+    auto id = std::make_shared<DingoSchema<optional<int32_t>>>();
     id->SetIndex(0);
     id->SetAllowNull(false);
     id->SetIsKey(true);
     schemas_->at(0) = id;
 
-    DingoSchema<optional<shared_ptr<string>>>* name = new DingoSchema<optional<shared_ptr<string>>>();
+    auto name = std::make_shared<DingoSchema<optional<shared_ptr<string>>>>();
     name->SetIndex(1);
     name->SetAllowNull(false);
     name->SetIsKey(true);
     schemas_->at(1) = name;
 
-    DingoSchema<optional<shared_ptr<string>>>* gender = new DingoSchema<optional<shared_ptr<string>>>();
+    auto gender = std::make_shared<DingoSchema<optional<shared_ptr<string>>>>();
     gender->SetIndex(2);
     gender->SetAllowNull(false);
     gender->SetIsKey(true);
     schemas_->at(2) = gender;
 
-    DingoSchema<optional<int64_t>>* score = new DingoSchema<optional<int64_t>>();
+    auto score = std::make_shared<DingoSchema<optional<int64_t>>>();
     score->SetIndex(3);
     score->SetAllowNull(false);
     score->SetIsKey(true);
     schemas_->at(3) = score;
 
-    DingoSchema<optional<shared_ptr<string>>>* addr = new DingoSchema<optional<shared_ptr<string>>>();
+    auto addr = std::make_shared<DingoSchema<optional<shared_ptr<string>>>>();
     addr->SetIndex(4);
     addr->SetAllowNull(true);
     addr->SetIsKey(false);
     schemas_->at(4) = addr;
 
-    DingoSchema<optional<bool>>* exist = new DingoSchema<optional<bool>>();
+    auto exist = std::make_shared<DingoSchema<optional<bool>>>();
     exist->SetIndex(5);
     exist->SetAllowNull(false);
     exist->SetIsKey(false);
     schemas_->at(5) = exist;
 
-    DingoSchema<optional<shared_ptr<string>>>* pic = new DingoSchema<optional<shared_ptr<string>>>();
+    auto pic = std::make_shared<DingoSchema<optional<shared_ptr<string>>>>();
     pic->SetIndex(6);
     pic->SetAllowNull(true);
     pic->SetIsKey(false);
     schemas_->at(6) = pic;
 
-    DingoSchema<optional<int32_t>>* test_null = new DingoSchema<optional<int32_t>>();
+    auto test_null = std::make_shared<DingoSchema<optional<int32_t>>>();
     test_null->SetIndex(7);
     test_null->SetAllowNull(true);
     test_null->SetIsKey(false);
     schemas_->at(7) = test_null;
 
-    DingoSchema<optional<int32_t>>* age = new DingoSchema<optional<int32_t>>();
+    auto age = std::make_shared<DingoSchema<optional<int32_t>>>();
     age->SetIndex(8);
     age->SetAllowNull(false);
     age->SetIsKey(false);
     schemas_->at(8) = age;
 
-    DingoSchema<optional<int64_t>>* prev = new DingoSchema<optional<int64_t>>();
+    auto prev = std::make_shared<DingoSchema<optional<int64_t>>>();
     prev->SetIndex(9);
     prev->SetAllowNull(false);
     prev->SetIsKey(false);
     schemas_->at(9) = prev;
 
-    DingoSchema<optional<double>>* salary = new DingoSchema<optional<double>>();
+    auto salary = std::make_shared<DingoSchema<optional<double>>>();
     salary->SetIndex(10);
     salary->SetAllowNull(true);
     salary->SetIsKey(false);
     schemas_->at(10) = salary;
   }
+
   void DeleteSchemas() {
-    for (BaseSchema* bs : *schemas_) {
-      delete bs;
-    }
     schemas_->clear();
     schemas_->shrink_to_fit();
   }
+
   void InitRecord() {
     record_ = new vector<any>(11);
     optional<int32_t> id = 0;
@@ -157,7 +157,7 @@ class DingoSerialTest : public testing::Test {
     record_->clear();
     record_->shrink_to_fit();
   }
-  vector<BaseSchema*>* GetSchemas() { return schemas_; }
+  std::shared_ptr<vector<std::shared_ptr<BaseSchema>>> GetSchemas() { return schemas_; }
   vector<any>* GetRecord() { return record_; }
 
  protected:
@@ -1329,7 +1329,7 @@ TEST_F(DingoSerialTest, bufLeBe) {
 
 TEST_F(DingoSerialTest, recordTest) {
   InitVector();
-  vector<BaseSchema*>* schemas = GetSchemas();
+  auto schemas = GetSchemas();
   RecordEncoder* re = new RecordEncoder(0, schemas, 0L, this->le);
   InitRecord();
 
@@ -1342,7 +1342,7 @@ TEST_F(DingoSerialTest, recordTest) {
   vector<any> record2;
   (void)rd->Decode(kv, record2);
 
-  for (BaseSchema* bs : *schemas) {
+  for (const auto& bs : *schemas) {
     BaseSchema::Type type = bs->GetType();
     switch (type) {
       case BaseSchema::kBool: {
@@ -1413,7 +1413,7 @@ TEST_F(DingoSerialTest, recordTest) {
   vector<any> record3;
   (void)rd->Decode(kv, index, record3);
 
-  for (BaseSchema* bs : *schemas) {
+  for (const auto& bs : *schemas) {
     BaseSchema::Type type = bs->GetType();
     switch (type) {
       case BaseSchema::kBool: {
@@ -1505,216 +1505,214 @@ TEST_F(DingoSerialTest, recordTest) {
 
   DeleteSchemas();
   DeleteRecords();
-  //delete record3;
-  //delete kv;
+  // delete record3;
+  // delete kv;
   delete rd;
 }
 
 TEST_F(DingoSerialTest, tabledefinitionTest) {
-  pb::meta::TableDefinition td;
-  td.set_name("test");
+  auto td = std::make_shared<pb::meta::TableDefinition>();
+  td->set_name("test");
 
-  pb::meta::ColumnDefinition* cd1 = td.add_columns();
+  pb::meta::ColumnDefinition* cd1 = td->add_columns();
   cd1->set_name("id");
   cd1->set_element_type(pb::meta::ELEM_TYPE_INT32);
   cd1->set_nullable(false);
   cd1->set_indexofkey(0);
 
-  pb::meta::ColumnDefinition* cd2 = td.add_columns();
+  pb::meta::ColumnDefinition* cd2 = td->add_columns();
   cd2->set_name("name");
   cd2->set_element_type(pb::meta::ELEM_TYPE_STRING);
   cd2->set_nullable(false);
   cd2->set_indexofkey(0);
 
-  pb::meta::ColumnDefinition* cd3 = td.add_columns();
+  pb::meta::ColumnDefinition* cd3 = td->add_columns();
   cd3->set_name("gender");
   cd3->set_element_type(pb::meta::ELEM_TYPE_STRING);
   cd3->set_nullable(false);
   cd3->set_indexofkey(0);
 
-  pb::meta::ColumnDefinition* cd4 = td.add_columns();
+  pb::meta::ColumnDefinition* cd4 = td->add_columns();
   cd4->set_name("score");
   cd4->set_element_type(pb::meta::ELEM_TYPE_INT64);
   cd4->set_nullable(false);
   cd4->set_indexofkey(0);
 
-  pb::meta::ColumnDefinition* cd5 = td.add_columns();
+  pb::meta::ColumnDefinition* cd5 = td->add_columns();
   cd5->set_name("addr");
   cd5->set_element_type(pb::meta::ELEM_TYPE_STRING);
   cd5->set_nullable(true);
   cd5->set_indexofkey(-1);
 
-  pb::meta::ColumnDefinition* cd6 = td.add_columns();
+  pb::meta::ColumnDefinition* cd6 = td->add_columns();
   cd6->set_name("exist");
   cd6->set_element_type(pb::meta::ELEM_TYPE_BOOLEAN);
   cd6->set_nullable(false);
   cd6->set_indexofkey(-1);
 
-  pb::meta::ColumnDefinition* cd7 = td.add_columns();
+  pb::meta::ColumnDefinition* cd7 = td->add_columns();
   cd7->set_name("pic");
   cd7->set_element_type(pb::meta::ELEM_TYPE_BYTES);
   cd7->set_nullable(true);
   cd7->set_indexofkey(-1);
 
-  pb::meta::ColumnDefinition* cd8 = td.add_columns();
+  pb::meta::ColumnDefinition* cd8 = td->add_columns();
   cd8->set_name("testNull");
   cd8->set_element_type(pb::meta::ELEM_TYPE_INT32);
   cd8->set_nullable(true);
   cd8->set_indexofkey(-1);
 
-  pb::meta::ColumnDefinition* cd9 = td.add_columns();
+  pb::meta::ColumnDefinition* cd9 = td->add_columns();
   cd9->set_name("age");
   cd9->set_element_type(pb::meta::ELEM_TYPE_INT32);
   cd9->set_nullable(false);
   cd9->set_indexofkey(-1);
 
-  pb::meta::ColumnDefinition* cd10 = td.add_columns();
+  pb::meta::ColumnDefinition* cd10 = td->add_columns();
   cd10->set_name("prev");
   cd10->set_element_type(pb::meta::ELEM_TYPE_INT64);
   cd10->set_nullable(false);
   cd10->set_indexofkey(-1);
 
-  pb::meta::ColumnDefinition* cd11 = td.add_columns();
+  pb::meta::ColumnDefinition* cd11 = td->add_columns();
   cd11->set_name("salary");
   cd11->set_element_type(pb::meta::ELEM_TYPE_DOUBLE);
   cd11->set_nullable(true);
   cd11->set_indexofkey(-1);
 
-  vector<BaseSchema*>* schemas = TableDefinitionToDingoSchema(&td);
-  BaseSchema* id = schemas->at(0);
+  auto schemas = TableDefinitionToDingoSchema(td);
+  auto id = schemas->at(0);
   EXPECT_EQ(id->GetIndex(), 0);
   EXPECT_EQ(id->GetType(), BaseSchema::Type::kInteger);
   EXPECT_FALSE(id->AllowNull());
   EXPECT_TRUE(id->IsKey());
 
-  BaseSchema* name = schemas->at(1);
+  auto name = schemas->at(1);
   EXPECT_EQ(name->GetIndex(), 1);
   EXPECT_EQ(name->GetType(), BaseSchema::Type::kString);
   EXPECT_FALSE(name->AllowNull());
   EXPECT_TRUE(name->IsKey());
 
-  BaseSchema* gender = schemas->at(2);
+  auto gender = schemas->at(2);
   EXPECT_EQ(gender->GetIndex(), 2);
   EXPECT_EQ(gender->GetType(), BaseSchema::Type::kString);
   EXPECT_FALSE(gender->AllowNull());
   EXPECT_TRUE(gender->IsKey());
 
-  BaseSchema* score = schemas->at(3);
+  auto score = schemas->at(3);
   EXPECT_EQ(score->GetIndex(), 3);
   EXPECT_EQ(score->GetType(), BaseSchema::Type::kLong);
   EXPECT_FALSE(score->AllowNull());
   EXPECT_TRUE(score->IsKey());
 
-  BaseSchema* addr = schemas->at(4);
+  auto addr = schemas->at(4);
   EXPECT_EQ(addr->GetIndex(), 4);
   EXPECT_EQ(addr->GetType(), BaseSchema::Type::kString);
   EXPECT_TRUE(addr->AllowNull());
   EXPECT_FALSE(addr->IsKey());
 
-  BaseSchema* exist = schemas->at(5);
+  auto exist = schemas->at(5);
   EXPECT_EQ(exist->GetIndex(), 5);
   EXPECT_EQ(exist->GetType(), BaseSchema::Type::kBool);
   EXPECT_FALSE(exist->AllowNull());
   EXPECT_FALSE(exist->IsKey());
 
-  BaseSchema* pic = schemas->at(6);
+  auto pic = schemas->at(6);
   EXPECT_EQ(pic->GetIndex(), 6);
   EXPECT_EQ(pic->GetType(), BaseSchema::Type::kString);
   EXPECT_TRUE(pic->AllowNull());
   EXPECT_FALSE(pic->IsKey());
 
-  BaseSchema* test_null = schemas->at(7);
+  auto test_null = schemas->at(7);
   EXPECT_EQ(test_null->GetIndex(), 7);
   EXPECT_EQ(test_null->GetType(), BaseSchema::Type::kInteger);
   EXPECT_TRUE(test_null->AllowNull());
   EXPECT_FALSE(test_null->IsKey());
 
-  BaseSchema* age = schemas->at(8);
+  auto age = schemas->at(8);
   EXPECT_EQ(age->GetIndex(), 8);
   EXPECT_EQ(age->GetType(), BaseSchema::Type::kInteger);
   EXPECT_FALSE(age->AllowNull());
   EXPECT_FALSE(age->IsKey());
 
-  BaseSchema* prev = schemas->at(9);
+  auto prev = schemas->at(9);
   EXPECT_EQ(prev->GetIndex(), 9);
   EXPECT_EQ(prev->GetType(), BaseSchema::Type::kLong);
   EXPECT_FALSE(prev->AllowNull());
   EXPECT_FALSE(prev->IsKey());
 
-  BaseSchema* salary = schemas->at(10);
+  auto salary = schemas->at(10);
   EXPECT_EQ(salary->GetIndex(), 10);
   EXPECT_EQ(salary->GetType(), BaseSchema::Type::kDouble);
   EXPECT_TRUE(salary->AllowNull());
   EXPECT_FALSE(salary->IsKey());
-
-  delete schemas;
 }
 
 TEST_F(DingoSerialTest, keyvaluecodecTest) {
-  pb::meta::TableDefinition td;
-  td.set_name("test");
+  auto td = std::make_shared<pb::meta::TableDefinition>();
+  td->set_name("test");
 
-  pb::meta::ColumnDefinition* cd1 = td.add_columns();
+  pb::meta::ColumnDefinition* cd1 = td->add_columns();
   cd1->set_name("id");
   cd1->set_element_type(pb::meta::ELEM_TYPE_INT32);
   cd1->set_nullable(false);
   cd1->set_indexofkey(0);
 
-  pb::meta::ColumnDefinition* cd2 = td.add_columns();
+  pb::meta::ColumnDefinition* cd2 = td->add_columns();
   cd2->set_name("name");
   cd2->set_element_type(pb::meta::ELEM_TYPE_STRING);
   cd2->set_nullable(false);
   cd2->set_indexofkey(0);
 
-  pb::meta::ColumnDefinition* cd3 = td.add_columns();
+  pb::meta::ColumnDefinition* cd3 = td->add_columns();
   cd3->set_name("gender");
   cd3->set_element_type(pb::meta::ELEM_TYPE_STRING);
   cd3->set_nullable(false);
   cd3->set_indexofkey(0);
 
-  pb::meta::ColumnDefinition* cd4 = td.add_columns();
+  pb::meta::ColumnDefinition* cd4 = td->add_columns();
   cd4->set_name("score");
   cd4->set_element_type(pb::meta::ELEM_TYPE_INT64);
   cd4->set_nullable(false);
   cd4->set_indexofkey(0);
 
-  pb::meta::ColumnDefinition* cd5 = td.add_columns();
+  pb::meta::ColumnDefinition* cd5 = td->add_columns();
   cd5->set_name("addr");
   cd5->set_element_type(pb::meta::ELEM_TYPE_STRING);
   cd5->set_nullable(true);
   cd5->set_indexofkey(-1);
 
-  pb::meta::ColumnDefinition* cd6 = td.add_columns();
+  pb::meta::ColumnDefinition* cd6 = td->add_columns();
   cd6->set_name("exist");
   cd6->set_element_type(pb::meta::ELEM_TYPE_BOOLEAN);
   cd6->set_nullable(false);
   cd6->set_indexofkey(-1);
 
-  pb::meta::ColumnDefinition* cd7 = td.add_columns();
+  pb::meta::ColumnDefinition* cd7 = td->add_columns();
   cd7->set_name("pic");
   cd7->set_element_type(pb::meta::ELEM_TYPE_BYTES);
   cd7->set_nullable(true);
   cd7->set_indexofkey(-1);
 
-  pb::meta::ColumnDefinition* cd8 = td.add_columns();
+  pb::meta::ColumnDefinition* cd8 = td->add_columns();
   cd8->set_name("testNull");
   cd8->set_element_type(pb::meta::ELEM_TYPE_INT32);
   cd8->set_nullable(true);
   cd8->set_indexofkey(-1);
 
-  pb::meta::ColumnDefinition* cd9 = td.add_columns();
+  pb::meta::ColumnDefinition* cd9 = td->add_columns();
   cd9->set_name("age");
   cd9->set_element_type(pb::meta::ELEM_TYPE_INT32);
   cd9->set_nullable(false);
   cd9->set_indexofkey(-1);
 
-  pb::meta::ColumnDefinition* cd10 = td.add_columns();
+  pb::meta::ColumnDefinition* cd10 = td->add_columns();
   cd10->set_name("prev");
   cd10->set_element_type(pb::meta::ELEM_TYPE_INT64);
   cd10->set_nullable(false);
   cd10->set_indexofkey(-1);
 
-  pb::meta::ColumnDefinition* cd11 = td.add_columns();
+  pb::meta::ColumnDefinition* cd11 = td->add_columns();
   cd11->set_name("salary");
   cd11->set_element_type(pb::meta::ELEM_TYPE_DOUBLE);
   cd11->set_nullable(true);
@@ -1748,7 +1746,7 @@ TEST_F(DingoSerialTest, keyvaluecodecTest) {
   record1.at(9) = prev;
   record1.at(10) = salary;
 
-  KeyValueCodec* codec = new KeyValueCodec(&td, 0);
+  KeyValueCodec* codec = new KeyValueCodec(td, 0);
   pb::common::KeyValue kv;
   (void)codec->Encode(record1, kv);
   vector<any> record2;
@@ -1839,8 +1837,8 @@ TEST_F(DingoSerialTest, keyvaluecodecTest) {
   string keyprefix_from_key(key, 0, keyprefix.length());
   EXPECT_EQ(keyprefix_from_key, keyprefix);
 
-  //delete key;
-  //delete keyprefix;
+  // delete key;
+  // delete keyprefix;
   delete codec;
   record2.clear();
   record2.shrink_to_fit();

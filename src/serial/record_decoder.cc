@@ -14,21 +14,25 @@
 
 #include "record_decoder.h"
 
+#include <memory>
 #include <vector>
 
 namespace dingodb {
 
-RecordDecoder::RecordDecoder(int schema_version, std::vector<BaseSchema*>* schemas, long common_id) {
+RecordDecoder::RecordDecoder(int schema_version, std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> schemas,
+                             long common_id) {
   this->le_ = IsLE();
   Init(schema_version, schemas, common_id);
 }
 
-RecordDecoder::RecordDecoder(int schema_version, std::vector<BaseSchema*>* schemas, long common_id, bool le) {
+RecordDecoder::RecordDecoder(int schema_version, std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> schemas,
+                             long common_id, bool le) {
   this->le_ = le;
   Init(schema_version, schemas, common_id);
 }
 
-void RecordDecoder::Init(int schema_version, std::vector<BaseSchema*>* schemas, long common_id) {
+void RecordDecoder::Init(int schema_version, std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> schemas,
+                         long common_id) {
   this->schema_version_ = schema_version;
   FormatSchema(schemas, this->le_);
   this->schemas_ = schemas;
@@ -54,12 +58,12 @@ int RecordDecoder::Decode(const std::string& key, const std::string& value, std:
   }
 
   record.resize(schemas_->size());
-  for (BaseSchema* bs : *schemas_) {
-    if (bs != nullptr) {
+  for (const auto& bs : *schemas_) {
+    if (bs) {
       BaseSchema::Type type = bs->GetType();
       switch (type) {
         case BaseSchema::kBool: {
-          DingoSchema<std::optional<bool>>* bos = static_cast<DingoSchema<std::optional<bool>>*>(bs);
+          auto bos = std::dynamic_pointer_cast<DingoSchema<std::optional<bool>>>(bs);
           if (bos->IsKey()) {
             record.at(bos->GetIndex()) = bos->DecodeKey(key_buf);
           } else {
@@ -68,7 +72,7 @@ int RecordDecoder::Decode(const std::string& key, const std::string& value, std:
           break;
         }
         case BaseSchema::kInteger: {
-          DingoSchema<std::optional<int32_t>>* is = static_cast<DingoSchema<std::optional<int32_t>>*>(bs);
+          auto is = std::dynamic_pointer_cast<DingoSchema<std::optional<int32_t>>>(bs);
           if (is->IsKey()) {
             record.at(is->GetIndex()) = is->DecodeKey(key_buf);
           } else {
@@ -77,7 +81,7 @@ int RecordDecoder::Decode(const std::string& key, const std::string& value, std:
           break;
         }
         case BaseSchema::kLong: {
-          DingoSchema<std::optional<int64_t>>* ls = static_cast<DingoSchema<std::optional<int64_t>>*>(bs);
+          auto ls = std::dynamic_pointer_cast<DingoSchema<std::optional<int64_t>>>(bs);
           if (ls->IsKey()) {
             record.at(ls->GetIndex()) = ls->DecodeKey(key_buf);
           } else {
@@ -86,7 +90,7 @@ int RecordDecoder::Decode(const std::string& key, const std::string& value, std:
           break;
         }
         case BaseSchema::kDouble: {
-          DingoSchema<std::optional<double>>* ds = static_cast<DingoSchema<std::optional<double>>*>(bs);
+          auto ds = std::dynamic_pointer_cast<DingoSchema<std::optional<double>>>(bs);
           if (ds->IsKey()) {
             record.at(ds->GetIndex()) = ds->DecodeKey(key_buf);
           } else {
@@ -95,8 +99,7 @@ int RecordDecoder::Decode(const std::string& key, const std::string& value, std:
           break;
         }
         case BaseSchema::kString: {
-          DingoSchema<std::optional<std::shared_ptr<std::string>>>* ss =
-              static_cast<DingoSchema<std::optional<std::shared_ptr<std::string>>>*>(bs);
+          auto ss = std::dynamic_pointer_cast<DingoSchema<std::optional<std::shared_ptr<std::string>>>>(bs);
           if (ss->IsKey()) {
             record.at(ss->GetIndex()) = ss->DecodeKey(key_buf);
           } else {
@@ -145,12 +148,12 @@ int RecordDecoder::Decode(const std::string& key, const std::string& value, cons
   }
 
   record.resize(schemas_->size());
-  for (BaseSchema* bs : *schemas_) {
-    if (bs != nullptr) {
+  for (const auto& bs : *schemas_) {
+    if (bs) {
       BaseSchema::Type type = bs->GetType();
       switch (type) {
         case BaseSchema::kBool: {
-          DingoSchema<std::optional<bool>>* bos = static_cast<DingoSchema<std::optional<bool>>*>(bs);
+          auto bos = std::dynamic_pointer_cast<DingoSchema<std::optional<bool>>>(bs);
           if (VectorFind(column_indexes, bos->GetIndex())) {
             if (bos->IsKey()) {
               record.at(bos->GetIndex()) = bos->DecodeKey(key_buf);
@@ -168,7 +171,7 @@ int RecordDecoder::Decode(const std::string& key, const std::string& value, cons
           break;
         }
         case BaseSchema::kInteger: {
-          DingoSchema<std::optional<int32_t>>* is = static_cast<DingoSchema<std::optional<int32_t>>*>(bs);
+          auto is = std::dynamic_pointer_cast<DingoSchema<std::optional<int32_t>>>(bs);
           if (VectorFind(column_indexes, is->GetIndex())) {
             if (is->IsKey()) {
               record.at(is->GetIndex()) = is->DecodeKey(key_buf);
@@ -186,7 +189,7 @@ int RecordDecoder::Decode(const std::string& key, const std::string& value, cons
           break;
         }
         case BaseSchema::kLong: {
-          DingoSchema<std::optional<int64_t>>* ls = static_cast<DingoSchema<std::optional<int64_t>>*>(bs);
+          auto ls = std::dynamic_pointer_cast<DingoSchema<std::optional<int64_t>>>(bs);
           if (VectorFind(column_indexes, ls->GetIndex())) {
             if (ls->IsKey()) {
               record.at(ls->GetIndex()) = ls->DecodeKey(key_buf);
@@ -204,7 +207,7 @@ int RecordDecoder::Decode(const std::string& key, const std::string& value, cons
           break;
         }
         case BaseSchema::kDouble: {
-          DingoSchema<std::optional<double>>* ds = static_cast<DingoSchema<std::optional<double>>*>(bs);
+          auto ds = std::dynamic_pointer_cast<DingoSchema<std::optional<double>>>(bs);
           if (VectorFind(column_indexes, ds->GetIndex())) {
             if (ds->IsKey()) {
               record.at(ds->GetIndex()) = ds->DecodeKey(key_buf);
@@ -222,8 +225,7 @@ int RecordDecoder::Decode(const std::string& key, const std::string& value, cons
           break;
         }
         case BaseSchema::kString: {
-          DingoSchema<std::optional<std::shared_ptr<std::string>>>* ss =
-              static_cast<DingoSchema<std::optional<std::shared_ptr<std::string>>>*>(bs);
+          auto ss = std::dynamic_pointer_cast<DingoSchema<std::optional<std::shared_ptr<std::string>>>>(bs);
           if (VectorFind(column_indexes, ss->GetIndex())) {
             if (ss->IsKey()) {
               record.at(ss->GetIndex()) = ss->DecodeKey(key_buf);

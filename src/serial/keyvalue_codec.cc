@@ -14,6 +14,8 @@
 
 #include "keyvalue_codec.h"
 
+#include <algorithm>
+#include <memory>
 #include <new>
 #include <string>
 #include <vector>
@@ -25,23 +27,17 @@
 
 namespace dingodb {
 
-KeyValueCodec::KeyValueCodec(pb::meta::TableDefinition* td, uint64_t common_id) {
-  this->td_ = td;
-  this->schemas_ = TableDefinitionToDingoSchema(td);
-  bool le = IsLE();
-  this->re_ = new RecordEncoder(0, this->schemas_, common_id, le);
-  this->rd_ = new RecordDecoder(0, this->schemas_, common_id, le);
-}
+KeyValueCodec::KeyValueCodec(std::shared_ptr<pb::meta::TableDefinition> td, uint64_t common_id)
+    : td_(td),
+      schemas_(TableDefinitionToDingoSchema(td)),
+      re_(0, this->schemas_, common_id, IsLE()),
+      rd_(0, this->schemas_, common_id, IsLE()) {}
 
-KeyValueCodec::~KeyValueCodec() {
-  delete schemas_;
-  delete re_;
-  delete rd_;
-}
+KeyValueCodec::~KeyValueCodec() = default;
 
 int KeyValueCodec::Decode(const std::string& key, const std::string& value, std::vector<std::any>& record) {
   std::vector<std::any> element_record;
-  int ret = rd_->Decode(key, value, element_record);
+  int ret = rd_.Decode(key, value, element_record);
   if (ret < 0) {
     return ret;
   }
@@ -59,7 +55,7 @@ int KeyValueCodec::Encode(const std::vector<std::any>& record, std::string& key,
   if (ret < 0) {
     return ret;
   }
-  return re_->Encode(sql_record, key, value);
+  return re_.Encode(sql_record, key, value);
 }
 
 int KeyValueCodec::Encode(const std::vector<std::any>& record, pb::common::KeyValue& key_value) {
@@ -72,7 +68,7 @@ int KeyValueCodec::EncodeKey(const std::vector<std::any>& record, std::string& o
   if (ret < 0) {
     return ret;
   }
-  return re_->EncodeKey(sql_record, output);
+  return re_.EncodeKey(sql_record, output);
 }
 
 int KeyValueCodec::EncodeKeyPrefix(const std::vector<std::any>& record, int column_count, std::string& output) {
@@ -81,11 +77,11 @@ int KeyValueCodec::EncodeKeyPrefix(const std::vector<std::any>& record, int colu
   if (ret < 0) {
     return ret;
   }
-  return re_->EncodeKeyPrefix(element_record, column_count, output);
+  return re_.EncodeKeyPrefix(element_record, column_count, output);
 }
 
-int KeyValueCodec::EncodeMaxKeyPrefix(std::string& output) { return re_->EncodeMinKeyPrefix(output); }
+int KeyValueCodec::EncodeMaxKeyPrefix(std::string& output) { return re_.EncodeMinKeyPrefix(output); }
 
-int KeyValueCodec::EncodeMinKeyPrefix(std::string& output) { return re_->EncodeMinKeyPrefix(output); }
+int KeyValueCodec::EncodeMinKeyPrefix(std::string& output) { return re_.EncodeMinKeyPrefix(output); }
 
 }  // namespace dingodb
