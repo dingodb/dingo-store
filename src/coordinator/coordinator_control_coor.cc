@@ -606,7 +606,13 @@ butil::Status CoordinatorControl::SelectStore(int32_t replica_num, const std::st
 
   // if not enough stores is selected, return -1
   if (stores_for_regions.size() < replica_num) {
-    DINGO_LOG(INFO) << "Not enough stores STORE_NORMAL for create region";
+    std::string selected_store_ids;
+    for (const auto& store : stores_for_regions) {
+      selected_store_ids += std::to_string(store.id()) + ",";
+    }
+    DINGO_LOG(INFO) << "Not enough stores STORE_NORMAL for create region, replica_num=" << replica_num
+                    << ", resource_tag=" << resource_tag << ", store_ids.size=" << store_ids.size()
+                    << ", selected_store_ids=" << selected_store_ids;
     return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE, "Not enough stores for create region");
   }
 
@@ -2252,85 +2258,6 @@ void CoordinatorControl::UpdateRegionMapAndStoreOperation(const pb::common::Stor
                                                         region_metrics.region_size());
     }
   }
-
-  // update store operation
-  pb::coordinator::StoreOperation store_operation;
-  GetStoreOperation(store_metrics.id(), store_operation);
-
-  if (store_operation.region_cmds_size() == 0) {
-    return;
-  }
-
-  auto* store_operation_increment = meta_increment.add_store_operations();
-  store_operation_increment->set_id(store_metrics.id());
-  store_operation_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
-  auto* store_operation_increment_store_operation = store_operation_increment->mutable_store_operation();
-
-  // add to be deleted region_cmd to increment
-  for (auto& it : *store_operation.mutable_region_cmds()) {
-    if (it.region_cmd_type() == pb::coordinator::RegionCmdType::CMD_CREATE) {
-      // check CMD_CREATE region_id exists
-      if (store_metrics.region_metrics_map().contains(it.region_id())) {
-        DINGO_LOG(INFO) << "CMD_CREATE store_id=" << store_metrics.id() << " region_id = " << it.region_id()
-                        << " exists, remove store_operation";
-        auto* region_cmd_for_delete = store_operation_increment_store_operation->add_region_cmds();
-        region_cmd_for_delete->CopyFrom(it);
-      }
-    } else if (it.region_cmd_type() == pb::coordinator::RegionCmdType::CMD_DELETE) {
-      // check CMD_DELETE region_id exists
-      if (!store_metrics.region_metrics_map().contains(it.region_id())) {
-        DINGO_LOG(INFO) << "CMD_DELETE store_id=" << store_metrics.id() << "region_id = " << it.region_id()
-                        << " not exists";
-        auto* region_cmd_for_delete = store_operation_increment_store_operation->add_region_cmds();
-        region_cmd_for_delete->CopyFrom(it);
-      } else if (store_metrics.region_metrics_map().at(it.region_id()).store_region_state() ==
-                     pb::common::StoreRegionState::DELETED ||
-                 store_metrics.region_metrics_map().at(it.region_id()).store_region_state() ==
-                     pb::common::StoreRegionState::DELETING) {
-        DINGO_LOG(INFO) << "CMD_DELETE store_id=" << store_metrics.id() << "region_id = " << it.region_id()
-                        << " exists, but state is DELETED or DELETING";
-        auto* region_cmd_for_delete = store_operation_increment_store_operation->add_region_cmds();
-        region_cmd_for_delete->CopyFrom(it);
-      } else {
-        DINGO_LOG(INFO) << "CMD_DELETE store_id=" << store_metrics.id() << "region_id = " << it.region_id()
-                        << " exists, but state is not DELETED or DELETING";
-      }
-    } else if (it.region_cmd_type() == pb::coordinator::RegionCmdType::CMD_SPLIT) {
-      // check CMD_SPLIT region_id exists
-      if (!store_metrics.region_metrics_map().contains(it.region_id())) {
-        DINGO_LOG(INFO) << "CMD_SPLIT store_id=" << store_metrics.id() << "region_id = " << it.region_id()
-                        << " not exists";
-        auto* region_cmd_for_delete = store_operation_increment_store_operation->add_region_cmds();
-        region_cmd_for_delete->CopyFrom(it);
-      } else if (store_metrics.region_metrics_map().at(it.region_id()).store_region_state() ==
-                 pb::common::StoreRegionState::SPLITTING) {
-        DINGO_LOG(INFO) << "CMD_SPLIT store_id=" << store_metrics.id() << "region_id = " << it.region_id()
-                        << " exists, and state is SPLITTING, it's same as expected";
-        auto* region_cmd_for_delete = store_operation_increment_store_operation->add_region_cmds();
-        region_cmd_for_delete->CopyFrom(it);
-      } else {
-        DINGO_LOG(INFO) << "CMD_SPLIT store_id=" << store_metrics.id() << "region_id = " << it.region_id()
-                        << " exists, but state is not SPLITTING";
-      }
-    } else if (it.region_cmd_type() == pb::coordinator::RegionCmdType::CMD_MERGE) {
-      // check CMD_MERGE region_id exists
-      if (!store_metrics.region_metrics_map().contains(it.region_id())) {
-        DINGO_LOG(INFO) << "CMD_MERGE store_id=" << store_metrics.id() << "region_id = " << it.region_id()
-                        << " not exists";
-        auto* region_cmd_for_delete = store_operation_increment_store_operation->add_region_cmds();
-        region_cmd_for_delete->CopyFrom(it);
-      } else if (store_metrics.region_metrics_map().at(it.region_id()).store_region_state() ==
-                 pb::common::StoreRegionState::MERGING) {
-        DINGO_LOG(INFO) << "CMD_MERGE store_id=" << store_metrics.id() << "region_id = " << it.region_id()
-                        << " exists, but state is MERGING";
-        auto* region_cmd_for_delete = store_operation_increment_store_operation->add_region_cmds();
-        region_cmd_for_delete->CopyFrom(it);
-      } else {
-        DINGO_LOG(INFO) << "CMD_MERGE store_id=" << store_metrics.id() << "region_id = " << it.region_id()
-                        << " exists, but state is not MERGING";
-      }
-    }
-  }
 }
 
 uint64_t CoordinatorControl::UpdateStoreMetrics(const pb::common::StoreMetrics& store_metrics,
@@ -2523,18 +2450,15 @@ void CoordinatorControl::GetMemoryInfo(pb::coordinator::CoordinatorMemoryInfo& m
   }
 }
 
-void CoordinatorControl::GetStoreOperation(uint64_t store_id, pb::coordinator::StoreOperation& store_operation) {
-  store_operation_map_.Get(store_id, store_operation);
+int CoordinatorControl::GetStoreOperation(uint64_t store_id, pb::coordinator::StoreOperation& store_operation) {
+  return store_operation_map_.Get(store_id, store_operation);
 }
 
-void CoordinatorControl::GetStoreOperations(
+int CoordinatorControl::GetStoreOperations(
     butil::FlatMap<uint64_t, pb::coordinator::StoreOperation>& store_operations) {
   store_operation_map_.GetFlatMapCopy(store_operations);
 
-  // auto store_opertion_kvs = store_operation_meta_->TransformToKvWithAll();
-  // for (auto& it : store_opertion_kvs) {
-  //   DINGO_LOG(DEBUG) << "store_operation_meta_ key=" << it.key() << " value=" << it.value();
-  // }
+  return store_operations.size();
 }
 
 void CoordinatorControl::GetTaskList(butil::FlatMap<uint64_t, pb::coordinator::TaskList>& task_lists) {
