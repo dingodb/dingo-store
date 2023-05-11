@@ -569,9 +569,14 @@ void StoreServiceImpl::KvScanBegin(google::protobuf::RpcController* controller,
 
   butil::Status status = ValidateKvScanBeginRequest(request);
   if (!status.ok()) {
-    auto* err = response->mutable_error();
-    err->set_errcode(static_cast<Errno>(status.error_code()));
-    err->set_errmsg(status.error_str());
+    // Note: The caller requires that if the parameter is wrong, no error will be reported and it will be returned
+    // directly.
+    if (pb::error::EILLEGAL_PARAMTETERS != static_cast<pb::error::Errno>(status.error_code())) {
+      auto* err = response->mutable_error();
+      err->set_errcode(static_cast<Errno>(status.error_code()));
+      err->set_errmsg(status.error_str());
+    }
+
     return;
   }
 
