@@ -15,6 +15,8 @@
 #ifndef DINGO_SERIAL_RECORD_ENCODER_H_
 #define DINGO_SERIAL_RECORD_ENCODER_H_
 
+#include <memory>
+
 #include "any"
 #include "functional"
 #include "keyvalue.h"
@@ -32,17 +34,18 @@ class RecordEncoder {
  private:
   int codec_version_ = 0;
   int schema_version_;
-  std::vector<BaseSchema*>* schemas_;
+  std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> schemas_;
   long common_id_;
   int key_buf_size_;
   int value_buf_size_;
   bool le_;
 
  public:
-  RecordEncoder(int schema_version, std::vector<BaseSchema*>* schemas, long common_id);
-  RecordEncoder(int schema_version, std::vector<BaseSchema*>* schemas, long common_id, bool le);
+  RecordEncoder(int schema_version, std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> schemas, long common_id);
+  RecordEncoder(int schema_version, std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> schemas, long common_id,
+                bool le);
 
-  void Init(int schema_version, std::vector<BaseSchema*>* schemas, long common_id);
+  void Init(int schema_version, std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> schemas, long common_id);
 
   int Encode(const std::vector<std::any>& record, pb::common::KeyValue& key_value /*output*/);
   int Encode(const std::vector<std::any>& record, std::string& key, std::string& value);

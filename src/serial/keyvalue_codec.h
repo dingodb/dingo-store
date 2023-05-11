@@ -15,6 +15,7 @@
 #ifndef DINGO_SERIAL_KEYVALUE_CODEC_H_
 #define DINGO_SERIAL_KEYVALUE_CODEC_H_
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -29,13 +30,13 @@ namespace dingodb {
 
 class KeyValueCodec {
  private:
-  pb::meta::TableDefinition* td_;
-  std::vector<BaseSchema*>* schemas_;
-  RecordEncoder* re_;
-  RecordDecoder* rd_;
+  std::shared_ptr<pb::meta::TableDefinition> td_;
+  std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> schemas_;
+  RecordEncoder re_;
+  RecordDecoder rd_;
 
  public:
-  KeyValueCodec(pb::meta::TableDefinition* td, uint64_t common_id);
+  KeyValueCodec(std::shared_ptr<pb::meta::TableDefinition> td, uint64_t common_id);
   ~KeyValueCodec();
 
   std::vector<std::any>* Decode(KeyValue* keyvalue);

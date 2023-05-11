@@ -26,7 +26,7 @@ class KeyValue {
 
  public:
   KeyValue(std::string* key, std::string* value);
-  ~KeyValue();
+  ~KeyValue() = default;
   void Set(std::string* key, std::string* value);
   void SetKey(std::string* key);
   void SetValue(std::string* value);
