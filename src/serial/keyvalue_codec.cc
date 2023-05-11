@@ -49,6 +49,10 @@ int KeyValueCodec::Decode(const pb::common::KeyValue& key_value, std::vector<std
   return Decode(key_value.key(), key_value.value(), record);
 }
 
+int KeyValueCodec::Decode(KeyValue& keyvalue, std::vector<std::any>& record) {
+  return Decode(*keyvalue.GetKey(), *keyvalue.GetValue(), record);
+}
+
 int KeyValueCodec::Encode(const std::vector<std::any>& record, std::string& key, std::string& value) {
   std::vector<std::any> sql_record;
   int ret = SqlToElement(*td_, record, sql_record);
@@ -60,6 +64,10 @@ int KeyValueCodec::Encode(const std::vector<std::any>& record, std::string& key,
 
 int KeyValueCodec::Encode(const std::vector<std::any>& record, pb::common::KeyValue& key_value) {
   return Encode(record, *key_value.mutable_key(), *key_value.mutable_value());
+}
+
+int KeyValueCodec::Encode(const std::vector<std::any>& record, KeyValue& keyvalue) {
+  return Encode(record, *keyvalue.GetKey(), *keyvalue.GetValue());
 }
 
 int KeyValueCodec::EncodeKey(const std::vector<std::any>& record, std::string& output) {

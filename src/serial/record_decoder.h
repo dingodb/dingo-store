@@ -46,7 +46,6 @@ class RecordDecoder {
 
   void Init(int schema_version, std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> schemas, long common_id);
 
-
   int Decode(const KeyValue& key_value, std::vector<std::any>& record /*output*/);
   int Decode(const pb::common::KeyValue& key_value, std::vector<std::any>& record /*output*/);
   int Decode(const std::string& key, const std::string& value, std::vector<std::any>& record /*output*/);
