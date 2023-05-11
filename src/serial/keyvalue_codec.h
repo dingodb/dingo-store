@@ -47,13 +47,12 @@ class KeyValueCodec {
   int Decode(const pb::common::KeyValue& key_value, std::vector<std::any>& record /*output*/);
   int Encode(const std::vector<std::any>& record, pb::common::KeyValue& key_value /*output*/);
 
-  std::string* EncodeKey(std::vector<std::any>* record);
   int EncodeKey(const std::vector<std::any>& record, std::string& output);
-  std::string* EncodeKeyPrefix(std::vector<std::any>* record, int column_count);
+
   int EncodeKeyPrefix(const std::vector<std::any>& record, int column_count, std::string& output);
-  std::string* EncodeMaxKeyPrefix();
+
   int EncodeMaxKeyPrefix(std::string& output);
-  std::string* EncodeMinKeyPrefix();
+
   int EncodeMinKeyPrefix(std::string& output);
 };
 
