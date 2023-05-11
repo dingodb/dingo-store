@@ -40,11 +40,9 @@ bool VectorFind(const std::vector<int>& v, int t);
 std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> TableDefinitionToDingoSchema(
     std::shared_ptr<pb::meta::TableDefinition> td);
 
-std::vector<std::any>* ElementToSql(pb::meta::TableDefinition* td, std::vector<std::any>* record);
 int ElementToSql(const pb::meta::TableDefinition& td, const std::vector<std::any>& record,
                  std::vector<std::any>& sql_record);
 
-std::vector<std::any>* SqlToElement(std::shared_ptr<pb::meta::TableDefinition> td, std::vector<std::any>* record);
 int SqlToElement(const pb::meta::TableDefinition& td, const std::vector<std::any>& sql_record,
                  std::vector<std::any>& element_record);
 

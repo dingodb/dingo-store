@@ -303,16 +303,6 @@ int ElementToSql(const pb::meta::TableDefinition& td, const std::vector<std::any
   return 0;
 }
 
-std::vector<std::any>* ElementToSql(pb::meta::TableDefinition* td, std::vector<std::any>* record) {
-  std::vector<std::any>* sql_record = new std::vector<std::any>(td->columns_size());
-  int ret = ElementToSql(*td, *record, *sql_record);
-  if (ret < 0) {
-    delete sql_record;
-    return nullptr;
-  }
-  return sql_record;
-}
-
 int SqlToElement(const pb::meta::TableDefinition& td, const std::vector<std::any>& sql_record,
                  std::vector<std::any>& element_record) {
   element_record.resize(td.columns_size());
@@ -385,16 +375,6 @@ int SqlToElement(const pb::meta::TableDefinition& td, const std::vector<std::any
     }
   }
   return 0;
-}
-
-std::vector<std::any>* SqlToElement(std::shared_ptr<pb::meta::TableDefinition> td, std::vector<std::any>* record) {
-  std::vector<std::any>* element_record = new std::vector<std::any>(td->columns_size());
-  int ret = SqlToElement(*td, *record, *element_record);
-  if (ret < 0) {
-    delete element_record;
-    return nullptr;
-  }
-  return element_record;
 }
 
 bool IsLE() {
