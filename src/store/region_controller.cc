@@ -23,6 +23,7 @@
 #include "common/constant.h"
 #include "common/logging.h"
 #include "event/store_state_machine_event.h"
+#include "fmt/core.h"
 #include "glog/logging.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
@@ -620,6 +621,10 @@ bool ControlExecutor::Init() {
 }
 
 bool ControlExecutor::Execute(TaskRunnable* task) {
+  if (queue_id_.value == 0) {
+    DINGO_LOG(ERROR) << "Control execute queue is not init.";
+    return false;
+  }
   if (bthread::execution_queue_execute(queue_id_, task) != 0) {
     DINGO_LOG(ERROR) << "region execution queue execute failed";
     return false;
@@ -636,6 +641,7 @@ void ControlExecutor::Stop() {
   if (bthread::execution_queue_join(queue_id_) != 0) {
     DINGO_LOG(ERROR) << "region execution queue join failed";
   }
+  queue_id_ = {0};
 }
 
 bool RegionCommandManager::Init() {
@@ -660,6 +666,7 @@ void RegionCommandManager::AddCommand(std::shared_ptr<pb::coordinator::RegionCmd
   {
     BAIDU_SCOPED_LOCK(mutex_);
     if (region_commands_.find(region_cmd->id()) != region_commands_.end()) {
+      DINGO_LOG(WARNING) << fmt::format("Region control command {} already exist!", region_cmd->id());
       return;
     }
 

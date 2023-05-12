@@ -274,6 +274,26 @@ void StoreRegionMeta::UpdateLeaderId(uint64_t region_id, uint64_t leader_id) {
   UpdateLeaderId(GetRegion(region_id), leader_id);
 }
 
+void StoreRegionMeta::UpdatePeers(store::RegionPtr region, std::vector<pb::common::Peer>& peers) {
+  assert(region != nullptr);
+  region->SetPeers(peers);
+  meta_writer_->Put(TransformToKv(&region));
+}
+
+void StoreRegionMeta::UpdatePeers(uint64_t region_id, std::vector<pb::common::Peer>& peers) {
+  UpdatePeers(GetRegion(region_id), peers);
+}
+
+void StoreRegionMeta::UpdateRange(store::RegionPtr region, const pb::common::Range& range) {
+  assert(region != nullptr);
+  region->SetRange(range);
+  meta_writer_->Put(TransformToKv(&region));
+}
+
+void StoreRegionMeta::UpdateRange(uint64_t region_id, const pb::common::Range& range) {
+  UpdateRange(GetRegion(region_id), range);
+}
+
 bool StoreRegionMeta::IsExistRegion(uint64_t region_id) { return GetRegion(region_id) != nullptr; }
 
 store::RegionPtr StoreRegionMeta::GetRegion(uint64_t region_id) {

@@ -296,13 +296,13 @@ void SplitHandler::Handle(std::shared_ptr<Context>, store::RegionPtr from_region
   if (to_range.end_key().compare(request.split_key()) < 0) {
     to_range.set_end_key(from_region->Range().end_key());
   }
-  to_region->SetRange(to_range);
+  Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->UpdateRange(to_region, to_range);
 
   // Set parent range
   pb::common::Range from_range;
   from_range.set_start_key(from_region->Range().start_key());
   from_range.set_end_key(request.split_key());
-  from_region->SetRange(from_range);
+  Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->UpdateRange(from_region, from_range);
   DINGO_LOG(DEBUG) << fmt::format("split region {} to {}, from region range[{}-{}] to region range[{}-{}]",
                                   from_region->Id(), to_region->Id(), Helper::StringToHex(from_range.start_key()),
                                   Helper::StringToHex(from_range.end_key()), Helper::StringToHex(to_range.start_key()),
