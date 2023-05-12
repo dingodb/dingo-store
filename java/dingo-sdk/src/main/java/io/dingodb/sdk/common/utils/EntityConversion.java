@@ -61,7 +61,6 @@ import static io.dingodb.meta.Meta.SqlType.SQL_TYPE_MULTISET;
 import static io.dingodb.meta.Meta.SqlType.SQL_TYPE_TIME;
 import static io.dingodb.meta.Meta.SqlType.SQL_TYPE_TIMESTAMP;
 import static io.dingodb.meta.Meta.SqlType.SQL_TYPE_VARCHAR;
-import static io.dingodb.sdk.common.utils.ByteArrayUtils.EMPTY_BYTES;
 import static io.dingodb.sdk.common.utils.Parameters.cleanNull;
 
 public class EntityConversion {
@@ -86,7 +85,7 @@ public class EntityConversion {
                 .setReplica(table.getReplica())
                 .addAllColumns(columnDefinitions)
                 .setAutoIncrement(table.autoIncrement())
-                .setCreateSql(table.createSql())
+                .setCreateSql(Parameters.cleanNull(table.createSql(), ""))
                 .build();
     }
 

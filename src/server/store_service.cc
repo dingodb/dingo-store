@@ -468,7 +468,7 @@ void StoreServiceImpl::KvBatchDelete(google::protobuf::RpcController* controller
   }
 }
 
-butil::Status ValidateKvDeleteRangeRequest(const dingodb::pb::store::KvDeleteRangeRequest* request) {
+butil::Status ValidateKvDeleteRangeRequest(const dingodb::pb::store::KvDeleteRangeRequest* request, pb::common::Range* range) {
   auto region = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(request->region_id());
   if (region == nullptr) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
@@ -490,6 +490,9 @@ butil::Status ValidateKvDeleteRangeRequest(const dingodb::pb::store::KvDeleteRan
   if (!status.ok()) {
     return status;
   }
+  if (range) {
+    *range = std::move(uniform_range);
+  }
 
   return butil::Status();
 }
@@ -500,7 +503,8 @@ void StoreServiceImpl::KvDeleteRange(google::protobuf::RpcController* controller
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
 
-  butil::Status status = ValidateKvDeleteRangeRequest(request);
+  pb::common::Range range;
+  butil::Status status = ValidateKvDeleteRangeRequest(request, &range);
   if (!status.ok()) {
     // Note: The caller requires that if the parameter is wrong, no error will be reported and it will be returned
     // directly.
@@ -518,6 +522,12 @@ void StoreServiceImpl::KvDeleteRange(google::protobuf::RpcController* controller
     return;
   }
 
+  auto* mut_range = const_cast<dingodb::pb::store::KvDeleteRangeRequest*>(request)->mutable_range();
+  mut_range->mutable_range()->set_start_key(range.start_key());
+  mut_range->mutable_range()->set_end_key(range.end_key());
+  mut_range->set_with_start(true);
+  mut_range->set_with_end(false);
+
   std::shared_ptr<Context> const ctx = std::make_shared<Context>(cntl, done_guard.release(), response);
   ctx->SetRegionId(request->region_id()).SetCfName(Constant::kStoreDataCF);
   auto* mut_request = const_cast<dingodb::pb::store::KvDeleteRangeRequest*>(request);
@@ -534,7 +544,7 @@ void StoreServiceImpl::KvDeleteRange(google::protobuf::RpcController* controller
   }
 }
 
-butil::Status ValidateKvScanBeginRequest(const dingodb::pb::store::KvScanBeginRequest* request) {
+butil::Status ValidateKvScanBeginRequest(const dingodb::pb::store::KvScanBeginRequest* request, pb::common::Range* range) {
   auto region = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(request->region_id());
   if (region == nullptr) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
@@ -550,13 +560,15 @@ butil::Status ValidateKvScanBeginRequest(const dingodb::pb::store::KvScanBeginRe
     return status;
   }
 
-  auto uniform_range = Helper::TransformRangeForValidate(region->Range(), request->range());
+  pb::common::Range uniform_range = Helper::TransformRangeForValidate(region->Range(), request->range());
 
   status = ServiceHelper::ValidateRangeInRange(region->Range(), uniform_range);
   if (!status.ok()) {
     return status;
   }
-
+  if (range) {
+    *range = std::move(uniform_range);
+  }
   return butil::Status();
 }
 
@@ -567,7 +579,8 @@ void StoreServiceImpl::KvScanBegin(google::protobuf::RpcController* controller,
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
 
-  butil::Status status = ValidateKvScanBeginRequest(request);
+  pb::common::Range range;
+  butil::Status status = ValidateKvScanBeginRequest(request, &range);
   if (!status.ok()) {
     // Note: The caller requires that if the parameter is wrong, no error will be reported and it will be returned
     // directly.
@@ -579,6 +592,12 @@ void StoreServiceImpl::KvScanBegin(google::protobuf::RpcController* controller,
 
     return;
   }
+
+  auto* mut_range = const_cast<dingodb::pb::store::KvScanBeginRequest*>(request)->mutable_range();
+  mut_range->mutable_range()->set_start_key(range.start_key());
+  mut_range->mutable_range()->set_end_key(range.end_key());
+  mut_range->set_with_start(true);
+  mut_range->set_with_end(false);
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
   ctx->SetRegionId(request->region_id()).SetCfName(Constant::kStoreDataCF);
