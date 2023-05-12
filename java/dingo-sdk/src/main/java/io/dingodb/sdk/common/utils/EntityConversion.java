@@ -86,6 +86,7 @@ public class EntityConversion {
                 .setReplica(table.getReplica())
                 .addAllColumns(columnDefinitions)
                 .setAutoIncrement(table.autoIncrement())
+                .setCreateSql(table.createSql())
                 .build();
     }
 

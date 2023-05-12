@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.Map;
 
 @Builder
+@AllArgsConstructor
 public class TableDefinition implements Table {
 
     private String name;
@@ -35,6 +36,7 @@ public class TableDefinition implements Table {
     private Map<String, String> properties;
     private int replica;
     private long autoIncrement = 1;
+    private String createSql;
 
     @Deprecated
     public TableDefinition(String name, List<Column> columns, int version, int ttl, Partition partition, String engine, Map<String, String> properties) {
@@ -102,5 +104,10 @@ public class TableDefinition implements Table {
     @Override
     public long autoIncrement() {
         return autoIncrement;
+    }
+
+    @Override
+    public String createSql() {
+        return createSql;
     }
 }
