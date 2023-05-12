@@ -53,6 +53,9 @@ public class ScanIterator implements Iterator<KeyValue>, AutoCloseable {
         this.range = range;
         this.retryTimes = retryTimes;
         this.scanId = scanBegin();
+        if (scanId == null || scanId.isEmpty()) {
+            release = true;
+        }
     }
 
     private static void checkRes(io.dingodb.error.ErrorOuterClass.Error error, String param) {
