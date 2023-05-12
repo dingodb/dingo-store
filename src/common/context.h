@@ -106,6 +106,7 @@ class Context {
   std::shared_ptr<BthreadCond> Cond() { return cond_; }
   butil::Status Status() { return status_; }
   void SetStatus(butil::Status& status) { status_ = status; }
+  void SetStatus(butil::Status&& status) { status_ = status; }
 
   WriteCbFunc WriteCb() { return write_cb_; }
   void SetWriteCb(WriteCbFunc write_cb) { write_cb_ = write_cb; }

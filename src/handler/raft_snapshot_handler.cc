@@ -156,7 +156,7 @@ bool RaftSnapshot::ValidateSnapshotFile(store::RegionPtr& /*region*/,
 
 // Load snapshot by ingest sst files
 bool RaftSnapshot::LoadSnapshot(braft::SnapshotReader* reader, store::RegionPtr region) {
-  DINGO_LOG(INFO) << "LoadSnapshot ...";
+  DINGO_LOG(INFO) << fmt::format("LoadSnapshot region {}", region->Id());
   auto filepath_func = [](const std::string& path, std::vector<std::string>& files) -> std::vector<std::string> {
     std::vector<std::string> filepaths;
 
@@ -171,8 +171,7 @@ bool RaftSnapshot::LoadSnapshot(braft::SnapshotReader* reader, store::RegionPtr 
   std::vector<std::string> files;
   reader->list_files(&files);
   if (files.empty()) {
-    DINGO_LOG(ERROR) << "Snapshot not include file";
-    return false;
+    DINGO_LOG(WARNING) << "Snapshot not include file";
   }
 
   for (auto& file : files) {
@@ -193,8 +192,10 @@ bool RaftSnapshot::LoadSnapshot(braft::SnapshotReader* reader, store::RegionPtr 
   }
 
   // Ingest sst to region
-  auto raw_engine = std::dynamic_pointer_cast<RawRocksEngine>(engine_);
-  status = raw_engine->IngestExternalFile(Constant::kStoreDataCF, filepath_func(reader->get_path(), files));
+  if (!files.empty()) {
+    auto raw_engine = std::dynamic_pointer_cast<RawRocksEngine>(engine_);
+    status = raw_engine->IngestExternalFile(Constant::kStoreDataCF, filepath_func(reader->get_path(), files));
+  }
   return status.ok();
 }
 

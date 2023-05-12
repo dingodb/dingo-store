@@ -134,6 +134,12 @@ class StoreRegionMeta : public TransformKvAble {
   void UpdateLeaderId(store::RegionPtr region, uint64_t leader_id);
   void UpdateLeaderId(uint64_t region_id, uint64_t leader_id);
 
+  void UpdatePeers(store::RegionPtr region, std::vector<pb::common::Peer>& peers);
+  void UpdatePeers(uint64_t region_id, std::vector<pb::common::Peer>& peers);
+
+  void UpdateRange(store::RegionPtr region, const pb::common::Range& range);
+  void UpdateRange(uint64_t region_id, const pb::common::Range& range);
+
   bool IsExistRegion(uint64_t region_id);
   store::RegionPtr GetRegion(uint64_t region_id);
   std::vector<store::RegionPtr> GetAllRegion();

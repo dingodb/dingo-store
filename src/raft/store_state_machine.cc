@@ -18,6 +18,7 @@
 #include <string>
 
 #include "braft/util.h"
+#include "butil/status.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "event/store_state_machine_event.h"
@@ -40,7 +41,7 @@ void StoreClosure::Run() {
     DINGO_LOG(ERROR) << fmt::format("raft log commit failed, region[{}] {}:{}", ctx_->RegionId(), status().error_code(),
                                     status().error_str());
 
-    ctx_->SetStatus(status());
+    ctx_->SetStatus(butil::Status(pb::error::ERAFT_COMMITLOG, status().error_str()));
   }
 
   if (ctx_->IsSyncMode()) {
@@ -62,7 +63,7 @@ StoreStateMachine::StoreStateMachine(std::shared_ptr<RawEngine> engine, store::R
       raft_meta_(raft_meta),
       region_metrics_(region_metrics),
       listeners_(listeners),
-      applied_term_(0),
+      applied_term_(raft_meta->term()),
       applied_index_(raft_meta->applied_index()) {}
 
 bool StoreStateMachine::Init() { return true; }
@@ -136,6 +137,7 @@ void StoreStateMachine::on_snapshot_save(braft::SnapshotWriter* writer, braft::C
   event->node_id = region_->Id();
 
   DispatchEvent(EventType::kSmSnapshotSave, event);
+
   DINGO_LOG(INFO) << "on_snapshot_save done, region: " << region_->Id();
 }
 
@@ -164,13 +166,25 @@ int StoreStateMachine::on_snapshot_load(braft::SnapshotReader* reader) {
   DINGO_LOG(INFO) << fmt::format("load snapshot({}-{}) applied_index({})", meta.last_included_term(),
                                  meta.last_included_index(), applied_index_);
 
+  // Todo: 1. When loading snapshot panic, need handle the corner case.
+  //       2. When restart server, maybe meta.last_included_index() > applied_index_.
   if (meta.last_included_index() > applied_index_) {
     auto event = std::make_shared<SmSnapshotLoadEvent>();
     event->engine = engine_;
     event->reader = reader;
     event->node_id = region_->Id();
+
     DispatchEvent(EventType::kSmSnapshotLoad, event);
+
+    // Update applied term and index
+    applied_term_ = meta.last_included_term();
     applied_index_ = meta.last_included_index();
+
+    if (raft_meta_ != nullptr) {
+      raft_meta_->set_term(applied_term_);
+      raft_meta_->set_applied_index(applied_index_);
+      Server::GetInstance()->GetStoreMetaManager()->GetStoreRaftMeta()->UpdateRaftMeta(raft_meta_);
+    }
   }
 
   return 0;

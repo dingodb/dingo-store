@@ -24,6 +24,7 @@
 #include "handler/raft_snapshot_handler.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
+#include "server/server.h"
 #include "store/heartbeat.h"
 
 namespace dingodb {
@@ -113,7 +114,7 @@ void SmConfigurationCommittedEventListener::OnEvent(std::shared_ptr<Event> event
     std::vector<pb::common::Peer> changed_peers;
     if (get_changed_peers(changed_peers)) {
       DINGO_LOG(DEBUG) << "Peers have changed, update region definition peer";
-      region->SetPeers(changed_peers);
+      Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->UpdatePeers(region, changed_peers);
       // Notify coordinator
       Heartbeat::TriggerStoreHeartbeat(nullptr);
     }

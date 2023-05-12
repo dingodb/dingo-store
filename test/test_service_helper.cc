@@ -148,4 +148,84 @@ TEST_F(ServiceHelperTest, ValidateRangeWithOptions) {
   }
 }
 
+std::string GenString(std::vector<char> key) { return std::string(key.data(), key.size()); }
+
+dingodb::pb::common::Range GenRange(std::vector<char> start_key, std::vector<char> end_key) {
+  dingodb::pb::common::Range range;
+  range.set_start_key(start_key.data(), start_key.size());
+  range.set_end_key(end_key.data(), end_key.size());
+  return range;
+}
+
+dingodb::pb::common::RangeWithOptions GenRangeWithOptions(std::vector<char> start_key, bool with_start,
+                                                          std::vector<char> end_key, bool with_end) {
+  dingodb::pb::common::RangeWithOptions range;
+  range.mutable_range()->set_start_key(start_key.data(), start_key.size());
+  range.mutable_range()->set_end_key(end_key.data(), end_key.size());
+  range.set_with_start(with_start);
+  range.set_with_end(with_end);
+
+  return range;
+}
+
+TEST_F(ServiceHelperTest, ValidateRange) {
+  EXPECT_EQ(false, dingodb::ServiceHelper::ValidateRange(GenRange({}, {0x78, 0x65})).ok());
+  EXPECT_EQ(false, dingodb::ServiceHelper::ValidateRange(GenRange({0x61, 0x64}, {})).ok());
+
+  EXPECT_EQ(true, dingodb::ServiceHelper::ValidateRange(GenRange({0x61, 0x64}, {0x78, 0x65})).ok());
+  EXPECT_EQ(false, dingodb::ServiceHelper::ValidateRange(GenRange({0x78, 0x65}, {0x61, 0x64})).ok());
+}
+
+TEST_F(ServiceHelperTest, ValidateRangeWithOptions2) {
+  EXPECT_EQ(false,
+            dingodb::ServiceHelper::ValidateRangeWithOptions(GenRangeWithOptions({}, true, {0x78, 0x65}, true)).ok());
+  EXPECT_EQ(false,
+            dingodb::ServiceHelper::ValidateRangeWithOptions(GenRangeWithOptions({0x61, 0x64}, true, {}, true)).ok());
+
+  EXPECT_EQ(true, dingodb::ServiceHelper::ValidateRangeWithOptions(
+                      GenRangeWithOptions({0x61, 0x64}, true, {0x78, 0x65}, true))
+                      .ok());
+  EXPECT_EQ(false, dingodb::ServiceHelper::ValidateRangeWithOptions(
+                       GenRangeWithOptions({0x78, 0x65}, true, {0x61, 0x64}, true))
+                       .ok());
+
+  EXPECT_EQ(false, dingodb::ServiceHelper::ValidateRangeWithOptions(
+                       GenRangeWithOptions({0x61, 0x64}, true, {0x61, 0x64}, false))
+                       .ok());
+  EXPECT_EQ(false, dingodb::ServiceHelper::ValidateRangeWithOptions(
+                       GenRangeWithOptions({0x61, 0x64}, false, {0x61, 0x64}, true))
+                       .ok());
+}
+
+TEST_F(ServiceHelperTest, ValidateKeyInRange) {
+  EXPECT_EQ(
+      true,
+      dingodb::ServiceHelper::ValidateKeyInRange(GenRange({0x61, 0x64}, {0x78, 0x65}), {GenString({0x61, 0x64})}).ok());
+
+  EXPECT_EQ(true,
+            dingodb::ServiceHelper::ValidateKeyInRange(GenRange({0x61, 0x64}, {0x78, 0x65}), {GenString({0x63})}).ok());
+  EXPECT_EQ(false,
+            dingodb::ServiceHelper::ValidateKeyInRange(GenRange({0x61, 0x64}, {0x78, 0x65}), {GenString({0x61})}).ok());
+  EXPECT_EQ(
+      false,
+      dingodb::ServiceHelper::ValidateKeyInRange(GenRange({0x61, 0x64}, {0x78, 0x65}), {GenString({0x78, 0x65})}).ok());
+  EXPECT_EQ(false,
+            dingodb::ServiceHelper::ValidateKeyInRange(GenRange({0x61, 0x64}, {0x78, 0x65}), {GenString({0x79})}).ok());
+}
+
+TEST_F(ServiceHelperTest, ValidateRangeInRange) {
+  EXPECT_EQ(true, dingodb::ServiceHelper::ValidateRangeInRange(GenRange({0x61, 0x64}, {0x78, 0x65}),
+                                                               GenRange({0x61, 0x64}, {0x78, 0x65}))
+                      .ok());
+  EXPECT_EQ(false, dingodb::ServiceHelper::ValidateRangeInRange(GenRange({0x61, 0x64}, {0x78, 0x65}),
+                                                                GenRange({0x61, 0x64}, {0x79, 0x65}))
+                       .ok());
+  EXPECT_EQ(true, dingodb::ServiceHelper::ValidateRangeInRange(GenRange({0x60, 0x64}, {0x78, 0x65}),
+                                                               GenRange({0x61, 0x64}, {0x78, 0x65}))
+                      .ok());
+  EXPECT_EQ(true, dingodb::ServiceHelper::ValidateRangeInRange(GenRange({0x61, 0x64}, {0x78, 0x65}),
+                                                               GenRange({0x63, 0x64}, {0x77, 0x65}))
+                      .ok());
+}
+
 }  // namespace dingodb

@@ -29,6 +29,7 @@
 #include "butil/time.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "fmt/core.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
 #include "proto/coordinator_internal.pb.h"
@@ -93,15 +94,15 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
     mut_region_metrics_map->insert({region->Id(), tmp_region_metrics});
   }
 
-  auto region_metricses = metrics_manager->GetStoreRegionMetrics()->GetAllMetrics();
-  for (auto region_metrics : region_metricses) {
-  }
-
   pb::coordinator::StoreHeartbeatResponse response;
   auto status = coordinator_interaction->SendRequest("StoreHeartbeat", request, response);
-  if (status.ok()) {
-    HeartbeatTask::HandleStoreHeartbeatResponse(store_meta_manager, response);
+  if (!status.ok()) {
+    DINGO_LOG(WARNING) << fmt::format("Store heartbeat failed, error: {} {}",
+                                      pb::error::Errno_Name(status.error_code()), status.error_str());
+    return;
   }
+
+  HeartbeatTask::HandleStoreHeartbeatResponse(store_meta_manager, response);
 }
 
 static std::vector<std::shared_ptr<pb::common::Store>> GetNewStore(
@@ -617,9 +618,14 @@ void Heartbeat::Destroy() {
   if (bthread::execution_queue_join(queue_id_) != 0) {
     DINGO_LOG(ERROR) << "heartbeat execution queue join failed";
   }
+  queue_id_ = {0};
 }
 
 bool Heartbeat::Execute(TaskRunnable* task) {
+  if (queue_id_.value == 0) {
+    DINGO_LOG(ERROR) << "Heartbeat execute queue is not init.";
+    return false;
+  }
   if (bthread::execution_queue_execute(queue_id_, task) != 0) {
     DINGO_LOG(ERROR) << "heartbeat execution queue execute failed";
     return false;
