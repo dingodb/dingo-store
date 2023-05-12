@@ -22,24 +22,21 @@ import io.dingodb.client.RouteTable;
 import io.dingodb.sdk.common.KeyValue;
 import io.dingodb.sdk.common.Range;
 import io.dingodb.sdk.common.codec.KeyValueCodec;
-import io.dingodb.sdk.common.table.RangeDistribution;
 import io.dingodb.sdk.common.table.Table;
 import io.dingodb.sdk.common.utils.Any;
 import io.dingodb.sdk.common.utils.ByteArrayUtils;
-import io.dingodb.sdk.common.utils.ByteArrayUtils.ComparableByteArray;
 import io.dingodb.sdk.common.utils.LinkedIterator;
 
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
-import java.util.NavigableMap;
 import java.util.NavigableSet;
 import java.util.TreeSet;
-import java.util.stream.Collectors;
 
 import static io.dingodb.sdk.common.utils.Any.wrap;
 import static io.dingodb.sdk.common.utils.ByteArrayUtils.compareWithoutLen;
+import static io.dingodb.sdk.common.utils.ByteArrayUtils.lessThan;
 
 public class ScanOperation implements Operation {
 
@@ -119,8 +116,8 @@ public class ScanOperation implements Operation {
         byte[] scanEnd = scanRange.getEndKey();
         int startExpect = scanRange.isWithStart() ? 0 : 1;
         int endExpect = scanRange.isWithEnd() ? 0 : -1;
-        return (compareWithoutLen(rangeStart, scanStart) >= startExpect && compareWithoutLen(rangeStart, scanEnd) <= endExpect)
-                || (compareWithoutLen(rangeEnd, scanStart) >= startExpect && compareWithoutLen(rangeEnd, scanEnd) <= endExpect);
+        return (compareWithoutLen(scanStart, rangeStart) >= startExpect && lessThan(scanStart, rangeEnd))
+            || (compareWithoutLen(scanEnd, rangeEnd) <= -endExpect && compareWithoutLen(scanEnd, rangeStart) >= endExpect);
     }
 
     private NavigableSet<Task> getSubTasks(RouteTable routeTable, OpRange range) {
