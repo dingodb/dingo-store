@@ -49,6 +49,8 @@ public interface Table {
 
     long autoIncrement();
 
+    String createSql();
+
     default int getPrimaryKeyCount() {
         int count = 0;
         for (Column column : getColumns()) {

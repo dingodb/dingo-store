@@ -153,6 +153,7 @@ message TableDefinition {
   map<string, string> properties = 8;
   uint32 replica = 9;
   uint64 auto_increment = 10;
+  string create_sql = 11;
 }
 
 // This Part is mainly equal to the Part in DingoDB 0.5.x
