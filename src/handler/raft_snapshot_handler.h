@@ -30,7 +30,11 @@ namespace dingodb {
 
 class RaftSnapshot {
  public:
-  RaftSnapshot(std::shared_ptr<RawEngine> engine) : engine_(engine) { engine_snapshot_ = engine->NewSnapshot(); }
+  RaftSnapshot(std::shared_ptr<RawEngine> engine, bool need_engine_snapshot = false) : engine_(engine) {
+    if (need_engine_snapshot) {
+      engine_snapshot_ = engine->NewSnapshot();
+    }
+  }
   ~RaftSnapshot() = default;
 
   RaftSnapshot(const RaftSnapshot&) = delete;
@@ -52,8 +56,6 @@ class RaftSnapshot {
   bool LoadSnapshot(braft::SnapshotReader* reader, store::RegionPtr region);
 
  private:
-  bool ValidateSnapshotFile(store::RegionPtr& region, std::unique_ptr<pb::store_internal::SstFileInfo> filemeta);
-
   std::shared_ptr<RawEngine> engine_;
   std::shared_ptr<Snapshot> engine_snapshot_;
 };

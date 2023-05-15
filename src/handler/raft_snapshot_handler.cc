@@ -15,13 +15,16 @@
 #include "handler/raft_snapshot_handler.h"
 
 #include <filesystem>
+#include <memory>
 #include <string>
 
 #include "butil/status.h"
 #include "common/constant.h"
+#include "common/failpoint.h"
 #include "common/helper.h"
 #include "fmt/core.h"
 #include "google/protobuf/message.h"
+#include "proto/error.pb.h"
 #include "server/server.h"
 
 namespace dingodb {
@@ -36,6 +39,10 @@ struct SaveRaftSnapshotArg {
 // Scan region, generate sst snapshot file
 butil::Status RaftSnapshot::GenSnapshotFileByScan(const std::string& checkpoint_dir, store::RegionPtr region,
                                                   std::vector<pb::store_internal::SstFileInfo>& sst_files) {
+  if (!std::filesystem::create_directories(checkpoint_dir)) {
+    DINGO_LOG(ERROR) << "Create directory failed: " << checkpoint_dir;
+    return butil::Status(pb::error::EINTERNAL, "Create directory failed");
+  }
   auto raw_engine = std::dynamic_pointer_cast<RawRocksEngine>(engine_);
   auto range = region->Range();
   // Build Iterator
@@ -49,8 +56,7 @@ butil::Status RaftSnapshot::GenSnapshotFileByScan(const std::string& checkpoint_
   std::string checkpoint_name = std::to_string(region->Id()) + ".sst";
   const std::string checkpoint_path = checkpoint_dir + "/" + checkpoint_name;
 
-  auto sst_writer = raw_engine->NewSstFileWriter();
-  auto status = sst_writer->SaveFile(iter, checkpoint_path);
+  auto status = RawRocksEngine::NewSstFileWriter()->SaveFile(iter, checkpoint_path);
   if (!status.ok()) {
     if (status.error_code() != pb::error::ENO_ENTRIES) {
       DINGO_LOG(ERROR) << fmt::format("save file failed, path: {} error: {} {}", checkpoint_path, status.error_code(),
@@ -79,6 +85,11 @@ std::vector<pb::store_internal::SstFileInfo> FilterSstFile(std::vector<pb::store
   std::vector<pb::store_internal::SstFileInfo> filter_sst_files;
   for (auto& sst_file : sst_files) {
     DINGO_LOG(INFO) << "sst file info: " << sst_file.ShortDebugString();
+    if (sst_file.level() == -1) {
+      filter_sst_files.push_back(sst_file);
+      continue;
+    }
+
     if ((end_key.empty() || sst_file.start_key() < end_key) && start_key < sst_file.end_key()) {
       filter_sst_files.push_back(sst_file);
     }
@@ -118,10 +129,6 @@ bool RaftSnapshot::SaveSnapshot(braft::SnapshotWriter* writer, store::RegionPtr 
   std::filesystem::path db_path(raw_engine->DbPath());
   std::string checkpoint_dir =
       fmt::format("{}/checkpoint_{}_{}", db_path.parent_path().string(), region->Id(), Helper::TimestampMs());
-  if (!std::filesystem::create_directories(checkpoint_dir)) {
-    DINGO_LOG(ERROR) << "Create directory failed: " << checkpoint_dir;
-    return false;
-  }
 
   std::vector<pb::store_internal::SstFileInfo> sst_files;
   auto status = func(checkpoint_dir, region, sst_files);
@@ -133,7 +140,7 @@ bool RaftSnapshot::SaveSnapshot(braft::SnapshotWriter* writer, store::RegionPtr 
 
   for (auto& sst_file : sst_files) {
     std::string snapshot_path = writer->get_path() + "/" + sst_file.name();
-    DINGO_LOG(INFO) << "snapshot_path: " << snapshot_path;
+    DINGO_LOG(DEBUG) << fmt::format("snapshot_path: {} to {}", sst_file.path(), snapshot_path);
     Helper::Link(sst_file.path(), snapshot_path);
 
     auto filemeta = std::make_unique<braft::LocalFileMeta>();
@@ -149,40 +156,13 @@ bool RaftSnapshot::SaveSnapshot(braft::SnapshotWriter* writer, store::RegionPtr 
   return true;
 }
 
-bool RaftSnapshot::ValidateSnapshotFile(store::RegionPtr& /*region*/,
-                                        std::unique_ptr<pb::store_internal::SstFileInfo> /*filemeta*/) {
-  return true;
-}
-
 // Load snapshot by ingest sst files
 bool RaftSnapshot::LoadSnapshot(braft::SnapshotReader* reader, store::RegionPtr region) {
   DINGO_LOG(INFO) << fmt::format("LoadSnapshot region {}", region->Id());
-  auto filepath_func = [](const std::string& path, std::vector<std::string>& files) -> std::vector<std::string> {
-    std::vector<std::string> filepaths;
-
-    for (auto& file : files) {
-      std::string filepath = path + "/" + file;
-      filepaths.push_back(filepath);
-    }
-
-    return filepaths;
-  };
-
   std::vector<std::string> files;
   reader->list_files(&files);
   if (files.empty()) {
     DINGO_LOG(WARNING) << "Snapshot not include file";
-  }
-
-  for (auto& file : files) {
-    auto filemeta = std::make_unique<braft::LocalFileMeta>();
-    reader->get_file_meta(file, filemeta.get());
-    auto sst_file_info = std::make_unique<pb::store_internal::SstFileInfo>();
-    sst_file_info->ParseFromString(filemeta->user_meta());
-
-    if (!ValidateSnapshotFile(region, std::move(sst_file_info))) {
-      return false;
-    }
   }
 
   // Delete old region data
@@ -194,18 +174,52 @@ bool RaftSnapshot::LoadSnapshot(braft::SnapshotReader* reader, store::RegionPtr 
   // Ingest sst to region
   if (!files.empty()) {
     auto raw_engine = std::dynamic_pointer_cast<RawRocksEngine>(engine_);
-    status = raw_engine->IngestExternalFile(Constant::kStoreDataCF, filepath_func(reader->get_path(), files));
+    std::vector<std::string> sst_files;
+    std::string current_path = reader->get_path() + "/" + "CURRENT";
+    // The snapshot is generated by use checkpoint.
+    if (std::filesystem::exists(current_path)) {
+      std::string merge_sst_path = fmt::format("{}/merge.sst", reader->get_path());
+      // Already exist merge.sst file, remove it.
+      if (std::filesystem::exists(merge_sst_path)) {
+        std::filesystem::remove(merge_sst_path);
+      }
+
+      // Merge multiple file to one sst.
+      // Origin checkpoint sst file cant't ingest rocksdb,
+      // Just use rocksdb::SstFileWriter generate sst file can ingest rocksdb.
+      status = RawRocksEngine::MergeCheckpointFile(reader->get_path(), region->Range(), merge_sst_path);
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << fmt::format("Merge checkpoint file failed, error: {} {}",
+                                        pb::error::Errno_Name(status.error_code()), status.error_str());
+        return false;
+      }
+
+      sst_files.push_back(merge_sst_path);
+
+    } else {  // The snapshot is generated by use scan.
+      for (auto& file : files) {
+        std::string filepath = reader->get_path() + "/" + file;
+        sst_files.push_back(filepath);
+      }
+    }
+
+    FAIL_POINT("load_snapshot_suspend");
+
+    if (!sst_files.empty()) {
+      status = raw_engine->IngestExternalFile(Constant::kStoreDataCF, sst_files);
+    }
   }
   return status.ok();
 }
 
-void RaftSaveSnapshotHanler::Handle(uint64_t region_id, std::shared_ptr<RawEngine> engine,
-                                    braft::SnapshotWriter* writer, braft::Closure* done) {
+// Use scan async save snapshot.
+void AsyncSaveSnapshotByScan(uint64_t region_id, std::shared_ptr<RawEngine> engine, braft::SnapshotWriter* writer,
+                             braft::Closure* done) {
   SaveRaftSnapshotArg* arg = new SaveRaftSnapshotArg();
   arg->region_id = region_id;
   arg->writer = writer;
   arg->done = done;
-  arg->raft_snapshot = new RaftSnapshot(engine);
+  arg->raft_snapshot = new RaftSnapshot(engine, true);
 
   bthread_t tid;
   const bthread_attr_t attr = BTHREAD_ATTR_NORMAL;
@@ -220,8 +234,8 @@ void RaftSaveSnapshotHanler::Handle(uint64_t region_id, std::shared_ptr<RawEngin
         auto gen_snapshot_file_func = std::bind(&RaftSnapshot::GenSnapshotFileByScan, snapshot_arg->raft_snapshot,
                                                 std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
         if (!snapshot_arg->raft_snapshot->SaveSnapshot(snapshot_arg->writer, region, gen_snapshot_file_func)) {
-          DINGO_LOG(ERROR) << "Save snapshot failed, region: " << region->Id();
-          if (snapshot_arg->done) {
+          LOG(ERROR) << "Save snapshot failed, region: " << region->Id();
+          if (snapshot_arg->done != nullptr) {
             snapshot_arg->done->status().set_error(pb::error::ERAFT_SAVE_SNAPSHOT, "save snapshot failed");
           }
         }
@@ -233,6 +247,34 @@ void RaftSaveSnapshotHanler::Handle(uint64_t region_id, std::shared_ptr<RawEngin
         return nullptr;
       },
       arg);
+}
+
+// Use checkpoint save snapshot
+void SaveSnapshotByCheckpoint(uint64_t region_id, std::shared_ptr<RawEngine> engine, braft::SnapshotWriter* writer,
+                              braft::Closure* done) {
+  brpc::ClosureGuard done_guard(done);
+  auto region = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
+  auto raft_snapshot = std::make_shared<RaftSnapshot>(engine, false);
+
+  auto gen_snapshot_file_func = std::bind(&RaftSnapshot::GenSnapshotFileByCheckpoint, raft_snapshot,
+                                          std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
+  if (!raft_snapshot->SaveSnapshot(writer, region, gen_snapshot_file_func)) {
+    LOG(ERROR) << "Save snapshot failed, region: " << region->Id();
+    if (done != nullptr) {
+      done->status().set_error(pb::error::ERAFT_SAVE_SNAPSHOT, "save snapshot failed");
+    }
+  }
+}
+
+void RaftSaveSnapshotHanler::Handle(uint64_t region_id, std::shared_ptr<RawEngine> engine,
+                                    braft::SnapshotWriter* writer, braft::Closure* done) {
+  auto config = Server::GetInstance()->GetConfig();
+  std::string policy = config->GetString("raft.snapshot_policy");
+  if (policy == "checkpoint") {
+    SaveSnapshotByCheckpoint(region_id, engine, writer, done);
+  } else if (policy == "scan") {
+    AsyncSaveSnapshotByScan(region_id, engine, writer, done);
+  }
 }
 
 void RaftLoadSnapshotHanler::Handle(uint64_t region_id, std::shared_ptr<RawEngine> engine,

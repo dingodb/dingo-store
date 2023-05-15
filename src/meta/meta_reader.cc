@@ -21,6 +21,7 @@
 #include "common/helper.h"
 #include "common/logging.h"
 #include "engine/snapshot.h"
+#include "fmt/core.h"
 
 namespace dingodb {
 
@@ -33,22 +34,23 @@ bool MetaReader::Scan(const std::string& prefix, std::vector<pb::common::KeyValu
 // Get with specific snapshot
 std::shared_ptr<pb::common::KeyValue> MetaReader::Get(std::shared_ptr<Snapshot> snapshot, const std::string& key) {
   auto reader = engine_->NewReader(Constant::kStoreMetaCF);
-  std::string* value = new std::string();
+  std::string value;
 
   butil::Status status;
   if (snapshot) {
-    status = reader->KvGet(snapshot, key, *value);
+    status = reader->KvGet(snapshot, key, value);
   } else {
-    status = reader->KvGet(key, *value);
+    status = reader->KvGet(key, value);
   }
-  if (!status.ok()) {
-    DINGO_LOG(ERROR) << "Meta get failed, errcode: " << status.error_code() << " " << status.error_str();
+  if (!status.ok() && status.error_code() != pb::error::EKEY_NOTFOUND) {
+    DINGO_LOG(ERROR) << fmt::format("Meta get key {} failed, errcode: {} {}", key, status.error_code(),
+                                    status.error_str());
     return nullptr;
   }
 
   std::shared_ptr<pb::common::KeyValue> kv = std::make_shared<pb::common::KeyValue>();
   kv->set_key(key);
-  kv->set_allocated_value(value);
+  kv->set_value(value);
 
   return kv;
 }

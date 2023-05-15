@@ -15,6 +15,7 @@
 #ifndef DINGODB_RAFT_STATE_MACHINE_H_
 #define DINGODB_RAFT_STATE_MACHINE_H_
 
+#include <atomic>
 #include <cstdint>
 #include <string>
 
@@ -54,8 +55,8 @@ class StoreStateMachine : public braft::StateMachine {
  public:
   explicit StoreStateMachine(std::shared_ptr<RawEngine> engine, store::RegionPtr region,
                              std::shared_ptr<pb::store_internal::RaftMeta> raft_meta,
-                             store::RegionMetricsPtr region_metrics,
-                             std::shared_ptr<EventListenerCollection> listeners);
+                             store::RegionMetricsPtr region_metrics, std::shared_ptr<EventListenerCollection> listeners,
+                             bool is_restart);
   ~StoreStateMachine() override = default;
 
   bool Init();
@@ -84,6 +85,8 @@ class StoreStateMachine : public braft::StateMachine {
   std::shared_ptr<pb::store_internal::RaftMeta> raft_meta_;
 
   store::RegionMetricsPtr region_metrics_;
+
+  std::atomic<bool> is_restart_for_load_snapshot_;
 };
 
 }  // namespace dingodb

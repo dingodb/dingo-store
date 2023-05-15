@@ -69,7 +69,7 @@ bool RaftKvEngine::Recover() {
         DINGO_LOG(WARNING) << "Recover region metrics not found: " << region->Id();
       }
 
-      AddNode(ctx, region, raft_meta, region_metrics, listener_factory->Build());
+      AddNode(ctx, region, raft_meta, region_metrics, listener_factory->Build(), true);
       ++count;
     }
   }
@@ -88,10 +88,10 @@ std::shared_ptr<RawEngine> RaftKvEngine::GetRawEngine() { return engine_; }
 butil::Status RaftKvEngine::AddNode(std::shared_ptr<Context> ctx, store::RegionPtr region,
                                     std::shared_ptr<pb::store_internal::RaftMeta> raft_meta,
                                     store::RegionMetricsPtr region_metrics,
-                                    std::shared_ptr<EventListenerCollection> listeners) {
+                                    std::shared_ptr<EventListenerCollection> listeners, bool is_restart) {
   DINGO_LOG(INFO) << "RaftkvEngine add region, region_id " << region->Id();
 
-  auto* state_machine = new StoreStateMachine(engine_, region, raft_meta, region_metrics, listeners);
+  auto* state_machine = new StoreStateMachine(engine_, region, raft_meta, region_metrics, listeners, is_restart);
   if (!state_machine->Init()) {
     return butil::Status(pb::error::ERAFT_INIT, "State machine init failed");
   }

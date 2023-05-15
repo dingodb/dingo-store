@@ -22,6 +22,7 @@
 #include <cstdint>
 #include <cstring>
 #include <exception>
+#include <filesystem>
 #include <iomanip>
 #include <map>
 #include <memory>
@@ -43,13 +44,12 @@
 #include "engine/raft_kv_engine.h"
 #include "engine/raw_engine.h"
 #include "fmt/core.h"
+#include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "rocksdb/advanced_options.h"
 #include "rocksdb/cache.h"
 #include "rocksdb/filter_policy.h"
 #include "rocksdb/iterator.h"
-#include "rocksdb/slice.h"
-#include "rocksdb/status.h"
 #include "rocksdb/table.h"
 #include "rocksdb/write_batch.h"
 
@@ -256,6 +256,43 @@ std::shared_ptr<Snapshot> RawRocksEngine::GetSnapshot() {
   return std::make_shared<RocksSnapshot>(db_->GetSnapshot(), db_);
 }
 
+butil::Status RawRocksEngine::MergeCheckpointFile(const std::string& path, const pb::common::Range& range,
+                                                  std::string& merge_sst_path) {
+  rocksdb::Options options;
+  options.create_if_missing = false;
+
+  std::vector<rocksdb::ColumnFamilyDescriptor> column_families = {
+      rocksdb::ColumnFamilyDescriptor(Constant::kStoreDataCF, rocksdb::ColumnFamilyOptions())};
+
+  // Due to delete other region sst file, so need repair db, or rocksdb::DB::Open will fail.
+  auto status = rocksdb::RepairDB(path, options, column_families);
+  if (!status.ok()) {
+    return butil::Status(pb::error::EINTERNAL, fmt::format("Rocksdb Repair db failed, {}", status.ToString()));
+  }
+
+  // Open snapshot db.
+  rocksdb::DB* snapshot_db = nullptr;
+  std::vector<rocksdb::ColumnFamilyHandle*> handles;
+  status = rocksdb::DB::OpenForReadOnly(options, path, column_families, &handles, &snapshot_db);
+  if (!status.ok()) {
+    return butil::Status(pb::error::EINTERNAL, fmt::format("Rocksdb open checkpoint failed, {}", status.ToString()));
+  }
+
+  // Create iterator
+  IteratorOptions iter_options;
+  iter_options.upper_bound = range.end_key();
+
+  rocksdb::ReadOptions read_options;
+  read_options.auto_prefix_mode = true;
+
+  auto iter =
+      std::make_shared<RawRocksEngine::Iterator>(iter_options, snapshot_db->NewIterator(read_options, handles[0]));
+  iter->Seek(range.start_key());
+
+  // Create sst writer
+  return NewSstFileWriter()->SaveFile(iter, merge_sst_path);
+}
+
 butil::Status RawRocksEngine::IngestExternalFile(const std::string& cf_name, const std::vector<std::string>& files) {
   rocksdb::IngestExternalFileOptions options;
   options.write_global_seqno = false;
@@ -317,7 +354,7 @@ std::shared_ptr<dingodb::Iterator> RawRocksEngine::NewIterator(const std::string
   // if (!options.upper_bound.empty()) {
   //   read_options.iterate_upper_bound = slice.get();
   // }
-  return std::make_shared<RawRocksEngine::Iterator>(options, snapshot,
+  return std::make_shared<RawRocksEngine::Iterator>(options,
                                                     db_->NewIterator(read_options, column_family->GetHandle()));
 }
 
@@ -599,8 +636,7 @@ bool RawRocksEngine::RocksdbInit(std::shared_ptr<Config> config, const std::stri
   db_options.max_background_jobs = GetBackgroundThreadNum(config);
 
   rocksdb::DB* db;
-  rocksdb::Status s =
-      rocksdb::DB::Open(db_options, db_path, column_families, &family_handles, &db);
+  rocksdb::Status s = rocksdb::DB::Open(db_options, db_path, column_families, &family_handles, &db);
   if (!s.ok()) {
     DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Open failed : {}", s.ToString());
     return false;
@@ -949,7 +985,7 @@ butil::Status RawRocksEngine::Writer::KvBatchPutIfAbsent(const std::vector<pb::c
 
     std::string value_old;
     rocksdb::Status s = db_->Get(rocksdb::ReadOptions(), column_family_->GetHandle(),
-      rocksdb::Slice(kv.key().data(), kv.key().size()), &value_old);
+                                 rocksdb::Slice(kv.key().data(), kv.key().size()), &value_old);
     if (is_atomic) {
       if (!s.IsNotFound()) {
         key_states.resize(kvs.size(), false);
@@ -1091,7 +1127,7 @@ butil::Status RawRocksEngine::Writer::KvDeleteIfEqual(const pb::common::KeyValue
   // other read will failed
   std::string old_value;
   rocksdb::Status s = db_->Get(rocksdb::ReadOptions(), column_family_->GetHandle(),
-    rocksdb::Slice(kv.key().data(), kv.key().size()), &old_value);
+                               rocksdb::Slice(kv.key().data(), kv.key().size()), &old_value);
   if (!s.ok()) {
     if (s.IsNotFound()) {
       DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::GetForUpdate not found key");
@@ -1107,8 +1143,8 @@ butil::Status RawRocksEngine::Writer::KvDeleteIfEqual(const pb::common::KeyValue
   }
 
   // delete a key
-  s = db_->Delete(rocksdb::WriteOptions(), column_family_->GetHandle(), rocksdb::Slice(kv.key().data(),
-    kv.key().size()));
+  s = db_->Delete(rocksdb::WriteOptions(), column_family_->GetHandle(),
+                  rocksdb::Slice(kv.key().data(), kv.key().size()));
   if (BAIDU_UNLIKELY(!s.ok())) {
     DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Delete failed : {}", s.ToString());
     return butil::Status(pb::error::EINTERNAL, "Internal error");
@@ -1128,7 +1164,7 @@ butil::Status RawRocksEngine::Writer::KvCompareAndSetInternal(const pb::common::
 
   std::string old_value;
   rocksdb::Status s = db_->Get(rocksdb::ReadOptions(), column_family_->GetHandle(),
-    rocksdb::Slice(kv.key().data(), kv.key().size()), &old_value);
+                               rocksdb::Slice(kv.key().data(), kv.key().size()), &old_value);
   if (s.ok()) {
     if (!is_key_exist) {
       // The key already exists, the client requests not to return an error code and key_state set false
@@ -1151,8 +1187,8 @@ butil::Status RawRocksEngine::Writer::KvCompareAndSetInternal(const pb::common::
   }
 
   // write a key
-  s = db_->Put(rocksdb::WriteOptions(), column_family_->GetHandle(), rocksdb::Slice(kv.key().data(),
-    kv.key().size()), rocksdb::Slice(value.data(), value.size()));
+  s = db_->Put(rocksdb::WriteOptions(), column_family_->GetHandle(), rocksdb::Slice(kv.key().data(), kv.key().size()),
+               rocksdb::Slice(value.data(), value.size()));
   if (!s.ok()) {
     DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Put failed : {}", s.ToString());
     return butil::Status(pb::error::EINTERNAL, "Internal error");
@@ -1169,8 +1205,7 @@ std::shared_ptr<EngineIterator> RawRocksEngine::Writer::NewIterator(const rocksd
                                                                     bool with_end) {
   auto snapshot_share = std::make_shared<RocksSnapshot>(snapshot, db_);
 
-  return std::make_shared<RocksIterator>(snapshot_share, db_, column_family_, start_key, end_key, with_start,
-                                         with_end);
+  return std::make_shared<RocksIterator>(snapshot_share, db_, column_family_, start_key, end_key, with_start, with_end);
 }
 
 butil::Status RawRocksEngine::Writer::KvBatchDeleteRangeCore(
@@ -1320,6 +1355,17 @@ butil::Status RawRocksEngine::Checkpoint::Create(const std::string& dirpath) {
   return butil::Status();
 }
 
+std::string FindFileInDirectory(const std::string& dirpath, const std::string& prefix) {
+  for (const auto& fe : std::filesystem::directory_iterator(dirpath)) {
+    auto filename = fe.path().filename().string();
+    if (filename.find(prefix) != std::string::npos) {
+      return filename;
+    }
+  }
+
+  return "";
+}
+
 butil::Status RawRocksEngine::Checkpoint::Create(const std::string& dirpath,
                                                  std::shared_ptr<ColumnFamily> column_family,
                                                  std::vector<pb::store_internal::SstFileInfo>& sst_files) {
@@ -1331,23 +1377,44 @@ butil::Status RawRocksEngine::Checkpoint::Create(const std::string& dirpath,
     return butil::Status(status.code(), status.ToString());
   }
 
-  rocksdb::ExportImportFilesMetaData* metadata = nullptr;
-  status = checkpoint->ExportColumnFamily(column_family->GetHandle(), dirpath, &metadata);
+  status = checkpoint->CreateCheckpoint(dirpath);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << "Export column family checkpoint failed " << status.ToString();
     delete checkpoint;
     return butil::Status(status.code(), status.ToString());
   }
+  rocksdb::ColumnFamilyMetaData meta_data;
+  db_->GetColumnFamilyMetaData(column_family->GetHandle(), &meta_data);
 
-  for (auto& file : metadata->files) {
-    pb::store_internal::SstFileInfo sst_file;
-    sst_file.set_level(file.level);
-    sst_file.set_name(file.name);
-    sst_file.set_path(dirpath + file.name);
-    sst_file.set_start_key(file.smallestkey);
-    sst_file.set_end_key(file.largestkey);
-    sst_files.emplace_back(std::move(sst_file));
+  for (auto& level : meta_data.levels) {
+    for (const auto& file : level.files) {
+      pb::store_internal::SstFileInfo sst_file;
+      sst_file.set_level(level.level);
+      sst_file.set_name(file.name);
+      sst_file.set_path(dirpath + file.name);
+      sst_file.set_start_key(file.smallestkey);
+      sst_file.set_end_key(file.largestkey);
+      sst_files.emplace_back(std::move(sst_file));
+    }
   }
+
+  pb::store_internal::SstFileInfo sst_file;
+  sst_file.set_level(-1);
+  sst_file.set_name("CURRENT");
+  sst_file.set_path(dirpath + "/CURRENT");
+  sst_files.push_back(sst_file);
+
+  std::string manifest_name = FindFileInDirectory(dirpath, "MANIFEST");
+  sst_file.set_level(-1);
+  sst_file.set_name(manifest_name);
+  sst_file.set_path(dirpath + "/" + manifest_name);
+  sst_files.push_back(sst_file);
+
+  std::string options_name = FindFileInDirectory(dirpath, "OPTIONS");
+  sst_file.set_level(-1);
+  sst_file.set_name(options_name);
+  sst_file.set_path(dirpath + "/" + options_name);
+  sst_files.push_back(sst_file);
 
   delete checkpoint;
   return butil::Status();
