@@ -23,6 +23,6 @@ import lombok.Getter;
 @AllArgsConstructor
 public class Range {
 
-    private byte[] startKey;
-    private byte[] endKey;
+    public final byte[] startKey;
+    public final byte[] endKey;
 }
