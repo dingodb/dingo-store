@@ -81,7 +81,7 @@ butil::Status CreateRegionTask::CreateRegion(std::shared_ptr<Context> ctx, store
     auto listener_factory = std::make_shared<StoreSmEventListenerFactory>();
 
     auto raft_kv_engine = std::dynamic_pointer_cast<RaftKvEngine>(engine);
-    status = raft_kv_engine->AddNode(ctx, region, raft_meta, region_metrics, listener_factory->Build());
+    status = raft_kv_engine->AddNode(ctx, region, raft_meta, region_metrics, listener_factory->Build(), false);
     if (!status.ok()) {
       return status;
     }
@@ -621,7 +621,7 @@ bool ControlExecutor::Init() {
 }
 
 bool ControlExecutor::Execute(TaskRunnable* task) {
-  if (queue_id_.value == 0) {
+  if (queue_id_.value == UINT64_MAX) {
     DINGO_LOG(ERROR) << "Control execute queue is not init.";
     return false;
   }
@@ -641,7 +641,8 @@ void ControlExecutor::Stop() {
   if (bthread::execution_queue_join(queue_id_) != 0) {
     DINGO_LOG(ERROR) << "region execution queue join failed";
   }
-  queue_id_ = {0};
+
+  queue_id_ = {UINT64_MAX};
 }
 
 bool RegionCommandManager::Init() {
@@ -751,7 +752,10 @@ void RegionCommandManager::TransformFromKv(const std::vector<pb::common::KeyValu
 
 bool RegionController::Init() {
   share_executor_ = std::make_shared<ControlExecutor>();
-  share_executor_->Init();
+  if (!share_executor_->Init()) {
+    DINGO_LOG(ERROR) << "Share executor init failed";
+    return false;
+  }
 
   auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
   auto regions = store_meta_manager->GetStoreRegionMeta()->GetAllAliveRegion();
@@ -804,7 +808,10 @@ bool RegionController::RegisterExecutor(uint64_t region_id) {
 
   if (executors_.find(region_id) == executors_.end()) {
     auto executor = std::make_shared<RegionControlExecutor>(region_id);
-    executor->Init();
+    if (!executor->Init()) {
+      DINGO_LOG(ERROR) << "Region controller executor init failed";
+      return false;
+    }
     executors_.insert({region_id, executor});
   }
 

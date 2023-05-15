@@ -374,10 +374,7 @@ bool Server::Recover() {
   return true;
 }
 
-bool Server::InitHeartbeat() {
-  heartbeat_ = std::make_shared<Heartbeat>();
-  return heartbeat_->Init();
-}
+bool Server::InitHeartbeat() { return heartbeat_->Init(); }
 
 void Server::Destroy() {
   crontab_manager_->Destroy();

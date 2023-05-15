@@ -214,7 +214,7 @@ class DestroyRegionExecutorTask : public TaskRunnable {
 
 class ControlExecutor {
  public:
-  explicit ControlExecutor() : queue_id_({0}) {}
+  explicit ControlExecutor() : queue_id_({UINT64_MAX}) {}
   virtual ~ControlExecutor() = default;
 
   bool Init();

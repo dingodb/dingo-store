@@ -118,7 +118,7 @@ class CalculateTableMetricsTask : public TaskRunnable {
 
 class Heartbeat {
  public:
-  Heartbeat() : queue_id_({0}) {}
+  Heartbeat() : queue_id_({UINT64_MAX}) {}
   ~Heartbeat() = default;
 
   Heartbeat(const Heartbeat&) = delete;

@@ -20,6 +20,7 @@
 
 #include "brpc/channel.h"
 #include "common/meta_control.h"
+#include "config/config_manager.h"
 #include "coordinator/auto_increment_control.h"
 #include "coordinator/coordinator_control.h"
 #include "coordinator/coordinator_interaction.h"
@@ -114,6 +115,7 @@ class Server {
   std::shared_ptr<CoordinatorInteraction> GetCoordinatorInteractionIncr() { return coordinator_interaction_incr_; }
 
   std::shared_ptr<Engine> GetEngine() { return engine_; }
+  std::shared_ptr<RawEngine> GetRawEngine() { return raw_engine_; }
 
   std::shared_ptr<Storage> GetStorage() { return storage_; }
   std::shared_ptr<StoreMetaManager> GetStoreMetaManager() { return store_meta_manager_; }
@@ -130,11 +132,13 @@ class Server {
 
   std::shared_ptr<Heartbeat> GetHeartbeat() { return heartbeat_; }
 
+  std::shared_ptr<Config> GetConfig() { return ConfigManager::GetInstance()->GetConfig(role_); }
+
   Server(const Server&) = delete;
   const Server& operator=(const Server&) = delete;
 
  private:
-  Server() = default;
+  Server() { heartbeat_ = std::make_shared<Heartbeat>(); }
   ~Server() = default;
 
   std::shared_ptr<pb::common::RegionDefinition> CreateCoordinatorRegion(const std::shared_ptr<Config>& config,

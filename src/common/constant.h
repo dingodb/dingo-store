@@ -50,6 +50,9 @@ class Constant {
   // Define region controller prefix.
   inline static const std::string kStoreRegionControlCommandPrefix = "CONTROL_CMD";
 
+  // Define loading snapshot flag.
+  inline static const std::string kIsLoadingSnapshot = "IS_LOADING_SNAPSHOT";
+
   // flat map init capacity
   static const uint64_t kStoreRegionMetaInitCapacity = 1024;
 

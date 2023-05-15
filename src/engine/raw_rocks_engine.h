@@ -39,7 +39,6 @@
 #include "rocksdb/slice_transform.h"
 #include "rocksdb/status.h"
 #include "rocksdb/utilities/checkpoint.h"
-#include <rocksdb/db.h>
 
 namespace dingodb {
 
@@ -113,8 +112,7 @@ class RawRocksEngine : public RawEngine {
 
   class Iterator : public dingodb::Iterator {
    public:
-    explicit Iterator(IteratorOptions options, std::shared_ptr<Snapshot> snapshot, rocksdb::Iterator* iter)
-        : options_(options), snapshot_(snapshot), iter_(iter) {}
+    explicit Iterator(IteratorOptions options, rocksdb::Iterator* iter) : options_(options), iter_(iter) {}
     ~Iterator() override = default;
 
     std::string GetName() override { return "RawRocks"; }
@@ -151,7 +149,6 @@ class RawRocksEngine : public RawEngine {
 
    private:
     IteratorOptions options_;
-    std::shared_ptr<Snapshot> snapshot_;
     std::unique_ptr<rocksdb::Iterator> iter_;
   };
 
@@ -279,6 +276,8 @@ class RawRocksEngine : public RawEngine {
 
   std::shared_ptr<Snapshot> GetSnapshot() override;
 
+  static butil::Status MergeCheckpointFile(const std::string& path, const pb::common::Range& range,
+                                           std::string& merge_sst_path);
   butil::Status IngestExternalFile(const std::string& cf_name, const std::vector<std::string>& files);
 
   void Flush(const std::string& cf_name) override;
@@ -291,7 +290,7 @@ class RawRocksEngine : public RawEngine {
   std::shared_ptr<dingodb::Iterator> NewIterator(const std::string& cf_name, IteratorOptions options) override;
   std::shared_ptr<dingodb::Iterator> NewIterator(const std::string& cf_name, std::shared_ptr<Snapshot> snapshot,
                                                  IteratorOptions options);
-  std::shared_ptr<SstFileWriter> NewSstFileWriter();
+  static std::shared_ptr<SstFileWriter> NewSstFileWriter();
   std::shared_ptr<Checkpoint> NewCheckpoint();
 
   std::shared_ptr<ColumnFamily> GetColumnFamily(const std::string& cf_name);

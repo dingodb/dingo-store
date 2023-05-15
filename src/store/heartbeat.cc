@@ -618,11 +618,11 @@ void Heartbeat::Destroy() {
   if (bthread::execution_queue_join(queue_id_) != 0) {
     DINGO_LOG(ERROR) << "heartbeat execution queue join failed";
   }
-  queue_id_ = {0};
+  queue_id_ = {UINT64_MAX};
 }
 
 bool Heartbeat::Execute(TaskRunnable* task) {
-  if (queue_id_.value == 0) {
+  if (queue_id_.value == UINT64_MAX) {
     DINGO_LOG(ERROR) << "Heartbeat execute queue is not init.";
     return false;
   }
