@@ -93,6 +93,13 @@ int RecordEncoder::EncodeKey(const std::vector<std::any>& record, std::string& o
           }
           break;
         }
+        case BaseSchema::kFloat: {
+          auto fs = std::dynamic_pointer_cast<DingoSchema<std::optional<float>>>(bs);
+          if (fs->IsKey()) {
+            fs->EncodeKey(key_buf, std::any_cast<std::optional<float>>(record.at(fs->GetIndex())));
+          }
+          break;
+        }
         case BaseSchema::kLong: {
           auto ls = std::dynamic_pointer_cast<DingoSchema<std::optional<int64_t>>>(bs);
           if (ls->IsKey()) {
@@ -147,6 +154,13 @@ int RecordEncoder::EncodeValue(const std::vector<std::any>& record, std::string&
           auto is = std::dynamic_pointer_cast<DingoSchema<std::optional<int32_t>>>(bs);
           if (!is->IsKey()) {
             is->EncodeValue(value_buf, std::any_cast<std::optional<int32_t>>(record.at(is->GetIndex())));
+          }
+          break;
+        }
+        case BaseSchema::kFloat: {
+          auto fs = std::dynamic_pointer_cast<DingoSchema<std::optional<float>>>(bs);
+          if (!fs->IsKey()) {
+            fs->EncodeValue(value_buf, std::any_cast<std::optional<float>>(record.at(fs->GetIndex())));
           }
           break;
         }
@@ -205,6 +219,13 @@ int RecordEncoder::EncodeKeyPrefix(const std::vector<std::any>& record, int colu
           auto is = std::dynamic_pointer_cast<DingoSchema<std::optional<int32_t>>>(bs);
           if (is->IsKey()) {
             is->EncodeKeyPrefix(key_prefix_buf, std::any_cast<std::optional<int32_t>>(record.at(is->GetIndex())));
+          }
+          break;
+        }
+        case BaseSchema::kFloat: {
+          auto fs = std::dynamic_pointer_cast<DingoSchema<std::optional<float>>>(bs);
+          if (fs->IsKey()) {
+            fs->EncodeKeyPrefix(key_prefix_buf, std::any_cast<std::optional<float>>(record.at(fs->GetIndex())));
           }
           break;
         }

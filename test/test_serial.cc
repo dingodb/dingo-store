@@ -428,6 +428,145 @@ TEST_F(DingoSerialTest, integerSchemaFakeLeBe) {
   delete bf21;
 }
 
+TEST_F(DingoSerialTest, floatSchemaLeBe) {
+  float data = -43225.23;
+  // bitset<32> key_data("00111000110101110010011011000100");
+  bitset<8> key_data_0("00111000");
+  bitset<8> key_data_1("11010111");
+  bitset<8> key_data_2("00100110");
+  bitset<8> key_data_3("11000100");
+  // bitset<32> value_data("11000111001010001101100100111011");
+  bitset<8> value_data_0("11000111");
+  bitset<8> value_data_1("00101000");
+  bitset<8> value_data_2("11011001");
+  bitset<8> value_data_3("00111011");
+  bitset<8> not_null_tag("00000001");
+
+  DingoSchema<optional<float>> b1;
+  b1.SetIndex(0);
+  optional<float> data1 = data;
+
+  b1.SetAllowNull(true);
+  b1.SetIsKey(true);
+  if (this->le) {
+    b1.SetIsLe(true);
+  } else {
+    b1.SetIsLe(false);
+  }
+  Buf* bf1 = new Buf(1, this->le);
+  b1.EncodeKey(bf1, data1);
+  string* bs1 = bf1->GetBytes();
+  bitset<8> bs10(bs1->at(0));
+  EXPECT_EQ(bs10, not_null_tag);
+  bitset<8> bs11(bs1->at(1));
+  EXPECT_EQ(bs11, key_data_0);
+  bitset<8> bs12(bs1->at(2));
+  EXPECT_EQ(bs12, key_data_1);
+  bitset<8> bs13(bs1->at(3));
+  EXPECT_EQ(bs13, key_data_2);
+  bitset<8> bs14(bs1->at(4));
+  EXPECT_EQ(bs14, key_data_3);
+  Buf* bf11 = new Buf(bs1, this->le);
+  optional<float> data2 = b1.DecodeKey(bf11);
+  EXPECT_EQ(data1, data2);
+  delete bs1;
+  delete bf1;
+  delete bf11;
+
+  b1.SetIsKey(false);
+  Buf* bf2 = new Buf(1, this->le);
+  b1.EncodeValue(bf2, data1);
+  string* bs2 = bf2->GetBytes();
+  bitset<8> bs20(bs2->at(0));
+  EXPECT_EQ(bs20, not_null_tag);
+  bitset<8> bs21(bs2->at(1));
+  EXPECT_EQ(bs21, value_data_0);
+  bitset<8> bs22(bs2->at(2));
+  EXPECT_EQ(bs22, value_data_1);
+  bitset<8> bs23(bs2->at(3));
+  EXPECT_EQ(bs23, value_data_2);
+  bitset<8> bs24(bs2->at(4));
+  EXPECT_EQ(bs24, value_data_3);
+  Buf* bf21 = new Buf(bs2, this->le);
+  optional<float> data3 = b1.DecodeValue(bf21);
+  EXPECT_EQ(data1, data3);
+  delete bs2;
+  delete bf2;
+  delete bf21;
+}
+
+TEST_F(DingoSerialTest, floatSchemaFakeLeBe) {
+  float ori_data = -43225.53;
+  uint32_t ori_data_bits;
+  memcpy(&ori_data_bits, &ori_data, 4);
+  uint32_t data_bits = bswap_32(ori_data_bits);
+  float data;
+  memcpy(&data, &data_bits, 4);
+  // bitset<32> key_data("00111000110101110010011011000100");
+  bitset<8> key_data_0("00111000");
+  bitset<8> key_data_1("11010111");
+  bitset<8> key_data_2("00100110");
+  bitset<8> key_data_3("01110111");
+  // bitset<32> value_data("11000111001010001101100110001000");
+  bitset<8> value_data_0("11000111");
+  bitset<8> value_data_1("00101000");
+  bitset<8> value_data_2("11011001");
+  bitset<8> value_data_3("10001000");
+  bitset<8> not_null_tag("00000001");
+
+  DingoSchema<optional<float>> b1;
+  b1.SetIndex(0);
+  optional<float> data1 = data;
+
+  b1.SetAllowNull(true);
+  b1.SetIsKey(true);
+  if (!this->le) {
+    b1.SetIsLe(true);
+  } else {
+    b1.SetIsLe(false);
+  }
+  Buf* bf1 = new Buf(1, !this->le);
+  b1.EncodeKey(bf1, data1);
+  string* bs1 = bf1->GetBytes();
+  bitset<8> bs10(bs1->at(0));
+  EXPECT_EQ(bs10, not_null_tag);
+  bitset<8> bs11(bs1->at(1));
+  EXPECT_EQ(bs11, key_data_0);
+  bitset<8> bs12(bs1->at(2));
+  EXPECT_EQ(bs12, key_data_1);
+  bitset<8> bs13(bs1->at(3));
+  EXPECT_EQ(bs13, key_data_2);
+  bitset<8> bs14(bs1->at(4));
+  EXPECT_EQ(bs14, key_data_3);
+  Buf* bf11 = new Buf(bs1, !this->le);
+  optional<float> data2 = b1.DecodeKey(bf11);
+  EXPECT_EQ(data1, data2);
+  delete bs1;
+  delete bf1;
+  delete bf11;
+
+  b1.SetIsKey(false);
+  Buf* bf2 = new Buf(1, !this->le);
+  b1.EncodeValue(bf2, data1);
+  string* bs2 = bf2->GetBytes();
+  bitset<8> bs20(bs2->at(0));
+  EXPECT_EQ(bs20, not_null_tag);
+  bitset<8> bs21(bs2->at(1));
+  EXPECT_EQ(bs21, value_data_0);
+  bitset<8> bs22(bs2->at(2));
+  EXPECT_EQ(bs22, value_data_1);
+  bitset<8> bs23(bs2->at(3));
+  EXPECT_EQ(bs23, value_data_2);
+  bitset<8> bs24(bs2->at(4));
+  EXPECT_EQ(bs24, value_data_3);
+  Buf* bf21 = new Buf(bs2, !this->le);
+  optional<float> data3 = b1.DecodeValue(bf21);
+  EXPECT_EQ(data1, data3);
+  delete bs2;
+  delete bf2;
+  delete bf21;
+}
+
 TEST_F(DingoSerialTest, longSchemaLeBe) {
   uint64_t data = 8237583920453957801;
   // bitset<64> key_data("1111001001010001110001101110111001011010001000001011100010101001");

@@ -80,6 +80,15 @@ int RecordDecoder::Decode(const std::string& key, const std::string& value, std:
           }
           break;
         }
+        case BaseSchema::kFloat: {
+          auto fs = std::dynamic_pointer_cast<DingoSchema<std::optional<float>>>(bs);
+          if (fs->IsKey()) {
+            record.at(fs->GetIndex()) = fs->DecodeKey(key_buf);
+          } else {
+            record.at(fs->GetIndex()) = fs->DecodeValue(value_buf);
+          }
+          break;
+        }
         case BaseSchema::kLong: {
           auto ls = std::dynamic_pointer_cast<DingoSchema<std::optional<int64_t>>>(bs);
           if (ls->IsKey()) {
@@ -182,6 +191,24 @@ int RecordDecoder::Decode(const std::string& key, const std::string& value, cons
               is->SkipKey(key_buf);
             } else {
               is->SkipValue(value_buf);
+            }
+          }
+          break;
+        }
+        case BaseSchema::kFloat: {
+          auto fs = std::dynamic_pointer_cast<DingoSchema<std::optional<float>>>(bs);
+          if (VectorFind(column_indexes, fs->GetIndex())) {
+            if (fs->IsKey()) {
+              record.at(fs->GetIndex()) = fs->DecodeKey(key_buf);
+            } else {
+              record.at(fs->GetIndex()) = fs->DecodeValue(value_buf);
+            }
+          } else {
+            record.at(fs->GetIndex()) = (std::optional<float>)std::nullopt;
+            if (fs->IsKey()) {
+              fs->SkipKey(key_buf);
+            } else {
+              fs->SkipValue(value_buf);
             }
           }
           break;
