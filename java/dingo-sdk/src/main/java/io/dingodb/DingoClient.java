@@ -29,6 +29,7 @@ import io.dingodb.client.operation.ScanOperation;
 import io.dingodb.sdk.common.DingoClientException;
 import io.dingodb.sdk.common.table.Table;
 import io.dingodb.sdk.common.utils.Optional;
+import io.dingodb.sdk.common.utils.Parameters;
 
 import java.util.Collections;
 import java.util.Iterator;
@@ -69,7 +70,7 @@ public class DingoClient {
     }
 
     public boolean upsert(String tableName, Record record) {
-        return upsert(tableName, Collections.singletonList(record)).get(0);
+        return Parameters.cleanNull(upsert(tableName, Collections.singletonList(record)).get(0), false);
     }
 
     public List<Boolean> upsert(String tableName, List<Record> records) {
@@ -77,7 +78,7 @@ public class DingoClient {
     }
 
     public boolean putIfAbsent(String tableName, Record record) {
-        return putIfAbsent(tableName, Collections.singletonList(record)).get(0);
+        return Parameters.cleanNull(putIfAbsent(tableName, Collections.singletonList(record)).get(0), false);
     }
 
     public List<Boolean> putIfAbsent(String tableName, List<Record> records) {
@@ -107,7 +108,7 @@ public class DingoClient {
     }
 
     public boolean delete(final String tableName, Key key) {
-        return delete(tableName, Collections.singletonList(key)).get(0);
+        return Parameters.cleanNull(delete(tableName, Collections.singletonList(key)).get(0), false);
     }
 
     public List<Boolean> delete(final String tableName, List<Key> keys) {

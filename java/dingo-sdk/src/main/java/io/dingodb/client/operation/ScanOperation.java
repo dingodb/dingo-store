@@ -67,8 +67,10 @@ public class ScanOperation implements Operation {
                 keyRange.withStart,
                 keyRange.withEnd
             );
-            if (greatThan(range.getStartKey(), range.getEndKey())
-                || (Arrays.equals(range.getStartKey(), range.getEndKey())) && (!range.withEnd || !range.withStart)) {
+            if (compareWithoutLen(range.getStartKey(), range.getEndKey()) > 0
+                || (Arrays.equals(range.getStartKey(), range.getEndKey())) && (!range.withEnd || !range.withStart)
+                || (!range.withStart && startKey.size() == 0)
+                || (!range.withEnd && endKey.size() == 0)) {
                 return new Fork(new Iterator[0], Collections.emptyNavigableSet(), true);
             }
             NavigableSet<Task> subTasks = getSubTasks(routeTable, range);
@@ -125,7 +127,7 @@ public class ScanOperation implements Operation {
         for (RangeDistribution rd : routeTable.getRangeDistribution().descendingMap().values()) {
             if (filter.test(keyGetter.apply(rd.getRange()))) {
                 if (subTasks.isEmpty()) {
-                    filter = k -> lessThan(range.getStartKey(), k);
+                    filter = k -> !(greatThan(range.getStartKey(), k) || compareWithoutLen(range.getStartKey(), k) == 0 && !range.withStart);
                     keyGetter = Range::getEndKey;
                 }
                 subTasks.add(new Task(
