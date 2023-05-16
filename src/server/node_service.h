@@ -38,6 +38,12 @@ class NodeServiceImpl : public pb::node::NodeService {
                       pb::node::ChangeLogLevelResponse* response, google::protobuf::Closure* done) override;
   void DingoMetrics(google::protobuf::RpcController* controller, const pb::node::MetricsRequest* request,
                     pb::node::MetricsResponse* response, google::protobuf::Closure* done) override;
+  void SetFailPoint(google::protobuf::RpcController* controller, const pb::node::SetFailPointRequest* request,
+                    pb::node::SetFailPointResponse* response, google::protobuf::Closure* done) override;
+  void GetFailPoints(google::protobuf::RpcController* controller, const pb::node::GetFailPointRequest* request,
+                     pb::node::GetFailPointResponse* response, google::protobuf::Closure* done) override;
+  void DeleteFailPoints(google::protobuf::RpcController* controller, const pb::node::DeleteFailPointRequest* request,
+                        pb::node::DeleteFailPointResponse* response, google::protobuf::Closure* done) override;
 
   void SetServer(dingodb::Server* server);
 

@@ -22,6 +22,7 @@
 
 #include "common/constant.h"
 #include "common/context.h"
+#include "common/failpoint.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "fmt/core.h"
@@ -468,7 +469,8 @@ void StoreServiceImpl::KvBatchDelete(google::protobuf::RpcController* controller
   }
 }
 
-butil::Status ValidateKvDeleteRangeRequest(const dingodb::pb::store::KvDeleteRangeRequest* request, pb::common::Range* range) {
+butil::Status ValidateKvDeleteRangeRequest(const dingodb::pb::store::KvDeleteRangeRequest* request,
+                                           pb::common::Range* range) {
   auto region = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(request->region_id());
   if (region == nullptr) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
@@ -544,7 +546,8 @@ void StoreServiceImpl::KvDeleteRange(google::protobuf::RpcController* controller
   }
 }
 
-butil::Status ValidateKvScanBeginRequest(const dingodb::pb::store::KvScanBeginRequest* request, pb::common::Range* range) {
+butil::Status ValidateKvScanBeginRequest(const dingodb::pb::store::KvScanBeginRequest* request,
+                                         pb::common::Range* range) {
   auto region = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(request->region_id());
   if (region == nullptr) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
