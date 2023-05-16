@@ -19,6 +19,7 @@
 #include <string>
 #include <utility>
 
+#include "common/failpoint.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "config/config_manager.h"
@@ -100,12 +101,16 @@ butil::Status RaftNode::Commit(std::shared_ptr<Context> ctx, std::shared_ptr<pb:
   butil::IOBufAsZeroCopyOutputStream wrapper(&data);
   raft_cmd->SerializeToZeroCopyStream(&wrapper);
 
+  FAIL_POINT("before_raft_commit");
+
   braft::Task task;
   task.data = &data;
   task.done = new StoreClosure(ctx, raft_cmd);
   node_->apply(task);
 
   StoreBvarMetrics::GetInstance().IncCommitCountPerSecond(str_node_id_);
+
+  FAIL_POINT("after_raft_commit");
 
   return butil::Status();
 }

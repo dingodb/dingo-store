@@ -74,6 +74,46 @@ message ChangeLogLevelResponse {
 message MetricsRequest {};
 message MetricsResponse {};
 
+message FailPointAction {
+  string type = 1;       // action type
+  uint32 percent = 2;    // action run percent
+  uint32 max_count = 3;  // action max run count
+  uint32 run_count = 4;  // already run count
+  string arg = 5;
+}
+
+message FailPoint {
+  string name = 1;    // fail point name, must unique
+  string config = 2;  // config format: [<pct>%][<cnt>*]<type>[(args...)][-><more terms>]
+
+  repeated FailPointAction actions = 10;  // just for GetFailPointRequest
+}
+
+message SetFailPointRequest {
+  FailPoint failpoint = 1;
+}
+
+message SetFailPointResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
+message GetFailPointRequest {
+  repeated string names = 1;
+}
+
+message GetFailPointResponse {
+  dingodb.pb.error.Error error = 1;
+  repeated FailPoint failpoints = 2;
+}
+
+message DeleteFailPointRequest {
+  repeated string names = 1;
+}
+
+message DeleteFailPointResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
 service NodeService {
   // GetNodeInfo
   // in: cluster_id
@@ -82,8 +122,17 @@ service NodeService {
 
   // Get current log level information
   rpc GetLogLevel(GetLogLevelRequest) returns (GetLogLevelResponse);
+
   // Change the LogLevel
   rpc ChangeLogLevel(ChangeLogLevelRequest) returns (ChangeLogLevelResponse);
 
+  // Metrics for prometheus
   rpc DingoMetrics(MetricsRequest) returns (MetricsResponse);
+
+  // Set failpoint
+  rpc SetFailPoint(SetFailPointRequest) returns (SetFailPointResponse);
+  // Get failpoint
+  rpc GetFailPoints(GetFailPointRequest) returns (GetFailPointResponse);
+  // Delete failpoint
+  rpc DeleteFailPoints(DeleteFailPointRequest) returns (DeleteFailPointResponse);
 }

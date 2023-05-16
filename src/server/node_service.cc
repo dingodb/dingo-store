@@ -23,6 +23,7 @@
 
 #include "brpc/controller.h"
 #include "butil/endpoint.h"
+#include "common/failpoint.h"
 #include "common/logging.h"
 #include "coordinator/coordinator_closure.h"
 #include "proto/common.pb.h"
@@ -269,6 +270,67 @@ void NodeServiceImpl::DingoMetrics(google::protobuf::RpcController* controller,
   if (DumpPrometheusMetricsToIOBuf(&cntl->response_attachment()) != 0) {
     cntl->SetFailed("Fail to dump metrics");
     return;
+  }
+}
+
+void NodeServiceImpl::SetFailPoint(google::protobuf::RpcController*, const pb::node::SetFailPointRequest* request,
+                                   pb::node::SetFailPointResponse* response, google::protobuf::Closure* done) {
+  brpc::ClosureGuard done_guard(done);
+
+  const auto& failpoint = request->failpoint();
+  if (failpoint.name().empty() || failpoint.config().empty()) {
+    auto* error = response->mutable_error();
+    error->set_errcode(Errno::EILLEGAL_PARAMTETERS);
+    error->set_errmsg("Param is error.");
+    return;
+  }
+
+  auto status = FailPointManager::GetInstance().ConfigureFailPoint(failpoint.name(), failpoint.config());
+  if (!status.ok()) {
+    auto* error = response->mutable_error();
+    error->set_errcode(static_cast<Errno>(status.error_code()));
+    error->set_errmsg(status.error_str());
+  }
+}
+
+void NodeServiceImpl::GetFailPoints(google::protobuf::RpcController*, const pb::node::GetFailPointRequest* request,
+                                    pb::node::GetFailPointResponse* response, google::protobuf::Closure* done) {
+  brpc::ClosureGuard done_guard(done);
+
+  std::vector<std::shared_ptr<FailPoint>> failpoints;
+  if (request->names().empty()) {
+    failpoints = FailPointManager::GetInstance().GetAllFailPoints();
+  } else {
+    for (const auto& name : request->names()) {
+      auto failpoint = FailPointManager::GetInstance().GetFailPoint(name);
+      if (failpoint != nullptr) {
+        failpoints.push_back(failpoint);
+      }
+    }
+  }
+
+  for (const auto& failpoint : failpoints) {
+    auto* mut_failpoint = response->add_failpoints();
+    mut_failpoint->set_name(failpoint->Name());
+    mut_failpoint->set_config(failpoint->Config());
+
+    for (auto& action : failpoint->GetActions()) {
+      auto* mut_action = mut_failpoint->add_actions();
+      mut_action->set_percent(action->Percent());
+      mut_action->set_max_count(action->MaxCount());
+      mut_action->set_run_count(action->Count());
+      mut_action->set_type(action->GetType());
+      mut_action->set_arg(action->Arg());
+    }
+  }
+}
+
+void NodeServiceImpl::DeleteFailPoints(google::protobuf::RpcController*,
+                                       const pb::node::DeleteFailPointRequest* request,
+                                       pb::node::DeleteFailPointResponse* response, google::protobuf::Closure* done) {
+  brpc::ClosureGuard done_guard(done);
+  for (const auto& name : request->names()) {
+    FailPointManager::GetInstance().DeleteFailPoint(name);
   }
 }
 

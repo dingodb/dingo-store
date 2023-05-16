@@ -21,6 +21,7 @@ option(EXAMPLE_LINK_SO "Whether examples are linked dynamically" OFF)
 option(LINK_TCMALLOC "Link tcmalloc if possible" OFF)
 option(BUILD_UNIT_TESTS "Build unit test" ON)
 option(DINGO_BUILD_STATIC "Link libraries statically to generate the DingoDB binary" OFF)
+option(ENABLE_FAILPOINT "Enable failpoint" OFF)
 
 include(CheckCXXCompilerFlag)
 check_cxx_compiler_flag("-std=c++17" COMPILER_SUPPORTS_CXX17)
@@ -248,6 +249,12 @@ endif()
 add_definitions(-DGLOG_CUSTOM_PREFIX_SUPPORT=ON)
 add_definitions(-DGIT_VERSION="${GIT_VERSION}")
 add_definitions(-DGIT_TAG_NAME="${GIT_TAG_NAME}")
+
+if (ENABLE_FAILPOINT)
+    message(STATUS "Enable failpoint")
+    add_definitions(-DENABLE_FAILPOINT="ON")
+    unset(ENABLE_FAILPOINT CACHE)
+endif()
 
 add_executable(dingodb_server src/server/main.cc $<TARGET_OBJECTS:DINGODB_OBJS> $<TARGET_OBJECTS:PROTO_OBJS>)
 add_executable(dingodb_client_store

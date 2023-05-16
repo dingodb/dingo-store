@@ -161,6 +161,9 @@ bool StoreRegionMetrics::CollectMetrics() {
   std::vector<store::RegionPtr> need_collect_regions;
   for (const auto& region_metrics : region_metricses) {
     auto raft_meta = store_raft_meta->GetRaftMeta(region_metrics->Id());
+    if (raft_meta == nullptr) {
+      continue;
+    }
     uint64_t applied_index = raft_meta->applied_index();
     if (region_metrics->LastLogIndex() >= applied_index) {
       continue;
