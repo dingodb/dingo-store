@@ -24,6 +24,7 @@
 #include "proto/common.pb.h"
 #include "schema/boolean_schema.h"
 #include "schema/double_schema.h"
+#include "schema/float_schema.h"
 #include "schema/integer_schema.h"
 #include "schema/long_schema.h"
 #include "schema/string_schema.h"

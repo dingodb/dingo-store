@@ -26,7 +26,7 @@ class BaseSchema {
 
  public:
   virtual ~BaseSchema() = default;
-  enum Type { kBool, kInteger, kLong, kDouble, kString };
+  enum Type { kBool, kInteger, kFloat, kLong, kDouble, kString };
   virtual Type GetType() = 0;
   virtual bool AllowNull() = 0;
   virtual int GetLength() = 0;

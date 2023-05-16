@@ -48,7 +48,7 @@ public class Test {
 
         long tag5 = System.currentTimeMillis();
         for(KeyValue kv : kvs) {
-            Object[] record = rd.decode(kv);
+            rd.decode(kv);
         }
         long tag6 = System.currentTimeMillis();
 
@@ -59,7 +59,7 @@ public class Test {
         int[] index = new int[]{4,5,10};
         long tag3 = System.currentTimeMillis();
         for (KeyValue kv : kvs) {
-            Object[] record = rd.decodeValue(kv, index);
+            rd.decodeValue(kv, index);
         }
         long tag4 = System.currentTimeMillis();
 
@@ -165,6 +165,11 @@ public class Test {
         salary.setAllowNull(true);
         salary.setIsKey(false);
 
+        DingoSchema testFloat = new FloatSchema();
+        testFloat.setIndex(11);
+        testFloat.setAllowNull(true);
+        testFloat.setIsKey(false);
+
         List<DingoSchema> table = new ArrayList<>();
         table.add(id);
         table.add(name);
@@ -177,6 +182,7 @@ public class Test {
         table.add(age);
         table.add(prev);
         table.add(salary);
+        table.add(testFloat);
 
         return table;
     }
@@ -201,13 +207,14 @@ public class Test {
                 null,
                 -20,
                 -214748364700L,
-                873485.4234
+                873485.4234,
+                873485.42F
         };
 
         List<Object[]> allRecord = new ArrayList<>();
         for (int i = 0; i < 1000000; i ++) {
-            Object[] r = new Object[11];
-            System.arraycopy(record, 1, r, 1, 10);
+            Object[] r = new Object[12];
+            System.arraycopy(record, 1, r, 1, 11);
             r[0] = i;
             allRecord.add(r);
         }
