@@ -51,18 +51,17 @@
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
 #include "rocksdb/table.h"
-#include "rocksdb/utilities/transaction_db.h"
 #include "rocksdb/write_batch.h"
 
 namespace dingodb {
 
 class RocksIterator : public EngineIterator {
  public:
-  explicit RocksIterator(std::shared_ptr<dingodb::Snapshot> snapshot, std::shared_ptr<rocksdb::TransactionDB> txn_db,
+  explicit RocksIterator(std::shared_ptr<dingodb::Snapshot> snapshot, std::shared_ptr<rocksdb::DB> db,
                          std::shared_ptr<RawRocksEngine::ColumnFamily> column_family, const std::string& start_key,
                          const std::string& end_key, bool with_start, bool with_end)
       : snapshot_(snapshot),
-        txn_db_(txn_db),
+        db_(db),
         column_family_(column_family),
         iter_(nullptr),
         start_key_(start_key),
@@ -74,7 +73,7 @@ class RocksIterator : public EngineIterator {
     read_option.snapshot = static_cast<const rocksdb::Snapshot*>(
         std::dynamic_pointer_cast<RawRocksEngine::RocksSnapshot>(snapshot)->Inner());
 
-    iter_ = txn_db_->NewIterator(read_option, column_family_->GetHandle());
+    iter_ = db_->NewIterator(read_option, column_family_->GetHandle());
   }
   void Start() override {
     iter_->Seek(start_key_);
@@ -137,7 +136,7 @@ class RocksIterator : public EngineIterator {
     }
     column_family_ = nullptr;
     snapshot_ = nullptr;
-    txn_db_ = nullptr;
+    db_ = nullptr;
     has_valid_kv_ = false;
   }
 
@@ -190,7 +189,7 @@ class RocksIterator : public EngineIterator {
   }
 
   std::shared_ptr<dingodb::Snapshot> snapshot_;
-  std::shared_ptr<rocksdb::TransactionDB> txn_db_;
+  std::shared_ptr<rocksdb::DB> db_;
   std::shared_ptr<RawRocksEngine::ColumnFamily> column_family_;
   rocksdb::Iterator* iter_;
   const std::string name_ = "Rocks";
@@ -202,7 +201,7 @@ class RocksIterator : public EngineIterator {
   bool has_valid_kv_;
 };
 
-RawRocksEngine::RawRocksEngine() : txn_db_(nullptr), column_families_({}) {}
+RawRocksEngine::RawRocksEngine() : db_(nullptr), column_families_({}) {}
 
 RawRocksEngine::~RawRocksEngine() {}
 
@@ -254,13 +253,13 @@ std::string RawRocksEngine::GetName() { return pb::common::RawEngine_Name(pb::co
 pb::common::RawEngine RawRocksEngine::GetID() { return pb::common::RAW_ENG_ROCKSDB; }
 
 std::shared_ptr<Snapshot> RawRocksEngine::GetSnapshot() {
-  return std::make_shared<RocksSnapshot>(txn_db_->GetSnapshot(), txn_db_);
+  return std::make_shared<RocksSnapshot>(db_->GetSnapshot(), db_);
 }
 
 butil::Status RawRocksEngine::IngestExternalFile(const std::string& cf_name, const std::vector<std::string>& files) {
   rocksdb::IngestExternalFileOptions options;
   options.write_global_seqno = false;
-  auto status = txn_db_->IngestExternalFile(GetColumnFamily(cf_name)->GetHandle(), files, options);
+  auto status = db_->IngestExternalFile(GetColumnFamily(cf_name)->GetHandle(), files, options);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << "IngestExternalFile failed " << status.ToString();
     return butil::Status(status.code(), status.ToString());
@@ -270,16 +269,16 @@ butil::Status RawRocksEngine::IngestExternalFile(const std::string& cf_name, con
 }
 
 void RawRocksEngine::Flush(const std::string& cf_name) {
-  if (txn_db_) {
+  if (db_) {
     rocksdb::FlushOptions flush_options;
-    txn_db_->Flush(flush_options, GetColumnFamily(cf_name)->GetHandle());
+    db_->Flush(flush_options, GetColumnFamily(cf_name)->GetHandle());
   }
 }
 
 void RawRocksEngine::Destroy() { rocksdb::DestroyDB(db_path_, db_options_); }
 
 std::shared_ptr<dingodb::Snapshot> RawRocksEngine::NewSnapshot() {
-  return std::make_shared<RocksSnapshot>(txn_db_->GetSnapshot(), txn_db_);
+  return std::make_shared<RocksSnapshot>(db_->GetSnapshot(), db_);
 }
 
 std::shared_ptr<RawEngine::Reader> RawRocksEngine::NewReader(const std::string& cf_name) {
@@ -287,7 +286,7 @@ std::shared_ptr<RawEngine::Reader> RawRocksEngine::NewReader(const std::string& 
   if (column_family == nullptr) {
     return nullptr;
   }
-  return std::make_shared<Reader>(txn_db_, column_family);
+  return std::make_shared<Reader>(db_, column_family);
 }
 
 std::shared_ptr<RawEngine::Writer> RawRocksEngine::NewWriter(const std::string& cf_name) {
@@ -295,7 +294,7 @@ std::shared_ptr<RawEngine::Writer> RawRocksEngine::NewWriter(const std::string& 
   if (column_family == nullptr) {
     return nullptr;
   }
-  return std::make_shared<Writer>(txn_db_, column_family);
+  return std::make_shared<Writer>(db_, column_family);
 }
 
 std::shared_ptr<dingodb::Iterator> RawRocksEngine::NewIterator(const std::string& cf_name, IteratorOptions options) {
@@ -319,7 +318,7 @@ std::shared_ptr<dingodb::Iterator> RawRocksEngine::NewIterator(const std::string
   //   read_options.iterate_upper_bound = slice.get();
   // }
   return std::make_shared<RawRocksEngine::Iterator>(options, snapshot,
-                                                    txn_db_->NewIterator(read_options, column_family->GetHandle()));
+                                                    db_->NewIterator(read_options, column_family->GetHandle()));
 }
 
 std::shared_ptr<RawRocksEngine::SstFileWriter> RawRocksEngine::NewSstFileWriter() {
@@ -327,14 +326,14 @@ std::shared_ptr<RawRocksEngine::SstFileWriter> RawRocksEngine::NewSstFileWriter(
 }
 
 std::shared_ptr<RawRocksEngine::Checkpoint> RawRocksEngine::NewCheckpoint() {
-  return std::make_shared<RawRocksEngine::Checkpoint>(txn_db_);
+  return std::make_shared<RawRocksEngine::Checkpoint>(db_);
 }
 
 void RawRocksEngine::Close() {
-  if (txn_db_) {
+  if (db_) {
     column_families_.clear();
-    txn_db_->Close();
-    txn_db_ = nullptr;
+    db_->Close();
+    db_ = nullptr;
   }
 
   DINGO_LOG(INFO) << fmt::format("rocksdb::DB::Close");
@@ -361,7 +360,7 @@ std::vector<uint64_t> RawRocksEngine::GetApproximateSizes(const std::string& cf_
   }
 
   uint64_t sizes[ranges.size()];
-  txn_db_->GetApproximateSizes(options, GetColumnFamily(cf_name)->GetHandle(), inner_ranges, ranges.size(), sizes);
+  db_->GetApproximateSizes(options, GetColumnFamily(cf_name)->GetHandle(), inner_ranges, ranges.size(), sizes);
 
   std::vector<uint64_t> result;
   result.reserve(ranges.size());
@@ -595,22 +594,19 @@ bool RawRocksEngine::RocksdbInit(std::shared_ptr<Config> config, const std::stri
   }
 
   rocksdb::DBOptions db_options;
-  rocksdb::TransactionDBOptions txn_db_options;
-
   db_options.create_if_missing = true;
   db_options.create_missing_column_families = true;
-
   db_options.max_background_jobs = GetBackgroundThreadNum(config);
 
-  rocksdb::TransactionDB* txn_db;
+  rocksdb::DB* db;
   rocksdb::Status s =
-      rocksdb::TransactionDB::Open(db_options, txn_db_options, db_path, column_families, &family_handles, &txn_db);
+      rocksdb::DB::Open(db_options, db_path, column_families, &family_handles, &db);
   if (!s.ok()) {
-    DINGO_LOG(ERROR) << fmt::format("rocksdb::TransactionDB::Open failed : {}", s.ToString());
+    DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Open failed : {}", s.ToString());
     return false;
   }
 
-  txn_db_.reset(txn_db);
+  db_.reset(db);
 
   return true;
 }
@@ -702,7 +698,7 @@ RawRocksEngine::ColumnFamily& RawRocksEngine::ColumnFamily::operator=(RawRocksEn
 }
 
 butil::Status RawRocksEngine::Reader::KvGet(const std::string& key, std::string& value) {
-  auto snapshot = std::make_shared<RocksSnapshot>(txn_db_->GetSnapshot(), txn_db_);
+  auto snapshot = std::make_shared<RocksSnapshot>(db_->GetSnapshot(), db_);
   return KvGet(snapshot, key, value);
 }
 
@@ -715,23 +711,21 @@ butil::Status RawRocksEngine::Reader::KvGet(std::shared_ptr<dingodb::Snapshot> s
 
   rocksdb::ReadOptions read_option;
   read_option.snapshot = static_cast<const rocksdb::Snapshot*>(snapshot->Inner());
-  rocksdb::PinnableSlice pinnable_slice;
-  rocksdb::Status s = txn_db_->Get(read_option, column_family_->GetHandle(), rocksdb::Slice(key), &pinnable_slice);
+  rocksdb::Status s = db_->Get(read_option, column_family_->GetHandle(), rocksdb::Slice(key), &value);
   if (!s.ok()) {
     if (s.IsNotFound()) {
       return butil::Status(pb::error::EKEY_NOTFOUND, "Not found");
     }
-    DINGO_LOG(ERROR) << fmt::format("rocksdb::TransactionDB::Get failed : {}", s.ToString());
+    DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Get failed : {}", s.ToString());
     return butil::Status(pb::error::EINTERNAL, "Internal error");
   }
-  value.assign(pinnable_slice.data(), pinnable_slice.size());
 
   return butil::Status();
 }
 
 butil::Status RawRocksEngine::Reader::KvScan(const std::string& start_key, const std::string& end_key,
                                              std::vector<pb::common::KeyValue>& kvs) {
-  auto snapshot = std::make_shared<RocksSnapshot>(txn_db_->GetSnapshot(), txn_db_);
+  auto snapshot = std::make_shared<RocksSnapshot>(db_->GetSnapshot(), db_);
   return KvScan(snapshot, start_key, end_key, kvs);
 }
 
@@ -752,7 +746,7 @@ butil::Status RawRocksEngine::Reader::KvScan(std::shared_ptr<dingodb::Snapshot> 
   read_option.snapshot = static_cast<const rocksdb::Snapshot*>(snapshot->Inner());
 
   std::string_view end_key_view(end_key);
-  rocksdb::Iterator* it = txn_db_->NewIterator(read_option, column_family_->GetHandle());
+  rocksdb::Iterator* it = db_->NewIterator(read_option, column_family_->GetHandle());
   for (it->Seek(start_key); it->Valid() && it->key().ToStringView() < end_key_view; it->Next()) {
     pb::common::KeyValue kv;
     kv.set_key(it->key().data(), it->key().size());
@@ -767,7 +761,7 @@ butil::Status RawRocksEngine::Reader::KvScan(std::shared_ptr<dingodb::Snapshot> 
 
 butil::Status RawRocksEngine::Reader::KvCount(const std::string& start_key, const std::string& end_key,
                                               uint64_t& count) {
-  auto snapshot = std::make_shared<RocksSnapshot>(txn_db_->GetSnapshot(), txn_db_);
+  auto snapshot = std::make_shared<RocksSnapshot>(db_->GetSnapshot(), db_);
   return KvCount(snapshot, start_key, end_key, count);
 }
 
@@ -788,7 +782,7 @@ butil::Status RawRocksEngine::Reader::KvCount(std::shared_ptr<dingodb::Snapshot>
   read_options.snapshot = static_cast<const rocksdb::Snapshot*>(snapshot->Inner());
 
   std::string_view end_key_view(end_key);
-  rocksdb::Iterator* it = txn_db_->NewIterator(read_options, column_family_->GetHandle());
+  rocksdb::Iterator* it = db_->NewIterator(read_options, column_family_->GetHandle());
   for (it->Seek(start_key), count = 0; it->Valid() && it->key().ToStringView() < end_key_view; it->Next()) {
     ++count;
   }
@@ -798,7 +792,7 @@ butil::Status RawRocksEngine::Reader::KvCount(std::shared_ptr<dingodb::Snapshot>
 }
 
 butil::Status RawRocksEngine::Reader::KvCount(const pb::common::RangeWithOptions& range, uint64_t* count) {
-  auto snapshot = std::make_shared<RocksSnapshot>(txn_db_->GetSnapshot(), txn_db_);
+  auto snapshot = std::make_shared<RocksSnapshot>(db_->GetSnapshot(), db_);
 
   return KvCount(snapshot, range, count);
 }
@@ -848,11 +842,7 @@ butil::Status RawRocksEngine::Reader::KvCount(std::shared_ptr<dingodb::Snapshot>
 std::shared_ptr<EngineIterator> RawRocksEngine::Reader::NewIterator(const std::string& start_key,
                                                                     const std::string& end_key, bool with_start,
                                                                     bool with_end) {
-  auto snapshot = std::make_shared<RocksSnapshot>(txn_db_->GetSnapshot(), txn_db_);
-
-  // return std::make_shared<RocksIterator>(snapshot, txn_db_, column_family_, start_key, end_key, with_start,
-  // with_end);
-
+  auto snapshot = std::make_shared<RocksSnapshot>(db_->GetSnapshot(), db_);
   return NewIterator(snapshot, start_key, end_key, with_start, with_end);
 }
 
@@ -860,7 +850,7 @@ std::shared_ptr<EngineIterator> RawRocksEngine::Reader::NewIterator(std::shared_
                                                                     const std::string& start_key,
                                                                     const std::string& end_key, bool with_start,
                                                                     bool with_end) {
-  return std::make_shared<RocksIterator>(snapshot, txn_db_, column_family_, start_key, end_key, with_start, with_end);
+  return std::make_shared<RocksIterator>(snapshot, db_, column_family_, start_key, end_key, with_start, with_end);
 }
 
 butil::Status RawRocksEngine::Writer::KvPut(const pb::common::KeyValue& kv) {
@@ -871,9 +861,9 @@ butil::Status RawRocksEngine::Writer::KvPut(const pb::common::KeyValue& kv) {
 
   rocksdb::WriteOptions write_options;
   rocksdb::Status s =
-      txn_db_->Put(write_options, column_family_->GetHandle(), rocksdb::Slice(kv.key()), rocksdb::Slice(kv.value()));
+      db_->Put(write_options, column_family_->GetHandle(), rocksdb::Slice(kv.key()), rocksdb::Slice(kv.value()));
   if (!s.ok()) {
-    DINGO_LOG(ERROR) << fmt::format("rocksdb::TransactionDB::Put failed : {}", s.ToString());
+    DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Put failed : {}", s.ToString());
     return butil::Status(pb::error::EINTERNAL, "Internal error");
   }
 
@@ -918,9 +908,9 @@ butil::Status RawRocksEngine::Writer::KvBatchPutAndDelete(const std::vector<pb::
     }
   }
   rocksdb::WriteOptions write_options;
-  rocksdb::Status s = txn_db_->Write(write_options, &batch);
+  rocksdb::Status s = db_->Write(write_options, &batch);
   if (!s.ok()) {
-    DINGO_LOG(ERROR) << fmt::format("rocksdb::TransactionDB::Write failed : {}", s.ToString());
+    DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Write failed : {}", s.ToString());
     return butil::Status(pb::error::EINTERNAL, "Internal error");
   }
 
@@ -945,67 +935,52 @@ butil::Status RawRocksEngine::Writer::KvBatchPutIfAbsent(const std::vector<pb::c
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
 
-  for (const auto& kv : kvs) {
-    if (kv.key().empty()) {
-      DINGO_LOG(ERROR) << fmt::format("empty key not support");
-      return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
-    }
-  }
-
   // Warning : be careful with vector<bool>
   key_states.resize(kvs.size(), false);
 
-  rocksdb::WriteOptions const write_options;
-  rocksdb::TransactionOptions txn_options;
-  txn_options.set_snapshot = true;
-  std::unique_ptr<rocksdb::Transaction> utxn(txn_db_->BeginTransaction(write_options));
-
-  if (!utxn) {
-    DINGO_LOG(ERROR) << fmt::format("rocksdb::TransactionDB::BeginTransaction failed");
-    return butil::Status(pb::error::EINTERNAL, "Internal error");
-  }
-
-  rocksdb::ReadOptions read_options;
-  read_options.snapshot = utxn->GetSnapshot();
-  size_t i = 0;
+  size_t key_index = 0;
+  rocksdb::WriteBatch batch;
   for (const auto& kv : kvs) {
-    std::string value_old;
+    if (BAIDU_UNLIKELY(kv.key().empty())) {
+      DINGO_LOG(ERROR) << fmt::format("empty key not support");
+      key_states.clear();
+      return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
+    }
 
-    // other read will failed
-    rocksdb::Status s = utxn->GetForUpdate(read_options, column_family_->GetHandle(),
-                                           rocksdb::Slice(kv.key().data(), kv.key().size()), &value_old);
+    std::string value_old;
+    rocksdb::Status s = db_->Get(rocksdb::ReadOptions(), column_family_->GetHandle(),
+      rocksdb::Slice(kv.key().data(), kv.key().size()), &value_old);
     if (is_atomic) {
       if (!s.IsNotFound()) {
         key_states.resize(kvs.size(), false);
-        utxn->Rollback();
-        DINGO_LOG(INFO) << fmt::format("rocksdb::TransactionDB::GetForUpdate failed : {}", s.ToString());
+        DINGO_LOG(INFO) << fmt::format("rocksdb::DB::Get failed or found: {}", s.ToString());
         return butil::Status(pb::error::EINTERNAL, "Internal error");
       }
-
     } else {
       if (!s.IsNotFound()) {
-        i++;
+        key_index++;
         continue;
       }
     }
 
-    // write a key in this transaction
-    s = utxn->Put(column_family_->GetHandle(), rocksdb::Slice(kv.key().data(), kv.key().size()),
+    // write a key in this batch
+    s = batch.Put(column_family_->GetHandle(), rocksdb::Slice(kv.key().data(), kv.key().size()),
                   rocksdb::Slice(kv.value().data(), kv.value().size()));
-    if (!s.ok()) {
-      if (is_atomic) key_states.resize(kvs.size(), false);
-      utxn->Rollback();
-      DINGO_LOG(ERROR) << fmt::format("rocksdb::TransactionDB::Put failed : {}", s.ToString());
+    if (BAIDU_UNLIKELY(!s.ok())) {
+      if (is_atomic) {
+        key_states.resize(kvs.size(), false);
+      }
+      DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Put failed : {}", s.ToString());
       return butil::Status(pb::error::EINTERNAL, "Internal error");
     }
-    key_states[i] = true;
-    i++;
+    key_states[key_index] = true;
+    key_index++;
   }
 
-  rocksdb::Status const s = utxn->Commit();
+  rocksdb::Status s = db_->Write(rocksdb::WriteOptions(), &batch);
   if (!s.ok()) {
     key_states.resize(kvs.size(), false);
-    DINGO_LOG(ERROR) << fmt::format("rocksdb::TransactionDB::Commit failed : {}", s.ToString());
+    DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Write failed : {}", s.ToString());
     return butil::Status(pb::error::EINTERNAL, "Internal error");
   }
 
@@ -1025,9 +1000,9 @@ butil::Status RawRocksEngine::Writer::KvDelete(const std::string& key) {
 
   rocksdb::WriteOptions const write_options;
   rocksdb::Status const s =
-      txn_db_->Delete(write_options, column_family_->GetHandle(), rocksdb::Slice(key.data(), key.size()));
+      db_->Delete(write_options, column_family_->GetHandle(), rocksdb::Slice(key.data(), key.size()));
   if (!s.ok()) {
-    DINGO_LOG(ERROR) << fmt::format("rocksdb::TransactionDB::Delete failed : {}", s.ToString());
+    DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Delete failed : {}", s.ToString());
     return butil::Status(pb::error::EINTERNAL, "Internal error");
   }
 
@@ -1113,45 +1088,29 @@ butil::Status RawRocksEngine::Writer::KvDeleteIfEqual(const pb::common::KeyValue
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
 
-  rocksdb::WriteOptions write_options;
-  std::unique_ptr<rocksdb::Transaction> txn(txn_db_->BeginTransaction(write_options));
-  if (!txn) {
-    DINGO_LOG(ERROR) << fmt::format("rocksdb::TransactionDB::BeginTransaction failed");
-    return butil::Status(pb::error::EINTERNAL, "Internal error");
-  }
-
   // other read will failed
   std::string old_value;
-  rocksdb::ReadOptions read_options;
-  rocksdb::Status s = txn->GetForUpdate(read_options, column_family_->GetHandle(),
-                                        rocksdb::Slice(kv.key().data(), kv.key().size()), &old_value);
+  rocksdb::Status s = db_->Get(rocksdb::ReadOptions(), column_family_->GetHandle(),
+    rocksdb::Slice(kv.key().data(), kv.key().size()), &old_value);
   if (!s.ok()) {
-    txn->Rollback();
     if (s.IsNotFound()) {
-      DINGO_LOG(ERROR) << fmt::format("rocksdb::TransactionDB::GetForUpdate not found key");
+      DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::GetForUpdate not found key");
       return butil::Status(pb::error::EKEY_NOTFOUND, "Not found");
     }
-    DINGO_LOG(ERROR) << fmt::format("rocksdb::TransactionDB::GetForUpdate failed : {}", s.ToString());
+    DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::GetForUpdate failed : {}", s.ToString());
     return butil::Status(pb::error::EINTERNAL, "Internal error");
   }
 
   if (kv.value() != old_value) {
-    txn->Rollback();
-    DINGO_LOG(WARNING) << fmt::format("rocksdb::TransactionDB::GetForUpdate value is not equal");
+    DINGO_LOG(WARNING) << fmt::format("rocksdb::DB::Get value is not equal, {} | {}.", kv.value(), old_value);
     return butil::Status(pb::error::EINTERNAL, "Internal error");
   }
 
-  // write a key in this transaction
-  s = txn->Delete(column_family_->GetHandle(), rocksdb::Slice(kv.key().data(), kv.key().size()));
-  if (!s.ok()) {
-    txn->Rollback();
-    DINGO_LOG(ERROR) << fmt::format("rocksdb::TransactionDB::Delete failed : {}", s.ToString());
-    return butil::Status(pb::error::EINTERNAL, "Internal error");
-  }
-
-  s = txn->Commit();
-  if (!s.ok()) {
-    DINGO_LOG(ERROR) << fmt::format("rocksdb::TransactionDB::Commit failed : {}", s.ToString());
+  // delete a key
+  s = db_->Delete(rocksdb::WriteOptions(), column_family_->GetHandle(), rocksdb::Slice(kv.key().data(),
+    kv.key().size()));
+  if (BAIDU_UNLIKELY(!s.ok())) {
+    DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Delete failed : {}", s.ToString());
     return butil::Status(pb::error::EINTERNAL, "Internal error");
   }
 
@@ -1167,55 +1126,35 @@ butil::Status RawRocksEngine::Writer::KvCompareAndSetInternal(const pb::common::
 
   key_state = false;
 
-  rocksdb::WriteOptions write_options;
-  std::unique_ptr<rocksdb::Transaction> txn(txn_db_->BeginTransaction(write_options));
-  if (!txn) {
-    DINGO_LOG(ERROR) << fmt::format("rocksdb::TransactionDB::BeginTransaction failed");
-    return butil::Status(pb::error::EINTERNAL, "Internal error");
-  }
-
-  // other read will failed
   std::string old_value;
-  rocksdb::ReadOptions const read_options;
-  rocksdb::Status s = txn->GetForUpdate(read_options, column_family_->GetHandle(),
-                                        rocksdb::Slice(kv.key().data(), kv.key().size()), &old_value);
+  rocksdb::Status s = db_->Get(rocksdb::ReadOptions(), column_family_->GetHandle(),
+    rocksdb::Slice(kv.key().data(), kv.key().size()), &old_value);
   if (s.ok()) {
     if (!is_key_exist) {
-      txn->Rollback();
       // The key already exists, the client requests not to return an error code and key_state set false
       key_state = false;
       return butil::Status();
     }
   } else if (s.IsNotFound()) {
     if (is_key_exist || (!is_key_exist && !kv.value().empty())) {
-      txn->Rollback();
-      DINGO_LOG(ERROR) << fmt::format("rocksdb::TransactionDB::GetForUpdate not found key");
+      DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Get not found key");
       return butil::Status(pb::error::EKEY_NOTFOUND, "Not found");
     }
   } else {  // error
-    txn->Rollback();
-    DINGO_LOG(ERROR) << fmt::format("rocksdb::TransactionDB::GetForUpdate failed : {}", s.ToString());
+    DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Get failed : {}", s.ToString());
     return butil::Status(pb::error::EINTERNAL, "Internal error");
   }
 
   if (kv.value() != old_value) {
-    txn->Rollback();
-    DINGO_LOG(WARNING) << fmt::format("rocksdb::TransactionDB::GetForUpdate value is not equal");
+    DINGO_LOG(WARNING) << fmt::format("rocksdb::DB::Get value is not equal");
     return butil::Status(pb::error::EINTERNAL, "Internal error");
   }
 
-  // write a key in this transaction
-  s = txn->Put(column_family_->GetHandle(), rocksdb::Slice(kv.key().data(), kv.key().size()),
-               rocksdb::Slice(value.data(), value.size()));
+  // write a key
+  s = db_->Put(rocksdb::WriteOptions(), column_family_->GetHandle(), rocksdb::Slice(kv.key().data(),
+    kv.key().size()), rocksdb::Slice(value.data(), value.size()));
   if (!s.ok()) {
-    txn->Rollback();
-    DINGO_LOG(ERROR) << fmt::format("rocksdb::TransactionDB::Put failed : {}", s.ToString());
-    return butil::Status(pb::error::EINTERNAL, "Internal error");
-  }
-
-  s = txn->Commit();
-  if (!s.ok()) {
-    DINGO_LOG(ERROR) << fmt::format("rocksdb::TransactionDB::Commit failed : {}", s.ToString());
+    DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Put failed : {}", s.ToString());
     return butil::Status(pb::error::EINTERNAL, "Internal error");
   }
 
@@ -1228,17 +1167,14 @@ std::shared_ptr<EngineIterator> RawRocksEngine::Writer::NewIterator(const rocksd
                                                                     const std::string& start_key,
                                                                     const std::string& end_key, bool with_start,
                                                                     bool with_end) {
-  auto snapshot_share = std::make_shared<RocksSnapshot>(snapshot, txn_db_);
+  auto snapshot_share = std::make_shared<RocksSnapshot>(snapshot, db_);
 
-  return std::make_shared<RocksIterator>(snapshot_share, txn_db_, column_family_, start_key, end_key, with_start,
+  return std::make_shared<RocksIterator>(snapshot_share, db_, column_family_, start_key, end_key, with_start,
                                          with_end);
 }
 
 butil::Status RawRocksEngine::Writer::KvBatchDeleteRangeCore(
     const std::vector<std::pair<std::string, std::string>>& key_pairs) {
-  rocksdb::TransactionDBWriteOptimizations opt;
-  opt.skip_concurrency_control = true;
-  opt.skip_duplicate_key_check = true;
   rocksdb::WriteBatch batch;
 
   for (const auto& [real_start_key, real_end_key] : key_pairs) {
@@ -1252,10 +1188,9 @@ butil::Status RawRocksEngine::Writer::KvBatchDeleteRangeCore(
     }
   }
 
-  rocksdb::WriteOptions write_options;
-  rocksdb::Status s = txn_db_->Write(write_options, opt, &batch);
+  rocksdb::Status s = db_->Write(rocksdb::WriteOptions(), &batch);
   if (!s.ok()) {
-    DINGO_LOG(ERROR) << fmt::format("rocksdb::TransactionDB::Write failed : {}", s.ToString());
+    DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Write failed : {}", s.ToString());
     return butil::Status(pb::error::EINTERNAL, "Internal error");
   }
 
@@ -1369,7 +1304,7 @@ butil::Status RawRocksEngine::SstFileWriter::SaveFile(std::shared_ptr<dingodb::I
 butil::Status RawRocksEngine::Checkpoint::Create(const std::string& dirpath) {
   // std::unique_ptr<rocksdb::Checkpoint> checkpoint = std::make_unique<rocksdb::Checkpoint>();
   rocksdb::Checkpoint* checkpoint = nullptr;
-  auto status = rocksdb::Checkpoint::Create(txn_db_.get(), &checkpoint);
+  auto status = rocksdb::Checkpoint::Create(db_.get(), &checkpoint);
   if (!status.ok()) {
     delete checkpoint;
     return butil::Status(status.code(), status.ToString());
@@ -1389,7 +1324,7 @@ butil::Status RawRocksEngine::Checkpoint::Create(const std::string& dirpath,
                                                  std::shared_ptr<ColumnFamily> column_family,
                                                  std::vector<pb::store_internal::SstFileInfo>& sst_files) {
   rocksdb::Checkpoint* checkpoint = nullptr;
-  auto status = rocksdb::Checkpoint::Create(txn_db_.get(), &checkpoint);
+  auto status = rocksdb::Checkpoint::Create(db_.get(), &checkpoint);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << "Checkpoint create failed " << status.ToString();
     delete checkpoint;

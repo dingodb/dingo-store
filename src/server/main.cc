@@ -368,14 +368,14 @@ int main(int argc, char *argv[]) {
 
   dingodb::pb::common::ClusterRole role = dingodb::pb::common::COORDINATOR;
 
-  auto is_coodinator = dingodb::Helper::IsEqualIgnoreCase(
+  auto is_coordinator = dingodb::Helper::IsEqualIgnoreCase(
       FLAGS_role, dingodb::pb::common::ClusterRole_Name(dingodb::pb::common::ClusterRole::COORDINATOR));
   auto is_store = dingodb::Helper::IsEqualIgnoreCase(
       FLAGS_role, dingodb::pb::common::ClusterRole_Name(dingodb::pb::common::ClusterRole::STORE));
 
   if (is_store) {
     role = dingodb::pb::common::STORE;
-  } else if (is_coodinator) {
+  } else if (is_coordinator) {
     role = dingodb::pb::common::COORDINATOR;
   } else {
     DINGO_LOG(ERROR) << "Invalid server role[" + FLAGS_role + "]";
@@ -449,7 +449,7 @@ int main(int argc, char *argv[]) {
     return -1;
   }
 
-  if (is_coodinator) {
+  if (is_coordinator) {
     if (!dingo_server->InitCoordinatorInteractionForAutoIncrement()) {
       DINGO_LOG(ERROR) << "InitCoordinatorInteractionForAutoIncrement failed!";
       return -1;
@@ -458,9 +458,9 @@ int main(int argc, char *argv[]) {
     dingo_server->SetEndpoints(GetEndpoints(config, "coordinator.peers"));
 
     coordinator_service.SetControl(dingo_server->GetCoordinatorControl());
-    coordinator_service.SetAutoImcrementControl(dingo_server->GetAutoIncrementControlReference());
+    coordinator_service.SetAutoIncrementControl(dingo_server->GetAutoIncrementControlReference());
     meta_service.SetControl(dingo_server->GetCoordinatorControl());
-    meta_service.SetAutoImcrementControl(dingo_server->GetAutoIncrementControlReference());
+    meta_service.SetAutoIncrementControl(dingo_server->GetAutoIncrementControlReference());
 
     // the Engine should be init success
     auto engine = dingo_server->GetEngine();

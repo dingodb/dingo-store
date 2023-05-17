@@ -57,7 +57,7 @@ class MetaServiceImpl : public pb::meta::MetaService {
     this->coordinator_control_ = coordinator_control;
   };
 
-  void SetAutoImcrementControl(std::shared_ptr<AutoIncrementControl>& auto_increment_control) {
+  void SetAutoIncrementControl(std::shared_ptr<AutoIncrementControl>& auto_increment_control) {
     auto_increment_control_ = auto_increment_control;
   };
 
