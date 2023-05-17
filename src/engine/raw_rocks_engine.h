@@ -39,8 +39,7 @@
 #include "rocksdb/slice_transform.h"
 #include "rocksdb/status.h"
 #include "rocksdb/utilities/checkpoint.h"
-#include "rocksdb/utilities/transaction.h"
-#include "rocksdb/utilities/transaction_db.h"
+#include <rocksdb/db.h>
 
 namespace dingodb {
 
@@ -97,11 +96,11 @@ class RawRocksEngine : public RawEngine {
 
   class RocksSnapshot : public dingodb::Snapshot {
    public:
-    explicit RocksSnapshot(const rocksdb::Snapshot* snapshot, std::shared_ptr<rocksdb::TransactionDB> txn_db)
-        : snapshot_(snapshot), txn_db_(txn_db) {}
+    explicit RocksSnapshot(const rocksdb::Snapshot* snapshot, std::shared_ptr<rocksdb::DB> db)
+        : snapshot_(snapshot), db_(db) {}
     ~RocksSnapshot() override {
-      if (txn_db_) {
-        txn_db_->ReleaseSnapshot(snapshot_);
+      if (db_) {
+        db_->ReleaseSnapshot(snapshot_);
       }
     };
 
@@ -109,7 +108,7 @@ class RawRocksEngine : public RawEngine {
 
    private:
     const rocksdb::Snapshot* snapshot_;
-    std::shared_ptr<rocksdb::TransactionDB> txn_db_;
+    std::shared_ptr<rocksdb::DB> db_;
   };
 
   class Iterator : public dingodb::Iterator {
@@ -158,8 +157,8 @@ class RawRocksEngine : public RawEngine {
 
   class Reader : public RawEngine::Reader {
    public:
-    Reader(std::shared_ptr<rocksdb::TransactionDB> txn_db, std::shared_ptr<ColumnFamily> column_family)
-        : txn_db_(txn_db), column_family_(column_family) {}
+    Reader(std::shared_ptr<rocksdb::DB> db, std::shared_ptr<ColumnFamily> column_family)
+        : db_(db), column_family_(column_family) {}
     ~Reader() override = default;
     butil::Status KvGet(const std::string& key, std::string& value) override;
     butil::Status KvGet(std::shared_ptr<dingodb::Snapshot> snapshot, const std::string& key,
@@ -185,14 +184,14 @@ class RawRocksEngine : public RawEngine {
     std::shared_ptr<EngineIterator> NewIterator(std::shared_ptr<dingodb::Snapshot> snapshot,
                                                 const std::string& start_key, const std::string& end_key,
                                                 bool with_start, bool with_end);
-    std::shared_ptr<rocksdb::TransactionDB> txn_db_;
+    std::shared_ptr<rocksdb::DB> db_;
     std::shared_ptr<ColumnFamily> column_family_;
   };
 
   class Writer : public RawEngine::Writer {
    public:
-    Writer(std::shared_ptr<rocksdb::TransactionDB> txn_db, std::shared_ptr<ColumnFamily> column_family)
-        : txn_db_(txn_db), column_family_(column_family) {}
+    Writer(std::shared_ptr<rocksdb::DB> db, std::shared_ptr<ColumnFamily> column_family)
+        : db_(db), column_family_(column_family) {}
     ~Writer() override = default;
     butil::Status KvPut(const pb::common::KeyValue& kv) override;
     butil::Status KvBatchPut(const std::vector<pb::common::KeyValue>& kvs) override;
@@ -231,7 +230,7 @@ class RawRocksEngine : public RawEngine {
     // static bool Increment(const std::string& original_key, std::string* key);
 
     std::shared_ptr<ColumnFamily> column_family_;
-    std::shared_ptr<rocksdb::TransactionDB> txn_db_;
+    std::shared_ptr<rocksdb::DB> db_;
   };
 
   class SstFileWriter {
@@ -256,7 +255,7 @@ class RawRocksEngine : public RawEngine {
 
   class Checkpoint {
    public:
-    explicit Checkpoint(std::shared_ptr<rocksdb::TransactionDB> txn_db) : txn_db_(txn_db) {}
+    explicit Checkpoint(std::shared_ptr<rocksdb::DB> db) : db_(db) {}
     ~Checkpoint() = default;
 
     Checkpoint(Checkpoint&& rhs) = delete;
@@ -267,7 +266,7 @@ class RawRocksEngine : public RawEngine {
                          std::vector<pb::store_internal::SstFileInfo>& sst_files);
 
    private:
-    std::shared_ptr<rocksdb::TransactionDB> txn_db_;
+    std::shared_ptr<rocksdb::DB> db_;
   };
 
   friend class Checkpoint;
@@ -328,7 +327,7 @@ class RawRocksEngine : public RawEngine {
   // destroy rocksdb need
   std::string db_path_;
   rocksdb::Options db_options_;
-  std::shared_ptr<rocksdb::TransactionDB> txn_db_;
+  std::shared_ptr<rocksdb::DB> db_;
   std::map<std::string, std::shared_ptr<ColumnFamily>> column_families_;
 };
 

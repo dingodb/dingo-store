@@ -51,7 +51,8 @@ bool CoordinatorInteraction::InitByNameService(const std::string& service_name, 
   service_type_ = service_type;
 
   brpc::ChannelOptions channel_opt;
-  channel_opt.timeout_ms = 500;
+  // ChannelOptions should set "timeout_ms > connect_timeout_ms" for circuit breaker
+  channel_opt.timeout_ms = 1000;
   channel_opt.connect_timeout_ms = 500;
 
   if (name_service_channel_.Init(service_name.c_str(), "rr", &channel_opt) != 0) {

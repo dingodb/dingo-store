@@ -55,18 +55,21 @@ bool AutoIncrementControl::Recover() {
 
 butil::Status AutoIncrementControl::GetAutoIncrement(uint64_t table_id, uint64_t& start_id) {
   DINGO_LOG(INFO) << table_id << " | " << start_id;
-  uint64_t* start_id_ptr = nullptr;
+  butil::Status status;
   {
     BAIDU_SCOPED_LOCK(auto_increment_map_mutex_);
+    uint64_t* start_id_ptr = nullptr;
     start_id_ptr = auto_increment_map_.seek(table_id);
-  }
 
-  if (start_id_ptr == nullptr) {
-    DINGO_LOG(WARNING) << " cannot find auto increment, table id: " << table_id;
-    return butil::Status(pb::error::Errno::EAUTO_INCREMENT_NOT_FOUND, "auto increment not found");
+    if (start_id_ptr == nullptr) {
+      DINGO_LOG(WARNING) << " cannot find auto increment, table id: " << table_id;
+      status = butil::Status(pb::error::Errno::EAUTO_INCREMENT_NOT_FOUND, "auto increment not found");
+    } else {
+      start_id = *start_id_ptr;
+      status = butil::Status::OK();
+    }
   }
-  start_id = *start_id_ptr;
-  return butil::Status::OK();
+  return status;
 }
 
 butil::Status AutoIncrementControl::GetAutoIncrements(butil::FlatMap<uint64_t, uint64_t>& auto_increments) {
