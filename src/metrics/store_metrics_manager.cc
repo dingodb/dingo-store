@@ -19,6 +19,7 @@
 #include <string>
 #include <vector>
 
+#include "bthread/bthread.h"
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
@@ -295,8 +296,17 @@ bool StoreMetricsManager::Init() {
 }
 
 void StoreMetricsManager::CollectMetrics() {
+  if (is_collecting_.load()) {
+    DINGO_LOG(WARNING) << "Already exist collecting metrics.";
+    return;
+  }
+
+  is_collecting_.store(true);
+
   store_metrics_->CollectMetrics();
   region_metrics_->CollectMetrics();
+
+  is_collecting_.store(false);
 }
 
 }  // namespace dingodb

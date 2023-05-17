@@ -249,7 +249,17 @@ bool Server::InitCrontabManager() {
       return false;
     }
     metrics_crontab->interval = metrics_interval;
-    metrics_crontab->func = [](void*) { Server::GetInstance()->GetStoreMetricsManager()->CollectMetrics(); };
+    metrics_crontab->func = [](void*) {
+      bthread_t tid;
+      const bthread_attr_t attr = BTHREAD_ATTR_NORMAL;
+      bthread_start_background(
+          &tid, &attr,
+          [](void*) -> void* {
+            Server::GetInstance()->GetStoreMetricsManager()->CollectMetrics();
+            return nullptr;
+          },
+          nullptr);
+    };
     metrics_crontab->arg = nullptr;
 
     crontab_manager_->AddAndRunCrontab(metrics_crontab);

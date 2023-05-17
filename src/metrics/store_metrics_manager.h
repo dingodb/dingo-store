@@ -17,6 +17,7 @@
 
 #include <sys/types.h>
 
+#include <atomic>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -161,7 +162,8 @@ class StoreMetricsManager {
  public:
   explicit StoreMetricsManager(std::shared_ptr<RawEngine> raw_engine, std::shared_ptr<MetaReader> meta_reader,
                                std::shared_ptr<MetaWriter> meta_writer)
-      : store_metrics_(std::make_shared<StoreMetrics>()),
+      : is_collecting_(false),
+        store_metrics_(std::make_shared<StoreMetrics>()),
         region_metrics_(std::make_shared<StoreRegionMetrics>(raw_engine, meta_reader, meta_writer)) {}
   ~StoreMetricsManager() = default;
 
@@ -176,6 +178,8 @@ class StoreMetricsManager {
   std::shared_ptr<StoreRegionMetrics> GetStoreRegionMetrics() { return region_metrics_; }
 
  private:
+  // Is collecting metrics, just one collecting at the same time.
+  std::atomic<bool> is_collecting_;
   std::shared_ptr<StoreMetrics> store_metrics_;
   std::shared_ptr<StoreRegionMetrics> region_metrics_;
 };
