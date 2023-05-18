@@ -1,5 +1,3 @@
-
-
 enable_testing()
 
 file(GLOB TEST_SRCS "test_*.cc")
@@ -20,3 +18,5 @@ foreach(TEST_SRC ${TEST_SRCS})
                         "-Xlinker \"-)\""
                         )
 endforeach()
+
+add_subdirectory(expr)
