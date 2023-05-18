@@ -189,6 +189,11 @@ public class BufImpl implements Buf {
     }
 
     @Override
+    public boolean isEnd() {
+        return (reversePos - forwardPos + 1) == 0;
+    }
+
+    @Override
     public byte[] getBytes() {
         int emptySize = reversePos - forwardPos + 1;
         if (emptySize == 0) {

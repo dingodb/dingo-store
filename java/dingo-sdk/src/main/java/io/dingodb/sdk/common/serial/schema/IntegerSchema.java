@@ -143,6 +143,11 @@ public class IntegerSchema implements DingoSchema<Integer> {
     }
 
     @Override
+    public Integer decodeKeyPrefix(Buf buf) {
+        return decodeKey(buf);
+    }
+
+    @Override
     public void skipKey(Buf buf) {
         buf.skip(getLength());
     }

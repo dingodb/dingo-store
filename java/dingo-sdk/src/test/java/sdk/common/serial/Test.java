@@ -109,6 +109,26 @@ public class Test {
         System.out.println("Stage3 : " + (tag6 - tag5));
     }
 
+    public static void testDecodeKeyPrefix() {
+        List<DingoSchema> table = getTable();
+        RecordEncoder re = new RecordEncoder(0, table, 0L);
+        RecordDecoder rd = new RecordDecoder(0, table, 0L);
+
+        Object[] record = new Object[12];
+        record[0] = 1;
+        record[1] = "test address test 中文 表情\uD83D\uDE0A\uD83C\uDFF7️\uD83D\uDC4C test 测试测试测试三" +
+                "\uD83E\uDD23\uD83D\uDE02\uD83D\uDE01\uD83D\uDC31\u200D\uD83D\uDC09\uD83D\uDC4F\uD83D\uDC31" +
+                "\u200D\uD83D\uDCBB✔\uD83E\uDD33\uD83E\uDD26\u200D♂️\uD83E\uDD26\u200D♀️\uD83D\uDE4C" +
+                "测试测试测试伍佰肆拾陆万伍仟陆佰伍拾肆元/n/r/r/ndfs肥肉士大夫";
+        record[2] = "f";
+
+
+        byte[] keyPrefix = re.encodeKeyPrefix(record, 3);
+        Object[] keyFromPrefix = rd.decodeKeyPrefix(keyPrefix);
+        System.out.println(keyFromPrefix);
+
+    }
+
     private static List<DingoSchema> getTable() {
         DingoSchema id = new IntegerSchema();
         id.setIndex(0);

@@ -154,6 +154,11 @@ public class LongSchema implements DingoSchema<Long> {
     }
 
     @Override
+    public Long decodeKeyPrefix(Buf buf) {
+        return decodeKey(buf);
+    }
+
+    @Override
     public void skipKey(Buf buf) {
         buf.skip(getLength());
     }

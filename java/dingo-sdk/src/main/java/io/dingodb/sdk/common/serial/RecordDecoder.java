@@ -88,6 +88,23 @@ public class RecordDecoder {
         return record;
     }
 
+    public Object[] decodeKeyPrefix(byte[] keyPrefix) {
+        Buf keyPrefixBuf = new BufImpl(keyPrefix);
+        if (keyPrefixBuf.readLong() != commonId) {
+            throw new RuntimeException("Wrong Common Id");
+        }
+        Object[] record = new Object[schemas.size()];
+        for (DingoSchema schema : schemas) {
+            if (keyPrefixBuf.isEnd()) {
+                break;
+            }
+            if (schema.isKey()) {
+                record[schema.getIndex()] = schema.decodeKeyPrefix(keyPrefixBuf);
+            }
+        }
+        return record;
+    }
+
     public Object[] decodeValue(KeyValue keyValue, int[] columnIndexes) {
         Buf valueBuf = new BufImpl(keyValue.getValue());
         if (valueBuf.readInt() != schemaVersion) {

@@ -55,6 +55,11 @@ public class DingoKeyValueCodec implements KeyValueCodec {
     }
 
     @Override
+    public Object[] decodeKeyPrefix(byte[] keyPrefix) throws IOException {
+        return (Object[]) type.convertFrom(rd.decodeKeyPrefix(keyPrefix), DingoConverter.INSTANCE);
+    }
+
+    @Override
     public KeyValue encode(Object @NonNull [] record) throws IOException {
         Object[] converted = (Object[]) type.convertTo(record, DingoConverter.INSTANCE);
         return re.encode(converted);

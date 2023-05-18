@@ -24,6 +24,8 @@ import java.io.IOException;
 public interface KeyValueCodec {
     Object[] decode(KeyValue keyValue) throws IOException;
 
+    Object[] decodeKeyPrefix(byte[] keyPrefix) throws IOException;
+
     KeyValue encode(Object @NonNull [] record) throws IOException;
 
     byte[] encodeKey(Object[] record) throws IOException;
