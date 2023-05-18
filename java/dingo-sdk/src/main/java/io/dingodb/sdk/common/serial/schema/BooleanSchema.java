@@ -137,6 +137,11 @@ public class BooleanSchema implements DingoSchema<Boolean> {
         return internalDecodeData(buf);
     }
 
+    @Override
+    public Boolean decodeKeyPrefix(Buf buf) {
+        return decodeKey(buf);
+    }
+
     private Boolean internalDecodeData(Buf buf) {
         return buf.read() == (byte) 0 ? false : true;
     }

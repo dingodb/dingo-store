@@ -175,6 +175,11 @@ public class DoubleSchema implements DingoSchema<Double> {
     }
 
     @Override
+    public Double decodeKeyPrefix(Buf buf) {
+        return decodeKey(buf);
+    }
+
+    @Override
     public void skipKey(Buf buf) {
         buf.skip(getLength());
     }

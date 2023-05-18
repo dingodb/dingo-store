@@ -163,6 +163,11 @@ public class FloatSchema implements DingoSchema<Float> {
     }
 
     @Override
+    public Float decodeKeyPrefix(Buf buf) {
+        return decodeKey(buf);
+    }
+
+    @Override
     public void skipKey(Buf buf) {
         buf.skip(getLength());
     }

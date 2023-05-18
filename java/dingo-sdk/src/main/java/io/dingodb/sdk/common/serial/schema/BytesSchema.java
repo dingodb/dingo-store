@@ -169,6 +169,42 @@ public class BytesSchema implements DingoSchema<byte[]> {
         return internalReadBytes(buf);
     }
 
+    @Override
+    public byte[] decodeKeyPrefix(Buf buf) {
+        if (allowNull) {
+            if (buf.read() == NULL) {
+                return null;
+            }
+        }
+        return internalReadKeyPrefixBytes(buf);
+    }
+
+    private byte[] internalReadKeyPrefixBytes(Buf buf) {
+        int length = 0;
+        do {
+            length += 9;
+            buf.skip(8);
+        } while(buf.read() == (byte) 255);
+        int groupNum = length / 9;
+        buf.skip(-1);
+        int reminderZero = 255 - buf.read() & 0xFF;
+        buf.skip(0 - length);
+        int oriLength = groupNum * 8 - reminderZero;
+        byte[] data = new byte[oriLength];
+        if (oriLength != 0) {
+            groupNum --;
+            for (int i = 0; i < groupNum; i++) {
+                buf.read(data, 8 * i, 8);
+                buf.skip(1);
+            }
+            if (reminderZero != 8) {
+                buf.read(data, 8 * groupNum, 8 - reminderZero);
+            }
+        }
+        buf.skip(reminderZero + 1);
+        return data;
+    }
+
     private byte[] internalReadBytes(Buf buf) {
         int length = buf.reverseReadInt();
         int groupNum = length / 9;

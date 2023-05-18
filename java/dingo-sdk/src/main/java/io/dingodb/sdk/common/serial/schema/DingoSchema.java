@@ -42,6 +42,7 @@ public interface DingoSchema<T> {
     void encodeKey(Buf buf, T data);
     void encodeKeyForUpdate(Buf buf, T data);
     T decodeKey(Buf buf);
+    T decodeKeyPrefix(Buf buf);
     void skipKey(Buf buf);
 
     void encodeKeyPrefix(Buf buf, T data);

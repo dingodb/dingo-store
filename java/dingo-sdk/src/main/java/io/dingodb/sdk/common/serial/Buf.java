@@ -41,5 +41,7 @@ public interface Buf {
     void ensureRemainder(int length);
     void resize(int oldSize, int newSize);
 
+    boolean isEnd();
+
     byte[] getBytes();
 }
