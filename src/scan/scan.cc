@@ -20,19 +20,18 @@
 #include <utility>
 #include <vector>
 
+#include "bthread/bthread.h"
 #include "bthread/mutex.h"
 #include "butil/compiler_specific.h"
 #include "butil/macros.h"
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "coprocessor/utils.h"
 #include "engine/write_data.h"
 #include "fmt/core.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
-#if defined(ENABLE_SCAN_OPTIMIZATION)
-#include "bthread/bthread.h"
-#endif
 
 namespace dingodb {
 
@@ -55,11 +54,12 @@ ScanContext::ScanContext()
       iter_(nullptr),
       is_already_call_start_(false),
       last_time_ms_()
-#if defined(ENABLE_SCAN_OPTIMIZATION)
+
       ,
       seek_state_(SeekState::kUninit)
-#endif
-{
+
+      ,
+      disable_coprocessor_(true) {
   bthread_mutex_init(&mutex_, nullptr);
 }
 ScanContext::~ScanContext() { Close(); }
@@ -114,6 +114,7 @@ void ScanContext::Close() {
   iter_ = nullptr;
   is_already_call_start_ = false;
   last_time_ms_.zero();
+  coprocessor_.reset();
   bthread_mutex_destroy(&mutex_);
 }
 
@@ -131,10 +132,20 @@ void ScanContext::GetKeyValue(std::vector<pb::common::KeyValue>& kvs) {
     is_already_call_start_ = true;
   }
 
-  pb::common::KeyValue kv;
+  if (!disable_coprocessor_) {
+    butil::Status status;
+    status = coprocessor_->Execute(iter_, key_only_, std::min(max_fetch_cnt_, max_fetch_cnt_by_server_), max_bytes_rpc_,
+                                   &kvs);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << fmt::format("Coprocessor::Execute failed");
+    }
+    return;
+  }
 
-  uint64_t already_bytes = 0;
-  for (uint64_t i = 0; iter_->HasNext() && i < max_fetch_cnt_ && i < max_fetch_cnt_by_server_; i++, iter_->Next()) {
+  ScanFilter scan_filter = ScanFilter(key_only_, std::min(max_fetch_cnt_, max_fetch_cnt_by_server_), max_bytes_rpc_);
+
+  while (iter_->HasNext()) {
+    pb::common::KeyValue kv;
     std::string key;
     std::string value;
     if (key_only_) {
@@ -144,24 +155,22 @@ void ScanContext::GetKeyValue(std::vector<pb::common::KeyValue>& kvs) {
       iter_->GetKV(key, value);
     }
 
-    already_bytes += kv.key().size();
-    if (!key_only_) {
-      already_bytes += kv.value().size();
-    }
-    if (already_bytes >= max_bytes_rpc_) {
-      break;
-    }
-
     kv.set_key(std::move(key));
     if (!key_only_) {
       kv.set_value(std::move(value));
     }
-    kvs.emplace_back(std::move(kv));
+
+    kvs.emplace_back(kv);
+    if (scan_filter.UptoLimit(kv)) {
+      iter_->Next();
+      break;
+    }
     kv.Clear();
+
+    iter_->Next();
   }
 }
 
-#if defined(ENABLE_SCAN_OPTIMIZATION)
 butil::Status ScanContext::AsyncWork() {
   auto lambda_call = [this]() {
     BAIDU_SCOPED_LOCK(mutex_);
@@ -214,7 +223,6 @@ butil::Status ScanContext::SeekCheck() {
   }
   return butil::Status();
 }
-#endif
 
 bool ScanContext::IsRecyclable() {
   bool ret = false;
@@ -245,7 +253,19 @@ bool ScanContext::IsRecyclable() {
 
 butil::Status ScanHandler::ScanBegin(std::shared_ptr<ScanContext> context, uint64_t region_id,
                                      const pb::common::Range& range, uint64_t max_fetch_cnt, bool key_only,
-                                     bool disable_auto_release, std::vector<pb::common::KeyValue>* kvs) {
+                                     bool disable_auto_release, bool disable_coprocessor,
+                                     const pb::store::Coprocessor& coprocessor,
+                                     std::vector<pb::common::KeyValue>* kvs) {
+  if (BAIDU_UNLIKELY(range.start_key().empty() || range.end_key().empty())) {
+    DINGO_LOG(ERROR) << fmt::format("start_key or end_key empty not support");
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
+  }
+
+  if (BAIDU_UNLIKELY(range.start_key() >= range.end_key())) {
+    DINGO_LOG(ERROR) << fmt::format("range wrong");
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
+  }
+
   BAIDU_SCOPED_LOCK(context->mutex_);
   if (ScanState::kOpened != context->state_) {
     context->state_ = ScanState::kError;
@@ -261,6 +281,23 @@ butil::Status ScanHandler::ScanBegin(std::shared_ptr<ScanContext> context, uint6
   context->key_only_ = key_only;
   context->disable_auto_release_ = disable_auto_release;
 
+  // opt if coprocessor all empty. set disable_coprocessor = true
+  if (!disable_coprocessor) {
+    if (Utils::CoprocessorParamEmpty(coprocessor)) {
+      context->disable_coprocessor_ = true;
+    } else {
+      context->disable_coprocessor_ = disable_coprocessor;
+      if (!context->disable_coprocessor_) {
+        context->coprocessor_ = std::make_shared<Coprocessor>();
+        butil::Status status = context->coprocessor_->Open(coprocessor);
+        if (!status.ok()) {
+          DINGO_LOG(ERROR) << fmt::format("Coprocessor::Open failed");
+          return status;
+        }
+      }
+    }
+  }
+
   std::shared_ptr<RawEngine::Reader> reader = context->engine_->NewReader(context->cf_name_);
 
   context->iter_ = reader->NewIterator(context->range_.start_key(), context->range_.end_key());
@@ -273,18 +310,17 @@ butil::Status ScanHandler::ScanBegin(std::shared_ptr<ScanContext> context, uint6
 
   if (context->max_fetch_cnt_ > 0) {
     context->GetKeyValue(*kvs);
-#if defined(ENABLE_SCAN_OPTIMIZATION)
+
     context->seek_state_ = ScanContext::SeekState::kInitted;
-#endif
+
   }
-#if defined(ENABLE_SCAN_OPTIMIZATION)
+
   else {  // NOLINT
     butil::Status s = context->AsyncWork();
     if (!s.ok()) {
       return s;
     }
   }
-#endif
 
   context->state_ = ScanState::kBegun;
 
@@ -305,9 +341,7 @@ butil::Status ScanHandler::ScanContinue(std::shared_ptr<ScanContext> context, co
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "max_fetch_cnt == 0");
   }
 
-#if defined(ENABLE_SCAN_OPTIMIZATION)
   context->WaitForReady();
-#endif
 
   BAIDU_SCOPED_LOCK(context->mutex_);
   if (ScanState::kBegun != context->state_ && ScanState::kContinued != context->state_) {
@@ -316,14 +350,12 @@ butil::Status ScanHandler::ScanContinue(std::shared_ptr<ScanContext> context, co
     return butil::Status(pb::error::EINTERNAL, "Internal error : wrong state");
   }
 
-#if defined(ENABLE_SCAN_OPTIMIZATION)
   butil::Status s = context->SeekCheck();
   if (!s.ok()) {
     DINGO_LOG(ERROR) << fmt::format("ScanHandler::ScanContinue SeekCheck  failed  state wrong : {}",
                                     static_cast<int>(context->seek_state_));
     return butil::Status(pb::error::EINTERNAL, "Internal error : wrong state");
   }
-#endif
 
   context->max_fetch_cnt_ = max_fetch_cnt;
 
@@ -344,9 +376,7 @@ butil::Status ScanHandler::ScanRelease(std::shared_ptr<ScanContext> context,
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "scan_id is empty");
   }
 
-#if defined(ENABLE_SCAN_OPTIMIZATION)
   context->WaitForReady();
-#endif
 
   BAIDU_SCOPED_LOCK(context->mutex_);
   if (ScanState::kBegun != context->state_ && ScanState::kContinued != context->state_) {
@@ -355,14 +385,12 @@ butil::Status ScanHandler::ScanRelease(std::shared_ptr<ScanContext> context,
     return butil::Status(pb::error::EINTERNAL, "Internal error : wrong state");
   }
 
-#if defined(ENABLE_SCAN_OPTIMIZATION)
   butil::Status s = context->SeekCheck();
   if (!s.ok()) {
     DINGO_LOG(ERROR) << fmt::format("ScanHandler::ScanContinue SeekCheck  failed  state wrong : {}",
                                     static_cast<int>(context->seek_state_));
     return butil::Status(pb::error::EINTERNAL, "Internal error : wrong state");
   }
-#endif
 
   context->state_ = ScanState::kReleasing;
 

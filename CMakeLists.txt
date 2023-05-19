@@ -201,6 +201,9 @@ file(GLOB METRICS_SRCS ${PROJECT_SOURCE_DIR}/src/metrics/*.cc)
 file(GLOB VERSION_SRCS ${PROJECT_SOURCE_DIR}/src/common/version.cc)
 file(GLOB SERIAL1_SRCS ${PROJECT_SOURCE_DIR}/src/serial/*.cc)
 file(GLOB SERIAL2_SRCS ${PROJECT_SOURCE_DIR}/src/serial/schema/*.cc)
+file(GLOB EXPR_SRCS ${PROJECT_SOURCE_DIR}/src/expr/*.cc)
+file(GLOB EXPR_CALC_SRCS ${PROJECT_SOURCE_DIR}/src/expr/calc/*.cc)
+file(GLOB COPROCESSOR_SRCS ${PROJECT_SOURCE_DIR}/src/coprocessor/*.cc)
 
 list(REMOVE_ITEM SERVER_SRCS "${PROJECT_SOURCE_DIR}/src/server/main.cc")
 
@@ -221,7 +224,11 @@ add_library(DINGODB_OBJS
             ${SCAN_SRCS}
             ${METRICS_SRCS}
             ${SERIAL1_SRCS}
-            ${SERIAL2_SRCS})
+            ${SERIAL2_SRCS}
+            ${COPROCESSOR_SRCS}
+            ${EXPR_SRCS}
+            ${EXPR_CALC_SRCS}
+            )
 
 # bin output dir
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin)

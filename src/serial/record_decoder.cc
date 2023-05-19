@@ -127,6 +127,76 @@ int RecordDecoder::Decode(const std::string& key, const std::string& value, std:
   return 0;
 }
 
+int RecordDecoder::DecodeKey(const std::string& key, std::vector<std::any>& record /*output*/) {
+  Buf* key_buf = new Buf(key, this->le_);
+
+  if (key_buf->ReadLong() != common_id_) {
+    //"Wrong Common Id"
+    return -1;
+  }
+
+  if (key_buf->ReverseReadInt() != codec_version_) {
+    //"Wrong Codec Version"
+    return -1;
+  }
+
+  record.resize(schemas_->size());
+  for (const auto& bs : *schemas_) {
+    if (bs) {
+      BaseSchema::Type type = bs->GetType();
+      switch (type) {
+        case BaseSchema::kBool: {
+          auto bos = std::dynamic_pointer_cast<DingoSchema<std::optional<bool>>>(bs);
+          if (bos->IsKey()) {
+            record.at(bos->GetIndex()) = bos->DecodeKey(key_buf);
+          }
+          break;
+        }
+        case BaseSchema::kInteger: {
+          auto is = std::dynamic_pointer_cast<DingoSchema<std::optional<int32_t>>>(bs);
+          if (is->IsKey()) {
+            record.at(is->GetIndex()) = is->DecodeKey(key_buf);
+          }
+          break;
+        }
+        case BaseSchema::kFloat: {
+          auto fs = std::dynamic_pointer_cast<DingoSchema<std::optional<float>>>(bs);
+          if (fs->IsKey()) {
+            record.at(fs->GetIndex()) = fs->DecodeKey(key_buf);
+          }
+          break;
+        }
+        case BaseSchema::kLong: {
+          auto ls = std::dynamic_pointer_cast<DingoSchema<std::optional<int64_t>>>(bs);
+          if (ls->IsKey()) {
+            record.at(ls->GetIndex()) = ls->DecodeKey(key_buf);
+          }
+          break;
+        }
+        case BaseSchema::kDouble: {
+          auto ds = std::dynamic_pointer_cast<DingoSchema<std::optional<double>>>(bs);
+          if (ds->IsKey()) {
+            record.at(ds->GetIndex()) = ds->DecodeKey(key_buf);
+          }
+          break;
+        }
+        case BaseSchema::kString: {
+          auto ss = std::dynamic_pointer_cast<DingoSchema<std::optional<std::shared_ptr<std::string>>>>(bs);
+          if (ss->IsKey()) {
+            record.at(ss->GetIndex()) = ss->DecodeKey(key_buf);
+          }
+          break;
+        }
+        default: {
+          break;
+        }
+      }
+    }
+  }
+  delete key_buf;
+  return 0;
+}
+
 int RecordDecoder::Decode(const KeyValue& key_value, std::vector<std::any>& record) {
   return Decode(*key_value.GetKey(), *key_value.GetValue(), record);
 }

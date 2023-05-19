@@ -177,41 +177,41 @@ TEST_F(ScanTest, ScanBegin) {
   std::vector<pb::common::KeyValue> kvs;
 
   // range empty
-  ok = ScanHandler::ScanBegin(scan, region_id, range, max_fetch_cnt, key_only, disable_auto_release, &kvs);
+  ok = ScanHandler::ScanBegin(scan, region_id, range, max_fetch_cnt, key_only, disable_auto_release, true, {}, &kvs);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
 
   range.set_start_key("keyAAA");
   range.set_end_key("keyAAA");
 
   // range value failed
-  ok = ScanHandler::ScanBegin(scan, 0, range, max_fetch_cnt, key_only, disable_auto_release, &kvs);
+  ok = ScanHandler::ScanBegin(scan, 0, range, max_fetch_cnt, key_only, disable_auto_release, true, {}, &kvs);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
 
   range.set_start_key("keyAAA");
   range.set_end_key("keyAAA");
 
   // range value failed
-  ok = ScanHandler::ScanBegin(scan, 0, range, max_fetch_cnt, key_only, disable_auto_release, &kvs);
+  ok = ScanHandler::ScanBegin(scan, 0, range, max_fetch_cnt, key_only, disable_auto_release, true, {}, &kvs);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
 
   range.set_start_key("keyAAA");
   range.set_end_key("keyAAA");
 
   // range value failed
-  ok = ScanHandler::ScanBegin(scan, 0, range, max_fetch_cnt, key_only, disable_auto_release, &kvs);
+  ok = ScanHandler::ScanBegin(scan, 0, range, max_fetch_cnt, key_only, disable_auto_release, true, {}, &kvs);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
 
   range.set_start_key("keyAAA");
   range.set_end_key("keyAA");
 
   // range value failed
-  ok = ScanHandler::ScanBegin(scan, 0, range, max_fetch_cnt, key_only, disable_auto_release, &kvs);
+  ok = ScanHandler::ScanBegin(scan, 0, range, max_fetch_cnt, key_only, disable_auto_release, true, {}, &kvs);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
 
   range.set_start_key("keyAAA");
   range.set_end_key("keyAAC");
   // ok
-  ok = ScanHandler::ScanBegin(scan, region_id, range, max_fetch_cnt, key_only, disable_auto_release, &kvs);
+  ok = ScanHandler::ScanBegin(scan, region_id, range, max_fetch_cnt, key_only, disable_auto_release, false, {}, &kvs);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
   this->DeleteScan();
@@ -369,10 +369,10 @@ TEST_F(ScanTest, ScanBeginEqual) {
   std::vector<pb::common::KeyValue> kvs;
 
   range.set_start_key("keyAAA");
-  range.set_end_key("keyAAA");
+  range.set_end_key("keyAAB");
 
   // ok
-  ok = ScanHandler::ScanBegin(scan, region_id, range, max_fetch_cnt, key_only, disable_auto_release, &kvs);
+  ok = ScanHandler::ScanBegin(scan, region_id, range, max_fetch_cnt, key_only, disable_auto_release, true, {}, &kvs);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
   for (const auto &kv : kvs) {
@@ -410,10 +410,10 @@ TEST_F(ScanTest, ScanBeginOthers) {
     std::vector<pb::common::KeyValue> kvs;
 
     range.set_start_key("keyAA");
-    range.set_end_key("keyAA");
+    range.set_end_key("keyAB");
 
     // ok
-    ok = ScanHandler::ScanBegin(scan, region_id, range, max_fetch_cnt, key_only, disable_auto_release, &kvs);
+    ok = ScanHandler::ScanBegin(scan, region_id, range, max_fetch_cnt, key_only, disable_auto_release, true, {}, &kvs);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
     for (const auto &kv : kvs) {
@@ -453,7 +453,7 @@ TEST_F(ScanTest, ScanBeginOthers) {
     range.set_end_key("keyABB");
 
     // ok
-    ok = ScanHandler::ScanBegin(scan, region_id, range, max_fetch_cnt, key_only, disable_auto_release, &kvs);
+    ok = ScanHandler::ScanBegin(scan, region_id, range, max_fetch_cnt, key_only, disable_auto_release, true, {}, &kvs);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
     for (const auto &kv : kvs) {
@@ -495,16 +495,16 @@ TEST_F(ScanTest, ScanBeginOthers) {
     range.set_end_key("keyABB");
 
     // ok
-    ok = ScanHandler::ScanBegin(scan, region_id, range, max_fetch_cnt, key_only, disable_auto_release, &kvs);
+    ok = ScanHandler::ScanBegin(scan, region_id, range, max_fetch_cnt, key_only, disable_auto_release, true, {}, &kvs);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
     for (const auto &kv : kvs) {
       std::cout << kv.key() << ":" << kv.value() << std::endl;
     }
 
-    EXPECT_EQ(kvs.size(), 2);
-    EXPECT_EQ(kvs[0].key(), "keyAB");
-    EXPECT_EQ(kvs[1].key(), "keyAB0");
+    EXPECT_EQ(kvs.size(), 6);
+    EXPECT_EQ(kvs[0].key(), "keyAA");
+    EXPECT_EQ(kvs[1].key(), "keyAA0");
 
     this->DeleteScan();
   }
@@ -533,18 +533,18 @@ TEST_F(ScanTest, ScanBeginOthers) {
     range.set_end_key("keyABB");
 
     // ok
-    ok = ScanHandler::ScanBegin(scan, region_id, range, max_fetch_cnt, key_only, disable_auto_release, &kvs);
+    ok = ScanHandler::ScanBegin(scan, region_id, range, max_fetch_cnt, key_only, disable_auto_release, true, {}, &kvs);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
     for (const auto &kv : kvs) {
       std::cout << kv.key() << ":" << kv.value() << std::endl;
     }
 
-    EXPECT_EQ(kvs.size(), 4);
-    EXPECT_EQ(kvs[0].key(), "keyAB");
-    EXPECT_EQ(kvs[1].key(), "keyAB0");
-    EXPECT_EQ(kvs[2].key(), "keyABB");
-    EXPECT_EQ(kvs[3].key(), "keyABB0");
+    EXPECT_EQ(kvs.size(), 6);
+    EXPECT_EQ(kvs[0].key(), "keyAA");
+    EXPECT_EQ(kvs[1].key(), "keyAA0");
+    EXPECT_EQ(kvs[2].key(), "keyAAA");
+    EXPECT_EQ(kvs[3].key(), "keyAAA0");
 
     this->DeleteScan();
   }
@@ -573,22 +573,20 @@ TEST_F(ScanTest, ScanBeginOthers) {
     range.set_end_key("keyABB");
 
     // ok
-    ok = ScanHandler::ScanBegin(scan, region_id, range, max_fetch_cnt, key_only, disable_auto_release, &kvs);
+    ok = ScanHandler::ScanBegin(scan, region_id, range, max_fetch_cnt, key_only, disable_auto_release, true, {}, &kvs);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
     for (const auto &kv : kvs) {
       std::cout << kv.key() << ":" << kv.value() << std::endl;
     }
 
-    EXPECT_EQ(kvs.size(), 8);
+    EXPECT_EQ(kvs.size(), 6);
     EXPECT_EQ(kvs[0].key(), "keyAA");
     EXPECT_EQ(kvs[1].key(), "keyAA0");
     EXPECT_EQ(kvs[2].key(), "keyAAA");
     EXPECT_EQ(kvs[3].key(), "keyAAA0");
     EXPECT_EQ(kvs[4].key(), "keyAB");
     EXPECT_EQ(kvs[5].key(), "keyAB0");
-    EXPECT_EQ(kvs[6].key(), "keyABB");
-    EXPECT_EQ(kvs[7].key(), "keyABB0");
 
     this->DeleteScan();
   }
@@ -624,7 +622,7 @@ TEST_F(ScanTest, ScanBeginNormal) {
   range.set_end_key("keyZZ");
 
   // ok
-  ok = ScanHandler::ScanBegin(scan, region_id, range, max_fetch_cnt, key_only, disable_auto_release, &kvs);
+  ok = ScanHandler::ScanBegin(scan, region_id, range, max_fetch_cnt, key_only, disable_auto_release, true, {}, &kvs);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
   for (const auto &kv : kvs) {
@@ -745,7 +743,7 @@ TEST_F(ScanTest, scan) {
   range.set_end_key("keyZZ");
 
   // ok
-  ok = ScanHandler::ScanBegin(scan, region_id, range, max_fetch_cnt, key_only, disable_auto_release, &kvs);
+  ok = ScanHandler::ScanBegin(scan, region_id, range, max_fetch_cnt, key_only, disable_auto_release, true, {}, &kvs);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
   for (const auto &kv : kvs) {

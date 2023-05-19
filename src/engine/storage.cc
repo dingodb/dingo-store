@@ -118,7 +118,8 @@ butil::Status Storage::KvDeleteRange(std::shared_ptr<Context> ctx, const pb::com
 
 butil::Status Storage::KvScanBegin([[maybe_unused]] std::shared_ptr<Context> ctx, const std::string& cf_name,
                                    uint64_t region_id, const pb::common::Range& range, uint64_t max_fetch_cnt,
-                                   bool key_only, bool disable_auto_release, std::string* scan_id,
+                                   bool key_only, bool disable_auto_release, bool disable_coprocessor,
+                                   const pb::store::Coprocessor& coprocessor, std::string* scan_id,
                                    std::vector<pb::common::KeyValue>* kvs) {
   ScanManager* manager = ScanManager::GetInstance();
   std::shared_ptr<ScanContext> scan = manager->CreateScan(scan_id);
@@ -133,7 +134,8 @@ butil::Status Storage::KvScanBegin([[maybe_unused]] std::shared_ptr<Context> ctx
     return status;
   }
 
-  status = ScanHandler::ScanBegin(scan, region_id, range, max_fetch_cnt, key_only, disable_auto_release, kvs);
+  status = ScanHandler::ScanBegin(scan, region_id, range, max_fetch_cnt, key_only, disable_auto_release,
+                                  disable_coprocessor, coprocessor, kvs);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << fmt::format("ScanContext::ScanBegin failed: {}", *scan_id);
     manager->DeleteScan(*scan_id);

@@ -25,18 +25,12 @@
 #include "bthread/types.h"
 #include "butil/status.h"
 #include "common/context.h"
+#include "coprocessor/coprocessor.h"
 #include "engine/raw_engine.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 
 namespace dingodb {
-
-// enable scan optimization switch to speed up scan execution if enabled
-#ifndef ENABLE_SCAN_OPTIMIZATION
-#define ENABLE_SCAN_OPTIMIZATION
-#endif
-
-//#undef ENABLE_SCAN_OPTIMIZATION
 
 enum class ScanState : unsigned char {
   kUninit = 0,
@@ -83,11 +77,10 @@ class ScanContext {
   void Close();
   static std::chrono::milliseconds GetCurrentTime();
   void GetKeyValue(std::vector<pb::common::KeyValue>& kvs);  // NOLINT
-#if defined(ENABLE_SCAN_OPTIMIZATION)
+
   butil::Status AsyncWork();
   void WaitForReady();
   butil::Status SeekCheck();
-#endif
 
   std::string scan_id_;
 
@@ -117,7 +110,6 @@ class ScanContext {
 
   bthread_mutex_t mutex_;
 
-#if defined(ENABLE_SCAN_OPTIMIZATION)
   enum class SeekState : unsigned char {
     kUninit = 0,
     kInitting = 1,
@@ -125,7 +117,11 @@ class ScanContext {
   };
   // default = kUninit
   volatile SeekState seek_state_;
-#endif
+
+  bool disable_coprocessor_;
+
+  // coprocessor
+  std::shared_ptr<Coprocessor> coprocessor_;
 
   // timeout millisecond to destroy
   static uint64_t timeout_ms_;
@@ -149,7 +145,8 @@ class ScanHandler {
 
   static butil::Status ScanBegin(std::shared_ptr<ScanContext> context, uint64_t region_id,
                                  const pb::common::Range& range, uint64_t max_fetch_cnt, bool key_only,
-                                 bool disable_auto_release, std::vector<pb::common::KeyValue>* kvs);
+                                 bool disable_auto_release, bool disable_coprocessor,
+                                 const pb::store::Coprocessor& coprocessor, std::vector<pb::common::KeyValue>* kvs);
 
   static butil::Status ScanContinue(std::shared_ptr<ScanContext> context, const std::string& scan_id,
                                     uint64_t max_fetch_cnt, std::vector<pb::common::KeyValue>* kvs);
