@@ -110,6 +110,7 @@ bool StoreRegionMetrics::Init() {
 }
 
 std::string StoreRegionMetrics::GetRegionMinKey(store::RegionPtr region) {
+  DINGO_LOG(INFO) << "GetRegionMinKey... region: " << region->Id();
   IteratorOptions options;
   auto iter = raw_engine_->NewIterator(Constant::kStoreDataCF, options);
   iter->Seek(region->Range().start_key());
@@ -123,6 +124,7 @@ std::string StoreRegionMetrics::GetRegionMinKey(store::RegionPtr region) {
 }
 
 std::string StoreRegionMetrics::GetRegionMaxKey(store::RegionPtr region) {
+  DINGO_LOG(INFO) << "GetRegionMaxKey... region: " << region->Id();
   IteratorOptions options;
   auto iter = raw_engine_->NewIterator(Constant::kStoreDataCF, options);
   iter->SeekForPrev(region->Range().end_key());
@@ -178,6 +180,7 @@ bool StoreRegionMetrics::CollectMetrics() {
     uint64_t start_time = Helper::TimestampMs();
     // Get min key
     bool is_collect_min_key = false;
+    GetRegionMinKey(region);
     if (region_metrics->NeedUpdateMinKey()) {
       is_collect_min_key = true;
       region_metrics->SetNeedUpdateMinKey(false);
@@ -185,6 +188,7 @@ bool StoreRegionMetrics::CollectMetrics() {
     }
     // Get max key
     bool is_collect_max_key = false;
+    GetRegionMaxKey(region);
     if (region_metrics->NeedUpdateMaxKey()) {
       is_collect_max_key = true;
       region_metrics->SetNeedUpdateMaxKey(false);

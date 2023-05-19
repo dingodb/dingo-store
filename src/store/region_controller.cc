@@ -43,7 +43,7 @@ butil::Status CreateRegionTask::ValidateCreateRegion(std::shared_ptr<StoreMetaMa
                                                      uint64_t region_id) {
   auto region = store_meta_manager->GetStoreRegionMeta()->GetRegion(region_id);
   if (region != nullptr && region->State() != pb::common::StoreRegionState::NEW) {
-    return butil::Status(pb::error::EREGION_ALREADY_EXIST, "Region already exist");
+    return butil::Status(pb::error::EREGION_ALREADY_EXIST, fmt::format("Region {} already exist", region_id));
   }
 
   return butil::Status();
@@ -111,7 +111,7 @@ void CreateRegionTask::Run() {
 
   // Notify coordinator
   if (region_cmd_->is_notify()) {
-    Heartbeat::TriggerStoreHeartbeat(nullptr);
+    Heartbeat::TriggerStoreHeartbeat(region_cmd_->region_id());
   }
 }
 
@@ -213,7 +213,7 @@ void DeleteRegionTask::Run() {
 
   // Notify coordinator
   if (region_cmd_->is_notify()) {
-    Heartbeat::TriggerStoreHeartbeat(nullptr);
+    Heartbeat::TriggerStoreHeartbeat(region_cmd_->region_id());
   }
 }
 
@@ -309,7 +309,7 @@ void SplitRegionTask::Run() {
 
   // Notify coordinator
   if (region_cmd_->is_notify()) {
-    Heartbeat::TriggerStoreHeartbeat(nullptr);
+    Heartbeat::TriggerStoreHeartbeat(region_cmd_->region_id());
   }
 }
 
@@ -389,7 +389,7 @@ void ChangeRegionTask::Run() {
 
   // Notify coordinator
   if (region_cmd_->is_notify()) {
-    Heartbeat::TriggerStoreHeartbeat(nullptr);
+    Heartbeat::TriggerStoreHeartbeat(region_cmd_->region_id());
   }
 }
 
@@ -453,7 +453,7 @@ void TransferLeaderTask::Run() {
 
   // Notify coordinator
   if (region_cmd_->is_notify()) {
-    Heartbeat::TriggerStoreHeartbeat(nullptr);
+    Heartbeat::TriggerStoreHeartbeat(region_cmd_->region_id());
   }
 }
 
@@ -512,7 +512,7 @@ void PurgeRegionTask::Run() {
 
   // Notify coordinator
   if (region_cmd_->is_notify()) {
-    Heartbeat::TriggerStoreHeartbeat(nullptr);
+    Heartbeat::TriggerStoreHeartbeat(region_cmd_->region_id());
   }
 }
 

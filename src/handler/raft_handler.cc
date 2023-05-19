@@ -263,7 +263,7 @@ void SplitHandler::SplitClosure::Run() {
 
   } else {
     store_region_meta->UpdateState(region_, pb::common::StoreRegionState::NORMAL);
-    Heartbeat::TriggerStoreHeartbeat(nullptr);
+    Heartbeat::TriggerStoreHeartbeat(region_->Id());
   }
 }
 
@@ -320,7 +320,7 @@ void SplitHandler::Handle(std::shared_ptr<Context>, store::RegionPtr from_region
   std::shared_ptr<Context> to_ctx = std::make_shared<Context>();
   to_ctx->SetDone(new SplitHandler::SplitClosure(to_region, true));
   engine->DoSnapshot(to_ctx, to_region->Id());
-  Heartbeat::TriggerStoreHeartbeat(nullptr);
+  Heartbeat::TriggerStoreHeartbeat(to_region->Id());
 
   // Update region metrics min/max key policy
   if (region_metrics != nullptr) {

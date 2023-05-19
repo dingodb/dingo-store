@@ -44,7 +44,9 @@ DEFINE_int32(store_heartbeat_timeout, 30, "store heartbeat timeout in seconds");
 DEFINE_int32(region_heartbeat_timeout, 30, "region heartbeat timeout in seconds");
 DEFINE_int32(region_delete_after_deleted_time, 60, "delete region after deleted time in seconds");
 
-void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> coordinator_interaction) {
+void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> coordinator_interaction,
+                                       uint64_t region_id) {
+  auto start_time = Helper::TimestampMs();
   auto engine = Server::GetInstance()->GetEngine();
   auto raft_kv_engine =
       (engine->GetID() == pb::common::ENG_RAFT_STORE) ? std::dynamic_pointer_cast<RaftKvEngine>(engine) : nullptr;
@@ -67,7 +69,14 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
 
   auto* mut_region_metrics_map = mut_store_metrics->mutable_region_metrics_map();
   auto region_metrics = metrics_manager->GetStoreRegionMetrics();
-  auto region_metas = store_meta_manager->GetStoreRegionMeta()->GetAllRegion();
+  std::vector<store::RegionPtr> region_metas;
+  if (region_id == 0) {
+    mut_store_metrics->set_is_contain_all_region(false);
+    region_metas = store_meta_manager->GetStoreRegionMeta()->GetAllRegion();
+  } else {
+    mut_store_metrics->set_is_contain_all_region(true);
+    region_metas.push_back(store_meta_manager->GetStoreRegionMeta()->GetRegion(region_id));
+  }
   for (const auto& region : region_metas) {
     pb::common::RegionMetrics tmp_region_metrics;
     auto metrics = region_metrics->GetMetrics(region->Id());
@@ -95,6 +104,9 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
   }
 
   DINGO_LOG(DEBUG) << "StoreHeartbeat request: " << request.ShortDebugString();
+  DINGO_LOG(INFO) << "StoreHeartbeatRequest size: " << request.ByteSizeLong()
+                  << " used time: " << Helper::TimestampMs() - start_time;
+  start_time = Helper::TimestampMs();
   pb::coordinator::StoreHeartbeatResponse response;
   auto status = coordinator_interaction->SendRequest("StoreHeartbeat", request, response);
   if (!status.ok()) {
@@ -102,6 +114,9 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
                                       pb::error::Errno_Name(status.error_code()), status.error_str());
     return;
   }
+
+  DINGO_LOG(INFO) << "StoreHeartbeatResponse size: " << response.ByteSizeLong()
+                  << " used time: " << Helper::TimestampMs() - start_time;
 
   HeartbeatTask::HandleStoreHeartbeatResponse(store_meta_manager, response);
 }
@@ -627,6 +642,7 @@ bool Heartbeat::Execute(TaskRunnable* task) {
     DINGO_LOG(ERROR) << "Heartbeat execute queue is not init.";
     return false;
   }
+
   if (bthread::execution_queue_execute(queue_id_, task) != 0) {
     DINGO_LOG(ERROR) << "heartbeat execution queue execute failed";
     return false;
@@ -635,9 +651,9 @@ bool Heartbeat::Execute(TaskRunnable* task) {
   return true;
 }
 
-void Heartbeat::TriggerStoreHeartbeat(void*) {
+void Heartbeat::TriggerStoreHeartbeat(uint64_t region_id) {
   // Free at ExecuteRoutine()
-  TaskRunnable* task = new HeartbeatTask(Server::GetInstance()->GetCoordinatorInteraction());
+  TaskRunnable* task = new HeartbeatTask(Server::GetInstance()->GetCoordinatorInteraction(), region_id);
   Server::GetInstance()->GetHeartbeat()->Execute(task);
 }
 

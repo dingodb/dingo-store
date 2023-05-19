@@ -323,6 +323,7 @@ message StoreMetrics {
   // the key of the map is region_id,  the value is RegionMetrics
   // this map contains all region's metrics include follower on this store
   map<uint64, dingodb.pb.common.RegionMetrics> region_metrics_map = 4;
+  bool is_contain_all_region = 5;  // true: region_metrics_map contain all region, or just part region.
 }
 
 // CoordinatorServiceType

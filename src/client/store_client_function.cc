@@ -112,6 +112,29 @@ void SendKvBatchPutIfAbsent(ServerInteractionPtr interaction, uint64_t region_id
   interaction->SendRequest("StoreService", "KvBatchPutIfAbsent", request, response);
 }
 
+void SendKvBatchDelete(ServerInteractionPtr interaction, uint64_t region_id, const std::string& key) {
+  dingodb::pb::store::KvBatchDeleteRequest request;
+  dingodb::pb::store::KvBatchDeleteResponse response;
+
+  request.set_region_id(region_id);
+  request.add_keys(key);
+
+  interaction->SendRequest("StoreService", "KvBatchDelete", request, response);
+}
+
+void SendKvDeleteRange(ServerInteractionPtr interaction, uint64_t region_id, const std::string& prefix) {
+  dingodb::pb::store::KvDeleteRangeRequest request;
+  dingodb::pb::store::KvDeleteRangeResponse response;
+
+  request.set_region_id(region_id);
+  request.mutable_range()->mutable_range()->set_start_key(prefix);
+  request.mutable_range()->mutable_range()->set_end_key(dingodb::Helper::PrefixNext(prefix));
+  request.mutable_range()->set_with_start(true);
+  request.mutable_range()->set_with_end(false);
+
+  interaction->SendRequest("StoreService", "KvDeleteRange", request, response);
+}
+
 dingodb::pb::common::RegionDefinition BuildRegionDefinition(uint64_t region_id, const std::string& raft_group,
                                                             std::vector<std::string>& raft_addrs,
                                                             const std::string& start_key, const std::string& end_key) {

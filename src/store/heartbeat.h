@@ -16,6 +16,7 @@
 #define DINGODB_SERVER_HEARTBEAT_H_
 
 #include <atomic>
+#include <cstdint>
 #include <memory>
 
 #include "brpc/channel.h"
@@ -33,16 +34,19 @@ namespace dingodb {
 class HeartbeatTask : public TaskRunnable {
  public:
   HeartbeatTask(std::shared_ptr<CoordinatorInteraction> coordinator_interaction)
-      : coordinator_interaction_(coordinator_interaction) {}
+      : region_id_(0), coordinator_interaction_(coordinator_interaction) {}
+  HeartbeatTask(std::shared_ptr<CoordinatorInteraction> coordinator_interaction, uint64_t region_id)
+      : region_id_(region_id), coordinator_interaction_(coordinator_interaction) {}
   ~HeartbeatTask() override = default;
 
-  void Run() override { SendStoreHeartbeat(coordinator_interaction_); }
+  void Run() override { SendStoreHeartbeat(coordinator_interaction_, region_id_); }
 
-  static void SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> coordinator_interaction);
+  static void SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> coordinator_interaction, uint64_t region_id);
   static void HandleStoreHeartbeatResponse(std::shared_ptr<StoreMetaManager> store_meta,
                                            const pb::coordinator::StoreHeartbeatResponse& response);
 
  private:
+  uint64_t region_id_;
   std::shared_ptr<CoordinatorInteraction> coordinator_interaction_;
 };
 
@@ -127,7 +131,7 @@ class Heartbeat {
   bool Init();
   void Destroy();
 
-  static void TriggerStoreHeartbeat(void*);
+  static void TriggerStoreHeartbeat(uint64_t region_id);
   static void TriggerCoordinatorPushToStore(void*);
   static void TriggerCoordinatorUpdateState(void*);
   static void TriggerCoordinatorTaskListProcess(void*);
