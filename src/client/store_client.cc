@@ -157,6 +157,10 @@ void Sender(client::ServerInteractionPtr interaction, const std::string& method,
       client::SendKvPutIfAbsent(interaction, FLAGS_region_id, FLAGS_key);
     } else if (method == "KvBatchPutIfAbsent") {
       client::SendKvBatchPutIfAbsent(interaction, FLAGS_region_id, FLAGS_prefix, 100);
+    } else if (method == "KvBatchDelete") {
+      client::SendKvBatchDelete(interaction, FLAGS_region_id, FLAGS_key);
+    } else if (method == "KvDeleteRange") {
+      client::SendKvDeleteRange(interaction, FLAGS_region_id, FLAGS_prefix);
     }
 
     // Test

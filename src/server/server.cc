@@ -235,7 +235,7 @@ bool Server::InitCrontabManager() {
       return false;
     }
     heartbeat_crontab->interval = heartbeat_interval;
-    heartbeat_crontab->func = Heartbeat::TriggerStoreHeartbeat;
+    heartbeat_crontab->func = [](void*) { Heartbeat::TriggerStoreHeartbeat(0); };
     heartbeat_crontab->arg = nullptr;
 
     crontab_manager_->AddAndRunCrontab(heartbeat_crontab);

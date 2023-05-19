@@ -71,7 +71,7 @@ void SmLeaderStartEventListener::OnEvent(std::shared_ptr<Event> event) {
   }
 
   // trigger heartbeat
-  Heartbeat::TriggerStoreHeartbeat(nullptr);
+  Heartbeat::TriggerStoreHeartbeat(the_event->node_id);
 }
 
 void SmConfigurationCommittedEventListener::OnEvent(std::shared_ptr<Event> event) {
@@ -118,7 +118,7 @@ void SmConfigurationCommittedEventListener::OnEvent(std::shared_ptr<Event> event
     DINGO_LOG(DEBUG) << "Peers have changed, update region definition peer";
     Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->UpdatePeers(region, changed_peers);
     // Notify coordinator
-    Heartbeat::TriggerStoreHeartbeat(nullptr);
+    Heartbeat::TriggerStoreHeartbeat(the_event->node_id);
   }
 }
 

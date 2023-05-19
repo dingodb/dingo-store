@@ -42,22 +42,30 @@ class StoreBvarMetrics {
 
   void UpdateLeaderSwitchTime(std::string region_id) {
     auto* region_stat = leader_switch_time_.get_stats({region_id});
-    region_stat->set_value(Helper::TimestampMs());
+    if (region_stat != nullptr) {
+      region_stat->set_value(Helper::TimestampMs());
+    }
   }
 
   void UpdateLeaderSwitchCount(std::string region_id, uint64_t value) {
     auto* region_stat = leader_switch_count_.get_stats({region_id});
-    region_stat->set_value(value);
+    if (region_stat != nullptr) {
+      region_stat->set_value(value);
+    }
   }
 
   void IncCommitCountPerSecond(std::string region_id) {
     auto* region_stat = commit_count_per_second_.get_stats({region_id});
-    *region_stat << 1;
+    if (region_stat != nullptr) {
+      *region_stat << 1;
+    }
   }
 
   void IncApplyCountPerSecond(std::string region_id) {
     auto* region_stat = apply_count_per_second_.get_stats({region_id});
-    *region_stat << 1;
+    if (region_stat != nullptr) {
+      *region_stat << 1;
+    }
   }
 
  private:

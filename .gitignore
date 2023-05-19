@@ -67,3 +67,5 @@ target/
 
 *.iml
 scripts/local_start_server.sh
+coor_list
+create_table.sh
