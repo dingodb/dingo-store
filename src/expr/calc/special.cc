@@ -12,38 +12,38 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DINGODB_EXPR_OPERATORVECTOR_H_
-#define DINGODB_EXPR_OPERATORVECTOR_H_
-
-#include <vector>
-
-#include "operator.h"
-#include "types.h"
+#include "special.h"
 
 namespace dingodb::expr {
 
-class OperatorVector {
- public:
-  OperatorVector() : m_vector() {}
-  virtual ~OperatorVector() {}
+template <>
+bool CalcIsTrue(const wrap<bool> &v) {
+  return v.has_value() && *v;
+}
 
-  void Decode(const byte code[], size_t len);
+template <>
+bool CalcIsTrue(const wrap<int32_t> &v) {
+  return v.has_value() && *v != 0;
+}
 
-  auto begin() { return m_vector.begin(); }
+template <>
+bool CalcIsTrue(const wrap<int64_t> &v) {
+  return v.has_value() && *v != 0;
+}
 
-  auto end() { return m_vector.end(); }
+template <>
+bool CalcIsFalse(const wrap<bool> &v) {
+  return v.has_value() && !*v;
+}
 
- private:
-  std::vector<Operator> m_vector;
+template <>
+bool CalcIsFalse(const wrap<int32_t> &v) {
+  return v.has_value() && *v != 0;
+}
 
-  void Add(const Operator &op) { m_vector.push_back(op); }
-
-  template <template <typename> class OP>
-  void AddOperatorByType(byte b);
-
-  void AddCastOperator(byte b);
-};
+template <>
+bool CalcIsFalse(const wrap<int64_t> &v) {
+  return v.has_value() && *v != 0;
+}
 
 }  // namespace dingodb::expr
-
-#endif  // DINGODB_EXPR_OPERATORVECTOR_H_

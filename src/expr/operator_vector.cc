@@ -1,38 +1,52 @@
+// Copyright (c) 2023 dingodb.com, Inc. All Rights Reserved
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #include "operator_vector.h"
 
 #include "codec.h"
 
-#define NULL_PREFIX  0x00
-#define NULL_INT32   (NULL_PREFIX | TYPE_INT32)
-#define NULL_INT64   (NULL_PREFIX | TYPE_INT64)
-#define NULL_BOOL    (NULL_PREFIX | TYPE_BOOL)
-#define NULL_FLOAT   (NULL_PREFIX | TYPE_FLOAT)
-#define NULL_DOUBLE  (NULL_PREFIX | TYPE_DOUBLE)
+#define NULL_PREFIX 0x00
+#define NULL_INT32 (NULL_PREFIX | TYPE_INT32)
+#define NULL_INT64 (NULL_PREFIX | TYPE_INT64)
+#define NULL_BOOL (NULL_PREFIX | TYPE_BOOL)
+#define NULL_FLOAT (NULL_PREFIX | TYPE_FLOAT)
+#define NULL_DOUBLE (NULL_PREFIX | TYPE_DOUBLE)
 #define NULL_DECIMAL (NULL_PREFIX | TYPE_DECIMAL)
-#define NULL_STRING  (NULL_PREFIX | TYPE_STRING)
+#define NULL_STRING (NULL_PREFIX | TYPE_STRING)
 
-#define CONST         0x10
-#define CONST_INT32   (CONST | TYPE_INT32)
-#define CONST_INT64   (CONST | TYPE_INT64)
-#define CONST_BOOL    (CONST | TYPE_BOOL)
-#define CONST_FLOAT   (CONST | TYPE_FLOAT)
-#define CONST_DOUBLE  (CONST | TYPE_DOUBLE)
+#define CONST 0x10
+#define CONST_INT32 (CONST | TYPE_INT32)
+#define CONST_INT64 (CONST | TYPE_INT64)
+#define CONST_BOOL (CONST | TYPE_BOOL)
+#define CONST_FLOAT (CONST | TYPE_FLOAT)
+#define CONST_DOUBLE (CONST | TYPE_DOUBLE)
 #define CONST_DECIMAL (CONST | TYPE_DECIMAL)
-#define CONST_STRING  (CONST | TYPE_STRING)
+#define CONST_STRING (CONST | TYPE_STRING)
 
-#define CONST_N       0x20
+#define CONST_N 0x20
 #define CONST_N_INT32 (CONST_N | TYPE_INT32)
 #define CONST_N_INT64 (CONST_N | TYPE_INT64)
-#define CONST_N_BOOL  (CONST_N | TYPE_BOOL)
+#define CONST_N_BOOL (CONST_N | TYPE_BOOL)
 
-#define VAR_I         0x30
-#define VAR_I_INT32   (VAR_I | TYPE_INT32)
-#define VAR_I_INT64   (VAR_I | TYPE_INT64)
-#define VAR_I_BOOL    (VAR_I | TYPE_BOOL)
-#define VAR_I_FLOAT   (VAR_I | TYPE_FLOAT)
-#define VAR_I_DOUBLE  (VAR_I | TYPE_DOUBLE)
+#define VAR_I 0x30
+#define VAR_I_INT32 (VAR_I | TYPE_INT32)
+#define VAR_I_INT64 (VAR_I | TYPE_INT64)
+#define VAR_I_BOOL (VAR_I | TYPE_BOOL)
+#define VAR_I_FLOAT (VAR_I | TYPE_FLOAT)
+#define VAR_I_DOUBLE (VAR_I | TYPE_DOUBLE)
 #define VAR_I_DECIMAL (VAR_I | TYPE_DECIMAL)
-#define VAR_I_STRING  (VAR_I | TYPE_STRING)
+#define VAR_I_STRING (VAR_I | TYPE_STRING)
 
 #define POS 0x81
 #define NEG 0x82
@@ -49,13 +63,13 @@
 #define LT 0x95
 #define NE 0x96
 
-#define IS_NULL  0xA1
-#define IS_TRUE  0xA2
+#define IS_NULL 0xA1
+#define IS_TRUE 0xA2
 #define IS_FALSE 0xA3
 
 #define NOT 0x51
 #define AND 0x52
-#define OR  0x53
+#define OR 0x53
 
 #define CAST 0xF0
 
