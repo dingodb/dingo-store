@@ -16,6 +16,7 @@
 
 package io.dingodb.sdk.service.cluster;
 
+import io.dingodb.common.Common;
 import io.dingodb.coordinator.Coordinator;
 import io.dingodb.coordinator.CoordinatorServiceGrpc;
 import io.dingodb.sdk.common.cluster.Executor;
@@ -61,6 +62,7 @@ public class ClusterServiceClient {
         return response.getExecutormap()
                 .getExecutorsList()
                 .stream()
+                .filter(executor -> executor.getState() == Common.ExecutorState.EXECUTOR_NORMAL)
                 .map(EntityConversion::mapping)
                 .collect(Collectors.toList());
     }
