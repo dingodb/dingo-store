@@ -14,6 +14,9 @@
 
 #include "server/service_helper.h"
 
+#include "common/helper.h"
+#include "fmt/core.h"
+
 namespace dingodb {
 
 // Validate region state
@@ -44,7 +47,9 @@ butil::Status ServiceHelper::ValidateRange(const pb::common::Range& range) {
   }
 
   if (BAIDU_UNLIKELY(range.start_key() >= range.end_key())) {
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Range is invalid");
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
+                         fmt::format("Range is invalid, range[{}-{}]", Helper::StringToHex(range.start_key()),
+                                     Helper::StringToHex(range.end_key())));
   }
 
   return butil::Status();
@@ -82,7 +87,10 @@ butil::Status ServiceHelper::ValidateKeyInRange(const pb::common::Range& range,
                                                 const std::vector<std::string_view>& keys) {
   for (const auto& key : keys) {
     if (range.start_key().compare(key) > 0 || range.end_key().compare(key) <= 0) {
-      return butil::Status(pb::error::EKEY_OUT_OF_RANGE, "Key out of range");
+      return butil::Status(
+          pb::error::EKEY_OUT_OF_RANGE,
+          fmt::format("Key out of range, region range[{}-{}] key[{}]", Helper::StringToHex(range.start_key()),
+                      Helper::StringToHex(range.end_key()), Helper::StringToHex(key)));
     }
   }
 
@@ -92,7 +100,11 @@ butil::Status ServiceHelper::ValidateKeyInRange(const pb::common::Range& range,
 // Validate range in range [)
 butil::Status ServiceHelper::ValidateRangeInRange(const pb::common::Range& range, const pb::common::Range& sub_range) {
   if (range.start_key().compare(sub_range.start_key()) > 0 || range.end_key().compare(sub_range.end_key()) < 0) {
-    return butil::Status(pb::error::EKEY_OUT_OF_RANGE, "Key out of range");
+    return butil::Status(
+        pb::error::EKEY_OUT_OF_RANGE,
+        fmt::format("Key out of range, region range[{}-{}] req range[{}-{}]", Helper::StringToHex(range.start_key()),
+                    Helper::StringToHex(range.end_key()), Helper::StringToHex(sub_range.start_key()),
+                    Helper::StringToHex(sub_range.end_key())));
   }
 
   return butil::Status();
