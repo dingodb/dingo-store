@@ -18,6 +18,7 @@
 #include <cstdint>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "braft/configuration.h"
@@ -116,6 +117,7 @@ class Helper {
   static pb::common::Range IntersectRange(const pb::common::Range& range1, const pb::common::Range& range2);
 
   static std::string StringToHex(const std::string& str);
+  static std::string StringToHex(const std::string_view& str);
 
   static void SetPbMessageError(butil::Status status, google::protobuf::Message* message);
 

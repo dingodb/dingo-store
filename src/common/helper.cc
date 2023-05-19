@@ -27,6 +27,7 @@
 #include <ratio>
 #include <regex>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -319,6 +320,14 @@ pb::common::Range Helper::IntersectRange(const pb::common::Range& range1, const 
 }
 
 std::string Helper::StringToHex(const std::string& str) {
+  std::stringstream ss;
+  for (const auto& ch : str) {
+    ss << std::setw(2) << std::setfill('0') << std::hex << static_cast<int>(static_cast<unsigned char>(ch));
+  }
+  return ss.str();
+}
+
+std::string Helper::StringToHex(const std::string_view& str) {
   std::stringstream ss;
   for (const auto& ch : str) {
     ss << std::setw(2) << std::setfill('0') << std::hex << static_cast<int>(static_cast<unsigned char>(ch));
