@@ -252,6 +252,10 @@ void StoreRegionMeta::UpdateState(store::RegionPtr region, pb::common::StoreRegi
     region->AppendHistoryState(new_state);
     if (meta_writer_ != nullptr) {
       meta_writer_->Put(TransformToKv(&region));
+    } else {
+      DINGO_LOG(WARNING) << fmt::format("Update region state persistence failed, region {} state {} to {}",
+                                        region->Id(), pb::common::StoreRegionState_Name(cur_state),
+                                        pb::common::StoreRegionState_Name(new_state));
     }
   }
 

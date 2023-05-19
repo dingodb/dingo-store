@@ -634,6 +634,7 @@ bool RawRocksEngine::RocksdbInit(std::shared_ptr<Config> config, const std::stri
   db_options.create_if_missing = true;
   db_options.create_missing_column_families = true;
   db_options.max_background_jobs = GetBackgroundThreadNum(config);
+  db_options.max_subcompactions = db_options.max_background_jobs / 4 * 3;
 
   rocksdb::DB* db;
   rocksdb::Status s = rocksdb::DB::Open(db_options, db_path, column_families, &family_handles, &db);
