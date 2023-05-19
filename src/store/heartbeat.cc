@@ -94,6 +94,7 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
     mut_region_metrics_map->insert({region->Id(), tmp_region_metrics});
   }
 
+  DINGO_LOG(DEBUG) << "StoreHeartbeat request: " << request.ShortDebugString();
   pb::coordinator::StoreHeartbeatResponse response;
   auto status = coordinator_interaction->SendRequest("StoreHeartbeat", request, response);
   if (!status.ok()) {

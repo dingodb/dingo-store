@@ -79,45 +79,46 @@ void SmConfigurationCommittedEventListener::OnEvent(std::shared_ptr<Event> event
 
   // Update region definition peers
   auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
-  if (store_region_meta) {
-    auto region = store_region_meta->GetRegion(the_event->node_id);
-    const auto& old_peers = region->Peers();
+  if (store_region_meta == nullptr) {
+    return;
+  }
+  auto region = store_region_meta->GetRegion(the_event->node_id);
+  const auto& old_peers = region->Peers();
 
-    // Get last peer from braft configuration.
-    std::vector<braft::PeerId> new_peers;
-    the_event->conf.list_peers(&new_peers);
+  // Get last peer from braft configuration.
+  std::vector<braft::PeerId> new_peers;
+  the_event->conf.list_peers(&new_peers);
 
-    // Check and get changed peers.
-    auto get_changed_peers = [new_peers, old_peers](std::vector<pb::common::Peer>& changed_peers) -> bool {
-      bool has_new_peer = false;
-      for (const auto& peer_id : new_peers) {
-        bool is_exist = false;
-        for (const auto& pb_peer : old_peers) {
-          if (std::string_view(pb_peer.raft_location().host()) ==
-                  std::string_view(butil::ip2str(peer_id.addr.ip).c_str()) &&
-              pb_peer.raft_location().port() == peer_id.addr.port) {
-            is_exist = true;
-            changed_peers.push_back(pb_peer);
-          }
-        }
-
-        // Not exist, get peer info used by api.
-        if (!is_exist) {
-          has_new_peer = true;
-          changed_peers.push_back(Helper::GetPeerInfo(peer_id.addr));
+  // Check and get changed peers.
+  auto get_changed_peers = [new_peers, old_peers](std::vector<pb::common::Peer>& changed_peers) -> bool {
+    bool has_new_peer = false;
+    for (const auto& peer_id : new_peers) {
+      bool is_exist = false;
+      for (const auto& pb_peer : old_peers) {
+        if (std::string_view(pb_peer.raft_location().host()) ==
+                std::string_view(butil::ip2str(peer_id.addr.ip).c_str()) &&
+            pb_peer.raft_location().port() == peer_id.addr.port) {
+          is_exist = true;
+          changed_peers.push_back(pb_peer);
         }
       }
 
-      return has_new_peer || changed_peers.size() != old_peers.size();
-    };
-
-    std::vector<pb::common::Peer> changed_peers;
-    if (get_changed_peers(changed_peers)) {
-      DINGO_LOG(DEBUG) << "Peers have changed, update region definition peer";
-      Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->UpdatePeers(region, changed_peers);
-      // Notify coordinator
-      Heartbeat::TriggerStoreHeartbeat(nullptr);
+      // Not exist, get peer info used by api.
+      if (!is_exist) {
+        has_new_peer = true;
+        changed_peers.push_back(Helper::GetPeerInfo(peer_id.addr));
+      }
     }
+
+    return has_new_peer || changed_peers.size() != old_peers.size();
+  };
+
+  std::vector<pb::common::Peer> changed_peers;
+  if (get_changed_peers(changed_peers)) {
+    DINGO_LOG(DEBUG) << "Peers have changed, update region definition peer";
+    Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->UpdatePeers(region, changed_peers);
+    // Notify coordinator
+    Heartbeat::TriggerStoreHeartbeat(nullptr);
   }
 }
 

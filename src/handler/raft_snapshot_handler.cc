@@ -189,6 +189,9 @@ bool RaftSnapshot::LoadSnapshot(braft::SnapshotReader* reader, store::RegionPtr 
       // Just use rocksdb::SstFileWriter generate sst file can ingest rocksdb.
       status = RawRocksEngine::MergeCheckpointFile(reader->get_path(), region->Range(), merge_sst_path);
       if (!status.ok()) {
+        if (status.error_code() == pb::error::ENO_ENTRIES) {
+          return true;
+        }
         DINGO_LOG(ERROR) << fmt::format("Merge checkpoint file failed, error: {} {}",
                                         pb::error::Errno_Name(status.error_code()), status.error_str());
         return false;

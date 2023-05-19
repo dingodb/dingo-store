@@ -15,7 +15,7 @@ raft:
   path: $BASE_PATH$/data/store/raft
   election_timeout: 1000 # ms
   snapshot_policy: checkpoint # scan or checkpoint
-  snapshot_interval: 600 # s
+  snapshot_interval: 120 # s
 log:
   level: INFO
   path: $BASE_PATH$/log
@@ -24,16 +24,16 @@ store:
   background_thread_num: 16 # background_thread_num priority background_thread_ratio
   # background_thread_ratio: 0.5 # cpu core * ratio
   base:
-    block_size: 131072
-    block_cache: 67108864
-    arena_block_size: 67108864
-    min_write_buffer_number_to_merge: 4
-    max_write_buffer_number: 2
-    max_compaction_bytes: 134217728
-    write_buffer_size: 67108864
-    prefix_extractor: 8
-    max_bytes_for_level_base: 134217728
-    target_file_size_base: 67108864
+    block_size: 131072 # 128KB
+    block_cache: 536870912 # 512MB
+    arena_block_size: 67108864 # 64MB
+    min_write_buffer_number_to_merge: 2
+    max_write_buffer_number: 5
+    max_compaction_bytes: 1677721600 # 1600MB
+    write_buffer_size: 67108864 # 64MB
+    prefix_extractor: 24
+    max_bytes_for_level_base: 134217728 # 128MB
+    target_file_size_base: 67108864 # 64MB
   column_families:
     - default
     - meta
