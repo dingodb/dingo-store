@@ -279,7 +279,12 @@ add_dependencies(dingodb_client_coordinator ${DEPEND_LIBS})
 
 if(DINGO_BUILD_STATIC)
     message(STATUS "Build DingoDB with static libraries linking")
-    set(CMAKE_EXE_LINKER_FLAGS "-static-libgcc -static-libstdc++")
+    if (CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
+        # This is only for build some modules for testing, not for the whole project.
+        # This project is currently not compatible with MacOS.
+    else()
+        set(CMAKE_EXE_LINKER_FLAGS "-static-libgcc -static-libstdc++")
+    endif()
 endif()
 
 target_link_libraries(dingodb_server
@@ -294,6 +299,8 @@ target_link_libraries(dingodb_client_coordinator
                       "-Xlinker \"-(\""
                       ${DYNAMIC_LIB}
                       "-Xlinker \"-)\"")
+
+add_subdirectory(src)
 
 if(BUILD_UNIT_TESTS)
     add_subdirectory(test)
