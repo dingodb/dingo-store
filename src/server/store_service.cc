@@ -605,7 +605,7 @@ void StoreServiceImpl::KvScanBegin(google::protobuf::RpcController* controller,
 
   status = storage_->KvScanBegin(ctx, Constant::kStoreDataCF, request->region_id(), correction_range,
                                  request->max_fetch_cnt(), request->key_only(), request->disable_auto_release(),
-                                 &scan_id, &kvs);
+                                 request->disable_coprocessor(), request->coprocessor(), &scan_id, &kvs);
   if (!status.ok()) {
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));

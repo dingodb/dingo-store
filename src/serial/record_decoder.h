@@ -50,6 +50,7 @@ class RecordDecoder {
   int Decode(const KeyValue& key_value, std::vector<std::any>& record /*output*/);
   int Decode(const pb::common::KeyValue& key_value, std::vector<std::any>& record /*output*/);
   int Decode(const std::string& key, const std::string& value, std::vector<std::any>& record /*output*/);
+  int DecodeKey(const std::string& key, std::vector<std::any>& record /*output*/);
 
   int Decode(const KeyValue& key_value, const std::vector<int>& column_indexes,
              std::vector<std::any>& record /*output*/);

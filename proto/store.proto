@@ -166,10 +166,11 @@ message AggregationOperator {
 message Schema {
   enum Type {
     BOOL = 0;
-    INTERGER = 1;
-    LONG = 2;
-    DOUBLE = 3;
-    STRING = 4;
+    INTEGER = 1;
+    FLOAT = 2;
+    LONG = 3;
+    DOUBLE = 4;
+    STRING = 5;
   };
 
   // type of data
