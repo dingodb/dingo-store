@@ -20,6 +20,7 @@
 #include <string>
 
 #include "common/helper.h"
+#include "server/service_helper.h"
 
 class HelperTest : public testing::Test {
  protected:
@@ -56,11 +57,7 @@ TEST_F(HelperTest, TimestampNs) {
   }
 }
 
-bool ValidateRangeInRange(const dingodb::pb::common::Range& range, const dingodb::pb::common::Range& sub_range) {
-  return (range.start_key().compare(sub_range.start_key()) <= 0 && range.end_key().compare(sub_range.end_key()) >= 0);
-}
-
-TEST_F(HelperTest, TransformRangeForValidate) {
+TEST_F(HelperTest, TransformRangeWithOptions) {
   dingodb::pb::common::Range region_range;
   char start_key[] = {0x61, 0x64};
   char end_key[] = {0x78, 0x65};
@@ -79,11 +76,11 @@ TEST_F(HelperTest, TransformRangeForValidate) {
     scan_range.set_with_start(true);
     scan_range.mutable_range()->set_end_key(end_key, 1);
     scan_range.set_with_end(true);
-    auto uniform_range = dingodb::Helper::TransformRangeForValidate(region_range, scan_range);
+    auto uniform_range = dingodb::Helper::TransformRangeWithOptions(scan_range);
     std::cout << "uniform_range: " << dingodb::Helper::StringToHex(uniform_range.start_key()) << " "
               << dingodb::Helper::StringToHex(uniform_range.end_key()) << std::endl;
 
-    EXPECT_EQ(true, ValidateRangeInRange(region_range, uniform_range));
+    EXPECT_EQ(true, dingodb::ServiceHelper::ValidateRangeInRange(region_range, uniform_range).ok());
   }
 
   {
@@ -95,9 +92,9 @@ TEST_F(HelperTest, TransformRangeForValidate) {
     scan_range.set_with_start(true);
     scan_range.mutable_range()->set_end_key(end_key, 1);
     scan_range.set_with_end(false);
-    auto uniform_range = dingodb::Helper::TransformRangeForValidate(region_range, scan_range);
+    auto uniform_range = dingodb::Helper::TransformRangeWithOptions(scan_range);
 
-    EXPECT_EQ(true, ValidateRangeInRange(region_range, uniform_range));
+    EXPECT_EQ(true, dingodb::ServiceHelper::ValidateRangeInRange(region_range, uniform_range).ok());
   }
 
   {
@@ -109,9 +106,9 @@ TEST_F(HelperTest, TransformRangeForValidate) {
     scan_range.set_with_start(false);
     scan_range.mutable_range()->set_end_key(end_key, 1);
     scan_range.set_with_end(true);
-    auto uniform_range = dingodb::Helper::TransformRangeForValidate(region_range, scan_range);
+    auto uniform_range = dingodb::Helper::TransformRangeWithOptions(scan_range);
 
-    EXPECT_EQ(true, ValidateRangeInRange(region_range, uniform_range));
+    EXPECT_EQ(true, dingodb::ServiceHelper::ValidateRangeInRange(region_range, uniform_range).ok());
   }
 
   {
@@ -123,9 +120,9 @@ TEST_F(HelperTest, TransformRangeForValidate) {
     scan_range.set_with_start(false);
     scan_range.mutable_range()->set_end_key(end_key, 1);
     scan_range.set_with_end(false);
-    auto uniform_range = dingodb::Helper::TransformRangeForValidate(region_range, scan_range);
+    auto uniform_range = dingodb::Helper::TransformRangeWithOptions(scan_range);
 
-    EXPECT_EQ(true, ValidateRangeInRange(region_range, uniform_range));
+    EXPECT_EQ(true, dingodb::ServiceHelper::ValidateRangeInRange(region_range, uniform_range).ok());
   }
 
   {
@@ -137,9 +134,9 @@ TEST_F(HelperTest, TransformRangeForValidate) {
     scan_range.set_with_start(true);
     scan_range.mutable_range()->set_end_key(end_key, 1);
     scan_range.set_with_end(true);
-    auto uniform_range = dingodb::Helper::TransformRangeForValidate(region_range, scan_range);
+    auto uniform_range = dingodb::Helper::TransformRangeWithOptions(scan_range);
 
-    EXPECT_EQ(false, ValidateRangeInRange(region_range, uniform_range));
+    EXPECT_EQ(false, dingodb::ServiceHelper::ValidateRangeInRange(region_range, uniform_range).ok());
   }
 
   {
@@ -151,9 +148,9 @@ TEST_F(HelperTest, TransformRangeForValidate) {
     scan_range.set_with_start(false);
     scan_range.mutable_range()->set_end_key(end_key, 1);
     scan_range.set_with_end(true);
-    auto uniform_range = dingodb::Helper::TransformRangeForValidate(region_range, scan_range);
+    auto uniform_range = dingodb::Helper::TransformRangeWithOptions(scan_range);
 
-    EXPECT_EQ(false, ValidateRangeInRange(region_range, uniform_range));
+    EXPECT_EQ(true, dingodb::ServiceHelper::ValidateRangeInRange(region_range, uniform_range).ok());
   }
 
   {
@@ -165,9 +162,9 @@ TEST_F(HelperTest, TransformRangeForValidate) {
     scan_range.set_with_start(true);
     scan_range.mutable_range()->set_end_key(end_key, 1);
     scan_range.set_with_end(false);
-    auto uniform_range = dingodb::Helper::TransformRangeForValidate(region_range, scan_range);
+    auto uniform_range = dingodb::Helper::TransformRangeWithOptions(scan_range);
 
-    EXPECT_EQ(false, ValidateRangeInRange(region_range, uniform_range));
+    EXPECT_EQ(false, dingodb::ServiceHelper::ValidateRangeInRange(region_range, uniform_range).ok());
   }
 
   {
@@ -179,9 +176,9 @@ TEST_F(HelperTest, TransformRangeForValidate) {
     scan_range.set_with_start(false);
     scan_range.mutable_range()->set_end_key(end_key, 1);
     scan_range.set_with_end(false);
-    auto uniform_range = dingodb::Helper::TransformRangeForValidate(region_range, scan_range);
+    auto uniform_range = dingodb::Helper::TransformRangeWithOptions(scan_range);
 
-    EXPECT_EQ(false, ValidateRangeInRange(region_range, uniform_range));
+    EXPECT_EQ(true, dingodb::ServiceHelper::ValidateRangeInRange(region_range, uniform_range).ok());
   }
 
   {
@@ -193,9 +190,9 @@ TEST_F(HelperTest, TransformRangeForValidate) {
     scan_range.set_with_start(true);
     scan_range.mutable_range()->set_end_key(end_key, 1);
     scan_range.set_with_end(false);
-    auto uniform_range = dingodb::Helper::TransformRangeForValidate(region_range, scan_range);
+    auto uniform_range = dingodb::Helper::TransformRangeWithOptions(scan_range);
 
-    EXPECT_EQ(false, ValidateRangeInRange(region_range, uniform_range));
+    EXPECT_EQ(true, dingodb::ServiceHelper::ValidateRangeInRange(region_range, uniform_range).ok());
   }
 
   // ==================================================
@@ -208,9 +205,9 @@ TEST_F(HelperTest, TransformRangeForValidate) {
     scan_range.set_with_start(true);
     scan_range.mutable_range()->set_end_key(end_key, 2);
     scan_range.set_with_end(true);
-    auto uniform_range = dingodb::Helper::TransformRangeForValidate(region_range, scan_range);
+    auto uniform_range = dingodb::Helper::TransformRangeWithOptions(scan_range);
 
-    EXPECT_EQ(false, ValidateRangeInRange(region_range, uniform_range));
+    EXPECT_EQ(false, dingodb::ServiceHelper::ValidateRangeInRange(region_range, uniform_range).ok());
   }
 
   {
@@ -222,9 +219,9 @@ TEST_F(HelperTest, TransformRangeForValidate) {
     scan_range.set_with_start(true);
     scan_range.mutable_range()->set_end_key(end_key, 2);
     scan_range.set_with_end(false);
-    auto uniform_range = dingodb::Helper::TransformRangeForValidate(region_range, scan_range);
+    auto uniform_range = dingodb::Helper::TransformRangeWithOptions(scan_range);
 
-    EXPECT_EQ(true, ValidateRangeInRange(region_range, uniform_range));
+    EXPECT_EQ(true, dingodb::ServiceHelper::ValidateRangeInRange(region_range, uniform_range).ok());
   }
 
   {
@@ -236,9 +233,9 @@ TEST_F(HelperTest, TransformRangeForValidate) {
     scan_range.set_with_start(false);
     scan_range.mutable_range()->set_end_key(end_key, 2);
     scan_range.set_with_end(true);
-    auto uniform_range = dingodb::Helper::TransformRangeForValidate(region_range, scan_range);
+    auto uniform_range = dingodb::Helper::TransformRangeWithOptions(scan_range);
 
-    EXPECT_EQ(false, ValidateRangeInRange(region_range, uniform_range));
+    EXPECT_EQ(false, dingodb::ServiceHelper::ValidateRangeInRange(region_range, uniform_range).ok());
   }
 
   {
@@ -250,9 +247,9 @@ TEST_F(HelperTest, TransformRangeForValidate) {
     scan_range.set_with_start(false);
     scan_range.mutable_range()->set_end_key(end_key, 2);
     scan_range.set_with_end(false);
-    auto uniform_range = dingodb::Helper::TransformRangeForValidate(region_range, scan_range);
+    auto uniform_range = dingodb::Helper::TransformRangeWithOptions(scan_range);
 
-    EXPECT_EQ(true, ValidateRangeInRange(region_range, uniform_range));
+    EXPECT_EQ(true, dingodb::ServiceHelper::ValidateRangeInRange(region_range, uniform_range).ok());
   }
 
   {
@@ -264,9 +261,9 @@ TEST_F(HelperTest, TransformRangeForValidate) {
     scan_range.set_with_start(true);
     scan_range.mutable_range()->set_end_key(end_key, 2);
     scan_range.set_with_end(true);
-    auto uniform_range = dingodb::Helper::TransformRangeForValidate(region_range, scan_range);
+    auto uniform_range = dingodb::Helper::TransformRangeWithOptions(scan_range);
 
-    EXPECT_EQ(false, ValidateRangeInRange(region_range, uniform_range));
+    EXPECT_EQ(false, dingodb::ServiceHelper::ValidateRangeInRange(region_range, uniform_range).ok());
   }
 
   {
@@ -278,9 +275,9 @@ TEST_F(HelperTest, TransformRangeForValidate) {
     scan_range.set_with_start(false);
     scan_range.mutable_range()->set_end_key(end_key, 2);
     scan_range.set_with_end(false);
-    auto uniform_range = dingodb::Helper::TransformRangeForValidate(region_range, scan_range);
+    auto uniform_range = dingodb::Helper::TransformRangeWithOptions(scan_range);
 
-    EXPECT_EQ(true, ValidateRangeInRange(region_range, uniform_range));
+    EXPECT_EQ(true, dingodb::ServiceHelper::ValidateRangeInRange(region_range, uniform_range).ok());
   }
 
   // ========================================
@@ -293,9 +290,9 @@ TEST_F(HelperTest, TransformRangeForValidate) {
     scan_range.set_with_start(true);
     scan_range.mutable_range()->set_end_key(end_key, 3);
     scan_range.set_with_end(true);
-    auto uniform_range = dingodb::Helper::TransformRangeForValidate(region_range, scan_range);
+    auto uniform_range = dingodb::Helper::TransformRangeWithOptions(scan_range);
 
-    EXPECT_EQ(false, ValidateRangeInRange(region_range, uniform_range));
+    EXPECT_EQ(false, dingodb::ServiceHelper::ValidateRangeInRange(region_range, uniform_range).ok());
   }
 
   {
@@ -307,9 +304,9 @@ TEST_F(HelperTest, TransformRangeForValidate) {
     scan_range.set_with_start(true);
     scan_range.mutable_range()->set_end_key(end_key, 3);
     scan_range.set_with_end(false);
-    auto uniform_range = dingodb::Helper::TransformRangeForValidate(region_range, scan_range);
+    auto uniform_range = dingodb::Helper::TransformRangeWithOptions(scan_range);
 
-    EXPECT_EQ(false, ValidateRangeInRange(region_range, uniform_range));
+    EXPECT_EQ(false, dingodb::ServiceHelper::ValidateRangeInRange(region_range, uniform_range).ok());
   }
 
   {
@@ -321,9 +318,9 @@ TEST_F(HelperTest, TransformRangeForValidate) {
     scan_range.set_with_start(false);
     scan_range.mutable_range()->set_end_key(end_key, 3);
     scan_range.set_with_end(true);
-    auto uniform_range = dingodb::Helper::TransformRangeForValidate(region_range, scan_range);
+    auto uniform_range = dingodb::Helper::TransformRangeWithOptions(scan_range);
 
-    EXPECT_EQ(false, ValidateRangeInRange(region_range, uniform_range));
+    EXPECT_EQ(false, dingodb::ServiceHelper::ValidateRangeInRange(region_range, uniform_range).ok());
   }
 
   {
@@ -335,9 +332,9 @@ TEST_F(HelperTest, TransformRangeForValidate) {
     scan_range.set_with_start(false);
     scan_range.mutable_range()->set_end_key(end_key, 3);
     scan_range.set_with_end(false);
-    auto uniform_range = dingodb::Helper::TransformRangeForValidate(region_range, scan_range);
+    auto uniform_range = dingodb::Helper::TransformRangeWithOptions(scan_range);
 
-    EXPECT_EQ(false, ValidateRangeInRange(region_range, uniform_range));
+    EXPECT_EQ(false, dingodb::ServiceHelper::ValidateRangeInRange(region_range, uniform_range).ok());
   }
   {
     // [0x616461, 0x786463]
@@ -348,8 +345,13 @@ TEST_F(HelperTest, TransformRangeForValidate) {
     scan_range.set_with_start(true);
     scan_range.mutable_range()->set_end_key(end_key, 3);
     scan_range.set_with_end(true);
-    auto uniform_range = dingodb::Helper::TransformRangeForValidate(region_range, scan_range);
+    auto uniform_range = dingodb::Helper::TransformRangeWithOptions(scan_range);
 
-    EXPECT_EQ(true, ValidateRangeInRange(region_range, uniform_range));
+    EXPECT_EQ(true, dingodb::ServiceHelper::ValidateRangeInRange(region_range, uniform_range).ok());
   }
+}
+
+TEST_F(HelperTest, hello) {
+  butil::EndPoint endpoint;
+  std::cout << endpoint.ip << endpoint.port;
 }

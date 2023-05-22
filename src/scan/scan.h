@@ -93,7 +93,7 @@ class ScanContext {
 
   uint64_t region_id_;
 
-  pb::common::RangeWithOptions range_;
+  pb::common::Range range_;
 
   uint64_t max_fetch_cnt_;
 
@@ -148,7 +148,7 @@ class ScanHandler {
   ScanHandler& operator=(ScanHandler&& rhs) = delete;
 
   static butil::Status ScanBegin(std::shared_ptr<ScanContext> context, uint64_t region_id,
-                                 const pb::common::RangeWithOptions& range, uint64_t max_fetch_cnt, bool key_only,
+                                 const pb::common::Range& range, uint64_t max_fetch_cnt, bool key_only,
                                  bool disable_auto_release, std::vector<pb::common::KeyValue>* kvs);
 
   static butil::Status ScanContinue(std::shared_ptr<ScanContext> context, const std::string& scan_id,

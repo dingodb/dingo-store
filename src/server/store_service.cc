@@ -469,14 +469,17 @@ void StoreServiceImpl::KvBatchDelete(google::protobuf::RpcController* controller
   }
 }
 
-butil::Status ValidateKvDeleteRangeRequest(const dingodb::pb::store::KvDeleteRangeRequest* request,
-                                           pb::common::Range* range) {
-  auto region = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(request->region_id());
+butil::Status ValidateKvDeleteRangeRequest(store::RegionPtr region, const pb::common::Range& req_range) {
   if (region == nullptr) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
   }
 
-  auto status = ServiceHelper::ValidateRangeWithOptions(request->range());
+  auto status = ServiceHelper::ValidateRange(req_range);
+  if (!status.ok()) {
+    return status;
+  }
+
+  status = ServiceHelper::ValidateRangeInRange(region->Range(), req_range);
   if (!status.ok()) {
     return status;
   }
@@ -484,16 +487,6 @@ butil::Status ValidateKvDeleteRangeRequest(const dingodb::pb::store::KvDeleteRan
   status = ServiceHelper::ValidateRegionState(region);
   if (!status.ok()) {
     return status;
-  }
-
-  auto uniform_range = Helper::TransformRangeForValidate(region->Range(), request->range());
-
-  status = ServiceHelper::ValidateRangeInRange(region->Range(), uniform_range);
-  if (!status.ok()) {
-    return status;
-  }
-  if (range) {
-    *range = std::move(uniform_range);
   }
 
   return butil::Status();
@@ -505,35 +498,24 @@ void StoreServiceImpl::KvDeleteRange(google::protobuf::RpcController* controller
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
 
-  pb::common::Range range;
-  butil::Status status = ValidateKvDeleteRangeRequest(request, &range);
+  auto region = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(request->region_id());
+  auto uniform_range = Helper::TransformRangeWithOptions(request->range());
+  butil::Status status = ValidateKvDeleteRangeRequest(region, uniform_range);
   if (!status.ok()) {
-    // Note: The caller requires that if the parameter is wrong, no error will be reported and it will be returned
-    // directly.
-    if (pb::error::EILLEGAL_PARAMTETERS == static_cast<pb::error::Errno>(status.error_code())) {
-      response->set_delete_count(0);
+    if (pb::error::ERANGE_INVALID != static_cast<pb::error::Errno>(status.error_code())) {
       auto* err = response->mutable_error();
-      err->set_errcode(pb::error::OK);
-      err->set_errmsg("");
-    } else {
-      auto* err = response->mutable_error();
-      err->set_errcode(static_cast<Errno>(status.error_code()));
+      err->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
       err->set_errmsg(status.error_str());
     }
-
     return;
   }
 
-  auto* mut_range = const_cast<dingodb::pb::store::KvDeleteRangeRequest*>(request)->mutable_range();
-  mut_range->mutable_range()->set_start_key(range.start_key());
-  mut_range->mutable_range()->set_end_key(range.end_key());
-  mut_range->set_with_start(true);
-  mut_range->set_with_end(false);
+  auto correction_range = Helper::IntersectRange(region->Range(), uniform_range);
 
   std::shared_ptr<Context> const ctx = std::make_shared<Context>(cntl, done_guard.release(), response);
   ctx->SetRegionId(request->region_id()).SetCfName(Constant::kStoreDataCF);
   auto* mut_request = const_cast<dingodb::pb::store::KvDeleteRangeRequest*>(request);
-  status = storage_->KvDeleteRange(ctx, *mut_request->mutable_range());
+  status = storage_->KvDeleteRange(ctx, correction_range);
   if (!status.ok()) {
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
@@ -546,14 +528,17 @@ void StoreServiceImpl::KvDeleteRange(google::protobuf::RpcController* controller
   }
 }
 
-butil::Status ValidateKvScanBeginRequest(const dingodb::pb::store::KvScanBeginRequest* request,
-                                         pb::common::Range* range) {
-  auto region = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(request->region_id());
+butil::Status ValidateKvScanBeginRequest(store::RegionPtr region, const pb::common::Range& req_range) {
   if (region == nullptr) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
   }
 
-  auto status = ServiceHelper::ValidateRangeWithOptions(request->range());
+  auto status = ServiceHelper::ValidateRange(req_range);
+  if (!status.ok()) {
+    return status;
+  }
+
+  status = ServiceHelper::ValidateRangeInRange(region->Range(), req_range);
   if (!status.ok()) {
     return status;
   }
@@ -563,15 +548,6 @@ butil::Status ValidateKvScanBeginRequest(const dingodb::pb::store::KvScanBeginRe
     return status;
   }
 
-  pb::common::Range uniform_range = Helper::TransformRangeForValidate(region->Range(), request->range());
-
-  status = ServiceHelper::ValidateRangeInRange(region->Range(), uniform_range);
-  if (!status.ok()) {
-    return status;
-  }
-  if (range) {
-    *range = std::move(uniform_range);
-  }
   return butil::Status();
 }
 
@@ -582,12 +558,11 @@ void StoreServiceImpl::KvScanBegin(google::protobuf::RpcController* controller,
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
 
-  pb::common::Range range;
-  butil::Status status = ValidateKvScanBeginRequest(request, &range);
+  auto region = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(request->region_id());
+  auto uniform_range = Helper::TransformRangeWithOptions(request->range());
+  butil::Status status = ValidateKvScanBeginRequest(region, uniform_range);
   if (!status.ok()) {
-    // Note: The caller requires that if the parameter is wrong, no error will be reported and it will be returned
-    // directly.
-    if (pb::error::EILLEGAL_PARAMTETERS != static_cast<pb::error::Errno>(status.error_code())) {
+    if (pb::error::ERANGE_INVALID != static_cast<pb::error::Errno>(status.error_code())) {
       auto* err = response->mutable_error();
       err->set_errcode(static_cast<Errno>(status.error_code()));
       err->set_errmsg(status.error_str());
@@ -595,12 +570,7 @@ void StoreServiceImpl::KvScanBegin(google::protobuf::RpcController* controller,
 
     return;
   }
-
-  auto* mut_range = const_cast<dingodb::pb::store::KvScanBeginRequest*>(request)->mutable_range();
-  mut_range->mutable_range()->set_start_key(range.start_key());
-  mut_range->mutable_range()->set_end_key(range.end_key());
-  mut_range->set_with_start(true);
-  mut_range->set_with_end(false);
+  auto correction_range = Helper::IntersectRange(region->Range(), uniform_range);
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
   ctx->SetRegionId(request->region_id()).SetCfName(Constant::kStoreDataCF);
@@ -608,7 +578,7 @@ void StoreServiceImpl::KvScanBegin(google::protobuf::RpcController* controller,
   std::vector<pb::common::KeyValue> kvs;  // NOLINT
   std::string scan_id;                    // NOLINT
 
-  status = storage_->KvScanBegin(ctx, Constant::kStoreDataCF, request->region_id(), request->range(),
+  status = storage_->KvScanBegin(ctx, Constant::kStoreDataCF, request->region_id(), correction_range,
                                  request->max_fetch_cnt(), request->key_only(), request->disable_auto_release(),
                                  &scan_id, &kvs);
   if (!status.ok()) {

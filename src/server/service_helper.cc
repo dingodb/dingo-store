@@ -14,7 +14,11 @@
 
 #include "server/service_helper.h"
 
+#include <string>
+#include <string_view>
+
 #include "common/helper.h"
+#include "common/logging.h"
 #include "fmt/core.h"
 
 namespace dingodb {
@@ -47,36 +51,7 @@ butil::Status ServiceHelper::ValidateRange(const pb::common::Range& range) {
   }
 
   if (BAIDU_UNLIKELY(range.start_key() >= range.end_key())) {
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
-                         fmt::format("Range is invalid, range[{}-{}]", Helper::StringToHex(range.start_key()),
-                                     Helper::StringToHex(range.end_key())));
-  }
-
-  return butil::Status();
-}
-
-butil::Status ServiceHelper::ValidateRangeWithOptions(const pb::common::RangeWithOptions& range) {
-  const std::string& start_key = range.range().start_key();
-  const std::string& end_key = range.range().end_key();
-
-  if (BAIDU_UNLIKELY(start_key.empty() || end_key.empty())) {
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Range key is empty");
-  }
-
-  if (BAIDU_UNLIKELY(start_key.size() == end_key.size())) {
-    if (start_key < end_key || (start_key == end_key && range.with_start() && range.with_end())) {
-      return butil::Status();
-    }
-
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Range is invalid");
-  }
-
-  // change to prefix comparison here.
-  size_t min_size = std::min(start_key.size(), end_key.size());
-
-  // min
-  if (BAIDU_UNLIKELY(memcmp(start_key.c_str(), end_key.c_str(), min_size) > 0)) {
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Range is invalid");
+    return butil::Status(pb::error::ERANGE_INVALID, "Range is invalid");
   }
 
   return butil::Status();
@@ -98,13 +73,39 @@ butil::Status ServiceHelper::ValidateKeyInRange(const pb::common::Range& range,
 }
 
 // Validate range in range [)
-butil::Status ServiceHelper::ValidateRangeInRange(const pb::common::Range& range, const pb::common::Range& sub_range) {
-  if (range.start_key().compare(sub_range.start_key()) > 0 || range.end_key().compare(sub_range.end_key()) < 0) {
+butil::Status ServiceHelper::ValidateRangeInRange(const pb::common::Range& region_range,
+                                                  const pb::common::Range& req_range) {
+  // Validate start_key
+  int min_length = std::min(region_range.start_key().size(), req_range.start_key().size());
+  std::string_view req_truncate_start_key(req_range.start_key().data(), min_length);
+  std::string_view region_truncate_start_key(region_range.start_key().data(), min_length);
+  if (req_truncate_start_key < region_truncate_start_key) {
     return butil::Status(
         pb::error::EKEY_OUT_OF_RANGE,
-        fmt::format("Key out of range, region range[{}-{}] req range[{}-{}]", Helper::StringToHex(range.start_key()),
-                    Helper::StringToHex(range.end_key()), Helper::StringToHex(sub_range.start_key()),
-                    Helper::StringToHex(sub_range.end_key())));
+        fmt::format("Key out of range, region range[{}-{}] req range[{}-{}]",
+                    Helper::StringToHex(region_range.start_key()), Helper::StringToHex(region_range.end_key()),
+                    Helper::StringToHex(req_range.start_key()), Helper::StringToHex(req_range.end_key())));
+  }
+
+  // Validate end_key
+  min_length = std::min(region_range.end_key().size(), req_range.end_key().size());
+  std::string_view req_truncate_end_key(req_range.end_key().data(), min_length);
+  std::string_view region_truncate_end_key(region_range.end_key().data(), min_length);
+
+  if (req_range.end_key().size() > region_range.end_key().size()) {
+    auto next_prefix_key = Helper::PrefixNext(req_truncate_end_key);
+    req_truncate_end_key = std::string_view(next_prefix_key.data(), next_prefix_key.size());
+  } else if (req_range.end_key().size() < region_range.end_key().size()) {
+    auto next_prefix_key = Helper::PrefixNext(region_truncate_end_key);
+    region_truncate_end_key = std::string_view(next_prefix_key.data(), next_prefix_key.size());
+  }
+
+  if (req_truncate_end_key > region_truncate_end_key) {
+    return butil::Status(
+        pb::error::EKEY_OUT_OF_RANGE,
+        fmt::format("Key out of range, region range[{}-{}] req range[{}-{}]",
+                    Helper::StringToHex(region_range.start_key()), Helper::StringToHex(region_range.end_key()),
+                    Helper::StringToHex(req_range.start_key()), Helper::StringToHex(req_range.end_key())));
   }
 
   return butil::Status();

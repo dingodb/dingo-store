@@ -175,17 +175,11 @@ class RawRocksEngine : public RawEngine {
     butil::Status KvCount(std::shared_ptr<dingodb::Snapshot> snapshot, const std::string& start_key,
                           const std::string& end_key, uint64_t& count) override;
 
-    butil::Status KvCount(const pb::common::RangeWithOptions& range, uint64_t* count) override;
-    butil::Status KvCount(std::shared_ptr<dingodb::Snapshot> snapshot, const pb::common::RangeWithOptions& range,
-                          uint64_t* count) override;
-
-    std::shared_ptr<EngineIterator> NewIterator(const std::string& start_key, const std::string& end_key,
-                                                bool with_start, bool with_end) override;
+    std::shared_ptr<EngineIterator> NewIterator(const std::string& start_key, const std::string& end_key) override;
 
    private:
     std::shared_ptr<EngineIterator> NewIterator(std::shared_ptr<dingodb::Snapshot> snapshot,
-                                                const std::string& start_key, const std::string& end_key,
-                                                bool with_start, bool with_end);
+                                                const std::string& start_key, const std::string& end_key);
     std::shared_ptr<rocksdb::DB> db_;
     std::shared_ptr<ColumnFamily> column_family_;
   };
@@ -211,8 +205,7 @@ class RawRocksEngine : public RawEngine {
     butil::Status KvBatchDelete(const std::vector<std::string>& keys) override;
 
     butil::Status KvDeleteRange(const pb::common::Range& range) override;
-    butil::Status KvDeleteRange(const pb::common::RangeWithOptions& range) override;
-    butil::Status KvBatchDeleteRange(const std::vector<pb::common::RangeWithOptions>& ranges) override;
+    butil::Status KvBatchDeleteRange(const std::vector<pb::common::Range>& ranges) override;
 
     // key must be exist
     butil::Status KvDeleteIfEqual(const pb::common::KeyValue& kv) override;
@@ -220,16 +213,6 @@ class RawRocksEngine : public RawEngine {
    private:
     butil::Status KvCompareAndSetInternal(const pb::common::KeyValue& kv, const std::string& value, bool is_key_exist,
                                           bool& key_state);
-
-    std::shared_ptr<EngineIterator> NewIterator(const rocksdb::Snapshot* snapshot, const std::string& start_key,
-                                                const std::string& end_key, bool with_start, bool with_end);
-
-    butil::Status KvBatchDeleteRangeCore(const std::vector<std::pair<std::string, std::string>>& key_pairs);
-
-    static butil::Status KvDeleteRangeParamCheck(const pb::common::RangeWithOptions& range, std::string* real_start_key,
-                                                 std::string* real_end_key);
-    // // original_key + 1. note overflow
-    // static bool Increment(const std::string& original_key, std::string* key);
 
     std::shared_ptr<ColumnFamily> column_family_;
     std::shared_ptr<rocksdb::DB> db_;

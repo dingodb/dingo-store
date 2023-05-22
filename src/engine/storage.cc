@@ -102,11 +102,11 @@ butil::Status Storage::KvDelete(std::shared_ptr<Context> ctx, const std::vector<
   });
 }
 
-butil::Status Storage::KvDeleteRange(std::shared_ptr<Context> ctx, const pb::common::RangeWithOptions& range) {
+butil::Status Storage::KvDeleteRange(std::shared_ptr<Context> ctx, const pb::common::Range& range) {
   WriteData write_data;
   std::shared_ptr<DeleteRangeDatum> datum = std::make_shared<DeleteRangeDatum>();
   datum->cf_name = ctx->CfName();
-  datum->ranges.emplace_back(std::move(const_cast<pb::common::RangeWithOptions&>(range)));
+  datum->ranges.emplace_back(std::move(const_cast<pb::common::Range&>(range)));
   write_data.AddDatums(std::static_pointer_cast<DatumAble>(datum));
 
   return engine_->AsyncWrite(ctx, write_data, [](std::shared_ptr<Context> ctx, butil::Status status) {
@@ -117,9 +117,9 @@ butil::Status Storage::KvDeleteRange(std::shared_ptr<Context> ctx, const pb::com
 }
 
 butil::Status Storage::KvScanBegin([[maybe_unused]] std::shared_ptr<Context> ctx, const std::string& cf_name,
-                                   uint64_t region_id, const pb::common::RangeWithOptions& range,
-                                   uint64_t max_fetch_cnt, bool key_only, bool disable_auto_release,
-                                   std::string* scan_id, std::vector<pb::common::KeyValue>* kvs) {
+                                   uint64_t region_id, const pb::common::Range& range, uint64_t max_fetch_cnt,
+                                   bool key_only, bool disable_auto_release, std::string* scan_id,
+                                   std::vector<pb::common::KeyValue>* kvs) {
   ScanManager* manager = ScanManager::GetInstance();
   std::shared_ptr<ScanContext> scan = manager->CreateScan(scan_id);
 

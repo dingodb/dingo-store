@@ -244,24 +244,8 @@ bool ScanContext::IsRecyclable() {
 }
 
 butil::Status ScanHandler::ScanBegin(std::shared_ptr<ScanContext> context, uint64_t region_id,
-                                     const pb::common::RangeWithOptions& range, uint64_t max_fetch_cnt, bool key_only,
+                                     const pb::common::Range& range, uint64_t max_fetch_cnt, bool key_only,
                                      bool disable_auto_release, std::vector<pb::common::KeyValue>* kvs) {
-  if (BAIDU_UNLIKELY(range.range().start_key().empty() || range.range().end_key().empty())) {
-    DINGO_LOG(ERROR) << fmt::format("start_key or end_key empty not support");
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
-  }
-
-  if (BAIDU_UNLIKELY(range.range().start_key() > range.range().end_key())) {
-    DINGO_LOG(ERROR) << fmt::format("range wrong");
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
-
-  } else if (BAIDU_UNLIKELY(range.range().start_key() == range.range().end_key())) {
-    if (!range.with_start() || !range.with_end()) {
-      DINGO_LOG(ERROR) << fmt::format("range wrong");
-      return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
-    }
-  }
-
   BAIDU_SCOPED_LOCK(context->mutex_);
   if (ScanState::kOpened != context->state_) {
     context->state_ = ScanState::kError;
@@ -279,8 +263,7 @@ butil::Status ScanHandler::ScanBegin(std::shared_ptr<ScanContext> context, uint6
 
   std::shared_ptr<RawEngine::Reader> reader = context->engine_->NewReader(context->cf_name_);
 
-  context->iter_ = reader->NewIterator(context->range_.range().start_key(), context->range_.range().end_key(),
-                                       context->range_.with_start(), context->range_.with_end());
+  context->iter_ = reader->NewIterator(context->range_.start_key(), context->range_.end_key());
 
   if (!context->iter_) {
     context->state_ = ScanState::kError;

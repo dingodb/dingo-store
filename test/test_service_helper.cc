@@ -14,6 +14,7 @@
 
 #include <gtest/gtest.h>
 
+#include <cstdint>
 #include <string>
 
 #include "butil/status.h"
@@ -29,128 +30,9 @@ class ServiceHelperTest : public testing::Test {
   void TearDown() override {}
 };
 
-TEST_F(ServiceHelperTest, ValidateRangeWithOptions) {
-  // ok  start_key == end_key and with_start = true and with_end = true
-  {
-    std::string start_key = "1234";
-    std::string end_key = "1234";
-    pb::common::RangeWithOptions range;
-    range.mutable_range()->set_start_key(start_key);
-    range.mutable_range()->set_end_key(end_key);
-    range.set_with_start(true);
-    range.set_with_end(true);
-    butil::Status ok = ServiceHelper::ValidateRangeWithOptions(range);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-  }
-
-  // failed  start_key == end_key and with_start = false and with_end = true
-  {
-    std::string start_key = "1234";
-    std::string end_key = "1234";
-    pb::common::RangeWithOptions range;
-    range.mutable_range()->set_start_key(start_key);
-    range.mutable_range()->set_end_key(end_key);
-    range.set_with_start(false);
-    range.set_with_end(true);
-    butil::Status ok = ServiceHelper::ValidateRangeWithOptions(range);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
-  }
-
-  // failed  start_key == end_key and with_start = true and with_end = false
-  {
-    std::string start_key = "1234";
-    std::string end_key = "1234";
-    pb::common::RangeWithOptions range;
-    range.mutable_range()->set_start_key(start_key);
-    range.mutable_range()->set_end_key(end_key);
-    range.set_with_start(true);
-    range.set_with_end(false);
-    butil::Status ok = ServiceHelper::ValidateRangeWithOptions(range);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
-  }
-
-  // failed  start_key == end_key and with_start = false and with_end = false
-  {
-    std::string start_key = "1234";
-    std::string end_key = "1234";
-    pb::common::RangeWithOptions range;
-    range.mutable_range()->set_start_key(start_key);
-    range.mutable_range()->set_end_key(end_key);
-    range.set_with_start(false);
-    range.set_with_end(false);
-    butil::Status ok = ServiceHelper::ValidateRangeWithOptions(range);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
-  }
-
-  // failed  start_key empty
-  {
-    std::string start_key;
-    std::string end_key = "1234";
-    pb::common::RangeWithOptions range;
-    range.mutable_range()->set_start_key(start_key);
-    range.mutable_range()->set_end_key(end_key);
-    range.set_with_start(false);
-    range.set_with_end(false);
-    butil::Status ok = ServiceHelper::ValidateRangeWithOptions(range);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
-  }
-
-  // failed  end_key empty
-  {
-    std::string start_key = "1234";
-    std::string end_key;
-    pb::common::RangeWithOptions range;
-    range.mutable_range()->set_start_key(start_key);
-    range.mutable_range()->set_end_key(end_key);
-    range.set_with_start(false);
-    range.set_with_end(false);
-    butil::Status ok = ServiceHelper::ValidateRangeWithOptions(range);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
-  }
-
-  // failed prefix start_key > prefix end_key ignore with_start with_end
-  {
-    std::string start_key = "1244";
-    std::string end_key = "12341";
-    pb::common::RangeWithOptions range;
-    range.mutable_range()->set_start_key(start_key);
-    range.mutable_range()->set_end_key(end_key);
-    range.set_with_start(false);
-    range.set_with_end(false);
-    butil::Status ok = ServiceHelper::ValidateRangeWithOptions(range);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
-  }
-
-  // ok prefix start_key == prefix end_key ignore with_start with_end
-  {
-    std::string start_key = "12345";
-    std::string end_key = "1234";
-    pb::common::RangeWithOptions range;
-    range.mutable_range()->set_start_key(start_key);
-    range.mutable_range()->set_end_key(end_key);
-    range.set_with_start(false);
-    range.set_with_end(false);
-    butil::Status ok = ServiceHelper::ValidateRangeWithOptions(range);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-  }
-
-  // ok prefix start_key < prefix end_key ignore with_start with_end
-  {
-    std::string start_key = "12345";
-    std::string end_key = "1237";
-    pb::common::RangeWithOptions range;
-    range.mutable_range()->set_start_key(start_key);
-    range.mutable_range()->set_end_key(end_key);
-    range.set_with_start(false);
-    range.set_with_end(false);
-    butil::Status ok = ServiceHelper::ValidateRangeWithOptions(range);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-  }
-}
-
 std::string GenString(std::vector<char> key) { return std::string(key.data(), key.size()); }
 
-dingodb::pb::common::Range GenRange(std::vector<char> start_key, std::vector<char> end_key) {
+dingodb::pb::common::Range GenRange(std::vector<uint8_t> start_key, std::vector<uint8_t> end_key) {
   dingodb::pb::common::Range range;
   range.set_start_key(start_key.data(), start_key.size());
   range.set_end_key(end_key.data(), end_key.size());
@@ -174,27 +56,6 @@ TEST_F(ServiceHelperTest, ValidateRange) {
 
   EXPECT_EQ(true, dingodb::ServiceHelper::ValidateRange(GenRange({0x61, 0x64}, {0x78, 0x65})).ok());
   EXPECT_EQ(false, dingodb::ServiceHelper::ValidateRange(GenRange({0x78, 0x65}, {0x61, 0x64})).ok());
-}
-
-TEST_F(ServiceHelperTest, ValidateRangeWithOptions2) {
-  EXPECT_EQ(false,
-            dingodb::ServiceHelper::ValidateRangeWithOptions(GenRangeWithOptions({}, true, {0x78, 0x65}, true)).ok());
-  EXPECT_EQ(false,
-            dingodb::ServiceHelper::ValidateRangeWithOptions(GenRangeWithOptions({0x61, 0x64}, true, {}, true)).ok());
-
-  EXPECT_EQ(true, dingodb::ServiceHelper::ValidateRangeWithOptions(
-                      GenRangeWithOptions({0x61, 0x64}, true, {0x78, 0x65}, true))
-                      .ok());
-  EXPECT_EQ(false, dingodb::ServiceHelper::ValidateRangeWithOptions(
-                       GenRangeWithOptions({0x78, 0x65}, true, {0x61, 0x64}, true))
-                       .ok());
-
-  EXPECT_EQ(false, dingodb::ServiceHelper::ValidateRangeWithOptions(
-                       GenRangeWithOptions({0x61, 0x64}, true, {0x61, 0x64}, false))
-                       .ok());
-  EXPECT_EQ(false, dingodb::ServiceHelper::ValidateRangeWithOptions(
-                       GenRangeWithOptions({0x61, 0x64}, false, {0x61, 0x64}, true))
-                       .ok());
 }
 
 TEST_F(ServiceHelperTest, ValidateKeyInRange) {
@@ -225,6 +86,21 @@ TEST_F(ServiceHelperTest, ValidateRangeInRange) {
                       .ok());
   EXPECT_EQ(true, dingodb::ServiceHelper::ValidateRangeInRange(GenRange({0x61, 0x64}, {0x78, 0x65}),
                                                                GenRange({0x63, 0x64}, {0x77, 0x65}))
+                      .ok());
+
+  EXPECT_EQ(true, dingodb::ServiceHelper::ValidateRangeInRange(GenRange({0x61, 0x64}, {0x78, 0x65}),
+                                                               GenRange({0x61, 0x64, 0x11}, {0x78, 0x64, 0x11}))
+                      .ok());
+  EXPECT_EQ(true, dingodb::ServiceHelper::ValidateRangeInRange(GenRange({0x61, 0x64}, {0x78, 0x65}),
+                                                               GenRange({0x61, 0x64}, {0x78}))
+                      .ok());
+  EXPECT_EQ(true, dingodb::ServiceHelper::ValidateRangeInRange(
+                      GenRange({0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x01, 0xd2},
+                               {0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x01, 0xd3}),
+                      GenRange({0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x01, 0xd2, 0x01, 0x25, 0x00, 0x00, 0x00, 0x00,
+                                0x00, 0x00, 0x00, 0xf8, 0x01, 0x72, 0x6f, 0x6f, 0x74, 0x00, 0x00, 0x00, 0x00, 0xfb},
+                               {0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x01, 0xd2, 0x01, 0x25, 0x00, 0x00, 0x00, 0x00,
+                                0x00, 0x00, 0x00, 0xf8, 0x01, 0x72, 0x6f, 0x6f, 0x74, 0x00, 0x00, 0x00, 0x00, 0xfc}))
                       .ok());
 }
 

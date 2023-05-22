@@ -81,12 +81,7 @@ class RawEngine {
     virtual butil::Status KvCount(std::shared_ptr<dingodb::Snapshot> snapshot, const std::string& start_key,
                                   const std::string& end_key, uint64_t& count) = 0;
 
-    virtual butil::Status KvCount(const pb::common::RangeWithOptions& range, uint64_t* count) = 0;
-    virtual butil::Status KvCount(std::shared_ptr<dingodb::Snapshot> snapshot,
-                                  const pb::common::RangeWithOptions& range, uint64_t* count) = 0;
-
-    virtual std::shared_ptr<EngineIterator> NewIterator(const std::string& start_key, const std::string& end_key,
-                                                        bool with_start, bool with_end) = 0;
+    virtual std::shared_ptr<EngineIterator> NewIterator(const std::string& start_key, const std::string& end_key) = 0;
   };
 
   class Writer {
@@ -109,8 +104,7 @@ class RawEngine {
     virtual butil::Status KvBatchDelete(const std::vector<std::string>& keys) = 0;
 
     virtual butil::Status KvDeleteRange(const pb::common::Range& range) = 0;
-    virtual butil::Status KvDeleteRange(const pb::common::RangeWithOptions& range) = 0;
-    virtual butil::Status KvBatchDeleteRange(const std::vector<pb::common::RangeWithOptions>& ranges) = 0;
+    virtual butil::Status KvBatchDeleteRange(const std::vector<pb::common::Range>& ranges) = 0;
 
     virtual butil::Status KvDeleteIfEqual(const pb::common::KeyValue& kv) = 0;
   };

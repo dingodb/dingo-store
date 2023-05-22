@@ -59,15 +59,15 @@ class RocksIterator : public EngineIterator {
  public:
   explicit RocksIterator(std::shared_ptr<dingodb::Snapshot> snapshot, std::shared_ptr<rocksdb::DB> db,
                          std::shared_ptr<RawRocksEngine::ColumnFamily> column_family, const std::string& start_key,
-                         const std::string& end_key, bool with_start, bool with_end)
+                         const std::string& end_key)
       : snapshot_(snapshot),
         db_(db),
         column_family_(column_family),
         iter_(nullptr),
         start_key_(start_key),
         end_key_(end_key),
-        with_start_(with_start),
-        with_end_(with_end),
+        with_start_(true),
+        with_end_(false),
         has_valid_kv_(false) {
     rocksdb::ReadOptions read_option;
     read_option.snapshot = static_cast<const rocksdb::Snapshot*>(
@@ -830,66 +830,16 @@ butil::Status RawRocksEngine::Reader::KvCount(std::shared_ptr<dingodb::Snapshot>
   return butil::Status();
 }
 
-butil::Status RawRocksEngine::Reader::KvCount(const pb::common::RangeWithOptions& range, uint64_t* count) {
-  auto snapshot = std::make_shared<RocksSnapshot>(db_->GetSnapshot(), db_);
-
-  return KvCount(snapshot, range, count);
-}
-
-butil::Status RawRocksEngine::Reader::KvCount(std::shared_ptr<dingodb::Snapshot> snapshot,
-                                              const pb::common::RangeWithOptions& range, uint64_t* count) {
-  if (BAIDU_UNLIKELY(range.range().start_key().empty() || range.range().end_key().empty())) {
-    DINGO_LOG(ERROR) << fmt::format("start_key or end_key empty. not support");
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
-  }
-
-  if (BAIDU_UNLIKELY(range.range().start_key() > range.range().end_key())) {
-    DINGO_LOG(ERROR) << fmt::format("start_key > end_key  not support");
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
-
-  } else if (BAIDU_UNLIKELY(range.range().start_key() == range.range().end_key())) {
-    if (!range.with_start() || !range.with_end()) {
-      DINGO_LOG(ERROR) << fmt::format("start_key == end_key with_start != true or with_end != true. not support");
-      return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
-    }
-  }
-
-  // Design constraints We do not allow tables with all 0xFF because there are too many tables and we cannot handle
-  // them
-  if (Helper::KeyIsEndOfAllTable(range.range().start_key()) || Helper::KeyIsEndOfAllTable(range.range().end_key())) {
-    DINGO_LOG(ERROR) << fmt::format("real_start_key or real_end_key all 0xFF. not support");
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
-  }
-
-  if (!count) {
-    return butil::Status();
-  }
-
-  *count = 0;
-
-  auto iter =
-      NewIterator(snapshot, range.range().start_key(), range.range().end_key(), range.with_start(), range.with_end());
-
-  // uint64_t internal_count = 0;
-  for (iter->Start(); iter->HasNext(); iter->Next()) {
-    ++*count;
-  }
-
-  return butil::Status();
-}
-
 std::shared_ptr<EngineIterator> RawRocksEngine::Reader::NewIterator(const std::string& start_key,
-                                                                    const std::string& end_key, bool with_start,
-                                                                    bool with_end) {
+                                                                    const std::string& end_key) {
   auto snapshot = std::make_shared<RocksSnapshot>(db_->GetSnapshot(), db_);
-  return NewIterator(snapshot, start_key, end_key, with_start, with_end);
+  return NewIterator(snapshot, start_key, end_key);
 }
 
 std::shared_ptr<EngineIterator> RawRocksEngine::Reader::NewIterator(std::shared_ptr<dingodb::Snapshot> snapshot,
                                                                     const std::string& start_key,
-                                                                    const std::string& end_key, bool with_start,
-                                                                    bool with_end) {
-  return std::make_shared<RocksIterator>(snapshot, db_, column_family_, start_key, end_key, with_start, with_end);
+                                                                    const std::string& end_key) {
+  return std::make_shared<RocksIterator>(snapshot, db_, column_family_, start_key, end_key);
 }
 
 butil::Status RawRocksEngine::Writer::KvPut(const pb::common::KeyValue& kv) {
@@ -1062,59 +1012,44 @@ butil::Status RawRocksEngine::Writer::KvBatchDelete(const std::vector<std::strin
 
 butil::Status RawRocksEngine::Writer::KvDeleteRange(const pb::common::Range& range) {
   if (range.start_key().empty() || range.end_key().empty()) {
-    DINGO_LOG(ERROR) << fmt::format("start_key or end_key empty. not support");
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range empty");
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range is empty");
   }
   if (range.start_key() >= range.end_key()) {
-    DINGO_LOG(ERROR) << fmt::format("start_key >= end_key  not support");
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range is wrong");
   }
 
-  butil::Status status = KvBatchDeleteRangeCore({{range.start_key(), range.end_key()}});
+  auto status =
+      db_->DeleteRange(rocksdb::WriteOptions(), column_family_->GetHandle(), range.start_key(), range.end_key());
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << fmt::format("KvBatchDeleteRangeCore failed : {}", status.error_str());
+    DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Write failed : {}", status.ToString());
     return butil::Status(pb::error::EINTERNAL, "Internal error");
   }
 
   return butil::Status();
 }
 
-butil::Status RawRocksEngine::Writer::KvDeleteRange(const pb::common::RangeWithOptions& range) {
-  std::string real_start_key;
-  std::string real_end_key;
-  butil::Status s = KvDeleteRangeParamCheck(range, &real_start_key, &real_end_key);
-  if (!s.ok()) {
-    DINGO_LOG(ERROR) << fmt::format("Helper::KvDeleteRangeParamCheck failed : {}", s.error_str());
-    return s;
-  }
-
-  pb::common::Range internal_range;
-  internal_range.set_start_key(real_start_key);
-  internal_range.set_end_key(real_end_key);
-
-  return KvDeleteRange(internal_range);
-}
-
-butil::Status RawRocksEngine::Writer::KvBatchDeleteRange(const std::vector<pb::common::RangeWithOptions>& ranges) {
-  std::vector<std::pair<std::string, std::string>> key_pairs;
-  butil::Status status;
-
-  size_t i = 0;
+butil::Status RawRocksEngine::Writer::KvBatchDeleteRange(const std::vector<pb::common::Range>& ranges) {
   for (const auto& range : ranges) {
-    std::string real_start_key;
-    std::string real_end_key;
-    butil::Status status = KvDeleteRangeParamCheck(range, &real_start_key, &real_end_key);
-    if (!status.ok()) {
-      DINGO_LOG(ERROR) << fmt::format("Helper::KvDeleteRangeParamCheck failed : {} index : {}", status.error_str(), i);
-      return status;
+    if (range.start_key().empty() || range.end_key().empty()) {
+      return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range is empty");
     }
-    key_pairs.emplace_back(real_start_key, real_end_key);
-    i++;
+    if (range.start_key() >= range.end_key()) {
+      return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range is wrong");
+    }
   }
 
-  status = KvBatchDeleteRangeCore(key_pairs);
-  if (!status.ok()) {
-    DINGO_LOG(ERROR) << fmt::format("KvBatchDeleteRangeCore failed : {}", status.error_str());
+  rocksdb::WriteBatch batch;
+  for (const auto& range : ranges) {
+    rocksdb::Status s = batch.DeleteRange(column_family_->GetHandle(), range.start_key(), range.start_key());
+    if (!s.ok()) {
+      DINGO_LOG(ERROR) << fmt::format("rocksdb::WriteBatch::DeleteRange failed : {}", s.ToString());
+      return butil::Status(pb::error::EINTERNAL, "Internal error");
+    }
+  }
+
+  rocksdb::Status s = db_->Write(rocksdb::WriteOptions(), &batch);
+  if (!s.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Write failed : {}", s.ToString());
     return butil::Status(pb::error::EINTERNAL, "Internal error");
   }
 
@@ -1198,95 +1133,6 @@ butil::Status RawRocksEngine::Writer::KvCompareAndSetInternal(const pb::common::
   }
 
   key_state = true;
-
-  return butil::Status();
-}
-
-std::shared_ptr<EngineIterator> RawRocksEngine::Writer::NewIterator(const rocksdb::Snapshot* snapshot,
-                                                                    const std::string& start_key,
-                                                                    const std::string& end_key, bool with_start,
-                                                                    bool with_end) {
-  auto snapshot_share = std::make_shared<RocksSnapshot>(snapshot, db_);
-
-  return std::make_shared<RocksIterator>(snapshot_share, db_, column_family_, start_key, end_key, with_start, with_end);
-}
-
-butil::Status RawRocksEngine::Writer::KvBatchDeleteRangeCore(
-    const std::vector<std::pair<std::string, std::string>>& key_pairs) {
-  rocksdb::WriteBatch batch;
-
-  for (const auto& [real_start_key, real_end_key] : key_pairs) {
-    rocksdb::Slice slice_begin{real_start_key};
-    rocksdb::Slice slice_end{real_end_key};
-
-    rocksdb::Status s = batch.DeleteRange(column_family_->GetHandle(), slice_begin, slice_end);
-    if (!s.ok()) {
-      DINGO_LOG(ERROR) << fmt::format("rocksdb::WriteBatch::DeleteRange failed : {}", s.ToString());
-      return butil::Status(pb::error::EINTERNAL, "Internal error");
-    }
-  }
-
-  rocksdb::Status s = db_->Write(rocksdb::WriteOptions(), &batch);
-  if (!s.ok()) {
-    DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Write failed : {}", s.ToString());
-    return butil::Status(pb::error::EINTERNAL, "Internal error");
-  }
-
-  return butil::Status();
-}
-
-butil::Status RawRocksEngine::Writer::KvDeleteRangeParamCheck(const pb::common::RangeWithOptions& range,
-                                                              std::string* real_start_key, std::string* real_end_key) {
-  if (BAIDU_UNLIKELY(range.range().start_key().empty() || range.range().end_key().empty())) {
-    DINGO_LOG(ERROR) << fmt::format("start_key or end_key empty. not support");
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
-  }
-
-  if (BAIDU_UNLIKELY(range.range().start_key() > range.range().end_key())) {
-    DINGO_LOG(ERROR) << fmt::format("start_key > end_key  not support");
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
-
-  } else if (BAIDU_UNLIKELY(range.range().start_key() == range.range().end_key())) {
-    if (!range.with_start() || !range.with_end()) {
-      DINGO_LOG(ERROR) << fmt::format("start_key == end_key with_start != true or with_end != true. not support");
-      return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
-    }
-  }
-
-  std::string internal_real_start_key;
-  if (!range.with_start()) {
-    internal_real_start_key = Helper::PrefixNext(range.range().start_key());
-  } else {
-    internal_real_start_key = range.range().start_key();
-  }
-
-  std::string internal_real_end_key;
-  if (range.with_end()) {
-    internal_real_end_key = Helper::PrefixNext(range.range().end_key());
-  } else {
-    internal_real_end_key = range.range().end_key();
-  }
-
-  // parameter check again
-  if (BAIDU_UNLIKELY(internal_real_start_key > internal_real_end_key)) {
-    DINGO_LOG(ERROR) << fmt::format("real_start_key > real_end_key  not support");
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
-
-  } else if (BAIDU_UNLIKELY(internal_real_start_key == internal_real_end_key)) {
-    if (!range.with_start() || !range.with_end()) {
-      DINGO_LOG(ERROR) << fmt::format(
-          "real_start_key == real_end_key with_start != true or with_end != true. not support");
-      return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
-    }
-  }
-
-  if (real_start_key) {
-    *real_start_key = internal_real_start_key;
-  }
-
-  if (real_end_key) {
-    *real_end_key = internal_real_end_key;
-  }
 
   return butil::Status();
 }
