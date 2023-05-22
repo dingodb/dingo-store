@@ -72,11 +72,11 @@ class RegionMetrics {
 
   using PbKeyValues = google::protobuf::RepeatedPtrField<pb::common::KeyValue>;
   using PbKeys = google::protobuf::RepeatedPtrField<std::string>;
-  using PbRangeWithOptionses = google::protobuf::RepeatedPtrField<pb::common::RangeWithOptions>;
+  using PbRanges = google::protobuf::RepeatedPtrField<pb::common::Range>;
 
   void UpdateMaxAndMinKey(const PbKeyValues& kvs);
   void UpdateMaxAndMinKeyPolicy(const PbKeys& keys);
-  void UpdateMaxAndMinKeyPolicy(const PbRangeWithOptionses& ranges);
+  void UpdateMaxAndMinKeyPolicy(const PbRanges& ranges);
   void UpdateMaxAndMinKeyPolicy();
 
  private:

@@ -169,7 +169,7 @@ TEST_F(ScanTest, ScanBegin) {
   butil::Status ok;
 
   uint64_t region_id = 1;
-  pb::common::RangeWithOptions range;
+  pb::common::Range range;
 
   uint64_t max_fetch_cnt = 10;
   bool key_only = false;
@@ -180,47 +180,36 @@ TEST_F(ScanTest, ScanBegin) {
   ok = ScanHandler::ScanBegin(scan, region_id, range, max_fetch_cnt, key_only, disable_auto_release, &kvs);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
 
-  range.mutable_range()->set_start_key("keyAAA");
-  range.mutable_range()->set_end_key("keyAAA");
-  range.set_with_start(true);
-  range.set_with_end(false);
+  range.set_start_key("keyAAA");
+  range.set_end_key("keyAAA");
 
   // range value failed
   ok = ScanHandler::ScanBegin(scan, 0, range, max_fetch_cnt, key_only, disable_auto_release, &kvs);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
 
-  range.mutable_range()->set_start_key("keyAAA");
-  range.mutable_range()->set_end_key("keyAAA");
-  range.set_with_start(false);
-  range.set_with_end(false);
+  range.set_start_key("keyAAA");
+  range.set_end_key("keyAAA");
 
   // range value failed
   ok = ScanHandler::ScanBegin(scan, 0, range, max_fetch_cnt, key_only, disable_auto_release, &kvs);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
 
-  range.mutable_range()->set_start_key("keyAAA");
-  range.mutable_range()->set_end_key("keyAAA");
-  range.set_with_start(false);
-  range.set_with_end(true);
+  range.set_start_key("keyAAA");
+  range.set_end_key("keyAAA");
 
   // range value failed
   ok = ScanHandler::ScanBegin(scan, 0, range, max_fetch_cnt, key_only, disable_auto_release, &kvs);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
 
-  range.mutable_range()->set_start_key("keyAAA");
-  range.mutable_range()->set_end_key("keyAA");
-  range.set_with_start(true);
-  range.set_with_end(false);
+  range.set_start_key("keyAAA");
+  range.set_end_key("keyAA");
 
   // range value failed
   ok = ScanHandler::ScanBegin(scan, 0, range, max_fetch_cnt, key_only, disable_auto_release, &kvs);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
 
-  range.mutable_range()->set_start_key("keyAAA");
-  range.mutable_range()->set_end_key("keyAAC");
-  range.set_with_start(true);
-  range.set_with_end(false);
-
+  range.set_start_key("keyAAA");
+  range.set_end_key("keyAAC");
   // ok
   ok = ScanHandler::ScanBegin(scan, region_id, range, max_fetch_cnt, key_only, disable_auto_release, &kvs);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
@@ -372,17 +361,15 @@ TEST_F(ScanTest, ScanBeginEqual) {
   EXPECT_NE(scan.get(), nullptr);
 
   uint64_t region_id = 1;
-  pb::common::RangeWithOptions range;
+  pb::common::Range range;
 
   uint64_t max_fetch_cnt = 10;
   bool key_only = false;
   bool disable_auto_release = true;
   std::vector<pb::common::KeyValue> kvs;
 
-  range.mutable_range()->set_start_key("keyAAA");
-  range.mutable_range()->set_end_key("keyAAA");
-  range.set_with_start(true);
-  range.set_with_end(true);
+  range.set_start_key("keyAAA");
+  range.set_end_key("keyAAA");
 
   // ok
   ok = ScanHandler::ScanBegin(scan, region_id, range, max_fetch_cnt, key_only, disable_auto_release, &kvs);
@@ -415,17 +402,15 @@ TEST_F(ScanTest, ScanBeginOthers) {
     EXPECT_NE(scan.get(), nullptr);
 
     uint64_t region_id = 1;
-    pb::common::RangeWithOptions range;
+    pb::common::Range range;
 
     uint64_t max_fetch_cnt = 100;
     bool key_only = false;
     bool disable_auto_release = true;
     std::vector<pb::common::KeyValue> kvs;
 
-    range.mutable_range()->set_start_key("keyAA");
-    range.mutable_range()->set_end_key("keyAA");
-    range.set_with_start(true);
-    range.set_with_end(true);
+    range.set_start_key("keyAA");
+    range.set_end_key("keyAA");
 
     // ok
     ok = ScanHandler::ScanBegin(scan, region_id, range, max_fetch_cnt, key_only, disable_auto_release, &kvs);
@@ -457,17 +442,15 @@ TEST_F(ScanTest, ScanBeginOthers) {
     EXPECT_NE(scan.get(), nullptr);
 
     uint64_t region_id = 1;
-    pb::common::RangeWithOptions range;
+    pb::common::Range range;
 
     uint64_t max_fetch_cnt = 100;
     bool key_only = false;
     bool disable_auto_release = true;
     std::vector<pb::common::KeyValue> kvs;
 
-    range.mutable_range()->set_start_key("keyAA");
-    range.mutable_range()->set_end_key("keyABB");
-    range.set_with_start(true);
-    range.set_with_end(false);
+    range.set_start_key("keyAA");
+    range.set_end_key("keyABB");
 
     // ok
     ok = ScanHandler::ScanBegin(scan, region_id, range, max_fetch_cnt, key_only, disable_auto_release, &kvs);
@@ -501,17 +484,15 @@ TEST_F(ScanTest, ScanBeginOthers) {
     EXPECT_NE(scan.get(), nullptr);
 
     uint64_t region_id = 1;
-    pb::common::RangeWithOptions range;
+    pb::common::Range range;
 
     uint64_t max_fetch_cnt = 100;
     bool key_only = false;
     bool disable_auto_release = true;
     std::vector<pb::common::KeyValue> kvs;
 
-    range.mutable_range()->set_start_key("keyAA");
-    range.mutable_range()->set_end_key("keyABB");
-    range.set_with_start(false);
-    range.set_with_end(false);
+    range.set_start_key("keyAA");
+    range.set_end_key("keyABB");
 
     // ok
     ok = ScanHandler::ScanBegin(scan, region_id, range, max_fetch_cnt, key_only, disable_auto_release, &kvs);
@@ -541,17 +522,15 @@ TEST_F(ScanTest, ScanBeginOthers) {
     EXPECT_NE(scan.get(), nullptr);
 
     uint64_t region_id = 1;
-    pb::common::RangeWithOptions range;
+    pb::common::Range range;
 
     uint64_t max_fetch_cnt = 100;
     bool key_only = false;
     bool disable_auto_release = true;
     std::vector<pb::common::KeyValue> kvs;
 
-    range.mutable_range()->set_start_key("keyAA");
-    range.mutable_range()->set_end_key("keyABB");
-    range.set_with_start(false);
-    range.set_with_end(true);
+    range.set_start_key("keyAA");
+    range.set_end_key("keyABB");
 
     // ok
     ok = ScanHandler::ScanBegin(scan, region_id, range, max_fetch_cnt, key_only, disable_auto_release, &kvs);
@@ -583,17 +562,15 @@ TEST_F(ScanTest, ScanBeginOthers) {
     EXPECT_NE(scan.get(), nullptr);
 
     uint64_t region_id = 1;
-    pb::common::RangeWithOptions range;
+    pb::common::Range range;
 
     uint64_t max_fetch_cnt = 100;
     bool key_only = false;
     bool disable_auto_release = true;
     std::vector<pb::common::KeyValue> kvs;
 
-    range.mutable_range()->set_start_key("keyAA");
-    range.mutable_range()->set_end_key("keyABB");
-    range.set_with_start(true);
-    range.set_with_end(true);
+    range.set_start_key("keyAA");
+    range.set_end_key("keyABB");
 
     // ok
     ok = ScanHandler::ScanBegin(scan, region_id, range, max_fetch_cnt, key_only, disable_auto_release, &kvs);
@@ -636,17 +613,15 @@ TEST_F(ScanTest, ScanBeginNormal) {
   EXPECT_NE(scan.get(), nullptr);
 
   uint64_t region_id = 1;
-  pb::common::RangeWithOptions range;
+  pb::common::Range range;
 
   uint64_t max_fetch_cnt = 0;
   bool key_only = false;
   bool disable_auto_release = true;
   std::vector<pb::common::KeyValue> kvs;
 
-  range.mutable_range()->set_start_key("keyAA");
-  range.mutable_range()->set_end_key("keyZZ");
-  range.set_with_start(true);
-  range.set_with_end(true);
+  range.set_start_key("keyAA");
+  range.set_end_key("keyZZ");
 
   // ok
   ok = ScanHandler::ScanBegin(scan, region_id, range, max_fetch_cnt, key_only, disable_auto_release, &kvs);
@@ -759,17 +734,15 @@ TEST_F(ScanTest, scan) {
   EXPECT_NE(scan.get(), nullptr);
 
   uint64_t region_id = 1;
-  pb::common::RangeWithOptions range;
+  pb::common::Range range;
 
   uint64_t max_fetch_cnt = 0;
   bool key_only = true;
   bool disable_auto_release = false;
   std::vector<pb::common::KeyValue> kvs;
 
-  range.mutable_range()->set_start_key("keyAA");
-  range.mutable_range()->set_end_key("keyZZ");
-  range.set_with_start(true);
-  range.set_with_end(true);
+  range.set_start_key("keyAA");
+  range.set_end_key("keyZZ");
 
   // ok
   ok = ScanHandler::ScanBegin(scan, region_id, range, max_fetch_cnt, key_only, disable_auto_release, &kvs);

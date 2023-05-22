@@ -129,7 +129,7 @@ void DeleteRangeHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
   if (region->State() == pb::common::StoreRegionState::SPLITTING) {
     const auto &range = region->Range();
     for (const auto &delete_range : request.ranges()) {
-      if (range.end_key().compare(delete_range.range().end_key()) <= 0) {
+      if (range.end_key().compare(delete_range.end_key()) <= 0) {
         if (ctx) {
           status.set_error(pb::error::EREGION_REDIRECT, "Region is spliting, please update route");
           ctx->SetStatus(status);
@@ -144,16 +144,17 @@ void DeleteRangeHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
   uint64_t delete_count = 0;
   if (1 == request.ranges().size()) {
     uint64_t internal_delete_count = 0;
-    status = reader->KvCount(request.ranges()[0], &internal_delete_count);
+    const auto &range = request.ranges()[0];
+    status = reader->KvCount(range.start_key(), range.end_key(), internal_delete_count);
     if (status.ok() && 0 != internal_delete_count) {
-      status = writer->KvDeleteRange(request.ranges()[0]);
+      status = writer->KvDeleteRange(range);
     }
     delete_count = internal_delete_count;
   } else {
     auto snapshot = engine->GetSnapshot();
     for (const auto &range : request.ranges()) {
       uint64_t internal_delete_count = 0;
-      status = reader->KvCount(snapshot, range, &internal_delete_count);
+      status = reader->KvCount(snapshot, range.start_key(), range.end_key(), internal_delete_count);
       if (!status.ok()) {
         delete_count = 0;
         break;

@@ -106,10 +106,8 @@ class Helper {
   }
 
   static std::string PrefixNext(const std::string& input);
+  static std::string PrefixNext(const std::string_view& input);
 
-  // Transform RangeWithOptions to Range for validate
-  static pb::common::Range TransformRangeForValidate(const pb::common::Range& region_range,
-                                                     const pb::common::RangeWithOptions& other_range);
   // Transform RangeWithOptions to Range for scan/deleteRange
   static pb::common::Range TransformRangeWithOptions(const pb::common::RangeWithOptions& range_with_options);
 

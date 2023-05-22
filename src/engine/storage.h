@@ -45,12 +45,11 @@ class Storage {
 
   butil::Status KvDelete(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys);
 
-  butil::Status KvDeleteRange(std::shared_ptr<Context> ctx, const pb::common::RangeWithOptions& range);
+  butil::Status KvDeleteRange(std::shared_ptr<Context> ctx, const pb::common::Range& range);
 
   butil::Status KvScanBegin([[maybe_unused]] std::shared_ptr<Context> ctx, const std::string& cf_name,
-                            uint64_t region_id, const pb::common::RangeWithOptions& range, uint64_t max_fetch_cnt,
-                            bool key_only, bool disable_auto_release, std::string* scan_id,
-                            std::vector<pb::common::KeyValue>* kvs);
+                            uint64_t region_id, const pb::common::Range& range, uint64_t max_fetch_cnt, bool key_only,
+                            bool disable_auto_release, std::string* scan_id, std::vector<pb::common::KeyValue>* kvs);
 
   static butil::Status KvScanContinue([[maybe_unused]] std::shared_ptr<Context> ctx, const std::string& scan_id,
                                       uint64_t max_fetch_cnt, std::vector<pb::common::KeyValue>* kvs);

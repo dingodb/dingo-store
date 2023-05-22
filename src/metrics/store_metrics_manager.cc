@@ -58,14 +58,12 @@ void RegionMetrics::UpdateMaxAndMinKeyPolicy(const PbKeys& keys) {
   }
 }
 
-void RegionMetrics::UpdateMaxAndMinKeyPolicy(const PbRangeWithOptionses& ranges) {
+void RegionMetrics::UpdateMaxAndMinKeyPolicy(const PbRanges& ranges) {
   for (const auto& range : ranges) {
-    if (range.range().start_key() <= inner_region_metrics_.min_key() &&
-        inner_region_metrics_.min_key() < range.range().end_key()) {
+    if (range.start_key() <= inner_region_metrics_.min_key() && inner_region_metrics_.min_key() < range.end_key()) {
       need_update_min_key_ = true;
     }
-    if (range.range().start_key() <= inner_region_metrics_.max_key() &&
-        inner_region_metrics_.max_key() < range.range().end_key()) {
+    if (range.start_key() <= inner_region_metrics_.max_key() && inner_region_metrics_.max_key() < range.end_key()) {
       need_update_max_key_ = true;
     }
   }

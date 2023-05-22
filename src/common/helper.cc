@@ -268,32 +268,19 @@ std::string Helper::PrefixNext(const std::string& input) {
   return (carry == 0) ? ret : input;
 }
 
-// Transform RangeWithOptions to Range for validate
-pb::common::Range Helper::TransformRangeForValidate(const pb::common::Range& region_range,
-                                                    const pb::common::RangeWithOptions& other_range) {
-  pb::common::Range range;
-
-  const auto& r_start_key = region_range.start_key();
-  const auto& r_end_key = region_range.end_key();
-  const auto& o_start_key = other_range.range().start_key();
-  const auto& o_end_key = other_range.range().end_key();
-
-  // adjust start_key
-  if (o_start_key.size() < r_start_key.size() &&
-      memcmp(o_start_key.c_str(), r_start_key.c_str(), o_start_key.size()) == 0) {
-    range.set_start_key(PrefixNext(o_start_key));
-  } else {
-    range.set_start_key(other_range.with_start() ? o_start_key : PrefixNext(o_start_key));
+std::string Helper::PrefixNext(const std::string_view& input) {
+  std::string ret(input.size(), 0);
+  int carry = 1;
+  for (int i = input.size() - 1; i >= 0; --i) {
+    if (static_cast<int32_t>(input[i]) == 0xFF && carry == 1) {
+      ret[i] = 0;
+    } else {
+      ret[i] = (input[i] + carry);
+      carry = 0;
+    }
   }
 
-  // adjust end_key
-  if (o_end_key.size() < r_end_key.size() && memcmp(o_end_key.c_str(), r_end_key.c_str(), o_end_key.size()) == 0) {
-    range.set_end_key(o_end_key);
-  } else {
-    range.set_end_key(other_range.with_end() ? PrefixNext(o_end_key) : o_end_key);
-  }
-
-  return range;
+  return (carry == 0) ? ret : std::string(input.data(), input.size());
 }
 
 // Transform RangeWithOptions to Range for scan/deleteRange
