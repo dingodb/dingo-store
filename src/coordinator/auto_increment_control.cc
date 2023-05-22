@@ -31,9 +31,6 @@
 
 namespace dingodb {
 
-const uint32_t kAutoIncrementGenerateCountMax = 100000;
-const uint32_t kAutoIncrementOffsetMax = 65535;
-
 AutoIncrementControl::AutoIncrementControl() {
   // init bthread mutex
   bthread_mutex_init(&auto_increment_map_mutex_, nullptr);
@@ -303,7 +300,7 @@ uint64_t AutoIncrementControl::GetGenerateEndId(uint64_t start_id, uint32_t coun
   }
 
   uint64_t real_start_id = GetRealStartId(start_id, increment, offset);
-  return real_start_id + (count - 1) * increment + 1;
+  return real_start_id + count * increment;
 }
 
 uint64_t AutoIncrementControl::GetRealStartId(uint64_t start_id, uint32_t auto_increment_increment,
@@ -315,10 +312,7 @@ uint64_t AutoIncrementControl::GetRealStartId(uint64_t start_id, uint32_t auto_i
     return start_id - remainder + auto_increment_increment + auto_increment_offset;
   }
 
-  if (auto_increment_offset == auto_increment_increment) {
-    return start_id;
-  }
-  return start_id + auto_increment_offset;
+  return start_id;
 }
 
 int AutoIncrementControl::SaveAutoIncrement(std::string& auto_increment_data) {
@@ -463,7 +457,7 @@ butil::Status AutoIncrementControl::SyncSendCreateAutoIncrementInternal(uint64_t
 }
 
 void AutoIncrementControl::AsyncSendUpdateAutoIncrementInternal(uint64_t table_id, uint64_t auto_increment) {
-  if (auto_increment == 0) {
+  if (auto_increment == 0 || auto_increment > kAutoIncrementOffsetMax) {
     DINGO_LOG(ERROR) << "table id: " << table_id << ", auto_increment: " << auto_increment;
     return;
   }
