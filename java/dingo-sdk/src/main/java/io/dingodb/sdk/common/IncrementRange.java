@@ -41,7 +41,7 @@ public class IncrementRange {
     }
 
     public IncrementRange setStartId(long startId) {
-        this.startId = new AtomicLong(startId);
+        this.startId = new AtomicLong(startId == offset ? startId : (startId + offset) - 1);
         return this;
     }
 
@@ -51,7 +51,7 @@ public class IncrementRange {
     }
 
     public Long getAndIncrement() {
-        long incrementId = startId.getAndIncrement();
+        long incrementId = startId.getAndAdd(increment);
         return incrementId >= endId.get() ? null : incrementId;
     }
 
