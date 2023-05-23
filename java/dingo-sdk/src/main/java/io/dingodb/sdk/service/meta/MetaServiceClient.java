@@ -406,6 +406,9 @@ public class MetaServiceClient {
     }
 
     public void generateAutoIncrement(DingoCommonId tableId, Long count, Integer increment, Integer offset) {
+        if (count <= 0 || increment <= 0 || offset <= 0) {
+            throw new DingoClientException("The parameter must be a positive integer greater than 0");
+        }
         Optional.ofNullable(incrementCache.get(tableId)).ifAbsent(() -> {
             Meta.GenerateAutoIncrementRequest request = Meta.GenerateAutoIncrementRequest.newBuilder()
                     .setTableId(mapping(tableId))
@@ -449,6 +452,24 @@ public class MetaServiceClient {
             range = incrementCache.get(tableId);
         }
         return range.getAndIncrement();
+    }
+
+    public Long getAutoIncrement(String tableName) {
+        tableName = cleanTableName(tableName);
+        return getAutoIncrement(getTableId(tableName));
+    }
+
+    public Long getAutoIncrement(DingoCommonId tableId) {
+        Meta.GetAutoIncrementRequest request = Meta.GetAutoIncrementRequest.newBuilder()
+                .setTableId(mapping(tableId))
+                .build();
+
+        Meta.GetAutoIncrementResponse response = incrementConnector.exec(stub -> {
+            Meta.GetAutoIncrementResponse res = stub.getAutoIncrement(request);
+            return new ServiceConnector.Response<>(res.getError(), res);
+        }).getResponse();
+
+        return response.getStartId();
     }
 
     private String cleanTableName(String name) {
