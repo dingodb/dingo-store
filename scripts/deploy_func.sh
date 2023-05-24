@@ -73,5 +73,7 @@ function start_program() {
 
   cd ${root_dir}
 
+  ulimit -c unlimited
+
   nohup ${root_dir}/bin/dingodb_server --role ${role}  --conf ./conf/${role}.yaml --coor_url=file://./conf/coor_list 2>&1 >./log/out &
 }
