@@ -71,10 +71,9 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
   auto region_metrics = metrics_manager->GetStoreRegionMetrics();
   std::vector<store::RegionPtr> region_metas;
   if (region_id == 0) {
-    mut_store_metrics->set_is_contain_all_region(false);
     region_metas = store_meta_manager->GetStoreRegionMeta()->GetAllRegion();
   } else {
-    mut_store_metrics->set_is_contain_all_region(true);
+    mut_store_metrics->set_is_partial_region_metrics(true);
     region_metas.push_back(store_meta_manager->GetStoreRegionMeta()->GetRegion(region_id));
   }
   for (const auto& region : region_metas) {

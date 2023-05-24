@@ -2275,14 +2275,12 @@ uint64_t CoordinatorControl::UpdateStoreMetrics(const pb::common::StoreMetrics& 
     return -1;
   }
 
-  bool need_update_epoch = false;
   {
     BAIDU_SCOPED_LOCK(store_metrics_map_mutex_);
     if (store_metrics_map_.seek(store_metrics.id()) != nullptr) {
       DINGO_LOG(DEBUG) << "STORE METIRCS UPDATE store_metrics.id = " << store_metrics.id();
 
       // update meta_increment
-      need_update_epoch = true;
       auto* store_metrics_increment = meta_increment.add_store_metrics();
       store_metrics_increment->set_id(store_metrics.id());
       store_metrics_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
@@ -2290,35 +2288,27 @@ uint64_t CoordinatorControl::UpdateStoreMetrics(const pb::common::StoreMetrics& 
       auto* store_metrics_increment_store = store_metrics_increment->mutable_store_metrics();
       store_metrics_increment_store->CopyFrom(store_metrics);
 
-      // on_apply
-      // store_metrics_map_epoch++;              // raft_kv_put
-      // store_metrics_map_[store_metrics.id()] = store;  // raft_kv_put
+      // set is_partial_region_metrics
+      if (store_metrics.is_partial_region_metrics()) {
+        store_metrics_increment->set_is_partial_region_metrics(store_metrics.is_partial_region_metrics());
+      }
 
     } else {
       DINGO_LOG(INFO) << "NEED ADD NEW STORE store_metrics.id = " << store_metrics.id();
 
       // update meta_increment
-      need_update_epoch = true;
       auto* store_metrics_increment = meta_increment.add_store_metrics();
       store_metrics_increment->set_id(store_metrics.id());
       store_metrics_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
 
       auto* store_metrics_increment_store = store_metrics_increment->mutable_store_metrics();
       store_metrics_increment_store->CopyFrom(store_metrics);
-
-      // on_apply
-      // store_metrics_map_epoch++;                                    // raft_kv_put
-      // store_metrics_map_.insert(std::make_pair(store_metrics.id(), store));  // raft_kv_put
     }
-
-    // mbvar store
-    coordinator_bvar_metrics_store_.UpdateStoreBvar(store_metrics.id(), store_metrics.total_capacity(),
-                                                    store_metrics.free_capacity());
   }
 
-  //   if (need_update_epoch) {
-  //     GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_STORE, meta_increment);
-  //   }
+  // mbvar store
+  coordinator_bvar_metrics_store_.UpdateStoreBvar(store_metrics.id(), store_metrics.total_capacity(),
+                                                  store_metrics.free_capacity());
 
   // use region_metrics_map to update region_map and store_operation
   if (store_metrics.region_metrics_map_size() > 0) {
