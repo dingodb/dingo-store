@@ -176,8 +176,8 @@ TEST_F(DingoSerialTest, boolSchema) {
   b1.EncodeKey(bf1, data1);
   string* bs1 = bf1->GetBytes();
   Buf* bf2 = new Buf(bs1, this->le);
-  delete bs1;
   optional<bool> data2 = b1.DecodeKey(bf2);
+  delete bs1;
   delete bf1;
   delete bf2;
   if (data2.has_value()) {
@@ -195,8 +195,8 @@ TEST_F(DingoSerialTest, boolSchema) {
   b2.EncodeValue(bf3, data3);
   string* bs2 = bf3->GetBytes();
   Buf* bf4 = new Buf(bs2, this->le);
-  delete bs2;
   optional<bool> data4 = b2.DecodeValue(bf4);
+  delete bs2;
   delete bf3;
   delete bf4;
   if (data4.has_value()) {
@@ -210,8 +210,8 @@ TEST_F(DingoSerialTest, boolSchema) {
   b2.EncodeValue(bf5, data5);
   string* bs3 = bf5->GetBytes();
   Buf* bf6 = new Buf(bs3, this->le);
-  delete bs3;
   optional<bool> data6 = b2.DecodeValue(bf6);
+  delete bs3;
   delete bf5;
   delete bf6;
   EXPECT_FALSE(data6.has_value());
@@ -224,8 +224,8 @@ TEST_F(DingoSerialTest, boolSchema) {
   b3.EncodeValue(bf7, nullopt);
   string* bs4 = bf7->GetBytes();
   Buf* bf8 = new Buf(bs4, this->le);
-  delete bs4;
   EXPECT_FALSE(b3.DecodeKey(bf8).has_value());
+  delete bs4;
   delete bf7;
   delete bf8;
 }
@@ -240,8 +240,8 @@ TEST_F(DingoSerialTest, integerSchema) {
   b1.EncodeKey(bf1, data1);
   string* bs1 = bf1->GetBytes();
   Buf* bf2 = new Buf(bs1, this->le);
-  delete bs1;
   optional<int32_t> data2 = b1.DecodeKey(bf2);
+  delete bs1;
   delete bf1;
   delete bf2;
   if (data2.has_value()) {
@@ -259,8 +259,8 @@ TEST_F(DingoSerialTest, integerSchema) {
   b2.EncodeValue(bf3, data3);
   string* bs2 = bf3->GetBytes();
   Buf* bf4 = new Buf(bs2, this->le);
-  delete bs2;
   optional<int32_t> data4 = b2.DecodeValue(bf4);
+  delete bs2;
   delete bf3;
   delete bf4;
   if (data4.has_value()) {
@@ -274,8 +274,8 @@ TEST_F(DingoSerialTest, integerSchema) {
   b2.EncodeValue(bf5, data5);
   string* bs3 = bf5->GetBytes();
   Buf* bf6 = new Buf(bs3, this->le);
-  delete bs3;
   optional<int32_t> data6 = b2.DecodeValue(bf6);
+  delete bs3;
   delete bf5;
   delete bf6;
   EXPECT_FALSE(data6.has_value());
@@ -288,8 +288,8 @@ TEST_F(DingoSerialTest, integerSchema) {
   b3.EncodeValue(bf7, nullopt);
   string* bs4 = bf7->GetBytes();
   Buf* bf8 = new Buf(bs4, this->le);
-  delete bs4;
   EXPECT_FALSE(b3.DecodeKey(bf8).has_value());
+  delete bs4;
   delete bf7;
   delete bf8;
 }
@@ -1134,8 +1134,8 @@ TEST_F(DingoSerialTest, longSchema) {
   b1.EncodeKey(bf1, data1);
   string* bs1 = bf1->GetBytes();
   Buf* bf2 = new Buf(bs1, this->le);
-  delete bs1;
   optional<int64_t> data2 = b1.DecodeKey(bf2);
+  delete bs1;
   delete bf1;
   delete bf2;
   if (data2.has_value()) {
@@ -1153,8 +1153,8 @@ TEST_F(DingoSerialTest, longSchema) {
   b2.EncodeValue(bf3, data3);
   string* bs2 = bf3->GetBytes();
   Buf* bf4 = new Buf(bs2, this->le);
-  delete bs2;
   optional<int64_t> data4 = b2.DecodeValue(bf4);
+  delete bs2;
   delete bf3;
   delete bf4;
   if (data4.has_value()) {
@@ -1168,8 +1168,8 @@ TEST_F(DingoSerialTest, longSchema) {
   b2.EncodeValue(bf5, data5);
   string* bs3 = bf5->GetBytes();
   Buf* bf6 = new Buf(bs3, this->le);
-  delete bs3;
   optional<int64_t> data6 = b2.DecodeValue(bf6);
+  delete bs3;
   delete bf5;
   delete bf6;
   EXPECT_FALSE(data6.has_value());
@@ -1182,8 +1182,8 @@ TEST_F(DingoSerialTest, longSchema) {
   b3.EncodeValue(bf7, nullopt);
   string* bs4 = bf7->GetBytes();
   Buf* bf8 = new Buf(bs4, this->le);
-  delete bs4;
   EXPECT_FALSE(b3.DecodeKey(bf8).has_value());
+  delete bs4;
   delete bf7;
   delete bf8;
 }
@@ -1198,8 +1198,8 @@ TEST_F(DingoSerialTest, doubleSchema) {
   b1.EncodeKey(bf1, data1);
   string* bs1 = bf1->GetBytes();
   Buf* bf2 = new Buf(bs1, this->le);
-  delete bs1;
   optional<double> data2 = b1.DecodeKey(bf2);
+  delete bs1;
   delete bf1;
   delete bf2;
   if (data2.has_value()) {
@@ -1217,8 +1217,8 @@ TEST_F(DingoSerialTest, doubleSchema) {
   b2.EncodeValue(bf3, data3);
   string* bs2 = bf3->GetBytes();
   Buf* bf4 = new Buf(bs2, this->le);
-  delete bs2;
   optional<double> data4 = b2.DecodeValue(bf4);
+  delete bs2;
   delete bf3;
   delete bf4;
   if (data4.has_value()) {
@@ -1232,8 +1232,8 @@ TEST_F(DingoSerialTest, doubleSchema) {
   b2.EncodeValue(bf5, data5);
   string* bs3 = bf5->GetBytes();
   Buf* bf6 = new Buf(bs3, this->le);
-  delete bs3;
   optional<double> data6 = b2.DecodeValue(bf6);
+  delete bs3;
   delete bf5;
   delete bf6;
   EXPECT_FALSE(data6.has_value());
@@ -1246,8 +1246,8 @@ TEST_F(DingoSerialTest, doubleSchema) {
   b3.EncodeValue(bf7, nullopt);
   string* bs4 = bf7->GetBytes();
   Buf* bf8 = new Buf(bs4, this->le);
-  delete bs4;
   EXPECT_FALSE(b3.DecodeKey(bf8).has_value());
+  delete bs4;
   delete bf7;
   delete bf8;
 }
@@ -1267,8 +1267,8 @@ TEST_F(DingoSerialTest, stringSchema) {
   b1.EncodeKey(bf1, data1);
   string* bs1 = bf1->GetBytes();
   Buf* bf2 = new Buf(bs1, this->le);
-  delete bs1;
   auto data2 = b1.DecodeKey(bf2);
+  delete bs1;
   delete bf1;
   delete bf2;
   if (data2.has_value()) {
@@ -1290,8 +1290,8 @@ TEST_F(DingoSerialTest, stringSchema) {
   b2.EncodeValue(bf3, data3);
   string* bs2 = bf3->GetBytes();
   Buf* bf4 = new Buf(bs2, this->le);
-  delete bs2;
   auto data4 = b2.DecodeValue(bf4);
+  delete bs2;
   delete bf3;
   delete bf4;
   if (data4.has_value()) {
@@ -1305,8 +1305,8 @@ TEST_F(DingoSerialTest, stringSchema) {
   b2.EncodeValue(bf5, data5);
   string* bs3 = bf5->GetBytes();
   Buf* bf6 = new Buf(bs3, this->le);
-  delete bs3;
   auto data6 = b2.DecodeValue(bf6);
+  delete bs3;
   delete bf5;
   delete bf6;
   EXPECT_FALSE(data6.has_value()) << "Line: " << __LINE__;
@@ -1319,8 +1319,8 @@ TEST_F(DingoSerialTest, stringSchema) {
   b3.EncodeValue(bf7, nullopt);
   string* bs4 = bf7->GetBytes();
   Buf* bf8 = new Buf(bs4, this->le);
-  delete bs4;
   auto data8 = b3.DecodeKey(bf8);
+  delete bs4;
   delete bf7;
   delete bf8;
   EXPECT_FALSE(data8.has_value()) << "Line: " << __LINE__;
