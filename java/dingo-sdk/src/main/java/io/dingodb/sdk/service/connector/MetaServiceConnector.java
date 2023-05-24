@@ -22,7 +22,6 @@ import io.dingodb.coordinator.CoordinatorServiceGrpc;
 import io.dingodb.meta.MetaServiceGrpc;
 import io.dingodb.sdk.common.Location;
 import io.dingodb.sdk.common.utils.Optional;
-import io.grpc.CallOptions;
 import io.grpc.ManagedChannel;
 import lombok.extern.slf4j.Slf4j;
 

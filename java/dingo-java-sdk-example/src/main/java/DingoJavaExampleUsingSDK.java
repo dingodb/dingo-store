@@ -1,22 +1,25 @@
-import com.google.common.collect.Maps;
-import io.dingodb.DingoClient;
-import io.dingodb.client.Key;
-import io.dingodb.client.Record;
-import io.dingodb.client.Value;
 import io.dingodb.common.Common;
-import io.dingodb.sdk.common.partition.PartitionDetailDefinition;
-import io.dingodb.sdk.common.partition.PartitionRule;
+import io.dingodb.sdk.common.DingoCommonId;
+import io.dingodb.sdk.common.KeyValue;
+import io.dingodb.sdk.common.codec.DingoKeyValueCodec;
 import io.dingodb.sdk.common.table.ColumnDefinition;
+import io.dingodb.sdk.common.table.RangeDistribution;
+import io.dingodb.sdk.common.table.Table;
 import io.dingodb.sdk.common.table.TableDefinition;
+import io.dingodb.sdk.common.utils.ByteArrayUtils.ComparableByteArray;
+import io.dingodb.sdk.service.meta.MetaServiceClient;
+import io.dingodb.sdk.service.store.StoreServiceClient;
 
+import java.io.IOException;
 import java.util.Arrays;
-import java.util.Collections;
-import java.util.LinkedHashMap;
-import java.util.Map;
+import java.util.NavigableMap;
 
 public class DingoJavaExampleUsingSDK {
 
-    public static void main(String[] args) {
+    private static MetaServiceClient metaService;
+    private static StoreServiceClient storeService;
+
+    public static void main(String[] args) throws IOException {
         if (args.length < 4) {
             System.out.println("java -cp dingo-java-sdk-example-0.6.0-SNAPSHOT.jar DingoJavaExampleUsingSDK 192.168.1.201:22001 huzx 1000000000 true xxxxxxxxxx");
             System.out.println("\t=> Args1: CoordinatorConnection(IP:PORT)");
@@ -30,60 +33,69 @@ public class DingoJavaExampleUsingSDK {
         String tableName = args[1];
         Long  recordCnt = Long.parseLong(args[2]);
         boolean isReCreateTable = args[3].equals("true") ? true : false;
-        String keyPrefix = "";
+        String keyPrefix = "id-";
         if (args.length >= 5) {
             keyPrefix = args[4];
         }
 
         System.out.println("1=>" + coordinatorAddress + ",2=>" + tableName + ",3=>" + recordCnt + ",4=>" + isReCreateTable);
 
-        DingoClient dingoClient = new DingoClient(coordinatorAddress, 10);
-        dingoClient.open();
+        metaService = new MetaServiceClient(coordinatorAddress).getSubMetaService("dingo");
+        DingoCommonId tableId = metaService.getTableId(tableName);
+        if (tableId == null) {
+            createTable(tableName);
+        } else if (isReCreateTable) {
+            metaService.dropTable(tableName);
+            createTable(tableName);
+        }
+        tableId = metaService.getTableId(tableName);
+        Table table = metaService.getTableDefinition(tableName);
 
-        ColumnDefinition c1 = ColumnDefinition.builder().name("id").type("varchar").nullable(false).primary(0).build();
-        ColumnDefinition c2 = ColumnDefinition.builder().name("name").type("varchar").nullable(false).primary(-1).build();
+        DingoKeyValueCodec codec = DingoKeyValueCodec.of(tableId.entityId(), table);
 
-        PartitionDetailDefinition detailDefinition = new PartitionDetailDefinition(null, null, Arrays.asList(new Object[]{"1"}));
-        PartitionRule partitionRule = new PartitionRule(null, null, Arrays.asList(detailDefinition));
+        storeService = new StoreServiceClient(metaService);
 
+        NavigableMap<ComparableByteArray, RangeDistribution> distributions = metaService.getRangeDistribution(tableId);
+
+        for (Long i = 0L; i < recordCnt; i++) {
+            Object[] record = new Object[] {keyPrefix + i, "name-" + i};
+            KeyValue keyValue = codec.encode(record);
+            DingoCommonId regionId = distributions.floorEntry(new ComparableByteArray(keyValue.getKey())).getValue().getId();
+            boolean success = storeService.kvPut(tableId, regionId, keyValue);
+            System.out.printf("Write key id: %s, result: %s\n", i, success);
+        }
+
+        for (Long i = 0L; i < recordCnt; i++) {
+            Object[] record = new Object[] {keyPrefix + i};
+            byte[] key = codec.encodeKey(record);
+            DingoCommonId regionId = distributions.floorEntry(new ComparableByteArray(key)).getValue().getId();
+            byte[] result = storeService.kvGet(tableId, regionId, key);
+            System.out.printf(
+                "Get key id: %s, result: %s\n",
+                i, Arrays.toString(codec.decode(new KeyValue(key, result)))
+            );
+        }
+
+    }
+
+    private static void createTable(String tableName) {
+        ColumnDefinition c1 = ColumnDefinition.builder()
+            .name("id").type("varchar").nullable(false).primary(0)
+            .build();
+        ColumnDefinition c2 = ColumnDefinition.builder()
+            .name("name").type("varchar").nullable(false).primary(-1)
+            .build();
 
         TableDefinition tableDefinition = TableDefinition.builder()
-                .name(tableName)
-                .columns(Arrays.asList(c1, c2))
-                .version(1)
-                .engine(Common.Engine.ENG_ROCKSDB.name())
-                .replica(3)
-                .build();
+            .name(tableName)
+            .columns(Arrays.asList(c1, c2))
+            .version(1)
+            .engine(Common.Engine.ENG_ROCKSDB.name())
+            .replica(3)
+            .build();
 
-        if (isReCreateTable) {
-            try {
-                dingoClient.dropTable(tableName);
-            } catch(Exception ex) {
-            }
-            boolean isSuccess = dingoClient.createTable(tableDefinition);
-            System.out.println("drop table and create table:" + isSuccess);
-            try {
-                Thread.sleep(12000);
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            }
-        }
-
-        Long test_count = recordCnt;
-        for (Long i = 0L; i < test_count; i++) {
-            boolean test = dingoClient.upsert(tableName, new Record(tableDefinition.getColumns(),
-                    new Value[]{Value.get(keyPrefix + i), Value.get(keyPrefix + "=zhangsan=>" + i)}));
-            if (i % 1000 == 0) {
-                System.out.println("Write key: " + i);
-            }
-        }
-
-        for (Long i = 0L; i < test_count; i++) {
-            Record record = dingoClient.get(tableName, new Key(Arrays.asList(Value.get(keyPrefix + i), Value.get(""))));
-            System.out.println(record);
-        }
-
-        dingoClient.close();
+        metaService.createTable(tableName, tableDefinition);
     }
+
 }
 

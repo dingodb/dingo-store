@@ -16,13 +16,7 @@
 
 package io.dingodb.sdk.common.table;
 
-import io.dingodb.meta.Meta;
-import io.dingodb.sdk.common.codec.DingoKeyValueCodec;
-import io.dingodb.sdk.common.codec.KeyValueCodec;
 import io.dingodb.sdk.common.partition.Partition;
-import io.dingodb.sdk.common.type.DingoType;
-import io.dingodb.sdk.common.type.DingoTypeFactory;
-import io.dingodb.sdk.common.type.TupleMapping;
 
 import java.util.Arrays;
 import java.util.LinkedList;
@@ -39,7 +33,7 @@ public interface Table {
 
     int getTtl();
 
-    Partition getPartDefinition();
+    Partition getPartition();
 
     String getEngine();
 
@@ -47,9 +41,9 @@ public interface Table {
 
     int getReplica();
 
-    long autoIncrement();
+    long getAutoIncrement();
 
-    String createSql();
+    String getCreateSql();
 
     default int getPrimaryKeyCount() {
         int count = 0;
@@ -59,14 +53,6 @@ public interface Table {
             }
         }
         return count;
-    }
-
-    default DingoType getDingoType() {
-        return DingoTypeFactory.tuple(
-            getColumns().stream()
-                .map(Column::getDingoType)
-                .toArray(DingoType[]::new)
-        );
     }
 
     default Column getColumn(int index) {
@@ -82,12 +68,18 @@ public interface Table {
         return null;
     }
 
-    default TupleMapping getKeyMapping() {
-        return TupleMapping.of(getKeyColumnIndices());
-    }
-
     default List<Integer> getKeyColumnIndices() {
         return getColumnIndices(true);
+    }
+
+    default List<Column> getKeyColumns() {
+        List<Column> keyCols = new LinkedList<>();
+        for (Column column : getColumns()) {
+            if (column.isPrimary()) {
+                keyCols.add(column);
+            }
+        }
+        return keyCols;
     }
 
     default List<Integer> getColumnIndices(boolean keyOrValue) {
@@ -101,15 +93,12 @@ public interface Table {
         }
         if (keyOrValue) {
             Integer[] pkIndices = new Integer[indices.size()];
-            for (int i = 0; i < indices.size(); i++) {
-                pkIndices[getColumns().get(indices.get(i)).getPrimary()] = indices.get(i);
+            for (Integer integer : indices) {
+                pkIndices[getColumns().get(integer).getPrimary()] = integer;
             }
             return Arrays.asList(pkIndices);
         }
         return indices;
     }
 
-    default KeyValueCodec createCodec(Meta.DingoCommonId tableId) {
-        return new DingoKeyValueCodec(getDingoType(), getKeyMapping(), tableId.getEntityId());
-    }
 }

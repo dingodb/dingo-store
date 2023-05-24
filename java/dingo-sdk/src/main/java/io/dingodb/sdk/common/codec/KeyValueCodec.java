@@ -32,7 +32,7 @@ public interface KeyValueCodec {
 
     byte[] encodeKeyPrefix(Object[] record, int columnCount) throws IOException;
 
-    byte[] encodeMinKeyPrefix() throws IOException;
+    byte[] encodeMinKeyPrefix();
 
-    byte[] encodeMaxKeyPrefix() throws IOException;
+    byte[] encodeMaxKeyPrefix();
 }

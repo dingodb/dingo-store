@@ -21,7 +21,6 @@ import io.dingodb.meta.MetaServiceGrpc;
 import io.dingodb.sdk.common.DingoClientException;
 import io.dingodb.sdk.common.DingoCommonId;
 import io.dingodb.sdk.common.IncrementRange;
-import io.dingodb.sdk.common.concurrent.Executors;
 import io.dingodb.sdk.common.table.RangeDistribution;
 import io.dingodb.sdk.common.table.Table;
 import io.dingodb.sdk.common.table.metric.TableMetrics;
@@ -42,6 +41,8 @@ import java.util.NavigableMap;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -51,6 +52,10 @@ import static io.dingodb.sdk.common.utils.EntityConversion.mapping;
 @Slf4j
 @Accessors(fluent = true)
 public class MetaServiceClient {
+
+    private static final ExecutorService reloadExecutor = Executors.newCachedThreadPool(
+        runnable -> new Thread(Thread.currentThread().getThreadGroup(), runnable, "meta-service-client-reload")
+    );
 
     private static final Meta.DingoCommonId ROOT_SCHEMA_ID = Meta.DingoCommonId.newBuilder()
             .setEntityType(Meta.EntityType.ENTITY_TYPE_SCHEMA)
@@ -64,6 +69,10 @@ public class MetaServiceClient {
             .setParentEntityId(0)
             .build();
 
+    private static Pattern pattern = Pattern.compile("^[A-Z_][A-Z\\d_]+$");
+    private static Pattern warnPattern = Pattern.compile(".*[a-z]+.*");
+    private static final String ROOT_NAME = "root";
+
     private final Map<String, Meta.DingoCommonId> metaServiceIdCache = new ConcurrentSkipListMap<>();
     private final Map<DingoCommonId, Table> tableDefinitionCache = new ConcurrentHashMap<>();
     private final Map<Meta.DingoCommonId, MetaServiceClient> metaServiceCache = new ConcurrentHashMap<>();
@@ -72,9 +81,6 @@ public class MetaServiceClient {
 
     private final Map<DingoCommonId, IncrementRange> incrementCache = new ConcurrentHashMap<>();
 
-    private Pattern pattern = Pattern.compile("^[A-Z_][A-Z\\d_]+$");
-    private Pattern warnPattern = Pattern.compile(".*[a-z]+.*");
-    private String ROOT_NAME = "root";
     private final Meta.DingoCommonId parentId;
     @Getter
     private final Meta.DingoCommonId id;
@@ -94,7 +100,7 @@ public class MetaServiceClient {
         this.name = ROOT_NAME;
         this.metaConnector = MetaServiceConnector.getMetaServiceConnector(servers);
         this.incrementConnector = AutoIncrementServiceConnector.getAutoIncrementServiceConnector(servers);
-        Executors.execute("meta-service-client-reload", this::reload);
+        reloadExecutor.execute(this::reload);
     }
 
     @Deprecated
@@ -103,7 +109,7 @@ public class MetaServiceClient {
         this.id = ROOT_SCHEMA_ID;
         this.name = ROOT_NAME;
         this.metaConnector = metaConnector;
-        Executors.execute("meta-service-client-reload", this::reload);
+        reloadExecutor.execute(this::reload);
     }
 
     private MetaServiceClient(
@@ -232,7 +238,7 @@ public class MetaServiceClient {
         Meta.DingoCommonId tableId = tableDefinitionWithId.getTableId();
         String name = tableDefinitionWithId.getTableDefinition().getName();
         tableIdCache.computeIfAbsent(name, __ -> tableId);
-        tableDefinitionCache.computeIfAbsent(mapping(tableId), __ -> mapping(tableDefinitionWithId.getTableDefinition()));
+        tableDefinitionCache.computeIfAbsent(mapping(tableId), __ -> mapping(tableDefinitionWithId));
     }
 
     public boolean createTable(@NonNull String tableName, @NonNull Table table) {
@@ -296,23 +302,23 @@ public class MetaServiceClient {
         tableName = cleanTableName(tableName);
         Meta.DingoCommonId tableId = tableIdCache.get(tableName);
         if (tableId == null) {
-            Meta.GetTableByNameRequest request = Meta.GetTableByNameRequest.newBuilder()
+            Meta.GetTablesRequest request = Meta.GetTablesRequest.newBuilder()
                     .setSchemaId(id)
-                    .setTableName(tableName)
                     .build();
 
-            Meta.GetTableByNameResponse response = metaConnector.exec(stub -> {
-                Meta.GetTableByNameResponse res = stub.getTableByName(request);
+            Meta.GetTablesResponse response = metaConnector.exec(stub -> {
+                Meta.GetTablesResponse res = stub.getTables(request);
                 return new ServiceConnector.Response<>(res.getError(), res);
             }).getResponse();
 
-            Meta.TableDefinitionWithId withId = response.getTableDefinitionWithId();
-            if (withId.getTableDefinition().getName().equals(tableName)) {
-                addTableCache(withId);
-                tableId = tableIdCache.get(tableName);
+            for (Meta.TableDefinitionWithId td : response.getTableDefinitionWithIdsList()) {
+                if (tableName.equals(td.getTableDefinition().getName())) {
+                    addTableCache(td);
+                    break;
+                }
             }
         }
-        return Optional.mapOrNull(tableId, EntityConversion::mapping);
+        return Optional.mapOrNull(tableIdCache.get(tableName), EntityConversion::mapping);
     }
 
     public Map<String, Table> getTableDefinitions() {
@@ -352,7 +358,7 @@ public class MetaServiceClient {
                 Meta.GetTableResponse res = stub.getTable(request);
                 return new ServiceConnector.Response<>(res.getError(), res);
             }).getResponse();
-            table = mapping(response.getTableDefinitionWithId().getTableDefinition());
+            table = mapping(response.getTableDefinitionWithId());
         }
         return table;
     }

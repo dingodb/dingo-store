@@ -16,9 +16,6 @@
 
 package io.dingodb.sdk.common.table;
 
-import io.dingodb.sdk.common.type.DingoType;
-import io.dingodb.sdk.common.type.DingoTypeFactory;
-
 public interface Column {
 
     String getName();
@@ -38,10 +35,6 @@ public interface Column {
     String getDefaultValue();
 
     boolean isAutoIncrement();
-
-    default DingoType getDingoType() {
-        return DingoTypeFactory.fromName(getType(), getElementType(), isNullable());
-    }
 
     default boolean isPrimary() {
         return getPrimary() > -1;

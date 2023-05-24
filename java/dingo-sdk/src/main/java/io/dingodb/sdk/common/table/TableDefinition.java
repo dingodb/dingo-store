@@ -19,10 +19,12 @@ package io.dingodb.sdk.common.table;
 import io.dingodb.sdk.common.partition.Partition;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
+import lombok.Getter;
 
 import java.util.List;
 import java.util.Map;
 
+@Getter
 @Builder
 @AllArgsConstructor
 public class TableDefinition implements Table {
@@ -35,79 +37,8 @@ public class TableDefinition implements Table {
     private String engine;
     private Map<String, String> properties;
     private int replica;
+    @Builder.Default
     private long autoIncrement = 1;
     private String createSql;
 
-    @Deprecated
-    public TableDefinition(String name, List<Column> columns, int version, int ttl, Partition partition, String engine, Map<String, String> properties) {
-        this(name, columns, version, ttl, partition, engine, properties, 3);
-    }
-
-    @Deprecated
-    public TableDefinition(String name, List<Column> columns, int version, int ttl, Partition partition, String engine, Map<String, String> properties, int replica) {
-        this(name, columns, version, ttl, partition, engine, properties, replica, 1);
-    }
-
-    @Deprecated
-    public TableDefinition(String name, List<Column> columns, int version, int ttl, Partition partition, String engine, Map<String, String> properties, int replica, long autoIncrement) {
-        this.name = name;
-        this.columns = columns;
-        this.version = version;
-        this.ttl = ttl;
-        this.partition = partition;
-        this.engine = engine;
-        this.properties = properties;
-        this.replica = replica;
-        this.autoIncrement = autoIncrement;
-    }
-
-    @Override
-    public String getName() {
-        return this.name;
-    }
-
-    @Override
-    public List<Column> getColumns() {
-        return columns;
-    }
-
-    @Override
-    public int getVersion() {
-        return this.version;
-    }
-
-    @Override
-    public int getTtl() {
-        return this.ttl;
-    }
-
-    @Override
-    public Partition getPartDefinition() {
-        return this.partition;
-    }
-
-    @Override
-    public String getEngine() {
-        return this.engine;
-    }
-
-    @Override
-    public Map<String, String> getProperties() {
-        return this.properties;
-    }
-
-    @Override
-    public int getReplica() {
-        return replica;
-    }
-
-    @Override
-    public long autoIncrement() {
-        return autoIncrement;
-    }
-
-    @Override
-    public String createSql() {
-        return createSql;
-    }
 }
