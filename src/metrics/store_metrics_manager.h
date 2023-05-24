@@ -138,12 +138,13 @@ class StoreRegionMetrics : public TransformKvAble {
   store::RegionMetricsPtr GetMetrics(uint64_t region_id);
   std::vector<store::RegionMetricsPtr> GetAllMetrics();
 
+  std::string GetRegionMinKey(store::RegionPtr region);
+  std::string GetRegionMaxKey(store::RegionPtr region);
+
  private:
   std::shared_ptr<pb::common::KeyValue> TransformToKv(void* obj) override;
   void TransformFromKv(const std::vector<pb::common::KeyValue>& kvs) override;
 
-  std::string GetRegionMinKey(store::RegionPtr region);
-  std::string GetRegionMaxKey(store::RegionPtr region);
   // Todo: later optimize
   uint64_t GetRegionKeyCount(store::RegionPtr region);
   std::vector<uint64_t> GetRegionApproximateSize(std::vector<store::RegionPtr> regions);

@@ -110,8 +110,11 @@ bool StoreRegionMetrics::Init() {
 }
 
 std::string StoreRegionMetrics::GetRegionMinKey(store::RegionPtr region) {
-  DINGO_LOG(INFO) << "GetRegionMinKey... region: " << region->Id();
+  DINGO_LOG(INFO) << fmt::format("GetRegionMinKey... region {} range[{}-{}]", region->Id(),
+                                 Helper::StringToHex(region->Range().start_key()),
+                                 Helper::StringToHex(region->Range().end_key()));
   IteratorOptions options;
+  options.upper_bound = region->Range().end_key();
   auto iter = raw_engine_->NewIterator(Constant::kStoreDataCF, options);
   iter->Seek(region->Range().start_key());
 
@@ -124,8 +127,11 @@ std::string StoreRegionMetrics::GetRegionMinKey(store::RegionPtr region) {
 }
 
 std::string StoreRegionMetrics::GetRegionMaxKey(store::RegionPtr region) {
-  DINGO_LOG(INFO) << "GetRegionMaxKey... region: " << region->Id();
+  DINGO_LOG(INFO) << fmt::format("GetRegionMaxKey... region {} range[{}-{}]", region->Id(),
+                                 Helper::StringToHex(region->Range().start_key()),
+                                 Helper::StringToHex(region->Range().end_key()));
   IteratorOptions options;
+  options.lower_bound = region->Range().start_key();
   auto iter = raw_engine_->NewIterator(Constant::kStoreDataCF, options);
   iter->SeekForPrev(region->Range().end_key());
 
