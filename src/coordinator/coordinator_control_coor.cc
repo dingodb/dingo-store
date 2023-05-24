@@ -1077,11 +1077,11 @@ butil::Status CoordinatorControl::SplitRegion(uint64_t split_from_region_id, uin
 butil::Status CoordinatorControl::SplitRegionWithTaskList(uint64_t split_from_region_id, uint64_t split_to_region_id,
                                                           std::string split_watershed_key,
                                                           pb::coordinator_internal::MetaIncrement& meta_increment) {
-  if (!ValidateTaskListConflict(split_from_region_id, split_to_region_id)) {
+  auto validate_ret = ValidateTaskListConflict(split_from_region_id, split_to_region_id);
+  if (!validate_ret.ok()) {
     DINGO_LOG(ERROR) << "SplitRegionWithTaskList validate task list conflict failed, split_from_region_id="
                      << split_from_region_id << ", split_to_region_id=" << split_to_region_id;
-    return butil::Status(pb::error::Errno::ETASK_LIST_CONFLICT,
-                         "SplitRegionWithTaskList validate task list conflict failed");
+    return validate_ret;
   }
 
   if (split_to_region_id > 0) {
@@ -1163,11 +1163,11 @@ butil::Status CoordinatorControl::SplitRegionWithTaskList(uint64_t split_from_re
 
 butil::Status CoordinatorControl::MergeRegionWithTaskList(uint64_t merge_from_region_id, uint64_t merge_to_region_id,
                                                           pb::coordinator_internal::MetaIncrement& meta_increment) {
-  if (!ValidateTaskListConflict(merge_from_region_id, merge_to_region_id)) {
+  auto validate_ret = ValidateTaskListConflict(merge_from_region_id, merge_to_region_id);
+  if (!validate_ret.ok()) {
     DINGO_LOG(ERROR) << "mergeRegionWithTaskList validate task list conflict failed, merge_from_region_id="
                      << merge_from_region_id << ", merge_to_region_id=" << merge_to_region_id;
-    return butil::Status(pb::error::Errno::ETASK_LIST_CONFLICT,
-                         "mergeRegionWithTaskList validate task list conflict failed");
+    return validate_ret;
   }
 
   // validate merge_from_region_id
@@ -1296,11 +1296,11 @@ butil::Status CoordinatorControl::MergeRegionWithTaskList(uint64_t merge_from_re
 // ChangePeerRegionWithTaskList
 butil::Status CoordinatorControl::ChangePeerRegionWithTaskList(
     uint64_t region_id, std::vector<uint64_t>& new_store_ids, pb::coordinator_internal::MetaIncrement& meta_increment) {
-  if (!ValidateTaskListConflict(region_id, region_id)) {
+  auto validate_ret = ValidateTaskListConflict(region_id, region_id);
+  if (!validate_ret.ok()) {
     DINGO_LOG(ERROR) << "ChangePeerRegionWithTaskList validate task list conflict failed, change_peer_region_id="
                      << region_id;
-    return butil::Status(pb::error::Errno::ETASK_LIST_CONFLICT,
-                         "ChangePeerRegionWithTaskList validate task list conflict failed");
+    return validate_ret;
   }
 
   // validate region_id
@@ -1514,14 +1514,14 @@ butil::Status CoordinatorControl::TransferLeaderRegionWithTaskList(
   return butil::Status::OK();
 }
 
-bool CoordinatorControl::ValidateTaskListConflict(uint64_t region_id, uint64_t second_region_id) {
+butil::Status CoordinatorControl::ValidateTaskListConflict(uint64_t region_id, uint64_t second_region_id) {
   // check task_list conflict
   butil::FlatMap<uint64_t, pb::coordinator::TaskList> task_list_map_temp;
   task_list_map_temp.init(1000);
   int ret = task_list_map_.GetFlatMapCopy(task_list_map_temp);
   if (ret < 0) {
     DINGO_LOG(ERROR) << "ValidateTaskListConflict task_list_map_.GetFlatMapCopy failed, region_id = " << region_id;
-    return false;
+    return butil::Status(pb::error::Errno::EINTERNAL, "ValidateTaskListConflict task_list_map_.GetFlatMapCopy failed");
   }
 
   for (const auto& task_list : task_list_map_temp) {
@@ -1530,7 +1530,9 @@ bool CoordinatorControl::ValidateTaskListConflict(uint64_t region_id, uint64_t s
         for (const auto& region_cmd : store_operation.region_cmds()) {
           if (region_cmd.region_id() == region_id || region_cmd.region_id() == second_region_id) {
             DINGO_LOG(ERROR) << "ValidateTaskListConflict task_list conflict, region_id = " << region_id;
-            return false;
+            return butil::Status(
+                pb::error::Errno::ETASK_LIST_CONFLICT,
+                "ValidateTaskListConflict task_list conflict, region_id = " + std::to_string(region_id));
           }
         }
       }
@@ -1544,19 +1546,23 @@ bool CoordinatorControl::ValidateTaskListConflict(uint64_t region_id, uint64_t s
   if (ret < 0) {
     DINGO_LOG(ERROR) << "ValidateTaskListConflict store_operation_map_.GetFlatMapCopy failed, region_id = "
                      << region_id;
-    return false;
+    return butil::Status(pb::error::Errno::EINTERNAL,
+                         "ValidateTaskListConflict store_operation_map_.GetFlatMapCopy failed, region_id = " +
+                             std::to_string(region_id));
   }
 
   for (const auto& store_operation : store_operation_map_temp) {
     for (const auto& region_cmd : store_operation.second.region_cmds()) {
       if (region_cmd.region_id() == region_id || region_cmd.region_id() == second_region_id) {
         DINGO_LOG(ERROR) << "ValidateTaskListConflict store_operation conflict, region_id = " << region_id;
-        return false;
+        return butil::Status(
+            pb::error::Errno::ESTORE_OPERATION_CONFLICT,
+            "ValidateTaskListConflict store_operation conflict, region_id = " + std::to_string(region_id));
       }
     }
   }
 
-  return true;
+  return butil::Status::OK();
 }
 
 // CleanStoreOperation

@@ -59,7 +59,7 @@ class StoreStateMachine : public braft::StateMachine {
                              bool is_restart);
   ~StoreStateMachine() override = default;
 
-  bool Init();
+  static bool Init();
 
   void on_apply(braft::Iterator& iter) override;
   void on_shutdown() override;
