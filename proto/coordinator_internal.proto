@@ -138,6 +138,7 @@ message MetaIncrementStoreMetrics {
   uint64 id = 1;
   dingodb.pb.common.StoreMetrics store_metrics = 2;
   MetaIncrementOpType op_type = 3;
+  bool is_partial_region_metrics = 4;
 }
 
 message MetaIncrementTableMetrics {

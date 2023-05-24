@@ -1198,11 +1198,27 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
 
       } else if (store_metrics.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
         auto& update_store = store_metrics_map_[store_metrics.id()];
-        update_store.CopyFrom(store_metrics.store_metrics());
-        DINGO_LOG(INFO) << "ApplyMetaIncrement store_metrics UPDATE, [id=" << store_metrics.id() << "] success";
+        if (!store_metrics.is_partial_region_metrics()) {
+          update_store.CopyFrom(store_metrics.store_metrics());
+        } else {
+          if (store_metrics.store_metrics().region_metrics_map_size() > 0) {
+            for (const auto& it : store_metrics.store_metrics().region_metrics_map()) {
+              auto region_metrics_to_update = update_store.mutable_region_metrics_map()->find(it.first);
+              if (region_metrics_to_update != update_store.mutable_region_metrics_map()->end()) {
+                region_metrics_to_update->second.CopyFrom(it.second);
+              } else {
+                update_store.mutable_region_metrics_map()->insert(it);
+              }
+            }
+          }
+        }
+        DINGO_LOG(INFO) << "ApplyMetaIncrement store_metrics UPDATE, [id=" << store_metrics.id() << "] success, "
+                        << "region_metrics_map_size=" << store_metrics.store_metrics().region_metrics_map_size()
+                        << ", is_partial_region_metrics=" << store_metrics.is_partial_region_metrics()
+                        << ", store_id=" << store_metrics.id();
 
         // meta_write_kv
-        meta_write_to_kv.push_back(store_metrics_meta_->TransformToKvValue(store_metrics.store_metrics()));
+        meta_write_to_kv.push_back(store_metrics_meta_->TransformToKvValue(update_store));
 
       } else if (store_metrics.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
         store_metrics_map_.erase(store_metrics.id());
