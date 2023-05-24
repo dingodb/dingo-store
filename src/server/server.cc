@@ -227,58 +227,61 @@ bool Server::InitCrontabManager() {
 
   if (role_ == pb::common::ClusterRole::STORE) {
     // Add heartbeat crontab
-    std::shared_ptr<Crontab> heartbeat_crontab = std::make_shared<Crontab>();
-    heartbeat_crontab->name = "HEARTBEA";
     uint64_t heartbeat_interval = config->GetInt("server.heartbeat_interval");
-    if (heartbeat_interval <= 0) {
+    if (heartbeat_interval < 0) {
       DINGO_LOG(ERROR) << "config server.heartbeat_interval illegal";
       return false;
-    }
-    heartbeat_crontab->interval = heartbeat_interval;
-    heartbeat_crontab->func = [](void*) { Heartbeat::TriggerStoreHeartbeat(0); };
-    heartbeat_crontab->arg = nullptr;
+    } else if (heartbeat_interval > 0) {
+      std::shared_ptr<Crontab> heartbeat_crontab = std::make_shared<Crontab>();
+      heartbeat_crontab->name = "HEARTBEA";
+      heartbeat_crontab->interval = heartbeat_interval;
+      heartbeat_crontab->func = [](void*) { Heartbeat::TriggerStoreHeartbeat(0); };
+      heartbeat_crontab->arg = nullptr;
 
-    crontab_manager_->AddAndRunCrontab(heartbeat_crontab);
+      crontab_manager_->AddAndRunCrontab(heartbeat_crontab);
+    }
 
     // Add store metrics crontab
-    std::shared_ptr<Crontab> metrics_crontab = std::make_shared<Crontab>();
-    metrics_crontab->name = "METRICS";
     uint64_t metrics_interval = config->GetInt("server.metrics_collect_interval");
-    if (metrics_interval <= 0) {
+    if (metrics_interval < 0) {
       DINGO_LOG(ERROR) << "config server.metrics_collect_interval illegal";
       return false;
-    }
-    metrics_crontab->interval = metrics_interval;
-    metrics_crontab->func = [](void*) {
-      bthread_t tid;
-      const bthread_attr_t attr = BTHREAD_ATTR_NORMAL;
-      bthread_start_background(
-          &tid, &attr,
-          [](void*) -> void* {
-            Server::GetInstance()->GetStoreMetricsManager()->CollectMetrics();
-            return nullptr;
-          },
-          nullptr);
-    };
-    metrics_crontab->arg = nullptr;
+    } else if (metrics_interval > 0) {
+      std::shared_ptr<Crontab> metrics_crontab = std::make_shared<Crontab>();
+      metrics_crontab->name = "METRICS";
+      metrics_crontab->interval = metrics_interval;
+      metrics_crontab->func = [](void*) {
+        bthread_t tid;
+        const bthread_attr_t attr = BTHREAD_ATTR_NORMAL;
+        bthread_start_background(
+            &tid, &attr,
+            [](void*) -> void* {
+              Server::GetInstance()->GetStoreMetricsManager()->CollectMetrics();
+              return nullptr;
+            },
+            nullptr);
+      };
+      metrics_crontab->arg = nullptr;
 
-    crontab_manager_->AddAndRunCrontab(metrics_crontab);
+      crontab_manager_->AddAndRunCrontab(metrics_crontab);
+    }
 
     // Add scan crontab
-    ScanManager::GetInstance()->Init(config);
-    std::shared_ptr<Crontab> scan_crontab = std::make_shared<Crontab>();
-    ScanManager::GetInstance()->Init(config);
-    scan_crontab->name = "SCAN";
     uint64_t scan_interval = config->GetInt(Constant::kStoreScan + "." + Constant::kStoreScanScanIntervalMs);
-    if (scan_interval <= 0) {
+    if (scan_interval < 0) {
       DINGO_LOG(ERROR) << "store.scan.scan_interval_ms illegal";
       return false;
-    }
-    scan_crontab->interval = scan_interval;
-    scan_crontab->func = ScanManager::RegularCleaningHandler;
-    scan_crontab->arg = ScanManager::GetInstance();
+    } else if (scan_interval < 0) {
+      ScanManager::GetInstance()->Init(config);
+      std::shared_ptr<Crontab> scan_crontab = std::make_shared<Crontab>();
+      ScanManager::GetInstance()->Init(config);
+      scan_crontab->name = "SCAN";
+      scan_crontab->interval = scan_interval;
+      scan_crontab->func = ScanManager::RegularCleaningHandler;
+      scan_crontab->arg = ScanManager::GetInstance();
 
-    crontab_manager_->AddAndRunCrontab(scan_crontab);
+      crontab_manager_->AddAndRunCrontab(scan_crontab);
+    }
 
   } else if (role_ == pb::common::ClusterRole::COORDINATOR) {
     // Add push crontab

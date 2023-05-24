@@ -98,7 +98,7 @@ class RawRocksEngine : public RawEngine {
     explicit RocksSnapshot(const rocksdb::Snapshot* snapshot, std::shared_ptr<rocksdb::DB> db)
         : snapshot_(snapshot), db_(db) {}
     ~RocksSnapshot() override {
-      if (db_) {
+      if (db_ != nullptr && snapshot_ != nullptr) {
         db_->ReleaseSnapshot(snapshot_);
       }
     };
