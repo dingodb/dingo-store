@@ -18,7 +18,6 @@ package io.dingodb.sdk.service.store;
 
 import com.google.protobuf.ByteString;
 import io.dingodb.common.Common;
-import io.dingodb.error.ErrorOuterClass;
 import io.dingodb.sdk.common.DingoClientException;
 import io.dingodb.sdk.common.DingoCommonId;
 import io.dingodb.sdk.common.KeyValue;
@@ -62,7 +61,7 @@ public class StoreServiceClient {
         this.retryTimes = retryTimes;
     }
 
-    public Supplier<Location> locationSupplier(DingoCommonId schemaId, DingoCommonId tableId, DingoCommonId regionId) {
+    private Supplier<Location> locationSupplier(DingoCommonId schemaId, DingoCommonId tableId, DingoCommonId regionId) {
         return () -> rootMetaService.getSubMetaService(schemaId).getRangeDistribution(tableId).values().stream()
             .filter(rd -> rd.getId().equals(regionId))
             .findAny()
@@ -70,6 +69,12 @@ public class StoreServiceClient {
             .orElse(null);
     }
 
+    /**
+     * Get store connector for the region of a specified table.
+     * @param tableId table id
+     * @param regionId region id
+     * @return store connector
+     */
     public StoreServiceConnector getStoreConnector(DingoCommonId tableId, DingoCommonId regionId) {
         // Schema parent is root, table parent is schema, so use root schema id and table parent id create schema id.
         SDKCommonId schemaId = new SDKCommonId(
@@ -88,9 +93,18 @@ public class StoreServiceClient {
         );
     }
 
+
     public void shutdown() {
+        connectorCache.clear();
     }
 
+    /**
+     * Returns the value to which the specified key, or empty byte array if not have the key.
+     * @param tableId table id of key
+     * @param regionId region id of key
+     * @param key key
+     * @return value
+     */
     public byte[] kvGet(DingoCommonId tableId, DingoCommonId regionId, byte[] key) {
         return exec(stub -> {
             Store.KvGetRequest req = Store.KvGetRequest.newBuilder()
@@ -102,6 +116,13 @@ public class StoreServiceClient {
         }, retryTimes, tableId, regionId);
     }
 
+    /**
+     * Returns the KeyValue list for the specified keys that are found.
+     * @param tableId table id of keys
+     * @param regionId region id of keys
+     * @param keys keys, the keys must in same region
+     * @return values
+     */
     public List<KeyValue> kvBatchGet(DingoCommonId tableId, DingoCommonId regionId, List<byte[]> keys) {
         return exec(stub -> {
             Store.KvBatchGetRequest req = Store.KvBatchGetRequest.newBuilder()
@@ -116,6 +137,18 @@ public class StoreServiceClient {
         }, retryTimes, tableId, regionId);
     }
 
+    /**
+     * Returns KeyValue iterator of scan, the scan is starting from the given start key,
+     * traverse in order until a key is encountered that exceeds the specified end key.
+     * Since the key is a variable-length byte array, the start and end specified in the range will
+     * be treated as prefixes.
+     * @param tableId table id
+     * @param regionId region id
+     * @param range key range, start and end must in same region
+     * @param withStart is with start
+     * @param withEnd is with end
+     * @return KeyValue iterator of scan
+     */
     public Iterator<KeyValue> scan(
         DingoCommonId tableId, DingoCommonId regionId, Range range, boolean withStart, boolean withEnd
     ) {
@@ -135,6 +168,13 @@ public class StoreServiceClient {
         );
     }
 
+    /**
+     * Put key and value to store.
+     * @param tableId table id
+     * @param regionId region id
+     * @param keyValue key and value
+     * @return is success
+     */
     public boolean kvPut(DingoCommonId tableId, DingoCommonId regionId, KeyValue keyValue) {
         return exec(stub -> {
             Store.KvPutRequest req = Store.KvPutRequest.newBuilder()
@@ -160,6 +200,13 @@ public class StoreServiceClient {
         }, retryTimes, tableId, regionId);
     }
 
+    /**
+     * Put key and value to store if the key is not in store.
+     * @param tableId table id
+     * @param regionId region id
+     * @param keyValue key and value
+     * @return true if key is not in store or false if the key exist in store
+     */
     public boolean kvPutIfAbsent(DingoCommonId tableId, DingoCommonId regionId, KeyValue keyValue) {
         return exec(stub -> {
             Store.KvPutIfAbsentRequest req = Store.KvPutIfAbsentRequest.newBuilder()
@@ -187,6 +234,13 @@ public class StoreServiceClient {
         }, retryTimes, tableId, regionId);
     }
 
+    /**
+     * Delete keys on store.
+     * @param tableId table id
+     * @param regionId region id
+     * @param keys delete key list, must in same region
+     * @return delete success or fail with keys
+     */
     public List<Boolean> kvBatchDelete(DingoCommonId tableId, DingoCommonId regionId, List<byte[]> keys) {
         return exec(stub -> {
             Store.KvBatchDeleteRequest req = Store.KvBatchDeleteRequest.newBuilder()
@@ -198,11 +252,18 @@ public class StoreServiceClient {
         }, retryTimes, tableId, regionId);
     }
 
-    public long kvDeleteRange(DingoCommonId tableId, DingoCommonId regionId, RangeWithOptions options) {
+    /**
+     * Delete keys in range, range strategy like {@link StoreServiceClient#scan}.
+     * @param tableId table id
+     * @param regionId region id
+     * @param range key range, start and end must in same region
+     * @return delete keys count
+     */
+    public long kvDeleteRange(DingoCommonId tableId, DingoCommonId regionId, RangeWithOptions range) {
         return exec(stub -> {
             Store.KvDeleteRangeRequest req = Store.KvDeleteRangeRequest.newBuilder()
                     .setRegionId(regionId.entityId())
-                    .setRange(mapping(options))
+                    .setRange(mapping(range))
                     .build();
             Store.KvDeleteRangeResponse res = stub.kvDeleteRange(req);
             return new ServiceConnector.Response<>(res.getError(), res.getDeleteCount());
@@ -216,15 +277,5 @@ public class StoreServiceClient {
             DingoCommonId regionId
     ) {
         return getStoreConnector(tableId, regionId).exec(function, retryTimes, err -> true).getResponse();
-
-    }
-
-    private void check(ErrorOuterClass.Error error) {
-        if (error == null) {
-            return;
-        }
-        if (error.getErrcodeValue() != 0) {
-            throw new DingoClientException(error.getErrcodeValue(), error.getErrmsg());
-        }
     }
 }

@@ -31,7 +31,10 @@ public final class Parameters {
 
     /**
      * If input is null, throw {@link NullPointerException}, else return input.
+     *
+     * @param <T> input type
      * @param input check object
+     * @param message exception message if input is null
      * @return input
      */
     public static <T> @NonNull T nonNull(T input, String message) {
@@ -40,7 +43,9 @@ public final class Parameters {
 
     /**
      * If check function return is false, throw exception, else return input.
+     * @param <T> input type
      * @param input check object
+     * @param checkFunction check function
      * @param message error message
      * @return input
      */
@@ -54,7 +59,9 @@ public final class Parameters {
 
     /**
      * If check function return is false, throw exception, else return input.
+     * @param <T> input type
      * @param input check object
+     * @param checkFunction check function
      * @param throwableSupplier throwable supplier
      * @return input
      */
@@ -99,6 +106,7 @@ public final class Parameters {
 
     /**
      * If check function return is false, return default value, else return input.
+     * @param <T> input type
      * @param input check object
      * @param defaultValue default value
      * @return input
@@ -109,6 +117,7 @@ public final class Parameters {
 
     /**
      * If check function return is false, return default value, else return input.
+     * @param <T> input type
      * @param input check object
      * @param valueSupplier default value supplier
      * @return input
@@ -119,7 +128,9 @@ public final class Parameters {
 
     /**
      * If check function return is false, return default value, else return input.
+     * @param <T> input type
      * @param input check object
+     * @param checkFunction check function
      * @param valueSupplier default value supplier
      * @return input
      */
@@ -139,7 +150,9 @@ public final class Parameters {
 
     /**
      * If check function return is false, return default value, else return input.
+     * @param <T> input type
      * @param input check object
+     * @param checkFunction check function
      * @param defaultValue default value supplier
      * @return input
      */

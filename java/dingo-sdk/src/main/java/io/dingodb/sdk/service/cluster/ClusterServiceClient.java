@@ -20,13 +20,10 @@ import io.dingodb.common.Common;
 import io.dingodb.coordinator.Coordinator;
 import io.dingodb.coordinator.CoordinatorServiceGrpc;
 import io.dingodb.sdk.common.cluster.Executor;
-import io.dingodb.sdk.common.cluster.ExecutorMap;
 import io.dingodb.sdk.common.utils.EntityConversion;
 import io.dingodb.sdk.service.connector.ServiceConnector;
 
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 import static io.dingodb.sdk.common.utils.EntityConversion.mapping;

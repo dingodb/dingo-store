@@ -20,70 +20,70 @@ import io.dingodb.sdk.common.KeyValue;
 import io.dingodb.sdk.common.serial.RecordDecoder;
 import io.dingodb.sdk.common.serial.RecordEncoder;
 import io.dingodb.sdk.common.serial.schema.DingoSchema;
-import io.dingodb.sdk.common.type.DingoType;
-import io.dingodb.sdk.common.type.TupleMapping;
-import io.dingodb.sdk.common.type.converter.DingoConverter;
+import io.dingodb.sdk.common.table.Column;
+import io.dingodb.sdk.common.table.Table;
 import org.checkerframework.checker.nullness.qual.NonNull;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
 public class DingoKeyValueCodec implements KeyValueCodec {
 
-    private DingoType type;
-    private List<DingoSchema> table;
+    private List<DingoSchema> schemas;
     RecordEncoder re;
     RecordDecoder rd;
 
-    public DingoKeyValueCodec(DingoType type, TupleMapping keyMapping, long commonId) {
-        this.type = type;
-        table = type.toDingoSchemas();
-        for (DingoSchema schema : table) {
-            if (keyMapping.contains(schema.getIndex())) {
-                schema.setIsKey(true);
-            } else {
-                schema.setIsKey(false);
-            }
+    public DingoKeyValueCodec(long commonId, List<DingoSchema> schemas) {
+        this.schemas = schemas;
+        re = new RecordEncoder(0, schemas, commonId);
+        rd = new RecordDecoder(0, schemas, commonId);
+    }
+
+    public static DingoKeyValueCodec of(long id, Table table) {
+        return of(id, table.getColumns());
+    }
+
+    public static DingoKeyValueCodec of(long id, List<Column> columns) {
+        List<DingoSchema> schemas = new ArrayList<>(columns.size());
+        for (int i = 0; i < columns.size(); i++) {
+            schemas.add(CodecUtils.createSchemaForColumn(columns.get(i), i));
         }
-        re = new RecordEncoder(0, table, commonId);
-        rd = new RecordDecoder(0, table, commonId);
+        return new DingoKeyValueCodec(id, schemas);
     }
 
     @Override
     public Object[] decode(KeyValue keyValue) throws IOException {
-        return (Object[]) type.convertFrom(rd.decode(keyValue), DingoConverter.INSTANCE);
+        return rd.decode(keyValue);
     }
 
     @Override
     public Object[] decodeKeyPrefix(byte[] keyPrefix) throws IOException {
-        return (Object[]) type.convertFrom(rd.decodeKeyPrefix(keyPrefix), DingoConverter.INSTANCE);
+        return rd.decodeKeyPrefix(keyPrefix);
     }
 
     @Override
     public KeyValue encode(Object @NonNull [] record) throws IOException {
-        Object[] converted = (Object[]) type.convertTo(record, DingoConverter.INSTANCE);
-        return re.encode(converted);
+        return re.encode(record);
     }
 
     @Override
     public byte[] encodeKey(Object[] record) throws IOException {
-        Object[] converted = (Object[]) type.convertTo(record, DingoConverter.INSTANCE);
-        return re.encodeKey(converted);
+        return re.encodeKey(record);
     }
 
     @Override
     public byte[] encodeKeyPrefix(Object[] record, int columnCount) throws IOException {
-        Object[] converted = (Object[]) type.convertTo(record, DingoConverter.INSTANCE);
-        return re.encodeKeyPrefix(converted, columnCount);
+        return re.encodeKeyPrefix(record, columnCount);
     }
 
     @Override
-    public byte[] encodeMinKeyPrefix() throws IOException {
+    public byte[] encodeMinKeyPrefix() {
         return re.encodeMinKeyPrefix();
     }
 
     @Override
-    public byte[] encodeMaxKeyPrefix() throws IOException {
+    public byte[] encodeMaxKeyPrefix() {
         return re.encodeMaxKeyPrefix();
     }
 }

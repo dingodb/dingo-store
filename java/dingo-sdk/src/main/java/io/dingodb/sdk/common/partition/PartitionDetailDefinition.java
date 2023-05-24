@@ -16,15 +16,22 @@
 
 package io.dingodb.sdk.common.partition;
 
+import lombok.Getter;
+
 import java.util.List;
 
+@Getter
 public class PartitionDetailDefinition implements PartitionDetail {
 
     private String partName;
     private String operator;
-    private List<Object> operand;
+    private Object[] operand;
 
-    public PartitionDetailDefinition(Object partName, String operator, List<Object> operand) {
+    public PartitionDetailDefinition(String partName, String operator, List<Object> operand) {
+        this(partName, operator, operand.toArray());
+    }
+
+    public PartitionDetailDefinition(Object partName, String operator, Object[] operand) {
         if (partName != null) {
             this.partName = partName.toString();
         }
@@ -32,18 +39,4 @@ public class PartitionDetailDefinition implements PartitionDetail {
         this.operand = operand;
     }
 
-    @Override
-    public String getPartName() {
-        return partName;
-    }
-
-    @Override
-    public String getOperator() {
-        return operator;
-    }
-
-    @Override
-    public List<Object> getOperand() {
-        return operand;
-    }
 }

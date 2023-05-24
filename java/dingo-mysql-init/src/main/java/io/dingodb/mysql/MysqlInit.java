@@ -29,8 +29,6 @@ import io.dingodb.sdk.common.table.RangeDistribution;
 import io.dingodb.sdk.common.table.Table;
 import io.dingodb.sdk.common.table.TableDefinition;
 import io.dingodb.sdk.common.utils.ByteArrayUtils;
-import io.dingodb.sdk.service.connector.MetaServiceConnector;
-import io.dingodb.sdk.service.connector.ServiceConnector;
 import io.dingodb.sdk.service.meta.MetaServiceClient;
 import io.dingodb.sdk.service.store.StoreServiceClient;
 
@@ -88,9 +86,7 @@ public class MysqlInit {
         DingoCommonId tableId = mysqlMetaClient.getTableId(tableName);
         Map<String, Object> userValuesMap = getUserObjectMap(tableName);
         Object[] userValues = userValuesMap.values().toArray();
-        KeyValueCodec codec = new DingoKeyValueCodec(tableDefinition.getDingoType(),
-                tableDefinition.getKeyMapping(),
-                tableId.entityId());
+        KeyValueCodec codec = DingoKeyValueCodec.of(tableId.entityId(), tableDefinition);
         KeyValue keyValue = codec.encode(userValues);
 
         NavigableMap<ByteArrayUtils.ComparableByteArray, RangeDistribution> rangeDistribution
@@ -104,8 +100,7 @@ public class MysqlInit {
     }
 
     public static void initMetaStore(String coordinatorSvr) {
-        ServiceConnector connector = MetaServiceConnector.getMetaServiceConnector(coordinatorSvr);
-        rootMeta = new MetaServiceClient(connector);
+        rootMeta = new MetaServiceClient(coordinatorSvr);
 
         storeServiceClient = new StoreServiceClient(rootMeta);
     }
@@ -143,8 +138,7 @@ public class MysqlInit {
         sleep();
         DingoCommonId tableId = informationMetaClient.getTableId(tableName);
 
-        KeyValueCodec codec = new DingoKeyValueCodec(tableDefinition.getDingoType(),
-                tableDefinition.getKeyMapping(), tableId.entityId());
+        KeyValueCodec codec = DingoKeyValueCodec.of(tableId.entityId(), tableDefinition);
         List<Object[]> values = initGlobalVariables();
         List<KeyValue> keyValueList = values.stream().map(value -> {
             try {
@@ -217,13 +211,12 @@ public class MysqlInit {
 
     private static TableDefinition getTableDefinition(String tableName) throws IOException {
         List<Column> columns = getColumnList(tableName);
-        return new TableDefinition(tableName,
-                columns,
-                1,
-                0,
-                null,
-                Common.Engine.ENG_ROCKSDB.name(),
-                null);
+        return TableDefinition.builder()
+            .name(tableName)
+            .columns(columns)
+            .version(1)
+            .engine(Common.Engine.ENG_ROCKSDB.name())
+            .build();
     }
 
     private static List<Column> getColumnList(String tableName) throws IOException {
@@ -287,7 +280,7 @@ public class MysqlInit {
                     map.put(column.getName(), "mysql_native_password");
                     break;
                 case "PASSWORD_LAST_CHANGED":
-                    map.put(column.getName(), new Timestamp(System.currentTimeMillis()));
+                    map.put(column.getName(), new Timestamp(System.currentTimeMillis()).getTime());
                     break;
                 default:
                     map.put(column.getName(), "Y");
@@ -316,9 +309,7 @@ public class MysqlInit {
             Object[] userKeys = new Object[tableDefinition.getColumns().size()];
             userKeys[0] = "%";
             userKeys[1] = "root";
-            KeyValueCodec codec = new DingoKeyValueCodec(tableDefinition.getDingoType(),
-                    tableDefinition.getKeyMapping(),
-                    tableId.entityId());
+            KeyValueCodec codec = DingoKeyValueCodec.of(tableId.entityId(), tableDefinition);
             try {
                 byte[] key = codec.encodeKey(userKeys);
                 NavigableMap<ByteArrayUtils.ComparableByteArray, RangeDistribution> rangeDistribution

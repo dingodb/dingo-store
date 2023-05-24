@@ -32,21 +32,25 @@ import io.dingodb.sdk.common.cluster.ExecutorUser;
 import io.dingodb.sdk.common.cluster.InternalExecutor;
 import io.dingodb.sdk.common.cluster.InternalExecutorMap;
 import io.dingodb.sdk.common.cluster.InternalExecutorUser;
+import io.dingodb.sdk.common.codec.DingoKeyValueCodec;
 import io.dingodb.sdk.common.codec.KeyValueCodec;
+import io.dingodb.sdk.common.partition.Partition;
 import io.dingodb.sdk.common.partition.PartitionDetail;
+import io.dingodb.sdk.common.partition.PartitionDetailDefinition;
+import io.dingodb.sdk.common.partition.PartitionRule;
 import io.dingodb.sdk.common.table.Column;
 import io.dingodb.sdk.common.table.ColumnDefinition;
 import io.dingodb.sdk.common.table.RangeDistribution;
 import io.dingodb.sdk.common.table.Table;
 import io.dingodb.sdk.common.table.TableDefinition;
 import io.dingodb.sdk.common.table.metric.TableMetrics;
-import io.dingodb.sdk.common.type.TypeCode;
 
-import java.io.IOException;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
-import java.util.TreeSet;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static io.dingodb.meta.Meta.SqlType.SQL_TYPE_ANY;
 import static io.dingodb.meta.Meta.SqlType.SQL_TYPE_ARRAY;
@@ -61,6 +65,7 @@ import static io.dingodb.meta.Meta.SqlType.SQL_TYPE_MULTISET;
 import static io.dingodb.meta.Meta.SqlType.SQL_TYPE_TIME;
 import static io.dingodb.meta.Meta.SqlType.SQL_TYPE_TIMESTAMP;
 import static io.dingodb.meta.Meta.SqlType.SQL_TYPE_VARCHAR;
+import static io.dingodb.sdk.common.utils.NoBreakFunctions.wrap;
 import static io.dingodb.sdk.common.utils.Parameters.cleanNull;
 
 public class EntityConversion {
@@ -84,22 +89,45 @@ public class EntityConversion {
                 .setEngine(Common.Engine.valueOf(table.getEngine()))
                 .setReplica(table.getReplica())
                 .addAllColumns(columnDefinitions)
-                .setAutoIncrement(table.autoIncrement())
-                .setCreateSql(Parameters.cleanNull(table.createSql(), ""))
+                .setAutoIncrement(table.getAutoIncrement())
+                .setCreateSql(Parameters.cleanNull(table.getCreateSql(), ""))
                 .build();
     }
 
-    public static Table mapping(Meta.TableDefinition tableDefinition) {
+    public static Table mapping(Meta.TableDefinitionWithId tableDefinitionWithId) {
+        Meta.TableDefinition tableDefinition = tableDefinitionWithId.getTableDefinition();
+        List<Column> columns = tableDefinition.getColumnsList().stream()
+            .map(EntityConversion::mapping)
+            .collect(Collectors.toList());
         return TableDefinition.builder()
                 .name(tableDefinition.getName())
-                .columns(tableDefinition.getColumnsList().stream().map(EntityConversion::mapping).collect(Collectors.toList()))
+                .columns(columns)
                 .version(tableDefinition.getVersion())
                 .ttl((int) tableDefinition.getTtl())
                 .partition(null)
                 .engine(tableDefinition.getEngine().name())
                 .properties(tableDefinition.getPropertiesMap())
+                .partition(mapping(tableDefinitionWithId.getTableId().getEntityId(), tableDefinition, columns))
                 .replica(tableDefinition.getReplica())
                 .build();
+    }
+
+    public static Partition mapping(long id, Meta.TableDefinition tableDefinition, List<Column> columns) {
+        Meta.PartitionRule partition = tableDefinition.getTablePartition();
+        if (partition.getRangePartition().getRangesCount() <= 1) {
+            return null;
+        }
+        DingoKeyValueCodec codec = DingoKeyValueCodec.of(id, columns);
+        List<PartitionDetail> details = partition.getRangePartition().getRangesList().stream()
+            .map(Common.Range::getStartKey)
+            .map(ByteString::toByteArray)
+            .sorted(ByteArrayUtils::compare)
+            .skip(1)
+            .map(wrap(codec::decodeKeyPrefix))
+            .map(key -> new PartitionDetailDefinition(null, null, key))
+            .collect(Collectors.toList());
+        // The current version only supports the range strategy.
+        return new PartitionRule("RANGE", partition.getColumnsList(), details);
     }
 
     public static Column mapping(Meta.ColumnDefinition definition) {
@@ -234,78 +262,34 @@ public class EntityConversion {
     }
 
     public static Meta.PartitionRule calcRange(Table table, Meta.DingoCommonId tableId) {
-        KeyValueCodec codec = table.createCodec(tableId);
-        if (table.getPartDefinition() == null) {
-            try {
-                Meta.RangePartition rangePartition = Meta.RangePartition.newBuilder().addRanges(
-                        Common.Range.newBuilder()
-                                .setStartKey(ByteString.copyFrom(codec.encodeMinKeyPrefix()))
-                                .setEndKey(ByteString.copyFrom(codec.encodeMaxKeyPrefix()))
-                                .build()
-                ).build();
-                return Meta.PartitionRule.newBuilder()
-                        .setRangePartition(rangePartition)
-                        .build();
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-        }
-        List<Integer> keyList = table.getKeyColumnIndices();
-        int columnCount = table.getColumns().size();
-        List<PartitionDetail> partDetails = table.getPartDefinition().details();
+        DingoCommonId tableId1 = mapping(tableId);
+        List<Column> keyColumns = table.getKeyColumns();
+        keyColumns.sort(Comparator.comparingInt(Column::getPrimary));
+        KeyValueCodec codec = DingoKeyValueCodec.of(tableId1.entityId(), keyColumns);
+        byte[] minKeyPrefix = codec.encodeMinKeyPrefix();
+        byte[] maxKeyPrefix = codec.encodeMaxKeyPrefix();
+        Meta.RangePartition.Builder rangeBuilder = Meta.RangePartition.newBuilder();
 
-        List<Column> cols = keyList.stream().map(table::getColumn).collect(Collectors.toList());
+        Iterator<byte[]> keys = Stream.concat(
+            Optional.mapOrGet(table.getPartition(), __ -> encodePartitionDetails(__.details(), codec), Stream::empty),
+            Stream.of(maxKeyPrefix))
+        .sorted(ByteArrayUtils::compare).iterator();
 
-        for (PartitionDetail partDetail : partDetails) {
-            if (partDetail.getOperand().size() > keyList.size()) {
-                throw new IllegalArgumentException(
-                    "Partition values count must be <= key columns count, but values count is "
-                    + partDetail.getOperand().size()
-                );
-            }
-            for (int i = 0; i < partDetail.getOperand().size(); i++) {
-                String simpleName = partDetail.getOperand().get(i).getClass().getSimpleName().toUpperCase();
-                int simpleCode = TypeCode.codeOf(simpleName);
-                String sqlType = cols.get(i).getType().toUpperCase();
-                int sqlTypeCode = TypeCode.codeOf(sqlType);
-                if (simpleCode != sqlTypeCode) {
-                    throw new IllegalArgumentException(
-                        "partition value type: (" + simpleName + ") must be the same as the primary key type: (" + sqlType + ")"
-                    );
-                }
-            }
+        byte[] start = minKeyPrefix;
+        while (keys.hasNext()) {
+            rangeBuilder.addRanges(Common.Range.newBuilder()
+                .setStartKey(ByteString.copyFrom(start))
+                .setEndKey(ByteString.copyFrom(start = keys.next()))
+            .build());
         }
 
-        Iterator<byte[]> keys = partDetails.stream()
-                .map(PartitionDetail::getOperand)
-                .map(operand -> operand.toArray(new Object[columnCount]))
-                .map(NoBreakFunctions.wrap(codec::encodeKey))
-                .collect(Collectors.toCollection(() -> new TreeSet<>(ByteArrayUtils::compare)))
-                .iterator();
+        return Meta.PartitionRule.newBuilder().setRangePartition(rangeBuilder.build()).build();
+    }
 
-        Meta.RangePartition.Builder rangePartitionBuilder = Meta.RangePartition.newBuilder();
-        Common.Range range;
-        try {
-            byte[] start = codec.encodeMinKeyPrefix();
-            while (keys.hasNext()) {
-                rangePartitionBuilder
-                        .addRanges(Common.Range.newBuilder()
-                                .setStartKey(ByteString.copyFrom(start))
-                                .setEndKey(ByteString.copyFrom(start = keys.next()))
-                                .build());
-            }
-            range = Common.Range.newBuilder()
-                    .setStartKey(ByteString.copyFrom(start))
-                    .setEndKey(ByteString.copyFrom(codec.encodeMaxKeyPrefix()))
-                    .build();
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-        Meta.RangePartition rangePartition = rangePartitionBuilder.addRanges(range).build();
-
-        return Meta.PartitionRule.newBuilder()
-                .setRangePartition(rangePartition)
-                .build();
+    private static Stream<byte[]> encodePartitionDetails(List<PartitionDetail> details, KeyValueCodec codec) {
+        return Parameters.<List<PartitionDetail>>cleanNull(details, Collections::emptyList).stream()
+            .map(PartitionDetail::getOperand)
+            .map(NoBreakFunctions.<Object[], byte[]>wrap(operand -> codec.encodeKeyPrefix(operand, operand.length)));
     }
 
     public static Meta.ColumnDefinition mapping(Column column) {

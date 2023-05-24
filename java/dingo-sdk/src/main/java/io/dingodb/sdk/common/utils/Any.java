@@ -17,7 +17,9 @@
 package io.dingodb.sdk.common.utils;
 
 import lombok.EqualsAndHashCode;
+import lombok.ToString;
 
+@ToString
 @EqualsAndHashCode
 public class Any {
 
