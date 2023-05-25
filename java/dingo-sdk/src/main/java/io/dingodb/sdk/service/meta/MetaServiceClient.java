@@ -35,6 +35,7 @@ import lombok.NonNull;
 import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
@@ -100,7 +101,7 @@ public class MetaServiceClient {
         this.name = ROOT_NAME;
         this.metaConnector = MetaServiceConnector.getMetaServiceConnector(servers);
         this.incrementConnector = AutoIncrementServiceConnector.getAutoIncrementServiceConnector(servers);
-        reloadExecutor.execute(this::reload);
+        // TODO reloadExecutor.execute(this::reload);
     }
 
     @Deprecated
@@ -109,7 +110,7 @@ public class MetaServiceClient {
         this.id = ROOT_SCHEMA_ID;
         this.name = ROOT_NAME;
         this.metaConnector = metaConnector;
-        reloadExecutor.execute(this::reload);
+        // TODO reloadExecutor.execute(this::reload);
     }
 
     private MetaServiceClient(
@@ -163,7 +164,7 @@ public class MetaServiceClient {
             return new ServiceConnector.Response<>(res.getError(), res);
         }).getResponse().getSchema();
 
-        addMetaServiceCache(schema);
+        // TODO addMetaServiceCache(schema);
     }
 
     public List<Meta.Schema> getSchemas(Meta.DingoCommonId id) {
@@ -179,11 +180,16 @@ public class MetaServiceClient {
     }
 
     public Map<String, MetaServiceClient> getSubMetaServices() {
-        return metaServiceCache.values().stream()
+        /* TODO
+            return metaServiceCache.values().stream()
+                .collect(Collectors.toMap(MetaServiceClient::name, Function.identity()));*/
+        return getSchemas(parentId).stream()
+                .map(schema -> new MetaServiceClient(schema.getId(), schema.getName(), metaConnector, incrementConnector))
                 .collect(Collectors.toMap(MetaServiceClient::name, Function.identity()));
     }
 
     public MetaServiceClient getSubMetaService(String name) {
+        /* TODO
         Meta.DingoCommonId schemaId = metaServiceIdCache.get(name);
         MetaServiceClient metaService;
         if (schemaId == null) {
@@ -203,8 +209,19 @@ public class MetaServiceClient {
                 .mapOrNull(metaServiceCache::get);
         } else {
             metaService = getSubMetaService(schemaId);
+        }*/
+        Meta.GetSchemaByNameRequest request = Meta.GetSchemaByNameRequest.newBuilder().setSchemaName(name).build();
+
+        Meta.GetSchemaByNameResponse response = metaConnector.exec(stub -> {
+            Meta.GetSchemaByNameResponse res = stub.getSchemaByName(request);
+            return new ServiceConnector.Response<>(res.getError(), res);
+        }).getResponse();
+
+        Meta.Schema schema = response.getSchema();
+        if (schema.getName().isEmpty()) {
+            return null;
         }
-        return metaService;
+        return new MetaServiceClient(schema.getId(), schema.getName(), metaConnector, incrementConnector);
     }
 
     public MetaServiceClient getSubMetaService(DingoCommonId schemaId) {
@@ -216,9 +233,18 @@ public class MetaServiceClient {
     }
 
     private MetaServiceClient getSubMetaService(Meta.DingoCommonId schemaId) {
-        return metaServiceCache.get(schemaId);
+        // TODO return metaServiceCache.get(schemaId);
+        Meta.GetSchemaRequest request = Meta.GetSchemaRequest.newBuilder().setSchemaId(schemaId).build();
+
+        Meta.GetSchemaResponse response = metaConnector.exec(stub -> {
+            Meta.GetSchemaResponse res = stub.getSchema(request);
+            return new ServiceConnector.Response<>(res.getError(), res);
+        }).getResponse();
+        Meta.Schema schema = response.getSchema();
+        return new MetaServiceClient(schema.getId(), schema.getName(), metaConnector, incrementConnector);
     }
 
+    /* TODO
     public boolean dropSubMetaService(String name) {
         return Optional.ofNullable(metaServiceIdCache.get(name))
                 .map(schemaId -> {
@@ -232,6 +258,19 @@ public class MetaServiceClient {
                     return response.getError().getErrcodeValue() == 0;
                 })
                 .orElse(false);
+    }*/
+
+    public boolean dropSubMetaService(DingoCommonId schemaId) {
+        Meta.DropSchemaRequest request = Meta.DropSchemaRequest.newBuilder()
+                .setSchemaId(mapping(schemaId))
+                .build();
+
+        Meta.DropSchemaResponse response = metaConnector.exec(stub -> {
+            Meta.DropSchemaResponse res = stub.dropSchema(request);
+            return new ServiceConnector.Response<>(res.getError(), res);
+        }).getResponse();
+
+        return response.getError().getErrcodeValue() == 0;
     }
 
     private void addTableCache(Meta.TableDefinitionWithId tableDefinitionWithId) {
@@ -271,8 +310,9 @@ public class MetaServiceClient {
         }).getResponse();
 
 
+        /* TODO
         tableIdCache.put(tableName, tableId);
-        tableDefinitionCache.put(mapping(tableId), table);
+        tableDefinitionCache.put(mapping(tableId), table);*/
 
         return response.getError().getErrcodeValue() == 0;
     }
@@ -291,8 +331,9 @@ public class MetaServiceClient {
             Meta.DropTableResponse res = stub.dropTable(request);
             return new ServiceConnector.Response<>(res.getError(), res);
         }).getResponse();
+        /* TODO
         tableIdCache.remove(tableName);
-        tableDefinitionCache.remove(tableId);
+        tableDefinitionCache.remove(tableId);*/
         removeAutoIncrementCache(tableId);
 
         return response.getError().getErrcodeValue() == 0;
@@ -300,6 +341,7 @@ public class MetaServiceClient {
 
     public DingoCommonId getTableId(@NonNull String tableName) {
         tableName = cleanTableName(tableName);
+        /* TODO
         Meta.DingoCommonId tableId = tableIdCache.get(tableName);
         if (tableId == null) {
             Meta.GetTablesRequest request = Meta.GetTablesRequest.newBuilder()
@@ -317,16 +359,38 @@ public class MetaServiceClient {
                     break;
                 }
             }
+        }*/
+        Meta.GetTableByNameRequest request = Meta.GetTableByNameRequest.newBuilder()
+                .setSchemaId(id)
+                .setTableName(tableName)
+                .build();
+
+        Meta.GetTableByNameResponse response = metaConnector.exec(stub -> {
+            Meta.GetTableByNameResponse res = stub.getTableByName(request);
+            return new ServiceConnector.Response<>(res.getError(), res);
+        }).getResponse();
+
+        Meta.TableDefinitionWithId withId = response.getTableDefinitionWithId();
+        if (withId.getTableDefinition().getName().equals(tableName)) {
+            return Optional.mapOrNull(withId.getTableId(), EntityConversion::mapping);
         }
-        return Optional.mapOrNull(tableIdCache.get(tableName), EntityConversion::mapping);
+        return null;
     }
 
     public Map<String, Table> getTableDefinitions() {
+        if (!(id == ROOT_SCHEMA_ID)) {
+            List<Meta.TableDefinitionWithId> tableDefinitions = getTableDefinitions(id);
+            return tableDefinitions.stream()
+                    .map(EntityConversion::mapping)
+                    .collect(Collectors.toMap(Table::getName, Function.identity()));
+        }
+        return Collections.emptyMap();
+        /* TODO
         if (tableDefinitionCache.isEmpty()) {
             reload();
         }
         return tableDefinitionCache.values().stream()
-                .collect(Collectors.toMap(Table::getName, Function.identity()));
+                .collect(Collectors.toMap(Table::getName, Function.identity()));*/
     }
 
     private List<Meta.TableDefinitionWithId> getTableDefinitions(Meta.DingoCommonId id) {
@@ -351,6 +415,7 @@ public class MetaServiceClient {
     }
 
     public Table getTableDefinition(@NonNull DingoCommonId tableId) {
+        /* TODO
         Table table = tableDefinitionCache.get(tableId);
         if (table == null) {
             Meta.GetTableRequest request = Meta.GetTableRequest.newBuilder().setTableId(mapping(tableId)).build();
@@ -361,6 +426,13 @@ public class MetaServiceClient {
             table = mapping(response.getTableDefinitionWithId());
         }
         return table;
+        }*/
+        Meta.GetTableRequest request = Meta.GetTableRequest.newBuilder().setTableId(mapping(tableId)).build();
+        Meta.GetTableResponse response = metaConnector.exec(stub -> {
+            Meta.GetTableResponse res = stub.getTable(request);
+            return new ServiceConnector.Response<>(res.getError(), res);
+        }).getResponse();
+        return mapping(response.getTableDefinitionWithId());
     }
 
     public NavigableMap<ByteArrayUtils.ComparableByteArray, RangeDistribution> getRangeDistribution(String tableName) {
@@ -397,6 +469,19 @@ public class MetaServiceClient {
         if (tableId == null) {
             throw new DingoClientException("Table " + tableName + " does not exist");
         }
+        return Optional.ofNullable(tableId)
+                .map(__ -> {
+                    Meta.GetTableMetricsRequest request = Meta.GetTableMetricsRequest.newBuilder()
+                            .setTableId(mapping(__))
+                            .build();
+                    Meta.GetTableMetricsResponse response = metaConnector.exec(stub -> {
+                        Meta.GetTableMetricsResponse res = stub.getTableMetrics(request);
+                        return new ServiceConnector.Response<>(res.getError(), res);
+                    }).getResponse();
+                    return response.getTableMetrics().getTableMetrics();
+                })
+                .mapOrNull(EntityConversion::mapping);
+        /* TODO
         return tableMetricsCache.computeIfAbsent(tableId, ___ -> Optional.ofNullable(tableId)
                 .map(__ -> {
                     Meta.GetTableMetricsRequest request = Meta.GetTableMetricsRequest.newBuilder()
@@ -408,7 +493,7 @@ public class MetaServiceClient {
                     }).getResponse();
                     return response.getTableMetrics().getTableMetrics();
                 })
-                .mapOrNull(EntityConversion::mapping));
+                .mapOrNull(EntityConversion::mapping));*/
     }
 
     public void generateAutoIncrement(DingoCommonId tableId, Long count, Integer increment, Integer offset) {

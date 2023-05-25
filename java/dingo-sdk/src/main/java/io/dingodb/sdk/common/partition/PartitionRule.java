@@ -16,8 +16,13 @@
 
 package io.dingodb.sdk.common.partition;
 
+import lombok.EqualsAndHashCode;
+import lombok.ToString;
+
 import java.util.List;
 
+@ToString
+@EqualsAndHashCode
 public class PartitionRule implements Partition {
 
     String strategy;

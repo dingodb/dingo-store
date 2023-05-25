@@ -16,11 +16,15 @@
 
 package io.dingodb.sdk.common.partition;
 
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
+import lombok.ToString;
 
 import java.util.List;
 
 @Getter
+@ToString
+@EqualsAndHashCode
 public class PartitionDetailDefinition implements PartitionDetail {
 
     private String partName;
