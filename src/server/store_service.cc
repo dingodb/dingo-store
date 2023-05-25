@@ -25,6 +25,7 @@
 #include "common/failpoint.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "common/synchronization.h"
 #include "fmt/core.h"
 #include "meta/store_meta_manager.h"
 #include "proto/common.pb.h"
@@ -45,6 +46,8 @@ void StoreServiceImpl::AddRegion(google::protobuf::RpcController* controller,
                                  dingodb::pb::store::AddRegionResponse* response, google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+
+  DINGO_LOG(DEBUG) << "AddRegion request: " << request->ShortDebugString();
 
   auto region_controller = Server::GetInstance()->GetRegionController();
 
@@ -68,6 +71,8 @@ void StoreServiceImpl::ChangeRegion(google::protobuf::RpcController* controller,
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
 
+  DINGO_LOG(DEBUG) << "ChangeRegion request: " << request->ShortDebugString();
+
   auto region_controller = Server::GetInstance()->GetRegionController();
 
   auto command = std::make_shared<pb::coordinator::RegionCmd>();
@@ -90,7 +95,8 @@ void StoreServiceImpl::DestroyRegion(google::protobuf::RpcController* controller
                                      google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(INFO) << "DestroyRegion request...";
+
+  DINGO_LOG(DEBUG) << "DestroyRegion request: " << request->ShortDebugString();
 
   auto region_controller = Server::GetInstance()->GetRegionController();
 
@@ -112,6 +118,8 @@ void StoreServiceImpl::Snapshot(google::protobuf::RpcController* controller, con
                                 pb::store::SnapshotResponse* response, google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+
+  DINGO_LOG(DEBUG) << "Snapshot request: " << request->ShortDebugString();
 
   auto region_controller = Server::GetInstance()->GetRegionController();
 
@@ -147,6 +155,8 @@ void StoreServiceImpl::KvGet(google::protobuf::RpcController* controller,
                              dingodb::pb::store::KvGetResponse* response, google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+
+  DINGO_LOG(DEBUG) << "KvGet request: " << request->ShortDebugString();
 
   butil::Status status = ValidateKvGetRequest(request);
   if (!status.ok()) {
@@ -203,6 +213,8 @@ void StoreServiceImpl::KvBatchGet(google::protobuf::RpcController* controller,
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
 
+  DINGO_LOG(DEBUG) << "KvBatchGet request: " << request->ShortDebugString();
+
   butil::Status status = ValidateKvBatchGetRequest(request);
   if (!status.ok()) {
     auto* err = response->mutable_error();
@@ -250,6 +262,8 @@ void StoreServiceImpl::KvPut(google::protobuf::RpcController* controller,
                              dingodb::pb::store::KvPutResponse* response, google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+
+  DINGO_LOG(DEBUG) << "KvPut request: " << request->ShortDebugString();
 
   butil::Status status = ValidateKvPutRequest(request);
   if (!status.ok()) {
@@ -301,6 +315,8 @@ void StoreServiceImpl::KvBatchPut(google::protobuf::RpcController* controller,
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
 
+  DINGO_LOG(DEBUG) << "KvBatchPut request: " << request->ShortDebugString();
+
   butil::Status status = ValidateKvBatchPutRequest(request);
   if (!status.ok()) {
     auto* err = response->mutable_error();
@@ -344,6 +360,7 @@ void StoreServiceImpl::KvPutIfAbsent(google::protobuf::RpcController* controller
                                      pb::store::KvPutIfAbsentResponse* response, google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+  DINGO_LOG(DEBUG) << "KvPutIfAbsent request: " << request->ShortDebugString();
 
   butil::Status status = ValidateKvPutIfAbsentRequest(request);
   if (!status.ok()) {
@@ -396,6 +413,8 @@ void StoreServiceImpl::KvBatchPutIfAbsent(google::protobuf::RpcController* contr
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
 
+  DINGO_LOG(DEBUG) << "KvBatchPutIfAbsent request: " << request->ShortDebugString();
+
   butil::Status status = ValidateKvBatchPutIfAbsentRequest(request);
   if (!status.ok()) {
     auto* err = response->mutable_error();
@@ -444,6 +463,8 @@ void StoreServiceImpl::KvBatchDelete(google::protobuf::RpcController* controller
                                      pb::store::KvBatchDeleteResponse* response, google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+
+  DINGO_LOG(DEBUG) << "KvBatchDelete request: " << request->ShortDebugString();
 
   butil::Status status = ValidateKvBatchDeleteRequest(request);
   if (!status.ok()) {
@@ -497,6 +518,8 @@ void StoreServiceImpl::KvDeleteRange(google::protobuf::RpcController* controller
                                      pb::store::KvDeleteRangeResponse* response, google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+
+  DINGO_LOG(DEBUG) << "KvDeleteRange request: " << request->ShortDebugString();
 
   auto region = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(request->region_id());
   auto uniform_range = Helper::TransformRangeWithOptions(request->range());
@@ -557,6 +580,8 @@ void StoreServiceImpl::KvScanBegin(google::protobuf::RpcController* controller,
                                    ::google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+
+  DINGO_LOG(DEBUG) << "KvScanBegin request: " << request->ShortDebugString();
 
   auto region = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(request->region_id());
   auto uniform_range = Helper::TransformRangeWithOptions(request->range());
@@ -623,6 +648,8 @@ void StoreServiceImpl::KvScanContinue(google::protobuf::RpcController* controlle
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
 
+  DINGO_LOG(DEBUG) << "KvScanContinue request: " << request->ShortDebugString();
+
   butil::Status status = ValidateKvScanContinueRequest(request);
   if (!status.ok()) {
     auto* err = response->mutable_error();
@@ -673,6 +700,8 @@ void StoreServiceImpl::KvScanRelease(google::protobuf::RpcController* controller
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
 
+  DINGO_LOG(DEBUG) << "KvScanRelease request: " << request->ShortDebugString();
+
   butil::Status status = ValidateKvScanReleaseRequest(request);
   if (!status.ok()) {
     auto* err = response->mutable_error();
@@ -704,6 +733,8 @@ void StoreServiceImpl::Debug(google::protobuf::RpcController* controller,
                              ::dingodb::pb::store::DebugResponse* response, ::google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+
+  DINGO_LOG(DEBUG) << "Debug request: " << request->ShortDebugString();
 
   if (request->type() == pb::store::DebugType::STORE_REGION_META_STAT) {
     auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();

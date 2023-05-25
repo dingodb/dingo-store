@@ -135,6 +135,41 @@ void SendKvDeleteRange(ServerInteractionPtr interaction, uint64_t region_id, con
   interaction->SendRequest("StoreService", "KvDeleteRange", request, response);
 }
 
+void SendKvScan(ServerInteractionPtr interaction, uint64_t region_id, const std::string& prefix) {
+  dingodb::pb::store::KvScanBeginRequest request;
+  dingodb::pb::store::KvScanBeginResponse response;
+
+  request.set_region_id(region_id);
+  request.mutable_range()->mutable_range()->set_start_key(prefix);
+  request.mutable_range()->mutable_range()->set_end_key(dingodb::Helper::PrefixNext(prefix));
+  request.mutable_range()->set_with_start(true);
+  request.mutable_range()->set_with_end(false);
+
+  interaction->SendRequest("StoreService", "KvScanBegin", request, response);
+  if (response.error().errcode() != 0) {
+    return;
+  }
+
+  dingodb::pb::store::KvScanContinueRequest continue_request;
+  dingodb::pb::store::KvScanContinueResponse continue_response;
+  continue_request.set_region_id(region_id);
+  continue_request.set_scan_id(response.scan_id());
+  continue_request.set_max_fetch_cnt(100);
+
+  interaction->SendRequest("StoreService", "KvScanContinue", continue_request, continue_response);
+  if (continue_response.error().errcode() != 0) {
+    return;
+  }
+
+  dingodb::pb::store::KvScanReleaseRequest release_request;
+  dingodb::pb::store::KvScanReleaseResponse release_response;
+
+  release_request.set_region_id(region_id);
+  release_request.set_scan_id(response.scan_id());
+
+  interaction->SendRequest("StoreService", "KvScanRelease", release_request, release_response);
+}
+
 dingodb::pb::common::RegionDefinition BuildRegionDefinition(uint64_t region_id, const std::string& raft_group,
                                                             std::vector<std::string>& raft_addrs,
                                                             const std::string& start_key, const std::string& end_key) {

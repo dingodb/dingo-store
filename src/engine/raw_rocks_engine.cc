@@ -70,6 +70,7 @@ class RocksIterator : public EngineIterator {
         with_end_(false),
         has_valid_kv_(false) {
     rocksdb::ReadOptions read_option;
+    read_option.auto_prefix_mode = true;
     read_option.snapshot = static_cast<const rocksdb::Snapshot*>(
         std::dynamic_pointer_cast<RawRocksEngine::RocksSnapshot>(snapshot)->Inner());
 
