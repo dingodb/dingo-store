@@ -267,14 +267,13 @@ bool Server::InitCrontabManager() {
     }
 
     // Add scan crontab
+    ScanManager::GetInstance()->Init(config);
     uint64_t scan_interval = config->GetInt(Constant::kStoreScan + "." + Constant::kStoreScanScanIntervalMs);
     if (scan_interval < 0) {
       DINGO_LOG(ERROR) << "store.scan.scan_interval_ms illegal";
       return false;
-    } else if (scan_interval < 0) {
-      ScanManager::GetInstance()->Init(config);
+    } else if (scan_interval > 0) {
       std::shared_ptr<Crontab> scan_crontab = std::make_shared<Crontab>();
-      ScanManager::GetInstance()->Init(config);
       scan_crontab->name = "SCAN";
       scan_crontab->interval = scan_interval;
       scan_crontab->func = ScanManager::RegularCleaningHandler;

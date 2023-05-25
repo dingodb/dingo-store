@@ -128,53 +128,76 @@ class BthreadCond {
 // wrapper bthread functions for c++ style
 class Bthread {
  public:
-  Bthread() {}
+  Bthread() = default;
   explicit Bthread(const bthread_attr_t* attr) : attr_(attr) {}
 
-  void run(const std::function<void()>& call) {
+  void Run(const std::function<void()>& call) {
     std::function<void()>* func_call = new std::function<void()>;
     *func_call = call;
-    int ret = bthread_start_background(&tid_, attr_,
-    [](void*p) -> void* {
-      auto call = static_cast<std::function<void()>*>(p);
-      (*call)();
-      delete call;
-      return NULL;
-    }, func_call);
+    int ret = bthread_start_background(
+        &tid_, attr_,
+        [](void* p) -> void* {
+          auto* call = static_cast<std::function<void()>*>(p);
+          (*call)();
+          delete call;
+          return nullptr;
+        },
+        func_call);
     if (ret != 0) {
       DINGO_LOG(FATAL) << "bthread_start_background fail.";
     }
   }
 
-  void run_urgent(const std::function<void()>& call) {
+  void RunUrgent(const std::function<void()>& call) {
     std::function<void()>* func_call = new std::function<void()>;
     *func_call = call;
-    int ret = bthread_start_urgent(&tid_, attr_,
-      [](void*p) -> void* {
-        auto call = static_cast<std::function<void()>*>(p);
-        (*call)();
-        delete call;
-        return NULL;
-      }, func_call);
+    int ret = bthread_start_urgent(
+        &tid_, attr_,
+        [](void* p) -> void* {
+          auto* call = static_cast<std::function<void()>*>(p);
+          (*call)();
+          delete call;
+          return nullptr;
+        },
+        func_call);
     if (ret != 0) {
       DINGO_LOG(FATAL) << "bthread_start_urgent fail";
     }
   }
 
-  void join() {
-    bthread_join(tid_, NULL);
-  }
+  void Join() const { bthread_join(tid_, nullptr); }
 
-  bthread_t id() {
-    return tid_;
-  }
+  bthread_t Id() const { return tid_; }
 
  private:
   bthread_t tid_;
-  const bthread_attr_t* attr_ = NULL;
+  const bthread_attr_t* attr_ = nullptr;
 };
+
+// RAII
+class ScopeGuard {
+ public:
+  explicit ScopeGuard(std::function<void()> exit_func) : exit_func_(exit_func) {}
+  ~ScopeGuard() {
+    if (!is_release_) {
+      exit_func_();
+    }
+  }
+
+  ScopeGuard(const ScopeGuard&) = delete;
+  ScopeGuard& operator=(const ScopeGuard&) = delete;
+
+  void Release() { is_release_ = true; }
+
+ private:
+  std::function<void()> exit_func_;
+  bool is_release_ = false;
+};
+
+#define SCOPEGUARD_LINENAME_CAT(name, line) name##line
+#define SCOPEGUARD_LINENAME(name, line) SCOPEGUARD_LINENAME_CAT(name, line)
+#define ON_SCOPE_EXIT(callback) ScopeGuard SCOPEGUARD_LINENAME(scope_guard, __LINE__)(callback)
 
 };  // namespace dingodb
 
 #endif  // DINGODB_COMMON_SYNCHRONIZATION_H_
-

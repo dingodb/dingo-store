@@ -480,7 +480,7 @@ void AutoIncrementControl::AsyncSendUpdateAutoIncrementInternal(uint64_t table_i
   };
 
   Bthread bth(&BTHREAD_ATTR_SMALL);
-  bth.run(update_function);
+  bth.Run(update_function);
 }
 
 void AutoIncrementControl::AsyncSendDeleteAutoIncrementInternal(uint64_t table_id) {
@@ -500,7 +500,7 @@ void AutoIncrementControl::AsyncSendDeleteAutoIncrementInternal(uint64_t table_i
   };
 
   Bthread bth(&BTHREAD_ATTR_SMALL);
-  bth.run(delete_function);
+  bth.Run(delete_function);
 }
 
 }  // namespace dingodb
