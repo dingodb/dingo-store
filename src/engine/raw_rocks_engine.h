@@ -100,6 +100,7 @@ class RawRocksEngine : public RawEngine {
     ~RocksSnapshot() override {
       if (db_ != nullptr && snapshot_ != nullptr) {
         db_->ReleaseSnapshot(snapshot_);
+        snapshot_ = nullptr;
       }
     };
 
@@ -112,7 +113,10 @@ class RawRocksEngine : public RawEngine {
 
   class Iterator : public dingodb::Iterator {
    public:
-    explicit Iterator(IteratorOptions options, rocksdb::Iterator* iter) : options_(options), iter_(iter) {}
+    explicit Iterator(IteratorOptions options, rocksdb::Iterator* iter)
+        : options_(options), iter_(iter), snapshot_(nullptr) {}
+    explicit Iterator(IteratorOptions options, rocksdb::Iterator* iter, std::shared_ptr<Snapshot> snapshot)
+        : options_(options), iter_(iter), snapshot_(snapshot) {}
     ~Iterator() override = default;
 
     std::string GetName() override { return "RawRocks"; }
@@ -150,6 +154,7 @@ class RawRocksEngine : public RawEngine {
    private:
     IteratorOptions options_;
     std::unique_ptr<rocksdb::Iterator> iter_;
+    std::shared_ptr<Snapshot> snapshot_;
   };
 
   class Reader : public RawEngine::Reader {

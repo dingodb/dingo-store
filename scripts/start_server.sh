@@ -18,8 +18,6 @@ DIST_DIR=$BASE_DIR/dist
 
 SERVER_NUM=${FLAGS_server_num}
 
-ulimit -c unlimited
-
 source $mydir/deploy_func.sh
 
 for ((i=1; i<=$SERVER_NUM; ++i)); do
