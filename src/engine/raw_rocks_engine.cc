@@ -349,13 +349,15 @@ std::shared_ptr<dingodb::Iterator> RawRocksEngine::NewIterator(const std::string
   // Correct free iterate_upper_bound
   // auto slice = std::make_unique<rocksdb::Slice>(options.upper_bound);
   rocksdb::ReadOptions read_options;
-  read_options.snapshot = static_cast<const rocksdb::Snapshot*>(snapshot->Inner());
+  if (snapshot != nullptr) {
+    read_options.snapshot = static_cast<const rocksdb::Snapshot*>(snapshot->Inner());
+  }
   read_options.auto_prefix_mode = true;
   // if (!options.upper_bound.empty()) {
   //   read_options.iterate_upper_bound = slice.get();
   // }
-  return std::make_shared<RawRocksEngine::Iterator>(options,
-                                                    db_->NewIterator(read_options, column_family->GetHandle()));
+  return std::make_shared<RawRocksEngine::Iterator>(options, db_->NewIterator(read_options, column_family->GetHandle()),
+                                                    snapshot);
 }
 
 std::shared_ptr<RawRocksEngine::SstFileWriter> RawRocksEngine::NewSstFileWriter() {
