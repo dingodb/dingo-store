@@ -48,7 +48,12 @@ void MetaServiceImpl::GetSchemas(google::protobuf::RpcController * /*controller*
   }
 
   std::vector<pb::meta::Schema> schemas;
-  this->coordinator_control_->GetSchemas(request->schema_id().entity_id(), schemas);
+  auto ret = this->coordinator_control_->GetSchemas(request->schema_id().entity_id(), schemas);
+  if (!ret.ok()) {
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    return;
+  }
 
   for (auto &schema : schemas) {
     auto *new_schema = response->add_schemas();
@@ -78,7 +83,12 @@ void MetaServiceImpl::GetSchema(google::protobuf::RpcController * /*controller*/
   }
 
   auto *schema = response->mutable_schema();
-  this->coordinator_control_->GetSchema(request->schema_id().entity_id(), *schema);
+  auto ret = this->coordinator_control_->GetSchema(request->schema_id().entity_id(), *schema);
+  if (!ret.ok()) {
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    return;
+  }
 }
 
 void MetaServiceImpl::GetSchemaByName(google::protobuf::RpcController * /*controller*/,
@@ -98,7 +108,12 @@ void MetaServiceImpl::GetSchemaByName(google::protobuf::RpcController * /*contro
   }
 
   auto *schema = response->mutable_schema();
-  this->coordinator_control_->GetSchemaByName(request->schema_name(), *schema);
+  auto ret = this->coordinator_control_->GetSchemaByName(request->schema_name(), *schema);
+  if (!ret.ok()) {
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    return;
+  }
 }
 
 void MetaServiceImpl::GetTables(google::protobuf::RpcController * /*controller*/,
@@ -118,7 +133,12 @@ void MetaServiceImpl::GetTables(google::protobuf::RpcController * /*controller*/
   }
 
   std::vector<pb::meta::TableDefinitionWithId> table_definition_with_ids;
-  this->coordinator_control_->GetTables(request->schema_id().entity_id(), table_definition_with_ids);
+  auto ret = this->coordinator_control_->GetTables(request->schema_id().entity_id(), table_definition_with_ids);
+  if (!ret.ok()) {
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    return;
+  }
 
   if (table_definition_with_ids.empty()) {
     DINGO_LOG(INFO) << "meta_service GetTables no tables, schema_id=" << request->schema_id().entity_id();
@@ -149,7 +169,13 @@ void MetaServiceImpl::GetTable(google::protobuf::RpcController * /*controller*/,
   DINGO_LOG(DEBUG) << "GetTable request:  table_id = [" << request->table_id().entity_id() << "]";
 
   auto *table = response->mutable_table_definition_with_id();
-  this->coordinator_control_->GetTable(request->table_id().parent_entity_id(), request->table_id().entity_id(), *table);
+  auto ret = this->coordinator_control_->GetTable(request->table_id().parent_entity_id(),
+                                                  request->table_id().entity_id(), *table);
+  if (!ret.ok()) {
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    return;
+  }
 }
 
 void MetaServiceImpl::GetTableByName(google::protobuf::RpcController * /*controller*/,
@@ -170,7 +196,13 @@ void MetaServiceImpl::GetTableByName(google::protobuf::RpcController * /*control
   }
 
   auto *table = response->mutable_table_definition_with_id();
-  this->coordinator_control_->GetTableByName(request->schema_id().entity_id(), request->table_name(), *table);
+  auto ret =
+      this->coordinator_control_->GetTableByName(request->schema_id().entity_id(), request->table_name(), *table);
+  if (!ret.ok()) {
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    return;
+  }
 }
 
 void MetaServiceImpl::GetTableRange(google::protobuf::RpcController * /*controller*/,
@@ -190,8 +222,13 @@ void MetaServiceImpl::GetTableRange(google::protobuf::RpcController * /*controll
   }
 
   auto *table_range = response->mutable_table_range();
-  this->coordinator_control_->GetTableRange(request->table_id().parent_entity_id(), request->table_id().entity_id(),
-                                            *table_range);
+  auto ret = this->coordinator_control_->GetTableRange(request->table_id().parent_entity_id(),
+                                                       request->table_id().entity_id(), *table_range);
+  if (!ret.ok()) {
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    return;
+  }
 }
 
 void MetaServiceImpl::GetTableMetrics(google::protobuf::RpcController * /*controller*/,
@@ -532,9 +569,10 @@ void MetaServiceImpl::CreateAutoIncrement(google::protobuf::RpcController *contr
     return;
   }
 
-  auto* closure = new CoordinatorClosure<pb::meta::CreateAutoIncrementRequest,
-      pb::meta::CreateAutoIncrementResponse>(request, response, done_guard.release());
-  std::shared_ptr<Context> ctx = std::make_shared<Context>(static_cast<brpc::Controller*>(controller), closure, response);
+  auto *closure = new CoordinatorClosure<pb::meta::CreateAutoIncrementRequest, pb::meta::CreateAutoIncrementResponse>(
+      request, response, done_guard.release());
+  std::shared_ptr<Context> ctx =
+      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), closure, response);
   ctx->SetRegionId(Constant::kAutoIncrementRegionId);
   // this is a async operation will be block by closure
   auto ret2 = engine_->MetaPut(ctx, meta_increment);
@@ -617,10 +655,11 @@ void MetaServiceImpl::GenerateAutoIncrement(google::protobuf::RpcController *con
     return;
   }
 
-  auto* closure = new CoordinatorClosure<pb::meta::GenerateAutoIncrementRequest,
-      pb::meta::GenerateAutoIncrementResponse>(request, response, done_guard.release());
-  std::shared_ptr<Context> ctx = std::make_shared<Context>(static_cast<brpc::Controller*>(controller),
-      closure, response);
+  auto *closure =
+      new CoordinatorClosure<pb::meta::GenerateAutoIncrementRequest, pb::meta::GenerateAutoIncrementResponse>(
+          request, response, done_guard.release());
+  std::shared_ptr<Context> ctx =
+      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), closure, response);
   ctx->SetRegionId(Constant::kAutoIncrementRegionId);
   // this is a async operation will be block by closure
   auto ret2 = engine_->MetaPut(ctx, meta_increment);

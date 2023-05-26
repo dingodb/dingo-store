@@ -27,6 +27,7 @@
 #include "butil/containers/flat_map.h"
 #include "butil/files/file_path.h"
 #include "butil/scoped_lock.h"
+#include "butil/status.h"
 #include "butil/strings/string_split.h"
 #include "common/helper.h"
 #include "common/logging.h"
@@ -222,16 +223,16 @@ butil::Status CoordinatorControl::DropSchema(uint64_t parent_schema_id, uint64_t
 // get schemas
 // in: schema_id
 // out: schemas
-void CoordinatorControl::GetSchemas(uint64_t schema_id, std::vector<pb::meta::Schema>& schemas) {
+butil::Status CoordinatorControl::GetSchemas(uint64_t schema_id, std::vector<pb::meta::Schema>& schemas) {
   // only root schema can has sub schemas
   if (schema_id != 0) {
     DINGO_LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
-    return;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "schema_id is illegal");
   }
 
   if (!schemas.empty()) {
     DINGO_LOG(ERROR) << "ERRROR: vector schemas is not empty , size=" << schemas.size();
-    return;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "vector schemas is not empty");
   }
 
   {
@@ -241,7 +242,7 @@ void CoordinatorControl::GetSchemas(uint64_t schema_id, std::vector<pb::meta::Sc
     int ret = schema_map_.GetFlatMapCopy(schema_map_copy);
     if (ret < 0) {
       DINGO_LOG(ERROR) << "ERRROR: schema_map_ GetFlatMapCopy failed";
-      return;
+      return butil::Status(pb::error::Errno::EINTERNAL, "schema_map_ GetFlatMapCopy failed");
     }
 
     for (const auto& it : schema_map_copy) {
@@ -269,16 +270,18 @@ void CoordinatorControl::GetSchemas(uint64_t schema_id, std::vector<pb::meta::Sc
   }
 
   DINGO_LOG(INFO) << "GetSchemas id=" << schema_id << " sub schema count=" << schema_map_.Size();
+
+  return butil::Status::OK();
 }
 
 // GetSchema
 // in: schema_id
 // out: schema
-void CoordinatorControl::GetSchema(uint64_t schema_id, pb::meta::Schema& schema) {
+butil::Status CoordinatorControl::GetSchema(uint64_t schema_id, pb::meta::Schema& schema) {
   // only root schema can has sub schemas
   if (schema_id < 0) {
     DINGO_LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
-    return;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "schema_id is illegal");
   }
 
   {
@@ -287,7 +290,7 @@ void CoordinatorControl::GetSchema(uint64_t schema_id, pb::meta::Schema& schema)
     int ret = schema_map_.Get(schema_id, temp_schema);
     if (ret < 0) {
       DINGO_LOG(ERROR) << "ERRROR: schema_id not found " << schema_id;
-      return;
+      return butil::Status(pb::error::Errno::ESCHEMA_NOT_FOUND, "schema_id not found");
     }
 
     auto* temp_id = schema.mutable_id();
@@ -308,27 +311,29 @@ void CoordinatorControl::GetSchema(uint64_t schema_id, pb::meta::Schema& schema)
   }
 
   DINGO_LOG(INFO) << "GetSchema id=" << schema_id << " sub table count=" << schema.table_ids_size();
+
+  return butil::Status::OK();
 }
 
 // GetSchemaByName
 // in: schema_name
 // out: schema
-void CoordinatorControl::GetSchemaByName(const std::string& schema_name, pb::meta::Schema& schema) {
+butil::Status CoordinatorControl::GetSchemaByName(const std::string& schema_name, pb::meta::Schema& schema) {
   if (schema_name.empty()) {
     DINGO_LOG(ERROR) << "ERRROR: schema_name illegal " << schema_name;
-    return;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "schema_name illegal");
   }
 
   uint64_t temp_schema_id = 0;
-  schema_name_map_safe_temp_.Get(schema_name, temp_schema_id);
-  if (temp_schema_id == 0) {
+  auto ret = schema_name_map_safe_temp_.Get(schema_name, temp_schema_id);
+  if (ret < 0) {
     DINGO_LOG(ERROR) << "ERRROR: schema_name not found " << schema_name;
-    return;
+    return butil::Status(pb::error::Errno::ESCHEMA_NOT_FOUND, "schema_name not found");
   }
 
-  GetSchema(temp_schema_id, schema);
-
   DINGO_LOG(INFO) << "GetSchemaByName name=" << schema_name << " sub table count=" << schema.table_ids_size();
+
+  return GetSchema(temp_schema_id, schema);
 }
 
 // CreateTableId
@@ -589,19 +594,19 @@ butil::Status CoordinatorControl::DropTable(uint64_t schema_id, uint64_t table_i
 }
 
 // get tables
-void CoordinatorControl::GetTables(uint64_t schema_id,
-                                   std::vector<pb::meta::TableDefinitionWithId>& table_definition_with_ids) {
+butil::Status CoordinatorControl::GetTables(uint64_t schema_id,
+                                            std::vector<pb::meta::TableDefinitionWithId>& table_definition_with_ids) {
   DINGO_LOG(INFO) << "GetTables in control schema_id=" << schema_id;
 
   if (schema_id < 0) {
     DINGO_LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
-    return;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "schema_id illegal");
   }
 
   if (!table_definition_with_ids.empty()) {
     DINGO_LOG(ERROR) << "ERRROR: vector table_definition_with_ids is not empty , size="
                      << table_definition_with_ids.size();
-    return;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "vector table_definition_with_ids is not empty");
   }
 
   {
@@ -610,7 +615,7 @@ void CoordinatorControl::GetTables(uint64_t schema_id,
     int ret = schema_map_.Get(schema_id, schema_internal);
     if (ret < 0) {
       DINGO_LOG(ERROR) << "ERRROR: schema_id not found" << schema_id;
-      return;
+      return butil::Status(pb::error::Errno::ESCHEMA_NOT_FOUND, "schema_id not found");
     }
 
     for (int i = 0; i < schema_internal.table_ids_size(); i++) {
@@ -640,27 +645,29 @@ void CoordinatorControl::GetTables(uint64_t schema_id,
   }
 
   DINGO_LOG(INFO) << "GetTables schema_id=" << schema_id << " tables count=" << table_definition_with_ids.size();
+
+  return butil::Status::OK();
 }
 
 // get table
-void CoordinatorControl::GetTable(uint64_t schema_id, uint64_t table_id,
-                                  pb::meta::TableDefinitionWithId& table_definition_with_id) {
+butil::Status CoordinatorControl::GetTable(uint64_t schema_id, uint64_t table_id,
+                                           pb::meta::TableDefinitionWithId& table_definition_with_id) {
   DINGO_LOG(INFO) << "GetTable in control schema_id=" << schema_id;
 
   if (schema_id < 0) {
     DINGO_LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
-    return;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "schema_id illegal");
   }
 
   if (table_id <= 0) {
     DINGO_LOG(ERROR) << "ERRROR: table illegal, table_id=" << table_id;
-    return;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "table_id illegal");
   }
 
   // validate schema_id
   if (!ValidateSchema(schema_id)) {
     DINGO_LOG(ERROR) << "ERRROR: schema_id not valid" << schema_id;
-    return;
+    return butil::Status(pb::error::Errno::ESCHEMA_NOT_FOUND, "schema_id not valid");
   }
 
   // validate table_id & get table definition
@@ -670,7 +677,7 @@ void CoordinatorControl::GetTable(uint64_t schema_id, uint64_t table_id,
     int ret = table_map_.Get(table_id, table_internal);
     if (ret < 0) {
       DINGO_LOG(ERROR) << "ERRROR: table_id not found" << table_id;
-      return;
+      return butil::Status(pb::error::Errno::ETABLE_NOT_FOUND, "table_id not found");
     }
 
     DINGO_LOG(INFO) << "GetTable found table_id=" << table_id;
@@ -686,60 +693,62 @@ void CoordinatorControl::GetTable(uint64_t schema_id, uint64_t table_id,
 
   DINGO_LOG(DEBUG) << fmt::format("GetTable schema_id={} table_id={} table_definition_with_id={}", schema_id, table_id,
                                   table_definition_with_id.DebugString());
+
+  return butil::Status::OK();
 }
 
 // get table by name
-void CoordinatorControl::GetTableByName(uint64_t schema_id, const std::string& table_name,
-                                        pb::meta::TableDefinitionWithId& table_definition) {
+butil::Status CoordinatorControl::GetTableByName(uint64_t schema_id, const std::string& table_name,
+                                                 pb::meta::TableDefinitionWithId& table_definition) {
   DINGO_LOG(INFO) << fmt::format("GetTableByName in control schema_id={} table_name={}", schema_id, table_name);
 
   if (schema_id < 0) {
     DINGO_LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
-    return;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "schema_id illegal");
   }
 
   if (table_name.empty()) {
     DINGO_LOG(ERROR) << "ERRROR: table_name illegal " << table_name;
-    return;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "table_name illegal");
   }
 
   if (!ValidateSchema(schema_id)) {
     DINGO_LOG(ERROR) << "ERRROR: schema_id not valid" << schema_id;
-    return;
+    return butil::Status(pb::error::Errno::ESCHEMA_NOT_FOUND, "schema_id not valid");
   }
 
   uint64_t temp_table_id = 0;
-  table_name_map_safe_temp_.Get(std::to_string(schema_id) + table_name, temp_table_id);
-
-  if (temp_table_id == 0) {
+  auto ret = table_name_map_safe_temp_.Get(std::to_string(schema_id) + table_name, temp_table_id);
+  if (ret < 0) {
     DINGO_LOG(ERROR) << "ERRROR: table_name not found " << table_name;
-    return;
+    return butil::Status(pb::error::Errno::ETABLE_NOT_FOUND, "table_name not found");
   }
-
-  GetTable(schema_id, temp_table_id, table_definition);
 
   DINGO_LOG(DEBUG) << fmt::format("GetTableByName schema_id={} table_name={} table_definition={}", schema_id,
                                   table_name, table_definition.DebugString());
+
+  return GetTable(schema_id, temp_table_id, table_definition);
 }
 
 // get table range
-void CoordinatorControl::GetTableRange(uint64_t schema_id, uint64_t table_id, pb::meta::TableRange& table_range) {
+butil::Status CoordinatorControl::GetTableRange(uint64_t schema_id, uint64_t table_id,
+                                                pb::meta::TableRange& table_range) {
   if (schema_id < 0) {
     DINGO_LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
-    return;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "schema_id illegal");
   }
 
   pb::coordinator_internal::TableInternal table_internal;
   if (!ValidateSchema(schema_id)) {
     DINGO_LOG(ERROR) << "ERRROR: schema_id not found" << schema_id;
-    return;
+    return butil::Status(pb::error::Errno::ESCHEMA_NOT_FOUND, "schema_id not found");
   }
   {
     // BAIDU_SCOPED_LOCK(table_map_mutex_);
     int ret = table_map_.Get(table_id, table_internal);
     if (ret < 0) {
       DINGO_LOG(ERROR) << "ERRROR: table_id not found" << table_id;
-      return;
+      return butil::Status(pb::error::Errno::ETABLE_NOT_FOUND, "table_id not found");
     }
   }
 
@@ -795,6 +804,8 @@ void CoordinatorControl::GetTableRange(uint64_t schema_id, uint64_t table_id, pb
     uint64_t store_map_epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_STORE);
     range_distribution->set_storemap_epoch(store_map_epoch);
   }
+
+  return butil::Status::OK();
 }
 
 // get table metrics

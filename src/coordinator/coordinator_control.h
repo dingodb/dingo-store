@@ -379,35 +379,35 @@ class CoordinatorControl : public MetaControl {
   void DeleteRegionBvar(uint64_t region_id);
 
   // get schemas
-  void GetSchemas(uint64_t schema_id, std::vector<pb::meta::Schema> &schemas);
+  butil::Status GetSchemas(uint64_t schema_id, std::vector<pb::meta::Schema> &schemas);
 
   // get schema
-  void GetSchema(uint64_t schema_id, pb::meta::Schema &schema);
+  butil::Status GetSchema(uint64_t schema_id, pb::meta::Schema &schema);
 
   // get schema by name
-  void GetSchemaByName(const std::string &schema_name, pb::meta::Schema &schema);
+  butil::Status GetSchemaByName(const std::string &schema_name, pb::meta::Schema &schema);
 
   // get tables
-  void GetTables(uint64_t schema_id, std::vector<pb::meta::TableDefinitionWithId> &table_definition_with_ids);
+  butil::Status GetTables(uint64_t schema_id, std::vector<pb::meta::TableDefinitionWithId> &table_definition_with_ids);
 
   // get table
   // in: schema_id
   // in: table_id
   // out: TableDefinitionWithId
-  void GetTable(uint64_t schema_id, uint64_t table_id, pb::meta::TableDefinitionWithId &table_definition);
+  butil::Status GetTable(uint64_t schema_id, uint64_t table_id, pb::meta::TableDefinitionWithId &table_definition);
 
   // get table by name
   // in: schema_id
   // in: table_name
   // out: TableDefinitionWithId
-  void GetTableByName(uint64_t schema_id, const std::string &table_name,
-                      pb::meta::TableDefinitionWithId &table_definition);
+  butil::Status GetTableByName(uint64_t schema_id, const std::string &table_name,
+                               pb::meta::TableDefinitionWithId &table_definition);
 
   // get parts
   // in: schema_id
   // in: table_id
   // out: repeated parts
-  void GetTableRange(uint64_t schema_id, uint64_t table_id, pb::meta::TableRange &table_range);
+  butil::Status GetTableRange(uint64_t schema_id, uint64_t table_id, pb::meta::TableRange &table_range);
 
   // get table metrics
   // in: schema_id
