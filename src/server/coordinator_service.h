@@ -119,6 +119,9 @@ class CoordinatorServiceImpl : public pb::coordinator::CoordinatorService {
                       pb::coordinator::StoreHeartbeatResponse* response, google::protobuf::Closure* done) override;
   void GetRegionMap(google::protobuf::RpcController* controller, const pb::coordinator::GetRegionMapRequest* request,
                     pb::coordinator::GetRegionMapResponse* response, google::protobuf::Closure* done) override;
+  void GetRegionCount(google::protobuf::RpcController* controller,
+                      const pb::coordinator::GetRegionCountRequest* request,
+                      pb::coordinator::GetRegionCountResponse* response, google::protobuf::Closure* done) override;
   void GetStoreMap(google::protobuf::RpcController* controller, const pb::coordinator::GetStoreMapRequest* request,
                    pb::coordinator::GetStoreMapResponse* response, google::protobuf::Closure* done) override;
   void GetStoreMetrics(google::protobuf::RpcController* controller,

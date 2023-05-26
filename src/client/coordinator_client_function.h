@@ -52,6 +52,7 @@ void SendGetStoreMap(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
 void SendGetExecutorMap(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendGetCoordinatorMap(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendGetRegionMap(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendGetRegionCount(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendCreateStore(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendDeleteStore(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendUpdateStore(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);

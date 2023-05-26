@@ -116,6 +116,33 @@ void MetaServiceImpl::GetSchemaByName(google::protobuf::RpcController * /*contro
   }
 }
 
+void MetaServiceImpl::GetTablesCount(google::protobuf::RpcController * /*controller*/,
+                                     const pb::meta::GetTablesCountRequest *request,
+                                     pb::meta::GetTablesCountResponse *response, google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!this->coordinator_control_->IsLeader()) {
+    return RedirectResponse(response);
+  }
+
+  DINGO_LOG(DEBUG) << "GetTablesCount request:  schema_id = [" << request->schema_id().entity_id() << "]";
+
+  if (!request->has_schema_id() || request->schema_id().entity_id() <= 0) {
+    response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
+    return;
+  }
+
+  uint64_t tables_count = 0;
+  auto ret = this->coordinator_control_->GetTablesCount(request->schema_id().entity_id(), tables_count);
+  if (!ret.ok()) {
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    return;
+  }
+
+  response->set_tables_count(tables_count);
+}
+
 void MetaServiceImpl::GetTables(google::protobuf::RpcController * /*controller*/,
                                 const pb::meta::GetTablesRequest *request, pb::meta::GetTablesResponse *response,
                                 google::protobuf::Closure *done) {

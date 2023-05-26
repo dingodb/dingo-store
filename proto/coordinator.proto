@@ -260,6 +260,15 @@ message GetRegionMapResponse {
   dingodb.pb.common.RegionMap regionmap = 3;
 }
 
+message GetRegionCountRequest {
+  uint64 epoch = 1;
+}
+
+message GetRegionCountResponse {
+  dingodb.pb.error.Error error = 1;
+  uint64 region_count = 2;
+}
+
 message GetStoreMapRequest {
   uint64 epoch = 1;
 }
@@ -580,6 +589,7 @@ service CoordinatorService {
   // Store
   rpc StoreHeartbeat(StoreHeartbeatRequest) returns (StoreHeartbeatResponse);
   rpc GetRegionMap(GetRegionMapRequest) returns (GetRegionMapResponse);
+  rpc GetRegionCount(GetRegionCountRequest) returns (GetRegionCountResponse);
   rpc GetStoreMap(GetStoreMapRequest) returns (GetStoreMapResponse);
   rpc GetStoreMetrics(GetStoreMetricsRequest) returns (GetStoreMetricsResponse);
   rpc DeleteStoreMetrics(DeleteStoreMetricsRequest) returns (DeleteStoreMetricsResponse);

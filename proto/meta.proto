@@ -228,6 +228,15 @@ message GetTablesResponse {
   repeated TableDefinitionWithId table_definition_with_ids = 2;
 }
 
+message GetTablesCountRequest {
+  DingoCommonId schema_id = 1;
+}
+
+message GetTablesCountResponse {
+  dingodb.pb.error.Error error = 1;
+  uint64 tables_count = 2;
+}
+
 message GetTableRequest {
   DingoCommonId table_id = 1;
 }
@@ -392,6 +401,11 @@ service MetaService {
   // in: schema_id
   // out: List<TableDefinitionWithId>
   rpc GetTables(GetTablesRequest) returns (GetTablesResponse);
+
+  // GetTablesCount
+  // in: schema_id
+  // out: tables_count
+  rpc GetTablesCount(GetTablesCountRequest) returns (GetTablesCountResponse);
 
   // GetTable
   // in: table_id

@@ -649,6 +649,32 @@ butil::Status CoordinatorControl::GetTables(uint64_t schema_id,
   return butil::Status::OK();
 }
 
+// get tables count
+butil::Status CoordinatorControl::GetTablesCount(uint64_t schema_id, uint64_t& tables_count) {
+  DINGO_LOG(INFO) << "GetTables in control schema_id=" << schema_id;
+
+  if (schema_id < 0) {
+    DINGO_LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "schema_id illegal");
+  }
+
+  {
+    // BAIDU_SCOPED_LOCK(schema_map_mutex_);
+    pb::coordinator_internal::SchemaInternal schema_internal;
+    int ret = schema_map_.Get(schema_id, schema_internal);
+    if (ret < 0) {
+      DINGO_LOG(ERROR) << "ERRROR: schema_id not found" << schema_id;
+      return butil::Status(pb::error::Errno::ESCHEMA_NOT_FOUND, "schema_id not found");
+    }
+
+    tables_count = schema_internal.table_ids_size();
+  }
+
+  DINGO_LOG(INFO) << "GetTablesCount schema_id=" << schema_id << " tables count=" << tables_count;
+
+  return butil::Status::OK();
+}
+
 // get table
 butil::Status CoordinatorControl::GetTable(uint64_t schema_id, uint64_t table_id,
                                            pb::meta::TableDefinitionWithId& table_definition_with_id) {
