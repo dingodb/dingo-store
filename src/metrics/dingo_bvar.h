@@ -26,7 +26,7 @@
 
 namespace dingodb {
 
-constexpr uint64_t MAX_MULTI_DIMENSION_STATS_COUNT = 20000;  // NOLINT
+constexpr uint64_t MAX_MULTI_DIMENSION_STATS_COUNT = 100000;  // NOLINT
 
 template <typename T>
 class DingoMultiDimension : public bvar::MVariable {
