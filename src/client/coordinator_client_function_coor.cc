@@ -524,8 +524,20 @@ void SendGetRegionMap(std::shared_ptr<dingodb::CoordinatorInteraction> coordinat
     }
   }
 
-  DINGO_LOG(INFO) << " region_count=" << response.regionmap().regions_size()
+  DINGO_LOG(INFO) << "region_count=" << response.regionmap().regions_size()
                   << ", normal_region_count=" << normal_region_count;
+}
+
+void SendGetRegionCount(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  dingodb::pb::coordinator::GetRegionCountRequest request;
+  dingodb::pb::coordinator::GetRegionCountResponse response;
+
+  request.set_epoch(1);
+
+  auto status = coordinator_interaction->SendRequest("GetRegionCount", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+
+  DINGO_LOG(INFO) << " region_count=" << response.region_count();
 }
 
 void SendCreateStore(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
@@ -1304,11 +1316,11 @@ void SendGetStoreOperation(std::shared_ptr<dingodb::CoordinatorInteraction> coor
   DINGO_LOG(INFO) << "SendRequest status=" << status;
 
   for (const auto& it : response.store_operations()) {
-    DINGO_LOG(INFO) << "store_id=" << it.id() << " cmd_count=" << it.region_cmds_size();
+    DINGO_LOG(INFO) << "store_id=" << it.id() << " store_operation=" << it.DebugString();
   }
 
   for (const auto& it : response.store_operations()) {
-    DINGO_LOG(INFO) << "store_id=" << it.id() << " store_operation=" << it.DebugString();
+    DINGO_LOG(INFO) << "store_id=" << it.id() << " cmd_count=" << it.region_cmds_size();
   }
 }
 

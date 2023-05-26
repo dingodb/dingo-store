@@ -211,6 +211,8 @@ void* Sender(void* /*arg*/) {
     SendGetExecutorMap(coordinator_interaction);
   } else if (FLAGS_method == "GetRegionMap") {
     SendGetRegionMap(coordinator_interaction);
+  } else if (FLAGS_method == "GetRegionCount") {
+    SendGetRegionCount(coordinator_interaction);
   } else if (FLAGS_method == "GetCoordinatorMap") {
     SendGetCoordinatorMap(coordinator_interaction);
   } else if (FLAGS_method == "QueryRegion") {

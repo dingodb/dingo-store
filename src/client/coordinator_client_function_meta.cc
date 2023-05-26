@@ -103,17 +103,17 @@ void SendGetSchemaByName(std::shared_ptr<dingodb::CoordinatorInteraction> coordi
 }
 
 void SendGetTablesCount(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
-  dingodb::pb::meta::GetTablesRequest request;
-  dingodb::pb::meta::GetTablesResponse response;
+  dingodb::pb::meta::GetTablesCountRequest request;
+  dingodb::pb::meta::GetTablesCountResponse response;
 
   auto* schema_id = request.mutable_schema_id();
   schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
   schema_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
   schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
 
-  auto status = coordinator_interaction->SendRequest("GetTables", request, response);
+  auto status = coordinator_interaction->SendRequest("GetTablesCount", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << "table_count=" << response.table_definition_with_ids_size();
+  DINGO_LOG_INFO << "table_count=" << response.tables_count();
 }
 
 void SendGetTables(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {

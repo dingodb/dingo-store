@@ -374,6 +374,7 @@ class CoordinatorControl : public MetaControl {
 
   // get regionmap
   void GetRegionMap(pb::common::RegionMap &region_map);
+  void GetRegionCount(uint64_t &region_count);
   void GetRegionIdsInMap(std::vector<uint64_t> &region_ids);
   void CleanRegionBvars();
   void DeleteRegionBvar(uint64_t region_id);
@@ -389,6 +390,7 @@ class CoordinatorControl : public MetaControl {
 
   // get tables
   butil::Status GetTables(uint64_t schema_id, std::vector<pb::meta::TableDefinitionWithId> &table_definition_with_ids);
+  butil::Status GetTablesCount(uint64_t schema_id, uint64_t &tables_count);
 
   // get table
   // in: schema_id

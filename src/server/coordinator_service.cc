@@ -673,6 +673,26 @@ void CoordinatorServiceImpl::GetRegionMap(google::protobuf::RpcController * /*co
   response->set_epoch(regionmap.epoch());
 }
 
+void CoordinatorServiceImpl::GetRegionCount(google::protobuf::RpcController * /*controller*/,
+                                            const pb::coordinator::GetRegionCountRequest *request,
+                                            pb::coordinator::GetRegionCountResponse *response,
+                                            google::protobuf::Closure *done) {
+  brpc::ClosureGuard const done_guard(done);
+
+  auto is_leader = this->coordinator_control_->IsLeader();
+  DINGO_LOG(DEBUG) << "Receive Get RegionMap Request, IsLeader:" << is_leader << ", Request:" << request->DebugString();
+
+  if (!is_leader) {
+    RedirectResponse(response);
+    return;
+  }
+
+  uint64_t region_count;
+  this->coordinator_control_->GetRegionCount(region_count);
+
+  response->set_region_count(region_count);
+}
+
 void CoordinatorServiceImpl::GetCoordinatorMap(google::protobuf::RpcController * /*controller*/,
                                                const pb::coordinator::GetCoordinatorMapRequest *request,
                                                pb::coordinator::GetCoordinatorMapResponse *response,

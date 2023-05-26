@@ -462,10 +462,20 @@ void CoordinatorControl::GetRegionMap(pb::common::RegionMap& region_map) {
     region_map_.GetFlatMapCopy(region_map_copy);
     for (auto& elemnt : region_map_copy) {
       auto* tmp_region = region_map.add_regions();
-      tmp_region->CopyFrom(elemnt.second);
+      // tmp_region->CopyFrom(elemnt.second);
+      tmp_region->set_id(elemnt.second.id());
+      tmp_region->mutable_definition()->set_name(elemnt.second.definition().name());
+      tmp_region->set_state(elemnt.second.state());
+      tmp_region->set_raft_status(elemnt.second.raft_status());
+      tmp_region->set_replica_status(elemnt.second.replica_status());
+      tmp_region->set_leader_store_id(elemnt.second.leader_store_id());
+      tmp_region->set_create_timestamp(elemnt.second.create_timestamp());
+      tmp_region->set_last_update_timestamp(elemnt.second.last_update_timestamp());
     }
   }
 }
+
+void CoordinatorControl::GetRegionCount(uint64_t& region_count) { region_count = region_map_.Size(); }
 
 void CoordinatorControl::GetRegionIdsInMap(std::vector<uint64_t>& region_ids) { region_map_.GetAllKeys(region_ids); }
 
@@ -2277,33 +2287,32 @@ uint64_t CoordinatorControl::UpdateStoreMetrics(const pb::common::StoreMetrics& 
 
   {
     BAIDU_SCOPED_LOCK(store_metrics_map_mutex_);
-    if (store_metrics_map_.seek(store_metrics.id()) != nullptr) {
-      DINGO_LOG(DEBUG) << "STORE METIRCS UPDATE store_metrics.id = " << store_metrics.id();
+    store_metrics_map_.insert(store_metrics.id(), store_metrics);
+    // if (store_metrics_map_.seek(store_metrics.id()) != nullptr) {
+    //   DINGO_LOG(DEBUG) << "STORE METIRCS UPDATE store_metrics.id = " << store_metrics.id();
 
-      // update meta_increment
-      auto* store_metrics_increment = meta_increment.add_store_metrics();
-      store_metrics_increment->set_id(store_metrics.id());
-      store_metrics_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
+    //   // update meta_increment
+    //   auto* store_metrics_increment = meta_increment.add_store_metrics();
+    //   store_metrics_increment->set_id(store_metrics.id());
+    //   store_metrics_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
 
-      auto* store_metrics_increment_store = store_metrics_increment->mutable_store_metrics();
-      store_metrics_increment_store->CopyFrom(store_metrics);
+    //   auto* store_metrics_increment_store = store_metrics_increment->mutable_store_metrics();
+    //   store_metrics_increment_store->CopyFrom(store_metrics);
 
-      // set is_partial_region_metrics
-      if (store_metrics.is_partial_region_metrics()) {
-        store_metrics_increment->set_is_partial_region_metrics(store_metrics.is_partial_region_metrics());
-      }
+    //   // set is_partial_region_metrics
+    //   if (store_metrics.is_partial_region_metrics()) {
+    //     store_metrics_increment->set_is_partial_region_metrics(store_metrics.is_partial_region_metrics());
+    //   }
+    // } else {
+    //   DINGO_LOG(INFO) << "NEED ADD NEW STORE store_metrics.id = " << store_metrics.id();
 
-    } else {
-      DINGO_LOG(INFO) << "NEED ADD NEW STORE store_metrics.id = " << store_metrics.id();
+    //   // update meta_increment
+    //   auto* store_metrics_increment = meta_increment.add_store_metrics();
+    //   store_metrics_increment->set_id(store_metrics.id());
+    //   store_metrics_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
 
-      // update meta_increment
-      auto* store_metrics_increment = meta_increment.add_store_metrics();
-      store_metrics_increment->set_id(store_metrics.id());
-      store_metrics_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
-
-      auto* store_metrics_increment_store = store_metrics_increment->mutable_store_metrics();
-      store_metrics_increment_store->CopyFrom(store_metrics);
-    }
+    //   auto* store_metrics_increment_store = store_metrics_increment->mutable_store_metrics();
+    // }
   }
 
   // mbvar store
