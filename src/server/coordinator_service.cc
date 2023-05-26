@@ -1364,7 +1364,7 @@ void CoordinatorServiceImpl::RaftControl(google::protobuf::RpcController *contro
   }
 
   auto is_leader = raft_node->IsLeader();
-  if (!is_leader) {
+  if (!is_leader && request->op_type() != pb::coordinator::RaftControlOp::Snapshot) {
     return RedirectResponse(raft_node, response);
   }
 

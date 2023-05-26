@@ -53,15 +53,28 @@ class HeartbeatTask : public TaskRunnable {
 class CoordinatorPushTask : public TaskRunnable {
  public:
   CoordinatorPushTask(std::shared_ptr<CoordinatorControl> coordinator_control)
-      : coordinator_control_(coordinator_control) {}
+      : coordinator_control_(coordinator_control) {
+    is_processing_.store(false);
+  }
   ~CoordinatorPushTask() override = default;
 
-  void Run() override { SendCoordinatorPushToStore(coordinator_control_); }
+  void Run() override {
+    if (is_processing_.load()) {
+      DINGO_LOG(INFO) << "is_processing_is true, skip SendCoordinatorPushToStore";
+      return;
+    }
+    DINGO_LOG(DEBUG) << "start process SendCoordinatorPushToStore";
+
+    AtomicGuard atomic_guard(is_processing_);
+
+    SendCoordinatorPushToStore(coordinator_control_);
+  }
 
  private:
   static void SendCoordinatorPushToStore(std::shared_ptr<CoordinatorControl> coordinator_control);
 
   std::shared_ptr<CoordinatorControl> coordinator_control_;
+  butil::atomic<bool> is_processing_;
 };
 
 class CoordinatorUpdateStateTask : public TaskRunnable {
@@ -70,12 +83,23 @@ class CoordinatorUpdateStateTask : public TaskRunnable {
       : coordinator_control_(coordinator_control) {}
   ~CoordinatorUpdateStateTask() override = default;
 
-  void Run() override { CoordinatorUpdateState(coordinator_control_); }
+  void Run() override {
+    if (is_processing_.load()) {
+      DINGO_LOG(INFO) << "is_processing_is true, skip CoordinatorUpdateState";
+      return;
+    }
+    DINGO_LOG(DEBUG) << "start process CoordinatorUpdateState";
+
+    AtomicGuard atomic_guard(is_processing_);
+
+    CoordinatorUpdateState(coordinator_control_);
+  }
 
  private:
   static void CoordinatorUpdateState(std::shared_ptr<CoordinatorControl> coordinator_control);
 
   std::shared_ptr<CoordinatorControl> coordinator_control_;
+  butil::atomic<bool> is_processing_;
 };
 
 class CoordinatorTaskListProcessTask : public TaskRunnable {
@@ -84,12 +108,23 @@ class CoordinatorTaskListProcessTask : public TaskRunnable {
       : coordinator_control_(coordinator_control) {}
   ~CoordinatorTaskListProcessTask() override = default;
 
-  void Run() override { CoordinatorTaskListProcess(coordinator_control_); }
+  void Run() override {
+    // if (is_processing_.load()) {
+    //   DINGO_LOG(INFO) << "is_processing_is true, skip CoordinatorTaskListProcess";
+    //   return;
+    // }
+    // DINGO_LOG(DEBUG) << "start process CoordinatorTaskListProcess";
+
+    // AtomicGuard atomic_guard(is_processing_);
+
+    CoordinatorTaskListProcess(coordinator_control_);
+  }
 
  private:
   static void CoordinatorTaskListProcess(std::shared_ptr<CoordinatorControl> coordinator_control);
 
   std::shared_ptr<CoordinatorControl> coordinator_control_;
+  // butil::atomic<bool> is_processing_;
 };
 
 class CoordinatorRecycleOrphanTask : public TaskRunnable {
@@ -98,12 +133,23 @@ class CoordinatorRecycleOrphanTask : public TaskRunnable {
       : coordinator_control_(coordinator_control) {}
   ~CoordinatorRecycleOrphanTask() override = default;
 
-  void Run() override { CoordinatorRecycleOrphan(coordinator_control_); }
+  void Run() override {
+    if (is_processing_.load()) {
+      DINGO_LOG(INFO) << "is_processing_is true, skip CoordinatorRecycleOrphan";
+      return;
+    }
+    DINGO_LOG(DEBUG) << "start process CoordinatorRecycleOrphan";
+
+    AtomicGuard atomic_guard(is_processing_);
+
+    CoordinatorRecycleOrphan(coordinator_control_);
+  }
 
  private:
   static void CoordinatorRecycleOrphan(std::shared_ptr<CoordinatorControl> coordinator_control);
 
   std::shared_ptr<CoordinatorControl> coordinator_control_;
+  butil::atomic<bool> is_processing_;
 };
 
 class CalculateTableMetricsTask : public TaskRunnable {
@@ -112,12 +158,23 @@ class CalculateTableMetricsTask : public TaskRunnable {
       : coordinator_control_(coordinator_control) {}
   ~CalculateTableMetricsTask() override = default;
 
-  void Run() override { CalculateTableMetrics(coordinator_control_); }
+  void Run() override {
+    if (is_processing_.load()) {
+      DINGO_LOG(INFO) << "is_processing_is true, skip CoordinatorTaskListProcess";
+      return;
+    }
+    DINGO_LOG(DEBUG) << "start process CoordinatorTaskListProcess";
+
+    AtomicGuard atomic_guard(is_processing_);
+
+    CalculateTableMetrics(coordinator_control_);
+  }
 
  private:
   static void CalculateTableMetrics(std::shared_ptr<CoordinatorControl> coordinator_control);
 
   std::shared_ptr<CoordinatorControl> coordinator_control_;
+  butil::atomic<bool> is_processing_;
 };
 
 class Heartbeat {

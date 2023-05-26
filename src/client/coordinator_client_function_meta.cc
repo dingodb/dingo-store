@@ -113,7 +113,7 @@ void SendGetTablesCount(std::shared_ptr<dingodb::CoordinatorInteraction> coordin
 
   auto status = coordinator_interaction->SendRequest("GetTables", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << response.DebugString();
+  DINGO_LOG_INFO << "table_count=" << response.table_definition_with_ids_size();
 }
 
 void SendGetTables(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
@@ -131,12 +131,15 @@ void SendGetTables(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_
 
   auto status = coordinator_interaction->SendRequest("GetTables", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << response.DebugString();
+  // DINGO_LOG_INFO << response.DebugString();
 
   for (const auto& table_definition_with_id : response.table_definition_with_ids()) {
     DINGO_LOG(INFO) << "table_id=[" << table_definition_with_id.table_id().entity_id() << "]"
-                    << "table_name=" << table_definition_with_id.table_definition().name();
+                    << "table_name=[" << table_definition_with_id.table_definition().name() << "], column_count=["
+                    << table_definition_with_id.table_definition().columns_size() << "]";
   }
+
+  DINGO_LOG(INFO) << "table_count=" << response.table_definition_with_ids_size();
 }
 
 void SendGetTable(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {

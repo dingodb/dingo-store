@@ -43,7 +43,12 @@
 namespace dingodb {
 
 bool CoordinatorControl::IsLeader() { return leader_term_.load(butil::memory_order_acquire) > 0; }
-void CoordinatorControl::SetLeaderTerm(int64_t term) { leader_term_.store(term, butil::memory_order_release); }
+
+void CoordinatorControl::SetLeaderTerm(int64_t term) {
+  DINGO_LOG(INFO) << "SetLeaderTerm, term=" << term;
+  leader_term_.store(term, butil::memory_order_release);
+}
+
 void CoordinatorControl::SetRaftNode(std::shared_ptr<RaftNode> raft_node) { raft_node_ = raft_node; }
 std::shared_ptr<RaftNode> CoordinatorControl::GetRaftNode() { return raft_node_; }
 

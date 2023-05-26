@@ -507,16 +507,25 @@ void SendGetRegionMap(std::shared_ptr<dingodb::CoordinatorInteraction> coordinat
   auto status = coordinator_interaction->SendRequest("GetRegionMap", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
 
-  for (const auto& region : response.regionmap().regions()) {
-    DINGO_LOG(INFO) << region.DebugString();
-  }
+  // for (const auto& region : response.regionmap().regions()) {
+  //   DINGO_LOG(INFO) << region.DebugString();
+  // }
+
+  uint64_t normal_region_count = 0;
   for (const auto& region : response.regionmap().regions()) {
     DINGO_LOG(INFO) << "Region id=" << region.id() << " name=" << region.definition().name()
                     << " state=" << dingodb::pb::common::RegionState_Name(region.state())
                     << " leader_store_id=" << region.leader_store_id()
                     << " replica_state=" << dingodb::pb::common::ReplicaStatus_Name(region.replica_status())
                     << " raft_status=" << dingodb::pb::common::RegionRaftStatus_Name(region.raft_status());
+
+    if (region.state() == dingodb::pb::common::RegionState::REGION_NORMAL) {
+      normal_region_count++;
+    }
   }
+
+  DINGO_LOG(INFO) << " region_count=" << response.regionmap().regions_size()
+                  << ", normal_region_count=" << normal_region_count;
 }
 
 void SendCreateStore(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
@@ -850,6 +859,13 @@ void SendQueryRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
   auto status = coordinator_interaction->SendRequest("QueryRegion", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
+
+  auto region = response.region();
+  DINGO_LOG(INFO) << "Region id=" << region.id() << " name=" << region.definition().name()
+                  << " state=" << dingodb::pb::common::RegionState_Name(region.state())
+                  << " leader_store_id=" << region.leader_store_id()
+                  << " replica_state=" << dingodb::pb::common::ReplicaStatus_Name(region.replica_status())
+                  << " raft_status=" << dingodb::pb::common::RegionRaftStatus_Name(region.raft_status());
 }
 
 void SendCreateRegionForSplit(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
