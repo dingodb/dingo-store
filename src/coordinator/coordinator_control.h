@@ -374,6 +374,7 @@ class CoordinatorControl : public MetaControl {
 
   // get regionmap
   void GetRegionMap(pb::common::RegionMap &region_map);
+  void GetRegionMapFull(pb::common::RegionMap &region_map);
   void GetRegionCount(uint64_t &region_count);
   void GetRegionIdsInMap(std::vector<uint64_t> &region_ids);
   void CleanRegionBvars();

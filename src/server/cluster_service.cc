@@ -87,7 +87,7 @@ void ClusterStatImpl::default_method(::google::protobuf::RpcController* controll
       PrintTableDefinition(os, table_definition.table_definition());
 
       pb::common::RegionMap region_map;
-      controller_->GetRegionMap(region_map);
+      controller_->GetRegionMapFull(region_map);
 
       pb::meta::TableRange table_range;
       controller_->GetTableRange(schema_id, table_id, table_range);
