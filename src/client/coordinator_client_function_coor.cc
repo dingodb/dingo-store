@@ -980,6 +980,7 @@ void SendSplitRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
   }
 
   if (!FLAGS_split_key.empty()) {
+    std::string split_key = dingodb::Helper::HexToString(FLAGS_split_key);
     request.mutable_split_request()->set_split_watershed_key(FLAGS_split_key);
   } else {
     DINGO_LOG(ERROR) << "split_key is empty, will auto generate from the mid between start_key and end_key";
@@ -1002,23 +1003,11 @@ void SendSplitRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
       return;
     }
 
-    // calc the mid value between start_vec and end_vec
+    // calc the mid value between start_key and end_key
     const auto& start_key = query_response.region().definition().range().start_key();
     const auto& end_key = query_response.region().definition().range().end_key();
 
-    DINGO_LOG(INFO) << " start_key = " << dingodb::Helper::StringToHex(start_key);
-    DINGO_LOG(INFO) << " end_key   = " << dingodb::Helper::StringToHex(end_key);
-
-    auto diff = dingodb::Helper::StringSubtract(start_key, end_key);
-    auto half_diff = dingodb::Helper::StringDivideByTwo(diff);
-    auto mid = dingodb::Helper::StringAdd(start_key, half_diff);
-
-    DINGO_LOG(INFO) << " diff      = " << dingodb::Helper::StringToHex(diff);
-    DINGO_LOG(INFO) << " half_diff = " << dingodb::Helper::StringToHex(half_diff);
-    DINGO_LOG(INFO) << " mid       = " << dingodb::Helper::StringToHex(mid);
-
-    auto real_mid = mid.substr(1, mid.size() - 1);
-    DINGO_LOG(INFO) << " mid real  = " << dingodb::Helper::StringToHex(real_mid);
+    auto real_mid = dingodb::Helper::CalculateMiddleKey(start_key, end_key);
 
     request.mutable_split_request()->set_split_watershed_key(real_mid);
 

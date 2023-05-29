@@ -323,6 +323,19 @@ std::string Helper::StringToHex(const std::string_view& str) {
   return ss.str();
 }
 
+std::string Helper::HexToString(const std::string& hex_str) {
+  std::string result;
+  // The hex_string must be of even length
+  for (size_t i = 0; i < hex_str.length(); i += 2) {
+    std::string hex_byte = hex_str.substr(i, 2);
+    // Convert the hex byte to an integer
+    int byte_value = std::stoi(hex_byte, nullptr, 16);
+    // Cast the integer to a char and append it to the result string
+    result += static_cast<char>(byte_value);
+  }
+  return result;
+}
+
 void Helper::AlignByteArrays(std::string& a, std::string& b) {
   if (a.size() < b.size()) {
     a.resize(b.size(), 0);
@@ -350,27 +363,6 @@ void Helper::RightAlignByteArrays(std::string& a, std::string& b) {
 
     std::swap(b, tmp);
   }
-}
-
-std::string Helper::StringSubtract(const std::string& a, const std::string& b) {
-  std::string a_copy = a;
-  std::string b_copy = b;
-  AlignByteArrays(a_copy, b_copy);
-
-  std::string result;
-  int8_t borrow = 0;
-  for (size_t i = 0; i < a_copy.size(); ++i) {
-    int16_t diff = static_cast<int16_t>(b_copy[i]) - static_cast<int16_t>(a_copy[i]) - borrow;
-    if (diff < 0) {
-      diff += 256;
-      borrow = 1;
-    } else {
-      borrow = 0;
-    }
-    result.push_back(diff);
-  }
-
-  return result;
 }
 
 // Notice: String will add one element as a prefix of the result, this element is for the carry
@@ -404,7 +396,7 @@ std::string Helper::StringAddRightAlign(const std::string& input_a, const std::s
   return StringAdd(a, b);
 }
 
-std::string Helper::StrintSubtract(const std::string& input_a, const std::string& input_b) {
+std::string Helper::StringSubtract(const std::string& input_a, const std::string& input_b) {
   std::string a = input_a;
   std::string b = input_b;
   AlignByteArrays(a, b);
@@ -430,12 +422,12 @@ std::string Helper::StrintSubtract(const std::string& input_a, const std::string
   return result;
 }
 
-std::string Helper::StrintSubtractRightAlign(const std::string& input_a, const std::string& input_b) {
+std::string Helper::StringSubtractRightAlign(const std::string& input_a, const std::string& input_b) {
   std::string a = input_a;
   std::string b = input_b;
   RightAlignByteArrays(a, b);
 
-  return StrintSubtract(a, b);
+  return StringSubtract(a, b);
 }
 
 std::string Helper::StringDivideByTwo(const std::string& array) {
@@ -459,6 +451,24 @@ std::string Helper::StringDivideByTwoRightAlign(const std::string& array) {
   }
 
   return result;
+}
+
+std::string Helper::CalculateMiddleKey(const std::string& start_key, const std::string& end_key) {
+  DINGO_LOG(INFO) << " start_key = " << dingodb::Helper::StringToHex(start_key);
+  DINGO_LOG(INFO) << " end_key   = " << dingodb::Helper::StringToHex(end_key);
+
+  auto diff = dingodb::Helper::StringSubtract(start_key, end_key);
+  auto half_diff = dingodb::Helper::StringDivideByTwo(diff);
+  auto mid = dingodb::Helper::StringAdd(start_key, half_diff);
+
+  DINGO_LOG(INFO) << " diff      = " << dingodb::Helper::StringToHex(diff);
+  DINGO_LOG(INFO) << " half_diff = " << dingodb::Helper::StringToHex(half_diff);
+  DINGO_LOG(INFO) << " mid       = " << dingodb::Helper::StringToHex(mid);
+
+  auto real_mid = mid.substr(1, mid.size() - 1);
+  DINGO_LOG(INFO) << " mid real  = " << dingodb::Helper::StringToHex(real_mid);
+
+  return real_mid;
 }
 
 std::vector<uint8_t> Helper::SubtractByteArrays(const std::vector<uint8_t>& a, const std::vector<uint8_t>& b) {
