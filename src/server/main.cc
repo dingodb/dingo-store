@@ -15,6 +15,7 @@
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
 #include <cstdio>
+#include <filesystem>
 #include <memory>
 #include <ostream>
 #include <sstream>
@@ -31,6 +32,7 @@
 #include <unistd.h>
 
 #include <csignal>
+#include <filesystem>
 #include <iostream>
 
 #include "brpc/server.h"
@@ -210,13 +212,16 @@ static void SignalHandler(int signo) {
     }
   }
 
+  // clean temp directory
+  std::filesystem::remove_all(dingodb::Server::GetInstance()->GetCheckpointPath());
+
   if (signo == SIGTERM) {
     // TODO: graceful shutdown
     DINGO_LOG(ERROR) << "graceful shutdown";
     exit(0);
   } else {
-    // abort to generate core dump
-    DINGO_LOG(ERROR) << "abort to generate core dump for signo=" << signo << " " << strsignal(signo);
+    // call abort() to generate core dump
+    DINGO_LOG(ERROR) << "call abort() to generate core dump for signo=" << signo << " " << strsignal(signo);
     abort();
   }
 }
@@ -275,6 +280,9 @@ static void SignalHandlerWithoutLineno(int signo) {
     }
 
   } while (unw_step(&cursor) > 0);
+
+  // clean temp directory
+  std::filesystem::remove_all(dingodb::Server::GetInstance()->GetCheckpointPath());
 
   if (signo == SIGTERM) {
     // TODO: graceful shutdown
@@ -402,6 +410,11 @@ int main(int argc, char *argv[]) {
   }
   if (!dingo_server->InitServerID()) {
     DINGO_LOG(ERROR) << "InitServerID failed!";
+    return -1;
+  }
+
+  if (!dingo_server->InitDirectory()) {
+    DINGO_LOG(ERROR) << "InitDirectory failed!";
     return -1;
   }
 

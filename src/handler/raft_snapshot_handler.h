@@ -45,10 +45,10 @@ class RaftSnapshot {
       std::function<butil::Status(const std::string, store::RegionPtr, std::vector<pb::store_internal::SstFileInfo>&)>;
 
   // Scan region, generate sst snapshot file
-  butil::Status GenSnapshotFileByScan(const std::string& checkpoint_dir, store::RegionPtr region,
+  butil::Status GenSnapshotFileByScan(const std::string& checkpoint_path, store::RegionPtr region,
                                       std::vector<pb::store_internal::SstFileInfo>& sst_files);
   // Do Checkpoint and hard link, generate sst snapshot file
-  butil::Status GenSnapshotFileByCheckpoint(const std::string& checkpoint_dir, store::RegionPtr region,
+  butil::Status GenSnapshotFileByCheckpoint(const std::string& checkpoint_path, store::RegionPtr region,
                                             std::vector<pb::store_internal::SstFileInfo>& sst_files);
 
   bool SaveSnapshot(braft::SnapshotWriter* writer, store::RegionPtr region, GenSnapshotFileFunc func);
