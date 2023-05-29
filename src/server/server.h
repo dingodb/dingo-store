@@ -58,6 +58,9 @@ class Server {
   // Every server instance has id, the id is allocated by coordinator.
   bool InitServerID();
 
+  // Init directory
+  bool InitDirectory();
+
   // Init raw storage engines;
   bool InitRawEngine();
 
@@ -134,6 +137,8 @@ class Server {
 
   std::shared_ptr<Config> GetConfig() { return ConfigManager::GetInstance()->GetConfig(role_); }
 
+  std::string GetCheckpointPath() { return checkpoint_path_; }
+
   Server(const Server&) = delete;
   const Server& operator=(const Server&) = delete;
 
@@ -193,6 +198,9 @@ class Server {
   std::shared_ptr<Heartbeat> heartbeat_;
   // This is manage auto increment meta data,
   std::shared_ptr<AutoIncrementControl> auto_increment_control_;
+
+  // checkpoint directory
+  std::string checkpoint_path_;
 };
 
 }  // namespace dingodb

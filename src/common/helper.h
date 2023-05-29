@@ -190,6 +190,9 @@ class Helper {
   // Notice: AddByteArrays will add one element as a prefix of the result, this element is for the carry
   // if you want the equal length of your input, you need to do substr by yourself
   static std::vector<uint8_t> AddByteArrays(const std::vector<uint8_t>& a, const std::vector<uint8_t>& b);
+
+  // filesystem operations
+  static std::string FindFileInDirectory(const std::string& dirpath, const std::string& prefix);
 };
 
 }  // namespace dingodb

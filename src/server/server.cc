@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <any>
 #include <cstdint>
+#include <filesystem>
 #include <memory>
 #include <vector>
 
@@ -103,6 +104,21 @@ bool Server::InitServerID() {
   id_ = config->GetInt("cluster.instance_id");
   keyring_ = config->GetString("cluster.keyring");
   return id_ != 0 && (!keyring_.empty());
+}
+
+bool Server::InitDirectory() {
+  auto config = ConfigManager::GetInstance()->GetConfig(role_);
+
+  std::filesystem::path db_path(config->GetString("store.path"));
+  checkpoint_path_ = fmt::format("{}/checkpoint", db_path.parent_path().string());
+  if (!std::filesystem::exists(checkpoint_path_)) {
+    if (!std::filesystem::create_directories(checkpoint_path_)) {
+      DINGO_LOG(ERROR) << "Create checkpoint directory failed: " << checkpoint_path_;
+      return false;
+    }
+  }
+
+  return true;
 }
 
 bool Server::InitRawEngine() {

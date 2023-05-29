@@ -22,6 +22,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
 #include <iomanip>
 #include <random>
 #include <ratio>
@@ -725,6 +726,17 @@ bool Helper::GetDiskCapacity(const std::string& path, std::map<std::string, uint
   output["TotalCapacity"] = total_space;
   output["FreeCcapacity"] = free_space;
   return true;
+}
+
+std::string Helper::FindFileInDirectory(const std::string& dirpath, const std::string& prefix) {
+  for (const auto& fe : std::filesystem::directory_iterator(dirpath)) {
+    auto filename = fe.path().filename().string();
+    if (filename.find(prefix) != std::string::npos) {
+      return filename;
+    }
+  }
+
+  return "";
 }
 
 }  // namespace dingodb

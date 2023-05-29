@@ -1205,17 +1205,6 @@ butil::Status RawRocksEngine::Checkpoint::Create(const std::string& dirpath) {
   return butil::Status();
 }
 
-std::string FindFileInDirectory(const std::string& dirpath, const std::string& prefix) {
-  for (const auto& fe : std::filesystem::directory_iterator(dirpath)) {
-    auto filename = fe.path().filename().string();
-    if (filename.find(prefix) != std::string::npos) {
-      return filename;
-    }
-  }
-
-  return "";
-}
-
 butil::Status RawRocksEngine::Checkpoint::Create(const std::string& dirpath,
                                                  std::shared_ptr<ColumnFamily> column_family,
                                                  std::vector<pb::store_internal::SstFileInfo>& sst_files) {
@@ -1254,13 +1243,13 @@ butil::Status RawRocksEngine::Checkpoint::Create(const std::string& dirpath,
   sst_file.set_path(dirpath + "/CURRENT");
   sst_files.push_back(sst_file);
 
-  std::string manifest_name = FindFileInDirectory(dirpath, "MANIFEST");
+  std::string manifest_name = Helper::FindFileInDirectory(dirpath, "MANIFEST");
   sst_file.set_level(-1);
   sst_file.set_name(manifest_name);
   sst_file.set_path(dirpath + "/" + manifest_name);
   sst_files.push_back(sst_file);
 
-  std::string options_name = FindFileInDirectory(dirpath, "OPTIONS");
+  std::string options_name = Helper::FindFileInDirectory(dirpath, "OPTIONS");
   sst_file.set_level(-1);
   sst_file.set_name(options_name);
   sst_file.set_path(dirpath + "/" + options_name);
