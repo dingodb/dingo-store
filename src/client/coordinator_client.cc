@@ -117,23 +117,20 @@ void SendDebug() {
   DINGO_LOG(INFO) << encode_result.size();
   DINGO_LOG(INFO) << dingodb::Helper::StringToHex(encode_result);
 
+  DINGO_LOG(INFO) << "==========================";
+
   if (FLAGS_start_key.empty() || FLAGS_end_key.empty()) {
     DINGO_LOG(ERROR) << "start_key or end_key is empty";
     return;
   }
 
-  std::string start_key(FLAGS_start_key);
-  std::string end_key(FLAGS_end_key);
+  std::string start_key = dingodb::Helper::HexToString(FLAGS_start_key);
+  std::string end_key = dingodb::Helper::HexToString(FLAGS_end_key);
 
-  auto s_diff = dingodb::Helper::StrintSubtract(start_key, end_key);
-  auto s_half_diff = dingodb::Helper::StringDivideByTwo(s_diff);
-  auto s_mid = dingodb::Helper::StringAdd(start_key, s_half_diff);
+  auto real_mid = dingodb::Helper::CalculateMiddleKey(start_key, end_key);
+  DINGO_LOG(INFO) << " mid real  = " << dingodb::Helper::StringToHex(real_mid);
 
-  DINGO_LOG(INFO) << "start_key: " << dingodb::Helper::StringToHex(start_key);
-  DINGO_LOG(INFO) << "end_key: " << dingodb::Helper::StringToHex(end_key);
-  DINGO_LOG(INFO) << "s_diff: " << dingodb::Helper::StringToHex(s_diff);
-  DINGO_LOG(INFO) << "s_half_diff: " << dingodb::Helper::StringToHex(s_half_diff);
-  DINGO_LOG(INFO) << "s_mid: " << dingodb::Helper::StringToHex(s_mid.substr(1, s_mid.size() - 1));
+  DINGO_LOG(INFO) << "==========================";
 
   if (start_key.size() < end_key.size()) {
     start_key.resize(end_key.size(), 0);
@@ -153,13 +150,13 @@ void SendDebug() {
 
   std::vector<uint8_t> half = dingodb::Helper::DivideByteArrayByTwo(start_vec);
 
-  DINGO_LOG(INFO) << "start_key:" << dingodb::Helper::StringToHex(start_key);
-  DINGO_LOG(INFO) << "end_key:" << dingodb::Helper::StringToHex(end_key);
-  DINGO_LOG(INFO) << "diff:" << dingodb::Helper::StringToHex(std::string(diff.begin(), diff.end()));
-  DINGO_LOG(INFO) << "half_diff:" << dingodb::Helper::StringToHex(std::string(half_diff.begin(), half_diff.end()));
-  DINGO_LOG(INFO) << "half:" << dingodb::Helper::StringToHex(std::string(half.begin(), half.end()));
+  DINGO_LOG(INFO) << "start_key:    " << dingodb::Helper::StringToHex(start_key);
+  DINGO_LOG(INFO) << "end_key:      " << dingodb::Helper::StringToHex(end_key);
+  DINGO_LOG(INFO) << "diff:         " << dingodb::Helper::StringToHex(std::string(diff.begin(), diff.end()));
+  DINGO_LOG(INFO) << "half_diff:    " << dingodb::Helper::StringToHex(std::string(half_diff.begin(), half_diff.end()));
+  DINGO_LOG(INFO) << "half:         " << dingodb::Helper::StringToHex(std::string(half.begin(), half.end()));
 
-  DINGO_LOG(INFO) << "mid_key:" << dingodb::Helper::StringToHex(mid_key.substr(1, mid_key.size() - 1));
+  DINGO_LOG(INFO) << "mid_key:      " << dingodb::Helper::StringToHex(mid_key.substr(1, mid_key.size() - 1));
 }
 
 void* Sender(void* /*arg*/) {
