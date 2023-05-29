@@ -36,6 +36,7 @@ import java.util.concurrent.locks.LockSupport;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
+import static io.dingodb.sdk.common.utils.ErrorCodeUtils.ignoreCode;
 import static io.dingodb.sdk.common.utils.ErrorCodeUtils.refreshCode;
 import static io.dingodb.sdk.common.utils.NoBreakFunctions.wrap;
 
@@ -89,6 +90,9 @@ public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
                     );
                     if (refreshCode.contains(response.getError().getErrcodeValue())) {
                         throw new DingoClientException.InvalidRouteTableException(response.error.getErrmsg());
+                    }
+                    if (ignoreCode.contains(response.getError().getErrcodeValue())) {
+                        return response;
                     }
                     if (retryCheck.test(response.error)) {
                         refresh(stub);

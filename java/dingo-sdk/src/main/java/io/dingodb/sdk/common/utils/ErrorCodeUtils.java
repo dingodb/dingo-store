@@ -21,6 +21,11 @@ import java.util.List;
 
 import static io.dingodb.error.ErrorOuterClass.Errno.EKEY_OUT_OF_RANGE_VALUE;
 import static io.dingodb.error.ErrorOuterClass.Errno.EREGION_REDIRECT_VALUE;
+import static io.dingodb.error.ErrorOuterClass.Errno.ESCHEMA_EXISTS_VALUE;
+import static io.dingodb.error.ErrorOuterClass.Errno.ESCHEMA_NOT_EMPTY_VALUE;
+import static io.dingodb.error.ErrorOuterClass.Errno.ESCHEMA_NOT_FOUND_VALUE;
+import static io.dingodb.error.ErrorOuterClass.Errno.ETABLE_EXISTS_VALUE;
+import static io.dingodb.error.ErrorOuterClass.Errno.ETABLE_NOT_FOUND_VALUE;
 
 public class ErrorCodeUtils {
 
@@ -29,4 +34,12 @@ public class ErrorCodeUtils {
             EREGION_REDIRECT_VALUE);
 
     public static final List<Integer> retryCode = Arrays.asList();
+
+    public static final List<Integer> ignoreCode = Arrays.asList(
+            ETABLE_NOT_FOUND_VALUE,
+            ETABLE_EXISTS_VALUE,
+            ESCHEMA_EXISTS_VALUE,
+            ESCHEMA_NOT_FOUND_VALUE,
+            ESCHEMA_NOT_EMPTY_VALUE
+    );
 }
