@@ -547,7 +547,11 @@ public class MetaServiceClient {
 
     public Long getAutoIncrement(String tableName) {
         tableName = cleanTableName(tableName);
-        return getAutoIncrement(getTableId(tableName));
+        DingoCommonId tableId = getTableId(tableName);
+        if (tableId == null) {
+            throw new DingoClientException("Table " + tableName + " does not exist");
+        }
+        return getAutoIncrement(tableId);
     }
 
     public Long getAutoIncrement(DingoCommonId tableId) {
