@@ -475,6 +475,20 @@ void CoordinatorControl::GetRegionMap(pb::common::RegionMap& region_map) {
   }
 }
 
+void CoordinatorControl::GetRegionMapFull(pb::common::RegionMap& region_map) {
+  region_map.set_epoch(GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_REGION));
+  {
+    // BAIDU_SCOPED_LOCK(region_map_mutex_);
+    butil::FlatMap<uint64_t, pb::common::Region> region_map_copy;
+    region_map_copy.init(30000);
+    region_map_.GetFlatMapCopy(region_map_copy);
+    for (auto& elemnt : region_map_copy) {
+      auto* tmp_region = region_map.add_regions();
+      tmp_region->CopyFrom(elemnt.second);
+    }
+  }
+}
+
 void CoordinatorControl::GetRegionCount(uint64_t& region_count) { region_count = region_map_.Size(); }
 
 void CoordinatorControl::GetRegionIdsInMap(std::vector<uint64_t>& region_ids) { region_map_.GetAllKeys(region_ids); }
