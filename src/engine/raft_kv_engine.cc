@@ -113,7 +113,7 @@ butil::Status RaftKvEngine::ChangeNode(std::shared_ptr<Context> /*ctx*/, uint64_
                                        std::vector<pb::common::Peer> peers) {
   auto node = raft_node_manager_->GetNode(region_id);
   if (node == nullptr) {
-    return butil::Status(pb::error::ERAFT_NOTNODE, "Not found raft node");
+    return butil::Status(pb::error::ERAFT_NOT_FOUND, "Not found raft node");
   }
   if (!node->IsLeader()) {
     return butil::Status(pb::error::ERAFT_NOTLEADER, node->GetLeaderId().to_string());
@@ -127,7 +127,7 @@ butil::Status RaftKvEngine::ChangeNode(std::shared_ptr<Context> /*ctx*/, uint64_
 butil::Status RaftKvEngine::StopNode(std::shared_ptr<Context> /*ctx*/, uint64_t region_id) {
   auto node = raft_node_manager_->GetNode(region_id);
   if (node == nullptr) {
-    return butil::Status(pb::error::ERAFT_NOTNODE, "Not found raft node");
+    return butil::Status(pb::error::ERAFT_NOT_FOUND, "Not found raft node");
   }
   raft_node_manager_->DeleteNode(region_id);
 
@@ -139,7 +139,7 @@ butil::Status RaftKvEngine::StopNode(std::shared_ptr<Context> /*ctx*/, uint64_t 
 butil::Status RaftKvEngine::DestroyNode(std::shared_ptr<Context> /*ctx*/, uint64_t region_id) {
   auto node = raft_node_manager_->GetNode(region_id);
   if (node == nullptr) {
-    return butil::Status(pb::error::ERAFT_NOTNODE, "Not found raft node");
+    return butil::Status(pb::error::ERAFT_NOT_FOUND, "Not found raft node");
   }
   raft_node_manager_->DeleteNode(region_id);
 
@@ -153,7 +153,7 @@ std::shared_ptr<RaftNode> RaftKvEngine::GetNode(uint64_t region_id) { return raf
 butil::Status RaftKvEngine::DoSnapshot(std::shared_ptr<Context> ctx, uint64_t region_id) {
   auto node = raft_node_manager_->GetNode(region_id);
   if (node == nullptr) {
-    return butil::Status(pb::error::ERAFT_NOTNODE, "Not found raft node");
+    return butil::Status(pb::error::ERAFT_NOT_FOUND, "Not found raft node");
   }
 
   node->Snapshot(dynamic_cast<braft::Closure*>(ctx->Done()));
@@ -163,7 +163,7 @@ butil::Status RaftKvEngine::DoSnapshot(std::shared_ptr<Context> ctx, uint64_t re
 butil::Status RaftKvEngine::TransferLeader(uint64_t region_id, const pb::common::Peer& peer) {
   auto node = raft_node_manager_->GetNode(region_id);
   if (node == nullptr) {
-    return butil::Status(pb::error::ERAFT_NOTNODE, "Not found raft node");
+    return butil::Status(pb::error::ERAFT_NOT_FOUND, "Not found raft node");
   }
 
   if (!node->IsLeader()) {
@@ -198,7 +198,7 @@ butil::Status RaftKvEngine::Write(std::shared_ptr<Context> ctx, const WriteData&
   auto node = raft_node_manager_->GetNode(ctx->RegionId());
   if (node == nullptr) {
     DINGO_LOG(ERROR) << "Not found raft node " << ctx->RegionId();
-    return butil::Status(pb::error::ERAFT_NOTNODE, "Not found raft node");
+    return butil::Status(pb::error::ERAFT_NOT_FOUND, "Not found raft node");
   }
 
   auto s = node->Commit(ctx, GenRaftCmdRequest(ctx, write_data));
@@ -219,7 +219,7 @@ butil::Status RaftKvEngine::AsyncWrite(std::shared_ptr<Context> ctx, const Write
   auto node = raft_node_manager_->GetNode(ctx->RegionId());
   if (node == nullptr) {
     DINGO_LOG(ERROR) << "Not found raft node " << ctx->RegionId();
-    return butil::Status(pb::error::ERAFT_NOTNODE, "Not found raft node");
+    return butil::Status(pb::error::ERAFT_NOT_FOUND, "Not found raft node");
   }
 
   ctx->SetWriteCb(cb);

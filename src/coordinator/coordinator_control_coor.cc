@@ -1132,7 +1132,7 @@ butil::Status CoordinatorControl::SplitRegionWithTaskList(uint64_t split_from_re
                      << Helper::StringToHex(split_watershed_key) << ", split_from_region_id = " << split_from_region_id
                      << " start_key=" << Helper::StringToHex(split_from_region.definition().range().start_key())
                      << ", end_key=" << Helper::StringToHex(split_from_region.definition().range().end_key());
-    return butil::Status(pb::error::Errno::EKEY_SPLIT, "SplitRegion split_watershed_key is illegal");
+    return butil::Status(pb::error::Errno::EKEY_INVALID, "SplitRegion split_watershed_key is illegal");
   }
 
   // validate split_from_region and split_to_region has NORMAL status

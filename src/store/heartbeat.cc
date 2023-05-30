@@ -339,31 +339,31 @@ bool CheckStoreOperationResult(pb::coordinator::RegionCmdType cmd_type, pb::erro
   switch (cmd_type) {
     case RegionCmdType::CMD_CREATE:
       DINGO_LOG(ERROR) << "CheckStoreOperationResult... create region failed, errcode=" << errcode;
-      if (errcode == Errno::EREGION_ALREADY_EXIST) {
+      if (errcode == Errno::EREGION_EXIST) {
         return true;
       }
       break;
     case RegionCmdType::CMD_DELETE:
       DINGO_LOG(ERROR) << "CheckStoreOperationResult... delete region failed, errcode=" << errcode;
-      if (errcode == Errno::EREGION_ALREADY_DELETED || errcode == Errno::EREGION_NOT_FOUND) {
+      if (errcode == Errno::EREGION_DELETING || errcode == Errno::EREGION_NOT_FOUND) {
         return true;
       }
       break;
     case RegionCmdType::CMD_SPLIT:
       DINGO_LOG(ERROR) << "CheckStoreOperationResult... split region failed, errcode=" << errcode;
-      if (errcode == Errno::EREGION_ALREADY_SPLIT) {
+      if (errcode == Errno::EREGION_SPLITING) {
         return true;
       }
       break;
     case RegionCmdType::CMD_MERGE:
       DINGO_LOG(ERROR) << "CheckStoreOperationResult... merge region failed, errcode=" << errcode;
-      if (errcode == Errno::EREGION_ALREADY_MERGED) {
+      if (errcode == Errno::EREGION_MERGEING) {
         return true;
       }
       break;
     case RegionCmdType::CMD_CHANGE_PEER:
       DINGO_LOG(ERROR) << "CheckStoreOperationResult... change peer region failed, errcode=" << errcode;
-      if (errcode == Errno::EREGION_ALREADY_PEER_CHANGED) {
+      if (errcode == Errno::EREGION_PEER_CHANGEING) {
         return true;
       }
       break;

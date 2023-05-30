@@ -42,7 +42,7 @@ butil::Status Storage::KvGet(std::shared_ptr<Context> ctx, const std::vector<std
     std::string value;
     auto status = reader->KvGet(ctx, key, value);
     if (!status.ok()) {
-      if (pb::error::EKEY_NOTFOUND == status.error_code()) {
+      if (pb::error::EKEY_NOT_FOUND == status.error_code()) {
         continue;
       }
       kvs.clear();

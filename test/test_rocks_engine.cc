@@ -503,16 +503,16 @@ TEST_F(RawRocksEngineTest, KvBatchPutAndDelete) {
     std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
 
     ok = reader->KvGet("not_found_key", value1);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOTFOUND);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOT_FOUND);
 
     ok = reader->KvGet("key1", value1);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOTFOUND);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOT_FOUND);
 
     ok = reader->KvGet("key2", value2);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOTFOUND);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOT_FOUND);
 
     ok = reader->KvGet("key3", value3);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOTFOUND);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOT_FOUND);
   }
 
   // ok puts and delete
@@ -557,13 +557,13 @@ TEST_F(RawRocksEngineTest, KvBatchPutAndDelete) {
     std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
 
     ok = reader->KvGet("key1", value1);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOTFOUND);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOT_FOUND);
 
     ok = reader->KvGet("key2", value2);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOTFOUND);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOT_FOUND);
 
     ok = reader->KvGet("key3", value3);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOTFOUND);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOT_FOUND);
 
     ok = reader->KvGet("key99", value0);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
@@ -652,7 +652,7 @@ TEST_F(RawRocksEngineTest, KvCompareAndSet) {
     bool key_state;
 
     butil::Status ok = writer->KvCompareAndSet(kv, value, key_state);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOTFOUND);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOT_FOUND);
   }
 
   // value empty . key exist current value not empty. failed
@@ -937,7 +937,7 @@ TEST_F(RawRocksEngineTest, KvBatchPutIfAbsentAtomic) {
     std::string value;
     std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
     ok = reader->KvGet("key111", value);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOTFOUND);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOT_FOUND);
   }
 
   // normal key all not exist
@@ -1555,7 +1555,7 @@ TEST_F(RawRocksEngineTest, KvDelete) {
 
     std::string value;
     ok = reader->KvGet(key, value);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOTFOUND);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOT_FOUND);
   }
 
   // ok
@@ -1741,7 +1741,7 @@ TEST_F(RawRocksEngineTest, KvBatchDelete) {
 
     for (int i = 0; i < 10; i++) {
       ok = reader->KvGet(kvs[i].key(), value);
-      EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOTFOUND);
+      EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOT_FOUND);
     }
   }
 }
@@ -1765,7 +1765,7 @@ TEST_F(RawRocksEngineTest, KvDeleteIfEqual) {
     kv.set_value("value598");
 
     butil::Status ok = writer->KvDeleteIfEqual(kv);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOTFOUND);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOT_FOUND);
   }
 
   // key exist value exist but value unequal
@@ -1828,7 +1828,7 @@ TEST_F(RawRocksEngineTest, KvDeleteIfEqual) {
 
     for (int i = 0; i < 10; i++) {
       ok = reader->KvGet(kvs[i].key(), value);
-      EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOTFOUND);
+      EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOT_FOUND);
     }
   }
 }
@@ -1899,7 +1899,7 @@ TEST_F(RawRocksEngineTest, KvDeleteRange) {
     std::string key = "key";
     std::string value;
     ok = reader->KvGet(key, value);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOTFOUND);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOT_FOUND);
 
     key = "key100";
     ok = reader->KvGet(key, value);
@@ -1934,7 +1934,7 @@ TEST_F(RawRocksEngineTest, KvDeleteRange) {
     std::string key = "key100";
     std::string value;
     ok = reader->KvGet(key, value);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOTFOUND);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOT_FOUND);
 
     key = "key200";
     ok = reader->KvGet(key, value);
@@ -2005,12 +2005,12 @@ TEST_F(RawRocksEngineTest, KvDeleteRangeWithRangeWithOptions) {
     std::string key1 = "KEY0";
     std::string value1;
     ok = reader->KvGet(key1, value1);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOTFOUND);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOT_FOUND);
 
     std::string key2 = "KEY1";
     std::string value2;
     ok = reader->KvGet(key2, value2);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOTFOUND);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOT_FOUND);
 
     std::string start_key = "KEY";
     std::string end_key = "KEZ";

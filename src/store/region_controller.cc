@@ -43,7 +43,7 @@ butil::Status CreateRegionTask::ValidateCreateRegion(std::shared_ptr<StoreMetaMa
                                                      uint64_t region_id) {
   auto region = store_meta_manager->GetStoreRegionMeta()->GetRegion(region_id);
   if (region != nullptr && region->State() != pb::common::StoreRegionState::NEW) {
-    return butil::Status(pb::error::EREGION_ALREADY_EXIST, fmt::format("Region {} already exist", region_id));
+    return butil::Status(pb::error::EREGION_EXIST, fmt::format("Region {} already exist", region_id));
   }
 
   return butil::Status();
@@ -128,7 +128,7 @@ butil::Status DeleteRegionTask::ValidateDeleteRegion(std::shared_ptr<StoreMetaMa
   }
   if (region->State() == pb::common::StoreRegionState::DELETING ||
       region->State() == pb::common::StoreRegionState::DELETED) {
-    return butil::Status(pb::error::EREGION_ALREADY_DELETED, "Region is deleting or deleted.");
+    return butil::Status(pb::error::EREGION_DELETING, "Region is deleting or deleted.");
   }
 
   if (region->State() == pb::common::StoreRegionState::SPLITTING ||
@@ -240,11 +240,11 @@ butil::Status SplitRegionTask::ValidateSplitRegion(std::shared_ptr<StoreRegionMe
   const auto& split_key = split_request.split_watershed_key();
   auto range = parent_region->Range();
   if (range.start_key().compare(split_key) >= 0 || range.end_key().compare(split_key) <= 0) {
-    return butil::Status(pb::error::EKEY_SPLIT, "Split key is invalid.");
+    return butil::Status(pb::error::EKEY_INVALID, "Split key is invalid.");
   }
 
   if (parent_region->State() == pb::common::StoreRegionState::SPLITTING) {
-    return butil::Status(pb::error::EREGION_ALREADY_SPLIT, "Parent region state is splitting.");
+    return butil::Status(pb::error::EREGION_SPLITING, "Parent region state is splitting.");
   }
 
   if (parent_region->State() == pb::common::StoreRegionState::NEW ||
@@ -259,7 +259,7 @@ butil::Status SplitRegionTask::ValidateSplitRegion(std::shared_ptr<StoreRegionMe
     auto raft_kv_engine = std::dynamic_pointer_cast<RaftKvEngine>(engine);
     auto node = raft_kv_engine->GetNode(parent_region_id);
     if (node == nullptr) {
-      return butil::Status(pb::error::ERAFT_NOTNODE, "No found raft node.");
+      return butil::Status(pb::error::ERAFT_NOT_FOUND, "No found raft node.");
     }
 
     if (!node->IsLeader()) {
@@ -335,7 +335,7 @@ butil::Status ChangeRegionTask::ValidateChangeRegion(std::shared_ptr<StoreMetaMa
     auto raft_kv_engine = std::dynamic_pointer_cast<RaftKvEngine>(engine);
     auto node = raft_kv_engine->GetNode(region_definition.id());
     if (node == nullptr) {
-      return butil::Status(pb::error::ERAFT_NOTNODE, "No found raft node.");
+      return butil::Status(pb::error::ERAFT_NOT_FOUND, "No found raft node.");
     }
 
     if (!node->IsLeader()) {
@@ -484,7 +484,7 @@ butil::Status PurgeRegionTask::ValidatePurgeRegion(store::RegionPtr region) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Region is not exist, can't purge.");
   }
   if (region->State() != pb::common::StoreRegionState::DELETED) {
-    return butil::Status(pb::error::EREGION_ALREADY_DELETED, "Region is not deleted, can't purge.");
+    return butil::Status(pb::error::EREGION_DELETED, "Region is not deleted, can't purge.");
   }
 
   return butil::Status();
@@ -527,7 +527,7 @@ butil::Status StopRegionTask::ValidateStopRegion(store::RegionPtr region) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Region is not exist, can't delete peer.");
   }
   if (region->State() != pb::common::StoreRegionState::ORPHAN) {
-    return butil::Status(pb::error::EREGION_ALREADY_DELETED, "Region is not orphan.");
+    return butil::Status(pb::error::EREGION_STATE, "Region is not orphan.");
   }
 
   return butil::Status();

@@ -81,7 +81,7 @@ TYPED_TEST(RawRocksEngineBugTest, test) {
     std::string value;
 
     butil::Status ok = reader->KvGet(key, value);
-    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_NOTFOUND);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_NOT_FOUND);
   }
 
   {

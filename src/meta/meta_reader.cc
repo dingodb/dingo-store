@@ -42,7 +42,7 @@ std::shared_ptr<pb::common::KeyValue> MetaReader::Get(std::shared_ptr<Snapshot> 
   } else {
     status = reader->KvGet(key, value);
   }
-  if (!status.ok() && status.error_code() != pb::error::EKEY_NOTFOUND) {
+  if (!status.ok() && status.error_code() != pb::error::EKEY_NOT_FOUND) {
     DINGO_LOG(ERROR) << fmt::format("Meta get key {} failed, errcode: {} {}", key, status.error_code(),
                                     status.error_str());
     return nullptr;

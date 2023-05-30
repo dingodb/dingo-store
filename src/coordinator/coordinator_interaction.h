@@ -98,12 +98,12 @@ butil::Status CoordinatorInteraction::SendRequestByService(const std::string& ap
                                                            Response& response) {
   const ::google::protobuf::ServiceDescriptor* service_desc = GetServiceDescriptor();
   if (service_desc == nullptr) {
-    return butil::Status(pb::error::ESERVICE_TYPE_NOT_FOUND, "Service type not found");
+    return butil::Status(pb::error::ENOT_SUPPORT, "Service type not found");
   }
 
   const ::google::protobuf::MethodDescriptor* method = service_desc->FindMethodByName(api_name);
   if (method == nullptr) {
-    return butil::Status(pb::error::ESERVICE_METHOD_NOT_FOUND, "Service method not found");
+    return butil::Status(pb::error::ENOT_SUPPORT, "Service method not found");
   }
 
   // DINGO_LOG(DEBUG) << "send request api " << api_name << " request: " << request.ShortDebugString();
@@ -226,12 +226,12 @@ butil::Status CoordinatorInteraction::SendRequestByList(const std::string& api_n
                                                         Response& response) {
   const ::google::protobuf::ServiceDescriptor* service_desc = GetServiceDescriptor();
   if (service_desc == nullptr) {
-    return butil::Status(pb::error::ESERVICE_TYPE_NOT_FOUND, "Service type not found");
+    return butil::Status(pb::error::ENOT_SUPPORT, "Service type not found");
   }
 
   const ::google::protobuf::MethodDescriptor* method = service_desc->FindMethodByName(api_name);
   if (method == nullptr) {
-    return butil::Status(pb::error::ESERVICE_METHOD_NOT_FOUND, "Service method not found");
+    return butil::Status(pb::error::ENOT_SUPPORT, "Service method not found");
   }
 
   // DINGO_LOG(DEBUG) << "send request api " << api_name << " request: " << request.ShortDebugString();

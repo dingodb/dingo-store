@@ -1481,7 +1481,7 @@ void CoordinatorServiceImpl::RaftControl(google::protobuf::RpcController *contro
       return;
     }
     default:
-      response->mutable_error()->set_errcode(::dingodb::pb::error::Errno::EOP_NOT_SUPPORTED);
+      response->mutable_error()->set_errcode(::dingodb::pb::error::Errno::ENOT_SUPPORT);
       DINGO_LOG(ERROR) << "node:" << raft_node->GetRaftGroupName() << " " << raft_node->GetPeerId().to_string()
                        << " unsupport request type:" << request->op_type() << ", log_id:" << log_id;
       return;
