@@ -93,7 +93,7 @@ butil::Status RaftMetaEngine::MetaPut(std::shared_ptr<Context> ctx,
   auto node = raft_node_manager_->GetNode(ctx->RegionId());
   if (node == nullptr) {
     DINGO_LOG(ERROR) << "Not found raft node on region " << ctx->RegionId();
-    return butil::Status(pb::error::ERAFT_NOTNODE, "Not found raft node");
+    return butil::Status(pb::error::ERAFT_NOT_FOUND, "Not found raft node");
   }
   return node->Commit(ctx, raft_cmd);
 }
