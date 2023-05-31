@@ -30,14 +30,8 @@ class Buf {
   bool le_;
 
  public:
-  Buf(int size, bool le);
-  Buf(int size);
-  Buf(std::string* buf, bool le);
-  Buf(std::string* buf);
   Buf(const std::string& buf, bool le);
   Buf(const std::string& buf);
-  void Init(int size);
-  void Init(std::string* buf);
   void Init(const std::string& buf);
   void SetForwardPos(int fp);
   void SetReversePos(int rp);
@@ -56,7 +50,7 @@ class Buf {
   void Skip(int size);
   void ReverseSkip(int size);
   void EnsureRemainder(int length);
-  std::string* GetBytes();
+  int GetBytes();
   int GetBytes(std::string& s);
 };
 

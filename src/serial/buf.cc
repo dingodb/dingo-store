@@ -18,26 +18,6 @@
 
 namespace dingodb {
 
-Buf::Buf(int size) {
-  Init(size);
-  this->le_ = IsLE();
-}
-
-Buf::Buf(int size, bool le) {
-  Init(size);
-  this->le_ = le;
-}
-
-Buf::Buf(std::string* buf) {
-  Init(buf);
-  this->le_ = IsLE();
-}
-
-Buf::Buf(std::string* buf, bool le) {
-  Init(buf);
-  this->le_ = le;
-}
-
 Buf::Buf(const std::string& buf) {
   Init(buf);
   this->le_ = IsLE();
@@ -46,17 +26,6 @@ Buf::Buf(const std::string& buf) {
 Buf::Buf(const std::string& buf, bool le) {
   Init(buf);
   this->le_ = le;
-}
-
-void Buf::Init(int size) {
-  this->buf_ = new std::string();
-  this->buf_->resize(size);
-  this->reverse_pos_ = size - 1;
-}
-
-void Buf::Init(std::string* buf) {
-  this->buf_ = buf;
-  this->reverse_pos_ = buf->size() - 1;
 }
 
 void Buf::Init(const std::string& buf) {
@@ -193,10 +162,10 @@ void Buf::EnsureRemainder(int length) {
   }
 }
 
-std::string* Buf::GetBytes() {
+int Buf::GetBytes() {
   int empty_size = reverse_pos_ - forward_pos_ + 1;
   if (empty_size == 0) {
-    return this->buf_;
+    return this->buf_->size();
   }
   if (empty_size > 0) {
     int final_size = buf_->size() - empty_size;
@@ -204,14 +173,15 @@ std::string* Buf::GetBytes() {
        buf_->at(i) = buf_->at(i + empty_size);
     }
     buf_->resize(final_size);
-    return buf_;
+    return final_size;
   }
 
   if (empty_size < 0) {
     //"Wrong Key Buf"
+    return -1;
   }
 
-  return nullptr;
+  return 0;
 }
 
 int Buf::GetBytes(std::string& s) {

@@ -172,10 +172,11 @@ TEST_F(DingoSerialTest, boolSchema) {
   b1.SetAllowNull(false);
   b1.SetIsKey(true);
   optional<bool> data1 = false;
-  Buf* bf1 = new Buf(1, this->le);
+  string* bs1 = new string();
+  Buf* bf1 = new Buf(*bs1, this->le);
   b1.EncodeKey(bf1, data1);
-  string* bs1 = bf1->GetBytes();
-  Buf* bf2 = new Buf(bs1, this->le);
+  bf1->GetBytes();
+  Buf* bf2 = new Buf(*bs1, this->le);
   optional<bool> data2 = b1.DecodeKey(bf2);
   delete bs1;
   delete bf1;
@@ -191,10 +192,11 @@ TEST_F(DingoSerialTest, boolSchema) {
   b2.SetAllowNull(true);
   b2.SetIsKey(false);
   optional<bool> data3 = true;
-  Buf* bf3 = new Buf(1, this->le);
+  string* bs2 = new string();
+  Buf* bf3 = new Buf(*bs2, this->le);
   b2.EncodeValue(bf3, data3);
-  string* bs2 = bf3->GetBytes();
-  Buf* bf4 = new Buf(bs2, this->le);
+  bf3->GetBytes();
+  Buf* bf4 = new Buf(*bs2, this->le);
   optional<bool> data4 = b2.DecodeValue(bf4);
   delete bs2;
   delete bf3;
@@ -206,10 +208,11 @@ TEST_F(DingoSerialTest, boolSchema) {
   }
 
   optional<bool> data5 = nullopt;
-  Buf* bf5 = new Buf(1, this->le);
+  string* bs3 = new string();
+  Buf* bf5 = new Buf(*bs3, this->le);
   b2.EncodeValue(bf5, data5);
-  string* bs3 = bf5->GetBytes();
-  Buf* bf6 = new Buf(bs3, this->le);
+  bf5->GetBytes();
+  Buf* bf6 = new Buf(*bs3, this->le);
   optional<bool> data6 = b2.DecodeValue(bf6);
   delete bs3;
   delete bf5;
@@ -220,10 +223,11 @@ TEST_F(DingoSerialTest, boolSchema) {
   b3.SetIndex(0);
   b3.SetAllowNull(true);
   b3.SetIsKey(true);
-  Buf* bf7 = new Buf(100, this->le);
+  string* bs4 = new string();
+  Buf* bf7 = new Buf(*bs4, this->le);
   b3.EncodeValue(bf7, nullopt);
-  string* bs4 = bf7->GetBytes();
-  Buf* bf8 = new Buf(bs4, this->le);
+  bf7->GetBytes();
+  Buf* bf8 = new Buf(*bs4, this->le);
   EXPECT_FALSE(b3.DecodeKey(bf8).has_value());
   delete bs4;
   delete bf7;
@@ -236,10 +240,11 @@ TEST_F(DingoSerialTest, integerSchema) {
   b1.SetAllowNull(false);
   b1.SetIsKey(true);
   optional<int32_t> data1 = 1543234;
-  Buf* bf1 = new Buf(1, this->le);
+  string* bs1 = new string();
+  Buf* bf1 = new Buf(*bs1, this->le);
   b1.EncodeKey(bf1, data1);
-  string* bs1 = bf1->GetBytes();
-  Buf* bf2 = new Buf(bs1, this->le);
+  bf1->GetBytes();
+  Buf* bf2 = new Buf(*bs1, this->le);
   optional<int32_t> data2 = b1.DecodeKey(bf2);
   delete bs1;
   delete bf1;
@@ -255,10 +260,11 @@ TEST_F(DingoSerialTest, integerSchema) {
   b2.SetAllowNull(true);
   b2.SetIsKey(false);
   optional<int32_t> data3 = 532142;
-  Buf* bf3 = new Buf(1, this->le);
+  string* bs2 = new string();
+  Buf* bf3 = new Buf(*bs2, this->le);
   b2.EncodeValue(bf3, data3);
-  string* bs2 = bf3->GetBytes();
-  Buf* bf4 = new Buf(bs2, this->le);
+  bf3->GetBytes();
+  Buf* bf4 = new Buf(*bs2, this->le);
   optional<int32_t> data4 = b2.DecodeValue(bf4);
   delete bs2;
   delete bf3;
@@ -270,10 +276,11 @@ TEST_F(DingoSerialTest, integerSchema) {
   }
 
   optional<int32_t> data5 = nullopt;
-  Buf* bf5 = new Buf(1, this->le);
+  string* bs3 = new string();
+  Buf* bf5 = new Buf(*bs3, this->le);
   b2.EncodeValue(bf5, data5);
-  string* bs3 = bf5->GetBytes();
-  Buf* bf6 = new Buf(bs3, this->le);
+  bf5->GetBytes();
+  Buf* bf6 = new Buf(*bs3, this->le);
   optional<int32_t> data6 = b2.DecodeValue(bf6);
   delete bs3;
   delete bf5;
@@ -284,10 +291,11 @@ TEST_F(DingoSerialTest, integerSchema) {
   b3.SetIndex(0);
   b3.SetAllowNull(true);
   b3.SetIsKey(true);
-  Buf* bf7 = new Buf(100, this->le);
+  string* bs4 = new string();
+  Buf* bf7 = new Buf(*bs4, this->le);
   b3.EncodeValue(bf7, nullopt);
-  string* bs4 = bf7->GetBytes();
-  Buf* bf8 = new Buf(bs4, this->le);
+  bf7->GetBytes();
+  Buf* bf8 = new Buf(*bs4, this->le);
   EXPECT_FALSE(b3.DecodeKey(bf8).has_value());
   delete bs4;
   delete bf7;
@@ -319,9 +327,10 @@ TEST_F(DingoSerialTest, integerSchemaLeBe) {
   } else {
     b1.SetIsLe(false);
   }
-  Buf* bf1 = new Buf(1, this->le);
+  string* bs1 = new string();
+  Buf* bf1 = new Buf(*bs1, this->le);
   b1.EncodeKey(bf1, data1);
-  string* bs1 = bf1->GetBytes();
+  bf1->GetBytes();
   bitset<8> bs10(bs1->at(0));
   EXPECT_EQ(bs10, not_null_tag);
   bitset<8> bs11(bs1->at(1));
@@ -332,7 +341,7 @@ TEST_F(DingoSerialTest, integerSchemaLeBe) {
   EXPECT_EQ(bs13, key_data_2);
   bitset<8> bs14(bs1->at(4));
   EXPECT_EQ(bs14, key_data_3);
-  Buf* bf11 = new Buf(bs1, this->le);
+  Buf* bf11 = new Buf(*bs1, this->le);
   optional<int32_t> data2 = b1.DecodeKey(bf11);
   EXPECT_EQ(data1, data2);
   delete bs1;
@@ -340,9 +349,10 @@ TEST_F(DingoSerialTest, integerSchemaLeBe) {
   delete bf11;
 
   b1.SetIsKey(false);
-  Buf* bf2 = new Buf(1, this->le);
+  string* bs2 = new string();
+  Buf* bf2 = new Buf(*bs2, this->le);
   b1.EncodeValue(bf2, data1);
-  string* bs2 = bf2->GetBytes();
+  bf2->GetBytes();
   bitset<8> bs20(bs2->at(0));
   EXPECT_EQ(bs20, not_null_tag);
   bitset<8> bs21(bs2->at(1));
@@ -353,7 +363,7 @@ TEST_F(DingoSerialTest, integerSchemaLeBe) {
   EXPECT_EQ(bs23, value_data_2);
   bitset<8> bs24(bs2->at(4));
   EXPECT_EQ(bs24, value_data_3);
-  Buf* bf21 = new Buf(bs2, this->le);
+  Buf* bf21 = new Buf(*bs2, this->le);
   optional<int32_t> data3 = b1.DecodeValue(bf21);
   EXPECT_EQ(data1, data3);
   delete bs2;
@@ -386,9 +396,10 @@ TEST_F(DingoSerialTest, integerSchemaFakeLeBe) {
   } else {
     b1.SetIsLe(false);
   }
-  Buf* bf1 = new Buf(1, !this->le);
+  string* bs1 = new string();
+  Buf* bf1 = new Buf(*bs1, this->le);
   b1.EncodeKey(bf1, data1);
-  string* bs1 = bf1->GetBytes();
+  bf1->GetBytes();
   bitset<8> bs10(bs1->at(0));
   EXPECT_EQ(bs10, not_null_tag);
   bitset<8> bs11(bs1->at(1));
@@ -399,7 +410,7 @@ TEST_F(DingoSerialTest, integerSchemaFakeLeBe) {
   EXPECT_EQ(bs13, key_data_2);
   bitset<8> bs14(bs1->at(4));
   EXPECT_EQ(bs14, key_data_3);
-  Buf* bf11 = new Buf(bs1, !this->le);
+  Buf* bf11 = new Buf(*bs1, !this->le);
   optional<int32_t> data2 = b1.DecodeKey(bf11);
   EXPECT_EQ(data1, data2);
   delete bs1;
@@ -407,9 +418,10 @@ TEST_F(DingoSerialTest, integerSchemaFakeLeBe) {
   delete bf11;
 
   b1.SetIsKey(false);
-  Buf* bf2 = new Buf(1, !this->le);
+  string* bs2 = new string();
+  Buf* bf2 = new Buf(*bs2, this->le);
   b1.EncodeValue(bf2, data1);
-  string* bs2 = bf2->GetBytes();
+  bf2->GetBytes();
   bitset<8> bs20(bs2->at(0));
   EXPECT_EQ(bs20, not_null_tag);
   bitset<8> bs21(bs2->at(1));
@@ -420,7 +432,7 @@ TEST_F(DingoSerialTest, integerSchemaFakeLeBe) {
   EXPECT_EQ(bs23, value_data_2);
   bitset<8> bs24(bs2->at(4));
   EXPECT_EQ(bs24, value_data_3);
-  Buf* bf21 = new Buf(bs2, !this->le);
+  Buf* bf21 = new Buf(*bs2, !this->le);
   optional<int32_t> data3 = b1.DecodeValue(bf21);
   EXPECT_EQ(data1, data3);
   delete bs2;
@@ -453,9 +465,10 @@ TEST_F(DingoSerialTest, floatSchemaLeBe) {
   } else {
     b1.SetIsLe(false);
   }
-  Buf* bf1 = new Buf(1, this->le);
+  string* bs1 = new string();
+  Buf* bf1 = new Buf(*bs1, this->le);
   b1.EncodeKey(bf1, data1);
-  string* bs1 = bf1->GetBytes();
+  bf1->GetBytes();
   bitset<8> bs10(bs1->at(0));
   EXPECT_EQ(bs10, not_null_tag);
   bitset<8> bs11(bs1->at(1));
@@ -466,7 +479,7 @@ TEST_F(DingoSerialTest, floatSchemaLeBe) {
   EXPECT_EQ(bs13, key_data_2);
   bitset<8> bs14(bs1->at(4));
   EXPECT_EQ(bs14, key_data_3);
-  Buf* bf11 = new Buf(bs1, this->le);
+  Buf* bf11 = new Buf(*bs1, this->le);
   optional<float> data2 = b1.DecodeKey(bf11);
   EXPECT_EQ(data1, data2);
   delete bs1;
@@ -474,9 +487,10 @@ TEST_F(DingoSerialTest, floatSchemaLeBe) {
   delete bf11;
 
   b1.SetIsKey(false);
-  Buf* bf2 = new Buf(1, this->le);
+  string* bs2 = new string();
+  Buf* bf2 = new Buf(*bs2, this->le);
   b1.EncodeValue(bf2, data1);
-  string* bs2 = bf2->GetBytes();
+  bf2->GetBytes();
   bitset<8> bs20(bs2->at(0));
   EXPECT_EQ(bs20, not_null_tag);
   bitset<8> bs21(bs2->at(1));
@@ -487,7 +501,7 @@ TEST_F(DingoSerialTest, floatSchemaLeBe) {
   EXPECT_EQ(bs23, value_data_2);
   bitset<8> bs24(bs2->at(4));
   EXPECT_EQ(bs24, value_data_3);
-  Buf* bf21 = new Buf(bs2, this->le);
+  Buf* bf21 = new Buf(*bs2, this->le);
   optional<float> data3 = b1.DecodeValue(bf21);
   EXPECT_EQ(data1, data3);
   delete bs2;
@@ -525,9 +539,10 @@ TEST_F(DingoSerialTest, floatSchemaFakeLeBe) {
   } else {
     b1.SetIsLe(false);
   }
-  Buf* bf1 = new Buf(1, !this->le);
+  string* bs1 = new string();
+  Buf* bf1 = new Buf(*bs1, this->le);
   b1.EncodeKey(bf1, data1);
-  string* bs1 = bf1->GetBytes();
+  bf1->GetBytes();
   bitset<8> bs10(bs1->at(0));
   EXPECT_EQ(bs10, not_null_tag);
   bitset<8> bs11(bs1->at(1));
@@ -538,7 +553,7 @@ TEST_F(DingoSerialTest, floatSchemaFakeLeBe) {
   EXPECT_EQ(bs13, key_data_2);
   bitset<8> bs14(bs1->at(4));
   EXPECT_EQ(bs14, key_data_3);
-  Buf* bf11 = new Buf(bs1, !this->le);
+  Buf* bf11 = new Buf(*bs1, !this->le);
   optional<float> data2 = b1.DecodeKey(bf11);
   EXPECT_EQ(data1, data2);
   delete bs1;
@@ -546,9 +561,10 @@ TEST_F(DingoSerialTest, floatSchemaFakeLeBe) {
   delete bf11;
 
   b1.SetIsKey(false);
-  Buf* bf2 = new Buf(1, !this->le);
+  string* bs2 = new string();
+  Buf* bf2 = new Buf(*bs2, this->le);
   b1.EncodeValue(bf2, data1);
-  string* bs2 = bf2->GetBytes();
+  bf2->GetBytes();
   bitset<8> bs20(bs2->at(0));
   EXPECT_EQ(bs20, not_null_tag);
   bitset<8> bs21(bs2->at(1));
@@ -559,7 +575,7 @@ TEST_F(DingoSerialTest, floatSchemaFakeLeBe) {
   EXPECT_EQ(bs23, value_data_2);
   bitset<8> bs24(bs2->at(4));
   EXPECT_EQ(bs24, value_data_3);
-  Buf* bf21 = new Buf(bs2, !this->le);
+  Buf* bf21 = new Buf(*bs2, !this->le);
   optional<float> data3 = b1.DecodeValue(bf21);
   EXPECT_EQ(data1, data3);
   delete bs2;
@@ -600,9 +616,10 @@ TEST_F(DingoSerialTest, longSchemaLeBe) {
   } else {
     b1.SetIsLe(false);
   }
-  Buf* bf1 = new Buf(1, this->le);
+  string* bs1 = new string();
+  Buf* bf1 = new Buf(*bs1, this->le);
   b1.EncodeKey(bf1, data1);
-  string* bs1 = bf1->GetBytes();
+  bf1->GetBytes();
   bitset<8> bs10(bs1->at(0));
   EXPECT_EQ(bs10, not_null_tag);
   bitset<8> bs11(bs1->at(1));
@@ -621,7 +638,7 @@ TEST_F(DingoSerialTest, longSchemaLeBe) {
   EXPECT_EQ(bs17, key_data_6);
   bitset<8> bs18(bs1->at(8));
   EXPECT_EQ(bs18, key_data_7);
-  Buf* bf11 = new Buf(bs1, this->le);
+  Buf* bf11 = new Buf(*bs1, this->le);
   optional<int64_t> data2 = b1.DecodeKey(bf11);
   EXPECT_EQ(data1, data2);
   delete bs1;
@@ -629,9 +646,10 @@ TEST_F(DingoSerialTest, longSchemaLeBe) {
   delete bf11;
 
   b1.SetIsKey(false);
-  Buf* bf2 = new Buf(1, this->le);
+  string* bs2 = new string();
+  Buf* bf2 = new Buf(*bs2, this->le);
   b1.EncodeValue(bf2, data1);
-  string* bs2 = bf2->GetBytes();
+  bf2->GetBytes();
   bitset<8> bs20(bs2->at(0));
   EXPECT_EQ(bs20, not_null_tag);
   bitset<8> bs21(bs2->at(1));
@@ -650,7 +668,7 @@ TEST_F(DingoSerialTest, longSchemaLeBe) {
   EXPECT_EQ(bs27, value_data_6);
   bitset<8> bs28(bs2->at(8));
   EXPECT_EQ(bs28, value_data_7);
-  Buf* bf21 = new Buf(bs2, this->le);
+  Buf* bf21 = new Buf(*bs2, this->le);
   optional<int64_t> data3 = b1.DecodeValue(bf21);
   EXPECT_EQ(data1, data3);
   delete bs2;
@@ -691,9 +709,10 @@ TEST_F(DingoSerialTest, longSchemaFakeLeBe) {
   } else {
     b1.SetIsLe(false);
   }
-  Buf* bf1 = new Buf(1, !this->le);
+  string* bs1 = new string();
+  Buf* bf1 = new Buf(*bs1, this->le);
   b1.EncodeKey(bf1, data1);
-  string* bs1 = bf1->GetBytes();
+  bf1->GetBytes();
   bitset<8> bs10(bs1->at(0));
   EXPECT_EQ(bs10, not_null_tag);
   bitset<8> bs11(bs1->at(1));
@@ -712,7 +731,7 @@ TEST_F(DingoSerialTest, longSchemaFakeLeBe) {
   EXPECT_EQ(bs17, key_data_6);
   bitset<8> bs18(bs1->at(8));
   EXPECT_EQ(bs18, key_data_7);
-  Buf* bf11 = new Buf(bs1, !this->le);
+  Buf* bf11 = new Buf(*bs1, !this->le);
   optional<int64_t> data2 = b1.DecodeKey(bf11);
   EXPECT_EQ(data1, data2);
   delete bs1;
@@ -720,9 +739,10 @@ TEST_F(DingoSerialTest, longSchemaFakeLeBe) {
   delete bf11;
 
   b1.SetIsKey(false);
-  Buf* bf2 = new Buf(1, !this->le);
+  string* bs2 = new string();
+  Buf* bf2 = new Buf(*bs2, this->le);
   b1.EncodeValue(bf2, data1);
-  string* bs2 = bf2->GetBytes();
+  bf2->GetBytes();
   bitset<8> bs20(bs2->at(0));
   EXPECT_EQ(bs20, not_null_tag);
   bitset<8> bs21(bs2->at(1));
@@ -741,7 +761,7 @@ TEST_F(DingoSerialTest, longSchemaFakeLeBe) {
   EXPECT_EQ(bs27, value_data_6);
   bitset<8> bs28(bs2->at(8));
   EXPECT_EQ(bs28, value_data_7);
-  Buf* bf21 = new Buf(bs2, !this->le);
+  Buf* bf21 = new Buf(*bs2, !this->le);
   optional<int64_t> data3 = b1.DecodeValue(bf21);
   EXPECT_EQ(data1, data3);
   delete bs2;
@@ -782,9 +802,10 @@ TEST_F(DingoSerialTest, doubleSchemaPosLeBe) {
   } else {
     b1.SetIsLe(false);
   }
-  Buf* bf1 = new Buf(1, this->le);
+  string* bs1 = new string();
+  Buf* bf1 = new Buf(*bs1, this->le);
   b1.EncodeKey(bf1, data1);
-  string* bs1 = bf1->GetBytes();
+  bf1->GetBytes();
   bitset<8> bs10(bs1->at(0));
   EXPECT_EQ(bs10, not_null_tag);
   bitset<8> bs11(bs1->at(1));
@@ -803,7 +824,7 @@ TEST_F(DingoSerialTest, doubleSchemaPosLeBe) {
   EXPECT_EQ(bs17, key_data_6);
   bitset<8> bs18(bs1->at(8));
   EXPECT_EQ(bs18, key_data_7);
-  Buf* bf11 = new Buf(bs1, this->le);
+  Buf* bf11 = new Buf(*bs1, this->le);
   optional<double> data2 = b1.DecodeKey(bf11);
   EXPECT_EQ(data1, data2);
   delete bs1;
@@ -811,9 +832,10 @@ TEST_F(DingoSerialTest, doubleSchemaPosLeBe) {
   delete bf11;
 
   b1.SetIsKey(false);
-  Buf* bf2 = new Buf(1, this->le);
+  string* bs2 = new string();
+  Buf* bf2 = new Buf(*bs2, this->le);
   b1.EncodeValue(bf2, data1);
-  string* bs2 = bf2->GetBytes();
+  bf2->GetBytes();
   bitset<8> bs20(bs2->at(0));
   EXPECT_EQ(bs20, not_null_tag);
   bitset<8> bs21(bs2->at(1));
@@ -832,7 +854,7 @@ TEST_F(DingoSerialTest, doubleSchemaPosLeBe) {
   EXPECT_EQ(bs27, value_data_6);
   bitset<8> bs28(bs2->at(8));
   EXPECT_EQ(bs28, value_data_7);
-  Buf* bf21 = new Buf(bs2, this->le);
+  Buf* bf21 = new Buf(*bs2, this->le);
   optional<double> data3 = b1.DecodeValue(bf21);
   EXPECT_EQ(data1, data3);
   delete bs2;
@@ -879,9 +901,10 @@ TEST_F(DingoSerialTest, doubleSchemaPosFakeLeBe) {
   } else {
     b1.SetIsLe(false);
   }
-  Buf* bf1 = new Buf(1, !this->le);
+  string* bs1 = new string();
+  Buf* bf1 = new Buf(*bs1, this->le);
   b1.EncodeKey(bf1, data1);
-  string* bs1 = bf1->GetBytes();
+  bf1->GetBytes();
   bitset<8> bs10(bs1->at(0));
   EXPECT_EQ(bs10, not_null_tag);
   bitset<8> bs11(bs1->at(1));
@@ -900,7 +923,7 @@ TEST_F(DingoSerialTest, doubleSchemaPosFakeLeBe) {
   EXPECT_EQ(bs17, key_data_6);
   bitset<8> bs18(bs1->at(8));
   EXPECT_EQ(bs18, key_data_7);
-  Buf* bf11 = new Buf(bs1, !this->le);
+  Buf* bf11 = new Buf(*bs1, !this->le);
   optional<double> data2 = b1.DecodeKey(bf11);
   EXPECT_EQ(data1, data2);
   delete bs1;
@@ -908,9 +931,10 @@ TEST_F(DingoSerialTest, doubleSchemaPosFakeLeBe) {
   delete bf11;
 
   b1.SetIsKey(false);
-  Buf* bf2 = new Buf(1, !this->le);
+  string* bs2 = new string();
+  Buf* bf2 = new Buf(*bs2, this->le);
   b1.EncodeValue(bf2, data1);
-  string* bs2 = bf2->GetBytes();
+  bf2->GetBytes();
   bitset<8> bs20(bs2->at(0));
   EXPECT_EQ(bs20, not_null_tag);
   bitset<8> bs21(bs2->at(1));
@@ -929,7 +953,7 @@ TEST_F(DingoSerialTest, doubleSchemaPosFakeLeBe) {
   EXPECT_EQ(bs27, value_data_6);
   bitset<8> bs28(bs2->at(8));
   EXPECT_EQ(bs28, value_data_7);
-  Buf* bf21 = new Buf(bs2, !this->le);
+  Buf* bf21 = new Buf(*bs2, !this->le);
   optional<double> data3 = b1.DecodeValue(bf21);
   EXPECT_EQ(data1, data3);
   delete bs2;
@@ -970,9 +994,10 @@ TEST_F(DingoSerialTest, doubleSchemaNegLeBe) {
   } else {
     b1.SetIsLe(false);
   }
-  Buf* bf1 = new Buf(1, this->le);
+  string* bs1 = new string();
+  Buf* bf1 = new Buf(*bs1, this->le);
   b1.EncodeKey(bf1, data1);
-  string* bs1 = bf1->GetBytes();
+  bf1->GetBytes();
   bitset<8> bs10(bs1->at(0));
   EXPECT_EQ(bs10, not_null_tag);
   bitset<8> bs11(bs1->at(1));
@@ -991,7 +1016,7 @@ TEST_F(DingoSerialTest, doubleSchemaNegLeBe) {
   EXPECT_EQ(bs17, key_data_6);
   bitset<8> bs18(bs1->at(8));
   EXPECT_EQ(bs18, key_data_7);
-  Buf* bf11 = new Buf(bs1, this->le);
+  Buf* bf11 = new Buf(*bs1, this->le);
   optional<double> data2 = b1.DecodeKey(bf11);
   EXPECT_EQ(data1, data2);
   delete bs1;
@@ -999,9 +1024,10 @@ TEST_F(DingoSerialTest, doubleSchemaNegLeBe) {
   delete bf11;
 
   b1.SetIsKey(false);
-  Buf* bf2 = new Buf(1, this->le);
+  string* bs2 = new string();
+  Buf* bf2 = new Buf(*bs2, this->le);
   b1.EncodeValue(bf2, data1);
-  string* bs2 = bf2->GetBytes();
+  bf2->GetBytes();
   bitset<8> bs20(bs2->at(0));
   EXPECT_EQ(bs20, not_null_tag);
   bitset<8> bs21(bs2->at(1));
@@ -1020,7 +1046,7 @@ TEST_F(DingoSerialTest, doubleSchemaNegLeBe) {
   EXPECT_EQ(bs27, value_data_6);
   bitset<8> bs28(bs2->at(8));
   EXPECT_EQ(bs28, value_data_7);
-  Buf* bf21 = new Buf(bs2, this->le);
+  Buf* bf21 = new Buf(*bs2, this->le);
   optional<double> data3 = b1.DecodeValue(bf21);
   EXPECT_EQ(data1, data3);
   delete bs2;
@@ -1066,9 +1092,10 @@ TEST_F(DingoSerialTest, doubleSchemaNegFakeLeBe) {
   } else {
     b1.SetIsLe(false);
   }
-  Buf* bf1 = new Buf(1, !this->le);
+  string* bs1 = new string();
+  Buf* bf1 = new Buf(*bs1, this->le);
   b1.EncodeKey(bf1, data1);
-  string* bs1 = bf1->GetBytes();
+  bf1->GetBytes();
   bitset<8> bs10(bs1->at(0));
   EXPECT_EQ(bs10, not_null_tag);
   bitset<8> bs11(bs1->at(1));
@@ -1087,7 +1114,7 @@ TEST_F(DingoSerialTest, doubleSchemaNegFakeLeBe) {
   EXPECT_EQ(bs17, key_data_6);
   bitset<8> bs18(bs1->at(8));
   EXPECT_EQ(bs18, key_data_7);
-  Buf* bf11 = new Buf(bs1, !this->le);
+  Buf* bf11 = new Buf(*bs1, !this->le);
   optional<double> data2 = b1.DecodeKey(bf11);
   EXPECT_EQ(data1, data2);
   delete bs1;
@@ -1095,9 +1122,10 @@ TEST_F(DingoSerialTest, doubleSchemaNegFakeLeBe) {
   delete bf11;
 
   b1.SetIsKey(false);
-  Buf* bf2 = new Buf(1, !this->le);
+  string* bs2 = new string();
+  Buf* bf2 = new Buf(*bs2, this->le);
   b1.EncodeValue(bf2, data1);
-  string* bs2 = bf2->GetBytes();
+  bf2->GetBytes();
   bitset<8> bs20(bs2->at(0));
   EXPECT_EQ(bs20, not_null_tag);
   bitset<8> bs21(bs2->at(1));
@@ -1116,7 +1144,7 @@ TEST_F(DingoSerialTest, doubleSchemaNegFakeLeBe) {
   EXPECT_EQ(bs27, value_data_6);
   bitset<8> bs28(bs2->at(8));
   EXPECT_EQ(bs28, value_data_7);
-  Buf* bf21 = new Buf(bs2, !this->le);
+  Buf* bf21 = new Buf(*bs2, !this->le);
   optional<double> data3 = b1.DecodeValue(bf21);
   EXPECT_EQ(data1, data3);
   delete bs2;
@@ -1130,10 +1158,11 @@ TEST_F(DingoSerialTest, longSchema) {
   b1.SetAllowNull(false);
   b1.SetIsKey(true);
   optional<int64_t> data1 = 1543234;
-  Buf* bf1 = new Buf(1, this->le);
+  string* bs1 = new string();
+  Buf* bf1 = new Buf(*bs1, this->le);
   b1.EncodeKey(bf1, data1);
-  string* bs1 = bf1->GetBytes();
-  Buf* bf2 = new Buf(bs1, this->le);
+  bf1->GetBytes();
+  Buf* bf2 = new Buf(*bs1, this->le);
   optional<int64_t> data2 = b1.DecodeKey(bf2);
   delete bs1;
   delete bf1;
@@ -1149,10 +1178,11 @@ TEST_F(DingoSerialTest, longSchema) {
   b2.SetAllowNull(true);
   b2.SetIsKey(false);
   optional<int64_t> data3 = 532142;
-  Buf* bf3 = new Buf(1, this->le);
+  string* bs2 = new string();
+  Buf* bf3 = new Buf(*bs2, this->le);
   b2.EncodeValue(bf3, data3);
-  string* bs2 = bf3->GetBytes();
-  Buf* bf4 = new Buf(bs2, this->le);
+  bf3->GetBytes();
+  Buf* bf4 = new Buf(*bs2, this->le);
   optional<int64_t> data4 = b2.DecodeValue(bf4);
   delete bs2;
   delete bf3;
@@ -1164,10 +1194,11 @@ TEST_F(DingoSerialTest, longSchema) {
   }
 
   optional<int64_t> data5 = nullopt;
-  Buf* bf5 = new Buf(1, this->le);
+  string* bs3 = new string();
+  Buf* bf5 = new Buf(*bs3, this->le);
   b2.EncodeValue(bf5, data5);
-  string* bs3 = bf5->GetBytes();
-  Buf* bf6 = new Buf(bs3, this->le);
+  bf5->GetBytes();
+  Buf* bf6 = new Buf(*bs3, this->le);
   optional<int64_t> data6 = b2.DecodeValue(bf6);
   delete bs3;
   delete bf5;
@@ -1178,10 +1209,11 @@ TEST_F(DingoSerialTest, longSchema) {
   b3.SetIndex(0);
   b3.SetAllowNull(true);
   b3.SetIsKey(true);
-  Buf* bf7 = new Buf(100, this->le);
+  string* bs4 = new string();
+  Buf* bf7 = new Buf(*bs4, this->le);
   b3.EncodeValue(bf7, nullopt);
-  string* bs4 = bf7->GetBytes();
-  Buf* bf8 = new Buf(bs4, this->le);
+  bf7->GetBytes();
+  Buf* bf8 = new Buf(*bs4, this->le);
   EXPECT_FALSE(b3.DecodeKey(bf8).has_value());
   delete bs4;
   delete bf7;
@@ -1194,10 +1226,11 @@ TEST_F(DingoSerialTest, doubleSchema) {
   b1.SetAllowNull(false);
   b1.SetIsKey(true);
   optional<double> data1 = 154.3234;
-  Buf* bf1 = new Buf(1, this->le);
+  string* bs1 = new string();
+  Buf* bf1 = new Buf(*bs1, this->le);
   b1.EncodeKey(bf1, data1);
-  string* bs1 = bf1->GetBytes();
-  Buf* bf2 = new Buf(bs1, this->le);
+  bf1->GetBytes();
+  Buf* bf2 = new Buf(*bs1, this->le);
   optional<double> data2 = b1.DecodeKey(bf2);
   delete bs1;
   delete bf1;
@@ -1213,10 +1246,11 @@ TEST_F(DingoSerialTest, doubleSchema) {
   b2.SetAllowNull(true);
   b2.SetIsKey(false);
   optional<double> data3 = 5321.42;
-  Buf* bf3 = new Buf(1, this->le);
+  string* bs2 = new string();
+  Buf* bf3 = new Buf(*bs2, this->le);
   b2.EncodeValue(bf3, data3);
-  string* bs2 = bf3->GetBytes();
-  Buf* bf4 = new Buf(bs2, this->le);
+  bf3->GetBytes();
+  Buf* bf4 = new Buf(*bs2, this->le);
   optional<double> data4 = b2.DecodeValue(bf4);
   delete bs2;
   delete bf3;
@@ -1228,10 +1262,11 @@ TEST_F(DingoSerialTest, doubleSchema) {
   }
 
   optional<double> data5 = nullopt;
-  Buf* bf5 = new Buf(1, this->le);
+  string* bs3 = new string();
+  Buf* bf5 = new Buf(*bs3, this->le);
   b2.EncodeValue(bf5, data5);
-  string* bs3 = bf5->GetBytes();
-  Buf* bf6 = new Buf(bs3, this->le);
+  bf5->GetBytes();
+  Buf* bf6 = new Buf(*bs3, this->le);
   optional<double> data6 = b2.DecodeValue(bf6);
   delete bs3;
   delete bf5;
@@ -1242,10 +1277,11 @@ TEST_F(DingoSerialTest, doubleSchema) {
   b3.SetIndex(0);
   b3.SetAllowNull(true);
   b3.SetIsKey(true);
-  Buf* bf7 = new Buf(100, this->le);
+  string* bs4 = new string();
+  Buf* bf7 = new Buf(*bs4, this->le);
   b3.EncodeValue(bf7, nullopt);
-  string* bs4 = bf7->GetBytes();
-  Buf* bf8 = new Buf(bs4, this->le);
+  bf7->GetBytes();
+  Buf* bf8 = new Buf(*bs4, this->le);
   EXPECT_FALSE(b3.DecodeKey(bf8).has_value());
   delete bs4;
   delete bf7;
@@ -1257,16 +1293,17 @@ TEST_F(DingoSerialTest, stringSchema) {
   b1.SetIndex(0);
   b1.SetAllowNull(false);
   b1.SetIsKey(true);
-  Buf* bf1 = new Buf(1, this->le);
 
   std::shared_ptr<std::string> s_data1 = std::make_shared<std::string>(
       "test address test 中文 表情😊🏷️👌 test "
       "测试测试测试三🤣😂😁🐱‍🐉👏");
   std::optional<std::shared_ptr<std::string>> data1{s_data1};
 
+  string* bs1 = new string();
+  Buf* bf1 = new Buf(*bs1, this->le);
   b1.EncodeKey(bf1, data1);
-  string* bs1 = bf1->GetBytes();
-  Buf* bf2 = new Buf(bs1, this->le);
+  bf1->GetBytes();
+  Buf* bf2 = new Buf(*bs1, this->le);
   auto data2 = b1.DecodeKey(bf2);
   delete bs1;
   delete bf1;
@@ -1286,10 +1323,11 @@ TEST_F(DingoSerialTest, stringSchema) {
       "测试测试测试三🤣😂😁🐱‍🐉👏");
   std::optional<std::shared_ptr<std::string>> data3{s_data3};
 
-  Buf* bf3 = new Buf(1, this->le);
+  string* bs2 = new string();
+  Buf* bf3 = new Buf(*bs2, this->le);
   b2.EncodeValue(bf3, data3);
-  string* bs2 = bf3->GetBytes();
-  Buf* bf4 = new Buf(bs2, this->le);
+  bf3->GetBytes();
+  Buf* bf4 = new Buf(*bs2, this->le);
   auto data4 = b2.DecodeValue(bf4);
   delete bs2;
   delete bf3;
@@ -1301,10 +1339,11 @@ TEST_F(DingoSerialTest, stringSchema) {
   }
 
   std::optional<std::shared_ptr<std::string>> data5 = nullopt;
-  Buf* bf5 = new Buf(1, this->le);
+  string* bs3 = new string();
+  Buf* bf5 = new Buf(*bs3, this->le);
   b2.EncodeValue(bf5, data5);
-  string* bs3 = bf5->GetBytes();
-  Buf* bf6 = new Buf(bs3, this->le);
+  bf5->GetBytes();
+  Buf* bf6 = new Buf(*bs3, this->le);
   auto data6 = b2.DecodeValue(bf6);
   delete bs3;
   delete bf5;
@@ -1315,10 +1354,11 @@ TEST_F(DingoSerialTest, stringSchema) {
   b3.SetIndex(0);
   b3.SetAllowNull(true);
   b3.SetIsKey(true);
-  Buf* bf7 = new Buf(100, this->le);
+  string* bs4 = new string();
+  Buf* bf7 = new Buf(*bs4, this->le);
   b3.EncodeValue(bf7, nullopt);
-  string* bs4 = bf7->GetBytes();
-  Buf* bf8 = new Buf(bs4, this->le);
+  bf7->GetBytes();
+  Buf* bf8 = new Buf(*bs4, this->le);
   auto data8 = b3.DecodeKey(bf8);
   delete bs4;
   delete bf7;
@@ -1336,13 +1376,15 @@ TEST_F(DingoSerialTest, stringPrefixSchema) {
       "测试测试测试三🤣😂😁🐱‍🐉👏");
   std::optional<std::shared_ptr<std::string>> data1{s_data1};
 
-  Buf* bf1 = new Buf(1, this->le);
+  string* bs1 = new string();
+  Buf* bf1 = new Buf(*bs1, this->le);
   b1.EncodeKey(bf1, data1);
-  string* bs1 = bf1->GetBytes();
+  bf1->GetBytes();
 
-  Buf* bf2 = new Buf(1, this->le);
+  string* bs2 = new string();
+  Buf* bf2 = new Buf(*bs2, this->le);
   b1.EncodeKeyPrefix(bf2, data1);
-  string* bs2 = bf2->GetBytes();
+  bf2->GetBytes();
   string bs3(*bs1, 0, bs2->length());
 
   delete bf1;
@@ -1377,11 +1419,13 @@ TEST_F(DingoSerialTest, bufLeBe) {
   bitset<8> bit14("00010111");
   bitset<8> bit15("00000000");
 
-  Buf bf1(16, this->le);
+  string* bs1 = new string();
+  bs1->resize(16);
+  Buf bf1(*bs1, this->le);
   bf1.WriteInt(int_data);
   bf1.WriteLong(long_data);
   bf1.ReverseWriteInt(int_data);
-  string* bs1 = bf1.GetBytes();
+  bf1.GetBytes();
   bitset<8> bs10(bs1->at(0));
   EXPECT_EQ(bs10, bit0);
   bitset<8> bs11(bs1->at(1));
@@ -1415,17 +1459,19 @@ TEST_F(DingoSerialTest, bufLeBe) {
   bitset<8> bs115(bs1->at(15));
   EXPECT_EQ(bs115, bit15);
 
-  Buf bf2(bs1, this->le);
+  Buf bf2(*bs1, this->le);
   EXPECT_EQ(int_data, bf2.ReverseReadInt());
   EXPECT_EQ(int_data, bf2.ReadInt());
   EXPECT_EQ(long_data, bf2.ReadLong());
   delete bs1;
 
-  Buf bf3(16, !this->le);
+  string* bs2 = new string();
+  bs2->resize(16);
+  Buf bf3(*bs2, !this->le);
   bf3.WriteInt(int_atad);
   bf3.WriteLong(long_atad);
   bf3.ReverseWriteInt(int_atad);
-  string* bs2 = bf3.GetBytes();
+  bf3.GetBytes();
   bitset<8> bs20(bs2->at(0));
   EXPECT_EQ(bs20, bit0);
   bitset<8> bs21(bs2->at(1));
@@ -1459,7 +1505,7 @@ TEST_F(DingoSerialTest, bufLeBe) {
   bitset<8> bs215(bs2->at(15));
   EXPECT_EQ(bs215, bit15);
 
-  Buf bf4(bs2, !this->le);
+  Buf bf4(*bs2, !this->le);
   EXPECT_EQ(int_atad, bf4.ReverseReadInt());
   EXPECT_EQ(int_atad, bf4.ReadInt());
   EXPECT_EQ(long_atad, bf4.ReadLong());

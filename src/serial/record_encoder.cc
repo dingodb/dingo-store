@@ -71,7 +71,8 @@ int RecordEncoder::Encode(const std::vector<std::any>& record, pb::common::KeyVa
 }
 
 int RecordEncoder::EncodeKey(const std::vector<std::any>& record, std::string& output) {
-  Buf* key_buf = new Buf(key_buf_size_, this->le_);
+  output.resize(key_buf_size_);
+  Buf* key_buf = new Buf(output, this->le_);
   key_buf->EnsureRemainder(12);
   key_buf->WriteLong(common_id_);
   key_buf->ReverseWriteInt(codec_version_);
@@ -129,13 +130,14 @@ int RecordEncoder::EncodeKey(const std::vector<std::any>& record, std::string& o
     }
   }
 
-  key_buf->GetBytes(output);
+  int ret = key_buf->GetBytes();
   delete key_buf;
-  return 0;
+  return ret;
 }
 
 int RecordEncoder::EncodeValue(const std::vector<std::any>& record, std::string& output) {
-  Buf* value_buf = new Buf(value_buf_size_, this->le_);
+  output.resize(value_buf_size_);
+  Buf* value_buf = new Buf(output, this->le_);
   value_buf->EnsureRemainder(4);
   value_buf->WriteInt(schema_version_);
 
@@ -193,14 +195,15 @@ int RecordEncoder::EncodeValue(const std::vector<std::any>& record, std::string&
     }
   }
 
-  int ret = value_buf->GetBytes(output);
+  int ret = value_buf->GetBytes();
   delete value_buf;
 
   return ret;
 }
 
 int RecordEncoder::EncodeKeyPrefix(const std::vector<std::any>& record, int column_count, std::string& output) {
-  Buf* key_prefix_buf = new Buf(key_buf_size_, this->le_);
+  output.resize(key_buf_size_);
+  Buf* key_prefix_buf = new Buf(output, this->le_);
   key_prefix_buf->EnsureRemainder(8);
   key_prefix_buf->WriteLong(common_id_);
 
@@ -263,7 +266,7 @@ int RecordEncoder::EncodeKeyPrefix(const std::vector<std::any>& record, int colu
     }
   }
 
-  int ret = key_prefix_buf->GetBytes(output);
+  int ret = key_prefix_buf->GetBytes();
   delete key_prefix_buf;
 
   return ret;
@@ -274,21 +277,22 @@ int RecordEncoder::EncodeMaxKeyPrefix(std::string& output) const {
     // "CommonId reach max! Cannot generate Max Key Prefix"
     return -1;
   }
-
-  Buf* max_key_prefix_buf = new Buf(key_buf_size_, this->le_);
+  output.resize(key_buf_size_);
+  Buf* max_key_prefix_buf = new Buf(output, this->le_);
   max_key_prefix_buf->EnsureRemainder(8);
   max_key_prefix_buf->WriteLong(common_id_ + 1);
-  int ret = max_key_prefix_buf->GetBytes(output);
+  int ret = max_key_prefix_buf->GetBytes();
   delete max_key_prefix_buf;
 
   return ret;
 }
 
 int RecordEncoder::EncodeMinKeyPrefix(std::string& output) const {
-  Buf* min_key_prefix_buf = new Buf(key_buf_size_, this->le_);
+  output.resize(key_buf_size_);
+  Buf* min_key_prefix_buf = new Buf(output, this->le_);
   min_key_prefix_buf->EnsureRemainder(8);
   min_key_prefix_buf->WriteLong(common_id_);
-  int ret = min_key_prefix_buf->GetBytes(output);
+  int ret = min_key_prefix_buf->GetBytes();
   delete min_key_prefix_buf;
 
   return ret;
