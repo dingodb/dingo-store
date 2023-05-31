@@ -22,6 +22,7 @@ import io.dingodb.common.Common;
 import io.dingodb.common.Common.RangeWithOptions;
 import io.dingodb.sdk.common.DingoClientException;
 import io.dingodb.sdk.common.KeyValue;
+import io.dingodb.sdk.common.utils.EntityConversion;
 import io.dingodb.sdk.service.connector.ServiceConnector;
 import io.dingodb.sdk.service.connector.StoreServiceConnector;
 import io.dingodb.store.Store;
@@ -42,11 +43,18 @@ public class ScanIterator implements Iterator<KeyValue>, AutoCloseable {
     private final ByteString scanId;
     private final int retryTimes;
 
+    private final Coprocessor coprocessor;
+
     private Iterator<KeyValue> delegateIterator = Collections.<KeyValue>emptyList().iterator();
     private boolean release = false;
 
     public ScanIterator(
-        StoreServiceConnector connector, long regionId, RangeWithOptions range, boolean key_only, int retryTimes
+        StoreServiceConnector connector,
+        long regionId,
+        RangeWithOptions range,
+        boolean key_only,
+        int retryTimes,
+        Coprocessor coprocessor
     ) {
         this.connector = connector;
         this.regionId = regionId;
@@ -56,6 +64,7 @@ public class ScanIterator implements Iterator<KeyValue>, AutoCloseable {
         if (scanId == null || scanId.isEmpty()) {
             release = true;
         }
+        this.coprocessor = coprocessor;
     }
 
     private static void checkRes(io.dingodb.error.ErrorOuterClass.Error error, String param) {
@@ -70,11 +79,14 @@ public class ScanIterator implements Iterator<KeyValue>, AutoCloseable {
 
     public ByteString scanBegin() {
         Store.KvScanBeginResponse response = connector.exec(stub -> {
-            Store.KvScanBeginResponse res = stub.kvScanBegin(Store.KvScanBeginRequest.newBuilder()
-                .setRange(range)
-                .setRegionId(regionId)
-                .setMaxFetchCnt(0)
-                .build());
+            Store.KvScanBeginRequest.Builder builder = Store.KvScanBeginRequest.newBuilder()
+                    .setRange(range)
+                    .setRegionId(regionId)
+                    .setMaxFetchCnt(0);
+            if (coprocessor != null) {
+                builder.setCoprocessor(EntityConversion.mapping(coprocessor));
+            }
+            Store.KvScanBeginResponse res = stub.kvScanBegin(builder.build());
             this.stub.set(stub);
             return new ServiceConnector.Response<>(res.getError(), res);
         }, retryTimes, err -> true).getResponse();
