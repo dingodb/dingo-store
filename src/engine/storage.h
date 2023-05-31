@@ -47,6 +47,9 @@ class Storage {
 
   butil::Status KvDeleteRange(std::shared_ptr<Context> ctx, const pb::common::Range& range);
 
+  butil::Status KvCompareAndSet(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs,
+                                const std::vector<std::string>& expect_values, bool is_atomic);
+
   butil::Status KvScanBegin([[maybe_unused]] std::shared_ptr<Context> ctx, const std::string& cf_name,
                             uint64_t region_id, const pb::common::Range& range, uint64_t max_fetch_cnt, bool key_only,
                             bool disable_auto_release, bool disable_coprocessor,

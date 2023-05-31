@@ -115,6 +115,22 @@ butil::Status Storage::KvDeleteRange(std::shared_ptr<Context> ctx, const pb::com
     }
   });
 }
+butil::Status Storage::KvCompareAndSet(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs,
+                                       const std::vector<std::string>& expect_values, bool is_atomic) {
+  WriteData write_data;
+  std::shared_ptr<CompareAndSetDatum> datum = std::make_shared<CompareAndSetDatum>();
+  datum->cf_name = ctx->CfName();
+  datum->kvs = kvs;
+  datum->expect_values = expect_values;
+  datum->is_atomic = is_atomic;
+  write_data.AddDatums(std::static_pointer_cast<DatumAble>(datum));
+
+  return engine_->AsyncWrite(ctx, write_data, [](std::shared_ptr<Context> ctx, butil::Status status) {
+    if (!status.ok()) {
+      Helper::SetPbMessageError(status, ctx->Response());
+    }
+  });
+}
 
 butil::Status Storage::KvScanBegin([[maybe_unused]] std::shared_ptr<Context> ctx, const std::string& cf_name,
                                    uint64_t region_id, const pb::common::Range& range, uint64_t max_fetch_cnt,

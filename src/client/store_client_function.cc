@@ -170,6 +170,41 @@ void SendKvScan(ServerInteractionPtr interaction, uint64_t region_id, const std:
   interaction->SendRequest("StoreService", "KvScanRelease", release_request, release_response);
 }
 
+void SendKvCompareAndSet(ServerInteractionPtr interaction, uint64_t region_id, const std::string& key) {
+  dingodb::pb::store::KvCompareAndSetRequest request;
+  dingodb::pb::store::KvCompareAndSetResponse response;
+
+  request.set_region_id(region_id);
+  dingodb::pb::common::KeyValue* kv = request.mutable_kv();
+  kv->set_key(key);
+  kv->set_value(Helper::GenRandomString(64));
+  request.set_expect_value("");
+
+  interaction->SendRequest("StoreService", "KvCompareAndSet", request, response);
+}
+
+void SendKvBatchCompareAndSet(ServerInteractionPtr interaction, uint64_t region_id, const std::string& prefix,
+                              int count) {
+  dingodb::pb::store::KvBatchCompareAndSetRequest request;
+  dingodb::pb::store::KvBatchCompareAndSetResponse response;
+
+  request.set_region_id(region_id);
+  for (int i = 0; i < count; ++i) {
+    std::string key = prefix + Helper::GenRandomString(30);
+    auto* kv = request.add_kvs();
+    kv->set_key(key);
+    kv->set_value(Helper::GenRandomString(64));
+  }
+
+  for (int i = 0; i < count; i++) {
+    request.add_expect_values("");
+  }
+
+  request.set_is_atomic(false);
+
+  interaction->SendRequest("StoreService", "KvBatchCompareAndSet", request, response);
+}
+
 dingodb::pb::common::RegionDefinition BuildRegionDefinition(uint64_t region_id, const std::string& raft_group,
                                                             std::vector<std::string>& raft_addrs,
                                                             const std::string& start_key, const std::string& end_key) {

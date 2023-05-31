@@ -34,6 +34,7 @@ enum class HandlerType {
   kDeleteBatch = pb::raft::DELETEBATCH,
   kSplit = pb::raft::SPLIT,
   kMetaWrite = pb::raft::META_WRITE,
+  kCompareAndSet = pb::raft::COMPAREANDSET,
 
   // Snapshot
   kSaveSnapshot = 1000,
