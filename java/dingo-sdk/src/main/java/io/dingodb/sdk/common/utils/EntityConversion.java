@@ -38,12 +38,17 @@ import io.dingodb.sdk.common.partition.Partition;
 import io.dingodb.sdk.common.partition.PartitionDetail;
 import io.dingodb.sdk.common.partition.PartitionDetailDefinition;
 import io.dingodb.sdk.common.partition.PartitionRule;
+import io.dingodb.sdk.common.serial.schema.DingoSchema;
+import io.dingodb.sdk.common.serial.schema.Type;
 import io.dingodb.sdk.common.table.Column;
 import io.dingodb.sdk.common.table.ColumnDefinition;
 import io.dingodb.sdk.common.table.RangeDistribution;
 import io.dingodb.sdk.common.table.Table;
 import io.dingodb.sdk.common.table.TableDefinition;
 import io.dingodb.sdk.common.table.metric.TableMetrics;
+import io.dingodb.sdk.service.store.AggregationOperator;
+import io.dingodb.sdk.service.store.Coprocessor;
+import io.dingodb.store.Store;
 
 import java.util.Collections;
 import java.util.Comparator;
@@ -259,6 +264,65 @@ public class EntityConversion {
                         .map(EntityConversion::mapping)
                         .collect(Collectors.toList())
         );
+    }
+
+    public static Store.Coprocessor mapping(Coprocessor coprocessor) {
+        return Store.Coprocessor.newBuilder()
+                .setSchemaVersion(coprocessor.getSchemaVersion())
+                .setOriginalSchema(mapping(coprocessor.getOriginalSchema()))
+                .setResultSchema(mapping(coprocessor.getResultSchema()))
+                .addAllSelectionColumns(coprocessor.getSelection())
+                .setExpression(ByteString.copyFrom(coprocessor.getExpression()))
+                .addAllGroupByColumns(coprocessor.getGroupBy())
+                .addAllAggregationOperators(coprocessor.getAggregations().stream()
+                        .map(EntityConversion::mapping)
+                        .collect(Collectors.toList()))
+                .build();
+    }
+
+    public static Store.Coprocessor.SchemaWrapper mapping(Coprocessor.SchemaWrapper schemaWrapper) {
+        return Store.Coprocessor.SchemaWrapper.newBuilder()
+                .addAllSchema(schemaWrapper.getSchemas().stream()
+                        .map(EntityConversion::mapping)
+                        .collect(Collectors.toList()))
+                .setCommonId(schemaWrapper.getCommonId())
+                .build();
+    }
+
+    public static Store.AggregationOperator mapping(AggregationOperator aggregationOperator) {
+        return Store.AggregationOperator.newBuilder()
+                .setOper(Store.AggregationType.forNumber(aggregationOperator.operation.getCode()))
+                .setIndexOfColumn(aggregationOperator.indexOfColumn)
+                .build();
+    }
+
+    public static Store.Schema mapping(DingoSchema schema) {
+        return Store.Schema.newBuilder()
+                .setType(mapping(schema.getType()))
+                .setIsKey(schema.isKey())
+                .setIsNullable(schema.isAllowNull())
+                .setIndex(schema.getIndex())
+                .build();
+    }
+
+    public static Store.Schema.Type mapping(Type type) {
+        switch (type) {
+            case BOOLEAN:
+                return Store.Schema.Type.BOOL;
+            case INTEGER:
+                return Store.Schema.Type.INTEGER;
+            case FLOAT:
+                return Store.Schema.Type.FLOAT;
+            case LONG:
+                return Store.Schema.Type.LONG;
+            case DOUBLE:
+                return Store.Schema.Type.DOUBLE;
+            case BYTES:
+            case STRING:
+                return Store.Schema.Type.STRING;
+            default:
+                throw new IllegalStateException("Unexpected value: " + type);
+        }
     }
 
     public static Meta.PartitionRule calcRange(Table table, Meta.DingoCommonId tableId) {

@@ -152,19 +152,44 @@ public class StoreServiceClient {
     public Iterator<KeyValue> scan(
         DingoCommonId tableId, DingoCommonId regionId, Range range, boolean withStart, boolean withEnd
     ) {
+        return scan(tableId, regionId, range, withStart, withEnd, null);
+    }
+
+    /**
+     * Returns KeyValue iterator of scan, the scan is starting from the given start key,
+     * traverse in order until a key is encountered that exceeds the specified end key.
+     * Since the key is a variable-length byte array, the start and end specified in the range will
+     * be treated as prefixes.
+     * @param tableId table id
+     * @param regionId region id
+     * @param range key range, start and end must in same region
+     * @param withStart is with start
+     * @param withEnd is with end
+     * @param coprocessor coprocessor
+     * @return KeyValue iterator of scan
+     */
+    public Iterator<KeyValue> scan(
+        DingoCommonId tableId,
+        DingoCommonId regionId,
+        Range range,
+        boolean withStart,
+        boolean withEnd,
+        Coprocessor coprocessor
+    ) {
         return new ScanIterator(getStoreConnector(tableId, regionId),
-               regionId.entityId(),
-               Common.RangeWithOptions.newBuilder()
-                   .setRange(
-                       Common.Range.newBuilder()
-                           .setStartKey(ByteString.copyFrom(range.getStartKey()))
-                           .setEndKey(ByteString.copyFrom(range.getEndKey()))
-                           .build())
-                   .setWithStart(withStart)
-                   .setWithEnd(withEnd)
-                   .build(),
-               false,
-               retryTimes
+                regionId.entityId(),
+                Common.RangeWithOptions.newBuilder()
+                    .setRange(
+                        Common.Range.newBuilder()
+                            .setStartKey(ByteString.copyFrom(range.getStartKey()))
+                            .setEndKey(ByteString.copyFrom(range.getEndKey()))
+                            .build())
+                    .setWithStart(withStart)
+                    .setWithEnd(withEnd)
+                    .build(),
+                false,
+                retryTimes,
+                coprocessor
         );
     }
 

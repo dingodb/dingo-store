@@ -25,11 +25,17 @@ import lombok.ToString;
 @EqualsAndHashCode
 public class ColumnDefinition implements Column {
 
+    public static final int DEFAULT_PRECISION = -1;
+    public static final int DEFAULT_SCALE = Integer.MIN_VALUE;
+
     private String name;
     private String type;
     private String elementType;
-    private int precision;
-    private int scale;
+    @Builder.Default
+    private int precision = DEFAULT_PRECISION;
+    @Builder.Default
+    private int scale = DEFAULT_SCALE;
+    @Builder.Default
     private boolean nullable = true;
     private int primary;
     private String defaultValue;
