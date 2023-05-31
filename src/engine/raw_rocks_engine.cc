@@ -926,6 +926,7 @@ butil::Status RawRocksEngine::Writer::KvBatchPutIfAbsent(const std::vector<pb::c
   }
 
   // Warning : be careful with vector<bool>
+  key_states.clear();
   key_states.resize(kvs.size(), false);
 
   size_t key_index = 0;
@@ -934,6 +935,7 @@ butil::Status RawRocksEngine::Writer::KvBatchPutIfAbsent(const std::vector<pb::c
     if (BAIDU_UNLIKELY(kv.key().empty())) {
       DINGO_LOG(ERROR) << fmt::format("empty key not support");
       key_states.clear();
+      key_states.resize(kvs.size(), false);
       return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
     }
 
@@ -942,6 +944,7 @@ butil::Status RawRocksEngine::Writer::KvBatchPutIfAbsent(const std::vector<pb::c
                                  rocksdb::Slice(kv.key().data(), kv.key().size()), &value_old);
     if (is_atomic) {
       if (!s.IsNotFound()) {
+        key_states.clear();
         key_states.resize(kvs.size(), false);
         DINGO_LOG(INFO) << fmt::format("rocksdb::DB::Get failed or found: {}", s.ToString());
         return butil::Status(pb::error::EINTERNAL, "Internal error");
@@ -958,6 +961,7 @@ butil::Status RawRocksEngine::Writer::KvBatchPutIfAbsent(const std::vector<pb::c
                   rocksdb::Slice(kv.value().data(), kv.value().size()));
     if (BAIDU_UNLIKELY(!s.ok())) {
       if (is_atomic) {
+        key_states.clear();
         key_states.resize(kvs.size(), false);
       }
       DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Put failed : {}", s.ToString());
@@ -969,6 +973,7 @@ butil::Status RawRocksEngine::Writer::KvBatchPutIfAbsent(const std::vector<pb::c
 
   rocksdb::Status s = db_->Write(rocksdb::WriteOptions(), &batch);
   if (!s.ok()) {
+    key_states.clear();
     key_states.resize(kvs.size(), false);
     DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Write failed : {}", s.ToString());
     return butil::Status(pb::error::EINTERNAL, "Internal error");
@@ -993,6 +998,115 @@ butil::Status RawRocksEngine::Writer::KvDelete(const std::string& key) {
       db_->Delete(write_options, column_family_->GetHandle(), rocksdb::Slice(key.data(), key.size()));
   if (!s.ok()) {
     DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Delete failed : {}", s.ToString());
+    return butil::Status(pb::error::EINTERNAL, "Internal error");
+  }
+
+  return butil::Status();
+}
+
+butil::Status RawRocksEngine::Writer::KvBatchCompareAndSet(const std::vector<pb::common::KeyValue>& kvs,
+                                                           const std::vector<std::string>& expect_values,
+                                                           std::vector<bool>& key_states, bool is_atomic) {
+  if (BAIDU_UNLIKELY(kvs.empty())) {
+    DINGO_LOG(ERROR) << fmt::format("empty keys not support");
+    return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
+  }
+
+  if (BAIDU_UNLIKELY(kvs.size() != expect_values.size())) {
+    DINGO_LOG(ERROR) << fmt::format("kvs {} != expect_values {} size", kvs.size(), expect_values.size());
+    return butil::Status(pb::error::EKEY_EMPTY, "Key is mismatch");
+  }
+
+  // Warning : be careful with vector<bool>
+  key_states.clear();
+  key_states.resize(kvs.size(), false);
+
+  size_t key_index = 0;
+  rocksdb::WriteBatch batch;
+  for (const auto& kv : kvs) {
+    if (BAIDU_UNLIKELY(kv.key().empty())) {
+      DINGO_LOG(ERROR) << fmt::format("empty key not support");
+      key_states.clear();
+      key_states.resize(kvs.size(), false);
+      return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
+    }
+
+    std::string value_old;
+    rocksdb::Status s = db_->Get(rocksdb::ReadOptions(), column_family_->GetHandle(),
+                                 rocksdb::Slice(kv.key().data(), kv.key().size()), &value_old);
+    if (is_atomic) {
+      if (s.ok()) {
+        if (value_old != expect_values[key_index]) {
+          key_states.clear();
+          key_states.resize(kvs.size(), false);
+          DINGO_LOG(ERROR) << fmt::format("value_old != expect_values[{}]", key_index);
+          return butil::Status(pb::error::EINTERNAL, "Internal error");
+        }
+      } else if (s.IsNotFound()) {
+        if (!expect_values[key_index].empty()) {
+          key_states.clear();
+          key_states.resize(kvs.size(), false);
+          DINGO_LOG(ERROR) << fmt::format("NotFound : expect_values[{}] not empty", key_index);
+          return butil::Status(pb::error::EINTERNAL, "Internal error");
+        }
+      } else {
+        key_states.clear();
+        key_states.resize(kvs.size(), false);
+        DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Get failed key_index :{} {}", key_index, s.ToString());
+        return butil::Status(pb::error::EINTERNAL, "Internal error");
+      }
+    } else {
+      if (s.ok()) {
+        if (value_old != expect_values[key_index]) {
+          key_index++;
+          continue;
+        }
+      } else if (s.IsNotFound()) {
+        if (!expect_values[key_index].empty()) {
+          key_index++;
+          continue;
+        }
+      } else {
+        key_index++;
+        continue;
+      }
+    }
+
+    // value empty means delete
+    if (kv.value().empty()) {
+      // delete a key in this batch
+      s = batch.Delete(column_family_->GetHandle(), rocksdb::Slice(kv.key().data(), kv.key().size()));
+      if (BAIDU_UNLIKELY(!s.ok())) {
+        if (is_atomic) {
+          key_states.clear();
+          key_states.resize(kvs.size(), false);
+        }
+        DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Delete failed key_index:{} : {}", key_index,  s.ToString());
+        return butil::Status(pb::error::EINTERNAL, "Internal error");
+      }
+    } else {
+      // write a key in this batch
+      s = batch.Put(column_family_->GetHandle(), rocksdb::Slice(kv.key().data(), kv.key().size()),
+                    rocksdb::Slice(kv.value().data(), kv.value().size()));
+      if (BAIDU_UNLIKELY(!s.ok())) {
+        if (is_atomic) {
+          key_states.clear();
+          key_states.resize(kvs.size(), false);
+        }
+        DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Put failed key_index :{} : {}", key_index, s.ToString());
+        return butil::Status(pb::error::EINTERNAL, "Internal error");
+      }
+    }
+
+    key_states[key_index] = true;
+    key_index++;
+  }
+
+  rocksdb::Status s = db_->Write(rocksdb::WriteOptions(), &batch);
+  if (!s.ok()) {
+    key_states.clear();
+    key_states.resize(kvs.size(), false);
+    DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Write failed : {}", s.ToString());
     return butil::Status(pb::error::EINTERNAL, "Internal error");
   }
 

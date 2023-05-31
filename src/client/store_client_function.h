@@ -52,6 +52,8 @@ void SendKvBatchPutIfAbsent(ServerInteractionPtr interaction, uint64_t region_id
 void SendKvBatchDelete(ServerInteractionPtr interaction, uint64_t region_id, const std::string& key);
 void SendKvDeleteRange(ServerInteractionPtr interaction, uint64_t region_id, const std::string& prefix);
 void SendKvScan(ServerInteractionPtr interaction, uint64_t region_id, const std::string& prefix);
+void SendKvCompareAndSet(ServerInteractionPtr interaction, uint64_t region_id, const std::string& key);
+void SendKvBatchCompareAndSet(ServerInteractionPtr interaction, uint64_t region_id, const std::string& prefix, int count);
 
 // region
 void SendAddRegion(ServerInteractionPtr interaction, uint64_t region_id, const std::string& raft_group,

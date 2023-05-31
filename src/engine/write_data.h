@@ -31,6 +31,7 @@ enum class DatumType {
   kDeleteRange = 3,
   kDeleteBatch = 4,
   kSplit = 5,
+  kCompareAndSet = 6,
 };
 
 class DatumAble {
@@ -84,6 +85,37 @@ struct PutIfAbsentDatum : public DatumAble {
 
   std::string cf_name;
   std::vector<pb::common::KeyValue> kvs;
+  bool is_atomic;
+};
+
+struct CompareAndSetDatum : public DatumAble {
+  DatumType GetType() override { return DatumType::kCompareAndSet; }
+
+  pb::raft::Request* TransformToRaft() override {
+    auto* request = new pb::raft::Request();
+
+    request->set_cmd_type(pb::raft::CmdType::COMPAREANDSET);
+    pb::raft::CompareAndSetRequest* compare_and_set_request = request->mutable_compare_and_set();
+    compare_and_set_request->set_cf_name(cf_name);
+
+    for (auto& kv : kvs) {
+      compare_and_set_request->add_kvs()->CopyFrom(kv);
+    }
+
+    for (auto& expect_value : expect_values) {
+      compare_and_set_request->add_expect_values(expect_value);
+    }
+
+    compare_and_set_request->set_is_atomic(is_atomic);
+
+    return request;
+  }
+
+  void TransformFromRaft(pb::raft::Response& resonse) override {}
+
+  std::string cf_name;
+  std::vector<pb::common::KeyValue> kvs;
+  std::vector<std::string> expect_values;
   bool is_atomic;
 };
 

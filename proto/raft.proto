@@ -29,6 +29,7 @@ enum CmdType {
   DELETERANGE = 3;
   DELETEBATCH = 4;
   SPLIT = 5;
+  COMPAREANDSET = 6;
 
   // Coordinator State Machine Operator
   META_WRITE = 2000;
@@ -48,6 +49,17 @@ message PutIfAbsentRequest {
 }
 
 message PutIfAbsentResponse {
+  repeated bytes put_keys = 1;
+}
+
+message CompareAndSetRequest {
+  string cf_name = 1;
+  repeated dingodb.pb.common.KeyValue kvs = 2;
+  repeated bytes expect_values = 3;
+  bool is_atomic = 4;
+}
+
+message CompareAndSetResponse {
   repeated bytes put_keys = 1;
 }
 
@@ -94,6 +106,7 @@ message Request {
     DeleteRangeRequest delete_range = 1002;
     DeleteBatchRequest delete_batch = 1003;
     SplitRequest split = 1004;
+    CompareAndSetRequest compare_and_set = 1005;
 
     // Coordinator Operation[2000, 3000]
     RaftMetaRequest meta_req = 2000;
@@ -109,6 +122,7 @@ message Response {
     DeleteRangeResponse delete_range = 1002;
     DeleteBatchResponse delete_batch = 1003;
     SplitResponse split = 1004;
+    CompareAndSetResponse compare_and_set = 1005;
 
     RaftCreateSchemaResponse create_schema_req = 2001;
     RaftCreateTableResponse create_table_req = 2002;

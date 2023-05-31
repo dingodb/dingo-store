@@ -99,6 +99,15 @@ class RawEngine {
 
     virtual butil::Status KvCompareAndSet(const pb::common::KeyValue& kv, const std::string& value,
                                           bool& key_state) = 0;
+    // Batch implementation comparisons and settings.
+    // There are three layers of semantics:
+    // 1. If key not exists, set key=value
+    // 2. If key exists, and value in request is null, delete key
+    // 3. If key exists, set key=value
+    // Not available internally, only for RPC use
+    virtual butil::Status KvBatchCompareAndSet(const std::vector<pb::common::KeyValue>& kvs,
+                                               const std::vector<std::string>& expect_values, std::vector<bool>& key_states,
+                                               bool is_atomic) = 0;
 
     virtual butil::Status KvDelete(const std::string& key) = 0;
     virtual butil::Status KvBatchDelete(const std::vector<std::string>& keys) = 0;

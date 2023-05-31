@@ -551,6 +551,113 @@ void StoreServiceImpl::KvDeleteRange(google::protobuf::RpcController* controller
   }
 }
 
+butil::Status ValidateKvCompareAndSetRequest(const dingodb::pb::store::KvCompareAndSetRequest* request) {
+  if (request->kv().key().empty()) {
+    return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
+  }
+
+  std::vector<std::string_view> keys = {request->kv().key()};
+  auto status = ServiceHelper::ValidateRegion(request->region_id(), keys);
+  if (!status.ok()) {
+    return status;
+  }
+
+  return butil::Status();
+}
+
+void StoreServiceImpl::KvCompareAndSet(google::protobuf::RpcController* controller,
+                                       const pb::store::KvCompareAndSetRequest* request,
+                                       pb::store::KvCompareAndSetResponse* response, google::protobuf::Closure* done) {
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(done);
+  DINGO_LOG(DEBUG) << "KvCompareAndSet request: " << request->ShortDebugString();
+
+  butil::Status status = ValidateKvCompareAndSetRequest(request);
+  if (!status.ok()) {
+    auto* err = response->mutable_error();
+    err->set_errcode(static_cast<Errno>(status.error_code()));
+    err->set_errmsg(status.error_str());
+    return;
+  }
+
+  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done_guard.release(), response);
+  ctx->SetRegionId(request->region_id()).SetCfName(Constant::kStoreDataCF);
+  // auto* mut_request = const_cast<dingodb::pb::store::KvCompareAndSetRequest*>(request);
+
+  status = storage_->KvCompareAndSet(ctx, {request->kv()}, {request->expect_value()}, true);
+  if (!status.ok()) {
+    auto* err = response->mutable_error();
+    err->set_errcode(static_cast<Errno>(status.error_code()));
+    err->set_errmsg(status.error_str());
+    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+      err->set_errmsg("Not leader, please redirect leader.");
+      ServiceHelper::RedirectLeader(status.error_str(), response);
+    }
+    brpc::ClosureGuard done_guard(done);
+  }
+}
+
+butil::Status ValidateKvBatchCompareAndSetRequest(const dingodb::pb::store::KvBatchCompareAndSetRequest* request) {
+  if (request->kvs().empty()) {
+    return butil::Status(pb::error::EKEY_EMPTY, "KVS is empty");
+  }
+
+  for (const auto& kv : request->kvs()) {
+    if (kv.key().empty()) {
+      return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
+    }
+  }
+
+  if (request->expect_values().size() != request->kvs().size()) {
+    return butil::Status(pb::error::EKEY_EMPTY, "expect_values size !=  kvs size");
+  }
+
+  std::vector<std::string_view> keys;
+  for (const auto& kv : request->kvs()) {
+    keys.push_back(kv.key());
+  }
+  auto status = ServiceHelper::ValidateRegion(request->region_id(), keys);
+  if (!status.ok()) {
+    return status;
+  }
+
+  return butil::Status();
+}
+
+void StoreServiceImpl::KvBatchCompareAndSet(google::protobuf::RpcController* controller,
+                                            const pb::store::KvBatchCompareAndSetRequest* request,
+                                            pb::store::KvBatchCompareAndSetResponse* response,
+                                            google::protobuf::Closure* done) {
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(done);
+  DINGO_LOG(DEBUG) << "KvBatchCompareAndSet request: " << request->ShortDebugString();
+
+  butil::Status status = ValidateKvBatchCompareAndSetRequest(request);
+  if (!status.ok()) {
+    auto* err = response->mutable_error();
+    err->set_errcode(static_cast<Errno>(status.error_code()));
+    err->set_errmsg(status.error_str());
+    return;
+  }
+
+  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done_guard.release(), response);
+  ctx->SetRegionId(request->region_id()).SetCfName(Constant::kStoreDataCF);
+  auto* mut_request = const_cast<dingodb::pb::store::KvBatchCompareAndSetRequest*>(request);
+
+  status = storage_->KvCompareAndSet(ctx, Helper::PbRepeatedToVector(mut_request->kvs()),
+                                     Helper::PbRepeatedToVector(mut_request->expect_values()), request->is_atomic());
+  if (!status.ok()) {
+    auto* err = response->mutable_error();
+    err->set_errcode(static_cast<Errno>(status.error_code()));
+    err->set_errmsg(status.error_str());
+    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+      err->set_errmsg("Not leader, please redirect leader.");
+      ServiceHelper::RedirectLeader(status.error_str(), response);
+    }
+    brpc::ClosureGuard done_guard(done);
+  }
+}
+
 butil::Status ValidateKvScanBeginRequest(store::RegionPtr region, const pb::common::Range& req_range) {
   if (region == nullptr) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");

@@ -63,6 +63,14 @@ class StoreServiceImpl : public pb::store::StoreService {
   void KvDeleteRange(google::protobuf::RpcController* controller, const pb::store::KvDeleteRangeRequest* request,
                      pb::store::KvDeleteRangeResponse* response, google::protobuf::Closure* done) override;
 
+  void KvCompareAndSet(google::protobuf::RpcController* controller, const pb::store::KvCompareAndSetRequest* request,
+                       pb::store::KvCompareAndSetResponse* response, google::protobuf::Closure* done) override;
+
+  void KvBatchCompareAndSet(google::protobuf::RpcController* controller,
+                            const pb::store::KvBatchCompareAndSetRequest* request,
+                            pb::store::KvBatchCompareAndSetResponse* response,
+                            google::protobuf::Closure* done) override;
+
   void KvScanBegin(google::protobuf::RpcController* controller, const ::dingodb::pb::store::KvScanBeginRequest* request,
                    ::dingodb::pb::store::KvScanBeginResponse* response, ::google::protobuf::Closure* done) override;
 

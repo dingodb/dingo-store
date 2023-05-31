@@ -39,6 +39,14 @@ class PutIfAbsentHandler : public BaseHandler {
               const pb::raft::Request &req, store::RegionMetricsPtr region_metrics) override;
 };
 
+// CompareAndSetRequest
+class CompareAndSetHandler : public BaseHandler {
+ public:
+  HandlerType GetType() override { return HandlerType::kCompareAndSet; }
+  void Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
+              const pb::raft::Request &req, store::RegionMetricsPtr region_metrics) override;
+};
+
 // DeleteRangeRequest
 class DeleteRangeHandler : public BaseHandler {
  public:

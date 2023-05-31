@@ -163,6 +163,10 @@ void Sender(client::ServerInteractionPtr interaction, const std::string& method,
       client::SendKvDeleteRange(interaction, FLAGS_region_id, FLAGS_prefix);
     } else if (method == "KvScan") {
       client::SendKvScan(interaction, FLAGS_region_id, FLAGS_prefix);
+    } else if (method == "KvCompareAndSet") {
+      client::SendKvCompareAndSet(interaction, FLAGS_region_id, FLAGS_key);
+    } else if (method == "KvBatchCompareAndSet") {
+      client::SendKvBatchCompareAndSet(interaction, FLAGS_region_id, FLAGS_prefix, 100);
     }
 
     // Test

@@ -120,6 +120,81 @@ void PutIfAbsentHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
   }
 }
 
+void CompareAndSetHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region,
+                                  std::shared_ptr<RawEngine> engine, const pb::raft::Request &req,
+                                  store::RegionMetricsPtr region_metrics) {
+  butil::Status status;
+  const auto &request = req.compare_and_set();
+  // region is spliting, check key out range
+  if (region->State() == pb::common::StoreRegionState::SPLITTING) {
+    const auto &range = region->Range();
+    for (const auto &kv : request.kvs()) {
+      if (range.end_key().compare(kv.key()) <= 0) {
+        if (ctx) {
+          status.set_error(pb::error::EREGION_REDIRECT, "Region is spliting, please update route");
+          ctx->SetStatus(status);
+        }
+        return;
+      }
+    }
+  }
+
+  std::vector<bool> key_states;  // NOLINT
+
+  auto writer = engine->NewWriter(request.cf_name());
+  bool const is_write_batch = (request.kvs().size() != 1);
+  status = writer->KvBatchCompareAndSet(Helper::PbRepeatedToVector(request.kvs()),
+                                        Helper::PbRepeatedToVector(request.expect_values()), key_states,
+                                        request.is_atomic());
+
+  if (ctx) {
+    ctx->SetStatus(status);
+    if (is_write_batch) {
+      auto *response = dynamic_cast<pb::store::KvBatchCompareAndSetResponse *>(ctx->Response());
+      // std::vector<bool> must do not use foreach
+      for (auto &&key_state : key_states) {
+        response->add_key_states(key_state);
+      }
+    } else {  // only one key
+      pb::store::KvCompareAndSetResponse *response =
+          dynamic_cast<pb::store::KvCompareAndSetResponse *>(ctx->Response());
+      if (response) {
+        response->set_key_state(key_states[0]);
+      } else {
+        pb::store::KvBatchCompareAndSetResponse *response =
+            dynamic_cast<pb::store::KvBatchCompareAndSetResponse *>(ctx->Response());
+        if (response) {
+          response->add_key_states(key_states[0]);
+        }
+      }
+    }
+  }
+
+  // Update region metrics min/max key
+  if (region_metrics != nullptr) {
+    size_t i = 0;
+    store::RegionMetrics::PbKeyValues new_kvs;
+    store::RegionMetrics::PbKeys delete_keys;
+    for (const auto &key_state : key_states) {
+      const auto &kv = request.kvs().at(i);
+      if (key_state) {
+        if (!request.expect_values(i).empty() && kv.value().empty()) {
+          delete_keys.Add(std::string(kv.key()));
+        }
+
+        if (request.expect_values(i).empty() && !kv.value().empty()) {
+          new_kvs.Add(pb::common::KeyValue(kv));
+        }
+      }
+    }
+
+    // add
+    region_metrics->UpdateMaxAndMinKey(new_kvs);
+    // delete key
+    region_metrics->UpdateMaxAndMinKeyPolicy(delete_keys);
+  }
+}
+
 void DeleteRangeHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region,
                                 std::shared_ptr<RawEngine> engine, const pb::raft::Request &req,
                                 store::RegionMetricsPtr region_metrics) {
@@ -336,6 +411,7 @@ std::shared_ptr<HandlerCollection> RaftApplyHandlerFactory::Build() {
   handler_collection->Register(std::make_shared<DeleteRangeHandler>());
   handler_collection->Register(std::make_shared<DeleteBatchHandler>());
   handler_collection->Register(std::make_shared<SplitHandler>());
+  handler_collection->Register(std::make_shared<CompareAndSetHandler>());
 
   return handler_collection;
 }

@@ -43,41 +43,6 @@
 
 namespace dingodb {  // NOLINT
 
-#if 0
-void Getfilepath(const char *path, const char *filename, char *filepath) {
-  strcpy(filepath, path);  // NOLINT
-
-  if (filepath[strlen(path) - 1] != '/') strcat(filepath, "/");  // NOLINT
-
-  strcat(filepath, filename);  // NOLINT
-}
-
-bool DeleteFile(const char *path) {
-  DIR *dir;
-  struct dirent *dirinfo;
-  struct stat statbuf;
-  char filepath[256] = {0};
-  lstat(path, &statbuf);
-
-  if (S_ISREG(statbuf.st_mode)) {
-    remove(path);
-  } else if (S_ISDIR(statbuf.st_mode)) {
-    if ((dir = opendir(path)) == nullptr) return true;
-    while ((dirinfo = readdir(dir)) != nullptr) {
-      Getfilepath(path, dirinfo->d_name, filepath);
-      if (strcmp(dirinfo->d_name, ".") == 0 ||
-          strcmp(dirinfo->d_name, "..") == 0)
-        continue;
-      DeleteFile(filepath);
-      rmdir(filepath);
-    }
-    closedir(dir);
-  }
-  rmdir(path);
-  return true;
-}
-#endif
-
 static const std::string kDefaultCf = "default";
 // static const std::string &kDefaultCf = "meta";
 
@@ -723,6 +688,365 @@ TEST_F(RawRocksEngineTest, KvCompareAndSet) {
     ok = reader->KvGet(key, value_another);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(value, value_another);
+  }
+}
+
+// Batch implementation comparisons and settings.
+// There are three layers of semantics:
+// 1. If the key does not exist, set kv
+// 2. The key exists and can be deleted
+// 3. The key exists to update the value
+// Not available internally, only for RPC use
+TEST_F(RawRocksEngineTest, KvBatchCompareAndSet) {
+  const std::string &cf_name = kDefaultCf;
+  std::shared_ptr<RawEngine::Writer> writer = RawRocksEngineTest::engine->NewWriter(cf_name);
+
+  // keys empty expect_values emtpy
+  {
+    std::vector<pb::common::KeyValue> kvs;
+    std::vector<std::string> expect_values;
+    std::vector<bool> key_states;
+
+    butil::Status ok = writer->KvBatchCompareAndSet(kvs, expect_values, key_states, true);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_EMPTY);
+  }
+
+  // keys and expect_values size not equal
+  {
+    std::vector<pb::common::KeyValue> kvs;
+    std::vector<std::string> expect_values;
+    std::vector<bool> key_states;
+
+    pb::common::KeyValue kv;
+    kvs.emplace_back(kv);
+
+    butil::Status ok = writer->KvBatchCompareAndSet(kvs, expect_values, key_states, true);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_EMPTY);
+  }
+
+  // keys key emtpy
+  {
+    std::vector<pb::common::KeyValue> kvs;
+    std::vector<std::string> expect_values;
+    std::vector<bool> key_states;
+
+    pb::common::KeyValue kv;
+    kvs.emplace_back(kv);
+
+    expect_values.resize(1);
+
+    butil::Status ok = writer->KvBatchCompareAndSet(kvs, expect_values, key_states, true);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_EMPTY);
+  }
+
+  // key not exist in rocksdb
+  // key not empty . expect_value empty. value empty
+  {
+    std::vector<pb::common::KeyValue> kvs;
+    std::vector<std::string> expect_values;
+    std::vector<bool> key_states;
+
+    pb::common::KeyValue kv;
+    kv.set_key("KeyBatchCompareAndSet");
+    kvs.emplace_back(kv);
+
+    expect_values.resize(1);
+
+    butil::Status ok = writer->KvBatchCompareAndSet(kvs, expect_values, key_states, true);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
+
+    std::string key = "KeyBatchCompareAndSet";
+    std::string value;
+    ok = reader->KvGet(key, value);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOT_FOUND);
+  }
+
+  // key exist in rocksdb
+  // key not empty . expect_value empty. value empty
+  {
+    butil::Status ok;
+    std::vector<pb::common::KeyValue> kvs;
+    std::vector<std::string> expect_values;
+    std::vector<bool> key_states;
+
+    pb::common::KeyValue kv;
+    kv.set_key("KeyBatchCompareAndSet");
+    kvs.emplace_back(kv);
+
+    expect_values.resize(1);
+
+    ok = writer->KvPut(kv);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    ok = writer->KvBatchCompareAndSet(kvs, expect_values, key_states, true);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
+
+    std::string key = "KeyBatchCompareAndSet";
+    std::string value;
+    ok = reader->KvGet(key, value);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOT_FOUND);
+  }
+
+  // key exist value not empty in rocksdb
+  // key not empty . expect_value empty. value empty
+  {
+    butil::Status ok;
+    std::vector<pb::common::KeyValue> kvs;
+    std::vector<std::string> expect_values;
+    std::vector<bool> key_states;
+
+    pb::common::KeyValue kv;
+    kv.set_key("KeyBatchCompareAndSet");
+    kvs.emplace_back(kv);
+
+    expect_values.resize(1);
+
+    kv.set_value("KeyBatchCompareAndSetValue");
+    ok = writer->KvPut(kv);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    ok = writer->KvBatchCompareAndSet(kvs, expect_values, key_states, true);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EINTERNAL);
+
+    std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
+
+    std::string key = "KeyBatchCompareAndSet";
+    std::string value;
+    ok = reader->KvGet(key, value);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+
+    ok = writer->KvDelete(kv.key());
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+  }
+
+  // keys not exist atomic ok
+  {
+    std::vector<pb::common::KeyValue> kvs;
+    std::vector<std::string> expect_values;
+    std::vector<bool> key_states;
+
+    for (size_t i = 0; i < 3; i++) {
+      pb::common::KeyValue kv;
+      kv.set_key("KeyBatchCompareAndSet" + std::to_string(i));
+      kv.set_value("ValueBatchCompareAndSet" + std::to_string(i));
+      kvs.emplace_back(kv);
+    }
+
+    expect_values.resize(3);
+
+    butil::Status ok = writer->KvBatchCompareAndSet(kvs, expect_values, key_states, true);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
+
+    for (size_t i = 0; i < 3; i++) {
+      std::string key = "KeyBatchCompareAndSet" + std::to_string(i);
+      std::string value;
+      ok = reader->KvGet(key, value);
+      EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+      EXPECT_EQ("ValueBatchCompareAndSet" + std::to_string(i), value);
+      EXPECT_EQ(key_states[i], true);
+    }
+  }
+
+  // keys exist delete . add keys not exist. update keys  atomic ok
+  {
+    std::vector<pb::common::KeyValue> kvs;
+    std::vector<std::string> expect_values;
+    std::vector<bool> key_states;
+
+    // delete key
+    for (size_t i = 0; i < 1; i++) {
+      pb::common::KeyValue kv;
+      kv.set_key("KeyBatchCompareAndSet" + std::to_string(i));
+      kv.set_value("");
+      kvs.emplace_back(kv);
+      expect_values.emplace_back("ValueBatchCompareAndSet" + std::to_string(i));
+    }
+
+    // update key
+    for (size_t i = 1; i < 2; i++) {
+      pb::common::KeyValue kv;
+      kv.set_key("KeyBatchCompareAndSet" + std::to_string(i));
+      kv.set_value("ValueBatchCompareAndSet------" + std::to_string(i));
+      kvs.emplace_back(kv);
+      expect_values.emplace_back("ValueBatchCompareAndSet" + std::to_string(i));
+    }
+
+    // add key
+    for (size_t i = 3; i < 4; i++) {
+      pb::common::KeyValue kv;
+      kv.set_key("KeyBatchCompareAndSet" + std::to_string(i));
+      kv.set_value("ValueBatchCompareAndSet" + std::to_string(i));
+      kvs.emplace_back(kv);
+      expect_values.emplace_back("");
+    }
+
+    butil::Status ok = writer->KvBatchCompareAndSet(kvs, expect_values, key_states, true);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
+
+    std::string key = "KeyBatchCompareAndSet" + std::to_string(0);
+    std::string value;
+    ok = reader->KvGet(key, value);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOT_FOUND);
+
+    key = "KeyBatchCompareAndSet" + std::to_string(1);
+    ok = reader->KvGet(key, value);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    EXPECT_EQ("ValueBatchCompareAndSet------" + std::to_string(1), value);
+
+    key = "KeyBatchCompareAndSet" + std::to_string(2);
+    ok = reader->KvGet(key, value);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    EXPECT_EQ("ValueBatchCompareAndSet" + std::to_string(2), value);
+
+    key = "KeyBatchCompareAndSet" + std::to_string(3);
+    ok = reader->KvGet(key, value);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    EXPECT_EQ("ValueBatchCompareAndSet" + std::to_string(3), value);
+
+    for (size_t i = 0; i < 3; i++) {
+      EXPECT_EQ(key_states[i], true);
+    }
+  }
+
+  // add keys again  atomic failed
+  {
+    std::vector<pb::common::KeyValue> kvs;
+    std::vector<std::string> expect_values;
+    std::vector<bool> key_states;
+    key_states.clear();
+
+    for (size_t i = 0; i < 4; i++) {
+      pb::common::KeyValue kv;
+      kv.set_key("KeyBatchCompareAndSet" + std::to_string(i));
+      kv.set_value("ValueBatchCompareAndSet" + std::to_string(i));
+      kvs.emplace_back(kv);
+      expect_values.emplace_back("");
+    }
+
+    butil::Status ok = writer->KvBatchCompareAndSet(kvs, expect_values, key_states, true);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EINTERNAL);
+
+    for (size_t i = 0; i < 4; i++) {
+      EXPECT_EQ(key_states[i], false);
+    }
+
+    pb::common::Range range;
+    range.set_start_key("KeyBatchCompareAndSet");
+    range.set_end_key("KeyBatchCompareAndSeu");
+
+    ok = writer->KvDeleteRange(range);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+  }
+
+  //////////////////////////////////////////////////////////////////////////////////////////////
+  // keys not exist not atomic ok
+  {
+    std::vector<pb::common::KeyValue> kvs;
+    std::vector<std::string> expect_values;
+    std::vector<bool> key_states;
+
+    for (size_t i = 0; i < 4; i++) {
+      pb::common::KeyValue kv;
+      kv.set_key("KeyBatchCompareAndSet" + std::to_string(i));
+      kv.set_value("ValueBatchCompareAndSet" + std::to_string(i));
+      kvs.emplace_back(kv);
+    }
+
+    expect_values.resize(4);
+
+    butil::Status ok = writer->KvBatchCompareAndSet(kvs, expect_values, key_states, false);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
+
+    for (size_t i = 0; i < 4; i++) {
+      std::string key = "KeyBatchCompareAndSet" + std::to_string(i);
+      std::string value;
+      ok = reader->KvGet(key, value);
+      EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+      EXPECT_EQ("ValueBatchCompareAndSet" + std::to_string(i), value);
+    }
+  }
+
+  // keys exist delete . add keys not exist. update keys  not atomic ok
+  {
+    std::vector<pb::common::KeyValue> kvs;
+    std::vector<std::string> expect_values;
+    std::vector<bool> key_states;
+
+    // delete key
+    for (size_t i = 0; i < 1; i++) {
+      pb::common::KeyValue kv;
+      kv.set_key("KeyBatchCompareAndSet" + std::to_string(i));
+      kv.set_value("");
+      kvs.emplace_back(kv);
+      expect_values.emplace_back("ValueBatchCompareAndSet" + std::to_string(i));
+    }
+
+    // update key
+    for (size_t i = 1; i < 2; i++) {
+      pb::common::KeyValue kv;
+      kv.set_key("KeyBatchCompareAndSet" + std::to_string(i));
+      kv.set_value("ValueBatchCompareAndSet------" + std::to_string(i));
+      kvs.emplace_back(kv);
+      expect_values.emplace_back("ValueBatchCompareAndSet" + std::to_string(i));
+    }
+
+    // add key
+    for (size_t i = 3; i < 4; i++) {
+      pb::common::KeyValue kv;
+      kv.set_key("KeyBatchCompareAndSet" + std::to_string(i));
+      kv.set_value("ValueBatchCompareAndSet" + std::to_string(i));
+      kvs.emplace_back(kv);
+      expect_values.emplace_back("");
+    }
+
+    butil::Status ok = writer->KvBatchCompareAndSet(kvs, expect_values, key_states, false);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
+
+    std::string key = "KeyBatchCompareAndSet" + std::to_string(0);
+    std::string value;
+    ok = reader->KvGet(key, value);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOT_FOUND);
+
+    key = "KeyBatchCompareAndSet" + std::to_string(1);
+    ok = reader->KvGet(key, value);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    EXPECT_EQ("ValueBatchCompareAndSet------" + std::to_string(1), value);
+
+    key = "KeyBatchCompareAndSet" + std::to_string(2);
+    ok = reader->KvGet(key, value);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    EXPECT_EQ("ValueBatchCompareAndSet" + std::to_string(2), value);
+
+    key = "KeyBatchCompareAndSet" + std::to_string(3);
+    ok = reader->KvGet(key, value);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    EXPECT_EQ("ValueBatchCompareAndSet" + std::to_string(3), value);
+
+    for (size_t i = 0; i < 2; i++) {
+      EXPECT_EQ(key_states[i], true);
+    }
+
+    EXPECT_EQ(key_states[2], false);
+
+    pb::common::Range range;
+    range.set_start_key("KeyBatchCompareAndSet");
+    range.set_end_key("KeyBatchCompareAndSeu");
+
+    ok = writer->KvDeleteRange(range);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 }
 

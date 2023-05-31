@@ -143,6 +143,35 @@ message KvDeleteRangeResponse {
   uint64 delete_count = 2;
 }
 
+message KvCompareAndSetRequest {
+  uint64 region_id = 1;
+  dingodb.pb.common.KeyValue kv = 2;
+  // empty means key not exist
+  bytes expect_value = 3;
+}
+
+message KvCompareAndSetResponse {
+  dingodb.pb.error.Error error = 1;
+  // key_state = true, update success
+  // key_state = false, update failed
+  bool key_state = 2;
+}
+
+message KvBatchCompareAndSetRequest {
+  uint64 region_id = 1;
+  repeated dingodb.pb.common.KeyValue kvs = 2;
+  // empty means key not exist
+  repeated bytes expect_values = 3;
+  bool is_atomic = 4;
+}
+
+message KvBatchCompareAndSetResponse {
+  dingodb.pb.error.Error error = 1;
+  // key_state = true, update success
+  // key_state = false, update failed
+  repeated bool key_states = 2;
+}
+
 // aggregation type
 enum AggregationType {
   AGGREGATION_NONE = 0;
@@ -360,6 +389,8 @@ service StoreService {
   rpc KvBatchPutIfAbsent(KvBatchPutIfAbsentRequest) returns (KvBatchPutIfAbsentResponse);
   rpc KvBatchDelete(KvBatchDeleteRequest) returns (KvBatchDeleteResponse);
   rpc KvDeleteRange(KvDeleteRangeRequest) returns (KvDeleteRangeResponse);
+  rpc KvCompareAndSet(KvCompareAndSetRequest) returns (KvCompareAndSetResponse);
+  rpc KvBatchCompareAndSet(KvBatchCompareAndSetRequest) returns (KvBatchCompareAndSetResponse);
 
   rpc KvScanBegin(KvScanBeginRequest) returns (KvScanBeginResponse);
   rpc KvScanContinue(KvScanContinueRequest) returns (KvScanContinueResponse);
