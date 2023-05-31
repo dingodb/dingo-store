@@ -256,7 +256,7 @@ public class MysqlInit {
         Map<String, Object> map = Maps.newLinkedHashMap();
         columnList.forEach(column -> {
             switch (column.getName()) {
-                case "USER":
+                case "NAME":
                     map.put(column.getName(), "root");
                     break;
                 case "HOST":
@@ -270,6 +270,8 @@ public class MysqlInit {
                     map.put(column.getName(), "");
                     break;
                 case "PASSWORD_LIFETIME":
+                    map.put(column.getName(), null);
+                    break;
                 case "MAX_QUESTIONS":
                 case "MAX_UPDATES":
                 case "MAX_CONNECTIONS":
@@ -281,6 +283,10 @@ public class MysqlInit {
                     break;
                 case "PASSWORD_LAST_CHANGED":
                     map.put(column.getName(), new Timestamp(System.currentTimeMillis()).getTime());
+                    break;
+                case "ACCOUNT_LOCKED":
+                case "PASSWORD_EXPIRED":
+                    map.put(column.getName(), "N");
                     break;
                 default:
                     map.put(column.getName(), "Y");
