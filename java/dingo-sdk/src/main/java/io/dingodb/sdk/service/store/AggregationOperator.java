@@ -16,16 +16,13 @@
 
 package io.dingodb.sdk.service.store;
 
-import lombok.Builder;
+public interface AggregationOperator {
 
-@Builder
-public class AggregationOperator {
+    AggregationType getOperation();
 
-    public final AggregationType operation;
+    int getIndexOfColumn();
 
-    public final int indexOfColumn;
-
-    public enum AggregationType {
+    enum AggregationType {
         AGGREGATION_NONE(0),
         SUM(1),
         COUNT(2),

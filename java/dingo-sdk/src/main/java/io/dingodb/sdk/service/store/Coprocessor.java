@@ -16,49 +16,29 @@
 
 package io.dingodb.sdk.service.store;
 
-import io.dingodb.sdk.common.serial.schema.DingoSchema;
-import io.dingodb.sdk.common.utils.ByteArrayUtils;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
+import io.dingodb.sdk.common.table.Column;
 
-import java.util.Collections;
 import java.util.List;
 
-@Getter
-@Builder
-public class Coprocessor {
+public interface Coprocessor {
 
-    private static final SchemaWrapper DEFAULT_WRAPPER = SchemaWrapper.builder().build();
+    int getSchemaVersion();
 
-    private int schemaVersion;
+    SchemaWrapper getOriginalSchema();
 
-    @Builder.Default
-    private SchemaWrapper originalSchema = DEFAULT_WRAPPER;
+    SchemaWrapper getResultSchema();
 
-    @Builder.Default
-    private SchemaWrapper resultSchema = DEFAULT_WRAPPER;
+    List<Integer> getSelection();
 
-    @Builder.Default
-    private List<Integer> selection = Collections.emptyList();
+    byte[] getExpression();
 
-    @Builder.Default
-    private byte[] expression = ByteArrayUtils.EMPTY_BYTES;
+    List<Integer> getGroupBy();
 
-    @Builder.Default
-    private List<Integer> groupBy = Collections.emptyList();
+    List<AggregationOperator> getAggregations();
 
-    @Builder.Default
-    private List<AggregationOperator> aggregations = Collections.emptyList();
+    interface SchemaWrapper {
+        List<Column> getSchemas();
 
-    @Getter
-    @Builder
-    @NoArgsConstructor
-    @AllArgsConstructor
-    public static class SchemaWrapper {
-        @Builder.Default
-        private List<DingoSchema> schemas = Collections.emptyList();
-        private long commonId;
+        long getCommonId();
     }
 }
