@@ -48,31 +48,36 @@ Buf::Buf(const std::string& buf, bool le) {
   this->le_ = le;
 }
 
+Buf::~Buf() {
+  this->buf_.clear();
+}
+
 void Buf::Init(int size) {
-  this->buf_ = new std::string();
-  this->buf_->resize(size);
+  this->buf_.resize(size);
   this->reverse_pos_ = size - 1;
 }
 
 void Buf::Init(std::string* buf) {
-  this->buf_ = buf;
-  this->reverse_pos_ = buf->size() - 1;
+  this->buf_.resize(buf->size());
+  this->buf_.assign(buf->begin(), buf->end());
+  this->reverse_pos_ = this->buf_.size() - 1;
 }
 
 void Buf::Init(const std::string& buf) {
-  this->buf_ = (std::string*) &buf;
-  this->reverse_pos_ = buf.size() - 1;
+  this->buf_.resize(buf.size());
+  this->buf_.assign(buf.begin(), buf.end());
+  this->reverse_pos_ = this->buf_.size() - 1;
 }
 
 void Buf::SetForwardPos(int fp) { this->forward_pos_ = fp; }
 
 void Buf::SetReversePos(int rp) { this->reverse_pos_ = rp; }
 
-void Buf::Write(uint8_t b) { buf_->at(forward_pos_++) = b; }
+void Buf::Write(uint8_t b) { buf_.at(forward_pos_++) = b; }
 
 void Buf::Write(const std::string& data) {
   for (auto it : data) {
-    buf_->at(forward_pos_++) = it;
+    buf_.at(forward_pos_++) = it;
   }
 }
 
@@ -114,7 +119,7 @@ void Buf::WriteLong(int64_t l) {
   }
 }
 
-void Buf::ReverseWrite(uint8_t b) { buf_->at(reverse_pos_--) = b; }
+void Buf::ReverseWrite(uint8_t b) { buf_.at(reverse_pos_--) = b; }
 
 void Buf::ReverseWriteInt(int32_t i) {
   uint32_t* ii = (uint32_t*)&i;
@@ -131,7 +136,7 @@ void Buf::ReverseWriteInt(int32_t i) {
   }
 }
 
-uint8_t Buf::Read() { return buf_->at(forward_pos_++); }
+uint8_t Buf::Read() { return buf_.at(forward_pos_++); }
 
 int32_t Buf::ReadInt() {
   if (this->le_) {
@@ -156,7 +161,7 @@ int64_t Buf::ReadLong() {
   return l;
 }
 
-uint8_t Buf::ReverseRead() { return buf_->at(reverse_pos_--); }
+uint8_t Buf::ReverseRead() { return buf_.at(reverse_pos_--); }
 
 int32_t Buf::ReverseReadInt() {
   if (this->le_) {
@@ -178,55 +183,54 @@ void Buf::EnsureRemainder(int length) {
   if ((forward_pos_ + length - 1) > reverse_pos_) {
     int new_size;
     if (length > 100) {
-      new_size = buf_->size() + length;
+      new_size = buf_.size() + length;
     } else {
-      new_size = buf_->size() + 100;
+      new_size = buf_.size() + 100;
     }
-    int reverse_size = buf_->size() - reverse_pos_ - 1;
-    buf_->resize(new_size);
-    int new_reverse_tag = buf_->size() - 1;
-    int old_reverse_tag = new_reverse_tag - reverse_size;
+    std::string new_buf;
+    new_buf.resize(new_size);
+    for (int i = 0; i < forward_pos_; i++) {
+      new_buf.at(i) = buf_.at(i);
+    }
+    int reverse_size = buf_.size() - reverse_pos_ - 1;
+    int buf_start = reverse_pos_ + 1;
+    int new_buf_start = new_size - reverse_size;
     for (int i = 0; i < reverse_size; i++) {
-      buf_->at(new_reverse_tag - i) = buf_->at(old_reverse_tag - i);
+      new_buf.at(new_buf_start + i) = buf_.at(buf_start + i);
     }
     reverse_pos_ = new_size - reverse_size - 1;
+    buf_ = new_buf;
   }
 }
 
 std::string* Buf::GetBytes() {
-  int empty_size = reverse_pos_ - forward_pos_ + 1;
-  if (empty_size == 0) {
-    return this->buf_;
+  std::string* s = new std::string();
+  int ret = GetBytes(*s);
+  if (ret < 0) {
+    delete s;
+    return nullptr;
   }
-  if (empty_size > 0) {
-    int final_size = buf_->size() - empty_size;
-    for (int i = forward_pos_; i < final_size; i++) {
-       buf_->at(i) = buf_->at(i + empty_size);
-    }
-    buf_->resize(final_size);
-    return buf_;
-  }
-
-  if (empty_size < 0) {
-    //"Wrong Key Buf"
-  }
-
-  return nullptr;
+  return s;
 }
 
 int Buf::GetBytes(std::string& s) {
   int empty_size = reverse_pos_ - forward_pos_ + 1;
   if (empty_size == 0) {
-    s = *this->buf_;
-    return this->buf_->size();
+    s.resize(buf_.size());
+    copy(buf_.begin(), buf_.end(), s.begin());
+
+    return buf_.size();
   }
   if (empty_size > 0) {
-    int final_size = buf_->size() - empty_size;
-    for (int i = forward_pos_; i < final_size; i++) {
-       buf_->at(i) = buf_->at(i + empty_size);
+    int final_size = buf_.size() - empty_size;
+    s.resize(final_size);
+    for (int i = 0; i < forward_pos_; i++) {
+      s[i] = buf_.at(i);
     }
-    buf_->resize(final_size);
-    s = *this->buf_;
+    int curr = reverse_pos_ + 1;
+    for (int i = forward_pos_; i < final_size; i++) {
+      s[i] = buf_.at(curr++);
+    }
     return final_size;
   }
 
@@ -237,6 +241,5 @@ int Buf::GetBytes(std::string& s) {
 
   return 0;
 }
-
 
 }  // namespace dingodb
