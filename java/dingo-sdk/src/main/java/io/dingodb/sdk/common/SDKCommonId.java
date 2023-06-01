@@ -44,6 +44,11 @@ public class SDKCommonId implements DingoCommonId {
     }
 
     @Override
+    public String toString() {
+        return "CommonId[" + type + "-" + parentId + "-" + entityId + "]";
+    }
+
+    @Override
     public boolean equals(Object other) {
         if (this == other) {
             return true;
