@@ -27,7 +27,6 @@ import io.dingodb.sdk.common.table.metric.TableMetrics;
 import io.dingodb.sdk.common.utils.ByteArrayUtils;
 import io.dingodb.sdk.common.utils.EntityConversion;
 import io.dingodb.sdk.common.utils.Optional;
-import io.dingodb.sdk.service.connector.AutoIncrementServiceConnector;
 import io.dingodb.sdk.service.connector.MetaServiceConnector;
 import io.dingodb.sdk.service.connector.ServiceConnector;
 import lombok.Getter;
@@ -80,8 +79,6 @@ public class MetaServiceClient {
     private final Map<String, Meta.DingoCommonId> tableIdCache = new ConcurrentHashMap<>();
     private final Map<DingoCommonId, TableMetrics> tableMetricsCache = new ConcurrentHashMap<>();
 
-    private final Map<DingoCommonId, IncrementRange> incrementCache = new ConcurrentHashMap<>();
-
     private final Meta.DingoCommonId parentId;
     @Getter
     private final Meta.DingoCommonId id;
@@ -93,14 +90,12 @@ public class MetaServiceClient {
     private Integer offset = 1;
 
     private ServiceConnector<MetaServiceGrpc.MetaServiceBlockingStub> metaConnector;
-    private ServiceConnector<MetaServiceGrpc.MetaServiceBlockingStub> incrementConnector;
 
     public MetaServiceClient(String servers) {
         this.parentId = ROOT_SCHEMA_ID;
         this.id = ROOT_SCHEMA_ID;
         this.name = ROOT_NAME;
         this.metaConnector = MetaServiceConnector.getMetaServiceConnector(servers);
-        this.incrementConnector = AutoIncrementServiceConnector.getAutoIncrementServiceConnector(servers);
         // TODO reloadExecutor.execute(this::reload);
     }
 
@@ -116,21 +111,15 @@ public class MetaServiceClient {
     private MetaServiceClient(
             Meta.DingoCommonId id,
             String name,
-            ServiceConnector<MetaServiceGrpc.MetaServiceBlockingStub> metaConnector,
-            ServiceConnector<MetaServiceGrpc.MetaServiceBlockingStub> incrementConnector) {
+            ServiceConnector<MetaServiceGrpc.MetaServiceBlockingStub> metaConnector) {
         this.parentId = ROOT_SCHEMA_ID;
         this.metaConnector = metaConnector;
-        this.incrementConnector = incrementConnector;
         this.id = id;
         this.name = name;
     }
 
     public ServiceConnector<MetaServiceGrpc.MetaServiceBlockingStub> getMetaConnector() {
         return metaConnector;
-    }
-
-    public ServiceConnector<MetaServiceGrpc.MetaServiceBlockingStub> getIncrementConnector() {
-        return incrementConnector;
     }
 
     public void close() {
@@ -149,7 +138,7 @@ public class MetaServiceClient {
     private void addMetaServiceCache(Meta.Schema schema) {
         metaServiceIdCache.computeIfAbsent(schema.getName(), __ -> schema.getId());
         metaServiceCache.computeIfAbsent(schema.getId(),
-                __ -> new MetaServiceClient(schema.getId(), schema.getName(), metaConnector, incrementConnector)
+                __ -> new MetaServiceClient(schema.getId(), schema.getName(), metaConnector)
         );
     }
 
@@ -184,7 +173,7 @@ public class MetaServiceClient {
             return metaServiceCache.values().stream()
                 .collect(Collectors.toMap(MetaServiceClient::name, Function.identity()));*/
         return getSchemas(parentId).stream()
-                .map(schema -> new MetaServiceClient(schema.getId(), schema.getName(), metaConnector, incrementConnector))
+                .map(schema -> new MetaServiceClient(schema.getId(), schema.getName(), metaConnector))
                 .collect(Collectors.toMap(MetaServiceClient::name, Function.identity()));
     }
 
@@ -221,7 +210,7 @@ public class MetaServiceClient {
         if (schema.getName().isEmpty()) {
             return null;
         }
-        return new MetaServiceClient(schema.getId(), schema.getName(), metaConnector, incrementConnector);
+        return new MetaServiceClient(schema.getId(), schema.getName(), metaConnector);
     }
 
     public MetaServiceClient getSubMetaService(DingoCommonId schemaId) {
@@ -241,7 +230,7 @@ public class MetaServiceClient {
             return new ServiceConnector.Response<>(res.getError(), res);
         }).getResponse();
         Meta.Schema schema = response.getSchema();
-        return new MetaServiceClient(schema.getId(), schema.getName(), metaConnector, incrementConnector);
+        return new MetaServiceClient(schema.getId(), schema.getName(), metaConnector);
     }
 
     /* TODO
@@ -334,7 +323,6 @@ public class MetaServiceClient {
         /* TODO
         tableIdCache.remove(tableName);
         tableDefinitionCache.remove(tableId);*/
-        removeAutoIncrementCache(tableId);
 
         return response.getError().getErrcodeValue() == 0;
     }
@@ -496,75 +484,34 @@ public class MetaServiceClient {
                 .mapOrNull(EntityConversion::mapping));*/
     }
 
+    @Deprecated
     public void generateAutoIncrement(DingoCommonId tableId, Long count, Integer increment, Integer offset) {
-        if (count <= 0 || increment <= 0 || offset <= 0) {
-            throw new DingoClientException("The parameter must be a positive integer greater than 0");
-        }
-        Optional.ofNullable(incrementCache.get(tableId)).ifAbsent(() -> {
-            Meta.GenerateAutoIncrementRequest request = Meta.GenerateAutoIncrementRequest.newBuilder()
-                    .setTableId(mapping(tableId))
-                    .setCount(this.count = count)
-                    .setAutoIncrementIncrement(this.increment = increment)
-                    .setAutoIncrementOffset(this.offset = offset)
-                    .build();
-            Meta.GenerateAutoIncrementResponse response = incrementConnector.exec(stub -> {
-                Meta.GenerateAutoIncrementResponse res = stub.generateAutoIncrement(request);
-                return new ServiceConnector.Response<>(res.getError(), res);
-            }).getResponse();
-
-            IncrementRange incrementRange = new IncrementRange(tableId, count, increment, offset)
-                    .setStartId(response.getStartId())
-                    .setEndId(response.getEndId());
-            addAutoIncrementCache(tableId, incrementRange);
-        });
+        throw new UnsupportedOperationException("Using increment service.");
     }
 
+    @Deprecated
     private void addAutoIncrementCache(DingoCommonId tableId, IncrementRange incrementRange) {
-        incrementCache.computeIfAbsent(tableId, __ -> incrementRange);
+        throw new UnsupportedOperationException("Using increment service.");
     }
 
+    @Deprecated
     private void removeAutoIncrementCache(DingoCommonId tableId) {
-        incrementCache.remove(tableId);
+        throw new UnsupportedOperationException("Using increment service.");
     }
 
+    @Deprecated
     public synchronized Long getIncrementId(DingoCommonId tableId) {
-        IncrementRange range = incrementCache.get(tableId);
-        if (range != null) {
-            Long incrementId = range.getAndIncrement();
-            if (incrementId == null) {
-                removeAutoIncrementCache(tableId);
-                generateAutoIncrement(tableId, range.getCount(), range.getIncrement(), range.getOffset());
-                range = incrementCache.get(tableId);
-            } else {
-                return incrementId;
-            }
-        } else {
-            generateAutoIncrement(tableId, count, increment, offset);
-            range = incrementCache.get(tableId);
-        }
-        return range.getAndIncrement();
+        throw new UnsupportedOperationException("Using increment service.");
     }
 
+    @Deprecated
     public Long getAutoIncrement(String tableName) {
-        tableName = cleanTableName(tableName);
-        DingoCommonId tableId = getTableId(tableName);
-        if (tableId == null) {
-            throw new DingoClientException("Table " + tableName + " does not exist");
-        }
-        return getAutoIncrement(tableId);
+        throw new UnsupportedOperationException("Using increment service.");
     }
 
+    @Deprecated
     public Long getAutoIncrement(DingoCommonId tableId) {
-        Meta.GetAutoIncrementRequest request = Meta.GetAutoIncrementRequest.newBuilder()
-                .setTableId(mapping(tableId))
-                .build();
-
-        Meta.GetAutoIncrementResponse response = incrementConnector.exec(stub -> {
-            Meta.GetAutoIncrementResponse res = stub.getAutoIncrement(request);
-            return new ServiceConnector.Response<>(res.getError(), res);
-        }).getResponse();
-
-        return response.getStartId();
+        throw new UnsupportedOperationException("Using increment service.");
     }
 
     private String cleanTableName(String name) {
