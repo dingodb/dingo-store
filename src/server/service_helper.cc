@@ -92,11 +92,12 @@ butil::Status ServiceHelper::ValidateRangeInRange(const pb::common::Range& regio
   std::string_view req_truncate_end_key(req_range.end_key().data(), min_length);
   std::string_view region_truncate_end_key(region_range.end_key().data(), min_length);
 
+  std::string next_prefix_key;
   if (req_range.end_key().size() > region_range.end_key().size()) {
-    auto next_prefix_key = Helper::PrefixNext(req_truncate_end_key);
+    next_prefix_key = Helper::PrefixNext(req_truncate_end_key);
     req_truncate_end_key = std::string_view(next_prefix_key.data(), next_prefix_key.size());
   } else if (req_range.end_key().size() < region_range.end_key().size()) {
-    auto next_prefix_key = Helper::PrefixNext(region_truncate_end_key);
+    next_prefix_key = Helper::PrefixNext(region_truncate_end_key);
     region_truncate_end_key = std::string_view(next_prefix_key.data(), next_prefix_key.size());
   }
 
