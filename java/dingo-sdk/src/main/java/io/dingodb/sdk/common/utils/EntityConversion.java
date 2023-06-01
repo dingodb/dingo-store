@@ -32,6 +32,7 @@ import io.dingodb.sdk.common.cluster.ExecutorUser;
 import io.dingodb.sdk.common.cluster.InternalExecutor;
 import io.dingodb.sdk.common.cluster.InternalExecutorMap;
 import io.dingodb.sdk.common.cluster.InternalExecutorUser;
+import io.dingodb.sdk.common.codec.CodecUtils;
 import io.dingodb.sdk.common.codec.DingoKeyValueCodec;
 import io.dingodb.sdk.common.codec.KeyValueCodec;
 import io.dingodb.sdk.common.partition.Partition;
@@ -283,6 +284,7 @@ public class EntityConversion {
     public static Store.Coprocessor.SchemaWrapper mapping(Coprocessor.SchemaWrapper schemaWrapper) {
         return Store.Coprocessor.SchemaWrapper.newBuilder()
                 .addAllSchema(schemaWrapper.getSchemas().stream()
+                        .map(CodecUtils::createSchemaForColumn)
                         .map(EntityConversion::mapping)
                         .collect(Collectors.toList()))
                 .setCommonId(schemaWrapper.getCommonId())
@@ -291,8 +293,8 @@ public class EntityConversion {
 
     public static Store.AggregationOperator mapping(AggregationOperator aggregationOperator) {
         return Store.AggregationOperator.newBuilder()
-                .setOper(Store.AggregationType.forNumber(aggregationOperator.operation.getCode()))
-                .setIndexOfColumn(aggregationOperator.indexOfColumn)
+                .setOper(Store.AggregationType.forNumber(aggregationOperator.getOperation().getCode()))
+                .setIndexOfColumn(aggregationOperator.getIndexOfColumn())
                 .build();
     }
 
