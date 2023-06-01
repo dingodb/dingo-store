@@ -23,7 +23,7 @@ namespace dingodb {
 
 class Buf {
  private:
-  std::string* buf_;
+  std::string buf_;
   int forward_pos_ = 0;
   int reverse_pos_ = 0;
   int count_ = 0;
@@ -36,6 +36,7 @@ class Buf {
   Buf(std::string* buf);
   Buf(const std::string& buf, bool le);
   Buf(const std::string& buf);
+  ~Buf();
   void Init(int size);
   void Init(std::string* buf);
   void Init(const std::string& buf);
