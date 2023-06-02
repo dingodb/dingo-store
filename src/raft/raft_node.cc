@@ -88,7 +88,7 @@ void RaftNode::Destroy() {
   DINGO_LOG(DEBUG) << fmt::format("Delete region {} finish raft node shutdown", node_id_);
 
   // Delete file directory
-  std::filesystem::remove_all(path_);
+  Helper::RemoveAllDirectory(path_);
   DINGO_LOG(DEBUG) << fmt::format("Delete region {} delete file directory", node_id_);
 }
 

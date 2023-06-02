@@ -132,7 +132,7 @@ bool RaftSnapshot::SaveSnapshot(braft::SnapshotWriter* writer, store::RegionPtr 
   auto status = func(region_checkpoint_path, region, sst_files);
   if (!status.ok() && status.error_code() != pb::error::ENO_ENTRIES) {
     // Clean temp checkpoint file
-    std::filesystem::remove_all(region_checkpoint_path);
+    Helper::RemoveAllDirectory(region_checkpoint_path);
     return false;
   }
 
@@ -149,7 +149,7 @@ bool RaftSnapshot::SaveSnapshot(braft::SnapshotWriter* writer, store::RegionPtr 
   }
 
   // Clean temp checkpoint file
-  std::filesystem::remove_all(region_checkpoint_path);
+  Helper::RemoveAllDirectory(region_checkpoint_path);
 
   return true;
 }
@@ -179,7 +179,7 @@ bool RaftSnapshot::LoadSnapshot(braft::SnapshotReader* reader, store::RegionPtr 
       std::string merge_sst_path = fmt::format("{}/merge.sst", reader->get_path());
       // Already exist merge.sst file, remove it.
       if (std::filesystem::exists(merge_sst_path)) {
-        std::filesystem::remove(merge_sst_path);
+        Helper::RemoveDirectory(merge_sst_path);
       }
 
       // Merge multiple file to one sst.
