@@ -20,7 +20,6 @@ import io.dingodb.meta.Meta;
 import io.dingodb.meta.MetaServiceGrpc;
 import io.dingodb.sdk.common.DingoClientException;
 import io.dingodb.sdk.common.DingoCommonId;
-import io.dingodb.sdk.common.IncrementRange;
 import io.dingodb.sdk.common.table.RangeDistribution;
 import io.dingodb.sdk.common.table.Table;
 import io.dingodb.sdk.common.table.metric.TableMetrics;
@@ -486,11 +485,6 @@ public class MetaServiceClient {
 
     @Deprecated
     public void generateAutoIncrement(DingoCommonId tableId, Long count, Integer increment, Integer offset) {
-        throw new UnsupportedOperationException("Using increment service.");
-    }
-
-    @Deprecated
-    private void addAutoIncrementCache(DingoCommonId tableId, IncrementRange incrementRange) {
         throw new UnsupportedOperationException("Using increment service.");
     }
 
