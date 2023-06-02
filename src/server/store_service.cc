@@ -903,7 +903,10 @@ void StoreServiceImpl::Debug(google::protobuf::RpcController* controller,
       raft_metas = store_raft_meta->GetAllRaftMeta();
     } else {
       for (auto region_id : request->region_ids()) {
-        raft_metas.push_back(store_raft_meta->GetRaftMeta(region_id));
+        auto raft_meta = store_raft_meta->GetRaftMeta(region_id);
+        if (raft_meta != nullptr) {
+          raft_metas.push_back(raft_meta);
+        }
       }
     }
 
@@ -926,7 +929,10 @@ void StoreServiceImpl::Debug(google::protobuf::RpcController* controller,
       region_metricses = store_region_metrics->GetAllMetrics();
     } else {
       for (auto region_id : request->region_ids()) {
-        region_metricses.push_back(store_region_metrics->GetMetrics(region_id));
+        auto metrics = store_region_metrics->GetMetrics(region_id);
+        if (metrics != nullptr) {
+          region_metricses.push_back(metrics);
+        }
       }
     }
 
