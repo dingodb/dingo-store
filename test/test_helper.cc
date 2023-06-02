@@ -14,6 +14,7 @@
 
 #include <gtest/gtest.h>
 
+#include <filesystem>
 #include <iostream>
 #include <iterator>
 #include <memory>
@@ -349,9 +350,4 @@ TEST_F(HelperTest, TransformRangeWithOptions) {
 
     EXPECT_EQ(true, dingodb::ServiceHelper::ValidateRangeInRange(region_range, uniform_range).ok());
   }
-}
-
-TEST_F(HelperTest, hello) {
-  butil::EndPoint endpoint;
-  std::cout << endpoint.ip << endpoint.port;
 }
