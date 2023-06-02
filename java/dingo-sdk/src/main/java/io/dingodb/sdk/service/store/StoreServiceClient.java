@@ -21,6 +21,7 @@ import io.dingodb.common.Common;
 import io.dingodb.sdk.common.DingoClientException;
 import io.dingodb.sdk.common.DingoCommonId;
 import io.dingodb.sdk.common.KeyValue;
+import io.dingodb.sdk.common.KeyValueWithExpect;
 import io.dingodb.sdk.common.Location;
 import io.dingodb.sdk.common.Range;
 import io.dingodb.sdk.common.RangeWithOptions;
@@ -34,6 +35,7 @@ import io.dingodb.store.Store;
 import io.dingodb.store.StoreServiceGrpc;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -292,6 +294,36 @@ public class StoreServiceClient {
                     .build();
             Store.KvDeleteRangeResponse res = stub.kvDeleteRange(req);
             return new ServiceConnector.Response<>(res.getError(), res.getDeleteCount());
+        }, retryTimes, tableId, regionId);
+    }
+
+    public boolean kvCompareAndSet(DingoCommonId tableId, DingoCommonId regionId, KeyValueWithExpect keyValue) {
+        return exec(stub -> {
+            Store.KvCompareAndSetRequest req = Store.KvCompareAndSetRequest.newBuilder()
+                .setRegionId(regionId.entityId())
+                .setKv(EntityConversion.mapping(keyValue))
+                .setExpectValue(ByteString.copyFrom(keyValue.expect))
+                .build();
+            Store.KvCompareAndSetResponse res = stub.kvCompareAndSet(req);
+            return new ServiceConnector.Response<>(res.getError(), res.getKeyState());
+        }, retryTimes, tableId, regionId);
+    }
+
+    public List<Boolean> kvBatchCompareAndSet(
+        DingoCommonId tableId, DingoCommonId regionId, List<KeyValueWithExpect> keyValues, boolean isAtomic
+    ) {
+        List<Common.KeyValue> kvs = new ArrayList<>();
+        List<ByteString> expects = new ArrayList<>();
+        keyValues.stream().peek(__ -> kvs.add(mapping(__))).forEach(__ -> expects.add(ByteString.copyFrom(__.expect)));
+        return exec(stub -> {
+            Store.KvBatchCompareAndSetRequest req = Store.KvBatchCompareAndSetRequest.newBuilder()
+                .setRegionId(regionId.entityId())
+                .addAllKvs(kvs)
+                .addAllExpectValues(expects)
+                .setIsAtomic(isAtomic)
+                .build();
+            Store.KvBatchCompareAndSetResponse res = stub.kvBatchCompareAndSet(req);
+            return new ServiceConnector.Response<>(res.getError(), res.getKeyStatesList());
         }, retryTimes, tableId, regionId);
     }
 
