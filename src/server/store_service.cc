@@ -214,6 +214,9 @@ void StoreServiceImpl::KvBatchGet(google::protobuf::RpcController* controller,
   brpc::ClosureGuard done_guard(done);
 
   DINGO_LOG(DEBUG) << "KvBatchGet request: " << request->ShortDebugString();
+  if (request->keys().empty()) {
+    return;
+  }
 
   butil::Status status = ValidateKvBatchGetRequest(request);
   if (!status.ok()) {
@@ -316,6 +319,9 @@ void StoreServiceImpl::KvBatchPut(google::protobuf::RpcController* controller,
   brpc::ClosureGuard done_guard(done);
 
   DINGO_LOG(DEBUG) << "KvBatchPut request: " << request->ShortDebugString();
+  if (request->kvs().empty()) {
+    return;
+  }
 
   butil::Status status = ValidateKvBatchPutRequest(request);
   if (!status.ok()) {
@@ -414,6 +420,9 @@ void StoreServiceImpl::KvBatchPutIfAbsent(google::protobuf::RpcController* contr
   brpc::ClosureGuard done_guard(done);
 
   DINGO_LOG(DEBUG) << "KvBatchPutIfAbsent request: " << request->ShortDebugString();
+  if (request->kvs().empty()) {
+    return;
+  }
 
   butil::Status status = ValidateKvBatchPutIfAbsentRequest(request);
   if (!status.ok()) {
@@ -465,6 +474,9 @@ void StoreServiceImpl::KvBatchDelete(google::protobuf::RpcController* controller
   brpc::ClosureGuard done_guard(done);
 
   DINGO_LOG(DEBUG) << "KvBatchDelete request: " << request->ShortDebugString();
+  if (request->keys().empty()) {
+    return;
+  }
 
   butil::Status status = ValidateKvBatchDeleteRequest(request);
   if (!status.ok()) {
@@ -598,10 +610,6 @@ void StoreServiceImpl::KvCompareAndSet(google::protobuf::RpcController* controll
 }
 
 butil::Status ValidateKvBatchCompareAndSetRequest(const dingodb::pb::store::KvBatchCompareAndSetRequest* request) {
-  if (request->kvs().empty()) {
-    return butil::Status(pb::error::EKEY_EMPTY, "KVS is empty");
-  }
-
   for (const auto& kv : request->kvs()) {
     if (kv.key().empty()) {
       return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
@@ -630,7 +638,12 @@ void StoreServiceImpl::KvBatchCompareAndSet(google::protobuf::RpcController* con
                                             google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+
   DINGO_LOG(DEBUG) << "KvBatchCompareAndSet request: " << request->ShortDebugString();
+
+  if (request->kvs().empty()) {
+    return;
+  }
 
   butil::Status status = ValidateKvBatchCompareAndSetRequest(request);
   if (!status.ok()) {

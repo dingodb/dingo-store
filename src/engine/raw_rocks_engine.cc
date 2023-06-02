@@ -620,6 +620,11 @@ int GetBackgroundThreadNum(std::shared_ptr<dingodb::Config> config) {
   return num > 0 ? num : Constant::kRocksdbBackgroundThreadNumDefault;
 }
 
+int GetStatsDumpPeriodSec(std::shared_ptr<dingodb::Config> config) {
+  int num = config->GetInt("store.stats_dump_period_sec");
+  return (num <= 0) ? Constant::kStatsDumpPeriodSecDefault : num;
+}
+
 bool RawRocksEngine::RocksdbInit(std::shared_ptr<Config> config, const std::string& db_path,
                                  const std::vector<std::string>& column_family,
                                  std::vector<rocksdb::ColumnFamilyHandle*>& family_handles) {
@@ -638,6 +643,7 @@ bool RawRocksEngine::RocksdbInit(std::shared_ptr<Config> config, const std::stri
   db_options.create_missing_column_families = true;
   db_options.max_background_jobs = GetBackgroundThreadNum(config);
   db_options.max_subcompactions = db_options.max_background_jobs / 4 * 3;
+  db_options.stats_dump_period_sec = GetStatsDumpPeriodSec(config);
 
   rocksdb::DB* db;
   rocksdb::Status s = rocksdb::DB::Open(db_options, db_path, column_families, &family_handles, &db);
@@ -1081,7 +1087,7 @@ butil::Status RawRocksEngine::Writer::KvBatchCompareAndSet(const std::vector<pb:
           key_states.clear();
           key_states.resize(kvs.size(), false);
         }
-        DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Delete failed key_index:{} : {}", key_index,  s.ToString());
+        DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Delete failed key_index:{} : {}", key_index, s.ToString());
         return butil::Status(pb::error::EINTERNAL, "Internal error");
       }
     } else {

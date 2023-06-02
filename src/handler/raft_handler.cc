@@ -245,12 +245,6 @@ void DeleteRangeHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
   if (ctx && ctx->Response()) {
     auto *response = dynamic_cast<pb::store::KvDeleteRangeResponse *>(ctx->Response());
     if (response) {
-      // Note: The caller requires that if the parameter is wrong, no error will be reported and it will be
-      // returned.
-      if (!status.ok() && pb::error::EILLEGAL_PARAMTETERS == static_cast<pb::error::Errno>(status.error_code())) {
-        status.set_error(pb::error::OK, "");
-      }
-
       ctx->SetStatus(status);
       response->set_delete_count(delete_count);
     }
@@ -303,14 +297,6 @@ void DeleteBatchHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
 
   if (ctx && ctx->Response()) {
     auto *response = dynamic_cast<pb::store::KvBatchDeleteResponse *>(ctx->Response());
-
-    // Note: The caller requires that if the parameter is wrong, no error will be reported and it will be
-    // returned.
-    if (!status.ok() && pb::error::EKEY_EMPTY == static_cast<pb::error::Errno>(status.error_code())) {
-      key_states.resize(request.keys().size(), false);
-      status.set_error(pb::error::OK, "");
-    }
-
     ctx->SetStatus(status);
     for (const auto &state : key_states) {
       response->add_key_states(state);

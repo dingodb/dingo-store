@@ -15,6 +15,7 @@
 #include "store/region_controller.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -617,14 +618,17 @@ bool ControlExecutor::Init() {
     return false;
   }
 
+  is_available_.store(true, std::memory_order_relaxed);
+
   return true;
 }
 
 bool ControlExecutor::Execute(TaskRunnable* task) {
-  if (queue_id_.value == UINT64_MAX) {
-    DINGO_LOG(ERROR) << "Control execute queue is not init.";
+  if (!is_available_.load(std::memory_order_relaxed)) {
+    DINGO_LOG(ERROR) << "Control execute queue is not available.";
     return false;
   }
+
   if (bthread::execution_queue_execute(queue_id_, task) != 0) {
     DINGO_LOG(ERROR) << "region execution queue execute failed";
     return false;
@@ -633,6 +637,8 @@ bool ControlExecutor::Execute(TaskRunnable* task) {
 }
 
 void ControlExecutor::Stop() {
+  is_available_.store(false, std::memory_order_relaxed);
+
   if (bthread::execution_queue_stop(queue_id_) != 0) {
     DINGO_LOG(ERROR) << "region execution queue stop failed";
     return;
@@ -641,8 +647,6 @@ void ControlExecutor::Stop() {
   if (bthread::execution_queue_join(queue_id_) != 0) {
     DINGO_LOG(ERROR) << "region execution queue join failed";
   }
-
-  queue_id_ = {UINT64_MAX};
 }
 
 bool RegionCommandManager::Init() {
