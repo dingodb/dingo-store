@@ -23,6 +23,7 @@ store:
   path: ./rocks_example
   background_thread_num: 16 # background_thread_num priority background_thread_ratio
   # background_thread_ratio: 0.5 # cpu core * ratio
+  stats_dump_period_sec: 120 # s
   base:
     block_size: 131072 # 128KB
     block_cache: 536870912 # 512MB

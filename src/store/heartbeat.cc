@@ -17,6 +17,7 @@
 #include <sys/types.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <map>
@@ -621,10 +622,14 @@ bool Heartbeat::Init() {
     return false;
   }
 
+  is_available_.store(true, std::memory_order_relaxed);
+
   return true;
 }
 
 void Heartbeat::Destroy() {
+  is_available_.store(false, std::memory_order_relaxed);
+
   if (bthread::execution_queue_stop(queue_id_) != 0) {
     DINGO_LOG(ERROR) << "heartbeat execution queue stop failed";
     return;
@@ -633,12 +638,11 @@ void Heartbeat::Destroy() {
   if (bthread::execution_queue_join(queue_id_) != 0) {
     DINGO_LOG(ERROR) << "heartbeat execution queue join failed";
   }
-  queue_id_ = {UINT64_MAX};
 }
 
 bool Heartbeat::Execute(TaskRunnable* task) {
-  if (queue_id_.value == UINT64_MAX) {
-    DINGO_LOG(ERROR) << "Heartbeat execute queue is not init.";
+  if (!is_available_.load(std::memory_order_relaxed)) {
+    DINGO_LOG(ERROR) << "Heartbeat execute queue is not available.";
     return false;
   }
 

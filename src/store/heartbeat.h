@@ -179,7 +179,7 @@ class CalculateTableMetricsTask : public TaskRunnable {
 
 class Heartbeat {
  public:
-  Heartbeat() : queue_id_({UINT64_MAX}) {}
+  Heartbeat() : is_available_(false), queue_id_({UINT64_MAX}) {}
   ~Heartbeat() = default;
 
   Heartbeat(const Heartbeat&) = delete;
@@ -203,6 +203,8 @@ class Heartbeat {
   bool Execute(TaskRunnable* task);
   static int ExecuteRoutine(void*, bthread::TaskIterator<TaskRunnable*>& iter);
 
+  // Execution queue is available.
+  std::atomic<bool> is_available_;
   bthread::ExecutionQueueId<TaskRunnable*> queue_id_;
 };
 

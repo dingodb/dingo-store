@@ -214,7 +214,7 @@ class DestroyRegionExecutorTask : public TaskRunnable {
 
 class ControlExecutor {
  public:
-  explicit ControlExecutor() : queue_id_({UINT64_MAX}) {}
+  explicit ControlExecutor() : is_available_(false), queue_id_({UINT64_MAX}) {}
   virtual ~ControlExecutor() = default;
 
   bool Init();
@@ -224,6 +224,8 @@ class ControlExecutor {
   void Stop();
 
  private:
+  // Execution queue is available.
+  std::atomic<bool> is_available_;
   bthread::ExecutionQueueId<TaskRunnable*> queue_id_;
 };
 

@@ -74,6 +74,7 @@ class Constant {
   inline static const std::string kMaxBytesForLevelMultiplier = "max_bytes_for_level_multiplier";
 
   static const int kRocksdbBackgroundThreadNumDefault = 16;
+  static const int kStatsDumpPeriodSecDefault = 600;
 
   // scan config
   inline static const std::string kStoreScan = "store.scan";
