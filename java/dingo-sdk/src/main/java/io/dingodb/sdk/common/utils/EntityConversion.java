@@ -283,8 +283,7 @@ public class EntityConversion {
 
     public static Store.Coprocessor.SchemaWrapper mapping(Coprocessor.SchemaWrapper schemaWrapper) {
         return Store.Coprocessor.SchemaWrapper.newBuilder()
-                .addAllSchema(schemaWrapper.getSchemas().stream()
-                        .map(CodecUtils::createSchemaForColumn)
+                .addAllSchema(CodecUtils.createSchemaForColumns(schemaWrapper.getSchemas()).stream()
                         .map(EntityConversion::mapping)
                         .collect(Collectors.toList()))
                 .setCommonId(schemaWrapper.getCommonId())

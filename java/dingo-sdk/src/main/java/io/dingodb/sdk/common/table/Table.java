@@ -68,6 +68,18 @@ public interface Table {
         return null;
     }
 
+    default int getColumnIndex(String name) {
+        int i = 0;
+        for (Column column : getColumns()) {
+            // `name` may be uppercase.
+            if (column.getName().equalsIgnoreCase(name)) {
+                return i;
+            }
+            ++i;
+        }
+        return -1;
+    }
+
     default List<Integer> getKeyColumnIndices() {
         return getColumnIndices(true);
     }

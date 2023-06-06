@@ -25,6 +25,9 @@ import io.dingodb.sdk.common.serial.schema.LongSchema;
 import io.dingodb.sdk.common.serial.schema.StringSchema;
 import io.dingodb.sdk.common.table.Column;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public final class CodecUtils {
 
     private CodecUtils() {
@@ -46,6 +49,14 @@ public final class CodecUtils {
         schema.setIsKey(column.isPrimary());
         schema.setIndex(index);
         return schema;
+    }
+
+    public static List<DingoSchema> createSchemaForColumns(List<Column> columns) {
+        List<DingoSchema> schemas = new ArrayList<>(columns.size());
+        for (int i = 0; i < columns.size(); i++) {
+            schemas.add(CodecUtils.createSchemaForColumn(columns.get(i), i));
+        }
+        return schemas;
     }
 
     public static DingoSchema createSchemaForTypeName(String typeName) {
