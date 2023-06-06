@@ -115,6 +115,8 @@ public class EntityConversion {
                 .properties(tableDefinition.getPropertiesMap())
                 .partition(mapping(tableDefinitionWithId.getTableId().getEntityId(), tableDefinition, columns))
                 .replica(tableDefinition.getReplica())
+                .autoIncrement(tableDefinition.getAutoIncrement())
+                .createSql(tableDefinition.getCreateSql())
                 .build();
     }
 
