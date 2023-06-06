@@ -186,7 +186,7 @@ enum AggregationType {
   AGGREGATION_NONE = 0;
   SUM = 1;
   COUNT = 2;
-  COUNTWITHNULL = 3;  // null is counted in count
+  COUNTWITHNULL = 3;  // null is counted in count //TODO
   MAX = 4;
   MIN = 5;
   SUM0 = 6;

@@ -32,37 +32,66 @@ Aggregation::~Aggregation() { Close(); }
 
 butil::Status Aggregation::Open(
     size_t start_aggregation_operators_index,
-    const std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>>& result_serial_schemas) {
+    const std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>>& result_serial_schemas,
+    const ::google::protobuf::RepeatedPtrField<pb::store::AggregationOperator>& aggregation_operators) {
   butil::Status status;
 
   result_record_ = std::make_shared<std::vector<std::any>>();
 
   result_record_->reserve((*result_serial_schemas).size() - start_aggregation_operators_index);
-  for (size_t i = start_aggregation_operators_index; i < result_serial_schemas->size(); i++) {
+  size_t j = 0;
+  for (size_t i = start_aggregation_operators_index;
+       i < result_serial_schemas->size() && j < aggregation_operators.size(); i++, j++) {
     auto type = (*result_serial_schemas)[i]->GetType();
+    auto oper = aggregation_operators[j].oper();
+
     switch (type) {
       case BaseSchema::Type::kBool: {
-        result_record_->emplace_back(std::optional<bool>(std::nullopt));
+        if (pb::store::COUNT == oper || pb::store::COUNTWITHNULL == oper || pb::store::SUM0 == oper) {
+          result_record_->emplace_back(std::optional<bool>(false));
+        } else {
+          result_record_->emplace_back(std::optional<bool>(std::nullopt));
+        }
         break;
       }
       case BaseSchema::Type::kInteger: {
-        result_record_->emplace_back(std::optional<int32_t>(std::nullopt));
+        if (pb::store::COUNT == oper || pb::store::COUNTWITHNULL == oper || pb::store::SUM0 == oper) {
+          result_record_->emplace_back(std::optional<int32_t>(0));
+        } else {
+          result_record_->emplace_back(std::optional<int32_t>(std::nullopt));
+        }
         break;
       }
       case BaseSchema::Type::kFloat: {
-        result_record_->emplace_back(std::optional<float>(std::nullopt));
+        if (pb::store::COUNT == oper || pb::store::COUNTWITHNULL == oper || pb::store::SUM0 == oper) {
+          result_record_->emplace_back(std::optional<float>(0.0f));
+        } else {
+          result_record_->emplace_back(std::optional<float>(std::nullopt));
+        }
         break;
       }
       case BaseSchema::Type::kLong: {
-        result_record_->emplace_back(std::optional<int64_t>(std::nullopt));
+        if (pb::store::COUNT == oper || pb::store::COUNTWITHNULL == oper || pb::store::SUM0 == oper) {
+          result_record_->emplace_back(std::optional<int64_t>(0));
+        } else {
+          result_record_->emplace_back(std::optional<int64_t>(std::nullopt));
+        }
         break;
       }
       case BaseSchema::Type::kDouble: {
-        result_record_->emplace_back(std::optional<double>(std::nullopt));
+        if (pb::store::COUNT == oper || pb::store::COUNTWITHNULL == oper || pb::store::SUM0 == oper) {
+          result_record_->emplace_back(std::optional<double>(0.0));
+        } else {
+          result_record_->emplace_back(std::optional<double>(std::nullopt));
+        }
         break;
       }
       case BaseSchema::Type::kString: {
-        result_record_->emplace_back(std::optional<std::shared_ptr<std::string>>(std::nullopt));
+        if (pb::store::COUNT == oper || pb::store::COUNTWITHNULL == oper || pb::store::SUM0 == oper) {
+          result_record_->emplace_back(std::optional<std::shared_ptr<std::string>>(std::make_shared<std::string>()));
+        } else {
+          result_record_->emplace_back(std::optional<std::shared_ptr<std::string>>(std::nullopt));
+        }
         break;
       }
       default: {
@@ -91,6 +120,10 @@ butil::Status Aggregation::Execute(
   return butil::Status();
 }
 
-void Aggregation::Close() { result_record_.reset(); }
+void Aggregation::Close() {
+  if (result_record_) {
+    result_record_.reset();
+  }
+}
 
 }  // namespace dingodb

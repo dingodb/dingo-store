@@ -240,6 +240,8 @@ butil::Status AggregationManager::Open(
     BaseSchema::Type serial_schema_type = (*group_by_operator_serial_schemas)[i]->GetType();
     BaseSchema::Type result_schema_type = (*result_serial_schemas)[i + start_aggregation_operators_index]->GetType();
     switch (oper) {
+      case pb::store::AggregationType::SUM0:
+        [[fallthrough]];
       case pb::store::AggregationType::SUM: {
         status = AddSumFunction(serial_schema_type, result_schema_type);
         if (!status.ok()) {
@@ -304,7 +306,7 @@ butil::Status AggregationManager::Open(
       case pb::store::AggregationType::AGGREGATION_NONE:
         [[fallthrough]];
       default: {
-        std::string error_message = fmt::format("unsupport pb_schema1 oper: {}", static_cast<int>(oper));
+        std::string error_message = fmt::format("unsupported pb_schema1 oper: {}", static_cast<int>(oper));
         DINGO_LOG(ERROR) << error_message;
         return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
       }
@@ -331,7 +333,7 @@ butil::Status AggregationManager::Execute(const std::string& group_by_key,
     aggregation = iter_new->second;
 
     status = aggregation->Open(result_serial_schemas_->size() - group_by_operator_serial_schemas_->size(),
-                               result_serial_schemas_);
+                               result_serial_schemas_, aggregation_operators_);
     if (!status.ok()) {
       DINGO_LOG(ERROR) << fmt::format("Aggregation::Open failed");
       return status;
@@ -350,11 +352,21 @@ butil::Status AggregationManager::Execute(const std::string& group_by_key,
 }
 
 void AggregationManager::Close() {
-  group_by_operator_serial_schemas_.reset();
+  if (group_by_operator_serial_schemas_) {
+    group_by_operator_serial_schemas_.reset();
+  }
+
   aggregation_operators_.Clear();
-  result_serial_schemas_.reset();
+
+  if (result_serial_schemas_) {
+    result_serial_schemas_.reset();
+  }
+
   aggregation_functions_.clear();
-  aggregations_.reset();
+
+  if (aggregations_) {
+    aggregations_.reset();
+  }
 }
 
 std::shared_ptr<AggregationIterator> AggregationManager::CreateIterator() {
@@ -362,6 +374,7 @@ std::shared_ptr<AggregationIterator> AggregationManager::CreateIterator() {
     using MapType = std::map<std::string, std::shared_ptr<Aggregation>>;
     aggregations_ = std::make_shared<MapType>();
   }
+  DINGO_LOG(DEBUG) << "aggregations  size : " << aggregations_->size();
   return std::make_shared<AggregationIterator>(aggregations_);
 }
 

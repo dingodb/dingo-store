@@ -671,13 +671,13 @@ TEST_F(CoprocessorTest, Open) {
     auto *aggregation_operator1 = pb_coprocessor.add_aggregation_operators();
     {
       aggregation_operator1->set_oper(::dingodb::pb::store::AggregationType::SUM);
-      aggregation_operator1->set_index_of_column(6);
+      aggregation_operator1->set_index_of_column(0);
     }
 
     auto *aggregation_operator2 = pb_coprocessor.add_aggregation_operators();
     {
       aggregation_operator2->set_oper(::dingodb::pb::store::AggregationType::COUNT);
-      aggregation_operator2->set_index_of_column(7);
+      aggregation_operator2->set_index_of_column(1);
     }
 
     auto *aggregation_operator3 = pb_coprocessor.add_aggregation_operators();
@@ -689,13 +689,13 @@ TEST_F(CoprocessorTest, Open) {
     auto *aggregation_operator4 = pb_coprocessor.add_aggregation_operators();
     {
       aggregation_operator4->set_oper(::dingodb::pb::store::AggregationType::MAX);
-      aggregation_operator4->set_index_of_column(9);
+      aggregation_operator4->set_index_of_column(3);
     }
 
     auto *aggregation_operator5 = pb_coprocessor.add_aggregation_operators();
     {
       aggregation_operator5->set_oper(::dingodb::pb::store::AggregationType::MIN);
-      aggregation_operator5->set_index_of_column(10);
+      aggregation_operator5->set_index_of_column(4);
     }
 
     auto *aggregation_operator6 = pb_coprocessor.add_aggregation_operators();

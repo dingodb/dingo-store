@@ -73,7 +73,7 @@ TEST_F(CoprocessorUtilsTest, CheckPbSchema) {
     schema1.set_index(-1);
     pb_schemas.Add(std::move(schema1));
     butil::Status ok = Utils::CheckPbSchema(pb_schemas);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
   // index invalid
@@ -95,7 +95,7 @@ TEST_F(CoprocessorUtilsTest, CheckPbSchema) {
 
     butil::Status ok = Utils::CheckPbSchema(pb_schemas);
 
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
   // OK

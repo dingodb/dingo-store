@@ -44,16 +44,22 @@ int RecordDecoder::Decode(const std::string& key, const std::string& value, std:
   Buf* value_buf = new Buf(value, this->le_);
   if (key_buf->ReadLong() != common_id_) {
     //"Wrong Common Id"
+    delete key_buf;
+    delete value_buf;
     return -1;
   }
 
   if (key_buf->ReverseReadInt() != codec_version_) {
     //"Wrong Codec Version"
+    delete key_buf;
+    delete value_buf;
     return -1;
   }
 
   if (value_buf->ReadInt() != schema_version_) {
     //"Wrong Schema Version"
+    delete key_buf;
+    delete value_buf;
     return -1;
   }
 
@@ -132,11 +138,13 @@ int RecordDecoder::DecodeKey(const std::string& key, std::vector<std::any>& reco
 
   if (key_buf->ReadLong() != common_id_) {
     //"Wrong Common Id"
+    delete key_buf;
     return -1;
   }
 
   if (key_buf->ReverseReadInt() != codec_version_) {
     //"Wrong Codec Version"
+    delete key_buf;
     return -1;
   }
 
@@ -211,16 +219,22 @@ int RecordDecoder::Decode(const std::string& key, const std::string& value, cons
   Buf* value_buf = new Buf(value, this->le_);
   if (key_buf->ReadLong() != common_id_) {
     //"Wrong Common Id"
+    delete key_buf;
+    delete value_buf;
     return -1;
   }
 
   if (key_buf->ReverseReadInt() != codec_version_) {
     //"Wrong Codec Version"
+    delete key_buf;
+    delete value_buf;
     return -1;
   }
 
   if (value_buf->ReadInt() != schema_version_) {
     //"Wrong Schema Version"
+    delete key_buf;
+    delete value_buf;
     return -1;
   }
 
