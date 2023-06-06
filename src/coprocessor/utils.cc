@@ -25,12 +25,16 @@
 
 #include "common/helper.h"
 #include "common/logging.h"
+#include "fmt/core.h"
 #include "proto/error.pb.h"
 #include "proto/store.pb.h"
 #include "serial/record_decoder.h"
 #include "serial/record_encoder.h"
 
 namespace dingodb {
+
+#undef COPROCESSOR_LOG
+#define COPROCESSOR_LOG DINGO_LOG(DEBUG)
 
 template <typename PB_SCHEMA, typename CONSTRUCT, typename TYPE>
 void SerialBaseSchemaConstructWrapper(const PB_SCHEMA& pb_schema, const CONSTRUCT& construct,
@@ -82,8 +86,37 @@ butil::Status Utils::CheckPbSchema(const google::protobuf::RepeatedPtrField<pb::
       return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
     }
 
-    if (i != schema.index()) {
-      std::string error_message = fmt::format("pb_schema invalid index : {} should be {}", schema.index(), i);
+    // if (i != schema.index()) {
+    //   std::string error_message = fmt::format("pb_schema invalid index : {} should be {}", schema.index(), i);
+    //   DINGO_LOG(ERROR) << error_message;
+    //   return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
+    // }
+    i++;
+  }
+
+  return butil::Status();
+}
+
+butil::Status Utils::CheckSerialSchema(
+    const std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>>& serial_schemas) {
+  if (serial_schemas && serial_schemas->empty()) {
+    std::string error_message = fmt::format("serial_schemas empty. not support");
+    DINGO_LOG(ERROR) << error_message;
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
+  }
+
+  size_t i = 0;
+  for (const auto& schema : *serial_schemas) {
+    const auto& type = schema->GetType();
+    if (type != BaseSchema::Type::kBool && type != BaseSchema::Type::kInteger && type != BaseSchema::Type::kFloat &&
+        type != BaseSchema::Type::kLong && type != BaseSchema::Type::kDouble && type != BaseSchema::Type::kString) {
+      std::string error_message = fmt::format("serial_schemas invalid type : {}. not support", static_cast<int>(type));
+      DINGO_LOG(ERROR) << error_message;
+      return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
+    }
+
+    if (i != schema->GetIndex()) {
+      std::string error_message = fmt::format("serial_schemas invalid index : {} should be {}", schema->GetIndex(), i);
       DINGO_LOG(ERROR) << error_message;
       return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
     }
@@ -135,7 +168,7 @@ butil::Status Utils::CheckGroupByOperators(
   for (const auto& elem : aggregation_operators) {
     if (elem.oper() != pb::store::AggregationType::SUM && elem.oper() != pb::store::AggregationType::COUNT &&
         elem.oper() != pb::store::AggregationType::COUNTWITHNULL && elem.oper() != pb::store::AggregationType::MAX &&
-        elem.oper() != pb::store::AggregationType::MIN) {
+        elem.oper() != pb::store::AggregationType::MIN && elem.oper() != pb::store::AggregationType::SUM0) {
       std::string error_message =
           fmt::format("aggregation_operators index : {}  type : {}. not support", index, static_cast<int>(elem.oper()));
       DINGO_LOG(ERROR) << error_message;
@@ -668,5 +701,313 @@ bool Utils::CoprocessorParamEmpty(const pb::store::Coprocessor& coprocessor) {
 
   return true;
 }
+
+void Utils::CloneCloneSerialSchemaVector(const std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>>& original,
+                                         std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>>* copy) {
+  (*copy)->reserve(original->size());
+  for (const auto& serial_schema : *original) {
+    (*copy)->emplace_back(Utils::CloneSerialSchema(serial_schema));
+  }
+}
+
+void Utils::SortSerialSchemaVector(std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>>* schemas) {
+  // sort by index
+  std::sort((*schemas)->begin(), (*schemas)->end(),
+            [](std::shared_ptr<BaseSchema>& bs1, std::shared_ptr<BaseSchema>& bs2) {
+              return bs1->GetIndex() < bs2->GetIndex();
+            });
+}
+
+void Utils::DebugPbSchema(const google::protobuf::RepeatedPtrField<pb::store::Schema>& pb_schemas,
+                          const std::string& name) {
+  COPROCESSOR_LOG
+      << "***************************DebugPbSchema Start*****************************************************";
+  COPROCESSOR_LOG << name;
+
+  size_t i = 0;
+  for (const auto& schema : pb_schemas) {
+    const auto& type = schema.type();
+
+    COPROCESSOR_LOG << "[" << i << "]";
+
+    // COPROCESSOR_LOG << "Schema_Type :";
+
+    switch (type) {
+      case pb::store::Schema_Type_BOOL:
+        COPROCESSOR_LOG << "Schema_Type : Schema_Type_BOOL";
+        break;
+      case pb::store::Schema_Type_INTEGER:
+        COPROCESSOR_LOG << "Schema_Type : Schema_Type_INTEGER";
+        break;
+      case pb::store::Schema_Type_FLOAT:
+        COPROCESSOR_LOG << "Schema_Type : Schema_Type_FLOAT";
+        break;
+      case pb::store::Schema_Type_LONG:
+        COPROCESSOR_LOG << "Schema_Type : Schema_Type_LONG";
+        break;
+      case pb::store::Schema_Type_DOUBLE:
+        COPROCESSOR_LOG << "Schema_Type : Schema_Type_DOUBLE";
+        break;
+      case pb::store::Schema_Type_STRING:
+        COPROCESSOR_LOG << "Schema_Type : Schema_Type_STRING";
+        break;
+    }
+
+    COPROCESSOR_LOG << "is_key : " << (schema.is_key() ? "true" : "false");
+    COPROCESSOR_LOG << "is_nullable : " << (schema.is_nullable() ? "true" : "false");
+    COPROCESSOR_LOG << "index : " << (schema.index());
+
+    COPROCESSOR_LOG << "\n";
+    i++;
+  }
+
+  COPROCESSOR_LOG << "***************************DebugPbSchema End*****************************************************"
+                  << "\n";
+}
+
+void Utils::DebugSerialSchema(const std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>>& serial_schemas,
+                              const std::string& name) {
+  COPROCESSOR_LOG
+      << "***************************DebugSerialSchema Start*****************************************************";
+  COPROCESSOR_LOG << name;
+
+  size_t i = 0;
+  if (serial_schemas) {
+    for (const auto& schema : *serial_schemas) {
+      const auto& type = schema->GetType();
+
+      COPROCESSOR_LOG << "[" << i << "]";
+
+      // COPROCESSOR_LOG << "Schema_Type :";
+
+      switch (type) {
+        case BaseSchema::kBool:
+          COPROCESSOR_LOG << "Schema_Type : BaseSchema::kBool";
+          break;
+        case BaseSchema::kInteger:
+          COPROCESSOR_LOG << "Schema_Type : BaseSchema::kInteger";
+          break;
+        case BaseSchema::kFloat:
+          COPROCESSOR_LOG << "Schema_Type : BaseSchema::kFloat";
+          break;
+        case BaseSchema::kLong:
+          COPROCESSOR_LOG << "Schema_Type : BaseSchema::kLong";
+          break;
+        case BaseSchema::kDouble:
+          COPROCESSOR_LOG << "Schema_Type : BaseSchema::kDouble";
+          break;
+        case BaseSchema::kString:
+          COPROCESSOR_LOG << "Schema_Type : BaseSchema::kString";
+          break;
+      }
+
+      COPROCESSOR_LOG << "IsKey : " << (schema->IsKey() ? "true" : "false");
+      COPROCESSOR_LOG << "AllowNull : " << (schema->AllowNull() ? "true" : "false");
+      COPROCESSOR_LOG << "Index : " << (schema->GetIndex());
+
+      COPROCESSOR_LOG << "\n";
+      i++;
+    }
+  }
+
+  COPROCESSOR_LOG
+      << "***************************DebugSerialSchema End*****************************************************";
+}
+
+void Utils::DebugGroupByOperators(
+    const ::google::protobuf::RepeatedPtrField<pb::store::AggregationOperator>& aggregation_operators,
+    const std::string& name) {
+  COPROCESSOR_LOG
+      << "***************************DebugGroupByOperators Start*****************************************************";
+  COPROCESSOR_LOG << name;
+
+  size_t i = 0;
+  for (const auto& aggregation_operator : aggregation_operators) {
+    const auto& oper = aggregation_operator.oper();
+
+    COPROCESSOR_LOG << "[" << i << "]";
+
+    // COPROCESSOR_LOG << "Oper_Type :";
+
+    switch (oper) {
+      case pb::store::AGGREGATION_NONE:
+        COPROCESSOR_LOG << "Oper_Type : AGGREGATION_NONE";
+        break;
+      case pb::store::SUM:
+        COPROCESSOR_LOG << "Oper_Type : SUM";
+        break;
+      case pb::store::COUNT:
+        COPROCESSOR_LOG << "Oper_Type : COUNT";
+        break;
+      case pb::store::COUNTWITHNULL:
+        COPROCESSOR_LOG << "Oper_Type : COUNTWITHNULL";
+        break;
+      case pb::store::MAX:
+        COPROCESSOR_LOG << "Oper_Type : MAX";
+        break;
+      case pb::store::MIN:
+        COPROCESSOR_LOG << "Oper_Type : MIN";
+        break;
+      case pb::store::SUM0:
+        COPROCESSOR_LOG << "Oper_Type : SUM0";
+        break;
+    }
+
+    COPROCESSOR_LOG << "index_of_column : " << (aggregation_operator.index_of_column());
+
+    COPROCESSOR_LOG << "\n";
+    i++;
+  }
+
+  COPROCESSOR_LOG
+      << "***************************DebugGroupByOperators End*****************************************************";
+}
+
+void Utils::DebugInt32Index(const ::google::protobuf::RepeatedField<int32_t>& repeated_field_int32,
+                            const std::string& name) {
+  COPROCESSOR_LOG
+      << "***************************DebugInt32Index Start*****************************************************";
+  COPROCESSOR_LOG << name;
+
+  size_t i = 0;
+  for (const auto& repeated_field : repeated_field_int32) {
+    COPROCESSOR_LOG << "[" << i << "]";
+
+    COPROCESSOR_LOG << "value : " << repeated_field;
+
+    COPROCESSOR_LOG << "\n";
+    i++;
+  }
+
+  COPROCESSOR_LOG
+      << "***************************DebugInt32Index End*****************************************************";
+}
+
+void Utils::DebugCoprocessor(const pb::store::Coprocessor& coprocessor) {
+  COPROCESSOR_LOG
+      << "***************************DebugCoprocessor Start*****************************************************";
+
+  COPROCESSOR_LOG << "schema_version : " << coprocessor.schema_version();
+
+  Utils::DebugPbSchema(coprocessor.original_schema().schema(), "original_schema");
+  COPROCESSOR_LOG << "original_schema : common_id : " << coprocessor.original_schema().common_id();
+
+  Utils::DebugPbSchema(coprocessor.result_schema().schema(), "result_schema");
+  COPROCESSOR_LOG << "result_schema : common_id : " << coprocessor.result_schema().common_id();
+
+  Utils::DebugInt32Index(coprocessor.selection_columns(), "selection_columns");
+
+  COPROCESSOR_LOG << fmt::format(Helper::StringToHex(coprocessor.expression()));
+
+  Utils::DebugInt32Index(coprocessor.group_by_columns(), "group_by_columns");
+
+  Utils::DebugGroupByOperators(coprocessor.aggregation_operators(), "aggregation_operators");
+
+  COPROCESSOR_LOG
+      << "***************************DebugCoprocessor End*****************************************************";
+}
+
+void Utils::PrintColumn(const std::any& column, BaseSchema::Type type, const std::string& name) {
+  switch (type) {
+    case BaseSchema::Type::kBool: {
+      try {
+        const std::optional<bool>& value = std::any_cast<std::optional<bool>>(column);
+        if (value.has_value()) {
+          COPROCESSOR_LOG << name << " std::optional<bool> :" << (value.value() ? "true" : "false");
+        } else {
+          COPROCESSOR_LOG << name << "std::optional<bool> is null";
+        }
+      } catch (const std::bad_any_cast& bad) {
+        DINGO_LOG(ERROR) << fmt::format("{} {}  any_cast std::optional<bool> failed", name, bad.what());
+        return;
+      }
+      break;
+    }
+    case BaseSchema::Type::kInteger: {
+      try {
+        const std::optional<int32_t>& value = std::any_cast<std::optional<int32_t>>(column);
+        if (value.has_value()) {
+          COPROCESSOR_LOG << name << " std::optional<int32_t> :" << value.value();
+        } else {
+          COPROCESSOR_LOG << name << " std::optional<int32_t> is null";
+        }
+      } catch (const std::bad_any_cast& bad) {
+        DINGO_LOG(ERROR) << fmt::format("{} {}  any_cast std::optional<int32_t> failed", name, bad.what());
+        return;
+      }
+      break;
+    }
+    case BaseSchema::Type::kFloat: {
+      try {
+        const std::optional<float>& value = std::any_cast<std::optional<float>>(column);
+        if (value.has_value()) {
+          COPROCESSOR_LOG << name << " std::optional<float> :" << value.value();
+        } else {
+          COPROCESSOR_LOG << name << " std::optional<float> is null";
+        }
+      } catch (const std::bad_any_cast& bad) {
+        DINGO_LOG(ERROR) << fmt::format("{} {}  any_cast std::optional<float> failed", name, bad.what());
+        return;
+      }
+      break;
+    }
+    case BaseSchema::Type::kLong: {
+      try {
+        const std::optional<int64_t>& value = std::any_cast<std::optional<int64_t>>(column);
+        if (value.has_value()) {
+          COPROCESSOR_LOG << name << " std::optional<int64_t> :" << value.value();
+        } else {
+          COPROCESSOR_LOG << name << " std::optional<int64_t> is null";
+        }
+      } catch (const std::bad_any_cast& bad) {
+        DINGO_LOG(ERROR) << fmt::format("{} {}  any_cast std::optional<int64_t> failed", name, bad.what());
+        return;
+      }
+      break;
+    }
+    case BaseSchema::Type::kDouble: {
+      try {
+        const std::optional<double>& value = std::any_cast<std::optional<double>>(column);
+        if (value.has_value()) {
+          COPROCESSOR_LOG << name << " std::optional<double> :" << value.value();
+        } else {
+          COPROCESSOR_LOG << name << " std::optional<double> is null";
+        }
+      } catch (const std::bad_any_cast& bad) {
+        DINGO_LOG(ERROR) << fmt::format("{} {}  any_cast std::optional<double> failed", name, bad.what());
+        return;
+      }
+      break;
+    }
+    case BaseSchema::Type::kString: {
+      try {
+        const std::optional<std::shared_ptr<std::string>>& value =
+            std::any_cast<std::optional<std::shared_ptr<std::string>>>(column);
+        if (value.has_value()) {
+          COPROCESSOR_LOG << name
+                          << " std::optional<std::shared_ptr<std::string>> : " << Helper::StringToHex(*(value.value()));
+        } else {
+          COPROCESSOR_LOG << name << " std::optional<std::shared_ptr<std::string>> is null";
+        }
+      } catch (const std::bad_any_cast& bad) {
+        DINGO_LOG(ERROR) << fmt::format("{} {}  any_cast std::optional<std::shared_ptr<std::string>> failed", name,
+                                        bad.what());
+        return;
+      }
+      break;
+    }
+    default: {
+      std::string error_message = fmt::format("{} CloneColumn unsupported type  {}", name, static_cast<int>(type));
+      DINGO_LOG(ERROR) << error_message;
+      return;
+    }
+  }
+}
+
+void Utils::PrintGroupByKey(const std::string& key, const std::string& name) {
+  COPROCESSOR_LOG << name << " : " << Helper::StringToHex(key);
+}
+
+#undef COPROCESSOR_LOG
 
 }  // namespace dingodb

@@ -38,6 +38,8 @@ class Utils {
   Utils& operator=(Utils&& rhs) = delete;
 
   static butil::Status CheckPbSchema(const google::protobuf::RepeatedPtrField<pb::store::Schema>& pb_schemas);
+  static butil::Status CheckSerialSchema(
+      const std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>>& serial_schemas);
   static butil::Status CheckSelection(const ::google::protobuf::RepeatedField<int32_t>& selection_columns,
                                       size_t original_schema_size);
 
@@ -82,6 +84,31 @@ class Utils {
   static std::any CloneColumn(const std::any& column, BaseSchema::Type type);
 
   static bool CoprocessorParamEmpty(const pb::store::Coprocessor& coprocessor);
+
+  static void CloneCloneSerialSchemaVector(const std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>>& original,
+                                           std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>>* copy);
+
+  static void SortSerialSchemaVector(std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>>* schemas);
+
+  static void DebugPbSchema(const google::protobuf::RepeatedPtrField<pb::store::Schema>& pb_schemas,
+                            const std::string& name);
+
+  static void DebugSerialSchema(const std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>>& serial_schemas,
+                                const std::string& name);
+
+  static void DebugGroupByOperators(
+      const ::google::protobuf::RepeatedPtrField<pb::store::AggregationOperator>& aggregation_operators,
+      const std::string& name);
+
+  static void DebugInt32Index(const ::google::protobuf::RepeatedField<int32_t>& repeated_field_int32,
+                              const std::string& name);
+
+  static void DebugCoprocessor(const pb::store::Coprocessor& coprocessor);
+
+  static void PrintColumn(const std::any& column, BaseSchema::Type type, const std::string& name);
+
+  static void PrintGroupByKey(const std::string& key, const std::string& name);
+
 };
 
 }  // namespace dingodb
