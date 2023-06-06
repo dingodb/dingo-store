@@ -60,11 +60,11 @@ public class ScanIterator implements Iterator<KeyValue>, AutoCloseable {
         this.regionId = regionId;
         this.range = range;
         this.retryTimes = retryTimes;
+        this.coprocessor = coprocessor;
         this.scanId = scanBegin();
         if (scanId == null || scanId.isEmpty()) {
             release = true;
         }
-        this.coprocessor = coprocessor;
     }
 
     private static void checkRes(io.dingodb.error.ErrorOuterClass.Error error, String param) {
