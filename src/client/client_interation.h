@@ -30,6 +30,7 @@
 #include "common/logging.h"
 #include "fmt/core.h"
 #include "glog/logging.h"
+#include "proto/common.pb.h"
 #include "proto/meta.pb.h"
 #include "proto/store.pb.h"
 
@@ -38,7 +39,7 @@ DECLARE_int32(timeout_ms);
 
 namespace client {
 
-const int kMaxRetry = 3;
+const int kMaxRetry = 5;
 
 class ServerInteraction {
  public:
@@ -48,10 +49,14 @@ class ServerInteraction {
   ServerInteraction(const ServerInteraction&) = delete;
   const ServerInteraction& operator=(const ServerInteraction&) = delete;
 
-  bool Init(const std::string& addr);
+  bool Init(const std::string& addrs);
+  bool Init(std::vector<std::string> addrs);
+
+  bool AddAddr(const std::string& addr);
 
   int GetLeader();
   void NextLeader(int leader_index);
+  void NextLeader(const dingodb::pb::common::Location& location);
 
   template <typename Request, typename Response>
   butil::Status SendRequest(const std::string& service_name, const std::string& api_name, const Request& request,
@@ -110,7 +115,8 @@ butil::Status ServerInteraction::SendRequest(const std::string& service_name, co
     if (response.error().errcode() != dingodb::pb::error::OK) {
       if (response.error().errcode() == dingodb::pb::error::ERAFT_NOTLEADER) {
         ++retry_count;
-        NextLeader(leader_index);
+        NextLeader(response.error().leader_location());
+
       } else {
         if (!FLAGS_log_each_request) {
           DINGO_LOG(ERROR) << fmt::format("{} response failed, error {} {}", api_name,
@@ -126,6 +132,8 @@ butil::Status ServerInteraction::SendRequest(const std::string& service_name, co
     }
 
   } while (retry_count < kMaxRetry);
+
+  DINGO_LOG(ERROR) << fmt::format("{} response failed, error ERAFT_NOTLEADER Not raft leader", api_name);
 
   return butil::Status(dingodb::pb::error::ERAFT_NOTLEADER, "Not raft leader");
 }

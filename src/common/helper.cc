@@ -100,6 +100,12 @@ butil::EndPoint Helper::GetEndPoint(const std::string& host, int port) {
   return butil::EndPoint(ip, port);
 }
 
+butil::EndPoint Helper::GetEndPoint(const std::string& addr) {
+  butil::EndPoint endpoint;
+  str2endpoint(addr.c_str(), &endpoint);
+  return endpoint;
+}
+
 bool Helper::IsDifferenceLocation(const pb::common::Location& location, const pb::common::Location& other_location) {
   return location.host() != other_location.host() || location.port() != other_location.port();
 }

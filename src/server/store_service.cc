@@ -136,6 +136,26 @@ void StoreServiceImpl::Snapshot(google::protobuf::RpcController* controller, con
   }
 }
 
+void StoreServiceImpl::TransferLeader(google::protobuf::RpcController* controller,
+                                      const pb::store::TransferLeaderRequest* request,
+                                      pb::store::TransferLeaderResponse* response, google::protobuf::Closure* done) {
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(done);
+
+  DINGO_LOG(DEBUG) << "TransferLeader request: " << request->ShortDebugString();
+
+  auto engine = Server::GetInstance()->GetEngine();
+  if (engine->GetID() == pb::common::ENG_RAFT_STORE) {
+    auto raft_kv_engine = std::dynamic_pointer_cast<RaftKvEngine>(engine);
+    auto status = raft_kv_engine->TransferLeader(request->region_id(), request->peer());
+    if (!status.ok()) {
+      auto* mut_err = response->mutable_error();
+      mut_err->set_errcode(static_cast<Errno>(status.error_code()));
+      mut_err->set_errmsg(status.error_str());
+    }
+  }
+}
+
 butil::Status ValidateKvGetRequest(const dingodb::pb::store::KvGetRequest* request) {
   if (request->key().empty()) {
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");

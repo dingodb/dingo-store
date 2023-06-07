@@ -185,9 +185,8 @@ std::shared_ptr<pb::raft::RaftCmdRequest> GenRaftCmdRequest(const std::shared_pt
   pb::raft::RequestHeader* header = raft_cmd->mutable_header();
   header->set_region_id(ctx->RegionId());
 
+  auto* requests = raft_cmd->mutable_requests();
   for (auto& datum : write_data.Datums()) {
-    auto* requests = raft_cmd->mutable_requests();
-
     requests->AddAllocated(datum->TransformToRaft());
   }
 

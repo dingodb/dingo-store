@@ -25,8 +25,10 @@
 #include "bthread/bthread.h"
 #include "client/client_helper.h"
 #include "common/helper.h"
+#include "common/logging.h"
 #include "fmt/core.h"
 #include "glog/logging.h"
+#include "proto/common.pb.h"
 
 const int kBatchSize = 1000;
 
@@ -133,6 +135,7 @@ void SendKvDeleteRange(ServerInteractionPtr interaction, uint64_t region_id, con
   request.mutable_range()->set_with_end(false);
 
   interaction->SendRequest("StoreService", "KvDeleteRange", request, response);
+  DINGO_LOG(INFO) << "delete count: " << response.delete_count();
 }
 
 void SendKvScan(ServerInteractionPtr interaction, uint64_t region_id, const std::string& prefix) {
@@ -154,12 +157,23 @@ void SendKvScan(ServerInteractionPtr interaction, uint64_t region_id, const std:
   dingodb::pb::store::KvScanContinueResponse continue_response;
   continue_request.set_region_id(region_id);
   continue_request.set_scan_id(response.scan_id());
-  continue_request.set_max_fetch_cnt(100);
+  int batch_size = 1000;
+  continue_request.set_max_fetch_cnt(batch_size);
 
-  interaction->SendRequest("StoreService", "KvScanContinue", continue_request, continue_response);
-  if (continue_response.error().errcode() != 0) {
-    return;
+  int count = 0;
+  for (;;) {
+    interaction->SendRequest("StoreService", "KvScanContinue", continue_request, continue_response);
+    if (continue_response.error().errcode() != 0) {
+      return;
+    }
+
+    count += continue_response.kvs().size();
+    if (continue_response.kvs().size() < batch_size) {
+      break;
+    }
   }
+
+  DINGO_LOG(INFO) << "scan count: " << count;
 
   dingodb::pb::store::KvScanReleaseRequest release_request;
   dingodb::pb::store::KvScanReleaseResponse release_response;
@@ -270,6 +284,26 @@ void SendSnapshot(ServerInteractionPtr interaction, uint64_t region_id) {
   request.set_region_id(region_id);
 
   interaction->SendRequest("StoreService", "Snapshot", request, response);
+}
+
+void SendTransferLeader(ServerInteractionPtr interaction, uint64_t region_id, const dingodb::pb::common::Peer& peer) {
+  dingodb::pb::store::TransferLeaderRequest request;
+  dingodb::pb::store::TransferLeaderResponse response;
+
+  request.set_region_id(region_id);
+  request.mutable_peer()->CopyFrom(peer);
+
+  interaction->SendRequest("StoreService", "TransferLeader", request, response);
+}
+
+void SendTransferLeaderByCoordinator(ServerInteractionPtr interaction, uint64_t region_id, uint64_t leader_store_id) {
+  dingodb::pb::coordinator::TransferLeaderRegionRequest request;
+  dingodb::pb::coordinator::TransferLeaderRegionResponse response;
+
+  request.set_region_id(region_id);
+  request.set_leader_store_id(leader_store_id);
+
+  interaction->SendRequest("CoordinatorService", "TransferLeaderRegion", request, response);
 }
 
 struct BatchPutGetParam {
@@ -509,6 +543,34 @@ void TestRegionLifecycle(ServerInteractionPtr interaction, uint64_t region_id, c
   for (int i = 0; i < thread_num; ++i) {
     bthread_join(tids[i], nullptr);
   }
+}
+
+void TestDeleteRangeWhenTransferLeader(std::shared_ptr<Context> ctx, uint64_t region_id, int req_num,
+                                       const std::string& prefix) {
+  // put data
+  DINGO_LOG(INFO) << "batch put...";
+  BatchPut(ctx->store_interaction, region_id, prefix, req_num);
+
+  // transfer leader
+  dingodb::pb::common::Peer new_leader_peer;
+  auto region = SendQueryRegion(ctx->coordinator_interaction, region_id);
+  for (const auto& peer : region.definition().peers()) {
+    if (region.leader_store_id() != peer.store_id()) {
+      new_leader_peer = peer;
+    }
+  }
+
+  DINGO_LOG(INFO) << fmt::format("transfer leader {}:{}", new_leader_peer.raft_location().host(),
+                                 new_leader_peer.raft_location().port());
+  SendTransferLeader(ctx->store_interaction, region_id, new_leader_peer);
+
+  // delete range
+  DINGO_LOG(INFO) << "delete range...";
+  SendKvDeleteRange(ctx->store_interaction, region_id, prefix);
+
+  // scan data
+  DINGO_LOG(INFO) << "scan...";
+  SendKvScan(ctx->store_interaction, region_id, prefix);
 }
 
 dingodb::pb::meta::CreateTableRequest BuildCreateTableRequest(const std::string& table_name, int partition_num) {

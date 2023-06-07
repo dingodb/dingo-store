@@ -42,6 +42,9 @@ struct Context {
   int req_num;
 };
 
+// coordinator
+dingodb::pb::common::Region SendQueryRegion(ServerInteractionPtr interaction, uint64_t region_id);
+
 // key/value
 void SendKvGet(ServerInteractionPtr interaction, uint64_t region_id, const std::string& key, std::string& value);
 void SendKvBatchGet(ServerInteractionPtr interaction, uint64_t region_id, const std::string& prefix, int count);
@@ -53,7 +56,8 @@ void SendKvBatchDelete(ServerInteractionPtr interaction, uint64_t region_id, con
 void SendKvDeleteRange(ServerInteractionPtr interaction, uint64_t region_id, const std::string& prefix);
 void SendKvScan(ServerInteractionPtr interaction, uint64_t region_id, const std::string& prefix);
 void SendKvCompareAndSet(ServerInteractionPtr interaction, uint64_t region_id, const std::string& key);
-void SendKvBatchCompareAndSet(ServerInteractionPtr interaction, uint64_t region_id, const std::string& prefix, int count);
+void SendKvBatchCompareAndSet(ServerInteractionPtr interaction, uint64_t region_id, const std::string& prefix,
+                              int count);
 
 // region
 void SendAddRegion(ServerInteractionPtr interaction, uint64_t region_id, const std::string& raft_group,
@@ -73,6 +77,8 @@ void TestBatchPutGet(ServerInteractionPtr interaction, uint64_t region_id, int t
 void TestRegionLifecycle(ServerInteractionPtr interaction, uint64_t region_id, const std::string& raft_group,
                          std::vector<std::string>& raft_addrs, int region_count, int thread_num, int req_num,
                          const std::string& prefix);
+void TestDeleteRangeWhenTransferLeader(std::shared_ptr<Context> ctx, uint64_t region_id, int req_num,
+                                       const std::string& prefix);
 void AutoTest(std::shared_ptr<Context> ctx);
 
 }  // namespace client

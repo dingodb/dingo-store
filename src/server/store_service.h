@@ -38,6 +38,9 @@ class StoreServiceImpl : public pb::store::StoreService {
   void Snapshot(google::protobuf::RpcController* controller, const pb::store::SnapshotRequest* request,
                 pb::store::SnapshotResponse* response, google::protobuf::Closure* done) override;
 
+  void TransferLeader(google::protobuf::RpcController* controller, const pb::store::TransferLeaderRequest* request,
+                      pb::store::TransferLeaderResponse* response, google::protobuf::Closure* done) override;
+
   void KvGet(google::protobuf::RpcController* controller, const pb::store::KvGetRequest* request,
              pb::store::KvGetResponse* response, google::protobuf::Closure* done) override;
 
