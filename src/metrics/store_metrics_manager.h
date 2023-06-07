@@ -122,7 +122,7 @@ class StoreRegionMetrics : public TransformKvAble {
         meta_writer_(meta_writer) {
     bthread_mutex_init(&mutex_, nullptr);
   }
-  ~StoreRegionMetrics() override = default;
+  ~StoreRegionMetrics() override { bthread_mutex_destroy(&mutex_); }
 
   StoreRegionMetrics(const StoreRegionMetrics&) = delete;
   const StoreRegionMetrics& operator=(const StoreRegionMetrics&) = delete;

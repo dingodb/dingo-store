@@ -141,12 +141,14 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
   butil::SplitString(FLAGS_raft_addrs, ',', &raft_addrs);
 
   if (FLAGS_store_addrs.empty()) {
-    // Get store addr from coordinator
-    auto store_addrs = GetStoreAddrs(ctx->coordinator_interaction, FLAGS_region_id);
-    ctx->store_interaction = std::make_shared<client::ServerInteraction>();
-    if (!ctx->store_interaction->Init(store_addrs)) {
-      DINGO_LOG(ERROR) << "Fail to init store_interaction";
-      return;
+    if (method != "AutoDropTable" && method != "AutoTest") {
+      // Get store addr from coordinator
+      auto store_addrs = GetStoreAddrs(ctx->coordinator_interaction, FLAGS_region_id);
+      ctx->store_interaction = std::make_shared<client::ServerInteraction>();
+      if (!ctx->store_interaction->Init(store_addrs)) {
+        DINGO_LOG(ERROR) << "Fail to init store_interaction";
+        return;
+      }
     }
   } else {
     ctx->store_interaction = std::make_shared<client::ServerInteraction>();
@@ -217,6 +219,12 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
       ctx->req_num = FLAGS_req_num;
 
       AutoTest(ctx);
+    }
+
+    // Table operation
+    if (method == "AutoDropTable") {
+      ctx->req_num = FLAGS_req_num;
+      client::AutoDropTable(ctx);
     }
 
     if (i + 1 < round_num) {

@@ -231,13 +231,19 @@ void AsyncSaveSnapshotByScan(uint64_t region_id, std::shared_ptr<RawEngine> engi
         brpc::ClosureGuard done_guard(snapshot_arg->done);
         auto region =
             Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(snapshot_arg->region_id);
-
-        auto gen_snapshot_file_func = std::bind(&RaftSnapshot::GenSnapshotFileByScan, snapshot_arg->raft_snapshot,
-                                                std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
-        if (!snapshot_arg->raft_snapshot->SaveSnapshot(snapshot_arg->writer, region, gen_snapshot_file_func)) {
-          LOG(ERROR) << "Save snapshot failed, region: " << region->Id();
+        if (region == nullptr) {
+          LOG(ERROR) << fmt::format("Save snapshot failed, region {} is null.", snapshot_arg->region_id);
           if (snapshot_arg->done != nullptr) {
             snapshot_arg->done->status().set_error(pb::error::ERAFT_SAVE_SNAPSHOT, "save snapshot failed");
+          }
+        } else {
+          auto gen_snapshot_file_func = std::bind(&RaftSnapshot::GenSnapshotFileByScan, snapshot_arg->raft_snapshot,
+                                                  std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
+          if (!snapshot_arg->raft_snapshot->SaveSnapshot(snapshot_arg->writer, region, gen_snapshot_file_func)) {
+            LOG(ERROR) << "Save snapshot failed, region: " << region->Id();
+            if (snapshot_arg->done != nullptr) {
+              snapshot_arg->done->status().set_error(pb::error::ERAFT_SAVE_SNAPSHOT, "save snapshot failed");
+            }
           }
         }
 
@@ -255,8 +261,15 @@ void SaveSnapshotByCheckpoint(uint64_t region_id, std::shared_ptr<RawEngine> eng
                               braft::Closure* done) {
   brpc::ClosureGuard done_guard(done);
   auto region = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
-  auto raft_snapshot = std::make_shared<RaftSnapshot>(engine, false);
+  if (region == nullptr) {
+    LOG(ERROR) << fmt::format("Save snapshot failed, region {} is null.", region_id);
+    if (done != nullptr) {
+      done->status().set_error(pb::error::ERAFT_SAVE_SNAPSHOT, "save snapshot failed");
+    }
+    return;
+  }
 
+  auto raft_snapshot = std::make_shared<RaftSnapshot>(engine, false);
   auto gen_snapshot_file_func = std::bind(&RaftSnapshot::GenSnapshotFileByCheckpoint, raft_snapshot,
                                           std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
   if (!raft_snapshot->SaveSnapshot(writer, region, gen_snapshot_file_func)) {
@@ -281,6 +294,10 @@ void RaftSaveSnapshotHanler::Handle(uint64_t region_id, std::shared_ptr<RawEngin
 void RaftLoadSnapshotHanler::Handle(uint64_t region_id, std::shared_ptr<RawEngine> engine,
                                     braft::SnapshotReader* reader) {
   auto region = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
+  if (region == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("Load snapshot failed, region {} is null.", region_id);
+    return;
+  }
   auto raft_snapshot = std::make_unique<RaftSnapshot>(engine);
   if (!raft_snapshot->LoadSnapshot(reader, region)) {
     DINGO_LOG(ERROR) << "Load snapshot failed, region: " << region->Id();
