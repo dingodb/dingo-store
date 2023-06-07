@@ -81,6 +81,9 @@ void TestDeleteRangeWhenTransferLeader(std::shared_ptr<Context> ctx, uint64_t re
                                        const std::string& prefix);
 void AutoTest(std::shared_ptr<Context> ctx);
 
+// Table
+void AutoDropTable(std::shared_ptr<Context> ctx);
+
 }  // namespace client
 
 #endif  // DINGODB_CLIENT_STORE_CLIENT_FUNCTION_H_

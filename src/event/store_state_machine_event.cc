@@ -21,6 +21,7 @@
 #include "butil/endpoint.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "fmt/core.h"
 #include "handler/raft_snapshot_handler.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
@@ -83,6 +84,10 @@ void SmConfigurationCommittedEventListener::OnEvent(std::shared_ptr<Event> event
     return;
   }
   auto region = store_region_meta->GetRegion(the_event->node_id);
+  if (region == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("region {} is null", the_event->node_id);
+    return;
+  }
   const auto& old_peers = region->Peers();
 
   // Get last peer from braft configuration.

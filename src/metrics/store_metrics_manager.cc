@@ -179,6 +179,9 @@ bool StoreRegionMetrics::CollectMetrics() {
     region_metrics->SetLastLogIndex(applied_index);
 
     auto region = store_region_meta->GetRegion(region_metrics->Id());
+    if (region == nullptr) {
+      continue;
+    }
     need_collect_regions.push_back(region);
 
     uint64_t start_time = Helper::TimestampMs();

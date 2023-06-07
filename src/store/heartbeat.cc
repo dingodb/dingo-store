@@ -75,32 +75,35 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
     region_metas = store_meta_manager->GetStoreRegionMeta()->GetAllRegion();
   } else {
     mut_store_metrics->set_is_partial_region_metrics(true);
-    region_metas.push_back(store_meta_manager->GetStoreRegionMeta()->GetRegion(region_id));
+    auto region_meta = store_meta_manager->GetStoreRegionMeta()->GetRegion(region_id);
+    if (region_meta != nullptr) {
+      region_metas.push_back(region_meta);
+    }
   }
-  for (const auto& region : region_metas) {
+  for (const auto& region_meta : region_metas) {
     pb::common::RegionMetrics tmp_region_metrics;
-    auto metrics = region_metrics->GetMetrics(region->Id());
+    auto metrics = region_metrics->GetMetrics(region_meta->Id());
     if (metrics != nullptr) {
       tmp_region_metrics.CopyFrom(metrics->InnerRegionMetrics());
     }
 
-    tmp_region_metrics.set_id(region->Id());
-    tmp_region_metrics.set_leader_store_id(region->LeaderId());
-    tmp_region_metrics.set_store_region_state(region->State());
-    tmp_region_metrics.mutable_region_definition()->CopyFrom(region->InnerRegion().definition());
+    tmp_region_metrics.set_id(region_meta->Id());
+    tmp_region_metrics.set_leader_store_id(region_meta->LeaderId());
+    tmp_region_metrics.set_store_region_state(region_meta->State());
+    tmp_region_metrics.mutable_region_definition()->CopyFrom(region_meta->InnerRegion().definition());
 
-    if ((region->State() == pb::common::StoreRegionState::NORMAL ||
-         region->State() == pb::common::StoreRegionState::STANDBY ||
-         region->State() == pb::common::StoreRegionState::SPLITTING ||
-         region->State() == pb::common::StoreRegionState::MERGING) &&
+    if ((region_meta->State() == pb::common::StoreRegionState::NORMAL ||
+         region_meta->State() == pb::common::StoreRegionState::STANDBY ||
+         region_meta->State() == pb::common::StoreRegionState::SPLITTING ||
+         region_meta->State() == pb::common::StoreRegionState::MERGING) &&
         raft_kv_engine != nullptr) {
-      auto raft_node = raft_kv_engine->GetNode(region->Id());
+      auto raft_node = raft_kv_engine->GetNode(region_meta->Id());
       if (raft_node != nullptr) {
         tmp_region_metrics.mutable_braft_status()->CopyFrom(*raft_node->GetStatus());
       }
     }
 
-    mut_region_metrics_map->insert({region->Id(), tmp_region_metrics});
+    mut_region_metrics_map->insert({region_meta->Id(), tmp_region_metrics});
   }
 
   DINGO_LOG(DEBUG) << "StoreHeartbeat request: " << request.ShortDebugString();

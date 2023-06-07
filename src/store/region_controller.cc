@@ -22,6 +22,7 @@
 
 #include "butil/status.h"
 #include "common/constant.h"
+#include "common/helper.h"
 #include "common/logging.h"
 #include "event/store_state_machine_event.h"
 #include "fmt/core.h"
@@ -189,6 +190,7 @@ butil::Status DeleteRegionTask::DeleteRegion(std::shared_ptr<Context> ctx, uint6
   auto command = std::make_shared<pb::coordinator::RegionCmd>();
   command->set_id(Helper::TimestampNs());
   command->set_region_id(region_id);
+  command->set_create_timestamp(Helper::TimestampMs());
   command->set_region_cmd_type(pb::coordinator::CMD_DESTROY_EXECUTOR);
   command->mutable_destroy_executor_request()->set_region_id(region_id);
 

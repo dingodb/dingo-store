@@ -26,7 +26,7 @@ namespace dingodb {
 // Validate region state
 butil::Status ServiceHelper::ValidateRegionState(store::RegionPtr region) {
   // Check is exist region.
-  if (!region) {
+  if (region == nullptr) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
   }
   if (region->State() == pb::common::StoreRegionState::NEW) {

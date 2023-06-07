@@ -16,6 +16,7 @@
 
 #include <sys/stat.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -304,6 +305,25 @@ void SendTransferLeaderByCoordinator(ServerInteractionPtr interaction, uint64_t 
   request.set_leader_store_id(leader_store_id);
 
   interaction->SendRequest("CoordinatorService", "TransferLeaderRegion", request, response);
+}
+
+std::vector<uint64_t> SendGetTables(ServerInteractionPtr interaction) {
+  dingodb::pb::meta::GetTablesRequest request;
+  dingodb::pb::meta::GetTablesResponse response;
+
+  auto* schema_id = request.mutable_schema_id();
+  schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
+  schema_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
+  schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+
+  interaction->SendRequest("MetaService", "GetTables", request, response);
+
+  std::vector<uint64_t> table_ids;
+  for (const auto& id : response.table_definition_with_ids()) {
+    table_ids.push_back(id.table_id().entity_id());
+  }
+
+  return table_ids;
 }
 
 struct BatchPutGetParam {
@@ -903,6 +923,19 @@ void AutoTest(std::shared_ptr<Context> ctx) {
 
   for (auto& tid : tids) {
     bthread_join(tid, nullptr);
+  }
+}
+
+void AutoDropTable(std::shared_ptr<Context> ctx) {
+  // Get all table
+  auto table_ids = SendGetTables(ctx->coordinator_interaction);
+  DINGO_LOG(INFO) << "table nums: " << table_ids.size();
+
+  // Drop table
+  std::sort(table_ids.begin(), table_ids.end());
+  for (int i = 0; i < ctx->req_num && i < table_ids.size(); ++i) {
+    DINGO_LOG(INFO) << "Delete table: " << table_ids[i];
+    SendDropTable(ctx->coordinator_interaction, table_ids[i]);
   }
 }
 
