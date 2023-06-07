@@ -261,6 +261,7 @@ class RegionCommandManager : public TransformKvAble {
   void UpdateCommandStatus(uint64_t command_id, pb::coordinator::RegionCmdStatus status);
   std::shared_ptr<pb::coordinator::RegionCmd> GetCommand(uint64_t command_id);
   std::vector<std::shared_ptr<pb::coordinator::RegionCmd>> GetCommands(pb::coordinator::RegionCmdStatus status);
+  std::vector<std::shared_ptr<pb::coordinator::RegionCmd>> GetCommands(uint64_t region_id);
   std::vector<std::shared_ptr<pb::coordinator::RegionCmd>> GetAllCommand();
 
  private:

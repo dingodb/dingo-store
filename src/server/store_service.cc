@@ -917,9 +917,9 @@ void StoreServiceImpl::Debug(google::protobuf::RpcController* controller,
       commands = Server::GetInstance()->GetRegionCommandManager()->GetAllCommand();
     } else {
       for (auto region_id : request->region_ids()) {
-        auto command = Server::GetInstance()->GetRegionCommandManager()->GetCommand(region_id);
-        if (command != nullptr) {
-          commands.push_back(command);
+        auto region_commands = Server::GetInstance()->GetRegionCommandManager()->GetCommands(region_id);
+        if (!region_commands.empty()) {
+          commands.insert(commands.end(), region_commands.begin(), region_commands.end());
         }
       }
     }
