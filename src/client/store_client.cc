@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <string>
@@ -26,9 +27,9 @@ DEFINE_int32(thread_num, 1, "Number of threads sending requests");
 DEFINE_int32(req_num, 1, "Number of requests");
 DEFINE_int32(round_num, 1, "Round of requests");
 DEFINE_int32(timeout_ms, 500, "Timeout for each request");
-DEFINE_string(addrs, "127.0.0.1:10001,127.0.0.1:10002,127.0.0.1:10003", "server addrs");
+DEFINE_string(store_addrs, "", "server addrs");
 DEFINE_string(raft_addrs, "127.0.0.1:10101:0,127.0.0.1:10102:0,127.0.0.1:10103:0", "raft addrs");
-DEFINE_string(coor_addrs, "127.0.0.1:10101:0,127.0.0.1:10102:0,127.0.0.1:10103:0", "corr addrs");
+DEFINE_string(coor_url, "", "coordinator url");
 DEFINE_string(method, "KvGet", "Request method");
 DEFINE_string(key, "", "Request key");
 DEFINE_string(value, "", "Request values");
@@ -121,78 +122,105 @@ void ValidateParam() {
   }
 }
 
-void Sender(client::ServerInteractionPtr interaction, const std::string& method, int round_num) {
+// Get store addr from coordinator
+std::vector<std::string> GetStoreAddrs(client::ServerInteractionPtr interaction, uint64_t region_id) {
+  std::vector<std::string> addrs;
+  auto region = client::SendQueryRegion(interaction, region_id);
+  for (const auto& peer : region.definition().peers()) {
+    const auto& location = peer.server_location();
+    addrs.push_back(fmt::format("{}:{}", location.host(), location.port()));
+  }
+
+  return addrs;
+}
+
+void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int round_num) {
   ValidateParam();
 
   std::vector<std::string> raft_addrs;
   butil::SplitString(FLAGS_raft_addrs, ',', &raft_addrs);
 
+  if (FLAGS_store_addrs.empty()) {
+    // Get store addr from coordinator
+    auto store_addrs = GetStoreAddrs(ctx->coordinator_interaction, FLAGS_region_id);
+    ctx->store_interaction = std::make_shared<client::ServerInteraction>();
+    if (!ctx->store_interaction->Init(store_addrs)) {
+      DINGO_LOG(ERROR) << "Fail to init store_interaction";
+      return;
+    }
+  } else {
+    ctx->store_interaction = std::make_shared<client::ServerInteraction>();
+    if (!ctx->store_interaction->Init(FLAGS_store_addrs)) {
+      DINGO_LOG(ERROR) << "Fail to init store_interaction";
+      return;
+    }
+  }
+
   for (int i = 0; i < round_num; ++i) {
     DINGO_LOG(INFO) << fmt::format("round: {} / {}", i, round_num);
     // Region operation
     if (method == "AddRegion") {
-      client::SendAddRegion(interaction, FLAGS_region_id, FLAGS_raft_group, raft_addrs);
+      client::SendAddRegion(ctx->store_interaction, FLAGS_region_id, FLAGS_raft_group, raft_addrs);
     } else if (method == "ChangeRegion") {
-      client::SendChangeRegion(interaction, FLAGS_region_id, FLAGS_raft_group, raft_addrs);
+      client::SendChangeRegion(ctx->store_interaction, FLAGS_region_id, FLAGS_raft_group, raft_addrs);
     } else if (method == "DestroyRegion") {
-      client::SendDestroyRegion(interaction, FLAGS_region_id);
+      client::SendDestroyRegion(ctx->store_interaction, FLAGS_region_id);
     } else if (method == "Snapshot") {
-      client::SendSnapshot(interaction, FLAGS_region_id);
+      client::SendSnapshot(ctx->store_interaction, FLAGS_region_id);
     } else if (method == "BatchAddRegion") {
-      client::BatchSendAddRegion(interaction, FLAGS_region_id, FLAGS_region_count, FLAGS_thread_num, FLAGS_raft_group,
-                                 raft_addrs);
+      client::BatchSendAddRegion(ctx->store_interaction, FLAGS_region_id, FLAGS_region_count, FLAGS_thread_num,
+                                 FLAGS_raft_group, raft_addrs);
     }
 
     // Kev/Value operation
     if (method == "KvGet") {
       std::string value;
-      client::SendKvGet(interaction, FLAGS_region_id, FLAGS_key, value);
+      client::SendKvGet(ctx->store_interaction, FLAGS_region_id, FLAGS_key, value);
     } else if (method == "KvBatchGet") {
-      client::SendKvBatchGet(interaction, FLAGS_region_id, FLAGS_prefix, FLAGS_req_num);
+      client::SendKvBatchGet(ctx->store_interaction, FLAGS_region_id, FLAGS_prefix, FLAGS_req_num);
     } else if (method == "KvPut") {
-      client::SendKvPut(interaction, FLAGS_region_id, FLAGS_key);
+      client::SendKvPut(ctx->store_interaction, FLAGS_region_id, FLAGS_key);
     } else if (method == "KvBatchPut") {
-      client::SendKvBatchPut(interaction, FLAGS_region_id, FLAGS_prefix, 100);
+      client::SendKvBatchPut(ctx->store_interaction, FLAGS_region_id, FLAGS_prefix, 100);
     } else if (method == "KvPutIfAbsent") {
-      client::SendKvPutIfAbsent(interaction, FLAGS_region_id, FLAGS_key);
+      client::SendKvPutIfAbsent(ctx->store_interaction, FLAGS_region_id, FLAGS_key);
     } else if (method == "KvBatchPutIfAbsent") {
-      client::SendKvBatchPutIfAbsent(interaction, FLAGS_region_id, FLAGS_prefix, 100);
+      client::SendKvBatchPutIfAbsent(ctx->store_interaction, FLAGS_region_id, FLAGS_prefix, 100);
     } else if (method == "KvBatchDelete") {
-      client::SendKvBatchDelete(interaction, FLAGS_region_id, FLAGS_key);
+      client::SendKvBatchDelete(ctx->store_interaction, FLAGS_region_id, FLAGS_key);
     } else if (method == "KvDeleteRange") {
-      client::SendKvDeleteRange(interaction, FLAGS_region_id, FLAGS_prefix);
+      client::SendKvDeleteRange(ctx->store_interaction, FLAGS_region_id, FLAGS_prefix);
     } else if (method == "KvScan") {
-      client::SendKvScan(interaction, FLAGS_region_id, FLAGS_prefix);
+      client::SendKvScan(ctx->store_interaction, FLAGS_region_id, FLAGS_prefix);
     } else if (method == "KvCompareAndSet") {
-      client::SendKvCompareAndSet(interaction, FLAGS_region_id, FLAGS_key);
+      client::SendKvCompareAndSet(ctx->store_interaction, FLAGS_region_id, FLAGS_key);
     } else if (method == "KvBatchCompareAndSet") {
-      client::SendKvBatchCompareAndSet(interaction, FLAGS_region_id, FLAGS_prefix, 100);
+      client::SendKvBatchCompareAndSet(ctx->store_interaction, FLAGS_region_id, FLAGS_prefix, 100);
     }
 
     // Test
     if (method == "TestBatchPut") {
-      client::TestBatchPut(interaction, FLAGS_region_id, FLAGS_thread_num, FLAGS_req_num, FLAGS_prefix);
+      client::TestBatchPut(ctx->store_interaction, FLAGS_region_id, FLAGS_thread_num, FLAGS_req_num, FLAGS_prefix);
     } else if (method == "TestBatchPutGet") {
-      client::TestBatchPutGet(interaction, FLAGS_region_id, FLAGS_thread_num, FLAGS_req_num, FLAGS_prefix);
+      client::TestBatchPutGet(ctx->store_interaction, FLAGS_region_id, FLAGS_thread_num, FLAGS_req_num, FLAGS_prefix);
     } else if (method == "TestRegionLifecycle") {
-      client::TestRegionLifecycle(interaction, FLAGS_region_id, FLAGS_raft_group, raft_addrs, FLAGS_region_count,
-                                  FLAGS_thread_num, FLAGS_req_num, FLAGS_prefix);
+      client::TestRegionLifecycle(ctx->store_interaction, FLAGS_region_id, FLAGS_raft_group, raft_addrs,
+                                  FLAGS_region_count, FLAGS_thread_num, FLAGS_req_num, FLAGS_prefix);
+    } else if (method == "TestDeleteRangeWhenTransferLeader") {
+      client::TestDeleteRangeWhenTransferLeader(ctx, FLAGS_region_id, FLAGS_req_num, FLAGS_prefix);
     }
 
     // Auto test
     if (method == "AutoTest") {
-      auto ctx = std::make_shared<client::Context>();
       ctx->table_name = FLAGS_table_name;
       ctx->partition_num = FLAGS_partition_num;
       ctx->req_num = FLAGS_req_num;
-      ctx->store_interaction = interaction;
-
-      client::ServerInteractionPtr coor_interaction = std::make_shared<client::ServerInteraction>();
-      coor_interaction->Init(FLAGS_coor_addrs);
-
-      ctx->coordinator_interaction = coor_interaction;
 
       AutoTest(ctx);
+    }
+
+    if (i + 1 < round_num) {
+      bthread_usleep(1000 * 1000L);
     }
   }
 }
@@ -206,10 +234,29 @@ int main(int argc, char* argv[]) {
 
   google::ParseCommandLineFlags(&argc, &argv, true);
 
-  client::ServerInteractionPtr interaction = std::make_shared<client::ServerInteraction>();
-  interaction->Init(FLAGS_addrs);
+  if (FLAGS_coor_url.empty()) {
+    FLAGS_coor_url = "file://./coor_list";
+  }
 
-  Sender(interaction, FLAGS_method, FLAGS_round_num);
+  auto ctx = std::make_shared<client::Context>();
+  if (!FLAGS_coor_url.empty()) {
+    std::string path = FLAGS_coor_url;
+    path = path.replace(path.find("file://"), 7, "");
+    auto addrs = client::Helper::GetAddrsFromFile(path);
+    if (addrs.empty()) {
+      DINGO_LOG(ERROR) << "url not find addr, path=" << path;
+      return -1;
+    }
+
+    auto coordinator_interaction = std::make_shared<client::ServerInteraction>();
+    if (!coordinator_interaction->Init(addrs)) {
+      DINGO_LOG(ERROR) << "Fail to init coordinator_interaction, please check parameter --url=" << FLAGS_coor_url;
+      return -1;
+    }
+    ctx->coordinator_interaction = coordinator_interaction;
+  }
+
+  Sender(ctx, FLAGS_method, FLAGS_round_num);
 
   return 0;
 }

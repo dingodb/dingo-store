@@ -827,7 +827,7 @@ butil::Status RawRocksEngine::Reader::KvCount(std::shared_ptr<dingodb::Snapshot>
   read_options.auto_prefix_mode = true;
   read_options.snapshot = static_cast<const rocksdb::Snapshot*>(snapshot->Inner());
 
-  std::string_view end_key_view(end_key);
+  std::string_view end_key_view(end_key.data(), end_key.size());
   rocksdb::Iterator* it = db_->NewIterator(read_options, column_family_->GetHandle());
   for (it->Seek(start_key), count = 0; it->Valid() && it->key().ToStringView() < end_key_view; it->Next()) {
     ++count;

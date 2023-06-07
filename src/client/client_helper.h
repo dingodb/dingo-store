@@ -15,6 +15,7 @@
 #ifndef DINGODB_CLIENT_HELPER_H_
 #define DINGODB_CLIENT_HELPER_H_
 
+#include <fstream>
 #include <map>
 #include <memory>
 #include <numeric>
@@ -40,6 +41,20 @@ const char kAlphabetV2[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k
 
 class Helper {
  public:
+  static std::string Ltrim(const std::string& s, const std::string& delete_str) {
+    size_t start = s.find_first_not_of(delete_str);
+    return (start == std::string::npos) ? "" : s.substr(start);
+  }
+
+  static std::string Rtrim(const std::string& s, const std::string& delete_str) {
+    size_t end = s.find_last_not_of(delete_str);
+    return (end == std::string::npos) ? "" : s.substr(0, end + 1);
+  }
+
+  static std::string Trim(const std::string& s, const std::string& delete_str) {
+    return Rtrim(Ltrim(s, delete_str), delete_str);
+  }
+
   static int GetRandInt() {
     std::random_device rd;
     std::mt19937 gen(rd());
@@ -114,7 +129,36 @@ class Helper {
     return endpoints;
   }
 
+  static std::vector<butil::EndPoint> VectorToEndpoints(std::vector<std::string> addrs) {
+    std::vector<butil::EndPoint> endpoints;
+    for (const auto& addr : addrs) {
+      butil::EndPoint endpoint;
+      if (butil::hostname2endpoint(addr.c_str(), &endpoint) != 0 && str2endpoint(addr.c_str(), &endpoint) != 0) {
+        continue;
+      }
+
+      endpoints.push_back(endpoint);
+    }
+
+    return endpoints;
+  }
+
   static bool RandomChoice() { return GetRandInt() % 2 == 0; }
+
+  static std::vector<std::string> GetAddrsFromFile(const std::string& path) {
+    std::vector<std::string> addrs;
+
+    std::ifstream input(path);
+    for (std::string line; getline(input, line);) {
+      if (line.find('#') != std::string::npos) {
+        continue;
+      }
+
+      addrs.push_back(Trim(line, " "));
+    }
+
+    return addrs;
+  }
 };
 
 }  // namespace client
