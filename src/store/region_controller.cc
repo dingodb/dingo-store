@@ -721,6 +721,22 @@ std::vector<std::shared_ptr<pb::coordinator::RegionCmd>> RegionCommandManager::G
   return commands;
 }
 
+std::vector<std::shared_ptr<pb::coordinator::RegionCmd>> RegionCommandManager::GetCommands(uint64_t region_id) {
+  BAIDU_SCOPED_LOCK(mutex_);
+  std::vector<std::shared_ptr<pb::coordinator::RegionCmd>> commands;
+  for (auto& [_, command] : region_commands_) {
+    if (command->region_id() == region_id) {
+      commands.push_back(command);
+    }
+  }
+
+  std::sort(commands.begin(), commands.end(),
+            [](const std::shared_ptr<pb::coordinator::RegionCmd>& a,
+               const std::shared_ptr<pb::coordinator::RegionCmd>& b) { return a->id() < b->id(); });
+
+  return commands;
+}
+
 std::vector<std::shared_ptr<pb::coordinator::RegionCmd>> RegionCommandManager::GetAllCommand() {
   BAIDU_SCOPED_LOCK(mutex_);
   std::vector<std::shared_ptr<pb::coordinator::RegionCmd>> commands;

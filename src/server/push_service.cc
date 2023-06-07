@@ -21,6 +21,7 @@
 #include "common/context.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "fmt/core.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
 #include "proto/error.pb.h"
@@ -89,7 +90,8 @@ void PushServiceImpl::PushStoreOperation(google::protobuf::RpcController* contro
     status = (validate_func != nullptr) ? validate_func(command)
                                         : butil::Status(pb::error::EINTERNAL, "Unknown region command");
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << "PushStoreOperation validate error: " << status.error_str();
+      DINGO_LOG(ERROR) << fmt::format("PushStoreOperation validate error: {} command: {}", status.error_str(),
+                                      command.ShortDebugString());
       error_func(command.id(), command.region_cmd_type(), status);
       continue;
     }
@@ -98,7 +100,8 @@ void PushServiceImpl::PushStoreOperation(google::protobuf::RpcController* contro
     status =
         region_controller->DispatchRegionControlCommand(ctx, std::make_shared<pb::coordinator::RegionCmd>(command));
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << "PushStoreOperation dispatch error: " << status.error_str();
+      DINGO_LOG(ERROR) << fmt::format("PushStoreOperation dispatch error: {} command: {}", status.error_str(),
+                                      command.ShortDebugString());
     }
     // coordinator need to get all region_cmd results, so add all results to response here
     error_func(command.id(), command.region_cmd_type(), status);
