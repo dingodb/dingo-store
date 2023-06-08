@@ -34,9 +34,17 @@ public class CoordinatorServiceConnector extends ServiceConnector<CoordinatorSer
         super(locations);
     }
 
+    public CoordinatorServiceConnector(String locations) {
+        super(locations);
+    }
+
+    protected Coordinator.GetCoordinatorMapResponse getCoordinatorMap() {
+        return execWithErrProto(stub -> stub.getCoordinatorMap(getCoordinatorMapRequest));
+    }
+
     @Override
     protected ManagedChannel transformToLeaderChannel(ManagedChannel channel) {
-        Common.Location leaderLocation = CoordinatorServiceGrpc.newBlockingStub(channel)
+        Common.Location leaderLocation = newStub(channel)
             .withDeadlineAfter(1, TimeUnit.SECONDS)
             .getCoordinatorMap(getCoordinatorMapRequest)
             .getLeaderLocation();

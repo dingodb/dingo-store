@@ -83,15 +83,7 @@ public class StoreServiceClient {
             DingoCommonId.Type.ENTITY_TYPE_SCHEMA, rootMetaService.id().getEntityId(), tableId.parentId()
         );
         return connectorCache.computeIfAbsent(
-            regionId,
-            __ -> new StoreServiceConnector(
-                locationSupplier(schemaId, tableId, regionId),
-                rootMetaService.getRangeDistribution(tableId).values().stream()
-                    .filter(rd -> rd.getId().equals(regionId))
-                    .findAny()
-                    .map(RangeDistribution::getVoters)
-                    .orElseThrow(() -> new RuntimeException("Cannot find region or region not have voters. "))
-            )
+            regionId, __ -> new StoreServiceConnector(locationSupplier(schemaId, tableId, regionId))
         );
     }
 

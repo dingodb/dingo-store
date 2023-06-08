@@ -16,16 +16,21 @@
 
 package io.dingodb.sdk.service.meta;
 
+import com.google.protobuf.ByteString;
+import io.dingodb.coordinator.Coordinator;
 import io.dingodb.meta.Meta;
 import io.dingodb.meta.MetaServiceGrpc;
 import io.dingodb.sdk.common.DingoClientException;
 import io.dingodb.sdk.common.DingoCommonId;
+import io.dingodb.sdk.common.codec.DingoKeyValueCodec;
+import io.dingodb.sdk.common.partition.PartitionDetail;
 import io.dingodb.sdk.common.table.RangeDistribution;
 import io.dingodb.sdk.common.table.Table;
 import io.dingodb.sdk.common.table.metric.TableMetrics;
-import io.dingodb.sdk.common.utils.ByteArrayUtils;
+import io.dingodb.sdk.common.utils.ByteArrayUtils.ComparableByteArray;
 import io.dingodb.sdk.common.utils.EntityConversion;
 import io.dingodb.sdk.common.utils.Optional;
+import io.dingodb.sdk.common.utils.Parameters;
 import io.dingodb.sdk.service.connector.MetaServiceConnector;
 import io.dingodb.sdk.service.connector.ServiceConnector;
 import lombok.Getter;
@@ -88,7 +93,7 @@ public class MetaServiceClient {
     private Integer increment = 1;
     private Integer offset = 1;
 
-    private ServiceConnector<MetaServiceGrpc.MetaServiceBlockingStub> metaConnector;
+    private MetaServiceConnector metaConnector;
 
     public MetaServiceClient(String servers) {
         this.parentId = ROOT_SCHEMA_ID;
@@ -98,19 +103,10 @@ public class MetaServiceClient {
         // TODO reloadExecutor.execute(this::reload);
     }
 
-    @Deprecated
-    public MetaServiceClient(ServiceConnector<MetaServiceGrpc.MetaServiceBlockingStub> metaConnector) {
-        this.parentId = ROOT_SCHEMA_ID;
-        this.id = ROOT_SCHEMA_ID;
-        this.name = ROOT_NAME;
-        this.metaConnector = metaConnector;
-        // TODO reloadExecutor.execute(this::reload);
-    }
-
     private MetaServiceClient(
             Meta.DingoCommonId id,
             String name,
-            ServiceConnector<MetaServiceGrpc.MetaServiceBlockingStub> metaConnector) {
+            MetaServiceConnector metaConnector) {
         this.parentId = ROOT_SCHEMA_ID;
         this.metaConnector = metaConnector;
         this.id = id;
@@ -347,21 +343,7 @@ public class MetaServiceClient {
                 }
             }
         }*/
-        Meta.GetTableByNameRequest request = Meta.GetTableByNameRequest.newBuilder()
-                .setSchemaId(id)
-                .setTableName(tableName)
-                .build();
-
-        Meta.GetTableByNameResponse response = metaConnector.exec(stub -> {
-            Meta.GetTableByNameResponse res = stub.getTableByName(request);
-            return new ServiceConnector.Response<>(res.getError(), res);
-        }).getResponse();
-
-        Meta.TableDefinitionWithId withId = response.getTableDefinitionWithId();
-        if (withId.getTableDefinition().getName().equals(tableName)) {
-            return Optional.mapOrNull(withId.getTableId(), EntityConversion::mapping);
-        }
-        return null;
+        return Optional.mapOrNull(getTableDefinitionWithId(tableName), __ -> EntityConversion.mapping(__.getTableId()));
     }
 
     public Map<String, Table> getTableDefinitions() {
@@ -393,12 +375,11 @@ public class MetaServiceClient {
     }
 
     public Table getTableDefinition(@NonNull String tableName) {
-        cleanTableName(tableName);
-        DingoCommonId tableId = getTableId(tableName);
-        if (tableId == null) {
-            throw new DingoClientException("Table " + tableName + " does not exist");
-        }
-        return getTableDefinition(tableId);
+        return Optional.mapOrThrow(
+            getTableDefinitionWithId(cleanTableName(tableName)),
+            EntityConversion::mapping,
+            () -> new DingoClientException("Table " + tableName + " does not exist")
+        );
     }
 
     public Table getTableDefinition(@NonNull DingoCommonId tableId) {
@@ -415,14 +396,64 @@ public class MetaServiceClient {
         return table;
         }*/
         Meta.GetTableRequest request = Meta.GetTableRequest.newBuilder().setTableId(mapping(tableId)).build();
-        Meta.GetTableResponse response = metaConnector.exec(stub -> {
-            Meta.GetTableResponse res = stub.getTable(request);
-            return new ServiceConnector.Response<>(res.getError(), res);
-        }).getResponse();
-        return mapping(response.getTableDefinitionWithId());
+        return mapping(metaConnector.execWithErrProto(stub -> stub.getTable(request)).getTableDefinitionWithId());
     }
 
-    public NavigableMap<ByteArrayUtils.ComparableByteArray, RangeDistribution> getRangeDistribution(String tableName) {
+    private Meta.TableDefinitionWithId getTableDefinitionWithId(String tableName) {
+        Meta.GetTableByNameRequest request = Meta.GetTableByNameRequest.newBuilder()
+            .setSchemaId(id)
+            .setTableName(tableName)
+            .build();
+
+        return Optional.ofNullable(metaConnector.execWithErrProto(stub -> stub.getTableByName(request)))
+            .map(Meta.GetTableByNameResponse::getTableDefinitionWithId)
+            .filter(__ -> __.getTableDefinition().getName().equalsIgnoreCase(tableName))
+            .orNull();
+    }
+
+
+    public void addDistribution(String tableName, PartitionDetail partitionDetail) {
+        tableName = cleanTableName(tableName);
+        Meta.TableDefinitionWithId definitionWithId = Parameters.nonNull(
+            getTableDefinitionWithId(tableName), "Table " + tableName + " dose not exist"
+        );
+        Table table = mapping(definitionWithId);
+        DingoCommonId tableId = mapping(definitionWithId.getTableId());
+        DingoKeyValueCodec codec = DingoKeyValueCodec.of(tableId.entityId(), table.getKeyColumns());
+        try {
+            byte[] key = codec.encodeKeyPrefix(partitionDetail.getOperand(), partitionDetail.getOperand().length);
+            Coordinator.SplitRegionRequest request = Coordinator.SplitRegionRequest.newBuilder()
+                .setSplitRequest(Coordinator.SplitRequest.newBuilder()
+                    .setSplitFromRegionId(
+                        getRangeDistribution(tableName, new ComparableByteArray(key)).getId().entityId())
+                    .setSplitWatershedKey(ByteString.copyFrom(key))
+                    .build())
+                .build();
+            metaConnector.getCoordinatorServiceConnector().execWithErrProto(stub -> stub.splitRegion(request));
+        } catch (Exception e) {
+            throw new DingoClientException(-1, e);
+        }
+    }
+
+    public RangeDistribution getRangeDistribution(String tableName, ComparableByteArray key) {
+        return getRangeDistribution(cleanTableName(tableName)).floorEntry(key).getValue();
+    }
+
+    public RangeDistribution getRangeDistribution(String tableName, DingoCommonId regionId) {
+        return getRangeDistribution(cleanTableName(tableName)).values().stream().filter(r -> r.getId().equals(regionId))
+            .findAny().orElseThrow(() -> new DingoClientException("Not found region " + tableName + ":" + regionId));
+    }
+
+    public RangeDistribution getRangeDistribution(DingoCommonId id, ComparableByteArray key) {
+        return getRangeDistribution(id).floorEntry(key).getValue();
+    }
+
+    public RangeDistribution getRangeDistribution(DingoCommonId id, DingoCommonId regionId) {
+        return getRangeDistribution(id).values().stream().filter(r -> r.getId().equals(regionId))
+            .findAny().orElseThrow(() -> new DingoClientException("Not found region " + id + ":" + regionId));
+    }
+
+    public NavigableMap<ComparableByteArray, RangeDistribution> getRangeDistribution(String tableName) {
         tableName = cleanTableName(tableName);
         DingoCommonId tableId = getTableId(tableName);
         if (tableId == null) {
@@ -431,8 +462,8 @@ public class MetaServiceClient {
         return getRangeDistribution(tableId);
     }
 
-    public NavigableMap<ByteArrayUtils.ComparableByteArray, RangeDistribution> getRangeDistribution(DingoCommonId id) {
-        NavigableMap<ByteArrayUtils.ComparableByteArray, RangeDistribution> result = new TreeMap<>();
+    public NavigableMap<ComparableByteArray, RangeDistribution> getRangeDistribution(DingoCommonId id) {
+        NavigableMap<ComparableByteArray, RangeDistribution> result = new TreeMap<>();
         Meta.GetTableRangeRequest request = Meta.GetTableRangeRequest.newBuilder()
                 .setTableId(mapping(id))
                 .build();
@@ -443,7 +474,7 @@ public class MetaServiceClient {
         }).getResponse();
 
         for (Meta.RangeDistribution tablePart : response.getTableRange().getRangeDistributionList()) {
-            result.put(new ByteArrayUtils.ComparableByteArray(
+            result.put(new ComparableByteArray(
                             tablePart.getRange().getStartKey().toByteArray()),
                     mapping(tablePart));
         }
@@ -481,31 +512,6 @@ public class MetaServiceClient {
                     return response.getTableMetrics().getTableMetrics();
                 })
                 .mapOrNull(EntityConversion::mapping));*/
-    }
-
-    @Deprecated
-    public void generateAutoIncrement(DingoCommonId tableId, Long count, Integer increment, Integer offset) {
-        throw new UnsupportedOperationException("Using increment service.");
-    }
-
-    @Deprecated
-    private void removeAutoIncrementCache(DingoCommonId tableId) {
-        throw new UnsupportedOperationException("Using increment service.");
-    }
-
-    @Deprecated
-    public synchronized Long getIncrementId(DingoCommonId tableId) {
-        throw new UnsupportedOperationException("Using increment service.");
-    }
-
-    @Deprecated
-    public Long getAutoIncrement(String tableName) {
-        throw new UnsupportedOperationException("Using increment service.");
-    }
-
-    @Deprecated
-    public Long getAutoIncrement(DingoCommonId tableId) {
-        throw new UnsupportedOperationException("Using increment service.");
     }
 
     private String cleanTableName(String name) {
