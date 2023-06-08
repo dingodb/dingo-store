@@ -35,8 +35,28 @@ Snapshot* Storage::GetSnapshot() { return nullptr; }
 
 void Storage::ReleaseSnapshot() {}
 
+butil::Status Storage::ValidateLeader(uint64_t region_id) {
+  if (engine_->GetID() == pb::common::ENG_RAFT_STORE) {
+    auto raft_kv_engine = std::dynamic_pointer_cast<RaftKvEngine>(engine_);
+    auto node = raft_kv_engine->GetNode(region_id);
+    if (node == nullptr) {
+      return butil::Status(pb::error::ERAFT_NOT_FOUND, "Not found raft node");
+    }
+
+    if (!node->IsLeader()) {
+      return butil::Status(pb::error::ERAFT_NOTLEADER, node->GetLeaderId().to_string());
+    }
+  }
+
+  return butil::Status();
+}
+
 butil::Status Storage::KvGet(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys,
                              std::vector<pb::common::KeyValue>& kvs) {
+  auto status = ValidateLeader(ctx->RegionId());
+  if (!status.ok()) {
+    return status;
+  }
   auto reader = engine_->NewReader(Constant::kStoreDataCF);
   for (const auto& key : keys) {
     std::string value;
@@ -132,15 +152,18 @@ butil::Status Storage::KvCompareAndSet(std::shared_ptr<Context> ctx, const std::
   });
 }
 
-butil::Status Storage::KvScanBegin([[maybe_unused]] std::shared_ptr<Context> ctx, const std::string& cf_name,
-                                   uint64_t region_id, const pb::common::Range& range, uint64_t max_fetch_cnt,
-                                   bool key_only, bool disable_auto_release, bool disable_coprocessor,
+butil::Status Storage::KvScanBegin(std::shared_ptr<Context> ctx, const std::string& cf_name, uint64_t region_id,
+                                   const pb::common::Range& range, uint64_t max_fetch_cnt, bool key_only,
+                                   bool disable_auto_release, bool disable_coprocessor,
                                    const pb::store::Coprocessor& coprocessor, std::string* scan_id,
                                    std::vector<pb::common::KeyValue>* kvs) {
+  auto status = ValidateLeader(ctx->RegionId());
+  if (!status.ok()) {
+    return status;
+  }
+
   ScanManager* manager = ScanManager::GetInstance();
   std::shared_ptr<ScanContext> scan = manager->CreateScan(scan_id);
-
-  butil::Status status;
 
   status = scan->Open(*scan_id, engine_->GetRawEngine(), cf_name);
   if (!status.ok()) {
@@ -163,8 +186,8 @@ butil::Status Storage::KvScanBegin([[maybe_unused]] std::shared_ptr<Context> ctx
   return status;
 }
 
-butil::Status Storage::KvScanContinue([[maybe_unused]] std::shared_ptr<Context> ctx, const std::string& scan_id,
-                                      uint64_t max_fetch_cnt, std::vector<pb::common::KeyValue>* kvs) {
+butil::Status Storage::KvScanContinue(std::shared_ptr<Context>, const std::string& scan_id, uint64_t max_fetch_cnt,
+                                      std::vector<pb::common::KeyValue>* kvs) {
   ScanManager* manager = ScanManager::GetInstance();
   std::shared_ptr<ScanContext> scan = manager->FindScan(scan_id);
   butil::Status status;
@@ -184,7 +207,7 @@ butil::Status Storage::KvScanContinue([[maybe_unused]] std::shared_ptr<Context> 
   return status;
 }
 
-butil::Status Storage::KvScanRelease([[maybe_unused]] std::shared_ptr<Context> ctx, const std::string& scan_id) {
+butil::Status Storage::KvScanRelease(std::shared_ptr<Context>, const std::string& scan_id) {
   ScanManager* manager = ScanManager::GetInstance();
   std::shared_ptr<ScanContext> scan = manager->FindScan(scan_id);
   butil::Status status;

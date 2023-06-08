@@ -303,6 +303,12 @@ void* Sender(void* /*arg*/) {
 }
 
 int main(int argc, char* argv[]) {
+  FLAGS_minloglevel = google::GLOG_INFO;
+  FLAGS_logtostdout = true;
+  FLAGS_colorlogtostdout = true;
+  FLAGS_logbufsecs = 0;
+  google::InitGoogleLogging(argv[0]);
+
   google::ParseCommandLineFlags(&argc, &argv, true);
 
   if (dingodb::FLAGS_show_version) {

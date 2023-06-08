@@ -15,6 +15,7 @@
 #ifndef DINGODB_ENGINE_STORAGE_H_
 #define DINGODB_ENGINE_STORAGE_H_
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -50,18 +51,20 @@ class Storage {
   butil::Status KvCompareAndSet(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs,
                                 const std::vector<std::string>& expect_values, bool is_atomic);
 
-  butil::Status KvScanBegin([[maybe_unused]] std::shared_ptr<Context> ctx, const std::string& cf_name,
-                            uint64_t region_id, const pb::common::Range& range, uint64_t max_fetch_cnt, bool key_only,
+  butil::Status KvScanBegin(std::shared_ptr<Context> ctx, const std::string& cf_name, uint64_t region_id,
+                            const pb::common::Range& range, uint64_t max_fetch_cnt, bool key_only,
                             bool disable_auto_release, bool disable_coprocessor,
                             const pb::store::Coprocessor& coprocessor, std::string* scan_id,
                             std::vector<pb::common::KeyValue>* kvs);
 
-  static butil::Status KvScanContinue([[maybe_unused]] std::shared_ptr<Context> ctx, const std::string& scan_id,
-                                      uint64_t max_fetch_cnt, std::vector<pb::common::KeyValue>* kvs);
+  static butil::Status KvScanContinue(std::shared_ptr<Context> ctx, const std::string& scan_id, uint64_t max_fetch_cnt,
+                                      std::vector<pb::common::KeyValue>* kvs);
 
-  static butil::Status KvScanRelease([[maybe_unused]] std::shared_ptr<Context> ctx, const std::string& scan_id);
+  static butil::Status KvScanRelease(std::shared_ptr<Context> ctx, const std::string& scan_id);
 
  private:
+  butil::Status ValidateLeader(uint64_t region_id);
+
   std::shared_ptr<Engine> engine_;
 };
 
