@@ -180,6 +180,7 @@ enum AggregationType {
   COUNTWITHNULL = 3;  // null is counted in count
   MAX = 4;
   MIN = 5;
+  SUM0 = 6;
 }
 
 // aggregation operation
