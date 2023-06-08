@@ -1039,15 +1039,14 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         // update region to region_map
         // auto& update_region = region_map_[region.id()];
         // update_region.CopyFrom(region.region());
-        int ret = region_map_.Put(region.id(), region.region());
+        int ret = region_map_.PutIfExists(region.id(), region.region());
         if (ret > 0) {
           DINGO_LOG(INFO) << "ApplyMetaIncrement region UPDATE, [id=" << region.id() << "] success";
+          // meta_write_kv
+          meta_write_to_kv.push_back(region_meta_->TransformToKvValue(region.region()));
         } else {
           DINGO_LOG(WARNING) << "ApplyMetaIncrement region UPDATE, [id=" << region.id() << "] failed";
         }
-
-        // meta_write_kv
-        meta_write_to_kv.push_back(region_meta_->TransformToKvValue(region.region()));
 
       } else if (region.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
         // remove region from region_map

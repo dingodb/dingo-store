@@ -894,11 +894,12 @@ butil::Status CoordinatorControl::DropRegion(uint64_t region_id, bool need_updat
         need_update_epoch = true;
         auto* region_increment = meta_increment.add_regions();
         region_increment->set_id(region_id);
-        region_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
+        region_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
 
         auto* region_increment_region = region_increment->mutable_region();
-        region_increment_region->CopyFrom(region_to_delete);
-        region_increment_region->set_state(::dingodb::pb::common::RegionState::REGION_DELETE);
+        // region_increment_region->CopyFrom(region_to_delete);
+        // region_increment_region->set_state(::dingodb::pb::common::RegionState::REGION_DELETE);
+        region_increment_region->set_id(region_id);
 
         // use TaskList to drop & purge region
         for (const auto& peer : region_to_delete.definition().peers()) {
