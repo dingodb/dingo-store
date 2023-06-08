@@ -512,20 +512,26 @@ void SendGetRegionMap(std::shared_ptr<dingodb::CoordinatorInteraction> coordinat
   // }
 
   uint64_t normal_region_count = 0;
+  uint64_t online_region_count = 0;
   for (const auto& region : response.regionmap().regions()) {
     DINGO_LOG(INFO) << "Region id=" << region.id() << " name=" << region.definition().name()
                     << " state=" << dingodb::pb::common::RegionState_Name(region.state())
-                    << " leader_store_id=" << region.leader_store_id()
+                    << " heartbeat_state=" << dingodb::pb::common::RegionHeartbeatState_Name(region.heartbeat_state())
                     << " replica_state=" << dingodb::pb::common::ReplicaStatus_Name(region.replica_status())
-                    << " raft_status=" << dingodb::pb::common::RegionRaftStatus_Name(region.raft_status());
+                    << " raft_status=" << dingodb::pb::common::RegionRaftStatus_Name(region.raft_status())
+                    << " leader_store_id=" << region.leader_store_id();
 
     if (region.state() == dingodb::pb::common::RegionState::REGION_NORMAL) {
       normal_region_count++;
     }
+
+    if (region.heartbeat_state() == dingodb::pb::common::RegionHeartbeatState::REGION_ONLINE) {
+      online_region_count++;
+    }
   }
 
   DINGO_LOG(INFO) << "region_count=" << response.regionmap().regions_size()
-                  << ", normal_region_count=" << normal_region_count;
+                  << ", normal_region_count=" << normal_region_count << ", online_region_count=" << online_region_count;
 }
 
 void SendGetRegionCount(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {

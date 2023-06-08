@@ -413,9 +413,24 @@ bool CoordinatorControl::TrySetRegionToDown(uint64_t region_id) {
   if (ret > 0) {
     if (region_to_update.state() != pb::common::RegionState::REGION_NEW &&
         region_to_update.last_update_timestamp() + (FLAGS_region_update_timeout * 1000) < butil::gettimeofday_ms()) {
-      // update region's state to REGION_DOWN
-      region_to_update.set_state(pb::common::RegionState::REGION_DOWN);
-      region_map_.Put(region_id, region_to_update);
+      // update region's heartbeat state to REGION_DOWN
+      region_to_update.set_heartbeat_state(pb::common::RegionHeartbeatState::REGION_DOWN);
+      region_map_.PutIfExists(region_id, region_to_update);
+      return true;
+    }
+  }
+  return false;
+}
+
+bool CoordinatorControl::TrySetRegionToOnline(uint64_t region_id) {
+  pb::common::Region region_to_update;
+  int ret = region_map_.Get(region_id, region_to_update);
+  if (ret > 0) {
+    if (region_to_update.heartbeat_state() != pb::common::RegionHeartbeatState::REGION_ONLINE &&
+        region_to_update.last_update_timestamp() + (FLAGS_region_update_timeout * 1000) >= butil::gettimeofday_ms()) {
+      // update region's heartbeat state to REGION_ONLINE
+      region_to_update.set_heartbeat_state(pb::common::RegionHeartbeatState::REGION_ONLINE);
+      region_map_.PutIfExists(region_id, region_to_update);
       return true;
     }
   }
@@ -468,6 +483,7 @@ void CoordinatorControl::GetRegionMap(pb::common::RegionMap& region_map) {
       tmp_region->set_state(elemnt.second.state());
       tmp_region->set_raft_status(elemnt.second.raft_status());
       tmp_region->set_replica_status(elemnt.second.replica_status());
+      tmp_region->set_heartbeat_state(elemnt.second.heartbeat_state());
       tmp_region->set_leader_store_id(elemnt.second.leader_store_id());
       tmp_region->set_create_timestamp(elemnt.second.create_timestamp());
       tmp_region->set_last_update_timestamp(elemnt.second.last_update_timestamp());
@@ -1009,7 +1025,8 @@ butil::Status CoordinatorControl::SplitRegion(uint64_t split_from_region_id, uin
 
   // validate split_from_region and split_to_region has NORMAL status
   if (split_from_region.state() != ::dingodb::pb::common::RegionState::REGION_NORMAL ||
-      split_from_region.raft_status() != ::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_HEALTHY) {
+      split_from_region.raft_status() != ::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_HEALTHY ||
+      split_from_region.heartbeat_state() != ::dingodb::pb::common::RegionHeartbeatState::REGION_ONLINE) {
     DINGO_LOG(ERROR) << "SplitRegion split_from_region is not ready for split, "
                         "split_from_region_id = "
                      << split_from_region_id << " from_state=" << split_from_region.state();
@@ -1137,7 +1154,8 @@ butil::Status CoordinatorControl::SplitRegionWithTaskList(uint64_t split_from_re
 
   // validate split_from_region and split_to_region has NORMAL status
   if (split_from_region.state() != ::dingodb::pb::common::RegionState::REGION_NORMAL ||
-      split_from_region.raft_status() != ::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_HEALTHY) {
+      split_from_region.raft_status() != ::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_HEALTHY ||
+      split_from_region.heartbeat_state() != ::dingodb::pb::common::RegionHeartbeatState::REGION_ONLINE) {
     DINGO_LOG(ERROR) << "SplitRegion split_from_region is not ready for split, "
                         "split_from_region_id = "
                      << split_from_region_id << " from_state=" << split_from_region.state();
@@ -1212,7 +1230,8 @@ butil::Status CoordinatorControl::MergeRegionWithTaskList(uint64_t merge_from_re
 
   // validate merge_from_region and merge_to_region has NORMAL status
   if (merge_from_region.state() != ::dingodb::pb::common::RegionState::REGION_NORMAL ||
-      merge_from_region.raft_status() != ::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_HEALTHY) {
+      merge_from_region.raft_status() != ::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_HEALTHY ||
+      merge_from_region.heartbeat_state() != ::dingodb::pb::common::RegionHeartbeatState::REGION_ONLINE) {
     DINGO_LOG(ERROR) << "MergeRegion merge_from_region is not ready for merge, "
                         "merge_from_region_id = "
                      << merge_from_region_id << " from_state=" << merge_from_region.state();
@@ -1222,7 +1241,8 @@ butil::Status CoordinatorControl::MergeRegionWithTaskList(uint64_t merge_from_re
 
   // validate merge_to_region and merge_to_region has NORMAL status
   if (merge_to_region.state() != ::dingodb::pb::common::RegionState::REGION_NORMAL ||
-      merge_to_region.raft_status() != ::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_HEALTHY) {
+      merge_to_region.raft_status() != ::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_HEALTHY ||
+      merge_to_region.heartbeat_state() != ::dingodb::pb::common::RegionHeartbeatState::REGION_ONLINE) {
     DINGO_LOG(ERROR) << "MergeRegion merge_to_region is not ready for merge, "
                         "merge_to_region_id = "
                      << merge_to_region_id << " from_state=" << merge_to_region.state();
@@ -1337,7 +1357,8 @@ butil::Status CoordinatorControl::ChangePeerRegionWithTaskList(
 
   // validate region has NORMAL status
   if (region.state() != ::dingodb::pb::common::RegionState::REGION_NORMAL ||
-      region.raft_status() != ::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_HEALTHY) {
+      region.raft_status() != ::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_HEALTHY ||
+      region.heartbeat_state() != ::dingodb::pb::common::RegionHeartbeatState::REGION_ONLINE) {
     DINGO_LOG(ERROR) << "ChangePeerRegion region is not ready for change_peer, region_id = " << region_id;
     return butil::Status(pb::error::Errno::ECHANGE_PEER_STATUS_ILLEGAL,
                          "ChangePeerRegion region is not ready for change_peer");
@@ -1487,7 +1508,13 @@ butil::Status CoordinatorControl::TransferLeaderRegionWithTaskList(
 
   if (region.state() != pb::common::RegionState::REGION_NORMAL) {
     DINGO_LOG(ERROR) << "TransferLeaderRegion region.state() != REGION_NORMAL, region_id = " << region_id;
-    return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "TransferLeaderRegion region.state() != REGION_NORMAL");
+    return butil::Status(pb::error::Errno::EREGION_STATE, "TransferLeaderRegion region.state() != REGION_NORMAL");
+  }
+
+  if (region.heartbeat_state() != pb::common::RegionHeartbeatState::REGION_ONLINE) {
+    DINGO_LOG(ERROR) << "TransferLeaderRegion region.heartbeat_state() != REGION_ONLINE, region_id = " << region_id;
+    return butil::Status(pb::error::Errno::EREGION_STATE,
+                         "TransferLeaderRegion region.heartbeat_state() != REGION_ONLINE");
   }
 
   if (region.leader_store_id() == new_leader_store_id) {

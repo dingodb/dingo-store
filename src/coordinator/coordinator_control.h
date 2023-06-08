@@ -372,6 +372,10 @@ class CoordinatorControl : public MetaControl {
   // return bool
   bool TrySetRegionToDown(uint64_t region_id);
 
+  // try to set region to online
+  // return bool
+  bool TrySetRegionToOnline(uint64_t region_id);
+
   // get regionmap
   void GetRegionMap(pb::common::RegionMap &region_map);
   void GetRegionMapFull(pb::common::RegionMap &region_map);
