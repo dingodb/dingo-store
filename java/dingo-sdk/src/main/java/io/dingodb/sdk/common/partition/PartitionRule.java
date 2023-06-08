@@ -19,6 +19,7 @@ package io.dingodb.sdk.common.partition;
 import lombok.EqualsAndHashCode;
 import lombok.ToString;
 
+import java.util.Collections;
 import java.util.List;
 
 @ToString
@@ -30,6 +31,10 @@ public class PartitionRule implements Partition {
     List<String> cols;
 
     List<PartitionDetail> details;
+
+    public PartitionRule(String strategy, List<PartitionDetail> details) {
+        this(strategy, Collections.emptyList(), details);
+    }
 
     public PartitionRule(String strategy, List<String> cols, List<PartitionDetail> details) {
         this.strategy = strategy;

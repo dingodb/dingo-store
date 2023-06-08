@@ -21,7 +21,6 @@ import io.dingodb.store.StoreServiceGrpc;
 import io.grpc.ManagedChannel;
 
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 import java.util.function.Supplier;
 
@@ -29,9 +28,14 @@ public class StoreServiceConnector extends ServiceConnector<StoreServiceGrpc.Sto
 
     private final Supplier<Location> leaderSupplier;
 
-    public StoreServiceConnector(Supplier<Location> leaderSupplier, List<Location> locations) {
-        super(new HashSet<>(locations));
+    public StoreServiceConnector(Supplier<Location> leaderSupplier) {
+        super(Collections.emptySet());
         this.leaderSupplier = leaderSupplier;
+    }
+
+    @Deprecated
+    public StoreServiceConnector(Supplier<Location> leaderSupplier, List<Location> locations) {
+        this(leaderSupplier);
     }
 
     @Override
@@ -40,7 +44,6 @@ public class StoreServiceConnector extends ServiceConnector<StoreServiceGrpc.Sto
         if (leader == null || leader.getHost().isEmpty()) {
             return null;
         }
-        locations = Collections.singleton(leader);
         return newChannel(leader);
     }
 

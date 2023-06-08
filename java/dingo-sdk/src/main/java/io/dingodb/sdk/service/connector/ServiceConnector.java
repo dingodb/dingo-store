@@ -19,6 +19,7 @@ package io.dingodb.sdk.service.connector;
 import io.dingodb.error.ErrorOuterClass;
 import io.dingodb.sdk.common.DingoClientException;
 import io.dingodb.sdk.common.Location;
+import io.dingodb.sdk.common.utils.NoBreakFunctions;
 import io.dingodb.sdk.common.utils.Optional;
 import io.grpc.ManagedChannel;
 import io.grpc.StatusRuntimeException;
@@ -27,7 +28,12 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
+import java.lang.reflect.Method;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -35,6 +41,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.LockSupport;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 import static io.dingodb.sdk.common.utils.ErrorCodeUtils.ignoreCode;
 import static io.dingodb.sdk.common.utils.ErrorCodeUtils.refreshCode;
@@ -43,7 +50,7 @@ import static io.dingodb.sdk.common.utils.NoBreakFunctions.wrap;
 @Slf4j
 public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
 
-    private final AtomicBoolean refresh = new AtomicBoolean();
+    private static Map<Class, ResponseBuilder> responseBuilders = new ConcurrentHashMap<>();
 
     @Getter
     @AllArgsConstructor
@@ -52,10 +59,35 @@ public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
         private final R response;
     }
 
+    @AllArgsConstructor
+    private static class ResponseBuilder<R> {
+        private final Method errorGetter;
+
+        public Response<R> build(R response) {
+            try {
+                return new Response<>((ErrorOuterClass.Error) errorGetter.invoke(response), response);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+
+
+    private final AtomicBoolean refresh = new AtomicBoolean();
+
     protected final AtomicReference<S> stubRef = new AtomicReference<>();
     protected Set<Location> locations = new CopyOnWriteArraySet<>();
 
-    protected S stub;
+    public ServiceConnector(String locations) {
+        this(Optional.ofNullable(locations)
+            .map(__ -> __.split(","))
+            .map(Arrays::stream)
+            .map(ss -> ss
+                .map(s -> s.split(":"))
+                .map(__ -> new Location(__[0], Integer.parseInt(__[1])))
+                .collect(Collectors.toSet()))
+            .orElseGet(Collections::emptySet));
+    }
 
     public ServiceConnector(Set<Location> locations) {
         this.locations.addAll(locations);
@@ -63,6 +95,24 @@ public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
 
     public S getStub() {
         return stubRef.get();
+    }
+
+    private <R> Response<R> getResponse(Object res) {
+        return responseBuilders.computeIfAbsent(res.getClass(), NoBreakFunctions.<Class, ResponseBuilder>wrap(
+            cls -> new ResponseBuilder<>(cls.getDeclaredMethod("getError")))
+        ).build(res);
+    }
+
+    public <R> R execWithErrProto(Function<S, R> function) {
+        return exec(stub -> this.<R>getResponse(function.apply(stub))).getResponse();
+    }
+
+    public <R> R execWithErrProto(Function<S, R> function, Predicate<ErrorOuterClass.Error> retryCheck) {
+        return exec(stub -> this.<R>getResponse(function.apply(stub)), retryCheck).getResponse();
+    }
+
+    public <R> R execWithErrProto(Function<S, R> function, int retryTimes, Predicate<ErrorOuterClass.Error> retryCheck) {
+        return exec(stub -> this.<R>getResponse(function.apply(stub)), retryTimes, retryCheck).getResponse();
     }
 
     public <R> Response<R> exec(Function<S, Response<R>> function) {
@@ -84,10 +134,6 @@ public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
             try {
                 Response<R> response = function.apply(stub);
                 if (response.getError().getErrcodeValue() != 0) {
-                    log.warn(
-                        "Exec {} failed, code: [{}], message: {}.",
-                        function.getClass(), response.error.getErrcode(), response.error.getErrmsg()
-                    );
                     if (refreshCode.contains(response.getError().getErrcodeValue())) {
                         throw new DingoClientException.InvalidRouteTableException(response.error.getErrmsg());
                     }
@@ -95,6 +141,10 @@ public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
                         return response;
                     }
                     if (retryCheck.test(response.error)) {
+                       log.warn(
+                            "Exec {} failed, code: [{}], message: {}.",
+                            function.getClass(), response.error.getErrcode(), response.error.getErrmsg()
+                       );
                         refresh(stub);
                         continue;
                     }
@@ -106,7 +156,7 @@ public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
                 refresh(stub);
             }
         }
-        throw new RuntimeException("Retry attempts exhausted, failed to exec operation.");
+        throw new DingoClientException.RetryException("Retry attempts exhausted, failed to exec operation.");
     }
 
     public void refresh(S stub) {
@@ -117,6 +167,14 @@ public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
             if (!stubRef.compareAndSet(stub, null)) {
                 return;
             }
+
+            if (locations == null || locations.isEmpty()) {
+                Optional.ofNullable(this.transformToLeaderChannel(null))
+                    .map(this::newStub)
+                    .ifPresent(stubRef::set);
+                return;
+            }
+
             for (Location location : locations) {
                 if (Optional.of(location)
                     .map(this::newChannel)
@@ -137,7 +195,7 @@ public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
         try {
             return ChannelManager.getChannel(location);
         } catch (Exception e) {
-            log.warn("Connect {}:{} error", location, e);
+            log.warn("Connect {} error", location, e);
         }
         return null;
     } 

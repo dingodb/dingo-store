@@ -16,50 +16,52 @@
 
 package io.dingodb.sdk.service.connector;
 
-import io.dingodb.common.Common;
 import io.dingodb.coordinator.Coordinator;
-import io.dingodb.coordinator.CoordinatorServiceGrpc;
 import io.dingodb.meta.MetaServiceGrpc;
 import io.dingodb.sdk.common.Location;
 import io.dingodb.sdk.common.utils.Optional;
 import io.grpc.ManagedChannel;
 
-import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
+import java.util.Set;
 
 public class AutoIncrementServiceConnector extends ServiceConnector<MetaServiceGrpc.MetaServiceBlockingStub> {
 
-    private final static Coordinator.GetCoordinatorMapRequest getCoordinatorMapRequest =
-        Coordinator.GetCoordinatorMapRequest.newBuilder().setClusterId(0).build();
+    private final CoordinatorServiceConnector coordinatorServiceConnector;
 
+    @Deprecated
     public AutoIncrementServiceConnector(List<Location> locations) {
-        super(new HashSet<>(locations));
+        this(new HashSet<>(locations));
+    }
+
+    public AutoIncrementServiceConnector(String locations) {
+        super(Collections.emptySet());
+        this.coordinatorServiceConnector = new CoordinatorServiceConnector(locations);
+    }
+
+    public AutoIncrementServiceConnector(Set<Location> locations) {
+        super(Collections.emptySet());
+        this.coordinatorServiceConnector = new CoordinatorServiceConnector(locations);
     }
 
     public static AutoIncrementServiceConnector getAutoIncrementServiceConnector(String servers) {
-        return Optional.ofNullable(servers.split(","))
-                .map(Arrays::stream)
-                .map(ss -> ss
-                        .map(s -> s.split(":"))
-                        .map(__ -> new Location(__[0], Integer.parseInt(__[1])))
-                        .collect(Collectors.toList()))
-                .map(AutoIncrementServiceConnector::new)
-                .orElseThrow("Create meta service connector error.");
+        return new AutoIncrementServiceConnector(servers);
+    }
+
+    @Override
+    public void refresh(MetaServiceGrpc.MetaServiceBlockingStub stub) {
+        super.refresh(stub);
     }
 
     @Override
     protected ManagedChannel transformToLeaderChannel(ManagedChannel channel) {
-        Common.Location autoincrementLeader = CoordinatorServiceGrpc.newBlockingStub(channel)
-            .withDeadlineAfter(1, TimeUnit.SECONDS)
-            .getCoordinatorMap(getCoordinatorMapRequest)
-            .getAutoIncrementLeaderLocation();
-        if (!autoincrementLeader.getHost().isEmpty()) {
-            return newChannel(autoincrementLeader.getHost(), autoincrementLeader.getPort());
-        }
-        return null;
+        return Optional.ofNullable(coordinatorServiceConnector.getCoordinatorMap())
+            .map(Coordinator.GetCoordinatorMapResponse::getAutoIncrementLeaderLocation)
+            .filter(__ -> !__.getHost().isEmpty())
+            .map(__ -> newChannel(__.getHost(), __.getPort()))
+            .orNull();
     }
 
     @Override

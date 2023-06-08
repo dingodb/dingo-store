@@ -26,9 +26,13 @@ public interface AggregationOperator {
         AGGREGATION_NONE(0),
         SUM(1),
         COUNT(2),
+        @Deprecated
         COUNTWITHNULL(3),
+        COUNT_WITH_NULL(3),
         MAX(4),
-        MIN(5);
+        MIN(5),
+        SUM_0(6),
+        ;
 
         private final int code;
 

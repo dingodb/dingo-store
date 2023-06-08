@@ -47,6 +47,12 @@ public class DingoClientException extends RuntimeException {
         this.errorCode = errorCode;
     }
 
+    public static final class RetryException extends DingoClientException {
+        public RetryException(String message) {
+            super(message);
+        }
+    }
+
     public static final class InvalidRouteTableException extends DingoClientException {
         public InvalidRouteTableException(String message) {
             super(message);

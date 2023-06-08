@@ -33,7 +33,7 @@ public class BooleanSchema implements DingoSchema<Boolean> {
 
     @Override
     public Type getType() {
-        return Type.INTEGER;
+        return Type.BOOLEAN;
     }
 
     @Override
