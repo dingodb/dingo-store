@@ -109,8 +109,12 @@ enum RegionState {
 
   // other state add here
   REGION_ILLEGAL = 20;  // region is not create by coordinator
-  REGION_DOWN = 21;     // region is offline
-  REGION_STANDBY = 22;  // region is standby, used in split
+  REGION_STANDBY = 21;  // region is standby, used in split
+}
+
+enum RegionHeartbeatState {
+  REGION_ONLINE = 0;  // region is online
+  REGION_DOWN = 1;    // region is offline
 }
 
 // StoreRegionState
@@ -234,18 +238,19 @@ message Region {
   RegionState state = 3;
   RegionRaftStatus raft_status = 4;
   ReplicaStatus replica_status = 5;
+  RegionHeartbeatState heartbeat_state = 6;
 
-  int64 leader_store_id = 6;
+  int64 leader_store_id = 7;
 
   // region definition
-  RegionDefinition definition = 7;
+  RegionDefinition definition = 8;
 
   // region metrics
-  RegionMetrics metrics = 8;
+  RegionMetrics metrics = 9;
 
   // other
-  uint64 create_timestamp = 9;
-  uint64 last_update_timestamp = 10;
+  uint64 create_timestamp = 10;
+  uint64 last_update_timestamp = 11;
 }
 
 message RegionMap {

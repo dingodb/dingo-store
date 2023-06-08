@@ -241,7 +241,11 @@ void CoordinatorUpdateStateTask::CoordinatorUpdateState(std::shared_ptr<Coordina
   for (const auto& it : region_map_temp.regions()) {
     DINGO_LOG(INFO) << "CoordinatorUpdateState... region " << it.id() << " state " << it.state()
                     << " last_update_timestamp " << it.last_update_timestamp() << " now " << butil::gettimeofday_ms();
-    if (it.last_update_timestamp() + (FLAGS_region_heartbeat_timeout * 1000) > butil::gettimeofday_ms()) {
+    if (it.last_update_timestamp() + (FLAGS_region_heartbeat_timeout * 1000) >= butil::gettimeofday_ms()) {
+      if (it.heartbeat_state() != pb::common::RegionHeartbeatState::REGION_ONLINE) {
+        DINGO_LOG(INFO) << "CoordinatorUpdateState... update region " << it.id() << " state to online";
+        coordinator_control->TrySetRegionToOnline(it.id());
+      }
       continue;
     }
 
