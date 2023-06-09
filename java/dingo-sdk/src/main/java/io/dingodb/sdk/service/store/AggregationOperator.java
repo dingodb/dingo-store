@@ -22,21 +22,23 @@ public interface AggregationOperator {
 
     int getIndexOfColumn();
 
-    enum AggregationType {
+    interface AggregationType {
+        int getCode();
+    }
+
+    enum AggregationTypeEnum implements AggregationType {
         AGGREGATION_NONE(0),
         SUM(1),
         COUNT(2),
-        @Deprecated
-        COUNTWITHNULL(3),
-        COUNT_WITH_NULL(3),
+        COUNT_WITH_NULL(3), COUNTWITHNULL(3),
         MAX(4),
         MIN(5),
-        SUM_0(6),
+        SUM_0(6), SUM0(6)
         ;
 
         private final int code;
 
-        AggregationType(int code) {
+        AggregationTypeEnum(int code) {
             this.code = code;
         }
 

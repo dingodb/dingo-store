@@ -26,11 +26,29 @@ import io.dingodb.sdk.common.serial.schema.StringSchema;
 import io.dingodb.sdk.common.table.Column;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 public final class CodecUtils {
 
     private CodecUtils() {
+    }
+
+    public static int compareColumnByPrimary(int c1, int c2) {
+        if (c1 * c2 > 0) {
+            return Integer.compare(c1, c2);
+        }
+        return c1 < 0 ? 1 : c2 < 0 ? -1 : c1 - c2;
+    }
+
+    public static Comparator<Column> sortColumnByPrimaryComparator() {
+        return (c1, c2) -> compareColumnByPrimary(c1.getPrimary(), c2.getPrimary());
+    }
+
+    public static List<Column> sortColumns(List<Column> columns) {
+        List<Column> codecOrderColumns = new ArrayList<>(columns);
+        codecOrderColumns.sort(sortColumnByPrimaryComparator());
+        return codecOrderColumns;
     }
 
     public static DingoSchema createSchemaForColumn(Column column) {
@@ -52,9 +70,11 @@ public final class CodecUtils {
     }
 
     public static List<DingoSchema> createSchemaForColumns(List<Column> columns) {
-        List<DingoSchema> schemas = new ArrayList<>(columns.size());
-        for (int i = 0; i < columns.size(); i++) {
-            schemas.add(CodecUtils.createSchemaForColumn(columns.get(i), i));
+        List<Column> orderColumns = sortColumns(columns);
+        List<DingoSchema> schemas = new ArrayList<>(orderColumns.size());
+        for (int i = 0; i < orderColumns.size(); i++) {
+            Column column = orderColumns.get(i);
+            schemas.add(CodecUtils.createSchemaForColumn(column, columns.indexOf(column)));
         }
         return schemas;
     }

@@ -45,11 +45,7 @@ public class DingoKeyValueCodec implements KeyValueCodec {
     }
 
     public static DingoKeyValueCodec of(long id, List<Column> columns) {
-        List<DingoSchema> schemas = new ArrayList<>(columns.size());
-        for (int i = 0; i < columns.size(); i++) {
-            schemas.add(CodecUtils.createSchemaForColumn(columns.get(i), i));
-        }
-        return new DingoKeyValueCodec(id, schemas);
+        return new DingoKeyValueCodec(id, CodecUtils.createSchemaForColumns(columns));
     }
 
     @Override

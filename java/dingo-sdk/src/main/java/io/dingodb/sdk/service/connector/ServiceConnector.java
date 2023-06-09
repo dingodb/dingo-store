@@ -141,10 +141,10 @@ public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
                         return response;
                     }
                     if (retryCheck.test(response.error)) {
-                       log.warn(
+                        log.warn(
                             "Exec {} failed, code: [{}], message: {}.",
                             function.getClass(), response.error.getErrcode(), response.error.getErrmsg()
-                       );
+                        );
                         refresh(stub);
                         continue;
                     }
