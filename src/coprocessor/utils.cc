@@ -508,7 +508,7 @@ butil::Status Utils::CompareSerialSchemaStrict(
     const auto& serial_schema2 = (*serial_schemas2)[i];
     if (serial_schema1->GetType() != serial_schema2->GetType()) {
       std::string error_message =
-          fmt::format("CompareSerialSchemaStrict failed  serial_schema1 type: {} uneqaul serial_schema2 type : {}",
+          fmt::format("CompareSerialSchemaStrict failed  serial_schema1 type: {} unequal serial_schema2 type : {}",
                       static_cast<int>(serial_schema1->GetType()), static_cast<int>(serial_schema2->GetType()));
       DINGO_LOG(ERROR) << error_message;
       return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
@@ -525,7 +525,7 @@ butil::Status Utils::CompareSerialSchemaNonStrict(
     const ::google::protobuf::RepeatedPtrField<pb::store::AggregationOperator>& aggregation_operators) {
   if (serial_schemas1->size() != serial_schemas2->size()) {
     std::string error_message =
-        fmt::format("CompareSerialSchemaNonStrict failed  serial_schema1 size: {} uneqaul serial_schema2 size : {}",
+        fmt::format("CompareSerialSchemaNonStrict failed  serial_schema1 size: {} unequal serial_schema2 size : {}",
                     serial_schemas1->size(), serial_schemas2->size());
     DINGO_LOG(ERROR) << error_message;
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
@@ -538,8 +538,9 @@ butil::Status Utils::CompareSerialSchemaNonStrict(
     const auto& serial_schema2 = (*serial_schemas2)[i];
     if (serial_schema1->GetType() != serial_schema2->GetType()) {
       std::string error_message = fmt::format(
-          "enable CompareSerialSchemaStrict failed  serial_schema1 type: {} uneqaul serial_schema2 type : {}",
-          static_cast<int>(serial_schema1->GetType()), static_cast<int>(serial_schema2->GetType()));
+          "enable CompareSerialSchemaNonStrict failed aggregation index : {}  serial_schema1 type: {} unequal "
+          "serial_schema2 type : {}",
+          i, static_cast<int>(serial_schema1->GetType()), static_cast<int>(serial_schema2->GetType()));
       DINGO_LOG(ERROR) << error_message;
       return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
     }
@@ -559,8 +560,9 @@ butil::Status Utils::CompareSerialSchemaNonStrict(
         continue;
       } else {
         std::string error_message = fmt::format(
-            "enable CompareSerialSchemaNonStrict failed  serial_schema1 type: {} uneqaul serial_schema2 type : {}",
-            static_cast<int>(serial_schema1->GetType()), static_cast<int>(serial_schema2->GetType()));
+            "enable CompareSerialSchemaNonStrict failed aggregation index : {}  serial_schema1 type: {} unequal "
+            "serial_schema2 type : {}",
+            j, static_cast<int>(serial_schema1->GetType()), static_cast<int>(serial_schema2->GetType()));
         DINGO_LOG(ERROR) << error_message;
         return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
       }
