@@ -116,6 +116,9 @@ void CoordinatorControl::OnLeaderStop() {
   coordinator_bvar_metrics_region_.Clear();
   coordinator_bvar_metrics_table_.Clear();
 
+  // clear all table_metrics on follower
+  table_metrics_map_.Clear();
+
   DINGO_LOG(INFO) << "OnLeaderStop finished";
 }
 
@@ -1147,6 +1150,9 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         } else {
           DINGO_LOG(WARNING) << "ApplyMetaIncrement table DELETE, [id=" << table.id() << "] failed";
         }
+
+        // delete table_metrics
+        table_metrics_map_.Erase(table.id());
 
         // delete from parent schema
         pb::coordinator_internal::SchemaInternal schema_to_update;

@@ -1000,6 +1000,9 @@ void CoordinatorControl::CalculateTableMetrics() {
     } else {
       table_metrics_internal.second.mutable_table_metrics()->CopyFrom(table_metrics);
 
+      // update table_metrics_map_ in memory
+      table_metrics_map_.PutIfExists(table_id, table_metrics_internal.second);
+
       // mbvar table
       coordinator_bvar_metrics_table_.UpdateTableBvar(table_id, table_metrics.rows_count(), table_metrics.part_count());
     }
