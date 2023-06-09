@@ -37,7 +37,8 @@ public class ColumnDefinition implements Column {
     private int scale = DEFAULT_SCALE;
     @Builder.Default
     private boolean nullable = true;
-    private int primary;
+    @Builder.Default
+    private int primary = -1;
     private String defaultValue;
     private boolean isAutoIncrement;
 
@@ -96,7 +97,7 @@ public class ColumnDefinition implements Column {
 
     @Override
     public int getPrimary() {
-        return primary;
+        return primary < 0 ? -1 : primary;
     }
 
     @Override
