@@ -1,0 +1,45 @@
+cluster:
+  name: dingodb
+  instance_id: $INSTANCE_ID$
+  keyring: TO_BE_CONTINUED
+server:
+  host: $SERVER_HOST$
+  port: $SERVER_PORT$
+  heartbeat_interval: 10000 # ms
+  metrics_collect_interval: 300000 # ms
+  worker_thread_num: 10 # must >4, worker_thread_num priority worker_thread_ratio
+  # worker_thread_ratio: 0.5 # cpu core * ratio
+raft:
+  host: $RAFT_HOST$
+  port: $RAFT_PORT$
+  path: $BASE_PATH$/data/index/raft
+  election_timeout: 1000 # ms
+  snapshot_policy: checkpoint # scan or checkpoint
+  snapshot_interval: 120 # s
+log:
+  level: INFO
+  path: $BASE_PATH$/log
+store:
+  path: $BASE_PATH$/data/index/db
+  background_thread_num: 16 # background_thread_num priority background_thread_ratio
+  # background_thread_ratio: 0.5 # cpu core * ratio
+  stats_dump_period_sec: 120 # s
+  base:
+    block_size: 131072 # 128KB
+    block_cache: 536870912 # 512MB
+    arena_block_size: 67108864 # 64MB
+    min_write_buffer_number_to_merge: 2
+    max_write_buffer_number: 5
+    max_compaction_bytes: 1677721600 # 1600MB
+    write_buffer_size: 67108864 # 64MB
+    prefix_extractor: 24
+    max_bytes_for_level_base: 134217728 # 128MB
+    target_file_size_base: 67108864 # 64MB
+  column_families:
+    - default
+    - meta
+  scan:
+    scan_interval_ms: 30000 # ms
+    timeout_ms: 60000 # ms
+    max_bytes_rpc: 4194304
+    max_fetch_cnt_by_server: 1000

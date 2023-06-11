@@ -65,7 +65,7 @@ butil::Status RaftMetaEngine::InitCoordinatorRegion(std::shared_ptr<Context> ctx
       region->id(), meta_raft_name, braft::PeerId(Server::GetInstance()->RaftEndpoint()), state_machine);
 
   if (node->Init(Helper::FormatPeers(Helper::ExtractLocations(region->peers())),
-                 ConfigManager::GetInstance()->GetConfig(ctx->ClusterRole())) != 0) {
+                 ConfigManager::GetInstance()->GetConfig(Server::GetInstance()->GetRole())) != 0) {
     node->Destroy();
     return butil::Status(pb::error::ERAFT_INIT, "Raft init failed");
   }

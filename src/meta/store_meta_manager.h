@@ -122,7 +122,7 @@ class StoreRegionMeta : public TransformKvAble {
 
   bool Init();
 
-  uint64_t GetEpoch();
+  static uint64_t GetEpoch();
 
   void AddRegion(store::RegionPtr region);
   void DeleteRegion(uint64_t region_id);
@@ -131,7 +131,7 @@ class StoreRegionMeta : public TransformKvAble {
   void UpdateState(store::RegionPtr region, pb::common::StoreRegionState new_state);
   void UpdateState(uint64_t region_id, pb::common::StoreRegionState new_state);
 
-  void UpdateLeaderId(store::RegionPtr region, uint64_t leader_id);
+  static void UpdateLeaderId(store::RegionPtr region, uint64_t leader_id);
   void UpdateLeaderId(uint64_t region_id, uint64_t leader_id);
 
   void UpdatePeers(store::RegionPtr region, std::vector<pb::common::Peer>& peers);
