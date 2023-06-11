@@ -288,6 +288,26 @@ void* Sender(void* /*arg*/) {
     SendGetTableRange(coordinator_interaction_meta);
   } else if (FLAGS_method == "GetTableMetrics") {
     SendGetTableMetrics(coordinator_interaction_meta);
+  } else if (FLAGS_method == "GetIndexes") {
+    SendGetIndexes(coordinator_interaction_meta);
+  } else if (FLAGS_method == "GetIndexsCount") {
+    SendGetIndexesCount(coordinator_interaction_meta);
+  } else if (FLAGS_method == "CreateIndex") {
+    SendCreateIndex(coordinator_interaction_meta, false);
+  } else if (FLAGS_method == "CreateIndexWithId") {
+    SendCreateIndex(coordinator_interaction_meta, true);
+  } else if (FLAGS_method == "CreateIndexId") {
+    SendCreateIndexId(coordinator_interaction_meta);
+  } else if (FLAGS_method == "DropIndex") {
+    SendDropIndex(coordinator_interaction_meta);
+  } else if (FLAGS_method == "GetIndex") {
+    SendGetIndex(coordinator_interaction_meta);
+  } else if (FLAGS_method == "GetIndexByName") {
+    SendGetIndexByName(coordinator_interaction_meta);
+  } else if (FLAGS_method == "GetIndexRange") {
+    SendGetIndexRange(coordinator_interaction_meta);
+  } else if (FLAGS_method == "GetIndexMetrics") {
+    SendGetIndexMetrics(coordinator_interaction_meta);
   } else if (FLAGS_method == "GetAutoIncrements") {  // auto increment
     SendGetAutoIncrements(coordinator_interaction_meta);
   } else if (FLAGS_method == "GetAutoIncrement") {

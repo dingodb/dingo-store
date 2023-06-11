@@ -743,4 +743,319 @@ void MetaServiceImpl::DeleteAutoIncrement(google::protobuf::RpcController *contr
   }
 }
 
+void MetaServiceImpl::GetIndexesCount(google::protobuf::RpcController * /*controller*/,
+                                      const pb::meta::GetIndexesCountRequest *request,
+                                      pb::meta::GetIndexesCountResponse *response, google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!this->coordinator_control_->IsLeader()) {
+    return RedirectResponse(response);
+  }
+
+  DINGO_LOG(DEBUG) << "GetIndexsCount request:  schema_id = [" << request->schema_id().entity_id() << "]";
+
+  if (!request->has_schema_id() || request->schema_id().entity_id() <= 0) {
+    response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
+    return;
+  }
+
+  uint64_t indexes_count = 0;
+  auto ret = this->coordinator_control_->GetIndexsCount(request->schema_id().entity_id(), indexes_count);
+  if (!ret.ok()) {
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    return;
+  }
+
+  response->set_indexes_count(indexes_count);
+}
+
+void MetaServiceImpl::GetIndexes(google::protobuf::RpcController * /*controller*/,
+                                 const pb::meta::GetIndexesRequest *request, pb::meta::GetIndexesResponse *response,
+                                 google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!this->coordinator_control_->IsLeader()) {
+    return RedirectResponse(response);
+  }
+
+  DINGO_LOG(DEBUG) << "GetIndexs request:  schema_id = [" << request->schema_id().entity_id() << "]";
+
+  if (!request->has_schema_id() || request->schema_id().entity_id() <= 0) {
+    response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
+    return;
+  }
+
+  std::vector<pb::meta::IndexDefinitionWithId> index_definition_with_ids;
+  auto ret = this->coordinator_control_->GetIndexs(request->schema_id().entity_id(), index_definition_with_ids);
+  if (!ret.ok()) {
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    return;
+  }
+
+  if (index_definition_with_ids.empty()) {
+    DINGO_LOG(INFO) << "meta_service GetIndexs no indexs, schema_id=" << request->schema_id().entity_id();
+    return;
+  }
+
+  // add index_definition_with_id
+  for (auto &index_definition_with_id : index_definition_with_ids) {
+    auto *index_def_with_id = response->add_index_definition_with_ids();
+    index_def_with_id->CopyFrom(index_definition_with_id);
+  }
+}
+
+void MetaServiceImpl::GetIndex(google::protobuf::RpcController * /*controller*/,
+                               const pb::meta::GetIndexRequest *request, pb::meta::GetIndexResponse *response,
+                               google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!this->coordinator_control_->IsLeader()) {
+    return RedirectResponse(response);
+  }
+
+  if (!request->has_index_id()) {
+    response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
+    return;
+  }
+
+  DINGO_LOG(DEBUG) << "GetIndex request:  index_id = [" << request->index_id().entity_id() << "]";
+
+  auto *index = response->mutable_index_definition_with_id();
+  auto ret = this->coordinator_control_->GetIndex(request->index_id().parent_entity_id(),
+                                                  request->index_id().entity_id(), *index);
+  if (!ret.ok()) {
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    return;
+  }
+}
+
+void MetaServiceImpl::GetIndexByName(google::protobuf::RpcController * /*controller*/,
+                                     const pb::meta::GetIndexByNameRequest *request,
+                                     pb::meta::GetIndexByNameResponse *response, google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!this->coordinator_control_->IsLeader()) {
+    return RedirectResponse(response);
+  }
+
+  DINGO_LOG(DEBUG) << "GetIndexByName request:  schema_id = [" << request->schema_id().entity_id() << "]"
+                   << " index_name = [" << request->index_name() << "]";
+
+  if (request->index_name().empty()) {
+    response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
+    return;
+  }
+
+  auto *index = response->mutable_index_definition_with_id();
+  auto ret =
+      this->coordinator_control_->GetIndexByName(request->schema_id().entity_id(), request->index_name(), *index);
+  if (!ret.ok()) {
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    return;
+  }
+}
+
+void MetaServiceImpl::GetIndexRange(google::protobuf::RpcController * /*controller*/,
+                                    const pb::meta::GetIndexRangeRequest *request,
+                                    pb::meta::GetIndexRangeResponse *response, google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!this->coordinator_control_->IsLeader()) {
+    return RedirectResponse(response);
+  }
+
+  DINGO_LOG(DEBUG) << "GetIndex request:  index_id = [" << request->index_id().entity_id() << "]";
+
+  if (!request->has_index_id()) {
+    response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
+    return;
+  }
+
+  auto *index_range = response->mutable_index_range();
+  auto ret = this->coordinator_control_->GetIndexRange(request->index_id().parent_entity_id(),
+                                                       request->index_id().entity_id(), *index_range);
+  if (!ret.ok()) {
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    return;
+  }
+}
+
+void MetaServiceImpl::GetIndexMetrics(google::protobuf::RpcController * /*controller*/,
+                                      const pb::meta::GetIndexMetricsRequest *request,
+                                      pb::meta::GetIndexMetricsResponse *response, google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!this->coordinator_control_->IsLeader()) {
+    return RedirectResponse(response);
+  }
+
+  DINGO_LOG(DEBUG) << "GetIndexMetrics request:  index_id = [" << request->index_id().entity_id() << "]";
+
+  if (!request->has_index_id()) {
+    response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
+    return;
+  }
+
+  auto *index_metrics = response->mutable_index_metrics();
+  auto ret = coordinator_control_->GetIndexMetrics(request->index_id().parent_entity_id(),
+                                                   request->index_id().entity_id(), *index_metrics);
+  if (!ret.ok()) {
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+  }
+}
+
+void MetaServiceImpl::CreateIndexId(google::protobuf::RpcController *controller,
+                                    const pb::meta::CreateIndexIdRequest *request,
+                                    pb::meta::CreateIndexIdResponse *response, google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!this->coordinator_control_->IsLeader()) {
+    return RedirectResponse(response);
+  }
+
+  DINGO_LOG(INFO) << "CreateIndexId request:  schema_id = [" << request->schema_id().entity_id() << "]";
+  DINGO_LOG(DEBUG) << request->DebugString();
+
+  if (!request->has_schema_id()) {
+    response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
+    return;
+  }
+
+  pb::coordinator_internal::MetaIncrement meta_increment;
+
+  uint64_t new_index_id;
+  auto ret = this->coordinator_control_->CreateIndexId(request->schema_id().entity_id(), new_index_id, meta_increment);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "CreateIndexId failed in meta_service";
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    return;
+  }
+  DINGO_LOG(INFO) << "CreateIndexId new_index_id=" << new_index_id;
+
+  auto *index_id = response->mutable_index_id();
+  index_id->set_entity_id(new_index_id);
+  index_id->set_parent_entity_id(request->schema_id().entity_id());
+  index_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_INDEX);
+
+  // prepare for raft process
+  CoordinatorClosure<pb::meta::CreateIndexIdRequest, pb::meta::CreateIndexIdResponse> *meta_put_closure =
+      new CoordinatorClosure<pb::meta::CreateIndexIdRequest, pb::meta::CreateIndexIdResponse>(request, response,
+                                                                                              done_guard.release());
+
+  std::shared_ptr<Context> ctx =
+      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
+  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+
+  // this is a async operation will be block by closure
+  engine_->MetaPut(ctx, meta_increment);
+
+  DINGO_LOG(INFO) << "CreateIndexId Success in meta_service index_d =" << new_index_id;
+}
+
+void MetaServiceImpl::CreateIndex(google::protobuf::RpcController *controller,
+                                  const pb::meta::CreateIndexRequest *request, pb::meta::CreateIndexResponse *response,
+                                  google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!this->coordinator_control_->IsLeader()) {
+    return RedirectResponse(response);
+  }
+
+  DINGO_LOG(INFO) << "CreateIndex request:  schema_id = [" << request->schema_id().entity_id() << "]";
+  DINGO_LOG(DEBUG) << request->DebugString();
+
+  if (!request->has_schema_id() || !request->has_index_definition()) {
+    response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
+    return;
+  }
+
+  pb::coordinator_internal::MetaIncrement meta_increment;
+
+  uint64_t new_index_id = 0;
+  if (request->has_index_id()) {
+    if (request->index_id().entity_id() > 0) {
+      new_index_id = request->index_id().entity_id();
+      DINGO_LOG(INFO) << "CreateIndex index_id is given[" << new_index_id << "] request:  schema_id = ["
+                      << request->schema_id().entity_id() << "]";
+    }
+  }
+
+  auto ret = this->coordinator_control_->CreateIndex(request->schema_id().entity_id(), request->index_definition(),
+                                                     new_index_id, meta_increment);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "CreateIndex failed in meta_service, error code=" << ret;
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    return;
+  }
+  DINGO_LOG(INFO) << "CreateIndex new_index_id=" << new_index_id;
+
+  auto *index_id = response->mutable_index_id();
+  index_id->set_entity_id(new_index_id);
+  index_id->set_parent_entity_id(request->schema_id().entity_id());
+  index_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_INDEX);
+
+  // prepare for raft process
+  CoordinatorClosure<pb::meta::CreateIndexRequest, pb::meta::CreateIndexResponse> *meta_put_closure =
+      new CoordinatorClosure<pb::meta::CreateIndexRequest, pb::meta::CreateIndexResponse>(request, response,
+                                                                                          done_guard.release());
+
+  std::shared_ptr<Context> ctx =
+      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
+  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+
+  // this is a async operation will be block by closure
+  engine_->MetaPut(ctx, meta_increment);
+
+  DINGO_LOG(INFO) << "CreateIndex Success in meta_service index_name =" << request->index_definition().name();
+}
+
+void MetaServiceImpl::DropIndex(google::protobuf::RpcController *controller, const pb::meta::DropIndexRequest *request,
+                                pb::meta::DropIndexResponse *response, google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!this->coordinator_control_->IsLeader()) {
+    return RedirectResponse(response);
+  }
+
+  DINGO_LOG(WARNING) << "DropIndex request:  schema_id = [" << request->index_id().parent_entity_id() << "]"
+                     << " index_id = [" << request->index_id().entity_id() << "]";
+  DINGO_LOG(DEBUG) << request->DebugString();
+
+  if (!request->has_index_id()) {
+    response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
+    return;
+  }
+
+  pb::coordinator_internal::MetaIncrement meta_increment;
+
+  auto ret = this->coordinator_control_->DropIndex(request->index_id().parent_entity_id(),
+                                                   request->index_id().entity_id(), meta_increment);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "DropIndex failed in meta_service, index_id=" << request->index_id().entity_id();
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    return;
+  }
+
+  // prepare for raft process
+  CoordinatorClosure<pb::meta::DropIndexRequest, pb::meta::DropIndexResponse> *meta_put_closure =
+      new CoordinatorClosure<pb::meta::DropIndexRequest, pb::meta::DropIndexResponse>(request, response,
+                                                                                      done_guard.release());
+
+  std::shared_ptr<Context> ctx =
+      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
+  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+
+  // this is a async operation will be block by closure
+  engine_->MetaPut(ctx, meta_increment);
+}
+
 }  // namespace dingodb

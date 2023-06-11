@@ -186,6 +186,11 @@ message ExecutorMap {
   repeated Executor executors = 2;
 }
 
+enum StoreType {
+  NODE_TYPE_STORE = 0;
+  NODE_TYPE_INDEX = 1;
+}
+
 // Store
 message Store {
   uint64 id = 1;                    // only updated by coordinator
@@ -198,6 +203,9 @@ message Store {
   string keyring = 8;               // only updated by coordinator
   uint64 create_timestamp = 9;      // only updated by coordinator
   uint64 last_seen_timestamp = 10;  // only updated by coordinator
+
+  // store type
+  StoreType store_type = 11;  // only updated by coordinator
 }
 
 message StoreMap {
@@ -231,6 +239,11 @@ message RegionDefinition {
   uint64 table_id = 7;
 }
 
+enum RegionType {
+  STORE_REGION = 0;
+  INDEX_REGION = 1;
+}
+
 message Region {
   // store info
   uint64 id = 1;
@@ -252,6 +265,9 @@ message Region {
   uint64 create_timestamp = 10;
   uint64 last_update_timestamp = 11;
   uint64 deleted_timestamp = 12;
+
+  // region type
+  RegionType region_type = 13;
 }
 
 message RegionMap {

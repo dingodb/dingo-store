@@ -450,8 +450,8 @@ butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta
     // int ret = CreateRegion(const std::string &region_name, const std::string
     // &resource_tag, int32_t replica_num, pb::common::Range region_range,
     // uint64_t schema_id, uint64_t table_id, uint64_t &new_region_id)
-    std::string const region_name = std::to_string(schema_id) + std::string("_") + table_definition.name() +
-                                    std::string("_part_") + std::to_string(i);
+    std::string const region_name = std::string("T_") + std::to_string(schema_id) + std::string("_") +
+                                    table_definition.name() + std::string("_part_") + std::to_string(i);
     uint64_t new_region_id = 0;
 
     auto ret = CreateRegion(region_name, "", replica, range_partition.ranges(i), schema_id, new_table_id, new_region_id,
@@ -584,6 +584,235 @@ butil::Status CoordinatorControl::DropTable(uint64_t schema_id, uint64_t table_i
   return butil::Status::OK();
 }
 
+// CreateIndexId
+// in: schema_id
+// out: new_index_id, meta_increment
+// return: 0 success, -1 failed
+butil::Status CoordinatorControl::CreateIndexId(uint64_t schema_id, uint64_t& new_index_id,
+                                                pb::coordinator_internal::MetaIncrement& meta_increment) {
+  // validate schema_id is existed
+  {
+    // BAIDU_SCOPED_LOCK(schema_map_mutex_);
+    bool ret = schema_map_.Exists(schema_id);
+    if (!ret) {
+      DINGO_LOG(ERROR) << "schema_id is illegal " << schema_id;
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "schema_id is illegal");
+    }
+  }
+
+  // create index id
+  new_index_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_INDEX, meta_increment);
+  DINGO_LOG(INFO) << "CreateIndexId new_index_id=" << new_index_id;
+
+  return butil::Status::OK();
+}
+
+// CreateIndex
+// in: schema_id, index_definition
+// out: new_index_id, meta_increment
+// return: 0 success, -1 failed
+butil::Status CoordinatorControl::CreateIndex(uint64_t schema_id, const pb::meta::IndexDefinition& index_definition,
+                                              uint64_t& new_index_id,
+                                              pb::coordinator_internal::MetaIncrement& meta_increment) {
+  // validate schema
+  // root schema cannot create index
+  if (schema_id < 0 || schema_id == ::dingodb::pb::meta::ROOT_SCHEMA) {
+    DINGO_LOG(ERROR) << "schema_id is illegal " << schema_id;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "schema_id is illegal");
+  }
+
+  {
+    // BAIDU_SCOPED_LOCK(schema_map_mutex_);
+    bool ret = schema_map_.Exists(schema_id);
+    if (!ret) {
+      DINGO_LOG(ERROR) << "schema_id is illegal " << schema_id;
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "schema_id is illegal");
+    }
+  }
+
+  // validate part information
+  if (!index_definition.has_index_partition()) {
+    DINGO_LOG(ERROR) << "no index_partition provided ";
+    return butil::Status(pb::error::Errno::EINDEX_DEFINITION_ILLEGAL, "no index_partition provided");
+  }
+  auto const& index_partition = index_definition.index_partition();
+  if (index_partition.has_hash_partition()) {
+    DINGO_LOG(ERROR) << "hash_partiton is not supported";
+    return butil::Status(pb::error::Errno::EINDEX_DEFINITION_ILLEGAL, "hash_partiton is not supported");
+  } else if (!index_partition.has_range_partition()) {
+    DINGO_LOG(ERROR) << "no range_partition provided ";
+    return butil::Status(pb::error::Errno::EINDEX_DEFINITION_ILLEGAL, "no range_partition provided");
+  }
+
+  auto const& range_partition = index_partition.range_partition();
+  if (range_partition.ranges_size() == 0) {
+    DINGO_LOG(ERROR) << "no range provided ";
+    return butil::Status(pb::error::Errno::EINDEX_DEFINITION_ILLEGAL, "no range provided");
+  }
+
+  // check if index_name exists
+  uint64_t value = 0;
+  index_name_map_safe_temp_.Get(std::to_string(schema_id) + index_definition.name(), value);
+  if (value != 0) {
+    DINGO_LOG(INFO) << " Createindex index_name is exist " << index_definition.name();
+    return butil::Status(pb::error::Errno::EINDEX_EXISTS,
+                         fmt::format("index_name[{}] is exist in get", index_definition.name().c_str()));
+  }
+
+  // if new_index_id is not given, create a new index_id
+  if (new_index_id <= 0) {
+    new_index_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_INDEX, meta_increment);
+    DINGO_LOG(INFO) << "CreateIndex new_index_id=" << new_index_id;
+  }
+
+  // update index_name_map_safe_temp_
+  if (index_name_map_safe_temp_.PutIfAbsent(std::to_string(schema_id) + index_definition.name(), new_index_id) < 0) {
+    DINGO_LOG(INFO) << " CreateIndex index_name" << index_definition.name()
+                    << " is exist, when insert new_index_id=" << new_index_id;
+    return butil::Status(pb::error::Errno::EINDEX_EXISTS,
+                         fmt::format("index_name[{}] is exist in put if absent", index_definition.name().c_str()));
+  }
+
+  // create index
+  // extract part info, create region for each part
+
+  std::vector<uint64_t> new_region_ids;
+  int32_t replica = index_definition.replica();
+  if (replica < 1) {
+    replica = 3;
+  }
+  for (int i = 0; i < range_partition.ranges_size(); i++) {
+    // int ret = CreateRegion(const std::string &region_name, const std::string
+    // &resource_tag, int32_t replica_num, pb::common::Range region_range,
+    // uint64_t schema_id, uint64_t index_id, uint64_t &new_region_id)
+    std::string const region_name = std::string("I_") + std::to_string(schema_id) + std::string("_") +
+                                    index_definition.name() + std::string("_part_") + std::to_string(i);
+    uint64_t new_region_id = 0;
+
+    auto ret = CreateRegion(region_name, "", replica, range_partition.ranges(i), schema_id, new_index_id, new_region_id,
+                            meta_increment);
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << "CreateRegion failed in CreateIndex index_name=" << index_definition.name();
+      break;
+    }
+
+    DINGO_LOG(INFO) << "CreateIndex create region success, region_id=" << new_region_id;
+
+    new_region_ids.push_back(new_region_id);
+  }
+
+  if (new_region_ids.size() < range_partition.ranges_size()) {
+    DINGO_LOG(ERROR) << "Not enough regions is created, drop residual regions need=" << range_partition.ranges_size()
+                     << " created=" << new_region_ids.size();
+    for (auto region_id_to_delete : new_region_ids) {
+      auto ret = DropRegion(region_id_to_delete, meta_increment);
+      if (!ret.ok()) {
+        DINGO_LOG(ERROR) << "DropRegion failed in CreateIndex index_name=" << index_definition.name()
+                         << " region_id =" << region_id_to_delete;
+      }
+    }
+
+    // remove index_name from map
+    index_name_map_safe_temp_.Erase(std::to_string(schema_id) + index_definition.name());
+    return butil::Status(pb::error::Errno::EINDEX_REGION_CREATE_FAILED, "Not enough regions is created");
+  }
+
+  // bumper up EPOCH_REGION
+  GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_REGION, meta_increment);
+
+  // create index_internal, set id & index_definition
+  pb::coordinator_internal::IndexInternal index_internal;
+  index_internal.set_id(new_index_id);
+  index_internal.set_schema_id(schema_id);
+  auto* definition = index_internal.mutable_definition();
+  definition->CopyFrom(index_definition);
+
+  // set part for index_internal
+  for (unsigned long new_region_id : new_region_ids) {
+    // create part and set region_id & range
+    auto* part_internal = index_internal.add_partitions();
+    part_internal->set_region_id(new_region_id);
+    // auto* part_range = part_internal->muindex_range();
+    // part_range->CopyFrom(range_partition.ranges(i));
+  }
+
+  // add index_internal to index_map_
+  // update meta_increment
+  GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_INDEX, meta_increment);
+  auto* index_increment = meta_increment.add_indexes();
+  index_increment->set_id(new_index_id);
+  index_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
+  // index_increment->set_schema_id(schema_id);
+
+  auto* index_increment_index = index_increment->mutable_index();
+  index_increment_index->CopyFrom(index_internal);
+
+  // on_apply
+  //  index_map_epoch++;                                               // raft_kv_put
+  //  index_map_.insert(std::make_pair(new_index_id, index_internal));  // raft_kv_put
+
+  // add index_id to schema
+  // auto* index_id = schema_map_[schema_id].add_index_ids();
+  // index_id->set_entity_id(new_index_id);
+  // index_id->set_parent_entity_id(schema_id);
+  // index_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_INDEX);
+  // raft_kv_put
+
+  return butil::Status::OK();
+}
+
+// DropIndex
+// in: schema_id, index_id
+// out: meta_increment
+// return: errno
+butil::Status CoordinatorControl::DropIndex(uint64_t schema_id, uint64_t index_id,
+                                            pb::coordinator_internal::MetaIncrement& meta_increment) {
+  if (schema_id < 0) {
+    DINGO_LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "schema_id illegal");
+  }
+
+  if (!ValidateSchema(schema_id)) {
+    DINGO_LOG(ERROR) << "ERRROR: schema_id not valid" << schema_id;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "schema_id not valid");
+  }
+
+  pb::coordinator_internal::IndexInternal index_internal;
+  {
+    // BAIDU_SCOPED_LOCK(index_map_mutex_);
+    int ret = index_map_.Get(index_id, index_internal);
+    if (ret < 0) {
+      DINGO_LOG(ERROR) << "ERRROR: index_id not found" << index_id;
+      return butil::Status(pb::error::Errno::EINDEX_NOT_FOUND, "index_id not found");
+    }
+  }
+
+  // call DropRegion
+  for (int i = 0; i < index_internal.partitions_size(); i++) {
+    // part id
+    uint64_t region_id = index_internal.partitions(i).region_id();
+
+    DropRegion(region_id, meta_increment);
+  }
+
+  // delete index
+  auto* index_to_delete = meta_increment.add_indexes();
+  index_to_delete->set_id(index_id);
+  index_to_delete->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
+  // index_to_delete->set_schema_id(schema_id);
+
+  auto* index_to_delete_index = index_to_delete->mutable_index();
+  index_to_delete_index->CopyFrom(index_internal);
+
+  // bump up index map epoch
+  GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_INDEX, meta_increment);
+
+  // delete index_name from index_name_safe_map_temp_
+  index_name_map_safe_temp_.Erase(std::to_string(schema_id) + index_internal.definition().name());
+
+  return butil::Status::OK();
+}
+
 // get tables
 butil::Status CoordinatorControl::GetTables(uint64_t schema_id,
                                             std::vector<pb::meta::TableDefinitionWithId>& table_definition_with_ids) {
@@ -640,6 +869,62 @@ butil::Status CoordinatorControl::GetTables(uint64_t schema_id,
   return butil::Status::OK();
 }
 
+// get indexs
+butil::Status CoordinatorControl::GetIndexs(uint64_t schema_id,
+                                            std::vector<pb::meta::IndexDefinitionWithId>& index_definition_with_ids) {
+  DINGO_LOG(INFO) << "GetIndexs in control schema_id=" << schema_id;
+
+  if (schema_id < 0) {
+    DINGO_LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "schema_id illegal");
+  }
+
+  if (!index_definition_with_ids.empty()) {
+    DINGO_LOG(ERROR) << "ERRROR: vector index_definition_with_ids is not empty , size="
+                     << index_definition_with_ids.size();
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "vector index_definition_with_ids is not empty");
+  }
+
+  {
+    // BAIDU_SCOPED_LOCK(schema_map_mutex_);
+    pb::coordinator_internal::SchemaInternal schema_internal;
+    int ret = schema_map_.Get(schema_id, schema_internal);
+    if (ret < 0) {
+      DINGO_LOG(ERROR) << "ERRROR: schema_id not found" << schema_id;
+      return butil::Status(pb::error::Errno::ESCHEMA_NOT_FOUND, "schema_id not found");
+    }
+
+    for (int i = 0; i < schema_internal.index_ids_size(); i++) {
+      uint64_t index_id = schema_internal.index_ids(i);
+
+      pb::coordinator_internal::IndexInternal index_internal;
+      int ret = index_map_.Get(index_id, index_internal);
+      if (ret < 0) {
+        DINGO_LOG(ERROR) << "ERRROR: index_id not found" << index_id;
+        continue;
+      }
+
+      DINGO_LOG(INFO) << "GetIndexs found index_id=" << index_id;
+
+      // construct return value
+      pb::meta::IndexDefinitionWithId index_def_with_id;
+
+      // index_def_with_id.muindex_index_id()->CopyFrom(schema_internal.schema().index_ids(i));
+      auto* index_id_for_response = index_def_with_id.mutable_index_id();
+      index_id_for_response->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_INDEX);
+      index_id_for_response->set_entity_id(index_id);
+      index_id_for_response->set_parent_entity_id(schema_id);
+
+      index_def_with_id.mutable_index_definition()->CopyFrom(index_internal.definition());
+      index_definition_with_ids.push_back(index_def_with_id);
+    }
+  }
+
+  DINGO_LOG(INFO) << "GetIndexs schema_id=" << schema_id << " indexs count=" << index_definition_with_ids.size();
+
+  return butil::Status::OK();
+}
+
 // get tables count
 butil::Status CoordinatorControl::GetTablesCount(uint64_t schema_id, uint64_t& tables_count) {
   DINGO_LOG(INFO) << "GetTables in control schema_id=" << schema_id;
@@ -662,6 +947,32 @@ butil::Status CoordinatorControl::GetTablesCount(uint64_t schema_id, uint64_t& t
   }
 
   DINGO_LOG(INFO) << "GetTablesCount schema_id=" << schema_id << " tables count=" << tables_count;
+
+  return butil::Status::OK();
+}
+
+// get indexs count
+butil::Status CoordinatorControl::GetIndexsCount(uint64_t schema_id, uint64_t& indexs_count) {
+  DINGO_LOG(INFO) << "GetIndexs in control schema_id=" << schema_id;
+
+  if (schema_id < 0) {
+    DINGO_LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "schema_id illegal");
+  }
+
+  {
+    // BAIDU_SCOPED_LOCK(schema_map_mutex_);
+    pb::coordinator_internal::SchemaInternal schema_internal;
+    int ret = schema_map_.Get(schema_id, schema_internal);
+    if (ret < 0) {
+      DINGO_LOG(ERROR) << "ERRROR: schema_id not found" << schema_id;
+      return butil::Status(pb::error::Errno::ESCHEMA_NOT_FOUND, "schema_id not found");
+    }
+
+    indexs_count = schema_internal.index_ids_size();
+  }
+
+  DINGO_LOG(INFO) << "GetIndexsCount schema_id=" << schema_id << " indexs count=" << indexs_count;
 
   return butil::Status::OK();
 }
@@ -714,6 +1025,54 @@ butil::Status CoordinatorControl::GetTable(uint64_t schema_id, uint64_t table_id
   return butil::Status::OK();
 }
 
+// get index
+butil::Status CoordinatorControl::GetIndex(uint64_t schema_id, uint64_t index_id,
+                                           pb::meta::IndexDefinitionWithId& index_definition_with_id) {
+  DINGO_LOG(INFO) << "GetIndex in control schema_id=" << schema_id;
+
+  if (schema_id < 0) {
+    DINGO_LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "schema_id illegal");
+  }
+
+  if (index_id <= 0) {
+    DINGO_LOG(ERROR) << "ERRROR: index illegal, index_id=" << index_id;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "index_id illegal");
+  }
+
+  // validate schema_id
+  if (!ValidateSchema(schema_id)) {
+    DINGO_LOG(ERROR) << "ERRROR: schema_id not valid" << schema_id;
+    return butil::Status(pb::error::Errno::ESCHEMA_NOT_FOUND, "schema_id not valid");
+  }
+
+  // validate index_id & get index definition
+  {
+    // BAIDU_SCOPED_LOCK(index_map_mutex_);
+    pb::coordinator_internal::IndexInternal index_internal;
+    int ret = index_map_.Get(index_id, index_internal);
+    if (ret < 0) {
+      DINGO_LOG(ERROR) << "ERRROR: index_id not found" << index_id;
+      return butil::Status(pb::error::Errno::EINDEX_NOT_FOUND, "index_id not found");
+    }
+
+    DINGO_LOG(INFO) << "GetIndex found index_id=" << index_id;
+
+    // index_def_with_id.muindex_index_id()->CopyFrom(schema_internal.schema().index_ids(i));
+    auto* index_id_for_response = index_definition_with_id.mutable_index_id();
+    index_id_for_response->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_INDEX);
+    index_id_for_response->set_entity_id(index_id);
+    index_id_for_response->set_parent_entity_id(schema_id);
+
+    index_definition_with_id.mutable_index_definition()->CopyFrom(index_internal.definition());
+  }
+
+  DINGO_LOG(DEBUG) << fmt::format("GetIndex schema_id={} index_id={} index_definition_with_id={}", schema_id, index_id,
+                                  index_definition_with_id.DebugString());
+
+  return butil::Status::OK();
+}
+
 // get table by name
 butil::Status CoordinatorControl::GetTableByName(uint64_t schema_id, const std::string& table_name,
                                                  pb::meta::TableDefinitionWithId& table_definition) {
@@ -745,6 +1104,39 @@ butil::Status CoordinatorControl::GetTableByName(uint64_t schema_id, const std::
                                   table_name, table_definition.DebugString());
 
   return GetTable(schema_id, temp_table_id, table_definition);
+}
+
+// get index by name
+butil::Status CoordinatorControl::GetIndexByName(uint64_t schema_id, const std::string& index_name,
+                                                 pb::meta::IndexDefinitionWithId& index_definition) {
+  DINGO_LOG(INFO) << fmt::format("GetIndexByName in control schema_id={} index_name={}", schema_id, index_name);
+
+  if (schema_id < 0) {
+    DINGO_LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "schema_id illegal");
+  }
+
+  if (index_name.empty()) {
+    DINGO_LOG(ERROR) << "ERRROR: index_name illegal " << index_name;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "index_name illegal");
+  }
+
+  if (!ValidateSchema(schema_id)) {
+    DINGO_LOG(ERROR) << "ERRROR: schema_id not valid" << schema_id;
+    return butil::Status(pb::error::Errno::ESCHEMA_NOT_FOUND, "schema_id not valid");
+  }
+
+  uint64_t temp_index_id = 0;
+  auto ret = index_name_map_safe_temp_.Get(std::to_string(schema_id) + index_name, temp_index_id);
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << "ERRROR: index_name not found " << index_name;
+    return butil::Status(pb::error::Errno::EINDEX_NOT_FOUND, "index_name not found");
+  }
+
+  DINGO_LOG(DEBUG) << fmt::format("GetIndexByName schema_id={} index_name={} index_definition={}", schema_id,
+                                  index_name, index_definition.DebugString());
+
+  return GetIndex(schema_id, temp_index_id, index_definition);
 }
 
 // get table range
@@ -792,6 +1184,84 @@ butil::Status CoordinatorControl::GetTableRange(uint64_t schema_id, uint64_t tab
     // range_distribution range
     auto* part_range = range_distribution->mutable_range();
     // part_range->CopyFrom(table_internal.partitions(i).range());
+    part_range->CopyFrom(part_region.definition().range());
+
+    // range_distribution leader location
+    auto* leader_location = range_distribution->mutable_leader();
+
+    // range_distribution voter & learner locations
+    for (int j = 0; j < part_region.definition().peers_size(); j++) {
+      const auto& part_peer = part_region.definition().peers(j);
+      if (part_peer.store_id() == part_region.leader_store_id()) {
+        leader_location->CopyFrom(part_peer.server_location());
+      }
+
+      if (part_peer.role() == ::dingodb::pb::common::PeerRole::VOTER) {
+        auto* voter_location = range_distribution->add_voters();
+        voter_location->CopyFrom(part_peer.server_location());
+      } else if (part_peer.role() == ::dingodb::pb::common::PeerRole::LEARNER) {
+        auto* learner_location = range_distribution->add_learners();
+        learner_location->CopyFrom(part_peer.server_location());
+      }
+    }
+
+    // range_distribution regionmap_epoch
+    uint64_t region_map_epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_REGION);
+    range_distribution->set_regionmap_epoch(region_map_epoch);
+
+    // range_distribution storemap_epoch
+    uint64_t store_map_epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_STORE);
+    range_distribution->set_storemap_epoch(store_map_epoch);
+  }
+
+  return butil::Status::OK();
+}
+
+// get index range
+butil::Status CoordinatorControl::GetIndexRange(uint64_t schema_id, uint64_t index_id,
+                                                pb::meta::IndexRange& index_range) {
+  if (schema_id < 0) {
+    DINGO_LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "schema_id illegal");
+  }
+
+  pb::coordinator_internal::IndexInternal index_internal;
+  if (!ValidateSchema(schema_id)) {
+    DINGO_LOG(ERROR) << "ERRROR: schema_id not found" << schema_id;
+    return butil::Status(pb::error::Errno::ESCHEMA_NOT_FOUND, "schema_id not found");
+  }
+  {
+    // BAIDU_SCOPED_LOCK(index_map_mutex_);
+    int ret = index_map_.Get(index_id, index_internal);
+    if (ret < 0) {
+      DINGO_LOG(ERROR) << "ERRROR: index_id not found" << index_id;
+      return butil::Status(pb::error::Errno::EINDEX_NOT_FOUND, "index_id not found");
+    }
+  }
+
+  for (int i = 0; i < index_internal.partitions_size(); i++) {
+    auto* range_distribution = index_range.add_range_distribution();
+
+    // range_distribution id
+    uint64_t region_id = index_internal.partitions(i).region_id();
+
+    auto* common_id_region = range_distribution->mutable_id();
+    common_id_region->set_entity_id(region_id);
+    common_id_region->set_parent_entity_id(index_id);
+    common_id_region->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_PART);
+
+    // get region
+    pb::common::Region part_region;
+    int ret = region_map_.Get(region_id, part_region);
+    if (ret < 0) {
+      DINGO_LOG(ERROR) << fmt::format("ERROR cannot find region in regionmap_ while GetIndex, index_id={} region_id={}",
+                                      index_id, region_id);
+      continue;
+    }
+
+    // range_distribution range
+    auto* part_range = range_distribution->mutable_range();
+    // part_range->CopyFrom(index_internal.partitions(i).range());
     part_range->CopyFrom(part_region.definition().range());
 
     // range_distribution leader location
@@ -895,6 +1365,76 @@ butil::Status CoordinatorControl::GetTableMetrics(uint64_t schema_id, uint64_t t
   return butil::Status::OK();
 }
 
+// get index metrics
+butil::Status CoordinatorControl::GetIndexMetrics(uint64_t schema_id, uint64_t index_id,
+                                                  pb::meta::IndexMetricsWithId& index_metrics) {
+  if (schema_id < 0) {
+    DINGO_LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "schema_id illegal");
+  }
+
+  if (index_metrics.id().entity_id() != 0) {
+    DINGO_LOG(ERROR) << "ERRROR: index is not empty , index_id=" << index_metrics.id().entity_id();
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "index is not empty");
+  }
+
+  if (!ValidateSchema(schema_id)) {
+    DINGO_LOG(ERROR) << "ERRROR: schema_id not found" << schema_id;
+    return butil::Status(pb::error::Errno::ESCHEMA_NOT_FOUND, "schema_id not found");
+  }
+
+  {
+    // BAIDU_SCOPED_LOCK(index_map_mutex_);
+    if (!index_map_.Exists(index_id)) {
+      DINGO_LOG(ERROR) << "ERRROR: index_id not found" << index_id;
+      return butil::Status(pb::error::Errno::EINDEX_NOT_FOUND, "index_id not found");
+    }
+  }
+
+  pb::coordinator_internal::IndexMetricsInternal index_metrics_internal;
+  {
+    // BAIDU_SCOPED_LOCK(index_metrics_map_mutex_);
+    int ret = index_metrics_map_.Get(index_id, index_metrics_internal);
+
+    // auto* temp_index_metrics = index_metrics_map_.seek(index_id);
+    if (ret < 0) {
+      DINGO_LOG(INFO) << "index_metrics not found, try to calculate new one" << index_id;
+
+      // calculate index metrics using region metrics
+      auto* index_metrics_single = index_metrics_internal.mutable_index_metrics();
+      if (CalculateIndexMetricsSingle(index_id, *index_metrics_single) < 0) {
+        DINGO_LOG(ERROR) << "ERRROR: CalculateIndexMetricsSingle failed" << index_id;
+        return butil::Status(pb::error::Errno::EINDEX_METRICS_FAILED, "CalculateIndexMetricsSingle failed");
+      } else {
+        index_metrics_internal.set_id(index_id);
+        index_metrics_internal.mutable_index_metrics()->CopyFrom(*index_metrics_single);
+        // index_metrics_map_[index_id] = index_metrics_internal;
+        // temp_index_metrics->CopyFrom(index_metrics_internal);
+        index_metrics_map_.Put(index_id, index_metrics_internal);
+
+        DINGO_LOG(INFO) << fmt::format(
+            "index_metrics first calculated, index_id={} row_count={} min_key={} max_key={} part_count={}", index_id,
+            index_metrics_single->rows_count(), index_metrics_single->min_key(), index_metrics_single->max_key(),
+            index_metrics_single->part_count());
+      }
+    } else {
+      // construct IndexMetrics from index_metrics_internal
+      DINGO_LOG(DEBUG) << "index_metrics found, return metrics in map" << index_id;
+      // index_metrics_internal = *temp_index_metrics;
+    }
+  }
+
+  // construct IndexMetricsWithId
+  auto* common_id_index = index_metrics.mutable_id();
+  common_id_index->set_entity_id(index_id);
+  common_id_index->set_parent_entity_id(schema_id);
+  common_id_index->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_INDEX);
+
+  index_metrics.mutable_index_metrics()->CopyFrom(index_metrics_internal.index_metrics());
+
+  return butil::Status::OK();
+}
+
 // CalculateTableMetricsSingle
 uint64_t CoordinatorControl::CalculateTableMetricsSingle(uint64_t table_id, pb::meta::TableMetrics& table_metrics) {
   pb::coordinator_internal::TableInternal table_internal;
@@ -967,6 +1507,78 @@ uint64_t CoordinatorControl::CalculateTableMetricsSingle(uint64_t table_id, pb::
   return 0;
 }
 
+// CalculateIndexMetricsSingle
+uint64_t CoordinatorControl::CalculateIndexMetricsSingle(uint64_t index_id, pb::meta::IndexMetrics& index_metrics) {
+  pb::coordinator_internal::IndexInternal index_internal;
+  {
+    // BAIDU_SCOPED_LOCK(index_map_mutex_);
+    int ret = index_map_.Get(index_id, index_internal);
+    if (ret < 0) {
+      DINGO_LOG(ERROR) << "ERRROR: index_id not found" << index_id;
+      return -1;
+    }
+  }
+
+  // build result metrics
+  uint64_t row_count = 0;
+  std::string min_key(10, '\x00');
+  std::string max_key(10, '\xFF');
+
+  for (int i = 0; i < index_internal.partitions_size(); i++) {
+    // part id
+    uint64_t region_id = index_internal.partitions(i).region_id();
+
+    // get region
+    pb::common::Region part_region;
+    {
+      // BAIDU_SCOPED_LOCK(region_map_mutex_);
+      int ret = region_map_.Get(region_id, part_region);
+      if (ret < 0) {
+        DINGO_LOG(ERROR) << fmt::format(
+            "ERROR cannot find region in regionmap_ while GetIndex, index_id={} region_id={}", index_id, region_id);
+        continue;
+      }
+    }
+
+    if (!part_region.has_metrics()) {
+      DINGO_LOG(ERROR) << fmt::format("ERROR region has no metrics, index_id={} region_id={}", index_id, region_id);
+      continue;
+    }
+
+    const auto& region_metrics = part_region.metrics();
+    row_count += region_metrics.row_count();
+
+    if (min_key.empty()) {
+      min_key = region_metrics.min_key();
+    } else {
+      if (min_key.compare(region_metrics.min_key()) > 0) {
+        min_key = region_metrics.min_key();
+      }
+    }
+
+    if (max_key.empty()) {
+      max_key = region_metrics.max_key();
+    } else {
+      if (max_key.compare(region_metrics.max_key()) < 0) {
+        max_key = region_metrics.max_key();
+      }
+    }
+  }
+
+  index_metrics.set_rows_count(row_count);
+  index_metrics.set_min_key(min_key);
+  index_metrics.set_max_key(max_key);
+  index_metrics.set_part_count(index_internal.partitions_size());
+
+  DINGO_LOG(DEBUG) << fmt::format(
+      "index_metrics calculated in CalculateIndexMetricsSingle, index_id={} row_count={} min_key={} max_key={} "
+      "part_count={}",
+      index_id, index_metrics.rows_count(), index_metrics.min_key(), index_metrics.max_key(),
+      index_metrics.part_count());
+
+  return 0;
+}
+
 // CalculateTableMetrics
 // calculate table metrics using region metrics
 // only recalculate when table_metrics_map_ does contain table_id
@@ -978,7 +1590,7 @@ void CoordinatorControl::CalculateTableMetrics() {
   temp_table_metrics_map.init(10000);
   table_metrics_map_.GetFlatMapCopy(temp_table_metrics_map);
 
-  for (auto table_metrics_internal : temp_table_metrics_map) {
+  for (auto& table_metrics_internal : temp_table_metrics_map) {
     uint64_t table_id = table_metrics_internal.first;
     pb::meta::TableMetrics table_metrics;
     if (CalculateTableMetricsSingle(table_id, table_metrics) < 0) {
@@ -996,6 +1608,39 @@ void CoordinatorControl::CalculateTableMetrics() {
 
       // mbvar table
       coordinator_bvar_metrics_table_.UpdateTableBvar(table_id, table_metrics.rows_count(), table_metrics.part_count());
+    }
+  }
+}
+
+// CalculateIndexMetrics
+// calculate index metrics using region metrics
+// only recalculate when index_metrics_map_ does contain index_id
+// if the index_id is not in index_map_, remove it from index_metrics_map_
+void CoordinatorControl::CalculateIndexMetrics() {
+  // BAIDU_SCOPED_LOCK(index_metrics_map_mutex_);
+
+  butil::FlatMap<uint64_t, pb::coordinator_internal::IndexMetricsInternal> temp_index_metrics_map;
+  temp_index_metrics_map.init(10000);
+  index_metrics_map_.GetFlatMapCopy(temp_index_metrics_map);
+
+  for (auto& index_metrics_internal : temp_index_metrics_map) {
+    uint64_t index_id = index_metrics_internal.first;
+    pb::meta::IndexMetrics index_metrics;
+    if (CalculateIndexMetricsSingle(index_id, index_metrics) < 0) {
+      DINGO_LOG(ERROR) << "ERRROR: CalculateIndexMetricsSingle failed, remove metrics from map" << index_id;
+      index_metrics_map_.Erase(index_id);
+
+      // mbvar index
+      coordinator_bvar_metrics_index_.DeleteIndexBvar(index_id);
+
+    } else {
+      index_metrics_internal.second.mutable_index_metrics()->CopyFrom(index_metrics);
+
+      // update index_metrics_map_ in memory
+      index_metrics_map_.PutIfExists(index_id, index_metrics_internal.second);
+
+      // mbvar index
+      coordinator_bvar_metrics_index_.UpdateIndexBvar(index_id, index_metrics.rows_count(), index_metrics.part_count());
     }
   }
 }

@@ -130,6 +130,38 @@ class CoordinatorBvarMetricsTable {
   DingoMultiDimension<bvar::Status<uint64_t>> table_metrics_;
 };
 
+class CoordinatorBvarMetricsIndex {
+ public:
+  CoordinatorBvarMetricsIndex() : index_metrics_("dingo_metrics_coordinator_index", {"id", "type"}) {
+    index_metrics_.expose("dingo_metrics_coordinator_index");
+  }
+  ~CoordinatorBvarMetricsIndex() = default;
+
+  CoordinatorBvarMetricsIndex(const CoordinatorBvarMetricsIndex &) = delete;
+  void operator=(const CoordinatorBvarMetricsIndex &) = delete;
+
+  void UpdateIndexBvar(uint64_t index_id, uint64_t index_row_count, uint64_t index_part_count) {
+    auto *stats = index_metrics_.get_stats({std::to_string(index_id), "row_count"});
+    if (stats) {
+      stats->set_value(index_row_count);
+    }
+    auto *stats2 = index_metrics_.get_stats({std::to_string(index_id), "part_count"});
+    if (stats2) {
+      stats2->set_value(index_part_count);
+    }
+  }
+
+  void DeleteIndexBvar(uint64_t index_id) {
+    index_metrics_.delete_stats({std::to_string(index_id), "row_count"});
+    index_metrics_.delete_stats({std::to_string(index_id), "part_count"});
+  }
+
+  void Clear() { index_metrics_.delete_stats(); }
+
+ private:
+  DingoMultiDimension<bvar::Status<uint64_t>> index_metrics_;
+};
+
 }  // namespace dingodb
 
 #endif  // DINGODB_COORDINATOR_BVAR_METRICS_H_

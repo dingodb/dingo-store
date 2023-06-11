@@ -101,6 +101,16 @@ void SendDropSchema(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator
 void SendCreateSchema(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendGetTableMetrics(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 
+void SendGetIndexesCount(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendGetIndexes(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendGetIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendGetIndexByName(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendGetIndexRange(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendCreateIndexId(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendCreateIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction, bool with_index_id);
+void SendDropIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendGetIndexMetrics(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+
 // auto increment functions
 void SendGetAutoIncrements(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendGetAutoIncrement(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);

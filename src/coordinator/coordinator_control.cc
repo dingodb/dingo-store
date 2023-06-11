@@ -64,6 +64,8 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   executor_user_meta_ =
       new MetaSafeStringMapStorage<pb::coordinator_internal::ExecutorUserInternal>(&executor_user_map_);
   task_list_meta_ = new MetaSafeMapStorage<pb::coordinator::TaskList>(&task_list_map_);
+  index_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::IndexInternal>(&index_map_);
+  index_metrics_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::IndexMetricsInternal>(&index_metrics_map_);
 
   // init FlatMap
   store_need_push_.init(100, 80);
@@ -86,6 +88,9 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   table_metrics_map_.Init(10000);         // table_metrics_map_ is a big map
   executor_user_map_.Init(100);           // executor_user_map_ is a small map
   task_list_map_.Init(100);               // task_list_map_ is a small map
+  index_name_map_safe_temp_.Init(10000);  // index_map_ is a big map
+  index_map_.Init(10000);                 // index_map_ is a big map
+  index_metrics_map_.Init(10000);         // index_metrics_map_ is a big map
 }
 
 CoordinatorControl::~CoordinatorControl() {
@@ -101,31 +106,36 @@ CoordinatorControl::~CoordinatorControl() {
   delete table_metrics_meta_;
   delete store_operation_meta_;
   delete executor_user_meta_;
+  delete index_meta_;
+  delete index_metrics_meta_;
 }
 
 // InitIds
 // Setup some initial ids for human readable
 void CoordinatorControl::InitIds() {
   if (id_epoch_map_.GetPresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_COORINATOR) == 0) {
-    id_epoch_map_.UpdatePresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_COORINATOR, 22000);
+    id_epoch_map_.UpdatePresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_COORINATOR, 20000);
   }
   if (id_epoch_map_.GetPresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_STORE) == 0) {
-    id_epoch_map_.UpdatePresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_STORE, 33000);
+    id_epoch_map_.UpdatePresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_STORE, 30000);
   }
   if (id_epoch_map_.GetPresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_EXECUTOR) == 0) {
-    id_epoch_map_.UpdatePresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_EXECUTOR, 44000);
+    id_epoch_map_.UpdatePresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_EXECUTOR, 40000);
   }
   if (id_epoch_map_.GetPresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_SCHEMA) == 0) {
-    id_epoch_map_.UpdatePresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_SCHEMA, 55000);
+    id_epoch_map_.UpdatePresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_SCHEMA, 50000);
   }
   if (id_epoch_map_.GetPresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_TABLE) == 0) {
-    id_epoch_map_.UpdatePresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_TABLE, 66000);
+    id_epoch_map_.UpdatePresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_TABLE, 60000);
+  }
+  if (id_epoch_map_.GetPresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_INDEX) == 0) {
+    id_epoch_map_.UpdatePresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_INDEX, 70000);
   }
   if (id_epoch_map_.GetPresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION) == 0) {
-    id_epoch_map_.UpdatePresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION, 77000);
+    id_epoch_map_.UpdatePresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION, 80000);
   }
   if (id_epoch_map_.GetPresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD) == 0) {
-    id_epoch_map_.UpdatePresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, 880000);
+    id_epoch_map_.UpdatePresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, 1000000);
   }
 }
 
@@ -312,6 +322,32 @@ bool CoordinatorControl::Recover() {
   DINGO_LOG(INFO) << "Recover task_list_meta_, count=" << kvs.size();
   kvs.clear();
 
+  // 12.index map
+  if (!meta_reader_->Scan(index_meta_->Prefix(), kvs)) {
+    return false;
+  }
+  {
+    // BAIDU_SCOPED_LOCK(index_map_mutex_);
+    if (!index_meta_->Recover(kvs)) {
+      return false;
+    }
+  }
+  DINGO_LOG(INFO) << "Recover index_meta, count=" << kvs.size();
+  kvs.clear();
+
+  // 13.index_metrics map
+  if (!meta_reader_->Scan(index_metrics_meta_->Prefix(), kvs)) {
+    return false;
+  }
+  {
+    // BAIDU_SCOPED_LOCK(index_metrics_map_mutex_);
+    if (!index_metrics_meta_->Recover(kvs)) {
+      return false;
+    }
+  }
+  DINGO_LOG(INFO) << "Recover index_metrics_meta, count=" << kvs.size();
+  kvs.clear();
+
   // copy id_epoch_map_ to id_epoch_map_safe_temp_
   {
     // BAIDU_SCOPED_LOCK(id_epoch_map_mutex_);
@@ -349,6 +385,18 @@ bool CoordinatorControl::Recover() {
     }
   }
   DINGO_LOG(INFO) << "Recover table_name_map_safe_temp, count=" << table_name_map_safe_temp_.Size();
+
+  // copy index_map_ to index_name_map_safe_temp_
+  {
+    // BAIDU_SCOPED_LOCK(index_map_mutex_);
+    butil::FlatMap<uint64_t, pb::coordinator_internal::IndexInternal> index_map_copy;
+    index_map_copy.init(10000);
+    index_map_.GetFlatMapCopy(index_map_copy);
+    for (const auto& it : index_map_copy) {
+      index_name_map_safe_temp_.Put(std::to_string(it.second.schema_id()) + it.second.definition().name(), it.first);
+    }
+  }
+  DINGO_LOG(INFO) << "Recover index_name_map_safe_temp, count=" << index_name_map_safe_temp_.Size();
 
   return true;
 }

@@ -391,3 +391,268 @@ void SendGetTableMetrics(std::shared_ptr<dingodb::CoordinatorInteraction> coordi
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG_INFO << response.DebugString();
 }
+
+void SendGetIndexsCount(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  dingodb::pb::meta::GetIndexesCountRequest request;
+  dingodb::pb::meta::GetIndexesCountResponse response;
+
+  auto* schema_id = request.mutable_schema_id();
+  schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
+  schema_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
+  schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+
+  auto status = coordinator_interaction->SendRequest("GetIndexsCount", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG_INFO << "index_count=" << response.indexes_count();
+}
+
+void SendGetIndexs(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  dingodb::pb::meta::GetIndexesRequest request;
+  dingodb::pb::meta::GetIndexesResponse response;
+
+  auto* schema_id = request.mutable_schema_id();
+  schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
+  schema_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
+  schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+
+  if (FLAGS_schema_id > 0) {
+    schema_id->set_entity_id(FLAGS_schema_id);
+  }
+
+  auto status = coordinator_interaction->SendRequest("GetIndexs", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  // DINGO_LOG_INFO << response.DebugString();
+
+  for (const auto& index_definition_with_id : response.index_definition_with_ids()) {
+    DINGO_LOG(INFO) << "index_id=[" << index_definition_with_id.index_id().entity_id() << "]"
+                    << "index_name=[" << index_definition_with_id.index_definition().name() << "], index_type=["
+                    << dingodb::pb::meta::IndexType_Name(index_definition_with_id.index_definition().index_type())
+                    << "]";
+  }
+
+  DINGO_LOG(INFO) << "index_count=" << response.index_definition_with_ids_size();
+}
+
+void SendGetIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  dingodb::pb::meta::GetIndexRequest request;
+  dingodb::pb::meta::GetIndexResponse response;
+
+  auto* index_id = request.mutable_index_id();
+  index_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_INDEX);
+  index_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+
+  if (FLAGS_id.empty()) {
+    DINGO_LOG(WARNING) << "id is empty, this index_id";
+    return;
+  }
+  index_id->set_entity_id(std::stol(FLAGS_id));
+
+  auto status = coordinator_interaction->SendRequest("GetIndex", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG_INFO << response.DebugString();
+}
+
+void SendGetIndexByName(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  dingodb::pb::meta::GetIndexByNameRequest request;
+  dingodb::pb::meta::GetIndexByNameResponse response;
+
+  if (FLAGS_name.empty()) {
+    DINGO_LOG(WARNING) << "name is empty";
+    return;
+  }
+
+  request.set_index_name(FLAGS_name);
+
+  auto status = coordinator_interaction->SendRequest("GetIndexByName", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG_INFO << response.DebugString();
+}
+
+void SendGetIndexRange(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  dingodb::pb::meta::GetIndexRangeRequest request;
+  dingodb::pb::meta::GetIndexRangeResponse response;
+
+  auto* index_id = request.mutable_index_id();
+  index_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_INDEX);
+  index_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+
+  if (FLAGS_id.empty()) {
+    DINGO_LOG(WARNING) << "id is empty";
+    return;
+  }
+  index_id->set_entity_id(std::stol(FLAGS_id));
+
+  auto status = coordinator_interaction->SendRequest("GetIndexRange", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG_INFO << response.DebugString();
+
+  for (const auto& it : response.index_range().range_distribution()) {
+    DINGO_LOG(INFO) << "region_id=[" << it.id().entity_id() << "]"
+                    << "range=[" << dingodb::Helper::StringToHex(it.range().start_key()) << ","
+                    << dingodb::Helper::StringToHex(it.range().end_key()) << "]"
+                    << " leader=[" << it.leader().host() << ":" << it.leader().port() << "]";
+  }
+}
+
+void SendCreateIndexId(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  dingodb::pb::meta::CreateIndexIdRequest request;
+  dingodb::pb::meta::CreateIndexIdResponse response;
+
+  auto* schema_id = request.mutable_schema_id();
+  schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
+  schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+  schema_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
+
+  auto status = coordinator_interaction->SendRequest("CreateIndexId", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG_INFO << response.DebugString();
+}
+
+void SendCreateIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction, bool with_index_id) {
+  dingodb::pb::meta::CreateIndexRequest request;
+  dingodb::pb::meta::CreateIndexResponse response;
+
+  if (FLAGS_name.empty()) {
+    DINGO_LOG(WARNING) << "name is empty";
+    return;
+  }
+
+  auto* schema_id = request.mutable_schema_id();
+  schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
+  schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+  schema_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
+
+  if (FLAGS_schema_id > 0) {
+    schema_id->set_entity_id(FLAGS_schema_id);
+  }
+
+  if (with_index_id) {
+    auto* index_id = request.mutable_index_id();
+    index_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_INDEX);
+    index_id->set_parent_entity_id(schema_id->entity_id());
+    if (FLAGS_id.empty()) {
+      DINGO_LOG(WARNING) << "id is empty";
+      return;
+    }
+    index_id->set_entity_id(std::stol(FLAGS_id));
+  }
+
+  // string name = 1;
+  auto* index_definition = request.mutable_index_definition();
+  index_definition->set_name(FLAGS_name);
+
+  if (FLAGS_replica > 0) {
+    index_definition->set_replica(FLAGS_replica);
+  }
+
+  // map<string, Index> indexes = 3;
+  // uint32 version = 4;
+  index_definition->set_version(1);
+  // PartitionRule index_partition = 6;
+  // map<string, string> properties = 8;
+
+  // add partition_rule
+  // repeated string columns = 1;
+  // PartitionStrategy strategy = 2;
+  // RangePartition range_partition = 3;
+  // HashPartition hash_partition = 4;
+  auto* partition_rule = index_definition->mutable_index_partition();
+  auto* part_column = partition_rule->add_columns();
+  part_column->assign("test_part_column");
+  auto* range_partition = partition_rule->mutable_range_partition();
+
+  if (with_index_id) {
+    auto* part_range = range_partition->add_ranges();
+    part_range->set_start_key(EncodeUint64(std::stol(FLAGS_id)));
+    part_range->set_end_key(EncodeUint64(1 + std::stol(FLAGS_id)));
+  } else {
+    for (int i = 0; i < 2; i++) {
+      auto* part_range = range_partition->add_ranges();
+      auto* part_range_start = part_range->mutable_start_key();
+      part_range_start->assign(std::to_string(i * 100));
+      auto* part_range_end = part_range->mutable_end_key();
+      part_range_end->assign(std::to_string((i + 1) * 100));
+    }
+  }
+
+  auto status = coordinator_interaction->SendRequest("CreateIndex", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG_INFO << response.DebugString();
+}
+
+void SendDropIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  dingodb::pb::meta::DropIndexRequest request;
+  dingodb::pb::meta::DropIndexResponse response;
+
+  auto* index_id = request.mutable_index_id();
+  index_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_INDEX);
+  index_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+  if (FLAGS_id.empty()) {
+    DINGO_LOG(WARNING) << "id is empty";
+    return;
+  }
+  index_id->set_entity_id(std::stol(FLAGS_id));
+
+  auto status = coordinator_interaction->SendRequest("DropIndex", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG_INFO << response.DebugString();
+}
+
+void SendGetIndexMetrics(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  dingodb::pb::meta::GetIndexMetricsRequest request;
+  dingodb::pb::meta::GetIndexMetricsResponse response;
+
+  auto* index_id = request.mutable_index_id();
+  index_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_INDEX);
+  index_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+  if (FLAGS_id.empty()) {
+    DINGO_LOG(WARNING) << "id is empty";
+    return;
+  }
+  index_id->set_entity_id(std::stol(FLAGS_id));
+
+  auto status = coordinator_interaction->SendRequest("GetIndexMetrics", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG_INFO << response.DebugString();
+}
+
+void SendGetIndexesCount(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  dingodb::pb::meta::GetIndexesCountRequest request;
+  dingodb::pb::meta::GetIndexesCountResponse response;
+
+  auto* schema_id = request.mutable_schema_id();
+  schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
+  schema_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
+  schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+
+  auto status = coordinator_interaction->SendRequest("GetIndexesCount", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG_INFO << "index_count=" << response.indexes_count();
+}
+
+void SendGetIndexes(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  dingodb::pb::meta::GetIndexesRequest request;
+  dingodb::pb::meta::GetIndexesResponse response;
+
+  auto* schema_id = request.mutable_schema_id();
+  schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
+  schema_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
+  schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+
+  if (FLAGS_schema_id > 0) {
+    schema_id->set_entity_id(FLAGS_schema_id);
+  }
+
+  auto status = coordinator_interaction->SendRequest("GetIndexes", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  // DINGO_LOG_INFO << response.DebugString();
+
+  for (const auto& index_definition_with_id : response.index_definition_with_ids()) {
+    DINGO_LOG(INFO) << "index_id=[" << index_definition_with_id.index_id().entity_id() << "]"
+                    << "index_name=[" << index_definition_with_id.index_definition().name() << "], index_type=["
+                    << dingodb::pb::meta::IndexType_Name(index_definition_with_id.index_definition().index_type())
+                    << "]";
+  }
+
+  DINGO_LOG(INFO) << "index_count=" << response.index_definition_with_ids_size();
+}
