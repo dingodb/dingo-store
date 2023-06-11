@@ -426,7 +426,8 @@ void SendGetIndexs(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_
   for (const auto& index_definition_with_id : response.index_definition_with_ids()) {
     DINGO_LOG(INFO) << "index_id=[" << index_definition_with_id.index_id().entity_id() << "]"
                     << "index_name=[" << index_definition_with_id.index_definition().name() << "], index_type=["
-                    << dingodb::pb::meta::IndexType_Name(index_definition_with_id.index_definition().index_type())
+                    << dingodb::pb::common::IndexType_Name(
+                           index_definition_with_id.index_definition().index_parameter().index_type())
                     << "]";
   }
 
@@ -650,7 +651,8 @@ void SendGetIndexes(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator
   for (const auto& index_definition_with_id : response.index_definition_with_ids()) {
     DINGO_LOG(INFO) << "index_id=[" << index_definition_with_id.index_id().entity_id() << "]"
                     << "index_name=[" << index_definition_with_id.index_definition().name() << "], index_type=["
-                    << dingodb::pb::meta::IndexType_Name(index_definition_with_id.index_definition().index_type())
+                    << dingodb::pb::common::IndexType_Name(
+                           index_definition_with_id.index_definition().index_parameter().index_type())
                     << "]";
   }
 

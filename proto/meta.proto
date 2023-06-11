@@ -158,44 +158,13 @@ message TableDefinition {
   string create_sql = 11;
 }
 
-enum IndexType {
-  INDEX_TYPE_VECTOR = 0;
-  INDEX_TYPE_SCALAR = 1;
-}
-
-enum VectorIndexType {
-  VECTOR_INDEX_TYPE_NONE = 0;
-  VECTOR_INDEX_TYPE_FLAT = 1;
-  VECTOR_INDEX_TYPE_IVF_FLAT = 2;
-  VECTOR_INDEX_TYPE_IVF_PQ = 3;
-  VECTOR_INDEX_TYPE_HNSW = 4;
-  VECTOR_INDEX_TYPE_DISKANN = 5;
-}
-
-message VectorIndexParamter {
-  VectorIndexType index_type = 1;
-
-  // vector
-  uint32 dimension = 2;
-
-  // ivf
-  uint32 nlist = 3;
-
-  // hnsw
-  uint32 efConstruction = 4;
-  uint32 efSearch = 5;
-}
-
 // IndexDefinition is for vector/scalar index
 message IndexDefinition {
   string name = 1;
   uint32 version = 2;
   PartitionRule index_partition = 3;
   uint32 replica = 4;
-  IndexType index_type = 5;
-
-  // vector index
-  VectorIndexParamter vector_index_parameter = 6;
+  dingodb.pb.common.IndexParameter index_parameter = 5;
 }
 
 // This Part is mainly equal to the Part in DingoDB 0.5.x

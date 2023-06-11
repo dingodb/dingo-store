@@ -446,6 +446,8 @@ butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta
   if (replica < 1) {
     replica = 3;
   }
+
+  pb::common::IndexParameter index_parameter;
   for (int i = 0; i < range_partition.ranges_size(); i++) {
     // int ret = CreateRegion(const std::string &region_name, const std::string
     // &resource_tag, int32_t replica_num, pb::common::Range region_range,
@@ -454,8 +456,8 @@ butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta
                                     table_definition.name() + std::string("_part_") + std::to_string(i);
     uint64_t new_region_id = 0;
 
-    auto ret = CreateRegion(region_name, "", replica, range_partition.ranges(i), schema_id, new_table_id, new_region_id,
-                            meta_increment);
+    auto ret = CreateRegion(region_name, pb::common::RegionType::STORE_REGION, "", replica, range_partition.ranges(i),
+                            schema_id, new_table_id, 0, index_parameter, new_region_id, meta_increment);
     if (!ret.ok()) {
       DINGO_LOG(ERROR) << "CreateRegion failed in CreateTable table_name=" << table_definition.name();
       break;
@@ -689,8 +691,9 @@ butil::Status CoordinatorControl::CreateIndex(uint64_t schema_id, const pb::meta
                                     index_definition.name() + std::string("_part_") + std::to_string(i);
     uint64_t new_region_id = 0;
 
-    auto ret = CreateRegion(region_name, "", replica, range_partition.ranges(i), schema_id, new_index_id, new_region_id,
-                            meta_increment);
+    auto ret =
+        CreateRegion(region_name, pb::common::RegionType::INDEX_REGION, "", replica, range_partition.ranges(i),
+                     schema_id, 0, new_index_id, index_definition.index_parameter(), new_region_id, meta_increment);
     if (!ret.ok()) {
       DINGO_LOG(ERROR) << "CreateRegion failed in CreateIndex index_name=" << index_definition.name();
       break;

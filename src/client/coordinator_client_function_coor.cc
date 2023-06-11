@@ -465,7 +465,8 @@ void SendGetStoreMap(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
     if (store.state() == dingodb::pb::common::StoreState::STORE_NORMAL) {
       store_count_available++;
     }
-    DINGO_LOG(INFO) << "store_id=" << store.id() << " state=" << dingodb::pb::common::StoreState_Name(store.state())
+    DINGO_LOG(INFO) << "store_id=" << store.id() << " type=" << dingodb::pb::common::StoreType_Name(store.store_type())
+                    << " state=" << dingodb::pb::common::StoreState_Name(store.state())
                     << " in_state=" << dingodb::pb::common::StoreInState_Name(store.in_state())
                     << " create_timestamp=" << store.create_timestamp()
                     << " last_seen_timestamp=" << store.last_seen_timestamp();
