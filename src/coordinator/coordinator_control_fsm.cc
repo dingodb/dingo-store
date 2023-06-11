@@ -101,6 +101,20 @@ void CoordinatorControl::OnLeaderStart(int64_t term) {
   DINGO_LOG(INFO) << "OnLeaderStart init table_name_map_safe_temp_ finished, term=" << term
                   << " count=" << table_name_map_safe_temp_.Size();
 
+  // copy index_map_ to index_name_map_safe_temp_
+  {
+    // BAIDU_SCOPED_LOCK(index_map_mutex_);
+    index_name_map_safe_temp_.Clear();
+    butil::FlatMap<uint64_t, pb::coordinator_internal::IndexInternal> index_map_copy;
+    index_map_copy.init(10000);
+    index_map_.GetFlatMapCopy(index_map_copy);
+    for (const auto& it : index_map_copy) {
+      index_name_map_safe_temp_.Put(std::to_string(it.second.schema_id()) + it.second.definition().name(), it.first);
+    }
+  }
+  DINGO_LOG(INFO) << "OnLeaderStart init index_name_map_safe_temp_ finished, term=" << term
+                  << " count=" << index_name_map_safe_temp_.Size();
+
   coordinator_bvar_.SetValue(1);
   DINGO_LOG(INFO) << "OnLeaderStart finished, term=" << term;
 }
@@ -110,9 +124,13 @@ void CoordinatorControl::OnLeaderStop() {
   coordinator_bvar_metrics_store_.Clear();
   coordinator_bvar_metrics_region_.Clear();
   coordinator_bvar_metrics_table_.Clear();
+  coordinator_bvar_metrics_index_.Clear();
 
   // clear all table_metrics on follower
   table_metrics_map_.Clear();
+
+  // clear all index_metrics on follower
+  index_metrics_map_.Clear();
 
   DINGO_LOG(INFO) << "OnLeaderStop finished";
 }
@@ -283,6 +301,30 @@ bool CoordinatorControl::LoadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapsh
     snapshot_file_kv->CopyFrom(kv);
   }
   DINGO_LOG(INFO) << "Snapshot task_list_meta_, count=" << kvs.size();
+  kvs.clear();
+
+  // 12.index map
+  if (!meta_reader_->Scan(snapshot, index_meta_->Prefix(), kvs)) {
+    return false;
+  }
+
+  for (const auto& kv : kvs) {
+    auto* snapshot_file_kv = meta_snapshot_file.add_index_map_kvs();
+    snapshot_file_kv->CopyFrom(kv);
+  }
+  DINGO_LOG(INFO) << "Snapshot index_meta, count=" << kvs.size();
+  kvs.clear();
+
+  // 13.index_metrics map
+  if (!meta_reader_->Scan(snapshot, index_metrics_meta_->Prefix(), kvs)) {
+    return false;
+  }
+
+  for (const auto& kv : kvs) {
+    auto* snapshot_file_kv = meta_snapshot_file.add_index_metrics_map_kvs();
+    snapshot_file_kv->CopyFrom(kv);
+  }
+  DINGO_LOG(INFO) << "Snapshot index_metrics_meta, count=" << kvs.size();
   kvs.clear();
 
   return true;
@@ -655,6 +697,62 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
   DINGO_LOG(INFO) << "LoadSnapshot task_list_meta, count=" << kvs.size();
   kvs.clear();
 
+  // 12.index map
+  kvs.reserve(meta_snapshot_file.index_map_kvs_size());
+  for (int i = 0; i < meta_snapshot_file.index_map_kvs_size(); i++) {
+    kvs.push_back(meta_snapshot_file.index_map_kvs(i));
+  }
+  {
+    // BAIDU_SCOPED_LOCK(index_map_mutex_);
+    if (!index_meta_->Recover(kvs)) {
+      return false;
+    }
+
+    // remove data in rocksdb
+    if (!meta_writer_->DeletePrefix(index_meta_->internal_prefix)) {
+      DINGO_LOG(ERROR) << "Coordinator delete index_meta_ range failed in LoadMetaFromSnapshotFile";
+      return false;
+    }
+    DINGO_LOG(INFO) << "Coordinator delete range index_meta_ success in LoadMetaFromSnapshotFile";
+
+    // write data to rocksdb
+    if (!meta_writer_->Put(kvs)) {
+      DINGO_LOG(ERROR) << "Coordinator write index_meta_ failed in LoadMetaFromSnapshotFile";
+      return false;
+    }
+    DINGO_LOG(INFO) << "Coordinator put index_meta_ success in LoadMetaFromSnapshotFile";
+  }
+  DINGO_LOG(INFO) << "LoadSnapshot index_meta, count=" << kvs.size();
+  kvs.clear();
+
+  // 13.index_metrics map
+  kvs.reserve(meta_snapshot_file.index_metrics_map_kvs_size());
+  for (int i = 0; i < meta_snapshot_file.index_metrics_map_kvs_size(); i++) {
+    kvs.push_back(meta_snapshot_file.index_metrics_map_kvs(i));
+  }
+  {
+    // BAIDU_SCOPED_LOCK(index_metrics_map_mutex_);
+    if (!index_metrics_meta_->Recover(kvs)) {
+      return false;
+    }
+
+    // remove data in rocksdb
+    if (!meta_writer_->DeletePrefix(index_metrics_meta_->internal_prefix)) {
+      DINGO_LOG(ERROR) << "Coordinator delete index_metrics_meta_ range failed in LoadMetaFromSnapshotFile";
+      return false;
+    }
+    DINGO_LOG(INFO) << "Coordinator delete range index_metrics_meta_ success in LoadMetaFromSnapshotFile";
+
+    // write data to rocksdb
+    if (!meta_writer_->Put(kvs)) {
+      DINGO_LOG(ERROR) << "Coordinator write index_metrics_meta_ failed in LoadMetaFromSnapshotFile";
+      return false;
+    }
+    DINGO_LOG(INFO) << "Coordinator put index_metrics_meta_ success in LoadMetaFromSnapshotFile";
+  }
+  DINGO_LOG(INFO) << "LoadSnapshot index_metrics_meta, count=" << kvs.size();
+  kvs.clear();
+
   // init id_epoch_map_temp_
   // copy id_epoch_map_ to id_epoch_map_temp_
   {
@@ -696,6 +794,20 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
 
   DINGO_LOG(INFO) << "LoadSnapshot table_name_map_safe_temp, count=" << table_name_map_safe_temp_.Size();
 
+  // copy index_map_ to index_name_map_safe_temp_
+  {
+    // BAIDU_SCOPED_LOCK(index_map_mutex_);
+    index_name_map_safe_temp_.Clear();
+    butil::FlatMap<uint64_t, pb::coordinator_internal::IndexInternal> index_map_copy;
+    index_map_copy.init(10000);
+    index_map_.GetFlatMapCopy(index_map_copy);
+    for (const auto& it : index_map_copy) {
+      index_name_map_safe_temp_.Put(std::to_string(it.second.schema_id()) + it.second.definition().name(), it.first);
+    }
+  }
+
+  DINGO_LOG(INFO) << "LoadSnapshot index_name_map_safe_temp, count=" << index_name_map_safe_temp_.Size();
+
   return true;
 }
 
@@ -714,11 +826,11 @@ void LogMetaIncrementSize(pb::coordinator_internal::MetaIncrement& meta_incremen
   if (meta_increment.stores_size() > 0) {
     DINGO_LOG(DEBUG) << "2.stores_size=" << meta_increment.stores_size();
   }
-  if (meta_increment.tables_size() > 0) {
-    DINGO_LOG(DEBUG) << "3.tables_size=" << meta_increment.tables_size();
-  }
   if (meta_increment.executors_size() > 0) {
-    DINGO_LOG(DEBUG) << "4.executors_size=" << meta_increment.executors_size();
+    DINGO_LOG(DEBUG) << "3.executors_size=" << meta_increment.executors_size();
+  }
+  if (meta_increment.schemas_size() > 0) {
+    DINGO_LOG(DEBUG) << "4.schemas_size=" << meta_increment.schemas_size();
   }
   if (meta_increment.regions_size() > 0) {
     DINGO_LOG(DEBUG) << "5.regions_size=" << meta_increment.regions_size();
@@ -726,20 +838,29 @@ void LogMetaIncrementSize(pb::coordinator_internal::MetaIncrement& meta_incremen
   if (meta_increment.deleted_regions_size() > 0) {
     DINGO_LOG(DEBUG) << "5.1 deleted_regions_size=" << meta_increment.deleted_regions_size();
   }
+  if (meta_increment.tables_size() > 0) {
+    DINGO_LOG(DEBUG) << "6.tables_size=" << meta_increment.tables_size();
+  }
   if (meta_increment.store_metrics_size() > 0) {
-    DINGO_LOG(DEBUG) << "6.store_metrics_size=" << meta_increment.store_metrics_size();
+    DINGO_LOG(DEBUG) << "7.store_metrics_size=" << meta_increment.store_metrics_size();
   }
   if (meta_increment.table_metrics_size() > 0) {
-    DINGO_LOG(DEBUG) << "7.table_metrics_size=" << meta_increment.table_metrics_size();
+    DINGO_LOG(DEBUG) << "8.table_metrics_size=" << meta_increment.table_metrics_size();
   }
   if (meta_increment.store_operations_size() > 0) {
-    DINGO_LOG(DEBUG) << "8.store_operations_size=" << meta_increment.store_operations_size();
+    DINGO_LOG(DEBUG) << "9.store_operations_size=" << meta_increment.store_operations_size();
   }
   if (meta_increment.executor_users_size() > 0) {
-    DINGO_LOG(DEBUG) << "9.executor_users_size=" << meta_increment.executor_users_size();
+    DINGO_LOG(DEBUG) << "10.executor_users_size=" << meta_increment.executor_users_size();
   }
-  if (meta_increment.executor_users_size() > 0) {
-    DINGO_LOG(DEBUG) << "9.executor_users_size=" << meta_increment.executor_users_size();
+  if (meta_increment.task_lists_size() > 0) {
+    DINGO_LOG(DEBUG) << "11.task_lists_size=" << meta_increment.task_lists_size();
+  }
+  if (meta_increment.indexes_size() > 0) {
+    DINGO_LOG(DEBUG) << "12.indexes_size=" << meta_increment.indexes_size();
+  }
+  if (meta_increment.index_metrics_size() > 0) {
+    DINGO_LOG(DEBUG) << "13.index_metrics_size=" << meta_increment.index_metrics_size();
   }
 
   DINGO_LOG(DEBUG) << meta_increment.DebugString();
@@ -1542,6 +1663,178 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
 
         // meta_delete_kv
         meta_delete_to_kv.push_back(task_list_meta_->TransformToKvValue(task_list.task_list()));
+      }
+    }
+  }
+
+  // 12.index map
+  {
+    if (meta_increment.indexes_size() > 0) {
+      DINGO_LOG(INFO) << "12.indexes_size=" << meta_increment.indexes_size();
+    }
+
+    // BAIDU_SCOPED_LOCK(index_map_mutex_);
+    for (int i = 0; i < meta_increment.indexes_size(); i++) {
+      const auto& index = meta_increment.indexes(i);
+      if (index.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
+        // need to update schema, so acquire lock
+        // BAIDU_SCOPED_LOCK(schema_map_mutex_);
+
+        // add index to index_map
+        // index_map_[index.id()] = index.index();
+        int ret = index_map_.Put(index.id(), index.index());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement index CREATE, [id=" << index.id() << "] success";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement index CREATE, [id=" << index.id() << "] failed";
+        }
+
+        // meta_write_kv
+        meta_write_to_kv.push_back(index_meta_->TransformToKvValue(index.index()));
+
+        // add index to parent schema
+        pb::coordinator_internal::SchemaInternal schema_to_update;
+        ret = schema_map_.Get(index.index().schema_id(), schema_to_update);
+        // auto* schema = schema_map_.seek(index.schema_id());
+        if (ret > 0) {
+          // add new created index's id to its parent schema's index_ids
+          schema_to_update.add_index_ids(index.id());
+          schema_map_.Put(index.index().schema_id(), schema_to_update);
+
+          DINGO_LOG(INFO) << "5.index map CREATE new_sub_index id=" << index.id()
+                          << " parent_id=" << index.index().schema_id();
+
+          // meta_write_kv
+          meta_write_to_kv.push_back(schema_meta_->TransformToKvValue(schema_to_update));
+        } else {
+          DINGO_LOG(ERROR) << " CREATE INDEX apply illegal schema_id=" << index.index().schema_id()
+                           << " index_id=" << index.id() << " index_name=" << index.index().definition().name();
+        }
+      } else if (index.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
+        // update index to index_map
+        // auto& update_index = index_map_[index.id()];
+        // update_index.CopyFrom(index.index());
+        pb::coordinator_internal::IndexInternal index_internal;
+        int ret = index_map_.Get(index.id(), index_internal);
+        if (ret > 0) {
+          if (index.index().has_definition()) {
+            index_internal.mutable_definition()->CopyFrom(index.index().definition());
+          }
+          if (index.index().partitions_size() > 0) {
+            index_internal.clear_partitions();
+            for (const auto& it : index.index().partitions()) {
+              index_internal.add_partitions()->CopyFrom(it);
+            }
+          }
+          ret = index_map_.Put(index.id(), index_internal);
+          if (ret > 0) {
+            DINGO_LOG(INFO) << "ApplyMetaIncrement index UPDATE, [id=" << index.id() << "] success";
+          } else {
+            DINGO_LOG(WARNING) << "ApplyMetaIncrement index UPDATE, [id=" << index.id() << "] failed";
+          }
+
+          // meta_write_kv
+          meta_write_to_kv.push_back(index_meta_->TransformToKvValue(index_internal));
+        } else {
+          DINGO_LOG(ERROR) << " UPDATE INDEX apply illegal index_id=" << index.id()
+                           << " index_name=" << index.index().definition().name();
+        }
+
+      } else if (index.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
+        // need to update schema, so acquire lock
+        // BAIDU_SCOPED_LOCK(schema_map_mutex_);
+
+        // delete index from index_map
+        int ret = index_map_.Erase(index.id());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement index DELETE, [id=" << index.id() << "] success";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement index DELETE, [id=" << index.id() << "] failed";
+        }
+
+        // delete index_metrics
+        index_metrics_map_.Erase(index.id());
+
+        // delete from parent schema
+        pb::coordinator_internal::SchemaInternal schema_to_update;
+        ret = schema_map_.Get(index.index().schema_id(), schema_to_update);
+
+        if (ret > 0) {
+          // according to the doc, we must use CopyFrom for protobuf message data structure here
+          pb::coordinator_internal::SchemaInternal new_schema;
+          new_schema.CopyFrom(schema_to_update);
+
+          new_schema.clear_index_ids();
+
+          // add left index_id to new_schema
+          for (auto x : schema_to_update.index_ids()) {
+            if (x != index.id()) {
+              new_schema.add_index_ids(x);
+            }
+          }
+          schema_to_update.CopyFrom(new_schema);
+          schema_map_.Put(index.index().schema_id(), schema_to_update);
+
+          DINGO_LOG(INFO) << "5.index map DELETE new_sub_index id=" << index.id()
+                          << " parent_id=" << index.index().schema_id();
+
+          // meta_write_kv
+          meta_write_to_kv.push_back(schema_meta_->TransformToKvValue(schema_to_update));
+
+        } else {
+          DINGO_LOG(ERROR) << " DROP INDEX apply illegal schema_id=" << index.index().schema_id()
+                           << " index_id=" << index.id() << " index_name=" << index.index().definition().name();
+        }
+        // meta_delete_kv
+        meta_delete_to_kv.push_back(index_meta_->TransformToKvValue(index.index()));
+      }
+    }
+  }
+
+  // 13.index_metrics map
+  {
+    if (meta_increment.index_metrics_size() > 0) {
+      DINGO_LOG(INFO) << "ApplyMetaIncrement index_metrics size=" << meta_increment.index_metrics_size();
+    }
+
+    // BAIDU_SCOPED_LOCK(index_metrics_map_mutex_);
+    for (int i = 0; i < meta_increment.index_metrics_size(); i++) {
+      const auto& index_metrics = meta_increment.index_metrics(i);
+      if (index_metrics.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
+        // index_metrics_map_[index_metrics.id()] = index_metrics.index_metrics();
+        int ret = index_metrics_map_.Put(index_metrics.id(), index_metrics.index_metrics());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement index_metrics CREATE, [id=" << index_metrics.id() << "] success";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement index_metrics CREATE, [id=" << index_metrics.id() << "] failed";
+        }
+
+        // meta_write_kv
+        meta_write_to_kv.push_back(index_metrics_meta_->TransformToKvValue(index_metrics.index_metrics()));
+
+      } else if (index_metrics.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
+        // auto& update_index = index_metrics_map_[index_metrics.id()];
+        // update_index.CopyFrom(index_metrics.index_metrics());
+        int ret = index_metrics_map_.Put(index_metrics.id(), index_metrics.index_metrics());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement index_metrics UPDATE, [id=" << index_metrics.id() << "] success";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement index_metrics UPDATE, [id=" << index_metrics.id() << "] failed";
+        }
+
+        // meta_write_kv
+        meta_write_to_kv.push_back(index_metrics_meta_->TransformToKvValue(index_metrics.index_metrics()));
+
+      } else if (index_metrics.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
+        int ret = index_metrics_map_.Erase(index_metrics.id());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement index_metrics DELETE, [id=" << index_metrics.id() << "] success";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement index_metrics DELETE, [id=" << index_metrics.id() << "] failed";
+        }
+
+        // meta_delete_kv
+        meta_delete_to_kv.push_back(index_metrics_meta_->TransformToKvValue(index_metrics.index_metrics()));
       }
     }
   }

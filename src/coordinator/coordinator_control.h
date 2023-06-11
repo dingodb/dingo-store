@@ -238,6 +238,21 @@ class CoordinatorControl : public MetaControl {
   butil::Status CreateTable(uint64_t schema_id, const pb::meta::TableDefinition &table_definition,
                             uint64_t &new_table_id, pb::coordinator_internal::MetaIncrement &meta_increment);
 
+  // create schema
+  // in: schema_id
+  // out: new index_id
+  // return: errno
+  butil::Status CreateIndexId(uint64_t schema_id, uint64_t &new_index_id,
+                              pb::coordinator_internal::MetaIncrement &meta_increment);
+
+  // create schema
+  // in: schema_id
+  // in: index_definition
+  // out: new index_id
+  // return: errno
+  butil::Status CreateIndex(uint64_t schema_id, const pb::meta::IndexDefinition &index_definition,
+                            uint64_t &new_index_id, pb::coordinator_internal::MetaIncrement &meta_increment);
+
   // create store
   // in: cluster_id
   // out: store_id, keyring
@@ -419,6 +434,35 @@ class CoordinatorControl : public MetaControl {
   // out: TableMetricsWithId
   butil::Status GetTableMetrics(uint64_t schema_id, uint64_t table_id, pb::meta::TableMetricsWithId &table_metrics);
 
+  // get indexs
+  butil::Status GetIndexs(uint64_t schema_id, std::vector<pb::meta::IndexDefinitionWithId> &index_definition_with_ids);
+  butil::Status GetIndexsCount(uint64_t schema_id, uint64_t &indexs_count);
+
+  // get index
+  // in: schema_id
+  // in: index_id
+  // out: IndexDefinitionWithId
+  butil::Status GetIndex(uint64_t schema_id, uint64_t index_id, pb::meta::IndexDefinitionWithId &index_definition);
+
+  // get index by name
+  // in: schema_id
+  // in: index_name
+  // out: IndexDefinitionWithId
+  butil::Status GetIndexByName(uint64_t schema_id, const std::string &index_name,
+                               pb::meta::IndexDefinitionWithId &index_definition);
+
+  // get parts
+  // in: schema_id
+  // in: index_id
+  // out: repeated parts
+  butil::Status GetIndexRange(uint64_t schema_id, uint64_t index_id, pb::meta::IndexRange &index_range);
+
+  // get index metrics
+  // in: schema_id
+  // in: index_id
+  // out: IndexMetricsWithId
+  butil::Status GetIndexMetrics(uint64_t schema_id, uint64_t index_id, pb::meta::IndexMetricsWithId &index_metrics);
+
   // update store metrics with new metrics
   // return new epoch
   uint64_t UpdateStoreMetrics(const pb::common::StoreMetrics &store_metrics,
@@ -430,6 +474,14 @@ class CoordinatorControl : public MetaControl {
   // out: meta_increment
   // return: errno
   butil::Status DropTable(uint64_t schema_id, uint64_t table_id,
+                          pb::coordinator_internal::MetaIncrement &meta_increment);
+
+  // drop index
+  // in: schema_id
+  // in: index_id
+  // out: meta_increment
+  // return: errno
+  butil::Status DropIndex(uint64_t schema_id, uint64_t index_id,
                           pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // get coordinator_map
@@ -464,6 +516,12 @@ class CoordinatorControl : public MetaControl {
 
   // calculate single table metrics
   uint64_t CalculateTableMetricsSingle(uint64_t table_id, pb::meta::TableMetrics &table_metrics);
+
+  // calculate index metrics
+  void CalculateIndexMetrics();
+
+  // calculate single index metrics
+  uint64_t CalculateIndexMetricsSingle(uint64_t index_id, pb::meta::IndexMetrics &index_metrics);
 
   // functions below are for raft fsm
   bool IsLeader() override;                                              // for raft fsm
@@ -605,6 +663,18 @@ class CoordinatorControl : public MetaControl {
   DingoSafeMap<uint64_t, pb::coordinator::TaskList> task_list_map_;  // task_list_id -> task_list
   MetaSafeMapStorage<pb::coordinator::TaskList> *task_list_meta_;    // need construct
 
+  // 12.indexs
+  DingoSafeMap<uint64_t, pb::coordinator_internal::IndexInternal> index_map_;
+  MetaSafeMapStorage<pb::coordinator_internal::IndexInternal> *index_meta_;
+
+  // index map temp, only for leader use, is out of state machine
+  // index_name -> index-id
+  DingoSafeMap<std::string, uint64_t> index_name_map_safe_temp_;
+
+  // 13.index_metrics
+  DingoSafeMap<uint64_t, pb::coordinator_internal::IndexMetricsInternal> index_metrics_map_;
+  MetaSafeMapStorage<pb::coordinator_internal::IndexMetricsInternal> *index_metrics_meta_;
+
   // root schema write to raft
   bool root_schema_writed_to_raft_;
 
@@ -634,6 +704,7 @@ class CoordinatorControl : public MetaControl {
   CoordinatorBvarMetricsStore coordinator_bvar_metrics_store_;
   CoordinatorBvarMetricsRegion coordinator_bvar_metrics_region_;
   CoordinatorBvarMetricsTable coordinator_bvar_metrics_table_;
+  CoordinatorBvarMetricsIndex coordinator_bvar_metrics_index_;
 };
 
 }  // namespace dingodb

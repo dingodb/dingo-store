@@ -67,6 +67,7 @@ class MetaServiceImpl : public pb::meta::MetaService {
                  pb::meta::GetSchemaResponse* response, google::protobuf::Closure* done) override;
   void GetSchemaByName(google::protobuf::RpcController* controller, const pb::meta::GetSchemaByNameRequest* request,
                        pb::meta::GetSchemaByNameResponse* response, google::protobuf::Closure* done) override;
+
   void GetTables(google::protobuf::RpcController* controller, const pb::meta::GetTablesRequest* request,
                  pb::meta::GetTablesResponse* response, google::protobuf::Closure* done) override;
   void GetTablesCount(google::protobuf::RpcController* controller, const pb::meta::GetTablesCountRequest* request,
@@ -85,6 +86,25 @@ class MetaServiceImpl : public pb::meta::MetaService {
                  pb::meta::DropTableResponse* response, google::protobuf::Closure* done) override;
   void CreateTableId(google::protobuf::RpcController* controller, const pb::meta::CreateTableIdRequest* request,
                      pb::meta::CreateTableIdResponse* response, google::protobuf::Closure* done) override;
+
+  void GetIndexes(google::protobuf::RpcController* controller, const pb::meta::GetIndexesRequest* request,
+                  pb::meta::GetIndexesResponse* response, google::protobuf::Closure* done) override;
+  void GetIndexesCount(google::protobuf::RpcController* controller, const pb::meta::GetIndexesCountRequest* request,
+                       pb::meta::GetIndexesCountResponse* response, google::protobuf::Closure* done) override;
+  void GetIndex(google::protobuf::RpcController* controller, const pb::meta::GetIndexRequest* request,
+                pb::meta::GetIndexResponse* response, google::protobuf::Closure* done) override;
+  void GetIndexByName(google::protobuf::RpcController* controller, const pb::meta::GetIndexByNameRequest* request,
+                      pb::meta::GetIndexByNameResponse* response, google::protobuf::Closure* done) override;
+  void GetIndexRange(google::protobuf::RpcController* controller, const pb::meta::GetIndexRangeRequest* request,
+                     pb::meta::GetIndexRangeResponse* response, google::protobuf::Closure* done) override;
+  void GetIndexMetrics(google::protobuf::RpcController* controller, const pb::meta::GetIndexMetricsRequest* request,
+                       pb::meta::GetIndexMetricsResponse* response, google::protobuf::Closure* done) override;
+  void CreateIndex(google::protobuf::RpcController* controller, const pb::meta::CreateIndexRequest* request,
+                   pb::meta::CreateIndexResponse* response, google::protobuf::Closure* done) override;
+  void DropIndex(google::protobuf::RpcController* controller, const pb::meta::DropIndexRequest* request,
+                 pb::meta::DropIndexResponse* response, google::protobuf::Closure* done) override;
+  void CreateIndexId(google::protobuf::RpcController* controller, const pb::meta::CreateIndexIdRequest* request,
+                     pb::meta::CreateIndexIdResponse* response, google::protobuf::Closure* done) override;
 
   void CreateSchema(google::protobuf::RpcController* controller, const pb::meta::CreateSchemaRequest* request,
                     pb::meta::CreateSchemaResponse* response, google::protobuf::Closure* done) override;

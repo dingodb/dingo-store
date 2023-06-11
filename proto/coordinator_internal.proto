@@ -26,6 +26,10 @@ message TableRegionInternal {
   uint64 region_id = 1;  // the region id of this part
 }
 
+message IndexRegionInternal {
+  uint64 region_id = 1;  // the region id of this part
+}
+
 // TableInternal is storage structure for coordinator
 message TableInternal {
   uint64 id = 1;
@@ -40,11 +44,26 @@ message TableMetricsInternal {
   dingodb.pb.meta.TableMetrics table_metrics = 2;
 }
 
+// IndexInternal is storage structure for coordinator
+message IndexInternal {
+  uint64 id = 1;
+  dingodb.pb.meta.IndexDefinition definition = 2;
+  repeated IndexRegionInternal partitions = 3;
+  uint64 schema_id = 4;
+}
+
+// IndexMetricsInternal is storage structure for index_metrics
+message IndexMetricsInternal {
+  uint64 id = 1;
+  dingodb.pb.meta.IndexMetrics index_metrics = 2;
+}
+
 // SchemaInternal is storage structure for schema
 message SchemaInternal {
   uint64 id = 1;
   string name = 2;
   repeated uint64 table_ids = 3;
+  repeated uint64 index_ids = 4;
 }
 
 // CoordinatorInteral stores coordinator info for SDK & stores.
@@ -69,6 +88,7 @@ enum IdEpochType {
   ID_NEXT_SCHEMA = 4;
   ID_NEXT_REGION = 5;
   ID_NEXT_TABLE = 6;
+  ID_NEXT_INDEX = 7;
 
   EPOCH_COORINATOR = 11;
   EPOCH_STORE = 12;
@@ -76,6 +96,7 @@ enum IdEpochType {
   EPOCH_SCHEMA = 14;
   EPOCH_REGION = 15;
   EPOCH_TABLE = 16;
+  EPOCH_INDEX = 17;
 
   RAFT_APPLY_TERM = 21;
   RAFT_APPLY_INDEX = 22;
@@ -147,6 +168,12 @@ message MetaIncrementTableMetrics {
   MetaIncrementOpType op_type = 3;
 }
 
+message MetaIncrementIndexMetrics {
+  uint64 id = 1;
+  dingodb.pb.coordinator_internal.IndexMetricsInternal index_metrics = 2;
+  MetaIncrementOpType op_type = 3;
+}
+
 message MetaIncrementExecutor {
   string id = 1;
   dingodb.pb.common.Executor executor = 2;
@@ -170,6 +197,12 @@ message MetaIncrementSchema {
 message MetaIncrementTable {
   uint64 id = 1;
   TableInternal table = 2;
+  MetaIncrementOpType op_type = 3;
+}
+
+message MetaIncrementIndex {
+  uint64 id = 1;
+  IndexInternal index = 2;
   MetaIncrementOpType op_type = 3;
 }
 
@@ -217,6 +250,8 @@ message MetaIncrement {
   repeated MetaIncrementStoreOperation store_operations = 10;
   repeated MetaIncrementExecutorUser executor_users = 11;
   repeated MetaIncrementTaskList task_lists = 12;
+  repeated MetaIncrementIndex indexes = 13;
+  repeated MetaIncrementIndexMetrics index_metrics = 14;
 
   repeated MetaIncrementAutoIncrement auto_increment = 20;
   repeated MetaIncrementRegion deleted_regions = 30;
@@ -236,6 +271,8 @@ message MetaSnapshotFile {
   repeated dingodb.pb.common.KeyValue store_operation_map_kvs = 10;
   repeated dingodb.pb.common.KeyValue executor_user_map_kvs = 11;
   repeated dingodb.pb.common.KeyValue task_list_map_kvs = 12;
+  repeated dingodb.pb.common.KeyValue index_map_kvs = 13;
+  repeated dingodb.pb.common.KeyValue index_metrics_map_kvs = 14;
 
   repeated dingodb.pb.common.KeyValue auto_increment_map_kvs = 20;  // now unused, just a placeholder
   AutoIncrementStorage auto_increment_storage = 21;

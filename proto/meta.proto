@@ -26,6 +26,7 @@ enum EntityType {
   ENTITY_TYPE_SCHEMA = 0;
   ENTITY_TYPE_TABLE = 1;
   ENTITY_TYPE_PART = 2;
+  ENTITY_TYPE_INDEX = 3;
 }
 
 // The id of internal schemas
@@ -139,6 +140,7 @@ message Schema {
   DingoCommonId id = 1;
   string name = 2;
   repeated DingoCommonId table_ids = 3;
+  repeated DingoCommonId index_ids = 4;
 }
 
 // TableDefinition is for SQL
@@ -154,6 +156,46 @@ message TableDefinition {
   uint32 replica = 9;
   uint64 auto_increment = 10;
   string create_sql = 11;
+}
+
+enum IndexType {
+  INDEX_TYPE_VECTOR = 0;
+  INDEX_TYPE_SCALAR = 1;
+}
+
+enum VectorIndexType {
+  VECTOR_INDEX_TYPE_NONE = 0;
+  VECTOR_INDEX_TYPE_FLAT = 1;
+  VECTOR_INDEX_TYPE_IVF_FLAT = 2;
+  VECTOR_INDEX_TYPE_IVF_PQ = 3;
+  VECTOR_INDEX_TYPE_HNSW = 4;
+  VECTOR_INDEX_TYPE_DISKANN = 5;
+}
+
+message VectorIndexParamter {
+  VectorIndexType index_type = 1;
+
+  // vector
+  uint32 dimension = 2;
+
+  // ivf
+  uint32 nlist = 3;
+
+  // hnsw
+  uint32 efConstruction = 4;
+  uint32 efSearch = 5;
+}
+
+// IndexDefinition is for vector/scalar index
+message IndexDefinition {
+  string name = 1;
+  uint32 version = 2;
+  PartitionRule index_partition = 3;
+  uint32 replica = 4;
+  IndexType index_type = 5;
+
+  // vector index
+  VectorIndexParamter vector_index_parameter = 6;
 }
 
 // This Part is mainly equal to the Part in DingoDB 0.5.x
@@ -174,6 +216,10 @@ message TableRange {
   repeated RangeDistribution range_distribution = 2;
 }
 
+message IndexRange {
+  repeated RangeDistribution range_distribution = 2;
+}
+
 // Table metrics for optimization of SQL plan
 message TableMetrics {
   uint64 rows_count = 1;
@@ -185,6 +231,19 @@ message TableMetrics {
 message TableMetricsWithId {
   DingoCommonId id = 1;
   TableMetrics table_metrics = 2;
+}
+
+// Index metrics for optimization of SQL plan
+message IndexMetrics {
+  uint64 rows_count = 1;
+  bytes min_key = 2;
+  bytes max_key = 3;
+  uint64 part_count = 4;
+}
+
+message IndexMetricsWithId {
+  DingoCommonId id = 1;
+  IndexMetrics index_metrics = 2;
 }
 
 message GetSchemasRequest {
@@ -219,6 +278,11 @@ message TableDefinitionWithId {
   TableDefinition table_definition = 2;
 }
 
+message IndexDefinitionWithId {
+  DingoCommonId index_id = 1;
+  IndexDefinition index_definition = 2;
+}
+
 message GetTablesRequest {
   DingoCommonId schema_id = 1;
 }
@@ -226,6 +290,15 @@ message GetTablesRequest {
 message GetTablesResponse {
   dingodb.pb.error.Error error = 1;
   repeated TableDefinitionWithId table_definition_with_ids = 2;
+}
+
+message GetIndexesRequest {
+  DingoCommonId schema_id = 1;
+}
+
+message GetIndexesResponse {
+  dingodb.pb.error.Error error = 1;
+  repeated IndexDefinitionWithId index_definition_with_ids = 2;
 }
 
 message GetTablesCountRequest {
@@ -237,6 +310,15 @@ message GetTablesCountResponse {
   uint64 tables_count = 2;
 }
 
+message GetIndexesCountRequest {
+  DingoCommonId schema_id = 1;
+}
+
+message GetIndexesCountResponse {
+  dingodb.pb.error.Error error = 1;
+  uint64 indexes_count = 2;
+}
+
 message GetTableRequest {
   DingoCommonId table_id = 1;
 }
@@ -244,6 +326,15 @@ message GetTableRequest {
 message GetTableResponse {
   dingodb.pb.error.Error error = 1;
   TableDefinitionWithId table_definition_with_id = 2;
+}
+
+message GetIndexRequest {
+  DingoCommonId index_id = 1;
+}
+
+message GetIndexResponse {
+  dingodb.pb.error.Error error = 1;
+  IndexDefinitionWithId index_definition_with_id = 2;
 }
 
 message GetTableByNameRequest {
@@ -256,6 +347,16 @@ message GetTableByNameResponse {
   TableDefinitionWithId table_definition_with_id = 2;
 }
 
+message GetIndexByNameRequest {
+  DingoCommonId schema_id = 1;
+  string index_name = 2;
+}
+
+message GetIndexByNameResponse {
+  dingodb.pb.error.Error error = 1;
+  IndexDefinitionWithId index_definition_with_id = 2;
+}
+
 message GetTableRangeRequest {
   DingoCommonId table_id = 1;
 }
@@ -263,6 +364,15 @@ message GetTableRangeRequest {
 message GetTableRangeResponse {
   dingodb.pb.error.Error error = 1;
   TableRange table_range = 2;
+}
+
+message GetIndexRangeRequest {
+  DingoCommonId index_id = 1;
+}
+
+message GetIndexRangeResponse {
+  dingodb.pb.error.Error error = 1;
+  IndexRange index_range = 2;
 }
 
 message GetTableMetricsRequest {
@@ -274,6 +384,15 @@ message GetTableMetricsResponse {
   TableMetricsWithId table_metrics = 2;
 }
 
+message GetIndexMetricsRequest {
+  DingoCommonId index_id = 1;
+}
+
+message GetIndexMetricsResponse {
+  dingodb.pb.error.Error error = 1;
+  IndexMetricsWithId index_metrics = 2;
+}
+
 message CreateTableIdRequest {
   DingoCommonId schema_id = 1;
 }
@@ -281,6 +400,15 @@ message CreateTableIdRequest {
 message CreateTableIdResponse {
   dingodb.pb.error.Error error = 1;
   DingoCommonId table_id = 2;
+}
+
+message CreateIndexIdRequest {
+  DingoCommonId schema_id = 1;
+}
+
+message CreateIndexIdResponse {
+  dingodb.pb.error.Error error = 1;
+  DingoCommonId index_id = 2;
 }
 
 message CreateTableRequest {
@@ -292,6 +420,17 @@ message CreateTableRequest {
 message CreateTableResponse {
   dingodb.pb.error.Error error = 1;
   DingoCommonId table_id = 2;
+}
+
+message CreateIndexRequest {
+  DingoCommonId schema_id = 1;
+  DingoCommonId index_id = 2;
+  IndexDefinition index_definition = 3;
+}
+
+message CreateIndexResponse {
+  dingodb.pb.error.Error error = 1;
+  DingoCommonId index_id = 2;
 }
 
 message CreateSchemaRequest {
@@ -317,6 +456,14 @@ message DropTableRequest {
 }
 
 message DropTableResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
+message DropIndexRequest {
+  DingoCommonId index_id = 1;
+}
+
+message DropIndexResponse {
   dingodb.pb.error.Error error = 1;
 }
 
@@ -442,6 +589,52 @@ service MetaService {
   // in: schema_id table_id
   // out: {}
   rpc DropTable(DropTableRequest) returns (DropTableResponse);
+
+  // GetIndexes
+  // in: schema_id
+  // out: List<IndexDefinitionWithId>
+  rpc GetIndexes(GetIndexesRequest) returns (GetIndexesResponse);
+
+  // GetIndexesCount
+  // in: schema_id
+  // out: tables_count
+  rpc GetIndexesCount(GetIndexesCountRequest) returns (GetIndexesCountResponse);
+
+  // GetIndex
+  // in: table_id
+  // out: IndexDefinitionWithId
+  rpc GetIndex(GetIndexRequest) returns (GetIndexResponse);
+
+  // GetIndexByName
+  // in: table_id
+  // out: IndexDefinitionWithId
+  rpc GetIndexByName(GetIndexByNameRequest) returns (GetIndexByNameResponse);
+
+  // GetIndexRange
+  // in: table_id
+  // out: IndexRange
+  rpc GetIndexRange(GetIndexRangeRequest) returns (GetIndexRangeResponse);
+
+  // GetIndexMetrics
+  // in: table_id
+  // out: table_metrics
+  rpc GetIndexMetrics(GetIndexMetricsRequest) returns (GetIndexMetricsResponse);
+
+  // CreateIndexId
+  // in: schema_id
+  // out: table_id
+  rpc CreateIndexId(CreateIndexIdRequest) returns (CreateIndexIdResponse);
+
+  // CreateIndex
+  // in: schema_id table_id IndexDefinition
+  //      if table_id is specified, use given table_id, else create new table_id
+  // out: table_id
+  rpc CreateIndex(CreateIndexRequest) returns (CreateIndexResponse);
+
+  // DropIndex
+  // in: schema_id table_id
+  // out: {}
+  rpc DropIndex(DropIndexRequest) returns (DropIndexResponse);
 
   // CreateSchema
   // in: parent_schema_id schema_name
