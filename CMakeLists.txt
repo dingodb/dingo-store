@@ -71,6 +71,7 @@ include(fmt)
 include(libunwind)
 include(libbacktrace)
 include(gperftools)
+include(hnswlib)
 
 message("protoc: ${PROTOBUF_PROTOC_EXECUTABLE}, proto inc: ${PROTOBUF_INCLUDE_DIRS}, lib: ${PROTOBUF_LIBRARIES}, ${PROTOBUF_PROTOC_LIBRARY}, protos: ${PROTO_FILES}")
 SET(MESSAGE_DIR ${CMAKE_CURRENT_BINARY_DIR}/proto)

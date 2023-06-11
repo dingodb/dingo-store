@@ -148,8 +148,8 @@ class Server {
 
   std::shared_ptr<pb::common::RegionDefinition> CreateCoordinatorRegion(const std::shared_ptr<Config>& config,
                                                                         uint64_t region_id,
-                                                                        const std::string& region_name,
-                                                                        std::shared_ptr<Context>& ctx);
+                                                                        const std::string& region_name
+                                                                        /*std::shared_ptr<Context>& ctx*/);
 
   friend struct DefaultSingletonTraits<Server>;
 

@@ -179,22 +179,22 @@ bool Server::InitEngine() {
 
 butil::Status Server::StartMetaRegion(const std::shared_ptr<Config>& config,  // NOLINT
                                       std::shared_ptr<Engine>& kv_engine) {   // NOLINT
-  std::shared_ptr<Context> ctx = std::make_shared<Context>();
+  // std::shared_ptr<Context> ctx = std::make_shared<Context>();
   std::shared_ptr<pb::common::RegionDefinition> region =
-      CreateCoordinatorRegion(config, Constant::kCoordinatorRegionId, Constant::kMetaRegionName, ctx);
+      CreateCoordinatorRegion(config, Constant::kCoordinatorRegionId, Constant::kMetaRegionName /*, ctx*/);
 
   auto raft_engine = std::dynamic_pointer_cast<RaftMetaEngine>(kv_engine);
-  return raft_engine->InitCoordinatorRegion(ctx, region, coordinator_control_, false);
+  return raft_engine->InitCoordinatorRegion(region, coordinator_control_, false);
 }
 
 butil::Status Server::StartAutoIncrementRegion(const std::shared_ptr<Config>& config,
                                                std::shared_ptr<Engine>& kv_engine) {
-  std::shared_ptr<Context> ctx = std::make_shared<Context>();
+  // std::shared_ptr<Context> ctx = std::make_shared<Context>();
   std::shared_ptr<pb::common::RegionDefinition> region =
-      CreateCoordinatorRegion(config, Constant::kAutoIncrementRegionId, Constant::kAutoIncrementRegionName, ctx);
+      CreateCoordinatorRegion(config, Constant::kAutoIncrementRegionId, Constant::kAutoIncrementRegionName /*, ctx*/);
 
   auto raft_engine = std::dynamic_pointer_cast<RaftMetaEngine>(kv_engine);
-  return raft_engine->InitCoordinatorRegion(ctx, region, auto_increment_control_, true);
+  return raft_engine->InitCoordinatorRegion(region, auto_increment_control_, true);
 }
 
 bool Server::InitCoordinatorInteraction() {
@@ -461,8 +461,8 @@ void Server::Destroy() {
 
 std::shared_ptr<pb::common::RegionDefinition> Server::CreateCoordinatorRegion(const std::shared_ptr<Config>& /*config*/,
                                                                               const uint64_t region_id,
-                                                                              const std::string& region_name,
-                                                                              std::shared_ptr<Context>& ctx) {
+                                                                              const std::string& region_name
+                                                                              /*std::shared_ptr<Context>& ctx*/) {
   /**
    * 1. context must contains role)
    */

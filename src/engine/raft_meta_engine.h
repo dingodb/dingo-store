@@ -28,9 +28,8 @@ class RaftMetaEngine : public RaftKvEngine {
   bool Init(std::shared_ptr<Config> config) override;
   bool Recover() override;
 
-  butil::Status InitCoordinatorRegion(std::shared_ptr<Context> ctx,
-      std::shared_ptr<pb::common::RegionDefinition> region,
-      const std::shared_ptr<MetaControl>& meta_control, bool is_volatile);
+  butil::Status InitCoordinatorRegion(std::shared_ptr<pb::common::RegionDefinition> region,
+                                      const std::shared_ptr<MetaControl>& meta_control, bool is_volatile);
 
   butil::Status MetaPut(std::shared_ptr<Context> ctx, const pb::coordinator_internal::MetaIncrement& meta) override;
 
@@ -40,4 +39,3 @@ class RaftMetaEngine : public RaftKvEngine {
 }  // namespace dingodb
 
 #endif  // DINGODB_ENGINE_RAFT_META_ENGINE_H_H  // NOLINT
-

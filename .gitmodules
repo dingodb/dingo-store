@@ -53,3 +53,6 @@
 [submodule "contrib/libbacktrace"]
 	path = contrib/libbacktrace
 	url = https://github.com/ianlancetaylor/libbacktrace
+[submodule "contrib/hnswlib"]
+	path = contrib/hnswlib
+	url = https://github.com/nmslib/hnswlib
