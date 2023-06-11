@@ -74,5 +74,7 @@ function start_program() {
   sudo ulimit -c unlimited
   sudo ulimit -n 1024000
 
+  echo "${root_dir}/bin/dingodb_server --role ${role}  --conf ./conf/${role}.yaml --coor_url=file://./conf/coor_list"
+
   nohup ${root_dir}/bin/dingodb_server --role ${role}  --conf ./conf/${role}.yaml --coor_url=file://./conf/coor_list 2>&1 >./log/out &
 }

@@ -24,6 +24,7 @@ enum ClusterRole {
   COORDINATOR = 1;
   STORE = 2;
   EXECUTOR = 3;
+  INDEX = 4;
 };
 
 enum Engine {

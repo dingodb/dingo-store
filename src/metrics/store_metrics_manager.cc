@@ -81,7 +81,8 @@ bool StoreMetrics::Init() { return CollectMetrics(); }
 bool StoreMetrics::CollectMetrics() {
   std::map<std::string, uint64_t> output;
 
-  auto config = ConfigManager::GetInstance()->GetConfig(pb::common::ClusterRole::STORE);
+  auto role = Server::GetInstance()->GetRole();
+  auto config = ConfigManager::GetInstance()->GetConfig(role);
 
   if (!Helper::GetDiskCapacity(config->GetString("store.path"), output)) {
     return false;

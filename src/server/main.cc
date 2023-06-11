@@ -49,6 +49,7 @@
 #include "proto/store.pb.h"
 #include "server/cluster_service.h"
 #include "server/coordinator_service.h"
+#include "server/index_service.h"
 #include "server/meta_service.h"
 #include "server/node_service.h"
 #include "server/push_service.h"
@@ -384,11 +385,15 @@ int main(int argc, char *argv[]) {
       FLAGS_role, dingodb::pb::common::ClusterRole_Name(dingodb::pb::common::ClusterRole::COORDINATOR));
   auto is_store = dingodb::Helper::IsEqualIgnoreCase(
       FLAGS_role, dingodb::pb::common::ClusterRole_Name(dingodb::pb::common::ClusterRole::STORE));
+  auto is_index = dingodb::Helper::IsEqualIgnoreCase(
+      FLAGS_role, dingodb::pb::common::ClusterRole_Name(dingodb::pb::common::ClusterRole::INDEX));
 
   if (is_store) {
     role = dingodb::pb::common::STORE;
   } else if (is_coordinator) {
     role = dingodb::pb::common::COORDINATOR;
+  } else if (is_index) {
+    role = dingodb::pb::common::INDEX;
   } else {
     DINGO_LOG(ERROR) << "Invalid server role[" + FLAGS_role + "]";
     return -1;
@@ -437,6 +442,7 @@ int main(int argc, char *argv[]) {
   dingodb::CoordinatorServiceImpl coordinator_service;
   dingodb::MetaServiceImpl meta_service;
   dingodb::StoreServiceImpl store_service;
+  dingodb::IndexServiceImpl index_service;
   dingodb::NodeServiceImpl node_service;
   dingodb::PushServiceImpl push_service;
   dingodb::VersionServiceProtoImpl version_service;
@@ -564,6 +570,63 @@ int main(int argc, char *argv[]) {
     store_service.SetStorage(dingo_server->GetStorage());
     if (brpc_server.AddService(&store_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
       DINGO_LOG(ERROR) << "Fail to add store service!";
+      return -1;
+    }
+
+    // add push service to server_location
+    if (brpc_server.AddService(&push_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
+      DINGO_LOG(ERROR) << "Fail to add store service!";
+      return -1;
+    }
+
+    // raft server
+    if (braft::add_service(&raft_server, dingo_server->RaftEndpoint()) != 0) {
+      DINGO_LOG(ERROR) << "Fail to add raft service!";
+      return -1;
+    }
+
+    if (raft_server.Start(dingo_server->RaftEndpoint(), &options) != 0) {
+      DINGO_LOG(ERROR) << "Fail to start raft server!";
+      return -1;
+    }
+    DINGO_LOG(INFO) << "Raft server is running on " << raft_server.listen_address();
+  } else if (is_index) {
+    if (!dingo_server->InitCoordinatorInteraction()) {
+      DINGO_LOG(ERROR) << "InitCoordinatorInteraction failed!";
+      return -1;
+    }
+    if (!dingo_server->ValiateCoordinator()) {
+      DINGO_LOG(ERROR) << "ValiateCoordinator failed!";
+      return -1;
+    }
+    if (!dingo_server->InitStorage()) {
+      DINGO_LOG(ERROR) << "InitStorage failed!";
+      return -1;
+    }
+    if (!dingo_server->InitStoreMetaManager()) {
+      DINGO_LOG(ERROR) << "InitStoreMetaManager failed!";
+      return -1;
+    }
+    if (!dingo_server->InitStoreMetricsManager()) {
+      DINGO_LOG(ERROR) << "InitStoreMetricsManager failed!";
+      return -1;
+    }
+    if (!dingo_server->InitStoreController()) {
+      DINGO_LOG(ERROR) << "InitStoreController failed!";
+      return -1;
+    }
+    if (!dingo_server->InitRegionCommandManager()) {
+      DINGO_LOG(ERROR) << "InitRegionCommandManager failed!";
+      return -1;
+    }
+    if (!dingo_server->InitRegionController()) {
+      DINGO_LOG(ERROR) << "InitRegionController failed!";
+      return -1;
+    }
+
+    store_service.SetStorage(dingo_server->GetStorage());
+    if (brpc_server.AddService(&index_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
+      DINGO_LOG(ERROR) << "Fail to add index service!";
       return -1;
     }
 

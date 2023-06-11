@@ -100,7 +100,7 @@ butil::Status RaftKvEngine::AddNode(std::shared_ptr<Context> ctx, store::RegionP
       region->Id(), region->Name(), braft::PeerId(Server::GetInstance()->RaftEndpoint()), state_machine);
 
   if (node->Init(Helper::FormatPeers(Helper::ExtractLocations(region->Peers())),
-                 ConfigManager::GetInstance()->GetConfig(ctx->ClusterRole())) != 0) {
+                 ConfigManager::GetInstance()->GetConfig(Server::GetInstance()->GetRole())) != 0) {
     node->Destroy();
     return butil::Status(pb::error::ERAFT_INIT, "Raft init failed");
   }

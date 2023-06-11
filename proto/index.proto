@@ -1,0 +1,212 @@
+// Copyright (c) 2023 dingodb.com, Inc. All Rights Reserved
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+import "common.proto";
+import "error.proto";
+import "store_internal.proto";
+import "coordinator.proto";
+
+package dingodb.pb.index;
+
+option java_package = "io.dingodb.index";
+option cc_generic_services = true;
+
+message AddRegionRequest {
+  dingodb.pb.common.RegionDefinition region = 1;
+}
+
+message AddRegionResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
+message ChangeRegionRequest {
+  dingodb.pb.common.RegionDefinition region = 1;
+}
+
+message ChangeRegionResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
+message DestroyRegionRequest {
+  uint64 region_id = 1;
+}
+
+message DestroyRegionResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
+message SnapshotRequest {
+  uint64 region_id = 1;
+}
+
+message SnapshotResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
+message TransferLeaderRequest {
+  uint64 region_id = 1;
+  dingodb.pb.common.Peer peer = 2;
+}
+
+message TransferLeaderResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
+message KvGetRequest {
+  uint64 region_id = 1;
+  bytes key = 2;
+}
+
+message KvGetResponse {
+  dingodb.pb.error.Error error = 1;
+  bytes value = 2;
+}
+
+message KvBatchGetRequest {
+  uint64 region_id = 1;
+  repeated bytes keys = 2;
+}
+
+message KvBatchGetResponse {
+  dingodb.pb.error.Error error = 1;
+  repeated dingodb.pb.common.KeyValue kvs = 2;
+}
+
+message KvPutRequest {
+  uint64 region_id = 1;
+  dingodb.pb.common.KeyValue kv = 2;
+}
+
+message KvPutResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
+message KvBatchPutRequest {
+  uint64 region_id = 1;
+  repeated dingodb.pb.common.KeyValue kvs = 2;
+}
+
+message KvBatchPutResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
+message KvPutIfAbsentRequest {
+  uint64 region_id = 1;
+  dingodb.pb.common.KeyValue kv = 2;
+}
+
+message KvPutIfAbsentResponse {
+  dingodb.pb.error.Error error = 1;
+  // key_state = true, update success
+  // key_state = false, update failed
+  bool key_state = 2;
+}
+
+message KvBatchPutIfAbsentRequest {
+  uint64 region_id = 1;
+  repeated dingodb.pb.common.KeyValue kvs = 2;
+  bool is_atomic = 3;
+}
+
+message KvBatchPutIfAbsentResponse {
+  dingodb.pb.error.Error error = 1;
+  // return the execution status of each key
+  // key_states[index] = true, update success
+  // key_states[index] = false, update failed
+  repeated bool key_states = 2;
+}
+
+message KvBatchDeleteRequest {
+  uint64 region_id = 1;
+  repeated bytes keys = 2;
+}
+
+message KvBatchDeleteResponse {
+  dingodb.pb.error.Error error = 1;
+  // return the execution status of each key
+  // key_states[index] = true, delete success
+  // key_states[index] = false, key not exist
+  repeated bool key_states = 2;
+}
+
+enum DebugType {
+  NONE = 0;
+  STORE_REGION_META_STAT = 1;
+  STORE_REGION_META_DETAILS = 2;
+  STORE_REGION_CONTROL_COMMAND = 3;
+  STORE_RAFT_META = 4;
+  STORE_REGION_EXECUTOR = 5;
+  STORE_REGION_METRICS = 6;
+}
+
+message DebugRequest {
+  DebugType type = 1;  // debug type
+  repeated uint64 region_ids = 2;
+}
+
+message DebugResponse {
+  message RegionMetaStat {
+    map<string, int32> state_counts = 1;
+  }
+
+  message RegionMetaDetails {
+    repeated dingodb.pb.store_internal.Region regions = 1;
+  }
+
+  message RegionControlCommand {
+    repeated dingodb.pb.coordinator.RegionCmd region_cmds = 1;
+  }
+
+  message RaftMeta {
+    repeated dingodb.pb.store_internal.RaftMeta raft_metas = 1;
+  }
+
+  message RegionExecutor {
+    repeated uint64 region_ids = 1;
+  }
+
+  message RegionMetrics {
+    repeated dingodb.pb.common.RegionMetrics region_metricses = 1;
+  }
+
+  RegionMetaStat region_meta_stat = 1;
+  RegionMetaDetails region_meta_details = 2;
+  RegionControlCommand region_control_command = 3;
+  RaftMeta raft_meta = 4;
+  RegionExecutor region_executor = 5;
+  RegionMetrics region_metrics = 6;
+}
+
+service IndexService {
+  // region
+  rpc AddRegion(AddRegionRequest) returns (AddRegionResponse);
+  rpc ChangeRegion(ChangeRegionRequest) returns (ChangeRegionResponse);
+  rpc DestroyRegion(DestroyRegionRequest) returns (DestroyRegionResponse);
+  rpc Snapshot(SnapshotRequest) returns (SnapshotResponse);
+  rpc TransferLeader(TransferLeaderRequest) returns (TransferLeaderResponse);
+
+  // kv
+  rpc KvGet(KvGetRequest) returns (KvGetResponse);
+  rpc KvBatchGet(KvBatchGetRequest) returns (KvBatchGetResponse);
+  rpc KvPut(KvPutRequest) returns (KvPutResponse);
+  rpc KvBatchPut(KvBatchPutRequest) returns (KvBatchPutResponse);
+  rpc KvPutIfAbsent(KvPutIfAbsentRequest) returns (KvPutIfAbsentResponse);
+  rpc KvBatchPutIfAbsent(KvBatchPutIfAbsentRequest) returns (KvBatchPutIfAbsentResponse);
+  rpc KvBatchDelete(KvBatchDeleteRequest) returns (KvBatchDeleteResponse);
+
+  // debug
+  rpc Debug(DebugRequest) returns (DebugResponse);
+};
