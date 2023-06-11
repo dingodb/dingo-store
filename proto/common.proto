@@ -237,11 +237,55 @@ message RegionDefinition {
   // meta info
   uint64 schema_id = 6;
   uint64 table_id = 7;
+  uint64 index_id = 8;
+  IndexParameter index_parameter = 9;
 }
 
 enum RegionType {
   STORE_REGION = 0;
   INDEX_REGION = 1;
+}
+
+enum IndexType {
+  INDEX_TYPE_NONE = 0;  // this is not index, for store region only
+  INDEX_TYPE_VECTOR = 1;
+  INDEX_TYPE_SCALAR = 2;
+}
+
+enum VectorIndexType {
+  VECTOR_INDEX_TYPE_NONE = 0;
+  VECTOR_INDEX_TYPE_FLAT = 1;
+  VECTOR_INDEX_TYPE_IVF_FLAT = 2;
+  VECTOR_INDEX_TYPE_IVF_PQ = 3;
+  VECTOR_INDEX_TYPE_HNSW = 4;
+  VECTOR_INDEX_TYPE_DISKANN = 5;
+}
+
+message VectorIndexParameter {
+  VectorIndexType index_type = 1;
+  uint32 dimension = 2;
+  uint32 nlist = 3;
+  uint32 efConstruction = 4;
+  uint32 efSearch = 5;
+}
+
+enum ScalarIndexType {
+  SCALAR_INDEX_TYPE_LSM = 0;
+  SCALAR_INDEX_TYPE_BTREE = 1;
+}
+
+message ScalarIndexParameter {
+  ScalarIndexType index_type = 1;
+  uint32 dimension = 2;
+  uint32 nlist = 3;
+  uint32 efConstruction = 4;
+  uint32 efSearch = 5;
+}
+
+message IndexParameter {
+  IndexType index_type = 1;
+  repeated VectorIndexParameter vector_index_parameters = 2;
+  repeated ScalarIndexParameter scalar_index_parameters = 3;
 }
 
 message Region {

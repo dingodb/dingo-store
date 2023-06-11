@@ -510,6 +510,11 @@ message CreateRegionRequest {
   uint64 table_id = 6;              // optional
   repeated uint64 store_ids = 7;    // optional if not set, will create choose from all stores
   uint64 split_from_region_id = 8;  // optional, if set, will split from this region
+
+  dingodb.pb.common.RegionType region_type =
+      9;                 // optional, if set, will create a region with this type, this type is default STORE
+  uint64 index_id = 10;  // optional, if region_type is INDEX, this field is required
+  dingodb.pb.common.IndexParameter index_parameter = 11;  // optional, if region_type is INDEX, this field is required
 }
 
 message CreateRegionResponse {
