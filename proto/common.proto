@@ -283,6 +283,7 @@ message VectorIndexParameter {
   uint32 nlist = 3;
   uint32 efConstruction = 4;
   uint32 efSearch = 5;
+  uint32 max_elements = 6;
 }
 
 message VectorSearchParameter {
@@ -304,8 +305,8 @@ message ScalarIndexParameter {
 
 message IndexParameter {
   IndexType index_type = 1;
-  repeated VectorIndexParameter vector_index_parameters = 2;
-  repeated ScalarIndexParameter scalar_index_parameters = 3;
+  VectorIndexParameter vector_index_parameter = 2;
+  ScalarIndexParameter scalar_index_parameter = 3;
 }
 
 message Region {

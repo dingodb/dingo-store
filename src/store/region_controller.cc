@@ -25,6 +25,7 @@
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "config/config_manager.h"
 #include "event/store_state_machine_event.h"
 #include "fmt/core.h"
 #include "glog/logging.h"
@@ -96,6 +97,18 @@ butil::Status CreateRegionTask::CreateRegion(std::shared_ptr<Context> ctx, store
     store_region_meta->UpdateState(region, pb::common::StoreRegionState::NORMAL);
   } else {
     store_region_meta->UpdateState(region, pb::common::StoreRegionState::STANDBY);
+  }
+
+  // vector index
+  const auto& definition = region->InnerRegion().definition();
+  if (definition.index_parameter().index_type() == pb::common::IndexType::INDEX_TYPE_VECTOR) {
+    DINGO_LOG(INFO) << fmt::format("Create region {} vector index", region->Id());
+
+    const auto& vector_index_parameter = definition.index_parameter().vector_index_parameter();
+    auto vector_index =
+        std::make_shared<VectorIndex>(vector_index_parameter.dimension(), vector_index_parameter.max_elements());
+
+    Server::GetInstance()->GetRegionController()->vector_index_map.Put(region->Id(), vector_index);
   }
 
   return butil::Status();
@@ -207,6 +220,9 @@ butil::Status DeleteRegionTask::DeleteRegion(std::shared_ptr<Context> ctx, uint6
   // TODO: need to implement a better mechanism of tombstone for region's meta info
   DINGO_LOG(DEBUG) << fmt::format("Purge region {}", region_id);
   store_region_meta->DeleteRegion(region_id);
+
+  // delete vector index
+  region_controller->vector_index_map.Erase(region_id);
 
   return butil::Status();
 }

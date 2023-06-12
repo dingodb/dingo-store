@@ -39,6 +39,7 @@
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "common/safe_map.h"
 #include "config/config_manager.h"
 #include "engine/engine.h"
 #include "engine/raft_kv_engine.h"
@@ -769,9 +770,8 @@ butil::Status RawRocksEngine::Reader::KvGet(std::shared_ptr<dingodb::Snapshot> s
   return butil::Status();
 }
 
-butil::Status RawRocksEngine::Reader::VectorSearch(const std::string& key_header,
-                                                   const pb::common::VectorWithId& vector,
-                                                   pb::common::VectorSearchParameter parameter,
+butil::Status RawRocksEngine::Reader::VectorSearch(uint64_t region_id, const pb::common::VectorWithId& vector,
+                                                   const pb::common::VectorSearchParameter& parameter,
                                                    std::vector<pb::common::VectorWithDistance>& vectors) {
   if (BAIDU_UNLIKELY(vector.vector().values_size() == 0)) {
     DINGO_LOG(ERROR) << fmt::format("vector empty not support");
@@ -782,6 +782,8 @@ butil::Status RawRocksEngine::Reader::VectorSearch(const std::string& key_header
     DINGO_LOG(ERROR) << fmt::format("top_n is 0 not support");
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "top_n is 0");
   }
+
+  std::string key_header = std::to_string(region_id);
 
   if (vector.id() > 0) {
     auto snapshot = std::make_shared<RocksSnapshot>(db_->GetSnapshot(), db_);
@@ -814,17 +816,26 @@ butil::Status RawRocksEngine::Reader::VectorSearch(const std::string& key_header
     return butil::Status();
   }
 
-  for (int i = 0; i < 10; i++) {
-    pb::common::VectorWithDistance vector_with_distance;
-    vector_with_distance.set_id(i);
-    vector_with_distance.set_distance(i);
+  // for (int i = 0; i < 10; i++) {
+  //   pb::common::VectorWithDistance vector_with_distance;
+  //   vector_with_distance.set_id(i);
+  //   vector_with_distance.set_distance(i);
 
-    for (int j = 0; j < 16; j++) {
-      vector_with_distance.mutable_vector()->add_values(i * 16 + j);
-    }
+  //   for (int j = 0; j < 16; j++) {
+  //     vector_with_distance.mutable_vector()->add_values(i * 16 + j);
+  //   }
 
-    vectors.push_back(vector_with_distance);
+  //   vectors.push_back(vector_with_distance);
+  // }
+
+  std::shared_ptr<VectorIndex> vector_index;
+  auto ret = Server::GetInstance()->GetRegionController()->vector_index_map.Get(region_id, vector_index);
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << fmt::format("Get vector_index failed");
+    return butil::Status(pb::error::EINTERNAL, "Internal error, Get vector_index failed");
   }
+
+  vector_index->Search(vector, parameter.top_n(), vectors);
 
   return butil::Status();
 }
@@ -926,12 +937,14 @@ butil::Status RawRocksEngine::Writer::KvPut(const pb::common::KeyValue& kv) {
   return butil::Status();
 }
 
-butil::Status RawRocksEngine::Writer::VectorAdd(const std::string& key_header, uint64_t log_id,
+butil::Status RawRocksEngine::Writer::VectorAdd(uint64_t region_id, uint64_t log_id,
                                                 const std::vector<pb::common::VectorWithId>& vectors) {
   if (BAIDU_UNLIKELY(vectors.empty())) {
     DINGO_LOG(ERROR) << fmt::format("vectors empty  not support");
     return butil::Status(pb::error::EVECTOR_EMPTY, "vectors is empty");
   }
+
+  std::string key_header = std::to_string(region_id);
 
   // write vector, WAL, WAL_LOG_ID
   rocksdb::WriteBatch batch;
@@ -963,6 +976,14 @@ butil::Status RawRocksEngine::Writer::VectorAdd(const std::string& key_header, u
   }
 
   // write vector index
+  std::shared_ptr<VectorIndex> vector_index;
+  auto ret = Server::GetInstance()->GetRegionController()->vector_index_map.Get(region_id, vector_index);
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << fmt::format("Get vector_index failed");
+    return butil::Status(pb::error::EINTERNAL, "Internal error, Get vector_index failed");
+  }
+
+  vector_index->Add(vectors);
 
   // commit rocksdb
   rocksdb::WriteOptions write_options;
@@ -975,12 +996,14 @@ butil::Status RawRocksEngine::Writer::VectorAdd(const std::string& key_header, u
   return butil::Status();
 }
 
-butil::Status RawRocksEngine::Writer::VectorDelete(const std::string& key_header, uint64_t log_id,
+butil::Status RawRocksEngine::Writer::VectorDelete(uint64_t region_id, uint64_t log_id,
                                                    const std::vector<uint64_t>& ids) {
   if (BAIDU_UNLIKELY(ids.empty())) {
     DINGO_LOG(ERROR) << fmt::format("vectors empty  not support");
     return butil::Status(pb::error::EVECTOR_EMPTY, "vectors is empty");
   }
+
+  std::string key_header = std::to_string(region_id);
 
   // write vector, WAL, WAL_LOG_ID
   rocksdb::WriteBatch batch;
@@ -1010,6 +1033,17 @@ butil::Status RawRocksEngine::Writer::VectorDelete(const std::string& key_header
   }
 
   // write vector index
+  // write vector index
+  std::shared_ptr<VectorIndex> vector_index;
+  auto ret = Server::GetInstance()->GetRegionController()->vector_index_map.Get(region_id, vector_index);
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << fmt::format("Get vector_index failed");
+    return butil::Status(pb::error::EINTERNAL, "Internal error, Get vector_index failed");
+  }
+
+  for (auto id : ids) {
+    vector_index->Delete(id);
+  }
 
   // commit rocksdb
   rocksdb::WriteOptions write_options;

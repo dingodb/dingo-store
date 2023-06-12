@@ -139,6 +139,8 @@ class Server {
 
   std::string GetCheckpointPath() { return checkpoint_path_; }
 
+  std::string GetIndexPath() { return index_path_; }
+
   Server(const Server&) = delete;
   const Server& operator=(const Server&) = delete;
 
@@ -201,6 +203,9 @@ class Server {
 
   // checkpoint directory
   std::string checkpoint_path_;
+
+  // index directory
+  std::string index_path_;
 };
 
 }  // namespace dingodb

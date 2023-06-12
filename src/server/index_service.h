@@ -18,7 +18,6 @@
 #include "brpc/controller.h"
 #include "brpc/server.h"
 #include "engine/storage.h"
-#include "hnswlib/hnswlib.h"
 #include "proto/index.pb.h"
 
 namespace dingodb {

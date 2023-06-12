@@ -946,6 +946,7 @@ butil::Status CoordinatorControl::CreateRegion(const std::string& region_name, p
   // new_region.set_name(region_name + std::string("_") + std::to_string(create_region_id));
   new_region.set_state(::dingodb::pb::common::RegionState::REGION_NEW);
   new_region.set_create_timestamp(butil::gettimeofday_ms());
+  new_region.set_region_type(region_type);
   // auto* range = new_region.mutable_range();
   // range->CopyFrom(region_range);
   // add store_id and its peer location to region

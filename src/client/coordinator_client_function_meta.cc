@@ -29,6 +29,8 @@ DECLARE_string(id);
 DECLARE_string(name);
 DECLARE_int64(schema_id);
 DECLARE_int64(replica);
+DECLARE_int64(max_elements);
+DECLARE_int64(dimension);
 
 void SendGetSchemas(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
   dingodb::pb::meta::GetSchemasRequest request;
@@ -545,6 +547,23 @@ void SendCreateIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
   if (FLAGS_replica > 0) {
     index_definition->set_replica(FLAGS_replica);
   }
+
+  // vector index parameter
+  index_definition->mutable_index_parameter()->set_index_type(dingodb::pb::common::IndexType::INDEX_TYPE_VECTOR);
+  auto* vector_index_parameter = index_definition->mutable_index_parameter()->mutable_vector_index_parameter();
+  vector_index_parameter->set_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW);
+
+  if (FLAGS_max_elements == 0) {
+    DINGO_LOG(WARNING) << "max_elements is empty";
+    return;
+  }
+  if (FLAGS_dimension == 0) {
+    DINGO_LOG(WARNING) << "dimension is empty";
+    return;
+  }
+
+  vector_index_parameter->set_max_elements(FLAGS_max_elements);
+  vector_index_parameter->set_dimension(FLAGS_dimension);
 
   // map<string, Index> indexes = 3;
   // uint32 version = 4;
