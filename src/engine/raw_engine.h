@@ -82,7 +82,8 @@ class RawEngine {
     virtual butil::Status KvCount(std::shared_ptr<dingodb::Snapshot> snapshot, const std::string& start_key,
                                   const std::string& end_key, uint64_t& count) = 0;
 
-    virtual butil::Status VectorSearch(pb::common::VectorWithId vector, pb::common::VectorSearchParameter parameter,
+    virtual butil::Status VectorSearch(const std::string& key_header, const pb::common::VectorWithId& vector,
+                                       pb::common::VectorSearchParameter parameter,
                                        std::vector<pb::common::VectorWithDistance>& vectors) = 0;
 
     virtual std::shared_ptr<EngineIterator> NewIterator(const std::string& start_key, const std::string& end_key) = 0;

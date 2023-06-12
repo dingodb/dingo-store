@@ -125,6 +125,22 @@ butil::Status Storage::VectorDelete(std::shared_ptr<Context> ctx, const std::vec
   });
 }
 
+butil::Status Storage::VectorSearch(std::shared_ptr<Context> ctx, const pb::common::VectorWithId& vector,
+                                    const pb::common::VectorSearchParameter& parameter,
+                                    std::vector<pb::common::VectorWithDistance>& results) {
+  auto status = ValidateLeader(ctx->RegionId());
+  if (!status.ok()) {
+    return status;
+  }
+  auto reader = engine_->NewReader(Constant::kStoreDataCF);
+  status = reader->VectorSearch(ctx, vector, parameter, results);
+  if (!status.ok()) {
+    return status;
+  }
+
+  return butil::Status();
+}
+
 butil::Status Storage::KvPutIfAbsent(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs,
                                      bool is_atomic) {
   WriteData write_data;

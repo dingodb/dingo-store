@@ -65,7 +65,7 @@ class Engine {
     virtual butil::Status KvCount(std::shared_ptr<Context> ctx, const std::string& start_key,
                                   const std::string& end_key, uint64_t& count) = 0;
 
-    virtual butil::Status VectorSearch(std::shared_ptr<Context> ctx, pb::common::VectorWithId vector,
+    virtual butil::Status VectorSearch(std::shared_ptr<Context> ctx, const pb::common::VectorWithId& vector,
                                        pb::common::VectorSearchParameter parameter,
                                        std::vector<pb::common::VectorWithDistance>& vectors) = 0;
   };

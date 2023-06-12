@@ -29,6 +29,7 @@
 #include "engine/raw_engine.h"
 #include "engine/snapshot.h"
 #include "openssl/core_dispatch.h"
+#include "proto/common.pb.h"
 #include "proto/store_internal.pb.h"
 #include "rocksdb/cache.h"
 #include "rocksdb/convenience.h"
@@ -175,7 +176,8 @@ class RawRocksEngine : public RawEngine {
     butil::Status KvCount(std::shared_ptr<dingodb::Snapshot> snapshot, const std::string& start_key,
                           const std::string& end_key, uint64_t& count) override;
 
-    butil::Status VectorSearch(pb::common::VectorWithId vector, pb::common::VectorSearchParameter parameter,
+    butil::Status VectorSearch(const std::string& key_header, const pb::common::VectorWithId& vector,
+                               pb::common::VectorSearchParameter parameter,
                                std::vector<pb::common::VectorWithDistance>& vectors) override;
 
     std::shared_ptr<EngineIterator> NewIterator(const std::string& start_key, const std::string& end_key) override;
