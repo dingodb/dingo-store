@@ -755,7 +755,7 @@ std::string Helper::FindFileInDirectory(const std::string& dirpath, const std::s
   return "";
 }
 
-bool Helper::RemoveDirectory(const std::string& path) {
+bool Helper::RemoveFileOrDirectory(const std::string& path) {
   std::error_code ec;
   if (!std::filesystem::remove(path, ec)) {
     DINGO_LOG(ERROR) << fmt::format("remove directory failed, error: {} {}", ec.value(), ec.message());
@@ -765,7 +765,7 @@ bool Helper::RemoveDirectory(const std::string& path) {
   return true;
 }
 
-bool Helper::RemoveAllDirectory(const std::string& path) {
+bool Helper::RemoveAllFileOrDirectory(const std::string& path) {
   std::error_code ec;
   auto num = std::filesystem::remove_all(path, ec);
   if (num == static_cast<std::uintmax_t>(-1)) {

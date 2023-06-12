@@ -22,6 +22,8 @@ SET(BRAFT_LIBRARIES "${BRAFT_INSTALL_DIR}/lib/libbraft.a" CACHE FILEPATH "braft 
 
 set(prefix_path "${THIRD_PARTY_PATH}/install/brpc|${THIRD_PARTY_PATH}/install/gflags|${THIRD_PARTY_PATH}/install/protobuf|${THIRD_PARTY_PATH}/install/zlib|${THIRD_PARTY_PATH}/install/glog|${THIRD_PARTY_PATH}/install/leveldb")
 
+set(CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS} -DUSE_BTHREAD_MUTEX)
+
 ExternalProject_Add(
         extern_braft
         ${EXTERNAL_PROJECT_LOG_ARGS}

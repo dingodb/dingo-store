@@ -15,6 +15,7 @@
 #include "handler/raft_snapshot_handler.h"
 
 #include <filesystem>
+#include <iostream>
 #include <memory>
 #include <string>
 
@@ -132,7 +133,7 @@ bool RaftSnapshot::SaveSnapshot(braft::SnapshotWriter* writer, store::RegionPtr 
   auto status = func(region_checkpoint_path, region, sst_files);
   if (!status.ok() && status.error_code() != pb::error::ENO_ENTRIES) {
     // Clean temp checkpoint file
-    Helper::RemoveAllDirectory(region_checkpoint_path);
+    Helper::RemoveAllFileOrDirectory(region_checkpoint_path);
     return false;
   }
 
@@ -149,7 +150,7 @@ bool RaftSnapshot::SaveSnapshot(braft::SnapshotWriter* writer, store::RegionPtr 
   }
 
   // Clean temp checkpoint file
-  Helper::RemoveAllDirectory(region_checkpoint_path);
+  Helper::RemoveAllFileOrDirectory(region_checkpoint_path);
 
   return true;
 }
@@ -169,6 +170,7 @@ bool RaftSnapshot::LoadSnapshot(braft::SnapshotReader* reader, store::RegionPtr 
     return false;
   }
 
+  bool has_temp_file = false;
   // Ingest sst to region
   if (!files.empty()) {
     auto raw_engine = std::dynamic_pointer_cast<RawRocksEngine>(engine_);
@@ -179,14 +181,20 @@ bool RaftSnapshot::LoadSnapshot(braft::SnapshotReader* reader, store::RegionPtr 
       std::string merge_sst_path = fmt::format("{}/merge.sst", reader->get_path());
       // Already exist merge.sst file, remove it.
       if (std::filesystem::exists(merge_sst_path)) {
-        Helper::RemoveDirectory(merge_sst_path);
+        Helper::RemoveFileOrDirectory(merge_sst_path);
       }
 
+      has_temp_file = true;
       // Merge multiple file to one sst.
       // Origin checkpoint sst file cant't ingest rocksdb,
       // Just use rocksdb::SstFileWriter generate sst file can ingest rocksdb.
       status = RawRocksEngine::MergeCheckpointFile(reader->get_path(), region->Range(), merge_sst_path);
       if (!status.ok()) {
+        // Clean temp file
+        if (std::filesystem::exists(merge_sst_path)) {
+          Helper::RemoveFileOrDirectory(merge_sst_path);
+        }
+
         if (status.error_code() == pb::error::ENO_ENTRIES) {
           return true;
         }
@@ -208,6 +216,10 @@ bool RaftSnapshot::LoadSnapshot(braft::SnapshotReader* reader, store::RegionPtr 
 
     if (!sst_files.empty()) {
       status = raw_engine->IngestExternalFile(Constant::kStoreDataCF, sst_files);
+      if (has_temp_file) {
+        // Clean temp file
+        Helper::RemoveFileOrDirectory(sst_files[0]);
+      }
     }
   }
   return status.ok();

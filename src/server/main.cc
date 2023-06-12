@@ -213,7 +213,7 @@ static void SignalHandler(int signo) {
   }
 
   // clean temp directory
-  dingodb::Helper::RemoveAllDirectory(dingodb::Server::GetInstance()->GetCheckpointPath());
+  dingodb::Helper::RemoveAllFileOrDirectory(dingodb::Server::GetInstance()->GetCheckpointPath());
 
   if (signo == SIGTERM) {
     // TODO: graceful shutdown
@@ -282,7 +282,7 @@ static void SignalHandlerWithoutLineno(int signo) {
   } while (unw_step(&cursor) > 0);
 
   // clean temp directory
-  dingodb::Helper::RemoveAllDirectory(dingodb::Server::GetInstance()->GetCheckpointPath());
+  dingodb::Helper::RemoveAllFileOrDirectory(dingodb::Server::GetInstance()->GetCheckpointPath());
 
   if (signo == SIGTERM) {
     // TODO: graceful shutdown
