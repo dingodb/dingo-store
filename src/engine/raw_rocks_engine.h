@@ -175,6 +175,9 @@ class RawRocksEngine : public RawEngine {
     butil::Status KvCount(std::shared_ptr<dingodb::Snapshot> snapshot, const std::string& start_key,
                           const std::string& end_key, uint64_t& count) override;
 
+    butil::Status VectorSearch(pb::common::VectorWithId vector, pb::common::VectorSearchParameter parameter,
+                               std::vector<pb::common::VectorWithDistance>& vectors) override;
+
     std::shared_ptr<EngineIterator> NewIterator(const std::string& start_key, const std::string& end_key) override;
 
    private:
@@ -219,6 +222,12 @@ class RawRocksEngine : public RawEngine {
 
     // key must be exist
     butil::Status KvDeleteIfEqual(const pb::common::KeyValue& kv) override;
+
+    // vector
+    butil::Status VectorAdd(const std::string& key_header, uint64_t log_id,
+                            const std::vector<pb::common::VectorWithId>& vectors) override;
+    butil::Status VectorDelete(const std::string& key_header, uint64_t log_id,
+                               const std::vector<uint64_t>& id) override;
 
    private:
     butil::Status KvCompareAndSetInternal(const pb::common::KeyValue& kv, const std::string& value, bool is_key_exist,
@@ -297,7 +306,7 @@ class RawRocksEngine : public RawEngine {
                                             std::vector<pb::common::Range>& ranges) override;
 
  private:
-  bool InitCfConfig(const std::vector<std::string>& column_family);
+  bool InitCfConfig(const std::vector<std::string>& column_families);
 
   // set cf config
   static bool SetCfConfiguration(const CfDefaultConf& default_conf,
@@ -306,20 +315,21 @@ class RawRocksEngine : public RawEngine {
 
   // set default column family if not exist. rocksdb not allow no default
   // column family we will move default to first
-  static void SetDefaultIfNotExist(std::vector<std::string>& column_family);  // NOLINT
+  static void SetDefaultIfNotExist(std::vector<std::string>& column_families);
 
   // new_cf = base + cf . cf will overwrite base value if exists.
   static void CreateNewMap(const std::map<std::string, std::string>& base, const std::map<std::string, std::string>& cf,
-                           std::map<std::string, std::string>& new_cf);  // NOLINT
+                           std::map<std::string, std::string>& new_cf);
 
   bool RocksdbInit(std::shared_ptr<Config> config, const std::string& db_path,
                    const std::vector<std::string>& column_family,
-                   std::vector<rocksdb::ColumnFamilyHandle*>& family_handles);  // NOLINT
+                   std::vector<rocksdb::ColumnFamilyHandle*>& family_handles);
 
-  void SetColumnFamilyHandle(const std::vector<std::string>& column_family,
+  void SetColumnFamilyHandle(const std::vector<std::string>& column_families,
                              const std::vector<rocksdb::ColumnFamilyHandle*>& family_handles);
 
-  void SetColumnFamilyFromConfig(const std::shared_ptr<Config>& config, const std::vector<std::string>& column_family);
+  void SetColumnFamilyFromConfig(const std::shared_ptr<Config>& config,
+                                 const std::vector<std::string>& column_families);
 
   // destroy rocksdb need
   std::string db_path_;

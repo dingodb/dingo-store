@@ -33,6 +33,10 @@ enum CmdType {
 
   // Coordinator State Machine Operator
   META_WRITE = 2000;
+
+  // vector [3000,4000]
+  VECTOR_ADD = 3000;
+  VECTOR_DELETE = 3001;
 }
 
 message PutRequest {
@@ -41,6 +45,20 @@ message PutRequest {
 }
 
 message PutResponse {}
+
+message VectorAddRequest {
+  string cf_name = 1;
+  repeated dingodb.pb.common.VectorWithId vectors = 2;
+}
+
+message VectorAddResponse {}
+
+message VectorDeleteRequest {
+  string cf_name = 1;
+  repeated uint64 ids = 2;
+}
+
+message VectorDeleteResponse {}
 
 message PutIfAbsentRequest {
   string cf_name = 1;
@@ -99,6 +117,7 @@ message RaftMetaRequest {
 
 message Request {
   CmdType cmd_type = 1;
+
   oneof cmd_body {
     // Store Operation[1000, 2000]
     PutRequest put = 1000;
@@ -110,6 +129,10 @@ message Request {
 
     // Coordinator Operation[2000, 3000]
     RaftMetaRequest meta_req = 2000;
+
+    // vector [3000,4000]
+    VectorAddRequest vector_add = 3000;
+    VectorDeleteRequest vector_delete = 3001;
   }
 }
 
@@ -126,6 +149,10 @@ message Response {
 
     RaftCreateSchemaResponse create_schema_req = 2001;
     RaftCreateTableResponse create_table_req = 2002;
+
+    // vector [3000,4000]
+    VectorAddResponse vector_add = 3000;
+    VectorDeleteResponse vector_delete = 3001;
   }
 }
 

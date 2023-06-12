@@ -28,7 +28,8 @@ class PutHandler : public BaseHandler {
  public:
   HandlerType GetType() override { return HandlerType::kPut; }
   void Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
-              const pb::raft::Request &req, store::RegionMetricsPtr region_metrics) override;
+              const pb::raft::Request &req, store::RegionMetricsPtr region_metrics, uint64_t term_id,
+              uint64_t log_id) override;
 };
 
 // PutIfAbsentRequest
@@ -36,7 +37,8 @@ class PutIfAbsentHandler : public BaseHandler {
  public:
   HandlerType GetType() override { return HandlerType::kPutIfabsent; }
   void Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
-              const pb::raft::Request &req, store::RegionMetricsPtr region_metrics) override;
+              const pb::raft::Request &req, store::RegionMetricsPtr region_metrics, uint64_t term_id,
+              uint64_t log_id) override;
 };
 
 // CompareAndSetRequest
@@ -44,7 +46,8 @@ class CompareAndSetHandler : public BaseHandler {
  public:
   HandlerType GetType() override { return HandlerType::kCompareAndSet; }
   void Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
-              const pb::raft::Request &req, store::RegionMetricsPtr region_metrics) override;
+              const pb::raft::Request &req, store::RegionMetricsPtr region_metrics, uint64_t term_id,
+              uint64_t log_id) override;
 };
 
 // DeleteRangeRequest
@@ -52,7 +55,8 @@ class DeleteRangeHandler : public BaseHandler {
  public:
   HandlerType GetType() override { return HandlerType::kDeleteRange; }
   void Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
-              const pb::raft::Request &req, store::RegionMetricsPtr region_metrics) override;
+              const pb::raft::Request &req, store::RegionMetricsPtr region_metrics, uint64_t term_id,
+              uint64_t log_id) override;
 };
 
 // DeleteBatchRequest
@@ -60,7 +64,8 @@ class DeleteBatchHandler : public BaseHandler {
  public:
   HandlerType GetType() override { return HandlerType::kDeleteBatch; }
   void Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
-              const pb::raft::Request &req, store::RegionMetricsPtr region_metricss) override;
+              const pb::raft::Request &req, store::RegionMetricsPtr region_metricss, uint64_t term_id,
+              uint64_t log_id) override;
 };
 
 // SplitHandler
@@ -80,7 +85,26 @@ class SplitHandler : public BaseHandler {
 
   HandlerType GetType() override { return HandlerType::kSplit; }
   void Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
-              const pb::raft::Request &req, store::RegionMetricsPtr region_metrics) override;
+              const pb::raft::Request &req, store::RegionMetricsPtr region_metrics, uint64_t term_id,
+              uint64_t log_id) override;
+};
+
+// VectorAddRequest
+class VectorAddHandler : public BaseHandler {
+ public:
+  HandlerType GetType() override { return HandlerType::kVectorAdd; }
+  void Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
+              const pb::raft::Request &req, store::RegionMetricsPtr region_metrics, uint64_t term_id,
+              uint64_t log_id) override;
+};
+
+// VectorDeleteRequest
+class VectorDeleteHandler : public BaseHandler {
+ public:
+  HandlerType GetType() override { return HandlerType::kVectorDelete; }
+  void Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
+              const pb::raft::Request &req, store::RegionMetricsPtr region_metricss, uint64_t term_id,
+              uint64_t log_id) override;
 };
 
 class RaftApplyHandlerFactory : public HandlerFactory {

@@ -94,6 +94,45 @@ message KvPutResponse {
   dingodb.pb.error.Error error = 1;
 }
 
+message VectorAddRequest {
+  uint64 region_id = 1;
+  repeated dingodb.pb.common.VectorWithId vectors = 2;
+  bool replace_deleted = 3;
+}
+
+message VectorAddResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
+message VectorSearchRequest {
+  uint64 region_id = 1;
+  dingodb.pb.common.Vector vector = 2;
+  dingodb.pb.common.VectorSearchParameter parameter = 3;
+}
+
+message VectorSearchResponse {
+  dingodb.pb.error.Error error = 1;
+  repeated dingodb.pb.common.Vector results = 2;
+}
+
+message VectorDeleteRequest {
+  uint64 region_id = 1;
+  repeated uint64 ids = 2;
+}
+
+message VectorDeleteResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
+message VectorUpdateRequest {
+  uint64 region_id = 1;
+  dingodb.pb.common.VectorWithId vector = 2;
+}
+
+message VectorUpdateResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
 message KvBatchPutRequest {
   uint64 region_id = 1;
   repeated dingodb.pb.common.KeyValue kvs = 2;
@@ -206,6 +245,11 @@ service IndexService {
   rpc KvPutIfAbsent(KvPutIfAbsentRequest) returns (KvPutIfAbsentResponse);
   rpc KvBatchPutIfAbsent(KvBatchPutIfAbsentRequest) returns (KvBatchPutIfAbsentResponse);
   rpc KvBatchDelete(KvBatchDeleteRequest) returns (KvBatchDeleteResponse);
+
+  // vector index
+  rpc VectorAdd(VectorAddRequest) returns (VectorAddResponse);
+  rpc VectorSearch(VectorSearchRequest) returns (VectorSearchResponse);
+  rpc VectorDelete(VectorDeleteRequest) returns (VectorDeleteResponse);
 
   // debug
   rpc Debug(DebugRequest) returns (DebugResponse);

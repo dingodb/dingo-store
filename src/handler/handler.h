@@ -15,6 +15,7 @@
 #ifndef DINGODB_HANDLER_HANDLER_H_
 #define DINGODB_HANDLER_HANDLER_H_
 
+#include <cstdint>
 #include <unordered_map>
 
 #include "braft/snapshot.h"
@@ -36,6 +37,10 @@ enum class HandlerType {
   kMetaWrite = pb::raft::META_WRITE,
   kCompareAndSet = pb::raft::COMPAREANDSET,
 
+  // vector
+  kVectorAdd = pb::raft::VECTOR_ADD,
+  kVectorDelete = pb::raft::VECTOR_DELETE,
+
   // Snapshot
   kSaveSnapshot = 1000,
   kLoadSnapshot = 1001,
@@ -49,8 +54,10 @@ class Handler {
   virtual HandlerType GetType() = 0;
   // virtual void Handle(std::shared_ptr<Context> ctx, std::shared_ptr<RawEngine> engine,
   //                     const pb::raft::Request &req) = 0;
+
   virtual void Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
-                      const pb::raft::Request &req, store::RegionMetricsPtr region_metrics) = 0;
+                      const pb::raft::Request &req, store::RegionMetricsPtr region_metrics, uint64_t term_id,
+                      uint64_t log_id) = 0;
 
   virtual void Handle(uint64_t region_id, std::shared_ptr<RawEngine> engine, braft::SnapshotWriter *writer,
                       braft::Closure *done) = 0;
@@ -67,7 +74,7 @@ class BaseHandler : public Handler {
   // }
 
   void Handle(std::shared_ptr<Context>, store::RegionPtr, std::shared_ptr<RawEngine>, const pb::raft::Request &,
-              store::RegionMetricsPtr) override {
+              store::RegionMetricsPtr, uint64_t /*term_id*/, uint64_t /*log_id*/) override {
     DINGO_LOG(ERROR) << "Not support handle...";
   }
 

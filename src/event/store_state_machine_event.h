@@ -15,6 +15,8 @@
 #ifndef DINGODB_EVENT_STATE_MACHINE_EVENT_H_
 #define DINGODB_EVENT_STATE_MACHINE_EVENT_H_
 
+#include <cstdint>
+
 #include "event/event.h"
 #include "handler/handler.h"
 #include "handler/raft_handler.h"
@@ -34,6 +36,8 @@ struct SmApplyEvent : public Event {
   std::shared_ptr<RawEngine> engine;
   braft::Closure* done;
   std::shared_ptr<pb::raft::RaftCmdRequest> raft_cmd;
+  uint64_t term_id;
+  uint64_t log_id;
 };
 
 class SmApplyEventListener : public EventListener {

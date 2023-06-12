@@ -204,7 +204,7 @@ class RocksIterator : public EngineIterator {
 
 RawRocksEngine::RawRocksEngine() : db_(nullptr), column_families_({}) {}
 
-RawRocksEngine::~RawRocksEngine() {}
+RawRocksEngine::~RawRocksEngine() = default;
 
 // load rocksdb config from config file
 bool RawRocksEngine::Init(std::shared_ptr<Config> config) {
@@ -769,6 +769,34 @@ butil::Status RawRocksEngine::Reader::KvGet(std::shared_ptr<dingodb::Snapshot> s
   return butil::Status();
 }
 
+butil::Status RawRocksEngine::Reader::VectorSearch(pb::common::VectorWithId vector,
+                                                   pb::common::VectorSearchParameter parameter,
+                                                   std::vector<pb::common::VectorWithDistance>& vectors) {
+  if (BAIDU_UNLIKELY(vector.vector().values_size() == 0)) {
+    DINGO_LOG(ERROR) << fmt::format("vector empty not support");
+    return butil::Status(pb::error::EVECTOR_EMPTY, "vector is empty");
+  }
+
+  if (parameter.top_n() == 0) {
+    DINGO_LOG(ERROR) << fmt::format("top_n is 0 not support");
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "top_n is 0");
+  }
+
+  for (int i = 0; i < 10; i++) {
+    pb::common::VectorWithDistance vector_with_distance;
+    vector_with_distance.set_id(i);
+    vector_with_distance.set_distance(i);
+
+    for (int j = 0; j < 16; j++) {
+      vector_with_distance.mutable_vector()->add_values(i * 16 + j);
+    }
+
+    vectors.push_back(vector_with_distance);
+  }
+
+  return butil::Status();
+}
+
 butil::Status RawRocksEngine::Reader::KvScan(const std::string& start_key, const std::string& end_key,
                                              std::vector<pb::common::KeyValue>& kvs) {
   auto snapshot = std::make_shared<RocksSnapshot>(db_->GetSnapshot(), db_);
@@ -861,6 +889,102 @@ butil::Status RawRocksEngine::Writer::KvPut(const pb::common::KeyValue& kv) {
   if (!s.ok()) {
     DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Put failed : {}", s.ToString());
     return butil::Status(pb::error::EINTERNAL, "Internal put error");
+  }
+
+  return butil::Status();
+}
+
+butil::Status RawRocksEngine::Writer::VectorAdd(const std::string& key_header, uint64_t log_id,
+                                                const std::vector<pb::common::VectorWithId>& vectors) {
+  if (BAIDU_UNLIKELY(vectors.empty())) {
+    DINGO_LOG(ERROR) << fmt::format("vectors empty  not support");
+    return butil::Status(pb::error::EVECTOR_EMPTY, "vectors is empty");
+  }
+
+  // write vector, WAL, WAL_LOG_ID
+  rocksdb::WriteBatch batch;
+  for (const auto& vector : vectors) {
+    if (BAIDU_UNLIKELY(vector.id() == 0 || vector.vector().values_size() == 0)) {
+      DINGO_LOG(ERROR) << fmt::format("vector empty  not support");
+      return butil::Status(pb::error::EVECTOR_EMPTY, "vector is empty");
+    } else {
+      rocksdb::Status s = batch.Put(column_family_->GetHandle(), key_header + std::to_string(vector.id()),
+                                    vector.vector().SerializeAsString());
+      if (BAIDU_UNLIKELY(!s.ok())) {
+        DINGO_LOG(ERROR) << fmt::format("rocksdb::WriteBatch::Put failed : {}", s.ToString());
+        return butil::Status(pb::error::EINTERNAL, "Internal error");
+      }
+
+      s = batch.Put(column_family_->GetHandle(), key_header + std::string("WAL") + std::to_string(vector.id()),
+                    vector.vector().SerializeAsString());
+      if (BAIDU_UNLIKELY(!s.ok())) {
+        DINGO_LOG(ERROR) << fmt::format("rocksdb::WriteBatch::Put failed : {}", s.ToString());
+        return butil::Status(pb::error::EINTERNAL, "Internal error");
+      }
+
+      s = batch.Put(column_family_->GetHandle(), key_header + std::string("WAL_LOG_ID"), std::to_string(log_id));
+      if (BAIDU_UNLIKELY(!s.ok())) {
+        DINGO_LOG(ERROR) << fmt::format("rocksdb::WriteBatch::Put failed : {}", s.ToString());
+        return butil::Status(pb::error::EINTERNAL, "Internal error");
+      }
+    }
+  }
+
+  // write vector index
+
+  // commit rocksdb
+  rocksdb::WriteOptions write_options;
+  rocksdb::Status s = db_->Write(write_options, &batch);
+  if (!s.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Write failed : {}", s.ToString());
+    return butil::Status(pb::error::EINTERNAL, "Internal error");
+  }
+
+  return butil::Status();
+}
+
+butil::Status RawRocksEngine::Writer::VectorDelete(const std::string& key_header, uint64_t log_id,
+                                                   const std::vector<uint64_t>& ids) {
+  if (BAIDU_UNLIKELY(ids.empty())) {
+    DINGO_LOG(ERROR) << fmt::format("vectors empty  not support");
+    return butil::Status(pb::error::EVECTOR_EMPTY, "vectors is empty");
+  }
+
+  // write vector, WAL, WAL_LOG_ID
+  rocksdb::WriteBatch batch;
+  for (const auto& id : ids) {
+    if (BAIDU_UNLIKELY(id == 0)) {
+      DINGO_LOG(ERROR) << fmt::format("vector empty  not support");
+      return butil::Status(pb::error::EVECTOR_EMPTY, "vector is empty");
+    } else {
+      rocksdb::Status s = batch.Delete(column_family_->GetHandle(), key_header + std::to_string(id));
+      if (BAIDU_UNLIKELY(!s.ok())) {
+        DINGO_LOG(ERROR) << fmt::format("rocksdb::WriteBatch::Put failed : {}", s.ToString());
+        return butil::Status(pb::error::EINTERNAL, "Internal error");
+      }
+
+      s = batch.Put(column_family_->GetHandle(), key_header + std::string("WAL") + std::to_string(id), std::string());
+      if (BAIDU_UNLIKELY(!s.ok())) {
+        DINGO_LOG(ERROR) << fmt::format("rocksdb::WriteBatch::Put failed : {}", s.ToString());
+        return butil::Status(pb::error::EINTERNAL, "Internal error");
+      }
+
+      s = batch.Put(column_family_->GetHandle(), key_header + std::string("WAL_LOG_ID"), std::to_string(log_id));
+      if (BAIDU_UNLIKELY(!s.ok())) {
+        DINGO_LOG(ERROR) << fmt::format("rocksdb::WriteBatch::Put failed : {}", s.ToString());
+        return butil::Status(pb::error::EINTERNAL, "Internal error");
+      }
+    }
+  }
+
+  // write vector index
+
+  // commit rocksdb
+  rocksdb::WriteOptions write_options;
+  rocksdb::Status s = db_->Write(write_options, &batch);
+  if (!s.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Write failed : {}", s.ToString());
+    return butil::Status(pb::error::EINTERNAL, "Internal error");
   }
 
   return butil::Status();

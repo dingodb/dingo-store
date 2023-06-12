@@ -15,6 +15,7 @@
 #include "handler/raft_handler.h"
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -29,7 +30,8 @@
 namespace dingodb {
 
 void PutHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
-                        const pb::raft::Request &req, store::RegionMetricsPtr region_metrics) {
+                        const pb::raft::Request &req, store::RegionMetricsPtr region_metrics, uint64_t /*term_id*/,
+                        uint64_t /*log_id*/) {
   butil::Status status;
   const auto &request = req.put();
   // region is spliting, check key out range
@@ -65,7 +67,7 @@ void PutHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, s
 
 void PutIfAbsentHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region,
                                 std::shared_ptr<RawEngine> engine, const pb::raft::Request &req,
-                                store::RegionMetricsPtr region_metrics) {
+                                store::RegionMetricsPtr region_metrics, uint64_t /*term_id*/, uint64_t /*log_id*/) {
   butil::Status status;
   const auto &request = req.put_if_absent();
   // region is spliting, check key out range
@@ -122,7 +124,7 @@ void PutIfAbsentHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
 
 void CompareAndSetHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region,
                                   std::shared_ptr<RawEngine> engine, const pb::raft::Request &req,
-                                  store::RegionMetricsPtr region_metrics) {
+                                  store::RegionMetricsPtr region_metrics, uint64_t /*term_id*/, uint64_t /*log_id*/) {
   butil::Status status;
   const auto &request = req.compare_and_set();
   // region is spliting, check key out range
@@ -197,7 +199,7 @@ void CompareAndSetHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr
 
 void DeleteRangeHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region,
                                 std::shared_ptr<RawEngine> engine, const pb::raft::Request &req,
-                                store::RegionMetricsPtr region_metrics) {
+                                store::RegionMetricsPtr region_metrics, uint64_t /*term_id*/, uint64_t /*log_id*/) {
   butil::Status status;
   const auto &request = req.delete_range();
   // region is spliting, check key out range
@@ -258,7 +260,7 @@ void DeleteRangeHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
 
 void DeleteBatchHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region,
                                 std::shared_ptr<RawEngine> engine, const pb::raft::Request &req,
-                                store::RegionMetricsPtr region_metrics) {
+                                store::RegionMetricsPtr region_metrics, uint64_t /*term_id*/, uint64_t /*log_id*/) {
   butil::Status status;
   const auto &request = req.delete_batch();
   // region is spliting, check key out range
@@ -330,7 +332,8 @@ void SplitHandler::SplitClosure::Run() {
 }
 
 void SplitHandler::Handle(std::shared_ptr<Context>, store::RegionPtr from_region, std::shared_ptr<RawEngine>,
-                          const pb::raft::Request &req, store::RegionMetricsPtr region_metrics) {
+                          const pb::raft::Request &req, store::RegionMetricsPtr region_metrics, uint64_t /*term_id*/,
+                          uint64_t /*log_id*/) {
   const auto &request = req.split();
   auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
 
@@ -390,6 +393,78 @@ void SplitHandler::Handle(std::shared_ptr<Context>, store::RegionPtr from_region
   }
 }
 
+void VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
+                              const pb::raft::Request &req, store::RegionMetricsPtr /*region_metrics*/,
+                              uint64_t /*term_id*/, uint64_t log_id) {
+  butil::Status status;
+  const auto &request = req.vector_add();
+  // region is spliting, check key out range
+  // if (region->State() == pb::common::StoreRegionState::SPLITTING) {
+  //   const auto &range = region->Range();
+  //   for (const auto &kv : request.kvs()) {
+  //     if (range.end_key().compare(kv.key()) <= 0) {
+  //       if (ctx) {
+  //         status.set_error(pb::error::EREGION_REDIRECT, "Region is spliting, please update route");
+  //         ctx->SetStatus(status);
+  //       }
+  //       return;
+  //     }
+  //   }
+  // }
+
+  auto writer = engine->NewWriter(request.cf_name());
+  if (request.vectors_size() > 0) {
+    status = writer->VectorAdd(std::to_string(region->Id()), log_id, Helper::PbRepeatedToVector(request.vectors()));
+  }
+
+  if (ctx) {
+    ctx->SetStatus(status);
+  }
+
+  // Update region metrics min/max key
+  // if (region_metrics != nullptr) {
+  //   region_metrics->UpdateMaxAndMinKey(request.kvs());
+  // }
+}
+
+void VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region,
+                                 std::shared_ptr<RawEngine> engine, const pb::raft::Request &req,
+                                 store::RegionMetricsPtr /*region_metrics*/, uint64_t /*term_id*/, uint64_t log_id) {
+  butil::Status status;
+  const auto &request = req.vector_delete();
+  // region is spliting, check key out range
+  // if (region->State() == pb::common::StoreRegionState::SPLITTING) {
+  //   const auto &range = region->Range();
+  //   for (const auto &key : request.keys()) {
+  //     if (range.end_key().compare(key) <= 0) {
+  //       if (ctx) {
+  //         status.set_error(pb::error::EREGION_REDIRECT, "Region is spliting, please update route");
+  //         ctx->SetStatus(status);
+  //       }
+  //       return;
+  //     }
+  //   }
+  // }
+
+  auto writer = engine->NewWriter(request.cf_name());
+  if (request.ids_size() > 0) {
+    std::vector<uint64_t> ids;
+    for (const auto &id : request.ids()) {
+      ids.push_back(id);
+    }
+    status = writer->VectorDelete(std::to_string(region->Id()), log_id, ids);
+  }
+
+  if (ctx) {
+    ctx->SetStatus(status);
+  }
+
+  // Update region metrics min/max key
+  // if (region_metrics != nullptr) {
+  //   region_metrics->UpdateMaxAndMinKey(request.kvs());
+  // }
+}
+
 std::shared_ptr<HandlerCollection> RaftApplyHandlerFactory::Build() {
   auto handler_collection = std::make_shared<HandlerCollection>();
   handler_collection->Register(std::make_shared<PutHandler>());
@@ -398,6 +473,8 @@ std::shared_ptr<HandlerCollection> RaftApplyHandlerFactory::Build() {
   handler_collection->Register(std::make_shared<DeleteBatchHandler>());
   handler_collection->Register(std::make_shared<SplitHandler>());
   handler_collection->Register(std::make_shared<CompareAndSetHandler>());
+  handler_collection->Register(std::make_shared<VectorAddHandler>());
+  handler_collection->Register(std::make_shared<VectorDeleteHandler>());
 
   return handler_collection;
 }

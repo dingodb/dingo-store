@@ -85,7 +85,7 @@ pb::common::Engine RaftKvEngine::GetID() { return pb::common::ENG_RAFT_STORE; }
 
 std::shared_ptr<RawEngine> RaftKvEngine::GetRawEngine() { return engine_; }
 
-butil::Status RaftKvEngine::AddNode(std::shared_ptr<Context> ctx, store::RegionPtr region,
+butil::Status RaftKvEngine::AddNode(std::shared_ptr<Context> /*ctx*/, store::RegionPtr region,
                                     std::shared_ptr<pb::store_internal::RaftMeta> raft_meta,
                                     store::RegionMetricsPtr region_metrics,
                                     std::shared_ptr<EventListenerCollection> listeners, bool is_restart) {
@@ -242,6 +242,12 @@ butil::Status RaftKvEngine::Reader::KvScan(std::shared_ptr<Context> /*ctx*/, con
 butil::Status RaftKvEngine::Reader::KvCount(std::shared_ptr<Context> /*ctx*/, const std::string& start_key,
                                             const std::string& end_key, uint64_t& count) {
   return reader_->KvCount(start_key, end_key, count);
+}
+
+butil::Status RaftKvEngine::Reader::VectorSearch(std::shared_ptr<Context> /*ctx*/, pb::common::VectorWithId vector,
+                                                 pb::common::VectorSearchParameter parameter,
+                                                 std::vector<pb::common::VectorWithDistance>& vectors) {
+  return reader_->VectorSearch(vector, parameter, vectors);
 }
 
 }  // namespace dingodb

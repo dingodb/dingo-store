@@ -22,6 +22,7 @@
 #include "event/event.h"
 #include "meta/store_meta_manager.h"
 #include "metrics/store_metrics_manager.h"
+#include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "proto/store.pb.h"
 #include "proto/store_internal.pb.h"
@@ -91,6 +92,10 @@ class RaftKvEngine : public Engine, public RaftControlAble {
 
     butil::Status KvCount(std::shared_ptr<Context> ctx, const std::string& start_key, const std::string& end_key,
                           uint64_t& count) override;
+
+    butil::Status VectorSearch(std::shared_ptr<Context> ctx, pb::common::VectorWithId vector,
+                               pb::common::VectorSearchParameter parameter,
+                               std::vector<pb::common::VectorWithDistance>& vectors) override;
 
    private:
     std::shared_ptr<RawEngine::Reader> reader_;
