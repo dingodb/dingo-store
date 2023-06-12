@@ -1290,6 +1290,7 @@ butil::Status RawRocksEngine::SstFileWriter::SaveFile(std::shared_ptr<dingodb::I
   for (; iter->Valid(); iter->Next()) {
     status = sst_writer_->Put(iter->Key(), iter->Value());
     if (!status.ok()) {
+      sst_writer_->Finish();
       return butil::Status(status.code(), status.ToString());
     }
   }

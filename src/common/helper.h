@@ -196,8 +196,8 @@ class Helper {
 
   // filesystem operations
   static std::string FindFileInDirectory(const std::string& dirpath, const std::string& prefix);
-  static bool RemoveDirectory(const std::string& path);
-  static bool RemoveAllDirectory(const std::string& path);
+  static bool RemoveFileOrDirectory(const std::string& path);
+  static bool RemoveAllFileOrDirectory(const std::string& path);
 };
 
 }  // namespace dingodb
