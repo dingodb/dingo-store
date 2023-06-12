@@ -126,7 +126,7 @@ std::chrono::milliseconds ScanContext::GetCurrentTime() {
   return millisec;
 }
 
-void ScanContext::GetKeyValue(std::vector<pb::common::KeyValue>& kvs) {
+butil::Status ScanContext::GetKeyValue(std::vector<pb::common::KeyValue>& kvs) {
   if (!is_already_call_start_) {
     iter_->Start();
     is_already_call_start_ = true;
@@ -139,7 +139,7 @@ void ScanContext::GetKeyValue(std::vector<pb::common::KeyValue>& kvs) {
     if (!status.ok()) {
       DINGO_LOG(ERROR) << fmt::format("Coprocessor::Execute failed");
     }
-    return;
+    return status;
   }
 
   ScanFilter scan_filter = ScanFilter(key_only_, std::min(max_fetch_cnt_, max_fetch_cnt_by_server_), max_bytes_rpc_);
@@ -169,6 +169,8 @@ void ScanContext::GetKeyValue(std::vector<pb::common::KeyValue>& kvs) {
 
     iter_->Next();
   }
+
+  return butil::Status();
 }
 
 butil::Status ScanContext::AsyncWork() {
@@ -309,7 +311,12 @@ butil::Status ScanHandler::ScanBegin(std::shared_ptr<ScanContext> context, uint6
   }
 
   if (context->max_fetch_cnt_ > 0) {
-    context->GetKeyValue(*kvs);
+    butil::Status s = context->GetKeyValue(*kvs);
+    if (!s.ok()) {
+      context->state_ = ScanState::kError;
+      DINGO_LOG(ERROR) << fmt::format("ScanContext::GetKeyValue failed");
+      return s;
+    }
 
     context->seek_state_ = ScanContext::SeekState::kInitted;
 
@@ -361,7 +368,12 @@ butil::Status ScanHandler::ScanContinue(std::shared_ptr<ScanContext> context, co
 
   context->state_ = ScanState::kContinuing;
 
-  context->GetKeyValue(*kvs);
+  s = context->GetKeyValue(*kvs);
+  if (!s.ok()) {
+    context->state_ = ScanState::kError;
+    DINGO_LOG(ERROR) << fmt::format("ScanContext::GetKeyValue failed");
+    return s;
+  }
 
   context->state_ = ScanState::kContinued;
   context->last_time_ms_ = context->GetCurrentTime();
