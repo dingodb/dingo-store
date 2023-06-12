@@ -15,6 +15,8 @@
 #ifndef DINGODB_ENGINE_KV_ENGINE_H_  // NOLINT
 #define DINGODB_ENGINE_KV_ENGINE_H_
 
+#include <sys/types.h>
+
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -82,8 +84,8 @@ class RawEngine {
     virtual butil::Status KvCount(std::shared_ptr<dingodb::Snapshot> snapshot, const std::string& start_key,
                                   const std::string& end_key, uint64_t& count) = 0;
 
-    virtual butil::Status VectorSearch(const std::string& key_header, const pb::common::VectorWithId& vector,
-                                       pb::common::VectorSearchParameter parameter,
+    virtual butil::Status VectorSearch(uint64_t region_id, const pb::common::VectorWithId& vector,
+                                       const pb::common::VectorSearchParameter& parameter,
                                        std::vector<pb::common::VectorWithDistance>& vectors) = 0;
 
     virtual std::shared_ptr<EngineIterator> NewIterator(const std::string& start_key, const std::string& end_key) = 0;
@@ -122,10 +124,9 @@ class RawEngine {
 
     virtual butil::Status KvDeleteIfEqual(const pb::common::KeyValue& kv) = 0;
 
-    virtual butil::Status VectorAdd(const std::string& key_header, uint64_t log_id,
+    virtual butil::Status VectorAdd(uint64_t region_id, uint64_t log_id,
                                     const std::vector<pb::common::VectorWithId>& vectors) = 0;
-    virtual butil::Status VectorDelete(const std::string& key_header, uint64_t log_id,
-                                       const std::vector<uint64_t>& id) = 0;
+    virtual butil::Status VectorDelete(uint64_t region_id, uint64_t log_id, const std::vector<uint64_t>& id) = 0;
   };
 
   virtual bool Init(std::shared_ptr<Config> config) = 0;

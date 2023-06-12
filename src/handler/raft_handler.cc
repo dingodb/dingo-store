@@ -414,7 +414,7 @@ void VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr reg
 
   auto writer = engine->NewWriter(request.cf_name());
   if (request.vectors_size() > 0) {
-    status = writer->VectorAdd(std::to_string(region->Id()), log_id, Helper::PbRepeatedToVector(request.vectors()));
+    status = writer->VectorAdd(region->Id(), log_id, Helper::PbRepeatedToVector(request.vectors()));
   }
 
   if (ctx) {
@@ -452,7 +452,7 @@ void VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr 
     for (const auto &id : request.ids()) {
       ids.push_back(id);
     }
-    status = writer->VectorDelete(std::to_string(region->Id()), log_id, ids);
+    status = writer->VectorDelete(region->Id(), log_id, ids);
   }
 
   if (ctx) {

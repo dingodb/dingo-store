@@ -40,6 +40,7 @@
 #include "rocksdb/slice_transform.h"
 #include "rocksdb/status.h"
 #include "rocksdb/utilities/checkpoint.h"
+#include "server/server.h"
 
 namespace dingodb {
 
@@ -176,8 +177,8 @@ class RawRocksEngine : public RawEngine {
     butil::Status KvCount(std::shared_ptr<dingodb::Snapshot> snapshot, const std::string& start_key,
                           const std::string& end_key, uint64_t& count) override;
 
-    butil::Status VectorSearch(const std::string& key_header, const pb::common::VectorWithId& vector,
-                               pb::common::VectorSearchParameter parameter,
+    butil::Status VectorSearch(uint64_t region_id, const pb::common::VectorWithId& vector,
+                               const pb::common::VectorSearchParameter& parameter,
                                std::vector<pb::common::VectorWithDistance>& vectors) override;
 
     std::shared_ptr<EngineIterator> NewIterator(const std::string& start_key, const std::string& end_key) override;
@@ -226,10 +227,9 @@ class RawRocksEngine : public RawEngine {
     butil::Status KvDeleteIfEqual(const pb::common::KeyValue& kv) override;
 
     // vector
-    butil::Status VectorAdd(const std::string& key_header, uint64_t log_id,
+    butil::Status VectorAdd(uint64_t region_id, uint64_t log_id,
                             const std::vector<pb::common::VectorWithId>& vectors) override;
-    butil::Status VectorDelete(const std::string& key_header, uint64_t log_id,
-                               const std::vector<uint64_t>& id) override;
+    butil::Status VectorDelete(uint64_t region_id, uint64_t log_id, const std::vector<uint64_t>& id) override;
 
    private:
     butil::Status KvCompareAndSetInternal(const pb::common::KeyValue& kv, const std::string& value, bool is_key_exist,

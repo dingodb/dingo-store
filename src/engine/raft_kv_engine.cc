@@ -247,7 +247,7 @@ butil::Status RaftKvEngine::Reader::KvCount(std::shared_ptr<Context> /*ctx*/, co
 butil::Status RaftKvEngine::Reader::VectorSearch(std::shared_ptr<Context> ctx, const pb::common::VectorWithId& vector,
                                                  pb::common::VectorSearchParameter parameter,
                                                  std::vector<pb::common::VectorWithDistance>& vectors) {
-  return reader_->VectorSearch(std::to_string(ctx->RegionId()), vector, parameter, vectors);
+  return reader_->VectorSearch(ctx->RegionId(), vector, parameter, vectors);
 }
 
 }  // namespace dingodb

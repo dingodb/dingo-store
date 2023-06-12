@@ -118,6 +118,15 @@ bool Server::InitDirectory() {
     }
   }
 
+  std::filesystem::path index_path(config->GetString("store.path"));
+  index_path_ = fmt::format("{}/idx", index_path.parent_path().string());
+  if (!std::filesystem::exists(index_path_)) {
+    if (!std::filesystem::create_directories(index_path_)) {
+      DINGO_LOG(ERROR) << "Create index directory failed: " << index_path_;
+      return false;
+    }
+  }
+
   return true;
 }
 

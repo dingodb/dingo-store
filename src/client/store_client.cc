@@ -18,6 +18,7 @@
 #include <string>
 #include <vector>
 
+#include "client/client_helper.h"
 #include "client/store_client_function.h"
 #include "fmt/core.h"
 #include "glog/logging.h"
@@ -34,14 +35,14 @@ DEFINE_string(method, "KvGet", "Request method");
 DEFINE_string(key, "", "Request key");
 DEFINE_string(value, "", "Request values");
 DEFINE_string(prefix, "", "key prefix");
-DEFINE_int32(region_id, 111111, "region id");
+DEFINE_int32(region_id, 0, "region id");
 DEFINE_int32(region_count, 1, "region count");
 DEFINE_int32(table_id, 0, "table id");
 DEFINE_string(table_name, "", "table name");
 DEFINE_string(raft_group, "store_default_test", "raft group");
 DEFINE_int32(partition_num, 1, "table partition num");
 DEFINE_int32(dimension, 16, "dimension");
-DEFINE_int32(count, 100, "count");
+DEFINE_int32(count, 50, "count");
 DEFINE_int32(id, 0, "id");
 
 bvar::LatencyRecorder g_latency_recorder("dingo-store");
