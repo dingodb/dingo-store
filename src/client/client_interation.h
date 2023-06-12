@@ -31,6 +31,7 @@
 #include "fmt/core.h"
 #include "glog/logging.h"
 #include "proto/common.pb.h"
+#include "proto/index.pb.h"
 #include "proto/meta.pb.h"
 #include "proto/store.pb.h"
 
@@ -88,6 +89,8 @@ butil::Status ServerInteraction::SendRequest(const std::string& service_name, co
     service_desc = const_cast<google::protobuf::ServiceDescriptor*>(dingodb::pb::meta::MetaService::descriptor());
   } else if (service_name == "StoreService") {
     service_desc = const_cast<google::protobuf::ServiceDescriptor*>(dingodb::pb::store::StoreService::descriptor());
+  } else if (service_name == "IndexService") {
+    service_desc = const_cast<google::protobuf::ServiceDescriptor*>(dingodb::pb::index::IndexService::descriptor());
   } else {
     DINGO_LOG(FATAL) << "Unknown service name: " << service_name;
   }

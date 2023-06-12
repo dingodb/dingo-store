@@ -40,6 +40,9 @@ DEFINE_int32(table_id, 0, "table id");
 DEFINE_string(table_name, "", "table name");
 DEFINE_string(raft_group, "store_default_test", "raft group");
 DEFINE_int32(partition_num, 1, "table partition num");
+DEFINE_int32(dimension, 16, "dimension");
+DEFINE_int32(count, 100, "count");
+DEFINE_int32(id, 0, "id");
 
 bvar::LatencyRecorder g_latency_recorder("dingo-store");
 
@@ -198,6 +201,12 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
       client::SendKvCompareAndSet(ctx->store_interaction, FLAGS_region_id, FLAGS_key);
     } else if (method == "KvBatchCompareAndSet") {
       client::SendKvBatchCompareAndSet(ctx->store_interaction, FLAGS_region_id, FLAGS_prefix, 100);
+    } else if (method == "VectorSearch") {
+      client::SendVectorSearch(ctx->store_interaction, FLAGS_region_id, FLAGS_dimension, FLAGS_id);
+    } else if (method == "VectorAdd") {
+      client::SendVectorAdd(ctx->store_interaction, FLAGS_region_id, FLAGS_dimension, FLAGS_count);
+    } else if (method == "VectorDelete") {
+      client::SendVectorDelete(ctx->store_interaction, FLAGS_region_id, FLAGS_count);
     }
 
     // Test

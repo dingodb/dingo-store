@@ -15,6 +15,7 @@
 #ifndef DINGODB_CLIENT_STORE_CLIENT_FUNCTION_H_
 #define DINGODB_CLIENT_STORE_CLIENT_FUNCTION_H_
 
+#include <cstdint>
 #include <memory>
 
 #include "client/client_helper.h"
@@ -44,6 +45,11 @@ struct Context {
 
 // coordinator
 dingodb::pb::common::Region SendQueryRegion(ServerInteractionPtr interaction, uint64_t region_id);
+
+// vector
+void SendVectorSearch(ServerInteractionPtr interaction, uint64_t region_id, uint32_t dimension, uint64_t id);
+void SendVectorAdd(ServerInteractionPtr interaction, uint64_t region_id, uint32_t dimension, uint32_t count);
+void SendVectorDelete(ServerInteractionPtr interaction, uint64_t region_id, uint32_t count);
 
 // key/value
 void SendKvGet(ServerInteractionPtr interaction, uint64_t region_id, const std::string& key, std::string& value);
