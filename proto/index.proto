@@ -106,13 +106,13 @@ message VectorAddResponse {
 
 message VectorSearchRequest {
   uint64 region_id = 1;
-  dingodb.pb.common.Vector vector = 2;
+  dingodb.pb.common.VectorWithId vector = 2;
   dingodb.pb.common.VectorSearchParameter parameter = 3;
 }
 
 message VectorSearchResponse {
   dingodb.pb.error.Error error = 1;
-  repeated dingodb.pb.common.Vector results = 2;
+  repeated dingodb.pb.common.VectorWithDistance results = 2;
 }
 
 message VectorDeleteRequest {
@@ -121,15 +121,6 @@ message VectorDeleteRequest {
 }
 
 message VectorDeleteResponse {
-  dingodb.pb.error.Error error = 1;
-}
-
-message VectorUpdateRequest {
-  uint64 region_id = 1;
-  dingodb.pb.common.VectorWithId vector = 2;
-}
-
-message VectorUpdateResponse {
   dingodb.pb.error.Error error = 1;
 }
 

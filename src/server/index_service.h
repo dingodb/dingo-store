@@ -67,6 +67,14 @@ class IndexServiceImpl : public pb::index::IndexService {
   void Debug(google::protobuf::RpcController* controller, const ::dingodb::pb::index::DebugRequest* request,
              ::dingodb::pb::index::DebugResponse* response, ::google::protobuf::Closure* done) override;
 
+  // vector
+  void VectorSearch(google::protobuf::RpcController* controller, const pb::index::VectorSearchRequest* request,
+                    pb::index::VectorSearchResponse* response, google::protobuf::Closure* done) override;
+  void VectorAdd(google::protobuf::RpcController* controller, const pb::index::VectorAddRequest* request,
+                 pb::index::VectorAddResponse* response, google::protobuf::Closure* done) override;
+  void VectorDelete(google::protobuf::RpcController* controller, const pb::index::VectorDeleteRequest* request,
+                    pb::index::VectorDeleteResponse* response, google::protobuf::Closure* done) override;
+
   void SetStorage(std::shared_ptr<Storage> storage);
 
  private:

@@ -628,6 +628,147 @@ void IndexServiceImpl::Debug(google::protobuf::RpcController* controller,
     }
   }
 }
+
+butil::Status ValidateVectorSearchRequest(const dingodb::pb::index::VectorSearchRequest* request) {
+  if (request->vector().vector().values_size() == 0) {
+    return butil::Status(pb::error::EVECTOR_EMPTY, "vector is empty");
+  }
+
+  return butil::Status();
+}
+
+// vector
+void IndexServiceImpl::VectorSearch(google::protobuf::RpcController* controller,
+                                    const dingodb::pb::index::VectorSearchRequest* request,
+                                    dingodb::pb::index::VectorSearchResponse* response,
+                                    google::protobuf::Closure* done) {
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(done);
+
+  DINGO_LOG(DEBUG) << "VectorSearch request: " << request->ShortDebugString();
+
+  butil::Status status = ValidateVectorSearchRequest(request);
+  if (!status.ok()) {
+    auto* err = response->mutable_error();
+    err->set_errcode(static_cast<Errno>(status.error_code()));
+    err->set_errmsg(status.error_str());
+    return;
+  }
+
+  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
+  ctx->SetRegionId(request->region_id()).SetCfName(Constant::kStoreDataCF);
+
+  auto* mut_request = const_cast<dingodb::pb::index::VectorSearchRequest*>(request);
+
+  std::vector<pb::common::VectorWithDistance> vector_results;
+  status = storage_->VectorSearch(ctx, request->vector(), request->parameter(), vector_results);
+  if (!status.ok()) {
+    auto* err = response->mutable_error();
+    err->set_errcode(static_cast<Errno>(status.error_code()));
+    err->set_errmsg(status.error_str());
+    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+      err->set_errmsg("Not leader, please redirect leader.");
+      ServiceHelper::RedirectLeader(status.error_str(), response);
+    }
+    return;
+  }
+
+  for (auto& vector_result : vector_results) {
+    response->add_results()->CopyFrom(vector_result);
+  }
+}
+
+butil::Status ValidateVectorAddRequest(const dingodb::pb::index::VectorAddRequest* request) {
+  if (request->vectors_size() == 0) {
+    return butil::Status(pb::error::EVECTOR_EMPTY, "vector is empty");
+  }
+
+  return butil::Status();
+}
+
+void IndexServiceImpl::VectorAdd(google::protobuf::RpcController* controller,
+                                 const dingodb::pb::index::VectorAddRequest* request,
+                                 dingodb::pb::index::VectorAddResponse* response, google::protobuf::Closure* done) {
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(done);
+
+  DINGO_LOG(DEBUG) << "VectorAdd request: " << request->ShortDebugString();
+
+  butil::Status status = ValidateVectorAddRequest(request);
+  if (!status.ok()) {
+    auto* err = response->mutable_error();
+    err->set_errcode(static_cast<Errno>(status.error_code()));
+    err->set_errmsg(status.error_str());
+    return;
+  }
+
+  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done_guard.release(), response);
+  ctx->SetRegionId(request->region_id()).SetCfName(Constant::kStoreDataCF);
+
+  std::vector<pb::common::VectorWithId> vectors;
+  for (const auto& vector : request->vectors()) {
+    vectors.push_back(vector);
+  }
+
+  status = storage_->VectorAdd(ctx, vectors);
+  if (!status.ok()) {
+    auto* err = response->mutable_error();
+    err->set_errcode(static_cast<Errno>(status.error_code()));
+    err->set_errmsg(status.error_str());
+    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+      err->set_errmsg("Not leader, please redirect leader.");
+      ServiceHelper::RedirectLeader(status.error_str(), response);
+    }
+    brpc::ClosureGuard done_guard(done);
+  }
+}
+
+butil::Status ValidateVectorDeleteRequest(const dingodb::pb::index::VectorDeleteRequest* request) {
+  if (request->ids_size() == 0) {
+    return butil::Status(pb::error::EVECTOR_EMPTY, "vector is empty");
+  }
+
+  return butil::Status();
+}
+
+void IndexServiceImpl::VectorDelete(google::protobuf::RpcController* controller,
+                                    const dingodb::pb::index::VectorDeleteRequest* request,
+                                    dingodb::pb::index::VectorDeleteResponse* response,
+                                    google::protobuf::Closure* done) {
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(done);
+
+  DINGO_LOG(DEBUG) << "VectorDelete request: " << request->ShortDebugString();
+
+  butil::Status status = ValidateVectorDeleteRequest(request);
+  if (!status.ok()) {
+    auto* err = response->mutable_error();
+    err->set_errcode(static_cast<Errno>(status.error_code()));
+    err->set_errmsg(status.error_str());
+    return;
+  }
+
+  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done_guard.release(), response);
+  ctx->SetRegionId(request->region_id()).SetCfName(Constant::kStoreDataCF);
+
+  std::vector<uint64_t> ids;
+  for (auto id : request->ids()) {
+    ids.push_back(id);
+  }
+
+  status = storage_->VectorDelete(ctx, ids);
+  if (!status.ok()) {
+    auto* err = response->mutable_error();
+    err->set_errcode(static_cast<Errno>(status.error_code()));
+    err->set_errmsg(status.error_str());
+    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+      err->set_errmsg("Not leader, please redirect leader.");
+      ServiceHelper::RedirectLeader(status.error_str(), response);
+    }
+    brpc::ClosureGuard done_guard(done);
+  }
+}
+
 void IndexServiceImpl::SetStorage(std::shared_ptr<Storage> storage) { storage_ = storage; }
 
 }  // namespace dingodb

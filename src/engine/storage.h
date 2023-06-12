@@ -64,9 +64,10 @@ class Storage {
 
   // vector index
   butil::Status VectorAdd(std::shared_ptr<Context> ctx, const std::vector<pb::common::VectorWithId>& vectors);
-  butil::Status VectorSearch(std::shared_ptr<Context> ctx, const pb::common::Vector& vector,
-                             const pb::common::VectorSearchParameter& parameter);
-  butil::Status VectorDelete(std::shared_ptr<Context> ctx, const std::vector<uint64_t>& id);
+  butil::Status VectorSearch(std::shared_ptr<Context> ctx, const pb::common::VectorWithId& vector,
+                             const pb::common::VectorSearchParameter& parameter,
+                             std::vector<pb::common::VectorWithDistance>& results);
+  butil::Status VectorDelete(std::shared_ptr<Context> ctx, const std::vector<uint64_t>& ids);
 
  private:
   butil::Status ValidateLeader(uint64_t region_id);

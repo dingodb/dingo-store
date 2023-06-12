@@ -769,7 +769,8 @@ butil::Status RawRocksEngine::Reader::KvGet(std::shared_ptr<dingodb::Snapshot> s
   return butil::Status();
 }
 
-butil::Status RawRocksEngine::Reader::VectorSearch(pb::common::VectorWithId vector,
+butil::Status RawRocksEngine::Reader::VectorSearch(const std::string& /*key_header*/,
+                                                   const pb::common::VectorWithId& vector,
                                                    pb::common::VectorSearchParameter parameter,
                                                    std::vector<pb::common::VectorWithDistance>& vectors) {
   if (BAIDU_UNLIKELY(vector.vector().values_size() == 0)) {

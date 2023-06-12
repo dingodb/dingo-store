@@ -93,7 +93,7 @@ class RaftKvEngine : public Engine, public RaftControlAble {
     butil::Status KvCount(std::shared_ptr<Context> ctx, const std::string& start_key, const std::string& end_key,
                           uint64_t& count) override;
 
-    butil::Status VectorSearch(std::shared_ptr<Context> ctx, pb::common::VectorWithId vector,
+    butil::Status VectorSearch(std::shared_ptr<Context> ctx, const pb::common::VectorWithId& vector,
                                pb::common::VectorSearchParameter parameter,
                                std::vector<pb::common::VectorWithDistance>& vectors) override;
 
