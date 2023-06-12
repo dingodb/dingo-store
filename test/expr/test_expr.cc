@@ -87,23 +87,25 @@ static Tuple tuple3{wrap<double>(3.5), wrap<double>(4.6)};
 
 INSTANTIATE_TEST_SUITE_P(  // Test cases with vars
     VarExpr, ExprTest,
-    testing::Values(                                      //
-        std::make_tuple("3100", &tuple1,                  // t0
-                        TYPE_INT32, wrap<int32_t>(1)),    // 1
-        std::make_tuple("3101", &tuple1,                  // t1
-                        TYPE_INT32, wrap<int32_t>(2)),    // 2
-        std::make_tuple("310031018301", &tuple1,          // t0 + t1
-                        TYPE_INT32, wrap<int32_t>(3)),    // 3
-        std::make_tuple("3200", &tuple2,                  // t0
-                        TYPE_INT64, wrap<int64_t>(35)),   // 35
-        std::make_tuple("3201", &tuple2,                  // t1
-                        TYPE_INT64, wrap<int64_t>(46)),   // 46
-        std::make_tuple("320032018302", &tuple2,          // t0 + t1
-                        TYPE_INT64, wrap<int64_t>(81)),   // 81
-        std::make_tuple("3500", &tuple3,                  // t0
-                        TYPE_DOUBLE, wrap<double>(3.5)),  // 3.5
-        std::make_tuple("3501", &tuple3,                  // t1
-                        TYPE_DOUBLE, wrap<double>(4.6)),  // 4.6
-        std::make_tuple("350035018305", &tuple3,          // t0 + t1
-                        TYPE_DOUBLE, wrap<double>(8.1))   // 8.1
+    testing::Values(                                          //
+        std::make_tuple("3100", &tuple1,                      // t0
+                        TYPE_INT32, wrap<int32_t>(1)),        // 1
+        std::make_tuple("3101", &tuple1,                      // t1
+                        TYPE_INT32, wrap<int32_t>(2)),        // 2
+        std::make_tuple("310031018301", &tuple1,              // t0 + t1
+                        TYPE_INT32, wrap<int32_t>(3)),        // 3
+        std::make_tuple("3200", &tuple2,                      // t0
+                        TYPE_INT64, wrap<int64_t>(35)),       // 35
+        std::make_tuple("3201", &tuple2,                      // t1
+                        TYPE_INT64, wrap<int64_t>(46)),       // 46
+        std::make_tuple("320032018302", &tuple2,              // t0 + t1
+                        TYPE_INT64, wrap<int64_t>(81)),       // 81
+        std::make_tuple("3500", &tuple3,                      // t0
+                        TYPE_DOUBLE, wrap<double>(3.5)),      // 3.5
+        std::make_tuple("3501", &tuple3,                      // t1
+                        TYPE_DOUBLE, wrap<double>(4.6)),      // 4.6
+        std::make_tuple("350035018305", &tuple3,              // t0 + t1
+                        TYPE_DOUBLE, wrap<double>(8.1)),      // 8.1
+        std::make_tuple("3501128080808008f0529505", &tuple3,  // t1 < 2147483648
+                        TYPE_BOOL, wrap<bool>(true))          // true
         ));

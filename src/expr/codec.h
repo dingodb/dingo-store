@@ -19,16 +19,17 @@
 
 namespace dingodb::expr {
 
+// T can be int32_t or int64_t
 template <typename T>
 const byte *DecodeVarint(T &value, const byte *data) {
   value = 0;
   const byte *p;
   int shift = 0;
   for (p = data; ((*p) & 0x80) != 0; ++p) {
-    value |= ((*p & 0x7F) << shift);
+    value |= ((T)(*p & 0x7F) << shift);
     shift += 7;
   }
-  value |= (*p << shift);
+  value |= ((T)(*p) << shift);
   return p;
 }
 
