@@ -247,7 +247,7 @@ butil::Status AggregationManager::Open(
         if (!status.ok()) {
           DINGO_LOG(ERROR) << fmt::format(
               "AddSumFunction failed index : {} serial_schema_type : {} result_schema_type : {}", index,
-              static_cast<int>(serial_schema_type), static_cast<int>(result_schema_type));
+              BaseSchema::GetTypeString(serial_schema_type), BaseSchema::GetTypeString(result_schema_type));
           return status;
         }
         break;
@@ -258,7 +258,7 @@ butil::Status AggregationManager::Open(
           if (!status.ok()) {
             DINGO_LOG(ERROR) << fmt::format(
                 "AddCountWithNullFunction failed index : {} serial_schema_type : {} result_schema_type : {}", index,
-                static_cast<int>(serial_schema_type), static_cast<int>(result_schema_type));
+                BaseSchema::GetTypeString(serial_schema_type), BaseSchema::GetTypeString(result_schema_type));
             return status;
           }
           break;
@@ -267,7 +267,7 @@ butil::Status AggregationManager::Open(
         if (!status.ok()) {
           DINGO_LOG(ERROR) << fmt::format(
               "AddCountFunction failed index : {} serial_schema_type : {} result_schema_type : {}", index,
-              static_cast<int>(serial_schema_type), static_cast<int>(result_schema_type));
+              BaseSchema::GetTypeString(serial_schema_type), BaseSchema::GetTypeString(result_schema_type));
           return status;
         }
 
@@ -278,7 +278,7 @@ butil::Status AggregationManager::Open(
         if (!status.ok()) {
           DINGO_LOG(ERROR) << fmt::format(
               "AddCountWithNullFunction failed index : {} serial_schema_type : {} result_schema_type : {}", index,
-              static_cast<int>(serial_schema_type), static_cast<int>(result_schema_type));
+              BaseSchema::GetTypeString(serial_schema_type), BaseSchema::GetTypeString(result_schema_type));
           return status;
         }
         break;
@@ -288,7 +288,7 @@ butil::Status AggregationManager::Open(
         if (!status.ok()) {
           DINGO_LOG(ERROR) << fmt::format(
               "AddMaxFunction failed index : {} serial_schema_type : {} result_schema_type : {}", index,
-              static_cast<int>(serial_schema_type), static_cast<int>(result_schema_type));
+              BaseSchema::GetTypeString(serial_schema_type), BaseSchema::GetTypeString(result_schema_type));
           return status;
         }
         break;
@@ -298,7 +298,7 @@ butil::Status AggregationManager::Open(
         if (!status.ok()) {
           DINGO_LOG(ERROR) << fmt::format(
               "AddMinFunction failed index : {} serial_schema_type : {} result_schema_type : {}", index,
-              static_cast<int>(serial_schema_type), static_cast<int>(result_schema_type));
+              BaseSchema::GetTypeString(serial_schema_type), BaseSchema::GetTypeString(result_schema_type));
           return status;
         }
         break;
@@ -308,7 +308,7 @@ butil::Status AggregationManager::Open(
       default: {
         std::string error_message = fmt::format("unsupported pb_schema1 oper: {}", static_cast<int>(oper));
         DINGO_LOG(ERROR) << error_message;
-        return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
+        return butil::Status(pb::error::ENOT_SUPPORT, error_message);
       }
     }
     i++;
@@ -391,10 +391,11 @@ butil::Status AggregationManager::AddSumFunction(BaseSchema::Type serial_schema_
   } else if (serial_schema_type == BaseSchema::kDouble && result_schema_type == BaseSchema::kDouble) {
     aggregation_functions_.emplace_back(SUM<double, double>());
   } else {
-    std::string error_message = fmt::format("SUM<{},{}>  not support yet", static_cast<int>(serial_schema_type),
-                                            static_cast<int>(result_schema_type));
+    std::string error_message =
+        fmt::format("SUM<{},{}>  not support yet", BaseSchema::GetTypeString(serial_schema_type),
+                    BaseSchema::GetTypeString(result_schema_type));
     DINGO_LOG(ERROR) << error_message;
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
+    return butil::Status(pb::error::ENOT_SUPPORT, error_message);
   }
 
   return butil::Status();
@@ -415,10 +416,11 @@ butil::Status AggregationManager::AddCountFunction(BaseSchema::Type serial_schem
   } else if (serial_schema_type == BaseSchema::kString && result_schema_type == BaseSchema::kLong) {
     aggregation_functions_.emplace_back(COUNT<std::shared_ptr<std::string>, int64_t>());
   } else {
-    std::string error_message = fmt::format("COUNT<{},{}>  not support yet", static_cast<int>(serial_schema_type),
-                                            static_cast<int>(result_schema_type));
+    std::string error_message =
+        fmt::format("COUNT<{},{}>  not support yet", BaseSchema::GetTypeString(serial_schema_type),
+                    BaseSchema::GetTypeString(result_schema_type));
     DINGO_LOG(ERROR) << error_message;
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
+    return butil::Status(pb::error::ENOT_SUPPORT, error_message);
   }
   return butil::Status();
 }
@@ -437,10 +439,11 @@ butil::Status AggregationManager::AddCountWithNullFunction(BaseSchema::Type seri
   } else if (serial_schema_type == BaseSchema::kString && result_schema_type == BaseSchema::kLong) {
     aggregation_functions_.emplace_back(COUNTWITHNULL<std::shared_ptr<std::string>, int64_t>());
   } else {
-    std::string error_message = fmt::format("COUNTWITHNULL<{},{}>  not support yet",
-                                            static_cast<int>(serial_schema_type), static_cast<int>(result_schema_type));
+    std::string error_message =
+        fmt::format("COUNTWITHNULL<{},{}>  not support yet", BaseSchema::GetTypeString(serial_schema_type),
+                    BaseSchema::GetTypeString(result_schema_type));
     DINGO_LOG(ERROR) << error_message;
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
+    return butil::Status(pb::error::ENOT_SUPPORT, error_message);
   }
   return butil::Status();
 }
@@ -459,10 +462,11 @@ butil::Status AggregationManager::AddMaxFunction(BaseSchema::Type serial_schema_
   } else if (serial_schema_type == BaseSchema::kString && result_schema_type == BaseSchema::kString) {
     aggregation_functions_.emplace_back(MAX<std::shared_ptr<std::string>, std::shared_ptr<std::string>>());
   } else {
-    std::string error_message = fmt::format("COUNTWITHNULL<{},{}>  not support yet",
-                                            static_cast<int>(serial_schema_type), static_cast<int>(result_schema_type));
+    std::string error_message =
+        fmt::format("COUNTWITHNULL<{},{}>  not support yet", BaseSchema::GetTypeString(serial_schema_type),
+                    BaseSchema::GetTypeString(result_schema_type));
     DINGO_LOG(ERROR) << error_message;
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
+    return butil::Status(pb::error::ENOT_SUPPORT, error_message);
   }
   return butil::Status();
 }
@@ -481,10 +485,11 @@ butil::Status AggregationManager::AddMinFunction(BaseSchema::Type serial_schema_
   } else if (serial_schema_type == BaseSchema::kString && result_schema_type == BaseSchema::kString) {
     aggregation_functions_.emplace_back(MIN<std::shared_ptr<std::string>, std::shared_ptr<std::string>>());
   } else {
-    std::string error_message = fmt::format("COUNTWITHNULL<{},{}>  not support yet",
-                                            static_cast<int>(serial_schema_type), static_cast<int>(result_schema_type));
+    std::string error_message =
+        fmt::format("COUNTWITHNULL<{},{}>  not support yet", BaseSchema::GetTypeString(serial_schema_type),
+                    BaseSchema::GetTypeString(result_schema_type));
     DINGO_LOG(ERROR) << error_message;
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
+    return butil::Status(pb::error::ENOT_SUPPORT, error_message);
   }
   return butil::Status();
 }

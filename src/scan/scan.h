@@ -76,7 +76,7 @@ class ScanContext {
  private:
   void Close();
   static std::chrono::milliseconds GetCurrentTime();
-  void GetKeyValue(std::vector<pb::common::KeyValue>& kvs);  // NOLINT
+  butil::Status GetKeyValue(std::vector<pb::common::KeyValue>& kvs);  // NOLINT
 
   butil::Status AsyncWork();
   void WaitForReady();

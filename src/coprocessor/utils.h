@@ -90,6 +90,9 @@ class Utils {
 
   static void SortSerialSchemaVector(std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>>* schemas);
 
+  static std::shared_ptr<BaseSchema> FindSerialSchemaVector(
+      const std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> &schemas, int index);
+
   static void DebugPbSchema(const google::protobuf::RepeatedPtrField<pb::store::Schema>& pb_schemas,
                             const std::string& name);
 
@@ -108,7 +111,6 @@ class Utils {
   static void PrintColumn(const std::any& column, BaseSchema::Type type, const std::string& name);
 
   static void PrintGroupByKey(const std::string& key, const std::string& name);
-
 };
 
 }  // namespace dingodb

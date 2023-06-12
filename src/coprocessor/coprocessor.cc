@@ -120,6 +120,19 @@ butil::Status Coprocessor::Open(const pb::store::Coprocessor& coprocessor) {
     return status;
   }
 
+  result_serial_schemas_sorted_ = std::make_shared<std::vector<std::shared_ptr<BaseSchema>>>();
+  Utils::CloneCloneSerialSchemaVector(result_serial_schemas_, &result_serial_schemas_sorted_);
+  // sort by index
+  Utils::SortSerialSchemaVector(&result_serial_schemas_sorted_);
+
+  // index from 0 ~ size-1
+  status = Utils::CheckSerialSchema(result_serial_schemas_sorted_);
+  if (!status.ok()) {
+    std::string error_message = fmt::format("result_serial_schemas_sorted_ check failed");
+    DINGO_LOG(ERROR) << error_message;
+    return status;
+  }
+
   status = CompareSerialSchema(coprocessor_);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << fmt::format("CompareSerialSchema failed");
@@ -212,23 +225,23 @@ butil::Status Coprocessor::DoExecute(const pb::common::KeyValue& kv, bool* has_r
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
   }
 
-  std::vector<std::any> selection_record;
-  selection_record.reserve(coprocessor_.selection_columns().size());
-  size_t i = 0;
-  for (auto index : coprocessor_.selection_columns()) {
-    std::any column = Utils::CloneColumn(original_record[index], (*selection_serial_schemas_sorted_)[i]->GetType());
-    if (!column.has_value()) {
-      std::string error_message = fmt::format(
-          "CloneColumn failed original_record index : {} selection_serial_schemas_sorted_ i : {} "
-          "selection_serial_schemas_sorted_ "
-          "type : {}",
-          index, i, static_cast<int>((*selection_serial_schemas_sorted_)[i]->GetType()));
-      DINGO_LOG(ERROR) << error_message;
-      return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
-    }
-    selection_record.emplace_back(std::move(column));
-    i++;
-  }
+  //  std::vector<std::any> selection_record;
+  //  selection_record.reserve(coprocessor_.selection_columns().size());
+  //  size_t i = 0;
+  //  for (auto index : coprocessor_.selection_columns()) {
+  //    std::any column = Utils::CloneColumn(original_record[index], (*selection_serial_schemas_sorted_)[i]->GetType());
+  //    if (!column.has_value()) {
+  //      std::string error_message = fmt::format(
+  //          "CloneColumn failed original_record index : {} selection_serial_schemas_sorted_ i : {} "
+  //          "selection_serial_schemas_sorted_ "
+  //          "type : {}",
+  //          index, i, static_cast<int>((*selection_serial_schemas_sorted_)[i]->GetType()));
+  //      DINGO_LOG(ERROR) << error_message;
+  //      return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
+  //    }
+  //    selection_record.emplace_back(std::move(column));
+  //    i++;
+  //  }
 
   bool is_key_value_reserve = true;
   if (enable_expression_) {
@@ -238,7 +251,7 @@ butil::Status Coprocessor::DoExecute(const pb::common::KeyValue& kv, bool* has_r
       runner.Decode(reinterpret_cast<const expr::byte*>(coprocessor_.expression().c_str()),
                     coprocessor_.expression().length());
 
-      expr::wrap<bool> ok = runner.Run<bool>(reinterpret_cast<const expr::Tuple*>(&selection_record));
+      expr::wrap<bool> ok = runner.Run<bool>(reinterpret_cast<const expr::Tuple*>(&original_record));
       is_key_value_reserve = ok.has_value() && ok.value();
     } catch (const std::exception& my_exception) {
       std::string error_message = fmt::format("expr::Runner Decode or Run failed. exception : {}", my_exception.what());
@@ -253,7 +266,7 @@ butil::Status Coprocessor::DoExecute(const pb::common::KeyValue& kv, bool* has_r
   }
 
   if (end_of_group_by_) {  // group by
-    status = DoExecuteForAggregation(selection_record);
+    status = DoExecuteForAggregation(original_record);
     if (!status.ok()) {
       std::string error_message = fmt::format("Coprocessor::DoExecuteForAggregation failed");
       DINGO_LOG(ERROR) << error_message;
@@ -263,7 +276,7 @@ butil::Status Coprocessor::DoExecute(const pb::common::KeyValue& kv, bool* has_r
     *has_result_kv = false;
 
   } else {  // selection
-    status = DoExecuteForSelection(selection_record, has_result_kv, result_kv);
+    status = DoExecuteForSelection(original_record, has_result_kv, result_kv);
     if (!status.ok()) {
       std::string error_message = fmt::format("Coprocessor::DoExecuteForSelection failed");
       DINGO_LOG(ERROR) << error_message;
@@ -352,7 +365,7 @@ butil::Status Coprocessor::DoExecuteForAggregation(const std::vector<std::any>& 
   if (!aggregation_manager_) {
     aggregation_manager_ = std::make_shared<AggregationManager>();
     status = aggregation_manager_->Open(group_by_operator_serial_schemas_, coprocessor_.aggregation_operators(),
-                                        result_serial_schemas_);
+                                        result_serial_schemas_sorted_);
     if (!status.ok()) {
       DINGO_LOG(ERROR) << fmt::format("AggregationManager::Open failed");
       return status;
@@ -436,31 +449,32 @@ butil::Status Coprocessor::GetKeyValueFromAggregation(bool key_only, size_t max_
       result_record.reserve(result_key_record.size() + value->size());
       size_t i = 0;
       for (const auto& column : result_key_record) {
-        std::any column_clone = Utils::CloneColumn(column, (*result_serial_schemas_)[i]->GetType());
+        std::any column_clone = Utils::CloneColumn(column, (*result_serial_schemas_sorted_)[i]->GetType());
         if (!column_clone.has_value()) {
           std::string error_message = fmt::format(
-              "CloneColumn failed result_key_record index : {} result_serial_schemas_ i : {} result_serial_schemas_ "
+              "CloneColumn failed result_key_record index : {} result_serial_schemas_sorted_ i : {} "
+              "result_serial_schemas_ "
               "type : {}",
-              i, i, static_cast<int>((*result_serial_schemas_)[i]->GetType()));
+              i, i, BaseSchema::GetTypeString((*result_serial_schemas_)[i]->GetType()));
           DINGO_LOG(ERROR) << error_message;
           return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
         }
-        Utils::PrintColumn(column, (*result_serial_schemas_)[i]->GetType(), "Key");
+        Utils::PrintColumn(column, (*result_serial_schemas_sorted_)[i]->GetType(), "Key");
         result_record.emplace_back(std::move(column_clone));
         i++;
       }
 
       for (const auto& column : *value) {
-        std::any column_clone = Utils::CloneColumn(column, (*result_serial_schemas_)[i]->GetType());
+        std::any column_clone = Utils::CloneColumn(column, (*result_serial_schemas_sorted_)[i]->GetType());
         if (!column_clone.has_value()) {
           std::string error_message = fmt::format(
-              "CloneColumn failed result_aggregation_record  index : {} result_serial_schemas_ i : {} "
+              "CloneColumn failed result_aggregation_record  index : {} result_serial_schemas_sorted_ i : {} "
               "result_serial_schemas_ type : {}",
-              (i - result_key_record.size()), i, static_cast<int>((*result_serial_schemas_)[i]->GetType()));
+              (i - result_key_record.size()), i, BaseSchema::GetTypeString((*result_serial_schemas_)[i]->GetType()));
           DINGO_LOG(ERROR) << error_message;
           return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
         }
-        Utils::PrintColumn(column, (*result_serial_schemas_)[i]->GetType(), "Value");
+        Utils::PrintColumn(column, (*result_serial_schemas_sorted_)[i]->GetType(), "Value");
         result_record.emplace_back(std::move(column_clone));
         i++;
       }
@@ -544,6 +558,10 @@ void Coprocessor::Close() {
   if (selection_serial_schemas_sorted_) {
     selection_serial_schemas_sorted_.reset();
   }
+
+  if (result_serial_schemas_sorted_) {
+    result_serial_schemas_sorted_.reset();
+  }
 }
 
 butil::Status Coprocessor::CompareSerialSchema(const pb::store::Coprocessor& coprocessor) {
@@ -551,19 +569,19 @@ butil::Status Coprocessor::CompareSerialSchema(const pb::store::Coprocessor& cop
 
   // group by
   if (group_by_serial_schemas_ && !group_by_serial_schemas_->empty()) {
-    if (result_serial_schemas_->size() != group_by_serial_schemas_->size()) {
+    if (result_serial_schemas_sorted_->size() != group_by_serial_schemas_->size()) {
       std::string error_message =
-          fmt::format("enable group by result_serial_schemas_ : {} unequal group_by_serial_schemas_ : {}",
-                      result_serial_schemas_->size(), group_by_serial_schemas_->size());
+          fmt::format("enable group by result_serial_schemas_sorted_ : {} unequal group_by_serial_schemas_ : {}",
+                      result_serial_schemas_sorted_->size(), group_by_serial_schemas_->size());
       DINGO_LOG(ERROR) << error_message;
       return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
     }
 
-    status = Utils::CompareSerialSchemaNonStrict(result_serial_schemas_, group_by_serial_schemas_,
+    status = Utils::CompareSerialSchemaNonStrict(result_serial_schemas_sorted_, group_by_serial_schemas_,
                                                  coprocessor.group_by_columns(), coprocessor.aggregation_operators());
     if (!status.ok()) {
       std::string error_message = fmt::format(
-          "CompareSerialSchemaStrict failed. compare result_serial_schemas_ and  selection_serial_schemas_ ");
+          "CompareSerialSchemaNonStrict failed. compare result_serial_schemas_sorted_ and  selection_serial_schemas_ ");
       DINGO_LOG(ERROR) << error_message;
       return status;
     }
@@ -571,19 +589,20 @@ butil::Status Coprocessor::CompareSerialSchema(const pb::store::Coprocessor& cop
     end_of_group_by_ = true;
     DINGO_LOG(DEBUG) << fmt::format("Coprocessor::Open enable group_by");
 
-  } else {  // selection compare
-    if (result_serial_schemas_->size() != selection_serial_schemas_->size()) {
-      std::string error_message =
-          fmt::format("enable selection result_serial_schemas_ : {} unequal selection_serial_schemas_ : {}",
-                      result_serial_schemas_->size(), selection_serial_schemas_->size());
+  } else {  // original_serial_schemas_sorted_ compare
+    if (result_serial_schemas_sorted_->size() != original_serial_schemas_sorted_->size()) {
+      std::string error_message = fmt::format(
+          "enable selection result_serial_schemas_sorted_ : {} unequal original_serial_schemas_sorted_ : {}",
+          result_serial_schemas_sorted_->size(), original_serial_schemas_sorted_->size());
       DINGO_LOG(ERROR) << error_message;
       return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
     }
 
-    status = Utils::CompareSerialSchemaStrict(result_serial_schemas_, selection_serial_schemas_);
+    status = Utils::CompareSerialSchemaStrict(result_serial_schemas_sorted_, original_serial_schemas_sorted_);
     if (!status.ok()) {
       std::string error_message = fmt::format(
-          "CompareSerialSchemaStrict failed . compare result_serial_schemas_ and  selection_serial_schemas_ ");
+          "CompareSerialSchemaStrict failed . compare result_serial_schemas_sorted_ and  "
+          "original_serial_schemas_sorted_ ");
       DINGO_LOG(ERROR) << error_message;
       return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
     }
@@ -606,7 +625,7 @@ butil::Status Coprocessor::InitGroupBySerialSchema(const pb::store::Coprocessor&
   if (!coprocessor.group_by_columns().empty()) {
     group_by_key_serial_schemas_ = std::make_shared<std::vector<std::shared_ptr<BaseSchema>>>();
 
-    Utils::CreateSerialSchema(selection_serial_schemas_, coprocessor.group_by_columns(), &group_by_key_serial_schemas_);
+    Utils::CreateSerialSchema(original_serial_schemas_, coprocessor.group_by_columns(), &group_by_key_serial_schemas_);
 
     Utils::UpdateSerialSchemaIndex(&group_by_key_serial_schemas_);
 
@@ -635,7 +654,7 @@ butil::Status Coprocessor::InitGroupBySerialSchema(const pb::store::Coprocessor&
                                            : aggregation_operator.index_of_column());
     }
 
-    Utils::CreateSerialSchema(selection_serial_schemas_, aggregation_operator_columns,
+    Utils::CreateSerialSchema(original_serial_schemas_, aggregation_operator_columns,
                               &group_by_operator_serial_schemas_);
 
     Utils::UpdateSerialSchemaIndex(&group_by_operator_serial_schemas_);
@@ -657,9 +676,9 @@ butil::Status Coprocessor::InitGroupBySerialSchema(const pb::store::Coprocessor&
 }
 
 void Coprocessor::GetOriginalColumnIndexes() {
-  original_column_indexes_.reserve(coprocessor_.selection_columns().size());
-  for (const auto& index : coprocessor_.selection_columns()) {
-    original_column_indexes_.push_back(index);
+  original_column_indexes_.reserve(original_serial_schemas_->size());
+  for (const auto& schema : *original_serial_schemas_) {
+    original_column_indexes_.push_back(schema->GetIndex());
   }
 
   // sort and unique

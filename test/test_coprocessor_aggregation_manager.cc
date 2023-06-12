@@ -1537,7 +1537,7 @@ TEST_F(CoprocessorAggregationManagerTest, Open) {
     aggregation_manager = std::make_shared<AggregationManager>();
 
     ok = aggregation_manager->Open(group_by_operator_serial_schemas, aggregation_operators, result_serial_schemas);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::ENOT_SUPPORT);
   }
 
   // COUNT

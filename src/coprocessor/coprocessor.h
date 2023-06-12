@@ -80,6 +80,7 @@ class Coprocessor {
 
   std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> original_serial_schemas_sorted_;
   std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> selection_serial_schemas_sorted_;
+  std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> result_serial_schemas_sorted_;
 };
 
 }  // namespace dingodb

@@ -20,6 +20,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <sstream>
 #include <utility>
 #include <vector>
 
@@ -324,7 +325,13 @@ butil::Status Utils::CreateSerialSchema(
     (*new_serial_schemas)->reserve(new_columns.size());
 
     for (const auto& index : new_columns) {
-      const std::shared_ptr<BaseSchema>& original_serial_schema = (*old_serial_schemas)[index];
+      std::shared_ptr<BaseSchema> original_serial_schema = FindSerialSchemaVector(old_serial_schemas, index);
+      if (!original_serial_schema) {
+        std::string error_message = fmt::format("FindSerialSchemaVector failed index : {}", index);
+        DINGO_LOG(ERROR) << error_message;
+        return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
+      }
+      // const std::shared_ptr<BaseSchema>& original_serial_schema = (*old_serial_schemas)[index];
       std::shared_ptr<BaseSchema> clone_serial_schema = CloneSerialSchema(original_serial_schema);
       (**new_serial_schemas).emplace_back(std::move(clone_serial_schema));
     }
@@ -485,19 +492,19 @@ butil::Status Utils::CompareSerialSchemaStrict(
     return butil::Status();
   } else if (!serial_schemas1 && serial_schemas2) {
     std::string error_message =
-        fmt::format("CompareSerialSchemaStrict failed  serial_schema1 invalid uneqaul serial_schema2 valid ");
+        fmt::format("CompareSerialSchemaStrict failed  serial_schema1 invalid unequal serial_schema2 valid ");
     DINGO_LOG(ERROR) << error_message;
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
   } else if (serial_schemas1 && !serial_schemas2) {
     std::string error_message =
-        fmt::format("CompareSerialSchemaStrict failed  serial_schema1 valid  uneqaul serial_schema2 invalid");
+        fmt::format("CompareSerialSchemaStrict failed  serial_schema1 valid  unequal serial_schema2 invalid");
     DINGO_LOG(ERROR) << error_message;
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
   }
 
   if (serial_schemas1->size() != serial_schemas2->size()) {
     std::string error_message =
-        fmt::format("CompareSerialSchemaStrict failed  serial_schema1 size: {} uneqaul serial_schema2 size : {}",
+        fmt::format("CompareSerialSchemaStrict failed  serial_schema1 size: {} unequal serial_schema2 size : {}",
                     serial_schemas1->size(), serial_schemas2->size());
     DINGO_LOG(ERROR) << error_message;
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
@@ -508,8 +515,8 @@ butil::Status Utils::CompareSerialSchemaStrict(
     const auto& serial_schema2 = (*serial_schemas2)[i];
     if (serial_schema1->GetType() != serial_schema2->GetType()) {
       std::string error_message =
-          fmt::format("CompareSerialSchemaStrict failed  serial_schema1 type: {} unequal serial_schema2 type : {}",
-                      static_cast<int>(serial_schema1->GetType()), static_cast<int>(serial_schema2->GetType()));
+          fmt::format("CompareSerialSchemaStrict failed index : {}  serial_schema1 type: {} unequal serial_schema2 type : {}",
+                      i, BaseSchema::GetTypeString(serial_schema1->GetType()), BaseSchema::GetTypeString(serial_schema2->GetType()));
       DINGO_LOG(ERROR) << error_message;
       return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
     }
@@ -538,9 +545,9 @@ butil::Status Utils::CompareSerialSchemaNonStrict(
     const auto& serial_schema2 = (*serial_schemas2)[i];
     if (serial_schema1->GetType() != serial_schema2->GetType()) {
       std::string error_message = fmt::format(
-          "enable CompareSerialSchemaNonStrict failed aggregation index : {}  serial_schema1 type: {} unequal "
+          "enable CompareSerialSchemaNonStrict failed group by key  index : {}  serial_schema1 type: {} unequal "
           "serial_schema2 type : {}",
-          i, static_cast<int>(serial_schema1->GetType()), static_cast<int>(serial_schema2->GetType()));
+          i, BaseSchema::GetTypeString(serial_schema1->GetType()), BaseSchema::GetTypeString(serial_schema2->GetType()));
       DINGO_LOG(ERROR) << error_message;
       return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
     }
@@ -560,9 +567,9 @@ butil::Status Utils::CompareSerialSchemaNonStrict(
         continue;
       } else {
         std::string error_message = fmt::format(
-            "enable CompareSerialSchemaNonStrict failed aggregation index : {}  serial_schema1 type: {} unequal "
+            "enable CompareSerialSchemaNonStrict failed index : {} aggregation index : {}  serial_schema1 type: {} unequal "
             "serial_schema2 type : {}",
-            j, static_cast<int>(serial_schema1->GetType()), static_cast<int>(serial_schema2->GetType()));
+            i, j, BaseSchema::GetTypeString(serial_schema1->GetType()), BaseSchema::GetTypeString(serial_schema2->GetType()));
         DINGO_LOG(ERROR) << error_message;
         return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
       }
@@ -720,6 +727,16 @@ void Utils::SortSerialSchemaVector(std::shared_ptr<std::vector<std::shared_ptr<B
             });
 }
 
+std::shared_ptr<BaseSchema> Utils::FindSerialSchemaVector(
+    const std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>>& schemas, int index) {
+  for (const auto& schema : *schemas) {
+    if (index == schema->GetIndex()) {
+      return schema;
+    }
+  }
+  return {};
+}
+
 void Utils::DebugPbSchema(const google::protobuf::RepeatedPtrField<pb::store::Schema>& pb_schemas,
                           const std::string& name) {
   COPROCESSOR_LOG
@@ -730,36 +747,38 @@ void Utils::DebugPbSchema(const google::protobuf::RepeatedPtrField<pb::store::Sc
   for (const auto& schema : pb_schemas) {
     const auto& type = schema.type();
 
-    COPROCESSOR_LOG << "[" << i << "]";
+    std::stringstream ss;
+
+    ss << "[" << i << "]";
 
     // COPROCESSOR_LOG << "Schema_Type :";
 
     switch (type) {
       case pb::store::Schema_Type_BOOL:
-        COPROCESSOR_LOG << "Schema_Type : Schema_Type_BOOL";
+        ss << " Schema_Type : Schema_Type_BOOL";
         break;
       case pb::store::Schema_Type_INTEGER:
-        COPROCESSOR_LOG << "Schema_Type : Schema_Type_INTEGER";
+        ss << " Schema_Type : Schema_Type_INTEGER";
         break;
       case pb::store::Schema_Type_FLOAT:
-        COPROCESSOR_LOG << "Schema_Type : Schema_Type_FLOAT";
+        ss << " Schema_Type : Schema_Type_FLOAT";
         break;
       case pb::store::Schema_Type_LONG:
-        COPROCESSOR_LOG << "Schema_Type : Schema_Type_LONG";
+        ss << " Schema_Type : Schema_Type_LONG";
         break;
       case pb::store::Schema_Type_DOUBLE:
-        COPROCESSOR_LOG << "Schema_Type : Schema_Type_DOUBLE";
+        ss << " Schema_Type : Schema_Type_DOUBLE";
         break;
       case pb::store::Schema_Type_STRING:
-        COPROCESSOR_LOG << "Schema_Type : Schema_Type_STRING";
+        ss << " Schema_Type : Schema_Type_STRING";
         break;
     }
 
-    COPROCESSOR_LOG << "is_key : " << (schema.is_key() ? "true" : "false");
-    COPROCESSOR_LOG << "is_nullable : " << (schema.is_nullable() ? "true" : "false");
-    COPROCESSOR_LOG << "index : " << (schema.index());
+    ss << " is_key : " << (schema.is_key() ? "true" : "false");
+    ss << " is_nullable : " << (schema.is_nullable() ? "true" : "false");
+    ss << " index : " << (schema.index());
 
-    COPROCESSOR_LOG << "\n";
+    COPROCESSOR_LOG << ss.str() << "\n";
     i++;
   }
 

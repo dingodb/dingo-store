@@ -32,6 +32,17 @@ class BaseSchema {
   virtual int GetLength() = 0;
   virtual bool IsKey() = 0;
   virtual int GetIndex() = 0;
+  static const char * GetTypeString(Type type) {
+    switch (type) {
+      case kBool: return "Bool";
+      case kInteger : return "kInteger";
+      case kFloat: return "kFloat";
+      case kLong : return "kLong";
+      case kDouble : return "kDouble";
+      case kString : return "kString";
+      default: return "unknown";
+    }
+  }
 };
 
 }  // namespace dingodb
