@@ -104,6 +104,8 @@ void StoreStateMachine::on_apply(braft::Iterator& iter) {
     event->done = iter.done();
     event->raft_cmd = raft_cmd;
     event->region_metrics = region_metrics_;
+    event->term_id = iter.term();
+    event->log_id = iter.index();
 
     DispatchEvent(EventType::kSmApply, event);
     applied_term_ = iter.term();

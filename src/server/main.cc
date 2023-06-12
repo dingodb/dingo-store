@@ -624,7 +624,7 @@ int main(int argc, char *argv[]) {
       return -1;
     }
 
-    store_service.SetStorage(dingo_server->GetStorage());
+    index_service.SetStorage(dingo_server->GetStorage());
     if (brpc_server.AddService(&index_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
       DINGO_LOG(ERROR) << "Fail to add index service!";
       return -1;

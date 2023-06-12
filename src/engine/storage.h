@@ -33,7 +33,7 @@ class Storage {
   Storage(std::shared_ptr<Engine> engine);
   ~Storage();
 
-  Snapshot* GetSnapshot();
+  static Snapshot* GetSnapshot();
   void ReleaseSnapshot();
 
   butil::Status KvGet(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys,
@@ -61,6 +61,12 @@ class Storage {
                                       std::vector<pb::common::KeyValue>* kvs);
 
   static butil::Status KvScanRelease(std::shared_ptr<Context> ctx, const std::string& scan_id);
+
+  // vector index
+  butil::Status VectorAdd(std::shared_ptr<Context> ctx, const std::vector<pb::common::VectorWithId>& vectors);
+  butil::Status VectorSearch(std::shared_ptr<Context> ctx, const pb::common::Vector& vector,
+                             const pb::common::VectorSearchParameter& parameter);
+  butil::Status VectorDelete(std::shared_ptr<Context> ctx, const std::vector<uint64_t>& id);
 
  private:
   butil::Status ValidateLeader(uint64_t region_id);

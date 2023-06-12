@@ -61,6 +61,21 @@ message KeyValue {
   bytes value = 2;
 }
 
+message Vector {
+  repeated float values = 1;
+}
+
+message VectorWithId {
+  uint64 id = 1;
+  dingodb.pb.common.Vector vector = 2;
+}
+
+message VectorWithDistance {
+  uint64 id = 1;
+  dingodb.pb.common.Vector vector = 2;
+  float distance = 3;
+}
+
 enum CoordinatorState {
   COORDINATOR_NEW = 0;
   COORDINATOR_NORMAL = 1;
@@ -268,6 +283,10 @@ message VectorIndexParameter {
   uint32 nlist = 3;
   uint32 efConstruction = 4;
   uint32 efSearch = 5;
+}
+
+message VectorSearchParameter {
+  uint32 top_n = 1;
 }
 
 enum ScalarIndexType {

@@ -14,6 +14,7 @@
 
 #include "engine/storage.h"
 
+#include <cstdint>
 #include <vector>
 
 #include "common/constant.h"
@@ -92,6 +93,34 @@ butil::Status Storage::KvPut(std::shared_ptr<Context> ctx, const std::vector<pb:
         LOG(ERROR) << fmt::format("KvPut request: {} response: {}", ctx->Request()->ShortDebugString(),
                                   ctx->Response()->ShortDebugString());
       }
+    }
+  });
+}
+
+butil::Status Storage::VectorAdd(std::shared_ptr<Context> ctx, const std::vector<pb::common::VectorWithId>& vectors) {
+  WriteData write_data;
+  std::shared_ptr<VectorAddDatum> datum = std::make_shared<VectorAddDatum>();
+  datum->cf_name = ctx->CfName();
+  datum->vectors = vectors;
+  write_data.AddDatums(std::static_pointer_cast<DatumAble>(datum));
+
+  return engine_->AsyncWrite(ctx, write_data, [](std::shared_ptr<Context> ctx, butil::Status status) {
+    if (!status.ok()) {
+      Helper::SetPbMessageError(status, ctx->Response());
+    }
+  });
+}
+
+butil::Status Storage::VectorDelete(std::shared_ptr<Context> ctx, const std::vector<uint64_t>& ids) {
+  WriteData write_data;
+  std::shared_ptr<VectorDeleteDatum> datum = std::make_shared<VectorDeleteDatum>();
+  datum->cf_name = ctx->CfName();
+  datum->ids = std::move(const_cast<std::vector<uint64_t>&>(ids));  // NOLINT
+  write_data.AddDatums(std::static_pointer_cast<DatumAble>(datum));
+
+  return engine_->AsyncWrite(ctx, write_data, [](std::shared_ptr<Context> ctx, butil::Status status) {
+    if (!status.ok()) {
+      Helper::SetPbMessageError(status, ctx->Response());
     }
   });
 }

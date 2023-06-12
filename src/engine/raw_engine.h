@@ -15,6 +15,7 @@
 #ifndef DINGODB_ENGINE_KV_ENGINE_H_  // NOLINT
 #define DINGODB_ENGINE_KV_ENGINE_H_
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -81,6 +82,9 @@ class RawEngine {
     virtual butil::Status KvCount(std::shared_ptr<dingodb::Snapshot> snapshot, const std::string& start_key,
                                   const std::string& end_key, uint64_t& count) = 0;
 
+    virtual butil::Status VectorSearch(pb::common::VectorWithId vector, pb::common::VectorSearchParameter parameter,
+                                       std::vector<pb::common::VectorWithDistance>& vectors) = 0;
+
     virtual std::shared_ptr<EngineIterator> NewIterator(const std::string& start_key, const std::string& end_key) = 0;
   };
 
@@ -106,8 +110,8 @@ class RawEngine {
     // 3. If key exists, set key=value
     // Not available internally, only for RPC use
     virtual butil::Status KvBatchCompareAndSet(const std::vector<pb::common::KeyValue>& kvs,
-                                               const std::vector<std::string>& expect_values, std::vector<bool>& key_states,
-                                               bool is_atomic) = 0;
+                                               const std::vector<std::string>& expect_values,
+                                               std::vector<bool>& key_states, bool is_atomic) = 0;
 
     virtual butil::Status KvDelete(const std::string& key) = 0;
     virtual butil::Status KvBatchDelete(const std::vector<std::string>& keys) = 0;
@@ -116,6 +120,11 @@ class RawEngine {
     virtual butil::Status KvBatchDeleteRange(const std::vector<pb::common::Range>& ranges) = 0;
 
     virtual butil::Status KvDeleteIfEqual(const pb::common::KeyValue& kv) = 0;
+
+    virtual butil::Status VectorAdd(const std::string& key_header, uint64_t log_id,
+                                    const std::vector<pb::common::VectorWithId>& vectors) = 0;
+    virtual butil::Status VectorDelete(const std::string& key_header, uint64_t log_id,
+                                       const std::vector<uint64_t>& id) = 0;
   };
 
   virtual bool Init(std::shared_ptr<Config> config) = 0;

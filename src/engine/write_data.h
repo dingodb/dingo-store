@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "butil/status.h"
+#include "proto/common.pb.h"
 #include "proto/raft.pb.h"
 
 namespace dingodb {
@@ -62,6 +63,51 @@ struct PutDatum : public DatumAble {
 
   std::string cf_name;
   std::vector<pb::common::KeyValue> kvs;
+};
+
+struct VectorAddDatum : public DatumAble {
+  DatumType GetType() override { return DatumType::kPut; }
+
+  pb::raft::Request* TransformToRaft() override {
+    auto* request = new pb::raft::Request();
+
+    request->set_cmd_type(pb::raft::CmdType::VECTOR_ADD);
+    pb::raft::VectorAddRequest* vector_add_request = request->mutable_vector_add();
+    for (auto& vector : vectors) {
+      vector_add_request->set_cf_name(cf_name);
+      vector_add_request->add_vectors()->CopyFrom(vector);
+    }
+
+    return request;
+  };
+
+  void TransformFromRaft(pb::raft::Response& resonse) override {}
+
+  std::string cf_name;
+  std::vector<pb::common::VectorWithId> vectors;
+};
+
+struct VectorDeleteDatum : public DatumAble {
+  ~VectorDeleteDatum() override = default;
+  DatumType GetType() override { return DatumType::kDeleteBatch; }
+
+  pb::raft::Request* TransformToRaft() override {
+    auto* request = new pb::raft::Request();
+
+    request->set_cmd_type(pb::raft::CmdType::VECTOR_DELETE);
+    pb::raft::VectorDeleteRequest* vector_delete_request = request->mutable_vector_delete();
+    vector_delete_request->set_cf_name(cf_name);
+    for (const auto& id : ids) {
+      vector_delete_request->add_ids(id);
+    }
+
+    return request;
+  }
+
+  void TransformFromRaft(pb::raft::Response& resonse) override {}
+
+  std::string cf_name;
+  std::vector<uint64_t> ids;
 };
 
 struct PutIfAbsentDatum : public DatumAble {
