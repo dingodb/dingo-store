@@ -769,7 +769,7 @@ butil::Status RawRocksEngine::Reader::KvGet(std::shared_ptr<dingodb::Snapshot> s
   return butil::Status();
 }
 
-butil::Status RawRocksEngine::Reader::VectorSearch(const std::string& /*key_header*/,
+butil::Status RawRocksEngine::Reader::VectorSearch(const std::string& key_header,
                                                    const pb::common::VectorWithId& vector,
                                                    pb::common::VectorSearchParameter parameter,
                                                    std::vector<pb::common::VectorWithDistance>& vectors) {
@@ -781,6 +781,37 @@ butil::Status RawRocksEngine::Reader::VectorSearch(const std::string& /*key_head
   if (parameter.top_n() == 0) {
     DINGO_LOG(ERROR) << fmt::format("top_n is 0 not support");
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "top_n is 0");
+  }
+
+  if (vector.id() > 0) {
+    auto snapshot = std::make_shared<RocksSnapshot>(db_->GetSnapshot(), db_);
+    rocksdb::ReadOptions read_option;
+    read_option.snapshot = static_cast<const rocksdb::Snapshot*>(snapshot->Inner());
+    std::string value;
+    rocksdb::Status s =
+        db_->Get(read_option, column_family_->GetHandle(), key_header + std::to_string(vector.id()), &value);
+    if (!s.ok()) {
+      if (s.IsNotFound()) {
+        return butil::Status(pb::error::EKEY_NOT_FOUND, "Not found");
+      }
+      DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Get failed : {}", s.ToString());
+      return butil::Status(pb::error::EINTERNAL, "Internal error");
+    }
+
+    pb::common::Vector result;
+    if (!result.ParseFromString(value)) {
+      DINGO_LOG(ERROR) << fmt::format("ParseFromString failed");
+      return butil::Status(pb::error::EINTERNAL, "Internal error");
+    }
+
+    pb::common::VectorWithDistance vector_with_distance;
+    vector_with_distance.set_id(vector.id());
+    vector_with_distance.set_distance(0);
+    vector_with_distance.mutable_vector()->CopyFrom(result);
+
+    vectors.push_back(vector_with_distance);
+
+    return butil::Status();
   }
 
   for (int i = 0; i < 10; i++) {

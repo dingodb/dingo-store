@@ -30,10 +30,65 @@
 #include "fmt/core.h"
 #include "glog/logging.h"
 #include "proto/common.pb.h"
+#include "proto/index.pb.h"
 
 const int kBatchSize = 1000;
 
 namespace client {
+
+void SendVectorSearch(ServerInteractionPtr interaction, uint64_t region_id, uint32_t dimension, uint64_t id) {
+  dingodb::pb::index::VectorSearchRequest request;
+  dingodb::pb::index::VectorSearchResponse response;
+
+  request.set_region_id(region_id);
+  auto* vector = request.mutable_vector()->mutable_vector();
+
+  for (int i = 0; i < dimension; i++) {
+    vector->add_values(1.0 * i);
+  }
+
+  request.mutable_parameter()->set_top_n(10);
+
+  if (id > 0) {
+    request.mutable_vector()->set_id(id);
+  }
+
+  interaction->SendRequest("IndexService", "VectorSearch", request, response);
+
+  DINGO_LOG(INFO) << "VectorSearch response: " << response.DebugString();
+}
+
+void SendVectorAdd(ServerInteractionPtr interaction, uint64_t region_id, uint32_t dimension, uint32_t count) {
+  dingodb::pb::index::VectorAddRequest request;
+  dingodb::pb::index::VectorAddResponse response;
+
+  request.set_region_id(region_id);
+  for (int i = 1; i <= count; ++i) {
+    auto* vector_with_id = request.add_vectors();
+    vector_with_id->set_id(i);
+    for (int j = 0; j < dimension; j++) {
+      vector_with_id->mutable_vector()->add_values(1.0 * dingodb::Helper::GenerateRandomInteger(0, 100) / 10);
+    }
+  }
+
+  interaction->SendRequest("IndexService", "VectorAdd", request, response);
+
+  DINGO_LOG(INFO) << "VectorAdd response: " << response.DebugString();
+}
+
+void SendVectorDelete(ServerInteractionPtr interaction, uint64_t region_id, uint32_t count) {
+  dingodb::pb::index::VectorDeleteRequest request;
+  dingodb::pb::index::VectorDeleteResponse response;
+
+  request.set_region_id(region_id);
+  for (int i = 1; i <= count; ++i) {
+    request.add_ids(i);
+  }
+
+  interaction->SendRequest("IndexService", "VectorDelete", request, response);
+
+  DINGO_LOG(INFO) << "VectorDelete response: " << response.DebugString();
+}
 
 void SendKvGet(ServerInteractionPtr interaction, uint64_t region_id, const std::string& key, std::string& value) {
   dingodb::pb::store::KvGetRequest request;
