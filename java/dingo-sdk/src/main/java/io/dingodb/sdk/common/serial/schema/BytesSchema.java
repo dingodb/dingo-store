@@ -74,17 +74,21 @@ public class BytesSchema implements DingoSchema<byte[]> {
     @Override
     public void encodeKey(Buf buf, byte[] data) {
         if (allowNull) {
-            buf.ensureRemainder(5);
             if (data == null) {
+                buf.ensureRemainder(5);
                 buf.write(NULL);
                 buf.reverseWriteInt0();
             } else {
+                buf.ensureRemainder(1);
                 buf.write(NOTNULL);
-                buf.reverseWriteInt(internalEncodeKey(buf, data));
+                int size = internalEncodeKey(buf, data);
+                buf.ensureRemainder(4);
+                buf.reverseWriteInt(size);
             }
         } else {
+            int size = internalEncodeKey(buf, data);
             buf.ensureRemainder(4);
-            buf.reverseWriteInt(internalEncodeKey(buf, data));
+            buf.reverseWriteInt(size);
         }
     }
 
