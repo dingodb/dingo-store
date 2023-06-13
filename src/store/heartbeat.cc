@@ -43,7 +43,7 @@ namespace dingodb {
 DEFINE_int32(executor_heartbeat_timeout, 30, "executor heartbeat timeout in seconds");
 DEFINE_int32(store_heartbeat_timeout, 30, "store heartbeat timeout in seconds");
 DEFINE_int32(region_heartbeat_timeout, 30, "region heartbeat timeout in seconds");
-DEFINE_int32(region_delete_after_deleted_time, 60, "delete region after deleted time in seconds");
+DEFINE_int32(region_delete_after_deleted_time, 604800, "delete region after deleted time in seconds");
 
 void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> coordinator_interaction,
                                        uint64_t region_id) {
@@ -209,6 +209,7 @@ void CoordinatorRecycleOrphanTask::CoordinatorRecycleOrphan(std::shared_ptr<Coor
   DINGO_LOG(DEBUG) << "CoordinatorRecycleOrphan... this is leader";
 
   coordinator_control->CleanRegionBvars();
+  coordinator_control->RecycleOrphanRegionOnStore();
 }
 
 // this is for coordinator

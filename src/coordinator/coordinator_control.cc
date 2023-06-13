@@ -61,6 +61,7 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   store_meta_ = new MetaSafeMapStorage<pb::common::Store>(&store_map_);
   schema_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::SchemaInternal>(&schema_map_);
   region_meta_ = new MetaSafeMapStorage<pb::common::Region>(&region_map_);
+  deleted_region_meta_ = new MetaSafeMapStorage<pb::common::Region>(&deleted_region_map_, "deleted_region_map_");
   table_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::TableInternal>(&table_map_);
   id_epoch_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::IdEpochInternal>(&id_epoch_map_);
   executor_meta_ = new MetaSafeStringMapStorage<pb::common::Executor>(&executor_map_);
@@ -98,6 +99,7 @@ CoordinatorControl::~CoordinatorControl() {
   delete store_meta_;
   delete schema_meta_;
   delete region_meta_;
+  delete deleted_region_meta_;
   delete table_meta_;
   delete id_epoch_meta_;
   delete executor_meta_;
@@ -223,6 +225,19 @@ bool CoordinatorControl::Recover() {
     }
   }
   DINGO_LOG(INFO) << "Recover region_meta, count=" << kvs.size();
+  kvs.clear();
+
+  // 5.1 deleted region map
+  if (!meta_reader_->Scan(deleted_region_meta_->Prefix(), kvs)) {
+    return false;
+  }
+  {
+    // BAIDU_SCOPED_LOCK(region_map_mutex_);
+    if (!deleted_region_meta_->Recover(kvs)) {
+      return false;
+    }
+  }
+  DINGO_LOG(INFO) << "Recover deleted_region_meta, count=" << kvs.size();
   kvs.clear();
 
   // 6.table map

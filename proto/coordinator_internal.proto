@@ -219,6 +219,7 @@ message MetaIncrement {
   repeated MetaIncrementTaskList task_lists = 12;
 
   repeated MetaIncrementAutoIncrement auto_increment = 20;
+  repeated MetaIncrementRegion deleted_regions = 30;
 }
 
 // snapshot pb file message
@@ -238,4 +239,6 @@ message MetaSnapshotFile {
 
   repeated dingodb.pb.common.KeyValue auto_increment_map_kvs = 20;  // now unused, just a placeholder
   AutoIncrementStorage auto_increment_storage = 21;
+
+  repeated dingodb.pb.common.KeyValue deleted_region_map_kvs = 30;
 }
