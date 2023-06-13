@@ -91,7 +91,9 @@ void DingoSchema<std::optional<std::shared_ptr<std::string>>>::EncodeKey(
     if (data.has_value()) {
       buf->EnsureRemainder(1);
       buf->Write(k_not_null);
-      buf->ReverseWriteInt(InternalEncodeKey(buf, data.value()));
+      int size = InternalEncodeKey(buf, data.value());
+      buf->EnsureRemainder(4);
+      buf->ReverseWriteInt(size);
     } else {
       buf->EnsureRemainder(5);
       buf->Write(k_null);
@@ -99,7 +101,9 @@ void DingoSchema<std::optional<std::shared_ptr<std::string>>>::EncodeKey(
     }
   } else {
     if (data.has_value()) {
-      buf->ReverseWriteInt(InternalEncodeKey(buf, data.value()));
+      int size = InternalEncodeKey(buf, data.value());
+      buf->EnsureRemainder(4);
+      buf->ReverseWriteInt(size);
     } else {
       // WRONG EMPTY DATA
     }
@@ -114,7 +118,7 @@ void DingoSchema<std::optional<std::shared_ptr<std::string>>>::EncodeKeyPrefix(
       buf->Write(k_not_null);
       InternalEncodeKey(buf, data.value());
     } else {
-      buf->EnsureRemainder(5);
+      buf->EnsureRemainder(1);
       buf->Write(k_null);
     }
   } else {

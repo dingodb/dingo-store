@@ -75,19 +75,23 @@ public class StringSchema implements DingoSchema<String> {
 
     public void encodeKey(Buf buf, String data) {
         if (allowNull) {
-            buf.ensureRemainder(5);
             if (data == null) {
+                buf.ensureRemainder(5);
                 buf.write(NULL);
                 buf.reverseWriteInt0();
             } else {
+                buf.ensureRemainder(1);
                 buf.write(NOTNULL);
                 byte[] bytes = data.getBytes(StandardCharsets.UTF_8);
-                buf.reverseWriteInt(internalEncodeKey(buf, bytes));
+                int size = internalEncodeKey(buf, bytes);
+                buf.ensureRemainder(4);
+                buf.reverseWriteInt(size);
             }
         } else {
-            buf.ensureRemainder(4);
             byte[] bytes = data.getBytes(StandardCharsets.UTF_8);
-            buf.reverseWriteInt(internalEncodeKey(buf, bytes));
+            int size = internalEncodeKey(buf, bytes);
+            buf.ensureRemainder(4);
+            buf.reverseWriteInt(size);
         }
     }
 
