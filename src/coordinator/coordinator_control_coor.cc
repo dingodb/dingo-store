@@ -511,6 +511,68 @@ void CoordinatorControl::GetRegionIdsInMap(std::vector<uint64_t>& region_ids) { 
 
 void CoordinatorControl::CleanRegionBvars() {}
 
+void CoordinatorControl::CleanDeletedRegions() {
+  butil::FlatMap<uint64_t, pb::common::Region> delete_regions;
+  delete_regions.init(3000);
+  deleted_region_map_.GetFlatMapCopy(delete_regions);
+
+  for (const auto& region : delete_regions) {
+    if (region.second.deleted_timestamp() + (FLAGS_region_delete_after_deleted_time * 1000) <
+        butil::gettimeofday_ms()) {
+      // deleted_region_map_.Delete(region->first);
+    }
+  }
+
+  pb::coordinator_internal::MetaIncrement meta_increment;
+
+  if (meta_increment.task_lists_size() > 0) {
+    SubmitMetaIncrement(meta_increment);
+  }
+}
+
+void CoordinatorControl::RecycleOrphanRegionOnStore() {
+  std::set<uint64_t> delete_region_ids;
+  deleted_region_map_.GetAllKeys(delete_region_ids);
+
+  std::map<uint64_t, std::vector<uint64_t>> region_id_on_store;
+
+  // load all region_id to region_id_on_store
+  {
+    BAIDU_SCOPED_LOCK(store_metrics_map_mutex_);
+    for (auto& store_metric : store_metrics_map_) {
+      const auto& region_metrics_map = store_metric.second.region_metrics_map();
+      for (const auto& region_metric : region_metrics_map) {
+        region_id_on_store[store_metric.first].push_back(region_metric.first);
+      }
+    }
+  }
+
+  pb::coordinator_internal::MetaIncrement meta_increment;
+
+  for (const auto& ids : region_id_on_store) {
+    DINGO_LOG(INFO) << "Start to RecycleOrphanRegionOnStore for store_id: " << ids.first
+                    << " region_id size: " << ids.second.size();
+    for (const auto& region_id : ids.second) {
+      // if region_id is in delete_region_map, need to delete region on this store
+      if (delete_region_ids.find(region_id) != delete_region_ids.end()) {
+        DINGO_LOG(INFO) << "RecycleOrphanRegionOnStore delete store_id:" << ids.first << " region_id: " << region_id;
+
+        auto* increment_task_list = CreateTaskList(meta_increment);
+
+        // this is delete_region task
+        AddDeleteTask(increment_task_list, ids.first, region_id, meta_increment);
+
+        // this is purge_region task
+        AddPurgeTask(increment_task_list, ids.first, region_id, meta_increment);
+      }
+    }
+  }
+
+  if (meta_increment.task_lists_size() > 0) {
+    SubmitMetaIncrement(meta_increment);
+  }
+}
+
 void CoordinatorControl::DeleteRegionBvar(uint64_t region_id) {
   coordinator_bvar_metrics_region_.DeleteRegionBvar(region_id);
 }
@@ -890,16 +952,25 @@ butil::Status CoordinatorControl::DropRegion(uint64_t region_id, bool need_updat
         region_to_delete.set_state(::dingodb::pb::common::RegionState::REGION_DELETE);
 
         // update meta_increment
-        // update region to DELETE, not delete region really, not
+        // 1.delete region from region_map_
         need_update_epoch = true;
         auto* region_increment = meta_increment.add_regions();
         region_increment->set_id(region_id);
         region_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
 
         auto* region_increment_region = region_increment->mutable_region();
-        // region_increment_region->CopyFrom(region_to_delete);
-        // region_increment_region->set_state(::dingodb::pb::common::RegionState::REGION_DELETE);
         region_increment_region->set_id(region_id);
+
+        // 2.add the deleted region to deleted_region_map_
+        auto* deleted_region_increment = meta_increment.add_deleted_regions();
+        deleted_region_increment->set_id(region_id);
+        deleted_region_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
+
+        auto* deleted_region_increment_region = deleted_region_increment->mutable_region();
+        // deleted_region_increment_region->CopyFrom(region_to_delete);
+        deleted_region_increment_region->set_state(::dingodb::pb::common::RegionState::REGION_DELETE);
+        deleted_region_increment_region->set_id(region_id);
+        deleted_region_increment_region->set_deleted_timestamp(butil::gettimeofday_ms());
 
         // use TaskList to drop & purge region
         for (const auto& peer : region_to_delete.definition().peers()) {
@@ -2555,7 +2626,7 @@ void CoordinatorControl::AddDeleteTask(pb::coordinator::TaskList* task_list, uin
 
 void CoordinatorControl::AddDeleteTaskWithCheck(
     pb::coordinator::TaskList* task_list, uint64_t store_id, uint64_t region_id,
-    const ::google::protobuf::RepeatedPtrField< ::dingodb::pb::common::Peer>& peers,
+    const ::google::protobuf::RepeatedPtrField<::dingodb::pb::common::Peer>& peers,
     pb::coordinator_internal::MetaIncrement& meta_increment) {
   // this is delete_region task
   // precheck if region in RegionMap is REGION_NORMAL and REGION_RAFT_HEALTHY

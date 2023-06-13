@@ -251,6 +251,7 @@ message Region {
   // other
   uint64 create_timestamp = 10;
   uint64 last_update_timestamp = 11;
+  uint64 deleted_timestamp = 12;
 }
 
 message RegionMap {

@@ -206,6 +206,18 @@ bool CoordinatorControl::LoadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapsh
   DINGO_LOG(INFO) << "Snapshot region_meta, count=" << kvs.size();
   kvs.clear();
 
+  // 5.1 deleted region map
+  if (!meta_reader_->Scan(snapshot, deleted_region_meta_->Prefix(), kvs)) {
+    return false;
+  }
+
+  for (const auto& kv : kvs) {
+    auto* snapshot_file_kv = meta_snapshot_file.add_region_map_kvs();
+    snapshot_file_kv->CopyFrom(kv);
+  }
+  DINGO_LOG(INFO) << "Snapshot deleted_region_meta, count=" << kvs.size();
+  kvs.clear();
+
   // 6.table map
   if (!meta_reader_->Scan(snapshot, table_meta_->Prefix(), kvs)) {
     return false;
@@ -454,6 +466,34 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
   DINGO_LOG(INFO) << "LoadSnapshot region_meta, count=" << kvs.size();
   kvs.clear();
 
+  // 5.1 deleted region map
+  kvs.reserve(meta_snapshot_file.deleted_region_map_kvs_size());
+  for (int i = 0; i < meta_snapshot_file.deleted_region_map_kvs_size(); i++) {
+    kvs.push_back(meta_snapshot_file.deleted_region_map_kvs(i));
+  }
+  {
+    // BAIDU_SCOPED_LOCK(region_map_mutex_);
+    if (!deleted_region_meta_->Recover(kvs)) {
+      return false;
+    }
+
+    // remove data in rocksdb
+    if (!meta_writer_->DeletePrefix(deleted_region_meta_->internal_prefix)) {
+      DINGO_LOG(ERROR) << "Coordinator delete deleted_region_meta_ range failed in LoadMetaFromSnapshotFile";
+      return false;
+    }
+    DINGO_LOG(INFO) << "Coordinator delete range deleted_region_meta_ success in LoadMetaFromSnapshotFile";
+
+    // write data to rocksdb
+    if (!meta_writer_->Put(kvs)) {
+      DINGO_LOG(ERROR) << "Coordinator write deleted_region_meta_ failed in LoadMetaFromSnapshotFile";
+      return false;
+    }
+    DINGO_LOG(INFO) << "Coordinator put deleted_region_meta_ success in LoadMetaFromSnapshotFile";
+  }
+  DINGO_LOG(INFO) << "LoadSnapshot deleted_region_meta, count=" << kvs.size();
+  kvs.clear();
+
   // 6.table map
   kvs.reserve(meta_snapshot_file.table_map_kvs_size());
   for (int i = 0; i < meta_snapshot_file.table_map_kvs_size(); i++) {
@@ -687,6 +727,9 @@ void LogMetaIncrementSize(pb::coordinator_internal::MetaIncrement& meta_incremen
   }
   if (meta_increment.regions_size() > 0) {
     DINGO_LOG(DEBUG) << "5.regions_size=" << meta_increment.regions_size();
+  }
+  if (meta_increment.deleted_regions_size() > 0) {
+    DINGO_LOG(DEBUG) << "5.1 deleted_regions_size=" << meta_increment.deleted_regions_size();
   }
   if (meta_increment.store_metrics_size() > 0) {
     DINGO_LOG(DEBUG) << "6.store_metrics_size=" << meta_increment.store_metrics_size();
@@ -1062,6 +1105,53 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
 
         // meta_delete_kv
         meta_delete_to_kv.push_back(region_meta_->TransformToKvValue(region.region()));
+      }
+    }
+  }
+
+  // 5.1 deleted region map
+  {
+    if (meta_increment.deleted_regions_size() > 0) {
+      DINGO_LOG(INFO) << "5.1 deleted_regions_size=" << meta_increment.deleted_regions_size();
+    }
+
+    // BAIDU_SCOPED_LOCK(region_map_mutex_);
+    for (int i = 0; i < meta_increment.deleted_regions_size(); i++) {
+      const auto& region = meta_increment.deleted_regions(i);
+      if (region.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
+        // add deleted_region to deleted_region_map
+        int ret = deleted_region_map_.Put(region.id(), region.region());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement deleted_region CREATE, [id=" << region.id() << "] success";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement deleted_region CREATE, [id=" << region.id() << "] failed";
+        }
+
+        // meta_write_kv
+        meta_write_to_kv.push_back(deleted_region_meta_->TransformToKvValue(region.region()));
+
+      } else if (region.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
+        // update region to deleted_region_map
+        int ret = deleted_region_map_.PutIfExists(region.id(), region.region());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement deleted_region UPDATE, [id=" << region.id() << "] success";
+          // meta_write_kv
+          meta_write_to_kv.push_back(deleted_region_meta_->TransformToKvValue(region.region()));
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement deleted_region UPDATE, [id=" << region.id() << "] failed";
+        }
+
+      } else if (region.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
+        // remove region from deleted_region_map
+        int ret = deleted_region_map_.Erase(region.id());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement deleted_region DELETE, [id=" << region.id() << "] success";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement deleted_region DELETE, [id=" << region.id() << "] failed";
+        }
+
+        // meta_delete_kv
+        meta_delete_to_kv.push_back(deleted_region_meta_->TransformToKvValue(region.region()));
       }
     }
   }

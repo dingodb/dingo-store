@@ -382,6 +382,8 @@ class CoordinatorControl : public MetaControl {
   void GetRegionCount(uint64_t &region_count);
   void GetRegionIdsInMap(std::vector<uint64_t> &region_ids);
   void CleanRegionBvars();
+  void CleanDeletedRegions();
+  void RecycleOrphanRegionOnStore();
   void DeleteRegionBvar(uint64_t region_id);
 
   // get schemas
@@ -572,6 +574,9 @@ class CoordinatorControl : public MetaControl {
   // 5.regions
   DingoSafeMap<uint64_t, pb::common::Region> region_map_;
   MetaSafeMapStorage<pb::common::Region> *region_meta_;
+  // 5.1 deleted_regions
+  DingoSafeMap<uint64_t, pb::common::Region> deleted_region_map_;  // tombstone for deleted region
+  MetaSafeMapStorage<pb::common::Region> *deleted_region_meta_;
 
   // 6.tables
   // TableInternal is combination of Table & TableDefinition
