@@ -628,7 +628,7 @@ TEST_F(RawRocksEngineTest, KvCompareAndSet) {
     bool key_state;
 
     butil::Status ok = writer->KvCompareAndSet(kv, value, key_state);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EINTERNAL);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
   // normal
@@ -810,7 +810,7 @@ TEST_F(RawRocksEngineTest, KvBatchCompareAndSet) {
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     ok = writer->KvBatchCompareAndSet(kvs, expect_values, key_states, true);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EINTERNAL);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
 
@@ -818,7 +818,6 @@ TEST_F(RawRocksEngineTest, KvBatchCompareAndSet) {
     std::string value;
     ok = reader->KvGet(key, value);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-
 
     ok = writer->KvDelete(kv.key());
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
@@ -933,7 +932,7 @@ TEST_F(RawRocksEngineTest, KvBatchCompareAndSet) {
     }
 
     butil::Status ok = writer->KvBatchCompareAndSet(kvs, expect_values, key_states, true);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EINTERNAL);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     for (size_t i = 0; i < 4; i++) {
       EXPECT_EQ(key_states[i], false);

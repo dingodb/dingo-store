@@ -763,7 +763,7 @@ butil::Status RawRocksEngine::Reader::KvGet(std::shared_ptr<dingodb::Snapshot> s
       return butil::Status(pb::error::EKEY_NOT_FOUND, "Not found");
     }
     DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Get failed : {}", s.ToString());
-    return butil::Status(pb::error::EINTERNAL, "Internal error");
+    return butil::Status(pb::error::EINTERNAL, "Internal get error");
   }
 
   return butil::Status();
@@ -860,7 +860,7 @@ butil::Status RawRocksEngine::Writer::KvPut(const pb::common::KeyValue& kv) {
       db_->Put(write_options, column_family_->GetHandle(), rocksdb::Slice(kv.key()), rocksdb::Slice(kv.value()));
   if (!s.ok()) {
     DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Put failed : {}", s.ToString());
-    return butil::Status(pb::error::EINTERNAL, "Internal error");
+    return butil::Status(pb::error::EINTERNAL, "Internal put error");
   }
 
   return butil::Status();
@@ -886,7 +886,7 @@ butil::Status RawRocksEngine::Writer::KvBatchPutAndDelete(const std::vector<pb::
       rocksdb::Status s = batch.Put(column_family_->GetHandle(), kv.key(), kv.value());
       if (BAIDU_UNLIKELY(!s.ok())) {
         DINGO_LOG(ERROR) << fmt::format("rocksdb::WriteBatch::Put failed : {}", s.ToString());
-        return butil::Status(pb::error::EINTERNAL, "Internal error");
+        return butil::Status(pb::error::EINTERNAL, "Internal put error");
       }
     }
   }
@@ -899,7 +899,7 @@ butil::Status RawRocksEngine::Writer::KvBatchPutAndDelete(const std::vector<pb::
       rocksdb::Status s = batch.Delete(column_family_->GetHandle(), kv.key());
       if (BAIDU_UNLIKELY(!s.ok())) {
         DINGO_LOG(ERROR) << fmt::format("rocksdb::WriteBatch::Put failed : {}", s.ToString());
-        return butil::Status(pb::error::EINTERNAL, "Internal error");
+        return butil::Status(pb::error::EINTERNAL, "Internal delete error");
       }
     }
   }
@@ -907,7 +907,7 @@ butil::Status RawRocksEngine::Writer::KvBatchPutAndDelete(const std::vector<pb::
   rocksdb::Status s = db_->Write(write_options, &batch);
   if (!s.ok()) {
     DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Write failed : {}", s.ToString());
-    return butil::Status(pb::error::EINTERNAL, "Internal error");
+    return butil::Status(pb::error::EINTERNAL, "Internal write error");
   }
 
   return butil::Status();
@@ -953,7 +953,7 @@ butil::Status RawRocksEngine::Writer::KvBatchPutIfAbsent(const std::vector<pb::c
         key_states.clear();
         key_states.resize(kvs.size(), false);
         DINGO_LOG(INFO) << fmt::format("rocksdb::DB::Get failed or found: {}", s.ToString());
-        return butil::Status(pb::error::EINTERNAL, "Internal error");
+        return butil::Status(pb::error::EINTERNAL, "Internal get error");
       }
     } else {
       if (!s.IsNotFound()) {
@@ -971,7 +971,7 @@ butil::Status RawRocksEngine::Writer::KvBatchPutIfAbsent(const std::vector<pb::c
         key_states.resize(kvs.size(), false);
       }
       DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Put failed : {}", s.ToString());
-      return butil::Status(pb::error::EINTERNAL, "Internal error");
+      return butil::Status(pb::error::EINTERNAL, "Internal put error");
     }
     key_states[key_index] = true;
     key_index++;
@@ -982,7 +982,7 @@ butil::Status RawRocksEngine::Writer::KvBatchPutIfAbsent(const std::vector<pb::c
     key_states.clear();
     key_states.resize(kvs.size(), false);
     DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Write failed : {}", s.ToString());
-    return butil::Status(pb::error::EINTERNAL, "Internal error");
+    return butil::Status(pb::error::EINTERNAL, "Internal write error");
   }
 
   return butil::Status();
@@ -1004,7 +1004,7 @@ butil::Status RawRocksEngine::Writer::KvDelete(const std::string& key) {
       db_->Delete(write_options, column_family_->GetHandle(), rocksdb::Slice(key.data(), key.size()));
   if (!s.ok()) {
     DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Delete failed : {}", s.ToString());
-    return butil::Status(pb::error::EINTERNAL, "Internal error");
+    return butil::Status(pb::error::EINTERNAL, "Internal delete error");
   }
 
   return butil::Status();
@@ -1045,21 +1045,22 @@ butil::Status RawRocksEngine::Writer::KvBatchCompareAndSet(const std::vector<pb:
         if (value_old != expect_values[key_index]) {
           key_states.clear();
           key_states.resize(kvs.size(), false);
-          DINGO_LOG(ERROR) << fmt::format("value_old != expect_values[{}]", key_index);
-          return butil::Status(pb::error::EINTERNAL, "Internal error");
+          DINGO_LOG(DEBUG) << fmt::format("compare and set old_value: {} expect_value: {}", value_old,
+                                          expect_values[key_index]);
+          return butil::Status();
         }
       } else if (s.IsNotFound()) {
         if (!expect_values[key_index].empty()) {
           key_states.clear();
           key_states.resize(kvs.size(), false);
           DINGO_LOG(ERROR) << fmt::format("NotFound : expect_values[{}] not empty", key_index);
-          return butil::Status(pb::error::EINTERNAL, "Internal error");
+          return butil::Status(pb::error::EINTERNAL, "Internal not found error");
         }
       } else {
         key_states.clear();
         key_states.resize(kvs.size(), false);
         DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Get failed key_index :{} {}", key_index, s.ToString());
-        return butil::Status(pb::error::EINTERNAL, "Internal error");
+        return butil::Status(pb::error::EINTERNAL, "Internal get error");
       }
     } else {
       if (s.ok()) {
@@ -1088,7 +1089,7 @@ butil::Status RawRocksEngine::Writer::KvBatchCompareAndSet(const std::vector<pb:
           key_states.resize(kvs.size(), false);
         }
         DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Delete failed key_index:{} : {}", key_index, s.ToString());
-        return butil::Status(pb::error::EINTERNAL, "Internal error");
+        return butil::Status(pb::error::EINTERNAL, "Internal delete error");
       }
     } else {
       // write a key in this batch
@@ -1100,7 +1101,7 @@ butil::Status RawRocksEngine::Writer::KvBatchCompareAndSet(const std::vector<pb:
           key_states.resize(kvs.size(), false);
         }
         DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Put failed key_index :{} : {}", key_index, s.ToString());
-        return butil::Status(pb::error::EINTERNAL, "Internal error");
+        return butil::Status(pb::error::EINTERNAL, "Internal put error");
       }
     }
 
@@ -1113,7 +1114,7 @@ butil::Status RawRocksEngine::Writer::KvBatchCompareAndSet(const std::vector<pb:
     key_states.clear();
     key_states.resize(kvs.size(), false);
     DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Write failed : {}", s.ToString());
-    return butil::Status(pb::error::EINTERNAL, "Internal error");
+    return butil::Status(pb::error::EINTERNAL, "Internal write error");
   }
 
   return butil::Status();
@@ -1143,7 +1144,7 @@ butil::Status RawRocksEngine::Writer::KvDeleteRange(const pb::common::Range& ran
       db_->DeleteRange(rocksdb::WriteOptions(), column_family_->GetHandle(), range.start_key(), range.end_key());
   if (!status.ok()) {
     DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Write failed : {}", status.ToString());
-    return butil::Status(pb::error::EINTERNAL, "Internal error");
+    return butil::Status(pb::error::EINTERNAL, "Internal delete range error");
   }
 
   return butil::Status();
@@ -1164,14 +1165,14 @@ butil::Status RawRocksEngine::Writer::KvBatchDeleteRange(const std::vector<pb::c
     rocksdb::Status s = batch.DeleteRange(column_family_->GetHandle(), range.start_key(), range.start_key());
     if (!s.ok()) {
       DINGO_LOG(ERROR) << fmt::format("rocksdb::WriteBatch::DeleteRange failed : {}", s.ToString());
-      return butil::Status(pb::error::EINTERNAL, "Internal error");
+      return butil::Status(pb::error::EINTERNAL, "Internal delete range error");
     }
   }
 
   rocksdb::Status s = db_->Write(rocksdb::WriteOptions(), &batch);
   if (!s.ok()) {
     DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Write failed : {}", s.ToString());
-    return butil::Status(pb::error::EINTERNAL, "Internal error");
+    return butil::Status(pb::error::EINTERNAL, "Internal write error");
   }
 
   return butil::Status();
@@ -1193,12 +1194,12 @@ butil::Status RawRocksEngine::Writer::KvDeleteIfEqual(const pb::common::KeyValue
       return butil::Status(pb::error::EKEY_NOT_FOUND, "Not found");
     }
     DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::GetForUpdate failed : {}", s.ToString());
-    return butil::Status(pb::error::EINTERNAL, "Internal error");
+    return butil::Status(pb::error::EINTERNAL, "Internal get error");
   }
 
   if (kv.value() != old_value) {
     DINGO_LOG(WARNING) << fmt::format("rocksdb::DB::Get value is not equal, {} | {}.", kv.value(), old_value);
-    return butil::Status(pb::error::EINTERNAL, "Internal error");
+    return butil::Status(pb::error::EINTERNAL, "Internal compare value error");
   }
 
   // delete a key
@@ -1206,7 +1207,7 @@ butil::Status RawRocksEngine::Writer::KvDeleteIfEqual(const pb::common::KeyValue
                   rocksdb::Slice(kv.key().data(), kv.key().size()));
   if (BAIDU_UNLIKELY(!s.ok())) {
     DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Delete failed : {}", s.ToString());
-    return butil::Status(pb::error::EINTERNAL, "Internal error");
+    return butil::Status(pb::error::EINTERNAL, "Internal delete error");
   }
 
   return butil::Status();
@@ -1237,12 +1238,12 @@ butil::Status RawRocksEngine::Writer::KvCompareAndSetInternal(const pb::common::
     }
   } else {  // error
     DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Get failed : {}", s.ToString());
-    return butil::Status(pb::error::EINTERNAL, "Internal error");
+    return butil::Status(pb::error::EINTERNAL, "Internal get error");
   }
 
   if (kv.value() != old_value) {
-    DINGO_LOG(WARNING) << fmt::format("rocksdb::DB::Get value is not equal");
-    return butil::Status(pb::error::EINTERNAL, "Internal error");
+    DINGO_LOG(DEBUG) << fmt::format("compare and set old_value: {} expect_value: {}", old_value, kv.value());
+    return butil::Status();
   }
 
   // write a key
@@ -1250,7 +1251,7 @@ butil::Status RawRocksEngine::Writer::KvCompareAndSetInternal(const pb::common::
                rocksdb::Slice(value.data(), value.size()));
   if (!s.ok()) {
     DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Put failed : {}", s.ToString());
-    return butil::Status(pb::error::EINTERNAL, "Internal error");
+    return butil::Status(pb::error::EINTERNAL, "Internal put error");
   }
 
   key_state = true;
