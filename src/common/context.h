@@ -34,6 +34,7 @@ class Context {
   Context()
       : cntl_(nullptr),
         done_(nullptr),
+        request_(nullptr),
         response_(nullptr),
         region_id_(0),
         delete_files_in_range_(false),
@@ -43,6 +44,7 @@ class Context {
   Context(brpc::Controller* cntl, google::protobuf::Closure* done)
       : cntl_(cntl),
         done_(done),
+        request_(nullptr),
         response_(nullptr),
         region_id_(0),
         delete_files_in_range_(false),
@@ -52,6 +54,18 @@ class Context {
   Context(brpc::Controller* cntl, google::protobuf::Closure* done, google::protobuf::Message* response)
       : cntl_(cntl),
         done_(done),
+        request_(nullptr),
+        response_(response),
+        region_id_(0),
+        delete_files_in_range_(false),
+        flush_(false),
+        role_(pb::common::ClusterRole::STORE),
+        enable_sync_(false) {}
+  Context(brpc::Controller* cntl, google::protobuf::Closure* done, const google::protobuf::Message* request,
+          google::protobuf::Message* response)
+      : cntl_(cntl),
+        done_(done),
+        request_(request),
         response_(response),
         region_id_(0),
         delete_files_in_range_(false),
@@ -71,6 +85,8 @@ class Context {
     done_ = done;
     return *this;
   }
+
+  const google::protobuf::Message* Request() { return request_; }
 
   google::protobuf::Message* Response() { return response_; }
   Context& SetResponse(google::protobuf::Message* response) {
@@ -115,6 +131,7 @@ class Context {
   // brpc framework free resource
   brpc::Controller* cntl_;
   google::protobuf::Closure* done_;
+  const google::protobuf::Message* request_;
   google::protobuf::Message* response_;
 
   uint64_t region_id_;
