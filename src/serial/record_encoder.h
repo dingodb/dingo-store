@@ -16,18 +16,11 @@
 #define DINGO_SERIAL_RECORD_ENCODER_H_
 
 #include <memory>
+#include <vector>
 
 #include "any"
-#include "functional"
-#include "keyvalue.h"
-#include "optional"
-#include "schema/boolean_schema.h"
-#include "schema/double_schema.h"
-#include "schema/float_schema.h"
-#include "schema/integer_schema.h"
-#include "schema/long_schema.h"
-#include "schema/string_schema.h"
-#include "utils.h"
+#include "proto/common.pb.h"
+#include "serial/schema/base_schema.h"
 
 namespace dingodb {
 

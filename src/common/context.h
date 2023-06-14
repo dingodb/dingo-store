@@ -59,7 +59,7 @@ class Context {
         region_id_(0),
         delete_files_in_range_(false),
         flush_(false),
-        role_(pb::common::ClusterRole::STORE),
+        // role_(pb::common::ClusterRole::STORE),
         enable_sync_(false) {}
   Context(brpc::Controller* cntl, google::protobuf::Closure* done, const google::protobuf::Message* request,
           google::protobuf::Message* response)
@@ -122,7 +122,7 @@ class Context {
   std::shared_ptr<BthreadCond> Cond() { return cond_; }
   butil::Status Status() { return status_; }
   void SetStatus(butil::Status& status) { status_ = status; }
-  void SetStatus(butil::Status&& status) { status_ = status; }
+  void SetStatus(butil::Status&& status) { status_ = status; }  // NOLINT
 
   WriteCbFunc WriteCb() { return write_cb_; }
   void SetWriteCb(WriteCbFunc write_cb) { write_cb_ = write_cb; }

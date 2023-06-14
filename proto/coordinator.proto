@@ -238,6 +238,12 @@ message CoordinatorMemoryInfo {
   uint64 deleted_region_map_count = 34;
   uint64 deleted_region_map_size = 35;
 
+  uint64 index_map_count = 36;
+  uint64 index_map_size = 37;
+
+  uint64 index_metrics_map_count = 38;
+  uint64 index_metrics_map_size = 39;
+
   repeated dingodb.pb.common.KeyValue id_epoch_values = 50;
 }
 
