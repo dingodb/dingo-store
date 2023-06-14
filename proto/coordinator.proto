@@ -260,6 +260,33 @@ message GetRegionMapResponse {
   dingodb.pb.common.RegionMap regionmap = 3;
 }
 
+message GetDeletedRegionMapRequest {
+  uint64 epoch = 1;
+}
+
+message GetDeletedRegionMapResponse {
+  dingodb.pb.error.Error error = 1;
+  uint64 epoch = 2;
+  dingodb.pb.common.RegionMap regionmap = 3;
+}
+
+message AddDeletedRegionMapRequest {
+  uint64 region_id = 1;
+  bool force = 2;
+}
+
+message AddDeletedRegionMapResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
+message CleanDeletedRegionMapRequest {
+  uint64 region_id = 1;
+}
+
+message CleanDeletedRegionMapResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
 message GetRegionCountRequest {
   uint64 epoch = 1;
 }
@@ -589,6 +616,9 @@ service CoordinatorService {
   // Store
   rpc StoreHeartbeat(StoreHeartbeatRequest) returns (StoreHeartbeatResponse);
   rpc GetRegionMap(GetRegionMapRequest) returns (GetRegionMapResponse);
+  rpc GetDeletedRegionMap(GetDeletedRegionMapRequest) returns (GetDeletedRegionMapResponse);
+  rpc AddDeletedRegionMap(AddDeletedRegionMapRequest) returns (AddDeletedRegionMapResponse);
+  rpc CleanDeletedRegionMap(CleanDeletedRegionMapRequest) returns (CleanDeletedRegionMapResponse);
   rpc GetRegionCount(GetRegionCountRequest) returns (GetRegionCountResponse);
   rpc GetStoreMap(GetStoreMapRequest) returns (GetStoreMapResponse);
   rpc GetStoreMetrics(GetStoreMetricsRequest) returns (GetStoreMetricsResponse);

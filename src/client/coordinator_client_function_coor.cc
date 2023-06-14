@@ -17,8 +17,8 @@
 #include <string>
 #include <vector>
 
+#include "butil/time.h"
 #include "client/coordinator_client_function.h"
-#include "client/store_client_function.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "coordinator/coordinator_interaction.h"
@@ -54,6 +54,7 @@ DECLARE_int64(region_cmd_id);
 DECLARE_string(store_ids);
 DECLARE_int64(index);
 DECLARE_string(state);
+DECLARE_bool(is_force);
 
 // raft control
 void SendRaftAddPeer() {
@@ -532,6 +533,60 @@ void SendGetRegionMap(std::shared_ptr<dingodb::CoordinatorInteraction> coordinat
 
   DINGO_LOG(INFO) << "region_count=" << response.regionmap().regions_size()
                   << ", normal_region_count=" << normal_region_count << ", online_region_count=" << online_region_count;
+}
+
+void SendGetDeletedRegionMap(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  dingodb::pb::coordinator::GetDeletedRegionMapRequest request;
+  dingodb::pb::coordinator::GetDeletedRegionMapResponse response;
+
+  request.set_epoch(1);
+
+  auto status = coordinator_interaction->SendRequest("GetDeletedRegionMap", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+
+  for (const auto& region : response.regionmap().regions()) {
+    DINGO_LOG(INFO) << "Region id=" << region.id() << " name=" << region.definition().name()
+                    << " state=" << dingodb::pb::common::RegionState_Name(region.state())
+                    << " deleted_time_stamp=" << region.deleted_timestamp()
+                    << " deleted_time_minutes=" << (butil::gettimeofday_ms() - region.deleted_timestamp()) / 1000 / 60
+                    << " deleted_time_hours=" << (butil::gettimeofday_ms() - region.deleted_timestamp()) / 1000 / 3600;
+  }
+
+  DINGO_LOG(INFO) << "region_count=" << response.regionmap().regions_size();
+}
+
+void SendAddDeletedRegionMap(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  dingodb::pb::coordinator::AddDeletedRegionMapRequest request;
+  dingodb::pb::coordinator::AddDeletedRegionMapResponse response;
+
+  if (FLAGS_id.empty()) {
+    DINGO_LOG(WARNING) << "id is empty";
+    return;
+  }
+  request.set_region_id(std::stol(FLAGS_id));
+
+  if (FLAGS_is_force) {
+    request.set_force(FLAGS_is_force);
+  }
+
+  auto status = coordinator_interaction->SendRequest("AddDeletedRegionMap", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG(INFO) << "response=" << response.DebugString();
+}
+
+void SendCleanDeletedRegionMap(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  dingodb::pb::coordinator::CleanDeletedRegionMapRequest request;
+  dingodb::pb::coordinator::CleanDeletedRegionMapResponse response;
+
+  if (FLAGS_id.empty()) {
+    DINGO_LOG(WARNING) << "id is empty";
+    return;
+  }
+  request.set_region_id(std::stol(FLAGS_id));
+
+  auto status = coordinator_interaction->SendRequest("CleanDeletedRegionMap", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG(INFO) << "response=" << response.DebugString();
 }
 
 void SendGetRegionCount(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {

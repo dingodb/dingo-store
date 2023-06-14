@@ -200,6 +200,11 @@ butil::Status DeleteRegionTask::DeleteRegion(std::shared_ptr<Context> ctx, uint6
                      << " error: " << status.error_code() << " " << status.error_str();
   }
 
+  // purge region for coordinator recycle_orphan_region mechanism
+  // TODO: need to implement a better mechanism of tombstone for region's meta info
+  DINGO_LOG(DEBUG) << fmt::format("Purge region {}", region_id);
+  store_region_meta->DeleteRegion(region_id);
+
   return butil::Status();
 }
 
@@ -742,6 +747,7 @@ std::vector<std::shared_ptr<pb::coordinator::RegionCmd>> RegionCommandManager::G
 std::vector<std::shared_ptr<pb::coordinator::RegionCmd>> RegionCommandManager::GetAllCommand() {
   BAIDU_SCOPED_LOCK(mutex_);
   std::vector<std::shared_ptr<pb::coordinator::RegionCmd>> commands;
+  commands.reserve(region_commands_.size());
   for (auto& [_, command] : region_commands_) {
     commands.push_back(command);
   }
@@ -819,6 +825,7 @@ void RegionController::Destroy() {
 std::vector<uint64_t> RegionController::GetAllRegion() {
   BAIDU_SCOPED_LOCK(mutex_);
   std::vector<uint64_t> region_ids;
+  region_ids.reserve(executors_.size());
   for (auto [region_id, _] : executors_) {
     region_ids.push_back(region_id);
   }

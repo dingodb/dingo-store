@@ -19,7 +19,6 @@
 #include <string>
 
 #include "brpc/controller.h"
-#include "brpc/server.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "coordinator/auto_increment_control.h"
@@ -119,6 +118,18 @@ class CoordinatorServiceImpl : public pb::coordinator::CoordinatorService {
                       pb::coordinator::StoreHeartbeatResponse* response, google::protobuf::Closure* done) override;
   void GetRegionMap(google::protobuf::RpcController* controller, const pb::coordinator::GetRegionMapRequest* request,
                     pb::coordinator::GetRegionMapResponse* response, google::protobuf::Closure* done) override;
+  void GetDeletedRegionMap(google::protobuf::RpcController* controller,
+                           const pb::coordinator::GetDeletedRegionMapRequest* request,
+                           pb::coordinator::GetDeletedRegionMapResponse* response,
+                           google::protobuf::Closure* done) override;
+  void AddDeletedRegionMap(google::protobuf::RpcController* controller,
+                           const pb::coordinator::AddDeletedRegionMapRequest* request,
+                           pb::coordinator::AddDeletedRegionMapResponse* response,
+                           google::protobuf::Closure* done) override;
+  void CleanDeletedRegionMap(google::protobuf::RpcController* controller,
+                             const pb::coordinator::CleanDeletedRegionMapRequest* request,
+                             pb::coordinator::CleanDeletedRegionMapResponse* response,
+                             google::protobuf::Closure* done) override;
   void GetRegionCount(google::protobuf::RpcController* controller,
                       const pb::coordinator::GetRegionCountRequest* request,
                       pb::coordinator::GetRegionCountResponse* response, google::protobuf::Closure* done) override;

@@ -30,7 +30,6 @@
 #include "common/version.h"
 #include "gflags/gflags.h"
 #include "proto/common.pb.h"
-#include "proto/coordinator.pb.h"
 
 DEFINE_string(git_commit_hash, GIT_VERSION, "current git commit version");
 DEFINE_string(git_tag_name, GIT_TAG_NAME, "current dingo version");
@@ -73,6 +72,7 @@ DEFINE_string(url, "", "coordinator url");
 DEFINE_int64(schema_id, 0, "schema_id");
 DEFINE_int64(replica, 0, "replica num");
 DEFINE_string(state, "", "state string");
+DEFINE_bool(is_force, false, "force");
 
 std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction;
 std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction_meta;
@@ -208,6 +208,12 @@ void* Sender(void* /*arg*/) {
     SendGetExecutorMap(coordinator_interaction);
   } else if (FLAGS_method == "GetRegionMap") {
     SendGetRegionMap(coordinator_interaction);
+  } else if (FLAGS_method == "GetDeletedRegionMap") {
+    SendGetDeletedRegionMap(coordinator_interaction);
+  } else if (FLAGS_method == "AddDeletedRegionMap") {
+    SendAddDeletedRegionMap(coordinator_interaction);
+  } else if (FLAGS_method == "CleanDeletedRegionMap") {
+    SendCleanDeletedRegionMap(coordinator_interaction);
   } else if (FLAGS_method == "GetRegionCount") {
     SendGetRegionCount(coordinator_interaction);
   } else if (FLAGS_method == "GetCoordinatorMap") {

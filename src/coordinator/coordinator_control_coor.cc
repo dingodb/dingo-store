@@ -27,28 +27,20 @@
 
 #include "braft/closure_helper.h"
 #include "braft/configuration.h"
-#include "braft/raft.h"
-#include "brpc/channel.h"
 #include "butil/containers/flat_map.h"
 #include "butil/scoped_lock.h"
 #include "butil/status.h"
-#include "butil/strings/string_split.h"
-#include "butil/synchronization/lock.h"
 #include "butil/time.h"
-#include "bvar/status.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "coordinator/coordinator_control.h"
-#include "engine/snapshot.h"
 #include "gflags/gflags.h"
-#include "google/protobuf/unknown_field_set.h"
 #include "metrics/coordinator_bvar_metrics.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
 #include "proto/coordinator_internal.pb.h"
 #include "proto/error.pb.h"
 #include "proto/meta.pb.h"
-#include "proto/node.pb.h"
 
 namespace dingodb {
 
@@ -505,34 +497,106 @@ void CoordinatorControl::GetRegionMapFull(pb::common::RegionMap& region_map) {
   }
 }
 
-void CoordinatorControl::GetRegionCount(uint64_t& region_count) { region_count = region_map_.Size(); }
+void CoordinatorControl::GetDeletedRegionMap(pb::common::RegionMap& region_map) {
+  // BAIDU_SCOPED_LOCK(region_map_mutex_);
+  butil::FlatMap<uint64_t, pb::common::Region> region_map_copy;
+  region_map_copy.init(30000);
+  deleted_region_map_.GetFlatMapCopy(region_map_copy);
+  for (auto& elemnt : region_map_copy) {
+    auto* tmp_region = region_map.add_regions();
+    tmp_region->CopyFrom(elemnt.second);
+  }
+}
 
-void CoordinatorControl::GetRegionIdsInMap(std::vector<uint64_t>& region_ids) { region_map_.GetAllKeys(region_ids); }
-
-void CoordinatorControl::CleanRegionBvars() {}
-
-void CoordinatorControl::CleanDeletedRegions() {
-  butil::FlatMap<uint64_t, pb::common::Region> delete_regions;
-  delete_regions.init(3000);
-  deleted_region_map_.GetFlatMapCopy(delete_regions);
-
-  for (const auto& region : delete_regions) {
-    if (region.second.deleted_timestamp() + (FLAGS_region_delete_after_deleted_time * 1000) <
-        butil::gettimeofday_ms()) {
-      // deleted_region_map_.Delete(region->first);
+butil::Status CoordinatorControl::AddDeletedRegionMap(uint64_t region_id, bool force) {
+  auto ret = region_map_.Exists(region_id);
+  if (ret) {
+    DINGO_LOG(WARNING) << "cannnot add deleted_region region_id: " << region_id << " already exists in region_map_";
+    if (!force) {
+      return butil::Status(pb::error::Errno::EINTERNAL, "region_id already exists in region_map_");
     }
   }
 
   pb::coordinator_internal::MetaIncrement meta_increment;
+  // add the deleted region to deleted_region_map_
+  auto* deleted_region_increment = meta_increment.add_deleted_regions();
+  deleted_region_increment->set_id(region_id);
+  deleted_region_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
 
-  if (meta_increment.task_lists_size() > 0) {
-    SubmitMetaIncrement(meta_increment);
-  }
+  auto* deleted_region_increment_region = deleted_region_increment->mutable_region();
+  deleted_region_increment_region->set_state(::dingodb::pb::common::RegionState::REGION_DELETE);
+  deleted_region_increment_region->set_id(region_id);
+  deleted_region_increment_region->mutable_definition()->set_name("MANUAL_ADD");
+  deleted_region_increment_region->set_deleted_timestamp(butil::gettimeofday_ms());
+
+  SubmitMetaIncrement(meta_increment);
+
+  return butil::Status::OK();
 }
 
+butil::Status CoordinatorControl::CleanDeletedRegionMap(uint64_t region_id) {
+  if (region_id == 0) {
+    butil::FlatMap<uint64_t, pb::common::Region> deleted_regions;
+    deleted_regions.init(30000);
+    auto ret = deleted_region_map_.GetFlatMapCopy(deleted_regions);
+    if (ret < 0) {
+      DINGO_LOG(WARNING) << "CleanDeletedRegionMap failed, region_id: " << region_id
+                         << " not exists in deleted_region_map_";
+    }
+
+    pb::coordinator_internal::MetaIncrement meta_increment;
+
+    for (const auto& element : deleted_regions) {
+      auto* deleted_region_increment = meta_increment.add_deleted_regions();
+      deleted_region_increment->set_id(element.second.id());
+      deleted_region_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
+
+      auto* deleted_region_increment_region = deleted_region_increment->mutable_region();
+      deleted_region_increment_region->set_id(element.second.id());
+    }
+
+    SubmitMetaIncrement(meta_increment);
+
+    return butil::Status::OK();
+  } else {
+    auto ret = deleted_region_map_.Exists(region_id);
+    if (!ret) {
+      DINGO_LOG(WARNING) << "CleanDeletedRegionMap failed, region_id: " << region_id
+                         << " not exists in deleted_region_map_";
+      return butil::Status(pb::error::Errno::EINTERNAL, "region_id not exists in deleted_region_map_");
+    }
+
+    pb::coordinator_internal::MetaIncrement meta_increment;
+    auto* deleted_region_increment = meta_increment.add_deleted_regions();
+    deleted_region_increment->set_id(region_id);
+    deleted_region_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
+
+    auto* deleted_region_increment_region = deleted_region_increment->mutable_region();
+    deleted_region_increment_region->set_id(region_id);
+
+    SubmitMetaIncrement(meta_increment);
+
+    return butil::Status::OK();
+  }
+
+  return butil::Status::OK();
+}
+
+void CoordinatorControl::GetRegionCount(uint64_t& region_count) { region_count = region_map_.Size(); }
+
+void CoordinatorControl::GetRegionIdsInMap(std::vector<uint64_t>& region_ids) { region_map_.GetAllKeys(region_ids); }
+
 void CoordinatorControl::RecycleOrphanRegionOnStore() {
-  std::set<uint64_t> delete_region_ids;
-  deleted_region_map_.GetAllKeys(delete_region_ids);
+  DINGO_LOG(INFO) << "Start to RecycleOrphanRegionOnStore, timestamp=" << butil::gettimeofday_ms();
+
+  butil::FlatMap<uint64_t, pb::common::Region> delete_regions;
+  delete_regions.init(3000);
+  deleted_region_map_.GetFlatMapCopy(delete_regions);
+
+  if (delete_regions.empty()) {
+    DINGO_LOG(DEBUG) << "No region to recycle";
+    return;
+  }
 
   std::map<uint64_t, std::vector<uint64_t>> region_id_on_store;
 
@@ -549,12 +613,37 @@ void CoordinatorControl::RecycleOrphanRegionOnStore() {
 
   pb::coordinator_internal::MetaIncrement meta_increment;
 
+  // delete orphan region on store
   for (const auto& ids : region_id_on_store) {
     DINGO_LOG(INFO) << "Start to RecycleOrphanRegionOnStore for store_id: " << ids.first
                     << " region_id size: " << ids.second.size();
+
+    pb::coordinator::StoreOperation store_operation;
+    bool is_store_operation_get = false;
+
     for (const auto& region_id : ids.second) {
       // if region_id is in delete_region_map, need to delete region on this store
-      if (delete_region_ids.find(region_id) != delete_region_ids.end()) {
+      if (delete_regions.seek(region_id) != nullptr) {
+        if (!is_store_operation_get) {
+          store_operation_map_.Get(ids.first, store_operation);
+          is_store_operation_get = true;
+        }
+
+        bool region_need_recycle = true;
+        for (const auto& region_cmd : store_operation.region_cmds()) {
+          if (region_cmd.region_id() == region_id &&
+              region_cmd.region_cmd_type() == pb::coordinator::RegionCmdType::CMD_DELETE) {
+            region_need_recycle = false;
+            break;
+          }
+        }
+
+        if (!region_need_recycle) {
+          DINGO_LOG(INFO) << "RecycleOrphanRegionOnStore delete skip because is_deleting store_id:" << ids.first
+                          << " region_id: " << region_id;
+          continue;
+        }
+
         DINGO_LOG(INFO) << "RecycleOrphanRegionOnStore delete store_id:" << ids.first << " region_id: " << region_id;
 
         auto* increment_task_list = CreateTaskList(meta_increment);
@@ -563,12 +652,32 @@ void CoordinatorControl::RecycleOrphanRegionOnStore() {
         AddDeleteTask(increment_task_list, ids.first, region_id, meta_increment);
 
         // this is purge_region task
-        AddPurgeTask(increment_task_list, ids.first, region_id, meta_increment);
+        // AddPurgeTask(increment_task_list, ids.first, region_id, meta_increment);
       }
     }
   }
 
-  if (meta_increment.task_lists_size() > 0) {
+  // delete too old delete_region
+  for (const auto& region : delete_regions) {
+    DINGO_LOG(INFO) << "RecycleOrphanRegionOnStore meet obsolete deleted_region region_id:" << region.first
+                    << " deleted_timestamp: " << region.second.deleted_timestamp()
+                    << " region_delete_after_deleted_time: " << FLAGS_region_delete_after_deleted_time;
+
+    if (region.second.deleted_timestamp() + (FLAGS_region_delete_after_deleted_time * 1000) <
+        butil::gettimeofday_ms()) {
+      DINGO_LOG(INFO) << "RecycleOrphanRegionOnStore delete obsolete deleted_region region_id:" << region.first
+                      << " deleted_timestamp: " << region.second.deleted_timestamp()
+                      << " region_delete_after_deleted_time: " << FLAGS_region_delete_after_deleted_time;
+
+      auto* deleted_region_increment = meta_increment.add_deleted_regions();
+      deleted_region_increment->set_id(region.second.id());
+      deleted_region_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
+      auto* deleted_region = deleted_region_increment->mutable_region();
+      deleted_region->set_id(region.second.id());
+    }
+  }
+
+  if (meta_increment.ByteSizeLong() > 0) {
     SubmitMetaIncrement(meta_increment);
   }
 }
@@ -970,6 +1079,7 @@ butil::Status CoordinatorControl::DropRegion(uint64_t region_id, bool need_updat
         // deleted_region_increment_region->CopyFrom(region_to_delete);
         deleted_region_increment_region->set_state(::dingodb::pb::common::RegionState::REGION_DELETE);
         deleted_region_increment_region->set_id(region_id);
+        deleted_region_increment_region->mutable_definition()->set_name(region_to_delete.definition().name());
         deleted_region_increment_region->set_deleted_timestamp(butil::gettimeofday_ms());
 
         // use TaskList to drop & purge region
@@ -980,7 +1090,7 @@ butil::Status CoordinatorControl::DropRegion(uint64_t region_id, bool need_updat
           AddDeleteTask(increment_task_list, peer.store_id(), region_id, meta_increment);
 
           // this is purge_region task
-          AddPurgeTask(increment_task_list, peer.store_id(), region_id, meta_increment);
+          // AddPurgeTask(increment_task_list, peer.store_id(), region_id, meta_increment);
         }
 
         // need to update table's range distribution if table_id > 0
@@ -1512,7 +1622,7 @@ butil::Status CoordinatorControl::ChangePeerRegionWithTaskList(
                            meta_increment);
 
     // this is purge_region task
-    AddPurgeTask(increment_task_list, new_store_ids_diff_less.at(0), region_id, meta_increment);
+    // AddPurgeTask(increment_task_list, new_store_ids_diff_less.at(0), region_id, meta_increment);
 
   } else if (new_store_ids_diff_more.size() == 1) {
     // expand region
@@ -2648,28 +2758,28 @@ void CoordinatorControl::AddDeleteTaskWithCheck(
   region_cmd_to_delete->mutable_delete_request()->set_region_id(region_id);
 }
 
-void CoordinatorControl::AddPurgeTask(pb::coordinator::TaskList* task_list, uint64_t store_id, uint64_t region_id,
-                                      pb::coordinator_internal::MetaIncrement& meta_increment) {
-  // this is purge_region task
-  auto* purge_region_task = task_list->add_tasks();
+// void CoordinatorControl::AddPurgeTask(pb::coordinator::TaskList* task_list, uint64_t store_id, uint64_t region_id,
+//                                       pb::coordinator_internal::MetaIncrement& meta_increment) {
+//   // this is purge_region task
+//   auto* purge_region_task = task_list->add_tasks();
 
-  // precheck if region on store is DELETED
-  auto* purge_region_check = purge_region_task->mutable_pre_check();
-  purge_region_check->set_type(::dingodb::pb::coordinator::TaskPreCheckType::STORE_REGION_CHECK);
-  purge_region_check->mutable_store_region_check()->set_store_id(store_id);
-  purge_region_check->mutable_store_region_check()->set_region_id(region_id);
-  purge_region_check->mutable_store_region_check()->set_store_region_state(
-      ::dingodb::pb::common::StoreRegionState::DELETED);
+//   // precheck if region on store is DELETED
+//   auto* purge_region_check = purge_region_task->mutable_pre_check();
+//   purge_region_check->set_type(::dingodb::pb::coordinator::TaskPreCheckType::STORE_REGION_CHECK);
+//   purge_region_check->mutable_store_region_check()->set_store_id(store_id);
+//   purge_region_check->mutable_store_region_check()->set_region_id(region_id);
+//   purge_region_check->mutable_store_region_check()->set_store_region_state(
+//       ::dingodb::pb::common::StoreRegionState::DELETED);
 
-  auto* store_operation_purge = purge_region_task->add_store_operations();
-  store_operation_purge->set_id(store_id);
-  auto* region_cmd_to_purge = store_operation_purge->add_region_cmds();
-  region_cmd_to_purge->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
-  region_cmd_to_purge->set_region_cmd_type(::dingodb::pb::coordinator::RegionCmdType::CMD_PURGE);
-  region_cmd_to_purge->set_region_id(region_id);
-  region_cmd_to_purge->set_create_timestamp(butil::gettimeofday_ms());
-  region_cmd_to_purge->mutable_purge_request()->set_region_id(region_id);
-}
+//   auto* store_operation_purge = purge_region_task->add_store_operations();
+//   store_operation_purge->set_id(store_id);
+//   auto* region_cmd_to_purge = store_operation_purge->add_region_cmds();
+//   region_cmd_to_purge->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
+//   region_cmd_to_purge->set_region_cmd_type(::dingodb::pb::coordinator::RegionCmdType::CMD_PURGE);
+//   region_cmd_to_purge->set_region_id(region_id);
+//   region_cmd_to_purge->set_create_timestamp(butil::gettimeofday_ms());
+//   region_cmd_to_purge->mutable_purge_request()->set_region_id(region_id);
+// }
 
 void CoordinatorControl::AddChangePeerTask(pb::coordinator::TaskList* task_list, uint64_t store_id, uint64_t region_id,
                                            const pb::common::RegionDefinition& region_definition,

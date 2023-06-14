@@ -673,6 +673,61 @@ void CoordinatorServiceImpl::GetRegionMap(google::protobuf::RpcController * /*co
   response->set_epoch(regionmap.epoch());
 }
 
+void CoordinatorServiceImpl::GetDeletedRegionMap(google::protobuf::RpcController * /*controller*/,
+                                                 const pb::coordinator::GetDeletedRegionMapRequest *request,
+                                                 pb::coordinator::GetDeletedRegionMapResponse *response,
+                                                 google::protobuf::Closure *done) {
+  brpc::ClosureGuard const done_guard(done);
+
+  auto is_leader = this->coordinator_control_->IsLeader();
+  DINGO_LOG(DEBUG) << "Receive Get RegionMap Request, IsLeader:" << is_leader << ", Request:" << request->DebugString();
+
+  if (!is_leader) {
+    RedirectResponse(response);
+    return;
+  }
+
+  pb::common::RegionMap regionmap;
+  this->coordinator_control_->GetDeletedRegionMap(regionmap);
+
+  response->mutable_regionmap()->CopyFrom(regionmap);
+  response->set_epoch(regionmap.epoch());
+}
+
+void CoordinatorServiceImpl::AddDeletedRegionMap(google::protobuf::RpcController * /*controller*/,
+                                                 const pb::coordinator::AddDeletedRegionMapRequest *request,
+                                                 pb::coordinator::AddDeletedRegionMapResponse *response,
+                                                 google::protobuf::Closure *done) {
+  brpc::ClosureGuard const done_guard(done);
+
+  auto is_leader = this->coordinator_control_->IsLeader();
+  DINGO_LOG(DEBUG) << "Receive Get RegionMap Request, IsLeader:" << is_leader << ", Request:" << request->DebugString();
+
+  if (!is_leader) {
+    RedirectResponse(response);
+    return;
+  }
+
+  auto ret = coordinator_control_->AddDeletedRegionMap(request->region_id(), request->force());
+}
+
+void CoordinatorServiceImpl::CleanDeletedRegionMap(google::protobuf::RpcController * /*controller*/,
+                                                   const pb::coordinator::CleanDeletedRegionMapRequest *request,
+                                                   pb::coordinator::CleanDeletedRegionMapResponse *response,
+                                                   google::protobuf::Closure *done) {
+  brpc::ClosureGuard const done_guard(done);
+
+  auto is_leader = this->coordinator_control_->IsLeader();
+  DINGO_LOG(DEBUG) << "Receive Get RegionMap Request, IsLeader:" << is_leader << ", Request:" << request->DebugString();
+
+  if (!is_leader) {
+    RedirectResponse(response);
+    return;
+  }
+
+  auto ret = coordinator_control_->CleanDeletedRegionMap(request->region_id());
+}
+
 void CoordinatorServiceImpl::GetRegionCount(google::protobuf::RpcController * /*controller*/,
                                             const pb::coordinator::GetRegionCountRequest *request,
                                             pb::coordinator::GetRegionCountResponse *response,

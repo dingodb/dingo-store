@@ -25,22 +25,15 @@
 #include <vector>
 
 #include "braft/configuration.h"
-#include "brpc/channel.h"
-#include "bthread/id.h"
-#include "bthread/types.h"
 #include "butil/containers/flat_map.h"
 #include "butil/scoped_lock.h"
-#include "butil/strings/string_split.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "common/safe_map.h"
 #include "coordinator/coordinator_meta_storage.h"
-#include "engine/snapshot.h"
-#include "google/protobuf/unknown_field_set.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator_internal.pb.h"
 #include "proto/meta.pb.h"
-#include "proto/node.pb.h"
 
 namespace dingodb {
 
@@ -86,6 +79,7 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   schema_map_.Init(10000);                // schema_map_ is a big map
   table_map_.Init(10000);                 // table_map_ is a big map
   region_map_.Init(30000);                // region_map_ is a big map
+  deleted_region_map_.Init(30000);        // deleted_region_map_ is a big map
   coordinator_map_.Init(10);              // coordinator_map_ is a small map
   store_map_.Init(100);                   // store_map_ is a small map
   executor_map_.Init(100);                // executor_map_ is a small map

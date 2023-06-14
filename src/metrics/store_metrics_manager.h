@@ -30,7 +30,6 @@
 #include "meta/store_meta_manager.h"
 #include "meta/transform_kv_able.h"
 #include "proto/common.pb.h"
-#include "proto/store_internal.pb.h"
 
 namespace dingodb {
 
