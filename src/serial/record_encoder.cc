@@ -18,7 +18,7 @@
 #include <string>
 
 #include "proto/common.pb.h"
-#include "serial/keyvalue.h"
+#include "serial/utils.h"
 
 namespace dingodb {
 

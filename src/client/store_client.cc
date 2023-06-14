@@ -27,7 +27,7 @@ DEFINE_bool(log_each_request, true, "Print log for each request");
 DEFINE_int32(thread_num, 1, "Number of threads sending requests");
 DEFINE_int32(req_num, 1, "Number of requests");
 DEFINE_int32(round_num, 1, "Round of requests");
-DEFINE_int32(timeout_ms, 500, "Timeout for each request");
+DEFINE_int32(timeout_ms, 5000, "Timeout for each request");
 DEFINE_string(store_addrs, "", "server addrs");
 DEFINE_string(raft_addrs, "127.0.0.1:10101:0,127.0.0.1:10102:0,127.0.0.1:10103:0", "raft addrs");
 DEFINE_string(coor_url, "", "coordinator url");

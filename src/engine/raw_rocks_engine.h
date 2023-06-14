@@ -28,19 +28,15 @@
 #include "engine/iterator.h"
 #include "engine/raw_engine.h"
 #include "engine/snapshot.h"
-#include "openssl/core_dispatch.h"
 #include "proto/common.pb.h"
 #include "proto/store_internal.pb.h"
-#include "rocksdb/cache.h"
 #include "rocksdb/convenience.h"
 #include "rocksdb/db.h"
 #include "rocksdb/listener.h"
 #include "rocksdb/options.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/slice_transform.h"
-#include "rocksdb/status.h"
 #include "rocksdb/utilities/checkpoint.h"
-#include "server/server.h"
 
 namespace dingodb {
 

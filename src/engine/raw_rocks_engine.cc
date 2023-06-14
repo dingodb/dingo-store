@@ -35,14 +35,10 @@
 #include <vector>
 
 #include "butil/compiler_specific.h"
-#include "butil/macros.h"
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
-#include "common/safe_map.h"
-#include "config/config_manager.h"
-#include "engine/engine.h"
-#include "engine/raft_kv_engine.h"
+#include "common/vector_index.h"
 #include "engine/raw_engine.h"
 #include "fmt/core.h"
 #include "proto/common.pb.h"
@@ -53,6 +49,7 @@
 #include "rocksdb/iterator.h"
 #include "rocksdb/table.h"
 #include "rocksdb/write_batch.h"
+#include "server/server.h"
 
 namespace dingodb {
 
@@ -61,15 +58,7 @@ class RocksIterator : public EngineIterator {
   explicit RocksIterator(std::shared_ptr<dingodb::Snapshot> snapshot, std::shared_ptr<rocksdb::DB> db,
                          std::shared_ptr<RawRocksEngine::ColumnFamily> column_family, const std::string& start_key,
                          const std::string& end_key)
-      : snapshot_(snapshot),
-        db_(db),
-        column_family_(column_family),
-        iter_(nullptr),
-        start_key_(start_key),
-        end_key_(end_key),
-        with_start_(true),
-        with_end_(false),
-        has_valid_kv_(false) {
+      : snapshot_(snapshot), db_(db), column_family_(column_family), start_key_(start_key), end_key_(end_key) {
     rocksdb::ReadOptions read_option;
     read_option.auto_prefix_mode = true;
     read_option.snapshot = static_cast<const rocksdb::Snapshot*>(
@@ -193,14 +182,14 @@ class RocksIterator : public EngineIterator {
   std::shared_ptr<dingodb::Snapshot> snapshot_;
   std::shared_ptr<rocksdb::DB> db_;
   std::shared_ptr<RawRocksEngine::ColumnFamily> column_family_;
-  rocksdb::Iterator* iter_;
+  rocksdb::Iterator* iter_{};
   const std::string name_ = "Rocks";
   uint32_t id_ = static_cast<uint32_t>(EnumEngineIterator::kRocks);
   std::string start_key_;
   std::string end_key_;
-  bool with_start_;
-  bool with_end_;
-  bool has_valid_kv_;
+  bool with_start_{};
+  bool with_end_{};
+  bool has_valid_kv_{};
 };
 
 RawRocksEngine::RawRocksEngine() : db_(nullptr), column_families_({}) {}
@@ -454,7 +443,7 @@ void SetCfConfigurationElementWrapper(const RawRocksEngine::CfDefaultConf& defau
                                       T& value) {  // NOLINT
   if (auto iter = default_conf.find(name); iter != default_conf.end()) {
     if (iter->second.has_value()) {
-      T default_value = static_cast<T>(std::get<int64_t>(iter->second.value()));
+      T default_value = static_cast<T>(std::get<int64_t>(iter->second.value()));  // NOLINT
 
       SetCfConfigurationElement(cf_configuration, name, static_cast<T>(default_value), value);
     }
@@ -1032,7 +1021,6 @@ butil::Status RawRocksEngine::Writer::VectorDelete(uint64_t region_id, uint64_t 
     }
   }
 
-  // write vector index
   // write vector index
   std::shared_ptr<VectorIndex> vector_index;
   auto ret = Server::GetInstance()->GetRegionController()->vector_index_map.Get(region_id, vector_index);
