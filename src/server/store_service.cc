@@ -176,13 +176,13 @@ void StoreServiceImpl::KvGet(google::protobuf::RpcController* controller,
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
 
-  DINGO_LOG(DEBUG) << "KvGet request: " << request->ShortDebugString();
-
   butil::Status status = ValidateKvGetRequest(request);
   if (!status.ok()) {
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
+    DINGO_LOG(ERROR) << fmt::format("KvGet request: {} response: {}", request->ShortDebugString(),
+                                    response->ShortDebugString());
     return;
   }
 
@@ -202,11 +202,16 @@ void StoreServiceImpl::KvGet(google::protobuf::RpcController* controller,
       err->set_errmsg("Not leader, please redirect leader.");
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
+    DINGO_LOG(ERROR) << fmt::format("KvGet request: {} response: {}", request->ShortDebugString(),
+                                    response->ShortDebugString());
     return;
   }
   if (!kvs.empty()) {
     response->set_value(kvs[0].value());
   }
+
+  DINGO_LOG(DEBUG) << fmt::format("KvGet request: {} response: {}", request->ShortDebugString(),
+                                  response->ShortDebugString());
 }
 
 butil::Status ValidateKvBatchGetRequest(const dingodb::pb::store::KvBatchGetRequest* request) {
@@ -233,7 +238,6 @@ void StoreServiceImpl::KvBatchGet(google::protobuf::RpcController* controller,
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
 
-  DINGO_LOG(DEBUG) << "KvBatchGet request: " << request->ShortDebugString();
   if (request->keys().empty()) {
     return;
   }
@@ -243,6 +247,8 @@ void StoreServiceImpl::KvBatchGet(google::protobuf::RpcController* controller,
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
+    DINGO_LOG(ERROR) << fmt::format("KvBatchGet request: {} response: {}", request->ShortDebugString(),
+                                    response->ShortDebugString());
     return;
   }
 
@@ -260,10 +266,15 @@ void StoreServiceImpl::KvBatchGet(google::protobuf::RpcController* controller,
       err->set_errmsg("Not leader, please redirect leader.");
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
+    DINGO_LOG(ERROR) << fmt::format("KvBatchGet request: {} response: {}", request->ShortDebugString(),
+                                    response->ShortDebugString());
     return;
   }
 
   Helper::VectorToPbRepeated(kvs, response->mutable_kvs());
+
+  DINGO_LOG(DEBUG) << fmt::format("KvBatchGet request: {} response: {}", request->ShortDebugString(),
+                                  response->ShortDebugString());
 }
 
 butil::Status ValidateKvPutRequest(const dingodb::pb::store::KvPutRequest* request) {
@@ -296,8 +307,9 @@ void StoreServiceImpl::KvPut(google::protobuf::RpcController* controller,
     return;
   }
 
-  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done_guard.release(), response);
+  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done_guard.release(), request, response);
   ctx->SetRegionId(request->region_id()).SetCfName(Constant::kStoreDataCF);
+
   auto* mut_request = const_cast<dingodb::pb::store::KvPutRequest*>(request);
   std::vector<pb::common::KeyValue> kvs;
   kvs.emplace_back(std::move(*mut_request->release_kv()));
@@ -348,10 +360,12 @@ void StoreServiceImpl::KvBatchPut(google::protobuf::RpcController* controller,
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
+    DINGO_LOG(ERROR) << fmt::format("KvBatchPut request: {} response: {}", request->ShortDebugString(),
+                                    response->ShortDebugString());
     return;
   }
 
-  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done_guard.release(), response);
+  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done_guard.release(), request, response);
   ctx->SetRegionId(request->region_id()).SetCfName(Constant::kStoreDataCF);
   auto* mut_request = const_cast<dingodb::pb::store::KvBatchPutRequest*>(request);
   status = storage_->KvPut(ctx, Helper::PbRepeatedToVector(mut_request->mutable_kvs()));
@@ -364,6 +378,8 @@ void StoreServiceImpl::KvBatchPut(google::protobuf::RpcController* controller,
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
     brpc::ClosureGuard done_guard(done);
+    DINGO_LOG(ERROR) << fmt::format("KvBatchPut request: {} response: {}", request->ShortDebugString(),
+                                    response->ShortDebugString());
   }
 }
 
@@ -393,10 +409,12 @@ void StoreServiceImpl::KvPutIfAbsent(google::protobuf::RpcController* controller
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
+    DINGO_LOG(ERROR) << fmt::format("KvPutIfAbsent request: {} response: {}", request->ShortDebugString(),
+                                    response->ShortDebugString());
     return;
   }
 
-  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done_guard.release(), response);
+  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done_guard.release(), request, response);
   ctx->SetRegionId(request->region_id()).SetCfName(Constant::kStoreDataCF);
   auto* mut_request = const_cast<dingodb::pb::store::KvPutIfAbsentRequest*>(request);
   std::vector<pb::common::KeyValue> kvs;
@@ -411,6 +429,8 @@ void StoreServiceImpl::KvPutIfAbsent(google::protobuf::RpcController* controller
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
     brpc::ClosureGuard done_guard(done);
+    DINGO_LOG(ERROR) << fmt::format("KvPutIfAbsent request: {} response: {}", request->ShortDebugString(),
+                                    response->ShortDebugString());
   }
 }
 
@@ -449,10 +469,12 @@ void StoreServiceImpl::KvBatchPutIfAbsent(google::protobuf::RpcController* contr
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
+    DINGO_LOG(ERROR) << fmt::format("KvBatchPutIfAbsent request: {} response: {}", request->ShortDebugString(),
+                                    response->ShortDebugString());
     return;
   }
 
-  std::shared_ptr<Context> const ctx = std::make_shared<Context>(cntl, done_guard.release(), response);
+  std::shared_ptr<Context> const ctx = std::make_shared<Context>(cntl, done_guard.release(), request, response);
   ctx->SetRegionId(request->region_id()).SetCfName(Constant::kStoreDataCF);
 
   auto* mut_request = const_cast<dingodb::pb::store::KvBatchPutIfAbsentRequest*>(request);
@@ -466,6 +488,8 @@ void StoreServiceImpl::KvBatchPutIfAbsent(google::protobuf::RpcController* contr
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
     brpc::ClosureGuard const done_guard(done);
+    DINGO_LOG(ERROR) << fmt::format("KvBatchPutIfAbsent request: {} response: {}", request->ShortDebugString(),
+                                    response->ShortDebugString());
   }
 }
 
@@ -503,10 +527,12 @@ void StoreServiceImpl::KvBatchDelete(google::protobuf::RpcController* controller
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
+    DINGO_LOG(ERROR) << fmt::format("KvBatchDelete request: {} response: {}", request->ShortDebugString(),
+                                    response->ShortDebugString());
     return;
   }
 
-  std::shared_ptr<Context> const ctx = std::make_shared<Context>(cntl, done_guard.release(), response);
+  std::shared_ptr<Context> const ctx = std::make_shared<Context>(cntl, done_guard.release(), request, response);
   ctx->SetRegionId(request->region_id()).SetCfName(Constant::kStoreDataCF);
   auto* mut_request = const_cast<dingodb::pb::store::KvBatchDeleteRequest*>(request);
   status = storage_->KvDelete(ctx, Helper::PbRepeatedToVector(mut_request->mutable_keys()));
@@ -519,6 +545,8 @@ void StoreServiceImpl::KvBatchDelete(google::protobuf::RpcController* controller
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
     brpc::ClosureGuard const done_guard(done);
+    DINGO_LOG(ERROR) << fmt::format("KvBatchDelete request: {} response: {}", request->ShortDebugString(),
+                                    response->ShortDebugString());
   }
 }
 
@@ -561,13 +589,15 @@ void StoreServiceImpl::KvDeleteRange(google::protobuf::RpcController* controller
       auto* err = response->mutable_error();
       err->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
       err->set_errmsg(status.error_str());
+      DINGO_LOG(ERROR) << fmt::format("KvDeleteRange request: {} response: {}", request->ShortDebugString(),
+                                      response->ShortDebugString());
     }
     return;
   }
 
   auto correction_range = Helper::IntersectRange(region->Range(), uniform_range);
 
-  std::shared_ptr<Context> const ctx = std::make_shared<Context>(cntl, done_guard.release(), response);
+  std::shared_ptr<Context> const ctx = std::make_shared<Context>(cntl, done_guard.release(), request, response);
   ctx->SetRegionId(request->region_id()).SetCfName(Constant::kStoreDataCF);
   auto* mut_request = const_cast<dingodb::pb::store::KvDeleteRangeRequest*>(request);
   status = storage_->KvDeleteRange(ctx, correction_range);
@@ -580,6 +610,8 @@ void StoreServiceImpl::KvDeleteRange(google::protobuf::RpcController* controller
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
     brpc::ClosureGuard const done_guard(done);
+    DINGO_LOG(ERROR) << fmt::format("KvDeleteRange request: {} response: {}", request->ShortDebugString(),
+                                    response->ShortDebugString());
   }
 }
 
@@ -602,17 +634,20 @@ void StoreServiceImpl::KvCompareAndSet(google::protobuf::RpcController* controll
                                        pb::store::KvCompareAndSetResponse* response, google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(DEBUG) << "KvCompareAndSet request: " << request->ShortDebugString();
+
+  DINGO_LOG(DEBUG) << fmt::format("KvCompareAndSet request: {}", request->ShortDebugString());
 
   butil::Status status = ValidateKvCompareAndSetRequest(request);
   if (!status.ok()) {
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
+    DINGO_LOG(ERROR) << fmt::format("KvCompareAndSet request: {} response: {}", request->ShortDebugString(),
+                                    response->ShortDebugString());
     return;
   }
 
-  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done_guard.release(), response);
+  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done_guard.release(), request, response);
   ctx->SetRegionId(request->region_id()).SetCfName(Constant::kStoreDataCF);
   // auto* mut_request = const_cast<dingodb::pb::store::KvCompareAndSetRequest*>(request);
 
@@ -626,6 +661,8 @@ void StoreServiceImpl::KvCompareAndSet(google::protobuf::RpcController* controll
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
     brpc::ClosureGuard done_guard(done);
+    DINGO_LOG(ERROR) << fmt::format("KvCompareAndSet request: {} response: {}", request->ShortDebugString(),
+                                    response->ShortDebugString());
   }
 }
 
@@ -659,7 +696,7 @@ void StoreServiceImpl::KvBatchCompareAndSet(google::protobuf::RpcController* con
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
 
-  DINGO_LOG(DEBUG) << "KvBatchCompareAndSet request: " << request->ShortDebugString();
+  DINGO_LOG(DEBUG) << fmt::format("KvBatchCompareAndSet request: {}", request->ShortDebugString());
 
   if (request->kvs().empty()) {
     return;
@@ -670,6 +707,8 @@ void StoreServiceImpl::KvBatchCompareAndSet(google::protobuf::RpcController* con
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
+    DINGO_LOG(ERROR) << fmt::format("KvBatchCompareAndSet request: {} response: {}", request->ShortDebugString(),
+                                    response->ShortDebugString());
     return;
   }
 
@@ -688,6 +727,8 @@ void StoreServiceImpl::KvBatchCompareAndSet(google::protobuf::RpcController* con
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
     brpc::ClosureGuard done_guard(done);
+    DINGO_LOG(ERROR) << fmt::format("KvBatchCompareAndSet request: {} response: {}", request->ShortDebugString(),
+                                    response->ShortDebugString());
   }
 }
 
@@ -721,8 +762,6 @@ void StoreServiceImpl::KvScanBegin(google::protobuf::RpcController* controller,
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
 
-  DINGO_LOG(DEBUG) << "KvScanBegin request: " << request->ShortDebugString();
-
   auto region = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(request->region_id());
   auto uniform_range = Helper::TransformRangeWithOptions(request->range());
   butil::Status status = ValidateKvScanBeginRequest(region, uniform_range);
@@ -731,8 +770,10 @@ void StoreServiceImpl::KvScanBegin(google::protobuf::RpcController* controller,
       auto* err = response->mutable_error();
       err->set_errcode(static_cast<Errno>(status.error_code()));
       err->set_errmsg(status.error_str());
-    }
 
+      DINGO_LOG(ERROR) << fmt::format("KvScanBegin request: {} response: {}", request->ShortDebugString(),
+                                      response->ShortDebugString());
+    }
     return;
   }
   auto correction_range = Helper::IntersectRange(region->Range(), uniform_range);
@@ -754,6 +795,8 @@ void StoreServiceImpl::KvScanBegin(google::protobuf::RpcController* controller,
       err->set_errmsg("Not leader, please redirect leader.");
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
+    DINGO_LOG(ERROR) << fmt::format("KvScanBegin request: {} response: {}", request->ShortDebugString(),
+                                    response->ShortDebugString());
     return;
   }
 
@@ -762,6 +805,9 @@ void StoreServiceImpl::KvScanBegin(google::protobuf::RpcController* controller,
   }
 
   *response->mutable_scan_id() = scan_id;
+
+  DINGO_LOG(DEBUG) << fmt::format("KvScanBegin request: {} response: {}", request->ShortDebugString(),
+                                  response->ShortDebugString());
 }
 
 butil::Status ValidateKvScanContinueRequest(const dingodb::pb::store::KvScanContinueRequest* request) {
@@ -788,13 +834,13 @@ void StoreServiceImpl::KvScanContinue(google::protobuf::RpcController* controlle
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
 
-  DINGO_LOG(DEBUG) << "KvScanContinue request: " << request->ShortDebugString();
-
   butil::Status status = ValidateKvScanContinueRequest(request);
   if (!status.ok()) {
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
+    DINGO_LOG(ERROR) << fmt::format("KvScanContinue request: {} response: {}", request->ShortDebugString(),
+                                    response->ShortDebugString());
     return;
   }
 
@@ -812,12 +858,17 @@ void StoreServiceImpl::KvScanContinue(google::protobuf::RpcController* controlle
       err->set_errmsg("Not leader, please redirect leader.");
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
+    DINGO_LOG(ERROR) << fmt::format("KvScanContinue request: {} response: {}", request->ShortDebugString(),
+                                    response->ShortDebugString());
     return;
   }
 
   if (!kvs.empty()) {
     Helper::VectorToPbRepeated(kvs, response->mutable_kvs());
   }
+
+  DINGO_LOG(DEBUG) << fmt::format("KvScanContinue request: {} response: {}", request->ShortDebugString(),
+                                  response->ShortDebugString());
 }
 
 butil::Status ValidateKvScanReleaseRequest(const dingodb::pb::store::KvScanReleaseRequest* request) {
@@ -840,13 +891,13 @@ void StoreServiceImpl::KvScanRelease(google::protobuf::RpcController* controller
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
 
-  DINGO_LOG(DEBUG) << "KvScanRelease request: " << request->ShortDebugString();
-
   butil::Status status = ValidateKvScanReleaseRequest(request);
   if (!status.ok()) {
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
+    DINGO_LOG(ERROR) << fmt::format("KvScanRelease request: {} response: {}", request->ShortDebugString(),
+                                    response->ShortDebugString());
     return;
   }
 
@@ -864,8 +915,13 @@ void StoreServiceImpl::KvScanRelease(google::protobuf::RpcController* controller
       err->set_errmsg("Not leader, please redirect leader.");
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
+    DINGO_LOG(ERROR) << fmt::format("KvScanRelease request: {} response: {}", request->ShortDebugString(),
+                                    response->ShortDebugString());
     return;
   }
+
+  DINGO_LOG(DEBUG) << fmt::format("KvScanRelease request: {} response: {}", request->ShortDebugString(),
+                                  response->ShortDebugString());
 }
 
 void StoreServiceImpl::Debug(google::protobuf::RpcController* controller,

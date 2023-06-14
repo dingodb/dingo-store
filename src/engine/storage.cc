@@ -88,6 +88,10 @@ butil::Status Storage::KvPut(std::shared_ptr<Context> ctx, const std::vector<pb:
   return engine_->AsyncWrite(ctx, write_data, [](std::shared_ptr<Context> ctx, butil::Status status) {
     if (!status.ok()) {
       Helper::SetPbMessageError(status, ctx->Response());
+      if (ctx->Request() != nullptr && ctx->Response() != nullptr) {
+        LOG(ERROR) << fmt::format("KvPut request: {} response: {}", ctx->Request()->ShortDebugString(),
+                                  ctx->Response()->ShortDebugString());
+      }
     }
   });
 }
@@ -104,6 +108,10 @@ butil::Status Storage::KvPutIfAbsent(std::shared_ptr<Context> ctx, const std::ve
   return engine_->AsyncWrite(ctx, write_data, [](std::shared_ptr<Context> ctx, butil::Status status) {
     if (!status.ok()) {
       Helper::SetPbMessageError(status, ctx->Response());
+      if (ctx->Request() != nullptr && ctx->Response() != nullptr) {
+        LOG(ERROR) << fmt::format("KvPutIfAbsent request: {} response: {}", ctx->Request()->ShortDebugString(),
+                                  ctx->Response()->ShortDebugString());
+      }
     }
   });
 }
@@ -118,6 +126,10 @@ butil::Status Storage::KvDelete(std::shared_ptr<Context> ctx, const std::vector<
   return engine_->AsyncWrite(ctx, write_data, [](std::shared_ptr<Context> ctx, butil::Status status) {
     if (!status.ok()) {
       Helper::SetPbMessageError(status, ctx->Response());
+      if (ctx->Request() != nullptr && ctx->Response() != nullptr) {
+        LOG(ERROR) << fmt::format("KvDelete request: {} response: {}", ctx->Request()->ShortDebugString(),
+                                  ctx->Response()->ShortDebugString());
+      }
     }
   });
 }
@@ -132,6 +144,10 @@ butil::Status Storage::KvDeleteRange(std::shared_ptr<Context> ctx, const pb::com
   return engine_->AsyncWrite(ctx, write_data, [](std::shared_ptr<Context> ctx, butil::Status status) {
     if (!status.ok()) {
       Helper::SetPbMessageError(status, ctx->Response());
+      if (ctx->Request() != nullptr && ctx->Response() != nullptr) {
+        LOG(ERROR) << fmt::format("KvDeleteRange request: {} response: {}", ctx->Request()->ShortDebugString(),
+                                  ctx->Response()->ShortDebugString());
+      }
     }
   });
 }
@@ -148,6 +164,10 @@ butil::Status Storage::KvCompareAndSet(std::shared_ptr<Context> ctx, const std::
   return engine_->AsyncWrite(ctx, write_data, [](std::shared_ptr<Context> ctx, butil::Status status) {
     if (!status.ok()) {
       Helper::SetPbMessageError(status, ctx->Response());
+      if (ctx->Request() != nullptr && ctx->Response() != nullptr) {
+        LOG(ERROR) << fmt::format("KvCompareAndSet request: {} response: {}", ctx->Request()->ShortDebugString(),
+                                  ctx->Response()->ShortDebugString());
+      }
     }
   });
 }
