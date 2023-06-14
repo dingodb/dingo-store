@@ -71,7 +71,7 @@ butil::Status Coprocessor::Open(const pb::store::Coprocessor& coprocessor) {
   // index from 0 ~ size-1
   status = Utils::CheckSerialSchema(original_serial_schemas_sorted_);
   if (!status.ok()) {
-    std::string error_message = fmt::format("original_serial_schemas_ check failed");
+    std::string error_message = fmt::format("original_serial_schemas_sorted_ check failed");
     DINGO_LOG(ERROR) << error_message;
     return status;
   }
@@ -141,7 +141,7 @@ butil::Status Coprocessor::Open(const pb::store::Coprocessor& coprocessor) {
 
   enable_expression_ = !coprocessor_.expression().empty();
 
-  DINGO_LOG(DEBUG) << fmt::format("Coprocessor::Open enable_expression_ : ", enable_expression_);
+  DINGO_LOG(DEBUG) << fmt::format("Coprocessor::Open enable_expression_ : {}", enable_expression_);
 
   DINGO_LOG(DEBUG) << fmt::format("Coprocessor::Open Leave");
 
@@ -309,7 +309,7 @@ butil::Status Coprocessor::DoExecuteForAggregation(const std::vector<std::any>& 
         return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
       }
       // debug
-      Utils::PrintColumn(column, (*group_by_key_serial_schemas_)[i]->GetType(), "key");
+      Utils::DebugColumn(column, (*group_by_key_serial_schemas_)[i]->GetType(), "key");
 
       group_by_key_record.emplace_back(std::move(column));
       i++;
@@ -334,7 +334,7 @@ butil::Status Coprocessor::DoExecuteForAggregation(const std::vector<std::any>& 
         return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
       }
       // debug
-      Utils::PrintColumn(column, (*group_by_operator_serial_schemas_)[i]->GetType(), "aggregation_operators");
+      Utils::DebugColumn(column, (*group_by_operator_serial_schemas_)[i]->GetType(), "aggregation_operators");
       group_by_operator_record.emplace_back(std::move(column));
       i++;
     }
@@ -360,7 +360,7 @@ butil::Status Coprocessor::DoExecuteForAggregation(const std::vector<std::any>& 
     }
   }
 
-  Utils::PrintGroupByKey(group_by_key, "group_by_key");
+  Utils::DebugGroupByKey(group_by_key, "group_by_key");
 
   if (!aggregation_manager_) {
     aggregation_manager_ = std::make_shared<AggregationManager>();
@@ -421,7 +421,7 @@ butil::Status Coprocessor::GetKeyValueFromAggregation(bool key_only, size_t max_
                                         coprocessor_.result_schema().common_id());
 
     while (aggregation_iterator_->HasNext()) {
-      Utils::PrintGroupByKey("", "Key Value pair");
+      Utils::DebugGroupByKey("", "Key Value pair");
       const std::string& key = aggregation_iterator_->GetKey();
       const std::shared_ptr<std::vector<std::any>>& value = aggregation_iterator_->GetValue();
 
@@ -459,7 +459,7 @@ butil::Status Coprocessor::GetKeyValueFromAggregation(bool key_only, size_t max_
           DINGO_LOG(ERROR) << error_message;
           return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
         }
-        Utils::PrintColumn(column, (*result_serial_schemas_sorted_)[i]->GetType(), "Key");
+        Utils::DebugColumn(column, (*result_serial_schemas_sorted_)[i]->GetType(), "Key");
         result_record.emplace_back(std::move(column_clone));
         i++;
       }
@@ -474,7 +474,7 @@ butil::Status Coprocessor::GetKeyValueFromAggregation(bool key_only, size_t max_
           DINGO_LOG(ERROR) << error_message;
           return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
         }
-        Utils::PrintColumn(column, (*result_serial_schemas_sorted_)[i]->GetType(), "Value");
+        Utils::DebugColumn(column, (*result_serial_schemas_sorted_)[i]->GetType(), "Value");
         result_record.emplace_back(std::move(column_clone));
         i++;
       }
