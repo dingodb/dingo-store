@@ -21,14 +21,9 @@
 #include <utility>
 #include <vector>
 
-#include "braft/configuration.h"
-#include "brpc/channel.h"
-#include "brpc/closure_guard.h"
 #include "butil/scoped_lock.h"
 #include "butil/status.h"
-#include "butil/strings/string_split.h"
 #include "common/constant.h"
-#include "common/helper.h"
 #include "common/logging.h"
 #include "coordinator/coordinator_control.h"
 #include "engine/snapshot.h"

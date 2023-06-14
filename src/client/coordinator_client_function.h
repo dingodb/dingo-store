@@ -22,17 +22,9 @@
 #include <memory>
 #include <string>
 
-#include "braft/raft.h"
-#include "braft/util.h"
 #include "brpc/channel.h"
 #include "brpc/controller.h"
-#include "bthread/bthread.h"
 #include "coordinator/coordinator_interaction.h"
-#include "gflags/gflags.h"
-#include "google/protobuf/util/json_util.h"
-#include "proto/coordinator.pb.h"
-#include "proto/meta.pb.h"
-#include "proto/node.pb.h"
 
 // node service functions
 void SendGetNodeInfo();
@@ -52,6 +44,9 @@ void SendGetStoreMap(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
 void SendGetExecutorMap(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendGetCoordinatorMap(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendGetRegionMap(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendGetDeletedRegionMap(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendAddDeletedRegionMap(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendCleanDeletedRegionMap(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendGetRegionCount(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendCreateStore(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendDeleteStore(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);

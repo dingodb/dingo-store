@@ -25,7 +25,6 @@
 #include <set>
 #include <vector>
 
-#include "butil/scoped_lock.h"
 #include "butil/status.h"
 #include "butil/time.h"
 #include "common/helper.h"
@@ -208,7 +207,6 @@ void CoordinatorRecycleOrphanTask::CoordinatorRecycleOrphan(std::shared_ptr<Coor
   }
   DINGO_LOG(DEBUG) << "CoordinatorRecycleOrphan... this is leader";
 
-  coordinator_control->CleanRegionBvars();
   coordinator_control->RecycleOrphanRegionOnStore();
 }
 

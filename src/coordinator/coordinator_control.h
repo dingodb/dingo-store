@@ -22,20 +22,14 @@
 #include <string>
 #include <vector>
 
-#include "braft/raft.h"
-#include "brpc/controller.h"
-#include "brpc/server.h"
 #include "bthread/types.h"
 #include "butil/containers/flat_map.h"
-#include "butil/scoped_lock.h"
 #include "butil/status.h"
-#include "common/logging.h"
 #include "common/meta_control.h"
 #include "common/safe_map.h"
 #include "coordinator/coordinator_meta_storage.h"
 #include "engine/engine.h"
 #include "engine/snapshot.h"
-#include "fmt/core.h"
 #include "meta/meta_reader.h"
 #include "meta/meta_writer.h"
 #include "metrics/coordinator_bvar_metrics.h"
@@ -379,10 +373,11 @@ class CoordinatorControl : public MetaControl {
   // get regionmap
   void GetRegionMap(pb::common::RegionMap &region_map);
   void GetRegionMapFull(pb::common::RegionMap &region_map);
+  void GetDeletedRegionMap(pb::common::RegionMap &region_map);
+  butil::Status AddDeletedRegionMap(uint64_t region_id, bool force);
+  butil::Status CleanDeletedRegionMap(uint64_t region_id);
   void GetRegionCount(uint64_t &region_count);
   void GetRegionIdsInMap(std::vector<uint64_t> &region_ids);
-  void CleanRegionBvars();
-  void CleanDeletedRegions();
   void RecycleOrphanRegionOnStore();
   void DeleteRegionBvar(uint64_t region_id);
 
@@ -508,8 +503,8 @@ class CoordinatorControl : public MetaControl {
   void AddDeleteTaskWithCheck(pb::coordinator::TaskList *task_list, uint64_t store_id, uint64_t region_id,
                               const ::google::protobuf::RepeatedPtrField< ::dingodb::pb::common::Peer> &peers,
                               pb::coordinator_internal::MetaIncrement &meta_increment);
-  void AddPurgeTask(pb::coordinator::TaskList *task_list, uint64_t store_id, uint64_t region_id,
-                    pb::coordinator_internal::MetaIncrement &meta_increment);
+  // void AddPurgeTask(pb::coordinator::TaskList *task_list, uint64_t store_id, uint64_t region_id,
+  //                   pb::coordinator_internal::MetaIncrement &meta_increment);
   void AddChangePeerTask(pb::coordinator::TaskList *task_list, uint64_t store_id, uint64_t region_id,
                          const pb::common::RegionDefinition &region_definition,
                          pb::coordinator_internal::MetaIncrement &meta_increment);

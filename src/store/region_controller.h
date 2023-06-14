@@ -23,7 +23,6 @@
 #include <vector>
 
 #include "bthread/execution_queue.h"
-#include "butil/macros.h"
 #include "butil/status.h"
 #include "common/constant.h"
 #include "common/context.h"
@@ -33,8 +32,6 @@
 #include "meta/transform_kv_able.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
-#include "proto/error.pb.h"
-#include "proto/store_internal.pb.h"
 
 namespace dingodb {
 
@@ -226,7 +223,7 @@ class ControlExecutor {
  private:
   // Execution queue is available.
   std::atomic<bool> is_available_;
-  bthread::ExecutionQueueId<TaskRunnable*> queue_id_;
+  bthread::ExecutionQueueId<TaskRunnable*> queue_id_;  // NOLINT
 };
 
 class RegionControlExecutor : public ControlExecutor {
