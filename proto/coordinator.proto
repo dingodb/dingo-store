@@ -235,6 +235,9 @@ message CoordinatorMemoryInfo {
   uint64 task_list_map_count = 32;
   uint64 task_list_map_size = 33;
 
+  uint64 deleted_region_map_count = 34;
+  uint64 deleted_region_map_size = 35;
+
   repeated dingodb.pb.common.KeyValue id_epoch_values = 50;
 }
 
