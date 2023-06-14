@@ -108,9 +108,9 @@ class Utils {
 
   static void DebugCoprocessor(const pb::store::Coprocessor& coprocessor);
 
-  static void PrintColumn(const std::any& column, BaseSchema::Type type, const std::string& name);
+  static void DebugColumn(const std::any& column, BaseSchema::Type type, const std::string& name);
 
-  static void PrintGroupByKey(const std::string& key, const std::string& name);
+  static void DebugGroupByKey(const std::string& key, const std::string& name);
 };
 
 }  // namespace dingodb

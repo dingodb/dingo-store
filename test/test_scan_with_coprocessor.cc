@@ -808,7 +808,7 @@ TEST_F(ScanWithCoprocessor, scan) {
 
     auto *schema6 = result_schema->add_schema();
     {
-      schema6->set_type(::dingodb::pb::store::Schema_Type::Schema_Type_BOOL);
+      schema6->set_type(::dingodb::pb::store::Schema_Type::Schema_Type_LONG);
       schema6->set_is_key(true);
       schema6->set_is_nullable(true);
       schema6->set_index(5);
