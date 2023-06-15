@@ -22,24 +22,15 @@
 #include <utility>
 #include <vector>
 
-#include "braft/configuration.h"
-#include "brpc/channel.h"
 #include "butil/containers/flat_map.h"
-#include "butil/files/file_path.h"
-#include "butil/scoped_lock.h"
 #include "butil/status.h"
-#include "butil/strings/string_split.h"
-#include "common/helper.h"
 #include "common/logging.h"
 #include "coordinator/auto_increment_control.h"
 #include "coordinator/coordinator_control.h"
-#include "engine/snapshot.h"
-#include "google/protobuf/unknown_field_set.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator_internal.pb.h"
 #include "proto/error.pb.h"
 #include "proto/meta.pb.h"
-#include "proto/node.pb.h"
 
 namespace dingodb {
 

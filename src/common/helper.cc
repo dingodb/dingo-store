@@ -75,10 +75,10 @@ int Helper::PeerIdToLocation(braft::PeerId peer_id, pb::common::Location& locati
     value = std::stoi(addrs[1]);
     temp_location.set_port(value);
   } catch (const std::invalid_argument& ia) {
-    DINGO_LOG(ERROR) << "PeerIdToLocation parse port error Irnvalid argument: " << ia.what() << std::endl;
+    DINGO_LOG(ERROR) << "PeerIdToLocation parse port error Irnvalid argument: " << ia.what() << '\n';
     return -1;
   } catch (const std::out_of_range& oor) {
-    DINGO_LOG(ERROR) << "PeerIdToLocation parse port error Out of Range error: " << oor.what() << std::endl;
+    DINGO_LOG(ERROR) << "PeerIdToLocation parse port error Out of Range error: " << oor.what() << '\n';
     return -1;
   }
 
@@ -549,7 +549,7 @@ std::string Helper::MessageToJsonString(const google::protobuf::Message& message
   options.always_print_primitive_fields = true;
   google::protobuf::util::Status status = google::protobuf::util::MessageToJsonString(message, &json_string, options);
   if (!status.ok()) {
-    std::cerr << "Failed to convert message to JSON: [" << status.message() << "]" << std::endl;
+    std::cerr << "Failed to convert message to JSON: [" << status.message() << "]" << '\n';
   }
   return json_string;
 }
