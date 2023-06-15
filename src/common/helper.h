@@ -24,7 +24,6 @@
 #include "braft/configuration.h"
 #include "butil/endpoint.h"
 #include "butil/status.h"
-#include "fmt/core.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "proto/node.pb.h"

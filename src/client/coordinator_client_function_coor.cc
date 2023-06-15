@@ -939,6 +939,8 @@ void SendQueryRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
                   << " leader_store_id=" << region.leader_store_id()
                   << " replica_state=" << dingodb::pb::common::ReplicaStatus_Name(region.replica_status())
                   << " raft_status=" << dingodb::pb::common::RegionRaftStatus_Name(region.raft_status());
+  DINGO_LOG(INFO) << "start_key=[" << dingodb::Helper::StringToHex(region.definition().range().start_key()) << "]";
+  DINGO_LOG(INFO) << "  end_key=[" << dingodb::Helper::StringToHex(region.definition().range().end_key()) << "]";
 }
 
 void SendCreateRegionForSplit(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {

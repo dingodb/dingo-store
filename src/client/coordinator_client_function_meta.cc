@@ -22,7 +22,6 @@
 #include "gflags/gflags_declare.h"
 #include "proto/common.pb.h"
 #include "proto/meta.pb.h"
-#include "proto/node.pb.h"
 
 DECLARE_bool(log_each_request);
 DECLARE_int32(timeout_ms);
