@@ -20,22 +20,19 @@
 #include <string>
 #include <vector>
 
-#include "brpc/controller.h"
-#include "brpc/server.h"
-#include "bthread/types.h"
-#include "butil/scoped_lock.h"
 #include "common/logging.h"
-#include "hnswlib/hnswlib.h"
+#include "hnswlib/space_l2.h"
 #include "proto/common.pb.h"
 
 namespace dingodb {
 
 class VectorIndex {
  public:
-  VectorIndex(uint32_t dimension, uint32_t max_elements)
-      : vector_index_type_(pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW),
-        dimension_(dimension),
-        max_elements_(max_elements) {
+  VectorIndex(uint32_t dimension, uint32_t max_elements,
+              pb::common::VectorIndexType vector_index_type = pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW)
+      : dimension_(dimension), max_elements_(max_elements) {
+    vector_index_type_ = vector_index_type;
+
     if (vector_index_type_ == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
       int m = 16;                 // Tightly connected with internal dimensionality of the data
                                   // strongly affects the memory consumption
@@ -43,7 +40,7 @@ class VectorIndex {
 
       // Initing index
       hnsw_space_ = new hnswlib::L2Space(dimension_);
-      hnsw_index_ = new hnswlib::HierarchicalNSW<float>(hnsw_space_, max_elements_, m, ef_construction);
+      hnsw_index_ = new hnswlib::HierarchicalNSW<float>(hnsw_space_, max_elements_, m, ef_construction, 100, true);
     } else {
       hnsw_index_ = nullptr;
     }
@@ -75,7 +72,7 @@ class VectorIndex {
 
   void Add(uint64_t id, const std::vector<float>& vector) {
     if (vector_index_type_ == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
-      hnsw_index_->addPoint(vector.data(), id);
+      hnsw_index_->addPoint(vector.data(), id, true);
     }
   }
 
@@ -112,12 +109,15 @@ class VectorIndex {
         vector_with_distance.set_id(result.top().second);
         vector_with_distance.set_distance(result.top().first);
 
-        std::vector<float> data = hnsw_index_->getDataByLabel<float>(result.top().second);
-        for (auto& value : data) {
-          vector_with_distance.mutable_vector()->add_values(value);
+        try {
+          std::vector<float> data = hnsw_index_->getDataByLabel<float>(result.top().second);
+          for (auto& value : data) {
+            vector_with_distance.mutable_vector()->add_values(value);
+          }
+          results.push_back(vector_with_distance);
+        } catch (std::exception& e) {
+          DINGO_LOG(ERROR) << "getDataByLabel failed, label: " << result.top().second << " err: " << e.what();
         }
-
-        results.push_back(vector_with_distance);
 
         result.pop();
       }

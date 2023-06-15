@@ -49,6 +49,7 @@
 #include "rocksdb/iterator.h"
 #include "rocksdb/table.h"
 #include "rocksdb/write_batch.h"
+#include "serial/buf.h"
 #include "server/server.h"
 
 namespace dingodb {
@@ -772,15 +773,15 @@ butil::Status RawRocksEngine::Reader::VectorSearch(uint64_t region_id, const pb:
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "top_n is 0");
   }
 
-  std::string key_header = std::to_string(region_id);
-
   if (vector.id() > 0) {
     auto snapshot = std::make_shared<RocksSnapshot>(db_->GetSnapshot(), db_);
     rocksdb::ReadOptions read_option;
     read_option.snapshot = static_cast<const rocksdb::Snapshot*>(snapshot->Inner());
     std::string value;
-    rocksdb::Status s =
-        db_->Get(read_option, column_family_->GetHandle(), key_header + std::to_string(vector.id()), &value);
+    std::string key;
+    EncodeVectorId(region_id, vector.id(), key);
+
+    rocksdb::Status s = db_->Get(read_option, column_family_->GetHandle(), key, &value);
     if (!s.ok()) {
       if (s.IsNotFound()) {
         return butil::Status(pb::error::EKEY_NOT_FOUND, "Not found");
@@ -933,8 +934,6 @@ butil::Status RawRocksEngine::Writer::VectorAdd(uint64_t region_id, uint64_t log
     return butil::Status(pb::error::EVECTOR_EMPTY, "vectors is empty");
   }
 
-  std::string key_header = std::to_string(region_id);
-
   // write vector, WAL, WAL_LOG_ID
   rocksdb::WriteBatch batch;
   for (const auto& vector : vectors) {
@@ -942,21 +941,31 @@ butil::Status RawRocksEngine::Writer::VectorAdd(uint64_t region_id, uint64_t log
       DINGO_LOG(ERROR) << fmt::format("vector empty  not support");
       return butil::Status(pb::error::EVECTOR_EMPTY, "vector is empty");
     } else {
-      rocksdb::Status s = batch.Put(column_family_->GetHandle(), key_header + std::to_string(vector.id()),
-                                    vector.vector().SerializeAsString());
+      // 1.write vector data
+      std::string key;
+      EncodeVectorId(region_id, vector.id(), key);
+
+      rocksdb::Status s = batch.Put(column_family_->GetHandle(), key, vector.vector().SerializeAsString());
       if (BAIDU_UNLIKELY(!s.ok())) {
         DINGO_LOG(ERROR) << fmt::format("rocksdb::WriteBatch::Put failed : {}", s.ToString());
         return butil::Status(pb::error::EINTERNAL, "Internal error");
       }
 
-      s = batch.Put(column_family_->GetHandle(), key_header + std::string("WAL") + std::to_string(vector.id()),
-                    vector.vector().SerializeAsString());
+      // 2.write wal data of vector
+      std::string wal_key;
+      EncodeVectorWal(region_id, vector.id(), log_id, wal_key);
+
+      s = batch.Put(column_family_->GetHandle(), wal_key, vector.vector().SerializeAsString());
       if (BAIDU_UNLIKELY(!s.ok())) {
         DINGO_LOG(ERROR) << fmt::format("rocksdb::WriteBatch::Put failed : {}", s.ToString());
         return butil::Status(pb::error::EINTERNAL, "Internal error");
       }
 
-      s = batch.Put(column_family_->GetHandle(), key_header + std::string("WAL_LOG_ID"), std::to_string(log_id));
+      // 3.write newest wal log_id
+      std::string wal_log_id_key;
+      EncodeVectorWalLogIdMax(region_id, wal_log_id_key);
+
+      s = batch.Put(column_family_->GetHandle(), wal_log_id_key, std::to_string(log_id));
       if (BAIDU_UNLIKELY(!s.ok())) {
         DINGO_LOG(ERROR) << fmt::format("rocksdb::WriteBatch::Put failed : {}", s.ToString());
         return butil::Status(pb::error::EINTERNAL, "Internal error");
@@ -972,7 +981,13 @@ butil::Status RawRocksEngine::Writer::VectorAdd(uint64_t region_id, uint64_t log
     return butil::Status(pb::error::EINTERNAL, "Internal error, Get vector_index failed");
   }
 
-  vector_index->Add(vectors);
+  try {
+    vector_index->Add(vectors);
+  } catch (const std::exception& e) {
+    std::string err_msg = fmt::format("vector_index add failed : {}", e.what());
+    DINGO_LOG(ERROR) << err_msg;
+    return butil::Status(pb::error::EINTERNAL, "Internal error, vector_index add failed, err=[%s]", err_msg.c_str());
+  }
 
   // commit rocksdb
   rocksdb::WriteOptions write_options;
@@ -992,8 +1007,6 @@ butil::Status RawRocksEngine::Writer::VectorDelete(uint64_t region_id, uint64_t 
     return butil::Status(pb::error::EVECTOR_EMPTY, "vectors is empty");
   }
 
-  std::string key_header = std::to_string(region_id);
-
   // write vector, WAL, WAL_LOG_ID
   rocksdb::WriteBatch batch;
   for (const auto& id : ids) {
@@ -1001,19 +1014,31 @@ butil::Status RawRocksEngine::Writer::VectorDelete(uint64_t region_id, uint64_t 
       DINGO_LOG(ERROR) << fmt::format("vector empty  not support");
       return butil::Status(pb::error::EVECTOR_EMPTY, "vector is empty");
     } else {
-      rocksdb::Status s = batch.Delete(column_family_->GetHandle(), key_header + std::to_string(id));
+      // 1.delete vector data
+      std::string key;
+      EncodeVectorId(region_id, id, key);
+
+      rocksdb::Status s = batch.Delete(column_family_->GetHandle(), key);
       if (BAIDU_UNLIKELY(!s.ok())) {
         DINGO_LOG(ERROR) << fmt::format("rocksdb::WriteBatch::Put failed : {}", s.ToString());
         return butil::Status(pb::error::EINTERNAL, "Internal error");
       }
 
-      s = batch.Put(column_family_->GetHandle(), key_header + std::string("WAL") + std::to_string(id), std::string());
+      // 2.write wal data of vector
+      std::string wal_key;
+      EncodeVectorWal(region_id, id, log_id, wal_key);
+
+      s = batch.Put(column_family_->GetHandle(), wal_key, std::string());
       if (BAIDU_UNLIKELY(!s.ok())) {
         DINGO_LOG(ERROR) << fmt::format("rocksdb::WriteBatch::Put failed : {}", s.ToString());
         return butil::Status(pb::error::EINTERNAL, "Internal error");
       }
 
-      s = batch.Put(column_family_->GetHandle(), key_header + std::string("WAL_LOG_ID"), std::to_string(log_id));
+      // 3.write newest wal log_id
+      std::string wal_log_id_key;
+      EncodeVectorWalLogIdMax(region_id, wal_log_id_key);
+
+      s = batch.Put(column_family_->GetHandle(), wal_log_id_key, std::to_string(log_id));
       if (BAIDU_UNLIKELY(!s.ok())) {
         DINGO_LOG(ERROR) << fmt::format("rocksdb::WriteBatch::Put failed : {}", s.ToString());
         return butil::Status(pb::error::EINTERNAL, "Internal error");
@@ -1030,7 +1055,11 @@ butil::Status RawRocksEngine::Writer::VectorDelete(uint64_t region_id, uint64_t 
   }
 
   for (auto id : ids) {
-    vector_index->Delete(id);
+    try {
+      vector_index->Delete(id);
+    } catch (std::exception& e) {
+      DINGO_LOG(ERROR) << fmt::format("vector_index delete failed, id: {}, error: {}", id, e.what());
+    }
   }
 
   // commit rocksdb
@@ -1570,6 +1599,41 @@ butil::Status RawRocksEngine::Checkpoint::Create(const std::string& dirpath,
 
   delete checkpoint;
   return butil::Status();
+}
+
+void EncodeVectorId(uint64_t region_id, uint64_t vector_id, std::string& result) {
+  Buf buf(17);
+  buf.WriteLong(region_id);
+  buf.Write(kVectorIdPrefix);
+  buf.WriteLong(vector_id);
+
+  buf.GetBytes(result);
+}
+
+void EncodeVectorWal(uint64_t region_id, uint64_t vector_id, uint64_t log_id, std::string& result) {
+  Buf buf(25);
+  buf.WriteLong(region_id);
+  buf.Write(kVectorWalPrefix);
+  buf.WriteLong(log_id);
+  buf.WriteLong(vector_id);
+
+  buf.GetBytes(result);
+}
+
+void EncodeVectorWalLogIdMax(uint64_t region_id, std::string& result) {
+  Buf buf(9);
+  buf.WriteLong(region_id);
+  buf.Write(kVectorWalLogIdMaxPrefix);
+
+  buf.GetBytes(result);
+}
+
+void EncodeVectorWalLogIdMin(uint64_t region_id, std::string& result) {
+  Buf buf(9);
+  buf.WriteLong(region_id);
+  buf.Write(kVectorWalLogIdMinPrefix);
+
+  buf.GetBytes(result);
 }
 
 }  // namespace dingodb

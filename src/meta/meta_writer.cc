@@ -15,7 +15,6 @@
 #include "meta/meta_writer.h"
 
 #include "common/constant.h"
-#include "common/context.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "proto/common.pb.h"

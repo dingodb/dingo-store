@@ -14,6 +14,8 @@
 
 #include "buf.h"
 
+#include <cstdint>
+
 #include "serial/utils.h"
 
 namespace dingodb {
@@ -48,9 +50,7 @@ Buf::Buf(const std::string& buf, bool le) {
   this->le_ = le;
 }
 
-Buf::~Buf() {
-  this->buf_.clear();
-}
+Buf::~Buf() { this->buf_.clear(); }
 
 void Buf::Init(int size) {
   this->buf_.resize(size);
