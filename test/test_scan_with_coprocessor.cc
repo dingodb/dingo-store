@@ -31,16 +31,19 @@
 
 #include "butil/status.h"
 #include "common/constant.h"
-#include "common/context.h"
 #include "config/config_manager.h"
-#include "engine/engine.h"
 #include "engine/raw_rocks_engine.h"
-#include "engine/rocks_engine.h"
 #include "proto/common.pb.h"
 #include "scan/scan.h"
 #include "scan/scan_manager.h"
 #include "serial/record_encoder.h"
-#include "serial/schema/dingo_schema.h"
+#include "serial/schema/base_schema.h"
+#include "serial/schema/boolean_schema.h"
+#include "serial/schema/double_schema.h"
+#include "serial/schema/float_schema.h"
+#include "serial/schema/integer_schema.h"
+#include "serial/schema/long_schema.h"
+#include "serial/schema/string_schema.h"
 #include "server/server.h"
 
 namespace dingodb {
@@ -58,38 +61,38 @@ std::string StrToHex(std::string str, std::string separator = "") {
 
 class ScanWithCoprocessor : public testing::Test {
  public:
-  static std::shared_ptr<Config> GetConfig() { return config_; }
+  static std::shared_ptr<Config> GetConfig() { return config; }
 
   static std::shared_ptr<RawRocksEngine> GetRawRocksEngine() { return engine; }
-  static ScanManager *&GetManager() { return manager_; }
+  static ScanManager *&GetManager() { return manager; }
 
-  static std::shared_ptr<ScanContext> GetScan(std::string *scan_id) {
-    if (!scan_) {
-      scan_ = manager_->CreateScan(scan_id);
-      scan_id_ = *scan_id;
+  static std::shared_ptr<ScanContext> GetScan(std::string *scan_id_in) {
+    if (!scan) {
+      scan = manager->CreateScan(scan_id_in);
+      scan_id = *scan_id_in;
     } else {
-      *scan_id = scan_id_;
+      *scan_id_in = scan_id;
     }
-    return scan_;
+    return scan;
   }
 
   static void DeleteScan() {
-    if (!scan_id_.empty() || scan_) {
-      manager_->DeleteScan(scan_id_);
+    if (!scan_id.empty() || scan) {
+      manager->DeleteScan(scan_id);
     }
-    scan_.reset();
-    scan_id_ = "";
+    scan.reset();
+    scan_id = "";
   }
 
  protected:
   static void SetUpTestSuite() {
-    std::cout << "ScanWithCoprocessor::SetUp()" << std::endl;
-    server_ = Server::GetInstance();
-    server_->SetRole(pb::common::ClusterRole::STORE);
-    server_->InitConfig(kFileName);
-    config_manager_ = ConfigManager::GetInstance();
-    config_ = config_manager_->GetConfig(pb::common::ClusterRole::STORE);
-    manager_ = ScanManager::GetInstance();
+    std::cout << "ScanWithCoprocessor::SetUp()" << '\n';
+    server = Server::GetInstance();
+    server->SetRole(pb::common::ClusterRole::STORE);
+    server->InitConfig(kFileName);
+    config_manager = ConfigManager::GetInstance();
+    config = config_manager->GetConfig(pb::common::ClusterRole::STORE);
+    manager = ScanManager::GetInstance();
     engine = std::make_shared<RawRocksEngine>();
   }
 
@@ -103,13 +106,13 @@ class ScanWithCoprocessor : public testing::Test {
   void TearDown() override {}
 
  private:
-  inline static Server *server_ = nullptr;
+  inline static Server *server = nullptr;
   inline static const std::string kFileName = "../../conf/store.yaml";
-  inline static ConfigManager *config_manager_ = nullptr;
-  inline static std::shared_ptr<Config> config_;
-  inline static ScanManager *manager_ = nullptr;
-  inline static std::shared_ptr<ScanContext> scan_;
-  inline static std::string scan_id_;
+  inline static ConfigManager *config_manager = nullptr;
+  inline static std::shared_ptr<Config> config;
+  inline static ScanManager *manager = nullptr;
+  inline static std::shared_ptr<ScanContext> scan;
+  inline static std::string scan_id;
 
  public:
   inline static std::shared_ptr<RawRocksEngine> engine;
@@ -248,7 +251,7 @@ TEST_F(ScanWithCoprocessor, Prepare) {
     }
 
     std::string s = StrToHex(key, " ");
-    std::cout << "s : " << s << std::endl;
+    std::cout << "s : " << s << '\n';
   }
 
   // 2
@@ -307,7 +310,7 @@ TEST_F(ScanWithCoprocessor, Prepare) {
     }
 
     std::string s = StrToHex(key, " ");
-    std::cout << "s : " << s << std::endl;
+    std::cout << "s : " << s << '\n';
   }
 
   // 3
@@ -366,7 +369,7 @@ TEST_F(ScanWithCoprocessor, Prepare) {
     }
 
     std::string s = StrToHex(key, " ");
-    std::cout << "s : " << s << std::endl;
+    std::cout << "s : " << s << '\n';
   }
 
   // 4
@@ -425,7 +428,7 @@ TEST_F(ScanWithCoprocessor, Prepare) {
     }
 
     std::string s = StrToHex(key, " ");
-    std::cout << "s : " << s << std::endl;
+    std::cout << "s : " << s << '\n';
   }
 
   // 5
@@ -484,7 +487,7 @@ TEST_F(ScanWithCoprocessor, Prepare) {
     }
 
     std::string s = StrToHex(key, " ");
-    std::cout << "s : " << s << std::endl;
+    std::cout << "s : " << s << '\n';
   }
 
   // 6
@@ -531,7 +534,7 @@ TEST_F(ScanWithCoprocessor, Prepare) {
     }
 
     std::string s = StrToHex(key, " ");
-    std::cout << "s : " << s << std::endl;
+    std::cout << "s : " << s << '\n';
   }
 
   // 7
@@ -590,7 +593,7 @@ TEST_F(ScanWithCoprocessor, Prepare) {
     }
 
     std::string s = StrToHex(key, " ");
-    std::cout << "s : " << s << std::endl;
+    std::cout << "s : " << s << '\n';
   }
 
   // 8
@@ -649,7 +652,7 @@ TEST_F(ScanWithCoprocessor, Prepare) {
     }
 
     std::string s = StrToHex(key, " ");
-    std::cout << "s : " << s << std::endl;
+    std::cout << "s : " << s << '\n';
   }
 }
 
@@ -663,7 +666,7 @@ TEST_F(ScanWithCoprocessor, scan) {
   // [keyAA, keyAA0, keyAAA, keyAAA0, keyABB, keyABB0, keyABC, keyABC0, keyABD, keyABD0, keyAB, keyAB0 ]
 
   auto scan = this->GetScan(&scan_id);
-  std::cout << "scan_id : " << scan_id << std::endl;
+  std::cout << "scan_id : " << scan_id << '\n';
 
   EXPECT_NE(scan.get(), nullptr);
   ok = scan->Open(scan_id, raw_rocks_engine, kDefaultCf);
@@ -683,10 +686,10 @@ TEST_F(ScanWithCoprocessor, scan) {
   std::string my_max_key(max_key.c_str(), 8);
 
   std::string my_min_key_s = StrToHex(my_min_key, " ");
-  std::cout << "my_min_key_s : " << my_min_key_s << std::endl;
+  std::cout << "my_min_key_s : " << my_min_key_s << '\n';
 
   std::string my_max_key_s = StrToHex(my_max_key, " ");
-  std::cout << "my_max_key_s : " << my_max_key_s << std::endl;
+  std::cout << "my_max_key_s : " << my_max_key_s << '\n';
 
   range.set_start_key(my_min_key);
   range.set_end_key(Helper::PrefixNext(my_max_key));
@@ -913,7 +916,7 @@ TEST_F(ScanWithCoprocessor, scan) {
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
   for (const auto &kv : kvs) {
-    std::cout << kv.key() << ":" << kv.value() << std::endl;
+    std::cout << kv.key() << ":" << kv.value() << '\n';
   }
 
   EXPECT_EQ(kvs.size(), 0);
@@ -926,7 +929,7 @@ TEST_F(ScanWithCoprocessor, scan) {
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
     for (const auto &kv : kvs) {
-      std::cout << StrToHex(kv.key(), " ") << ":" << StrToHex(kv.value(), " ") << std::endl;
+      std::cout << StrToHex(kv.key(), " ") << ":" << StrToHex(kv.value(), " ") << '\n';
     }
 
     cnt += kvs.size();
@@ -937,7 +940,7 @@ TEST_F(ScanWithCoprocessor, scan) {
     kvs.clear();
   }
 
-  std::cout << "cnt : " << cnt << std::endl;
+  std::cout << "cnt : " << cnt << '\n';
 
   ok = ScanHandler::ScanRelease(scan, scan_id);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
@@ -958,10 +961,10 @@ TEST_F(ScanWithCoprocessor, KvDeleteRange) {
     std::string my_max_key(max_key.c_str(), 8);
 
     std::string my_min_key_s = StrToHex(my_min_key, " ");
-    std::cout << "my_min_key_s : " << my_min_key_s << std::endl;
+    std::cout << "my_min_key_s : " << my_min_key_s << '\n';
 
     std::string my_max_key_s = StrToHex(my_max_key, " ");
-    std::cout << "my_max_key_s : " << my_max_key_s << std::endl;
+    std::cout << "my_max_key_s : " << my_max_key_s << '\n';
 
     range.set_start_key(my_min_key);
     range.set_end_key(Helper::PrefixNext(my_max_key));
@@ -980,9 +983,9 @@ TEST_F(ScanWithCoprocessor, KvDeleteRange) {
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
     std::cout << "start_key : " << StrToHex(start_key, " ") << "\n"
-              << "end_key : " << StrToHex(end_key, " ") << std::endl;
+              << "end_key : " << StrToHex(end_key, " ") << '\n';
     for (const auto &kv : kvs) {
-      std::cout << kv.key() << ":" << kv.value() << std::endl;
+      std::cout << kv.key() << ":" << kv.value() << '\n';
     }
   }
 }
