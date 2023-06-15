@@ -51,11 +51,6 @@ public class AutoIncrementServiceConnector extends ServiceConnector<MetaServiceG
     }
 
     @Override
-    public void refresh(MetaServiceGrpc.MetaServiceBlockingStub stub) {
-        super.refresh(stub);
-    }
-
-    @Override
     protected ManagedChannel transformToLeaderChannel(ManagedChannel channel) {
         return Optional.ofNullable(coordinatorServiceConnector.getCoordinatorMap())
             .map(Coordinator.GetCoordinatorMapResponse::getAutoIncrementLeaderLocation)

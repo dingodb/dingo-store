@@ -42,20 +42,15 @@ public class ClusterServiceClient {
                 .setExecutor(mapping(executor))
                 .build();
 
-        Coordinator.ExecutorHeartbeatResponse response = connector.exec(stub -> {
-            Coordinator.ExecutorHeartbeatResponse res = stub.executorHeartbeat(req);
-            return new ServiceConnector.Response<>(res.getError(), res);
-        }).getResponse();
+        Coordinator.ExecutorHeartbeatResponse response = connector.exec(stub -> stub.executorHeartbeat(req));
     }
 
     public List<Executor> getExecutorMap(long epoch) {
         Coordinator.GetExecutorMapRequest req = Coordinator.GetExecutorMapRequest.newBuilder()
                 .setEpoch(epoch)
                 .build();
-        Coordinator.GetExecutorMapResponse response = connector.exec(stub -> {
-            Coordinator.GetExecutorMapResponse res = stub.getExecutorMap(req);
-            return new ServiceConnector.Response<>(res.getError(), res);
-        }).getResponse();
+
+        Coordinator.GetExecutorMapResponse response = connector.exec(stub -> stub.getExecutorMap(req));
         return response.getExecutormap()
                 .getExecutorsList()
                 .stream()

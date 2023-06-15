@@ -23,7 +23,6 @@ import io.dingodb.common.Common.RangeWithOptions;
 import io.dingodb.sdk.common.DingoClientException;
 import io.dingodb.sdk.common.KeyValue;
 import io.dingodb.sdk.common.utils.EntityConversion;
-import io.dingodb.sdk.service.connector.ServiceConnector;
 import io.dingodb.sdk.service.connector.StoreServiceConnector;
 import io.dingodb.store.Store;
 import io.dingodb.store.StoreServiceGrpc;
@@ -78,18 +77,18 @@ public class ScanIterator implements Iterator<KeyValue>, AutoCloseable {
     }
 
     public ByteString scanBegin() {
+        Store.KvScanBeginRequest.Builder builder = Store.KvScanBeginRequest.newBuilder()
+                .setRange(range)
+                .setRegionId(regionId)
+                .setMaxFetchCnt(0);
+        if (coprocessor != null) {
+            builder.setCoprocessor(EntityConversion.mapping(coprocessor));
+        }
+        Store.KvScanBeginRequest request = builder.build();
         Store.KvScanBeginResponse response = connector.exec(stub -> {
-            Store.KvScanBeginRequest.Builder builder = Store.KvScanBeginRequest.newBuilder()
-                    .setRange(range)
-                    .setRegionId(regionId)
-                    .setMaxFetchCnt(0);
-            if (coprocessor != null) {
-                builder.setCoprocessor(EntityConversion.mapping(coprocessor));
-            }
-            Store.KvScanBeginResponse res = stub.kvScanBegin(builder.build());
             this.stub.set(stub);
-            return new ServiceConnector.Response<>(res.getError(), res);
-        }, retryTimes, err -> true).getResponse();
+            return stub.kvScanBegin(request);
+        });
         return response.getScanId();
     }
 
@@ -119,11 +118,17 @@ public class ScanIterator implements Iterator<KeyValue>, AutoCloseable {
     }
 
     @Override
-    public void close() {
+    public synchronized void close() {
         if (release) {
             return;
         }
         scanRelease();
+    }
+
+    @Override
+    protected void finalize() throws Throwable {
+        close();
+        super.finalize();
     }
 
     @Override

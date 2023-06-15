@@ -18,17 +18,9 @@ package io.dingodb.sdk.service.store;
 
 import com.google.protobuf.ByteString;
 import io.dingodb.common.Common;
-import io.dingodb.sdk.common.DingoClientException;
-import io.dingodb.sdk.common.DingoCommonId;
-import io.dingodb.sdk.common.KeyValue;
-import io.dingodb.sdk.common.KeyValueWithExpect;
-import io.dingodb.sdk.common.Location;
-import io.dingodb.sdk.common.Range;
-import io.dingodb.sdk.common.RangeWithOptions;
-import io.dingodb.sdk.common.SDKCommonId;
+import io.dingodb.sdk.common.*;
 import io.dingodb.sdk.common.table.RangeDistribution;
 import io.dingodb.sdk.common.utils.EntityConversion;
-import io.dingodb.sdk.service.connector.ServiceConnector;
 import io.dingodb.sdk.service.connector.StoreServiceConnector;
 import io.dingodb.sdk.service.meta.MetaServiceClient;
 import io.dingodb.store.Store;
@@ -100,14 +92,11 @@ public class StoreServiceClient {
      * @return value
      */
     public byte[] kvGet(DingoCommonId tableId, DingoCommonId regionId, byte[] key) {
-        return exec(stub -> {
-            Store.KvGetRequest req = Store.KvGetRequest.newBuilder()
-                    .setRegionId(regionId.entityId())
-                    .setKey(ByteString.copyFrom(key))
-                    .build();
-            Store.KvGetResponse res = stub.kvGet(req);
-            return new ServiceConnector.Response<>(res.getError(), res.getValue().toByteArray());
-        }, retryTimes, tableId, regionId);
+        Store.KvGetRequest req = Store.KvGetRequest.newBuilder()
+                .setRegionId(regionId.entityId())
+                .setKey(ByteString.copyFrom(key))
+                .build();
+        return exec(stub -> stub.kvGet(req), retryTimes, tableId, regionId).getValue().toByteArray();
     }
 
     /**
@@ -118,17 +107,14 @@ public class StoreServiceClient {
      * @return values
      */
     public List<KeyValue> kvBatchGet(DingoCommonId tableId, DingoCommonId regionId, List<byte[]> keys) {
-        return exec(stub -> {
-            Store.KvBatchGetRequest req = Store.KvBatchGetRequest.newBuilder()
-                    .setRegionId(regionId.entityId())
-                    .addAllKeys(keys.stream().map(ByteString::copyFrom).collect(Collectors.toList()))
-                    .build();
-            Store.KvBatchGetResponse res = stub.kvBatchGet(req);
-            return new ServiceConnector.Response<>(
-                res.getError(),
-                res.getKvsList().stream().map(EntityConversion::mapping).collect(Collectors.toList())
-            );
-        }, retryTimes, tableId, regionId);
+        Store.KvBatchGetRequest req = Store.KvBatchGetRequest.newBuilder()
+                .setRegionId(regionId.entityId())
+                .addAllKeys(keys.stream().map(ByteString::copyFrom).collect(Collectors.toList()))
+                .build();
+        return exec(stub -> stub.kvBatchGet(req), retryTimes, tableId, regionId)
+                .getKvsList().stream()
+                .map(EntityConversion::mapping)
+                .collect(Collectors.toList());
     }
 
     /**
@@ -195,28 +181,21 @@ public class StoreServiceClient {
      * @return is success
      */
     public boolean kvPut(DingoCommonId tableId, DingoCommonId regionId, KeyValue keyValue) {
-        return exec(stub -> {
-            Store.KvPutRequest req = Store.KvPutRequest.newBuilder()
-                .setRegionId(regionId.entityId())
-                .setKv(mapping(keyValue))
-                .build();
-            Store.KvPutResponse res = stub.kvPut(req);
-            return new ServiceConnector.Response<>(res.getError(), true);
-        }, retryTimes, tableId, regionId);
+        Store.KvPutRequest req = Store.KvPutRequest.newBuilder()
+            .setRegionId(regionId.entityId())
+            .setKv(mapping(keyValue))
+            .build();
+        exec(stub -> stub.kvPut(req), retryTimes, tableId, regionId);
+        return true;
     }
 
     public boolean kvBatchPut(DingoCommonId tableId, DingoCommonId regionId, List<KeyValue> keyValues) {
-        return exec(stub -> {
-            Store.KvBatchPutRequest req = Store.KvBatchPutRequest.newBuilder()
-                .setRegionId(regionId.entityId())
-                .addAllKvs(keyValues.stream().map(EntityConversion::mapping).collect(Collectors.toList()))
-                .build();
-            if (stub == null) {
-                throw new DingoClientException(-1, "blockingStub is null");
-            }
-            Store.KvBatchPutResponse res = stub.kvBatchPut(req);
-            return new ServiceConnector.Response<>(res.getError(), true);
-        }, retryTimes, tableId, regionId);
+        Store.KvBatchPutRequest req = Store.KvBatchPutRequest.newBuilder()
+            .setRegionId(regionId.entityId())
+            .addAllKvs(keyValues.stream().map(EntityConversion::mapping).collect(Collectors.toList()))
+            .build();
+        exec(stub -> stub.kvBatchPut(req), retryTimes, tableId, regionId);
+        return true;
     }
 
     /**
@@ -227,14 +206,11 @@ public class StoreServiceClient {
      * @return true if key is not in store or false if the key exist in store
      */
     public boolean kvPutIfAbsent(DingoCommonId tableId, DingoCommonId regionId, KeyValue keyValue) {
-        return exec(stub -> {
-            Store.KvPutIfAbsentRequest req = Store.KvPutIfAbsentRequest.newBuilder()
-                    .setRegionId(regionId.entityId())
-                    .setKv(mapping(keyValue))
-                    .build();
-            Store.KvPutIfAbsentResponse res = stub.kvPutIfAbsent(req);
-            return new ServiceConnector.Response<>(res.getError(), res.getKeyState());
-        }, retryTimes, tableId, regionId);
+        Store.KvPutIfAbsentRequest req = Store.KvPutIfAbsentRequest.newBuilder()
+                .setRegionId(regionId.entityId())
+                .setKv(mapping(keyValue))
+                .build();
+        return exec(stub -> stub.kvPutIfAbsent(req), retryTimes, tableId, regionId).getKeyState();
     }
 
     public List<Boolean> kvBatchPutIfAbsent(DingoCommonId tableId, DingoCommonId regionId, List<KeyValue> keyValues) {
@@ -242,15 +218,12 @@ public class StoreServiceClient {
     }
 
     public List<Boolean> kvBatchPutIfAbsent(DingoCommonId tableId, DingoCommonId regionId, List<KeyValue> keyValues, boolean isAtomic) {
-        return exec(stub -> {
-            Store.KvBatchPutIfAbsentRequest req = Store.KvBatchPutIfAbsentRequest.newBuilder()
-                    .setRegionId(regionId.entityId())
-                    .addAllKvs(keyValues.stream().map(EntityConversion::mapping).collect(Collectors.toList()))
-                    .setIsAtomic(isAtomic)
-                    .build();
-            Store.KvBatchPutIfAbsentResponse res = stub.kvBatchPutIfAbsent(req);
-            return new ServiceConnector.Response<>(res.getError(), res.getKeyStatesList());
-        }, retryTimes, tableId, regionId);
+        Store.KvBatchPutIfAbsentRequest req = Store.KvBatchPutIfAbsentRequest.newBuilder()
+                .setRegionId(regionId.entityId())
+                .addAllKvs(keyValues.stream().map(EntityConversion::mapping).collect(Collectors.toList()))
+                .setIsAtomic(isAtomic)
+                .build();
+        return exec(stub -> stub.kvBatchPutIfAbsent(req), retryTimes, tableId, regionId).getKeyStatesList();
     }
 
     /**
@@ -261,14 +234,11 @@ public class StoreServiceClient {
      * @return delete success or fail with keys
      */
     public List<Boolean> kvBatchDelete(DingoCommonId tableId, DingoCommonId regionId, List<byte[]> keys) {
-        return exec(stub -> {
-            Store.KvBatchDeleteRequest req = Store.KvBatchDeleteRequest.newBuilder()
-                    .setRegionId(regionId.entityId())
-                    .addAllKeys(keys.stream().map(ByteString::copyFrom).collect(Collectors.toList()))
-                    .build();
-            Store.KvBatchDeleteResponse res = stub.kvBatchDelete(req);
-            return new ServiceConnector.Response<>(res.getError(), res.getKeyStatesList());
-        }, retryTimes, tableId, regionId);
+        Store.KvBatchDeleteRequest req = Store.KvBatchDeleteRequest.newBuilder()
+                .setRegionId(regionId.entityId())
+                .addAllKeys(keys.stream().map(ByteString::copyFrom).collect(Collectors.toList()))
+                .build();
+        return exec(stub -> stub.kvBatchDelete(req), retryTimes, tableId, regionId).getKeyStatesList();
     }
 
     /**
@@ -279,26 +249,20 @@ public class StoreServiceClient {
      * @return delete keys count
      */
     public long kvDeleteRange(DingoCommonId tableId, DingoCommonId regionId, RangeWithOptions range) {
-        return exec(stub -> {
-            Store.KvDeleteRangeRequest req = Store.KvDeleteRangeRequest.newBuilder()
-                    .setRegionId(regionId.entityId())
-                    .setRange(mapping(range))
-                    .build();
-            Store.KvDeleteRangeResponse res = stub.kvDeleteRange(req);
-            return new ServiceConnector.Response<>(res.getError(), res.getDeleteCount());
-        }, retryTimes, tableId, regionId);
+        Store.KvDeleteRangeRequest req = Store.KvDeleteRangeRequest.newBuilder()
+                .setRegionId(regionId.entityId())
+                .setRange(mapping(range))
+                .build();
+        return exec(stub -> stub.kvDeleteRange(req), retryTimes, tableId, regionId).getDeleteCount();
     }
 
     public boolean kvCompareAndSet(DingoCommonId tableId, DingoCommonId regionId, KeyValueWithExpect keyValue) {
-        return exec(stub -> {
-            Store.KvCompareAndSetRequest req = Store.KvCompareAndSetRequest.newBuilder()
-                .setRegionId(regionId.entityId())
-                .setKv(EntityConversion.mapping(keyValue))
-                .setExpectValue(ByteString.copyFrom(keyValue.expect))
-                .build();
-            Store.KvCompareAndSetResponse res = stub.kvCompareAndSet(req);
-            return new ServiceConnector.Response<>(res.getError(), res.getKeyState());
-        }, retryTimes, tableId, regionId);
+        Store.KvCompareAndSetRequest req = Store.KvCompareAndSetRequest.newBuilder()
+            .setRegionId(regionId.entityId())
+            .setKv(EntityConversion.mapping(keyValue))
+            .setExpectValue(ByteString.copyFrom(keyValue.expect))
+            .build();
+        return exec(stub -> stub.kvCompareAndSet(req), retryTimes, tableId, regionId).getKeyState();
     }
 
     public List<Boolean> kvBatchCompareAndSet(
@@ -307,24 +271,21 @@ public class StoreServiceClient {
         List<Common.KeyValue> kvs = new ArrayList<>();
         List<ByteString> expects = new ArrayList<>();
         keyValues.stream().peek(__ -> kvs.add(mapping(__))).forEach(__ -> expects.add(ByteString.copyFrom(__.expect)));
-        return exec(stub -> {
-            Store.KvBatchCompareAndSetRequest req = Store.KvBatchCompareAndSetRequest.newBuilder()
-                .setRegionId(regionId.entityId())
-                .addAllKvs(kvs)
-                .addAllExpectValues(expects)
-                .setIsAtomic(isAtomic)
-                .build();
-            Store.KvBatchCompareAndSetResponse res = stub.kvBatchCompareAndSet(req);
-            return new ServiceConnector.Response<>(res.getError(), res.getKeyStatesList());
-        }, retryTimes, tableId, regionId);
+        Store.KvBatchCompareAndSetRequest req = Store.KvBatchCompareAndSetRequest.newBuilder()
+            .setRegionId(regionId.entityId())
+            .addAllKvs(kvs)
+            .addAllExpectValues(expects)
+            .setIsAtomic(isAtomic)
+            .build();
+        return exec(stub -> stub.kvBatchCompareAndSet(req), retryTimes, tableId, regionId).getKeyStatesList();
     }
 
     private <R> R exec(
-            Function<StoreServiceGrpc.StoreServiceBlockingStub, ServiceConnector.Response<R>> function,
+            Function<StoreServiceGrpc.StoreServiceBlockingStub, R> function,
             int retryTimes,
             DingoCommonId tableId,
             DingoCommonId regionId
     ) {
-        return getStoreConnector(tableId, regionId).exec(function, retryTimes, err -> true).getResponse();
+        return getStoreConnector(tableId, regionId).exec(function, retryTimes);
     }
 }
