@@ -263,7 +263,7 @@ class MetaSafeMapStorage {
 
   uint64_t ParseId(const std::string &str) {
     if (str.size() <= internal_prefix.size()) {
-      LOG(ERROR) << "Parse id failed, invalid str " << str;
+      DINGO_LOG(ERROR) << "Parse id failed, invalid str:[" << str << "], prefix:[" << internal_prefix << "]";
       return 0;
     }
 
@@ -271,7 +271,7 @@ class MetaSafeMapStorage {
     try {
       return std::stoull(s, nullptr, 10);
     } catch (std::invalid_argument &e) {
-      LOG(ERROR) << "string to uint64_t failed: " << e.what();
+      DINGO_LOG(ERROR) << "string to uint64_t failed: " << e.what();
     }
 
     return 0;
@@ -381,7 +381,7 @@ class MetaSafeStringMapStorage {
 
   std::string ParseId(const std::string &str) {
     if (str.size() <= internal_prefix.size()) {
-      LOG(ERROR) << "Parse id failed, invalid str " << str;
+      DINGO_LOG(ERROR) << "Parse id failed, invalid str " << str;
       return std::string();
     }
 
@@ -492,7 +492,7 @@ class MetaMapStorage {
 
   uint64_t ParseId(const std::string &str) {
     if (str.size() <= internal_prefix.size()) {
-      LOG(ERROR) << "Parse id failed, invalid str " << str;
+      DINGO_LOG(ERROR) << "Parse id failed, invalid str " << str;
       return 0;
     }
 
@@ -500,7 +500,7 @@ class MetaMapStorage {
     try {
       return std::stoull(s, nullptr, 10);
     } catch (std::invalid_argument &e) {
-      LOG(ERROR) << "string to uint64_t failed: " << e.what();
+      DINGO_LOG(ERROR) << "string to uint64_t failed: " << e.what();
     }
 
     return 0;
