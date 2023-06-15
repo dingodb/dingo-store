@@ -18,7 +18,6 @@
 #include <string_view>
 
 #include "common/helper.h"
-#include "common/logging.h"
 #include "fmt/core.h"
 
 namespace dingodb {
