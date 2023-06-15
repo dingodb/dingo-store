@@ -17,6 +17,7 @@
 #include <memory>
 #include <string>
 
+#include "bthread/bthread.h"
 #include "client/client_helper.h"
 #include "common/helper.h"
 #include "fmt/core.h"

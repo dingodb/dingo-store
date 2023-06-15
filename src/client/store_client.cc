@@ -18,6 +18,7 @@
 #include <string>
 #include <vector>
 
+#include "bthread/bthread.h"
 #include "client/client_helper.h"
 #include "client/store_client_function.h"
 #include "fmt/core.h"

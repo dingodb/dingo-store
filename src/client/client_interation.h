@@ -15,6 +15,8 @@
 #ifndef DINGODB_CLIENT_INTERATION_H_
 #define DINGODB_CLIENT_INTERATION_H_
 
+#include <butil/fast_rand.h>
+
 #include <cstdint>
 #include <map>
 #include <memory>
@@ -23,13 +25,10 @@
 #include <string>
 #include <vector>
 
-#include "braft/util.h"
 #include "brpc/channel.h"
 #include "brpc/controller.h"
-#include "butil/strings/string_split.h"
 #include "common/logging.h"
 #include "fmt/core.h"
-#include "glog/logging.h"
 #include "proto/common.pb.h"
 #include "proto/index.pb.h"
 #include "proto/meta.pb.h"
