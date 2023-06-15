@@ -4,7 +4,6 @@ import io.dingodb.meta.Meta;
 import io.dingodb.sdk.common.AutoIncrement;
 import io.dingodb.sdk.common.DingoCommonId;
 import io.dingodb.sdk.service.connector.AutoIncrementServiceConnector;
-import io.dingodb.sdk.service.connector.ServiceConnector;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -55,10 +54,7 @@ public class AutoIncrementService {
                 .setAutoIncrementIncrement(increment)
                 .setAutoIncrementOffset(offset)
                 .build();
-            Meta.GenerateAutoIncrementResponse response = connector.exec(stub -> {
-                Meta.GenerateAutoIncrementResponse res = stub.generateAutoIncrement(request);
-                return new ServiceConnector.Response<>(res.getError(), res);
-            }).getResponse();
+            Meta.GenerateAutoIncrementResponse response = connector.exec(stub -> stub.generateAutoIncrement(request));
 
             return new AutoIncrement.Increment(response.getEndId(), response.getStartId());
         } catch (Exception e) {
@@ -72,12 +68,7 @@ public class AutoIncrementService {
             .setTableId(mapping(tableId))
             .build();
 
-        Meta.GetAutoIncrementResponse response = connector.exec(stub -> {
-            Meta.GetAutoIncrementResponse res = stub.getAutoIncrement(request);
-            return new ServiceConnector.Response<>(res.getError(), res);
-        }).getResponse();
-
-        return response.getStartId();
+        return connector.exec(stub -> stub.getAutoIncrement(request)).getStartId();
     }
 
     public long localCurrent(DingoCommonId tableId) {

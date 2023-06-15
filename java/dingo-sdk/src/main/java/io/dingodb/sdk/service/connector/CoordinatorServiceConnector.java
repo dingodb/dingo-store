@@ -39,7 +39,7 @@ public class CoordinatorServiceConnector extends ServiceConnector<CoordinatorSer
     }
 
     protected Coordinator.GetCoordinatorMapResponse getCoordinatorMap() {
-        return execWithErrProto(stub -> stub.getCoordinatorMap(getCoordinatorMapRequest));
+        return exec(stub -> stub.getCoordinatorMap(getCoordinatorMapRequest));
     }
 
     @Override

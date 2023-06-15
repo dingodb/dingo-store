@@ -19,6 +19,7 @@ package io.dingodb.sdk.service.connector;
 import io.dingodb.error.ErrorOuterClass;
 import io.dingodb.sdk.common.DingoClientException;
 import io.dingodb.sdk.common.Location;
+import io.dingodb.sdk.common.utils.ErrorCodeUtils;
 import io.dingodb.sdk.common.utils.NoBreakFunctions;
 import io.dingodb.sdk.common.utils.Optional;
 import io.grpc.ManagedChannel;
@@ -40,16 +41,15 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.LockSupport;
 import java.util.function.Function;
-import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
-import static io.dingodb.sdk.common.utils.ErrorCodeUtils.ignoreCode;
-import static io.dingodb.sdk.common.utils.ErrorCodeUtils.refreshCode;
+import static io.dingodb.sdk.common.utils.ErrorCodeUtils.defaultCodeChecker;
 import static io.dingodb.sdk.common.utils.NoBreakFunctions.wrap;
 
 @Slf4j
 public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
 
+    public static final int RETRY_TIMES = 30;
     private static Map<Class, ResponseBuilder> responseBuilders = new ConcurrentHashMap<>();
 
     @Getter
@@ -97,33 +97,40 @@ public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
         return stubRef.get();
     }
 
-    private <R> Response<R> getResponse(Object res) {
+    private <R> Response<R> toResponse(Object res) {
         return responseBuilders.computeIfAbsent(res.getClass(), NoBreakFunctions.<Class, ResponseBuilder>wrap(
             cls -> new ResponseBuilder<>(cls.getDeclaredMethod("getError")))
         ).build(res);
     }
 
-    public <R> R execWithErrProto(Function<S, R> function) {
-        return exec(stub -> this.<R>getResponse(function.apply(stub))).getResponse();
+    private <R> R cleanResponse(Response<R> response) {
+        return Optional.mapOrNull(response, Response::getResponse);
     }
 
-    public <R> R execWithErrProto(Function<S, R> function, Predicate<ErrorOuterClass.Error> retryCheck) {
-        return exec(stub -> this.<R>getResponse(function.apply(stub)), retryCheck).getResponse();
+    public <R> R exec(Function<S, R> function) {
+        return cleanResponse(this.exec(function, RETRY_TIMES, defaultCodeChecker, this::toResponse));
     }
 
-    public <R> R execWithErrProto(Function<S, R> function, int retryTimes, Predicate<ErrorOuterClass.Error> retryCheck) {
-        return exec(stub -> this.<R>getResponse(function.apply(stub)), retryTimes, retryCheck).getResponse();
+    public <R> R exec(Function<S, R> function, int retryTimes) {
+        return cleanResponse(this.exec(function, retryTimes, defaultCodeChecker, this::toResponse));
     }
 
-    public <R> Response<R> exec(Function<S, Response<R>> function) {
-        return exec(function, 30, e -> true);
+    public <R> R exec(Function<S, R> function, Function<Integer, ErrorCodeUtils.InternalCode> errChecker) {
+        return cleanResponse(exec(function, RETRY_TIMES, errChecker, this::toResponse));
     }
 
-    public <R> Response<R> exec(Function<S, Response<R>> function, Predicate<ErrorOuterClass.Error> retryCheck) {
-        return exec(function, 30, retryCheck);
+    public <R> R exec(
+        Function<S, R> function, int retryTimes, Function<Integer, ErrorCodeUtils.InternalCode> errChecker
+    ) {
+        return cleanResponse(exec(function, retryTimes, errChecker, this::toResponse));
     }
 
-    public <R> Response<R> exec(Function<S, Response<R>> function, int retryTimes, Predicate<ErrorOuterClass.Error> retryCheck) {
+    public <R> Response<R> exec(
+            Function<S, R> function,
+            int retryTimes,
+            Function<Integer, ErrorCodeUtils.InternalCode> errChecker,
+            Function<R, Response<R>> toResponse
+    ) {
         S stub;
         while (retryTimes-- > 0) {
             if ((stub = getStub()) == null) {
@@ -132,27 +139,47 @@ public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
                 continue;
             }
             try {
-                Response<R> response = function.apply(stub);
-                if (response.getError().getErrcodeValue() != 0) {
-                    if (refreshCode.contains(response.getError().getErrcodeValue())) {
-                        throw new DingoClientException.InvalidRouteTableException(response.error.getErrmsg());
+                Response<R> response = toResponse.apply(function.apply(stub));
+                ErrorOuterClass.Error error = response.getError();
+                int errCode = error.getErrcodeValue();
+                if (errCode != 0) {
+                    switch (errChecker.apply(errCode)) {
+                        case RETRY:
+                            log.warn(
+                                    "Exec {} failed, code: [{}], message: {}, will retry...",
+                                    function.getClass(), response.error.getErrcode(), response.error.getErrmsg()
+                            );
+                            LockSupport.parkNanos(TimeUnit.SECONDS.toNanos(1));
+                            refresh(stub);
+                            continue;
+                        case FAILED:
+                            log.error(
+                                    "Exec {} error, code: [{}], message: {}.",
+                                    function.getClass(), response.error.getErrcode(), response.error.getErrmsg()
+                            );
+                            throw new DingoClientException(errCode, error.getErrmsg());
+                        case REFRESH:
+                            log.warn(
+                                    "Exec {} failed, code: [{}], message: {}, will refresh...",
+                                    function.getClass(), response.error.getErrcode(), response.error.getErrmsg()
+                            );
+                            throw new DingoClientException.InvalidRouteTableException(response.error.getErrmsg());
+                        case IGNORE:
+                            if (log.isDebugEnabled()) {
+                                log.warn(
+                                    "Exec {} failed, code: [{}], message: {}, ignore it.",
+                                    function.getClass(), response.error.getErrcode(), response.error.getErrmsg()
+                                );
+                            }
+                            return null;
+                        default:
+                            throw new IllegalStateException("Unexpected value: " + errChecker.apply(errCode));
                     }
-                    if (ignoreCode.contains(response.getError().getErrcodeValue())) {
-                        return response;
-                    }
-                    if (retryCheck.test(response.error)) {
-                        log.warn(
-                            "Exec {} failed, code: [{}], message: {}.",
-                            function.getClass(), response.error.getErrcode(), response.error.getErrmsg()
-                        );
-                        refresh(stub);
-                        continue;
-                    }
-                    throw new DingoClientException(response.getError().getErrcodeValue(), response.getError().getErrmsg());
                 }
                 return response;
             } catch (StatusRuntimeException e) {
                 log.warn("Exec {} failed: {}.", function.getClass(), e.getMessage());
+                LockSupport.parkNanos(TimeUnit.SECONDS.toNanos(1));
                 refresh(stub);
             }
         }
