@@ -264,13 +264,15 @@ std::string Helper::PrefixNext(const std::string& input) {
   std::string ret(input.size(), 0);
   int carry = 1;
   for (int i = input.size() - 1; i >= 0; --i) {
-    if (static_cast<int32_t>(input[i]) == 0xFF && carry == 1) {
+    if (static_cast<uint8_t>(input[i]) == (uint8_t)0xFF && carry == 1) {
       ret[i] = 0;
     } else {
       ret[i] = (input[i] + carry);
       carry = 0;
     }
   }
+
+  std::cout << std::endl;
 
   return (carry == 0) ? ret : input;
 }
@@ -279,7 +281,7 @@ std::string Helper::PrefixNext(const std::string_view& input) {
   std::string ret(input.size(), 0);
   int carry = 1;
   for (int i = input.size() - 1; i >= 0; --i) {
-    if (static_cast<int32_t>(input[i]) == 0xFF && carry == 1) {
+    if (static_cast<uint8_t>(input[i]) == (uint8_t)0xFF && carry == 1) {
       ret[i] = 0;
     } else {
       ret[i] = (input[i] + carry);
