@@ -272,8 +272,6 @@ std::string Helper::PrefixNext(const std::string& input) {
     }
   }
 
-  std::cout << std::endl;
-
   return (carry == 0) ? ret : input;
 }
 
