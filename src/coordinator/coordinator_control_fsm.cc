@@ -207,7 +207,7 @@ bool CoordinatorControl::LoadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapsh
   }
 
   for (const auto& kv : kvs) {
-    auto* snapshot_file_kv = meta_snapshot_file.add_region_map_kvs();
+    auto* snapshot_file_kv = meta_snapshot_file.add_deleted_region_map_kvs();
     snapshot_file_kv->CopyFrom(kv);
   }
   DINGO_LOG(INFO) << "Snapshot deleted_region_meta, count=" << kvs.size();
