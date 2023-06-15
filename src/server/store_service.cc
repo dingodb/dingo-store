@@ -592,7 +592,7 @@ void StoreServiceImpl::KvDeleteRange(google::protobuf::RpcController* controller
       DINGO_LOG(ERROR) << fmt::format("KvDeleteRange request: {} response: {}", request->ShortDebugString(),
                                       response->ShortDebugString());
     } else {
-      DINGO_LOG(WARNING) << fmt::format("KvScanBegin range invalid request: {} uniform_range: {}",
+      DINGO_LOG(WARNING) << fmt::format("KvDeleteRange range invalid request: {} uniform_range: {}",
                                         request->ShortDebugString(), uniform_range.ShortDebugString());
     }
     return;
