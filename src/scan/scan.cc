@@ -23,12 +23,12 @@
 #include "bthread/bthread.h"
 #include "bthread/mutex.h"
 #include "butil/compiler_specific.h"
-#include "butil/macros.h"
-#include "common/constant.h"
-#include "common/helper.h"
+#include "butil/macros.h"     // IWYU pragma: keep
+#include "common/constant.h"  // IWYU pragma: keep
+#include "common/helper.h"    // IWYU pragma: keep
 #include "common/logging.h"
 #include "coprocessor/utils.h"
-#include "engine/write_data.h"
+#include "engine/write_data.h"  // IWYU pragma: keep
 #include "fmt/core.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"

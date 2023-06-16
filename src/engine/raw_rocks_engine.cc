@@ -183,14 +183,14 @@ class RocksIterator : public EngineIterator {
   std::shared_ptr<dingodb::Snapshot> snapshot_;
   std::shared_ptr<rocksdb::DB> db_;
   std::shared_ptr<RawRocksEngine::ColumnFamily> column_family_;
-  rocksdb::Iterator* iter_{};
+  rocksdb::Iterator* iter_{nullptr};
   const std::string name_ = "Rocks";
   uint32_t id_ = static_cast<uint32_t>(EnumEngineIterator::kRocks);
   std::string start_key_;
   std::string end_key_;
-  bool with_start_{};
-  bool with_end_{};
-  bool has_valid_kv_{};
+  bool with_start_{true};
+  bool with_end_{false};
+  bool has_valid_kv_{false};
 };
 
 RawRocksEngine::RawRocksEngine() : db_(nullptr), column_families_({}) {}

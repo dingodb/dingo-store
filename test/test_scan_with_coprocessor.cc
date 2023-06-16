@@ -61,38 +61,38 @@ std::string StrToHex(std::string str, std::string separator = "") {
 
 class ScanWithCoprocessor : public testing::Test {
  public:
-  static std::shared_ptr<Config> GetConfig() { return config; }
+  static std::shared_ptr<Config> GetConfig() { return config_; }
 
   static std::shared_ptr<RawRocksEngine> GetRawRocksEngine() { return engine; }
-  static ScanManager *&GetManager() { return manager; }
+  static ScanManager *&GetManager() { return manager_; }
 
-  static std::shared_ptr<ScanContext> GetScan(std::string *scan_id_in) {
-    if (!scan) {
-      scan = manager->CreateScan(scan_id_in);
-      scan_id = *scan_id_in;
+  static std::shared_ptr<ScanContext> GetScan(std::string *scan_id) {
+    if (!scan_) {
+      scan_ = manager_->CreateScan(scan_id);
+      scan_id_ = *scan_id;
     } else {
-      *scan_id_in = scan_id;
+      *scan_id = scan_id_;
     }
-    return scan;
+    return scan_;
   }
 
   static void DeleteScan() {
-    if (!scan_id.empty() || scan) {
-      manager->DeleteScan(scan_id);
+    if (!scan_id_.empty() || scan_) {
+      manager_->DeleteScan(scan_id_);
     }
-    scan.reset();
-    scan_id = "";
+    scan_.reset();
+    scan_id_ = "";
   }
 
  protected:
   static void SetUpTestSuite() {
     std::cout << "ScanWithCoprocessor::SetUp()" << '\n';
-    server = Server::GetInstance();
-    server->SetRole(pb::common::ClusterRole::STORE);
-    server->InitConfig(kFileName);
-    config_manager = ConfigManager::GetInstance();
-    config = config_manager->GetConfig(pb::common::ClusterRole::STORE);
-    manager = ScanManager::GetInstance();
+    server_ = Server::GetInstance();
+    server_->SetRole(pb::common::ClusterRole::STORE);
+    server_->InitConfig(kFileName);
+    config_manager_ = ConfigManager::GetInstance();
+    config_ = config_manager_->GetConfig(pb::common::ClusterRole::STORE);
+    manager_ = ScanManager::GetInstance();
     engine = std::make_shared<RawRocksEngine>();
   }
 
@@ -106,13 +106,13 @@ class ScanWithCoprocessor : public testing::Test {
   void TearDown() override {}
 
  private:
-  inline static Server *server = nullptr;
+  inline static Server *server_ = nullptr;  // NOLINT
   inline static const std::string kFileName = "../../conf/store.yaml";
-  inline static ConfigManager *config_manager = nullptr;
-  inline static std::shared_ptr<Config> config;
-  inline static ScanManager *manager = nullptr;
-  inline static std::shared_ptr<ScanContext> scan;
-  inline static std::string scan_id;
+  inline static ConfigManager *config_manager_ = nullptr;  // NOLINT
+  inline static std::shared_ptr<Config> config_;           // NOLINT
+  inline static ScanManager *manager_ = nullptr;           // NOLINT
+  inline static std::shared_ptr<ScanContext> scan_;        // NOLINT
+  inline static std::string scan_id_;                      // NOLINT
 
  public:
   inline static std::shared_ptr<RawRocksEngine> engine;
