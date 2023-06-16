@@ -14,8 +14,6 @@
 
 #include "buf.h"
 
-#include <cstdint>
-
 #include "serial/utils.h"
 
 namespace dingodb {

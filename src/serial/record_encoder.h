@@ -16,11 +16,18 @@
 #define DINGO_SERIAL_RECORD_ENCODER_H_
 
 #include <memory>
-#include <vector>
 
 #include "any"
-#include "proto/common.pb.h"
-#include "serial/schema/base_schema.h"
+#include "functional"               // IWYU pragma: keep
+#include "keyvalue.h"               // IWYU pragma: keep
+#include "optional"                 // IWYU pragma: keep
+#include "schema/boolean_schema.h"  // IWYU pragma: keep
+#include "schema/double_schema.h"   // IWYU pragma: keep
+#include "schema/float_schema.h"    // IWYU pragma: keep
+#include "schema/integer_schema.h"  // IWYU pragma: keep
+#include "schema/long_schema.h"     // IWYU pragma: keep
+#include "schema/string_schema.h"   // IWYU pragma: keep
+#include "utils.h"                  // IWYU pragma: keep
 
 namespace dingodb {
 

@@ -18,7 +18,7 @@
 #include <string>
 
 #include "proto/common.pb.h"
-#include "serial/utils.h"
+#include "serial/keyvalue.h"  // IWYU pragma: keep
 
 namespace dingodb {
 
