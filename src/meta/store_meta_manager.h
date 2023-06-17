@@ -147,7 +147,7 @@ class StoreRegionMeta : public TransformKvAble {
   std::vector<store::RegionPtr> GetAllMetricsRegion();
 
  private:
-  std::shared_ptr<pb::common::KeyValue> TransformToKv(void* obj) override;
+  std::shared_ptr<pb::common::KeyValue> TransformToKv(std::any obj) override;
   void TransformFromKv(const std::vector<pb::common::KeyValue>& kvs) override;
 
   // Read meta data from persistence storage.
@@ -184,7 +184,7 @@ class StoreRaftMeta : public TransformKvAble {
   std::vector<RaftMetaPtr> GetAllRaftMeta();
 
  private:
-  std::shared_ptr<pb::common::KeyValue> TransformToKv(void* obj) override;
+  std::shared_ptr<pb::common::KeyValue> TransformToKv(std::any obj) override;
   void TransformFromKv(const std::vector<pb::common::KeyValue>& kvs) override;
 
   // Read meta data from persistence storage.

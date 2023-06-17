@@ -14,7 +14,7 @@ raft:
   host: 127.0.0.1
   port: 8001
   path: ./data/coordinator/raft
-  election_timeout: 10000 # ms
+  election_timeout: 2000 # ms
   snapshot_policy: checkpoint # scan or checkpoint
   snapshot_interval: 3600 # s
 log:

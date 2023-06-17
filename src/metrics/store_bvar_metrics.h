@@ -68,6 +68,21 @@ class StoreBvarMetrics {
     }
   }
 
+  void DeleteMetrics(std::string region_id) {
+    if (leader_switch_time_.has_stats({region_id})) {
+      leader_switch_time_.delete_stats({region_id});
+    }
+    if (leader_switch_count_.has_stats({region_id})) {
+      leader_switch_count_.delete_stats({region_id});
+    }
+    if (commit_count_per_second_.has_stats({region_id})) {
+      commit_count_per_second_.delete_stats({region_id});
+    }
+    if (apply_count_per_second_.has_stats({region_id})) {
+      apply_count_per_second_.delete_stats({region_id});
+    }
+  }
+
  private:
   bvar::MultiDimension<bvar::Status<uint64_t>> leader_switch_time_;
   bvar::MultiDimension<bvar::Status<uint64_t>> leader_switch_count_;

@@ -208,7 +208,7 @@ bool StoreRegionMetrics::CollectMetrics() {
         region->Id(), is_collect_min_key ? "true" : "false", is_collect_max_key ? "true" : "false",
         Helper::TimestampMs() - start_time);
 
-    meta_writer_->Put(TransformToKv(region_metrics.get()));
+    meta_writer_->Put(TransformToKv(region_metrics));
   }
 
   // Get approximate size
@@ -238,7 +238,7 @@ void StoreRegionMetrics::AddMetrics(store::RegionMetricsPtr metrics) {
     metricses_.insert_or_assign(metrics->Id(), metrics);
   }
 
-  meta_writer_->Put(TransformToKv(metrics.get()));
+  meta_writer_->Put(TransformToKv(metrics));
 }
 
 void StoreRegionMetrics::DeleteMetrics(uint64_t region_id) {
@@ -271,8 +271,8 @@ std::vector<store::RegionMetricsPtr> StoreRegionMetrics::GetAllMetrics() {
   return metricses;
 }
 
-std::shared_ptr<pb::common::KeyValue> StoreRegionMetrics::TransformToKv(void* obj) {
-  auto* region_metrics = static_cast<store::RegionMetrics*>(obj);
+std::shared_ptr<pb::common::KeyValue> StoreRegionMetrics::TransformToKv(std::any obj) {
+  auto region_metrics = std::any_cast<store::RegionMetricsPtr>(obj);
   auto kv = std::make_shared<pb::common::KeyValue>();
   kv->set_key(GenKey(region_metrics->Id()));
   kv->set_value(region_metrics->Serialize());

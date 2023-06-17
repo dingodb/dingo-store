@@ -141,7 +141,7 @@ class StoreRegionMetrics : public TransformKvAble {
   std::string GetRegionMaxKey(store::RegionPtr region);
 
  private:
-  std::shared_ptr<pb::common::KeyValue> TransformToKv(void* obj) override;
+  std::shared_ptr<pb::common::KeyValue> TransformToKv(std::any obj) override;
   void TransformFromKv(const std::vector<pb::common::KeyValue>& kvs) override;
 
   // Todo: later optimize

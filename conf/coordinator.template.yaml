@@ -14,7 +14,7 @@ raft:
   host: $RAFT_HOST$
   port: $RAFT_PORT$
   path: $BASE_PATH$/data/coordinator/raft
-  election_timeout: 10000 # ms
+  election_timeout: 2000 # ms
   snapshot_policy: checkpoint # scan or checkpoint
   snapshot_interval: 300 # s
 log:

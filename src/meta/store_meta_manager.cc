@@ -14,6 +14,7 @@
 
 #include "meta/store_meta_manager.h"
 
+#include <any>
 #include <atomic>
 #include <cassert>
 #include <cstddef>
@@ -71,7 +72,7 @@ void Region::SetPeers(std::vector<pb::common::Peer>& peers) {
   google::protobuf::RepeatedPtrField<pb::common::Peer> tmp_peers;
   tmp_peers.Add(peers.begin(), peers.end());
 
-  inner_region_.mutable_definition()->mutable_peers()->Swap(&tmp_peers);
+  inner_region_.mutable_definition()->mutable_peers()->CopyFrom(tmp_peers);
 }
 
 pb::common::StoreRegionState Region::State() const { return state_.load(std::memory_order_relaxed); }
@@ -177,7 +178,7 @@ void StoreRegionMeta::AddRegion(store::RegionPtr region) {
   regions_.Put(region->Id(), region);
 
   if (meta_writer_ != nullptr) {
-    meta_writer_->Put(TransformToKv(&region));
+    meta_writer_->Put(TransformToKv(region));
   }
 }
 
@@ -193,7 +194,7 @@ void StoreRegionMeta::UpdateRegion(store::RegionPtr region) {
   regions_.Put(region->Id(), region);
 
   if (meta_writer_ != nullptr) {
-    meta_writer_->Put(TransformToKv(&region));
+    meta_writer_->Put(TransformToKv(region));
   }
 }
 
@@ -251,7 +252,7 @@ void StoreRegionMeta::UpdateState(store::RegionPtr region, pb::common::StoreRegi
   if (successed) {
     region->AppendHistoryState(new_state);
     if (meta_writer_ != nullptr) {
-      meta_writer_->Put(TransformToKv(&region));
+      meta_writer_->Put(TransformToKv(region));
     } else {
       DINGO_LOG(WARNING) << fmt::format("Update region state persistence failed, region {} state {} to {}",
                                         region->Id(), pb::common::StoreRegionState_Name(cur_state),
@@ -281,7 +282,7 @@ void StoreRegionMeta::UpdateLeaderId(uint64_t region_id, uint64_t leader_id) {
 void StoreRegionMeta::UpdatePeers(store::RegionPtr region, std::vector<pb::common::Peer>& peers) {
   assert(region != nullptr);
   region->SetPeers(peers);
-  meta_writer_->Put(TransformToKv(&region));
+  meta_writer_->Put(TransformToKv(region));
 }
 
 void StoreRegionMeta::UpdatePeers(uint64_t region_id, std::vector<pb::common::Peer>& peers) {
@@ -291,7 +292,7 @@ void StoreRegionMeta::UpdatePeers(uint64_t region_id, std::vector<pb::common::Pe
 void StoreRegionMeta::UpdateRange(store::RegionPtr region, const pb::common::Range& range) {
   assert(region != nullptr);
   region->SetRange(range);
-  meta_writer_->Put(TransformToKv(&region));
+  meta_writer_->Put(TransformToKv(region));
 }
 
 void StoreRegionMeta::UpdateRange(uint64_t region_id, const pb::common::Range& range) {
@@ -352,8 +353,8 @@ std::vector<store::RegionPtr> StoreRegionMeta::GetAllMetricsRegion() {
   return regions;
 }
 
-std::shared_ptr<pb::common::KeyValue> StoreRegionMeta::TransformToKv(void* obj) {
-  auto region = *static_cast<store::RegionPtr*>(obj);
+std::shared_ptr<pb::common::KeyValue> StoreRegionMeta::TransformToKv(std::any obj) {
+  auto region = std::any_cast<store::RegionPtr>(obj);
   auto kv = std::make_shared<pb::common::KeyValue>();
   kv->set_key(GenKey(region->Id()));
   kv->set_value(region->Serialize());
@@ -404,7 +405,7 @@ void StoreRaftMeta::AddRaftMeta(RaftMetaPtr raft_meta) {
     raft_metas_.insert(std::make_pair(raft_meta->region_id(), raft_meta));
   }
 
-  meta_writer_->Put(TransformToKv(&raft_meta));
+  meta_writer_->Put(TransformToKv(raft_meta));
 }
 
 void StoreRaftMeta::UpdateRaftMeta(RaftMetaPtr raft_meta) {
@@ -413,7 +414,7 @@ void StoreRaftMeta::UpdateRaftMeta(RaftMetaPtr raft_meta) {
     raft_metas_.insert_or_assign(raft_meta->region_id(), raft_meta);
   }
 
-  meta_writer_->Put(TransformToKv(&raft_meta));
+  meta_writer_->Put(TransformToKv(raft_meta));
 }
 
 void StoreRaftMeta::DeleteRaftMeta(uint64_t region_id) {
@@ -446,8 +447,8 @@ std::vector<StoreRaftMeta::RaftMetaPtr> StoreRaftMeta::GetAllRaftMeta() {
   return raft_metas;
 }
 
-std::shared_ptr<pb::common::KeyValue> StoreRaftMeta::TransformToKv(void* obj) {
-  auto raft_meta = *static_cast<RaftMetaPtr*>(obj);
+std::shared_ptr<pb::common::KeyValue> StoreRaftMeta::TransformToKv(std::any obj) {
+  auto raft_meta = std::any_cast<RaftMetaPtr>(obj);
   std::shared_ptr<pb::common::KeyValue> kv = std::make_shared<pb::common::KeyValue>();
   kv->set_key(GenKey(raft_meta->region_id()));
   kv->set_value(raft_meta->SerializeAsString());
