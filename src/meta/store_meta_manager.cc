@@ -29,6 +29,7 @@
 namespace dingodb {
 
 namespace store {
+
 std::shared_ptr<Region> Region::New(const pb::common::RegionDefinition& definition) {
   auto region = std::make_shared<Region>();
   region->inner_region_.set_id(definition.id());
@@ -37,9 +38,13 @@ std::shared_ptr<Region> Region::New(const pb::common::RegionDefinition& definiti
   return region;
 }
 
-std::string Region::Serialize() { return inner_region_.SerializeAsString(); }
+std::string Region::Serialize() {
+  BAIDU_SCOPED_LOCK(mutex_);
+  return inner_region_.SerializeAsString();
+}
 
 void Region::DeSerialize(const std::string& data) {
+  BAIDU_SCOPED_LOCK(mutex_);
   inner_region_.ParsePartialFromArray(data.data(), data.size());
   state_.store(inner_region_.state());
 }
@@ -48,6 +53,7 @@ uint64_t Region::LeaderId() {
   BAIDU_SCOPED_LOCK(mutex_);
   return inner_region_.leader_id();
 }
+
 void Region::SetLeaderId(uint64_t leader_id) {
   BAIDU_SCOPED_LOCK(mutex_);
   inner_region_.set_leader_id(leader_id);
@@ -57,12 +63,15 @@ const pb::common::Range& Region::Range() {
   BAIDU_SCOPED_LOCK(mutex_);
   return inner_region_.definition().range();
 }
+
 void Region::SetRange(const pb::common::Range& range) {
   BAIDU_SCOPED_LOCK(mutex_);
   inner_region_.mutable_definition()->mutable_range()->CopyFrom(range);
 }
 
-std::vector<pb::common::Peer> Region::Peers() const {
+std::vector<pb::common::Peer> Region::Peers() {
+  BAIDU_SCOPED_LOCK(mutex_);
+
   std::vector<pb::common::Peer> peers(inner_region_.definition().peers().begin(),
                                       inner_region_.definition().peers().end());
   return peers;
@@ -72,13 +81,21 @@ void Region::SetPeers(std::vector<pb::common::Peer>& peers) {
   google::protobuf::RepeatedPtrField<pb::common::Peer> tmp_peers;
   tmp_peers.Add(peers.begin(), peers.end());
 
-  inner_region_.mutable_definition()->mutable_peers()->CopyFrom(tmp_peers);
+  {
+    BAIDU_SCOPED_LOCK(mutex_);
+    inner_region_.mutable_definition()->mutable_peers()->CopyFrom(tmp_peers);
+  }
 }
 
 pb::common::StoreRegionState Region::State() const { return state_.load(std::memory_order_relaxed); }
+
 void Region::SetState(pb::common::StoreRegionState state) {
   state_.store(state, std::memory_order_relaxed);
-  inner_region_.set_state(state);
+
+  {
+    BAIDU_SCOPED_LOCK(mutex_);
+    inner_region_.set_state(state);
+  }
 }
 
 }  // namespace store
