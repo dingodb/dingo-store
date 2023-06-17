@@ -262,7 +262,7 @@ class RegionCommandManager : public TransformKvAble {
   std::vector<std::shared_ptr<pb::coordinator::RegionCmd>> GetAllCommand();
 
  private:
-  std::shared_ptr<pb::common::KeyValue> TransformToKv(void* obj) override;
+  std::shared_ptr<pb::common::KeyValue> TransformToKv(std::any obj) override;
   void TransformFromKv(const std::vector<pb::common::KeyValue>& kvs) override;
 
   // Read meta data from persistence storage.

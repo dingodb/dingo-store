@@ -15,6 +15,7 @@
 #ifndef DINGODB_TRANSFORM_KV_ABLE_H_
 #define DINGODB_TRANSFORM_KV_ABLE_H_
 
+#include <any>
 #include <memory>
 #include <shared_mutex>
 #include <vector>
@@ -52,7 +53,7 @@ class TransformKvAble {
   }
 
   // Transform other format to kv.
-  virtual std::shared_ptr<pb::common::KeyValue> TransformToKv(void* /*obj*/) {
+  virtual std::shared_ptr<pb::common::KeyValue> TransformToKv(std::any /*obj*/) {
     DINGO_LOG(ERROR) << "Not support";
     return nullptr;
   }

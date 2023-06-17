@@ -19,6 +19,7 @@
 #include <string>
 #include <utility>
 
+#include "bthread/bthread.h"
 #include "common/failpoint.h"
 #include "common/helper.h"
 #include "common/logging.h"

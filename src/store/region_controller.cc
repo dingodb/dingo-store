@@ -19,6 +19,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <string>
 
 #include "butil/status.h"
 #include "common/constant.h"
@@ -27,6 +28,7 @@
 #include "event/store_state_machine_event.h"
 #include "fmt/core.h"
 #include "glog/logging.h"
+#include "metrics/store_bvar_metrics.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
 #include "proto/error.pb.h"
@@ -180,6 +182,7 @@ butil::Status DeleteRegionTask::DeleteRegion(std::shared_ptr<Context> ctx, uint6
   // Delete metrics
   DINGO_LOG(DEBUG) << fmt::format("Delete region {} delete region metrics", region_id);
   Server::GetInstance()->GetStoreMetricsManager()->GetStoreRegionMetrics()->DeleteMetrics(region_id);
+  StoreBvarMetrics::GetInstance().DeleteMetrics(std::to_string(region_id));
 
   // Delete raft meta
   store_meta_manager->GetStoreRaftMeta()->DeleteRaftMeta(region_id);
@@ -685,13 +688,13 @@ void RegionCommandManager::AddCommand(std::shared_ptr<pb::coordinator::RegionCmd
     region_commands_.insert(std::make_pair(region_cmd->id(), region_cmd));
   }
 
-  meta_writer_->Put(TransformToKv(&region_cmd));
+  meta_writer_->Put(TransformToKv(region_cmd));
 }
 
 void RegionCommandManager::UpdateCommandStatus(std::shared_ptr<pb::coordinator::RegionCmd> region_cmd,
                                                pb::coordinator::RegionCmdStatus status) {
   region_cmd->set_status(status);
-  meta_writer_->Put(TransformToKv(&region_cmd));
+  meta_writer_->Put(TransformToKv(region_cmd));
 }
 
 void RegionCommandManager::UpdateCommandStatus(uint64_t command_id, pb::coordinator::RegionCmdStatus status) {
@@ -759,8 +762,8 @@ std::vector<std::shared_ptr<pb::coordinator::RegionCmd>> RegionCommandManager::G
   return commands;
 }
 
-std::shared_ptr<pb::common::KeyValue> RegionCommandManager::TransformToKv(void* obj) {
-  auto region_cmd = *static_cast<std::shared_ptr<pb::coordinator::RegionCmd>*>(obj);
+std::shared_ptr<pb::common::KeyValue> RegionCommandManager::TransformToKv(std::any obj) {
+  auto region_cmd = std::any_cast<std::shared_ptr<pb::coordinator::RegionCmd>>(obj);
   std::shared_ptr<pb::common::KeyValue> kv = std::make_shared<pb::common::KeyValue>();
   kv->set_key(GenKey(region_cmd->id()));
   kv->set_value(region_cmd->SerializeAsString());
