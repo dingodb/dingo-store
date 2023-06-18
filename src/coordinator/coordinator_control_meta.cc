@@ -318,7 +318,7 @@ butil::Status CoordinatorControl::GetSchemaByName(const std::string& schema_name
   uint64_t temp_schema_id = 0;
   auto ret = schema_name_map_safe_temp_.Get(schema_name, temp_schema_id);
   if (ret < 0) {
-    DINGO_LOG(ERROR) << "ERRROR: schema_name not found " << schema_name;
+    DINGO_LOG(WARNING) << "WARNING: schema_name not found " << schema_name;
     return butil::Status(pb::error::Errno::ESCHEMA_NOT_FOUND, "schema_name not found");
   }
 
@@ -737,7 +737,7 @@ butil::Status CoordinatorControl::GetTableByName(uint64_t schema_id, const std::
   uint64_t temp_table_id = 0;
   auto ret = table_name_map_safe_temp_.Get(std::to_string(schema_id) + table_name, temp_table_id);
   if (ret < 0) {
-    DINGO_LOG(ERROR) << "ERRROR: table_name not found " << table_name;
+    DINGO_LOG(WARNING) << "WARNING: table_name not found " << table_name;
     return butil::Status(pb::error::Errno::ETABLE_NOT_FOUND, "table_name not found");
   }
 
