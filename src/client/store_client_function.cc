@@ -34,6 +34,8 @@
 
 const int kBatchSize = 1000;
 
+DECLARE_string(key);
+
 namespace client {
 
 void SendVectorSearch(ServerInteractionPtr interaction, uint64_t region_id, uint32_t dimension, uint64_t id) {
@@ -48,6 +50,12 @@ void SendVectorSearch(ServerInteractionPtr interaction, uint64_t region_id, uint
   }
 
   request.mutable_parameter()->set_top_n(10);
+  if (FLAGS_key.empty()) {
+    request.mutable_parameter()->set_with_all_metadata(true);
+  } else {
+    auto* key = request.mutable_parameter()->mutable_selected_keys()->Add();
+    key->assign(FLAGS_key);
+  }
 
   if (id > 0) {
     request.mutable_vector()->set_id(id);
@@ -68,6 +76,13 @@ void SendVectorAdd(ServerInteractionPtr interaction, uint64_t region_id, uint32_
     vector_with_id->set_id(i);
     for (int j = 0; j < dimension; j++) {
       vector_with_id->mutable_vector()->add_values(1.0 * dingodb::Helper::GenerateRandomInteger(0, 100) / 10);
+    }
+
+    vector_with_id->mutable_metadata()->mutable_metadata()->insert({"name", fmt::format("name{}", i)});
+
+    for (int k = 0; k < 3; ++k) {
+      vector_with_id->mutable_metadata()->mutable_metadata()->insert(
+          {fmt::format("key{}", k), fmt::format("value{}", k)});
     }
   }
 
