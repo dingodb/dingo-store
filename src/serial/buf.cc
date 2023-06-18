@@ -240,4 +240,10 @@ int Buf::GetBytes(std::string& s) {
   return 0;
 }
 
+std::string Buf::GetString() {
+  std::string s;
+  GetBytes(s);
+  return s;
+}
+
 }  // namespace dingodb

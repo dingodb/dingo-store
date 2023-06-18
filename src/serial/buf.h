@@ -59,6 +59,7 @@ class Buf {
   void EnsureRemainder(int length);
   std::string* GetBytes();
   int GetBytes(std::string& s);
+  std::string GetString();
 };
 
 }  // namespace dingodb

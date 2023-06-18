@@ -41,6 +41,7 @@
 #include "proto/coordinator_internal.pb.h"
 #include "proto/error.pb.h"
 #include "proto/meta.pb.h"
+#include "serial/buf.h"
 
 namespace dingodb {
 
@@ -906,6 +907,13 @@ butil::Status CoordinatorControl::SelectStore(pb::common::StoreType store_type, 
   return butil::Status::OK();
 }
 
+std::string EncodeIndexRegionHeader(uint64_t region_id) {
+  Buf buf(17);
+  buf.WriteLong(region_id);
+
+  return buf.GetString();
+}
+
 butil::Status CoordinatorControl::CreateRegion(const std::string& region_name, pb::common::RegionType region_type,
                                                const std::string& resource_tag, int32_t replica_num,
                                                pb::common::Range region_range, uint64_t schema_id, uint64_t table_id,
@@ -972,7 +980,14 @@ butil::Status CoordinatorControl::CreateRegion(const std::string& region_name, p
   region_definition->set_index_id(index_id);
   region_definition->mutable_index_parameter()->CopyFrom(index_parameter);
   auto* range_in_definition = region_definition->mutable_range();
-  range_in_definition->CopyFrom(region_range);
+  // for index region, the region key header is start with region_id
+  // for table region, the region range is defined by user
+  if (region_type == pb::common::RegionType::INDEX_REGION) {
+    range_in_definition->set_start_key(EncodeIndexRegionHeader(create_region_id));
+    range_in_definition->set_end_key(EncodeIndexRegionHeader(create_region_id + 1));
+  } else {
+    range_in_definition->CopyFrom(region_range);
+  }
 
   // add store_id and its peer location to region
   for (int i = 0; i < replica_num; i++) {
