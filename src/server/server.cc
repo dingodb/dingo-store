@@ -452,6 +452,17 @@ bool Server::Recover() {
       DINGO_LOG(ERROR) << "Recover region controller failed";
       return false;
     }
+  } else if (this->role_ == pb::common::INDEX) {
+    // Recover engine state.
+    if (!engine_->Recover()) {
+      DINGO_LOG(ERROR) << "Recover engine failed, engine " << engine_->GetName();
+      return false;
+    }
+
+    if (!region_controller_->Recover()) {
+      DINGO_LOG(ERROR) << "Recover region controller failed";
+      return false;
+    }
   }
 
   return true;

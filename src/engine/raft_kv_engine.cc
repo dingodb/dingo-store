@@ -96,6 +96,11 @@ butil::Status RaftKvEngine::AddNode(std::shared_ptr<Context> /*ctx*/, store::Reg
     return butil::Status(pb::error::ERAFT_INIT, "State machine init failed");
   }
 
+  // if this region is index region, load index
+  if (region->InnerRegion().definition().has_index_parameter()) {
+    Server::GetInstance()->GetRegionController()->LoadIndex(region->Id());
+  }
+
   std::shared_ptr<RaftNode> node = std::make_shared<RaftNode>(
       region->Id(), region->Name(), braft::PeerId(Server::GetInstance()->RaftEndpoint()), state_machine);
 
