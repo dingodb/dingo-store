@@ -61,8 +61,6 @@ void CoordinatorControl::GetCoordinatorMap(uint64_t cluster_id, uint64_t& epoch,
     return;
   }
   epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_COORINATOR);
-  leader_location.mutable_host()->assign("127.0.0.1");
-  leader_location.set_port(19190);
 
   if (raft_node_ == nullptr) {
     DINGO_LOG(ERROR) << "GetCoordinatorMap raft_node_ is nullptr";
