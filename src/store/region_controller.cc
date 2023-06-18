@@ -841,6 +841,16 @@ void RegionController::Destroy() {
   share_executor_->Stop();
 }
 
+butil::Status RegionController::LoadIndex(uint64_t region_id) {
+  DINGO_LOG(INFO) << "LoadIndex for region_id:" << region_id;
+
+  if (this->vector_index_map.Exists(region_id)) {
+    DINGO_LOG(INFO) << " index already loaded, region_id:" << region_id;
+  }
+
+  return butil::Status::OK();
+}
+
 std::vector<uint64_t> RegionController::GetAllRegion() {
   BAIDU_SCOPED_LOCK(mutex_);
   std::vector<uint64_t> region_ids;

@@ -313,6 +313,9 @@ class RegionController {
   // vector_index
   DingoSafeMap<uint64_t, std::shared_ptr<VectorIndex>> vector_index_map;
 
+  // load or build index
+  butil::Status LoadIndex(uint64_t region_id);
+
  private:
   std::shared_ptr<RegionControlExecutor> GetRegionControlExecutor(uint64_t region_id);
   butil::Status InnerDispatchRegionControlCommand(std::shared_ptr<Context> ctx,
