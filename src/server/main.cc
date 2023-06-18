@@ -60,6 +60,8 @@ DEFINE_string(conf, "", "server config");
 DEFINE_string(role, "", "server role [store|coordinator]");
 DEFINE_string(git_commit_hash, GIT_VERSION, "current git commit version");
 DEFINE_string(git_tag_name, GIT_TAG_NAME, "current dingo version");
+DEFINE_string(dingo_build_type, DINGO_BUILD_TYPE, "current dingo build type");
+DEFINE_string(dingo_contrib_build_type, DINGO_CONTRIB_BUILD_TYPE, "current dingo contrib build type");
 
 namespace bvar {
 DECLARE_int32(bvar_max_dump_multi_dimension_metric_number);
@@ -365,6 +367,8 @@ int main(int argc, char *argv[]) {
   if (dingodb::FLAGS_show_version) {
     printf("Dingo-Store version:[%s] with git commit hash:[%s]\n", FLAGS_git_tag_name.c_str(),
            FLAGS_git_commit_hash.c_str());
+    printf("Dingo-Store build_type:[%s] contrib_build_type:[%s]\n", FLAGS_dingo_build_type.c_str(),
+           FLAGS_dingo_contrib_build_type.c_str());
     exit(-1);
   }
 

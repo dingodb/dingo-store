@@ -256,6 +256,8 @@ endif()
 add_definitions(-DGLOG_CUSTOM_PREFIX_SUPPORT=ON)
 add_definitions(-DGIT_VERSION="${GIT_VERSION}")
 add_definitions(-DGIT_TAG_NAME="${GIT_TAG_NAME}")
+add_definitions(-DDINGO_BUILD_TYPE="${CMAKE_BUILD_TYPE}")
+add_definitions(-DDINGO_CONTRIB_BUILD_TYPE="${THIRD_PARTY_BUILD_TYPE}")
 
 if (ENABLE_FAILPOINT)
     message(STATUS "Enable failpoint")

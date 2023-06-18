@@ -28,7 +28,15 @@ namespace dingodb {
 #endif
 
 #ifndef GIT_TAG_NAME
-#define GIT_TAG_NAME "v0.6.0"
+#define GIT_TAG_NAME "v0.7.0"
+#endif
+
+#ifndef DINGO_BUILD_TYPE
+#define DINGO_BUILD_TYPE "unknown"
+#endif
+
+#ifndef DINGO_CONTRIB_BUILD_TYPE
+#define DINGO_CONTRIB_BUILD_TYPE "unknown"
 #endif
 
 DECLARE_bool(show_version);
