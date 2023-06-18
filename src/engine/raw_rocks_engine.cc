@@ -35,6 +35,7 @@
 #include <vector>
 
 #include "butil/compiler_specific.h"
+#include "butil/status.h"
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
@@ -773,10 +774,12 @@ butil::Status RawRocksEngine::Reader::VectorSearch(uint64_t region_id, const pb:
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "top_n is 0");
   }
 
+  auto snapshot = std::make_shared<RocksSnapshot>(db_->GetSnapshot(), db_);
+  rocksdb::ReadOptions read_option;
+  read_option.snapshot = static_cast<const rocksdb::Snapshot*>(snapshot->Inner());
+
+  // search vector by id
   if (vector.id() > 0) {
-    auto snapshot = std::make_shared<RocksSnapshot>(db_->GetSnapshot(), db_);
-    rocksdb::ReadOptions read_option;
-    read_option.snapshot = static_cast<const rocksdb::Snapshot*>(snapshot->Inner());
     std::string value;
     std::string key;
     EncodeVectorId(region_id, vector.id(), key);
@@ -797,37 +800,91 @@ butil::Status RawRocksEngine::Reader::VectorSearch(uint64_t region_id, const pb:
     }
 
     pb::common::VectorWithDistance vector_with_distance;
-    vector_with_distance.set_id(vector.id());
     vector_with_distance.set_distance(0);
-    vector_with_distance.mutable_vector()->CopyFrom(result);
+    vector_with_distance.mutable_vector_with_id()->set_id(vector.id());
+    vector_with_distance.mutable_vector_with_id()->mutable_vector()->CopyFrom(result);
 
     vectors.push_back(vector_with_distance);
+  }
+  // search vector by vector
+  else {
+    std::shared_ptr<VectorIndex> vector_index;
+    auto ret = Server::GetInstance()->GetRegionController()->vector_index_map.Get(region_id, vector_index);
+    if (ret < 0) {
+      DINGO_LOG(ERROR) << fmt::format("Get vector_index failed");
+      return butil::Status(pb::error::EINTERNAL, "Internal error, Get vector_index failed");
+    }
 
-    return butil::Status();
+    vector_index->Search(vector, parameter.top_n(), vectors);
+
+    // if vector index does not support restruct vector ,we restruct it using RocksDB
+    for (auto& vector_with_distance : vectors) {
+      if (vector_with_distance.vector_with_id().has_vector()) {
+        continue;
+      }
+
+      std::string value;
+      std::string key;
+      EncodeVectorId(region_id, vector_with_distance.vector_with_id().id(), key);
+
+      rocksdb::Status s = db_->Get(read_option, column_family_->GetHandle(), key, &value);
+      if (!s.ok()) {
+        if (s.IsNotFound()) {
+          return butil::Status(pb::error::EKEY_NOT_FOUND, "Not found");
+        }
+        DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Get failed : {}", s.ToString());
+        return butil::Status(pb::error::EINTERNAL, "Internal error");
+      }
+
+      pb::common::Vector result;
+      if (!result.ParseFromString(value)) {
+        DINGO_LOG(ERROR) << fmt::format("ParseFromString failed");
+        return butil::Status(pb::error::EINTERNAL, "Internal error");
+      }
+
+      vector_with_distance.mutable_vector_with_id()->mutable_vector()->CopyFrom(result);
+    }
   }
 
-  // for (int i = 0; i < 10; i++) {
-  //   pb::common::VectorWithDistance vector_with_distance;
-  //   vector_with_distance.set_id(i);
-  //   vector_with_distance.set_distance(i);
-
-  //   for (int j = 0; j < 16; j++) {
-  //     vector_with_distance.mutable_vector()->add_values(i * 16 + j);
-  //   }
-
-  //   vectors.push_back(vector_with_distance);
-  // }
-
-  std::shared_ptr<VectorIndex> vector_index;
-  auto ret = Server::GetInstance()->GetRegionController()->vector_index_map.Get(region_id, vector_index);
-  if (ret < 0) {
-    DINGO_LOG(ERROR) << fmt::format("Get vector_index failed");
-    return butil::Status(pb::error::EINTERNAL, "Internal error, Get vector_index failed");
+  if (!parameter.with_all_metadata() && parameter.selected_keys_size() == 0) {
+    return butil::Status::OK();
   }
 
-  vector_index->Search(vector, parameter.top_n(), vectors);
+  // get metadata by parameter
+  for (auto& vector_with_distance : vectors) {
+    std::string metadata_key;
+    std::string metadata_value;
 
-  return butil::Status();
+    EncodeVectorMeta(region_id, vector_with_distance.vector_with_id().id(), metadata_key);
+
+    rocksdb::Status s = db_->Get(read_option, column_family_->GetHandle(), metadata_key, &metadata_value);
+    if (!s.ok()) {
+      if (!s.IsNotFound()) {
+        DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Get failed : {}", s.ToString());
+        return butil::Status(pb::error::EINTERNAL, "Internal error");
+      }
+    }
+
+    auto* metadata = vector_with_distance.mutable_vector_with_id()->mutable_metadata()->mutable_metadata();
+
+    pb::common::VectorMetadata vector_metadata;
+    if (!vector_metadata.ParseFromString(metadata_value)) {
+      DINGO_LOG(ERROR) << fmt::format("ParseFromString failed");
+      return butil::Status(pb::error::EINTERNAL, "Internal error");
+    }
+
+    for (const auto& it : vector_metadata.metadata()) {
+      if (!parameter.with_all_metadata() &&
+          std::find(parameter.selected_keys().begin(), parameter.selected_keys().end(), it.first) ==
+              parameter.selected_keys().end()) {
+        continue;
+      }
+
+      metadata->insert({it.first, it.second});
+    }
+  }
+
+  return butil::Status::OK();
 }
 
 butil::Status RawRocksEngine::Reader::KvScan(const std::string& start_key, const std::string& end_key,
@@ -970,6 +1027,16 @@ butil::Status RawRocksEngine::Writer::VectorAdd(uint64_t region_id, uint64_t log
         DINGO_LOG(ERROR) << fmt::format("rocksdb::WriteBatch::Put failed : {}", s.ToString());
         return butil::Status(pb::error::EINTERNAL, "Internal error");
       }
+
+      // 4.write vector metadata
+      std::string metadata_key;
+      EncodeVectorMeta(region_id, vector.id(), metadata_key);
+
+      s = batch.Put(column_family_->GetHandle(), metadata_key, vector.metadata().SerializeAsString());
+      if (BAIDU_UNLIKELY(!s.ok())) {
+        DINGO_LOG(ERROR) << fmt::format("rocksdb::WriteBatch::Put failed : {}", s.ToString());
+        return butil::Status(pb::error::EINTERNAL, "Internal error");
+      }
     }
   }
 
@@ -1039,6 +1106,16 @@ butil::Status RawRocksEngine::Writer::VectorDelete(uint64_t region_id, uint64_t 
       EncodeVectorWalLogIdMax(region_id, wal_log_id_key);
 
       s = batch.Put(column_family_->GetHandle(), wal_log_id_key, std::to_string(log_id));
+      if (BAIDU_UNLIKELY(!s.ok())) {
+        DINGO_LOG(ERROR) << fmt::format("rocksdb::WriteBatch::Put failed : {}", s.ToString());
+        return butil::Status(pb::error::EINTERNAL, "Internal error");
+      }
+
+      // 4.delete vector metadata
+      std::string metadata_key;
+      EncodeVectorMeta(region_id, id, metadata_key);
+
+      s = batch.Delete(column_family_->GetHandle(), metadata_key);
       if (BAIDU_UNLIKELY(!s.ok())) {
         DINGO_LOG(ERROR) << fmt::format("rocksdb::WriteBatch::Put failed : {}", s.ToString());
         return butil::Status(pb::error::EINTERNAL, "Internal error");
@@ -1605,6 +1682,15 @@ void EncodeVectorId(uint64_t region_id, uint64_t vector_id, std::string& result)
   Buf buf(17);
   buf.WriteLong(region_id);
   buf.Write(kVectorIdPrefix);
+  buf.WriteLong(vector_id);
+
+  buf.GetBytes(result);
+}
+
+void EncodeVectorMeta(uint64_t region_id, uint64_t vector_id, std::string& result) {
+  Buf buf(17);
+  buf.WriteLong(region_id);
+  buf.Write(kVectorMetaPrefix);
   buf.WriteLong(vector_id);
 
   buf.GetBytes(result);

@@ -35,7 +35,9 @@ enum Engine {
   ENG_COLUMNAR = 4;
 };
 
-enum RawEngine { RAW_ENG_ROCKSDB = 0; };
+enum RawEngine {
+  RAW_ENG_ROCKSDB = 0;
+};
 
 message Location {
   string host = 1;
@@ -65,15 +67,19 @@ message Vector {
   repeated float values = 1;
 }
 
+message VectorMetadata {
+  map<string, bytes> metadata = 3;
+}
+
 message VectorWithId {
   uint64 id = 1;
-  dingodb.pb.common.Vector vector = 2;
+  Vector vector = 2;            // vector data
+  VectorMetadata metadata = 3;  // metadata of this vector
 }
 
 message VectorWithDistance {
-  uint64 id = 1;
-  dingodb.pb.common.Vector vector = 2;
-  float distance = 3;
+  VectorWithId vector_with_id = 1;
+  float distance = 2;
 }
 
 enum CoordinatorState {
@@ -288,6 +294,8 @@ message VectorIndexParameter {
 
 message VectorSearchParameter {
   uint32 top_n = 1;
+  bool with_all_metadata = 2;  // if true, return all metadata, otherwise return only selected key
+  repeated string selected_keys = 3;
 }
 
 enum ScalarIndexType {

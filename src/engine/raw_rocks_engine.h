@@ -340,8 +340,10 @@ const uint8_t kVectorIdPrefix = 0x01;
 const uint8_t kVectorWalPrefix = 0x02;
 const uint8_t kVectorWalLogIdMaxPrefix = 0x03;
 const uint8_t kVectorWalLogIdMinPrefix = 0x04;
+const uint8_t kVectorMetaPrefix = 0x05;
 
 void EncodeVectorId(uint64_t region_id, uint64_t vector_id, std::string& result);
+void EncodeVectorMeta(uint64_t region_id, uint64_t vector_id, std::string& result);
 void EncodeVectorWal(uint64_t region_id, uint64_t vector_id, uint64_t log_id, std::string& result);
 void EncodeVectorWalLogIdMax(uint64_t region_id, std::string& result);
 void EncodeVectorWalLogIdMin(uint64_t region_id, std::string& result);

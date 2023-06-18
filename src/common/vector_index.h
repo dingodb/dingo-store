@@ -106,13 +106,16 @@ class VectorIndex {
 
       while (!result.empty()) {
         pb::common::VectorWithDistance vector_with_distance;
-        vector_with_distance.set_id(result.top().second);
         vector_with_distance.set_distance(result.top().first);
+
+        auto* vector_with_id = vector_with_distance.mutable_vector_with_id();
+
+        vector_with_id->set_id(result.top().second);
 
         try {
           std::vector<float> data = hnsw_index_->getDataByLabel<float>(result.top().second);
           for (auto& value : data) {
-            vector_with_distance.mutable_vector()->add_values(value);
+            vector_with_id->mutable_vector()->add_values(value);
           }
           results.push_back(vector_with_distance);
         } catch (std::exception& e) {
