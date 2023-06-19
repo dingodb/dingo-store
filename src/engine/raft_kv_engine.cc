@@ -98,7 +98,11 @@ butil::Status RaftKvEngine::AddNode(std::shared_ptr<Context> /*ctx*/, store::Reg
 
   // if this region is index region, load index
   if (region->InnerRegion().definition().has_index_parameter()) {
-    Server::GetInstance()->GetRegionController()->LoadIndex(region->Id());
+    auto ret = Server::GetInstance()->GetRegionController()->LoadIndex(region->Id());
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << "Load index failed, region_id: " << region->Id() << ", error: " << ret.error_str();
+      return butil::Status(pb::error::ERAFT_INIT, "Load index failed");
+    }
   }
 
   std::shared_ptr<RaftNode> node = std::make_shared<RaftNode>(

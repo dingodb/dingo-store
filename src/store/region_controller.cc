@@ -25,6 +25,7 @@
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "common/vector_index.h"
 #include "config/config_manager.h"
 #include "event/store_state_machine_event.h"
 #include "fmt/core.h"
@@ -104,11 +105,11 @@ butil::Status CreateRegionTask::CreateRegion(std::shared_ptr<Context> ctx, store
   if (definition.index_parameter().index_type() == pb::common::IndexType::INDEX_TYPE_VECTOR) {
     DINGO_LOG(INFO) << fmt::format("Create region {} vector index", region->Id());
 
-    const auto& vector_index_parameter = definition.index_parameter().vector_index_parameter();
-    auto vector_index =
-        std::make_shared<VectorIndex>(vector_index_parameter.dimension(), vector_index_parameter.max_elements());
-
-    Server::GetInstance()->GetRegionController()->vector_index_map.Put(region->Id(), vector_index);
+    auto region_controller = Server::GetInstance()->GetRegionController();
+    auto ret = region_controller->InitVectorIndex(region->Id(), region->InnerRegion().definition().index_parameter());
+    if (!ret) {
+      return butil::Status(pb::error::EINTERNAL, fmt::format("Init vector index failed, region_id: {}", region->Id()));
+    }
   }
 
   return butil::Status();
@@ -797,6 +798,69 @@ void RegionCommandManager::TransformFromKv(const std::vector<pb::common::KeyValu
   }
 }
 
+bool RegionController::InitVectorIndex(uint64_t region_id) {
+  auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
+  auto region = store_meta_manager->GetStoreRegionMeta()->GetRegion(region_id);
+  if (region == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("Region {} not exist", region_id);
+    return false;
+  }
+
+  const auto& definition = region->InnerRegion().definition();
+  if (definition.index_parameter().index_type() != pb::common::IndexType::INDEX_TYPE_VECTOR) {
+    DINGO_LOG(ERROR) << fmt::format("Region {} is not vector index", region_id);
+    return false;
+  }
+
+  return InitVectorIndex(region_id, definition.index_parameter());
+}
+
+bool RegionController::InitVectorIndex(uint64_t region_id, const pb::common::IndexParameter& index_parameter) {
+  if (index_parameter.index_type() != pb::common::IndexType::INDEX_TYPE_VECTOR) {
+    DINGO_LOG(ERROR) << "index_parameter is not vector index, type=" << index_parameter.index_type()
+                     << ", region_id=" << region_id;
+    return false;
+  }
+
+  auto vector_index = CreateVectorIndexPtr(index_parameter);
+  if (vector_index == nullptr) {
+    DINGO_LOG(ERROR) << "Create vector index failed, region_id=" << region_id;
+    return false;
+  }
+
+  vector_index_map.Put(region_id, vector_index);
+  return true;
+}
+
+bool RegionController::InitVectorAppliedLogId(uint64_t region_id) {
+  uint64_t max_log_id = 0;
+
+  auto engine = Server::GetInstance()->GetEngine();
+  DINGO_LOG(INFO) << fmt::format("Build vector index for region {} ", region_id);
+  auto reader = engine->GetRawEngine()->NewReader(Constant::kStoreDataCF);
+
+  auto ret = reader->VectorGetMaxLogId(region_id, max_log_id);
+  if (ret.ok()) {
+    DINGO_LOG(INFO) << fmt::format("Region {} max log id is {}", region_id, max_log_id);
+    applied_log_id_map.Put(region_id, max_log_id);
+  }
+
+  return true;
+}
+
+std::shared_ptr<VectorIndex> RegionController::CreateVectorIndexPtr(const pb::common::IndexParameter& index_parameter) {
+  if (index_parameter.index_type() != pb::common::IndexType::INDEX_TYPE_VECTOR) {
+    DINGO_LOG(ERROR) << "index_parameter is not vector index, type=" << index_parameter.index_type();
+    return nullptr;
+  }
+
+  const auto& vector_index_parameter = index_parameter.vector_index_parameter();
+  auto vector_index =
+      std::make_shared<VectorIndex>(vector_index_parameter.dimension(), vector_index_parameter.max_elements());
+
+  return vector_index;
+}
+
 bool RegionController::Init() {
   share_executor_ = std::make_shared<ControlExecutor>();
   if (!share_executor_->Init()) {
@@ -810,6 +874,20 @@ bool RegionController::Init() {
     if (!RegisterExecutor(region->Id())) {
       DINGO_LOG(ERROR) << "Register region control executor failed, region: " << region->Id();
       return false;
+    }
+
+    // init vector index map
+    const auto& definition = region->InnerRegion().definition();
+    if (definition.index_parameter().index_type() == pb::common::IndexType::INDEX_TYPE_VECTOR) {
+      DINGO_LOG(INFO) << fmt::format("Create region {} vector index", region->Id());
+
+      auto ret = InitVectorIndex(region->Id(), definition.index_parameter());
+      if (!ret) {
+        DINGO_LOG(ERROR) << fmt::format("Create region {} vector index failed", region->Id());
+        return false;
+      }
+
+      InitVectorAppliedLogId(region->Id());
     }
   }
 
@@ -844,9 +922,37 @@ void RegionController::Destroy() {
 butil::Status RegionController::LoadIndex(uint64_t region_id) {
   DINGO_LOG(INFO) << "LoadIndex for region_id:" << region_id;
 
-  if (this->vector_index_map.Exists(region_id)) {
-    DINGO_LOG(INFO) << " index already loaded, region_id:" << region_id;
+  // if (this->vector_index_map.Exists(region_id)) {
+  //   DINGO_LOG(INFO) << " index already loaded, region_id:" << region_id;
+  //   return butil::Status::OK();
+  // }
+
+  // get index parameter
+  auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
+  auto region = store_meta_manager->GetStoreRegionMeta()->GetRegion(region_id);
+  if (region == nullptr) {
+    DINGO_LOG(ERROR) << "region not exist, region_id:" << region_id;
+    return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "region not exist, region_id:%ld", region_id);
   }
+
+  if (region->InnerRegion().definition().index_parameter().index_type() != pb::common::IndexType::INDEX_TYPE_VECTOR) {
+    DINGO_LOG(ERROR) << "region is not vector index, region_id:" << region_id;
+    return butil::Status(pb::error::Errno::EINDEX_NOT_FOUND, "region is not vector index, region_id:%ld", region_id);
+  }
+
+  // Build vector index
+  auto engine = Server::GetInstance()->GetEngine();
+  DINGO_LOG(INFO) << fmt::format("Build vector index for region {} ", region_id);
+  auto writer = engine->GetRawEngine()->NewWriter(Constant::kStoreDataCF);
+
+  auto vector_index = CreateVectorIndexPtr(region->InnerRegion().definition().index_parameter());
+  auto ret = writer->VectorIndexBuild(region_id, vector_index);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("Build vector index for region {} failed", region_id);
+    return butil::Status(pb::error::Errno::EINTERNAL, "Build vector index for region %ld failed", region_id);
+  }
+
+  vector_index_map.Put(region_id, vector_index);
 
   return butil::Status::OK();
 }
