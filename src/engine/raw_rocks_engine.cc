@@ -36,6 +36,7 @@
 
 #include "butil/compiler_specific.h"
 #include "butil/status.h"
+#include "client/coordinator_client_function.h"
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
@@ -887,6 +888,37 @@ butil::Status RawRocksEngine::Reader::VectorSearch(uint64_t region_id, const pb:
   return butil::Status::OK();
 }
 
+butil::Status RawRocksEngine::Reader::VectorGetMaxLogId(uint64_t region_id, uint64_t& max_log_id) {
+  auto snapshot = std::make_shared<RocksSnapshot>(db_->GetSnapshot(), db_);
+
+  rocksdb::ReadOptions read_option;
+  read_option.auto_prefix_mode = true;
+  read_option.snapshot = static_cast<const rocksdb::Snapshot*>(snapshot->Inner());
+
+  // get the max log_id of vector wal
+  std::string value;
+  std::string key;
+  EncodeVectorWalLogIdMax(region_id, key);
+
+  rocksdb::Status s = db_->Get(read_option, column_family_->GetHandle(), key, &value);
+  if (!s.ok()) {
+    if (!s.IsNotFound()) {
+      DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Get failed : {}", s.ToString());
+      return butil::Status(pb::error::EINTERNAL, "Internal error");
+    } else {
+      DINGO_LOG(INFO) << "No max_log_id found, maybe no data wrote, region_id: " << region_id;
+      max_log_id = 0;
+      return butil::Status::OK();
+    }
+  } else {
+    max_log_id = DecodeUint64(value);
+  }
+
+  DINGO_LOG(INFO) << "VectorGetMaxLogId, region_id: " << region_id << ", max_log_id: " << max_log_id;
+
+  return butil::Status::OK();
+}
+
 butil::Status RawRocksEngine::Reader::KvScan(const std::string& start_key, const std::string& end_key,
                                              std::vector<pb::common::KeyValue>& kvs) {
   auto snapshot = std::make_shared<RocksSnapshot>(db_->GetSnapshot(), db_);
@@ -991,6 +1023,19 @@ butil::Status RawRocksEngine::Writer::VectorAdd(uint64_t region_id, uint64_t log
     return butil::Status(pb::error::EVECTOR_EMPTY, "vectors is empty");
   }
 
+  auto region_controller = Server::GetInstance()->GetRegionController();
+  if (region_controller == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("region_controller is nullptr");
+    return butil::Status(pb::error::EINTERNAL, "region_controller is nullptr");
+  }
+
+  uint64_t max_log_id = 0;
+  auto ret1 = region_controller->applied_log_id_map.Get(region_id, max_log_id);
+  if (log_id <= max_log_id && ret1 > 0) {
+    DINGO_LOG(WARNING) << fmt::format("log_id {} less than max_log_id {}, skip this log_id apply", log_id, max_log_id);
+    return butil::Status::OK();
+  }
+
   // write vector, WAL, WAL_LOG_ID
   rocksdb::WriteBatch batch;
   for (const auto& vector : vectors) {
@@ -1022,7 +1067,7 @@ butil::Status RawRocksEngine::Writer::VectorAdd(uint64_t region_id, uint64_t log
       std::string wal_log_id_key;
       EncodeVectorWalLogIdMax(region_id, wal_log_id_key);
 
-      s = batch.Put(column_family_->GetHandle(), wal_log_id_key, std::to_string(log_id));
+      s = batch.Put(column_family_->GetHandle(), wal_log_id_key, EncodeUint64(log_id));
       if (BAIDU_UNLIKELY(!s.ok())) {
         DINGO_LOG(ERROR) << fmt::format("rocksdb::WriteBatch::Put failed : {}", s.ToString());
         return butil::Status(pb::error::EINTERNAL, "Internal error");
@@ -1042,7 +1087,7 @@ butil::Status RawRocksEngine::Writer::VectorAdd(uint64_t region_id, uint64_t log
 
   // write vector index
   std::shared_ptr<VectorIndex> vector_index;
-  auto ret = Server::GetInstance()->GetRegionController()->vector_index_map.Get(region_id, vector_index);
+  auto ret = region_controller->vector_index_map.Get(region_id, vector_index);
   if (ret < 0) {
     DINGO_LOG(ERROR) << fmt::format("Get vector_index failed");
     return butil::Status(pb::error::EINTERNAL, "Internal error, Get vector_index failed");
@@ -1064,6 +1109,9 @@ butil::Status RawRocksEngine::Writer::VectorAdd(uint64_t region_id, uint64_t log
     return butil::Status(pb::error::EINTERNAL, "Internal error");
   }
 
+  // update applied_log_id_map
+  region_controller->applied_log_id_map.Put(region_id, log_id);
+
   return butil::Status();
 }
 
@@ -1072,6 +1120,19 @@ butil::Status RawRocksEngine::Writer::VectorDelete(uint64_t region_id, uint64_t 
   if (BAIDU_UNLIKELY(ids.empty())) {
     DINGO_LOG(ERROR) << fmt::format("vectors empty  not support");
     return butil::Status(pb::error::EVECTOR_EMPTY, "vectors is empty");
+  }
+
+  auto region_controller = Server::GetInstance()->GetRegionController();
+  if (region_controller == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("region_controller is nullptr");
+    return butil::Status(pb::error::EINTERNAL, "region_controller is nullptr");
+  }
+
+  uint64_t max_log_id = 0;
+  auto ret1 = region_controller->applied_log_id_map.Get(region_id, max_log_id);
+  if (log_id <= max_log_id && ret1 > 0) {
+    DINGO_LOG(WARNING) << fmt::format("log_id {} less than max_log_id {}, skip this log_id apply", log_id, max_log_id);
+    return butil::Status::OK();
   }
 
   // write vector, WAL, WAL_LOG_ID
@@ -1125,7 +1186,7 @@ butil::Status RawRocksEngine::Writer::VectorDelete(uint64_t region_id, uint64_t 
 
   // write vector index
   std::shared_ptr<VectorIndex> vector_index;
-  auto ret = Server::GetInstance()->GetRegionController()->vector_index_map.Get(region_id, vector_index);
+  auto ret = region_controller->vector_index_map.Get(region_id, vector_index);
   if (ret < 0) {
     DINGO_LOG(ERROR) << fmt::format("Get vector_index failed");
     return butil::Status(pb::error::EINTERNAL, "Internal error, Get vector_index failed");
@@ -1147,7 +1208,85 @@ butil::Status RawRocksEngine::Writer::VectorDelete(uint64_t region_id, uint64_t 
     return butil::Status(pb::error::EINTERNAL, "Internal error");
   }
 
+  // update applied_log_id_map
+  region_controller->applied_log_id_map.Put(region_id, log_id);
+
   return butil::Status();
+}
+
+butil::Status RawRocksEngine::Writer::VectorIndexBuild(uint64_t region_id, std::shared_ptr<VectorIndex> vector_index) {
+  if (vector_index == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("vector_index is nullptr");
+    return butil::Status(pb::error::EINTERNAL, "Internal error, vector_index is nullptr");
+  }
+
+  auto snapshot = std::make_shared<RocksSnapshot>(db_->GetSnapshot(), db_);
+
+  rocksdb::ReadOptions read_option;
+  read_option.auto_prefix_mode = true;
+  read_option.snapshot = static_cast<const rocksdb::Snapshot*>(snapshot->Inner());
+
+  // get the max log_id of vector wal
+  uint64_t max_log_id = 0;
+  RawRocksEngine::Reader reader(db_, column_family_);
+  auto ret1 = reader.VectorGetMaxLogId(region_id, max_log_id);
+  if (!ret1.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("VectorGetMaxLogId failed, region_id: {}", region_id);
+    return butil::Status(pb::error::EINTERNAL, "Internal error, VectorGetMaxLogId failed");
+  }
+
+  DINGO_LOG(INFO) << "VectorIndexBuild, region_id: " << region_id << ", max_log_id: " << max_log_id;
+
+  // calculate the Vector data's start_key and end_key in RocksDB
+  std::string start_key;
+  std::string end_key;
+
+  EncodeVectorId(region_id, 0, start_key);
+  EncodeVectorId(region_id, UINT64_MAX, end_key);
+
+  // scan vector data to build vector index
+  std::string_view end_key_view(end_key);
+  rocksdb::Iterator* it = db_->NewIterator(read_option, column_family_->GetHandle());
+  for (it->Seek(start_key); it->Valid() && it->key().ToStringView() < end_key_view; it->Next()) {
+    pb::common::KeyValue kv;
+    kv.set_key(it->key().data(), it->key().size());
+    kv.set_value(it->value().data(), it->value().size());
+
+    if (it->key().size() != 17) {
+      DINGO_LOG(ERROR) << fmt::format("vector key size error, key: {}", kv.key());
+      return butil::Status(pb::error::EINTERNAL, "Internal error, vector key size error");
+    }
+
+    pb::common::VectorWithId vector;
+    vector.set_id(DecodeVectorId(kv.key()));
+
+    if (!vector.mutable_vector()->ParseFromString(kv.value())) {
+      DINGO_LOG(ERROR) << fmt::format("vector ParseFromString failed, key: {}", kv.key());
+      return butil::Status(pb::error::EINTERNAL, "Internal error, vector ParseFromString failed");
+    }
+
+    if (vector.vector().values_size() <= 0) {
+      DINGO_LOG(ERROR) << fmt::format("vector values_size error, key: {}", kv.key());
+      return butil::Status(pb::error::EINTERNAL, "Internal error, vector values_size error");
+    }
+
+    DINGO_LOG(INFO) << "VectorIndexBuild, region_id: " << region_id << ", vector_id: " << vector.id()
+                    << ", vector_size: " << vector.vector().values_size();
+    DINGO_LOG(DEBUG) << vector.DebugString();
+
+    // add to vector index
+    try {
+      vector_index->Add(vector);
+    } catch (std::exception& e) {
+      DINGO_LOG(ERROR) << fmt::format("vector_index add failed, id: {}, error: {}", vector.id(), e.what());
+      return butil::Status(pb::error::EINTERNAL, "Internal error, vector_index add failed");
+    }
+  }
+  delete it;
+
+  DINGO_LOG(INFO) << "VectorIndexBuild, region_id: " << region_id << ", max_log_id: " << max_log_id << ", success";
+
+  return butil::Status::OK();
 }
 
 butil::Status RawRocksEngine::Writer::KvBatchPut(const std::vector<pb::common::KeyValue>& kvs) {
@@ -1687,6 +1826,18 @@ void EncodeVectorId(uint64_t region_id, uint64_t vector_id, std::string& result)
   buf.GetBytes(result);
 }
 
+uint64_t DecodeVectorId(const std::string& value) {
+  if (value.size() != 17) {
+    DINGO_LOG(ERROR) << "DecodeVectorId failed, value size is not 8, value:[" << value << "]";
+    return 0;
+  }
+  Buf buf(value);
+  buf.ReadLong();
+  buf.Read();
+
+  return buf.ReadLong();
+}
+
 void EncodeVectorMeta(uint64_t region_id, uint64_t vector_id, std::string& result) {
   Buf buf(17);
   buf.WriteLong(region_id);
@@ -1720,6 +1871,21 @@ void EncodeVectorWalLogIdMin(uint64_t region_id, std::string& result) {
   buf.Write(kVectorWalLogIdMinPrefix);
 
   buf.GetBytes(result);
+}
+
+std::string EncodeUint64(uint64_t value) {
+  Buf buf(8);
+  buf.WriteLong(value);
+  return buf.GetString();
+}
+
+uint64_t DecodeUint64(const std::string& value) {
+  if (value.size() != 8) {
+    DINGO_LOG(ERROR) << "DecodeUint64 failed, value size is not 8, value:[" << value << "]";
+    return 0;
+  }
+  Buf buf(value);
+  return buf.ReadLong();
 }
 
 }  // namespace dingodb
