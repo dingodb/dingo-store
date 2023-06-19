@@ -1338,14 +1338,27 @@ butil::Status RawRocksEngine::Checkpoint::Create(const std::string& dirpath,
     return butil::Status(status.code(), status.ToString());
   }
 
+  status = db_->DisableFileDeletions();
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << "Disable file deletion failed " << status.ToString();
+    return butil::Status(status.code(), status.ToString());
+  }
+
   status = checkpoint->CreateCheckpoint(dirpath);
   if (!status.ok()) {
+    db_->EnableFileDeletions(false);
     DINGO_LOG(ERROR) << "Export column family checkpoint failed " << status.ToString();
     delete checkpoint;
     return butil::Status(status.code(), status.ToString());
   }
   rocksdb::ColumnFamilyMetaData meta_data;
   db_->GetColumnFamilyMetaData(column_family->GetHandle(), &meta_data);
+
+  status = db_->EnableFileDeletions(false);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << "Enable file deletion failed " << status.ToString();
+    return butil::Status(status.code(), status.ToString());
+  }
 
   for (auto& level : meta_data.levels) {
     for (const auto& file : level.files) {
