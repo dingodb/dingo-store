@@ -41,28 +41,6 @@ class IndexServiceImpl : public pb::index::IndexService {
   void TransferLeader(google::protobuf::RpcController* controller, const pb::index::TransferLeaderRequest* request,
                       pb::index::TransferLeaderResponse* response, google::protobuf::Closure* done) override;
 
-  void KvGet(google::protobuf::RpcController* controller, const pb::index::KvGetRequest* request,
-             pb::index::KvGetResponse* response, google::protobuf::Closure* done) override;
-
-  void KvBatchGet(google::protobuf::RpcController* controller, const pb::index::KvBatchGetRequest* request,
-                  pb::index::KvBatchGetResponse* response, google::protobuf::Closure* done) override;
-
-  void KvPut(google::protobuf::RpcController* controller, const pb::index::KvPutRequest* request,
-             pb::index::KvPutResponse* response, google::protobuf::Closure* done) override;
-
-  void KvBatchPut(google::protobuf::RpcController* controller, const pb::index::KvBatchPutRequest* request,
-                  pb::index::KvBatchPutResponse* response, google::protobuf::Closure* done) override;
-
-  void KvPutIfAbsent(google::protobuf::RpcController* controller, const pb::index::KvPutIfAbsentRequest* request,
-                     pb::index::KvPutIfAbsentResponse* response, google::protobuf::Closure* done) override;
-
-  void KvBatchPutIfAbsent(google::protobuf::RpcController* controller,
-                          const pb::index::KvBatchPutIfAbsentRequest* request,
-                          pb::index::KvBatchPutIfAbsentResponse* response, google::protobuf::Closure* done) override;
-
-  void KvBatchDelete(google::protobuf::RpcController* controller, const pb::index::KvBatchDeleteRequest* request,
-                     pb::index::KvBatchDeleteResponse* response, google::protobuf::Closure* done) override;
-
   void Debug(google::protobuf::RpcController* controller, const ::dingodb::pb::index::DebugRequest* request,
              ::dingodb::pb::index::DebugResponse* response, ::google::protobuf::Closure* done) override;
 
