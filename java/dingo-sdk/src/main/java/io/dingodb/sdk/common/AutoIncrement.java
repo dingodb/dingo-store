@@ -37,19 +37,26 @@ public class AutoIncrement {
     }
 
     public synchronized long inc() {
-        if (inc >= limit) {
-            fetch();
+        long current = inc;
+        if (current >= limit) {
+            current = fetch();
         }
-        return inc++;
+        inc += increment;
+        return current;
     }
 
-    private void fetch() {
+    private long fetch() {
         Increment increment = fetcher.apply(tableId);
-        if (increment.inc >= increment.limit) {
+        if ((increment.inc + this.increment) >= increment.limit) {
             throw new RuntimeException("Fetch zero increment, table id: {}" + tableId);
         }
-        this.inc = increment.inc;
+        if (increment.inc % this.offset != 0) {
+            this.inc = increment.inc + this.offset - increment.inc % this.offset;
+        } else {
+            this.inc = increment.inc;
+        }
         this.limit = increment.limit;
+        return inc;
     }
 
 }
