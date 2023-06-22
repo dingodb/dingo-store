@@ -63,6 +63,9 @@ DEFINE_string(git_commit_hash, GIT_VERSION, "current git commit version");
 DEFINE_string(git_tag_name, GIT_TAG_NAME, "current dingo version");
 DEFINE_string(dingo_build_type, DINGO_BUILD_TYPE, "current dingo build type");
 DEFINE_string(dingo_contrib_build_type, DINGO_CONTRIB_BUILD_TYPE, "current dingo contrib build type");
+DEFINE_string(coor_url, "",
+              "coor service name, e.g. file://<path>, list://<addr1>,<addr2>..., bns://<bns-name>, "
+              "consul://<service-name>, http://<url>, https://<url>");
 
 namespace bvar {
 DECLARE_int32(bvar_max_dump_multi_dimension_metric_number);
@@ -163,14 +166,14 @@ void ErrorCallback(void *vdata, const char *msg, int errnum) {
 // The signal handler
 #define MAX_STACKTRACE_SIZE 128
 static void SignalHandler(int signo) {
-  std::cerr << "Received signal " << signo << std::endl;
-  std::cerr << "Stack trace:" << std::endl;
+  std::cerr << "Received signal " << signo << '\n';
+  std::cerr << "Stack trace:" << '\n';
   DINGO_LOG(ERROR) << "Received signal " << signo;
   DINGO_LOG(ERROR) << "Stack trace:";
 
   struct backtrace_state *state = backtrace_create_state(nullptr, 0, ErrorCallback, nullptr);
   if (state == nullptr) {
-    std::cerr << "state is null" << std::endl;
+    std::cerr << "state is null" << '\n';
   }
 
   struct DingoStackTraceInfo all[MAX_STACKTRACE_SIZE];
@@ -183,7 +186,7 @@ static void SignalHandler(int signo) {
 
   int i = backtrace_full(state, 0, BacktraceCallback, ErrorCallback, &data);
   if (i != 0) {
-    std::cerr << "backtrace_full failed" << std::endl;
+    std::cerr << "backtrace_full failed" << '\n';
     DINGO_LOG(ERROR) << "backtrace_full failed";
   }
 
@@ -201,14 +204,14 @@ static void SignalHandler(int signo) {
       auto error_msg = butil::string_printf("#%zu source[%s:%d] symbol[%s] pc[0x%0lx]", x, all[x].filename,
                                             all[x].lineno, nameptr, static_cast<uint64_t>(all[x].pc));
       DINGO_LOG(ERROR) << error_msg;
-      std::cout << error_msg << std::endl;
+      std::cout << error_msg << '\n';
     } else {
       auto error_msg = butil::string_printf(
           "#%zu source[%s:%d] symbol[%s] pc[0x%0lx] fname[%s] fbase[0x%lx] sname[%s] saddr[0x%lx] ", x, all[x].filename,
           all[x].lineno, nameptr, static_cast<uint64_t>(all[x].pc), info.dli_fname, (uint64_t)info.dli_fbase,
           info.dli_sname, (uint64_t)info.dli_saddr);
       DINGO_LOG(ERROR) << error_msg;
-      std::cout << error_msg << std::endl;
+      std::cout << error_msg << '\n';
     }
     if (demangled) {
       free(demangled);
@@ -258,7 +261,7 @@ static void SignalHandlerWithoutLineno(int signo) {
       if (demangled) {
         nameptr = demangled;
       }
-      // std::cout << "  " << nameptr << " + " << offset << " (0x" << std::hex << pc << ")" << std::endl;
+      // std::cout << "  " << nameptr << " + " << offset << " (0x" << std::hex << pc << ")" << '\n';
 
       if (!dladdr((void *)pc, &info)) {
         std::stringstream string_stream;
@@ -266,7 +269,7 @@ static void SignalHandlerWithoutLineno(int signo) {
                       << ") ";
         std::string const error_msg = string_stream.str();
         DINGO_LOG(ERROR) << error_msg;
-        std::cout << error_msg << std::endl;
+        std::cout << error_msg << '\n';
       } else {
         std::stringstream string_stream;
         string_stream << "Frame [" << i++ << "] symbol=[" << nameptr << " + " << offset << "] (0x" << std::hex << pc
@@ -275,7 +278,7 @@ static void SignalHandlerWithoutLineno(int signo) {
                       << "]";
         std::string const error_msg = string_stream.str();
         DINGO_LOG(ERROR) << error_msg;
-        std::cout << error_msg << std::endl;
+        std::cout << error_msg << '\n';
       }
       if (demangled) {
         free(demangled);
@@ -362,14 +365,47 @@ int GetWorkerThreadNum(std::shared_ptr<dingodb::Config> config) {
   return num;
 }
 
+// setup default conf and coor_list
+bool SetDefaultConfAndCoorList(const dingodb::pb::common::ClusterRole &role) {
+  if (FLAGS_conf.empty()) {
+    if (role == dingodb::pb::common::COORDINATOR && std::filesystem::exists("./conf/coordinator.yaml")) {
+      FLAGS_conf = "./conf/coordinator.yaml";
+    } else if (role == dingodb::pb::common::STORE && std::filesystem::exists("./conf/store.yaml")) {
+      FLAGS_conf = "./conf/store.yaml";
+    } else if (role == dingodb::pb::common::INDEX && std::filesystem::exists("./conf/index.yaml")) {
+      FLAGS_conf = "./conf/index.yaml";
+    } else {
+      DINGO_LOG(ERROR) << "unknown role:" << role;
+      return false;
+    }
+  }
+
+  if (FLAGS_coor_url.empty() && std::filesystem::exists("./conf/coor_list")) {
+    FLAGS_coor_url = "file://./conf/coor_list";
+  }
+
+  return true;
+}
+
 int main(int argc, char *argv[]) {
   google::ParseCommandLineFlags(&argc, &argv, true);
 
-  if (dingodb::FLAGS_show_version) {
+  if (dingodb::FLAGS_show_version || FLAGS_role.empty()) {
     printf("Dingo-Store version:[%s] with git commit hash:[%s]\n", FLAGS_git_tag_name.c_str(),
            FLAGS_git_commit_hash.c_str());
     printf("Dingo-Store build_type:[%s] contrib_build_type:[%s]\n", FLAGS_dingo_build_type.c_str(),
            FLAGS_dingo_contrib_build_type.c_str());
+    printf(
+        "Usage: %s --role=[coordinator|store|index] --conf ./conf/[coordinator|store|index].yaml "
+        "--coor_url=[file://./conf/coor_list]\n",
+        argv[0]);
+    printf("Example: \n");
+    printf("         bin/dingodb_server --role [coordinator|store|index]\n");
+    printf(
+        "         bin/dingodb_server --role coordinator --conf ./conf/coordinator.yaml "
+        "--coor_url=file://./conf/coor_list\n");
+    printf("         bin/dingodb_server --role store --conf ./conf/store.yaml --coor_url=file://./conf/coor_list\n");
+    printf("         bin/dingodb_server --role index --conf ./conf/index.yaml --coor_url=file://./conf/coor_list\n");
     exit(-1);
   }
 
@@ -398,6 +434,8 @@ int main(int argc, char *argv[]) {
     DINGO_LOG(ERROR) << "Invalid server role[" + FLAGS_role + "]";
     return -1;
   }
+
+  SetDefaultConfAndCoorList(role);
 
   if (FLAGS_conf.empty()) {
     DINGO_LOG(ERROR) << "Missing server config.";

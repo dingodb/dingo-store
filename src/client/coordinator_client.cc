@@ -40,7 +40,7 @@ DEFINE_bool(use_bthread, false, "Use bthread to send requests");
 DEFINE_int32(thread_num, 1, "Number of threads sending requests");
 DEFINE_int32(timeout_ms, 500, "Timeout for each request");
 DEFINE_int32(req_num, 1, "Number of requests");
-DEFINE_string(method, "Hello", "Request method");
+DEFINE_string(method, "", "Request method");
 DEFINE_string(id, "", "Request parameter id, for example: table_id for CreateTable/DropTable");
 DEFINE_string(host, "127.0.0.1", "Request parameter host");
 DEFINE_int32(port, 18888, "Request parameter port");
@@ -341,11 +341,27 @@ int main(int argc, char* argv[]) {
 
   google::ParseCommandLineFlags(&argc, &argv, true);
 
-  if (dingodb::FLAGS_show_version) {
+  if (dingodb::FLAGS_show_version || FLAGS_method.empty()) {
     printf("Dingo-Store version:[%s] with git commit hash:[%s]\n", FLAGS_git_tag_name.c_str(),
            FLAGS_git_commit_hash.c_str());
     printf("Dingo-Store build_type:[%s] contrib_build_type:[%s]\n", FLAGS_dingo_build_type.c_str(),
            FLAGS_dingo_contrib_build_type.c_str());
+    printf("Usage: %s --method=[method]\n", argv[0]);
+    printf(
+        "Methods: [ RaftAddPeer | RaftRemovePeer | RaftTransferLeader | RaftSnapshot | RaftResetPeer | GetNodeInfo | "
+        "GetLogLevel | ChangeLogLevel | Hello | StoreHeartbeat | CreateStore | DeleteStore | UpdateStore | "
+        "CreateExecutor | DeleteExecutor | CreateExecutorUser | UpdateExecutorUser | DeleteExecutorUser | "
+        "GetExecutorUserMap | ExecutorHeartbeat | GetStoreMap | GetExecutorMap | GetRegionMap | GetDeletedRegionMap | "
+        "AddDeletedRegionMap | CleanDeletedRegionMap | GetRegionCount | GetCoordinatorMap | QueryRegion | "
+        "CreateRegionForSplit | DropRegion | DropRegionPermanently | SplitRegion | MergeRegion | AddPeerRegion | "
+        "RemovePeerRegion | TransferLeaderRegion | GetOrphanRegion | GetStoreOperation | GetTaskList | CleanTaskList | "
+        "CleanStoreOperation | AddStoreOperation | RemoveStoreOperation | GetStoreMetrics | DeleteStoreMetrics | "
+        "GetSchemas | GetSchema | GetSchemaByName | GetTables | GetTablesCount | CreateTable | CreateTableWithId | "
+        "CreateTableWithIncrement | CreateTableId | DropTable | CreateSchema | DropSchema | GetTable | GetTableByName "
+        "| GetTableRange | GetTableMetrics | GetIndexes | GetIndexsCount | CreateIndex | CreateIndexWithId | "
+        "CreateIndexId | DropIndex | GetIndex | GetIndexByName | GetIndexRange | GetIndexMetrics | GetAutoIncrements | "
+        "GetAutoIncrement | CreateAutoIncrement | UpdateAutoIncrement | GenerateAutoIncrement | DeleteAutoIncrement | "
+        "Debug ]\n");
     exit(-1);
   }
 
