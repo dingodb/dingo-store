@@ -25,6 +25,7 @@
 #include "common/helper.h"
 #include "fmt/core.h"
 #include "google/protobuf/message.h"
+#include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "server/server.h"
 
@@ -222,6 +223,18 @@ bool RaftSnapshot::LoadSnapshot(braft::SnapshotReader* reader, store::RegionPtr 
       }
     }
   }
+
+  // call load_index for index region with vector index
+  const auto& region_definition = region->InnerRegion().definition();
+  if (region_definition.has_index_parameter() &&
+      region_definition.index_parameter().index_type() == pb::common::IndexType::INDEX_TYPE_VECTOR) {
+    auto ret = Server::GetInstance()->GetRegionController()->LoadIndex(region->Id());
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << "Load index failed, region_id: " << region->Id() << ", error: " << ret.error_str();
+      return false;
+    }
+  }
+
   return status.ok();
 }
 
