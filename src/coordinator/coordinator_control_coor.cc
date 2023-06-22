@@ -978,7 +978,9 @@ butil::Status CoordinatorControl::CreateRegion(const std::string& region_name, p
   region_definition->set_schema_id(schema_id);
   region_definition->set_table_id(table_id);
   region_definition->set_index_id(index_id);
-  region_definition->mutable_index_parameter()->CopyFrom(index_parameter);
+  if (index_parameter.index_type() != pb::common::IndexType::INDEX_TYPE_NONE) {
+    region_definition->mutable_index_parameter()->CopyFrom(index_parameter);
+  }
   auto* range_in_definition = region_definition->mutable_range();
   // for index region, the region key header is start with region_id
   // for table region, the region range is defined by user
