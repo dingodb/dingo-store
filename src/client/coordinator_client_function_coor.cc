@@ -461,9 +461,15 @@ void SendGetStoreMap(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
 
   // print all store's id, state, in_state, create_timestamp, last_seen_timestamp
   int32_t store_count_available = 0;
+  int32_t index_count_available = 0;
   for (auto const& store : response.storemap().stores()) {
-    if (store.state() == dingodb::pb::common::StoreState::STORE_NORMAL) {
+    if (store.state() == dingodb::pb::common::StoreState::STORE_NORMAL &&
+        store.store_type() == dingodb::pb::common::StoreType::NODE_TYPE_STORE) {
       store_count_available++;
+    }
+    if (store.state() == dingodb::pb::common::StoreState::STORE_NORMAL &&
+        store.store_type() == dingodb::pb::common::StoreType::NODE_TYPE_INDEX) {
+      index_count_available++;
     }
     DINGO_LOG(INFO) << "store_id=" << store.id() << " type=" << dingodb::pb::common::StoreType_Name(store.store_type())
                     << " state=" << dingodb::pb::common::StoreState_Name(store.state())
@@ -475,6 +481,9 @@ void SendGetStoreMap(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
   // don't modify this log, it is used by sdk
   if (store_count_available > 0) {
     DINGO_LOG(INFO) << "DINGODB_HAVE_STORE_AVAILABLE, store_count=" << store_count_available;
+  }
+  if (index_count_available > 0) {
+    DINGO_LOG(INFO) << "DINGODB_HAVE_INDEX_AVAILABLE, index_count=" << index_count_available;
   }
 }
 
