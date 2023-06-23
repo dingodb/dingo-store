@@ -63,9 +63,7 @@ DEFINE_string(git_commit_hash, GIT_VERSION, "current git commit version");
 DEFINE_string(git_tag_name, GIT_TAG_NAME, "current dingo version");
 DEFINE_string(dingo_build_type, DINGO_BUILD_TYPE, "current dingo build type");
 DEFINE_string(dingo_contrib_build_type, DINGO_CONTRIB_BUILD_TYPE, "current dingo contrib build type");
-DEFINE_string(coor_url, "",
-              "coor service name, e.g. file://<path>, list://<addr1>,<addr2>..., bns://<bns-name>, "
-              "consul://<service-name>, http://<url>, https://<url>");
+DECLARE_string(coor_url);
 
 namespace bvar {
 DECLARE_int32(bvar_max_dump_multi_dimension_metric_number);
