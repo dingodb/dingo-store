@@ -45,7 +45,9 @@
 #include "scan/scan_manager.h"
 #include "store/heartbeat.h"
 
-DECLARE_string(coor_url);
+DEFINE_string(coor_url, "",
+              "coor service name, e.g. file://<path>, list://<addr1>,<addr2>..., bns://<bns-name>, "
+              "consul://<service-name>, http://<url>, https://<url>");
 
 namespace dingodb {
 
