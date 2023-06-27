@@ -33,6 +33,7 @@
 #include "store/heartbeat.h"
 #include "store/region_controller.h"
 #include "store/store_controller.h"
+#include "vector/vector_index_manager.h"
 
 template <typename T>
 struct DefaultSingletonTraits;
@@ -91,6 +92,9 @@ class Server {
 
   bool InitStoreMetricsManager();
 
+  // Init vector index manager
+  bool InitVectorIndexManager();
+
   static pb::node::LogLevel GetDingoLogLevel(std::shared_ptr<dingodb::Config> config);
 
   // Init Heartbeat
@@ -140,6 +144,8 @@ class Server {
   std::string GetCheckpointPath() { return checkpoint_path_; }
 
   std::string GetIndexPath() { return index_path_; }
+
+  std::shared_ptr<VectorIndexManager> GetVectorIndexManager() { return vector_index_manager_; }
 
   Server(const Server&) = delete;
   const Server& operator=(const Server&) = delete;
@@ -206,6 +212,9 @@ class Server {
 
   // index directory
   std::string index_path_;
+
+  // vector index manager
+  std::shared_ptr<VectorIndexManager> vector_index_manager_;
 };
 
 }  // namespace dingodb

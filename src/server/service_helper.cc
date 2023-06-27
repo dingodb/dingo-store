@@ -112,7 +112,6 @@ butil::Status ServiceHelper::ValidateRangeInRange(const pb::common::Range& regio
 }
 
 butil::Status ServiceHelper::ValidateRegion(uint64_t region_id, const std::vector<std::string_view>& keys) {
-  // Todo: use double buffer map replace.
   auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
   auto region = store_region_meta->GetRegion(region_id);
 
@@ -122,6 +121,18 @@ butil::Status ServiceHelper::ValidateRegion(uint64_t region_id, const std::vecto
   }
 
   status = ValidateKeyInRange(region->Range(), keys);
+  if (!status.ok()) {
+    return status;
+  }
+
+  return butil::Status();
+}
+
+butil::Status ServiceHelper::ValidateIndexRegion(uint64_t region_id) {
+  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+  auto region = store_region_meta->GetRegion(region_id);
+
+  auto status = ValidateRegionState(region);
   if (!status.ok()) {
     return status;
   }

@@ -23,7 +23,6 @@
 #include <vector>
 
 #include "common/context.h"
-#include "common/vector_index.h"
 #include "config/config.h"
 #include "engine/iterator.h"
 #include "engine/snapshot.h"
@@ -85,11 +84,6 @@ class RawEngine {
     virtual butil::Status KvCount(std::shared_ptr<dingodb::Snapshot> snapshot, const std::string& start_key,
                                   const std::string& end_key, uint64_t& count) = 0;
 
-    virtual butil::Status VectorSearch(uint64_t region_id, const pb::common::VectorWithId& vector,
-                                       const pb::common::VectorSearchParameter& parameter,
-                                       std::vector<pb::common::VectorWithDistance>& vectors) = 0;
-    virtual butil::Status VectorGetMaxLogId(uint64_t region_id, uint64_t& max_log_id) = 0;
-
     virtual std::shared_ptr<EngineIterator> NewIterator(const std::string& start_key, const std::string& end_key) = 0;
   };
 
@@ -125,11 +119,6 @@ class RawEngine {
     virtual butil::Status KvBatchDeleteRange(const std::vector<pb::common::Range>& ranges) = 0;
 
     virtual butil::Status KvDeleteIfEqual(const pb::common::KeyValue& kv) = 0;
-
-    virtual butil::Status VectorAdd(uint64_t region_id, uint64_t log_id,
-                                    const std::vector<pb::common::VectorWithId>& vectors) = 0;
-    virtual butil::Status VectorDelete(uint64_t region_id, uint64_t log_id, const std::vector<uint64_t>& id) = 0;
-    virtual butil::Status VectorIndexBuild(uint64_t region_id, std::shared_ptr<VectorIndex> vector_index) = 0;
   };
 
   virtual bool Init(std::shared_ptr<Config> config) = 0;

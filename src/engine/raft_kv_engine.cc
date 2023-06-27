@@ -33,6 +33,7 @@
 #include "raft/meta_state_machine.h"
 #include "raft/store_state_machine.h"
 #include "server/server.h"
+#include "vector/codec.h"
 
 namespace dingodb {
 
@@ -94,17 +95,6 @@ butil::Status RaftKvEngine::AddNode(std::shared_ptr<Context> /*ctx*/, store::Reg
   auto* state_machine = new StoreStateMachine(engine_, region, raft_meta, region_metrics, listeners, is_restart);
   if (!state_machine->Init()) {
     return butil::Status(pb::error::ERAFT_INIT, "State machine init failed");
-  }
-
-  // if this region is index region and index type is vector, load index
-  const auto& region_definition = region->InnerRegion().definition();
-  if (region_definition.has_index_parameter() &&
-      region_definition.index_parameter().index_type() == pb::common::IndexType::INDEX_TYPE_VECTOR) {
-    auto ret = Server::GetInstance()->GetRegionController()->LoadIndex(region->Id());
-    if (!ret.ok()) {
-      DINGO_LOG(ERROR) << "Load index failed, region_id: " << region->Id() << ", error: " << ret.error_str();
-      return butil::Status(pb::error::ERAFT_INIT, "Load index failed");
-    }
   }
 
   std::shared_ptr<RaftNode> node = std::make_shared<RaftNode>(
@@ -218,7 +208,7 @@ butil::Status RaftKvEngine::Write(std::shared_ptr<Context> ctx, const WriteData&
 
   ctx->EnableSyncMode();
   ctx->Cond()->IncreaseWait();
-  DINGO_LOG(INFO) << "Wake up";
+
   if (!ctx->Status().ok()) {
     return ctx->Status();
   }
@@ -236,10 +226,6 @@ butil::Status RaftKvEngine::AsyncWrite(std::shared_ptr<Context> ctx, const Write
   return node->Commit(ctx, GenRaftCmdRequest(ctx, write_data));
 }
 
-std::shared_ptr<Engine::Reader> RaftKvEngine::NewReader(const std::string& cf_name) {
-  return std::make_shared<RaftKvEngine::Reader>(engine_->NewReader(cf_name));
-}
-
 butil::Status RaftKvEngine::Reader::KvGet(std::shared_ptr<Context> /*ctx*/, const std::string& key,
                                           std::string& value) {
   return reader_->KvGet(key, value);
@@ -255,10 +241,128 @@ butil::Status RaftKvEngine::Reader::KvCount(std::shared_ptr<Context> /*ctx*/, co
   return reader_->KvCount(start_key, end_key, count);
 }
 
-butil::Status RaftKvEngine::Reader::VectorSearch(std::shared_ptr<Context> ctx, const pb::common::VectorWithId& vector,
-                                                 pb::common::VectorSearchParameter parameter,
-                                                 std::vector<pb::common::VectorWithDistance>& vectors) {
-  return reader_->VectorSearch(ctx->RegionId(), vector, parameter, vectors);
+std::shared_ptr<Engine::Reader> RaftKvEngine::NewReader(const std::string& cf_name) {
+  return std::make_shared<RaftKvEngine::Reader>(engine_->NewReader(cf_name));
+}
+
+butil::Status RaftKvEngine::VectorReader::QueryVectorWithId(uint64_t region_id, uint64_t vector_id,
+                                                            pb::common::VectorWithDistance& vector_with_distance) {
+  std::string key;
+  VectorCodec::EncodeVectorId(region_id, vector_id, key);
+
+  std::string value;
+  auto status = reader_->KvGet(key, value);
+  if (!status.ok()) {
+    return status;
+  }
+
+  pb::common::Vector result;
+  if (!result.ParseFromString(value)) {
+    return butil::Status(pb::error::EINTERNAL, "Internal ParseFromString error");
+  }
+
+  vector_with_distance.set_distance(0);
+  vector_with_distance.mutable_vector_with_id()->set_id(vector_id);
+  vector_with_distance.mutable_vector_with_id()->mutable_vector()->CopyFrom(result);
+
+  return butil::Status();
+}
+
+butil::Status RaftKvEngine::VectorReader::SearchVector(uint64_t region_id, const pb::common::VectorWithId& vector,
+                                                       const pb::common::VectorSearchParameter& parameter,
+                                                       std::vector<pb::common::VectorWithDistance>& vectors) {
+  auto vector_index = Server::GetInstance()->GetVectorIndexManager()->GetVectorIndex(region_id);
+  if (vector_index == nullptr) {
+    return butil::Status(pb::error::EVECTOR_NOT_FOUND, fmt::format("Not found vector index {}", region_id));
+  }
+
+  vector_index->Search(vector, parameter.top_n(), vectors);
+
+  // if vector index does not support restruct vector ,we restruct it using RocksDB
+  for (auto& vector_with_distance : vectors) {
+    if (vector_with_distance.vector_with_id().has_vector()) {
+      continue;
+    }
+
+    auto status = QueryVectorWithId(region_id, vector_with_distance.vector_with_id().id(), vector_with_distance);
+    if (!status.ok()) {
+      return status;
+    }
+  }
+
+  return butil::Status();
+}
+
+butil::Status RaftKvEngine::VectorReader::QueryVectorMetaData(uint64_t region_id,
+                                                              const pb::common::VectorSearchParameter& parameter,
+                                                              std::vector<pb::common::VectorWithDistance>& vectors) {
+  // get metadata by parameter
+  for (auto& vector_with_distance : vectors) {
+    std::string key;
+    VectorCodec::EncodeVectorMeta(region_id, vector_with_distance.vector_with_id().id(), key);
+
+    std::string value;
+    auto status = reader_->KvGet(key, value);
+    if (!status.ok()) {
+      return status;
+    }
+
+    pb::common::VectorMetadata vector_metadata;
+    if (!vector_metadata.ParseFromString(value)) {
+      return butil::Status(pb::error::EINTERNAL, "Internal error");
+    }
+
+    auto* metadata = vector_with_distance.mutable_vector_with_id()->mutable_metadata()->mutable_metadata();
+    for (const auto& [key, value] : vector_metadata.metadata()) {
+      if (!parameter.with_all_metadata() &&
+          std::find(parameter.selected_keys().begin(), parameter.selected_keys().end(), key) ==
+              parameter.selected_keys().end()) {
+        continue;
+      }
+
+      metadata->insert({key, value});
+    }
+  }
+
+  return butil::Status();
+}
+
+butil::Status RaftKvEngine::VectorReader::VectorSearch(std::shared_ptr<Context> ctx,
+                                                       const pb::common::VectorWithId& vector,
+                                                       pb::common::VectorSearchParameter parameter,
+                                                       std::vector<pb::common::VectorWithDistance>& vectors) {
+  if (vector.id() > 0) {
+    // Search vector by id
+    pb::common::VectorWithDistance vector_with_distance;
+    auto status = QueryVectorWithId(ctx->RegionId(), vector.id(), vector_with_distance);
+    if (!status.ok()) {
+      return status;
+    }
+
+    vectors.push_back(vector_with_distance);
+  } else {
+    // Search vector by vector
+    auto status = SearchVector(ctx->RegionId(), vector, parameter, vectors);
+    if (!status.ok()) {
+      return status;
+    }
+  }
+
+  if (!parameter.with_all_metadata() && parameter.selected_keys_size() == 0) {
+    return butil::Status::OK();
+  }
+
+  // Get metadata by parameter
+  auto status = QueryVectorMetaData(ctx->RegionId(), parameter, vectors);
+  if (!status.ok()) {
+    return status;
+  }
+
+  return butil::Status();
+}
+
+std::shared_ptr<Engine::VectorReader> RaftKvEngine::NewVectorReader(const std::string& cf_name) {
+  return std::make_shared<RaftKvEngine::VectorReader>(engine_->NewReader(cf_name));
 }
 
 }  // namespace dingodb

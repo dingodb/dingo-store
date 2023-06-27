@@ -26,6 +26,7 @@
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "server/server.h"
+#include "vector/codec.h"
 
 namespace dingodb {
 
@@ -398,33 +399,56 @@ void VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr reg
                               uint64_t /*term_id*/, uint64_t log_id) {
   butil::Status status;
   const auto &request = req.vector_add();
-  // region is spliting, check key out range
-  // if (region->State() == pb::common::StoreRegionState::SPLITTING) {
-  //   const auto &range = region->Range();
-  //   for (const auto &kv : request.kvs()) {
-  //     if (range.end_key().compare(kv.key()) <= 0) {
-  //       if (ctx) {
-  //         status.set_error(pb::error::EREGION_REDIRECT, "Region is spliting, please update route");
-  //         ctx->SetStatus(status);
-  //       }
-  //       return;
-  //     }
-  //   }
-  // }
 
-  auto writer = engine->NewWriter(request.cf_name());
-  if (request.vectors_size() > 0) {
-    status = writer->VectorAdd(region->Id(), log_id, Helper::PbRepeatedToVector(request.vectors()));
+  // Transform vector to kv
+  std::vector<pb::common::KeyValue> kvs;
+  for (const auto &vector : request.vectors()) {
+    // vector data
+    {
+      pb::common::KeyValue kv;
+      std::string key;
+      VectorCodec::EncodeVectorId(region->Id(), vector.id(), key);
+      kv.mutable_key()->swap(key);
+      kv.set_value(vector.vector().SerializeAsString());
+      kvs.push_back(kv);
+    }
+    // vector metadata
+    {
+      pb::common::KeyValue kv;
+      std::string key;
+      VectorCodec::EncodeVectorMeta(region->Id(), vector.id(), key);
+      kv.mutable_key()->swap(key);
+      kv.set_value(vector.metadata().SerializeAsString());
+      kvs.push_back(kv);
+    }
+  }
+
+  // Store vector
+  if (!kvs.empty()) {
+    auto writer = engine->NewWriter(request.cf_name());
+    status = writer->KvBatchPut(kvs);
+  }
+
+  // Add vector to index
+  try {
+    auto vector_index_manager = Server::GetInstance()->GetVectorIndexManager();
+    auto vector_index = vector_index_manager->GetVectorIndex(region->Id());
+    if (vector_index != nullptr && log_id > vector_index->ApplyLogIndex()) {
+      for (const auto &vector : request.vectors()) {
+        vector_index->Add(vector);
+      }
+
+      vector_index_manager->UpdateApplyLogIndex(vector_index, log_id);
+    }
+
+  } catch (const std::exception &e) {
+    DINGO_LOG(ERROR) << fmt::format("vector_index add failed : {}", e.what());
+    status = butil::Status(pb::error::EINTERNAL, "Internal error, vector_index add failed, err=[%s]", e.what());
   }
 
   if (ctx) {
     ctx->SetStatus(status);
   }
-
-  // Update region metrics min/max key
-  // if (region_metrics != nullptr) {
-  //   region_metrics->UpdateMaxAndMinKey(request.kvs());
-  // }
 }
 
 void VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region,
@@ -432,37 +456,48 @@ void VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr 
                                  store::RegionMetricsPtr /*region_metrics*/, uint64_t /*term_id*/, uint64_t log_id) {
   butil::Status status;
   const auto &request = req.vector_delete();
-  // region is spliting, check key out range
-  // if (region->State() == pb::common::StoreRegionState::SPLITTING) {
-  //   const auto &range = region->Range();
-  //   for (const auto &key : request.keys()) {
-  //     if (range.end_key().compare(key) <= 0) {
-  //       if (ctx) {
-  //         status.set_error(pb::error::EREGION_REDIRECT, "Region is spliting, please update route");
-  //         ctx->SetStatus(status);
-  //       }
-  //       return;
-  //     }
-  //   }
-  // }
 
-  auto writer = engine->NewWriter(request.cf_name());
-  if (request.ids_size() > 0) {
-    std::vector<uint64_t> ids;
-    for (const auto &id : request.ids()) {
-      ids.push_back(id);
+  // Transform vector to kv
+  std::vector<std::string> keys;
+  for (const auto &vector_id : request.ids()) {
+    {
+      std::string key;
+      VectorCodec::EncodeVectorId(region->Id(), vector_id, key);
+      keys.push_back(key);
     }
-    status = writer->VectorDelete(region->Id(), log_id, ids);
+
+    {
+      std::string key;
+      VectorCodec::EncodeVectorMeta(region->Id(), vector_id, key);
+      keys.push_back(key);
+    }
+  }
+
+  // Delete vector from storage
+  if (!keys.empty()) {
+    auto writer = engine->NewWriter(request.cf_name());
+    status = writer->KvBatchDelete(keys);
+  }
+
+  // Delete vector from index
+  try {
+    auto vector_index_manager = Server::GetInstance()->GetVectorIndexManager();
+    auto vector_index = vector_index_manager->GetVectorIndex(region->Id());
+    if (vector_index != nullptr && log_id > vector_index->ApplyLogIndex()) {
+      for (const auto &vector_id : request.ids()) {
+        vector_index->Delete(vector_id);
+      }
+
+      vector_index_manager->UpdateApplyLogIndex(vector_index, log_id);
+    }
+  } catch (const std::exception &e) {
+    DINGO_LOG(ERROR) << fmt::format("vector_index delete failed : {}", e.what());
+    status = butil::Status(pb::error::EINTERNAL, "Internal error, vector_index delete failed, err=[%s]", e.what());
   }
 
   if (ctx) {
     ctx->SetStatus(status);
   }
-
-  // Update region metrics min/max key
-  // if (region_metrics != nullptr) {
-  //   region_metrics->UpdateMaxAndMinKey(request.kvs());
-  // }
 }
 
 std::shared_ptr<HandlerCollection> RaftApplyHandlerFactory::Build() {

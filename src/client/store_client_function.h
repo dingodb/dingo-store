@@ -46,7 +46,8 @@ struct Context {
 dingodb::pb::common::Region SendQueryRegion(ServerInteractionPtr interaction, uint64_t region_id);
 
 // vector
-void SendVectorSearch(ServerInteractionPtr interaction, uint64_t region_id, uint32_t dimension, uint64_t id);
+void SendVectorSearch(ServerInteractionPtr interaction, uint64_t region_id, uint32_t dimension, uint64_t vector_id,
+                      uint32_t topn);
 void SendVectorAdd(ServerInteractionPtr interaction, uint64_t region_id, uint32_t dimension, uint32_t count);
 void SendVectorDelete(ServerInteractionPtr interaction, uint64_t region_id, uint32_t count);
 

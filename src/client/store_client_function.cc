@@ -38,7 +38,8 @@ DECLARE_string(key);
 
 namespace client {
 
-void SendVectorSearch(ServerInteractionPtr interaction, uint64_t region_id, uint32_t dimension, uint64_t id) {
+void SendVectorSearch(ServerInteractionPtr interaction, uint64_t region_id, uint32_t dimension, uint64_t vector_id,
+                      uint32_t topn) {
   dingodb::pb::index::VectorSearchRequest request;
   dingodb::pb::index::VectorSearchResponse response;
 
@@ -49,7 +50,7 @@ void SendVectorSearch(ServerInteractionPtr interaction, uint64_t region_id, uint
     vector->add_values(1.0 * i);
   }
 
-  request.mutable_parameter()->set_top_n(10);
+  request.mutable_parameter()->set_top_n(topn);
   if (FLAGS_key.empty()) {
     request.mutable_parameter()->set_with_all_metadata(true);
   } else {
@@ -57,8 +58,8 @@ void SendVectorSearch(ServerInteractionPtr interaction, uint64_t region_id, uint
     key->assign(FLAGS_key);
   }
 
-  if (id > 0) {
-    request.mutable_vector()->set_id(id);
+  if (vector_id > 0) {
+    request.mutable_vector()->set_id(vector_id);
   }
 
   interaction->SendRequest("IndexService", "VectorSearch", request, response);

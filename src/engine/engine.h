@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "common/context.h"
+#include "common/logging.h"
 #include "config/config.h"
 #include "engine/raw_engine.h"
 #include "engine/snapshot.h"
@@ -52,6 +53,7 @@ class Engine {
   virtual butil::Status Write(std::shared_ptr<Context> ctx, const WriteData& write_data) = 0;
   virtual butil::Status AsyncWrite(std::shared_ptr<Context> ctx, const WriteData& write_data, WriteCbFunc cb) = 0;
 
+  // KV reader
   class Reader {
    public:
     Reader() = default;
@@ -64,6 +66,13 @@ class Engine {
 
     virtual butil::Status KvCount(std::shared_ptr<Context> ctx, const std::string& start_key,
                                   const std::string& end_key, uint64_t& count) = 0;
+  };
+
+  // Vector reader
+  class VectorReader {
+   public:
+    VectorReader() = default;
+    virtual ~VectorReader() = default;
 
     virtual butil::Status VectorSearch(std::shared_ptr<Context> ctx, const pb::common::VectorWithId& vector,
                                        pb::common::VectorSearchParameter parameter,
@@ -71,6 +80,10 @@ class Engine {
   };
 
   virtual std::shared_ptr<Reader> NewReader(const std::string& cf_name) = 0;
+  virtual std::shared_ptr<VectorReader> NewVectorReader(const std::string&) {
+    DINGO_LOG(ERROR) << "Not support NewVectorReader.";
+    return nullptr;
+  }
 
   //  This is used by RaftKvEngine to Persist Meta
   //  This is a alternative method, will be replace by zihui new Interface.

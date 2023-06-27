@@ -24,7 +24,6 @@
 #include <variant>
 #include <vector>
 
-#include "common/vector_index.h"
 #include "config/config.h"
 #include "engine/iterator.h"
 #include "engine/raw_engine.h"
@@ -174,11 +173,6 @@ class RawRocksEngine : public RawEngine {
     butil::Status KvCount(std::shared_ptr<dingodb::Snapshot> snapshot, const std::string& start_key,
                           const std::string& end_key, uint64_t& count) override;
 
-    butil::Status VectorSearch(uint64_t region_id, const pb::common::VectorWithId& vector,
-                               const pb::common::VectorSearchParameter& parameter,
-                               std::vector<pb::common::VectorWithDistance>& vectors) override;
-    butil::Status VectorGetMaxLogId(uint64_t region_id, uint64_t& max_log_id) override;
-
     std::shared_ptr<EngineIterator> NewIterator(const std::string& start_key, const std::string& end_key) override;
 
    private:
@@ -223,12 +217,6 @@ class RawRocksEngine : public RawEngine {
 
     // key must be exist
     butil::Status KvDeleteIfEqual(const pb::common::KeyValue& kv) override;
-
-    // vector
-    butil::Status VectorAdd(uint64_t region_id, uint64_t log_id,
-                            const std::vector<pb::common::VectorWithId>& vectors) override;
-    butil::Status VectorDelete(uint64_t region_id, uint64_t log_id, const std::vector<uint64_t>& id) override;
-    butil::Status VectorIndexBuild(uint64_t region_id, std::shared_ptr<VectorIndex> vector_index) override;
 
    private:
     butil::Status KvCompareAndSetInternal(const pb::common::KeyValue& kv, const std::string& value, bool is_key_exist,
@@ -338,21 +326,6 @@ class RawRocksEngine : public RawEngine {
   std::shared_ptr<rocksdb::DB> db_;
   std::map<std::string, std::shared_ptr<ColumnFamily>> column_families_;
 };
-
-const uint8_t kVectorIdPrefix = 0x01;
-const uint8_t kVectorWalPrefix = 0x02;
-const uint8_t kVectorWalLogIdMaxPrefix = 0x03;
-const uint8_t kVectorWalLogIdMinPrefix = 0x04;
-const uint8_t kVectorMetaPrefix = 0x05;
-
-void EncodeVectorId(uint64_t region_id, uint64_t vector_id, std::string& result);
-uint64_t DecodeVectorId(const std::string& value);
-void EncodeVectorMeta(uint64_t region_id, uint64_t vector_id, std::string& result);
-void EncodeVectorWal(uint64_t region_id, uint64_t vector_id, uint64_t log_id, std::string& result);
-void EncodeVectorWalLogIdMax(uint64_t region_id, std::string& result);
-void EncodeVectorWalLogIdMin(uint64_t region_id, std::string& result);
-std::string EncodeUint64(uint64_t value);
-uint64_t DecodeUint64(const std::string& value);
 
 }  // namespace dingodb
 

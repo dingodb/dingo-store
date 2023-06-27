@@ -440,6 +440,13 @@ bool Server::InitStoreMetricsManager() {
   return store_metrics_manager_->Init();
 }
 
+bool Server::InitVectorIndexManager() {
+  vector_index_manager_ = std::make_shared<VectorIndexManager>(raw_engine_, std::make_shared<MetaReader>(raw_engine_),
+                                                               std::make_shared<MetaWriter>(raw_engine_));
+
+  return vector_index_manager_->Init(store_meta_manager_->GetStoreRegionMeta()->GetAllAliveRegion());
+}
+
 bool Server::Recover() {
   if (this->role_ == pb::common::STORE) {
     // Recover engine state.
