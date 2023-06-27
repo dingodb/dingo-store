@@ -17,6 +17,7 @@
 
 #include <memory>
 
+#include "butil/status.h"
 #include "engine/engine.h"
 #include "engine/raw_engine.h"
 #include "event/event.h"
@@ -80,8 +81,7 @@ class RaftKvEngine : public Engine, public RaftControlAble {
   butil::Status Write(std::shared_ptr<Context> ctx, const WriteData& write_data) override;
   butil::Status AsyncWrite(std::shared_ptr<Context> ctx, const WriteData& write_data, WriteCbFunc cb) override;
 
-  std::shared_ptr<Engine::Reader> NewReader(const std::string& cf_name) override;
-
+  // KV reader
   class Reader : public Engine::Reader {
    public:
     Reader(std::shared_ptr<RawEngine::Reader> reader) : reader_(reader) {}
@@ -93,13 +93,34 @@ class RaftKvEngine : public Engine, public RaftControlAble {
     butil::Status KvCount(std::shared_ptr<Context> ctx, const std::string& start_key, const std::string& end_key,
                           uint64_t& count) override;
 
+   private:
+    std::shared_ptr<RawEngine::Reader> reader_;
+  };
+
+  std::shared_ptr<Engine::Reader> NewReader(const std::string& cf_name) override;
+
+  // Vector reader
+  class VectorReader : public Engine::VectorReader {
+   public:
+    VectorReader(std::shared_ptr<RawEngine::Reader> reader) : reader_(reader) {}
+
     butil::Status VectorSearch(std::shared_ptr<Context> ctx, const pb::common::VectorWithId& vector,
                                pb::common::VectorSearchParameter parameter,
                                std::vector<pb::common::VectorWithDistance>& vectors) override;
 
    private:
+    butil::Status QueryVectorWithId(uint64_t region_id, uint64_t vector_id,
+                                    pb::common::VectorWithDistance& vector_with_distance);
+    butil::Status SearchVector(uint64_t region_id, const pb::common::VectorWithId& vector,
+                               const pb::common::VectorSearchParameter& parameter,
+                               std::vector<pb::common::VectorWithDistance>& vectors);
+    butil::Status QueryVectorMetaData(uint64_t region_id, const pb::common::VectorSearchParameter& parameter,
+                                      std::vector<pb::common::VectorWithDistance>& vectors);
+
     std::shared_ptr<RawEngine::Reader> reader_;
   };
+
+  std::shared_ptr<Engine::VectorReader> NewVectorReader(const std::string& cf_name) override;
 
  protected:
   std::shared_ptr<RawEngine> engine_;                   // NOLINT

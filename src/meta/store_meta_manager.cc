@@ -30,6 +30,8 @@ namespace dingodb {
 
 namespace store {
 
+std::shared_ptr<Region> Region::New() { return std::make_shared<Region>(); }
+
 std::shared_ptr<Region> Region::New(const pb::common::RegionDefinition& definition) {
   auto region = std::make_shared<Region>();
   region->inner_region_.set_id(definition.id());
@@ -391,7 +393,7 @@ std::shared_ptr<pb::common::KeyValue> StoreRegionMeta::TransformToKv(std::any ob
 void StoreRegionMeta::TransformFromKv(const std::vector<pb::common::KeyValue>& kvs) {
   for (const auto& kv : kvs) {
     uint64_t region_id = ParseRegionId(kv.key());
-    auto region = std::make_shared<store::Region>();
+    auto region = store::Region::New();
     region->DeSerialize(kv.value());
     regions_.Put(region_id, region);
   }

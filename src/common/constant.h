@@ -49,6 +49,8 @@ class Constant {
   inline static const std::string kStoreRegionMetricsPrefix = "METRICS_REGION";
   // Define region controller prefix.
   inline static const std::string kStoreRegionControlCommandPrefix = "CONTROL_CMD";
+  // Define vector index apply max log prefix.
+  inline static const std::string kVectorIndexApplyLogPrefix = "VECTOR_INDEX_APPLY_LOG";
 
   // Define loading snapshot flag.
   inline static const std::string kIsLoadingSnapshot = "IS_LOADING_SNAPSHOT";
@@ -90,6 +92,10 @@ class Constant {
   static const uint32_t kSegmentLogMaxSegmentSize = 8 * 1024 * 1024;  // 8M
   static const bool kSegmentLogSync = true;
   static const uint32_t kSegmentLogSyncPerBytes = INT32_MAX;
+
+  // vector key prefix
+  static const uint8_t kVectorIdPrefix = 0x01;
+  static const uint8_t kVectorMetaPrefix = 0x02;
 };
 
 }  // namespace dingodb

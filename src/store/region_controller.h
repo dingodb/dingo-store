@@ -27,7 +27,6 @@
 #include "common/constant.h"
 #include "common/context.h"
 #include "common/safe_map.h"
-#include "common/vector_index.h"
 #include "meta/meta_reader.h"
 #include "meta/meta_writer.h"
 #include "meta/store_meta_manager.h"
@@ -281,11 +280,7 @@ class RegionCommandManager : public TransformKvAble {
 // Every region has a region control executor, so that all regions can concurrently execute commands.
 class RegionController {
  public:
-  RegionController() {
-    bthread_mutex_init(&mutex_, nullptr);
-    vector_index_map.Init(1000);
-    applied_log_id_map.Init(1000);
-  }
+  RegionController() { bthread_mutex_init(&mutex_, nullptr); }
   ~RegionController() { bthread_mutex_destroy(&mutex_); }
 
   RegionController(const RegionController&) = delete;
@@ -294,10 +289,9 @@ class RegionController {
   bool Init();
   bool Recover();
   void Destroy();
-  bool InitVectorIndex(uint64_t region_id);
-  bool InitVectorIndex(uint64_t region_id, const pb::common::IndexParameter& index_parameter);
+
   bool InitVectorAppliedLogId(uint64_t region_id);
-  static std::shared_ptr<VectorIndex> CreateVectorIndexPtr(const pb::common::IndexParameter& index_parameter);
+
   std::vector<uint64_t> GetAllRegion();
 
   bool RegisterExecutor(uint64_t region_id);
@@ -313,14 +307,6 @@ class RegionController {
   static ValidaterMap validaters;
 
   static ValidateFunc GetValidater(pb::coordinator::RegionCmdType);
-
-  // vector_index
-  DingoSafeMap<uint64_t, std::shared_ptr<VectorIndex>> vector_index_map;
-  // applied_log_id
-  DingoSafeMap<uint64_t, uint64_t> applied_log_id_map;
-
-  // load or build index
-  butil::Status LoadIndex(uint64_t region_id);
 
  private:
   std::shared_ptr<RegionControlExecutor> GetRegionControlExecutor(uint64_t region_id);

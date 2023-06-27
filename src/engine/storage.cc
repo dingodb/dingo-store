@@ -132,7 +132,8 @@ butil::Status Storage::VectorSearch(std::shared_ptr<Context> ctx, const pb::comm
   if (!status.ok()) {
     return status;
   }
-  auto reader = engine_->NewReader(Constant::kStoreDataCF);
+
+  auto reader = engine_->NewVectorReader(Constant::kStoreDataCF);
   status = reader->VectorSearch(ctx, vector, parameter, results);
   if (!status.ok()) {
     return status;

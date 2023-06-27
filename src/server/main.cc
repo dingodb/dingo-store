@@ -647,6 +647,10 @@ int main(int argc, char *argv[]) {
       DINGO_LOG(ERROR) << "InitStoreMetricsManager failed!";
       return -1;
     }
+    if (!dingo_server->InitVectorIndexManager()) {
+      DINGO_LOG(ERROR) << "InitVectorIndexManager failed!";
+      return -1;
+    }
     if (!dingo_server->InitStoreController()) {
       DINGO_LOG(ERROR) << "InitStoreController failed!";
       return -1;

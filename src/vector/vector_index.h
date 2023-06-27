@@ -15,8 +15,10 @@
 #ifndef DINGODB_VECTOR_INDEX_H_
 #define DINGODB_VECTOR_INDEX_H_
 
+#include <atomic>
 #include <cstdint>
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -28,9 +30,9 @@ namespace dingodb {
 
 class VectorIndex {
  public:
-  VectorIndex(uint32_t dimension, uint32_t max_elements,
+  VectorIndex(uint64_t id, uint32_t dimension, uint32_t max_elements,
               pb::common::VectorIndexType vector_index_type = pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW)
-      : dimension_(dimension), max_elements_(max_elements) {
+      : id_(id), apply_log_index_(0), snapshot_log_index_(0), dimension_(dimension), max_elements_(max_elements) {
     vector_index_type_ = vector_index_type;
 
     if (vector_index_type_ == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
@@ -51,6 +53,16 @@ class VectorIndex {
       delete hnsw_index_;
       delete hnsw_space_;
     }
+  }
+
+  static std::shared_ptr<VectorIndex> New(uint64_t id, const pb::common::IndexParameter& index_parameter) {
+    if (index_parameter.index_type() != pb::common::IndexType::INDEX_TYPE_VECTOR) {
+      DINGO_LOG(ERROR) << "index_parameter is not vector index, type=" << index_parameter.index_type();
+      return nullptr;
+    }
+
+    const auto& vector_index_parameter = index_parameter.vector_index_parameter();
+    return std::make_shared<VectorIndex>(id, vector_index_parameter.dimension(), vector_index_parameter.max_elements());
   }
 
   pb::common::VectorIndexType VectorIndexType() { return vector_index_type_; }
@@ -137,7 +149,28 @@ class VectorIndex {
     Search(vector, topk, results);
   }
 
+  uint64_t Id() const { return id_; }
+
+  uint64_t ApplyLogIndex() const { return apply_log_index_.load(std::memory_order_relaxed); }
+
+  void SetApplyLogIndex(uint64_t apply_log_index) {
+    apply_log_index_.store(apply_log_index, std::memory_order_relaxed);
+  }
+
+  uint64_t SnapshotLogIndex() const { return snapshot_log_index_.load(std::memory_order_relaxed); }
+
+  void SetSnapshotLogIndex(uint64_t snapshot_log_index) {
+    snapshot_log_index_.store(snapshot_log_index, std::memory_order_relaxed);
+  }
+
  private:
+  // region_id
+  uint64_t id_;
+  // apply max log index
+  std::atomic<uint64_t> apply_log_index_;
+  // last snapshot log index
+  std::atomic<uint64_t> snapshot_log_index_;
+
   pb::common::VectorIndexType vector_index_type_;
   hnswlib::HierarchicalNSW<float>* hnsw_index_;
   hnswlib::L2Space* hnsw_space_;

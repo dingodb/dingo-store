@@ -264,11 +264,15 @@ void IndexServiceImpl::Debug(google::protobuf::RpcController* controller,
 }
 
 butil::Status ValidateVectorSearchRequest(const dingodb::pb::index::VectorSearchRequest* request) {
-  if (request->vector().vector().values_size() == 0) {
-    return butil::Status(pb::error::EVECTOR_EMPTY, "vector is empty");
+  if (request->region_id() == 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id is error");
   }
 
-  return butil::Status();
+  if (request->vector().vector().values_size() == 0) {
+    return butil::Status(pb::error::EVECTOR_EMPTY, "Vector is empty");
+  }
+
+  return ServiceHelper::ValidateIndexRegion(request->region_id());
 }
 
 // vector
@@ -313,11 +317,21 @@ void IndexServiceImpl::VectorSearch(google::protobuf::RpcController* controller,
 }
 
 butil::Status ValidateVectorAddRequest(const dingodb::pb::index::VectorAddRequest* request) {
-  if (request->vectors_size() == 0) {
-    return butil::Status(pb::error::EVECTOR_EMPTY, "vector is empty");
+  if (request->region_id() == 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id is error");
   }
 
-  return butil::Status();
+  if (request->vectors().empty()) {
+    return butil::Status(pb::error::EVECTOR_EMPTY, "Vector quantity is empty");
+  }
+
+  for (const auto& vector : request->vectors()) {
+    if (vector.vector().values().empty()) {
+      return butil::Status(pb::error::EVECTOR_EMPTY, "Vector is empty");
+    }
+  }
+
+  return ServiceHelper::ValidateIndexRegion(request->region_id());
 }
 
 void IndexServiceImpl::VectorAdd(google::protobuf::RpcController* controller,
@@ -358,11 +372,15 @@ void IndexServiceImpl::VectorAdd(google::protobuf::RpcController* controller,
 }
 
 butil::Status ValidateVectorDeleteRequest(const dingodb::pb::index::VectorDeleteRequest* request) {
-  if (request->ids_size() == 0) {
-    return butil::Status(pb::error::EVECTOR_EMPTY, "vector is empty");
+  if (request->region_id() == 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id is error");
   }
 
-  return butil::Status();
+  if (request->ids().empty()) {
+    return butil::Status(pb::error::EVECTOR_EMPTY, "Vector id quantity is empty");
+  }
+
+  return ServiceHelper::ValidateIndexRegion(request->region_id());
 }
 
 void IndexServiceImpl::VectorDelete(google::protobuf::RpcController* controller,

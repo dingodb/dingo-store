@@ -47,6 +47,7 @@ class Region {
   Region(const Region&) = delete;
   void operator=(const Region&) = delete;
 
+  static std::shared_ptr<Region> New();
   static std::shared_ptr<Region> New(const pb::common::RegionDefinition& definition);
 
   std::string Serialize();
