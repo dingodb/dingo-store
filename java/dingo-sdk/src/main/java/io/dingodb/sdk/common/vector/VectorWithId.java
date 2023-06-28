@@ -14,20 +14,20 @@
  * limitations under the License.
  */
 
-package io.dingodb.sdk.common;
+package io.dingodb.sdk.common.vector;
 
-public interface DingoCommonId {
+import lombok.AllArgsConstructor;
+import lombok.Getter;
 
-    Type type();
+import java.util.List;
+import java.util.Map;
 
-    long parentId();
+@Getter
+@AllArgsConstructor
+public class VectorWithId {
 
-    long entityId();
+    private long id;
+    private List<Float> vectors;
+    private Map<String, byte[]> metaData;
 
-    enum Type {
-        ENTITY_TYPE_SCHEMA,
-        ENTITY_TYPE_TABLE,
-        ENTITY_TYPE_PART,
-        ENTITY_TYPE_INDEX;
-    }
 }
