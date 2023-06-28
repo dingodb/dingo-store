@@ -25,6 +25,7 @@
 #include "common/logging.h"
 #include "config/config_manager.h"
 #include "fmt/core.h"
+#include "log/segment_log_storage.h"
 #include "metrics/store_bvar_metrics.h"
 #include "proto/common.pb.h"
 #include "raft/store_state_machine.h"
@@ -62,10 +63,11 @@ int RaftNode::Init(const std::string& init_conf, std::shared_ptr<Config> config)
   node_options.snapshot_interval_s = config->GetInt("raft.snapshot_interval");
 
   path_ = fmt::format("{}/{}", config->GetString("raft.path"), node_id_);
-  node_options.log_uri = "local://" + path_ + "/log";
   node_options.raft_meta_uri = "local://" + path_ + "/raft_meta";
   node_options.snapshot_uri = "local://" + path_ + "/snapshot";
   node_options.disable_cli = false;
+  node_options.log_storage = new SegmentLogStorage(path_ + "/log");
+  node_options.node_owns_log_storage = true;
 
   if (node_->init(node_options) != 0) {
     DINGO_LOG(ERROR) << "Fail to init raft node " << node_id_;

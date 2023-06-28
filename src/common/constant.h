@@ -85,6 +85,11 @@ class Constant {
 
   inline static const std::string kMetaRegionName = "COORDINATOR";
   inline static const std::string kAutoIncrementRegionName = "AUTO_INCREMENT";
+
+  // segment log
+  static const uint32_t kSegmentLogMaxSegmentSize = 8 * 1024 * 1024;  // 8M
+  static const bool kSegmentLogSync = true;
+  static const uint32_t kSegmentLogSyncPerBytes = INT32_MAX;
 };
 
 }  // namespace dingodb
