@@ -23,6 +23,8 @@ import io.dingodb.meta.MetaServiceGrpc;
 import io.dingodb.sdk.common.DingoClientException;
 import io.dingodb.sdk.common.DingoCommonId;
 import io.dingodb.sdk.common.codec.DingoKeyValueCodec;
+import io.dingodb.sdk.common.index.Index;
+import io.dingodb.sdk.common.index.IndexDefinition;
 import io.dingodb.sdk.common.partition.PartitionDetail;
 import io.dingodb.sdk.common.table.RangeDistribution;
 import io.dingodb.sdk.common.table.Table;
@@ -473,6 +475,105 @@ public class MetaServiceClient {
                     return response.getTableMetrics().getTableMetrics();
                 })
                 .mapOrNull(EntityConversion::mapping));*/
+    }
+
+    public boolean createIndex(String name, Index index) {
+        Meta.CreateIndexIdRequest indexIdRequest = Meta.CreateIndexIdRequest.newBuilder()
+                .setSchemaId(id)
+                .build();
+
+        Meta.CreateIndexIdResponse idResponse = metaConnector.exec(stub -> stub.createIndexId(indexIdRequest));
+
+        Meta.CreateIndexRequest request = Meta.CreateIndexRequest.newBuilder()
+                .setSchemaId(id)
+                .setIndexId(idResponse.getIndexId())
+                .setIndexDefinition(mapping(idResponse.getIndexId().getEntityId(), index))
+                .build();
+
+        Meta.CreateIndexResponse response = metaConnector.exec(stub -> stub.createIndex(request));
+
+        return response != null;
+    }
+
+    public boolean dropIndex(DingoCommonId indexId) {
+        Meta.DropIndexRequest request = Meta.DropIndexRequest.newBuilder().setIndexId(mapping(indexId)).build();
+
+        Meta.DropIndexResponse response = metaConnector.exec(stub -> stub.dropIndex(request));
+
+        return response.getError().getErrcodeValue() == 0;
+    }
+
+    public Index getIndex(DingoCommonId indexId) {
+        Meta.GetIndexRequest request = Meta.GetIndexRequest.newBuilder().setIndexId(mapping(indexId)).build();
+
+        Meta.GetIndexResponse response = metaConnector.exec(stub -> stub.getIndex(request));
+
+        return mapping(response.getIndexDefinitionWithId().getIndexDefinition());
+    }
+
+    public Index getIndex(String name) {
+        Meta.GetIndexByNameRequest request = Meta.GetIndexByNameRequest.newBuilder()
+                .setSchemaId(id)
+                .setIndexName(name)
+                .build();
+
+        Meta.GetIndexByNameResponse response = metaConnector.exec(stub -> stub.getIndexByName(request));
+        return mapping(response.getIndexDefinitionWithId().getIndexDefinition());
+    }
+
+    public Map<DingoCommonId, Index> getIndexes(DingoCommonId schemaId) {
+        Map<DingoCommonId, Index> results = new ConcurrentHashMap<>();
+        Meta.GetIndexesRequest request = Meta.GetIndexesRequest.newBuilder()
+                .setSchemaId(mapping(schemaId))
+                .build();
+
+        Meta.GetIndexesResponse response = metaConnector.exec(stub -> stub.getIndexes(request));
+
+        for (Meta.IndexDefinitionWithId definitionWithId : response.getIndexDefinitionWithIdsList()) {
+            results.put(mapping(definitionWithId.getIndexId()), mapping(definitionWithId.getIndexDefinition()));
+        }
+
+        return results;
+    }
+
+    public DingoCommonId getIndexId(String indexName) {
+        return Optional.mapOrNull(getIndexDefinitionWithId(indexName), __ -> EntityConversion.mapping(__.getIndexId()));
+    }
+
+    private Meta.IndexDefinitionWithId getIndexDefinitionWithId(String indexName) {
+        Meta.GetIndexByNameRequest request = Meta.GetIndexByNameRequest.newBuilder()
+                .setSchemaId(id)
+                .setIndexName(indexName)
+                .build();
+
+        return Optional.ofNullable(metaConnector.exec(stub -> stub.getIndexByName(request)))
+                .map(Meta.GetIndexByNameResponse::getIndexDefinitionWithId)
+                .filter(__ -> __.getIndexDefinition().getName().equalsIgnoreCase(indexName))
+                .orNull();
+    }
+
+    public NavigableMap<ComparableByteArray, RangeDistribution> getIndexRangeDistribution(String indexName) {
+        DingoCommonId indexId = getIndexId(indexName);
+        if (indexId == null) {
+            throw new DingoClientException("Index " + indexName + " does not exist");
+        }
+        return getIndexRangeDistribution(indexId);
+    }
+
+    public NavigableMap<ComparableByteArray, RangeDistribution> getIndexRangeDistribution(DingoCommonId indexId) {
+        NavigableMap<ComparableByteArray, RangeDistribution> result = new TreeMap<>();
+        Meta.GetIndexRangeRequest request = Meta.GetIndexRangeRequest.newBuilder()
+                .setIndexId(mapping(indexId))
+                .build();
+
+        Meta.GetIndexRangeResponse response = metaConnector.exec(stub -> stub.getIndexRange(request));
+
+        for (Meta.RangeDistribution indexPart : response.getIndexRange().getRangeDistributionList()) {
+            result.put(new ComparableByteArray(
+                        indexPart.getRange().getStartKey().toByteArray()),
+                    mapping(indexPart));
+        }
+        return result;
     }
 
     private String cleanTableName(String name) {

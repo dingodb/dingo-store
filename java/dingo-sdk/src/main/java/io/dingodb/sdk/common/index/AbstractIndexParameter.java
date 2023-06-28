@@ -14,20 +14,27 @@
  * limitations under the License.
  */
 
-package io.dingodb.sdk.common;
+package io.dingodb.sdk.common.index;
 
-public interface DingoCommonId {
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.ToString;
 
-    Type type();
+@Getter
+@ToString
+@NoArgsConstructor
+@AllArgsConstructor
+public abstract class AbstractIndexParameter {
 
-    long parentId();
+    private IndexType indexType;
+    private Integer dimension;
+    private Integer nlist;
+    private Integer efConstruction;
+    private Integer efSearch;
 
-    long entityId();
-
-    enum Type {
-        ENTITY_TYPE_SCHEMA,
-        ENTITY_TYPE_TABLE,
-        ENTITY_TYPE_PART,
-        ENTITY_TYPE_INDEX;
+    public interface IndexType {
+        String name();
     }
+
 }

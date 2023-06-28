@@ -16,6 +16,7 @@
 
 package io.dingodb.sdk.common.utils;
 
+import com.google.common.collect.Maps;
 import com.google.protobuf.ByteString;
 import io.dingodb.common.Common;
 import io.dingodb.meta.Meta;
@@ -35,10 +36,16 @@ import io.dingodb.sdk.common.cluster.InternalExecutorUser;
 import io.dingodb.sdk.common.codec.CodecUtils;
 import io.dingodb.sdk.common.codec.DingoKeyValueCodec;
 import io.dingodb.sdk.common.codec.KeyValueCodec;
+import io.dingodb.sdk.common.index.Index;
+import io.dingodb.sdk.common.index.IndexDefinition;
+import io.dingodb.sdk.common.index.IndexParameter;
+import io.dingodb.sdk.common.index.ScalarIndexParameter;
+import io.dingodb.sdk.common.index.VectorIndexParameter;
 import io.dingodb.sdk.common.partition.Partition;
 import io.dingodb.sdk.common.partition.PartitionDetail;
 import io.dingodb.sdk.common.partition.PartitionDetailDefinition;
 import io.dingodb.sdk.common.partition.PartitionRule;
+import io.dingodb.sdk.common.serial.RecordEncoder;
 import io.dingodb.sdk.common.serial.schema.DingoSchema;
 import io.dingodb.sdk.common.serial.schema.Type;
 import io.dingodb.sdk.common.table.Column;
@@ -47,6 +54,8 @@ import io.dingodb.sdk.common.table.RangeDistribution;
 import io.dingodb.sdk.common.table.Table;
 import io.dingodb.sdk.common.table.TableDefinition;
 import io.dingodb.sdk.common.table.metric.TableMetrics;
+import io.dingodb.sdk.common.vector.VectorWithDistance;
+import io.dingodb.sdk.common.vector.VectorWithId;
 import io.dingodb.sdk.service.store.AggregationOperator;
 import io.dingodb.sdk.service.store.Coprocessor;
 import io.dingodb.store.Store;
@@ -55,6 +64,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -267,6 +277,113 @@ public class EntityConversion {
                         .map(EntityConversion::mapping)
                         .collect(Collectors.toList())
         );
+    }
+
+    public static Index mapping(Meta.IndexDefinition definition) {
+        return new IndexDefinition(
+                definition.getName(),
+                definition.getVersion(),
+                null,
+                definition.getReplica(),
+                mapping(definition.getIndexParameter())
+                );
+    }
+
+    public static Meta.IndexDefinition mapping(long id, Index index) {
+        RecordEncoder re = new RecordEncoder(0, null, id);
+        return Meta.IndexDefinition.newBuilder()
+                .setName(index.getName())
+                .setVersion(index.getVersion())
+                .setIndexPartition(
+                    Meta.PartitionRule.newBuilder()
+                        .setRangePartition(Meta.RangePartition.newBuilder()
+                            .addRanges(Common.Range.newBuilder()
+                                .setStartKey(ByteString.copyFrom(re.encodeMinKeyPrefix()))
+                                .build())
+                            .build())
+                        .build())
+                .setReplica(index.getReplica())
+                .setIndexParameter(mapping(index.getIndexParameter()))
+                .build();
+    }
+
+    public static IndexParameter mapping(Common.IndexParameter parameter) {
+        Common.VectorIndexParameter vectorParam = parameter.getVectorIndexParameter();
+        Common.ScalarIndexParameter scalarParam = parameter.getScalarIndexParameter();
+        return new IndexParameter(
+                IndexParameter.IndexType.valueOf(parameter.getIndexType().name()),
+                new VectorIndexParameter(
+                        VectorIndexParameter.VectorIndexType.valueOf(vectorParam.getIndexType().name()),
+                        vectorParam.getDimension(),
+                        vectorParam.getNlist(),
+                        vectorParam.getEfConstruction(),
+                        vectorParam.getEfSearch(),
+                        vectorParam.getMaxElements()),
+                new ScalarIndexParameter(
+                        ScalarIndexParameter.ScalarIndexType.valueOf(scalarParam.getIndexType().name()),
+                        scalarParam.getDimension(),
+                        scalarParam.getNlist(),
+                        scalarParam.getEfConstruction(),
+                        scalarParam.getEfSearch()
+                )
+        );
+    }
+
+    public static Common.IndexParameter mapping(IndexParameter parameter) {
+        VectorIndexParameter vectorParameter = (VectorIndexParameter) parameter.getVectorIndexParameter();
+        Common.IndexParameter.Builder builder = Common.IndexParameter.newBuilder()
+                .setIndexType(Common.IndexType.valueOf(parameter.getIndexType().name()))
+                .setVectorIndexParameter(
+                        Common.VectorIndexParameter.newBuilder()
+                                .setIndexType(Common.VectorIndexType.valueOf(vectorParameter.getIndexType().name()))
+                                .setDimension(vectorParameter.getDimension())
+                                .setNlist(vectorParameter.getNlist())
+                                .setEfConstruction(vectorParameter.getEfConstruction())
+                                .setEfSearch(vectorParameter.getEfConstruction())
+                                .setMaxElements(vectorParameter.getMaxElements())
+                                .build());
+
+        if (parameter.getScalarIndexParameter() != null) {
+            ScalarIndexParameter scalarParameter = (ScalarIndexParameter) parameter.getScalarIndexParameter();
+            builder.setScalarIndexParameter(
+                    Common.ScalarIndexParameter.newBuilder()
+                            .setIndexType(Common.ScalarIndexType.valueOf(scalarParameter.getIndexType().name()))
+                            .setDimension(scalarParameter.getDimension())
+                            .setNlist(scalarParameter.getNlist())
+                            .setEfConstruction(scalarParameter.getEfConstruction())
+                            .setEfSearch(scalarParameter.getEfSearch())
+                            .build());
+        }
+
+        return builder.build();
+    }
+
+    public static Common.VectorWithId mapping(VectorWithId vector) {
+        return Common.VectorWithId.newBuilder()
+                .setId(vector.getId())
+                .setVector(Common.Vector.newBuilder().addAllValues(vector.getVectors()).build())
+                .setMetadata(Common.VectorMetadata.newBuilder().putAllMetadata(vector.getMetaData().entrySet().stream()
+                    .collect(
+                        Maps::newHashMap,
+                        (map, entry) -> map.put(entry.getKey(), ByteString.copyFrom(entry.getValue())),
+                        Map::putAll
+                    )).build())
+                .build();
+    }
+
+    public static VectorWithId mapping(Common.VectorWithId vector) {
+        return new VectorWithId(vector.getId(), vector.getVector().getValuesList(), vector.getMetadata()
+                .getMetadataMap()
+                .entrySet().stream()
+                .collect(
+                        Maps::newHashMap,
+                        (map, entry) -> map.put(entry.getKey(), entry.getValue().toByteArray()),
+                        Map::putAll
+                ));
+    }
+
+    public static VectorWithDistance mapping(Common.VectorWithDistance distance) {
+        return new VectorWithDistance(mapping(distance.getVectorWithId()), distance.getDistance());
     }
 
     public static Store.Coprocessor mapping(Coprocessor coprocessor) {

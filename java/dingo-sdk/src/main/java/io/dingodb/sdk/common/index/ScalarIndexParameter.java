@@ -14,20 +14,25 @@
  * limitations under the License.
  */
 
-package io.dingodb.sdk.common;
+package io.dingodb.sdk.common.index;
 
-public interface DingoCommonId {
+public class ScalarIndexParameter extends AbstractIndexParameter {
 
-    Type type();
-
-    long parentId();
-
-    long entityId();
-
-    enum Type {
-        ENTITY_TYPE_SCHEMA,
-        ENTITY_TYPE_TABLE,
-        ENTITY_TYPE_PART,
-        ENTITY_TYPE_INDEX;
+    public ScalarIndexParameter(
+            IndexType indexType,
+            Integer dimension,
+            Integer nlist,
+            Integer efConstruction,
+            Integer efSearch
+    ) {
+        super(indexType, dimension, nlist, efConstruction, efSearch);
     }
+
+    public enum ScalarIndexType implements IndexType {
+        SCALAR_INDEX_TYPE_LSM,
+        SCALAR_INDEX_TYPE_BTREE
+
+    }
+
+
 }

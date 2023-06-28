@@ -14,20 +14,17 @@
  * limitations under the License.
  */
 
-package io.dingodb.sdk.common;
+package io.dingodb.sdk.common.vector;
 
-public interface DingoCommonId {
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.experimental.Delegate;
 
-    Type type();
+@Getter
+@AllArgsConstructor
+public class VectorWithDistance {
 
-    long parentId();
-
-    long entityId();
-
-    enum Type {
-        ENTITY_TYPE_SCHEMA,
-        ENTITY_TYPE_TABLE,
-        ENTITY_TYPE_PART,
-        ENTITY_TYPE_INDEX;
-    }
+    @Delegate
+    private VectorWithId vector;
+    private float distance;
 }

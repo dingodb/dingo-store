@@ -14,20 +14,19 @@
  * limitations under the License.
  */
 
-package io.dingodb.sdk.common;
+package io.dingodb.sdk.common.index;
 
-public interface DingoCommonId {
+import io.dingodb.sdk.common.partition.Partition;
 
-    Type type();
+public interface Index {
 
-    long parentId();
+    String getName();
 
-    long entityId();
+    Integer getVersion();
 
-    enum Type {
-        ENTITY_TYPE_SCHEMA,
-        ENTITY_TYPE_TABLE,
-        ENTITY_TYPE_PART,
-        ENTITY_TYPE_INDEX;
-    }
+    Partition indexPartition();
+
+    Integer getReplica();
+
+    IndexParameter getIndexParameter();
 }
