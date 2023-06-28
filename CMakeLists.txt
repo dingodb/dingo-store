@@ -189,6 +189,7 @@ endif()
 # source file
 file(GLOB COMMON_SRCS ${PROJECT_SOURCE_DIR}/src/common/*.cc)
 file(GLOB CONFIG_SRCS ${PROJECT_SOURCE_DIR}/src/config/*.cc)
+file(GLOB LOG_SRCS ${PROJECT_SOURCE_DIR}/src/log/*.cc)
 file(GLOB RAFT_SRCS ${PROJECT_SOURCE_DIR}/src/raft/*.cc)
 file(GLOB ENGINE_SRCS ${PROJECT_SOURCE_DIR}/src/engine/*.cc)
 file(GLOB CRONTAB_SRCS ${PROJECT_SOURCE_DIR}/src/crontab/*.cc)
@@ -214,6 +215,7 @@ add_library(DINGODB_OBJS
             OBJECT
             ${COMMON_SRCS}
             ${CONFIG_SRCS}
+            ${LOG_SRCS}
             ${RAFT_SRCS}
             ${ENGINE_SRCS}
             ${CRONTAB_SRCS}
