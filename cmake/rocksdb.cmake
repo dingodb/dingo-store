@@ -44,7 +44,7 @@ ExternalProject_Add(
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON
         -DCMAKE_BUILD_TYPE=${THIRD_PARTY_BUILD_TYPE}
         -DCMAKE_PREFIX_PATH=${prefix_path}
-        -DPORTABLE=ON
+        -DPORTABLE=0 # Minimum CPU arch to support, or 0 = current CPU, 1 = baseline CPU
         -DWITH_SNAPPY=ON
         -DWITH_LZ4=ON
         -DWITH_ZSTD=ON
