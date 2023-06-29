@@ -56,3 +56,6 @@
 [submodule "contrib/hnswlib"]
 	path = contrib/hnswlib
 	url = https://github.com/nmslib/hnswlib
+[submodule "contrib/openblas"]
+	path = contrib/openblas
+	url = https://github.com/xianyi/OpenBLAS
