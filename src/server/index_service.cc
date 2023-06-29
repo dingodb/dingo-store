@@ -146,7 +146,7 @@ void IndexServiceImpl::TransferLeader(google::protobuf::RpcController* controlle
 
   auto engine = Server::GetInstance()->GetEngine();
   if (engine->GetID() == pb::common::ENG_RAFT_STORE) {
-    auto raft_kv_engine = std::dynamic_pointer_cast<RaftKvEngine>(engine);
+    auto raft_kv_engine = std::dynamic_pointer_cast<RaftStoreEngine>(engine);
     auto status = raft_kv_engine->TransferLeader(request->region_id(), request->peer());
     if (!status.ok()) {
       auto* mut_err = response->mutable_error();

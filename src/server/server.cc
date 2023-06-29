@@ -32,8 +32,7 @@
 #include "coordinator/coordinator_control.h"
 #include "engine/engine.h"
 #include "engine/mem_engine.h"
-#include "engine/raft_kv_engine.h"
-#include "engine/raft_meta_engine.h"
+#include "engine/raft_store_engine.h"
 #include "engine/raw_rocks_engine.h"
 #include "engine/rocks_engine.h"
 #include "glog/logging.h"
@@ -145,7 +144,7 @@ bool Server::InitRawEngine() {
 bool Server::InitEngine() {
   auto config = ConfigManager::GetInstance()->GetConfig(role_);
 
-  // cooridnator use RaftMetaEngine
+  // cooridnator
   if (role_ == pb::common::ClusterRole::COORDINATOR) {
     // init CoordinatorController
     coordinator_control_ = std::make_shared<CoordinatorControl>(std::make_shared<MetaReader>(raw_engine_),
@@ -161,7 +160,7 @@ bool Server::InitEngine() {
     }
 
     // init raft_meta_engine
-    engine_ = std::make_shared<RaftMetaEngine>(raw_engine_);
+    engine_ = std::make_shared<RaftStoreEngine>(raw_engine_);
 
     // set raft_meta_engine to coordinator_control
     coordinator_control_->SetKvEngine(engine_);
@@ -176,9 +175,9 @@ bool Server::InitEngine() {
       return false;
     }
   } else {
-    engine_ = std::make_shared<RaftKvEngine>(raw_engine_);
+    engine_ = std::make_shared<RaftStoreEngine>(raw_engine_);
     if (!engine_->Init(config)) {
-      DINGO_LOG(ERROR) << "Init RaftKvEngine failed with Config[" << config->ToString() << "]";
+      DINGO_LOG(ERROR) << "Init RaftStoreEngine failed with Config[" << config->ToString() << "]";
       return false;
     }
   }
@@ -192,8 +191,8 @@ butil::Status Server::StartMetaRegion(const std::shared_ptr<Config>& config,  //
   std::shared_ptr<pb::common::RegionDefinition> region =
       CreateCoordinatorRegion(config, Constant::kCoordinatorRegionId, Constant::kMetaRegionName /*, ctx*/);
 
-  auto raft_engine = std::dynamic_pointer_cast<RaftMetaEngine>(kv_engine);
-  return raft_engine->InitCoordinatorRegion(region, coordinator_control_, false);
+  auto raft_engine = std::dynamic_pointer_cast<RaftStoreEngine>(kv_engine);
+  return raft_engine->AddNode(region, coordinator_control_, false);
 }
 
 butil::Status Server::StartAutoIncrementRegion(const std::shared_ptr<Config>& config,
@@ -202,8 +201,8 @@ butil::Status Server::StartAutoIncrementRegion(const std::shared_ptr<Config>& co
   std::shared_ptr<pb::common::RegionDefinition> region =
       CreateCoordinatorRegion(config, Constant::kAutoIncrementRegionId, Constant::kAutoIncrementRegionName /*, ctx*/);
 
-  auto raft_engine = std::dynamic_pointer_cast<RaftMetaEngine>(kv_engine);
-  return raft_engine->InitCoordinatorRegion(region, auto_increment_control_, true);
+  auto raft_engine = std::dynamic_pointer_cast<RaftStoreEngine>(kv_engine);
+  return raft_engine->AddNode(region, auto_increment_control_, true);
 }
 
 bool Server::InitCoordinatorInteraction() {

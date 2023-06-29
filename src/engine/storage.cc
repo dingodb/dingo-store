@@ -38,7 +38,7 @@ void Storage::ReleaseSnapshot() {}
 
 butil::Status Storage::ValidateLeader(uint64_t region_id) {
   if (engine_->GetID() == pb::common::ENG_RAFT_STORE) {
-    auto raft_kv_engine = std::dynamic_pointer_cast<RaftKvEngine>(engine_);
+    auto raft_kv_engine = std::dynamic_pointer_cast<RaftStoreEngine>(engine_);
     auto node = raft_kv_engine->GetNode(region_id);
     if (node == nullptr) {
       return butil::Status(pb::error::ERAFT_NOT_FOUND, "Not found raft node");

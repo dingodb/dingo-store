@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "engine/raft_kv_engine.h"
+#include "engine/raft_store_engine.h"
 
 #include <cstdint>
 #include <memory>
@@ -37,16 +37,16 @@
 
 namespace dingodb {
 
-RaftKvEngine::RaftKvEngine(std::shared_ptr<RawEngine> engine)
+RaftStoreEngine::RaftStoreEngine(std::shared_ptr<RawEngine> engine)
     : engine_(engine), raft_node_manager_(std::move(std::make_unique<RaftNodeManager>())) {}
 
-RaftKvEngine::~RaftKvEngine() = default;
+RaftStoreEngine::~RaftStoreEngine() = default;
 
-bool RaftKvEngine::Init(std::shared_ptr<Config> /*config*/) { return true; }
+bool RaftStoreEngine::Init(std::shared_ptr<Config> /*config*/) { return true; }
 
 // Recover raft node from region meta data.
 // Invoke when server starting.
-bool RaftKvEngine::Recover() {
+bool RaftStoreEngine::Recover() {
   auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
   auto store_raft_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRaftMeta();
   auto store_region_metrics = Server::GetInstance()->GetStoreMetricsManager()->GetStoreRegionMetrics();
@@ -80,16 +80,16 @@ bool RaftKvEngine::Recover() {
   return true;
 }
 
-std::string RaftKvEngine::GetName() { return pb::common::Engine_Name(pb::common::ENG_RAFT_STORE); }
+std::string RaftStoreEngine::GetName() { return pb::common::Engine_Name(pb::common::ENG_RAFT_STORE); }
 
-pb::common::Engine RaftKvEngine::GetID() { return pb::common::ENG_RAFT_STORE; }
+pb::common::Engine RaftStoreEngine::GetID() { return pb::common::ENG_RAFT_STORE; }
 
-std::shared_ptr<RawEngine> RaftKvEngine::GetRawEngine() { return engine_; }
+std::shared_ptr<RawEngine> RaftStoreEngine::GetRawEngine() { return engine_; }
 
-butil::Status RaftKvEngine::AddNode(std::shared_ptr<Context> /*ctx*/, store::RegionPtr region,
-                                    std::shared_ptr<pb::store_internal::RaftMeta> raft_meta,
-                                    store::RegionMetricsPtr region_metrics,
-                                    std::shared_ptr<EventListenerCollection> listeners, bool is_restart) {
+butil::Status RaftStoreEngine::AddNode(std::shared_ptr<Context> /*ctx*/, store::RegionPtr region,
+                                       std::shared_ptr<pb::store_internal::RaftMeta> raft_meta,
+                                       store::RegionMetricsPtr region_metrics,
+                                       std::shared_ptr<EventListenerCollection> listeners, bool is_restart) {
   DINGO_LOG(INFO) << "RaftkvEngine add region, region_id " << region->Id();
 
   auto* state_machine = new StoreStateMachine(engine_, region, raft_meta, region_metrics, listeners, is_restart);
@@ -110,8 +110,33 @@ butil::Status RaftKvEngine::AddNode(std::shared_ptr<Context> /*ctx*/, store::Reg
   return butil::Status();
 }
 
-butil::Status RaftKvEngine::ChangeNode(std::shared_ptr<Context> /*ctx*/, uint64_t region_id,
-                                       std::vector<pb::common::Peer> peers) {
+butil::Status RaftStoreEngine::AddNode(std::shared_ptr<pb::common::RegionDefinition> region,
+                                       std::shared_ptr<MetaControl> meta_control, bool is_volatile) {
+  DINGO_LOG(INFO) << "RaftkvEngine add region, region_id " << region->id();
+
+  // construct MetaStatMachine here
+  braft::StateMachine* state_machine = new MetaStateMachine(meta_control, is_volatile);
+
+  std::string const meta_raft_name = fmt::format("{}-{}", region->name(), region->id());
+  std::shared_ptr<RaftNode> const node = std::make_shared<RaftNode>(
+      region->id(), meta_raft_name, braft::PeerId(Server::GetInstance()->RaftEndpoint()), state_machine);
+
+  if (node->Init(Helper::FormatPeers(Helper::ExtractLocations(region->peers())),
+                 ConfigManager::GetInstance()->GetConfig(Server::GetInstance()->GetRole())) != 0) {
+    node->Destroy();
+    return butil::Status(pb::error::ERAFT_INIT, "Raft init failed");
+  }
+
+  raft_node_manager_->AddNode(region->id(), node);
+
+  // set raft_node to coordinator_control
+  meta_control->SetRaftNode(node);
+
+  return butil::Status();
+}
+
+butil::Status RaftStoreEngine::ChangeNode(std::shared_ptr<Context> /*ctx*/, uint64_t region_id,
+                                          std::vector<pb::common::Peer> peers) {
   auto node = raft_node_manager_->GetNode(region_id);
   if (node == nullptr) {
     return butil::Status(pb::error::ERAFT_NOT_FOUND, "Not found raft node");
@@ -125,7 +150,7 @@ butil::Status RaftKvEngine::ChangeNode(std::shared_ptr<Context> /*ctx*/, uint64_
   return butil::Status();
 }
 
-butil::Status RaftKvEngine::StopNode(std::shared_ptr<Context> /*ctx*/, uint64_t region_id) {
+butil::Status RaftStoreEngine::StopNode(std::shared_ptr<Context> /*ctx*/, uint64_t region_id) {
   auto node = raft_node_manager_->GetNode(region_id);
   if (node == nullptr) {
     return butil::Status(pb::error::ERAFT_NOT_FOUND, "Not found raft node");
@@ -137,7 +162,7 @@ butil::Status RaftKvEngine::StopNode(std::shared_ptr<Context> /*ctx*/, uint64_t 
   return butil::Status();
 }
 
-butil::Status RaftKvEngine::DestroyNode(std::shared_ptr<Context> /*ctx*/, uint64_t region_id) {
+butil::Status RaftStoreEngine::DestroyNode(std::shared_ptr<Context> /*ctx*/, uint64_t region_id) {
   auto node = raft_node_manager_->GetNode(region_id);
   if (node == nullptr) {
     return butil::Status(pb::error::ERAFT_NOT_FOUND, "Not found raft node");
@@ -149,9 +174,11 @@ butil::Status RaftKvEngine::DestroyNode(std::shared_ptr<Context> /*ctx*/, uint64
   return butil::Status();
 }
 
-std::shared_ptr<RaftNode> RaftKvEngine::GetNode(uint64_t region_id) { return raft_node_manager_->GetNode(region_id); }
+std::shared_ptr<RaftNode> RaftStoreEngine::GetNode(uint64_t region_id) {
+  return raft_node_manager_->GetNode(region_id);
+}
 
-butil::Status RaftKvEngine::DoSnapshot(std::shared_ptr<Context> ctx, uint64_t region_id) {
+butil::Status RaftStoreEngine::DoSnapshot(std::shared_ptr<Context> ctx, uint64_t region_id) {
   auto node = raft_node_manager_->GetNode(region_id);
   if (node == nullptr) {
     return butil::Status(pb::error::ERAFT_NOT_FOUND, "Not found raft node");
@@ -161,7 +188,7 @@ butil::Status RaftKvEngine::DoSnapshot(std::shared_ptr<Context> ctx, uint64_t re
   return butil::Status();
 }
 
-butil::Status RaftKvEngine::TransferLeader(uint64_t region_id, const pb::common::Peer& peer) {
+butil::Status RaftStoreEngine::TransferLeader(uint64_t region_id, const pb::common::Peer& peer) {
   auto node = raft_node_manager_->GetNode(region_id);
   if (node == nullptr) {
     return butil::Status(pb::error::ERAFT_NOT_FOUND, "Not found raft node");
@@ -194,7 +221,7 @@ std::shared_ptr<pb::raft::RaftCmdRequest> GenRaftCmdRequest(const std::shared_pt
   return raft_cmd;
 }
 
-butil::Status RaftKvEngine::Write(std::shared_ptr<Context> ctx, const WriteData& write_data) {
+butil::Status RaftStoreEngine::Write(std::shared_ptr<Context> ctx, const WriteData& write_data) {
   auto node = raft_node_manager_->GetNode(ctx->RegionId());
   if (node == nullptr) {
     DINGO_LOG(ERROR) << "Not found raft node " << ctx->RegionId();
@@ -215,7 +242,11 @@ butil::Status RaftKvEngine::Write(std::shared_ptr<Context> ctx, const WriteData&
   return butil::Status();
 }
 
-butil::Status RaftKvEngine::AsyncWrite(std::shared_ptr<Context> ctx, const WriteData& write_data, WriteCbFunc cb) {
+butil::Status RaftStoreEngine::AsyncWrite(std::shared_ptr<Context> ctx, const WriteData& write_data) {
+  return AsyncWrite(ctx, write_data, [](std::shared_ptr<Context> ctx, butil::Status status) {});
+}
+
+butil::Status RaftStoreEngine::AsyncWrite(std::shared_ptr<Context> ctx, const WriteData& write_data, WriteCbFunc cb) {
   auto node = raft_node_manager_->GetNode(ctx->RegionId());
   if (node == nullptr) {
     DINGO_LOG(ERROR) << "Not found raft node " << ctx->RegionId();
@@ -226,27 +257,27 @@ butil::Status RaftKvEngine::AsyncWrite(std::shared_ptr<Context> ctx, const Write
   return node->Commit(ctx, GenRaftCmdRequest(ctx, write_data));
 }
 
-butil::Status RaftKvEngine::Reader::KvGet(std::shared_ptr<Context> /*ctx*/, const std::string& key,
-                                          std::string& value) {
+butil::Status RaftStoreEngine::Reader::KvGet(std::shared_ptr<Context> /*ctx*/, const std::string& key,
+                                             std::string& value) {
   return reader_->KvGet(key, value);
 }
 
-butil::Status RaftKvEngine::Reader::KvScan(std::shared_ptr<Context> /*ctx*/, const std::string& start_key,
-                                           const std::string& end_key, std::vector<pb::common::KeyValue>& kvs) {
+butil::Status RaftStoreEngine::Reader::KvScan(std::shared_ptr<Context> /*ctx*/, const std::string& start_key,
+                                              const std::string& end_key, std::vector<pb::common::KeyValue>& kvs) {
   return reader_->KvScan(start_key, end_key, kvs);
 }
 
-butil::Status RaftKvEngine::Reader::KvCount(std::shared_ptr<Context> /*ctx*/, const std::string& start_key,
-                                            const std::string& end_key, uint64_t& count) {
+butil::Status RaftStoreEngine::Reader::KvCount(std::shared_ptr<Context> /*ctx*/, const std::string& start_key,
+                                               const std::string& end_key, uint64_t& count) {
   return reader_->KvCount(start_key, end_key, count);
 }
 
-std::shared_ptr<Engine::Reader> RaftKvEngine::NewReader(const std::string& cf_name) {
-  return std::make_shared<RaftKvEngine::Reader>(engine_->NewReader(cf_name));
+std::shared_ptr<Engine::Reader> RaftStoreEngine::NewReader(const std::string& cf_name) {
+  return std::make_shared<RaftStoreEngine::Reader>(engine_->NewReader(cf_name));
 }
 
-butil::Status RaftKvEngine::VectorReader::QueryVectorWithId(uint64_t region_id, uint64_t vector_id,
-                                                            pb::common::VectorWithDistance& vector_with_distance) {
+butil::Status RaftStoreEngine::VectorReader::QueryVectorWithId(uint64_t region_id, uint64_t vector_id,
+                                                               pb::common::VectorWithDistance& vector_with_distance) {
   std::string key;
   VectorCodec::EncodeVectorId(region_id, vector_id, key);
 
@@ -268,9 +299,9 @@ butil::Status RaftKvEngine::VectorReader::QueryVectorWithId(uint64_t region_id, 
   return butil::Status();
 }
 
-butil::Status RaftKvEngine::VectorReader::SearchVector(uint64_t region_id, const pb::common::VectorWithId& vector,
-                                                       const pb::common::VectorSearchParameter& parameter,
-                                                       std::vector<pb::common::VectorWithDistance>& vectors) {
+butil::Status RaftStoreEngine::VectorReader::SearchVector(uint64_t region_id, const pb::common::VectorWithId& vector,
+                                                          const pb::common::VectorSearchParameter& parameter,
+                                                          std::vector<pb::common::VectorWithDistance>& vectors) {
   auto vector_index = Server::GetInstance()->GetVectorIndexManager()->GetVectorIndex(region_id);
   if (vector_index == nullptr) {
     return butil::Status(pb::error::EVECTOR_NOT_FOUND, fmt::format("Not found vector index {}", region_id));
@@ -293,9 +324,9 @@ butil::Status RaftKvEngine::VectorReader::SearchVector(uint64_t region_id, const
   return butil::Status();
 }
 
-butil::Status RaftKvEngine::VectorReader::QueryVectorMetaData(uint64_t region_id,
-                                                              const pb::common::VectorSearchParameter& parameter,
-                                                              std::vector<pb::common::VectorWithDistance>& vectors) {
+butil::Status RaftStoreEngine::VectorReader::QueryVectorMetaData(uint64_t region_id,
+                                                                 const pb::common::VectorSearchParameter& parameter,
+                                                                 std::vector<pb::common::VectorWithDistance>& vectors) {
   // get metadata by parameter
   for (auto& vector_with_distance : vectors) {
     std::string key;
@@ -327,10 +358,10 @@ butil::Status RaftKvEngine::VectorReader::QueryVectorMetaData(uint64_t region_id
   return butil::Status();
 }
 
-butil::Status RaftKvEngine::VectorReader::VectorSearch(std::shared_ptr<Context> ctx,
-                                                       const pb::common::VectorWithId& vector,
-                                                       pb::common::VectorSearchParameter parameter,
-                                                       std::vector<pb::common::VectorWithDistance>& vectors) {
+butil::Status RaftStoreEngine::VectorReader::VectorSearch(std::shared_ptr<Context> ctx,
+                                                          const pb::common::VectorWithId& vector,
+                                                          pb::common::VectorSearchParameter parameter,
+                                                          std::vector<pb::common::VectorWithDistance>& vectors) {
   if (vector.id() > 0) {
     // Search vector by id
     pb::common::VectorWithDistance vector_with_distance;
@@ -361,8 +392,8 @@ butil::Status RaftKvEngine::VectorReader::VectorSearch(std::shared_ptr<Context> 
   return butil::Status();
 }
 
-std::shared_ptr<Engine::VectorReader> RaftKvEngine::NewVectorReader(const std::string& cf_name) {
-  return std::make_shared<RaftKvEngine::VectorReader>(engine_->NewReader(cf_name));
+std::shared_ptr<Engine::VectorReader> RaftStoreEngine::NewVectorReader(const std::string& cf_name) {
+  return std::make_shared<RaftStoreEngine::VectorReader>(engine_->NewReader(cf_name));
 }
 
 }  // namespace dingodb

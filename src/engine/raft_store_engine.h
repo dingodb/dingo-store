@@ -18,6 +18,7 @@
 #include <memory>
 
 #include "butil/status.h"
+#include "common/meta_control.h"
 #include "engine/engine.h"
 #include "engine/raw_engine.h"
 #include "event/event.h"
@@ -39,6 +40,8 @@ class RaftControlAble {
                                 std::shared_ptr<pb::store_internal::RaftMeta> raft_meta,
                                 store::RegionMetricsPtr region_metrics,
                                 std::shared_ptr<EventListenerCollection> listeners, bool is_restart) = 0;
+  virtual butil::Status AddNode(std::shared_ptr<pb::common::RegionDefinition> region,
+                                std::shared_ptr<MetaControl> meta_control, bool is_volatile) = 0;
   virtual butil::Status StopNode(std::shared_ptr<Context> ctx, uint64_t region_id) = 0;
   virtual butil::Status DestroyNode(std::shared_ptr<Context> ctx, uint64_t region_id) = 0;
   virtual butil::Status ChangeNode(std::shared_ptr<Context> ctx, uint64_t region_id,
@@ -51,10 +54,10 @@ class RaftControlAble {
   RaftControlAble() = default;
 };
 
-class RaftKvEngine : public Engine, public RaftControlAble {
+class RaftStoreEngine : public Engine, public RaftControlAble {
  public:
-  RaftKvEngine(std::shared_ptr<RawEngine> engine);
-  ~RaftKvEngine() override;
+  RaftStoreEngine(std::shared_ptr<RawEngine> engine);
+  ~RaftStoreEngine() override;
 
   bool Init(std::shared_ptr<Config> config) override;
   bool Recover() override;
@@ -67,6 +70,8 @@ class RaftKvEngine : public Engine, public RaftControlAble {
   butil::Status AddNode(std::shared_ptr<Context> ctx, store::RegionPtr region,
                         std::shared_ptr<pb::store_internal::RaftMeta> raft_meta, store::RegionMetricsPtr region_metrics,
                         std::shared_ptr<EventListenerCollection> listeners, bool is_restart) override;
+  butil::Status AddNode(std::shared_ptr<pb::common::RegionDefinition> region, std::shared_ptr<MetaControl> meta_control,
+                        bool is_volatile) override;
   butil::Status ChangeNode(std::shared_ptr<Context> ctx, uint64_t region_id,
                            std::vector<pb::common::Peer> peers) override;
   butil::Status StopNode(std::shared_ptr<Context> ctx, uint64_t region_id) override;
@@ -79,6 +84,7 @@ class RaftKvEngine : public Engine, public RaftControlAble {
   butil::Status DoSnapshot(std::shared_ptr<Context> ctx, uint64_t region_id) override;
 
   butil::Status Write(std::shared_ptr<Context> ctx, const WriteData& write_data) override;
+  butil::Status AsyncWrite(std::shared_ptr<Context> ctx, const WriteData& write_data) override;
   butil::Status AsyncWrite(std::shared_ptr<Context> ctx, const WriteData& write_data, WriteCbFunc cb) override;
 
   // KV reader

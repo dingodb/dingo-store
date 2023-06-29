@@ -21,7 +21,7 @@
 
 #include "common/context.h"
 #include "engine/engine.h"
-#include "engine/raft_kv_engine.h"
+#include "engine/raft_store_engine.h"
 #include "memory"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"

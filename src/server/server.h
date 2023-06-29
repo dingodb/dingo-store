@@ -179,7 +179,7 @@ class Server {
   std::shared_ptr<CoordinatorInteraction> coordinator_interaction_;
   std::shared_ptr<CoordinatorInteraction> coordinator_interaction_incr_;
 
-  // All store engine, include MemEngine/RaftKvEngine/RocksEngine
+  // All store engine, include MemEngine/RaftStoreEngine/RocksEngine
   std::shared_ptr<Engine> engine_;
   std::shared_ptr<RawEngine> raw_engine_;
 
