@@ -62,3 +62,6 @@
 [submodule "contrib/faiss"]
 	path = contrib/faiss
 	url = https://github.com/facebookresearch/faiss
+[submodule "contrib/diskann"]
+	path = contrib/diskann
+	url = https://github.com/microsoft/DiskANN

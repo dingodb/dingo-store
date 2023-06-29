@@ -22,6 +22,9 @@ option(LINK_TCMALLOC "Link tcmalloc if possible" OFF)
 option(BUILD_UNIT_TESTS "Build unit test" ON)
 option(DINGO_BUILD_STATIC "Link libraries statically to generate the DingoDB binary" OFF)
 option(ENABLE_FAILPOINT "Enable failpoint" OFF)
+option(WITH_DISKANN "Build with diskann index" OFF)
+option(WITH_MKL "Build with intel mkl" OFF)
+option(BOOST_SEARCH_PATH "")
 
 include(CheckCXXCompilerFlag)
 check_cxx_compiler_flag("-std=c++17" COMPILER_SUPPORTS_CXX17)
@@ -133,6 +136,7 @@ include_directories(${OPENSSL_INCLUDE_DIR})
 include_directories(${LIBUNWIND_INCLUDE_DIR})
 include_directories(${LIBBACKTRACE_INCLUDE_DIR})
 include_directories(${GPERFTOOLS_INCLUDE_DIR})
+include_directories(${FAISS_INCLUDE_DIR})
 include_directories(${PROJECT_SOURCE_DIR}/src)
 
 set(DYNAMIC_LIB
@@ -146,7 +150,6 @@ set(DYNAMIC_LIB
     ${LZ4_LIBRARIES}
     ${ZSTD_LIBRARIES}
     ${YAMLCPP_LIBRARIES}
-    ${OPENBLAS_LIBRARIES}
     ${FAISS_LIBRARIES}
     ${FMT_LIBRARIES}
     ${ZLIB_LIBRARIES}
@@ -178,7 +181,6 @@ set(DEPEND_LIBS
     zstd
     glog
     yamlcpp
-    openblas
     faiss
     fmt
     gtest
@@ -190,6 +192,46 @@ if(LINK_TCMALLOC)
     message(STATUS "Build DingoDB with tcmalloc")
     set(DYNAMIC_LIB ${DYNAMIC_LIB} ${GPERFTOOLS_LIBRARIES})
     set(DEPEND_LIBS ${DEPEND_LIBS} gperftools)
+endif()
+
+
+if(WITH_MKL)
+    find_package(MKL REQUIRED)
+    if(MKL_FOUND)
+        message(STATUS "The MKL is found, use intel mkl to replace openblas.")
+    else()
+        message(FATAL_ERROR "The MKL is not found, please install MKL and enable MKL.")
+    endif()
+else()
+    find_package(MKL QUIET)
+    if(MKL_FOUND)
+        message(FATAL_ERROR "The MKL is found, cannot build faiss with openblas, please disable MKL.")
+    endif()
+
+    include_directories(${OPENBLAS_INCLUDE_DIR})
+    set(DEPEND_LIBS ${DEPEND_LIBS} openblas)
+    set(DYNAMIC_LIB ${DYNAMIC_LIB} ${OPENBLAS_LIBRARIES})
+endif()
+
+if(WITH_DISKANN)
+    if(NOT WITH_MKL)
+        message(FATAL_ERROR "The WITH_MKL is not ON, please install enable WITH_MKL to build diskann.")
+    endif()
+
+    if(NOT MKL_FOUND)
+        message(FATAL_ERROR "The MKL is not found, please install intel mkl to build diskann.")
+    endif()
+
+    if(NOT BOOST_SEARCH_PATH)
+        find_package(Boost REQUIRED COMPONENTS program_options)
+    else()
+        message(STATUS "BOOST_SEARCH_PATH=${BOOST_SEARCH_PATH}, use user-defined boost version")
+    endif()
+
+    include(diskann)
+    include_directories(${DISKANN_INCLUDE_DIR})
+    set(DEPEND_LIBS ${DEPEND_LIBS} diskann)
+    set(DYNAMIC_LIB ${DYNAMIC_LIB} ${DISKANN_LIBRARIES})
 endif()
 
 # source file
