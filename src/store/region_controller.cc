@@ -85,7 +85,7 @@ butil::Status CreateRegionTask::CreateRegion(std::shared_ptr<Context> ctx, store
 
     auto listener_factory = std::make_shared<StoreSmEventListenerFactory>();
 
-    auto raft_kv_engine = std::dynamic_pointer_cast<RaftKvEngine>(engine);
+    auto raft_kv_engine = std::dynamic_pointer_cast<RaftStoreEngine>(engine);
     status = raft_kv_engine->AddNode(ctx, region, raft_meta, region_metrics, listener_factory->Build(), false);
     if (!status.ok()) {
       return status;
@@ -184,7 +184,7 @@ butil::Status DeleteRegionTask::DeleteRegion(std::shared_ptr<Context> ctx, uint6
 
   // Raft kv engine
   if (engine->GetID() == pb::common::ENG_RAFT_STORE) {
-    auto raft_kv_engine = std::dynamic_pointer_cast<RaftKvEngine>(engine);
+    auto raft_kv_engine = std::dynamic_pointer_cast<RaftStoreEngine>(engine);
     // Delete raft
     DINGO_LOG(DEBUG) << fmt::format("Delete region {} delete raft node", region_id);
     raft_kv_engine->DestroyNode(ctx, region_id);
@@ -288,7 +288,7 @@ butil::Status SplitRegionTask::ValidateSplitRegion(std::shared_ptr<StoreRegionMe
 
   auto engine = Server::GetInstance()->GetEngine();
   if (engine->GetID() == pb::common::ENG_RAFT_STORE) {
-    auto raft_kv_engine = std::dynamic_pointer_cast<RaftKvEngine>(engine);
+    auto raft_kv_engine = std::dynamic_pointer_cast<RaftStoreEngine>(engine);
     auto node = raft_kv_engine->GetNode(parent_region_id);
     if (node == nullptr) {
       return butil::Status(pb::error::ERAFT_NOT_FOUND, "No found raft node.");
@@ -364,7 +364,7 @@ butil::Status ChangeRegionTask::ValidateChangeRegion(std::shared_ptr<StoreMetaMa
 
   auto engine = Server::GetInstance()->GetEngine();
   if (engine->GetID() == pb::common::ENG_RAFT_STORE) {
-    auto raft_kv_engine = std::dynamic_pointer_cast<RaftKvEngine>(engine);
+    auto raft_kv_engine = std::dynamic_pointer_cast<RaftStoreEngine>(engine);
     auto node = raft_kv_engine->GetNode(region_definition.id());
     if (node == nullptr) {
       return butil::Status(pb::error::ERAFT_NOT_FOUND, "No found raft node.");
@@ -401,7 +401,7 @@ butil::Status ChangeRegionTask::ChangeRegion(std::shared_ptr<Context> ctx,
 
   auto engine = Server::GetInstance()->GetEngine();
   if (engine->GetID() == pb::common::ENG_RAFT_STORE) {
-    auto raft_kv_engine = std::dynamic_pointer_cast<RaftKvEngine>(engine);
+    auto raft_kv_engine = std::dynamic_pointer_cast<RaftStoreEngine>(engine);
     return raft_kv_engine->ChangeNode(ctx, region_definition.id(), filter_peers_by_role(pb::common::VOTER));
   }
 
@@ -465,7 +465,7 @@ butil::Status TransferLeaderTask::TransferLeader(std::shared_ptr<Context>, uint6
 
   auto engine = Server::GetInstance()->GetEngine();
   if (engine->GetID() == pb::common::ENG_RAFT_STORE) {
-    auto raft_kv_engine = std::dynamic_pointer_cast<RaftKvEngine>(engine);
+    auto raft_kv_engine = std::dynamic_pointer_cast<RaftStoreEngine>(engine);
     return raft_kv_engine->TransferLeader(region_id, peer);
   }
 
@@ -580,7 +580,7 @@ butil::Status StopRegionTask::StopRegion(std::shared_ptr<Context> ctx, uint64_t 
   // Shutdown raft node
   auto engine = Server::GetInstance()->GetEngine();
   if (engine->GetID() == pb::common::ENG_RAFT_STORE) {
-    auto raft_kv_engine = std::dynamic_pointer_cast<RaftKvEngine>(engine);
+    auto raft_kv_engine = std::dynamic_pointer_cast<RaftStoreEngine>(engine);
     // Delete raft
     DINGO_LOG(DEBUG) << fmt::format("Delete peer {} delete raft node", region_id);
     raft_kv_engine->StopNode(ctx, region_id);

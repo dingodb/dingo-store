@@ -51,6 +51,7 @@ class Engine {
   virtual butil::Status DoSnapshot(std::shared_ptr<Context> ctx, uint64_t region_id) = 0;
 
   virtual butil::Status Write(std::shared_ptr<Context> ctx, const WriteData& write_data) = 0;
+  virtual butil::Status AsyncWrite(std::shared_ptr<Context> ctx, const WriteData& write_data) = 0;
   virtual butil::Status AsyncWrite(std::shared_ptr<Context> ctx, const WriteData& write_data, WriteCbFunc cb) = 0;
 
   // KV reader
@@ -85,7 +86,7 @@ class Engine {
     return nullptr;
   }
 
-  //  This is used by RaftKvEngine to Persist Meta
+  //  This is used by RaftStoreEngine to Persist Meta
   //  This is a alternative method, will be replace by zihui new Interface.
   virtual butil::Status MetaPut(std::shared_ptr<Context> /*ctx*/,
                                 const pb::coordinator_internal::MetaIncrement& /*meta*/) {

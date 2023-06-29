@@ -49,7 +49,7 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
   auto start_time = Helper::TimestampMs();
   auto engine = Server::GetInstance()->GetEngine();
   auto raft_kv_engine =
-      (engine->GetID() == pb::common::ENG_RAFT_STORE) ? std::dynamic_pointer_cast<RaftKvEngine>(engine) : nullptr;
+      (engine->GetID() == pb::common::ENG_RAFT_STORE) ? std::dynamic_pointer_cast<RaftStoreEngine>(engine) : nullptr;
 
   pb::coordinator::StoreHeartbeatRequest request;
   auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();

@@ -17,6 +17,7 @@
 
 #include <cstdarg>
 #include <cstdint>
+#include <string>
 #include <vector>
 
 #include "butil/status.h"
@@ -33,6 +34,7 @@ enum class DatumType {
   kDeleteBatch = 4,
   kSplit = 5,
   kCompareAndSet = 6,
+  kMetaPut = 7,
 };
 
 class DatumAble {
@@ -63,6 +65,26 @@ struct PutDatum : public DatumAble {
 
   std::string cf_name;
   std::vector<pb::common::KeyValue> kvs;
+};
+
+struct MetaPutDatum : public DatumAble {
+  DatumType GetType() override { return DatumType::kMetaPut; }
+
+  pb::raft::Request* TransformToRaft() override {
+    auto* request = new pb::raft::Request();
+
+    request->set_cmd_type(pb::raft::CmdType::META_WRITE);
+
+    pb::raft::RaftMetaRequest* meta_request = request->mutable_meta_req();
+    auto* meta_increment_request = meta_request->mutable_meta_increment();
+    meta_increment_request->CopyFrom(meta_increment);
+    return request;
+  };
+
+  void TransformFromRaft(pb::raft::Response& resonse) override {}
+
+  std::string cf_name;
+  pb::coordinator_internal::MetaIncrement meta_increment;
 };
 
 struct VectorAddDatum : public DatumAble {
@@ -246,6 +268,17 @@ class WriteData {
  public:
   std::vector<std::shared_ptr<DatumAble>> Datums() const { return datums_; }
   void AddDatums(std::shared_ptr<DatumAble> datum) { datums_.push_back(datum); }
+
+  static WriteData BuildWrite(const std::string& cf_name,
+                              const pb::coordinator_internal::MetaIncrement& meta_increment) {
+    WriteData write_data;
+    auto datum = std::make_shared<MetaPutDatum>();
+    datum->cf_name = cf_name;
+    datum->meta_increment = meta_increment;
+    write_data.AddDatums(std::static_pointer_cast<DatumAble>(datum));
+
+    return write_data;
+  }
 
  private:
   std::vector<std::shared_ptr<DatumAble>> datums_;
