@@ -69,6 +69,7 @@ include(brpc)
 include(braft)
 include(yaml-cpp)
 include(openblas)
+include(faiss)
 include(fmt)
 include(libunwind)
 include(libbacktrace)
@@ -146,6 +147,7 @@ set(DYNAMIC_LIB
     ${ZSTD_LIBRARIES}
     ${YAMLCPP_LIBRARIES}
     ${OPENBLAS_LIBRARIES}
+    ${FAISS_LIBRARIES}
     ${FMT_LIBRARIES}
     ${ZLIB_LIBRARIES}
     ${OPENSSL_LIBRARIES}
@@ -177,6 +179,7 @@ set(DEPEND_LIBS
     glog
     yamlcpp
     openblas
+    faiss
     fmt
     gtest
     libunwind
