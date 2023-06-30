@@ -94,7 +94,7 @@ void CoordinatorServiceImpl::CreateExecutor(google::protobuf::RpcController *con
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteData::BuildWrite(ctx->CfName(), meta_increment));
+  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
 }
 
 void CoordinatorServiceImpl::DeleteExecutor(google::protobuf::RpcController *controller,
@@ -138,7 +138,7 @@ void CoordinatorServiceImpl::DeleteExecutor(google::protobuf::RpcController *con
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteData::BuildWrite(ctx->CfName(), meta_increment));
+  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
 }
 
 void CoordinatorServiceImpl::CreateExecutorUser(google::protobuf::RpcController *controller,
@@ -185,7 +185,7 @@ void CoordinatorServiceImpl::CreateExecutorUser(google::protobuf::RpcController 
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteData::BuildWrite(ctx->CfName(), meta_increment));
+  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
 }
 
 void CoordinatorServiceImpl::UpdateExecutorUser(google::protobuf::RpcController *controller,
@@ -230,7 +230,7 @@ void CoordinatorServiceImpl::UpdateExecutorUser(google::protobuf::RpcController 
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteData::BuildWrite(ctx->CfName(), meta_increment));
+  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
 }
 
 void CoordinatorServiceImpl::DeleteExecutorUser(google::protobuf::RpcController *controller,
@@ -275,7 +275,7 @@ void CoordinatorServiceImpl::DeleteExecutorUser(google::protobuf::RpcController 
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteData::BuildWrite(ctx->CfName(), meta_increment));
+  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
 }
 
 void CoordinatorServiceImpl::GetExecutorUserMap(google::protobuf::RpcController * /*controller*/,
@@ -346,7 +346,7 @@ void CoordinatorServiceImpl::CreateStore(google::protobuf::RpcController *contro
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteData::BuildWrite(ctx->CfName(), meta_increment));
+  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
 }
 
 void CoordinatorServiceImpl::DeleteStore(google::protobuf::RpcController *controller,
@@ -397,7 +397,7 @@ void CoordinatorServiceImpl::DeleteStore(google::protobuf::RpcController *contro
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteData::BuildWrite(ctx->CfName(), meta_increment));
+  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
 }
 
 void CoordinatorServiceImpl::UpdateStore(google::protobuf::RpcController *controller,
@@ -439,7 +439,7 @@ void CoordinatorServiceImpl::UpdateStore(google::protobuf::RpcController *contro
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteData::BuildWrite(ctx->CfName(), meta_increment));
+  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
 }
 
 void CoordinatorServiceImpl::ExecutorHeartbeat(google::protobuf::RpcController *controller,
@@ -499,7 +499,7 @@ void CoordinatorServiceImpl::ExecutorHeartbeat(google::protobuf::RpcController *
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteData::BuildWrite(ctx->CfName(), meta_increment));
+  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
 }
 
 void CoordinatorServiceImpl::StoreHeartbeat(google::protobuf::RpcController *controller,
@@ -567,7 +567,7 @@ void CoordinatorServiceImpl::StoreHeartbeat(google::protobuf::RpcController *con
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteData::BuildWrite(ctx->CfName(), meta_increment));
+  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
 }
 
 void CoordinatorServiceImpl::GetStoreMap(google::protobuf::RpcController * /*controller*/,
@@ -870,7 +870,7 @@ void CoordinatorServiceImpl::CreateRegion(google::protobuf::RpcController *contr
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteData::BuildWrite(ctx->CfName(), meta_increment));
+  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
 }
 
 void CoordinatorServiceImpl::DropRegion(google::protobuf::RpcController *controller,
@@ -913,7 +913,7 @@ void CoordinatorServiceImpl::DropRegion(google::protobuf::RpcController *control
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteData::BuildWrite(ctx->CfName(), meta_increment));
+  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
 }
 
 void CoordinatorServiceImpl::DropRegionPermanently(google::protobuf::RpcController *controller,
@@ -956,7 +956,7 @@ void CoordinatorServiceImpl::DropRegionPermanently(google::protobuf::RpcControll
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteData::BuildWrite(ctx->CfName(), meta_increment));
+  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
 }
 
 void CoordinatorServiceImpl::SplitRegion(google::protobuf::RpcController *controller,
@@ -1006,7 +1006,7 @@ void CoordinatorServiceImpl::SplitRegion(google::protobuf::RpcController *contro
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteData::BuildWrite(ctx->CfName(), meta_increment));
+  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
 }
 
 void CoordinatorServiceImpl::MergeRegion(google::protobuf::RpcController *controller,
@@ -1055,7 +1055,7 @@ void CoordinatorServiceImpl::MergeRegion(google::protobuf::RpcController *contro
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteData::BuildWrite(ctx->CfName(), meta_increment));
+  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
 }
 
 void CoordinatorServiceImpl::ChangePeerRegion(google::protobuf::RpcController *controller,
@@ -1120,7 +1120,7 @@ void CoordinatorServiceImpl::ChangePeerRegion(google::protobuf::RpcController *c
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteData::BuildWrite(ctx->CfName(), meta_increment));
+  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
 }
 
 void CoordinatorServiceImpl::TransferLeaderRegion(google::protobuf::RpcController *controller,
@@ -1169,7 +1169,7 @@ void CoordinatorServiceImpl::TransferLeaderRegion(google::protobuf::RpcControlle
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteData::BuildWrite(ctx->CfName(), meta_increment));
+  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
 }
 
 void CoordinatorServiceImpl::GetOrphanRegion(google::protobuf::RpcController * /*controller*/,
@@ -1273,7 +1273,7 @@ void CoordinatorServiceImpl::CleanStoreOperation(google::protobuf::RpcController
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteData::BuildWrite(ctx->CfName(), meta_increment));
+  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
 }
 
 void CoordinatorServiceImpl::AddStoreOperation(google::protobuf::RpcController *controller,
@@ -1316,7 +1316,7 @@ void CoordinatorServiceImpl::AddStoreOperation(google::protobuf::RpcController *
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteData::BuildWrite(ctx->CfName(), meta_increment));
+  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
 }
 
 void CoordinatorServiceImpl::RemoveStoreOperation(google::protobuf::RpcController *controller,
@@ -1360,7 +1360,7 @@ void CoordinatorServiceImpl::RemoveStoreOperation(google::protobuf::RpcControlle
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteData::BuildWrite(ctx->CfName(), meta_increment));
+  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
 }
 
 // task list
@@ -1428,7 +1428,7 @@ void CoordinatorServiceImpl::CleanTaskList(google::protobuf::RpcController *cont
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteData::BuildWrite(ctx->CfName(), meta_increment));
+  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
 }
 
 // raft control

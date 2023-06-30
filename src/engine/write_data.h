@@ -17,10 +17,12 @@
 
 #include <cstdarg>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "butil/status.h"
+#include "common/logging.h"
 #include "proto/common.pb.h"
 #include "proto/raft.pb.h"
 
@@ -55,7 +57,7 @@ struct PutDatum : public DatumAble {
     pb::raft::PutRequest* put_request = request->mutable_put();
     for (auto& kv : kvs) {
       put_request->set_cf_name(cf_name);
-      put_request->add_kvs()->CopyFrom(kv);
+      put_request->add_kvs()->Swap(&kv);
     }
 
     return request;
@@ -77,7 +79,7 @@ struct MetaPutDatum : public DatumAble {
 
     pb::raft::RaftMetaRequest* meta_request = request->mutable_meta_req();
     auto* meta_increment_request = meta_request->mutable_meta_increment();
-    meta_increment_request->CopyFrom(meta_increment);
+    meta_increment_request->Swap(&meta_increment);
     return request;
   };
 
@@ -97,7 +99,7 @@ struct VectorAddDatum : public DatumAble {
     pb::raft::VectorAddRequest* vector_add_request = request->mutable_vector_add();
     for (auto& vector : vectors) {
       vector_add_request->set_cf_name(cf_name);
-      vector_add_request->add_vectors()->CopyFrom(vector);
+      vector_add_request->add_vectors()->Swap(&vector);
     }
 
     return request;
@@ -143,7 +145,7 @@ struct PutIfAbsentDatum : public DatumAble {
     put_if_absent_request->set_cf_name(cf_name);
     put_if_absent_request->set_is_atomic(is_atomic);
     for (auto& kv : kvs) {
-      put_if_absent_request->add_kvs()->CopyFrom(kv);
+      put_if_absent_request->add_kvs()->Swap(&kv);
     }
 
     return request;
@@ -197,8 +199,8 @@ struct DeleteBatchDatum : public DatumAble {
     request->set_cmd_type(pb::raft::CmdType::DELETEBATCH);
     pb::raft::DeleteBatchRequest* delete_batch_request = request->mutable_delete_batch();
     delete_batch_request->set_cf_name(cf_name);
-    for (const auto& key : keys) {
-      delete_batch_request->add_keys()->assign(key.data(), key.size());
+    for (auto& key : keys) {
+      delete_batch_request->add_keys()->swap(key);
     }
 
     return request;
@@ -269,19 +271,129 @@ class WriteData {
   std::vector<std::shared_ptr<DatumAble>> Datums() const { return datums_; }
   void AddDatums(std::shared_ptr<DatumAble> datum) { datums_.push_back(datum); }
 
-  static WriteData BuildWrite(const std::string& cf_name,
-                              const pb::coordinator_internal::MetaIncrement& meta_increment) {
-    WriteData write_data;
-    auto datum = std::make_shared<MetaPutDatum>();
+ private:
+  std::vector<std::shared_ptr<DatumAble>> datums_;
+};
+
+// Build WriteData struct.
+class WriteDataBuilder {
+ public:
+  // PutDatum
+  static std::shared_ptr<WriteData> BuildWrite(const std::string& cf_name,
+                                               const std::vector<pb::common::KeyValue>& kvs) {
+    auto datum = std::make_shared<PutDatum>();
     datum->cf_name = cf_name;
-    datum->meta_increment = meta_increment;
-    write_data.AddDatums(std::static_pointer_cast<DatumAble>(datum));
+    datum->kvs = kvs;
+
+    auto write_data = std::make_shared<WriteData>();
+    write_data->AddDatums(std::static_pointer_cast<DatumAble>(datum));
 
     return write_data;
   }
 
- private:
-  std::vector<std::shared_ptr<DatumAble>> datums_;
+  // VectorAddDatum
+  static std::shared_ptr<WriteData> BuildWrite(const std::string& cf_name,
+                                               const std::vector<pb::common::VectorWithId>& vectors) {
+    auto datum = std::make_shared<VectorAddDatum>();
+    datum->cf_name = cf_name;
+    datum->vectors = vectors;
+
+    auto write_data = std::make_shared<WriteData>();
+    write_data->AddDatums(std::static_pointer_cast<DatumAble>(datum));
+
+    return write_data;
+  }
+
+  // VectorDeleteDatum
+  static std::shared_ptr<WriteData> BuildWrite(const std::string& cf_name, const std::vector<uint64_t>& ids) {
+    auto datum = std::make_shared<VectorDeleteDatum>();
+    datum->cf_name = cf_name;
+    datum->ids = ids;
+
+    auto write_data = std::make_shared<WriteData>();
+    write_data->AddDatums(std::static_pointer_cast<DatumAble>(datum));
+
+    return write_data;
+  }
+
+  // PutIfAbsentDatum
+  static std::shared_ptr<WriteData> BuildWrite(const std::string& cf_name, const std::vector<pb::common::KeyValue>& kvs,
+                                               bool is_atomic) {
+    auto datum = std::make_shared<PutIfAbsentDatum>();
+    datum->cf_name = cf_name;
+    datum->kvs = kvs;
+    datum->is_atomic = is_atomic;
+
+    auto write_data = std::make_shared<WriteData>();
+    write_data->AddDatums(std::static_pointer_cast<DatumAble>(datum));
+
+    return write_data;
+  }
+
+  // DeleteBatchDatum
+  static std::shared_ptr<WriteData> BuildWrite(const std::string& cf_name, const std::vector<std::string>& keys) {
+    auto datum = std::make_shared<DeleteBatchDatum>();
+    datum->cf_name = cf_name;
+    datum->keys = std::move(const_cast<std::vector<std::string>&>(keys));  // NOLINT
+
+    auto write_data = std::make_shared<WriteData>();
+    write_data->AddDatums(std::static_pointer_cast<DatumAble>(datum));
+
+    return write_data;
+  }
+
+  // DeleteRangeDatum
+  static std::shared_ptr<WriteData> BuildWrite(const std::string& cf_name, const pb::common::Range& range) {
+    auto datum = std::make_shared<DeleteRangeDatum>();
+    datum->cf_name = cf_name;
+    datum->ranges.emplace_back(std::move(const_cast<pb::common::Range&>(range)));
+
+    auto write_data = std::make_shared<WriteData>();
+    write_data->AddDatums(std::static_pointer_cast<DatumAble>(datum));
+
+    return write_data;
+  }
+
+  // CompareAndSetDatum
+  static std::shared_ptr<WriteData> BuildWrite(const std::string& cf_name, const std::vector<pb::common::KeyValue>& kvs,
+                                               const std::vector<std::string>& expect_values, bool is_atomic) {
+    auto datum = std::make_shared<CompareAndSetDatum>();
+    datum->cf_name = cf_name;
+    datum->kvs = kvs;
+    datum->expect_values = expect_values;
+    datum->is_atomic = is_atomic;
+
+    auto write_data = std::make_shared<WriteData>();
+    write_data->AddDatums(std::static_pointer_cast<DatumAble>(datum));
+
+    return write_data;
+  }
+
+  // MetaPutDatum
+  static std::shared_ptr<WriteData> BuildWrite(const std::string& cf_name,
+                                               pb::coordinator_internal::MetaIncrement& meta_increment) {
+    auto datum = std::make_shared<MetaPutDatum>();
+    datum->cf_name = cf_name;
+    datum->meta_increment.Swap(&meta_increment);
+
+    auto write_data = std::make_shared<WriteData>();
+    write_data->AddDatums(std::static_pointer_cast<DatumAble>(datum));
+
+    return write_data;
+  }
+
+  // SplitDatum
+  static std::shared_ptr<WriteData> BuildWrite(const pb::coordinator::SplitRequest& split_request) {
+    auto datum = std::make_shared<SplitDatum>();
+    datum->from_region_id = split_request.split_from_region_id();
+    datum->to_region_id = split_request.split_to_region_id();
+    datum->split_key = split_request.split_watershed_key();
+
+    auto write_data = std::make_shared<WriteData>();
+    write_data->AddDatums(std::static_pointer_cast<DatumAble>(datum));
+
+    return write_data;
+  }
 };
 
 }  // namespace dingodb

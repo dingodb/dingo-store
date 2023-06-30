@@ -46,10 +46,15 @@ std::string RocksEngine::GetName() { return pb::common::Engine_Name(pb::common::
 
 pb::common::Engine RocksEngine::GetID() { return pb::common::ENG_ROCKSDB; }
 
-butil::Status RocksEngine::Write(std::shared_ptr<Context> /*ctx*/, const WriteData& /*write_data*/) {
+butil::Status RocksEngine::Write(std::shared_ptr<Context> /*ctx*/, std::shared_ptr<WriteData> /*write_data*/) {
   return butil::Status();
 }
-butil::Status RocksEngine::AsyncWrite(std::shared_ptr<Context> /*ctx*/, const WriteData& /*write_data*/,
+
+butil::Status RocksEngine::AsyncWrite(std::shared_ptr<Context> /*ctx*/, std::shared_ptr<WriteData> /*write_data*/) {
+  return butil::Status();
+}
+
+butil::Status RocksEngine::AsyncWrite(std::shared_ptr<Context> /*ctx*/, std::shared_ptr<WriteData> /*write_data*/,
                                       WriteCbFunc /*write_cb*/) {
   return butil::Status();
 }
