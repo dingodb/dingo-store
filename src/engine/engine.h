@@ -50,9 +50,10 @@ class Engine {
   virtual std::shared_ptr<Snapshot> GetSnapshot() = 0;
   virtual butil::Status DoSnapshot(std::shared_ptr<Context> ctx, uint64_t region_id) = 0;
 
-  virtual butil::Status Write(std::shared_ptr<Context> ctx, const WriteData& write_data) = 0;
-  virtual butil::Status AsyncWrite(std::shared_ptr<Context> ctx, const WriteData& write_data) = 0;
-  virtual butil::Status AsyncWrite(std::shared_ptr<Context> ctx, const WriteData& write_data, WriteCbFunc cb) = 0;
+  virtual butil::Status Write(std::shared_ptr<Context> ctx, std::shared_ptr<WriteData> write_data) = 0;
+  virtual butil::Status AsyncWrite(std::shared_ptr<Context> ctx, std::shared_ptr<WriteData> write_data) = 0;
+  virtual butil::Status AsyncWrite(std::shared_ptr<Context> ctx, std::shared_ptr<WriteData> write_data,
+                                   WriteCbFunc cb) = 0;
 
   // KV reader
   class Reader {

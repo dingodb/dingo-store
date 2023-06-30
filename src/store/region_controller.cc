@@ -311,16 +311,10 @@ butil::Status SplitRegionTask::SplitRegion() {
   }
 
   // Commit raft log
-  WriteData write_data;
-  auto datum = std::make_shared<SplitDatum>();
-  datum->from_region_id = region_cmd_->split_request().split_from_region_id();
-  datum->to_region_id = region_cmd_->split_request().split_to_region_id();
-  datum->split_key = region_cmd_->split_request().split_watershed_key();
 
-  write_data.AddDatums(std::static_pointer_cast<DatumAble>(datum));
-
-  ctx_->SetRegionId(datum->from_region_id);
-  return Server::GetInstance()->GetEngine()->AsyncWrite(ctx_, write_data,
+  ctx_->SetRegionId(region_cmd_->split_request().split_from_region_id());
+  return Server::GetInstance()->GetEngine()->AsyncWrite(ctx_,
+                                                        WriteDataBuilder::BuildWrite(region_cmd_->split_request()),
                                                         [](std::shared_ptr<Context>, butil::Status status) {
                                                           if (!status.ok()) {
                                                             LOG(ERROR) << "Write split failed, " << status.error_str();

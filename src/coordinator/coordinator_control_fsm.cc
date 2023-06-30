@@ -1866,7 +1866,7 @@ butil::Status CoordinatorControl::SubmitMetaIncrement(google::protobuf::Closure*
     ctx->SetDone(done);
   }
 
-  auto status = engine_->AsyncWrite(ctx, WriteData::BuildWrite(ctx->CfName(), meta_increment));
+  auto status = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
   if (!status.ok()) {
     DINGO_LOG(ERROR) << "ApplyMetaIncrement failed, errno=" << status.error_code() << " errmsg=" << status.error_str();
     return status;

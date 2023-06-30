@@ -80,49 +80,34 @@ butil::Status Storage::KvGet(std::shared_ptr<Context> ctx, const std::vector<std
 }
 
 butil::Status Storage::KvPut(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs) {
-  WriteData write_data;
-  std::shared_ptr<PutDatum> datum = std::make_shared<PutDatum>();
-  datum->cf_name = ctx->CfName();
-  datum->kvs = kvs;
-  write_data.AddDatums(std::static_pointer_cast<DatumAble>(datum));
-
-  return engine_->AsyncWrite(ctx, write_data, [](std::shared_ptr<Context> ctx, butil::Status status) {
-    if (!status.ok()) {
-      Helper::SetPbMessageError(status, ctx->Response());
-      if (ctx->Request() != nullptr && ctx->Response() != nullptr) {
-        LOG(ERROR) << fmt::format("KvPut request: {} response: {}", ctx->Request()->ShortDebugString(),
-                                  ctx->Response()->ShortDebugString());
-      }
-    }
-  });
+  return engine_->AsyncWrite(
+      ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), kvs), [](std::shared_ptr<Context> ctx, butil::Status status) {
+        if (!status.ok()) {
+          Helper::SetPbMessageError(status, ctx->Response());
+          if (ctx->Request() != nullptr && ctx->Response() != nullptr) {
+            LOG(ERROR) << fmt::format("KvPut request: {} response: {}", ctx->Request()->ShortDebugString(),
+                                      ctx->Response()->ShortDebugString());
+          }
+        }
+      });
 }
 
 butil::Status Storage::VectorAdd(std::shared_ptr<Context> ctx, const std::vector<pb::common::VectorWithId>& vectors) {
-  WriteData write_data;
-  std::shared_ptr<VectorAddDatum> datum = std::make_shared<VectorAddDatum>();
-  datum->cf_name = ctx->CfName();
-  datum->vectors = vectors;
-  write_data.AddDatums(std::static_pointer_cast<DatumAble>(datum));
-
-  return engine_->AsyncWrite(ctx, write_data, [](std::shared_ptr<Context> ctx, butil::Status status) {
-    if (!status.ok()) {
-      Helper::SetPbMessageError(status, ctx->Response());
-    }
-  });
+  return engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), vectors),
+                             [](std::shared_ptr<Context> ctx, butil::Status status) {
+                               if (!status.ok()) {
+                                 Helper::SetPbMessageError(status, ctx->Response());
+                               }
+                             });
 }
 
 butil::Status Storage::VectorDelete(std::shared_ptr<Context> ctx, const std::vector<uint64_t>& ids) {
-  WriteData write_data;
-  std::shared_ptr<VectorDeleteDatum> datum = std::make_shared<VectorDeleteDatum>();
-  datum->cf_name = ctx->CfName();
-  datum->ids = std::move(const_cast<std::vector<uint64_t>&>(ids));  // NOLINT
-  write_data.AddDatums(std::static_pointer_cast<DatumAble>(datum));
-
-  return engine_->AsyncWrite(ctx, write_data, [](std::shared_ptr<Context> ctx, butil::Status status) {
-    if (!status.ok()) {
-      Helper::SetPbMessageError(status, ctx->Response());
-    }
-  });
+  return engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), ids),
+                             [](std::shared_ptr<Context> ctx, butil::Status status) {
+                               if (!status.ok()) {
+                                 Helper::SetPbMessageError(status, ctx->Response());
+                               }
+                             });
 }
 
 butil::Status Storage::VectorSearch(std::shared_ptr<Context> ctx, const pb::common::VectorWithId& vector,
@@ -144,78 +129,58 @@ butil::Status Storage::VectorSearch(std::shared_ptr<Context> ctx, const pb::comm
 
 butil::Status Storage::KvPutIfAbsent(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs,
                                      bool is_atomic) {
-  WriteData write_data;
-  std::shared_ptr<PutIfAbsentDatum> datum = std::make_shared<PutIfAbsentDatum>();
-  datum->cf_name = ctx->CfName();
-  datum->kvs = kvs;
-  datum->is_atomic = is_atomic;
-  write_data.AddDatums(std::static_pointer_cast<DatumAble>(datum));
-
-  return engine_->AsyncWrite(ctx, write_data, [](std::shared_ptr<Context> ctx, butil::Status status) {
-    if (!status.ok()) {
-      Helper::SetPbMessageError(status, ctx->Response());
-      if (ctx->Request() != nullptr && ctx->Response() != nullptr) {
-        LOG(ERROR) << fmt::format("KvPutIfAbsent request: {} response: {}", ctx->Request()->ShortDebugString(),
-                                  ctx->Response()->ShortDebugString());
-      }
-    }
-  });
+  return engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), kvs, is_atomic),
+                             [](std::shared_ptr<Context> ctx, butil::Status status) {
+                               if (!status.ok()) {
+                                 Helper::SetPbMessageError(status, ctx->Response());
+                                 if (ctx->Request() != nullptr && ctx->Response() != nullptr) {
+                                   LOG(ERROR) << fmt::format("KvPutIfAbsent request: {} response: {}",
+                                                             ctx->Request()->ShortDebugString(),
+                                                             ctx->Response()->ShortDebugString());
+                                 }
+                               }
+                             });
 }
 
 butil::Status Storage::KvDelete(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys) {
-  WriteData write_data;
-  std::shared_ptr<DeleteBatchDatum> datum = std::make_shared<DeleteBatchDatum>();
-  datum->cf_name = ctx->CfName();
-  datum->keys = std::move(const_cast<std::vector<std::string>&>(keys));  // NOLINT
-  write_data.AddDatums(std::static_pointer_cast<DatumAble>(datum));
-
-  return engine_->AsyncWrite(ctx, write_data, [](std::shared_ptr<Context> ctx, butil::Status status) {
-    if (!status.ok()) {
-      Helper::SetPbMessageError(status, ctx->Response());
-      if (ctx->Request() != nullptr && ctx->Response() != nullptr) {
-        LOG(ERROR) << fmt::format("KvDelete request: {} response: {}", ctx->Request()->ShortDebugString(),
-                                  ctx->Response()->ShortDebugString());
-      }
-    }
-  });
+  return engine_->AsyncWrite(
+      ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), keys), [](std::shared_ptr<Context> ctx, butil::Status status) {
+        if (!status.ok()) {
+          Helper::SetPbMessageError(status, ctx->Response());
+          if (ctx->Request() != nullptr && ctx->Response() != nullptr) {
+            LOG(ERROR) << fmt::format("KvDelete request: {} response: {}", ctx->Request()->ShortDebugString(),
+                                      ctx->Response()->ShortDebugString());
+          }
+        }
+      });
 }
 
 butil::Status Storage::KvDeleteRange(std::shared_ptr<Context> ctx, const pb::common::Range& range) {
-  WriteData write_data;
-  std::shared_ptr<DeleteRangeDatum> datum = std::make_shared<DeleteRangeDatum>();
-  datum->cf_name = ctx->CfName();
-  datum->ranges.emplace_back(std::move(const_cast<pb::common::Range&>(range)));
-  write_data.AddDatums(std::static_pointer_cast<DatumAble>(datum));
-
-  return engine_->AsyncWrite(ctx, write_data, [](std::shared_ptr<Context> ctx, butil::Status status) {
-    if (!status.ok()) {
-      Helper::SetPbMessageError(status, ctx->Response());
-      if (ctx->Request() != nullptr && ctx->Response() != nullptr) {
-        LOG(ERROR) << fmt::format("KvDeleteRange request: {} response: {}", ctx->Request()->ShortDebugString(),
-                                  ctx->Response()->ShortDebugString());
-      }
-    }
-  });
+  return engine_->AsyncWrite(
+      ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), range), [](std::shared_ptr<Context> ctx, butil::Status status) {
+        if (!status.ok()) {
+          Helper::SetPbMessageError(status, ctx->Response());
+          if (ctx->Request() != nullptr && ctx->Response() != nullptr) {
+            LOG(ERROR) << fmt::format("KvDeleteRange request: {} response: {}", ctx->Request()->ShortDebugString(),
+                                      ctx->Response()->ShortDebugString());
+          }
+        }
+      });
 }
+
 butil::Status Storage::KvCompareAndSet(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs,
                                        const std::vector<std::string>& expect_values, bool is_atomic) {
-  WriteData write_data;
-  std::shared_ptr<CompareAndSetDatum> datum = std::make_shared<CompareAndSetDatum>();
-  datum->cf_name = ctx->CfName();
-  datum->kvs = kvs;
-  datum->expect_values = expect_values;
-  datum->is_atomic = is_atomic;
-  write_data.AddDatums(std::static_pointer_cast<DatumAble>(datum));
-
-  return engine_->AsyncWrite(ctx, write_data, [](std::shared_ptr<Context> ctx, butil::Status status) {
-    if (!status.ok()) {
-      Helper::SetPbMessageError(status, ctx->Response());
-      if (ctx->Request() != nullptr && ctx->Response() != nullptr) {
-        LOG(ERROR) << fmt::format("KvCompareAndSet request: {} response: {}", ctx->Request()->ShortDebugString(),
-                                  ctx->Response()->ShortDebugString());
-      }
-    }
-  });
+  return engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), kvs, expect_values, is_atomic),
+                             [](std::shared_ptr<Context> ctx, butil::Status status) {
+                               if (!status.ok()) {
+                                 Helper::SetPbMessageError(status, ctx->Response());
+                                 if (ctx->Request() != nullptr && ctx->Response() != nullptr) {
+                                   LOG(ERROR) << fmt::format("KvCompareAndSet request: {} response: {}",
+                                                             ctx->Request()->ShortDebugString(),
+                                                             ctx->Response()->ShortDebugString());
+                                 }
+                               }
+                             });
 }
 
 butil::Status Storage::KvScanBegin(std::shared_ptr<Context> ctx, const std::string& cf_name, uint64_t region_id,

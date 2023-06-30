@@ -207,21 +207,21 @@ butil::Status RaftStoreEngine::TransferLeader(uint64_t region_id, const pb::comm
 }
 
 std::shared_ptr<pb::raft::RaftCmdRequest> GenRaftCmdRequest(const std::shared_ptr<Context> ctx,
-                                                            const WriteData& write_data) {
+                                                            std::shared_ptr<WriteData> write_data) {
   std::shared_ptr<pb::raft::RaftCmdRequest> raft_cmd = std::make_shared<pb::raft::RaftCmdRequest>();
 
   pb::raft::RequestHeader* header = raft_cmd->mutable_header();
   header->set_region_id(ctx->RegionId());
 
   auto* requests = raft_cmd->mutable_requests();
-  for (auto& datum : write_data.Datums()) {
+  for (auto& datum : write_data->Datums()) {
     requests->AddAllocated(datum->TransformToRaft());
   }
 
   return raft_cmd;
 }
 
-butil::Status RaftStoreEngine::Write(std::shared_ptr<Context> ctx, const WriteData& write_data) {
+butil::Status RaftStoreEngine::Write(std::shared_ptr<Context> ctx, std::shared_ptr<WriteData> write_data) {
   auto node = raft_node_manager_->GetNode(ctx->RegionId());
   if (node == nullptr) {
     DINGO_LOG(ERROR) << "Not found raft node " << ctx->RegionId();
@@ -242,11 +242,12 @@ butil::Status RaftStoreEngine::Write(std::shared_ptr<Context> ctx, const WriteDa
   return butil::Status();
 }
 
-butil::Status RaftStoreEngine::AsyncWrite(std::shared_ptr<Context> ctx, const WriteData& write_data) {
+butil::Status RaftStoreEngine::AsyncWrite(std::shared_ptr<Context> ctx, std::shared_ptr<WriteData> write_data) {
   return AsyncWrite(ctx, write_data, [](std::shared_ptr<Context> ctx, butil::Status status) {});
 }
 
-butil::Status RaftStoreEngine::AsyncWrite(std::shared_ptr<Context> ctx, const WriteData& write_data, WriteCbFunc cb) {
+butil::Status RaftStoreEngine::AsyncWrite(std::shared_ptr<Context> ctx, std::shared_ptr<WriteData> write_data,
+                                          WriteCbFunc cb) {
   auto node = raft_node_manager_->GetNode(ctx->RegionId());
   if (node == nullptr) {
     DINGO_LOG(ERROR) << "Not found raft node " << ctx->RegionId();
