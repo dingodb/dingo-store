@@ -35,9 +35,7 @@ enum Engine {
   ENG_COLUMNAR = 4;
 };
 
-enum RawEngine {
-  RAW_ENG_ROCKSDB = 0;
-};
+enum RawEngine { RAW_ENG_ROCKSDB = 0; };
 
 message Location {
   string host = 1;
@@ -63,8 +61,28 @@ message KeyValue {
   bytes value = 2;
 }
 
+enum ValueType {
+  FLOAT = 0;
+  UINT8 = 1;  // binary
+}
+
+// message Vector {
+//   int32 dimension = 1;
+//   ValueType value_type = 2;
+//   message FloatArray {
+//     repeated float data = 1;
+//   }
+//   oneof data {
+//     FloatArray float_values = 3;
+//     bytes binary_values = 4;
+//   }
+// }
+
 message Vector {
-  repeated float values = 1;
+  int32 dimension = 1;
+  ValueType value_type = 2;
+  repeated float float_values = 3;
+  bytes binary_values = 4;
 }
 
 message VectorMetadata {
@@ -283,19 +301,145 @@ enum VectorIndexType {
   VECTOR_INDEX_TYPE_DISKANN = 5;
 }
 
+enum MetricType {
+  // L2
+  L2 = 0;
+
+  // InnerProduct
+  IP = 1;
+}
+
+message CreateFlatParam {
+  // dimensions required
+  uint32 dimension = 1;
+}
+
+message CreateIvfFlatParam {
+  // dimensions required
+  uint32 dimension = 1;
+
+  // distance calculation method (L2 or InnerProduct) required
+  MetricType metric_type = 2;
+
+  // Number of cluster centers (default 2048) required
+  int32 ncentroids = 3;
+}
+
+message CreateIvfPqParam {
+  // dimensions required
+  uint32 dimension = 1;
+
+  // distance calculation method (L2 or InnerProduct) required
+  MetricType metric_type = 2;
+
+  // Number of cluster centers Default 2048 required
+  int32 ncentroids = 3;
+
+  // PQ split sub-vector size default 64 required
+  int32 nsubvector = 4;
+
+  // Inverted list (IVF) bucket initialization size default 1000 optional
+  int32 bucket_init_size = 5;
+
+  // Inverted list (IVF) bucket maximum capacity default 1280000 optional
+  int32 bucket_max_size = 6;
+}
+
+message CreateHnswParam {
+  // dimensions required
+  uint32 dimension = 1;
+
+  // the range traversed in the graph during the process of finding node neighbors when
+  // composing the graph. The larger the value, the better the composition effect and the
+  // longer the composition time. Default 40 required
+  uint32 efConstruction = 2;
+
+  // Set the maximum number of elements. required
+  uint32 max_elements = 3;
+
+  // distance calculation method (L2 or InnerProduct) required
+  MetricType metric_type = 4;
+
+  // The number of node neighbors, the larger the value, the better the composition effect, and the
+  // more memory it takes. Default 32. required .
+  int32 nlinks = 5;
+}
+
+message CreateDiskAnnParam {
+  // TODO : Not implement
+  // dimensions required
+  uint32 dimension = 1;
+}
+
 message VectorIndexParameter {
   VectorIndexType index_type = 1;
-  uint32 dimension = 2;
-  uint32 nlist = 3;
-  uint32 efConstruction = 4;
-  uint32 efSearch = 5;
-  uint32 max_elements = 6;
+  oneof create {
+    CreateFlatParam flat = 2;
+    CreateIvfFlatParam ivf_flat = 3;
+    CreateIvfPqParam ivf_pq = 4;
+    CreateHnswParam hnsw = 5;
+    CreateDiskAnnParam diskann = 6;
+  }
+}
+
+message SearchFlatParam {
+  // query parallel mode
+  // Default 1, parallel between queries; 0, parallel in a single query.
+  // Inter-query parallelism refers to a single query that contains multiple vectors, and is parallelized between each
+  // vector query. optional
+  int32 parallel_on_queries = 1;
+}
+
+message SearchIvfFlatParam {
+  // How many buckets to query, the default is 80, and cannot exceed the size of ncentroids. Optional parameters
+  int32 nprobe = 1;
+
+  // Default 1, parallel between queries; 0, parallel in a single query.
+  // Inter-query parallelism refers to a query in which a single query contains multiple vectors, and is parallelized
+  // between each vector query. If there is only a single vector, it can be queried in parallel across nprobe buckets.
+  // optional parameters
+  int32 parallel_on_queries = 2;
+}
+
+message SearchIvfPqParam {
+  // How many buckets to query, the default is 80, and cannot exceed the size of ncentroids Optional parameters
+  int32 nprobe = 1;
+
+  // Default 1, parallel between queries; 0, parallel in a single query.
+  // Inter-query parallelism refers to a query in which a single query contains multiple vectors, and is parallelized
+  // between each vector query. If there is only a single vector, it can be queried in parallel across nprobe buckets
+  // optional parameters
+  int32 parallel_on_queries = 2;
+
+  // number of results recalled from the index
+  // The default is 100. This parameter is for whether to use the original vector for fine sorting. When searching, it
+  // will look for recall_num results in the IVF index. Then use the original vectors to reorder to get the topK final
+  // results. Among them, whether to use the original vector to reorder is specified by the quick parameter. optional
+  // parameters
+  int32 recall_num = 3;
+}
+
+message SearchHNSWParam {
+  // Range traversed in the graph when searching for node neighbors Optional parameters Default 64 Optional parameters
+  int32 efSearch = 1;
+}
+
+message SearchDiskAnnParam {
+  // TODO : Not implement
 }
 
 message VectorSearchParameter {
   uint32 top_n = 1;
   bool with_all_metadata = 2;  // if true, return all metadata, otherwise return only selected key
   repeated string selected_keys = 3;
+
+  oneof search {
+    SearchFlatParam flat = 4;
+    SearchIvfFlatParam ivf_flat = 5;
+    SearchIvfPqParam ivf_pq = 6;
+    SearchHNSWParam hnsw = 7;
+    SearchDiskAnnParam diskann = 8;
+  }
 }
 
 enum ScalarIndexType {
@@ -303,6 +447,7 @@ enum ScalarIndexType {
   SCALAR_INDEX_TYPE_BTREE = 1;
 }
 
+// ?????
 message ScalarIndexParameter {
   ScalarIndexType index_type = 1;
   uint32 dimension = 2;

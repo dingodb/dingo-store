@@ -69,6 +69,7 @@ message VectorAddRequest {
   uint64 region_id = 1;
   repeated dingodb.pb.common.VectorWithId vectors = 2;
   bool replace_deleted = 3;
+  bool is_update = 4;
 }
 
 message VectorAddResponse {
@@ -93,6 +94,23 @@ message VectorDeleteRequest {
 
 message VectorDeleteResponse {
   dingodb.pb.error.Error error = 1;
+}
+
+message CalcDistanceRequest {
+  uint64 region_id = 1;
+  dingodb.pb.common.MetricType metric_type = 2;
+
+  // target vector target vector
+  dingodb.pb.common.Vector target_vector = 3;
+
+  // source vectors source vectors Each source will calculate the distance from the target vector according to the
+  // algorithm
+  repeated dingodb.pb.common.Vector source_vectors = 4;
+}
+
+message CalcDistanceResults {
+  dingodb.pb.error.Error error = 1;
+  repeated float distances = 2;
 }
 
 enum DebugType {
@@ -155,6 +173,7 @@ service IndexService {
   rpc VectorAdd(VectorAddRequest) returns (VectorAddResponse);
   rpc VectorSearch(VectorSearchRequest) returns (VectorSearchResponse);
   rpc VectorDelete(VectorDeleteRequest) returns (VectorDeleteResponse);
+  rpc CalcDistance(CalcDistanceRequest) returns (CalcDistanceResults);
 
   // debug
   rpc Debug(DebugRequest) returns (DebugResponse);
