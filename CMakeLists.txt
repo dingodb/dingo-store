@@ -14,7 +14,7 @@
 
 # Use the command in the next line to release
 # cmake -DCMAKE_BUILD_TYPE=Release -DTHIRD_PARTY_BUILD_TYPE=Release ..
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.23.1 FATAL_ERROR)
 project(dingo-store C CXX)
 
 option(EXAMPLE_LINK_SO "Whether examples are linked dynamically" OFF)
