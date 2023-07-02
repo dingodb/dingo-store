@@ -19,13 +19,8 @@ package io.dingodb.sdk.common.index;
 public class ScalarIndexParameter extends AbstractIndexParameter {
 
     public ScalarIndexParameter(
-            IndexType indexType,
-            Integer dimension,
-            Integer nlist,
-            Integer efConstruction,
-            Integer efSearch
-    ) {
-        super(indexType, dimension, nlist, efConstruction, efSearch);
+            IndexType indexType) {
+        super(indexType);
     }
 
     public enum ScalarIndexType implements IndexType {
@@ -33,6 +28,5 @@ public class ScalarIndexParameter extends AbstractIndexParameter {
         SCALAR_INDEX_TYPE_BTREE
 
     }
-
 
 }
