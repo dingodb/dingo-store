@@ -28,10 +28,6 @@ import lombok.ToString;
 public abstract class AbstractIndexParameter {
 
     private IndexType indexType;
-    private Integer dimension;
-    private Integer nlist;
-    private Integer efConstruction;
-    private Integer efSearch;
 
     public interface IndexType {
         String name();

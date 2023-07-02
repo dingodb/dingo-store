@@ -113,8 +113,8 @@ public class EntityConversion {
     public static Table mapping(Meta.TableDefinitionWithId tableDefinitionWithId) {
         Meta.TableDefinition tableDefinition = tableDefinitionWithId.getTableDefinition();
         List<Column> columns = tableDefinition.getColumnsList().stream()
-            .map(EntityConversion::mapping)
-            .collect(Collectors.toList());
+                .map(EntityConversion::mapping)
+                .collect(Collectors.toList());
         return TableDefinition.builder()
                 .name(tableDefinition.getName())
                 .columns(columns)
@@ -137,13 +137,13 @@ public class EntityConversion {
         }
         DingoKeyValueCodec codec = DingoKeyValueCodec.of(id, columns);
         List<PartitionDetail> details = partition.getRangePartition().getRangesList().stream()
-            .map(Common.Range::getStartKey)
-            .map(ByteString::toByteArray)
-            .sorted(ByteArrayUtils::compare)
-            .skip(1)
-            .map(wrap(codec::decodeKeyPrefix))
-            .map(key -> new PartitionDetailDefinition(null, null, key))
-            .collect(Collectors.toList());
+                .map(Common.Range::getStartKey)
+                .map(ByteString::toByteArray)
+                .sorted(ByteArrayUtils::compare)
+                .skip(1)
+                .map(wrap(codec::decodeKeyPrefix))
+                .map(key -> new PartitionDetailDefinition(null, null, key))
+                .collect(Collectors.toList());
         // The current version only supports the range strategy.
         return new PartitionRule("RANGE", partition.getColumnsList(), details);
     }
@@ -167,8 +167,7 @@ public class EntityConversion {
                 metrics.getMinKey().toByteArray(),
                 metrics.getMaxKey().toByteArray(),
                 metrics.getRowsCount(),
-                metrics.getPartCount()
-        );
+                metrics.getPartCount());
     }
 
     public static KeyValue mapping(Common.KeyValue keyValue) {
@@ -213,8 +212,7 @@ public class EntityConversion {
         return new RangeWithOptions(
                 mapping(options.getRange()),
                 options.getWithStart(),
-                options.getWithEnd()
-        );
+                options.getWithEnd());
     }
 
     public static Common.RangeWithOptions mapping(RangeWithOptions options) {
@@ -251,8 +249,7 @@ public class EntityConversion {
         return new InternalExecutor(
                 mapping(executor.getServerLocation()),
                 mapping(executor.getExecutorUser()),
-                executor.getResourceTag()
-        );
+                executor.getResourceTag());
     }
 
     public static Common.ExecutorUser mapping(ExecutorUser executorUser) {
@@ -265,8 +262,7 @@ public class EntityConversion {
     public static ExecutorUser mapping(Common.ExecutorUser executorUser) {
         return new InternalExecutorUser(
                 executorUser.getUser(),
-                executorUser.getKeyring()
-        );
+                executorUser.getKeyring());
     }
 
     public static ExecutorMap mapping(Common.ExecutorMap executorMap) {
@@ -275,8 +271,7 @@ public class EntityConversion {
                 executorMap.getExecutorsList()
                         .stream()
                         .map(EntityConversion::mapping)
-                        .collect(Collectors.toList())
-        );
+                        .collect(Collectors.toList()));
     }
 
     public static Index mapping(Meta.IndexDefinition definition) {
@@ -285,8 +280,7 @@ public class EntityConversion {
                 definition.getVersion(),
                 null,
                 definition.getReplica(),
-                mapping(definition.getIndexParameter())
-                );
+                mapping(definition.getIndexParameter()));
     }
 
     public static Meta.IndexDefinition mapping(long id, Index index) {
@@ -295,13 +289,13 @@ public class EntityConversion {
                 .setName(index.getName())
                 .setVersion(index.getVersion())
                 .setIndexPartition(
-                    Meta.PartitionRule.newBuilder()
-                        .setRangePartition(Meta.RangePartition.newBuilder()
-                            .addRanges(Common.Range.newBuilder()
-                                .setStartKey(ByteString.copyFrom(re.encodeMinKeyPrefix()))
+                        Meta.PartitionRule.newBuilder()
+                                .setRangePartition(Meta.RangePartition.newBuilder()
+                                        .addRanges(Common.Range.newBuilder()
+                                                .setStartKey(ByteString.copyFrom(re.encodeMinKeyPrefix()))
+                                                .build())
+                                        .build())
                                 .build())
-                            .build())
-                        .build())
                 .setReplica(index.getReplica())
                 .setIndexParameter(mapping(index.getIndexParameter()))
                 .build();
@@ -313,20 +307,14 @@ public class EntityConversion {
         return new IndexParameter(
                 IndexParameter.IndexType.valueOf(parameter.getIndexType().name()),
                 new VectorIndexParameter(
-                        VectorIndexParameter.VectorIndexType.valueOf(vectorParam.getIndexType().name()),
-                        vectorParam.getDimension(),
-                        vectorParam.getNlist(),
-                        vectorParam.getEfConstruction(),
-                        vectorParam.getEfSearch(),
-                        vectorParam.getMaxElements()),
+                        VectorIndexParameter.VectorIndexType.valueOf(vectorParam.getVectorIndexType().name()),
+                        vectorParam.getHnswParameter().getDimension(),
+                        vectorParam.getHnswParameter().getMetricType(),
+                        vectorParam.getHnswParameter().getEfConstruction(),
+                        vectorParam.getHnswParameter().getMaxElements(),
+                        vectorParam.getHnswParameter().getNlinks()),
                 new ScalarIndexParameter(
-                        ScalarIndexParameter.ScalarIndexType.valueOf(scalarParam.getIndexType().name()),
-                        scalarParam.getDimension(),
-                        scalarParam.getNlist(),
-                        scalarParam.getEfConstruction(),
-                        scalarParam.getEfSearch()
-                )
-        );
+                        ScalarIndexParameter.ScalarIndexType.valueOf(scalarParam.getIndexType().name())));
     }
 
     public static Common.IndexParameter mapping(IndexParameter parameter) {
@@ -335,12 +323,17 @@ public class EntityConversion {
                 .setIndexType(Common.IndexType.valueOf(parameter.getIndexType().name()))
                 .setVectorIndexParameter(
                         Common.VectorIndexParameter.newBuilder()
-                                .setIndexType(Common.VectorIndexType.valueOf(vectorParameter.getIndexType().name()))
-                                .setDimension(vectorParameter.getDimension())
-                                .setNlist(vectorParameter.getNlist())
-                                .setEfConstruction(vectorParameter.getEfConstruction())
-                                .setEfSearch(vectorParameter.getEfConstruction())
-                                .setMaxElements(vectorParameter.getMaxElements())
+                                .setVectorIndexType(
+                                        Common.VectorIndexType.valueOf(vectorParameter.getIndexType().name()))
+                                .setHnswParameter(
+                                        Common.CreateHnswParam.newBuilder()
+                                                .setDimension(vectorParameter.getDimension())
+                                                .setMetricType(Common.MetricType
+                                                        .valueOf(vectorParameter.getMetricType().name()))
+                                                .setEfConstruction(vectorParameter.getEfConstruction())
+                                                .setMaxElements(vectorParameter.getMaxElements())
+                                                .setNlinks(vectorParameter.getNlinks())
+                                                .build())
                                 .build());
 
         if (parameter.getScalarIndexParameter() != null) {
@@ -348,10 +341,6 @@ public class EntityConversion {
             builder.setScalarIndexParameter(
                     Common.ScalarIndexParameter.newBuilder()
                             .setIndexType(Common.ScalarIndexType.valueOf(scalarParameter.getIndexType().name()))
-                            .setDimension(scalarParameter.getDimension())
-                            .setNlist(scalarParameter.getNlist())
-                            .setEfConstruction(scalarParameter.getEfConstruction())
-                            .setEfSearch(scalarParameter.getEfSearch())
                             .build());
         }
 
@@ -361,25 +350,24 @@ public class EntityConversion {
     public static Common.VectorWithId mapping(VectorWithId vector) {
         return Common.VectorWithId.newBuilder()
                 .setId(vector.getId())
-                .setVector(Common.Vector.newBuilder().addAllValues(vector.getVectors()).build())
+                .setVector(Common.Vector.newBuilder().addAllFloatValues(vector.getVectors()).build())
                 .setMetadata(Common.VectorMetadata.newBuilder().putAllMetadata(vector.getMetaData().entrySet().stream()
-                    .collect(
-                        Maps::newHashMap,
-                        (map, entry) -> map.put(entry.getKey(), ByteString.copyFrom(entry.getValue())),
-                        Map::putAll
-                    )).build())
+                        .collect(
+                                Maps::newHashMap,
+                                (map, entry) -> map.put(entry.getKey(), ByteString.copyFrom(entry.getValue())),
+                                Map::putAll))
+                        .build())
                 .build();
     }
 
     public static VectorWithId mapping(Common.VectorWithId vector) {
-        return new VectorWithId(vector.getId(), vector.getVector().getValuesList(), vector.getMetadata()
+        return new VectorWithId(vector.getId(), vector.getVector().getFloatValuesList(), vector.getMetadata()
                 .getMetadataMap()
                 .entrySet().stream()
                 .collect(
                         Maps::newHashMap,
                         (map, entry) -> map.put(entry.getKey(), entry.getValue().toByteArray()),
-                        Map::putAll
-                ));
+                        Map::putAll));
     }
 
     public static VectorWithDistance mapping(Common.VectorWithDistance distance) {
@@ -455,16 +443,17 @@ public class EntityConversion {
         Meta.RangePartition.Builder rangeBuilder = Meta.RangePartition.newBuilder();
 
         Iterator<byte[]> keys = Stream.concat(
-            Optional.mapOrGet(table.getPartition(), __ -> encodePartitionDetails(__.details(), codec), Stream::empty),
-            Stream.of(maxKeyPrefix))
-        .sorted(ByteArrayUtils::compare).iterator();
+                Optional.mapOrGet(table.getPartition(), __ -> encodePartitionDetails(__.details(), codec),
+                        Stream::empty),
+                Stream.of(maxKeyPrefix))
+                .sorted(ByteArrayUtils::compare).iterator();
 
         byte[] start = minKeyPrefix;
         while (keys.hasNext()) {
             rangeBuilder.addRanges(Common.Range.newBuilder()
-                .setStartKey(ByteString.copyFrom(start))
-                .setEndKey(ByteString.copyFrom(start = keys.next()))
-            .build());
+                    .setStartKey(ByteString.copyFrom(start))
+                    .setEndKey(ByteString.copyFrom(start = keys.next()))
+                    .build());
         }
 
         return Meta.PartitionRule.newBuilder().setRangePartition(rangeBuilder.build()).build();
@@ -472,8 +461,9 @@ public class EntityConversion {
 
     private static Stream<byte[]> encodePartitionDetails(List<PartitionDetail> details, KeyValueCodec codec) {
         return Parameters.<List<PartitionDetail>>cleanNull(details, Collections::emptyList).stream()
-            .map(PartitionDetail::getOperand)
-            .map(NoBreakFunctions.<Object[], byte[]>wrap(operand -> codec.encodeKeyPrefix(operand, operand.length)));
+                .map(PartitionDetail::getOperand)
+                .map(NoBreakFunctions
+                        .<Object[], byte[]>wrap(operand -> codec.encodeKeyPrefix(operand, operand.length)));
     }
 
     public static Meta.ColumnDefinition mapping(Column column) {

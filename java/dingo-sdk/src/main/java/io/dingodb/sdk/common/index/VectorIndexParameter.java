@@ -16,6 +16,8 @@
 
 package io.dingodb.sdk.common.index;
 
+import io.dingodb.common.Common;
+import io.dingodb.common.Common.VectorIndexType;
 import lombok.Getter;
 import lombok.ToString;
 
@@ -23,18 +25,25 @@ import lombok.ToString;
 @ToString
 public class VectorIndexParameter extends AbstractIndexParameter {
 
+    private Integer dimension;
+    private Common.MetricType metricType;
+    private Integer efConstruction;
     private Integer maxElements;
+    private Integer nlinks;
 
     public VectorIndexParameter(
             IndexType indexType,
             Integer dimension,
-            Integer nlist,
+            Common.MetricType metricType,
             Integer efConstruction,
-            Integer efSearch,
-            Integer maxElements
-    ) {
-        super(indexType, dimension, nlist, efConstruction, efSearch);
+            Integer maxElements,
+            Integer nlinks) {
+        super(indexType);
+        this.dimension = dimension;
+        this.metricType = metricType;
+        this.efConstruction = efConstruction;
         this.maxElements = maxElements;
+        this.nlinks = nlinks;
     }
 
     public enum VectorIndexType implements IndexType {
