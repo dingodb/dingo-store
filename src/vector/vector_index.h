@@ -16,6 +16,7 @@
 #define DINGODB_VECTOR_INDEX_H_
 
 #include <atomic>
+#include <cassert>
 #include <cstdint>
 #include <map>
 #include <memory>
@@ -23,6 +24,7 @@
 #include <vector>
 
 #include "common/logging.h"
+#include "hnswlib/space_ip.h"
 #include "hnswlib/space_l2.h"
 #include "proto/common.pb.h"
 
@@ -30,19 +32,27 @@ namespace dingodb {
 
 class VectorIndex {
  public:
-  VectorIndex(uint64_t id, uint32_t dimension, uint32_t max_elements,
-              pb::common::VectorIndexType vector_index_type = pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW)
-      : id_(id), apply_log_index_(0), snapshot_log_index_(0), dimension_(dimension), max_elements_(max_elements) {
-    vector_index_type_ = vector_index_type;
+  VectorIndex(uint64_t id, const pb::common::VectorIndexParameter& vector_index_parameter)
+      : id_(id), apply_log_index_(0), snapshot_log_index_(0) {
+    vector_index_type_ = vector_index_parameter.vector_index_type();
 
     if (vector_index_type_ == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
-      int m = 16;                 // Tightly connected with internal dimensionality of the data
-                                  // strongly affects the memory consumption
-      int ef_construction = 200;  // Controls index search speed/build speed tradeoff
+      const auto& hnsw_parameter = vector_index_parameter.hnsw_parameter();
+      assert(hnsw_parameter.dimension() > 0);
+      assert(hnsw_parameter.metric_type() != pb::common::MetricType::METRIC_TYPE_NONE);
+      assert(hnsw_parameter.efconstruction() > 0);
+      assert(hnsw_parameter.max_elements() > 0);
+      assert(hnsw_parameter.nlinks() > 0);
 
-      // Initing index
-      hnsw_space_ = new hnswlib::L2Space(dimension_);
-      hnsw_index_ = new hnswlib::HierarchicalNSW<float>(hnsw_space_, max_elements_, m, ef_construction, 100, true);
+      if (hnsw_parameter.metric_type() == pb::common::MetricType::METRIC_TYPE_INNER_PRODUCT) {
+        hnsw_space_ = new hnswlib::InnerProductSpace(hnsw_parameter.dimension());
+      } else {
+        hnsw_space_ = new hnswlib::L2Space(hnsw_parameter.dimension());
+      }
+
+      hnsw_index_ =
+          new hnswlib::HierarchicalNSW<float>(hnsw_space_, hnsw_parameter.max_elements(), hnsw_parameter.nlinks(),
+                                              hnsw_parameter.efconstruction(), 100, true);
     } else {
       hnsw_index_ = nullptr;
     }
@@ -62,7 +72,36 @@ class VectorIndex {
     }
 
     const auto& vector_index_parameter = index_parameter.vector_index_parameter();
-    return std::make_shared<VectorIndex>(id, vector_index_parameter.dimension(), vector_index_parameter.max_elements());
+    if (vector_index_parameter.vector_index_type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
+      const auto& hnsw_parameter = vector_index_parameter.hnsw_parameter();
+
+      if (hnsw_parameter.dimension() == 0) {
+        DINGO_LOG(ERROR) << "vector_index_parameter is illegal, dimension is 0";
+        return nullptr;
+      }
+      if (hnsw_parameter.metric_type() == pb::common::MetricType::METRIC_TYPE_NONE) {
+        DINGO_LOG(ERROR) << "vector_index_parameter is illegal, ef_construction is 0";
+        return nullptr;
+      }
+      if (hnsw_parameter.efconstruction() == 0) {
+        DINGO_LOG(ERROR) << "vector_index_parameter is illegal, efconstruction is 0";
+        return nullptr;
+      }
+      if (hnsw_parameter.max_elements() == 0) {
+        DINGO_LOG(ERROR) << "vector_index_parameter is illegal, max_elements is 0";
+        return nullptr;
+      }
+      if (hnsw_parameter.nlinks() == 0) {
+        DINGO_LOG(ERROR) << "vector_index_parameter is illegal, nlinks is 0";
+        return nullptr;
+      }
+
+      return std::make_shared<VectorIndex>(id, vector_index_parameter);
+    } else {
+      DINGO_LOG(ERROR) << "vector_index_parameter is not hnsw index, type="
+                       << vector_index_parameter.vector_index_type();
+      return nullptr;
+    }
   }
 
   pb::common::VectorIndexType VectorIndexType() { return vector_index_type_; }
@@ -75,7 +114,7 @@ class VectorIndex {
 
   void Add(const pb::common::VectorWithId& vector_with_id) {
     std::vector<float> vector;
-    for (const auto& value : vector_with_id.vector().values()) {
+    for (const auto& value : vector_with_id.vector().float_values()) {
       vector.push_back(value);
     }
 
@@ -127,7 +166,7 @@ class VectorIndex {
         try {
           std::vector<float> data = hnsw_index_->getDataByLabel<float>(result.top().second);
           for (auto& value : data) {
-            vector_with_id->mutable_vector()->add_values(value);
+            vector_with_id->mutable_vector()->add_float_values(value);
           }
           results.push_back(vector_with_distance);
         } catch (std::exception& e) {
@@ -142,7 +181,7 @@ class VectorIndex {
   void Search(pb::common::VectorWithId vector_with_id, uint32_t topk,
               std::vector<pb::common::VectorWithDistance>& results) {
     std::vector<float> vector;
-    for (auto value : vector_with_id.vector().values()) {
+    for (auto value : vector_with_id.vector().float_values()) {
       vector.push_back(value);
     }
 
@@ -172,10 +211,12 @@ class VectorIndex {
   std::atomic<uint64_t> snapshot_log_index_;
 
   pb::common::VectorIndexType vector_index_type_;
+
+  // hnsw members
   hnswlib::HierarchicalNSW<float>* hnsw_index_;
-  hnswlib::L2Space* hnsw_space_;
-  uint32_t dimension_;     // Dimension of the elements
-  uint32_t max_elements_;  // Maximum number of elements, should be known beforehand
+  hnswlib::SpaceInterface<float>* hnsw_space_;
+
+  uint32_t dimension_;  // Dimension of the elements
 };
 
 }  // namespace dingodb

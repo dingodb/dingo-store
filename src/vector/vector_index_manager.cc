@@ -106,7 +106,7 @@ butil::Status VectorIndexManager::LoadVectorIndex(store::RegionPtr region) {
       continue;
     }
 
-    if (vector.vector().values_size() <= 0) {
+    if (vector.vector().float_values_size() <= 0) {
       DINGO_LOG(WARNING) << fmt::format("vector values_size error, id {}", vector.id());
       continue;
     }

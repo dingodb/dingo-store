@@ -35,7 +35,9 @@ enum Engine {
   ENG_COLUMNAR = 4;
 };
 
-enum RawEngine { RAW_ENG_ROCKSDB = 0; };
+enum RawEngine {
+  RAW_ENG_ROCKSDB = 0;
+};
 
 message Location {
   string host = 1;
@@ -66,23 +68,11 @@ enum ValueType {
   UINT8 = 1;  // binary
 }
 
-// message Vector {
-//   int32 dimension = 1;
-//   ValueType value_type = 2;
-//   message FloatArray {
-//     repeated float data = 1;
-//   }
-//   oneof data {
-//     FloatArray float_values = 3;
-//     bytes binary_values = 4;
-//   }
-// }
-
 message Vector {
   int32 dimension = 1;
   ValueType value_type = 2;
   repeated float float_values = 3;
-  bytes binary_values = 4;
+  repeated bytes binary_values = 4;
 }
 
 message VectorMetadata {
@@ -302,11 +292,9 @@ enum VectorIndexType {
 }
 
 enum MetricType {
-  // L2
-  L2 = 0;
-
-  // InnerProduct
-  IP = 1;
+  METRIC_TYPE_NONE = 0;  // this is a placeholder
+  METRIC_TYPE_L2 = 1;
+  METRIC_TYPE_INNER_PRODUCT = 2;
 }
 
 message CreateFlatParam {
@@ -349,16 +337,16 @@ message CreateHnswParam {
   // dimensions required
   uint32 dimension = 1;
 
+  // distance calculation method (L2 or InnerProduct) required
+  MetricType metric_type = 2;
+
   // the range traversed in the graph during the process of finding node neighbors when
   // composing the graph. The larger the value, the better the composition effect and the
   // longer the composition time. Default 40 required
-  uint32 efConstruction = 2;
+  uint32 efConstruction = 3;
 
   // Set the maximum number of elements. required
-  uint32 max_elements = 3;
-
-  // distance calculation method (L2 or InnerProduct) required
-  MetricType metric_type = 4;
+  uint32 max_elements = 4;
 
   // The number of node neighbors, the larger the value, the better the composition effect, and the
   // more memory it takes. Default 32. required .
@@ -369,16 +357,19 @@ message CreateDiskAnnParam {
   // TODO : Not implement
   // dimensions required
   uint32 dimension = 1;
+
+  // distance calculation method (L2 or InnerProduct) required
+  MetricType metric_type = 2;
 }
 
 message VectorIndexParameter {
-  VectorIndexType index_type = 1;
-  oneof create {
-    CreateFlatParam flat = 2;
-    CreateIvfFlatParam ivf_flat = 3;
-    CreateIvfPqParam ivf_pq = 4;
-    CreateHnswParam hnsw = 5;
-    CreateDiskAnnParam diskann = 6;
+  VectorIndexType vector_index_type = 1;
+  oneof vector_index_parameter {
+    CreateFlatParam flat_parameter = 2;
+    CreateIvfFlatParam ivf_flat_parameter = 3;
+    CreateIvfPqParam ivf_pq_parameter = 4;
+    CreateHnswParam hnsw_parameter = 5;
+    CreateDiskAnnParam diskann_parameter = 6;
   }
 }
 
