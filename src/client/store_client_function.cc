@@ -46,20 +46,21 @@ void SendVectorSearch(ServerInteractionPtr interaction, uint64_t region_id, uint
   request.set_region_id(region_id);
   auto* vector = request.mutable_vector()->mutable_vector();
 
-  for (int i = 0; i < dimension; i++) {
-    vector->add_values(1.0 * i);
+  if (vector_id > 0) {
+    request.mutable_vector()->set_id(vector_id);
+  } else {
+    for (int i = 0; i < dimension; i++) {
+      vector->add_float_values(1.0 * i);
+    }
+
+    request.mutable_parameter()->set_top_n(topn);
   }
 
-  request.mutable_parameter()->set_top_n(topn);
   if (FLAGS_key.empty()) {
     request.mutable_parameter()->set_with_all_metadata(true);
   } else {
     auto* key = request.mutable_parameter()->mutable_selected_keys()->Add();
     key->assign(FLAGS_key);
-  }
-
-  if (vector_id > 0) {
-    request.mutable_vector()->set_id(vector_id);
   }
 
   interaction->SendRequest("IndexService", "VectorSearch", request, response);
@@ -76,7 +77,7 @@ void SendVectorAdd(ServerInteractionPtr interaction, uint64_t region_id, uint32_
     auto* vector_with_id = request.add_vectors();
     vector_with_id->set_id(i);
     for (int j = 0; j < dimension; j++) {
-      vector_with_id->mutable_vector()->add_values(1.0 * dingodb::Helper::GenerateRandomInteger(0, 100) / 10);
+      vector_with_id->mutable_vector()->add_float_values(1.0 * dingodb::Helper::GenerateRandomInteger(0, 100) / 10);
     }
 
     vector_with_id->mutable_metadata()->mutable_metadata()->insert({"name", fmt::format("name{}", i)});

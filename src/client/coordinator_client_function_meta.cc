@@ -551,7 +551,7 @@ void SendCreateIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
   // vector index parameter
   index_definition->mutable_index_parameter()->set_index_type(dingodb::pb::common::IndexType::INDEX_TYPE_VECTOR);
   auto* vector_index_parameter = index_definition->mutable_index_parameter()->mutable_vector_index_parameter();
-  vector_index_parameter->set_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW);
+  vector_index_parameter->set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW);
 
   if (FLAGS_max_elements == 0) {
     DINGO_LOG(WARNING) << "max_elements is empty";
@@ -562,8 +562,15 @@ void SendCreateIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
     return;
   }
 
-  vector_index_parameter->set_max_elements(FLAGS_max_elements);
-  vector_index_parameter->set_dimension(FLAGS_dimension);
+  DINGO_LOG(INFO) << "max_elements=" << FLAGS_max_elements << ", dimension=" << FLAGS_dimension;
+
+  auto* hsnw_index_parameter = vector_index_parameter->mutable_hnsw_parameter();
+
+  hsnw_index_parameter->set_dimension(FLAGS_dimension);
+  hsnw_index_parameter->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_L2);
+  hsnw_index_parameter->set_efconstruction(200);
+  hsnw_index_parameter->set_nlinks(16);
+  hsnw_index_parameter->set_max_elements(FLAGS_max_elements);
 
   // map<string, Index> indexes = 3;
   // uint32 version = 4;

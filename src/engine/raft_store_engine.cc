@@ -340,7 +340,7 @@ butil::Status RaftStoreEngine::VectorReader::QueryVectorMetaData(uint64_t region
 
     pb::common::VectorMetadata vector_metadata;
     if (!vector_metadata.ParseFromString(value)) {
-      return butil::Status(pb::error::EINTERNAL, "Internal error");
+      return butil::Status(pb::error::EINTERNAL, "Internal error, decode VectorMetadata failed");
     }
 
     auto* metadata = vector_with_distance.mutable_vector_with_id()->mutable_metadata()->mutable_metadata();

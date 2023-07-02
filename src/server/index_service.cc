@@ -268,8 +268,10 @@ butil::Status ValidateVectorSearchRequest(const dingodb::pb::index::VectorSearch
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id is error");
   }
 
-  if (request->vector().vector().values_size() == 0) {
-    return butil::Status(pb::error::EVECTOR_EMPTY, "Vector is empty");
+  if (request->vector().id() == 0) {
+    if (request->vector().vector().float_values_size() == 0 && request->vector().vector().binary_values_size() == 0) {
+      return butil::Status(pb::error::EVECTOR_EMPTY, "Vector is empty");
+    }
   }
 
   return ServiceHelper::ValidateIndexRegion(request->region_id());
@@ -326,7 +328,7 @@ butil::Status ValidateVectorAddRequest(const dingodb::pb::index::VectorAddReques
   }
 
   for (const auto& vector : request->vectors()) {
-    if (vector.vector().values().empty()) {
+    if (vector.vector().float_values().empty()) {
       return butil::Status(pb::error::EVECTOR_EMPTY, "Vector is empty");
     }
   }
