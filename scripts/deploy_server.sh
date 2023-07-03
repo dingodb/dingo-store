@@ -8,6 +8,7 @@ if [[ ! -d "$mydir" ]]; then mydir="$PWD"; fi
 DEFINE_string role 'store' 'server role'
 DEFINE_integer server_num 3 'server number'
 DEFINE_boolean clean_db 1 'clean db'
+DEFINE_boolean clean_idx 1 'clean idx'
 DEFINE_boolean clean_raft 1 'clean raft'
 DEFINE_boolean clean_log 0 'clean log'
 DEFINE_boolean replace_conf 0 'replace conf'

@@ -96,6 +96,7 @@ class Constant {
   // vector key prefix
   static const uint8_t kVectorIdPrefix = 0x01;
   static const uint8_t kVectorMetaPrefix = 0x02;
+  static const uint8_t kVectorWalPrefix = 0x03;
 };
 
 }  // namespace dingodb

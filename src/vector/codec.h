@@ -25,10 +25,11 @@ class VectorCodec {
   static void EncodeVectorId(uint64_t region_id, uint64_t vector_id, std::string& result);
   static uint64_t DecodeVectorId(const std::string& value);
   static void EncodeVectorMeta(uint64_t region_id, uint64_t vector_id, std::string& result);
-
-  static std::string EncodeVecotrIndexLogIndex(uint64_t snapshot_log_index, uint64_t apply_log_index);
-  static uint64_t DecodeVectorSnapshotLogIndex(const std::string& value);
-  static uint64_t DecodeVectorApplyLogIndex(const std::string& value);
+  static void EncodeVectorWal(uint64_t region_id, uint64_t vector_id, uint64_t log_id, std::string& result);
+  static std::string EncodeVectorIndexLogIndex(uint64_t snapshot_log_index, uint64_t apply_log_index);
+  static int DecodeVectorIndexLogIndex(const std::string& value, uint64_t& snapshot_log_index,
+                                       uint64_t& apply_log_index);
+  static int DecodeVectorWal(const std::string& value, uint64_t& vector_id, uint64_t& log_id);
 };
 
 }  // namespace dingodb
