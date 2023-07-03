@@ -54,6 +54,7 @@ import io.dingodb.sdk.common.table.RangeDistribution;
 import io.dingodb.sdk.common.table.Table;
 import io.dingodb.sdk.common.table.TableDefinition;
 import io.dingodb.sdk.common.table.metric.TableMetrics;
+import io.dingodb.sdk.common.vector.Vector;
 import io.dingodb.sdk.common.vector.VectorWithDistance;
 import io.dingodb.sdk.common.vector.VectorWithId;
 import io.dingodb.sdk.service.store.AggregationOperator;
@@ -284,7 +285,7 @@ public class EntityConversion {
     }
 
     public static Meta.IndexDefinition mapping(long id, Index index) {
-        RecordEncoder re = new RecordEncoder(0, null, id);
+        RecordEncoder re = new RecordEncoder(0, id);
         return Meta.IndexDefinition.newBuilder()
                 .setName(index.getName())
                 .setVersion(index.getVersion())
@@ -309,7 +310,7 @@ public class EntityConversion {
                 new VectorIndexParameter(
                         VectorIndexParameter.VectorIndexType.valueOf(vectorParam.getVectorIndexType().name()),
                         vectorParam.getHnswParameter().getDimension(),
-                        vectorParam.getHnswParameter().getMetricType(),
+                        VectorIndexParameter.MetricType.valueOf(vectorParam.getHnswParameter().getMetricType().name()),
                         vectorParam.getHnswParameter().getEfConstruction(),
                         vectorParam.getHnswParameter().getMaxElements(),
                         vectorParam.getHnswParameter().getNlinks()),
@@ -347,11 +348,20 @@ public class EntityConversion {
         return builder.build();
     }
 
-    public static Common.VectorWithId mapping(VectorWithId vector) {
+    public static Common.VectorWithId mapping(VectorWithId withId) {
+        Vector vector = withId.getVector();
         return Common.VectorWithId.newBuilder()
-                .setId(vector.getId())
-                .setVector(Common.Vector.newBuilder().addAllFloatValues(vector.getVectors()).build())
-                .setMetadata(Common.VectorMetadata.newBuilder().putAllMetadata(vector.getMetaData().entrySet().stream()
+                .setId(withId.getId())
+                .setVector(Common.Vector.newBuilder()
+                        .setDimension(vector.getDimension())
+                        .setValueType(Common.ValueType.valueOf(vector.getValueType().name()))
+                        .addAllFloatValues(vector.getFloatValues())
+                        .addAllBinaryValues(vector.getBinaryValues()
+                                .stream()
+                                .map(ByteString::copyFrom)
+                                .collect(Collectors.toList()))
+                        .build())
+                .setMetadata(Common.VectorMetadata.newBuilder().putAllMetadata(withId.getMetaData().entrySet().stream()
                         .collect(
                                 Maps::newHashMap,
                                 (map, entry) -> map.put(entry.getKey(), ByteString.copyFrom(entry.getValue())),
@@ -360,14 +370,20 @@ public class EntityConversion {
                 .build();
     }
 
-    public static VectorWithId mapping(Common.VectorWithId vector) {
-        return new VectorWithId(vector.getId(), vector.getVector().getFloatValuesList(), vector.getMetadata()
-                .getMetadataMap()
-                .entrySet().stream()
-                .collect(
-                        Maps::newHashMap,
-                        (map, entry) -> map.put(entry.getKey(), entry.getValue().toByteArray()),
-                        Map::putAll));
+    public static VectorWithId mapping(Common.VectorWithId withId) {
+        Common.Vector vector = withId.getVector();
+        return new VectorWithId(withId.getId(), new Vector(
+                vector.getDimension(),
+                Vector.ValueType.valueOf(vector.getValueType().name()),
+                vector.getFloatValuesList(),
+                vector.getBinaryValuesList().stream().map(ByteString::toByteArray).collect(Collectors.toList())),
+                withId.getMetadata()
+                        .getMetadataMap()
+                        .entrySet().stream()
+                        .collect(
+                                Maps::newHashMap,
+                                (map, entry) -> map.put(entry.getKey(), entry.getValue().toByteArray()),
+                                Map::putAll));
     }
 
     public static VectorWithDistance mapping(Common.VectorWithDistance distance) {

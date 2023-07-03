@@ -6,8 +6,10 @@ package io.dingodb.sdk.common.index;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.ToString;
 
 @Getter
+@ToString
 @AllArgsConstructor
 public class IndexParameter {
 

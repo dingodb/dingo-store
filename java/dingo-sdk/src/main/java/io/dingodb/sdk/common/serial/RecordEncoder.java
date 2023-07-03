@@ -39,6 +39,11 @@ public class RecordEncoder {
         this.valueBufSize = size[1];
     }
 
+    public RecordEncoder(int schemaVersion, long commonId) {
+        this.schemaVersion = schemaVersion;
+        this.commonId = commonId;
+    }
+
 
     public KeyValue encode(Object[] record) {
         KeyValue kv = new KeyValue(null, null);

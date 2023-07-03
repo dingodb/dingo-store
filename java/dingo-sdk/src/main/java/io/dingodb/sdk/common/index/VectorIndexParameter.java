@@ -16,8 +16,6 @@
 
 package io.dingodb.sdk.common.index;
 
-import io.dingodb.common.Common;
-import io.dingodb.common.Common.VectorIndexType;
 import lombok.Getter;
 import lombok.ToString;
 
@@ -26,7 +24,7 @@ import lombok.ToString;
 public class VectorIndexParameter extends AbstractIndexParameter {
 
     private Integer dimension;
-    private Common.MetricType metricType;
+    private MetricType metricType;
     private Integer efConstruction;
     private Integer maxElements;
     private Integer nlinks;
@@ -34,7 +32,7 @@ public class VectorIndexParameter extends AbstractIndexParameter {
     public VectorIndexParameter(
             IndexType indexType,
             Integer dimension,
-            Common.MetricType metricType,
+            MetricType metricType,
             Integer efConstruction,
             Integer maxElements,
             Integer nlinks) {
@@ -53,5 +51,11 @@ public class VectorIndexParameter extends AbstractIndexParameter {
         VECTOR_INDEX_TYPE_IVF_PQ,
         VECTOR_INDEX_TYPE_HNSW,
         VECTOR_INDEX_TYPE_DISKANN
+    }
+
+    public enum MetricType {
+        METRIC_TYPE_NONE,  // this is a placeholder
+        METRIC_TYPE_L2,
+        METRIC_TYPE_INNER_PRODUCT
     }
 }
