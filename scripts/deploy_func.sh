@@ -62,6 +62,9 @@ function deploy_store() {
   if [ "${FLAGS_clean_log}" == "0" ]; then
     rm -rf $dstpath/log/*
   fi
+  if [ "${FLAGS_clean_idx}" == "0" ]; then
+    rm -rf $dstpath/data/${role}/idx/*
+  fi
 }
 
 function start_program() {

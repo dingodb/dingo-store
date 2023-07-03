@@ -23,21 +23,23 @@
 #include <string>
 #include <vector>
 
+#include "butil/status.h"
 #include "common/logging.h"
 #include "hnswlib/space_ip.h"
 #include "hnswlib/space_l2.h"
 #include "proto/common.pb.h"
+#include "proto/error.pb.h"
 
 namespace dingodb {
 
 class VectorIndex {
  public:
   VectorIndex(uint64_t id, const pb::common::VectorIndexParameter& vector_index_parameter)
-      : id_(id), apply_log_index_(0), snapshot_log_index_(0) {
-    vector_index_type_ = vector_index_parameter.vector_index_type();
+      : id_(id), apply_log_index_(0), snapshot_log_index_(0), vector_index_parameter_(vector_index_parameter) {
+    vector_index_type_ = vector_index_parameter_.vector_index_type();
 
     if (vector_index_type_ == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
-      const auto& hnsw_parameter = vector_index_parameter.hnsw_parameter();
+      const auto& hnsw_parameter = vector_index_parameter_.hnsw_parameter();
       assert(hnsw_parameter.dimension() > 0);
       assert(hnsw_parameter.metric_type() != pb::common::MetricType::METRIC_TYPE_NONE);
       assert(hnsw_parameter.efconstruction() > 0);
@@ -106,49 +108,68 @@ class VectorIndex {
 
   pb::common::VectorIndexType VectorIndexType() { return vector_index_type_; }
 
-  void Add(const std::vector<pb::common::VectorWithId>& vector_with_ids) {
+  butil::Status Add(const std::vector<pb::common::VectorWithId>& vector_with_ids) {
     for (const auto& vector_with_id : vector_with_ids) {
-      Add(vector_with_id);
+      auto ret = Add(vector_with_id);
+      if (!ret.ok()) {
+        return ret;
+      }
     }
+    return butil::Status::OK();
   }
 
-  void Add(const pb::common::VectorWithId& vector_with_id) {
+  butil::Status Add(const pb::common::VectorWithId& vector_with_id) {
     std::vector<float> vector;
     for (const auto& value : vector_with_id.vector().float_values()) {
       vector.push_back(value);
     }
 
-    Add(vector_with_id.id(), vector);
+    return Add(vector_with_id.id(), vector);
   }
 
-  void Add(uint64_t id, const std::vector<float>& vector) {
+  butil::Status Add(uint64_t id, const std::vector<float>& vector) {
     if (vector_index_type_ == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
       hnsw_index_->addPoint(vector.data(), id, true);
+      return butil::Status::OK();
+    } else {
+      return butil::Status(pb::error::Errno::EINTERNAL, "vector index type is not supported");
     }
   }
 
   void Delete(uint64_t id) {
     if (vector_index_type_ == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
-      hnsw_index_->markDelete(id);
+      try {
+        hnsw_index_->markDelete(id);
+      } catch (std::exception& e) {
+        DINGO_LOG(ERROR) << "delete vector failed, id=" << id << ", what=" << e.what();
+      }
     }
   }
 
-  void Save(const std::string& path) {
+  butil::Status Save(const std::string& path) {
     if (vector_index_type_ == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
       hnsw_index_->saveIndex(path);
+      return butil::Status::OK();
+    } else {
+      return butil::Status(pb::error::Errno::EINTERNAL, "vector index type is not supported");
     }
   }
 
-  void Load(const std::string& path) {
+  butil::Status Load(const std::string& path) {
     // FIXME: need to prevent SEGV when delete old_hnsw_index
     if (vector_index_type_ == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
       auto* old_hnsw_index = hnsw_index_;
-      hnsw_index_ = new hnswlib::HierarchicalNSW<float>(hnsw_space_, path);
+      hnsw_index_ = new hnswlib::HierarchicalNSW<float>(hnsw_space_, path, false,
+                                                        vector_index_parameter_.hnsw_parameter().max_elements(), true);
       delete old_hnsw_index;
+      return butil::Status::OK();
+    } else {
+      return butil::Status(pb::error::Errno::EINTERNAL, "vector index type is not supported");
     }
   }
 
-  void Search(const std::vector<float>& vector, uint32_t topk, std::vector<pb::common::VectorWithDistance>& results) {
+  butil::Status Search(const std::vector<float>& vector, uint32_t topk,
+                       std::vector<pb::common::VectorWithDistance>& results) {
     if (vector_index_type_ == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
       // std::priority_queue<std::pair<float, uint64_t>> result = hnsw_index_->searchKnn(vector.data(), topk);
       std::priority_queue<std::pair<float, uint64_t>> result = hnsw_index_->searchKnn(vector.data(), topk);
@@ -175,17 +196,20 @@ class VectorIndex {
 
         result.pop();
       }
+      return butil::Status::OK();
+    } else {
+      return butil::Status(pb::error::Errno::EINTERNAL, "vector index type is not supported");
     }
   }
 
-  void Search(pb::common::VectorWithId vector_with_id, uint32_t topk,
-              std::vector<pb::common::VectorWithDistance>& results) {
+  butil::Status Search(pb::common::VectorWithId vector_with_id, uint32_t topk,
+                       std::vector<pb::common::VectorWithDistance>& results) {
     std::vector<float> vector;
     for (auto value : vector_with_id.vector().float_values()) {
       vector.push_back(value);
     }
 
-    Search(vector, topk, results);
+    return Search(vector, topk, results);
   }
 
   uint64_t Id() const { return id_; }
@@ -217,6 +241,7 @@ class VectorIndex {
   hnswlib::SpaceInterface<float>* hnsw_space_;
 
   uint32_t dimension_;  // Dimension of the elements
+  pb::common::VectorIndexParameter vector_index_parameter_;
 };
 
 }  // namespace dingodb

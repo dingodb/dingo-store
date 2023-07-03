@@ -16,6 +16,7 @@
 #define DINGODB_VECTOR_INDEX_MANAGER_H_
 
 #include <cstdint>
+#include <memory>
 
 #include "butil/status.h"
 #include "common/safe_map.h"
@@ -45,6 +46,14 @@ class VectorIndexManager : public TransformKvAble {
   std::shared_ptr<VectorIndex> GetVectorIndex(uint64_t region_id);
 
   butil::Status LoadVectorIndex(store::RegionPtr region);
+  static std::shared_ptr<VectorIndex> LoadVectorIndexFromDisk(store::RegionPtr region);
+
+  butil::Status SaveVectorIndex(store::RegionPtr region);
+  static butil::Status SaveVectorIndex(std::shared_ptr<VectorIndex> vector_index);
+  std::shared_ptr<VectorIndex> BuildVectorIndex(store::RegionPtr region);
+  butil::Status RebuildVectorIndex(store::RegionPtr region);
+  butil::Status ReplayValToVectorIndex(std::shared_ptr<VectorIndex> vector_index, uint64_t start_log_id,
+                                       uint64_t end_log_id);
 
   void UpdateApplyLogIndex(std::shared_ptr<VectorIndex> vector_index, uint64_t apply_log_index);
   void UpdateApplyLogIndex(uint64_t region_id, uint64_t apply_log_index);
@@ -52,6 +61,7 @@ class VectorIndexManager : public TransformKvAble {
  private:
   std::shared_ptr<pb::common::KeyValue> TransformToKv(std::any obj) override;
   void TransformFromKv(const std::vector<pb::common::KeyValue>& kvs) override;
+  void GetVectorIndexLogIndex(uint64_t region_id, uint64_t& snapshot_log_index, uint64_t& apply_log_index);
 
   // Read meta data from persistence storage.
   std::shared_ptr<MetaReader> meta_reader_;

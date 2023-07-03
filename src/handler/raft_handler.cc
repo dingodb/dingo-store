@@ -421,12 +421,17 @@ void VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr reg
       kv.set_value(vector.metadata().SerializeAsString());
       kvs.push_back(kv);
     }
-  }
+    // vector wal
+    {
+      // write wal data of vector
+      pb::common::KeyValue kv;
+      std::string wal_key;
+      VectorCodec::EncodeVectorWal(region->Id(), vector.id(), log_id, wal_key);
 
-  // Store vector
-  if (!kvs.empty()) {
-    auto writer = engine->NewWriter(request.cf_name());
-    status = writer->KvBatchPut(kvs);
+      kv.mutable_key()->swap(wal_key);
+      kv.set_value(vector.vector().SerializeAsString());
+      kvs.push_back(kv);
+    }
   }
 
   // Add vector to index
@@ -446,6 +451,12 @@ void VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr reg
     status = butil::Status(pb::error::EINTERNAL, "Internal error, vector_index add failed, err=[%s]", e.what());
   }
 
+  // Store vector
+  if (!kvs.empty()) {
+    auto writer = engine->NewWriter(request.cf_name());
+    status = writer->KvBatchPut(kvs);
+  }
+
   if (ctx) {
     ctx->SetStatus(status);
   }
@@ -459,6 +470,7 @@ void VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr 
 
   // Transform vector to kv
   std::vector<std::string> keys;
+  std::vector<pb::common::KeyValue> kvs_put;
   for (const auto &vector_id : request.ids()) {
     {
       std::string key;
@@ -471,12 +483,26 @@ void VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr 
       VectorCodec::EncodeVectorMeta(region->Id(), vector_id, key);
       keys.push_back(key);
     }
+
+    {
+      // vector wal
+      {
+        // write wal data of vector
+        pb::common::KeyValue kv;
+        std::string wal_key;
+        VectorCodec::EncodeVectorWal(region->Id(), vector_id, log_id, wal_key);
+
+        kv.mutable_key()->swap(wal_key);
+        kvs_put.push_back(kv);
+      }
+    }
   }
 
-  // Delete vector from storage
-  if (!keys.empty()) {
-    auto writer = engine->NewWriter(request.cf_name());
-    status = writer->KvBatchDelete(keys);
+  std::vector<pb::common::KeyValue> kvs_delete;
+  for (auto &key : keys) {
+    pb::common::KeyValue kv;
+    kv.mutable_key()->swap(key);
+    kvs_delete.push_back(kv);
   }
 
   // Delete vector from index
@@ -493,6 +519,12 @@ void VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr 
   } catch (const std::exception &e) {
     DINGO_LOG(ERROR) << fmt::format("vector_index delete failed : {}", e.what());
     status = butil::Status(pb::error::EINTERNAL, "Internal error, vector_index delete failed, err=[%s]", e.what());
+  }
+
+  // Delete vector and write wal
+  if ((!kvs_delete.empty()) || (!kvs_put.empty())) {
+    auto writer = engine->NewWriter(request.cf_name());
+    status = writer->KvBatchPutAndDelete(kvs_put, kvs_delete);
   }
 
   if (ctx) {

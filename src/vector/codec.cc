@@ -52,7 +52,31 @@ void VectorCodec::EncodeVectorMeta(uint64_t region_id, uint64_t vector_id, std::
   buf.GetBytes(result);
 }
 
-std::string VectorCodec::EncodeVecotrIndexLogIndex(uint64_t snapshot_log_index, uint64_t apply_log_index) {
+void VectorCodec::EncodeVectorWal(uint64_t region_id, uint64_t vector_id, uint64_t log_id, std::string& result) {
+  Buf buf(25);
+  buf.WriteLong(region_id);
+  buf.Write(Constant::kVectorWalPrefix);
+  buf.WriteLong(log_id);
+  buf.WriteLong(vector_id);
+
+  buf.GetBytes(result);
+}
+
+int VectorCodec::DecodeVectorWal(const std::string& value, uint64_t& vector_id, uint64_t& log_id) {
+  if (value.size() != 25) {
+    DINGO_LOG(ERROR) << "DecodeVectorIdFromWal failed, value size is not 8, value:[" << value << "]";
+    return -1;
+  }
+  Buf buf(value);
+  buf.ReadLong();              // region_id
+  buf.Read();                  // kVectorWalPrefix
+  log_id = buf.ReadLong();     // log_id
+  vector_id = buf.ReadLong();  // vector_id
+
+  return 0;
+}
+
+std::string VectorCodec::EncodeVectorIndexLogIndex(uint64_t snapshot_log_index, uint64_t apply_log_index) {
   Buf buf(16);
   buf.WriteLong(snapshot_log_index);
   buf.WriteLong(apply_log_index);
@@ -62,25 +86,18 @@ std::string VectorCodec::EncodeVecotrIndexLogIndex(uint64_t snapshot_log_index, 
   return result;
 }
 
-uint64_t VectorCodec::DecodeVectorSnapshotLogIndex(const std::string& value) {
-  if (value.size() != 18) {
-    DINGO_LOG(ERROR) << "DecodeVectorSnapshotLogIndex failed, value size is not 8, value:[" << value << "]";
-    return 0;
+int VectorCodec::DecodeVectorIndexLogIndex(const std::string& value, uint64_t& snapshot_log_index,
+                                           uint64_t& apply_log_index) {
+  if (value.size() != 16) {
+    DINGO_LOG(ERROR) << "DecodeVectorApplyLogIndex failed, value size is not 16, value:[" << value
+                     << "], size=" << value.size();
+    return -1;
   }
   Buf buf(value);
+  snapshot_log_index = buf.ReadLong();
+  apply_log_index = buf.ReadLong();
 
-  return buf.ReadLong();
-}
-
-uint64_t VectorCodec::DecodeVectorApplyLogIndex(const std::string& value) {
-  if (value.size() != 18) {
-    DINGO_LOG(ERROR) << "DecodeVectorApplyLogIndex failed, value size is not 8, value:[" << value << "]";
-    return 0;
-  }
-  Buf buf(value);
-  buf.ReadLong();
-
-  return buf.ReadLong();
+  return 0;
 }
 
 }  // namespace dingodb
