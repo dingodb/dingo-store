@@ -165,6 +165,8 @@ message IndexDefinition {
   PartitionRule index_partition = 3;
   uint32 replica = 4;
   dingodb.pb.common.IndexParameter index_parameter = 5;
+  bool with_auto_incrment = 6;  // if true, the index create a auto increment
+  uint64 auto_increment = 7;    // auto increment start id
 }
 
 // This Part is mainly equal to the Part in DingoDB 0.5.x

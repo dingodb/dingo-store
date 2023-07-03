@@ -603,7 +603,8 @@ butil::Status CoordinatorControl::CreateIndexId(uint64_t schema_id, uint64_t& ne
   }
 
   // create index id
-  new_index_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_INDEX, meta_increment);
+  // new_index_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_INDEX, meta_increment);
+  new_index_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_TABLE, meta_increment);
   DINGO_LOG(INFO) << "CreateIndexId new_index_id=" << new_index_id;
 
   return butil::Status::OK();
@@ -663,8 +664,23 @@ butil::Status CoordinatorControl::CreateIndex(uint64_t schema_id, const pb::meta
 
   // if new_index_id is not given, create a new index_id
   if (new_index_id <= 0) {
-    new_index_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_INDEX, meta_increment);
+    // new_index_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_INDEX, meta_increment);
+    new_index_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_TABLE, meta_increment);
     DINGO_LOG(INFO) << "CreateIndex new_index_id=" << new_index_id;
+  }
+
+  // create auto increment
+  if (index_definition.with_auto_incrment()) {
+    auto status =
+        AutoIncrementControl::SyncSendCreateAutoIncrementInternal(new_index_id, index_definition.auto_increment());
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << fmt::format("send create auto increment internal error, code: {}, message: {} ",
+                                      status.error_code(), status.error_str());
+      return butil::Status(pb::error::Errno::EAUTO_INCREMENT_WHILE_CREATING_TABLE,
+                           fmt::format("send create auto increment internal error, code: {}, message: {}",
+                                       status.error_code(), status.error_str()));
+    }
+    DINGO_LOG(INFO) << "CreateIndex AutoIncrement send create auto increment internal success";
   }
 
   // update index_name_map_safe_temp_
@@ -812,6 +828,10 @@ butil::Status CoordinatorControl::DropIndex(uint64_t schema_id, uint64_t index_i
 
   // delete index_name from index_name_safe_map_temp_
   index_name_map_safe_temp_.Erase(std::to_string(schema_id) + index_internal.definition().name());
+
+  if (index_internal.definition().with_auto_incrment()) {
+    AutoIncrementControl::AsyncSendDeleteAutoIncrementInternal(index_id);
+  }
 
   return butil::Status::OK();
 }
