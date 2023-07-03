@@ -83,12 +83,14 @@ public class IndexServiceClient {
             DingoCommonId indexId,
             DingoCommonId regionId,
             List<VectorWithId> vectors,
-            boolean replaceDeleted)
+            boolean replaceDeleted,
+            boolean isUpdate)
     {
         Index.VectorAddRequest request = Index.VectorAddRequest.newBuilder()
                 .setRegionId(regionId.entityId())
                 .addAllVectors(vectors.stream().map(EntityConversion::mapping).collect(Collectors.toList()))
                 .setReplaceDeleted(replaceDeleted)
+                .setIsUpdate(isUpdate)
                 .build();
 
         exec(stub -> stub.vectorAdd(request), retryTimes, indexId, regionId);

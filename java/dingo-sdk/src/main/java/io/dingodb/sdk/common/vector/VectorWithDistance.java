@@ -25,6 +25,6 @@ import lombok.experimental.Delegate;
 public class VectorWithDistance {
 
     @Delegate
-    private VectorWithId vector;
+    private VectorWithId withId;
     private float distance;
 }

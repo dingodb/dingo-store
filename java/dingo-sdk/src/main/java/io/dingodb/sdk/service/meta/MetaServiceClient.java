@@ -495,6 +495,11 @@ public class MetaServiceClient {
         return response != null;
     }
 
+    public boolean dropIndex(String indexName) {
+        DingoCommonId indexId = getIndexId(indexName);
+        return dropIndex(indexId);
+    }
+
     public boolean dropIndex(DingoCommonId indexId) {
         Meta.DropIndexRequest request = Meta.DropIndexRequest.newBuilder().setIndexId(mapping(indexId)).build();
 

@@ -19,7 +19,6 @@ package io.dingodb.sdk.common.vector;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 
-import java.util.List;
 import java.util.Map;
 
 @Getter
@@ -27,7 +26,7 @@ import java.util.Map;
 public class VectorWithId {
 
     private long id;
-    private List<Float> vectors;
+    private Vector vector;
     private Map<String, byte[]> metaData;
 
 }
