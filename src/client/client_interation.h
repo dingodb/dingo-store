@@ -32,6 +32,7 @@
 #include "proto/common.pb.h"
 #include "proto/index.pb.h"
 #include "proto/meta.pb.h"
+#include "proto/region_control.pb.h"
 #include "proto/store.pb.h"
 
 DECLARE_bool(log_each_request);
@@ -90,6 +91,9 @@ butil::Status ServerInteraction::SendRequest(const std::string& service_name, co
     service_desc = const_cast<google::protobuf::ServiceDescriptor*>(dingodb::pb::store::StoreService::descriptor());
   } else if (service_name == "IndexService") {
     service_desc = const_cast<google::protobuf::ServiceDescriptor*>(dingodb::pb::index::IndexService::descriptor());
+  } else if (service_name == "RegionControlService") {
+    service_desc = const_cast<google::protobuf::ServiceDescriptor*>(
+        dingodb::pb::region_control::RegionControlService::descriptor());
   } else {
     DINGO_LOG(FATAL) << "Unknown service name: " << service_name;
   }

@@ -53,6 +53,7 @@
 #include "server/meta_service.h"
 #include "server/node_service.h"
 #include "server/push_service.h"
+#include "server/region_control_service.h"
 #include "server/server.h"
 #include "server/store_service.h"
 #include "server/version_service.h"
@@ -479,6 +480,7 @@ int main(int argc, char *argv[]) {
   dingodb::MetaServiceImpl meta_service;
   dingodb::StoreServiceImpl store_service;
   dingodb::IndexServiceImpl index_service;
+  dingodb::RegionControlServiceImpl region_control_service;
   dingodb::NodeServiceImpl node_service;
   dingodb::PushServiceImpl push_service;
   dingodb::VersionServiceProtoImpl version_service;
@@ -609,9 +611,14 @@ int main(int argc, char *argv[]) {
       return -1;
     }
 
+    if (brpc_server.AddService(&region_control_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
+      DINGO_LOG(ERROR) << "Fail to add region control service!";
+      return -1;
+    }
+
     // add push service to server_location
     if (brpc_server.AddService(&push_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
-      DINGO_LOG(ERROR) << "Fail to add store service!";
+      DINGO_LOG(ERROR) << "Fail to add push service!";
       return -1;
     }
 
@@ -670,9 +677,14 @@ int main(int argc, char *argv[]) {
       return -1;
     }
 
+    if (brpc_server.AddService(&region_control_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
+      DINGO_LOG(ERROR) << "Fail to add region control service!";
+      return -1;
+    }
+
     // add push service to server_location
     if (brpc_server.AddService(&push_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
-      DINGO_LOG(ERROR) << "Fail to add store service!";
+      DINGO_LOG(ERROR) << "Fail to add push service!";
       return -1;
     }
 

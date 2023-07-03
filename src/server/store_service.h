@@ -26,21 +26,6 @@ class StoreServiceImpl : public pb::store::StoreService {
  public:
   StoreServiceImpl();
 
-  void AddRegion(google::protobuf::RpcController* controller, const pb::store::AddRegionRequest* request,
-                 pb::store::AddRegionResponse* response, google::protobuf::Closure* done) override;
-
-  void ChangeRegion(google::protobuf::RpcController* controller, const pb::store::ChangeRegionRequest* request,
-                    pb::store::ChangeRegionResponse* response, google::protobuf::Closure* done) override;
-
-  void DestroyRegion(google::protobuf::RpcController* controller, const pb::store::DestroyRegionRequest* request,
-                     pb::store::DestroyRegionResponse* response, google::protobuf::Closure* done) override;
-
-  void Snapshot(google::protobuf::RpcController* controller, const pb::store::SnapshotRequest* request,
-                pb::store::SnapshotResponse* response, google::protobuf::Closure* done) override;
-
-  void TransferLeader(google::protobuf::RpcController* controller, const pb::store::TransferLeaderRequest* request,
-                      pb::store::TransferLeaderResponse* response, google::protobuf::Closure* done) override;
-
   void KvGet(google::protobuf::RpcController* controller, const pb::store::KvGetRequest* request,
              pb::store::KvGetResponse* response, google::protobuf::Closure* done) override;
 
@@ -85,9 +70,6 @@ class StoreServiceImpl : public pb::store::StoreService {
   void KvScanRelease(google::protobuf::RpcController* controller,
                      const ::dingodb::pb::store::KvScanReleaseRequest* request,
                      ::dingodb::pb::store::KvScanReleaseResponse* response, ::google::protobuf::Closure* done) override;
-
-  void Debug(google::protobuf::RpcController* controller, const ::dingodb::pb::store::DebugRequest* request,
-             ::dingodb::pb::store::DebugResponse* response, ::google::protobuf::Closure* done) override;
 
   void SetStorage(std::shared_ptr<Storage> storage);
 
