@@ -128,9 +128,9 @@ void CoordinatorControl::InitIds() {
   if (id_epoch_map_.GetPresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_TABLE) == 0) {
     id_epoch_map_.UpdatePresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_TABLE, 60000);
   }
-  if (id_epoch_map_.GetPresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_INDEX) == 0) {
-    id_epoch_map_.UpdatePresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_INDEX, 70000);
-  }
+  // if (id_epoch_map_.GetPresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_INDEX) == 0) {
+  //   id_epoch_map_.UpdatePresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_INDEX, 70000);
+  // }
   if (id_epoch_map_.GetPresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION) == 0) {
     id_epoch_map_.UpdatePresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION, 80000);
   }

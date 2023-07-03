@@ -88,7 +88,7 @@ enum IdEpochType {
   ID_NEXT_SCHEMA = 4;
   ID_NEXT_REGION = 5;
   ID_NEXT_TABLE = 6;
-  ID_NEXT_INDEX = 7;
+  ID_NEXT_INDEX = 7;  // deprecated for index id auto_increment
 
   EPOCH_COORINATOR = 11;
   EPOCH_STORE = 12;

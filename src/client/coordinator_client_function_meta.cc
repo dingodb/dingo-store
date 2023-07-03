@@ -20,6 +20,7 @@
 #include "common/logging.h"
 #include "coordinator/coordinator_interaction.h"
 #include "gflags/gflags_declare.h"
+#include "glog/logging.h"
 #include "proto/common.pb.h"
 #include "proto/meta.pb.h"
 
@@ -31,6 +32,7 @@ DECLARE_int64(schema_id);
 DECLARE_int64(replica);
 DECLARE_int64(max_elements);
 DECLARE_int64(dimension);
+DECLARE_bool(with_auto_increment);
 
 void SendGetSchemas(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
   dingodb::pb::meta::GetSchemasRequest request;
@@ -546,6 +548,11 @@ void SendCreateIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
 
   if (FLAGS_replica > 0) {
     index_definition->set_replica(FLAGS_replica);
+  }
+
+  if (FLAGS_with_auto_increment) {
+    index_definition->set_with_auto_incrment(true);
+    index_definition->set_auto_increment(1024);
   }
 
   // vector index parameter
