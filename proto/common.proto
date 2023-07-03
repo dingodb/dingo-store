@@ -438,13 +438,8 @@ enum ScalarIndexType {
   SCALAR_INDEX_TYPE_BTREE = 1;
 }
 
-// ?????
 message ScalarIndexParameter {
-  ScalarIndexType index_type = 1;
-  uint32 dimension = 2;
-  uint32 nlist = 3;
-  uint32 efConstruction = 4;
-  uint32 efSearch = 5;
+  ScalarIndexType scalar_index_type = 1;
 }
 
 message IndexParameter {
