@@ -314,7 +314,7 @@ public class EntityConversion {
                         vectorParam.getHnswParameter().getMaxElements(),
                         vectorParam.getHnswParameter().getNlinks()),
                 new ScalarIndexParameter(
-                        ScalarIndexParameter.ScalarIndexType.valueOf(scalarParam.getIndexType().name())));
+                        ScalarIndexParameter.ScalarIndexType.valueOf(scalarParam.getScalarIndexType().name())));
     }
 
     public static Common.IndexParameter mapping(IndexParameter parameter) {
@@ -340,7 +340,7 @@ public class EntityConversion {
             ScalarIndexParameter scalarParameter = (ScalarIndexParameter) parameter.getScalarIndexParameter();
             builder.setScalarIndexParameter(
                     Common.ScalarIndexParameter.newBuilder()
-                            .setIndexType(Common.ScalarIndexType.valueOf(scalarParameter.getIndexType().name()))
+                            .setScalarIndexType(Common.ScalarIndexType.valueOf(scalarParameter.getIndexType().name()))
                             .build());
         }
 
