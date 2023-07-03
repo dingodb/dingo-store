@@ -323,50 +323,50 @@ dingodb::pb::common::RegionDefinition BuildRegionDefinition(uint64_t region_id, 
 
 void SendAddRegion(ServerInteractionPtr interaction, uint64_t region_id, const std::string& raft_group,
                    std::vector<std::string> raft_addrs) {
-  dingodb::pb::store::AddRegionRequest request;
+  dingodb::pb::region_control::AddRegionRequest request;
   request.mutable_region()->CopyFrom(BuildRegionDefinition(region_id, raft_group, raft_addrs, "a", "z"));
-  dingodb::pb::store::AddRegionResponse response;
+  dingodb::pb::region_control::AddRegionResponse response;
 
-  interaction->SendRequest("StoreService", "AddRegion", request, response);
+  interaction->SendRequest("RegionControlService", "AddRegion", request, response);
 }
 
 void SendChangeRegion(ServerInteractionPtr interaction, uint64_t region_id, const std::string& raft_group,
                       std::vector<std::string> raft_addrs) {
-  dingodb::pb::store::ChangeRegionRequest request;
-  dingodb::pb::store::ChangeRegionResponse response;
+  dingodb::pb::region_control::ChangeRegionRequest request;
+  dingodb::pb::region_control::ChangeRegionResponse response;
 
   request.mutable_region()->CopyFrom(BuildRegionDefinition(region_id, raft_group, raft_addrs, "a", "z"));
   dingodb::pb::common::RegionDefinition* region = request.mutable_region();
 
-  interaction->SendRequest("StoreService", "ChangeRegion", request, response);
+  interaction->SendRequest("RegionControlService", "ChangeRegion", request, response);
 }
 
 void SendDestroyRegion(ServerInteractionPtr interaction, uint64_t region_id) {
-  dingodb::pb::store::DestroyRegionRequest request;
-  dingodb::pb::store::DestroyRegionResponse response;
+  dingodb::pb::region_control::DestroyRegionRequest request;
+  dingodb::pb::region_control::DestroyRegionResponse response;
 
   request.set_region_id(region_id);
 
-  interaction->SendRequest("StoreService", "DestroyRegion", request, response);
+  interaction->SendRequest("RegionControlService", "DestroyRegion", request, response);
 }
 
 void SendSnapshot(ServerInteractionPtr interaction, uint64_t region_id) {
-  dingodb::pb::store::SnapshotRequest request;
-  dingodb::pb::store::SnapshotResponse response;
+  dingodb::pb::region_control::SnapshotRequest request;
+  dingodb::pb::region_control::SnapshotResponse response;
 
   request.set_region_id(region_id);
 
-  interaction->SendRequest("StoreService", "Snapshot", request, response);
+  interaction->SendRequest("RegionControlService", "Snapshot", request, response);
 }
 
 void SendTransferLeader(ServerInteractionPtr interaction, uint64_t region_id, const dingodb::pb::common::Peer& peer) {
-  dingodb::pb::store::TransferLeaderRequest request;
-  dingodb::pb::store::TransferLeaderResponse response;
+  dingodb::pb::region_control::TransferLeaderRequest request;
+  dingodb::pb::region_control::TransferLeaderResponse response;
 
   request.set_region_id(region_id);
   request.mutable_peer()->CopyFrom(peer);
 
-  interaction->SendRequest("StoreService", "TransferLeader", request, response);
+  interaction->SendRequest("RegionControlService", "TransferLeader", request, response);
 }
 
 void SendTransferLeaderByCoordinator(ServerInteractionPtr interaction, uint64_t region_id, uint64_t leader_store_id) {
@@ -529,10 +529,10 @@ void* AdddRegionRoutine(void* arg) {
   std::unique_ptr<AddRegionParam> param(static_cast<AddRegionParam*>(arg));
   auto interaction = param->interaction;
   for (int i = 0; i < param->region_count; ++i) {
-    dingodb::pb::store::AddRegionRequest request;
+    dingodb::pb::region_control::AddRegionRequest request;
     request.mutable_region()->CopyFrom(
         BuildRegionDefinition(param->start_region_id + i, param->raft_group, param->raft_addrs, "a", "z"));
-    dingodb::pb::store::AddRegionResponse response;
+    dingodb::pb::region_control::AddRegionResponse response;
 
     interaction->AllSendRequest("StoreService", "AddRegion", request, response);
 
@@ -577,10 +577,10 @@ void* OperationRegionRoutine(void* arg) {
     // Create region
     {
       DINGO_LOG(INFO) << "======Create region " << region_id;
-      dingodb::pb::store::AddRegionRequest request;
+      dingodb::pb::region_control::AddRegionRequest request;
       request.mutable_region()->CopyFrom(
           BuildRegionDefinition(param->start_region_id + i, param->raft_group, param->raft_addrs, "a", "z"));
-      dingodb::pb::store::AddRegionResponse response;
+      dingodb::pb::region_control::AddRegionResponse response;
 
       interaction->AllSendRequest("StoreService", "AddRegion", request, response);
     }
@@ -596,8 +596,8 @@ void* OperationRegionRoutine(void* arg) {
     {
       bthread_usleep(3 * 1000 * 1000L);
       DINGO_LOG(INFO) << "======Delete region " << region_id;
-      dingodb::pb::store::DestroyRegionRequest request;
-      dingodb::pb::store::DestroyRegionResponse response;
+      dingodb::pb::region_control::DestroyRegionRequest request;
+      dingodb::pb::region_control::DestroyRegionResponse response;
 
       request.set_region_id(region_id);
 

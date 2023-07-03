@@ -26,24 +26,6 @@ class IndexServiceImpl : public pb::index::IndexService {
  public:
   IndexServiceImpl();
 
-  void AddRegion(google::protobuf::RpcController* controller, const pb::index::AddRegionRequest* request,
-                 pb::index::AddRegionResponse* response, google::protobuf::Closure* done) override;
-
-  void ChangeRegion(google::protobuf::RpcController* controller, const pb::index::ChangeRegionRequest* request,
-                    pb::index::ChangeRegionResponse* response, google::protobuf::Closure* done) override;
-
-  void DestroyRegion(google::protobuf::RpcController* controller, const pb::index::DestroyRegionRequest* request,
-                     pb::index::DestroyRegionResponse* response, google::protobuf::Closure* done) override;
-
-  void Snapshot(google::protobuf::RpcController* controller, const pb::index::SnapshotRequest* request,
-                pb::index::SnapshotResponse* response, google::protobuf::Closure* done) override;
-
-  void TransferLeader(google::protobuf::RpcController* controller, const pb::index::TransferLeaderRequest* request,
-                      pb::index::TransferLeaderResponse* response, google::protobuf::Closure* done) override;
-
-  void Debug(google::protobuf::RpcController* controller, const ::dingodb::pb::index::DebugRequest* request,
-             ::dingodb::pb::index::DebugResponse* response, ::google::protobuf::Closure* done) override;
-
   // vector
   void VectorSearch(google::protobuf::RpcController* controller, const pb::index::VectorSearchRequest* request,
                     pb::index::VectorSearchResponse* response, google::protobuf::Closure* done) override;

@@ -24,47 +24,6 @@ package dingodb.pb.index;
 option java_package = "io.dingodb.index";
 option cc_generic_services = true;
 
-message AddRegionRequest {
-  dingodb.pb.common.RegionDefinition region = 1;
-}
-
-message AddRegionResponse {
-  dingodb.pb.error.Error error = 1;
-}
-
-message ChangeRegionRequest {
-  dingodb.pb.common.RegionDefinition region = 1;
-}
-
-message ChangeRegionResponse {
-  dingodb.pb.error.Error error = 1;
-}
-
-message DestroyRegionRequest {
-  uint64 region_id = 1;
-}
-
-message DestroyRegionResponse {
-  dingodb.pb.error.Error error = 1;
-}
-
-message SnapshotRequest {
-  uint64 region_id = 1;
-}
-
-message SnapshotResponse {
-  dingodb.pb.error.Error error = 1;
-}
-
-message TransferLeaderRequest {
-  uint64 region_id = 1;
-  dingodb.pb.common.Peer peer = 2;
-}
-
-message TransferLeaderResponse {
-  dingodb.pb.error.Error error = 1;
-}
-
 message VectorAddRequest {
   uint64 region_id = 1;
   repeated dingodb.pb.common.VectorWithId vectors = 2;
@@ -113,68 +72,10 @@ message CalcDistanceResults {
   repeated float distances = 2;
 }
 
-enum DebugType {
-  NONE = 0;
-  STORE_REGION_META_STAT = 1;
-  STORE_REGION_META_DETAILS = 2;
-  STORE_REGION_CONTROL_COMMAND = 3;
-  STORE_RAFT_META = 4;
-  STORE_REGION_EXECUTOR = 5;
-  STORE_REGION_METRICS = 6;
-}
-
-message DebugRequest {
-  DebugType type = 1;  // debug type
-  repeated uint64 region_ids = 2;
-}
-
-message DebugResponse {
-  message RegionMetaStat {
-    map<string, int32> state_counts = 1;
-  }
-
-  message RegionMetaDetails {
-    repeated dingodb.pb.store_internal.Region regions = 1;
-  }
-
-  message RegionControlCommand {
-    repeated dingodb.pb.coordinator.RegionCmd region_cmds = 1;
-  }
-
-  message RaftMeta {
-    repeated dingodb.pb.store_internal.RaftMeta raft_metas = 1;
-  }
-
-  message RegionExecutor {
-    repeated uint64 region_ids = 1;
-  }
-
-  message RegionMetrics {
-    repeated dingodb.pb.common.RegionMetrics region_metricses = 1;
-  }
-
-  RegionMetaStat region_meta_stat = 1;
-  RegionMetaDetails region_meta_details = 2;
-  RegionControlCommand region_control_command = 3;
-  RaftMeta raft_meta = 4;
-  RegionExecutor region_executor = 5;
-  RegionMetrics region_metrics = 6;
-}
-
 service IndexService {
-  // region
-  rpc AddRegion(AddRegionRequest) returns (AddRegionResponse);
-  rpc ChangeRegion(ChangeRegionRequest) returns (ChangeRegionResponse);
-  rpc DestroyRegion(DestroyRegionRequest) returns (DestroyRegionResponse);
-  rpc Snapshot(SnapshotRequest) returns (SnapshotResponse);
-  rpc TransferLeader(TransferLeaderRequest) returns (TransferLeaderResponse);
-
   // vector index
   rpc VectorAdd(VectorAddRequest) returns (VectorAddResponse);
   rpc VectorSearch(VectorSearchRequest) returns (VectorSearchResponse);
   rpc VectorDelete(VectorDeleteRequest) returns (VectorDeleteResponse);
   rpc CalcDistance(CalcDistanceRequest) returns (CalcDistanceResults);
-
-  // debug
-  rpc Debug(DebugRequest) returns (DebugResponse);
 };
