@@ -36,10 +36,14 @@ import io.dingodb.sdk.common.cluster.InternalExecutorUser;
 import io.dingodb.sdk.common.codec.CodecUtils;
 import io.dingodb.sdk.common.codec.DingoKeyValueCodec;
 import io.dingodb.sdk.common.codec.KeyValueCodec;
+import io.dingodb.sdk.common.index.DiskAnnParam;
+import io.dingodb.sdk.common.index.FlatParam;
+import io.dingodb.sdk.common.index.HnswParam;
 import io.dingodb.sdk.common.index.Index;
 import io.dingodb.sdk.common.index.IndexDefinition;
 import io.dingodb.sdk.common.index.IndexParameter;
-import io.dingodb.sdk.common.index.ScalarIndexParameter;
+import io.dingodb.sdk.common.index.IvfFlatParam;
+import io.dingodb.sdk.common.index.IvfPqParam;
 import io.dingodb.sdk.common.index.VectorIndexParameter;
 import io.dingodb.sdk.common.partition.Partition;
 import io.dingodb.sdk.common.partition.PartitionDetail;
@@ -281,7 +285,9 @@ public class EntityConversion {
                 definition.getVersion(),
                 null,
                 definition.getReplica(),
-                mapping(definition.getIndexParameter()));
+                mapping(definition.getIndexParameter()),
+                definition.getWithAutoIncrment(),
+                definition.getAutoIncrement());
     }
 
     public static Meta.IndexDefinition mapping(long id, Index index) {
@@ -299,53 +305,121 @@ public class EntityConversion {
                                 .build())
                 .setReplica(index.getReplica())
                 .setIndexParameter(mapping(index.getIndexParameter()))
+                .setWithAutoIncrment(index.isAutoIncrement())
+                .setAutoIncrement(index.getAutoIncrement())
                 .build();
     }
 
     public static IndexParameter mapping(Common.IndexParameter parameter) {
         Common.VectorIndexParameter vectorParam = parameter.getVectorIndexParameter();
-        Common.ScalarIndexParameter scalarParam = parameter.getScalarIndexParameter();
-        return new IndexParameter(
-                IndexParameter.IndexType.valueOf(parameter.getIndexType().name()),
-                new VectorIndexParameter(
-                        VectorIndexParameter.VectorIndexType.valueOf(vectorParam.getVectorIndexType().name()),
-                        vectorParam.getHnswParameter().getDimension(),
-                        VectorIndexParameter.MetricType.valueOf(vectorParam.getHnswParameter().getMetricType().name()),
-                        vectorParam.getHnswParameter().getEfConstruction(),
-                        vectorParam.getHnswParameter().getMaxElements(),
-                        vectorParam.getHnswParameter().getNlinks()),
-                new ScalarIndexParameter(
-                        ScalarIndexParameter.ScalarIndexType.valueOf(scalarParam.getScalarIndexType().name())));
+        switch (vectorParam.getVectorIndexType()) {
+            case VECTOR_INDEX_TYPE_FLAT:
+                return new IndexParameter(
+                        IndexParameter.IndexType.valueOf(parameter.getIndexType().name()),
+                        new VectorIndexParameter(VectorIndexParameter.VectorIndexType.VECTOR_INDEX_TYPE_FLAT,
+                                new FlatParam(vectorParam.getFlatParameter().getDimension())));
+            case VECTOR_INDEX_TYPE_IVF_FLAT:
+                Common.CreateIvfFlatParam ivfFlatParam = vectorParam.getIvfFlatParameter();
+                return new IndexParameter(
+                        IndexParameter.IndexType.valueOf(parameter.getIndexType().name()),
+                        new VectorIndexParameter(VectorIndexParameter.VectorIndexType.VECTOR_INDEX_TYPE_IVF_FLAT,
+                                new IvfFlatParam(
+                                        ivfFlatParam.getDimension(),
+                                        VectorIndexParameter.MetricType.valueOf(ivfFlatParam.getMetricType().name()),
+                                        ivfFlatParam.getNcentroids())));
+            case VECTOR_INDEX_TYPE_IVF_PQ:
+                Common.CreateIvfPqParam pqParam = vectorParam.getIvfPqParameter();
+                return new IndexParameter(
+                        IndexParameter.IndexType.valueOf(parameter.getIndexType().name()),
+                        new VectorIndexParameter(VectorIndexParameter.VectorIndexType.VECTOR_INDEX_TYPE_IVF_PQ,
+                                new IvfPqParam(
+                                        pqParam.getDimension(),
+                                        VectorIndexParameter.MetricType.valueOf(pqParam.getMetricType().name()),
+                                        pqParam.getNcentroids(),
+                                        pqParam.getNsubvector(),
+                                        pqParam.getBucketInitSize(),
+                                        pqParam.getBucketMaxSize())));
+            case VECTOR_INDEX_TYPE_HNSW:
+                Common.CreateHnswParam hnswParam = vectorParam.getHnswParameter();
+                return new IndexParameter(
+                        IndexParameter.IndexType.valueOf(parameter.getIndexType().name()),
+                        new VectorIndexParameter(VectorIndexParameter.VectorIndexType.VECTOR_INDEX_TYPE_HNSW,
+                                new HnswParam(hnswParam.getDimension(),
+                                        VectorIndexParameter.MetricType.valueOf(hnswParam.getMetricType().name()),
+                                        hnswParam.getEfConstruction(),
+                                        hnswParam.getMaxElements(),
+                                        hnswParam.getNlinks())));
+            case VECTOR_INDEX_TYPE_DISKANN:
+                Common.CreateDiskAnnParam annParam = vectorParam.getDiskannParameter();
+                return new IndexParameter(
+                        IndexParameter.IndexType.valueOf(parameter.getIndexType().name()),
+                        new VectorIndexParameter(VectorIndexParameter.VectorIndexType.VECTOR_INDEX_TYPE_DISKANN,
+                                new DiskAnnParam(
+                                        annParam.getDimension(),
+                                        VectorIndexParameter.MetricType.valueOf(annParam.getMetricType().name()))));
+
+            default:
+                throw new IllegalStateException("Unexpected value: " + vectorParam.getVectorIndexType());
+        }
     }
 
     public static Common.IndexParameter mapping(IndexParameter parameter) {
-        VectorIndexParameter vectorParameter = (VectorIndexParameter) parameter.getVectorIndexParameter();
-        Common.IndexParameter.Builder builder = Common.IndexParameter.newBuilder()
+        VectorIndexParameter vectorParameter = parameter.getVectorIndexParameter();
+        Common.VectorIndexParameter.Builder build = Common.VectorIndexParameter.newBuilder()
+                .setVectorIndexType(Common.VectorIndexType.valueOf(vectorParameter.getVectorIndexType().name()));
+        switch (vectorParameter.getVectorIndexType()) {
+            case VECTOR_INDEX_TYPE_FLAT:
+                build.setFlatParameter(Common.CreateFlatParam.newBuilder()
+                        .setDimension(vectorParameter.getFlatParam().getDimension())
+                        .build());
+                break;
+            case VECTOR_INDEX_TYPE_IVF_FLAT:
+                IvfFlatParam ivfFlatParam = vectorParameter.getIvfFlatParam();
+                build.setIvfFlatParameter(Common.CreateIvfFlatParam.newBuilder()
+                        .setDimension(ivfFlatParam.getDimension())
+                        .setMetricType(Common.MetricType.valueOf(ivfFlatParam.getMetricType().name()))
+                        .setNcentroids(ivfFlatParam.getNcentroids())
+                        .build());
+                break;
+            case VECTOR_INDEX_TYPE_IVF_PQ:
+                IvfPqParam ivfPqParam = vectorParameter.getIvfPqParam();
+                build.setIvfPqParameter(Common.CreateIvfPqParam.newBuilder()
+                        .setDimension(ivfPqParam.getDimension())
+                        .setMetricType(Common.MetricType.valueOf(ivfPqParam.getMetricType().name()))
+                        .setNcentroids(ivfPqParam.getNcentroids())
+                        .setBucketInitSize(ivfPqParam.getBucketInitSize())
+                        .setBucketMaxSize(ivfPqParam.getBucketMaxSize())
+                        .build());
+                break;
+            case VECTOR_INDEX_TYPE_HNSW:
+                HnswParam hnswParam = vectorParameter.getHnswParam();
+                build.setHnswParameter(Common.CreateHnswParam.newBuilder()
+                        .setDimension(hnswParam.getDimension())
+                        .setMetricType(Common.MetricType.valueOf(hnswParam.getMetricType().name()))
+                        .setEfConstruction(hnswParam.getEfConstruction())
+                        .setMaxElements(hnswParam.getMaxElements())
+                        .setNlinks(hnswParam.getNlinks()).build());
+                break;
+            case VECTOR_INDEX_TYPE_DISKANN:
+                DiskAnnParam diskAnnParam = vectorParameter.getDiskAnnParam();
+                build.setDiskannParameter(Common.CreateDiskAnnParam.newBuilder()
+                        .setDimension(diskAnnParam.getDimension())
+                        .setMetricType(Common.MetricType.valueOf(diskAnnParam.getMetricType().name()))
+                        .build());
+                break;
+        }
+        return Common.IndexParameter.newBuilder()
                 .setIndexType(Common.IndexType.valueOf(parameter.getIndexType().name()))
-                .setVectorIndexParameter(
-                        Common.VectorIndexParameter.newBuilder()
-                                .setVectorIndexType(
-                                        Common.VectorIndexType.valueOf(vectorParameter.getIndexType().name()))
-                                .setHnswParameter(
-                                        Common.CreateHnswParam.newBuilder()
-                                                .setDimension(vectorParameter.getDimension())
-                                                .setMetricType(Common.MetricType
-                                                        .valueOf(vectorParameter.getMetricType().name()))
-                                                .setEfConstruction(vectorParameter.getEfConstruction())
-                                                .setMaxElements(vectorParameter.getMaxElements())
-                                                .setNlinks(vectorParameter.getNlinks())
-                                                .build())
-                                .build());
+                .setVectorIndexParameter(build.build())
+                .build();
 
-        if (parameter.getScalarIndexParameter() != null) {
+        /*if (parameter.getScalarIndexParameter() != null) {
             ScalarIndexParameter scalarParameter = (ScalarIndexParameter) parameter.getScalarIndexParameter();
             builder.setScalarIndexParameter(
                     Common.ScalarIndexParameter.newBuilder()
                             .setScalarIndexType(Common.ScalarIndexType.valueOf(scalarParameter.getIndexType().name()))
                             .build());
-        }
-
-        return builder.build();
+        }*/
     }
 
     public static Common.VectorWithId mapping(VectorWithId withId) {

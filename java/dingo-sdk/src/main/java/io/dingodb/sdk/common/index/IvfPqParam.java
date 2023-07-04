@@ -16,17 +16,21 @@
 
 package io.dingodb.sdk.common.index;
 
-public class ScalarIndexParameter extends AbstractIndexParameter {
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.ToString;
 
-    public ScalarIndexParameter(
-            IndexType indexType) {
-        super(indexType);
-    }
+@Getter
+@ToString
+@NoArgsConstructor
+@AllArgsConstructor
+public class IvfPqParam {
 
-    public enum ScalarIndexType implements IndexType {
-        SCALAR_INDEX_TYPE_LSM,
-        SCALAR_INDEX_TYPE_BTREE
-
-    }
-
+    private Integer dimension;
+    private VectorIndexParameter.MetricType metricType;
+    private Integer ncentroids;
+    private Integer nsubvector;
+    private Integer bucketInitSize;
+    private Integer bucketMaxSize;
 }

@@ -16,21 +16,20 @@
 
 package io.dingodb.sdk.common.index;
 
-import io.dingodb.sdk.common.partition.Partition;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.ToString;
 
-public interface Index {
+@Getter
+@ToString
+@NoArgsConstructor
+@AllArgsConstructor
+public class HnswParam {
 
-    String getName();
-
-    Integer getVersion();
-
-    Partition indexPartition();
-
-    Integer getReplica();
-
-    IndexParameter getIndexParameter();
-
-    boolean isAutoIncrement();
-
-    Long getAutoIncrement();
+    private Integer dimension;
+    private VectorIndexParameter.MetricType metricType;
+    private Integer efConstruction;
+    private Integer maxElements;
+    private Integer nlinks;
 }

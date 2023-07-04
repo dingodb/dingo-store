@@ -25,12 +25,8 @@ import lombok.ToString;
 @ToString
 @NoArgsConstructor
 @AllArgsConstructor
-public abstract class AbstractIndexParameter {
+public class DiskAnnParam {
 
-    private IndexType indexType;
-
-    public interface IndexType {
-        String name();
-    }
-
+    private Integer dimension;
+    private VectorIndexParameter.MetricType metricType;
 }

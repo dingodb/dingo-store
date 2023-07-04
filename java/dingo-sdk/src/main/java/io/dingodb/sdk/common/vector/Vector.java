@@ -26,10 +26,13 @@ import java.util.List;
 @ToString
 public class Vector {
 
-    private final int dimension;
-    private final ValueType valueType;
-    private final List<Float> floatValues;
-    private final List<byte[]> binaryValues;
+    private int dimension;
+    private ValueType valueType;
+    private List<Float> floatValues;
+    private List<byte[]> binaryValues;
+
+    public Vector() {
+    }
 
     public Vector(int dimension, ValueType valueType, List<Float> floatValues, List<byte[]> binaryValues) {
         this.dimension = dimension;
