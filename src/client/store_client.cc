@@ -209,6 +209,8 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
     // Vector operation
     if (method == "VectorSearch") {
       client::SendVectorSearch(ctx->store_interaction, FLAGS_region_id, FLAGS_dimension, FLAGS_vector_id, FLAGS_topn);
+    } else if (method == "VectorBatchQuery") {
+      client::SendVectorBatchQuery(ctx->store_interaction, FLAGS_region_id, {static_cast<uint64_t>(FLAGS_vector_id)});
     } else if (method == "VectorAdd") {
       client::SendVectorAdd(ctx->store_interaction, FLAGS_region_id, FLAGS_dimension, FLAGS_count);
     } else if (method == "VectorDelete") {

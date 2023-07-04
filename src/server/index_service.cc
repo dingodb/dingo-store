@@ -41,6 +41,64 @@ namespace dingodb {
 
 IndexServiceImpl::IndexServiceImpl() = default;
 
+butil::Status ValidateVectorBatchQueryQequest(const dingodb::pb::index::VectorBatchQueryRequest* request) {
+  if (request->region_id() == 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id is error");
+  }
+
+  if (request->vector_ids().empty()) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param vector_ids is error");
+  }
+
+  return ServiceHelper::ValidateIndexRegion(request->region_id());
+}
+
+void IndexServiceImpl::VectorBatchQuery(google::protobuf::RpcController* controller,
+                                        const dingodb::pb::index::VectorBatchQueryRequest* request,
+                                        dingodb::pb::index::VectorBatchQueryResponse* response,
+                                        google::protobuf::Closure* done) {
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(done);
+
+  DINGO_LOG(DEBUG) << "VectorBatchQuery request: " << request->ShortDebugString();
+
+  butil::Status status = ValidateVectorBatchQueryQequest(request);
+  if (!status.ok()) {
+    auto* err = response->mutable_error();
+    err->set_errcode(static_cast<Errno>(status.error_code()));
+    err->set_errmsg(status.error_str());
+    DINGO_LOG(ERROR) << fmt::format("VectorBatchQuery request: {} response: {}", request->ShortDebugString(),
+                                    response->ShortDebugString());
+    return;
+  }
+
+  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
+  ctx->SetRegionId(request->region_id()).SetCfName(Constant::kStoreDataCF);
+
+  auto* mut_request = const_cast<dingodb::pb::index::VectorBatchQueryRequest*>(request);
+
+  std::vector<pb::common::VectorWithId> vector_with_ids;
+  status =
+      storage_->VectorBatchQuery(ctx, Helper::PbRepeatedToVector(request->vector_ids()), request->is_need_metadata(),
+                                 Helper::PbRepeatedToVector(request->selected_keys()), vector_with_ids);
+  if (!status.ok()) {
+    auto* err = response->mutable_error();
+    err->set_errcode(static_cast<Errno>(status.error_code()));
+    err->set_errmsg(status.error_str());
+    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+      err->set_errmsg("Not leader, please redirect leader.");
+      ServiceHelper::RedirectLeader(status.error_str(), response);
+    }
+    DINGO_LOG(ERROR) << fmt::format("VectorBatchQuery request: {} response: {}", request->ShortDebugString(),
+                                    response->ShortDebugString());
+    return;
+  }
+
+  for (auto& vector_with_id : vector_with_ids) {
+    response->add_vectors()->Swap(&vector_with_id);
+  }
+}
+
 butil::Status ValidateVectorSearchRequest(const dingodb::pb::index::VectorSearchRequest* request) {
   if (request->region_id() == 0) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id is error");
@@ -70,6 +128,8 @@ void IndexServiceImpl::VectorSearch(google::protobuf::RpcController* controller,
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
+    DINGO_LOG(ERROR) << fmt::format("VectorSearch request: {} response: {}", request->ShortDebugString(),
+                                    response->ShortDebugString());
     return;
   }
 
@@ -88,6 +148,8 @@ void IndexServiceImpl::VectorSearch(google::protobuf::RpcController* controller,
       err->set_errmsg("Not leader, please redirect leader.");
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
+    DINGO_LOG(ERROR) << fmt::format("VectorSearch request: {} response: {}", request->ShortDebugString(),
+                                    response->ShortDebugString());
     return;
   }
 

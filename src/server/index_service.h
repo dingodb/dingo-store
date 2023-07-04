@@ -27,6 +27,8 @@ class IndexServiceImpl : public pb::index::IndexService {
   IndexServiceImpl();
 
   // vector
+  void VectorBatchQuery(google::protobuf::RpcController* controller, const pb::index::VectorBatchQueryRequest* request,
+                        pb::index::VectorBatchQueryResponse* response, google::protobuf::Closure* done) override;
   void VectorSearch(google::protobuf::RpcController* controller, const pb::index::VectorSearchRequest* request,
                     pb::index::VectorSearchResponse* response, google::protobuf::Closure* done) override;
   void VectorAdd(google::protobuf::RpcController* controller, const pb::index::VectorAddRequest* request,

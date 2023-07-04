@@ -68,6 +68,21 @@ void SendVectorSearch(ServerInteractionPtr interaction, uint64_t region_id, uint
   DINGO_LOG(INFO) << "VectorSearch response: " << response.DebugString();
 }
 
+void SendVectorBatchQuery(ServerInteractionPtr interaction, uint64_t region_id, std::vector<uint64_t> vector_ids) {
+  dingodb::pb::index::VectorBatchQueryRequest request;
+  dingodb::pb::index::VectorBatchQueryResponse response;
+
+  request.set_region_id(region_id);
+  for (auto vector_id : vector_ids) {
+    request.add_vector_ids(vector_id);
+  }
+  request.set_is_need_metadata(true);
+
+  interaction->SendRequest("IndexService", "VectorBatchQuery", request, response);
+
+  DINGO_LOG(INFO) << "VectorBatchQuery response: " << response.DebugString();
+}
+
 void SendVectorAdd(ServerInteractionPtr interaction, uint64_t region_id, uint32_t dimension, uint32_t count) {
   dingodb::pb::index::VectorAddRequest request;
   dingodb::pb::index::VectorAddResponse response;

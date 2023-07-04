@@ -35,6 +35,20 @@ message VectorAddResponse {
   dingodb.pb.error.Error error = 1;
 }
 
+message VectorBatchQueryRequest {
+  uint64 region_id = 1;
+  repeated uint64 vector_ids = 2;
+  bool is_need_metadata = 3;          // Response is need meta data.
+  repeated string selected_keys = 4;  // Select meta data key.
+}
+
+message VectorBatchQueryResponse {
+  dingodb.pb.error.Error error = 1;
+  repeated dingodb.pb.common.VectorWithId vectors = 2;
+}
+
+// vector.id > 0: exact query
+// vector.id == 0: similarity search with vector.vector
 message VectorSearchRequest {
   uint64 region_id = 1;
   dingodb.pb.common.VectorWithId vector = 2;
@@ -67,7 +81,7 @@ message CalcDistanceRequest {
   repeated dingodb.pb.common.Vector source_vectors = 4;
 }
 
-message CalcDistanceResults {
+message CalcDistanceResponse {
   dingodb.pb.error.Error error = 1;
   repeated float distances = 2;
 }
@@ -75,7 +89,8 @@ message CalcDistanceResults {
 service IndexService {
   // vector index
   rpc VectorAdd(VectorAddRequest) returns (VectorAddResponse);
+  rpc VectorBatchQuery(VectorBatchQueryRequest) returns (VectorBatchQueryResponse);
   rpc VectorSearch(VectorSearchRequest) returns (VectorSearchResponse);
   rpc VectorDelete(VectorDeleteRequest) returns (VectorDeleteResponse);
-  rpc CalcDistance(CalcDistanceRequest) returns (CalcDistanceResults);
+  rpc CalcDistance(CalcDistanceRequest) returns (CalcDistanceResponse);
 };

@@ -16,6 +16,8 @@
 
 #include <cstdint>
 #include <memory>
+#include <string>
+#include <vector>
 
 #include "braft/raft.h"
 #include "butil/endpoint.h"
@@ -278,7 +280,7 @@ std::shared_ptr<Engine::Reader> RaftStoreEngine::NewReader(const std::string& cf
 }
 
 butil::Status RaftStoreEngine::VectorReader::QueryVectorWithId(uint64_t region_id, uint64_t vector_id,
-                                                               pb::common::VectorWithDistance& vector_with_distance) {
+                                                               pb::common::VectorWithId& vector_with_id) {
   std::string key;
   VectorCodec::EncodeVectorId(region_id, vector_id, key);
 
@@ -288,93 +290,104 @@ butil::Status RaftStoreEngine::VectorReader::QueryVectorWithId(uint64_t region_i
     return status;
   }
 
-  pb::common::Vector result;
-  if (!result.ParseFromString(value)) {
+  pb::common::Vector vector;
+  if (!vector.ParseFromString(value)) {
     return butil::Status(pb::error::EINTERNAL, "Internal ParseFromString error");
   }
 
-  vector_with_distance.set_distance(0);
-  vector_with_distance.mutable_vector_with_id()->set_id(vector_id);
-  vector_with_distance.mutable_vector_with_id()->mutable_vector()->CopyFrom(result);
+  vector_with_id.set_id(vector_id);
+  vector_with_id.mutable_vector()->Swap(&vector);
 
   return butil::Status();
 }
 
-butil::Status RaftStoreEngine::VectorReader::SearchVector(uint64_t region_id, const pb::common::VectorWithId& vector,
-                                                          const pb::common::VectorSearchParameter& parameter,
-                                                          std::vector<pb::common::VectorWithDistance>& vectors) {
+butil::Status RaftStoreEngine::VectorReader::SearchVector(
+    uint64_t region_id, const pb::common::VectorWithId& vector, const pb::common::VectorSearchParameter& parameter,
+    std::vector<pb::common::VectorWithDistance>& vector_with_distances) {
   auto vector_index = Server::GetInstance()->GetVectorIndexManager()->GetVectorIndex(region_id);
   if (vector_index == nullptr) {
     return butil::Status(pb::error::EVECTOR_NOT_FOUND, fmt::format("Not found vector index {}", region_id));
   }
 
-  vector_index->Search(vector, parameter.top_n(), vectors);
+  vector_index->Search(vector, parameter.top_n(), vector_with_distances);
 
   // if vector index does not support restruct vector ,we restruct it using RocksDB
-  for (auto& vector_with_distance : vectors) {
+  for (auto& vector_with_distance : vector_with_distances) {
     if (vector_with_distance.vector_with_id().has_vector()) {
       continue;
     }
 
-    auto status = QueryVectorWithId(region_id, vector_with_distance.vector_with_id().id(), vector_with_distance);
+    pb::common::VectorWithId vector_with_id;
+    auto status = QueryVectorWithId(region_id, vector_with_distance.vector_with_id().id(), vector_with_id);
     if (!status.ok()) {
       return status;
     }
+    vector_with_distance.mutable_vector_with_id()->Swap(&vector_with_id);
   }
 
   return butil::Status();
 }
 
 butil::Status RaftStoreEngine::VectorReader::QueryVectorMetaData(uint64_t region_id,
-                                                                 const pb::common::VectorSearchParameter& parameter,
-                                                                 std::vector<pb::common::VectorWithDistance>& vectors) {
+                                                                 std::vector<std::string> selected_meta_keys,
+                                                                 pb::common::VectorWithId& vector_with_id) {
   // get metadata by parameter
-  for (auto& vector_with_distance : vectors) {
-    std::string key;
-    VectorCodec::EncodeVectorMeta(region_id, vector_with_distance.vector_with_id().id(), key);
+  std::string key;
+  VectorCodec::EncodeVectorMeta(region_id, vector_with_id.id(), key);
 
-    std::string value;
-    auto status = reader_->KvGet(key, value);
-    if (!status.ok()) {
-      return status;
+  std::string value;
+  auto status = reader_->KvGet(key, value);
+  if (!status.ok()) {
+    return status;
+  }
+
+  pb::common::VectorMetadata vector_metadata;
+  if (!vector_metadata.ParseFromString(value)) {
+    return butil::Status(pb::error::EINTERNAL, "Internal error, decode VectorMetadata failed");
+  }
+
+  auto* metadata = vector_with_id.mutable_metadata()->mutable_metadata();
+  for (const auto& [key, value] : vector_metadata.metadata()) {
+    if (!selected_meta_keys.empty() &&
+        std::find(selected_meta_keys.begin(), selected_meta_keys.end(), key) == selected_meta_keys.end()) {
+      continue;
     }
 
-    pb::common::VectorMetadata vector_metadata;
-    if (!vector_metadata.ParseFromString(value)) {
-      return butil::Status(pb::error::EINTERNAL, "Internal error, decode VectorMetadata failed");
-    }
-
-    auto* metadata = vector_with_distance.mutable_vector_with_id()->mutable_metadata()->mutable_metadata();
-    for (const auto& [key, value] : vector_metadata.metadata()) {
-      if (!parameter.with_all_metadata() &&
-          std::find(parameter.selected_keys().begin(), parameter.selected_keys().end(), key) ==
-              parameter.selected_keys().end()) {
-        continue;
-      }
-
-      metadata->insert({key, value});
-    }
+    metadata->insert({key, value});
   }
 
   return butil::Status();
 }
 
-butil::Status RaftStoreEngine::VectorReader::VectorSearch(std::shared_ptr<Context> ctx,
-                                                          const pb::common::VectorWithId& vector,
-                                                          pb::common::VectorSearchParameter parameter,
-                                                          std::vector<pb::common::VectorWithDistance>& vectors) {
-  if (vector.id() > 0) {
+butil::Status RaftStoreEngine::VectorReader::QueryVectorMetaData(
+    uint64_t region_id, std::vector<std::string> selected_meta_keys,
+    std::vector<pb::common::VectorWithDistance>& vector_with_distances) {
+  // get metadata by parameter
+  for (auto& vector_with_distance : vector_with_distances) {
+    pb::common::VectorWithId& vector_with_id = *(vector_with_distance.mutable_vector_with_id());
+    QueryVectorMetaData(region_id, selected_meta_keys, vector_with_id);
+  }
+
+  return butil::Status();
+}
+
+butil::Status RaftStoreEngine::VectorReader::VectorSearch(
+    std::shared_ptr<Context> ctx, const pb::common::VectorWithId& vector_with_id,
+    pb::common::VectorSearchParameter parameter, std::vector<pb::common::VectorWithDistance>& vector_with_distances) {
+  if (vector_with_id.id() > 0) {
     // Search vector by id
-    pb::common::VectorWithDistance vector_with_distance;
-    auto status = QueryVectorWithId(ctx->RegionId(), vector.id(), vector_with_distance);
+    pb::common::VectorWithId tmp_vector_with_id;
+    auto status = QueryVectorWithId(ctx->RegionId(), vector_with_id.id(), tmp_vector_with_id);
     if (!status.ok()) {
       return status;
     }
 
-    vectors.push_back(vector_with_distance);
+    pb::common::VectorWithDistance vector_with_distance;
+    vector_with_distance.mutable_vector_with_id()->Swap(&tmp_vector_with_id);
+    vector_with_distances.push_back(vector_with_distance);
   } else {
     // Search vector by vector
-    auto status = SearchVector(ctx->RegionId(), vector, parameter, vectors);
+    auto status = SearchVector(ctx->RegionId(), vector_with_id, parameter, vector_with_distances);
     if (!status.ok()) {
       return status;
     }
@@ -385,9 +398,38 @@ butil::Status RaftStoreEngine::VectorReader::VectorSearch(std::shared_ptr<Contex
   }
 
   // Get metadata by parameter
-  auto status = QueryVectorMetaData(ctx->RegionId(), parameter, vectors);
+  std::vector<std::string> selected_meta_keys = parameter.with_all_metadata()
+                                                    ? std::vector<std::string>{}
+                                                    : Helper::PbRepeatedToVector(parameter.selected_keys());
+  auto status = QueryVectorMetaData(ctx->RegionId(), selected_meta_keys, vector_with_distances);
   if (!status.ok()) {
     return status;
+  }
+
+  return butil::Status();
+}
+
+butil::Status RaftStoreEngine::VectorReader::VectorBatchQuery(std::shared_ptr<Context> ctx,
+                                                              std::vector<uint64_t> vector_ids, bool is_need_metadata,
+                                                              std::vector<std::string> selected_meta_keys,
+                                                              std::vector<pb::common::VectorWithId>& vector_with_ids) {
+  for (auto vector_id : vector_ids) {
+    pb::common::VectorWithId vector_with_id;
+    auto status = QueryVectorWithId(ctx->RegionId(), vector_id, vector_with_id);
+    if (!status.ok()) {
+      return status;
+    }
+
+    vector_with_ids.push_back(vector_with_id);
+  }
+
+  if (is_need_metadata) {
+    for (auto& vector_with_id : vector_with_ids) {
+      auto status = QueryVectorMetaData(ctx->RegionId(), selected_meta_keys, vector_with_id);
+      if (!status.ok()) {
+        return status;
+      }
+    }
   }
 
   return butil::Status();

@@ -79,6 +79,10 @@ class Engine {
     virtual butil::Status VectorSearch(std::shared_ptr<Context> ctx, const pb::common::VectorWithId& vector,
                                        pb::common::VectorSearchParameter parameter,
                                        std::vector<pb::common::VectorWithDistance>& vectors) = 0;
+
+    virtual butil::Status VectorBatchQuery(std::shared_ptr<Context> ctx, std::vector<uint64_t> vector_ids,
+                                           bool is_need_metadata, std::vector<std::string> selected_meta_keys,
+                                           std::vector<pb::common::VectorWithId>& vector_with_ids) = 0;
   };
 
   virtual std::shared_ptr<Reader> NewReader(const std::string& cf_name) = 0;
