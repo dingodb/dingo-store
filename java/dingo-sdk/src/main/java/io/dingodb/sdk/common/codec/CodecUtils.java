@@ -23,6 +23,7 @@ import io.dingodb.sdk.common.serial.schema.DoubleSchema;
 import io.dingodb.sdk.common.serial.schema.IntegerSchema;
 import io.dingodb.sdk.common.serial.schema.LongSchema;
 import io.dingodb.sdk.common.serial.schema.StringSchema;
+import io.dingodb.sdk.common.serial.schema.VectorSchema;
 import io.dingodb.sdk.common.table.Column;
 
 import java.util.ArrayList;
@@ -110,6 +111,9 @@ public final class CodecUtils {
             case "TIME":
             case "TIMESTAMP":
                 schema = new LongSchema();
+                break;
+            case "VECTOR":
+                schema = new VectorSchema();
                 break;
             case "BINARY":
             case "BYTES":
