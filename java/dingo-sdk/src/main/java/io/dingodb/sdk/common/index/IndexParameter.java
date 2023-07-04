@@ -6,16 +6,18 @@ package io.dingodb.sdk.common.index;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.ToString;
 
 @Getter
 @ToString
+@NoArgsConstructor
 @AllArgsConstructor
 public class IndexParameter {
 
     private IndexType indexType;
-    private AbstractIndexParameter vectorIndexParameter;
-    private AbstractIndexParameter scalarIndexParameter;
+    private VectorIndexParameter vectorIndexParameter;
+    // private ScalarIndexParameter scalarIndexParameter;
 
     public enum IndexType {
         INDEX_TYPE_NONE,

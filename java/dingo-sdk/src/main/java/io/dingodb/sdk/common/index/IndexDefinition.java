@@ -20,12 +20,12 @@ import io.dingodb.sdk.common.partition.Partition;
 import io.dingodb.sdk.common.partition.PartitionRule;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
-import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.ToString;
 
-@Getter
 @Builder
 @ToString
+@NoArgsConstructor
 @AllArgsConstructor
 public class IndexDefinition implements Index {
 
@@ -34,6 +34,8 @@ public class IndexDefinition implements Index {
     private PartitionRule partitionRule;
     private Integer replica;
     private IndexParameter parameter;
+    private boolean isAutoIncrement;
+    private Long autoIncrement;
 
     @Override
     public String getName() {
@@ -58,5 +60,15 @@ public class IndexDefinition implements Index {
     @Override
     public IndexParameter getIndexParameter() {
         return parameter;
+    }
+
+    @Override
+    public boolean isAutoIncrement() {
+        return isAutoIncrement;
+    }
+
+    @Override
+    public Long getAutoIncrement() {
+        return autoIncrement;
     }
 }

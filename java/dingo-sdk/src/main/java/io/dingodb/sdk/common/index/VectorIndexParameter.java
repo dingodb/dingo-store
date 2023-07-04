@@ -17,34 +17,47 @@
 package io.dingodb.sdk.common.index;
 
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.ToString;
 
 @Getter
 @ToString
-public class VectorIndexParameter extends AbstractIndexParameter {
+@NoArgsConstructor
+public class VectorIndexParameter {
 
-    private Integer dimension;
-    private MetricType metricType;
-    private Integer efConstruction;
-    private Integer maxElements;
-    private Integer nlinks;
+    private VectorIndexType vectorIndexType;
+    private FlatParam flatParam;
+    private IvfFlatParam ivfFlatParam;
+    private IvfPqParam ivfPqParam;
+    private HnswParam hnswParam;
+    private DiskAnnParam diskAnnParam;
 
-    public VectorIndexParameter(
-            IndexType indexType,
-            Integer dimension,
-            MetricType metricType,
-            Integer efConstruction,
-            Integer maxElements,
-            Integer nlinks) {
-        super(indexType);
-        this.dimension = dimension;
-        this.metricType = metricType;
-        this.efConstruction = efConstruction;
-        this.maxElements = maxElements;
-        this.nlinks = nlinks;
+    public VectorIndexParameter(VectorIndexType vectorIndexType, FlatParam flatParam) {
+        this.vectorIndexType = vectorIndexType;
+        this.flatParam = flatParam;
     }
 
-    public enum VectorIndexType implements IndexType {
+    public VectorIndexParameter(VectorIndexType vectorIndexType, IvfFlatParam ivfFlatParam) {
+        this.vectorIndexType = vectorIndexType;
+        this.ivfFlatParam = ivfFlatParam;
+    }
+
+    public VectorIndexParameter(VectorIndexType vectorIndexType, IvfPqParam ivfPqParam) {
+        this.vectorIndexType = vectorIndexType;
+        this.ivfPqParam = ivfPqParam;
+    }
+
+    public VectorIndexParameter(VectorIndexType vectorIndexType, HnswParam hnswParam) {
+        this.vectorIndexType = vectorIndexType;
+        this.hnswParam = hnswParam;
+    }
+
+    public VectorIndexParameter(VectorIndexType vectorIndexType, DiskAnnParam diskAnnParam) {
+        this.vectorIndexType = vectorIndexType;
+        this.diskAnnParam = diskAnnParam;
+    }
+
+    public enum VectorIndexType {
         VECTOR_INDEX_TYPE_NONE,
         VECTOR_INDEX_TYPE_FLAT,
         VECTOR_INDEX_TYPE_IVF_FLAT,
