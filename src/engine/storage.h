@@ -64,6 +64,9 @@ class Storage {
 
   // vector index
   butil::Status VectorAdd(std::shared_ptr<Context> ctx, const std::vector<pb::common::VectorWithId>& vectors);
+  butil::Status VectorBatchQuery(std::shared_ptr<Context> ctx, std::vector<uint64_t> vector_ids, bool is_need_metadata,
+                                 std::vector<std::string> selected_meta_keys,
+                                 std::vector<pb::common::VectorWithId>& vector_with_ids);
   butil::Status VectorSearch(std::shared_ptr<Context> ctx, const pb::common::VectorWithId& vector,
                              const pb::common::VectorSearchParameter& parameter,
                              std::vector<pb::common::VectorWithDistance>& results);

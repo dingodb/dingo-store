@@ -99,6 +99,26 @@ class Helper {
   }
 
   template <typename T>
+  static std::vector<T> PbRepeatedToVector(const google::protobuf::RepeatedField<T>& data) {
+    std::vector<T> vec;
+    for (auto& item : data) {
+      vec.push_back(item);
+    }
+
+    return vec;
+  }
+
+  template <typename T>
+  static std::vector<T> PbRepeatedToVector(google::protobuf::RepeatedField<T>* data) {
+    std::vector<T> vec;
+    for (auto& item : *data) {
+      vec.push_back(item);
+    }
+
+    return vec;
+  }
+
+  template <typename T>
   static void VectorToPbRepeated(const std::vector<T>& vec, google::protobuf::RepeatedPtrField<T>* out) {
     for (auto& item : vec) {
       *(out->Add()) = item;

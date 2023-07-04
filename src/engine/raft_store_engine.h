@@ -111,18 +111,24 @@ class RaftStoreEngine : public Engine, public RaftControlAble {
    public:
     VectorReader(std::shared_ptr<RawEngine::Reader> reader) : reader_(reader) {}
 
-    butil::Status VectorSearch(std::shared_ptr<Context> ctx, const pb::common::VectorWithId& vector,
+    butil::Status VectorSearch(std::shared_ptr<Context> ctx, const pb::common::VectorWithId& vector_with_id,
                                pb::common::VectorSearchParameter parameter,
-                               std::vector<pb::common::VectorWithDistance>& vectors) override;
+                               std::vector<pb::common::VectorWithDistance>& vector_with_distances) override;
+
+    butil::Status VectorBatchQuery(std::shared_ptr<Context> ctx, std::vector<uint64_t> vector_ids,
+                                   bool is_need_metadata, std::vector<std::string> selected_meta_keys,
+                                   std::vector<pb::common::VectorWithId>& vector_with_ids);
 
    private:
-    butil::Status QueryVectorWithId(uint64_t region_id, uint64_t vector_id,
-                                    pb::common::VectorWithDistance& vector_with_distance);
+    butil::Status QueryVectorWithId(uint64_t region_id, uint64_t vector_id, pb::common::VectorWithId& vector_with_id);
     butil::Status SearchVector(uint64_t region_id, const pb::common::VectorWithId& vector,
                                const pb::common::VectorSearchParameter& parameter,
-                               std::vector<pb::common::VectorWithDistance>& vectors);
-    butil::Status QueryVectorMetaData(uint64_t region_id, const pb::common::VectorSearchParameter& parameter,
-                                      std::vector<pb::common::VectorWithDistance>& vectors);
+                               std::vector<pb::common::VectorWithDistance>& vector_with_distances);
+
+    butil::Status QueryVectorMetaData(uint64_t region_id, std::vector<std::string> selected_meta_keys,
+                                      pb::common::VectorWithId& vector_with_id);
+    butil::Status QueryVectorMetaData(uint64_t region_id, std::vector<std::string> selected_meta_keys,
+                                      std::vector<pb::common::VectorWithDistance>& vector_with_distances);
 
     std::shared_ptr<RawEngine::Reader> reader_;
   };

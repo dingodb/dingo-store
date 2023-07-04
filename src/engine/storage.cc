@@ -110,6 +110,23 @@ butil::Status Storage::VectorDelete(std::shared_ptr<Context> ctx, const std::vec
                              });
 }
 
+butil::Status Storage::VectorBatchQuery(std::shared_ptr<Context> ctx, std::vector<uint64_t> vector_ids,
+                                        bool is_need_metadata, std::vector<std::string> selected_meta_keys,
+                                        std::vector<pb::common::VectorWithId>& vector_with_ids) {
+  auto status = ValidateLeader(ctx->RegionId());
+  if (!status.ok()) {
+    return status;
+  }
+
+  auto reader = engine_->NewVectorReader(Constant::kStoreDataCF);
+  status = reader->VectorBatchQuery(ctx, vector_ids, is_need_metadata, selected_meta_keys, vector_with_ids);
+  if (!status.ok()) {
+    return status;
+  }
+
+  return butil::Status();
+}
+
 butil::Status Storage::VectorSearch(std::shared_ptr<Context> ctx, const pb::common::VectorWithId& vector,
                                     const pb::common::VectorSearchParameter& parameter,
                                     std::vector<pb::common::VectorWithDistance>& results) {
