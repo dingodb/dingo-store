@@ -610,6 +610,317 @@ butil::Status CoordinatorControl::CreateIndexId(uint64_t schema_id, uint64_t& ne
   return butil::Status::OK();
 }
 
+// validate index definition
+// in: index_definition
+// return: errno
+butil::Status CoordinatorControl::ValidateIndexDefinition(const pb::meta::IndexDefinition& index_definition) {
+  // validate index name
+  if (index_definition.name().empty()) {
+    DINGO_LOG(ERROR) << "index name is empty";
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "index name is empty");
+  }
+
+  const auto& index_parameter = index_definition.index_parameter();
+
+  // check index_type is not NONE
+  if (index_parameter.index_type() == pb::common::IndexType::INDEX_TYPE_NONE) {
+    DINGO_LOG(ERROR) << "index_type is NONE";
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "index_type is NONE");
+  }
+
+  // if index_type is INDEX_TYPE_VECTOR, check vector_index_parameter
+  if (index_parameter.index_type() == pb::common::IndexType::INDEX_TYPE_VECTOR) {
+    if (!index_parameter.has_vector_index_parameter()) {
+      DINGO_LOG(ERROR) << "index_type is INDEX_TYPE_VECTOR, but vector_index_parameter is not set";
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
+                           "index_type is INDEX_TYPE_VECTOR, but vector_index_parameter is not set");
+    }
+
+    const auto& vector_index_parameter = index_parameter.vector_index_parameter();
+
+    // check vector_index_parameter.index_type is not NONE
+    if (vector_index_parameter.vector_index_type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_NONE) {
+      DINGO_LOG(ERROR) << "vector_index_parameter.index_type is NONE";
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "vector_index_parameter.index_type is NONE");
+    }
+
+    // if vector_index_type is HNSW, check hnsw_parameter is set
+    if (vector_index_parameter.vector_index_type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
+      if (!vector_index_parameter.has_hnsw_parameter()) {
+        DINGO_LOG(ERROR) << "vector_index_type is HNSW, but hnsw_parameter is not set";
+        return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
+                             "vector_index_type is HNSW, but hnsw_parameter is not set");
+      }
+
+      const auto& hnsw_parameter = vector_index_parameter.hnsw_parameter();
+
+      // check hnsw_parameter.dimension
+      // The dimension of the vector space. This parameter is required and must be greater than 0.
+      if (hnsw_parameter.dimension() <= 0) {
+        DINGO_LOG(ERROR) << "hnsw_parameter.dimension is illegal " << hnsw_parameter.dimension();
+        return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
+                             "hnsw_parameter.dimension is illegal " + std::to_string(hnsw_parameter.dimension()));
+      }
+
+      // check hnsw_parameter.metric_type
+      // The distance metric used to calculate the similarity between vectors. This parameter is required and must not
+      // be METRIC_TYPE_NONE.
+      if (hnsw_parameter.metric_type() == pb::common::METRIC_TYPE_NONE) {
+        DINGO_LOG(ERROR) << "hnsw_parameter.metric_type is illegal " << hnsw_parameter.metric_type();
+        return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
+                             "hnsw_parameter.metric_type is illegal " + std::to_string(hnsw_parameter.metric_type()));
+      }
+
+      // check hnsw_parameter.ef_construction
+      // The size of the dynamic list for the nearest neighbors during the construction of the graph. This parameter
+      // affects the quality of the graph and the construction time. A larger value leads to a higher quality graph but
+      // slower construction time. This parameter must be greater than 0.
+      if (hnsw_parameter.efconstruction() <= 0) {
+        DINGO_LOG(ERROR) << "hnsw_parameter.ef_construction is illegal " << hnsw_parameter.efconstruction();
+        return butil::Status(
+            pb::error::Errno::EILLEGAL_PARAMTETERS,
+            "hnsw_parameter.ef_construction is illegal " + std::to_string(hnsw_parameter.efconstruction()));
+      }
+
+      // check hnsw_parameter.max_elements
+      // The maximum number of elements that can be indexed. This parameter affects the memory usage of the index. This
+      // parameter must be greater than 0.
+      if (hnsw_parameter.max_elements() <= 0) {
+        DINGO_LOG(ERROR) << "hnsw_parameter.max_elements is illegal " << hnsw_parameter.max_elements();
+        return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
+                             "hnsw_parameter.max_elements is illegal " + std::to_string(hnsw_parameter.max_elements()));
+      }
+
+      // check hnsw_parameter.nlinks
+      // The number of links for each element in the graph. This parameter affects the quality of the graph and the
+      // search time. A larger value leads to a higher quality graph but slower search time. This parameter must be
+      // greater than 0.
+      if (hnsw_parameter.nlinks() <= 0) {
+        DINGO_LOG(ERROR) << "hnsw_parameter.nlinks is illegal " << hnsw_parameter.nlinks();
+        return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
+                             "hnsw_parameter.nlinks is illegal " + std::to_string(hnsw_parameter.nlinks()));
+      }
+    }
+
+    // if vector_index_type is FLAT, check flat_parameter is set
+    if (vector_index_parameter.vector_index_type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT) {
+      if (!vector_index_parameter.has_flat_parameter()) {
+        DINGO_LOG(ERROR) << "vector_index_type is FLAT, but flat_parameter is not set";
+        return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
+                             "vector_index_type is FLAT, but flat_parameter is not set");
+      }
+
+      const auto& flat_parameter = vector_index_parameter.flat_parameter();
+
+      // check flat_parameter.dimension
+      if (flat_parameter.dimension() <= 0) {
+        DINGO_LOG(ERROR) << "flat_parameter.dimension is illegal " << flat_parameter.dimension();
+        return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
+                             "flat_parameter.dimension is illegal " + std::to_string(flat_parameter.dimension()));
+      }
+
+      // check flat_parameter.metric_type
+      if (flat_parameter.metric_type() == pb::common::METRIC_TYPE_NONE) {
+        DINGO_LOG(ERROR) << "flat_parameter.metric_type is illegal " << flat_parameter.metric_type();
+        return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
+                             "flat_parameter.metric_type is illegal " + std::to_string(flat_parameter.metric_type()));
+      }
+    }
+
+    // if vector_index_type is IVF_FLAT, check ivf_flat_parameter is set
+    if (vector_index_parameter.vector_index_type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT) {
+      if (!vector_index_parameter.has_ivf_flat_parameter()) {
+        DINGO_LOG(ERROR) << "vector_index_type is IVF_FLAT, but ivf_flat_parameter is not set";
+        return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
+                             "vector_index_type is IVF_FLAT, but ivf_flat_parameter is not set");
+      }
+
+      const auto& ivf_flat_parameter = vector_index_parameter.ivf_flat_parameter();
+
+      // check ivf_flat_parameter.dimension
+      // The dimension of the vectors to be indexed. This parameter must be greater than 0.
+      if (ivf_flat_parameter.dimension() <= 0) {
+        DINGO_LOG(ERROR) << "ivf_flat_parameter.dimension is illegal " << ivf_flat_parameter.dimension();
+        return butil::Status(
+            pb::error::Errno::EILLEGAL_PARAMTETERS,
+            "ivf_flat_parameter.dimension is illegal " + std::to_string(ivf_flat_parameter.dimension()));
+      }
+
+      // check ivf_flat_parameter.metric_type
+      // The distance metric used to compute the distance between vectors. This parameter affects the accuracy of the
+      // search. This parameter must not be METRIC_TYPE_NONE.
+      if (ivf_flat_parameter.metric_type() == pb::common::METRIC_TYPE_NONE) {
+        DINGO_LOG(ERROR) << "ivf_flat_parameter.metric_type is illegal " << ivf_flat_parameter.metric_type();
+        return butil::Status(
+            pb::error::Errno::EILLEGAL_PARAMTETERS,
+            "ivf_flat_parameter.metric_type is illegal " + std::to_string(ivf_flat_parameter.metric_type()));
+      }
+
+      // check ivf_flat_parameter.ncentroids
+      // The number of centroids (clusters) used in the product quantization. This parameter affects the memory usage of
+      // the index and the accuracy of the search. This parameter must be greater than 0.
+      if (ivf_flat_parameter.ncentroids() <= 0) {
+        DINGO_LOG(ERROR) << "ivf_flat_parameter.ncentroids is illegal " << ivf_flat_parameter.ncentroids();
+        return butil::Status(
+            pb::error::Errno::EILLEGAL_PARAMTETERS,
+            "ivf_flat_parameter.ncentroids is illegal " + std::to_string(ivf_flat_parameter.ncentroids()));
+      }
+    }
+
+    // if vector_index_type is IVF_PQ, check ivf_pq_parameter is set
+    if (vector_index_parameter.vector_index_type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ) {
+      if (!vector_index_parameter.has_ivf_pq_parameter()) {
+        DINGO_LOG(ERROR) << "vector_index_type is IVF_PQ, but ivf_pq_parameter is not set";
+        return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
+                             "vector_index_type is IVF_PQ, but ivf_pq_parameter is not set");
+      }
+
+      const auto& ivf_pq_parameter = vector_index_parameter.ivf_pq_parameter();
+
+      // check ivf_pq_parameter.dimension
+      // The dimension of the vectors to be indexed. This parameter must be greater than 0.
+      if (ivf_pq_parameter.dimension() <= 0) {
+        DINGO_LOG(ERROR) << "ivf_pq_parameter.dimension is illegal " << ivf_pq_parameter.dimension();
+        return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
+                             "ivf_pq_parameter.dimension is illegal " + std::to_string(ivf_pq_parameter.dimension()));
+      }
+
+      // check ivf_pq_parameter.metric_type
+      // The distance metric used to compute the distance between vectors. This parameter affects the accuracy of the
+      // search. This parameter must not be METRIC_TYPE_NONE.
+      if (ivf_pq_parameter.metric_type() == pb::common::METRIC_TYPE_NONE) {
+        DINGO_LOG(ERROR) << "ivf_pq_parameter.metric_type is illegal " << ivf_pq_parameter.metric_type();
+        return butil::Status(
+            pb::error::Errno::EILLEGAL_PARAMTETERS,
+            "ivf_pq_parameter.metric_type is illegal " + std::to_string(ivf_pq_parameter.metric_type()));
+      }
+
+      // check ivf_pq_parameter.nlist
+      // The number of inverted lists (buckets) used in the index. This parameter affects the memory usage of the index
+      // and the accuracy of the search. This parameter must be greater than 0.
+      if (ivf_pq_parameter.ncentroids() <= 0) {
+        DINGO_LOG(ERROR) << "ivf_pq_parameter.ncentroids is illegal " << ivf_pq_parameter.ncentroids();
+        return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
+                             "ivf_pq_parameter.ncentroids is illegal " + std::to_string(ivf_pq_parameter.ncentroids()));
+      }
+
+      // check ivf_pq_parameter.nsubvector
+      // The number of subvectors used in the product quantization. This parameter affects the memory usage of the index
+      // and the accuracy of the search. This parameter must be greater than 0.
+      if (ivf_pq_parameter.nsubvector() <= 0) {
+        DINGO_LOG(ERROR) << "ivf_pq_parameter.nsubvector is illegal " << ivf_pq_parameter.nsubvector();
+        return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
+                             "ivf_pq_parameter.nsubvector is illegal " + std::to_string(ivf_pq_parameter.nsubvector()));
+      }
+
+      // check ivf_pq_parameter.bucket_init_size
+      // The number of bits used to represent each subvector in the index. This parameter affects the memory usage of
+      // the index and the accuracy of the search. This parameter must be greater than 0.
+      if (ivf_pq_parameter.bucket_init_size() <= 0) {
+        DINGO_LOG(ERROR) << "ivf_pq_parameter.bucket_init_size is illegal " << ivf_pq_parameter.bucket_init_size();
+        return butil::Status(
+            pb::error::Errno::EILLEGAL_PARAMTETERS,
+            "ivf_pq_parameter.bucket_init_size is illegal " + std::to_string(ivf_pq_parameter.bucket_init_size()));
+      }
+
+      // check ivf_pq_parameter.bucket_max_size
+      // The maximum number of vectors that can be added to each inverted list (bucket) in the index. This parameter
+      // affects the memory usage of the index and the accuracy of the search. This parameter must be greater than 0.
+      if (ivf_pq_parameter.bucket_max_size() <= 0) {
+        DINGO_LOG(ERROR) << "ivf_pq_parameter.bucket_max_size is illegal " << ivf_pq_parameter.bucket_max_size();
+        return butil::Status(
+            pb::error::Errno::EILLEGAL_PARAMTETERS,
+            "ivf_pq_parameter.bucket_max_size is illegal " + std::to_string(ivf_pq_parameter.bucket_max_size()));
+      }
+
+      // If all checks pass, return a butil::Status object with no error.
+      return butil::Status::OK();
+    }
+
+    // if vector_index_type is diskann, check diskann_parameter is set
+    if (vector_index_parameter.vector_index_type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_DISKANN) {
+      if (!vector_index_parameter.has_diskann_parameter()) {
+        DINGO_LOG(ERROR) << "vector_index_type is DISKANN, but diskann_parameter is not set";
+        return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
+                             "vector_index_type is DISKANN, but diskann_parameter is not set");
+      }
+
+      const auto& diskann_parameter = vector_index_parameter.diskann_parameter();
+
+      // check diskann_parameter.dimension
+      // The dimension of the vectors to be indexed. This parameter must be greater than 0.
+      if (diskann_parameter.dimension() <= 0) {
+        DINGO_LOG(ERROR) << "diskann_parameter.dimension is illegal " << diskann_parameter.dimension();
+        return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
+                             "diskann_parameter.dimension is illegal " + std::to_string(diskann_parameter.dimension()));
+      }
+
+      // check diskann_parameter.metric_type
+      // The distance metric used to compute the distance between vectors. This parameter affects the accuracy of the
+      // search. This parameter must not be METRIC_TYPE_NONE.
+      if (diskann_parameter.metric_type() == pb::common::METRIC_TYPE_NONE) {
+        DINGO_LOG(ERROR) << "diskann_parameter.metric_type is illegal " << diskann_parameter.metric_type();
+        return butil::Status(
+            pb::error::Errno::EILLEGAL_PARAMTETERS,
+            "diskann_parameter.metric_type is illegal " + std::to_string(diskann_parameter.metric_type()));
+      }
+
+      // check diskann_parameter.num_trees
+      // The number of trees to be built in the index. This parameter affects the memory usage of the index and the
+      // accuracy of the search. This parameter must be greater than 0.
+      if (diskann_parameter.num_trees() <= 0) {
+        DINGO_LOG(ERROR) << "diskann_parameter.num_trees is illegal " << diskann_parameter.num_trees();
+        return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
+                             "diskann_parameter.num_trees is illegal " + std::to_string(diskann_parameter.num_trees()));
+      }
+
+      // check diskann_parameter.num_neighbors
+      // The number of nearest neighbors to be returned by the search. This parameter affects the accuracy of the
+      // search. This parameter must be greater than 0.
+      if (diskann_parameter.num_neighbors() <= 0) {
+        DINGO_LOG(ERROR) << "diskann_parameter.num_neighbors is illegal " << diskann_parameter.num_neighbors();
+        return butil::Status(
+            pb::error::Errno::EILLEGAL_PARAMTETERS,
+            "diskann_parameter.num_neighbors is illegal " + std::to_string(diskann_parameter.num_neighbors()));
+      }
+
+      // check diskann_parameter.num_threads
+      // The number of CPU cores to be used in building the index. This parameter affects the speed of the index
+      // building. This parameter must be greater than 0.
+      if (diskann_parameter.num_threads() <= 0) {
+        DINGO_LOG(ERROR) << "diskann_parameter.num_threads is illegal " << diskann_parameter.num_threads();
+        return butil::Status(
+            pb::error::Errno::EILLEGAL_PARAMTETERS,
+            "diskann_parameter.num_threads is illegal " + std::to_string(diskann_parameter.num_threads()));
+      }
+
+      // If all checks pass, return a butil::Status object with no error.
+      return butil::Status::OK();
+    }
+
+    return butil::Status::OK();
+  } else if (index_parameter.index_type() == pb::common::IndexType::INDEX_TYPE_SCALAR) {
+    // check if scalar_index_parameter is set
+    if (!index_parameter.has_scalar_index_parameter()) {
+      DINGO_LOG(ERROR) << "index_type is SCALAR, but scalar_index_parameter is not set";
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
+                           "index_type is SCALAR, but scalar_index_parameter is not set");
+    }
+
+    const auto& scalar_index_parameter = index_parameter.scalar_index_parameter();
+
+    // check scalar index type
+    if (scalar_index_parameter.scalar_index_type() == pb::common::ScalarIndexType::SCALAR_INDEX_TYPE_NONE) {
+      DINGO_LOG(ERROR) << "scalar_index_type is illegal " << scalar_index_parameter.scalar_index_type();
+      return butil::Status(
+          pb::error::Errno::EILLEGAL_PARAMTETERS,
+          "scalar_index_type is illegal " + std::to_string(scalar_index_parameter.scalar_index_type()));
+    }
+  }
+
+  return butil::Status::OK();
+}
+
 // CreateIndex
 // in: schema_id, index_definition
 // out: new_index_id, meta_increment
@@ -633,11 +944,18 @@ butil::Status CoordinatorControl::CreateIndex(uint64_t schema_id, const pb::meta
     }
   }
 
+  // validate index_definition
+  auto status = ValidateIndexDefinition(index_definition);
+  if (!status.ok()) {
+    return status;
+  }
+
   // validate part information
   if (!index_definition.has_index_partition()) {
     DINGO_LOG(ERROR) << "no index_partition provided ";
     return butil::Status(pb::error::Errno::EINDEX_DEFINITION_ILLEGAL, "no index_partition provided");
   }
+
   auto const& index_partition = index_definition.index_partition();
   if (index_partition.has_hash_partition()) {
     DINGO_LOG(ERROR) << "hash_partiton is not supported";

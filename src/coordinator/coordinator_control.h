@@ -251,6 +251,11 @@ class CoordinatorControl : public MetaControl {
   butil::Status CreateIndexId(uint64_t schema_id, uint64_t &new_index_id,
                               pb::coordinator_internal::MetaIncrement &meta_increment);
 
+  // validate index definition
+  // in: index_definition
+  // return: errno
+  static butil::Status ValidateIndexDefinition(const pb::meta::IndexDefinition &index_definition);
+
   // create schema
   // in: schema_id
   // in: index_definition

@@ -62,8 +62,8 @@ class VectorIndexManager : public TransformKvAble {
   butil::Status RebuildVectorIndex(store::RegionPtr region);
 
   // Replay log to vector index.
-  butil::Status ReplayWalToVectorIndex(std::shared_ptr<VectorIndex> vector_index, uint64_t start_log_id,
-                                       uint64_t end_log_id);
+  static butil::Status ReplayWalToVectorIndex(std::shared_ptr<VectorIndex> vector_index, uint64_t start_log_id,
+                                              uint64_t end_log_id);
 
   void UpdateApplyLogIndex(std::shared_ptr<VectorIndex> vector_index, uint64_t apply_log_index);
   void UpdateApplyLogIndex(uint64_t region_id, uint64_t apply_log_index);

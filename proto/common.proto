@@ -81,9 +81,9 @@ message VectorMetadata {
 
 message VectorWithId {
   uint64 id = 1;
-  Vector vector = 2;            // vector data
-  VectorMetadata metadata = 3;  // metadata of this vector
-  map<string, ScalarValue> scalar_data = 4; // scalar data of this vector, key: scalar key, value: scalar value data.
+  Vector vector = 2;                         // vector data
+  VectorMetadata metadata = 3;               // metadata of this vector
+  map<string, ScalarValue> scalar_data = 4;  // scalar data of this vector, key: scalar key, value: scalar value data.
 }
 
 message VectorWithDistance {
@@ -338,6 +338,9 @@ message ScalarValue {
 message CreateFlatParam {
   // dimensions required
   uint32 dimension = 1;
+
+  // distance calculation method (L2 or InnerProduct) required
+  MetricType metric_type = 2;
 }
 
 message CreateIvfFlatParam {
@@ -392,12 +395,28 @@ message CreateHnswParam {
 }
 
 message CreateDiskAnnParam {
-  // TODO : Not implement
   // dimensions required
+  // The number of dimensions in the vector data.
   uint32 dimension = 1;
 
   // distance calculation method (L2 or InnerProduct) required
+  // The distance calculation method to be used for the index.
   MetricType metric_type = 2;
+
+  // The number of trees to be built in the index.
+  // The number of trees affects the accuracy and search speed of the index.
+  // A larger number of trees will result in higher accuracy but slower search speed.
+  int32 num_trees = 3;
+
+  // The number of nearest neighbors to be returned in a search.
+  // The number of neighbors affects the accuracy and search speed of the index.
+  // A larger number of neighbors will result in higher accuracy but slower search speed.
+  int32 num_neighbors = 4;
+
+  // The number of threads to be used for building the index.
+  // The number of threads affects the speed of building the index.
+  // A larger number of threads will result in faster index building but may use more system resources.
+  int32 num_threads = 5;
 }
 
 message VectorIndexParameter {
@@ -458,10 +477,16 @@ message SearchDiskAnnParam {
 }
 
 message VectorSearchParameter {
+  // The number of top results to return.
   uint32 top_n = 1;
-  bool with_all_metadata = 2;  // if true, return all metadata, otherwise return only selected key
+
+  // Whether to return all metadata or only selected keys.
+  bool with_all_metadata = 2;
+
+  // A list of keys to return if `with_all_metadata` is false.
   repeated string selected_keys = 3;
 
+  // The search method to use.
   oneof search {
     SearchFlatParam flat = 4;
     SearchIvfFlatParam ivf_flat = 5;
@@ -469,12 +494,15 @@ message VectorSearchParameter {
     SearchHNSWParam hnsw = 7;
     SearchDiskAnnParam diskann = 8;
   }
+
+  // Whether to use scalar filtering.
   bool use_scalar_filter = 20;
 }
 
 enum ScalarIndexType {
-  SCALAR_INDEX_TYPE_LSM = 0;
-  SCALAR_INDEX_TYPE_BTREE = 1;
+  SCALAR_INDEX_TYPE_NONE = 0;  // no scalar index, just a placeholder
+  SCALAR_INDEX_TYPE_LSM = 1;
+  SCALAR_INDEX_TYPE_BTREE = 2;
 }
 
 message ScalarIndexParameter {
@@ -547,22 +575,24 @@ message RaftPeerStatus {
 
 // BRaftStatus
 message BRaftStatus {
-  RaftNodeState raft_state = 1;
-  string peer_id = 11;
-  string leader_peer_id = 12;
-  bool readonly = 13;
-  int64 term = 14;
-  int64 committed_index = 15;
-  int64 known_applied_index = 16;
-  int64 pending_index = 17;
-  int64 pending_queue_size = 18;
-  int64 applying_index = 19;
-  int64 first_index = 20;
-  int64 last_index = 21;
-  int64 disk_index = 22;
+  RaftNodeState raft_state = 1;    // the current state of the raft node
+  string peer_id = 11;             // the ID of the peer associated with this status
+  string leader_peer_id = 12;      // the ID of the current leader peer
+  bool readonly = 13;              // whether the node is in read-only mode
+  int64 term = 14;                 // the current term of the raft node
+  int64 committed_index = 15;      // the index of the highest log entry known to be committed
+  int64 known_applied_index = 16;  // the index of the highest log entry applied to the state machine
+  int64 pending_index = 17;        // the index of the highest log entry not yet known to be committed
+  int64 pending_queue_size = 18;   // the size of the pending queue
+  int64 applying_index = 19;       // the index of the highest log entry currently being applied to the state machine
+  int64 first_index = 20;          // the index of the first log entry
+  int64 last_index = 21;           // the index of the last log entry
+  int64 disk_index = 22;           // the index of the last log entry persisted to disk
 
-  map<string, RaftPeerStatus> stable_followers = 23;
-  map<string, RaftPeerStatus> unstable_followers = 24;
+  map<string, RaftPeerStatus> stable_followers =
+      23;  // a map of stable followers, where the key is the peer ID and the value is the status of the follower
+  map<string, RaftPeerStatus> unstable_followers =
+      24;  // a map of unstable followers, where the key is the peer ID and the value is the status of the follower
 }
 
 // RegionMetrics
