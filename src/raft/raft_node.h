@@ -65,6 +65,8 @@ class RaftNode {
 
   std::shared_ptr<pb::common::BRaftStatus> GetStatus();
 
+  std::shared_ptr<braft::LogStorage> LogStorage() { return log_storage_; }
+
  private:
   std::string path_;
   uint64_t node_id_;
@@ -73,6 +75,7 @@ class RaftNode {
 
   std::unique_ptr<braft::Node> node_;
   braft::StateMachine* fsm_;
+  std::shared_ptr<braft::LogStorage> log_storage_;
 };
 
 }  // namespace dingodb

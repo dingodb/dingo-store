@@ -14,7 +14,11 @@
 
 #include "log/segment_log_storage.h"
 
+#include <atomic>
+#include <cstdint>
 #include <memory>
+#include <utility>
+#include <vector>
 
 #include "braft/fsync.h"
 #include "braft/local_storage.pb.h"
@@ -31,6 +35,7 @@
 #include "common/constant.h"
 #include "common/failpoint.h"
 #include "common/logging.h"
+#include "fmt/core.h"
 #include "gflags/gflags.h"
 
 #define SEGMENT_OPEN_PATTERN "log_inprogress_%020" PRId64
@@ -741,6 +746,34 @@ braft::LogEntry* SegmentLogStorage::get_entry(const int64_t index) {
   return segment->Get(index);
 }
 
+std::vector<std::shared_ptr<LogEntry>> SegmentLogStorage::GetEntrys(int64_t begin_index, int64_t end_index) {
+  auto segments = GetSegments(begin_index, end_index);
+  if (segments.empty()) {
+    return {};
+  }
+
+  std::vector<std::shared_ptr<LogEntry>> log_entrys;
+  for (auto& segment : segments) {
+    for (int i = segment->FirstIndex(); i <= segment->LastIndex(); ++i) {
+      if (i < begin_index || i > end_index) {
+        continue;
+      }
+      auto* log_entry = segment->Get(i);
+      if (log_entry != nullptr) {
+        if (log_entry->type == braft::ENTRY_TYPE_DATA) {
+          auto tmp_log_entry = std::make_shared<LogEntry>();
+          tmp_log_entry->term = log_entry->id.term;
+          tmp_log_entry->index = log_entry->id.index;
+          tmp_log_entry->data.swap(log_entry->data);
+          log_entrys.push_back(tmp_log_entry);
+        }
+      }
+    }
+  }
+
+  return log_entrys;
+}
+
 int64_t SegmentLogStorage::get_term(const int64_t index) {
   std::shared_ptr<Segment> segment = GetSegment(index);
   return (segment == nullptr) ? 0 : segment->GetTerm(index);
@@ -784,6 +817,14 @@ int SegmentLogStorage::truncate_prefix(const int64_t first_index_kept) {
                      << " >= first_index_kept=" << first_index_kept;
     return 0;
   }
+
+  // int64_t allow_destroy_log_index = allow_destroy_log_index_.load(std::memory_order_relaxed);
+  // if (first_index_kept >= allow_destroy_log_index) {
+  //   DINGO_LOG(DEBUG) << fmt::format("Not allow truncate prefix, first_index_kept({})>=allow_destroy_log_index_({})",
+  //                                   first_index_kept, allow_destroy_log_index);
+  //   return 0;
+  // }
+
   // NOTE: truncate_prefix is not important, as it has nothing to do with
   // consensus. We try to save meta on the disk first to make sure even if
   // the deleting fails or the process crashes (which is unlikely to happen).
@@ -1162,6 +1203,35 @@ std::shared_ptr<Segment> SegmentLogStorage::GetSegment(int64_t index) {
   }
 
   return nullptr;
+}
+
+std::vector<std::shared_ptr<Segment>> SegmentLogStorage::GetSegments(int64_t begin_index, int64_t end_index) {
+  BAIDU_SCOPED_LOCK(mutex_);
+  int64_t first_index = first_log_index();
+  int64_t last_index = last_log_index();
+  if (first_index == last_index + 1) {
+    return {};
+  }
+
+  if (end_index < first_index || begin_index > last_index) {
+    DINGO_LOG(WARNING) << fmt::format(
+        "Attempted to access entry {}-{} outside of log, first_log_index: {} last_log_index: {}", begin_index,
+        end_index, first_index, last_index);
+    return {};
+  }
+
+  std::vector<std::shared_ptr<Segment>> segments;
+  for (auto& [_, segment] : segments_) {
+    if (begin_index <= segment->LastIndex() || segment->FirstIndex() <= end_index) {
+      segments.push_back(segment);
+    }
+  }
+
+  if (begin_index <= open_segment_->LastIndex() || open_segment_->FirstIndex() <= end_index) {
+    segments.push_back(open_segment_);
+  }
+
+  return segments;
 }
 
 void SegmentLogStorage::list_files(std::vector<std::string>* seg_files) {

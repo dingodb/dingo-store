@@ -15,6 +15,7 @@
 #ifndef DINGODB_SEGMENT_LOG_STORAGE_H_
 #define DINGODB_SEGMENT_LOG_STORAGE_H_
 
+#include <atomic>
 #include <map>
 #include <memory>
 #include <vector>
@@ -27,6 +28,13 @@
 #include "butil/logging.h"
 
 namespace dingodb {
+
+struct LogEntry {
+  int64_t index;
+  int64_t term;
+
+  butil::IOBuf data;
+};
 
 class BAIDU_CACHELINE_ALIGNMENT Segment {
  public:
@@ -149,6 +157,9 @@ class SegmentLogStorage : public braft::LogStorage {
   // get logentry by index
   virtual braft::LogEntry* get_entry(const int64_t index);
 
+  // [begin_index, end_index]
+  std::vector<std::shared_ptr<LogEntry>> GetEntrys(int64_t begin_index, int64_t end_index);
+
   // get logentry's term by index
   virtual int64_t get_term(const int64_t index);
 
@@ -179,6 +190,10 @@ class SegmentLogStorage : public braft::LogStorage {
 
   void sync();
 
+  void SetAllowDestroyLogIndex(int64_t allow_destroy_log_index) {
+    allow_destroy_log_index_.store(allow_destroy_log_index, std::memory_order_relaxed);
+  }
+
  private:
   std::shared_ptr<Segment> OpenSegment();
   int SaveMeta(int64_t log_index);
@@ -186,12 +201,14 @@ class SegmentLogStorage : public braft::LogStorage {
   int ListSegments(bool is_empty);
   int LoadSegments(braft::ConfigurationManager* configuration_manager);
   std::shared_ptr<Segment> GetSegment(int64_t log_index);
+  std::vector<std::shared_ptr<Segment>> GetSegments(int64_t begin_index, int64_t end_index);
   void PopSegments(int64_t first_index_kept, std::vector<std::shared_ptr<Segment>>& poppeds);
   std::shared_ptr<Segment> PopSegmentsFromBack(int64_t last_index_kept, std::vector<std::shared_ptr<Segment>>& poppeds);
 
   std::string path_;
   butil::atomic<int64_t> first_log_index_;
   butil::atomic<int64_t> last_log_index_;
+  butil::atomic<int64_t> allow_destroy_log_index_;
 
   bthread::Mutex mutex_;
   SegmentMap segments_;
