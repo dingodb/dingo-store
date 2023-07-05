@@ -436,7 +436,16 @@ void VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr reg
   try {
     auto vector_index_manager = Server::GetInstance()->GetVectorIndexManager();
     auto vector_index = vector_index_manager->GetVectorIndex(region->Id());
-    if (vector_index != nullptr && log_id > vector_index->ApplyLogIndex()) {
+
+    // if vector_index is nullptr, return internal error
+    if (vector_index == nullptr) {
+      DINGO_LOG(ERROR) << fmt::format("vector_index is nullptr, region_id={}", region->Id());
+      status =
+          butil::Status(pb::error::EINTERNAL, "Internal error, vector_index is nullptr, region_id=[%ld]", region->Id());
+      return;
+    }
+
+    if (log_id > vector_index->ApplyLogIndex()) {
       for (const auto &vector : request.vectors()) {
         vector_index->Add(vector);
       }
@@ -450,7 +459,7 @@ void VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr reg
   }
 
   // Store vector
-  if (!kvs.empty()) {
+  if ((!kvs.empty()) && status.ok()) {
     auto writer = engine->NewWriter(request.cf_name());
     status = writer->KvBatchPut(kvs);
   }
@@ -500,7 +509,16 @@ void VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr 
   try {
     auto vector_index_manager = Server::GetInstance()->GetVectorIndexManager();
     auto vector_index = vector_index_manager->GetVectorIndex(region->Id());
-    if (vector_index != nullptr && log_id > vector_index->ApplyLogIndex()) {
+
+    // if vector_index is nullptr, return internal error
+    if (vector_index == nullptr) {
+      DINGO_LOG(ERROR) << fmt::format("vector_index is nullptr, region_id={}", region->Id());
+      status =
+          butil::Status(pb::error::EINTERNAL, "Internal error, vector_index is nullptr, region_id=[%ld]", region->Id());
+      return;
+    }
+
+    if (log_id > vector_index->ApplyLogIndex()) {
       for (const auto &vector_id : request.ids()) {
         vector_index->Delete(vector_id);
       }
@@ -513,7 +531,7 @@ void VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr 
   }
 
   // Delete vector and write wal
-  if ((!kvs_delete.empty()) || (!kvs_put.empty())) {
+  if (status.ok() && ((!kvs_delete.empty()) || (!kvs_put.empty()))) {
     auto writer = engine->NewWriter(request.cf_name());
     status = writer->KvBatchPutAndDelete(kvs_put, kvs_delete);
   }
