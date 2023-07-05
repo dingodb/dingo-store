@@ -117,7 +117,7 @@ class RaftStoreEngine : public Engine, public RaftControlAble {
 
     butil::Status VectorBatchQuery(std::shared_ptr<Context> ctx, std::vector<uint64_t> vector_ids,
                                    bool is_need_metadata, std::vector<std::string> selected_meta_keys,
-                                   std::vector<pb::common::VectorWithId>& vector_with_ids);
+                                   std::vector<pb::common::VectorWithId>& vector_with_ids) override;
 
    private:
     butil::Status QueryVectorWithId(uint64_t region_id, uint64_t vector_id, pb::common::VectorWithId& vector_with_id);

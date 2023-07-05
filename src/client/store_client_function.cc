@@ -97,9 +97,24 @@ void SendVectorAdd(ServerInteractionPtr interaction, uint64_t region_id, uint32_
 
     vector_with_id->mutable_metadata()->mutable_metadata()->insert({"name", fmt::format("name{}", i)});
 
-    for (int k = 0; k < 3; ++k) {
+    for (int k = 0; k < 2; ++k) {
       vector_with_id->mutable_metadata()->mutable_metadata()->insert(
-          {fmt::format("key{}", k), fmt::format("value{}", k)});
+          {fmt::format("meta_key{}", k), fmt::format("meta_value{}", k)});
+    }
+
+    for (int k = 0; k < 2; ++k) {
+      auto* scalar_data = vector_with_id->mutable_scalar_data()->mutable_scalar_data();
+      dingodb::pb::common::ScalarValue scalar_value;
+      scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::STRING);
+      scalar_value.add_fields()->set_string_data(fmt::format("scalar_value{}", k));
+      (*scalar_data)[fmt::format("scalar_key{}", k)] = scalar_value;
+    }
+    for (int k = 2; k < 4; ++k) {
+      auto* scalar_data = vector_with_id->mutable_scalar_data()->mutable_scalar_data();
+      dingodb::pb::common::ScalarValue scalar_value;
+      scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::INT64);
+      scalar_value.add_fields()->set_long_data(k);
+      (*scalar_data)[fmt::format("scalar_key{}", k)] = scalar_value;
     }
   }
 

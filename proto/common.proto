@@ -76,14 +76,18 @@ message Vector {
 }
 
 message VectorMetadata {
-  map<string, bytes> metadata = 3;
+  map<string, bytes> metadata = 1;
+}
+
+message VectorScalardata {
+  map<string, ScalarValue> scalar_data = 1;  // scalar data of this vector, key: scalar key, value: scalar value data.
 }
 
 message VectorWithId {
   uint64 id = 1;
-  Vector vector = 2;                         // vector data
-  VectorMetadata metadata = 3;               // metadata of this vector
-  map<string, ScalarValue> scalar_data = 4;  // scalar data of this vector, key: scalar key, value: scalar value data.
+  Vector vector = 2;                 // vector data
+  VectorMetadata metadata = 3;       // metadata of this vector
+  VectorScalardata scalar_data = 4;  // scalar data of this vector, key: scalar key, value: scalar value data.
 }
 
 message VectorWithDistance {

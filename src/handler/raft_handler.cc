@@ -421,6 +421,15 @@ void VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr reg
       kv.set_value(vector.metadata().SerializeAsString());
       kvs.push_back(kv);
     }
+    // vector scalardata
+    {
+      pb::common::KeyValue kv;
+      std::string key;
+      VectorCodec::EncodeVectorScalar(region->Id(), vector.id(), key);
+      kv.mutable_key()->swap(key);
+      kv.set_value(vector.scalar_data().SerializeAsString());
+      kvs.push_back(kv);
+    }
   }
 
   // Add vector to index
@@ -470,6 +479,12 @@ void VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr 
     {
       std::string key;
       VectorCodec::EncodeVectorMeta(region->Id(), vector_id, key);
+      keys.push_back(key);
+    }
+
+    {
+      std::string key;
+      VectorCodec::EncodeVectorScalar(region->Id(), vector_id, key);
       keys.push_back(key);
     }
   }

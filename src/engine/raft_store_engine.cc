@@ -331,29 +331,56 @@ butil::Status RaftStoreEngine::VectorReader::SearchVector(
 butil::Status RaftStoreEngine::VectorReader::QueryVectorMetaData(uint64_t region_id,
                                                                  std::vector<std::string> selected_meta_keys,
                                                                  pb::common::VectorWithId& vector_with_id) {
-  // get metadata by parameter
-  std::string key;
-  VectorCodec::EncodeVectorMeta(region_id, vector_with_id.id(), key);
+  std::string key, value;
 
-  std::string value;
-  auto status = reader_->KvGet(key, value);
-  if (!status.ok()) {
-    return status;
-  }
+  // get metadata
+  {
+    VectorCodec::EncodeVectorMeta(region_id, vector_with_id.id(), key);
 
-  pb::common::VectorMetadata vector_metadata;
-  if (!vector_metadata.ParseFromString(value)) {
-    return butil::Status(pb::error::EINTERNAL, "Internal error, decode VectorMetadata failed");
-  }
-
-  auto* metadata = vector_with_id.mutable_metadata()->mutable_metadata();
-  for (const auto& [key, value] : vector_metadata.metadata()) {
-    if (!selected_meta_keys.empty() &&
-        std::find(selected_meta_keys.begin(), selected_meta_keys.end(), key) == selected_meta_keys.end()) {
-      continue;
+    auto status = reader_->KvGet(key, value);
+    if (!status.ok()) {
+      return status;
     }
 
-    metadata->insert({key, value});
+    pb::common::VectorMetadata vector_metadata;
+    if (!vector_metadata.ParseFromString(value)) {
+      return butil::Status(pb::error::EINTERNAL, "Internal error, decode VectorMetadata failed");
+    }
+
+    auto* metadata = vector_with_id.mutable_metadata()->mutable_metadata();
+    for (const auto& [key, value] : vector_metadata.metadata()) {
+      if (!selected_meta_keys.empty() &&
+          std::find(selected_meta_keys.begin(), selected_meta_keys.end(), key) == selected_meta_keys.end()) {
+        continue;
+      }
+
+      metadata->insert({key, value});
+    }
+  }
+
+  // get scalardata
+  {
+    VectorCodec::EncodeVectorScalar(region_id, vector_with_id.id(), key);
+
+    auto status = reader_->KvGet(key, value);
+    if (!status.ok()) {
+      return status;
+    }
+
+    pb::common::VectorScalardata vector_scalar;
+    if (!vector_scalar.ParseFromString(value)) {
+      return butil::Status(pb::error::EINTERNAL, "Internal error, decode VectorScalar failed");
+    }
+
+    auto* scalar = vector_with_id.mutable_scalar_data()->mutable_scalar_data();
+    for (const auto& [key, value] : vector_scalar.scalar_data()) {
+      if (!selected_meta_keys.empty() &&
+          std::find(selected_meta_keys.begin(), selected_meta_keys.end(), key) == selected_meta_keys.end()) {
+        continue;
+      }
+
+      scalar->insert({key, value});
+    }
   }
 
   return butil::Status();
