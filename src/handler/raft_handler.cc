@@ -421,17 +421,6 @@ void VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr reg
       kv.set_value(vector.metadata().SerializeAsString());
       kvs.push_back(kv);
     }
-    // vector wal
-    {
-      // write wal data of vector
-      pb::common::KeyValue kv;
-      std::string wal_key;
-      VectorCodec::EncodeVectorWal(region->Id(), vector.id(), log_id, wal_key);
-
-      kv.mutable_key()->swap(wal_key);
-      kv.set_value(vector.vector().SerializeAsString());
-      kvs.push_back(kv);
-    }
   }
 
   // Add vector to index
@@ -482,19 +471,6 @@ void VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr 
       std::string key;
       VectorCodec::EncodeVectorMeta(region->Id(), vector_id, key);
       keys.push_back(key);
-    }
-
-    {
-      // vector wal
-      {
-        // write wal data of vector
-        pb::common::KeyValue kv;
-        std::string wal_key;
-        VectorCodec::EncodeVectorWal(region->Id(), vector_id, log_id, wal_key);
-
-        kv.mutable_key()->swap(wal_key);
-        kvs_put.push_back(kv);
-      }
     }
   }
 

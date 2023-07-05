@@ -39,7 +39,8 @@ RaftNode::RaftNode(uint64_t node_id, const std::string& raft_group_name, braft::
       str_node_id_(std::to_string(node_id)),
       raft_group_name_(raft_group_name),
       node_(new braft::Node(raft_group_name, peer_id)),
-      fsm_(fsm) {}
+      fsm_(fsm),
+      log_storage_(nullptr) {}
 
 RaftNode::~RaftNode() {
   if (fsm_) {
@@ -66,8 +67,9 @@ int RaftNode::Init(const std::string& init_conf, std::shared_ptr<Config> config)
   node_options.raft_meta_uri = "local://" + path_ + "/raft_meta";
   node_options.snapshot_uri = "local://" + path_ + "/snapshot";
   node_options.disable_cli = false;
-  node_options.log_storage = new SegmentLogStorage(path_ + "/log");
-  node_options.node_owns_log_storage = true;
+  log_storage_ = std::make_shared<SegmentLogStorage>(path_ + "/log");
+  node_options.log_storage = log_storage_.get();
+  node_options.node_owns_log_storage = false;
 
   if (node_->init(node_options) != 0) {
     DINGO_LOG(ERROR) << "Fail to init raft node " << node_id_;

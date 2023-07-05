@@ -21,10 +21,13 @@
 
 #include "common/logging.h"
 #include "fmt/core.h"
+#include "log/segment_log_storage.h"
 #include "proto/error.pb.h"
+#include "proto/raft.pb.h"
 #include "server/server.h"
 #include "vector/codec.h"
 #include "vector/vector_index.h"
+
 namespace dingodb {
 
 bool VectorIndexManager::Init(std::vector<store::RegionPtr> regions) {
@@ -90,17 +93,18 @@ std::shared_ptr<VectorIndex> VectorIndexManager::GetVectorIndex(uint64_t region_
 }
 
 // Load vector index for already exist vector index at bootstrap.
+// Priority load from snapshot, if snapshot not exist then load from rocksdb.
 butil::Status VectorIndexManager::LoadVectorIndex(store::RegionPtr region) {
   assert(region != nullptr);
 
   std::shared_ptr<VectorIndex> vector_index;
 
-  // try to LoadVectorIndexFromDisk
-  vector_index = LoadVectorIndexFromDisk(region);
-  if (vector_index) {
+  // try to LoadVectorIndexFromSnapshot
+  vector_index = LoadVectorIndexFromSnapshot(region);
+  if (vector_index != nullptr) {
     // replay wal
     DINGO_LOG(INFO) << fmt::format("Load vector index from disk, id {} success, will ReplayWal", region->Id());
-    auto status = ReplayValToVectorIndex(vector_index, vector_index->ApplyLogIndex() + 1, UINT64_MAX);
+    auto status = ReplayWalToVectorIndex(vector_index, vector_index->ApplyLogIndex() + 1, UINT64_MAX);
     if (status.ok()) {
       DINGO_LOG(INFO) << fmt::format("ReplayWal success, id {}, log_id {}", region->Id(),
                                      vector_index->ApplyLogIndex());
@@ -110,11 +114,12 @@ butil::Status VectorIndexManager::LoadVectorIndex(store::RegionPtr region) {
     }
   }
 
-  DINGO_LOG(INFO) << fmt::format("Load vector index from disk, id {} failed, will build vector_index", region->Id());
+  DINGO_LOG(INFO) << fmt::format("Load vector index from snapshot, id {} failed, will build vector_index",
+                                 region->Id());
 
-  // build a new vector_index from scratch
+  // build a new vector_index from rocksdb
   vector_index = BuildVectorIndex(region);
-  if (!vector_index) {
+  if (vector_index == nullptr) {
     DINGO_LOG(WARNING) << fmt::format("Build vector index failed, id {}", region->Id());
     return butil::Status(pb::error::Errno::EINTERNAL, "Build vector index failed");
   }
@@ -128,7 +133,7 @@ butil::Status VectorIndexManager::LoadVectorIndex(store::RegionPtr region) {
 }
 
 // Load vector index for already exist vector index at bootstrap.
-std::shared_ptr<VectorIndex> VectorIndexManager::LoadVectorIndexFromDisk(store::RegionPtr region) {
+std::shared_ptr<VectorIndex> VectorIndexManager::LoadVectorIndexFromSnapshot(store::RegionPtr region) {
   assert(region != nullptr);
 
   // read vector index file log_id
@@ -189,71 +194,50 @@ std::shared_ptr<VectorIndex> VectorIndexManager::LoadVectorIndexFromDisk(store::
 }
 
 // Replay vector index from wal
-butil::Status VectorIndexManager::ReplayValToVectorIndex(std::shared_ptr<VectorIndex> vector_index,
+butil::Status VectorIndexManager::ReplayWalToVectorIndex(std::shared_ptr<VectorIndex> vector_index,
                                                          uint64_t start_log_id, uint64_t end_log_id) {
   assert(vector_index != nullptr);
 
   DINGO_LOG(INFO) << fmt::format("Replay vector index {} from log id {} to log id {}", vector_index->Id(), start_log_id,
                                  end_log_id);
 
-  std::string start_key;
-  std::string end_key;
+  auto engine = Server::GetInstance()->GetEngine();
+  if (engine->GetID() != pb::common::ENG_RAFT_STORE) {
+    return butil::Status(pb::error::Errno::EINTERNAL, "Engine is not raft store.");
+  }
+  auto raft_kv_engine = std::dynamic_pointer_cast<RaftStoreEngine>(engine);
+  auto node = raft_kv_engine->GetNode(vector_index->Id());
+  if (node == nullptr) {
+    return butil::Status(pb::error::Errno::ERAFT_NOT_FOUND, fmt::format("Not found node {}", vector_index->Id()));
+  }
 
-  VectorCodec::EncodeVectorWal(vector_index->Id(), 0, start_log_id, start_key);
-  VectorCodec::EncodeVectorWal(vector_index->Id(), UINT64_MAX, end_log_id, end_key);
+  auto log_stroage = std::dynamic_pointer_cast<SegmentLogStorage>(node->LogStorage());
+  if (log_stroage == nullptr) {
+    return butil::Status(pb::error::Errno::EINTERNAL, fmt::format("Not found log stroage {}", vector_index->Id()));
+  }
 
-  IteratorOptions options;
-  options.lower_bound = start_key;
-  options.upper_bound = end_key;
-  auto iter = raw_engine_->NewIterator(Constant::kStoreDataCF, options);
-
-  // replay vector wal data to vector index
   uint64_t last_log_id = vector_index->ApplyLogIndex();
-  for (iter->Seek(start_key); iter->Valid(); iter->Next()) {
-    pb::common::VectorWithId vector;
-
-    std::string key(iter->Key());
-    uint64_t vector_id = 0;
-    uint64_t log_id = 0;
-    VectorCodec::DecodeVectorWal(key, vector_id, log_id);
-
-    if (log_id >= last_log_id) {
-      last_log_id = log_id;
-    } else {
-      DINGO_LOG(WARNING) << fmt::format(
-          "Replay vector index {} from log id {} to log id {}, now log id {}, last_log_id {}, vector id {}",
-          vector_index->Id(), start_log_id, end_log_id, log_id, last_log_id, vector_id);
-      continue;
+  auto log_entrys = log_stroage->GetEntrys(start_log_id, end_log_id);
+  for (const auto& log_entry : log_entrys) {
+    auto raft_cmd = std::make_shared<pb::raft::RaftCmdRequest>();
+    butil::IOBufAsZeroCopyInputStream wrapper(log_entry->data);
+    CHECK(raft_cmd->ParseFromZeroCopyStream(&wrapper));
+    for (const auto& request : raft_cmd->requests()) {
+      switch (request.cmd_type()) {
+        case pb::raft::VECTOR_ADD:
+          for (const auto& vector_with_id : request.vector_add().vectors()) {
+            vector_index->Add(vector_with_id);
+          }
+        case pb::raft::VECTOR_DELETE:
+          for (auto vector_id : request.vector_delete().ids()) {
+            vector_index->Delete(vector_id);
+          }
+        default:
+          break;
+      }
     }
 
-    DINGO_LOG(DEBUG) << fmt::format(
-        "Replay vector index {} from log id {} to log id {}, now log id {}, vector id {}, value size {}",
-        vector_index->Id(), start_log_id, end_log_id, log_id, vector_id, iter->Value().size());
-
-    vector.set_id(vector_id);
-
-    std::string value(iter->Value());
-
-    // vector deleted
-    if (value.empty() || value.length() == 0) {
-      DINGO_LOG(DEBUG) << fmt::format("Replay vector index vector delete, vector id {}, log_id {}", vector.id(),
-                                      log_id);
-      vector_index->Delete(vector.id());
-      continue;
-    }
-
-    if (!vector.mutable_vector()->ParseFromString(value)) {
-      DINGO_LOG(WARNING) << fmt::format("vector ParseFromString failed, id {}", vector.id());
-      continue;
-    }
-
-    if (vector.vector().float_values_size() <= 0) {
-      DINGO_LOG(WARNING) << fmt::format("vector values_size error, id {}", vector.id());
-      continue;
-    }
-
-    DINGO_LOG(DEBUG) << fmt::format("Replay vector index vector add, vector id {}, log_id {}", vector.id(), log_id);
-    vector_index->Add(vector);
+    last_log_id = log_entry->index;
   }
 
   vector_index->SetApplyLogIndex(last_log_id);
@@ -261,10 +245,10 @@ butil::Status VectorIndexManager::ReplayValToVectorIndex(std::shared_ptr<VectorI
   DINGO_LOG(INFO) << fmt::format("Replay vector index {} from log id {} to log id {} success, last_log_id {}",
                                  vector_index->Id(), start_log_id, end_log_id, last_log_id);
 
-  return butil::Status::OK();
+  return butil::Status();
 }
 
-// Build vector index from scratch
+// Build vector index with original all data(store rocksdb).
 std::shared_ptr<VectorIndex> VectorIndexManager::BuildVectorIndex(store::RegionPtr region) {
   assert(region != nullptr);
 
@@ -318,18 +302,18 @@ std::shared_ptr<VectorIndex> VectorIndexManager::BuildVectorIndex(store::RegionP
   return vector_index;
 }
 
-// Rebuild vector index from rocksdb
+// Rebuild vector index
 butil::Status VectorIndexManager::RebuildVectorIndex(store::RegionPtr region) {
   assert(region != nullptr);
 
-  // build a new vector_index from scratch
+  // Build vector index with original all data.
   auto vector_index = BuildVectorIndex(region);
-  if (!vector_index) {
+  if (vector_index == nullptr) {
     DINGO_LOG(WARNING) << fmt::format("Build vector index failed, id {}", region->Id());
     return butil::Status(pb::error::Errno::EINTERNAL, "Build vector index failed");
   }
 
-  auto status = ReplayValToVectorIndex(vector_index, vector_index->ApplyLogIndex() + 1, UINT64_MAX);
+  auto status = ReplayWalToVectorIndex(vector_index, vector_index->ApplyLogIndex() + 1, UINT64_MAX);
   if (status.ok()) {
     DINGO_LOG(INFO) << fmt::format("ReplayWal success first-round, id {}, log_id {}", region->Id(),
                                    vector_index->ApplyLogIndex());
@@ -339,20 +323,13 @@ butil::Status VectorIndexManager::RebuildVectorIndex(store::RegionPtr region) {
   }
 
   // TODO: need to lock vector_index add/delete, to catch up and switch to new vector_index
-  status = ReplayValToVectorIndex(vector_index, vector_index->ApplyLogIndex() + 1, UINT64_MAX);
+  status = ReplayWalToVectorIndex(vector_index, vector_index->ApplyLogIndex() + 1, UINT64_MAX);
   if (status.ok()) {
     DINGO_LOG(INFO) << fmt::format("ReplayWal success catch up, id {}, log_id {}", region->Id(),
                                    vector_index->ApplyLogIndex());
     // set vector index to vector index map
     vector_indexs_.Put(region->Id(), vector_index);
     return status;
-  }
-
-  // save index to disk
-  auto ret = SaveVectorIndex(vector_index);
-  if (!ret.ok()) {
-    DINGO_LOG(WARNING) << fmt::format("Save vector index failed, id {}", region->Id());
-    return ret;
   }
 
   // add vector index to vector index map
