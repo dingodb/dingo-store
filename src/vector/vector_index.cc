@@ -14,4 +14,6 @@
 
 #include "vector/vector_index.h"
 
-namespace dingodb {}  // namespace dingodb
+namespace dingodb {
+VectorIndex::~VectorIndex() = default;
+}  // namespace dingodb
