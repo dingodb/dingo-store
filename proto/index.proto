@@ -69,21 +69,14 @@ message VectorDeleteResponse {
   dingodb.pb.error.Error error = 1;
 }
 
-message CalcDistanceRequest {
+message VectorGetBorderIdRequest {
   uint64 region_id = 1;
-  dingodb.pb.common.MetricType metric_type = 2;
-
-  // target vector target vector
-  dingodb.pb.common.Vector target_vector = 3;
-
-  // source vectors source vectors Each source will calculate the distance from the target vector according to the
-  // algorithm
-  repeated dingodb.pb.common.Vector source_vectors = 4;
+  bool get_min = 2;  // if true, get min id, else get max id
 }
 
-message CalcDistanceResponse {
+message VectorGetBorderIdResponse {
   dingodb.pb.error.Error error = 1;
-  repeated float distances = 2;
+  uint64 id = 2;
 }
 
 service IndexService {
@@ -92,5 +85,5 @@ service IndexService {
   rpc VectorBatchQuery(VectorBatchQueryRequest) returns (VectorBatchQueryResponse);
   rpc VectorSearch(VectorSearchRequest) returns (VectorSearchResponse);
   rpc VectorDelete(VectorDeleteRequest) returns (VectorDeleteResponse);
-  rpc CalcDistance(CalcDistanceRequest) returns (CalcDistanceResponse);
+  rpc VectorGetBorderId(VectorGetBorderIdRequest) returns (VectorGetBorderIdResponse);
 };

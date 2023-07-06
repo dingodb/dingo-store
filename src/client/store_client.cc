@@ -215,6 +215,10 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
       client::SendVectorAdd(ctx->store_interaction, FLAGS_region_id, FLAGS_dimension, FLAGS_count);
     } else if (method == "VectorDelete") {
       client::SendVectorDelete(ctx->store_interaction, FLAGS_region_id, FLAGS_count);
+    } else if (method == "VectorGetMaxId") {
+      client::SendVectorGetMaxId(ctx->store_interaction, FLAGS_region_id);
+    } else if (method == "VectorGetMinId") {
+      client::SendVectorGetMinId(ctx->store_interaction, FLAGS_region_id);
     }
 
     // Test

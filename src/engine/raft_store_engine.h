@@ -119,6 +119,8 @@ class RaftStoreEngine : public Engine, public RaftControlAble {
                                    bool is_need_metadata, std::vector<std::string> selected_meta_keys,
                                    std::vector<pb::common::VectorWithId>& vector_with_ids) override;
 
+    butil::Status VectorGetBorderId(std::shared_ptr<Context> ctx, uint64_t& id, bool get_min) override;
+
    private:
     butil::Status QueryVectorWithId(uint64_t region_id, uint64_t vector_id, pb::common::VectorWithId& vector_with_id);
     butil::Status SearchVector(uint64_t region_id, const pb::common::VectorWithId& vector,
