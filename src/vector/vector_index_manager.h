@@ -68,6 +68,8 @@ class VectorIndexManager : public TransformKvAble {
   void UpdateApplyLogIndex(std::shared_ptr<VectorIndex> vector_index, uint64_t apply_log_index);
   void UpdateApplyLogIndex(uint64_t region_id, uint64_t apply_log_index);
 
+  butil::Status GetBorderId(uint64_t region_id, uint64_t& border_id, bool get_min);
+
  private:
   std::shared_ptr<pb::common::KeyValue> TransformToKv(std::any obj) override;
   void TransformFromKv(const std::vector<pb::common::KeyValue>& kvs) override;

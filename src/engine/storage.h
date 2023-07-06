@@ -71,6 +71,7 @@ class Storage {
                              const pb::common::VectorSearchParameter& parameter,
                              std::vector<pb::common::VectorWithDistance>& results);
   butil::Status VectorDelete(std::shared_ptr<Context> ctx, const std::vector<uint64_t>& ids);
+  butil::Status VectorGetBorderId(std::shared_ptr<Context> ctx, uint64_t& id, bool get_min);
 
  private:
   butil::Status ValidateLeader(uint64_t region_id);

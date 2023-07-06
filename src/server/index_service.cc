@@ -263,6 +263,54 @@ void IndexServiceImpl::VectorDelete(google::protobuf::RpcController* controller,
   }
 }
 
+butil::Status ValidateVectorGetBorderIdRequest(const dingodb::pb::index::VectorGetBorderIdRequest* request) {
+  if (request->region_id() == 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id is error");
+  }
+
+  return ServiceHelper::ValidateIndexRegion(request->region_id());
+}
+
+void IndexServiceImpl::VectorGetBorderId(google::protobuf::RpcController* controller,
+                                         const pb::index::VectorGetBorderIdRequest* request,
+                                         pb::index::VectorGetBorderIdResponse* response,
+                                         google::protobuf::Closure* done) {
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(done);
+
+  DINGO_LOG(DEBUG) << "VectorGetBorderId request: " << request->ShortDebugString();
+
+  butil::Status status = ValidateVectorGetBorderIdRequest(request);
+  if (!status.ok()) {
+    auto* err = response->mutable_error();
+    err->set_errcode(static_cast<Errno>(status.error_code()));
+    err->set_errmsg(status.error_str());
+    DINGO_LOG(ERROR) << fmt::format("VectorGetBorderId request: {} response: {}", request->ShortDebugString(),
+                                    response->ShortDebugString());
+    return;
+  }
+
+  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
+  ctx->SetRegionId(request->region_id()).SetCfName(Constant::kStoreDataCF);
+
+  uint64_t border_id = 0;
+  status = storage_->VectorGetBorderId(ctx, border_id, request->get_min());
+  if (!status.ok()) {
+    auto* err = response->mutable_error();
+    err->set_errcode(static_cast<Errno>(status.error_code()));
+    err->set_errmsg(status.error_str());
+    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+      err->set_errmsg("Not leader, please redirect leader.");
+      ServiceHelper::RedirectLeader(status.error_str(), response);
+    }
+    DINGO_LOG(ERROR) << fmt::format("VectorGetBorderId request: {} response: {}", request->ShortDebugString(),
+                                    response->ShortDebugString());
+    return;
+  }
+
+  response->set_id(border_id);
+}
+
 void IndexServiceImpl::SetStorage(std::shared_ptr<Storage> storage) { storage_ = storage; }
 
 }  // namespace dingodb

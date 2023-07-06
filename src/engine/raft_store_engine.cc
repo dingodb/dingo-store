@@ -462,6 +462,19 @@ butil::Status RaftStoreEngine::VectorReader::VectorBatchQuery(std::shared_ptr<Co
   return butil::Status();
 }
 
+butil::Status RaftStoreEngine::VectorReader::VectorGetBorderId(std::shared_ptr<Context> ctx, uint64_t& id,
+                                                               bool get_min) {
+  auto vector_index_mgr = Server::GetInstance()->GetVectorIndexManager();
+
+  auto status = vector_index_mgr->GetBorderId(ctx->RegionId(), id, get_min);
+  if (!status.ok()) {
+    DINGO_LOG(INFO) << "Failed to get border id: " << status.error_str();
+    return status;
+  }
+
+  return butil::Status();
+}
+
 std::shared_ptr<Engine::VectorReader> RaftStoreEngine::NewVectorReader(const std::string& cf_name) {
   return std::make_shared<RaftStoreEngine::VectorReader>(engine_->NewReader(cf_name));
 }

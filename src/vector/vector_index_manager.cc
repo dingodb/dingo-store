@@ -19,6 +19,7 @@
 #include <memory>
 #include <string>
 
+#include "butil/status.h"
 #include "common/logging.h"
 #include "fmt/core.h"
 #include "log/segment_log_storage.h"
@@ -492,6 +493,44 @@ void VectorIndexManager::GetVectorIndexLogIndex(uint64_t region_id, uint64_t& sn
   if (ret < 0) {
     DINGO_LOG(ERROR) << fmt::format("DecodeVectorIndexLogIndex failed, region_id {}", region_id);
   }
+}
+
+// GetBorderId
+butil::Status VectorIndexManager::GetBorderId(uint64_t region_id, uint64_t& border_id, bool get_min) {
+  std::string start_key;
+  std::string end_key;
+  VectorCodec::EncodeVectorId(region_id, 0, start_key);
+  VectorCodec::EncodeVectorId(region_id, UINT64_MAX, end_key);
+
+  IteratorOptions options;
+  options.lower_bound = start_key;
+  options.upper_bound = end_key;
+
+  auto iter = raw_engine_->NewIterator(Constant::kStoreDataCF, options);
+  if (iter == nullptr) {
+    DINGO_LOG(INFO) << fmt::format("NewIterator failed, region_id {}", region_id);
+    return butil::Status(pb::error::Errno::EINTERNAL, "NewIterator failed");
+  }
+
+  if (get_min) {
+    for (iter->Seek(start_key); iter->Valid(); iter->Next()) {
+      pb::common::VectorWithId vector;
+
+      std::string key(iter->Key());
+      border_id = VectorCodec::DecodeVectorId(key);
+      break;
+    }
+  } else {
+    for (iter->SeekForPrev(end_key); iter->Valid(); iter->Prev()) {
+      pb::common::VectorWithId vector;
+
+      std::string key(iter->Key());
+      border_id = VectorCodec::DecodeVectorId(key);
+      break;
+    }
+  }
+
+  return butil::Status::OK();
 }
 
 }  // namespace dingodb

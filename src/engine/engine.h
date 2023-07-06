@@ -83,6 +83,8 @@ class Engine {
     virtual butil::Status VectorBatchQuery(std::shared_ptr<Context> ctx, std::vector<uint64_t> vector_ids,
                                            bool is_need_metadata, std::vector<std::string> selected_meta_keys,
                                            std::vector<pb::common::VectorWithId>& vector_with_ids) = 0;
+
+    virtual butil::Status VectorGetBorderId(std::shared_ptr<Context> ctx, uint64_t& id, bool get_min) = 0;
   };
 
   virtual std::shared_ptr<Reader> NewReader(const std::string& cf_name) = 0;

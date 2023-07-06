@@ -90,7 +90,7 @@ void SendVectorAdd(ServerInteractionPtr interaction, uint64_t region_id, uint32_
   request.set_region_id(region_id);
   for (int i = 1; i <= count; ++i) {
     auto* vector_with_id = request.add_vectors();
-    vector_with_id->set_id(i);
+    vector_with_id->set_id(i + 1000);
     for (int j = 0; j < dimension; j++) {
       vector_with_id->mutable_vector()->add_float_values(1.0 * dingodb::Helper::GenerateRandomInteger(0, 100) / 10);
     }
@@ -129,12 +129,35 @@ void SendVectorDelete(ServerInteractionPtr interaction, uint64_t region_id, uint
 
   request.set_region_id(region_id);
   for (int i = 1; i <= count; ++i) {
-    request.add_ids(i);
+    request.add_ids(i + 1000);
   }
 
   interaction->SendRequest("IndexService", "VectorDelete", request, response);
 
   DINGO_LOG(INFO) << "VectorDelete response: " << response.DebugString();
+}
+
+void SendVectorGetMaxId(ServerInteractionPtr interaction, uint64_t region_id) {
+  dingodb::pb::index::VectorGetBorderIdRequest request;
+  dingodb::pb::index::VectorGetBorderIdResponse response;
+
+  request.set_region_id(region_id);
+
+  interaction->SendRequest("IndexService", "VectorGetBorderId", request, response);
+
+  DINGO_LOG(INFO) << "VectorGetBorderId response: " << response.DebugString();
+}
+
+void SendVectorGetMinId(ServerInteractionPtr interaction, uint64_t region_id) {
+  dingodb::pb::index::VectorGetBorderIdRequest request;
+  dingodb::pb::index::VectorGetBorderIdResponse response;
+
+  request.set_region_id(region_id);
+  request.set_get_min(true);
+
+  interaction->SendRequest("IndexService", "VectorGetBorderId", request, response);
+
+  DINGO_LOG(INFO) << "VectorGetBorderId response: " << response.DebugString();
 }
 
 void SendKvGet(ServerInteractionPtr interaction, uint64_t region_id, const std::string& key, std::string& value) {

@@ -35,6 +35,9 @@ class IndexServiceImpl : public pb::index::IndexService {
                  pb::index::VectorAddResponse* response, google::protobuf::Closure* done) override;
   void VectorDelete(google::protobuf::RpcController* controller, const pb::index::VectorDeleteRequest* request,
                     pb::index::VectorDeleteResponse* response, google::protobuf::Closure* done) override;
+  void VectorGetBorderId(google::protobuf::RpcController* controller,
+                         const pb::index::VectorGetBorderIdRequest* request,
+                         pb::index::VectorGetBorderIdResponse* response, google::protobuf::Closure* done) override;
 
   void SetStorage(std::shared_ptr<Storage> storage);
 
