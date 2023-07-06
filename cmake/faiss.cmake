@@ -38,6 +38,7 @@ ExternalProject_Add(
         -DCMAKE_PREFIX_PATH=${prefix_path}
         -DFAISS_ENABLE_GPU=OFF
         -DFAISS_ENABLE_PYTHON=OFF
+        -DBLA_STATIC=ON
         -DBUILD_TESTING=OFF
         -DBUILD_SHARED_LIBS=OFF
         ${EXTERNAL_OPTIONAL_ARGS}
