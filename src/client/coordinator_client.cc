@@ -77,6 +77,8 @@ DEFINE_string(state, "", "state string");
 DEFINE_bool(is_force, false, "force");
 DEFINE_int64(max_elements, 0, "max_elements");
 DEFINE_int64(dimension, 0, "dimension");
+DEFINE_int64(efconstruction, 0, "efconstruction");
+DEFINE_int64(nlinks, 0, "nlinks");
 DEFINE_bool(with_auto_increment, true, "with_auto_increment");
 
 std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction;
