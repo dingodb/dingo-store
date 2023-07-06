@@ -27,6 +27,7 @@
 #include "server/server.h"
 #include "vector/codec.h"
 #include "vector/vector_index.h"
+#include "vector/vector_index_factory.h"
 
 namespace dingodb {
 
@@ -71,7 +72,7 @@ bool VectorIndexManager::AddVectorIndex(uint64_t region_id, std::shared_ptr<Vect
 }
 
 bool VectorIndexManager::AddVectorIndex(uint64_t region_id, const pb::common::IndexParameter& index_parameter) {
-  auto vector_index = VectorIndex::New(region_id, index_parameter);
+  auto vector_index = VectorIndexFactory::New(region_id, index_parameter);
   if (vector_index == nullptr) {
     return false;
   }
@@ -174,7 +175,7 @@ std::shared_ptr<VectorIndex> VectorIndexManager::LoadVectorIndexFromSnapshot(sto
   }
 
   // create a new vector_index
-  auto vector_index = VectorIndex::New(region->Id(), region->InnerRegion().definition().index_parameter());
+  auto vector_index = VectorIndexFactory::New(region->Id(), region->InnerRegion().definition().index_parameter());
   if (!vector_index) {
     DINGO_LOG(WARNING) << fmt::format("New vector index failed, id {}", region->Id());
     return nullptr;
@@ -261,7 +262,7 @@ std::shared_ptr<VectorIndex> VectorIndexManager::BuildVectorIndex(store::RegionP
   options.lower_bound = start_key;
   options.upper_bound = end_key;
 
-  auto vector_index = VectorIndex::New(region->Id(), region->InnerRegion().definition().index_parameter());
+  auto vector_index = VectorIndexFactory::New(region->Id(), region->InnerRegion().definition().index_parameter());
   if (!vector_index) {
     DINGO_LOG(WARNING) << fmt::format("New vector index failed, id {}", region->Id());
     return nullptr;
