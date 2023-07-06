@@ -37,8 +37,8 @@ class VectorIndexHnsw : public VectorIndex {
  public:
   explicit VectorIndexHnsw(uint64_t id, const pb::common::VectorIndexParameter& vector_index_parameter)
       : VectorIndex(id, vector_index_parameter) {
-    if (vector_index_type_ == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
-      const auto& hnsw_parameter = vector_index_parameter_.hnsw_parameter();
+    if (vector_index_type == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
+      const auto& hnsw_parameter = vector_index_parameter.hnsw_parameter();
       assert(hnsw_parameter.dimension() > 0);
       assert(hnsw_parameter.metric_type() != pb::common::MetricType::METRIC_TYPE_NONE);
       assert(hnsw_parameter.efconstruction() > 0);
@@ -60,7 +60,7 @@ class VectorIndexHnsw : public VectorIndex {
   }
 
   ~VectorIndexHnsw() override {
-    if (vector_index_type_ == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
+    if (vector_index_type == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
       delete hnsw_index_;
       delete hnsw_space_;
     }
@@ -71,14 +71,10 @@ class VectorIndexHnsw : public VectorIndex {
   VectorIndexHnsw(VectorIndexHnsw&& rhs) = delete;
   VectorIndexHnsw& operator=(VectorIndexHnsw&& rhs) = delete;
 
-  butil::Status Add(const std::vector<pb::common::VectorWithId>& vector_with_ids) {
-    return VectorIndex::Add(vector_with_ids);
-  }
+  butil::Status Add(uint64_t id, const std::vector<float>& vector) override { return Upsert(id, vector); }
 
-  butil::Status Add(const pb::common::VectorWithId& vector_with_id) { return VectorIndex::Add(vector_with_id); }
-
-  butil::Status Add(uint64_t id, const std::vector<float>& vector) override {
-    if (vector_index_type_ == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
+  butil::Status Upsert(uint64_t id, const std::vector<float>& vector) override {
+    if (vector_index_type == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
       hnsw_index_->addPoint(vector.data(), id, true);
       return butil::Status::OK();
     } else {
@@ -87,7 +83,7 @@ class VectorIndexHnsw : public VectorIndex {
   }
 
   void Delete(uint64_t id) override {
-    if (vector_index_type_ == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
+    if (vector_index_type == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
       try {
         hnsw_index_->markDelete(id);
       } catch (std::exception& e) {
@@ -97,7 +93,7 @@ class VectorIndexHnsw : public VectorIndex {
   }
 
   butil::Status Save(const std::string& path) override {
-    if (vector_index_type_ == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
+    if (vector_index_type == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
       hnsw_index_->saveIndex(path);
       return butil::Status::OK();
     } else {
@@ -107,10 +103,10 @@ class VectorIndexHnsw : public VectorIndex {
 
   butil::Status Load(const std::string& path) override {
     // FIXME: need to prevent SEGV when delete old_hnsw_index
-    if (vector_index_type_ == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
+    if (vector_index_type == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
       auto* old_hnsw_index = hnsw_index_;
       hnsw_index_ = new hnswlib::HierarchicalNSW<float>(hnsw_space_, path, false,
-                                                        vector_index_parameter_.hnsw_parameter().max_elements(), true);
+                                                        vector_index_parameter.hnsw_parameter().max_elements(), true);
       delete old_hnsw_index;
       return butil::Status::OK();
     } else {
@@ -120,7 +116,7 @@ class VectorIndexHnsw : public VectorIndex {
 
   butil::Status Search(const std::vector<float>& vector, uint32_t topk,
                        std::vector<pb::common::VectorWithDistance>& results) override {
-    if (vector_index_type_ == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
+    if (vector_index_type == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
       // std::priority_queue<std::pair<float, uint64_t>> result = hnsw_index_->searchKnn(vector.data(), topk);
       std::priority_queue<std::pair<float, uint64_t>> result = hnsw_index_->searchKnn(vector.data(), topk);
 

@@ -445,11 +445,14 @@ void VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr reg
       return;
     }
 
+    // Check if the log_id is greater than the ApplyLogIndex of the vector index
     if (log_id > vector_index->ApplyLogIndex()) {
+      // If it is, then iterate over each vector in the request and upsert it into the vector index
       for (const auto &vector : request.vectors()) {
-        vector_index->Add(vector);
+        vector_index->Upsert(vector);
       }
 
+      // Update the ApplyLogIndex of the vector index to the current log_id
       vector_index_manager->UpdateApplyLogIndex(vector_index, log_id);
     }
 

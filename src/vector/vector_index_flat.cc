@@ -33,8 +33,8 @@ namespace dingodb {
 
 VectorIndexFlat::VectorIndexFlat(uint64_t id, const pb::common::VectorIndexParameter& vector_index_parameter)
     : VectorIndex(id, vector_index_parameter) {
-  metric_type_ = vector_index_parameter_.flat_parameter().metric_type();
-  dimension_ = vector_index_parameter_.flat_parameter().dimension();
+  metric_type_ = vector_index_parameter.flat_parameter().metric_type();
+  dimension_ = vector_index_parameter.flat_parameter().dimension();
 
   if (pb::common::MetricType::METRIC_TYPE_L2 == metric_type_) {
     raw_index_ = std::make_unique<faiss::IndexFlatL2>(dimension_);
@@ -50,14 +50,6 @@ VectorIndexFlat::VectorIndexFlat(uint64_t id, const pb::common::VectorIndexParam
 }
 
 VectorIndexFlat::~VectorIndexFlat() { index_->reset(); }
-
-butil::Status VectorIndexFlat::Add(const std::vector<pb::common::VectorWithId>& vector_with_ids) {
-  return VectorIndex::Add(vector_with_ids);
-}
-
-butil::Status VectorIndexFlat::Add(const pb::common::VectorWithId& vector_with_id) {
-  return VectorIndex::Add(vector_with_id);
-}
 
 butil::Status VectorIndexFlat::Add(uint64_t id, const std::vector<float>& vector) {
   // check

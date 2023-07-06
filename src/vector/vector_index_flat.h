@@ -50,14 +50,11 @@ class VectorIndexFlat : public VectorIndex {
   VectorIndexFlat(VectorIndexFlat&& rhs) = delete;
   VectorIndexFlat& operator=(VectorIndexFlat&& rhs) = delete;
 
-  butil::Status Add(const std::vector<pb::common::VectorWithId>& vector_with_ids) ;
-
-  butil::Status Add(const pb::common::VectorWithId& vector_with_id) ;
-
+  // in FLAT index, add two vector with same id will cause data conlict
   butil::Status Add(uint64_t id, const std::vector<float>& vector) override;
 
   // not exist add. if exist update
-  butil::Status Upsert(uint64_t id, const std::vector<float>& vector);
+  butil::Status Upsert(uint64_t id, const std::vector<float>& vector) override;
 
   void Delete(uint64_t id) override;
 
@@ -69,7 +66,7 @@ class VectorIndexFlat : public VectorIndex {
                        std::vector<pb::common::VectorWithDistance>& results) override;
 
   butil::Status Search(pb::common::VectorWithId vector_with_id, uint32_t topk,
-                       std::vector<pb::common::VectorWithDistance>& results) override ;
+                       std::vector<pb::common::VectorWithDistance>& results) override;
 
  private:
   // Dimension of the elements

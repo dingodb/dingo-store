@@ -35,20 +35,20 @@ namespace dingodb {
 class VectorIndex {
  public:
   VectorIndex(uint64_t id, const pb::common::VectorIndexParameter& vector_index_parameter)
-      : id_(id), apply_log_index_(0), snapshot_log_index_(0), vector_index_parameter_(vector_index_parameter) {
-    vector_index_type_ = vector_index_parameter_.vector_index_type();
+      : id(id), apply_log_index(0), snapshot_log_index(0), vector_index_parameter(vector_index_parameter) {
+    vector_index_type = vector_index_parameter.vector_index_type();
   }
 
-  virtual ~VectorIndex() {}
+  virtual ~VectorIndex();
 
   VectorIndex(const VectorIndex& rhs) = delete;
   VectorIndex& operator=(const VectorIndex& rhs) = delete;
   VectorIndex(VectorIndex&& rhs) = delete;
   VectorIndex& operator=(VectorIndex&& rhs) = delete;
 
-  pb::common::VectorIndexType VectorIndexType() const { return vector_index_type_; }
+  pb::common::VectorIndexType VectorIndexType() const { return vector_index_type; }
 
-  butil::Status Add(const std::vector<pb::common::VectorWithId>& vector_with_ids) {
+  virtual butil::Status Add(const std::vector<pb::common::VectorWithId>& vector_with_ids) {
     for (const auto& vector_with_id : vector_with_ids) {
       auto ret = Add(vector_with_id);
       if (!ret.ok()) {
@@ -58,7 +58,7 @@ class VectorIndex {
     return butil::Status::OK();
   }
 
-  butil::Status Add(const pb::common::VectorWithId& vector_with_id) {
+  virtual butil::Status Add(const pb::common::VectorWithId& vector_with_id) {
     std::vector<float> vector;
     for (const auto& value : vector_with_id.vector().float_values()) {
       vector.push_back(value);
@@ -68,6 +68,29 @@ class VectorIndex {
   }
 
   virtual butil::Status Add([[maybe_unused]] uint64_t id, [[maybe_unused]] const std::vector<float>& vector) {
+    return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "Not Support");
+  }
+
+  virtual butil::Status Upsert(const std::vector<pb::common::VectorWithId>& vector_with_ids) {
+    for (const auto& vector_with_id : vector_with_ids) {
+      auto ret = Upsert(vector_with_id);
+      if (!ret.ok()) {
+        return ret;
+      }
+    }
+    return butil::Status::OK();
+  }
+
+  virtual butil::Status Upsert(const pb::common::VectorWithId& vector_with_id) {
+    std::vector<float> vector;
+    for (const auto& value : vector_with_id.vector().float_values()) {
+      vector.push_back(value);
+    }
+
+    return Upsert(vector_with_id.id(), vector);
+  }
+
+  virtual butil::Status Upsert([[maybe_unused]] uint64_t id, [[maybe_unused]] const std::vector<float>& vector) {
     return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "Not Support");
   }
 
@@ -82,42 +105,42 @@ class VectorIndex {
   }
 
   virtual butil::Status Search([[maybe_unused]] const std::vector<float>& vector, [[maybe_unused]] uint32_t topk,
-                               std::vector<pb::common::VectorWithDistance>& results) {
+                               std::vector<pb::common::VectorWithDistance>& /*results*/) {
     return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "Not Support");
   }
 
   virtual butil::Status Search([[maybe_unused]] pb::common::VectorWithId vector_with_id, [[maybe_unused]] uint32_t topk,
-                               std::vector<pb::common::VectorWithDistance>& results) {
+                               std::vector<pb::common::VectorWithDistance>& /*results*/) {
     return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "Not Support");
   }
 
-  uint64_t Id() const { return id_; }
+  uint64_t Id() const { return id; }
 
-  uint64_t ApplyLogIndex() const { return apply_log_index_.load(std::memory_order_relaxed); }
+  uint64_t ApplyLogIndex() const { return apply_log_index.load(std::memory_order_relaxed); }
 
   void SetApplyLogIndex(uint64_t apply_log_index) {
-    apply_log_index_.store(apply_log_index, std::memory_order_relaxed);
+    this->apply_log_index.store(apply_log_index, std::memory_order_relaxed);
   }
 
-  uint64_t SnapshotLogIndex() const { return snapshot_log_index_.load(std::memory_order_relaxed); }
+  uint64_t SnapshotLogIndex() const { return snapshot_log_index.load(std::memory_order_relaxed); }
 
   void SetSnapshotLogIndex(uint64_t snapshot_log_index) {
-    snapshot_log_index_.store(snapshot_log_index, std::memory_order_relaxed);
+    this->snapshot_log_index.store(snapshot_log_index, std::memory_order_relaxed);
   }
 
  protected:
   // region_id
-  uint64_t id_;
+  uint64_t id;
 
   // apply max log index
-  std::atomic<uint64_t> apply_log_index_;
+  std::atomic<uint64_t> apply_log_index;
 
   // last snapshot log index
-  std::atomic<uint64_t> snapshot_log_index_;
+  std::atomic<uint64_t> snapshot_log_index;
 
-  pb::common::VectorIndexType vector_index_type_;
+  pb::common::VectorIndexType vector_index_type;
 
-  pb::common::VectorIndexParameter vector_index_parameter_;
+  pb::common::VectorIndexParameter vector_index_parameter;
 };
 
 }  // namespace dingodb
