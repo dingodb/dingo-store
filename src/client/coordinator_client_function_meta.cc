@@ -32,6 +32,8 @@ DECLARE_int64(schema_id);
 DECLARE_int64(replica);
 DECLARE_int64(max_elements);
 DECLARE_int64(dimension);
+DECLARE_int64(efconstruction);
+DECLARE_int64(nlinks);
 DECLARE_bool(with_auto_increment);
 
 void SendGetSchemas(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
@@ -568,6 +570,14 @@ void SendCreateIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
     DINGO_LOG(WARNING) << "dimension is empty";
     return;
   }
+  if (FLAGS_efconstruction == 0) {
+    DINGO_LOG(WARNING) << "efconstruction is empty";
+    return;
+  }
+  if (FLAGS_nlinks == 0) {
+    DINGO_LOG(WARNING) << "nlinks is empty";
+    return;
+  }
 
   DINGO_LOG(INFO) << "max_elements=" << FLAGS_max_elements << ", dimension=" << FLAGS_dimension;
 
@@ -575,8 +585,8 @@ void SendCreateIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
 
   hsnw_index_parameter->set_dimension(FLAGS_dimension);
   hsnw_index_parameter->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_L2);
-  hsnw_index_parameter->set_efconstruction(200);
-  hsnw_index_parameter->set_nlinks(16);
+  hsnw_index_parameter->set_efconstruction(FLAGS_efconstruction);
+  hsnw_index_parameter->set_nlinks(FLAGS_nlinks);
   hsnw_index_parameter->set_max_elements(FLAGS_max_elements);
 
   // map<string, Index> indexes = 3;

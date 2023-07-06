@@ -694,8 +694,11 @@ butil::Status CoordinatorControl::ValidateIndexDefinition(const pb::meta::IndexD
       // check hnsw_parameter.nlinks
       // The number of links for each element in the graph. This parameter affects the quality of the graph and the
       // search time. A larger value leads to a higher quality graph but slower search time. This parameter must be
-      // greater than 0.
-      if (hnsw_parameter.nlinks() <= 0) {
+      // greater than 1.
+      // In HNSW, there is a equation: mult_ = 1 / log(1.0 * M_), where M_ is the nlists
+      // During latter processing, HNSW will malloc memory directly proportional to mult_, so when M_==1,  mult_ is
+      // infinity, malloc will fail.
+      if (hnsw_parameter.nlinks() <= 1) {
         DINGO_LOG(ERROR) << "hnsw_parameter.nlinks is illegal " << hnsw_parameter.nlinks();
         return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
                              "hnsw_parameter.nlinks is illegal " + std::to_string(hnsw_parameter.nlinks()));
