@@ -57,6 +57,27 @@ execute_process(COMMAND cp ${CMAKE_CURRENT_SOURCE_DIR}/contrib/.clang-tidy ${CMA
 
 find_package(Threads REQUIRED)
 
+find_package(OpenMP REQUIRED)
+
+execute_process(
+    COMMAND g++ --print-file-name libgomp.a
+    RESULT_VARIABLE CMD_RESULT
+    OUTPUT_VARIABLE FILE_NAME
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+
+# Check the return code and output of the command
+if(CMD_RESULT EQUAL 0 AND EXISTS ${FILE_NAME})
+    message(STATUS "Valid libgomp: ${FILE_NAME}")
+    set(OPENMP_LIBRARY ${FILE_NAME})
+elseif(DINGO_BUILD_STATIC)
+    message(FATAL_ERROR "static libgomp is not found, file_name: ${FILE_NAME}")
+else()
+    set(OPENMP_LIBRARY ${OpenMP_gomp_LIBRARY})
+endif()
+
+message(STATUS "OpenMP_LIBRARY=${OPENMP_LIBRARY}")
+
 include(openssl)
 include(zlib)
 include(gflags)
@@ -162,6 +183,7 @@ set(DYNAMIC_LIB
     ${LIBUNWIND_GENERIC_LIBRARIES}
     ${LIBUNWIND_ARCH_LIBRARIES}
     ${LIBBACKTRACE_LIBRARIES}
+    ${OPENMP_LIBRARY}
     # rt
     dl
     Threads::Threads
@@ -346,7 +368,7 @@ if(DINGO_BUILD_STATIC)
         # This is only for build some modules for testing, not for the whole project.
         # This project is currently not compatible with MacOS.
     else()
-        set(CMAKE_EXE_LINKER_FLAGS "-static-libgcc -static-libstdc++ -fopenmp")
+        set(CMAKE_EXE_LINKER_FLAGS "-static-libgcc -static-libstdc++")
     endif()
 endif()
 
