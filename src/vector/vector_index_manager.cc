@@ -80,8 +80,43 @@ bool VectorIndexManager::AddVectorIndex(uint64_t region_id, const pb::common::In
   return AddVectorIndex(region_id, vector_index);
 }
 
+/**
+ * Deletes the vector index for the specified region ID.
+ *
+ * @param region_id The ID of the region whose vector index is to be deleted.
+ */
 void VectorIndexManager::DeleteVectorIndex(uint64_t region_id) {
+  // Log the deletion of the vector index.
+  DINGO_LOG(INFO) << fmt::format("Delete region's vector index {}", region_id);
+
+  // Remove the vector index from the vector index map.
   vector_indexs_.Erase(region_id);
+
+  // Find all files associated with the vector index and add them to a list.
+  std::vector<std::filesystem::path> file_path_list;
+  std::filesystem::directory_iterator dir_iter(Server::GetInstance()->GetIndexPath());
+  for (const auto& iter : dir_iter) {
+    if (iter.is_regular_file()) {
+      auto file_name = iter.path().filename().string();
+      if ((iter.path().extension() == ".idx" || iter.path().extension() == ".tmp") &&
+          file_name.find(std::to_string(region_id) + '_') == 0) {
+        file_path_list.emplace_back(iter.path());
+      }
+
+      if (iter.path().extension() == ".log_id" && file_name.find(std::to_string(region_id)) == 0) {
+        file_path_list.emplace_back(iter.path());
+      }
+    }
+  }
+
+  // Delete all files in the file_path_list.
+  for (const auto& file_path : file_path_list) {
+    // Log the deletion of the vector index file.
+    DINGO_LOG(INFO) << fmt::format("Delete region's vector index file {}", file_path.string());
+    std::filesystem::remove(file_path);
+  }
+
+  // Delete the vector index metadata from the metadata store.
   meta_writer_->Delete(GenKey(region_id));
 }
 
@@ -486,6 +521,19 @@ void VectorIndexManager::GetVectorIndexLogIndex(uint64_t region_id, uint64_t& sn
   if (kv == nullptr) {
     snapshot_log_index = 0;
     apply_log_index = 0;
+
+    DINGO_LOG(ERROR) << fmt::format("GetVectorIndexLogIndex failed, region_id {}", region_id);
+    return;
+  }
+
+  if (kv->value().empty()) {
+    snapshot_log_index = 0;
+    apply_log_index = 0;
+
+    DINGO_LOG(WARNING) << fmt::format(
+        "GetVectorIndexLogIndex not found, maybe this region is not written, region_id {}, snapshot_log_index {}, "
+        "apply_log_index {}",
+        region_id, snapshot_log_index, apply_log_index);
     return;
   }
 
