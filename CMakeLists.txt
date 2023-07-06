@@ -346,7 +346,7 @@ if(DINGO_BUILD_STATIC)
         # This is only for build some modules for testing, not for the whole project.
         # This project is currently not compatible with MacOS.
     else()
-        set(CMAKE_EXE_LINKER_FLAGS "-static-libgcc -static-libstdc++")
+        set(CMAKE_EXE_LINKER_FLAGS "-static-libgcc -static-libstdc++ -fopenmp")
     endif()
 endif()
 
