@@ -442,6 +442,9 @@ void VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr reg
       DINGO_LOG(ERROR) << fmt::format("vector_index is nullptr, region_id={}", region->Id());
       status =
           butil::Status(pb::error::EINTERNAL, "Internal error, vector_index is nullptr, region_id=[%ld]", region->Id());
+      if (ctx) {
+        ctx->SetStatus(status);
+      }
       return;
     }
 
@@ -449,7 +452,19 @@ void VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr reg
     if (log_id > vector_index->ApplyLogIndex()) {
       // If it is, then iterate over each vector in the request and upsert it into the vector index
       for (const auto &vector : request.vectors()) {
-        vector_index->Upsert(vector);
+        auto ret = vector_index->Upsert(vector);
+        if (!ret.ok()) {
+          DINGO_LOG(ERROR) << fmt::format("vector_index upsert failed, region_id={}, vector_id={}, err={}",
+                                          region->Id(), vector.id(), ret.error_str());
+          status =
+              butil::Status(pb::error::EINTERNAL,
+                            "Internal error, vector_index upsert failed, region_id=[%ld], vector_id=[%ld], err=[%s]",
+                            region->Id(), vector.id(), ret.error_cstr());
+          if (ctx) {
+            ctx->SetStatus(status);
+          }
+          return;
+        }
       }
 
       // Update the ApplyLogIndex of the vector index to the current log_id

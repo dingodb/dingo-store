@@ -58,10 +58,6 @@ class VectorIndexFlat : public VectorIndex {
 
   void Delete(uint64_t id) override;
 
-  butil::Status Save([[maybe_unused]] const std::string& path) override;
-
-  butil::Status Load([[maybe_unused]] const std::string& path) override;
-
   butil::Status Search(const std::vector<float>& vector, uint32_t topk,
                        std::vector<pb::common::VectorWithDistance>& results) override;
 

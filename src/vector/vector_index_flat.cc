@@ -22,6 +22,7 @@
 #include <string>
 #include <vector>
 
+#include "bthread/mutex.h"
 #include "butil/status.h"
 #include "common/logging.h"
 #include "hnswlib/space_ip.h"
@@ -33,6 +34,8 @@ namespace dingodb {
 
 VectorIndexFlat::VectorIndexFlat(uint64_t id, const pb::common::VectorIndexParameter& vector_index_parameter)
     : VectorIndex(id, vector_index_parameter) {
+  bthread_mutex_init(&mutex_, nullptr);
+
   metric_type_ = vector_index_parameter.flat_parameter().metric_type();
   dimension_ = vector_index_parameter.flat_parameter().dimension();
 
@@ -69,7 +72,7 @@ butil::Status VectorIndexFlat::Upsert(uint64_t id, const std::vector<float>& vec
   // check
   if (vector.size() != static_cast<size_t>(dimension_)) {
     std::string s =
-        fmt::format("Flat : float size : {}  {} not equal to  dimension(create) : {}", vector.size(), dimension_);
+        fmt::format("Flat : float size : {} not equal to  dimension(create) : {}", vector.size(), dimension_);
     DINGO_LOG(ERROR) << s;
     return butil::Status(pb::error::Errno::EVECTOR_INVALID, s);
   }
@@ -97,10 +100,6 @@ void VectorIndexFlat::Delete(uint64_t id) {
     DINGO_LOG(DEBUG) << fmt::format("not found id : {}", id);
   }
 }
-
-butil::Status VectorIndexFlat::Save([[maybe_unused]] const std::string& path) { return butil::Status::OK(); }
-
-butil::Status VectorIndexFlat::Load([[maybe_unused]] const std::string& path) { return butil::Status::OK(); }
 
 butil::Status VectorIndexFlat::Search(const std::vector<float>& vector, uint32_t topk,
                                       std::vector<pb::common::VectorWithDistance>& results) {  // NOLINT
@@ -141,13 +140,13 @@ butil::Status VectorIndexFlat::Search(pb::common::VectorWithId vector_with_id, u
   dingodb::pb::common::ValueType value_type = vector_with_id.vector().value_type();
 
   // check dimension
-  int32_t dimension = vector_with_id.vector().dimension();
-  if (dimension_ != static_cast<faiss::idx_t>(dimension)) {
-    std::string s =
-        fmt::format("Flat : dimension(create) : {}  dimension(input) : {} not equal!", dimension_, dimension);
-    DINGO_LOG(ERROR) << s;
-    return butil::Status(pb::error::Errno::EVECTOR_INVALID, s);
-  }
+  // int32_t dimension = vector_with_id.vector().dimension();
+  // if (dimension_ != static_cast<faiss::idx_t>(dimension)) {
+  //   std::string s =
+  //       fmt::format("Flat : dimension(create) : {}  dimension(input) : {} not equal!", dimension_, dimension);
+  //   DINGO_LOG(ERROR) << s;
+  //   return butil::Status(pb::error::Errno::EVECTOR_INVALID, s);
+  // }
 
   if (value_type != dingodb::pb::common::ValueType::FLOAT) {
     std::string s = fmt::format("Flat : {} only support float vector. not support binary vector now!",
@@ -164,7 +163,7 @@ butil::Status VectorIndexFlat::Search(pb::common::VectorWithId vector_with_id, u
   // check again
   if (vector.size() != static_cast<size_t>(dimension_)) {
     std::string s =
-        fmt::format("Flat : float size : {}  {} not equal to  dimension(create) : {}", vector.size(), dimension_);
+        fmt::format("Flat : float size : {} not equal to  dimension(create) : {}", vector.size(), dimension_);
     DINGO_LOG(ERROR) << s;
     return butil::Status(pb::error::Errno::EVECTOR_INVALID, s);
   }
