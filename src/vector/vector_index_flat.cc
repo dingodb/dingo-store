@@ -58,7 +58,7 @@ butil::Status VectorIndexFlat::Add(uint64_t id, const std::vector<float>& vector
   // check
   if (vector.size() != static_cast<size_t>(dimension_)) {
     std::string s =
-        fmt::format("Flat : float size : {}  {} not equal to  dimension(create) : {}", vector.size(), dimension_);
+        fmt::format("Flat : float size : {} not equal to  dimension(create) : {}", vector.size(), dimension_);
     DINGO_LOG(ERROR) << s;
     return butil::Status(pb::error::Errno::EVECTOR_INVALID, s);
   }
@@ -116,15 +116,14 @@ butil::Status VectorIndexFlat::Search(const std::vector<float>& vector, uint32_t
   results.clear();
 
   for (size_t i = 0; i < topk; i++) {
+    if (labels[i] < 0) {
+      continue;
+    }
     pb::common::VectorWithDistance vector_with_distance;
     auto* vector_with_id = vector_with_distance.mutable_vector_with_id();
     vector_with_id->set_id(labels[i]);
     vector_with_id->mutable_vector()->set_dimension(dimension_);
     vector_with_id->mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
-
-    for (const auto& value : vector) {
-      vector_with_id->mutable_vector()->add_float_values(value);
-    }
     vector_with_distance.set_distance(distances[i]);
 
     results.emplace_back(std::move(vector_with_distance));
@@ -164,6 +163,12 @@ butil::Status VectorIndexFlat::Search(pb::common::VectorWithId vector_with_id, u
   if (vector.size() != static_cast<size_t>(dimension_)) {
     std::string s =
         fmt::format("Flat : float size : {} not equal to  dimension(create) : {}", vector.size(), dimension_);
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EVECTOR_INVALID, s);
+  }
+
+  if (0 == topk) {
+    std::string s = fmt::format("Flat : topk is zero. not support");
     DINGO_LOG(ERROR) << s;
     return butil::Status(pb::error::Errno::EVECTOR_INVALID, s);
   }

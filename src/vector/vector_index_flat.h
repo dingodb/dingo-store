@@ -50,7 +50,7 @@ class VectorIndexFlat : public VectorIndex {
   VectorIndexFlat(VectorIndexFlat&& rhs) = delete;
   VectorIndexFlat& operator=(VectorIndexFlat&& rhs) = delete;
 
-  // in FLAT index, add two vector with same id will cause data conlict
+  // in FLAT index, add two vector with same id will cause data conflict
   butil::Status Add(uint64_t id, const std::vector<float>& vector) override;
 
   // not exist add. if exist update
