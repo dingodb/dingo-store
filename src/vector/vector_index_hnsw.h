@@ -45,6 +45,8 @@ class VectorIndexHnsw : public VectorIndex {
       assert(hnsw_parameter.max_elements() > 0);
       assert(hnsw_parameter.nlinks() > 0);
 
+      this->dimension_ = hnsw_parameter.dimension();
+
       if (hnsw_parameter.metric_type() == pb::common::MetricType::METRIC_TYPE_INNER_PRODUCT) {
         hnsw_space_ = new hnswlib::InnerProductSpace(hnsw_parameter.dimension());
       } else {
@@ -75,7 +77,14 @@ class VectorIndexHnsw : public VectorIndex {
 
   butil::Status Upsert(uint64_t id, const std::vector<float>& vector) override {
     if (vector_index_type == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
+      if (vector.size() != this->dimension_) {
+        DINGO_LOG(ERROR) << "vector dimension is not match, id=" << id << ", input dimension=" << vector.size() << ", "
+                         << "index dimension=" << this->dimension_;
+        return butil::Status(pb::error::Errno::EINTERNAL, "vector dimension is not match");
+      }
+
       hnsw_index_->addPoint(vector.data(), id, true);
+
       return butil::Status::OK();
     } else {
       return butil::Status(pb::error::Errno::EINTERNAL, "vector index type is not supported");
@@ -118,6 +127,12 @@ class VectorIndexHnsw : public VectorIndex {
                        std::vector<pb::common::VectorWithDistance>& results) override {
     if (vector_index_type == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
       // std::priority_queue<std::pair<float, uint64_t>> result = hnsw_index_->searchKnn(vector.data(), topk);
+
+      if (vector.size() != this->dimension_) {
+        return butil::Status(pb::error::Errno::EINTERNAL, "vector dimension is not match, input=%zu, index=%d",
+                             vector.size(), this->dimension_);
+      }
+
       std::priority_queue<std::pair<float, uint64_t>> result = hnsw_index_->searchKnn(vector.data(), topk);
 
       DINGO_LOG(DEBUG) << "result.size() = " << result.size();

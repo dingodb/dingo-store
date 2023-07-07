@@ -407,13 +407,25 @@ butil::Status VectorIndexManager::SaveVectorIndex(std::shared_ptr<VectorIndex> v
   // save vector index to tmp file
   auto ret = vector_index->Save(vector_index_tmp_file_path);
   if (!ret.ok()) {
+    if (ret.error_code() == pb::error::Errno::EVECTOR_NOT_SUPPORT) {
+      DINGO_LOG(WARNING) << fmt::format("Save vector index {} to tmp file not supported for this index, {}",
+                                        vector_index->Id(), ret.error_str());
+      return butil::Status::OK();
+    }
+
     DINGO_LOG(ERROR) << fmt::format("Save vector index {} to tmp file failed, {}", vector_index->Id(), ret.error_str());
     std::filesystem::remove(vector_index_tmp_file_path);
     return ret;
   }
 
   // rename tmp file to vector index file
-  std::filesystem::rename(vector_index_tmp_file_path, vector_index_file_path);
+  if (std::filesystem::exists(vector_index_tmp_file_path)) {
+    std::filesystem::rename(vector_index_tmp_file_path, vector_index_file_path);
+  } else {
+    // handle the case where the file does not exist
+    DINGO_LOG(ERROR) << fmt::format("Save vector index {} to tmp file failed, tmp file not exist", vector_index->Id());
+    return butil::Status(pb::error::Errno::EINTERNAL, "Save vector index to tmp file failed, tmp file not exist");
+  }
 
   // write vector index file log_id
   std::string vector_index_file_log_id_file_path =

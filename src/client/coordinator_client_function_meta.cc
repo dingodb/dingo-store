@@ -35,6 +35,7 @@ DECLARE_int64(dimension);
 DECLARE_int64(efconstruction);
 DECLARE_int64(nlinks);
 DECLARE_bool(with_auto_increment);
+DECLARE_string(vector_index_type);
 
 void SendGetSchemas(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
   dingodb::pb::meta::GetSchemasRequest request;
@@ -560,46 +561,57 @@ void SendCreateIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
   // vector index parameter
   index_definition->mutable_index_parameter()->set_index_type(dingodb::pb::common::IndexType::INDEX_TYPE_VECTOR);
   auto* vector_index_parameter = index_definition->mutable_index_parameter()->mutable_vector_index_parameter();
-  vector_index_parameter->set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW);
 
-  if (FLAGS_max_elements == 0) {
-    DINGO_LOG(WARNING) << "max_elements is empty";
+  if (FLAGS_vector_index_type.empty()) {
+    DINGO_LOG(WARNING) << "vector_index_type is empty";
     return;
   }
+
+  if (FLAGS_vector_index_type == "hnsw") {
+    vector_index_parameter->set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW);
+  } else if (FLAGS_vector_index_type == "flat") {
+    vector_index_parameter->set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
+  } else {
+    DINGO_LOG(WARNING) << "vector_index_type is invalid, now only support hnsw and flat";
+    return;
+  }
+
   if (FLAGS_dimension == 0) {
     DINGO_LOG(WARNING) << "dimension is empty";
     return;
   }
-  if (FLAGS_efconstruction == 0) {
-    DINGO_LOG(WARNING) << "efconstruction is empty";
-    return;
+
+  if (FLAGS_vector_index_type == "hnsw") {
+    if (FLAGS_max_elements == 0) {
+      DINGO_LOG(WARNING) << "max_elements is empty";
+      return;
+    }
+    if (FLAGS_efconstruction == 0) {
+      DINGO_LOG(WARNING) << "efconstruction is empty";
+      return;
+    }
+    if (FLAGS_nlinks == 0) {
+      DINGO_LOG(WARNING) << "nlinks is empty";
+      return;
+    }
+
+    DINGO_LOG(INFO) << "max_elements=" << FLAGS_max_elements << ", dimension=" << FLAGS_dimension;
+
+    auto* hsnw_index_parameter = vector_index_parameter->mutable_hnsw_parameter();
+
+    hsnw_index_parameter->set_dimension(FLAGS_dimension);
+    hsnw_index_parameter->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_L2);
+    hsnw_index_parameter->set_efconstruction(FLAGS_efconstruction);
+    hsnw_index_parameter->set_nlinks(FLAGS_nlinks);
+    hsnw_index_parameter->set_max_elements(FLAGS_max_elements);
+  } else if (FLAGS_vector_index_type == "flat") {
+    auto* flat_index_parameter = vector_index_parameter->mutable_flat_parameter();
+    flat_index_parameter->set_dimension(FLAGS_dimension);
+    flat_index_parameter->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_L2);
   }
-  if (FLAGS_nlinks == 0) {
-    DINGO_LOG(WARNING) << "nlinks is empty";
-    return;
-  }
 
-  DINGO_LOG(INFO) << "max_elements=" << FLAGS_max_elements << ", dimension=" << FLAGS_dimension;
-
-  auto* hsnw_index_parameter = vector_index_parameter->mutable_hnsw_parameter();
-
-  hsnw_index_parameter->set_dimension(FLAGS_dimension);
-  hsnw_index_parameter->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_L2);
-  hsnw_index_parameter->set_efconstruction(FLAGS_efconstruction);
-  hsnw_index_parameter->set_nlinks(FLAGS_nlinks);
-  hsnw_index_parameter->set_max_elements(FLAGS_max_elements);
-
-  // map<string, Index> indexes = 3;
-  // uint32 version = 4;
   index_definition->set_version(1);
-  // PartitionRule index_partition = 6;
-  // map<string, string> properties = 8;
 
-  // add partition_rule
-  // repeated string columns = 1;
-  // PartitionStrategy strategy = 2;
-  // RangePartition range_partition = 3;
-  // HashPartition hash_partition = 4;
   auto* partition_rule = index_definition->mutable_index_partition();
   auto* part_column = partition_rule->add_columns();
   part_column->assign("test_part_column");
