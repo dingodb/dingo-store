@@ -117,6 +117,35 @@ public class IndexServiceClient {
         return response.getResultsList().stream().map(EntityConversion::mapping).collect(Collectors.toList());
     }
 
+    public List<VectorWithId> vectorBatchQuery(
+            DingoCommonId indexId,
+            DingoCommonId regionId,
+            List<Long> vectorIds,
+            Boolean isNeedMetaData,
+            List<String> selectedKeys
+            ) {
+        Index.VectorBatchQueryRequest request = Index.VectorBatchQueryRequest.newBuilder()
+                .setRegionId(regionId.entityId())
+                .addAllVectorIds(vectorIds)
+                .setIsNeedMetadata(isNeedMetaData)
+                .addAllSelectedKeys(selectedKeys)
+                .build();
+
+        Index.VectorBatchQueryResponse response = exec(stub -> stub.vectorBatchQuery(request), retryTimes, indexId, regionId);
+
+        return response.getVectorsList().stream().map(EntityConversion::mapping).collect(Collectors.toList());
+    }
+
+    public Long vectorGetBoderId(DingoCommonId indexId, DingoCommonId regionId, Boolean getMin) {
+        Index.VectorGetBorderIdRequest request = Index.VectorGetBorderIdRequest.newBuilder()
+                .setRegionId(regionId.entityId())
+                .setGetMin(getMin)
+                .build();
+
+        Index.VectorGetBorderIdResponse response = exec(stub -> stub.vectorGetBorderId(request), retryTimes, indexId, regionId);
+        return response.getId();
+    }
+
     public boolean vectorDelete(DingoCommonId indexId, DingoCommonId regionId, List<Long> ids) {
         Index.VectorDeleteRequest request = Index.VectorDeleteRequest.newBuilder()
                 .setRegionId(regionId.entityId())
