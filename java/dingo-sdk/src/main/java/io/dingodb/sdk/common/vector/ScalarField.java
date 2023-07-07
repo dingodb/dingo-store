@@ -16,17 +16,43 @@
 
 package io.dingodb.sdk.common.vector;
 
-import lombok.AllArgsConstructor;
 import lombok.Getter;
-
-import java.util.Map;
+import lombok.NoArgsConstructor;
+import lombok.ToString;
 
 @Getter
-@AllArgsConstructor
-public class VectorWithId {
+@ToString
+@NoArgsConstructor
+public class ScalarField {
 
-    private long id;
-    private Vector vector;
-    private Map<String, ScalarValue> scalarData;
+    private Object data;
+
+    public ScalarField(Boolean data) {
+        this.data = data;
+    }
+
+    public ScalarField(Integer data) {
+        this.data = data;
+    }
+
+    public ScalarField(Long data) {
+        this.data = data;
+    }
+
+    public ScalarField(Float data) {
+        this.data = data;
+    }
+
+    public ScalarField(Double data) {
+        this.data = data;
+    }
+
+    public ScalarField(String data) {
+        this.data = data;
+    }
+
+    public ScalarField(byte[] data) {
+        this.data = data;
+    }
 
 }

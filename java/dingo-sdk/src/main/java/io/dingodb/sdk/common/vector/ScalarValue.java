@@ -18,15 +18,28 @@ package io.dingodb.sdk.common.vector;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.ToString;
 
-import java.util.Map;
+import java.util.List;
 
 @Getter
+@ToString
+@NoArgsConstructor
 @AllArgsConstructor
-public class VectorWithId {
+public class ScalarValue {
 
-    private long id;
-    private Vector vector;
-    private Map<String, ScalarValue> scalarData;
+    private ScalarFieldType fieldType;
+    private List<ScalarField> fields;
 
+    public enum ScalarFieldType {
+        NONE,
+        BOOL,
+        INTEGER,
+        LONG,
+        FLOAT,
+        DOUBLE,
+        STRING,
+        BYTES
+    }
 }
