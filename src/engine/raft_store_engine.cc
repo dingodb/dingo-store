@@ -306,7 +306,7 @@ butil::Status RaftStoreEngine::VectorReader::SearchVector(
     std::vector<pb::common::VectorWithDistance>& vector_with_distances) {
   auto vector_index = Server::GetInstance()->GetVectorIndexManager()->GetVectorIndex(region_id);
   if (vector_index == nullptr) {
-    return butil::Status(pb::error::EVECTOR_NOT_FOUND, fmt::format("Not found vector index {}", region_id));
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, fmt::format("Not found vector index {}", region_id));
   }
 
   vector_index->Search(vector, parameter.top_n(), vector_with_distances);
