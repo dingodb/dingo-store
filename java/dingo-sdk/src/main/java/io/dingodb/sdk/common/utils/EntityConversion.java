@@ -423,9 +423,11 @@ public class EntityConversion {
     }
 
     public static Common.VectorWithId mapping(VectorWithId withId) {
-        Vector vector = withId.getVector();
-        return Common.VectorWithId.newBuilder()
-                .setId(withId.getId())
+        Common.VectorWithId.Builder builder = Common.VectorWithId.newBuilder()
+                .setId(withId.getId());
+        if (withId.getVector() != null) {
+            Vector vector = withId.getVector();
+            builder
                 .setVector(Common.Vector.newBuilder()
                         .setDimension(vector.getDimension())
                         .setValueType(Common.ValueType.valueOf(vector.getValueType().name()))
@@ -434,14 +436,17 @@ public class EntityConversion {
                                 .stream()
                                 .map(ByteString::copyFrom)
                                 .collect(Collectors.toList()))
-                        .build())
-                .setMetadata(Common.VectorMetadata.newBuilder().putAllMetadata(withId.getMetaData().entrySet().stream()
+                        .build());
+        }
+        if (withId.getMetaData() != null) {
+            builder.setMetadata(Common.VectorMetadata.newBuilder().putAllMetadata(withId.getMetaData().entrySet().stream()
                         .collect(
                                 Maps::newHashMap,
                                 (map, entry) -> map.put(entry.getKey(), ByteString.copyFrom(entry.getValue())),
                                 Map::putAll))
-                        .build())
-                .build();
+                        .build());
+        }
+        return builder.build();
     }
 
     public static VectorWithId mapping(Common.VectorWithId withId) {
