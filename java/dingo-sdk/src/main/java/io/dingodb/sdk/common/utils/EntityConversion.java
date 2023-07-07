@@ -58,6 +58,8 @@ import io.dingodb.sdk.common.table.RangeDistribution;
 import io.dingodb.sdk.common.table.Table;
 import io.dingodb.sdk.common.table.TableDefinition;
 import io.dingodb.sdk.common.table.metric.TableMetrics;
+import io.dingodb.sdk.common.vector.ScalarField;
+import io.dingodb.sdk.common.vector.ScalarValue;
 import io.dingodb.sdk.common.vector.Vector;
 import io.dingodb.sdk.common.vector.VectorWithDistance;
 import io.dingodb.sdk.common.vector.VectorWithId;
@@ -65,6 +67,7 @@ import io.dingodb.sdk.service.store.AggregationOperator;
 import io.dingodb.sdk.service.store.Coprocessor;
 import io.dingodb.store.Store;
 
+import javax.activation.UnsupportedDataTypeException;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
@@ -438,13 +441,13 @@ public class EntityConversion {
                                 .collect(Collectors.toList()))
                         .build());
         }
-        if (withId.getMetaData() != null) {
-            builder.setMetadata(Common.VectorMetadata.newBuilder().putAllMetadata(withId.getMetaData().entrySet().stream()
+        if (withId.getScalarData() != null) {
+            builder.setScalarData(Common.VectorScalardata.newBuilder().putAllScalarData(withId.getScalarData().entrySet().stream()
                         .collect(
                                 Maps::newHashMap,
-                                (map, entry) -> map.put(entry.getKey(), ByteString.copyFrom(entry.getValue())),
+                                (map, entry) -> map.put(entry.getKey(), mapping(entry.getValue())),
                                 Map::putAll))
-                        .build());
+                    .build());
         }
         return builder.build();
     }
@@ -456,13 +459,69 @@ public class EntityConversion {
                 Vector.ValueType.valueOf(vector.getValueType().name()),
                 vector.getFloatValuesList(),
                 vector.getBinaryValuesList().stream().map(ByteString::toByteArray).collect(Collectors.toList())),
-                withId.getMetadata()
-                        .getMetadataMap()
-                        .entrySet().stream()
-                        .collect(
-                                Maps::newHashMap,
-                                (map, entry) -> map.put(entry.getKey(), entry.getValue().toByteArray()),
-                                Map::putAll));
+                withId.getScalarData().getScalarDataMap().entrySet().stream().collect(
+                        Maps::newHashMap,
+                        (map, entry) -> map.put(entry.getKey(), mapping(entry.getValue())),
+                        Map::putAll));
+    }
+
+    public static ScalarValue mapping(Common.ScalarValue value) {
+        return new ScalarValue(ScalarValue.ScalarFieldType.valueOf(value.getFieldType().name()),
+                value.getFieldsList().stream()
+                        .map(f -> mapping(f, value.getFieldType()))
+                        .collect(Collectors.toList()));
+    }
+
+    public static ScalarField mapping(Common.ScalarField field, Common.ScalarFieldType type) {
+        switch (type) {
+            case BOOL:
+                return new ScalarField(field.getBoolData());
+            case INT8:
+            case INT16:
+            case INT32:
+                return new ScalarField(field.getIntData());
+            case INT64:
+                return new ScalarField(field.getLongData());
+            case FLOAT32:
+                return new ScalarField(field.getFloatData());
+            case DOUBLE:
+                return new ScalarField(field.getDoubleData());
+            case STRING:
+                return new ScalarField(field.getStringData());
+            case BYTES:
+                return new ScalarField(field.getBytesData().toByteArray());
+            default:
+                throw new IllegalStateException("Unexpected value: " + type);
+        }
+    }
+
+    public static Common.ScalarValue mapping(ScalarValue value) {
+        return Common.ScalarValue.newBuilder()
+                .setFieldType(Common.ScalarFieldType.valueOf(value.getFieldType().name()))
+                .addAllFields(value.getFields().stream().map(f -> mapping(f, value.getFieldType()))
+                        .collect(Collectors.toList()))
+                .build();
+    }
+
+    public static Common.ScalarField mapping(ScalarField field, ScalarValue.ScalarFieldType type) {
+        switch (type) {
+            case BOOL:
+                return Common.ScalarField.newBuilder().setBoolData((Boolean) field.getData()).build();
+            case INTEGER:
+                return Common.ScalarField.newBuilder().setIntData((Integer) field.getData()).build();
+            case LONG:
+                return Common.ScalarField.newBuilder().setLongData((Long) field.getData()).build();
+            case FLOAT:
+                return Common.ScalarField.newBuilder().setFloatData((Float) field.getData()).build();
+            case DOUBLE:
+                return Common.ScalarField.newBuilder().setDoubleData((Double) field.getData()).build();
+            case STRING:
+                return Common.ScalarField.newBuilder().setStringData(field.getData().toString()).build();
+            case BYTES:
+                return Common.ScalarField.newBuilder().setBytesData(ByteString.copyFromUtf8(field.getData().toString())).build();
+            default:
+                throw new IllegalStateException("Unexpected value: " + type);
+        }
     }
 
     public static VectorWithDistance mapping(Common.VectorWithDistance distance) {
