@@ -121,10 +121,15 @@ butil::Status Storage::VectorBatchQuery(std::shared_ptr<Context> ctx, std::vecto
   auto reader = engine_->NewVectorReader(Constant::kStoreDataCF);
   status = reader->VectorBatchQuery(ctx, vector_ids, is_need_metadata, selected_meta_keys, vector_with_ids);
   if (!status.ok()) {
+    if (pb::error::EKEY_NOT_FOUND == status.error_code()) {
+      // return OK if not found
+      return butil::Status::OK();
+    }
+
     return status;
   }
 
-  return butil::Status();
+  return butil::Status::OK();
 }
 
 butil::Status Storage::VectorGetBorderId(std::shared_ptr<Context> ctx, uint64_t& id, bool get_min) {
@@ -153,6 +158,11 @@ butil::Status Storage::VectorSearch(std::shared_ptr<Context> ctx, const pb::comm
   auto reader = engine_->NewVectorReader(Constant::kStoreDataCF);
   status = reader->VectorSearch(ctx, vector, parameter, results);
   if (!status.ok()) {
+    if (pb::error::EKEY_NOT_FOUND == status.error_code()) {
+      // return OK if not found
+      return butil::Status::OK();
+    }
+
     return status;
   }
 
