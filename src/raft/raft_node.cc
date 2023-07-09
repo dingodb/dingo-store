@@ -34,20 +34,13 @@
 namespace dingodb {
 
 RaftNode::RaftNode(uint64_t node_id, const std::string& raft_group_name, braft::PeerId peer_id,
-                   braft::StateMachine* fsm)
+                   std::shared_ptr<braft::StateMachine> fsm, std::shared_ptr<SegmentLogStorage> log_storage)
     : node_id_(node_id),
       str_node_id_(std::to_string(node_id)),
       raft_group_name_(raft_group_name),
       node_(new braft::Node(raft_group_name, peer_id)),
       fsm_(fsm),
-      log_storage_(nullptr) {}
-
-RaftNode::~RaftNode() {
-  if (fsm_) {
-    delete fsm_;
-    fsm_ = nullptr;
-  }
-}
+      log_storage_(log_storage) {}
 
 // init_conf: 127.0.0.1:8201:0,127.0.0.1:8202:0,127.0.0.1:8203:0
 int RaftNode::Init(const std::string& init_conf, std::shared_ptr<Config> config) {
@@ -59,7 +52,7 @@ int RaftNode::Init(const std::string& init_conf, std::shared_ptr<Config> config)
   }
 
   node_options.election_timeout_ms = config->GetInt("raft.election_timeout");
-  node_options.fsm = fsm_;
+  node_options.fsm = fsm_.get();
   node_options.node_owns_fsm = false;
   node_options.snapshot_interval_s = config->GetInt("raft.snapshot_interval");
 
@@ -67,9 +60,9 @@ int RaftNode::Init(const std::string& init_conf, std::shared_ptr<Config> config)
   node_options.raft_meta_uri = "local://" + path_ + "/raft_meta";
   node_options.snapshot_uri = "local://" + path_ + "/snapshot";
   node_options.disable_cli = false;
-  log_storage_ = std::make_shared<SegmentLogStorage>(path_ + "/log");
-  node_options.log_storage = log_storage_.get();
-  node_options.node_owns_log_storage = false;
+
+  node_options.log_storage = new SegmentLogStorageWrapper(log_storage_);
+  node_options.node_owns_log_storage = true;
 
   if (node_->init(node_options) != 0) {
     DINGO_LOG(ERROR) << "Fail to init raft node " << node_id_;
@@ -87,11 +80,7 @@ void RaftNode::Stop() {
 }
 
 void RaftNode::Destroy() {
-  DINGO_LOG(DEBUG) << fmt::format("Delete region {} raft node shutdown", node_id_);
-  node_->shutdown(nullptr);
-  node_->join();
-  DINGO_LOG(DEBUG) << fmt::format("Delete region {} finish raft node shutdown", node_id_);
-
+  Stop();
   // Delete file directory
   Helper::RemoveAllFileOrDirectory(path_);
   DINGO_LOG(DEBUG) << fmt::format("Delete region {} delete file directory", node_id_);

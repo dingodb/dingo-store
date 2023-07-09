@@ -23,6 +23,7 @@
 
 #include "common/context.h"
 #include "config/config.h"
+#include "log/segment_log_storage.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "proto/raft.pb.h"
@@ -32,8 +33,9 @@ namespace dingodb {
 // Encapsulation braft node
 class RaftNode {
  public:
-  RaftNode(uint64_t node_id, const std::string& raft_group_name, braft::PeerId peer_id, braft::StateMachine* fsm);
-  ~RaftNode();
+  RaftNode(uint64_t node_id, const std::string& raft_group_name, braft::PeerId peer_id,
+           std::shared_ptr<braft::StateMachine> fsm, std::shared_ptr<SegmentLogStorage> log_storage);
+  ~RaftNode() = default;
 
   int Init(const std::string& init_conf, std::shared_ptr<Config> config);
   void Stop();
@@ -65,17 +67,15 @@ class RaftNode {
 
   std::shared_ptr<pb::common::BRaftStatus> GetStatus();
 
-  std::shared_ptr<braft::LogStorage> LogStorage() { return log_storage_; }
-
  private:
   std::string path_;
   uint64_t node_id_;
   std::string str_node_id_;
   std::string raft_group_name_;
 
+  std::shared_ptr<braft::StateMachine> fsm_;
+  std::shared_ptr<SegmentLogStorage> log_storage_;
   std::unique_ptr<braft::Node> node_;
-  braft::StateMachine* fsm_;
-  std::shared_ptr<braft::LogStorage> log_storage_;
 };
 
 }  // namespace dingodb

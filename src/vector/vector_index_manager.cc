@@ -248,7 +248,7 @@ butil::Status VectorIndexManager::ReplayWalToVectorIndex(std::shared_ptr<VectorI
     return butil::Status(pb::error::Errno::ERAFT_NOT_FOUND, fmt::format("Not found node {}", vector_index->Id()));
   }
 
-  auto log_stroage = std::dynamic_pointer_cast<SegmentLogStorage>(node->LogStorage());
+  auto log_stroage = Server::GetInstance()->GetLogStorageManager()->GetLogStorage(vector_index->Id());
   if (log_stroage == nullptr) {
     return butil::Status(pb::error::Errno::EINTERNAL, fmt::format("Not found log stroage {}", vector_index->Id()));
   }

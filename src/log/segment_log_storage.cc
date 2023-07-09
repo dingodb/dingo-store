@@ -157,7 +157,7 @@ int Segment::Create() {
   if (fd_ >= 0) {
     butil::make_close_on_exec(fd_);
   }
-  DINGO_LOG(INFO) << "Created new segment `" << path << "' with fd=" << fd_;
+  DINGO_LOG(INFO) << "Created new segment " << path << " with fd=" << fd_;
   return fd_ >= 0 ? 0 : -1;
 }
 
@@ -395,7 +395,8 @@ int Segment::Append(const braft::LogEntry* entry) {
   while (written < (ssize_t)to_write) {
     const ssize_t n = butil::IOBuf::cut_multiple_into_file_descriptor(fd_, pieces + start, ARRAY_SIZE(pieces) - start);
     if (n < 0) {
-      DINGO_LOG(ERROR) << "Fail to write to fd=" << fd_ << ", path: " << path_ << berror();
+      DINGO_LOG(ERROR) << fmt::format("Fail to write to fd={}, path: {} first_index: {} error: {}", fd_, path_,
+                                      first_index_, berror());
       return -1;
     }
     written += n;
@@ -621,7 +622,9 @@ int Segment::Truncate(int64_t last_index_kept) {
   return ret;
 }
 
-int SegmentLogStorage::init(braft::ConfigurationManager* configuration_manager) {
+SegmentLogStorage::~SegmentLogStorage() { Helper::RemoveAllFileOrDirectory(path_); }
+
+int SegmentLogStorage::Init(braft::ConfigurationManager* configuration_manager) {
   if (Constant::kSegmentLogMaxSegmentSize < 0) {
     DINGO_LOG(FATAL) << "Constant::kSegmentLogMaxSegmentSize " << Constant::kSegmentLogMaxSegmentSize
                      << " must be greater than or equal to 0 ";
@@ -672,9 +675,9 @@ int SegmentLogStorage::init(braft::ConfigurationManager* configuration_manager) 
   return ret;
 }
 
-int64_t SegmentLogStorage::last_log_index() { return last_log_index_.load(butil::memory_order_acquire); }
+int64_t SegmentLogStorage::LastLogIndex() { return last_log_index_.load(butil::memory_order_acquire); }
 
-int SegmentLogStorage::append_entries(const std::vector<braft::LogEntry*>& entries, braft::IOMetric* metric) {
+int SegmentLogStorage::AppendEntries(const std::vector<braft::LogEntry*>& entries, braft::IOMetric* metric) {
   if (entries.empty()) {
     return 0;
   }
@@ -721,7 +724,7 @@ int SegmentLogStorage::append_entries(const std::vector<braft::LogEntry*>& entri
   return entries.size();
 }
 
-int SegmentLogStorage::append_entry(const braft::LogEntry* entry) {
+int SegmentLogStorage::AppendEntry(const braft::LogEntry* entry) {
   auto segment = OpenSegment();
   if (nullptr == segment) {
     return EIO;
@@ -730,7 +733,7 @@ int SegmentLogStorage::append_entry(const braft::LogEntry* entry) {
   if (ret != 0 && ret != EEXIST) {
     return ret;
   }
-  if (EEXIST == ret && entry->id.term != get_term(entry->id.index)) {
+  if (EEXIST == ret && entry->id.term != GetTerm(entry->id.index)) {
     return EINVAL;
   }
   last_log_index_.fetch_add(1, butil::memory_order_release);
@@ -738,7 +741,7 @@ int SegmentLogStorage::append_entry(const braft::LogEntry* entry) {
   return segment->Sync(enable_sync_);
 }
 
-braft::LogEntry* SegmentLogStorage::get_entry(const int64_t index) {
+braft::LogEntry* SegmentLogStorage::GetEntry(const int64_t index) {
   std::shared_ptr<Segment> segment = GetSegment(index);
   if (segment == nullptr) {
     return nullptr;
@@ -774,7 +777,7 @@ std::vector<std::shared_ptr<LogEntry>> SegmentLogStorage::GetEntrys(int64_t begi
   return log_entrys;
 }
 
-int64_t SegmentLogStorage::get_term(const int64_t index) {
+int64_t SegmentLogStorage::GetTerm(const int64_t index) {
   std::shared_ptr<Segment> segment = GetSegment(index);
   return (segment == nullptr) ? 0 : segment->GetTerm(index);
 }
@@ -809,7 +812,7 @@ void SegmentLogStorage::PopSegments(int64_t first_index_kept, std::vector<std::s
   }
 }
 
-int SegmentLogStorage::truncate_prefix(const int64_t first_index_kept) {
+int SegmentLogStorage::TruncatePrefix(const int64_t first_index_kept) {
   // segment files
   if (first_log_index_.load(butil::memory_order_acquire) >= first_index_kept) {
     DINGO_LOG(DEBUG) << "Nothing is going to happen since first_log_index_="
@@ -820,7 +823,8 @@ int SegmentLogStorage::truncate_prefix(const int64_t first_index_kept) {
 
   // int64_t allow_destroy_log_index = allow_destroy_log_index_.load(std::memory_order_relaxed);
   // if (first_index_kept >= allow_destroy_log_index) {
-  //   DINGO_LOG(DEBUG) << fmt::format("Not allow truncate prefix, first_index_kept({})>=allow_destroy_log_index_({})",
+  //   DINGO_LOG(DEBUG) << fmt::format("Not allow truncate prefix,
+  //   first_index_kept({})>=allow_destroy_log_index_({})",
   //                                   first_index_kept, allow_destroy_log_index);
   //   return 0;
   // }
@@ -882,7 +886,7 @@ std::shared_ptr<Segment> SegmentLogStorage::PopSegmentsFromBack(int64_t last_ind
   return nullptr;
 }
 
-int SegmentLogStorage::truncate_suffix(const int64_t last_index_kept) {
+int SegmentLogStorage::TruncateSuffix(int64_t last_index_kept) {
   // segment files
   std::vector<std::shared_ptr<Segment>> poppeds;
   std::shared_ptr<Segment> last_segment = PopSegmentsFromBack(last_index_kept, poppeds);
@@ -927,7 +931,7 @@ int SegmentLogStorage::truncate_suffix(const int64_t last_index_kept) {
   return ret;
 }
 
-int SegmentLogStorage::reset(const int64_t next_log_index) {
+int SegmentLogStorage::Reset(int64_t next_log_index) {
   if (next_log_index <= 0) {
     DINGO_LOG(ERROR) << "Invalid next_log_index=" << next_log_index << " path: " << path_;
     return EINVAL;
@@ -1141,7 +1145,7 @@ std::shared_ptr<Segment> SegmentLogStorage::OpenSegment() {
   {
     BAIDU_SCOPED_LOCK(mutex_);
     if (!open_segment_) {
-      open_segment_ = std::make_shared<Segment>(path_, last_log_index() + 1, checksum_type_);
+      open_segment_ = std::make_shared<Segment>(path_, LastLogIndex() + 1, checksum_type_);
       if (open_segment_->Create() != 0) {
         open_segment_ = nullptr;
         return nullptr;
@@ -1157,7 +1161,7 @@ std::shared_ptr<Segment> SegmentLogStorage::OpenSegment() {
     if (prev_open_segment) {
       if (prev_open_segment->Close(enable_sync_) == 0) {
         BAIDU_SCOPED_LOCK(mutex_);
-        open_segment_ = std::make_shared<Segment>(path_, last_log_index() + 1, checksum_type_);
+        open_segment_ = std::make_shared<Segment>(path_, LastLogIndex() + 1, checksum_type_);
         if (open_segment_->Create() == 0) {
           // success
           break;
@@ -1178,8 +1182,8 @@ std::shared_ptr<Segment> SegmentLogStorage::OpenSegment() {
 
 std::shared_ptr<Segment> SegmentLogStorage::GetSegment(int64_t index) {
   BAIDU_SCOPED_LOCK(mutex_);
-  int64_t first_index = first_log_index();
-  int64_t last_index = last_log_index();
+  int64_t first_index = FirstLogIndex();
+  int64_t last_index = LastLogIndex();
   if (first_index == last_index + 1) {
     return nullptr;
   }
@@ -1207,8 +1211,8 @@ std::shared_ptr<Segment> SegmentLogStorage::GetSegment(int64_t index) {
 
 std::vector<std::shared_ptr<Segment>> SegmentLogStorage::GetSegments(int64_t begin_index, int64_t end_index) {
   BAIDU_SCOPED_LOCK(mutex_);
-  int64_t first_index = first_log_index();
-  int64_t last_index = last_log_index();
+  int64_t first_index = FirstLogIndex();
+  int64_t last_index = LastLogIndex();
   if (first_index == last_index + 1) {
     return {};
   }
@@ -1234,7 +1238,7 @@ std::vector<std::shared_ptr<Segment>> SegmentLogStorage::GetSegments(int64_t beg
   return segments;
 }
 
-void SegmentLogStorage::list_files(std::vector<std::string>* seg_files) {
+void SegmentLogStorage::ListFiles(std::vector<std::string>* seg_files) {
   BAIDU_SCOPED_LOCK(mutex_);
   seg_files->push_back(SEGMENT_META_FILE);
   for (auto& [_, segment] : segments_) {
@@ -1245,7 +1249,7 @@ void SegmentLogStorage::list_files(std::vector<std::string>* seg_files) {
   }
 }
 
-void SegmentLogStorage::sync() {
+void SegmentLogStorage::Sync() {
   std::vector<std::shared_ptr<Segment>> segments;
   {
     BAIDU_SCOPED_LOCK(mutex_);
@@ -1259,9 +1263,7 @@ void SegmentLogStorage::sync() {
   }
 }
 
-braft::LogStorage* SegmentLogStorage::new_instance(const std::string& uri) const { return new SegmentLogStorage(uri); }
-
-butil::Status SegmentLogStorage::gc_instance(const std::string& uri) const {
+butil::Status SegmentLogStorage::GcInstance(const std::string& uri) const {
   butil::Status status;
   if (braft::gc_dir(uri) != 0) {
     DINGO_LOG(WARNING) << "Failed to gc log storage from path " << path_;
