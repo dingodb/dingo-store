@@ -43,6 +43,7 @@
 #include "proto/node.pb.h"
 #include "scan/scan_manager.h"
 #include "store/heartbeat.h"
+#include "store/region_controller.h"
 
 DEFINE_string(coor_url, "",
               "coor service name, e.g. file://<path>, list://<addr1>,<addr2>..., bns://<bns-name>, "
@@ -232,6 +233,11 @@ bool Server::InitCoordinatorInteractionForAutoIncrement() {
     return coordinator_interaction_incr_->Init(config->GetString("coordinator.peers"),
                                                pb::common::CoordinatorServiceType::ServiceTypeAutoIncrement);
   }
+}
+
+bool Server::InitLogStorageManager() {
+  log_storage_ = std::make_shared<LogStorageManager>();
+  return true;
 }
 
 bool Server::InitStorage() {

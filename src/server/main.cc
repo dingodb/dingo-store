@@ -475,6 +475,10 @@ int main(int argc, char *argv[]) {
     DINGO_LOG(ERROR) << "InitEngine failed!";
     return -1;
   }
+  if (!dingo_server->InitLogStorageManager()) {
+    DINGO_LOG(ERROR) << "InitLogStorageManager failed!";
+    return -1;
+  }
 
   dingodb::CoordinatorServiceImpl coordinator_service;
   dingodb::MetaServiceImpl meta_service;

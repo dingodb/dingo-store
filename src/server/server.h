@@ -27,6 +27,7 @@
 #include "crontab/crontab.h"
 #include "engine/raw_engine.h"
 #include "engine/storage.h"
+#include "log/log_storage_manager.h"
 #include "meta/store_meta_manager.h"
 #include "metrics/store_metrics_manager.h"
 #include "proto/common.pb.h"
@@ -71,6 +72,9 @@ class Server {
   // Init coordinator interaction
   bool InitCoordinatorInteraction();
   bool InitCoordinatorInteractionForAutoIncrement();
+
+  // Init log Storage manager.
+  bool InitLogStorageManager();
 
   // Init storage engine.
   bool InitStorage();
@@ -123,6 +127,8 @@ class Server {
 
   std::shared_ptr<Engine> GetEngine() { return engine_; }
   std::shared_ptr<RawEngine> GetRawEngine() { return raw_engine_; }
+
+  std::shared_ptr<LogStorageManager> GetLogStorageManager() { return log_storage_; }
 
   std::shared_ptr<Storage> GetStorage() { return storage_; }
   std::shared_ptr<StoreMetaManager> GetStoreMetaManager() { return store_meta_manager_; }
@@ -182,6 +188,9 @@ class Server {
   // All store engine, include MemEngine/RaftStoreEngine/RocksEngine
   std::shared_ptr<Engine> engine_;
   std::shared_ptr<RawEngine> raw_engine_;
+
+  // This is log storage manager
+  std::shared_ptr<LogStorageManager> log_storage_;
 
   // This is a Storage class, deal with all about storage stuff.
   std::shared_ptr<Storage> storage_;

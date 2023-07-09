@@ -58,6 +58,7 @@ function deploy_store() {
   fi
   if [ "${FLAGS_clean_raft}" == "0" ]; then
     rm -rf $dstpath/data/${role}/raft/*
+    rm -rf $dstpath/data/${role}/log/*
   fi
   if [ "${FLAGS_clean_log}" == "0" ]; then
     rm -rf $dstpath/log/*

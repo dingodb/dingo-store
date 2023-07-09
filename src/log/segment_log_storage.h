@@ -16,6 +16,7 @@
 #define DINGODB_SEGMENT_LOG_STORAGE_H_
 
 #include <atomic>
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <vector>
@@ -26,6 +27,8 @@
 #include "butil/atomicops.h"
 #include "butil/iobuf.h"
 #include "butil/logging.h"
+#include "common/helper.h"
+#include "common/logging.h"
 
 namespace dingodb {
 
@@ -134,61 +137,66 @@ class BAIDU_CACHELINE_ALIGNMENT Segment {
 //      log_meta: record start_log
 //      log_000001-0001000: closed segment
 //      log_inprogress_0001001: open segment
-class SegmentLogStorage : public braft::LogStorage {
+class SegmentLogStorage {
  public:
   using SegmentMap = std::map<int64_t, std::shared_ptr<Segment>>;
 
-  explicit SegmentLogStorage(const std::string& path, bool enable_sync = true)
-      : path_(path), first_log_index_(1), last_log_index_(0), checksum_type_(0), enable_sync_(enable_sync) {}
+  explicit SegmentLogStorage(const std::string& path, uint64_t region_id, bool enable_sync = true)
+      : path_(path),
+        region_id_(region_id),
+        first_log_index_(1),
+        last_log_index_(0),
+        checksum_type_(0),
+        enable_sync_(enable_sync) {}
 
   SegmentLogStorage() : first_log_index_(1), last_log_index_(0), checksum_type_(0), enable_sync_(true) {}
 
-  ~SegmentLogStorage() override = default;
+  ~SegmentLogStorage();
 
   // init logstorage, check consistency and integrity
-  virtual int init(braft::ConfigurationManager* configuration_manager);
+  int Init(braft::ConfigurationManager* configuration_manager);
+
+  uint64_t RegionId() const { return region_id_; }
 
   // first log index in log
-  virtual int64_t first_log_index() { return first_log_index_.load(butil::memory_order_acquire); }
+  int64_t FirstLogIndex() { return first_log_index_.load(butil::memory_order_acquire); }
 
   // last log index in log
-  virtual int64_t last_log_index();
+  int64_t LastLogIndex();
 
   // get logentry by index
-  virtual braft::LogEntry* get_entry(const int64_t index);
+  braft::LogEntry* GetEntry(int64_t index);
 
   // [begin_index, end_index]
   std::vector<std::shared_ptr<LogEntry>> GetEntrys(int64_t begin_index, int64_t end_index);
 
   // get logentry's term by index
-  virtual int64_t get_term(const int64_t index);
+  int64_t GetTerm(int64_t index);
 
   // append entry to log
-  int append_entry(const braft::LogEntry* entry);
+  int AppendEntry(const braft::LogEntry* entry);
 
   // append entries to log and update IOMetric, return success append number
-  virtual int append_entries(const std::vector<braft::LogEntry*>& entries, braft::IOMetric* metric);
+  int AppendEntries(const std::vector<braft::LogEntry*>& entries, braft::IOMetric* metric);
 
   // delete logs from storage's head, [1, first_index_kept) will be discarded
-  virtual int truncate_prefix(const int64_t first_index_kept);
+  int TruncatePrefix(int64_t first_index_kept);
 
   // delete uncommitted logs from storage's tail, (last_index_kept, infinity) will be discarded
-  virtual int truncate_suffix(const int64_t last_index_kept);
+  int TruncateSuffix(int64_t last_index_kept);
 
-  virtual int reset(const int64_t next_log_index);
+  int Reset(int64_t next_log_index);
 
-  LogStorage* new_instance(const std::string& uri) const;
+  butil::Status GcInstance(const std::string& uri) const;
 
-  butil::Status gc_instance(const std::string& uri) const;
-
-  SegmentMap segments() {
+  SegmentMap Segments() {
     BAIDU_SCOPED_LOCK(mutex_);
     return segments_;
   }
 
-  void list_files(std::vector<std::string>* seg_files);
+  void ListFiles(std::vector<std::string>* seg_files);
 
-  void sync();
+  void Sync();
 
   void SetAllowDestroyLogIndex(int64_t allow_destroy_log_index) {
     allow_destroy_log_index_.store(allow_destroy_log_index, std::memory_order_relaxed);
@@ -206,6 +214,8 @@ class SegmentLogStorage : public braft::LogStorage {
   std::shared_ptr<Segment> PopSegmentsFromBack(int64_t last_index_kept, std::vector<std::shared_ptr<Segment>>& poppeds);
 
   std::string path_;
+  uint64_t region_id_;
+
   butil::atomic<int64_t> first_log_index_;
   butil::atomic<int64_t> last_log_index_;
   butil::atomic<int64_t> allow_destroy_log_index_;
@@ -217,6 +227,63 @@ class SegmentLogStorage : public braft::LogStorage {
 
   int checksum_type_;
   bool enable_sync_;
+};
+
+// Wrap SegmentLogStorage for inject braft
+class SegmentLogStorageWrapper : public braft::LogStorage {
+ public:
+  explicit SegmentLogStorageWrapper(std::shared_ptr<SegmentLogStorage> log_storage)
+      : log_storage_(log_storage), region_id_(log_storage->RegionId()) {}
+  ~SegmentLogStorageWrapper() override = default;
+
+  // init logstorage, check consistency and integrity
+  virtual int init(braft::ConfigurationManager* configuration_manager) {
+    return log_storage_->Init(configuration_manager);
+  }
+
+  // first log index in log
+  virtual int64_t first_log_index() { return log_storage_->FirstLogIndex(); }
+
+  // last log index in log
+  virtual int64_t last_log_index() { return log_storage_->LastLogIndex(); }
+
+  // get logentry by index
+  virtual braft::LogEntry* get_entry(const int64_t index) { return log_storage_->GetEntry(index); }
+
+  // get logentry's term by index
+  virtual int64_t get_term(const int64_t index) { return log_storage_->GetTerm(index); }
+
+  // append entry to log
+  int append_entry(const braft::LogEntry* entry) { return log_storage_->AppendEntry(entry); }
+
+  // append entries to log and update IOMetric, return success append number
+  virtual int append_entries(const std::vector<braft::LogEntry*>& entries, braft::IOMetric* metric) {
+    return log_storage_->AppendEntries(entries, metric);
+  }
+
+  // delete logs from storage's head, [1, first_index_kept) will be discarded
+  virtual int truncate_prefix(const int64_t first_index_kept) { return log_storage_->TruncatePrefix(first_index_kept); }
+
+  // delete uncommitted logs from storage's tail, (last_index_kept, infinity) will be discarded
+  virtual int truncate_suffix(const int64_t last_index_kept) { return log_storage_->TruncateSuffix(last_index_kept); }
+
+  virtual int reset(const int64_t next_log_index) { return log_storage_->Reset(next_log_index); }
+
+  LogStorage* new_instance(const std::string& uri) const {
+    DINGO_LOG(INFO) << "New segment log storage instance " << region_id_;
+    auto log_storage = std::make_shared<SegmentLogStorage>(uri, region_id_);
+    return new SegmentLogStorageWrapper(log_storage);
+  }
+
+  butil::Status gc_instance(const std::string& uri) const { return log_storage_->GcInstance(uri); }
+
+  void list_files(std::vector<std::string>* seg_files) { log_storage_->ListFiles(seg_files); }
+
+  void sync() { log_storage_->Sync(); }
+
+ private:
+  uint64_t region_id_;
+  std::shared_ptr<SegmentLogStorage> log_storage_;
 };
 
 }  //  namespace dingodb

@@ -188,6 +188,7 @@ butil::Status DeleteRegionTask::DeleteRegion(std::shared_ptr<Context> ctx, uint6
     // Delete raft
     DINGO_LOG(DEBUG) << fmt::format("Delete region {} delete raft node", region_id);
     raft_kv_engine->DestroyNode(ctx, region_id);
+    Server::GetInstance()->GetLogStorageManager()->DeleteStorage(region_id);
   }
 
   // Update state

@@ -94,16 +94,24 @@ butil::Status RaftStoreEngine::AddNode(std::shared_ptr<Context> /*ctx*/, store::
                                        std::shared_ptr<EventListenerCollection> listeners, bool is_restart) {
   DINGO_LOG(INFO) << "RaftkvEngine add region, region_id " << region->Id();
 
-  auto* state_machine = new StoreStateMachine(engine_, region, raft_meta, region_metrics, listeners, is_restart);
+  // Build StateMachine
+  auto state_machine =
+      std::make_shared<StoreStateMachine>(engine_, region, raft_meta, region_metrics, listeners, is_restart);
   if (!state_machine->Init()) {
     return butil::Status(pb::error::ERAFT_INIT, "State machine init failed");
   }
 
-  std::shared_ptr<RaftNode> node = std::make_shared<RaftNode>(
-      region->Id(), region->Name(), braft::PeerId(Server::GetInstance()->RaftEndpoint()), state_machine);
+  // Build log storage
+  auto config = ConfigManager::GetInstance()->GetConfig(Server::GetInstance()->GetRole());
+  std::string log_path = fmt::format("{}/{}", config->GetString("raft.log_path"), region->Id());
+  auto log_storage = std::make_shared<SegmentLogStorage>(log_path, region->Id());
+  Server::GetInstance()->GetLogStorageManager()->AddLogStorage(region->Id(), log_storage);
 
-  if (node->Init(Helper::FormatPeers(Helper::ExtractLocations(region->Peers())),
-                 ConfigManager::GetInstance()->GetConfig(Server::GetInstance()->GetRole())) != 0) {
+  // Build RaftNode
+  std::shared_ptr<RaftNode> node = std::make_shared<RaftNode>(
+      region->Id(), region->Name(), braft::PeerId(Server::GetInstance()->RaftEndpoint()), state_machine, log_storage);
+
+  if (node->Init(Helper::FormatPeers(Helper::ExtractLocations(region->Peers())), config) != 0) {
     node->Destroy();
     return butil::Status(pb::error::ERAFT_INIT, "Raft init failed");
   }
@@ -116,15 +124,21 @@ butil::Status RaftStoreEngine::AddNode(std::shared_ptr<pb::common::RegionDefinit
                                        std::shared_ptr<MetaControl> meta_control, bool is_volatile) {
   DINGO_LOG(INFO) << "RaftkvEngine add region, region_id " << region->id();
 
-  // construct MetaStatMachine here
-  braft::StateMachine* state_machine = new MetaStateMachine(meta_control, is_volatile);
+  // Build StatMachine
+  auto state_machine = std::make_shared<MetaStateMachine>(meta_control, is_volatile);
+
+  // Build log storage
+  auto config = ConfigManager::GetInstance()->GetConfig(Server::GetInstance()->GetRole());
+  std::string log_path = fmt::format("{}/{}", config->GetString("raft.log_path"), region->id());
+  auto log_storage = std::make_shared<SegmentLogStorage>(log_path, region->id());
+  Server::GetInstance()->GetLogStorageManager()->AddLogStorage(region->id(), log_storage);
 
   std::string const meta_raft_name = fmt::format("{}-{}", region->name(), region->id());
   std::shared_ptr<RaftNode> const node = std::make_shared<RaftNode>(
-      region->id(), meta_raft_name, braft::PeerId(Server::GetInstance()->RaftEndpoint()), state_machine);
+      region->id(), meta_raft_name, braft::PeerId(Server::GetInstance()->RaftEndpoint()), state_machine, log_storage);
 
-  if (node->Init(Helper::FormatPeers(Helper::ExtractLocations(region->peers())),
-                 ConfigManager::GetInstance()->GetConfig(Server::GetInstance()->GetRole())) != 0) {
+  // Build RaftNode
+  if (node->Init(Helper::FormatPeers(Helper::ExtractLocations(region->peers())), config) != 0) {
     node->Destroy();
     return butil::Status(pb::error::ERAFT_INIT, "Raft init failed");
   }
