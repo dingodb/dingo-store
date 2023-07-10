@@ -31,13 +31,13 @@
 class SegmentLogStorageTest : public testing::Test {
  protected:
   static void SetUpTestSuite() {
-    log_stroage = std::make_shared<dingodb::SegmentLogStorage>("/tmp/log");
+    log_stroage = std::make_shared<dingodb::SegmentLogStorage>("/tmp/log", 100);
     static braft::ConfigurationManager configuration_manager;
-    log_stroage->init(&configuration_manager);
+    log_stroage->Init(&configuration_manager);
   }
   static void TearDownTestSuite() {
-    log_stroage->reset(log_stroage->last_log_index() + 1);
-    log_stroage->gc_instance("/tmp/log");
+    log_stroage->Reset(log_stroage->LastLogIndex() + 1);
+    log_stroage->GcInstance("/tmp/log");
 
     std::filesystem::remove_all("/tmp/log");
   }
@@ -95,26 +95,26 @@ braft::LogEntry* GenLogEntry() {
 }
 
 TEST_F(SegmentLogStorageTest, AppendEntries) {
-  uint64_t begin_log_index = log_stroage->first_log_index();
+  uint64_t begin_log_index = log_stroage->FirstLogIndex();
 
   const int k_log_entry_count = 1000;
   for (int i = 0; i < k_log_entry_count; ++i) {
     auto* log_entry = GenLogEntry();
-    log_stroage->append_entry(log_entry);
+    log_stroage->AppendEntry(log_entry);
     log_entry->Release();
   }
 
-  DINGO_LOG(INFO) << fmt::format("first_log_id: {} last_log_id: {}", log_stroage->first_log_index(),
-                                 log_stroage->last_log_index());
+  DINGO_LOG(INFO) << fmt::format("first_log_id: {} last_log_id: {}", log_stroage->FirstLogIndex(),
+                                 log_stroage->LastLogIndex());
 
-  EXPECT_EQ(begin_log_index + k_log_entry_count, log_stroage->last_log_index() + 1);
+  EXPECT_EQ(begin_log_index + k_log_entry_count, log_stroage->LastLogIndex() + 1);
 }
 
 TEST_F(SegmentLogStorageTest, GetEntrys) {
   const int k_log_entry_count = 1000;
   for (int i = 0; i < k_log_entry_count; ++i) {
     auto* log_entry = GenLogEntry();
-    log_stroage->append_entry(log_entry);
+    log_stroage->AppendEntry(log_entry);
     log_entry->Release();
   }
 
