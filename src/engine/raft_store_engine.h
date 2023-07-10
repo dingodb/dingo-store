@@ -134,6 +134,11 @@ class RaftStoreEngine : public Engine, public RaftControlAble {
     butil::Status QueryVectorScalarData(uint64_t region_id, std::vector<std::string> selected_scalar_keys,
                                         std::vector<pb::common::VectorWithDistance>& vector_with_distances);
 
+    butil::Status CompareVectorScalarData(uint64_t region_id,
+                                          uint64_t vector_id,
+                                          const pb::common::VectorScalardata& source_scalar_data,
+                                          bool& compare_result);
+
     std::shared_ptr<RawEngine::Reader> reader_;
   };
 

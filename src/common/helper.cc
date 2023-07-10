@@ -776,4 +776,45 @@ bool Helper::RemoveAllFileOrDirectory(const std::string& path) {
   return true;
 }
 
+bool Helper::IsEqualVectorScalarValue(const pb::common::ScalarValue& value1, const pb::common::ScalarValue& value2) {
+  if (value1.field_type() != value2.field_type()) {
+    return false;
+  }
+
+  #define CASE(scalar_field_type, type_data) \
+  case scalar_field_type: { \
+      if (value1.fields_size() == value2.fields_size()) { \
+        for (int i = 0; i < value1.fields_size(); i++) { \
+          if (value1.fields()[i].type_data() != value2.fields()[i].type_data()) { \
+            return false; \
+          } \
+        } \
+      } else { \
+        return false; \
+      } \
+      return true; \
+  }
+
+  switch(value1.field_type()) {
+    CASE(pb::common::ScalarFieldType::BOOL, bool_data)
+    CASE(pb::common::ScalarFieldType::INT8, int_data)
+    CASE(pb::common::ScalarFieldType::INT16, int_data)
+    CASE(pb::common::ScalarFieldType::INT32, int_data)
+    CASE(pb::common::ScalarFieldType::INT64, long_data)
+    CASE(pb::common::ScalarFieldType::FLOAT32, float_data)
+    CASE(pb::common::ScalarFieldType::DOUBLE, double_data)
+    CASE(pb::common::ScalarFieldType::STRING, string_data)
+    CASE(pb::common::ScalarFieldType::BYTES, bytes_data)
+
+    default: {
+      DINGO_LOG(WARNING) << fmt::format("Invalid scalar field type: {}.", static_cast<int>(value1.field_type()));
+      break;
+    }
+  }
+
+  #undef CASE
+
+  return false;
+}
+
 }  // namespace dingodb
