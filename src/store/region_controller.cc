@@ -622,13 +622,30 @@ void DestroyRegionExecutorTask::Run() {
 
 butil::Status SnapshotVectorIndexTask::SaveSnapshot(std::shared_ptr<Context> /*ctx*/, uint64_t vector_index_id) {
   DINGO_LOG(INFO) << "SaveSnapshot: " << vector_index_id;
-  auto vector_index_manager = Server::GetInstance()->GetVectorIndexManager();
-  auto vector_index = vector_index_manager->GetVectorIndex(vector_index_id);
-  if (vector_index == nullptr) {
-    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, fmt::format("Not found vector index {}", vector_index_id));
+  auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
+  auto store_region_meta = store_meta_manager->GetStoreRegionMeta();
+
+  auto region = store_region_meta->GetRegion(vector_index_id);
+  if (region == nullptr) {
+    return butil::Status(pb::error::EREGION_NOT_FOUND, fmt::format("Not found region {}", vector_index_id));
   }
 
-  return vector_index_manager->SaveVectorIndex(vector_index);
+  auto vector_index_manager = Server::GetInstance()->GetVectorIndexManager();
+  if (vector_index_manager == nullptr) {
+    return butil::Status(pb::error::EINTERNAL, "Vector index manager is nullptr");
+  }
+
+  return vector_index_manager->RebuildVectorIndex(region);
+
+  // TODO: when SaveVectorIndex is implemented correctly, we can use it to save vector index
+
+  // auto vector_index = vector_index_manager->GetVectorIndex(vector_index_id);
+  // if (vector_index == nullptr) {
+  //   return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, fmt::format("Not found vector index {}",
+  //   vector_index_id));
+  // }
+
+  // return vector_index_manager->SaveVectorIndex(vector_index);
 }
 
 void SnapshotVectorIndexTask::Run() {

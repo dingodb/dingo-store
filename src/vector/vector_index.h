@@ -20,6 +20,7 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -46,89 +47,43 @@ class VectorIndex {
   VectorIndex(VectorIndex&& rhs) = delete;
   VectorIndex& operator=(VectorIndex&& rhs) = delete;
 
-  pb::common::VectorIndexType VectorIndexType() const { return vector_index_type; }
+  pb::common::VectorIndexType VectorIndexType() const;
 
-  virtual butil::Status Add(const std::vector<pb::common::VectorWithId>& vector_with_ids) {
-    for (const auto& vector_with_id : vector_with_ids) {
-      auto ret = Add(vector_with_id);
-      if (!ret.ok()) {
-        return ret;
-      }
-    }
-    return butil::Status::OK();
-  }
+  virtual butil::Status Add(const std::vector<pb::common::VectorWithId>& vector_with_ids);
+  virtual butil::Status Add(const pb::common::VectorWithId& vector_with_id);
+  virtual butil::Status Add([[maybe_unused]] uint64_t id, [[maybe_unused]] const std::vector<float>& vector) = 0;
 
-  virtual butil::Status Add(const pb::common::VectorWithId& vector_with_id) {
-    std::vector<float> vector;
-    for (const auto& value : vector_with_id.vector().float_values()) {
-      vector.push_back(value);
-    }
+  virtual butil::Status Upsert(const std::vector<pb::common::VectorWithId>& vector_with_ids);
+  virtual butil::Status Upsert(const pb::common::VectorWithId& vector_with_id);
+  virtual butil::Status Upsert([[maybe_unused]] uint64_t id, [[maybe_unused]] const std::vector<float>& vector) = 0;
 
-    return Add(vector_with_id.id(), vector);
-  }
+  virtual butil::Status Delete([[maybe_unused]] uint64_t id) = 0;
 
-  virtual butil::Status Add([[maybe_unused]] uint64_t id, [[maybe_unused]] const std::vector<float>& vector) {
-    return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "Not Support");
-  }
+  virtual butil::Status Save([[maybe_unused]] const std::string& path);
 
-  virtual butil::Status Upsert(const std::vector<pb::common::VectorWithId>& vector_with_ids) {
-    for (const auto& vector_with_id : vector_with_ids) {
-      auto ret = Upsert(vector_with_id);
-      if (!ret.ok()) {
-        return ret;
-      }
-    }
-    return butil::Status::OK();
-  }
+  virtual butil::Status Load([[maybe_unused]] const std::string& path);
 
-  virtual butil::Status Upsert(const pb::common::VectorWithId& vector_with_id) {
-    std::vector<float> vector;
-    for (const auto& value : vector_with_id.vector().float_values()) {
-      vector.push_back(value);
-    }
-
-    return Upsert(vector_with_id.id(), vector);
-  }
-
-  virtual butil::Status Upsert([[maybe_unused]] uint64_t id, [[maybe_unused]] const std::vector<float>& vector) {
-    return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "Not Support");
-  }
-
-  virtual void Delete(uint64_t id) {}
-
-  virtual butil::Status Save([[maybe_unused]] const std::string& path) {
-    return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "Not Support");
-  }
-
-  virtual butil::Status Load([[maybe_unused]] const std::string& path) {
-    return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "Not Support");
-  }
+  virtual butil::Status Search([[maybe_unused]] pb::common::VectorWithId vector_with_id, [[maybe_unused]] uint32_t topk,
+                               std::vector<pb::common::VectorWithDistance>& results,
+                               [[maybe_unused]] bool reconstruct = false);
 
   virtual butil::Status Search([[maybe_unused]] const std::vector<float>& vector, [[maybe_unused]] uint32_t topk,
                                std::vector<pb::common::VectorWithDistance>& /*results*/,
-                               [[maybe_unused]] bool reconstruct = false) {
-    return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "Not Support");
-  }
+                               [[maybe_unused]] bool reconstruct = false) = 0;
 
-  virtual butil::Status Search([[maybe_unused]] pb::common::VectorWithId vector_with_id, [[maybe_unused]] uint32_t topk,
-                               std::vector<pb::common::VectorWithDistance>& /*results*/,
-                               [[maybe_unused]] bool reconstruct = false) {
-    return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "Not Support");
-  }
+  virtual butil::Status SetOnline() = 0;
+
+  virtual butil::Status SetOffline() = 0;
 
   uint64_t Id() const { return id; }
 
-  uint64_t ApplyLogIndex() const { return apply_log_index.load(std::memory_order_relaxed); }
+  uint64_t ApplyLogIndex() const;
 
-  void SetApplyLogIndex(uint64_t apply_log_index) {
-    this->apply_log_index.store(apply_log_index, std::memory_order_relaxed);
-  }
+  void SetApplyLogIndex(uint64_t apply_log_index);
 
-  uint64_t SnapshotLogIndex() const { return snapshot_log_index.load(std::memory_order_relaxed); }
+  uint64_t SnapshotLogIndex() const;
 
-  void SetSnapshotLogIndex(uint64_t snapshot_log_index) {
-    this->snapshot_log_index.store(snapshot_log_index, std::memory_order_relaxed);
-  }
+  void SetSnapshotLogIndex(uint64_t snapshot_log_index);
 
  protected:
   // region_id

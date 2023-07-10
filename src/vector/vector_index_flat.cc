@@ -35,6 +35,7 @@ namespace dingodb {
 VectorIndexFlat::VectorIndexFlat(uint64_t id, const pb::common::VectorIndexParameter& vector_index_parameter)
     : VectorIndex(id, vector_index_parameter) {
   bthread_mutex_init(&mutex_, nullptr);
+  is_online_.store(true);
 
   metric_type_ = vector_index_parameter.flat_parameter().metric_type();
   dimension_ = vector_index_parameter.flat_parameter().dimension();
@@ -58,6 +59,13 @@ VectorIndexFlat::~VectorIndexFlat() {
 }
 
 butil::Status VectorIndexFlat::Add(uint64_t id, const std::vector<float>& vector) {
+  // check is_online
+  if (!is_online_.load()) {
+    std::string s = fmt::format("vector index is offline, please wait for online");
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EVECTOR_INDEX_OFFLINE, s);
+  }
+
   // check
   if (vector.size() != static_cast<size_t>(dimension_)) {
     std::string s =
@@ -72,6 +80,13 @@ butil::Status VectorIndexFlat::Add(uint64_t id, const std::vector<float>& vector
 }
 
 butil::Status VectorIndexFlat::Upsert(uint64_t id, const std::vector<float>& vector) {
+  // check is_online
+  if (!is_online_.load()) {
+    std::string s = fmt::format("vector index is offline, please wait for online");
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EVECTOR_INDEX_OFFLINE, s);
+  }
+
   // check
   if (vector.size() != static_cast<size_t>(dimension_)) {
     std::string s =
@@ -89,7 +104,14 @@ butil::Status VectorIndexFlat::Upsert(uint64_t id, const std::vector<float>& vec
   return butil::Status::OK();
 }
 
-void VectorIndexFlat::Delete(uint64_t id) {
+butil::Status VectorIndexFlat::Delete(uint64_t id) {
+  // check is_online
+  if (!is_online_.load()) {
+    std::string s = fmt::format("vector index is offline, please wait for online");
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EVECTOR_INDEX_OFFLINE, s);
+  }
+
   std::array<faiss::idx_t, 1> ids{static_cast<faiss::idx_t>(id)};
   faiss::IDSelectorArray sel(ids.size(), ids.data());
   size_t remove_count = 0;
@@ -100,13 +122,23 @@ void VectorIndexFlat::Delete(uint64_t id) {
   }
 
   if (0 == remove_count) {
-    DINGO_LOG(DEBUG) << fmt::format("not found id : {}", id);
+    DINGO_LOG(ERROR) << fmt::format("not found id : {}", id);
+    return butil::Status(pb::error::Errno::EVECTOR_INVALID, fmt::format("not found : {}", id));
   }
+
+  return butil::Status::OK();
 }
 
 butil::Status VectorIndexFlat::Search(const std::vector<float>& vector, uint32_t topk,
                                       std::vector<pb::common::VectorWithDistance>& results,
                                       [[maybe_unused]] bool reconstruct) {  // NOLINT
+                                                                            // check is_online
+  if (!is_online_.load()) {
+    std::string s = fmt::format("vector index is offline, please wait for online");
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EVECTOR_INDEX_OFFLINE, s);
+  }
+
   std::vector<faiss::Index::distance_t> distances;
   distances.resize(topk, 0.0f);
   std::vector<faiss::idx_t> labels;
@@ -141,6 +173,13 @@ butil::Status VectorIndexFlat::Search(const std::vector<float>& vector, uint32_t
 butil::Status VectorIndexFlat::Search(pb::common::VectorWithId vector_with_id, uint32_t topk,
                                       std::vector<pb::common::VectorWithDistance>& results,
                                       [[maybe_unused]] bool reconstruct) {
+  // check is_online
+  if (!is_online_.load()) {
+    std::string s = fmt::format("vector index is offline, please wait for online");
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EVECTOR_INDEX_OFFLINE, s);
+  }
+
   dingodb::pb::common::ValueType value_type = vector_with_id.vector().value_type();
 
   if (value_type != dingodb::pb::common::ValueType::FLOAT) {
@@ -170,6 +209,24 @@ butil::Status VectorIndexFlat::Search(pb::common::VectorWithId vector_with_id, u
   }
 
   return Search(vector, topk, results);
+}
+
+butil::Status VectorIndexFlat::SetOffline() {
+  is_online_.store(false);
+  return butil::Status::OK();
+}
+
+butil::Status VectorIndexFlat::SetOnline() {
+  is_online_.store(true);
+  return butil::Status::OK();
+}
+
+butil::Status VectorIndexFlat::Save(const std::string& /*path*/) {
+  return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "Flat index not support save");
+}
+
+butil::Status VectorIndexFlat::Load(const std::string& /*path*/) {
+  return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "Flat index not support load");
 }
 
 }  // namespace dingodb

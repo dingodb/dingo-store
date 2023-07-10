@@ -50,19 +50,25 @@ class VectorIndexFlat : public VectorIndex {
   VectorIndexFlat(VectorIndexFlat&& rhs) = delete;
   VectorIndexFlat& operator=(VectorIndexFlat&& rhs) = delete;
 
+  butil::Status Save(const std::string& path) override;
+  butil::Status Load(const std::string& path) override;
+
   // in FLAT index, add two vector with same id will cause data conflict
   butil::Status Add(uint64_t id, const std::vector<float>& vector) override;
 
   // not exist add. if exist update
   butil::Status Upsert(uint64_t id, const std::vector<float>& vector) override;
 
-  void Delete(uint64_t id) override;
+  butil::Status Delete(uint64_t id) override;
 
   butil::Status Search(const std::vector<float>& vector, uint32_t topk,
                        std::vector<pb::common::VectorWithDistance>& results, bool reconstruct = false) override;
 
   butil::Status Search(pb::common::VectorWithId vector_with_id, uint32_t topk,
                        std::vector<pb::common::VectorWithDistance>& results, bool reconstruct = false) override;
+
+  butil::Status SetOnline() override;
+  butil::Status SetOffline() override;
 
  private:
   // Dimension of the elements
@@ -76,6 +82,7 @@ class VectorIndexFlat : public VectorIndex {
   std::unique_ptr<faiss::IndexIDMap> index_;
 
   bthread_mutex_t mutex_;
+  std::atomic<bool> is_online_;
 };
 
 }  // namespace dingodb

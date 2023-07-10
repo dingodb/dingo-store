@@ -263,7 +263,7 @@ butil::Status VectorIndexManager::ReplayWalToVectorIndex(std::shared_ptr<VectorI
       switch (request.cmd_type()) {
         case pb::raft::VECTOR_ADD:
           for (const auto& vector_with_id : request.vector_add().vectors()) {
-            vector_index->Add(vector_with_id);
+            vector_index->Upsert(vector_with_id);
           }
         case pb::raft::VECTOR_DELETE:
           for (auto vector_id : request.vector_delete().ids()) {
@@ -333,7 +333,7 @@ std::shared_ptr<VectorIndex> VectorIndexManager::BuildVectorIndex(store::RegionP
       continue;
     }
 
-    vector_index->Add(vector);
+    vector_index->Upsert(vector);
   }
 
   return vector_index;
@@ -359,22 +359,29 @@ butil::Status VectorIndexManager::RebuildVectorIndex(store::RegionPtr region) {
     return status;
   }
 
-  // TODO: need to lock vector_index add/delete, to catch up and switch to new vector_index
+  // lock vector_index add/delete, to catch up and switch to new vector_index
+  auto online_vector_index = this->GetVectorIndex(region->Id());
+
+  // set online_vector_index to offline, so it will reject all vector add/del, raft handler will usleep and try to
+  // switch to new vector_index to add/del
+  if (online_vector_index != nullptr) {
+    online_vector_index->SetOffline();
+  }
+
   status = ReplayWalToVectorIndex(vector_index, vector_index->ApplyLogIndex() + 1, UINT64_MAX);
   if (status.ok()) {
     DINGO_LOG(INFO) << fmt::format("ReplayWal success catch up, id {}, log_id {}", region->Id(),
                                    vector_index->ApplyLogIndex());
+
     // set vector index to vector index map
     vector_indexs_.Put(region->Id(), vector_index);
-    return status;
+
+  } else {
+    DINGO_LOG(WARNING) << fmt::format("ReplayWal failed, id {}, log_id {}", region->Id(),
+                                      vector_index->ApplyLogIndex());
   }
 
-  // add vector index to vector index map
-  vector_indexs_.Put(region->Id(), vector_index);
-
-  // TODO: unlock vector_index add/delete lock
-
-  return butil::Status::OK();
+  return status;
 }
 
 butil::Status VectorIndexManager::SaveVectorIndex(store::RegionPtr region) {
