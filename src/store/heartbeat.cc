@@ -619,6 +619,17 @@ int Heartbeat::ExecuteRoutine(void*, bthread::TaskIterator<TaskRunnable*>& iter)
   return 0;
 }
 
+// this is for index
+void VectorIndexScrubTask::ScrubVectorIndex() {
+  auto vector_index_manager = Server::GetInstance()->GetVectorIndexManager();
+  if (vector_index_manager == nullptr) {
+    DINGO_LOG(ERROR) << "vector_index_manager is nullptr";
+    return;
+  }
+
+  vector_index_manager->ScrubVectorIndex();
+}
+
 bool Heartbeat::Init() {
   bthread::ExecutionQueueOptions options;
   options.bthread_attr = BTHREAD_ATTR_NORMAL;
@@ -693,6 +704,12 @@ void Heartbeat::TriggerCoordinatorRecycleOrphan(void*) {
 void Heartbeat::TriggerCalculateTableMetrics(void*) {
   // Free at ExecuteRoutine()
   TaskRunnable* task = new CalculateTableMetricsTask(Server::GetInstance()->GetCoordinatorControl());
+  Server::GetInstance()->GetHeartbeat()->Execute(task);
+}
+
+void Heartbeat::TriggerScrubVectorIndex(void*) {
+  // Free at ExecuteRoutine()
+  TaskRunnable* task = new VectorIndexScrubTask();
   Server::GetInstance()->GetHeartbeat()->Execute(task);
 }
 

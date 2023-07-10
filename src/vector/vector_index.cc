@@ -91,4 +91,18 @@ butil::Status VectorIndex::Load(const std::string& /*path*/) {
   return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "this vector index do not implement load");
 }
 
+butil::Status VectorIndex::GetCount([[maybe_unused]] uint64_t& count) {
+  return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "this vector index do not implement get count");
+}
+
+butil::Status VectorIndex::NeedToRebuild([[maybe_unused]] bool& need_to_rebuild,
+                                         [[maybe_unused]] uint64_t last_save_log_behind) {
+  return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "this vector index do not implement need to rebuild");
+}
+
+butil::Status VectorIndex::NeedToSave([[maybe_unused]] bool& need_to_save,
+                                      [[maybe_unused]] uint64_t last_save_log_behind) {
+  return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "this vector index do not implement need to rebuild");
+}
+
 }  // namespace dingodb

@@ -229,4 +229,21 @@ butil::Status VectorIndexFlat::Load(const std::string& /*path*/) {
   return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "Flat index not support load");
 }
 
+butil::Status VectorIndexFlat::GetCount([[maybe_unused]] uint64_t& count) {
+  count = index_->id_map.size();
+  return butil::Status::OK();
+}
+
+butil::Status VectorIndexFlat::NeedToRebuild([[maybe_unused]] bool& need_to_rebuild,
+                                             [[maybe_unused]] uint64_t last_save_log_behind) {
+  need_to_rebuild = false;
+  return butil::Status::OK();
+}
+
+butil::Status VectorIndexFlat::NeedToSave([[maybe_unused]] bool& need_to_save,
+                                          [[maybe_unused]] uint64_t last_save_log_behind) {
+  need_to_save = false;
+  return butil::Status::OK();
+}
+
 }  // namespace dingodb

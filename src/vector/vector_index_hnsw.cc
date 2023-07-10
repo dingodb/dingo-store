@@ -217,4 +217,44 @@ butil::Status VectorIndexHnsw::SetOffline() {
   return butil::Status::OK();
 }
 
+butil::Status VectorIndexHnsw::GetCount([[maybe_unused]] uint64_t& count) {
+  count = this->hnsw_index_->getCurrentElementCount();
+  return butil::Status::OK();
+}
+
+butil::Status VectorIndexHnsw::NeedToRebuild([[maybe_unused]] bool& need_to_rebuild,
+                                             [[maybe_unused]] uint64_t last_save_log_behind) {
+  auto element_count = this->hnsw_index_->getCurrentElementCount();
+  auto deleted_count = this->hnsw_index_->getDeletedCount();
+
+  if (element_count == 0 || deleted_count == 0) {
+    need_to_rebuild = false;
+    return butil::Status::OK();
+  }
+
+  if (deleted_count > 0 && deleted_count > element_count / 2) {
+    need_to_rebuild = true;
+    return butil::Status::OK();
+  }
+
+  return butil::Status::OK();
+}
+
+butil::Status VectorIndexHnsw::NeedToSave([[maybe_unused]] bool& need_to_save,
+                                          [[maybe_unused]] uint64_t last_save_log_behind) {
+  auto element_count = this->hnsw_index_->getCurrentElementCount();
+  auto deleted_count = this->hnsw_index_->getDeletedCount();
+
+  if (element_count == 0 || deleted_count == 0) {
+    need_to_save = false;
+    return butil::Status::OK();
+  }
+
+  if (last_save_log_behind > 500000) {
+    need_to_save = true;
+  }
+
+  return butil::Status::OK();
+}
+
 }  // namespace dingodb
