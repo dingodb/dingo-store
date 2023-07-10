@@ -92,18 +92,49 @@ services:
       INSTANCE_START_ID: 1003
       <<: *shared-env
 
-  mysql_init:
+  index1:
     image: dingodatabase/dingo-store:latest
-    hostname: mysql_init
-    container_name: mysql_init
+    hostname: index1
+    container_name: index1
     network_mode: host
     depends_on:
-      - store1
-      - store2
-      - store3
+      - coordinator1
+      - coordinator2
+      - coordinator3
     environment:
-      SERVER_HOST: ${DINGO_HOST_IP}
-      COORDINATOR_SERVER_START_PORT: 22001
-      COOR_SRV_PEERS: ${DINGO_HOST_IP}:22001,${DINGO_HOST_IP}:22002,${DINGO_HOST_IP}:22003
-    entrypoint: [ "/bin/sh", "-c" ]
-    command: /opt/dingo-store/scripts/mysql_init.sh
+      FLAGS_role: index
+      INDEX_RAFT_START_PORT: 21101
+      INDEX_SERVER_START_PORT: 21001
+      INDEX_INSTANCE_START_ID: 1101
+      <<: *shared-env
+  index2:
+    image: dingodatabase/dingo-store:latest
+    hostname: index2
+    container_name: index2
+    network_mode: host
+    depends_on:
+      - coordinator1
+      - coordinator2
+      - coordinator3
+    environment:
+      FLAGS_role: index
+      INDEX_RAFT_START_PORT: 21102
+      INDEX_SERVER_START_PORT: 21002
+      INDEX_INSTANCE_START_ID: 1102
+      <<: *shared-env
+
+  index3:
+    image: dingodatabase/dingo-store:latest
+    hostname: index3
+    container_name: index3
+    network_mode: host
+    depends_on:
+      - coordinator1
+      - coordinator2
+      - coordinator3
+    environment:
+      FLAGS_role: index
+      INDEX_RAFT_START_PORT: 21103
+      INDEX_SERVER_START_PORT: 21003
+      INDEX_INSTANCE_START_ID: 1103
+      <<: *shared-env
