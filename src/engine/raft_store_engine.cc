@@ -327,9 +327,39 @@ butil::Status RaftStoreEngine::VectorReader::SearchVector(
     return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, fmt::format("Not found vector index {}", region_id));
   }
 
-  bool with_vector_data = !(parameter.without_vector_data());
+  uint32_t top_n = parameter.top_n();
+  bool use_scalar_filter = parameter.use_scalar_filter();
+  if (use_scalar_filter) {
+    if (BAIDU_UNLIKELY(vector.scalar_data().scalar_data_size() == 0)) {
+      return butil::Status(pb::error::EVECTOR_SCALAR_DATA_NOT_FOUND,
+        fmt::format("Not found vector scalar data, region: {}, vector id: {}", region_id, vector.id()));
+    }
+    top_n *= 10;
+  }
 
-  vector_index->Search(vector, parameter.top_n(), vector_with_distances, with_vector_data);
+  bool with_vector_data = !(parameter.without_vector_data());
+  std::vector<pb::common::VectorWithDistance> temp_vector_with_distances;
+
+  vector_index->Search(vector, top_n, temp_vector_with_distances, with_vector_data);
+  size_t temp_size = temp_vector_with_distances.size();
+
+  if (use_scalar_filter) {
+    for (auto& temp_vector_with_distance : temp_vector_with_distances) {
+      uint64_t temp_id = temp_vector_with_distance.vector_with_id().id();
+      bool compare_result = false;
+      butil::Status status = CompareVectorScalarData(region_id, temp_id, vector.scalar_data(), compare_result);
+      if (!status.ok()) {
+        return status;
+      }
+      if (!compare_result) {
+        continue;
+      }
+
+      vector_with_distances.push_back(temp_vector_with_distance);
+    }
+  } else {
+    vector_with_distances.swap(temp_vector_with_distances);
+  }
 
   // if vector index does not support restruct vector ,we restruct it using RocksDB
   if (with_vector_data) {
@@ -346,6 +376,10 @@ butil::Status RaftStoreEngine::VectorReader::SearchVector(
       vector_with_distance.mutable_vector_with_id()->Swap(&vector_with_id);
     }
   }
+
+  DINGO_LOG(INFO) << "scalar filter: " << use_scalar_filter << ", region: " << region_id << ", vector id: "
+    << vector.id() << ", before filter, result size: " << temp_size
+    << ", after filter, result size: " << vector_with_distances.size();
 
   return butil::Status();
 }
@@ -392,6 +426,41 @@ butil::Status RaftStoreEngine::VectorReader::QueryVectorScalarData(
     QueryVectorScalarData(region_id, selected_scalar_keys, vector_with_id);
   }
 
+  return butil::Status();
+}
+
+butil::Status RaftStoreEngine::VectorReader::CompareVectorScalarData(uint64_t region_id,
+                                                          uint64_t vector_id,
+                                                          const pb::common::VectorScalardata& source_scalar_data,
+                                                          bool& compare_result) {
+  compare_result = false;
+  std::string key, value;
+
+  VectorCodec::EncodeVectorScalar(region_id, vector_id, key);
+
+  auto status = reader_->KvGet(key, value);
+  if (!status.ok()) {
+    return status;
+  }
+
+  pb::common::VectorScalardata vector_scalar;
+  if (!vector_scalar.ParseFromString(value)) {
+    return butil::Status(pb::error::EINTERNAL, "Internal error, decode VectorScalar failed");
+  }
+
+  for (const auto& [key, value] : source_scalar_data.scalar_data()) {
+    auto it = vector_scalar.scalar_data().find(key);
+    if (it == vector_scalar.scalar_data().end()) {
+      return butil::Status();
+    }
+
+    compare_result = Helper::IsEqualVectorScalarValue(value, it->second);
+    if (!compare_result) {
+      return butil::Status();
+    }
+  }
+
+  compare_result = true;
   return butil::Status();
 }
 

@@ -217,6 +217,9 @@ class Helper {
   static std::string FindFileInDirectory(const std::string& dirpath, const std::string& prefix);
   static bool RemoveFileOrDirectory(const std::string& path);
   static bool RemoveAllFileOrDirectory(const std::string& path);
+
+  // vector scalar index value
+  static bool IsEqualVectorScalarValue(const pb::common::ScalarValue& value1, const pb::common::ScalarValue& value2);
 };
 
 }  // namespace dingodb
