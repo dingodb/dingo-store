@@ -34,6 +34,8 @@ deploy() {
   program_dir=$BASE_DIR/dist/${FLAGS_role}1
   if [ $FLAGS_role == "coordinator" ]; then
     deploy_store ${FLAGS_role} $BASE_DIR $program_dir $COORDINATOR_SERVER_START_PORT $COORDINATOR_RAFT_START_PORT $INSTANCE_START_ID ${COOR_RAFT_PEERS} ${TMP_COORDINATOR_SERVICES}
+  elif [ ${FLAGS_role} == "index" ]; then
+    deploy_store ${FLAGS_role} ${BASE_DIR} ${program_dir} ${INDEX_SERVER_START_PORT} ${INDEX_RAFT_START_PORT} ${INDEX_INSTANCE_START_ID} ${COOR_RAFT_PEERS:-fail} ${TMP_COORDINATOR_SERVICES}
   else
     deploy_store ${FLAGS_role} $BASE_DIR $program_dir $SERVER_START_PORT $RAFT_START_PORT $INSTANCE_START_ID ${COOR_RAFT_PEERS:-fail} ${TMP_COORDINATOR_SERVICES}
   fi
