@@ -42,6 +42,11 @@ class RegionControlServiceImpl : public pb::region_control::RegionControlService
                       const pb::region_control::TransferLeaderRequest* request,
                       pb::region_control::TransferLeaderResponse* response, google::protobuf::Closure* done) override;
 
+  void SnapshotVectorIndex(google::protobuf::RpcController* controller,
+                           const pb::region_control::SnapshotVectorIndexRequest* request,
+                           pb::region_control::SnapshotVectorIndexResponse* response,
+                           google::protobuf::Closure* done) override;
+
   void Debug(google::protobuf::RpcController* controller, const ::dingodb::pb::region_control::DebugRequest* request,
              ::dingodb::pb::region_control::DebugResponse* response, ::google::protobuf::Closure* done) override;
 };

@@ -180,6 +180,8 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
     } else if (method == "BatchAddRegion") {
       client::BatchSendAddRegion(ctx->store_interaction, FLAGS_region_id, FLAGS_region_count, FLAGS_thread_num,
                                  FLAGS_raft_group, raft_addrs);
+    } else if (method == "SnapshotVectorIndex") {
+      client::SendSnapshotVectorIndex(ctx->store_interaction, FLAGS_region_id);
     }
 
     // Kev/Value operation

@@ -210,6 +210,21 @@ class DestroyRegionExecutorTask : public TaskRunnable {
   std::shared_ptr<pb::coordinator::RegionCmd> region_cmd_;
 };
 
+class SnapshotVectorIndexTask : public TaskRunnable {
+ public:
+  SnapshotVectorIndexTask(std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> region_cmd)
+      : ctx_(ctx), region_cmd_(region_cmd) {}
+  ~SnapshotVectorIndexTask() override = default;
+
+  void Run() override;
+
+ private:
+  static butil::Status SaveSnapshot(std::shared_ptr<Context> ctx, uint64_t vector_index_id);
+
+  std::shared_ptr<Context> ctx_;
+  std::shared_ptr<pb::coordinator::RegionCmd> region_cmd_;
+};
+
 class ControlExecutor {
  public:
   explicit ControlExecutor() : is_available_(false), queue_id_({UINT64_MAX}) {}

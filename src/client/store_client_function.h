@@ -77,6 +77,7 @@ void SendDestroyRegion(ServerInteractionPtr interaction, uint64_t region_id);
 void SendSnapshot(ServerInteractionPtr interaction, uint64_t region_id);
 void BatchSendAddRegion(ServerInteractionPtr interaction, int start_region_id, int region_count, int thread_num,
                         const std::string& raft_group, std::vector<std::string>& raft_addrs);
+void SendSnapshotVectorIndex(ServerInteractionPtr interaction, uint64_t vector_index_id);
 
 // test
 void TestBatchPut(ServerInteractionPtr interaction, uint64_t region_id, int thread_num, int req_num,

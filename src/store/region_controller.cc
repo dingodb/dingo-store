@@ -620,6 +620,29 @@ void DestroyRegionExecutorTask::Run() {
       status.ok() ? pb::coordinator::RegionCmdStatus::STATUS_DONE : pb::coordinator::RegionCmdStatus::STATUS_FAIL);
 }
 
+butil::Status SnapshotVectorIndexTask::SaveSnapshot(std::shared_ptr<Context> /*ctx*/, uint64_t vector_index_id) {
+  DINGO_LOG(INFO) << "SaveSnapshot: " << vector_index_id;
+  auto vector_index_manager = Server::GetInstance()->GetVectorIndexManager();
+  auto vector_index = vector_index_manager->GetVectorIndex(vector_index_id);
+  if (vector_index == nullptr) {
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, fmt::format("Not found vector index {}", vector_index_id));
+  }
+
+  return vector_index_manager->SaveVectorIndex(vector_index);
+}
+
+void SnapshotVectorIndexTask::Run() {
+  auto status = SaveSnapshot(ctx_, region_cmd_->snapshot_vector_index_request().vector_index_id());
+  if (!status.ok()) {
+    DINGO_LOG(DEBUG) << fmt::format("Save vector index snapshot {} failed, {}",
+                                    region_cmd_->snapshot_vector_index_request().vector_index_id(), status.error_str());
+  }
+
+  Server::GetInstance()->GetRegionCommandManager()->UpdateCommandStatus(
+      region_cmd_,
+      status.ok() ? pb::coordinator::RegionCmdStatus::STATUS_DONE : pb::coordinator::RegionCmdStatus::STATUS_FAIL);
+}
+
 static int ExecuteRoutine(void*, bthread::TaskIterator<TaskRunnable*>& iter) {
   if (iter.is_queue_stopped()) {
     return 0;
@@ -1008,6 +1031,10 @@ RegionController::TaskBuilderMap RegionController::task_builders = {
     {pb::coordinator::CMD_DESTROY_EXECUTOR,
      [](std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command) -> TaskRunnable* {
        return new DestroyRegionExecutorTask(ctx, command);
+     }},
+    {pb::coordinator::CMD_SNAPSHOT_VECTOR_INDEX,
+     [](std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command) -> TaskRunnable* {
+       return new SnapshotVectorIndexTask(ctx, command);
      }},
 };
 
