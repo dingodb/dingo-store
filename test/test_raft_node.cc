@@ -49,6 +49,7 @@ const std::string kYamlConfigContent =
     "  host: 127.0.0.1\n"
     "  port: 23100\n"
     "  path: /tmp/dingo-store/data/store/raft\n"
+    "  log_path: /tmp/dingo-store/data/store/log\n"
     "  election_timeout: 1000 # ms\n"
     "  snapshot_interval: 3600 # s\n"
     "log:\n"
@@ -132,17 +133,21 @@ std::shared_ptr<dingodb::RaftNode> LaunchRaftNode(std::shared_ptr<dingodb::Confi
                                                   const dingodb::pb::common::Peer& peer, std::string init_conf) {
   // build state machine
   auto raft_meta = dingodb::StoreRaftMeta::NewRaftMeta(region->Id());
-  auto* state_machine = new dingodb::StoreStateMachine(nullptr, region, raft_meta, nullptr, nullptr, false);
+  auto state_machine =
+      std::make_shared<dingodb::StoreStateMachine>(nullptr, region, raft_meta, nullptr, nullptr, false);
   if (!state_machine->Init()) {
     std::cout << "Init state machine failed";
     return nullptr;
   }
 
+  std::string log_path = fmt::format("{}/{}", config->GetString("raft.log_path"), node_id);
+  auto log_storage = std::make_shared<dingodb::SegmentLogStorage>(log_path, node_id);
+
   // std::string init_conf = FormatPeers(region->Peers());
 
   // build braft node
-  auto node = std::make_shared<dingodb::RaftNode>(node_id, region->Name(),
-                                                  braft::PeerId(FormatLocation(peer.raft_location())), state_machine);
+  auto node = std::make_shared<dingodb::RaftNode>(
+      node_id, region->Name(), braft::PeerId(FormatLocation(peer.raft_location())), state_machine, log_storage);
 
   if (node->Init(init_conf, config) != 0) {
     node->Destroy();

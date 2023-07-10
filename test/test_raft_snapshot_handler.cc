@@ -53,6 +53,7 @@ const std::string kYamlConfigContent =
     "  host: 127.0.0.1\n"
     "  port: 23100\n"
     "  path: /data/dingo-store/data/store/raft\n"
+    "  log_path: /data/dingo-store/data/store/log\n"
     "  election_timeout: 1000 # ms\n"
     "  snapshot_interval: 3600 # s\n"
     "log:\n"
