@@ -104,7 +104,8 @@ butil::Status RaftStoreEngine::AddNode(std::shared_ptr<Context> /*ctx*/, store::
   // Build log storage
   auto config = ConfigManager::GetInstance()->GetConfig(Server::GetInstance()->GetRole());
   std::string log_path = fmt::format("{}/{}", config->GetString("raft.log_path"), region->Id());
-  auto log_storage = std::make_shared<SegmentLogStorage>(log_path, region->Id());
+  auto log_storage = std::make_shared<SegmentLogStorage>(log_path, region->Id(),
+                                                         Server::GetInstance()->GetRole() == pb::common::INDEX);
   Server::GetInstance()->GetLogStorageManager()->AddLogStorage(region->Id(), log_storage);
 
   // Build RaftNode

@@ -437,7 +437,8 @@ butil::Status VectorIndexManager::SaveVectorIndex(std::shared_ptr<VectorIndex> v
     return butil::Status(pb::error::Errno::EINTERNAL, "Open vector index file log_id file failed");
   }
 
-  vector_index_file_log_id_file << vector_index->ApplyLogIndex();
+  uint64_t apply_log_index = vector_index->ApplyLogIndex();
+  vector_index_file_log_id_file << apply_log_index;
 
   // delete old vector index file
   // read dir file list
@@ -479,7 +480,11 @@ butil::Status VectorIndexManager::SaveVectorIndex(std::shared_ptr<VectorIndex> v
     std::filesystem::remove(file_path);
   }
 
-  // TODO: trim wal log here
+  // Set truncate wal log index.
+  auto log_storage = Server::GetInstance()->GetLogStorageManager()->GetLogStorage(vector_index->Id());
+  if (log_storage != nullptr) {
+    log_storage->SetVectorIndexTruncateLogIndex(apply_log_index);
+  }
 
   return butil::Status::OK();
 }

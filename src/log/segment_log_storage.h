@@ -141,12 +141,14 @@ class SegmentLogStorage {
  public:
   using SegmentMap = std::map<int64_t, std::shared_ptr<Segment>>;
 
-  explicit SegmentLogStorage(const std::string& path, uint64_t region_id, bool enable_sync = true)
+  explicit SegmentLogStorage(const std::string& path, uint64_t region_id, bool enable_truncate_control = false,
+                             bool enable_sync = true)
       : path_(path),
         region_id_(region_id),
         first_log_index_(1),
         last_log_index_(0),
         checksum_type_(0),
+        enable_truncate_control_(enable_truncate_control),
         enable_sync_(enable_sync) {}
 
   SegmentLogStorage() : first_log_index_(1), last_log_index_(0), checksum_type_(0), enable_sync_(true) {}
@@ -198,8 +200,13 @@ class SegmentLogStorage {
 
   void Sync();
 
-  void SetAllowDestroyLogIndex(int64_t allow_destroy_log_index) {
-    allow_destroy_log_index_.store(allow_destroy_log_index, std::memory_order_relaxed);
+  void SetVectorIndexTruncateLogIndex(int64_t truncate_log_index) {
+    auto it = truncate_log_indexs_.find("VectorIndex");
+    if (it != truncate_log_indexs_.end()) {
+      if (truncate_log_index > it->second.load(std::memory_order_relaxed)) {
+        it->second.store(truncate_log_index, std::memory_order_relaxed);
+      }
+    }
   }
 
  private:
@@ -218,7 +225,10 @@ class SegmentLogStorage {
 
   butil::atomic<int64_t> first_log_index_;
   butil::atomic<int64_t> last_log_index_;
-  butil::atomic<int64_t> allow_destroy_log_index_;
+
+  // Control truncate log.
+  bool enable_truncate_control_;
+  std::map<std::string, std::atomic<int64_t>> truncate_log_indexs_;
 
   bthread::Mutex mutex_;
   SegmentMap segments_;
