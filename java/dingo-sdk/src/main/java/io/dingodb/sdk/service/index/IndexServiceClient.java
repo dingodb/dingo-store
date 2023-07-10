@@ -59,20 +59,18 @@ public class IndexServiceClient {
 
     private Supplier<Location> locationSupplier(DingoCommonId schemaId, DingoCommonId indexId, DingoCommonId regionId) {
         return () -> rootMetaService.getSubMetaService(schemaId).getIndexRangeDistribution(indexId).values().stream()
-            .filter(rd -> rd.getId().equals(regionId))
-            .findAny()
-            .map(RangeDistribution::getLeader)
-            .orElse(null);
+                .filter(rd -> rd.getId().equals(regionId))
+                .findAny()
+                .map(RangeDistribution::getLeader)
+                .orElse(null);
     }
 
     public IndexServiceConnector getIndexStoreConnector(DingoCommonId indexId, DingoCommonId regionId) {
         SDKCommonId schemaId = new SDKCommonId(
-            DingoCommonId.Type.ENTITY_TYPE_INDEX, rootMetaService.id().getEntityId(), indexId.parentId()
-        );
+                DingoCommonId.Type.ENTITY_TYPE_INDEX, rootMetaService.id().getEntityId(), indexId.parentId());
 
         return connectorCache.computeIfAbsent(
-            regionId, __ -> new IndexServiceConnector(locationSupplier(schemaId, indexId, regionId))
-        );
+                regionId, __ -> new IndexServiceConnector(locationSupplier(schemaId, indexId, regionId)));
     }
 
     public void shutdown() {
@@ -84,8 +82,7 @@ public class IndexServiceClient {
             DingoCommonId regionId,
             List<VectorWithId> vectors,
             boolean replaceDeleted,
-            boolean isUpdate)
-    {
+            boolean isUpdate) {
         Index.VectorAddRequest request = Index.VectorAddRequest.newBuilder()
                 .setRegionId(regionId.entityId())
                 .addAllVectors(vectors.stream().map(EntityConversion::mapping).collect(Collectors.toList()))
@@ -107,7 +104,7 @@ public class IndexServiceClient {
                 .setVector(mapping(vector))
                 .setParameter(Common.VectorSearchParameter.newBuilder()
                         .setTopN(parameter.getTopN())
-                        .setWithAllMetadata(parameter.isWithAllMetaData())
+                        .setWithScalarData(parameter.isWithScalarData())
                         .addAllSelectedKeys(parameter.getSelectedKeys())
                         .build())
                 .build();
@@ -121,17 +118,17 @@ public class IndexServiceClient {
             DingoCommonId indexId,
             DingoCommonId regionId,
             List<Long> vectorIds,
-            Boolean isNeedMetaData,
-            List<String> selectedKeys
-            ) {
+            Boolean withScalarData,
+            List<String> selectedKeys) {
         Index.VectorBatchQueryRequest request = Index.VectorBatchQueryRequest.newBuilder()
                 .setRegionId(regionId.entityId())
                 .addAllVectorIds(vectorIds)
-                .setIsNeedMetadata(isNeedMetaData)
+                .setWithScalarData(withScalarData)
                 .addAllSelectedKeys(selectedKeys)
                 .build();
 
-        Index.VectorBatchQueryResponse response = exec(stub -> stub.vectorBatchQuery(request), retryTimes, indexId, regionId);
+        Index.VectorBatchQueryResponse response = exec(stub -> stub.vectorBatchQuery(request), retryTimes, indexId,
+                regionId);
 
         return response.getVectorsList().stream().map(EntityConversion::mapping).collect(Collectors.toList());
     }
@@ -142,7 +139,8 @@ public class IndexServiceClient {
                 .setGetMin(getMin)
                 .build();
 
-        Index.VectorGetBorderIdResponse response = exec(stub -> stub.vectorGetBorderId(request), retryTimes, indexId, regionId);
+        Index.VectorGetBorderIdResponse response = exec(stub -> stub.vectorGetBorderId(request), retryTimes, indexId,
+                regionId);
         return response.getId();
     }
 
@@ -161,8 +159,7 @@ public class IndexServiceClient {
             Function<IndexServiceGrpc.IndexServiceBlockingStub, R> function,
             int retryTimes,
             DingoCommonId indexId,
-            DingoCommonId regionId
-    ) {
+            DingoCommonId regionId) {
         return getIndexStoreConnector(indexId, regionId).exec(function, retryTimes);
     }
 }

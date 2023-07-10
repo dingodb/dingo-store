@@ -124,7 +124,7 @@ class VectorIndexHnsw : public VectorIndex {
   }
 
   butil::Status Search(const std::vector<float>& vector, uint32_t topk,
-                       std::vector<pb::common::VectorWithDistance>& results) override {
+                       std::vector<pb::common::VectorWithDistance>& results, bool reconstruct = false) override {
     if (vector_index_type == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
       // std::priority_queue<std::pair<float, uint64_t>> result = hnsw_index_->searchKnn(vector.data(), topk);
 
@@ -145,14 +145,18 @@ class VectorIndexHnsw : public VectorIndex {
 
         vector_with_id->set_id(result.top().second);
 
-        try {
-          std::vector<float> data = hnsw_index_->getDataByLabel<float>(result.top().second);
-          for (auto& value : data) {
-            vector_with_id->mutable_vector()->add_float_values(value);
+        if (reconstruct) {
+          try {
+            std::vector<float> data = hnsw_index_->getDataByLabel<float>(result.top().second);
+            for (auto& value : data) {
+              vector_with_id->mutable_vector()->add_float_values(value);
+            }
+            results.push_back(vector_with_distance);
+          } catch (std::exception& e) {
+            DINGO_LOG(ERROR) << "getDataByLabel failed, label: " << result.top().second << " err: " << e.what();
           }
+        } else {
           results.push_back(vector_with_distance);
-        } catch (std::exception& e) {
-          DINGO_LOG(ERROR) << "getDataByLabel failed, label: " << result.top().second << " err: " << e.what();
         }
 
         result.pop();
@@ -164,13 +168,13 @@ class VectorIndexHnsw : public VectorIndex {
   }
 
   butil::Status Search(pb::common::VectorWithId vector_with_id, uint32_t topk,
-                       std::vector<pb::common::VectorWithDistance>& results) override {
+                       std::vector<pb::common::VectorWithDistance>& results, bool reconstruct = false) override {
     std::vector<float> vector;
     for (auto value : vector_with_id.vector().float_values()) {
       vector.push_back(value);
     }
 
-    return Search(vector, topk, results);
+    return Search(vector, topk, results, reconstruct);
   }
 
  private:

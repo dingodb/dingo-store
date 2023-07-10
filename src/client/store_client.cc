@@ -46,6 +46,8 @@ DEFINE_int32(dimension, 16, "dimension");
 DEFINE_int32(count, 50, "count");
 DEFINE_int32(vector_id, 0, "vector_id");
 DEFINE_int32(topn, 10, "top n");
+DEFINE_bool(without_vector, false, "Search vector without output vector data");
+DEFINE_bool(with_scalar, false, "Search vector with scalar data");
 
 bvar::LatencyRecorder g_latency_recorder("dingo-store");
 

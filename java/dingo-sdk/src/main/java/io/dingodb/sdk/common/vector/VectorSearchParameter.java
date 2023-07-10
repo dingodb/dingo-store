@@ -26,6 +26,6 @@ import java.util.List;
 public class VectorSearchParameter {
 
     private Integer topN;
-    private boolean withAllMetaData;
+    private boolean withScalarData;
     private List<String> selectedKeys;
 }

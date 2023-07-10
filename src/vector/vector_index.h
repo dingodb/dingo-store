@@ -105,12 +105,14 @@ class VectorIndex {
   }
 
   virtual butil::Status Search([[maybe_unused]] const std::vector<float>& vector, [[maybe_unused]] uint32_t topk,
-                               std::vector<pb::common::VectorWithDistance>& /*results*/) {
+                               std::vector<pb::common::VectorWithDistance>& /*results*/,
+                               [[maybe_unused]] bool reconstruct = false) {
     return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "Not Support");
   }
 
   virtual butil::Status Search([[maybe_unused]] pb::common::VectorWithId vector_with_id, [[maybe_unused]] uint32_t topk,
-                               std::vector<pb::common::VectorWithDistance>& /*results*/) {
+                               std::vector<pb::common::VectorWithDistance>& /*results*/,
+                               [[maybe_unused]] bool reconstruct = false) {
     return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "Not Support");
   }
 

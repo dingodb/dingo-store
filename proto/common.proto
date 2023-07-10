@@ -35,7 +35,9 @@ enum Engine {
   ENG_COLUMNAR = 4;
 };
 
-enum RawEngine { RAW_ENG_ROCKSDB = 0; };
+enum RawEngine {
+  RAW_ENG_ROCKSDB = 0;
+};
 
 message Location {
   string host = 1;
@@ -73,10 +75,6 @@ message Vector {
   repeated bytes binary_values = 4;
 }
 
-message VectorMetadata {
-  map<string, bytes> metadata = 1;
-}
-
 message VectorScalardata {
   map<string, ScalarValue> scalar_data = 1;  // scalar data of this vector, key: scalar key, value: scalar value data.
 }
@@ -84,8 +82,7 @@ message VectorScalardata {
 message VectorWithId {
   uint64 id = 1;
   Vector vector = 2;                 // vector data
-  VectorMetadata metadata = 3;       // metadata of this vector
-  VectorScalardata scalar_data = 4;  // scalar data of this vector, key: scalar key, value: scalar value data.
+  VectorScalardata scalar_data = 3;  // scalar data of this vector, key: scalar key, value: scalar value data.
 }
 
 message VectorWithDistance {
@@ -482,19 +479,18 @@ message VectorSearchParameter {
   // The number of top results to return.
   uint32 top_n = 1;
 
-  // Whether to return all metadata or only selected keys.
-  bool with_all_metadata = 2;
-
-  // A list of keys to return if `with_all_metadata` is false.
-  repeated string selected_keys = 3;
+  bool without_vector_data = 2;       // Default false, if true, response without vector data.
+  bool with_scalar_data = 3;          // Default false, if true, response with scalar data.
+  repeated string selected_keys = 4;  // If with_scalar_data is true, selected_keys is used to select scalar data, if
+                                      // this parameter is null, all scalar data will be returned.
 
   // The search method to use.
   oneof search {
-    SearchFlatParam flat = 4;
-    SearchIvfFlatParam ivf_flat = 5;
-    SearchIvfPqParam ivf_pq = 6;
-    SearchHNSWParam hnsw = 7;
-    SearchDiskAnnParam diskann = 8;
+    SearchFlatParam flat = 11;
+    SearchIvfFlatParam ivf_flat = 12;
+    SearchIvfPqParam ivf_pq = 13;
+    SearchHNSWParam hnsw = 14;
+    SearchDiskAnnParam diskann = 15;
   }
 
   // Whether to use scalar filtering.

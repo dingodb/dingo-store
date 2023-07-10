@@ -43,15 +43,6 @@ uint64_t VectorCodec::DecodeVectorId(const std::string& value) {
   return buf.ReadLong();
 }
 
-void VectorCodec::EncodeVectorMeta(uint64_t region_id, uint64_t vector_id, std::string& result) {
-  Buf buf(17);
-  buf.WriteLong(region_id);
-  buf.Write(Constant::kVectorMetaPrefix);
-  buf.WriteLong(vector_id);
-
-  buf.GetBytes(result);
-}
-
 void VectorCodec::EncodeVectorScalar(uint64_t region_id, uint64_t vector_id, std::string& result) {
   Buf buf(17);
   buf.WriteLong(region_id);
