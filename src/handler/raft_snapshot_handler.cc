@@ -117,7 +117,8 @@ butil::Status RaftSnapshot::GenSnapshotFileByCheckpoint(const std::string& check
   return butil::Status();
 }
 
-bool RaftSnapshot::SaveSnapshot(braft::SnapshotWriter* writer, store::RegionPtr region, GenSnapshotFileFunc func) {
+bool RaftSnapshot::SaveSnapshot(braft::SnapshotWriter* writer, store::RegionPtr region,  // NOLINT
+                                GenSnapshotFileFunc func) {
   if (region->Range().start_key().empty() || region->Range().end_key().empty()) {
     DINGO_LOG(ERROR) << fmt::format("Save snapshot region {} failed, range is invalid", region->Id());
     return false;
@@ -268,8 +269,9 @@ void AsyncSaveSnapshotByScan(uint64_t region_id, std::shared_ptr<RawEngine> engi
             snapshot_arg->done->status().set_error(pb::error::ERAFT_SAVE_SNAPSHOT, "save snapshot failed");
           }
         } else {
-          auto gen_snapshot_file_func = std::bind(&RaftSnapshot::GenSnapshotFileByScan, snapshot_arg->raft_snapshot,
-                                                  std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
+          auto gen_snapshot_file_func =
+              std::bind(&RaftSnapshot::GenSnapshotFileByScan, snapshot_arg->raft_snapshot,  // NOLINT
+                        std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
           if (!snapshot_arg->raft_snapshot->SaveSnapshot(snapshot_arg->writer, region, gen_snapshot_file_func)) {
             LOG(ERROR) << "Save snapshot failed, region: " << region->Id();
             if (snapshot_arg->done != nullptr) {
@@ -301,7 +303,7 @@ void SaveSnapshotByCheckpoint(uint64_t region_id, std::shared_ptr<RawEngine> eng
   }
 
   auto raft_snapshot = std::make_shared<RaftSnapshot>(engine, false);
-  auto gen_snapshot_file_func = std::bind(&RaftSnapshot::GenSnapshotFileByCheckpoint, raft_snapshot,
+  auto gen_snapshot_file_func = std::bind(&RaftSnapshot::GenSnapshotFileByCheckpoint, raft_snapshot,  // NOLINT
                                           std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
   if (!raft_snapshot->SaveSnapshot(writer, region, gen_snapshot_file_func)) {
     LOG(ERROR) << "Save snapshot failed, region: " << region->Id();

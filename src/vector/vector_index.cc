@@ -14,6 +14,81 @@
 
 #include "vector/vector_index.h"
 
+#include "butil/status.h"
+
 namespace dingodb {
+
 VectorIndex::~VectorIndex() = default;
+
+pb::common::VectorIndexType VectorIndex::VectorIndexType() const { return vector_index_type; }
+
+butil::Status VectorIndex::Search([[maybe_unused]] pb::common::VectorWithId vector_with_id,
+                                  [[maybe_unused]] uint32_t topk, std::vector<pb::common::VectorWithDistance>& results,
+                                  [[maybe_unused]] bool reconstruct) {
+  std::vector<float> vector;
+  for (auto value : vector_with_id.vector().float_values()) {
+    vector.push_back(value);
+  }
+
+  return Search(vector, topk, results, reconstruct);
+}
+
+butil::Status VectorIndex::Upsert(const std::vector<pb::common::VectorWithId>& vector_with_ids) {
+  for (const auto& vector_with_id : vector_with_ids) {
+    auto ret = Upsert(vector_with_id);
+    if (!ret.ok()) {
+      return ret;
+    }
+  }
+  return butil::Status::OK();
+}
+
+butil::Status VectorIndex::Upsert(const pb::common::VectorWithId& vector_with_id) {
+  std::vector<float> vector;
+  for (const auto& value : vector_with_id.vector().float_values()) {
+    vector.push_back(value);
+  }
+
+  return Upsert(vector_with_id.id(), vector);
+}
+
+butil::Status VectorIndex::Add(const std::vector<pb::common::VectorWithId>& vector_with_ids) {
+  for (const auto& vector_with_id : vector_with_ids) {
+    auto ret = Add(vector_with_id);
+    if (!ret.ok()) {
+      return ret;
+    }
+  }
+  return butil::Status::OK();
+}
+
+butil::Status VectorIndex::Add(const pb::common::VectorWithId& vector_with_id) {
+  std::vector<float> vector;
+  for (const auto& value : vector_with_id.vector().float_values()) {
+    vector.push_back(value);
+  }
+
+  return Add(vector_with_id.id(), vector);
+}
+
+void VectorIndex::SetSnapshotLogIndex(uint64_t snapshot_log_index) {
+  this->snapshot_log_index.store(snapshot_log_index, std::memory_order_relaxed);
+}
+
+uint64_t VectorIndex::ApplyLogIndex() const { return apply_log_index.load(std::memory_order_relaxed); }
+
+void VectorIndex::SetApplyLogIndex(uint64_t apply_log_index) {
+  this->apply_log_index.store(apply_log_index, std::memory_order_relaxed);
+}
+
+uint64_t VectorIndex::SnapshotLogIndex() const { return snapshot_log_index.load(std::memory_order_relaxed); }
+
+butil::Status VectorIndex::Save(const std::string& /*path*/) {
+  return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "this vector index do not implement save");
+}
+
+butil::Status VectorIndex::Load(const std::string& /*path*/) {
+  return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "this vector index do not implement load");
+}
+
 }  // namespace dingodb

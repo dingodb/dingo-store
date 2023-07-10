@@ -23,6 +23,7 @@
 #include <string>
 #include <vector>
 
+#include "bthread/types.h"
 #include "butil/status.h"
 #include "common/logging.h"
 #include "hnswlib/space_ip.h"
@@ -35,147 +36,28 @@ namespace dingodb {
 
 class VectorIndexHnsw : public VectorIndex {
  public:
-  explicit VectorIndexHnsw(uint64_t id, const pb::common::VectorIndexParameter& vector_index_parameter)
-      : VectorIndex(id, vector_index_parameter) {
-    if (vector_index_type == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
-      const auto& hnsw_parameter = vector_index_parameter.hnsw_parameter();
-      assert(hnsw_parameter.dimension() > 0);
-      assert(hnsw_parameter.metric_type() != pb::common::MetricType::METRIC_TYPE_NONE);
-      assert(hnsw_parameter.efconstruction() > 0);
-      assert(hnsw_parameter.max_elements() > 0);
-      assert(hnsw_parameter.nlinks() > 0);
+  explicit VectorIndexHnsw(uint64_t id, const pb::common::VectorIndexParameter& vector_index_parameter);
 
-      this->dimension_ = hnsw_parameter.dimension();
-
-      if (hnsw_parameter.metric_type() == pb::common::MetricType::METRIC_TYPE_INNER_PRODUCT) {
-        hnsw_space_ = new hnswlib::InnerProductSpace(hnsw_parameter.dimension());
-      } else {
-        hnsw_space_ = new hnswlib::L2Space(hnsw_parameter.dimension());
-      }
-
-      hnsw_index_ =
-          new hnswlib::HierarchicalNSW<float>(hnsw_space_, hnsw_parameter.max_elements(), hnsw_parameter.nlinks(),
-                                              hnsw_parameter.efconstruction(), 100, true);
-    } else {
-      hnsw_index_ = nullptr;
-    }
-  }
-
-  ~VectorIndexHnsw() override {
-    if (vector_index_type == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
-      delete hnsw_index_;
-      delete hnsw_space_;
-    }
-  }
+  ~VectorIndexHnsw() override;
 
   VectorIndexHnsw(const VectorIndexHnsw& rhs) = delete;
   VectorIndexHnsw& operator=(const VectorIndexHnsw& rhs) = delete;
   VectorIndexHnsw(VectorIndexHnsw&& rhs) = delete;
   VectorIndexHnsw& operator=(VectorIndexHnsw&& rhs) = delete;
 
-  butil::Status Add(uint64_t id, const std::vector<float>& vector) override { return Upsert(id, vector); }
+  butil::Status Add(uint64_t id, const std::vector<float>& vector) override;
 
-  butil::Status Upsert(uint64_t id, const std::vector<float>& vector) override {
-    if (vector_index_type == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
-      if (vector.size() != this->dimension_) {
-        DINGO_LOG(ERROR) << "vector dimension is not match, id=" << id << ", input dimension=" << vector.size() << ", "
-                         << "index dimension=" << this->dimension_;
-        return butil::Status(pb::error::Errno::EINTERNAL, "vector dimension is not match");
-      }
+  butil::Status Upsert(uint64_t id, const std::vector<float>& vector) override;
+  butil::Status Delete(uint64_t id) override;
 
-      hnsw_index_->addPoint(vector.data(), id, true);
+  butil::Status Save(const std::string& path) override;
+  butil::Status Load(const std::string& path) override;
 
-      return butil::Status::OK();
-    } else {
-      return butil::Status(pb::error::Errno::EINTERNAL, "vector index type is not supported");
-    }
-  }
-
-  void Delete(uint64_t id) override {
-    if (vector_index_type == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
-      try {
-        hnsw_index_->markDelete(id);
-      } catch (std::exception& e) {
-        DINGO_LOG(ERROR) << "delete vector failed, id=" << id << ", what=" << e.what();
-      }
-    }
-  }
-
-  butil::Status Save(const std::string& path) override {
-    if (vector_index_type == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
-      hnsw_index_->saveIndex(path);
-      return butil::Status::OK();
-    } else {
-      return butil::Status(pb::error::Errno::EINTERNAL, "vector index type is not supported");
-    }
-  }
-
-  butil::Status Load(const std::string& path) override {
-    // FIXME: need to prevent SEGV when delete old_hnsw_index
-    if (vector_index_type == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
-      auto* old_hnsw_index = hnsw_index_;
-      hnsw_index_ = new hnswlib::HierarchicalNSW<float>(hnsw_space_, path, false,
-                                                        vector_index_parameter.hnsw_parameter().max_elements(), true);
-      delete old_hnsw_index;
-      return butil::Status::OK();
-    } else {
-      return butil::Status(pb::error::Errno::EINTERNAL, "vector index type is not supported");
-    }
-  }
+  butil::Status SetOnline() override;
+  butil::Status SetOffline() override;
 
   butil::Status Search(const std::vector<float>& vector, uint32_t topk,
-                       std::vector<pb::common::VectorWithDistance>& results, bool reconstruct = false) override {
-    if (vector_index_type == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
-      // std::priority_queue<std::pair<float, uint64_t>> result = hnsw_index_->searchKnn(vector.data(), topk);
-
-      if (vector.size() != this->dimension_) {
-        return butil::Status(pb::error::Errno::EINTERNAL, "vector dimension is not match, input=%zu, index=%d",
-                             vector.size(), this->dimension_);
-      }
-
-      std::priority_queue<std::pair<float, uint64_t>> result = hnsw_index_->searchKnn(vector.data(), topk);
-
-      DINGO_LOG(DEBUG) << "result.size() = " << result.size();
-
-      while (!result.empty()) {
-        pb::common::VectorWithDistance vector_with_distance;
-        vector_with_distance.set_distance(result.top().first);
-
-        auto* vector_with_id = vector_with_distance.mutable_vector_with_id();
-
-        vector_with_id->set_id(result.top().second);
-
-        if (reconstruct) {
-          try {
-            std::vector<float> data = hnsw_index_->getDataByLabel<float>(result.top().second);
-            for (auto& value : data) {
-              vector_with_id->mutable_vector()->add_float_values(value);
-            }
-            results.push_back(vector_with_distance);
-          } catch (std::exception& e) {
-            DINGO_LOG(ERROR) << "getDataByLabel failed, label: " << result.top().second << " err: " << e.what();
-          }
-        } else {
-          results.push_back(vector_with_distance);
-        }
-
-        result.pop();
-      }
-      return butil::Status::OK();
-    } else {
-      return butil::Status(pb::error::Errno::EINTERNAL, "vector index type is not supported");
-    }
-  }
-
-  butil::Status Search(pb::common::VectorWithId vector_with_id, uint32_t topk,
-                       std::vector<pb::common::VectorWithDistance>& results, bool reconstruct = false) override {
-    std::vector<float> vector;
-    for (auto value : vector_with_id.vector().float_values()) {
-      vector.push_back(value);
-    }
-
-    return Search(vector, topk, results, reconstruct);
-  }
+                       std::vector<pb::common::VectorWithDistance>& results, bool reconstruct = false) override;
 
  private:
   // hnsw members
@@ -184,6 +66,9 @@ class VectorIndexHnsw : public VectorIndex {
 
   // Dimension of the elements
   uint32_t dimension_;
+
+  bthread_mutex_t mutex_;
+  std::atomic<bool> is_online_;
 };
 
 }  // namespace dingodb
