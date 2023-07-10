@@ -157,6 +157,31 @@ void RegionControlServiceImpl::TransferLeader(google::protobuf::RpcController* c
   }
 }
 
+void RegionControlServiceImpl::SnapshotVectorIndex(google::protobuf::RpcController* controller,
+                                                   const pb::region_control::SnapshotVectorIndexRequest* request,
+                                                   pb::region_control::SnapshotVectorIndexResponse* response,
+                                                   google::protobuf::Closure* done) {
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(done);
+
+  DINGO_LOG(DEBUG) << "SnapshotVectorIndex request: " << request->ShortDebugString();
+
+  auto region_controller = Server::GetInstance()->GetRegionController();
+
+  auto command = std::make_shared<pb::coordinator::RegionCmd>();
+  command->set_id(Helper::TimestampNs());
+  command->set_region_id(request->vector_index_id());
+  command->set_region_cmd_type(pb::coordinator::CMD_SNAPSHOT_VECTOR_INDEX);
+  command->mutable_snapshot_vector_index_request()->set_vector_index_id(request->vector_index_id());
+
+  auto status = region_controller->DispatchRegionControlCommand(std::make_shared<Context>(cntl, done), command);
+  if (!status.ok()) {
+    auto* mut_err = response->mutable_error();
+    mut_err->set_errcode(static_cast<Errno>(status.error_code()));
+    mut_err->set_errmsg(status.error_str());
+  }
+}
+
 void RegionControlServiceImpl::Debug(google::protobuf::RpcController* controller,
                                      const ::dingodb::pb::region_control::DebugRequest* request,
                                      ::dingodb::pb::region_control::DebugResponse* response,

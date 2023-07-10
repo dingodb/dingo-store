@@ -425,6 +425,15 @@ void SendSnapshot(ServerInteractionPtr interaction, uint64_t region_id) {
   interaction->SendRequest("RegionControlService", "Snapshot", request, response);
 }
 
+void SendSnapshotVectorIndex(ServerInteractionPtr interaction, uint64_t vector_index_id) {
+  dingodb::pb::region_control::SnapshotVectorIndexRequest request;
+  dingodb::pb::region_control::SnapshotVectorIndexResponse response;
+
+  request.set_vector_index_id(vector_index_id);
+
+  interaction->SendRequest("RegionControlService", "SnapshotVectorIndex", request, response);
+}
+
 void SendTransferLeader(ServerInteractionPtr interaction, uint64_t region_id, const dingodb::pb::common::Peer& peer) {
   dingodb::pb::region_control::TransferLeaderRequest request;
   dingodb::pb::region_control::TransferLeaderResponse response;

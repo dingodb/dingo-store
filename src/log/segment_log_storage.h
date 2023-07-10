@@ -149,7 +149,9 @@ class SegmentLogStorage {
         last_log_index_(0),
         checksum_type_(0),
         enable_truncate_control_(enable_truncate_control),
-        enable_sync_(enable_sync) {}
+        enable_sync_(enable_sync) {
+    truncate_log_indexs_["VectorIndex"] = 1;
+  }
 
   SegmentLogStorage() : first_log_index_(1), last_log_index_(0), checksum_type_(0), enable_sync_(true) {}
 

@@ -65,6 +65,14 @@ message TransferLeaderResponse {
   dingodb.pb.error.Error error = 1;
 }
 
+message SnapshotVectorIndexRequest {
+  uint64 vector_index_id = 1;
+}
+
+message SnapshotVectorIndexResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
 enum DebugType {
   NONE = 0;
   STORE_REGION_META_STAT = 1;
@@ -120,6 +128,7 @@ service RegionControlService {
   rpc DestroyRegion(DestroyRegionRequest) returns (DestroyRegionResponse);
   rpc Snapshot(SnapshotRequest) returns (SnapshotResponse);
   rpc TransferLeader(TransferLeaderRequest) returns (TransferLeaderResponse);
+  rpc SnapshotVectorIndex(SnapshotVectorIndexRequest) returns (SnapshotVectorIndexResponse);
 
   // debug
   rpc Debug(DebugRequest) returns (DebugResponse);

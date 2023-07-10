@@ -94,6 +94,10 @@ message TransferLeaderRequest {
   dingodb.pb.common.Peer peer = 1;  // transfer leadership to the peer
 }
 
+message SnapshotVectorIndexRequest {
+  uint64 vector_index_id = 1;  // vector index id
+}
+
 message PurgeRequest {
   uint64 region_id = 1;  // region id to be purged
 }
@@ -108,15 +112,16 @@ message DestroyExecutorRequest {
 
 // RegionCmdType
 enum RegionCmdType {
-  CMD_NONE = 0;  // this is a placeholder
-  CMD_CREATE = 1;
-  CMD_DELETE = 2;
-  CMD_SPLIT = 3;
-  CMD_MERGE = 4;
-  CMD_CHANGE_PEER = 5;
-  CMD_TRANSFER_LEADER = 6;
-  CMD_SNAPSHOT = 7;
-  CMD_PURGE = 8;  // purge region's meta for deleted region
+  CMD_NONE = 0;                   // this is a placeholder
+  CMD_CREATE = 1;                 // create region
+  CMD_DELETE = 2;                 // delete region
+  CMD_SPLIT = 3;                  // split region
+  CMD_MERGE = 4;                  // merge region
+  CMD_CHANGE_PEER = 5;            // change peer for region raft group
+  CMD_TRANSFER_LEADER = 6;        // transfer leader for region raft group
+  CMD_SNAPSHOT = 7;               // save region snapshot
+  CMD_PURGE = 8;                  // purge region's meta for deleted region
+  CMD_SNAPSHOT_VECTOR_INDEX = 9;  // save vector index snapshot
 
   CMD_STOP = 30;              // when region state ORPHAN, stop region
   CMD_DESTROY_EXECUTOR = 31;  // destroy region executor
@@ -144,6 +149,8 @@ message RegionCmd {
     PurgeRequest purge_request = 16;  // purge region meta on store, this region is deleted and already purge on
     TransferLeaderRequest transfer_leader_request = 17;  // change peer parameters
     // coordinator, so store can purge this region's meta data
+
+    SnapshotVectorIndexRequest snapshot_vector_index_request = 18;  // save vector index snapshot
 
     StopRequest stop_request = 30;                         // when region state ORPHAN, stop region
     DestroyExecutorRequest destroy_executor_request = 31;  // destroy region executor
