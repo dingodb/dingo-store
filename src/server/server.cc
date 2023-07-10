@@ -403,6 +403,15 @@ bool Server::InitCrontabManager() {
       crontab_manager_->AddAndRunCrontab(metrics_crontab);
     }
 
+    // Add heartbeat crontab
+    std::shared_ptr<Crontab> scrub_vector_index_crontab = std::make_shared<Crontab>();
+    scrub_vector_index_crontab->name = "SCRUB_VECTOR_INDEX";
+    scrub_vector_index_crontab->interval = heartbeat_interval * 10;
+    scrub_vector_index_crontab->func = [](void*) { Heartbeat::TriggerScrubVectorIndex(nullptr); };
+    scrub_vector_index_crontab->arg = nullptr;
+
+    crontab_manager_->AddAndRunCrontab(scrub_vector_index_crontab);
+
     // // Add scan crontab
     // ScanManager::GetInstance()->Init(config);
     // uint64_t scan_interval = config->GetInt(Constant::kStoreScan + "." + Constant::kStoreScanScanIntervalMs);

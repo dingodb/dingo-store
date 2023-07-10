@@ -49,6 +49,12 @@ class VectorIndex {
 
   pb::common::VectorIndexType VectorIndexType() const;
 
+  virtual butil::Status GetCount([[maybe_unused]] uint64_t& count);
+
+  virtual butil::Status NeedToRebuild([[maybe_unused]] bool& need_to_rebuild,
+                                      [[maybe_unused]] uint64_t last_save_log_behind);
+  virtual butil::Status NeedToSave([[maybe_unused]] bool& need_to_save, [[maybe_unused]] uint64_t last_save_log_behind);
+
   virtual butil::Status Add(const std::vector<pb::common::VectorWithId>& vector_with_ids);
   virtual butil::Status Add(const pb::common::VectorWithId& vector_with_id);
   virtual butil::Status Add([[maybe_unused]] uint64_t id, [[maybe_unused]] const std::vector<float>& vector) = 0;

@@ -177,6 +177,16 @@ class CalculateTableMetricsTask : public TaskRunnable {
   butil::atomic<bool> is_processing_;
 };
 
+class VectorIndexScrubTask : public TaskRunnable {
+ public:
+  VectorIndexScrubTask() = default;
+  ~VectorIndexScrubTask() override = default;
+
+  void Run() override { ScrubVectorIndex(); }
+
+  static void ScrubVectorIndex();
+};
+
 class Heartbeat {
  public:
   Heartbeat() : is_available_(false), queue_id_({UINT64_MAX}) {}
@@ -194,6 +204,7 @@ class Heartbeat {
   static void TriggerCoordinatorTaskListProcess(void*);
   static void TriggerCoordinatorRecycleOrphan(void*);
   static void TriggerCalculateTableMetrics(void*);
+  static void TriggerScrubVectorIndex(void*);
 
   static butil::Status RpcSendPushStoreOperation(const pb::common::Location& location,
                                                  const pb::push::PushStoreOperationRequest& request,
@@ -205,7 +216,7 @@ class Heartbeat {
 
   // Execution queue is available.
   std::atomic<bool> is_available_;
-  bthread::ExecutionQueueId<TaskRunnable*> queue_id_;
+  bthread::ExecutionQueueId<TaskRunnable*> queue_id_;  // NOLINT
 };
 
 }  // namespace dingodb

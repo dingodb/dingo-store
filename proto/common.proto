@@ -170,6 +170,18 @@ enum RegionRaftStatus {
   REGION_RAFT_CONSECUTIVE_ERROR = 5;
 }
 
+// This enum defines the possible states of a region vector index.
+enum RegionVectorIndexStatus {
+  VECTOR_INDEX_STATUS_NONE = 0;          // The index has no status.
+  VECTOR_INDEX_STATUS_NORMAL = 1;        // The index is in a normal state.
+  VECTOR_INDEX_STATUS_BUILDING = 2;      // The index is being built.
+  VECTOR_INDEX_STATUS_REBUILDING = 3;    // The index is being rebuilt.
+  VECTOR_INDEX_STATUS_LOADING = 4;       // The index is being loaded.
+  VECTOR_INDEX_STATUS_SNAPSHOTTING = 5;  // The index is being snapshotted.
+  VECTOR_INDEX_STATUS_REPLAYING = 6;     // The index is replaying wal.
+  VECTOR_INDEX_STATUS_ERROR = 10;        // The index is in an error state.
+}
+
 enum ReplicaStatus {
   REPLICA_NONE = 0;
   REPLICA_NORMAL = 1;

@@ -70,6 +70,13 @@ class VectorIndexFlat : public VectorIndex {
   butil::Status SetOnline() override;
   butil::Status SetOffline() override;
 
+  butil::Status GetCount([[maybe_unused]] uint64_t& count) override;
+
+  butil::Status NeedToRebuild([[maybe_unused]] bool& need_to_rebuild,
+                              [[maybe_unused]] uint64_t last_save_log_behind) override;
+  butil::Status NeedToSave([[maybe_unused]] bool& need_to_save,
+                           [[maybe_unused]] uint64_t last_save_log_behind) override;
+
  private:
   // Dimension of the elements
   faiss::idx_t dimension_;
