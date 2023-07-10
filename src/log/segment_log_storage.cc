@@ -821,13 +821,15 @@ int SegmentLogStorage::TruncatePrefix(const int64_t first_index_kept) {
     return 0;
   }
 
-  // int64_t allow_destroy_log_index = allow_destroy_log_index_.load(std::memory_order_relaxed);
-  // if (first_index_kept >= allow_destroy_log_index) {
-  //   DINGO_LOG(DEBUG) << fmt::format("Not allow truncate prefix,
-  //   first_index_kept({})>=allow_destroy_log_index_({})",
-  //                                   first_index_kept, allow_destroy_log_index);
-  //   return 0;
-  // }
+  if (enable_truncate_control_) {
+    for (auto& truncate_log_index : truncate_log_indexs_) {
+      if (first_index_kept >= truncate_log_index.second.load(std::memory_order_relaxed)) {
+        DINGO_LOG(DEBUG) << fmt::format("Not allow truncate prefix, first_index_kept({})>=truncate_log_index({})",
+                                        first_index_kept, truncate_log_index.second.load(std::memory_order_relaxed));
+        return 0;
+      }
+    }
+  }
 
   // NOTE: truncate_prefix is not important, as it has nothing to do with
   // consensus. We try to save meta on the disk first to make sure even if
