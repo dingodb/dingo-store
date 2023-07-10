@@ -59,10 +59,10 @@ class VectorIndexFlat : public VectorIndex {
   void Delete(uint64_t id) override;
 
   butil::Status Search(const std::vector<float>& vector, uint32_t topk,
-                       std::vector<pb::common::VectorWithDistance>& results) override;
+                       std::vector<pb::common::VectorWithDistance>& results, bool reconstruct = false) override;
 
   butil::Status Search(pb::common::VectorWithId vector_with_id, uint32_t topk,
-                       std::vector<pb::common::VectorWithDistance>& results) override;
+                       std::vector<pb::common::VectorWithDistance>& results, bool reconstruct = false) override;
 
  private:
   // Dimension of the elements

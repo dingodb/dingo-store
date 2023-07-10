@@ -111,7 +111,8 @@ butil::Status Storage::VectorDelete(std::shared_ptr<Context> ctx, const std::vec
 }
 
 butil::Status Storage::VectorBatchQuery(std::shared_ptr<Context> ctx, std::vector<uint64_t> vector_ids,
-                                        bool is_need_metadata, std::vector<std::string> selected_meta_keys,
+                                        bool with_vector_data, bool with_scalar_data,
+                                        std::vector<std::string> selected_scalar_keys,
                                         std::vector<pb::common::VectorWithId>& vector_with_ids) {
   auto status = ValidateLeader(ctx->RegionId());
   if (!status.ok()) {
@@ -119,7 +120,8 @@ butil::Status Storage::VectorBatchQuery(std::shared_ptr<Context> ctx, std::vecto
   }
 
   auto reader = engine_->NewVectorReader(Constant::kStoreDataCF);
-  status = reader->VectorBatchQuery(ctx, vector_ids, is_need_metadata, selected_meta_keys, vector_with_ids);
+  status = reader->VectorBatchQuery(ctx, vector_ids, with_vector_data, with_scalar_data, selected_scalar_keys,
+                                    vector_with_ids);
   if (!status.ok()) {
     if (pb::error::EKEY_NOT_FOUND == status.error_code()) {
       // return OK if not found

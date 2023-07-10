@@ -16,8 +16,6 @@ syntax = "proto3";
 
 import "common.proto";
 import "error.proto";
-import "store_internal.proto";
-import "coordinator.proto";
 
 package dingodb.pb.index;
 
@@ -38,8 +36,10 @@ message VectorAddResponse {
 message VectorBatchQueryRequest {
   uint64 region_id = 1;
   repeated uint64 vector_ids = 2;
-  bool is_need_metadata = 3;          // Response is need meta data.
-  repeated string selected_keys = 4;  // Select meta data key.
+  bool without_vector_data = 3;       // Default false, if true, response without vector data.
+  bool with_scalar_data = 4;          // Default false, if true, response with scalar data.
+  repeated string selected_keys = 5;  // If with_scalar_data is true, selected_keys is used to select scalar data, if
+                                      // this parameter is null, all scalar data will be returned.
 }
 
 message VectorBatchQueryResponse {

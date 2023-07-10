@@ -52,7 +52,10 @@ VectorIndexFlat::VectorIndexFlat(uint64_t id, const pb::common::VectorIndexParam
   index_ = std::make_unique<faiss::IndexIDMap>(raw_index_.get());
 }
 
-VectorIndexFlat::~VectorIndexFlat() { index_->reset(); }
+VectorIndexFlat::~VectorIndexFlat() {
+  index_->reset();
+  bthread_mutex_destroy(&mutex_);
+}
 
 butil::Status VectorIndexFlat::Add(uint64_t id, const std::vector<float>& vector) {
   // check
@@ -102,7 +105,8 @@ void VectorIndexFlat::Delete(uint64_t id) {
 }
 
 butil::Status VectorIndexFlat::Search(const std::vector<float>& vector, uint32_t topk,
-                                      std::vector<pb::common::VectorWithDistance>& results) {  // NOLINT
+                                      std::vector<pb::common::VectorWithDistance>& results,
+                                      [[maybe_unused]] bool reconstruct) {  // NOLINT
   std::vector<faiss::Index::distance_t> distances;
   distances.resize(topk, 0.0f);
   std::vector<faiss::idx_t> labels;
@@ -135,17 +139,9 @@ butil::Status VectorIndexFlat::Search(const std::vector<float>& vector, uint32_t
 }
 
 butil::Status VectorIndexFlat::Search(pb::common::VectorWithId vector_with_id, uint32_t topk,
-                                      std::vector<pb::common::VectorWithDistance>& results) {
+                                      std::vector<pb::common::VectorWithDistance>& results,
+                                      [[maybe_unused]] bool reconstruct) {
   dingodb::pb::common::ValueType value_type = vector_with_id.vector().value_type();
-
-  // check dimension
-  // int32_t dimension = vector_with_id.vector().dimension();
-  // if (dimension_ != static_cast<faiss::idx_t>(dimension)) {
-  //   std::string s =
-  //       fmt::format("Flat : dimension(create) : {}  dimension(input) : {} not equal!", dimension_, dimension);
-  //   DINGO_LOG(ERROR) << s;
-  //   return butil::Status(pb::error::Errno::EVECTOR_INVALID, s);
-  // }
 
   if (value_type != dingodb::pb::common::ValueType::FLOAT) {
     std::string s = fmt::format("Flat : {} only support float vector. not support binary vector now!",

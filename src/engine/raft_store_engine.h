@@ -116,21 +116,23 @@ class RaftStoreEngine : public Engine, public RaftControlAble {
                                std::vector<pb::common::VectorWithDistance>& vector_with_distances) override;
 
     butil::Status VectorBatchQuery(std::shared_ptr<Context> ctx, std::vector<uint64_t> vector_ids,
-                                   bool is_need_metadata, std::vector<std::string> selected_meta_keys,
+                                   bool with_vector_data, bool with_scalar_data,
+                                   std::vector<std::string> selected_scalar_keys,
                                    std::vector<pb::common::VectorWithId>& vector_with_ids) override;
 
     butil::Status VectorGetBorderId(std::shared_ptr<Context> ctx, uint64_t& id, bool get_min) override;
 
    private:
-    butil::Status QueryVectorWithId(uint64_t region_id, uint64_t vector_id, pb::common::VectorWithId& vector_with_id);
+    butil::Status QueryVectorWithId(uint64_t region_id, uint64_t vector_id, pb::common::VectorWithId& vector_with_id,
+                                    bool with_vector_data = true);
     butil::Status SearchVector(uint64_t region_id, const pb::common::VectorWithId& vector,
                                const pb::common::VectorSearchParameter& parameter,
                                std::vector<pb::common::VectorWithDistance>& vector_with_distances);
 
-    butil::Status QueryVectorMetaData(uint64_t region_id, std::vector<std::string> selected_meta_keys,
-                                      pb::common::VectorWithId& vector_with_id);
-    butil::Status QueryVectorMetaData(uint64_t region_id, std::vector<std::string> selected_meta_keys,
-                                      std::vector<pb::common::VectorWithDistance>& vector_with_distances);
+    butil::Status QueryVectorScalarData(uint64_t region_id, std::vector<std::string> selected_scalar_keys,
+                                        pb::common::VectorWithId& vector_with_id);
+    butil::Status QueryVectorScalarData(uint64_t region_id, std::vector<std::string> selected_scalar_keys,
+                                        std::vector<pb::common::VectorWithDistance>& vector_with_distances);
 
     std::shared_ptr<RawEngine::Reader> reader_;
   };

@@ -35,6 +35,8 @@
 const int kBatchSize = 1000;
 
 DECLARE_string(key);
+DECLARE_bool(without_vector);
+DECLARE_bool(with_scalar);
 
 namespace client {
 
@@ -56,9 +58,15 @@ void SendVectorSearch(ServerInteractionPtr interaction, uint64_t region_id, uint
     request.mutable_parameter()->set_top_n(topn);
   }
 
-  if (FLAGS_key.empty()) {
-    request.mutable_parameter()->set_with_all_metadata(true);
-  } else {
+  if (FLAGS_without_vector) {
+    request.mutable_parameter()->set_without_vector_data(true);
+  }
+
+  if (FLAGS_with_scalar) {
+    request.mutable_parameter()->set_with_scalar_data(true);
+  }
+
+  if (!FLAGS_key.empty()) {
     auto* key = request.mutable_parameter()->mutable_selected_keys()->Add();
     key->assign(FLAGS_key);
   }
@@ -76,7 +84,19 @@ void SendVectorBatchQuery(ServerInteractionPtr interaction, uint64_t region_id, 
   for (auto vector_id : vector_ids) {
     request.add_vector_ids(vector_id);
   }
-  request.set_is_need_metadata(true);
+
+  if (FLAGS_without_vector) {
+    request.set_without_vector_data(true);
+  }
+
+  if (FLAGS_with_scalar) {
+    request.set_with_scalar_data(true);
+  }
+
+  if (!FLAGS_key.empty()) {
+    auto* key = request.mutable_selected_keys()->Add();
+    key->assign(FLAGS_key);
+  }
 
   interaction->SendRequest("IndexService", "VectorBatchQuery", request, response);
 
@@ -93,13 +113,6 @@ void SendVectorAdd(ServerInteractionPtr interaction, uint64_t region_id, uint32_
     vector_with_id->set_id(i + 1000);
     for (int j = 0; j < dimension; j++) {
       vector_with_id->mutable_vector()->add_float_values(1.0 * dingodb::Helper::GenerateRandomInteger(0, 100) / 10);
-    }
-
-    vector_with_id->mutable_metadata()->mutable_metadata()->insert({"name", fmt::format("name{}", i)});
-
-    for (int k = 0; k < 2; ++k) {
-      vector_with_id->mutable_metadata()->mutable_metadata()->insert(
-          {fmt::format("meta_key{}", k), fmt::format("meta_value{}", k)});
     }
 
     for (int k = 0; k < 2; ++k) {
