@@ -35,7 +35,7 @@
 
 namespace dingodb {
 
-class VectorIndexFlatTest : public testing::Test {
+class VectorIndexMemoryTest : public testing::Test {
  protected:
   static void SetUpTestSuite() {}
 
@@ -51,7 +51,7 @@ class VectorIndexFlatTest : public testing::Test {
   inline static std::vector<float> data_base_;
 };
 
-TEST_F(VectorIndexFlatTest, Create) {
+TEST_F(VectorIndexMemoryTest, Create) {
   // invalid param
   {
     uint64_t id = 1;
@@ -146,7 +146,7 @@ TEST_F(VectorIndexFlatTest, Create) {
   }
 }
 
-TEST_F(VectorIndexFlatTest, Add) {
+TEST_F(VectorIndexMemoryTest, Add) {
   butil::Status ok;
 
   // create random data
@@ -230,7 +230,7 @@ TEST_F(VectorIndexFlatTest, Add) {
   }
 }
 
-TEST_F(VectorIndexFlatTest, Delete) {
+TEST_F(VectorIndexMemoryTest, Delete) {
   butil::Status ok;
 
   // id not found
@@ -262,7 +262,7 @@ TEST_F(VectorIndexFlatTest, Delete) {
   }
 }
 
-TEST_F(VectorIndexFlatTest, Upsert) {
+TEST_F(VectorIndexMemoryTest, Upsert) {
   butil::Status ok;
 
   // create random data
@@ -392,7 +392,7 @@ TEST_F(VectorIndexFlatTest, Upsert) {
   }
 }
 
-TEST_F(VectorIndexFlatTest, Search) {
+TEST_F(VectorIndexMemoryTest, Search) {
   butil::Status ok;
 
   // invalid param failed

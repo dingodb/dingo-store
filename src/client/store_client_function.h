@@ -17,6 +17,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <string>
 
 #include "client/client_interation.h"
 
@@ -54,6 +55,8 @@ void SendVectorAdd(ServerInteractionPtr interaction, uint64_t region_id, uint32_
 void SendVectorDelete(ServerInteractionPtr interaction, uint64_t region_id, uint32_t start_id, uint32_t count);
 void SendVectorGetMaxId(ServerInteractionPtr interaction, uint64_t region_id);
 void SendVectorGetMinId(ServerInteractionPtr interaction, uint64_t region_id);
+void SendVectorAddBatch(ServerInteractionPtr interaction, uint64_t region_id, uint32_t dimension, uint32_t count,
+                        uint32_t step_count, int64_t start_id, const std::string& file);
 
 // key/value
 void SendKvGet(ServerInteractionPtr interaction, uint64_t region_id, const std::string& key, std::string& value);
