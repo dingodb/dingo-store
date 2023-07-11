@@ -57,7 +57,7 @@ class VectorIndexManager : public TransformKvAble {
   butil::Status SaveVectorIndex(store::RegionPtr region);
 
   // Invoke when server runing.
-  butil::Status RebuildVectorIndex(store::RegionPtr region);
+  butil::Status RebuildVectorIndex(store::RegionPtr region, bool need_save = true);
 
   void UpdateApplyLogIndex(std::shared_ptr<VectorIndex> vector_index, uint64_t apply_log_index);
   void UpdateApplyLogIndex(uint64_t region_id, uint64_t apply_log_index);
