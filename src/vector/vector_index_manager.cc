@@ -394,7 +394,7 @@ std::shared_ptr<VectorIndex> VectorIndexManager::BuildVectorIndex(store::RegionP
 }
 
 // Rebuild vector index
-butil::Status VectorIndexManager::RebuildVectorIndex(store::RegionPtr region) {
+butil::Status VectorIndexManager::RebuildVectorIndex(store::RegionPtr region, bool need_save) {
   assert(region != nullptr);
 
   DINGO_LOG(INFO) << fmt::format("Rebuild vector index, id {}", region->Id());
@@ -411,6 +411,21 @@ butil::Status VectorIndexManager::RebuildVectorIndex(store::RegionPtr region) {
     DINGO_LOG(WARNING) << fmt::format("Build vector index failed, id {}", region->Id());
 
     return butil::Status(pb::error::Errno::EINTERNAL, "Build vector index failed");
+  }
+
+  // we want to eliminate the impact of the blocking during replay wal in catch-up round
+  // so save is done before replay wal first-round
+  if (need_save) {
+    // save vector index to rocksdb
+    auto status = SaveVectorIndex(vector_index);
+    if (!status.ok()) {
+      // update vector_index_status
+      vector_index_status_.Put(region->Id(), pb::common::RegionVectorIndexStatus::VECTOR_INDEX_STATUS_ERROR);
+
+      DINGO_LOG(WARNING) << fmt::format("Save vector index failed, id {}", region->Id());
+
+      return butil::Status(pb::error::Errno::EINTERNAL, "Save vector index failed");
+    }
   }
 
   auto status = ReplayWalToVectorIndex(vector_index, vector_index->ApplyLogIndex() + 1, UINT64_MAX);
