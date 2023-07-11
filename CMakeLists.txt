@@ -385,6 +385,8 @@ add_executable(dingodb_client_store
                src/client/client_interation.cc
                src/client/store_client_function.cc
                src/common/helper.cc
+               ${SERIAL1_SRCS}
+               ${SERIAL2_SRCS}
                ${VERSION_SRCS} $<TARGET_OBJECTS:PROTO_OBJS>)
 add_executable(dingodb_client_coordinator
                src/client/coordinator_client.cc
@@ -393,6 +395,8 @@ add_executable(dingodb_client_coordinator
                src/client/coordinator_client_function_incr.cc
                src/common/helper.cc
                src/coordinator/coordinator_interaction.cc
+               ${SERIAL1_SRCS}
+               ${SERIAL2_SRCS}
                ${VERSION_SRCS} $<TARGET_OBJECTS:PROTO_OBJS>)
 
 add_dependencies(DINGODB_OBJS ${DEPEND_LIBS})

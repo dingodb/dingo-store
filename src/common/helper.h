@@ -220,6 +220,8 @@ class Helper {
 
   // vector scalar index value
   static bool IsEqualVectorScalarValue(const pb::common::ScalarValue& value1, const pb::common::ScalarValue& value2);
+  // for index region, encode raw_range
+  static std::string EncodeIndexRegionHeader(uint64_t region_id);
 };
 
 }  // namespace dingodb

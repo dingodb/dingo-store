@@ -40,6 +40,7 @@
 #include "fmt/core.h"
 #include "google/protobuf/util/json_util.h"
 #include "proto/node.pb.h"
+#include "serial/buf.h"
 
 namespace dingodb {
 
@@ -781,21 +782,21 @@ bool Helper::IsEqualVectorScalarValue(const pb::common::ScalarValue& value1, con
     return false;
   }
 
-  #define CASE(scalar_field_type, type_data) \
-  case scalar_field_type: { \
-      if (value1.fields_size() == value2.fields_size()) { \
-        for (int i = 0; i < value1.fields_size(); i++) { \
-          if (value1.fields()[i].type_data() != value2.fields()[i].type_data()) { \
-            return false; \
-          } \
-        } \
-      } else { \
-        return false; \
-      } \
-      return true; \
+#define CASE(scalar_field_type, type_data)                                      \
+  case scalar_field_type: {                                                     \
+    if (value1.fields_size() == value2.fields_size()) {                         \
+      for (int i = 0; i < value1.fields_size(); i++) {                          \
+        if (value1.fields()[i].type_data() != value2.fields()[i].type_data()) { \
+          return false;                                                         \
+        }                                                                       \
+      }                                                                         \
+    } else {                                                                    \
+      return false;                                                             \
+    }                                                                           \
+    return true;                                                                \
   }
 
-  switch(value1.field_type()) {
+  switch (value1.field_type()) {
     CASE(pb::common::ScalarFieldType::BOOL, bool_data)
     CASE(pb::common::ScalarFieldType::INT8, int_data)
     CASE(pb::common::ScalarFieldType::INT16, int_data)
@@ -812,9 +813,16 @@ bool Helper::IsEqualVectorScalarValue(const pb::common::ScalarValue& value1, con
     }
   }
 
-  #undef CASE
+#undef CASE
 
   return false;
+}
+
+std::string Helper::EncodeIndexRegionHeader(uint64_t region_id) {
+  Buf buf(17);
+  buf.WriteLong(region_id);
+
+  return buf.GetString();
 }
 
 }  // namespace dingodb

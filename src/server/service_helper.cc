@@ -120,6 +120,7 @@ butil::Status ServiceHelper::ValidateRegion(uint64_t region_id, const std::vecto
     return status;
   }
 
+  // for table region, Range is always equal to RawRange, so here we can use Range to validate
   status = ValidateKeyInRange(region->Range(), keys);
   if (!status.ok()) {
     return status;

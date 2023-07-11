@@ -60,7 +60,9 @@ class Region {
   void SetLeaderId(uint64_t leader_id);
 
   const pb::common::Range& Range();
+  const pb::common::Range& RawRange();
   void SetRange(const pb::common::Range& range);
+  void SetRawRange(const pb::common::Range& range);
 
   std::vector<pb::common::Peer> Peers();
   void SetPeers(std::vector<pb::common::Peer>& peers);
