@@ -1156,7 +1156,7 @@ butil::Status CoordinatorControl::UpdateIndex(uint64_t schema_id, uint64_t index
 
   if (new_index_definition.index_parameter().vector_index_parameter().vector_index_type() ==
       pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
-    if (new_index_definition.index_parameter().vector_index_parameter().hnsw_parameter().max_elements() !=
+    if (new_index_definition.index_parameter().vector_index_parameter().hnsw_parameter().max_elements() >
         index_internal.definition().index_parameter().vector_index_parameter().hnsw_parameter().max_elements()) {
       DINGO_LOG(INFO)
           << "UpdateIndex update hnsw max_elements from "
@@ -1175,6 +1175,76 @@ butil::Status CoordinatorControl::UpdateIndex(uint64_t schema_id, uint64_t index
           ->set_max_elements(
               new_index_definition.index_parameter().vector_index_parameter().hnsw_parameter().max_elements());
       increment_index->CopyFrom(index_internal);
+
+      // create store operations
+      std::vector<pb::coordinator::StoreOperation> store_operations;
+
+      // for each partition(region) of the index, build store_operation
+      for (int i = 0; i < index_internal.partitions_size(); i++) {
+        auto region_id = index_internal.partitions(i).region_id();
+
+        pb::common::Region region;
+        auto ret = this->region_map_.Get(region_id, region);
+        if (ret < 0) {
+          DINGO_LOG(ERROR) << "ERRROR: region_id not found" << region_id;
+          return butil::Status(pb::error::Errno::EREGION_NOT_FOUND,
+                               "region_id not found, region_id=" + std::to_string(region_id));
+        }
+
+        // generate new region_definition
+        auto region_definition = region.definition();
+        region_definition.mutable_index_parameter()
+            ->mutable_vector_index_parameter()
+            ->mutable_hnsw_parameter()
+            ->set_max_elements(
+                new_index_definition.index_parameter().vector_index_parameter().hnsw_parameter().max_elements());
+
+        // for each peer, build store_operation
+        for (const auto& peer : region.definition().peers()) {
+          pb::coordinator::StoreOperation store_operation;
+
+          store_operation.set_id(peer.store_id());
+
+          auto* region_cmd = store_operation.add_region_cmds();
+          region_cmd->set_id(region_id);
+          region_cmd->set_create_timestamp(butil::gettimeofday_ms());
+          region_cmd->set_region_id(region_id);
+          region_cmd->set_region_cmd_type(::dingodb::pb::coordinator::RegionCmdType::CMD_UPDATE_DEFINITION);
+          region_cmd->set_is_notify(false);
+
+          auto* update_definition_request = region_cmd->mutable_update_definition_request();
+          update_definition_request->mutable_new_region_definition()->CopyFrom(region_definition);
+
+          store_operations.push_back(store_operation);
+        }
+      }
+
+      // add store operations to meta_increment
+      for (const auto& store_operation : store_operations) {
+        auto* store_operation_increment = meta_increment.add_store_operations();
+        store_operation_increment->set_id(store_operation.id());
+        store_operation_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
+        store_operation_increment->mutable_store_operation()->CopyFrom(store_operation);
+
+        DINGO_LOG(INFO) << "store_operation_increment = " << store_operation_increment->DebugString();
+      }
+
+      DINGO_LOG(INFO)
+          << "UpdateIndex built meta_increment OK, store_operation count=" << store_operations.size()
+          << ", new_max_elements="
+          << new_index_definition.index_parameter().vector_index_parameter().hnsw_parameter().max_elements()
+          << ", old_max_elements="
+          << index_internal.definition().index_parameter().vector_index_parameter().hnsw_parameter().max_elements();
+
+      return butil::Status::OK();
+    } else {
+      DINGO_LOG(INFO)
+          << "UpdateIndex skip update hnsw max_elements, new_max_elements="
+          << new_index_definition.index_parameter().vector_index_parameter().hnsw_parameter().max_elements()
+          << " old_max_elements="
+          << index_internal.definition().index_parameter().vector_index_parameter().hnsw_parameter().max_elements();
+
+      return butil::Status::OK();
     }
   } else {
     DINGO_LOG(ERROR) << "ERRROR: index type not support, new_index_definition=" << new_index_definition.DebugString()

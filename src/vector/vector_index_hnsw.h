@@ -65,6 +65,9 @@ class VectorIndexHnsw : public VectorIndex {
   butil::Status NeedToSave([[maybe_unused]] bool& need_to_save,
                            [[maybe_unused]] uint64_t last_save_log_behind) override;
 
+  butil::Status ResizeMaxElements(uint64_t new_max_elements);
+  butil::Status GetMaxElements(uint64_t& max_elements);
+
  private:
   // hnsw members
   hnswlib::HierarchicalNSW<float>* hnsw_index_;

@@ -35,6 +35,7 @@
 #include "proto/error.pb.h"
 #include "server/server.h"
 #include "store/heartbeat.h"
+#include "vector/vector_index_hnsw.h"
 
 namespace dingodb {
 
@@ -660,6 +661,100 @@ void SnapshotVectorIndexTask::Run() {
       status.ok() ? pb::coordinator::RegionCmdStatus::STATUS_DONE : pb::coordinator::RegionCmdStatus::STATUS_FAIL);
 }
 
+butil::Status UpdateDefinitionTask::PreValidateUpdateDefinition(const pb::coordinator::RegionCmd& command) {
+  auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
+
+  return ValidateUpdateDefinition(store_meta_manager->GetStoreRegionMeta()->GetRegion(command.region_id()));
+}
+
+butil::Status UpdateDefinitionTask::ValidateUpdateDefinition(store::RegionPtr region) {
+  if (region == nullptr) {
+    return butil::Status(pb::error::EREGION_NOT_FOUND, "Region is not exist, can't delete peer.");
+  }
+
+  if (region->State() != pb::common::StoreRegionState::NORMAL) {
+    return butil::Status(pb::error::EREGION_STATE, "Region state not allow change.");
+  }
+
+  return butil::Status();
+}
+
+void UpdateDefinitionTask::Run() {
+  auto status = UpdateDefinition(ctx_, region_cmd_->region_id(),
+                                 region_cmd_->update_definition_request().new_region_definition());
+  if (!status.ok()) {
+    DINGO_LOG(DEBUG) << fmt::format("Update Region Defition {} failed, {}", region_cmd_->region_id(),
+                                    status.error_str());
+  }
+
+  Server::GetInstance()->GetRegionCommandManager()->UpdateCommandStatus(
+      region_cmd_,
+      status.ok() ? pb::coordinator::RegionCmdStatus::STATUS_DONE : pb::coordinator::RegionCmdStatus::STATUS_FAIL);
+}
+
+butil::Status UpdateDefinitionTask::UpdateDefinition(std::shared_ptr<Context> /*ctx*/, uint64_t region_id,
+                                                     const pb::common::RegionDefinition& new_definition) {
+  DINGO_LOG(INFO) << "UpdateDefinition: " << region_id;
+  auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
+  auto store_region_meta = store_meta_manager->GetStoreRegionMeta();
+
+  auto region = store_region_meta->GetRegion(region_id);
+  if (region == nullptr) {
+    return butil::Status(pb::error::EREGION_NOT_FOUND, fmt::format("Not found region {}", region_id));
+  }
+
+  auto vector_index_manager = Server::GetInstance()->GetVectorIndexManager();
+  if (vector_index_manager == nullptr) {
+    return butil::Status(pb::error::EINTERNAL, "Vector index manager is nullptr");
+  }
+
+  auto vector_index = vector_index_manager->GetVectorIndex(region_id);
+  if (vector_index == nullptr) {
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, fmt::format("Not found vector index {}", region_id));
+  }
+
+  // check if is changing hnsw max_elements
+  if (new_definition.index_parameter().vector_index_parameter().has_hnsw_parameter()) {
+    auto hnsw_index = std::dynamic_pointer_cast<VectorIndexHnsw>(vector_index);
+    if (hnsw_index == nullptr) {
+      return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, fmt::format("Not found hnsw index {}", region_id));
+    }
+
+    auto new_max_elements = new_definition.index_parameter().vector_index_parameter().hnsw_parameter().max_elements();
+    uint64_t old_max_elements = 0;
+    auto ret = hnsw_index->GetMaxElements(old_max_elements);
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << fmt::format("Get hnsw index max elements failed {}", region_id);
+      return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND,
+                           fmt::format("Get hnsw index max elements failed {}", region_id));
+    }
+
+    if (new_max_elements <= old_max_elements) {
+      DINGO_LOG(INFO) << fmt::format("UpdateDefinition: {} new max elements {} <= old max elements {}, skip", region_id,
+                                     new_max_elements, old_max_elements);
+      return butil::Status::OK();
+    } else {
+      ret = hnsw_index->ResizeMaxElements(
+          new_definition.index_parameter().vector_index_parameter().hnsw_parameter().max_elements());
+      if (!ret.ok()) {
+        DINGO_LOG(ERROR) << fmt::format("Resize hnsw index max elements failed {}", region_id);
+        return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND,
+                             fmt::format("Resize hnsw index max elements failed {}", region_id));
+      }
+
+      DINGO_LOG(INFO) << fmt::format("UpdateDefinition: {} new max elements {} > old max elements {}, resize success",
+                                     region_id, new_max_elements, old_max_elements);
+
+      return butil::Status::OK();
+    }
+  } else {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
+                         fmt::format("Not found hnsw index parameter in region_cmd {}", region_id));
+  }
+
+  return butil::Status::OK();
+}
+
 static int ExecuteRoutine(void*, bthread::TaskIterator<TaskRunnable*>& iter) {
   if (iter.is_queue_stopped()) {
     return 0;
@@ -1053,6 +1148,10 @@ RegionController::TaskBuilderMap RegionController::task_builders = {
      [](std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command) -> TaskRunnable* {
        return new SnapshotVectorIndexTask(ctx, command);
      }},
+    {pb::coordinator::CMD_UPDATE_DEFINITION,
+     [](std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command) -> TaskRunnable* {
+       return new UpdateDefinitionTask(ctx, command);
+     }},
 };
 
 RegionController::ValidaterMap RegionController::validaters = {
@@ -1063,6 +1162,7 @@ RegionController::ValidaterMap RegionController::validaters = {
     {pb::coordinator::CMD_TRANSFER_LEADER, TransferLeaderTask::PreValidateTransferLeader},
     {pb::coordinator::CMD_PURGE, PurgeRegionTask::PreValidatePurgeRegion},
     {pb::coordinator::CMD_STOP, StopRegionTask::PreValidateStopRegion},
+    {pb::coordinator::CMD_UPDATE_DEFINITION, UpdateDefinitionTask::PreValidateUpdateDefinition},
 };
 
 }  // namespace dingodb

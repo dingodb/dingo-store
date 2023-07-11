@@ -257,4 +257,30 @@ butil::Status VectorIndexHnsw::NeedToSave([[maybe_unused]] bool& need_to_save,
   return butil::Status::OK();
 }
 
+butil::Status VectorIndexHnsw::ResizeMaxElements(uint64_t new_max_elements) {
+  BAIDU_SCOPED_LOCK(mutex_);
+
+  if (vector_index_type == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
+    hnsw_index_->resizeIndex(new_max_elements);
+    return butil::Status::OK();
+  } else {
+    return butil::Status(pb::error::Errno::EINTERNAL, "vector index type is not supported");
+  }
+
+  return butil::Status::OK();
+}
+
+butil::Status VectorIndexHnsw::GetMaxElements(uint64_t& max_elements) {
+  BAIDU_SCOPED_LOCK(mutex_);
+
+  if (vector_index_type == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
+    max_elements = hnsw_index_->getMaxElements();
+    return butil::Status::OK();
+  } else {
+    return butil::Status(pb::error::Errno::EINTERNAL, "vector index type is not supported");
+  }
+
+  return butil::Status::OK();
+}
+
 }  // namespace dingodb
