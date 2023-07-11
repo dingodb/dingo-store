@@ -37,7 +37,7 @@ void PutHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, s
   const auto &request = req.put();
   // region is spliting, check key out range
   if (region->State() == pb::common::StoreRegionState::SPLITTING) {
-    const auto &range = region->Range();
+    const auto &range = region->RawRange();
     for (const auto &kv : request.kvs()) {
       if (range.end_key().compare(kv.key()) <= 0) {
         if (ctx) {
@@ -73,7 +73,7 @@ void PutIfAbsentHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
   const auto &request = req.put_if_absent();
   // region is spliting, check key out range
   if (region->State() == pb::common::StoreRegionState::SPLITTING) {
-    const auto &range = region->Range();
+    const auto &range = region->RawRange();
     for (const auto &kv : request.kvs()) {
       if (range.end_key().compare(kv.key()) <= 0) {
         if (ctx) {
@@ -130,7 +130,7 @@ void CompareAndSetHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr
   const auto &request = req.compare_and_set();
   // region is spliting, check key out range
   if (region->State() == pb::common::StoreRegionState::SPLITTING) {
-    const auto &range = region->Range();
+    const auto &range = region->RawRange();
     for (const auto &kv : request.kvs()) {
       if (range.end_key().compare(kv.key()) <= 0) {
         if (ctx) {
@@ -205,7 +205,7 @@ void DeleteRangeHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
   const auto &request = req.delete_range();
   // region is spliting, check key out range
   if (region->State() == pb::common::StoreRegionState::SPLITTING) {
-    const auto &range = region->Range();
+    const auto &range = region->RawRange();
     for (const auto &delete_range : request.ranges()) {
       if (range.end_key().compare(delete_range.end_key()) <= 0) {
         if (ctx) {
@@ -266,7 +266,7 @@ void DeleteBatchHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
   const auto &request = req.delete_batch();
   // region is spliting, check key out range
   if (region->State() == pb::common::StoreRegionState::SPLITTING) {
-    const auto &range = region->Range();
+    const auto &range = region->RawRange();
     for (const auto &key : request.keys()) {
       if (range.end_key().compare(key) <= 0) {
         if (ctx) {

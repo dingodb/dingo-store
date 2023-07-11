@@ -46,13 +46,13 @@ butil::Status RaftSnapshot::GenSnapshotFileByScan(const std::string& checkpoint_
     return butil::Status(pb::error::EINTERNAL, "Create directory failed");
   }
   auto raw_engine = std::dynamic_pointer_cast<RawRocksEngine>(engine_);
-  auto range = region->Range();
+  auto raw_range = region->RawRange();
   // Build Iterator
   IteratorOptions options;
-  options.upper_bound = range.end_key();
+  options.upper_bound = raw_range.end_key();
 
   auto iter = raw_engine->NewIterator(Constant::kStoreDataCF, engine_snapshot_, options);
-  iter->Seek(range.start_key());
+  iter->Seek(raw_range.start_key());
 
   // Build sst name and path
   std::string sst_name = std::to_string(region->Id()) + ".sst";
@@ -72,8 +72,8 @@ butil::Status RaftSnapshot::GenSnapshotFileByScan(const std::string& checkpoint_
   sst_file.set_level(0);
   sst_file.set_name(sst_name);
   sst_file.set_path(sst_path);
-  sst_file.set_start_key(range.start_key());
-  sst_file.set_end_key(range.end_key());
+  sst_file.set_start_key(raw_range.start_key());
+  sst_file.set_end_key(raw_range.end_key());
 
   DINGO_LOG(INFO) << "sst file info: " << sst_file.ShortDebugString();
   sst_files.push_back(sst_file);
@@ -113,20 +113,20 @@ butil::Status RaftSnapshot::GenSnapshotFileByCheckpoint(const std::string& check
     return butil::Status();
   }
 
-  sst_files = FilterSstFile(tmp_sst_files, region->Range().start_key(), region->Range().end_key());
+  sst_files = FilterSstFile(tmp_sst_files, region->RawRange().start_key(), region->RawRange().end_key());
   return butil::Status();
 }
 
 bool RaftSnapshot::SaveSnapshot(braft::SnapshotWriter* writer, store::RegionPtr region,  // NOLINT
                                 GenSnapshotFileFunc func) {
-  if (region->Range().start_key().empty() || region->Range().end_key().empty()) {
+  if (region->RawRange().start_key().empty() || region->RawRange().end_key().empty()) {
     DINGO_LOG(ERROR) << fmt::format("Save snapshot region {} failed, range is invalid", region->Id());
     return false;
   }
 
   DINGO_LOG(INFO) << fmt::format("Save snapshot region {} range[{}-{}]", region->Id(),
-                                 Helper::StringToHex(region->Range().start_key()),
-                                 Helper::StringToHex(region->Range().end_key()));
+                                 Helper::StringToHex(region->RawRange().start_key()),
+                                 Helper::StringToHex(region->RawRange().end_key()));
 
   std::string region_checkpoint_path =
       fmt::format("{}/{}_{}", Server::GetInstance()->GetCheckpointPath(), region->Id(), Helper::TimestampMs());
@@ -167,7 +167,7 @@ bool RaftSnapshot::LoadSnapshot(braft::SnapshotReader* reader, store::RegionPtr 
   }
 
   // Delete old region data
-  auto status = engine_->NewWriter(Constant::kStoreDataCF)->KvDeleteRange(region->Range());
+  auto status = engine_->NewWriter(Constant::kStoreDataCF)->KvDeleteRange(region->RawRange());
   if (!status.ok()) {
     return false;
   }
@@ -190,7 +190,7 @@ bool RaftSnapshot::LoadSnapshot(braft::SnapshotReader* reader, store::RegionPtr 
       // Merge multiple file to one sst.
       // Origin checkpoint sst file cant't ingest rocksdb,
       // Just use rocksdb::SstFileWriter generate sst file can ingest rocksdb.
-      status = RawRocksEngine::MergeCheckpointFile(reader->get_path(), region->Range(), merge_sst_path);
+      status = RawRocksEngine::MergeCheckpointFile(reader->get_path(), region->RawRange(), merge_sst_path);
       if (!status.ok()) {
         // Clean temp file
         if (std::filesystem::exists(merge_sst_path)) {

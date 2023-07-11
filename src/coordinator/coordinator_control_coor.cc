@@ -907,13 +907,6 @@ butil::Status CoordinatorControl::SelectStore(pb::common::StoreType store_type, 
   return butil::Status::OK();
 }
 
-std::string EncodeIndexRegionHeader(uint64_t region_id) {
-  Buf buf(17);
-  buf.WriteLong(region_id);
-
-  return buf.GetString();
-}
-
 butil::Status CoordinatorControl::CreateRegion(const std::string& region_name, pb::common::RegionType region_type,
                                                const std::string& resource_tag, int32_t replica_num,
                                                pb::common::Range region_range, uint64_t schema_id, uint64_t table_id,
@@ -951,24 +944,9 @@ butil::Status CoordinatorControl::CreateRegion(const std::string& region_name, p
   pb::common::Region new_region;
   new_region.set_id(create_region_id);
   new_region.set_epoch(1);
-  // new_region.set_name(region_name + std::string("_") + std::to_string(create_region_id));
   new_region.set_state(::dingodb::pb::common::RegionState::REGION_NEW);
   new_region.set_create_timestamp(butil::gettimeofday_ms());
   new_region.set_region_type(region_type);
-  // auto* range = new_region.mutable_range();
-  // range->CopyFrom(region_range);
-  // add store_id and its peer location to region
-  // for (int i = 0; i < replica_num; i++) {
-  //   auto store = selected_stores_for_regions[i];
-  //   auto* peer = new_region.add_peers();
-  //   peer->set_store_id(store.id());
-  //   peer->set_role(::dingodb::pb::common::PeerRole::VOTER);
-  //   peer->mutable_server_location()->CopyFrom(store.server_location());
-  //   peer->mutable_raft_location()->CopyFrom(store.raft_location());
-  // }
-
-  // new_region.set_schema_id(schema_id);
-  // new_region.set_table_id(table_id);
 
   // create region definition begin
   auto* region_definition = new_region.mutable_metrics()->mutable_region_definition();
@@ -981,14 +959,20 @@ butil::Status CoordinatorControl::CreateRegion(const std::string& region_name, p
   if (index_parameter.index_type() != pb::common::IndexType::INDEX_TYPE_NONE) {
     region_definition->mutable_index_parameter()->CopyFrom(index_parameter);
   }
+
+  // set region range in region definition, this is provided by sdk
   auto* range_in_definition = region_definition->mutable_range();
+  range_in_definition->CopyFrom(region_range);
+
+  // set raw range in region definition, this is for store/index internal use
+  auto* raw_range_in_definition = region_definition->mutable_raw_range();
   // for index region, the region key header is start with region_id
   // for table region, the region range is defined by user
   if (region_type == pb::common::RegionType::INDEX_REGION) {
-    range_in_definition->set_start_key(EncodeIndexRegionHeader(create_region_id));
-    range_in_definition->set_end_key(EncodeIndexRegionHeader(create_region_id + 1));
+    raw_range_in_definition->set_start_key(Helper::EncodeIndexRegionHeader(create_region_id));
+    raw_range_in_definition->set_end_key(Helper::EncodeIndexRegionHeader(create_region_id + 1));
   } else {
-    range_in_definition->CopyFrom(region_range);
+    raw_range_in_definition->CopyFrom(region_range);
   }
 
   // add store_id and its peer location to region

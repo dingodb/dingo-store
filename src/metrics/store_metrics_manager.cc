@@ -110,12 +110,12 @@ bool StoreRegionMetrics::Init() {
 
 std::string StoreRegionMetrics::GetRegionMinKey(store::RegionPtr region) {
   DINGO_LOG(INFO) << fmt::format("GetRegionMinKey... region {} range[{}-{}]", region->Id(),
-                                 Helper::StringToHex(region->Range().start_key()),
-                                 Helper::StringToHex(region->Range().end_key()));
+                                 Helper::StringToHex(region->RawRange().start_key()),
+                                 Helper::StringToHex(region->RawRange().end_key()));
   IteratorOptions options;
-  options.upper_bound = region->Range().end_key();
+  options.upper_bound = region->RawRange().end_key();
   auto iter = raw_engine_->NewIterator(Constant::kStoreDataCF, options);
-  iter->Seek(region->Range().start_key());
+  iter->Seek(region->RawRange().start_key());
 
   if (!iter->Valid()) {
     return "";
@@ -127,12 +127,12 @@ std::string StoreRegionMetrics::GetRegionMinKey(store::RegionPtr region) {
 
 std::string StoreRegionMetrics::GetRegionMaxKey(store::RegionPtr region) {
   DINGO_LOG(INFO) << fmt::format("GetRegionMaxKey... region {} range[{}-{}]", region->Id(),
-                                 Helper::StringToHex(region->Range().start_key()),
-                                 Helper::StringToHex(region->Range().end_key()));
+                                 Helper::StringToHex(region->RawRange().start_key()),
+                                 Helper::StringToHex(region->RawRange().end_key()));
   IteratorOptions options;
-  options.lower_bound = region->Range().start_key();
+  options.lower_bound = region->RawRange().start_key();
   auto iter = raw_engine_->NewIterator(Constant::kStoreDataCF, options);
-  iter->SeekForPrev(region->Range().end_key());
+  iter->SeekForPrev(region->RawRange().end_key());
 
   if (!iter->Valid()) {
     return "";
@@ -146,7 +146,7 @@ uint64_t StoreRegionMetrics::GetRegionKeyCount(store::RegionPtr region) {
   auto reader = raw_engine_->NewReader(Constant::kStoreDataCF);
 
   uint64_t count = 0;
-  reader->KvCount(region->Range().start_key(), region->Range().end_key(), count);
+  reader->KvCount(region->RawRange().start_key(), region->RawRange().end_key(), count);
 
   return count;
 }
@@ -155,7 +155,7 @@ std::vector<uint64_t> StoreRegionMetrics::GetRegionApproximateSize(std::vector<s
   std::vector<pb::common::Range> ranges;
   ranges.reserve(regions.size());
   for (const auto& region : regions) {
-    ranges.push_back(region->Range());
+    ranges.push_back(region->RawRange());
   }
 
   return raw_engine_->GetApproximateSizes(Constant::kStoreDataCF, ranges);
