@@ -98,6 +98,10 @@ message SnapshotVectorIndexRequest {
   uint64 vector_index_id = 1;  // vector index id
 }
 
+message UpdateDefinitionRequest {
+  dingodb.pb.common.RegionDefinition new_region_definition = 1;  // new region definition
+}
+
 message PurgeRequest {
   uint64 region_id = 1;  // region id to be purged
 }
@@ -122,6 +126,7 @@ enum RegionCmdType {
   CMD_SNAPSHOT = 7;               // save region snapshot
   CMD_PURGE = 8;                  // purge region's meta for deleted region
   CMD_SNAPSHOT_VECTOR_INDEX = 9;  // save vector index snapshot
+  CMD_UPDATE_DEFINITION = 10;     // update definition, now only support hnsw index change max_elements
 
   CMD_STOP = 30;              // when region state ORPHAN, stop region
   CMD_DESTROY_EXECUTOR = 31;  // destroy region executor
@@ -148,9 +153,9 @@ message RegionCmd {
     ChangePeerRequest change_peer_request = 15;  // change peer parameters
     PurgeRequest purge_request = 16;  // purge region meta on store, this region is deleted and already purge on
     TransferLeaderRequest transfer_leader_request = 17;  // change peer parameters
-    // coordinator, so store can purge this region's meta data
 
     SnapshotVectorIndexRequest snapshot_vector_index_request = 18;  // save vector index snapshot
+    UpdateDefinitionRequest update_definition_request = 19;         // update region definition
 
     StopRequest stop_request = 30;                         // when region state ORPHAN, stop region
     DestroyExecutorRequest destroy_executor_request = 31;  // destroy region executor
