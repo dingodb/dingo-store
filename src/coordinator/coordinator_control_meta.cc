@@ -256,6 +256,16 @@ butil::Status CoordinatorControl::GetSchemas(uint64_t schema_id, std::vector<pb:
         schema.add_table_ids()->CopyFrom(table_id);
       }
 
+      // construct index_ids in schema
+      for (auto it_index : it.second.index_ids()) {
+        pb::meta::DingoCommonId index_id;
+        index_id.set_entity_id(it_index);
+        index_id.set_parent_entity_id(temp_id->entity_id());
+        index_id.set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_INDEX);
+
+        schema.add_index_ids()->CopyFrom(index_id);
+      }
+
       schemas.push_back(schema);
     }
   }
