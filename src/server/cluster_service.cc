@@ -45,7 +45,7 @@ void ClusterStatImpl::default_method(::google::protobuf::RpcController* controll
   cntl->http_response().set_content_type("text/html");
 
   butil::IOBufBuilder os;
-  const std::string header_in_str = "Table and Regions In DingoStore Cluster";
+  const std::string header_in_str = "Table, Index and Region In DingoStore Cluster";
   // If Current Request is HTML mode, then construct HTML HEADER
   os << "<!DOCTYPE html><html><head>\n"
      << "<script language=\"javascript\" type=\"text/javascript\" src=\"/js/jquery_min\"></script>\n"
@@ -72,6 +72,9 @@ void ClusterStatImpl::default_method(::google::protobuf::RpcController* controll
     PrintSchema(os, schema.name());
     os << "<hr>";
 
+    pb::common::RegionMap region_map;
+    controller_->GetRegionMapFull(region_map);
+
     for (const auto& table_entry : schema.table_ids()) {
       // Start TableID
       os << "<ul>";
@@ -86,13 +89,35 @@ void ClusterStatImpl::default_method(::google::protobuf::RpcController* controll
       pb::meta::TableDefinition table_def = table_definition.table_definition();
       PrintTableDefinition(os, table_definition.table_definition());
 
-      pb::common::RegionMap region_map;
-      controller_->GetRegionMapFull(region_map);
-
       pb::meta::TableRange table_range;
       controller_->GetTableRange(schema_id, table_id, table_range);
 
       PrintTableRegions(os, region_map, table_range);
+      // End Append Table Information
+      os << "</ul>";
+      os << "</li>";
+      // End of TableID
+      os << "</ul>";
+    }
+
+    for (const auto& index_entry : schema.index_ids()) {
+      // Start IndexID
+      os << "<ul>";
+      auto index_id = index_entry.entity_id();
+      os << "<li> IndexID: " << std::to_string(index_id);
+      // Start Append Index Information
+      os << "<ul>";
+
+      pb::meta::IndexDefinitionWithId index_definition;
+      controller_->GetIndex(schema_id, index_id, index_definition);
+      os << "<li> IndexName:" << index_definition.index_definition().name() << "</li>";
+      pb::meta::IndexDefinition index_def = index_definition.index_definition();
+      PrintIndexDefinition(os, index_definition.index_definition());
+
+      pb::meta::IndexRange index_range;
+      controller_->GetIndexRange(schema_id, index_id, index_range);
+
+      PrintIndexRegions(os, region_map, index_range);
       // End Append Table Information
       os << "</ul>";
       os << "</li>";
@@ -126,6 +151,7 @@ void ClusterStatImpl::PrintRegionNode(std::ostream& os, const pb::common::Region
   std::string leader_info = "<li>Leader:";
   std::string follower_info = "<li>Follower:";
   std::string range_info = "<li>Range:[";
+  std::string raw_range_info = "<li>RawRange:[";
   int64_t const leader_store_id = region.leader_store_id();
   for (const auto& peer : region.definition().peers()) {
     std::string ip_port;
@@ -155,12 +181,16 @@ void ClusterStatImpl::PrintRegionNode(std::ostream& os, const pb::common::Region
   range_info += region.definition().range().ShortDebugString();
   range_info += "] </li>";
 
+  raw_range_info += region.definition().raw_range().ShortDebugString();
+  raw_range_info += "] </li>";
+
   os << "<li>RegionID:";
   os << std::to_string(region.id());
   os << "<ul>";
   os << leader_info;
   os << follower_info;
   os << range_info;
+  os << raw_range_info;
   os << "</ul>";
   os << "</li>";
 }
@@ -216,6 +246,47 @@ void ClusterStatImpl::PrintTableDefinition(std::ostream& os, const pb::meta::Tab
     os << "<li>" << column.name() << ":" << SqlType_Name(column.sql_type()) << "</li>";
   }
 
+  os << "</ul>";
+  os << "</li>";
+}
+
+void ClusterStatImpl::PrintIndexDefinition(std::ostream& os, const pb::meta::IndexDefinition& index_definition) {
+  /*
+   * <li>Columns
+   *  <ul>
+   *   <li>ID:INT</li>
+   *   <li>NAME:varchar</li>
+   *   <li>AGE:int</li>
+   *   </ul>
+   * </li>
+   * */
+  os << "<li> IndexDefinition:";
+  os << "<ul>";
+
+  os << "<li>" << index_definition.ShortDebugString() << "</li>";
+
+  os << "</ul>";
+  os << "</li>";
+}
+
+void ClusterStatImpl::PrintIndexRegions(std::ostream& os, const pb::common::RegionMap& region_map,
+                                        const pb::meta::IndexRange& index_range) {
+  os << "<li> Regions: ";
+  os << "<ul>";
+  for (const auto& range_distribution : index_range.range_distribution()) {
+    uint64_t const region_id = range_distribution.id().entity_id();
+    DINGO_LOG(INFO) << "RangeID:" << region_id << "," << range_distribution.ShortDebugString();
+    pb::common::Region found_region;
+    bool const is_found = GetRegionInfo(region_id, region_map, found_region);
+    if (!is_found) {
+      DINGO_LOG(WARNING) << "Cannot Found Region:" << region_id << " on RegionMap";
+      continue;
+    }
+
+    // Append Region Info to HTML
+    PrintRegionNode(os, found_region);
+  }
+  // End Append Region Information
   os << "</ul>";
   os << "</li>";
 }
