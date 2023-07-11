@@ -15,9 +15,12 @@
 #include "client/store_client_function.h"
 
 #include <sys/stat.h>
+#include <unistd.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cstdint>
+#include <filesystem>
 #include <functional>
 #include <memory>
 #include <string>
@@ -37,6 +40,8 @@ const int kBatchSize = 1000;
 DECLARE_string(key);
 DECLARE_bool(without_vector);
 DECLARE_bool(with_scalar);
+DECLARE_bool(print_vector_search_delay);
+DECLARE_bool(vector_enable_scalar);
 
 namespace client {
 
@@ -71,7 +76,17 @@ void SendVectorSearch(ServerInteractionPtr interaction, uint64_t region_id, uint
     key->assign(FLAGS_key);
   }
 
-  interaction->SendRequest("IndexService", "VectorSearch", request, response);
+  if (FLAGS_print_vector_search_delay) {
+    auto start = std::chrono::steady_clock::now();
+    interaction->SendRequest("IndexService", "VectorSearch", request, response);
+    auto end = std::chrono::steady_clock::now();
+    auto diff = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+
+    DINGO_LOG(INFO) << fmt::format("SendVectorSearch  span: {} (us)", diff);
+
+  } else {
+    interaction->SendRequest("IndexService", "VectorSearch", request, response);
+  }
 
   DINGO_LOG(INFO) << "VectorSearch response: " << response.DebugString();
 }
@@ -109,32 +124,38 @@ void SendVectorAdd(ServerInteractionPtr interaction, uint64_t region_id, uint32_
   dingodb::pb::index::VectorAddResponse response;
 
   request.set_region_id(region_id);
+
   for (int i = start_id; i < start_id + count; ++i) {
     auto* vector_with_id = request.add_vectors();
     vector_with_id->set_id(i);
+    vector_with_id->mutable_vector()->set_dimension(dimension);
+    vector_with_id->mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
     for (int j = 0; j < dimension; j++) {
       vector_with_id->mutable_vector()->add_float_values(1.0 * dingodb::Helper::GenerateRandomInteger(0, 100) / 10);
     }
-
-    for (int k = 0; k < 2; ++k) {
-      auto* scalar_data = vector_with_id->mutable_scalar_data()->mutable_scalar_data();
-      dingodb::pb::common::ScalarValue scalar_value;
-      scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::STRING);
-      scalar_value.add_fields()->set_string_data(fmt::format("scalar_value{}", k));
-      (*scalar_data)[fmt::format("scalar_key{}", k)] = scalar_value;
-    }
-    for (int k = 2; k < 4; ++k) {
-      auto* scalar_data = vector_with_id->mutable_scalar_data()->mutable_scalar_data();
-      dingodb::pb::common::ScalarValue scalar_value;
-      scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::INT64);
-      scalar_value.add_fields()->set_long_data(k);
-      (*scalar_data)[fmt::format("scalar_key{}", k)] = scalar_value;
+    if (FLAGS_vector_enable_scalar) {
+      for (int k = 0; k < 2; ++k) {
+        auto* scalar_data = vector_with_id->mutable_scalar_data()->mutable_scalar_data();
+        dingodb::pb::common::ScalarValue scalar_value;
+        scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::STRING);
+        scalar_value.add_fields()->set_string_data(fmt::format("scalar_value{}", k));
+        (*scalar_data)[fmt::format("scalar_key{}", k)] = scalar_value;
+      }
+      for (int k = 2; k < 4; ++k) {
+        auto* scalar_data = vector_with_id->mutable_scalar_data()->mutable_scalar_data();
+        dingodb::pb::common::ScalarValue scalar_value;
+        scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::INT64);
+        scalar_value.add_fields()->set_long_data(k);
+        (*scalar_data)[fmt::format("scalar_key{}", k)] = scalar_value;
+      }
     }
   }
 
-  interaction->SendRequest("IndexService", "VectorAdd", request, response);
+  butil::Status ok = interaction->SendRequest("IndexService", "VectorAdd", request, response);
 
-  DINGO_LOG(INFO) << "VectorAdd response: " << response.DebugString();
+  if (!ok.ok()) {
+    DINGO_LOG(INFO) << "VectorAdd response: " << response.DebugString();
+  }
 }
 
 void SendVectorDelete(ServerInteractionPtr interaction, uint64_t region_id, uint32_t start_id, uint32_t count) {
@@ -172,6 +193,59 @@ void SendVectorGetMinId(ServerInteractionPtr interaction, uint64_t region_id) {
   interaction->SendRequest("IndexService", "VectorGetBorderId", request, response);
 
   DINGO_LOG(INFO) << "VectorGetBorderId response: " << response.DebugString();
+}
+
+void SendVectorAddBatch(ServerInteractionPtr interaction, uint64_t region_id, uint32_t dimension, uint32_t count,
+                        uint32_t step_count, int64_t start_id, const std::string& file) {
+  std::filesystem::path url(file);
+  std::fstream out;
+  if (!std::filesystem::exists(url)) {
+    // not exist
+    out.open(file, std::ios::out | std::ios::binary);
+  } else {
+    out.open(file, std::ios::out | std::ios::binary | std::ios::trunc);
+  }
+
+  if (!out.is_open()) {
+    DINGO_LOG(ERROR) << fmt::format("{} open failed", file);
+    out.close();
+    return;
+  }
+
+  out << "index,cost(us)\n";
+  int64_t total = 0;
+
+  uint32_t cnt = count / step_count;
+  uint32_t left_step_count = count % step_count;
+
+  for (uint32_t i = 0; i < cnt; i++) {
+    auto start = std::chrono::steady_clock::now();
+    SendVectorAdd(interaction, region_id, dimension, start_id + i * step_count, step_count);
+    auto end = std::chrono::steady_clock::now();
+    auto diff = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+    out << i << "," << diff << "\n";
+
+    DINGO_LOG(INFO) << "index : " << i << ":" << diff;
+
+    total += diff;
+  }
+
+  if (left_step_count > 0) {
+    auto start = std::chrono::steady_clock::now();
+    SendVectorAdd(interaction, region_id, dimension, start_id + cnt * step_count, left_step_count);
+    auto end = std::chrono::steady_clock::now();
+    auto diff = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+    out << cnt << "," << diff << "\n";
+
+    DINGO_LOG(INFO) << "index : " << cnt << ":" << diff;
+
+    total += diff;
+  }
+
+  DINGO_LOG(INFO) << fmt::format("total : {} cost : {} (us) avg : {} us", count, total,
+                                 static_cast<long double>(total) / count);
+
+  out.close();
 }
 
 void SendKvGet(ServerInteractionPtr interaction, uint64_t region_id, const std::string& key, std::string& value) {

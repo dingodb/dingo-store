@@ -23,6 +23,7 @@
 #include "client/store_client_function.h"
 #include "common/version.h"
 #include "fmt/core.h"
+#include "gflags/gflags.h"
 #include "glog/logging.h"
 
 DEFINE_bool(log_each_request, true, "Print log for each request");
@@ -50,6 +51,13 @@ DEFINE_int32(vector_id, 0, "vector_id");
 DEFINE_int32(topn, 10, "top n");
 DEFINE_bool(without_vector, false, "Search vector without output vector data");
 DEFINE_bool(with_scalar, false, "Search vector with scalar data");
+// DEFINE_string(vector_index_algorithm, "hnsw", "support hnsw or flat");
+// DEFINE_string(vector_index_distance_algorithm, "L2", "support L2 or IP");
+DEFINE_int64(vector_index_id, 0, "vector index id unique. default 0");
+DEFINE_string(vector_index_add_cost_file, "./cost.txt", "exec batch vector add. cost time");
+DEFINE_bool(vector_enable_scalar, true, "vector enable scalar");
+DEFINE_int32(step_count, 1024, "step_count");
+DEFINE_bool(print_vector_search_delay, false, "print vector search delay");
 
 bvar::LatencyRecorder g_latency_recorder("dingo-store");
 
@@ -225,6 +233,9 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
       client::SendVectorGetMaxId(ctx->store_interaction, FLAGS_region_id);
     } else if (method == "VectorGetMinId") {
       client::SendVectorGetMinId(ctx->store_interaction, FLAGS_region_id);
+    } else if (method == "VectorAddBatch") {
+      client::SendVectorAddBatch(ctx->store_interaction, FLAGS_region_id, FLAGS_dimension, FLAGS_count,
+                                 FLAGS_step_count, FLAGS_start_id, FLAGS_vector_index_add_cost_file);
     }
 
     // Test
