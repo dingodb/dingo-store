@@ -64,6 +64,8 @@ class Region {
   void SetRange(const pb::common::Range& range);
   void SetRawRange(const pb::common::Range& range);
 
+  void SetIndexParameter(const pb::common::IndexParameter& index_parameter);
+
   std::vector<pb::common::Peer> Peers();
   void SetPeers(std::vector<pb::common::Peer>& peers);
 

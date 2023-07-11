@@ -742,6 +742,10 @@ butil::Status UpdateDefinitionTask::UpdateDefinition(std::shared_ptr<Context> /*
                              fmt::format("Resize hnsw index max elements failed {}", region_id));
       }
 
+      // update region definition in store meta
+      region->SetIndexParameter(new_definition.index_parameter());
+      store_region_meta->UpdateRegion(region);
+
       DINGO_LOG(INFO) << fmt::format("UpdateDefinition: {} new max elements {} > old max elements {}, resize success",
                                      region_id, new_max_elements, old_max_elements);
 

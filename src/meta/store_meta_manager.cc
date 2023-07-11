@@ -82,6 +82,11 @@ void Region::SetRawRange(const pb::common::Range& range) {
   inner_region_.mutable_definition()->mutable_raw_range()->CopyFrom(range);
 }
 
+void Region::SetIndexParameter(const pb::common::IndexParameter& index_parameter) {
+  BAIDU_SCOPED_LOCK(mutex_);
+  inner_region_.mutable_definition()->mutable_index_parameter()->CopyFrom(index_parameter);
+}
+
 std::vector<pb::common::Peer> Region::Peers() {
   BAIDU_SCOPED_LOCK(mutex_);
 
