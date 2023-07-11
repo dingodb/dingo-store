@@ -404,6 +404,15 @@ message CreateIndexResponse {
   DingoCommonId index_id = 2;
 }
 
+message UpdateIndexRequest {
+  DingoCommonId index_id = 1;
+  IndexDefinition new_index_definition = 2;
+}
+
+message UpdateIndexResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
 message CreateSchemaRequest {
   DingoCommonId parent_schema_id = 1;
   string schema_name = 2;
@@ -593,14 +602,19 @@ service MetaService {
 
   // CreateIndexId
   // in: schema_id
-  // out: table_id
+  // out: index_id
   rpc CreateIndexId(CreateIndexIdRequest) returns (CreateIndexIdResponse);
 
   // CreateIndex
-  // in: schema_id table_id IndexDefinition
-  //      if table_id is specified, use given table_id, else create new table_id
-  // out: table_id
+  // in: schema_id index_id IndexDefinition
+  //      if index_id is specified, use given index_id, else create new index_id
+  // out: index_id
   rpc CreateIndex(CreateIndexRequest) returns (CreateIndexResponse);
+
+  // UpdateIndex
+  // in: index_id IndexDefinition
+  // out: {}
+  rpc UpdateIndex(UpdateIndexRequest) returns (UpdateIndexResponse);
 
   // DropIndex
   // in: schema_id table_id

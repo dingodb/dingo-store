@@ -1017,6 +1017,52 @@ void MetaServiceImpl::CreateIndex(google::protobuf::RpcController *controller,
   DINGO_LOG(INFO) << "CreateIndex Success in meta_service index_name =" << request->index_definition().name();
 }
 
+void MetaServiceImpl::UpdateIndex(google::protobuf::RpcController *controller,
+                                  const pb::meta::UpdateIndexRequest *request, pb::meta::UpdateIndexResponse *response,
+                                  google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!this->coordinator_control_->IsLeader()) {
+    return RedirectResponse(response);
+  }
+
+  DINGO_LOG(INFO) << "UpdateIndex request:  schema_id = [" << request->index_id().parent_entity_id() << "]"
+                  << " index_id = [" << request->index_id().entity_id() << "]";
+  DINGO_LOG(DEBUG) << request->DebugString();
+
+  if (!request->has_index_id() || !request->has_new_index_definition()) {
+    response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
+    return;
+  }
+
+  pb::coordinator_internal::MetaIncrement meta_increment;
+
+  auto ret =
+      this->coordinator_control_->UpdateIndex(request->index_id().parent_entity_id(), request->index_id().entity_id(),
+                                              request->new_index_definition(), meta_increment);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "UpdateIndex failed in meta_service, error code=" << ret;
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    return;
+  }
+  DINGO_LOG(INFO) << "UpdateIndex new_index_id=" << request->index_id().entity_id();
+
+  // prepare for raft process
+  CoordinatorClosure<pb::meta::UpdateIndexRequest, pb::meta::UpdateIndexResponse> *meta_put_closure =
+      new CoordinatorClosure<pb::meta::UpdateIndexRequest, pb::meta::UpdateIndexResponse>(request, response,
+                                                                                          done_guard.release());
+
+  std::shared_ptr<Context> ctx =
+      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
+  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+
+  // this is a async operation will be block by closure
+  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+
+  DINGO_LOG(INFO) << "UpdateIndex Success in meta_service index_name =" << request->new_index_definition().name();
+}
+
 void MetaServiceImpl::DropIndex(google::protobuf::RpcController *controller, const pb::meta::DropIndexRequest *request,
                                 pb::meta::DropIndexResponse *response, google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);

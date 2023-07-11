@@ -304,6 +304,8 @@ void* Sender(void* /*arg*/) {
     SendCreateIndex(coordinator_interaction_meta, true);
   } else if (FLAGS_method == "CreateIndexId") {
     SendCreateIndexId(coordinator_interaction_meta);
+  } else if (FLAGS_method == "UpdateIndex") {
+    SendUpdateIndex(coordinator_interaction_meta);
   } else if (FLAGS_method == "DropIndex") {
     SendDropIndex(coordinator_interaction_meta);
   } else if (FLAGS_method == "GetIndex") {

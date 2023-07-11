@@ -99,6 +99,7 @@ void CrontabManager::InnerPauseCrontab(uint32_t crontab_id) {
     bthread_timer_del(crontab->timer_id);
   }
 }
+
 void CrontabManager::PauseCrontab(uint32_t crontab_id) {
   BAIDU_SCOPED_LOCK(mutex_);
 

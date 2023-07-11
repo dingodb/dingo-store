@@ -1101,6 +1101,90 @@ butil::Status CoordinatorControl::CreateIndex(uint64_t schema_id, const pb::meta
   return butil::Status::OK();
 }
 
+// update index
+// in: index_id
+// in: index_definition
+// return: errno
+// TODO: now only support update hnsw index's max_elements
+butil::Status CoordinatorControl::UpdateIndex(uint64_t schema_id, uint64_t index_id,
+                                              const pb::meta::IndexDefinition& new_index_definition,
+                                              pb::coordinator_internal::MetaIncrement& meta_increment) {
+  DINGO_LOG(INFO) << "UpdateIndex in control schema_id=" << schema_id;
+
+  if (schema_id < 0) {
+    DINGO_LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "schema_id illegal");
+  }
+
+  if (index_id <= 0) {
+    DINGO_LOG(ERROR) << "ERRROR: index illegal, index_id=" << index_id;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "index_id illegal");
+  }
+
+  // validate schema_id
+  if (!ValidateSchema(schema_id)) {
+    DINGO_LOG(ERROR) << "ERRROR: schema_id not valid" << schema_id;
+    return butil::Status(pb::error::Errno::ESCHEMA_NOT_FOUND, "schema_id not valid");
+  }
+
+  // validate index_id & get index definition
+  pb::coordinator_internal::IndexInternal index_internal;
+  int ret = index_map_.Get(index_id, index_internal);
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << "ERRROR: index_id not found" << index_id;
+    return butil::Status(pb::error::Errno::EINDEX_NOT_FOUND, "index_id not found");
+  }
+
+  DINGO_LOG(INFO) << "GetIndex found index_id=" << index_id;
+
+  DINGO_LOG(DEBUG) << fmt::format("UpdateIndex get_index schema_id={} index_id={} index_internal={}", schema_id,
+                                  index_id, index_internal.DebugString());
+
+  // validate new_index_definition
+  auto status = ValidateIndexDefinition(new_index_definition);
+  if (!status.ok()) {
+    return status;
+  }
+
+  // now only support hnsw max_elements update
+  if (new_index_definition.index_parameter().vector_index_parameter().vector_index_type() !=
+      index_internal.definition().index_parameter().vector_index_parameter().vector_index_type()) {
+    DINGO_LOG(ERROR) << "ERRROR: index type not match, new_index_definition=" << new_index_definition.DebugString()
+                     << " index_internal.definition()=" << index_internal.definition().DebugString();
+    return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "index type not match");
+  }
+
+  if (new_index_definition.index_parameter().vector_index_parameter().vector_index_type() ==
+      pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
+    if (new_index_definition.index_parameter().vector_index_parameter().hnsw_parameter().max_elements() !=
+        index_internal.definition().index_parameter().vector_index_parameter().hnsw_parameter().max_elements()) {
+      DINGO_LOG(INFO)
+          << "UpdateIndex update hnsw max_elements from "
+          << index_internal.definition().index_parameter().vector_index_parameter().hnsw_parameter().max_elements()
+          << " to " << new_index_definition.index_parameter().vector_index_parameter().hnsw_parameter().max_elements();
+
+      auto* index_increment = meta_increment.add_indexes();
+      index_increment->set_id(index_id);
+      index_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
+
+      auto* increment_index = index_increment->mutable_index();
+      index_internal.mutable_definition()
+          ->mutable_index_parameter()
+          ->mutable_vector_index_parameter()
+          ->mutable_hnsw_parameter()
+          ->set_max_elements(
+              new_index_definition.index_parameter().vector_index_parameter().hnsw_parameter().max_elements());
+      increment_index->CopyFrom(index_internal);
+    }
+  } else {
+    DINGO_LOG(ERROR) << "ERRROR: index type not support, new_index_definition=" << new_index_definition.DebugString()
+                     << " index_internal.definition()=" << index_internal.definition().DebugString();
+    return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "index definition update type not support");
+  }
+
+  return butil::Status::OK();
+}
+
 // DropIndex
 // in: schema_id, index_id
 // out: meta_increment

@@ -229,14 +229,14 @@ class CoordinatorControl : public MetaControl {
   butil::Status DropSchema(uint64_t parent_schema_id, uint64_t schema_id,
                            pb::coordinator_internal::MetaIncrement &meta_increment);
 
-  // create schema
+  // create table_id
   // in: schema_id
   // out: new table_id
   // return: errno
   butil::Status CreateTableId(uint64_t schema_id, uint64_t &new_table_id,
                               pb::coordinator_internal::MetaIncrement &meta_increment);
 
-  // create schema
+  // create table
   // in: schema_id
   // in: table_definition
   // out: new table_id
@@ -244,7 +244,7 @@ class CoordinatorControl : public MetaControl {
   butil::Status CreateTable(uint64_t schema_id, const pb::meta::TableDefinition &table_definition,
                             uint64_t &new_table_id, pb::coordinator_internal::MetaIncrement &meta_increment);
 
-  // create schema
+  // create index_id
   // in: schema_id
   // out: new index_id
   // return: errno
@@ -256,13 +256,22 @@ class CoordinatorControl : public MetaControl {
   // return: errno
   static butil::Status ValidateIndexDefinition(const pb::meta::IndexDefinition &index_definition);
 
-  // create schema
+  // create index
   // in: schema_id
   // in: index_definition
   // out: new index_id
   // return: errno
   butil::Status CreateIndex(uint64_t schema_id, const pb::meta::IndexDefinition &index_definition,
                             uint64_t &new_index_id, pb::coordinator_internal::MetaIncrement &meta_increment);
+
+  // update index
+  // in: schema_id
+  // in: index_id
+  // in: new_index_definition
+  // return: errno
+  butil::Status UpdateIndex(uint64_t schema_id, uint64_t index_id,
+                            const pb::meta::IndexDefinition &new_index_definition,
+                            pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // create store
   // in: cluster_id

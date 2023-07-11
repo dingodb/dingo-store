@@ -101,6 +101,8 @@ class MetaServiceImpl : public pb::meta::MetaService {
                        pb::meta::GetIndexMetricsResponse* response, google::protobuf::Closure* done) override;
   void CreateIndex(google::protobuf::RpcController* controller, const pb::meta::CreateIndexRequest* request,
                    pb::meta::CreateIndexResponse* response, google::protobuf::Closure* done) override;
+  void UpdateIndex(google::protobuf::RpcController* controller, const pb::meta::UpdateIndexRequest* request,
+                   pb::meta::UpdateIndexResponse* response, google::protobuf::Closure* done) override;
   void DropIndex(google::protobuf::RpcController* controller, const pb::meta::DropIndexRequest* request,
                  pb::meta::DropIndexResponse* response, google::protobuf::Closure* done) override;
   void CreateIndexId(google::protobuf::RpcController* controller, const pb::meta::CreateIndexIdRequest* request,
