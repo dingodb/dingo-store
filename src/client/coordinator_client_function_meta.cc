@@ -441,6 +441,71 @@ void SendGetIndexs(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_
   DINGO_LOG(INFO) << "index_count=" << response.index_definition_with_ids_size();
 }
 
+void SendUpdateIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  dingodb::pb::meta::GetIndexRequest get_request;
+  dingodb::pb::meta::GetIndexResponse get_response;
+
+  auto* index_id = get_request.mutable_index_id();
+  index_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_INDEX);
+  index_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+
+  if (FLAGS_id.empty()) {
+    DINGO_LOG(WARNING) << "id is empty, this index_id";
+    return;
+  }
+  index_id->set_entity_id(std::stol(FLAGS_id));
+
+  if (FLAGS_max_elements <= 0) {
+    DINGO_LOG(WARNING) << "max_elements is empty, this max_elements";
+    return;
+  }
+
+  auto status = coordinator_interaction->SendRequest("GetIndex", get_request, get_response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG_INFO << get_response.DebugString();
+
+  DINGO_LOG(INFO) << "index_id=[" << get_response.index_definition_with_id().index_id().entity_id() << "]"
+                  << "index_name=[" << get_response.index_definition_with_id().index_definition().name()
+                  << "], index_type=["
+                  << dingodb::pb::common::IndexType_Name(
+                         get_response.index_definition_with_id().index_definition().index_parameter().index_type())
+                  << "]";
+  auto old_count = get_response.index_definition_with_id()
+                       .index_definition()
+                       .index_parameter()
+                       .vector_index_parameter()
+                       .hnsw_parameter()
+                       .max_elements();
+
+  DINGO_LOG(INFO) << "index_count=" << old_count;
+
+  if (old_count <= 0) {
+    DINGO_LOG(WARNING) << "old_count is illegal, stop to update";
+    return;
+  }
+
+  if (FLAGS_max_elements <= old_count) {
+    DINGO_LOG(WARNING) << "new max_elements is illegal, stop to update";
+    return;
+  }
+
+  dingodb::pb::meta::UpdateIndexRequest update_request;
+  dingodb::pb::meta::UpdateIndexResponse update_response;
+
+  update_request.mutable_index_id()->CopyFrom(get_response.index_definition_with_id().index_id());
+  update_request.mutable_new_index_definition()->CopyFrom(get_response.index_definition_with_id().index_definition());
+  update_request.mutable_new_index_definition()
+      ->mutable_index_parameter()
+      ->mutable_vector_index_parameter()
+      ->mutable_hnsw_parameter()
+      ->set_max_elements(FLAGS_max_elements);
+
+  status = coordinator_interaction->SendRequest("UpdateIndex", update_request, update_response);
+
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG_INFO << update_response.DebugString();
+}
+
 void SendGetIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
   dingodb::pb::meta::GetIndexRequest request;
   dingodb::pb::meta::GetIndexResponse response;
