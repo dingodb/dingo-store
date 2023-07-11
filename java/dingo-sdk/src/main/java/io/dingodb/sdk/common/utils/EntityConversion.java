@@ -296,18 +296,17 @@ public class EntityConversion {
     }
 
     public static Meta.IndexDefinition mapping(long id, Index index) {
-        RecordEncoder re = new RecordEncoder(0, id);
         LongSchema schema = new LongSchema(0);
         schema.setIsKey(true);
         DingoKeyValueCodec codec = new DingoKeyValueCodec(id, Collections.singletonList(schema));
         Iterator<byte[]> keys = Stream.concat(
                         Optional.mapOrGet(index.indexPartition(), __ -> encodePartitionDetails(__.details(), codec),
                                 Stream::empty),
-                        Stream.of(re.encodeMaxKeyPrefix()))
+                        Stream.of(codec.encodeMaxKeyPrefix()))
                 .sorted(ByteArrayUtils::compare).iterator();
 
         Meta.RangePartition.Builder rangeBuilder = Meta.RangePartition.newBuilder();
-        byte[] start = re.encodeMinKeyPrefix();
+        byte[] start = codec.encodeMinKeyPrefix();
         while (keys.hasNext()) {
             rangeBuilder.addRanges(Common.Range.newBuilder()
                     .setStartKey(ByteString.copyFrom(start))
@@ -333,10 +332,13 @@ public class EntityConversion {
         Common.VectorIndexParameter vectorParam = parameter.getVectorIndexParameter();
         switch (vectorParam.getVectorIndexType()) {
             case VECTOR_INDEX_TYPE_FLAT:
+                Common.CreateFlatParam flatParam = vectorParam.getFlatParameter();
                 return new IndexParameter(
                         IndexParameter.IndexType.valueOf(parameter.getIndexType().name()),
                         new VectorIndexParameter(VectorIndexParameter.VectorIndexType.VECTOR_INDEX_TYPE_FLAT,
-                                new FlatParam(vectorParam.getFlatParameter().getDimension())));
+                                new FlatParam(
+                                        flatParam.getDimension(),
+                                        VectorIndexParameter.MetricType.valueOf(flatParam.getMetricType().name()))));
             case VECTOR_INDEX_TYPE_IVF_FLAT:
                 Common.CreateIvfFlatParam ivfFlatParam = vectorParam.getIvfFlatParameter();
                 return new IndexParameter(
@@ -390,6 +392,7 @@ public class EntityConversion {
             case VECTOR_INDEX_TYPE_FLAT:
                 build.setFlatParameter(Common.CreateFlatParam.newBuilder()
                         .setDimension(vectorParameter.getFlatParam().getDimension())
+                        .setMetricType(Common.MetricType.valueOf(vectorParameter.getFlatParam().getMetricType().name()))
                         .build());
                 break;
             case VECTOR_INDEX_TYPE_IVF_FLAT:

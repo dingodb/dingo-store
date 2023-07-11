@@ -28,4 +28,5 @@ import lombok.ToString;
 public class FlatParam {
 
     private Integer dimension;
+    private VectorIndexParameter.MetricType metricType;
 }
