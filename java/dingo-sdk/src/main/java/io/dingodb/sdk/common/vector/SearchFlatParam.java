@@ -18,16 +18,12 @@ package io.dingodb.sdk.common.vector;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
-
-import java.util.List;
+import lombok.NoArgsConstructor;
 
 @Getter
 @AllArgsConstructor
-public class VectorSearchParameter {
+@NoArgsConstructor
+public class SearchFlatParam {
 
-    private Integer topN;
-    private boolean withoutVectorData;
-    private boolean withScalarData;
-    private List<String> selectedKeys;
-    private Search search;
+    private Integer parallelOnQueries;
 }

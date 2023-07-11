@@ -51,6 +51,7 @@ import io.dingodb.sdk.common.partition.PartitionDetailDefinition;
 import io.dingodb.sdk.common.partition.PartitionRule;
 import io.dingodb.sdk.common.serial.RecordEncoder;
 import io.dingodb.sdk.common.serial.schema.DingoSchema;
+import io.dingodb.sdk.common.serial.schema.LongSchema;
 import io.dingodb.sdk.common.serial.schema.Type;
 import io.dingodb.sdk.common.table.Column;
 import io.dingodb.sdk.common.table.ColumnDefinition;
@@ -68,6 +69,7 @@ import io.dingodb.sdk.service.store.Coprocessor;
 import io.dingodb.store.Store;
 
 import javax.activation.UnsupportedDataTypeException;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
@@ -295,16 +297,30 @@ public class EntityConversion {
 
     public static Meta.IndexDefinition mapping(long id, Index index) {
         RecordEncoder re = new RecordEncoder(0, id);
+        LongSchema schema = new LongSchema(0);
+        schema.setIsKey(true);
+        DingoKeyValueCodec codec = new DingoKeyValueCodec(id, Collections.singletonList(schema));
+        Iterator<byte[]> keys = Stream.concat(
+                        Optional.mapOrGet(index.indexPartition(), __ -> encodePartitionDetails(__.details(), codec),
+                                Stream::empty),
+                        Stream.of(re.encodeMaxKeyPrefix()))
+                .sorted(ByteArrayUtils::compare).iterator();
+
+        Meta.RangePartition.Builder rangeBuilder = Meta.RangePartition.newBuilder();
+        byte[] start = re.encodeMinKeyPrefix();
+        while (keys.hasNext()) {
+            rangeBuilder.addRanges(Common.Range.newBuilder()
+                    .setStartKey(ByteString.copyFrom(start))
+                    .setEndKey(ByteString.copyFrom(start = keys.next()))
+                    .build());
+        }
+
         return Meta.IndexDefinition.newBuilder()
                 .setName(index.getName())
                 .setVersion(index.getVersion())
                 .setIndexPartition(
                         Meta.PartitionRule.newBuilder()
-                                .setRangePartition(Meta.RangePartition.newBuilder()
-                                        .addRanges(Common.Range.newBuilder()
-                                                .setStartKey(ByteString.copyFrom(re.encodeMinKeyPrefix()))
-                                                .build())
-                                        .build())
+                                .setRangePartition(rangeBuilder.build())
                                 .build())
                 .setReplica(index.getReplica())
                 .setIndexParameter(mapping(index.getIndexParameter()))

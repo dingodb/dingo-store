@@ -23,6 +23,7 @@ import io.dingodb.sdk.common.DingoCommonId;
 import io.dingodb.sdk.common.Location;
 import io.dingodb.sdk.common.SDKCommonId;
 import io.dingodb.sdk.common.utils.EntityConversion;
+import io.dingodb.sdk.common.vector.Search;
 import io.dingodb.sdk.common.vector.VectorSearchParameter;
 import io.dingodb.sdk.common.vector.VectorWithDistance;
 import io.dingodb.sdk.common.vector.VectorWithId;
@@ -99,14 +100,42 @@ public class IndexServiceClient {
             DingoCommonId regionId,
             VectorWithId vector,
             VectorSearchParameter parameter) {
+        Search search = parameter.getSearch();
+        Common.VectorSearchParameter.Builder builder = Common.VectorSearchParameter.newBuilder()
+                .setTopN(parameter.getTopN())
+                .setWithoutVectorData(parameter.isWithoutVectorData())
+                .setWithScalarData(parameter.isWithScalarData())
+                .addAllSelectedKeys(parameter.getSelectedKeys());
+        if (search.getFlat() != null) {
+            builder.setFlat(Common.SearchFlatParam.newBuilder()
+                    .setParallelOnQueries(search.getFlat().getParallelOnQueries())
+                    .build());
+        }
+        if (search.getIvfFlatParam() != null) {
+            builder.setIvfFlat(Common.SearchIvfFlatParam.newBuilder()
+                    .setNprobe(search.getIvfFlatParam().getNprobe())
+                    .setParallelOnQueries(search.getIvfPqParam().getParallelOnQueries())
+                    .build());
+        }
+        if (search.getIvfPqParam() != null) {
+            builder.setIvfPq(Common.SearchIvfPqParam.newBuilder()
+                    .setNprobe(search.getIvfPqParam().getNprobe())
+                    .setParallelOnQueries(search.getIvfPqParam().getParallelOnQueries())
+                    .setRecallNum(search.getIvfPqParam().getRecallNum())
+                    .build());
+        }
+        if (search.getHnswParam() != null) {
+            builder.setHnsw(Common.SearchHNSWParam.newBuilder()
+                    .setEfSearch(search.getHnswParam().getEfSearch())
+                    .build());
+        }
+        if (search.getDiskAnnParam() != null) {
+
+        }
         Index.VectorSearchRequest request = Index.VectorSearchRequest.newBuilder()
                 .setRegionId(regionId.entityId())
                 .setVector(mapping(vector))
-                .setParameter(Common.VectorSearchParameter.newBuilder()
-                        .setTopN(parameter.getTopN())
-                        .setWithScalarData(parameter.isWithScalarData())
-                        .addAllSelectedKeys(parameter.getSelectedKeys())
-                        .build())
+                .setParameter(builder.build())
                 .build();
 
         Index.VectorSearchResponse response = exec(stub -> stub.vectorSearch(request), retryTimes, indexId, regionId);
