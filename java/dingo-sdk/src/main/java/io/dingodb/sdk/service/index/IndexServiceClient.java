@@ -105,7 +105,8 @@ public class IndexServiceClient {
                 .setTopN(parameter.getTopN())
                 .setWithoutVectorData(parameter.isWithoutVectorData())
                 .setWithScalarData(parameter.isWithScalarData())
-                .addAllSelectedKeys(parameter.getSelectedKeys());
+                .addAllSelectedKeys(parameter.getSelectedKeys())
+                .setUseScalarFilter(parameter.isUseScalarFilter());
         if (search.getFlat() != null) {
             builder.setFlat(Common.SearchFlatParam.newBuilder()
                     .setParallelOnQueries(search.getFlat().getParallelOnQueries())
