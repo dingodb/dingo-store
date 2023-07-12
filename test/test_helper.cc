@@ -21,6 +21,7 @@
 #include <string>
 
 #include "common/helper.h"
+#include "fmt/core.h"
 #include "server/service_helper.h"
 
 class HelperTest : public testing::Test {
@@ -350,4 +351,33 @@ TEST_F(HelperTest, TransformRangeWithOptions) {
 
     EXPECT_EQ(true, dingodb::ServiceHelper::ValidateRangeInRange(region_range, uniform_range).ok());
   }
+}
+
+TEST_F(HelperTest, ToUpper) {
+  std::string value = "hello world";
+  EXPECT_EQ("HELLO WORLD", dingodb::Helper::ToUpper(value));
+}
+
+TEST_F(HelperTest, ToLower) {
+  std::string value = "HELLO WORLD";
+  EXPECT_EQ("hello world", dingodb::Helper::ToLower(value));
+}
+
+TEST_F(HelperTest, TraverseDirectory) {
+  std::string path = "/tmp/unit_test_traverse_directory";
+
+  std::filesystem::create_directory(path);
+  std::filesystem::create_directory(fmt::format("{}/a1", path));
+  std::filesystem::create_directory(fmt::format("{}/a1/b1", path));
+  std::filesystem::create_directory(fmt::format("{}/a1/b2", path));
+  std::filesystem::create_directory(fmt::format("{}/a2", path));
+  std::filesystem::create_directory(fmt::format("{}/a2/b3", path));
+
+  auto filenames = dingodb::Helper::TraverseDirectory(path);
+  for (const auto& filename : filenames) {
+    std::cout << "filename: " << filename << std::endl;
+  }
+
+  std::filesystem::remove_all(path);
+  EXPECT_EQ(2, filenames.size());
 }

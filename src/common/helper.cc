@@ -17,6 +17,8 @@
 #include <sys/statvfs.h>
 #include <unistd.h>
 
+#include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -24,6 +26,7 @@
 #include <cstring>
 #include <filesystem>
 #include <iomanip>
+#include <iostream>
 #include <random>
 #include <ratio>
 #include <regex>
@@ -37,6 +40,7 @@
 #include "butil/endpoint.h"
 #include "butil/strings/string_split.h"
 #include "common/logging.h"
+#include "common/service_access.h"
 #include "fmt/core.h"
 #include "google/protobuf/util/json_util.h"
 #include "proto/node.pb.h"
@@ -568,42 +572,6 @@ butil::EndPoint Helper::QueryServerEndpointByRaftEndpoint(std::map<uint64_t, std
   return result;
 }
 
-pb::node::NodeInfo Helper::GetNodeInfo(const butil::EndPoint& endpoint) {
-  brpc::Channel channel;
-  if (channel.Init(endpoint, nullptr) != 0) {
-    DINGO_LOG(ERROR) << "Fail to init channel to " << butil::endpoint2str(endpoint).c_str();
-    return {};
-  }
-
-  pb::node::NodeService_Stub stub(&channel);
-
-  brpc::Controller cntl;
-  cntl.set_timeout_ms(1000L);
-
-  pb::node::GetNodeInfoRequest request;
-  pb::node::GetNodeInfoResponse response;
-
-  request.set_cluster_id(0);
-  stub.GetNodeInfo(&cntl, &request, &response, nullptr);
-  if (cntl.Failed()) {
-    DINGO_LOG(ERROR) << "Fail to send request to : " << cntl.ErrorText();
-    return {};
-  }
-
-  DINGO_LOG(INFO) << "Received response"
-                  << " cluster_id=" << request.cluster_id() << " latency=" << cntl.latency_us()
-                  << " server_location=" << response.node_info().server_location().host() << ":"
-                  << response.node_info().server_location().port();
-
-  return response.node_info();
-}
-
-pb::node::NodeInfo Helper::GetNodeInfo(const std::string& host, int port) {
-  butil::EndPoint endpoint;
-  butil::str2endpoint(host.c_str(), port, &endpoint);
-  return GetNodeInfo(endpoint);
-}
-
 void Helper::GetServerLocation(const pb::common::Location& raft_location, pb::common::Location& server_location) {
   // validate raft_location
   // TODO: how to support ipv6
@@ -613,7 +581,7 @@ void Helper::GetServerLocation(const pb::common::Location& raft_location, pb::co
     return;
   }
 
-  auto node_info = GetNodeInfo(raft_location.host(), raft_location.port());
+  auto node_info = ServiceAccess::GetNodeInfo(raft_location.host(), raft_location.port());
 
   server_location.CopyFrom(node_info.server_location());
 }
@@ -627,7 +595,7 @@ void Helper::GetRaftLocation(const pb::common::Location& server_location, pb::co
     return;
   }
 
-  auto node_info = GetNodeInfo(server_location.host(), server_location.port());
+  auto node_info = ServiceAccess::GetNodeInfo(server_location.host(), server_location.port());
 
   raft_location.CopyFrom(node_info.raft_location());
 }
@@ -635,7 +603,7 @@ void Helper::GetRaftLocation(const pb::common::Location& server_location, pb::co
 pb::common::Peer Helper::GetPeerInfo(const butil::EndPoint& endpoint) {
   pb::common::Peer peer;
 
-  auto node_info = GetNodeInfo(endpoint);
+  auto node_info = ServiceAccess::GetNodeInfo(endpoint);
   peer.set_store_id(node_info.id());
   peer.set_role(pb::common::PeerRole::VOTER);
   peer.mutable_raft_location()->Swap(node_info.mutable_raft_location());
@@ -745,6 +713,16 @@ bool Helper::GetDiskCapacity(const std::string& path, std::map<std::string, uint
   return true;
 }
 
+// Not recursion
+std::vector<std::string> Helper::TraverseDirectory(const std::string& path) {
+  std::vector<std::string> filenames;
+  for (const auto& fe : std::filesystem::directory_iterator(path)) {
+    filenames.push_back(fe.path().filename().string());
+  }
+
+  return filenames;
+}
+
 std::string Helper::FindFileInDirectory(const std::string& dirpath, const std::string& prefix) {
   for (const auto& fe : std::filesystem::directory_iterator(dirpath)) {
     auto filename = fe.path().filename().string();
@@ -823,6 +801,20 @@ std::string Helper::EncodeIndexRegionHeader(uint64_t region_id) {
   buf.WriteLong(region_id);
 
   return buf.GetString();
+}
+
+std::string Helper::ToUpper(const std::string& str) {
+  std::string result;
+  result.resize(str.size());
+  std::transform(str.begin(), str.end(), result.begin(), ::toupper);
+  return result;
+}
+
+std::string Helper::ToLower(const std::string& str) {
+  std::string result;
+  result.resize(str.size());
+  std::transform(str.begin(), str.end(), result.begin(), ::tolower);
+  return result;
 }
 
 }  // namespace dingodb

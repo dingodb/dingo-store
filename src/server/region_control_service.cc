@@ -15,12 +15,15 @@
 
 #include "server/region_control_service.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <string>
 #include <string_view>
 #include <vector>
 
+#include "butil/endpoint.h"
+#include "butil/status.h"
 #include "common/constant.h"
 #include "common/context.h"
 #include "common/helper.h"
@@ -32,6 +35,7 @@
 #include "proto/error.pb.h"
 #include "proto/region_control.pb.h"
 #include "server/server.h"
+#include "vector/vector_index_snapshot.h"
 
 using dingodb::pb::error::Errno;
 
@@ -175,6 +179,35 @@ void RegionControlServiceImpl::SnapshotVectorIndex(google::protobuf::RpcControll
   command->mutable_snapshot_vector_index_request()->set_vector_index_id(request->vector_index_id());
 
   auto status = region_controller->DispatchRegionControlCommand(std::make_shared<Context>(cntl, done), command);
+  if (!status.ok()) {
+    auto* mut_err = response->mutable_error();
+    mut_err->set_errcode(static_cast<Errno>(status.error_code()));
+    mut_err->set_errmsg(status.error_str());
+  }
+}
+
+void RegionControlServiceImpl::TriggerVectorIndexSnapshot(
+    google::protobuf::RpcController* controller, const pb::region_control::TriggerVectorIndexSnapshotRequest* request,
+    pb::region_control::TriggerVectorIndexSnapshotResponse* response, google::protobuf::Closure* done) {
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(done);
+
+  DINGO_LOG(DEBUG) << "TriggerVectorIndexSnapshot request: " << request->ShortDebugString();
+
+  butil::EndPoint endpoint;
+  butil::str2endpoint(request->location().host().c_str(), request->location().port(), &endpoint);
+
+  butil::Status status;
+  if (Helper::ToUpper(request->type()) == "INSTALL") {
+    status = VectorIndexSnapshot::LaunchInstallSnapshot(endpoint, request->vector_index_id());
+  } else if (Helper::ToUpper(request->type()) == "PULL") {
+    status = VectorIndexSnapshot::LaunchPullSnapshot(endpoint, request->vector_index_id());
+  } else {
+    auto* error = response->mutable_error();
+    error->set_errcode(pb::error::EILLEGAL_PARAMTETERS);
+    error->set_errmsg("Param type is error");
+  }
+
   if (!status.ok()) {
     auto* mut_err = response->mutable_error();
     mut_err->set_errcode(static_cast<Errno>(status.error_code()));

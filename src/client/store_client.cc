@@ -43,6 +43,7 @@ DEFINE_string(table_name, "", "table name");
 DEFINE_string(raft_group, "store_default_test", "raft group");
 DEFINE_int32(partition_num, 1, "table partition num");
 DEFINE_int32(dimension, 16, "dimension");
+DEFINE_int32(start_id, 1, "start id");
 DEFINE_int32(count, 50, "count");
 DEFINE_int32(vector_id, 0, "vector_id");
 DEFINE_int32(topn, 10, "top n");
@@ -216,7 +217,7 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
     } else if (method == "VectorBatchQuery") {
       client::SendVectorBatchQuery(ctx->store_interaction, FLAGS_region_id, {static_cast<uint64_t>(FLAGS_vector_id)});
     } else if (method == "VectorAdd") {
-      client::SendVectorAdd(ctx->store_interaction, FLAGS_region_id, FLAGS_dimension, FLAGS_count);
+      client::SendVectorAdd(ctx->store_interaction, FLAGS_region_id, FLAGS_dimension, FLAGS_start_id, FLAGS_count);
     } else if (method == "VectorDelete") {
       client::SendVectorDelete(ctx->store_interaction, FLAGS_region_id, FLAGS_count);
     } else if (method == "VectorGetMaxId") {

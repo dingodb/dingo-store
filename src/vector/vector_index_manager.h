@@ -76,10 +76,6 @@ class VectorIndexManager : public TransformKvAble {
   // Load vector index from snapshot.
   static std::shared_ptr<VectorIndex> LoadVectorIndexFromSnapshot(store::RegionPtr region);
 
-  // Load last snapshot log id from idx directory.
-  static butil::Status GetLastVectorSnapshotLogId(uint64_t region_id, uint64_t& vector_snapshot_log_id);
-  static butil::Status PutLastVectorSnapshotLogId(uint64_t region_id, uint64_t vector_snapshot_log_id);
-
   // Build vector index with original all data(store rocksdb).
   // Invoke when server starting.
   std::shared_ptr<VectorIndex> BuildVectorIndex(store::RegionPtr region);

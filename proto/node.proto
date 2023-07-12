@@ -55,7 +55,8 @@ message LogDetail {
   bool stop_logging_if_full_disk = 3;
 }
 
-message GetLogLevelRequest {};
+message GetLogLevelRequest {
+};
 message GetLogLevelResponse {
   dingodb.pb.error.Error error = 1;
   LogLevel log_level = 2;
@@ -71,8 +72,10 @@ message ChangeLogLevelResponse {
   dingodb.pb.error.Error error = 1;
 };
 
-message MetricsRequest {};
-message MetricsResponse {};
+message MetricsRequest {
+};
+message MetricsResponse {
+};
 
 message FailPointAction {
   string type = 1;       // action type
@@ -114,6 +117,31 @@ message DeleteFailPointResponse {
   dingodb.pb.error.Error error = 1;
 }
 
+message VectorIndexSnapshotMeta {
+  uint64 vector_index_id = 1;
+  uint64 snapshot_log_index = 2;
+  repeated string filenames = 3;
+}
+
+message InstallVectorIndexSnapshotRequest {
+  string uri = 1;  // remote://host:port/reader_id
+  VectorIndexSnapshotMeta meta = 2;
+}
+
+message InstallVectorIndexSnapshotResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
+message GetVectorIndexSnapshotRequest {
+  uint64 vector_index_id = 1;
+}
+
+message GetVectorIndexSnapshotResponse {
+  dingodb.pb.error.Error error = 1;
+  string uri = 2;  // remote://host:port/reader_id
+  VectorIndexSnapshotMeta meta = 3;
+}
+
 service NodeService {
   // GetNodeInfo
   // in: cluster_id
@@ -135,4 +163,9 @@ service NodeService {
   rpc GetFailPoints(GetFailPointRequest) returns (GetFailPointResponse);
   // Delete failpoint
   rpc DeleteFailPoints(DeleteFailPointRequest) returns (DeleteFailPointResponse);
+
+  // Install vector index snapshot
+  rpc InstallVectorIndexSnapshot(InstallVectorIndexSnapshotRequest) returns (InstallVectorIndexSnapshotResponse);
+  // Get vector index snapshot
+  rpc GetVectorIndexSnapshot(GetVectorIndexSnapshotRequest) returns (GetVectorIndexSnapshotResponse);
 }

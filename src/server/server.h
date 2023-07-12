@@ -149,7 +149,25 @@ class Server {
 
   std::string GetCheckpointPath() { return checkpoint_path_; }
 
-  std::string GetIndexPath() { return index_path_; }
+  std::string GetStorePath() {
+    auto config = ConfigManager::GetInstance()->GetConfig(role_);
+    return config == nullptr ? "" : config->GetString("store.path");
+  }
+
+  std::string GetRaftPath() {
+    auto config = ConfigManager::GetInstance()->GetConfig(role_);
+    return config == nullptr ? "" : config->GetString("raft.path");
+  }
+
+  std::string GetRaftLogPath() {
+    auto config = ConfigManager::GetInstance()->GetConfig(role_);
+    return config == nullptr ? "" : config->GetString("raft.log_path");
+  }
+
+  std::string GetIndexPath() {
+    auto config = ConfigManager::GetInstance()->GetConfig(role_);
+    return config == nullptr ? "" : config->GetString("vector.index_path");
+  }
 
   std::shared_ptr<VectorIndexManager> GetVectorIndexManager() { return vector_index_manager_; }
 
@@ -218,9 +236,6 @@ class Server {
 
   // checkpoint directory
   std::string checkpoint_path_;
-
-  // index directory
-  std::string index_path_;
 
   // vector index manager
   std::shared_ptr<VectorIndexManager> vector_index_manager_;

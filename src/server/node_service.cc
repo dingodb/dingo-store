@@ -23,12 +23,15 @@
 
 #include "brpc/controller.h"
 #include "butil/endpoint.h"
+#include "butil/status.h"
 #include "common/failpoint.h"
 #include "common/logging.h"
 #include "coordinator/coordinator_closure.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator_internal.pb.h"
 #include "proto/node.pb.h"
+#include "server/server.h"
+#include "vector/vector_index_snapshot.h"
 
 namespace dingodb {
 using pb::error::Errno;
@@ -331,6 +334,70 @@ void NodeServiceImpl::DeleteFailPoints(google::protobuf::RpcController*,
   brpc::ClosureGuard done_guard(done);
   for (const auto& name : request->names()) {
     FailPointManager::GetInstance().DeleteFailPoint(name);
+  }
+}
+
+butil::Status ValidateInstallVectorIndexSnapshotRequest(const pb::node::InstallVectorIndexSnapshotRequest* request) {
+  auto vector_index_manager = Server::GetInstance()->GetVectorIndexManager();
+  if (vector_index_manager->GetVectorIndex(request->meta().vector_index_id()) == nullptr) {
+    return butil::Status(Errno::EVECTOR_INDEX_NOT_FOUND, "Not found vector index.");
+  }
+
+  if (request->meta().filenames().empty()) {
+    return butil::Status(Errno::EILLEGAL_PARAMTETERS, "Param filename is error.");
+  }
+
+  if (request->meta().snapshot_log_index() <= 1) {
+    return butil::Status(Errno::EILLEGAL_PARAMTETERS, "Param snapshot_log_index is error.");
+  }
+
+  return butil::Status();
+}
+
+void NodeServiceImpl::InstallVectorIndexSnapshot(google::protobuf::RpcController* controller,
+                                                 const pb::node::InstallVectorIndexSnapshotRequest* request,
+                                                 pb::node::InstallVectorIndexSnapshotResponse* response,
+                                                 google::protobuf::Closure* done) {
+  brpc::ClosureGuard done_guard(done);
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+
+  auto status = ValidateInstallVectorIndexSnapshotRequest(request);
+  if (!status.ok()) {
+    auto* error = response->mutable_error();
+    error->set_errcode(static_cast<Errno>(status.error_code()));
+    error->set_errmsg(status.error_str());
+  }
+
+  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, nullptr, response);
+  status = VectorIndexSnapshot::HandleInstallSnapshot(ctx, request->uri(), request->meta());
+  if (!status.ok()) {
+    auto* error = response->mutable_error();
+    error->set_errcode(static_cast<Errno>(status.error_code()));
+    error->set_errmsg(status.error_str());
+  }
+}
+
+void NodeServiceImpl::GetVectorIndexSnapshot(google::protobuf::RpcController* controller,
+                                             const pb::node::GetVectorIndexSnapshotRequest* request,
+                                             pb::node::GetVectorIndexSnapshotResponse* response,
+                                             google::protobuf::Closure* done) {
+  brpc::ClosureGuard done_guard(done);
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+
+  auto vector_index_manager = Server::GetInstance()->GetVectorIndexManager();
+  if (vector_index_manager->GetVectorIndex(request->vector_index_id()) == nullptr) {
+    auto* error = response->mutable_error();
+    error->set_errcode(Errno::EVECTOR_INDEX_NOT_FOUND);
+    error->set_errmsg("Not found vector index.");
+    return;
+  }
+
+  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, nullptr, response);
+  auto status = VectorIndexSnapshot::HandlePullSnapshot(ctx, request->vector_index_id());
+  if (!status.ok()) {
+    auto* error = response->mutable_error();
+    error->set_errcode(static_cast<Errno>(status.error_code()));
+    error->set_errmsg(status.error_str());
   }
 }
 

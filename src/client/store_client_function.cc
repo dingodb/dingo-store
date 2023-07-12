@@ -103,14 +103,16 @@ void SendVectorBatchQuery(ServerInteractionPtr interaction, uint64_t region_id, 
   DINGO_LOG(INFO) << "VectorBatchQuery response: " << response.DebugString();
 }
 
-void SendVectorAdd(ServerInteractionPtr interaction, uint64_t region_id, uint32_t dimension, uint32_t count) {
+void SendVectorAdd(ServerInteractionPtr interaction, uint64_t region_id, uint32_t dimension, uint32_t start_id,
+                   uint32_t count) {
   dingodb::pb::index::VectorAddRequest request;
   dingodb::pb::index::VectorAddResponse response;
 
   request.set_region_id(region_id);
-  for (int i = 1; i <= count; ++i) {
+  uint32_t end_id = start_id + count;
+  for (int i = start_id; i <= end_id; ++i) {
     auto* vector_with_id = request.add_vectors();
-    vector_with_id->set_id(i + 1000);
+    vector_with_id->set_id(i);
     for (int j = 0; j < dimension; j++) {
       vector_with_id->mutable_vector()->add_float_values(1.0 * dingodb::Helper::GenerateRandomInteger(0, 100) / 10);
     }

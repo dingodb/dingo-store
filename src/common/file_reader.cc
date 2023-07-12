@@ -14,6 +14,9 @@
 
 #include "common/file_reader.h"
 
+#include "common/logging.h"
+#include "fmt/core.h"
+
 namespace dingodb {
 
 LocalDirReader::~LocalDirReader() {
@@ -39,15 +42,15 @@ int LocalDirReader::ReadFileWithMeta(butil::IOBuf* out, const std::string& filen
   if (is_reading_) {
     // Just let follower retry, if there already a reading request in process.
     lck.unlock();
-    BRAFT_VLOG << "A courrent read file is in process, path: " << path_;
+    DINGO_LOG(INFO) << "A courrent read file is in process, path: " << path_;
     return EAGAIN;
   }
   int ret = EINVAL;
   if (filename != current_filename_) {
     if (!eof_reached_ || offset != 0) {
       lck.unlock();
-      BRAFT_VLOG << "Out of order read request, path: " << path_ << " filename: " << filename << " offset: " << offset
-                 << " max_count: " << max_count;
+      DINGO_LOG(INFO) << fmt::format("Out of order read request, path: {} filename: {} offset: {} max_count: {}", path_,
+                                     filename, offset, max_count);
       return EINVAL;
     }
     if (current_file_) {
