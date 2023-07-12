@@ -100,6 +100,9 @@ class Constant {
 
   // File transport chunk size
   static const uint32_t kFileTransportChunkSize = 1024 * 1024;  // 1M
+                                                                //
+  // vector limitations
+  static const uint32_t kVectorMaxDimension = 32768;
 };
 
 }  // namespace dingodb
