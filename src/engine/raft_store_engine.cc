@@ -331,8 +331,9 @@ butil::Status RaftStoreEngine::VectorReader::SearchVector(
   bool use_scalar_filter = parameter.use_scalar_filter();
   if (use_scalar_filter) {
     if (BAIDU_UNLIKELY(vector.scalar_data().scalar_data_size() == 0)) {
-      return butil::Status(pb::error::EVECTOR_SCALAR_DATA_NOT_FOUND,
-        fmt::format("Not found vector scalar data, region: {}, vector id: {}", region_id, vector.id()));
+      return butil::Status(
+          pb::error::EVECTOR_SCALAR_DATA_NOT_FOUND,
+          fmt::format("Not found vector scalar data, region: {}, vector id: {}", region_id, vector.id()));
     }
     top_n *= 10;
   }
@@ -377,9 +378,9 @@ butil::Status RaftStoreEngine::VectorReader::SearchVector(
     }
   }
 
-  DINGO_LOG(INFO) << "scalar filter: " << use_scalar_filter << ", region: " << region_id << ", vector id: "
-    << vector.id() << ", before filter, result size: " << temp_size
-    << ", after filter, result size: " << vector_with_distances.size();
+  DINGO_LOG(INFO) << "scalar filter: " << use_scalar_filter << ", region: " << region_id
+                  << ", vector id: " << vector.id() << ", before filter, result size: " << temp_size
+                  << ", after filter, result size: " << vector_with_distances.size();
 
   return butil::Status();
 }
@@ -429,10 +430,9 @@ butil::Status RaftStoreEngine::VectorReader::QueryVectorScalarData(
   return butil::Status();
 }
 
-butil::Status RaftStoreEngine::VectorReader::CompareVectorScalarData(uint64_t region_id,
-                                                          uint64_t vector_id,
-                                                          const pb::common::VectorScalardata& source_scalar_data,
-                                                          bool& compare_result) {
+butil::Status RaftStoreEngine::VectorReader::CompareVectorScalarData(
+    uint64_t region_id, uint64_t vector_id, const pb::common::VectorScalardata& source_scalar_data,
+    bool& compare_result) {
   compare_result = false;
   std::string key, value;
 
@@ -508,22 +508,28 @@ butil::Status RaftStoreEngine::VectorReader::VectorBatchQuery(std::shared_ptr<Co
     pb::common::VectorWithId vector_with_id;
     auto status = QueryVectorWithId(ctx->RegionId(), vector_id, vector_with_id, with_vector_data);
     if (!status.ok()) {
-      return status;
+      DINGO_LOG(WARNING) << "Failed to query vector with id: " << vector_id << ", status: " << status.error_str();
     }
 
+    // if the id is not exist, the vector_with_id will be empty, sdk client will handle this
     vector_with_ids.push_back(vector_with_id);
   }
 
   if (with_scalar_data) {
     for (auto& vector_with_id : vector_with_ids) {
+      if (vector_with_id.ByteSizeLong() == 0) {
+        continue;
+      }
+
       auto status = QueryVectorScalarData(ctx->RegionId(), selected_scalar_keys, vector_with_id);
       if (!status.ok()) {
-        return status;
+        DINGO_LOG(WARNING) << "Failed to query vector scalar data, id: " << vector_with_id.id()
+                           << ", status: " << status.error_str();
       }
     }
   }
 
-  return butil::Status();
+  return butil::Status::OK();
 }
 
 butil::Status RaftStoreEngine::VectorReader::VectorGetBorderId(std::shared_ptr<Context> ctx, uint64_t& id,

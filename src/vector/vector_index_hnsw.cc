@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -102,7 +103,20 @@ butil::Status VectorIndexHnsw::Upsert(uint64_t id, const std::vector<float>& vec
       return butil::Status(pb::error::Errno::EINTERNAL, "vector dimension is not match");
     }
 
-    hnsw_index_->addPoint(vector.data(), id, true);
+    try {
+      hnsw_index_->addPoint(vector.data(), id, true);
+    } catch (std::runtime_error& e) {
+      if (std::string(e.what()) == "The number of elements exceeds the specified limit") {
+        DINGO_LOG(ERROR) << "upsert vector failed, exceeds limit, id=" << id << ", what=" << e.what();
+        return butil::Status(pb::error::Errno::EVECTOR_INDEX_FULL, std::string(e.what()));
+      } else {
+        DINGO_LOG(ERROR) << "upsert vector failed, id=" << id << ", what=" << e.what();
+        return butil::Status(pb::error::Errno::EINTERNAL, std::string(e.what()));
+      }
+    } catch (std::exception& e) {
+      DINGO_LOG(ERROR) << "upsert vector failed, id=" << id << ", what=" << e.what();
+      return butil::Status(pb::error::Errno::EINTERNAL, std::string(e.what()));
+    }
 
     return butil::Status::OK();
   } else {
@@ -123,6 +137,14 @@ butil::Status VectorIndexHnsw::Delete(uint64_t id) {
   if (vector_index_type == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
     try {
       hnsw_index_->markDelete(id);
+    } catch (std::runtime_error& e) {
+      if (std::string(e.what()) == "Label not found") {
+        DINGO_LOG(ERROR) << "delete vector failed, not found, id=" << id << ", what=" << e.what();
+        return butil::Status(pb::error::Errno::EVECTOR_NOT_FOUND, std::string(e.what()));
+      } else {
+        DINGO_LOG(ERROR) << "delete vector failed, id=" << id << ", what=" << e.what();
+        return butil::Status(pb::error::Errno::EINTERNAL, std::string(e.what()));
+      }
     } catch (std::exception& e) {
       DINGO_LOG(ERROR) << "delete vector failed, id=" << id << ", what=" << e.what();
       return butil::Status(pb::error::Errno::EINTERNAL, std::string(e.what()));

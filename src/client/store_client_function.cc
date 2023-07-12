@@ -109,8 +109,7 @@ void SendVectorAdd(ServerInteractionPtr interaction, uint64_t region_id, uint32_
   dingodb::pb::index::VectorAddResponse response;
 
   request.set_region_id(region_id);
-  uint32_t end_id = start_id + count;
-  for (int i = start_id; i <= end_id; ++i) {
+  for (int i = start_id; i < start_id + count; ++i) {
     auto* vector_with_id = request.add_vectors();
     vector_with_id->set_id(i);
     for (int j = 0; j < dimension; j++) {
@@ -138,13 +137,13 @@ void SendVectorAdd(ServerInteractionPtr interaction, uint64_t region_id, uint32_
   DINGO_LOG(INFO) << "VectorAdd response: " << response.DebugString();
 }
 
-void SendVectorDelete(ServerInteractionPtr interaction, uint64_t region_id, uint32_t count) {
+void SendVectorDelete(ServerInteractionPtr interaction, uint64_t region_id, uint32_t start_id, uint32_t count) {
   dingodb::pb::index::VectorDeleteRequest request;
   dingodb::pb::index::VectorDeleteResponse response;
 
   request.set_region_id(region_id);
-  for (int i = 1; i <= count; ++i) {
-    request.add_ids(i + 1000);
+  for (int i = 0; i < count; ++i) {
+    request.add_ids(i + start_id);
   }
 
   interaction->SendRequest("IndexService", "VectorDelete", request, response);
