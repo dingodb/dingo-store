@@ -49,7 +49,8 @@ dingodb::pb::common::Region SendQueryRegion(ServerInteractionPtr interaction, ui
 void SendVectorSearch(ServerInteractionPtr interaction, uint64_t region_id, uint32_t dimension, uint64_t vector_id,
                       uint32_t topn);
 void SendVectorBatchQuery(ServerInteractionPtr interaction, uint64_t region_id, std::vector<uint64_t> vector_ids);
-void SendVectorAdd(ServerInteractionPtr interaction, uint64_t region_id, uint32_t dimension, uint32_t count);
+void SendVectorAdd(ServerInteractionPtr interaction, uint64_t region_id, uint32_t dimension, uint32_t start_id,
+                   uint32_t count);
 void SendVectorDelete(ServerInteractionPtr interaction, uint64_t region_id, uint32_t count);
 void SendVectorGetMaxId(ServerInteractionPtr interaction, uint64_t region_id);
 void SendVectorGetMinId(ServerInteractionPtr interaction, uint64_t region_id);

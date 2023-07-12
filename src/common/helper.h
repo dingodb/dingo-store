@@ -156,8 +156,6 @@ class Helper {
   // use raft_location to get server_location
   // in: raft_location
   // out: server_location
-  static pb::node::NodeInfo GetNodeInfo(const butil::EndPoint& endpoint);
-  static pb::node::NodeInfo GetNodeInfo(const std::string& host, int port);
   static void GetServerLocation(const pb::common::Location& raft_location, pb::common::Location& server_location);
   static void GetRaftLocation(const pb::common::Location& server_location, pb::common::Location& raft_location);
   static pb::common::Peer GetPeerInfo(const butil::EndPoint& endpoint);
@@ -214,6 +212,7 @@ class Helper {
   static std::vector<uint8_t> AddByteArrays(const std::vector<uint8_t>& a, const std::vector<uint8_t>& b);
 
   // filesystem operations
+  static std::vector<std::string> TraverseDirectory(const std::string& path);
   static std::string FindFileInDirectory(const std::string& dirpath, const std::string& prefix);
   static bool RemoveFileOrDirectory(const std::string& path);
   static bool RemoveAllFileOrDirectory(const std::string& path);
@@ -222,6 +221,11 @@ class Helper {
   static bool IsEqualVectorScalarValue(const pb::common::ScalarValue& value1, const pb::common::ScalarValue& value2);
   // for index region, encode raw_range
   static std::string EncodeIndexRegionHeader(uint64_t region_id);
+
+  // Upper string
+  static std::string ToUpper(const std::string& str);
+  // Lower string
+  static std::string ToLower(const std::string& str);
 };
 
 }  // namespace dingodb

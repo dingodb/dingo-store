@@ -73,6 +73,16 @@ message SnapshotVectorIndexResponse {
   dingodb.pb.error.Error error = 1;
 }
 
+message TriggerVectorIndexSnapshotRequest {
+  uint64 vector_index_id = 1;
+  string type = 2;  // install or pull
+  dingodb.pb.common.Location location = 3;
+}
+
+message TriggerVectorIndexSnapshotResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
 enum DebugType {
   NONE = 0;
   STORE_REGION_META_STAT = 1;
@@ -129,6 +139,8 @@ service RegionControlService {
   rpc Snapshot(SnapshotRequest) returns (SnapshotResponse);
   rpc TransferLeader(TransferLeaderRequest) returns (TransferLeaderResponse);
   rpc SnapshotVectorIndex(SnapshotVectorIndexRequest) returns (SnapshotVectorIndexResponse);
+
+  rpc TriggerVectorIndexSnapshot(TriggerVectorIndexSnapshotRequest) returns (TriggerVectorIndexSnapshotResponse);
 
   // debug
   rpc Debug(DebugRequest) returns (DebugResponse);

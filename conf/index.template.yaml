@@ -20,6 +20,8 @@ raft:
 log:
   level: INFO
   path: $BASE_PATH$/log
+vector:
+  index_path: $BASE_PATH$/data/index/idx
 store:
   path: $BASE_PATH$/data/index/db
   background_thread_num: 16 # background_thread_num priority background_thread_ratio

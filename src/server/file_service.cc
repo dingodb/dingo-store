@@ -14,15 +14,9 @@
 
 #include "server/file_service.h"
 
+#include "fmt/core.h"
+
 namespace dingodb {
-
-FileServiceImpl& FileServiceImpl::GetInstance() {
-  static FileServiceImpl instance;
-
-  return instance;
-}
-
-FileServiceImpl::FileServiceImpl() { next_id_ = ((int64_t)getpid() << 45) | (butil::gettimeofday_us() << 17 >> 17); }
 
 void FileServiceImpl::GetFile(google::protobuf::RpcController* controller,
                               const pb::fileservice::GetFileRequest* request,
@@ -30,18 +24,17 @@ void FileServiceImpl::GetFile(google::protobuf::RpcController* controller,
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
 
-  auto reader = GetReader(request->reader_id());
+  DINGO_LOG(INFO) << fmt::format("Get file for {} request {}", butil::endpoint2str(cntl->remote_side()).c_str(),
+                                 request->ShortDebugString());
+
+  auto reader = FileServiceReaderManager::GetInstance().GetReader(request->reader_id());
   if (reader == nullptr) {
-    cntl->SetFailed(pb::error::EFILE_NOT_FOUND_READER, "Fail to find reader=%" PRId64, request->reader_id());
+    cntl->SetFailed(pb::error::EFILE_NOT_FOUND_READER, "Not found reader %lu", request->reader_id());
     return;
   }
 
-  DINGO_LOG(INFO) << "Get file for " << cntl->remote_side() << " path=" << reader->Path()
-                  << " filename=" << request->filename() << " offset=" << request->offset()
-                  << " size=" << request->size();
-
   if (request->size() <= 0 || request->offset() < 0) {
-    cntl->SetFailed(pb::error::EILLEGAL_PARAMTETERS, "Invalid request=%s", request->ShortDebugString().c_str());
+    cntl->SetFailed(pb::error::EILLEGAL_PARAMTETERS, "Invalid request %s", request->ShortDebugString().c_str());
     return;
   }
 
@@ -51,7 +44,7 @@ void FileServiceImpl::GetFile(google::protobuf::RpcController* controller,
 
   const int rc = reader->ReadFile(&buf, request->filename(), request->offset(), request->size(), &read_size, &is_eof);
   if (rc != 0) {
-    cntl->SetFailed(pb::error::EFILE_READ, "Fail to read from path=%s filename=%s : %s", reader->Path().c_str(),
+    cntl->SetFailed(pb::error::EFILE_READ, "Read file failed, path:%s/%s error: %s", reader->Path().c_str(),
                     request->filename().c_str(), berror(rc));
     return;
   }
@@ -66,7 +59,20 @@ void FileServiceImpl::GetFile(google::protobuf::RpcController* controller,
   cntl->response_attachment().swap(buf);
 }
 
-uint64_t FileServiceImpl::AddReader(std::shared_ptr<FileReader> reader) {
+FileServiceReaderManager::FileServiceReaderManager() {
+  bthread_mutex_init(&mutex_, nullptr);
+  next_id_ = ((int64_t)getpid() << 45) | (butil::gettimeofday_us() << 17 >> 17);
+}
+
+FileServiceReaderManager::~FileServiceReaderManager() { bthread_mutex_destroy(&mutex_); }
+
+FileServiceReaderManager& FileServiceReaderManager::GetInstance() {
+  static FileServiceReaderManager instance;
+
+  return instance;
+}
+
+uint64_t FileServiceReaderManager::AddReader(std::shared_ptr<FileReader> reader) {
   BAIDU_SCOPED_LOCK(mutex_);
   uint64_t reader_id = ++next_id_;
   readers_[reader_id] = reader;
@@ -74,12 +80,12 @@ uint64_t FileServiceImpl::AddReader(std::shared_ptr<FileReader> reader) {
   return reader_id;
 }
 
-int FileServiceImpl::RemoveReader(uint64_t reader_id) {
+int FileServiceReaderManager::DeleteReader(uint64_t reader_id) {
   BAIDU_SCOPED_LOCK(mutex_);
   return readers_.erase(reader_id) == 1 ? 0 : -1;
 }
 
-std::shared_ptr<FileReader> FileServiceImpl::GetReader(uint64_t reader_id) {
+std::shared_ptr<FileReader> FileServiceReaderManager::GetReader(uint64_t reader_id) {
   BAIDU_SCOPED_LOCK(mutex_);
   auto it = readers_.find(reader_id);
   return (it == readers_.end()) ? nullptr : it->second;

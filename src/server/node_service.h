@@ -45,6 +45,16 @@ class NodeServiceImpl : public pb::node::NodeService {
   void DeleteFailPoints(google::protobuf::RpcController* controller, const pb::node::DeleteFailPointRequest* request,
                         pb::node::DeleteFailPointResponse* response, google::protobuf::Closure* done) override;
 
+  void InstallVectorIndexSnapshot(google::protobuf::RpcController* controller,
+                                  const pb::node::InstallVectorIndexSnapshotRequest* request,
+                                  pb::node::InstallVectorIndexSnapshotResponse* response,
+                                  google::protobuf::Closure* done) override;
+
+  void GetVectorIndexSnapshot(google::protobuf::RpcController* controller,
+                              const pb::node::GetVectorIndexSnapshotRequest* request,
+                              pb::node::GetVectorIndexSnapshotResponse* response,
+                              google::protobuf::Closure* done) override;
+
   void SetServer(dingodb::Server* server);
 
  private:

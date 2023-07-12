@@ -49,6 +49,7 @@
 #include "proto/store.pb.h"
 #include "server/cluster_service.h"
 #include "server/coordinator_service.h"
+#include "server/file_service.h"
 #include "server/index_service.h"
 #include "server/meta_service.h"
 #include "server/node_service.h"
@@ -489,6 +490,7 @@ int main(int argc, char *argv[]) {
   dingodb::PushServiceImpl push_service;
   dingodb::VersionServiceProtoImpl version_service;
   dingodb::ClusterStatImpl cluster_stat_service;
+  dingodb::FileServiceImpl file_service;
 
   node_service.SetServer(dingo_server);
 
@@ -626,6 +628,12 @@ int main(int argc, char *argv[]) {
       return -1;
     }
 
+    // add file service
+    if (brpc_server.AddService(&file_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
+      DINGO_LOG(ERROR) << "Fail to add push service!";
+      return -1;
+    }
+
     // raft server
     if (braft::add_service(&raft_server, dingo_server->RaftEndpoint()) != 0) {
       DINGO_LOG(ERROR) << "Fail to add raft service!";
@@ -688,6 +696,12 @@ int main(int argc, char *argv[]) {
 
     // add push service to server_location
     if (brpc_server.AddService(&push_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
+      DINGO_LOG(ERROR) << "Fail to add push service!";
+      return -1;
+    }
+
+    // add file service
+    if (brpc_server.AddService(&file_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
       DINGO_LOG(ERROR) << "Fail to add push service!";
       return -1;
     }

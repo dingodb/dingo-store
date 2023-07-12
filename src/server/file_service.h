@@ -29,19 +29,25 @@ namespace dingodb {
 
 class FileServiceImpl : public pb::fileservice::FileService {
  public:
+  FileServiceImpl() = default;
+  ~FileServiceImpl() override = default;
   static FileServiceImpl& GetInstance();
-
-  uint64_t AddReader(std::shared_ptr<FileReader> reader);
-  int RemoveReader(uint64_t reader_id);
 
   void GetFile(google::protobuf::RpcController* controller, const pb::fileservice::GetFileRequest* request,
                pb::fileservice::GetFileResponse* response, google::protobuf::Closure* done) override;
+};
+
+class FileServiceReaderManager {
+ public:
+  static FileServiceReaderManager& GetInstance();
+
+  uint64_t AddReader(std::shared_ptr<FileReader> reader);
+  int DeleteReader(uint64_t reader_id);
+  std::shared_ptr<FileReader> GetReader(uint64_t reader_id);
 
  private:
-  FileServiceImpl();
-  ~FileServiceImpl() override = default;
-
-  std::shared_ptr<FileReader> GetReader(uint64_t reader_id);
+  FileServiceReaderManager();
+  ~FileServiceReaderManager();
 
   uint64_t next_id_;
 
