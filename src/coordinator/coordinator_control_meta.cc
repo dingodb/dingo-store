@@ -24,6 +24,7 @@
 
 #include "butil/containers/flat_map.h"
 #include "butil/status.h"
+#include "common/constant.h"
 #include "common/logging.h"
 #include "coordinator/auto_increment_control.h"
 #include "coordinator/coordinator_control.h"
@@ -666,7 +667,7 @@ butil::Status CoordinatorControl::ValidateIndexDefinition(const pb::meta::IndexD
 
       // check hnsw_parameter.dimension
       // The dimension of the vector space. This parameter is required and must be greater than 0.
-      if (hnsw_parameter.dimension() <= 0) {
+      if (hnsw_parameter.dimension() <= 0 || hnsw_parameter.dimension() > Constant::kVectorMaxDimension) {
         DINGO_LOG(ERROR) << "hnsw_parameter.dimension is illegal " << hnsw_parameter.dimension();
         return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
                              "hnsw_parameter.dimension is illegal " + std::to_string(hnsw_parameter.dimension()));
@@ -726,7 +727,7 @@ butil::Status CoordinatorControl::ValidateIndexDefinition(const pb::meta::IndexD
       const auto& flat_parameter = vector_index_parameter.flat_parameter();
 
       // check flat_parameter.dimension
-      if (flat_parameter.dimension() <= 0) {
+      if (flat_parameter.dimension() <= 0 || flat_parameter.dimension() > Constant::kVectorMaxDimension) {
         DINGO_LOG(ERROR) << "flat_parameter.dimension is illegal " << flat_parameter.dimension();
         return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
                              "flat_parameter.dimension is illegal " + std::to_string(flat_parameter.dimension()));
@@ -752,7 +753,7 @@ butil::Status CoordinatorControl::ValidateIndexDefinition(const pb::meta::IndexD
 
       // check ivf_flat_parameter.dimension
       // The dimension of the vectors to be indexed. This parameter must be greater than 0.
-      if (ivf_flat_parameter.dimension() <= 0) {
+      if (ivf_flat_parameter.dimension() <= 0 || ivf_flat_parameter.dimension() > Constant::kVectorMaxDimension) {
         DINGO_LOG(ERROR) << "ivf_flat_parameter.dimension is illegal " << ivf_flat_parameter.dimension();
         return butil::Status(
             pb::error::Errno::EILLEGAL_PARAMTETERS,
@@ -792,7 +793,7 @@ butil::Status CoordinatorControl::ValidateIndexDefinition(const pb::meta::IndexD
 
       // check ivf_pq_parameter.dimension
       // The dimension of the vectors to be indexed. This parameter must be greater than 0.
-      if (ivf_pq_parameter.dimension() <= 0) {
+      if (ivf_pq_parameter.dimension() <= 0 || ivf_pq_parameter.dimension() > Constant::kVectorMaxDimension) {
         DINGO_LOG(ERROR) << "ivf_pq_parameter.dimension is illegal " << ivf_pq_parameter.dimension();
         return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
                              "ivf_pq_parameter.dimension is illegal " + std::to_string(ivf_pq_parameter.dimension()));
@@ -862,7 +863,7 @@ butil::Status CoordinatorControl::ValidateIndexDefinition(const pb::meta::IndexD
 
       // check diskann_parameter.dimension
       // The dimension of the vectors to be indexed. This parameter must be greater than 0.
-      if (diskann_parameter.dimension() <= 0) {
+      if (diskann_parameter.dimension() <= 0 || diskann_parameter.dimension() > Constant::kVectorMaxDimension) {
         DINGO_LOG(ERROR) << "diskann_parameter.dimension is illegal " << diskann_parameter.dimension();
         return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
                              "diskann_parameter.dimension is illegal " + std::to_string(diskann_parameter.dimension()));
