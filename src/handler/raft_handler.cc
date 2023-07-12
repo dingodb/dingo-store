@@ -25,6 +25,7 @@
 #include "fmt/core.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
+#include "proto/index.pb.h"
 #include "server/server.h"
 #include "vector/codec.h"
 
@@ -400,95 +401,118 @@ void VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr reg
   butil::Status status;
   const auto &request = req.vector_add();
 
-  // Transform vector to kv
-  std::vector<pb::common::KeyValue> kvs;
   for (const auto &vector : request.vectors()) {
-    // vector data
-    {
-      pb::common::KeyValue kv;
-      std::string key;
-      VectorCodec::EncodeVectorId(region->Id(), vector.id(), key);
-      kv.mutable_key()->swap(key);
-      kv.set_value(vector.vector().SerializeAsString());
-      kvs.push_back(kv);
-    }
-    // vector scalardata
-    {
-      pb::common::KeyValue kv;
-      std::string key;
-      VectorCodec::EncodeVectorScalar(region->Id(), vector.id(), key);
-      kv.mutable_key()->swap(key);
-      kv.set_value(vector.scalar_data().SerializeAsString());
-      kvs.push_back(kv);
-    }
   }
 
   // Add vector to index
-  try {
-    auto vector_index_manager = Server::GetInstance()->GetVectorIndexManager();
-    auto vector_index = vector_index_manager->GetVectorIndex(region->Id());
+  auto vector_index_manager = Server::GetInstance()->GetVectorIndexManager();
+  auto vector_index = vector_index_manager->GetVectorIndex(region->Id());
 
-    // if vector_index is nullptr, return internal error
-    if (vector_index == nullptr) {
-      DINGO_LOG(ERROR) << fmt::format("vector_index is nullptr, region_id={}", region->Id());
-      status =
-          butil::Status(pb::error::EINTERNAL, "Internal error, vector_index is nullptr, region_id=[%ld]", region->Id());
-      if (ctx) {
-        ctx->SetStatus(status);
-      }
-      return;
+  // if vector_index is nullptr, return internal error
+  if (vector_index == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("vector_index is nullptr, region_id={}", region->Id());
+    status =
+        butil::Status(pb::error::EINTERNAL, "Internal error, vector_index is nullptr, region_id=[%ld]", region->Id());
+    if (ctx) {
+      ctx->SetStatus(status);
     }
+    return;
+  }
 
-    // Check if the log_id is greater than the ApplyLogIndex of the vector index
-    if (log_id > vector_index->ApplyLogIndex()) {
-      // if vector_index is offline, it may doing snapshot or replay wal, wait for a while and retry full raft log
-      bool stop_flag = true;
-      do {
-        // stop while for default
-        stop_flag = true;
+  // Check if the log_id is greater than the ApplyLogIndex of the vector index
+  if (log_id <= vector_index->ApplyLogIndex()) {
+    DINGO_LOG(WARNING) << fmt::format("vector_index apply log index {} >= log_id {}, region_id={}",
+                                      vector_index->ApplyLogIndex(), log_id, region->Id());
+    if (ctx) {
+      ctx->SetStatus(status);
+    }
+    return;
+  }
+  // Transform vector to kv
+  std::vector<pb::common::KeyValue> kvs;
 
-        // If it is, then iterate over each vector in the request and upsert it into the vector index
-        for (const auto &vector : request.vectors()) {
-          auto ret = vector_index->Upsert(vector);
-          if (ret.error_code() == pb::error::Errno::EVECTOR_INDEX_OFFLINE) {
-            // do not stop while, wait for a while and retry full raft log
-            stop_flag = false;
+  // build key_states
+  std::vector<bool> key_states(request.vectors_size(), false);
 
-            bthread_usleep(1000 * 100);
-            vector_index = vector_index_manager->GetVectorIndex(region->Id());
-            if (vector_index == nullptr) {
-              DINGO_LOG(ERROR) << fmt::format("vector_index is nullptr, region_id={}", region->Id());
-              status = butil::Status(pb::error::EINTERNAL, "Internal error, vector_index is nullptr, region_id=[%ld]",
-                                     region->Id());
-              if (ctx) {
-                ctx->SetStatus(status);
-              }
-              return;
-            }
-            break;
-          } else if (!ret.ok()) {
-            DINGO_LOG(ERROR) << fmt::format("vector_index upsert failed, region_id={}, vector_id={}, err={}",
-                                            region->Id(), vector.id(), ret.error_str());
-            status =
-                butil::Status(pb::error::EINTERNAL,
-                              "Internal error, vector_index upsert failed, region_id=[%ld], vector_id=[%ld], err=[%s]",
-                              region->Id(), vector.id(), ret.error_cstr());
+  // if vector_index is offline, it may doing snapshot or replay wal, wait for a while and retry full raft log
+  bool stop_flag = true;
+  do {
+    // stop while for default
+    stop_flag = true;
+    kvs.clear();
+
+    // If it is, then iterate over each vector in the request and upsert it into the vector index
+    for (int i = 0; i < request.vectors_size(); i++) {
+      key_states[i] = false;
+      const auto &vector = request.vectors(i);
+      try {
+        auto ret = vector_index->Upsert(vector);
+        if (ret.error_code() == pb::error::Errno::EVECTOR_INDEX_OFFLINE) {
+          // do not stop while, wait for a while and retry full raft log
+          stop_flag = false;
+
+          bthread_usleep(1000 * 100);
+          vector_index = vector_index_manager->GetVectorIndex(region->Id());
+          if (vector_index == nullptr) {
+            DINGO_LOG(ERROR) << fmt::format("vector_index is nullptr, region_id={}", region->Id());
+            status = butil::Status(pb::error::EINTERNAL, "Internal error, vector_index is nullptr, region_id=[%ld]",
+                                   region->Id());
             if (ctx) {
               ctx->SetStatus(status);
             }
             return;
           }
+          break;
+        } else if (ret.error_code() == pb::error::Errno::EVECTOR_INDEX_FULL) {
+          DINGO_LOG(INFO) << fmt::format("vector_index is full, region_id={}", region->Id());
+          status = butil::Status(pb::error::EVECTOR_INDEX_FULL, "error, vector_index is full, region_id=[%ld]",
+                                 region->Id());
+          continue;
+        } else if (!ret.ok()) {
+          DINGO_LOG(ERROR) << fmt::format("vector_index upsert failed, region_id={}, vector_id={}, err={}",
+                                          region->Id(), vector.id(), ret.error_str());
+          status =
+              butil::Status(pb::error::EINTERNAL,
+                            "Internal error, vector_index upsert failed, region_id=[%ld], vector_id=[%ld], err=[%s]",
+                            region->Id(), vector.id(), ret.error_cstr());
+          if (ctx) {
+            ctx->SetStatus(status);
+          }
+
+          if (i == 0) {
+            return;
+          } else {
+            continue;
+          }
         }
-      } while (!stop_flag);
 
-      // Update the ApplyLogIndex of the vector index to the current log_id
-      vector_index_manager->UpdateApplyLogIndex(vector_index, log_id);
+        // vector data
+        {
+          pb::common::KeyValue kv;
+          std::string key;
+          VectorCodec::EncodeVectorId(region->Id(), vector.id(), key);
+          kv.mutable_key()->swap(key);
+          kv.set_value(vector.vector().SerializeAsString());
+          kvs.push_back(kv);
+        }
+        // vector scalardata
+        {
+          pb::common::KeyValue kv;
+          std::string key;
+          VectorCodec::EncodeVectorScalar(region->Id(), vector.id(), key);
+          kv.mutable_key()->swap(key);
+          kv.set_value(vector.scalar_data().SerializeAsString());
+          kvs.push_back(kv);
+        }
+
+        key_states[i] = true;
+
+      } catch (const std::exception &e) {
+        DINGO_LOG(ERROR) << fmt::format("vector_index add failed : {}", e.what());
+        status = butil::Status(pb::error::EINTERNAL, "Internal error, vector_index add failed, err=[%s]", e.what());
+      }
     }
-
-  } catch (const std::exception &e) {
-    DINGO_LOG(ERROR) << fmt::format("vector_index add failed : {}", e.what());
-    status = butil::Status(pb::error::EINTERNAL, "Internal error, vector_index add failed, err=[%s]", e.what());
-  }
+  } while (!stop_flag);
 
   // Store vector
   if ((!kvs.empty()) && status.ok()) {
@@ -496,7 +520,17 @@ void VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr reg
     status = writer->KvBatchPut(kvs);
   }
 
+  // Update the ApplyLogIndex of the vector index to the current log_id
+  vector_index_manager->UpdateApplyLogIndex(vector_index, log_id);
+
   if (ctx) {
+    if (ctx->Response()) {
+      auto *response = dynamic_cast<pb::index::VectorAddResponse *>(ctx->Response());
+      for (const auto &state : key_states) {
+        response->add_key_states(state);
+      }
+    }
+
     ctx->SetStatus(status);
   }
 }
@@ -507,98 +541,137 @@ void VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr 
   butil::Status status;
   const auto &request = req.vector_delete();
 
-  // Transform vector to kv
-  std::vector<std::string> keys;
-  std::vector<pb::common::KeyValue> kvs_put;
-  for (const auto &vector_id : request.ids()) {
-    {
-      std::string key;
-      VectorCodec::EncodeVectorId(region->Id(), vector_id, key);
-      keys.push_back(key);
-    }
-
-    {
-      std::string key;
-      VectorCodec::EncodeVectorScalar(region->Id(), vector_id, key);
-      keys.push_back(key);
-    }
-  }
-
-  std::vector<pb::common::KeyValue> kvs_delete;
-  for (auto &key : keys) {
-    pb::common::KeyValue kv;
-    kv.mutable_key()->swap(key);
-    kvs_delete.push_back(kv);
-  }
+  auto reader = engine->NewReader(request.cf_name());
+  auto snapshot = engine->GetSnapshot();
 
   // Delete vector from index
-  try {
-    auto vector_index_manager = Server::GetInstance()->GetVectorIndexManager();
-    auto vector_index = vector_index_manager->GetVectorIndex(region->Id());
+  auto vector_index_manager = Server::GetInstance()->GetVectorIndexManager();
+  auto vector_index = vector_index_manager->GetVectorIndex(region->Id());
 
-    // if vector_index is nullptr, return internal error
-    if (vector_index == nullptr) {
-      DINGO_LOG(ERROR) << fmt::format("vector_index is nullptr, region_id={}", region->Id());
-      status =
-          butil::Status(pb::error::EINTERNAL, "Internal error, vector_index is nullptr, region_id=[%ld]", region->Id());
-      return;
+  // if vector_index is nullptr, return internal error
+  if (vector_index == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("vector_index is nullptr, region_id={}", region->Id());
+    status =
+        butil::Status(pb::error::EINTERNAL, "Internal error, vector_index is nullptr, region_id=[%ld]", region->Id());
+    return;
+  }
+
+  if (log_id <= vector_index->ApplyLogIndex()) {
+    if (ctx) {
+      ctx->SetStatus(status);
     }
+    return;
+  }
 
-    if (log_id > vector_index->ApplyLogIndex()) {
-      // if vector_index is offline, it may doing snapshot or replay wal, wait for a while and retry full raft log
-      bool stop_flag = true;
-      do {
-        // stop while for default
-        stop_flag = true;
+  // Transform vector to kv
+  std::vector<std::string> keys;
 
-        // If it is, then iterate over each vector in the request and upsert it into the vector index
-        for (const auto &vector_id : request.ids()) {
-          auto ret = vector_index->Delete(vector_id);
-          if (ret.error_code() == pb::error::Errno::EVECTOR_INDEX_OFFLINE) {
-            // do not stop while, wait for a while and retry full raft log
-            stop_flag = false;
+  // build key_states
+  std::vector<bool> key_states(request.ids().size(), false);
 
-            bthread_usleep(1000 * 100);
-            vector_index = vector_index_manager->GetVectorIndex(region->Id());
-            if (vector_index == nullptr) {
-              DINGO_LOG(ERROR) << fmt::format("vector_index is nullptr, region_id={}", region->Id());
-              status = butil::Status(pb::error::EINTERNAL, "Internal error, vector_index is nullptr, region_id=[%ld]",
-                                     region->Id());
-              if (ctx) {
-                ctx->SetStatus(status);
-              }
-              return;
-            }
-            break;
-          } else if (!ret.ok()) {
-            DINGO_LOG(ERROR) << fmt::format("vector_index del failed, region_id={}, vector_id={}, err={}", region->Id(),
-                                            vector_id, ret.error_str());
-            status =
-                butil::Status(pb::error::EINTERNAL,
-                              "Internal error, vector_index upsert failed, region_id=[%ld], vector_id=[%ld], err=[%s]",
-                              region->Id(), vector_id, ret.error_cstr());
+  // if vector_index is offline, it may doing snapshot or replay wal, wait for a while and retry full raft log
+  bool stop_flag = true;
+  do {
+    // stop while for default
+    stop_flag = true;
+    keys.clear();
+
+    // If it is, then iterate over each vector in the request and upsert it into the vector index
+    for (int i = 0; i < request.ids_size(); i++) {
+      auto vector_id = request.ids(i);
+      // set key_states
+      {
+        std::string key;
+        VectorCodec::EncodeVectorId(region->Id(), vector_id, key);
+
+        std::string value;
+        auto ret = reader->KvGet(snapshot, key, value);
+        if (!ret.ok()) {
+          key_states[i] = false;
+          i++;
+          continue;
+        }
+      }
+
+      // delete vector from index
+      try {
+        auto ret = vector_index->Delete(vector_id);
+        if (ret.error_code() == pb::error::Errno::EVECTOR_INDEX_OFFLINE) {
+          // do not stop while, wait for a while and retry full raft log
+          stop_flag = false;
+
+          bthread_usleep(1000 * 100);
+          vector_index = vector_index_manager->GetVectorIndex(region->Id());
+          if (vector_index == nullptr) {
+            DINGO_LOG(ERROR) << fmt::format("vector_index is nullptr, region_id={}", region->Id());
+            status = butil::Status(pb::error::EINTERNAL, "Internal error, vector_index is nullptr, region_id=[%ld]",
+                                   region->Id());
             if (ctx) {
               ctx->SetStatus(status);
             }
             return;
           }
-        }
-      } while (!stop_flag);
+          break;
+        } else if (ret.error_code() == pb::error::Errno::EVECTOR_NOT_FOUND) {
+          DINGO_LOG(ERROR) << fmt::format("vector_index del EVECTOR_NOT_FOUND, region_id={}, vector_id={}, err={}",
+                                          region->Id(), vector_id, ret.error_str());
+          continue;
+        } else if (!ret.ok()) {
+          DINGO_LOG(ERROR) << fmt::format("vector_index del failed, region_id={}, vector_id={}, err={}", region->Id(),
+                                          vector_id, ret.error_str());
+          status =
+              butil::Status(pb::error::EINTERNAL,
+                            "Internal error, vector_index upsert failed, region_id=[%ld], vector_id=[%ld], err=[%s]",
+                            region->Id(), vector_id, ret.error_cstr());
+          if (ctx) {
+            ctx->SetStatus(status);
+          }
 
-      vector_index_manager->UpdateApplyLogIndex(vector_index, log_id);
+          if (i == 0) {
+            return;
+          } else {
+            continue;
+          }
+        }
+
+        {
+          std::string key;
+          VectorCodec::EncodeVectorId(region->Id(), vector_id, key);
+          keys.push_back(key);
+        }
+
+        {
+          std::string key;
+          VectorCodec::EncodeVectorScalar(region->Id(), vector_id, key);
+          keys.push_back(key);
+        }
+
+        key_states[i] = true;
+
+      } catch (const std::exception &e) {
+        DINGO_LOG(ERROR) << fmt::format("vector_index delete failed : {}", e.what());
+        status = butil::Status(pb::error::EINTERNAL, "Internal error, vector_index delete failed, err=[%s]", e.what());
+      }
     }
-  } catch (const std::exception &e) {
-    DINGO_LOG(ERROR) << fmt::format("vector_index delete failed : {}", e.what());
-    status = butil::Status(pb::error::EINTERNAL, "Internal error, vector_index delete failed, err=[%s]", e.what());
-  }
+
+  } while (!stop_flag);
 
   // Delete vector and write wal
-  if (status.ok() && ((!kvs_delete.empty()) || (!kvs_put.empty()))) {
+  if (!keys.empty()) {
     auto writer = engine->NewWriter(request.cf_name());
-    status = writer->KvBatchPutAndDelete(kvs_put, kvs_delete);
+    status = writer->KvBatchDelete(keys);
   }
 
+  vector_index_manager->UpdateApplyLogIndex(vector_index, log_id);
+
   if (ctx) {
+    if (ctx->Response()) {
+      auto *response = dynamic_cast<pb::index::VectorDeleteResponse *>(ctx->Response());
+      for (const auto &state : key_states) {
+        response->add_key_states(state);
+      }
+    }
+
     ctx->SetStatus(status);
   }
 }

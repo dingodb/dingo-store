@@ -31,6 +31,10 @@ message VectorAddRequest {
 
 message VectorAddResponse {
   dingodb.pb.error.Error error = 1;
+  // return the execution status of each key
+  // key_states[index] = true, add success
+  // key_states[index] = false, add failed
+  repeated bool key_states = 2;
 }
 
 message VectorBatchQueryRequest {
@@ -67,6 +71,10 @@ message VectorDeleteRequest {
 
 message VectorDeleteResponse {
   dingodb.pb.error.Error error = 1;
+  // return the execution status of each key
+  // key_states[index] = true, delete success
+  // key_states[index] = false, key not exist
+  repeated bool key_states = 2;
 }
 
 message VectorGetBorderIdRequest {

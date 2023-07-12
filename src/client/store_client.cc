@@ -219,7 +219,7 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
     } else if (method == "VectorAdd") {
       client::SendVectorAdd(ctx->store_interaction, FLAGS_region_id, FLAGS_dimension, FLAGS_start_id, FLAGS_count);
     } else if (method == "VectorDelete") {
-      client::SendVectorDelete(ctx->store_interaction, FLAGS_region_id, FLAGS_count);
+      client::SendVectorDelete(ctx->store_interaction, FLAGS_region_id, FLAGS_start_id, FLAGS_count);
     } else if (method == "VectorGetMaxId") {
       client::SendVectorGetMaxId(ctx->store_interaction, FLAGS_region_id);
     } else if (method == "VectorGetMinId") {
