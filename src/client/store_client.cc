@@ -21,6 +21,7 @@
 #include "bthread/bthread.h"
 #include "client/client_helper.h"
 #include "client/store_client_function.h"
+#include "common/version.h"
 #include "fmt/core.h"
 #include "glog/logging.h"
 
@@ -32,7 +33,7 @@ DEFINE_int32(timeout_ms, 5000, "Timeout for each request");
 DEFINE_string(store_addrs, "", "server addrs");
 DEFINE_string(raft_addrs, "127.0.0.1:10101:0,127.0.0.1:10102:0,127.0.0.1:10103:0", "raft addrs");
 DEFINE_string(coor_url, "", "coordinator url");
-DEFINE_string(method, "KvGet", "Request method");
+DEFINE_string(method, "", "Request method");
 DEFINE_string(key, "", "Request key");
 DEFINE_string(value, "", "Request values");
 DEFINE_string(prefix, "", "key prefix");
@@ -267,6 +268,13 @@ int main(int argc, char* argv[]) {
   google::InitGoogleLogging(argv[0]);
 
   google::ParseCommandLineFlags(&argc, &argv, true);
+
+  if (dingodb::FLAGS_show_version || FLAGS_method.empty()) {
+    dingodb::DingoShowVerion();
+
+    printf("Usage: %s --method=[method]\n", argv[0]);
+    exit(-1);
+  }
 
   if (FLAGS_coor_url.empty()) {
     FLAGS_coor_url = "file://./coor_list";

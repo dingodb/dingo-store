@@ -27,6 +27,14 @@ namespace dingodb {
 #define GIT_VERSION "unknown"
 #endif
 
+#ifndef MAJOR_VERSION
+#define MAJOR_VERSION "v0.7.0"
+#endif
+
+#ifndef MINOR_VERSION
+#define MINOR_VERSION "0"
+#endif
+
 #ifndef GIT_TAG_NAME
 #define GIT_TAG_NAME "v0.7.0"
 #endif
@@ -40,6 +48,9 @@ namespace dingodb {
 #endif
 
 DECLARE_bool(show_version);
+
+void DingoShowVerion();
+void DingoLogVerion();
 
 }  // namespace dingodb
 

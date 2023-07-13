@@ -27,6 +27,7 @@
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "common/version.h"
 #include "config/config.h"
 #include "config/config_manager.h"
 #include "coordinator/coordinator_control.h"
@@ -95,6 +96,8 @@ bool Server::InitLog() {
 
   DINGO_LOG(INFO) << "log_dir: " << FLAGS_log_dir << " role:" << role_name
                   << " LogLevel:" << dingodb::pb::node::LogLevel_Name(log_level);
+
+  DingoLogVerion();
 
   return true;
 }
