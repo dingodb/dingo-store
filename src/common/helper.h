@@ -216,6 +216,7 @@ class Helper {
   static std::string FindFileInDirectory(const std::string& dirpath, const std::string& prefix);
   static bool RemoveFileOrDirectory(const std::string& path);
   static bool RemoveAllFileOrDirectory(const std::string& path);
+  static butil::Status Rename(const std::string& src_path, const std::string& dst_path, bool is_force = true);
 
   // vector scalar index value
   static bool IsEqualVectorScalarValue(const pb::common::ScalarValue& value1, const pb::common::ScalarValue& value2);

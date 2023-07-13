@@ -38,11 +38,13 @@
 #include "brpc/channel.h"
 #include "brpc/controller.h"
 #include "butil/endpoint.h"
+#include "butil/status.h"
 #include "butil/strings/string_split.h"
 #include "common/logging.h"
 #include "common/service_access.h"
 #include "fmt/core.h"
 #include "google/protobuf/util/json_util.h"
+#include "proto/error.pb.h"
 #include "proto/node.pb.h"
 #include "serial/buf.h"
 
@@ -753,6 +755,42 @@ bool Helper::RemoveAllFileOrDirectory(const std::string& path) {
   }
 
   return true;
+}
+
+butil::Status Helper::Rename(const std::string& src_path, const std::string& dst_path, bool is_force) {
+  std::filesystem::path source_path = src_path;
+  std::filesystem::path destination_path = dst_path;
+
+  // Check if the destination path already exists
+  if (std::filesystem::exists(destination_path)) {
+    if (!is_force) {
+      // If is_force is false, return error
+      DINGO_LOG(ERROR) << fmt::format("Destination {} already exists, is_force = false, so cannot rename from {}",
+                                      dst_path, src_path);
+      return butil::Status(pb::error::Errno::EINTERNAL, "Destination already exists");
+    }
+
+    // Remove the existing destination
+    RemoveAllFileOrDirectory(dst_path);
+
+    // Check if the removal was successful
+    if (std::filesystem::exists(destination_path)) {
+      DINGO_LOG(ERROR) << fmt::format("Failed to remove the existing destination {} ", dst_path);
+      return butil::Status(pb::error::Errno::EINTERNAL, "Failed to remove the existing destination");
+    }
+  }
+
+  // Perform the rename operation
+  try {
+    std::filesystem::rename(source_path, destination_path);
+    DINGO_LOG(DEBUG) << fmt::format("Rename {} to {}", src_path, dst_path);
+  } catch (const std::exception& ex) {
+    DINGO_LOG(ERROR) << fmt::format("Rename operation failed, src_path: {}, dst_path: {}, error: {}", src_path,
+                                    dst_path, ex.what());
+    return butil::Status(pb::error::Errno::EINTERNAL, fmt::format("Rename operation failed, error: {}", ex.what()));
+  }
+
+  return butil::Status::OK();
 }
 
 bool Helper::IsEqualVectorScalarValue(const pb::common::ScalarValue& value1, const pb::common::ScalarValue& value2) {
