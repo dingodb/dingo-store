@@ -400,12 +400,11 @@ butil::Status VectorIndexManager::RebuildVectorIndex(store::RegionPtr region, bo
     }
   }
 
+  // first ground replay wal
   auto status = ReplayWalToVectorIndex(vector_index, vector_index->ApplyLogIndex() + 1, UINT64_MAX);
   if (status.ok()) {
     DINGO_LOG(INFO) << fmt::format("ReplayWal success first-round, id {}, log_id {}", region->Id(),
                                    vector_index->ApplyLogIndex());
-    // set vector index to vector index map
-    vector_indexs_.Put(region->Id(), vector_index);
 
     // update vector_index_status
     vector_index_status_.Put(region->Id(), pb::common::RegionVectorIndexStatus::VECTOR_INDEX_STATUS_REPLAYING);
@@ -428,6 +427,7 @@ butil::Status VectorIndexManager::RebuildVectorIndex(store::RegionPtr region, bo
     online_vector_index->SetOffline();
   }
 
+  // second ground replay wal
   status = ReplayWalToVectorIndex(vector_index, vector_index->ApplyLogIndex() + 1, UINT64_MAX);
   if (status.ok()) {
     DINGO_LOG(INFO) << fmt::format("ReplayWal success catch-up round, id {}, log_id {}", region->Id(),
@@ -702,7 +702,7 @@ butil::Status VectorIndexManager::ScrubVectorIndex() {
     }
 
     uint64_t last_snapshot_log_id = VectorIndexSnapshot::GetLastVectorIndexSnapshotLogId(vector_index->Id());
-    if (last_snapshot_log_id == 0) {
+    if (last_snapshot_log_id == UINT64_MAX) {
       DINGO_LOG(ERROR) << fmt::format("GetLastVectorIndexSnapshotLogId failed, region_id {}", region->Id());
       continue;
     }

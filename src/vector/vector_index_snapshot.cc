@@ -110,7 +110,17 @@ static uint64_t ParseMetaLogId(const std::string& path) {
   std::string str;
   std::getline(file, str);
 
-  return std::strtoull(str.c_str(), nullptr, 10);
+  try {
+    return std::strtoull(str.c_str(), nullptr, 10);
+  } catch (const std::invalid_argument& e) {
+    DINGO_LOG(ERROR) << " path: " << path << ", Invalid argument: " << e.what();
+  } catch (const std::out_of_range& e) {
+    DINGO_LOG(ERROR) << " path: " << path << ", Out of range: " << e.what();
+  } catch (...) {
+    DINGO_LOG(ERROR) << " path: " << path << ", Unknown error";
+  }
+
+  return UINT64_MAX;
 }
 
 bool VectorIndexSnapshot::IsExistVectorIndexSnapshot(uint64_t vector_index_id) {
@@ -128,6 +138,7 @@ uint64_t VectorIndexSnapshot::GetLastVectorIndexSnapshotLogId(uint64_t vector_in
   if (!std::filesystem::exists(snapshot_parent_path)) {
     return 0;
   }
+
   std::string last_snapshot_path = GetLastSnapshotPath(snapshot_parent_path);
   if (last_snapshot_path.empty()) {
     return 0;
