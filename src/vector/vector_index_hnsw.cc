@@ -209,6 +209,8 @@ butil::Status VectorIndexHnsw::Search(const std::vector<float>& vector, uint32_t
       auto* vector_with_id = vector_with_distance.mutable_vector_with_id();
 
       vector_with_id->set_id(result.top().second);
+      vector_with_id->mutable_vector()->set_dimension(dimension_);
+      vector_with_id->mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
 
       if (reconstruct) {
         try {

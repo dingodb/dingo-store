@@ -365,7 +365,8 @@ butil::Status RaftStoreEngine::VectorReader::SearchVector(
   // if vector index does not support restruct vector ,we restruct it using RocksDB
   if (with_vector_data) {
     for (auto& vector_with_distance : vector_with_distances) {
-      if (vector_with_distance.vector_with_id().has_vector()) {
+      if (vector_with_distance.vector_with_id().vector().float_values_size() > 0 ||
+          vector_with_distance.vector_with_id().vector().binary_values_size() > 0) {
         continue;
       }
 
