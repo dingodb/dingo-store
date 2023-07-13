@@ -20,7 +20,9 @@
 #include "butil/endpoint.h"
 #include "butil/status.h"
 #include "common/context.h"
+#include "meta/store_meta_manager.h"
 #include "proto/node.pb.h"
+#include "vector/vector_index.h"
 
 namespace dingodb {
 
@@ -39,6 +41,11 @@ class VectorIndexSnapshot {
 
   static bool IsExistVectorIndexSnapshot(uint64_t vector_index_id);
   static uint64_t GetLastVectorIndexSnapshotLogId(uint64_t vector_index_id);
+
+  // Save vecgor index snapshot.
+  static butil::Status SaveVectorIndexSnapshot(std::shared_ptr<VectorIndex> vector_index);
+  // Load vector index from snapshot.
+  static std::shared_ptr<VectorIndex> LoadVectorIndexSnapshot(store::RegionPtr region);
 
  private:
   static butil::Status DownloadSnapshotFile(const std::string& uri, const pb::node::VectorIndexSnapshotMeta& meta);
