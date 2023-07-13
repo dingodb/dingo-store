@@ -512,7 +512,9 @@ butil::Status VectorIndexManager::SaveVectorIndex(std::shared_ptr<VectorIndex> v
   // Temp snapshot path for save vector index.
   std::string tmp_snapshot_path = fmt::format("{}/tmp", snapshot_parent_path);
   if (std::filesystem::exists(tmp_snapshot_path)) {
+    DINGO_LOG(INFO) << fmt::format("Remove and Recreate snapshot tmp path {}", tmp_snapshot_path);
     Helper::RemoveAllFileOrDirectory(tmp_snapshot_path);
+    std::filesystem::create_directories(tmp_snapshot_path);
   } else {
     DINGO_LOG(INFO) << fmt::format("Create snapshot tmp path {}", tmp_snapshot_path);
     std::filesystem::create_directories(tmp_snapshot_path);
@@ -553,7 +555,7 @@ butil::Status VectorIndexManager::SaveVectorIndex(std::shared_ptr<VectorIndex> v
   std::string new_snapshot_path =
       fmt::format("{}/{}/snapshot_{:020}", Server::GetInstance()->GetIndexPath(), vector_index->Id(), apply_log_index);
   DINGO_LOG(INFO) << fmt::format("Rename tmp snapshot path {} to {}", tmp_snapshot_path, new_snapshot_path);
-  ret = Helper::Rename(new_snapshot_path, snapshot_parent_path, false);
+  ret = Helper::Rename(tmp_snapshot_path, new_snapshot_path, false);
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << fmt::format("Rename tmp snapshot path {} to {} failed, {}", tmp_snapshot_path,
                                     new_snapshot_path, ret.error_str());
