@@ -61,10 +61,6 @@
 
 DEFINE_string(conf, "", "server config");
 DEFINE_string(role, "", "server role [store|coordinator]");
-DEFINE_string(git_commit_hash, GIT_VERSION, "current git commit version");
-DEFINE_string(git_tag_name, GIT_TAG_NAME, "current dingo version");
-DEFINE_string(dingo_build_type, DINGO_BUILD_TYPE, "current dingo build type");
-DEFINE_string(dingo_contrib_build_type, DINGO_CONTRIB_BUILD_TYPE, "current dingo contrib build type");
 DECLARE_string(coor_url);
 
 namespace bvar {
@@ -391,10 +387,8 @@ int main(int argc, char *argv[]) {
   google::ParseCommandLineFlags(&argc, &argv, true);
 
   if (dingodb::FLAGS_show_version || FLAGS_role.empty()) {
-    printf("Dingo-Store version:[%s] with git commit hash:[%s]\n", FLAGS_git_tag_name.c_str(),
-           FLAGS_git_commit_hash.c_str());
-    printf("Dingo-Store build_type:[%s] contrib_build_type:[%s]\n", FLAGS_dingo_build_type.c_str(),
-           FLAGS_dingo_contrib_build_type.c_str());
+    dingodb::DingoShowVerion();
+
     printf(
         "Usage: %s --role=[coordinator|store|index] --conf ./conf/[coordinator|store|index].yaml "
         "--coor_url=[file://./conf/coor_list]\n",
@@ -740,8 +734,6 @@ int main(int argc, char *argv[]) {
     return -1;
   }
   DINGO_LOG(INFO) << "Server is running on " << brpc_server.listen_address();
-  DINGO_LOG(INFO) << "Current Git Commit version is:" << FLAGS_git_commit_hash;
-  DINGO_LOG(INFO) << "Current branch tag is:" << FLAGS_git_tag_name;
 
   // Wait until 'CTRL-C' is pressed. then Stop() and Join() the service
   while (!brpc::IsAskedToQuit()) {
