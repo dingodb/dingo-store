@@ -73,9 +73,6 @@ class VectorIndexManager : public TransformKvAble {
 
   bool AddVectorIndex(uint64_t region_id, std::shared_ptr<VectorIndex> vector_index);
 
-  // Load vector index from snapshot.
-  static std::shared_ptr<VectorIndex> LoadVectorIndexFromSnapshot(store::RegionPtr region);
-
   // Build vector index with original all data(store rocksdb).
   // Invoke when server starting.
   std::shared_ptr<VectorIndex> BuildVectorIndex(store::RegionPtr region);
@@ -83,8 +80,6 @@ class VectorIndexManager : public TransformKvAble {
   // Replay log to vector index.
   static butil::Status ReplayWalToVectorIndex(std::shared_ptr<VectorIndex> vector_index, uint64_t start_log_id,
                                               uint64_t end_log_id);
-
-  static butil::Status SaveVectorIndex(std::shared_ptr<VectorIndex> vector_index);
 
   // Scrub vector index.
   butil::Status ScrubVectorIndex(store::RegionPtr region, bool need_rebuild, bool need_save);
