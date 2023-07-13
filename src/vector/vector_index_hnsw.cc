@@ -29,6 +29,7 @@
 #include "butil/status.h"
 #include "common/logging.h"
 #include "fmt/core.h"
+#include "gflags/gflags.h"
 #include "hnswlib/space_ip.h"
 #include "hnswlib/space_l2.h"
 #include "proto/common.pb.h"
@@ -36,6 +37,8 @@
 #include "vector/vector_index.h"
 
 namespace dingodb {
+
+DEFINE_uint64(hnsw_need_save_count, 10000, "hnsw need save count");
 
 VectorIndexHnsw::VectorIndexHnsw(uint64_t id, const pb::common::VectorIndexParameter& vector_index_parameter)
     : VectorIndex(id, vector_index_parameter) {
@@ -272,7 +275,7 @@ butil::Status VectorIndexHnsw::NeedToSave([[maybe_unused]] bool& need_to_save,
     return butil::Status::OK();
   }
 
-  if (last_save_log_behind > 500000) {
+  if (last_save_log_behind > FLAGS_hnsw_need_save_count) {
     need_to_save = true;
   }
 

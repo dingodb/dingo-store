@@ -401,9 +401,6 @@ void VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr reg
   butil::Status status;
   const auto &request = req.vector_add();
 
-  for (const auto &vector : request.vectors()) {
-  }
-
   // Add vector to index
   auto vector_index_manager = Server::GetInstance()->GetVectorIndexManager();
   auto vector_index = vector_index_manager->GetVectorIndex(region->Id());
