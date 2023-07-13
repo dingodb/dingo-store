@@ -44,6 +44,7 @@ class FileServiceReaderManager {
   uint64_t AddReader(std::shared_ptr<FileReader> reader);
   int DeleteReader(uint64_t reader_id);
   std::shared_ptr<FileReader> GetReader(uint64_t reader_id);
+  std::vector<uint64_t> GetAllReaderId();
 
  private:
   FileServiceReaderManager();

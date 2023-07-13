@@ -91,6 +91,7 @@ enum DebugType {
   STORE_RAFT_META = 4;
   STORE_REGION_EXECUTOR = 5;
   STORE_REGION_METRICS = 6;
+  STORE_FILE_READER = 7;
 }
 
 message DebugRequest {
@@ -123,12 +124,18 @@ message DebugResponse {
     repeated dingodb.pb.common.RegionMetrics region_metricses = 1;
   }
 
+  message FileReader {
+    int32 count = 1;
+    repeated uint64 reader_ids = 2;
+  }
+
   RegionMetaStat region_meta_stat = 1;
   RegionMetaDetails region_meta_details = 2;
   RegionControlCommand region_control_command = 3;
   RaftMeta raft_meta = 4;
   RegionExecutor region_executor = 5;
   RegionMetrics region_metrics = 6;
+  FileReader file_reader = 7;
 }
 
 service RegionControlService {

@@ -14,6 +14,9 @@
 
 #include "server/file_service.h"
 
+#include <cstdint>
+#include <vector>
+
 #include "fmt/core.h"
 
 namespace dingodb {
@@ -89,6 +92,17 @@ std::shared_ptr<FileReader> FileServiceReaderManager::GetReader(uint64_t reader_
   BAIDU_SCOPED_LOCK(mutex_);
   auto it = readers_.find(reader_id);
   return (it == readers_.end()) ? nullptr : it->second;
+}
+
+std::vector<uint64_t> FileServiceReaderManager::GetAllReaderId() {
+  BAIDU_SCOPED_LOCK(mutex_);
+
+  std::vector<uint64_t> reader_ids;
+  for (auto& [reader_id, _] : readers_) {
+    reader_ids.push_back(reader_id);
+  }
+
+  return reader_ids;
 }
 
 }  // namespace dingodb

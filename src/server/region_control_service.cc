@@ -34,6 +34,7 @@
 #include "proto/coordinator.pb.h"
 #include "proto/error.pb.h"
 #include "proto/region_control.pb.h"
+#include "server/file_service.h"
 #include "server/server.h"
 #include "vector/vector_index_snapshot.h"
 
@@ -319,6 +320,13 @@ void RegionControlServiceImpl::Debug(google::protobuf::RpcController* controller
 
     for (auto& region_metrics : region_metricses) {
       response->mutable_region_metrics()->add_region_metricses()->CopyFrom(region_metrics->InnerRegionMetrics());
+    }
+  } else if (request->type() == pb::region_control::DebugType::STORE_FILE_READER) {
+    auto reader_ids = FileServiceReaderManager::GetInstance().GetAllReaderId();
+
+    response->mutable_file_reader()->set_count(reader_ids.size());
+    for (auto reader_id : reader_ids) {
+      response->mutable_file_reader()->add_reader_ids(reader_id);
     }
   }
 }
