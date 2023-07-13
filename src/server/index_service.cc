@@ -27,6 +27,7 @@
 #include "common/logging.h"
 #include "common/synchronization.h"
 #include "fmt/core.h"
+#include "gflags/gflags.h"
 #include "meta/store_meta_manager.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
@@ -39,6 +40,9 @@ using dingodb::pb::error::Errno;
 
 namespace dingodb {
 
+DEFINE_uint64(vector_max_bactch_count, 1024, "vector max batch count in one request");
+DEFINE_uint64(vector_max_request_size, 4194304, "vector max batch count in one request");
+
 IndexServiceImpl::IndexServiceImpl() = default;
 
 butil::Status ValidateVectorBatchQueryQequest(const dingodb::pb::index::VectorBatchQueryRequest* request) {
@@ -48,6 +52,12 @@ butil::Status ValidateVectorBatchQueryQequest(const dingodb::pb::index::VectorBa
 
   if (request->vector_ids().empty()) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param vector_ids is error");
+  }
+
+  if (request->vector_ids().size() > FLAGS_vector_max_bactch_count) {
+    return butil::Status(pb::error::EVECTOR_EXCEED_MAX_BATCH_COUNT,
+                         fmt::format("Param vector_ids size {} is exceed max batch count {}",
+                                     request->vector_ids().size(), FLAGS_vector_max_bactch_count));
   }
 
   return ServiceHelper::ValidateIndexRegion(request->region_id());
@@ -110,6 +120,12 @@ butil::Status ValidateVectorSearchRequest(const dingodb::pb::index::VectorSearch
     }
   }
 
+  if (request->parameter().top_n() > FLAGS_vector_max_bactch_count) {
+    return butil::Status(pb::error::EVECTOR_EXCEED_MAX_BATCH_COUNT,
+                         fmt::format("Param top_n {} is exceed max batch count {}", request->parameter().top_n(),
+                                     FLAGS_vector_max_bactch_count));
+  }
+
   return ServiceHelper::ValidateIndexRegion(request->region_id());
 }
 
@@ -167,6 +183,18 @@ butil::Status ValidateVectorAddRequest(const dingodb::pb::index::VectorAddReques
     return butil::Status(pb::error::EVECTOR_EMPTY, "Vector quantity is empty");
   }
 
+  if (request->vectors_size() > FLAGS_vector_max_bactch_count) {
+    return butil::Status(pb::error::EVECTOR_EXCEED_MAX_BATCH_COUNT,
+                         fmt::format("Param vectors size {} is exceed max batch count {}", request->vectors_size(),
+                                     FLAGS_vector_max_bactch_count));
+  }
+
+  if (request->ByteSizeLong() > FLAGS_vector_max_request_size) {
+    return butil::Status(pb::error::EVECTOR_EXCEED_MAX_REQUEST_SIZE,
+                         fmt::format("Param vectors size {} is exceed max batch size {}", request->ByteSizeLong(),
+                                     FLAGS_vector_max_request_size));
+  }
+
   for (const auto& vector : request->vectors()) {
     if (vector.vector().float_values().empty()) {
       return butil::Status(pb::error::EVECTOR_EMPTY, "Vector is empty");
@@ -220,6 +248,12 @@ butil::Status ValidateVectorDeleteRequest(const dingodb::pb::index::VectorDelete
 
   if (request->ids().empty()) {
     return butil::Status(pb::error::EVECTOR_EMPTY, "Vector id quantity is empty");
+  }
+
+  if (request->ids_size() > FLAGS_vector_max_bactch_count) {
+    return butil::Status(pb::error::EVECTOR_EXCEED_MAX_BATCH_COUNT,
+                         fmt::format("Param ids size {} is exceed max batch count {}", request->ids_size(),
+                                     FLAGS_vector_max_bactch_count));
   }
 
   return ServiceHelper::ValidateIndexRegion(request->region_id());
