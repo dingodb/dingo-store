@@ -515,7 +515,7 @@ void VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr reg
   } while (!stop_flag);
 
   // Store vector
-  if ((!kvs.empty()) && status.ok()) {
+  if ((!kvs.empty())) {
     auto writer = engine->NewWriter(request.cf_name());
     status = writer->KvBatchPut(kvs);
   }
