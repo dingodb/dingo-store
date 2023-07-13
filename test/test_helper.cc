@@ -35,17 +35,17 @@ class HelperTest : public testing::Test {
 //   std::map<std::string, uint64_t> output;
 
 //   EXPECT_EQ(true, dingodb::Helper::GetDiskCapacity(path, output));
-//   std::cout << output["TotalSpace"] << " " << output["FreeSpace"] << std::endl;
+//   std::cout << output["TotalSpace"] << " " << output["FreeSpace"] << '\n';
 // }
 
 TEST_F(HelperTest, FormatTime) {
   auto format_time = dingodb::Helper::FormatTime(1681970908, "%Y-%m-%d %H:%M:%S");
-  std::cout << format_time << std::endl;
+  std::cout << format_time << '\n';
 
   EXPECT_EQ("2023-04-20 14:08:28", format_time);
 
   // auto format_ms_time = dingodb::Helper::FormatMsTime(1681970908001, "%Y-%m-%d %H:%M:%S");
-  // std::cout << format_ms_time << std::endl;
+  // std::cout << format_ms_time << '\n';
 
   // EXPECT_EQ("2023-04-20 14:08:28.001", format_ms_time);
 
@@ -55,7 +55,7 @@ TEST_F(HelperTest, FormatTime) {
 TEST_F(HelperTest, TimestampNs) {
   std::shared_ptr<int> abc;
   if (abc == nullptr) {
-    std::cout << dingodb::Helper::TimestampNs() << std::endl;
+    std::cout << dingodb::Helper::TimestampNs() << '\n';
   }
 }
 
@@ -67,7 +67,7 @@ TEST_F(HelperTest, TransformRangeWithOptions) {
   region_range.set_end_key(end_key, 2);
 
   std::cout << "region_range: " << dingodb::Helper::StringToHex(region_range.start_key()) << " "
-            << dingodb::Helper::StringToHex(region_range.end_key()) << std::endl;
+            << dingodb::Helper::StringToHex(region_range.end_key()) << '\n';
 
   {
     // [0x61, 0x78]
@@ -80,7 +80,7 @@ TEST_F(HelperTest, TransformRangeWithOptions) {
     scan_range.set_with_end(true);
     auto uniform_range = dingodb::Helper::TransformRangeWithOptions(scan_range);
     std::cout << "uniform_range: " << dingodb::Helper::StringToHex(uniform_range.start_key()) << " "
-              << dingodb::Helper::StringToHex(uniform_range.end_key()) << std::endl;
+              << dingodb::Helper::StringToHex(uniform_range.end_key()) << '\n';
 
     EXPECT_EQ(true, dingodb::ServiceHelper::ValidateRangeInRange(region_range, uniform_range).ok());
   }
@@ -366,16 +366,16 @@ TEST_F(HelperTest, ToLower) {
 TEST_F(HelperTest, TraverseDirectory) {
   std::string path = "/tmp/unit_test_traverse_directory";
 
-  std::filesystem::create_directory(path);
-  std::filesystem::create_directory(fmt::format("{}/a1", path));
-  std::filesystem::create_directory(fmt::format("{}/a1/b1", path));
-  std::filesystem::create_directory(fmt::format("{}/a1/b2", path));
-  std::filesystem::create_directory(fmt::format("{}/a2", path));
-  std::filesystem::create_directory(fmt::format("{}/a2/b3", path));
+  std::filesystem::create_directories(path);
+  std::filesystem::create_directories(fmt::format("{}/a1", path));
+  std::filesystem::create_directories(fmt::format("{}/a1/b1", path));
+  std::filesystem::create_directories(fmt::format("{}/a1/b2", path));
+  std::filesystem::create_directories(fmt::format("{}/a2", path));
+  std::filesystem::create_directories(fmt::format("{}/a2/b3", path));
 
   auto filenames = dingodb::Helper::TraverseDirectory(path);
   for (const auto& filename : filenames) {
-    std::cout << "filename: " << filename << std::endl;
+    std::cout << "filename: " << filename << '\n';
   }
 
   std::filesystem::remove_all(path);

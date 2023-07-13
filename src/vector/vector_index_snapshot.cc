@@ -281,7 +281,7 @@ butil::Status VectorIndexSnapshot::DownloadSnapshotFile(const std::string& uri,
   std::string snapshot_parent_path =
       fmt::format("{}/{}", Server::GetInstance()->GetIndexPath(), meta.vector_index_id());
   if (!std::filesystem::exists(snapshot_parent_path)) {
-    std::filesystem::create_directory(snapshot_parent_path);
+    std::filesystem::create_directories(snapshot_parent_path);
   }
 
   // Get all exist snapshot path
@@ -292,7 +292,7 @@ butil::Status VectorIndexSnapshot::DownloadSnapshotFile(const std::string& uri,
   if (std::filesystem::exists(tmp_snapshot_path)) {
     Helper::RemoveAllFileOrDirectory(tmp_snapshot_path);
   } else {
-    std::filesystem::create_directory(tmp_snapshot_path);
+    std::filesystem::create_directories(tmp_snapshot_path);
   }
 
   for (const auto& filename : meta.filenames()) {
@@ -336,7 +336,12 @@ butil::Status VectorIndexSnapshot::DownloadSnapshotFile(const std::string& uri,
   // Rename
   std::string new_snapshot_path = fmt::format("{}/{}/snapshot_{:020}", Server::GetInstance()->GetIndexPath(),
                                               meta.vector_index_id(), meta.snapshot_log_index());
-  std::filesystem::rename(tmp_snapshot_path, new_snapshot_path);
+  auto ret = Helper::Rename(new_snapshot_path, snapshot_parent_path);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "Rename vector index snapshot failed, src: " << tmp_snapshot_path
+                     << ", dst: " << new_snapshot_path << ", error: " << ret.error_str();
+    return ret;
+  }
 
   // Remove old snapshot
   for (auto& snapshot_path : snapshot_paths) {
