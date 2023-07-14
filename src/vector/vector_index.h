@@ -30,6 +30,7 @@
 #include "hnswlib/space_l2.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
+#include "proto/index.pb.h"
 
 namespace dingodb {
 
@@ -73,6 +74,11 @@ class VectorIndex {
   virtual butil::Status Save([[maybe_unused]] const std::string& path);
 
   virtual butil::Status Load([[maybe_unused]] const std::string& path);
+
+  virtual butil::Status BatchSearch([[maybe_unused]] std::vector<pb::common::VectorWithId> vector_with_ids,
+                                    [[maybe_unused]] uint32_t topk,
+                                    std::vector<pb::index::VectorWithDistanceResult>& results,
+                                    [[maybe_unused]] bool reconstruct = false);
 
   virtual butil::Status Search([[maybe_unused]] pb::common::VectorWithId vector_with_id, [[maybe_unused]] uint32_t topk,
                                std::vector<pb::common::VectorWithDistance>& results,

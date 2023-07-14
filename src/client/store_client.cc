@@ -49,6 +49,7 @@ DEFINE_int32(start_id, 1, "start id");
 DEFINE_int32(count, 50, "count");
 DEFINE_int32(vector_id, 0, "vector_id");
 DEFINE_int32(topn, 10, "top n");
+DEFINE_int32(batch_count, 5, "batch count");
 DEFINE_bool(without_vector, false, "Search vector without output vector data");
 DEFINE_bool(with_scalar, false, "Search vector with scalar data");
 // DEFINE_string(vector_index_algorithm, "hnsw", "support hnsw or flat");
@@ -223,6 +224,9 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
     // Vector operation
     if (method == "VectorSearch") {
       client::SendVectorSearch(ctx->store_interaction, FLAGS_region_id, FLAGS_dimension, FLAGS_vector_id, FLAGS_topn);
+    } else if (method == "VectorBatchSearch") {
+      client::SendVectorBatchSearch(ctx->store_interaction, FLAGS_region_id, FLAGS_dimension, FLAGS_vector_id,
+                                    FLAGS_topn, FLAGS_batch_count);
     } else if (method == "VectorBatchQuery") {
       client::SendVectorBatchQuery(ctx->store_interaction, FLAGS_region_id, {static_cast<uint64_t>(FLAGS_vector_id)});
     } else if (method == "VectorAdd") {

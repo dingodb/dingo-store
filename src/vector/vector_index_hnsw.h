@@ -60,6 +60,9 @@ class VectorIndexHnsw : public VectorIndex {
 
   butil::Status Search(const std::vector<float>& vector, uint32_t topk,
                        std::vector<pb::common::VectorWithDistance>& results, bool reconstruct = false) override;
+  butil::Status BatchSearch(std::vector<pb::common::VectorWithId> vector_with_ids, uint32_t topk,
+                            std::vector<pb::index::VectorWithDistanceResult>& results,
+                            bool reconstruct = false) override;
 
   butil::Status GetCount([[maybe_unused]] uint64_t& count) override;
   butil::Status NeedToRebuild([[maybe_unused]] bool& need_to_rebuild,

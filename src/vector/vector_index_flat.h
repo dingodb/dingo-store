@@ -69,6 +69,10 @@ class VectorIndexFlat : public VectorIndex {
   butil::Status Search(pb::common::VectorWithId vector_with_id, uint32_t topk,
                        std::vector<pb::common::VectorWithDistance>& results, bool reconstruct = false) override;
 
+  butil::Status BatchSearch(std::vector<pb::common::VectorWithId> vector_with_ids, uint32_t topk,
+                            std::vector<pb::index::VectorWithDistanceResult>& results,
+                            bool reconstruct = false) override;
+
   butil::Status SetOnline() override;
   butil::Status SetOffline() override;
 

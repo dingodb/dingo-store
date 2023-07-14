@@ -91,6 +91,59 @@ void SendVectorSearch(ServerInteractionPtr interaction, uint64_t region_id, uint
   DINGO_LOG(INFO) << "VectorSearch response: " << response.DebugString();
 }
 
+void SendVectorBatchSearch(ServerInteractionPtr interaction, uint64_t region_id, uint32_t dimension, uint64_t vector_id,
+                           uint32_t topn, uint32_t batch_count) {
+  dingodb::pb::index::VectorSearchRequest request;
+  dingodb::pb::index::VectorSearchResponse response;
+
+  request.set_region_id(region_id);
+
+  if (vector_id > 0) {
+    request.mutable_vector()->set_id(vector_id);
+  } else {
+    for (int count = 0; count < batch_count; count++) {
+      auto* vector = request.add_vector_with_ids()->mutable_vector();
+      for (int i = 0; i < dimension; i++) {
+        vector->add_float_values(1.0 * i);
+      }
+    }
+
+    request.mutable_parameter()->set_top_n(topn);
+  }
+
+  if (FLAGS_without_vector) {
+    request.mutable_parameter()->set_without_vector_data(true);
+  }
+
+  if (FLAGS_with_scalar) {
+    request.mutable_parameter()->set_with_scalar_data(true);
+  }
+
+  if (!FLAGS_key.empty()) {
+    auto* key = request.mutable_parameter()->mutable_selected_keys()->Add();
+    key->assign(FLAGS_key);
+  }
+
+  if (FLAGS_print_vector_search_delay) {
+    auto start = std::chrono::steady_clock::now();
+    interaction->SendRequest("IndexService", "VectorSearch", request, response);
+    auto end = std::chrono::steady_clock::now();
+    auto diff = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+
+    DINGO_LOG(INFO) << fmt::format("SendVectorSearch  span: {} (us)", diff);
+
+  } else {
+    interaction->SendRequest("IndexService", "VectorSearch", request, response);
+  }
+
+  DINGO_LOG(INFO) << "VectorSearch response: " << response.DebugString();
+
+  DINGO_LOG(INFO) << "VectorSearch response, batch_result_size: " << response.batch_results_size();
+  for (const auto& batch_result : response.batch_results()) {
+    DINGO_LOG(INFO) << "VectorSearch response, batch_result_dist_size: " << batch_result.vector_with_distances_size();
+  }
+}
+
 void SendVectorBatchQuery(ServerInteractionPtr interaction, uint64_t region_id, std::vector<uint64_t> vector_ids) {
   dingodb::pb::index::VectorBatchQueryRequest request;
   dingodb::pb::index::VectorBatchQueryResponse response;

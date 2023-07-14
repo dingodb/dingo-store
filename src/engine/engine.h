@@ -29,6 +29,7 @@
 #include "proto/common.pb.h"
 #include "proto/coordinator_internal.pb.h"
 #include "proto/error.pb.h"
+#include "proto/index.pb.h"
 #include "proto/raft.pb.h"
 
 namespace dingodb {
@@ -80,8 +81,14 @@ class Engine {
                                        pb::common::VectorSearchParameter parameter,
                                        std::vector<pb::common::VectorWithDistance>& vectors) = 0;
 
+    virtual butil::Status VectorBatchSearch(std::shared_ptr<Context> ctx,
+                                            const std::vector<pb::common::VectorWithId>& vector_with_ids,
+                                            pb::common::VectorSearchParameter parameter,
+                                            std::vector<pb::index::VectorWithDistanceResult>& results) = 0;
+
     virtual butil::Status VectorBatchQuery(std::shared_ptr<Context> ctx, std::vector<uint64_t> vector_ids,
-                                          bool with_vector_data, bool with_scalar_data, std::vector<std::string> selected_scalar_keys,
+                                           bool with_vector_data, bool with_scalar_data,
+                                           std::vector<std::string> selected_scalar_keys,
                                            std::vector<pb::common::VectorWithId>& vector_with_ids) = 0;
 
     virtual butil::Status VectorGetBorderId(std::shared_ptr<Context> ctx, uint64_t& id, bool get_min) = 0;
