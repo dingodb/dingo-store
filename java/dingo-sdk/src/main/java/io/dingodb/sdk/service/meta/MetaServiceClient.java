@@ -495,6 +495,18 @@ public class MetaServiceClient {
         return response != null;
     }
 
+    public boolean updateIndex(String index, Index newIndex) {
+        DingoCommonId indexId = getIndexId(index);
+        Meta.UpdateIndexRequest request = Meta.UpdateIndexRequest.newBuilder()
+                .setIndexId(mapping(indexId))
+                .setNewIndexDefinition(mapping(indexId.entityId(), newIndex))
+                .build();
+
+        Meta.UpdateIndexResponse response = metaConnector.exec(stub -> stub.updateIndex(request));
+
+        return response != null;
+    }
+
     public boolean dropIndex(String indexName) {
         DingoCommonId indexId = getIndexId(indexName);
         return dropIndex(indexId);
@@ -513,7 +525,7 @@ public class MetaServiceClient {
 
         Meta.GetIndexResponse response = metaConnector.exec(stub -> stub.getIndex(request));
 
-        return mapping(response.getIndexDefinitionWithId().getIndexDefinition());
+        return mapping(indexId.entityId(), response.getIndexDefinitionWithId().getIndexDefinition());
     }
 
     public Index getIndex(String name) {
@@ -523,7 +535,8 @@ public class MetaServiceClient {
                 .build();
 
         Meta.GetIndexByNameResponse response = metaConnector.exec(stub -> stub.getIndexByName(request));
-        return mapping(response.getIndexDefinitionWithId().getIndexDefinition());
+        Meta.IndexDefinitionWithId withId = response.getIndexDefinitionWithId();
+        return mapping(withId.getIndexId().getEntityId(), withId.getIndexDefinition());
     }
 
     public Map<DingoCommonId, Index> getIndexes(DingoCommonId schemaId) {
@@ -534,8 +547,8 @@ public class MetaServiceClient {
 
         Meta.GetIndexesResponse response = metaConnector.exec(stub -> stub.getIndexes(request));
 
-        for (Meta.IndexDefinitionWithId definitionWithId : response.getIndexDefinitionWithIdsList()) {
-            results.put(mapping(definitionWithId.getIndexId()), mapping(definitionWithId.getIndexDefinition()));
+        for (Meta.IndexDefinitionWithId withId : response.getIndexDefinitionWithIdsList()) {
+            results.put(mapping(withId.getIndexId()), mapping(withId.getIndexId().getEntityId(), withId.getIndexDefinition()));
         }
 
         return results;

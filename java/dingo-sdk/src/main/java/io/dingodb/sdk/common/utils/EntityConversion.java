@@ -49,7 +49,6 @@ import io.dingodb.sdk.common.partition.Partition;
 import io.dingodb.sdk.common.partition.PartitionDetail;
 import io.dingodb.sdk.common.partition.PartitionDetailDefinition;
 import io.dingodb.sdk.common.partition.PartitionRule;
-import io.dingodb.sdk.common.serial.RecordEncoder;
 import io.dingodb.sdk.common.serial.schema.DingoSchema;
 import io.dingodb.sdk.common.serial.schema.LongSchema;
 import io.dingodb.sdk.common.serial.schema.Type;
@@ -68,8 +67,6 @@ import io.dingodb.sdk.service.store.AggregationOperator;
 import io.dingodb.sdk.service.store.Coprocessor;
 import io.dingodb.store.Store;
 
-import javax.activation.UnsupportedDataTypeException;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
@@ -95,6 +92,8 @@ import static io.dingodb.sdk.common.utils.NoBreakFunctions.wrap;
 import static io.dingodb.sdk.common.utils.Parameters.cleanNull;
 
 public class EntityConversion {
+
+    public static final LongSchema SCHEMA = new LongSchema(0);
 
     public static Meta.TableDefinition mapping(Table table, Meta.DingoCommonId tableId) {
         Optional.ofNullable(table.getColumns())
@@ -284,23 +283,40 @@ public class EntityConversion {
                         .collect(Collectors.toList()));
     }
 
-    public static Index mapping(Meta.IndexDefinition definition) {
+    public static Index mapping(long id, Meta.IndexDefinition definition) {
         return new IndexDefinition(
                 definition.getName(),
                 definition.getVersion(),
-                null,
+                mapping(id, definition.getIndexPartition()),
                 definition.getReplica(),
                 mapping(definition.getIndexParameter()),
                 definition.getWithAutoIncrment(),
                 definition.getAutoIncrement());
     }
 
+    public static PartitionRule mapping(long id, Meta.PartitionRule partition) {
+        if (partition.getRangePartition().getRangesCount() <= 1) {
+            return null;
+        }
+        SCHEMA.setIsKey(true);
+        DingoKeyValueCodec codec = new DingoKeyValueCodec(id, Collections.singletonList(SCHEMA));
+        List<PartitionDetail> details = partition.getRangePartition().getRangesList().stream()
+                .map(Common.Range::getStartKey)
+                .map(ByteString::toByteArray)
+                .sorted(ByteArrayUtils::compare)
+                .skip(1)
+                .map(wrap(codec::decodeKeyPrefix))
+                .map(key -> new PartitionDetailDefinition("", "", key))
+                .collect(Collectors.toList());
+
+        return new PartitionRule("RANGE", partition.getColumnsList(), details);
+    }
+
     public static Meta.IndexDefinition mapping(long id, Index index) {
-        LongSchema schema = new LongSchema(0);
-        schema.setIsKey(true);
-        DingoKeyValueCodec codec = new DingoKeyValueCodec(id, Collections.singletonList(schema));
+        SCHEMA.setIsKey(true);
+        DingoKeyValueCodec codec = new DingoKeyValueCodec(id, Collections.singletonList(SCHEMA));
         Iterator<byte[]> keys = Stream.concat(
-                        Optional.mapOrGet(index.indexPartition(), __ -> encodePartitionDetails(__.details(), codec),
+                        Optional.mapOrGet(index.getIndexPartition(), __ -> encodePartitionDetails(__.getDetails(), codec),
                                 Stream::empty),
                         Stream.of(codec.encodeMaxKeyPrefix()))
                 .sorted(ByteArrayUtils::compare).iterator();
@@ -323,7 +339,7 @@ public class EntityConversion {
                                 .build())
                 .setReplica(index.getReplica())
                 .setIndexParameter(mapping(index.getIndexParameter()))
-                .setWithAutoIncrment(index.isAutoIncrement())
+                .setWithAutoIncrment(index.getIsAutoIncrement())
                 .setAutoIncrement(index.getAutoIncrement())
                 .build();
     }
@@ -616,7 +632,7 @@ public class EntityConversion {
         Meta.RangePartition.Builder rangeBuilder = Meta.RangePartition.newBuilder();
 
         Iterator<byte[]> keys = Stream.concat(
-                Optional.mapOrGet(table.getPartition(), __ -> encodePartitionDetails(__.details(), codec),
+                Optional.mapOrGet(table.getPartition(), __ -> encodePartitionDetails(__.getDetails(), codec),
                         Stream::empty),
                 Stream.of(maxKeyPrefix))
                 .sorted(ByteArrayUtils::compare).iterator();

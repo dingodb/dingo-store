@@ -20,9 +20,9 @@ import java.util.List;
 
 public interface Partition {
 
-    String strategy();
+    String getFuncName();
 
-    List<String> cols();
+    List<String> getCols();
 
-    List<PartitionDetail> details();
+    List<PartitionDetail> getDetails();
 }

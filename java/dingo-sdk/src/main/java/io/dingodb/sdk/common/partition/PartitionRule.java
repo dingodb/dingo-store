@@ -17,18 +17,20 @@
 package io.dingodb.sdk.common.partition;
 
 import lombok.EqualsAndHashCode;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.ToString;
 
 import java.util.Collections;
 import java.util.List;
 
+@Getter
 @ToString
 @NoArgsConstructor
 @EqualsAndHashCode
 public class PartitionRule implements Partition {
 
-    String strategy;
+    String funcName;
 
     List<String> cols;
 
@@ -39,23 +41,8 @@ public class PartitionRule implements Partition {
     }
 
     public PartitionRule(String strategy, List<String> cols, List<PartitionDetail> details) {
-        this.strategy = strategy;
+        this.funcName = strategy;
         this.cols = cols;
         this.details = details;
-    }
-
-    @Override
-    public String strategy() {
-        return strategy;
-    }
-
-    @Override
-    public List<String> cols() {
-        return cols;
-    }
-
-    @Override
-    public List<PartitionDetail> details() {
-        return details;
     }
 }

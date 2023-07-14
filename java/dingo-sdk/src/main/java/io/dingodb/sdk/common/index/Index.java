@@ -24,13 +24,13 @@ public interface Index {
 
     Integer getVersion();
 
-    Partition indexPartition();
+    Partition getIndexPartition();
 
     Integer getReplica();
 
     IndexParameter getIndexParameter();
 
-    boolean isAutoIncrement();
+    Boolean getIsAutoIncrement();
 
     Long getAutoIncrement();
 }
