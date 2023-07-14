@@ -367,12 +367,6 @@ butil::Status VectorIndexManager::RebuildVectorIndex(store::RegionPtr region, bo
     return butil::Status(pb::error::Errno::EINTERNAL, "ReplayWal failed first-round");
   }
 
-<<<<<<< HEAD
-=======
-  // lock vector_index add/delete, to catch up and switch to new vector_index
-  auto online_vector_index = GetVectorIndex(region->Id());
-
->>>>>>> [refactor][store] Adjust save and load vector index snapshot code place.
   // set online_vector_index to offline, so it will reject all vector add/del, raft handler will usleep and try to
   // switch to new vector_index to add/del
   if (online_vector_index != nullptr) {
@@ -407,9 +401,6 @@ butil::Status VectorIndexManager::RebuildVectorIndex(store::RegionPtr region, bo
     DINGO_LOG(ERROR) << fmt::format("ReplayWal failed catch-up round, id {}, log_id {}", region->Id(),
                                     vector_index->ApplyLogIndex());
   }
-
-  DINGO_LOG(INFO) << "old vector index: " << (void*)online_vector_index.get()
-                  << " new vector index: " << (void*)vector_index.get();
 
   return status;
 }

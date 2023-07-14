@@ -142,4 +142,26 @@ std::shared_ptr<pb::fileservice::GetFileResponse> ServiceAccess::GetFile(const p
   return response;
 }
 
+std::shared_ptr<pb::fileservice::CleanFileReaderResponse> ServiceAccess::CleanFileReader(
+    const pb::fileservice::CleanFileReaderRequest& request, const butil::EndPoint& endpoint) {
+  brpc::Channel channel;
+  if (channel.Init(endpoint, nullptr) != 0) {
+    DINGO_LOG(ERROR) << "Fail to init channel to " << butil::endpoint2str(endpoint).c_str();
+    return {};
+  }
+
+  brpc::Controller cntl;
+  cntl.set_timeout_ms(1000L);
+  pb::fileservice::FileService_Stub stub(&channel);
+
+  auto response = std::make_shared<pb::fileservice::CleanFileReaderResponse>();
+  stub.CleanFileReader(&cntl, &request, response.get(), nullptr);
+  if (cntl.Failed()) {
+    DINGO_LOG(ERROR) << fmt::format("Send CleanFileReader request failed, error {}", cntl.ErrorText());
+    return nullptr;
+  }
+
+  return response;
+}
+
 }  // namespace dingodb

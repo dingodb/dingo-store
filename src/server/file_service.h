@@ -35,6 +35,10 @@ class FileServiceImpl : public pb::fileservice::FileService {
 
   void GetFile(google::protobuf::RpcController* controller, const pb::fileservice::GetFileRequest* request,
                pb::fileservice::GetFileResponse* response, google::protobuf::Closure* done) override;
+
+  void CleanFileReader(google::protobuf::RpcController* controller,
+                       const pb::fileservice::CleanFileReaderRequest* request,
+                       pb::fileservice::CleanFileReaderResponse* response, google::protobuf::Closure* done) override;
 };
 
 class FileServiceReaderManager {

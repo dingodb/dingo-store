@@ -40,6 +40,9 @@ class ServiceAccess {
   static std::shared_ptr<pb::fileservice::GetFileResponse> GetFile(const pb::fileservice::GetFileRequest& request,
                                                                    const butil::EndPoint& endpoint, butil::IOBuf* buf);
 
+  static std::shared_ptr<pb::fileservice::CleanFileReaderResponse> CleanFileReader(
+      const pb::fileservice::CleanFileReaderRequest& request, const butil::EndPoint& endpoint);
+
  private:
   ServiceAccess() = default;
 };
