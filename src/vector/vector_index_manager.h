@@ -36,7 +36,6 @@ class VectorIndexManager : public TransformKvAble {
         meta_reader_(meta_reader),
         meta_writer_(meta_writer) {
     vector_indexs_.Init(1000);
-    vector_index_status_.Init(1000);
   }
 
   ~VectorIndexManager() override = default;
@@ -92,9 +91,6 @@ class VectorIndexManager : public TransformKvAble {
   std::shared_ptr<RawEngine> raw_engine_;
   // region_id: vector_index
   DingoSafeMap<uint64_t, std::shared_ptr<VectorIndex>> vector_indexs_;
-
-  // VectorIndexStatus map
-  DingoSafeMap<uint64_t, pb::common::RegionVectorIndexStatus> vector_index_status_;
 };
 
 }  // namespace dingodb

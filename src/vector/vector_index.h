@@ -36,7 +36,11 @@ namespace dingodb {
 class VectorIndex {
  public:
   VectorIndex(uint64_t id, const pb::common::VectorIndexParameter& vector_index_parameter)
-      : id(id), apply_log_index(0), snapshot_log_index(0), vector_index_parameter(vector_index_parameter) {
+      : id(id),
+        status(pb::common::VECTOR_INDEX_STATUS_NONE),
+        apply_log_index(0),
+        snapshot_log_index(0),
+        vector_index_parameter(vector_index_parameter) {
     vector_index_type = vector_index_parameter.vector_index_type();
   }
 
@@ -83,6 +87,10 @@ class VectorIndex {
 
   uint64_t Id() const { return id; }
 
+  pb::common::RegionVectorIndexStatus Status() { return status.load(); }
+
+  void SetStatus(pb::common::RegionVectorIndexStatus status) { this->status.store(status); }
+
   uint64_t ApplyLogIndex() const;
 
   void SetApplyLogIndex(uint64_t apply_log_index);
@@ -94,6 +102,9 @@ class VectorIndex {
  protected:
   // region_id
   uint64_t id;
+
+  // status
+  std::atomic<pb::common::RegionVectorIndexStatus> status;
 
   // apply max log index
   std::atomic<uint64_t> apply_log_index;
