@@ -59,6 +59,8 @@ DEFINE_int64(vector_index_id, 0, "vector index id unique. default 0");
 DEFINE_string(vector_index_add_cost_file, "./cost.txt", "exec batch vector add. cost time");
 DEFINE_int32(step_count, 1024, "step_count");
 DEFINE_bool(print_vector_search_delay, false, "print vector search delay");
+DEFINE_bool(vector_enable_scalar, false, "vector enable scalar");
+
 
 bvar::LatencyRecorder g_latency_recorder("dingo-store");
 

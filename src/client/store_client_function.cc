@@ -19,12 +19,13 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <functional>
+#include <iostream>
 #include <memory>
 #include <string>
-#include <thread>
 #include <vector>
 
 #include "bthread/bthread.h"
@@ -41,71 +42,10 @@ const int kBatchSize = 1000;
 DECLARE_string(key);
 DECLARE_bool(without_vector);
 DECLARE_bool(with_scalar);
-DECLARE_bool(with_table);
 DECLARE_bool(print_vector_search_delay);
+DECLARE_bool(vector_enable_scalar);
 
 namespace client {
-
-/*
- * replacement for the openmp '#pragma omp parallel for' directive
- * only handles a subset of functionality (no reductions etc)
- * Process ids from start (inclusive) to end (EXCLUSIVE)
- *
- * The method is borrowed from nmslib
- */
-template <class Function>
-inline void ParallelFor(size_t start, size_t end, size_t num_threads, Function fn) {
-  if (num_threads <= 0) {
-    num_threads = std::thread::hardware_concurrency();
-  }
-
-  if (num_threads == 1) {
-    for (size_t id = start; id < end; id++) {
-      fn(id, 0);
-    }
-  } else {
-    std::vector<std::thread> threads;
-    std::atomic<size_t> current(start);
-
-    // keep track of exceptions in threads
-    // https://stackoverflow.com/a/32428427/1713196
-    std::exception_ptr last_exception = nullptr;
-    std::mutex last_except_mutex;
-
-    for (size_t thread_id = 0; thread_id < num_threads; ++thread_id) {
-      threads.push_back(std::thread([&, thread_id] {
-        while (true) {
-          size_t id = current.fetch_add(1);
-
-          if (id >= end) {
-            break;
-          }
-
-          try {
-            fn(id, thread_id);
-          } catch (...) {
-            std::unique_lock<std::mutex> last_excep_lock(last_except_mutex);
-            last_exception = std::current_exception();
-            /*
-             * This will work even when current is the largest value that
-             * size_t can fit, because fetch_add returns the previous value
-             * before the increment (what will result in overflow
-             * and produce 0 instead of current + 1).
-             */
-            current = end;
-            break;
-          }
-        }
-      }));
-    }
-    for (auto& thread : threads) {
-      thread.join();
-    }
-    if (last_exception) {
-      std::rethrow_exception(last_exception);
-    }
-  }
-}
 
 void SendVectorSearch(ServerInteractionPtr interaction, uint64_t region_id, uint32_t dimension, uint64_t vector_id,
                       uint32_t topn) {
@@ -131,10 +71,6 @@ void SendVectorSearch(ServerInteractionPtr interaction, uint64_t region_id, uint
 
   if (FLAGS_with_scalar) {
     request.mutable_parameter()->set_with_scalar_data(true);
-  }
-
-  if (FLAGS_with_table) {
-    request.mutable_parameter()->set_with_table_data(true);
   }
 
   if (!FLAGS_key.empty()) {
@@ -185,10 +121,6 @@ void SendVectorBatchSearch(ServerInteractionPtr interaction, uint64_t region_id,
     request.mutable_parameter()->set_with_scalar_data(true);
   }
 
-  if (FLAGS_with_table) {
-    request.mutable_parameter()->set_with_table_data(true);
-  }
-
   if (!FLAGS_key.empty()) {
     auto* key = request.mutable_parameter()->mutable_selected_keys()->Add();
     key->assign(FLAGS_key);
@@ -231,10 +163,6 @@ void SendVectorBatchQuery(ServerInteractionPtr interaction, uint64_t region_id, 
     request.set_with_scalar_data(true);
   }
 
-  if (FLAGS_with_table) {
-    request.set_with_table_data(true);
-  }
-
   if (!FLAGS_key.empty()) {
     auto* key = request.mutable_selected_keys()->Add();
     key->assign(FLAGS_key);
@@ -246,7 +174,7 @@ void SendVectorBatchQuery(ServerInteractionPtr interaction, uint64_t region_id, 
 }
 
 void SendVectorAdd(ServerInteractionPtr interaction, uint64_t region_id, uint32_t dimension, uint32_t start_id,
-                   uint32_t count) {
+                   uint32_t count, bool create_random_internal, float* start) {
   dingodb::pb::index::VectorAddRequest request;
   dingodb::pb::index::VectorAddResponse response;
 
@@ -258,9 +186,14 @@ void SendVectorAdd(ServerInteractionPtr interaction, uint64_t region_id, uint32_
     vector_with_id->mutable_vector()->set_dimension(dimension);
     vector_with_id->mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
     for (int j = 0; j < dimension; j++) {
-      vector_with_id->mutable_vector()->add_float_values(1.0 * dingodb::Helper::GenerateRandomInteger(0, 100) / 10);
+      if (create_random_internal) {
+        vector_with_id->mutable_vector()->add_float_values(1.0 * dingodb::Helper::GenerateRandomInteger(0, 100) / 10);
+      } else {
+        vector_with_id->mutable_vector()->add_float_values(*start);
+        start++;
+      }
     }
-    if (FLAGS_with_scalar) {
+    if (FLAGS_vector_enable_scalar) {
       for (int k = 0; k < 2; ++k) {
         auto* scalar_data = vector_with_id->mutable_scalar_data()->mutable_scalar_data();
         dingodb::pb::common::ScalarValue scalar_value;
@@ -276,12 +209,6 @@ void SendVectorAdd(ServerInteractionPtr interaction, uint64_t region_id, uint32_
         (*scalar_data)[fmt::format("scalar_key{}", k)] = scalar_value;
       }
     }
-
-    if (FLAGS_with_table) {
-      auto* table_data = vector_with_id->mutable_table_data();
-      table_data->set_table_key(fmt::format("table_key{}", i));
-      table_data->set_table_value(fmt::format("table_value{}", i));
-    }
   }
 
   butil::Status status = interaction->SendRequest("IndexService", "VectorAdd", request, response);
@@ -292,9 +219,11 @@ void SendVectorAdd(ServerInteractionPtr interaction, uint64_t region_id, uint32_
     }
   }
 
-  DINGO_LOG(INFO) << "VectorAdd repsonse error: " << response.error().DebugString();
-  DINGO_LOG(INFO) << fmt::format("VectorAdd response success count: {} fail count: {}", success_count,
-                                 response.key_states().size() - success_count);
+  if (FLAGS_log_each_request) {
+    DINGO_LOG(INFO) << "VectorAdd repsonse error: " << response.error().DebugString();
+    DINGO_LOG(INFO) << fmt::format("VectorAdd response success count: {} fail count: {}", success_count,
+                                   response.key_states().size() - success_count);
+  }
 }
 
 void SendVectorDelete(ServerInteractionPtr interaction, uint64_t region_id, uint32_t start_id, uint32_t count) {
@@ -344,31 +273,6 @@ void SendVectorGetMinId(ServerInteractionPtr interaction, uint64_t region_id) {
 
 void SendVectorAddBatch(ServerInteractionPtr interaction, uint64_t region_id, uint32_t dimension, uint32_t count,
                         uint32_t step_count, int64_t start_id, const std::string& file) {
-  if (step_count == 0) {
-    DINGO_LOG(ERROR) << "step_count must be greater than 0";
-    return;
-  }
-  if (region_id == 0) {
-    DINGO_LOG(ERROR) << "region_id must be greater than 0";
-    return;
-  }
-  if (dimension == 0) {
-    DINGO_LOG(ERROR) << "dimension must be greater than 0";
-    return;
-  }
-  if (count == 0) {
-    DINGO_LOG(ERROR) << "count must be greater than 0";
-    return;
-  }
-  if (start_id < 0) {
-    DINGO_LOG(ERROR) << "start_id must be greater than 0";
-    return;
-  }
-  if (file.empty()) {
-    DINGO_LOG(ERROR) << "vector_index_add_cost_file must not be empty";
-    return;
-  }
-
   std::filesystem::path url(file);
   std::fstream out;
   if (!std::filesystem::exists(url)) {
@@ -384,82 +288,49 @@ void SendVectorAddBatch(ServerInteractionPtr interaction, uint64_t region_id, ui
     return;
   }
 
+  std::cerr << "create random (" << count << ") ";
+
+  // create random
+  std::mt19937 rng;
+  std::uniform_real_distribution<> distrib;
+  std::vector<float> values;
+  values.resize(count * dimension, 0.0f);
+  for (size_t i = 0; i < count * dimension; i++) {
+    values[i] = distrib(rng);
+    if (0 == i % 1000000) {
+      std::cerr << ".";
+    }
+  }
+  std::cerr << std::endl;
+
   out << "index,cost(us)\n";
   int64_t total = 0;
 
-  if (count % step_count != 0) {
-    DINGO_LOG(ERROR) << fmt::format("count {} must be divisible by step_count {}", count, step_count);
-    return;
-  }
-
   uint32_t cnt = count / step_count;
+  uint32_t left_step_count = count % step_count;
 
-  std::mt19937 rng;
-  std::uniform_real_distribution<> distrib(0.0, 10.0);
-
-  std::vector<float> random_seeds;
-  random_seeds.resize(count * dimension);
-  for (uint32_t i = 0; i < count; ++i) {
-    for (uint32_t j = 0; j < dimension; ++j) {
-      random_seeds[i * dimension + j] = distrib(rng);
-    }
-
-    if (i % 10000 == 0) {
-      DINGO_LOG(INFO) << fmt::format("generate random seeds: {}/{}", i, count);
-    }
-  }
-
-  // Add data to index
-  // uint32_t num_threads = std::thread::hardware_concurrency();
-  // try {
-  //   ParallelFor(0, count, num_threads, [&](size_t row, size_t /*thread_id*/) {
-  //     std::mt19937 rng;
-  //     std::uniform_real_distribution<> distrib(0.0, 10.0);
-  //     for (uint32_t i = 0; i < dimension; ++i) {
-  //       random_seeds[row * dimension + i] = distrib(rng);
-  //     }
-  //   });
-  // } catch (std::runtime_error& e) {
-  //   DINGO_LOG(ERROR) << "generate random data failed, error=" << e.what();
-  //   return;
-  // }
-
-  DINGO_LOG(INFO) << fmt::format("generate random seeds: {}/{}", count, count);
-
-  for (uint32_t x = 0; x < cnt; x++) {
+  for (uint32_t i = 0; i < cnt; i++) {
     auto start = std::chrono::steady_clock::now();
-    {
-      dingodb::pb::index::VectorAddRequest request;
-      dingodb::pb::index::VectorAddResponse response;
-
-      request.set_region_id(region_id);
-
-      uint64_t real_start_id = start_id + x * step_count;
-      for (int i = real_start_id; i < real_start_id + step_count; ++i) {
-        auto* vector_with_id = request.add_vectors();
-        vector_with_id->set_id(i);
-        vector_with_id->mutable_vector()->set_dimension(dimension);
-        vector_with_id->mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
-        for (int j = 0; j < dimension; j++) {
-          vector_with_id->mutable_vector()->add_float_values(random_seeds[i * dimension + j]);
-        }
-      }
-
-      butil::Status status = interaction->SendRequest("IndexService", "VectorAdd", request, response);
-      int success_count = 0;
-      for (auto key_state : response.key_states()) {
-        if (key_state) {
-          ++success_count;
-        }
-      }
-    }
-
+    SendVectorAdd(interaction, region_id, dimension, start_id + i * step_count, step_count, false,
+                  (values.data() + i * step_count * dimension));
     auto end = std::chrono::steady_clock::now();
     auto diff = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-    out << x << " , " << diff << "\n";
+    out << i << "," << diff << "\n";
 
-    DINGO_LOG(INFO) << "index : " << x << " : " << diff << " us, avg : " << static_cast<long double>(diff) / step_count
-                    << " us";
+    DINGO_LOG(INFO) << "index : " << i << ":" << diff;
+
+    total += diff;
+  }
+
+  if (left_step_count > 0) {
+    auto start = std::chrono::steady_clock::now();
+    SendVectorAdd(interaction, region_id, dimension, start_id + cnt * step_count, left_step_count, false,
+                  (values.data() + cnt * step_count * dimension));
+    auto end = std::chrono::steady_clock::now();
+    auto diff = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+    out << cnt << "," << diff << "\n";
+
+    DINGO_LOG(INFO) << "index : " << cnt << ":" << diff;
 
     total += diff;
   }
