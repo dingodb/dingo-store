@@ -212,15 +212,26 @@ butil::Status VectorIndexSnapshot::LaunchPullSnapshot(const butil::EndPoint& end
   pb::node::GetVectorIndexSnapshotRequest request;
   request.set_vector_index_id(vector_index_id);
 
-  DINGO_LOG(INFO) << "LaunchPullSnapshot...01";
   pb::node::GetVectorIndexSnapshotResponse response;
   auto status = ServiceAccess::GetVectorIndexSnapshot(request, endpoint, response);
   if (!status.ok()) {
     return status;
   }
-  DINGO_LOG(INFO) << "LaunchPullSnapshot...02";
 
-  return DownloadSnapshotFile(response.uri(), response.meta());
+  status = DownloadSnapshotFile(response.uri(), response.meta());
+  if (!status.ok()) {
+    return status;
+  }
+
+  // Clean corresponding reader id.
+  uint64_t reader_id = ParseReaderId(response.uri());
+  if (reader_id > 0) {
+    pb::fileservice::CleanFileReaderRequest request;
+    request.set_reader_id(reader_id);
+    ServiceAccess::CleanFileReader(request, endpoint);
+  }
+
+  return butil::Status();
 }
 
 butil::Status VectorIndexSnapshot::HandlePullSnapshot(std::shared_ptr<Context> ctx, uint64_t vector_index_id) {

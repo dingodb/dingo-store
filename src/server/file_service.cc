@@ -62,6 +62,18 @@ void FileServiceImpl::GetFile(google::protobuf::RpcController* controller,
   cntl->response_attachment().swap(buf);
 }
 
+void FileServiceImpl::CleanFileReader(google::protobuf::RpcController* controller,
+                                      const pb::fileservice::CleanFileReaderRequest* request,
+                                      pb::fileservice::CleanFileReaderResponse* response,
+                                      google::protobuf::Closure* done) {
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(done);
+
+  if (request->reader_id() > 0) {
+    FileServiceReaderManager::GetInstance().DeleteReader(request->reader_id());
+  }
+}
+
 FileServiceReaderManager::FileServiceReaderManager() {
   bthread_mutex_init(&mutex_, nullptr);
   next_id_ = ((int64_t)getpid() << 45) | (butil::gettimeofday_us() << 17 >> 17);

@@ -32,6 +32,15 @@ message GetFileResponse {
   uint64 read_size = 2;
 }
 
+message CleanFileReaderRequest {
+  uint64 reader_id = 1;
+}
+
+message CleanFileReaderResponse {
+}
+
 service FileService {
   rpc GetFile(GetFileRequest) returns (GetFileResponse);
+  // Clean file reader
+  rpc CleanFileReader(CleanFileReaderRequest) returns (CleanFileReaderResponse);
 }
