@@ -260,6 +260,7 @@ butil::Status VectorIndexFlat::Search(const std::vector<float>& vector, uint32_t
     vector_with_id->mutable_vector()->set_dimension(dimension_);
     vector_with_id->mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
     vector_with_distance.set_distance(distances[i]);
+    vector_with_distance.set_metric_type(metric_type_);
 
     results.emplace_back(std::move(vector_with_distance));
   }
@@ -363,6 +364,7 @@ butil::Status VectorIndexFlat::BatchSearch(std::vector<pb::common::VectorWithId>
       vector_with_id->mutable_vector()->set_dimension(dimension_);
       vector_with_id->mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
       vector_with_distance->set_distance(distances[i]);
+      vector_with_distance->set_metric_type(metric_type_);
     }
   }
 
