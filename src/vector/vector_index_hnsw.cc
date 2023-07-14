@@ -21,6 +21,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "bthread/mutex.h"
@@ -40,10 +41,72 @@ namespace dingodb {
 
 DEFINE_uint64(hnsw_need_save_count, 10000, "hnsw need save count");
 
+/*
+ * replacement for the openmp '#pragma omp parallel for' directive
+ * only handles a subset of functionality (no reductions etc)
+ * Process ids from start (inclusive) to end (EXCLUSIVE)
+ *
+ * The method is borrowed from nmslib
+ */
+template <class Function>
+inline void ParallelFor(size_t start, size_t end, size_t num_threads, Function fn) {
+  if (num_threads <= 0) {
+    num_threads = std::thread::hardware_concurrency();
+  }
+
+  if (num_threads == 1) {
+    for (size_t id = start; id < end; id++) {
+      fn(id, 0);
+    }
+  } else {
+    std::vector<std::thread> threads;
+    std::atomic<size_t> current(start);
+
+    // keep track of exceptions in threads
+    // https://stackoverflow.com/a/32428427/1713196
+    std::exception_ptr last_exception = nullptr;
+    std::mutex last_except_mutex;
+
+    for (size_t thread_id = 0; thread_id < num_threads; ++thread_id) {
+      threads.push_back(std::thread([&, thread_id] {
+        while (true) {
+          size_t id = current.fetch_add(1);
+
+          if (id >= end) {
+            break;
+          }
+
+          try {
+            fn(id, thread_id);
+          } catch (...) {
+            std::unique_lock<std::mutex> last_excep_lock(last_except_mutex);
+            last_exception = std::current_exception();
+            /*
+             * This will work even when current is the largest value that
+             * size_t can fit, because fetch_add returns the previous value
+             * before the increment (what will result in overflow
+             * and produce 0 instead of current + 1).
+             */
+            current = end;
+            break;
+          }
+        }
+      }));
+    }
+    for (auto& thread : threads) {
+      thread.join();
+    }
+    if (last_exception) {
+      std::rethrow_exception(last_exception);
+    }
+  }
+}
+
 VectorIndexHnsw::VectorIndexHnsw(uint64_t id, const pb::common::VectorIndexParameter& vector_index_parameter)
     : VectorIndex(id, vector_index_parameter) {
   bthread_mutex_init(&mutex_, nullptr);
   is_online_.store(true);
+  hnsw_num_threads_ = std::thread::hardware_concurrency();
 
   if (vector_index_type == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
     const auto& hnsw_parameter = vector_index_parameter.hnsw_parameter();
@@ -89,6 +152,58 @@ butil::Status VectorIndexHnsw::Add(uint64_t id, const std::vector<float>& vector
   return Upsert(id, vector);
 }
 
+butil::Status VectorIndexHnsw::Upsert(const std::vector<pb::common::VectorWithId>& vector_with_ids) {
+  // check is_online
+  if (!is_online_.load()) {
+    std::string s = fmt::format("vector index is offline, please wait for online");
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EVECTOR_INDEX_OFFLINE, s);
+  }
+
+  if (vector_with_ids.empty()) {
+    DINGO_LOG(WARNING) << "upsert vector empty";
+    return butil::Status::OK();
+  }
+
+  // check
+  uint32_t input_dimension = vector_with_ids[0].vector().float_values_size();
+  if (input_dimension != static_cast<size_t>(dimension_)) {
+    std::string s =
+        fmt::format("HNSW: float size : {} not equal to  dimension(create) : {}", input_dimension, dimension_);
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EVECTOR_INVALID, s);
+  }
+
+  butil::Status ret;
+
+  std::unique_ptr<float> data;
+  try {
+    data.reset(new float[this->dimension_ * vector_with_ids.size()]);
+  } catch (std::bad_alloc& e) {
+    DINGO_LOG(ERROR) << "upsert vector failed, error=" << e.what();
+    ret = butil::Status(pb::error::Errno::EINTERNAL, "upsert vector failed, error=" + std::string(e.what()));
+    return ret;
+  }
+
+  for (size_t row = 0; row < vector_with_ids.size(); ++row) {
+    for (size_t col = 0; col < this->dimension_; ++col) {
+      data.get()[row * this->dimension_ + col] = vector_with_ids[row].vector().float_values().at(col);
+    }
+  }
+
+  // Add data to index
+  try {
+    ParallelFor(0, vector_with_ids.size(), hnsw_num_threads_, [&](size_t row, size_t /*thread_id*/) {
+      this->hnsw_index_->addPoint((void*)(data.get() + dimension_ * row), vector_with_ids[row].id());
+    });
+  } catch (std::runtime_error& e) {
+    DINGO_LOG(ERROR) << "upsert vector failed, error=" << e.what();
+    ret = butil::Status(pb::error::Errno::EINTERNAL, "upsert vector failed, error=" + std::string(e.what()));
+  }
+
+  return ret;
+}
+
 butil::Status VectorIndexHnsw::Upsert(uint64_t id, const std::vector<float>& vector) {
   // check is_online
   if (!is_online_.load()) {
@@ -125,6 +240,33 @@ butil::Status VectorIndexHnsw::Upsert(uint64_t id, const std::vector<float>& vec
   } else {
     return butil::Status(pb::error::Errno::EINTERNAL, "vector index type is not supported");
   }
+}
+
+butil::Status VectorIndexHnsw::DeleteBatch(const std::vector<uint64_t>& delete_ids) {
+  // check is_online
+  if (!is_online_.load()) {
+    std::string s = fmt::format("vector index is offline, please wait for online");
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EVECTOR_INDEX_OFFLINE, s);
+  }
+
+  if (delete_ids.empty()) {
+    DINGO_LOG(WARNING) << "delete ids is empty";
+    return butil::Status::OK();
+  }
+
+  butil::Status ret;
+
+  // Add data to index
+  try {
+    ParallelFor(0, delete_ids.size(), hnsw_num_threads_,
+                [&](size_t row, size_t /*thread_id*/) { hnsw_index_->markDelete(delete_ids[row]); });
+  } catch (std::runtime_error& e) {
+    DINGO_LOG(ERROR) << "delete vector failed, error=" << e.what();
+    ret = butil::Status(pb::error::Errno::EINTERNAL, "delete vector failed, error=" + std::string(e.what()));
+  }
+
+  return ret;
 }
 
 butil::Status VectorIndexHnsw::Delete(uint64_t id) {

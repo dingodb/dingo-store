@@ -68,6 +68,7 @@ class VectorIndex {
   virtual butil::Status Upsert([[maybe_unused]] uint64_t id, [[maybe_unused]] const std::vector<float>& vector) = 0;
 
   virtual butil::Status Delete([[maybe_unused]] uint64_t id) = 0;
+  virtual butil::Status DeleteBatch([[maybe_unused]] const std::vector<uint64_t>& delete_ids);
 
   virtual butil::Status Save([[maybe_unused]] const std::string& path);
 

@@ -158,6 +158,8 @@ void SendVectorAdd(ServerInteractionPtr interaction, uint64_t region_id, uint32_
       ++success_count;
     }
   }
+
+  DINGO_LOG(INFO) << "VectorAdd repsonse error: " << response.error().DebugString();
   DINGO_LOG(INFO) << fmt::format("VectorAdd response success count: {} fail count: {}", success_count,
                                  response.key_states().size() - success_count);
 }
@@ -172,8 +174,16 @@ void SendVectorDelete(ServerInteractionPtr interaction, uint64_t region_id, uint
   }
 
   interaction->SendRequest("IndexService", "VectorDelete", request, response);
+  int success_count = 0;
+  for (auto key_state : response.key_states()) {
+    if (key_state) {
+      ++success_count;
+    }
+  }
 
-  DINGO_LOG(INFO) << "VectorDelete response: " << response.DebugString();
+  DINGO_LOG(INFO) << "VectorDelete repsonse error: " << response.error().DebugString();
+  DINGO_LOG(INFO) << fmt::format("VectorDelete response success count: {} fail count: {}", success_count,
+                                 response.key_states().size() - success_count);
 }
 
 void SendVectorGetMaxId(ServerInteractionPtr interaction, uint64_t region_id) {

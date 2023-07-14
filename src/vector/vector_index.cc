@@ -40,6 +40,7 @@ butil::Status VectorIndex::Upsert(const std::vector<pb::common::VectorWithId>& v
       return ret;
     }
   }
+
   return butil::Status::OK();
 }
 
@@ -69,6 +70,17 @@ butil::Status VectorIndex::Add(const pb::common::VectorWithId& vector_with_id) {
   }
 
   return Add(vector_with_id.id(), vector);
+}
+
+butil::Status VectorIndex::DeleteBatch(const std::vector<uint64_t>& delete_ids) {
+  for (auto id : delete_ids) {
+    auto ret = Delete(id);
+    if (!ret.ok()) {
+      return ret;
+    }
+  }
+
+  return butil::Status::OK();
 }
 
 void VectorIndex::SetSnapshotLogIndex(uint64_t snapshot_log_index) {
