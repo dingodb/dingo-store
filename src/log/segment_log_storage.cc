@@ -749,7 +749,7 @@ braft::LogEntry* SegmentLogStorage::GetEntry(const int64_t index) {
   return segment->Get(index);
 }
 
-std::vector<std::shared_ptr<LogEntry>> SegmentLogStorage::GetEntrys(int64_t begin_index, int64_t end_index) {
+std::vector<std::shared_ptr<LogEntry>> SegmentLogStorage::GetEntrys(uint64_t begin_index, uint64_t end_index) {
   auto segments = GetSegments(begin_index, end_index);
   if (segments.empty()) {
     return {};
@@ -757,7 +757,7 @@ std::vector<std::shared_ptr<LogEntry>> SegmentLogStorage::GetEntrys(int64_t begi
 
   std::vector<std::shared_ptr<LogEntry>> log_entrys;
   for (auto& segment : segments) {
-    for (int i = segment->FirstIndex(); i <= segment->LastIndex(); ++i) {
+    for (int64_t i = segment->FirstIndex(); i <= segment->LastIndex(); ++i) {
       if (i < begin_index || i > end_index) {
         continue;
       }
@@ -1211,10 +1211,10 @@ std::shared_ptr<Segment> SegmentLogStorage::GetSegment(int64_t index) {
   return nullptr;
 }
 
-std::vector<std::shared_ptr<Segment>> SegmentLogStorage::GetSegments(int64_t begin_index, int64_t end_index) {
+std::vector<std::shared_ptr<Segment>> SegmentLogStorage::GetSegments(uint64_t begin_index, uint64_t end_index) {
   BAIDU_SCOPED_LOCK(mutex_);
-  int64_t first_index = FirstLogIndex();
-  int64_t last_index = LastLogIndex();
+  uint64_t first_index = FirstLogIndex();
+  uint64_t last_index = LastLogIndex();
   if (first_index == last_index + 1) {
     return {};
   }

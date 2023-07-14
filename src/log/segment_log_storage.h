@@ -172,7 +172,7 @@ class SegmentLogStorage {
   braft::LogEntry* GetEntry(int64_t index);
 
   // [begin_index, end_index]
-  std::vector<std::shared_ptr<LogEntry>> GetEntrys(int64_t begin_index, int64_t end_index);
+  std::vector<std::shared_ptr<LogEntry>> GetEntrys(uint64_t begin_index, uint64_t end_index);
 
   // get logentry's term by index
   int64_t GetTerm(int64_t index);
@@ -218,7 +218,7 @@ class SegmentLogStorage {
   int ListSegments(bool is_empty);
   int LoadSegments(braft::ConfigurationManager* configuration_manager);
   std::shared_ptr<Segment> GetSegment(int64_t log_index);
-  std::vector<std::shared_ptr<Segment>> GetSegments(int64_t begin_index, int64_t end_index);
+  std::vector<std::shared_ptr<Segment>> GetSegments(uint64_t begin_index, uint64_t end_index);
   void PopSegments(int64_t first_index_kept, std::vector<std::shared_ptr<Segment>>& poppeds);
   std::shared_ptr<Segment> PopSegmentsFromBack(int64_t last_index_kept, std::vector<std::shared_ptr<Segment>>& poppeds);
 

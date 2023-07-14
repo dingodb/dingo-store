@@ -58,8 +58,13 @@ class VectorIndexManager : public TransformKvAble {
   // Invoke when server runing.
   butil::Status RebuildVectorIndex(store::RegionPtr region, bool need_save = true, bool is_initial_build = false);
 
-  void UpdateApplyLogIndex(std::shared_ptr<VectorIndex> vector_index, uint64_t apply_log_index);
-  void UpdateApplyLogIndex(uint64_t region_id, uint64_t apply_log_index);
+  // Update vector index apply log index.
+  void UpdateApplyLogIndex(std::shared_ptr<VectorIndex> vector_index, uint64_t log_index);
+  void UpdateApplyLogIndex(uint64_t region_id, uint64_t log_index);
+
+  // Update vector index snapshot log index.
+  void UpdateSnapshotLogIndex(std::shared_ptr<VectorIndex> vector_index, uint64_t log_index);
+  void UpdateSnapshotLogIndex(uint64_t region_id, uint64_t log_index);
 
   butil::Status GetBorderId(uint64_t region_id, uint64_t& border_id, bool get_min);
 

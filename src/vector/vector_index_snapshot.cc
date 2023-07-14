@@ -364,7 +364,8 @@ butil::Status VectorIndexSnapshot::DownloadSnapshotFile(const std::string& uri,
   return butil::Status();
 }
 
-butil::Status VectorIndexSnapshot::SaveVectorIndexSnapshot(std::shared_ptr<VectorIndex> vector_index) {
+butil::Status VectorIndexSnapshot::SaveVectorIndexSnapshot(std::shared_ptr<VectorIndex> vector_index,
+                                                           uint64_t& snapshot_log_index) {
   // Check if vector_index is null
   if (!vector_index) {
     DINGO_LOG(WARNING) << fmt::format("Save vector index failed, vector_index is null");
@@ -386,14 +387,7 @@ butil::Status VectorIndexSnapshot::SaveVectorIndexSnapshot(std::shared_ptr<Vecto
   }
 
   // Last snapshot path
-  auto filenames = Helper::TraverseDirectory(snapshot_parent_path);
-  std::string last_snapshot_path;
-  for (const auto& filename : filenames) {
-    if (filename != "tmp") {
-      last_snapshot_path = fmt::format("{}/{}", snapshot_parent_path, filename);
-      break;
-    }
-  }
+  auto snapshot_paths = GetSnapshotPaths(snapshot_parent_path);
 
   // Temp snapshot path for save vector index.
   std::string tmp_snapshot_path = fmt::format("{}/tmp", snapshot_parent_path);
@@ -437,8 +431,9 @@ butil::Status VectorIndexSnapshot::SaveVectorIndexSnapshot(std::shared_ptr<Vecto
   std::filesystem::rename(tmp_snapshot_path, new_snapshot_path);
 
   // Remove old snapshot
-  if (!last_snapshot_path.empty()) {
-    Helper::RemoveAllFileOrDirectory(last_snapshot_path);
+  for (auto& snapshot_path : snapshot_paths) {
+    DINGO_LOG(INFO) << "delete vector index snapshot: " << snapshot_path;
+    Helper::RemoveAllFileOrDirectory(snapshot_path);
   }
 
   // Set truncate wal log index.
@@ -446,6 +441,8 @@ butil::Status VectorIndexSnapshot::SaveVectorIndexSnapshot(std::shared_ptr<Vecto
   if (log_storage != nullptr) {
     log_storage->SetVectorIndexTruncateLogIndex(apply_log_index);
   }
+
+  snapshot_log_index = apply_log_index;
 
   return butil::Status::OK();
 }
