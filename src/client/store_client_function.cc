@@ -151,11 +151,15 @@ void SendVectorAdd(ServerInteractionPtr interaction, uint64_t region_id, uint32_
     }
   }
 
-  butil::Status ok = interaction->SendRequest("IndexService", "VectorAdd", request, response);
-
-  if (!ok.ok()) {
-    DINGO_LOG(INFO) << "VectorAdd response: " << response.DebugString();
+  butil::Status status = interaction->SendRequest("IndexService", "VectorAdd", request, response);
+  int success_count = 0;
+  for (auto key_state : response.key_states()) {
+    if (key_state) {
+      ++success_count;
+    }
   }
+  DINGO_LOG(INFO) << fmt::format("VectorAdd response success count: {} fail count: {}", success_count,
+                                 response.key_states().size() - success_count);
 }
 
 void SendVectorDelete(ServerInteractionPtr interaction, uint64_t region_id, uint32_t start_id, uint32_t count) {
