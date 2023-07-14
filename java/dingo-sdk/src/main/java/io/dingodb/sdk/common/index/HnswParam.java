@@ -16,10 +16,7 @@
 
 package io.dingodb.sdk.common.index;
 
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.ToString;
+import lombok.*;
 
 @Getter
 @ToString
@@ -30,6 +27,7 @@ public class HnswParam {
     private Integer dimension;
     private VectorIndexParameter.MetricType metricType;
     private Integer efConstruction;
+    @Setter
     private Integer maxElements;
     private Integer nlinks;
 }

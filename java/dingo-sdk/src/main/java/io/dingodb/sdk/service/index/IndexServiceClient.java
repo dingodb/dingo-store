@@ -78,7 +78,7 @@ public class IndexServiceClient {
         connectorCache.clear();
     }
 
-    public boolean vectorAdd(
+    public List<Boolean> vectorAdd(
             DingoCommonId indexId,
             DingoCommonId regionId,
             List<VectorWithId> vectors,
@@ -91,8 +91,9 @@ public class IndexServiceClient {
                 .setIsUpdate(isUpdate)
                 .build();
 
-        exec(stub -> stub.vectorAdd(request), retryTimes, indexId, regionId);
-        return true;
+        Index.VectorAddResponse response = exec(stub -> stub.vectorAdd(request), retryTimes, indexId, regionId);
+
+        return response.getKeyStatesList();
     }
 
     public List<VectorWithDistance> vectorSearch(
@@ -148,11 +149,13 @@ public class IndexServiceClient {
             DingoCommonId indexId,
             DingoCommonId regionId,
             List<Long> vectorIds,
+            Boolean withOutVectorData,
             Boolean withScalarData,
             List<String> selectedKeys) {
         Index.VectorBatchQueryRequest request = Index.VectorBatchQueryRequest.newBuilder()
                 .setRegionId(regionId.entityId())
                 .addAllVectorIds(vectorIds)
+                .setWithoutVectorData(withOutVectorData)
                 .setWithScalarData(withScalarData)
                 .addAllSelectedKeys(selectedKeys)
                 .build();
@@ -174,15 +177,15 @@ public class IndexServiceClient {
         return response.getId();
     }
 
-    public boolean vectorDelete(DingoCommonId indexId, DingoCommonId regionId, List<Long> ids) {
+    public List<Boolean> vectorDelete(DingoCommonId indexId, DingoCommonId regionId, List<Long> ids) {
         Index.VectorDeleteRequest request = Index.VectorDeleteRequest.newBuilder()
                 .setRegionId(regionId.entityId())
                 .addAllIds(ids)
                 .build();
 
-        exec(stub -> stub.vectorDelete(request), retryTimes, indexId, regionId);
+        Index.VectorDeleteResponse response = exec(stub -> stub.vectorDelete(request), retryTimes, indexId, regionId);
 
-        return true;
+        return response.getKeyStatesList();
     }
 
     private <R> R exec(

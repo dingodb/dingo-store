@@ -34,7 +34,7 @@ public class IndexDefinition implements Index {
     private PartitionRule partitionRule;
     private Integer replica;
     private IndexParameter parameter;
-    private boolean isAutoIncrement;
+    private Boolean isAutoIncrement;
     private Long autoIncrement;
 
     @Override
@@ -48,7 +48,7 @@ public class IndexDefinition implements Index {
     }
 
     @Override
-    public Partition indexPartition() {
+    public Partition getIndexPartition() {
         return partitionRule;
     }
 
@@ -63,7 +63,7 @@ public class IndexDefinition implements Index {
     }
 
     @Override
-    public boolean isAutoIncrement() {
+    public Boolean getIsAutoIncrement() {
         return isAutoIncrement;
     }
 
