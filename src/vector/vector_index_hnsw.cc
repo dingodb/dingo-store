@@ -347,6 +347,7 @@ butil::Status VectorIndexHnsw::Search(const std::vector<float>& vector, uint32_t
     while (!result.empty()) {
       pb::common::VectorWithDistance vector_with_distance;
       vector_with_distance.set_distance(result.top().first);
+      vector_with_distance.set_metric_type(this->vector_index_parameter.hnsw_parameter().metric_type());
 
       auto* vector_with_id = vector_with_distance.mutable_vector_with_id();
 
@@ -429,6 +430,7 @@ butil::Status VectorIndexHnsw::BatchSearch(std::vector<pb::common::VectorWithId>
       while (!result.empty()) {
         auto* vector_with_distance = results[row].add_vector_with_distances();
         vector_with_distance->set_distance(result.top().first);
+        vector_with_distance->set_metric_type(this->vector_index_parameter.hnsw_parameter().metric_type());
 
         auto* vector_with_id = vector_with_distance->mutable_vector_with_id();
 

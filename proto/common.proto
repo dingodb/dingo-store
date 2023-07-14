@@ -88,6 +88,7 @@ message VectorWithId {
 message VectorWithDistance {
   VectorWithId vector_with_id = 1;
   float distance = 2;
+  MetricType metric_type = 3;
 }
 
 enum CoordinatorState {
