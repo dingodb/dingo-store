@@ -1255,7 +1255,7 @@ butil::Status CoordinatorControl::UpdateIndex(uint64_t schema_id, uint64_t index
           << " old_max_elements="
           << index_internal.definition().index_parameter().vector_index_parameter().hnsw_parameter().max_elements();
 
-      return butil::Status::OK();
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "hnsw max_elements only support increase");
     }
   } else {
     DINGO_LOG(ERROR) << "ERRROR: index type not support, new_index_definition=" << new_index_definition.DebugString()

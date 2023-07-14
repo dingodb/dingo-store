@@ -484,11 +484,6 @@ void SendUpdateIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
     return;
   }
 
-  if (FLAGS_max_elements <= old_count) {
-    DINGO_LOG(WARNING) << "new max_elements is illegal, stop to update";
-    return;
-  }
-
   dingodb::pb::meta::UpdateIndexRequest update_request;
   dingodb::pb::meta::UpdateIndexResponse update_response;
 
