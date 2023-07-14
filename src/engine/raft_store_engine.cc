@@ -31,6 +31,7 @@
 #include "proto/common.pb.h"
 #include "proto/coordinator_internal.pb.h"
 #include "proto/error.pb.h"
+#include "proto/index.pb.h"
 #include "proto/raft.pb.h"
 #include "raft/meta_state_machine.h"
 #include "raft/store_state_machine.h"
@@ -320,68 +321,79 @@ butil::Status RaftStoreEngine::VectorReader::QueryVectorWithId(uint64_t region_i
 }
 
 butil::Status RaftStoreEngine::VectorReader::SearchVector(
-    uint64_t region_id, const pb::common::VectorWithId& vector, const pb::common::VectorSearchParameter& parameter,
-    std::vector<pb::common::VectorWithDistance>& vector_with_distances) {
+    uint64_t region_id, const std::vector<pb::common::VectorWithId>& vector_with_ids,
+    const pb::common::VectorSearchParameter& parameter,
+    std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results) {
   auto vector_index = Server::GetInstance()->GetVectorIndexManager()->GetVectorIndex(region_id);
   if (vector_index == nullptr) {
     return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, fmt::format("Not found vector index {}", region_id));
   }
 
+  if (vector_with_ids.empty()) {
+    DINGO_LOG(WARNING) << "Empty vector with ids";
+    return butil::Status();
+  }
+
   uint32_t top_n = parameter.top_n();
   bool use_scalar_filter = parameter.use_scalar_filter();
   if (use_scalar_filter) {
-    if (BAIDU_UNLIKELY(vector.scalar_data().scalar_data_size() == 0)) {
+    if (BAIDU_UNLIKELY(vector_with_ids[0].scalar_data().scalar_data_size() == 0)) {
       return butil::Status(
           pb::error::EVECTOR_SCALAR_DATA_NOT_FOUND,
-          fmt::format("Not found vector scalar data, region: {}, vector id: {}", region_id, vector.id()));
+          fmt::format("Not found vector scalar data, region: {}, vector id: {}", region_id, vector_with_ids[0].id()));
     }
     top_n *= 10;
   }
 
   bool with_vector_data = !(parameter.without_vector_data());
-  std::vector<pb::common::VectorWithDistance> temp_vector_with_distances;
+  std::vector<pb::index::VectorWithDistanceResult> tmp_results;
 
-  vector_index->Search(vector, top_n, temp_vector_with_distances, with_vector_data);
-  size_t temp_size = temp_vector_with_distances.size();
+  vector_index->BatchSearch(vector_with_ids, top_n, tmp_results, with_vector_data);
 
   if (use_scalar_filter) {
-    for (auto& temp_vector_with_distance : temp_vector_with_distances) {
-      uint64_t temp_id = temp_vector_with_distance.vector_with_id().id();
-      bool compare_result = false;
-      butil::Status status = CompareVectorScalarData(region_id, temp_id, vector.scalar_data(), compare_result);
-      if (!status.ok()) {
-        return status;
-      }
-      if (!compare_result) {
-        continue;
+    for (auto& vector_with_distance_result : tmp_results) {
+      pb::index::VectorWithDistanceResult new_vector_with_distance_result;
+
+      bool is_reserve = false;
+      for (auto& temp_vector_with_distance : *vector_with_distance_result.mutable_vector_with_distances()) {
+        uint64_t temp_id = temp_vector_with_distance.vector_with_id().id();
+        bool compare_result = false;
+        butil::Status status =
+            CompareVectorScalarData(region_id, temp_id, vector_with_ids[0].scalar_data(), compare_result);
+        if (!status.ok()) {
+          return status;
+        }
+        if (!compare_result) {
+          continue;
+        }
+
+        new_vector_with_distance_result.add_vector_with_distances()->Swap(&temp_vector_with_distance);
       }
 
-      vector_with_distances.push_back(temp_vector_with_distance);
+      vector_with_distance_results.emplace_back(std::move(new_vector_with_distance_result));
     }
   } else {
-    vector_with_distances.swap(temp_vector_with_distances);
+    vector_with_distance_results.swap(tmp_results);
   }
 
   // if vector index does not support restruct vector ,we restruct it using RocksDB
   if (with_vector_data) {
-    for (auto& vector_with_distance : vector_with_distances) {
-      if (vector_with_distance.vector_with_id().vector().float_values_size() > 0 ||
-          vector_with_distance.vector_with_id().vector().binary_values_size() > 0) {
-        continue;
-      }
+    for (auto& result : vector_with_distance_results) {
+      for (auto& vector_with_distance : *result.mutable_vector_with_distances()) {
+        if (vector_with_distance.vector_with_id().vector().float_values_size() > 0 ||
+            vector_with_distance.vector_with_id().vector().binary_values_size() > 0) {
+          continue;
+        }
 
-      pb::common::VectorWithId vector_with_id;
-      auto status = QueryVectorWithId(region_id, vector_with_distance.vector_with_id().id(), vector_with_id);
-      if (!status.ok()) {
-        return status;
+        pb::common::VectorWithId vector_with_id;
+        auto status = QueryVectorWithId(region_id, vector_with_distance.vector_with_id().id(), vector_with_id);
+        if (!status.ok()) {
+          return status;
+        }
+        vector_with_distance.mutable_vector_with_id()->Swap(&vector_with_id);
       }
-      vector_with_distance.mutable_vector_with_id()->Swap(&vector_with_id);
     }
   }
-
-  DINGO_LOG(INFO) << "scalar filter: " << use_scalar_filter << ", region: " << region_id
-                  << ", vector id: " << vector.id() << ", before filter, result size: " << temp_size
-                  << ", after filter, result size: " << vector_with_distances.size();
 
   return butil::Status();
 }
@@ -413,6 +425,20 @@ butil::Status RaftStoreEngine::VectorReader::QueryVectorScalarData(uint64_t regi
       }
 
       scalar->insert({key, value});
+    }
+  }
+
+  return butil::Status();
+}
+
+butil::Status RaftStoreEngine::VectorReader::QueryVectorScalarData(
+    uint64_t region_id, std::vector<std::string> selected_scalar_keys,
+    std::vector<pb::index::VectorWithDistanceResult>& results) {
+  // get metadata by parameter
+  for (auto& result : results) {
+    for (auto& vector_with_distance : *result.mutable_vector_with_distances()) {
+      pb::common::VectorWithId& vector_with_id = *(vector_with_distance.mutable_vector_with_id());
+      QueryVectorScalarData(region_id, selected_scalar_keys, vector_with_id);
     }
   }
 
@@ -481,10 +507,25 @@ butil::Status RaftStoreEngine::VectorReader::VectorSearch(
     vector_with_distance.mutable_vector_with_id()->Swap(&tmp_vector_with_id);
     vector_with_distances.push_back(vector_with_distance);
   } else {
-    // Search vector by vector
-    auto status = SearchVector(ctx->RegionId(), vector_with_id, parameter, vector_with_distances);
+    // build vector with ids
+    std::vector<pb::common::VectorWithId> vector_with_ids;
+    vector_with_ids.push_back(vector_with_id);
+
+    // build vector with distance results
+    std::vector<pb::index::VectorWithDistanceResult> vector_with_distance_results;
+
+    // Search vectors by vectors
+    auto status = SearchVector(ctx->RegionId(), vector_with_ids, parameter, vector_with_distance_results);
     if (!status.ok()) {
       return status;
+    }
+
+    // build vector with distances
+    for (auto& vector_with_distance_result : vector_with_distance_results) {
+      for (auto& vector_with_distance : *vector_with_distance_result.mutable_vector_with_distances()) {
+        vector_with_distances.push_back(vector_with_distance);
+      }
+      break;  // only the first result is needed
     }
   }
 
@@ -492,6 +533,34 @@ butil::Status RaftStoreEngine::VectorReader::VectorSearch(
     // Get metadata by parameter
     std::vector<std::string> selected_scalar_keys = Helper::PbRepeatedToVector(parameter.selected_keys());
     auto status = QueryVectorScalarData(ctx->RegionId(), selected_scalar_keys, vector_with_distances);
+    if (!status.ok()) {
+      return status;
+    }
+  }
+
+  return butil::Status();
+}
+
+butil::Status RaftStoreEngine::VectorReader::VectorBatchSearch(
+    std::shared_ptr<Context> ctx, const std::vector<pb::common::VectorWithId>& vector_with_ids,  // NOLINT
+    pb::common::VectorSearchParameter parameter,                                                 // NOLINT
+    std::vector<pb::index::VectorWithDistanceResult>& results) {                                 // NOLINT
+
+  if (vector_with_ids.empty()) {
+    DINGO_LOG(WARNING) << "VectorBatchSearch: vector_with_ids is empty";
+    return butil::Status::OK();
+  }
+
+  // Search vectors by vectors
+  auto status = SearchVector(ctx->RegionId(), vector_with_ids, parameter, results);
+  if (!status.ok()) {
+    return status;
+  }
+
+  if (parameter.with_scalar_data()) {
+    // Get metadata by parameter
+    std::vector<std::string> selected_scalar_keys = Helper::PbRepeatedToVector(parameter.selected_keys());
+    auto status = QueryVectorScalarData(ctx->RegionId(), selected_scalar_keys, results);
     if (!status.ok()) {
       return status;
     }

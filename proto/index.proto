@@ -57,11 +57,17 @@ message VectorSearchRequest {
   uint64 region_id = 1;
   dingodb.pb.common.VectorWithId vector = 2;
   dingodb.pb.common.VectorSearchParameter parameter = 3;
+  repeated dingodb.pb.common.VectorWithId vector_with_ids = 4;  // this field is used for batch search
+}
+
+message VectorWithDistanceResult {
+  repeated dingodb.pb.common.VectorWithDistance vector_with_distances = 1;
 }
 
 message VectorSearchResponse {
   dingodb.pb.error.Error error = 1;
   repeated dingodb.pb.common.VectorWithDistance results = 2;
+  repeated VectorWithDistanceResult batch_results = 3;  // this field is used for batch search
 }
 
 message VectorDeleteRequest {

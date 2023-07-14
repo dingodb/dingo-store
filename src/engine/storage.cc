@@ -149,6 +149,29 @@ butil::Status Storage::VectorGetBorderId(std::shared_ptr<Context> ctx, uint64_t&
   return butil::Status();
 }
 
+butil::Status Storage::VectorBatchSearch(std::shared_ptr<Context> ctx,
+                                         const std::vector<pb::common::VectorWithId>& vector_with_ids,
+                                         const pb::common::VectorSearchParameter& parameter,
+                                         std::vector<pb::index::VectorWithDistanceResult>& results) {
+  auto status = ValidateLeader(ctx->RegionId());
+  if (!status.ok()) {
+    return status;
+  }
+
+  auto reader = engine_->NewVectorReader(Constant::kStoreDataCF);
+  status = reader->VectorBatchSearch(ctx, vector_with_ids, parameter, results);
+  if (!status.ok()) {
+    if (pb::error::EKEY_NOT_FOUND == status.error_code()) {
+      // return OK if not found
+      return butil::Status::OK();
+    }
+
+    return status;
+  }
+
+  return butil::Status();
+}
+
 butil::Status Storage::VectorSearch(std::shared_ptr<Context> ctx, const pb::common::VectorWithId& vector,
                                     const pb::common::VectorSearchParameter& parameter,
                                     std::vector<pb::common::VectorWithDistance>& results) {

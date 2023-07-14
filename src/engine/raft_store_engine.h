@@ -26,6 +26,7 @@
 #include "metrics/store_metrics_manager.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
+#include "proto/index.pb.h"
 #include "proto/store.pb.h"
 #include "proto/store_internal.pb.h"
 #include "raft/raft_node_manager.h"
@@ -115,6 +116,11 @@ class RaftStoreEngine : public Engine, public RaftControlAble {
                                pb::common::VectorSearchParameter parameter,
                                std::vector<pb::common::VectorWithDistance>& vector_with_distances) override;
 
+    butil::Status VectorBatchSearch(std::shared_ptr<Context> ctx,
+                                    const std::vector<pb::common::VectorWithId>& vector_with_ids,
+                                    pb::common::VectorSearchParameter parameter,
+                                    std::vector<pb::index::VectorWithDistanceResult>& results) override;
+
     butil::Status VectorBatchQuery(std::shared_ptr<Context> ctx, std::vector<uint64_t> vector_ids,
                                    bool with_vector_data, bool with_scalar_data,
                                    std::vector<std::string> selected_scalar_keys,
@@ -125,19 +131,19 @@ class RaftStoreEngine : public Engine, public RaftControlAble {
    private:
     butil::Status QueryVectorWithId(uint64_t region_id, uint64_t vector_id, pb::common::VectorWithId& vector_with_id,
                                     bool with_vector_data = true);
-    butil::Status SearchVector(uint64_t region_id, const pb::common::VectorWithId& vector,
+    butil::Status SearchVector(uint64_t region_id, const std::vector<pb::common::VectorWithId>& vector_with_ids,
                                const pb::common::VectorSearchParameter& parameter,
-                               std::vector<pb::common::VectorWithDistance>& vector_with_distances);
+                               std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results);
 
     butil::Status QueryVectorScalarData(uint64_t region_id, std::vector<std::string> selected_scalar_keys,
                                         pb::common::VectorWithId& vector_with_id);
     butil::Status QueryVectorScalarData(uint64_t region_id, std::vector<std::string> selected_scalar_keys,
                                         std::vector<pb::common::VectorWithDistance>& vector_with_distances);
+    butil::Status QueryVectorScalarData(uint64_t region_id, std::vector<std::string> selected_scalar_keys,
+                                        std::vector<pb::index::VectorWithDistanceResult>& results);
 
-    butil::Status CompareVectorScalarData(uint64_t region_id,
-                                          uint64_t vector_id,
-                                          const pb::common::VectorScalardata& source_scalar_data,
-                                          bool& compare_result);
+    butil::Status CompareVectorScalarData(uint64_t region_id, uint64_t vector_id,
+                                          const pb::common::VectorScalardata& source_scalar_data, bool& compare_result);
 
     std::shared_ptr<RawEngine::Reader> reader_;
   };

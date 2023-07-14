@@ -15,12 +15,36 @@
 #include "vector/vector_index.h"
 
 #include "butil/status.h"
+#include "proto/common.pb.h"
 
 namespace dingodb {
 
 VectorIndex::~VectorIndex() = default;
 
 pb::common::VectorIndexType VectorIndex::VectorIndexType() const { return vector_index_type; }
+
+butil::Status VectorIndex::BatchSearch(std::vector<pb::common::VectorWithId> vector_with_ids, uint32_t topk,
+                                       std::vector<pb::index::VectorWithDistanceResult>& results, bool reconstruct) {
+  for (auto& vector_with_id : vector_with_ids) {
+    std::vector<float> vector;
+    for (auto value : vector_with_id.vector().float_values()) {
+      vector.push_back(value);
+    }
+
+    std::vector<pb::common::VectorWithDistance> vector_with_distances;
+    Search(vector, topk, vector_with_distances, reconstruct);
+
+    // build results
+    pb::index::VectorWithDistanceResult vector_with_distance_result;
+    for (auto& vector_with_distance : vector_with_distances) {
+      auto* new_result = vector_with_distance_result.add_vector_with_distances();
+      new_result->Swap(&vector_with_distance);
+    }
+    results.push_back(std::move(vector_with_distance_result));
+  }
+
+  return butil::Status::OK();
+}
 
 butil::Status VectorIndex::Search([[maybe_unused]] pb::common::VectorWithId vector_with_id,
                                   [[maybe_unused]] uint32_t topk, std::vector<pb::common::VectorWithDistance>& results,

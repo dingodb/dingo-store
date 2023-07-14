@@ -194,7 +194,7 @@ butil::Status VectorIndexHnsw::Upsert(const std::vector<pb::common::VectorWithId
   // Add data to index
   try {
     ParallelFor(0, vector_with_ids.size(), hnsw_num_threads_, [&](size_t row, size_t /*thread_id*/) {
-      this->hnsw_index_->addPoint((void*)(data.get() + dimension_ * row), vector_with_ids[row].id());
+      this->hnsw_index_->addPoint((void*)(data.get() + dimension_ * row), vector_with_ids[row].id(), true);
     });
   } catch (std::runtime_error& e) {
     DINGO_LOG(ERROR) << "upsert vector failed, error=" << e.what();
@@ -374,6 +374,88 @@ butil::Status VectorIndexHnsw::Search(const std::vector<float>& vector, uint32_t
   } else {
     return butil::Status(pb::error::Errno::EINTERNAL, "vector index type is not supported");
   }
+}
+
+butil::Status VectorIndexHnsw::BatchSearch(std::vector<pb::common::VectorWithId> vector_with_ids, uint32_t topk,
+                                           std::vector<pb::index::VectorWithDistanceResult>& results,
+                                           bool reconstruct) {
+  // check is_online
+  if (!is_online_.load()) {
+    std::string s = fmt::format("vector index is offline, please wait for online");
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EVECTOR_INDEX_OFFLINE, s);
+  }
+
+  if (vector_index_type != pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
+    return butil::Status(pb::error::Errno::EINTERNAL, "vector index type is not supported");
+  }
+
+  if (vector_with_ids.empty()) {
+    return butil::Status::OK();
+  }
+
+  if (vector_with_ids[0].vector().float_values_size() != this->dimension_) {
+    return butil::Status(pb::error::Errno::EINTERNAL, "vector dimension is not match, input=%d, index=%d",
+                         vector_with_ids[0].vector().float_values_size(), this->dimension_);
+  }
+
+  butil::Status ret;
+
+  std::unique_ptr<float> data;
+  try {
+    data.reset(new float[this->dimension_ * vector_with_ids.size()]);
+  } catch (std::bad_alloc& e) {
+    DINGO_LOG(ERROR) << "upsert vector failed, error=" << e.what();
+    ret = butil::Status(pb::error::Errno::EINTERNAL, "upsert vector failed, error=" + std::string(e.what()));
+    return ret;
+  }
+
+  for (size_t row = 0; row < vector_with_ids.size(); ++row) {
+    for (size_t col = 0; col < this->dimension_; ++col) {
+      data.get()[row * this->dimension_ + col] = vector_with_ids[row].vector().float_values().at(col);
+    }
+  }
+
+  // Query the elements for themselves and measure recall
+  std::vector<hnswlib::labeltype> neighbors(vector_with_ids.size());
+
+  // Search by parallel
+  results.resize(vector_with_ids.size());
+  try {
+    ParallelFor(0, vector_with_ids.size(), hnsw_num_threads_, [&](size_t row, size_t /*thread_id*/) {
+      std::priority_queue<std::pair<float, hnswlib::labeltype>> result =
+          hnsw_index_->searchKnn(data.get() + dimension_ * row, topk);
+
+      while (!result.empty()) {
+        auto* vector_with_distance = results[row].add_vector_with_distances();
+        vector_with_distance->set_distance(result.top().first);
+
+        auto* vector_with_id = vector_with_distance->mutable_vector_with_id();
+
+        vector_with_id->set_id(result.top().second);
+        vector_with_id->mutable_vector()->set_dimension(dimension_);
+        vector_with_id->mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
+
+        if (reconstruct) {
+          try {
+            std::vector<float> data = hnsw_index_->getDataByLabel<float>(result.top().second);
+            for (auto& value : data) {
+              vector_with_id->mutable_vector()->add_float_values(value);
+            }
+          } catch (std::exception& e) {
+            LOG(ERROR) << "getDataByLabel failed, label: " << result.top().second << " err: " << e.what();
+          }
+        }
+
+        result.pop();
+      }
+    });
+  } catch (std::runtime_error& e) {
+    DINGO_LOG(ERROR) << "parallel search vector failed, error=" << e.what();
+    ret = butil::Status(pb::error::Errno::EINTERNAL, "parallel search vector failed, error=" + std::string(e.what()));
+  }
+
+  return butil::Status::OK();
 }
 
 butil::Status VectorIndexHnsw::SetOnline() {

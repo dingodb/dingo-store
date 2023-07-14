@@ -29,6 +29,7 @@
 #include "hnswlib/space_l2.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
+#include "proto/index.pb.h"
 #include "proto/region_control.pb.h"
 
 namespace dingodb {
@@ -307,6 +308,67 @@ butil::Status VectorIndexFlat::Search(pb::common::VectorWithId vector_with_id, u
   }
 
   return Search(vector, topk, results);
+}
+
+butil::Status VectorIndexFlat::BatchSearch(std::vector<pb::common::VectorWithId> vector_with_ids, uint32_t topk,
+                                           std::vector<pb::index::VectorWithDistanceResult>& results,
+                                           [[maybe_unused]] bool reconstruct) {
+  if (!is_online_.load()) {
+    std::string s = fmt::format("vector index is offline, please wait for online");
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EVECTOR_INDEX_OFFLINE, s);
+  }
+
+  if (vector_with_ids.empty()) {
+    DINGO_LOG(WARNING) << "vector_with_ids is empty";
+    return butil::Status::OK();
+  }
+
+  std::vector<faiss::Index::distance_t> distances;
+  distances.resize(topk * vector_with_ids.size(), 0.0f);
+  std::vector<faiss::idx_t> labels;
+  labels.resize(topk * vector_with_ids.size(), -1);
+
+  std::unique_ptr<float> vectors;
+  try {
+    vectors.reset(new float[vector_with_ids.size() * dimension_]);
+  } catch (std::bad_alloc& e) {
+    std::string s = fmt::format("Failed to allocate memory for vectors: {}", e.what());
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EVECTOR_INVALID, "Failed to allocate memory for vectors, error: %s",
+                         e.what());
+  }
+
+  for (size_t i = 0; i < vector_with_ids.size(); ++i) {
+    const auto& vector = vector_with_ids[i].vector().float_values();
+    memcpy(vectors.get() + i * dimension_, vector.data(), dimension_ * sizeof(float));
+  }
+
+  {
+    BAIDU_SCOPED_LOCK(mutex_);
+    index_->search(vector_with_ids.size(), vectors.get(), topk, distances.data(), labels.data());
+  }
+
+  for (size_t row = 0; row < vector_with_ids.size(); ++row) {
+    auto& result = results.emplace_back();
+
+    for (size_t i = 0; i < topk; i++) {
+      if (labels[i] < 0) {
+        continue;
+      }
+      auto* vector_with_distance = result.add_vector_with_distances();
+
+      auto* vector_with_id = vector_with_distance->mutable_vector_with_id();
+      vector_with_id->set_id(labels[i]);
+      vector_with_id->mutable_vector()->set_dimension(dimension_);
+      vector_with_id->mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
+      vector_with_distance->set_distance(distances[i]);
+    }
+  }
+
+  DINGO_LOG(DEBUG) << "result.size() = " << results.size();
+
+  return butil::Status::OK();
 }
 
 butil::Status VectorIndexFlat::SetOffline() {
