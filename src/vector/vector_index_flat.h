@@ -57,9 +57,11 @@ class VectorIndexFlat : public VectorIndex {
   butil::Status Add(uint64_t id, const std::vector<float>& vector) override;
 
   // not exist add. if exist update
+  butil::Status Upsert(const std::vector<pb::common::VectorWithId>& vector_with_ids) override;
   butil::Status Upsert(uint64_t id, const std::vector<float>& vector) override;
 
   butil::Status Delete(uint64_t id) override;
+  butil::Status DeleteBatch(const std::vector<uint64_t>& delete_ids) override;
 
   butil::Status Search(const std::vector<float>& vector, uint32_t topk,
                        std::vector<pb::common::VectorWithDistance>& results, bool reconstruct = false) override;

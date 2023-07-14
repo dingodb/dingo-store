@@ -29,6 +29,7 @@
 #include "hnswlib/space_l2.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
+#include "proto/region_control.pb.h"
 
 namespace dingodb {
 
@@ -79,6 +80,65 @@ butil::Status VectorIndexFlat::Add(uint64_t id, const std::vector<float>& vector
   return butil::Status::OK();
 }
 
+butil::Status VectorIndexFlat::Upsert(const std::vector<pb::common::VectorWithId>& vector_with_ids) {
+  // check is_online
+  if (!is_online_.load()) {
+    std::string s = fmt::format("vector index is offline, please wait for online");
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EVECTOR_INDEX_OFFLINE, s);
+  }
+
+  if (vector_with_ids.empty()) {
+    return butil::Status::OK();
+  }
+
+  // check
+  uint32_t input_dimension = vector_with_ids[0].vector().float_values_size();
+  if (input_dimension != static_cast<size_t>(dimension_)) {
+    std::string s =
+        fmt::format("Flat : float size : {} not equal to  dimension(create) : {}", input_dimension, dimension_);
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EVECTOR_INVALID, s);
+  }
+
+  std::unique_ptr<faiss::idx_t> ids;
+  try {
+    ids.reset(new faiss::idx_t[vector_with_ids.size()]);
+  } catch (std::bad_alloc& e) {
+    std::string s = fmt::format("Failed to allocate memory for ids: {}", e.what());
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EVECTOR_INVALID, "Failed to allocate memory for ids, error: %s", e.what());
+  }
+
+  for (size_t i = 0; i < vector_with_ids.size(); ++i) {
+    ids.get()[i] = static_cast<faiss::idx_t>(vector_with_ids[i].id());
+  }
+
+  faiss::IDSelectorArray sel(vector_with_ids.size(), ids.get());
+
+  BAIDU_SCOPED_LOCK(mutex_);
+  index_->remove_ids(sel);
+
+  std::unique_ptr<float> vectors;
+  try {
+    vectors.reset(new float[vector_with_ids.size() * dimension_]);
+  } catch (std::bad_alloc& e) {
+    std::string s = fmt::format("Failed to allocate memory for vectors: {}", e.what());
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EVECTOR_INVALID, "Failed to allocate memory for vectors, error: %s",
+                         e.what());
+  }
+
+  for (size_t i = 0; i < vector_with_ids.size(); ++i) {
+    const auto& vector = vector_with_ids[i].vector().float_values();
+    memcpy(vectors.get() + i * dimension_, vector.data(), dimension_ * sizeof(float));
+  }
+
+  index_->add_with_ids(vector_with_ids.size(), vectors.get(), ids.get());
+
+  return butil::Status::OK();
+}
+
 butil::Status VectorIndexFlat::Upsert(uint64_t id, const std::vector<float>& vector) {
   // check is_online
   if (!is_online_.load()) {
@@ -101,6 +161,44 @@ butil::Status VectorIndexFlat::Upsert(uint64_t id, const std::vector<float>& vec
   BAIDU_SCOPED_LOCK(mutex_);
   index_->remove_ids(sel);
   index_->add_with_ids(1, vector.data(), reinterpret_cast<faiss::idx_t*>(&id));
+
+  return butil::Status::OK();
+}
+
+butil::Status VectorIndexFlat::DeleteBatch(const std::vector<uint64_t>& delete_ids) {
+  // check is_online
+  if (!is_online_.load()) {
+    std::string s = fmt::format("vector index is offline, please wait for online");
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EVECTOR_INDEX_OFFLINE, s);
+  }
+
+  std::unique_ptr<faiss::idx_t> ids;
+  try {
+    ids.reset(new faiss::idx_t[delete_ids.size()]);
+  } catch (std::bad_alloc& e) {
+    std::string s = fmt::format("Failed to allocate memory for ids: {}", e.what());
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EVECTOR_INVALID, "Failed to allocate memory for ids, error: %s", e.what());
+  }
+
+  for (size_t i = 0; i < delete_ids.size(); ++i) {
+    ids.get()[i] = static_cast<faiss::idx_t>(delete_ids[i]);
+  }
+
+  faiss::IDSelectorArray sel(delete_ids.size(), ids.get());
+
+  size_t remove_count = 0;
+  {
+    BAIDU_SCOPED_LOCK(mutex_);
+    remove_count = index_->remove_ids(sel);
+  }
+
+  if (0 == remove_count) {
+    DINGO_LOG(ERROR) << fmt::format("not found id : {}", id);
+    return butil::Status(pb::error::Errno::EVECTOR_INVALID, fmt::format("not found : {}", id));
+  }
+
   return butil::Status::OK();
 }
 

@@ -47,8 +47,10 @@ class VectorIndexHnsw : public VectorIndex {
 
   butil::Status Add(uint64_t id, const std::vector<float>& vector) override;
 
+  butil::Status Upsert(const std::vector<pb::common::VectorWithId>& vector_with_ids) override;
   butil::Status Upsert(uint64_t id, const std::vector<float>& vector) override;
   butil::Status Delete(uint64_t id) override;
+  butil::Status DeleteBatch(const std::vector<uint64_t>& delete_ids) override;
 
   butil::Status Save(const std::string& path) override;
   butil::Status Load(const std::string& path) override;
@@ -72,6 +74,9 @@ class VectorIndexHnsw : public VectorIndex {
   // hnsw members
   hnswlib::HierarchicalNSW<float>* hnsw_index_;
   hnswlib::SpaceInterface<float>* hnsw_space_;
+
+  // hnsw parallel threads count
+  uint32_t hnsw_num_threads_;
 
   // Dimension of the elements
   uint32_t dimension_;
