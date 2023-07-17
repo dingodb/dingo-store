@@ -77,6 +77,9 @@ class VectorIndexFlat : public VectorIndex {
   butil::Status SetOffline() override;
   bool IsOnline() override;
 
+  void LockWrite() override;
+  void UnlockWrite() override;
+
   butil::Status GetCount([[maybe_unused]] uint64_t& count) override;
 
   butil::Status NeedToRebuild([[maybe_unused]] bool& need_to_rebuild,

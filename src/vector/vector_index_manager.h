@@ -50,10 +50,10 @@ class VectorIndexManager : public TransformKvAble {
 
   // Load vector index for already exist vector index at bootstrap.
   // Priority load from snapshot, if snapshot not exist then load from rocksdb.
-  butil::Status LoadVectorIndex(store::RegionPtr region);
+  butil::Status LoadOrBuildVectorIndex(store::RegionPtr region);
 
   // Save vector index snapshot.
-  butil::Status SaveVectorIndex(store::RegionPtr region);
+  butil::Status SaveVectorIndex(store::RegionPtr region, bool can_overwrite = false);
 
   // check if status is legal for rebuild
   butil::Status CheckAndSetRebuildStatus(store::RegionPtr region, bool is_initial_build);
