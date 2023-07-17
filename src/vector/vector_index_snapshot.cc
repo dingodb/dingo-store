@@ -376,7 +376,7 @@ butil::Status VectorIndexSnapshot::SaveVectorIndexSnapshot(std::shared_ptr<Vecto
 
   std::string snapshot_parent_path = fmt::format("{}/{}", Server::GetInstance()->GetIndexPath(), vector_index->Id());
   if (!std::filesystem::exists(snapshot_parent_path)) {
-    std::filesystem::create_directory(snapshot_parent_path);
+    std::filesystem::create_directories(snapshot_parent_path);
   }
 
   // New snapshot path, if already exist then give up.

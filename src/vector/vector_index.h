@@ -92,6 +92,8 @@ class VectorIndex {
 
   virtual butil::Status SetOffline() = 0;
 
+  virtual bool IsOnline() = 0;
+
   uint64_t Id() const { return id; }
 
   pb::common::RegionVectorIndexStatus Status() { return status.load(); }

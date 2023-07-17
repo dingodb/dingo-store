@@ -75,6 +75,7 @@ class VectorIndexFlat : public VectorIndex {
 
   butil::Status SetOnline() override;
   butil::Status SetOffline() override;
+  bool IsOnline() override;
 
   butil::Status GetCount([[maybe_unused]] uint64_t& count) override;
 

@@ -30,6 +30,7 @@
 #include "fmt/core.h"
 #include "log/segment_log_storage.h"
 #include "meta/store_meta_manager.h"
+#include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "proto/file_service.pb.h"
 #include "proto/node.pb.h"
@@ -301,11 +302,70 @@ std::shared_ptr<VectorIndex> VectorIndexManager::BuildVectorIndex(store::RegionP
   return vector_index;
 }
 
+butil::Status VectorIndexManager::CheckAndSetRebuildStatus(store::RegionPtr region, bool is_initial_build) {
+  // lock vector_index add/delete, to catch up and switch to new vector_index
+  auto online_vector_index = GetVectorIndex(region->Id());
+  if (online_vector_index == nullptr) {
+    if (is_initial_build) {
+      return butil::Status::OK();
+    }
+
+    DINGO_LOG(ERROR) << fmt::format("online_vector_index is not found, this is an illegal rebuild, stop, id {}",
+                                    region->Id());
+    return butil::Status(pb::error::Errno::EINTERNAL,
+                         "online_vector_index is not found, cannot do rebuild, try to set is_initial_build to true");
+  }
+
+  if (!online_vector_index->IsOnline()) {
+    DINGO_LOG(WARNING) << fmt::format("online_vector_index is not online, skip rebuild, id {}", region->Id());
+    return butil::Status(pb::error::Errno::EINTERNAL, "online_vector_index is not online, skip rebuild");
+  }
+
+  if (online_vector_index->Status() != pb::common::VECTOR_INDEX_STATUS_NORMAL &&
+      online_vector_index->Status() != pb::common::VECTOR_INDEX_STATUS_ERROR &&
+      online_vector_index->Status() != pb::common::VECTOR_INDEX_STATUS_NONE) {
+    DINGO_LOG(WARNING) << fmt::format(
+        "online_vector_index status is not normal/error/none, this is an illegal rebuild, stop, id {}, status {}",
+        region->Id(), pb::common::RegionVectorIndexStatus_Name(online_vector_index->Status()));
+    return butil::Status(pb::error::Errno::EINTERNAL,
+                         "online_vector_index status is not normal/error/none, cannot do rebuild");
+  }
+
+  online_vector_index->SetStatus(pb::common::RegionVectorIndexStatus::VECTOR_INDEX_STATUS_REBUILDING);
+
+  online_vector_index = GetVectorIndex(region->Id());
+  if (online_vector_index == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format(
+        "online_vector_index is not found after set_status, this is an illegal rebuild, stop, id {}", region->Id());
+    return butil::Status(
+        pb::error::Errno::EINTERNAL,
+        "online_vector_index is not found after set_status, cannot do rebuild, try to set is_initial_build to true");
+  }
+
+  if (online_vector_index->Status() != pb::common::VECTOR_INDEX_STATUS_REBUILDING) {
+    DINGO_LOG(INFO) << fmt::format(
+        "online_vector_index status is not rebuilding after set_status, this is an illegal rebuild, stop, id {}, "
+        "status {}",
+        region->Id(), pb::common::RegionVectorIndexStatus_Name(online_vector_index->Status()));
+
+    return butil::Status(pb::error::Errno::EINTERNAL,
+                         "online_vector_index status is not rebuilding after set_status, cannot do rebuild");
+  }
+
+  return butil::Status::OK();
+}
+
 // Rebuild vector index
 butil::Status VectorIndexManager::RebuildVectorIndex(store::RegionPtr region, bool need_save, bool is_initial_build) {
   assert(region != nullptr);
 
   DINGO_LOG(INFO) << fmt::format("Rebuild vector index id {}", region->Id());
+
+  // check and set rebuild status
+  auto status = CheckAndSetRebuildStatus(region, is_initial_build);
+  if (!status.ok()) {
+    return status;
+  }
 
   // lock vector_index add/delete, to catch up and switch to new vector_index
   auto online_vector_index = GetVectorIndex(region->Id());
@@ -315,9 +375,6 @@ butil::Status VectorIndexManager::RebuildVectorIndex(store::RegionPtr region, bo
     return butil::Status(pb::error::Errno::EINTERNAL,
                          "online_vector_index is not found, cannot do rebuild, try to set is_initial_build to true");
   }
-
-  // update vector index status rebuilding
-  online_vector_index->SetStatus(pb::common::VECTOR_INDEX_STATUS_REBUILDING);
 
   // Build vector index with original all data.
   auto vector_index = BuildVectorIndex(region);
@@ -341,7 +398,7 @@ butil::Status VectorIndexManager::RebuildVectorIndex(store::RegionPtr region, bo
   }
 
   // first ground replay wal
-  auto status = ReplayWalToVectorIndex(vector_index, vector_index->ApplyLogIndex() + 1, UINT64_MAX);
+  status = ReplayWalToVectorIndex(vector_index, vector_index->ApplyLogIndex() + 1, UINT64_MAX);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << fmt::format("ReplayWal failed first-round, id {}, log_id {}", region->Id(),
                                     vector_index->ApplyLogIndex());
@@ -362,10 +419,10 @@ butil::Status VectorIndexManager::RebuildVectorIndex(store::RegionPtr region, bo
   if (!status.ok()) {
     DINGO_LOG(ERROR) << fmt::format("ReplayWal failed catch-up round, id {}, log_id {}", region->Id(),
                                     vector_index->ApplyLogIndex());
-    online_vector_index->SetStatus(pb::common::VECTOR_INDEX_STATUS_NORMAL);
-    online_vector_index->SetOnline();
     return status;
   }
+  // set the new vector_index's status to NORMAL
+  vector_index->SetStatus(pb::common::VECTOR_INDEX_STATUS_NORMAL);
 
   DINGO_LOG(INFO) << fmt::format("ReplayWal success catch-up round, id {}, log_id {}", region->Id(),
                                  vector_index->ApplyLogIndex());
@@ -381,8 +438,6 @@ butil::Status VectorIndexManager::RebuildVectorIndex(store::RegionPtr region, bo
                          "ReplayWal catch-up round finish, but online_vector_index "
                          "maybe delete by others, so stop to update vector_indexes map");
   }
-
-  online_vector_index->SetStatus(pb::common::VECTOR_INDEX_STATUS_NORMAL);
 
   return butil::Status();
 }
@@ -557,14 +612,12 @@ butil::Status VectorIndexManager::ScrubVectorIndex() {
     return butil::Status::OK();
   }
 
+  DINGO_LOG(INFO) << "ScrubVectorIndex start, alive region_count is " << regions.size();
+
   for (const auto& region : regions) {
     auto vector_index = GetVectorIndex(region->Id());
     if (vector_index == nullptr) {
       DINGO_LOG(INFO) << fmt::format("GetVectorIndex failed, region_id {}", region->Id());
-      continue;
-    }
-
-    if (!VectorIndexSnapshot::IsExistVectorIndexSnapshot(vector_index->Id())) {
       continue;
     }
 
@@ -581,6 +634,9 @@ butil::Status VectorIndexManager::ScrubVectorIndex() {
 
     bool need_save = false;
     vector_index->NeedToSave(need_save, last_save_log_behind);
+
+    DINGO_LOG(INFO) << fmt::format("need_rebuild {}, need_save {}, region_id {}", need_rebuild, need_save,
+                                   region->Id());
 
     if (need_rebuild || need_save) {
       DINGO_LOG(INFO) << fmt::format("need_scrub, region_id {}", region->Id());

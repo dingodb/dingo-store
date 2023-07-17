@@ -470,6 +470,8 @@ butil::Status VectorIndexHnsw::SetOffline() {
   return butil::Status::OK();
 }
 
+bool VectorIndexHnsw::IsOnline() { return is_online_.load(); }
+
 butil::Status VectorIndexHnsw::GetCount([[maybe_unused]] uint64_t& count) {
   count = this->hnsw_index_->getCurrentElementCount();
   return butil::Status::OK();
@@ -495,6 +497,11 @@ butil::Status VectorIndexHnsw::NeedToRebuild([[maybe_unused]] bool& need_to_rebu
 
 butil::Status VectorIndexHnsw::NeedToSave([[maybe_unused]] bool& need_to_save,
                                           [[maybe_unused]] uint64_t last_save_log_behind) {
+  if (this->status != pb::common::RegionVectorIndexStatus::VECTOR_INDEX_STATUS_NORMAL) {
+    need_to_save = false;
+    return butil::Status::OK();
+  }
+
   auto element_count = this->hnsw_index_->getCurrentElementCount();
   auto deleted_count = this->hnsw_index_->getDeletedCount();
 

@@ -7,6 +7,7 @@ server:
   port: $SERVER_PORT$
   heartbeat_interval: 10000 # ms
   metrics_collect_interval: 300000 # ms
+  scrub_vector_index_interval: 60000 # ms
   worker_thread_num: 10 # must >4, worker_thread_num priority worker_thread_ratio
   # worker_thread_ratio: 0.5 # cpu core * ratio
 raft:
