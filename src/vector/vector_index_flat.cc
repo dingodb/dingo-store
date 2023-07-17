@@ -383,6 +383,8 @@ butil::Status VectorIndexFlat::SetOnline() {
   return butil::Status::OK();
 }
 
+bool VectorIndexFlat::IsOnline() { return is_online_.load(); }
+
 butil::Status VectorIndexFlat::Save(const std::string& /*path*/) {
   return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "Flat index not support save");
 }

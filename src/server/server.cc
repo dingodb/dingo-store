@@ -255,6 +255,8 @@ bool Server::InitCrontabManager() {
     if (heartbeat_interval < 0) {
       DINGO_LOG(ERROR) << "config server.heartbeat_interval illegal";
       return false;
+    } else if (heartbeat_interval == 0) {
+      DINGO_LOG(WARNING) << "config server.heartbeat_interval is 0, heartbeat will not be triggered";
     } else if (heartbeat_interval > 0) {
       std::shared_ptr<Crontab> heartbeat_crontab = std::make_shared<Crontab>();
       heartbeat_crontab->name = "HEARTBEA";
@@ -270,6 +272,8 @@ bool Server::InitCrontabManager() {
     if (metrics_interval < 0) {
       DINGO_LOG(ERROR) << "config server.metrics_collect_interval illegal";
       return false;
+    } else if (metrics_interval == 0) {
+      DINGO_LOG(WARNING) << "config server.metrics_collect_interval is 0, metrics will not be collected";
     } else if (metrics_interval > 0) {
       std::shared_ptr<Crontab> metrics_crontab = std::make_shared<Crontab>();
       metrics_crontab->name = "METRICS";
@@ -296,6 +300,8 @@ bool Server::InitCrontabManager() {
     if (scan_interval < 0) {
       DINGO_LOG(ERROR) << "store.scan.scan_interval_ms illegal";
       return false;
+    } else if (scan_interval == 0) {
+      DINGO_LOG(WARNING) << "store.scan.scan_interval_ms is 0, scan will not be triggered";
     } else if (scan_interval > 0) {
       std::shared_ptr<Crontab> scan_crontab = std::make_shared<Crontab>();
       scan_crontab->name = "SCAN";
@@ -362,6 +368,8 @@ bool Server::InitCrontabManager() {
     if (heartbeat_interval < 0) {
       DINGO_LOG(ERROR) << "config server.heartbeat_interval illegal";
       return false;
+    } else if (heartbeat_interval == 0) {
+      DINGO_LOG(WARNING) << "config server.heartbeat_interval is 0, heartbeat will not be triggered";
     } else if (heartbeat_interval > 0) {
       std::shared_ptr<Crontab> heartbeat_crontab = std::make_shared<Crontab>();
       heartbeat_crontab->name = "HEARTBEA";
@@ -377,6 +385,8 @@ bool Server::InitCrontabManager() {
     if (metrics_interval < 0) {
       DINGO_LOG(ERROR) << "config server.metrics_collect_interval illegal";
       return false;
+    } else if (metrics_interval == 0) {
+      DINGO_LOG(WARNING) << "config server.metrics_collect_interval is 0, metrics will not be collected";
     } else if (metrics_interval > 0) {
       std::shared_ptr<Crontab> metrics_crontab = std::make_shared<Crontab>();
       metrics_crontab->name = "METRICS";
@@ -398,13 +408,21 @@ bool Server::InitCrontabManager() {
     }
 
     // Add scrub vector index crontab
-    std::shared_ptr<Crontab> scrub_vector_index_crontab = std::make_shared<Crontab>();
-    scrub_vector_index_crontab->name = "SCRUB_VECTOR_INDEX";
-    scrub_vector_index_crontab->interval = heartbeat_interval * 10;
-    scrub_vector_index_crontab->func = [](void*) { Heartbeat::TriggerScrubVectorIndex(nullptr); };
-    scrub_vector_index_crontab->arg = nullptr;
+    uint64_t scrub_vector_index_interval = config->GetInt("server.scrub_vector_index_interval");
+    if (scrub_vector_index_interval < 0) {
+      DINGO_LOG(ERROR) << "config server.scrub_vector_index_interval illegal";
+      return false;
+    } else if (scrub_vector_index_interval == 0) {
+      DINGO_LOG(WARNING) << "config server.scrub_vector_index_interval is 0, scrub vector index will not be triggered";
+    } else if (scrub_vector_index_interval > 0) {
+      std::shared_ptr<Crontab> scrub_vector_index_crontab = std::make_shared<Crontab>();
+      scrub_vector_index_crontab->name = "SCRUB_VECTOR_INDEX";
+      scrub_vector_index_crontab->interval = scrub_vector_index_interval;
+      scrub_vector_index_crontab->func = [](void*) { Heartbeat::TriggerScrubVectorIndex(nullptr); };
+      scrub_vector_index_crontab->arg = nullptr;
 
-    crontab_manager_->AddAndRunCrontab(scrub_vector_index_crontab);
+      crontab_manager_->AddAndRunCrontab(scrub_vector_index_crontab);
+    }
 
     // // Add scan crontab
     // ScanManager::GetInstance()->Init(config);

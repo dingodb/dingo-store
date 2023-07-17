@@ -55,6 +55,9 @@ class VectorIndexManager : public TransformKvAble {
   // Save vector index snapshot.
   butil::Status SaveVectorIndex(store::RegionPtr region);
 
+  // check if status is legal for rebuild
+  butil::Status CheckAndSetRebuildStatus(store::RegionPtr region, bool is_initial_build);
+
   // Invoke when server runing.
   butil::Status RebuildVectorIndex(store::RegionPtr region, bool need_save = true, bool is_initial_build = false);
 

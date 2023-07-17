@@ -57,6 +57,7 @@ class VectorIndexHnsw : public VectorIndex {
 
   butil::Status SetOnline() override;
   butil::Status SetOffline() override;
+  bool IsOnline() override;
 
   butil::Status Search(const std::vector<float>& vector, uint32_t topk,
                        std::vector<pb::common::VectorWithDistance>& results, bool reconstruct = false) override;
