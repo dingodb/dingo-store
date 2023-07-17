@@ -241,6 +241,8 @@ class SegmentLogStorage {
   bool enable_sync_;
 };
 
+// NOLINTBEGIN
+
 // Wrap SegmentLogStorage for inject braft
 class SegmentLogStorageWrapper : public braft::LogStorage {
  public:
@@ -297,6 +299,8 @@ class SegmentLogStorageWrapper : public braft::LogStorage {
   uint64_t region_id_;
   std::shared_ptr<SegmentLogStorage> log_storage_;
 };
+
+// NOLINTEND
 
 }  //  namespace dingodb
 

@@ -43,7 +43,9 @@ class VectorIndexSnapshot {
   static uint64_t GetLastVectorIndexSnapshotLogId(uint64_t vector_index_id);
 
   // Save vecgor index snapshot.
-  static butil::Status SaveVectorIndexSnapshot(std::shared_ptr<VectorIndex> vector_index, uint64_t& snapshot_log_index);
+  static butil::Status SaveVectorIndexSnapshot(std::shared_ptr<VectorIndex> vector_index, uint64_t& snapshot_log_index,
+                                               bool can_overwrite);
+
   // Load vector index from snapshot.
   static std::shared_ptr<VectorIndex> LoadVectorIndexSnapshot(store::RegionPtr region);
 

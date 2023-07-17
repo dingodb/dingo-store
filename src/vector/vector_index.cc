@@ -120,6 +120,7 @@ void VectorIndex::SetApplyLogIndex(uint64_t apply_log_index) {
 uint64_t VectorIndex::SnapshotLogIndex() const { return snapshot_log_index.load(std::memory_order_relaxed); }
 
 butil::Status VectorIndex::Save(const std::string& /*path*/) {
+  // Save need the caller to do LockWrite() and UnlockWrite()
   return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "this vector index do not implement save");
 }
 

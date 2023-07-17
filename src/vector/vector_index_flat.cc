@@ -23,6 +23,7 @@
 #include <vector>
 
 #include "bthread/mutex.h"
+#include "bthread/types.h"
 #include "butil/status.h"
 #include "common/logging.h"
 #include "hnswlib/space_ip.h"
@@ -384,6 +385,10 @@ butil::Status VectorIndexFlat::SetOnline() {
 }
 
 bool VectorIndexFlat::IsOnline() { return is_online_.load(); }
+
+void VectorIndexFlat::LockWrite() { bthread_mutex_lock(&mutex_); }
+
+void VectorIndexFlat::UnlockWrite() { bthread_mutex_unlock(&mutex_); }
 
 butil::Status VectorIndexFlat::Save(const std::string& /*path*/) {
   return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "Flat index not support save");

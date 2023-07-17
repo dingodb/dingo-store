@@ -51,13 +51,13 @@ bool VectorIndexManager::Init(std::vector<store::RegionPtr> regions) {
     if (definition.index_parameter().index_type() == pb::common::IndexType::INDEX_TYPE_VECTOR) {
       DINGO_LOG(INFO) << fmt::format("Init load region {} vector index", region->Id());
 
-      auto status = LoadVectorIndex(region);
+      auto status = LoadOrBuildVectorIndex(region);
       if (!status.ok()) {
         DINGO_LOG(ERROR) << fmt::format("Load region {} vector index failed, ", region->Id());
         return false;
       }
 
-      status = SaveVectorIndex(region);
+      status = SaveVectorIndex(region, true);
       if (!status.ok()) {
         DINGO_LOG(ERROR) << fmt::format("Save region {} vector index failed, ", region->Id());
         return false;
@@ -137,7 +137,7 @@ std::shared_ptr<VectorIndex> VectorIndexManager::GetVectorIndex(uint64_t region_
 
 // Load vector index for already exist vector index at bootstrap.
 // Priority load from snapshot, if snapshot not exist then load from rocksdb.
-butil::Status VectorIndexManager::LoadVectorIndex(store::RegionPtr region) {
+butil::Status VectorIndexManager::LoadOrBuildVectorIndex(store::RegionPtr region) {
   assert(region != nullptr);
 
   auto online_vector_index = GetVectorIndex(region->Id());
@@ -388,7 +388,7 @@ butil::Status VectorIndexManager::RebuildVectorIndex(store::RegionPtr region, bo
   if (need_save) {
     // save vector index to rocksdb
     uint64_t snapshot_log_index = 0;
-    auto status = VectorIndexSnapshot::SaveVectorIndexSnapshot(vector_index, snapshot_log_index);
+    auto status = VectorIndexSnapshot::SaveVectorIndexSnapshot(vector_index, snapshot_log_index, true);
     if (!status.ok()) {
       DINGO_LOG(WARNING) << fmt::format("Save vector index {} failed, message: {}", region->Id(), status.error_str());
       return butil::Status(pb::error::Errno::EINTERNAL, "Save vector index failed");
@@ -442,7 +442,7 @@ butil::Status VectorIndexManager::RebuildVectorIndex(store::RegionPtr region, bo
   return butil::Status();
 }
 
-butil::Status VectorIndexManager::SaveVectorIndex(store::RegionPtr region) {
+butil::Status VectorIndexManager::SaveVectorIndex(store::RegionPtr region, bool can_overwrite) {
   DINGO_LOG(INFO) << fmt::format("Save vector index id {}", region->Id());
 
   auto vector_index = GetVectorIndex(region->Id());
@@ -455,9 +455,10 @@ butil::Status VectorIndexManager::SaveVectorIndex(store::RegionPtr region) {
   vector_index->SetStatus(pb::common::VECTOR_INDEX_STATUS_SNAPSHOTTING);
 
   uint64_t snapshot_log_index = 0;
-  auto status = VectorIndexSnapshot::SaveVectorIndexSnapshot(vector_index, snapshot_log_index);
+  auto status = VectorIndexSnapshot::SaveVectorIndexSnapshot(vector_index, snapshot_log_index, can_overwrite);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << fmt::format("Save vector index failed, id {}", region->Id());
+    DINGO_LOG(ERROR) << fmt::format("Save vector index failed, id {}, errno: {}, errstr: {}", region->Id(),
+                                    status.error_code(), status.error_str());
     return status;
   } else {
     UpdateSnapshotLogIndex(vector_index, snapshot_log_index);
@@ -674,8 +675,12 @@ butil::Status VectorIndexManager::ScrubVectorIndex(store::RegionPtr region, bool
       return ret;
     }
   } else if (need_save) {
-    // TODO: add save vector index here
     DINGO_LOG(INFO) << fmt::format("need_save, do SaveVectorIndex, region_id {}", region->Id());
+    auto ret = SaveVectorIndex(region);
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << fmt::format("SaveVectorIndex in ScrubVectorIndex failed, region_id {}", region->Id());
+      return ret;
+    }
   }
 
   DINGO_LOG(INFO) << fmt::format("ScrubVectorIndex success, region_id {}", region->Id());

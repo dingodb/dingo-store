@@ -89,10 +89,11 @@ class VectorIndex {
                                [[maybe_unused]] bool reconstruct = false) = 0;
 
   virtual butil::Status SetOnline() = 0;
-
   virtual butil::Status SetOffline() = 0;
-
   virtual bool IsOnline() = 0;
+
+  virtual void LockWrite() = 0;
+  virtual void UnlockWrite() = 0;
 
   uint64_t Id() const { return id; }
 

@@ -191,6 +191,8 @@ butil::Status VectorIndexHnsw::Upsert(const std::vector<pb::common::VectorWithId
     }
   }
 
+  BAIDU_SCOPED_LOCK(mutex_);
+
   // Add data to index
   try {
     ParallelFor(0, vector_with_ids.size(), hnsw_num_threads_, [&](size_t row, size_t /*thread_id*/) {
@@ -257,6 +259,8 @@ butil::Status VectorIndexHnsw::DeleteBatch(const std::vector<uint64_t>& delete_i
 
   butil::Status ret;
 
+  BAIDU_SCOPED_LOCK(mutex_);
+
   // Add data to index
   try {
     ParallelFor(0, delete_ids.size(), hnsw_num_threads_,
@@ -300,6 +304,7 @@ butil::Status VectorIndexHnsw::Delete(uint64_t id) {
 }
 
 butil::Status VectorIndexHnsw::Save(const std::string& path) {
+  // Save need the caller to do LockWrite() and UnlockWrite()
   if (vector_index_type == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
     hnsw_index_->saveIndex(path);
     return butil::Status::OK();
@@ -472,6 +477,10 @@ butil::Status VectorIndexHnsw::SetOffline() {
 
 bool VectorIndexHnsw::IsOnline() { return is_online_.load(); }
 
+void VectorIndexHnsw::LockWrite() { bthread_mutex_lock(&mutex_); }
+
+void VectorIndexHnsw::UnlockWrite() { bthread_mutex_unlock(&mutex_); }
+
 butil::Status VectorIndexHnsw::GetCount([[maybe_unused]] uint64_t& count) {
   count = this->hnsw_index_->getCurrentElementCount();
   return butil::Status::OK();
@@ -498,6 +507,8 @@ butil::Status VectorIndexHnsw::NeedToRebuild([[maybe_unused]] bool& need_to_rebu
 butil::Status VectorIndexHnsw::NeedToSave([[maybe_unused]] bool& need_to_save,
                                           [[maybe_unused]] uint64_t last_save_log_behind) {
   if (this->status != pb::common::RegionVectorIndexStatus::VECTOR_INDEX_STATUS_NORMAL) {
+    DINGO_LOG(INFO) << "need_to_save=false: vector index status is not normal, status="
+                    << pb::common::RegionVectorIndexStatus_Name(this->status.load());
     need_to_save = false;
     return butil::Status::OK();
   }
@@ -505,14 +516,27 @@ butil::Status VectorIndexHnsw::NeedToSave([[maybe_unused]] bool& need_to_save,
   auto element_count = this->hnsw_index_->getCurrentElementCount();
   auto deleted_count = this->hnsw_index_->getDeletedCount();
 
-  if (element_count == 0 || deleted_count == 0) {
+  if (element_count == 0 && deleted_count == 0) {
+    DINGO_LOG(INFO) << "need_to_save=false: element count is 0 and deleted count is 0, element_count=" << element_count
+                    << ", deleted_count=" << deleted_count;
     need_to_save = false;
     return butil::Status::OK();
   }
 
+  if (snapshot_log_index.load() == 0) {
+    DINGO_LOG(INFO) << "need_to_save=true: snapshot_log_index is 0";
+    need_to_save = true;
+    return butil::Status::OK();
+  }
+
   if (last_save_log_behind > FLAGS_hnsw_need_save_count) {
+    DINGO_LOG(INFO) << "need_to_save=true: last_save_log_behind=" << last_save_log_behind
+                    << ", FLAGS_hnsw_need_save_count=" << FLAGS_hnsw_need_save_count;
     need_to_save = true;
   }
+
+  DINGO_LOG(INFO) << "need_to_save=false: last_save_log_behind=" << last_save_log_behind
+                  << ", FLAGS_hnsw_need_save_count=" << FLAGS_hnsw_need_save_count;
 
   return butil::Status::OK();
 }
