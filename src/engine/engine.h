@@ -84,7 +84,7 @@ class Engine {
 
     virtual butil::Status VectorBatchQuery(std::shared_ptr<Context> ctx, std::vector<uint64_t> vector_ids,
                                            bool with_vector_data, bool with_scalar_data,
-                                           std::vector<std::string> selected_scalar_keys,
+                                           std::vector<std::string> selected_scalar_keys, bool with_table_data,
                                            std::vector<pb::common::VectorWithId>& vector_with_ids) = 0;
 
     virtual butil::Status VectorGetBorderId(std::shared_ptr<Context> ctx, uint64_t& id, bool get_min) = 0;

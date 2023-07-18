@@ -89,7 +89,8 @@ void IndexServiceImpl::VectorBatchQuery(google::protobuf::RpcController* control
   std::vector<pb::common::VectorWithId> vector_with_ids;
   status = storage_->VectorBatchQuery(ctx, Helper::PbRepeatedToVector(request->vector_ids()),
                                       (!request->without_vector_data()), request->with_scalar_data(),
-                                      Helper::PbRepeatedToVector(request->selected_keys()), vector_with_ids);
+                                      Helper::PbRepeatedToVector(request->selected_keys()), request->with_table_data(),
+                                      vector_with_ids);
   if (!status.ok()) {
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));

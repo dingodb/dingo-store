@@ -398,6 +398,54 @@ butil::Status RaftStoreEngine::VectorReader::SearchVector(
   return butil::Status();
 }
 
+butil::Status RaftStoreEngine::VectorReader::QueryVectorTableData(uint64_t region_id,
+                                                                  pb::common::VectorWithId& vector_with_id) {
+  std::string key, value;
+
+  // get table data
+  {
+    VectorCodec::EncodeVectorTable(region_id, vector_with_id.id(), key);
+
+    auto status = reader_->KvGet(key, value);
+    if (!status.ok()) {
+      return status;
+    }
+
+    pb::common::VectorTableData vector_table;
+    if (!vector_table.ParseFromString(value)) {
+      return butil::Status(pb::error::EINTERNAL, "Internal error, decode VectorTable failed");
+    }
+
+    vector_with_id.mutable_table_data()->CopyFrom(vector_table);
+  }
+
+  return butil::Status();
+}
+
+butil::Status RaftStoreEngine::VectorReader::QueryVectorTableData(
+    uint64_t region_id, std::vector<pb::index::VectorWithDistanceResult>& results) {
+  // get metadata by parameter
+  for (auto& result : results) {
+    for (auto& vector_with_distance : *result.mutable_vector_with_distances()) {
+      pb::common::VectorWithId& vector_with_id = *(vector_with_distance.mutable_vector_with_id());
+      QueryVectorTableData(region_id, vector_with_id);
+    }
+  }
+
+  return butil::Status();
+}
+
+butil::Status RaftStoreEngine::VectorReader::QueryVectorTableData(
+    uint64_t region_id, std::vector<pb::common::VectorWithDistance>& vector_with_distances) {
+  // get metadata by parameter
+  for (auto& vector_with_distance : vector_with_distances) {
+    pb::common::VectorWithId& vector_with_id = *(vector_with_distance.mutable_vector_with_id());
+    QueryVectorTableData(region_id, vector_with_id);
+  }
+
+  return butil::Status();
+}
+
 butil::Status RaftStoreEngine::VectorReader::QueryVectorScalarData(uint64_t region_id,
                                                                    std::vector<std::string> selected_scalar_keys,
                                                                    pb::common::VectorWithId& vector_with_id) {
@@ -508,9 +556,17 @@ butil::Status RaftStoreEngine::VectorReader::VectorBatchSearch(
   }
 
   if (parameter.with_scalar_data()) {
-    // Get metadata by parameter
+    // Get scalar data by parameter
     std::vector<std::string> selected_scalar_keys = Helper::PbRepeatedToVector(parameter.selected_keys());
     auto status = QueryVectorScalarData(ctx->RegionId(), selected_scalar_keys, results);
+    if (!status.ok()) {
+      return status;
+    }
+  }
+
+  if (parameter.with_table_data()) {
+    // Get table data by parameter
+    auto status = QueryVectorTableData(ctx->RegionId(), results);
     if (!status.ok()) {
       return status;
     }
@@ -523,6 +579,7 @@ butil::Status RaftStoreEngine::VectorReader::VectorBatchQuery(std::shared_ptr<Co
                                                               std::vector<uint64_t> vector_ids, bool with_vector_data,
                                                               bool with_scalar_data,
                                                               std::vector<std::string> selected_scalar_keys,
+                                                              bool with_table_data,
                                                               std::vector<pb::common::VectorWithId>& vector_with_ids) {
   for (auto vector_id : vector_ids) {
     pb::common::VectorWithId vector_with_id;
@@ -544,6 +601,20 @@ butil::Status RaftStoreEngine::VectorReader::VectorBatchQuery(std::shared_ptr<Co
       auto status = QueryVectorScalarData(ctx->RegionId(), selected_scalar_keys, vector_with_id);
       if (!status.ok()) {
         DINGO_LOG(WARNING) << "Failed to query vector scalar data, id: " << vector_with_id.id()
+                           << ", status: " << status.error_str();
+      }
+    }
+  }
+
+  if (with_table_data) {
+    for (auto& vector_with_id : vector_with_ids) {
+      if (vector_with_id.ByteSizeLong() == 0) {
+        continue;
+      }
+
+      auto status = QueryVectorTableData(ctx->RegionId(), vector_with_id);
+      if (!status.ok()) {
+        DINGO_LOG(WARNING) << "Failed to query vector table data, id: " << vector_with_id.id()
                            << ", status: " << status.error_str();
       }
     }

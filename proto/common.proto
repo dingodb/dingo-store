@@ -79,10 +79,16 @@ message VectorScalardata {
   map<string, ScalarValue> scalar_data = 1;  // scalar data of this vector, key: scalar key, value: scalar value data.
 }
 
+message VectorTableData {
+  bytes table_key = 1;    // table primary key of this vector
+  bytes table_value = 2;  // table value of this vector
+}
+
 message VectorWithId {
   uint64 id = 1;
   Vector vector = 2;                 // vector data
   VectorScalardata scalar_data = 3;  // scalar data of this vector, key: scalar key, value: scalar value data.
+  VectorTableData table_data = 4;    // table data of this vector, only SQL can use this field
 }
 
 message VectorWithDistance {
@@ -498,6 +504,7 @@ message VectorSearchParameter {
   bool with_scalar_data = 3;          // Default false, if true, response with scalar data.
   repeated string selected_keys = 4;  // If with_scalar_data is true, selected_keys is used to select scalar data, if
                                       // this parameter is null, all scalar data will be returned.
+  bool with_table_data = 5;           // Default false, if true, response with table data
 
   // The search method to use.
   oneof search {

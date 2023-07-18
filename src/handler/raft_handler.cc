@@ -438,13 +438,22 @@ void VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr reg
       kv.set_value(vector.vector().SerializeAsString());
       kvs.push_back(kv);
     }
-    // vector scalardata
+    // vector scalar data
     {
       pb::common::KeyValue kv;
       std::string key;
       VectorCodec::EncodeVectorScalar(region->Id(), vector.id(), key);
       kv.mutable_key()->swap(key);
       kv.set_value(vector.scalar_data().SerializeAsString());
+      kvs.push_back(kv);
+    }
+    // vector table data
+    {
+      pb::common::KeyValue kv;
+      std::string key;
+      VectorCodec::EncodeVectorTable(region->Id(), vector.id(), key);
+      kv.mutable_key()->swap(key);
+      kv.set_value(vector.table_data().SerializeAsString());
       kvs.push_back(kv);
     }
   }
@@ -593,15 +602,24 @@ void VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr 
     std::string value;
     auto ret = reader->KvGet(snapshot, key, value);
     if (ret.ok()) {
+      // delete vector data
       {
         std::string key;
         VectorCodec::EncodeVectorId(region->Id(), request.ids(i), key);
         keys.push_back(key);
       }
 
+      // delete scalar data
       {
         std::string key;
         VectorCodec::EncodeVectorScalar(region->Id(), request.ids(i), key);
+        keys.push_back(key);
+      }
+
+      // delete table data
+      {
+        std::string key;
+        VectorCodec::EncodeVectorTable(region->Id(), request.ids(i), key);
         keys.push_back(key);
       }
 
