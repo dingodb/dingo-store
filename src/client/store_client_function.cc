@@ -245,6 +245,8 @@ void SendVectorBatchQuery(ServerInteractionPtr interaction, uint64_t region_id, 
   DINGO_LOG(INFO) << "VectorBatchQuery response: " << response.DebugString();
 }
 
+const int kKAddVectorBatchSize = 1024;
+
 void SendVectorAdd(ServerInteractionPtr interaction, uint64_t region_id, uint32_t dimension, uint32_t start_id,
                    uint32_t count) {
   dingodb::pb::index::VectorAddRequest request;
@@ -252,7 +254,8 @@ void SendVectorAdd(ServerInteractionPtr interaction, uint64_t region_id, uint32_
 
   request.set_region_id(region_id);
 
-  for (int i = start_id; i < start_id + count; ++i) {
+  int end_id = start_id + count;
+  for (int i = start_id; i < end_id; ++i) {
     auto* vector_with_id = request.add_vectors();
     vector_with_id->set_id(i);
     vector_with_id->mutable_vector()->set_dimension(dimension);
@@ -284,17 +287,21 @@ void SendVectorAdd(ServerInteractionPtr interaction, uint64_t region_id, uint32_
     }
   }
 
-  butil::Status status = interaction->SendRequest("IndexService", "VectorAdd", request, response);
-  int success_count = 0;
-  for (auto key_state : response.key_states()) {
-    if (key_state) {
-      ++success_count;
+  if ((i - start_id + 1) % kKAddVectorBatchSize == 0 || (i + 1) == end_id) {
+    DINGO_LOG(INFO) << "VectorAdd request";
+    butil::Status status = interaction->SendRequest("IndexService", "VectorAdd", request, response);
+    int success_count = 0;
+    for (auto key_state : response.key_states()) {
+      if (key_state) {
+        ++success_count;
+      }
     }
+    DINGO_LOG(INFO) << fmt::format(
+        "VectorAdd response success count: {} fail count: {} vector count: {} schedule: {}/{}", success_count,
+        response.key_states().size() - success_count, request.vectors().size(), i - start_id + 1, count);
+    request.clear_vectors();
   }
-
-  DINGO_LOG(INFO) << "VectorAdd repsonse error: " << response.error().DebugString();
-  DINGO_LOG(INFO) << fmt::format("VectorAdd response success count: {} fail count: {}", success_count,
-                                 response.key_states().size() - success_count);
+}
 }
 
 void SendVectorDelete(ServerInteractionPtr interaction, uint64_t region_id, uint32_t start_id, uint32_t count) {
