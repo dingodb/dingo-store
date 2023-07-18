@@ -385,6 +385,10 @@ butil::Status VectorIndexManager::RebuildVectorIndex(store::RegionPtr region, bo
                          "online_vector_index is not found, cannot do rebuild, try to set is_initial_build to true");
   }
 
+  // update vector index status rebuilding
+  online_vector_index->SetStatus(pb::common::VECTOR_INDEX_STATUS_REBUILDING);
+
+  uint64_t start_time = Helper::TimestampMs();
   // Build vector index with original all data.
   auto vector_index = BuildVectorIndex(region);
   if (vector_index == nullptr) {
@@ -392,9 +396,13 @@ butil::Status VectorIndexManager::RebuildVectorIndex(store::RegionPtr region, bo
     return butil::Status(pb::error::Errno::EINTERNAL, "Build vector index failed");
   }
 
+  DINGO_LOG(INFO) << fmt::format("Build vector index success, id {}, log_id {} elapsed time: {}ms", region->Id(),
+                                 vector_index->ApplyLogIndex(), Helper::TimestampMs() - start_time);
+
   // we want to eliminate the impact of the blocking during replay wal in catch-up round
   // so save is done before replay wal first-round
   if (need_save) {
+    start_time = Helper::TimestampMs();
     // save vector index to rocksdb
     uint64_t snapshot_log_index = 0;
     auto status = VectorIndexSnapshot::SaveVectorIndexSnapshot(vector_index, snapshot_log_index, true);
@@ -404,8 +412,12 @@ butil::Status VectorIndexManager::RebuildVectorIndex(store::RegionPtr region, bo
     } else {
       UpdateSnapshotLogIndex(vector_index, snapshot_log_index);
     }
+
+    DINGO_LOG(INFO) << fmt::format("Save vector index snapshot success, id {}, snapshot_log_id {} elapsed time: {}ms",
+                                   region->Id(), snapshot_log_index, Helper::TimestampMs() - start_time);
   }
 
+  start_time = Helper::TimestampMs();
   // first ground replay wal
   status = ReplayWalToVectorIndex(vector_index, vector_index->ApplyLogIndex() + 1, UINT64_MAX);
   if (!status.ok()) {
@@ -414,8 +426,8 @@ butil::Status VectorIndexManager::RebuildVectorIndex(store::RegionPtr region, bo
     return butil::Status(pb::error::Errno::EINTERNAL, "ReplayWal failed first-round");
   }
 
-  DINGO_LOG(INFO) << fmt::format("ReplayWal success first-round, id {}, log_id {}", region->Id(),
-                                 vector_index->ApplyLogIndex());
+  DINGO_LOG(INFO) << fmt::format("ReplayWal success first-round, id {}, log_id {} elapsed time: {}ms", region->Id(),
+                                 vector_index->ApplyLogIndex(), Helper::TimestampMs() - start_time);
 
   // set online_vector_index to offline, so it will reject all vector add/del, raft handler will usleep and try to
   // switch to new vector_index to add/del
@@ -423,6 +435,7 @@ butil::Status VectorIndexManager::RebuildVectorIndex(store::RegionPtr region, bo
     online_vector_index->SetOffline();
   }
 
+  start_time = Helper::TimestampMs();
   // second ground replay wal
   status = ReplayWalToVectorIndex(vector_index, vector_index->ApplyLogIndex() + 1, UINT64_MAX);
   if (!status.ok()) {
@@ -433,8 +446,8 @@ butil::Status VectorIndexManager::RebuildVectorIndex(store::RegionPtr region, bo
   // set the new vector_index's status to NORMAL
   vector_index->SetStatus(pb::common::VECTOR_INDEX_STATUS_NORMAL);
 
-  DINGO_LOG(INFO) << fmt::format("ReplayWal success catch-up round, id {}, log_id {}", region->Id(),
-                                 vector_index->ApplyLogIndex());
+  DINGO_LOG(INFO) << fmt::format("ReplayWal success catch-up round, id {}, log_id {} elapsed time: {}ms", region->Id(),
+                                 vector_index->ApplyLogIndex(), Helper::TimestampMs() - start_time);
 
   // set vector index to vector index map
   int ret = vector_indexs_.PutIfExists(region->Id(), vector_index);
