@@ -77,10 +77,6 @@ class Engine {
     VectorReader() = default;
     virtual ~VectorReader() = default;
 
-    virtual butil::Status VectorSearch(std::shared_ptr<Context> ctx, const pb::common::VectorWithId& vector,
-                                       pb::common::VectorSearchParameter parameter,
-                                       std::vector<pb::common::VectorWithDistance>& vectors) = 0;
-
     virtual butil::Status VectorBatchSearch(std::shared_ptr<Context> ctx,
                                             const std::vector<pb::common::VectorWithId>& vector_with_ids,
                                             pb::common::VectorSearchParameter parameter,

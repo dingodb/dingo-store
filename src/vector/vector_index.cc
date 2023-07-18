@@ -16,96 +16,13 @@
 
 #include "butil/status.h"
 #include "proto/common.pb.h"
+#include "proto/error.pb.h"
 
 namespace dingodb {
 
 VectorIndex::~VectorIndex() = default;
 
 pb::common::VectorIndexType VectorIndex::VectorIndexType() const { return vector_index_type; }
-
-butil::Status VectorIndex::BatchSearch(std::vector<pb::common::VectorWithId> vector_with_ids, uint32_t topk,
-                                       std::vector<pb::index::VectorWithDistanceResult>& results, bool reconstruct) {
-  for (auto& vector_with_id : vector_with_ids) {
-    std::vector<float> vector;
-    for (auto value : vector_with_id.vector().float_values()) {
-      vector.push_back(value);
-    }
-
-    std::vector<pb::common::VectorWithDistance> vector_with_distances;
-    Search(vector, topk, vector_with_distances, reconstruct);
-
-    // build results
-    pb::index::VectorWithDistanceResult vector_with_distance_result;
-    for (auto& vector_with_distance : vector_with_distances) {
-      auto* new_result = vector_with_distance_result.add_vector_with_distances();
-      new_result->Swap(&vector_with_distance);
-    }
-    results.push_back(std::move(vector_with_distance_result));
-  }
-
-  return butil::Status::OK();
-}
-
-butil::Status VectorIndex::Search([[maybe_unused]] pb::common::VectorWithId vector_with_id,
-                                  [[maybe_unused]] uint32_t topk, std::vector<pb::common::VectorWithDistance>& results,
-                                  [[maybe_unused]] bool reconstruct) {
-  std::vector<float> vector;
-  for (auto value : vector_with_id.vector().float_values()) {
-    vector.push_back(value);
-  }
-
-  return Search(vector, topk, results, reconstruct);
-}
-
-butil::Status VectorIndex::Upsert(const std::vector<pb::common::VectorWithId>& vector_with_ids) {
-  for (const auto& vector_with_id : vector_with_ids) {
-    auto ret = Upsert(vector_with_id);
-    if (!ret.ok()) {
-      return ret;
-    }
-  }
-
-  return butil::Status::OK();
-}
-
-butil::Status VectorIndex::Upsert(const pb::common::VectorWithId& vector_with_id) {
-  std::vector<float> vector;
-  for (const auto& value : vector_with_id.vector().float_values()) {
-    vector.push_back(value);
-  }
-
-  return Upsert(vector_with_id.id(), vector);
-}
-
-butil::Status VectorIndex::Add(const std::vector<pb::common::VectorWithId>& vector_with_ids) {
-  for (const auto& vector_with_id : vector_with_ids) {
-    auto ret = Add(vector_with_id);
-    if (!ret.ok()) {
-      return ret;
-    }
-  }
-  return butil::Status::OK();
-}
-
-butil::Status VectorIndex::Add(const pb::common::VectorWithId& vector_with_id) {
-  std::vector<float> vector;
-  for (const auto& value : vector_with_id.vector().float_values()) {
-    vector.push_back(value);
-  }
-
-  return Add(vector_with_id.id(), vector);
-}
-
-butil::Status VectorIndex::DeleteBatch(const std::vector<uint64_t>& delete_ids) {
-  for (auto id : delete_ids) {
-    auto ret = Delete(id);
-    if (!ret.ok()) {
-      return ret;
-    }
-  }
-
-  return butil::Status::OK();
-}
 
 void VectorIndex::SetSnapshotLogIndex(uint64_t snapshot_log_index) {
   this->snapshot_log_index.store(snapshot_log_index, std::memory_order_relaxed);

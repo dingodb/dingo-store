@@ -54,24 +54,17 @@ class VectorIndexFlat : public VectorIndex {
   butil::Status Load(const std::string& path) override;
 
   // in FLAT index, add two vector with same id will cause data conflict
-  butil::Status Add(uint64_t id, const std::vector<float>& vector) override;
+  butil::Status Add(const std::vector<pb::common::VectorWithId>& vector_with_ids) override;
+
+  butil::Status AddOrUpsert(const std::vector<pb::common::VectorWithId>& vector_with_ids, bool is_upsert);
 
   // not exist add. if exist update
   butil::Status Upsert(const std::vector<pb::common::VectorWithId>& vector_with_ids) override;
-  butil::Status Upsert(uint64_t id, const std::vector<float>& vector) override;
 
-  butil::Status Delete(uint64_t id) override;
-  butil::Status DeleteBatch(const std::vector<uint64_t>& delete_ids) override;
+  butil::Status Delete(const std::vector<uint64_t>& delete_ids) override;
 
-  butil::Status Search(const std::vector<float>& vector, uint32_t topk,
-                       std::vector<pb::common::VectorWithDistance>& results, bool reconstruct = false) override;
-
-  butil::Status Search(pb::common::VectorWithId vector_with_id, uint32_t topk,
-                       std::vector<pb::common::VectorWithDistance>& results, bool reconstruct = false) override;
-
-  butil::Status BatchSearch(std::vector<pb::common::VectorWithId> vector_with_ids, uint32_t topk,
-                            std::vector<pb::index::VectorWithDistanceResult>& results,
-                            bool reconstruct = false) override;
+  butil::Status Search(std::vector<pb::common::VectorWithId> vector_with_ids, uint32_t topk,
+                       std::vector<pb::index::VectorWithDistanceResult>& results, bool reconstruct = false) override;
 
   butil::Status SetOnline() override;
   butil::Status SetOffline() override;

@@ -45,12 +45,10 @@ class VectorIndexHnsw : public VectorIndex {
   VectorIndexHnsw(VectorIndexHnsw&& rhs) = delete;
   VectorIndexHnsw& operator=(VectorIndexHnsw&& rhs) = delete;
 
-  butil::Status Add(uint64_t id, const std::vector<float>& vector) override;
-
   butil::Status Upsert(const std::vector<pb::common::VectorWithId>& vector_with_ids) override;
-  butil::Status Upsert(uint64_t id, const std::vector<float>& vector) override;
-  butil::Status Delete(uint64_t id) override;
-  butil::Status DeleteBatch(const std::vector<uint64_t>& delete_ids) override;
+  butil::Status Add(const std::vector<pb::common::VectorWithId>& vector_with_ids) override;
+
+  butil::Status Delete(const std::vector<uint64_t>& delete_ids) override;
 
   butil::Status Save(const std::string& path) override;
   butil::Status Load(const std::string& path) override;
@@ -62,11 +60,8 @@ class VectorIndexHnsw : public VectorIndex {
   void LockWrite() override;
   void UnlockWrite() override;
 
-  butil::Status Search(const std::vector<float>& vector, uint32_t topk,
-                       std::vector<pb::common::VectorWithDistance>& results, bool reconstruct = false) override;
-  butil::Status BatchSearch(std::vector<pb::common::VectorWithId> vector_with_ids, uint32_t topk,
-                            std::vector<pb::index::VectorWithDistanceResult>& results,
-                            bool reconstruct = false) override;
+  butil::Status Search(std::vector<pb::common::VectorWithId> vector_with_ids, uint32_t topk,
+                       std::vector<pb::index::VectorWithDistanceResult>& results, bool reconstruct = false) override;
 
   butil::Status GetCount([[maybe_unused]] uint64_t& count) override;
   butil::Status NeedToRebuild([[maybe_unused]] bool& need_to_rebuild,

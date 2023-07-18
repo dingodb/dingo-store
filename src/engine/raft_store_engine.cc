@@ -348,7 +348,7 @@ butil::Status RaftStoreEngine::VectorReader::SearchVector(
   bool with_vector_data = !(parameter.without_vector_data());
   std::vector<pb::index::VectorWithDistanceResult> tmp_results;
 
-  vector_index->BatchSearch(vector_with_ids, top_n, tmp_results, with_vector_data);
+  vector_index->Search(vector_with_ids, top_n, tmp_results, with_vector_data);
 
   if (use_scalar_filter) {
     for (auto& vector_with_distance_result : tmp_results) {
@@ -488,56 +488,6 @@ butil::Status RaftStoreEngine::VectorReader::CompareVectorScalarData(
   }
 
   compare_result = true;
-  return butil::Status();
-}
-
-butil::Status RaftStoreEngine::VectorReader::VectorSearch(
-    std::shared_ptr<Context> ctx, const pb::common::VectorWithId& vector_with_id,
-    pb::common::VectorSearchParameter parameter, std::vector<pb::common::VectorWithDistance>& vector_with_distances) {
-  if (vector_with_id.id() > 0) {
-    // Search vector by id
-    pb::common::VectorWithId tmp_vector_with_id;
-    auto status =
-        QueryVectorWithId(ctx->RegionId(), vector_with_id.id(), tmp_vector_with_id, !parameter.without_vector_data());
-    if (!status.ok()) {
-      return status;
-    }
-
-    pb::common::VectorWithDistance vector_with_distance;
-    vector_with_distance.mutable_vector_with_id()->Swap(&tmp_vector_with_id);
-    vector_with_distances.push_back(vector_with_distance);
-  } else {
-    // build vector with ids
-    std::vector<pb::common::VectorWithId> vector_with_ids;
-    vector_with_ids.push_back(vector_with_id);
-
-    // build vector with distance results
-    std::vector<pb::index::VectorWithDistanceResult> vector_with_distance_results;
-
-    // Search vectors by vectors
-    auto status = SearchVector(ctx->RegionId(), vector_with_ids, parameter, vector_with_distance_results);
-    if (!status.ok()) {
-      return status;
-    }
-
-    // build vector with distances
-    for (auto& vector_with_distance_result : vector_with_distance_results) {
-      for (auto& vector_with_distance : *vector_with_distance_result.mutable_vector_with_distances()) {
-        vector_with_distances.push_back(vector_with_distance);
-      }
-      break;  // only the first result is needed
-    }
-  }
-
-  if (parameter.with_scalar_data()) {
-    // Get metadata by parameter
-    std::vector<std::string> selected_scalar_keys = Helper::PbRepeatedToVector(parameter.selected_keys());
-    auto status = QueryVectorScalarData(ctx->RegionId(), selected_scalar_keys, vector_with_distances);
-    if (!status.ok()) {
-      return status;
-    }
-  }
-
   return butil::Status();
 }
 

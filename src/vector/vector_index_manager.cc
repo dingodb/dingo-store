@@ -224,14 +224,20 @@ butil::Status VectorIndexManager::ReplayWalToVectorIndex(std::shared_ptr<VectorI
     CHECK(raft_cmd->ParseFromZeroCopyStream(&wrapper));
     for (const auto& request : raft_cmd->requests()) {
       switch (request.cmd_type()) {
-        case pb::raft::VECTOR_ADD:
+        case pb::raft::VECTOR_ADD: {
+          std::vector<pb::common::VectorWithId> vectors;
           for (const auto& vector_with_id : request.vector_add().vectors()) {
-            vector_index->Upsert(vector_with_id);
+            vectors.push_back(vector_with_id);
           }
-        case pb::raft::VECTOR_DELETE:
+          vector_index->Upsert(vectors);
+        } break;
+        case pb::raft::VECTOR_DELETE: {
+          std::vector<uint64_t> ids;
           for (auto vector_id : request.vector_delete().ids()) {
-            vector_index->Delete(vector_id);
+            ids.push_back(vector_id);
           }
+          vector_index->Delete(ids);
+        } break;
         default:
           break;
       }
@@ -296,7 +302,10 @@ std::shared_ptr<VectorIndex> VectorIndexManager::BuildVectorIndex(store::RegionP
       continue;
     }
 
-    vector_index->Upsert(vector);
+    std::vector<pb::common::VectorWithId> vectors;
+    vectors.push_back(vector);
+
+    vector_index->Upsert(vectors);
   }
 
   return vector_index;

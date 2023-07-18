@@ -135,6 +135,10 @@ butil::Status ValidateVectorSearchRequest(const dingodb::pb::index::VectorSearch
                                      FLAGS_vector_max_bactch_count));
   }
 
+  if (request->parameter().top_n() < 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param top_n is error");
+  }
+
   return ServiceHelper::ValidateIndexRegion(request->region_id());
 }
 
@@ -162,8 +166,12 @@ void IndexServiceImpl::VectorSearch(google::protobuf::RpcController* controller,
   ctx->SetRegionId(request->region_id()).SetCfName(Constant::kStoreDataCF);
 
   if (request->vector_with_ids_size() <= 0) {
-    std::vector<pb::common::VectorWithDistance> vector_results;
-    status = storage_->VectorSearch(ctx, request->vector(), request->parameter(), vector_results);
+    std::vector<pb::common::VectorWithId> vector_with_ids;
+    vector_with_ids.push_back(request->vector());
+
+    std::vector<pb::index::VectorWithDistanceResult> vector_results;
+
+    status = storage_->VectorBatchSearch(ctx, vector_with_ids, request->parameter(), vector_results);
     if (!status.ok()) {
       auto* err = response->mutable_error();
       err->set_errcode(static_cast<Errno>(status.error_code()));
@@ -178,7 +186,7 @@ void IndexServiceImpl::VectorSearch(google::protobuf::RpcController* controller,
     }
 
     for (auto& vector_result : vector_results) {
-      response->add_results()->CopyFrom(vector_result);
+      response->add_batch_results()->CopyFrom(vector_result);
     }
   } else {
     std::vector<pb::common::VectorWithId> vector_with_ids;

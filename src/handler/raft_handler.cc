@@ -467,7 +467,16 @@ void VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr reg
     stop_flag = true;
 
     try {
+      auto start = std::chrono::steady_clock::now();
+
       auto ret = vector_index->Upsert(vector_with_ids);
+
+      auto end = std::chrono::steady_clock::now();
+
+      auto diff = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+      DINGO_LOG(INFO) << fmt::format("vector_index upsert {} vectors, cost {} us, region_id={}", vector_with_ids.size(),
+                                     diff, region->Id());
+
       if (ret.error_code() == pb::error::Errno::EVECTOR_INDEX_OFFLINE) {
         // do not stop while, wait for a while and retry full raft log
         stop_flag = false;
@@ -611,7 +620,7 @@ void VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr 
 
     // delete vector from index
     try {
-      auto ret = vector_index->DeleteBatch(delete_ids);
+      auto ret = vector_index->Delete(delete_ids);
       if (ret.error_code() == pb::error::Errno::EVECTOR_INDEX_OFFLINE) {
         // do not stop while, wait for a while and retry full raft log
         stop_flag = false;
