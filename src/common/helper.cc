@@ -32,6 +32,7 @@
 #include <regex>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -615,12 +616,17 @@ pb::common::Peer Helper::GetPeerInfo(const butil::EndPoint& endpoint) {
 }
 
 uint64_t Helper::GenerateRandomInteger(uint64_t min_value, uint64_t max_value) {
-  std::random_device rd;   // obtain a random seed from the hardware
-  std::mt19937 gen(rd());  // seed the generator
+  std::mt19937 rng;
+  std::uniform_real_distribution<> distrib(min_value, max_value);
 
-  std::uniform_int_distribution<> dis(min_value, max_value);  // define the range
+  return distrib(rng);
+}
 
-  return dis(gen);  // generate the random number
+float Helper::GenerateRandomFloat(float min_value, float max_value) {
+  std::mt19937 rng;
+  std::uniform_real_distribution<> distrib(min_value, max_value);
+
+  return distrib(rng);
 }
 
 std::string Helper::GenerateRandomString(int length) {

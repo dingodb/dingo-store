@@ -141,15 +141,8 @@ VectorIndexHnsw::~VectorIndexHnsw() {
   bthread_mutex_destroy(&mutex_);
 }
 
-butil::Status VectorIndexHnsw::Add(uint64_t id, const std::vector<float>& vector) {
-  // check is_online
-  if (!is_online_.load()) {
-    std::string s = fmt::format("vector index is offline, please wait for online");
-    DINGO_LOG(ERROR) << s;
-    return butil::Status(pb::error::Errno::EVECTOR_INDEX_OFFLINE, s);
-  }
-
-  return Upsert(id, vector);
+butil::Status VectorIndexHnsw::Add(const std::vector<pb::common::VectorWithId>& vector_with_ids) {
+  return Upsert(vector_with_ids);
 }
 
 butil::Status VectorIndexHnsw::Upsert(const std::vector<pb::common::VectorWithId>& vector_with_ids) {
@@ -206,45 +199,7 @@ butil::Status VectorIndexHnsw::Upsert(const std::vector<pb::common::VectorWithId
   return ret;
 }
 
-butil::Status VectorIndexHnsw::Upsert(uint64_t id, const std::vector<float>& vector) {
-  // check is_online
-  if (!is_online_.load()) {
-    std::string s = fmt::format("vector index is offline, please wait for online");
-    DINGO_LOG(ERROR) << s;
-    return butil::Status(pb::error::Errno::EVECTOR_INDEX_OFFLINE, s);
-  }
-
-  BAIDU_SCOPED_LOCK(mutex_);
-
-  if (vector_index_type == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
-    if (vector.size() != this->dimension_) {
-      DINGO_LOG(ERROR) << "vector dimension is not match, id=" << id << ", input dimension=" << vector.size() << ", "
-                       << "index dimension=" << this->dimension_;
-      return butil::Status(pb::error::Errno::EINTERNAL, "vector dimension is not match");
-    }
-
-    try {
-      hnsw_index_->addPoint(vector.data(), id, true);
-    } catch (std::runtime_error& e) {
-      if (std::string(e.what()) == "The number of elements exceeds the specified limit") {
-        DINGO_LOG(ERROR) << "upsert vector failed, exceeds limit, id=" << id << ", what=" << e.what();
-        return butil::Status(pb::error::Errno::EVECTOR_INDEX_FULL, std::string(e.what()));
-      } else {
-        DINGO_LOG(ERROR) << "upsert vector failed, id=" << id << ", what=" << e.what();
-        return butil::Status(pb::error::Errno::EINTERNAL, std::string(e.what()));
-      }
-    } catch (std::exception& e) {
-      DINGO_LOG(ERROR) << "upsert vector failed, id=" << id << ", what=" << e.what();
-      return butil::Status(pb::error::Errno::EINTERNAL, std::string(e.what()));
-    }
-
-    return butil::Status::OK();
-  } else {
-    return butil::Status(pb::error::Errno::EINTERNAL, "vector index type is not supported");
-  }
-}
-
-butil::Status VectorIndexHnsw::DeleteBatch(const std::vector<uint64_t>& delete_ids) {
+butil::Status VectorIndexHnsw::Delete(const std::vector<uint64_t>& delete_ids) {
   // check is_online
   if (!is_online_.load()) {
     std::string s = fmt::format("vector index is offline, please wait for online");
@@ -273,36 +228,6 @@ butil::Status VectorIndexHnsw::DeleteBatch(const std::vector<uint64_t>& delete_i
   return ret;
 }
 
-butil::Status VectorIndexHnsw::Delete(uint64_t id) {
-  // check is_online
-  if (!is_online_.load()) {
-    std::string s = fmt::format("vector index is offline, please wait for online");
-    DINGO_LOG(ERROR) << s;
-    return butil::Status(pb::error::Errno::EVECTOR_INDEX_OFFLINE, s);
-  }
-
-  BAIDU_SCOPED_LOCK(mutex_);
-
-  if (vector_index_type == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
-    try {
-      hnsw_index_->markDelete(id);
-    } catch (std::runtime_error& e) {
-      if (std::string(e.what()) == "Label not found") {
-        DINGO_LOG(ERROR) << "delete vector failed, not found, id=" << id << ", what=" << e.what();
-        return butil::Status(pb::error::Errno::EVECTOR_NOT_FOUND, std::string(e.what()));
-      } else {
-        DINGO_LOG(ERROR) << "delete vector failed, id=" << id << ", what=" << e.what();
-        return butil::Status(pb::error::Errno::EINTERNAL, std::string(e.what()));
-      }
-    } catch (std::exception& e) {
-      DINGO_LOG(ERROR) << "delete vector failed, id=" << id << ", what=" << e.what();
-      return butil::Status(pb::error::Errno::EINTERNAL, std::string(e.what()));
-    }
-  }
-
-  return butil::Status::OK();
-}
-
 butil::Status VectorIndexHnsw::Save(const std::string& path) {
   // Save need the caller to do LockWrite() and UnlockWrite()
   if (vector_index_type == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
@@ -328,8 +253,8 @@ butil::Status VectorIndexHnsw::Load(const std::string& path) {
   }
 }
 
-butil::Status VectorIndexHnsw::Search(const std::vector<float>& vector, uint32_t topk,
-                                      std::vector<pb::common::VectorWithDistance>& results, bool reconstruct) {
+butil::Status VectorIndexHnsw::Search(std::vector<pb::common::VectorWithId> vector_with_ids, uint32_t topk,
+                                      std::vector<pb::index::VectorWithDistanceResult>& results, bool reconstruct) {
   // check is_online
   if (!is_online_.load()) {
     std::string s = fmt::format("vector index is offline, please wait for online");
@@ -337,59 +262,14 @@ butil::Status VectorIndexHnsw::Search(const std::vector<float>& vector, uint32_t
     return butil::Status(pb::error::Errno::EVECTOR_INDEX_OFFLINE, s);
   }
 
-  if (vector_index_type == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
-    // std::priority_queue<std::pair<float, uint64_t>> result = hnsw_index_->searchKnn(vector.data(), topk);
-
-    if (vector.size() != this->dimension_) {
-      return butil::Status(pb::error::Errno::EINTERNAL, "vector dimension is not match, input=%zu, index=%d",
-                           vector.size(), this->dimension_);
-    }
-
-    std::priority_queue<std::pair<float, uint64_t>> result = hnsw_index_->searchKnn(vector.data(), topk);
-
-    DINGO_LOG(DEBUG) << "result.size() = " << result.size();
-
-    while (!result.empty()) {
-      pb::common::VectorWithDistance vector_with_distance;
-      vector_with_distance.set_distance(result.top().first);
-      vector_with_distance.set_metric_type(this->vector_index_parameter.hnsw_parameter().metric_type());
-
-      auto* vector_with_id = vector_with_distance.mutable_vector_with_id();
-
-      vector_with_id->set_id(result.top().second);
-      vector_with_id->mutable_vector()->set_dimension(dimension_);
-      vector_with_id->mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
-
-      if (reconstruct) {
-        try {
-          std::vector<float> data = hnsw_index_->getDataByLabel<float>(result.top().second);
-          for (auto& value : data) {
-            vector_with_id->mutable_vector()->add_float_values(value);
-          }
-          results.push_back(vector_with_distance);
-        } catch (std::exception& e) {
-          DINGO_LOG(ERROR) << "getDataByLabel failed, label: " << result.top().second << " err: " << e.what();
-        }
-      } else {
-        results.push_back(vector_with_distance);
-      }
-
-      result.pop();
-    }
+  if (vector_with_ids.empty()) {
+    DINGO_LOG(WARNING) << "vector_with_ids is empty";
     return butil::Status::OK();
-  } else {
-    return butil::Status(pb::error::Errno::EINTERNAL, "vector index type is not supported");
   }
-}
 
-butil::Status VectorIndexHnsw::BatchSearch(std::vector<pb::common::VectorWithId> vector_with_ids, uint32_t topk,
-                                           std::vector<pb::index::VectorWithDistanceResult>& results,
-                                           bool reconstruct) {
-  // check is_online
-  if (!is_online_.load()) {
-    std::string s = fmt::format("vector index is offline, please wait for online");
-    DINGO_LOG(ERROR) << s;
-    return butil::Status(pb::error::Errno::EVECTOR_INDEX_OFFLINE, s);
+  if (topk == 0) {
+    DINGO_LOG(WARNING) << "topk is invalid";
+    return butil::Status::OK();
   }
 
   if (vector_index_type != pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
@@ -417,6 +297,10 @@ butil::Status VectorIndexHnsw::BatchSearch(std::vector<pb::common::VectorWithId>
   }
 
   for (size_t row = 0; row < vector_with_ids.size(); ++row) {
+    if (vector_with_ids[row].vector().float_values_size() != this->dimension_) {
+      return butil::Status(pb::error::Errno::EVECTOR_INVALID, "vector dimension is not match, input=%d, index=%d",
+                           vector_with_ids[row].vector().float_values_size(), this->dimension_);
+    }
     for (size_t col = 0; col < this->dimension_; ++col) {
       data.get()[row * this->dimension_ + col] = vector_with_ids[row].vector().float_values().at(col);
     }

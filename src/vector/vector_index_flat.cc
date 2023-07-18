@@ -61,28 +61,8 @@ VectorIndexFlat::~VectorIndexFlat() {
   bthread_mutex_destroy(&mutex_);
 }
 
-butil::Status VectorIndexFlat::Add(uint64_t id, const std::vector<float>& vector) {
-  // check is_online
-  if (!is_online_.load()) {
-    std::string s = fmt::format("vector index is offline, please wait for online");
-    DINGO_LOG(ERROR) << s;
-    return butil::Status(pb::error::Errno::EVECTOR_INDEX_OFFLINE, s);
-  }
-
-  // check
-  if (vector.size() != static_cast<size_t>(dimension_)) {
-    std::string s =
-        fmt::format("Flat : float size : {} not equal to  dimension(create) : {}", vector.size(), dimension_);
-    DINGO_LOG(ERROR) << s;
-    return butil::Status(pb::error::Errno::EVECTOR_INVALID, s);
-  }
-
-  BAIDU_SCOPED_LOCK(mutex_);
-  index_->add_with_ids(1, vector.data(), reinterpret_cast<faiss::idx_t*>(&id));
-  return butil::Status::OK();
-}
-
-butil::Status VectorIndexFlat::Upsert(const std::vector<pb::common::VectorWithId>& vector_with_ids) {
+butil::Status VectorIndexFlat::AddOrUpsert(const std::vector<pb::common::VectorWithId>& vector_with_ids,
+                                           bool is_upsert) {
   // check is_online
   if (!is_online_.load()) {
     std::string s = fmt::format("vector index is offline, please wait for online");
@@ -116,10 +96,12 @@ butil::Status VectorIndexFlat::Upsert(const std::vector<pb::common::VectorWithId
     ids.get()[i] = static_cast<faiss::idx_t>(vector_with_ids[i].id());
   }
 
-  faiss::IDSelectorArray sel(vector_with_ids.size(), ids.get());
-
   BAIDU_SCOPED_LOCK(mutex_);
-  index_->remove_ids(sel);
+
+  if (is_upsert) {
+    faiss::IDSelectorArray sel(vector_with_ids.size(), ids.get());
+    index_->remove_ids(sel);
+  }
 
   std::unique_ptr<float> vectors;
   try {
@@ -141,33 +123,15 @@ butil::Status VectorIndexFlat::Upsert(const std::vector<pb::common::VectorWithId
   return butil::Status::OK();
 }
 
-butil::Status VectorIndexFlat::Upsert(uint64_t id, const std::vector<float>& vector) {
-  // check is_online
-  if (!is_online_.load()) {
-    std::string s = fmt::format("vector index is offline, please wait for online");
-    DINGO_LOG(ERROR) << s;
-    return butil::Status(pb::error::Errno::EVECTOR_INDEX_OFFLINE, s);
-  }
-
-  // check
-  if (vector.size() != static_cast<size_t>(dimension_)) {
-    std::string s =
-        fmt::format("Flat : float size : {} not equal to  dimension(create) : {}", vector.size(), dimension_);
-    DINGO_LOG(ERROR) << s;
-    return butil::Status(pb::error::Errno::EVECTOR_INVALID, s);
-  }
-
-  std::array<faiss::idx_t, 1> ids{static_cast<faiss::idx_t>(id)};
-  faiss::IDSelectorArray sel(ids.size(), ids.data());
-
-  BAIDU_SCOPED_LOCK(mutex_);
-  index_->remove_ids(sel);
-  index_->add_with_ids(1, vector.data(), reinterpret_cast<faiss::idx_t*>(&id));
-
-  return butil::Status::OK();
+butil::Status VectorIndexFlat::Upsert(const std::vector<pb::common::VectorWithId>& vector_with_ids) {
+  return AddOrUpsert(vector_with_ids, true);
 }
 
-butil::Status VectorIndexFlat::DeleteBatch(const std::vector<uint64_t>& delete_ids) {
+butil::Status VectorIndexFlat::Add(const std::vector<pb::common::VectorWithId>& vector_with_ids) {
+  return AddOrUpsert(vector_with_ids, false);
+}
+
+butil::Status VectorIndexFlat::Delete(const std::vector<uint64_t>& delete_ids) {
   // check is_online
   if (!is_online_.load()) {
     std::string s = fmt::format("vector index is offline, please wait for online");
@@ -204,117 +168,9 @@ butil::Status VectorIndexFlat::DeleteBatch(const std::vector<uint64_t>& delete_i
   return butil::Status::OK();
 }
 
-butil::Status VectorIndexFlat::Delete(uint64_t id) {
-  // check is_online
-  if (!is_online_.load()) {
-    std::string s = fmt::format("vector index is offline, please wait for online");
-    DINGO_LOG(ERROR) << s;
-    return butil::Status(pb::error::Errno::EVECTOR_INDEX_OFFLINE, s);
-  }
-
-  std::array<faiss::idx_t, 1> ids{static_cast<faiss::idx_t>(id)};
-  faiss::IDSelectorArray sel(ids.size(), ids.data());
-  size_t remove_count = 0;
-
-  {
-    BAIDU_SCOPED_LOCK(mutex_);
-    remove_count = index_->remove_ids(sel);
-  }
-
-  if (0 == remove_count) {
-    DINGO_LOG(ERROR) << fmt::format("not found id : {}", id);
-    return butil::Status(pb::error::Errno::EVECTOR_INVALID, fmt::format("not found : {}", id));
-  }
-
-  return butil::Status::OK();
-}
-
-butil::Status VectorIndexFlat::Search(const std::vector<float>& vector, uint32_t topk,
-                                      std::vector<pb::common::VectorWithDistance>& results,
-                                      [[maybe_unused]] bool reconstruct) {  // NOLINT
-                                                                            // check is_online
-  if (!is_online_.load()) {
-    std::string s = fmt::format("vector index is offline, please wait for online");
-    DINGO_LOG(ERROR) << s;
-    return butil::Status(pb::error::Errno::EVECTOR_INDEX_OFFLINE, s);
-  }
-
-  std::vector<faiss::Index::distance_t> distances;
-  distances.resize(topk, 0.0f);
-  std::vector<faiss::idx_t> labels;
-  labels.resize(topk, -1);
-
-  {
-    BAIDU_SCOPED_LOCK(mutex_);
-    index_->search(1, vector.data(), topk, distances.data(), labels.data());
-  }
-
-  results.clear();
-
-  for (size_t i = 0; i < topk; i++) {
-    if (labels[i] < 0) {
-      continue;
-    }
-    pb::common::VectorWithDistance vector_with_distance;
-    auto* vector_with_id = vector_with_distance.mutable_vector_with_id();
-    vector_with_id->set_id(labels[i]);
-    vector_with_id->mutable_vector()->set_dimension(dimension_);
-    vector_with_id->mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
-    vector_with_distance.set_distance(distances[i]);
-    vector_with_distance.set_metric_type(metric_type_);
-
-    results.emplace_back(std::move(vector_with_distance));
-  }
-
-  DINGO_LOG(DEBUG) << "result.size() = " << results.size();
-
-  return butil::Status::OK();
-}
-
-butil::Status VectorIndexFlat::Search(pb::common::VectorWithId vector_with_id, uint32_t topk,
-                                      std::vector<pb::common::VectorWithDistance>& results,
+butil::Status VectorIndexFlat::Search(std::vector<pb::common::VectorWithId> vector_with_ids, uint32_t topk,
+                                      std::vector<pb::index::VectorWithDistanceResult>& results,
                                       [[maybe_unused]] bool reconstruct) {
-  // check is_online
-  if (!is_online_.load()) {
-    std::string s = fmt::format("vector index is offline, please wait for online");
-    DINGO_LOG(ERROR) << s;
-    return butil::Status(pb::error::Errno::EVECTOR_INDEX_OFFLINE, s);
-  }
-
-  dingodb::pb::common::ValueType value_type = vector_with_id.vector().value_type();
-
-  if (value_type != dingodb::pb::common::ValueType::FLOAT) {
-    std::string s = fmt::format("Flat : {} only support float vector. not support binary vector now!",
-                                static_cast<int>(value_type));
-    DINGO_LOG(ERROR) << s;
-    return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, s);
-  }
-
-  std::vector<float> vector;
-  for (const auto& value : vector_with_id.vector().float_values()) {
-    vector.emplace_back(value);
-  }
-
-  // check again
-  if (vector.size() != static_cast<size_t>(dimension_)) {
-    std::string s =
-        fmt::format("Flat : float size : {} not equal to  dimension(create) : {}", vector.size(), dimension_);
-    DINGO_LOG(ERROR) << s;
-    return butil::Status(pb::error::Errno::EVECTOR_INVALID, s);
-  }
-
-  if (0 == topk) {
-    std::string s = fmt::format("Flat : topk is zero. not support");
-    DINGO_LOG(ERROR) << s;
-    return butil::Status(pb::error::Errno::EVECTOR_INVALID, s);
-  }
-
-  return Search(vector, topk, results);
-}
-
-butil::Status VectorIndexFlat::BatchSearch(std::vector<pb::common::VectorWithId> vector_with_ids, uint32_t topk,
-                                           std::vector<pb::index::VectorWithDistanceResult>& results,
-                                           [[maybe_unused]] bool reconstruct) {
   if (!is_online_.load()) {
     std::string s = fmt::format("vector index is offline, please wait for online");
     DINGO_LOG(ERROR) << s;
@@ -324,6 +180,16 @@ butil::Status VectorIndexFlat::BatchSearch(std::vector<pb::common::VectorWithId>
   if (vector_with_ids.empty()) {
     DINGO_LOG(WARNING) << "vector_with_ids is empty";
     return butil::Status::OK();
+  }
+
+  if (topk == 0) {
+    DINGO_LOG(WARNING) << "topk is invalid";
+    return butil::Status::OK();
+  }
+
+  if (vector_with_ids[0].vector().float_values_size() != this->dimension_) {
+    return butil::Status(pb::error::Errno::EINTERNAL, "vector dimension is not match, input=%d, index=%ld",
+                         vector_with_ids[0].vector().float_values_size(), this->dimension_);
   }
 
   std::vector<faiss::Index::distance_t> distances;
@@ -342,8 +208,20 @@ butil::Status VectorIndexFlat::BatchSearch(std::vector<pb::common::VectorWithId>
   }
 
   for (size_t i = 0; i < vector_with_ids.size(); ++i) {
-    const auto& vector = vector_with_ids[i].vector().float_values();
-    memcpy(vectors.get() + i * dimension_, vector.data(), dimension_ * sizeof(float));
+    if (vector_with_ids[i].vector().float_values_size() != this->dimension_) {
+      DINGO_LOG(ERROR) << fmt::format(
+          "vector dimension is not equal to index dimension, vector id : {}, float_value_zie: {}, index dimension: {}",
+          vector_with_ids[i].id(), vector_with_ids[i].vector().float_values_size(), this->dimension_);
+
+      return butil::Status(
+          pb::error::Errno::EVECTOR_INVALID,
+          fmt::format("vector dimension is not equal to index dimension, vector id : {}, "
+                      "float_value_zie: {}, index dimension: {}",
+                      vector_with_ids[i].id(), vector_with_ids[i].vector().float_values_size(), this->dimension_));
+    } else {
+      const auto& vector = vector_with_ids[i].vector().float_values();
+      memcpy(vectors.get() + i * dimension_, vector.data(), dimension_ * sizeof(float));
+    }
   }
 
   {

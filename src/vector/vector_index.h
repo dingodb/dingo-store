@@ -60,33 +60,20 @@ class VectorIndex {
                                       [[maybe_unused]] uint64_t last_save_log_behind);
   virtual butil::Status NeedToSave([[maybe_unused]] bool& need_to_save, [[maybe_unused]] uint64_t last_save_log_behind);
 
-  virtual butil::Status Add(const std::vector<pb::common::VectorWithId>& vector_with_ids);
-  virtual butil::Status Add(const pb::common::VectorWithId& vector_with_id);
-  virtual butil::Status Add([[maybe_unused]] uint64_t id, [[maybe_unused]] const std::vector<float>& vector) = 0;
+  virtual butil::Status Add(const std::vector<pb::common::VectorWithId>& vector_with_ids) = 0;
 
-  virtual butil::Status Upsert(const std::vector<pb::common::VectorWithId>& vector_with_ids);
-  virtual butil::Status Upsert(const pb::common::VectorWithId& vector_with_id);
-  virtual butil::Status Upsert([[maybe_unused]] uint64_t id, [[maybe_unused]] const std::vector<float>& vector) = 0;
+  virtual butil::Status Upsert(const std::vector<pb::common::VectorWithId>& vector_with_ids) = 0;
 
-  virtual butil::Status Delete([[maybe_unused]] uint64_t id) = 0;
-  virtual butil::Status DeleteBatch([[maybe_unused]] const std::vector<uint64_t>& delete_ids);
+  virtual butil::Status Delete([[maybe_unused]] const std::vector<uint64_t>& delete_ids) = 0;
 
   virtual butil::Status Save([[maybe_unused]] const std::string& path);
 
   virtual butil::Status Load([[maybe_unused]] const std::string& path);
 
-  virtual butil::Status BatchSearch([[maybe_unused]] std::vector<pb::common::VectorWithId> vector_with_ids,
+  virtual butil::Status Search([[maybe_unused]] std::vector<pb::common::VectorWithId> vector_with_ids,
                                     [[maybe_unused]] uint32_t topk,
                                     std::vector<pb::index::VectorWithDistanceResult>& results,
-                                    [[maybe_unused]] bool reconstruct = false);
-
-  virtual butil::Status Search([[maybe_unused]] pb::common::VectorWithId vector_with_id, [[maybe_unused]] uint32_t topk,
-                               std::vector<pb::common::VectorWithDistance>& results,
-                               [[maybe_unused]] bool reconstruct = false);
-
-  virtual butil::Status Search([[maybe_unused]] const std::vector<float>& vector, [[maybe_unused]] uint32_t topk,
-                               std::vector<pb::common::VectorWithDistance>& /*results*/,
-                               [[maybe_unused]] bool reconstruct = false) = 0;
+                                    [[maybe_unused]] bool reconstruct = false) = 0;
 
   virtual butil::Status SetOnline() = 0;
   virtual butil::Status SetOffline() = 0;

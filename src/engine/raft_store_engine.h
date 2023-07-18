@@ -112,10 +112,6 @@ class RaftStoreEngine : public Engine, public RaftControlAble {
    public:
     VectorReader(std::shared_ptr<RawEngine::Reader> reader) : reader_(reader) {}
 
-    butil::Status VectorSearch(std::shared_ptr<Context> ctx, const pb::common::VectorWithId& vector_with_id,
-                               pb::common::VectorSearchParameter parameter,
-                               std::vector<pb::common::VectorWithDistance>& vector_with_distances) override;
-
     butil::Status VectorBatchSearch(std::shared_ptr<Context> ctx,
                                     const std::vector<pb::common::VectorWithId>& vector_with_ids,
                                     pb::common::VectorSearchParameter parameter,

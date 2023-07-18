@@ -172,28 +172,6 @@ butil::Status Storage::VectorBatchSearch(std::shared_ptr<Context> ctx,
   return butil::Status();
 }
 
-butil::Status Storage::VectorSearch(std::shared_ptr<Context> ctx, const pb::common::VectorWithId& vector,
-                                    const pb::common::VectorSearchParameter& parameter,
-                                    std::vector<pb::common::VectorWithDistance>& results) {
-  auto status = ValidateLeader(ctx->RegionId());
-  if (!status.ok()) {
-    return status;
-  }
-
-  auto reader = engine_->NewVectorReader(Constant::kStoreDataCF);
-  status = reader->VectorSearch(ctx, vector, parameter, results);
-  if (!status.ok()) {
-    if (pb::error::EKEY_NOT_FOUND == status.error_code()) {
-      // return OK if not found
-      return butil::Status::OK();
-    }
-
-    return status;
-  }
-
-  return butil::Status();
-}
-
 butil::Status Storage::KvPutIfAbsent(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs,
                                      bool is_atomic) {
   return engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), kvs, is_atomic),

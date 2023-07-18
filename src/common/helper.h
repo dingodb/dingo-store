@@ -163,6 +163,7 @@ class Helper {
   // generate random string for keyring
   static std::string GenerateRandomString(int length);
   static uint64_t GenerateRandomInteger(uint64_t min_value, uint64_t max_value);
+  static float GenerateRandomFloat(float min_value, float max_value);
   static uint64_t GenId();
 
   // Create hard link
