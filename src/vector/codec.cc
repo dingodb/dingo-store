@@ -52,6 +52,15 @@ void VectorCodec::EncodeVectorScalar(uint64_t region_id, uint64_t vector_id, std
   buf.GetBytes(result);
 }
 
+void VectorCodec::EncodeVectorTable(uint64_t region_id, uint64_t vector_id, std::string& result) {
+  Buf buf(17);
+  buf.WriteLong(region_id);
+  buf.Write(Constant::kVectorTablePrefix);
+  buf.WriteLong(vector_id);
+
+  buf.GetBytes(result);
+}
+
 void VectorCodec::EncodeVectorWal(uint64_t region_id, uint64_t vector_id, uint64_t log_id, std::string& result) {
   Buf buf(25);
   buf.WriteLong(region_id);

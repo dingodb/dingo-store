@@ -119,7 +119,7 @@ class RaftStoreEngine : public Engine, public RaftControlAble {
 
     butil::Status VectorBatchQuery(std::shared_ptr<Context> ctx, std::vector<uint64_t> vector_ids,
                                    bool with_vector_data, bool with_scalar_data,
-                                   std::vector<std::string> selected_scalar_keys,
+                                   std::vector<std::string> selected_scalar_keys, bool with_table_data,
                                    std::vector<pb::common::VectorWithId>& vector_with_ids) override;
 
     butil::Status VectorGetBorderId(std::shared_ptr<Context> ctx, uint64_t& id, bool get_min) override;
@@ -140,6 +140,11 @@ class RaftStoreEngine : public Engine, public RaftControlAble {
 
     butil::Status CompareVectorScalarData(uint64_t region_id, uint64_t vector_id,
                                           const pb::common::VectorScalardata& source_scalar_data, bool& compare_result);
+
+    butil::Status QueryVectorTableData(uint64_t region_id, pb::common::VectorWithId& vector_with_id);
+    butil::Status QueryVectorTableData(uint64_t region_id,
+                                       std::vector<pb::common::VectorWithDistance>& vector_with_distances);
+    butil::Status QueryVectorTableData(uint64_t region_id, std::vector<pb::index::VectorWithDistanceResult>& results);
 
     std::shared_ptr<RawEngine::Reader> reader_;
   };

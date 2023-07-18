@@ -41,8 +41,8 @@ const int kBatchSize = 1000;
 DECLARE_string(key);
 DECLARE_bool(without_vector);
 DECLARE_bool(with_scalar);
+DECLARE_bool(with_table);
 DECLARE_bool(print_vector_search_delay);
-DECLARE_bool(vector_enable_scalar);
 
 namespace client {
 
@@ -133,6 +133,10 @@ void SendVectorSearch(ServerInteractionPtr interaction, uint64_t region_id, uint
     request.mutable_parameter()->set_with_scalar_data(true);
   }
 
+  if (FLAGS_with_table) {
+    request.mutable_parameter()->set_with_table_data(true);
+  }
+
   if (!FLAGS_key.empty()) {
     auto* key = request.mutable_parameter()->mutable_selected_keys()->Add();
     key->assign(FLAGS_key);
@@ -181,6 +185,10 @@ void SendVectorBatchSearch(ServerInteractionPtr interaction, uint64_t region_id,
     request.mutable_parameter()->set_with_scalar_data(true);
   }
 
+  if (FLAGS_with_table) {
+    request.mutable_parameter()->set_with_table_data(true);
+  }
+
   if (!FLAGS_key.empty()) {
     auto* key = request.mutable_parameter()->mutable_selected_keys()->Add();
     key->assign(FLAGS_key);
@@ -223,6 +231,10 @@ void SendVectorBatchQuery(ServerInteractionPtr interaction, uint64_t region_id, 
     request.set_with_scalar_data(true);
   }
 
+  if (FLAGS_with_table) {
+    request.set_with_table_data(true);
+  }
+
   if (!FLAGS_key.empty()) {
     auto* key = request.mutable_selected_keys()->Add();
     key->assign(FLAGS_key);
@@ -248,7 +260,7 @@ void SendVectorAdd(ServerInteractionPtr interaction, uint64_t region_id, uint32_
     for (int j = 0; j < dimension; j++) {
       vector_with_id->mutable_vector()->add_float_values(1.0 * dingodb::Helper::GenerateRandomInteger(0, 100) / 10);
     }
-    if (FLAGS_vector_enable_scalar) {
+    if (FLAGS_with_scalar) {
       for (int k = 0; k < 2; ++k) {
         auto* scalar_data = vector_with_id->mutable_scalar_data()->mutable_scalar_data();
         dingodb::pb::common::ScalarValue scalar_value;
@@ -263,6 +275,12 @@ void SendVectorAdd(ServerInteractionPtr interaction, uint64_t region_id, uint32_
         scalar_value.add_fields()->set_long_data(k);
         (*scalar_data)[fmt::format("scalar_key{}", k)] = scalar_value;
       }
+    }
+
+    if (FLAGS_with_table) {
+      auto* table_data = vector_with_id->mutable_table_data();
+      table_data->set_table_key(fmt::format("table_key{}", i));
+      table_data->set_table_value(fmt::format("table_value{}", i));
     }
   }
 
@@ -425,22 +443,6 @@ void SendVectorAddBatch(ServerInteractionPtr interaction, uint64_t region_id, ui
         for (int j = 0; j < dimension; j++) {
           vector_with_id->mutable_vector()->add_float_values(random_seeds[i * dimension + j]);
         }
-        // if (FLAGS_vector_enable_scalar) {
-        //   for (int k = 0; k < 2; ++k) {
-        //     auto* scalar_data = vector_with_id->mutable_scalar_data()->mutable_scalar_data();
-        //     dingodb::pb::common::ScalarValue scalar_value;
-        //     scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::STRING);
-        //     scalar_value.add_fields()->set_string_data(fmt::format("scalar_value{}", k));
-        //     (*scalar_data)[fmt::format("scalar_key{}", k)] = scalar_value;
-        //   }
-        //   for (int k = 2; k < 4; ++k) {
-        //     auto* scalar_data = vector_with_id->mutable_scalar_data()->mutable_scalar_data();
-        //     dingodb::pb::common::ScalarValue scalar_value;
-        //     scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::INT64);
-        //     scalar_value.add_fields()->set_long_data(k);
-        //     (*scalar_data)[fmt::format("scalar_key{}", k)] = scalar_value;
-        //   }
-        // }
       }
 
       butil::Status status = interaction->SendRequest("IndexService", "VectorAdd", request, response);
