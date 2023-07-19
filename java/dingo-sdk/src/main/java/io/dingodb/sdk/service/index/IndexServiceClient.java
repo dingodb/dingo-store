@@ -26,12 +26,14 @@ import io.dingodb.sdk.common.utils.EntityConversion;
 import io.dingodb.sdk.common.vector.Search;
 import io.dingodb.sdk.common.vector.VectorSearchParameter;
 import io.dingodb.sdk.common.vector.VectorWithDistance;
+import io.dingodb.sdk.common.vector.VectorWithDistanceResult;
 import io.dingodb.sdk.common.vector.VectorWithId;
 import io.dingodb.sdk.common.table.RangeDistribution;
 import io.dingodb.sdk.service.connector.IndexServiceConnector;
 import io.dingodb.sdk.service.meta.MetaServiceClient;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -96,10 +98,10 @@ public class IndexServiceClient {
         return response.getKeyStatesList();
     }
 
-    public List<VectorWithDistance> vectorSearch(
+    public List<VectorWithDistanceResult> vectorSearch(
             DingoCommonId indexId,
             DingoCommonId regionId,
-            VectorWithId vector,
+            List<VectorWithId> vectors,
             VectorSearchParameter parameter) {
         Search search = parameter.getSearch();
         Common.VectorSearchParameter.Builder builder = Common.VectorSearchParameter.newBuilder()
@@ -136,13 +138,17 @@ public class IndexServiceClient {
         }
         Index.VectorSearchRequest request = Index.VectorSearchRequest.newBuilder()
                 .setRegionId(regionId.entityId())
-                .setVector(mapping(vector))
+                .addAllVectorWithIds(vectors.stream().map(EntityConversion::mapping).collect(Collectors.toList()))
                 .setParameter(builder.build())
                 .build();
 
         Index.VectorSearchResponse response = exec(stub -> stub.vectorSearch(request), retryTimes, indexId, regionId);
 
-        return response.getResultsList().stream().map(EntityConversion::mapping).collect(Collectors.toList());
+        return response.getBatchResultsList().stream()
+                .map(r -> new VectorWithDistanceResult(r.getVectorWithDistancesList().stream()
+                        .map(EntityConversion::mapping)
+                        .collect(Collectors.toList())))
+                .collect(Collectors.toList());
     }
 
     public List<VectorWithId> vectorBatchQuery(
