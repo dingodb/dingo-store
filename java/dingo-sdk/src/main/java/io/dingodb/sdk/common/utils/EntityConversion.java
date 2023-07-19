@@ -560,7 +560,10 @@ public class EntityConversion {
     }
 
     public static VectorWithDistance mapping(Common.VectorWithDistance distance) {
-        return new VectorWithDistance(mapping(distance.getVectorWithId()), distance.getDistance());
+        return new VectorWithDistance(
+                mapping(distance.getVectorWithId()),
+                distance.getDistance(),
+                VectorIndexParameter.MetricType.valueOf(distance.getMetricType().name()));
     }
 
     public static Store.Coprocessor mapping(Coprocessor coprocessor) {

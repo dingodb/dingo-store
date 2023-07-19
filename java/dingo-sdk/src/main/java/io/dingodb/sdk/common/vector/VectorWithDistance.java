@@ -16,6 +16,7 @@
 
 package io.dingodb.sdk.common.vector;
 
+import io.dingodb.sdk.common.index.VectorIndexParameter;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.experimental.Delegate;
@@ -27,4 +28,5 @@ public class VectorWithDistance {
     @Delegate
     private VectorWithId withId;
     private float distance;
+    private VectorIndexParameter.MetricType metricType;
 }
