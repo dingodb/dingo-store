@@ -72,6 +72,8 @@ class VectorIndexHnsw : public VectorIndex {
   butil::Status ResizeMaxElements(uint64_t new_max_elements);
   butil::Status GetMaxElements(uint64_t& max_elements);
 
+  hnswlib::HierarchicalNSW<float>* GetHnswIndex();
+
  private:
   // hnsw members
   hnswlib::HierarchicalNSW<float>* hnsw_index_;

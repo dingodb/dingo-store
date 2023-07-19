@@ -14,6 +14,7 @@
 
 #include "vector/vector_index_hnsw.h"
 
+#include <algorithm>
 #include <atomic>
 #include <cassert>
 #include <cstdint>
@@ -169,7 +170,7 @@ butil::Status VectorIndexHnsw::Upsert(const std::vector<pb::common::VectorWithId
 
   butil::Status ret;
 
-  std::unique_ptr<float> data;
+  std::unique_ptr<float[]> data;
   try {
     data.reset(new float[this->dimension_ * vector_with_ids.size()]);
   } catch (std::bad_alloc& e) {
@@ -188,7 +189,14 @@ butil::Status VectorIndexHnsw::Upsert(const std::vector<pb::common::VectorWithId
 
   // Add data to index
   try {
-    ParallelFor(0, vector_with_ids.size(), hnsw_num_threads_, [&](size_t row, size_t /*thread_id*/) {
+    size_t real_threads = hnsw_num_threads_;
+
+    if (BAIDU_UNLIKELY(hnsw_index_->M_ < hnsw_num_threads_ &&
+                       hnsw_index_->cur_element_count < hnsw_num_threads_ * hnsw_index_->M_)) {
+      real_threads = 1;
+    }
+
+    ParallelFor(0, vector_with_ids.size(), real_threads, [&](size_t row, size_t /*thread_id*/) {
       this->hnsw_index_->addPoint((void*)(data.get() + dimension_ * row), vector_with_ids[row].id(), true);
     });
   } catch (std::runtime_error& e) {
@@ -287,7 +295,7 @@ butil::Status VectorIndexHnsw::Search(std::vector<pb::common::VectorWithId> vect
 
   butil::Status ret;
 
-  std::unique_ptr<float> data;
+  std::unique_ptr<float[]> data;
   try {
     data.reset(new float[this->dimension_ * vector_with_ids.size()]);
   } catch (std::bad_alloc& e) {
@@ -450,5 +458,7 @@ butil::Status VectorIndexHnsw::GetMaxElements(uint64_t& max_elements) {
 
   return butil::Status::OK();
 }
+
+hnswlib::HierarchicalNSW<float>* VectorIndexHnsw::GetHnswIndex() { return this->hnsw_index_; }
 
 }  // namespace dingodb

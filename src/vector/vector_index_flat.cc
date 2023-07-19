@@ -83,7 +83,7 @@ butil::Status VectorIndexFlat::AddOrUpsert(const std::vector<pb::common::VectorW
     return butil::Status(pb::error::Errno::EVECTOR_INVALID, s);
   }
 
-  std::unique_ptr<faiss::idx_t> ids;
+  std::unique_ptr<faiss::idx_t[]> ids;
   try {
     ids.reset(new faiss::idx_t[vector_with_ids.size()]);
   } catch (std::bad_alloc& e) {
@@ -103,7 +103,7 @@ butil::Status VectorIndexFlat::AddOrUpsert(const std::vector<pb::common::VectorW
     index_->remove_ids(sel);
   }
 
-  std::unique_ptr<float> vectors;
+  std::unique_ptr<float[]> vectors;
   try {
     vectors.reset(new float[vector_with_ids.size() * dimension_]);
   } catch (std::bad_alloc& e) {
@@ -139,7 +139,7 @@ butil::Status VectorIndexFlat::Delete(const std::vector<uint64_t>& delete_ids) {
     return butil::Status(pb::error::Errno::EVECTOR_INDEX_OFFLINE, s);
   }
 
-  std::unique_ptr<faiss::idx_t> ids;
+  std::unique_ptr<faiss::idx_t[]> ids;
   try {
     ids.reset(new faiss::idx_t[delete_ids.size()]);
   } catch (std::bad_alloc& e) {
@@ -197,7 +197,7 @@ butil::Status VectorIndexFlat::Search(std::vector<pb::common::VectorWithId> vect
   std::vector<faiss::idx_t> labels;
   labels.resize(topk * vector_with_ids.size(), -1);
 
-  std::unique_ptr<float> vectors;
+  std::unique_ptr<float[]> vectors;
   try {
     vectors.reset(new float[vector_with_ids.size() * dimension_]);
   } catch (std::bad_alloc& e) {
