@@ -5,18 +5,32 @@ cluster:
 server:
   host: $SERVER_HOST$
   port: $SERVER_PORT$
-  heartbeat_interval: 10000 # ms
-  metrics_collect_interval: 300000 # ms
+  heartbeat_interval_s: 10
+  metrics_collect_interval_s: 300
   worker_thread_num: 10 # must >4, worker_thread_num priority worker_thread_ratio
   # worker_thread_ratio: 0.5 # cpu core * ratio
+region:
+  split_check_interval_s: 0 # 0: disable >0: enable 
+  split_check_concurrency: 5
+  split_check_threshold_size: 134217728 # 128M if exceed the size, then try check region for split.
+  split_policy: SIZE # HALF/SIZE/KEYS
+  # HALF
+  # split_threshold_size: 134217728 # 128M
+  # split_chunk_size: 1048576 # 1M
+  # SIZE
+  split_threshold_size: 134217728 # 128M
+  split_ratio: 0.5
+  # KEYS
+  # split_key_number: 200000
+  # split_key_ratio: 0.5
 raft:
   host: $RAFT_HOST$
   port: $RAFT_PORT$
   path: $BASE_PATH$/data/store/raft
   log_path: $BASE_PATH$/data/store/log
-  election_timeout: 2000 # ms
+  election_timeout_s: 2
   snapshot_policy: checkpoint # scan or checkpoint
-  snapshot_interval: 120 # s
+  snapshot_interval_s: 120
 log:
   level: INFO
   path: $BASE_PATH$/log
@@ -24,7 +38,7 @@ store:
   path: $BASE_PATH$/data/store/db
   background_thread_num: 16 # background_thread_num priority background_thread_ratio
   # background_thread_ratio: 0.5 # cpu core * ratio
-  stats_dump_period_sec: 120 # s
+  stats_dump_period_s: 120
   base:
     block_size: 131072 # 128KB
     block_cache: 536870912 # 512MB

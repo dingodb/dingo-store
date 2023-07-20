@@ -21,6 +21,7 @@
 
 #include "brpc/channel.h"
 #include "common/logging.h"
+#include "common/runnable.h"
 #include "coordinator/coordinator_control.h"
 #include "coordinator/coordinator_interaction.h"
 #include "meta/store_meta_manager.h"
@@ -212,7 +213,6 @@ class Heartbeat {
 
  private:
   bool Execute(TaskRunnable* task);
-  static int ExecuteRoutine(void*, bthread::TaskIterator<TaskRunnable*>& iter);
 
   // Execution queue is available.
   std::atomic<bool> is_available_;

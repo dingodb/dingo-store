@@ -5,7 +5,7 @@ cluster:
 server:
   host: $SERVER_HOST$
   port: $SERVER_PORT$
-  push_interval: 1000 # ms
+  push_interval_s: 1
   worker_thread_num: 32 # must >4, worker_thread_num priority worker_thread_ratio
   # worker_thread_ratio: 0.5 # cpu core * ratio
 coordinator:
@@ -15,9 +15,9 @@ raft:
   port: $RAFT_PORT$
   path: $BASE_PATH$/data/coordinator/raft
   log_path: $BASE_PATH$/data/coordinator/log
-  election_timeout: 2000 # ms
+  election_timeout_s: 2
   snapshot_policy: checkpoint # scan or checkpoint
-  snapshot_interval: 300 # s
+  snapshot_interval_s: 300
 log:
   level: INFO
   path: $BASE_PATH$/log
@@ -25,7 +25,7 @@ store:
   path: $BASE_PATH$/data/coordinator/db
   background_thread_num: 16 # background_thread_num priority background_thread_ratio
   # background_thread_ratio: 0.5 # cpu core * ratio
-  stats_dump_period_sec: 120 # s
+  stats_dump_period_s: 120
   base:
     block_size: 131072 # 128KB
     block_cache: 536870912 # 512MB

@@ -51,10 +51,10 @@ int RaftNode::Init(const std::string& init_conf, std::shared_ptr<Config> config)
     return -1;
   }
 
-  node_options.election_timeout_ms = config->GetInt("raft.election_timeout");
+  node_options.election_timeout_ms = config->GetInt("raft.election_timeout_s") * 1000;
   node_options.fsm = fsm_.get();
   node_options.node_owns_fsm = false;
-  node_options.snapshot_interval_s = config->GetInt("raft.snapshot_interval");
+  node_options.snapshot_interval_s = config->GetInt("raft.snapshot_interval_s");
 
   path_ = fmt::format("{}/{}", config->GetString("raft.path"), node_id_);
   node_options.raft_meta_uri = "local://" + path_ + "/raft_meta";

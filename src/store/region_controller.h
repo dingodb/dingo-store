@@ -26,6 +26,7 @@
 #include "butil/status.h"
 #include "common/constant.h"
 #include "common/context.h"
+#include "common/runnable.h"
 #include "common/safe_map.h"
 #include "meta/meta_reader.h"
 #include "meta/meta_writer.h"
@@ -35,14 +36,6 @@
 #include "proto/coordinator.pb.h"
 
 namespace dingodb {
-
-class TaskRunnable {
- public:
-  TaskRunnable() = default;
-  virtual ~TaskRunnable() = default;
-
-  virtual void Run() = 0;
-};
 
 class CreateRegionTask : public TaskRunnable {
  public:

@@ -31,6 +31,7 @@
 #include "meta/store_meta_manager.h"
 #include "metrics/store_metrics_manager.h"
 #include "proto/common.pb.h"
+#include "split/split_checker.h"
 #include "store/heartbeat.h"
 #include "store/region_controller.h"
 #include "store/store_controller.h"
@@ -104,6 +105,9 @@ class Server {
   // Init Heartbeat
   bool InitHeartbeat();
 
+  // Init PreSplitChecker
+  bool InitPreSplitChecker();
+
   butil::Status StartMetaRegion(const std::shared_ptr<Config>& config, std::shared_ptr<Engine>& kv_engine);
 
   butil::Status StartAutoIncrementRegion(const std::shared_ptr<Config>& config, std::shared_ptr<Engine>& kv_engine);
@@ -170,6 +174,8 @@ class Server {
   }
 
   std::shared_ptr<VectorIndexManager> GetVectorIndexManager() { return vector_index_manager_; }
+
+  std::shared_ptr<PreSplitChecker> GetPreSplitChecker() { return pre_split_checker_; }
 
   Server(const Server&) = delete;
   const Server& operator=(const Server&) = delete;
@@ -239,6 +245,8 @@ class Server {
 
   // vector index manager
   std::shared_ptr<VectorIndexManager> vector_index_manager_;
+  // Pre split checker
+  std::shared_ptr<PreSplitChecker> pre_split_checker_;
 };
 
 }  // namespace dingodb

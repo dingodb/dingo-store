@@ -604,21 +604,6 @@ void CalculateTableMetricsTask::CalculateTableMetrics(std::shared_ptr<Coordinato
   coordinator_control->CalculateTableMetrics();
 }
 
-int Heartbeat::ExecuteRoutine(void*, bthread::TaskIterator<TaskRunnable*>& iter) {
-  if (iter.is_queue_stopped()) {
-    return 0;
-  }
-
-  {
-    std::unique_ptr<TaskRunnable> self_guard(*iter);
-    for (; iter; ++iter) {
-      (*iter)->Run();
-    }
-  }
-
-  return 0;
-}
-
 // this is for index
 void VectorIndexScrubTask::ScrubVectorIndex() {
   auto vector_index_manager = Server::GetInstance()->GetVectorIndexManager();
@@ -674,43 +659,57 @@ bool Heartbeat::Execute(TaskRunnable* task) {
 void Heartbeat::TriggerStoreHeartbeat(uint64_t region_id) {
   // Free at ExecuteRoutine()
   TaskRunnable* task = new HeartbeatTask(Server::GetInstance()->GetCoordinatorInteraction(), region_id);
-  Server::GetInstance()->GetHeartbeat()->Execute(task);
+  if (!Server::GetInstance()->GetHeartbeat()->Execute(task)) {
+    delete task;
+  }
 }
 
 void Heartbeat::TriggerCoordinatorPushToStore(void*) {
   // Free at ExecuteRoutine()
   TaskRunnable* task = new CoordinatorPushTask(Server::GetInstance()->GetCoordinatorControl());
-  Server::GetInstance()->GetHeartbeat()->Execute(task);
+  if (!Server::GetInstance()->GetHeartbeat()->Execute(task)) {
+    delete task;
+  }
 }
 
 void Heartbeat::TriggerCoordinatorUpdateState(void*) {
   // Free at ExecuteRoutine()
   TaskRunnable* task = new CoordinatorUpdateStateTask(Server::GetInstance()->GetCoordinatorControl());
-  Server::GetInstance()->GetHeartbeat()->Execute(task);
+  if (!Server::GetInstance()->GetHeartbeat()->Execute(task)) {
+    delete task;
+  }
 }
 
 void Heartbeat::TriggerCoordinatorTaskListProcess(void*) {
   // Free at ExecuteRoutine()
   TaskRunnable* task = new CoordinatorTaskListProcessTask(Server::GetInstance()->GetCoordinatorControl());
-  Server::GetInstance()->GetHeartbeat()->Execute(task);
+  if (!Server::GetInstance()->GetHeartbeat()->Execute(task)) {
+    delete task;
+  }
 }
 
 void Heartbeat::TriggerCoordinatorRecycleOrphan(void*) {
   // Free at ExecuteRoutine()
   TaskRunnable* task = new CoordinatorRecycleOrphanTask(Server::GetInstance()->GetCoordinatorControl());
-  Server::GetInstance()->GetHeartbeat()->Execute(task);
+  if (!Server::GetInstance()->GetHeartbeat()->Execute(task)) {
+    delete task;
+  }
 }
 
 void Heartbeat::TriggerCalculateTableMetrics(void*) {
   // Free at ExecuteRoutine()
   TaskRunnable* task = new CalculateTableMetricsTask(Server::GetInstance()->GetCoordinatorControl());
-  Server::GetInstance()->GetHeartbeat()->Execute(task);
+  if (!Server::GetInstance()->GetHeartbeat()->Execute(task)) {
+    delete task;
+  }
 }
 
 void Heartbeat::TriggerScrubVectorIndex(void*) {
   // Free at ExecuteRoutine()
   TaskRunnable* task = new VectorIndexScrubTask();
-  Server::GetInstance()->GetHeartbeat()->Execute(task);
+  if (!Server::GetInstance()->GetHeartbeat()->Execute(task)) {
+    delete task;
+  }
 }
 
 butil::Status Heartbeat::RpcSendPushStoreOperation(const pb::common::Location& location,

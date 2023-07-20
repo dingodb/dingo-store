@@ -37,7 +37,8 @@ namespace store {
 
 class RegionMetrics {
  public:
-  RegionMetrics() : last_log_index_(0), need_update_min_key_(true), need_update_max_key_(true) {}
+  RegionMetrics()
+      : last_log_index_(0), need_update_min_key_(true), need_update_max_key_(true), need_update_key_count_(true) {}
   ~RegionMetrics() = default;
 
   std::string Serialize();
@@ -51,6 +52,9 @@ class RegionMetrics {
 
   bool NeedUpdateMaxKey() const { return need_update_max_key_; }
   void SetNeedUpdateMaxKey(bool need_update_max_key) { need_update_max_key_ = need_update_max_key; }
+
+  bool NeedUpdateKeyCount() const { return need_update_key_count_; }
+  void SetNeedUpdateKeyCount(bool need_update_key_count) { need_update_key_count_ = need_update_key_count; }
 
   uint64_t Id() const { return inner_region_metrics_.id(); }
   void SetId(uint64_t region_id) { inner_region_metrics_.set_id(region_id); }
@@ -85,6 +89,8 @@ class RegionMetrics {
   bool need_update_min_key_;
   // need update region max key
   bool need_update_max_key_;
+  // need update region key count
+  bool need_update_key_count_;
 
   pb::common::RegionMetrics inner_region_metrics_;
 };

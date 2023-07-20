@@ -5,7 +5,7 @@ cluster:
 server:
   host: 127.0.0.1
   port: 19190
-  push_interval: 1000 # ms
+  push_interval_s: 1
   worker_thread_num: 10 # must >4, worker_thread_num priority worker_thread_ratio
   # worker_thread_ratio: 0.5 # cpu core * ratio
 coordinator:
@@ -15,9 +15,9 @@ raft:
   port: 8001
   path: ./data/coordinator/raft
   log_path: ./data/coordinator/log
-  election_timeout: 2000 # ms
+  election_timeout_s: 2
   snapshot_policy: checkpoint # scan or checkpoint
-  snapshot_interval: 3600 # s
+  snapshot_interval_s: 300
 log:
   level: INFO
   path: ./log
@@ -25,7 +25,7 @@ store:
   path: ./data/coordinator/db
   background_thread_num: 16 # background_thread_num priority background_thread_ratio
   # background_thread_ratio: 0.5 # cpu core * ratio
-  stats_dump_period_sec: 120 # s
+  stats_dump_period_s: 120
   base:
     block_size: 131072 # 128KB
     block_cache: 536870912 # 512MB

@@ -759,21 +759,6 @@ butil::Status UpdateDefinitionTask::UpdateDefinition(std::shared_ptr<Context> /*
   return butil::Status::OK();
 }
 
-static int ExecuteRoutine(void*, bthread::TaskIterator<TaskRunnable*>& iter) {
-  if (iter.is_queue_stopped()) {
-    return 0;
-  }
-
-  {
-    std::unique_ptr<TaskRunnable> self_guard(*iter);
-    for (; iter; ++iter) {
-      (*iter)->Run();
-    }
-  }
-
-  return 0;
-}
-
 bool ControlExecutor::Init() {
   bthread::ExecutionQueueOptions options;
   options.bthread_attr = BTHREAD_ATTR_NORMAL;

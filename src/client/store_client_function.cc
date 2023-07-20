@@ -285,23 +285,22 @@ void SendVectorAdd(ServerInteractionPtr interaction, uint64_t region_id, uint32_
       table_data->set_table_key(fmt::format("table_key{}", i));
       table_data->set_table_value(fmt::format("table_value{}", i));
     }
-  }
 
-  if ((i - start_id + 1) % kKAddVectorBatchSize == 0 || (i + 1) == end_id) {
-    DINGO_LOG(INFO) << "VectorAdd request";
-    butil::Status status = interaction->SendRequest("IndexService", "VectorAdd", request, response);
-    int success_count = 0;
-    for (auto key_state : response.key_states()) {
-      if (key_state) {
-        ++success_count;
+    if ((i - start_id + 1) % kKAddVectorBatchSize == 0 || (i + 1) == end_id) {
+      DINGO_LOG(INFO) << "VectorAdd request";
+      butil::Status status = interaction->SendRequest("IndexService", "VectorAdd", request, response);
+      int success_count = 0;
+      for (auto key_state : response.key_states()) {
+        if (key_state) {
+          ++success_count;
+        }
       }
+      DINGO_LOG(INFO) << fmt::format(
+          "VectorAdd response success count: {} fail count: {} vector count: {} schedule: {}/{}", success_count,
+          response.key_states().size() - success_count, request.vectors().size(), i - start_id + 1, count);
+      request.clear_vectors();
     }
-    DINGO_LOG(INFO) << fmt::format(
-        "VectorAdd response success count: {} fail count: {} vector count: {} schedule: {}/{}", success_count,
-        response.key_states().size() - success_count, request.vectors().size(), i - start_id + 1, count);
-    request.clear_vectors();
   }
-}
 }
 
 void SendVectorDelete(ServerInteractionPtr interaction, uint64_t region_id, uint32_t start_id, uint32_t count) {

@@ -612,7 +612,7 @@ int GetBackgroundThreadNum(std::shared_ptr<dingodb::Config> config) {
 }
 
 int GetStatsDumpPeriodSec(std::shared_ptr<dingodb::Config> config) {
-  int num = config->GetInt("store.stats_dump_period_sec");
+  int num = config->GetInt("store.stats_dump_period_s");
   return (num <= 0) ? Constant::kStatsDumpPeriodSecDefault : num;
 }
 

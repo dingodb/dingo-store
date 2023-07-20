@@ -216,6 +216,39 @@ void RegionControlServiceImpl::TriggerVectorIndexSnapshot(
   }
 }
 
+static pb::common::RegionMetrics GetRegionActualMetrics(uint64_t region_id) {
+  pb::common::RegionMetrics region_metrics;
+  region_metrics.set_id(region_id);
+  auto region = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
+  if (region == nullptr) {
+    return region_metrics;
+  }
+  auto raw_engine = Server::GetInstance()->GetRawEngine();
+
+  IteratorOptions options;
+  options.upper_bound = region->Range().end_key();
+  auto iter = raw_engine->NewIterator(Constant::kStoreDataCF, options);
+
+  int32_t size = 0;
+  int32_t key_count = 0;
+  std::string min_key, max_key;
+  for (iter->Seek(region->Range().start_key()); iter->Valid(); iter->Next()) {
+    size += iter->Key().size() + iter->Value().size();
+    ++key_count;
+    if (min_key.empty()) {
+      min_key = iter->Key();
+    }
+    max_key = iter->Key();
+  }
+
+  region_metrics.set_min_key(min_key);
+  region_metrics.set_max_key(max_key);
+  region_metrics.set_region_size(size);
+  region_metrics.set_row_count(key_count);
+
+  return region_metrics;
+}
+
 void RegionControlServiceImpl::Debug(google::protobuf::RpcController* controller,
                                      const ::dingodb::pb::region_control::DebugRequest* request,
                                      ::dingodb::pb::region_control::DebugResponse* response,
@@ -327,6 +360,10 @@ void RegionControlServiceImpl::Debug(google::protobuf::RpcController* controller
     response->mutable_file_reader()->set_count(reader_ids.size());
     for (auto reader_id : reader_ids) {
       response->mutable_file_reader()->add_reader_ids(reader_id);
+    }
+  } else if (request->type() == pb::region_control::DebugType::STORE_REGION_ACTUAL_METRICS) {
+    for (auto region_id : request->region_ids()) {
+      response->mutable_region_actual_metrics()->add_region_metricses()->CopyFrom(GetRegionActualMetrics(region_id));
     }
   }
 }
