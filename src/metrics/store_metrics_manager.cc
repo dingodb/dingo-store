@@ -173,7 +173,7 @@ bool StoreRegionMetrics::CollectMetrics() {
       continue;
     }
     uint64_t applied_index = raft_meta->applied_index();
-    if (region_metrics->LastLogIndex() >= applied_index) {
+    if (applied_index != 0 && region_metrics->LastLogIndex() >= applied_index) {
       continue;
     }
 
@@ -202,7 +202,11 @@ bool StoreRegionMetrics::CollectMetrics() {
     }
 
     // Get region key counts
-    region_metrics->SetKeyCount(GetRegionKeyCount(region));
+    if (region_metrics->NeedUpdateKeyCount()) {
+      region_metrics->SetKeyCount(GetRegionKeyCount(region));
+    } else {
+      region_metrics->SetNeedUpdateKeyCount(true);
+    }
 
     DINGO_LOG(DEBUG) << fmt::format(
         "Collect region metrics, region {} min_key[{}] max_key[{}] key_count[true] region_size[true] elapsed[{} ms]",

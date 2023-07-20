@@ -604,6 +604,10 @@ int main(int argc, char *argv[]) {
       DINGO_LOG(ERROR) << "InitRegionController failed!";
       return -1;
     }
+    if (!dingo_server->InitPreSplitChecker()) {
+      DINGO_LOG(ERROR) << "InitPreSplitChecker failed!";
+      return -1;
+    }
 
     store_service.SetStorage(dingo_server->GetStorage());
     if (brpc_server.AddService(&store_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
