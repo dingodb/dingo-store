@@ -197,6 +197,7 @@ message TableMetrics {
   bytes min_key = 2;
   bytes max_key = 3;
   uint64 part_count = 4;
+  uint64 table_size = 5;  // approximate table size in bytes
 }
 
 message TableMetricsWithId {

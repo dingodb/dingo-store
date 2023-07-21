@@ -1958,6 +1958,7 @@ uint64_t CoordinatorControl::CalculateTableMetricsSingle(uint64_t table_id, pb::
 
   // build result metrics
   uint64_t row_count = 0;
+  uint64_t table_size = 0;
   std::string min_key(10, '\x00');
   std::string max_key(10, '\xFF');
 
@@ -1984,6 +1985,7 @@ uint64_t CoordinatorControl::CalculateTableMetricsSingle(uint64_t table_id, pb::
 
     const auto& region_metrics = part_region.metrics();
     row_count += region_metrics.row_count();
+    table_size += region_metrics.region_size();
 
     if (min_key.empty()) {
       min_key = region_metrics.min_key();
@@ -2003,6 +2005,7 @@ uint64_t CoordinatorControl::CalculateTableMetricsSingle(uint64_t table_id, pb::
   }
 
   table_metrics.set_rows_count(row_count);
+  table_metrics.set_table_size(table_size);
   table_metrics.set_min_key(min_key);
   table_metrics.set_max_key(max_key);
   table_metrics.set_part_count(table_internal.partitions_size());
