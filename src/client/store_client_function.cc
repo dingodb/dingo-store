@@ -353,6 +353,11 @@ void SendVectorAdd(ServerInteractionPtr interaction, uint64_t region_id, uint32_
           ++success_count;
         }
       }
+
+      if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+        DINGO_LOG(ERROR) << "VectorAdd repsonse error: " << response.error().DebugString();
+      }
+
       DINGO_LOG(INFO) << fmt::format(
           "VectorAdd response success count: {} fail count: {} vector count: {} schedule: {}/{}", success_count,
           response.key_states().size() - success_count, request.vectors().size(), i - start_id + 1, count);

@@ -142,6 +142,11 @@ butil::Status ValidateVectorSearchRequest(const dingodb::pb::index::VectorSearch
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param top_n is error");
   }
 
+  auto vector_index = Server::GetInstance()->GetVectorIndexManager()->GetVectorIndex(request->region_id());
+  if (!vector_index) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id cannot find vector_index");
+  }
+
   return ServiceHelper::ValidateIndexRegion(request->region_id());
 }
 
@@ -246,6 +251,29 @@ butil::Status ValidateVectorAddRequest(const dingodb::pb::index::VectorAddReques
     }
   }
 
+  auto vector_index = Server::GetInstance()->GetVectorIndexManager()->GetVectorIndex(request->region_id());
+  if (!vector_index) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id cannot find vector_index");
+  }
+
+  auto dimension = vector_index->GetDimension();
+  for (const auto& vector : request->vectors()) {
+    if (vector_index->VectorIndexType() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW ||
+        vector_index->VectorIndexType() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT ||
+        vector_index->VectorIndexType() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT ||
+        vector_index->VectorIndexType() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ) {
+      if (vector.vector().float_values().size() != dimension) {
+        return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
+                             "Param vector dimension is error, correct dimension is " + std::to_string(dimension));
+      }
+    } else {
+      if (vector.vector().binary_values().size() != dimension) {
+        return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
+                             "Param vector dimension is error, correct dimension is " + std::to_string(dimension));
+      }
+    }
+  }
+
   return ServiceHelper::ValidateIndexRegion(request->region_id());
 }
 
@@ -299,6 +327,11 @@ butil::Status ValidateVectorDeleteRequest(const dingodb::pb::index::VectorDelete
     return butil::Status(pb::error::EVECTOR_EXCEED_MAX_BATCH_COUNT,
                          fmt::format("Param ids size {} is exceed max batch count {}", request->ids_size(),
                                      FLAGS_vector_max_bactch_count));
+  }
+
+  auto vector_index = Server::GetInstance()->GetVectorIndexManager()->GetVectorIndex(request->region_id());
+  if (!vector_index) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id cannot find vector_index");
   }
 
   return ServiceHelper::ValidateIndexRegion(request->region_id());

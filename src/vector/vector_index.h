@@ -54,6 +54,7 @@ class VectorIndex {
 
   pb::common::VectorIndexType VectorIndexType() const;
 
+  virtual int32_t GetDimension() = 0;
   virtual butil::Status GetCount([[maybe_unused]] uint64_t& count);
   virtual butil::Status GetDeletedCount([[maybe_unused]] uint64_t& deleted_count);
   virtual butil::Status GetMemorySize([[maybe_unused]] uint64_t& memory_size);
