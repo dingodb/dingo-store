@@ -456,6 +456,8 @@ butil::Status VectorIndexHnsw::GetMaxElements(uint64_t& max_elements) {
 
 hnswlib::HierarchicalNSW<float>* VectorIndexHnsw::GetHnswIndex() { return this->hnsw_index_; }
 
+int32_t VectorIndexHnsw::GetDimension() { return this->dimension_; }
+
 butil::Status VectorIndexHnsw::GetCount(uint64_t& count) {
   count = this->hnsw_index_->getCurrentElementCount();
   return butil::Status::OK();

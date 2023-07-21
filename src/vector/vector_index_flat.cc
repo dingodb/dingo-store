@@ -276,6 +276,8 @@ butil::Status VectorIndexFlat::Load(const std::string& /*path*/) {
   return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "Flat index not support load");
 }
 
+int32_t VectorIndexFlat::GetDimension() { return this->dimension_; }
+
 butil::Status VectorIndexFlat::GetCount(uint64_t& count) {
   count = index_->id_map.size();
   return butil::Status::OK();
