@@ -373,11 +373,6 @@ void VectorIndexHnsw::LockWrite() { bthread_mutex_lock(&mutex_); }
 
 void VectorIndexHnsw::UnlockWrite() { bthread_mutex_unlock(&mutex_); }
 
-butil::Status VectorIndexHnsw::GetCount([[maybe_unused]] uint64_t& count) {
-  count = this->hnsw_index_->getCurrentElementCount();
-  return butil::Status::OK();
-}
-
 butil::Status VectorIndexHnsw::NeedToRebuild([[maybe_unused]] bool& need_to_rebuild,
                                              [[maybe_unused]] uint64_t last_save_log_behind) {
   auto element_count = this->hnsw_index_->getCurrentElementCount();
@@ -460,5 +455,35 @@ butil::Status VectorIndexHnsw::GetMaxElements(uint64_t& max_elements) {
 }
 
 hnswlib::HierarchicalNSW<float>* VectorIndexHnsw::GetHnswIndex() { return this->hnsw_index_; }
+
+butil::Status VectorIndexHnsw::GetCount(uint64_t& count) {
+  count = this->hnsw_index_->getCurrentElementCount();
+  return butil::Status::OK();
+}
+
+butil::Status VectorIndexHnsw::GetDeletedCount(uint64_t& deleted_count) {
+  deleted_count = this->hnsw_index_->getDeletedCount();
+  return butil::Status::OK();
+}
+
+butil::Status VectorIndexHnsw::GetMemorySize(uint64_t& memory_size) {
+  auto count = this->hnsw_index_->getCurrentElementCount();
+  if (count == 0) {
+    memory_size = 0;
+    return butil::Status::OK();
+  }
+
+  memory_size = hnsw_index_->max_elements_ * hnsw_index_->size_data_per_element_  // level 0 memory
+                + hnsw_index_->size_links_level0_                                 // level 0 links memory
+                + hnsw_index_->max_elements_ * sizeof(void*)                      // linkLists_ memory
+                + hnsw_index_->max_elements_ * sizeof(uint64_t)                   // element_levels_
+                + hnsw_index_->max_elements_ * sizeof(uint64_t)    // label_lookup_, translate user label to internal id
+                + hnsw_index_->max_elements_ * sizeof(std::mutex)  // link_list_locks_
+                + 65536 * sizeof(std::mutex)                       // label_op_locks_
+                + hnsw_index_->max_elements_ * sizeof(uint64_t) * hnsw_index_->M_ * hnsw_index_->maxlevel_ /
+                      2  // level 1-max_level nlinks, estimate echo vector exists in harf max_level_ count levels
+      ;
+  return butil::Status::OK();
+}
 
 }  // namespace dingodb

@@ -64,6 +64,9 @@ class VectorIndexHnsw : public VectorIndex {
                        std::vector<pb::index::VectorWithDistanceResult>& results, bool reconstruct = false) override;
 
   butil::Status GetCount([[maybe_unused]] uint64_t& count) override;
+  butil::Status GetDeletedCount([[maybe_unused]] uint64_t& deleted_count) override;
+  butil::Status GetMemorySize([[maybe_unused]] uint64_t& memory_size) override;
+
   butil::Status NeedToRebuild([[maybe_unused]] bool& need_to_rebuild,
                               [[maybe_unused]] uint64_t last_save_log_behind) override;
   butil::Status NeedToSave([[maybe_unused]] bool& need_to_save,

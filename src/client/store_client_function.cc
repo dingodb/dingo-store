@@ -245,6 +245,57 @@ void SendVectorBatchQuery(ServerInteractionPtr interaction, uint64_t region_id, 
   DINGO_LOG(INFO) << "VectorBatchQuery response: " << response.DebugString();
 }
 
+void SendVectorScanQuery(ServerInteractionPtr interaction, uint64_t region_id, uint64_t start_id, uint64_t limit,
+                         bool is_reverse) {
+  dingodb::pb::index::VectorScanQueryRequest request;
+  dingodb::pb::index::VectorScanQueryResponse response;
+
+  request.set_region_id(region_id);
+  request.set_vector_id_start(start_id);
+
+  if (limit > 0) {
+    request.set_max_scan_count(limit);
+  } else {
+    request.set_max_scan_count(10);
+  }
+
+  request.set_is_reverse_scan(is_reverse);
+
+  if (FLAGS_without_vector) {
+    request.set_without_vector_data(true);
+  }
+
+  if (FLAGS_with_scalar) {
+    request.set_with_scalar_data(true);
+  }
+
+  if (FLAGS_with_table) {
+    request.set_with_table_data(true);
+  }
+
+  if (!FLAGS_key.empty()) {
+    auto* key = request.mutable_selected_keys()->Add();
+    key->assign(FLAGS_key);
+  }
+
+  DINGO_LOG(INFO) << "VectorScanQuery response: " << response.DebugString();
+
+  interaction->SendRequest("IndexService", "VectorScanQuery", request, response);
+
+  DINGO_LOG(INFO) << "VectorScanQuery response: " << response.DebugString();
+}
+
+void SendVectorGetRegionMetrics(ServerInteractionPtr interaction, uint64_t region_id) {
+  dingodb::pb::index::VectorGetRegionMetricsRequest request;
+  dingodb::pb::index::VectorGetRegionMetricsResponse response;
+
+  request.set_region_id(region_id);
+
+  interaction->SendRequest("IndexService", "VectorGetRegionMetrics", request, response);
+
+  DINGO_LOG(INFO) << "VectorGetRegionMetrics response: " << response.DebugString();
+}
+
 const int kKAddVectorBatchSize = 1024;
 
 void SendVectorAdd(ServerInteractionPtr interaction, uint64_t region_id, uint32_t dimension, uint32_t start_id,

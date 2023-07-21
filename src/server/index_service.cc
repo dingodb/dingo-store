@@ -42,9 +42,11 @@ using dingodb::pb::error::Errno;
 namespace dingodb {
 
 DEFINE_uint64(vector_max_bactch_count, 1024, "vector max batch count in one request");
-DEFINE_uint64(vector_max_request_size, 4194304, "vector max batch count in one request");
+DEFINE_uint64(vector_max_request_size, 8388608, "vector max batch count in one request");
 
 IndexServiceImpl::IndexServiceImpl() = default;
+
+void IndexServiceImpl::SetStorage(std::shared_ptr<Storage> storage) { storage_ = storage; }
 
 butil::Status ValidateVectorBatchQueryQequest(const dingodb::pb::index::VectorBatchQueryRequest* request) {
   if (request->region_id() == 0) {
@@ -388,6 +390,119 @@ void IndexServiceImpl::VectorGetBorderId(google::protobuf::RpcController* contro
   response->set_id(border_id);
 }
 
-void IndexServiceImpl::SetStorage(std::shared_ptr<Storage> storage) { storage_ = storage; }
+butil::Status ValidateVectorScanQueryRequest(const dingodb::pb::index::VectorScanQueryRequest* request) {
+  if (request->region_id() == 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id is error");
+  }
+
+  if (request->vector_id_start() == 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param vector_id_start is error");
+  }
+
+  if (request->max_scan_count() == 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param max_scan_count cant be 0");
+  }
+
+  if (request->max_scan_count() > FLAGS_vector_max_bactch_count) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param max_scan_count is bigger than %ld",
+                         FLAGS_vector_max_bactch_count);
+  }
+
+  return ServiceHelper::ValidateIndexRegion(request->region_id());
+}
+
+void IndexServiceImpl::VectorScanQuery(google::protobuf::RpcController* controller,
+                                       const pb::index::VectorScanQueryRequest* request,
+                                       pb::index::VectorScanQueryResponse* response, google::protobuf::Closure* done) {
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(done);
+
+  DINGO_LOG(DEBUG) << "VectorScanQuery request: " << request->ShortDebugString();
+
+  butil::Status status = ValidateVectorScanQueryRequest(request);
+  if (!status.ok()) {
+    auto* err = response->mutable_error();
+    err->set_errcode(static_cast<Errno>(status.error_code()));
+    err->set_errmsg(status.error_str());
+    DINGO_LOG(ERROR) << fmt::format("VectorScanQuery request: {} response: {}", request->ShortDebugString(),
+                                    response->ShortDebugString());
+    return;
+  }
+
+  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
+  ctx->SetRegionId(request->region_id()).SetCfName(Constant::kStoreDataCF);
+
+  std::vector<pb::common::VectorWithId> vector_with_ids;
+
+  status = storage_->VectorScanQuery(ctx, request->vector_id_start(), request->is_reverse_scan(),
+                                     request->max_scan_count(), (!request->without_vector_data()),
+                                     request->with_scalar_data(), Helper::PbRepeatedToVector(request->selected_keys()),
+                                     request->with_table_data(), vector_with_ids);
+
+  if (!status.ok()) {
+    auto* err = response->mutable_error();
+    err->set_errcode(static_cast<Errno>(status.error_code()));
+    err->set_errmsg(status.error_str());
+    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+      err->set_errmsg("Not leader, please redirect leader.");
+      ServiceHelper::RedirectLeader(status.error_str(), response);
+    }
+    DINGO_LOG(ERROR) << fmt::format("VectorScanQuery request: {} response: {}", request->ShortDebugString(),
+                                    response->ShortDebugString());
+    return;
+  }
+
+  for (auto& vector_with_id : vector_with_ids) {
+    response->add_vectors()->Swap(&vector_with_id);
+  }
+}
+
+butil::Status ValidateVectorGetRegionMetricsRequest(const dingodb::pb::index::VectorGetRegionMetricsRequest* request) {
+  if (request->region_id() == 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id is error");
+  }
+
+  return ServiceHelper::ValidateIndexRegion(request->region_id());
+}
+
+void IndexServiceImpl::VectorGetRegionMetrics(google::protobuf::RpcController* controller,
+                                              const pb::index::VectorGetRegionMetricsRequest* request,
+                                              pb::index::VectorGetRegionMetricsResponse* response,
+                                              google::protobuf::Closure* done) {
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(done);
+
+  DINGO_LOG(DEBUG) << "VectorGetRegionMetrics request: " << request->ShortDebugString();
+
+  butil::Status status = ValidateVectorGetRegionMetricsRequest(request);
+  if (!status.ok()) {
+    auto* err = response->mutable_error();
+    err->set_errcode(static_cast<Errno>(status.error_code()));
+    err->set_errmsg(status.error_str());
+    DINGO_LOG(ERROR) << fmt::format("VectorGetRegionMetrics request: {} response: {}", request->ShortDebugString(),
+                                    response->ShortDebugString());
+    return;
+  }
+
+  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
+  ctx->SetRegionId(request->region_id()).SetCfName(Constant::kStoreDataCF);
+
+  pb::common::VectorIndexMetrics metrics;
+  status = storage_->VectorGetRegionMetrics(ctx, request->region_id(), metrics);
+  if (!status.ok()) {
+    auto* err = response->mutable_error();
+    err->set_errcode(static_cast<Errno>(status.error_code()));
+    err->set_errmsg(status.error_str());
+    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+      err->set_errmsg("Not leader, please redirect leader.");
+      ServiceHelper::RedirectLeader(status.error_str(), response);
+    }
+    DINGO_LOG(ERROR) << fmt::format("VectorGetRegionMetrics request: {} response: {}", request->ShortDebugString(),
+                                    response->ShortDebugString());
+    return;
+  }
+
+  response->mutable_metrics()->CopyFrom(metrics);
+}
 
 }  // namespace dingodb

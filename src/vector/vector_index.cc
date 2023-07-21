@@ -49,6 +49,14 @@ butil::Status VectorIndex::GetCount([[maybe_unused]] uint64_t& count) {
   return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "this vector index do not implement get count");
 }
 
+butil::Status VectorIndex::GetDeletedCount([[maybe_unused]] uint64_t& deleted_count) {
+  return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "this vector index do not implement get deleted count");
+}
+
+butil::Status VectorIndex::GetMemorySize([[maybe_unused]] uint64_t& memory_size) {
+  return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "this vector index do not implement get memory size");
+}
+
 butil::Status VectorIndex::NeedToRebuild([[maybe_unused]] bool& need_to_rebuild,
                                          [[maybe_unused]] uint64_t last_save_log_behind) {
   return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "this vector index do not implement need to rebuild");

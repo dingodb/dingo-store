@@ -52,6 +52,33 @@ message VectorBatchQueryResponse {
   repeated dingodb.pb.common.VectorWithId vectors = 2;
 }
 
+message VectorScanQueryRequest {
+  uint64 region_id = 1;
+  uint64 vector_id_start = 2;
+  bool is_reverse_scan = 3;
+  uint64 max_scan_count = 4;  // the max count user want to scan
+
+  bool without_vector_data = 11;       // Default false, if true, response without vector data.
+  bool with_scalar_data = 12;          // Default false, if true, response with scalar data.
+  repeated string selected_keys = 13;  // If with_scalar_data is true, selected_keys is used to select scalar data, if
+                                       // this parameter is null, all scalar data will be returned.
+  bool with_table_data = 14;           // Default false, if true, response with table data.
+}
+
+message VectorScanQueryResponse {
+  dingodb.pb.error.Error error = 1;
+  repeated dingodb.pb.common.VectorWithId vectors = 2;
+}
+
+message VectorGetRegionMetricsRequest {
+  uint64 region_id = 1;
+}
+
+message VectorGetRegionMetricsResponse {
+  dingodb.pb.error.Error error = 1;
+  dingodb.pb.common.VectorIndexMetrics metrics = 2;
+}
+
 // vector.id > 0: exact query
 // vector.id == 0: similarity search with vector.vector
 message VectorSearchRequest {
@@ -101,4 +128,6 @@ service IndexService {
   rpc VectorSearch(VectorSearchRequest) returns (VectorSearchResponse);
   rpc VectorDelete(VectorDeleteRequest) returns (VectorDeleteResponse);
   rpc VectorGetBorderId(VectorGetBorderIdRequest) returns (VectorGetBorderIdResponse);
+  rpc VectorScanQuery(VectorScanQueryRequest) returns (VectorScanQueryResponse);
+  rpc VectorGetRegionMetrics(VectorGetRegionMetricsRequest) returns (VectorGetRegionMetricsResponse);
 };

@@ -276,19 +276,33 @@ butil::Status VectorIndexFlat::Load(const std::string& /*path*/) {
   return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "Flat index not support load");
 }
 
-butil::Status VectorIndexFlat::GetCount([[maybe_unused]] uint64_t& count) {
+butil::Status VectorIndexFlat::GetCount(uint64_t& count) {
   count = index_->id_map.size();
   return butil::Status::OK();
 }
 
-butil::Status VectorIndexFlat::NeedToRebuild([[maybe_unused]] bool& need_to_rebuild,
-                                             [[maybe_unused]] uint64_t last_save_log_behind) {
+butil::Status VectorIndexFlat::GetDeletedCount(uint64_t& deleted_count) {
+  deleted_count = 0;
+  return butil::Status::OK();
+}
+
+butil::Status VectorIndexFlat::GetMemorySize(uint64_t& memory_size) {
+  auto count = index_->ntotal;
+  if (count == 0) {
+    memory_size = 0;
+    return butil::Status::OK();
+  }
+
+  memory_size = count * sizeof(uint64_t) + count * dimension_ * sizeof(float);
+  return butil::Status::OK();
+}
+
+butil::Status VectorIndexFlat::NeedToRebuild(bool& need_to_rebuild, [[maybe_unused]] uint64_t last_save_log_behind) {
   need_to_rebuild = false;
   return butil::Status::OK();
 }
 
-butil::Status VectorIndexFlat::NeedToSave([[maybe_unused]] bool& need_to_save,
-                                          [[maybe_unused]] uint64_t last_save_log_behind) {
+butil::Status VectorIndexFlat::NeedToSave(bool& need_to_save, [[maybe_unused]] uint64_t last_save_log_behind) {
   need_to_save = false;
   return butil::Status::OK();
 }

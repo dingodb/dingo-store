@@ -19,6 +19,7 @@
 #include <string>
 #include <vector>
 
+#include "butil/status.h"
 #include "common/context.h"
 #include "engine/engine.h"
 #include "engine/raft_store_engine.h"
@@ -73,6 +74,12 @@ class Storage {
                                   std::vector<pb::index::VectorWithDistanceResult>& results);
   butil::Status VectorDelete(std::shared_ptr<Context> ctx, const std::vector<uint64_t>& ids);
   butil::Status VectorGetBorderId(std::shared_ptr<Context> ctx, uint64_t& id, bool get_min);
+  butil::Status VectorScanQuery(std::shared_ptr<Context> ctx, uint64_t start_id, bool is_reverse, uint64_t limit,
+                                bool with_vector_data, bool with_scalar_data,
+                                const std::vector<std::string>& selected_scalar_keys, bool with_table_data,
+                                std::vector<pb::common::VectorWithId>& vector_with_ids);
+  butil::Status VectorGetRegionMetrics(std::shared_ptr<Context> ctx, uint64_t region_id,
+                                       pb::common::VectorIndexMetrics& region_metrics);
 
  private:
   butil::Status ValidateLeader(uint64_t region_id);

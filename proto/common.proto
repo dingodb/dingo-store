@@ -35,7 +35,9 @@ enum Engine {
   ENG_COLUMNAR = 4;
 };
 
-enum RawEngine { RAW_ENG_ROCKSDB = 0; };
+enum RawEngine {
+  RAW_ENG_ROCKSDB = 0;
+};
 
 message Location {
   string host = 1;
