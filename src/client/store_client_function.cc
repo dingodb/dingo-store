@@ -296,14 +296,20 @@ void SendVectorGetRegionMetrics(ServerInteractionPtr interaction, uint64_t regio
   DINGO_LOG(INFO) << "VectorGetRegionMetrics response: " << response.DebugString();
 }
 
-const int kKAddVectorBatchSize = 1024;
-
 void SendVectorAdd(ServerInteractionPtr interaction, uint64_t region_id, uint32_t dimension, uint32_t start_id,
-                   uint32_t count) {
+                   uint32_t count, uint32_t step_count) {
   dingodb::pb::index::VectorAddRequest request;
   dingodb::pb::index::VectorAddResponse response;
 
+  if (step_count == 0) {
+    DINGO_LOG(ERROR) << "step_count is 0, use count as step_count";
+    step_count = count;
+  }
+
   request.set_region_id(region_id);
+
+  std::mt19937 rng;
+  std::uniform_real_distribution<> distrib(0.0, 10.0);
 
   int end_id = start_id + count;
   for (int i = start_id; i < end_id; ++i) {
@@ -312,8 +318,9 @@ void SendVectorAdd(ServerInteractionPtr interaction, uint64_t region_id, uint32_
     vector_with_id->mutable_vector()->set_dimension(dimension);
     vector_with_id->mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
     for (int j = 0; j < dimension; j++) {
-      vector_with_id->mutable_vector()->add_float_values(1.0 * dingodb::Helper::GenerateRandomInteger(0, 100) / 10);
+      vector_with_id->mutable_vector()->add_float_values(distrib(rng));
     }
+
     if (FLAGS_with_scalar) {
       for (int k = 0; k < 2; ++k) {
         auto* scalar_data = vector_with_id->mutable_scalar_data()->mutable_scalar_data();
@@ -337,7 +344,7 @@ void SendVectorAdd(ServerInteractionPtr interaction, uint64_t region_id, uint32_
       table_data->set_table_value(fmt::format("table_value{}", i));
     }
 
-    if ((i - start_id + 1) % kKAddVectorBatchSize == 0 || (i + 1) == end_id) {
+    if ((i - start_id + 1) % step_count == 0 || (i + 1) == end_id) {
       DINGO_LOG(INFO) << "VectorAdd request";
       butil::Status status = interaction->SendRequest("IndexService", "VectorAdd", request, response);
       int success_count = 0;
