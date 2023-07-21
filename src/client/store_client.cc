@@ -59,6 +59,8 @@ DEFINE_int64(vector_index_id, 0, "vector index id unique. default 0");
 DEFINE_string(vector_index_add_cost_file, "./cost.txt", "exec batch vector add. cost time");
 DEFINE_int32(step_count, 1024, "step_count");
 DEFINE_bool(print_vector_search_delay, false, "print vector search delay");
+DEFINE_int32(limit, 0, "limit");
+DEFINE_bool(is_reverse, false, "is_revers");
 
 bvar::LatencyRecorder g_latency_recorder("dingo-store");
 
@@ -229,6 +231,11 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
                                     FLAGS_topn, FLAGS_batch_count);
     } else if (method == "VectorBatchQuery") {
       client::SendVectorBatchQuery(ctx->store_interaction, FLAGS_region_id, {static_cast<uint64_t>(FLAGS_vector_id)});
+    } else if (method == "VectorScanQuery") {
+      client::SendVectorScanQuery(ctx->store_interaction, FLAGS_region_id, FLAGS_start_id, FLAGS_limit,
+                                  FLAGS_is_reverse);
+    } else if (method == "VectorGetRegionMetrics") {
+      client::SendVectorGetRegionMetrics(ctx->store_interaction, FLAGS_region_id);
     } else if (method == "VectorAdd") {
       client::SendVectorAdd(ctx->store_interaction, FLAGS_region_id, FLAGS_dimension, FLAGS_start_id, FLAGS_count);
     } else if (method == "VectorDelete") {

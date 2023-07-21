@@ -43,6 +43,16 @@ uint64_t VectorCodec::DecodeVectorId(const std::string& value) {
   return buf.ReadLong();
 }
 
+uint64_t VectorCodec::DecodeVectorRegionId(const std::string& value) {
+  if (value.size() != 17) {
+    DINGO_LOG(ERROR) << "DecodeVectorId failed, value size is not 8, value:[" << value << "]";
+    return 0;
+  }
+  Buf buf(value);
+
+  return buf.ReadLong();
+}
+
 void VectorCodec::EncodeVectorScalar(uint64_t region_id, uint64_t vector_id, std::string& result) {
   Buf buf(17);
   buf.WriteLong(region_id);

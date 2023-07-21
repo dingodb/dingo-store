@@ -600,6 +600,11 @@ butil::Status VectorIndexManager::GetBorderId(uint64_t region_id, uint64_t& bord
       pb::common::VectorWithId vector;
 
       std::string key(iter->Key());
+      auto decode_region_id = VectorCodec::DecodeVectorRegionId(key);
+      if (decode_region_id != region_id) {
+        break;
+      }
+
       border_id = VectorCodec::DecodeVectorId(key);
       break;
     }
@@ -608,6 +613,11 @@ butil::Status VectorIndexManager::GetBorderId(uint64_t region_id, uint64_t& bord
       pb::common::VectorWithId vector;
 
       std::string key(iter->Key());
+      auto decode_region_id = VectorCodec::DecodeVectorRegionId(key);
+      if (decode_region_id != region_id) {
+        break;
+      }
+
       border_id = VectorCodec::DecodeVectorId(key);
       break;
     }
@@ -706,6 +716,56 @@ butil::Status VectorIndexManager::ScrubVectorIndex(store::RegionPtr region, bool
   }
 
   DINGO_LOG(INFO) << fmt::format("ScrubVectorIndex success, region_id {}", region->Id());
+
+  return butil::Status::OK();
+}
+
+// ScanVectorId
+butil::Status VectorIndexManager::ScanVectorId(uint64_t region_id, uint64_t start_id, bool is_reverse, uint64_t limit,
+                                               std::vector<uint64_t>& ids) {
+  std::string start_key;
+  std::string end_key;
+  VectorCodec::EncodeVectorId(region_id, 0, start_key);
+  VectorCodec::EncodeVectorId(region_id, UINT64_MAX, end_key);
+
+  std::string seek_key;
+  VectorCodec::EncodeVectorId(region_id, start_id, seek_key);
+
+  IteratorOptions options;
+  options.lower_bound = start_key;
+  options.upper_bound = end_key;
+
+  auto iter = raw_engine_->NewIterator(Constant::kStoreDataCF, options);
+  if (iter == nullptr) {
+    DINGO_LOG(INFO) << fmt::format("NewIterator failed, region_id {}", region_id);
+    return butil::Status(pb::error::Errno::EINTERNAL, "NewIterator failed");
+  }
+
+  if (!is_reverse) {
+    for (iter->Seek(seek_key); iter->Valid(); iter->Next()) {
+      pb::common::VectorWithId vector;
+
+      std::string key(iter->Key());
+      auto vector_id = VectorCodec::DecodeVectorId(key);
+      ids.push_back(vector_id);
+
+      if (ids.size() >= limit) {
+        break;
+      }
+    }
+  } else {
+    for (iter->SeekForPrev(seek_key); iter->Valid(); iter->Prev()) {
+      pb::common::VectorWithId vector;
+
+      std::string key(iter->Key());
+      auto vector_id = VectorCodec::DecodeVectorId(key);
+      ids.push_back(vector_id);
+
+      if (ids.size() >= limit) {
+        break;
+      }
+    }
+  }
 
   return butil::Status::OK();
 }

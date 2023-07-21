@@ -305,4 +305,39 @@ butil::Status Storage::KvScanRelease(std::shared_ptr<Context>, const std::string
   return status;
 }
 
+butil::Status Storage::VectorScanQuery(std::shared_ptr<Context> ctx, uint64_t start_id, bool is_reverse, uint64_t limit,
+                                       bool with_vector_data, bool with_scalar_data,
+                                       const std::vector<std::string>& selected_scalar_keys, bool with_table_data,
+                                       std::vector<pb::common::VectorWithId>& vector_with_ids) {
+  auto status = ValidateLeader(ctx->RegionId());
+  if (!status.ok()) {
+    return status;
+  }
+
+  auto reader = engine_->NewVectorReader(Constant::kStoreDataCF);
+  status = reader->VectorScanQuery(ctx, start_id, is_reverse, limit, with_vector_data, with_scalar_data,
+                                   selected_scalar_keys, with_table_data, vector_with_ids);
+  if (!status.ok()) {
+    return status;
+  }
+
+  return butil::Status();
+}
+
+butil::Status Storage::VectorGetRegionMetrics(std::shared_ptr<Context> ctx, uint64_t region_id,
+                                              pb::common::VectorIndexMetrics& region_metrics) {
+  auto status = ValidateLeader(ctx->RegionId());
+  if (!status.ok()) {
+    return status;
+  }
+
+  auto reader = engine_->NewVectorReader(Constant::kStoreDataCF);
+  status = reader->VectorGetRegionMetrics(ctx, region_id, region_metrics);
+  if (!status.ok()) {
+    return status;
+  }
+
+  return butil::Status();
+}
+
 }  // namespace dingodb

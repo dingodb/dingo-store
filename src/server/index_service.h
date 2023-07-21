@@ -38,6 +38,12 @@ class IndexServiceImpl : public pb::index::IndexService {
   void VectorGetBorderId(google::protobuf::RpcController* controller,
                          const pb::index::VectorGetBorderIdRequest* request,
                          pb::index::VectorGetBorderIdResponse* response, google::protobuf::Closure* done) override;
+  void VectorScanQuery(google::protobuf::RpcController* controller, const pb::index::VectorScanQueryRequest* request,
+                       pb::index::VectorScanQueryResponse* response, google::protobuf::Closure* done) override;
+  void VectorGetRegionMetrics(google::protobuf::RpcController* controller,
+                              const pb::index::VectorGetRegionMetricsRequest* request,
+                              pb::index::VectorGetRegionMetricsResponse* response,
+                              google::protobuf::Closure* done) override;
 
   void SetStorage(std::shared_ptr<Storage> storage);
 

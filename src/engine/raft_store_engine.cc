@@ -636,6 +636,107 @@ butil::Status RaftStoreEngine::VectorReader::VectorGetBorderId(std::shared_ptr<C
   return butil::Status();
 }
 
+butil::Status RaftStoreEngine::VectorReader::VectorScanQuery(std::shared_ptr<Context> ctx, uint64_t start_id,
+                                                             bool is_reverse, uint64_t limit, bool with_vector_data,
+                                                             bool with_scalar_data,
+                                                             const std::vector<std::string>& selected_scalar_keys,
+                                                             bool with_table_data,
+                                                             std::vector<pb::common::VectorWithId>& vector_with_ids) {
+  DINGO_LOG(INFO) << "scan vector id, region_id: " << ctx->RegionId() << ", start_id: " << start_id
+                  << ", is_reverse: " << is_reverse << ", limit: " << limit;
+
+  // scan for ids
+  std::vector<uint64_t> vector_ids;
+  auto vector_index_mgr = Server::GetInstance()->GetVectorIndexManager();
+  auto status = vector_index_mgr->ScanVectorId(ctx->RegionId(), start_id, is_reverse, limit, vector_ids);
+  if (!status.ok()) {
+    DINGO_LOG(INFO) << "Failed to scan vector id: " << status.error_str();
+    return status;
+  }
+
+  DINGO_LOG(INFO) << "scan vector id count: " << vector_ids.size();
+
+  if (vector_ids.empty()) {
+    return butil::Status();
+  }
+
+  // query vector with id
+  for (auto vector_id : vector_ids) {
+    pb::common::VectorWithId vector_with_id;
+    auto status = QueryVectorWithId(ctx->RegionId(), vector_id, vector_with_id, with_vector_data);
+    if (!status.ok()) {
+      DINGO_LOG(WARNING) << "Failed to query vector with id: " << vector_id << ", status: " << status.error_str();
+    }
+
+    // if the id is not exist, the vector_with_id will be empty, sdk client will handle this
+    vector_with_ids.push_back(vector_with_id);
+  }
+
+  if (with_scalar_data) {
+    for (auto& vector_with_id : vector_with_ids) {
+      if (vector_with_id.ByteSizeLong() == 0) {
+        continue;
+      }
+
+      auto status = QueryVectorScalarData(ctx->RegionId(), selected_scalar_keys, vector_with_id);
+      if (!status.ok()) {
+        DINGO_LOG(WARNING) << "Failed to query vector scalar data, id: " << vector_with_id.id()
+                           << ", status: " << status.error_str();
+      }
+    }
+  }
+
+  if (with_table_data) {
+    for (auto& vector_with_id : vector_with_ids) {
+      if (vector_with_id.ByteSizeLong() == 0) {
+        continue;
+      }
+
+      auto status = QueryVectorTableData(ctx->RegionId(), vector_with_id);
+      if (!status.ok()) {
+        DINGO_LOG(WARNING) << "Failed to query vector table data, id: " << vector_with_id.id()
+                           << ", status: " << status.error_str();
+      }
+    }
+  }
+
+  return butil::Status::OK();
+}
+
+butil::Status RaftStoreEngine::VectorReader::VectorGetRegionMetrics(std::shared_ptr<Context> ctx, uint64_t region_id,
+                                                                    pb::common::VectorIndexMetrics& region_metrics) {
+  auto vector_index_mgr = Server::GetInstance()->GetVectorIndexManager();
+  if (vector_index_mgr == nullptr) {
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, fmt::format("Not found vector index mgr {}", region_id));
+  }
+
+  auto vector_index = vector_index_mgr->GetVectorIndex(region_id);
+  if (vector_index == nullptr) {
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, fmt::format("Not found vector index {}", region_id));
+  }
+
+  uint64_t total_vector_count = 0;
+  uint64_t total_deleted_count = 0;
+  uint64_t total_memory_usage = 0;
+  uint64_t max_id = 0;
+  uint64_t min_id = 0;
+
+  vector_index->GetCount(total_vector_count);
+  vector_index->GetDeletedCount(total_deleted_count);
+  vector_index->GetMemorySize(total_memory_usage);
+
+  vector_index_mgr->GetBorderId(ctx->RegionId(), min_id, true);
+  vector_index_mgr->GetBorderId(ctx->RegionId(), max_id, false);
+
+  region_metrics.set_current_count(total_vector_count);
+  region_metrics.set_deleted_count(total_deleted_count);
+  region_metrics.set_memory_bytes(total_memory_usage);
+  region_metrics.set_max_id(max_id);
+  region_metrics.set_min_id(min_id);
+
+  return butil::Status();
+}
+
 std::shared_ptr<Engine::VectorReader> RaftStoreEngine::NewVectorReader(const std::string& cf_name) {
   return std::make_shared<RaftStoreEngine::VectorReader>(engine_->NewReader(cf_name));
 }

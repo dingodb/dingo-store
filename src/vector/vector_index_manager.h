@@ -70,6 +70,8 @@ class VectorIndexManager : public TransformKvAble {
   void UpdateSnapshotLogIndex(uint64_t region_id, uint64_t log_index);
 
   butil::Status GetBorderId(uint64_t region_id, uint64_t& border_id, bool get_min);
+  butil::Status ScanVectorId(uint64_t region_id, uint64_t start_id, bool is_reverse, uint64_t limit,
+                             std::vector<uint64_t>& ids);
 
   butil::Status ScrubVectorIndex();
 

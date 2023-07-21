@@ -55,6 +55,8 @@ class VectorIndex {
   pb::common::VectorIndexType VectorIndexType() const;
 
   virtual butil::Status GetCount([[maybe_unused]] uint64_t& count);
+  virtual butil::Status GetDeletedCount([[maybe_unused]] uint64_t& deleted_count);
+  virtual butil::Status GetMemorySize([[maybe_unused]] uint64_t& memory_size);
 
   virtual butil::Status NeedToRebuild([[maybe_unused]] bool& need_to_rebuild,
                                       [[maybe_unused]] uint64_t last_save_log_behind);
@@ -71,9 +73,9 @@ class VectorIndex {
   virtual butil::Status Load([[maybe_unused]] const std::string& path);
 
   virtual butil::Status Search([[maybe_unused]] std::vector<pb::common::VectorWithId> vector_with_ids,
-                                    [[maybe_unused]] uint32_t topk,
-                                    std::vector<pb::index::VectorWithDistanceResult>& results,
-                                    [[maybe_unused]] bool reconstruct = false) = 0;
+                               [[maybe_unused]] uint32_t topk,
+                               std::vector<pb::index::VectorWithDistanceResult>& results,
+                               [[maybe_unused]] bool reconstruct = false) = 0;
 
   virtual butil::Status SetOnline() = 0;
   virtual butil::Status SetOffline() = 0;

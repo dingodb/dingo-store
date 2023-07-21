@@ -24,6 +24,7 @@ class VectorCodec {
  public:
   static void EncodeVectorId(uint64_t region_id, uint64_t vector_id, std::string& result);
   static uint64_t DecodeVectorId(const std::string& value);
+  static uint64_t DecodeVectorRegionId(const std::string& value);
   static void EncodeVectorScalar(uint64_t region_id, uint64_t vector_id, std::string& result);
   static void EncodeVectorTable(uint64_t region_id, uint64_t vector_id, std::string& result);
   static void EncodeVectorWal(uint64_t region_id, uint64_t vector_id, uint64_t log_id, std::string& result);
