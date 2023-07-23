@@ -8,15 +8,12 @@
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <cstddef>
 #include <cstdint>
-#include <cstdio>
-#include <cstring>
-#include <iomanip>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -24,11 +21,15 @@
 #include "brpc/channel.h"
 #include "brpc/controller.h"
 #include "bthread/bthread.h"
+#include "client/client_helper.h"
 #include "client/coordinator_client_function.h"
+#include "client/store_client_function.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "common/version.h"
+#include "fmt/core.h"
 #include "gflags/gflags.h"
+#include "glog/logging.h"
 #include "proto/common.pb.h"
 
 DEFINE_bool(log_each_request, true, "Print log for each request");
@@ -77,6 +78,252 @@ DEFINE_int64(efconstruction, 0, "efconstruction");
 DEFINE_int64(nlinks, 0, "nlinks");
 DEFINE_bool(with_auto_increment, true, "with_auto_increment");
 DEFINE_string(vector_index_type, "", "vector_index_type");
+DEFINE_int32(round_num, 1, "Round of requests");
+DEFINE_string(store_addrs, "", "server addrs");
+DEFINE_string(raft_addrs, "127.0.0.1:10101:0,127.0.0.1:10102:0,127.0.0.1:10103:0", "raft addrs");
+DEFINE_string(key, "", "Request key");
+DEFINE_string(value, "", "Request values");
+DEFINE_string(prefix, "", "key prefix");
+DEFINE_int32(region_count, 1, "region count");
+DEFINE_int32(table_id, 0, "table id");
+DEFINE_string(table_name, "", "table name");
+DEFINE_string(raft_group, "store_default_test", "raft group");
+DEFINE_int32(partition_num, 1, "table partition num");
+DEFINE_int32(start_id, 1, "start id");
+DEFINE_int32(count, 50, "count");
+DEFINE_int32(vector_id, 0, "vector_id");
+DEFINE_int32(topn, 10, "top n");
+DEFINE_int32(batch_count, 5, "batch count");
+DEFINE_bool(without_vector, false, "Search vector without output vector data");
+DEFINE_bool(with_scalar, false, "Search vector with scalar data");
+DEFINE_bool(with_table, false, "Search vector with table data");
+DEFINE_int64(vector_index_id, 0, "vector index id unique. default 0");
+DEFINE_string(vector_index_add_cost_file, "./cost.txt", "exec batch vector add. cost time");
+DEFINE_int32(step_count, 1024, "step_count");
+DEFINE_bool(print_vector_search_delay, false, "print vector search delay");
+DEFINE_int32(limit, 0, "limit");
+DEFINE_bool(is_reverse, false, "is_revers");
+
+bvar::LatencyRecorder g_latency_recorder("dingo-store");
+
+const std::map<std::string, std::vector<std::string>> kParamConstraint = {
+    {"RaftGroup", {"AddRegion", "ChangeRegion", "BatchAddRegion", "TestBatchPutGet"}},
+    {"RaftAddrs", {"AddRegion", "ChangeRegion", "BatchAddRegion", "TestBatchPutGet"}},
+    {"ThreadNum", {"BatchAddRegion", "TestBatchPutGet", "TestBatchPutGet"}},
+    {"RegionCount", {"BatchAddRegion", "TestBatchPutGet"}},
+    {"ReqNum", {"KvBatchGet", "TestBatchPutGet", "TestBatchPutGet", "AutoTest"}},
+    {"TableName", {"AutoTest"}},
+    {"PartitionNum", {"AutoTest"}},
+};
+
+void ValidateParam() {
+  if (FLAGS_region_id == 0) {
+    DINGO_LOG(FATAL) << "missing param region_id error";
+  }
+
+  if (FLAGS_raft_group.empty()) {
+    auto methods = kParamConstraint.find("RaftGroup")->second;
+    for (const auto& method : methods) {
+      if (method == FLAGS_method) {
+        DINGO_LOG(FATAL) << "missing param raft_group error";
+      }
+    }
+  }
+
+  if (FLAGS_raft_addrs.empty()) {
+    auto methods = kParamConstraint.find("RaftAddrs")->second;
+    for (const auto& method : methods) {
+      if (method == FLAGS_method) {
+        DINGO_LOG(FATAL) << "missing param raft_addrs error";
+      }
+    }
+  }
+
+  if (FLAGS_thread_num == 0) {
+    auto methods = kParamConstraint.find("ThreadNum")->second;
+    for (const auto& method : methods) {
+      if (method == FLAGS_method) {
+        DINGO_LOG(FATAL) << "missing param thread_num error";
+      }
+    }
+  }
+
+  if (FLAGS_region_count == 0) {
+    auto methods = kParamConstraint.find("RegionCount")->second;
+    for (const auto& method : methods) {
+      if (method == FLAGS_method) {
+        DINGO_LOG(FATAL) << "missing param region_count error";
+      }
+    }
+  }
+
+  if (FLAGS_req_num == 0) {
+    auto methods = kParamConstraint.find("ReqNum")->second;
+    for (const auto& method : methods) {
+      if (method == FLAGS_method) {
+        DINGO_LOG(FATAL) << "missing param req_num error";
+      }
+    }
+  }
+
+  if (FLAGS_table_name.empty()) {
+    auto methods = kParamConstraint.find("TableName")->second;
+    for (const auto& method : methods) {
+      if (method == FLAGS_method) {
+        DINGO_LOG(FATAL) << "missing param table_name error";
+      }
+    }
+  }
+
+  if (FLAGS_partition_num == 0) {
+    auto methods = kParamConstraint.find("PartitionNum")->second;
+    for (const auto& method : methods) {
+      if (method == FLAGS_method) {
+        DINGO_LOG(FATAL) << "missing param partition_num error";
+      }
+    }
+  }
+}
+
+// Get store addr from coordinator
+std::vector<std::string> GetStoreAddrs(client::ServerInteractionPtr interaction, uint64_t region_id) {
+  std::vector<std::string> addrs;
+  auto region = client::SendQueryRegion(interaction, region_id);
+  for (const auto& peer : region.definition().peers()) {
+    const auto& location = peer.server_location();
+    addrs.push_back(fmt::format("{}:{}", location.host(), location.port()));
+  }
+
+  return addrs;
+}
+
+void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int round_num) {
+  ValidateParam();
+
+  std::vector<std::string> raft_addrs;
+  butil::SplitString(FLAGS_raft_addrs, ',', &raft_addrs);
+
+  if (FLAGS_store_addrs.empty()) {
+    if (method != "AutoDropTable" && method != "AutoTest") {
+      // Get store addr from coordinator
+      auto store_addrs = GetStoreAddrs(ctx->coordinator_interaction, FLAGS_region_id);
+      ctx->store_interaction = std::make_shared<client::ServerInteraction>();
+      if (!ctx->store_interaction->Init(store_addrs)) {
+        DINGO_LOG(ERROR) << "Fail to init store_interaction";
+        return;
+      }
+    }
+  } else {
+    ctx->store_interaction = std::make_shared<client::ServerInteraction>();
+    if (!ctx->store_interaction->Init(FLAGS_store_addrs)) {
+      DINGO_LOG(ERROR) << "Fail to init store_interaction";
+      return;
+    }
+  }
+
+  for (int i = 0; i < round_num; ++i) {
+    DINGO_LOG(INFO) << fmt::format("round: {} / {}", i, round_num);
+    // Region operation
+    if (method == "AddRegion") {
+      client::SendAddRegion(ctx->store_interaction, FLAGS_region_id, FLAGS_raft_group, raft_addrs);
+    } else if (method == "ChangeRegion") {
+      client::SendChangeRegion(ctx->store_interaction, FLAGS_region_id, FLAGS_raft_group, raft_addrs);
+    } else if (method == "DestroyRegion") {
+      client::SendDestroyRegion(ctx->store_interaction, FLAGS_region_id);
+    } else if (method == "Snapshot") {
+      client::SendSnapshot(ctx->store_interaction, FLAGS_region_id);
+    } else if (method == "BatchAddRegion") {
+      client::BatchSendAddRegion(ctx->store_interaction, FLAGS_region_id, FLAGS_region_count, FLAGS_thread_num,
+                                 FLAGS_raft_group, raft_addrs);
+    } else if (method == "SnapshotVectorIndex") {
+      client::SendSnapshotVectorIndex(ctx->store_interaction, FLAGS_region_id);
+    }
+
+    // Kev/Value operation
+    if (method == "KvGet") {
+      std::string value;
+      client::SendKvGet(ctx->store_interaction, FLAGS_region_id, FLAGS_key, value);
+    } else if (method == "KvBatchGet") {
+      client::SendKvBatchGet(ctx->store_interaction, FLAGS_region_id, FLAGS_prefix, FLAGS_req_num);
+    } else if (method == "KvPut") {
+      client::SendKvPut(ctx->store_interaction, FLAGS_region_id, FLAGS_key);
+    } else if (method == "KvBatchPut") {
+      client::SendKvBatchPut(ctx->store_interaction, FLAGS_region_id, FLAGS_prefix, 100);
+    } else if (method == "KvPutIfAbsent") {
+      client::SendKvPutIfAbsent(ctx->store_interaction, FLAGS_region_id, FLAGS_key);
+    } else if (method == "KvBatchPutIfAbsent") {
+      client::SendKvBatchPutIfAbsent(ctx->store_interaction, FLAGS_region_id, FLAGS_prefix, 100);
+    } else if (method == "KvBatchDelete") {
+      client::SendKvBatchDelete(ctx->store_interaction, FLAGS_region_id, FLAGS_key);
+    } else if (method == "KvDeleteRange") {
+      client::SendKvDeleteRange(ctx->store_interaction, FLAGS_region_id, FLAGS_prefix);
+    } else if (method == "KvScan") {
+      client::SendKvScan(ctx->store_interaction, FLAGS_region_id, FLAGS_prefix);
+    } else if (method == "KvCompareAndSet") {
+      client::SendKvCompareAndSet(ctx->store_interaction, FLAGS_region_id, FLAGS_key);
+    } else if (method == "KvBatchCompareAndSet") {
+      client::SendKvBatchCompareAndSet(ctx->store_interaction, FLAGS_region_id, FLAGS_prefix, 100);
+    }
+
+    // Vector operation
+    if (method == "VectorSearch") {
+      client::SendVectorSearch(ctx->store_interaction, FLAGS_region_id, FLAGS_dimension, FLAGS_vector_id, FLAGS_topn);
+    } else if (method == "VectorBatchSearch") {
+      client::SendVectorBatchSearch(ctx->store_interaction, FLAGS_region_id, FLAGS_dimension, FLAGS_vector_id,
+                                    FLAGS_topn, FLAGS_batch_count);
+    } else if (method == "VectorBatchQuery") {
+      client::SendVectorBatchQuery(ctx->store_interaction, FLAGS_region_id, {static_cast<uint64_t>(FLAGS_vector_id)});
+    } else if (method == "VectorScanQuery") {
+      client::SendVectorScanQuery(ctx->store_interaction, FLAGS_region_id, FLAGS_start_id, FLAGS_limit,
+                                  FLAGS_is_reverse);
+    } else if (method == "VectorGetRegionMetrics") {
+      client::SendVectorGetRegionMetrics(ctx->store_interaction, FLAGS_region_id);
+    } else if (method == "VectorAdd") {
+      client::SendVectorAdd(ctx->store_interaction, FLAGS_region_id, FLAGS_dimension, FLAGS_start_id, FLAGS_count,
+                            FLAGS_step_count);
+    } else if (method == "VectorDelete") {
+      client::SendVectorDelete(ctx->store_interaction, FLAGS_region_id, FLAGS_start_id, FLAGS_count);
+    } else if (method == "VectorGetMaxId") {
+      client::SendVectorGetMaxId(ctx->store_interaction, FLAGS_region_id);
+    } else if (method == "VectorGetMinId") {
+      client::SendVectorGetMinId(ctx->store_interaction, FLAGS_region_id);
+    } else if (method == "VectorAddBatch") {
+      client::SendVectorAddBatch(ctx->store_interaction, FLAGS_region_id, FLAGS_dimension, FLAGS_count,
+                                 FLAGS_step_count, FLAGS_start_id, FLAGS_vector_index_add_cost_file);
+    }
+
+    // Test
+    if (method == "TestBatchPut") {
+      client::TestBatchPut(ctx->store_interaction, FLAGS_region_id, FLAGS_thread_num, FLAGS_req_num, FLAGS_prefix);
+    } else if (method == "TestBatchPutGet") {
+      client::TestBatchPutGet(ctx->store_interaction, FLAGS_region_id, FLAGS_thread_num, FLAGS_req_num, FLAGS_prefix);
+    } else if (method == "TestRegionLifecycle") {
+      client::TestRegionLifecycle(ctx->store_interaction, FLAGS_region_id, FLAGS_raft_group, raft_addrs,
+                                  FLAGS_region_count, FLAGS_thread_num, FLAGS_req_num, FLAGS_prefix);
+    } else if (method == "TestDeleteRangeWhenTransferLeader") {
+      client::TestDeleteRangeWhenTransferLeader(ctx, FLAGS_region_id, FLAGS_req_num, FLAGS_prefix);
+    }
+
+    // Auto test
+    if (method == "AutoTest") {
+      ctx->table_name = FLAGS_table_name;
+      ctx->partition_num = FLAGS_partition_num;
+      ctx->req_num = FLAGS_req_num;
+
+      AutoTest(ctx);
+    }
+
+    // Table operation
+    if (method == "AutoDropTable") {
+      ctx->req_num = FLAGS_req_num;
+      client::AutoDropTable(ctx);
+    }
+
+    if (i + 1 < round_num) {
+      bthread_usleep(1000 * 1000L);
+    }
+  }
+}
 
 std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction;
 std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction_meta;
@@ -115,7 +362,7 @@ uint64_t DecodeUint64(const std::string& str) {
   return value;
 }
 
-void SendDebug() {
+void CoordinatorSendDebug() {
   uint64_t test1 = 1001;
   auto encode_result = EncodeUint64(test1);
   DINGO_LOG(INFO) << encode_result.size();
@@ -163,7 +410,7 @@ void SendDebug() {
   DINGO_LOG(INFO) << "mid_key:      " << dingodb::Helper::StringToHex(mid_key.substr(1, mid_key.size() - 1));
 }
 
-void* Sender(void* /*arg*/) {
+int CoordinatorSender() {
   if (FLAGS_method == "RaftAddPeer") {  // raft control
     SendRaftAddPeer();
   } else if (FLAGS_method == "RaftRemovePeer") {
@@ -324,14 +571,14 @@ void* Sender(void* /*arg*/) {
     SendGenerateAutoIncrement(coordinator_interaction_meta);
   } else if (FLAGS_method == "DeleteAutoIncrement") {
     SendDeleteAutoIncrement(coordinator_interaction_meta);
-  } else if (FLAGS_method == "Debug") {
-    SendDebug();
+  } else if (FLAGS_method == "CoordinatorDebug") {
+    CoordinatorSendDebug();
   } else {
-    DINGO_LOG(INFO) << " method illegal , exit";
-    return nullptr;
+    DINGO_LOG(INFO) << " not coordinator method, try to send to store";
+    return -1;
   }
 
-  return nullptr;
+  return 0;
 }
 
 int main(int argc, char* argv[]) {
@@ -347,26 +594,7 @@ int main(int argc, char* argv[]) {
     dingodb::DingoShowVerion();
 
     printf("Usage: %s --method=[method]\n", argv[0]);
-    printf(
-        "Methods: [ RaftAddPeer | RaftRemovePeer | RaftTransferLeader | RaftSnapshot | RaftResetPeer | GetNodeInfo | "
-        "GetLogLevel | ChangeLogLevel | Hello | StoreHeartbeat | CreateStore | DeleteStore | UpdateStore | "
-        "CreateExecutor | DeleteExecutor | CreateExecutorUser | UpdateExecutorUser | DeleteExecutorUser | "
-        "GetExecutorUserMap | ExecutorHeartbeat | GetStoreMap | GetExecutorMap | GetRegionMap | GetDeletedRegionMap | "
-        "AddDeletedRegionMap | CleanDeletedRegionMap | GetRegionCount | GetCoordinatorMap | QueryRegion | "
-        "CreateRegionForSplit | DropRegion | DropRegionPermanently | SplitRegion | MergeRegion | AddPeerRegion | "
-        "RemovePeerRegion | TransferLeaderRegion | GetOrphanRegion | GetStoreOperation | GetTaskList | CleanTaskList | "
-        "CleanStoreOperation | AddStoreOperation | RemoveStoreOperation | GetStoreMetrics | DeleteStoreMetrics | "
-        "GetSchemas | GetSchema | GetSchemaByName | GetTables | GetTablesCount | CreateTable | CreateTableWithId | "
-        "CreateTableWithIncrement | CreateTableId | DropTable | CreateSchema | DropSchema | GetTable | GetTableByName "
-        "| GetTableRange | GetTableMetrics | GetIndexes | GetIndexsCount | CreateIndex | CreateIndexWithId | "
-        "CreateIndexId | DropIndex | GetIndex | GetIndexByName | GetIndexRange | GetIndexMetrics | GetAutoIncrements | "
-        "GetAutoIncrement | CreateAutoIncrement | UpdateAutoIncrement | GenerateAutoIncrement | DeleteAutoIncrement | "
-        "Debug ]\n");
     exit(-1);
-  }
-
-  if (!FLAGS_url.empty()) {
-    FLAGS_coor_url = FLAGS_url;
   }
 
   if (FLAGS_coor_url.empty()) {
@@ -374,6 +602,29 @@ int main(int argc, char* argv[]) {
     FLAGS_coor_url = "file://./coor_list";
   }
 
+  if (!FLAGS_url.empty()) {
+    FLAGS_coor_url = FLAGS_url;
+  }
+
+  auto ctx = std::make_shared<client::Context>();
+  if (!FLAGS_coor_url.empty()) {
+    std::string path = FLAGS_coor_url;
+    path = path.replace(path.find("file://"), 7, "");
+    auto addrs = client::Helper::GetAddrsFromFile(path);
+    if (addrs.empty()) {
+      DINGO_LOG(ERROR) << "url not find addr, path=" << path;
+      return -1;
+    }
+
+    auto coordinator_interaction = std::make_shared<client::ServerInteraction>();
+    if (!coordinator_interaction->Init(addrs)) {
+      DINGO_LOG(ERROR) << "Fail to init coordinator_interaction, please check parameter --url=" << FLAGS_coor_url;
+      return -1;
+    }
+    ctx->coordinator_interaction = coordinator_interaction;
+  }
+
+  // this is for legacy coordinator_client use, will be removed in the future
   if (!FLAGS_coor_url.empty()) {
     coordinator_interaction = std::make_shared<dingodb::CoordinatorInteraction>();
     if (!coordinator_interaction->InitByNameService(
@@ -394,18 +645,9 @@ int main(int argc, char* argv[]) {
     FLAGS_coordinator_addr = FLAGS_addr;
   }
 
-  std::vector<bthread_t> tids;
-  tids.resize(FLAGS_thread_num);
-
-  for (int i = 0; i < FLAGS_thread_num; ++i) {
-    if (bthread_start_background(&tids[i], nullptr, Sender, nullptr) != 0) {
-      DINGO_LOG(ERROR) << "Fail to create bthread";
-      return -1;
-    }
-  }
-
-  for (int i = 0; i < FLAGS_thread_num; ++i) {
-    bthread_join(tids[i], nullptr);
+  auto ret = CoordinatorSender();
+  if (ret < 0) {
+    Sender(ctx, FLAGS_method, FLAGS_round_num);
   }
 
   return 0;
