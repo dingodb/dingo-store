@@ -18,7 +18,7 @@
 #include "coordinator/coordinator_interaction.h"
 #include "coordinator_client_function.h"
 
-DEFINE_uint64(start_id, 1, "Start id of auto_increment.");
+DEFINE_uint64(incr_start_id, 1, "Start id of auto_increment.");
 DEFINE_bool(force, true, "Force set auto increment.");
 DEFINE_uint32(generate_count, 10000, "Generate auto increment id count.");
 DEFINE_uint32(auto_increment_increment, 1, "SQL var auto_increment_increment.");
@@ -33,7 +33,7 @@ DECLARE_string(id);
 // ./dingodb_client_coordinator -url=file://./coor_list -id=888 -method=CreateAutoIncrement
 // ./dingodb_client_coordinator -url=file://./coor_list -id=888 -method=GetAutoIncrement
 // ./dingodb_client_coordinator -url=file://./coor_list -id=888 -generate_count=10000 -method=GenerateAutoIncrement
-// ./dingodb_client_coordinator -url=file://./coor_list -id=888 -start_id=110000 -method=UpdateAutoIncrement
+// ./dingodb_client_coordinator -url=file://./coor_list -id=888 -incr_start_id=110000 -method=UpdateAutoIncrement
 // ./dingodb_client_coordinator -url=file://./coor_list -id=888 -method=DeleteAutoIncrement
 
 void SendGetAutoIncrements(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
@@ -74,7 +74,7 @@ void SendCreateAutoIncrement(std::shared_ptr<dingodb::CoordinatorInteraction> co
   }
   table_id->set_entity_id(std::stol(FLAGS_id));
 
-  request.set_start_id(FLAGS_start_id);
+  request.set_start_id(FLAGS_incr_start_id);
 
   auto status = coordinator_interaction->SendRequest("CreateAutoIncrement", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
@@ -93,7 +93,7 @@ void SendUpdateAutoIncrement(std::shared_ptr<dingodb::CoordinatorInteraction> co
   }
   table_id->set_entity_id(std::stol(FLAGS_id));
 
-  request.set_start_id(FLAGS_start_id);
+  request.set_start_id(FLAGS_incr_start_id);
   request.set_force(FLAGS_force);
 
   auto status = coordinator_interaction->SendRequest("UpdateAutoIncrement", request, response);

@@ -115,6 +115,21 @@ void SendVectorSearch(ServerInteractionPtr interaction, uint64_t region_id, uint
   request.set_region_id(region_id);
   auto* vector = request.mutable_vector()->mutable_vector();
 
+  if (region_id == 0) {
+    DINGO_LOG(ERROR) << "region_id is 0";
+    return;
+  }
+
+  if (dimension == 0) {
+    DINGO_LOG(ERROR) << "dimension is 0";
+    return;
+  }
+
+  if (topn == 0) {
+    DINGO_LOG(ERROR) << "topn is 0";
+    return;
+  }
+
   if (vector_id > 0) {
     request.mutable_vector()->set_id(vector_id);
   } else {
@@ -163,6 +178,26 @@ void SendVectorBatchSearch(ServerInteractionPtr interaction, uint64_t region_id,
   dingodb::pb::index::VectorSearchResponse response;
 
   request.set_region_id(region_id);
+
+  if (region_id == 0) {
+    DINGO_LOG(ERROR) << "region_id is 0";
+    return;
+  }
+
+  if (dimension == 0) {
+    DINGO_LOG(ERROR) << "dimension is 0";
+    return;
+  }
+
+  if (topn == 0) {
+    DINGO_LOG(ERROR) << "topn is 0";
+    return;
+  }
+
+  if (batch_count == 0) {
+    DINGO_LOG(ERROR) << "batch_count is 0";
+    return;
+  }
 
   if (vector_id > 0) {
     request.mutable_vector()->set_id(vector_id);
@@ -301,9 +336,24 @@ void SendVectorAdd(ServerInteractionPtr interaction, uint64_t region_id, uint32_
   dingodb::pb::index::VectorAddRequest request;
   dingodb::pb::index::VectorAddResponse response;
 
+  if (region_id == 0) {
+    DINGO_LOG(ERROR) << "region_id is 0";
+    return;
+  }
+
+  if (count == 0) {
+    DINGO_LOG(ERROR) << "count is 0";
+    return;
+  }
+
   if (step_count == 0) {
     DINGO_LOG(ERROR) << "step_count is 0, use count as step_count";
     step_count = count;
+  }
+
+  if (dimension == 0) {
+    DINGO_LOG(ERROR) << "dimension is 0";
+    return;
   }
 
   request.set_region_id(region_id);

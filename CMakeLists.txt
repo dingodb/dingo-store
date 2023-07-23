@@ -317,6 +317,7 @@ file(GLOB SERIAL2_SRCS ${PROJECT_SOURCE_DIR}/src/serial/schema/*.cc)
 file(GLOB EXPR_SRCS ${PROJECT_SOURCE_DIR}/src/expr/*.cc)
 file(GLOB EXPR_CALC_SRCS ${PROJECT_SOURCE_DIR}/src/expr/calc/*.cc)
 file(GLOB COPROCESSOR_SRCS ${PROJECT_SOURCE_DIR}/src/coprocessor/*.cc)
+file(GLOB CLIENT_SRCS ${PROJECT_SOURCE_DIR}/src/client/*.cc)
 
 list(REMOVE_ITEM SERVER_SRCS "${PROJECT_SOURCE_DIR}/src/server/main.cc")
 
@@ -382,31 +383,20 @@ if (ENABLE_FAILPOINT)
 endif()
 
 add_executable(dingodb_server src/server/main.cc $<TARGET_OBJECTS:DINGODB_OBJS> $<TARGET_OBJECTS:PROTO_OBJS>)
-add_executable(dingodb_client_store
-               src/client/store_client.cc
-               src/client/client_interation.cc
-               src/client/store_client_function.cc
-               src/common/helper.cc
-               src/common/service_access.cc
-               ${SERIAL1_SRCS}
-               ${SERIAL2_SRCS}
-               ${VERSION_SRCS} $<TARGET_OBJECTS:PROTO_OBJS>)
-add_executable(dingodb_client_coordinator
-               src/client/coordinator_client.cc
-               src/client/coordinator_client_function_coor.cc
-               src/client/coordinator_client_function_meta.cc
-               src/client/coordinator_client_function_incr.cc
-               src/common/helper.cc
-               src/common/service_access.cc
-               src/coordinator/coordinator_interaction.cc
-               ${SERIAL1_SRCS}
-               ${SERIAL2_SRCS}
-               ${VERSION_SRCS} $<TARGET_OBJECTS:PROTO_OBJS>)
+add_executable(dingodb_client
+                ${CLIENT_SRCS}
+                src/coordinator/coordinator_interaction.cc
+                src/common/helper.cc
+                src/common/service_access.cc
+                ${SERIAL1_SRCS}
+                ${SERIAL2_SRCS}
+                ${VERSION_SRCS} $<TARGET_OBJECTS:PROTO_OBJS>)
 
 add_dependencies(DINGODB_OBJS ${DEPEND_LIBS})
 add_dependencies(dingodb_server ${DEPEND_LIBS})
-add_dependencies(dingodb_client_store ${DEPEND_LIBS})
-add_dependencies(dingodb_client_coordinator ${DEPEND_LIBS})
+add_dependencies(dingodb_client ${DEPEND_LIBS})
+# add_dependencies(dingodb_client_store ${DEPEND_LIBS})
+# add_dependencies(dingodb_client_coordinator ${DEPEND_LIBS})
 
 if(DINGO_BUILD_STATIC)
     message(STATUS "Build DingoDB with static libraries linking")
@@ -422,11 +412,7 @@ target_link_libraries(dingodb_server
                       "-Xlinker \"-(\""
                       ${DYNAMIC_LIB}
                       "-Xlinker \"-)\"")
-target_link_libraries(dingodb_client_store
-                      "-Xlinker \"-(\""
-                      ${DYNAMIC_LIB}
-                      "-Xlinker \"-)\"")
-target_link_libraries(dingodb_client_coordinator
+target_link_libraries(dingodb_client
                       "-Xlinker \"-(\""
                       ${DYNAMIC_LIB}
                       "-Xlinker \"-)\"")
