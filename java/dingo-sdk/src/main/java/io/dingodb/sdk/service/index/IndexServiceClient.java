@@ -24,8 +24,9 @@ import io.dingodb.sdk.common.Location;
 import io.dingodb.sdk.common.SDKCommonId;
 import io.dingodb.sdk.common.utils.EntityConversion;
 import io.dingodb.sdk.common.vector.Search;
+import io.dingodb.sdk.common.vector.VectorIndexMetrics;
+import io.dingodb.sdk.common.vector.VectorScanQuery;
 import io.dingodb.sdk.common.vector.VectorSearchParameter;
-import io.dingodb.sdk.common.vector.VectorWithDistance;
 import io.dingodb.sdk.common.vector.VectorWithDistanceResult;
 import io.dingodb.sdk.common.vector.VectorWithId;
 import io.dingodb.sdk.common.table.RangeDistribution;
@@ -33,7 +34,6 @@ import io.dingodb.sdk.service.connector.IndexServiceConnector;
 import io.dingodb.sdk.service.meta.MetaServiceClient;
 import lombok.extern.slf4j.Slf4j;
 
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -181,6 +181,33 @@ public class IndexServiceClient {
         Index.VectorGetBorderIdResponse response = exec(stub -> stub.vectorGetBorderId(request), retryTimes, indexId,
                 regionId);
         return response.getId();
+    }
+
+    public List<VectorWithId> vectorScanQuery(DingoCommonId indexId, DingoCommonId regionId, VectorScanQuery query) {
+        Index.VectorScanQueryRequest request = Index.VectorScanQueryRequest.newBuilder()
+                .setRegionId(regionId.entityId())
+                .setVectorIdStart(query.getStartId())
+                .setIsReverseScan(query.getIsReverseScan())
+                .setMaxScanCount(query.getMaxScanCount())
+                .setWithoutVectorData(query.getWithoutVectorData())
+                .setWithScalarData(query.getWithScalarData())
+                .addAllSelectedKeys(query.getSelectedKeys())
+                .setWithTableData(query.getWithTableData())
+                .build();
+
+        Index.VectorScanQueryResponse response = exec(stub -> stub.vectorScanQuery(request), retryTimes, indexId,
+                regionId);
+        return response.getVectorsList().stream().map(EntityConversion::mapping).collect(Collectors.toList());
+    }
+
+    public VectorIndexMetrics vectorGetRegionMetrics(DingoCommonId indexId, DingoCommonId regionId) {
+        Index.VectorGetRegionMetricsRequest request = Index.VectorGetRegionMetricsRequest.newBuilder()
+                .setRegionId(regionId.entityId())
+                .build();
+
+        Index.VectorGetRegionMetricsResponse response = exec(stub -> stub.vectorGetRegionMetrics(request), retryTimes,
+                indexId, regionId);
+        return mapping(response.getMetrics());
     }
 
     public List<Boolean> vectorDelete(DingoCommonId indexId, DingoCommonId regionId, List<Long> ids) {

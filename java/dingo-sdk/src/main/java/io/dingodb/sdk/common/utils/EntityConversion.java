@@ -61,6 +61,7 @@ import io.dingodb.sdk.common.table.metric.TableMetrics;
 import io.dingodb.sdk.common.vector.ScalarField;
 import io.dingodb.sdk.common.vector.ScalarValue;
 import io.dingodb.sdk.common.vector.Vector;
+import io.dingodb.sdk.common.vector.VectorIndexMetrics;
 import io.dingodb.sdk.common.vector.VectorWithDistance;
 import io.dingodb.sdk.common.vector.VectorWithId;
 import io.dingodb.sdk.service.store.AggregationOperator;
@@ -498,6 +499,16 @@ public class EntityConversion {
                         Maps::newHashMap,
                         (map, entry) -> map.put(entry.getKey(), mapping(entry.getValue())),
                         Map::putAll));
+    }
+
+    public static VectorIndexMetrics mapping(Common.VectorIndexMetrics metrics) {
+        return new VectorIndexMetrics(
+                VectorIndexParameter.VectorIndexType.valueOf(metrics.getVectorIndexType().name()),
+                metrics.getCurrentCount(),
+                metrics.getDeletedCount(),
+                metrics.getMaxId(),
+                metrics.getMinId(),
+                metrics.getMemoryBytes());
     }
 
     public static ScalarValue mapping(Common.ScalarValue value) {
