@@ -73,6 +73,9 @@ class Region {
   void SetState(pb::common::StoreRegionState state);
   void AppendHistoryState(pb::common::StoreRegionState state) { inner_region_.add_history_states(state); }
 
+  bool DisableSplit();
+  void SetDisableSplit(bool disable_split);
+
   const pb::store_internal::Region& InnerRegion() const { return inner_region_; }
 
  private:

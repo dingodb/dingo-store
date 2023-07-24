@@ -759,6 +759,45 @@ butil::Status UpdateDefinitionTask::UpdateDefinition(std::shared_ptr<Context> /*
   return butil::Status::OK();
 }
 
+butil::Status SwitchSplitTask::PreValidateSwitchSplit(const pb::coordinator::RegionCmd& command) {
+  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+
+  auto region = store_region_meta->GetRegion(command.switch_split_request().region_id());
+  if (region == nullptr) {
+    return butil::Status(pb::error::EREGION_NOT_FOUND,
+                         fmt::format("Not found region {}", command.switch_split_request().region_id()));
+  }
+
+  return butil::Status::OK();
+}
+
+void SwitchSplitTask::Run() {
+  auto status = SwitchSplit(ctx_, region_cmd_->switch_split_request().region_id(),
+                            region_cmd_->switch_split_request().disable_split());
+  if (!status.ok()) {
+    DINGO_LOG(DEBUG) << fmt::format("SwitchSplit executor region {} failed, {}",
+                                    region_cmd_->switch_split_request().region_id(), status.error_str());
+  }
+
+  Server::GetInstance()->GetRegionCommandManager()->UpdateCommandStatus(
+      region_cmd_,
+      status.ok() ? pb::coordinator::RegionCmdStatus::STATUS_DONE : pb::coordinator::RegionCmdStatus::STATUS_FAIL);
+}
+
+butil::Status SwitchSplitTask::SwitchSplit(std::shared_ptr<Context>, uint64_t region_id, bool disable_split) {
+  DINGO_LOG(INFO) << "SwitchSplit: " << region_id;
+  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+
+  auto region = store_region_meta->GetRegion(region_id);
+  if (region == nullptr) {
+    return butil::Status(pb::error::EREGION_NOT_FOUND, fmt::format("Not found region {}", region_id));
+  }
+
+  region->SetDisableSplit(disable_split);
+
+  return butil::Status();
+}
+
 bool ControlExecutor::Init() {
   bthread::ExecutionQueueOptions options;
   options.bthread_attr = BTHREAD_ATTR_NORMAL;
@@ -1141,6 +1180,10 @@ RegionController::TaskBuilderMap RegionController::task_builders = {
      [](std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command) -> TaskRunnable* {
        return new UpdateDefinitionTask(ctx, command);
      }},
+    {pb::coordinator::CMD_SWITCH_SPLIT,
+     [](std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command) -> TaskRunnable* {
+       return new SwitchSplitTask(ctx, command);
+     }},
 };
 
 RegionController::ValidaterMap RegionController::validaters = {
@@ -1152,6 +1195,7 @@ RegionController::ValidaterMap RegionController::validaters = {
     {pb::coordinator::CMD_PURGE, PurgeRegionTask::PreValidatePurgeRegion},
     {pb::coordinator::CMD_STOP, StopRegionTask::PreValidateStopRegion},
     {pb::coordinator::CMD_UPDATE_DEFINITION, UpdateDefinitionTask::PreValidateUpdateDefinition},
+    {pb::coordinator::CMD_SWITCH_SPLIT, SwitchSplitTask::PreValidateSwitchSplit},
 };
 
 }  // namespace dingodb

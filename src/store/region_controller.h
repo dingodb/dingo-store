@@ -238,6 +238,23 @@ class UpdateDefinitionTask : public TaskRunnable {
   std::shared_ptr<pb::coordinator::RegionCmd> region_cmd_;
 };
 
+class SwitchSplitTask : public TaskRunnable {
+ public:
+  SwitchSplitTask(std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> region_cmd)
+      : ctx_(ctx), region_cmd_(region_cmd) {}
+  ~SwitchSplitTask() override = default;
+
+  void Run() override;
+
+  static butil::Status PreValidateSwitchSplit(const pb::coordinator::RegionCmd& command);
+
+ private:
+  static butil::Status SwitchSplit(std::shared_ptr<Context> ctx, uint64_t region_id, bool disable_split);
+
+  std::shared_ptr<Context> ctx_;
+  std::shared_ptr<pb::coordinator::RegionCmd> region_cmd_;
+};
+
 class ControlExecutor {
  public:
   explicit ControlExecutor() : is_available_(false), queue_id_({UINT64_MAX}) {}

@@ -106,6 +106,11 @@ message PurgeRequest {
   uint64 region_id = 1;  // region id to be purged
 }
 
+message SwitchSplitRequest {
+  uint64 region_id = 1;
+  bool disable_split = 2;  // false: enable split true: disable split.
+}
+
 message StopRequest {
   uint64 region_id = 1;  // region id to be stop
 }
@@ -127,6 +132,7 @@ enum RegionCmdType {
   CMD_PURGE = 8;                  // purge region's meta for deleted region
   CMD_SNAPSHOT_VECTOR_INDEX = 9;  // save vector index snapshot
   CMD_UPDATE_DEFINITION = 10;     // update definition, now only support hnsw index change max_elements
+  CMD_SWITCH_SPLIT = 11;          // switch region enable/disable split.
 
   CMD_STOP = 30;              // when region state ORPHAN, stop region
   CMD_DESTROY_EXECUTOR = 31;  // destroy region executor
@@ -156,6 +162,7 @@ message RegionCmd {
 
     SnapshotVectorIndexRequest snapshot_vector_index_request = 18;  // save vector index snapshot
     UpdateDefinitionRequest update_definition_request = 19;         // update region definition
+    SwitchSplitRequest switch_split_request = 20;                   // switch region split
 
     StopRequest stop_request = 30;                         // when region state ORPHAN, stop region
     DestroyExecutorRequest destroy_executor_request = 31;  // destroy region executor
