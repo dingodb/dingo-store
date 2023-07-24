@@ -175,6 +175,10 @@ class RawRocksEngine : public RawEngine {
 
     std::shared_ptr<EngineIterator> NewIterator(const std::string& start_key, const std::string& end_key) override;
 
+    std::shared_ptr<dingodb::Iterator> NewIterator(IteratorOptions options) override;
+    std::shared_ptr<dingodb::Iterator> NewIterator(std::shared_ptr<Snapshot> snapshot,
+                                                   IteratorOptions options) override;
+
    private:
     std::shared_ptr<EngineIterator> NewIterator(std::shared_ptr<dingodb::Snapshot> snapshot,
                                                 const std::string& start_key, const std::string& end_key);

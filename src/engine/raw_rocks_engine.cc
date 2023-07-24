@@ -828,6 +828,26 @@ butil::Status RawRocksEngine::Reader::KvCount(std::shared_ptr<dingodb::Snapshot>
   return butil::Status();
 }
 
+std::shared_ptr<dingodb::Iterator> RawRocksEngine::Reader::NewIterator(IteratorOptions options) {
+  return NewIterator(nullptr, options);
+}
+
+std::shared_ptr<dingodb::Iterator> RawRocksEngine::Reader::NewIterator(std::shared_ptr<Snapshot> snapshot,
+                                                                       IteratorOptions options) {
+  // Correct free iterate_upper_bound
+  // auto slice = std::make_unique<rocksdb::Slice>(options.upper_bound);
+  rocksdb::ReadOptions read_options;
+  if (snapshot != nullptr) {
+    read_options.snapshot = static_cast<const rocksdb::Snapshot*>(snapshot->Inner());
+  }
+  read_options.auto_prefix_mode = true;
+  // if (!options.upper_bound.empty()) {
+  //   read_options.iterate_upper_bound = slice.get();
+  // }
+  return std::make_shared<RawRocksEngine::Iterator>(
+      options, db_->NewIterator(read_options, column_family_->GetHandle()), snapshot);
+}
+
 std::shared_ptr<EngineIterator> RawRocksEngine::Reader::NewIterator(const std::string& start_key,
                                                                     const std::string& end_key) {
   auto snapshot = std::make_shared<RocksSnapshot>(db_->GetSnapshot(), db_);

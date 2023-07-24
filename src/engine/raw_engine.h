@@ -85,6 +85,9 @@ class RawEngine {
                                   const std::string& end_key, uint64_t& count) = 0;
 
     virtual std::shared_ptr<EngineIterator> NewIterator(const std::string& start_key, const std::string& end_key) = 0;
+    virtual std::shared_ptr<dingodb::Iterator> NewIterator(IteratorOptions options) = 0;
+    virtual std::shared_ptr<dingodb::Iterator> NewIterator(std::shared_ptr<Snapshot> snapshot,
+                                                           IteratorOptions options) = 0;
   };
 
   class Writer {
