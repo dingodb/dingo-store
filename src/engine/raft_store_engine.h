@@ -153,6 +153,10 @@ class RaftStoreEngine : public Engine, public RaftControlAble {
                                        std::vector<pb::common::VectorWithDistance>& vector_with_distances);
     butil::Status QueryVectorTableData(uint64_t region_id, std::vector<pb::index::VectorWithDistanceResult>& results);
 
+    butil::Status GetBorderId(uint64_t region_id, uint64_t& border_id, bool get_min);
+    butil::Status ScanVectorId(uint64_t region_id, uint64_t start_id, bool is_reverse, uint64_t limit,
+                               std::vector<uint64_t>& ids);
+
     std::shared_ptr<RawEngine::Reader> reader_;
   };
 

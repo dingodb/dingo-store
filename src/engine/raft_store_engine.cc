@@ -625,9 +625,7 @@ butil::Status RaftStoreEngine::VectorReader::VectorBatchQuery(std::shared_ptr<Co
 
 butil::Status RaftStoreEngine::VectorReader::VectorGetBorderId(std::shared_ptr<Context> ctx, uint64_t& id,
                                                                bool get_min) {
-  auto vector_index_mgr = Server::GetInstance()->GetVectorIndexManager();
-
-  auto status = vector_index_mgr->GetBorderId(ctx->RegionId(), id, get_min);
+  auto status = GetBorderId(ctx->RegionId(), id, get_min);
   if (!status.ok()) {
     DINGO_LOG(INFO) << "Failed to get border id: " << status.error_str();
     return status;
@@ -647,8 +645,7 @@ butil::Status RaftStoreEngine::VectorReader::VectorScanQuery(std::shared_ptr<Con
 
   // scan for ids
   std::vector<uint64_t> vector_ids;
-  auto vector_index_mgr = Server::GetInstance()->GetVectorIndexManager();
-  auto status = vector_index_mgr->ScanVectorId(ctx->RegionId(), start_id, is_reverse, limit, vector_ids);
+  auto status = ScanVectorId(ctx->RegionId(), start_id, is_reverse, limit, vector_ids);
   if (!status.ok()) {
     DINGO_LOG(INFO) << "Failed to scan vector id: " << status.error_str();
     return status;
@@ -725,8 +722,8 @@ butil::Status RaftStoreEngine::VectorReader::VectorGetRegionMetrics(std::shared_
   vector_index->GetDeletedCount(total_deleted_count);
   vector_index->GetMemorySize(total_memory_usage);
 
-  vector_index_mgr->GetBorderId(ctx->RegionId(), min_id, true);
-  vector_index_mgr->GetBorderId(ctx->RegionId(), max_id, false);
+  GetBorderId(ctx->RegionId(), min_id, true);
+  GetBorderId(ctx->RegionId(), max_id, false);
 
   region_metrics.set_current_count(total_vector_count);
   region_metrics.set_deleted_count(total_deleted_count);
@@ -735,6 +732,104 @@ butil::Status RaftStoreEngine::VectorReader::VectorGetRegionMetrics(std::shared_
   region_metrics.set_min_id(min_id);
 
   return butil::Status();
+}
+
+// GetBorderId
+butil::Status RaftStoreEngine::VectorReader::GetBorderId(uint64_t region_id, uint64_t& border_id, bool get_min) {
+  std::string start_key;
+  std::string end_key;
+  VectorCodec::EncodeVectorId(region_id, 0, start_key);
+  VectorCodec::EncodeVectorId(region_id, UINT64_MAX, end_key);
+
+  IteratorOptions options;
+  options.lower_bound = start_key;
+  options.upper_bound = end_key;
+
+  auto iter = reader_->NewIterator(options);
+  if (iter == nullptr) {
+    DINGO_LOG(INFO) << fmt::format("NewIterator failed, region_id {}", region_id);
+    return butil::Status(pb::error::Errno::EINTERNAL, "NewIterator failed");
+  }
+
+  if (get_min) {
+    for (iter->Seek(start_key); iter->Valid(); iter->Next()) {
+      pb::common::VectorWithId vector;
+
+      std::string key(iter->Key());
+      auto decode_region_id = VectorCodec::DecodeVectorRegionId(key);
+      if (decode_region_id != region_id) {
+        break;
+      }
+
+      border_id = VectorCodec::DecodeVectorId(key);
+      break;
+    }
+  } else {
+    for (iter->SeekForPrev(end_key); iter->Valid(); iter->Prev()) {
+      pb::common::VectorWithId vector;
+
+      std::string key(iter->Key());
+      auto decode_region_id = VectorCodec::DecodeVectorRegionId(key);
+      if (decode_region_id != region_id) {
+        break;
+      }
+
+      border_id = VectorCodec::DecodeVectorId(key);
+      break;
+    }
+  }
+
+  return butil::Status::OK();
+}
+
+// ScanVectorId
+butil::Status RaftStoreEngine::VectorReader::ScanVectorId(uint64_t region_id, uint64_t start_id, bool is_reverse,
+                                                          uint64_t limit, std::vector<uint64_t>& ids) {
+  std::string start_key;
+  std::string end_key;
+  VectorCodec::EncodeVectorId(region_id, 0, start_key);
+  VectorCodec::EncodeVectorId(region_id, UINT64_MAX, end_key);
+
+  std::string seek_key;
+  VectorCodec::EncodeVectorId(region_id, start_id, seek_key);
+
+  IteratorOptions options;
+  options.lower_bound = start_key;
+  options.upper_bound = end_key;
+
+  auto iter = reader_->NewIterator(options);
+  if (iter == nullptr) {
+    DINGO_LOG(INFO) << fmt::format("NewIterator failed, region_id {}", region_id);
+    return butil::Status(pb::error::Errno::EINTERNAL, "NewIterator failed");
+  }
+
+  if (!is_reverse) {
+    for (iter->Seek(seek_key); iter->Valid(); iter->Next()) {
+      pb::common::VectorWithId vector;
+
+      std::string key(iter->Key());
+      auto vector_id = VectorCodec::DecodeVectorId(key);
+      ids.push_back(vector_id);
+
+      if (ids.size() >= limit) {
+        break;
+      }
+    }
+  } else {
+    for (iter->SeekForPrev(seek_key); iter->Valid(); iter->Prev()) {
+      pb::common::VectorWithId vector;
+
+      std::string key(iter->Key());
+      auto vector_id = VectorCodec::DecodeVectorId(key);
+      ids.push_back(vector_id);
+
+      if (ids.size() >= limit) {
+        break;
+      }
+    }
+  }
+
+  return butil::Status::OK();
 }
 
 std::shared_ptr<Engine::VectorReader> RaftStoreEngine::NewVectorReader(const std::string& cf_name) {
