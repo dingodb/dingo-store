@@ -130,6 +130,10 @@ void SplitCheckTask::SplitCheck() {
   if (split_key.empty()) {
     return;
   }
+  if (region_->State() != pb::common::NORMAL) {
+    DINGO_LOG(WARNING) << "Region state it not NORMAL, not launch split.";
+    return;
+  }
 
   DINGO_LOG(INFO) << fmt::format("Need split region {} split_key {}", region_->Id(), split_key);
 
@@ -172,6 +176,23 @@ bool SplitCheckWorkers::Execute(TaskRunnable* task) {
   offset_ = (offset_ + 1) % workers_.size();
 
   return true;
+}
+
+bool SplitCheckWorkers::IsExistRegionChecking(uint64_t region_id) {
+  BAIDU_SCOPED_LOCK(mutex_);
+  return checking_regions_.find(region_id) != checking_regions_.end();
+}
+
+void SplitCheckWorkers::AddRegionChecking(uint64_t region_id) {
+  BAIDU_SCOPED_LOCK(mutex_);
+  if (checking_regions_.find(region_id) == checking_regions_.end()) {
+    checking_regions_.insert(region_id);
+  }
+}
+
+void SplitCheckWorkers::DeleteRegionChecking(uint64_t region_id) {
+  BAIDU_SCOPED_LOCK(mutex_);
+  checking_regions_.erase(region_id);
 }
 
 static std::shared_ptr<SplitChecker> BuildSplitChecker(std::shared_ptr<dingodb::Config> config /*NOLINT*/,
@@ -229,6 +250,12 @@ void PreSplitCheckTask::PreSplitCheck() {
     if (split_check_workers_ == nullptr) {
       continue;
     }
+    if (region->State() != pb::common::NORMAL) {
+      continue;
+    }
+    if (split_check_workers_->IsExistRegionChecking(region->Id())) {
+      continue;
+    }
     if (!IsLeader(engine, region->Id())) {
       continue;
     }
@@ -243,7 +270,10 @@ void PreSplitCheckTask::PreSplitCheck() {
     if (split_checker == nullptr) {
       continue;
     }
-    split_check_workers_->Execute(new SplitCheckTask(region, region_metric, split_checker));
+
+    if (split_check_workers_->Execute(new SplitCheckTask(split_check_workers_, region, region_metric, split_checker))) {
+      split_check_workers_->AddRegionChecking(region->Id());
+    }
   }
 }
 
