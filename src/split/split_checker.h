@@ -112,38 +112,57 @@ class KeysSplitChecker : public SplitChecker {
   std::shared_ptr<RawEngine> raw_engine_;
 };
 
-// Check region whether need to split.
-class SplitCheckTask : public TaskRunnable {
- public:
-  SplitCheckTask(store::RegionPtr region, store::RegionMetricsPtr region_metrics,
-                 std::shared_ptr<SplitChecker> split_checker)
-      : region_(region), region_metrics_(region_metrics), split_checker_(split_checker) {}
-  ~SplitCheckTask() override = default;
-
-  void Run() override { SplitCheck(); }
-
- private:
-  void SplitCheck();
-
-  store::RegionPtr region_;
-  store::RegionMetricsPtr region_metrics_;
-  std::shared_ptr<SplitChecker> split_checker_;
-};
-
 // Multiple worker run split check task.
 class SplitCheckWorkers {
  public:
-  SplitCheckWorkers() : offset_(0) {}
-  ~SplitCheckWorkers() = default;
+  SplitCheckWorkers() : offset_(0) { bthread_mutex_init(&mutex_, nullptr); }
+  ~SplitCheckWorkers() { bthread_mutex_destroy(&mutex_); }
 
   bool Init(uint32_t num);
   void Destroy();
 
   bool Execute(TaskRunnable* task);
 
+  bool IsExistRegionChecking(uint64_t region_id);
+  void AddRegionChecking(uint64_t region_id);
+  void DeleteRegionChecking(uint64_t region_id);
+
  private:
+  // Protect checking_regions_.
+  bthread_mutex_t mutex_;
+  // Region of doing check.
+  std::set<uint64_t> checking_regions_;
+
+  // Indicate workers offset for round-robin.
   uint32_t offset_;
   std::vector<std::shared_ptr<Worker>> workers_;
+};
+
+// Check region whether need to split.
+class SplitCheckTask : public TaskRunnable {
+ public:
+  SplitCheckTask(std::shared_ptr<SplitCheckWorkers> split_check_workers, store::RegionPtr region,
+                 store::RegionMetricsPtr region_metrics, std::shared_ptr<SplitChecker> split_checker)
+      : split_check_workers_(split_check_workers),
+        region_(region),
+        region_metrics_(region_metrics),
+        split_checker_(split_checker) {}
+  ~SplitCheckTask() override = default;
+
+  void Run() override {
+    SplitCheck();
+    if (region_ != nullptr && split_check_workers_ != nullptr) {
+      split_check_workers_->DeleteRegionChecking(region_->Id());
+    }
+  }
+
+ private:
+  void SplitCheck();
+
+  std::shared_ptr<SplitCheckWorkers> split_check_workers_;
+  store::RegionPtr region_;
+  store::RegionMetricsPtr region_metrics_;
+  std::shared_ptr<SplitChecker> split_checker_;
 };
 
 // Pre split check, if region approximate size exceed threshold size, then check region actual size.
