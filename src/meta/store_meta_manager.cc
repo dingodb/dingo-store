@@ -116,6 +116,16 @@ void Region::SetState(pb::common::StoreRegionState state) {
   }
 }
 
+bool Region::DisableSplit() {
+  BAIDU_SCOPED_LOCK(mutex_);
+  return inner_region_.disable_split();
+}
+
+void Region::SetDisableSplit(bool disable_split) {
+  BAIDU_SCOPED_LOCK(mutex_);
+  inner_region_.set_disable_split(disable_split);
+}
+
 }  // namespace store
 
 bool StoreServerMeta::Init() {

@@ -130,6 +130,9 @@ void SplitCheckTask::SplitCheck() {
   if (split_key.empty()) {
     return;
   }
+  if (region_->DisableSplit()) {
+    return;
+  }
   if (region_->State() != pb::common::NORMAL) {
     DINGO_LOG(WARNING) << "Region state it not NORMAL, not launch split.";
     return;
@@ -251,6 +254,9 @@ void PreSplitCheckTask::PreSplitCheck() {
       continue;
     }
     if (region->State() != pb::common::NORMAL) {
+      continue;
+    }
+    if (region->DisableSplit()) {
       continue;
     }
     if (split_check_workers_->IsExistRegionChecking(region->Id())) {

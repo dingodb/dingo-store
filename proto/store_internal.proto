@@ -41,4 +41,5 @@ message Region {
   uint64 leader_id = 3;
   dingodb.pb.common.StoreRegionState state = 4;
   repeated dingodb.pb.common.StoreRegionState history_states = 5;
+  bool disable_split = 10;  // true: forbid region split
 }
