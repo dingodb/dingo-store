@@ -43,9 +43,14 @@ VectorIndexFlat::VectorIndexFlat(uint64_t id, const pb::common::VectorIndexParam
   metric_type_ = vector_index_parameter.flat_parameter().metric_type();
   dimension_ = vector_index_parameter.flat_parameter().dimension();
 
+  normalize_ = false;
+
   if (pb::common::MetricType::METRIC_TYPE_L2 == metric_type_) {
     raw_index_ = std::make_unique<faiss::IndexFlatL2>(dimension_);
   } else if (pb::common::MetricType::METRIC_TYPE_INNER_PRODUCT == metric_type_) {
+    raw_index_ = std::make_unique<faiss::IndexFlatIP>(dimension_);
+  } else if (pb::common::MetricType::METRIC_TYPE_COSINE == metric_type_) {
+    normalize_ = true;
     raw_index_ = std::make_unique<faiss::IndexFlatIP>(dimension_);
   } else {
     DINGO_LOG(WARNING) << fmt::format("Flat : not support metric type : {} use L2 default",
@@ -59,6 +64,18 @@ VectorIndexFlat::VectorIndexFlat(uint64_t id, const pb::common::VectorIndexParam
 VectorIndexFlat::~VectorIndexFlat() {
   index_->reset();
   bthread_mutex_destroy(&mutex_);
+}
+
+const float kFloatAccuracy = 0.00001;
+
+void NormalizeVec(float* x, int32_t d) {
+  float norm_l2_sqr = faiss::fvec_norm_L2sqr(x, d);
+  if (norm_l2_sqr > 0 && std::abs(1.0f - norm_l2_sqr) > kFloatAccuracy) {
+    float norm_l2 = std::sqrt(norm_l2_sqr);
+    for (int32_t i = 0; i < d; i++) {
+      x[i] = x[i] / norm_l2;
+    }
+  }
 }
 
 butil::Status VectorIndexFlat::AddOrUpsert(const std::vector<pb::common::VectorWithId>& vector_with_ids,
@@ -116,6 +133,10 @@ butil::Status VectorIndexFlat::AddOrUpsert(const std::vector<pb::common::VectorW
   for (size_t i = 0; i < vector_with_ids.size(); ++i) {
     const auto& vector = vector_with_ids[i].vector().float_values();
     memcpy(vectors.get() + i * dimension_, vector.data(), dimension_ * sizeof(float));
+
+    if (normalize_) {
+      NormalizeVec(vectors.get() + i * dimension_, dimension_);
+    }
   }
 
   index_->add_with_ids(vector_with_ids.size(), vectors.get(), ids.get());
@@ -221,6 +242,10 @@ butil::Status VectorIndexFlat::Search(std::vector<pb::common::VectorWithId> vect
     } else {
       const auto& vector = vector_with_ids[i].vector().float_values();
       memcpy(vectors.get() + i * dimension_, vector.data(), dimension_ * sizeof(float));
+
+      if (normalize_) {
+        NormalizeVec(vectors.get() + i * dimension_, dimension_);
+      }
     }
   }
 

@@ -32,6 +32,7 @@
 #include "faiss/IndexIDMap.h"
 #include "faiss/MetricType.h"
 #include "faiss/impl/IDSelector.h"
+#include "faiss/utils/distances.h"
 #include "fmt/core.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
@@ -96,6 +97,9 @@ class VectorIndexFlat : public VectorIndex {
 
   bthread_mutex_t mutex_;
   std::atomic<bool> is_online_;
+
+  // normalize vector
+  bool normalize_;
 };
 
 }  // namespace dingodb
