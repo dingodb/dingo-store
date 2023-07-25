@@ -81,9 +81,9 @@ class Storage {
   butil::Status VectorGetRegionMetrics(std::shared_ptr<Context> ctx, uint64_t region_id,
                                        pb::common::VectorIndexMetrics& region_metrics);
 
- private:
   butil::Status ValidateLeader(uint64_t region_id);
 
+ private:
   std::shared_ptr<Engine> engine_;
 };
 

@@ -48,7 +48,8 @@ IndexServiceImpl::IndexServiceImpl() = default;
 
 void IndexServiceImpl::SetStorage(std::shared_ptr<Storage> storage) { storage_ = storage; }
 
-butil::Status ValidateVectorBatchQueryQequest(const dingodb::pb::index::VectorBatchQueryRequest* request) {
+butil::Status IndexServiceImpl::ValidateVectorBatchQueryQequest(
+    const dingodb::pb::index::VectorBatchQueryRequest* request) {
   if (request->region_id() == 0) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id is error");
   }
@@ -61,6 +62,11 @@ butil::Status ValidateVectorBatchQueryQequest(const dingodb::pb::index::VectorBa
     return butil::Status(pb::error::EVECTOR_EXCEED_MAX_BATCH_COUNT,
                          fmt::format("Param vector_ids size {} is exceed max batch count {}",
                                      request->vector_ids().size(), FLAGS_vector_max_bactch_count));
+  }
+
+  auto status = storage_->ValidateLeader(request->region_id());
+  if (!status.ok()) {
+    return status;
   }
 
   return ServiceHelper::ValidateIndexRegion(request->region_id());
@@ -80,8 +86,12 @@ void IndexServiceImpl::VectorBatchQuery(google::protobuf::RpcController* control
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
-    DINGO_LOG(ERROR) << fmt::format("VectorBatchQuery request: {} response: {}", request->ShortDebugString(),
-                                    response->ShortDebugString());
+    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+      err->set_errmsg("Not leader, please redirect leader.");
+      ServiceHelper::RedirectLeader(status.error_str(), response);
+    }
+    DINGO_LOG(WARNING) << fmt::format("ValidateRequest failed request: {} response: {}", request->ShortDebugString(),
+                                      response->ShortDebugString());
     return;
   }
 
@@ -111,7 +121,7 @@ void IndexServiceImpl::VectorBatchQuery(google::protobuf::RpcController* control
   }
 }
 
-butil::Status ValidateVectorSearchRequest(const dingodb::pb::index::VectorSearchRequest* request) {
+butil::Status IndexServiceImpl::ValidateVectorSearchRequest(const dingodb::pb::index::VectorSearchRequest* request) {
   if (request->region_id() == 0) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id is error");
   }
@@ -142,6 +152,11 @@ butil::Status ValidateVectorSearchRequest(const dingodb::pb::index::VectorSearch
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param top_n is error");
   }
 
+  auto status = storage_->ValidateLeader(request->region_id());
+  if (!status.ok()) {
+    return status;
+  }
+
   auto vector_index = Server::GetInstance()->GetVectorIndexManager()->GetVectorIndex(request->region_id());
   if (!vector_index) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id cannot find vector_index");
@@ -165,8 +180,12 @@ void IndexServiceImpl::VectorSearch(google::protobuf::RpcController* controller,
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
-    DINGO_LOG(ERROR) << fmt::format("VectorSearch request: {} response: {}", request->ShortDebugString(),
-                                    response->ShortDebugString());
+    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+      err->set_errmsg("Not leader, please redirect leader.");
+      ServiceHelper::RedirectLeader(status.error_str(), response);
+    }
+    DINGO_LOG(WARNING) << fmt::format("ValidateRequest failed request: {} response: {}", request->ShortDebugString(),
+                                      response->ShortDebugString());
     return;
   }
 
@@ -224,7 +243,7 @@ void IndexServiceImpl::VectorSearch(google::protobuf::RpcController* controller,
   }
 }
 
-butil::Status ValidateVectorAddRequest(const dingodb::pb::index::VectorAddRequest* request) {
+butil::Status IndexServiceImpl::ValidateVectorAddRequest(const dingodb::pb::index::VectorAddRequest* request) {
   if (request->region_id() == 0) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id is error");
   }
@@ -243,6 +262,11 @@ butil::Status ValidateVectorAddRequest(const dingodb::pb::index::VectorAddReques
     return butil::Status(pb::error::EVECTOR_EXCEED_MAX_REQUEST_SIZE,
                          fmt::format("Param vectors size {} is exceed max batch size {}", request->ByteSizeLong(),
                                      FLAGS_vector_max_request_size));
+  }
+
+  auto status = storage_->ValidateLeader(request->region_id());
+  if (!status.ok()) {
+    return status;
   }
 
   for (const auto& vector : request->vectors()) {
@@ -294,6 +318,12 @@ void IndexServiceImpl::VectorAdd(google::protobuf::RpcController* controller,
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
+    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+      err->set_errmsg("Not leader, please redirect leader.");
+      ServiceHelper::RedirectLeader(status.error_str(), response);
+    }
+    DINGO_LOG(WARNING) << fmt::format("ValidateRequest failed request: {} response: {}", request->ShortDebugString(),
+                                      response->ShortDebugString());
     return;
   }
 
@@ -318,7 +348,7 @@ void IndexServiceImpl::VectorAdd(google::protobuf::RpcController* controller,
   }
 }
 
-butil::Status ValidateVectorDeleteRequest(const dingodb::pb::index::VectorDeleteRequest* request) {
+butil::Status IndexServiceImpl::ValidateVectorDeleteRequest(const dingodb::pb::index::VectorDeleteRequest* request) {
   if (request->region_id() == 0) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id is error");
   }
@@ -331,6 +361,11 @@ butil::Status ValidateVectorDeleteRequest(const dingodb::pb::index::VectorDelete
     return butil::Status(pb::error::EVECTOR_EXCEED_MAX_BATCH_COUNT,
                          fmt::format("Param ids size {} is exceed max batch count {}", request->ids_size(),
                                      FLAGS_vector_max_bactch_count));
+  }
+
+  auto status = storage_->ValidateLeader(request->region_id());
+  if (!status.ok()) {
+    return status;
   }
 
   auto vector_index = Server::GetInstance()->GetVectorIndexManager()->GetVectorIndex(request->region_id());
@@ -355,6 +390,12 @@ void IndexServiceImpl::VectorDelete(google::protobuf::RpcController* controller,
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
+    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+      err->set_errmsg("Not leader, please redirect leader.");
+      ServiceHelper::RedirectLeader(status.error_str(), response);
+    }
+    DINGO_LOG(WARNING) << fmt::format("ValidateRequest failed request: {} response: {}", request->ShortDebugString(),
+                                      response->ShortDebugString());
     return;
   }
 
@@ -379,9 +420,15 @@ void IndexServiceImpl::VectorDelete(google::protobuf::RpcController* controller,
   }
 }
 
-butil::Status ValidateVectorGetBorderIdRequest(const dingodb::pb::index::VectorGetBorderIdRequest* request) {
+butil::Status IndexServiceImpl::ValidateVectorGetBorderIdRequest(
+    const dingodb::pb::index::VectorGetBorderIdRequest* request) {
   if (request->region_id() == 0) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id is error");
+  }
+
+  auto status = storage_->ValidateLeader(request->region_id());
+  if (!status.ok()) {
+    return status;
   }
 
   return ServiceHelper::ValidateIndexRegion(request->region_id());
@@ -401,8 +448,12 @@ void IndexServiceImpl::VectorGetBorderId(google::protobuf::RpcController* contro
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
-    DINGO_LOG(ERROR) << fmt::format("VectorGetBorderId request: {} response: {}", request->ShortDebugString(),
-                                    response->ShortDebugString());
+    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+      err->set_errmsg("Not leader, please redirect leader.");
+      ServiceHelper::RedirectLeader(status.error_str(), response);
+    }
+    DINGO_LOG(WARNING) << fmt::format("ValidateRequest failed request: {} response: {}", request->ShortDebugString(),
+                                      response->ShortDebugString());
     return;
   }
 
@@ -427,7 +478,8 @@ void IndexServiceImpl::VectorGetBorderId(google::protobuf::RpcController* contro
   response->set_id(border_id);
 }
 
-butil::Status ValidateVectorScanQueryRequest(const dingodb::pb::index::VectorScanQueryRequest* request) {
+butil::Status IndexServiceImpl::ValidateVectorScanQueryRequest(
+    const dingodb::pb::index::VectorScanQueryRequest* request) {
   if (request->region_id() == 0) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id is error");
   }
@@ -443,6 +495,11 @@ butil::Status ValidateVectorScanQueryRequest(const dingodb::pb::index::VectorSca
   if (request->max_scan_count() > FLAGS_vector_max_bactch_count) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param max_scan_count is bigger than %ld",
                          FLAGS_vector_max_bactch_count);
+  }
+
+  auto status = storage_->ValidateLeader(request->region_id());
+  if (!status.ok()) {
+    return status;
   }
 
   return ServiceHelper::ValidateIndexRegion(request->region_id());
@@ -461,8 +518,12 @@ void IndexServiceImpl::VectorScanQuery(google::protobuf::RpcController* controll
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
-    DINGO_LOG(ERROR) << fmt::format("VectorScanQuery request: {} response: {}", request->ShortDebugString(),
-                                    response->ShortDebugString());
+    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+      err->set_errmsg("Not leader, please redirect leader.");
+      ServiceHelper::RedirectLeader(status.error_str(), response);
+    }
+    DINGO_LOG(WARNING) << fmt::format("ValidateRequest failed request: {} response: {}", request->ShortDebugString(),
+                                      response->ShortDebugString());
     return;
   }
 
@@ -494,9 +555,20 @@ void IndexServiceImpl::VectorScanQuery(google::protobuf::RpcController* controll
   }
 }
 
-butil::Status ValidateVectorGetRegionMetricsRequest(const dingodb::pb::index::VectorGetRegionMetricsRequest* request) {
+butil::Status IndexServiceImpl::ValidateVectorGetRegionMetricsRequest(
+    const dingodb::pb::index::VectorGetRegionMetricsRequest* request) {
   if (request->region_id() == 0) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id is error");
+  }
+
+  auto status = storage_->ValidateLeader(request->region_id());
+  if (!status.ok()) {
+    return status;
+  }
+
+  auto vector_index = Server::GetInstance()->GetVectorIndexManager()->GetVectorIndex(request->region_id());
+  if (!vector_index) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id cannot find vector_index");
   }
 
   return ServiceHelper::ValidateIndexRegion(request->region_id());
@@ -516,8 +588,12 @@ void IndexServiceImpl::VectorGetRegionMetrics(google::protobuf::RpcController* c
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
-    DINGO_LOG(ERROR) << fmt::format("VectorGetRegionMetrics request: {} response: {}", request->ShortDebugString(),
-                                    response->ShortDebugString());
+    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+      err->set_errmsg("Not leader, please redirect leader.");
+      ServiceHelper::RedirectLeader(status.error_str(), response);
+    }
+    DINGO_LOG(WARNING) << fmt::format("ValidateRequest failed request: {} response: {}", request->ShortDebugString(),
+                                      response->ShortDebugString());
     return;
   }
 
