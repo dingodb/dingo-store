@@ -527,15 +527,17 @@ butil::Status VectorIndexHnsw::GetMemorySize(uint64_t& memory_size) {
     memory_size = 0;
     return butil::Status::OK();
   }
+  auto deleted_count = this->hnsw_index_->getDeletedCount();
+  auto memory_count = count + deleted_count;
 
-  memory_size = hnsw_index_->max_elements_ * hnsw_index_->size_data_per_element_  // level 0 memory
+  memory_size = memory_count * hnsw_index_->size_data_per_element_  // level 0 memory
                 + hnsw_index_->size_links_level0_                                 // level 0 links memory
-                + hnsw_index_->max_elements_ * sizeof(void*)                      // linkLists_ memory
-                + hnsw_index_->max_elements_ * sizeof(uint64_t)                   // element_levels_
-                + hnsw_index_->max_elements_ * sizeof(uint64_t)    // label_lookup_, translate user label to internal id
+                + memory_count * sizeof(void*)                      // linkLists_ memory
+                + memory_count * sizeof(uint64_t)                   // element_levels_
+                + memory_count * sizeof(uint64_t)    // label_lookup_, translate user label to internal id
                 + hnsw_index_->max_elements_ * sizeof(std::mutex)  // link_list_locks_
                 + 65536 * sizeof(std::mutex)                       // label_op_locks_
-                + hnsw_index_->max_elements_ * sizeof(uint64_t) * hnsw_index_->M_ * hnsw_index_->maxlevel_ /
+                + memory_count * sizeof(uint64_t) * hnsw_index_->M_ * hnsw_index_->maxlevel_ /
                       2  // level 1-max_level nlinks, estimate echo vector exists in harf max_level_ count levels
       ;
   return butil::Status::OK();

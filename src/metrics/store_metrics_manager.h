@@ -71,6 +71,43 @@ class RegionMetrics {
   uint64_t KeyCount() const { return inner_region_metrics_.row_count(); }
   void SetKeyCount(uint64_t key_count) { inner_region_metrics_.set_row_count(key_count); }
 
+  // vector index start
+  pb::common::VectorIndexType GetVectorIndexType() const {
+    return inner_region_metrics_.vector_index_metrics().vector_index_type();
+  }
+
+  void SetVectorIndexType(pb::common::VectorIndexType vector_index_type) {
+    inner_region_metrics_.mutable_vector_index_metrics()->set_vector_index_type(vector_index_type);
+  }
+
+  int64_t GetVectorCurrentCount() const { return inner_region_metrics_.vector_index_metrics().current_count(); }
+
+  void SetVectorCurrentCount(int64_t current_count) {
+    inner_region_metrics_.mutable_vector_index_metrics()->set_current_count(current_count);
+  }
+
+  int64_t GetVectorDeletedCount() const { return inner_region_metrics_.vector_index_metrics().deleted_count(); }
+
+  void SetVectorDeletedCount(int64_t deleted_count) {
+    inner_region_metrics_.mutable_vector_index_metrics()->set_deleted_count(deleted_count);
+  }
+
+  int64_t GetVectorMaxId() const { return inner_region_metrics_.vector_index_metrics().max_id(); }
+
+  void SetVectorMaxId(int64_t max_id) { inner_region_metrics_.mutable_vector_index_metrics()->set_max_id(max_id); }
+
+  int64_t GetVectorMinId() const { return inner_region_metrics_.vector_index_metrics().min_id(); }
+
+  void SetVectorMinId(int64_t min_id) { inner_region_metrics_.mutable_vector_index_metrics()->set_min_id(min_id); }
+
+  int64_t GetVectorMemoryBytes() const { return inner_region_metrics_.vector_index_metrics().memory_bytes(); }
+
+  void SetVectorMemoryBytes(int64_t memory_bytes) {
+    inner_region_metrics_.mutable_vector_index_metrics()->set_memory_bytes(memory_bytes);
+  }
+
+  // vector index end
+
   const pb::common::RegionMetrics& InnerRegionMetrics() { return inner_region_metrics_; }
 
   using PbKeyValues = google::protobuf::RepeatedPtrField<pb::common::KeyValue>;
@@ -120,11 +157,12 @@ class StoreMetrics {
 class StoreRegionMetrics : public TransformKvAble {
  public:
   StoreRegionMetrics(std::shared_ptr<RawEngine> raw_engine, std::shared_ptr<MetaReader> meta_reader,
-                     std::shared_ptr<MetaWriter> meta_writer)
+                     std::shared_ptr<MetaWriter> meta_writer, std::shared_ptr<Engine> engine)
       : TransformKvAble(Constant::kStoreRegionMetricsPrefix),
         raw_engine_(raw_engine),
         meta_reader_(meta_reader),
-        meta_writer_(meta_writer) {
+        meta_writer_(meta_writer),
+        engine_(engine) {
     bthread_mutex_init(&mutex_, nullptr);
   }
   ~StoreRegionMetrics() override { bthread_mutex_destroy(&mutex_); }
@@ -160,6 +198,8 @@ class StoreRegionMetrics : public TransformKvAble {
   std::shared_ptr<MetaWriter> meta_writer_;
 
   std::shared_ptr<RawEngine> raw_engine_;
+
+  std::shared_ptr<Engine> engine_;
   bthread_mutex_t mutex_;
   std::map<uint64_t, store::RegionMetricsPtr> metricses_;
 };
@@ -167,10 +207,10 @@ class StoreRegionMetrics : public TransformKvAble {
 class StoreMetricsManager {
  public:
   explicit StoreMetricsManager(std::shared_ptr<RawEngine> raw_engine, std::shared_ptr<MetaReader> meta_reader,
-                               std::shared_ptr<MetaWriter> meta_writer)
+                               std::shared_ptr<MetaWriter> meta_writer, std::shared_ptr<Engine> engine)
       : is_collecting_(false),
         store_metrics_(std::make_shared<StoreMetrics>()),
-        region_metrics_(std::make_shared<StoreRegionMetrics>(raw_engine, meta_reader, meta_writer)) {}
+        region_metrics_(std::make_shared<StoreRegionMetrics>(raw_engine, meta_reader, meta_writer, engine)) {}
   ~StoreMetricsManager() = default;
 
   StoreMetricsManager(const StoreMetricsManager&) = delete;

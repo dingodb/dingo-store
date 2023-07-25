@@ -560,7 +560,7 @@ void SendVectorAddBatch(ServerInteractionPtr interaction, uint64_t region_id, ui
         vector_with_id->mutable_vector()->set_dimension(dimension);
         vector_with_id->mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
         for (int j = 0; j < dimension; j++) {
-          vector_with_id->mutable_vector()->add_float_values(random_seeds[i * dimension + j]);
+          vector_with_id->mutable_vector()->add_float_values(random_seeds[(i - start_id) * dimension + j]);
         }
       }
 

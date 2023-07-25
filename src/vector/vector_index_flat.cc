@@ -26,6 +26,8 @@
 #include "bthread/types.h"
 #include "butil/status.h"
 #include "common/logging.h"
+#include "faiss/Index.h"
+#include "faiss/MetricType.h"
 #include "hnswlib/space_ip.h"
 #include "hnswlib/space_l2.h"
 #include "proto/common.pb.h"
@@ -181,6 +183,7 @@ butil::Status VectorIndexFlat::Delete(const std::vector<uint64_t>& delete_ids) {
     remove_count = index_->remove_ids(sel);
   }
 
+
   if (0 == remove_count) {
     DINGO_LOG(ERROR) << fmt::format("not found id : {}", id);
     return butil::Status(pb::error::Errno::EVECTOR_INVALID, fmt::format("not found : {}", id));
@@ -320,7 +323,7 @@ butil::Status VectorIndexFlat::GetMemorySize(uint64_t& memory_size) {
     return butil::Status::OK();
   }
 
-  memory_size = count * sizeof(uint64_t) + count * dimension_ * sizeof(float);
+  memory_size = count * sizeof(faiss::idx_t) + count * dimension_ * sizeof(faiss::Index::component_t);
   return butil::Status::OK();
 }
 

@@ -2036,6 +2036,14 @@ uint64_t CoordinatorControl::CalculateIndexMetricsSingle(uint64_t index_id, pb::
   std::string min_key(10, '\x00');
   std::string max_key(10, '\xFF');
 
+  // about vector
+  pb::common::VectorIndexType vector_index_type = pb::common::VectorIndexType::VECTOR_INDEX_TYPE_NONE;
+  int64_t current_count = 0;
+  int64_t deleted_count = 0;
+  int64_t max_id = -1;
+  int64_t min_id = -1;
+  int64_t memory_bytes = 0;
+
   for (int i = 0; i < index_internal.partitions_size(); i++) {
     // part id
     uint64_t region_id = index_internal.partitions(i).region_id();
@@ -2075,6 +2083,35 @@ uint64_t CoordinatorControl::CalculateIndexMetricsSingle(uint64_t index_id, pb::
         max_key = region_metrics.max_key();
       }
     }
+
+    if (region_metrics.has_vector_index_metrics()) {
+      const auto& vector_index_metrics = region_metrics.vector_index_metrics();
+
+      pb::common::VectorIndexType internal_vector_index_type = vector_index_metrics.vector_index_type();
+      int64_t internal_current_count = vector_index_metrics.current_count();
+      int64_t internal_deleted_count = vector_index_metrics.deleted_count();
+      int64_t internal_max_id = vector_index_metrics.max_id();
+      int64_t internal_min_id = vector_index_metrics.min_id();
+      int64_t internal_memory_bytes = vector_index_metrics.memory_bytes();
+
+      vector_index_type = internal_vector_index_type;
+      current_count += internal_current_count;
+      deleted_count += internal_deleted_count;
+
+      if (max_id < 0) {
+        max_id = internal_max_id;
+      } else {
+        max_id = std::max(max_id, internal_max_id);
+      }
+
+      if (min_id < 0) {
+        min_id = internal_min_id;
+      } else {
+        min_id = std::min(min_id, internal_min_id);
+      }
+
+      memory_bytes += internal_memory_bytes;
+    }
   }
 
   index_metrics.set_rows_count(row_count);
@@ -2082,11 +2119,30 @@ uint64_t CoordinatorControl::CalculateIndexMetricsSingle(uint64_t index_id, pb::
   index_metrics.set_max_key(max_key);
   index_metrics.set_part_count(index_internal.partitions_size());
 
-  DINGO_LOG(DEBUG) << fmt::format(
-      "index_metrics calculated in CalculateIndexMetricsSingle, index_id={} row_count={} min_key={} max_key={} "
-      "part_count={}",
-      index_id, index_metrics.rows_count(), index_metrics.min_key(), index_metrics.max_key(),
-      index_metrics.part_count());
+  // about vector
+  if (vector_index_type != pb::common::VectorIndexType::VECTOR_INDEX_TYPE_NONE) {
+    index_metrics.set_vector_index_type(vector_index_type);
+    index_metrics.set_current_count(current_count);
+    index_metrics.set_deleted_count(deleted_count);
+    index_metrics.set_max_id(max_id);
+    index_metrics.set_min_id(min_id);
+    index_metrics.set_memory_bytes(memory_bytes);
+  }
+
+  if (index_metrics.vector_index_type() != pb::common::VectorIndexType::VECTOR_INDEX_TYPE_NONE) {
+    DINGO_LOG(DEBUG) << fmt::format(
+        "index_metrics calculated in CalculateIndexMetricsSingle, index_id={} row_count={} min_key={} max_key={} "
+        "part_count={} vector_index_type={} current_count={} deleted_count={} max_id={} min_id={} memory_bytes={}",
+        index_id, index_metrics.rows_count(), index_metrics.min_key(), index_metrics.max_key(),
+        index_metrics.part_count(), static_cast<int>(index_metrics.vector_index_type()), index_metrics.current_count(),
+        index_metrics.deleted_count(), index_metrics.max_id(), index_metrics.min_id(), index_metrics.memory_bytes());
+  } else {
+    DINGO_LOG(DEBUG) << fmt::format(
+        "index_metrics calculated in CalculateIndexMetricsSingle, index_id={} row_count={} min_key={} max_key={} "
+        "part_count={}",
+        index_id, index_metrics.rows_count(), index_metrics.min_key(), index_metrics.max_key(),
+        index_metrics.part_count());
+  }
 
   return 0;
 }

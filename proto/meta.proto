@@ -211,6 +211,24 @@ message IndexMetrics {
   bytes min_key = 2;
   bytes max_key = 3;
   uint64 part_count = 4;
+
+  // vector index type . reserve to do one of for each different algorithm.
+  dingodb.pb.common.VectorIndexType vector_index_type = 20;
+
+  // current count
+  int64 current_count = 21;
+
+  // deleted count
+  int64 deleted_count = 22;
+
+  // max id
+  int64 max_id = 23;
+
+  // min id
+  int64 min_id = 24;
+
+  // memeory unit bytes
+  int64 memory_bytes = 25;
 }
 
 message IndexMetricsWithId {
