@@ -78,6 +78,8 @@ class VectorIndexHnsw : public VectorIndex {
 
   hnswlib::HierarchicalNSW<float>* GetHnswIndex();
 
+  void NormalizeVector(const float* data, float* norm_array) const;
+
  private:
   // hnsw members
   hnswlib::HierarchicalNSW<float>* hnsw_index_;
@@ -91,6 +93,9 @@ class VectorIndexHnsw : public VectorIndex {
 
   bthread_mutex_t mutex_;
   std::atomic<bool> is_online_;
+
+  // normalize vector
+  bool normalize_;
 };
 
 }  // namespace dingodb

@@ -660,14 +660,14 @@ void SendCreateIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
     auto* hsnw_index_parameter = vector_index_parameter->mutable_hnsw_parameter();
 
     hsnw_index_parameter->set_dimension(FLAGS_dimension);
-    hsnw_index_parameter->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_L2);
+    hsnw_index_parameter->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_COSINE);
     hsnw_index_parameter->set_efconstruction(FLAGS_efconstruction);
     hsnw_index_parameter->set_nlinks(FLAGS_nlinks);
     hsnw_index_parameter->set_max_elements(FLAGS_max_elements);
   } else if (FLAGS_vector_index_type == "flat") {
     auto* flat_index_parameter = vector_index_parameter->mutable_flat_parameter();
     flat_index_parameter->set_dimension(FLAGS_dimension);
-    flat_index_parameter->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_L2);
+    flat_index_parameter->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_COSINE);
   }
 
   index_definition->set_version(1);

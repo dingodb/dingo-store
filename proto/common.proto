@@ -316,6 +316,7 @@ enum MetricType {
   METRIC_TYPE_NONE = 0;  // this is a placeholder
   METRIC_TYPE_L2 = 1;
   METRIC_TYPE_INNER_PRODUCT = 2;
+  METRIC_TYPE_COSINE = 3;
 }
 
 enum ScalarFilterType {

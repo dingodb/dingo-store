@@ -119,9 +119,14 @@ VectorIndexHnsw::VectorIndexHnsw(uint64_t id, const pb::common::VectorIndexParam
 
     this->dimension_ = hnsw_parameter.dimension();
 
+    normalize_ = false;
+
     if (hnsw_parameter.metric_type() == pb::common::MetricType::METRIC_TYPE_INNER_PRODUCT) {
       hnsw_space_ = new hnswlib::InnerProductSpace(hnsw_parameter.dimension());
-    } else {
+    } else if (hnsw_parameter.metric_type() == pb::common::MetricType::METRIC_TYPE_COSINE) {
+      normalize_ = true;
+      hnsw_space_ = new hnswlib::InnerProductSpace(hnsw_parameter.dimension());
+    } else if (hnsw_parameter.metric_type() == pb::common::MetricType::METRIC_TYPE_L2) {
       hnsw_space_ = new hnswlib::L2Space(hnsw_parameter.dimension());
     }
 
@@ -196,9 +201,20 @@ butil::Status VectorIndexHnsw::Upsert(const std::vector<pb::common::VectorWithId
       real_threads = 1;
     }
 
-    ParallelFor(0, vector_with_ids.size(), real_threads, [&](size_t row, size_t /*thread_id*/) {
-      this->hnsw_index_->addPoint((void*)(data.get() + dimension_ * row), vector_with_ids[row].id(), true);
-    });
+    if (!normalize_) {
+      ParallelFor(0, vector_with_ids.size(), real_threads, [&](size_t row, size_t /*thread_id*/) {
+        this->hnsw_index_->addPoint((void*)(data.get() + dimension_ * row), vector_with_ids[row].id(), true);
+      });
+    } else {
+      std::vector<float> norm_array(real_threads * dimension_);
+      ParallelFor(0, vector_with_ids.size(), real_threads, [&](size_t row, size_t thread_id) {
+        // normalize vector:
+        size_t start_idx = thread_id * dimension_;
+        NormalizeVector((float*)(data.get() + dimension_ * row), (norm_array.data() + start_idx));
+
+        this->hnsw_index_->addPoint((void*)(norm_array.data() + start_idx), vector_with_ids[row].id(), true);
+      });
+    }
   } catch (std::runtime_error& e) {
     DINGO_LOG(ERROR) << "upsert vector failed, error=" << e.what();
     ret = butil::Status(pb::error::Errno::EINTERNAL, "upsert vector failed, error=" + std::string(e.what()));
@@ -320,35 +336,72 @@ butil::Status VectorIndexHnsw::Search(std::vector<pb::common::VectorWithId> vect
   // Search by parallel
   results.resize(vector_with_ids.size());
   try {
-    ParallelFor(0, vector_with_ids.size(), hnsw_num_threads_, [&](size_t row, size_t /*thread_id*/) {
-      std::priority_queue<std::pair<float, hnswlib::labeltype>> result =
-          hnsw_index_->searchKnn(data.get() + dimension_ * row, topk);
+    if (!normalize_) {
+      ParallelFor(0, vector_with_ids.size(), hnsw_num_threads_, [&](size_t row, size_t /*thread_id*/) {
+        std::priority_queue<std::pair<float, hnswlib::labeltype>> result =
+            hnsw_index_->searchKnn(data.get() + dimension_ * row, topk);
 
-      while (!result.empty()) {
-        auto* vector_with_distance = results[row].add_vector_with_distances();
-        vector_with_distance->set_distance(result.top().first);
-        vector_with_distance->set_metric_type(this->vector_index_parameter.hnsw_parameter().metric_type());
+        while (!result.empty()) {
+          auto* vector_with_distance = results[row].add_vector_with_distances();
+          vector_with_distance->set_distance(result.top().first);
+          vector_with_distance->set_metric_type(this->vector_index_parameter.hnsw_parameter().metric_type());
 
-        auto* vector_with_id = vector_with_distance->mutable_vector_with_id();
+          auto* vector_with_id = vector_with_distance->mutable_vector_with_id();
 
-        vector_with_id->set_id(result.top().second);
-        vector_with_id->mutable_vector()->set_dimension(dimension_);
-        vector_with_id->mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
+          vector_with_id->set_id(result.top().second);
+          vector_with_id->mutable_vector()->set_dimension(dimension_);
+          vector_with_id->mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
 
-        if (reconstruct) {
-          try {
-            std::vector<float> data = hnsw_index_->getDataByLabel<float>(result.top().second);
-            for (auto& value : data) {
-              vector_with_id->mutable_vector()->add_float_values(value);
+          if (reconstruct) {
+            try {
+              std::vector<float> data = hnsw_index_->getDataByLabel<float>(result.top().second);
+              for (auto& value : data) {
+                vector_with_id->mutable_vector()->add_float_values(value);
+              }
+            } catch (std::exception& e) {
+              LOG(ERROR) << "getDataByLabel failed, label: " << result.top().second << " err: " << e.what();
             }
-          } catch (std::exception& e) {
-            LOG(ERROR) << "getDataByLabel failed, label: " << result.top().second << " err: " << e.what();
           }
-        }
 
-        result.pop();
-      }
-    });
+          result.pop();
+        }
+      });
+    } else {
+      std::vector<float> norm_array(hnsw_num_threads_ * dimension_);
+      ParallelFor(0, vector_with_ids.size(), hnsw_num_threads_, [&](size_t row, size_t thread_id) {
+        size_t start_idx = thread_id * dimension_;
+        NormalizeVector((float*)(data.get() + dimension_ * row), (norm_array.data() + start_idx));
+
+        std::priority_queue<std::pair<float, hnswlib::labeltype>> result =
+            hnsw_index_->searchKnn(norm_array.data() + start_idx, topk);
+
+        while (!result.empty()) {
+          auto* vector_with_distance = results[row].add_vector_with_distances();
+          vector_with_distance->set_distance(result.top().first);
+          vector_with_distance->set_metric_type(this->vector_index_parameter.hnsw_parameter().metric_type());
+
+          auto* vector_with_id = vector_with_distance->mutable_vector_with_id();
+
+          vector_with_id->set_id(result.top().second);
+          vector_with_id->mutable_vector()->set_dimension(dimension_);
+          vector_with_id->mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
+
+          // TODO: reconstruct normalized vector or orginal vector
+          // if (reconstruct) {
+          //   try {
+          //     std::vector<float> data = hnsw_index_->getDataByLabel<float>(result.top().second);
+          //     for (auto& value : data) {
+          //       vector_with_id->mutable_vector()->add_float_values(value);
+          //     }
+          //   } catch (std::exception& e) {
+          //     LOG(ERROR) << "getDataByLabel failed, label: " << result.top().second << " err: " << e.what();
+          //   }
+          // }
+
+          result.pop();
+        }
+      });
+    }
   } catch (std::runtime_error& e) {
     DINGO_LOG(ERROR) << "parallel search vector failed, error=" << e.what();
     ret = butil::Status(pb::error::Errno::EINTERNAL, "parallel search vector failed, error=" + std::string(e.what()));
@@ -486,6 +539,13 @@ butil::Status VectorIndexHnsw::GetMemorySize(uint64_t& memory_size) {
                       2  // level 1-max_level nlinks, estimate echo vector exists in harf max_level_ count levels
       ;
   return butil::Status::OK();
+}
+
+void VectorIndexHnsw::NormalizeVector(const float* data, float* norm_array) const {
+  float norm = 0.0f;
+  for (int i = 0; i < dimension_; i++) norm += data[i] * data[i];
+  norm = 1.0f / (sqrtf(norm) + 1e-30f);
+  for (int i = 0; i < dimension_; i++) norm_array[i] = data[i] * norm;
 }
 
 }  // namespace dingodb

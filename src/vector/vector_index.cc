@@ -14,6 +14,8 @@
 
 #include "vector/vector_index.h"
 
+#include <cstdint>
+
 #include "butil/status.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
