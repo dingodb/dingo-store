@@ -146,16 +146,16 @@ message Schema {
 // TableDefinition is for SQL
 message TableDefinition {
   string name = 1;
-  repeated ColumnDefinition columns = 2;
-  map<string, Index> indexes = 3;
-  uint32 version = 4;
-  uint64 ttl = 5;
-  PartitionRule table_partition = 6;
-  dingodb.pb.common.Engine engine = 7;
-  map<string, string> properties = 8;
-  uint32 replica = 9;
-  uint64 auto_increment = 10;
-  string create_sql = 11;
+  uint32 version = 2;
+  uint64 ttl = 3;
+  uint64 auto_increment = 4;
+  string create_sql = 5;
+  PartitionRule table_partition = 20; 
+  uint32 replica = 21; 
+  dingodb.pb.common.Engine engine = 22; 
+  repeated ColumnDefinition columns = 30; 
+  map<string, string> properties = 40; 
+  dingodb.pb.common.IndexParameter index_parameter = 41; // for index
 }
 
 // IndexDefinition is for vector/scalar index
@@ -255,11 +255,11 @@ message IndexDefinitionWithId {
   IndexDefinition index_definition = 2;
 }
 
-message GetTablesRequest {
+message GetTablesBySchemaRequest {
   DingoCommonId schema_id = 1;
 }
 
-message GetTablesResponse {
+message GetTablesBySchemaResponse {
   dingodb.pb.error.Error error = 1;
   repeated TableDefinitionWithId table_definition_with_ids = 2;
 }
@@ -509,6 +509,47 @@ message DeleteAutoIncrementResponse {
   dingodb.pb.error.Error error = 1;
 }
 
+// generate table id, vector index id and scalar index id
+message GenerateTableIdsRequest {
+  DingoCommonId schema_id = 1;
+  uint32 count = 2;
+}
+
+message GenerateTableIdsResponse{
+  dingodb.pb.error.Error error = 1;
+  repeated DingoCommonId table_ids = 2;
+}
+
+// create table, vector index and scalar index
+message CreateTablesRequest {
+  DingoCommonId schema_id = 1;
+  repeated TableDefinitionWithId table_definition_with_ids = 2;
+}
+
+message CreateTablesResponse {
+  dingodb.pb.error.Error error = 1;
+  repeated DingoCommonId table_ids = 2;
+}
+
+// get assigned table definition, including vector index and scalar index
+message GetTablesRequest {
+  DingoCommonId table_id = 1;
+}
+
+message GetTablesResponse {
+  dingodb.pb.error.Error error = 1;
+  repeated TableDefinitionWithId table_definition_with_ids = 2;
+}
+
+// drop table, vector index and scalar index
+message DropTablesRequest {
+  repeated DingoCommonId table_id = 1;
+}
+
+message DropTablesResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
 service MetaService {
   // GetSchemas
   // in: schema_id
@@ -525,10 +566,10 @@ service MetaService {
   // out: Schema
   rpc GetSchemaByName(GetSchemaByNameRequest) returns (GetSchemaByNameResponse);
 
-  // GetTables
+  // GetTablesBySchema
   // in: schema_id
   // out: List<TableDefinitionWithId>
-  rpc GetTables(GetTablesRequest) returns (GetTablesResponse);
+  rpc GetTablesBySchema(GetTablesBySchemaRequest) returns (GetTablesBySchemaResponse);
 
   // GetTablesCount
   // in: schema_id
@@ -570,6 +611,26 @@ service MetaService {
   // in: schema_id table_id
   // out: {}
   rpc DropTable(DropTableRequest) returns (DropTableResponse);
+
+  // GenerateTableIds
+  // in: schema_id count
+  // out: List<DingoCommonId>
+  rpc GenerateTableIds(GenerateTableIdsRequest) returns (GenerateTableIdsResponse);
+
+  // CreateTables
+  // in: schema_id List<TableDefinitionWithId>
+  // out: List<DingoCommonId>
+  rpc CreateTables(CreateTablesRequest) returns (CreateTablesResponse);
+
+  // GetTables
+  // in: schema_id table_id
+  // out: List<DingoCommonId>
+  rpc GetTables(GetTablesRequest) returns (GetTablesResponse);
+
+  // DropTables
+  // in: table_id
+  // out: {}
+  rpc DropTables(DropTablesRequest) returns (DropTablesResponse);
 
   // GetIndexes
   // in: schema_id

@@ -143,8 +143,8 @@ void MetaServiceImpl::GetTablesCount(google::protobuf::RpcController * /*control
   response->set_tables_count(tables_count);
 }
 
-void MetaServiceImpl::GetTables(google::protobuf::RpcController * /*controller*/,
-                                const pb::meta::GetTablesRequest *request, pb::meta::GetTablesResponse *response,
+void MetaServiceImpl::GetTablesBySchema(google::protobuf::RpcController * /*controller*/,
+                                const pb::meta::GetTablesBySchemaRequest *request, pb::meta::GetTablesBySchemaResponse *response,
                                 google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
 
@@ -152,7 +152,7 @@ void MetaServiceImpl::GetTables(google::protobuf::RpcController * /*controller*/
     return RedirectResponse(response);
   }
 
-  DINGO_LOG(DEBUG) << "GetTables request:  schema_id = [" << request->schema_id().entity_id() << "]";
+  DINGO_LOG(DEBUG) << "GetTablesBySchema request:  schema_id = [" << request->schema_id().entity_id() << "]";
 
   if (!request->has_schema_id() || request->schema_id().entity_id() <= 0) {
     response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
@@ -168,7 +168,7 @@ void MetaServiceImpl::GetTables(google::protobuf::RpcController * /*controller*/
   }
 
   if (table_definition_with_ids.empty()) {
-    DINGO_LOG(INFO) << "meta_service GetTables no tables, schema_id=" << request->schema_id().entity_id();
+    DINGO_LOG(INFO) << "meta_service GetTablesBySchema no tables, schema_id=" << request->schema_id().entity_id();
     return;
   }
 

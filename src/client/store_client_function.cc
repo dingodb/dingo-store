@@ -870,16 +870,16 @@ void SendTransferLeaderByCoordinator(ServerInteractionPtr interaction, uint64_t 
   interaction->SendRequest("CoordinatorService", "TransferLeaderRegion", request, response);
 }
 
-std::vector<uint64_t> SendGetTables(ServerInteractionPtr interaction) {
-  dingodb::pb::meta::GetTablesRequest request;
-  dingodb::pb::meta::GetTablesResponse response;
+std::vector<uint64_t> SendGetTablesBySchema(ServerInteractionPtr interaction) {
+  dingodb::pb::meta::GetTablesBySchemaRequest request;
+  dingodb::pb::meta::GetTablesBySchemaResponse response;
 
   auto* schema_id = request.mutable_schema_id();
   schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
   schema_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
   schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
 
-  interaction->SendRequest("MetaService", "GetTables", request, response);
+  interaction->SendRequest("MetaService", "GetTablesBySchema", request, response);
 
   std::vector<uint64_t> table_ids;
   for (const auto& id : response.table_definition_with_ids()) {
@@ -1491,7 +1491,7 @@ void AutoTest(std::shared_ptr<Context> ctx) {
 
 void AutoDropTable(std::shared_ptr<Context> ctx) {
   // Get all table
-  auto table_ids = SendGetTables(ctx->coordinator_interaction);
+  auto table_ids = SendGetTablesBySchema(ctx->coordinator_interaction);
   DINGO_LOG(INFO) << "table nums: " << table_ids.size();
 
   // Drop table
