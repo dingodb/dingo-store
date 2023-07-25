@@ -246,6 +246,10 @@ butil::Status ValidateVectorAddRequest(const dingodb::pb::index::VectorAddReques
   }
 
   for (const auto& vector : request->vectors()) {
+    if (vector.id() == 0 || vector.id() == UINT64_MAX) {
+      return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param vector id is not allowed to be zero or UNINT64_MAX");
+    }
+
     if (vector.vector().float_values().empty()) {
       return butil::Status(pb::error::EVECTOR_EMPTY, "Vector is empty");
     }
