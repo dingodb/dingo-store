@@ -208,10 +208,63 @@ bool StoreRegionMetrics::CollectMetrics() {
       region_metrics->SetNeedUpdateKeyCount(true);
     }
 
-    DINGO_LOG(DEBUG) << fmt::format(
-        "Collect region metrics, region {} min_key[{}] max_key[{}] key_count[true] region_size[true] elapsed[{} ms]",
-        region->Id(), is_collect_min_key ? "true" : "false", is_collect_max_key ? "true" : "false",
-        Helper::TimestampMs() - start_time);
+    // vector index
+    bool vector_index_has_data = false;
+    std::shared_ptr<VectorIndexManager> vector_index_mgr = Server::GetInstance()->GetVectorIndexManager();
+    if (vector_index_mgr) {
+      std::shared_ptr<VectorIndex> vector_index = vector_index_mgr->GetVectorIndex(region_metrics->Id());
+      if (vector_index) {
+        if (pb::common::VectorIndexType::VECTOR_INDEX_TYPE_NONE != vector_index->VectorIndexType()) {
+          region_metrics->SetVectorIndexType(vector_index->VectorIndexType());
+
+          uint64_t current_count = 0;
+          vector_index->GetCount(current_count);
+          region_metrics->SetVectorCurrentCount(current_count);
+
+          uint64_t deleted_count = 0;
+          vector_index->GetDeletedCount(deleted_count);
+          region_metrics->SetVectorDeletedCount(deleted_count);
+
+          std::shared_ptr<Context> ctx = std::make_shared<Context>();
+          ctx->SetRegionId(region_metrics->Id());
+
+          auto reader = engine_->NewVectorReader(Constant::kStoreDataCF);
+          uint64_t max_id = 0;
+
+          reader->VectorGetBorderId(ctx, max_id, false);
+          region_metrics->SetVectorMaxId(max_id);
+
+          uint64_t min_id = 0;
+          reader->VectorGetBorderId(ctx, min_id, true);
+          region_metrics->SetVectorMinId(min_id);
+
+          uint64_t total_memory_usage = 0;
+          vector_index->GetMemorySize(total_memory_usage);
+          region_metrics->SetVectorMemoryBytes(total_memory_usage);
+
+          vector_index_has_data = true;
+        }
+      }
+    }
+
+    if (vector_index_has_data) {
+      DINGO_LOG(DEBUG) << fmt::format(
+          "Collect region metrics, region {} min_key[{}] max_key[{}] key_count[true] region_size[true]  "
+          "vector_type[{}] vector_index_count[{}] vector_index_deleted_count[{}] vector_index_max_id[{}] "
+          "vector_index_min_id[{}] "
+          "vector_index_memory_bytes[{}]"
+          "elapsed[{} ms]",
+          region->Id(), is_collect_min_key ? "true" : "false", is_collect_max_key ? "true" : "false",
+          static_cast<int>(region_metrics->GetVectorIndexType()), region_metrics->GetVectorCurrentCount(),
+          region_metrics->GetVectorDeletedCount(), region_metrics->GetVectorMaxId(), region_metrics->GetVectorMinId(),
+          region_metrics->GetVectorMemoryBytes(), Helper::TimestampMs() - start_time);
+    } else {  //  no vector index data
+      DINGO_LOG(DEBUG) << fmt::format(
+          "Collect region metrics, region {} min_key[{}] max_key[{}] key_count[true] region_size[true] elapsed[{} "
+          "ms]",
+          region->Id(), is_collect_min_key ? "true" : "false", is_collect_max_key ? "true" : "false",
+          Helper::TimestampMs() - start_time);
+    }
 
     meta_writer_->Put(TransformToKv(region_metrics));
   }

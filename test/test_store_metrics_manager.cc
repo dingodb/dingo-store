@@ -156,9 +156,11 @@ TEST_F(StoreRegionMetricsTest, GetRegionMinKey) {
   range.set_end_key("ee");
   writer->KvDeleteRange(range);
 
+  std::shared_ptr<dingodb::Engine> engine;
+
   auto store_region_metrics = std::make_shared<dingodb::StoreRegionMetrics>(
       StoreRegionMetricsTest::engine, std::make_shared<dingodb::MetaReader>(StoreRegionMetricsTest::engine),
-      std::make_shared<dingodb::MetaWriter>(StoreRegionMetricsTest::engine));
+      std::make_shared<dingodb::MetaWriter>(StoreRegionMetricsTest::engine), engine);
 
   std::vector<std::string> raft_addrs;
   dingodb::store::RegionPtr region = BuildRegion(11111, "unit-test-01", raft_addrs);
