@@ -108,8 +108,8 @@ butil::Status ServerInteraction::SendRequest(const std::string& service_name, co
     const int leader_index = GetLeader();
     channels_[leader_index]->CallMethod(method, &cntl, &request, &response, nullptr);
     if (FLAGS_log_each_request) {
-      DINGO_LOG(INFO) << "send request api " << api_name << " request: " << request.ShortDebugString()
-                      << " response: " << response.ShortDebugString();
+      DINGO_LOG(INFO) << "send request api [" << leader_index << "]" << api_name
+                      << " request: " << request.ShortDebugString() << " response: " << response.ShortDebugString();
     }
     if (cntl.Failed()) {
       DINGO_LOG(ERROR) << fmt::format("{} response failed, {} {} {}", api_name, cntl.log_id(), cntl.ErrorCode(),
