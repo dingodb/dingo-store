@@ -297,12 +297,12 @@ public class MetaServiceClient {
         /* TODO
         Meta.DingoCommonId tableId = tableIdCache.get(tableName);
         if (tableId == null) {
-            Meta.GetTablesRequest request = Meta.GetTablesRequest.newBuilder()
+            Meta.GetTablesBySchemaRequest request = Meta.GetTablesBySchemaRequest.newBuilder()
                     .setSchemaId(id)
                     .build();
 
-            Meta.GetTablesResponse response = metaConnector.exec(stub -> {
-                Meta.GetTablesResponse res = stub.getTables(request);
+            Meta.GetTablesBySchemaResponse response = metaConnector.exec(stub -> {
+                Meta.GetTablesBySchemaResponse res = stub.getTables(request);
                 return new ServiceConnector.Response<>(res.getError(), res);
             }).getResponse();
 
@@ -333,11 +333,11 @@ public class MetaServiceClient {
     }
 
     private List<Meta.TableDefinitionWithId> getTableDefinitions(Meta.DingoCommonId id) {
-        Meta.GetTablesRequest request = Meta.GetTablesRequest.newBuilder()
+        Meta.GetTablesBySchemaRequest request = Meta.GetTablesBySchemaRequest.newBuilder()
                 .setSchemaId(id)
                 .build();
 
-        return metaConnector.exec(stub -> stub.getTables(request)).getTableDefinitionWithIdsList();
+        return metaConnector.exec(stub -> stub.getTablesBySchema(request)).getTableDefinitionWithIdsList();
     }
 
     public Table getTableDefinition(@NonNull String tableName) {

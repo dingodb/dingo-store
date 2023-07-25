@@ -511,8 +511,8 @@ int CoordinatorSender() {
     SendGetSchema(coordinator_interaction_meta);
   } else if (FLAGS_method == "GetSchemaByName") {
     SendGetSchemaByName(coordinator_interaction_meta);
-  } else if (FLAGS_method == "GetTables") {
-    SendGetTables(coordinator_interaction_meta);
+  } else if (FLAGS_method == "GetTablesBySchema") {
+    SendGetTablesBySchema(coordinator_interaction_meta);
   } else if (FLAGS_method == "GetTablesCount") {
     SendGetTablesCount(coordinator_interaction_meta);
   } else if (FLAGS_method == "CreateTable") {

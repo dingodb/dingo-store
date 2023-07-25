@@ -89,7 +89,7 @@ void SendGetSchemas(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator
 void SendGetSchema(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendGetSchemaByName(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendGetTablesCount(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
-void SendGetTables(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendGetTablesBySchema(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendGetTable(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendGetTableByName(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendGetTableRange(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
