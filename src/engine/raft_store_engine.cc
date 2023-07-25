@@ -761,7 +761,13 @@ butil::Status RaftStoreEngine::VectorReader::GetBorderId(uint64_t region_id, uin
         break;
       }
 
-      border_id = VectorCodec::DecodeVectorId(key);
+      auto vector_id = VectorCodec::DecodeVectorId(key);
+      if (vector_id == 0 || vector_id == UINT64_MAX) {
+        continue;
+      } else {
+        border_id = vector_id;
+      }
+
       break;
     }
   } else {
@@ -774,7 +780,13 @@ butil::Status RaftStoreEngine::VectorReader::GetBorderId(uint64_t region_id, uin
         break;
       }
 
-      border_id = VectorCodec::DecodeVectorId(key);
+      auto vector_id = VectorCodec::DecodeVectorId(key);
+      if (vector_id == 0 || vector_id == UINT64_MAX) {
+        continue;
+      } else {
+        border_id = vector_id;
+      }
+
       break;
     }
   }
@@ -808,7 +820,16 @@ butil::Status RaftStoreEngine::VectorReader::ScanVectorId(uint64_t region_id, ui
       pb::common::VectorWithId vector;
 
       std::string key(iter->Key());
+      auto decode_region_id = VectorCodec::DecodeVectorRegionId(key);
+      if (decode_region_id != region_id) {
+        break;
+      }
+
       auto vector_id = VectorCodec::DecodeVectorId(key);
+      if (vector_id == 0 || vector_id == UINT64_MAX) {
+        continue;
+      }
+
       ids.push_back(vector_id);
 
       if (ids.size() >= limit) {
@@ -820,7 +841,16 @@ butil::Status RaftStoreEngine::VectorReader::ScanVectorId(uint64_t region_id, ui
       pb::common::VectorWithId vector;
 
       std::string key(iter->Key());
+      auto decode_region_id = VectorCodec::DecodeVectorRegionId(key);
+      if (decode_region_id != region_id) {
+        break;
+      }
+
       auto vector_id = VectorCodec::DecodeVectorId(key);
+      if (vector_id == 0 || vector_id == UINT64_MAX) {
+        continue;
+      }
+
       ids.push_back(vector_id);
 
       if (ids.size() >= limit) {
