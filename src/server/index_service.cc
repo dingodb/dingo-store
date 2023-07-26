@@ -280,24 +280,22 @@ butil::Status IndexServiceImpl::ValidateVectorAddRequest(const dingodb::pb::inde
   }
 
   auto vector_index = Server::GetInstance()->GetVectorIndexManager()->GetVectorIndex(request->region_id());
-  if (!vector_index) {
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id cannot find vector_index");
-  }
-
-  auto dimension = vector_index->GetDimension();
-  for (const auto& vector : request->vectors()) {
-    if (vector_index->VectorIndexType() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW ||
-        vector_index->VectorIndexType() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT ||
-        vector_index->VectorIndexType() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT ||
-        vector_index->VectorIndexType() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ) {
-      if (vector.vector().float_values().size() != dimension) {
-        return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
-                             "Param vector dimension is error, correct dimension is " + std::to_string(dimension));
-      }
-    } else {
-      if (vector.vector().binary_values().size() != dimension) {
-        return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
-                             "Param vector dimension is error, correct dimension is " + std::to_string(dimension));
+  if (vector_index != nullptr) {
+    auto dimension = vector_index->GetDimension();
+    for (const auto& vector : request->vectors()) {
+      if (vector_index->VectorIndexType() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW ||
+          vector_index->VectorIndexType() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT ||
+          vector_index->VectorIndexType() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT ||
+          vector_index->VectorIndexType() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ) {
+        if (vector.vector().float_values().size() != dimension) {
+          return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
+                               "Param vector dimension is error, correct dimension is " + std::to_string(dimension));
+        }
+      } else {
+        if (vector.vector().binary_values().size() != dimension) {
+          return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
+                               "Param vector dimension is error, correct dimension is " + std::to_string(dimension));
+        }
       }
     }
   }
@@ -366,11 +364,6 @@ butil::Status IndexServiceImpl::ValidateVectorDeleteRequest(const dingodb::pb::i
   auto status = storage_->ValidateLeader(request->region_id());
   if (!status.ok()) {
     return status;
-  }
-
-  auto vector_index = Server::GetInstance()->GetVectorIndexManager()->GetVectorIndex(request->region_id());
-  if (!vector_index) {
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id cannot find vector_index");
   }
 
   return ServiceHelper::ValidateIndexRegion(request->region_id());

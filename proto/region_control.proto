@@ -93,6 +93,7 @@ enum DebugType {
   STORE_REGION_METRICS = 6;
   STORE_FILE_READER = 7;
   STORE_REGION_ACTUAL_METRICS = 8;
+  INDEX_VECTOR_INDEX_METRICS = 100;
 }
 
 message DebugRequest {
@@ -134,6 +135,20 @@ message DebugResponse {
     repeated dingodb.pb.common.RegionMetrics region_metricses = 1;
   }
 
+  message VectorIndexMetricsEntry {
+    uint64 id = 1;
+    uint32 dimension = 10;
+    uint64 apply_log_index = 20;
+    uint64 snapshot_log_index = 30;
+    uint64 key_count = 40;
+    uint64 deleted_key_count = 50;
+    uint64 memory_size = 60;
+  }
+
+  message VectorIndexMetrics {
+    repeated VectorIndexMetricsEntry entries = 1;
+  }
+
   RegionMetaStat region_meta_stat = 1;
   RegionMetaDetails region_meta_details = 2;
   RegionControlCommand region_control_command = 3;
@@ -142,6 +157,7 @@ message DebugResponse {
   RegionMetrics region_metrics = 6;
   FileReader file_reader = 7;
   RegionActualMetrics region_actual_metrics = 8;
+  VectorIndexMetrics vector_index_metrics = 100;
 }
 
 service RegionControlService {

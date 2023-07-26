@@ -14,6 +14,7 @@
 
 #include "event/store_state_machine_event.h"
 
+#include <memory>
 #include <string_view>
 #include <vector>
 
@@ -23,6 +24,7 @@
 #include "common/logging.h"
 #include "fmt/core.h"
 #include "handler/raft_snapshot_handler.h"
+#include "handler/raft_vote_handler.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
 #include "server/server.h"
@@ -74,6 +76,20 @@ void SmLeaderStartEventListener::OnEvent(std::shared_ptr<Event> event) {
 
   // trigger heartbeat
   Heartbeat::TriggerStoreHeartbeat(the_event->node_id);
+
+  auto handlers = handler_collection_->GetHandlers();
+  for (auto& handle : handlers) {
+    handle->Handle(the_event->region, the_event->term);
+  }
+}
+
+void SmLeaderStopEventListener::OnEvent(std::shared_ptr<Event> event) {
+  auto the_event = std::dynamic_pointer_cast<SmLeaderStopEvent>(event);
+
+  auto handlers = handler_collection_->GetHandlers();
+  for (auto& handle : handlers) {
+    handle->Handle(the_event->region, the_event->status);
+  }
 }
 
 void SmConfigurationCommittedEventListener::OnEvent(std::shared_ptr<Event> event) {
@@ -144,7 +160,8 @@ void SmStopFollowingEventListener::OnEvent(std::shared_ptr<Event> event) {
 std::shared_ptr<EventListenerCollection> StoreSmEventListenerFactory::Build() {
   auto listener_collection = std::make_shared<EventListenerCollection>();
 
-  auto handler_factory = std::make_shared<RaftApplyHandlerFactory>();
+  std::shared_ptr<HandlerFactory> handler_factory;
+  handler_factory = std::make_shared<RaftApplyHandlerFactory>();
   listener_collection->Register(std::make_shared<SmApplyEventListener>(handler_factory->Build()));
 
   listener_collection->Register(std::make_shared<SmShutdownEventListener>());
@@ -152,8 +169,12 @@ std::shared_ptr<EventListenerCollection> StoreSmEventListenerFactory::Build() {
       std::make_shared<SmSnapshotSaveEventListener>(std::make_shared<RaftSaveSnapshotHanler>()));
   listener_collection->Register(
       std::make_shared<SmSnapshotLoadEventListener>(std::make_shared<RaftLoadSnapshotHanler>()));
-  listener_collection->Register(std::make_shared<SmLeaderStartEventListener>());
-  listener_collection->Register(std::make_shared<SmLeaderStopEventListener>());
+
+  handler_factory = std::make_shared<LeaderStartHandlerFactory>();
+  listener_collection->Register(std::make_shared<SmLeaderStartEventListener>(handler_factory->Build()));
+  handler_factory = std::make_shared<LeaderStopHandlerFactory>();
+  listener_collection->Register(std::make_shared<SmLeaderStopEventListener>(handler_factory->Build()));
+
   listener_collection->Register(std::make_shared<SmErrorEventListener>());
   listener_collection->Register(std::make_shared<SmConfigurationCommittedEventListener>());
   listener_collection->Register(std::make_shared<SmStartFollowingEventListener>());

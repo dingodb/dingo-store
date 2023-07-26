@@ -225,23 +225,6 @@ bool RaftSnapshot::LoadSnapshot(braft::SnapshotReader* reader, store::RegionPtr 
     }
   }
 
-  // call load_index for index region with vector index
-  const auto& region_definition = region->InnerRegion().definition();
-  if (region_definition.has_index_parameter() &&
-      region_definition.index_parameter().index_type() == pb::common::IndexType::INDEX_TYPE_VECTOR) {
-    DINGO_LOG(INFO) << fmt::format("LoadSnapshot load region {} vector index", region->Id());
-    auto status = Server::GetInstance()->GetVectorIndexManager()->LoadOrBuildVectorIndex(region);
-    if (!status.ok()) {
-      DINGO_LOG(ERROR) << "Load index failed, region_id: " << region->Id() << ", error: " << status.error_str();
-      return false;
-    }
-    status = Server::GetInstance()->GetVectorIndexManager()->SaveVectorIndex(region, true);
-    if (!status.ok()) {
-      DINGO_LOG(ERROR) << "Save index failed, region_id: " << region->Id() << ", error: " << status.error_str();
-      return false;
-    }
-  }
-
   return status.ok();
 }
 

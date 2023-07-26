@@ -117,31 +117,6 @@ butil::Status ServiceAccess::GetVectorIndexSnapshot(const pb::node::GetVectorInd
   return butil::Status();
 }
 
-std::shared_ptr<pb::fileservice::GetFileResponse> ServiceAccess::GetFile(const pb::fileservice::GetFileRequest& request,
-                                                                         const butil::EndPoint& endpoint,
-                                                                         butil::IOBuf* buf) {
-  brpc::Channel channel;
-  if (channel.Init(endpoint, nullptr) != 0) {
-    DINGO_LOG(ERROR) << "Fail to init channel to " << butil::endpoint2str(endpoint).c_str();
-    return {};
-  }
-
-  brpc::Controller cntl;
-  cntl.set_timeout_ms(1000L);
-  pb::fileservice::FileService_Stub stub(&channel);
-
-  auto response = std::make_shared<pb::fileservice::GetFileResponse>();
-  stub.GetFile(&cntl, &request, response.get(), nullptr);
-  if (cntl.Failed()) {
-    DINGO_LOG(ERROR) << fmt::format("Send GetFile request failed, error {}", cntl.ErrorText());
-    return nullptr;
-  }
-
-  buf->swap(cntl.response_attachment());
-
-  return response;
-}
-
 std::shared_ptr<pb::fileservice::CleanFileReaderResponse> ServiceAccess::CleanFileReader(
     const pb::fileservice::CleanFileReaderRequest& request, const butil::EndPoint& endpoint) {
   brpc::Channel channel;
@@ -160,6 +135,32 @@ std::shared_ptr<pb::fileservice::CleanFileReaderResponse> ServiceAccess::CleanFi
     DINGO_LOG(ERROR) << fmt::format("Send CleanFileReader request failed, error {}", cntl.ErrorText());
     return nullptr;
   }
+
+  return response;
+}
+
+bool RemoteFileCopier::Init() {
+  if (channel_.Init(endpoint_, nullptr) != 0) {
+    DINGO_LOG(ERROR) << "Fail to init channel to " << butil::endpoint2str(endpoint_).c_str();
+    return false;
+  }
+  return true;
+}
+
+std::shared_ptr<pb::fileservice::GetFileResponse> RemoteFileCopier::GetFile(
+    const pb::fileservice::GetFileRequest& request, butil::IOBuf* buf) {
+  brpc::Controller cntl;
+  cntl.set_timeout_ms(1000L);
+  pb::fileservice::FileService_Stub stub(&channel_);
+
+  auto response = std::make_shared<pb::fileservice::GetFileResponse>();
+  stub.GetFile(&cntl, &request, response.get(), nullptr);
+  if (cntl.Failed()) {
+    DINGO_LOG(ERROR) << fmt::format("Send GetFileRequest failed, error {}", cntl.ErrorText());
+    return nullptr;
+  }
+
+  buf->swap(cntl.response_attachment());
 
   return response;
 }

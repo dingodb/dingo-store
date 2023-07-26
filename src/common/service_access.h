@@ -15,6 +15,11 @@
 #ifndef DINGODB_COMMON_SERVICE_STUB_H_
 #define DINGODB_COMMON_SERVICE_STUB_H_
 
+#include <sys/stat.h>
+
+#include <memory>
+
+#include "braft/remote_file_copier.h"
 #include "butil/endpoint.h"
 #include "butil/iobuf.h"
 #include "butil/status.h"
@@ -37,14 +42,30 @@ class ServiceAccess {
                                               pb::node::GetVectorIndexSnapshotResponse& response);
 
   // FileService
-  static std::shared_ptr<pb::fileservice::GetFileResponse> GetFile(const pb::fileservice::GetFileRequest& request,
-                                                                   const butil::EndPoint& endpoint, butil::IOBuf* buf);
-
   static std::shared_ptr<pb::fileservice::CleanFileReaderResponse> CleanFileReader(
       const pb::fileservice::CleanFileReaderRequest& request, const butil::EndPoint& endpoint);
 
  private:
   ServiceAccess() = default;
+};
+
+class RemoteFileCopier {
+ public:
+  RemoteFileCopier(const butil::EndPoint& endpoint) : endpoint_(endpoint) {}
+  ~RemoteFileCopier() = default;
+
+  static std::shared_ptr<RemoteFileCopier> New(const butil::EndPoint& endpoint) {
+    return std::make_shared<RemoteFileCopier>(endpoint);
+  }
+
+  bool Init();
+
+  std::shared_ptr<pb::fileservice::GetFileResponse> GetFile(const pb::fileservice::GetFileRequest& request,
+                                                            butil::IOBuf* buf);
+
+ private:
+  butil::EndPoint endpoint_;
+  brpc::Channel channel_;
 };
 
 }  // namespace dingodb

@@ -27,8 +27,8 @@ void FileServiceImpl::GetFile(google::protobuf::RpcController* controller,
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
 
-  DINGO_LOG(INFO) << fmt::format("Get file for {} request {}", butil::endpoint2str(cntl->remote_side()).c_str(),
-                                 request->ShortDebugString());
+  DINGO_LOG(DEBUG) << fmt::format("Send file to {} request {}", butil::endpoint2str(cntl->remote_side()).c_str(),
+                                  request->ShortDebugString());
 
   auto reader = FileServiceReaderManager::GetInstance().GetReader(request->reader_id());
   if (reader == nullptr) {

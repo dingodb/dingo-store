@@ -612,7 +612,10 @@ void VectorIndexScrubTask::ScrubVectorIndex() {
     return;
   }
 
-  vector_index_manager->ScrubVectorIndex();
+  auto status = vector_index_manager->ScrubVectorIndex();
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("Scrub vector index failed, error: {}", status.error_str());
+  }
 }
 
 bool Heartbeat::Init() {

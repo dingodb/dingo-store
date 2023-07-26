@@ -120,7 +120,13 @@ braft::PeerId RaftNode::GetPeerId() { return node_->node_id().peer_id; }
 void RaftNode::Shutdown(braft::Closure* done) { node_->shutdown(done); }
 void RaftNode::Join() { node_->join(); }
 
-butil::Status RaftNode::ListPeers(std::vector<braft::PeerId>* peers) { return node_->list_peers(peers); }
+butil::Status RaftNode::ListPeers(std::vector<braft::PeerId>* peers) {
+  auto status = node_->list_peers(peers);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << "List peers failed, error: " << status.error_str();
+  }
+  return status;
+}
 
 void RaftNode::AddPeer(const braft::PeerId& peer, braft::Closure* done) { node_->add_peer(peer, done); }
 

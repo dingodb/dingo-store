@@ -27,6 +27,7 @@
 #include "common/failpoint.h"
 #include "common/logging.h"
 #include "coordinator/coordinator_closure.h"
+#include "fmt/core.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator_internal.pb.h"
 #include "proto/node.pb.h"
@@ -338,11 +339,6 @@ void NodeServiceImpl::DeleteFailPoints(google::protobuf::RpcController*,
 }
 
 butil::Status ValidateInstallVectorIndexSnapshotRequest(const pb::node::InstallVectorIndexSnapshotRequest* request) {
-  auto vector_index_manager = Server::GetInstance()->GetVectorIndexManager();
-  if (vector_index_manager->GetVectorIndex(request->meta().vector_index_id()) == nullptr) {
-    return butil::Status(Errno::EVECTOR_INDEX_NOT_FOUND, "Not found vector index.");
-  }
-
   if (request->meta().filenames().empty()) {
     return butil::Status(Errno::EILLEGAL_PARAMTETERS, "Param filename is error.");
   }
@@ -366,6 +362,9 @@ void NodeServiceImpl::InstallVectorIndexSnapshot(google::protobuf::RpcController
     auto* error = response->mutable_error();
     error->set_errcode(static_cast<Errno>(status.error_code()));
     error->set_errmsg(status.error_str());
+    DINGO_LOG(INFO) << fmt::format("InstallVectorIndexSnapshot request: {} response: {}", request->ShortDebugString(),
+                                   response->ShortDebugString());
+    return;
   }
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, nullptr, response);
@@ -375,6 +374,9 @@ void NodeServiceImpl::InstallVectorIndexSnapshot(google::protobuf::RpcController
     error->set_errcode(static_cast<Errno>(status.error_code()));
     error->set_errmsg(status.error_str());
   }
+
+  DINGO_LOG(INFO) << fmt::format("InstallVectorIndexSnapshot request: {} response: {}", request->ShortDebugString(),
+                                 response->ShortDebugString());
 }
 
 void NodeServiceImpl::GetVectorIndexSnapshot(google::protobuf::RpcController* controller,
@@ -389,6 +391,8 @@ void NodeServiceImpl::GetVectorIndexSnapshot(google::protobuf::RpcController* co
     auto* error = response->mutable_error();
     error->set_errcode(Errno::EVECTOR_INDEX_NOT_FOUND);
     error->set_errmsg("Not found vector index.");
+    DINGO_LOG(INFO) << fmt::format("GetVectorIndexSnapshot request: {} response: {}", request->ShortDebugString(),
+                                   response->ShortDebugString());
     return;
   }
 
@@ -399,6 +403,8 @@ void NodeServiceImpl::GetVectorIndexSnapshot(google::protobuf::RpcController* co
     error->set_errcode(static_cast<Errno>(status.error_code()));
     error->set_errmsg(status.error_str());
   }
+  DINGO_LOG(INFO) << fmt::format("GetVectorIndexSnapshot request: {} response: {}", request->ShortDebugString(),
+                                 response->ShortDebugString());
 }
 
 }  // namespace dingodb

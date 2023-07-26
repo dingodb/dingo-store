@@ -365,6 +365,37 @@ void RegionControlServiceImpl::Debug(google::protobuf::RpcController* controller
     for (auto region_id : request->region_ids()) {
       response->mutable_region_actual_metrics()->add_region_metricses()->CopyFrom(GetRegionActualMetrics(region_id));
     }
+  } else if (request->type() == pb::region_control::DebugType::INDEX_VECTOR_INDEX_METRICS) {
+    auto vector_index_manager = Server::GetInstance()->GetVectorIndexManager();
+    std::vector<std::shared_ptr<VectorIndex>> vector_indexs;
+    if (request->region_ids().empty()) {
+      vector_indexs = vector_index_manager->GetAllVectorIndex();
+    } else {
+      for (auto region_id : request->region_ids()) {
+        auto vector_index = vector_index_manager->GetVectorIndex(region_id);
+        if (vector_index != nullptr) {
+          vector_indexs.push_back(vector_index);
+        }
+      }
+    }
+
+    for (auto& vector_index : vector_indexs) {
+      auto* entry = response->mutable_vector_index_metrics()->add_entries();
+
+      entry->set_id(vector_index->Id());
+      entry->set_dimension(vector_index->GetDimension());
+      entry->set_apply_log_index(vector_index->ApplyLogIndex());
+      entry->set_snapshot_log_index(vector_index->SnapshotLogIndex());
+      uint64_t key_count = 0;
+      vector_index->GetCount(key_count);
+      entry->set_key_count(key_count);
+      uint64_t deleted_key_count = 0;
+      vector_index->GetDeletedCount(deleted_key_count);
+      entry->set_deleted_key_count(deleted_key_count);
+      uint64_t memory_size = 0;
+      vector_index->GetMemorySize(memory_size);
+      entry->set_memory_size(memory_size);
+    }
   }
 }
 

@@ -229,6 +229,7 @@ void StoreStateMachine::on_leader_start(int64_t term) {
   auto event = std::make_shared<SmLeaderStartEvent>();
   event->term = term;
   event->node_id = region_->Id();
+  event->region = region_;
 
   DispatchEvent(EventType::kSmLeaderStart, event);
 
@@ -242,6 +243,7 @@ void StoreStateMachine::on_leader_stop(const butil::Status& status) {
                   << status.error_str();
   auto event = std::make_shared<SmLeaderStopEvent>();
   event->status = status;
+  event->region = region_;
 
   DispatchEvent(EventType::kSmLeaderStop, event);
 }

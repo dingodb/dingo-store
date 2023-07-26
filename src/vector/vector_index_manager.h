@@ -17,6 +17,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <vector>
 
 #include "butil/status.h"
 #include "common/safe_map.h"
@@ -47,13 +48,14 @@ class VectorIndexManager : public TransformKvAble {
   void DeleteVectorIndex(uint64_t region_id);
 
   std::shared_ptr<VectorIndex> GetVectorIndex(uint64_t region_id);
+  std::vector<std::shared_ptr<VectorIndex>> GetAllVectorIndex();
 
   // Load vector index for already exist vector index at bootstrap.
   // Priority load from snapshot, if snapshot not exist then load from rocksdb.
   butil::Status LoadOrBuildVectorIndex(store::RegionPtr region);
 
   // Save vector index snapshot.
-  butil::Status SaveVectorIndex(store::RegionPtr region, bool can_overwrite = false);
+  butil::Status SaveVectorIndex(std::shared_ptr<VectorIndex> vector_index, bool can_overwrite = false);
 
   // check if status is legal for rebuild
   butil::Status CheckAndSetRebuildStatus(store::RegionPtr region, bool is_initial_build);
@@ -74,7 +76,7 @@ class VectorIndexManager : public TransformKvAble {
  private:
   std::shared_ptr<pb::common::KeyValue> TransformToKv(std::any obj) override;
   void TransformFromKv(const std::vector<pb::common::KeyValue>& kvs) override;
-  void GetVectorIndexLogIndex(uint64_t region_id, uint64_t& snapshot_log_index, uint64_t& apply_log_index);
+  butil::Status GetVectorIndexLogIndex(uint64_t region_id, uint64_t& snapshot_log_index, uint64_t& apply_log_index);
 
   bool AddVectorIndex(uint64_t region_id, std::shared_ptr<VectorIndex> vector_index);
 

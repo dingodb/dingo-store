@@ -17,6 +17,7 @@
 #include <sys/wait.h>  // Add this include
 
 #include <algorithm>
+#include <atomic>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -56,7 +57,7 @@ static std::vector<std::string> GetSnapshotPaths(std::string path) {
 
   std::vector<std::string> result;
   for (const auto& filename : filenames) {
-    if (filename != "tmp") {
+    if (filename.find("tmp") == std::string::npos) {
       result.push_back(fmt::format("{}/{}", path, filename));
     }
   }
@@ -124,7 +125,7 @@ static uint64_t ParseMetaLogId(const std::string& path) {
     DINGO_LOG(ERROR) << " path: " << path << ", Unknown error";
   }
 
-  return UINT64_MAX;
+  return 0;
 }
 
 bool VectorIndexSnapshot::IsExistVectorIndexSnapshot(uint64_t vector_index_id) {
@@ -158,12 +159,13 @@ uint64_t VectorIndexSnapshot::GetLastVectorIndexSnapshotLogId(uint64_t vector_in
 }
 
 butil::Status VectorIndexSnapshot::LaunchInstallSnapshot(const butil::EndPoint& endpoint, uint64_t vector_index_id) {
+  uint64_t start_time = Helper::TimestampMs();
   std::string snapshot_parent_path = fmt::format("{}/{}", Server::GetInstance()->GetIndexPath(), vector_index_id);
 
   // Get last snapshot
   std::string last_snapshot_path = GetLastSnapshotPath(snapshot_parent_path);
   if (last_snapshot_path.empty()) {
-    return butil::Status(pb::error::EVECTOR_SNAPSHOT_NOT_FOUND, "Not found vector index snapshot");
+    return butil::Status(pb::error::EVECTOR_SNAPSHOT_NOT_FOUND, "Not found vector index snapshot %lu", vector_index_id);
   }
   DINGO_LOG(INFO) << fmt::format("last vector index snapshot: {}", last_snapshot_path);
 
@@ -198,10 +200,13 @@ butil::Status VectorIndexSnapshot::LaunchInstallSnapshot(const butil::EndPoint& 
   }
   meta->set_vector_index_id(vector_index_id);
 
-  DINGO_LOG(INFO) << "InstallVectorIndexSnapshotRequest: " << request.ShortDebugString();
   pb::node::InstallVectorIndexSnapshotResponse response;
   auto status = ServiceAccess::InstallVectorIndexSnapshot(request, endpoint, response);
   FileServiceReaderManager::GetInstance().DeleteReader(reader_id);
+
+  DINGO_LOG(INFO) << fmt::format("Install vector index snapshot {} to {} finish elapsed time {}ms request: {}",
+                                 vector_index_id, Helper::EndPointToStr(endpoint), Helper::TimestampMs() - start_time,
+                                 request.ShortDebugString());
 
   return status;
 }
@@ -237,12 +242,44 @@ butil::Status VectorIndexSnapshot::LaunchPullSnapshot(const butil::EndPoint& end
   return butil::Status();
 }
 
+butil::Status VectorIndexSnapshot::InstallSnapshotToFollowers(uint64_t region_id) {
+  uint64_t start_time = Helper::TimestampMs();
+  auto engine = Server::GetInstance()->GetEngine();
+  if (engine->GetID() != pb::common::ENG_RAFT_STORE) {
+    return butil::Status(pb::error::EINTERNAL, "Not raft store engine.");
+  }
+
+  auto raft_kv_engine = std::dynamic_pointer_cast<RaftStoreEngine>(engine);
+  auto raft_node = raft_kv_engine->GetNode(region_id);
+  if (raft_node == nullptr) {
+    return butil::Status(pb::error::ERAFT_NOT_FOUND, "Not found raft node.");
+  }
+
+  auto self_peer = raft_node->GetPeerId();
+  std::vector<braft::PeerId> peers;
+  raft_node->ListPeers(&peers);
+  for (const auto& peer : peers) {
+    if (peer != self_peer) {
+      auto status = LaunchInstallSnapshot(peer.addr, region_id);
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << fmt::format("Install vector index snapshot {} to {} failed, error: {}", region_id,
+                                        Helper::EndPointToStr(peer.addr), status.error_str());
+      }
+    }
+  }
+
+  DINGO_LOG(INFO) << fmt::format("Install vector index snapshot {} to all followers finish elapsed time {}ms",
+                                 region_id, Helper::TimestampMs() - start_time);
+
+  return butil::Status();
+}
+
 butil::Status VectorIndexSnapshot::HandlePullSnapshot(std::shared_ptr<Context> ctx, uint64_t vector_index_id) {
   // Check last snapshot is exist.
   std::string snapshot_parent_path = fmt::format("{}/{}", Server::GetInstance()->GetIndexPath(), vector_index_id);
   std::string last_snapshot_path = GetLastSnapshotPath(snapshot_parent_path);
   if (last_snapshot_path.empty()) {
-    return butil::Status(pb::error::EVECTOR_SNAPSHOT_NOT_FOUND, "Not found vector index snapshot");
+    return butil::Status(pb::error::EVECTOR_SNAPSHOT_NOT_FOUND, "Not found vector index snapshot %lu", vector_index_id);
   }
   DINGO_LOG(INFO) << fmt::format("====last_snapshot_path: {}", last_snapshot_path);
 
@@ -310,6 +347,11 @@ butil::Status VectorIndexSnapshot::DownloadSnapshotFile(const std::string& uri,
     std::filesystem::create_directories(tmp_snapshot_path);
   }
 
+  auto remote_file_copier = RemoteFileCopier::New(endpoint);
+  if (!remote_file_copier->Init()) {
+    return butil::Status(pb::error::EINTERNAL,
+                         fmt::format("Init remote file copier failed, endpoint {}", Helper::EndPointToStr(endpoint)));
+  }
   for (const auto& filename : meta.filenames()) {
     uint64_t offset = 0;
     std::ofstream ofile;
@@ -328,7 +370,7 @@ butil::Status VectorIndexSnapshot::DownloadSnapshotFile(const std::string& uri,
       DINGO_LOG(DEBUG) << "GetFileRequest: " << request.ShortDebugString();
 
       butil::IOBuf buf;
-      auto response = ServiceAccess::GetFile(request, endpoint, &buf);
+      auto response = remote_file_copier->GetFile(request, &buf);
       if (response == nullptr) {
         return butil::Status(pb::error::EINTERNAL, "Get file failed");
       }
@@ -351,11 +393,11 @@ butil::Status VectorIndexSnapshot::DownloadSnapshotFile(const std::string& uri,
   // Rename
   std::string new_snapshot_path = fmt::format("{}/{}/snapshot_{:020}", Server::GetInstance()->GetIndexPath(),
                                               meta.vector_index_id(), meta.snapshot_log_index());
-  auto ret = Helper::Rename(new_snapshot_path, snapshot_parent_path);
-  if (!ret.ok()) {
-    DINGO_LOG(ERROR) << "Rename vector index snapshot failed, src: " << tmp_snapshot_path
-                     << ", dst: " << new_snapshot_path << ", error: " << ret.error_str();
-    return ret;
+  auto status = Helper::Rename(tmp_snapshot_path, new_snapshot_path);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("Rename vector index snapshot failed, {} -> {} error: {}", tmp_snapshot_path,
+                                    new_snapshot_path, status.error_str());
+    return status;
   }
 
   // Remove old snapshot
@@ -367,8 +409,18 @@ butil::Status VectorIndexSnapshot::DownloadSnapshotFile(const std::string& uri,
   return butil::Status();
 }
 
+// Save vector index snapshot, just one concurrence.
 butil::Status VectorIndexSnapshot::SaveVectorIndexSnapshot(std::shared_ptr<VectorIndex> vector_index,
                                                            uint64_t& snapshot_log_index, bool can_overwrite) {
+  // Control concurrence.
+  static std::atomic<bool> doing = false;
+  if (doing.load(std::memory_order_relaxed)) {
+    return butil::Status(pb::error::EINTERNAL, "Save vector index is busy.");
+  }
+  doing.store(true, std::memory_order_relaxed);
+  ON_SCOPE_EXIT([&]() { doing.store(false, std::memory_order_relaxed); });
+
+  uint64_t start_time = Helper::TimestampMs();
   // Check if vector_index is null
   if (!vector_index) {
     DINGO_LOG(WARNING) << fmt::format("Save vector index failed, vector_index is null");
@@ -430,7 +482,7 @@ butil::Status VectorIndexSnapshot::SaveVectorIndexSnapshot(std::shared_ptr<Vecto
     // unlock write
     vector_index->UnlockWrite();
 
-    DINGO_LOG(ERROR) << fmt::format("Save vector index {} to tmp file failed, create pipe failed, error: {}",
+    DINGO_LOG(ERROR) << fmt::format("Save vector index snapshot {} failed, create pipe failed, error: {}",
                                     vector_index->Id(), strerror(errno));
     Helper::RemoveAllFileOrDirectory(tmp_snapshot_path);
     return butil::Status(pb::error::Errno::EINTERNAL, "Save vector index failed, create pipe failed");
@@ -441,8 +493,8 @@ butil::Status VectorIndexSnapshot::SaveVectorIndexSnapshot(std::shared_ptr<Vecto
     // unlock write
     vector_index->UnlockWrite();
 
-    DINGO_LOG(ERROR) << fmt::format("Save vector index {} to tmp file failed, fork failed, error: {}",
-                                    vector_index->Id(), strerror(errno));
+    DINGO_LOG(ERROR) << fmt::format("Save vector index snapshot {} failed, fork failed, error: {}", vector_index->Id(),
+                                    strerror(errno));
     Helper::RemoveAllFileOrDirectory(tmp_snapshot_path);
     return butil::Status(pb::error::Errno::EINTERNAL, "Save vector index failed, fork failed");
   } else if (pid == 0) {
@@ -466,7 +518,7 @@ butil::Status VectorIndexSnapshot::SaveVectorIndexSnapshot(std::shared_ptr<Vecto
 
     std::string buf;
     if (!error.SerializeToString(&buf)) {
-      DINGO_LOG(ERROR) << fmt::format("Save vector index {} to tmp file failed, serialize error failed",
+      DINGO_LOG(ERROR) << fmt::format("Save vector index snapshot {} failed, serialize error failed",
                                       vector_index->Id());
       Helper::RemoveAllFileOrDirectory(tmp_snapshot_path);
     }
@@ -495,7 +547,7 @@ butil::Status VectorIndexSnapshot::SaveVectorIndexSnapshot(std::shared_ptr<Vecto
       pb::error::Error error;
       error.ParseFromString(result);
       if (error.errcode() != pb::error::Errno::OK) {
-        DINGO_LOG(ERROR) << fmt::format("Save vector index {} to tmp file failed, {}", vector_index->Id(),
+        DINGO_LOG(ERROR) << fmt::format("Save vector index snapshot {}  failed, {}", vector_index->Id(),
                                         error.errmsg());
         Helper::RemoveAllFileOrDirectory(tmp_snapshot_path);
         return butil::Status(error.errcode(), error.errmsg());
@@ -503,10 +555,10 @@ butil::Status VectorIndexSnapshot::SaveVectorIndexSnapshot(std::shared_ptr<Vecto
 
       close(pipefd[0]);  // Close read end
 
-      DINGO_LOG(INFO) << fmt::format("Save vector index {} to tmp file success", vector_index->Id());
+      DINGO_LOG(INFO) << fmt::format("Save vector index snapshot {} success", vector_index->Id());
 
     } else {
-      DINGO_LOG(ERROR) << fmt::format("Save vector index {} to tmp file failed, child process encountered an error",
+      DINGO_LOG(ERROR) << fmt::format("Save vector index snapshot {} failed, child process encountered an error",
                                       vector_index->Id());
       Helper::RemoveAllFileOrDirectory(tmp_snapshot_path);
       return butil::Status(pb::error::Errno::EINTERNAL, "Save vector index failed, child process encountered an error");
@@ -525,25 +577,11 @@ butil::Status VectorIndexSnapshot::SaveVectorIndexSnapshot(std::shared_ptr<Vecto
   meta_file.close();
 
   // Rename
-  std::filesystem::rename(tmp_snapshot_path, new_snapshot_path);
+  Helper::Rename(tmp_snapshot_path, new_snapshot_path);
 
-  // GetLastSnapshotLogId
-  auto last_snapshot_log_id = GetLastVectorIndexSnapshotLogId(vector_index->Id());
-  if (last_snapshot_log_id == UINT64_MAX) {
-    DINGO_LOG(ERROR) << fmt::format("GetLastVectorIndexSnapshotLogId failed, region_id {}", vector_index->Id());
-    return butil::Status(pb::error::Errno::EINTERNAL,
-                         fmt::format("GetLastVectorIndexSnapshotLogId failed, region_id {}", vector_index->Id()));
-  }
-
-  // do not delete latest snapshot, to prevent some race conditions
-  std::string latest_snapshot_path = fmt::format("{}/snapshot_{:020}", snapshot_parent_path, last_snapshot_log_id);
-
-  // Remove old snapshot, except latest snapshot
+  // Remove old snapshots
   for (auto& snapshot_path : snapshot_paths) {
-    if (snapshot_path == latest_snapshot_path) {
-      continue;
-    }
-    DINGO_LOG(INFO) << "delete vector index snapshot: " << snapshot_path;
+    DINGO_LOG(INFO) << "Delete vector index snapshot: " << snapshot_path;
     Helper::RemoveAllFileOrDirectory(snapshot_path);
   }
 
@@ -555,6 +593,9 @@ butil::Status VectorIndexSnapshot::SaveVectorIndexSnapshot(std::shared_ptr<Vecto
 
   snapshot_log_index = apply_log_index;
 
+  DINGO_LOG(INFO) << fmt::format("Save vector index snapshot {}/snapshot_{:020} elapsed time {} ", vector_index->Id(),
+                                 apply_log_index, Helper::TimestampMs() - start_time);
+
   return butil::Status::OK();
 }
 
@@ -562,14 +603,14 @@ butil::Status VectorIndexSnapshot::SaveVectorIndexSnapshot(std::shared_ptr<Vecto
 std::shared_ptr<VectorIndex> VectorIndexSnapshot::LoadVectorIndexSnapshot(store::RegionPtr region) {
   assert(region != nullptr);
 
-  // open vector_index_file_log_id_file_path and read its content to a std::string
-  uint64_t vector_index_file_log_id = VectorIndexSnapshot::GetLastVectorIndexSnapshotLogId(region->Id());
-  if (vector_index_file_log_id == 0) {
-    DINGO_LOG(ERROR) << fmt::format("GetLastVectorIndexSnapshotLogId failed, id {}", region->Id());
+  // Read vector index snapshot log id form snapshot meta file.
+  uint64_t last_snapshot_log_id = VectorIndexSnapshot::GetLastVectorIndexSnapshotLogId(region->Id());
+  if (last_snapshot_log_id == 0) {
+    DINGO_LOG(WARNING) << fmt::format("Get last vector index snapshot log id failed, id {}", region->Id());
     return nullptr;
   }
 
-  DINGO_LOG(INFO) << fmt::format("Vector index {} log id is {}", region->Id(), vector_index_file_log_id);
+  DINGO_LOG(INFO) << fmt::format("Vector index {} log id is {}", region->Id(), last_snapshot_log_id);
 
   std::string snapshot_parent_path = fmt::format("{}/{}", Server::GetInstance()->GetIndexPath(), region->Id());
   if (!std::filesystem::exists(snapshot_parent_path)) {
@@ -579,13 +620,13 @@ std::shared_ptr<VectorIndex> VectorIndexSnapshot::LoadVectorIndexSnapshot(store:
 
   std::string last_snapshot_path = GetLastSnapshotPath(snapshot_parent_path);
   if (last_snapshot_path.empty()) {
-    DINGO_LOG(ERROR) << fmt::format("GetLastSnapshotPath failed, snapshot_parent_path {}", snapshot_parent_path);
+    DINGO_LOG(ERROR) << fmt::format("Get last snapshot path failed, snapshot_parent_path {}", snapshot_parent_path);
     return nullptr;
   }
 
   // check if can load from file
   std::string vector_index_file_path =
-      fmt::format("{}/index_{}_{}.idx", last_snapshot_path, region->Id(), vector_index_file_log_id);
+      fmt::format("{}/index_{}_{}.idx", last_snapshot_path, region->Id(), last_snapshot_log_id);
 
   // check if file vector_index_file_path exists
   if (!std::filesystem::exists(vector_index_file_path)) {
@@ -609,7 +650,8 @@ std::shared_ptr<VectorIndex> VectorIndexSnapshot::LoadVectorIndexSnapshot(store:
   }
 
   // set vector_index apply log id
-  vector_index->SetApplyLogIndex(vector_index_file_log_id);
+  vector_index->SetSnapshotLogIndex(last_snapshot_log_id);
+  vector_index->SetApplyLogIndex(last_snapshot_log_id);
 
   return vector_index;
 }
