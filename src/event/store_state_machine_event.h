@@ -19,7 +19,7 @@
 
 #include "event/event.h"
 #include "handler/handler.h"
-#include "handler/raft_handler.h"
+#include "handler/raft_apply_handler.h"
 #include "metrics/store_metrics_manager.h"
 #include "raft/store_state_machine.h"
 #include "server/server.h"
@@ -120,15 +120,20 @@ struct SmLeaderStartEvent : public Event {
 
   int64_t term;
   int64_t node_id;
+  store::RegionPtr region;
 };
 
 class SmLeaderStartEventListener : public EventListener {
  public:
-  SmLeaderStartEventListener() = default;
+  SmLeaderStartEventListener(std::shared_ptr<HandlerCollection> handler_collection)
+      : handler_collection_(handler_collection) {}
   ~SmLeaderStartEventListener() override = default;
 
   EventType GetType() override { return EventType::kSmLeaderStart; }
   void OnEvent(std::shared_ptr<Event> event) override;
+
+ private:
+  std::shared_ptr<HandlerCollection> handler_collection_;
 };
 
 // State Machine LeaderStop
@@ -137,15 +142,20 @@ struct SmLeaderStopEvent : public Event {
   ~SmLeaderStopEvent() override = default;
 
   butil::Status status;
+  store::RegionPtr region;
 };
 
 class SmLeaderStopEventListener : public EventListener {
  public:
-  SmLeaderStopEventListener() = default;
+  SmLeaderStopEventListener(std::shared_ptr<HandlerCollection> handler_collection)
+      : handler_collection_(handler_collection) {}
   ~SmLeaderStopEventListener() override = default;
 
   EventType GetType() override { return EventType::kSmLeaderStop; }
-  void OnEvent(std::shared_ptr<Event> event) override {}
+  void OnEvent(std::shared_ptr<Event> event) override;
+
+ private:
+  std::shared_ptr<HandlerCollection> handler_collection_;
 };
 
 // State Machine Error

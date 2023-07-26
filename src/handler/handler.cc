@@ -35,4 +35,13 @@ std::shared_ptr<Handler> HandlerCollection::GetHandler(HandlerType type) {
   return it->second;
 }
 
+std::vector<std::shared_ptr<Handler>> HandlerCollection::GetHandlers() {
+  std::vector<std::shared_ptr<Handler>> handlers;
+  for (auto [_, handler] : handlers_) {
+    handlers.push_back(handler);
+  }
+
+  return handlers;
+}
+
 }  // namespace dingodb

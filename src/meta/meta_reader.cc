@@ -48,7 +48,7 @@ std::shared_ptr<pb::common::KeyValue> MetaReader::Get(std::shared_ptr<Snapshot> 
     return nullptr;
   }
 
-  std::shared_ptr<pb::common::KeyValue> kv = std::make_shared<pb::common::KeyValue>();
+  auto kv = std::make_shared<pb::common::KeyValue>();
   kv->set_key(key);
   kv->set_value(value);
 

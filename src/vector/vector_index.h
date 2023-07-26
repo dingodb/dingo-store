@@ -88,15 +88,12 @@ class VectorIndex {
   uint64_t Id() const { return id; }
 
   pb::common::RegionVectorIndexStatus Status() { return status.load(); }
-
   void SetStatus(pb::common::RegionVectorIndexStatus status) { this->status.store(status); }
 
   uint64_t ApplyLogIndex() const;
-
   void SetApplyLogIndex(uint64_t apply_log_index);
 
   uint64_t SnapshotLogIndex() const;
-
   void SetSnapshotLogIndex(uint64_t snapshot_log_index);
 
  protected:

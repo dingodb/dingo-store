@@ -17,8 +17,10 @@
 
 #include <cstdint>
 #include <unordered_map>
+#include <vector>
 
 #include "braft/snapshot.h"
+#include "butil/status.h"
 #include "common/context.h"
 #include "engine/raw_engine.h"
 #include "meta/store_meta_manager.h"
@@ -44,6 +46,10 @@ enum class HandlerType {
   // Snapshot
   kSaveSnapshot = 1000,
   kLoadSnapshot = 1001,
+
+  // Vector index
+  kVectorIndexLeaderStart = 2000,
+  kVectorIndexLeaderStop = 2001,
 };
 
 class Handler {
@@ -62,6 +68,9 @@ class Handler {
   virtual void Handle(uint64_t region_id, std::shared_ptr<RawEngine> engine, braft::SnapshotWriter *writer,
                       braft::Closure *done) = 0;
   virtual void Handle(uint64_t region_id, std::shared_ptr<RawEngine> engine, braft::SnapshotReader *reader) = 0;
+
+  virtual void Handle(store::RegionPtr region, uint64_t term_id) = 0;
+  virtual void Handle(store::RegionPtr region, butil::Status status) = 0;
 };
 
 class BaseHandler : public Handler {
@@ -85,6 +94,9 @@ class BaseHandler : public Handler {
   void Handle(uint64_t, std::shared_ptr<RawEngine>, braft::SnapshotReader *) override {
     DINGO_LOG(ERROR) << "Not support handle...";
   }
+
+  void Handle(store::RegionPtr, uint64_t) override { DINGO_LOG(ERROR) << "Not support handle..."; }
+  void Handle(store::RegionPtr, butil::Status) override { DINGO_LOG(ERROR) << "Not support handle..."; }
 };
 
 // A group hander
@@ -97,6 +109,7 @@ class HandlerCollection {
 
   void Register(std::shared_ptr<Handler> handler);
   std::shared_ptr<Handler> GetHandler(HandlerType type);
+  std::vector<std::shared_ptr<Handler>> GetHandlers();
 
  private:
   std::unordered_map<HandlerType, std::shared_ptr<Handler>> handlers_;

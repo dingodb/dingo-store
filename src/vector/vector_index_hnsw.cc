@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cassert>
+#include <cstddef>
 #include <cstdint>
 #include <map>
 #include <memory>
@@ -40,7 +41,7 @@
 
 namespace dingodb {
 
-DEFINE_uint64(hnsw_need_save_count, 10000, "hnsw need save count");
+DEFINE_uint64(hnsw_need_save_count, 100, "hnsw need save count");
 
 /*
  * replacement for the openmp '#pragma omp parallel for' directive
@@ -71,12 +72,11 @@ inline void ParallelFor(size_t start, size_t end, size_t num_threads, Function f
     for (size_t thread_id = 0; thread_id < num_threads; ++thread_id) {
       threads.push_back(std::thread([&, thread_id] {
         while (true) {
-          size_t id = current.fetch_add(1);
+          size_t id = current.fetch_add(1, std::memory_order_relaxed);
 
           if (id >= end) {
             break;
           }
-
           try {
             fn(id, thread_id);
           } catch (...) {
@@ -173,23 +173,6 @@ butil::Status VectorIndexHnsw::Upsert(const std::vector<pb::common::VectorWithId
     return butil::Status(pb::error::Errno::EVECTOR_INVALID, s);
   }
 
-  butil::Status ret;
-
-  std::unique_ptr<float[]> data;
-  try {
-    data.reset(new float[this->dimension_ * vector_with_ids.size()]);
-  } catch (std::bad_alloc& e) {
-    DINGO_LOG(ERROR) << "upsert vector failed, error=" << e.what();
-    ret = butil::Status(pb::error::Errno::EINTERNAL, "upsert vector failed, error=" + std::string(e.what()));
-    return ret;
-  }
-
-  for (size_t row = 0; row < vector_with_ids.size(); ++row) {
-    for (size_t col = 0; col < this->dimension_; ++col) {
-      data.get()[row * this->dimension_ + col] = vector_with_ids[row].vector().float_values().at(col);
-    }
-  }
-
   BAIDU_SCOPED_LOCK(mutex_);
 
   // Add data to index
@@ -197,30 +180,20 @@ butil::Status VectorIndexHnsw::Upsert(const std::vector<pb::common::VectorWithId
     size_t real_threads = hnsw_num_threads_;
 
     if (BAIDU_UNLIKELY(hnsw_index_->M_ < hnsw_num_threads_ &&
-                       hnsw_index_->cur_element_count < hnsw_num_threads_ * hnsw_index_->M_)) {
+                       hnsw_index_->cur_element_count.load(std::memory_order_relaxed) <
+                           hnsw_num_threads_ * hnsw_index_->M_)) {
       real_threads = 1;
     }
 
-    if (!normalize_) {
-      ParallelFor(0, vector_with_ids.size(), real_threads, [&](size_t row, size_t /*thread_id*/) {
-        this->hnsw_index_->addPoint((void*)(data.get() + dimension_ * row), vector_with_ids[row].id(), true);
-      });
-    } else {
-      std::vector<float> norm_array(real_threads * dimension_);
-      ParallelFor(0, vector_with_ids.size(), real_threads, [&](size_t row, size_t thread_id) {
-        // normalize vector:
-        size_t start_idx = thread_id * dimension_;
-        NormalizeVector((float*)(data.get() + dimension_ * row), (norm_array.data() + start_idx));
-
-        this->hnsw_index_->addPoint((void*)(norm_array.data() + start_idx), vector_with_ids[row].id(), true);
-      });
-    }
+    ParallelFor(0, vector_with_ids.size(), real_threads, [&](size_t row, size_t /*thread_id*/) {
+      this->hnsw_index_->addPoint((void*)vector_with_ids[row].vector().float_values().data(), vector_with_ids[row].id(),
+                                  true);
+    });
+    return butil::Status();
   } catch (std::runtime_error& e) {
     DINGO_LOG(ERROR) << "upsert vector failed, error=" << e.what();
-    ret = butil::Status(pb::error::Errno::EINTERNAL, "upsert vector failed, error=" + std::string(e.what()));
+    return butil::Status(pb::error::Errno::EINTERNAL, "upsert vector failed, error=" + std::string(e.what()));
   }
-
-  return ret;
 }
 
 butil::Status VectorIndexHnsw::Delete(const std::vector<uint64_t>& delete_ids) {

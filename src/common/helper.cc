@@ -240,6 +240,10 @@ std::vector<butil::EndPoint> Helper::StrToEndpoints(const std::string& str) {
   return endpoints;
 }
 
+std::string Helper::EndPointToStr(const butil::EndPoint& end_point) {
+  return std::string(butil::endpoint2str(end_point).c_str());
+}
+
 std::shared_ptr<PbError> Helper::Error(Errno errcode, const std::string& errmsg) {
   std::shared_ptr<PbError> err = std::make_shared<PbError>();
   err->set_errcode(errcode);

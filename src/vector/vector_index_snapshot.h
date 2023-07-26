@@ -34,6 +34,8 @@ class VectorIndexSnapshot {
   static butil::Status HandleInstallSnapshot(std::shared_ptr<Context> ctx, const std::string& uri,
                                              const pb::node::VectorIndexSnapshotMeta& meta);
 
+  static butil::Status InstallSnapshotToFollowers(uint64_t region_id);
+
   // Launch pull snapshot at client.
   static butil::Status LaunchPullSnapshot(const butil::EndPoint& endpoint, uint64_t vector_index_id);
   // Handle install snapshot at server.

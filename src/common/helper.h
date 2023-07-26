@@ -71,6 +71,8 @@ class Helper {
   static butil::EndPoint StrToEndPoint(std::string str);
   static std::vector<butil::EndPoint> StrToEndpoints(const std::string& str);
 
+  static std::string EndPointToStr(const butil::EndPoint& end_point);
+
   static std::shared_ptr<PbError> Error(Errno errcode, const std::string& errmsg);
   static bool Error(Errno errcode, const std::string& errmsg, PbError& err);
   static bool Error(Errno errcode, const std::string& errmsg, std::shared_ptr<PbError> err);
@@ -81,6 +83,7 @@ class Helper {
   template <typename T>
   static std::vector<T> PbRepeatedToVector(const google::protobuf::RepeatedPtrField<T>& data) {
     std::vector<T> vec;
+    vec.reserve(data.size());
     for (auto& item : data) {
       vec.emplace_back(std::move(item));
     }
@@ -91,6 +94,7 @@ class Helper {
   template <typename T>
   static std::vector<T> PbRepeatedToVector(google::protobuf::RepeatedPtrField<T>* data) {
     std::vector<T> vec;
+    vec.reserve(data->size());
     for (auto& item : *data) {
       vec.emplace_back(std::move(item));
     }

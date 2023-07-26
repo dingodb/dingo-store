@@ -36,6 +36,7 @@
 #include "server/server.h"
 #include "store/heartbeat.h"
 #include "vector/vector_index_hnsw.h"
+#include "vector/vector_index_snapshot.h"
 
 namespace dingodb {
 
@@ -100,19 +101,20 @@ butil::Status CreateRegionTask::CreateRegion(std::shared_ptr<Context> ctx, store
     store_region_meta->UpdateState(region, pb::common::StoreRegionState::STANDBY);
   }
 
-  if (Server::GetInstance()->GetRole() == pb::common::ClusterRole::INDEX) {
-    // vector index
-    const auto& definition = region->InnerRegion().definition();
-    if (definition.index_parameter().index_type() == pb::common::IndexType::INDEX_TYPE_VECTOR) {
-      DINGO_LOG(INFO) << fmt::format("Create region {} vector index", region->Id());
+  // if (Server::GetInstance()->GetRole() == pb::common::ClusterRole::INDEX) {
+  //   // vector index
+  //   const auto& definition = region->InnerRegion().definition();
+  //   if (definition.index_parameter().index_type() == pb::common::IndexType::INDEX_TYPE_VECTOR) {
+  //     DINGO_LOG(INFO) << fmt::format("Create region {} vector index", region->Id());
 
-      auto vector_index_manager = Server::GetInstance()->GetVectorIndexManager();
-      if (!vector_index_manager->AddVectorIndex(region->Id(), region->InnerRegion().definition().index_parameter())) {
-        return butil::Status(pb::error::EINTERNAL,
-                             fmt::format("Init vector index failed, region_id: {}", region->Id()));
-      }
-    }
-  }
+  //     auto vector_index_manager = Server::GetInstance()->GetVectorIndexManager();
+  //     if (!vector_index_manager->AddVectorIndex(region->Id(), region->InnerRegion().definition().index_parameter()))
+  //     {
+  //       return butil::Status(pb::error::EINTERNAL,
+  //                            fmt::format("Init vector index failed, region_id: {}", region->Id()));
+  //     }
+  //   }
+  // }
 
   return butil::Status();
 }
@@ -636,17 +638,21 @@ butil::Status SnapshotVectorIndexTask::SaveSnapshot(std::shared_ptr<Context> /*c
     return butil::Status(pb::error::EINTERNAL, "Vector index manager is nullptr");
   }
 
-  return vector_index_manager->RebuildVectorIndex(region);
+  // return vector_index_manager->RebuildVectorIndex(region);
 
-  // TODO: when SaveVectorIndex is implemented correctly, we can use it to save vector index
+  auto vector_index = vector_index_manager->GetVectorIndex(vector_index_id);
+  if (vector_index == nullptr) {
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, fmt::format("Not found vector index {}", vector_index_id));
+  }
 
-  // auto vector_index = vector_index_manager->GetVectorIndex(vector_index_id);
-  // if (vector_index == nullptr) {
-  //   return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, fmt::format("Not found vector index {}",
-  //   vector_index_id));
-  // }
+  uint64_t snapshot_log_index = 0;
+  auto status = VectorIndexSnapshot::SaveVectorIndexSnapshot(vector_index, snapshot_log_index, true);
+  if (!status.ok()) {
+    return status;
+  }
+  vector_index_manager->UpdateSnapshotLogIndex(vector_index, snapshot_log_index);
 
-  // return vector_index_manager->SaveVectorIndex(vector_index);
+  return butil::Status();
 }
 
 void SnapshotVectorIndexTask::Run() {
