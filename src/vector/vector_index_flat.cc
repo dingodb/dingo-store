@@ -38,7 +38,7 @@
 namespace dingodb {
 
 VectorIndexFlat::VectorIndexFlat(uint64_t id, const pb::common::VectorIndexParameter& vector_index_parameter)
-    : VectorIndex(id, vector_index_parameter) {
+    : VectorIndex(id, vector_index_parameter, 0) {
   bthread_mutex_init(&mutex_, nullptr);
   is_online_.store(true);
 

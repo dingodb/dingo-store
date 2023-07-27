@@ -28,6 +28,7 @@
 #include "hnswlib/space_l2.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
+#include "server/server.h"
 #include "vector/vector_index.h"
 #include "vector/vector_index_flat.h"
 #include "vector/vector_index_hnsw.h"
@@ -65,7 +66,12 @@ std::shared_ptr<VectorIndex> VectorIndexFactory::New(uint64_t id, const pb::comm
       return nullptr;
     }
 
-    return std::make_shared<VectorIndexHnsw>(id, vector_index_parameter);
+    auto config = Server::GetInstance()->GetConfig();
+    int64_t save_snapshot_threshold_write_key_num = config->GetInt64("vector.hnsw_save_threshold_write_key_num");
+    save_snapshot_threshold_write_key_num = save_snapshot_threshold_write_key_num > 0
+                                                ? save_snapshot_threshold_write_key_num
+                                                : Constant::kVectorIndexSaveSnapshotThresholdWriteKeyNum;
+    return std::make_shared<VectorIndexHnsw>(id, vector_index_parameter, save_snapshot_threshold_write_key_num);
   } else if (vector_index_parameter.vector_index_type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT) {
     const auto& flat_parameter = vector_index_parameter.flat_parameter();
 

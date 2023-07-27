@@ -677,8 +677,9 @@ int SegmentLogStorage::AppendEntries(const std::vector<braft::LogEntry*>& entrie
     return 0;
   }
   if (last_log_index_.load(butil::memory_order_relaxed) + 1 != entries.front()->id.index) {
-    DINGO_LOG(FATAL) << "There's gap between appending entries and last_log_index_"
-                     << " path: " << path_;
+    DINGO_LOG(FATAL) << fmt::format(
+        "There's gap between appending entries and last_log_index_ path: {} last_log_index_: {} entry_index: {}", path_,
+        last_log_index_.load(butil::memory_order_relaxed), entries.front()->id.index);
     return -1;
   }
   std::shared_ptr<Segment> last_segment;
