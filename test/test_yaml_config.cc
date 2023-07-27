@@ -52,6 +52,17 @@ TEST(ConfigTest, scalar_02) {
   EXPECT_EQ("127.0.0.1", config.GetString("host.ip"));
 }
 
+TEST(ConfigTest, scalar_int64) {
+  dingodb::YamlConfig config;
+
+  const std::string yaml =
+      "raft:\n"
+      "  segmentlog_max_segment_size: 34359738368";
+
+  config.Load(yaml);
+  EXPECT_EQ(34359738368, config.GetInt64("raft.segmentlog_max_segment_size"));
+}
+
 TEST(ConfigTest, scalar_double) {
   dingodb::YamlConfig config;
 

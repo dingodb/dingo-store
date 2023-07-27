@@ -14,6 +14,7 @@
 
 #include "config/yaml_config.h"
 
+#include <cstdint>
 #include <typeinfo>
 
 #include "butil/strings/string_util.h"
@@ -43,6 +44,15 @@ int YamlConfig::ReloadFile(const std::string& filename) { return Load(filename);
 int YamlConfig::GetInt(const std::string& key) {
   try {
     return GetScalar<int>(key);
+  } catch (std::exception& e) {
+    DINGO_LOG(FATAL) << "Config GetInt failed: " << key << " exception: " << e.what();
+  }
+  return -1;
+}
+
+int64_t YamlConfig::GetInt64(const std::string& key) {
+  try {
+    return GetScalar<int64_t>(key);
   } catch (std::exception& e) {
     DINGO_LOG(FATAL) << "Config GetInt failed: " << key << " exception: " << e.what();
   }
