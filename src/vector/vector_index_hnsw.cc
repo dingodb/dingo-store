@@ -41,7 +41,7 @@
 
 namespace dingodb {
 
-DEFINE_uint64(hnsw_need_save_count, 100, "hnsw need save count");
+DEFINE_uint64(hnsw_need_save_count, 10000, "hnsw need save count");
 
 /*
  * replacement for the openmp '#pragma omp parallel for' directive
@@ -103,8 +103,9 @@ inline void ParallelFor(size_t start, size_t end, size_t num_threads, Function f
   }
 }
 
-VectorIndexHnsw::VectorIndexHnsw(uint64_t id, const pb::common::VectorIndexParameter& vector_index_parameter)
-    : VectorIndex(id, vector_index_parameter) {
+VectorIndexHnsw::VectorIndexHnsw(uint64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
+                                 uint64_t save_snapshot_threshold_write_key_num)
+    : VectorIndex(id, vector_index_parameter, save_snapshot_threshold_write_key_num) {
   bthread_mutex_init(&mutex_, nullptr);
   is_online_.store(true);
   hnsw_num_threads_ = std::thread::hardware_concurrency();
@@ -185,10 +186,22 @@ butil::Status VectorIndexHnsw::Upsert(const std::vector<pb::common::VectorWithId
       real_threads = 1;
     }
 
-    ParallelFor(0, vector_with_ids.size(), real_threads, [&](size_t row, size_t /*thread_id*/) {
-      this->hnsw_index_->addPoint((void*)vector_with_ids[row].vector().float_values().data(), vector_with_ids[row].id(),
-                                  true);
-    });
+    if (!normalize_) {
+      ParallelFor(0, vector_with_ids.size(), real_threads, [&](size_t row, size_t /*thread_id*/) {
+        this->hnsw_index_->addPoint((void*)vector_with_ids[row].vector().float_values().data(),
+                                    vector_with_ids[row].id(), true);
+      });
+    } else {
+      std::vector<float> norm_array(real_threads * dimension_);
+      ParallelFor(0, vector_with_ids.size(), real_threads, [&](size_t row, size_t thread_id) {
+        // normalize vector
+        size_t start_idx = thread_id * dimension_;
+        NormalizeVector((float*)vector_with_ids[row].vector().float_values().data(), (norm_array.data() + start_idx));
+
+        this->hnsw_index_->addPoint((void*)(norm_array.data() + start_idx), vector_with_ids[row].id(), true);
+      });
+    }
+    write_key_count += vector_with_ids.size();
     return butil::Status();
   } catch (std::runtime_error& e) {
     DINGO_LOG(ERROR) << "upsert vector failed, error=" << e.what();
@@ -217,6 +230,7 @@ butil::Status VectorIndexHnsw::Delete(const std::vector<uint64_t>& delete_ids) {
   try {
     ParallelFor(0, delete_ids.size(), hnsw_num_threads_,
                 [&](size_t row, size_t /*thread_id*/) { hnsw_index_->markDelete(delete_ids[row]); });
+    write_key_count += delete_ids.size();
   } catch (std::runtime_error& e) {
     DINGO_LOG(ERROR) << "delete vector failed, error=" << e.what();
     ret = butil::Status(pb::error::Errno::EINTERNAL, "delete vector failed, error=" + std::string(e.what()));
@@ -439,6 +453,7 @@ butil::Status VectorIndexHnsw::NeedToSave([[maybe_unused]] bool& need_to_save,
   if (snapshot_log_index.load() == 0) {
     DINGO_LOG(INFO) << "need_to_save=true: snapshot_log_index is 0";
     need_to_save = true;
+    last_save_write_key_count = write_key_count;
     return butil::Status::OK();
   }
 
@@ -446,10 +461,22 @@ butil::Status VectorIndexHnsw::NeedToSave([[maybe_unused]] bool& need_to_save,
     DINGO_LOG(INFO) << "need_to_save=true: last_save_log_behind=" << last_save_log_behind
                     << ", FLAGS_hnsw_need_save_count=" << FLAGS_hnsw_need_save_count;
     need_to_save = true;
+    last_save_write_key_count = write_key_count;
+    return butil::Status::OK();
+  }
+
+  if ((write_key_count - last_save_write_key_count) >= save_snapshot_threshold_write_key_num) {
+    DINGO_LOG(INFO) << fmt::format("need_to_save=true: write_key_count {}/{}/{}", write_key_count,
+                                   last_save_write_key_count, save_snapshot_threshold_write_key_num);
+    need_to_save = true;
+    last_save_write_key_count = write_key_count;
+    return butil::Status::OK();
   }
 
   DINGO_LOG(INFO) << "need_to_save=false: last_save_log_behind=" << last_save_log_behind
-                  << ", FLAGS_hnsw_need_save_count=" << FLAGS_hnsw_need_save_count;
+                  << ", FLAGS_hnsw_need_save_count=" << FLAGS_hnsw_need_save_count
+                  << fmt::format(", write_key_count={}/{}/{}", write_key_count, last_save_write_key_count,
+                                 save_snapshot_threshold_write_key_num);
 
   return butil::Status::OK();
 }
@@ -504,10 +531,10 @@ butil::Status VectorIndexHnsw::GetMemorySize(uint64_t& memory_size) {
   auto memory_count = count + deleted_count;
 
   memory_size = memory_count * hnsw_index_->size_data_per_element_  // level 0 memory
-                + hnsw_index_->size_links_level0_                                 // level 0 links memory
+                + hnsw_index_->size_links_level0_                   // level 0 links memory
                 + memory_count * sizeof(void*)                      // linkLists_ memory
                 + memory_count * sizeof(uint64_t)                   // element_levels_
-                + memory_count * sizeof(uint64_t)    // label_lookup_, translate user label to internal id
+                + memory_count * sizeof(uint64_t)                  // label_lookup_, translate user label to internal id
                 + hnsw_index_->max_elements_ * sizeof(std::mutex)  // link_list_locks_
                 + 65536 * sizeof(std::mutex)                       // label_op_locks_
                 + memory_count * sizeof(uint64_t) * hnsw_index_->M_ * hnsw_index_->maxlevel_ /

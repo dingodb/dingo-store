@@ -36,11 +36,15 @@ namespace dingodb {
 
 class VectorIndex {
  public:
-  VectorIndex(uint64_t id, const pb::common::VectorIndexParameter& vector_index_parameter)
+  VectorIndex(uint64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
+              uint64_t save_snapshot_threshold_write_key_num)
       : id(id),
         status(pb::common::VECTOR_INDEX_STATUS_NONE),
         apply_log_index(0),
         snapshot_log_index(0),
+        write_key_count(0),
+        last_save_write_key_count(0),
+        save_snapshot_threshold_write_key_num(save_snapshot_threshold_write_key_num),
         vector_index_parameter(vector_index_parameter) {
     vector_index_type = vector_index_parameter.vector_index_type();
   }
@@ -105,9 +109,14 @@ class VectorIndex {
 
   // apply max log index
   std::atomic<uint64_t> apply_log_index;
-
   // last snapshot log index
   std::atomic<uint64_t> snapshot_log_index;
+
+  // write(add/update/delete) key count
+  uint64_t write_key_count;
+  uint64_t last_save_write_key_count;
+  // save snapshot threshold write key num
+  uint64_t save_snapshot_threshold_write_key_num;
 
   pb::common::VectorIndexType vector_index_type;
 

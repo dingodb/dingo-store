@@ -593,7 +593,7 @@ butil::Status VectorIndexSnapshot::SaveVectorIndexSnapshot(std::shared_ptr<Vecto
 
   snapshot_log_index = apply_log_index;
 
-  DINGO_LOG(INFO) << fmt::format("Save vector index snapshot {}/snapshot_{:020} elapsed time {} ", vector_index->Id(),
+  DINGO_LOG(INFO) << fmt::format("Save vector index snapshot {}/snapshot_{:020} elapsed time {}ms", vector_index->Id(),
                                  apply_log_index, Helper::TimestampMs() - start_time);
 
   return butil::Status::OK();

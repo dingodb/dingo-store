@@ -24,7 +24,8 @@ log:
   path: $BASE_PATH$/log
 vector:
   index_path: $BASE_PATH$/data/index/idx
-  hnsw_save_threshold_log_num: 100 # hnsw vector index save snapshot threshold log num.
+  # save hnsw vector index snapshot when write key num exceed threshold.
+  hnsw_save_threshold_write_key_num: 10000
 store:
   path: $BASE_PATH$/data/index/db
   background_thread_num: 16 # background_thread_num priority background_thread_ratio
