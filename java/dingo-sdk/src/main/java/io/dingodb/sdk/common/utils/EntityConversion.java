@@ -62,6 +62,7 @@ import io.dingodb.sdk.common.vector.ScalarField;
 import io.dingodb.sdk.common.vector.ScalarValue;
 import io.dingodb.sdk.common.vector.Vector;
 import io.dingodb.sdk.common.vector.VectorIndexMetrics;
+import io.dingodb.sdk.common.vector.VectorTableData;
 import io.dingodb.sdk.common.vector.VectorWithDistance;
 import io.dingodb.sdk.common.vector.VectorWithId;
 import io.dingodb.sdk.service.store.AggregationOperator;
@@ -485,6 +486,13 @@ public class EntityConversion {
                                 Map::putAll))
                     .build());
         }
+        if (withId.getTableData() != null) {
+            VectorTableData tableData = withId.getTableData();
+            builder.setTableData(Common.VectorTableData.newBuilder()
+                    .setTableKey(ByteString.copyFrom(tableData.getKey()))
+                    .setTableValue(ByteString.copyFrom(tableData.getValue()))
+                    .build());
+        }
         return builder.build();
     }
 
@@ -498,7 +506,11 @@ public class EntityConversion {
                 withId.getScalarData().getScalarDataMap().entrySet().stream().collect(
                         Maps::newHashMap,
                         (map, entry) -> map.put(entry.getKey(), mapping(entry.getValue())),
-                        Map::putAll));
+                        Map::putAll),
+                new VectorTableData(
+                        withId.getTableData().getTableKey().toByteArray(),
+                        withId.getTableData().getTableValue().toByteArray())
+        );
     }
 
     public static VectorIndexMetrics mapping(Common.VectorIndexMetrics metrics) {
