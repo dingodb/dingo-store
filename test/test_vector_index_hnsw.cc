@@ -29,6 +29,7 @@
 
 #include "butil/status.h"
 #include "faiss/MetricType.h"
+#include "fmt/core.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "proto/index.pb.h"
@@ -336,28 +337,28 @@ TEST_F(VectorIndexHnswTest, UpsertCosine) {
   {
     data_base.clear();
     data_base.resize(10 * 16);
-    std::array<float, 16> array1 = {0.0, 1.0, 2.0,  3.0,  4.0,  5.0,  6.0,  7.0,
+    std::array<float, 16> array1 = {1.0, 1.0, 2.0,  3.0,  4.0,  5.0,  6.0,  7.0,
                                     8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0};
-    std::array<float, 16> array2 = {0.0,  3.0,  6.0,  9.0,  12.0, 15.0, 18.0, 21.0,
+    std::array<float, 16> array2 = {2.0,  3.0,  6.0,  9.0,  12.0, 15.0, 18.0, 21.0,
                                     24.0, 27.0, 30.0, 33.0, 36.0, 39.0, 42.0, 45.0};
 
-    std::array<float, 16> array3 = {0.0,  4.0,  8.0,  12.0, 16.0, 20.0, 24.0, 28.0,
+    std::array<float, 16> array3 = {3.0,  4.0,  8.0,  12.0, 16.0, 20.0, 24.0, 28.0,
                                     32.0, 36.0, 40.0, 44.0, 48.0, 52.0, 56.0, 60.0};
     std::array<float, 16> array4 = {0.0,  5.0,  10.0, 15.0, 20.0, 25.0, 30.0, 35.0,
                                     40.0, 45.0, 50.0, 55.0, 60.0, 65.0, 70.0, 75.0};
     std::array<float, 16> array5 = {0.0,  6.0,  12.0, 18.0, 24.0, 30.0, 36.0, 42.0,
                                     48.0, 54.0, 60.0, 66.0, 72.0, 78.0, 84.0, 90.0};
 
-    std::array<float, 16> array6 = {0.0,  7.0,  14.0, 21.0, 28.0, 35.0, 42.0, 49.0,
+    std::array<float, 16> array6 = {4.0,  7.0,  14.0, 21.0, 28.0, 35.0, 42.0, 49.0,
                                     56.0, 63.0, 70.0, 77.0, 84.0, 91.0, 98.0, 105.0};
 
-    std::array<float, 16> array7 = {0.0,  8.0,  16.0, 24.0, 32.0, 40.0,  48.0,  56.0,
+    std::array<float, 16> array7 = {5.0,  8.0,  16.0, 24.0, 32.0, 40.0,  48.0,  56.0,
                                     64.0, 72.0, 80.0, 88.0, 96.0, 104.0, 112.0, 120.0};
-    std::array<float, 16> array8 = {0.0,  9.0,  18.0, 27.0, 36.0,  45.0,  54.0,  63.0,
+    std::array<float, 16> array8 = {6.0,  9.0,  18.0, 27.0, 36.0,  45.0,  54.0,  63.0,
                                     72.0, 81.0, 90.0, 99.0, 108.0, 117.0, 126.0, 135.0};
-    std::array<float, 16> array9 = {0.0,  10.0, 20.0,  30.0,  40.0,  50.0,  60.0,  70.0,
+    std::array<float, 16> array9 = {7.0,  10.0, 20.0,  30.0,  40.0,  50.0,  60.0,  70.0,
                                     80.0, 90.0, 100.0, 110.0, 120.0, 130.0, 140.0, 150.0};
-    std::array<float, 16> array10 = {0.0,  11.0, 22.0,  33.0,  44.0,  55.0,  66.0,  77.0,
+    std::array<float, 16> array10 = {8.0,  11.0, 22.0,  33.0,  44.0,  55.0,  66.0,  77.0,
                                      88.0, 99.0, 110.0, 121.0, 132.0, 143.0, 154.0, 165.0};
 
     size_t i = 0;
@@ -389,10 +390,23 @@ TEST_F(VectorIndexHnswTest, UpsertCosine) {
       pb::common::VectorWithId vector_with_id;
 
       vector_with_id.set_id(id);
+      std::vector<float> norm_array(dimension);
+      auto hnsw_index = std::dynamic_pointer_cast<VectorIndexHnsw>(vector_index_hnsw);
+
+      hnsw_index->NormalizeVector(data_base.data() + id * dimension, norm_array.data());
+      std::cout << "normalized [";
       for (size_t i = 0; i < dimension; i++) {
-        // vector_with_id.mutable_vector()->add_float_values(data_base[id * dimension + i]);
-        vector_with_id.mutable_vector()->add_float_values(data_base[1 * dimension + i]);
+        std::cout << norm_array[i] << ", ";
       }
+      std::cout << "]" << '\n';
+
+      std::cout << "orignal [";
+      for (size_t i = 0; i < dimension; i++) {
+        std::cout << data_base[id * dimension + i] << ", ";
+        vector_with_id.mutable_vector()->add_float_values(data_base[id * dimension + i]);
+        // vector_with_id.mutable_vector()->add_float_values(data_base[1 * dimension + i]);
+      }
+      std::cout << "]" << '\n';
 
       vector_with_ids.push_back(vector_with_id);
     }
@@ -430,10 +444,10 @@ TEST_F(VectorIndexHnswTest, SearchCosine) {
     vector_with_id.mutable_vector()->set_dimension(dimension);
     vector_with_id.mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
     for (size_t i = 0; i < dimension; i++) {
-      float value = data_base[i + dimension];
+      float value = data_base[i];
       vector_with_id.mutable_vector()->add_float_values(value);
     }
-    uint32_t topk = 10;
+    uint32_t topk = 5;
     std::vector<pb::index::VectorWithDistanceResult> results;
     std::vector<pb::common::VectorWithId> vector_with_ids;
     vector_with_ids.push_back(vector_with_id);
@@ -448,13 +462,13 @@ TEST_F(VectorIndexHnswTest, SearchCosine) {
         std::cout << "distance : " << vector_with_distances.distance();
         std::cout << " [";
         for (const auto &value : vector_with_distances.vector_with_id().vector().float_values()) {
-          std::cout << value << " ";
+          std::cout << fmt::format("{}", value) << " ";
         }
         std::cout << "] ";
 
         std::cout << '\n';
       }
-      EXPECT_EQ(result.vector_with_distances_size(), 10);
+      EXPECT_EQ(result.vector_with_distances_size(), topk);
     }
   }
 }

@@ -270,7 +270,13 @@ butil::Status VectorIndexFlat::Search(std::vector<pb::common::VectorWithId> vect
       vector_with_id->set_id(labels[i]);
       vector_with_id->mutable_vector()->set_dimension(dimension_);
       vector_with_id->mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
-      vector_with_distance->set_distance(distances[i]);
+      if (metric_type_ == pb::common::MetricType::METRIC_TYPE_COSINE ||
+          metric_type_ == pb::common::MetricType::METRIC_TYPE_INNER_PRODUCT) {
+        vector_with_distance->set_distance(1.0F - distances[i]);
+      } else {
+        vector_with_distance->set_distance(distances[i]);
+      }
+
       vector_with_distance->set_metric_type(metric_type_);
     }
   }
