@@ -105,7 +105,9 @@ butil::Status RaftStoreEngine::AddNode(std::shared_ptr<Context> /*ctx*/, store::
   // Build log storage
   auto config = ConfigManager::GetInstance()->GetConfig(Server::GetInstance()->GetRole());
   std::string log_path = fmt::format("{}/{}", config->GetString("raft.log_path"), region->Id());
-  auto log_storage = std::make_shared<SegmentLogStorage>(log_path, region->Id(),
+  int64_t max_segment_size = config->GetInt64("raft.segmentlog_max_segment_size");
+  max_segment_size = max_segment_size > 0 ? max_segment_size : Constant::kSegmentLogMaxSegmentSize;
+  auto log_storage = std::make_shared<SegmentLogStorage>(log_path, region->Id(), max_segment_size,
                                                          Server::GetInstance()->GetRole() == pb::common::INDEX);
   Server::GetInstance()->GetLogStorageManager()->AddLogStorage(region->Id(), log_storage);
 
@@ -132,7 +134,9 @@ butil::Status RaftStoreEngine::AddNode(std::shared_ptr<pb::common::RegionDefinit
   // Build log storage
   auto config = ConfigManager::GetInstance()->GetConfig(Server::GetInstance()->GetRole());
   std::string log_path = fmt::format("{}/{}", config->GetString("raft.log_path"), region->id());
-  auto log_storage = std::make_shared<SegmentLogStorage>(log_path, region->id());
+  int64_t max_segment_size = config->GetInt64("raft.segmentlog_max_segment_size");
+  max_segment_size = max_segment_size > 0 ? max_segment_size : Constant::kSegmentLogMaxSegmentSize;
+  auto log_storage = std::make_shared<SegmentLogStorage>(log_path, region->id(), max_segment_size);
   Server::GetInstance()->GetLogStorageManager()->AddLogStorage(region->id(), log_storage);
 
   std::string const meta_raft_name = fmt::format("{}-{}", region->name(), region->id());

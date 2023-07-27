@@ -141,10 +141,11 @@ class SegmentLogStorage {
  public:
   using SegmentMap = std::map<int64_t, std::shared_ptr<Segment>>;
 
-  explicit SegmentLogStorage(const std::string& path, uint64_t region_id, bool enable_truncate_control = false,
-                             bool enable_sync = true)
+  explicit SegmentLogStorage(const std::string& path, uint64_t region_id, uint64_t max_segment_size,
+                             bool enable_truncate_control = false, bool enable_sync = true)
       : path_(path),
         region_id_(region_id),
+        max_segment_size_(max_segment_size),
         first_log_index_(1),
         last_log_index_(0),
         checksum_type_(0),
@@ -211,6 +212,8 @@ class SegmentLogStorage {
     }
   }
 
+  uint64_t MaxSegmentSize() const { return max_segment_size_; }
+
  private:
   std::shared_ptr<Segment> OpenSegment();
   int SaveMeta(int64_t log_index);
@@ -239,6 +242,8 @@ class SegmentLogStorage {
 
   int checksum_type_;
   bool enable_sync_;
+
+  uint64_t max_segment_size_;
 };
 
 // NOLINTBEGIN
@@ -285,7 +290,7 @@ class SegmentLogStorageWrapper : public braft::LogStorage {
 
   LogStorage* new_instance(const std::string& uri) const {
     DINGO_LOG(INFO) << "New segment log storage instance " << region_id_;
-    auto log_storage = std::make_shared<SegmentLogStorage>(uri, region_id_);
+    auto log_storage = std::make_shared<SegmentLogStorage>(uri, region_id_, log_storage_->MaxSegmentSize());
     return new SegmentLogStorageWrapper(log_storage);
   }
 

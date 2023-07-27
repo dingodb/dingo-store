@@ -18,11 +18,13 @@ raft:
   election_timeout_s: 2
   snapshot_policy: checkpoint # scan or checkpoint
   snapshot_interval_s: 120
+  segmentlog_max_segment_size: 33554432 # 32M
 log:
   level: INFO
   path: $BASE_PATH$/log
 vector:
   index_path: $BASE_PATH$/data/index/idx
+  hnsw_save_threshold_log_num: 100 # hnsw vector index save snapshot threshold log num.
 store:
   path: $BASE_PATH$/data/index/db
   background_thread_num: 16 # background_thread_num priority background_thread_ratio

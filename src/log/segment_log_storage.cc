@@ -625,11 +625,6 @@ int Segment::Truncate(int64_t last_index_kept) {
 SegmentLogStorage::~SegmentLogStorage() { Helper::RemoveAllFileOrDirectory(path_); }
 
 int SegmentLogStorage::Init(braft::ConfigurationManager* configuration_manager) {
-  if (Constant::kSegmentLogMaxSegmentSize < 0) {
-    DINGO_LOG(FATAL) << "Constant::kSegmentLogMaxSegmentSize " << Constant::kSegmentLogMaxSegmentSize
-                     << " must be greater than or equal to 0 ";
-    return -1;
-  }
   butil::FilePath dir_path(path_);
   butil::File::Error e;
   if (!butil::CreateDirectoryAndGetError(dir_path, &e, true)) {
@@ -1153,7 +1148,7 @@ std::shared_ptr<Segment> SegmentLogStorage::OpenSegment() {
         return nullptr;
       }
     }
-    if (open_segment_->Bytes() > Constant::kSegmentLogMaxSegmentSize) {
+    if (open_segment_->Bytes() > max_segment_size_) {
       segments_[open_segment_->FirstIndex()] = open_segment_;
       prev_open_segment.swap(open_segment_);
     }

@@ -31,6 +31,7 @@ class Config {
   virtual int ReloadFile(const std::string& filename) = 0;
 
   virtual int GetInt(const std::string& key) = 0;
+  virtual int64_t GetInt64(const std::string& key) = 0;
   virtual double GetDouble(const std::string& key) = 0;
   virtual std::string GetString(const std::string& key) = 0;
 

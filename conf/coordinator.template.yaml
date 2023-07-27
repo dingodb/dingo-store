@@ -18,6 +18,7 @@ raft:
   election_timeout_s: 2
   snapshot_policy: checkpoint # scan or checkpoint
   snapshot_interval_s: 300
+  segmentlog_max_segment_size: 33554432 # 32M
 log:
   level: INFO
   path: $BASE_PATH$/log
