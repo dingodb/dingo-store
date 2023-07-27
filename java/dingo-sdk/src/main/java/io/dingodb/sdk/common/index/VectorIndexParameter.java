@@ -69,6 +69,7 @@ public class VectorIndexParameter {
     public enum MetricType {
         METRIC_TYPE_NONE,  // this is a placeholder
         METRIC_TYPE_L2,
-        METRIC_TYPE_INNER_PRODUCT
+        METRIC_TYPE_INNER_PRODUCT,
+        METRIC_TYPE_COSINE
     }
 }

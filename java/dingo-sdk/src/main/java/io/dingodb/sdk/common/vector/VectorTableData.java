@@ -19,21 +19,10 @@ package io.dingodb.sdk.common.vector;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 
-import java.util.Map;
-
 @Getter
 @AllArgsConstructor
-public class VectorWithId {
+public class VectorTableData {
 
-    private long id;
-    private Vector vector;
-    private Map<String, ScalarValue> scalarData;
-    private VectorTableData tableData;
-
-    @Deprecated
-    public VectorWithId(long id, Vector vector, Map<String, ScalarValue> scalarData) {
-        this.id = id;
-        this.vector = vector;
-        this.scalarData = scalarData;
-    }
+    private byte[] key;
+    private byte[] value;
 }
