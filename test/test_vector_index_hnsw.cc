@@ -36,6 +36,7 @@
 #include "vector/vector_index.h"
 #include "vector/vector_index_factory.h"
 #include "vector/vector_index_hnsw.h"
+#include "vector/vector_index_utils.h"
 
 namespace dingodb {
 
@@ -393,7 +394,7 @@ TEST_F(VectorIndexHnswTest, UpsertCosine) {
       std::vector<float> norm_array(dimension);
       auto hnsw_index = std::dynamic_pointer_cast<VectorIndexHnsw>(vector_index_hnsw);
 
-      hnsw_index->NormalizeVector(data_base.data() + id * dimension, norm_array.data());
+      VectorIndexUtils::NormalizeVectorForHnsw(data_base.data() + id * dimension, dimension, norm_array.data());
       std::cout << "normalized [";
       for (size_t i = 0; i < dimension; i++) {
         std::cout << norm_array[i] << ", ";

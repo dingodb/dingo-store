@@ -82,6 +82,12 @@ class Storage {
   butil::Status VectorGetRegionMetrics(std::shared_ptr<Context> ctx, uint64_t region_id,
                                        pb::common::VectorIndexMetrics& region_metrics);
 
+  butil::Status VectorCalcDistance(std::shared_ptr<Context> ctx, uint64_t region_id,
+                                   const ::dingodb::pb::index::VectorCalcDistanceRequest& request,
+                                   std::vector<std::vector<float>>& distances,  // NOLINT
+                                   std::vector<::dingodb::pb::common::Vector>& result_op_left_vectors,  // NOLINT
+                                   std::vector<::dingodb::pb::common::Vector>& result_op_right_vectors);  // NOLINT
+
   butil::Status ValidateLeader(uint64_t region_id);
 
  private:

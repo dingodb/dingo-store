@@ -34,6 +34,7 @@
 #include "proto/error.pb.h"
 #include "proto/index.pb.h"
 #include "proto/region_control.pb.h"
+#include "vector/vector_index_utils.h"
 
 namespace dingodb {
 
@@ -68,17 +69,17 @@ VectorIndexFlat::~VectorIndexFlat() {
   bthread_mutex_destroy(&mutex_);
 }
 
-const float kFloatAccuracy = 0.00001;
+// const float kFloatAccuracy = 0.00001;
 
-void NormalizeVec(float* x, int32_t d) {
-  float norm_l2_sqr = faiss::fvec_norm_L2sqr(x, d);
-  if (norm_l2_sqr > 0 && std::abs(1.0f - norm_l2_sqr) > kFloatAccuracy) {
-    float norm_l2 = std::sqrt(norm_l2_sqr);
-    for (int32_t i = 0; i < d; i++) {
-      x[i] = x[i] / norm_l2;
-    }
-  }
-}
+// void NormalizeVec(float* x, int32_t d) {
+//   float norm_l2_sqr = faiss::fvec_norm_L2sqr(x, d);
+//   if (norm_l2_sqr > 0 && std::abs(1.0f - norm_l2_sqr) > kFloatAccuracy) {
+//     float norm_l2 = std::sqrt(norm_l2_sqr);
+//     for (int32_t i = 0; i < d; i++) {
+//       x[i] = x[i] / norm_l2;
+//     }
+//   }
+// }
 
 butil::Status VectorIndexFlat::AddOrUpsert(const std::vector<pb::common::VectorWithId>& vector_with_ids,
                                            bool is_upsert) {
@@ -137,7 +138,7 @@ butil::Status VectorIndexFlat::AddOrUpsert(const std::vector<pb::common::VectorW
     memcpy(vectors.get() + i * dimension_, vector.data(), dimension_ * sizeof(float));
 
     if (normalize_) {
-      NormalizeVec(vectors.get() + i * dimension_, dimension_);
+      VectorIndexUtils::NormalizeVectorForFaiss(vectors.get() + i * dimension_, dimension_);
     }
   }
 
@@ -182,7 +183,6 @@ butil::Status VectorIndexFlat::Delete(const std::vector<uint64_t>& delete_ids) {
     BAIDU_SCOPED_LOCK(mutex_);
     remove_count = index_->remove_ids(sel);
   }
-
 
   if (0 == remove_count) {
     DINGO_LOG(ERROR) << fmt::format("not found id : {}", id);
@@ -247,7 +247,7 @@ butil::Status VectorIndexFlat::Search(std::vector<pb::common::VectorWithId> vect
       memcpy(vectors.get() + i * dimension_, vector.data(), dimension_ * sizeof(float));
 
       if (normalize_) {
-        NormalizeVec(vectors.get() + i * dimension_, dimension_);
+        VectorIndexUtils::NormalizeVectorForFaiss(vectors.get() + i * dimension_, dimension_);
       }
     }
   }

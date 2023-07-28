@@ -62,6 +62,9 @@ void SendVectorAddBatch(ServerInteractionPtr interaction, uint64_t region_id, ui
 void SendVectorScanQuery(ServerInteractionPtr interaction, uint64_t region_id, uint64_t start_id, uint64_t limit,
                          bool is_reverse);
 void SendVectorGetRegionMetrics(ServerInteractionPtr interaction, uint64_t region_id);
+void SendVectorCalcDistance(ServerInteractionPtr interaction, uint64_t region_id, uint32_t dimension,
+                            const std::string& alg_type, const std::string& metric_type, int32_t left_vector_size,
+                            int32_t right_vector_size, bool is_return_normlize);
 
 // key/value
 void SendKvGet(ServerInteractionPtr interaction, uint64_t region_id, const std::string& key, std::string& value);

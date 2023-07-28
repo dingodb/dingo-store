@@ -45,6 +45,11 @@ class IndexServiceImpl : public pb::index::IndexService {
                               pb::index::VectorGetRegionMetricsResponse* response,
                               google::protobuf::Closure* done) override;
 
+  void VectorCalcDistance(google::protobuf::RpcController* controller,
+                          const ::dingodb::pb::index::VectorCalcDistanceRequest* request,
+                          ::dingodb::pb::index::VectorCalcDistanceResponse* response,
+                          ::google::protobuf::Closure* done) override;
+
   void SetStorage(std::shared_ptr<Storage> storage);
 
  private:

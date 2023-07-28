@@ -107,6 +107,12 @@ DEFINE_string(scalar_filter_key, "", "Request scalar_filter_key");
 DEFINE_string(scalar_filter_value, "", "Request scalar_filter_value");
 DEFINE_int32(ttl, 0, "ttl");
 
+DEFINE_string(alg_type, "faiss", "use alg type. such as faiss or hnsw");
+DEFINE_string(metric_type, "L2", "metric type. such as L2 or IP or cosine");
+DEFINE_int32(left_vector_size, 2, "left vector size. <= 0 error");
+DEFINE_int32(right_vector_size, 3, "right vector size. <= 0 error");
+DEFINE_bool(is_return_normlize, true, "is return normlize default true");
+
 bvar::LatencyRecorder g_latency_recorder("dingo-store");
 
 const std::map<std::string, std::vector<std::string>> kParamConstraint = {
@@ -307,6 +313,10 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
     } else if (method == "VectorAddBatch") {
       client::SendVectorAddBatch(ctx->store_interaction, FLAGS_region_id, FLAGS_dimension, FLAGS_count,
                                  FLAGS_step_count, FLAGS_start_id, FLAGS_vector_index_add_cost_file);
+    } else if (method == "VectorCalcDistance") {
+      client::SendVectorCalcDistance(ctx->store_interaction, FLAGS_region_id, FLAGS_dimension, FLAGS_alg_type,
+                                     FLAGS_metric_type, FLAGS_left_vector_size, FLAGS_right_vector_size,
+                                     FLAGS_is_return_normlize);
     }
 
     // Test
