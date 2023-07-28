@@ -308,6 +308,8 @@ butil::Status Storage::KvScanRelease(std::shared_ptr<Context>, const std::string
 butil::Status Storage::VectorScanQuery(std::shared_ptr<Context> ctx, uint64_t start_id, bool is_reverse, uint64_t limit,
                                        bool with_vector_data, bool with_scalar_data,
                                        const std::vector<std::string>& selected_scalar_keys, bool with_table_data,
+                                       bool use_scalar_filter,
+                                       const pb::common::VectorScalardata& scalar_data_for_filter,
                                        std::vector<pb::common::VectorWithId>& vector_with_ids) {
   auto status = ValidateLeader(ctx->RegionId());
   if (!status.ok()) {
@@ -316,7 +318,8 @@ butil::Status Storage::VectorScanQuery(std::shared_ptr<Context> ctx, uint64_t st
 
   auto reader = engine_->NewVectorReader(Constant::kStoreDataCF);
   status = reader->VectorScanQuery(ctx, start_id, is_reverse, limit, with_vector_data, with_scalar_data,
-                                   selected_scalar_keys, with_table_data, vector_with_ids);
+                                   selected_scalar_keys, with_table_data, use_scalar_filter, scalar_data_for_filter,
+                                   vector_with_ids);
   if (!status.ok()) {
     return status;
   }

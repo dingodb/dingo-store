@@ -642,14 +642,16 @@ butil::Status RaftStoreEngine::VectorReader::VectorScanQuery(std::shared_ptr<Con
                                                              bool is_reverse, uint64_t limit, bool with_vector_data,
                                                              bool with_scalar_data,
                                                              const std::vector<std::string>& selected_scalar_keys,
-                                                             bool with_table_data,
+                                                             bool with_table_data, bool use_scalar_filter,
+                                                             const pb::common::VectorScalardata& scalar_data_for_filter,
                                                              std::vector<pb::common::VectorWithId>& vector_with_ids) {
   DINGO_LOG(INFO) << "scan vector id, region_id: " << ctx->RegionId() << ", start_id: " << start_id
                   << ", is_reverse: " << is_reverse << ", limit: " << limit;
 
   // scan for ids
   std::vector<uint64_t> vector_ids;
-  auto status = ScanVectorId(ctx->RegionId(), start_id, is_reverse, limit, vector_ids);
+  auto status =
+      ScanVectorId(ctx->RegionId(), start_id, is_reverse, limit, use_scalar_filter, scalar_data_for_filter, vector_ids);
   if (!status.ok()) {
     DINGO_LOG(INFO) << "Failed to scan vector id: " << status.error_str();
     return status;
@@ -800,7 +802,9 @@ butil::Status RaftStoreEngine::VectorReader::GetBorderId(uint64_t region_id, uin
 
 // ScanVectorId
 butil::Status RaftStoreEngine::VectorReader::ScanVectorId(uint64_t region_id, uint64_t start_id, bool is_reverse,
-                                                          uint64_t limit, std::vector<uint64_t>& ids) {
+                                                          uint64_t limit, bool use_scalar_filter,
+                                                          const pb::common::VectorScalardata& scalar_data_for_filter,
+                                                          std::vector<uint64_t>& ids) {
   std::string start_key;
   std::string end_key;
   VectorCodec::EncodeVectorId(region_id, 0, start_key);
@@ -834,6 +838,14 @@ butil::Status RaftStoreEngine::VectorReader::ScanVectorId(uint64_t region_id, ui
         continue;
       }
 
+      if (use_scalar_filter) {
+        bool compare_result = false;
+        CompareVectorScalarData(region_id, vector_id, scalar_data_for_filter, compare_result);
+        if (!compare_result) {
+          continue;
+        }
+      }
+
       ids.push_back(vector_id);
 
       if (ids.size() >= limit) {
@@ -853,6 +865,14 @@ butil::Status RaftStoreEngine::VectorReader::ScanVectorId(uint64_t region_id, ui
       auto vector_id = VectorCodec::DecodeVectorId(key);
       if (vector_id == 0 || vector_id == UINT64_MAX) {
         continue;
+      }
+
+      if (use_scalar_filter) {
+        bool compare_result = false;
+        CompareVectorScalarData(region_id, vector_id, scalar_data_for_filter, compare_result);
+        if (!compare_result) {
+          continue;
+        }
       }
 
       ids.push_back(vector_id);
