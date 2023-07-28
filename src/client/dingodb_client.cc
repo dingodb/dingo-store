@@ -118,16 +118,18 @@ const std::map<std::string, std::vector<std::string>> kParamConstraint = {
     {"PartitionNum", {"AutoTest"}},
 };
 
-void ValidateParam() {
+int ValidateParam() {
   if (FLAGS_region_id == 0) {
-    DINGO_LOG(FATAL) << "missing param region_id error";
+    DINGO_LOG(ERROR) << "missing param region_id error";
+    return -1;
   }
 
   if (FLAGS_raft_group.empty()) {
     auto methods = kParamConstraint.find("RaftGroup")->second;
     for (const auto& method : methods) {
       if (method == FLAGS_method) {
-        DINGO_LOG(FATAL) << "missing param raft_group error";
+        DINGO_LOG(ERROR) << "missing param raft_group error";
+        return -1;
       }
     }
   }
@@ -136,7 +138,8 @@ void ValidateParam() {
     auto methods = kParamConstraint.find("RaftAddrs")->second;
     for (const auto& method : methods) {
       if (method == FLAGS_method) {
-        DINGO_LOG(FATAL) << "missing param raft_addrs error";
+        DINGO_LOG(ERROR) << "missing param raft_addrs error";
+        return -1;
       }
     }
   }
@@ -145,7 +148,8 @@ void ValidateParam() {
     auto methods = kParamConstraint.find("ThreadNum")->second;
     for (const auto& method : methods) {
       if (method == FLAGS_method) {
-        DINGO_LOG(FATAL) << "missing param thread_num error";
+        DINGO_LOG(ERROR) << "missing param thread_num error";
+        return -1;
       }
     }
   }
@@ -154,7 +158,8 @@ void ValidateParam() {
     auto methods = kParamConstraint.find("RegionCount")->second;
     for (const auto& method : methods) {
       if (method == FLAGS_method) {
-        DINGO_LOG(FATAL) << "missing param region_count error";
+        DINGO_LOG(ERROR) << "missing param region_count error";
+        return -1;
       }
     }
   }
@@ -163,7 +168,8 @@ void ValidateParam() {
     auto methods = kParamConstraint.find("ReqNum")->second;
     for (const auto& method : methods) {
       if (method == FLAGS_method) {
-        DINGO_LOG(FATAL) << "missing param req_num error";
+        DINGO_LOG(ERROR) << "missing param req_num error";
+        return -1;
       }
     }
   }
@@ -172,7 +178,8 @@ void ValidateParam() {
     auto methods = kParamConstraint.find("TableName")->second;
     for (const auto& method : methods) {
       if (method == FLAGS_method) {
-        DINGO_LOG(FATAL) << "missing param table_name error";
+        DINGO_LOG(ERROR) << "missing param table_name error";
+        return -1;
       }
     }
   }
@@ -181,10 +188,13 @@ void ValidateParam() {
     auto methods = kParamConstraint.find("PartitionNum")->second;
     for (const auto& method : methods) {
       if (method == FLAGS_method) {
-        DINGO_LOG(FATAL) << "missing param partition_num error";
+        DINGO_LOG(ERROR) << "missing param partition_num error";
+        return -1;
       }
     }
   }
+
+  return 0;
 }
 
 // Get store addr from coordinator
@@ -200,7 +210,11 @@ std::vector<std::string> GetStoreAddrs(client::ServerInteractionPtr interaction,
 }
 
 void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int round_num) {
-  ValidateParam();
+  auto ret = ValidateParam();
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << "ValidateParam error";
+    return;
+  }
 
   std::vector<std::string> raft_addrs;
   butil::SplitString(FLAGS_raft_addrs, ',', &raft_addrs);
@@ -242,7 +256,7 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
     }
 
     // Kev/Value operation
-    if (method == "KvGet") {
+    else if (method == "KvGet") {
       std::string value;
       client::SendKvGet(ctx->store_interaction, FLAGS_region_id, FLAGS_key, value);
     } else if (method == "KvBatchGet") {
@@ -268,7 +282,7 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
     }
 
     // Vector operation
-    if (method == "VectorSearch") {
+    else if (method == "VectorSearch") {
       client::SendVectorSearch(ctx->store_interaction, FLAGS_region_id, FLAGS_dimension, FLAGS_vector_id, FLAGS_topn);
     } else if (method == "VectorBatchSearch") {
       client::SendVectorBatchSearch(ctx->store_interaction, FLAGS_region_id, FLAGS_dimension, FLAGS_vector_id,
@@ -295,7 +309,7 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
     }
 
     // Test
-    if (method == "TestBatchPut") {
+    else if (method == "TestBatchPut") {
       client::TestBatchPut(ctx->store_interaction, FLAGS_region_id, FLAGS_thread_num, FLAGS_req_num, FLAGS_prefix);
     } else if (method == "TestBatchPutGet") {
       client::TestBatchPutGet(ctx->store_interaction, FLAGS_region_id, FLAGS_thread_num, FLAGS_req_num, FLAGS_prefix);
@@ -307,7 +321,7 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
     }
 
     // Auto test
-    if (method == "AutoTest") {
+    else if (method == "AutoTest") {
       ctx->table_name = FLAGS_table_name;
       ctx->partition_num = FLAGS_partition_num;
       ctx->req_num = FLAGS_req_num;
@@ -316,9 +330,15 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
     }
 
     // Table operation
-    if (method == "AutoDropTable") {
+    else if (method == "AutoDropTable") {
       ctx->req_num = FLAGS_req_num;
       client::AutoDropTable(ctx);
+    }
+
+    // illegal method
+    else {
+      DINGO_LOG(ERROR) << "Unknown method: " << method;
+      return;
     }
 
     if (i + 1 < round_num) {
@@ -590,12 +610,17 @@ int main(int argc, char* argv[]) {
   FLAGS_logbufsecs = 0;
   google::InitGoogleLogging(argv[0]);
 
+  if (argc > 1) {
+    FLAGS_method = argv[1];
+  }
+
   google::ParseCommandLineFlags(&argc, &argv, true);
 
   if (dingodb::FLAGS_show_version || FLAGS_method.empty()) {
     dingodb::DingoShowVerion();
 
-    printf("Usage: %s --method=[method]\n", argv[0]);
+    printf("Usage: %s [method] [paramters]\n", argv[0]);
+    printf("Example: %s CreateTable --name=test_table_name\n", argv[0]);
     exit(-1);
   }
 
