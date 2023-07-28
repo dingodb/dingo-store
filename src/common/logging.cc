@@ -14,6 +14,7 @@
 
 #include "common/logging.h"
 
+#include <cstdint>
 #include <iomanip>
 
 #include "fmt/core.h"
@@ -27,7 +28,7 @@ void DingoLogger::InitLogger(const std::string& log_dir, const std::string& role
   FLAGS_stop_logging_if_full_disk = true;
   FLAGS_minloglevel = google::GLOG_INFO;
   FLAGS_logbuflevel = google::GLOG_INFO;
-  ChangeGlogLevelUsingDingoLevel(level);
+  ChangeGlogLevelUsingDingoLevel(level, kGlobalValueOfDebug);
 
   const std::string program_name = fmt::format("./{}", role);
   google::InitGoogleLogging(program_name.c_str(), &CustomLogFormatPrefix);
@@ -63,10 +64,10 @@ void DingoLogger::CustomLogFormatPrefix(std::ostream& s, const google::LogMessag
     << l.thread_id << "][" << l.filename << ':' << l.line_number << "]";
 }
 
-void DingoLogger::ChangeGlogLevelUsingDingoLevel(const pb::node::LogLevel& log_level) {
+void DingoLogger::ChangeGlogLevelUsingDingoLevel(const pb::node::LogLevel& log_level, uint32_t verbose) {
   if (log_level == pb::node::DEBUG) {
     DingoLogger::SetMinLogLevel(0);
-    DingoLogger::SetMinVerboseLevel(kGlobalValueOfDebug);
+    DingoLogger::SetMinVerboseLevel(verbose == 0 ? kGlobalValueOfDebug : verbose);
   } else {
     DingoLogger::SetMinLogLevel(static_cast<int>(log_level) - 1);
     DingoLogger::SetMinVerboseLevel(1);

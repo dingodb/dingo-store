@@ -107,9 +107,9 @@ void NodeServiceImpl::ChangeLogLevel(google::protobuf::RpcController* /* control
   DINGO_LOG(INFO) << "ChangeLogLevel=>Receive Request:" << request->DebugString();
 
   const LogLevel log_level = request->log_level();
-  DingoLogger::ChangeGlogLevelUsingDingoLevel(log_level);
-
   const LogDetail& log_detail = request->log_detail();
+
+  DingoLogger::ChangeGlogLevelUsingDingoLevel(log_level, log_detail.verbose());
   DingoLogger::SetLogBuffSecs(log_detail.log_buf_secs());
   DingoLogger::SetMaxLogSize(log_detail.max_log_size());
   DingoLogger::SetStoppingWhenDiskFull(log_detail.stop_logging_if_full_disk());

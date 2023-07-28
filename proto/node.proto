@@ -53,6 +53,8 @@ message LogDetail {
   uint32 max_log_size = 2;
   // Sets whether to avoid logging to the disk if the disk is full.
   bool stop_logging_if_full_disk = 3;
+  // set verbose
+  uint32 verbose = 4;
 }
 
 message GetLogLevelRequest {

@@ -53,7 +53,7 @@ class DingoLogger {
 
   static bool GetStoppingWhenDiskFull();
   static void SetStoppingWhenDiskFull(bool is_stop);
-  static void ChangeGlogLevelUsingDingoLevel(const pb::node::LogLevel& level);
+  static void ChangeGlogLevelUsingDingoLevel(const pb::node::LogLevel& level, uint32_t verbose);
   static void CustomLogFormatPrefix(std::ostream& s, const google::LogMessageInfo& l, void*);
 };
 
