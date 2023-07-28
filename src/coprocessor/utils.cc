@@ -129,11 +129,11 @@ butil::Status Utils::CheckSerialSchema(
 
 butil::Status Utils::CheckSelection(const ::google::protobuf::RepeatedField<int32_t>& selection_columns,
                                     size_t original_schema_size) {
-  if (selection_columns.empty()) {
-    std::string error_message = fmt::format("selection_columns empty. not support");
-    DINGO_LOG(ERROR) << error_message;
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
-  }
+  // if (selection_columns.empty()) {
+  //   std::string error_message = fmt::format("selection_columns empty. not support");
+  //   DINGO_LOG(ERROR) << error_message;
+  //   return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
+  // }
 
   for (const auto& index : selection_columns) {
     if (index < 0 || index >= static_cast<int>(original_schema_size)) {
@@ -502,13 +502,13 @@ butil::Status Utils::CompareSerialSchemaStrict(
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
   }
 
-  if (serial_schemas1->size() != serial_schemas2->size()) {
-    std::string error_message =
-        fmt::format("CompareSerialSchemaStrict failed  serial_schema1 size: {} unequal serial_schema2 size : {}",
-                    serial_schemas1->size(), serial_schemas2->size());
-    DINGO_LOG(ERROR) << error_message;
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
-  }
+  // if (serial_schemas1->size() != serial_schemas2->size()) {
+  //   std::string error_message =
+  //       fmt::format("CompareSerialSchemaStrict failed  serial_schema1 size: {} unequal serial_schema2 size : {}",
+  //                   serial_schemas1->size(), serial_schemas2->size());
+  //   DINGO_LOG(ERROR) << error_message;
+  //   return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
+  // }
 
   for (size_t i = 0; i < serial_schemas1->size() && i < serial_schemas2->size(); i++) {
     const auto& serial_schema1 = (*serial_schemas1)[i];
