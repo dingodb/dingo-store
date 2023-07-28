@@ -37,6 +37,7 @@ class YamlConfig : public Config {
   int LoadFile(const std::string& filename) override;
   int ReloadFile(const std::string& filename) override;
 
+  bool GetBool(const std::string& key) override;
   int GetInt(const std::string& key) override;
   int64_t GetInt64(const std::string& key) override;
   double GetDouble(const std::string& key) override;

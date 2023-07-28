@@ -41,6 +41,15 @@ int YamlConfig::LoadFile(const std::string& filename) {
 
 int YamlConfig::ReloadFile(const std::string& filename) { return Load(filename); }
 
+bool YamlConfig::GetBool(const std::string& key) {
+  try {
+    return GetScalar<bool>(key);
+  } catch (std::exception& e) {
+    DINGO_LOG(FATAL) << "Config GetBool failed: " << key << " exception: " << e.what();
+  }
+  return false;
+}
+
 int YamlConfig::GetInt(const std::string& key) {
   try {
     return GetScalar<int>(key);
