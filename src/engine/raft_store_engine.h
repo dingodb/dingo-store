@@ -127,6 +127,7 @@ class RaftStoreEngine : public Engine, public RaftControlAble {
     butil::Status VectorScanQuery(std::shared_ptr<Context> ctx, uint64_t start_id, bool is_reverse, uint64_t limit,
                                   bool with_vector_data, bool with_scalar_data,
                                   const std::vector<std::string>& selected_scalar_keys, bool with_table_data,
+                                  bool use_scalar_filter, const pb::common::VectorScalardata& scalar_data_for_filter,
                                   std::vector<pb::common::VectorWithId>& vector_with_ids) override;
     butil::Status VectorGetRegionMetrics(std::shared_ptr<Context> ctx, uint64_t region_id,
                                          pb::common::VectorIndexMetrics& region_metrics) override;

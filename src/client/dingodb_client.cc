@@ -103,6 +103,8 @@ DEFINE_int32(step_count, 1024, "step_count");
 DEFINE_bool(print_vector_search_delay, false, "print vector search delay");
 DEFINE_int32(limit, 0, "limit");
 DEFINE_bool(is_reverse, false, "is_revers");
+DEFINE_string(scalar_filter_key, "", "Request scalar_filter_key");
+DEFINE_string(scalar_filter_value, "", "Request scalar_filter_value");
 
 bvar::LatencyRecorder g_latency_recorder("dingo-store");
 

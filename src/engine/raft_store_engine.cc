@@ -642,7 +642,8 @@ butil::Status RaftStoreEngine::VectorReader::VectorScanQuery(std::shared_ptr<Con
                                                              bool is_reverse, uint64_t limit, bool with_vector_data,
                                                              bool with_scalar_data,
                                                              const std::vector<std::string>& selected_scalar_keys,
-                                                             bool with_table_data,
+                                                             bool with_table_data, bool use_scalar_filter,
+                                                             const pb::common::VectorScalardata& scalar_data_for_filter,
                                                              std::vector<pb::common::VectorWithId>& vector_with_ids) {
   DINGO_LOG(INFO) << "scan vector id, region_id: " << ctx->RegionId() << ", start_id: " << start_id
                   << ", is_reverse: " << is_reverse << ", limit: " << limit;
@@ -667,6 +668,14 @@ butil::Status RaftStoreEngine::VectorReader::VectorScanQuery(std::shared_ptr<Con
     auto status = QueryVectorWithId(ctx->RegionId(), vector_id, vector_with_id, with_vector_data);
     if (!status.ok()) {
       DINGO_LOG(WARNING) << "Failed to query vector with id: " << vector_id << ", status: " << status.error_str();
+    }
+
+    if (use_scalar_filter) {
+      bool compare_result = false;
+      CompareVectorScalarData(ctx->RegionId(), vector_id, scalar_data_for_filter, compare_result);
+      if (!compare_result) {
+        continue;
+      }
     }
 
     // if the id is not exist, the vector_with_id will be empty, sdk client will handle this

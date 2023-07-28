@@ -525,10 +525,11 @@ void IndexServiceImpl::VectorScanQuery(google::protobuf::RpcController* controll
 
   std::vector<pb::common::VectorWithId> vector_with_ids;
 
-  status = storage_->VectorScanQuery(ctx, request->vector_id_start(), request->is_reverse_scan(),
-                                     request->max_scan_count(), (!request->without_vector_data()),
-                                     request->with_scalar_data(), Helper::PbRepeatedToVector(request->selected_keys()),
-                                     request->with_table_data(), vector_with_ids);
+  status =
+      storage_->VectorScanQuery(ctx, request->vector_id_start(), request->is_reverse_scan(), request->max_scan_count(),
+                                (!request->without_vector_data()), request->with_scalar_data(),
+                                Helper::PbRepeatedToVector(request->selected_keys()), request->with_table_data(),
+                                request->use_scalar_filter(), request->scalar_for_filter(), vector_with_ids);
 
   if (!status.ok()) {
     auto* err = response->mutable_error();

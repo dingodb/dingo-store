@@ -63,6 +63,10 @@ message VectorScanQueryRequest {
   repeated string selected_keys = 13;  // If with_scalar_data is true, selected_keys is used to select scalar data, if
                                        // this parameter is null, all scalar data will be returned.
   bool with_table_data = 14;           // Default false, if true, response with table data.
+
+  // Whether to use scalar filtering.
+  bool use_scalar_filter = 20;
+  dingodb.pb.common.VectorScalardata scalar_for_filter = 21;
 }
 
 message VectorScanQueryResponse {

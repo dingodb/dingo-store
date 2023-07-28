@@ -175,8 +175,15 @@ void SendGetTableByName(std::shared_ptr<dingodb::CoordinatorInteraction> coordin
     DINGO_LOG(WARNING) << "name is empty";
     return;
   }
+  if (FLAGS_schema_id == 0) {
+    DINGO_LOG(WARNING) << "schema_id is empty";
+    return;
+  }
 
   request.set_table_name(FLAGS_name);
+  auto* schema_id = request.mutable_schema_id();
+  schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
+  schema_id->set_entity_id(FLAGS_schema_id);
 
   auto status = coordinator_interaction->SendRequest("GetTableByName", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
@@ -529,7 +536,15 @@ void SendGetIndexByName(std::shared_ptr<dingodb::CoordinatorInteraction> coordin
     return;
   }
 
+  if (FLAGS_schema_id == 0) {
+    DINGO_LOG(WARNING) << "schema_id is empty";
+    return;
+  }
+
   request.set_index_name(FLAGS_name);
+  auto* schema_id = request.mutable_schema_id();
+  schema_id->set_entity_id(FLAGS_schema_id);
+  schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
 
   auto status = coordinator_interaction->SendRequest("GetIndexByName", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
