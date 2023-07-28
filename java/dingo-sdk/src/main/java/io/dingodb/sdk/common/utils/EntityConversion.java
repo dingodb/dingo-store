@@ -77,19 +77,6 @@ import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import static io.dingodb.meta.Meta.SqlType.SQL_TYPE_ANY;
-import static io.dingodb.meta.Meta.SqlType.SQL_TYPE_ARRAY;
-import static io.dingodb.meta.Meta.SqlType.SQL_TYPE_BIGINT;
-import static io.dingodb.meta.Meta.SqlType.SQL_TYPE_BOOLEAN;
-import static io.dingodb.meta.Meta.SqlType.SQL_TYPE_BYTES;
-import static io.dingodb.meta.Meta.SqlType.SQL_TYPE_DATE;
-import static io.dingodb.meta.Meta.SqlType.SQL_TYPE_DOUBLE;
-import static io.dingodb.meta.Meta.SqlType.SQL_TYPE_FLOAT;
-import static io.dingodb.meta.Meta.SqlType.SQL_TYPE_INTEGER;
-import static io.dingodb.meta.Meta.SqlType.SQL_TYPE_MULTISET;
-import static io.dingodb.meta.Meta.SqlType.SQL_TYPE_TIME;
-import static io.dingodb.meta.Meta.SqlType.SQL_TYPE_TIMESTAMP;
-import static io.dingodb.meta.Meta.SqlType.SQL_TYPE_VARCHAR;
 import static io.dingodb.sdk.common.utils.NoBreakFunctions.wrap;
 import static io.dingodb.sdk.common.utils.Parameters.cleanNull;
 
@@ -162,8 +149,8 @@ public class EntityConversion {
     public static Column mapping(Meta.ColumnDefinition definition) {
         return ColumnDefinition.builder()
                 .name(definition.getName())
-                .type(mapping(definition.getSqlType()))
-                .elementType(definition.getElementType().name())
+                .type(definition.getSqlType())
+                .elementType(definition.getElementType())
                 .precision(definition.getPrecision())
                 .scale(definition.getScale())
                 .nullable(definition.getNullable())
@@ -685,88 +672,14 @@ public class EntityConversion {
         return Meta.ColumnDefinition.newBuilder()
                 .setName(column.getName())
                 .setNullable(column.isNullable())
-                .setElementType(Meta.ElementType.ELEM_TYPE_STRING)
+                .setElementType(cleanNull(column.getElementType(), ""))
                 .setDefaultVal(cleanNull(column.getDefaultValue(), ""))
                 .setPrecision(column.getPrecision())
                 .setScale(column.getScale())
                 .setIndexOfKey(column.getPrimary())
-                .setSqlType(mapping(column.getType()))
+                .setSqlType(column.getType())
                 .setIsAutoIncrement(column.isAutoIncrement())
                 .build();
     }
 
-    private static String mapping(Meta.SqlType sqlType) {
-        switch (sqlType) {
-            case SQL_TYPE_VARCHAR:
-                return "VARCHAR";
-            case SQL_TYPE_INTEGER:
-                return "INTEGER";
-            case SQL_TYPE_BOOLEAN:
-                return "BOOLEAN";
-            case SQL_TYPE_DOUBLE:
-                return "DOUBLE";
-            case SQL_TYPE_BIGINT:
-                return "BIGINT";
-            case SQL_TYPE_FLOAT:
-                return "FLOAT";
-            case SQL_TYPE_DATE:
-                return "DATE";
-            case SQL_TYPE_TIME:
-                return "TIME";
-            case SQL_TYPE_TIMESTAMP:
-                return "TIMESTAMP";
-            case SQL_TYPE_ARRAY:
-                return "ARRAY";
-            case SQL_TYPE_MULTISET:
-                return "MULTISET";
-            case SQL_TYPE_ANY:
-                return "ANY";
-            case SQL_TYPE_BYTES:
-                return "BINARY";
-            default:
-                break;
-        }
-        throw new IllegalArgumentException("Unrecognized type name \"" + sqlType.name() + "\".");
-    }
-
-    private static Meta.SqlType mapping(String type) {
-        switch (type.toUpperCase()) {
-            case "STRING":
-            case "VARCHAR":
-                return SQL_TYPE_VARCHAR;
-            case "INT":
-            case "INTEGER":
-                return SQL_TYPE_INTEGER;
-            case "BOOL":
-            case "BOOLEAN":
-                return SQL_TYPE_BOOLEAN;
-            case "LONG":
-            case "BIGINT":
-                return SQL_TYPE_BIGINT;
-            case "DOUBLE":
-                return SQL_TYPE_DOUBLE;
-            case "FLOAT":
-                return SQL_TYPE_FLOAT;
-            case "DATE":
-                return SQL_TYPE_DATE;
-            case "TIME":
-                return SQL_TYPE_TIME;
-            case "TIMESTAMP":
-                return SQL_TYPE_TIMESTAMP;
-            case "ARRAY":
-                return SQL_TYPE_ARRAY;
-            case "LIST":
-            case "MULTISET":
-                return SQL_TYPE_MULTISET;
-            case "ANY":
-                return SQL_TYPE_ANY;
-            case "BYTES":
-            case "BINARY":
-            case "BLOB":
-                return SQL_TYPE_BYTES;
-            default:
-                break;
-        }
-        throw new IllegalArgumentException("Unrecognized type name \"" + type + "\".");
-    }
 }

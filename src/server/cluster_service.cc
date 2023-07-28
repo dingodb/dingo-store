@@ -243,7 +243,7 @@ void ClusterStatImpl::PrintTableDefinition(std::ostream& os, const pb::meta::Tab
   os << "<ul>";
 
   for (const auto& column : table_definition.columns()) {
-    os << "<li>" << column.name() << ":" << SqlType_Name(column.sql_type()) << "</li>";
+    os << "<li>" << column.name() << ":" << column.sql_type() << "</li>";
   }
 
   os << "</ul>";

@@ -267,8 +267,8 @@ void SendCreateTable(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
     std::string column_name("test_columen_");
     column_name.append(std::to_string(i));
     column->set_name(column_name);
-    column->set_sql_type(::dingodb::pb::meta::SqlType::SQL_TYPE_BIGINT);
-    column->set_element_type(::dingodb::pb::meta::ElementType::ELEM_TYPE_INT64);
+    column->set_sql_type("BIGINT");
+    column->set_element_type("BIGINT");
     column->set_precision(100);
     column->set_nullable(false);
     column->set_indexofkey(7);

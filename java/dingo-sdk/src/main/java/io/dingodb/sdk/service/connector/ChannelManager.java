@@ -2,9 +2,9 @@ package io.dingodb.sdk.service.connector;
 
 import io.dingodb.sdk.common.Location;
 import io.dingodb.sdk.common.utils.Optional;
-import io.grpc.Grpc;
-import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
+import io.grpc.InsecureChannelCredentials;
+import io.grpc.netty.shaded.io.grpc.netty.NettyChannelBuilder;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.Map;
@@ -14,6 +14,9 @@ import static io.dingodb.sdk.common.utils.NoBreakFunctions.wrap;
 
 @Slf4j
 public final class ChannelManager {
+
+    public static final int DEFAULT_MAX_MESSAGE_SIZE = 1024 * 1024 * 1024;
+
     private ChannelManager() {
         Runtime.getRuntime().addShutdownHook(new Thread(ChannelManager::shutdown));
     }
@@ -33,7 +36,12 @@ public final class ChannelManager {
     }
 
     private static ManagedChannel newChannel(String host, int port) {
-        return Grpc.newChannelBuilder(host + ":" + port, InsecureChannelCredentials.create()).build();
+        return NettyChannelBuilder.forAddress(host, port, InsecureChannelCredentials.create())
+            .flowControlWindow(DEFAULT_MAX_MESSAGE_SIZE)
+            .maxInboundMessageSize(DEFAULT_MAX_MESSAGE_SIZE)
+            .maxInboundMetadataSize(DEFAULT_MAX_MESSAGE_SIZE)
+            .keepAliveWithoutCalls(true)
+            .build();
     }
 
     private static void shutdown() {
