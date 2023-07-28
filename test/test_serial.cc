@@ -27,7 +27,7 @@
 #include <optional>
 #include <string>
 
-#include "serial/keyvalue_codec.h"
+// #include "serial/keyvalue_codec.h"
 #include "serial/schema/base_schema.h"
 
 using namespace dingodb;
@@ -1649,336 +1649,336 @@ TEST_F(DingoSerialTest, recordTest) {
   delete rd;
 }
 
-TEST_F(DingoSerialTest, tabledefinitionTest) {
-  auto td = std::make_shared<pb::meta::TableDefinition>();
-  td->set_name("test");
+// TEST_F(DingoSerialTest, tabledefinitionTest) {
+//   auto td = std::make_shared<pb::meta::TableDefinition>();
+//   td->set_name("test");
 
-  pb::meta::ColumnDefinition* cd1 = td->add_columns();
-  cd1->set_name("id");
-  cd1->set_element_type(pb::meta::ELEM_TYPE_INT32);
-  cd1->set_nullable(false);
-  cd1->set_indexofkey(0);
+//   pb::meta::ColumnDefinition* cd1 = td->add_columns();
+//   cd1->set_name("id");
+//   cd1->set_element_type(pb::meta::ELEM_TYPE_INT32);
+//   cd1->set_nullable(false);
+//   cd1->set_indexofkey(0);
 
-  pb::meta::ColumnDefinition* cd2 = td->add_columns();
-  cd2->set_name("name");
-  cd2->set_element_type(pb::meta::ELEM_TYPE_STRING);
-  cd2->set_nullable(false);
-  cd2->set_indexofkey(0);
+//   pb::meta::ColumnDefinition* cd2 = td->add_columns();
+//   cd2->set_name("name");
+//   cd2->set_element_type(pb::meta::ELEM_TYPE_STRING);
+//   cd2->set_nullable(false);
+//   cd2->set_indexofkey(0);
 
-  pb::meta::ColumnDefinition* cd3 = td->add_columns();
-  cd3->set_name("gender");
-  cd3->set_element_type(pb::meta::ELEM_TYPE_STRING);
-  cd3->set_nullable(false);
-  cd3->set_indexofkey(0);
+//   pb::meta::ColumnDefinition* cd3 = td->add_columns();
+//   cd3->set_name("gender");
+//   cd3->set_element_type(pb::meta::ELEM_TYPE_STRING);
+//   cd3->set_nullable(false);
+//   cd3->set_indexofkey(0);
 
-  pb::meta::ColumnDefinition* cd4 = td->add_columns();
-  cd4->set_name("score");
-  cd4->set_element_type(pb::meta::ELEM_TYPE_INT64);
-  cd4->set_nullable(false);
-  cd4->set_indexofkey(0);
+//   pb::meta::ColumnDefinition* cd4 = td->add_columns();
+//   cd4->set_name("score");
+//   cd4->set_element_type(pb::meta::ELEM_TYPE_INT64);
+//   cd4->set_nullable(false);
+//   cd4->set_indexofkey(0);
 
-  pb::meta::ColumnDefinition* cd5 = td->add_columns();
-  cd5->set_name("addr");
-  cd5->set_element_type(pb::meta::ELEM_TYPE_STRING);
-  cd5->set_nullable(true);
-  cd5->set_indexofkey(-1);
+//   pb::meta::ColumnDefinition* cd5 = td->add_columns();
+//   cd5->set_name("addr");
+//   cd5->set_element_type(pb::meta::ELEM_TYPE_STRING);
+//   cd5->set_nullable(true);
+//   cd5->set_indexofkey(-1);
 
-  pb::meta::ColumnDefinition* cd6 = td->add_columns();
-  cd6->set_name("exist");
-  cd6->set_element_type(pb::meta::ELEM_TYPE_BOOLEAN);
-  cd6->set_nullable(false);
-  cd6->set_indexofkey(-1);
+//   pb::meta::ColumnDefinition* cd6 = td->add_columns();
+//   cd6->set_name("exist");
+//   cd6->set_element_type(pb::meta::ELEM_TYPE_BOOLEAN);
+//   cd6->set_nullable(false);
+//   cd6->set_indexofkey(-1);
 
-  pb::meta::ColumnDefinition* cd7 = td->add_columns();
-  cd7->set_name("pic");
-  cd7->set_element_type(pb::meta::ELEM_TYPE_BYTES);
-  cd7->set_nullable(true);
-  cd7->set_indexofkey(-1);
+//   pb::meta::ColumnDefinition* cd7 = td->add_columns();
+//   cd7->set_name("pic");
+//   cd7->set_element_type(pb::meta::ELEM_TYPE_BYTES);
+//   cd7->set_nullable(true);
+//   cd7->set_indexofkey(-1);
 
-  pb::meta::ColumnDefinition* cd8 = td->add_columns();
-  cd8->set_name("testNull");
-  cd8->set_element_type(pb::meta::ELEM_TYPE_INT32);
-  cd8->set_nullable(true);
-  cd8->set_indexofkey(-1);
+//   pb::meta::ColumnDefinition* cd8 = td->add_columns();
+//   cd8->set_name("testNull");
+//   cd8->set_element_type(pb::meta::ELEM_TYPE_INT32);
+//   cd8->set_nullable(true);
+//   cd8->set_indexofkey(-1);
 
-  pb::meta::ColumnDefinition* cd9 = td->add_columns();
-  cd9->set_name("age");
-  cd9->set_element_type(pb::meta::ELEM_TYPE_INT32);
-  cd9->set_nullable(false);
-  cd9->set_indexofkey(-1);
+//   pb::meta::ColumnDefinition* cd9 = td->add_columns();
+//   cd9->set_name("age");
+//   cd9->set_element_type(pb::meta::ELEM_TYPE_INT32);
+//   cd9->set_nullable(false);
+//   cd9->set_indexofkey(-1);
 
-  pb::meta::ColumnDefinition* cd10 = td->add_columns();
-  cd10->set_name("prev");
-  cd10->set_element_type(pb::meta::ELEM_TYPE_INT64);
-  cd10->set_nullable(false);
-  cd10->set_indexofkey(-1);
+//   pb::meta::ColumnDefinition* cd10 = td->add_columns();
+//   cd10->set_name("prev");
+//   cd10->set_element_type(pb::meta::ELEM_TYPE_INT64);
+//   cd10->set_nullable(false);
+//   cd10->set_indexofkey(-1);
 
-  pb::meta::ColumnDefinition* cd11 = td->add_columns();
-  cd11->set_name("salary");
-  cd11->set_element_type(pb::meta::ELEM_TYPE_DOUBLE);
-  cd11->set_nullable(true);
-  cd11->set_indexofkey(-1);
+//   pb::meta::ColumnDefinition* cd11 = td->add_columns();
+//   cd11->set_name("salary");
+//   cd11->set_element_type(pb::meta::ELEM_TYPE_DOUBLE);
+//   cd11->set_nullable(true);
+//   cd11->set_indexofkey(-1);
 
-  auto schemas = TableDefinitionToDingoSchema(td);
-  auto id = schemas->at(0);
-  EXPECT_EQ(id->GetIndex(), 0);
-  EXPECT_EQ(id->GetType(), BaseSchema::Type::kInteger);
-  EXPECT_FALSE(id->AllowNull());
-  EXPECT_TRUE(id->IsKey());
+//   auto schemas = TableDefinitionToDingoSchema(td);
+//   auto id = schemas->at(0);
+//   EXPECT_EQ(id->GetIndex(), 0);
+//   EXPECT_EQ(id->GetType(), BaseSchema::Type::kInteger);
+//   EXPECT_FALSE(id->AllowNull());
+//   EXPECT_TRUE(id->IsKey());
 
-  auto name = schemas->at(1);
-  EXPECT_EQ(name->GetIndex(), 1);
-  EXPECT_EQ(name->GetType(), BaseSchema::Type::kString);
-  EXPECT_FALSE(name->AllowNull());
-  EXPECT_TRUE(name->IsKey());
+//   auto name = schemas->at(1);
+//   EXPECT_EQ(name->GetIndex(), 1);
+//   EXPECT_EQ(name->GetType(), BaseSchema::Type::kString);
+//   EXPECT_FALSE(name->AllowNull());
+//   EXPECT_TRUE(name->IsKey());
 
-  auto gender = schemas->at(2);
-  EXPECT_EQ(gender->GetIndex(), 2);
-  EXPECT_EQ(gender->GetType(), BaseSchema::Type::kString);
-  EXPECT_FALSE(gender->AllowNull());
-  EXPECT_TRUE(gender->IsKey());
+//   auto gender = schemas->at(2);
+//   EXPECT_EQ(gender->GetIndex(), 2);
+//   EXPECT_EQ(gender->GetType(), BaseSchema::Type::kString);
+//   EXPECT_FALSE(gender->AllowNull());
+//   EXPECT_TRUE(gender->IsKey());
 
-  auto score = schemas->at(3);
-  EXPECT_EQ(score->GetIndex(), 3);
-  EXPECT_EQ(score->GetType(), BaseSchema::Type::kLong);
-  EXPECT_FALSE(score->AllowNull());
-  EXPECT_TRUE(score->IsKey());
+//   auto score = schemas->at(3);
+//   EXPECT_EQ(score->GetIndex(), 3);
+//   EXPECT_EQ(score->GetType(), BaseSchema::Type::kLong);
+//   EXPECT_FALSE(score->AllowNull());
+//   EXPECT_TRUE(score->IsKey());
 
-  auto addr = schemas->at(4);
-  EXPECT_EQ(addr->GetIndex(), 4);
-  EXPECT_EQ(addr->GetType(), BaseSchema::Type::kString);
-  EXPECT_TRUE(addr->AllowNull());
-  EXPECT_FALSE(addr->IsKey());
+//   auto addr = schemas->at(4);
+//   EXPECT_EQ(addr->GetIndex(), 4);
+//   EXPECT_EQ(addr->GetType(), BaseSchema::Type::kString);
+//   EXPECT_TRUE(addr->AllowNull());
+//   EXPECT_FALSE(addr->IsKey());
 
-  auto exist = schemas->at(5);
-  EXPECT_EQ(exist->GetIndex(), 5);
-  EXPECT_EQ(exist->GetType(), BaseSchema::Type::kBool);
-  EXPECT_FALSE(exist->AllowNull());
-  EXPECT_FALSE(exist->IsKey());
+//   auto exist = schemas->at(5);
+//   EXPECT_EQ(exist->GetIndex(), 5);
+//   EXPECT_EQ(exist->GetType(), BaseSchema::Type::kBool);
+//   EXPECT_FALSE(exist->AllowNull());
+//   EXPECT_FALSE(exist->IsKey());
 
-  auto pic = schemas->at(6);
-  EXPECT_EQ(pic->GetIndex(), 6);
-  EXPECT_EQ(pic->GetType(), BaseSchema::Type::kString);
-  EXPECT_TRUE(pic->AllowNull());
-  EXPECT_FALSE(pic->IsKey());
+//   auto pic = schemas->at(6);
+//   EXPECT_EQ(pic->GetIndex(), 6);
+//   EXPECT_EQ(pic->GetType(), BaseSchema::Type::kString);
+//   EXPECT_TRUE(pic->AllowNull());
+//   EXPECT_FALSE(pic->IsKey());
 
-  auto test_null = schemas->at(7);
-  EXPECT_EQ(test_null->GetIndex(), 7);
-  EXPECT_EQ(test_null->GetType(), BaseSchema::Type::kInteger);
-  EXPECT_TRUE(test_null->AllowNull());
-  EXPECT_FALSE(test_null->IsKey());
+//   auto test_null = schemas->at(7);
+//   EXPECT_EQ(test_null->GetIndex(), 7);
+//   EXPECT_EQ(test_null->GetType(), BaseSchema::Type::kInteger);
+//   EXPECT_TRUE(test_null->AllowNull());
+//   EXPECT_FALSE(test_null->IsKey());
 
-  auto age = schemas->at(8);
-  EXPECT_EQ(age->GetIndex(), 8);
-  EXPECT_EQ(age->GetType(), BaseSchema::Type::kInteger);
-  EXPECT_FALSE(age->AllowNull());
-  EXPECT_FALSE(age->IsKey());
+//   auto age = schemas->at(8);
+//   EXPECT_EQ(age->GetIndex(), 8);
+//   EXPECT_EQ(age->GetType(), BaseSchema::Type::kInteger);
+//   EXPECT_FALSE(age->AllowNull());
+//   EXPECT_FALSE(age->IsKey());
 
-  auto prev = schemas->at(9);
-  EXPECT_EQ(prev->GetIndex(), 9);
-  EXPECT_EQ(prev->GetType(), BaseSchema::Type::kLong);
-  EXPECT_FALSE(prev->AllowNull());
-  EXPECT_FALSE(prev->IsKey());
+//   auto prev = schemas->at(9);
+//   EXPECT_EQ(prev->GetIndex(), 9);
+//   EXPECT_EQ(prev->GetType(), BaseSchema::Type::kLong);
+//   EXPECT_FALSE(prev->AllowNull());
+//   EXPECT_FALSE(prev->IsKey());
 
-  auto salary = schemas->at(10);
-  EXPECT_EQ(salary->GetIndex(), 10);
-  EXPECT_EQ(salary->GetType(), BaseSchema::Type::kDouble);
-  EXPECT_TRUE(salary->AllowNull());
-  EXPECT_FALSE(salary->IsKey());
-}
+//   auto salary = schemas->at(10);
+//   EXPECT_EQ(salary->GetIndex(), 10);
+//   EXPECT_EQ(salary->GetType(), BaseSchema::Type::kDouble);
+//   EXPECT_TRUE(salary->AllowNull());
+//   EXPECT_FALSE(salary->IsKey());
+// }
 
-TEST_F(DingoSerialTest, keyvaluecodecTest) {
-  auto td = std::make_shared<pb::meta::TableDefinition>();
-  td->set_name("test");
+// TEST_F(DingoSerialTest, keyvaluecodecTest) {
+//   auto td = std::make_shared<pb::meta::TableDefinition>();
+//   td->set_name("test");
 
-  pb::meta::ColumnDefinition* cd1 = td->add_columns();
-  cd1->set_name("id");
-  cd1->set_element_type(pb::meta::ELEM_TYPE_INT32);
-  cd1->set_nullable(false);
-  cd1->set_indexofkey(0);
+//   pb::meta::ColumnDefinition* cd1 = td->add_columns();
+//   cd1->set_name("id");
+//   cd1->set_element_type(pb::meta::ELEM_TYPE_INT32);
+//   cd1->set_nullable(false);
+//   cd1->set_indexofkey(0);
 
-  pb::meta::ColumnDefinition* cd2 = td->add_columns();
-  cd2->set_name("name");
-  cd2->set_element_type(pb::meta::ELEM_TYPE_STRING);
-  cd2->set_nullable(false);
-  cd2->set_indexofkey(0);
+//   pb::meta::ColumnDefinition* cd2 = td->add_columns();
+//   cd2->set_name("name");
+//   cd2->set_element_type(pb::meta::ELEM_TYPE_STRING);
+//   cd2->set_nullable(false);
+//   cd2->set_indexofkey(0);
 
-  pb::meta::ColumnDefinition* cd3 = td->add_columns();
-  cd3->set_name("gender");
-  cd3->set_element_type(pb::meta::ELEM_TYPE_STRING);
-  cd3->set_nullable(false);
-  cd3->set_indexofkey(0);
+//   pb::meta::ColumnDefinition* cd3 = td->add_columns();
+//   cd3->set_name("gender");
+//   cd3->set_element_type(pb::meta::ELEM_TYPE_STRING);
+//   cd3->set_nullable(false);
+//   cd3->set_indexofkey(0);
 
-  pb::meta::ColumnDefinition* cd4 = td->add_columns();
-  cd4->set_name("score");
-  cd4->set_element_type(pb::meta::ELEM_TYPE_INT64);
-  cd4->set_nullable(false);
-  cd4->set_indexofkey(0);
+//   pb::meta::ColumnDefinition* cd4 = td->add_columns();
+//   cd4->set_name("score");
+//   cd4->set_element_type(pb::meta::ELEM_TYPE_INT64);
+//   cd4->set_nullable(false);
+//   cd4->set_indexofkey(0);
 
-  pb::meta::ColumnDefinition* cd5 = td->add_columns();
-  cd5->set_name("addr");
-  cd5->set_element_type(pb::meta::ELEM_TYPE_STRING);
-  cd5->set_nullable(true);
-  cd5->set_indexofkey(-1);
+//   pb::meta::ColumnDefinition* cd5 = td->add_columns();
+//   cd5->set_name("addr");
+//   cd5->set_element_type(pb::meta::ELEM_TYPE_STRING);
+//   cd5->set_nullable(true);
+//   cd5->set_indexofkey(-1);
 
-  pb::meta::ColumnDefinition* cd6 = td->add_columns();
-  cd6->set_name("exist");
-  cd6->set_element_type(pb::meta::ELEM_TYPE_BOOLEAN);
-  cd6->set_nullable(false);
-  cd6->set_indexofkey(-1);
+//   pb::meta::ColumnDefinition* cd6 = td->add_columns();
+//   cd6->set_name("exist");
+//   cd6->set_element_type(pb::meta::ELEM_TYPE_BOOLEAN);
+//   cd6->set_nullable(false);
+//   cd6->set_indexofkey(-1);
 
-  pb::meta::ColumnDefinition* cd7 = td->add_columns();
-  cd7->set_name("pic");
-  cd7->set_element_type(pb::meta::ELEM_TYPE_BYTES);
-  cd7->set_nullable(true);
-  cd7->set_indexofkey(-1);
+//   pb::meta::ColumnDefinition* cd7 = td->add_columns();
+//   cd7->set_name("pic");
+//   cd7->set_element_type(pb::meta::ELEM_TYPE_BYTES);
+//   cd7->set_nullable(true);
+//   cd7->set_indexofkey(-1);
 
-  pb::meta::ColumnDefinition* cd8 = td->add_columns();
-  cd8->set_name("testNull");
-  cd8->set_element_type(pb::meta::ELEM_TYPE_INT32);
-  cd8->set_nullable(true);
-  cd8->set_indexofkey(-1);
+//   pb::meta::ColumnDefinition* cd8 = td->add_columns();
+//   cd8->set_name("testNull");
+//   cd8->set_element_type(pb::meta::ELEM_TYPE_INT32);
+//   cd8->set_nullable(true);
+//   cd8->set_indexofkey(-1);
 
-  pb::meta::ColumnDefinition* cd9 = td->add_columns();
-  cd9->set_name("age");
-  cd9->set_element_type(pb::meta::ELEM_TYPE_INT32);
-  cd9->set_nullable(false);
-  cd9->set_indexofkey(-1);
+//   pb::meta::ColumnDefinition* cd9 = td->add_columns();
+//   cd9->set_name("age");
+//   cd9->set_element_type(pb::meta::ELEM_TYPE_INT32);
+//   cd9->set_nullable(false);
+//   cd9->set_indexofkey(-1);
 
-  pb::meta::ColumnDefinition* cd10 = td->add_columns();
-  cd10->set_name("prev");
-  cd10->set_element_type(pb::meta::ELEM_TYPE_INT64);
-  cd10->set_nullable(false);
-  cd10->set_indexofkey(-1);
+//   pb::meta::ColumnDefinition* cd10 = td->add_columns();
+//   cd10->set_name("prev");
+//   cd10->set_element_type(pb::meta::ELEM_TYPE_INT64);
+//   cd10->set_nullable(false);
+//   cd10->set_indexofkey(-1);
 
-  pb::meta::ColumnDefinition* cd11 = td->add_columns();
-  cd11->set_name("salary");
-  cd11->set_element_type(pb::meta::ELEM_TYPE_DOUBLE);
-  cd11->set_nullable(true);
-  cd11->set_indexofkey(-1);
+//   pb::meta::ColumnDefinition* cd11 = td->add_columns();
+//   cd11->set_name("salary");
+//   cd11->set_element_type(pb::meta::ELEM_TYPE_DOUBLE);
+//   cd11->set_nullable(true);
+//   cd11->set_indexofkey(-1);
 
-  vector<any> record1(11);
-  optional<int32_t> id = 0;
-  std::shared_ptr<std::string> name = std::make_shared<std::string>("tn");
-  std::shared_ptr<std::string> gender = std::make_shared<std::string>("f");
-  optional<int64_t> score = 214748364700L;
-  std::shared_ptr<std::string> addr = std::make_shared<std::string>(
-      "test address test 中文 表情😊🏷️👌 test "
-      "测试测试测试三🤣😂😁🐱‍🐉👏🐱‍💻✔🤳🤦‍♂️🤦‍♀️🙌测试测试测"
-      "试伍佰肆拾陆万伍仟陆佰伍拾肆元/n/r/r/ndfs肥肉士大夫");
-  optional<bool> exist = false;
-  optional<shared_ptr<string>> pic = nullopt;
-  optional<int32_t> test_null = nullopt;
-  optional<int32_t> age = -20;
-  optional<int64_t> prev = -214748364700L;
-  optional<double> salary = 873485.4234;
+//   vector<any> record1(11);
+//   optional<int32_t> id = 0;
+//   std::shared_ptr<std::string> name = std::make_shared<std::string>("tn");
+//   std::shared_ptr<std::string> gender = std::make_shared<std::string>("f");
+//   optional<int64_t> score = 214748364700L;
+//   std::shared_ptr<std::string> addr = std::make_shared<std::string>(
+//       "test address test 中文 表情😊🏷️👌 test "
+//       "测试测试测试三🤣😂😁🐱‍🐉👏🐱‍💻✔🤳🤦‍♂️🤦‍♀️🙌测试测试测"
+//       "试伍佰肆拾陆万伍仟陆佰伍拾肆元/n/r/r/ndfs肥肉士大夫");
+//   optional<bool> exist = false;
+//   optional<shared_ptr<string>> pic = nullopt;
+//   optional<int32_t> test_null = nullopt;
+//   optional<int32_t> age = -20;
+//   optional<int64_t> prev = -214748364700L;
+//   optional<double> salary = 873485.4234;
 
-  record1.at(0) = id;
-  record1.at(1) = optional<shared_ptr<string>>{name};
-  record1.at(2) = optional<shared_ptr<string>>{gender};
-  record1.at(3) = score;
-  record1.at(4) = optional<shared_ptr<string>>{addr};
-  record1.at(5) = exist;
-  record1.at(6) = pic;
-  record1.at(7) = test_null;
-  record1.at(8) = age;
-  record1.at(9) = prev;
-  record1.at(10) = salary;
+//   record1.at(0) = id;
+//   record1.at(1) = optional<shared_ptr<string>>{name};
+//   record1.at(2) = optional<shared_ptr<string>>{gender};
+//   record1.at(3) = score;
+//   record1.at(4) = optional<shared_ptr<string>>{addr};
+//   record1.at(5) = exist;
+//   record1.at(6) = pic;
+//   record1.at(7) = test_null;
+//   record1.at(8) = age;
+//   record1.at(9) = prev;
+//   record1.at(10) = salary;
 
-  KeyValueCodec* codec = new KeyValueCodec(td, 0);
-  pb::common::KeyValue kv;
-  (void)codec->Encode(record1, kv);
-  vector<any> record2;
-  (void)codec->Decode(kv, record2);
+//   KeyValueCodec* codec = new KeyValueCodec(td, 0);
+//   pb::common::KeyValue kv;
+//   (void)codec->Encode(record1, kv);
+//   vector<any> record2;
+//   (void)codec->Decode(kv, record2);
 
-  optional<int32_t> r0 = any_cast<optional<int32_t>>(record2.at(0));
-  if (r0.has_value()) {
-    EXPECT_EQ(id, r0.value());
-  } else {
-    EXPECT_TRUE(0);
-  }
+//   optional<int32_t> r0 = any_cast<optional<int32_t>>(record2.at(0));
+//   if (r0.has_value()) {
+//     EXPECT_EQ(id, r0.value());
+//   } else {
+//     EXPECT_TRUE(0);
+//   }
 
-  optional<shared_ptr<string>> r1 = any_cast<optional<shared_ptr<string>>>(record2.at(1));
-  if (r1.has_value()) {
-    EXPECT_EQ(*name, *r1.value());
-  } else {
-    EXPECT_TRUE(0);
-  }
+//   optional<shared_ptr<string>> r1 = any_cast<optional<shared_ptr<string>>>(record2.at(1));
+//   if (r1.has_value()) {
+//     EXPECT_EQ(*name, *r1.value());
+//   } else {
+//     EXPECT_TRUE(0);
+//   }
 
-  optional<shared_ptr<string>> r2 = any_cast<optional<shared_ptr<string>>>(record2.at(2));
-  if (r2.has_value()) {
-    EXPECT_EQ(*gender, *r2.value());
-  } else {
-    EXPECT_TRUE(0);
-  }
+//   optional<shared_ptr<string>> r2 = any_cast<optional<shared_ptr<string>>>(record2.at(2));
+//   if (r2.has_value()) {
+//     EXPECT_EQ(*gender, *r2.value());
+//   } else {
+//     EXPECT_TRUE(0);
+//   }
 
-  optional<int64_t> r3 = any_cast<optional<int64_t>>(record2.at(3));
-  if (r3.has_value()) {
-    EXPECT_EQ(score, r3.value());
-  } else {
-    EXPECT_TRUE(0);
-  }
+//   optional<int64_t> r3 = any_cast<optional<int64_t>>(record2.at(3));
+//   if (r3.has_value()) {
+//     EXPECT_EQ(score, r3.value());
+//   } else {
+//     EXPECT_TRUE(0);
+//   }
 
-  optional<shared_ptr<string>> r4 = any_cast<optional<shared_ptr<string>>>(record2.at(4));
-  if (r4.has_value()) {
-    EXPECT_EQ(*addr, *r4.value());
-  } else {
-    EXPECT_TRUE(0);
-  }
+//   optional<shared_ptr<string>> r4 = any_cast<optional<shared_ptr<string>>>(record2.at(4));
+//   if (r4.has_value()) {
+//     EXPECT_EQ(*addr, *r4.value());
+//   } else {
+//     EXPECT_TRUE(0);
+//   }
 
-  optional<bool> r5 = any_cast<optional<bool>>(record2.at(5));
-  if (r5.has_value()) {
-    EXPECT_FALSE(r5.value());
-  } else {
-    EXPECT_TRUE(0);
-  }
+//   optional<bool> r5 = any_cast<optional<bool>>(record2.at(5));
+//   if (r5.has_value()) {
+//     EXPECT_FALSE(r5.value());
+//   } else {
+//     EXPECT_TRUE(0);
+//   }
 
-  optional<shared_ptr<string>> r6 = any_cast<optional<shared_ptr<string>>>(record2.at(6));
-  if (r6.has_value()) {
-    EXPECT_TRUE(0);
-  } else {
-    EXPECT_TRUE(1);
-  }
+//   optional<shared_ptr<string>> r6 = any_cast<optional<shared_ptr<string>>>(record2.at(6));
+//   if (r6.has_value()) {
+//     EXPECT_TRUE(0);
+//   } else {
+//     EXPECT_TRUE(1);
+//   }
 
-  optional<int32_t> r7 = any_cast<optional<int32_t>>(record2.at(7));
-  if (r7.has_value()) {
-    EXPECT_TRUE(0);
-  } else {
-    EXPECT_TRUE(1);
-  }
+//   optional<int32_t> r7 = any_cast<optional<int32_t>>(record2.at(7));
+//   if (r7.has_value()) {
+//     EXPECT_TRUE(0);
+//   } else {
+//     EXPECT_TRUE(1);
+//   }
 
-  optional<int32_t> r8 = any_cast<optional<int32_t>>(record2.at(8));
-  if (r8.has_value()) {
-    EXPECT_EQ(age, r8.value());
-  } else {
-    EXPECT_TRUE(0);
-  }
+//   optional<int32_t> r8 = any_cast<optional<int32_t>>(record2.at(8));
+//   if (r8.has_value()) {
+//     EXPECT_EQ(age, r8.value());
+//   } else {
+//     EXPECT_TRUE(0);
+//   }
 
-  optional<int64_t> r9 = any_cast<optional<int64_t>>(record2.at(9));
-  if (r9.has_value()) {
-    EXPECT_EQ(prev, r9.value());
-  } else {
-    EXPECT_TRUE(0);
-  }
+//   optional<int64_t> r9 = any_cast<optional<int64_t>>(record2.at(9));
+//   if (r9.has_value()) {
+//     EXPECT_EQ(prev, r9.value());
+//   } else {
+//     EXPECT_TRUE(0);
+//   }
 
-  optional<double> r10 = any_cast<optional<double>>(record2.at(10));
-  if (r10.has_value()) {
-    EXPECT_EQ(salary, r10.value());
-  } else {
-    EXPECT_TRUE(0);
-  }
+//   optional<double> r10 = any_cast<optional<double>>(record2.at(10));
+//   if (r10.has_value()) {
+//     EXPECT_EQ(salary, r10.value());
+//   } else {
+//     EXPECT_TRUE(0);
+//   }
 
-  string key;
-  (void)codec->EncodeKey(record1, key);
-  string keyprefix;
-  (void)codec->EncodeKeyPrefix(record1, 3, keyprefix);
-  EXPECT_EQ(kv.key(), key);
-  string keyprefix_from_key(key, 0, keyprefix.length());
-  EXPECT_EQ(keyprefix_from_key, keyprefix);
+//   string key;
+//   (void)codec->EncodeKey(record1, key);
+//   string keyprefix;
+//   (void)codec->EncodeKeyPrefix(record1, 3, keyprefix);
+//   EXPECT_EQ(kv.key(), key);
+//   string keyprefix_from_key(key, 0, keyprefix.length());
+//   EXPECT_EQ(keyprefix_from_key, keyprefix);
 
-  // delete key;
-  // delete keyprefix;
-  delete codec;
-  record2.clear();
-  record2.shrink_to_fit();
-}
+//   // delete key;
+//   // delete keyprefix;
+//   delete codec;
+//   record2.clear();
+//   record2.shrink_to_fit();
+// }

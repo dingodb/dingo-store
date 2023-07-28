@@ -60,47 +60,14 @@ message DingoCommonId {
   uint64 entity_id = 3;
 }
 
-// Define types about SQL.
-enum SqlType {
-  SQL_TYPE_BOOLEAN = 0;
-  SQL_TYPE_INTEGER = 1;
-  SQL_TYPE_BIGINT = 2;
-  SQL_TYPE_DOUBLE = 3;
-  SQL_TYPE_FLOAT = 4;
-  SQL_TYPE_DATE = 5;
-  SQL_TYPE_TIME = 6;
-  SQL_TYPE_TIMESTAMP = 7;
-  SQL_TYPE_VARCHAR = 8;
-  SQL_TYPE_ARRAY = 9;
-  SQL_TYPE_MULTISET = 10;
-  SQL_TYPE_BYTES = 11;
-  SQL_TYPE_ANY = 12;
-}
-
-// Define ElementType about Composite Structure.
-enum ElementType {
-  ELEM_TYPE_DOUBLE = 0;
-  ELEM_TYPE_FLOAT = 1;
-  ELEM_TYPE_INT32 = 2;
-  ELEM_TYPE_INT64 = 3;
-  ELEM_TYPE_UINT32 = 4;
-  ELEM_TYPE_UINT64 = 5;
-  ELEM_TYPE_BOOLEAN = 6;
-  ELEM_TYPE_STRING = 7;
-  ELEM_TYPE_BYTES = 8;
-  ELEM_TYPE_FIX32 = 9;
-  ELEM_TYPE_FIX64 = 10;
-  ELEM_TYPE_SFIX32 = 11;
-  ELEM_TYPE_SFIX64 = 12;
-}
 
 /**
  * Column Definition.
  */
 message ColumnDefinition {
   string name = 1;
-  SqlType sql_type = 2;
-  ElementType element_type = 3;
+  string sql_type = 2;
+  string element_type = 3;
   int32 precision = 4;
   int32 scale = 5;
   bool nullable = 6;
