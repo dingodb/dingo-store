@@ -36,17 +36,31 @@ KeyValueCodec::KeyValueCodec(std::shared_ptr<pb::meta::TableDefinition> td, uint
 KeyValueCodec::~KeyValueCodec() = default;
 
 int KeyValueCodec::Decode(const std::string& key, const std::string& value, std::vector<std::any>& record) {
-  std::vector<std::any> element_record;
-  int ret = rd_.Decode(key, value, element_record);
+  // std::vector<std::any> element_record;
+  int ret = rd_.Decode(key, value, record);
   if (ret < 0) {
     return ret;
   }
+  return 0;
+  // return ElementToSql(*td_, element_record, record);
+}
 
-  return ElementToSql(*td_, element_record, record);
+int KeyValueCodec::Decode(const std::string& key, const std::string& value, const std::vector<int>& column_indexes, std::vector<std::any>& record) {
+  // std::vector<std::any> element_record;
+  int ret = rd_.Decode(key, value, column_indexes, record);
+  if (ret < 0) {
+    return ret;
+  }
+  return 0;
+  // return ElementToSql(*td_, element_record, record);
 }
 
 int KeyValueCodec::Decode(const pb::common::KeyValue& key_value, std::vector<std::any>& record) {
   return Decode(key_value.key(), key_value.value(), record);
+}
+
+int KeyValueCodec::Decode(const pb::common::KeyValue& key_value, const std::vector<int>& column_indexes, std::vector<std::any>& record) {
+  return Decode(key_value.key(), key_value.value(), column_indexes, record);
 }
 
 int KeyValueCodec::Decode(KeyValue& keyvalue, std::vector<std::any>& record) {
@@ -54,12 +68,14 @@ int KeyValueCodec::Decode(KeyValue& keyvalue, std::vector<std::any>& record) {
 }
 
 int KeyValueCodec::Encode(const std::vector<std::any>& record, std::string& key, std::string& value) {
-  std::vector<std::any> sql_record;
-  int ret = SqlToElement(*td_, record, sql_record);
+  // std::vector<std::any> sql_record;
+  // int ret = SqlToElement(*td_, record, sql_record);
+  int ret = re_.Encode(record, key, value);
   if (ret < 0) {
     return ret;
   }
-  return re_.Encode(sql_record, key, value);
+  // return re_.Encode(sql_record, key, value);
+  return 0;
 }
 
 int KeyValueCodec::Encode(const std::vector<std::any>& record, pb::common::KeyValue& key_value) {

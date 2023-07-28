@@ -35,7 +35,11 @@ void FormatSchema(std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> sche
 int* GetApproPerRecordSize(std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> schemas);
 
 bool VectorFindAndRemove(std::vector<int>* v, int t);
-bool VectorFind(const std::vector<int>& v, int t);
+// bool VectorFind(const std::vector<int>& v, int t);
+// bool VectorFind(const std::vector<int>& v, int t, int n);
+inline bool VectorFind(const std::vector<int>& v, int t, int n) {
+  return v[n] == t;
+}
 
 std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> TableDefinitionToDingoSchema(
     std::shared_ptr<pb::meta::TableDefinition> td);

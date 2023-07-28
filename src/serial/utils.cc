@@ -103,14 +103,22 @@ bool VectorFindAndRemove(std::vector<int>* v, int t) {
   return false;
 }
 
-bool VectorFind(const std::vector<int>& v, int t) {
-  for (int it : v) {
-    if (it == t) {
-      return true;
-    }
-  }
-  return false;
-}
+// bool VectorFind(const std::vector<int>& v, int t) {
+//   for (int it : v) {
+//     if (it == t) {
+//       return true;
+//     }
+//   }
+//   return false;
+// }
+
+// bool VectorFind(const std::vector<int>& v, int t) {
+//   return std::binary_search(v.begin(), v.end(), t);
+// }
+
+// bool VectorFind(const std::vector<int>& v, int t, int n) {
+//   return v[n] == t;
+// }
 
 std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> TableDefinitionToDingoSchema(
     std::shared_ptr<pb::meta::TableDefinition> td) {

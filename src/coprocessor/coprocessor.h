@@ -61,6 +61,7 @@ class Coprocessor {
   butil::Status InitGroupBySerialSchema(const pb::store::Coprocessor& coprocessor);
 
   void GetOriginalColumnIndexes();
+  void GetSelectionColumnIndexes();
 
   pb::store::Coprocessor coprocessor_;
   std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> original_serial_schemas_;
@@ -77,6 +78,7 @@ class Coprocessor {
   std::shared_ptr<AggregationManager> aggregation_manager_;
   std::shared_ptr<AggregationIterator> aggregation_iterator_;
   std::vector<int> original_column_indexes_;
+  std::vector<int> selection_column_indexes_;
 
   std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> original_serial_schemas_sorted_;
   std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> selection_serial_schemas_sorted_;

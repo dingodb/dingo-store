@@ -41,7 +41,11 @@ class KeyValueCodec {
   ~KeyValueCodec();
 
   int Decode(const std::string& key, const std::string& value, std::vector<std::any>& record /*output*/);
+  int Decode(const std::string& key, const std::string& value, const std::vector<int>& column_indexes, std::vector<std::any>& record);
+
   int Decode(const pb::common::KeyValue& key_value, std::vector<std::any>& record /*output*/);
+  int Decode(const pb::common::KeyValue& key_value, const std::vector<int>& column_indexes, std::vector<std::any>& record);
+  
   int Decode(KeyValue& keyvalue, std::vector<std::any>& record /*output*/);
 
   int Encode(const std::vector<std::any>& record, std::string& key /*output*/, std::string& value /*output*/);
