@@ -25,6 +25,24 @@ class ConfigTest : public testing::Test {
   void TearDown() override {}
 };
 
+TEST(ConfigTest, scalar_bool) {
+  {
+    dingodb::YamlConfig config;
+    const std::string yaml = "enable: true";
+
+    config.Load(yaml);
+    EXPECT_EQ(true, config.GetBool("enable"));
+  }
+
+  {
+    dingodb::YamlConfig config;
+    const std::string yaml = "enable: false";
+
+    config.Load(yaml);
+    EXPECT_EQ(false, config.GetBool("enable"));
+  }
+}
+
 TEST(ConfigTest, scalar_01) {
   dingodb::YamlConfig config;
 
