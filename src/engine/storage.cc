@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <vector>
 
+#include "butil/compiler_specific.h"
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
@@ -24,8 +25,10 @@
 #include "fmt/core.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
+#include "proto/index.pb.h"
 #include "scan/scan.h"
 #include "scan/scan_manager.h"
+#include "vector/vector_index_utils.h"
 namespace dingodb {
 
 Storage::Storage(std::shared_ptr<Engine> engine) : engine_(engine) {}
@@ -341,6 +344,83 @@ butil::Status Storage::VectorGetRegionMetrics(std::shared_ptr<Context> ctx, uint
   }
 
   return butil::Status();
+}
+
+butil::Status Storage::VectorCalcDistance([[maybe_unused]] std::shared_ptr<Context> ctx,
+                                          [[maybe_unused]] uint64_t region_id,
+                                          const ::dingodb::pb::index::VectorCalcDistanceRequest& request,
+                                          std::vector<std::vector<float>>& distances,
+                                          std::vector<::dingodb::pb::common::Vector>& result_op_left_vectors,
+                                          std::vector<::dingodb::pb::common::Vector>& result_op_right_vectors) {
+  // param check
+  auto algorithm_type = request.algorithm_type();
+  auto metric_type = request.metric_type();
+  const auto& op_left_vectors = request.op_left_vectors();
+  const auto& op_right_vectors = request.op_right_vectors();
+  auto is_return_normlize = request.is_return_normlize();
+
+  if (BAIDU_UNLIKELY(::dingodb::pb::index::AlgorithmType::ALGORITHM_NONE == algorithm_type)) {
+    std::string s = fmt::format("invalid algorithm type : ALGORITHM_NONE");
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
+  }
+
+  if (BAIDU_UNLIKELY(::dingodb::pb::common::MetricType::METRIC_TYPE_NONE == metric_type)) {
+    std::string s = fmt::format("invalid metric type : METRIC_TYPE_NONE");
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
+  }
+
+  if (BAIDU_UNLIKELY(op_left_vectors.empty() || op_right_vectors.empty())) {
+    std::string s = fmt::format("op_left_vectors empty or op_right_vectors empty. ignore");
+    DINGO_LOG(DEBUG) << s;
+    return butil::Status();
+  }
+
+  int32_t dimension = 0;
+
+  auto lambda_op_vector_check_function = [&dimension](const auto& op_vector, const std::string& name) {
+    if (!op_vector.empty()) {
+      size_t i = 0;
+      for (const auto& vector : op_vector) {
+        int32_t current_dimension = static_cast<int32_t>(vector.float_values().size());
+        if (0 == dimension) {
+          dimension = current_dimension;
+        }
+
+        if (dimension != current_dimension) {
+          std::string s = fmt::format("{} index : {}  dimension : {} unequal current_dimension : {}", name, i,
+                                      dimension, current_dimension);
+          DINGO_LOG(ERROR) << s;
+          return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
+        }
+        i++;
+      }
+    }
+
+    return butil::Status();
+  };
+
+  butil::Status status;
+
+  status = lambda_op_vector_check_function(op_left_vectors, "op_left_vectors");
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("lambda_op_vector_check_function : op_left_vectors failed");
+    return status;
+  }
+
+  status = lambda_op_vector_check_function(op_right_vectors, "op_right_vectors");
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("lambda_op_vector_check_function : op_right_vectors failed");
+    return status;
+  }
+
+  status = VectorIndexUtils::CalcDistanceEntry(request, distances, result_op_left_vectors, result_op_right_vectors);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("VectorIndexUtils::CalcDistanceEntry failed : {}", status.error_cstr());
+  }
+
+  return status;
 }
 
 }  // namespace dingodb

@@ -18,6 +18,7 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
@@ -602,6 +603,104 @@ void SendVectorAddBatch(ServerInteractionPtr interaction, uint64_t region_id, ui
                                  static_cast<long double>(total) / count);
 
   out.close();
+}
+
+void SendVectorCalcDistance(ServerInteractionPtr interaction, [[maybe_unused]] uint64_t region_id, uint32_t dimension,
+                            const std::string& alg_type, const std::string& metric_type, int32_t left_vector_size,
+                            int32_t right_vector_size, bool is_return_normlize) {
+  ::dingodb::pb::index::VectorCalcDistanceRequest request;
+  ::dingodb::pb::index::VectorCalcDistanceResponse response;
+
+  // if (dimension == 0) {
+  //   DINGO_LOG(ERROR) << "step_count must be greater than 0";
+  //   return;
+  // }
+
+  std::string real_alg_type = alg_type;
+  std::string real_metric_type = metric_type;
+
+  std::transform(real_alg_type.begin(), real_alg_type.end(), real_alg_type.begin(), ::tolower);
+  std::transform(real_metric_type.begin(), real_metric_type.end(), real_metric_type.begin(), ::tolower);
+
+  bool is_faiss = ("faiss" == real_alg_type);
+  bool is_hnsw = ("hnsw" == real_alg_type);
+
+  // if (!is_faiss && !is_hnsw) {
+  //   DINGO_LOG(ERROR) << "invalid alg_type :  use faiss or hnsw!!!";
+  //   return;
+  // }
+
+  bool is_l2 = ("l2" == real_metric_type);
+  bool is_ip = ("ip" == real_metric_type);
+  bool is_cosine = ("cosine" == real_metric_type);
+  // if (!is_l2 && !is_ip && !is_cosine) {
+  //   DINGO_LOG(ERROR) << "invalid metric_type :  use L2 or IP or cosine !!!";
+  //   return;
+  // }
+
+  // if (left_vector_size <= 0) {
+  //   DINGO_LOG(ERROR) << "left_vector_size <=0 : " << left_vector_size;
+  //   return;
+  // }
+
+  // if (right_vector_size <= 0) {
+  //   DINGO_LOG(ERROR) << "right_vector_size <=0 : " << left_vector_size;
+  //   return;
+  // }
+
+  dingodb::pb::index::AlgorithmType algorithm_type = dingodb::pb::index::AlgorithmType::ALGORITHM_NONE;
+  if (is_faiss) {
+    algorithm_type = dingodb::pb::index::AlgorithmType::ALGORITHM_FAISS;
+  }
+  if (is_hnsw) {
+    algorithm_type = dingodb::pb::index::AlgorithmType::ALGORITHM_HNSWLIB;
+  }
+
+  dingodb::pb::common::MetricType my_metric_type = dingodb::pb::common::MetricType::METRIC_TYPE_NONE;
+  if (is_l2) {
+    my_metric_type = dingodb::pb::common::MetricType::METRIC_TYPE_L2;
+  }
+  if (is_ip) {
+    my_metric_type = dingodb::pb::common::MetricType::METRIC_TYPE_INNER_PRODUCT;
+  }
+  if (is_cosine) {
+    my_metric_type = dingodb::pb::common::MetricType::METRIC_TYPE_COSINE;
+  }
+  google::protobuf::RepeatedPtrField<::dingodb::pb::common::Vector> op_left_vectors;
+  google::protobuf::RepeatedPtrField<::dingodb::pb::common::Vector> op_right_vectors;
+
+  std::mt19937 rng;
+  std::uniform_real_distribution<> distrib;
+
+  // op left assignment
+  for (size_t i = 0; i < left_vector_size; i++) {
+    ::dingodb::pb::common::Vector op_left_vector;
+    for (uint32_t i = 0; i < dimension; i++) {
+      op_left_vector.add_float_values(distrib(rng));
+    }
+    op_left_vectors.Add(std::move(op_left_vector));
+  }
+
+  // op right assignment
+  for (size_t i = 0; i < right_vector_size; i++) {
+    ::dingodb::pb::common::Vector op_right_vector;
+    for (uint32_t i = 0; i < dimension; i++) {
+      op_right_vector.add_float_values(distrib(rng));
+    }
+    op_right_vectors.Add(std::move(op_right_vector));  // NOLINT
+  }
+
+  request.set_algorithm_type(algorithm_type);
+  request.set_metric_type(my_metric_type);
+  request.set_is_return_normlize(is_return_normlize);
+  request.mutable_op_left_vectors()->Add(op_left_vectors.begin(), op_left_vectors.end());
+  request.mutable_op_right_vectors()->Add(op_right_vectors.begin(), op_right_vectors.end());
+
+  DINGO_LOG(INFO) << "SendVectorCalcDistance request: " << request.DebugString();
+
+  interaction->SendRequest("IndexService", "VectorCalcDistance", request, response);
+
+  DINGO_LOG(INFO) << "SendVectorCalcDistance response: " << response.DebugString();
 }
 
 void SendKvGet(ServerInteractionPtr interaction, uint64_t region_id, const std::string& key, std::string& value) {

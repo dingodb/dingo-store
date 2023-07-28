@@ -79,7 +79,7 @@ class VectorIndexHnsw : public VectorIndex {
 
   hnswlib::HierarchicalNSW<float>* GetHnswIndex();
 
-  void NormalizeVector(const float* data, float* norm_array) const;
+  //void NormalizeVector(const float* data, float* norm_array) const;
 
  private:
   // hnsw members

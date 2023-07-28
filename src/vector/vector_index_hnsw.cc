@@ -38,6 +38,7 @@
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "vector/vector_index.h"
+#include "vector/vector_index_utils.h"
 
 namespace dingodb {
 
@@ -196,7 +197,8 @@ butil::Status VectorIndexHnsw::Upsert(const std::vector<pb::common::VectorWithId
       ParallelFor(0, vector_with_ids.size(), real_threads, [&](size_t row, size_t thread_id) {
         // normalize vector
         size_t start_idx = thread_id * dimension_;
-        NormalizeVector((float*)vector_with_ids[row].vector().float_values().data(), (norm_array.data() + start_idx));
+        VectorIndexUtils::NormalizeVectorForHnsw((float*)vector_with_ids[row].vector().float_values().data(),
+                                                 dimension_, (norm_array.data() + start_idx));
 
         this->hnsw_index_->addPoint((void*)(norm_array.data() + start_idx), vector_with_ids[row].id(), true);
       });
@@ -357,7 +359,8 @@ butil::Status VectorIndexHnsw::Search(std::vector<pb::common::VectorWithId> vect
       std::vector<float> norm_array(hnsw_num_threads_ * dimension_);
       ParallelFor(0, vector_with_ids.size(), hnsw_num_threads_, [&](size_t row, size_t thread_id) {
         size_t start_idx = thread_id * dimension_;
-        NormalizeVector((float*)(data.get() + dimension_ * row), (norm_array.data() + start_idx));
+        VectorIndexUtils::NormalizeVectorForHnsw((float*)(data.get() + dimension_ * row), dimension_,
+                                                 (norm_array.data() + start_idx));
 
         std::priority_queue<std::pair<float, hnswlib::labeltype>> result =
             hnsw_index_->searchKnn(norm_array.data() + start_idx, topk);
@@ -543,11 +546,11 @@ butil::Status VectorIndexHnsw::GetMemorySize(uint64_t& memory_size) {
   return butil::Status::OK();
 }
 
-void VectorIndexHnsw::NormalizeVector(const float* data, float* norm_array) const {
-  float norm = 0.0f;
-  for (int i = 0; i < dimension_; i++) norm += data[i] * data[i];
-  norm = 1.0f / (sqrtf(norm) + 1e-30f);
-  for (int i = 0; i < dimension_; i++) norm_array[i] = data[i] * norm;
-}
+// void VectorIndexHnsw::NormalizeVector(const float* data, float* norm_array) const {
+//   float norm = 0.0f;
+//   for (int i = 0; i < dimension_; i++) norm += data[i] * data[i];
+//   norm = 1.0f / (sqrtf(norm) + 1e-30f);
+//   for (int i = 0; i < dimension_; i++) norm_array[i] = data[i] * norm;
+// }
 
 }  // namespace dingodb

@@ -125,6 +125,46 @@ message VectorGetBorderIdResponse {
   uint64 id = 2;
 }
 
+enum AlgorithmType {
+  ALGORITHM_NONE = 0;
+  ALGORITHM_FAISS = 1;
+  ALGORITHM_HNSWLIB = 2;
+}
+
+message VectorCalcDistanceRequest {
+  // which library algorithm to use
+  AlgorithmType algorithm_type = 1;
+
+  // must be valid
+  dingodb.pb.common.MetricType metric_type = 2;
+
+  // target vector arrays . empty do nothing. no error.
+  repeated dingodb.pb.common.Vector op_left_vectors = 3;
+
+  // source vector arrays . empty do nothing. no error.
+  repeated dingodb.pb.common.Vector op_right_vectors = 4;
+
+  // whether to return the normalized result.
+  bool is_return_normlize = 5;
+}
+
+message VectorDistance {
+  repeated float internal_distances = 1;
+}
+
+message VectorCalcDistanceResponse {
+  dingodb.pb.error.Error error = 1;
+
+  // return normalized result if is_return_normlize is true
+  repeated dingodb.pb.common.Vector op_left_vectors = 2;
+
+  // return normalized result if is_return_normlize is true
+  repeated dingodb.pb.common.Vector op_right_vectors = 3;
+
+  // num distance values = op_left_vectors *  op_right_vectors
+  repeated VectorDistance distances = 4;
+}
+
 service IndexService {
   // vector index
   rpc VectorAdd(VectorAddRequest) returns (VectorAddResponse);
@@ -134,4 +174,5 @@ service IndexService {
   rpc VectorGetBorderId(VectorGetBorderIdRequest) returns (VectorGetBorderIdResponse);
   rpc VectorScanQuery(VectorScanQueryRequest) returns (VectorScanQueryResponse);
   rpc VectorGetRegionMetrics(VectorGetRegionMetricsRequest) returns (VectorGetRegionMetricsResponse);
+  rpc VectorCalcDistance(VectorCalcDistanceRequest) returns (VectorCalcDistanceResponse);
 };
