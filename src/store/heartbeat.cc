@@ -602,6 +602,7 @@ void CalculateTableMetricsTask::CalculateTableMetrics(std::shared_ptr<Coordinato
   DINGO_LOG(DEBUG) << "CalculateTableMetrics... this is leader";
 
   coordinator_control->CalculateTableMetrics();
+  coordinator_control->CalculateIndexMetrics();
 }
 
 // this is for index
