@@ -529,7 +529,7 @@ enum ScalarIndexType {
 
 message ScalarIndexParameter {
   ScalarIndexType scalar_index_type = 1;
-  bool is_unique = 2; // for scalar index
+  bool is_unique = 2;  // for scalar index
 }
 
 message IndexParameter {
@@ -673,4 +673,5 @@ enum CoordinatorServiceType {
   ServiceTypeCoordinator = 0;
   ServiceTypeMeta = 1;
   ServiceTypeAutoIncrement = 2;
+  ServiceTypeVersion = 3;
 }

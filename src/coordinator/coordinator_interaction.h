@@ -35,6 +35,7 @@
 #include "proto/coordinator.pb.h"
 #include "proto/error.pb.h"
 #include "proto/meta.pb.h"
+#include "proto/version.pb.h"
 
 namespace dingodb {
 

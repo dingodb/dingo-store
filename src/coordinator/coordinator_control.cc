@@ -25,6 +25,7 @@
 #include <vector>
 
 #include "braft/configuration.h"
+#include "bthread/mutex.h"
 #include "butil/containers/flat_map.h"
 #include "butil/scoped_lock.h"
 #include "common/helper.h"
@@ -45,6 +46,7 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   bthread_mutex_init(&executor_need_push_mutex_, nullptr);
   bthread_mutex_init(&store_metrics_map_mutex_, nullptr);
   bthread_mutex_init(&store_operation_map_mutex_, nullptr);
+  bthread_mutex_init(&version_lease_to_key_map_temp_mutex_, nullptr);
   root_schema_writed_to_raft_ = false;
   is_processing_task_list_.store(false);
   leader_term_.store(-1, butil::memory_order_release);
@@ -66,6 +68,12 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   task_list_meta_ = new MetaSafeMapStorage<pb::coordinator::TaskList>(&task_list_map_);
   index_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::IndexInternal>(&index_map_);
   index_metrics_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::IndexMetricsInternal>(&index_metrics_map_);
+
+  // version kv
+  version_lease_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::LeaseInternal>(&version_lease_map_);
+  version_kv_meta_ = new MetaSafeStringStdMapStorage<pb::coordinator_internal::VersionKvInternal>(&version_kv_map_);
+  version_kv_rev_meta_ =
+      new MetaSafeStringStdMapStorage<pb::coordinator_internal::VersionKvInternal>(&version_kv_rev_map_);
 
   // init FlatMap
   store_need_push_.init(100, 80);
@@ -91,6 +99,8 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   index_name_map_safe_temp_.Init(10000);  // index_map_ is a big map
   index_map_.Init(10000);                 // index_map_ is a big map
   index_metrics_map_.Init(10000);         // index_metrics_map_ is a big map
+  // version kv
+  version_lease_map_.Init(10000);
 }
 
 CoordinatorControl::~CoordinatorControl() {

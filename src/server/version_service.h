@@ -20,11 +20,13 @@
 #include <iostream>
 #include <unordered_map>
 
+#include "brpc/server.h"
 #include "bthread/condition_variable.h"
 #include "bthread/mutex.h"
+#include "coordinator/coordinator_control.h"
+#include "engine/engine.h"
 #include "google/protobuf/stubs/callback.h"
 #include "proto/version.pb.h"
-#include "brpc/server.h"
 
 using dingodb::pb::version::GetCurrVersionRequest;
 using dingodb::pb::version::GetCurrVersionResponse;
@@ -45,8 +47,7 @@ struct VersionListener {
 
 class VersionService {
  public:
-
-  static VersionService & GetInstance();
+  static VersionService& GetInstance();
 
   VersionService(const VersionService&) = delete;
   VersionService& operator=(const VersionService&) = delete;
@@ -63,20 +64,14 @@ class VersionService {
   static int AddListenableVersion(VersionId id, uint64_t version) {
     return GetInstance().AddListenableVersion(id.type(), id.id(), version);
   }
-  static int DelListenableVersion(VersionId id) {
-    return GetInstance().DelListenableVersion(id.type(), id.id());
-  }
+  static int DelListenableVersion(VersionId id) { return GetInstance().DelListenableVersion(id.type(), id.id()); }
 
-  static uint64_t GetCurrentVersion(VersionId id) {
-    return GetInstance().GetCurrentVersion(id.type(), id.id());
-  }
+  static uint64_t GetCurrentVersion(VersionId id) { return GetInstance().GetCurrentVersion(id.type(), id.id()); }
   static uint64_t GetNewVersion(VersionId id, uint64_t curr_version, uint wait_seconds) {
     return GetInstance().GetNewVersion(id.type(), id.id(), curr_version, wait_seconds);
   }
 
-  static uint64_t IncVersion(VersionId id) {
-    return GetInstance().IncVersion(id.type(), id.id());
-  }
+  static uint64_t IncVersion(VersionId id) { return GetInstance().IncVersion(id.type(), id.id()); }
   static int UpdateVersion(VersionId id, uint64_t version) {
     return GetInstance().UpdateVersion(id.type(), id.id(), version);
   }
@@ -87,45 +82,82 @@ class VersionService {
 
   bthread::Mutex mutex_;
   std::array<std::unordered_map<uint64_t, VersionListener*>, VersionType_ARRAYSIZE> version_listeners_;
-
 };
 
 class VersionServiceProtoImpl : public dingodb::pb::version::VersionService {
  public:
-   
-  void GetNewVersion(
-    google::protobuf::RpcController* cntl_base,
-    const GetNewVersionRequest* request,
-    GetNewVersionResponse* response,
-    google::protobuf::Closure* done
-  ) override {
+  template <typename T>
+  void RedirectResponse(T response) {
+    pb::common::Location leader_location;
+    this->coordinator_control_->GetLeaderLocation(leader_location);
 
-    brpc::ClosureGuard done_guard(done);
-    response->set_version(
-      dingodb::VersionService::GetNewVersion(request->verid(), request->version(), 60)
-    );
-    brpc::Controller* cntl = static_cast<brpc::Controller*>(cntl_base);
-    cntl->response_attachment().append(cntl->request_attachment());
-
+    auto* error_in_response = response->mutable_error();
+    error_in_response->mutable_leader_location()->CopyFrom(leader_location);
+    error_in_response->set_errcode(pb::error::Errno::ERAFT_NOTLEADER);
   }
 
-  void GetCurrVersion(
-    google::protobuf::RpcController* cntl_base,
-    const GetCurrVersionRequest* request,
-    GetCurrVersionResponse* response,
-    google::protobuf::Closure* done
-  ) override {
+  template <typename T>
+  void RedirectResponse(std::shared_ptr<RaftNode> raft_node, T response) {
+    // parse leader raft location from string
+    auto leader_string = raft_node->GetLeaderId().to_string();
 
-    brpc::ClosureGuard done_guard(done);
-    response->set_version(
-      dingodb::VersionService::GetCurrentVersion(request->verid())
-    );
-    brpc::Controller* cntl = static_cast<brpc::Controller*>(cntl_base);
-    cntl->response_attachment().append(cntl->request_attachment());
+    pb::common::Location leader_raft_location;
+    int ret = Helper::PeerIdToLocation(raft_node->GetLeaderId(), leader_raft_location);
+    if (ret < 0) {
+      return;
+    }
 
+    // GetServerLocation
+    pb::common::Location leader_server_location;
+    coordinator_control_->GetServerLocation(leader_raft_location, leader_server_location);
+
+    auto* error_in_response = response->mutable_error();
+    error_in_response->mutable_leader_location()->CopyFrom(leader_server_location);
+    error_in_response->set_errcode(pb::error::Errno::ERAFT_NOTLEADER);
   }
 
+  void SetKvEngine(std::shared_ptr<Engine> engine) { engine_ = engine; };
+  void SetControl(std::shared_ptr<CoordinatorControl> coordinator_control) {
+    this->coordinator_control_ = coordinator_control;
+  };
+
+  void GetNewVersion(google::protobuf::RpcController* cntl_base, const GetNewVersionRequest* request,
+                     GetNewVersionResponse* response, google::protobuf::Closure* done) override {
+    brpc::ClosureGuard done_guard(done);
+    response->set_version(dingodb::VersionService::GetNewVersion(request->verid(), request->version(), 60));
+    brpc::Controller* cntl = static_cast<brpc::Controller*>(cntl_base);
+    cntl->response_attachment().append(cntl->request_attachment());
+  }
+
+  void GetCurrVersion(google::protobuf::RpcController* cntl_base, const GetCurrVersionRequest* request,
+                      GetCurrVersionResponse* response, google::protobuf::Closure* done) override {
+    brpc::ClosureGuard done_guard(done);
+    response->set_version(dingodb::VersionService::GetCurrentVersion(request->verid()));
+    brpc::Controller* cntl = static_cast<brpc::Controller*>(cntl_base);
+    cntl->response_attachment().append(cntl->request_attachment());
+  }
+
+  void LeaseGrant(google::protobuf::RpcController* cntl_basecontroller, const pb::version::LeaseGrantRequest* request,
+                  pb::version::LeaseGrantResponse* response, google::protobuf::Closure* done) override;
+
+  void LeaseRevoke(google::protobuf::RpcController* cntl_basecontroller, const pb::version::LeaseRevokeRequest* request,
+                   pb::version::LeaseRevokeResponse* response, google::protobuf::Closure* done) override;
+
+  void LeaseRenew(google::protobuf::RpcController* cntl_basecontroller, const pb::version::LeaseRenewRequest* request,
+                  pb::version::LeaseRenewResponse* response, google::protobuf::Closure* done) override;
+
+  void LeaseTimeToLive(google::protobuf::RpcController* cntl_basecontroller,
+                       const pb::version::LeaseTimeToLiveRequest* request,
+                       pb::version::LeaseTimeToLiveResponse* response, google::protobuf::Closure* done) override;
+
+  void ListLeases(google::protobuf::RpcController* cntl_basecontroller, const pb::version::ListLeasesRequest* request,
+                  pb::version::ListLeasesResponse* response, google::protobuf::Closure* done) override;
+
+ private:
+  std::shared_ptr<CoordinatorControl> coordinator_control_;
+  std::shared_ptr<Engine> engine_;
 };
-}
+
+}  // namespace dingodb
 
 #endif

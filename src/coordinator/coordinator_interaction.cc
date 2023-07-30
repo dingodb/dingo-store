@@ -83,6 +83,9 @@ const ::google::protobuf::ServiceDescriptor* CoordinatorInteraction::GetServiceD
     case pb::common::CoordinatorServiceType::ServiceTypeAutoIncrement: {
       return pb::meta::MetaService::descriptor();
     }
+    case pb::common::CoordinatorServiceType::ServiceTypeVersion: {
+      return pb::version::VersionService::descriptor();
+    }
   }
   return nullptr;
 }

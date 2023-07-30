@@ -103,6 +103,8 @@ enum IdEpochType {
 
   ID_NEXT_REGION_CMD = 31;
   ID_NEXT_TASK_LIST = 32;
+
+  ID_NEXT_LEASE = 40;
 }
 
 message IdEpochInternal {
@@ -236,6 +238,41 @@ message MetaIncrementTaskList {
   MetaIncrementOpType op_type = 3;
 }
 
+// version_kv
+message LeaseInternal {
+  uint64 id = 1;
+  uint64 ttl_seconds = 2;
+  uint64 create_ts_seconds = 3;
+  uint64 last_renew_ts_seconds = 4;
+}
+
+message MetaIncrementLease {
+  uint64 id = 1;
+  LeaseInternal lease = 2;
+  MetaIncrementOpType op_type = 3;
+}
+
+message VersionKvInternal {
+  bytes id = 1;
+  bytes value = 2;
+  uint64 create_revision = 3;
+  uint64 mod_revision = 4;
+  uint64 version = 5;
+  uint64 lease = 6;
+}
+
+message MetaIncrementVersionKv {
+  bytes id = 1;
+  VersionKvInternal version_kv = 2;
+  MetaIncrementOpType op_type = 3;
+}
+
+message MetaIncrementVersionKvRevision {
+  bytes id = 1;
+  VersionKvInternal version_kv = 2;
+  MetaIncrementOpType op_type = 3;
+}
+
 // MetaIncrement stores meta data need to be inserted or updated
 message MetaIncrement {
   repeated MetaIncrementCoordinator coordinators = 1;
@@ -255,6 +292,10 @@ message MetaIncrement {
 
   repeated MetaIncrementAutoIncrement auto_increment = 20;
   repeated MetaIncrementRegion deleted_regions = 30;
+
+  repeated MetaIncrementLease leases = 40;
+  repeated MetaIncrementVersionKv version_kvs = 41;
+  repeated MetaIncrementVersionKvRevision version_kv_revs = 42;
 }
 
 // snapshot pb file message
@@ -278,4 +319,8 @@ message MetaSnapshotFile {
   AutoIncrementStorage auto_increment_storage = 21;
 
   repeated dingodb.pb.common.KeyValue deleted_region_map_kvs = 30;
+
+  repeated dingodb.pb.common.KeyValue lease_map_kvs = 40;
+  repeated dingodb.pb.common.KeyValue version_kv_map_kvs = 41;
+  repeated dingodb.pb.common.KeyValue version_kv_rev_map_kvs = 42;
 }

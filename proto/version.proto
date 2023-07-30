@@ -139,14 +139,15 @@ message RangeRequest {
 }
 
 message RangeResponse {
-  ResponseHeader header = 1;
+  dingodb.pb.error.Error error = 1;
+  ResponseHeader header = 2;
   // kvs is the list of key-value pairs matched by the range request.
   // kvs is empty when count is requested.
-  repeated VersionKeyValue kvs = 2;
+  repeated VersionKeyValue kvs = 3;
   // more indicates if there are more keys to return in the requested range.
-  bool more = 3;
+  bool more = 4;
   // count is set to the number of keys within the range when requested.
-  int64 count = 4;
+  int64 count = 5;
 }
 
 message PutRequest {
@@ -172,9 +173,10 @@ message PutRequest {
 }
 
 message PutResponse {
-  ResponseHeader header = 1;
+  dingodb.pb.error.Error error = 1;
+  ResponseHeader header = 2;
   // if prev_kv is set in the request, the previous key-value pair will be returned.
-  VersionKeyValue prev_kv = 2;
+  VersionKeyValue prev_kv = 3;
 }
 
 message DeleteRangeRequest {
@@ -193,80 +195,85 @@ message DeleteRangeRequest {
 }
 
 message DeleteRangeResponse {
-  ResponseHeader header = 1;
+  dingodb.pb.error.Error error = 1;
+  ResponseHeader header = 2;
   // deleted is the number of keys deleted by the delete range request.
-  int64 deleted = 2;
+  int64 deleted = 3;
   // if prev_kv is set in the request, the previous key-value pairs will be returned.
-  repeated VersionKeyValue prev_kvs = 3;
+  repeated VersionKeyValue prev_kvs = 4;
 }
 
 // lease
 message LeaseGrantRequest {
   // TTL is the advisory time-to-live in seconds. Expired lease will return -1.
-  int64 TTL = 1;
+  uint64 TTL = 1;
   // ID is the requested ID for the lease. If ID is set to 0, the lessor chooses an ID.
-  int64 ID = 2;
+  uint64 ID = 2;
 }
 
 message LeaseGrantResponse {
-  ResponseHeader header = 1;
+  dingodb.pb.error.Error error = 1;
+  ResponseHeader header = 2;
   // ID is the lease ID for the granted lease.
-  int64 ID = 2;
+  uint64 ID = 3;
   // TTL is the server chosen lease time-to-live in seconds.
-  int64 TTL = 3;
-  string error = 4;
+  uint64 TTL = 4;
 }
 
 message LeaseRevokeRequest {
   // ID is the lease ID to revoke. When the ID is revoked, all associated keys will be deleted.
-  int64 ID = 1;
+  uint64 ID = 1;
 }
 
 message LeaseRevokeResponse {
-  ResponseHeader header = 1;
+  dingodb.pb.error.Error error = 1;
+  ResponseHeader header = 2;
 }
 
 message LeaseRenewRequest {
   // ID is the lease ID for the lease to keep alive.
-  int64 ID = 1;
+  uint64 ID = 1;
 }
 
 message LeaseRenewResponse {
-  ResponseHeader header = 1;
+  dingodb.pb.error.Error error = 1;
+  ResponseHeader header = 2;
   // ID is the lease ID from the keep alive request.
-  int64 ID = 2;
+  uint64 ID = 3;
   // TTL is the new time-to-live for the lease.
-  int64 TTL = 3;
+  uint64 TTL = 4;
 }
 
 message LeaseTimeToLiveRequest {
   // ID is the lease ID for the lease.
-  int64 ID = 1;
+  uint64 ID = 1;
   // keys is true to query all the keys attached to this lease.
   bool keys = 2;
 }
 
 message LeaseTimeToLiveResponse {
-  ResponseHeader header = 1;
+  dingodb.pb.error.Error error = 1;
+  ResponseHeader header = 2;
   // ID is the lease ID from the keep alive request.
-  int64 ID = 2;
+  int64 ID = 3;
   // TTL is the remaining TTL in seconds for the lease; the lease will expire in under TTL+1 seconds.
-  int64 TTL = 3;
+  int64 TTL = 4;
   // GrantedTTL is the initial granted time in seconds upon lease creation/renewal.
-  int64 grantedTTL = 4;
+  int64 grantedTTL = 5;
   // Keys is the list of keys attached to this lease.
-  repeated bytes keys = 5;
+  repeated bytes keys = 6;
 }
 
 message ListLeasesRequest {}
 
 message LeaseStatus {
-  int64 ID = 1;
+  uint64 ID = 1;
 }
 
 message ListLeasesResponse {
-  ResponseHeader header = 1;
-  repeated LeaseStatus leases = 2;
+  dingodb.pb.error.Error error = 1;
+  ResponseHeader header = 2;
+  repeated LeaseStatus leases = 3;
 }
 
 // watch
@@ -334,19 +341,20 @@ message WatchCancelRequest {
 message WatchProgressRequest {}
 
 message WatchResponse {
-  ResponseHeader header = 1;
+  dingodb.pb.error.Error error = 1;
+  ResponseHeader header = 2;
   // watch_id is the ID of the watcher that corresponds to the response.
-  int64 watch_id = 2;
+  int64 watch_id = 3;
 
   // created is set to true if the response is for a create watch request.
   // The client should record the watch_id and expect to receive events for
   // the created watcher from the same stream.
   // All events sent to the created watcher will attach with the same watch_id.
-  bool created = 3;
+  bool created = 4;
 
   // canceled is set to true if the response is for a cancel watch request.
   // No further events will be sent to the canceled watcher.
-  bool canceled = 4;
+  bool canceled = 5;
 
   // compact_revision is set to the minimum index if a watcher tries to watch
   // at a compacted index.
@@ -356,13 +364,13 @@ message WatchResponse {
   //
   // The client should treat the watcher as canceled and should not try to create any
   // watcher with the same start_revision again.
-  int64 compact_revision = 5;  // NOT IMPLEMENTED
+  int64 compact_revision = 6;  // NOT IMPLEMENTED
 
   // cancel_reason indicates the reason for canceling the watcher.
-  string cancel_reason = 6;
+  string cancel_reason = 7;
 
   // framgment is true if large watch response was split over multiple responses.
-  bool fragment = 7;  // NOT IMPLEMENTED
+  bool fragment = 8;  // NOT IMPLEMENTED
 
   repeated Event events = 11;
 }

@@ -105,6 +105,7 @@ DEFINE_int32(limit, 0, "limit");
 DEFINE_bool(is_reverse, false, "is_revers");
 DEFINE_string(scalar_filter_key, "", "Request scalar_filter_key");
 DEFINE_string(scalar_filter_value, "", "Request scalar_filter_value");
+DEFINE_int32(ttl, 0, "ttl");
 
 bvar::LatencyRecorder g_latency_recorder("dingo-store");
 
@@ -349,6 +350,7 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
 
 std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction;
 std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction_meta;
+std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction_version;
 
 bool GetBrpcChannel(const std::string& location, brpc::Channel& channel) {
   braft::PeerId node;
@@ -559,7 +561,10 @@ int CoordinatorSender() {
     SendGetTableRange(coordinator_interaction_meta);
   } else if (FLAGS_method == "GetTableMetrics") {
     SendGetTableMetrics(coordinator_interaction_meta);
-  } else if (FLAGS_method == "GetIndexes") {
+  }
+
+  // indexes
+  else if (FLAGS_method == "GetIndexes") {
     SendGetIndexes(coordinator_interaction_meta);
   } else if (FLAGS_method == "GetIndexsCount") {
     SendGetIndexesCount(coordinator_interaction_meta);
@@ -581,7 +586,10 @@ int CoordinatorSender() {
     SendGetIndexRange(coordinator_interaction_meta);
   } else if (FLAGS_method == "GetIndexMetrics") {
     SendGetIndexMetrics(coordinator_interaction_meta);
-  } else if (FLAGS_method == "GetAutoIncrements") {  // auto increment
+  }
+
+  // auto increment
+  else if (FLAGS_method == "GetAutoIncrements") {  // auto increment
     SendGetAutoIncrements(coordinator_interaction_meta);
   } else if (FLAGS_method == "GetAutoIncrement") {
     SendGetAutoIncrement(coordinator_interaction_meta);
@@ -593,7 +601,23 @@ int CoordinatorSender() {
     SendGenerateAutoIncrement(coordinator_interaction_meta);
   } else if (FLAGS_method == "DeleteAutoIncrement") {
     SendDeleteAutoIncrement(coordinator_interaction_meta);
-  } else if (FLAGS_method == "CoordinatorDebug") {
+  }
+
+  // version kv
+  else if (FLAGS_method == "LeaseGrant") {
+    SendLeaseGrant(coordinator_interaction_version);
+  } else if (FLAGS_method == "LeaseRevoke") {
+    SendLeaseRevoke(coordinator_interaction_version);
+  } else if (FLAGS_method == "LeaseRenew") {
+    SendLeaseRenew(coordinator_interaction_version);
+  } else if (FLAGS_method == "LeaseTimeToLive") {
+    SendLeaseTimeToLive(coordinator_interaction_version);
+  } else if (FLAGS_method == "ListLeases") {
+    SendListLeases(coordinator_interaction_version);
+  }
+
+  // debug
+  else if (FLAGS_method == "CoordinatorDebug") {
     CoordinatorSendDebug();
   } else {
     DINGO_LOG(INFO) << " not coordinator method, try to send to store";
@@ -664,6 +688,14 @@ int main(int argc, char* argv[]) {
     if (!coordinator_interaction_meta->InitByNameService(
             FLAGS_coor_url, dingodb::pb::common::CoordinatorServiceType::ServiceTypeMeta)) {
       DINGO_LOG(ERROR) << "Fail to init coordinator_interaction_meta, please check parameter --url=" << FLAGS_coor_url;
+      return -1;
+    }
+
+    coordinator_interaction_version = std::make_shared<dingodb::CoordinatorInteraction>();
+    if (!coordinator_interaction_version->InitByNameService(
+            FLAGS_coor_url, dingodb::pb::common::CoordinatorServiceType::ServiceTypeVersion)) {
+      DINGO_LOG(ERROR) << "Fail to init coordinator_interaction_version, please check parameter --url="
+                       << FLAGS_coor_url;
       return -1;
     }
   }
