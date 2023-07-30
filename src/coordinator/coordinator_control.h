@@ -717,9 +717,9 @@ class CoordinatorControl : public MetaControl {
   DingoSafeMap<uint64_t, pb::coordinator_internal::IndexMetricsInternal> index_metrics_map_;
   MetaSafeMapStorage<pb::coordinator_internal::IndexMetricsInternal> *index_metrics_meta_;
 
-  // 14.version lease
+  // 14.lease
   DingoSafeMap<uint64_t, pb::coordinator_internal::LeaseInternal> lease_map_;
-  MetaSafeMapStorage<pb::coordinator_internal::LeaseInternal> *version_lease_meta_;
+  MetaSafeMapStorage<pb::coordinator_internal::LeaseInternal> *lease_meta_;
   std::map<uint64_t, LeaseWithKeys>
       version_lease_to_key_map_temp_;  // storage lease_id to key map, this map is built in on_leader_start
   bthread_mutex_t version_lease_to_key_map_temp_mutex_;
