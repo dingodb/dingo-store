@@ -363,7 +363,7 @@ bool CoordinatorControl::LoadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapsh
   kvs.clear();
 
   // 14.lease_map_
-  if (!meta_reader_->Scan(snapshot, version_lease_meta_->Prefix(), kvs)) {
+  if (!meta_reader_->Scan(snapshot, lease_meta_->Prefix(), kvs)) {
     return false;
   }
 
@@ -831,23 +831,23 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
   }
   {
     // BAIDU_SCOPED_LOCK(lease_map_mutex_);
-    if (!version_lease_meta_->Recover(kvs)) {
+    if (!lease_meta_->Recover(kvs)) {
       return false;
     }
 
     // remove data in rocksdb
-    if (!meta_writer_->DeletePrefix(version_lease_meta_->internal_prefix)) {
-      DINGO_LOG(ERROR) << "Coordinator delete version_lease_meta_ range failed in LoadMetaFromSnapshotFile";
+    if (!meta_writer_->DeletePrefix(lease_meta_->internal_prefix)) {
+      DINGO_LOG(ERROR) << "Coordinator delete lease_meta_ range failed in LoadMetaFromSnapshotFile";
       return false;
     }
-    DINGO_LOG(INFO) << "Coordinator delete range version_lease_meta_ success in LoadMetaFromSnapshotFile";
+    DINGO_LOG(INFO) << "Coordinator delete range lease_meta_ success in LoadMetaFromSnapshotFile";
 
     // write data to rocksdb
     if (!meta_writer_->Put(kvs)) {
-      DINGO_LOG(ERROR) << "Coordinator write version_lease_meta_ failed in LoadMetaFromSnapshotFile";
+      DINGO_LOG(ERROR) << "Coordinator write lease_meta_ failed in LoadMetaFromSnapshotFile";
       return false;
     }
-    DINGO_LOG(INFO) << "Coordinator put version_lease_meta_ success in LoadMetaFromSnapshotFile";
+    DINGO_LOG(INFO) << "Coordinator put lease_meta_ success in LoadMetaFromSnapshotFile";
   }
   DINGO_LOG(INFO) << "LoadSnapshot version_lease_meta, count=" << kvs.size();
   kvs.clear();
@@ -2059,7 +2059,7 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         }
 
         // meta_write_kv
-        meta_write_to_kv.push_back(version_lease_meta_->TransformToKvValue(version_lease.lease()));
+        meta_write_to_kv.push_back(lease_meta_->TransformToKvValue(version_lease.lease()));
 
       } else if (version_lease.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
         // auto& update_version_lease = lease_map_[version_lease.id()];
@@ -2072,7 +2072,7 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         }
 
         // meta_write_kv
-        meta_write_to_kv.push_back(version_lease_meta_->TransformToKvValue(version_lease.lease()));
+        meta_write_to_kv.push_back(lease_meta_->TransformToKvValue(version_lease.lease()));
 
       } else if (version_lease.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
         int ret = lease_map_.Erase(version_lease.id());
@@ -2083,7 +2083,7 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         }
 
         // meta_delete_kv
-        meta_delete_to_kv.push_back(version_lease_meta_->TransformToKvValue(version_lease.lease()));
+        meta_delete_to_kv.push_back(lease_meta_->TransformToKvValue(version_lease.lease()));
       }
     }
   }

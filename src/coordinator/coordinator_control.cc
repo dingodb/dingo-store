@@ -70,7 +70,7 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   index_metrics_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::IndexMetricsInternal>(&index_metrics_map_);
 
   // version kv
-  version_lease_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::LeaseInternal>(&lease_map_);
+  lease_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::LeaseInternal>(&lease_map_);
   version_kv_meta_ =
       new MetaSafeStringStdMapStorage<pb::coordinator_internal::VersionKvInternal>(&version_kv_map_, "version_kv_map_");
   version_kv_rev_meta_ = new MetaSafeStringStdMapStorage<pb::coordinator_internal::VersionKvInternal>(
@@ -362,21 +362,53 @@ bool CoordinatorControl::Recover() {
   DINGO_LOG(INFO) << "Recover index_metrics_meta, count=" << kvs.size();
   kvs.clear();
 
+  // 14.lease map
+  if (!meta_reader_->Scan(lease_meta_->Prefix(), kvs)) {
+    return false;
+  }
+  {
+    if (!lease_meta_->Recover(kvs)) {
+      return false;
+    }
+  }
+  DINGO_LOG(INFO) << "Recover lease_meta, count=" << kvs.size();
+  kvs.clear();
+
+  // 15.version_kv map
+  if (!meta_reader_->Scan(version_kv_meta_->Prefix(), kvs)) {
+    return false;
+  }
+  {
+    if (!version_kv_meta_->Recover(kvs)) {
+      return false;
+    }
+  }
+  DINGO_LOG(INFO) << "Recover version_kv_meta, count=" << kvs.size();
+  kvs.clear();
+
+  // 16.version_kv_rev map
+  if (!meta_reader_->Scan(version_kv_rev_meta_->Prefix(), kvs)) {
+    return false;
+  }
+  {
+    if (!version_kv_rev_meta_->Recover(kvs)) {
+      return false;
+    }
+  }
+  DINGO_LOG(INFO) << "Recover version_kv_rev_meta, count=" << kvs.size();
+  kvs.clear();
+
   // copy id_epoch_map_ to id_epoch_map_safe_temp_
   {
-    // BAIDU_SCOPED_LOCK(id_epoch_map_mutex_);
-    // id_epoch_map_safe_temp_.CopyFromRawMap(id_epoch_map_);
     butil::FlatMap<uint64_t, pb::coordinator_internal::IdEpochInternal> temp_copy;
     temp_copy.init(100);
     id_epoch_map_.GetRawMapCopy(temp_copy);
     id_epoch_map_safe_temp_.CopyFromRawMap(temp_copy);
-    // id_epoch_map_safe_temp_.Copy(id_epoch_map_);
   }
   DINGO_LOG(INFO) << "Recover id_epoch_safe_map_temp, count=" << id_epoch_map_safe_temp_.Size();
 
   // copy schema_map_ to schema_name_map_safe_temp_
   {
-    // BAIDU_SCOPED_LOCK(schema_map_mutex_);
     schema_name_map_safe_temp_.Clear();
 
     butil::FlatMap<uint64_t, pb::coordinator_internal::SchemaInternal> schema_map_copy;
@@ -390,7 +422,6 @@ bool CoordinatorControl::Recover() {
 
   // copy table_map_ to table_name_map_safe_temp_
   {
-    // BAIDU_SCOPED_LOCK(table_map_mutex_);
     butil::FlatMap<uint64_t, pb::coordinator_internal::TableInternal> table_map_copy;
     table_map_copy.init(10000);
     table_map_.GetRawMapCopy(table_map_copy);
@@ -402,7 +433,6 @@ bool CoordinatorControl::Recover() {
 
   // copy index_map_ to index_name_map_safe_temp_
   {
-    // BAIDU_SCOPED_LOCK(index_map_mutex_);
     butil::FlatMap<uint64_t, pb::coordinator_internal::IndexInternal> index_map_copy;
     index_map_copy.init(10000);
     index_map_.GetRawMapCopy(index_map_copy);
