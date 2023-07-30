@@ -206,7 +206,7 @@ message DeleteRangeResponse {
 // lease
 message LeaseGrantRequest {
   // TTL is the advisory time-to-live in seconds. Expired lease will return -1.
-  uint64 TTL = 1;
+  int64 TTL = 1;
   // ID is the requested ID for the lease. If ID is set to 0, the lessor chooses an ID.
   uint64 ID = 2;
 }
@@ -217,7 +217,7 @@ message LeaseGrantResponse {
   // ID is the lease ID for the granted lease.
   uint64 ID = 3;
   // TTL is the server chosen lease time-to-live in seconds.
-  uint64 TTL = 4;
+  int64 TTL = 4;
 }
 
 message LeaseRevokeRequest {
@@ -241,7 +241,7 @@ message LeaseRenewResponse {
   // ID is the lease ID from the keep alive request.
   uint64 ID = 3;
   // TTL is the new time-to-live for the lease.
-  uint64 TTL = 4;
+  int64 TTL = 4;
 }
 
 message LeaseQueryRequest {
@@ -255,7 +255,7 @@ message LeaseQueryResponse {
   dingodb.pb.error.Error error = 1;
   ResponseHeader header = 2;
   // ID is the lease ID from the keep alive request.
-  int64 ID = 3;
+  uint64 ID = 3;
   // TTL is the remaining TTL in seconds for the lease; the lease will expire in under TTL+1 seconds.
   int64 TTL = 4;
   // GrantedTTL is the initial granted time in seconds upon lease creation/renewal.

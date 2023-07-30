@@ -613,15 +613,22 @@ class CoordinatorControl : public MetaControl {
 
   butil::Status CleanTaskList(uint64_t task_list_id, pb::coordinator_internal::MetaIncrement &meta_increment);
 
+  // lease timeout/revoke task
+  void LeaseTask();
+
+  // lease timeout/revoke task
+  void CompactionTask();
+
   // version kv
-  butil::Status LeaseGrant(uint64_t lease_id, uint64_t ttl_seconds, uint64_t &granted_id, uint64_t &granted_ttl_seconds,
+  butil::Status LeaseGrant(uint64_t lease_id, int64_t ttl_seconds, uint64_t &granted_id, int64_t &granted_ttl_seconds,
                            pb::coordinator_internal::MetaIncrement &meta_increment);
-  butil::Status LeaseRenew(uint64_t lease_id, uint64_t &ttl_seconds,
+  butil::Status LeaseRenew(uint64_t lease_id, int64_t &ttl_seconds,
                            pb::coordinator_internal::MetaIncrement &meta_increment);
-  butil::Status LeaseRevoke(uint64_t lease_id, pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status LeaseRevoke(uint64_t lease_id, pb::coordinator_internal::MetaIncrement &meta_increment,
+                            bool has_mutex_locked = false);
   butil::Status ListLeases(std::vector<pb::coordinator_internal::LeaseInternal> &leases);
-  butil::Status LeaseQuery(uint64_t lease_id, bool get_keys, uint64_t &granted_ttl_seconds,
-                           uint64_t &remaining_ttl_seconds, std::set<std::string> &keys);
+  butil::Status LeaseQuery(uint64_t lease_id, bool get_keys, int64_t &granted_ttl_seconds,
+                           int64_t &remaining_ttl_seconds, std::set<std::string> &keys);
 
  private:
   butil::Status ValidateTaskListConflict(uint64_t region_id, uint64_t second_region_id);

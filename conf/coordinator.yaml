@@ -5,11 +5,17 @@ cluster:
 server:
   host: 127.0.0.1
   port: 19190
-  push_interval_s: 1
   worker_thread_num: 10 # must >4, worker_thread_num priority worker_thread_ratio
   # worker_thread_ratio: 0.5 # cpu core * ratio
 coordinator:
   peers: 127.0.0.1:8001,127.0.0.1:8002,127.0.0.1:8003
+  push_interval_s: 1
+  update_state_interval_s: 10
+  task_list_interval_s: 1
+  calc_metrics_interval_s: 60
+  recycle_orphan_interval_s: 60
+  lease_interval_s: 1
+  compaction_interval_s: 300
 raft:
   host: 127.0.0.1
   port: 8001

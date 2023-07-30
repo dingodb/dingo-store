@@ -333,9 +333,9 @@ bool Server::InitCrontabManager() {
     // Add push crontab
     std::shared_ptr<Crontab> push_crontab = std::make_shared<Crontab>();
     push_crontab->name = "PUSH";
-    uint64_t push_interval_s = config->GetInt("server.push_interval_s");
+    uint64_t push_interval_s = config->GetInt("coordinator.push_interval_s");
     if (push_interval_s <= 0) {
-      DINGO_LOG(INFO) << "server.push_interval_s illegal";
+      DINGO_LOG(INFO) << "coordinator.push_interval_s illegal";
       return false;
     }
     push_crontab->interval = push_interval_s * 1000;
@@ -347,7 +347,12 @@ bool Server::InitCrontabManager() {
     // Add update state crontab
     std::shared_ptr<Crontab> update_crontab = std::make_shared<Crontab>();
     update_crontab->name = "UPDATE";
-    update_crontab->interval = push_interval_s * 10 * 1000;
+    uint64_t update_state_interval_s = config->GetInt("coordinator.update_state_interval_s");
+    if (update_state_interval_s <= 0) {
+      DINGO_LOG(INFO) << "coordinator.update_state_interval_s illegal";
+      return false;
+    }
+    update_crontab->interval = update_state_interval_s * 1000;
     update_crontab->func = Heartbeat::TriggerCoordinatorUpdateState;
     update_crontab->arg = nullptr;
 
@@ -356,7 +361,12 @@ bool Server::InitCrontabManager() {
     // Add task list process crontab
     std::shared_ptr<Crontab> tasklist_crontab = std::make_shared<Crontab>();
     tasklist_crontab->name = "TASKLIST";
-    tasklist_crontab->interval = push_interval_s * 1000;
+    uint64_t task_list_interval_s = config->GetInt("coordinator.task_list_interval_s");
+    if (task_list_interval_s <= 0) {
+      DINGO_LOG(INFO) << "coordinator.task_list_interval_s illegal";
+      return false;
+    }
+    tasklist_crontab->interval = task_list_interval_s * 1000;
     tasklist_crontab->func = Heartbeat::TriggerCoordinatorTaskListProcess;
     tasklist_crontab->arg = nullptr;
 
@@ -365,7 +375,12 @@ bool Server::InitCrontabManager() {
     // Add calculate crontab
     std::shared_ptr<Crontab> calc_crontab = std::make_shared<Crontab>();
     calc_crontab->name = "CALCULATE";
-    calc_crontab->interval = push_interval_s * 60 * 1000;
+    uint64_t calc_metrics_interval_s = config->GetInt("coordinator.calc_metrics_interval_s");
+    if (calc_metrics_interval_s <= 0) {
+      DINGO_LOG(INFO) << "coordinator.calc_metrics_interval_s illegal";
+      return false;
+    }
+    calc_crontab->interval = calc_metrics_interval_s * 1000;
     calc_crontab->func = Heartbeat::TriggerCalculateTableMetrics;
     calc_crontab->arg = nullptr;
 
@@ -373,12 +388,45 @@ bool Server::InitCrontabManager() {
 
     // Add recycle orphan crontab
     std::shared_ptr<Crontab> recycle_crontab = std::make_shared<Crontab>();
+    uint64_t recycle_orphan_interval_s = config->GetInt("coordinator.recycle_orphan_interval_s");
+    if (recycle_orphan_interval_s <= 0) {
+      DINGO_LOG(INFO) << "coordinator.recycle_orphan_interval_s illegal";
+      return false;
+    }
     recycle_crontab->name = "RECYCLE";
-    recycle_crontab->interval = push_interval_s * 60 * 1000;
+    recycle_crontab->interval = recycle_orphan_interval_s * 1000;
     recycle_crontab->func = Heartbeat::TriggerCoordinatorRecycleOrphan;
     recycle_crontab->arg = nullptr;
 
     crontab_manager_->AddAndRunCrontab(recycle_crontab);
+
+    // Add lease crontab
+    std::shared_ptr<Crontab> lease_crontab = std::make_shared<Crontab>();
+    lease_crontab->name = "LEASE";
+    uint64_t lease_interval_s = config->GetInt("coordinator.lease_interval_s");
+    if (lease_interval_s <= 0) {
+      DINGO_LOG(INFO) << "coordinator.lease_interval_s illegal";
+      return false;
+    }
+    lease_crontab->interval = lease_interval_s * 1000;
+    lease_crontab->func = Heartbeat::TriggerLeaseTask;
+    lease_crontab->arg = nullptr;
+
+    crontab_manager_->AddAndRunCrontab(lease_crontab);
+
+    // Add compaction crontab
+    std::shared_ptr<Crontab> compaction_crontab = std::make_shared<Crontab>();
+    compaction_crontab->name = "compaction";
+    uint64_t compaction_interval_s = config->GetInt("coordinator.compaction_interval_s");
+    if (compaction_interval_s <= 0) {
+      DINGO_LOG(INFO) << "coordinator.compaction_interval_s illegal";
+      return false;
+    }
+    compaction_crontab->interval = compaction_interval_s * 1000;
+    compaction_crontab->func = Heartbeat::TriggerCompactionTask;
+    compaction_crontab->arg = nullptr;
+
+    crontab_manager_->AddAndRunCrontab(compaction_crontab);
 
   } else if (role_ == pb::common::ClusterRole::INDEX) {
     // Add heartbeat crontab
