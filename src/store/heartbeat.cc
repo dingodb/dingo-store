@@ -29,6 +29,7 @@
 #include "butil/time.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "coordinator/coordinator_control.h"
 #include "fmt/core.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
@@ -200,6 +201,7 @@ void HeartbeatTask::HandleStoreHeartbeatResponse(std::shared_ptr<dingodb::StoreM
   }
 }
 
+static std::atomic<bool> g_store_recycle_orphan_running(false);
 void CoordinatorRecycleOrphanTask::CoordinatorRecycleOrphan(std::shared_ptr<CoordinatorControl> coordinator_control) {
   if (!coordinator_control->IsLeader()) {
     DINGO_LOG(DEBUG) << "CoordinatorRecycleOrphan... this is follower";
@@ -207,16 +209,31 @@ void CoordinatorRecycleOrphanTask::CoordinatorRecycleOrphan(std::shared_ptr<Coor
   }
   DINGO_LOG(DEBUG) << "CoordinatorRecycleOrphan... this is leader";
 
+  if (g_store_recycle_orphan_running.load(std::memory_order_relaxed)) {
+    DINGO_LOG(INFO) << "CoordinatorRecycleOrphan... g_store_recycle_orphan_running is true, return";
+    return;
+  }
+
+  AtomicGuard guard(g_store_recycle_orphan_running);
+
   coordinator_control->RecycleOrphanRegionOnStore();
 }
 
 // this is for coordinator
+static std::atomic<bool> g_coordinator_update_state_running(false);
 void CoordinatorUpdateStateTask::CoordinatorUpdateState(std::shared_ptr<CoordinatorControl> coordinator_control) {
   if (!coordinator_control->IsLeader()) {
     DINGO_LOG(DEBUG) << "CoordinatorUpdateState... this is follower";
     return;
   }
   DINGO_LOG(DEBUG) << "CoordinatorUpdateState... this is leader";
+
+  if (g_coordinator_update_state_running.load(std::memory_order_relaxed)) {
+    DINGO_LOG(INFO) << "CoordinatorUpdateState... g_coordinator_update_state_running is true, return";
+    return;
+  }
+
+  AtomicGuard guard(g_coordinator_update_state_running);
 
   // update executor_state by last_seen_timestamp
   pb::common::ExecutorMap executor_map_temp;
@@ -324,6 +341,7 @@ void CoordinatorUpdateStateTask::CoordinatorUpdateState(std::shared_ptr<Coordina
 }
 
 // this is for coordinator
+static std::atomic<bool> g_coordinator_task_list_process_running(false);
 void CoordinatorTaskListProcessTask::CoordinatorTaskListProcess(
     std::shared_ptr<CoordinatorControl> coordinator_control) {
   if (!coordinator_control->IsLeader()) {
@@ -331,6 +349,13 @@ void CoordinatorTaskListProcessTask::CoordinatorTaskListProcess(
     return;
   }
   DINGO_LOG(DEBUG) << "CoordinatorUpdateState... this is leader";
+
+  if (g_coordinator_task_list_process_running.load(std::memory_order_relaxed)) {
+    DINGO_LOG(INFO) << "CoordinatorTaskListProcess... g_coordinator_task_list_process_running is true, return";
+    return;
+  }
+
+  AtomicGuard guard(g_coordinator_task_list_process_running);
 
   coordinator_control->ProcessTaskList();
 }
@@ -390,12 +415,20 @@ bool CheckStoreOperationResult(pb::coordinator::RegionCmdType cmd_type, pb::erro
 }
 
 // this is for coordinator
+static std::atomic<bool> g_coordinator_push_to_store_running(false);
 void CoordinatorPushTask::SendCoordinatorPushToStore(std::shared_ptr<CoordinatorControl> coordinator_control) {
   if (!coordinator_control->IsLeader()) {
     DINGO_LOG(DEBUG) << "... this is follower";
     return;
   }
   DINGO_LOG(DEBUG) << "... this is leader";
+
+  if (g_coordinator_push_to_store_running.load(std::memory_order_relaxed)) {
+    DINGO_LOG(INFO) << "... g_coordinator_push_to_store_running is true, return";
+    return;
+  }
+
+  AtomicGuard guard(g_coordinator_push_to_store_running);
 
   // update store_state by last_seen_timestamp and send store operation to store
   // here we only update store_state to offline if last_seen_timestamp is too old
@@ -594,6 +627,7 @@ void CoordinatorPushTask::SendCoordinatorPushToStore(std::shared_ptr<Coordinator
 }
 
 // this is for coordinator
+static std::atomic<bool> g_coordinator_calc_metrics_running(false);
 void CalculateTableMetricsTask::CalculateTableMetrics(std::shared_ptr<CoordinatorControl> coordinator_control) {
   if (!coordinator_control->IsLeader()) {
     // DINGO_LOG(INFO) << "SendCoordinatorPushToStore... this is follower";
@@ -601,8 +635,53 @@ void CalculateTableMetricsTask::CalculateTableMetrics(std::shared_ptr<Coordinato
   }
   DINGO_LOG(DEBUG) << "CalculateTableMetrics... this is leader";
 
+  if (g_coordinator_calc_metrics_running.load(std::memory_order_relaxed)) {
+    DINGO_LOG(INFO) << "CalculateTableMetrics... g_coordinator_calc_metrics_running is true, return";
+    return;
+  }
+
+  AtomicGuard guard(g_coordinator_calc_metrics_running);
+
   coordinator_control->CalculateTableMetrics();
   coordinator_control->CalculateIndexMetrics();
+}
+
+// this is for coordinator
+static std::atomic<bool> g_coordinator_lease_running(false);
+void LeaseTask::ExecLeaseTask(std::shared_ptr<CoordinatorControl> coordinator_control) {
+  if (!coordinator_control->IsLeader()) {
+    // DINGO_LOG(INFO) << "ExecLeaseTask... this is follower";
+    return;
+  }
+  DINGO_LOG(DEBUG) << "ExecLeaseTask... this is leader";
+
+  if (g_coordinator_lease_running.load(std::memory_order_relaxed)) {
+    DINGO_LOG(INFO) << "ExecLeaseTask... g_coordinator_lease_running is true, return";
+    return;
+  }
+
+  AtomicGuard guard(g_coordinator_lease_running);
+
+  coordinator_control->LeaseTask();
+}
+
+// this is for coordinator
+static std::atomic<bool> g_coordinator_compaction_running(false);
+void CompactionTask::ExecCompactionTask(std::shared_ptr<CoordinatorControl> coordinator_control) {
+  if (!coordinator_control->IsLeader()) {
+    // DINGO_LOG(INFO) << "ExecCompactionTask... this is follower";
+    return;
+  }
+  DINGO_LOG(DEBUG) << "ExecCompactionTask... this is leader";
+
+  if (g_coordinator_compaction_running.load(std::memory_order_relaxed)) {
+    DINGO_LOG(INFO) << "ExecCompactionTask... g_coordinator_compaction_running is true, return";
+    return;
+  }
+
+  AtomicGuard guard(g_coordinator_compaction_running);
+
+  coordinator_control->CompactionTask();
 }
 
 // this is for index
@@ -703,6 +782,22 @@ void Heartbeat::TriggerCoordinatorRecycleOrphan(void*) {
 void Heartbeat::TriggerCalculateTableMetrics(void*) {
   // Free at ExecuteRoutine()
   TaskRunnable* task = new CalculateTableMetricsTask(Server::GetInstance()->GetCoordinatorControl());
+  if (!Server::GetInstance()->GetHeartbeat()->Execute(task)) {
+    delete task;
+  }
+}
+
+void Heartbeat::TriggerLeaseTask(void*) {
+  // Free at ExecuteRoutine()
+  TaskRunnable* task = new LeaseTask(Server::GetInstance()->GetCoordinatorControl());
+  if (!Server::GetInstance()->GetHeartbeat()->Execute(task)) {
+    delete task;
+  }
+}
+
+void Heartbeat::TriggerCompactionTask(void*) {
+  // Free at ExecuteRoutine()
+  TaskRunnable* task = new CompactionTask(Server::GetInstance()->GetCoordinatorControl());
   if (!Server::GetInstance()->GetHeartbeat()->Execute(task)) {
     delete task;
   }

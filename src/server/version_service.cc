@@ -127,9 +127,9 @@ void VersionServiceProtoImpl::LeaseGrant(google::protobuf::RpcController* contro
     return RedirectResponse(response);
   }
 
-  if (request->ttl() == 0) {
+  if (request->ttl() <= 0) {
     response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
-    response->mutable_error()->set_errmsg("ttl is zero");
+    response->mutable_error()->set_errmsg("ttl is zero or negative");
     return;
   }
 
@@ -137,7 +137,7 @@ void VersionServiceProtoImpl::LeaseGrant(google::protobuf::RpcController* contro
 
   // lease grant
   uint64_t granted_id = 0;
-  uint64_t granted_ttl_seconds = 0;
+  int64_t granted_ttl_seconds = 0;
 
   auto ret =
       coordinator_control_->LeaseGrant(request->id(), request->ttl(), granted_id, granted_ttl_seconds, meta_increment);
@@ -226,7 +226,7 @@ void VersionServiceProtoImpl::LeaseRenew(google::protobuf::RpcController* contro
 
   pb::coordinator_internal::MetaIncrement meta_increment;
 
-  uint64_t ttl_seconds = 0;
+  int64_t ttl_seconds = 0;
   auto ret = coordinator_control_->LeaseRenew(request->id(), ttl_seconds, meta_increment);
   if (!ret.ok()) {
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
@@ -270,8 +270,8 @@ void VersionServiceProtoImpl::LeaseQuery(google::protobuf::RpcController* /*cont
     return;
   }
 
-  uint64_t granted_ttl_seconde = 0;
-  uint64_t remaining_ttl_seconds = 0;
+  int64_t granted_ttl_seconde = 0;
+  int64_t remaining_ttl_seconds = 0;
   std::set<std::string> keys;
 
   auto ret = coordinator_control_->LeaseQuery(request->id(), request->keys(), granted_ttl_seconde,
