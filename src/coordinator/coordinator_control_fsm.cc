@@ -115,6 +115,41 @@ void CoordinatorControl::OnLeaderStart(int64_t term) {
   DINGO_LOG(INFO) << "OnLeaderStart init index_name_map_safe_temp_ finished, term=" << term
                   << " count=" << index_name_map_safe_temp_.Size();
 
+  // build version_lease_to_key_map_temp_
+  {
+    std::map<uint64_t, LeaseWithKeys> t_lease_to_key;
+
+    butil::FlatMap<uint64_t, pb::coordinator_internal::LeaseInternal> version_lease_to_key_map_copy;
+    version_lease_to_key_map_copy.init(10000);
+    version_lease_map_.GetFlatMapCopy(version_lease_to_key_map_copy);
+
+    t_lease_to_key.clear();
+    for (auto lease : version_lease_to_key_map_copy) {
+      LeaseWithKeys lease_with_keys;
+      lease_with_keys.lease.Swap(&lease.second);
+      t_lease_to_key.insert(std::make_pair(lease.first, lease_with_keys));
+    }
+
+    // read all keys from version_kv to construct lease list
+    std::vector<pb::coordinator_internal::VersionKvInternal> values;
+
+    if (this->version_kv_map_.GetAllValues(values, [](pb::coordinator_internal::VersionKvInternal version_kv) -> bool {
+          return version_kv.lease() > 0;
+        }) < 0) {
+      DINGO_LOG(FATAL) << "OnLeaderStart version_kv_map_.GetAllValues failed";
+    }
+
+    for (const auto& value : values) {
+      auto it = t_lease_to_key.find(value.lease());
+      if (it != t_lease_to_key.end()) {
+        it->second.keys.insert(value.id());
+      }
+    }
+
+    BAIDU_SCOPED_LOCK(version_lease_to_key_map_temp_mutex_);
+    version_lease_to_key_map_temp_.swap(t_lease_to_key);
+  }
+
   coordinator_bvar_.SetValue(1);
   DINGO_LOG(INFO) << "OnLeaderStart finished, term=" << term;
 }

@@ -522,11 +522,13 @@ int main(int argc, char *argv[]) {
     coordinator_service.SetAutoIncrementControl(dingo_server->GetAutoIncrementControlReference());
     meta_service.SetControl(dingo_server->GetCoordinatorControl());
     meta_service.SetAutoIncrementControl(dingo_server->GetAutoIncrementControlReference());
+    version_service.SetControl(dingo_server->GetCoordinatorControl());
 
     // the Engine should be init success
     auto engine = dingo_server->GetEngine();
     coordinator_service.SetKvEngine(engine);
     meta_service.SetKvEngine(engine);
+    version_service.SetKvEngine(engine);
 
     // add service to brpc
     if (brpc_server.AddService(&coordinator_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {

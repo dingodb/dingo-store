@@ -12,26 +12,33 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "server/version_service.h"
+
+#include <sys/types.h>
+
+#include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <cstdio>
 #include <future>
 #include <optional>
 #include <vector>
-#include <cstdio>
-#include <atomic>
 
 #include "bthread/condition_variable.h"
 #include "bthread/mutex.h"
-#include "server/version_service.h"
+#include "common/constant.h"
+#include "coordinator/coordinator_closure.h"
+#include "proto/coordinator_internal.pb.h"
+#include "proto/version.pb.h"
 
 namespace dingodb {
 
 int VersionService::AddListenableVersion(VersionType type, uint64_t id, uint64_t version) {
   std::unique_lock<bthread::Mutex> lock(mutex_);
   if (auto exist = version_listeners_[type].find(id); version_listeners_[type].end() != exist) {
-      return -1;
+    return -1;
   }
-  VersionListener * version_listener = new VersionListener;
+  VersionListener* version_listener = new VersionListener;
   version_listener->version = version;
   version_listener->ref_count = 0;
   version_listeners_[type].insert({id, version_listener});
@@ -42,7 +49,7 @@ int VersionService::DelListenableVersion(VersionType type, uint64_t id) {
   std::unique_lock<bthread::Mutex> lock(mutex_);
   if (auto exist = version_listeners_[type].find(id); version_listeners_[type].end() != exist) {
     version_listeners_[type].erase(id);
-    VersionListener * version_listener = exist->second;
+    VersionListener* version_listener = exist->second;
     version_listener->version.store(0);
     while (version_listener->ref_count != 0) {
       lock.unlock();
@@ -64,11 +71,10 @@ uint64_t VersionService::GetCurrentVersion(VersionType type, uint64_t id) {
   return 0;
 }
 
-
 uint64_t VersionService::GetNewVersion(VersionType type, uint64_t id, uint64_t curr_version, uint wait_seconds) {
   std::unique_lock<bthread::Mutex> lock(mutex_);
   if (auto exist = version_listeners_[type].find(id); version_listeners_[type].end() != exist) {
-    VersionListener * version_listener = exist->second;
+    VersionListener* version_listener = exist->second;
     if (version_listener->version != curr_version) {
       return version_listener->version;
     }
@@ -92,8 +98,7 @@ int VersionService::UpdateVersion(VersionType type, uint64_t id, uint64_t versio
     return 0;
   }
   return -1;
-}  
- 
+}
 
 uint64_t VersionService::IncVersion(VersionType type, uint64_t id) {
   std::unique_lock<bthread::Mutex> lock(mutex_);
@@ -111,4 +116,216 @@ VersionService& VersionService::GetInstance() {
   return service;
 }
 
+void VersionServiceProtoImpl::LeaseGrant(google::protobuf::RpcController* controller,
+                                         const pb::version::LeaseGrantRequest* request,
+                                         pb::version::LeaseGrantResponse* response, google::protobuf::Closure* done) {
+  brpc::ClosureGuard done_guard(done);
+  auto is_leader = this->coordinator_control_->IsLeader();
+  DINGO_LOG(WARNING) << "Receive Create Executor Request: IsLeader:" << is_leader
+                     << ", Request: " << request->DebugString();
+
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  if (request->ttl() == 0) {
+    response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errmsg("ttl is zero");
+    return;
+  }
+
+  pb::coordinator_internal::MetaIncrement meta_increment;
+
+  // lease grant
+  uint64_t granted_id = 0;
+  uint64_t granted_ttl_seconds = 0;
+
+  auto ret =
+      coordinator_control_->LeaseGrant(request->id(), request->ttl(), granted_id, granted_ttl_seconds, meta_increment);
+  if (!ret.ok()) {
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    DINGO_LOG(ERROR) << "LeaseGrant failed:  lease_id=" << granted_id;
+    return;
+  }
+  DINGO_LOG(INFO) << "LeaseGrant success:  lease_id=" << granted_id;
+
+  response->set_id(granted_id);
+  response->set_ttl(granted_ttl_seconds);
+
+  // prepare for raft process
+  CoordinatorClosure<pb::version::LeaseGrantRequest, pb::version::LeaseGrantResponse>* meta_closure =
+      new CoordinatorClosure<pb::version::LeaseGrantRequest, pb::version::LeaseGrantResponse>(request, response,
+                                                                                              done_guard.release());
+
+  std::shared_ptr<Context> const ctx =
+      std::make_shared<Context>(static_cast<brpc::Controller*>(controller), meta_closure);
+  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+
+  // this is a async operation will be block by closure
+  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
 }
+
+void VersionServiceProtoImpl::LeaseRevoke(google::protobuf::RpcController* controller,
+                                          const pb::version::LeaseRevokeRequest* request,
+                                          pb::version::LeaseRevokeResponse* response, google::protobuf::Closure* done) {
+  brpc::ClosureGuard done_guard(done);
+  auto is_leader = this->coordinator_control_->IsLeader();
+  DINGO_LOG(WARNING) << "Receive Create Executor Request: IsLeader:" << is_leader
+                     << ", Request: " << request->DebugString();
+
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  if (request->id() == 0) {
+    response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errmsg("lease id is zero");
+    return;
+  }
+
+  pb::coordinator_internal::MetaIncrement meta_increment;
+
+  auto ret = coordinator_control_->LeaseRevoke(request->id(), meta_increment);
+  if (!ret.ok()) {
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    DINGO_LOG(ERROR) << "LeaseRevoke failed:  lease_id=" << request->id();
+    return;
+  }
+  DINGO_LOG(INFO) << "LeaseRevoke success:  lease_id=" << request->id();
+
+  // prepare for raft process
+  CoordinatorClosure<pb::version::LeaseRevokeRequest, pb::version::LeaseRevokeResponse>* meta_closure =
+      new CoordinatorClosure<pb::version::LeaseRevokeRequest, pb::version::LeaseRevokeResponse>(request, response,
+                                                                                                done_guard.release());
+
+  std::shared_ptr<Context> const ctx =
+      std::make_shared<Context>(static_cast<brpc::Controller*>(controller), meta_closure);
+  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+
+  // this is a async operation will be block by closure
+  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+}
+
+void VersionServiceProtoImpl::LeaseRenew(google::protobuf::RpcController* controller,
+                                         const pb::version::LeaseRenewRequest* request,
+                                         pb::version::LeaseRenewResponse* response, google::protobuf::Closure* done) {
+  brpc::ClosureGuard done_guard(done);
+  auto is_leader = this->coordinator_control_->IsLeader();
+  DINGO_LOG(WARNING) << "Receive Create Executor Request: IsLeader:" << is_leader
+                     << ", Request: " << request->DebugString();
+
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  if (request->id() == 0) {
+    response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errmsg("lease id is zero");
+    return;
+  }
+
+  pb::coordinator_internal::MetaIncrement meta_increment;
+
+  uint64_t ttl_seconds = 0;
+  auto ret = coordinator_control_->LeaseRenew(request->id(), ttl_seconds, meta_increment);
+  if (!ret.ok()) {
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    DINGO_LOG(ERROR) << "LeaseRenew failed:  lease_id=" << request->id();
+    return;
+  }
+  DINGO_LOG(INFO) << "LeaseRenew success:  lease_id=" << request->id();
+
+  response->set_id(request->id());
+  response->set_ttl(ttl_seconds);
+
+  // prepare for raft process
+  CoordinatorClosure<pb::version::LeaseRenewRequest, pb::version::LeaseRenewResponse>* meta_closure =
+      new CoordinatorClosure<pb::version::LeaseRenewRequest, pb::version::LeaseRenewResponse>(request, response,
+                                                                                              done_guard.release());
+
+  std::shared_ptr<Context> const ctx =
+      std::make_shared<Context>(static_cast<brpc::Controller*>(controller), meta_closure);
+  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+
+  // this is a async operation will be block by closure
+  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+}
+
+void VersionServiceProtoImpl::LeaseTimeToLive(google::protobuf::RpcController* /*controller*/,
+                                              const pb::version::LeaseTimeToLiveRequest* request,
+                                              pb::version::LeaseTimeToLiveResponse* response,
+                                              google::protobuf::Closure* done) {
+  brpc::ClosureGuard done_guard(done);
+  auto is_leader = this->coordinator_control_->IsLeader();
+  DINGO_LOG(WARNING) << "Receive Create Executor Request: IsLeader:" << is_leader
+                     << ", Request: " << request->DebugString();
+
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  if (request->id() == 0) {
+    response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errmsg("lease id is zero");
+    return;
+  }
+
+  uint64_t granted_ttl_seconde = 0;
+  uint64_t remaining_ttl_seconds = 0;
+  std::set<std::string> keys;
+
+  auto ret = coordinator_control_->LeaseTimeToLive(request->id(), request->keys(), granted_ttl_seconde,
+                                                   remaining_ttl_seconds, keys);
+  if (!ret.ok()) {
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    DINGO_LOG(ERROR) << "LeaseTimeToLive failed:  lease_id=" << request->id();
+    return;
+  }
+  DINGO_LOG(INFO) << "LeaseTimeToLive success:  lease_id=" << request->id();
+
+  response->set_id(request->id());
+  response->set_grantedttl(granted_ttl_seconde);
+  response->set_ttl(remaining_ttl_seconds);
+  if (!keys.empty()) {
+    for (const auto& key : keys) {
+      response->add_keys(key);
+    }
+  }
+}
+
+void VersionServiceProtoImpl::ListLeases(google::protobuf::RpcController* /*controller*/,
+                                         const pb::version::ListLeasesRequest* request,
+                                         pb::version::ListLeasesResponse* response, google::protobuf::Closure* done) {
+  brpc::ClosureGuard done_guard(done);
+  auto is_leader = this->coordinator_control_->IsLeader();
+  DINGO_LOG(WARNING) << "Receive Create Executor Request: IsLeader:" << is_leader
+                     << ", Request: " << request->DebugString();
+
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  std::vector<pb::coordinator_internal::LeaseInternal> leases;
+
+  auto ret = coordinator_control_->ListLeases(leases);
+  if (!ret.ok()) {
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    DINGO_LOG(ERROR) << "ListLeases failed";
+    return;
+  }
+  DINGO_LOG(INFO) << "ListLeases success";
+
+  if (!leases.empty()) {
+    for (const auto& lease : leases) {
+      auto* lease_status = response->add_leases();
+      lease_status->set_id(lease.id());
+    }
+  }
+}
+
+}  // namespace dingodb

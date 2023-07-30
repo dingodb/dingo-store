@@ -120,6 +120,11 @@ class MetaBvarTable {
   bvar::Status<uint64_t> part_count_;
 };
 
+struct LeaseWithKeys {
+  pb::coordinator_internal::LeaseInternal lease;
+  std::set<std::string> keys;
+};
+
 class CoordinatorControl : public MetaControl {
  public:
   CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, std::shared_ptr<MetaWriter> meta_writer,
@@ -579,7 +584,7 @@ class CoordinatorControl : public MetaControl {
   void AddDeleteTask(pb::coordinator::TaskList *task_list, uint64_t store_id, uint64_t region_id,
                      pb::coordinator_internal::MetaIncrement &meta_increment);
   void AddDeleteTaskWithCheck(pb::coordinator::TaskList *task_list, uint64_t store_id, uint64_t region_id,
-                              const ::google::protobuf::RepeatedPtrField< ::dingodb::pb::common::Peer> &peers,
+                              const ::google::protobuf::RepeatedPtrField<::dingodb::pb::common::Peer> &peers,
                               pb::coordinator_internal::MetaIncrement &meta_increment);
   // void AddPurgeTask(pb::coordinator::TaskList *task_list, uint64_t store_id, uint64_t region_id,
   //                   pb::coordinator_internal::MetaIncrement &meta_increment);
@@ -607,6 +612,16 @@ class CoordinatorControl : public MetaControl {
   bool DoTaskPreCheck(const pb::coordinator::TaskPreCheck &task_pre_check);
 
   butil::Status CleanTaskList(uint64_t task_list_id, pb::coordinator_internal::MetaIncrement &meta_increment);
+
+  // version kv
+  butil::Status LeaseGrant(uint64_t lease_id, uint64_t ttl_seconds, uint64_t &granted_id, uint64_t &granted_ttl_seconds,
+                           pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status LeaseRenew(uint64_t lease_id, uint64_t &ttl_seconds,
+                           pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status LeaseRevoke(uint64_t lease_id, pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status ListLeases(std::vector<pb::coordinator_internal::LeaseInternal> &leases);
+  butil::Status LeaseTimeToLive(uint64_t lease_id, bool get_keys, uint64_t &granted_ttl_seconds,
+                                uint64_t &remaining_ttl_seconds, std::set<std::string> &keys);
 
  private:
   butil::Status ValidateTaskListConflict(uint64_t region_id, uint64_t second_region_id);
@@ -694,6 +709,21 @@ class CoordinatorControl : public MetaControl {
   // 13.index_metrics
   DingoSafeMap<uint64_t, pb::coordinator_internal::IndexMetricsInternal> index_metrics_map_;
   MetaSafeMapStorage<pb::coordinator_internal::IndexMetricsInternal> *index_metrics_meta_;
+
+  // 14.version lease
+  DingoSafeMap<uint64_t, pb::coordinator_internal::LeaseInternal> version_lease_map_;
+  MetaSafeMapStorage<pb::coordinator_internal::LeaseInternal> *version_lease_meta_;
+  std::map<uint64_t, LeaseWithKeys>
+      version_lease_to_key_map_temp_;  // storage lease_id to key map, this map is built in on_leader_start
+  bthread_mutex_t version_lease_to_key_map_temp_mutex_;
+
+  // 15.version kv with lease
+  DingoSafeStdMap<std::string, pb::coordinator_internal::VersionKvInternal> version_kv_map_;
+  MetaSafeStringStdMapStorage<pb::coordinator_internal::VersionKvInternal> *version_kv_meta_;
+
+  // 16.version kv multi revision
+  DingoSafeStdMap<std::string, pb::coordinator_internal::VersionKvInternal> version_kv_rev_map_;
+  MetaSafeStringStdMapStorage<pb::coordinator_internal::VersionKvInternal> *version_kv_rev_meta_;
 
   // root schema write to raft
   bool root_schema_writed_to_raft_;
