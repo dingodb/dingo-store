@@ -610,8 +610,8 @@ int CoordinatorSender() {
     SendLeaseRevoke(coordinator_interaction_version);
   } else if (FLAGS_method == "LeaseRenew") {
     SendLeaseRenew(coordinator_interaction_version);
-  } else if (FLAGS_method == "LeaseTimeToLive") {
-    SendLeaseTimeToLive(coordinator_interaction_version);
+  } else if (FLAGS_method == "LeaseQuery") {
+    SendLeaseQuery(coordinator_interaction_version);
   } else if (FLAGS_method == "ListLeases") {
     SendListLeases(coordinator_interaction_version);
   }

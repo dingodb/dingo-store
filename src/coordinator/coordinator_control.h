@@ -620,8 +620,8 @@ class CoordinatorControl : public MetaControl {
                            pb::coordinator_internal::MetaIncrement &meta_increment);
   butil::Status LeaseRevoke(uint64_t lease_id, pb::coordinator_internal::MetaIncrement &meta_increment);
   butil::Status ListLeases(std::vector<pb::coordinator_internal::LeaseInternal> &leases);
-  butil::Status LeaseTimeToLive(uint64_t lease_id, bool get_keys, uint64_t &granted_ttl_seconds,
-                                uint64_t &remaining_ttl_seconds, std::set<std::string> &keys);
+  butil::Status LeaseQuery(uint64_t lease_id, bool get_keys, uint64_t &granted_ttl_seconds,
+                           uint64_t &remaining_ttl_seconds, std::set<std::string> &keys);
 
  private:
   butil::Status ValidateTaskListConflict(uint64_t region_id, uint64_t second_region_id);
@@ -711,7 +711,7 @@ class CoordinatorControl : public MetaControl {
   MetaSafeMapStorage<pb::coordinator_internal::IndexMetricsInternal> *index_metrics_meta_;
 
   // 14.version lease
-  DingoSafeMap<uint64_t, pb::coordinator_internal::LeaseInternal> version_lease_map_;
+  DingoSafeMap<uint64_t, pb::coordinator_internal::LeaseInternal> lease_map_;
   MetaSafeMapStorage<pb::coordinator_internal::LeaseInternal> *version_lease_meta_;
   std::map<uint64_t, LeaseWithKeys>
       version_lease_to_key_map_temp_;  // storage lease_id to key map, this map is built in on_leader_start

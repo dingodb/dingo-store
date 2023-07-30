@@ -121,8 +121,7 @@ void VersionServiceProtoImpl::LeaseGrant(google::protobuf::RpcController* contro
                                          pb::version::LeaseGrantResponse* response, google::protobuf::Closure* done) {
   brpc::ClosureGuard done_guard(done);
   auto is_leader = this->coordinator_control_->IsLeader();
-  DINGO_LOG(WARNING) << "Receive Create Executor Request: IsLeader:" << is_leader
-                     << ", Request: " << request->DebugString();
+  DINGO_LOG(INFO) << "Receive LeaseGrant Request: IsLeader:" << is_leader << ", Request: " << request->DebugString();
 
   if (!is_leader) {
     return RedirectResponse(response);
@@ -171,7 +170,7 @@ void VersionServiceProtoImpl::LeaseRevoke(google::protobuf::RpcController* contr
                                           pb::version::LeaseRevokeResponse* response, google::protobuf::Closure* done) {
   brpc::ClosureGuard done_guard(done);
   auto is_leader = this->coordinator_control_->IsLeader();
-  DINGO_LOG(WARNING) << "Receive Create Executor Request: IsLeader:" << is_leader
+  DINGO_LOG(WARNING) << "Receive LeaseRevoke Request: IsLeader:" << is_leader
                      << ", Request: " << request->DebugString();
 
   if (!is_leader) {
@@ -213,8 +212,7 @@ void VersionServiceProtoImpl::LeaseRenew(google::protobuf::RpcController* contro
                                          pb::version::LeaseRenewResponse* response, google::protobuf::Closure* done) {
   brpc::ClosureGuard done_guard(done);
   auto is_leader = this->coordinator_control_->IsLeader();
-  DINGO_LOG(WARNING) << "Receive Create Executor Request: IsLeader:" << is_leader
-                     << ", Request: " << request->DebugString();
+  DINGO_LOG(WARNING) << "Receive LeaseRenew Request: IsLeader:" << is_leader << ", Request: " << request->DebugString();
 
   if (!is_leader) {
     return RedirectResponse(response);
@@ -254,13 +252,12 @@ void VersionServiceProtoImpl::LeaseRenew(google::protobuf::RpcController* contro
   engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
 }
 
-void VersionServiceProtoImpl::LeaseTimeToLive(google::protobuf::RpcController* /*controller*/,
-                                              const pb::version::LeaseTimeToLiveRequest* request,
-                                              pb::version::LeaseTimeToLiveResponse* response,
-                                              google::protobuf::Closure* done) {
+void VersionServiceProtoImpl::LeaseQuery(google::protobuf::RpcController* /*controller*/,
+                                         const pb::version::LeaseQueryRequest* request,
+                                         pb::version::LeaseQueryResponse* response, google::protobuf::Closure* done) {
   brpc::ClosureGuard done_guard(done);
   auto is_leader = this->coordinator_control_->IsLeader();
-  DINGO_LOG(WARNING) << "Receive Create Executor Request: IsLeader:" << is_leader
+  DINGO_LOG(WARNING) << "Receive LeaseTimeToLive Request: IsLeader:" << is_leader
                      << ", Request: " << request->DebugString();
 
   if (!is_leader) {
@@ -277,8 +274,8 @@ void VersionServiceProtoImpl::LeaseTimeToLive(google::protobuf::RpcController* /
   uint64_t remaining_ttl_seconds = 0;
   std::set<std::string> keys;
 
-  auto ret = coordinator_control_->LeaseTimeToLive(request->id(), request->keys(), granted_ttl_seconde,
-                                                   remaining_ttl_seconds, keys);
+  auto ret = coordinator_control_->LeaseQuery(request->id(), request->keys(), granted_ttl_seconde,
+                                              remaining_ttl_seconds, keys);
   if (!ret.ok()) {
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
     response->mutable_error()->set_errmsg(ret.error_str());
@@ -302,8 +299,7 @@ void VersionServiceProtoImpl::ListLeases(google::protobuf::RpcController* /*cont
                                          pb::version::ListLeasesResponse* response, google::protobuf::Closure* done) {
   brpc::ClosureGuard done_guard(done);
   auto is_leader = this->coordinator_control_->IsLeader();
-  DINGO_LOG(WARNING) << "Receive Create Executor Request: IsLeader:" << is_leader
-                     << ", Request: " << request->DebugString();
+  DINGO_LOG(WARNING) << "Receive ListLeases Request: IsLeader:" << is_leader << ", Request: " << request->DebugString();
 
   if (!is_leader) {
     return RedirectResponse(response);

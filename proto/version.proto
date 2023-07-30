@@ -244,14 +244,14 @@ message LeaseRenewResponse {
   uint64 TTL = 4;
 }
 
-message LeaseTimeToLiveRequest {
+message LeaseQueryRequest {
   // ID is the lease ID for the lease.
   uint64 ID = 1;
   // keys is true to query all the keys attached to this lease.
   bool keys = 2;
 }
 
-message LeaseTimeToLiveResponse {
+message LeaseQueryResponse {
   dingodb.pb.error.Error error = 1;
   ResponseHeader header = 2;
   // ID is the lease ID from the keep alive request.
@@ -427,8 +427,8 @@ service VersionService {
   // to the server and streaming keep alive responses from the server to the client.
   rpc LeaseRenew(LeaseRenewRequest) returns (LeaseRenewResponse) {}
 
-  // LeaseTimeToLive retrieves lease information.
-  rpc LeaseTimeToLive(LeaseTimeToLiveRequest) returns (LeaseTimeToLiveResponse) {}
+  // LeaseQuery retrieves lease information.
+  rpc LeaseQuery(LeaseQueryRequest) returns (LeaseQueryResponse) {}
 
   // ListLeases lists all existing leases.
   rpc ListLeases(ListLeasesRequest) returns (ListLeasesResponse) {}
