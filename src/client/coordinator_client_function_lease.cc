@@ -80,16 +80,17 @@ void SendLeaseRenew(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator
   DINGO_LOG_INFO << response.DebugString();
 }
 
-void SendLeaseTimeToLive(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
-  dingodb::pb::version::LeaseTimeToLiveRequest request;
-  dingodb::pb::version::LeaseTimeToLiveResponse response;
+void SendLeaseQuery(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  dingodb::pb::version::LeaseQueryRequest request;
+  dingodb::pb::version::LeaseQueryResponse response;
 
   if (FLAGS_id.empty()) {
-    DINGO_LOG(WARNING) << "id is empty, use auto generate id";
+    DINGO_LOG(WARNING) << "id is empty, please set --id";
+    return;
   }
   request.set_id(std::stol(FLAGS_id));
 
-  auto status = coordinator_interaction->SendRequest("LeaseTimeToLive", request, response);
+  auto status = coordinator_interaction->SendRequest("LeaseQuery", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG_INFO << response.DebugString();
 }

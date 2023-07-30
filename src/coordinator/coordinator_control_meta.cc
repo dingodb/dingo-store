@@ -231,10 +231,10 @@ butil::Status CoordinatorControl::GetSchemas(uint64_t schema_id, std::vector<pb:
     // BAIDU_SCOPED_LOCK(schema_map_mutex_);
     butil::FlatMap<uint64_t, pb::coordinator_internal::SchemaInternal> schema_map_copy;
     schema_map_copy.init(10000);
-    int ret = schema_map_.GetFlatMapCopy(schema_map_copy);
+    int ret = schema_map_.GetRawMapCopy(schema_map_copy);
     if (ret < 0) {
-      DINGO_LOG(ERROR) << "ERRROR: schema_map_ GetFlatMapCopy failed";
-      return butil::Status(pb::error::Errno::EINTERNAL, "schema_map_ GetFlatMapCopy failed");
+      DINGO_LOG(ERROR) << "ERRROR: schema_map_ GetRawMapCopy failed";
+      return butil::Status(pb::error::Errno::EINTERNAL, "schema_map_ GetRawMapCopy failed");
     }
 
     for (const auto& it : schema_map_copy) {
@@ -2156,7 +2156,7 @@ void CoordinatorControl::CalculateTableMetrics() {
 
   butil::FlatMap<uint64_t, pb::coordinator_internal::TableMetricsInternal> temp_table_metrics_map;
   temp_table_metrics_map.init(10000);
-  table_metrics_map_.GetFlatMapCopy(temp_table_metrics_map);
+  table_metrics_map_.GetRawMapCopy(temp_table_metrics_map);
 
   for (auto& table_metrics_internal : temp_table_metrics_map) {
     uint64_t table_id = table_metrics_internal.first;
@@ -2189,7 +2189,7 @@ void CoordinatorControl::CalculateIndexMetrics() {
 
   butil::FlatMap<uint64_t, pb::coordinator_internal::IndexMetricsInternal> temp_index_metrics_map;
   temp_index_metrics_map.init(10000);
-  index_metrics_map_.GetFlatMapCopy(temp_index_metrics_map);
+  index_metrics_map_.GetRawMapCopy(temp_index_metrics_map);
 
   for (auto& index_metrics_internal : temp_index_metrics_map) {
     uint64_t index_id = index_metrics_internal.first;

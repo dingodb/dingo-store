@@ -108,7 +108,7 @@ void CoordinatorControl::GetStoreMap(pb::common::StoreMap& store_map) {
     // BAIDU_SCOPED_LOCK(store_map_mutex_);
     butil::FlatMap<uint64_t, pb::common::Store> store_map_copy;
     store_map_copy.init(100);
-    store_map_.GetFlatMapCopy(store_map_copy);
+    store_map_.GetRawMapCopy(store_map_copy);
 
     for (auto& element : store_map_copy) {
       auto* tmp_region = store_map.add_stores();
@@ -465,7 +465,7 @@ void CoordinatorControl::GetRegionMap(pb::common::RegionMap& region_map) {
     // BAIDU_SCOPED_LOCK(region_map_mutex_);
     butil::FlatMap<uint64_t, pb::common::Region> region_map_copy;
     region_map_copy.init(30000);
-    region_map_.GetFlatMapCopy(region_map_copy);
+    region_map_.GetRawMapCopy(region_map_copy);
     for (auto& elemnt : region_map_copy) {
       auto* tmp_region = region_map.add_regions();
       // tmp_region->CopyFrom(elemnt.second);
@@ -488,7 +488,7 @@ void CoordinatorControl::GetRegionMapFull(pb::common::RegionMap& region_map) {
     // BAIDU_SCOPED_LOCK(region_map_mutex_);
     butil::FlatMap<uint64_t, pb::common::Region> region_map_copy;
     region_map_copy.init(30000);
-    region_map_.GetFlatMapCopy(region_map_copy);
+    region_map_.GetRawMapCopy(region_map_copy);
     for (auto& elemnt : region_map_copy) {
       auto* tmp_region = region_map.add_regions();
       tmp_region->CopyFrom(elemnt.second);
@@ -500,7 +500,7 @@ void CoordinatorControl::GetDeletedRegionMap(pb::common::RegionMap& region_map) 
   // BAIDU_SCOPED_LOCK(region_map_mutex_);
   butil::FlatMap<uint64_t, pb::common::Region> region_map_copy;
   region_map_copy.init(30000);
-  deleted_region_map_.GetFlatMapCopy(region_map_copy);
+  deleted_region_map_.GetRawMapCopy(region_map_copy);
   for (auto& elemnt : region_map_copy) {
     auto* tmp_region = region_map.add_regions();
     tmp_region->CopyFrom(elemnt.second);
@@ -537,7 +537,7 @@ butil::Status CoordinatorControl::CleanDeletedRegionMap(uint64_t region_id) {
   if (region_id == 0) {
     butil::FlatMap<uint64_t, pb::common::Region> deleted_regions;
     deleted_regions.init(30000);
-    auto ret = deleted_region_map_.GetFlatMapCopy(deleted_regions);
+    auto ret = deleted_region_map_.GetRawMapCopy(deleted_regions);
     if (ret < 0) {
       DINGO_LOG(WARNING) << "CleanDeletedRegionMap failed, region_id: " << region_id
                          << " not exists in deleted_region_map_";
@@ -590,7 +590,7 @@ void CoordinatorControl::RecycleOrphanRegionOnStore() {
 
   butil::FlatMap<uint64_t, pb::common::Region> delete_regions;
   delete_regions.init(3000);
-  deleted_region_map_.GetFlatMapCopy(delete_regions);
+  deleted_region_map_.GetRawMapCopy(delete_regions);
 
   if (delete_regions.empty()) {
     DINGO_LOG(DEBUG) << "No region to recycle";
@@ -783,7 +783,7 @@ butil::Status CoordinatorControl::SelectStore(pb::common::StoreType store_type, 
   // or when resource_tag exists, select store with resource_tag
   butil::FlatMap<uint64_t, pb::common::Store> store_map_copy;
   store_map_copy.init(100);
-  store_map_.GetFlatMapCopy(store_map_copy);
+  store_map_.GetRawMapCopy(store_map_copy);
 
   // select store for region
   if (store_ids.empty()) {
@@ -1773,10 +1773,10 @@ butil::Status CoordinatorControl::ValidateTaskListConflict(uint64_t region_id, u
   // check task_list conflict
   butil::FlatMap<uint64_t, pb::coordinator::TaskList> task_list_map_temp;
   task_list_map_temp.init(1000);
-  int ret = task_list_map_.GetFlatMapCopy(task_list_map_temp);
+  int ret = task_list_map_.GetRawMapCopy(task_list_map_temp);
   if (ret < 0) {
-    DINGO_LOG(ERROR) << "ValidateTaskListConflict task_list_map_.GetFlatMapCopy failed, region_id = " << region_id;
-    return butil::Status(pb::error::Errno::EINTERNAL, "ValidateTaskListConflict task_list_map_.GetFlatMapCopy failed");
+    DINGO_LOG(ERROR) << "ValidateTaskListConflict task_list_map_.GetRawMapCopy failed, region_id = " << region_id;
+    return butil::Status(pb::error::Errno::EINTERNAL, "ValidateTaskListConflict task_list_map_.GetRawMapCopy failed");
   }
 
   for (const auto& task_list : task_list_map_temp) {
@@ -1797,13 +1797,12 @@ butil::Status CoordinatorControl::ValidateTaskListConflict(uint64_t region_id, u
   // check store operation conflict
   butil::FlatMap<uint64_t, pb::coordinator::StoreOperation> store_operation_map_temp;
   store_operation_map_temp.init(1000);
-  ret = store_operation_map_.GetFlatMapCopy(store_operation_map_temp);
+  ret = store_operation_map_.GetRawMapCopy(store_operation_map_temp);
   if (ret < 0) {
-    DINGO_LOG(ERROR) << "ValidateTaskListConflict store_operation_map_.GetFlatMapCopy failed, region_id = "
-                     << region_id;
-    return butil::Status(pb::error::Errno::EINTERNAL,
-                         "ValidateTaskListConflict store_operation_map_.GetFlatMapCopy failed, region_id = " +
-                             std::to_string(region_id));
+    DINGO_LOG(ERROR) << "ValidateTaskListConflict store_operation_map_.GetRawMapCopy failed, region_id = " << region_id;
+    return butil::Status(
+        pb::error::Errno::EINTERNAL,
+        "ValidateTaskListConflict store_operation_map_.GetRawMapCopy failed, region_id = " + std::to_string(region_id));
   }
 
   for (const auto& store_operation : store_operation_map_temp) {
@@ -2018,7 +2017,7 @@ void CoordinatorControl::GetExecutorMap(pb::common::ExecutorMap& executor_map) {
     // BAIDU_SCOPED_LOCK(executor_map_mutex_);
     butil::FlatMap<std::string, pb::common::Executor> executor_map_copy;
     executor_map_copy.init(100);
-    executor_map_.GetFlatMapCopy(executor_map_copy);
+    executor_map_.GetRawMapCopy(executor_map_copy);
     for (auto& element : executor_map_copy) {
       auto* tmp_region = executor_map.add_executors();
       tmp_region->CopyFrom(element.second);
@@ -2038,7 +2037,7 @@ butil::Status CoordinatorControl::GetExecutorUserMap(uint64_t cluster_id,
     // BAIDU_SCOPED_LOCK(executor_user_map_mutex_);
     butil::FlatMap<std::string, pb::coordinator_internal::ExecutorUserInternal> executor_user_map_copy;
     executor_user_map_copy.init(100);
-    executor_user_map_.GetFlatMapCopy(executor_user_map_copy);
+    executor_user_map_.GetRawMapCopy(executor_user_map_copy);
     for (auto& element : executor_user_map_copy) {
       auto* tmp_region = executor_user_map.add_executor_users();
       tmp_region->set_user(element.second.id());
@@ -2602,7 +2601,7 @@ void CoordinatorControl::GetMemoryInfo(pb::coordinator::CoordinatorMemoryInfo& m
     // dump id & epoch to kv
     butil::FlatMap<uint64_t, pb::coordinator_internal::IdEpochInternal> id_epoch_map_temp;
     id_epoch_map_temp.init(100);
-    int ret = id_epoch_map_.GetFlatMapCopy(id_epoch_map_temp);
+    int ret = id_epoch_map_.GetRawMapCopy(id_epoch_map_temp);
     for (auto& it : id_epoch_map_temp) {
       const google::protobuf::EnumDescriptor* enum_descriptor =
           dingodb::pb::coordinator_internal::IdEpochType_descriptor();
@@ -2721,13 +2720,13 @@ int CoordinatorControl::GetStoreOperation(uint64_t store_id, pb::coordinator::St
 
 int CoordinatorControl::GetStoreOperations(
     butil::FlatMap<uint64_t, pb::coordinator::StoreOperation>& store_operations) {
-  store_operation_map_.GetFlatMapCopy(store_operations);
+  store_operation_map_.GetRawMapCopy(store_operations);
 
   return store_operations.size();
 }
 
 void CoordinatorControl::GetTaskList(butil::FlatMap<uint64_t, pb::coordinator::TaskList>& task_lists) {
-  task_list_map_.GetFlatMapCopy(task_lists);
+  task_list_map_.GetRawMapCopy(task_lists);
 }
 
 pb::coordinator::TaskList* CoordinatorControl::CreateTaskList(pb::coordinator_internal::MetaIncrement& meta_increment) {
@@ -3078,10 +3077,10 @@ butil::Status CoordinatorControl::ProcessTaskList() {
 
   butil::FlatMap<uint64_t, pb::coordinator::TaskList> task_list_map;
   task_list_map.init(100);
-  auto ret = task_list_map_.GetFlatMapCopy(task_list_map);
+  auto ret = task_list_map_.GetRawMapCopy(task_list_map);
   if (ret < 0) {
-    DINGO_LOG(ERROR) << "task_list_map_.GetFlatMapCopy failed";
-    return butil::Status(pb::error::EINTERNAL, "task_list_map_.GetFlatMapCopy failed");
+    DINGO_LOG(ERROR) << "task_list_map_.GetRawMapCopy failed";
+    return butil::Status(pb::error::EINTERNAL, "task_list_map_.GetRawMapCopy failed");
   }
 
   if (task_list_map.empty()) {
@@ -3115,10 +3114,10 @@ butil::Status CoordinatorControl::CleanTaskList(uint64_t task_list_id,
                                                 pb::coordinator_internal::MetaIncrement& meta_increment) {
   butil::FlatMap<uint64_t, pb::coordinator::TaskList> task_list_map;
   task_list_map.init(100);
-  auto ret = task_list_map_.GetFlatMapCopy(task_list_map);
+  auto ret = task_list_map_.GetRawMapCopy(task_list_map);
   if (ret < 0) {
-    DINGO_LOG(ERROR) << "task_list_map_.GetFlatMapCopy failed";
-    return butil::Status(pb::error::EINTERNAL, "task_list_map_.GetFlatMapCopy failed");
+    DINGO_LOG(ERROR) << "task_list_map_.GetRawMapCopy failed";
+    return butil::Status(pb::error::EINTERNAL, "task_list_map_.GetRawMapCopy failed");
   }
 
   if (task_list_map.empty()) {

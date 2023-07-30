@@ -66,9 +66,9 @@ void CoordinatorControl::OnLeaderStart(int64_t term) {
 
     butil::FlatMap<uint64_t, pb::coordinator_internal::IdEpochInternal> temp_copy;
     temp_copy.init(100);
-    id_epoch_map_.GetFlatMapCopy(temp_copy);
+    id_epoch_map_.GetRawMapCopy(temp_copy);
     id_epoch_map_safe_temp_.Clear();
-    id_epoch_map_safe_temp_.CopyFlatMap(temp_copy);
+    id_epoch_map_safe_temp_.CopyFromRawMap(temp_copy);
   }
   DINGO_LOG(INFO) << "OnLeaderStart init id_epoch_safe_map_temp_ finished, term=" << term
                   << " count=" << id_epoch_map_safe_temp_.Size();
@@ -79,7 +79,7 @@ void CoordinatorControl::OnLeaderStart(int64_t term) {
     schema_name_map_safe_temp_.Clear();
     butil::FlatMap<uint64_t, pb::coordinator_internal::SchemaInternal> schema_map_copy;
     schema_map_copy.init(10000);
-    schema_map_.GetFlatMapCopy(schema_map_copy);
+    schema_map_.GetRawMapCopy(schema_map_copy);
     for (const auto& it : schema_map_copy) {
       schema_name_map_safe_temp_.Put(it.second.name(), it.first);
     }
@@ -93,7 +93,7 @@ void CoordinatorControl::OnLeaderStart(int64_t term) {
     table_name_map_safe_temp_.Clear();
     butil::FlatMap<uint64_t, pb::coordinator_internal::TableInternal> table_map_copy;
     table_map_copy.init(10000);
-    table_map_.GetFlatMapCopy(table_map_copy);
+    table_map_.GetRawMapCopy(table_map_copy);
     for (const auto& it : table_map_copy) {
       table_name_map_safe_temp_.Put(std::to_string(it.second.schema_id()) + it.second.definition().name(), it.first);
     }
@@ -107,7 +107,7 @@ void CoordinatorControl::OnLeaderStart(int64_t term) {
     index_name_map_safe_temp_.Clear();
     butil::FlatMap<uint64_t, pb::coordinator_internal::IndexInternal> index_map_copy;
     index_map_copy.init(10000);
-    index_map_.GetFlatMapCopy(index_map_copy);
+    index_map_.GetRawMapCopy(index_map_copy);
     for (const auto& it : index_map_copy) {
       index_name_map_safe_temp_.Put(std::to_string(it.second.schema_id()) + it.second.definition().name(), it.first);
     }
@@ -121,7 +121,7 @@ void CoordinatorControl::OnLeaderStart(int64_t term) {
 
     butil::FlatMap<uint64_t, pb::coordinator_internal::LeaseInternal> version_lease_to_key_map_copy;
     version_lease_to_key_map_copy.init(10000);
-    version_lease_map_.GetFlatMapCopy(version_lease_to_key_map_copy);
+    lease_map_.GetRawMapCopy(version_lease_to_key_map_copy);
 
     t_lease_to_key.clear();
     for (auto lease : version_lease_to_key_map_copy) {
@@ -360,6 +360,42 @@ bool CoordinatorControl::LoadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapsh
     snapshot_file_kv->CopyFrom(kv);
   }
   DINGO_LOG(INFO) << "Snapshot index_metrics_meta, count=" << kvs.size();
+  kvs.clear();
+
+  // 14.lease_map_
+  if (!meta_reader_->Scan(snapshot, version_lease_meta_->Prefix(), kvs)) {
+    return false;
+  }
+
+  for (const auto& kv : kvs) {
+    auto* snapshot_file_kv = meta_snapshot_file.add_lease_map_kvs();
+    snapshot_file_kv->CopyFrom(kv);
+  }
+  DINGO_LOG(INFO) << "Snapshot lease_map_, count=" << kvs.size();
+  kvs.clear();
+
+  // 15.version_kv_map_
+  if (!meta_reader_->Scan(snapshot, version_kv_meta_->Prefix(), kvs)) {
+    return false;
+  }
+
+  for (const auto& kv : kvs) {
+    auto* snapshot_file_kv = meta_snapshot_file.add_version_kv_map_kvs();
+    snapshot_file_kv->CopyFrom(kv);
+  }
+  DINGO_LOG(INFO) << "Snapshot version_kv_map_, count=" << kvs.size();
+  kvs.clear();
+
+  // 16.version_kv_rev_map_
+  if (!meta_reader_->Scan(snapshot, version_kv_rev_meta_->Prefix(), kvs)) {
+    return false;
+  }
+
+  for (const auto& kv : kvs) {
+    auto* snapshot_file_kv = meta_snapshot_file.add_version_kv_rev_map_kvs();
+    snapshot_file_kv->CopyFrom(kv);
+  }
+  DINGO_LOG(INFO) << "Snapshot version_kv_rev_map_, count=" << kvs.size();
   kvs.clear();
 
   return true;
@@ -788,17 +824,101 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
   DINGO_LOG(INFO) << "LoadSnapshot index_metrics_meta, count=" << kvs.size();
   kvs.clear();
 
+  // 14.lease_map_
+  kvs.reserve(meta_snapshot_file.lease_map_kvs_size());
+  for (int i = 0; i < meta_snapshot_file.lease_map_kvs_size(); i++) {
+    kvs.push_back(meta_snapshot_file.lease_map_kvs(i));
+  }
+  {
+    // BAIDU_SCOPED_LOCK(lease_map_mutex_);
+    if (!version_lease_meta_->Recover(kvs)) {
+      return false;
+    }
+
+    // remove data in rocksdb
+    if (!meta_writer_->DeletePrefix(version_lease_meta_->internal_prefix)) {
+      DINGO_LOG(ERROR) << "Coordinator delete version_lease_meta_ range failed in LoadMetaFromSnapshotFile";
+      return false;
+    }
+    DINGO_LOG(INFO) << "Coordinator delete range version_lease_meta_ success in LoadMetaFromSnapshotFile";
+
+    // write data to rocksdb
+    if (!meta_writer_->Put(kvs)) {
+      DINGO_LOG(ERROR) << "Coordinator write version_lease_meta_ failed in LoadMetaFromSnapshotFile";
+      return false;
+    }
+    DINGO_LOG(INFO) << "Coordinator put version_lease_meta_ success in LoadMetaFromSnapshotFile";
+  }
+  DINGO_LOG(INFO) << "LoadSnapshot version_lease_meta, count=" << kvs.size();
+  kvs.clear();
+
+  // 15.version_kv_map_
+  kvs.reserve(meta_snapshot_file.version_kv_map_kvs_size());
+  for (int i = 0; i < meta_snapshot_file.version_kv_map_kvs_size(); i++) {
+    kvs.push_back(meta_snapshot_file.version_kv_map_kvs(i));
+  }
+  {
+    // BAIDU_SCOPED_LOCK(version_kv_map_mutex_);
+    if (!version_kv_meta_->Recover(kvs)) {
+      return false;
+    }
+
+    // remove data in rocksdb
+    if (!meta_writer_->DeletePrefix(version_kv_meta_->internal_prefix)) {
+      DINGO_LOG(ERROR) << "Coordinator delete version_kv_meta_ range failed in LoadMetaFromSnapshotFile";
+      return false;
+    }
+    DINGO_LOG(INFO) << "Coordinator delete range version_kv_meta_ success in LoadMetaFromSnapshotFile";
+
+    // write data to rocksdb
+    if (!meta_writer_->Put(kvs)) {
+      DINGO_LOG(ERROR) << "Coordinator write version_kv_meta_ failed in LoadMetaFromSnapshotFile";
+      return false;
+    }
+    DINGO_LOG(INFO) << "Coordinator put version_kv_meta_ success in LoadMetaFromSnapshotFile";
+  }
+  DINGO_LOG(INFO) << "LoadSnapshot version_kv_meta, count=" << kvs.size();
+  kvs.clear();
+
+  // 16.version_kv_rev_map_
+  kvs.reserve(meta_snapshot_file.version_kv_rev_map_kvs_size());
+  for (int i = 0; i < meta_snapshot_file.version_kv_rev_map_kvs_size(); i++) {
+    kvs.push_back(meta_snapshot_file.version_kv_rev_map_kvs(i));
+  }
+  {
+    // BAIDU_SCOPED_LOCK(version_kv_rev_map_mutex_);
+    if (!version_kv_rev_meta_->Recover(kvs)) {
+      return false;
+    }
+
+    // remove data in rocksdb
+    if (!meta_writer_->DeletePrefix(version_kv_rev_meta_->internal_prefix)) {
+      DINGO_LOG(ERROR) << "Coordinator delete version_kv_rev_meta_ range failed in LoadMetaFromSnapshotFile";
+      return false;
+    }
+    DINGO_LOG(INFO) << "Coordinator delete range version_kv_rev_meta_ success in LoadMetaFromSnapshotFile";
+
+    // write data to rocksdb
+    if (!meta_writer_->Put(kvs)) {
+      DINGO_LOG(ERROR) << "Coordinator write version_kv_rev_meta_ failed in LoadMetaFromSnapshotFile";
+      return false;
+    }
+    DINGO_LOG(INFO) << "Coordinator put version_kv_rev_meta_ success in LoadMetaFromSnapshotFile";
+  }
+  DINGO_LOG(INFO) << "LoadSnapshot version_kv_rev_meta, count=" << kvs.size();
+  kvs.clear();
+
   // init id_epoch_map_temp_
   // copy id_epoch_map_ to id_epoch_map_temp_
   {
     // BAIDU_SCOPED_LOCK(id_epoch_map_mutex_);
-    // id_epoch_map_safe_temp_.CopyFlatMap(id_epoch_map_);
+    // id_epoch_map_safe_temp_.CopyFromRawMap(id_epoch_map_);
     // id_epoch_map_safe_temp_.Copy(id_epoch_map_);
 
     butil::FlatMap<uint64_t, pb::coordinator_internal::IdEpochInternal> temp_copy;
     temp_copy.init(100);
-    id_epoch_map_.GetFlatMapCopy(temp_copy);
-    id_epoch_map_safe_temp_.CopyFlatMap(temp_copy);
+    id_epoch_map_.GetRawMapCopy(temp_copy);
+    id_epoch_map_safe_temp_.CopyFromRawMap(temp_copy);
   }
   DINGO_LOG(INFO) << "LoadSnapshot id_epoch_safe_map_temp, count=" << id_epoch_map_safe_temp_.Size();
 
@@ -808,7 +928,7 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
     schema_name_map_safe_temp_.Clear();
     butil::FlatMap<uint64_t, pb::coordinator_internal::SchemaInternal> schema_map_copy;
     schema_map_copy.init(10000);
-    schema_map_.GetFlatMapCopy(schema_map_copy);
+    schema_map_.GetRawMapCopy(schema_map_copy);
     for (const auto& it : schema_map_copy) {
       schema_name_map_safe_temp_.Put(it.second.name(), it.first);
     }
@@ -821,7 +941,7 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
     table_name_map_safe_temp_.Clear();
     butil::FlatMap<uint64_t, pb::coordinator_internal::TableInternal> table_map_copy;
     table_map_copy.init(10000);
-    table_map_.GetFlatMapCopy(table_map_copy);
+    table_map_.GetRawMapCopy(table_map_copy);
     for (const auto& it : table_map_copy) {
       table_name_map_safe_temp_.Put(std::to_string(it.second.schema_id()) + it.second.definition().name(), it.first);
     }
@@ -835,13 +955,50 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
     index_name_map_safe_temp_.Clear();
     butil::FlatMap<uint64_t, pb::coordinator_internal::IndexInternal> index_map_copy;
     index_map_copy.init(10000);
-    index_map_.GetFlatMapCopy(index_map_copy);
+    index_map_.GetRawMapCopy(index_map_copy);
     for (const auto& it : index_map_copy) {
       index_name_map_safe_temp_.Put(std::to_string(it.second.schema_id()) + it.second.definition().name(), it.first);
     }
   }
 
   DINGO_LOG(INFO) << "LoadSnapshot index_name_map_safe_temp, count=" << index_name_map_safe_temp_.Size();
+
+  // build version_lease_to_key_map_temp_
+  {
+    std::map<uint64_t, LeaseWithKeys> t_lease_to_key;
+
+    butil::FlatMap<uint64_t, pb::coordinator_internal::LeaseInternal> version_lease_to_key_map_copy;
+    version_lease_to_key_map_copy.init(10000);
+    lease_map_.GetRawMapCopy(version_lease_to_key_map_copy);
+
+    t_lease_to_key.clear();
+    for (auto lease : version_lease_to_key_map_copy) {
+      LeaseWithKeys lease_with_keys;
+      lease_with_keys.lease.Swap(&lease.second);
+      t_lease_to_key.insert(std::make_pair(lease.first, lease_with_keys));
+    }
+
+    // read all keys from version_kv to construct lease list
+    std::vector<pb::coordinator_internal::VersionKvInternal> values;
+
+    if (this->version_kv_map_.GetAllValues(values, [](pb::coordinator_internal::VersionKvInternal version_kv) -> bool {
+          return version_kv.lease() > 0;
+        }) < 0) {
+      DINGO_LOG(FATAL) << "OnLeaderStart version_kv_map_.GetAllValues failed";
+    }
+
+    for (const auto& value : values) {
+      auto it = t_lease_to_key.find(value.lease());
+      if (it != t_lease_to_key.end()) {
+        it->second.keys.insert(value.id());
+      }
+    }
+
+    BAIDU_SCOPED_LOCK(version_lease_to_key_map_temp_mutex_);
+    version_lease_to_key_map_temp_.swap(t_lease_to_key);
+  }
+
+  DINGO_LOG(INFO) << "LoadSnapshot version_lease_to_key_map_temp, count=" << version_lease_to_key_map_temp_.size();
 
   return true;
 }
@@ -896,6 +1053,15 @@ void LogMetaIncrementSize(pb::coordinator_internal::MetaIncrement& meta_incremen
   }
   if (meta_increment.index_metrics_size() > 0) {
     DINGO_LOG(DEBUG) << "13.index_metrics_size=" << meta_increment.index_metrics_size();
+  }
+  if (meta_increment.leases_size() > 0) {
+    DINGO_LOG(DEBUG) << "14.leases_size=" << meta_increment.leases_size();
+  }
+  if (meta_increment.version_kvs_size() > 0) {
+    DINGO_LOG(DEBUG) << "15.version_kvs_size=" << meta_increment.version_kvs_size();
+  }
+  if (meta_increment.version_kv_revs_size() > 0) {
+    DINGO_LOG(DEBUG) << "16.version_kv_revs_size=" << meta_increment.version_kv_revs_size();
   }
 
   DINGO_LOG(DEBUG) << meta_increment.DebugString();
@@ -1870,6 +2036,150 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
 
         // meta_delete_kv
         meta_delete_to_kv.push_back(index_metrics_meta_->TransformToKvValue(index_metrics.index_metrics()));
+      }
+    }
+  }
+
+  // 14.lease_map_
+  {
+    if (meta_increment.leases_size() > 0) {
+      DINGO_LOG(INFO) << "ApplyMetaIncrement version_leases size=" << meta_increment.leases_size();
+    }
+
+    // BAIDU_SCOPED_LOCK(lease_map_mutex_);
+    for (int i = 0; i < meta_increment.leases_size(); i++) {
+      const auto& version_lease = meta_increment.leases(i);
+      if (version_lease.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
+        // lease_map_[version_lease.id()] = version_lease.version_lease();
+        int ret = lease_map_.Put(version_lease.id(), version_lease.lease());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement version_lease CREATE, [id=" << version_lease.id() << "] success";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement version_lease CREATE, [id=" << version_lease.id() << "] failed";
+        }
+
+        // meta_write_kv
+        meta_write_to_kv.push_back(version_lease_meta_->TransformToKvValue(version_lease.lease()));
+
+      } else if (version_lease.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
+        // auto& update_version_lease = lease_map_[version_lease.id()];
+        // update_version_lease.CopyFrom(version_lease.version_lease());
+        int ret = lease_map_.Put(version_lease.id(), version_lease.lease());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement version_lease UPDATE, [id=" << version_lease.id() << "] success";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement version_lease UPDATE, [id=" << version_lease.id() << "] failed";
+        }
+
+        // meta_write_kv
+        meta_write_to_kv.push_back(version_lease_meta_->TransformToKvValue(version_lease.lease()));
+
+      } else if (version_lease.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
+        int ret = lease_map_.Erase(version_lease.id());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement version_lease DELETE, [id=" << version_lease.id() << "] success";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement version_lease DELETE, [id=" << version_lease.id() << "] failed";
+        }
+
+        // meta_delete_kv
+        meta_delete_to_kv.push_back(version_lease_meta_->TransformToKvValue(version_lease.lease()));
+      }
+    }
+  }
+
+  // 15.version_kv_map_
+  {
+    if (meta_increment.version_kvs_size() > 0) {
+      DINGO_LOG(INFO) << "ApplyMetaIncrement version_kvs size=" << meta_increment.version_kvs_size();
+    }
+
+    // BAIDU_SCOPED_LOCK(version_kv_map_mutex_);
+    for (int i = 0; i < meta_increment.version_kvs_size(); i++) {
+      const auto& version_kv = meta_increment.version_kvs(i);
+      if (version_kv.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
+        // version_kv_map_[version_kv.id()] = version_kv.version_kv();
+        int ret = version_kv_map_.PutIfAbsent(version_kv.id(), version_kv.version_kv());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement version_kv CREATE, [id=" << version_kv.id() << "] success";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement version_kv CREATE, [id=" << version_kv.id() << "] failed";
+        }
+
+        // meta_write_kv
+        meta_write_to_kv.push_back(version_kv_meta_->TransformToKvValue(version_kv.version_kv()));
+
+      } else if (version_kv.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
+        // auto& update_version_kv = version_kv_map_[version_kv.id()];
+        // update_version_kv.CopyFrom(version_kv.version_kv());
+        int ret = version_kv_map_.PutIfExists(version_kv.id(), version_kv.version_kv());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement version_kv UPDATE, [id=" << version_kv.id() << "] success";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement version_kv UPDATE, [id=" << version_kv.id() << "] failed";
+        }
+
+        // meta_write_kv
+        meta_write_to_kv.push_back(version_kv_meta_->TransformToKvValue(version_kv.version_kv()));
+
+      } else if (version_kv.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
+        int ret = version_kv_map_.Erase(version_kv.id());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement version_kv DELETE, [id=" << version_kv.id() << "] success";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement version_kv DELETE, [id=" << version_kv.id() << "] failed";
+        }
+
+        // meta_delete_kv
+        meta_delete_to_kv.push_back(version_kv_meta_->TransformToKvValue(version_kv.version_kv()));
+      }
+    }
+  }
+
+  // 16.version_kv_rev_map_
+  {
+    if (meta_increment.version_kv_revs_size() > 0) {
+      DINGO_LOG(INFO) << "ApplyMetaIncrement version_kv_revs size=" << meta_increment.version_kv_revs_size();
+    }
+
+    // BAIDU_SCOPED_LOCK(version_kv_rev_map_mutex_);
+    for (int i = 0; i < meta_increment.version_kv_revs_size(); i++) {
+      const auto& version_kv_rev = meta_increment.version_kv_revs(i);
+      if (version_kv_rev.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
+        // version_kv_rev_map_[version_kv_rev.id()] = version_kv_rev.version_kv_rev();
+        int ret = version_kv_rev_map_.PutIfAbsent(version_kv_rev.id(), version_kv_rev.version_kv());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement version_kv_rev CREATE, [id=" << version_kv_rev.id() << "] success";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement version_kv_rev CREATE, [id=" << version_kv_rev.id() << "] failed";
+        }
+
+        // meta_write_kv
+        meta_write_to_kv.push_back(version_kv_rev_meta_->TransformToKvValue(version_kv_rev.version_kv()));
+
+      } else if (version_kv_rev.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
+        // auto& update_version_kv_rev = version_kv_rev_map_[version_kv_rev.id()];
+        // update_version_kv_rev.CopyFrom(version_kv_rev.version_kv_rev());
+        int ret = version_kv_rev_map_.PutIfExists(version_kv_rev.id(), version_kv_rev.version_kv());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement version_kv_rev UPDATE, [id=" << version_kv_rev.id() << "] success";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement version_kv_rev UPDATE, [id=" << version_kv_rev.id() << "] failed";
+        }
+
+        // meta_write_kv
+        meta_write_to_kv.push_back(version_kv_rev_meta_->TransformToKvValue(version_kv_rev.version_kv()));
+
+      } else if (version_kv_rev.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
+        int ret = version_kv_rev_map_.Erase(version_kv_rev.id());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement version_kv_rev DELETE, [id=" << version_kv_rev.id() << "] success";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement version_kv_rev DELETE, [id=" << version_kv_rev.id() << "] failed";
+        }
+
+        // meta_delete_kv
+        meta_delete_to_kv.push_back(version_kv_rev_meta_->TransformToKvValue(version_kv_rev.version_kv()));
       }
     }
   }

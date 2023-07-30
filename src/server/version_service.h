@@ -146,9 +146,8 @@ class VersionServiceProtoImpl : public dingodb::pb::version::VersionService {
   void LeaseRenew(google::protobuf::RpcController* cntl_basecontroller, const pb::version::LeaseRenewRequest* request,
                   pb::version::LeaseRenewResponse* response, google::protobuf::Closure* done) override;
 
-  void LeaseTimeToLive(google::protobuf::RpcController* cntl_basecontroller,
-                       const pb::version::LeaseTimeToLiveRequest* request,
-                       pb::version::LeaseTimeToLiveResponse* response, google::protobuf::Closure* done) override;
+  void LeaseQuery(google::protobuf::RpcController* cntl_basecontroller, const pb::version::LeaseQueryRequest* request,
+                  pb::version::LeaseQueryResponse* response, google::protobuf::Closure* done) override;
 
   void ListLeases(google::protobuf::RpcController* cntl_basecontroller, const pb::version::ListLeasesRequest* request,
                   pb::version::ListLeasesResponse* response, google::protobuf::Closure* done) override;

@@ -308,7 +308,7 @@ class MetaSafeMapStorage {
   std::vector<pb::common::KeyValue> TransformToKvWithAll() {
     butil::FlatMap<uint64_t, T> temp_map;
     temp_map.init(10000);
-    elements_->GetFlatMapCopy(temp_map);
+    elements_->GetRawMapCopy(temp_map);
 
     std::vector<pb::common::KeyValue> kvs;
     for (const auto &it : temp_map) {
@@ -420,7 +420,7 @@ class MetaSafeStringMapStorage {
   std::vector<pb::common::KeyValue> TransformToKvWithAll() {
     butil::FlatMap<std::string, T> temp_map;
     temp_map.init(10000);
-    elements_->GetFlatMapCopy(temp_map);
+    elements_->GetRawMapCopy(temp_map);
 
     std::vector<pb::common::KeyValue> kvs;
     for (const auto &it : temp_map) {
@@ -575,9 +575,9 @@ class MetaSafeStringStdMapStorage {
  public:
   const std::string internal_prefix;
   MetaSafeStringStdMapStorage(DingoSafeStdMap<std::string, T> *elements_ptr)
-      : internal_prefix(std::string("meta_map_safe_string") + typeid(T).name()), elements_(elements_ptr){};
+      : internal_prefix(std::string("meta_stdmap_safe_string") + typeid(T).name()), elements_(elements_ptr){};
   MetaSafeStringStdMapStorage(DingoSafeStdMap<std::string, T> *elements_ptr, const std::string &prefix)
-      : internal_prefix(std::string("meta_map_safe_string") + prefix), elements_(elements_ptr){};
+      : internal_prefix(std::string("meta_stdmap_safe_string") + prefix), elements_(elements_ptr){};
   ~MetaSafeStringStdMapStorage() = default;
 
   std::string Prefix() { return internal_prefix; }
@@ -640,7 +640,7 @@ class MetaSafeStringStdMapStorage {
   std::vector<pb::common::KeyValue> TransformToKvWithAll() {
     butil::FlatMap<std::string, T> temp_map;
     temp_map.init(10000);
-    elements_->GetFlatMapCopy(temp_map);
+    elements_->GetRawMapCopy(temp_map);
 
     std::vector<pb::common::KeyValue> kvs;
     for (const auto &it : temp_map) {

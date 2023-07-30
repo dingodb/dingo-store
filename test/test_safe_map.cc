@@ -87,7 +87,7 @@ TEST(DingoSafeMapTest, DingoSafeMapCopy) {
   map2.insert(4, 4);
   safe_map.Clear();
   EXPECT_EQ(safe_map.Size(), 0);
-  safe_map.CopyFlatMap(map2);
+  safe_map.CopyFromRawMap(map2);
   EXPECT_EQ(safe_map.Size(), 4);
   auto val9 = safe_map.Get(4);
   EXPECT_EQ(val9, 4);
@@ -100,6 +100,6 @@ TEST(DingoSafeMapTest, DingoSafeMapCopy) {
 
   butil::FlatMap<uint64_t, uint64_t> map3;
   map3.init(100);
-  safe_map.GetFlatMapCopy(map3);
+  safe_map.GetRawMapCopy(map3);
   EXPECT_EQ(map3.size(), 3);
 }

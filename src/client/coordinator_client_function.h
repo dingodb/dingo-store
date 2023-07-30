@@ -124,7 +124,7 @@ void SendDeleteAutoIncrement(std::shared_ptr<dingodb::CoordinatorInteraction> co
 void SendLeaseGrant(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendLeaseRevoke(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendLeaseRenew(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
-void SendLeaseTimeToLive(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendLeaseQuery(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendListLeases(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 
 // debug

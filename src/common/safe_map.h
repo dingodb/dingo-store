@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <functional>
 #include <set>
+#include <utility>
 #include <vector>
 
 #include "butil/containers/doubly_buffered_data.h"
@@ -197,19 +198,19 @@ class DingoSafeMap {
 
   // Copy
   // copy the map with FlatMap input_map
-  int CopyFlatMap(const TypeRawMap &input_map) {
-    if (safe_map.Modify(InnerCopyFlatMap, input_map) > 0) {
+  int CopyFromRawMap(const TypeRawMap &input_map) {
+    if (safe_map.Modify(InnerCopyFromRawMap, input_map) > 0) {
       return 1;
     } else {
       return -1;
     }
   }
 
-  // GetFlatMapCopy
+  // GetRawMapCopy
   // get a copy of the internal flat map
   // used to get all key-value pairs from safe map
   // the out_map must be initialized before call this function
-  int GetFlatMapCopy(TypeRawMap &out_map) {
+  int GetRawMapCopy(TypeRawMap &out_map) {
     TypeScopedPtr ptr;
     if (safe_map.Read(&ptr) != 0) {
       return -1;
@@ -306,7 +307,7 @@ class DingoSafeMap {
 
  protected:
   // all inner function return 1 if modify record access, return 0 if no record is successfully modified
-  static size_t InnerCopyFlatMap(TypeRawMap &map, const TypeRawMap &input_map) {
+  static size_t InnerCopyFromRawMap(TypeRawMap &map, const TypeRawMap &input_map) {
     map = input_map;
     return 1;
   }
@@ -575,19 +576,19 @@ class DingoSafeStdMap {
 
   // Copy
   // copy the map with FlatMap input_map
-  int CopyFlatMap(const TypeRawMap &input_map) {
-    if (safe_map.Modify(InnerCopyFlatMap, input_map) > 0) {
+  int CopyFromRawMap(const TypeRawMap &input_map) {
+    if (safe_map.Modify(InnerCopyFromRawMap, input_map) > 0) {
       return 1;
     } else {
       return -1;
     }
   }
 
-  // GetFlatMapCopy
+  // GetRawMapCopy
   // get a copy of the internal flat map
   // used to get all key-value pairs from safe map
   // the out_map must be initialized before call this function
-  int GetFlatMapCopy(TypeRawMap &out_map) {
+  int GetRawMapCopy(TypeRawMap &out_map) {
     TypeScopedPtr ptr;
     if (safe_map.Read(&ptr) != 0) {
       return -1;
@@ -684,7 +685,7 @@ class DingoSafeStdMap {
 
  protected:
   // all inner function return 1 if modify record access, return 0 if no record is successfully modified
-  static size_t InnerCopyFlatMap(TypeRawMap &map, const TypeRawMap &input_map) {
+  static size_t InnerCopyFromRawMap(TypeRawMap &map, const TypeRawMap &input_map) {
     map = input_map;
     return 1;
   }
@@ -715,38 +716,38 @@ class DingoSafeStdMap {
     }
 
     for (int i = 0; i < key_list.size(); i++) {
-      map.insert(key_list[i], value_list[i]);
+      map.insert(std::pair<T_KEY, T_VALUE>(key_list[i], value_list[i]));
     }
     return key_list.size();
   }
 
   static size_t InnerPutIfExists(TypeRawMap &map, const T_KEY &key, const T_VALUE &value) {
-    auto *value_ptr = map.seek(key);
-    if (value_ptr == nullptr) {
+    auto iter = map.find(key);
+    if (iter == map.end()) {
       return 0;
     }
 
-    *value_ptr = value;
+    iter->second = value;
     return 1;
   }
 
   static size_t InnerPutIfAbsent(TypeRawMap &map, const T_KEY &key, const T_VALUE &value) {
-    auto *value_ptr = map.seek(key);
-    if (value_ptr != nullptr) {
+    auto iter = map.find(key);
+    if (iter != map.end()) {
       return 0;
     }
 
-    map.insert(key, value);
+    map.insert(std::pair<T_KEY, T_VALUE>(key, value));
     return 1;
   }
 
   static size_t InnerPutIfEqual(TypeRawMap &map, const T_KEY &key, const T_VALUE &value) {
-    auto *value_ptr = map.seek(key);
-    if (value_ptr == nullptr) {
+    auto iter = map.find(key);
+    if (iter == map.end()) {
       return 0;
     }
 
-    if (*value_ptr != value) {
+    if (iter != value) {
       return 0;
     }
 
@@ -754,16 +755,16 @@ class DingoSafeStdMap {
   }
 
   static size_t InnerPutIfNotEqual(TypeRawMap &map, const T_KEY &key, const T_VALUE &value) {
-    auto *value_ptr = map.seek(key);
-    if (value_ptr == nullptr) {
+    auto iter = map.find(key);
+    if (iter == map.end()) {
       return 0;
     }
 
-    if (*value_ptr == value) {
+    if (iter->second == value) {
       return 0;
     }
 
-    *value_ptr = value;
+    iter->second = value;
     return 1;
   }
 
