@@ -38,6 +38,7 @@
 #include "proto/coordinator_internal.pb.h"
 #include "proto/error.pb.h"
 #include "proto/meta.pb.h"
+#include "proto/version.pb.h"
 #include "raft/raft_node.h"
 
 namespace dingodb {
@@ -559,6 +560,8 @@ class CoordinatorControl : public MetaControl {
   void OnLeaderStop() override;                                          // for raft fsm
   int GetAppliedTermAndIndex(uint64_t &term, uint64_t &index) override;  // for raft fsm
 
+  void BuildTempMaps();
+
   // set raft_node to coordinator_control
   void SetRaftNode(std::shared_ptr<RaftNode> raft_node) override;  // for raft fsm
   std::shared_ptr<RaftNode> GetRaftNode() override;                // for raft fsm
@@ -623,7 +626,7 @@ class CoordinatorControl : public MetaControl {
   // lease timeout/revoke task
   void CompactionTask();
 
-  // version kv
+  // lease
   butil::Status LeaseGrant(uint64_t lease_id, int64_t ttl_seconds, uint64_t &granted_id, int64_t &granted_ttl_seconds,
                            pb::coordinator_internal::MetaIncrement &meta_increment);
   butil::Status LeaseRenew(uint64_t lease_id, int64_t &ttl_seconds,
@@ -633,6 +636,50 @@ class CoordinatorControl : public MetaControl {
   butil::Status ListLeases(std::vector<pb::coordinator_internal::LeaseInternal> &leases);
   butil::Status LeaseQuery(uint64_t lease_id, bool get_keys, int64_t &granted_ttl_seconds,
                            int64_t &remaining_ttl_seconds, std::set<std::string> &keys);
+  void BuildLeaseToKeyMap();
+
+  // revision encode and decode
+  static std::string RevisionToString(const pb::coordinator_internal::RevisionInternal &revision);
+  static pb::coordinator_internal::RevisionInternal StringToRevision(const std::string &input_string);
+
+  // raw kv functions
+  butil::Status GetRawKvIndex(const std::string &key, pb::coordinator_internal::KvIndexInternal &kv_index);
+  butil::Status GetRawKvRev(const pb::coordinator_internal::RevisionInternal &revision,
+                            pb::coordinator_internal::KvRevInternal &kv_rev);
+
+  // kv functions for api
+  // KvRange is the get function
+  // in:  key
+  // in:  range_end
+  // in:  limit
+  // in:  keys_only
+  // in:  count_only
+  // out: kv
+  // return: errno
+  butil::Status KvRange(const std::string &key, const std::string &range_end, int64_t limit, bool keys_only,
+                        bool count_only, std::vector<pb::version::Kv> &kv, uint64_t &total_count_in_range);
+  // KvPut is the put function
+  // in:  key_values
+  // in:  lease_id
+  // in:  prev_kv
+  // in:  igore_value
+  // in:  ignore_lease
+  // out:  prev_kvs
+  // out:  revision
+  // return: errno
+  butil::Status KvPut(const std::vector<pb::common::KeyValue> &key_values, uint64_t lease_id, bool prev_kv,
+                      bool igore_value, bool ignore_lease, std::vector<pb::version::Kv> &prev_kvs, uint64_t &revision,
+                      pb::coordinator_internal::MetaIncrement &meta_increment);
+  // KvDeleteRange is the delete function
+  // in:  key
+  // in:  range_end
+  // in:  prev_key
+  // out:  prev_kvs
+  // out:  revision
+  // return: errno
+  butil::Status KvDeleteRange(const std::string &key, const std::string &range_end, bool prev_key,
+                              std::vector<pb::version::Kv> &prev_kvs, uint64_t &revision,
+                              pb::coordinator_internal::MetaIncrement &meta_increment);
 
  private:
   butil::Status ValidateTaskListConflict(uint64_t region_id, uint64_t second_region_id);
@@ -725,16 +772,16 @@ class CoordinatorControl : public MetaControl {
   DingoSafeMap<uint64_t, pb::coordinator_internal::LeaseInternal> lease_map_;
   MetaSafeMapStorage<pb::coordinator_internal::LeaseInternal> *lease_meta_;
   std::map<uint64_t, LeaseWithKeys>
-      version_lease_to_key_map_temp_;  // storage lease_id to key map, this map is built in on_leader_start
-  bthread_mutex_t version_lease_to_key_map_temp_mutex_;
+      lease_to_key_map_temp_;  // storage lease_id to key map, this map is built in on_leader_start
+  bthread_mutex_t lease_to_key_map_temp_mutex_;
 
   // 15.version kv with lease
-  DingoSafeStdMap<std::string, pb::coordinator_internal::VersionKvInternal> version_kv_map_;
-  MetaSafeStringStdMapStorage<pb::coordinator_internal::VersionKvInternal> *version_kv_meta_;
+  DingoSafeStdMap<std::string, pb::coordinator_internal::KvIndexInternal> kv_index_map_;
+  MetaSafeStringStdMapStorage<pb::coordinator_internal::KvIndexInternal> *kv_index_meta_;
 
   // 16.version kv multi revision
-  DingoSafeStdMap<std::string, pb::coordinator_internal::VersionKvInternal> version_kv_rev_map_;
-  MetaSafeStringStdMapStorage<pb::coordinator_internal::VersionKvInternal> *version_kv_rev_meta_;
+  DingoSafeStdMap<std::string, pb::coordinator_internal::KvRevInternal> kv_rev_map_;
+  MetaSafeStringStdMapStorage<pb::coordinator_internal::KvRevInternal> *kv_rev_meta_;
 
   // root schema write to raft
   bool root_schema_writed_to_raft_;

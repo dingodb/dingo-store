@@ -46,7 +46,7 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   bthread_mutex_init(&executor_need_push_mutex_, nullptr);
   bthread_mutex_init(&store_metrics_map_mutex_, nullptr);
   bthread_mutex_init(&store_operation_map_mutex_, nullptr);
-  bthread_mutex_init(&version_lease_to_key_map_temp_mutex_, nullptr);
+  bthread_mutex_init(&lease_to_key_map_temp_mutex_, nullptr);
   root_schema_writed_to_raft_ = false;
   is_processing_task_list_.store(false);
   leader_term_.store(-1, butil::memory_order_release);
@@ -71,10 +71,9 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
 
   // version kv
   lease_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::LeaseInternal>(&lease_map_);
-  version_kv_meta_ =
-      new MetaSafeStringStdMapStorage<pb::coordinator_internal::VersionKvInternal>(&version_kv_map_, "version_kv_map_");
-  version_kv_rev_meta_ = new MetaSafeStringStdMapStorage<pb::coordinator_internal::VersionKvInternal>(
-      &version_kv_rev_map_, "version_kv_rev_map_");
+  kv_index_meta_ =
+      new MetaSafeStringStdMapStorage<pb::coordinator_internal::KvIndexInternal>(&kv_index_map_, "kv_index_map_");
+  kv_rev_meta_ = new MetaSafeStringStdMapStorage<pb::coordinator_internal::KvRevInternal>(&kv_rev_map_, "kv_rev_map_");
 
   // init FlatMap
   store_need_push_.init(100, 80);
@@ -374,109 +373,36 @@ bool CoordinatorControl::Recover() {
   DINGO_LOG(INFO) << "Recover lease_meta, count=" << kvs.size();
   kvs.clear();
 
-  // 15.version_kv map
-  if (!meta_reader_->Scan(version_kv_meta_->Prefix(), kvs)) {
+  // 15.kv_index map
+  if (!meta_reader_->Scan(kv_index_meta_->Prefix(), kvs)) {
     return false;
   }
   {
-    if (!version_kv_meta_->Recover(kvs)) {
+    if (!kv_index_meta_->Recover(kvs)) {
       return false;
     }
   }
-  DINGO_LOG(INFO) << "Recover version_kv_meta, count=" << kvs.size();
+  DINGO_LOG(INFO) << "Recover kv_index_meta, count=" << kvs.size();
   kvs.clear();
 
-  // 16.version_kv_rev map
-  if (!meta_reader_->Scan(version_kv_rev_meta_->Prefix(), kvs)) {
+  // 16.kv_rev map
+  if (!meta_reader_->Scan(kv_rev_meta_->Prefix(), kvs)) {
     return false;
   }
   {
-    if (!version_kv_rev_meta_->Recover(kvs)) {
+    if (!kv_rev_meta_->Recover(kvs)) {
       return false;
     }
   }
-  DINGO_LOG(INFO) << "Recover version_kv_rev_meta, count=" << kvs.size();
+  DINGO_LOG(INFO) << "Recover kv_rev_meta, count=" << kvs.size();
   kvs.clear();
 
-  // copy id_epoch_map_ to id_epoch_map_safe_temp_
-  {
-    butil::FlatMap<uint64_t, pb::coordinator_internal::IdEpochInternal> temp_copy;
-    temp_copy.init(100);
-    id_epoch_map_.GetRawMapCopy(temp_copy);
-    id_epoch_map_safe_temp_.CopyFromRawMap(temp_copy);
-  }
-  DINGO_LOG(INFO) << "Recover id_epoch_safe_map_temp, count=" << id_epoch_map_safe_temp_.Size();
-
-  // copy schema_map_ to schema_name_map_safe_temp_
-  {
-    schema_name_map_safe_temp_.Clear();
-
-    butil::FlatMap<uint64_t, pb::coordinator_internal::SchemaInternal> schema_map_copy;
-    schema_map_copy.init(10000);
-    schema_map_.GetRawMapCopy(schema_map_copy);
-    for (const auto& it : schema_map_copy) {
-      schema_name_map_safe_temp_.Put(it.second.name(), it.first);
-    }
-  }
-  DINGO_LOG(INFO) << "Recover schema_name_map_safe_temp, count=" << schema_name_map_safe_temp_.Size();
-
-  // copy table_map_ to table_name_map_safe_temp_
-  {
-    butil::FlatMap<uint64_t, pb::coordinator_internal::TableInternal> table_map_copy;
-    table_map_copy.init(10000);
-    table_map_.GetRawMapCopy(table_map_copy);
-    for (const auto& it : table_map_copy) {
-      table_name_map_safe_temp_.Put(std::to_string(it.second.schema_id()) + it.second.definition().name(), it.first);
-    }
-  }
-  DINGO_LOG(INFO) << "Recover table_name_map_safe_temp, count=" << table_name_map_safe_temp_.Size();
-
-  // copy index_map_ to index_name_map_safe_temp_
-  {
-    butil::FlatMap<uint64_t, pb::coordinator_internal::TableInternal> index_map_copy;
-    index_map_copy.init(10000);
-    index_map_.GetRawMapCopy(index_map_copy);
-    for (const auto& it : index_map_copy) {
-      index_name_map_safe_temp_.Put(std::to_string(it.second.schema_id()) + it.second.definition().name(), it.first);
-    }
-  }
-  DINGO_LOG(INFO) << "Recover index_name_map_safe_temp, count=" << index_name_map_safe_temp_.Size();
+  // build id_epoch, schema_name, table_name, index_name maps
+  BuildTempMaps();
 
   // build version_lease_to_key_map_temp_
-  {
-    std::map<uint64_t, LeaseWithKeys> t_lease_to_key;
-
-    butil::FlatMap<uint64_t, pb::coordinator_internal::LeaseInternal> version_lease_to_key_map_copy;
-    version_lease_to_key_map_copy.init(10000);
-    lease_map_.GetRawMapCopy(version_lease_to_key_map_copy);
-
-    t_lease_to_key.clear();
-    for (auto lease : version_lease_to_key_map_copy) {
-      LeaseWithKeys lease_with_keys;
-      lease_with_keys.lease.Swap(&lease.second);
-      t_lease_to_key.insert(std::make_pair(lease.first, lease_with_keys));
-    }
-
-    // read all keys from version_kv to construct lease list
-    std::vector<pb::coordinator_internal::VersionKvInternal> values;
-
-    if (this->version_kv_map_.GetAllValues(values, [](pb::coordinator_internal::VersionKvInternal version_kv) -> bool {
-          return version_kv.lease() > 0;
-        }) < 0) {
-      DINGO_LOG(FATAL) << "OnLeaderStart version_kv_map_.GetAllValues failed";
-    }
-
-    for (const auto& value : values) {
-      auto it = t_lease_to_key.find(value.lease());
-      if (it != t_lease_to_key.end()) {
-        it->second.keys.insert(value.id());
-      }
-    }
-
-    BAIDU_SCOPED_LOCK(version_lease_to_key_map_temp_mutex_);
-    version_lease_to_key_map_temp_.swap(t_lease_to_key);
-  }
-  DINGO_LOG(INFO) << "Recover version_lease_to_key_map_temp, count=" << version_lease_to_key_map_temp_.size();
+  BuildLeaseToKeyMap();
+  DINGO_LOG(INFO) << "Recover lease_to_key_map_temp, count=" << lease_to_key_map_temp_.size();
 
   return true;
 }

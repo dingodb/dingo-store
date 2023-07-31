@@ -431,12 +431,12 @@ class DingoSafeStdMap {
     if (safe_map.Read(&ptr) != 0) {
       return -1;
     }
-    auto *value_ptr = ptr->seek(key);
-    if (!value_ptr) {
+    auto value_iter = ptr->find(key);
+    if (value_iter == ptr->end()) {
       return -1;
     }
 
-    value = *value_ptr;
+    value = value_iter->second;
     return 1;
   }
 
@@ -448,12 +448,12 @@ class DingoSafeStdMap {
     if (safe_map.Read(&ptr) != 0) {
       return value;
     }
-    auto *value_ptr = ptr->seek(key);
-    if (!value_ptr) {
+    auto value_iter = ptr->find(key);
+    if (value_iter == ptr->end()) {
       return value;
     }
 
-    return *value_ptr;
+    return value_iter->second;
   }
 
   // GetAllKeys
