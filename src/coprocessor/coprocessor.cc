@@ -81,7 +81,7 @@ butil::Status Coprocessor::Open(const pb::store::Coprocessor& coprocessor) {
     DINGO_LOG(ERROR) << fmt::format("selection_columns check failed");
     return status;
   }
-  
+
   selection_serial_schemas_ = std::make_shared<std::vector<std::shared_ptr<BaseSchema>>>();
   Utils::CreateSerialSchema(original_serial_schemas_, coprocessor_.selection_columns(), &selection_serial_schemas_);
 
@@ -94,6 +94,15 @@ butil::Status Coprocessor::Open(const pb::store::Coprocessor& coprocessor) {
   Utils::SortSerialSchemaVector(&selection_serial_schemas_sorted_);
   Utils::DebugSerialSchema(selection_serial_schemas_sorted_, "selection_serial_schemas_sorted_");
 
+  if (selection_column_indexes_.empty()) {
+    GetSelectionColumnIndexes();
+  }
+
+  for (const auto& index : selection_column_indexes_) {
+    // Use the index variable here
+    DINGO_LOG_DEBUG << "selection column index:" << index;
+  }
+  
   status = InitGroupBySerialSchema(coprocessor_);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << fmt::format("InitGroupBySerialSchema failed");
@@ -204,14 +213,14 @@ butil::Status Coprocessor::DoExecute(const pb::common::KeyValue& kv, bool* has_r
   // if (original_column_indexes_.empty()) {
   //   GetOriginalColumnIndexes();
   // }
-  if(selection_column_indexes_.empty()) {
-    GetSelectionColumnIndexes();
-  }
-  
-  for (const auto& index : selection_column_indexes_) {
-    // Use the index variable here
-    DINGO_LOG_DEBUG << "selection column index:" << index;
-  }
+  // if(selection_column_indexes_.empty()) {
+  //   GetSelectionColumnIndexes();
+  // }
+
+  // for (const auto& index : selection_column_indexes_) {
+  //   // Use the index variable here
+  //   DINGO_LOG_DEBUG << "selection column index:" << index;
+  // }
 
   int ret = 0;
   try {
@@ -574,8 +583,8 @@ butil::Status Coprocessor::CompareSerialSchema(const pb::store::Coprocessor& cop
 
   // group by
   DINGO_LOG_DEBUG << "result_serial_schemas_sorted_->size():" << result_serial_schemas_sorted_->size();
-  DINGO_LOG_DEBUG << "group_by_serial_schemas_->size():" << group_by_serial_schemas_->size();
   if (group_by_serial_schemas_ && !group_by_serial_schemas_->empty()) {
+    DINGO_LOG_DEBUG << "group_by_serial_schemas_->size():" << group_by_serial_schemas_->size();
     if (result_serial_schemas_sorted_->size() != group_by_serial_schemas_->size()) {
       std::string error_message =
           fmt::format("enable group by result_serial_schemas_sorted_ : {} unequal group_by_serial_schemas_ : {}",
@@ -596,7 +605,7 @@ butil::Status Coprocessor::CompareSerialSchema(const pb::store::Coprocessor& cop
     end_of_group_by_ = true;
     DINGO_LOG(DEBUG) << fmt::format("Coprocessor::Open enable group_by");
 
-  } else {  
+  } else {
     end_of_group_by_ = false;
     DINGO_LOG(DEBUG) << fmt::format("Coprocessor::Open enable selection");
   }
@@ -606,7 +615,7 @@ butil::Status Coprocessor::CompareSerialSchema(const pb::store::Coprocessor& cop
 
 butil::Status Coprocessor::InitGroupBySerialSchema(const pb::store::Coprocessor& coprocessor) {
   butil::Status status;
-  status = Utils::CheckGroupByColumns(coprocessor.group_by_columns(), coprocessor.selection_columns().size());
+  status = Utils::CheckGroupByColumns(coprocessor.group_by_columns(), selection_column_indexes_.size());
   if (!status.ok()) {
     DINGO_LOG(ERROR) << fmt::format("group by columns check failed");
     return status;
@@ -615,7 +624,8 @@ butil::Status Coprocessor::InitGroupBySerialSchema(const pb::store::Coprocessor&
   if (!coprocessor.group_by_columns().empty()) {
     group_by_key_serial_schemas_ = std::make_shared<std::vector<std::shared_ptr<BaseSchema>>>();
 
-    Utils::CreateSerialSchema(selection_serial_schemas_sorted_, coprocessor.group_by_columns(), &group_by_key_serial_schemas_);
+    Utils::CreateSerialSchema(selection_serial_schemas_sorted_, coprocessor.group_by_columns(),
+                              &group_by_key_serial_schemas_);
 
     Utils::UpdateSerialSchemaIndex(&group_by_key_serial_schemas_);
 
@@ -627,7 +637,7 @@ butil::Status Coprocessor::InitGroupBySerialSchema(const pb::store::Coprocessor&
     DINGO_LOG(DEBUG) << fmt::format("Coprocessor::Open enable group_by_key");
   }
 
-  status = Utils::CheckGroupByOperators(coprocessor.aggregation_operators(), coprocessor.selection_columns().size());
+  status = Utils::CheckGroupByOperators(coprocessor.aggregation_operators(), selection_column_indexes_.size());
   if (!status.ok()) {
     DINGO_LOG(ERROR) << fmt::format("group by operators check failed");
     return status;
@@ -639,7 +649,7 @@ butil::Status Coprocessor::InitGroupBySerialSchema(const pb::store::Coprocessor&
     for (const auto& aggregation_operator : coprocessor.aggregation_operators()) {
       aggregation_operator_columns.Add(aggregation_operator.index_of_column() < 0 ||
                                                aggregation_operator.index_of_column() >=
-                                                   coprocessor.selection_columns().size()
+                                                   selection_column_indexes_.size()
                                            ? 0
                                            : aggregation_operator.index_of_column());
     }
@@ -659,8 +669,6 @@ butil::Status Coprocessor::InitGroupBySerialSchema(const pb::store::Coprocessor&
 
   // complete Sum(a) group by b
   if (!coprocessor.group_by_columns().empty() || !coprocessor.aggregation_operators().empty()) {
-    DINGO_LOG_DEBUG << "group_by_key_serial_schemas_ size:" << group_by_key_serial_schemas_->size();
-    DINGO_LOG_DEBUG << "group_by_operator_serial_schemas_ size:" << group_by_operator_serial_schemas_->size();
     Utils::JoinSerialSchema(group_by_key_serial_schemas_, group_by_operator_serial_schemas_, &group_by_serial_schemas_);
     Utils::UpdateSerialSchemaIndex(&group_by_serial_schemas_);
   }
@@ -691,7 +699,7 @@ void Coprocessor::GetSelectionColumnIndexes() {
     std::sort(selection_column_indexes_.begin(), selection_column_indexes_.end(), [](int i, int j) { return i < j; });
 
     selection_column_indexes_.erase(std::unique(selection_column_indexes_.begin(), selection_column_indexes_.end()),
-                                  selection_column_indexes_.end());
+                                    selection_column_indexes_.end());
   } else {
     selection_column_indexes_.reserve(selection_serial_schemas_->size());
     for (const auto& schema : *selection_serial_schemas_) {
@@ -702,7 +710,7 @@ void Coprocessor::GetSelectionColumnIndexes() {
     std::sort(selection_column_indexes_.begin(), selection_column_indexes_.end(), [](int i, int j) { return i < j; });
 
     selection_column_indexes_.erase(std::unique(selection_column_indexes_.begin(), selection_column_indexes_.end()),
-                                  selection_column_indexes_.end());
+                                    selection_column_indexes_.end());
   }
 }
 
