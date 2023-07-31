@@ -107,6 +107,7 @@ enum IdEpochType {
   ID_NEXT_TASK_LIST = 32;
 
   ID_NEXT_LEASE = 40;
+  ID_NEXT_REVISION = 41;
 }
 
 message IdEpochInternal {
@@ -241,7 +242,7 @@ message MetaIncrementTaskList {
   MetaIncrementOpType op_type = 3;
 }
 
-// version_kv
+// lease
 message LeaseInternal {
   uint64 id = 1;
   uint64 ttl_seconds = 2;
@@ -255,24 +256,68 @@ message MetaIncrementLease {
   MetaIncrementOpType op_type = 3;
 }
 
-message VersionKvInternal {
-  bytes id = 1;
+// A revision indicates modification of the key-value space.
+// The set of changes that share same main revision changes the key-value space atomically.
+message RevisionInternal {
+  // main is the main revision of a set of changes that happen atomically.
+  uint64 main = 1;
+
+  // sub is the sub revision of a change in a set of changes that happen
+  // atomically. Each change has different increasing sub revision in that
+  // set.
+  uint64 sub = 2;
+}
+
+// keyIndex stores the revisions of a key in the backend.
+// Each keyIndex has at least one key generation.
+// Each generation might have several key versions.
+// Tombstone on a key appends an tombstone version at the end
+// of the current generation and creates a new empty generation.
+// Each version of a key has an index pointing to the backend.
+message KvIndexInternal {
+  message Generation {
+    uint64 verison = 1;                       // if verison == 0, means this is a empty generation
+    RevisionInternal create_revision = 2;     // the create revision of this generation
+    repeated RevisionInternal revisions = 3;  // the revisions of this generation
+  }
+
+  bytes id = 1;  // id is the key of the keyIndex.
+  RevisionInternal mod_revision = 2;
+  repeated Generation generations = 3;
+}
+
+message KvInternal {
+  bytes id = 1;  // id is the key of the keyIndex.
   bytes value = 2;
-  uint64 create_revision = 3;
-  uint64 mod_revision = 4;
+  RevisionInternal create_revision = 3;
+  RevisionInternal mod_revision = 4;
   uint64 version = 5;
   uint64 lease = 6;
 }
 
-message MetaIncrementVersionKv {
-  bytes id = 1;
-  VersionKvInternal version_kv = 2;
-  MetaIncrementOpType op_type = 3;
+message KvRevInternal {
+  bytes id = 1;  // id is the key of the KvRev, it's encode from RevisionInternal
+  KvInternal kv = 2;
 }
 
-message MetaIncrementVersionKvRevision {
+message MetaIncrementKvIndex {
+  enum KvIndexEventType {
+    KV_INDEX_EVENT_TYPE_NONE = 0;
+    KV_INDEX_EVENT_TYPE_PUT = 1;
+    KV_INDEX_EVENT_TYPE_DELETE = 2;
+    KV_INDEX_EVENT_TYPE_COMPACTION = 3;
+  }
+
   bytes id = 1;
-  VersionKvInternal version_kv = 2;
+  KvIndexInternal kv_index = 2;
+  MetaIncrementOpType op_type = 3;
+  KvIndexEventType event_type = 4;
+  RevisionInternal compact_revision = 5;
+}
+
+message MetaIncrementKvRevision {
+  bytes id = 1;
+  KvRevInternal kv_rev = 2;
   MetaIncrementOpType op_type = 3;
 }
 
@@ -297,8 +342,8 @@ message MetaIncrement {
   repeated MetaIncrementRegion deleted_regions = 30;
 
   repeated MetaIncrementLease leases = 40;
-  repeated MetaIncrementVersionKv version_kvs = 41;
-  repeated MetaIncrementVersionKvRevision version_kv_revs = 42;
+  repeated MetaIncrementKvIndex kv_indexes = 41;
+  repeated MetaIncrementKvRevision kv_revs = 42;
 }
 
 // snapshot pb file message
@@ -324,6 +369,6 @@ message MetaSnapshotFile {
   repeated dingodb.pb.common.KeyValue deleted_region_map_kvs = 30;
 
   repeated dingodb.pb.common.KeyValue lease_map_kvs = 40;
-  repeated dingodb.pb.common.KeyValue version_kv_map_kvs = 41;
-  repeated dingodb.pb.common.KeyValue version_kv_rev_map_kvs = 42;
+  repeated dingodb.pb.common.KeyValue kv_index_map_kvs = 41;
+  repeated dingodb.pb.common.KeyValue kv_rev_map_kvs = 42;
 }

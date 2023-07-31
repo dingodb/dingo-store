@@ -38,12 +38,12 @@ message GetNewVersionResponse {
 }
 
 // kv
-message VersionKeyValue {
+message Kv {
   dingodb.pb.common.KeyValue kv = 1;
   int64 create_revision = 2;
   int64 mod_revision = 3;
   int64 version = 4;
-  int64 lease = 6;
+  uint64 lease = 6;
 }
 
 message Event {
@@ -52,8 +52,8 @@ message Event {
     DELETE = 1;
   }
   EventType type = 1;
-  VersionKeyValue kv = 2;
-  VersionKeyValue prev_kv = 3;
+  Kv kv = 2;
+  Kv prev_kv = 3;
 }
 
 message ResponseHeader {
@@ -72,19 +72,6 @@ message ResponseHeader {
 }
 
 message RangeRequest {
-  enum SortOrder {
-    NONE = 0;     // default, no sorting
-    ASCEND = 1;   // lowest target value first
-    DESCEND = 2;  // highest target value first
-  }
-  enum SortTarget {
-    KEY = 0;
-    VERSION = 1;
-    CREATE = 2;
-    MOD = 3;
-    VALUE = 4;
-  }
-
   // key is the first key for the range. If range_end is not given, the request only looks up key.
   bytes key = 1;
   // range_end is the upper bound on the requested range [key, range_end).
@@ -100,12 +87,6 @@ message RangeRequest {
   // If revision is less or equal to zero, the range is over the newest key-value store.
   // If the revision has been compacted, ErrCompacted is returned as a response.
   int64 revision = 4;
-
-  // sort_order is the order for returned sorted results.
-  SortOrder sort_order = 5;
-
-  // sort_target is the key-value field to use for sorting.
-  SortTarget sort_target = 6;
 
   // serializable sets the range request to use serializable member-local reads.
   // Range requests are linearizable by default; linearizable requests have higher
@@ -143,7 +124,7 @@ message RangeResponse {
   ResponseHeader header = 2;
   // kvs is the list of key-value pairs matched by the range request.
   // kvs is empty when count is requested.
-  repeated VersionKeyValue kvs = 3;
+  repeated Kv kvs = 3;
   // more indicates if there are more keys to return in the requested range.
   bool more = 4;
   // count is set to the number of keys within the range when requested.
@@ -151,32 +132,31 @@ message RangeResponse {
 }
 
 message PutRequest {
-  // key is the key, in bytes, to put into the key-value store.
-  bytes key = 1;
-  // value is the value, in bytes, to associate with the key in the key-value store.
-  bytes value = 2;
+  // key_values is the key and value, to put into the key-value store.
+  repeated dingodb.pb.common.KeyValue key_values = 1;
+
   // lease is the lease ID to associate with the key in the key-value store. A lease
   // value of 0 indicates no lease.
-  int64 lease = 3;
+  uint64 lease = 2;
 
   // If prev_kv is set, gets the previous key-value pair before changing it.
   // The previous key-value pair will be returned in the put response.
-  bool prev_kv = 4;
+  bool prev_kv = 3;
 
   // If ignore_value is set, updates the key using its current value.
   // Returns an error if the key does not exist.
-  bool ignore_value = 5;
+  bool ignore_value = 4;
 
   // If ignore_lease is set, updates the key using its current lease.
   // Returns an error if the key does not exist.
-  bool ignore_lease = 6;
+  bool ignore_lease = 5;
 }
 
 message PutResponse {
   dingodb.pb.error.Error error = 1;
   ResponseHeader header = 2;
   // if prev_kv is set in the request, the previous key-value pair will be returned.
-  VersionKeyValue prev_kv = 3;
+  repeated Kv prev_kvs = 3;
 }
 
 message DeleteRangeRequest {
@@ -200,7 +180,7 @@ message DeleteRangeResponse {
   // deleted is the number of keys deleted by the delete range request.
   int64 deleted = 3;
   // if prev_kv is set in the request, the previous key-value pairs will be returned.
-  repeated VersionKeyValue prev_kvs = 4;
+  repeated Kv prev_kvs = 4;
 }
 
 // lease
@@ -384,7 +364,7 @@ message LockRequest {
   // the lock is automatically released. Calls to Lock with the same lease will
   // be treated as a single acquisition; locking twice with the same lease is a
   // no-op.
-  int64 lease = 2;
+  uint64 lease = 2;
 }
 
 message LockResponse {
@@ -407,13 +387,13 @@ service VersionService {
   rpc GetNewVersion(GetNewVersionRequest) returns (GetNewVersionResponse) {}
 
   // Range is Get and MultiGet
-  rpc VersionKvRange(RangeRequest) returns (RangeResponse) {}
+  rpc KvRange(RangeRequest) returns (RangeResponse) {}
 
   // Put is Upsert
-  rpc VersionKvPut(PutRequest) returns (PutResponse) {}
+  rpc KvPut(PutRequest) returns (PutResponse) {}
 
   // DeleteRange is Delete and MultiDelete
-  rpc VersionKvDeleteRange(DeleteRangeRequest) returns (DeleteRangeResponse) {}
+  rpc KvDeleteRange(DeleteRangeRequest) returns (DeleteRangeResponse) {}
 
   // LeaseGrant creates a lease which expires if the server does not receive a keepAlive
   // within a given time to live period. All keys attached to the lease will be expired and
