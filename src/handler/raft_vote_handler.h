@@ -33,6 +33,20 @@ class VectorIndexLeaderStopHandler : public BaseHandler {
   void Handle(store::RegionPtr region, butil::Status status) override;
 };
 
+// VectorIndexFollowerStart
+class VectorIndexFollowerStartHandler : public BaseHandler {
+ public:
+  HandlerType GetType() override { return HandlerType::kVectorIndexFollowerStart; }
+  void Handle(store::RegionPtr region, const braft::LeaderChangeContext &ctx) override;
+};
+
+// VectorIndexFollowerStop
+class VectorIndexFollowerStopHandler : public BaseHandler {
+ public:
+  HandlerType GetType() override { return HandlerType::kVectorIndexFollowerStop; }
+  void Handle(store::RegionPtr region, const braft::LeaderChangeContext &ctx) override;
+};
+
 // Leader start handler collection
 class LeaderStartHandlerFactory : public HandlerFactory {
  public:
@@ -41,6 +55,18 @@ class LeaderStartHandlerFactory : public HandlerFactory {
 
 // Leader stop handler collection
 class LeaderStopHandlerFactory : public HandlerFactory {
+ public:
+  std::shared_ptr<HandlerCollection> Build() override;
+};
+
+// Follower start handler collection
+class FollowerStartHandlerFactory : public HandlerFactory {
+ public:
+  std::shared_ptr<HandlerCollection> Build() override;
+};
+
+// Follower stop handler collection
+class FollowerStopHandlerFactory : public HandlerFactory {
  public:
   std::shared_ptr<HandlerCollection> Build() override;
 };

@@ -109,8 +109,10 @@ butil::Status ServiceAccess::GetVectorIndexSnapshot(const pb::node::GetVectorInd
   }
 
   if (response.error().errcode() != pb::error::OK) {
-    DINGO_LOG(ERROR) << fmt::format("GetVectorIndexSnapshot response failed, error {} {}",
-                                    static_cast<int>(response.error().errcode()), response.error().errmsg());
+    if (response.error().errcode() != pb::error::EVECTOR_INDEX_NOT_FOUND) {
+      DINGO_LOG(ERROR) << fmt::format("GetVectorIndexSnapshot response failed, error {} {}",
+                                      static_cast<int>(response.error().errcode()), response.error().errmsg());
+    }
     return butil::Status(response.error().errcode(), response.error().errmsg());
   }
 

@@ -50,6 +50,8 @@ enum class HandlerType {
   // Vector index
   kVectorIndexLeaderStart = 2000,
   kVectorIndexLeaderStop = 2001,
+  kVectorIndexFollowerStart = 2002,
+  kVectorIndexFollowerStop = 2003,
 };
 
 class Handler {
@@ -71,6 +73,8 @@ class Handler {
 
   virtual void Handle(store::RegionPtr region, uint64_t term_id) = 0;
   virtual void Handle(store::RegionPtr region, butil::Status status) = 0;
+
+  virtual void Handle(store::RegionPtr region, const braft::LeaderChangeContext &ctx) = 0;
 };
 
 class BaseHandler : public Handler {
@@ -97,6 +101,9 @@ class BaseHandler : public Handler {
 
   void Handle(store::RegionPtr, uint64_t) override { DINGO_LOG(ERROR) << "Not support handle..."; }
   void Handle(store::RegionPtr, butil::Status) override { DINGO_LOG(ERROR) << "Not support handle..."; }
+  void Handle(store::RegionPtr, const braft::LeaderChangeContext &) override {
+    DINGO_LOG(ERROR) << "Not support handle...";
+  }
 };
 
 // A group hander

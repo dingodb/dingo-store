@@ -24,6 +24,7 @@ log:
   path: $BASE_PATH$/log
 vector:
   index_path: $BASE_PATH$/data/index/idx
+  enable_follower_hold_index: false
   # save hnsw vector index snapshot when write key num exceed threshold.
   hnsw_save_threshold_write_key_num: 10000
 store:

@@ -452,16 +452,17 @@ void VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr reg
 
   auto vector_index_manager = Server::GetInstance()->GetVectorIndexManager();
   auto vector_index = vector_index_manager->GetVectorIndex(region->Id());
-  // Only leader write vector index, follower don't write vector index.
-  if (ctx != nullptr) {
-    // if vector_index is nullptr, return internal error
-    if (vector_index == nullptr) {
-      DINGO_LOG(ERROR) << fmt::format("Not found vector index {}", region->Id());
-      status = butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "Not found vector index %ld", region->Id());
-      set_ctx_status(status);
-      return;
-    }
 
+  // if leadder vector_index is nullptr, return internal error
+  if (ctx != nullptr && vector_index == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("Not found vector index {}", region->Id());
+    status = butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "Not found vector index %ld", region->Id());
+    set_ctx_status(status);
+    return;
+  }
+
+  // Only leader and specific follower write vector index, other follower don't write vector index.
+  if (vector_index != nullptr) {
     // Check if the log_id is greater than the ApplyLogIndex of the vector index
     if (log_id <= vector_index->ApplyLogIndex()) {
       DINGO_LOG(WARNING) << fmt::format("Vector index {} already applied log index, log_id({}) / apply_log_index({})",
@@ -525,7 +526,7 @@ void VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr reg
     auto writer = engine->NewWriter(request.cf_name());
     status = writer->KvBatchPut(kvs);
 
-    if (ctx != nullptr) {
+    if (vector_index != nullptr) {
       // Update the ApplyLogIndex of the vector index to the current log_id
       vector_index_manager->UpdateApplyLogIndex(vector_index, log_id);
     }
@@ -612,15 +613,16 @@ void VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr 
 
   auto vector_index_manager = Server::GetInstance()->GetVectorIndexManager();
   auto vector_index = vector_index_manager->GetVectorIndex(region->Id());
-  // Only leader write vector index, follower don't write vector index.
-  if (ctx != nullptr) {
-    if (vector_index == nullptr) {
-      DINGO_LOG(ERROR) << fmt::format("Not found vector index {}", region->Id());
-      status = butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "Not found vector index %ld", region->Id());
-      set_ctx_status(status);
-      return;
-    }
+  // if leadder vector_index is nullptr, return internal error
+  if (ctx != nullptr && vector_index == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("Not found vector index {}", region->Id());
+    status = butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "Not found vector index %ld", region->Id());
+    set_ctx_status(status);
+    return;
+  }
 
+  // Only leader and specific follower write vector index, other follower don't write vector index.
+  if (vector_index != nullptr) {
     if (log_id <= vector_index->ApplyLogIndex()) {
       DINGO_LOG(WARNING) << fmt::format("Vector index {} already applied log index, log_id({}) / apply_log_index({})",
                                         region->Id(), log_id, vector_index->ApplyLogIndex());
@@ -674,7 +676,7 @@ void VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr 
     auto writer = engine->NewWriter(request.cf_name());
     status = writer->KvBatchDelete(keys);
 
-    if (ctx != nullptr) {
+    if (vector_index != nullptr) {
       // Update the ApplyLogIndex of the vector index to the current log_id
       vector_index_manager->UpdateApplyLogIndex(vector_index, log_id);
     }

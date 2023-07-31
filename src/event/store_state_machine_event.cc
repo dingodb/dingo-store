@@ -77,6 +77,7 @@ void SmLeaderStartEventListener::OnEvent(std::shared_ptr<Event> event) {
   // trigger heartbeat
   Heartbeat::TriggerStoreHeartbeat(the_event->node_id);
 
+  // Invoke handler
   auto handlers = handler_collection_->GetHandlers();
   for (auto& handle : handlers) {
     handle->Handle(the_event->region, the_event->term);
@@ -86,6 +87,7 @@ void SmLeaderStartEventListener::OnEvent(std::shared_ptr<Event> event) {
 void SmLeaderStopEventListener::OnEvent(std::shared_ptr<Event> event) {
   auto the_event = std::dynamic_pointer_cast<SmLeaderStopEvent>(event);
 
+  // Invoke handler
   auto handlers = handler_collection_->GetHandlers();
   for (auto& handle : handlers) {
     handle->Handle(the_event->region, the_event->status);
@@ -151,10 +153,22 @@ void SmStartFollowingEventListener::OnEvent(std::shared_ptr<Event> event) {
   if (store_region_meta) {
     store_region_meta->UpdateLeaderId(the_event->node_id, 0);
   }
+
+  // Invoke handler
+  auto handlers = handler_collection_->GetHandlers();
+  for (auto& handle : handlers) {
+    handle->Handle(the_event->region, the_event->ctx);
+  }
 }
 
 void SmStopFollowingEventListener::OnEvent(std::shared_ptr<Event> event) {
   auto the_event = std::dynamic_pointer_cast<SmStopFollowingEvent>(event);
+
+  // Invoke handler
+  auto handlers = handler_collection_->GetHandlers();
+  for (auto& handle : handlers) {
+    handle->Handle(the_event->region, the_event->ctx);
+  }
 }
 
 std::shared_ptr<EventListenerCollection> StoreSmEventListenerFactory::Build() {
@@ -177,8 +191,11 @@ std::shared_ptr<EventListenerCollection> StoreSmEventListenerFactory::Build() {
 
   listener_collection->Register(std::make_shared<SmErrorEventListener>());
   listener_collection->Register(std::make_shared<SmConfigurationCommittedEventListener>());
-  listener_collection->Register(std::make_shared<SmStartFollowingEventListener>());
-  listener_collection->Register(std::make_shared<SmStopFollowingEventListener>());
+
+  handler_factory = std::make_shared<FollowerStartHandlerFactory>();
+  listener_collection->Register(std::make_shared<SmStartFollowingEventListener>(handler_factory->Build()));
+  handler_factory = std::make_shared<FollowerStopHandlerFactory>();
+  listener_collection->Register(std::make_shared<SmStopFollowingEventListener>(handler_factory->Build()));
 
   return listener_collection;
 }
