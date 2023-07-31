@@ -18,31 +18,80 @@
 #include "meta/store_meta_manager.h"
 #include "proto/common.pb.h"
 #include "server/server.h"
+#include "vector/vector_index_snapshot.h"
 
 namespace dingodb {
 
 void VectorIndexLeaderStartHandler::Handle(store::RegionPtr region, uint64_t) {
+  if (region == nullptr) {
+    return;
+  }
+
   // Load vector index.
-  if (region != nullptr) {
-    auto vector_index_manager = Server::GetInstance()->GetVectorIndexManager();
-    auto vector_index = vector_index_manager->GetVectorIndex(region->Id());
-    if (vector_index != nullptr) {
-      DINGO_LOG(WARNING) << fmt::format("Vector index {} already exist, don't need load again.", region->Id());
-    } else {
-      auto status = vector_index_manager->LoadOrBuildVectorIndex(region);
+  auto vector_index_manager = Server::GetInstance()->GetVectorIndexManager();
+  auto vector_index = vector_index_manager->GetVectorIndex(region->Id());
+  if (vector_index != nullptr) {
+    DINGO_LOG(WARNING) << fmt::format("Vector index {} already exist, don't need load again.", region->Id());
+  } else {
+    if (!VectorIndexSnapshot::IsExistVectorIndexSnapshot(region->Id())) {
+      auto status = VectorIndexSnapshot::PullLastSnapshotFromPeers(region->Id());
       if (!status.ok()) {
-        DINGO_LOG(ERROR) << fmt::format("Load or build vector index failed, region {} error: {}", region->Id(),
+        DINGO_LOG(ERROR) << fmt::format("Pull vector index {} last snapshot failed, error: {}", region->Id(),
                                         status.error_str());
       }
+    }
+
+    auto status = vector_index_manager->LoadOrBuildVectorIndex(region);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << fmt::format("Load or build vector index failed, region {} error: {}", region->Id(),
+                                      status.error_str());
     }
   }
 }
 
 void VectorIndexLeaderStopHandler::Handle(store::RegionPtr region, butil::Status) {
-  if (region != nullptr) {
-    Server::GetInstance()->GetVectorIndexManager()->DeleteVectorIndex(region->Id());
+  auto config = Server::GetInstance()->GetConfig();
+  if (config == nullptr) {
+    return;
+  }
+  if (config->GetBool("vector.enable_follower_hold_index")) {
+    return;
+  }
+  if (region == nullptr) {
+    return;
+  }
+
+  // Delete vector index.
+  Server::GetInstance()->GetVectorIndexManager()->DeleteVectorIndex(region->Id());
+}
+
+void VectorIndexFollowerStartHandler::Handle(store::RegionPtr region, const braft::LeaderChangeContext &) {
+  auto config = Server::GetInstance()->GetConfig();
+  if (config == nullptr) {
+    return;
+  }
+  if (!config->GetBool("vector.enable_follower_hold_index")) {
+    return;
+  }
+  if (region == nullptr) {
+    return;
+  }
+
+  // Load vector index.
+  auto vector_index_manager = Server::GetInstance()->GetVectorIndexManager();
+  auto vector_index = vector_index_manager->GetVectorIndex(region->Id());
+  if (vector_index != nullptr) {
+    DINGO_LOG(WARNING) << fmt::format("Vector index {} already exist, don't need load again.", region->Id());
+  } else {
+    auto status = vector_index_manager->LoadOrBuildVectorIndex(region);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << fmt::format("Load or build vector index failed, region {} error: {}", region->Id(),
+                                      status.error_str());
+    }
   }
 }
+
+void VectorIndexFollowerStopHandler::Handle(store::RegionPtr region, const braft::LeaderChangeContext &ctx) {}
 
 std::shared_ptr<HandlerCollection> LeaderStartHandlerFactory::Build() {
   auto handler_collection = std::make_shared<HandlerCollection>();
@@ -57,6 +106,24 @@ std::shared_ptr<HandlerCollection> LeaderStopHandlerFactory::Build() {
   auto handler_collection = std::make_shared<HandlerCollection>();
   if (Server::GetInstance()->GetRole() == pb::common::INDEX) {
     handler_collection->Register(std::make_shared<VectorIndexLeaderStopHandler>());
+  }
+
+  return handler_collection;
+}
+
+std::shared_ptr<HandlerCollection> FollowerStartHandlerFactory::Build() {
+  auto handler_collection = std::make_shared<HandlerCollection>();
+  if (Server::GetInstance()->GetRole() == pb::common::INDEX) {
+    handler_collection->Register(std::make_shared<VectorIndexFollowerStartHandler>());
+  }
+
+  return handler_collection;
+}
+
+std::shared_ptr<HandlerCollection> FollowerStopHandlerFactory::Build() {
+  auto handler_collection = std::make_shared<HandlerCollection>();
+  if (Server::GetInstance()->GetRole() == pb::common::INDEX) {
+    handler_collection->Register(std::make_shared<VectorIndexFollowerStopHandler>());
   }
 
   return handler_collection;

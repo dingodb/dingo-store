@@ -213,6 +213,11 @@ butil::Status VectorIndexSnapshot::LaunchInstallSnapshot(const butil::EndPoint& 
 
 butil::Status VectorIndexSnapshot::HandleInstallSnapshot(std::shared_ptr<Context>, const std::string& uri,
                                                          const pb::node::VectorIndexSnapshotMeta& meta) {
+  auto config = Server::GetInstance()->GetConfig();
+  if (config != nullptr && config->GetBool("vector.enable_follower_hold_index")) {
+    return butil::Status(pb::error::EVECTOR_NOT_NEED_SNAPSHOT, "Not need snapshot, follower own vector index.");
+  }
+
   return DownloadSnapshotFile(uri, meta);
 }
 
@@ -316,6 +321,65 @@ butil::Status VectorIndexSnapshot::HandlePullSnapshot(std::shared_ptr<Context> c
   response->set_uri(fmt::format("remote://{}:{}/{}", host, port, reader_id));
 
   DINGO_LOG(INFO) << fmt::format("====response: {}", response->ShortDebugString());
+
+  return butil::Status();
+}
+
+butil::Status VectorIndexSnapshot::PullLastSnapshotFromPeers(uint64_t region_id) {
+  uint64_t start_time = Helper::TimestampMs();
+  auto engine = Server::GetInstance()->GetEngine();
+  if (engine->GetID() != pb::common::ENG_RAFT_STORE) {
+    return butil::Status(pb::error::EINTERNAL, "Not raft store engine.");
+  }
+
+  auto raft_kv_engine = std::dynamic_pointer_cast<RaftStoreEngine>(engine);
+  auto raft_node = raft_kv_engine->GetNode(region_id);
+  if (raft_node == nullptr) {
+    return butil::Status(pb::error::ERAFT_NOT_FOUND, "Not found raft node.");
+  }
+
+  // Find max vector index snapshot peer.
+  pb::node::GetVectorIndexSnapshotRequest request;
+  request.set_vector_index_id(region_id);
+
+  uint64_t max_snapshot_log_index = 0;
+  butil::EndPoint endpoint;
+
+  auto self_peer = raft_node->GetPeerId();
+  std::vector<braft::PeerId> peers;
+  raft_node->ListPeers(&peers);
+  for (const auto& peer : peers) {
+    if (peer == self_peer) {
+      continue;
+    }
+
+    pb::node::GetVectorIndexSnapshotResponse response;
+    auto status = ServiceAccess::GetVectorIndexSnapshot(request, peer.addr, response);
+    if (!status.ok()) {
+      continue;
+    }
+
+    if (max_snapshot_log_index < response.meta().snapshot_log_index()) {
+      max_snapshot_log_index = response.meta().snapshot_log_index();
+      endpoint = peer.addr;
+    }
+  }
+
+  // Has vector index snapshot, pull it.
+  if (max_snapshot_log_index == 0) {
+    DINGO_LOG(INFO) << fmt::format("Other peers not exist vector index snapshot {}", region_id);
+    return butil::Status();
+  }
+
+  auto status = LaunchPullSnapshot(endpoint, region_id);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("Pull vector index snapshot {} from {} failed, error: {}", region_id,
+                                    Helper::EndPointToStr(endpoint), status.error_str());
+    return status;
+  }
+
+  DINGO_LOG(INFO) << fmt::format("Pull vector index snapshot {} finish elapsed time {}ms", region_id,
+                                 Helper::TimestampMs() - start_time);
 
   return butil::Status();
 }

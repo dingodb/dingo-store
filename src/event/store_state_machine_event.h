@@ -201,15 +201,20 @@ struct SmStartFollowingEvent : public Event {
 
   const braft::LeaderChangeContext& ctx;
   uint64_t node_id;
+  store::RegionPtr region;
 };
 
 class SmStartFollowingEventListener : public EventListener {
  public:
-  SmStartFollowingEventListener() = default;
+  SmStartFollowingEventListener(std::shared_ptr<HandlerCollection> handler_collection)
+      : handler_collection_(handler_collection) {}
   ~SmStartFollowingEventListener() override = default;
 
   EventType GetType() override { return EventType::kSmStartFollowing; }
   void OnEvent(std::shared_ptr<Event> event) override;
+
+ private:
+  std::shared_ptr<HandlerCollection> handler_collection_;
 };
 
 // State Machine StopFollowing
@@ -220,15 +225,20 @@ struct SmStopFollowingEvent : public Event {
 
   const braft::LeaderChangeContext& ctx;
   uint64_t node_id;
+  store::RegionPtr region;
 };
 
 class SmStopFollowingEventListener : public EventListener {
  public:
-  SmStopFollowingEventListener() = default;
+  SmStopFollowingEventListener(std::shared_ptr<HandlerCollection> handler_collection)
+      : handler_collection_(handler_collection) {}
   ~SmStopFollowingEventListener() override = default;
 
   EventType GetType() override { return EventType::kSmStopFollowing; }
   void OnEvent(std::shared_ptr<Event> event) override;
+
+ private:
+  std::shared_ptr<HandlerCollection> handler_collection_;
 };
 
 class StoreSmEventListenerFactory : public EventListenerFactory {

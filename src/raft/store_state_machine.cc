@@ -273,6 +273,7 @@ void StoreStateMachine::on_start_following(const braft::LeaderChangeContext& ctx
                                  ctx.leader_id().to_string(), ctx.status().error_code(), ctx.status().error_str());
   auto event = std::make_shared<SmStartFollowingEvent>(ctx);
   event->node_id = region_->Id();
+  event->region = region_;
 
   DispatchEvent(EventType::kSmStartFollowing, event);
 
@@ -286,6 +287,7 @@ void StoreStateMachine::on_stop_following(const braft::LeaderChangeContext& ctx)
                                  ctx.leader_id().to_string(), ctx.status().error_code(), ctx.status().error_str());
   auto event = std::make_shared<SmStopFollowingEvent>(ctx);
   event->node_id = region_->Id();
+  event->region = region_;
 
   DispatchEvent(EventType::kSmStopFollowing, event);
 }
