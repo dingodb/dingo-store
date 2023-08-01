@@ -26,6 +26,7 @@ message TableRegionInternal {
   uint64 region_id = 1;  // the region id of this part
 }
 
+// @Deprecated
 message IndexRegionInternal {
   uint64 region_id = 1;  // the region id of this part
 }
@@ -44,6 +45,7 @@ message TableMetricsInternal {
   dingodb.pb.meta.TableMetrics table_metrics = 2;
 }
 
+// @Deprecated
 // IndexInternal is storage structure for coordinator
 message IndexInternal {
   uint64 id = 1;
@@ -202,6 +204,7 @@ message MetaIncrementTable {
   MetaIncrementOpType op_type = 3;
 }
 
+// @Deprecated
 message MetaIncrementIndex {
   uint64 id = 1;
   IndexInternal index = 2;
@@ -287,7 +290,7 @@ message MetaIncrement {
   repeated MetaIncrementStoreOperation store_operations = 10;
   repeated MetaIncrementExecutorUser executor_users = 11;
   repeated MetaIncrementTaskList task_lists = 12;
-  repeated MetaIncrementIndex indexes = 13;
+  repeated MetaIncrementTable indexes = 13;
   repeated MetaIncrementIndexMetrics index_metrics = 14;
 
   repeated MetaIncrementAutoIncrement auto_increment = 20;

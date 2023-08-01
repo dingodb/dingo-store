@@ -31,6 +31,34 @@
 
 namespace dingodb {
 
+void MetaServiceImpl::TableDefinitionToIndexDefinition(const pb::meta::TableDefinition& table_definition,
+                                              pb::meta::IndexDefinition& index_definition) {
+  index_definition.set_name(table_definition.name());
+  index_definition.set_version(table_definition.version());
+  index_definition.mutable_index_partition()->CopyFrom(table_definition.table_partition());
+  index_definition.set_replica(table_definition.replica());
+  index_definition.mutable_index_parameter()->CopyFrom(table_definition.index_parameter());
+  index_definition.set_with_auto_incrment(table_definition.auto_increment() > 0 ? true : false);
+  index_definition.set_auto_increment(table_definition.auto_increment());
+}
+
+void MetaServiceImpl::IndexDefinitionToTableDefinition(const pb::meta::IndexDefinition& index_definition,
+                                              pb::meta::TableDefinition& table_definition) {
+  table_definition.set_name(index_definition.name());
+  table_definition.set_version(index_definition.version());
+  table_definition.set_auto_increment(index_definition.auto_increment());
+  table_definition.mutable_table_partition()->CopyFrom(index_definition.index_partition());
+  table_definition.set_replica(index_definition.replica());
+  if ((index_definition.index_parameter().index_type() == pb::common::IndexType::INDEX_TYPE_SCALAR)
+      && (index_definition.index_parameter().scalar_index_parameter().scalar_index_type()
+      == pb::common::ScalarIndexType::SCALAR_INDEX_TYPE_BTREE )) {
+    table_definition.set_engine(pb::common::Engine::ENG_BTREE);
+  } else {
+    table_definition.set_engine(pb::common::Engine::ENG_ROCKSDB);
+  }
+  table_definition.mutable_index_parameter()->CopyFrom(index_definition.index_parameter());
+}
+
 void MetaServiceImpl::GetSchemas(google::protobuf::RpcController * /*controller*/,
                                  const pb::meta::GetSchemasRequest *request, pb::meta::GetSchemasResponse *response,
                                  google::protobuf::Closure *done) {
@@ -752,7 +780,7 @@ void MetaServiceImpl::GetIndexesCount(google::protobuf::RpcController * /*contro
     return RedirectResponse(response);
   }
 
-  DINGO_LOG(DEBUG) << "GetIndexsCount request:  schema_id = [" << request->schema_id().entity_id() << "]";
+  DINGO_LOG(DEBUG) << "GetIndexesCount request:  schema_id = [" << request->schema_id().entity_id() << "]";
 
   if (!request->has_schema_id() || request->schema_id().entity_id() <= 0) {
     response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
@@ -760,7 +788,7 @@ void MetaServiceImpl::GetIndexesCount(google::protobuf::RpcController * /*contro
   }
 
   uint64_t indexes_count = 0;
-  auto ret = this->coordinator_control_->GetIndexsCount(request->schema_id().entity_id(), indexes_count);
+  auto ret = this->coordinator_control_->GetIndexesCount(request->schema_id().entity_id(), indexes_count);
   if (!ret.ok()) {
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
     response->mutable_error()->set_errmsg(ret.error_str());
@@ -786,23 +814,24 @@ void MetaServiceImpl::GetIndexes(google::protobuf::RpcController * /*controller*
     return;
   }
 
-  std::vector<pb::meta::IndexDefinitionWithId> index_definition_with_ids;
-  auto ret = this->coordinator_control_->GetIndexs(request->schema_id().entity_id(), index_definition_with_ids);
+  std::vector<pb::meta::TableDefinitionWithId> table_definition_with_ids;
+  auto ret = this->coordinator_control_->GetIndexes(request->schema_id().entity_id(), table_definition_with_ids);
   if (!ret.ok()) {
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
     response->mutable_error()->set_errmsg(ret.error_str());
     return;
   }
 
-  if (index_definition_with_ids.empty()) {
+  if (table_definition_with_ids.empty()) {
     DINGO_LOG(INFO) << "meta_service GetIndexs no indexs, schema_id=" << request->schema_id().entity_id();
     return;
   }
 
   // add index_definition_with_id
-  for (auto &index_definition_with_id : index_definition_with_ids) {
+  for (const auto &temp_definition : table_definition_with_ids) {
     auto *index_def_with_id = response->add_index_definition_with_ids();
-    index_def_with_id->CopyFrom(index_definition_with_id);
+    index_def_with_id->mutable_index_id()->CopyFrom(temp_definition.table_id());
+    TableDefinitionToIndexDefinition(temp_definition.table_definition(), *(index_def_with_id->mutable_index_definition()));
   }
 }
 
@@ -822,14 +851,18 @@ void MetaServiceImpl::GetIndex(google::protobuf::RpcController * /*controller*/,
 
   DINGO_LOG(DEBUG) << "GetIndex request:  index_id = [" << request->index_id().entity_id() << "]";
 
-  auto *index = response->mutable_index_definition_with_id();
+  pb::meta::TableDefinitionWithId table_definition_with_id;
   auto ret = this->coordinator_control_->GetIndex(request->index_id().parent_entity_id(),
-                                                  request->index_id().entity_id(), *index);
+                                                  request->index_id().entity_id(), table_definition_with_id);
   if (!ret.ok()) {
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
     response->mutable_error()->set_errmsg(ret.error_str());
     return;
   }
+
+  auto *index = response->mutable_index_definition_with_id();
+  index->mutable_index_id()->CopyFrom(table_definition_with_id.table_id());
+  TableDefinitionToIndexDefinition(table_definition_with_id.table_definition(), *(index->mutable_index_definition()));
 }
 
 void MetaServiceImpl::GetIndexByName(google::protobuf::RpcController * /*controller*/,
@@ -849,14 +882,18 @@ void MetaServiceImpl::GetIndexByName(google::protobuf::RpcController * /*control
     return;
   }
 
-  auto *index = response->mutable_index_definition_with_id();
-  auto ret =
-      this->coordinator_control_->GetIndexByName(request->schema_id().entity_id(), request->index_name(), *index);
+  pb::meta::TableDefinitionWithId table_definition_with_id;
+  auto ret = this->coordinator_control_->GetIndexByName(request->schema_id().entity_id(), request->index_name(),
+                                                        table_definition_with_id);
   if (!ret.ok()) {
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
     response->mutable_error()->set_errmsg(ret.error_str());
     return;
   }
+
+  auto *index = response->mutable_index_definition_with_id();
+  index->mutable_index_id()->CopyFrom(table_definition_with_id.table_id());
+  TableDefinitionToIndexDefinition(table_definition_with_id.table_definition(), *(index->mutable_index_definition()));
 }
 
 void MetaServiceImpl::GetIndexRange(google::protobuf::RpcController * /*controller*/,
@@ -987,7 +1024,9 @@ void MetaServiceImpl::CreateIndex(google::protobuf::RpcController *controller,
     }
   }
 
-  auto ret = this->coordinator_control_->CreateIndex(request->schema_id().entity_id(), request->index_definition(),
+  pb::meta::TableDefinition table_definition;
+  IndexDefinitionToTableDefinition(request->index_definition(), table_definition);
+  auto ret = this->coordinator_control_->CreateIndex(request->schema_id().entity_id(), table_definition,
                                                      new_index_id, meta_increment);
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << "CreateIndex failed in meta_service, error code=" << ret;
@@ -1036,10 +1075,12 @@ void MetaServiceImpl::UpdateIndex(google::protobuf::RpcController *controller,
   }
 
   pb::coordinator_internal::MetaIncrement meta_increment;
-
+  pb::meta::TableDefinition table_definition;
+  IndexDefinitionToTableDefinition(request->new_index_definition(), table_definition);
+  
   auto ret =
       this->coordinator_control_->UpdateIndex(request->index_id().parent_entity_id(), request->index_id().entity_id(),
-                                              request->new_index_definition(), meta_increment);
+                                              table_definition, meta_increment);
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << "UpdateIndex failed in meta_service, error code=" << ret;
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
@@ -1102,6 +1143,122 @@ void MetaServiceImpl::DropIndex(google::protobuf::RpcController *controller, con
 
   // this is a async operation will be block by closure
   engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+}
+
+void MetaServiceImpl::GenerateTableIds(google::protobuf::RpcController* controller,
+                                       const pb::meta::GenerateTableIdsRequest* request,
+                                       pb::meta::GenerateTableIdsResponse* response, google::protobuf::Closure* done) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!coordinator_control_->IsLeader()) {
+    return RedirectResponse(response);
+  }
+
+  DINGO_LOG(INFO) << request->ShortDebugString();
+
+  if (!request->has_schema_id() || request->count() == 0) {
+    response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
+    return;
+  }
+
+  pb::coordinator_internal::MetaIncrement meta_increment;
+  butil::Status ret = coordinator_control_->GenerateTableIds(request->schema_id().entity_id(), request->count(),
+    meta_increment, response);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "GenerateTableIds failed.";
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    return;
+  } 
+
+  // prepare for raft process
+  CoordinatorClosure<pb::meta::GenerateTableIdsRequest, pb::meta::GenerateTableIdsResponse> *meta_put_closure =
+      new CoordinatorClosure<pb::meta::GenerateTableIdsRequest, pb::meta::GenerateTableIdsResponse>(request, response,
+                                                                                              done_guard.release());
+
+  std::shared_ptr<Context> ctx =
+      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
+  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+
+  // this is a async operation will be block by closure
+  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+
+  DINGO_LOG(INFO) << "GenerateTableIds Success.";
+}
+
+void MetaServiceImpl::CreateTables(google::protobuf::RpcController* controller,
+                                   const pb::meta::CreateTablesRequest* request,
+                                   pb::meta::CreateTablesResponse* response, google::protobuf::Closure* done) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!coordinator_control_->IsLeader()) {
+    return RedirectResponse(response);
+  }
+
+  DINGO_LOG(INFO) << request->DebugString();
+
+//  if (!request->has_schema_id() || request->table_definition_with_ids_size() == 0) {
+//    DINGO_LOG(ERROR) << request->has_schema_id() << " | " << request->table_definition_with_ids_size();
+//    response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
+//    response->mutable_error()->set_errmsg("schema id or definition size.");
+//    return;
+//  }
+//
+//  pb::coordinator_internal::MetaIncrement meta_increment;
+//
+//  bool find_table_type = false;
+//  for (const auto& temp_with_id : request->table_definition_with_ids()) {
+//    const auto& table_id = temp_with_id.table_id();
+//    const auto& temp_definition = temp_with_id.table_definition();
+//    butil::Status ret;
+//    if (table_id.entity_type() == pb::meta::EntityType::ENTITY_TYPE_TABLE) {
+//      find_table_type = true;
+//      uint64_t new_table_id = table_id.entity_id();
+//      ret = coordinator_control_->CreateTable(request->schema_id().entity_id(), temp_definition, new_table_id,
+//                                              meta_increment);
+//    } else if (table_id.entity_type() == pb::meta::EntityType::ENTITY_TYPE_INDEX){
+//    }
+//
+//    if (!ret.ok()) {
+//      DINGO_LOG(ERROR) << "CreateTables failed in meta_service, error code=" << ret;
+//      response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+//      response->mutable_error()->set_errmsg(ret.error_str());
+//      return;
+//    }
+//    //DINGO_LOG(INFO) << "type: " << table_id.entity_type() << ", new_table_id=" << new_table_id;
+//  }
+//
+//  // create table finally
+//  if (!find_table_type) {
+//    response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
+//    response->mutable_error()->set_errmsg("cannot find table type.");
+//    return;
+//  }
+//
+//  // prepare for raft process
+//  CoordinatorClosure<pb::meta::CreateTablesRequest, pb::meta::CreateTablesResponse> *meta_put_closure =
+//      new CoordinatorClosure<pb::meta::CreateTablesRequest, pb::meta::CreateTablesResponse>(request, response,
+//                                                                                              done_guard.release());
+//
+//  std::shared_ptr<Context> ctx =
+//      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
+//  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+//
+//  // this is a async operation will be block by closure
+//  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+//
+//  DINGO_LOG(INFO) << "CreateTables Success.";
+}
+
+void MetaServiceImpl::GetTables(google::protobuf::RpcController* controller, const pb::meta::GetTablesRequest* request,
+                                pb::meta::GetTablesResponse* response, google::protobuf::Closure* done) {
+
+}
+
+void MetaServiceImpl::DropTables(google::protobuf::RpcController* controller,
+                                 const pb::meta::DropTablesRequest* request,
+                                 pb::meta::DropTablesResponse* response, google::protobuf::Closure* done) {
+
 }
 
 }  // namespace dingodb

@@ -113,6 +113,15 @@ class MetaServiceImpl : public pb::meta::MetaService {
   void DropSchema(google::protobuf::RpcController* controller, const pb::meta::DropSchemaRequest* request,
                   pb::meta::DropSchemaResponse* response, google::protobuf::Closure* done) override;
 
+  void GenerateTableIds(google::protobuf::RpcController* controller, const pb::meta::GenerateTableIdsRequest* request,
+                         pb::meta::GenerateTableIdsResponse* response, google::protobuf::Closure* done) override;
+  void CreateTables(google::protobuf::RpcController* controller, const pb::meta::CreateTablesRequest* request,
+                         pb::meta::CreateTablesResponse* response, google::protobuf::Closure* done) override;
+  void GetTables(google::protobuf::RpcController* controller, const pb::meta::GetTablesRequest* request,
+                         pb::meta::GetTablesResponse* response, google::protobuf::Closure* done) override;
+  void DropTables(google::protobuf::RpcController* controller, const pb::meta::DropTablesRequest* request,
+                         pb::meta::DropTablesResponse* response, google::protobuf::Closure* done) override;
+
   void GetAutoIncrements(google::protobuf::RpcController* controller, const pb::meta::GetAutoIncrementsRequest* request,
                          pb::meta::GetAutoIncrementsResponse* response, google::protobuf::Closure* done) override;
   void GetAutoIncrement(google::protobuf::RpcController* controller, const pb::meta::GetAutoIncrementRequest* request,
@@ -132,6 +141,12 @@ class MetaServiceImpl : public pb::meta::MetaService {
                            pb::meta::DeleteAutoIncrementResponse* response, google::protobuf::Closure* done) override;
 
  private:
+  // table and index definition convertor
+  static void TableDefinitionToIndexDefinition(const pb::meta::TableDefinition& table_definition,
+                                               pb::meta::IndexDefinition& index_definition);
+  static void IndexDefinitionToTableDefinition(const pb::meta::IndexDefinition& index_definition,
+                                               pb::meta::TableDefinition& table_definition);
+
   std::shared_ptr<CoordinatorControl> coordinator_control_;
   std::shared_ptr<AutoIncrementControl> auto_increment_control_;
   std::shared_ptr<Engine> engine_;

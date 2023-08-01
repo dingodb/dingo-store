@@ -257,26 +257,30 @@ class CoordinatorControl : public MetaControl {
                               pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // validate index definition
-  // in: index_definition
+  // in: table_definition
   // return: errno
-  static butil::Status ValidateIndexDefinition(const pb::meta::IndexDefinition &index_definition);
+  static butil::Status ValidateIndexDefinition(const pb::meta::TableDefinition &table_definition);
 
   // create index
   // in: schema_id
-  // in: index_definition
+  // in: table_definition
   // out: new index_id
   // return: errno
-  butil::Status CreateIndex(uint64_t schema_id, const pb::meta::IndexDefinition &index_definition,
+  butil::Status CreateIndex(uint64_t schema_id, const pb::meta::TableDefinition &table_definition,
                             uint64_t &new_index_id, pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // update index
   // in: schema_id
   // in: index_id
-  // in: new_index_definition
+  // in: new_table_definition
   // return: errno
   butil::Status UpdateIndex(uint64_t schema_id, uint64_t index_id,
-                            const pb::meta::IndexDefinition &new_index_definition,
+                            const pb::meta::TableDefinition &new_table_definition,
                             pb::coordinator_internal::MetaIncrement &meta_increment);
+
+  // generate table ids
+  butil::Status GenerateTableIds(uint64_t schema_id, uint32_t count,
+		  pb::coordinator_internal::MetaIncrement& meta_increment, pb::meta::GenerateTableIdsResponse* response);
 
   // create store
   // in: cluster_id
@@ -459,22 +463,22 @@ class CoordinatorControl : public MetaControl {
   // out: TableMetricsWithId
   butil::Status GetTableMetrics(uint64_t schema_id, uint64_t table_id, pb::meta::TableMetricsWithId &table_metrics);
 
-  // get indexs
-  butil::Status GetIndexs(uint64_t schema_id, std::vector<pb::meta::IndexDefinitionWithId> &index_definition_with_ids);
-  butil::Status GetIndexsCount(uint64_t schema_id, uint64_t &indexs_count);
+  // get indexes
+  butil::Status GetIndexes(uint64_t schema_id, std::vector<pb::meta::TableDefinitionWithId> &table_definition_with_ids);
+  butil::Status GetIndexesCount(uint64_t schema_id, uint64_t &indexes_count);
 
   // get index
   // in: schema_id
   // in: index_id
-  // out: IndexDefinitionWithId
-  butil::Status GetIndex(uint64_t schema_id, uint64_t index_id, pb::meta::IndexDefinitionWithId &index_definition);
+  // out: TableDefinitionWithId
+  butil::Status GetIndex(uint64_t schema_id, uint64_t index_id, pb::meta::TableDefinitionWithId &table_definition);
 
   // get index by name
   // in: schema_id
   // in: index_name
-  // out: IndexDefinitionWithId
+  // out: TableDefinitionWithId
   butil::Status GetIndexByName(uint64_t schema_id, const std::string &index_name,
-                               pb::meta::IndexDefinitionWithId &index_definition);
+                               pb::meta::TableDefinitionWithId &table_definition);
 
   // get parts
   // in: schema_id
@@ -705,9 +709,9 @@ class CoordinatorControl : public MetaControl {
   DingoSafeMap<uint64_t, pb::coordinator::TaskList> task_list_map_;  // task_list_id -> task_list
   MetaSafeMapStorage<pb::coordinator::TaskList> *task_list_meta_;    // need construct
 
-  // 12.indexs
-  DingoSafeMap<uint64_t, pb::coordinator_internal::IndexInternal> index_map_;
-  MetaSafeMapStorage<pb::coordinator_internal::IndexInternal> *index_meta_;
+  // 12.indexes
+  DingoSafeMap<uint64_t, pb::coordinator_internal::TableInternal> index_map_;
+  MetaSafeMapStorage<pb::coordinator_internal::TableInternal> *index_meta_;
 
   // index map temp, only for leader use, is out of state machine
   // index_name -> index-id
