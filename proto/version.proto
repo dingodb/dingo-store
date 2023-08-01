@@ -132,16 +132,16 @@ message RangeResponse {
 }
 
 message PutRequest {
-  // key_values is the key and value, to put into the key-value store.
-  repeated dingodb.pb.common.KeyValue key_values = 1;
+  // key_value is the key and value, to put into the key-value store.
+  dingodb.pb.common.KeyValue key_value = 1;
 
   // lease is the lease ID to associate with the key in the key-value store. A lease
   // value of 0 indicates no lease.
   uint64 lease = 2;
 
-  // If prev_kv is set, gets the previous key-value pair before changing it.
+  // If need_prev_kv is set, gets the previous key-value pair before changing it.
   // The previous key-value pair will be returned in the put response.
-  bool prev_kv = 3;
+  bool need_prev_kv = 3;
 
   // If ignore_value is set, updates the key using its current value.
   // Returns an error if the key does not exist.
@@ -156,7 +156,7 @@ message PutResponse {
   dingodb.pb.error.Error error = 1;
   ResponseHeader header = 2;
   // if prev_kv is set in the request, the previous key-value pair will be returned.
-  repeated Kv prev_kvs = 3;
+  Kv prev_kv = 3;
 }
 
 message DeleteRangeRequest {
@@ -169,9 +169,9 @@ message DeleteRangeRequest {
   // If range_end is '\0', the range is all keys greater than or equal to the key argument.
   bytes range_end = 2;
 
-  // If prev_kv is set, gets the previous key-value pairs before deleting it.
+  // If need_prev_kv is set, gets the previous key-value pairs before deleting it.
   // The previous key-value pairs will be returned in the delete response.
-  bool prev_kv = 3;
+  bool need_prev_kv = 3;
 }
 
 message DeleteRangeResponse {
@@ -298,7 +298,7 @@ message WatchCreateRequest {
 
   // If prev_kv is set, created watcher gets the previous KV before the event happens.
   // If the previous KV is already compacted, nothing will be returned.
-  bool prev_kv = 6;
+  bool need_prev_kv = 6;
 
   // If watch_id is provided and non-zero, it will be assigned to this watcher.
   // Since creating a watcher in coordinator is not a synchronous operation,

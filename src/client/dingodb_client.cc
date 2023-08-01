@@ -118,7 +118,7 @@ DEFINE_uint64(sub_revision, 0, "sub_revision");
 DEFINE_string(range_end, "", "range_end for coor kv");
 DEFINE_bool(count_only, false, "count_only for coor kv");
 DEFINE_bool(keys_only, false, "keys_only for coor kv");
-DEFINE_bool(prev_kv, false, "prev_kv for coor kv");
+DEFINE_bool(need_prev_kv, false, "need_prev_kv for coor kv");
 DEFINE_bool(ignore_value, false, "ignore_value for coor kv");
 DEFINE_bool(ignore_lease, false, "ignore_lease for coor kv");
 DEFINE_uint64(lease, 0, "lease for coor kv put");

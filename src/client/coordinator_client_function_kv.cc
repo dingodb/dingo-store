@@ -36,7 +36,7 @@ DECLARE_int32(limit);
 DECLARE_string(value);
 DECLARE_bool(count_only);
 DECLARE_bool(keys_only);
-DECLARE_bool(prev_kv);
+DECLARE_bool(need_prev_kv);
 DECLARE_bool(ignore_value);
 DECLARE_bool(ignore_lease);
 DECLARE_uint64(lease);
@@ -103,14 +103,14 @@ void SendCoorKvPut(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_
     return;
   }
 
-  auto *key_value = request.add_key_values();
+  auto *key_value = request.mutable_key_value();
   key_value->set_key(FLAGS_key);
   key_value->set_value(FLAGS_value);
 
   request.set_lease(FLAGS_lease);
   request.set_ignore_lease(FLAGS_ignore_lease);
   request.set_ignore_value(FLAGS_ignore_value);
-  request.set_prev_kv(FLAGS_prev_kv);
+  request.set_need_prev_kv(FLAGS_need_prev_kv);
 
   auto status = coordinator_interaction->SendRequest("KvPut", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
@@ -128,7 +128,7 @@ void SendCoorKvDeleteRange(std::shared_ptr<dingodb::CoordinatorInteraction> coor
 
   request.set_key(FLAGS_key);
   request.set_range_end(FLAGS_range_end);
-  request.set_prev_kv(FLAGS_prev_kv);
+  request.set_need_prev_kv(FLAGS_need_prev_kv);
 
   auto status = coordinator_interaction->SendRequest("KvDeleteRange", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;

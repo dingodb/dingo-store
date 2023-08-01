@@ -46,7 +46,6 @@
 
 namespace dingodb {
 
-DEFINE_uint32(max_kv_put_count, 1000, "max kv put count");
 DEFINE_uint32(max_kv_key_size, 4096, "max kv put count");
 DEFINE_uint32(max_kv_value_size, 4096, "max kv put count");
 
@@ -285,21 +284,21 @@ butil::Status CoordinatorControl::KvRange(const std::string &key, const std::str
 }
 
 // KvPut is the put function
-// in:  key_values
+// in:  key_value
 // in:  lease_id
 // in:  prev_kv
 // in:  igore_value
 // in:  ignore_lease
-// out:  prev_kvs
+// out:  prev_kv
 // out:  revision
 // return: errno
-butil::Status CoordinatorControl::KvPut(const std::vector<pb::common::KeyValue> &key_values, uint64_t lease_id,
-                                        bool prev_kv, bool igore_value, bool ignore_lease,
-                                        std::vector<pb::version::Kv> &prev_kvs, uint64_t &revision,
-                                        uint64_t &lease_grant_id,
+butil::Status CoordinatorControl::KvPut(const pb::common::KeyValue &key_value_in, uint64_t lease_id, bool need_prev_kv,
+                                        bool igore_value, bool ignore_lease, pb::version::Kv &prev_kv,
+                                        uint64_t &revision, uint64_t &lease_grant_id,
                                         pb::coordinator_internal::MetaIncrement &meta_increment) {
-  DINGO_LOG(INFO) << "KvPut, key_values size: " << key_values.size() << ", lease_id: " << lease_id
-                  << ", prev_kv: " << prev_kv << ", igore_value: " << igore_value << ", ignore_lease: " << ignore_lease;
+  DINGO_LOG(INFO) << "KvPut, key_value: " << key_value_in.ShortDebugString() << ", lease_id: " << lease_id
+                  << ", need_prev_kv: " << need_prev_kv << ", igore_value: " << igore_value
+                  << ", ignore_lease: " << ignore_lease;
 
   // check lease
   if (!ignore_lease && lease_id != 0) {
@@ -316,85 +315,75 @@ butil::Status CoordinatorControl::KvPut(const std::vector<pb::common::KeyValue> 
 
   lease_grant_id = lease_id;
 
-  if (key_values.size() > FLAGS_max_kv_put_count) {
-    DINGO_LOG(ERROR) << "KvPut key_values size is too large, max_kv_put_count: " << FLAGS_max_kv_put_count
-                     << ", key_values size: " << key_values.size();
-    return butil::Status(EINVAL, "KvPut key_values size is too large");
+  // check key
+  if (key_value_in.key().empty()) {
+    DINGO_LOG(ERROR) << "KvPut key is empty";
+    return butil::Status(EINVAL, "KvPut key is empty");
   }
 
-  for (const auto &key_value_in : key_values) {
-    // check key
-    if (key_value_in.key().empty()) {
-      DINGO_LOG(ERROR) << "KvPut key is empty";
-      return butil::Status(EINVAL, "KvPut key is empty");
-    }
+  // check value
+  if (!igore_value && key_value_in.value().empty()) {
+    DINGO_LOG(ERROR) << "KvPut value is empty";
+    return butil::Status(EINVAL, "KvPut value is empty");
+  }
 
-    // check value
-    if (!igore_value && key_value_in.value().empty()) {
-      DINGO_LOG(ERROR) << "KvPut value is empty";
-      return butil::Status(EINVAL, "KvPut value is empty");
-    }
+  // check key length
+  if (key_value_in.key().size() > FLAGS_max_kv_key_size) {
+    DINGO_LOG(ERROR) << "KvPut key is too long, max_kv_key_size: " << FLAGS_max_kv_key_size
+                     << ", key: " << key_value_in.key();
+    return butil::Status(EINVAL, "KvPut key is too long");
+  }
 
-    // check key length
-    if (key_value_in.key().size() > FLAGS_max_kv_key_size) {
-      DINGO_LOG(ERROR) << "KvPut key is too long, max_kv_key_size: " << FLAGS_max_kv_key_size
-                       << ", key: " << key_value_in.key();
-      return butil::Status(EINVAL, "KvPut key is too long");
-    }
-
-    // check value length
-    if (!igore_value && key_value_in.value().size() > FLAGS_max_kv_value_size) {
-      DINGO_LOG(ERROR) << "KvPut value is too long, max_kv_value_size: " << FLAGS_max_kv_value_size
-                       << ", key: " << key_value_in.key();
-      return butil::Status(EINVAL, "KvPut value is too long");
-    }
+  // check value length
+  if (!igore_value && key_value_in.value().size() > FLAGS_max_kv_value_size) {
+    DINGO_LOG(ERROR) << "KvPut value is too long, max_kv_value_size: " << FLAGS_max_kv_value_size
+                     << ", key: " << key_value_in.key();
+    return butil::Status(EINVAL, "KvPut value is too long");
   }
 
   // do kv_put
   uint64_t sub_revision = 1;
   revision = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REVISION, meta_increment);
 
-  for (const auto &key_value_in : key_values) {
-    if (prev_kv) {
-      std::vector<pb::version::Kv> kvs_temp;
-      uint64_t total_count_in_range = 0;
-      this->KvRange(key_value_in.key(), std::string(), 1, false, false, kvs_temp, total_count_in_range);
-      if (!kvs_temp.empty()) {
-        prev_kvs.push_back(kvs_temp[0]);
-        if (ignore_lease) {
-          lease_grant_id = kvs_temp[0].lease();
-        } else if (kvs_temp[0].lease() != lease_grant_id) {
-          DINGO_LOG(ERROR) << "KvPut lease_grant_id is not equal, lease_grant_id: " << lease_grant_id
-                           << ", kvs_temp[0].lease(): " << kvs_temp[0].lease();
-          return butil::Status(EINVAL, "KvPut lease_grant_id is not equal");
-        }
-      } else {
-        pb::version::Kv kv_temp;
-        prev_kvs.push_back(kv_temp);
+  if (need_prev_kv) {
+    std::vector<pb::version::Kv> kvs_temp;
+    uint64_t total_count_in_range = 0;
+    this->KvRange(key_value_in.key(), std::string(), 1, false, false, kvs_temp, total_count_in_range);
+    if (!kvs_temp.empty()) {
+      prev_kv.CopyFrom(kvs_temp[0]);
+      if (ignore_lease) {
+        lease_grant_id = kvs_temp[0].lease();
+      } else if (kvs_temp[0].lease() != lease_grant_id) {
+        DINGO_LOG(ERROR) << "KvPut lease_grant_id is not equal, lease_grant_id: " << lease_grant_id
+                         << ", kvs_temp[0].lease(): " << kvs_temp[0].lease();
+        return butil::Status(EINVAL, "KvPut lease_grant_id is not equal");
       }
+    } else {
+      pb::version::Kv kv_temp;
+      prev_kv.CopyFrom(kv_temp);
     }
-
-    // update kv_index
-    DINGO_LOG(INFO) << "KvPut will put key: " << key_value_in.key();
-
-    // add meta_increment
-    auto *kv_index_meta_increment = meta_increment.add_kv_indexes();
-    kv_index_meta_increment->set_id(key_value_in.key());
-    kv_index_meta_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
-    kv_index_meta_increment->set_event_type(pb::coordinator_internal::KvIndexEventType::KV_INDEX_EVENT_TYPE_PUT);
-    kv_index_meta_increment->mutable_op_revision()->set_main(revision);
-    kv_index_meta_increment->mutable_op_revision()->set_sub(sub_revision);
-    kv_index_meta_increment->set_ignore_lease(ignore_lease);
-    kv_index_meta_increment->set_lease_id(lease_grant_id);
-    if (!ignore_lease) {
-      kv_index_meta_increment->set_ignore_value(igore_value);
-    }
-    if (!igore_value) {
-      kv_index_meta_increment->set_value(key_value_in.value());
-    }
-
-    ++sub_revision;
   }
+
+  // update kv_index
+  DINGO_LOG(INFO) << "KvPut will put key: " << key_value_in.key();
+
+  // add meta_increment
+  auto *kv_index_meta_increment = meta_increment.add_kv_indexes();
+  kv_index_meta_increment->set_id(key_value_in.key());
+  kv_index_meta_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
+  kv_index_meta_increment->set_event_type(pb::coordinator_internal::KvIndexEventType::KV_INDEX_EVENT_TYPE_PUT);
+  kv_index_meta_increment->mutable_op_revision()->set_main(revision);
+  kv_index_meta_increment->mutable_op_revision()->set_sub(sub_revision);
+  kv_index_meta_increment->set_ignore_lease(ignore_lease);
+  kv_index_meta_increment->set_lease_id(lease_grant_id);
+  if (!ignore_lease) {
+    kv_index_meta_increment->set_ignore_value(igore_value);
+  }
+  if (!igore_value) {
+    kv_index_meta_increment->set_value(key_value_in.value());
+  }
+
+  ++sub_revision;
 
   return butil::Status::OK();
 }
@@ -402,19 +391,19 @@ butil::Status CoordinatorControl::KvPut(const std::vector<pb::common::KeyValue> 
 // KvDeleteRange is the delete function
 // in:  key
 // in:  range_end
-// in:  prev_key
+// in:  need_prev
 // out:  prev_kvs
 // out:  revision
 // return: errno
-butil::Status CoordinatorControl::KvDeleteRange(const std::string &key, const std::string &range_end, bool prev_key,
+butil::Status CoordinatorControl::KvDeleteRange(const std::string &key, const std::string &range_end, bool need_prev_kv,
                                                 std::vector<pb::version::Kv> &prev_kvs, uint64_t &revision,
                                                 pb::coordinator_internal::MetaIncrement &meta_increment) {
-  DINGO_LOG(INFO) << "KvDeleteRange, key: " << key << ", range_end: " << range_end << ", prev_key: " << prev_key;
+  DINGO_LOG(INFO) << "KvDeleteRange, key: " << key << ", range_end: " << range_end << ", need_prev: " << need_prev_kv;
 
   std::vector<pb::version::Kv> kvs_to_delete;
   uint64_t total_count_in_range = 0;
 
-  bool key_only = !prev_key;
+  bool key_only = !need_prev_kv;
 
   auto ret = KvRange(key, range_end, INT64_MAX, key_only, false, kvs_to_delete, total_count_in_range);
   if (!ret.ok()) {
@@ -442,7 +431,7 @@ butil::Status CoordinatorControl::KvDeleteRange(const std::string &key, const st
     ++sub_revision;
   }
 
-  if (prev_key) {
+  if (need_prev_kv) {
     prev_kvs.swap(kvs_to_delete);
   }
 
