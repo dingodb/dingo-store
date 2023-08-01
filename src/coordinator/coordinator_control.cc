@@ -71,9 +71,8 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
 
   // version kv
   lease_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::LeaseInternal>(&lease_map_);
-  kv_index_meta_ =
-      new MetaSafeStringStdMapStorage<pb::coordinator_internal::KvIndexInternal>(&kv_index_map_, "kv_index_map_");
-  kv_rev_meta_ = new MetaSafeStringStdMapStorage<pb::coordinator_internal::KvRevInternal>(&kv_rev_map_, "kv_rev_map_");
+  kv_index_meta_ = new MetaSafeStringStdMapStorage<pb::coordinator_internal::KvIndexInternal>(&kv_index_map_);
+  kv_rev_meta_ = new MetaSafeStringStdMapStorage<pb::coordinator_internal::KvRevInternal>(&kv_rev_map_);
 
   // init FlatMap
   store_need_push_.init(100, 80);

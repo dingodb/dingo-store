@@ -822,7 +822,6 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
     kvs.push_back(meta_snapshot_file.kv_index_map_kvs(i));
   }
   {
-    // BAIDU_SCOPED_LOCK(kv_index_map_mutex_);
     if (!kv_index_meta_->Recover(kvs)) {
       return false;
     }
@@ -844,13 +843,12 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
   DINGO_LOG(INFO) << "LoadSnapshot version_kv_meta, count=" << kvs.size();
   kvs.clear();
 
-  // 16.version_kv_rev_map_
+  // 16.kv_rev_map_
   kvs.reserve(meta_snapshot_file.kv_rev_map_kvs_size());
   for (int i = 0; i < meta_snapshot_file.kv_rev_map_kvs_size(); i++) {
     kvs.push_back(meta_snapshot_file.kv_rev_map_kvs(i));
   }
   {
-    // BAIDU_SCOPED_LOCK(version_kv_rev_map_mutex_);
     if (!kv_rev_meta_->Recover(kvs)) {
       return false;
     }
@@ -1969,51 +1967,56 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
   }
 
   // 15.kv_index_map_
-  // {
-  //   if (meta_increment.kv_indexes_size() > 0) {
-  //     DINGO_LOG(INFO) << "ApplyMetaIncrement kv_indexes size=" << meta_increment.kv_indexes_size();
-  //   }
+  {
+    if (meta_increment.kv_indexes_size() > 0) {
+      DINGO_LOG(INFO) << "ApplyMetaIncrement kv_indexes size=" << meta_increment.kv_indexes_size();
+    }
+    for (int i = 0; i < meta_increment.kv_indexes_size(); i++) {
+      const auto& kv_index = meta_increment.kv_indexes(i);
+      if (kv_index.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
+      } else if (kv_index.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
+        if (kv_index.event_type() == pb::coordinator_internal::KvIndexEventType::KV_INDEX_EVENT_TYPE_PUT) {
+          // call KvPutApply
+          auto ret = KvPutApply(kv_index.id(), kv_index.op_revision(), kv_index.ignore_lease(), kv_index.lease_id(),
+                                kv_index.ignore_value(), kv_index.value());
+          if (ret.ok()) {
+            DINGO_LOG(INFO) << "ApplyMetaIncrement kv_index UPDATE, [id=" << kv_index.id() << "] success";
+          } else {
+            DINGO_LOG(WARNING) << "ApplyMetaIncrement kv_index UPDATE, [id=" << kv_index.id() << "] failed";
+          }
+        } else if (kv_index.event_type() == pb::coordinator_internal::KvIndexEventType::KV_INDEX_EVENT_TYPE_DELETE) {
+          // call KvDeleteApply
+          auto ret = KvDeleteApply(kv_index.id(), kv_index.op_revision());
+          if (ret.ok()) {
+            DINGO_LOG(INFO) << "ApplyMetaIncrement kv_index UPDATE, [id=" << kv_index.id() << "] success";
+          } else {
+            DINGO_LOG(WARNING) << "ApplyMetaIncrement kv_index UPDATE, [id=" << kv_index.id() << "] failed";
+          }
+        } else if (kv_index.event_type() ==
+                   pb::coordinator_internal::KvIndexEventType::KV_INDEX_EVENT_TYPE_COMPACTION) {
+          // call KvLockApply
+          auto ret = KvCompactApply(kv_index.id(), kv_index.op_revision());
+          if (ret.ok()) {
+            DINGO_LOG(INFO) << "ApplyMetaIncrement kv_index UPDATE, [id=" << kv_index.id() << "] success";
+          } else {
+            DINGO_LOG(WARNING) << "ApplyMetaIncrement kv_index UPDATE, [id=" << kv_index.id() << "] failed";
+          }
+        }
+      } else if (kv_index.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
+        int ret = kv_index_map_.Erase(kv_index.id());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement kv_index DELETE, [id=" << kv_index.id() << "] success";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement kv_index DELETE, [id=" << kv_index.id() << "] failed";
+        }
 
-  //   for (int i = 0; i < meta_increment.kv_indexes_size(); i++) {
-  //     const auto& kv_index = meta_increment.kv_indexes(i);
-  //     if (kv_index.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
-  //       // kv_index_map_[kv_index.id()] = kv_index.kv_index();
-  //       int ret = kv_index_map_.PutIfAbsent(kv_index.id(), kv_index.kv_index());
-  //       if (ret > 0) {
-  //         DINGO_LOG(INFO) << "ApplyMetaIncrement kv_index CREATE, [id=" << kv_index.id() << "] success";
-  //       } else {
-  //         DINGO_LOG(WARNING) << "ApplyMetaIncrement kv_index CREATE, [id=" << kv_index.id() << "] failed";
-  //       }
-
-  //       // meta_write_kv
-  //       meta_write_to_kv.push_back(kv_index_meta_->TransformToKvValue(kv_index.kv_index()));
-
-  //     } else if (kv_index.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
-  //       // auto& update_kv_index = kv_index_map_[kv_index.id()];
-  //       // update_kv_index.CopyFrom(kv_index.kv_index());
-  //       int ret = kv_index_map_.PutIfExists(kv_index.id(), kv_index.kv_index());
-  //       if (ret > 0) {
-  //         DINGO_LOG(INFO) << "ApplyMetaIncrement kv_index UPDATE, [id=" << kv_index.id() << "] success";
-  //       } else {
-  //         DINGO_LOG(WARNING) << "ApplyMetaIncrement kv_index UPDATE, [id=" << kv_index.id() << "] failed";
-  //       }
-
-  //       // meta_write_kv
-  //       meta_write_to_kv.push_back(kv_index_meta_->TransformToKvValue(kv_index.kv_index()));
-
-  //     } else if (kv_index.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
-  //       int ret = kv_index_map_.Erase(kv_index.id());
-  //       if (ret > 0) {
-  //         DINGO_LOG(INFO) << "ApplyMetaIncrement kv_index DELETE, [id=" << kv_index.id() << "] success";
-  //       } else {
-  //         DINGO_LOG(WARNING) << "ApplyMetaIncrement kv_index DELETE, [id=" << kv_index.id() << "] failed";
-  //       }
-
-  //       // meta_delete_kv
-  //       meta_delete_to_kv.push_back(kv_index_meta_->TransformToKvValue(kv_index.kv_index()));
-  //     }
-  //   }
-  // }
+        // meta_delete_kv
+        pb::coordinator_internal::KvIndexInternal kv_index_internal_to_delete;
+        kv_index_internal_to_delete.set_id(kv_index.id());
+        meta_delete_to_kv.push_back(kv_index_meta_->TransformToKvValue(kv_index_internal_to_delete));
+      }
+    }
+  }
 
   // 16.kv_rev_map_
   {

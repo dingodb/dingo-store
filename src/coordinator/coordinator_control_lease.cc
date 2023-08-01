@@ -290,10 +290,9 @@ void CoordinatorControl::BuildLeaseToKeyMap() {
     }
     const auto &latest_generation = kv_index_value.generations(generation_count - 1);
     pb::coordinator_internal::KvRevInternal kv_rev;
-    std::string revision_string = RevisionToString(kv_index_value.mod_revision());
-    auto ret = this->kv_rev_map_.Get(revision_string, kv_rev);
-    if (ret < 0) {
-      DINGO_LOG(ERROR) << "kv_rev_map_.Get failed, revision_string: " << revision_string;
+    auto ret = GetRawKvRev(kv_index_value.mod_revision(), kv_rev);
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << "GetRawKvRev failed, revision: " << kv_index_value.mod_revision().ShortDebugString();
       continue;
     }
 

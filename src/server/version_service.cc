@@ -453,6 +453,15 @@ void VersionServiceProtoImpl::KvRange(google::protobuf::RpcController* /*control
     response->mutable_error()->set_errmsg(ret.error_str());
   }
 
+  if (!kvs.empty()) {
+    for (const auto& kv : kvs) {
+      auto* resp_kv = response->add_kvs();
+      resp_kv->CopyFrom(kv);
+    }
+    response->set_count(total_count_in_range);
+    response->set_more(total_count_in_range > real_limit);
+  }
+
   DINGO_LOG(INFO) << "Range success: key=" << request->key() << ", end_key=" << request->range_end()
                   << ", limit=" << request->limit();
 }
