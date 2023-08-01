@@ -698,6 +698,9 @@ class CoordinatorControl : public MetaControl {
   // KvDeleteRangeApply is the apply function for delete
   butil::Status KvDeleteApply(const std::string &key, const pb::coordinator_internal::RevisionInternal &op_revision);
 
+  // KvCompactApply is the apply function for delete
+  butil::Status KvCompactApply(const std::string &key, const pb::coordinator_internal::RevisionInternal &op_revision);
+
  private:
   butil::Status ValidateTaskListConflict(uint64_t region_id, uint64_t second_region_id);
 

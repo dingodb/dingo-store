@@ -701,7 +701,7 @@ class DingoSafeStdMap {
   }
 
   static size_t InnerPut(TypeRawMap &map, const T_KEY &key, const T_VALUE &value) {
-    map.insert(std::make_pair(key, value));
+    map.insert_or_assign(key, value);
     return 1;
   }
 
@@ -716,7 +716,7 @@ class DingoSafeStdMap {
     }
 
     for (int i = 0; i < key_list.size(); i++) {
-      map.insert(std::make_pair(key_list[i], value_list[i]));
+      map.insert_or_assign(key_list[i], value_list[i]);
     }
     return key_list.size();
   }
@@ -737,7 +737,7 @@ class DingoSafeStdMap {
       return 0;
     }
 
-    map.insert(std::pair<T_KEY, T_VALUE>(key, value));
+    map.insert_or_assign(key, value);
     return 1;
   }
 
