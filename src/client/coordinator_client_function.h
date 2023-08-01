@@ -130,6 +130,9 @@ void SendListLeases(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator
 // kv
 void SendGetRawKvIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendGetRawKvRev(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendCoorKvRange(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendCoorKvPut(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendCoorKvDeleteRange(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 
 // debug
 void SendDebug();

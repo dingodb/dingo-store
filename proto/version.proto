@@ -86,7 +86,7 @@ message RangeRequest {
   // revision is the point-in-time of the key-value store to use for the range.
   // If revision is less or equal to zero, the range is over the newest key-value store.
   // If the revision has been compacted, ErrCompacted is returned as a response.
-  int64 revision = 4;
+  int64 revision = 4;  // NOT IMPLEMENTED
 
   // serializable sets the range request to use serializable member-local reads.
   // Range requests are linearizable by default; linearizable requests have higher
@@ -381,6 +381,58 @@ message UnlockRequest {
 
 message UnlockResponse {}
 
+message GetRawKvIndexRequest {
+  bytes key = 1;
+}
+
+message KvIndexInternal {
+  message Generation {
+    uint64 verison = 1;                       // if verison == 0, means this is a empty generation
+    RevisionInternal create_revision = 2;     // the create revision of this generation
+    repeated RevisionInternal revisions = 3;  // the revisions of this generation
+  }
+
+  bytes id = 1;  // id is the key of the keyIndex.
+  RevisionInternal mod_revision = 2;
+  repeated Generation generations = 3;
+}
+
+message GetRawKvIndexResponse {
+  dingodb.pb.error.Error error = 1;
+  ResponseHeader header = 2;
+  KvIndexInternal kvIndex = 3;
+}
+
+message RevisionInternal {
+  uint64 main = 1;
+  uint64 sub = 2;
+}
+
+message KvInternal {
+  bytes id = 1;  // id is the key of the keyIndex.
+  bytes value = 2;
+  RevisionInternal create_revision = 3;
+  RevisionInternal mod_revision = 4;
+  uint64 version = 5;
+  uint64 lease = 6;
+  bool is_deleted = 7;  // for delete operation, we set is_deleted to true, and set value to empty
+}
+
+message KvRevInternal {
+  bytes id = 1;  // id is the key of the KvRev, it's encode from RevisionInternal
+  KvInternal kv = 2;
+}
+
+message GetRawKvRevRequest {
+  RevisionInternal revision = 1;
+}
+
+message GetRawKvRevResponse {
+  dingodb.pb.error.Error error = 1;
+  ResponseHeader header = 2;
+  KvRevInternal kvRev = 3;
+}
+
 service VersionService {
   rpc GetCurrVersion(GetCurrVersionRequest) returns (GetCurrVersionResponse) {}
 
@@ -429,4 +481,7 @@ service VersionService {
   // next Lock caller waiting for the lock will then be woken up and given
   // ownership of the lock.
   rpc Unlock(UnlockRequest) returns (UnlockResponse) {}
+
+  rpc GetRawKvIndex(GetRawKvIndexRequest) returns (GetRawKvIndexResponse) {}
+  rpc GetRawKvRev(GetRawKvRevRequest) returns (GetRawKvRevResponse) {}
 }

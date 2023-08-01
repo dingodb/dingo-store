@@ -113,6 +113,16 @@ DEFINE_int32(left_vector_size, 2, "left vector size. <= 0 error");
 DEFINE_int32(right_vector_size, 3, "right vector size. <= 0 error");
 DEFINE_bool(is_return_normlize, true, "is return normlize default true");
 
+DEFINE_uint64(revision, 0, "revision");
+DEFINE_uint64(sub_revision, 0, "sub_revision");
+DEFINE_string(range_end, "", "range_end for coor kv");
+DEFINE_bool(count_only, false, "count_only for coor kv");
+DEFINE_bool(keys_only, false, "keys_only for coor kv");
+DEFINE_bool(prev_kv, false, "prev_kv for coor kv");
+DEFINE_bool(ignore_value, false, "ignore_value for coor kv");
+DEFINE_bool(ignore_lease, false, "ignore_lease for coor kv");
+DEFINE_uint64(lease, 0, "lease for coor kv put");
+
 bvar::LatencyRecorder g_latency_recorder("dingo-store");
 
 const std::map<std::string, std::vector<std::string>> kParamConstraint = {
@@ -624,6 +634,19 @@ int CoordinatorSender() {
     SendLeaseQuery(coordinator_interaction_version);
   } else if (FLAGS_method == "ListLeases") {
     SendListLeases(coordinator_interaction_version);
+  }
+
+  // coordinator kv
+  else if (FLAGS_method == "GetRawKvIndex") {
+    SendGetRawKvIndex(coordinator_interaction_version);
+  } else if (FLAGS_method == "GetRawKvRev") {
+    SendGetRawKvRev(coordinator_interaction_version);
+  } else if (FLAGS_method == "CoorKvRange") {
+    SendCoorKvRange(coordinator_interaction_version);
+  } else if (FLAGS_method == "CoorKvPut") {
+    SendCoorKvPut(coordinator_interaction_version);
+  } else if (FLAGS_method == "CoorKvDeleteRange") {
+    SendCoorKvDeleteRange(coordinator_interaction_version);
   }
 
   // debug
