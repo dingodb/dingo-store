@@ -33,8 +33,9 @@ void VectorIndexLeaderStartHandler::Handle(store::RegionPtr region, uint64_t) {
   if (vector_index != nullptr) {
     DINGO_LOG(WARNING) << fmt::format("Vector index {} already exist, don't need load again.", region->Id());
   } else {
-    if (!VectorIndexSnapshot::IsExistVectorIndexSnapshot(region->Id())) {
-      auto status = VectorIndexSnapshot::PullLastSnapshotFromPeers(region->Id());
+    auto snapshot_manager = vector_index_manager->GetVectorIndexSnapshotManager();
+    if (!snapshot_manager->IsExistVectorIndexSnapshot(region->Id())) {
+      auto status = VectorIndexSnapshotManager::PullLastSnapshotFromPeers(region->Id());
       if (!status.ok()) {
         DINGO_LOG(ERROR) << fmt::format("Pull vector index {} last snapshot failed, error: {}", region->Id(),
                                         status.error_str());

@@ -45,6 +45,11 @@
 namespace dingodb {
 
 bool VectorIndexManager::Init(std::vector<store::RegionPtr> regions) {
+  // Init vector index snapshot
+  if (!vector_index_snapshot_manager_->Init(regions)) {
+    return false;
+  }
+
   for (auto& region : regions) {
     // init vector index map
     const auto& definition = region->InnerRegion().definition();
@@ -142,7 +147,7 @@ butil::Status VectorIndexManager::LoadOrBuildVectorIndex(store::RegionPtr region
   update_online_vector_index_status(pb::common::VECTOR_INDEX_STATUS_LOADING);
 
   // try to LoadVectorIndexFromSnapshot
-  auto new_vector_index = VectorIndexSnapshot::LoadVectorIndexSnapshot(region);
+  auto new_vector_index = VectorIndexSnapshotManager::LoadVectorIndexSnapshot(region);
   if (new_vector_index != nullptr) {
     // replay wal
     DINGO_LOG(INFO) << fmt::format("Load vector index from snapshot, id {} success, will ReplayWal", region->Id());
@@ -474,7 +479,7 @@ butil::Status VectorIndexManager::RebuildVectorIndex(store::RegionPtr region, bo
   return butil::Status();
 }
 
-butil::Status VectorIndexManager::SaveVectorIndex(std::shared_ptr<VectorIndex> vector_index, bool can_overwrite) {
+butil::Status VectorIndexManager::SaveVectorIndex(std::shared_ptr<VectorIndex> vector_index) {
   assert(vector_index != nullptr);
   DINGO_LOG(INFO) << fmt::format("Save vector index id {}", vector_index->Id());
 
@@ -482,7 +487,7 @@ butil::Status VectorIndexManager::SaveVectorIndex(std::shared_ptr<VectorIndex> v
   vector_index->SetStatus(pb::common::VECTOR_INDEX_STATUS_SNAPSHOTTING);
 
   uint64_t snapshot_log_index = 0;
-  auto status = VectorIndexSnapshot::SaveVectorIndexSnapshot(vector_index, snapshot_log_index, can_overwrite);
+  auto status = VectorIndexSnapshotManager::SaveVectorIndexSnapshot(vector_index, snapshot_log_index);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << fmt::format("Save vector index snapshot failed, id {}, errno: {}, errstr: {}",
                                     vector_index->Id(), status.error_code(), status.error_str());
@@ -496,7 +501,7 @@ butil::Status VectorIndexManager::SaveVectorIndex(std::shared_ptr<VectorIndex> v
   DINGO_LOG(INFO) << fmt::format("Save vector index success, id {}", vector_index->Id());
 
   // Install vector index snapshot to followers.
-  status = VectorIndexSnapshot::InstallSnapshotToFollowers(vector_index->Id());
+  status = VectorIndexSnapshotManager::InstallSnapshotToFollowers(vector_index->Id());
   if (!status.ok()) {
     DINGO_LOG(ERROR) << fmt::format("Install snapshot to followers failed, region {} error {}", vector_index->Id(),
                                     status.error_str());
@@ -603,13 +608,10 @@ butil::Status VectorIndexManager::ScrubVectorIndex() {
       continue;
     }
 
-    uint64_t last_snapshot_log_id = VectorIndexSnapshot::GetLastVectorIndexSnapshotLogId(vector_index->Id());
-    if (last_snapshot_log_id == UINT64_MAX) {
-      DINGO_LOG(ERROR) << fmt::format("Get last vector index snapshot log id failed, region_id {}", region->Id());
-      continue;
-    }
+    auto last_snapshot = vector_index_snapshot_manager_->GetLastSnapshot(vector_index->Id());
+    uint64_t last_snaphsot_log_id = (last_snapshot == nullptr) ? 0 : last_snapshot->SnapshotLogId();
 
-    auto last_save_log_behind = vector_index->ApplyLogIndex() - last_snapshot_log_id;
+    auto last_save_log_behind = vector_index->ApplyLogIndex() - last_snaphsot_log_id;
 
     bool need_rebuild = false;
     vector_index->NeedToRebuild(need_rebuild, last_save_log_behind);

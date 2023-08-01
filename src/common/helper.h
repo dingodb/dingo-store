@@ -219,6 +219,7 @@ class Helper {
   // filesystem operations
   static std::vector<std::string> TraverseDirectory(const std::string& path);
   static std::string FindFileInDirectory(const std::string& dirpath, const std::string& prefix);
+  static bool CreateDirectory(const std::string& path);
   static bool RemoveFileOrDirectory(const std::string& path);
   static bool RemoveAllFileOrDirectory(const std::string& path);
   static butil::Status Rename(const std::string& src_path, const std::string& dst_path, bool is_force = true);
