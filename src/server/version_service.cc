@@ -506,6 +506,7 @@ void VersionServiceProtoImpl::KvPut(google::protobuf::RpcController* controller,
       resp_kv->CopyFrom(kv);
     }
   }
+  response->mutable_header()->set_revision(revision);
 
   // prepare for raft process
   auto* meta_closure = new CoordinatorClosure<pb::version::PutRequest, pb::version::PutResponse>(request, response,
@@ -560,6 +561,7 @@ void VersionServiceProtoImpl::KvDeleteRange(google::protobuf::RpcController* /*c
       resp_kv->CopyFrom(kv);
     }
   }
+  response->mutable_header()->set_revision(revision);
 
   // prepare for raft process
   auto* meta_closure = new CoordinatorClosure<pb::version::DeleteRangeRequest, pb::version::DeleteRangeResponse>(

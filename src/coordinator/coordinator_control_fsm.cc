@@ -1980,26 +1980,26 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
           auto ret = KvPutApply(kv_index.id(), kv_index.op_revision(), kv_index.ignore_lease(), kv_index.lease_id(),
                                 kv_index.ignore_value(), kv_index.value());
           if (ret.ok()) {
-            DINGO_LOG(INFO) << "ApplyMetaIncrement kv_index UPDATE, [id=" << kv_index.id() << "] success";
+            DINGO_LOG(INFO) << "ApplyMetaIncrement kv_index UPDATE,PUT [id=" << kv_index.id() << "] success";
           } else {
-            DINGO_LOG(WARNING) << "ApplyMetaIncrement kv_index UPDATE, [id=" << kv_index.id() << "] failed";
+            DINGO_LOG(WARNING) << "ApplyMetaIncrement kv_index UPDATE,PUT [id=" << kv_index.id() << "] failed";
           }
         } else if (kv_index.event_type() == pb::coordinator_internal::KvIndexEventType::KV_INDEX_EVENT_TYPE_DELETE) {
           // call KvDeleteApply
           auto ret = KvDeleteApply(kv_index.id(), kv_index.op_revision());
           if (ret.ok()) {
-            DINGO_LOG(INFO) << "ApplyMetaIncrement kv_index UPDATE, [id=" << kv_index.id() << "] success";
+            DINGO_LOG(INFO) << "ApplyMetaIncrement kv_index UPDATE,DELETE [id=" << kv_index.id() << "] success";
           } else {
-            DINGO_LOG(WARNING) << "ApplyMetaIncrement kv_index UPDATE, [id=" << kv_index.id() << "] failed";
+            DINGO_LOG(WARNING) << "ApplyMetaIncrement kv_index UPDATE,DELETE [id=" << kv_index.id() << "] failed";
           }
         } else if (kv_index.event_type() ==
                    pb::coordinator_internal::KvIndexEventType::KV_INDEX_EVENT_TYPE_COMPACTION) {
           // call KvLockApply
           auto ret = KvCompactApply(kv_index.id(), kv_index.op_revision());
           if (ret.ok()) {
-            DINGO_LOG(INFO) << "ApplyMetaIncrement kv_index UPDATE, [id=" << kv_index.id() << "] success";
+            DINGO_LOG(INFO) << "ApplyMetaIncrement kv_index UPDATE,COMPACT [id=" << kv_index.id() << "] success";
           } else {
-            DINGO_LOG(WARNING) << "ApplyMetaIncrement kv_index UPDATE, [id=" << kv_index.id() << "] failed";
+            DINGO_LOG(WARNING) << "ApplyMetaIncrement kv_index UPDATE,COMPACT [id=" << kv_index.id() << "] failed";
           }
         }
       } else if (kv_index.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {

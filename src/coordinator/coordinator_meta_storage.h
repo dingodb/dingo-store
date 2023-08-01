@@ -267,7 +267,8 @@ class MetaSafeMapStorage {
       return 0;
     }
 
-    std::string s(str.c_str() + internal_prefix.size() + 1);
+    // std::string s(str.c_str() + internal_prefix.size() + 1);
+    std::string s = str.substr(internal_prefix.size() + 1);
     try {
       return std::stoull(s, nullptr, 10);
     } catch (std::invalid_argument &e) {
@@ -277,7 +278,8 @@ class MetaSafeMapStorage {
     return 0;
   }
 
-  std::string GenKey(uint64_t id) { return fmt::format("{}_{}", internal_prefix, id); }
+  // std::string GenKey(uint64_t id) { return fmt::format("{}_{}", internal_prefix, id); }
+  std::string GenKey(uint64_t id) { return internal_prefix + "_" + std::to_string(id); }
 
   std::shared_ptr<pb::common::KeyValue> TransformToKv(uint64_t id) {
     // std::shared_lock<std::shared_mutex> lock(mutex_);
@@ -385,11 +387,13 @@ class MetaSafeStringMapStorage {
       return std::string();
     }
 
-    std::string s(str.c_str() + internal_prefix.size() + 1);
+    // std::string s(str.c_str() + internal_prefix.size() + 1);
+    std::string s = str.substr(internal_prefix.size() + 1);
     return s;
   }
 
-  std::string GenKey(std::string id) { return fmt::format("{}_{}", internal_prefix, id); }
+  // std::string GenKey(std::string id) { return fmt::format("{}_{}", internal_prefix, id); }
+  std::string GenKey(std::string id) { return internal_prefix + "_" + id; }
 
   std::shared_ptr<pb::common::KeyValue> TransformToKv(std::string id) {
     // std::shared_lock<std::shared_mutex> lock(mutex_);
@@ -496,7 +500,8 @@ class MetaMapStorage {
       return 0;
     }
 
-    std::string s(str.c_str() + internal_prefix.size() + 1);
+    // std::string s(str.c_str() + internal_prefix.size() + 1);
+    std::string s = str.substr(internal_prefix.size() + 1);
     try {
       return std::stoull(s, nullptr, 10);
     } catch (std::invalid_argument &e) {
@@ -506,7 +511,8 @@ class MetaMapStorage {
     return 0;
   }
 
-  std::string GenKey(uint64_t id) { return fmt::format("{}_{}", internal_prefix, id); }
+  // std::string GenKey(uint64_t id) { return fmt::format("{}_{}", internal_prefix, id); }
+  std::string GenKey(uint64_t id) { return internal_prefix + "_" + std::to_string(id); }
 
   std::shared_ptr<pb::common::KeyValue> TransformToKv(uint64_t id) {
     // std::shared_lock<std::shared_mutex> lock(mutex_);
@@ -605,11 +611,14 @@ class MetaSafeStringStdMapStorage {
       return std::string();
     }
 
-    std::string s(str.c_str() + internal_prefix.size() + 1);
-    return s;
+    return str.substr(internal_prefix.size() + 1);
+
+    // std::string s(str.c_str() + internal_prefix.size() + 1);
+    // return s;
   }
 
-  std::string GenKey(std::string id) { return fmt::format("{}_{}", internal_prefix, id); }
+  // std::string GenKey(std::string id) { return fmt::format("{}_{}", internal_prefix, id); }
+  std::string GenKey(std::string id) { return internal_prefix + "_" + id; }
 
   std::shared_ptr<pb::common::KeyValue> TransformToKv(std::string id) {
     // std::shared_lock<std::shared_mutex> lock(mutex_);
