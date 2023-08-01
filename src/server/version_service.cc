@@ -477,34 +477,31 @@ void VersionServiceProtoImpl::KvPut(google::protobuf::RpcController* controller,
     return RedirectResponse(response);
   }
 
-  if (request->key_values_size() <= 0) {
+  if (request->key_value().key().empty()) {
     response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
-    response->mutable_error()->set_errmsg("key_values is empty");
+    response->mutable_error()->set_errmsg("key_value is empty");
     return;
   }
 
-  auto key_values = Helper::PbRepeatedToVector(request->key_values());
-  std::vector<pb::version::Kv> prev_kvs;
+  pb::version::Kv prev_kv;
   uint64_t revision = 0;
   uint64_t lease_grant_id = 0;
 
   pb::coordinator_internal::MetaIncrement meta_increment;
-  auto ret = coordinator_control_->KvPut(key_values, request->lease(), request->prev_kv(), request->ignore_value(),
-                                         request->ignore_lease(), prev_kvs, revision, lease_grant_id, meta_increment);
+  auto ret = coordinator_control_->KvPut(request->key_value(), request->lease(), request->need_prev_kv(),
+                                         request->ignore_value(), request->ignore_lease(), prev_kv, revision,
+                                         lease_grant_id, meta_increment);
   if (!ret.ok()) {
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
     response->mutable_error()->set_errmsg(ret.error_str());
     return;
   }
 
-  DINGO_LOG(INFO) << "Put success: key_values_size=" << request->key_values_size()
+  DINGO_LOG(INFO) << "Put success: key_valuee=" << request->key_value().ShortDebugString()
                   << ", lease_grant_id=" << lease_grant_id << ", revision=" << revision;
 
-  if (request->prev_kv()) {
-    for (const auto& kv : prev_kvs) {
-      auto* resp_kv = response->add_prev_kvs();
-      resp_kv->CopyFrom(kv);
-    }
+  if (request->need_prev_kv()) {
+    response->mutable_prev_kv()->CopyFrom(prev_kv);
   }
   response->mutable_header()->set_revision(revision);
 
@@ -543,8 +540,8 @@ void VersionServiceProtoImpl::KvDeleteRange(google::protobuf::RpcController* /*c
   std::vector<pb::version::Kv> prev_kvs;
   uint64_t revision = 0;
   pb::coordinator_internal::MetaIncrement meta_increment;
-  auto ret = coordinator_control_->KvDeleteRange(request->key(), request->range_end(), request->prev_kv(), prev_kvs,
-                                                 revision, meta_increment);
+  auto ret = coordinator_control_->KvDeleteRange(request->key(), request->range_end(), request->need_prev_kv(),
+                                                 prev_kvs, revision, meta_increment);
   if (!ret.ok()) {
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
     response->mutable_error()->set_errmsg(ret.error_str());
@@ -555,7 +552,7 @@ void VersionServiceProtoImpl::KvDeleteRange(google::protobuf::RpcController* /*c
   DINGO_LOG(INFO) << "DeleteRange success: key=" << request->key() << ", end_key=" << request->range_end()
                   << ", revision=" << revision;
 
-  if (request->prev_kv()) {
+  if (request->need_prev_kv()) {
     for (const auto& kv : prev_kvs) {
       auto* resp_kv = response->add_prev_kvs();
       resp_kv->CopyFrom(kv);

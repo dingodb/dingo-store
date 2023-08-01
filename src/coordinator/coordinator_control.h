@@ -668,17 +668,17 @@ class CoordinatorControl : public MetaControl {
   butil::Status KvRange(const std::string &key, const std::string &range_end, int64_t limit, bool keys_only,
                         bool count_only, std::vector<pb::version::Kv> &kv, uint64_t &total_count_in_range);
   // KvPut is the put function
-  // in:  key_values
+  // in:  key_value
   // in:  lease_id
   // in:  prev_kv
   // in:  igore_value
   // in:  ignore_lease
-  // out:  prev_kvs
+  // out:  prev_kv
   // out:  revision
   // return: errno
-  butil::Status KvPut(const std::vector<pb::common::KeyValue> &key_values, uint64_t lease_id, bool prev_kv,
-                      bool igore_value, bool ignore_lease, std::vector<pb::version::Kv> &prev_kvs, uint64_t &revision,
-                      uint64_t &lease_grant_id, pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status KvPut(const pb::common::KeyValue &key_value_in, uint64_t lease_id, bool need_prev_kv, bool igore_value,
+                      bool ignore_lease, pb::version::Kv &prev_kv, uint64_t &revision, uint64_t &lease_grant_id,
+                      pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // KvDeleteRange is the delete function
   // in:  key
@@ -687,7 +687,7 @@ class CoordinatorControl : public MetaControl {
   // out:  prev_kvs
   // out:  revision
   // return: errno
-  butil::Status KvDeleteRange(const std::string &key, const std::string &range_end, bool prev_key,
+  butil::Status KvDeleteRange(const std::string &key, const std::string &range_end, bool need_prev_kv,
                               std::vector<pb::version::Kv> &prev_kvs, uint64_t &revision,
                               pb::coordinator_internal::MetaIncrement &meta_increment);
 
