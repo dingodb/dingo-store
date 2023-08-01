@@ -403,6 +403,12 @@ bool CoordinatorControl::Recover() {
   BuildLeaseToKeyMap();
   DINGO_LOG(INFO) << "Recover lease_to_key_map_temp, count=" << lease_to_key_map_temp_.size();
 
+  std::map<std::string, pb::coordinator_internal::KvRevInternal> kv_rev_map;
+  kv_rev_map_.GetRawMapCopy(kv_rev_map);
+  for (auto& kv : kv_rev_map) {
+    DINGO_LOG(INFO) << "kv_rev_map key=" << Helper::StringToHex(kv.first) << " value=" << kv.second.DebugString();
+  }
+
   return true;
 }
 

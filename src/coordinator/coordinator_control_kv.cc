@@ -203,6 +203,10 @@ butil::Status CoordinatorControl::KvRange(const std::string &key, const std::str
   DINGO_LOG(INFO) << "KvRange, key: " << key << ", range_end: " << range_end << ", limit: " << limit
                   << ", keys_only: " << keys_only << ", count_only: " << count_only;
 
+  if (limit == 0) {
+    limit = INT64_MAX;
+  }
+
   std::vector<pb::coordinator_internal::KvIndexInternal> kv_index_values;
 
   if (range_end.empty()) {
@@ -222,8 +226,6 @@ butil::Status CoordinatorControl::KvRange(const std::string &key, const std::str
     }
   }
 
-  total_count_in_range = kv_index_values.size();
-
   if (count_only) {
     DINGO_LOG(INFO) << "KvRange count_only, total_count_in_range: " << total_count_in_range;
     return butil::Status::OK();
@@ -234,10 +236,17 @@ butil::Status CoordinatorControl::KvRange(const std::string &key, const std::str
   for (const auto &kv_index_value : kv_index_values) {
     auto generation_count = kv_index_value.generations_size();
     if (generation_count == 0) {
+      DINGO_LOG(INFO) << "KvRange generation_count is 0, key: " << key;
       continue;
     }
     const auto &latest_generation = kv_index_value.generations(generation_count - 1);
     if (!latest_generation.has_create_revision() || latest_generation.revisions_size() == 0) {
+      DINGO_LOG(INFO) << "KvRange latest_generation is empty, key: " << key;
+      continue;
+    }
+
+    limit_count++;
+    if (limit_count > limit) {
       continue;
     }
 
@@ -264,12 +273,9 @@ butil::Status CoordinatorControl::KvRange(const std::string &key, const std::str
 
     // add to output
     kv.push_back(kv_temp);
-
-    limit_count++;
-    if (limit_count >= limit) {
-      break;
-    }
   }
+
+  total_count_in_range = limit_count;
 
   DINGO_LOG(INFO) << "KvRange finish, key: " << key << ", range_end: " << range_end << ", limit: " << limit
                   << ", keys_only: " << keys_only << ", count_only: " << count_only << ", kv size: " << kv.size()
@@ -345,7 +351,7 @@ butil::Status CoordinatorControl::KvPut(const std::vector<pb::common::KeyValue> 
   }
 
   // do kv_put
-  uint64_t sub_revision = 0;
+  uint64_t sub_revision = 1;
   revision = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REVISION, meta_increment);
 
   for (const auto &key_value_in : key_values) {
@@ -410,7 +416,7 @@ butil::Status CoordinatorControl::KvDeleteRange(const std::string &key, const st
 
   bool key_only = !prev_key;
 
-  auto ret = KvRange(key, range_end, 0, key_only, false, kvs_to_delete, total_count_in_range);
+  auto ret = KvRange(key, range_end, INT64_MAX, key_only, false, kvs_to_delete, total_count_in_range);
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << "KvDeleteRange KvRange failed, key: " << key << ", range_end: " << range_end
                      << ", error: " << ret.error_str();
@@ -418,7 +424,7 @@ butil::Status CoordinatorControl::KvDeleteRange(const std::string &key, const st
   }
 
   // do kv_delete
-  uint64_t sub_revision = 0;
+  uint64_t sub_revision = 1;
   revision = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REVISION, meta_increment);
 
   for (const auto &kv_to_delete : kvs_to_delete) {
@@ -506,6 +512,7 @@ butil::Status CoordinatorControl::KvPutApply(const std::string &key,
       // setup new_version
       new_version = latest_generation->verison();
     }
+    kv_index.mutable_mod_revision()->CopyFrom(op_revision);
   }
 
   // generate new kv_rev
@@ -615,6 +622,7 @@ butil::Status CoordinatorControl::KvDeleteApply(const std::string &key,
       // setup new_version
       new_version = latest_generation->verison();
     }
+    kv_index.mutable_mod_revision()->CopyFrom(op_revision);
   }
 
   // generate new kv_rev
