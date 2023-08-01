@@ -358,7 +358,6 @@ butil::Status RaftStoreEngine::VectorReader::SearchVector(
     for (auto& vector_with_distance_result : tmp_results) {
       pb::index::VectorWithDistanceResult new_vector_with_distance_result;
 
-      bool is_reserve = false;
       for (auto& temp_vector_with_distance : *vector_with_distance_result.mutable_vector_with_distances()) {
         uint64_t temp_id = temp_vector_with_distance.vector_with_id().id();
         bool compare_result = false;

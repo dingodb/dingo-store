@@ -105,7 +105,7 @@ void CoordinatorControl::OnLeaderStart(int64_t term) {
   {
     // BAIDU_SCOPED_LOCK(index_map_mutex_);
     index_name_map_safe_temp_.Clear();
-    butil::FlatMap<uint64_t, pb::coordinator_internal::IndexInternal> index_map_copy;
+    butil::FlatMap<uint64_t, pb::coordinator_internal::TableInternal> index_map_copy;
     index_map_copy.init(10000);
     index_map_.GetRawMapCopy(index_map_copy);
     for (const auto& it : index_map_copy) {
@@ -953,7 +953,7 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
   {
     // BAIDU_SCOPED_LOCK(index_map_mutex_);
     index_name_map_safe_temp_.Clear();
-    butil::FlatMap<uint64_t, pb::coordinator_internal::IndexInternal> index_map_copy;
+    butil::FlatMap<uint64_t, pb::coordinator_internal::TableInternal> index_map_copy;
     index_map_copy.init(10000);
     index_map_.GetRawMapCopy(index_map_copy);
     for (const auto& it : index_map_copy) {
@@ -1883,7 +1883,7 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
 
         // add index to index_map
         // index_map_[index.id()] = index.index();
-        int ret = index_map_.Put(index.id(), index.index());
+        int ret = index_map_.Put(index.id(), index.table());
         if (ret > 0) {
           DINGO_LOG(INFO) << "ApplyMetaIncrement index CREATE, [id=" << index.id() << "] success";
         } else {
@@ -1891,43 +1891,43 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         }
 
         // meta_write_kv
-        meta_write_to_kv.push_back(index_meta_->TransformToKvValue(index.index()));
+        meta_write_to_kv.push_back(index_meta_->TransformToKvValue(index.table()));
 
         // add index to parent schema
         pb::coordinator_internal::SchemaInternal schema_to_update;
-        ret = schema_map_.Get(index.index().schema_id(), schema_to_update);
+        ret = schema_map_.Get(index.table().schema_id(), schema_to_update);
         // auto* schema = schema_map_.seek(index.schema_id());
         if (ret > 0) {
           // add new created index's id to its parent schema's index_ids
           schema_to_update.add_index_ids(index.id());
-          schema_map_.Put(index.index().schema_id(), schema_to_update);
+          schema_map_.Put(index.table().schema_id(), schema_to_update);
 
           DINGO_LOG(INFO) << "5.index map CREATE new_sub_index id=" << index.id()
-                          << " parent_id=" << index.index().schema_id();
+                          << " parent_id=" << index.table().schema_id();
 
           // meta_write_kv
           meta_write_to_kv.push_back(schema_meta_->TransformToKvValue(schema_to_update));
         } else {
-          DINGO_LOG(ERROR) << " CREATE INDEX apply illegal schema_id=" << index.index().schema_id()
-                           << " index_id=" << index.id() << " index_name=" << index.index().definition().name();
+          DINGO_LOG(ERROR) << " CREATE INDEX apply illegal schema_id=" << index.table().schema_id()
+                           << " index_id=" << index.id() << " index_name=" << index.table().definition().name();
         }
       } else if (index.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
         // update index to index_map
         // auto& update_index = index_map_[index.id()];
         // update_index.CopyFrom(index.index());
-        pb::coordinator_internal::IndexInternal index_internal;
-        int ret = index_map_.Get(index.id(), index_internal);
+        pb::coordinator_internal::TableInternal table_internal;
+        int ret = index_map_.Get(index.id(), table_internal);
         if (ret > 0) {
-          if (index.index().has_definition()) {
-            index_internal.mutable_definition()->CopyFrom(index.index().definition());
+          if (index.table().has_definition()) {
+            table_internal.mutable_definition()->CopyFrom(index.table().definition());
           }
-          if (index.index().partitions_size() > 0) {
-            index_internal.clear_partitions();
-            for (const auto& it : index.index().partitions()) {
-              index_internal.add_partitions()->CopyFrom(it);
+          if (index.table().partitions_size() > 0) {
+            table_internal.clear_partitions();
+            for (const auto& it : index.table().partitions()) {
+              table_internal.add_partitions()->CopyFrom(it);
             }
           }
-          ret = index_map_.Put(index.id(), index_internal);
+          ret = index_map_.Put(index.id(), table_internal);
           if (ret > 0) {
             DINGO_LOG(INFO) << "ApplyMetaIncrement index UPDATE, [id=" << index.id() << "] success";
           } else {
@@ -1935,10 +1935,10 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
           }
 
           // meta_write_kv
-          meta_write_to_kv.push_back(index_meta_->TransformToKvValue(index_internal));
+          meta_write_to_kv.push_back(index_meta_->TransformToKvValue(table_internal));
         } else {
           DINGO_LOG(ERROR) << " UPDATE INDEX apply illegal index_id=" << index.id()
-                           << " index_name=" << index.index().definition().name();
+                           << " index_name=" << index.table().definition().name();
         }
 
       } else if (index.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
@@ -1958,7 +1958,7 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
 
         // delete from parent schema
         pb::coordinator_internal::SchemaInternal schema_to_update;
-        ret = schema_map_.Get(index.index().schema_id(), schema_to_update);
+        ret = schema_map_.Get(index.table().schema_id(), schema_to_update);
 
         if (ret > 0) {
           // according to the doc, we must use CopyFrom for protobuf message data structure here
@@ -1974,20 +1974,20 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
             }
           }
           schema_to_update.CopyFrom(new_schema);
-          schema_map_.Put(index.index().schema_id(), schema_to_update);
+          schema_map_.Put(index.table().schema_id(), schema_to_update);
 
           DINGO_LOG(INFO) << "5.index map DELETE new_sub_index id=" << index.id()
-                          << " parent_id=" << index.index().schema_id();
+                          << " parent_id=" << index.table().schema_id();
 
           // meta_write_kv
           meta_write_to_kv.push_back(schema_meta_->TransformToKvValue(schema_to_update));
 
         } else {
-          DINGO_LOG(ERROR) << " DROP INDEX apply illegal schema_id=" << index.index().schema_id()
-                           << " index_id=" << index.id() << " index_name=" << index.index().definition().name();
+          DINGO_LOG(ERROR) << " DROP INDEX apply illegal schema_id=" << index.table().schema_id()
+                           << " index_id=" << index.id() << " index_name=" << index.table().definition().name();
         }
         // meta_delete_kv
-        meta_delete_to_kv.push_back(index_meta_->TransformToKvValue(index.index()));
+        meta_delete_to_kv.push_back(index_meta_->TransformToKvValue(index.table()));
       }
     }
   }

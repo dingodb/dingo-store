@@ -43,7 +43,7 @@ class ClusterStatImpl : public pb::cluster::ClusterStat, public brpc::Tabbed {
   static void PrintTableRegions(std::ostream& os, const pb::common::RegionMap& region_map,
                                 const pb::meta::TableRange& table_range);
 
-  static void PrintIndexDefinition(std::ostream& os, const pb::meta::IndexDefinition& index_definition);
+  static void PrintIndexDefinition(std::ostream& os, const pb::meta::TableDefinition& table_definition);
   static void PrintIndexRegions(std::ostream& os, const pb::common::RegionMap& region_map,
                                 const pb::meta::IndexRange& index_range);
 };

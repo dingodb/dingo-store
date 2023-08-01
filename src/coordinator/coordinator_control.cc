@@ -66,7 +66,7 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   executor_user_meta_ =
       new MetaSafeStringMapStorage<pb::coordinator_internal::ExecutorUserInternal>(&executor_user_map_);
   task_list_meta_ = new MetaSafeMapStorage<pb::coordinator::TaskList>(&task_list_map_);
-  index_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::IndexInternal>(&index_map_);
+  index_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::TableInternal>(&index_map_);
   index_metrics_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::IndexMetricsInternal>(&index_metrics_map_);
 
   // version kv
@@ -433,7 +433,7 @@ bool CoordinatorControl::Recover() {
 
   // copy index_map_ to index_name_map_safe_temp_
   {
-    butil::FlatMap<uint64_t, pb::coordinator_internal::IndexInternal> index_map_copy;
+    butil::FlatMap<uint64_t, pb::coordinator_internal::TableInternal> index_map_copy;
     index_map_copy.init(10000);
     index_map_.GetRawMapCopy(index_map_copy);
     for (const auto& it : index_map_copy) {

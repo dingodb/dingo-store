@@ -108,11 +108,10 @@ void ClusterStatImpl::default_method(::google::protobuf::RpcController* controll
       // Start Append Index Information
       os << "<ul>";
 
-      pb::meta::IndexDefinitionWithId index_definition;
-      controller_->GetIndex(schema_id, index_id, index_definition);
-      os << "<li> IndexName:" << index_definition.index_definition().name() << "</li>";
-      pb::meta::IndexDefinition index_def = index_definition.index_definition();
-      PrintIndexDefinition(os, index_definition.index_definition());
+      pb::meta::TableDefinitionWithId table_definition;
+      controller_->GetIndex(schema_id, index_id, table_definition);
+      os << "<li> IndexName:" << table_definition.table_definition().name() << "</li>";
+      PrintIndexDefinition(os, table_definition.table_definition());
 
       pb::meta::IndexRange index_range;
       controller_->GetIndexRange(schema_id, index_id, index_range);
@@ -250,7 +249,7 @@ void ClusterStatImpl::PrintTableDefinition(std::ostream& os, const pb::meta::Tab
   os << "</li>";
 }
 
-void ClusterStatImpl::PrintIndexDefinition(std::ostream& os, const pb::meta::IndexDefinition& index_definition) {
+void ClusterStatImpl::PrintIndexDefinition(std::ostream& os, const pb::meta::TableDefinition& table_definition) {
   /*
    * <li>Columns
    *  <ul>
@@ -263,7 +262,7 @@ void ClusterStatImpl::PrintIndexDefinition(std::ostream& os, const pb::meta::Ind
   os << "<li> IndexDefinition:";
   os << "<ul>";
 
-  os << "<li>" << index_definition.ShortDebugString() << "</li>";
+  os << "<li>" << table_definition.ShortDebugString() << "</li>";
 
   os << "</ul>";
   os << "</li>";
