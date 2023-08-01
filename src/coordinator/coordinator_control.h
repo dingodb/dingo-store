@@ -643,9 +643,17 @@ class CoordinatorControl : public MetaControl {
   static pb::coordinator_internal::RevisionInternal StringToRevision(const std::string &input_string);
 
   // raw kv functions
+  butil::Status RangeRawKvIndex(const std::string &key, const std::string &range_end,
+                                std::vector<pb::coordinator_internal::KvIndexInternal> &kv_index_values);
   butil::Status GetRawKvIndex(const std::string &key, pb::coordinator_internal::KvIndexInternal &kv_index);
+  butil::Status PutRawKvIndex(const std::string &key, const pb::coordinator_internal::KvIndexInternal &kv_index);
+  butil::Status DeleteRawKvIndex(const std::string &key, const pb::coordinator_internal::KvIndexInternal &kv_index);
   butil::Status GetRawKvRev(const pb::coordinator_internal::RevisionInternal &revision,
                             pb::coordinator_internal::KvRevInternal &kv_rev);
+  butil::Status PutRawKvRev(const pb::coordinator_internal::RevisionInternal &revision,
+                            const pb::coordinator_internal::KvRevInternal &kv_rev);
+  butil::Status DeleteRawKvRev(const pb::coordinator_internal::RevisionInternal &revision,
+                               const pb::coordinator_internal::KvRevInternal &kv_rev);
 
   // kv functions for api
   // KvRange is the get function
@@ -680,6 +688,13 @@ class CoordinatorControl : public MetaControl {
   butil::Status KvDeleteRange(const std::string &key, const std::string &range_end, bool prev_key,
                               std::vector<pb::version::Kv> &prev_kvs, uint64_t &revision,
                               pb::coordinator_internal::MetaIncrement &meta_increment);
+
+  // KvPutApply is the apply function for put
+  butil::Status KvPutApply(const std::string &key, const pb::coordinator_internal::RevisionInternal &op_revision,
+                           bool ignore_lease, uint64_t lease_id, bool ignore_value, const std::string &value);
+
+  // KvDeleteRangeApply is the apply function for delete
+  butil::Status KvDeleteApply(const std::string &key, const pb::coordinator_internal::RevisionInternal &op_revision);
 
  private:
   butil::Status ValidateTaskListConflict(uint64_t region_id, uint64_t second_region_id);
