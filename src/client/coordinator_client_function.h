@@ -120,12 +120,16 @@ void SendUpdateAutoIncrement(std::shared_ptr<dingodb::CoordinatorInteraction> co
 void SendGenerateAutoIncrement(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendDeleteAutoIncrement(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 
-/// version kv
+// lease
 void SendLeaseGrant(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendLeaseRevoke(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendLeaseRenew(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendLeaseQuery(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendListLeases(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+
+// kv
+void SendGetRawKvIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendGetRawKvRev(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 
 // debug
 void SendDebug();

@@ -86,12 +86,97 @@ butil::Status CoordinatorControl::GetRawKvIndex(const std::string &key,
   return butil::Status::OK();
 }
 
+butil::Status CoordinatorControl::RangeRawKvIndex(
+    const std::string &key, const std::string &range_end,
+    std::vector<pb::coordinator_internal::KvIndexInternal> &kv_index_values) {
+  // scan kv_index for legal keys
+  auto ret = this->kv_index_map_.GetAllValues(
+      kv_index_values, [&key, &range_end](pb::coordinator_internal::KvIndexInternal version_kv) -> bool {
+        auto generation_count = version_kv.generations_size();
+        if (generation_count == 0) {
+          return false;
+        }
+
+        const auto &latest_generation = version_kv.generations(generation_count - 1);
+        if (!latest_generation.has_create_revision() || latest_generation.revisions_size() == 0) {
+          return false;
+        }
+
+        if (range_end.empty()) {
+          return key == version_kv.id();
+        } else if (range_end == std::to_string('\0')) {
+          return version_kv.id().compare(key) >= 0;
+        } else {
+          return version_kv.id().compare(key) >= 0 && version_kv.id().compare(range_end) < 0;
+        }
+      });
+
+  if (ret < 0) {
+    DINGO_LOG(WARNING) << "RangeRawKvIndex failed, key:[" << key << "]";
+    return butil::Status(EINVAL, "RangeRawKvIndex failed");
+  } else {
+    return butil::Status::OK();
+  }
+}
+
+butil::Status CoordinatorControl::PutRawKvIndex(const std::string &key,
+                                                const pb::coordinator_internal::KvIndexInternal &kv_index) {
+  auto ret = this->kv_index_map_.Put(key, kv_index);
+  if (ret < 0) {
+    DINGO_LOG(WARNING) << "PutRawKvIndex failed, key:[" << key << "]";
+  }
+
+  std::vector<pb::common::KeyValue> meta_write_to_kv;
+  meta_write_to_kv.push_back(kv_index_meta_->TransformToKvValue(kv_index));
+  meta_writer_->Put(meta_write_to_kv);
+
+  return butil::Status::OK();
+}
+
+butil::Status CoordinatorControl::DeleteRawKvIndex(const std::string &key,
+                                                   const pb::coordinator_internal::KvIndexInternal &kv_index) {
+  auto ret = this->kv_index_map_.Erase(key);
+  if (ret < 0) {
+    DINGO_LOG(WARNING) << "DeleteRawKvIndex failed, key:[" << key << "]";
+  }
+
+  auto kv_to_delete = kv_index_meta_->TransformToKvValue(kv_index);
+  meta_writer_->Delete(kv_to_delete.key());
+
+  return butil::Status::OK();
+}
+
 butil::Status CoordinatorControl::GetRawKvRev(const pb::coordinator_internal::RevisionInternal &revision,
                                               pb::coordinator_internal::KvRevInternal &kv_rev) {
   auto ret = this->kv_rev_map_.Get(RevisionToString(revision), kv_rev);
   if (ret < 0) {
     DINGO_LOG(WARNING) << "GetRawKvRev failed, revision:[" << revision.ShortDebugString() << "]";
   }
+  return butil::Status::OK();
+}
+
+butil::Status CoordinatorControl::PutRawKvRev(const pb::coordinator_internal::RevisionInternal &revision,
+                                              const pb::coordinator_internal::KvRevInternal &kv_rev) {
+  auto ret = this->kv_rev_map_.Put(RevisionToString(revision), kv_rev);
+  if (ret < 0) {
+    DINGO_LOG(WARNING) << "PutRawKvRev failed, revision:[" << revision.ShortDebugString() << "]";
+  }
+  std::vector<pb::common::KeyValue> meta_write_to_kv;
+  meta_write_to_kv.push_back(kv_rev_meta_->TransformToKvValue(kv_rev));
+  meta_writer_->Put(meta_write_to_kv);
+
+  return butil::Status::OK();
+}
+
+butil::Status CoordinatorControl::DeleteRawKvRev(const pb::coordinator_internal::RevisionInternal &revision,
+                                                 const pb::coordinator_internal::KvRevInternal &kv_rev) {
+  auto ret = this->kv_rev_map_.Erase(RevisionToString(revision));
+  if (ret < 0) {
+    DINGO_LOG(WARNING) << "DeleteRawKvRev failed, revision:[" << revision.ShortDebugString() << "]";
+  }
+  auto kv_to_delete = kv_rev_meta_->TransformToKvValue(kv_rev);
+  meta_writer_->Delete(kv_to_delete.key());
+
   return butil::Status::OK();
 }
 
@@ -122,27 +207,10 @@ butil::Status CoordinatorControl::KvRange(const std::string &key, const std::str
     kv_index_values.push_back(kv_index);
   } else {
     // scan kv_index for legal keys
-    if (this->kv_index_map_.GetAllValues(
-            kv_index_values, [&key, &range_end](pb::coordinator_internal::KvIndexInternal version_kv) -> bool {
-              auto generation_count = version_kv.generations_size();
-              if (generation_count == 0) {
-                return false;
-              }
-
-              const auto &latest_generation = version_kv.generations(generation_count - 1);
-              if (!latest_generation.has_create_revision() || latest_generation.revisions_size() == 0) {
-                return false;
-              }
-
-              if (range_end.empty()) {
-                return key == version_kv.id();
-              } else if (range_end == std::to_string('\0')) {
-                return version_kv.id().compare(key) >= 0;
-              } else {
-                return version_kv.id().compare(key) >= 0 && version_kv.id().compare(range_end) < 0;
-              }
-            }) < 0) {
-      DINGO_LOG(FATAL) << "OnLeaderStart kv_index_map_.GetAllValues failed";
+    auto ret = RangeRawKvIndex(key, range_end, kv_index_values);
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << "KvRange kv_index_map_.RangeRawKvIndex failed";
+      return ret;
     }
   }
 
@@ -265,6 +333,7 @@ butil::Status CoordinatorControl::KvPut(const std::vector<pb::common::KeyValue> 
   // do kv_put
   uint64_t sub_revision = 0;
   revision = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REVISION, meta_increment);
+
   for (const auto &key_value_in : key_values) {
     if (prev_kv) {
       std::vector<pb::version::Kv> kvs_temp;
@@ -279,77 +348,27 @@ butil::Status CoordinatorControl::KvPut(const std::vector<pb::common::KeyValue> 
     }
 
     // update kv_index
-    pb::coordinator_internal::KvIndexInternal kv_index;
-    auto ret = this->GetRawKvIndex(key_value_in.key(), kv_index);
-    if (!ret.ok()) {
-      DINGO_LOG(INFO) << "KvPut will create new key: " << key_value_in.key() << ", error_str: " << ret.error_str();
+    DINGO_LOG(INFO) << "KvPut will put key: " << key_value_in.key();
 
-      kv_index.set_id(key_value_in.key());
-      kv_index.mutable_mod_revision()->set_main(revision);
-      kv_index.mutable_mod_revision()->set_sub(sub_revision);
-
-      auto *new_generation = kv_index.add_generations();
-      new_generation->mutable_create_revision()->set_main(revision);
-      new_generation->mutable_create_revision()->set_sub(sub_revision);
-      auto *new_revision = new_generation->add_revisions();
-      new_revision->set_main(revision);
-      new_revision->set_sub(sub_revision);
-
-      ++sub_revision;
-
-      // add meta_increment
-      auto *kv_index_meta_increment = meta_increment.add_kv_indexes();
-      kv_index_meta_increment->set_id(key_value_in.key());
-      kv_index_meta_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
-      kv_index_meta_increment->mutable_kv_index()->Swap(&kv_index);
-
-    } else {
-      DINGO_LOG(INFO) << "KvPut will update old key: " << key_value_in.key() << ", error_str: " << ret.error_str();
-
-      auto generation_count = kv_index.generations_size();
-      if (generation_count == 0) {
-        DINGO_LOG(ERROR) << "KvPut generation_count is 0, key: " << key_value_in.key();
-        return butil::Status(EINVAL, "KvPut generation_count is 0");
-      }
-
-      bool is_a_deleted_key = false;
-
-      const auto &latest_generation = kv_index.generations(generation_count - 1);
-      if (!latest_generation.has_create_revision() || latest_generation.revisions_size() == 0) {
-        is_a_deleted_key = true;
-      }
-
-      kv_index.mutable_mod_revision()->set_main(revision);
-      kv_index.mutable_mod_revision()->set_sub(sub_revision);
-
-      auto *new_generation = kv_index.add_generations();
-
-      if (is_a_deleted_key) {
-        new_generation->mutable_create_revision()->set_main(revision);
-        new_generation->mutable_create_revision()->set_sub(sub_revision);
-        new_generation->set_verison(1L);
-      } else {
-        new_generation->mutable_create_revision()->set_main(latest_generation.create_revision().main());
-        new_generation->mutable_create_revision()->set_sub(latest_generation.create_revision().sub());
-        new_generation->set_verison(latest_generation.verison() + 1);
-      }
-
-      auto *new_revision = new_generation->add_revisions();
-      new_revision->set_main(revision);
-      new_revision->set_sub(sub_revision);
-
-      ++sub_revision;
-
-      // add meta_increment
-      auto *kv_index_meta_increment = meta_increment.add_kv_indexes();
-      kv_index_meta_increment->set_id(key_value_in.key());
-      kv_index_meta_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
-      kv_index_meta_increment->mutable_kv_index()->Swap(&kv_index);
-      kv_index_meta_increment->set_event_type(
-          ::dingodb::pb::coordinator_internal::MetaIncrementKvIndex_KvIndexEventType::
-              MetaIncrementKvIndex_KvIndexEventType_KV_INDEX_EVENT_TYPE_PUT);
+    // add meta_increment
+    auto *kv_index_meta_increment = meta_increment.add_kv_indexes();
+    kv_index_meta_increment->set_id(key_value_in.key());
+    kv_index_meta_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
+    kv_index_meta_increment->set_event_type(pb::coordinator_internal::KvIndexEventType::KV_INDEX_EVENT_TYPE_PUT);
+    kv_index_meta_increment->mutable_op_revision()->set_main(revision);
+    kv_index_meta_increment->mutable_op_revision()->set_sub(sub_revision);
+    kv_index_meta_increment->set_ignore_lease(ignore_lease);
+    kv_index_meta_increment->set_lease_id(lease_id);
+    if (!ignore_lease) {
+      kv_index_meta_increment->set_ignore_value(igore_value);
     }
+    if (!igore_value) {
+      kv_index_meta_increment->set_value(key_value_in.value());
+    }
+
+    ++sub_revision;
   }
+
   return butil::Status::OK();
 }
 
@@ -363,6 +382,245 @@ butil::Status CoordinatorControl::KvPut(const std::vector<pb::common::KeyValue> 
 butil::Status CoordinatorControl::KvDeleteRange(const std::string &key, const std::string &range_end, bool prev_key,
                                                 std::vector<pb::version::Kv> &prev_kvs, uint64_t &revision,
                                                 pb::coordinator_internal::MetaIncrement &meta_increment) {
+  DINGO_LOG(INFO) << "KvDeleteRange, key: " << key << ", range_end: " << range_end << ", prev_key: " << prev_key;
+
+  std::vector<pb::version::Kv> kvs_to_delete;
+  uint64_t total_count_in_range = 0;
+
+  bool key_only = !prev_key;
+
+  auto ret = KvRange(key, range_end, 0, key_only, false, kvs_to_delete, total_count_in_range);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "KvDeleteRange KvRange failed, key: " << key << ", range_end: " << range_end
+                     << ", error: " << ret.error_str();
+    return ret;
+  }
+
+  // do kv_delete
+  uint64_t sub_revision = 0;
+  revision = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REVISION, meta_increment);
+
+  for (const auto &kv_to_delete : kvs_to_delete) {
+    // update kv_index
+    DINGO_LOG(INFO) << "KvDelete will delete key: " << kv_to_delete.kv().key();
+
+    // add meta_increment
+    auto *kv_index_meta_increment = meta_increment.add_kv_indexes();
+    kv_index_meta_increment->set_id(kv_to_delete.kv().key());
+    kv_index_meta_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
+    kv_index_meta_increment->set_event_type(pb::coordinator_internal::KvIndexEventType::KV_INDEX_EVENT_TYPE_DELETE);
+    kv_index_meta_increment->mutable_op_revision()->set_main(revision);
+    kv_index_meta_increment->mutable_op_revision()->set_sub(sub_revision);
+
+    ++sub_revision;
+  }
+
+  if (prev_key) {
+    prev_kvs.swap(kvs_to_delete);
+  }
+
+  return butil::Status::OK();
+}
+
+butil::Status CoordinatorControl::KvPutApply(const std::string &key,
+                                             const pb::coordinator_internal::RevisionInternal &op_revision,
+                                             bool ignore_lease, uint64_t lease_id, bool ignore_value,
+                                             const std::string &value) {
+  DINGO_LOG(INFO) << "KvPutApply, key: " << key << ", op_revision: " << op_revision.ShortDebugString()
+                  << ", ignore_lease: " << ignore_lease << ", lease_id: " << lease_id
+                  << ", ignore_value: " << ignore_value << ", value: " << value;
+
+  // get kv_index and generate new kv_index
+  pb::coordinator_internal::KvIndexInternal kv_index;
+  pb::coordinator_internal::RevisionInternal last_mod_revision;
+  pb::coordinator_internal::RevisionInternal new_create_revision;
+  new_create_revision.set_main(op_revision.main());
+  new_create_revision.set_sub(op_revision.sub());
+  uint64_t new_version = 1;
+
+  auto ret = this->GetRawKvIndex(key, kv_index);
+  if (!ret.ok()) {
+    DINGO_LOG(INFO) << "KvPutApply GetRawKvIndex failed, will create key: " << key << ", error: " << ret.error_str();
+    kv_index.set_id(key);
+    kv_index.mutable_mod_revision()->set_main(op_revision.main());
+    kv_index.mutable_mod_revision()->set_sub(op_revision.sub());
+    auto *generation = kv_index.add_generations();
+    generation->mutable_create_revision()->set_main(op_revision.main());
+    generation->mutable_create_revision()->set_sub(op_revision.sub());
+    generation->set_verison(1);
+    generation->add_revisions()->CopyFrom(op_revision);
+  } else {
+    DINGO_LOG(INFO) << "KvPutApply GetRawKvIndex success, will update key: " << key << ", error: " << ret.error_str();
+
+    last_mod_revision = kv_index.mod_revision();
+
+    if (kv_index.generations_size() == 0) {
+      auto *generation = kv_index.add_generations();
+      generation->mutable_create_revision()->set_main(op_revision.main());
+      generation->mutable_create_revision()->set_sub(op_revision.sub());
+      generation->set_verison(1);
+      generation->add_revisions()->CopyFrom(op_revision);
+    } else {
+      auto &latest_generation = *kv_index.mutable_generations()->rbegin();
+      if (latest_generation.has_create_revision()) {
+        latest_generation.add_revisions()->CopyFrom(op_revision);
+        latest_generation.set_verison(latest_generation.verison() + 1);
+      } else {
+        latest_generation.mutable_create_revision()->set_main(op_revision.main());
+        latest_generation.mutable_create_revision()->set_sub(op_revision.sub());
+        latest_generation.set_verison(1);
+        latest_generation.add_revisions()->CopyFrom(op_revision);
+      }
+
+      // setup new_create_revision to last create_revision
+      new_create_revision.set_main(latest_generation.create_revision().main());
+      new_create_revision.set_sub(latest_generation.create_revision().sub());
+
+      // setup new_version
+      new_version = latest_generation.verison();
+    }
+  }
+
+  // generate new kv_rev
+  pb::coordinator_internal::KvRevInternal kv_rev_last;
+  pb::coordinator_internal::KvRevInternal kv_rev;
+  GetRawKvRev(last_mod_revision, kv_rev_last);
+
+  kv_rev.set_id(RevisionToString(op_revision));
+
+  // kv is KvInternal
+  auto *kv = kv_rev.mutable_kv();
+
+  // id is key
+  kv->set_id(key);
+  // value
+  if (!ignore_value) {
+    kv->set_value(value);
+  } else {
+    kv->set_value(kv_rev_last.kv().value());
+  }
+  // create_revision
+  kv->mutable_create_revision()->set_main(new_create_revision.main());
+  kv->mutable_create_revision()->set_sub(new_create_revision.sub());
+  // mod_revision
+  kv->mutable_mod_revision()->set_main(op_revision.main());
+  kv->mutable_mod_revision()->set_sub(op_revision.sub());
+  // version
+  kv->set_version(new_version);
+  // lease
+  if (ignore_lease) {
+    kv->set_lease(kv_rev_last.kv().lease());
+  } else {
+    kv->set_lease(lease_id);
+  }
+
+  // do real write to state machine
+  ret = this->PutRawKvIndex(key, kv_index);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "KvPutApply PutRawKvIndex failed, key: " << key << ", error: " << ret.error_str();
+  }
+
+  ret = this->PutRawKvRev(op_revision, kv_rev);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "KvPutApply PutRawKvRev failed, revision: " << op_revision.ShortDebugString()
+                     << ", error: " << ret.error_str();
+    return ret;
+  }
+
+  DINGO_LOG(INFO) << "KvPutApply success, key: " << key << ", op_revision: " << op_revision.ShortDebugString()
+                  << ", ignore_lease: " << ignore_lease << ", lease_id: " << lease_id
+                  << ", ignore_value: " << ignore_value << ", value: " << value;
+
+  return butil::Status::OK();
+}
+
+butil::Status CoordinatorControl::KvDeleteApply(const std::string &key,
+                                                const pb::coordinator_internal::RevisionInternal &op_revision) {
+  DINGO_LOG(INFO) << "KvDeleteApply, key: " << key << ", revision: " << op_revision.ShortDebugString();
+
+  // get kv_index and generate new kv_index
+  pb::coordinator_internal::KvIndexInternal kv_index;
+  pb::coordinator_internal::RevisionInternal last_mod_revision;
+  pb::coordinator_internal::RevisionInternal new_create_revision;
+  new_create_revision.set_main(op_revision.main());
+  new_create_revision.set_sub(op_revision.sub());
+  uint64_t new_version = 1;
+
+  auto ret = this->GetRawKvIndex(key, kv_index);
+  if (!ret.ok()) {
+    DINGO_LOG(INFO) << "KvDeleteApply GetRawKvIndex failed, no need to delete: " << key
+                    << ", error: " << ret.error_str();
+    return butil::Status::OK();
+  } else {
+    DINGO_LOG(INFO) << "KvDeleteApply GetRawKvIndex success, will delete key: " << key
+                    << ", error: " << ret.error_str();
+
+    last_mod_revision = kv_index.mod_revision();
+
+    if (kv_index.generations_size() == 0) {
+      // create a null generator means delete
+      auto *generation = kv_index.add_generations();
+    } else {
+      auto &latest_generation = *kv_index.mutable_generations()->rbegin();
+      if (latest_generation.has_create_revision()) {
+        // add a the delete revision to latest generation
+        latest_generation.add_revisions()->CopyFrom(op_revision);
+        latest_generation.set_verison(latest_generation.verison() + 1);
+
+        // create a null generator means delete
+        auto *generation = kv_index.add_generations();
+      } else {
+        // a null generator means delete
+        // so we do not need to add a new generation
+      }
+
+      // setup new_create_revision to last create_revision
+      new_create_revision.set_main(latest_generation.create_revision().main());
+      new_create_revision.set_sub(latest_generation.create_revision().sub());
+
+      // setup new_version
+      new_version = latest_generation.verison();
+    }
+  }
+
+  // generate new kv_rev
+  pb::coordinator_internal::KvRevInternal kv_rev_last;
+  pb::coordinator_internal::KvRevInternal kv_rev;
+  GetRawKvRev(last_mod_revision, kv_rev_last);
+
+  kv_rev.set_id(RevisionToString(op_revision));
+
+  // kv is KvInternal
+  auto *kv = kv_rev.mutable_kv();
+
+  // id is key
+  kv->set_id(key);
+  // create_revision
+  kv->mutable_create_revision()->set_main(new_create_revision.main());
+  kv->mutable_create_revision()->set_sub(new_create_revision.sub());
+  // mod_revision
+  kv->mutable_mod_revision()->set_main(op_revision.main());
+  kv->mutable_mod_revision()->set_sub(op_revision.sub());
+  // version
+  kv->set_version(new_version);
+  // is_deleted
+  kv->set_is_deleted(true);
+
+  // do real write to state machine
+  ret = this->PutRawKvIndex(key, kv_index);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "KvDeleteApply PutRawKvIndex failed, key: " << key << ", error: " << ret.error_str();
+  }
+
+  ret = this->PutRawKvRev(op_revision, kv_rev);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "KvDeleteApply PutRawKvRev failed, revision: " << op_revision.ShortDebugString()
+                     << ", error: " << ret.error_str();
+    return ret;
+  }
+
+  DINGO_LOG(INFO) << "KvDeleteApply success, key: " << key << ", revision: " << op_revision.ShortDebugString();
+
   return butil::Status::OK();
 }
 

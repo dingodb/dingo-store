@@ -293,6 +293,7 @@ message KvInternal {
   RevisionInternal mod_revision = 4;
   uint64 version = 5;
   uint64 lease = 6;
+  bool is_deleted = 7;  // for delete operation, we set is_deleted to true, and set value to empty
 }
 
 message KvRevInternal {
@@ -300,19 +301,22 @@ message KvRevInternal {
   KvInternal kv = 2;
 }
 
-message MetaIncrementKvIndex {
-  enum KvIndexEventType {
-    KV_INDEX_EVENT_TYPE_NONE = 0;
-    KV_INDEX_EVENT_TYPE_PUT = 1;
-    KV_INDEX_EVENT_TYPE_DELETE = 2;
-    KV_INDEX_EVENT_TYPE_COMPACTION = 3;
-  }
+enum KvIndexEventType {
+  KV_INDEX_EVENT_TYPE_NONE = 0;
+  KV_INDEX_EVENT_TYPE_PUT = 1;
+  KV_INDEX_EVENT_TYPE_DELETE = 2;
+  KV_INDEX_EVENT_TYPE_COMPACTION = 3;
+}
 
+message MetaIncrementKvIndex {
   bytes id = 1;
-  KvIndexInternal kv_index = 2;
-  MetaIncrementOpType op_type = 3;
-  KvIndexEventType event_type = 4;
-  RevisionInternal compact_revision = 5;
+  MetaIncrementOpType op_type = 2;
+  KvIndexEventType event_type = 3;
+  RevisionInternal op_revision = 4;
+  bool ignore_lease = 5;
+  uint64 lease_id = 6;
+  bool ignore_value = 7;
+  bytes value = 8;
 }
 
 message MetaIncrementKvRevision {
