@@ -17,11 +17,14 @@
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
+#include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "butil/endpoint.h"
 #include "butil/strings/string_split.h"
+#include "fmt/core.h"
 #include "vector/vector_index_snapshot.h"
 
 class VectorIndexSnapshotTest : public testing::Test {
@@ -69,7 +72,7 @@ static uint64_t ParseReaderId(const std::string& uri) {
   return result;
 }
 
-TEST_F(VectorIndexSnapshotTest, ParseHost) {
+TEST_F(VectorIndexSnapshotTest, ParseHost) {  // NOLINT
   {
     std::string uri = "remote://172.20.3.17:21002/688558464596561784";
     auto endpoint = ParseHost(uri);
@@ -85,7 +88,7 @@ TEST_F(VectorIndexSnapshotTest, ParseHost) {
   }
 }
 
-TEST_F(VectorIndexSnapshotTest, ParseReaderId) {
+TEST_F(VectorIndexSnapshotTest, ParseReaderId) {  // NOLINT
   {
     std::string uri = "remote://127.0.0.1:20001/12346";
     EXPECT_EQ(12346, ParseReaderId(uri));
@@ -98,5 +101,53 @@ TEST_F(VectorIndexSnapshotTest, ParseReaderId) {
   {
     std::string uri = "remote://127.0.0.1:20001/123abc";
     EXPECT_EQ(0, ParseReaderId(uri));
+  }
+}
+
+TEST_F(VectorIndexSnapshotTest, AddSnapshot) {  // NOLINT
+  auto snapshot_manager = std::make_shared<dingodb::VectorIndexSnapshotManager>();
+
+  EXPECT_EQ(nullptr, snapshot_manager->GetLastSnapshot(100));
+
+  {
+    uint64_t vector_index_id = 100;
+    uint64_t snapshot_log_id = 5;
+    std::string path = fmt::format("/tmp/{}/snapshot_{:020}", vector_index_id, snapshot_log_id);
+    auto snapshot = dingodb::vector_index::SnapshotMeta::New(vector_index_id, path);
+
+    snapshot_manager->AddSnapshot(snapshot);
+    EXPECT_EQ(snapshot, snapshot_manager->GetLastSnapshot(vector_index_id));
+  }
+
+  {
+    uint64_t vector_index_id = 100;
+    uint64_t snapshot_log_id = 11;
+    std::string path = fmt::format("/tmp/{}/snapshot_{:020}", vector_index_id, snapshot_log_id);
+    auto snapshot = dingodb::vector_index::SnapshotMeta::New(vector_index_id, path);
+
+    snapshot_manager->AddSnapshot(snapshot);
+    EXPECT_EQ(snapshot, snapshot_manager->GetLastSnapshot(vector_index_id));
+    EXPECT_EQ(2, snapshot_manager->GetSnapshots(vector_index_id).size());
+  }
+
+  {
+    uint64_t vector_index_id = 101;
+    uint64_t snapshot_log_id = 6;
+    std::string path = fmt::format("/tmp/{}/snapshot_{:020}", vector_index_id, snapshot_log_id);
+    auto snapshot = dingodb::vector_index::SnapshotMeta::New(vector_index_id, path);
+
+    snapshot_manager->AddSnapshot(snapshot);
+    EXPECT_EQ(snapshot, snapshot_manager->GetLastSnapshot(vector_index_id));
+  }
+
+  {
+    uint64_t vector_index_id = 101;
+    uint64_t snapshot_log_id = 16;
+    std::string path = fmt::format("/tmp/{}/snapshot_{:020}", vector_index_id, snapshot_log_id);
+    auto snapshot = dingodb::vector_index::SnapshotMeta::New(vector_index_id, path);
+
+    snapshot_manager->AddSnapshot(snapshot);
+    EXPECT_EQ(snapshot, snapshot_manager->GetLastSnapshot(vector_index_id));
+    EXPECT_EQ(2, snapshot_manager->GetSnapshots(vector_index_id).size());
   }
 }

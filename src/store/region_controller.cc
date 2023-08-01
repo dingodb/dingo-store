@@ -646,7 +646,7 @@ butil::Status SnapshotVectorIndexTask::SaveSnapshot(std::shared_ptr<Context> /*c
   }
 
   uint64_t snapshot_log_index = 0;
-  auto status = VectorIndexSnapshot::SaveVectorIndexSnapshot(vector_index, snapshot_log_index, true);
+  auto status = VectorIndexSnapshotManager::SaveVectorIndexSnapshot(vector_index, snapshot_log_index);
   if (!status.ok()) {
     return status;
   }

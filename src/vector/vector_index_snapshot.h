@@ -15,19 +15,72 @@
 #ifndef DINGODB_VECTOR_INDEX_SNAPSHOT_H_
 #define DINGODB_VECTOR_INDEX_SNAPSHOT_H_
 
+#include <atomic>
 #include <cstdint>
+#include <memory>
+#include <queue>
+#include <string>
+#include <vector>
 
 #include "butil/endpoint.h"
 #include "butil/status.h"
 #include "common/context.h"
+#include "engine/snapshot.h"
 #include "meta/store_meta_manager.h"
 #include "proto/node.pb.h"
 #include "vector/vector_index.h"
 
 namespace dingodb {
 
-class VectorIndexSnapshot {
+namespace vector_index {
+
+// Indicate a vector index snapshot
+class SnapshotMeta {
  public:
+  SnapshotMeta(uint64_t vector_index_id, const std::string& path);
+  ~SnapshotMeta();
+
+  static std::shared_ptr<SnapshotMeta> New(uint64_t vector_index_id, const std::string& path) {
+    return std::make_shared<SnapshotMeta>(vector_index_id, path);
+  }
+
+  bool Init();
+  void Destroy();
+  bool IsDestroy();
+
+  void IncUseRefferenceCount();
+  void DescUseRefferenceCount();
+
+  uint64_t VectorIndexId() const { return vector_index_id_; }
+  uint64_t SnapshotLogId() const { return snapshot_log_id_; }
+  std::string Path() const { return path_; }
+  std::string MetaPath();
+  std::string IndexDataPath();
+  std::vector<std::string> ListFileNames();
+
+ private:
+  uint64_t vector_index_id_;
+  uint64_t snapshot_log_id_;
+  std::string path_;
+
+  std::atomic<bool> is_destroy_;
+
+  bthread_mutex_t mutex_;
+  // When using_reference_count_>0, don't allow destroy.
+  int using_reference_count_;
+};
+
+using SnapshotMetaPtr = std::shared_ptr<SnapshotMeta>;
+
+}  // namespace vector_index
+
+class VectorIndexSnapshotManager {
+ public:
+  VectorIndexSnapshotManager() { bthread_mutex_init(&mutex_, nullptr); }
+  ~VectorIndexSnapshotManager() { bthread_mutex_destroy(&mutex_); }
+
+  bool Init(std::vector<store::RegionPtr> regions);
+
   // Launch install snapshot at client.
   static butil::Status LaunchInstallSnapshot(const butil::EndPoint& endpoint, uint64_t vector_index_id);
   // Handle install snapshot at server.
@@ -43,18 +96,28 @@ class VectorIndexSnapshot {
   // Pull last snapshot from peers.
   static butil::Status PullLastSnapshotFromPeers(uint64_t region_id);
 
-  static bool IsExistVectorIndexSnapshot(uint64_t vector_index_id);
-  static uint64_t GetLastVectorIndexSnapshotLogId(uint64_t vector_index_id);
+  bool IsExistVectorIndexSnapshot(uint64_t vector_index_id);
 
   // Save vecgor index snapshot.
-  static butil::Status SaveVectorIndexSnapshot(std::shared_ptr<VectorIndex> vector_index, uint64_t& snapshot_log_index,
-                                               bool can_overwrite);
+  static butil::Status SaveVectorIndexSnapshot(std::shared_ptr<VectorIndex> vector_index, uint64_t& snapshot_log_index);
 
   // Load vector index from snapshot.
   static std::shared_ptr<VectorIndex> LoadVectorIndexSnapshot(store::RegionPtr region);
 
+  bool AddSnapshot(vector_index::SnapshotMetaPtr snapshot);
+  void DeleteSnapshot(vector_index::SnapshotMetaPtr snapshot);
+  vector_index::SnapshotMetaPtr GetLastSnapshot(uint64_t vector_index_id);
+  std::vector<vector_index::SnapshotMetaPtr> GetSnapshots(uint64_t vector_index_id);
+  bool IsExistSnapshot(uint64_t vector_index_id, uint64_t snapshot_log_id);
+
  private:
+  static std::string GetSnapshotParentPath(uint64_t vector_index_id);
+  static std::string GetSnapshotTmpPath(uint64_t vector_index_id);
+  static std::string GetSnapshotNewPath(uint64_t vector_index_id, uint64_t snapshot_log_id);
   static butil::Status DownloadSnapshotFile(const std::string& uri, const pb::node::VectorIndexSnapshotMeta& meta);
+
+  bthread_mutex_t mutex_;
+  std::map<uint64_t, std::map<uint64_t, vector_index::SnapshotMetaPtr>> snapshot_maps_;
 };
 
 }  // namespace dingodb

@@ -25,6 +25,7 @@
 #include "meta/transform_kv_able.h"
 #include "proto/common.pb.h"
 #include "vector/vector_index.h"
+#include "vector/vector_index_snapshot.h"
 
 namespace dingodb {
 
@@ -36,6 +37,7 @@ class VectorIndexManager : public TransformKvAble {
         raw_engine_(raw_engine),
         meta_reader_(meta_reader),
         meta_writer_(meta_writer) {
+    vector_index_snapshot_manager_ = std::make_shared<VectorIndexSnapshotManager>();
     vector_indexs_.Init(1000);
   }
 
@@ -55,7 +57,7 @@ class VectorIndexManager : public TransformKvAble {
   butil::Status LoadOrBuildVectorIndex(store::RegionPtr region);
 
   // Save vector index snapshot.
-  butil::Status SaveVectorIndex(std::shared_ptr<VectorIndex> vector_index, bool can_overwrite = false);
+  butil::Status SaveVectorIndex(std::shared_ptr<VectorIndex> vector_index);
 
   // check if status is legal for rebuild
   butil::Status CheckAndSetRebuildStatus(store::RegionPtr region, bool is_initial_build);
@@ -72,6 +74,8 @@ class VectorIndexManager : public TransformKvAble {
   void UpdateSnapshotLogIndex(uint64_t region_id, uint64_t log_index);
 
   butil::Status ScrubVectorIndex();
+
+  std::shared_ptr<VectorIndexSnapshotManager> GetVectorIndexSnapshotManager() { return vector_index_snapshot_manager_; }
 
  private:
   std::shared_ptr<pb::common::KeyValue> TransformToKv(std::any obj) override;
@@ -99,6 +103,9 @@ class VectorIndexManager : public TransformKvAble {
   std::shared_ptr<RawEngine> raw_engine_;
   // region_id: vector_index
   DingoSafeMap<uint64_t, std::shared_ptr<VectorIndex>> vector_indexs_;
+
+  // vector index snapshot manager
+  std::shared_ptr<VectorIndexSnapshotManager> vector_index_snapshot_manager_;
 };
 
 }  // namespace dingodb

@@ -31,7 +31,7 @@
 class SegmentLogStorageTest : public testing::Test {
  protected:
   static void SetUpTestSuite() {
-    log_stroage = std::make_shared<dingodb::SegmentLogStorage>("/tmp/log", 100);
+    log_stroage = std::make_shared<dingodb::SegmentLogStorage>("/tmp/log", 100, 8 * 1024 * 1024);
     static braft::ConfigurationManager configuration_manager;
     log_stroage->Init(&configuration_manager);
   }

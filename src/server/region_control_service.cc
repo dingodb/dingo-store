@@ -200,9 +200,9 @@ void RegionControlServiceImpl::TriggerVectorIndexSnapshot(
 
   butil::Status status;
   if (Helper::ToUpper(request->type()) == "INSTALL") {
-    status = VectorIndexSnapshot::LaunchInstallSnapshot(endpoint, request->vector_index_id());
+    status = VectorIndexSnapshotManager::LaunchInstallSnapshot(endpoint, request->vector_index_id());
   } else if (Helper::ToUpper(request->type()) == "PULL") {
-    status = VectorIndexSnapshot::LaunchPullSnapshot(endpoint, request->vector_index_id());
+    status = VectorIndexSnapshotManager::LaunchPullSnapshot(endpoint, request->vector_index_id());
   } else {
     auto* error = response->mutable_error();
     error->set_errcode(pb::error::EILLEGAL_PARAMTETERS);
