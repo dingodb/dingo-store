@@ -137,6 +137,7 @@ class VersionServiceProtoImpl : public dingodb::pb::version::VersionService {
     cntl->response_attachment().append(cntl->request_attachment());
   }
 
+  // lease
   void LeaseGrant(google::protobuf::RpcController* cntl_basecontroller, const pb::version::LeaseGrantRequest* request,
                   pb::version::LeaseGrantResponse* response, google::protobuf::Closure* done) override;
 
@@ -151,6 +152,18 @@ class VersionServiceProtoImpl : public dingodb::pb::version::VersionService {
 
   void ListLeases(google::protobuf::RpcController* cntl_basecontroller, const pb::version::ListLeasesRequest* request,
                   pb::version::ListLeasesResponse* response, google::protobuf::Closure* done) override;
+
+  // kv
+  void GetRawKvIndex(google::protobuf::RpcController* controller, const pb::version::GetRawKvIndexRequest* request,
+                     pb::version::GetRawKvIndexResponse* response, google::protobuf::Closure* done) override;
+  void GetRawKvRev(google::protobuf::RpcController* controller, const pb::version::GetRawKvRevRequest* request,
+                   pb::version::GetRawKvRevResponse* response, google::protobuf::Closure* done) override;
+  void KvRange(google::protobuf::RpcController* controller, const pb::version::RangeRequest* request,
+               pb::version::RangeResponse* response, google::protobuf::Closure* done) override;
+  void KvPut(google::protobuf::RpcController* controller, const pb::version::PutRequest* request,
+             pb::version::PutResponse* response, google::protobuf::Closure* done) override;
+  void KvDeleteRange(google::protobuf::RpcController* controller, const pb::version::DeleteRangeRequest* request,
+                     pb::version::DeleteRangeResponse* response, google::protobuf::Closure* done) override;
 
  private:
   std::shared_ptr<CoordinatorControl> coordinator_control_;

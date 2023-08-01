@@ -27,7 +27,9 @@
 #include "bthread/condition_variable.h"
 #include "bthread/mutex.h"
 #include "common/constant.h"
+#include "common/helper.h"
 #include "coordinator/coordinator_closure.h"
+#include "proto/common.pb.h"
 #include "proto/coordinator_internal.pb.h"
 #include "proto/version.pb.h"
 
@@ -322,6 +324,244 @@ void VersionServiceProtoImpl::ListLeases(google::protobuf::RpcController* /*cont
       lease_status->set_id(lease.id());
     }
   }
+}
+
+void VersionServiceProtoImpl::GetRawKvIndex(google::protobuf::RpcController*,
+                                            const pb::version::GetRawKvIndexRequest* request,
+                                            pb::version::GetRawKvIndexResponse* response,
+                                            google::protobuf::Closure* done) {
+  brpc::ClosureGuard done_guard(done);
+  auto is_leader = this->coordinator_control_->IsLeader();
+  DINGO_LOG(WARNING) << "Receive GetRawKvIndex Request: IsLeader:" << is_leader
+                     << ", Request: " << request->DebugString();
+
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  if (request->key().empty()) {
+    response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errmsg("key is empty");
+    return;
+  }
+
+  pb::coordinator_internal::KvIndexInternal kv_index;
+  auto ret = coordinator_control_->GetRawKvIndex(request->key(), kv_index);
+  if (!ret.ok()) {
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    DINGO_LOG(ERROR) << "GetRawKvIndex failed: key=" << request->key();
+    return;
+  }
+  DINGO_LOG(INFO) << "GetRawKvIndex success: key=" << request->key();
+
+  auto* resp_kv_index = response->mutable_kvindex();
+  resp_kv_index->set_id(kv_index.id());
+  resp_kv_index->mutable_mod_revision()->set_main(kv_index.mod_revision().main());
+  resp_kv_index->mutable_mod_revision()->set_sub(kv_index.mod_revision().sub());
+  for (const auto& generation : kv_index.generations()) {
+    auto* new_generation = resp_kv_index->add_generations();
+    new_generation->set_verison(generation.verison());
+    new_generation->mutable_create_revision()->set_main(generation.create_revision().main());
+    new_generation->mutable_create_revision()->set_sub(generation.create_revision().sub());
+    for (const auto& revision : generation.revisions()) {
+      auto* new_revision = new_generation->add_revisions();
+      new_revision->set_main(revision.main());
+      new_revision->set_sub(revision.sub());
+    }
+  }
+}
+
+void VersionServiceProtoImpl::GetRawKvRev(google::protobuf::RpcController*,
+                                          const pb::version::GetRawKvRevRequest* request,
+                                          pb::version::GetRawKvRevResponse* response, google::protobuf::Closure* done) {
+  brpc::ClosureGuard done_guard(done);
+  auto is_leader = this->coordinator_control_->IsLeader();
+  DINGO_LOG(WARNING) << "Receive GetRawKvRev Request: IsLeader:" << is_leader
+                     << ", Request: " << request->DebugString();
+
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  if (!request->has_revision()) {
+    response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errmsg("revision is empty");
+    return;
+  }
+
+  pb::coordinator_internal::KvRevInternal kv_rev;
+  pb::coordinator_internal::RevisionInternal revision;
+  revision.set_main(request->revision().main());
+  revision.set_sub(request->revision().sub());
+  auto ret = coordinator_control_->GetRawKvRev(revision, kv_rev);
+  if (!ret.ok()) {
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    DINGO_LOG(ERROR) << "GetRawKvRev failed: revision=" << request->revision().main() << "."
+                     << request->revision().sub();
+    return;
+  }
+
+  DINGO_LOG(INFO) << "GetRawKvRev success: revision=" << request->revision().main() << "." << request->revision().sub();
+
+  auto* resp_kv_rev = response->mutable_kvrev();
+  resp_kv_rev->set_id(kv_rev.id());
+  auto* resp_kv = resp_kv_rev->mutable_kv();
+  resp_kv->set_id(kv_rev.kv().id());
+  resp_kv->set_value(kv_rev.kv().value());
+  resp_kv->mutable_mod_revision()->set_main(kv_rev.kv().mod_revision().main());
+  resp_kv->mutable_mod_revision()->set_sub(kv_rev.kv().mod_revision().sub());
+  resp_kv->mutable_create_revision()->set_main(kv_rev.kv().create_revision().main());
+  resp_kv->mutable_create_revision()->set_sub(kv_rev.kv().create_revision().sub());
+  resp_kv->set_version(kv_rev.kv().version());
+  resp_kv->set_lease(kv_rev.kv().lease());
+  resp_kv->set_is_deleted(kv_rev.kv().is_deleted());
+}
+
+void VersionServiceProtoImpl::KvRange(google::protobuf::RpcController* /*controller*/,
+                                      const pb::version::RangeRequest* request, pb::version::RangeResponse* response,
+                                      google::protobuf::Closure* done) {
+  brpc::ClosureGuard done_guard(done);
+
+  auto is_leader = this->coordinator_control_->IsLeader();
+  DINGO_LOG(WARNING) << "Receive Range Request: IsLeader:" << is_leader << ", Request: " << request->DebugString();
+
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  if (request->key().empty()) {
+    response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errmsg("key is empty");
+    return;
+  }
+
+  int64_t real_limit = 0;
+  if (request->limit() <= 0) {
+    real_limit = INT64_MAX;
+  } else {
+    real_limit = request->limit();
+  }
+
+  std::vector<pb::version::Kv> kvs;
+  uint64_t total_count_in_range = 0;
+  auto ret = coordinator_control_->KvRange(request->key(), request->range_end(), real_limit, request->keys_only(),
+                                           request->count_only(), kvs, total_count_in_range);
+  if (!ret.ok()) {
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+  }
+
+  DINGO_LOG(INFO) << "Range success: key=" << request->key() << ", end_key=" << request->range_end()
+                  << ", limit=" << request->limit();
+}
+
+void VersionServiceProtoImpl::KvPut(google::protobuf::RpcController* controller, const pb::version::PutRequest* request,
+                                    pb::version::PutResponse* response, google::protobuf::Closure* done) {
+  brpc::ClosureGuard done_guard(done);
+
+  auto is_leader = this->coordinator_control_->IsLeader();
+  DINGO_LOG(WARNING) << "Receive Put Request: IsLeader:" << is_leader << ", Request: " << request->DebugString();
+
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  if (request->key_values_size() <= 0) {
+    response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errmsg("key_values is empty");
+    return;
+  }
+
+  auto key_values = Helper::PbRepeatedToVector(request->key_values());
+  std::vector<pb::version::Kv> prev_kvs;
+  uint64_t revision = 0;
+  uint64_t lease_grant_id = 0;
+
+  pb::coordinator_internal::MetaIncrement meta_increment;
+  auto ret = coordinator_control_->KvPut(key_values, request->lease(), request->prev_kv(), request->ignore_value(),
+                                         request->ignore_lease(), prev_kvs, revision, lease_grant_id, meta_increment);
+  if (!ret.ok()) {
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    return;
+  }
+
+  DINGO_LOG(INFO) << "Put success: key_values_size=" << request->key_values_size()
+                  << ", lease_grant_id=" << lease_grant_id << ", revision=" << revision;
+
+  if (request->prev_kv()) {
+    for (const auto& kv : prev_kvs) {
+      auto* resp_kv = response->add_prev_kvs();
+      resp_kv->CopyFrom(kv);
+    }
+  }
+
+  // prepare for raft process
+  auto* meta_closure = new CoordinatorClosure<pb::version::PutRequest, pb::version::PutResponse>(request, response,
+                                                                                                 done_guard.release());
+
+  std::shared_ptr<Context> const ctx =
+      std::make_shared<Context>(static_cast<brpc::Controller*>(controller), meta_closure, response);
+  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+
+  // this is a async operation will be block by closure
+  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+}
+
+void VersionServiceProtoImpl::KvDeleteRange(google::protobuf::RpcController* /*controller*/,
+                                            const pb::version::DeleteRangeRequest* request,
+                                            pb::version::DeleteRangeResponse* response,
+                                            google::protobuf::Closure* done) {
+  brpc::ClosureGuard done_guard(done);
+
+  auto is_leader = this->coordinator_control_->IsLeader();
+  DINGO_LOG(WARNING) << "Receive DeleteRange Request: IsLeader:" << is_leader
+                     << ", Request: " << request->DebugString();
+
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  if (request->key().empty()) {
+    response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errmsg("key is empty");
+    return;
+  }
+
+  std::vector<pb::version::Kv> prev_kvs;
+  uint64_t revision = 0;
+  pb::coordinator_internal::MetaIncrement meta_increment;
+  auto ret = coordinator_control_->KvDeleteRange(request->key(), request->range_end(), request->prev_kv(), prev_kvs,
+                                                 revision, meta_increment);
+  if (!ret.ok()) {
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    DINGO_LOG(ERROR) << "DeleteRange failed: key=" << request->key() << ", end_key=" << request->range_end();
+    return;
+  }
+
+  DINGO_LOG(INFO) << "DeleteRange success: key=" << request->key() << ", end_key=" << request->range_end()
+                  << ", revision=" << revision;
+
+  if (request->prev_kv()) {
+    for (const auto& kv : prev_kvs) {
+      auto* resp_kv = response->add_prev_kvs();
+      resp_kv->CopyFrom(kv);
+    }
+  }
+
+  // prepare for raft process
+  auto* meta_closure = new CoordinatorClosure<pb::version::DeleteRangeRequest, pb::version::DeleteRangeResponse>(
+      request, response, done_guard.release());
+
+  std::shared_ptr<Context> const ctx =
+      std::make_shared<Context>(static_cast<brpc::Controller*>(nullptr), meta_closure, response);
+  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+
+  // this is a async operation will be block by closure
+  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
 }
 
 }  // namespace dingodb

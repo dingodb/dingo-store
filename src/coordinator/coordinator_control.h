@@ -281,7 +281,8 @@ class CoordinatorControl : public MetaControl {
 
   // generate table ids
   butil::Status GenerateTableIds(uint64_t schema_id, uint32_t count,
-		  pb::coordinator_internal::MetaIncrement& meta_increment, pb::meta::GenerateTableIdsResponse* response);
+                                 pb::coordinator_internal::MetaIncrement &meta_increment,
+                                 pb::meta::GenerateTableIdsResponse *response);
 
   // create store
   // in: cluster_id
@@ -677,7 +678,8 @@ class CoordinatorControl : public MetaControl {
   // return: errno
   butil::Status KvPut(const std::vector<pb::common::KeyValue> &key_values, uint64_t lease_id, bool prev_kv,
                       bool igore_value, bool ignore_lease, std::vector<pb::version::Kv> &prev_kvs, uint64_t &revision,
-                      pb::coordinator_internal::MetaIncrement &meta_increment);
+                      uint64_t &lease_grant_id, pb::coordinator_internal::MetaIncrement &meta_increment);
+
   // KvDeleteRange is the delete function
   // in:  key
   // in:  range_end

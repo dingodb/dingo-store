@@ -279,6 +279,7 @@ butil::Status CoordinatorControl::KvRange(const std::string &key, const std::str
 butil::Status CoordinatorControl::KvPut(const std::vector<pb::common::KeyValue> &key_values, uint64_t lease_id,
                                         bool prev_kv, bool igore_value, bool ignore_lease,
                                         std::vector<pb::version::Kv> &prev_kvs, uint64_t &revision,
+                                        uint64_t &lease_grant_id,
                                         pb::coordinator_internal::MetaIncrement &meta_increment) {
   DINGO_LOG(INFO) << "KvPut, key_values size: " << key_values.size() << ", lease_id: " << lease_id
                   << ", prev_kv: " << prev_kv << ", igore_value: " << igore_value << ", ignore_lease: " << ignore_lease;
@@ -295,6 +296,8 @@ butil::Status CoordinatorControl::KvPut(const std::vector<pb::common::KeyValue> 
       return ret;
     }
   }
+
+  lease_grant_id = lease_id;
 
   if (key_values.size() > FLAGS_max_kv_put_count) {
     DINGO_LOG(ERROR) << "KvPut key_values size is too large, max_kv_put_count: " << FLAGS_max_kv_put_count
@@ -341,6 +344,13 @@ butil::Status CoordinatorControl::KvPut(const std::vector<pb::common::KeyValue> 
       this->KvRange(key_value_in.key(), std::string(), 1, false, false, kvs_temp, total_count_in_range);
       if (!kvs_temp.empty()) {
         prev_kvs.push_back(kvs_temp[0]);
+        if (ignore_lease) {
+          lease_grant_id = kvs_temp[0].lease();
+        } else if (kvs_temp[0].lease() != lease_grant_id) {
+          DINGO_LOG(ERROR) << "KvPut lease_grant_id is not equal, lease_grant_id: " << lease_grant_id
+                           << ", kvs_temp[0].lease(): " << kvs_temp[0].lease();
+          return butil::Status(EINVAL, "KvPut lease_grant_id is not equal");
+        }
       } else {
         pb::version::Kv kv_temp;
         prev_kvs.push_back(kv_temp);
@@ -358,7 +368,7 @@ butil::Status CoordinatorControl::KvPut(const std::vector<pb::common::KeyValue> 
     kv_index_meta_increment->mutable_op_revision()->set_main(revision);
     kv_index_meta_increment->mutable_op_revision()->set_sub(sub_revision);
     kv_index_meta_increment->set_ignore_lease(ignore_lease);
-    kv_index_meta_increment->set_lease_id(lease_id);
+    kv_index_meta_increment->set_lease_id(lease_grant_id);
     if (!ignore_lease) {
       kv_index_meta_increment->set_ignore_value(igore_value);
     }
