@@ -75,6 +75,7 @@ int RecordEncoder::EncodeKey(const std::vector<std::any>& record, std::string& o
   key_buf->EnsureRemainder(12);
   key_buf->WriteLong(common_id_);
   key_buf->ReverseWriteInt(codec_version_);
+  int index = 0;
   for (const auto& bs : *schemas_) {
     if (bs) {
       BaseSchema::Type type = bs->GetType();
@@ -82,35 +83,35 @@ int RecordEncoder::EncodeKey(const std::vector<std::any>& record, std::string& o
         case BaseSchema::kBool: {
           auto bos = std::dynamic_pointer_cast<DingoSchema<std::optional<bool>>>(bs);
           if (bos->IsKey()) {
-            bos->EncodeKey(key_buf, std::any_cast<std::optional<bool>>(record.at(bos->GetIndex())));
+            bos->EncodeKey(key_buf, std::any_cast<std::optional<bool>>(record.at(index)));
           }
           break;
         }
         case BaseSchema::kInteger: {
           auto is = std::dynamic_pointer_cast<DingoSchema<std::optional<int32_t>>>(bs);
           if (is->IsKey()) {
-            is->EncodeKey(key_buf, std::any_cast<std::optional<int32_t>>(record.at(is->GetIndex())));
+            is->EncodeKey(key_buf, std::any_cast<std::optional<int32_t>>(record.at(index)));
           }
           break;
         }
         case BaseSchema::kFloat: {
           auto fs = std::dynamic_pointer_cast<DingoSchema<std::optional<float>>>(bs);
           if (fs->IsKey()) {
-            fs->EncodeKey(key_buf, std::any_cast<std::optional<float>>(record.at(fs->GetIndex())));
+            fs->EncodeKey(key_buf, std::any_cast<std::optional<float>>(record.at(index)));
           }
           break;
         }
         case BaseSchema::kLong: {
           auto ls = std::dynamic_pointer_cast<DingoSchema<std::optional<int64_t>>>(bs);
           if (ls->IsKey()) {
-            ls->EncodeKey(key_buf, std::any_cast<std::optional<int64_t>>(record.at(ls->GetIndex())));
+            ls->EncodeKey(key_buf, std::any_cast<std::optional<int64_t>>(record.at(index)));
           }
           break;
         }
         case BaseSchema::kDouble: {
           auto ds = std::dynamic_pointer_cast<DingoSchema<std::optional<double>>>(bs);
           if (ds->IsKey()) {
-            ds->EncodeKey(key_buf, std::any_cast<std::optional<double>>(record.at(ds->GetIndex())));
+            ds->EncodeKey(key_buf, std::any_cast<std::optional<double>>(record.at(index)));
           }
           break;
         }
@@ -118,7 +119,7 @@ int RecordEncoder::EncodeKey(const std::vector<std::any>& record, std::string& o
           auto ss = std::dynamic_pointer_cast<DingoSchema<std::optional<std::shared_ptr<std::string>>>>(bs);
           if (ss->IsKey()) {
             ss->EncodeKey(key_buf,
-                          std::any_cast<std::optional<std::shared_ptr<std::string>>>(record.at(ss->GetIndex())));
+                          std::any_cast<std::optional<std::shared_ptr<std::string>>>(record.at(index)));
           }
           break;
         }
@@ -127,6 +128,7 @@ int RecordEncoder::EncodeKey(const std::vector<std::any>& record, std::string& o
         }
       }
     }
+    index++;
   }
 
   key_buf->GetBytes(output);
@@ -138,7 +140,7 @@ int RecordEncoder::EncodeValue(const std::vector<std::any>& record, std::string&
   Buf* value_buf = new Buf(value_buf_size_, this->le_);
   value_buf->EnsureRemainder(4);
   value_buf->WriteInt(schema_version_);
-
+  int index = 0;
   for (const auto& bs : *schemas_) {
     if (bs) {
       BaseSchema::Type type = bs->GetType();
@@ -191,6 +193,7 @@ int RecordEncoder::EncodeValue(const std::vector<std::any>& record, std::string&
         }
       }
     }
+    index++;
   }
 
   int ret = value_buf->GetBytes(output);
