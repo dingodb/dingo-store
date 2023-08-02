@@ -79,6 +79,7 @@ butil::Status Utils::CheckPbSchema(const google::protobuf::RepeatedPtrField<pb::
   size_t i = 0;
   for (const auto& schema : pb_schemas) {
     const auto& type = schema.type();
+    // check null type ?
     if (type != pb::store::Schema::Type::Schema_Type_BOOL && type != pb::store::Schema::Type::Schema_Type_INTEGER &&
         type != pb::store::Schema::Type::Schema_Type_FLOAT && type != pb::store::Schema::Type::Schema_Type_LONG &&
         type != pb::store::Schema::Type::Schema_Type_DOUBLE && type != pb::store::Schema::Type::Schema_Type_STRING) {
@@ -319,6 +320,59 @@ std::shared_ptr<BaseSchema> Utils::CloneSerialSchema(const std::shared_ptr<BaseS
 butil::Status Utils::CreateSerialSchema(
     const std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>>& old_serial_schemas,
     const ::google::protobuf::RepeatedField<int32_t>& new_columns,
+    std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>>* new_serial_schemas) {
+  if (old_serial_schemas && !old_serial_schemas->empty() && !new_columns.empty()) {
+    (*new_serial_schemas)->clear();
+    (*new_serial_schemas)->reserve(new_columns.size());
+
+    for (const auto& index : new_columns) {
+      std::shared_ptr<BaseSchema> original_serial_schema = FindSerialSchemaVector(old_serial_schemas, index);
+      if (!original_serial_schema) {
+        std::string error_message = fmt::format("FindSerialSchemaVector failed index : {}", index);
+        DINGO_LOG(ERROR) << error_message;
+        return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
+      }
+      // const std::shared_ptr<BaseSchema>& original_serial_schema = (*old_serial_schemas)[index];
+      std::shared_ptr<BaseSchema> clone_serial_schema = CloneSerialSchema(original_serial_schema);
+      (**new_serial_schemas).emplace_back(std::move(clone_serial_schema));
+    }
+  }
+
+  return butil::Status();
+}
+
+
+
+butil::Status Utils::CreateSerialSchema(
+    const std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>>& old_serial_schemas,
+    const ::google::protobuf::RepeatedField<int32_t>& new_columns,
+    const std::vector<int>& selection_columns,
+    std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>>* new_serial_schemas) {
+  if (old_serial_schemas && !old_serial_schemas->empty() && !new_columns.empty()) {
+    (*new_serial_schemas)->clear();
+    (*new_serial_schemas)->reserve(new_columns.size());
+
+    for (const auto& index : new_columns) {
+      DINGO_LOG(DEBUG) << "CreateSerialSchema index:" << index;
+      int index_selection = selection_columns[index];
+      DINGO_LOG(DEBUG) << "index_selection:" << index_selection;
+      std::shared_ptr<BaseSchema> original_serial_schema = (*old_serial_schemas)[index_selection];
+      if (!original_serial_schema) {
+        std::string error_message = fmt::format("FindSerialSchemaVector failed index : {}", index);
+        DINGO_LOG(ERROR) << error_message;
+        return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
+      }
+      // const std::shared_ptr<BaseSchema>& original_serial_schema = (*old_serial_schemas)[index];
+      std::shared_ptr<BaseSchema> clone_serial_schema = CloneSerialSchema(original_serial_schema);
+      (**new_serial_schemas).emplace_back(std::move(clone_serial_schema));
+    }
+  }
+
+  return butil::Status();
+}
+butil::Status Utils::CreateSelectionSchema(
+    const std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>>& old_serial_schemas,
+    const std::vector<int>& new_columns,
     std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>>* new_serial_schemas) {
   if (old_serial_schemas && !old_serial_schemas->empty() && !new_columns.empty()) {
     (*new_serial_schemas)->clear();

@@ -13,10 +13,12 @@
 // limitations under the License.
 
 #include "record_decoder.h"
-#include "counter.h"
 
 #include <memory>
 #include <vector>
+
+#include "common/logging.h"
+#include "counter.h"
 
 namespace dingodb {
 
@@ -150,6 +152,7 @@ int RecordDecoder::DecodeKey(const std::string& key, std::vector<std::any>& reco
   }
 
   record.resize(schemas_->size());
+  int index = 0;
   for (const auto& bs : *schemas_) {
     if (bs) {
       BaseSchema::Type type = bs->GetType();
@@ -157,42 +160,42 @@ int RecordDecoder::DecodeKey(const std::string& key, std::vector<std::any>& reco
         case BaseSchema::kBool: {
           auto bos = std::dynamic_pointer_cast<DingoSchema<std::optional<bool>>>(bs);
           if (bos->IsKey()) {
-            record.at(bos->GetIndex()) = bos->DecodeKey(key_buf);
+            record.at(index) = bos->DecodeKey(key_buf);
           }
           break;
         }
         case BaseSchema::kInteger: {
           auto is = std::dynamic_pointer_cast<DingoSchema<std::optional<int32_t>>>(bs);
           if (is->IsKey()) {
-            record.at(is->GetIndex()) = is->DecodeKey(key_buf);
+            record.at(index) = is->DecodeKey(key_buf);
           }
           break;
         }
         case BaseSchema::kFloat: {
           auto fs = std::dynamic_pointer_cast<DingoSchema<std::optional<float>>>(bs);
           if (fs->IsKey()) {
-            record.at(fs->GetIndex()) = fs->DecodeKey(key_buf);
+            record.at(index) = fs->DecodeKey(key_buf);
           }
           break;
         }
         case BaseSchema::kLong: {
           auto ls = std::dynamic_pointer_cast<DingoSchema<std::optional<int64_t>>>(bs);
           if (ls->IsKey()) {
-            record.at(ls->GetIndex()) = ls->DecodeKey(key_buf);
+            record.at(index) = ls->DecodeKey(key_buf);
           }
           break;
         }
         case BaseSchema::kDouble: {
           auto ds = std::dynamic_pointer_cast<DingoSchema<std::optional<double>>>(bs);
           if (ds->IsKey()) {
-            record.at(ds->GetIndex()) = ds->DecodeKey(key_buf);
+            record.at(index) = ds->DecodeKey(key_buf);
           }
           break;
         }
         case BaseSchema::kString: {
           auto ss = std::dynamic_pointer_cast<DingoSchema<std::optional<std::shared_ptr<std::string>>>>(bs);
           if (ss->IsKey()) {
-            record.at(ss->GetIndex()) = ss->DecodeKey(key_buf);
+            record.at(index) = ss->DecodeKey(key_buf);
           }
           break;
         }
@@ -201,6 +204,7 @@ int RecordDecoder::DecodeKey(const std::string& key, std::vector<std::any>& reco
         }
       }
     }
+    index++;
   }
   delete key_buf;
   return 0;
@@ -214,8 +218,9 @@ int RecordDecoder::Decode(const pb::common::KeyValue& key_value, std::vector<std
   return Decode(key_value.key(), key_value.value(), record);
 }
 
-template<typename T>
-void DecodeOrSkip(const std::shared_ptr<DingoSchema<std::optional<T>>>& schema, Buf& key_buf, Buf& value_buf, const std::vector<int>& column_indexes, std::vector<std::any>& record, int& n) {
+template <typename T>
+void DecodeOrSkip(const std::shared_ptr<DingoSchema<std::optional<T>>>& schema, Buf& key_buf, Buf& value_buf,
+                  const std::vector<int>& column_indexes, std::vector<std::any>& record, int& n, int& m) {
   if (VectorFind(column_indexes, schema->GetIndex(), n)) {
     if (schema->IsKey()) {
       record.at(n) = schema->DecodeKey(&key_buf);
@@ -231,17 +236,79 @@ void DecodeOrSkip(const std::shared_ptr<DingoSchema<std::optional<T>>>& schema, 
       schema->SkipValue(&value_buf);
     }
   }
+  m++;
+}
+
+inline bool VectorPairFind(const std::vector<std::pair<int, int>>& indexed_mapping_index, int m, int n,
+                           int& recordIndex) {
+  int first = indexed_mapping_index[n].first;
+  int second = indexed_mapping_index[n].second;
+  DINGO_LOG(DEBUG) << "(" << first << ", " << second << ", " << m << "," << n << ") ";
+  if (first == m) {
+    recordIndex = second;
+    return true;
+  } else {
+    return false;
+  }
+}
+
+template <typename T>
+void DecodeOrSkip1(const std::shared_ptr<DingoSchema<std::optional<T>>>& schema, Buf& key_buf, Buf& value_buf,
+                   const std::vector<std::pair<int, int>>& indexed_mapping_index, std::vector<std::any>& record, int& n,
+                   int& m) {
+  int recordIndex = 0;
+  if (VectorPairFind(indexed_mapping_index, m, n, recordIndex)) {
+    DINGO_LOG(DEBUG) << "recordIndex" << recordIndex;
+    if (schema->IsKey()) {
+      record.at(recordIndex) = schema->DecodeKey(&key_buf);
+    } else {
+      record.at(recordIndex) = schema->DecodeValue(&value_buf);
+    }
+    n++;
+  } else {
+    // record.at(schema->GetIndex()) = std::nullopt;
+    if (schema->IsKey()) {
+      schema->SkipKey(&key_buf);
+    } else {
+      schema->SkipValue(&value_buf);
+    }
+  }
+  m++;
 }
 
 int RecordDecoder::Decode(const std::string& key, const std::string& value, const std::vector<int>& column_indexes,
                           std::vector<std::any>& record) {
   Buf key_buf(key, this->le_);
   Buf value_buf(value, this->le_);
-  if (key_buf.ReadLong() != common_id_ || key_buf.ReverseReadInt() != codec_version_ || value_buf.ReadInt() != schema_version_) {
+  if (key_buf.ReadLong() != common_id_ || key_buf.ReverseReadInt() != codec_version_ ||
+      value_buf.ReadInt() != schema_version_) {
     return -1;
   }
   record.resize(column_indexes.size());
   int n = 0;
+  int m = 0;
+  // column_indexes [6,0,2,4]
+  std::vector<int> mapping_index;
+  for (int i : column_indexes) {
+    mapping_index.push_back(i);
+  }
+
+  std::vector<std::pair<int, int>> indexed_mapping_index;
+
+  // index
+  for (int i = 0; i < mapping_index.size(); i++) {
+    indexed_mapping_index.push_back(std::make_pair(mapping_index[i], i));
+  }
+
+  // sort indexed_mapping_index
+  std::sort(indexed_mapping_index.begin(), indexed_mapping_index.end());
+
+  // sort end indexed_mapping_index and mapping_index
+  DINGO_LOG(DEBUG) << "indexed_mapping_index: ";
+  for (auto p : indexed_mapping_index) {
+    DINGO_LOG(DEBUG) << "(" << p.first << ", " << p.second << ") ";
+  }
+
   for (auto iter = schemas_->begin(); iter != schemas_->end(); ++iter) {
     if (column_indexes.size() == n) {
       return 0;
@@ -251,27 +318,33 @@ int RecordDecoder::Decode(const std::string& key, const std::string& value, cons
       BaseSchema::Type type = bs->GetType();
       switch (type) {
         case BaseSchema::kBool: {
-          DecodeOrSkip(std::dynamic_pointer_cast<DingoSchema<std::optional<bool>>>(bs), key_buf, value_buf, column_indexes, record, n);
+          DecodeOrSkip1(std::dynamic_pointer_cast<DingoSchema<std::optional<bool>>>(bs), key_buf, value_buf,
+                        indexed_mapping_index, record, n, m);
           break;
         }
         case BaseSchema::kInteger: {
-          DecodeOrSkip(std::dynamic_pointer_cast<DingoSchema<std::optional<int32_t>>>(bs), key_buf, value_buf, column_indexes, record, n);
+          DecodeOrSkip1(std::dynamic_pointer_cast<DingoSchema<std::optional<int32_t>>>(bs), key_buf, value_buf,
+                        indexed_mapping_index, record, n, m);
           break;
         }
         case BaseSchema::kFloat: {
-          DecodeOrSkip(std::dynamic_pointer_cast<DingoSchema<std::optional<float>>>(bs), key_buf, value_buf, column_indexes, record, n);
+          DecodeOrSkip1(std::dynamic_pointer_cast<DingoSchema<std::optional<float>>>(bs), key_buf, value_buf,
+                        indexed_mapping_index, record, n, m);
           break;
         }
         case BaseSchema::kLong: {
-          DecodeOrSkip(std::dynamic_pointer_cast<DingoSchema<std::optional<int64_t>>>(bs), key_buf, value_buf, column_indexes, record, n);
+          DecodeOrSkip1(std::dynamic_pointer_cast<DingoSchema<std::optional<int64_t>>>(bs), key_buf, value_buf,
+                        indexed_mapping_index, record, n, m);
           break;
         }
         case BaseSchema::kDouble: {
-          DecodeOrSkip(std::dynamic_pointer_cast<DingoSchema<std::optional<double>>>(bs), key_buf, value_buf, column_indexes, record, n);
+          DecodeOrSkip1(std::dynamic_pointer_cast<DingoSchema<std::optional<double>>>(bs), key_buf, value_buf,
+                        indexed_mapping_index, record, n, m);
           break;
         }
         case BaseSchema::kString: {
-          DecodeOrSkip(std::dynamic_pointer_cast<DingoSchema<std::optional<std::shared_ptr<std::string>>>>(bs), key_buf, value_buf, column_indexes, record, n);
+          DecodeOrSkip1(std::dynamic_pointer_cast<DingoSchema<std::optional<std::shared_ptr<std::string>>>>(bs),
+                        key_buf, value_buf, indexed_mapping_index, record, n, m);
           break;
         }
         default: {

@@ -40,6 +40,13 @@ class Utils {
   static butil::Status CheckPbSchema(const google::protobuf::RepeatedPtrField<pb::store::Schema>& pb_schemas);
   static butil::Status CheckSerialSchema(
       const std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>>& serial_schemas);
+
+  static butil::Status CreateSerialSchema(
+      const std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>>& old_serial_schemas,
+      const ::google::protobuf::RepeatedField<int32_t>& new_columns,
+    const std::vector<int>& selection_columns,
+    std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>>* new_serial_schemas) ;
+
   static butil::Status CheckSelection(const ::google::protobuf::RepeatedField<int32_t>& selection_columns,
                                       size_t original_schema_size);
 
@@ -58,6 +65,11 @@ class Utils {
   static butil::Status CreateSerialSchema(
       const std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>>& old_serial_schemas,
       const ::google::protobuf::RepeatedField<int32_t>& new_columns,
+      std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>>* new_serial_schemas);
+
+  static butil::Status CreateSelectionSchema(
+      const std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>>& old_serial_schemas,
+      const std::vector<int>& new_columns,
       std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>>* new_serial_schemas);
 
   static butil::Status UpdateSerialSchemaIndex(
@@ -91,7 +103,7 @@ class Utils {
   static void SortSerialSchemaVector(std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>>* schemas);
 
   static std::shared_ptr<BaseSchema> FindSerialSchemaVector(
-      const std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> &schemas, int index);
+      const std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>>& schemas, int index);
 
   static void DebugPbSchema(const google::protobuf::RepeatedPtrField<pb::store::Schema>& pb_schemas,
                             const std::string& name);
