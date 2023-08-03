@@ -117,6 +117,10 @@ void SendGetTablesCount(std::shared_ptr<dingodb::CoordinatorInteraction> coordin
   schema_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
   schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
 
+  if (FLAGS_schema_id > 0) {
+    schema_id->set_entity_id(FLAGS_schema_id);
+  }
+
   auto status = coordinator_interaction->SendRequest("GetTablesCount", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG_INFO << "table_count=" << response.tables_count();
@@ -755,6 +759,10 @@ void SendGetIndexesCount(std::shared_ptr<dingodb::CoordinatorInteraction> coordi
   schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
   schema_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
   schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+
+  if (FLAGS_schema_id > 0) {
+    schema_id->set_entity_id(FLAGS_schema_id);
+  }
 
   auto status = coordinator_interaction->SendRequest("GetIndexesCount", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;

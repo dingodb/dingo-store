@@ -23,10 +23,11 @@ option java_package = "io.dingodb.meta";
 option cc_generic_services = true;
 
 enum EntityType {
-  ENTITY_TYPE_SCHEMA = 0;
-  ENTITY_TYPE_TABLE = 1;
-  ENTITY_TYPE_PART = 2;
-  ENTITY_TYPE_INDEX = 3;
+  ENTITY_TYPE_SCHEMA = 0;  // schema type
+  ENTITY_TYPE_TABLE = 1;   // table type
+  ENTITY_TYPE_PART = 2;    // partiton type
+  ENTITY_TYPE_INDEX = 3;   // index type, especially for vector index
+  ENTITY_TYPE_REGION = 4;  // region type
 }
 
 // The id of internal schemas
@@ -60,7 +61,6 @@ message DingoCommonId {
   uint64 entity_id = 3;
 }
 
-
 /**
  * Column Definition.
  */
@@ -90,10 +90,14 @@ enum PartitionStrategy {
 }
 
 message RangePartition {
-  repeated dingodb.pb.common.Range ranges = 1;
+  repeated dingodb.pb.common.Range ranges = 1;  // the count of ranges must be equal to the count of id
+  repeated DingoCommonId ids = 2;               // this is really part id, its parent entity is table
 }
 
-message HashPartition {}
+message HashPartition {
+  repeated dingodb.pb.common.Range ranges = 1;  // the count of ranges must be equal to the count of id
+  repeated DingoCommonId ids = 2;               // this is really part id, its parent entity is table
+}
 
 message PartitionRule {
   repeated string columns = 1;
@@ -117,12 +121,12 @@ message TableDefinition {
   uint64 ttl = 3;
   uint64 auto_increment = 4;
   string create_sql = 5;
-  PartitionRule table_partition = 20; 
-  uint32 replica = 21; 
-  dingodb.pb.common.Engine engine = 22; 
-  repeated ColumnDefinition columns = 30; 
-  map<string, string> properties = 40; 
-  dingodb.pb.common.IndexParameter index_parameter = 41; // for index
+  PartitionRule table_partition = 20;
+  uint32 replica = 21;
+  dingodb.pb.common.Engine engine = 22;
+  repeated ColumnDefinition columns = 30;
+  map<string, string> properties = 40;
+  dingodb.pb.common.IndexParameter index_parameter = 41;  // for index
 }
 
 // IndexDefinition is for vector/scalar index
@@ -138,7 +142,7 @@ message IndexDefinition {
 
 // This Part is mainly equal to the Part in DingoDB 0.5.x
 message RangeDistribution {
-  DingoCommonId id = 1;                            // this is really region id, its parent entity is table
+  DingoCommonId id = 1;                            // this is really region id, its parent entity is part_id
   dingodb.pb.common.Range range = 2;               // the range of this part
   dingodb.pb.common.Location leader = 3;           // the leader's store location
   repeated dingodb.pb.common.Location voters = 4;  // all members of the region that have right to vote, this field is
@@ -500,7 +504,7 @@ message GenerateTableIdsRequest {
   uint32 count = 2;
 }
 
-message GenerateTableIdsResponse{
+message GenerateTableIdsResponse {
   dingodb.pb.error.Error error = 1;
   repeated DingoCommonId table_ids = 2;
 }

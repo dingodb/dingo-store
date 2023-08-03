@@ -727,17 +727,16 @@ butil::Status CoordinatorControl::CreateRegionForSplitInternal(
   // create region with split_from_region_id & store_ids
   return CreateRegion(split_from_region.definition().name(), split_from_region.region_type(), "", store_ids.size(),
                       new_range, split_from_region.definition().schema_id(), split_from_region.definition().table_id(),
-                      split_from_region.definition().index_id(), split_from_region.definition().index_parameter(),
-                      store_ids, split_from_region_id, new_region_id, meta_increment);
+                      split_from_region.definition().index_id(), split_from_region.definition().part_id(),
+                      split_from_region.definition().index_parameter(), store_ids, split_from_region_id, new_region_id,
+                      meta_increment);
 }
 
-butil::Status CoordinatorControl::CreateRegionForSplit(const std::string& region_name,
-                                                       pb::common::RegionType region_type,
-                                                       const std::string& resource_tag, pb::common::Range region_range,
-                                                       uint64_t schema_id, uint64_t table_id, uint64_t index_id,
-                                                       const pb::common::IndexParameter& index_parameter,
-                                                       uint64_t split_from_region_id, uint64_t& new_region_id,
-                                                       pb::coordinator_internal::MetaIncrement& meta_increment) {
+butil::Status CoordinatorControl::CreateRegionForSplit(
+    const std::string& region_name, pb::common::RegionType region_type, const std::string& resource_tag,
+    pb::common::Range region_range, uint64_t schema_id, uint64_t table_id, uint64_t index_id, uint64_t part_id,
+    const pb::common::IndexParameter& index_parameter, uint64_t split_from_region_id, uint64_t& new_region_id,
+    pb::coordinator_internal::MetaIncrement& meta_increment) {
   if (split_from_region_id <= 0) {
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "split_from_region_id must be positive");
   }
@@ -757,18 +756,20 @@ butil::Status CoordinatorControl::CreateRegionForSplit(const std::string& region
 
   // create region with split_from_region_id & store_ids
   return CreateRegion(region_name, region_type, resource_tag, store_ids.size(), region_range, schema_id, table_id,
-                      index_id, index_parameter, store_ids, split_from_region_id, new_region_id, meta_increment);
+                      index_id, part_id, index_parameter, store_ids, split_from_region_id, new_region_id,
+                      meta_increment);
 }
 
 butil::Status CoordinatorControl::CreateRegion(const std::string& region_name, pb::common::RegionType region_type,
                                                const std::string& resource_tag, int32_t replica_num,
                                                pb::common::Range region_range, uint64_t schema_id, uint64_t table_id,
-                                               uint64_t index_id, const pb::common::IndexParameter& index_parameter,
+                                               uint64_t index_id, uint64_t part_id,
+                                               const pb::common::IndexParameter& index_parameter,
                                                uint64_t& new_region_id,
                                                pb::coordinator_internal::MetaIncrement& meta_increment) {
   std::vector<uint64_t> store_ids;
   return CreateRegion(region_name, region_type, resource_tag, replica_num, region_range, schema_id, table_id, index_id,
-                      index_parameter, store_ids, 0, new_region_id, meta_increment);
+                      part_id, index_parameter, store_ids, 0, new_region_id, meta_increment);
 }
 
 butil::Status CoordinatorControl::SelectStore(pb::common::StoreType store_type, int32_t replica_num,
@@ -907,13 +908,11 @@ butil::Status CoordinatorControl::SelectStore(pb::common::StoreType store_type, 
   return butil::Status::OK();
 }
 
-butil::Status CoordinatorControl::CreateRegion(const std::string& region_name, pb::common::RegionType region_type,
-                                               const std::string& resource_tag, int32_t replica_num,
-                                               pb::common::Range region_range, uint64_t schema_id, uint64_t table_id,
-                                               uint64_t index_id, const pb::common::IndexParameter& index_parameter,
-                                               std::vector<uint64_t>& store_ids, uint64_t split_from_region_id,
-                                               uint64_t& new_region_id,
-                                               pb::coordinator_internal::MetaIncrement& meta_increment) {
+butil::Status CoordinatorControl::CreateRegion(
+    const std::string& region_name, pb::common::RegionType region_type, const std::string& resource_tag,
+    int32_t replica_num, pb::common::Range region_range, uint64_t schema_id, uint64_t table_id, uint64_t index_id,
+    uint64_t part_id, const pb::common::IndexParameter& index_parameter, std::vector<uint64_t>& store_ids,
+    uint64_t split_from_region_id, uint64_t& new_region_id, pb::coordinator_internal::MetaIncrement& meta_increment) {
   std::vector<pb::common::Store> selected_stores_for_regions;
 
   // setup store_type
@@ -956,6 +955,7 @@ butil::Status CoordinatorControl::CreateRegion(const std::string& region_name, p
   region_definition->set_schema_id(schema_id);
   region_definition->set_table_id(table_id);
   region_definition->set_index_id(index_id);
+  region_definition->set_part_id(part_id);
   if (index_parameter.index_type() != pb::common::IndexType::INDEX_TYPE_NONE) {
     region_definition->mutable_index_parameter()->CopyFrom(index_parameter);
   }
@@ -1052,6 +1052,7 @@ butil::Status CoordinatorControl::CreateRegion(const std::string& region_name, p
     // new_partition->mutable_range()->set_start_key(region_range.start_key());
     // new_partition->mutable_range()->set_end_key(region_range.end_key());
     new_partition->set_region_id(create_region_id);
+    new_partition->set_part_id(part_id);
   }
 
   // on_apply

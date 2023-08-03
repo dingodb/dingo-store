@@ -371,7 +371,8 @@ butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta
   // validate schema
   // root schema cannot create table
   if (schema_id < 0 || schema_id == ::dingodb::pb::meta::ROOT_SCHEMA) {
-    DINGO_LOG(ERROR) << "schema_id is illegal " << schema_id;
+    DINGO_LOG(ERROR) << "schema_id is illegal " << schema_id
+                     << ", table_definition:" << table_definition.ShortDebugString();
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "schema_id is illegal");
   }
 
@@ -379,7 +380,8 @@ butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta
     // BAIDU_SCOPED_LOCK(schema_map_mutex_);
     bool ret = schema_map_.Exists(schema_id);
     if (!ret) {
-      DINGO_LOG(ERROR) << "schema_id is illegal " << schema_id;
+      DINGO_LOG(ERROR) << "schema_id is illegal " << schema_id
+                       << ", table_definition:" << table_definition.DebugString();
       return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "schema_id is illegal");
     }
   }
@@ -388,28 +390,57 @@ butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta
   butil::Status ret =
       AutoIncrementControl::CheckAutoIncrementInTableDefinition(table_definition, has_auto_increment_column);
   if (!ret.ok()) {
-    DINGO_LOG(ERROR) << "check auto increment in table definition error.";
+    DINGO_LOG(ERROR) << "check auto increment in table definition error:" << ret.error_str()
+                     << ", table_definition:" << table_definition.ShortDebugString();
     return ret;
   }
 
   // validate part information
-  if (!table_definition.has_table_partition()) {
-    DINGO_LOG(ERROR) << "no table_partition provided ";
-    return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "no table_partition provided");
-  }
   auto const& table_partition = table_definition.table_partition();
-  if (table_partition.has_hash_partition()) {
-    DINGO_LOG(ERROR) << "hash_partiton is not supported";
-    return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "hash_partiton is not supported");
-  } else if (!table_partition.has_range_partition()) {
-    DINGO_LOG(ERROR) << "no range_partition provided ";
-    return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "no range_partition provided");
+  if (!table_partition.has_range_partition() && !table_partition.has_hash_partition()) {
+    DINGO_LOG(ERROR) << "no partition provided" << table_definition.ShortDebugString();
+    return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "no partition provided");
   }
 
   auto const& range_partition = table_partition.range_partition();
-  if (range_partition.ranges_size() == 0) {
-    DINGO_LOG(ERROR) << "no range provided ";
-    return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "no range provided");
+  auto const& hash_partition = table_partition.hash_partition();
+
+  // store new_part_id for next usage
+  std::vector<uint64_t> new_part_ids;
+
+  if (range_partition.ranges_size() > 0) {
+    if (range_partition.ids_size() != range_partition.ranges_size()) {
+      DINGO_LOG(WARNING) << "range_partition.ids_size() != range_partition.ranges_size()";
+      // TODO: return error after sdk support part_id
+      // return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "no part_id provided");
+
+      // this is for temporary usage
+      for (auto range_part : range_partition.ranges()) {
+        new_part_ids.push_back(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_TABLE, meta_increment));
+      }
+    } else {
+      for (const auto& range_part : range_partition.ids()) {
+        new_part_ids.push_back(range_part.entity_id());
+      }
+    }
+  } else if (hash_partition.ranges_size() > 0) {
+    if (hash_partition.ids_size() != hash_partition.ranges_size()) {
+      DINGO_LOG(WARNING) << "hash_partition.ids_size() != hash_partition.ranges_size()";
+      // TODO: return error after sdk support part_id
+      // return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "no part_id provided");
+
+      // this is for temporary usage
+      for (auto hash_part : hash_partition.ranges()) {
+        new_part_ids.push_back(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_TABLE, meta_increment));
+      }
+    } else {
+      for (const auto& hash_part : hash_partition.ids()) {
+        new_part_ids.push_back(hash_part.entity_id());
+      }
+    }
+  } else {
+    DINGO_LOG(ERROR) << "no range provided " << table_definition.ShortDebugString();
+    return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "no partition provided");
   }
 
   // check if table_name exists
@@ -433,7 +464,8 @@ butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta
         AutoIncrementControl::SyncSendCreateAutoIncrementInternal(new_table_id, table_definition.auto_increment());
     if (!status.ok()) {
       DINGO_LOG(ERROR) << fmt::format("send create auto increment internal error, code: {}, message: {} ",
-                                      status.error_code(), status.error_str());
+                                      status.error_code(), status.error_str())
+                       << ", table_definition:" << table_definition.ShortDebugString();
       return butil::Status(pb::error::Errno::EAUTO_INCREMENT_WHILE_CREATING_TABLE,
                            fmt::format("send create auto increment internal error, code: {}, message: {}",
                                        status.error_code(), status.error_str()));
@@ -458,41 +490,87 @@ butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta
     replica = 3;
   }
 
+  // this is just a null parameter
   pb::common::IndexParameter index_parameter;
-  for (int i = 0; i < range_partition.ranges_size(); i++) {
-    // int ret = CreateRegion(const std::string &region_name, const std::string
-    // &resource_tag, int32_t replica_num, pb::common::Range region_range,
-    // uint64_t schema_id, uint64_t table_id, uint64_t &new_region_id)
-    std::string const region_name = std::string("T_") + std::to_string(schema_id) + std::string("_") +
-                                    table_definition.name() + std::string("_part_") + std::to_string(i);
-    uint64_t new_region_id = 0;
 
-    auto ret = CreateRegion(region_name, pb::common::RegionType::STORE_REGION, "", replica, range_partition.ranges(i),
-                            schema_id, new_table_id, 0, index_parameter, new_region_id, meta_increment);
-    if (!ret.ok()) {
-      DINGO_LOG(ERROR) << "CreateRegion failed in CreateTable table_name=" << table_definition.name();
-      break;
-    }
+  if (range_partition.ranges_size() > 0) {
+    // for range partitions
+    for (int i = 0; i < range_partition.ranges_size(); i++) {
+      // int ret = CreateRegion(const std::string &region_name, const std::string
+      // &resource_tag, int32_t replica_num, pb::common::Range region_range,
+      // uint64_t schema_id, uint64_t table_id, uint64_t &new_region_id)
+      std::string const region_name = std::string("T_") + std::to_string(schema_id) + std::string("_") +
+                                      table_definition.name() + std::string("_part_") + std::to_string(i);
+      uint64_t new_region_id = 0;
+      uint64_t new_part_id = new_part_ids[i];
 
-    DINGO_LOG(INFO) << "CreateTable create region success, region_id=" << new_region_id;
-
-    new_region_ids.push_back(new_region_id);
-  }
-
-  if (new_region_ids.size() < range_partition.ranges_size()) {
-    DINGO_LOG(ERROR) << "Not enough regions is created, drop residual regions need=" << range_partition.ranges_size()
-                     << " created=" << new_region_ids.size();
-    for (auto region_id_to_delete : new_region_ids) {
-      auto ret = DropRegion(region_id_to_delete, meta_increment);
+      auto ret = CreateRegion(region_name, pb::common::RegionType::STORE_REGION, "", replica, range_partition.ranges(i),
+                              schema_id, new_table_id, 0, new_part_id, index_parameter, new_region_id, meta_increment);
       if (!ret.ok()) {
-        DINGO_LOG(ERROR) << "DropRegion failed in CreateTable table_name=" << table_definition.name()
-                         << " region_id =" << region_id_to_delete;
+        DINGO_LOG(ERROR) << "CreateRegion failed in CreateTable table_name=" << table_definition.name()
+                         << ", table_definition:" << table_definition.ShortDebugString();
+        break;
       }
+
+      DINGO_LOG(INFO) << "CreateTable create region success, region_id=" << new_region_id;
+
+      new_region_ids.push_back(new_region_id);
     }
 
-    // remove table_name from map
-    table_name_map_safe_temp_.Erase(std::to_string(schema_id) + table_definition.name());
-    return butil::Status(pb::error::Errno::ETABLE_REGION_CREATE_FAILED, "Not enough regions is created");
+    if (new_region_ids.size() < range_partition.ranges_size()) {
+      DINGO_LOG(ERROR) << "Not enough regions is created, drop residual regions need=" << range_partition.ranges_size()
+                       << " created=" << new_region_ids.size();
+      for (auto region_id_to_delete : new_region_ids) {
+        auto ret = DropRegion(region_id_to_delete, meta_increment);
+        if (!ret.ok()) {
+          DINGO_LOG(ERROR) << "DropRegion failed in CreateTable table_name=" << table_definition.name()
+                           << " region_id =" << region_id_to_delete;
+        }
+      }
+
+      // remove table_name from map
+      table_name_map_safe_temp_.Erase(std::to_string(schema_id) + table_definition.name());
+      return butil::Status(pb::error::Errno::ETABLE_REGION_CREATE_FAILED, "Not enough regions is created");
+    }
+  } else if (hash_partition.ranges_size() > 0) {
+    // for hash partitions
+    for (int i = 0; i < hash_partition.ranges_size(); i++) {
+      std::string const region_name = std::string("T_") + std::to_string(schema_id) + std::string("_") +
+                                      table_definition.name() + std::string("_part_") + std::to_string(i);
+      uint64_t new_region_id = 0;
+      uint64_t new_part_id = new_part_ids[i];
+
+      auto ret = CreateRegion(region_name, pb::common::RegionType::STORE_REGION, "", replica, hash_partition.ranges(i),
+                              schema_id, new_table_id, 0, new_part_id, index_parameter, new_region_id, meta_increment);
+      if (!ret.ok()) {
+        DINGO_LOG(ERROR) << "CreateRegion failed in CreateTable table_name=" << table_definition.name() << ", "
+                         << table_definition.ShortDebugString();
+        break;
+      }
+
+      DINGO_LOG(INFO) << "CreateTable create region success, region_id=" << new_region_id;
+
+      new_region_ids.push_back(new_region_id);
+    }
+
+    if (new_region_ids.size() < hash_partition.ranges_size()) {
+      DINGO_LOG(ERROR) << "Not enough regions is created, drop residual regions need=" << hash_partition.ranges_size()
+                       << " created=" << new_region_ids.size();
+      for (auto region_id_to_delete : new_region_ids) {
+        auto ret = DropRegion(region_id_to_delete, meta_increment);
+        if (!ret.ok()) {
+          DINGO_LOG(ERROR) << "DropRegion failed in CreateTable table_name=" << table_definition.name()
+                           << " region_id =" << region_id_to_delete;
+        }
+      }
+
+      // remove table_name from map
+      table_name_map_safe_temp_.Erase(std::to_string(schema_id) + table_definition.name());
+      return butil::Status(pb::error::Errno::ETABLE_REGION_CREATE_FAILED, "Not enough regions is created");
+    }
+  } else {
+    DINGO_LOG(ERROR) << "no partition provided";
+    return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "no partition provided");
   }
 
   // bumper up EPOCH_REGION
@@ -506,12 +584,11 @@ butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta
   definition->CopyFrom(table_definition);
 
   // set part for table_internal
-  for (unsigned long new_region_id : new_region_ids) {
+  for (int i = 0; i < new_region_ids.size(); i++) {
     // create part and set region_id & range
     auto* part_internal = table_internal.add_partitions();
-    part_internal->set_region_id(new_region_id);
-    // auto* part_range = part_internal->mutable_range();
-    // part_range->CopyFrom(range_partition.ranges(i));
+    part_internal->set_region_id(new_region_ids[i]);
+    part_internal->set_part_id(new_part_ids[i]);
   }
 
   // add table_internal to table_map_
@@ -684,8 +761,8 @@ butil::Status CoordinatorControl::ValidateIndexDefinition(const pb::meta::TableD
 
       // check hnsw_parameter.ef_construction
       // The size of the dynamic list for the nearest neighbors during the construction of the graph. This parameter
-      // affects the quality of the graph and the construction time. A larger value leads to a higher quality graph but
-      // slower construction time. This parameter must be greater than 0.
+      // affects the quality of the graph and the construction time. A larger value leads to a higher quality graph
+      // but slower construction time. This parameter must be greater than 0.
       if (hnsw_parameter.efconstruction() <= 0) {
         DINGO_LOG(ERROR) << "hnsw_parameter.ef_construction is illegal " << hnsw_parameter.efconstruction();
         return butil::Status(
@@ -694,8 +771,8 @@ butil::Status CoordinatorControl::ValidateIndexDefinition(const pb::meta::TableD
       }
 
       // check hnsw_parameter.max_elements
-      // The maximum number of elements that can be indexed. This parameter affects the memory usage of the index. This
-      // parameter must be greater than 0.
+      // The maximum number of elements that can be indexed. This parameter affects the memory usage of the index.
+      // This parameter must be greater than 0.
       if (hnsw_parameter.max_elements() <= 0) {
         DINGO_LOG(ERROR) << "hnsw_parameter.max_elements is illegal " << hnsw_parameter.max_elements();
         return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
@@ -771,8 +848,8 @@ butil::Status CoordinatorControl::ValidateIndexDefinition(const pb::meta::TableD
       }
 
       // check ivf_flat_parameter.ncentroids
-      // The number of centroids (clusters) used in the product quantization. This parameter affects the memory usage of
-      // the index and the accuracy of the search. This parameter must be greater than 0.
+      // The number of centroids (clusters) used in the product quantization. This parameter affects the memory usage
+      // of the index and the accuracy of the search. This parameter must be greater than 0.
       if (ivf_flat_parameter.ncentroids() <= 0) {
         DINGO_LOG(ERROR) << "ivf_flat_parameter.ncentroids is illegal " << ivf_flat_parameter.ncentroids();
         return butil::Status(
@@ -810,8 +887,8 @@ butil::Status CoordinatorControl::ValidateIndexDefinition(const pb::meta::TableD
       }
 
       // check ivf_pq_parameter.nlist
-      // The number of inverted lists (buckets) used in the index. This parameter affects the memory usage of the index
-      // and the accuracy of the search. This parameter must be greater than 0.
+      // The number of inverted lists (buckets) used in the index. This parameter affects the memory usage of the
+      // index and the accuracy of the search. This parameter must be greater than 0.
       if (ivf_pq_parameter.ncentroids() <= 0) {
         DINGO_LOG(ERROR) << "ivf_pq_parameter.ncentroids is illegal " << ivf_pq_parameter.ncentroids();
         return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
@@ -819,8 +896,8 @@ butil::Status CoordinatorControl::ValidateIndexDefinition(const pb::meta::TableD
       }
 
       // check ivf_pq_parameter.nsubvector
-      // The number of subvectors used in the product quantization. This parameter affects the memory usage of the index
-      // and the accuracy of the search. This parameter must be greater than 0.
+      // The number of subvectors used in the product quantization. This parameter affects the memory usage of the
+      // index and the accuracy of the search. This parameter must be greater than 0.
       if (ivf_pq_parameter.nsubvector() <= 0) {
         DINGO_LOG(ERROR) << "ivf_pq_parameter.nsubvector is illegal " << ivf_pq_parameter.nsubvector();
         return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
@@ -966,23 +1043,55 @@ butil::Status CoordinatorControl::CreateIndex(uint64_t schema_id, const pb::meta
 
   // validate part information
   if (!table_definition.has_table_partition()) {
-    DINGO_LOG(ERROR) << "no table_partition provided ";
+    DINGO_LOG(ERROR) << "no table_partition provided , table_definition=" << table_definition.DebugString();
     return butil::Status(pb::error::Errno::EINDEX_DEFINITION_ILLEGAL, "no table_partition provided");
   }
 
   auto const& index_partition = table_definition.table_partition();
-  if (index_partition.has_hash_partition()) {
-    DINGO_LOG(ERROR) << "hash_partiton is not supported";
+  if (index_partition.has_hash_partition() && index_partition.has_range_partition()) {
+    DINGO_LOG(ERROR) << "hash_partiton is not supported, table_definition=" << table_definition.DebugString();
     return butil::Status(pb::error::Errno::EINDEX_DEFINITION_ILLEGAL, "hash_partiton is not supported");
-  } else if (!index_partition.has_range_partition()) {
-    DINGO_LOG(ERROR) << "no range_partition provided ";
-    return butil::Status(pb::error::Errno::EINDEX_DEFINITION_ILLEGAL, "no range_partition provided");
   }
 
   auto const& range_partition = index_partition.range_partition();
-  if (range_partition.ranges_size() == 0) {
-    DINGO_LOG(ERROR) << "no range provided ";
-    return butil::Status(pb::error::Errno::EINDEX_DEFINITION_ILLEGAL, "no range provided");
+  auto const& hash_partition = index_partition.hash_partition();
+
+  // store new_part_id for next usage
+  std::vector<uint64_t> new_part_ids;
+
+  if (range_partition.ranges_size() > 0) {
+    if (range_partition.ids_size() != range_partition.ranges_size()) {
+      DINGO_LOG(WARNING) << "range_partition.ids_size() != range_partition.ranges_size(), table_definition="
+                         << table_definition.DebugString();
+      // return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "no part_id provided");
+
+      // this is for temporary usage
+      for (auto range_part : range_partition.ranges()) {
+        new_part_ids.push_back(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_TABLE, meta_increment));
+      }
+    } else {
+      for (const auto& range_part : range_partition.ids()) {
+        new_part_ids.push_back(range_part.entity_id());
+      }
+    }
+  } else if (hash_partition.ranges_size() > 0) {
+    if (hash_partition.ids_size() != hash_partition.ranges_size()) {
+      DINGO_LOG(WARNING) << "hash_partition.ids_size() != hash_partition.ranges_size(), table_definition="
+                         << table_definition.DebugString();
+      // return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "no part_id provided");
+
+      // this is for temporary usage
+      for (auto hash_part : hash_partition.ranges()) {
+        new_part_ids.push_back(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_TABLE, meta_increment));
+      }
+    } else {
+      for (const auto& hash_part : hash_partition.ids()) {
+        new_part_ids.push_back(hash_part.entity_id());
+      }
+    }
+  } else {
+    DINGO_LOG(ERROR) << "no range provided , table_definition=" << table_definition.DebugString();
+    return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "no partition provided");
   }
 
   // check if index_name exists
@@ -1007,7 +1116,8 @@ butil::Status CoordinatorControl::CreateIndex(uint64_t schema_id, const pb::meta
         AutoIncrementControl::SyncSendCreateAutoIncrementInternal(new_index_id, table_definition.auto_increment());
     if (!status.ok()) {
       DINGO_LOG(ERROR) << fmt::format("send create auto increment internal error, code: {}, message: {} ",
-                                      status.error_code(), status.error_str());
+                                      status.error_code(), status.error_str())
+                       << ", table_definition=" << table_definition.DebugString();
       return butil::Status(pb::error::Errno::EAUTO_INCREMENT_WHILE_CREATING_TABLE,
                            fmt::format("send create auto increment internal error, code: {}, message: {}",
                                        status.error_code(), status.error_str()));
@@ -1031,41 +1141,82 @@ butil::Status CoordinatorControl::CreateIndex(uint64_t schema_id, const pb::meta
   if (replica < 1) {
     replica = 3;
   }
-  for (int i = 0; i < range_partition.ranges_size(); i++) {
-    // int ret = CreateRegion(const std::string &region_name, const std::string
-    // &resource_tag, int32_t replica_num, pb::common::Range region_range,
-    // uint64_t schema_id, uint64_t index_id, uint64_t &new_region_id)
-    std::string const region_name = std::string("I_") + std::to_string(schema_id) + std::string("_") +
-                                    table_definition.name() + std::string("_part_") + std::to_string(i);
-    uint64_t new_region_id = 0;
+  if (range_partition.ranges_size() > 0) {
+    for (int i = 0; i < range_partition.ranges_size(); i++) {
+      // int ret = CreateRegion(const std::string &region_name, const std::string
+      // &resource_tag, int32_t replica_num, pb::common::Range region_range,
+      // uint64_t schema_id, uint64_t index_id, uint64_t &new_region_id)
+      std::string const region_name = std::string("I_") + std::to_string(schema_id) + std::string("_") +
+                                      table_definition.name() + std::string("_part_") + std::to_string(i);
+      uint64_t new_region_id = 0;
+      uint64_t new_part_id = new_part_ids[i];
 
-    auto ret =
-        CreateRegion(region_name, pb::common::RegionType::INDEX_REGION, "", replica, range_partition.ranges(i),
-                     schema_id, 0, new_index_id, table_definition.index_parameter(), new_region_id, meta_increment);
-    if (!ret.ok()) {
-      DINGO_LOG(ERROR) << "CreateRegion failed in CreateIndex index_name=" << table_definition.name();
-      break;
-    }
-
-    DINGO_LOG(INFO) << "CreateIndex create region success, region_id=" << new_region_id;
-
-    new_region_ids.push_back(new_region_id);
-  }
-
-  if (new_region_ids.size() < range_partition.ranges_size()) {
-    DINGO_LOG(ERROR) << "Not enough regions is created, drop residual regions need=" << range_partition.ranges_size()
-                     << " created=" << new_region_ids.size();
-    for (auto region_id_to_delete : new_region_ids) {
-      auto ret = DropRegion(region_id_to_delete, meta_increment);
+      auto ret = CreateRegion(region_name, pb::common::RegionType::INDEX_REGION, "", replica, range_partition.ranges(i),
+                              schema_id, 0, new_index_id, new_part_id, table_definition.index_parameter(),
+                              new_region_id, meta_increment);
       if (!ret.ok()) {
-        DINGO_LOG(ERROR) << "DropRegion failed in CreateIndex index_name=" << table_definition.name()
-                         << " region_id =" << region_id_to_delete;
+        DINGO_LOG(ERROR) << "CreateRegion failed in CreateIndex index_name=" << table_definition.name();
+        break;
       }
+
+      DINGO_LOG(INFO) << "CreateIndex create region success, region_id=" << new_region_id;
+
+      new_region_ids.push_back(new_region_id);
     }
 
-    // remove index_name from map
-    index_name_map_safe_temp_.Erase(std::to_string(schema_id) + table_definition.name());
-    return butil::Status(pb::error::Errno::EINDEX_REGION_CREATE_FAILED, "Not enough regions is created");
+    if (new_region_ids.size() < range_partition.ranges_size()) {
+      DINGO_LOG(ERROR) << "Not enough regions is created, drop residual regions need=" << range_partition.ranges_size()
+                       << " created=" << new_region_ids.size();
+      for (auto region_id_to_delete : new_region_ids) {
+        auto ret = DropRegion(region_id_to_delete, meta_increment);
+        if (!ret.ok()) {
+          DINGO_LOG(ERROR) << "DropRegion failed in CreateIndex index_name=" << table_definition.name()
+                           << " region_id =" << region_id_to_delete;
+        }
+      }
+
+      // remove index_name from map
+      index_name_map_safe_temp_.Erase(std::to_string(schema_id) + table_definition.name());
+      return butil::Status(pb::error::Errno::EINDEX_REGION_CREATE_FAILED, "Not enough regions is created");
+    }
+  } else if (hash_partition.ranges_size() > 0) {
+    for (int i = 0; i < hash_partition.ranges_size(); i++) {
+      std::string const region_name = std::string("I_") + std::to_string(schema_id) + std::string("_") +
+                                      table_definition.name() + std::string("_part_") + std::to_string(i);
+      uint64_t new_region_id = 0;
+      uint64_t new_part_id = new_part_ids[i];
+
+      auto ret = CreateRegion(region_name, pb::common::RegionType::INDEX_REGION, "", replica, hash_partition.ranges(i),
+                              schema_id, 0, new_index_id, new_part_id, table_definition.index_parameter(),
+                              new_region_id, meta_increment);
+      if (!ret.ok()) {
+        DINGO_LOG(ERROR) << "CreateRegion failed in CreateIndex index_name=" << table_definition.name();
+        break;
+      }
+
+      DINGO_LOG(INFO) << "CreateIndex create region success, region_id=" << new_region_id;
+
+      new_region_ids.push_back(new_region_id);
+    }
+
+    if (new_region_ids.size() < hash_partition.ranges_size()) {
+      DINGO_LOG(ERROR) << "Not enough regions is created, drop residual regions need=" << hash_partition.ranges_size()
+                       << " created=" << new_region_ids.size();
+      for (auto region_id_to_delete : new_region_ids) {
+        auto ret = DropRegion(region_id_to_delete, meta_increment);
+        if (!ret.ok()) {
+          DINGO_LOG(ERROR) << "DropRegion failed in CreateIndex index_name=" << table_definition.name()
+                           << " region_id =" << region_id_to_delete;
+        }
+      }
+
+      // remove index_name from map
+      index_name_map_safe_temp_.Erase(std::to_string(schema_id) + table_definition.name());
+      return butil::Status(pb::error::Errno::EINDEX_REGION_CREATE_FAILED, "Not enough regions is created");
+    }
+  } else {
+    DINGO_LOG(ERROR) << "no partition provided";
+    return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "no partition provided");
   }
 
   // bumper up EPOCH_REGION
@@ -1079,12 +1230,11 @@ butil::Status CoordinatorControl::CreateIndex(uint64_t schema_id, const pb::meta
   definition->CopyFrom(table_definition);
 
   // set part for table_internal
-  for (unsigned long new_region_id : new_region_ids) {
+  for (int i = 0; i < new_region_ids.size(); i++) {
     // create part and set region_id & range
     auto* part_internal = table_internal.add_partitions();
-    part_internal->set_region_id(new_region_id);
-    // auto* part_range = part_internal->muindex_range();
-    // part_range->CopyFrom(range_partition.ranges(i));
+    part_internal->set_region_id(new_region_ids[i]);
+    part_internal->set_part_id(new_part_ids[i]);
   }
 
   // add table_internal to index_map_
@@ -1380,7 +1530,7 @@ butil::Status CoordinatorControl::GetTables(uint64_t schema_id,
 
 // get indexes
 butil::Status CoordinatorControl::GetIndexes(uint64_t schema_id,
-                                            std::vector<pb::meta::TableDefinitionWithId>& table_definition_with_ids) {
+                                             std::vector<pb::meta::TableDefinitionWithId>& table_definition_with_ids) {
   DINGO_LOG(INFO) << "GetIndexes in control schema_id=" << schema_id;
 
   if (schema_id < 0) {
@@ -1674,10 +1824,11 @@ butil::Status CoordinatorControl::GetTableRange(uint64_t schema_id, uint64_t tab
 
     // range_distribution id
     uint64_t region_id = table_internal.partitions(i).region_id();
+    uint64_t part_id = table_internal.partitions(i).part_id();
 
     auto* common_id_region = range_distribution->mutable_id();
     common_id_region->set_entity_id(region_id);
-    common_id_region->set_parent_entity_id(table_id);
+    common_id_region->set_parent_entity_id(part_id);
     common_id_region->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_PART);
 
     // get region
@@ -2213,12 +2364,13 @@ void CoordinatorControl::CalculateIndexMetrics() {
 }
 
 butil::Status CoordinatorControl::GenerateTableIds(uint64_t schema_id, uint32_t count,
-  pb::coordinator_internal::MetaIncrement& meta_increment, pb::meta::GenerateTableIdsResponse* response) {
+                                                   pb::coordinator_internal::MetaIncrement& meta_increment,
+                                                   pb::meta::GenerateTableIdsResponse* response) {
   bool ret = schema_map_.Exists(schema_id);
   if (!ret) {
     DINGO_LOG(ERROR) << "schema_id is illegal " << schema_id;
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "schema_id is illegal");
-  } 
+  }
 
   for (uint32_t i = 0; i < count; i++) {
     uint64_t new_table_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_TABLE, meta_increment);

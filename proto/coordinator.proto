@@ -531,15 +531,18 @@ message CreateRegionRequest {
   string resource_tag = 2;
   uint64 replica_num = 3;
   dingodb.pb.common.Range range = 4;
-  uint64 schema_id = 5;             // optional
-  uint64 table_id = 6;              // optional
-  repeated uint64 store_ids = 7;    // optional if not set, will create choose from all stores
-  uint64 split_from_region_id = 8;  // optional, if set, will split from this region
+  uint64 schema_id = 11;  // optional
+  uint64 table_id = 12;   // optional
+  uint64 index_id = 13;   // optional, if region_type is INDEX, this field is required
+  uint64 part_id = 14;    // optional, if region_type is INDEX, this field is required
+
+  repeated uint64 store_ids = 20;  // optional if not set, will create choose from all stores
+
+  uint64 split_from_region_id = 25;  // optional, if set, will split from this region
 
   dingodb.pb.common.RegionType region_type =
-      9;                 // optional, if set, will create a region with this type, this type is default STORE
-  uint64 index_id = 10;  // optional, if region_type is INDEX, this field is required
-  dingodb.pb.common.IndexParameter index_parameter = 11;  // optional, if region_type is INDEX, this field is required
+      30;  // optional, if set, will create a region with this type, this type is default STORE
+  dingodb.pb.common.IndexParameter index_parameter = 40;  // optional, if region_type is INDEX, this field is required
 }
 
 message CreateRegionResponse {

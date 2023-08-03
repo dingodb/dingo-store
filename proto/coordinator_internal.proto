@@ -24,6 +24,7 @@ package dingodb.pb.coordinator_internal;
 // TableRegionInternal is not table partition in SQL, its only use for storage.
 message TableRegionInternal {
   uint64 region_id = 1;  // the region id of this part
+  uint64 part_id = 2;    // the part id of this part
 }
 
 // @Deprecated
