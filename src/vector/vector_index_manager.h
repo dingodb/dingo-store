@@ -45,11 +45,11 @@ class VectorIndexManager : public TransformKvAble {
 
   bool Init(std::vector<store::RegionPtr> regions);
 
-  bool AddVectorIndex(uint64_t region_id, const pb::common::IndexParameter& index_parameter);
+  bool AddVectorIndex(uint64_t vector_index_id, const pb::common::IndexParameter& index_parameter);
 
-  void DeleteVectorIndex(uint64_t region_id);
+  void DeleteVectorIndex(uint64_t vector_index_id);
 
-  std::shared_ptr<VectorIndex> GetVectorIndex(uint64_t region_id);
+  std::shared_ptr<VectorIndex> GetVectorIndex(uint64_t vector_index_id);
   std::vector<std::shared_ptr<VectorIndex>> GetAllVectorIndex();
 
   // Load vector index for already exist vector index at bootstrap.
@@ -67,11 +67,11 @@ class VectorIndexManager : public TransformKvAble {
 
   // Update vector index apply log index.
   void UpdateApplyLogIndex(std::shared_ptr<VectorIndex> vector_index, uint64_t log_index);
-  void UpdateApplyLogIndex(uint64_t region_id, uint64_t log_index);
+  void UpdateApplyLogIndex(uint64_t vector_index_id, uint64_t log_index);
 
   // Update vector index snapshot log index.
   void UpdateSnapshotLogIndex(std::shared_ptr<VectorIndex> vector_index, uint64_t log_index);
-  void UpdateSnapshotLogIndex(uint64_t region_id, uint64_t log_index);
+  void UpdateSnapshotLogIndex(uint64_t vector_index_id, uint64_t log_index);
 
   butil::Status ScrubVectorIndex();
 
@@ -80,9 +80,10 @@ class VectorIndexManager : public TransformKvAble {
  private:
   std::shared_ptr<pb::common::KeyValue> TransformToKv(std::any obj) override;
   void TransformFromKv(const std::vector<pb::common::KeyValue>& kvs) override;
-  butil::Status GetVectorIndexLogIndex(uint64_t region_id, uint64_t& snapshot_log_index, uint64_t& apply_log_index);
+  butil::Status GetVectorIndexLogIndex(uint64_t vector_index_id, uint64_t& snapshot_log_index,
+                                       uint64_t& apply_log_index);
 
-  bool AddVectorIndex(uint64_t region_id, std::shared_ptr<VectorIndex> vector_index);
+  bool AddVectorIndex(std::shared_ptr<VectorIndex> vector_index, bool force = true);
 
   // Build vector index with original all data(store rocksdb).
   // Invoke when server starting.
@@ -101,7 +102,7 @@ class VectorIndexManager : public TransformKvAble {
   std::shared_ptr<MetaWriter> meta_writer_;
 
   std::shared_ptr<RawEngine> raw_engine_;
-  // region_id: vector_index
+  // vector_index_id: vector_index
   DingoSafeMap<uint64_t, std::shared_ptr<VectorIndex>> vector_indexs_;
 
   // vector index snapshot manager

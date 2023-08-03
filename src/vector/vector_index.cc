@@ -19,10 +19,19 @@
 #include "butil/status.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
+#include "server/server.h"
 
 namespace dingodb {
 
-VectorIndex::~VectorIndex() = default;
+VectorIndex::~VectorIndex() {
+  auto vector_index_manager = Server::GetInstance()->GetVectorIndexManager();
+  if (vector_index_manager != nullptr) {
+    auto snapshot_manager = vector_index_manager->GetVectorIndexSnapshotManager();
+    if (snapshot_manager != nullptr) {
+      snapshot_manager->DeleteSnapshots(id);
+    }
+  }
+}
 
 pb::common::VectorIndexType VectorIndex::VectorIndexType() const { return vector_index_type; }
 

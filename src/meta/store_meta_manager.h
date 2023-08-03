@@ -76,6 +76,9 @@ class Region {
   bool DisableSplit();
   void SetDisableSplit(bool disable_split);
 
+  uint64_t RefVectorIndexId();
+  void SetRefVectorIndexId(uint64_t vector_index_id);
+
   const pb::store_internal::Region& InnerRegion() const { return inner_region_; }
 
  private:
