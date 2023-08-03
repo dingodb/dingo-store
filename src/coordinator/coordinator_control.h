@@ -638,6 +638,9 @@ class CoordinatorControl : public MetaControl {
   butil::Status LeaseQuery(uint64_t lease_id, bool get_keys, int64_t &granted_ttl_seconds,
                            int64_t &remaining_ttl_seconds, std::set<std::string> &keys);
   void BuildLeaseToKeyMap();
+  butil::Status LeaseAddKeys(uint64_t lease_id, std::set<std::string> &keys);
+  butil::Status LeaseRemoveKeys(uint64_t lease_id, std::set<std::string> &keys);
+  butil::Status LeaseRemoveMultiLeaseKeys(std::map<uint64_t, std::set<std::string>> &lease_to_keys);
 
   // revision encode and decode
   static std::string RevisionToString(const pb::coordinator_internal::RevisionInternal &revision);
@@ -667,28 +670,31 @@ class CoordinatorControl : public MetaControl {
   // return: errno
   butil::Status KvRange(const std::string &key, const std::string &range_end, int64_t limit, bool keys_only,
                         bool count_only, std::vector<pb::version::Kv> &kv, uint64_t &total_count_in_range);
+
   // KvPut is the put function
   // in:  key_value
   // in:  lease_id
   // in:  prev_kv
   // in:  igore_value
   // in:  ignore_lease
+  // in:  main_revision
+  // in and out:  sub_revision
   // out:  prev_kv
-  // out:  revision
   // return: errno
   butil::Status KvPut(const pb::common::KeyValue &key_value_in, uint64_t lease_id, bool need_prev_kv, bool igore_value,
-                      bool ignore_lease, pb::version::Kv &prev_kv, uint64_t &revision, uint64_t &lease_grant_id,
-                      pb::coordinator_internal::MetaIncrement &meta_increment);
+                      bool ignore_lease, uint64_t main_revision, uint64_t &sub_revision, pb::version::Kv &prev_kv,
+                      uint64_t &lease_grant_id, pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // KvDeleteRange is the delete function
   // in:  key
   // in:  range_end
   // in:  prev_key
+  // in:  main_revision
+  // in and out:  sub_revision
   // out:  prev_kvs
-  // out:  revision
   // return: errno
   butil::Status KvDeleteRange(const std::string &key, const std::string &range_end, bool need_prev_kv,
-                              std::vector<pb::version::Kv> &prev_kvs, uint64_t &revision,
+                              uint64_t main_revision, uint64_t &sub_revision, std::vector<pb::version::Kv> &prev_kvs,
                               pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // KvPutApply is the apply function for put

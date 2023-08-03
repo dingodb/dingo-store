@@ -89,6 +89,7 @@ void SendLeaseQuery(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator
     return;
   }
   request.set_id(std::stol(FLAGS_id));
+  request.set_keys(true);
 
   auto status = coordinator_interaction->SendRequest("LeaseQuery", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
