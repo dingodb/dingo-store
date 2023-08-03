@@ -36,9 +36,7 @@ enum Engine {
   ENG_BTREE = 5;
 };
 
-enum RawEngine {
-  RAW_ENG_ROCKSDB = 0;
-};
+enum RawEngine { RAW_ENG_ROCKSDB = 0; };
 
 message Location {
   string host = 1;
@@ -87,9 +85,10 @@ message VectorTableData {
 
 message VectorWithId {
   uint64 id = 1;
-  Vector vector = 2;                 // vector data
-  VectorScalardata scalar_data = 3;  // scalar data of this vector, key: scalar key, value: scalar value data.
-  VectorTableData table_data = 4;    // table data of this vector, only SQL can use this field
+  Vector vector = 2;  // vector data
+  VectorScalardata scalar_data =
+      3;                           // scalar data of this vector, key: scalar key, value: scalar value data. meta data.
+  VectorTableData table_data = 4;  // table data of this vector, only SQL can use this field
 }
 
 message VectorWithDistance {
@@ -320,9 +319,23 @@ enum MetricType {
   METRIC_TYPE_COSINE = 3;
 }
 
-enum ScalarFilterType {
-  POST_QUERY = 0;
-  PRE_QUERY = 1;
+enum VectorFilter {
+  // filter vector scalar include post filter and pre filter
+  SCALAR_FILTER = 0;
+
+  // use coprocessor only include pre filter
+  TABLE_FILTER = 1;
+
+  // vector id search direct by ids. only include pre filter
+  VECTOR_ID_FILTER = 10;
+}
+
+enum VectorFilterType {
+  // first vector search, then filter
+  QUERY_POST = 0;
+
+  // first search from rocksdb, then search vector
+  QUERY_PRE = 1;
 }
 
 enum ScalarFieldType {
@@ -498,6 +511,51 @@ message SearchDiskAnnParam {
   // TODO : Not implement
 }
 
+message VectorSchema {
+  enum Type {
+    BOOL = 0;
+    INTEGER = 1;
+    FLOAT = 2;
+    LONG = 3;
+    DOUBLE = 4;
+    STRING = 5;
+  };
+
+  // type of data
+  Type type = 1;
+
+  // Is primary key
+  bool is_key = 2;
+
+  // is allowed to be empty
+  bool is_nullable = 3;
+
+  // index position starts from 0
+  int32 index = 4;
+}
+
+message VectorCoprocessor {
+  // the version of the serialized data
+  int32 schema_version = 1;
+
+  message VectorSchemaWrapper {
+    repeated VectorSchema schema = 1;
+    int64 common_id = 2;
+  }
+
+  // original schema
+  VectorSchemaWrapper original_schema = 2;
+
+  // Column selection in the table list selection
+  // For example, [0, 2, 4, 7] selects the index subscript of the column.
+  // If the length of the array is 0, it means all
+  repeated int32 selection_columns = 3;
+
+  // The operator pushes down the expression binary filter to use empty to indicate that there is no expression and no
+  // filtering
+  bytes expression = 4;
+}
+
 message VectorSearchParameter {
   // The number of top results to return.
   uint32 top_n = 1;
@@ -518,7 +576,20 @@ message VectorSearchParameter {
   }
 
   // Whether to use scalar filtering.
+  // This is a switch to enable or disable filtering.
+  // @Deprecated This field will be deprecated in the near future.
+  // @Deprecated Please use vector_filter and vector_query_type instead.
   bool use_scalar_filter = 20;
+
+  // filter source
+  VectorFilter vector_filter = 21;
+
+  // only include pre filter and post filter
+  VectorFilterType vector_filter_type = 22;
+
+  //  if vector_filter == TABLE_FILTER and  vector_query_type = QUERY_PRE enable vector_coprocessor
+  //  coprocessor request
+  VectorCoprocessor vector_coprocessor = 23;
 }
 
 enum ScalarIndexType {
