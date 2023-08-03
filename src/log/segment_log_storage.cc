@@ -676,6 +676,11 @@ int SegmentLogStorage::AppendEntries(const std::vector<braft::LogEntry*>& entrie
   if (entries.empty()) {
     return 0;
   }
+
+  DINGO_LOG(DEBUG) << fmt::format(
+      "append entries region_id: {} last_log_index_: {} log type: {} entry index: {}_{} entry count: {}", region_id_,
+      last_log_index_.load(butil::memory_order_relaxed), static_cast<int>(entries.front()->type),
+      entries.front()->id.term, entries.front()->id.index, entries.size());
   if (last_log_index_.load(butil::memory_order_relaxed) + 1 != entries.front()->id.index) {
     DINGO_LOG(FATAL) << fmt::format(
         "There's gap between appending entries and last_log_index_ path: {} last_log_index_: {} entry_index: {}", path_,
@@ -721,6 +726,9 @@ int SegmentLogStorage::AppendEntries(const std::vector<braft::LogEntry*>& entrie
 }
 
 int SegmentLogStorage::AppendEntry(const braft::LogEntry* entry) {
+  DINGO_LOG(DEBUG) << fmt::format("append entry region_id: {} last_log_index_: {} entry index: {}", region_id_,
+                                  last_log_index_.load(butil::memory_order_relaxed), entry->id.index);
+
   auto segment = OpenSegment();
   if (nullptr == segment) {
     return EIO;
@@ -836,6 +844,8 @@ int SegmentLogStorage::TruncatePrefix(const int64_t first_index_kept) {
     return -1;
   }
 
+  DINGO_LOG(DEBUG) << fmt::format("truncate prefix: region_id: {} first_index_kept: {}", region_id_, first_index_kept);
+
   std::vector<std::shared_ptr<Segment>> poppeds;
   PopSegments(first_index_kept, poppeds);
   for (auto& popped : poppeds) {
@@ -885,6 +895,7 @@ std::shared_ptr<Segment> SegmentLogStorage::PopSegmentsFromBack(int64_t last_ind
 }
 
 int SegmentLogStorage::TruncateSuffix(int64_t last_index_kept) {
+  DINGO_LOG(DEBUG) << fmt::format("truncate suffix: region_id: {} last_index_kept: {}", region_id_, last_index_kept);
   // segment files
   std::vector<std::shared_ptr<Segment>> poppeds;
   std::shared_ptr<Segment> last_segment = PopSegmentsFromBack(last_index_kept, poppeds);
