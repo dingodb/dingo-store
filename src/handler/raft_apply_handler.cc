@@ -450,13 +450,14 @@ void VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr reg
     vector_with_ids.push_back(vector_with_id);
   }
 
+  uint64_t vector_index_id = region->Id();
   auto vector_index_manager = Server::GetInstance()->GetVectorIndexManager();
-  auto vector_index = vector_index_manager->GetVectorIndex(region->Id());
+  auto vector_index = vector_index_manager->GetVectorIndex(vector_index_id);
 
   // if leadder vector_index is nullptr, return internal error
   if (ctx != nullptr && vector_index == nullptr) {
-    DINGO_LOG(ERROR) << fmt::format("Not found vector index {}", region->Id());
-    status = butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "Not found vector index %ld", region->Id());
+    DINGO_LOG(ERROR) << fmt::format("Not found vector index {}", vector_index_id);
+    status = butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "Not found vector index %ld", vector_index_id);
     set_ctx_status(status);
     return;
   }
@@ -466,7 +467,7 @@ void VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr reg
     // Check if the log_id is greater than the ApplyLogIndex of the vector index
     if (log_id <= vector_index->ApplyLogIndex()) {
       DINGO_LOG(WARNING) << fmt::format("Vector index {} already applied log index, log_id({}) / apply_log_index({})",
-                                        region->Id(), log_id, vector_index->ApplyLogIndex());
+                                        vector_index_id, log_id, vector_index->ApplyLogIndex());
       set_ctx_status(status);
       return;
     }
@@ -485,38 +486,35 @@ void VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr reg
         auto end = std::chrono::steady_clock::now();
 
         auto diff = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-        DINGO_LOG(INFO) << fmt::format("vector_index upsert {} vectors, cost {} us, region_id={}",
-                                       vector_with_ids.size(), diff, region->Id());
+        DINGO_LOG(INFO) << fmt::format("vector index {} upsert {} vectors, cost {}us", vector_index_id,
+                                       vector_with_ids.size(), diff);
 
         if (ret.error_code() == pb::error::Errno::EVECTOR_INDEX_OFFLINE) {
           // do not stop while, wait for a while and retry full raft log
           stop_flag = false;
 
           bthread_usleep(1000 * 100);
-          vector_index = vector_index_manager->GetVectorIndex(region->Id());
+          vector_index = vector_index_manager->GetVectorIndex(vector_index_id);
           if (vector_index == nullptr) {
-            DINGO_LOG(ERROR) << fmt::format("vector_index is nullptr, region_id={}", region->Id());
-            status = butil::Status(pb::error::EINTERNAL, "Internal error, vector_index is nullptr, region_id=[%ld]",
-                                   region->Id());
+            DINGO_LOG(ERROR) << fmt::format("Not found vector index {}", vector_index_id);
+            status = butil::Status(pb::error::EINTERNAL, "Not found vector index %lu", vector_index_id);
             set_ctx_status(status);
             return;
           }
         } else if (ret.error_code() == pb::error::Errno::EVECTOR_INDEX_FULL) {
-          DINGO_LOG(INFO) << fmt::format("vector_index is full, region_id={}", region->Id());
-          status = butil::Status(pb::error::EVECTOR_INDEX_FULL, "error, vector_index is full, region_id=[%ld]",
-                                 region->Id());
+          DINGO_LOG(INFO) << fmt::format("vector index {} is full", vector_index_id);
+          status = butil::Status(pb::error::EVECTOR_INDEX_FULL, "Vector index %lu is full", vector_index_id);
         } else if (!ret.ok()) {
-          DINGO_LOG(ERROR) << fmt::format("vector_index upsert failed, region_id={}, vector_count={}, err={}",
-                                          region->Id(), vector_with_ids.size(), ret.error_str());
-          status =
-              butil::Status(pb::error::EINTERNAL,
-                            "Internal error, vector_index upsert failed, region_id=[%ld], vector_count=[%ld], err=[%s]",
-                            region->Id(), vector_with_ids.size(), ret.error_cstr());
+          DINGO_LOG(ERROR) << fmt::format("vector index {} upsert failed, vector_count={}, err={}", vector_index_id,
+                                          vector_with_ids.size(), ret.error_str());
+          status = butil::Status(pb::error::EINTERNAL, "Vector index %lu upsert failed, vector_count=[%ld], err=[%s]",
+                                 vector_index_id, vector_with_ids.size(), ret.error_cstr());
           set_ctx_status(status);
         }
       } catch (const std::exception &e) {
         DINGO_LOG(ERROR) << fmt::format("vector_index add failed : {}", e.what());
-        status = butil::Status(pb::error::EINTERNAL, "Internal error, vector_index add failed, err=[%s]", e.what());
+        status =
+            butil::Status(pb::error::EINTERNAL, "Vector index %lu add failed, err=[%s]", vector_index_id, e.what());
       }
     } while (!stop_flag);
   }
@@ -611,12 +609,13 @@ void VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr 
     }
   }
 
+  uint64_t vector_index_id = region->Id();
   auto vector_index_manager = Server::GetInstance()->GetVectorIndexManager();
-  auto vector_index = vector_index_manager->GetVectorIndex(region->Id());
+  auto vector_index = vector_index_manager->GetVectorIndex(vector_index_id);
   // if leadder vector_index is nullptr, return internal error
   if (ctx != nullptr && vector_index == nullptr) {
-    DINGO_LOG(ERROR) << fmt::format("Not found vector index {}", region->Id());
-    status = butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "Not found vector index %ld", region->Id());
+    DINGO_LOG(ERROR) << fmt::format("Not found vector index {}", vector_index_id);
+    status = butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "Not found vector index %ld", vector_index_id);
     set_ctx_status(status);
     return;
   }
@@ -625,7 +624,7 @@ void VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr 
   if (vector_index != nullptr) {
     if (log_id <= vector_index->ApplyLogIndex()) {
       DINGO_LOG(WARNING) << fmt::format("Vector index {} already applied log index, log_id({}) / apply_log_index({})",
-                                        region->Id(), log_id, vector_index->ApplyLogIndex());
+                                        vector_index_id, log_id, vector_index->ApplyLogIndex());
       set_ctx_status(status);
       return;
     }
@@ -644,29 +643,27 @@ void VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr 
           stop_flag = false;
 
           bthread_usleep(1000 * 100);
-          vector_index = vector_index_manager->GetVectorIndex(region->Id());
+          vector_index = vector_index_manager->GetVectorIndex(vector_index_id);
           if (vector_index == nullptr) {
-            DINGO_LOG(ERROR) << fmt::format("vector_index is nullptr, region_id={}", region->Id());
-            status = butil::Status(pb::error::EINTERNAL, "Internal error, vector_index is nullptr, region_id=[%ld]",
-                                   region->Id());
+            DINGO_LOG(ERROR) << fmt::format("Not found vector index {}", vector_index_id);
+            status = butil::Status(pb::error::EINTERNAL, "Not found vector index %lu", vector_index_id);
             set_ctx_status(status);
             return;
           }
         } else if (ret.error_code() == pb::error::Errno::EVECTOR_NOT_FOUND) {
-          DINGO_LOG(ERROR) << fmt::format("vector_index del EVECTOR_NOT_FOUND, region_id={}, vector_count={}, err={}",
-                                          region->Id(), delete_ids.size(), ret.error_str());
+          DINGO_LOG(ERROR) << fmt::format("vector not found at vector index {}, vector_count={}, err={}",
+                                          vector_index_id, delete_ids.size(), ret.error_str());
         } else if (!ret.ok()) {
-          DINGO_LOG(ERROR) << fmt::format("vector_index del failed, region_id={}, vector_count={}, err={}",
-                                          region->Id(), delete_ids.size(), ret.error_str());
-          status =
-              butil::Status(pb::error::EINTERNAL,
-                            "Internal error, vector_index del failed, region_id=[%ld], vector_count=[%ld], err=[%s]",
-                            region->Id(), delete_ids.size(), ret.error_cstr());
+          DINGO_LOG(ERROR) << fmt::format("vector index {} delete failed, vector_count={}, err={}", vector_index_id,
+                                          delete_ids.size(), ret.error_str());
+          status = butil::Status(pb::error::EINTERNAL, "Vector index %lu delete failed, vector_count=[%ld], err=[%s]",
+                                 vector_index_id, delete_ids.size(), ret.error_cstr());
           set_ctx_status(status);
         }
       } catch (const std::exception &e) {
-        DINGO_LOG(ERROR) << fmt::format("vector_index delete failed : {}", e.what());
-        status = butil::Status(pb::error::EINTERNAL, "Internal error, vector_index delete failed, err=[%s]", e.what());
+        DINGO_LOG(ERROR) << fmt::format("vector index {} delete failed : {}", vector_index_id, e.what());
+        status =
+            butil::Status(pb::error::EINTERNAL, "Vector index %lu delete failed, err=[%s]", vector_index_id, e.what());
       }
     } while (!stop_flag);
   }

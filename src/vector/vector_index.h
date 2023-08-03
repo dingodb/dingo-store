@@ -92,7 +92,11 @@ class VectorIndex {
   uint64_t Id() const { return id; }
 
   pb::common::RegionVectorIndexStatus Status() { return status.load(); }
-  void SetStatus(pb::common::RegionVectorIndexStatus status) { this->status.store(status); }
+  void SetStatus(pb::common::RegionVectorIndexStatus status) {
+    if (this->status.load() != pb::common::VECTOR_INDEX_STATUS_DELETE) {
+      this->status.store(status);
+    }
+  }
 
   uint64_t ApplyLogIndex() const;
   void SetApplyLogIndex(uint64_t apply_log_index);
@@ -101,7 +105,7 @@ class VectorIndex {
   void SetSnapshotLogIndex(uint64_t snapshot_log_index);
 
  protected:
-  // region_id
+  // vector index id
   uint64_t id;
 
   // status

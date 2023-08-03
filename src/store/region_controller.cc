@@ -101,21 +101,6 @@ butil::Status CreateRegionTask::CreateRegion(std::shared_ptr<Context> ctx, store
     store_region_meta->UpdateState(region, pb::common::StoreRegionState::STANDBY);
   }
 
-  // if (Server::GetInstance()->GetRole() == pb::common::ClusterRole::INDEX) {
-  //   // vector index
-  //   const auto& definition = region->InnerRegion().definition();
-  //   if (definition.index_parameter().index_type() == pb::common::IndexType::INDEX_TYPE_VECTOR) {
-  //     DINGO_LOG(INFO) << fmt::format("Create region {} vector index", region->Id());
-
-  //     auto vector_index_manager = Server::GetInstance()->GetVectorIndexManager();
-  //     if (!vector_index_manager->AddVectorIndex(region->Id(), region->InnerRegion().definition().index_parameter()))
-  //     {
-  //       return butil::Status(pb::error::EINTERNAL,
-  //                            fmt::format("Init vector index failed, region_id: {}", region->Id()));
-  //     }
-  //   }
-  // }
-
   return butil::Status();
 }
 
@@ -208,8 +193,17 @@ butil::Status DeleteRegionTask::DeleteRegion(std::shared_ptr<Context> ctx, uint6
 
   // Index region
   if (Server::GetInstance()->GetRole() == pb::common::ClusterRole::INDEX) {
-    // Delete vector index
-    Server::GetInstance()->GetVectorIndexManager()->DeleteVectorIndex(region_id);
+    auto vector_index_manager = Server::GetInstance()->GetVectorIndexManager();
+    if (vector_index_manager != nullptr) {
+      auto vector_index = vector_index_manager->GetVectorIndex(region_id);
+      if (vector_index != nullptr) {
+        // Delete vector index
+        vector_index_manager->DeleteVectorIndex(vector_index->Id());
+      }
+    }
+
+    // Delete vector index directory.
+    Helper::RemoveAllFileOrDirectory(VectorIndexSnapshotManager::GetSnapshotParentPath(region_id));
   }
 
   // Delete region executor

@@ -126,6 +126,16 @@ void Region::SetDisableSplit(bool disable_split) {
   inner_region_.set_disable_split(disable_split);
 }
 
+uint64_t Region::RefVectorIndexId() {
+  BAIDU_SCOPED_LOCK(mutex_);
+  return inner_region_.ref_vector_index_id();
+}
+
+void Region::SetRefVectorIndexId(uint64_t vector_index_id) {
+  BAIDU_SCOPED_LOCK(mutex_);
+  inner_region_.set_ref_vector_index_id(vector_index_id);
+}
+
 }  // namespace store
 
 bool StoreServerMeta::Init() {

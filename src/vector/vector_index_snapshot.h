@@ -45,11 +45,6 @@ class SnapshotMeta {
   }
 
   bool Init();
-  void Destroy();
-  bool IsDestroy();
-
-  void IncUseRefferenceCount();
-  void DescUseRefferenceCount();
 
   uint64_t VectorIndexId() const { return vector_index_id_; }
   uint64_t SnapshotLogId() const { return snapshot_log_id_; }
@@ -62,12 +57,6 @@ class SnapshotMeta {
   uint64_t vector_index_id_;
   uint64_t snapshot_log_id_;
   std::string path_;
-
-  std::atomic<bool> is_destroy_;
-
-  bthread_mutex_t mutex_;
-  // When using_reference_count_>0, don't allow destroy.
-  int using_reference_count_;
 };
 
 using SnapshotMetaPtr = std::shared_ptr<SnapshotMeta>;
@@ -87,7 +76,7 @@ class VectorIndexSnapshotManager {
   static butil::Status HandleInstallSnapshot(std::shared_ptr<Context> ctx, const std::string& uri,
                                              const pb::node::VectorIndexSnapshotMeta& meta);
   // Install snapshot to all followers.
-  static butil::Status InstallSnapshotToFollowers(uint64_t region_id);
+  static butil::Status InstallSnapshotToFollowers(std::shared_ptr<VectorIndex> vector_index);
 
   // Launch pull snapshot at client.
   static butil::Status LaunchPullSnapshot(const butil::EndPoint& endpoint, uint64_t vector_index_id);
@@ -106,17 +95,20 @@ class VectorIndexSnapshotManager {
 
   bool AddSnapshot(vector_index::SnapshotMetaPtr snapshot);
   void DeleteSnapshot(vector_index::SnapshotMetaPtr snapshot);
+  void DeleteSnapshots(uint64_t vector_index_id);
   vector_index::SnapshotMetaPtr GetLastSnapshot(uint64_t vector_index_id);
   std::vector<vector_index::SnapshotMetaPtr> GetSnapshots(uint64_t vector_index_id);
   bool IsExistSnapshot(uint64_t vector_index_id, uint64_t snapshot_log_id);
 
- private:
   static std::string GetSnapshotParentPath(uint64_t vector_index_id);
+
+ private:
   static std::string GetSnapshotTmpPath(uint64_t vector_index_id);
   static std::string GetSnapshotNewPath(uint64_t vector_index_id, uint64_t snapshot_log_id);
   static butil::Status DownloadSnapshotFile(const std::string& uri, const pb::node::VectorIndexSnapshotMeta& meta);
 
   bthread_mutex_t mutex_;
+  // vector_index_id: [snapshot_log_id: snapshot]
   std::map<uint64_t, std::map<uint64_t, vector_index::SnapshotMetaPtr>> snapshot_maps_;
 };
 

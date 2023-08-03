@@ -187,6 +187,7 @@ enum RegionVectorIndexStatus {
   VECTOR_INDEX_STATUS_SNAPSHOTTING = 5;  // The index is being snapshotted.
   VECTOR_INDEX_STATUS_REPLAYING = 6;     // The index is replaying wal.
   VECTOR_INDEX_STATUS_ERROR = 10;        // The index is in an error state.
+  VECTOR_INDEX_STATUS_DELETE = 11;       // The index is delete state.
 }
 
 enum ReplicaStatus {
