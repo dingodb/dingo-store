@@ -26,6 +26,10 @@ option(WITH_DISKANN "Build with diskann index" OFF)
 option(WITH_MKL "Build with intel mkl" OFF)
 option(BOOST_SEARCH_PATH "")
 
+# To avoid rocksdb PROTABLE options on old arch machine when build using docker
+set(ROCKSDB_PROTABLE_OPTION "0" CACHE STRING "An option for rocksdb PROTABLE, default 0")
+message("ROCKSDB_PROTABLE_OPTION value is :${ROCKSDB_PROTABLE_OPTION}")
+
 include(CheckCXXCompilerFlag)
 check_cxx_compiler_flag("-std=c++17" COMPILER_SUPPORTS_CXX17)
 if(COMPILER_SUPPORTS_CXX17)

@@ -22,6 +22,7 @@ SET(ROCKSDB_LIBRARIES "${ROCKSDB_INSTALL_DIR}/lib/librocksdb.a" CACHE FILEPATH "
 
 set(prefix_path "${THIRD_PARTY_PATH}/install/snappy|${THIRD_PARTY_PATH}/install/zlib|${THIRD_PARTY_PATH}/install/lz4|${THIRD_PARTY_PATH}/install/zstd|${THIRD_PARTY_PATH}/install/gflags")
 
+
 ExternalProject_Add(
         extern_rocksdb
         ${EXTERNAL_PROJECT_LOG_ARGS}
@@ -44,7 +45,7 @@ ExternalProject_Add(
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON
         -DCMAKE_BUILD_TYPE=${THIRD_PARTY_BUILD_TYPE}
         -DCMAKE_PREFIX_PATH=${prefix_path}
-        -DPORTABLE=0 # Minimum CPU arch to support, or 0 = current CPU, 1 = baseline CPU
+        -DPORTABLE=${ROCKSDB_PROTABLE_OPTION} # Minimum CPU arch to support, or 0 = current CPU, 1 = baseline CPU
         -DWITH_SNAPPY=ON
         -DWITH_LZ4=ON
         -DWITH_ZSTD=ON
