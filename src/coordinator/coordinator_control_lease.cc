@@ -154,7 +154,7 @@ butil::Status CoordinatorControl::LeaseRevoke(uint64_t lease_id,
 
   auto ret = this->lease_map_.Get(lease_id, lease);
   if (ret < 0) {
-    DINGO_LOG(WARNING) << "lease id " << lease_id << " not found";
+    DINGO_LOG(WARNING) << "lease id " << lease_id << " not found from lease_map_";
     return butil::Status(pb::error::Errno::ELEASE_NOT_EXISTS_OR_EXPIRED, "lease id %lu not found", lease_id);
   }
 
@@ -165,7 +165,26 @@ butil::Status CoordinatorControl::LeaseRevoke(uint64_t lease_id,
   auto *increment_lease = lease_increment->mutable_lease();
   increment_lease->Swap(&lease);
 
-  // TODO: do version_kv delete simultaneously
+  // do version_kv delete simultaneously
+  LeaseWithKeys lease_with_keys;
+  auto keys_iter = this->lease_to_key_map_temp_.find(lease_id);
+  if (keys_iter == this->lease_to_key_map_temp_.end()) {
+    DINGO_LOG(WARNING) << "lease id " << lease_id << " not found from lease_to_key_map_temp_";
+  }
+
+  lease_with_keys = std::move(keys_iter->second);
+  for (const auto &key : lease_with_keys.keys) {
+    std::vector<pb::version::Kv> prev_kvs;
+    uint64_t main_revision = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REVISION, meta_increment);
+    uint64_t sub_revision = 1;
+    auto ret_status =
+        this->KvDeleteRange(key, std::string(), false, main_revision, sub_revision, prev_kvs, meta_increment);
+    if (!ret_status.ok()) {
+      DINGO_LOG(ERROR) << "DeleteRawKv failed, key: " << key;
+    }
+  }
+
+  // delete lease from map
   this->lease_to_key_map_temp_.erase(lease_id);
 
   if (!has_mutex_locked) {
@@ -187,13 +206,6 @@ butil::Status CoordinatorControl::ListLeases(std::vector<pb::coordinator_interna
 
 butil::Status CoordinatorControl::LeaseQuery(uint64_t lease_id, bool get_keys, int64_t &granted_ttl_seconds,
                                              int64_t &remaining_ttl_seconds, std::set<std::string> &keys) {
-  // pb::coordinator_internal::LeaseInternal lease;
-  // auto ret = this->lease_map_.Get(lease_id, lease);
-  // if (ret < 0) {
-  //   DINGO_LOG(WARNING) << "lease id " << lease_id << " not found";
-  //   return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "lease id %lu not found", lease_id);
-  // }
-
   BAIDU_SCOPED_LOCK(lease_to_key_map_temp_mutex_);
 
   auto it = this->lease_to_key_map_temp_.find(lease_id);
@@ -244,10 +256,12 @@ void CoordinatorControl::LeaseTask() {
     for (const auto &lease_id : lease_ids_to_revoke) {
       LeaseRevoke(lease_id, meta_increment, true);
     }
-  }
 
-  if (meta_increment.leases_size() > 0) {
-    this->SubmitMetaIncrement(meta_increment);
+    // submit meta_increment with mutex locked
+    // if we do this without lock, there maybe KvPut before LeaseRevoke, which will cause data inconsistency
+    if (meta_increment.leases_size() > 0) {
+      this->SubmitMetaIncrement(meta_increment);
+    }
   }
 }
 
@@ -309,6 +323,96 @@ void CoordinatorControl::BuildLeaseToKeyMap() {
 
   BAIDU_SCOPED_LOCK(lease_to_key_map_temp_mutex_);
   lease_to_key_map_temp_.swap(t_lease_to_key);
+}
+
+butil::Status CoordinatorControl::LeaseAddKeys(uint64_t lease_id, std::set<std::string> &keys) {
+  DINGO_LOG(INFO) << "lease id " << lease_id << " add keys " << keys.size();
+
+  BAIDU_SCOPED_LOCK(lease_to_key_map_temp_mutex_);
+
+  LeaseWithKeys lease_with_keys;
+  auto iter = this->lease_to_key_map_temp_.find(lease_id);
+  if (iter == this->lease_to_key_map_temp_.end()) {
+    DINGO_LOG(WARNING) << "lease id " << lease_id << " not found";
+    return butil::Status(pb::error::Errno::ELEASE_NOT_EXISTS_OR_EXPIRED, "lease id %lu not found", lease_id);
+  }
+
+  lease_with_keys = std::move(iter->second);
+
+  for (const auto &key : keys) {
+    auto ret = lease_with_keys.keys.insert(key);
+    if (!ret.second) {
+      DINGO_LOG(INFO) << "lease id " << lease_id << " add key " << key << " failed, already exists";
+    } else {
+      DINGO_LOG(INFO) << "lease id " << lease_id << " add key " << key << " success";
+    }
+  }
+
+  this->lease_to_key_map_temp_.insert_or_assign(lease_id, lease_with_keys);
+
+  return butil::Status::OK();
+}
+
+butil::Status CoordinatorControl::LeaseRemoveKeys(uint64_t lease_id, std::set<std::string> &keys) {
+  DINGO_LOG(INFO) << "lease id " << lease_id << " remove keys " << keys.size();
+
+  BAIDU_SCOPED_LOCK(lease_to_key_map_temp_mutex_);
+
+  LeaseWithKeys lease_with_keys;
+  auto iter = this->lease_to_key_map_temp_.find(lease_id);
+  if (iter == this->lease_to_key_map_temp_.end()) {
+    DINGO_LOG(WARNING) << "lease id " << lease_id << " not found";
+    return butil::Status(pb::error::Errno::ELEASE_NOT_EXISTS_OR_EXPIRED, "lease id %lu not found", lease_id);
+  }
+
+  lease_with_keys = std::move(iter->second);
+
+  for (const auto &key : keys) {
+    auto ret = lease_with_keys.keys.erase(key);
+    if (ret == 0) {
+      DINGO_LOG(INFO) << "lease id " << lease_id << " remove key " << key << " failed, not exists";
+    } else {
+      DINGO_LOG(INFO) << "lease id " << lease_id << " remove key " << key << " success";
+    }
+  }
+
+  this->lease_to_key_map_temp_.insert_or_assign(lease_id, lease_with_keys);
+
+  return butil::Status::OK();
+}
+
+butil::Status CoordinatorControl::LeaseRemoveMultiLeaseKeys(std::map<uint64_t, std::set<std::string>> &lease_to_keys) {
+  DINGO_LOG(INFO) << "lease remove multi lease keys, lease count " << lease_to_keys.size();
+
+  BAIDU_SCOPED_LOCK(lease_to_key_map_temp_mutex_);
+
+  for (const auto &iter_lease_to_keys : lease_to_keys) {
+    auto lease_id = iter_lease_to_keys.first;
+    auto keys = iter_lease_to_keys.second;
+
+    DINGO_LOG(INFO) << "lease id " << lease_id << " remove keys " << keys.size();
+
+    LeaseWithKeys lease_with_keys;
+    auto iter = this->lease_to_key_map_temp_.find(lease_id);
+    if (iter == this->lease_to_key_map_temp_.end()) {
+      DINGO_LOG(WARNING) << "lease id " << lease_id << " not found";
+    }
+
+    lease_with_keys = std::move(iter->second);
+
+    for (const auto &key : keys) {
+      auto ret = lease_with_keys.keys.erase(key);
+      if (ret == 0) {
+        DINGO_LOG(INFO) << "lease id " << lease_id << " remove key " << key << " failed, not exists";
+      } else {
+        DINGO_LOG(INFO) << "lease id " << lease_id << " remove key " << key << " success";
+      }
+    }
+
+    this->lease_to_key_map_temp_.insert_or_assign(lease_id, lease_with_keys);
+  }
+
+  return butil::Status::OK();
 }
 
 }  // namespace dingodb

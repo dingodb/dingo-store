@@ -27,7 +27,6 @@
 #include "bthread/condition_variable.h"
 #include "bthread/mutex.h"
 #include "common/constant.h"
-#include "common/helper.h"
 #include "coordinator/coordinator_closure.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator_internal.pb.h"
@@ -483,14 +482,18 @@ void VersionServiceProtoImpl::KvPut(google::protobuf::RpcController* controller,
     return;
   }
 
+  // begin to do kv_put
+  pb::coordinator_internal::MetaIncrement meta_increment;
+
   pb::version::Kv prev_kv;
-  uint64_t revision = 0;
+  uint64_t main_revision =
+      coordinator_control_->GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REVISION, meta_increment);
+  uint64_t sub_revision = 1;
   uint64_t lease_grant_id = 0;
 
-  pb::coordinator_internal::MetaIncrement meta_increment;
   auto ret = coordinator_control_->KvPut(request->key_value(), request->lease(), request->need_prev_kv(),
-                                         request->ignore_value(), request->ignore_lease(), prev_kv, revision,
-                                         lease_grant_id, meta_increment);
+                                         request->ignore_value(), request->ignore_lease(), main_revision, sub_revision,
+                                         prev_kv, lease_grant_id, meta_increment);
   if (!ret.ok()) {
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
     response->mutable_error()->set_errmsg(ret.error_str());
@@ -498,12 +501,12 @@ void VersionServiceProtoImpl::KvPut(google::protobuf::RpcController* controller,
   }
 
   DINGO_LOG(INFO) << "Put success: key_valuee=" << request->key_value().ShortDebugString()
-                  << ", lease_grant_id=" << lease_grant_id << ", revision=" << revision;
+                  << ", lease_grant_id=" << lease_grant_id << ", revision=" << main_revision << "." << sub_revision;
 
   if (request->need_prev_kv()) {
     response->mutable_prev_kv()->CopyFrom(prev_kv);
   }
-  response->mutable_header()->set_revision(revision);
+  response->mutable_header()->set_revision(main_revision);
 
   // prepare for raft process
   auto* meta_closure = new CoordinatorClosure<pb::version::PutRequest, pb::version::PutResponse>(request, response,
@@ -537,11 +540,15 @@ void VersionServiceProtoImpl::KvDeleteRange(google::protobuf::RpcController* /*c
     return;
   }
 
-  std::vector<pb::version::Kv> prev_kvs;
-  uint64_t revision = 0;
   pb::coordinator_internal::MetaIncrement meta_increment;
+
+  std::vector<pb::version::Kv> prev_kvs;
+  uint64_t main_revision =
+      coordinator_control_->GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REVISION, meta_increment);
+  uint64_t sub_revision = 1;
+
   auto ret = coordinator_control_->KvDeleteRange(request->key(), request->range_end(), request->need_prev_kv(),
-                                                 prev_kvs, revision, meta_increment);
+                                                 main_revision, sub_revision, prev_kvs, meta_increment);
   if (!ret.ok()) {
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
     response->mutable_error()->set_errmsg(ret.error_str());
@@ -550,7 +557,7 @@ void VersionServiceProtoImpl::KvDeleteRange(google::protobuf::RpcController* /*c
   }
 
   DINGO_LOG(INFO) << "DeleteRange success: key=" << request->key() << ", end_key=" << request->range_end()
-                  << ", revision=" << revision;
+                  << ", revision=" << main_revision << "." << sub_revision;
 
   if (request->need_prev_kv()) {
     for (const auto& kv : prev_kvs) {
@@ -558,7 +565,7 @@ void VersionServiceProtoImpl::KvDeleteRange(google::protobuf::RpcController* /*c
       resp_kv->CopyFrom(kv);
     }
   }
-  response->mutable_header()->set_revision(revision);
+  response->mutable_header()->set_revision(main_revision);
 
   // prepare for raft process
   auto* meta_closure = new CoordinatorClosure<pb::version::DeleteRangeRequest, pb::version::DeleteRangeResponse>(
