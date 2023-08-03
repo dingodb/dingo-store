@@ -419,7 +419,7 @@ butil::Status CoordinatorControl::KvPut(const pb::common::KeyValue &key_value_in
 // return: errno
 butil::Status CoordinatorControl::KvDeleteRange(const std::string &key, const std::string &range_end, bool need_prev_kv,
                                                 uint64_t main_revision, uint64_t &sub_revision,
-                                                std::vector<pb::version::Kv> &prev_kvs,
+                                                bool need_lease_remove_keys, std::vector<pb::version::Kv> &prev_kvs,
                                                 pb::coordinator_internal::MetaIncrement &meta_increment) {
   DINGO_LOG(INFO) << "KvDeleteRange, key: " << key << ", range_end: " << range_end << ", need_prev: " << need_prev_kv;
 
@@ -463,7 +463,7 @@ butil::Status CoordinatorControl::KvDeleteRange(const std::string &key, const st
   }
 
   // do lease_remove_keys
-  if (!keys_to_remove_lease.empty()) {
+  if (need_lease_remove_keys && (!keys_to_remove_lease.empty())) {
     ret = LeaseRemoveMultiLeaseKeys(keys_to_remove_lease);
     if (!ret.ok()) {
       DINGO_LOG(ERROR) << "KvDeleteRange LeaseRemoveKeys failed, keys_to_remove_lease size: "

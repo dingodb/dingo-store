@@ -548,7 +548,7 @@ void VersionServiceProtoImpl::KvDeleteRange(google::protobuf::RpcController* /*c
   uint64_t sub_revision = 1;
 
   auto ret = coordinator_control_->KvDeleteRange(request->key(), request->range_end(), request->need_prev_kv(),
-                                                 main_revision, sub_revision, prev_kvs, meta_increment);
+                                                 main_revision, sub_revision, true, prev_kvs, meta_increment);
   if (!ret.ok()) {
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
     response->mutable_error()->set_errmsg(ret.error_str());
