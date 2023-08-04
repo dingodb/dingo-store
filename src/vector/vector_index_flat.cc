@@ -16,10 +16,12 @@
 
 #include <atomic>
 #include <cassert>
+#include <cstddef>
 #include <cstdint>
 #include <map>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "bthread/mutex.h"
@@ -28,12 +30,14 @@
 #include "common/logging.h"
 #include "faiss/Index.h"
 #include "faiss/MetricType.h"
+#include "fmt/core.h"
 #include "hnswlib/space_ip.h"
 #include "hnswlib/space_l2.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "proto/index.pb.h"
 #include "proto/region_control.pb.h"
+#include "vector/vector_index_filter.h"
 #include "vector/vector_index_utils.h"
 
 namespace dingodb {
@@ -61,7 +65,7 @@ VectorIndexFlat::VectorIndexFlat(uint64_t id, const pb::common::VectorIndexParam
     raw_index_ = std::make_unique<faiss::IndexFlatL2>(dimension_);
   }
 
-  index_ = std::make_unique<faiss::IndexIDMap>(raw_index_.get());
+  index_ = std::make_unique<faiss::IndexIDMap2>(raw_index_.get());
 }
 
 VectorIndexFlat::~VectorIndexFlat() {
@@ -194,7 +198,7 @@ butil::Status VectorIndexFlat::Delete(const std::vector<uint64_t>& delete_ids) {
 
 butil::Status VectorIndexFlat::Search(std::vector<pb::common::VectorWithId> vector_with_ids, uint32_t topk,
                                       std::vector<pb::index::VectorWithDistanceResult>& results,
-                                      [[maybe_unused]] bool reconstruct) {
+                                      [[maybe_unused]] bool reconstruct, const std::vector<uint64_t>& vector_ids) {
   if (!is_online_.load()) {
     std::string s = fmt::format("vector index is offline, please wait for online");
     DINGO_LOG(ERROR) << s;
@@ -253,8 +257,33 @@ butil::Status VectorIndexFlat::Search(std::vector<pb::common::VectorWithId> vect
   }
 
   {
+    bool enable_filter = (!vector_ids.empty());
+
+    std::vector<uint64_t> internal_vector_ids;
+    internal_vector_ids.reserve(vector_ids.size());
+    for (auto vector_id : vector_ids) {
+      auto iter = index_->rev_map.find(static_cast<faiss::idx_t>(vector_id));
+      if (iter == index_->rev_map.end()) {
+        DINGO_LOG(WARNING) << fmt::format("vector_id : {} not exist . ignore", vector_id);
+        continue;
+      }
+      internal_vector_ids.push_back(iter->second);
+    }
+
+    if (internal_vector_ids.empty()) {
+      enable_filter = false;
+    }
+
+    std::unique_ptr<SearchFilterForFlat> search_filter_for_flat_ptr =
+        std::make_unique<SearchFilterForFlat>(std::move(internal_vector_ids));
+    faiss::SearchParameters* param = enable_filter ? search_filter_for_flat_ptr.get() : nullptr;
+
     BAIDU_SCOPED_LOCK(mutex_);
-    index_->search(vector_with_ids.size(), vectors.get(), topk, distances.data(), labels.data());
+    if (enable_filter) {
+      SearchWithParam(vector_with_ids.size(), vectors.get(), topk, distances.data(), labels.data(), param);
+    } else {
+      index_->search(vector_with_ids.size(), vectors.get(), topk, distances.data(), labels.data());
+    }
   }
 
   for (size_t row = 0; row < vector_with_ids.size(); ++row) {
@@ -341,6 +370,17 @@ butil::Status VectorIndexFlat::NeedToRebuild(bool& need_to_rebuild, [[maybe_unus
 butil::Status VectorIndexFlat::NeedToSave(bool& need_to_save, [[maybe_unused]] uint64_t last_save_log_behind) {
   need_to_save = false;
   return butil::Status::OK();
+}
+
+void VectorIndexFlat::SearchWithParam(faiss::idx_t n, const faiss::Index::component_t* x, faiss::idx_t k,
+                                      faiss::Index::distance_t* distances, faiss::idx_t* labels,
+                                      const faiss::SearchParameters* params) {
+  raw_index_->search(n, x, k, distances, labels, params);
+  faiss::idx_t* li = labels;
+#pragma omp parallel for
+  for (faiss::idx_t i = 0; i < n * k; i++) {
+    li[i] = li[i] < 0 ? li[i] : index_->id_map[li[i]];
+  }
 }
 
 }  // namespace dingodb

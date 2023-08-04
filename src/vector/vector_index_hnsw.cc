@@ -38,6 +38,7 @@
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "vector/vector_index.h"
+#include "vector/vector_index_filter.h"
 #include "vector/vector_index_utils.h"
 
 namespace dingodb {
@@ -267,7 +268,8 @@ butil::Status VectorIndexHnsw::Load(const std::string& path) {
 }
 
 butil::Status VectorIndexHnsw::Search(std::vector<pb::common::VectorWithId> vector_with_ids, uint32_t topk,
-                                      std::vector<pb::index::VectorWithDistanceResult>& results, bool reconstruct) {
+                                      std::vector<pb::index::VectorWithDistanceResult>& results, bool reconstruct,
+                                      const std::vector<uint64_t>& vector_ids) {
   // check is_online
   if (!is_online_.load()) {
     std::string s = fmt::format("vector index is offline, please wait for online");
@@ -325,10 +327,15 @@ butil::Status VectorIndexHnsw::Search(std::vector<pb::common::VectorWithId> vect
   // Search by parallel
   results.resize(vector_with_ids.size());
   try {
+    bool enable_filter = (!vector_ids.empty());
+
+    std::unique_ptr<SearchFilterForHnsw> search_filter_for_hnsw_ptr = std::make_unique<SearchFilterForHnsw>(vector_ids);
+    hnswlib::BaseFilterFunctor* is_id_allowed = enable_filter ? search_filter_for_hnsw_ptr.get() : nullptr;
+
     if (!normalize_) {
-      ParallelFor(0, vector_with_ids.size(), hnsw_num_threads_, [&](size_t row, size_t /*thread_id*/) {
+      ParallelFor(0, vector_with_ids.size(), hnsw_num_threads_, [&, is_id_allowed](size_t row, size_t /*thread_id*/) {
         std::priority_queue<std::pair<float, hnswlib::labeltype>> result =
-            hnsw_index_->searchKnn(data.get() + dimension_ * row, topk);
+            hnsw_index_->searchKnn(data.get() + dimension_ * row, topk, is_id_allowed);
 
         while (!result.empty()) {
           auto* vector_with_distance = results[row].add_vector_with_distances();
@@ -357,13 +364,13 @@ butil::Status VectorIndexHnsw::Search(std::vector<pb::common::VectorWithId> vect
       });
     } else {
       std::vector<float> norm_array(hnsw_num_threads_ * dimension_);
-      ParallelFor(0, vector_with_ids.size(), hnsw_num_threads_, [&](size_t row, size_t thread_id) {
+      ParallelFor(0, vector_with_ids.size(), hnsw_num_threads_, [&, is_id_allowed](size_t row, size_t thread_id) {
         size_t start_idx = thread_id * dimension_;
         VectorIndexUtils::NormalizeVectorForHnsw((float*)(data.get() + dimension_ * row), dimension_,
                                                  (norm_array.data() + start_idx));
 
         std::priority_queue<std::pair<float, hnswlib::labeltype>> result =
-            hnsw_index_->searchKnn(norm_array.data() + start_idx, topk);
+            hnsw_index_->searchKnn(norm_array.data() + start_idx, topk, is_id_allowed);
 
         while (!result.empty()) {
           auto* vector_with_distance = results[row].add_vector_with_distances();

@@ -65,7 +65,8 @@ class VectorIndexFlat : public VectorIndex {
   butil::Status Delete(const std::vector<uint64_t>& delete_ids) override;
 
   butil::Status Search(std::vector<pb::common::VectorWithId> vector_with_ids, uint32_t topk,
-                       std::vector<pb::index::VectorWithDistanceResult>& results, bool reconstruct = false) override;
+                       std::vector<pb::index::VectorWithDistanceResult>& results, bool reconstruct = false,
+                       const std::vector<uint64_t>& vector_ids = {}) override;
 
   butil::Status SetOnline() override;
   butil::Status SetOffline() override;
@@ -85,6 +86,9 @@ class VectorIndexFlat : public VectorIndex {
                            [[maybe_unused]] uint64_t last_save_log_behind) override;
 
  private:
+  void SearchWithParam(faiss::idx_t n, const faiss::Index::component_t* x, faiss::idx_t k,
+                       faiss::Index::distance_t* distances, faiss::idx_t* labels,
+                       const faiss::SearchParameters* params);
   // Dimension of the elements
   faiss::idx_t dimension_;
 
@@ -93,7 +97,7 @@ class VectorIndexFlat : public VectorIndex {
 
   std::unique_ptr<faiss::Index> raw_index_;
 
-  std::unique_ptr<faiss::IndexIDMap> index_;
+  std::unique_ptr<faiss::IndexIDMap2> index_;
 
   bthread_mutex_t mutex_;
   std::atomic<bool> is_online_;
