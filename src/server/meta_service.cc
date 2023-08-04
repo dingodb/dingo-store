@@ -1156,34 +1156,34 @@ void MetaServiceImpl::GenerateTableIds(google::protobuf::RpcController* controll
 
   DINGO_LOG(INFO) << request->ShortDebugString();
 
-  if (!request->has_schema_id() || request->count() == 0) {
-    response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
-    return;
-  }
+  //if (!request->has_schema_id() || request->count() == 0) {
+  //  response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
+  //  return;
+  //}
 
-  pb::coordinator_internal::MetaIncrement meta_increment;
-  butil::Status ret = coordinator_control_->GenerateTableIds(request->schema_id().entity_id(), request->count(),
-    meta_increment, response);
-  if (!ret.ok()) {
-    DINGO_LOG(ERROR) << "GenerateTableIds failed.";
-    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
-    response->mutable_error()->set_errmsg(ret.error_str());
-    return;
-  } 
+  //pb::coordinator_internal::MetaIncrement meta_increment;
+  //butil::Status ret = coordinator_control_->GenerateTableIds(request->schema_id().entity_id(), request->count(),
+  //  meta_increment, response);
+  //if (!ret.ok()) {
+  //  DINGO_LOG(ERROR) << "GenerateTableIds failed.";
+  //  response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+  //  response->mutable_error()->set_errmsg(ret.error_str());
+  //  return;
+  //} 
 
-  // prepare for raft process
-  CoordinatorClosure<pb::meta::GenerateTableIdsRequest, pb::meta::GenerateTableIdsResponse> *meta_put_closure =
-      new CoordinatorClosure<pb::meta::GenerateTableIdsRequest, pb::meta::GenerateTableIdsResponse>(request, response,
-                                                                                              done_guard.release());
+  //// prepare for raft process
+  //CoordinatorClosure<pb::meta::GenerateTableIdsRequest, pb::meta::GenerateTableIdsResponse> *meta_put_closure =
+  //    new CoordinatorClosure<pb::meta::GenerateTableIdsRequest, pb::meta::GenerateTableIdsResponse>(request, response,
+  //                                                                                            done_guard.release());
 
-  std::shared_ptr<Context> ctx =
-      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
-  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+  //std::shared_ptr<Context> ctx =
+  //    std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
+  //ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
-  // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  //// this is a async operation will be block by closure
+  //engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
 
-  DINGO_LOG(INFO) << "GenerateTableIds Success.";
+  //DINGO_LOG(INFO) << "GenerateTableIds Success.";
 }
 
 void MetaServiceImpl::CreateTables(google::protobuf::RpcController* controller,
@@ -1197,62 +1197,100 @@ void MetaServiceImpl::CreateTables(google::protobuf::RpcController* controller,
 
   DINGO_LOG(INFO) << request->DebugString();
 
-//  if (!request->has_schema_id() || request->table_definition_with_ids_size() == 0) {
-//    DINGO_LOG(ERROR) << request->has_schema_id() << " | " << request->table_definition_with_ids_size();
-//    response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
-//    response->mutable_error()->set_errmsg("schema id or definition size.");
-//    return;
-//  }
-//
-//  pb::coordinator_internal::MetaIncrement meta_increment;
-//
-//  bool find_table_type = false;
-//  for (const auto& temp_with_id : request->table_definition_with_ids()) {
-//    const auto& table_id = temp_with_id.table_id();
-//    const auto& temp_definition = temp_with_id.table_definition();
-//    butil::Status ret;
-//    if (table_id.entity_type() == pb::meta::EntityType::ENTITY_TYPE_TABLE) {
-//      find_table_type = true;
-//      uint64_t new_table_id = table_id.entity_id();
-//      ret = coordinator_control_->CreateTable(request->schema_id().entity_id(), temp_definition, new_table_id,
-//                                              meta_increment);
-//    } else if (table_id.entity_type() == pb::meta::EntityType::ENTITY_TYPE_INDEX){
-//    }
-//
-//    if (!ret.ok()) {
-//      DINGO_LOG(ERROR) << "CreateTables failed in meta_service, error code=" << ret;
-//      response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
-//      response->mutable_error()->set_errmsg(ret.error_str());
-//      return;
-//    }
-//    //DINGO_LOG(INFO) << "type: " << table_id.entity_type() << ", new_table_id=" << new_table_id;
-//  }
-//
-//  // create table finally
-//  if (!find_table_type) {
-//    response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
-//    response->mutable_error()->set_errmsg("cannot find table type.");
-//    return;
-//  }
-//
-//  // prepare for raft process
-//  CoordinatorClosure<pb::meta::CreateTablesRequest, pb::meta::CreateTablesResponse> *meta_put_closure =
-//      new CoordinatorClosure<pb::meta::CreateTablesRequest, pb::meta::CreateTablesResponse>(request, response,
-//                                                                                              done_guard.release());
-//
-//  std::shared_ptr<Context> ctx =
-//      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
-//  ctx->SetRegionId(Constant::kCoordinatorRegionId);
-//
-//  // this is a async operation will be block by closure
-//  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
-//
-//  DINGO_LOG(INFO) << "CreateTables Success.";
+  //if (!request->has_schema_id() || request->table_definition_with_ids_size() == 0) {
+  //  DINGO_LOG(ERROR) << request->has_schema_id() << " | " << request->table_definition_with_ids_size();
+  //  response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
+  //  response->mutable_error()->set_errmsg("schema id or definition size.");
+  //  return;
+  //}
+
+  //pb::coordinator_internal::MetaIncrement meta_increment;
+
+  ////bool find_table_type = false;
+  //for (const auto& temp_with_id : request->table_definition_with_ids()) {
+  //  const auto& table_id = temp_with_id.table_id();
+  //  const auto& definition = temp_with_id.table_definition();
+  //  uint64_t new_id = table_id.entity_id();
+
+  //  butil::Status ret;
+  //  if (table_id.entity_type() == pb::meta::EntityType::ENTITY_TYPE_TABLE) {
+  //    //find_table_type = true;
+  //    ret = coordinator_control_->CreateTable(request->schema_id().entity_id(), definition, new_id,
+  //                                            meta_increment);
+  //  } else if (table_id.entity_type() == pb::meta::EntityType::ENTITY_TYPE_INDEX){
+  //    ret = coordinator_control_->CreateIndex(request->schema_id().entity_id(), definition, new_id,
+  //                                            meta_increment);
+  //  } else {
+  //    ret = butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "entity type is illegal");
+  //  }
+
+  //  if (!ret.ok()) {
+  //    DINGO_LOG(ERROR) << "CreateTables failed in meta_service, error code=" << ret;
+  //    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+  //    response->mutable_error()->set_errmsg(ret.error_str());
+  //    return;
+  //  }
+
+  //  auto* table_id_ptr = response->add_table_ids();
+  //  table_id_ptr->set_entity_id(new_id);
+  //  table_id_ptr->set_parent_entity_id(request->schema_id().entity_id()); // zhangjie ???
+  //  table_id_ptr->set_entity_type(table_id.entity_type());
+
+  //  DINGO_LOG(INFO) << "type: " << table_id.entity_type() << ", new_id=" << new_id;
+  //}
+
+  //// create find table finally
+  ///*if (!find_table_type) {
+  //  response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
+  //  response->mutable_error()->set_errmsg("cannot find table type.");
+  //  return;
+  //}*/
+
+  //// prepare for raft process
+  //CoordinatorClosure<pb::meta::CreateTablesRequest, pb::meta::CreateTablesResponse> *meta_put_closure =
+  //    new CoordinatorClosure<pb::meta::CreateTablesRequest, pb::meta::CreateTablesResponse>(request, response,
+  //                                                                                          done_guard.release());
+
+  //std::shared_ptr<Context> ctx =
+  //    std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
+  //ctx->SetRegionId(Constant::kCoordinatorRegionId);
+
+  //// this is a async operation will be block by closure
+  //engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+
+  //DINGO_LOG(INFO) << "CreateTables Success.";
 }
 
 void MetaServiceImpl::GetTables(google::protobuf::RpcController* controller, const pb::meta::GetTablesRequest* request,
                                 pb::meta::GetTablesResponse* response, google::protobuf::Closure* done) {
 
+  //if (!coordinator_control_->IsLeader()) {
+  //  return RedirectResponse(response);
+  //}
+
+  //if (!request->has_table_id()) {
+  //  response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
+  //  return;
+  //}
+
+  //butil::Status ret;
+  //if (request->table_id().entity_type() == pb::meta::EntityType::ENTITY_TYPE_INDEX) {
+  //  pb::meta::TableDefinitionWithId table_definition_with_id;
+  //  ret = coordinator_control_->GetIndex(request->table_id().parent_entity_id(), request->table_id().entity_id(),
+  //                                       table_definition_with_id);
+  //} else if (request->table_id().entity_type() == pb::meta::EntityType::ENTITY_TYPE_TABLE){
+
+  //} else {
+  //  ret = butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "entity type is illegal");
+  //}
+
+  //if (!ret.ok()) {
+  //  response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+  //  response->mutable_error()->set_errmsg(ret.error_str());
+  //  return;
+  //}
+
+  //// TODO 
 }
 
 void MetaServiceImpl::DropTables(google::protobuf::RpcController* controller,
