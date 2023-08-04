@@ -94,10 +94,9 @@ class Constant {
   static const uint32_t kSegmentLogSyncPerBytes = INT32_MAX;
 
   // vector key prefix
-  static const uint8_t kVectorIdPrefix = 0x01;
+  static const uint8_t kVectorDataPrefix = 0x01;
   static const uint8_t kVectorScalarPrefix = 0x02;
-  static const uint8_t kVectorWalPrefix = 0x03;
-  static const uint8_t kVectorTablePrefix = 0x04;
+  static const uint8_t kVectorTablePrefix = 0x03;
 
   // File transport chunk size
   static const uint32_t kFileTransportChunkSize = 1024 * 1024;  // 1M

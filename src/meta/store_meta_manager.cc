@@ -136,6 +136,8 @@ void Region::SetRefVectorIndexId(uint64_t vector_index_id) {
   inner_region_.set_ref_vector_index_id(vector_index_id);
 }
 
+uint64_t Region::PartitionId() { return inner_region_.definition().part_id(); }
+
 }  // namespace store
 
 bool StoreServerMeta::Init() {

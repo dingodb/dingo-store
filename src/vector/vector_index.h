@@ -34,6 +34,9 @@
 
 namespace dingodb {
 
+// Vector index abstract base class.
+// One region own one vector index(region_id==vector_index_id)
+// But one region can refer other vector index when region split.
 class VectorIndex {
  public:
   VectorIndex(uint64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,

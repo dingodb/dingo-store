@@ -79,6 +79,8 @@ class Region {
   uint64_t RefVectorIndexId();
   void SetRefVectorIndexId(uint64_t vector_index_id);
 
+  uint64_t PartitionId();
+
   const pb::store_internal::Region& InnerRegion() const { return inner_region_; }
 
  private:

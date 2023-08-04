@@ -253,17 +253,14 @@ bool StoreRegionMetrics::CollectMetrics() {
           vector_index->GetDeletedCount(deleted_count);
           region_metrics->SetVectorDeletedCount(deleted_count);
 
-          std::shared_ptr<Context> ctx = std::make_shared<Context>();
-          ctx->SetRegionId(region_metrics->Id());
-
           auto reader = engine_->NewVectorReader(Constant::kStoreDataCF);
           uint64_t max_id = 0;
 
-          reader->VectorGetBorderId(ctx, max_id, false);
+          reader->VectorGetBorderId(region->RawRange(), false, max_id);
           region_metrics->SetVectorMaxId(max_id);
 
           uint64_t min_id = 0;
-          reader->VectorGetBorderId(ctx, min_id, true);
+          reader->VectorGetBorderId(region->RawRange(), true, min_id);
           region_metrics->SetVectorMinId(min_id);
 
           uint64_t total_memory_usage = 0;

@@ -276,15 +276,6 @@ std::shared_ptr<VectorIndex> VectorIndexManager::BuildVectorIndex(store::RegionP
   assert(region != nullptr);
   uint64_t vector_index_id = region->Id();
 
-  std::string start_key;
-  std::string end_key;
-  VectorCodec::EncodeVectorId(vector_index_id, 0, start_key);
-  VectorCodec::EncodeVectorId(vector_index_id, UINT64_MAX, end_key);
-
-  IteratorOptions options;
-  options.lower_bound = start_key;
-  options.upper_bound = end_key;
-
   auto vector_index = VectorIndexFactory::New(vector_index_id, region->InnerRegion().definition().index_parameter());
   if (!vector_index) {
     DINGO_LOG(WARNING) << fmt::format("New vector index failed, vector id {}", vector_index_id);
@@ -305,6 +296,10 @@ std::shared_ptr<VectorIndex> VectorIndexManager::BuildVectorIndex(store::RegionP
                                  snapshot_log_index, apply_log_index);
 
   // load vector data to vector index
+  IteratorOptions options;
+  options.upper_bound = VectorCodec::FillVectorDataPrefix(region->Range().end_key());
+
+  std::string start_key = VectorCodec::FillVectorDataPrefix(region->Range().start_key());
   auto iter = raw_engine_->NewIterator(Constant::kStoreDataCF, options);
   for (iter->Seek(start_key); iter->Valid(); iter->Next()) {
     pb::common::VectorWithId vector;

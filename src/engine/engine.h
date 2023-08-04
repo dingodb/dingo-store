@@ -77,24 +77,49 @@ class Engine {
     VectorReader() = default;
     virtual ~VectorReader() = default;
 
-    virtual butil::Status VectorBatchSearch(std::shared_ptr<Context> ctx,
-                                            const std::vector<pb::common::VectorWithId>& vector_with_ids,
-                                            pb::common::VectorSearchParameter parameter,
+    struct Context {
+      Context()
+          : partition_id(0),
+            region_id(0),
+            start_id(0),
+            limit(0),
+            with_vector_data(false),
+            with_scalar_data(false),
+            with_table_data(false),
+            is_reverse(false),
+            use_scalar_filter(false) {}
+      uint64_t partition_id;
+      uint64_t region_id;
+
+      pb::common::Range region_range;
+
+      std::vector<pb::common::VectorWithId> vector_with_ids;
+      std::vector<uint64_t> vector_ids;
+      pb::common::VectorSearchParameter parameter;
+      std::vector<std::string> selected_scalar_keys;
+      pb::common::VectorScalardata scalar_data_for_filter;
+
+      uint64_t start_id;
+      uint64_t limit;
+
+      bool with_vector_data;
+      bool with_scalar_data;
+      bool with_table_data;
+      bool is_reverse;
+      bool use_scalar_filter;
+    };
+
+    virtual butil::Status VectorBatchSearch(std::shared_ptr<VectorReader::Context> ctx,
                                             std::vector<pb::index::VectorWithDistanceResult>& results) = 0;
 
-    virtual butil::Status VectorBatchQuery(std::shared_ptr<Context> ctx, std::vector<uint64_t> vector_ids,
-                                           bool with_vector_data, bool with_scalar_data,
-                                           std::vector<std::string> selected_scalar_keys, bool with_table_data,
+    virtual butil::Status VectorBatchQuery(std::shared_ptr<VectorReader::Context> ctx,
                                            std::vector<pb::common::VectorWithId>& vector_with_ids) = 0;
 
-    virtual butil::Status VectorGetBorderId(std::shared_ptr<Context> ctx, uint64_t& id, bool get_min) = 0;
-    virtual butil::Status VectorScanQuery(std::shared_ptr<Context> ctx, uint64_t start_id, bool is_reverse,
-                                          uint64_t limit, bool with_vector_data, bool with_scalar_data,
-                                          const std::vector<std::string>& selected_scalar_keys, bool with_table_data,
-                                          bool use_scalar_filter,
-                                          const pb::common::VectorScalardata& scalar_data_for_filter,
+    virtual butil::Status VectorGetBorderId(const pb::common::Range& region_range, bool get_min,
+                                            uint64_t& vector_id) = 0;
+    virtual butil::Status VectorScanQuery(std::shared_ptr<VectorReader::Context> ctx,
                                           std::vector<pb::common::VectorWithId>& vector_with_ids) = 0;
-    virtual butil::Status VectorGetRegionMetrics(std::shared_ptr<Context> ctx, uint64_t region_id,
+    virtual butil::Status VectorGetRegionMetrics(uint64_t region_id, const pb::common::Range& region_range,
                                                  pb::common::VectorIndexMetrics& region_metrics) = 0;
   };
 

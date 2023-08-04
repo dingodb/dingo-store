@@ -23,15 +23,28 @@
 
 namespace dingodb {
 
-inline uint64_t VectorCodec::GetPartIdByRegionId(uint64_t region_id) {
-  auto region = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
-  return region->InnerRegion().definition().part_id();
+void VectorCodec::EncodeVectorData(uint64_t partition_id, uint64_t vector_id, std::string& result) {
+  Buf buf(17);
+  buf.Write(Constant::kVectorDataPrefix);
+  buf.WriteLong(partition_id);
+  buf.WriteLong(vector_id);
+
+  buf.GetBytes(result);
 }
 
-void VectorCodec::EncodeVectorId(uint64_t region_id, uint64_t vector_id, std::string& result) {
+void VectorCodec::EncodeVectorScalar(uint64_t partition_id, uint64_t vector_id, std::string& result) {
   Buf buf(17);
-  buf.WriteLong(GetPartIdByRegionId(region_id));
-  buf.Write(Constant::kVectorIdPrefix);
+  buf.Write(Constant::kVectorScalarPrefix);
+  buf.WriteLong(partition_id);
+  buf.WriteLong(vector_id);
+
+  buf.GetBytes(result);
+}
+
+void VectorCodec::EncodeVectorTable(uint64_t partition_id, uint64_t vector_id, std::string& result) {
+  Buf buf(17);
+  buf.Write(Constant::kVectorTablePrefix);
+  buf.WriteLong(partition_id);
   buf.WriteLong(vector_id);
 
   buf.GetBytes(result);
@@ -39,74 +52,49 @@ void VectorCodec::EncodeVectorId(uint64_t region_id, uint64_t vector_id, std::st
 
 uint64_t VectorCodec::DecodeVectorId(const std::string& value) {
   if (value.size() != 17) {
-    DINGO_LOG(ERROR) << "DecodeVectorId failed, value size is not 8, value:[" << value << "]";
+    DINGO_LOG(ERROR) << "Decode vector id failed, value size is not 8, value:[" << value << "]";
     return 0;
   }
   Buf buf(value);
+  buf.Read();
   buf.ReadLong();
+
+  return buf.ReadLong();
+}
+
+uint64_t VectorCodec::DecodePartitionId(const std::string& value) {
+  if (value.size() != 17) {
+    DINGO_LOG(ERROR) << "Decode partition id failed, value size is not 8, value:[" << value << "]";
+    return 0;
+  }
+  Buf buf(value);
   buf.Read();
 
   return buf.ReadLong();
 }
 
-// uint64_t VectorCodec::DecodeVectorRegionId(const std::string& value) {
-//   if (value.size() != 17) {
-//     DINGO_LOG(ERROR) << "DecodeVectorId failed, value size is not 8, value:[" << value << "]";
-//     return 0;
-//   }
-//   Buf buf(value);
+std::string VectorCodec::FillVectorDataPrefix(const std::string& value) {
+  Buf buf(17);
+  buf.Write(Constant::kVectorDataPrefix);
+  buf.Write(value);
 
-//   return buf.ReadLong();
-// }
-
-bool VectorCodec::ValidateRawKeyInRegion(const std::string& key, uint64_t region_id) {
-  // TODO: after change prefix position, need to change this code to add prefix before compare
-  auto region = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
-  auto region_raw_range = region->InnerRegion().definition().raw_range();
-
-  return key.compare(region_raw_range.start_key()) >= 0 && key.compare(region_raw_range.end_key()) < 0;
+  return buf.GetString();
 }
 
-void VectorCodec::EncodeVectorScalar(uint64_t region_id, uint64_t vector_id, std::string& result) {
+std::string VectorCodec::FillVectorScalarPrefix(const std::string& value) {
   Buf buf(17);
-  buf.WriteLong(GetPartIdByRegionId(region_id));
   buf.Write(Constant::kVectorScalarPrefix);
-  buf.WriteLong(vector_id);
+  buf.Write(value);
 
-  buf.GetBytes(result);
+  return buf.GetString();
 }
 
-void VectorCodec::EncodeVectorTable(uint64_t region_id, uint64_t vector_id, std::string& result) {
+std::string VectorCodec::FillVectorTablePrefix(const std::string& value) {
   Buf buf(17);
-  buf.WriteLong(GetPartIdByRegionId(region_id));
   buf.Write(Constant::kVectorTablePrefix);
-  buf.WriteLong(vector_id);
+  buf.Write(value);
 
-  buf.GetBytes(result);
-}
-
-void VectorCodec::EncodeVectorWal(uint64_t region_id, uint64_t vector_id, uint64_t log_id, std::string& result) {
-  Buf buf(25);
-  buf.WriteLong(GetPartIdByRegionId(region_id));
-  buf.Write(Constant::kVectorWalPrefix);
-  buf.WriteLong(log_id);
-  buf.WriteLong(vector_id);
-
-  buf.GetBytes(result);
-}
-
-int VectorCodec::DecodeVectorWal(const std::string& value, uint64_t& vector_id, uint64_t& log_id) {
-  if (value.size() != 25) {
-    DINGO_LOG(ERROR) << "DecodeVectorIdFromWal failed, value size is not 8, value:[" << value << "]";
-    return -1;
-  }
-  Buf buf(value);
-  buf.ReadLong();              // region_id
-  buf.Read();                  // kVectorWalPrefix
-  log_id = buf.ReadLong();     // log_id
-  vector_id = buf.ReadLong();  // vector_id
-
-  return 0;
+  return buf.GetString();
 }
 
 std::string VectorCodec::EncodeVectorIndexLogIndex(uint64_t snapshot_log_index, uint64_t apply_log_index) {

@@ -95,86 +95,6 @@ butil::Status Storage::KvPut(std::shared_ptr<Context> ctx, const std::vector<pb:
       });
 }
 
-butil::Status Storage::VectorAdd(std::shared_ptr<Context> ctx, const std::vector<pb::common::VectorWithId>& vectors) {
-  return engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), vectors),
-                             [](std::shared_ptr<Context> ctx, butil::Status status) {
-                               if (!status.ok()) {
-                                 Helper::SetPbMessageError(status, ctx->Response());
-                               }
-                             });
-}
-
-butil::Status Storage::VectorDelete(std::shared_ptr<Context> ctx, const std::vector<uint64_t>& ids) {
-  return engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), ids),
-                             [](std::shared_ptr<Context> ctx, butil::Status status) {
-                               if (!status.ok()) {
-                                 Helper::SetPbMessageError(status, ctx->Response());
-                               }
-                             });
-}
-
-butil::Status Storage::VectorBatchQuery(std::shared_ptr<Context> ctx, std::vector<uint64_t> vector_ids,
-                                        bool with_vector_data, bool with_scalar_data,
-                                        std::vector<std::string> selected_scalar_keys, bool with_table_data,
-                                        std::vector<pb::common::VectorWithId>& vector_with_ids) {
-  auto status = ValidateLeader(ctx->RegionId());
-  if (!status.ok()) {
-    return status;
-  }
-
-  auto reader = engine_->NewVectorReader(Constant::kStoreDataCF);
-  status = reader->VectorBatchQuery(ctx, vector_ids, with_vector_data, with_scalar_data, selected_scalar_keys,
-                                    with_table_data, vector_with_ids);
-  if (!status.ok()) {
-    if (pb::error::EKEY_NOT_FOUND == status.error_code()) {
-      // return OK if not found
-      return butil::Status::OK();
-    }
-
-    return status;
-  }
-
-  return butil::Status::OK();
-}
-
-butil::Status Storage::VectorGetBorderId(std::shared_ptr<Context> ctx, uint64_t& id, bool get_min) {
-  auto status = ValidateLeader(ctx->RegionId());
-  if (!status.ok()) {
-    return status;
-  }
-
-  auto reader = engine_->NewVectorReader(Constant::kStoreDataCF);
-  status = reader->VectorGetBorderId(ctx, id, get_min);
-  if (!status.ok()) {
-    return status;
-  }
-
-  return butil::Status();
-}
-
-butil::Status Storage::VectorBatchSearch(std::shared_ptr<Context> ctx,
-                                         const std::vector<pb::common::VectorWithId>& vector_with_ids,
-                                         const pb::common::VectorSearchParameter& parameter,
-                                         std::vector<pb::index::VectorWithDistanceResult>& results) {
-  auto status = ValidateLeader(ctx->RegionId());
-  if (!status.ok()) {
-    return status;
-  }
-
-  auto reader = engine_->NewVectorReader(Constant::kStoreDataCF);
-  status = reader->VectorBatchSearch(ctx, vector_with_ids, parameter, results);
-  if (!status.ok()) {
-    if (pb::error::EKEY_NOT_FOUND == status.error_code()) {
-      // return OK if not found
-      return butil::Status::OK();
-    }
-
-    return status;
-  }
-
-  return butil::Status();
-}
-
 butil::Status Storage::KvPutIfAbsent(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs,
                                      bool is_atomic) {
   return engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), kvs, is_atomic),
@@ -308,21 +228,75 @@ butil::Status Storage::KvScanRelease(std::shared_ptr<Context>, const std::string
   return status;
 }
 
-butil::Status Storage::VectorScanQuery(std::shared_ptr<Context> ctx, uint64_t start_id, bool is_reverse, uint64_t limit,
-                                       bool with_vector_data, bool with_scalar_data,
-                                       const std::vector<std::string>& selected_scalar_keys, bool with_table_data,
-                                       bool use_scalar_filter,
-                                       const pb::common::VectorScalardata& scalar_data_for_filter,
-                                       std::vector<pb::common::VectorWithId>& vector_with_ids) {
-  auto status = ValidateLeader(ctx->RegionId());
+butil::Status Storage::VectorAdd(std::shared_ptr<Context> ctx, const std::vector<pb::common::VectorWithId>& vectors) {
+  return engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), vectors),
+                             [](std::shared_ptr<Context> ctx, butil::Status status) {
+                               if (!status.ok()) {
+                                 Helper::SetPbMessageError(status, ctx->Response());
+                               }
+                             });
+}
+
+butil::Status Storage::VectorDelete(std::shared_ptr<Context> ctx, const std::vector<uint64_t>& ids) {
+  return engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), ids),
+                             [](std::shared_ptr<Context> ctx, butil::Status status) {
+                               if (!status.ok()) {
+                                 Helper::SetPbMessageError(status, ctx->Response());
+                               }
+                             });
+}
+
+butil::Status Storage::VectorBatchQuery(std::shared_ptr<Engine::VectorReader::Context> ctx,
+                                        std::vector<pb::common::VectorWithId>& vector_with_ids) {
+  auto status = ValidateLeader(ctx->region_id);
   if (!status.ok()) {
     return status;
   }
 
   auto reader = engine_->NewVectorReader(Constant::kStoreDataCF);
-  status = reader->VectorScanQuery(ctx, start_id, is_reverse, limit, with_vector_data, with_scalar_data,
-                                   selected_scalar_keys, with_table_data, use_scalar_filter, scalar_data_for_filter,
-                                   vector_with_ids);
+  status = reader->VectorBatchQuery(ctx, vector_with_ids);
+  if (!status.ok()) {
+    if (pb::error::EKEY_NOT_FOUND == status.error_code()) {
+      // return OK if not found
+      return butil::Status::OK();
+    }
+
+    return status;
+  }
+
+  return butil::Status::OK();
+}
+
+butil::Status Storage::VectorBatchSearch(std::shared_ptr<Engine::VectorReader::Context> ctx,
+                                         std::vector<pb::index::VectorWithDistanceResult>& results) {
+  auto status = ValidateLeader(ctx->region_id);
+  if (!status.ok()) {
+    return status;
+  }
+
+  auto reader = engine_->NewVectorReader(Constant::kStoreDataCF);
+  status = reader->VectorBatchSearch(ctx, results);
+  if (!status.ok()) {
+    if (pb::error::EKEY_NOT_FOUND == status.error_code()) {
+      // return OK if not found
+      return butil::Status::OK();
+    }
+
+    return status;
+  }
+
+  return butil::Status();
+}
+
+butil::Status Storage::VectorGetBorderId(uint64_t region_id, const pb::common::Range& region_range, bool get_min,
+                                         uint64_t& vector_id) {
+  auto status = ValidateLeader(region_id);
+  if (!status.ok()) {
+    return status;
+  }
+
+  auto reader = engine_->NewVectorReader(Constant::kStoreDataCF);
+  status = reader->VectorGetBorderId(region_range, get_min, vector_id);
   if (!status.ok()) {
     return status;
   }
@@ -330,15 +304,31 @@ butil::Status Storage::VectorScanQuery(std::shared_ptr<Context> ctx, uint64_t st
   return butil::Status();
 }
 
-butil::Status Storage::VectorGetRegionMetrics(std::shared_ptr<Context> ctx, uint64_t region_id,
-                                              pb::common::VectorIndexMetrics& region_metrics) {
-  auto status = ValidateLeader(ctx->RegionId());
+butil::Status Storage::VectorScanQuery(std::shared_ptr<Engine::VectorReader::Context> ctx,
+                                       std::vector<pb::common::VectorWithId>& vector_with_ids) {
+  auto status = ValidateLeader(ctx->region_id);
   if (!status.ok()) {
     return status;
   }
 
   auto reader = engine_->NewVectorReader(Constant::kStoreDataCF);
-  status = reader->VectorGetRegionMetrics(ctx, region_id, region_metrics);
+  status = reader->VectorScanQuery(ctx, vector_with_ids);
+  if (!status.ok()) {
+    return status;
+  }
+
+  return butil::Status();
+}
+
+butil::Status Storage::VectorGetRegionMetrics(uint64_t region_id, const pb::common::Range& region_range,
+                                              pb::common::VectorIndexMetrics& region_metrics) {
+  auto status = ValidateLeader(region_id);
+  if (!status.ok()) {
+    return status;
+  }
+
+  auto reader = engine_->NewVectorReader(Constant::kStoreDataCF);
+  status = reader->VectorGetRegionMetrics(region_id, region_range, region_metrics);
   if (!status.ok()) {
     return status;
   }
