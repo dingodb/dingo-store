@@ -761,10 +761,15 @@ butil::Status RaftStoreEngine::VectorReader::GetBorderId(uint64_t region_id, uin
       pb::common::VectorWithId vector;
 
       std::string key(iter->Key());
-      auto decode_region_id = VectorCodec::DecodeVectorRegionId(key);
-      if (decode_region_id != region_id) {
+
+      if (!VectorCodec::ValidateRawKeyInRegion(key, region_id)) {
         break;
       }
+
+      // auto decode_region_id = VectorCodec::DecodeVectorRegionId(key);
+      // if (decode_region_id != region_id) {
+      //   break;
+      // }
 
       auto vector_id = VectorCodec::DecodeVectorId(key);
       if (vector_id == 0 || vector_id == UINT64_MAX) {
@@ -780,10 +785,15 @@ butil::Status RaftStoreEngine::VectorReader::GetBorderId(uint64_t region_id, uin
       pb::common::VectorWithId vector;
 
       std::string key(iter->Key());
-      auto decode_region_id = VectorCodec::DecodeVectorRegionId(key);
-      if (decode_region_id != region_id) {
+
+      if (!VectorCodec::ValidateRawKeyInRegion(key, region_id)) {
         break;
       }
+
+      // auto decode_region_id = VectorCodec::DecodeVectorRegionId(key);
+      // if (decode_region_id != region_id) {
+      //   break;
+      // }
 
       auto vector_id = VectorCodec::DecodeVectorId(key);
       if (vector_id == 0 || vector_id == UINT64_MAX) {
@@ -827,10 +837,15 @@ butil::Status RaftStoreEngine::VectorReader::ScanVectorId(uint64_t region_id, ui
       pb::common::VectorWithId vector;
 
       std::string key(iter->Key());
-      auto decode_region_id = VectorCodec::DecodeVectorRegionId(key);
-      if (decode_region_id != region_id) {
+
+      if (!VectorCodec::ValidateRawKeyInRegion(key, region_id)) {
         break;
       }
+
+      // auto decode_region_id = VectorCodec::DecodeVectorRegionId(key);
+      // if (decode_region_id != region_id) {
+      //   break;
+      // }
 
       auto vector_id = VectorCodec::DecodeVectorId(key);
       if (vector_id == 0 || vector_id == UINT64_MAX) {
@@ -856,10 +871,15 @@ butil::Status RaftStoreEngine::VectorReader::ScanVectorId(uint64_t region_id, ui
       pb::common::VectorWithId vector;
 
       std::string key(iter->Key());
-      auto decode_region_id = VectorCodec::DecodeVectorRegionId(key);
-      if (decode_region_id != region_id) {
+
+      if (!VectorCodec::ValidateRawKeyInRegion(key, region_id)) {
         break;
       }
+
+      // auto decode_region_id = VectorCodec::DecodeVectorRegionId(key);
+      // if (decode_region_id != region_id) {
+      //   break;
+      // }
 
       auto vector_id = VectorCodec::DecodeVectorId(key);
       if (vector_id == 0 || vector_id == UINT64_MAX) {

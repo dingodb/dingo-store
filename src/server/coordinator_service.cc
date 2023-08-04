@@ -831,20 +831,20 @@ void CoordinatorServiceImpl::CreateRegion(google::protobuf::RpcController *contr
 
   butil::Status ret = butil::Status::OK();
   if (split_from_region_id > 0) {
-    ret = coordinator_control_->CreateRegionForSplit(region_name, region_type, resource_tag, range, schema_id, table_id,
-                                                     index_id, part_id, index_parameter, split_from_region_id,
+    ret = coordinator_control_->CreateRegionForSplit(region_name, region_type, resource_tag, range, range, schema_id,
+                                                     table_id, index_id, part_id, index_parameter, split_from_region_id,
                                                      new_region_id, meta_increment);
   } else if (request->store_ids_size() > 0) {
     std::vector<uint64_t> store_ids;
     for (auto id : request->store_ids()) {
       store_ids.push_back(id);
     }
-    ret = coordinator_control_->CreateRegion(region_name, region_type, resource_tag, replica_num, range, schema_id,
-                                             table_id, index_id, part_id, index_parameter, store_ids, 0, new_region_id,
-                                             meta_increment);
+    ret = coordinator_control_->CreateRegion(region_name, region_type, resource_tag, replica_num, range, range,
+                                             schema_id, table_id, index_id, part_id, index_parameter, store_ids, 0,
+                                             new_region_id, meta_increment);
   } else {
     ret =
-        coordinator_control_->CreateRegion(region_name, region_type, resource_tag, replica_num, range, schema_id,
+        coordinator_control_->CreateRegion(region_name, region_type, resource_tag, replica_num, range, range, schema_id,
                                            table_id, index_id, part_id, index_parameter, new_region_id, meta_increment);
   }
 
