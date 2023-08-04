@@ -443,6 +443,17 @@ butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta
     return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "no partition provided");
   }
 
+  // check if part_id is legal
+  std::set<uint64_t> part_id_set;
+  for (auto id : new_part_ids) {
+    auto ret = part_id_set.insert(id);
+    if (!ret.second) {
+      DINGO_LOG(ERROR) << "part_id is illegal, part_id=" << id
+                       << ", table_definition:" << table_definition.DebugString();
+      return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "part_id is illegal");
+    }
+  }
+
   // check if table_name exists
   uint64_t value = 0;
   table_name_map_safe_temp_.Get(std::to_string(schema_id) + table_definition.name(), value);
@@ -505,7 +516,8 @@ butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta
       uint64_t new_part_id = new_part_ids[i];
 
       auto ret = CreateRegion(region_name, pb::common::RegionType::STORE_REGION, "", replica, range_partition.ranges(i),
-                              schema_id, new_table_id, 0, new_part_id, index_parameter, new_region_id, meta_increment);
+                              range_partition.ranges(i), schema_id, new_table_id, 0, new_part_id, index_parameter,
+                              new_region_id, meta_increment);
       if (!ret.ok()) {
         DINGO_LOG(ERROR) << "CreateRegion failed in CreateTable table_name=" << table_definition.name()
                          << ", table_definition:" << table_definition.ShortDebugString();
@@ -541,7 +553,8 @@ butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta
       uint64_t new_part_id = new_part_ids[i];
 
       auto ret = CreateRegion(region_name, pb::common::RegionType::STORE_REGION, "", replica, hash_partition.ranges(i),
-                              schema_id, new_table_id, 0, new_part_id, index_parameter, new_region_id, meta_increment);
+                              hash_partition.ranges(i), schema_id, new_table_id, 0, new_part_id, index_parameter,
+                              new_region_id, meta_increment);
       if (!ret.ok()) {
         DINGO_LOG(ERROR) << "CreateRegion failed in CreateTable table_name=" << table_definition.name() << ", "
                          << table_definition.ShortDebugString();
@@ -1094,6 +1107,17 @@ butil::Status CoordinatorControl::CreateIndex(uint64_t schema_id, const pb::meta
     return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "no partition provided");
   }
 
+  // check if part_id is legal
+  std::set<uint64_t> part_id_set;
+  for (auto id : new_part_ids) {
+    auto ret = part_id_set.insert(id);
+    if (!ret.second) {
+      DINGO_LOG(ERROR) << "part_id is illegal, part_id=" << id
+                       << ", table_definition:" << table_definition.DebugString();
+      return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "part_id is illegal");
+    }
+  }
+
   // check if index_name exists
   uint64_t value = 0;
   index_name_map_safe_temp_.Get(std::to_string(schema_id) + table_definition.name(), value);
@@ -1151,9 +1175,15 @@ butil::Status CoordinatorControl::CreateIndex(uint64_t schema_id, const pb::meta
       uint64_t new_region_id = 0;
       uint64_t new_part_id = new_part_ids[i];
 
-      auto ret = CreateRegion(region_name, pb::common::RegionType::INDEX_REGION, "", replica, range_partition.ranges(i),
-                              schema_id, 0, new_index_id, new_part_id, table_definition.index_parameter(),
-                              new_region_id, meta_increment);
+      // TODO: after sdk support part_id, this should be removed
+      pb::common::Range raw_range;
+      raw_range.set_start_key(Helper::EncodeIndexRegionHeader(new_part_id));
+      raw_range.set_end_key(Helper::EncodeIndexRegionHeader(new_part_id + 1));
+
+      auto ret =
+          CreateRegion(region_name, pb::common::RegionType::INDEX_REGION, "", replica, /*range_partition.ranges(i),*/
+                       raw_range, raw_range, schema_id, 0, new_index_id, new_part_id,
+                       table_definition.index_parameter(), new_region_id, meta_increment);
       if (!ret.ok()) {
         DINGO_LOG(ERROR) << "CreateRegion failed in CreateIndex index_name=" << table_definition.name();
         break;
@@ -1186,9 +1216,15 @@ butil::Status CoordinatorControl::CreateIndex(uint64_t schema_id, const pb::meta
       uint64_t new_region_id = 0;
       uint64_t new_part_id = new_part_ids[i];
 
-      auto ret = CreateRegion(region_name, pb::common::RegionType::INDEX_REGION, "", replica, hash_partition.ranges(i),
-                              schema_id, 0, new_index_id, new_part_id, table_definition.index_parameter(),
-                              new_region_id, meta_increment);
+      // TODO: after sdk support part_id, this should be removed
+      pb::common::Range raw_range;
+      raw_range.set_start_key(Helper::EncodeIndexRegionHeader(new_part_id));
+      raw_range.set_end_key(Helper::EncodeIndexRegionHeader(new_part_id + 1));
+
+      auto ret =
+          CreateRegion(region_name, pb::common::RegionType::INDEX_REGION, "", replica, /*hash_partition.ranges(i),*/
+                       raw_range, raw_range, schema_id, 0, new_index_id, new_part_id,
+                       table_definition.index_parameter(), new_region_id, meta_increment);
       if (!ret.ok()) {
         DINGO_LOG(ERROR) << "CreateRegion failed in CreateIndex index_name=" << table_definition.name();
         break;
