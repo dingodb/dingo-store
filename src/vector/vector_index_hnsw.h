@@ -62,7 +62,8 @@ class VectorIndexHnsw : public VectorIndex {
   void UnlockWrite() override;
 
   butil::Status Search(std::vector<pb::common::VectorWithId> vector_with_ids, uint32_t topk,
-                       std::vector<pb::index::VectorWithDistanceResult>& results, bool reconstruct = false) override;
+                       std::vector<pb::index::VectorWithDistanceResult>& results, bool reconstruct = false,
+                       const std::vector<uint64_t>& vector_ids = {}) override;
 
   int32_t GetDimension() override;
   butil::Status GetCount([[maybe_unused]] uint64_t& count) override;
@@ -79,7 +80,7 @@ class VectorIndexHnsw : public VectorIndex {
 
   hnswlib::HierarchicalNSW<float>* GetHnswIndex();
 
-  //void NormalizeVector(const float* data, float* norm_array) const;
+  // void NormalizeVector(const float* data, float* norm_array) const;
 
  private:
   // hnsw members

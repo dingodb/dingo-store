@@ -79,8 +79,8 @@ class VectorIndex {
 
   virtual butil::Status Search([[maybe_unused]] std::vector<pb::common::VectorWithId> vector_with_ids,
                                [[maybe_unused]] uint32_t topk,
-                               std::vector<pb::index::VectorWithDistanceResult>& results,
-                               [[maybe_unused]] bool reconstruct = false) = 0;
+                               std::vector<pb::index::VectorWithDistanceResult>& results,  // NOLINT
+                               [[maybe_unused]] bool reconstruct = false, const std::vector<uint64_t>& vector_ids = {}) = 0;
 
   virtual butil::Status SetOnline() = 0;
   virtual butil::Status SetOffline() = 0;

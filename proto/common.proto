@@ -591,6 +591,10 @@ message VectorSearchParameter {
   //  if vector_filter == TABLE_FILTER and  vector_query_type = QUERY_PRE enable vector_coprocessor
   //  coprocessor request
   VectorCoprocessor vector_coprocessor = 23;
+
+  // vector id array vector_filter == VECTOR_ID_FILTER enable vector_ids
+  repeated uint64 vector_ids = 24;
+
 }
 
 enum ScalarIndexType {
