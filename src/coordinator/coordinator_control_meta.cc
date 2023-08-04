@@ -2372,14 +2372,14 @@ butil::Status CoordinatorControl::GenerateTableIds(uint64_t schema_id, uint32_t 
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "schema_id is illegal");
   }
 
-  for (uint32_t i = 0; i < count; i++) {
-    uint64_t new_table_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_TABLE, meta_increment);
-    DINGO_LOG(INFO) << "GenerateTableIds new_table_id=" << new_table_id;
-    auto* table_id = response->add_table_ids();
-    table_id->set_entity_id(new_table_id);
-    table_id->set_parent_entity_id(schema_id);
-    table_id->set_entity_type(pb::meta::EntityType::ENTITY_TYPE_TABLE);
-  }
+  //for (uint32_t i = 0; i < count; i++) {
+  //  uint64_t new_table_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_TABLE, meta_increment);
+  //  DINGO_LOG(INFO) << "GenerateTableIds new_table_id=" << new_table_id;
+  //  auto* table_id = response->add_table_ids();
+  //  table_id->set_entity_id(new_table_id);
+  //  table_id->set_parent_entity_id(schema_id);
+  //  table_id->set_entity_type(pb::meta::EntityType::ENTITY_TYPE_TABLE);
+  //}
 
   return butil::Status::OK();
 }

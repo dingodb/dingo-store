@@ -207,6 +207,25 @@ message IndexMetricsWithId {
   IndexMetrics index_metrics = 2;
 }
 
+message TableWithPartCount {
+  // has table
+  bool has_table = 1;
+
+  // if has table, table`s part count
+  uint32 table_part_count = 2;
+
+  // index count, include vector index and scalar index
+  uint32 index_count = 3;
+
+  // each index may has different part count, the list size must equal index count
+  repeated uint32 index_part_count = 4;
+}
+
+message TableIdWithPartIds {
+  DingoCommonId table_id = 1;
+  repeated DingoCommonId part_ids = 2;
+}
+
 message GetSchemasRequest {
   DingoCommonId schema_id = 1;
 }
@@ -501,12 +520,12 @@ message DeleteAutoIncrementResponse {
 // generate table id, vector index id and scalar index id
 message GenerateTableIdsRequest {
   DingoCommonId schema_id = 1;
-  uint32 count = 2;
+  TableWithPartCount count = 2;
 }
 
 message GenerateTableIdsResponse {
   dingodb.pb.error.Error error = 1;
-  repeated DingoCommonId table_ids = 2;
+  repeated TableIdWithPartIds ids = 2;
 }
 
 // create table, vector index and scalar index
