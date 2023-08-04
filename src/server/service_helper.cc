@@ -129,10 +129,7 @@ butil::Status ServiceHelper::ValidateRegion(uint64_t region_id, const std::vecto
   return butil::Status();
 }
 
-butil::Status ServiceHelper::ValidateIndexRegion(uint64_t region_id) {
-  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
-  auto region = store_region_meta->GetRegion(region_id);
-
+butil::Status ServiceHelper::ValidateIndexRegion(store::RegionPtr region) {
   auto status = ValidateRegionState(region);
   if (!status.ok()) {
     return status;

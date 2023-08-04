@@ -37,6 +37,7 @@ class Storage {
   static Snapshot* GetSnapshot();
   void ReleaseSnapshot();
 
+  // kv
   butil::Status KvGet(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys,
                       std::vector<pb::common::KeyValue>& kvs);
 
@@ -65,21 +66,17 @@ class Storage {
 
   // vector index
   butil::Status VectorAdd(std::shared_ptr<Context> ctx, const std::vector<pb::common::VectorWithId>& vectors);
-  butil::Status VectorBatchQuery(std::shared_ptr<Context> ctx, std::vector<uint64_t> vector_ids, bool with_vector_data,
-                                 bool with_scalar_data, std::vector<std::string> selected_scalar_keys,
-                                 bool with_table_data, std::vector<pb::common::VectorWithId>& vector_with_ids);
-  butil::Status VectorBatchSearch(std::shared_ptr<Context> ctx,
-                                  const std::vector<pb::common::VectorWithId>& vector_with_ids,
-                                  const pb::common::VectorSearchParameter& parameter,
-                                  std::vector<pb::index::VectorWithDistanceResult>& results);
   butil::Status VectorDelete(std::shared_ptr<Context> ctx, const std::vector<uint64_t>& ids);
-  butil::Status VectorGetBorderId(std::shared_ptr<Context> ctx, uint64_t& id, bool get_min);
-  butil::Status VectorScanQuery(std::shared_ptr<Context> ctx, uint64_t start_id, bool is_reverse, uint64_t limit,
-                                bool with_vector_data, bool with_scalar_data,
-                                const std::vector<std::string>& selected_scalar_keys, bool with_table_data,
-                                bool use_scalar_filter, const pb::common::VectorScalardata& scalar_data_for_filter,
+
+  butil::Status VectorBatchQuery(std::shared_ptr<Engine::VectorReader::Context> ctx,
+                                 std::vector<pb::common::VectorWithId>& vector_with_ids);
+  butil::Status VectorBatchSearch(std::shared_ptr<Engine::VectorReader::Context> ctx,
+                                  std::vector<pb::index::VectorWithDistanceResult>& results);
+  butil::Status VectorGetBorderId(uint64_t region_id, const pb::common::Range& region_range, bool get_min,
+                                  uint64_t& vector_id);
+  butil::Status VectorScanQuery(std::shared_ptr<Engine::VectorReader::Context> ctx,
                                 std::vector<pb::common::VectorWithId>& vector_with_ids);
-  butil::Status VectorGetRegionMetrics(std::shared_ptr<Context> ctx, uint64_t region_id,
+  butil::Status VectorGetRegionMetrics(uint64_t region_id, const pb::common::Range& region_range,
                                        pb::common::VectorIndexMetrics& region_metrics);
 
   butil::Status VectorCalcDistance(std::shared_ptr<Context> ctx, uint64_t region_id,

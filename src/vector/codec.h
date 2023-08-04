@@ -24,18 +24,21 @@ namespace dingodb {
 
 class VectorCodec {
  public:
-  static inline uint64_t GetPartIdByRegionId(uint64_t region_id);
-  static void EncodeVectorId(uint64_t region_id, uint64_t vector_id, std::string& result);
+  // Foramt: prefix/partition_id/vector_id
+  static void EncodeVectorData(uint64_t partition_id, uint64_t vector_id, std::string& result);
+  static void EncodeVectorScalar(uint64_t partition_id, uint64_t vector_id, std::string& result);
+  static void EncodeVectorTable(uint64_t partition_id, uint64_t vector_id, std::string& result);
+
   static uint64_t DecodeVectorId(const std::string& value);
-  static bool ValidateRawKeyInRegion(const std::string& key, uint64_t region_id);
-  // static uint64_t DecodeVectorRegionId(const std::string& value);
-  static void EncodeVectorScalar(uint64_t region_id, uint64_t vector_id, std::string& result);
-  static void EncodeVectorTable(uint64_t region_id, uint64_t vector_id, std::string& result);
-  static void EncodeVectorWal(uint64_t region_id, uint64_t vector_id, uint64_t log_id, std::string& result);
+  static uint64_t DecodePartitionId(const std::string& value);
+
+  static std::string FillVectorDataPrefix(const std::string& value);
+  static std::string FillVectorScalarPrefix(const std::string& value);
+  static std::string FillVectorTablePrefix(const std::string& value);
+
   static std::string EncodeVectorIndexLogIndex(uint64_t snapshot_log_index, uint64_t apply_log_index);
   static int DecodeVectorIndexLogIndex(const std::string& value, uint64_t& snapshot_log_index,
                                        uint64_t& apply_log_index);
-  static int DecodeVectorWal(const std::string& value, uint64_t& vector_id, uint64_t& log_id);
 };
 
 }  // namespace dingodb

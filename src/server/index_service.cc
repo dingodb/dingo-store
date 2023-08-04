@@ -49,7 +49,7 @@ IndexServiceImpl::IndexServiceImpl() = default;
 void IndexServiceImpl::SetStorage(std::shared_ptr<Storage> storage) { storage_ = storage; }
 
 butil::Status IndexServiceImpl::ValidateVectorBatchQueryQequest(
-    const dingodb::pb::index::VectorBatchQueryRequest* request) {
+    const dingodb::pb::index::VectorBatchQueryRequest* request, store::RegionPtr region) {
   if (request->region_id() == 0) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id is error");
   }
@@ -69,7 +69,7 @@ butil::Status IndexServiceImpl::ValidateVectorBatchQueryQequest(
     return status;
   }
 
-  return ServiceHelper::ValidateIndexRegion(request->region_id());
+  return ServiceHelper::ValidateIndexRegion(region);
 }
 
 void IndexServiceImpl::VectorBatchQuery(google::protobuf::RpcController* controller,
@@ -81,7 +81,18 @@ void IndexServiceImpl::VectorBatchQuery(google::protobuf::RpcController* control
 
   DINGO_LOG(DEBUG) << "VectorBatchQuery request: " << request->ShortDebugString();
 
-  butil::Status status = ValidateVectorBatchQueryQequest(request);
+  // Validate region exist.
+  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+  auto region = store_region_meta->GetRegion(request->region_id());
+  if (region == nullptr) {
+    auto* err = response->mutable_error();
+    err->set_errcode(pb::error::EREGION_NOT_FOUND);
+    err->set_errmsg(fmt::format("Not found region {}", request->region_id()));
+    return;
+  }
+
+  // Validate request parameter.
+  butil::Status status = ValidateVectorBatchQueryQequest(request, region);
   if (!status.ok()) {
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
@@ -95,14 +106,18 @@ void IndexServiceImpl::VectorBatchQuery(google::protobuf::RpcController* control
     return;
   }
 
-  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
-  ctx->SetRegionId(request->region_id()).SetCfName(Constant::kStoreDataCF);
+  // Set vector reader context.
+  auto ctx = std::make_shared<Engine::VectorReader::Context>();
+  ctx->partition_id = region->PartitionId();
+  ctx->region_id = region->Id();
+  ctx->vector_ids = Helper::PbRepeatedToVector(request->vector_ids());
+  ctx->selected_scalar_keys = Helper::PbRepeatedToVector(request->selected_keys());
+  ctx->with_vector_data = !request->without_vector_data();
+  ctx->with_scalar_data = request->with_scalar_data();
+  ctx->with_table_data = request->with_table_data();
 
   std::vector<pb::common::VectorWithId> vector_with_ids;
-  status = storage_->VectorBatchQuery(ctx, Helper::PbRepeatedToVector(request->vector_ids()),
-                                      (!request->without_vector_data()), request->with_scalar_data(),
-                                      Helper::PbRepeatedToVector(request->selected_keys()), request->with_table_data(),
-                                      vector_with_ids);
+  status = storage_->VectorBatchQuery(ctx, vector_with_ids);
   if (!status.ok()) {
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
@@ -121,7 +136,8 @@ void IndexServiceImpl::VectorBatchQuery(google::protobuf::RpcController* control
   }
 }
 
-butil::Status IndexServiceImpl::ValidateVectorSearchRequest(const dingodb::pb::index::VectorSearchRequest* request) {
+butil::Status IndexServiceImpl::ValidateVectorSearchRequest(const dingodb::pb::index::VectorSearchRequest* request,
+                                                            store::RegionPtr region) {
   if (request->region_id() == 0) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id is error");
   }
@@ -152,6 +168,10 @@ butil::Status IndexServiceImpl::ValidateVectorSearchRequest(const dingodb::pb::i
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param top_n is error");
   }
 
+  if (request->vector_with_ids_size() > 0 && request->vector_with_ids().empty()) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param vector_with_ids is empty");
+  }
+
   auto status = storage_->ValidateLeader(request->region_id());
   if (!status.ok()) {
     return status;
@@ -162,7 +182,7 @@ butil::Status IndexServiceImpl::ValidateVectorSearchRequest(const dingodb::pb::i
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id cannot find vector_index");
   }
 
-  return ServiceHelper::ValidateIndexRegion(request->region_id());
+  return ServiceHelper::ValidateIndexRegion(region);
 }
 
 // vector
@@ -175,7 +195,18 @@ void IndexServiceImpl::VectorSearch(google::protobuf::RpcController* controller,
 
   DINGO_LOG(DEBUG) << "VectorSearch request: " << request->ShortDebugString();
 
-  butil::Status status = ValidateVectorSearchRequest(request);
+  // Validate region exist.
+  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+  auto region = store_region_meta->GetRegion(request->region_id());
+  if (region == nullptr) {
+    auto* err = response->mutable_error();
+    err->set_errcode(pb::error::EREGION_NOT_FOUND);
+    err->set_errmsg(fmt::format("Not found region {}", request->region_id()));
+    return;
+  }
+
+  // Validate request parameter.
+  butil::Status status = ValidateVectorSearchRequest(request, region);
   if (!status.ok()) {
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
@@ -189,61 +220,42 @@ void IndexServiceImpl::VectorSearch(google::protobuf::RpcController* controller,
     return;
   }
 
-  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
-  ctx->SetRegionId(request->region_id()).SetCfName(Constant::kStoreDataCF);
+  // Set vector reader context.
+  auto ctx = std::make_shared<Engine::VectorReader::Context>();
+  ctx->partition_id = region->PartitionId();
+  ctx->region_id = region->Id();
+  ctx->parameter = request->parameter();
 
   if (request->vector_with_ids_size() <= 0) {
-    std::vector<pb::common::VectorWithId> vector_with_ids;
-    vector_with_ids.push_back(request->vector());
-
-    std::vector<pb::index::VectorWithDistanceResult> vector_results;
-
-    status = storage_->VectorBatchSearch(ctx, vector_with_ids, request->parameter(), vector_results);
-    if (!status.ok()) {
-      auto* err = response->mutable_error();
-      err->set_errcode(static_cast<Errno>(status.error_code()));
-      err->set_errmsg(status.error_str());
-      if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-        err->set_errmsg("Not leader, please redirect leader.");
-        ServiceHelper::RedirectLeader(status.error_str(), response);
-      }
-      DINGO_LOG(ERROR) << fmt::format("VectorSearch request: {} response: {}", request->ShortDebugString(),
-                                      response->ShortDebugString());
-      return;
-    }
-
-    for (auto& vector_result : vector_results) {
-      response->add_batch_results()->CopyFrom(vector_result);
-    }
+    ctx->vector_with_ids.push_back(request->vector());
   } else {
-    std::vector<pb::common::VectorWithId> vector_with_ids;
     for (const auto& vector : request->vector_with_ids()) {
-      vector_with_ids.push_back(vector);
+      ctx->vector_with_ids.push_back(vector);
     }
+  }
 
-    std::vector<pb::index::VectorWithDistanceResult> vector_results;
-
-    status = storage_->VectorBatchSearch(ctx, vector_with_ids, request->parameter(), vector_results);
-    if (!status.ok()) {
-      auto* err = response->mutable_error();
-      err->set_errcode(static_cast<Errno>(status.error_code()));
-      err->set_errmsg(status.error_str());
-      if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-        err->set_errmsg("Not leader, please redirect leader.");
-        ServiceHelper::RedirectLeader(status.error_str(), response);
-      }
-      DINGO_LOG(ERROR) << fmt::format("VectorSearch request: {} response: {}", request->ShortDebugString(),
-                                      response->ShortDebugString());
-      return;
+  std::vector<pb::index::VectorWithDistanceResult> vector_results;
+  status = storage_->VectorBatchSearch(ctx, vector_results);
+  if (!status.ok()) {
+    auto* err = response->mutable_error();
+    err->set_errcode(static_cast<Errno>(status.error_code()));
+    err->set_errmsg(status.error_str());
+    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+      err->set_errmsg("Not leader, please redirect leader.");
+      ServiceHelper::RedirectLeader(status.error_str(), response);
     }
+    DINGO_LOG(ERROR) << fmt::format("VectorSearch request: {} response: {}", request->ShortDebugString(),
+                                    response->ShortDebugString());
+    return;
+  }
 
-    for (auto& vector_result : vector_results) {
-      response->add_batch_results()->CopyFrom(vector_result);
-    }
+  for (auto& vector_result : vector_results) {
+    response->add_batch_results()->CopyFrom(vector_result);
   }
 }
 
-butil::Status IndexServiceImpl::ValidateVectorAddRequest(const dingodb::pb::index::VectorAddRequest* request) {
+butil::Status IndexServiceImpl::ValidateVectorAddRequest(const dingodb::pb::index::VectorAddRequest* request,
+                                                         store::RegionPtr region) {
   if (request->region_id() == 0) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id is error");
   }
@@ -300,7 +312,7 @@ butil::Status IndexServiceImpl::ValidateVectorAddRequest(const dingodb::pb::inde
     }
   }
 
-  return ServiceHelper::ValidateIndexRegion(request->region_id());
+  return ServiceHelper::ValidateIndexRegion(region);
 }
 
 void IndexServiceImpl::VectorAdd(google::protobuf::RpcController* controller,
@@ -311,7 +323,18 @@ void IndexServiceImpl::VectorAdd(google::protobuf::RpcController* controller,
 
   DINGO_LOG(DEBUG) << "VectorAdd request: " << request->ShortDebugString();
 
-  butil::Status status = ValidateVectorAddRequest(request);
+  // Validate region exist.
+  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+  auto region = store_region_meta->GetRegion(request->region_id());
+  if (region == nullptr) {
+    auto* err = response->mutable_error();
+    err->set_errcode(pb::error::EREGION_NOT_FOUND);
+    err->set_errmsg(fmt::format("Not found region {}", request->region_id()));
+    return;
+  }
+
+  // Validate request parameter.
+  butil::Status status = ValidateVectorAddRequest(request, region);
   if (!status.ok()) {
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
@@ -346,7 +369,8 @@ void IndexServiceImpl::VectorAdd(google::protobuf::RpcController* controller,
   }
 }
 
-butil::Status IndexServiceImpl::ValidateVectorDeleteRequest(const dingodb::pb::index::VectorDeleteRequest* request) {
+butil::Status IndexServiceImpl::ValidateVectorDeleteRequest(const dingodb::pb::index::VectorDeleteRequest* request,
+                                                            store::RegionPtr region) {
   if (request->region_id() == 0) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id is error");
   }
@@ -366,7 +390,7 @@ butil::Status IndexServiceImpl::ValidateVectorDeleteRequest(const dingodb::pb::i
     return status;
   }
 
-  return ServiceHelper::ValidateIndexRegion(request->region_id());
+  return ServiceHelper::ValidateIndexRegion(region);
 }
 
 void IndexServiceImpl::VectorDelete(google::protobuf::RpcController* controller,
@@ -378,7 +402,18 @@ void IndexServiceImpl::VectorDelete(google::protobuf::RpcController* controller,
 
   DINGO_LOG(DEBUG) << "VectorDelete request: " << request->ShortDebugString();
 
-  butil::Status status = ValidateVectorDeleteRequest(request);
+  // Validate region exist.
+  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+  auto region = store_region_meta->GetRegion(request->region_id());
+  if (region == nullptr) {
+    auto* err = response->mutable_error();
+    err->set_errcode(pb::error::EREGION_NOT_FOUND);
+    err->set_errmsg(fmt::format("Not found region {}", request->region_id()));
+    return;
+  }
+
+  // Validate request parameter.
+  butil::Status status = ValidateVectorDeleteRequest(request, region);
   if (!status.ok()) {
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
@@ -395,12 +430,12 @@ void IndexServiceImpl::VectorDelete(google::protobuf::RpcController* controller,
   std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done_guard.release(), response);
   ctx->SetRegionId(request->region_id()).SetCfName(Constant::kStoreDataCF);
 
-  std::vector<uint64_t> ids;
+  std::vector<uint64_t> vector_ids;
   for (auto id : request->ids()) {
-    ids.push_back(id);
+    vector_ids.push_back(id);
   }
 
-  status = storage_->VectorDelete(ctx, ids);
+  status = storage_->VectorDelete(ctx, vector_ids);
   if (!status.ok()) {
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
@@ -414,7 +449,7 @@ void IndexServiceImpl::VectorDelete(google::protobuf::RpcController* controller,
 }
 
 butil::Status IndexServiceImpl::ValidateVectorGetBorderIdRequest(
-    const dingodb::pb::index::VectorGetBorderIdRequest* request) {
+    const dingodb::pb::index::VectorGetBorderIdRequest* request, store::RegionPtr region) {
   if (request->region_id() == 0) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id is error");
   }
@@ -424,7 +459,7 @@ butil::Status IndexServiceImpl::ValidateVectorGetBorderIdRequest(
     return status;
   }
 
-  return ServiceHelper::ValidateIndexRegion(request->region_id());
+  return ServiceHelper::ValidateIndexRegion(region);
 }
 
 void IndexServiceImpl::VectorGetBorderId(google::protobuf::RpcController* controller,
@@ -436,7 +471,18 @@ void IndexServiceImpl::VectorGetBorderId(google::protobuf::RpcController* contro
 
   DINGO_LOG(DEBUG) << "VectorGetBorderId request: " << request->ShortDebugString();
 
-  butil::Status status = ValidateVectorGetBorderIdRequest(request);
+  // Validate region exist.
+  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+  auto region = store_region_meta->GetRegion(request->region_id());
+  if (region == nullptr) {
+    auto* err = response->mutable_error();
+    err->set_errcode(pb::error::EREGION_NOT_FOUND);
+    err->set_errmsg(fmt::format("Not found region {}", request->region_id()));
+    return;
+  }
+
+  // Validate request parameter.
+  butil::Status status = ValidateVectorGetBorderIdRequest(request, region);
   if (!status.ok()) {
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
@@ -453,8 +499,8 @@ void IndexServiceImpl::VectorGetBorderId(google::protobuf::RpcController* contro
   std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
   ctx->SetRegionId(request->region_id()).SetCfName(Constant::kStoreDataCF);
 
-  uint64_t border_id = 0;
-  status = storage_->VectorGetBorderId(ctx, border_id, request->get_min());
+  uint64_t vector_id = 0;
+  status = storage_->VectorGetBorderId(region->Id(), region->RawRange(), request->get_min(), vector_id);
   if (!status.ok()) {
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
@@ -468,11 +514,11 @@ void IndexServiceImpl::VectorGetBorderId(google::protobuf::RpcController* contro
     return;
   }
 
-  response->set_id(border_id);
+  response->set_id(vector_id);
 }
 
 butil::Status IndexServiceImpl::ValidateVectorScanQueryRequest(
-    const dingodb::pb::index::VectorScanQueryRequest* request) {
+    const dingodb::pb::index::VectorScanQueryRequest* request, store::RegionPtr region) {
   if (request->region_id() == 0) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id is error");
   }
@@ -495,7 +541,7 @@ butil::Status IndexServiceImpl::ValidateVectorScanQueryRequest(
     return status;
   }
 
-  return ServiceHelper::ValidateIndexRegion(request->region_id());
+  return ServiceHelper::ValidateIndexRegion(region);
 }
 
 void IndexServiceImpl::VectorScanQuery(google::protobuf::RpcController* controller,
@@ -506,7 +552,18 @@ void IndexServiceImpl::VectorScanQuery(google::protobuf::RpcController* controll
 
   DINGO_LOG(DEBUG) << "VectorScanQuery request: " << request->ShortDebugString();
 
-  butil::Status status = ValidateVectorScanQueryRequest(request);
+  // Validate region exist.
+  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+  auto region = store_region_meta->GetRegion(request->region_id());
+  if (region == nullptr) {
+    auto* err = response->mutable_error();
+    err->set_errcode(pb::error::EREGION_NOT_FOUND);
+    err->set_errmsg(fmt::format("Not found region {}", request->region_id()));
+    return;
+  }
+
+  // Validate request parameter.
+  butil::Status status = ValidateVectorScanQueryRequest(request, region);
   if (!status.ok()) {
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
@@ -520,17 +577,23 @@ void IndexServiceImpl::VectorScanQuery(google::protobuf::RpcController* controll
     return;
   }
 
-  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
-  ctx->SetRegionId(request->region_id()).SetCfName(Constant::kStoreDataCF);
+  // Set vector reader context.
+  auto ctx = std::make_shared<Engine::VectorReader::Context>();
+  ctx->partition_id = region->PartitionId();
+  ctx->region_id = region->Id();
+  ctx->region_range = region->Range();
+  ctx->selected_scalar_keys = Helper::PbRepeatedToVector(request->selected_keys());
+  ctx->with_vector_data = !request->without_vector_data();
+  ctx->with_scalar_data = request->with_scalar_data();
+  ctx->with_table_data = request->with_table_data();
+  ctx->start_id = request->vector_id_start();
+  ctx->is_reverse = request->is_reverse_scan();
+  ctx->limit = request->max_scan_count();
+  ctx->use_scalar_filter = request->use_scalar_filter();
+  ctx->scalar_data_for_filter = request->scalar_for_filter();
 
   std::vector<pb::common::VectorWithId> vector_with_ids;
-
-  status =
-      storage_->VectorScanQuery(ctx, request->vector_id_start(), request->is_reverse_scan(), request->max_scan_count(),
-                                (!request->without_vector_data()), request->with_scalar_data(),
-                                Helper::PbRepeatedToVector(request->selected_keys()), request->with_table_data(),
-                                request->use_scalar_filter(), request->scalar_for_filter(), vector_with_ids);
-
+  status = storage_->VectorScanQuery(ctx, vector_with_ids);
   if (!status.ok()) {
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
@@ -550,7 +613,7 @@ void IndexServiceImpl::VectorScanQuery(google::protobuf::RpcController* controll
 }
 
 butil::Status IndexServiceImpl::ValidateVectorGetRegionMetricsRequest(
-    const dingodb::pb::index::VectorGetRegionMetricsRequest* request) {
+    const dingodb::pb::index::VectorGetRegionMetricsRequest* request, store::RegionPtr region) {
   if (request->region_id() == 0) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id is error");
   }
@@ -565,7 +628,7 @@ butil::Status IndexServiceImpl::ValidateVectorGetRegionMetricsRequest(
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id cannot find vector_index");
   }
 
-  return ServiceHelper::ValidateIndexRegion(request->region_id());
+  return ServiceHelper::ValidateIndexRegion(region);
 }
 
 void IndexServiceImpl::VectorGetRegionMetrics(google::protobuf::RpcController* controller,
@@ -577,7 +640,18 @@ void IndexServiceImpl::VectorGetRegionMetrics(google::protobuf::RpcController* c
 
   DINGO_LOG(DEBUG) << "VectorGetRegionMetrics request: " << request->ShortDebugString();
 
-  butil::Status status = ValidateVectorGetRegionMetricsRequest(request);
+  // Validate region exist.
+  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+  auto region = store_region_meta->GetRegion(request->region_id());
+  if (region == nullptr) {
+    auto* err = response->mutable_error();
+    err->set_errcode(pb::error::EREGION_NOT_FOUND);
+    err->set_errmsg(fmt::format("Not found region {}", request->region_id()));
+    return;
+  }
+
+  // Validate request parameter.
+  butil::Status status = ValidateVectorGetRegionMetricsRequest(request, region);
   if (!status.ok()) {
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
@@ -591,11 +665,8 @@ void IndexServiceImpl::VectorGetRegionMetrics(google::protobuf::RpcController* c
     return;
   }
 
-  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
-  ctx->SetRegionId(request->region_id()).SetCfName(Constant::kStoreDataCF);
-
   pb::common::VectorIndexMetrics metrics;
-  status = storage_->VectorGetRegionMetrics(ctx, request->region_id(), metrics);
+  status = storage_->VectorGetRegionMetrics(region->Id(), region->RawRange(), metrics);
   if (!status.ok()) {
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));

@@ -414,7 +414,7 @@ void VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr reg
     {
       pb::common::KeyValue kv;
       std::string key;
-      VectorCodec::EncodeVectorId(region->Id(), vector.id(), key);
+      VectorCodec::EncodeVectorData(region->PartitionId(), vector.id(), key);
       kv.mutable_key()->swap(key);
       kv.set_value(vector.vector().SerializeAsString());
       kvs.push_back(kv);
@@ -423,7 +423,7 @@ void VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr reg
     {
       pb::common::KeyValue kv;
       std::string key;
-      VectorCodec::EncodeVectorScalar(region->Id(), vector.id(), key);
+      VectorCodec::EncodeVectorScalar(region->PartitionId(), vector.id(), key);
       kv.mutable_key()->swap(key);
       kv.set_value(vector.scalar_data().SerializeAsString());
       kvs.push_back(kv);
@@ -432,7 +432,7 @@ void VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr reg
     {
       pb::common::KeyValue kv;
       std::string key;
-      VectorCodec::EncodeVectorTable(region->Id(), vector.id(), key);
+      VectorCodec::EncodeVectorTable(region->PartitionId(), vector.id(), key);
       kv.mutable_key()->swap(key);
       kv.set_value(vector.table_data().SerializeAsString());
       kvs.push_back(kv);
@@ -576,7 +576,7 @@ void VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr 
   for (int i = 0; i < request.ids_size(); i++) {
     // set key_states
     std::string key;
-    VectorCodec::EncodeVectorId(region->Id(), request.ids(i), key);
+    VectorCodec::EncodeVectorData(region->PartitionId(), request.ids(i), key);
 
     std::string value;
     auto ret = reader->KvGet(snapshot, key, value);
@@ -584,21 +584,21 @@ void VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr 
       // delete vector data
       {
         std::string key;
-        VectorCodec::EncodeVectorId(region->Id(), request.ids(i), key);
+        VectorCodec::EncodeVectorData(region->PartitionId(), request.ids(i), key);
         keys.push_back(key);
       }
 
       // delete scalar data
       {
         std::string key;
-        VectorCodec::EncodeVectorScalar(region->Id(), request.ids(i), key);
+        VectorCodec::EncodeVectorScalar(region->PartitionId(), request.ids(i), key);
         keys.push_back(key);
       }
 
       // delete table data
       {
         std::string key;
-        VectorCodec::EncodeVectorTable(region->Id(), request.ids(i), key);
+        VectorCodec::EncodeVectorTable(region->PartitionId(), request.ids(i), key);
         keys.push_back(key);
       }
 
