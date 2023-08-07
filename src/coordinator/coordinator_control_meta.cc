@@ -437,7 +437,6 @@ butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta
       // this is for temporary usage
       for (const auto& range_part : range_partition.ranges()) {
         new_part_ids.push_back(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_TABLE, meta_increment));
-        new_part_ranges.push_back(range_part);
       }
     } else {
       for (const auto& range_part : range_partition.ids()) {
@@ -469,12 +468,13 @@ butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta
   }
 
   if (new_part_ranges.empty()) {
-    DINGO_LOG(ERROR) << "no partition provided";
+    DINGO_LOG(ERROR) << "no partition provided, table_definition:" << table_definition.ShortDebugString();
     return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "no partition provided");
   }
 
   if (new_part_ranges.size() != new_part_ids.size()) {
-    DINGO_LOG(ERROR) << "new_part_ranges.size() != new_part_ids.size()";
+    DINGO_LOG(ERROR) << "new_part_ranges.size() != new_part_ids.size(), table_definition:"
+                     << table_definition.DebugString();
     return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "new_part_ranges.size() != new_part_ids.size()");
   }
 
