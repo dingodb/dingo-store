@@ -70,7 +70,7 @@ int Helper::PeerIdToLocation(braft::PeerId peer_id, pb::common::Location& locati
   std::vector<std::string> addrs;
   butil::SplitString(peer_id_string, ':', &addrs);
 
-  if (addrs.size() != 3) {
+  if (addrs.size() < 3) {
     DINGO_LOG(ERROR) << "GetLeaderLocation peerid to string error " << peer_id_string;
     return -1;
   }
