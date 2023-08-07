@@ -232,12 +232,16 @@ class Helper {
   // vector scalar index value
   static bool IsEqualVectorScalarValue(const pb::common::ScalarValue& value1, const pb::common::ScalarValue& value2);
   // for index region, encode raw_range
-  static std::string EncodeIndexRegionHeader(uint64_t region_id);
+  static std::string EncodeIndexRegionHeader(uint64_t partition_id, uint64_t vector_id);
 
   // Upper string
   static std::string ToUpper(const std::string& str);
   // Lower string
   static std::string ToLower(const std::string& str);
+
+  // Parallel run task, e.g. load vector index.
+  using TaskFunctor = void* (*)(void*);
+  static bool ParallelRunTask(TaskFunctor task, void* arg, int concurrency);
 };
 
 }  // namespace dingodb

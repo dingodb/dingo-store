@@ -1058,7 +1058,7 @@ void SendSplitRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
 
   if (!FLAGS_split_key.empty()) {
     std::string split_key = dingodb::Helper::HexToString(FLAGS_split_key);
-    request.mutable_split_request()->set_split_watershed_key(FLAGS_split_key);
+    request.mutable_split_request()->set_split_watershed_key(split_key);
   } else {
     DINGO_LOG(ERROR) << "split_key is empty, will auto generate from the mid between start_key and end_key";
     // query the region

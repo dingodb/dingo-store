@@ -35,6 +35,7 @@
 #include "proto/error.pb.h"
 #include "server/server.h"
 #include "store/heartbeat.h"
+#include "vector/codec.h"
 #include "vector/vector_index_hnsw.h"
 #include "vector/vector_index_snapshot.h"
 
@@ -65,6 +66,20 @@ butil::Status CreateRegionTask::CreateRegion(std::shared_ptr<Context> ctx, store
   auto status = ValidateCreateRegion(store_meta_manager, region->Id());
   if (!status.ok()) {
     return status;
+  }
+
+  // Later delete
+  {
+    DINGO_LOG(INFO) << fmt::format(
+        "region {} range [{}-{}), raw_range: [{}-{})", region->Id(), Helper::StringToHex(region->Range().start_key()),
+        Helper::StringToHex(region->Range().end_key()), Helper::StringToHex(region->RawRange().start_key()),
+        Helper::StringToHex(region->RawRange().end_key()));
+
+    uint64_t min_vector_id = VectorCodec::DecodeVectorId(region->RawRange().start_key());
+    uint64_t max_vector_id = VectorCodec::DecodeVectorId(region->RawRange().end_key());
+    DINGO_LOG(INFO) << fmt::format("vector id range [{}-{}), raw_range: [{}-{})", min_vector_id, max_vector_id,
+                                   Helper::StringToHex(region->RawRange().start_key()),
+                                   Helper::StringToHex(region->RawRange().end_key()));
   }
 
   // Add region to store region meta manager
@@ -200,10 +215,13 @@ butil::Status DeleteRegionTask::DeleteRegion(std::shared_ptr<Context> ctx, uint6
         // Delete vector index
         vector_index_manager->DeleteVectorIndex(vector_index->Id());
       }
-    }
 
-    // Delete vector index directory.
-    Helper::RemoveAllFileOrDirectory(VectorIndexSnapshotManager::GetSnapshotParentPath(region_id));
+      // Delete vector index snapshot
+      auto snapshot_manager = vector_index_manager->GetVectorIndexSnapshotManager();
+      if (snapshot_manager != nullptr) {
+        snapshot_manager->DeleteSnapshots(region_id);
+      }
+    }
   }
 
   // Delete region executor
@@ -268,7 +286,7 @@ butil::Status SplitRegionTask::ValidateSplitRegion(std::shared_ptr<StoreRegionMe
   }
 
   const auto& split_key = split_request.split_watershed_key();
-  auto range = parent_region->Range();
+  auto range = parent_region->RawRange();
   if (range.start_key().compare(split_key) >= 0 || range.end_key().compare(split_key) <= 0) {
     return butil::Status(pb::error::EKEY_INVALID, "Split key is invalid.");
   }

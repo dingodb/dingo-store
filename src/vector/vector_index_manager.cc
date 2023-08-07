@@ -14,6 +14,7 @@
 
 #include "vector/vector_index_manager.h"
 
+#include <atomic>
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
@@ -22,6 +23,7 @@
 #include <string>
 #include <vector>
 
+#include "bthread/bthread.h"
 #include "butil/binary_printer.h"
 #include "butil/status.h"
 #include "common/helper.h"
@@ -50,25 +52,11 @@ bool VectorIndexManager::Init(std::vector<store::RegionPtr> regions) {
     return false;
   }
 
-  for (auto& region : regions) {
-    // init vector index map
-    const auto& definition = region->InnerRegion().definition();
-    if (definition.index_parameter().index_type() == pb::common::IndexType::INDEX_TYPE_VECTOR) {
-      uint64_t vector_index_id = region->Id();
-      DINGO_LOG(INFO) << fmt::format("Init load region {} vector index", vector_index_id);
-
-      // When raft leader start, may load vector index,
-      // so check vector index wherther exist, if exist then don't load vector index.
-      auto vector_index = GetVectorIndex(vector_index_id);
-      if (vector_index == nullptr) {
-        continue;
-      }
-      auto status = LoadOrBuildVectorIndex(region);
-      if (!status.ok()) {
-        DINGO_LOG(ERROR) << fmt::format("Load region {} vector index failed, ", vector_index_id);
-        return false;
-      }
-    }
+  // Load vector index.
+  auto status = ParallelLoadOrBuildVectorIndex(regions, Constant::kLoadOrBuildVectorIndexConcurrency);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << "Parallel load or build vector index failed, error: " << status.error_str();
+    return false;
   }
 
   return true;
@@ -123,6 +111,15 @@ void VectorIndexManager::DeleteVectorIndex(uint64_t vector_index_id) {
 
 std::shared_ptr<VectorIndex> VectorIndexManager::GetVectorIndex(uint64_t vector_index_id) {
   return vector_indexs_.Get(vector_index_id);
+}
+
+std::shared_ptr<VectorIndex> VectorIndexManager::GetVectorIndex(store::RegionPtr region) {
+  auto vector_index = region->ShareVectorIndex();
+  if (vector_index != nullptr) {
+    return vector_index;
+  }
+
+  return vector_indexs_.Get(region->Id());
 }
 
 std::vector<std::shared_ptr<VectorIndex>> VectorIndexManager::GetAllVectorIndex() {
@@ -191,6 +188,68 @@ butil::Status VectorIndexManager::LoadOrBuildVectorIndex(store::RegionPtr region
   update_online_vector_index_status(pb::common::VECTOR_INDEX_STATUS_NORMAL);
 
   DINGO_LOG(INFO) << fmt::format("Build vector index success, id {}", vector_index_id);
+
+  return butil::Status();
+}
+
+butil::Status VectorIndexManager::ParallelLoadOrBuildVectorIndex(std::vector<store::RegionPtr> regions,
+                                                                 int concurrency) {
+  struct Parameter {
+    VectorIndexManager* vector_index_manager;
+    std::vector<store::RegionPtr> regions;
+    std::atomic<int> offset;
+    std::vector<int> results;
+  };
+
+  Parameter* param = new Parameter();
+  param->vector_index_manager = this;
+  param->regions = regions;
+  param->offset = 0;
+  param->results.resize(regions.size(), 0);
+
+  auto task = [](void* arg) -> void* {
+    if (arg == nullptr) {
+      return nullptr;
+    }
+    auto* param = static_cast<Parameter*>(arg);
+
+    for (;;) {
+      int offset = param->offset.fetch_add(0, std::memory_order_relaxed);
+      if (offset >= param->regions.size()) {
+        break;
+      }
+
+      auto region = param->regions[offset];
+
+      uint64_t vector_index_id = region->Id();
+      LOG(INFO) << fmt::format("Init load region {} vector index", vector_index_id);
+
+      // When raft leader start, may load vector index,
+      // so check vector index wherther exist, if exist then don't load vector index.
+      auto vector_index = param->vector_index_manager->GetVectorIndex(vector_index_id);
+      if (vector_index == nullptr) {
+        continue;
+      }
+      auto status = param->vector_index_manager->LoadOrBuildVectorIndex(region);
+      if (!status.ok()) {
+        LOG(ERROR) << fmt::format("Load region {} vector index failed, ", vector_index_id);
+        param->results[offset] = -1;
+        break;
+      }
+    }
+
+    return nullptr;
+  };
+
+  if (!Helper::ParallelRunTask(task, param, concurrency)) {
+    return butil::Status(pb::error::EINTERNAL, "Create bthread failed.");
+  }
+
+  for (auto result : param->results) {
+    if (result == -1) {
+      return butil::Status(pb::error::EINTERNAL, "Load or build vector index failed.");
+    }
+  }
 
   return butil::Status();
 }
@@ -292,16 +351,21 @@ std::shared_ptr<VectorIndex> VectorIndexManager::BuildVectorIndex(store::RegionP
   vector_index->SetSnapshotLogIndex(snapshot_log_index);
   vector_index->SetApplyLogIndex(apply_log_index);
 
-  DINGO_LOG(INFO) << fmt::format("Build vector index {}, snapshot_log_index({}) apply_log_index({})", vector_index_id,
-                                 snapshot_log_index, apply_log_index);
+  std::string start_key = VectorCodec::FillVectorDataPrefix(region->RawRange().start_key());
+  std::string end_key = VectorCodec::FillVectorDataPrefix(region->RawRange().end_key());
+  DINGO_LOG(INFO) << fmt::format("Build vector index {}, snapshot_log_index({}) apply_log_index({}) range: [{}-{})",
+                                 vector_index_id, snapshot_log_index, apply_log_index, Helper::StringToHex(start_key),
+                                 Helper::StringToHex(end_key));
 
+  uint64_t start_time = Helper::TimestampMs();
   // load vector data to vector index
   IteratorOptions options;
-  options.upper_bound = VectorCodec::FillVectorDataPrefix(region->Range().end_key());
+  options.upper_bound = end_key;
 
-  std::string start_key = VectorCodec::FillVectorDataPrefix(region->Range().start_key());
   auto iter = raw_engine_->NewIterator(Constant::kStoreDataCF, options);
+  uint64_t count = 0;
   for (iter->Seek(start_key); iter->Valid(); iter->Next()) {
+    ++count;
     pb::common::VectorWithId vector;
 
     std::string key(iter->Key());
@@ -309,7 +373,7 @@ std::shared_ptr<VectorIndex> VectorIndexManager::BuildVectorIndex(store::RegionP
 
     std::string value(iter->Value());
     if (!vector.mutable_vector()->ParseFromString(value)) {
-      DINGO_LOG(WARNING) << fmt::format("vector ParseFromString failed, id {}", vector.id());
+      DINGO_LOG(WARNING) << fmt::format("vector with id ParseFromString failed, id {}", vector.id());
       continue;
     }
 
@@ -324,66 +388,86 @@ std::shared_ptr<VectorIndex> VectorIndexManager::BuildVectorIndex(store::RegionP
     vector_index->Upsert(vectors);
   }
 
-  DINGO_LOG(INFO) << fmt::format("Build vector index {} finish, snapshot_log_index({}) apply_log_index({})",
-                                 vector_index_id, snapshot_log_index, apply_log_index);
+  DINGO_LOG(INFO) << fmt::format(
+      "Build vector index {} finish, snapshot_log_index({}) apply_log_index({}) count({}) elapsed time({}ms)",
+      vector_index_id, snapshot_log_index, apply_log_index, count, Helper::TimestampMs() - start_time);
 
   return vector_index;
 }
 
-butil::Status VectorIndexManager::CheckAndSetRebuildStatus(store::RegionPtr region, bool is_initial_build) {
+butil::Status VectorIndexManager::CheckRebuildStatus(std::shared_ptr<VectorIndex> vector_index, bool is_initial_build) {
   assert(region != nullptr);
-  uint64_t vector_index_id = region->Id();
 
-  // lock vector_index add/delete, to catch up and switch to new vector_index
-  auto online_vector_index = GetVectorIndex(vector_index_id);
-  if (online_vector_index == nullptr) {
+  if (vector_index == nullptr) {
     if (is_initial_build) {
       return butil::Status::OK();
     }
 
     DINGO_LOG(ERROR) << fmt::format("online_vector_index is not found, this is an illegal rebuild, stop, id {}",
-                                    vector_index_id);
+                                    vector_index->Id());
     return butil::Status(pb::error::Errno::EINTERNAL,
                          "online_vector_index is not found, cannot do rebuild, try to set is_initial_build to true");
   }
 
-  if (!online_vector_index->IsOnline()) {
-    DINGO_LOG(WARNING) << fmt::format("online_vector_index is not online, skip rebuild, id {}", vector_index_id);
+  if (!vector_index->IsOnline()) {
+    DINGO_LOG(WARNING) << fmt::format("online_vector_index is not online, skip rebuild, id {}", vector_index->Id());
     return butil::Status(pb::error::Errno::EINTERNAL, "online_vector_index is not online, skip rebuild");
   }
 
-  if (online_vector_index->Status() != pb::common::VECTOR_INDEX_STATUS_NORMAL &&
-      online_vector_index->Status() != pb::common::VECTOR_INDEX_STATUS_ERROR &&
-      online_vector_index->Status() != pb::common::VECTOR_INDEX_STATUS_NONE) {
+  if (vector_index->Status() != pb::common::VECTOR_INDEX_STATUS_NORMAL &&
+      vector_index->Status() != pb::common::VECTOR_INDEX_STATUS_ERROR &&
+      vector_index->Status() != pb::common::VECTOR_INDEX_STATUS_NONE) {
     DINGO_LOG(WARNING) << fmt::format(
         "online_vector_index status is not normal/error/none, this is an illegal rebuild, stop, id {}, status {}",
-        vector_index_id, pb::common::RegionVectorIndexStatus_Name(online_vector_index->Status()));
+        vector_index->Id(), pb::common::RegionVectorIndexStatus_Name(vector_index->Status()));
     return butil::Status(pb::error::Errno::EINTERNAL,
                          "online_vector_index status is not normal/error/none, cannot do rebuild");
   }
 
-  online_vector_index->SetStatus(pb::common::RegionVectorIndexStatus::VECTOR_INDEX_STATUS_REBUILDING);
-
-  online_vector_index = GetVectorIndex(vector_index_id);
-  if (online_vector_index == nullptr) {
-    DINGO_LOG(ERROR) << fmt::format(
-        "online_vector_index is not found after set_status, this is an illegal rebuild, stop, id {}", vector_index_id);
-    return butil::Status(
-        pb::error::Errno::EINTERNAL,
-        "online_vector_index is not found after set_status, cannot do rebuild, try to set is_initial_build to true");
-  }
-
-  if (online_vector_index->Status() != pb::common::VECTOR_INDEX_STATUS_REBUILDING) {
-    DINGO_LOG(INFO) << fmt::format(
-        "online_vector_index status is not rebuilding after set_status, this is an illegal rebuild, stop, id {}, "
-        "status {}",
-        vector_index_id, pb::common::RegionVectorIndexStatus_Name(online_vector_index->Status()));
-
-    return butil::Status(pb::error::Errno::EINTERNAL,
-                         "online_vector_index status is not rebuilding after set_status, cannot do rebuild");
-  }
-
   return butil::Status::OK();
+}
+
+butil::Status VectorIndexManager::AsyncRebuildVectorIndex(store::RegionPtr region, bool need_save,
+                                                          bool is_initial_build) {
+  struct Parameter {
+    VectorIndexManager* vector_index_manager;
+    store::RegionPtr region;
+    bool need_save;
+    bool is_initial_build;
+  };
+
+  DINGO_LOG(INFO) << fmt::format("Async rebuild vector index {}", region->Id());
+
+  Parameter* param = new Parameter();
+  param->vector_index_manager = this;
+  param->region = region;
+  param->need_save = need_save;
+  param->is_initial_build = is_initial_build;
+
+  bthread_t tid;
+  int ret = bthread_start_background(
+      &tid, nullptr,
+      [](void* arg) -> void* {
+        if (arg == nullptr) {
+          return nullptr;
+        }
+
+        auto* param = static_cast<Parameter*>(arg);
+        auto status =
+            param->vector_index_manager->RebuildVectorIndex(param->region, param->need_save, param->is_initial_build);
+        if (!status.ok()) {
+          LOG(ERROR) << fmt::format("Rebuild vector index {} failed, error: {}", param->region->Id(),
+                                    status.error_str());
+        }
+
+        return nullptr;
+      },
+      param);
+  if (ret != 0) {
+    DINGO_LOG(ERROR) << "Create bthread failed, ret: " << ret;
+  }
+
+  return butil::Status();
 }
 
 // Rebuild vector index
@@ -393,23 +477,17 @@ butil::Status VectorIndexManager::RebuildVectorIndex(store::RegionPtr region, bo
 
   DINGO_LOG(INFO) << fmt::format("Rebuild vector index id {}", vector_index_id);
 
-  // check and set rebuild status
-  auto status = CheckAndSetRebuildStatus(region, is_initial_build);
+  // check rebuild status
+  auto online_vector_index = GetVectorIndex(vector_index_id);
+  auto status = CheckRebuildStatus(online_vector_index, is_initial_build);
   if (!status.ok()) {
     return status;
   }
 
-  // lock vector_index add/delete, to catch up and switch to new vector_index
-  auto online_vector_index = GetVectorIndex(vector_index_id);
-  if (online_vector_index == nullptr && !is_initial_build) {
-    DINGO_LOG(ERROR) << fmt::format("online_vector_index is not found, this is an illegal rebuild, stop, id {}",
-                                    vector_index_id);
-    return butil::Status(pb::error::Errno::EINTERNAL,
-                         "online_vector_index is not found, cannot do rebuild, try to set is_initial_build to true");
-  }
-
   // update vector index status rebuilding
-  online_vector_index->SetStatus(pb::common::VECTOR_INDEX_STATUS_REBUILDING);
+  if (online_vector_index != nullptr) {
+    online_vector_index->SetStatus(pb::common::VECTOR_INDEX_STATUS_REBUILDING);
+  }
 
   uint64_t start_time = Helper::TimestampMs();
   // Build vector index with original all data.
@@ -452,9 +530,9 @@ butil::Status VectorIndexManager::RebuildVectorIndex(store::RegionPtr region, bo
 
   // set online_vector_index to offline, so it will reject all vector add/del, raft handler will usleep and try to
   // switch to new vector_index to add/del
-  if (online_vector_index != nullptr) {
-    online_vector_index->SetOffline();
-  }
+  // if (online_vector_index != nullptr) {
+  //   online_vector_index->SetOffline();
+  // }
 
   start_time = Helper::TimestampMs();
   // second ground replay wal
@@ -482,6 +560,9 @@ butil::Status VectorIndexManager::RebuildVectorIndex(store::RegionPtr region, bo
                          "maybe delete by others, so stop to update vector_indexes map");
   }
 
+  // Reset region share vector index id.
+  region->SetShareVectorIndex(nullptr);
+
   return butil::Status();
 }
 
@@ -497,6 +578,7 @@ butil::Status VectorIndexManager::SaveVectorIndex(std::shared_ptr<VectorIndex> v
   if (!status.ok()) {
     DINGO_LOG(ERROR) << fmt::format("Save vector index snapshot failed, id {}, errno: {}, errstr: {}",
                                     vector_index->Id(), status.error_code(), status.error_str());
+    vector_index->SetStatus(pb::common::VECTOR_INDEX_STATUS_NORMAL);
     return status;
   } else {
     UpdateSnapshotLogIndex(vector_index, snapshot_log_index);

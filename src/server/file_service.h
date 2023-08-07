@@ -17,6 +17,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <string>
 
 #include "brpc/controller.h"
 #include "brpc/server.h"
@@ -24,6 +25,7 @@
 #include "common/file_reader.h"
 #include "common/synchronization.h"
 #include "proto/file_service.pb.h"
+#include "vector/vector_index_snapshot.h"
 
 namespace dingodb {
 
@@ -41,13 +43,32 @@ class FileServiceImpl : public pb::fileservice::FileService {
                        pb::fileservice::CleanFileReaderResponse* response, google::protobuf::Closure* done) override;
 };
 
+class FileReaderWrapper {
+ public:
+  FileReaderWrapper(vector_index::SnapshotMetaPtr snapshot)
+      : snapshot_(snapshot),
+        file_reader_(std::make_shared<LocalDirReader>(new braft::PosixFileSystemAdaptor(), snapshot->Path())) {}
+  ~FileReaderWrapper() = default;
+
+  int ReadFile(butil::IOBuf* out, const std::string& filename, off_t offset, size_t max_count, size_t* read_count,
+               bool* is_eof) {
+    return file_reader_->ReadFile(out, filename, offset, max_count, read_count, is_eof);
+  }
+
+  std::string Path() { return snapshot_->Path(); }
+
+ private:
+  vector_index::SnapshotMetaPtr snapshot_;
+  std::shared_ptr<FileReader> file_reader_;
+};
+
 class FileServiceReaderManager {
  public:
   static FileServiceReaderManager& GetInstance();
 
-  uint64_t AddReader(std::shared_ptr<FileReader> reader);
+  uint64_t AddReader(std::shared_ptr<FileReaderWrapper> reader);
   int DeleteReader(uint64_t reader_id);
-  std::shared_ptr<FileReader> GetReader(uint64_t reader_id);
+  std::shared_ptr<FileReaderWrapper> GetReader(uint64_t reader_id);
   std::vector<uint64_t> GetAllReaderId();
 
  private:
@@ -57,7 +78,7 @@ class FileServiceReaderManager {
   uint64_t next_id_;
 
   bthread_mutex_t mutex_;
-  std::map<uint64_t, std::shared_ptr<FileReader>> readers_;
+  std::map<uint64_t, std::shared_ptr<FileReaderWrapper>> readers_;
 };
 
 }  // namespace dingodb

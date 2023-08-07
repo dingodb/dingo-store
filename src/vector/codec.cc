@@ -17,9 +17,9 @@
 #include <cstdint>
 
 #include "common/constant.h"
+#include "common/helper.h"
 #include "common/logging.h"
 #include "serial/buf.h"
-#include "server/server.h"
 
 namespace dingodb {
 
@@ -51,24 +51,31 @@ void VectorCodec::EncodeVectorTable(uint64_t partition_id, uint64_t vector_id, s
 }
 
 uint64_t VectorCodec::DecodeVectorId(const std::string& value) {
-  if (value.size() != 17) {
-    DINGO_LOG(ERROR) << "Decode vector id failed, value size is not 8, value:[" << value << "]";
+  Buf buf(value);
+  if (value.size() == 17) {
+    buf.Skip(9);
+  } else if (value.size() == 16) {
+    buf.Skip(8);
+  } else {
+    DINGO_LOG(ERROR) << "Decode vector id failed, value size is not 16 or 17, value:[" << Helper::StringToHex(value)
+                     << "]";
     return 0;
   }
-  Buf buf(value);
-  buf.Read();
-  buf.ReadLong();
 
   return buf.ReadLong();
 }
 
 uint64_t VectorCodec::DecodePartitionId(const std::string& value) {
-  if (value.size() != 17) {
-    DINGO_LOG(ERROR) << "Decode partition id failed, value size is not 8, value:[" << value << "]";
+  Buf buf(value);
+
+  if (value.size() == 17) {
+    buf.Skip(1);
+  } else if (value.size() == 16) {
+  } else {
+    DINGO_LOG(ERROR) << "Decode partition id failed, value size is not 16 or 17, value:[" << Helper::StringToHex(value)
+                     << "]";
     return 0;
   }
-  Buf buf(value);
-  buf.Read();
 
   return buf.ReadLong();
 }
@@ -110,7 +117,7 @@ std::string VectorCodec::EncodeVectorIndexLogIndex(uint64_t snapshot_log_index, 
 int VectorCodec::DecodeVectorIndexLogIndex(const std::string& value, uint64_t& snapshot_log_index,
                                            uint64_t& apply_log_index) {
   if (value.size() != 16) {
-    DINGO_LOG(ERROR) << "DecodeVectorApplyLogIndex failed, value size is not 16, value:[" << value
+    DINGO_LOG(ERROR) << "DecodeVectorApplyLogIndex failed, value size is not 16, value:[" << Helper::StringToHex(value)
                      << "], size=" << value.size();
     return -1;
   }

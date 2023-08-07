@@ -504,6 +504,23 @@ bool Server::InitCrontabManager() {
 
       crontab_manager_->AddAndRunCrontab(crontab);
     }
+
+    // Add split checker crontab
+    uint64_t split_check_interval_s = config->GetInt("region.split_check_interval_s");
+    if (split_check_interval_s < 0) {
+      DINGO_LOG(ERROR) << "config region.split_check_interval_s illegal";
+      return false;
+    } else if (split_check_interval_s == 0) {
+      DINGO_LOG(WARNING) << "config region.split_check_interval_s is 0, split checker will not be triggered";
+    } else if (split_check_interval_s > 0) {
+      std::shared_ptr<Crontab> crontab = std::make_shared<Crontab>();
+      crontab->name = "SPLIT_CHECKER";
+      crontab->interval = split_check_interval_s * 1000;
+      crontab->func = [](void*) { PreSplitChecker::TriggerPreSplitCheck(nullptr); };
+      crontab->arg = nullptr;
+
+      crontab_manager_->AddAndRunCrontab(crontab);
+    }
   }
 
   return true;

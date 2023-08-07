@@ -10,6 +10,20 @@ server:
   scrub_vector_index_interval_s: 60
   worker_thread_num: 10 # must >4, worker_thread_num priority worker_thread_ratio
   # worker_thread_ratio: 0.5 # cpu core * ratio
+region:
+  split_check_interval_s: 0 # 0: disable >0: enable 
+  split_check_concurrency: 5
+  split_check_threshold_size: 134217728 # 128M if exceed the size, then try check region for split.
+  split_policy: SIZE # HALF/SIZE/KEYS
+  # HALF
+  # split_threshold_size: 134217728 # 128M
+  # split_chunk_size: 1048576 # 1M
+  # SIZE
+  split_threshold_size: 134217728 # 128M
+  split_ratio: 0.5
+  # KEYS
+  # split_key_number: 200000
+  # split_key_ratio: 0.5
 raft:
   host: $RAFT_HOST$
   port: $RAFT_PORT$
@@ -20,11 +34,11 @@ raft:
   snapshot_interval_s: 120
   segmentlog_max_segment_size: 33554432 # 32M
 log:
-  level: INFO
+  level: DEBUG
   path: $BASE_PATH$/log
 vector:
   index_path: $BASE_PATH$/data/index/idx
-  enable_follower_hold_index: false
+  enable_follower_hold_index: true
   # save hnsw vector index snapshot when write key num exceed threshold.
   hnsw_save_threshold_write_key_num: 10000
 store:

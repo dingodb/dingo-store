@@ -1384,8 +1384,8 @@ butil::Status CoordinatorControl::SplitRegionWithTaskList(uint64_t split_from_re
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "SplitRegion split_watershed_key is empty");
   }
 
-  if (split_from_region.definition().range().start_key().compare(split_watershed_key) >= 0 ||
-      split_from_region.definition().range().end_key().compare(split_watershed_key) <= 0) {
+  if (split_from_region.definition().raw_range().start_key().compare(split_watershed_key) >= 0 ||
+      split_from_region.definition().raw_range().end_key().compare(split_watershed_key) <= 0) {
     DINGO_LOG(ERROR) << "SplitRegion split_watershed_key is illegal, split_watershed_key = "
                      << Helper::StringToHex(split_watershed_key) << ", split_from_region_id = " << split_from_region_id
                      << " start_key=" << Helper::StringToHex(split_from_region.definition().range().start_key())

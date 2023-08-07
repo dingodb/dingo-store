@@ -18,6 +18,7 @@
 #include <atomic>
 #include <cassert>
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <memory>
 #include <optional>
@@ -43,6 +44,7 @@ class VectorIndex {
               uint64_t save_snapshot_threshold_write_key_num)
       : id(id),
         status(pb::common::VECTOR_INDEX_STATUS_NONE),
+        snapshot_doing(false),
         apply_log_index(0),
         snapshot_log_index(0),
         write_key_count(0),
@@ -52,12 +54,28 @@ class VectorIndex {
     vector_index_type = vector_index_parameter.vector_index_type();
   }
 
-  virtual ~VectorIndex();
+  virtual ~VectorIndex() = default;
 
   VectorIndex(const VectorIndex& rhs) = delete;
   VectorIndex& operator=(const VectorIndex& rhs) = delete;
   VectorIndex(VectorIndex&& rhs) = delete;
   VectorIndex& operator=(VectorIndex&& rhs) = delete;
+
+  class FilterFunctor {
+   public:
+    virtual bool Check(uint64_t vector_id) = 0;
+  };
+
+  class RangeFilterFunctor : public FilterFunctor {
+   public:
+    RangeFilterFunctor(uint64_t min_vector_id, uint64_t max_vector_id)
+        : min_vector_id_(min_vector_id), max_vector_id_(max_vector_id) {}
+    bool Check(uint64_t vector_id) override { return vector_id >= min_vector_id_ && vector_id < max_vector_id_; }
+
+   private:
+    uint64_t min_vector_id_;
+    uint64_t max_vector_id_;
+  };
 
   pb::common::VectorIndexType VectorIndexType() const;
 
@@ -81,9 +99,9 @@ class VectorIndex {
   virtual butil::Status Load([[maybe_unused]] const std::string& path);
 
   virtual butil::Status Search([[maybe_unused]] std::vector<pb::common::VectorWithId> vector_with_ids,
-                               [[maybe_unused]] uint32_t topk,
-                               std::vector<pb::index::VectorWithDistanceResult>& results,  // NOLINT
-                               [[maybe_unused]] bool reconstruct = false, const std::vector<uint64_t>& vector_ids = {}) = 0;
+                               [[maybe_unused]] uint32_t topk, [[maybe_unused]] std::shared_ptr<FilterFunctor> filter,
+                               std::vector<pb::index::VectorWithDistanceResult>& results,
+                               [[maybe_unused]] bool reconstruct = false) = 0;
 
   virtual butil::Status SetOnline() = 0;
   virtual butil::Status SetOffline() = 0;
@@ -101,6 +119,9 @@ class VectorIndex {
     }
   }
 
+  bool SnapshotDoing() { return snapshot_doing.load(std::memory_order_relaxed); }
+  void SetSnapshotDoing(bool doing) { snapshot_doing.store(doing, std::memory_order_relaxed); }
+
   uint64_t ApplyLogIndex() const;
   void SetApplyLogIndex(uint64_t apply_log_index);
 
@@ -113,6 +134,9 @@ class VectorIndex {
 
   // status
   std::atomic<pb::common::RegionVectorIndexStatus> status;
+
+  // control do snapshot concurrency
+  std::atomic<bool> snapshot_doing;
 
   // apply max log index
   std::atomic<uint64_t> apply_log_index;

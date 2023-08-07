@@ -409,7 +409,7 @@ TEST_F(VectorIndexMemoryTest, Search) {
     vector_with_ids.push_back(vector_with_id);
     uint32_t topk = 0;
     std::vector<pb::index::VectorWithDistanceResult> results;
-    ok = vector_index_flat->Search(vector_with_ids, topk, results);
+    ok = vector_index_flat->Search(vector_with_ids, topk, nullptr, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
@@ -427,7 +427,8 @@ TEST_F(VectorIndexMemoryTest, Search) {
     std::vector<pb::index::VectorWithDistanceResult> results;
     std::vector<pb::common::VectorWithId> vector_with_ids;
     vector_with_ids.push_back(vector_with_id);
-    ok = vector_index_flat->Search(vector_with_ids, topk, results);
+
+    ok = vector_index_flat->Search(vector_with_ids, topk, nullptr, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
@@ -445,7 +446,7 @@ TEST_F(VectorIndexMemoryTest, Search) {
     std::vector<pb::index::VectorWithDistanceResult> results;
     std::vector<pb::common::VectorWithId> vector_with_ids;
     vector_with_ids.push_back(vector_with_id);
-    ok = vector_index_flat->Search(vector_with_ids, topk, results);
+    ok = vector_index_flat->Search(vector_with_ids, topk, nullptr, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
@@ -737,7 +738,7 @@ TEST_F(VectorIndexMemoryTest, SearchCosine) {
     vector_with_ids.push_back(vector_with_id);
     uint32_t topk = 0;
     std::vector<pb::index::VectorWithDistanceResult> results;
-    ok = vector_index_flat->Search(vector_with_ids, topk, results);
+    ok = vector_index_flat->Search(vector_with_ids, topk, nullptr, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
@@ -755,7 +756,7 @@ TEST_F(VectorIndexMemoryTest, SearchCosine) {
     std::vector<pb::index::VectorWithDistanceResult> results;
     std::vector<pb::common::VectorWithId> vector_with_ids;
     vector_with_ids.push_back(vector_with_id);
-    ok = vector_index_flat->Search(vector_with_ids, topk, results);
+    ok = vector_index_flat->Search(vector_with_ids, topk, nullptr, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
@@ -773,7 +774,7 @@ TEST_F(VectorIndexMemoryTest, SearchCosine) {
     std::vector<pb::index::VectorWithDistanceResult> results;
     std::vector<pb::common::VectorWithId> vector_with_ids;
     vector_with_ids.push_back(vector_with_id);
-    ok = vector_index_flat->Search(vector_with_ids, topk, results);
+    ok = vector_index_flat->Search(vector_with_ids, topk, nullptr, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 

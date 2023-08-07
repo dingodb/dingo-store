@@ -65,8 +65,8 @@ class VectorIndexFlat : public VectorIndex {
   butil::Status Delete(const std::vector<uint64_t>& delete_ids) override;
 
   butil::Status Search(std::vector<pb::common::VectorWithId> vector_with_ids, uint32_t topk,
-                       std::vector<pb::index::VectorWithDistanceResult>& results, bool reconstruct = false,
-                       const std::vector<uint64_t>& vector_ids = {}) override;
+                       std::shared_ptr<FilterFunctor> filter, std::vector<pb::index::VectorWithDistanceResult>& results,
+                       bool reconstruct = false) override;
 
   butil::Status SetOnline() override;
   butil::Status SetOffline() override;

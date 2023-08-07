@@ -238,10 +238,10 @@ bool StoreRegionMetrics::CollectMetrics() {
 
     // vector index
     bool vector_index_has_data = false;
-    std::shared_ptr<VectorIndexManager> vector_index_mgr = Server::GetInstance()->GetVectorIndexManager();
-    if (vector_index_mgr) {
-      std::shared_ptr<VectorIndex> vector_index = vector_index_mgr->GetVectorIndex(region_metrics->Id());
-      if (vector_index) {
+    auto vector_index_mgr = Server::GetInstance()->GetVectorIndexManager();
+    if (vector_index_mgr != nullptr) {
+      auto vector_index = vector_index_mgr->GetVectorIndex(region_metrics->Id());
+      if (vector_index != nullptr) {
         if (pb::common::VectorIndexType::VECTOR_INDEX_TYPE_NONE != vector_index->VectorIndexType()) {
           region_metrics->SetVectorIndexType(vector_index->VectorIndexType());
 

@@ -15,11 +15,15 @@
 #include "vector/vector_reader.h"
 
 #include <cstdint>
+#include <memory>
+#include <string>
 
 #include "common/helper.h"
 #include "fmt/core.h"
+#include "proto/common.pb.h"
 #include "server/server.h"
 #include "vector/codec.h"
+#include "vector/vector_index.h"
 
 namespace dingodb {
 
@@ -48,14 +52,9 @@ butil::Status VectorReader::QueryVectorWithId(uint64_t partition_id, uint64_t ve
 }
 
 butil::Status VectorReader::SearchVector(
-    uint64_t partition_id, uint64_t region_id, const std::vector<pb::common::VectorWithId>& vector_with_ids,
-    const pb::common::VectorSearchParameter& parameter,
+    uint64_t partition_id, std::shared_ptr<VectorIndex> vector_index, pb::common::Range region_range,
+    const std::vector<pb::common::VectorWithId>& vector_with_ids, const pb::common::VectorSearchParameter& parameter,
     std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results) {
-  auto vector_index = Server::GetInstance()->GetVectorIndexManager()->GetVectorIndex(region_id);
-  if (vector_index == nullptr) {
-    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, fmt::format("Not found vector index {}", region_id));
-  }
-
   if (vector_with_ids.empty()) {
     DINGO_LOG(WARNING) << "Empty vector with ids";
     return butil::Status();
@@ -82,7 +81,11 @@ butil::Status VectorReader::SearchVector(
   bool with_vector_data = !(parameter.without_vector_data());
   std::vector<pb::index::VectorWithDistanceResult> tmp_results;
 
-  vector_index->Search(vector_with_ids, top_n, tmp_results, with_vector_data);
+  uint64_t min_vector_id = VectorCodec::DecodeVectorId(region_range.start_key());
+  uint64_t max_vector_id = VectorCodec::DecodeVectorId(region_range.end_key());
+  DINGO_LOG(INFO) << fmt::format("vector id range [{}-{})", min_vector_id, max_vector_id);
+  auto filter = std::make_shared<VectorIndex::RangeFilterFunctor>(min_vector_id, max_vector_id);
+  vector_index->Search(vector_with_ids, top_n, filter, tmp_results, with_vector_data);
 
   if (use_scalar_filter) {
     // scalar post filter
@@ -295,7 +298,8 @@ butil::Status VectorReader::CompareVectorScalarData(uint64_t partition_id, uint6
 butil::Status VectorReader::VectorBatchSearch(std::shared_ptr<Engine::VectorReader::Context> ctx,
                                               std::vector<pb::index::VectorWithDistanceResult>& results) {  // NOLINT
   // Search vectors by vectors
-  auto status = SearchVector(ctx->partition_id, ctx->region_id, ctx->vector_with_ids, ctx->parameter, results);
+  auto status = SearchVector(ctx->partition_id, ctx->vector_index, ctx->region_range, ctx->vector_with_ids,
+                             ctx->parameter, results);
   if (!status.ok()) {
     return status;
   }
@@ -440,14 +444,11 @@ butil::Status VectorReader::VectorScanQuery(std::shared_ptr<Engine::VectorReader
 }
 
 butil::Status VectorReader::VectorGetRegionMetrics(uint64_t region_id, const pb::common::Range& region_range,
+                                                   std::shared_ptr<VectorIndex> vector_index,
                                                    pb::common::VectorIndexMetrics& region_metrics) {
   auto vector_index_manager = Server::GetInstance()->GetVectorIndexManager();
   if (vector_index_manager == nullptr) {
     return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, fmt::format("Not found vector index mgr {}", region_id));
-  }
-  auto vector_index = vector_index_manager->GetVectorIndex(region_id);
-  if (vector_index == nullptr) {
-    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, fmt::format("Not found vector index {}", region_id));
   }
 
   uint64_t total_vector_count = 0;
@@ -474,20 +475,21 @@ butil::Status VectorReader::VectorGetRegionMetrics(uint64_t region_id, const pb:
 
 // GetBorderId
 butil::Status VectorReader::GetBorderId(const pb::common::Range& region_range, bool get_min, uint64_t& vector_id) {
-  IteratorOptions options;
-  options.lower_bound = VectorCodec::FillVectorDataPrefix(region_range.start_key());
-  options.upper_bound = VectorCodec::FillVectorDataPrefix(region_range.end_key());
-
-  auto iter = reader_->NewIterator(options);
-  if (iter == nullptr) {
-    DINGO_LOG(ERROR) << fmt::format("New iterator failed, region range [{}-{})",
-                                    Helper::StringToHex(region_range.start_key()),
-                                    Helper::StringToHex(region_range.end_key()));
-    return butil::Status(pb::error::Errno::EINTERNAL, "New iterator failed");
-  }
+  std::string start_key = VectorCodec::FillVectorDataPrefix(region_range.start_key());
+  std::string end_key = VectorCodec::FillVectorDataPrefix(region_range.end_key());
 
   if (get_min) {
-    iter->Seek(options.lower_bound);
+    IteratorOptions options;
+    options.upper_bound = end_key;
+    auto iter = reader_->NewIterator(options);
+    if (iter == nullptr) {
+      DINGO_LOG(ERROR) << fmt::format("New iterator failed, region range [{}-{})",
+                                      Helper::StringToHex(region_range.start_key()),
+                                      Helper::StringToHex(region_range.end_key()));
+      return butil::Status(pb::error::Errno::EINTERNAL, "New iterator failed");
+    }
+
+    iter->Seek(start_key);
     if (!iter->Valid()) {
       return butil::Status(pb::error::Errno::EINTERNAL, "Seek start_key failed");
     }
@@ -495,7 +497,16 @@ butil::Status VectorReader::GetBorderId(const pb::common::Range& region_range, b
     std::string key(iter->Key());
     vector_id = VectorCodec::DecodeVectorId(key);
   } else {
-    iter->SeekForPrev(options.upper_bound);
+    IteratorOptions options;
+    options.lower_bound = start_key;
+    auto iter = reader_->NewIterator(options);
+    if (iter == nullptr) {
+      DINGO_LOG(ERROR) << fmt::format("New iterator failed, region range [{}-{})",
+                                      Helper::StringToHex(region_range.start_key()),
+                                      Helper::StringToHex(region_range.end_key()));
+      return butil::Status(pb::error::Errno::EINTERNAL, "New iterator failed");
+    }
+    iter->SeekForPrev(end_key);
     if (!iter->Valid()) {
       return butil::Status(pb::error::Errno::EINTERNAL, "Seek end_key failed");
     }

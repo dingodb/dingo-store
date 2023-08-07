@@ -1226,8 +1226,8 @@ butil::Status CoordinatorControl::CreateIndex(uint64_t schema_id, const pb::meta
 
     // TODO: after sdk support part_id, this should be removed
     pb::common::Range raw_range;
-    raw_range.set_start_key(Helper::EncodeIndexRegionHeader(new_part_id));
-    raw_range.set_end_key(Helper::EncodeIndexRegionHeader(new_part_id + 1));
+    raw_range.set_start_key(Helper::EncodeIndexRegionHeader(new_part_id, 0));
+    raw_range.set_end_key(Helper::EncodeIndexRegionHeader(new_part_id, UINT64_MAX));
 
     auto ret = CreateRegion(region_name, pb::common::RegionType::INDEX_REGION, "", replica, new_part_range, raw_range,
                             schema_id, 0, new_index_id, new_part_id, table_definition.index_parameter(), new_region_id,

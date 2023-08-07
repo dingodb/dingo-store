@@ -87,7 +87,7 @@ FileServiceReaderManager& FileServiceReaderManager::GetInstance() {
   return instance;
 }
 
-uint64_t FileServiceReaderManager::AddReader(std::shared_ptr<FileReader> reader) {
+uint64_t FileServiceReaderManager::AddReader(std::shared_ptr<FileReaderWrapper> reader) {
   BAIDU_SCOPED_LOCK(mutex_);
   uint64_t reader_id = ++next_id_;
   readers_[reader_id] = reader;
@@ -100,7 +100,7 @@ int FileServiceReaderManager::DeleteReader(uint64_t reader_id) {
   return readers_.erase(reader_id) == 1 ? 0 : -1;
 }
 
-std::shared_ptr<FileReader> FileServiceReaderManager::GetReader(uint64_t reader_id) {
+std::shared_ptr<FileReaderWrapper> FileServiceReaderManager::GetReader(uint64_t reader_id) {
   BAIDU_SCOPED_LOCK(mutex_);
   auto it = readers_.find(reader_id);
   return (it == readers_.end()) ? nullptr : it->second;

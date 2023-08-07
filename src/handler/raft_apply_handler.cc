@@ -324,10 +324,17 @@ void SplitHandler::SplitClosure::Run() {
   auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
   if (is_child_) {
     if (status().ok()) {
+      if (region_->Type() == pb::common::INDEX_REGION) {
+        Server::GetInstance()->GetVectorIndexManager()->AsyncRebuildVectorIndex(region_, true, true);
+      }
+
       store_region_meta->UpdateState(region_, pb::common::StoreRegionState::NORMAL);
     }
 
   } else {
+    // if (region_->Type() == pb::common::INDEX_REGION) {
+    //   Server::GetInstance()->GetVectorIndexManager()->AsyncRebuildVectorIndex(region_, true, false);
+    // }
     store_region_meta->UpdateState(region_, pb::common::StoreRegionState::NORMAL);
     Heartbeat::TriggerStoreHeartbeat(region_->Id());
   }
@@ -359,15 +366,25 @@ void SplitHandler::Handle(std::shared_ptr<Context>, store::RegionPtr from_region
   pb::common::Range to_range;
   // Set child range
   to_range.set_start_key(request.split_key());
-  to_range.set_end_key(to_region->Range().end_key());
+  to_range.set_end_key(to_region->RawRange().end_key());
   if (to_range.end_key().compare(request.split_key()) < 0) {
-    to_range.set_end_key(from_region->Range().end_key());
+    to_range.set_end_key(from_region->RawRange().end_key());
   }
   Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->UpdateRange(to_region, to_range);
 
+  if (to_region->Type() == pb::common::INDEX_REGION) {
+    // Set child share vector index
+    auto vector_index = Server::GetInstance()->GetVectorIndexManager()->GetVectorIndex(from_region->Id());
+    if (vector_index != nullptr) {
+      to_region->SetShareVectorIndex(vector_index);
+    } else {
+      DINGO_LOG(ERROR) << fmt::format("split region get vector index failed, region {}", from_region->Id());
+    }
+  }
+
   // Set parent range
   pb::common::Range from_range;
-  from_range.set_start_key(from_region->Range().start_key());
+  from_range.set_start_key(from_region->RawRange().start_key());
   from_range.set_end_key(request.split_key());
   Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->UpdateRange(from_region, from_range);
   DINGO_LOG(DEBUG) << fmt::format("split region {} to {}, from region range[{}-{}] to region range[{}-{}]",
@@ -406,6 +423,22 @@ void VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr reg
 
   butil::Status status;
   const auto &request = req.vector_add();
+
+  // region is spliting, check key out range
+  if (region->State() == pb::common::StoreRegionState::SPLITTING) {
+    const auto &range = region->RawRange();
+    uint64_t start_vector_id = VectorCodec::DecodeVectorId(range.start_key());
+    uint64_t end_vector_id = VectorCodec::DecodeVectorId(range.end_key());
+    for (const auto &vector : request.vectors()) {
+      if (vector.id() < start_vector_id || vector.id() >= end_vector_id) {
+        if (ctx) {
+          status.set_error(pb::error::EREGION_REDIRECT, "Region is spliting, please update route");
+          ctx->SetStatus(status);
+        }
+        return;
+      }
+    }
+  }
 
   // Transform vector to kv
   std::vector<pb::common::KeyValue> kvs;
@@ -452,8 +485,7 @@ void VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr reg
 
   uint64_t vector_index_id = region->Id();
   auto vector_index_manager = Server::GetInstance()->GetVectorIndexManager();
-  auto vector_index = vector_index_manager->GetVectorIndex(vector_index_id);
-
+  auto vector_index = vector_index_manager->GetVectorIndex(region);
   // if leadder vector_index is nullptr, return internal error
   if (ctx != nullptr && vector_index == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("Not found vector index {}", vector_index_id);
@@ -494,7 +526,7 @@ void VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr reg
           stop_flag = false;
 
           bthread_usleep(1000 * 100);
-          vector_index = vector_index_manager->GetVectorIndex(vector_index_id);
+          vector_index = vector_index_manager->GetVectorIndex(region);
           if (vector_index == nullptr) {
             DINGO_LOG(ERROR) << fmt::format("Not found vector index {}", vector_index_id);
             status = butil::Status(pb::error::EINTERNAL, "Not found vector index %lu", vector_index_id);
@@ -558,6 +590,22 @@ void VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr 
   butil::Status status;
   const auto &request = req.vector_delete();
 
+  // region is spliting, check key out range
+  if (region->State() == pb::common::StoreRegionState::SPLITTING) {
+    const auto &range = region->RawRange();
+    uint64_t start_vector_id = VectorCodec::DecodeVectorId(range.start_key());
+    uint64_t end_vector_id = VectorCodec::DecodeVectorId(range.end_key());
+    for (auto vector_id : request.ids()) {
+      if (vector_id < start_vector_id || vector_id >= end_vector_id) {
+        if (ctx) {
+          status.set_error(pb::error::EREGION_REDIRECT, "Region is spliting, please update route");
+          ctx->SetStatus(status);
+        }
+        return;
+      }
+    }
+  }
+
   auto reader = engine->NewReader(request.cf_name());
   auto snapshot = engine->GetSnapshot();
 
@@ -611,7 +659,7 @@ void VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr 
 
   uint64_t vector_index_id = region->Id();
   auto vector_index_manager = Server::GetInstance()->GetVectorIndexManager();
-  auto vector_index = vector_index_manager->GetVectorIndex(vector_index_id);
+  auto vector_index = vector_index_manager->GetVectorIndex(region);
   // if leadder vector_index is nullptr, return internal error
   if (ctx != nullptr && vector_index == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("Not found vector index {}", vector_index_id);
@@ -643,7 +691,7 @@ void VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr 
           stop_flag = false;
 
           bthread_usleep(1000 * 100);
-          vector_index = vector_index_manager->GetVectorIndex(vector_index_id);
+          vector_index = vector_index_manager->GetVectorIndex(region);
           if (vector_index == nullptr) {
             DINGO_LOG(ERROR) << fmt::format("Not found vector index {}", vector_index_id);
             status = butil::Status(pb::error::EINTERNAL, "Not found vector index %lu", vector_index_id);

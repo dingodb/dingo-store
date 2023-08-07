@@ -48,12 +48,14 @@ class VectorReader {
                                 std::vector<pb::common::VectorWithId>& vector_with_ids);
 
   butil::Status VectorGetRegionMetrics(uint64_t region_id, const pb::common::Range& region_range,
+                                       std::shared_ptr<VectorIndex> vector_index,
                                        pb::common::VectorIndexMetrics& region_metrics);
 
  private:
   butil::Status QueryVectorWithId(uint64_t partition_id, uint64_t vector_id, bool with_vector_data,
                                   pb::common::VectorWithId& vector_with_id);
-  butil::Status SearchVector(uint64_t partition_id, uint64_t region_id,
+  butil::Status SearchVector(uint64_t partition_id, std::shared_ptr<VectorIndex> vector_index,
+                             pb::common::Range region_range,
                              const std::vector<pb::common::VectorWithId>& vector_with_ids,
                              const pb::common::VectorSearchParameter& parameter,
                              std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results);

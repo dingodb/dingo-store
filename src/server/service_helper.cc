@@ -17,8 +17,10 @@
 #include <string>
 #include <string_view>
 
+#include "butil/status.h"
 #include "common/helper.h"
 #include "fmt/core.h"
+#include "vector/codec.h"
 
 namespace dingodb {
 
@@ -39,6 +41,9 @@ butil::Status ServiceHelper::ValidateRegionState(store::RegionPtr region) {
   }
   if (region->State() == pb::common::StoreRegionState::DELETED) {
     return butil::Status(pb::error::EREGION_UNAVAILABLE, "Region is deleted");
+  }
+  if (region->State() == pb::common::StoreRegionState::ORPHAN) {
+    return butil::Status(pb::error::EREGION_UNAVAILABLE, "Region is orphan");
   }
 
   return butil::Status();
@@ -121,7 +126,7 @@ butil::Status ServiceHelper::ValidateRegion(uint64_t region_id, const std::vecto
   }
 
   // for table region, Range is always equal to RawRange, so here we can use Range to validate
-  status = ValidateKeyInRange(region->Range(), keys);
+  status = ValidateKeyInRange(region->RawRange(), keys);
   if (!status.ok()) {
     return status;
   }
@@ -129,10 +134,22 @@ butil::Status ServiceHelper::ValidateRegion(uint64_t region_id, const std::vecto
   return butil::Status();
 }
 
-butil::Status ServiceHelper::ValidateIndexRegion(store::RegionPtr region) {
+butil::Status ServiceHelper::ValidateIndexRegion(store::RegionPtr region, std::vector<uint64_t> vector_ids) {
   auto status = ValidateRegionState(region);
   if (!status.ok()) {
     return status;
+  }
+
+  const auto& range = region->RawRange();
+  uint64_t min_vector_id = VectorCodec::DecodeVectorId(range.start_key());
+  uint64_t max_vector_id = VectorCodec::DecodeVectorId(range.end_key());
+  for (auto vector_id : vector_ids) {
+    if (vector_id < min_vector_id || vector_id >= max_vector_id) {
+      return butil::Status(pb::error::EKEY_OUT_OF_RANGE,
+                           fmt::format("Key out of range, region range[{}-{}) / [{}-{}) req vecotr id {}",
+                                       Helper::StringToHex(range.start_key()), Helper::StringToHex(range.end_key()),
+                                       min_vector_id, max_vector_id, vector_id));
+    }
   }
 
   return butil::Status();

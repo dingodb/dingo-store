@@ -50,20 +50,23 @@ class VectorIndexManager : public TransformKvAble {
   void DeleteVectorIndex(uint64_t vector_index_id);
 
   std::shared_ptr<VectorIndex> GetVectorIndex(uint64_t vector_index_id);
+  std::shared_ptr<VectorIndex> GetVectorIndex(store::RegionPtr region);
   std::vector<std::shared_ptr<VectorIndex>> GetAllVectorIndex();
 
   // Load vector index for already exist vector index at bootstrap.
   // Priority load from snapshot, if snapshot not exist then load from rocksdb.
   butil::Status LoadOrBuildVectorIndex(store::RegionPtr region);
+  butil::Status ParallelLoadOrBuildVectorIndex(std::vector<store::RegionPtr> regions, int concurrency);
 
   // Save vector index snapshot.
   butil::Status SaveVectorIndex(std::shared_ptr<VectorIndex> vector_index);
 
   // check if status is legal for rebuild
-  butil::Status CheckAndSetRebuildStatus(store::RegionPtr region, bool is_initial_build);
+  butil::Status CheckRebuildStatus(std::shared_ptr<VectorIndex> vector_index, bool is_initial_build);
 
   // Invoke when server runing.
   butil::Status RebuildVectorIndex(store::RegionPtr region, bool need_save = true, bool is_initial_build = false);
+  butil::Status AsyncRebuildVectorIndex(store::RegionPtr region, bool need_save = true, bool is_initial_build = false);
 
   // Update vector index apply log index.
   void UpdateApplyLogIndex(std::shared_ptr<VectorIndex> vector_index, uint64_t log_index);
