@@ -99,11 +99,17 @@ message HashPartition {
   repeated DingoCommonId ids = 2;               // this is really part id, its parent entity is table
 }
 
+message Partition {
+  DingoCommonId id = 1;               // this is really part id, its parent entity is table
+  dingodb.pb.common.Range range = 2;  // the count of ranges must be equal to the count of id
+}
+
 message PartitionRule {
   repeated string columns = 1;
   PartitionStrategy strategy = 2;
-  RangePartition range_partition = 3;
-  HashPartition hash_partition = 4;
+  RangePartition range_partition = 3;  // deprecated, will be removed in the future
+  HashPartition hash_partition = 4;    // deprecated, will be removed in the future
+  repeated Partition partitions = 10;
 }
 
 // Schema
