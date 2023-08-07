@@ -27,6 +27,7 @@
 #include "bthread/condition_variable.h"
 #include "bthread/mutex.h"
 #include "common/constant.h"
+#include "common/logging.h"
 #include "coordinator/coordinator_closure.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator_internal.pb.h"
@@ -585,7 +586,7 @@ void VersionServiceProtoImpl::Watch(google::protobuf::RpcController* controller,
   brpc::ClosureGuard done_guard(done);
 
   auto is_leader = this->coordinator_control_->IsLeader();
-  DINGO_LOG(WARNING) << "Receive Watch Request: IsLeader:" << is_leader << ", Request: " << request->DebugString();
+  DINGO_LOG(INFO) << "Receive Watch Request: IsLeader:" << is_leader << ", Request: " << request->DebugString();
 
   if (!is_leader) {
     return RedirectResponse(response);
@@ -616,6 +617,12 @@ void VersionServiceProtoImpl::Watch(google::protobuf::RpcController* controller,
         no_delete_event = true;
       }
     }
+  }
+
+  if (no_put_event && no_delete_event) {
+    DINGO_LOG(ERROR) << "Watch failed: no put event and no delete event";
+    response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errmsg("no put event and no delete event");
   }
 
   coordinator_control_->OneTimeWatch(one_time_req.key(), one_time_req.start_revision(), no_put_event, no_delete_event,

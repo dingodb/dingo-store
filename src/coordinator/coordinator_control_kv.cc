@@ -602,9 +602,9 @@ butil::Status CoordinatorControl::KvPutApply(const std::string &key,
   DINGO_LOG(INFO) << "KvPutApply PutRawKvRev success, revision: " << op_revision.ShortDebugString()
                   << ", kv_rev: " << kv_rev.ShortDebugString();
 
-  // add watch
+  // trigger watch
   if (!this->one_time_watch_map_.empty()) {
-    DINGO_LOG(INFO) << "KvPutApply one_time_watch_map_ is not empty, will add watch, key: " << key
+    DINGO_LOG(INFO) << "KvPutApply one_time_watch_map_ is not empty, will trigger watch, key: " << key
                     << ", watch size: " << this->one_time_watch_map_.size();
 
     if (prev_kv.create_revision() > 0) {
@@ -618,6 +618,8 @@ butil::Status CoordinatorControl::KvPutApply(const std::string &key,
     new_kv.set_lease(kv_rev.kv().lease());
     new_kv.mutable_kv()->set_key(key);
     new_kv.mutable_kv()->set_value(kv_rev.kv().value());
+
+    TriggerOneWatch(key, pb::version::Event::EventType::Event_EventType_PUT, new_kv, prev_kv);
   }
 
   DINGO_LOG(INFO) << "KvPutApply success after trigger watch, key: " << key
@@ -727,9 +729,9 @@ butil::Status CoordinatorControl::KvDeleteApply(const std::string &key,
 
   DINGO_LOG(INFO) << "KvDeleteApply success, key: " << key << ", revision: " << op_revision.ShortDebugString();
 
-  // add watch
+  // trigger watch
   if (!this->one_time_watch_map_.empty()) {
-    DINGO_LOG(INFO) << "KvDeleteApply one_time_watch_map_ is not empty, will add watch, key: " << key
+    DINGO_LOG(INFO) << "KvDeleteApply one_time_watch_map_ is not empty, will trigger watch, key: " << key
                     << ", watch size: " << this->one_time_watch_map_.size();
 
     if (prev_kv.create_revision() > 0) {
@@ -743,6 +745,8 @@ butil::Status CoordinatorControl::KvDeleteApply(const std::string &key,
     new_kv.set_lease(kv_rev.kv().lease());
     new_kv.mutable_kv()->set_key(key);
     new_kv.mutable_kv()->set_value(kv_rev.kv().value());
+
+    TriggerOneWatch(key, pb::version::Event::EventType::Event_EventType_DELETE, new_kv, prev_kv);
   }
 
   DINGO_LOG(INFO) << "KvDeleteApply success after trigger watch, key: " << key

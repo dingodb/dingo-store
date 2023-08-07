@@ -29,6 +29,7 @@
 #include "braft/configuration.h"
 #include "brpc/callback.h"
 #include "brpc/closure_guard.h"
+#include "bthread/mutex.h"
 #include "butil/containers/flat_map.h"
 #include "butil/scoped_lock.h"
 #include "butil/status.h"
@@ -50,16 +51,28 @@ namespace dingodb {
 
 void WatchCancelCallback(CoordinatorControl* coordinator_control, google::protobuf::Closure* done) {
   DINGO_LOG(INFO) << "WatchCancelCallback, done:" << done;
-  coordinator_control->RemoveOneTimeWatch(done);
+
+  coordinator_control->CancelOneTimeWatchClosure(done);
 }
 
 butil::Status CoordinatorControl::OneTimeWatch(const std::string& watch_key, uint64_t start_revision, bool no_put_event,
                                                bool no_delete_event, bool need_prev_kv, bool wait_on_not_exist_key,
                                                google::protobuf::Closure* done, pb::version::WatchResponse* response,
-                                               brpc::Controller* cntl) {
+                                               [[maybe_unused]] brpc::Controller* cntl) {
   brpc::ClosureGuard done_guard(done);
 
+  DINGO_LOG(INFO) << "OneTimeWatch, watch_key:" << watch_key << ", start_revision:" << start_revision
+                  << ", no_put_event:" << no_put_event << ", no_delete_event:" << no_delete_event
+                  << ", need_prev_kv:" << need_prev_kv << ", wait_on_not_exist_key:" << wait_on_not_exist_key
+                  << ", done:" << done;
+
   BAIDU_SCOPED_LOCK(one_time_watch_map_mutex_);
+
+  if (start_revision == 0) {
+    start_revision = GetPresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_REVISION);
+    DINGO_LOG(INFO) << "OneTimeWatch, start_revision is 0, set to next revision, watch_key:" << watch_key
+                    << ", start_revision:" << start_revision;
+  }
 
   // check if need to send back immediately
   std::vector<pb::version::Kv> kvs_temp;
@@ -85,14 +98,16 @@ butil::Status CoordinatorControl::OneTimeWatch(const std::string& watch_key, uin
   }
 
   // add to watch
-  AddOneTimeWatch(watch_key, start_revision, no_put_event, no_delete_event, need_prev_kv, done, response);
+  auto* defer_done = done_guard.release();
+  AddOneTimeWatch(watch_key, start_revision, no_put_event, no_delete_event, need_prev_kv, defer_done, response);
 
   // add NotifyOnCancel callback
-  cntl->NotifyOnCancel(brpc::NewCallback(&WatchCancelCallback, this, done));
+  // cntl->NotifyOnCancel(brpc::NewCallback(&WatchCancelCallback, this, defer_done));
 
   return butil::Status::OK();
 }
 
+// caller must hold one_time_watch_map_mutex_
 butil::Status CoordinatorControl::AddOneTimeWatch(const std::string& watch_key, uint64_t start_revision,
                                                   bool no_put_event, bool no_delete_event, bool need_prev_kv,
                                                   google::protobuf::Closure* done,
@@ -100,18 +115,23 @@ butil::Status CoordinatorControl::AddOneTimeWatch(const std::string& watch_key, 
   // add to watch
   WatchNode watch_node(done, response, start_revision, no_put_event, no_delete_event, need_prev_kv);
 
-  {
-    BAIDU_SCOPED_LOCK(one_time_watch_map_mutex_);
-    auto it = one_time_watch_map_.find(watch_key);
-    if (it == one_time_watch_map_.end()) {
-      std::map<google::protobuf::Closure*, WatchNode> watch_node_map;
-      watch_node_map.insert_or_assign(done, watch_node);
-      one_time_watch_map_.insert_or_assign(watch_key, watch_node_map);
-    } else {
-      auto& exist_watch_node_map = it->second;
-      exist_watch_node_map.insert_or_assign(done, watch_node);
-    }
+  DINGO_LOG(INFO) << "AddOneTimeWatch, watch_key:" << watch_key << ", start_revision:" << start_revision
+                  << ", no_put_event:" << no_put_event << ", no_delete_event:" << no_delete_event
+                  << ", need_prev_kv:" << need_prev_kv << ", done:" << done;
+
+  auto it = one_time_watch_map_.find(watch_key);
+  if (it == one_time_watch_map_.end()) {
+    std::map<google::protobuf::Closure*, WatchNode> watch_node_map;
+    watch_node_map.insert_or_assign(done, watch_node);
+    one_time_watch_map_.insert_or_assign(watch_key, watch_node_map);
+    DINGO_LOG(INFO) << "AddOneTimeWatch, watch_key not found, insert, watch_key:" << watch_key;
+  } else {
+    auto& exist_watch_node_map = it->second;
+    exist_watch_node_map.insert_or_assign(done, watch_node);
+    DINGO_LOG(INFO) << "AddOneTimeWatch, watch_key found, insert, watch_key:" << watch_key;
   }
+
+  one_time_watch_closure_map_.insert_or_assign(done, watch_key);
 
   return butil::Status::OK();
 }
@@ -154,21 +174,53 @@ butil::Status CoordinatorControl::RemoveOneTimeWatchWithLock(google::protobuf::C
   return butil::Status::OK();
 }
 
-// this function is called by WatchCancelCallback
-butil::Status CoordinatorControl::RemoveOneTimeWatch(google::protobuf::Closure* done) {
+// this function is called by crontab
+butil::Status CoordinatorControl::RemoveOneTimeWatch() {
+  DINGO_LOG(INFO) << "RemoveOneTimeWatch";
+
   BAIDU_SCOPED_LOCK(one_time_watch_map_mutex_);
 
-  auto ret = RemoveOneTimeWatch(done);
-  if (ret.ok()) {
-    DINGO_LOG(INFO) << "RemoveOneTimeWatch success, do done->Run(), done:" << done;
-    brpc::ClosureGuard done_guard(done);
+  std::map<google::protobuf::Closure*, bool> done_map;
+
+  one_time_watch_closure_status_map_.GetRawMapCopy(done_map);
+
+  if (done_map.empty()) {
+    DINGO_LOG(INFO) << "RemoveOneTimeWatch, done_map is empty";
+    return butil::Status::OK();
   }
 
+  DINGO_LOG(INFO) << "RemoveOneTimeWatch, done_map.size:" << done_map.size();
+
+  for (auto& it : done_map) {
+    auto* done = it.first;
+    DINGO_LOG(INFO) << "RemoveOneTimeWatch, done:" << done;
+
+    auto ret = RemoveOneTimeWatchWithLock(done);
+    if (ret.ok()) {
+      DINGO_LOG(INFO) << "RemoveOneTimeWatchWithLock success, do done->Run(), done:" << done;
+      done->Run();
+    }
+
+    one_time_watch_closure_status_map_.Erase(done);
+  }
+
+  DINGO_LOG(INFO) << "RemoveOneTimeWatch finish, done_map.size:" << done_map.size();
+
+  return butil::Status::OK();
+}
+
+// this function is called by WatchCancelCallback
+butil::Status CoordinatorControl::CancelOneTimeWatchClosure(google::protobuf::Closure* done) {
+  DINGO_LOG(INFO) << "CancelOneTimeWatchClosure, done:" << done;
+  one_time_watch_closure_status_map_.Put(done, true);
   return butil::Status::OK();
 }
 
 butil::Status CoordinatorControl::TriggerOneWatch(const std::string& key, pb::version::Event::EventType event_type,
                                                   pb::version::Kv& new_kv, pb::version::Kv& prev_kv) {
+  DINGO_LOG(INFO) << "TriggerOneWatch, key:" << key << ", event_type:" << event_type
+                  << ", new_kv:" << new_kv.ShortDebugString() << ", prev_kv:" << prev_kv.ShortDebugString();
+
   BAIDU_SCOPED_LOCK(one_time_watch_map_mutex_);
 
   auto it = one_time_watch_map_.find(key);
@@ -178,6 +230,8 @@ butil::Status CoordinatorControl::TriggerOneWatch(const std::string& key, pb::ve
   }
 
   auto& watch_node_map = it->second;
+
+  std::vector<google::protobuf::Closure*> done_list;
   for (auto& watch_node : watch_node_map) {
     if (watch_node.second.no_put_event && event_type == pb::version::Event::EventType::Event_EventType_PUT) {
       DINGO_LOG(INFO) << "TriggerOneWatch skip, no_put_event, key:" << key;
@@ -206,18 +260,26 @@ butil::Status CoordinatorControl::TriggerOneWatch(const std::string& key, pb::ve
       old_kv->Swap(&prev_kv);
     }
 
-    RemoveOneTimeWatchWithLock(watch_node.first);
-
-    brpc::ClosureGuard done_guard(watch_node.first);
-
-    DINGO_LOG(INFO) << "TriggerOneWatch success, key:" << key << ", event_type:" << event_type
+    DINGO_LOG(INFO) << "TriggerOneWatch will RemoveOneTimeWatch, key:" << key << ", event_type:" << event_type
                     << ", watch_node.first:" << watch_node.first
                     << ", watch_detail: start_revision=" << watch_node.second.start_revision
                     << ", no_put_event=" << watch_node.second.no_put_event
                     << ", no_delete_event=" << watch_node.second.no_delete_event
                     << ", need_prev_kv=" << watch_node.second.need_prev_kv
                     << ", response:" << response->ShortDebugString();
+
+    auto* done = watch_node.first;
+    done_list.push_back(done);
+
+    DINGO_LOG(INFO) << "TriggerOneWatch success, key:" << key << ", event_type:" << event_type << ", done:" << done
+                    << ", response:" << response->ShortDebugString();
   }
+
+  for (auto& done : done_list) {
+    done->Run();
+    RemoveOneTimeWatchWithLock(done);
+  }
+
   return butil::Status::OK();
 }
 

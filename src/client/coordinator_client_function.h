@@ -134,6 +134,9 @@ void SendCoorKvRange(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
 void SendCoorKvPut(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendCoorKvDeleteRange(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 
+// watch
+void SendOneTimeWatch(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+
 // debug
 void SendDebug();
 std::string EncodeUint64(uint64_t value);
