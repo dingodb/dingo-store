@@ -579,4 +579,48 @@ void VersionServiceProtoImpl::KvDeleteRange(google::protobuf::RpcController* /*c
   engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
 }
 
+void VersionServiceProtoImpl::Watch(google::protobuf::RpcController* controller,
+                                    const pb::version::WatchRequest* request, pb::version::WatchResponse* response,
+                                    google::protobuf::Closure* done) {
+  brpc::ClosureGuard done_guard(done);
+
+  auto is_leader = this->coordinator_control_->IsLeader();
+  DINGO_LOG(WARNING) << "Receive Watch Request: IsLeader:" << is_leader << ", Request: " << request->DebugString();
+
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  if (!request->has_one_time_request()) {
+    response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errmsg("only one_time_request is supported now");
+    return;
+  }
+
+  if (request->one_time_request().key().empty()) {
+    response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errmsg("key is empty");
+    return;
+  }
+
+  const auto& one_time_req = request->one_time_request();
+
+  bool no_put_event = false;
+  bool no_delete_event = false;
+
+  if (one_time_req.filters_size() > 0) {
+    for (const auto& filter : one_time_req.filters()) {
+      if (filter == pb::version::EventFilterType::NOPUT) {
+        no_put_event = true;
+      } else if (filter == pb::version::EventFilterType::NODELETE) {
+        no_delete_event = true;
+      }
+    }
+  }
+
+  coordinator_control_->OneTimeWatch(one_time_req.key(), one_time_req.start_revision(), no_put_event, no_delete_event,
+                                     one_time_req.need_prev_kv(), one_time_req.wait_on_not_exist_key(),
+                                     done_guard.release(), response, static_cast<brpc::Controller*>(controller));
+}
+
 }  // namespace dingodb

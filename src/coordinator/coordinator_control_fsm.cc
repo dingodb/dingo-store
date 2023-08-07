@@ -111,6 +111,13 @@ void CoordinatorControl::OnLeaderStart(int64_t term) {
 
   // build lease_to_key_map_temp_
   BuildLeaseToKeyMap();
+
+  // clear one time watch map
+  {
+    BAIDU_SCOPED_LOCK(one_time_watch_map_mutex_);
+    one_time_watch_map_.clear();
+  }
+
   DINGO_LOG(INFO) << "OnLeaderStart init lease_to_key_map_temp_ finished, term=" << term
                   << " count=" << lease_to_key_map_temp_.size();
 
@@ -130,6 +137,23 @@ void CoordinatorControl::OnLeaderStop() {
 
   // clear all index_metrics on follower
   index_metrics_map_.Clear();
+
+  // clear one time watch map
+  {
+    BAIDU_SCOPED_LOCK(one_time_watch_map_mutex_);
+    for (auto& it : one_time_watch_map_) {
+      auto& closure_to_reposne_map = it.second;
+      for (auto& ctrm : closure_to_reposne_map) {
+        auto* done = ctrm.first;
+        if (done) {
+          done->Run();
+        }
+      }
+    }
+
+    one_time_watch_map_.clear();
+    one_time_watch_closure_map_.clear();
+  }
 
   DINGO_LOG(INFO) << "OnLeaderStop finished";
 }
