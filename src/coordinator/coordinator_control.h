@@ -15,6 +15,7 @@
 #ifndef DINGODB_COORDINATOR_CONTROL_H_
 #define DINGODB_COORDINATOR_CONTROL_H_
 
+#include <atomic>
 #include <cstdint>
 #include <map>
 #include <memory>
@@ -42,6 +43,18 @@
 #include "raft/raft_node.h"
 
 namespace dingodb {
+
+struct WatchNode {
+  WatchNode() {
+    done = nullptr;
+    response = nullptr;
+  }
+
+  WatchNode(google::protobuf::Closure *done, pb::version::WatchResponse *response) : done(done), response(response) {}
+
+  google::protobuf::Closure *done;
+  pb::version::WatchResponse *response;
+};
 
 class AtomicGuard {
  public:
@@ -710,6 +723,12 @@ class CoordinatorControl : public MetaControl {
   // KvCompactApply is the apply function for delete
   butil::Status KvCompactApply(const std::string &key, const pb::coordinator_internal::RevisionInternal &op_revision);
 
+  // watch functions for api
+  butil::Status OneTimeWatch(const std::string &watch_key, uint64_t start_revision, bool no_put_event,
+                             bool no_delete_event, bool need_prev_kv, bool wait_on_not_exist_key,
+                             google::protobuf::Closure *done, pb::version::WatchResponse *response,
+                             brpc::Controller *cntl);
+
  private:
   butil::Status ValidateTaskListConflict(uint64_t region_id, uint64_t second_region_id);
 
@@ -811,6 +830,12 @@ class CoordinatorControl : public MetaControl {
   // 16.version kv multi revision
   DingoSafeStdMap<std::string, pb::coordinator_internal::KvRevInternal> kv_rev_map_;
   MetaSafeStringStdMapStorage<pb::coordinator_internal::KvRevInternal> *kv_rev_meta_;
+
+  // one time watch map
+  // this map on work on leader, is out of state machine
+  std::map<std::string, std::map<google::protobuf::Closure *, pb::version::WatchResponse *>> one_time_watch_map_;
+  std::map<google::protobuf::Closure *, std::string> one_time_watch_closure_map_;
+  bthread_mutex_t one_time_watch_map_mutex_;
 
   // root schema write to raft
   bool root_schema_writed_to_raft_;

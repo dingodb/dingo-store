@@ -286,7 +286,7 @@ butil::Status CoordinatorControl::KvRange(const std::string &key, const std::str
 // KvPut is the put function
 // in:  key_value
 // in:  lease_id
-// in:  prev_kv
+// in:  need_prev_kv
 // in:  igore_value
 // in:  ignore_lease
 // in:  main_revision
