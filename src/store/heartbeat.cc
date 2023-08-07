@@ -217,6 +217,8 @@ void CoordinatorRecycleOrphanTask::CoordinatorRecycleOrphan(std::shared_ptr<Coor
   AtomicGuard guard(g_store_recycle_orphan_running);
 
   coordinator_control->RecycleOrphanRegionOnStore();
+
+  coordinator_control->RemoveOneTimeWatch();
 }
 
 // this is for coordinator

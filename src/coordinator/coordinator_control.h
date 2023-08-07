@@ -31,6 +31,7 @@
 #include "coordinator/coordinator_meta_storage.h"
 #include "engine/engine.h"
 #include "engine/snapshot.h"
+#include "google/protobuf/stubs/callback.h"
 #include "meta/meta_reader.h"
 #include "meta/meta_writer.h"
 #include "metrics/coordinator_bvar_metrics.h"
@@ -748,8 +749,9 @@ class CoordinatorControl : public MetaControl {
                                 bool no_delete_event, bool need_prev_kv, google::protobuf::Closure *done,
                                 pb::version::WatchResponse *response);
   // remove watch from map
-  butil::Status RemoveOneTimeWatch(google::protobuf::Closure *done);
+  butil::Status RemoveOneTimeWatch();
   butil::Status RemoveOneTimeWatchWithLock(google::protobuf::Closure *done);
+  butil::Status CancelOneTimeWatchClosure(google::protobuf::Closure *done);
 
   // watch functions for raft fsm
   butil::Status TriggerOneWatch(const std::string &key, pb::version::Event::EventType event_type,
@@ -862,6 +864,7 @@ class CoordinatorControl : public MetaControl {
   std::map<std::string, std::map<google::protobuf::Closure *, WatchNode>> one_time_watch_map_;
   std::map<google::protobuf::Closure *, std::string> one_time_watch_closure_map_;
   bthread_mutex_t one_time_watch_map_mutex_;
+  DingoSafeStdMap<google::protobuf::Closure *, bool> one_time_watch_closure_status_map_;
 
   // root schema write to raft
   bool root_schema_writed_to_raft_;

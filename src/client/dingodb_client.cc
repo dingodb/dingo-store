@@ -122,6 +122,10 @@ DEFINE_bool(need_prev_kv, false, "need_prev_kv for coor kv");
 DEFINE_bool(ignore_value, false, "ignore_value for coor kv");
 DEFINE_bool(ignore_lease, false, "ignore_lease for coor kv");
 DEFINE_uint64(lease, 0, "lease for coor kv put");
+DEFINE_bool(no_put, false, "watch no put");
+DEFINE_bool(no_delete, false, "watch no delete");
+DEFINE_bool(wait_on_not_exist_key, false, "watch wait for not exist key");
+DEFINE_uint32(max_watch_count, 10, "max_watch_count");
 
 bvar::LatencyRecorder g_latency_recorder("dingo-store");
 
@@ -647,6 +651,11 @@ int CoordinatorSender() {
     SendCoorKvPut(coordinator_interaction_version);
   } else if (FLAGS_method == "CoorKvDeleteRange") {
     SendCoorKvDeleteRange(coordinator_interaction_version);
+  }
+
+  // coordinator watch
+  else if (FLAGS_method == "OneTimeWatch") {
+    SendOneTimeWatch(coordinator_interaction_version);
   }
 
   // debug
