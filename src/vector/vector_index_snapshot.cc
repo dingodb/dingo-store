@@ -52,6 +52,7 @@ namespace vector_index {
 
 SnapshotMeta::SnapshotMeta(uint64_t vector_index_id, const std::string& path)
     : vector_index_id_(vector_index_id), path_(path) {}
+
 SnapshotMeta::~SnapshotMeta() {
   // Delete directory
   DINGO_LOG(INFO) << "Delete vector index snapshot directory " << path_;
@@ -206,7 +207,7 @@ butil::Status VectorIndexSnapshotManager::LaunchInstallSnapshot(const butil::End
   DINGO_LOG(INFO) << fmt::format("last vector index snapshot: {}", last_snapshot->Path());
 
   // Get uri
-  auto reader = std::make_shared<LocalDirReader>(new braft::PosixFileSystemAdaptor(), last_snapshot->Path());
+  auto reader = std::make_shared<FileReaderWrapper>(last_snapshot);
   uint64_t reader_id = FileServiceReaderManager::GetInstance().AddReader(reader);
   auto config = Server::GetInstance()->GetConfig();
   auto host = config->GetString("server.host");
@@ -334,7 +335,7 @@ butil::Status VectorIndexSnapshotManager::HandlePullSnapshot(std::shared_ptr<Con
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Parse server host or port error.");
   }
 
-  auto reader = std::make_shared<LocalDirReader>(new braft::PosixFileSystemAdaptor(), last_snapshot->Path());
+  auto reader = std::make_shared<FileReaderWrapper>(last_snapshot);
   uint64_t reader_id = FileServiceReaderManager::GetInstance().AddReader(reader);
   response->set_uri(fmt::format("remote://{}:{}/{}", host, port, reader_id));
 
@@ -496,20 +497,20 @@ butil::Status VectorIndexSnapshotManager::DownloadSnapshotFile(const std::string
 // Save vector index snapshot, just one concurrence.
 butil::Status VectorIndexSnapshotManager::SaveVectorIndexSnapshot(std::shared_ptr<VectorIndex> vector_index,
                                                                   uint64_t& snapshot_log_index) {
-  // Control concurrence.
-  static std::atomic<bool> doing = false;
-  if (doing.load(std::memory_order_relaxed)) {
-    return butil::Status(pb::error::EINTERNAL, "Save vector index is busy.");
-  }
-  doing.store(true, std::memory_order_relaxed);
-  ON_SCOPE_EXIT([&]() { doing.store(false, std::memory_order_relaxed); });
-
-  uint64_t start_time = Helper::TimestampMs();
   // Check if vector_index is null
-  if (!vector_index) {
+  if (vector_index == nullptr) {
     DINGO_LOG(WARNING) << fmt::format("Save vector index failed, vector_index is null");
     return butil::Status(pb::error::Errno::EINTERNAL, "Save vector index failed, vector_index is null");
   }
+
+  // Control concurrence.
+  if (vector_index->SnapshotDoing()) {
+    return butil::Status(pb::error::EINTERNAL, "Save vector index is busy.");
+  }
+  vector_index->SetSnapshotLogIndex(true);
+  ON_SCOPE_EXIT([&]() { vector_index->SetSnapshotLogIndex(false); });
+
+  uint64_t start_time = Helper::TimestampMs();
 
   // lock write for atomic ops
   // this lock will be unlocked after fork()

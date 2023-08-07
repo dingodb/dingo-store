@@ -33,6 +33,7 @@
 #include "meta/transform_kv_able.h"
 #include "proto/common.pb.h"
 #include "proto/store_internal.pb.h"
+#include "vector/vector_index.h"
 
 namespace dingodb {
 
@@ -55,13 +56,13 @@ class Region {
 
   uint64_t Id() const { return inner_region_.id(); }
   const std::string& Name() const { return inner_region_.definition().name(); }
+  pb::common::RegionType Type() { return inner_region_.region_type(); }
 
   uint64_t LeaderId();
   void SetLeaderId(uint64_t leader_id);
 
   const pb::common::Range& Range();
   const pb::common::Range& RawRange();
-  void SetRange(const pb::common::Range& range);
   void SetRawRange(const pb::common::Range& range);
 
   void SetIndexParameter(const pb::common::IndexParameter& index_parameter);
@@ -76,8 +77,8 @@ class Region {
   bool DisableSplit();
   void SetDisableSplit(bool disable_split);
 
-  uint64_t RefVectorIndexId();
-  void SetRefVectorIndexId(uint64_t vector_index_id);
+  std::shared_ptr<VectorIndex> ShareVectorIndex() { return share_vector_index_; }
+  void SetShareVectorIndex(std::shared_ptr<VectorIndex> vector_index) { share_vector_index_ = vector_index; }
 
   uint64_t PartitionId();
 
@@ -87,6 +88,8 @@ class Region {
   bthread_mutex_t mutex_;
   pb::store_internal::Region inner_region_;
   std::atomic<pb::common::StoreRegionState> state_;
+  // Share vector index with parent region, when spliting region.
+  std::shared_ptr<VectorIndex> share_vector_index_;
 };
 
 using RegionPtr = std::shared_ptr<Region>;

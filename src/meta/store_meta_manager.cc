@@ -36,6 +36,11 @@ std::shared_ptr<Region> Region::New() { return std::make_shared<Region>(); }
 std::shared_ptr<Region> Region::New(const pb::common::RegionDefinition& definition) {
   auto region = std::make_shared<Region>();
   region->inner_region_.set_id(definition.id());
+  if (definition.index_parameter().index_type() == pb::common::INDEX_TYPE_VECTOR) {
+    region->inner_region_.set_region_type(pb::common::INDEX_REGION);
+  } else {
+    region->inner_region_.set_region_type(pb::common::STORE_REGION);
+  }
   region->inner_region_.mutable_definition()->CopyFrom(definition);
   region->SetState(pb::common::StoreRegionState::NEW);
   return region;
@@ -70,11 +75,6 @@ const pb::common::Range& Region::Range() {
 const pb::common::Range& Region::RawRange() {
   BAIDU_SCOPED_LOCK(mutex_);
   return inner_region_.definition().raw_range();
-}
-
-void Region::SetRange(const pb::common::Range& range) {
-  BAIDU_SCOPED_LOCK(mutex_);
-  inner_region_.mutable_definition()->mutable_range()->CopyFrom(range);
 }
 
 void Region::SetRawRange(const pb::common::Range& range) {
@@ -124,16 +124,6 @@ bool Region::DisableSplit() {
 void Region::SetDisableSplit(bool disable_split) {
   BAIDU_SCOPED_LOCK(mutex_);
   inner_region_.set_disable_split(disable_split);
-}
-
-uint64_t Region::RefVectorIndexId() {
-  BAIDU_SCOPED_LOCK(mutex_);
-  return inner_region_.ref_vector_index_id();
-}
-
-void Region::SetRefVectorIndexId(uint64_t vector_index_id) {
-  BAIDU_SCOPED_LOCK(mutex_);
-  inner_region_.set_ref_vector_index_id(vector_index_id);
 }
 
 uint64_t Region::PartitionId() { return inner_region_.definition().part_id(); }
@@ -357,32 +347,8 @@ void StoreRegionMeta::UpdatePeers(uint64_t region_id, std::vector<pb::common::Pe
 
 void StoreRegionMeta::UpdateRange(store::RegionPtr region, const pb::common::Range& range) {
   assert(region != nullptr);
-  // for table region, update range and raw_range
-  if (region->InnerRegion().definition().index_parameter().index_type() == pb::common::IndexType::INDEX_TYPE_NONE) {
-    region->SetRange(range);
-    region->SetRawRange(range);
-  }
-  // for index region, update range, and calculate raw_range
-  else if (region->InnerRegion().definition().index_parameter().index_type() ==
-           pb::common::IndexType::INDEX_TYPE_VECTOR) {
-    region->SetRange(range);
 
-    pb::common::Range raw_range;
-    raw_range.set_start_key(Helper::EncodeIndexRegionHeader(region->Id()));
-    raw_range.set_end_key(Helper::EncodeIndexRegionHeader(region->Id() + 1));
-    region->SetRawRange(raw_range);
-  } else if (region->InnerRegion().definition().index_parameter().index_type() ==
-             pb::common::IndexType::INDEX_TYPE_SCALAR) {
-    region->SetRange(range);
-
-    pb::common::Range raw_range;
-    raw_range.set_start_key(Helper::EncodeIndexRegionHeader(region->Id()));
-    raw_range.set_end_key(Helper::EncodeIndexRegionHeader(region->Id() + 1));
-    region->SetRawRange(raw_range);
-  } else {
-    DINGO_LOG(ERROR) << "Unknown index type "
-                     << pb::common::IndexType_Name(region->InnerRegion().definition().index_parameter().index_type());
-  }
+  region->SetRawRange(range);
 
   meta_writer_->Put(TransformToKv(region));
 }

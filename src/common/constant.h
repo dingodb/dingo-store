@@ -104,6 +104,8 @@ class Constant {
   // vector limitations
   static const uint32_t kVectorMaxDimension = 32768;
   static const uint64_t kVectorIndexSaveSnapshotThresholdWriteKeyNum = 10000;
+
+  static const uint32_t kLoadOrBuildVectorIndexConcurrency = 5;
 };
 
 }  // namespace dingodb

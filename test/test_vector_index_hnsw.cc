@@ -238,7 +238,9 @@ TEST_F(VectorIndexHnswTest, Search) {
     std::vector<pb::index::VectorWithDistanceResult> results;
     std::vector<pb::common::VectorWithId> vector_with_ids;
     vector_with_ids.push_back(vector_with_id);
-    ok = vector_index_hnsw->Search(vector_with_ids, topk, results, true);
+
+    auto filter = std::make_shared<VectorIndex::RangeFilterFunctor>(0, UINT64_MAX);
+    ok = vector_index_hnsw->Search(vector_with_ids, topk, filter, results, true);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     for (const auto &result : results) {
@@ -452,7 +454,8 @@ TEST_F(VectorIndexHnswTest, SearchCosine) {
     std::vector<pb::index::VectorWithDistanceResult> results;
     std::vector<pb::common::VectorWithId> vector_with_ids;
     vector_with_ids.push_back(vector_with_id);
-    ok = vector_index_hnsw->Search(vector_with_ids, topk, results, true);
+    auto filter = std::make_shared<VectorIndex::RangeFilterFunctor>(0, UINT64_MAX);
+    ok = vector_index_hnsw->Search(vector_with_ids, topk, filter, results, true);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     for (const auto &result : results) {

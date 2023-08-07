@@ -42,6 +42,17 @@
 
 namespace dingodb {
 
+// Filter vecotr id used by region range.
+class FlatRangeFilterFunctor : public faiss::IDSelector {
+ public:
+  FlatRangeFilterFunctor(std::shared_ptr<VectorIndex::FilterFunctor> filter) : filter_(filter) {}
+  ~FlatRangeFilterFunctor() override = default;
+  bool is_member(faiss::idx_t id) const override { return filter_ == nullptr || filter_->Check(id); }
+
+ private:
+  std::shared_ptr<VectorIndex::FilterFunctor> filter_;
+};
+
 VectorIndexFlat::VectorIndexFlat(uint64_t id, const pb::common::VectorIndexParameter& vector_index_parameter)
     : VectorIndex(id, vector_index_parameter, 0) {
   bthread_mutex_init(&mutex_, nullptr);
@@ -197,6 +208,7 @@ butil::Status VectorIndexFlat::Delete(const std::vector<uint64_t>& delete_ids) {
 }
 
 butil::Status VectorIndexFlat::Search(std::vector<pb::common::VectorWithId> vector_with_ids, uint32_t topk,
+                                      std::shared_ptr<FilterFunctor> filter,
                                       std::vector<pb::index::VectorWithDistanceResult>& results,
                                       [[maybe_unused]] bool reconstruct, const std::vector<uint64_t>& vector_ids) {
   if (!is_online_.load()) {
@@ -282,11 +294,13 @@ butil::Status VectorIndexFlat::Search(std::vector<pb::common::VectorWithId> vect
     faiss::SearchParameters* param = enable_filter ? search_filter_for_flat_ptr.get() : nullptr;
 
     BAIDU_SCOPED_LOCK(mutex_);
-    if (enable_filter) {
-      SearchWithParam(vector_with_ids.size(), vectors.get(), topk, distances.data(), labels.data(), param);
-    } else {
-      index_->search(vector_with_ids.size(), vectors.get(), topk, distances.data(), labels.data());
+    faiss::SearchParameters* params = nullptr;
+    if (filter != nullptr) {
+      params = new faiss::SearchParameters();
+      params->sel = new FlatRangeFilterFunctor(filter);
     }
+    index_->search(vector_with_ids.size(), vectors.get(), topk, distances.data(), labels.data(), params);
+    delete params;
   }
 
   for (size_t row = 0; row < vector_with_ids.size(); ++row) {

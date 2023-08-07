@@ -45,6 +45,17 @@ namespace dingodb {
 
 DEFINE_uint64(hnsw_need_save_count, 10000, "hnsw need save count");
 
+// Filter vecotr id used by region range.
+class HnswRangeFilterFunctor : public hnswlib::BaseFilterFunctor {
+ public:
+  HnswRangeFilterFunctor(std::shared_ptr<VectorIndex::FilterFunctor> filter) : filter_(filter) {}
+  ~HnswRangeFilterFunctor() = default;
+  bool operator()(hnswlib::labeltype id) override { return filter_ == nullptr || filter_->Check(id); }
+
+ private:
+  std::shared_ptr<VectorIndex::FilterFunctor> filter_;
+};
+
 /*
  * replacement for the openmp '#pragma omp parallel for' directive
  * only handles a subset of functionality (no reductions etc)
@@ -268,8 +279,8 @@ butil::Status VectorIndexHnsw::Load(const std::string& path) {
 }
 
 butil::Status VectorIndexHnsw::Search(std::vector<pb::common::VectorWithId> vector_with_ids, uint32_t topk,
-                                      std::vector<pb::index::VectorWithDistanceResult>& results, bool reconstruct,
-                                      const std::vector<uint64_t>& vector_ids) {
+                                      std::shared_ptr<FilterFunctor> filter,
+                                      std::vector<pb::index::VectorWithDistanceResult>& results, bool reconstruct) {
   // check is_online
   if (!is_online_.load()) {
     std::string s = fmt::format("vector index is offline, please wait for online");
@@ -333,9 +344,11 @@ butil::Status VectorIndexHnsw::Search(std::vector<pb::common::VectorWithId> vect
     hnswlib::BaseFilterFunctor* is_id_allowed = enable_filter ? search_filter_for_hnsw_ptr.get() : nullptr;
 
     if (!normalize_) {
-      ParallelFor(0, vector_with_ids.size(), hnsw_num_threads_, [&, is_id_allowed](size_t row, size_t /*thread_id*/) {
+      ParallelFor(0, vector_with_ids.size(), hnsw_num_threads_, [&](size_t row, size_t /*thread_id*/) {
+        HnswRangeFilterFunctor* hnsw_filter = filter == nullptr ? nullptr : new HnswRangeFilterFunctor(filter);
         std::priority_queue<std::pair<float, hnswlib::labeltype>> result =
-            hnsw_index_->searchKnn(data.get() + dimension_ * row, topk, is_id_allowed);
+            hnsw_index_->searchKnn(data.get() + dimension_ * row, topk, hnsw_filter);
+        delete hnsw_filter;
 
         while (!result.empty()) {
           auto* vector_with_distance = results[row].add_vector_with_distances();
@@ -368,9 +381,10 @@ butil::Status VectorIndexHnsw::Search(std::vector<pb::common::VectorWithId> vect
         size_t start_idx = thread_id * dimension_;
         VectorIndexUtils::NormalizeVectorForHnsw((float*)(data.get() + dimension_ * row), dimension_,
                                                  (norm_array.data() + start_idx));
-
+        HnswRangeFilterFunctor* hnsw_filter = new HnswRangeFilterFunctor(filter);
         std::priority_queue<std::pair<float, hnswlib::labeltype>> result =
-            hnsw_index_->searchKnn(norm_array.data() + start_idx, topk, is_id_allowed);
+            hnsw_index_->searchKnn(norm_array.data() + start_idx, topk, hnsw_filter);
+        delete hnsw_filter;
 
         while (!result.empty()) {
           auto* vector_with_distance = results[row].add_vector_with_distances();
@@ -444,8 +458,8 @@ butil::Status VectorIndexHnsw::NeedToRebuild([[maybe_unused]] bool& need_to_rebu
 butil::Status VectorIndexHnsw::NeedToSave([[maybe_unused]] bool& need_to_save,
                                           [[maybe_unused]] uint64_t last_save_log_behind) {
   if (this->status != pb::common::RegionVectorIndexStatus::VECTOR_INDEX_STATUS_NORMAL) {
-    DINGO_LOG(INFO) << "need_to_save=false: vector index status is not normal, status="
-                    << pb::common::RegionVectorIndexStatus_Name(this->status.load());
+    DINGO_LOG(INFO) << fmt::format("vector index {} need_to_save=false: vector index status is not normal, status={}",
+                                   Id(), pb::common::RegionVectorIndexStatus_Name(this->status.load()));
     need_to_save = false;
     return butil::Status::OK();
   }
@@ -454,36 +468,39 @@ butil::Status VectorIndexHnsw::NeedToSave([[maybe_unused]] bool& need_to_save,
   auto deleted_count = this->hnsw_index_->getDeletedCount();
 
   if (element_count == 0 && deleted_count == 0) {
-    DINGO_LOG(INFO) << "need_to_save=false: element count is 0 and deleted count is 0, element_count=" << element_count
-                    << ", deleted_count=" << deleted_count;
+    DINGO_LOG(INFO) << fmt::format(
+        "vector index {} need_to_save=false: element count is 0 and deleted count is 0, element_count={} "
+        "deleted_count={}",
+        Id(), element_count, deleted_count);
     need_to_save = false;
     return butil::Status::OK();
   }
 
   if (snapshot_log_index.load() == 0) {
-    DINGO_LOG(INFO) << "need_to_save=true: snapshot_log_index is 0";
+    DINGO_LOG(INFO) << fmt::format("vector index {} need_to_save=true: snapshot_log_index is 0", Id());
     need_to_save = true;
     last_save_write_key_count = write_key_count;
     return butil::Status::OK();
   }
 
   if (last_save_log_behind > FLAGS_hnsw_need_save_count) {
-    DINGO_LOG(INFO) << "need_to_save=true: last_save_log_behind=" << last_save_log_behind
-                    << ", FLAGS_hnsw_need_save_count=" << FLAGS_hnsw_need_save_count;
+    DINGO_LOG(INFO) << fmt::format(
+        "vector index {} need_to_save=true: last_save_log_behind={} FLAGS_hnsw_need_save_count={}", Id(),
+        last_save_log_behind, FLAGS_hnsw_need_save_count);
     need_to_save = true;
     last_save_write_key_count = write_key_count;
     return butil::Status::OK();
   }
 
   if ((write_key_count - last_save_write_key_count) >= save_snapshot_threshold_write_key_num) {
-    DINGO_LOG(INFO) << fmt::format("need_to_save=true: write_key_count {}/{}/{}", write_key_count,
+    DINGO_LOG(INFO) << fmt::format("vector index {} need_to_save=true: write_key_count {}/{}/{}", Id(), write_key_count,
                                    last_save_write_key_count, save_snapshot_threshold_write_key_num);
     need_to_save = true;
     last_save_write_key_count = write_key_count;
     return butil::Status::OK();
   }
 
-  DINGO_LOG(INFO) << "need_to_save=false: last_save_log_behind=" << last_save_log_behind
+  DINGO_LOG(INFO) << "vector index " << Id() << " need_to_save=false: last_save_log_behind=" << last_save_log_behind
                   << ", FLAGS_hnsw_need_save_count=" << FLAGS_hnsw_need_save_count
                   << fmt::format(", write_key_count={}/{}/{}", write_key_count, last_save_write_key_count,
                                  save_snapshot_threshold_write_key_num);

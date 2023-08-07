@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <cstdint>
 #include <memory>
 #include <string>
 
@@ -722,7 +723,7 @@ void SendCreateIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
       part->mutable_id()->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_PART);
       part->mutable_id()->set_parent_entity_id(schema_id->entity_id());
       part->mutable_range()->set_start_key(std::to_string(i * 100));
-      part->mutable_range()->set_end_key(std::to_string((i + 1) * 100));
+      part->mutable_range()->set_end_key(std::to_string(i * 100 + 1));
     }
   }
 

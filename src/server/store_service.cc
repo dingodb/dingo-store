@@ -445,7 +445,7 @@ butil::Status ValidateKvDeleteRangeRequest(store::RegionPtr region, const pb::co
     return status;
   }
 
-  status = ServiceHelper::ValidateRangeInRange(region->Range(), req_range);
+  status = ServiceHelper::ValidateRangeInRange(region->RawRange(), req_range);
   if (!status.ok()) {
     return status;
   }
@@ -483,7 +483,7 @@ void StoreServiceImpl::KvDeleteRange(google::protobuf::RpcController* controller
     return;
   }
 
-  auto correction_range = Helper::IntersectRange(region->Range(), uniform_range);
+  auto correction_range = Helper::IntersectRange(region->RawRange(), uniform_range);
 
   std::shared_ptr<Context> const ctx = std::make_shared<Context>(cntl, done_guard.release(), request, response);
   ctx->SetRegionId(request->region_id()).SetCfName(Constant::kStoreDataCF);
@@ -630,7 +630,7 @@ butil::Status ValidateKvScanBeginRequest(store::RegionPtr region, const pb::comm
     return status;
   }
 
-  status = ServiceHelper::ValidateRangeInRange(region->Range(), req_range);
+  status = ServiceHelper::ValidateRangeInRange(region->RawRange(), req_range);
   if (!status.ok()) {
     return status;
   }
@@ -667,7 +667,7 @@ void StoreServiceImpl::KvScanBegin(google::protobuf::RpcController* controller,
     }
     return;
   }
-  auto correction_range = Helper::IntersectRange(region->Range(), uniform_range);
+  auto correction_range = Helper::IntersectRange(region->RawRange(), uniform_range);
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
   ctx->SetRegionId(request->region_id()).SetCfName(Constant::kStoreDataCF);

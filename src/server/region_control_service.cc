@@ -226,13 +226,13 @@ static pb::common::RegionMetrics GetRegionActualMetrics(uint64_t region_id) {
   auto raw_engine = Server::GetInstance()->GetRawEngine();
 
   IteratorOptions options;
-  options.upper_bound = region->Range().end_key();
+  options.upper_bound = region->RawRange().end_key();
   auto iter = raw_engine->NewIterator(Constant::kStoreDataCF, options);
 
   int32_t size = 0;
   int32_t key_count = 0;
   std::string min_key, max_key;
-  for (iter->Seek(region->Range().start_key()); iter->Valid(); iter->Next()) {
+  for (iter->Seek(region->RawRange().start_key()); iter->Valid(); iter->Next()) {
     size += iter->Key().size() + iter->Value().size();
     ++key_count;
     if (min_key.empty()) {

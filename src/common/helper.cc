@@ -29,6 +29,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <iomanip>
 #include <iostream>
 #include <random>
@@ -354,7 +355,7 @@ std::string Helper::HexToString(const std::string& hex_str) {
     // Convert the hex byte to an integer
     int byte_value = std::stoi(hex_byte, nullptr, 16);
     // Cast the integer to a char and append it to the result string
-    result += static_cast<char>(byte_value);
+    result += static_cast<unsigned char>(byte_value);
   }
   return result;
 }
@@ -1073,9 +1074,10 @@ bool Helper::IsEqualVectorScalarValue(const pb::common::ScalarValue& value1, con
   return false;
 }
 
-std::string Helper::EncodeIndexRegionHeader(uint64_t region_id) {
-  Buf buf(17);
-  buf.WriteLong(region_id);
+std::string Helper::EncodeIndexRegionHeader(uint64_t partition_id, uint64_t vector_id) {
+  Buf buf(16);
+  buf.WriteLong(partition_id);
+  buf.WriteLong(vector_id);
 
   return buf.GetString();
 }
@@ -1092,6 +1094,40 @@ std::string Helper::ToLower(const std::string& str) {
   result.resize(str.size());
   std::transform(str.begin(), str.end(), result.begin(), ::tolower);
   return result;
+}
+
+bool Helper::ParallelRunTask(TaskFunctor task, void* arg, int concurrency) {
+  uint64_t start_time = Helper::TimestampMs();
+
+  bool all_success = true;
+  std::vector<bthread_t> tids;
+  tids.resize(concurrency);
+  for (int i = 0; i < concurrency; ++i) {
+    int ret = bthread_start_background(&tids[i], nullptr, task, arg);
+    if (ret != 0) {
+      DINGO_LOG(ERROR) << "Create bthread failed, ret: " << ret;
+      all_success = false;
+      tids[i] = 0;
+      break;
+    }
+  }
+
+  if (!all_success) {
+    for (int i = 0; i < concurrency; ++i) {
+      if (tids[i] != 0) {
+        bthread_stop(tids[i]);
+      }
+    }
+    return false;
+  }
+
+  for (int i = 0; i < concurrency; ++i) {
+    bthread_join(tids[i], nullptr);
+  }
+
+  DINGO_LOG(INFO) << fmt::format("parallel run task elapsed time {}ms", Helper::TimestampMs() - start_time);
+
+  return true;
 }
 
 }  // namespace dingodb

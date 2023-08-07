@@ -122,6 +122,7 @@ class RaftStoreEngine : public Engine, public RaftControlAble {
     butil::Status VectorScanQuery(std::shared_ptr<VectorReader::Context> ctx,                             // NOLINT
                                   std::vector<pb::common::VectorWithId>& vector_with_ids) override;       // NOLINT
     butil::Status VectorGetRegionMetrics(uint64_t region_id, const pb::common::Range& region_range,       // NOLINT
+                                         std::shared_ptr<VectorIndex> vector_index,                       // NOLINT
                                          pb::common::VectorIndexMetrics& region_metrics) override;        // NOLINT
 
    private:

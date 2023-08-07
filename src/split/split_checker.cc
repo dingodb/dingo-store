@@ -37,14 +37,14 @@ namespace dingodb {
 
 std::string HalfSplitChecker::SplitKey(store::RegionPtr region, uint32_t& count) {
   IteratorOptions options;
-  options.upper_bound = region->Range().end_key();
+  options.upper_bound = region->RawRange().end_key();
   auto iter = raw_engine_->NewIterator(Constant::kStoreDataCF, options);
 
   uint64_t chunk_size = 0;
   uint64_t size = 0;
   std::vector<std::string> keys;
   bool is_split = false;
-  for (iter->Seek(region->Range().start_key()); iter->Valid(); iter->Next()) {
+  for (iter->Seek(region->RawRange().start_key()); iter->Valid(); iter->Next()) {
     ++count;
     chunk_size += iter->Key().size() + iter->Value().size();
     size += iter->Key().size() + iter->Value().size();
@@ -65,13 +65,13 @@ std::string HalfSplitChecker::SplitKey(store::RegionPtr region, uint32_t& count)
 std::string SizeSplitChecker::SplitKey(store::RegionPtr region, uint32_t& count) {
   uint32_t split_pos = split_size_ * split_ratio_;
   IteratorOptions options;
-  options.upper_bound = region->Range().end_key();
+  options.upper_bound = region->RawRange().end_key();
   auto iter = raw_engine_->NewIterator(Constant::kStoreDataCF, options);
 
   uint64_t size = 0;
   std::string split_key;
   bool is_split = false;
-  for (iter->Seek(region->Range().start_key()); iter->Valid(); iter->Next()) {
+  for (iter->Seek(region->RawRange().start_key()); iter->Valid(); iter->Next()) {
     ++count;
     size += iter->Key().size() + iter->Value().size();
 
@@ -89,13 +89,13 @@ std::string KeysSplitChecker::SplitKey(store::RegionPtr region, uint32_t& count)
   uint32_t split_key_number = split_key_number_ * split_key_ratio_;
 
   IteratorOptions options;
-  options.upper_bound = region->Range().end_key();
+  options.upper_bound = region->RawRange().end_key();
   auto iter = raw_engine_->NewIterator(Constant::kStoreDataCF, options);
 
   uint64_t split_key_count = 0;
   std::string split_key;
   bool is_split = false;
-  for (iter->Seek(region->Range().start_key()); iter->Valid(); iter->Next()) {
+  for (iter->Seek(region->RawRange().start_key()); iter->Valid(); iter->Next()) {
     ++count;
     ++split_key_count;
 

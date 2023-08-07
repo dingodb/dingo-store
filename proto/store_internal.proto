@@ -37,11 +37,11 @@ message RaftMeta {
 
 message Region {
   uint64 id = 1;
-  dingodb.pb.common.RegionDefinition definition = 2;
-  uint64 leader_id = 3;
-  dingodb.pb.common.StoreRegionState state = 4;
-  repeated dingodb.pb.common.StoreRegionState history_states = 5;
-  uint64 ref_vector_index_id = 6;  // region refer vector index
+  dingodb.pb.common.RegionType region_type = 10;
+  dingodb.pb.common.RegionDefinition definition = 20;
+  uint64 leader_id = 30;
+  dingodb.pb.common.StoreRegionState state = 40;
+  repeated dingodb.pb.common.StoreRegionState history_states = 50;
 
-  bool disable_split = 10;  // true: forbid region split
+  bool disable_split = 70;  // true: forbid region split
 }

@@ -69,7 +69,7 @@ butil::Status IndexServiceImpl::ValidateVectorBatchQueryQequest(
     return status;
   }
 
-  return ServiceHelper::ValidateIndexRegion(region);
+  return ServiceHelper::ValidateIndexRegion(region, Helper::PbRepeatedToVector(request->vector_ids()));
 }
 
 void IndexServiceImpl::VectorBatchQuery(google::protobuf::RpcController* controller,
@@ -182,7 +182,16 @@ butil::Status IndexServiceImpl::ValidateVectorSearchRequest(const dingodb::pb::i
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id cannot find vector_index");
   }
 
-  return ServiceHelper::ValidateIndexRegion(region);
+  std::vector<uint64_t> vector_ids;
+  if (request->vector_with_ids_size() <= 0) {
+    vector_ids.push_back(request->vector().id());
+  } else {
+    for (const auto& vector : request->vector_with_ids()) {
+      vector_ids.push_back(vector.id());
+    }
+  }
+
+  return ServiceHelper::ValidateIndexRegion(region, vector_ids);
 }
 
 // vector
@@ -220,10 +229,21 @@ void IndexServiceImpl::VectorSearch(google::protobuf::RpcController* controller,
     return;
   }
 
+  // Get vector index.
+  auto vector_index = Server::GetInstance()->GetVectorIndexManager()->GetVectorIndex(region);
+  if (vector_index == nullptr) {
+    auto* err = response->mutable_error();
+    err->set_errcode(pb::error::EVECTOR_INDEX_NOT_FOUND);
+    err->set_errmsg(fmt::format("Not found vector index {}", region->Id()));
+    return;
+  }
+
   // Set vector reader context.
   auto ctx = std::make_shared<Engine::VectorReader::Context>();
   ctx->partition_id = region->PartitionId();
   ctx->region_id = region->Id();
+  ctx->vector_index = vector_index;
+  ctx->region_range = region->RawRange();
   ctx->parameter = request->parameter();
 
   if (request->vector_with_ids_size() <= 0) {
@@ -312,7 +332,12 @@ butil::Status IndexServiceImpl::ValidateVectorAddRequest(const dingodb::pb::inde
     }
   }
 
-  return ServiceHelper::ValidateIndexRegion(region);
+  std::vector<uint64_t> vector_ids;
+  for (const auto& vector : request->vectors()) {
+    vector_ids.push_back(vector.id());
+  }
+
+  return ServiceHelper::ValidateIndexRegion(region, vector_ids);
 }
 
 void IndexServiceImpl::VectorAdd(google::protobuf::RpcController* controller,
@@ -390,7 +415,7 @@ butil::Status IndexServiceImpl::ValidateVectorDeleteRequest(const dingodb::pb::i
     return status;
   }
 
-  return ServiceHelper::ValidateIndexRegion(region);
+  return ServiceHelper::ValidateIndexRegion(region, Helper::PbRepeatedToVector(request->ids()));
 }
 
 void IndexServiceImpl::VectorDelete(google::protobuf::RpcController* controller,
@@ -430,12 +455,7 @@ void IndexServiceImpl::VectorDelete(google::protobuf::RpcController* controller,
   std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done_guard.release(), response);
   ctx->SetRegionId(request->region_id()).SetCfName(Constant::kStoreDataCF);
 
-  std::vector<uint64_t> vector_ids;
-  for (auto id : request->ids()) {
-    vector_ids.push_back(id);
-  }
-
-  status = storage_->VectorDelete(ctx, vector_ids);
+  status = storage_->VectorDelete(ctx, Helper::PbRepeatedToVector(request->ids()));
   if (!status.ok()) {
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
@@ -459,7 +479,7 @@ butil::Status IndexServiceImpl::ValidateVectorGetBorderIdRequest(
     return status;
   }
 
-  return ServiceHelper::ValidateIndexRegion(region);
+  return ServiceHelper::ValidateIndexRegion(region, {});
 }
 
 void IndexServiceImpl::VectorGetBorderId(google::protobuf::RpcController* controller,
@@ -541,7 +561,7 @@ butil::Status IndexServiceImpl::ValidateVectorScanQueryRequest(
     return status;
   }
 
-  return ServiceHelper::ValidateIndexRegion(region);
+  return ServiceHelper::ValidateIndexRegion(region, {request->vector_id_start()});
 }
 
 void IndexServiceImpl::VectorScanQuery(google::protobuf::RpcController* controller,
@@ -581,7 +601,7 @@ void IndexServiceImpl::VectorScanQuery(google::protobuf::RpcController* controll
   auto ctx = std::make_shared<Engine::VectorReader::Context>();
   ctx->partition_id = region->PartitionId();
   ctx->region_id = region->Id();
-  ctx->region_range = region->Range();
+  ctx->region_range = region->RawRange();
   ctx->selected_scalar_keys = Helper::PbRepeatedToVector(request->selected_keys());
   ctx->with_vector_data = !request->without_vector_data();
   ctx->with_scalar_data = request->with_scalar_data();
@@ -628,7 +648,7 @@ butil::Status IndexServiceImpl::ValidateVectorGetRegionMetricsRequest(
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id cannot find vector_index");
   }
 
-  return ServiceHelper::ValidateIndexRegion(region);
+  return ServiceHelper::ValidateIndexRegion(region, {});
 }
 
 void IndexServiceImpl::VectorGetRegionMetrics(google::protobuf::RpcController* controller,
@@ -665,8 +685,20 @@ void IndexServiceImpl::VectorGetRegionMetrics(google::protobuf::RpcController* c
     return;
   }
 
+  // Get vector index.
+  auto vector_index = Server::GetInstance()->GetVectorIndexManager()->GetVectorIndex(region->Id());
+  if (vector_index == nullptr) {
+    vector_index = region->ShareVectorIndex();
+  }
+  if (vector_index == nullptr) {
+    auto* err = response->mutable_error();
+    err->set_errcode(pb::error::EVECTOR_INDEX_NOT_FOUND);
+    err->set_errmsg(fmt::format("Not found vector index {}", region->Id()));
+    return;
+  }
+
   pb::common::VectorIndexMetrics metrics;
-  status = storage_->VectorGetRegionMetrics(region->Id(), region->RawRange(), metrics);
+  status = storage_->VectorGetRegionMetrics(region->Id(), region->RawRange(), vector_index, metrics);
   if (!status.ok()) {
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
