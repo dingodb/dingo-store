@@ -45,15 +45,29 @@
 namespace dingodb {
 
 struct WatchNode {
-  WatchNode() {
-    done = nullptr;
-    response = nullptr;
-  }
+  WatchNode(google::protobuf::Closure *done, pb::version::WatchResponse *response)
+      : done(done),
+        response(response),
+        start_revision(0),
+        no_put_event(false),
+        no_delete_event(false),
+        need_prev_kv(false) {}
 
-  WatchNode(google::protobuf::Closure *done, pb::version::WatchResponse *response) : done(done), response(response) {}
+  WatchNode(google::protobuf::Closure *done, pb::version::WatchResponse *response, uint64_t start_revision,
+            bool no_put_event, bool no_delete_event, bool need_prev_kv)
+      : done(done),
+        response(response),
+        start_revision(start_revision),
+        no_put_event(no_put_event),
+        no_delete_event(no_delete_event),
+        need_prev_kv(need_prev_kv) {}
 
   google::protobuf::Closure *done;
   pb::version::WatchResponse *response;
+  uint64_t start_revision;
+  bool no_put_event;
+  bool no_delete_event;
+  bool need_prev_kv;
 };
 
 class AtomicGuard {
@@ -729,6 +743,18 @@ class CoordinatorControl : public MetaControl {
                              google::protobuf::Closure *done, pb::version::WatchResponse *response,
                              brpc::Controller *cntl);
 
+  // add watch to map
+  butil::Status AddOneTimeWatch(const std::string &watch_key, uint64_t start_revision, bool no_put_event,
+                                bool no_delete_event, bool need_prev_kv, google::protobuf::Closure *done,
+                                pb::version::WatchResponse *response);
+  // remove watch from map
+  butil::Status RemoveOneTimeWatch(google::protobuf::Closure *done);
+  butil::Status RemoveOneTimeWatchWithLock(google::protobuf::Closure *done);
+
+  // watch functions for raft fsm
+  butil::Status TriggerOneWatch(const std::string &key, pb::version::Event::EventType event_type,
+                                pb::version::Kv &new_kv, pb::version::Kv &prev_kv);
+
  private:
   butil::Status ValidateTaskListConflict(uint64_t region_id, uint64_t second_region_id);
 
@@ -833,7 +859,7 @@ class CoordinatorControl : public MetaControl {
 
   // one time watch map
   // this map on work on leader, is out of state machine
-  std::map<std::string, std::map<google::protobuf::Closure *, pb::version::WatchResponse *>> one_time_watch_map_;
+  std::map<std::string, std::map<google::protobuf::Closure *, WatchNode>> one_time_watch_map_;
   std::map<google::protobuf::Closure *, std::string> one_time_watch_closure_map_;
   bthread_mutex_t one_time_watch_map_mutex_;
 

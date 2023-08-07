@@ -495,6 +495,9 @@ butil::Status CoordinatorControl::KvPutApply(const std::string &key,
   new_create_revision.set_sub(op_revision.sub());
   uint64_t new_version = 1;
 
+  pb::version::Kv prev_kv;
+  pb::version::Kv new_kv;
+
   auto ret = this->GetRawKvIndex(key, kv_index);
   if (!ret.ok()) {
     DINGO_LOG(INFO) << "KvPutApply GetRawKvIndex not found, will create key: " << key << ", error: " << ret.error_str();
@@ -527,6 +530,11 @@ butil::Status CoordinatorControl::KvPutApply(const std::string &key,
         latest_generation->add_revisions()->CopyFrom(op_revision);
         latest_generation->set_verison(latest_generation->verison() + 1);
         DINGO_LOG(INFO) << "KvPutApply latest_generation add revsion: " << latest_generation->ShortDebugString();
+
+        // only in this situation, the prev_kv is meaningful
+        prev_kv.set_create_revision(latest_generation->create_revision().main());
+        prev_kv.set_mod_revision(kv_index.mod_revision().main());
+        prev_kv.set_version(latest_generation->verison());
       } else {
         latest_generation->mutable_create_revision()->set_main(op_revision.main());
         latest_generation->mutable_create_revision()->set_sub(op_revision.sub());
@@ -594,9 +602,27 @@ butil::Status CoordinatorControl::KvPutApply(const std::string &key,
   DINGO_LOG(INFO) << "KvPutApply PutRawKvRev success, revision: " << op_revision.ShortDebugString()
                   << ", kv_rev: " << kv_rev.ShortDebugString();
 
-  DINGO_LOG(INFO) << "KvPutApply success, key: " << key << ", op_revision: " << op_revision.ShortDebugString()
-                  << ", ignore_lease: " << ignore_lease << ", lease_id: " << lease_id
-                  << ", ignore_value: " << ignore_value << ", value: " << value;
+  // add watch
+  if (!this->one_time_watch_map_.empty()) {
+    DINGO_LOG(INFO) << "KvPutApply one_time_watch_map_ is not empty, will add watch, key: " << key
+                    << ", watch size: " << this->one_time_watch_map_.size();
+
+    if (prev_kv.create_revision() > 0) {
+      prev_kv.set_lease(kv_rev_last.kv().lease());
+      prev_kv.mutable_kv()->set_key(key);
+      prev_kv.mutable_kv()->set_value(kv_rev_last.kv().value());
+    }
+    new_kv.set_create_revision(new_create_revision.main());
+    new_kv.set_mod_revision(op_revision.main());
+    new_kv.set_version(new_version);
+    new_kv.set_lease(kv_rev.kv().lease());
+    new_kv.mutable_kv()->set_key(key);
+    new_kv.mutable_kv()->set_value(kv_rev.kv().value());
+  }
+
+  DINGO_LOG(INFO) << "KvPutApply success after trigger watch, key: " << key
+                  << ", op_revision: " << op_revision.ShortDebugString() << ", ignore_lease: " << ignore_lease
+                  << ", lease_id: " << lease_id << ", ignore_value: " << ignore_value << ", value: " << value;
 
   return butil::Status::OK();
 }
@@ -612,6 +638,9 @@ butil::Status CoordinatorControl::KvDeleteApply(const std::string &key,
   new_create_revision.set_main(op_revision.main());
   new_create_revision.set_sub(op_revision.sub());
   uint64_t new_version = 1;
+
+  pb::version::Kv prev_kv;
+  pb::version::Kv new_kv;
 
   auto ret = this->GetRawKvIndex(key, kv_index);
   if (!ret.ok()) {
@@ -638,6 +667,11 @@ butil::Status CoordinatorControl::KvDeleteApply(const std::string &key,
         // create a null generator means delete
         auto *generation = kv_index.add_generations();
         DINGO_LOG(INFO) << "KvDeleteApply kv_index add null generation[1]: " << generation->ShortDebugString();
+
+        // only in this situation, the prev_kv is meaningful
+        prev_kv.set_create_revision(latest_generation->create_revision().main());
+        prev_kv.set_mod_revision(kv_index.mod_revision().main());
+        prev_kv.set_version(latest_generation->verison());
       } else {
         // a null generation means delete
         // so we do not need to add a new generation
@@ -692,6 +726,27 @@ butil::Status CoordinatorControl::KvDeleteApply(const std::string &key,
   }
 
   DINGO_LOG(INFO) << "KvDeleteApply success, key: " << key << ", revision: " << op_revision.ShortDebugString();
+
+  // add watch
+  if (!this->one_time_watch_map_.empty()) {
+    DINGO_LOG(INFO) << "KvDeleteApply one_time_watch_map_ is not empty, will add watch, key: " << key
+                    << ", watch size: " << this->one_time_watch_map_.size();
+
+    if (prev_kv.create_revision() > 0) {
+      prev_kv.set_lease(kv_rev_last.kv().lease());
+      prev_kv.mutable_kv()->set_key(key);
+      prev_kv.mutable_kv()->set_value(kv_rev_last.kv().value());
+    }
+    new_kv.set_create_revision(new_create_revision.main());
+    new_kv.set_mod_revision(op_revision.main());
+    new_kv.set_version(new_version);
+    new_kv.set_lease(kv_rev.kv().lease());
+    new_kv.mutable_kv()->set_key(key);
+    new_kv.mutable_kv()->set_value(kv_rev.kv().value());
+  }
+
+  DINGO_LOG(INFO) << "KvDeleteApply success after trigger watch, key: " << key
+                  << ", revision: " << op_revision.ShortDebugString();
 
   return butil::Status::OK();
 }
