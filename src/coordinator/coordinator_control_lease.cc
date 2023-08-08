@@ -47,7 +47,7 @@
 namespace dingodb {
 
 DEFINE_uint64(version_lease_max_ttl_seconds, 300, "max ttl seconds for version lease");
-DEFINE_uint64(version_lease_min_ttl_seconds, 5, "min ttl seconds for version lease");
+DEFINE_uint64(version_lease_min_ttl_seconds, 3, "min ttl seconds for version lease");
 
 butil::Status CoordinatorControl::LeaseGrant(uint64_t lease_id, int64_t ttl_seconds, uint64_t &granted_id,
                                              int64_t &granted_ttl_seconds,
