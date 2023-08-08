@@ -177,8 +177,9 @@ butil::Status CoordinatorControl::LeaseRevoke(uint64_t lease_id,
     std::vector<pb::version::Kv> prev_kvs;
     uint64_t main_revision = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REVISION, meta_increment);
     uint64_t sub_revision = 1;
-    auto ret_status =
-        this->KvDeleteRange(key, std::string(), false, main_revision, sub_revision, false, prev_kvs, meta_increment);
+    uint64_t deleted_count = 0;
+    auto ret_status = this->KvDeleteRange(key, std::string(), false, main_revision, sub_revision, false, deleted_count,
+                                          prev_kvs, meta_increment);
     if (!ret_status.ok()) {
       DINGO_LOG(ERROR) << "DeleteRawKv failed, key: " << key;
     }
