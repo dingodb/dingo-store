@@ -1,3 +1,4 @@
+
 // Copyright (c) 2023 dingodb.com, Inc. All Rights Reserved
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -126,6 +127,9 @@ DEFINE_bool(no_put, false, "watch no put");
 DEFINE_bool(no_delete, false, "watch no delete");
 DEFINE_bool(wait_on_not_exist_key, false, "watch wait for not exist key");
 DEFINE_uint32(max_watch_count, 10, "max_watch_count");
+DEFINE_bool(with_vector_ids, false, "Search vector with vector ids list default false");
+DEFINE_bool(with_scalar_pre_filter, false, "Search vector with scalar data pre filter");
+DEFINE_bool(with_scalar_post_filter, false, "Search vector with scalar data post filter");
 
 DEFINE_string(lock_name, "", "Request lock_name");
 DEFINE_string(client_uuid, "", "Request client_uuid");

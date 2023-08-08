@@ -216,8 +216,10 @@ butil::Status VectorIndexFlat::Search(std::vector<pb::common::VectorWithId> vect
   }
 
   if (vector_with_ids[0].vector().float_values_size() != this->dimension_) {
-    return butil::Status(pb::error::Errno::EINTERNAL, "vector dimension is not match, input=%d, index=%ld",
-                         vector_with_ids[0].vector().float_values_size(), this->dimension_);
+    std::string s = fmt::format("vector dimension is not match, input = {}, index = {} ",
+                                vector_with_ids[0].vector().float_values_size(), this->dimension_);
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EINTERNAL, s);
   }
 
   std::vector<faiss::Index::distance_t> distances;
@@ -270,9 +272,10 @@ butil::Status VectorIndexFlat::Search(std::vector<pb::common::VectorWithId> vect
       internal_vector_ids.push_back(iter->second);
     }
 
-    if (internal_vector_ids.empty()) {
-      enable_filter = false;
-    }
+    // if all original id not found. ignore .result nothing
+    // if (internal_vector_ids.empty()) {
+    //   enable_filter = false;
+    // }
 
     std::unique_ptr<SearchFilterForFlat> search_filter_for_flat_ptr =
         std::make_unique<SearchFilterForFlat>(std::move(internal_vector_ids));
@@ -290,20 +293,20 @@ butil::Status VectorIndexFlat::Search(std::vector<pb::common::VectorWithId> vect
     auto& result = results.emplace_back();
 
     for (size_t i = 0; i < topk; i++) {
-      if (labels[i] < 0) {
+      if (labels[i + (row * topk)] < 0) {
         continue;
       }
       auto* vector_with_distance = result.add_vector_with_distances();
 
       auto* vector_with_id = vector_with_distance->mutable_vector_with_id();
-      vector_with_id->set_id(labels[i]);
+      vector_with_id->set_id(labels[i + (row * topk)]);
       vector_with_id->mutable_vector()->set_dimension(dimension_);
       vector_with_id->mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
       if (metric_type_ == pb::common::MetricType::METRIC_TYPE_COSINE ||
           metric_type_ == pb::common::MetricType::METRIC_TYPE_INNER_PRODUCT) {
-        vector_with_distance->set_distance(1.0F - distances[i]);
+        vector_with_distance->set_distance(1.0F - distances[i + (row * topk)]);
       } else {
-        vector_with_distance->set_distance(distances[i]);
+        vector_with_distance->set_distance(distances[i + (row * topk)]);
       }
 
       vector_with_distance->set_metric_type(metric_type_);
@@ -358,7 +361,8 @@ butil::Status VectorIndexFlat::GetMemorySize(uint64_t& memory_size) {
     return butil::Status::OK();
   }
 
-  memory_size = count * sizeof(faiss::idx_t) + count * dimension_ * sizeof(faiss::Index::component_t);
+  memory_size = count * sizeof(faiss::idx_t) + count * dimension_ * sizeof(faiss::Index::component_t) +
+                (sizeof(faiss::idx_t) + sizeof(faiss::idx_t)) * index_->rev_map.size();
   return butil::Status::OK();
 }
 

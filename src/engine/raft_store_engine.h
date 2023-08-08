@@ -30,6 +30,7 @@
 #include "proto/store.pb.h"
 #include "proto/store_internal.pb.h"
 #include "raft/raft_node_manager.h"
+#include "vector/vector_index.h"
 
 namespace dingodb {
 
@@ -158,6 +159,24 @@ class RaftStoreEngine : public Engine, public RaftControlAble {
     butil::Status ScanVectorId(uint64_t region_id, uint64_t start_id, bool is_reverse, uint64_t limit,
                                bool use_scalar_filter, const pb::common::VectorScalardata& scalar_data_for_filter,
                                std::vector<uint64_t>& ids);
+
+    butil::Status DoVectorSearchForVectorIdPreFilter(
+        std::shared_ptr<VectorIndex> vector_index, [[maybe_unused]] uint64_t region_id,
+        const std::vector<pb::common::VectorWithId>& vector_with_ids,
+        const pb::common::VectorSearchParameter& parameter,
+        std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results);  // NOLINT
+
+    butil::Status DoVectorSearchForScalarPreFilter(
+        std::shared_ptr<VectorIndex> vector_index, uint64_t region_id,
+        const std::vector<pb::common::VectorWithId>& vector_with_ids,
+        const pb::common::VectorSearchParameter& parameter,
+        std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results);  // NOLINT
+
+    butil::Status DoVectorSearchForTableCoprocessor(
+        std::shared_ptr<VectorIndex> vector_index, uint64_t region_id,
+        const std::vector<pb::common::VectorWithId>& vector_with_ids,
+        const pb::common::VectorSearchParameter& parameter,
+        std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results);  // NOLINT
 
     std::shared_ptr<RawEngine::Reader> reader_;
   };
