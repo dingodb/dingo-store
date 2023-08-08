@@ -960,6 +960,4 @@ void SendGetTables(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_
   DINGO_LOG(INFO) << "RESPONSE =" << response.DebugString();
 }
 
-void SendDropTables(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
-
-}
+void SendDropTables(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {}

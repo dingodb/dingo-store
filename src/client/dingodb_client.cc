@@ -622,7 +622,6 @@ int CoordinatorSender() {
     SendDropTables(coordinator_interaction_meta);
   }
 
-
   // auto increment
   else if (FLAGS_method == "GetAutoIncrements") {  // auto increment
     SendGetAutoIncrements(coordinator_interaction_meta);

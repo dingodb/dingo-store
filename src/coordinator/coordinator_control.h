@@ -309,12 +309,12 @@ class CoordinatorControl : public MetaControl {
                             pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // generate table ids
-  butil::Status GenerateTableIds(uint64_t schema_id, const pb::meta::TableWithPartCount& count,
+  butil::Status GenerateTableIds(uint64_t schema_id, const pb::meta::TableWithPartCount &count,
                                  pb::coordinator_internal::MetaIncrement &meta_increment,
                                  pb::meta::GenerateTableIdsResponse *response);
 
   // create table indexes map
-  void CreateTableIndexesMap(pb::coordinator_internal::TableIndexInternal& table_index_internal,
+  void CreateTableIndexesMap(pb::coordinator_internal::TableIndexInternal &table_index_internal,
                              pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // get table indexes
@@ -768,7 +768,8 @@ class CoordinatorControl : public MetaControl {
   butil::Status ValidateTaskListConflict(uint64_t region_id, uint64_t second_region_id);
 
   void GenerateTableIdAndPartIds(uint64_t schema_id, uint64_t part_count, pb::meta::EntityType entity_type,
-         pb::coordinator_internal::MetaIncrement& meta_increment, pb::meta::TableIdWithPartIds* ids);
+                                 pb::coordinator_internal::MetaIncrement &meta_increment,
+                                 pb::meta::TableIdWithPartIds *ids);
 
   // ids_epochs_temp (out of state machine, only for leader use)
   DingoSafeIdEpochMap id_epoch_map_safe_temp_;
