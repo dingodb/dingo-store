@@ -474,12 +474,12 @@ butil::Status CoordinatorControl::KvDeleteRange(const std::string &key, const st
     }
   }
 
-  if (need_prev_kv) {
-    prev_kvs.swap(kvs_to_delete);
-  }
-
   if (!kvs_to_delete.empty()) {
     deleted_count = kvs_to_delete.size();
+  }
+
+  if (need_prev_kv) {
+    prev_kvs.swap(kvs_to_delete);
   }
 
   return butil::Status::OK();

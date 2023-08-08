@@ -149,12 +149,18 @@ butil::Status CoordinatorControl::LeaseRevoke(uint64_t lease_id,
   auto iter = this->lease_to_key_map_temp_.find(lease_id);
   if (iter == this->lease_to_key_map_temp_.end()) {
     DINGO_LOG(WARNING) << "lease id " << lease_id << " not found, cannot revoke";
+    if (!has_mutex_locked) {
+      bthread_mutex_unlock(&lease_to_key_map_temp_mutex_);
+    }
     return butil::Status(pb::error::Errno::ELEASE_NOT_EXISTS_OR_EXPIRED, "lease id %lu not found", lease_id);
   }
 
   auto ret = this->lease_map_.Get(lease_id, lease);
   if (ret < 0) {
     DINGO_LOG(WARNING) << "lease id " << lease_id << " not found from lease_map_";
+    if (!has_mutex_locked) {
+      bthread_mutex_unlock(&lease_to_key_map_temp_mutex_);
+    }
     return butil::Status(pb::error::Errno::ELEASE_NOT_EXISTS_OR_EXPIRED, "lease id %lu not found", lease_id);
   }
 
