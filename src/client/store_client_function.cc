@@ -46,6 +46,9 @@ DECLARE_bool(with_table);
 DECLARE_bool(print_vector_search_delay);
 DECLARE_string(scalar_filter_key);
 DECLARE_string(scalar_filter_value);
+DECLARE_bool(with_vector_ids);
+DECLARE_bool(with_scalar_pre_filter);
+DECLARE_bool(with_scalar_post_filter);
 
 namespace client {
 
@@ -160,6 +163,69 @@ void SendVectorSearch(ServerInteractionPtr interaction, uint64_t region_id, uint
     key->assign(FLAGS_key);
   }
 
+  std::vector<uint64_t> vt_ids;
+  if (FLAGS_with_vector_ids) {
+    request.mutable_parameter()->set_vector_filter(::dingodb::pb::common::VectorFilter::VECTOR_ID_FILTER);
+    request.mutable_parameter()->set_vector_filter_type(::dingodb::pb::common::VectorFilterType::QUERY_PRE);
+
+    for (int i = 0; i < 20; i++) {
+      std::random_device seed;
+      std::ranlux48 engine(seed());
+
+      std::uniform_int_distribution<> distrib(1, 100000ULL);
+      auto random = distrib(engine);
+
+      vt_ids.push_back(random);
+    }
+
+    sort(vt_ids.begin(), vt_ids.end());
+    vt_ids.erase(std::unique(vt_ids.begin(), vt_ids.end()), vt_ids.end());
+
+    for (auto id : vt_ids) {
+      request.mutable_parameter()->add_vector_ids(id);
+    }
+
+    std::cout << "vector_ids : " << request.parameter().vector_ids().size() << " [ ";
+
+    for (auto id : request.parameter().vector_ids()) {
+      std::cout << id << " ";
+    }
+    std::cout << "]";
+    std::cout << std::endl;
+  }
+
+  if (FLAGS_with_scalar_pre_filter) {
+    request.mutable_parameter()->set_vector_filter(::dingodb::pb::common::VectorFilter::SCALAR_FILTER);
+    request.mutable_parameter()->set_vector_filter_type(::dingodb::pb::common::VectorFilterType::QUERY_PRE);
+
+    dingodb::pb::common::VectorWithId* vector_with_id = request.mutable_vector();
+
+    for (int k = 0; k < 2; k++) {
+      ::dingodb::pb::common::ScalarValue scalar_value;
+      scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::STRING);
+      ::dingodb::pb::common::ScalarField* field = scalar_value.add_fields();
+      field->set_string_data("value" + std::to_string(k));
+
+      vector_with_id->mutable_scalar_data()->mutable_scalar_data()->insert({"key" + std::to_string(k), scalar_value});
+    }
+  }
+
+  if (FLAGS_with_scalar_post_filter) {
+    request.mutable_parameter()->set_vector_filter(::dingodb::pb::common::VectorFilter::SCALAR_FILTER);
+    request.mutable_parameter()->set_vector_filter_type(::dingodb::pb::common::VectorFilterType::QUERY_POST);
+
+    dingodb::pb::common::VectorWithId* vector_with_id = request.mutable_vector();
+
+    for (int k = 0; k < 2; k++) {
+      ::dingodb::pb::common::ScalarValue scalar_value;
+      scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::STRING);
+      ::dingodb::pb::common::ScalarField* field = scalar_value.add_fields();
+      field->set_string_data("value" + std::to_string(k));
+
+      vector_with_id->mutable_scalar_data()->mutable_scalar_data()->insert({"key" + std::to_string(k), scalar_value});
+    }
+  }
+
   if (FLAGS_print_vector_search_delay) {
     auto start = std::chrono::steady_clock::now();
     interaction->SendRequest("IndexService", "VectorSearch", request, response);
@@ -173,6 +239,70 @@ void SendVectorSearch(ServerInteractionPtr interaction, uint64_t region_id, uint
   }
 
   DINGO_LOG(INFO) << "VectorSearch response: " << response.DebugString();
+
+  // match compare
+  if (FLAGS_with_vector_ids) {
+    std::cout << "vector_ids : " << request.parameter().vector_ids().size() << " [ ";
+
+    for (auto id : request.parameter().vector_ids()) {
+      std::cout << id << " ";
+    }
+    std::cout << "]";
+    std::cout << std::endl;
+
+    std::vector<uint64_t> result_vt_ids;
+    for (const auto& vector_with_distance_result : response.batch_results()) {
+      for (const auto& vector_with_distance : vector_with_distance_result.vector_with_distances()) {
+        auto id = vector_with_distance.vector_with_id().id();
+        result_vt_ids.push_back(id);
+      }
+    }
+
+    if (result_vt_ids.empty()) {
+      std::cout << "result_vt_ids : empty" << std::endl;
+    } else {
+      std::cout << "result_vt_ids : " << result_vt_ids.size() << " [ ";
+      for (auto id : result_vt_ids) {
+        std::cout << id << " ";
+      }
+      std::cout << "]";
+      std::cout << std::endl;
+    }
+
+    for (auto id : result_vt_ids) {
+      auto iter = std::find(vt_ids.begin(), vt_ids.end(), id);
+      if (iter == vt_ids.end()) {
+        std::cout << "result_vector_ids not all in vector_ids" << std::endl;
+        return;
+      }
+    }
+    std::cout << "result_vector_ids  all in vector_ids" << std::endl;
+  }
+
+  if (FLAGS_with_scalar_pre_filter || FLAGS_with_scalar_post_filter) {
+    std::vector<uint64_t> result_vt_ids;
+    for (const auto& vector_with_distance_result : response.batch_results()) {
+      for (const auto& vector_with_distance : vector_with_distance_result.vector_with_distances()) {
+        auto id = vector_with_distance.vector_with_id().id();
+        result_vt_ids.push_back(id);
+      }
+    }
+
+    auto lambda_print_result_vector_function = [&result_vt_ids](const std::string& name) {
+      std::cout << name << ": " << result_vt_ids.size() << " [ ";
+      for (auto id : result_vt_ids) {
+        std::cout << id << " ";
+      }
+      std::cout << "]";
+      std::cout << std::endl;
+    };
+
+    lambda_print_result_vector_function("before sort result_vt_ids");
+
+    std::sort(result_vt_ids.begin(), result_vt_ids.end());
+
+    lambda_print_result_vector_function("after  sort result_vt_ids");
+  }
 }
 
 void SendVectorBatchSearch(ServerInteractionPtr interaction, uint64_t region_id, uint32_t dimension, uint64_t vector_id,
@@ -205,10 +335,15 @@ void SendVectorBatchSearch(ServerInteractionPtr interaction, uint64_t region_id,
   if (vector_id > 0) {
     request.mutable_vector()->set_id(vector_id);
   } else {
+    std::random_device seed;
+    std::ranlux48 engine(seed());
+    std::uniform_int_distribution<> distrib(0, 100);
+
     for (int count = 0; count < batch_count; count++) {
       auto* vector = request.add_vector_with_ids()->mutable_vector();
       for (int i = 0; i < dimension; i++) {
-        vector->add_float_values(1.0 * i);
+        auto random = static_cast<double>(distrib(engine)) / 10.123;
+        vector->add_float_values(random);
       }
     }
 
@@ -232,6 +367,55 @@ void SendVectorBatchSearch(ServerInteractionPtr interaction, uint64_t region_id,
     key->assign(FLAGS_key);
   }
 
+  std::vector<uint64_t> vt_ids;
+  if (FLAGS_with_vector_ids) {
+    request.mutable_parameter()->set_vector_filter(::dingodb::pb::common::VectorFilter::VECTOR_ID_FILTER);
+    request.mutable_parameter()->set_vector_filter_type(::dingodb::pb::common::VectorFilterType::QUERY_PRE);
+
+    for (int i = 0; i < 200; i++) {
+      std::random_device seed;
+      std::ranlux48 engine(seed());
+
+      std::uniform_int_distribution<> distrib(1, 10000ULL);
+      auto random = distrib(engine);
+
+      vt_ids.push_back(random);
+    }
+
+    sort(vt_ids.begin(), vt_ids.end());
+    vt_ids.erase(std::unique(vt_ids.begin(), vt_ids.end()), vt_ids.end());
+
+    for (auto id : vt_ids) {
+      request.mutable_parameter()->add_vector_ids(id);
+    }
+
+    std::cout << "vector_ids : " << request.parameter().vector_ids().size() << " [ ";
+
+    for (auto id : request.parameter().vector_ids()) {
+      std::cout << id << " ";
+    }
+    std::cout << "]";
+    std::cout << std::endl;
+  }
+
+  if (FLAGS_with_scalar_pre_filter) {
+    request.mutable_parameter()->set_vector_filter(::dingodb::pb::common::VectorFilter::SCALAR_FILTER);
+    request.mutable_parameter()->set_vector_filter_type(::dingodb::pb::common::VectorFilterType::QUERY_PRE);
+
+    for (uint32_t m = 0; m < batch_count; m++) {
+      dingodb::pb::common::VectorWithId* vector_with_id = request.mutable_vector_with_ids(m);
+
+      for (int k = 0; k < 2; k++) {
+        ::dingodb::pb::common::ScalarValue scalar_value;
+        scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::STRING);
+        ::dingodb::pb::common::ScalarField* field = scalar_value.add_fields();
+        field->set_string_data("value" + std::to_string(k));
+
+        vector_with_id->mutable_scalar_data()->mutable_scalar_data()->insert({"key" + std::to_string(k), scalar_value});
+      }
+    }
+  }
+
   if (FLAGS_print_vector_search_delay) {
     auto start = std::chrono::steady_clock::now();
     interaction->SendRequest("IndexService", "VectorSearch", request, response);
@@ -249,6 +433,74 @@ void SendVectorBatchSearch(ServerInteractionPtr interaction, uint64_t region_id,
   DINGO_LOG(INFO) << "VectorSearch response, batch_result_size: " << response.batch_results_size();
   for (const auto& batch_result : response.batch_results()) {
     DINGO_LOG(INFO) << "VectorSearch response, batch_result_dist_size: " << batch_result.vector_with_distances_size();
+  }
+
+  // match compare
+  if (FLAGS_with_vector_ids) {
+    std::cout << "vector_ids : " << request.parameter().vector_ids().size() << " [ ";
+
+    for (auto id : request.parameter().vector_ids()) {
+      std::cout << id << " ";
+    }
+    std::cout << "]";
+    std::cout << std::endl;
+
+    std::cout << "response.batch_results() size : " << response.batch_results().size() << std::endl;
+
+    for (const auto& vector_with_distance_result : response.batch_results()) {
+      std::vector<uint64_t> result_vt_ids;
+      for (const auto& vector_with_distance : vector_with_distance_result.vector_with_distances()) {
+        auto id = vector_with_distance.vector_with_id().id();
+        result_vt_ids.push_back(id);
+      }
+
+      if (result_vt_ids.empty()) {
+        std::cout << "result_vt_ids : empty" << std::endl;
+      } else {
+        std::cout << "result_vt_ids : " << result_vt_ids.size() << " [ ";
+        for (auto id : result_vt_ids) {
+          std::cout << id << " ";
+        }
+        std::cout << "]";
+        std::cout << std::endl;
+      }
+
+      for (auto id : result_vt_ids) {
+        auto iter = std::find(vt_ids.begin(), vt_ids.end(), id);
+        if (iter == vt_ids.end()) {
+          std::cout << "result_vector_ids not all in vector_ids" << std::endl;
+          return;
+        }
+      }
+      std::cout << "result_vector_ids  all in vector_ids" << std::endl;
+    }
+  }
+
+  if (FLAGS_with_scalar_pre_filter) {
+    for (const auto& vector_with_distance_result : response.batch_results()) {
+      std::vector<uint64_t> result_vt_ids;
+      for (const auto& vector_with_distance : vector_with_distance_result.vector_with_distances()) {
+        auto id = vector_with_distance.vector_with_id().id();
+        result_vt_ids.push_back(id);
+      }
+
+      auto lambda_print_result_vector_function = [&result_vt_ids](const std::string& name) {
+        std::cout << name << ": " << result_vt_ids.size() << " [ ";
+        for (auto id : result_vt_ids) {
+          std::cout << id << " ";
+        }
+        std::cout << "]";
+        std::cout << std::endl;
+      };
+
+      lambda_print_result_vector_function("before sort result_vt_ids");
+
+      std::sort(result_vt_ids.begin(), result_vt_ids.end());
+
+      lambda_print_result_vector_function("after  sort result_vt_ids");
+
+      std::cout << std::endl;
+    }
   }
 }
 
@@ -577,6 +829,19 @@ void SendVectorAddBatch(ServerInteractionPtr interaction, uint64_t region_id, ui
         vector_with_id->mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
         for (int j = 0; j < dimension; j++) {
           vector_with_id->mutable_vector()->add_float_values(random_seeds[(i - start_id) * dimension + j]);
+        }
+
+        if (FLAGS_with_scalar) {
+          for (int k = 0; k < 3; k++) {
+            ::dingodb::pb::common::ScalarValue scalar_value;
+            int index = k + (i < 30 ? 0 : 1);
+            scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::STRING);
+            ::dingodb::pb::common::ScalarField* field = scalar_value.add_fields();
+            field->set_string_data("value" + std::to_string(index));
+
+            vector_with_id->mutable_scalar_data()->mutable_scalar_data()->insert(
+                {"key" + std::to_string(index), scalar_value});
+          }
         }
       }
 
