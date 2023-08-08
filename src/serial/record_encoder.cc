@@ -188,6 +188,54 @@ int RecordEncoder::EncodeValue(const std::vector<std::any>& record, std::string&
           }
           break;
         }
+        case BaseSchema::kBoolList: {
+          auto ss = std::dynamic_pointer_cast<DingoSchema<std::optional<std::shared_ptr<std::vector<bool>>>>>(bs);
+          if (!ss->IsKey()) {
+            ss->EncodeValue(value_buf,
+                            std::any_cast<std::optional<std::shared_ptr<std::vector<bool>>>>(record.at(ss->GetIndex())));
+          }
+          break;
+        }
+        case BaseSchema::kStringList: {
+          auto ss = std::dynamic_pointer_cast<DingoSchema<std::optional<std::shared_ptr<std::vector<std::string>>>>>(bs);
+          if (!ss->IsKey()) {
+            ss->EncodeValue(value_buf,
+                            std::any_cast<std::optional<std::shared_ptr<std::vector<std::string>>>>(record.at(ss->GetIndex())));
+          }
+          break;
+        }
+        case BaseSchema::kDoubleList: {
+          auto ss = std::dynamic_pointer_cast<DingoSchema<std::optional<std::shared_ptr<std::vector<double>>>>>(bs);
+          if (!ss->IsKey()) {
+            ss->EncodeValue(value_buf,
+                            std::any_cast<std::optional<std::shared_ptr<std::vector<double>>>>(record.at(ss->GetIndex())));
+          }
+          break;
+        }
+        case BaseSchema::kFloatList: {
+          auto ss = std::dynamic_pointer_cast<DingoSchema<std::optional<std::shared_ptr<std::vector<float>>>>>(bs);
+          if (!ss->IsKey()) {
+            ss->EncodeValue(value_buf,
+                            std::any_cast<std::optional<std::shared_ptr<std::vector<float>>>>(record.at(ss->GetIndex())));
+          }
+          break;
+        }
+        case BaseSchema::kIntegerList: {
+          auto ss = std::dynamic_pointer_cast<DingoSchema<std::optional<std::shared_ptr<std::vector<int32_t>>>>>(bs);
+          if (!ss->IsKey()) {
+            ss->EncodeValue(value_buf,
+                            std::any_cast<std::optional<std::shared_ptr<std::vector<int32_t>>>>(record.at(ss->GetIndex())));
+          }
+          break;
+        }
+        case BaseSchema::kLongList: {
+          auto ss = std::dynamic_pointer_cast<DingoSchema<std::optional<std::shared_ptr<std::vector<int64_t>>>>>(bs);
+          if (!ss->IsKey()) {
+            ss->EncodeValue(value_buf,
+                            std::any_cast<std::optional<std::shared_ptr<std::vector<int64_t>>>>(record.at(ss->GetIndex())));
+          }
+          break;
+        }
         default: {
           break;
         }

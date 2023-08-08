@@ -125,6 +125,60 @@ int RecordDecoder::Decode(const std::string& key, const std::string& value, std:
           }
           break;
         }
+        case BaseSchema::kBoolList: {
+          auto ss = std::dynamic_pointer_cast<DingoSchema<std::optional<std::shared_ptr<std::vector<bool>>>>>(bs);
+          if (ss->IsKey()) {
+            record.at(ss->GetIndex()) = ss->DecodeKey(key_buf);
+          } else {
+            record.at(ss->GetIndex()) = ss->DecodeValue(value_buf);
+          }
+          break;
+        }
+        case BaseSchema::kStringList: {
+          auto ss = std::dynamic_pointer_cast<DingoSchema<std::optional<std::shared_ptr<std::vector<std::string>>>>>(bs);
+          if (ss->IsKey()) {
+            record.at(ss->GetIndex()) = ss->DecodeKey(key_buf);
+          } else {
+            record.at(ss->GetIndex()) = ss->DecodeValue(value_buf);
+          }
+          break;
+        }
+        case BaseSchema::kDoubleList: {
+          auto ss = std::dynamic_pointer_cast<DingoSchema<std::optional<std::shared_ptr<std::vector<double>>>>>(bs);
+          if (ss->IsKey()) {
+            record.at(ss->GetIndex()) = ss->DecodeKey(key_buf);
+          } else {
+            record.at(ss->GetIndex()) = ss->DecodeValue(value_buf);
+          }
+          break;
+        }
+        case BaseSchema::kFloatList: {
+          auto ss = std::dynamic_pointer_cast<DingoSchema<std::optional<std::shared_ptr<std::vector<float>>>>>(bs);
+          if (ss->IsKey()) {
+            record.at(ss->GetIndex()) = ss->DecodeKey(key_buf);
+          } else {
+            record.at(ss->GetIndex()) = ss->DecodeValue(value_buf);
+          }
+          break;
+        }
+        case BaseSchema::kIntegerList: {
+          auto ss = std::dynamic_pointer_cast<DingoSchema<std::optional<std::shared_ptr<std::vector<int32_t>>>>>(bs);
+          if (ss->IsKey()) {
+            record.at(ss->GetIndex()) = ss->DecodeKey(key_buf);
+          } else {
+            record.at(ss->GetIndex()) = ss->DecodeValue(value_buf);
+          }
+          break;
+        }
+        case BaseSchema::kLongList: {
+          auto ss = std::dynamic_pointer_cast<DingoSchema<std::optional<std::shared_ptr<std::vector<int64_t>>>>>(bs);
+          if (ss->IsKey()) {
+            record.at(ss->GetIndex()) = ss->DecodeKey(key_buf);
+          } else {
+            record.at(ss->GetIndex()) = ss->DecodeValue(value_buf);
+          }
+          break;
+        }
         default: {
           break;
         }
@@ -194,6 +248,13 @@ int RecordDecoder::DecodeKey(const std::string& key, std::vector<std::any>& reco
         }
         case BaseSchema::kString: {
           auto ss = std::dynamic_pointer_cast<DingoSchema<std::optional<std::shared_ptr<std::string>>>>(bs);
+          if (ss->IsKey()) {
+            record.at(index) = ss->DecodeKey(key_buf);
+          }
+          break;
+        }
+        case BaseSchema::kDoubleList: {
+          auto ss = std::dynamic_pointer_cast<DingoSchema<std::optional<std::shared_ptr<double>>>>(bs);
           if (ss->IsKey()) {
             record.at(index) = ss->DecodeKey(key_buf);
           }
@@ -344,6 +405,36 @@ int RecordDecoder::Decode(const std::string& key, const std::string& value, cons
         }
         case BaseSchema::kString: {
           DecodeOrSkip1(std::dynamic_pointer_cast<DingoSchema<std::optional<std::shared_ptr<std::string>>>>(bs),
+                        key_buf, value_buf, indexed_mapping_index, record, n, m);
+          break;
+        }
+        case BaseSchema::kBoolList: {
+          DecodeOrSkip1(std::dynamic_pointer_cast<DingoSchema<std::optional<std::shared_ptr<std::vector<bool>>>>>(bs),
+                        key_buf, value_buf, indexed_mapping_index, record, n, m);
+          break;
+        }
+        case BaseSchema::kStringList: {
+          DecodeOrSkip1(std::dynamic_pointer_cast<DingoSchema<std::optional<std::shared_ptr<std::vector<std::string>>>>>(bs),
+                        key_buf, value_buf, indexed_mapping_index, record, n, m);
+          break;
+        }
+        case BaseSchema::kDoubleList: {
+          DecodeOrSkip1(std::dynamic_pointer_cast<DingoSchema<std::optional<std::shared_ptr<std::vector<double>>>>>(bs),
+                        key_buf, value_buf, indexed_mapping_index, record, n, m);
+          break;
+        }
+        case BaseSchema::kFloatList: {
+          DecodeOrSkip1(std::dynamic_pointer_cast<DingoSchema<std::optional<std::shared_ptr<std::vector<float>>>>>(bs),
+                        key_buf, value_buf, indexed_mapping_index, record, n, m);
+          break;
+        }
+        case BaseSchema::kIntegerList: {
+          DecodeOrSkip1(std::dynamic_pointer_cast<DingoSchema<std::optional<std::shared_ptr<std::vector<int32_t>>>>>(bs),
+                        key_buf, value_buf, indexed_mapping_index, record, n, m);
+          break;
+        }
+        case BaseSchema::kLongList: {
+          DecodeOrSkip1(std::dynamic_pointer_cast<DingoSchema<std::optional<std::shared_ptr<std::vector<int64_t>>>>>(bs),
                         key_buf, value_buf, indexed_mapping_index, record, n, m);
           break;
         }

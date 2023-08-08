@@ -28,6 +28,12 @@
 #include "schema/long_schema.h"     // IWYU pragma: keep
 #include "schema/string_schema.h"   // IWYU pragma: keep
 #include "utils.h"                  // IWYU pragma: keep
+#include "schema/boolean_list_schema.h"
+#include "schema/string_list_schema.h"
+#include "schema/double_list_schema.h"
+#include "schema/float_list_schema.h"
+#include "schema/integer_list_schema.h"
+#include "schema/long_list_schema.h"
 
 namespace dingodb {
 

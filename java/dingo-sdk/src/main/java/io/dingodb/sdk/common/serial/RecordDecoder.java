@@ -69,7 +69,8 @@ public class RecordDecoder {
         if (valueBuf.readInt() != schemaVersion) {
             throw new RuntimeException("Wrong Schema Version");
         }
-        Object[] record = new Object[schemas.size()];
+        Object[] record = new Object[columnIndexes.length];
+        int i = 0;
         for (DingoSchema schema : schemas) {
             if (Arrays.binarySearch(columnIndexes, schema.getIndex()) < 0) {
                 if (schema.isKey()) {
@@ -79,10 +80,11 @@ public class RecordDecoder {
                 }
             } else {
                 if (schema.isKey()) {
-                    record[schema.getIndex()] = schema.decodeKey(keyBuf);
+                    record[i] = schema.decodeKey(keyBuf);
                 } else {
-                    record[schema.getIndex()] = schema.decodeValue(valueBuf);
+                    record[i] = schema.decodeValue(valueBuf);
                 }
+                i++;
             }
         }
         return record;
