@@ -19,7 +19,8 @@ package io.dingodb.sdk.common.serial.schema;
 import java.util.Locale;
 
 public enum Type {
-    BOOLEAN, INTEGER, FLOAT, LONG, DOUBLE, BYTES, STRING, VECTOR;
+    BOOLEAN, INTEGER, FLOAT, LONG, DOUBLE, BYTES, STRING, VECTOR, ARRAY,
+    BOOLEANLIST, INTEGERLIST, FLOATLIST, LONGLIST, DOUBLELIST, STRINGLIST;
 
     private final String name;
 

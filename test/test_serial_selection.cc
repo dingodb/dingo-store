@@ -168,74 +168,73 @@ class DingoSerialTest : public testing::Test {
   void TearDown() override {}
 };
 
-// TEST_F(DingoSerialTest, keyvaluecodeStringLoopTest) {
-//   auto td = std::make_shared<pb::meta::TableDefinition>();
-//   td->set_name("test");
+TEST_F(DingoSerialTest, keyvaluecodeStringLoopTest) {
 
-//   int32_t n = 10000;
-//   // Define column definitions and records
-//   vector<any> record1(n);
-//   for (int i = 0; i < n; i++) {
-//     std::string column_name = "column_" + std::to_string(i);
-//     std::shared_ptr<std::string> column_value = std::make_shared<std::string>("value_" + std::to_string(i));
-//     pb::meta::ColumnDefinition* cd = td->add_columns();
-//     cd->set_name(column_name);
-//     cd->set_element_type(pb::meta::ELEM_TYPE_STRING);
-//     cd->set_nullable(false);
-//     cd->set_indexofkey(0);
-//     record1.at(i) = optional<shared_ptr<string>>{column_value};
-//   }
-//   ASSERT_EQ(n, record1.size());
-//   // Create KeyValueCodec and encode record
-//   KeyValueCodec* codec = new KeyValueCodec(td, 0);
-//   pb::common::KeyValue kv;
-//   Counter LoadCnter1;
-//   LoadCnter1.reStart();
-//   (void)codec->Encode(record1, kv);
-//   int64_t timeDBFetch1 = LoadCnter1.mtimeElapsed();
-//   std::cout << "Encode Time : " << timeDBFetch1 << " milliseconds" << std::endl;
-//   // Decode record and verify values
-//   std::vector<std::any> decoded_records;
-//   Counter LoadCnter2;
-//   LoadCnter2.reStart();
-//   (void)codec->Decode(kv, decoded_records);
-//   std::cout << "Decode Time : " << LoadCnter2.mtimeElapsed() << " milliseconds" << std::endl;
-//   std::cout << "Decode output records size:" << decoded_records.size() << std::endl;
+  int32_t n = 10000;
+  // Define column definitions and records
+  vector<any> record1(n);
+  std::shared_ptr<vector<std::shared_ptr<BaseSchema>>> schemas_ = std::make_shared<vector<std::shared_ptr<BaseSchema>>>(n);
+  for (int i = 0; i < n; i++) {
+    std::shared_ptr<std::string> column_value = std::make_shared<std::string>("value_" + std::to_string(i));
+    auto str = std::make_shared<DingoSchema<optional<shared_ptr<string>>>>();
+    str->SetIndex(i);
+    str->SetAllowNull(false);
+    str->SetIsKey(false);
+    schemas_->at(i) = str;
+    record1.at(i) = optional<shared_ptr<string>>{column_value};
+  }
+  ASSERT_EQ(n, record1.size());
+  // encode record
+  std::shared_ptr<RecordEncoder> re = std::make_shared<RecordEncoder>(0, schemas_, 0L, this->le);
+  pb::common::KeyValue kv;
+  Counter LoadCnter1;
+  LoadCnter1.reStart();
+  (void)re->Encode(record1, kv);
+  int64_t timeDBFetch1 = LoadCnter1.mtimeElapsed();
+  std::cout << "Encode Time : " << timeDBFetch1 << " milliseconds" << std::endl;
+  // Decode record and verify values
+  std::shared_ptr<RecordDecoder> rd = std::make_shared<RecordDecoder>(0, schemas_, 0L, this->le);
+  std::vector<std::any> decoded_records;
+  Counter LoadCnter2;
+  LoadCnter2.reStart();
+  (void)rd->Decode(kv, decoded_records);
+  std::cout << "Decode Time : " << LoadCnter2.mtimeElapsed() << " milliseconds" << std::endl;
+  std::cout << "Decode output records size:" << decoded_records.size() << std::endl;
 
-//   // Decode record selection columns
-//   int selectionColumnsSize = n - 3;
-//   {
-//     std::vector<int> indexes;
-//     for (int i = 0; i < selectionColumnsSize; i++) {
-//       indexes.push_back(i);
-//     }
-//     std::vector<int>& column_indexes = indexes;
-//     std::vector<std::any> decoded_s_records;
-//     Counter LoadCnter3;
-//     LoadCnter3.reStart();
-//     // std::sort(column_indexes.begin(), column_indexes.end());
-//     (void)codec->Decode(kv, column_indexes, decoded_s_records);
-//     std::cout << "Decode selection columns size:" << selectionColumnsSize
-//               << ", need Time : " << LoadCnter3.mtimeElapsed() << " milliseconds" << std::endl;
-//     std::cout << "Decode selection output records size:" << decoded_s_records.size() << std::endl;
-//   }
-//   {
-//     std::vector<int> indexes;
-//     selectionColumnsSize = n - selectionColumnsSize;
-//     for (int i = 0; i < selectionColumnsSize; i++) {
-//       indexes.push_back(i);
-//     }
-//     std::vector<int>& column_indexes = indexes;
-//     std::vector<std::any> decoded_s_records;
-//     Counter LoadCnter3;
-//     LoadCnter3.reStart();
-//     // std::sort(column_indexes.begin(), column_indexes.end());
-//     (void)codec->Decode(kv, column_indexes, decoded_s_records);
-//     std::cout << "Decode selection columns size:" << selectionColumnsSize
-//               << ", need Time : " << LoadCnter3.mtimeElapsed() << " milliseconds" << std::endl;
-//     std::cout << "Decode selection output records size:" << decoded_s_records.size() << std::endl;
-//   }
-// }
+  // Decode record selection columns
+  int selectionColumnsSize = n - 3;
+  {
+    std::vector<int> indexes;
+    for (int i = 0; i < selectionColumnsSize; i++) {
+      indexes.push_back(i);
+    }
+    std::vector<int>& column_indexes = indexes;
+    std::vector<std::any> decoded_s_records;
+    Counter LoadCnter3;
+    LoadCnter3.reStart();
+    // std::sort(column_indexes.begin(), column_indexes.end());
+    (void)rd->Decode(kv, column_indexes, decoded_s_records);
+    std::cout << "Decode selection columns size:" << selectionColumnsSize
+              << ", need Time : " << LoadCnter3.mtimeElapsed() << " milliseconds" << std::endl;
+    std::cout << "Decode selection output records size:" << decoded_s_records.size() << std::endl;
+  }
+  {
+    std::vector<int> indexes;
+    selectionColumnsSize = n - selectionColumnsSize;
+    for (int i = 0; i < selectionColumnsSize; i++) {
+      indexes.push_back(i);
+    }
+    std::vector<int>& column_indexes = indexes;
+    std::vector<std::any> decoded_s_records;
+    Counter LoadCnter3;
+    LoadCnter3.reStart();
+    // std::sort(column_indexes.begin(), column_indexes.end());
+    (void)rd->Decode(kv, column_indexes, decoded_s_records);
+    std::cout << "Decode selection columns size:" << selectionColumnsSize
+              << ", need Time : " << LoadCnter3.mtimeElapsed() << " milliseconds" << std::endl;
+    std::cout << "Decode selection output records size:" << decoded_s_records.size() << std::endl;
+  }
+}
 
 // TEST_F(DingoSerialTest, keyvaluecodeDoubleLoopTest) {
 //   auto td = std::make_shared<pb::meta::TableDefinition>();

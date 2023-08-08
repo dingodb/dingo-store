@@ -64,6 +64,21 @@ void FormatSchema(std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> sche
           ds->SetIsLe(le);
           break;
         }
+        case BaseSchema::kIntegerList: {
+          auto ds = std::dynamic_pointer_cast<DingoSchema<std::optional<std::shared_ptr<std::vector<int32_t>>>>>(bs);
+          ds->SetIsLe(le);
+          break;
+        }
+        case BaseSchema::kLongList: {
+          auto ds = std::dynamic_pointer_cast<DingoSchema<std::optional<std::shared_ptr<std::vector<int64_t>>>>>(bs);
+          ds->SetIsLe(le);
+          break;
+        }
+        case BaseSchema::kDoubleList: {
+          auto ds = std::dynamic_pointer_cast<DingoSchema<std::optional<std::shared_ptr<std::vector<double>>>>>(bs);
+          ds->SetIsLe(le);
+          break;
+        }
         default: {
           break;
         }
