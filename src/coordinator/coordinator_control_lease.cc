@@ -47,7 +47,7 @@
 namespace dingodb {
 
 DEFINE_uint64(version_lease_max_ttl_seconds, 300, "max ttl seconds for version lease");
-DEFINE_uint64(version_lease_min_ttl_seconds, 5, "min ttl seconds for version lease");
+DEFINE_uint64(version_lease_min_ttl_seconds, 3, "min ttl seconds for version lease");
 
 butil::Status CoordinatorControl::LeaseGrant(uint64_t lease_id, int64_t ttl_seconds, uint64_t &granted_id,
                                              int64_t &granted_ttl_seconds,
@@ -149,12 +149,18 @@ butil::Status CoordinatorControl::LeaseRevoke(uint64_t lease_id,
   auto iter = this->lease_to_key_map_temp_.find(lease_id);
   if (iter == this->lease_to_key_map_temp_.end()) {
     DINGO_LOG(WARNING) << "lease id " << lease_id << " not found, cannot revoke";
+    if (!has_mutex_locked) {
+      bthread_mutex_unlock(&lease_to_key_map_temp_mutex_);
+    }
     return butil::Status(pb::error::Errno::ELEASE_NOT_EXISTS_OR_EXPIRED, "lease id %lu not found", lease_id);
   }
 
   auto ret = this->lease_map_.Get(lease_id, lease);
   if (ret < 0) {
     DINGO_LOG(WARNING) << "lease id " << lease_id << " not found from lease_map_";
+    if (!has_mutex_locked) {
+      bthread_mutex_unlock(&lease_to_key_map_temp_mutex_);
+    }
     return butil::Status(pb::error::Errno::ELEASE_NOT_EXISTS_OR_EXPIRED, "lease id %lu not found", lease_id);
   }
 
@@ -177,8 +183,9 @@ butil::Status CoordinatorControl::LeaseRevoke(uint64_t lease_id,
     std::vector<pb::version::Kv> prev_kvs;
     uint64_t main_revision = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REVISION, meta_increment);
     uint64_t sub_revision = 1;
-    auto ret_status =
-        this->KvDeleteRange(key, std::string(), false, main_revision, sub_revision, false, prev_kvs, meta_increment);
+    uint64_t deleted_count = 0;
+    auto ret_status = this->KvDeleteRange(key, std::string(), false, main_revision, sub_revision, false, deleted_count,
+                                          prev_kvs, meta_increment);
     if (!ret_status.ok()) {
       DINGO_LOG(ERROR) << "DeleteRawKv failed, key: " << key;
     }

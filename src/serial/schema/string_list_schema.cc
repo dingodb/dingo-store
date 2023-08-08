@@ -32,10 +32,8 @@ void DingoSchema<std::optional<std::shared_ptr<std::vector<std::string>>>>::Inte
 
 void DingoSchema<std::optional<std::shared_ptr<std::vector<std::string>>>>::InternalEncodeValue(Buf* buf,
                                                                                    std::shared_ptr<std::vector<std::string>> data) {
-    // vector size 
     buf->EnsureRemainder(4);
     buf->WriteInt(data->size());
-    // 遍历data,并调用InternalEmlementEncodeValue函数，以便序列化vector中的每个元素
     for (const std::string& str : *data) {
         InternalEmlementEncodeValue(buf, str);
     }
