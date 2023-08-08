@@ -36,8 +36,9 @@
 namespace dingodb {
 
 void CoordinatorControl::GenerateTableIdAndPartIds(uint64_t schema_id, uint64_t part_count,
-    pb::meta::EntityType entity_type, pb::coordinator_internal::MetaIncrement& meta_increment,
-    pb::meta::TableIdWithPartIds* ids) {
+                                                   pb::meta::EntityType entity_type,
+                                                   pb::coordinator_internal::MetaIncrement& meta_increment,
+                                                   pb::meta::TableIdWithPartIds* ids) {
   uint64_t new_table_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_TABLE, meta_increment);
 
   auto* table_id = ids->mutable_table_id();
@@ -1028,7 +1029,7 @@ butil::Status CoordinatorControl::ValidateIndexDefinition(const pb::meta::TableD
       return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "scalar index name is empty.");
     }
 
-	// check colums
+    // check colums
     if (table_definition.columns_size() == 0) {
       DINGO_LOG(ERROR) << "scalar index cannot find column";
       return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "scalar index cannot find column.");
@@ -2414,7 +2415,7 @@ butil::Status CoordinatorControl::GenerateTableIds(uint64_t schema_id, const pb:
 }
 
 void CoordinatorControl::CreateTableIndexesMap(pb::coordinator_internal::TableIndexInternal& table_index_internal,
-                                            pb::coordinator_internal::MetaIncrement &meta_increment) {
+                                               pb::coordinator_internal::MetaIncrement& meta_increment) {
   // update meta_increment
   auto* table_index_increment = meta_increment.add_table_indexes();
   table_index_increment->set_id(table_index_internal.id());
@@ -2423,7 +2424,7 @@ void CoordinatorControl::CreateTableIndexesMap(pb::coordinator_internal::TableIn
 }
 
 butil::Status CoordinatorControl::GetTableIndexes(uint64_t schema_id, uint64_t table_id,
-                                                  pb::meta::GetTablesResponse *response) {
+                                                  pb::meta::GetTablesResponse* response) {
   pb::meta::TableDefinitionWithId definition_with_id;
   butil::Status ret = GetTable(schema_id, table_id, definition_with_id);
   if (!ret.ok()) {

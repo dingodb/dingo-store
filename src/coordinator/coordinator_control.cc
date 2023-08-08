@@ -76,7 +76,8 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   kv_rev_meta_ = new MetaSafeStringStdMapStorage<pb::coordinator_internal::KvRevInternal>(&kv_rev_map_);
 
   // table index
-  table_index_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::TableIndexInternal>(&table_index_map_, "table_index_map_");
+  table_index_meta_ =
+      new MetaSafeMapStorage<pb::coordinator_internal::TableIndexInternal>(&table_index_map_, "table_index_map_");
 
   // init FlatMap
   store_need_push_.init(100, 80);
@@ -414,7 +415,6 @@ bool CoordinatorControl::Recover() {
 
   DINGO_LOG(INFO) << "Recover table_index_meta, count=" << kvs.size();
   kvs.clear();
-
 
   // build id_epoch, schema_name, table_name, index_name maps
   BuildTempMaps();
