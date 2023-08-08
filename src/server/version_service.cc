@@ -548,8 +548,10 @@ void VersionServiceProtoImpl::KvDeleteRange(google::protobuf::RpcController* /*c
       coordinator_control_->GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REVISION, meta_increment);
   uint64_t sub_revision = 1;
 
-  auto ret = coordinator_control_->KvDeleteRange(request->key(), request->range_end(), request->need_prev_kv(),
-                                                 main_revision, sub_revision, true, prev_kvs, meta_increment);
+  uint64_t deleted_count = 0;
+  auto ret =
+      coordinator_control_->KvDeleteRange(request->key(), request->range_end(), request->need_prev_kv(), main_revision,
+                                          sub_revision, true, deleted_count, prev_kvs, meta_increment);
   if (!ret.ok()) {
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
     response->mutable_error()->set_errmsg(ret.error_str());
@@ -567,6 +569,7 @@ void VersionServiceProtoImpl::KvDeleteRange(google::protobuf::RpcController* /*c
     }
   }
   response->mutable_header()->set_revision(main_revision);
+  response->set_deleted(deleted_count);
 
   // prepare for raft process
   auto* meta_closure = new CoordinatorClosure<pb::version::DeleteRangeRequest, pb::version::DeleteRangeResponse>(

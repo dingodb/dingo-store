@@ -728,11 +728,12 @@ class CoordinatorControl : public MetaControl {
   // in:  main_revision
   // in and out:  sub_revision
   // in:  need_lease_remove_keys
+  // out:  deleted_count
   // out:  prev_kvs
   // return: errno
   butil::Status KvDeleteRange(const std::string &key, const std::string &range_end, bool need_prev_kv,
                               uint64_t main_revision, uint64_t &sub_revision, bool need_lease_remove_keys,
-                              std::vector<pb::version::Kv> &prev_kvs,
+                              uint64_t &deleted_count, std::vector<pb::version::Kv> &prev_kvs,
                               pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // KvPutApply is the apply function for put
