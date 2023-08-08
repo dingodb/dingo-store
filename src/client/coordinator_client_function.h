@@ -24,6 +24,7 @@
 
 #include "brpc/channel.h"
 #include "brpc/controller.h"
+#include "bthread/bthread.h"
 #include "coordinator/coordinator_interaction.h"
 
 // node service functions
@@ -142,11 +143,44 @@ void SendCoorKvDeleteRange(std::shared_ptr<dingodb::CoordinatorInteraction> coor
 
 // watch
 void SendOneTimeWatch(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendLock(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 
 // debug
 void SendDebug();
 std::string EncodeUint64(uint64_t value);
 uint64_t DecodeUint64(const std::string& str);
 bool GetBrpcChannel(const std::string& location, brpc::Channel& channel);
+
+class Bthread {
+ public:
+  template <class Fn, class... Args>
+  Bthread(const bthread_attr_t* attr, Fn&& fn, Args&&... args) {  // NOLINT
+    auto p_wrap_fn = new auto([=] { fn(args...); });
+    auto call_back = [](void* ar) -> void* {
+      auto f = reinterpret_cast<decltype(p_wrap_fn)>(ar);
+      (*f)();
+      delete f;
+      return nullptr;
+    };
+
+    bthread_start_background(&th_, attr, call_back, (void*)p_wrap_fn);
+    joinable_ = true;
+  }
+
+  void Join() {
+    if (joinable_) {
+      bthread_join(th_, nullptr);
+      joinable_ = false;
+    }
+  }
+
+  bool Joinable() const noexcept { return joinable_; }
+
+  bthread_t GetId() const { return th_; }
+
+ private:
+  bthread_t th_;
+  bool joinable_ = false;
+};
 
 #endif  // DINGODB_COORDINATOR_CLIENT_FUNCTION_H_

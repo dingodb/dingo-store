@@ -319,15 +319,25 @@ butil::Status CoordinatorControl::KvPut(const pb::common::KeyValue &key_value_in
 
   lease_grant_id = lease_id;
 
-  // if ignore_lease, get the lease of the key
+  uint64_t total_count_in_range = 0;
+  this->KvRange(key_value_in.key(), std::string(), 1, false, false, kvs_temp, total_count_in_range);
   if (ignore_lease) {
-    uint64_t total_count_in_range = 0;
-    this->KvRange(key_value_in.key(), std::string(), 1, false, false, kvs_temp, total_count_in_range);
     if (!kvs_temp.empty()) {
+      // if ignore_lease, get the lease of the key
       lease_grant_id = kvs_temp[0].lease();
     } else {
       DINGO_LOG(ERROR) << "KvPut ignore_lease, but not found key: " << key_value_in.key();
       return butil::Status(EINVAL, "KvPut ignore_lease, but not found key");
+    }
+  } else if (lease_id != 0) {
+    if (!kvs_temp.empty()) {
+      // if ignore_lease, get the lease of the key
+      lease_grant_id = kvs_temp[0].lease();
+      if (lease_grant_id != lease_id) {
+        DINGO_LOG(ERROR) << "KvPut lease_id not match, key: " << key_value_in.key() << ", lease_id: " << lease_id
+                         << ", lease_grant_id: " << lease_grant_id;
+        return butil::Status(EINVAL, "KvPut lease_id not match");
+      }
     }
   }
 

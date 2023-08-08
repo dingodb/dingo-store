@@ -127,6 +127,9 @@ DEFINE_bool(no_delete, false, "watch no delete");
 DEFINE_bool(wait_on_not_exist_key, false, "watch wait for not exist key");
 DEFINE_uint32(max_watch_count, 10, "max_watch_count");
 
+DEFINE_string(lock_name, "", "Request lock_name");
+DEFINE_string(client_uuid, "", "Request client_uuid");
+
 bvar::LatencyRecorder g_latency_recorder("dingo-store");
 
 const std::map<std::string, std::vector<std::string>> kParamConstraint = {
@@ -666,6 +669,8 @@ int CoordinatorSender() {
   // coordinator watch
   else if (FLAGS_method == "OneTimeWatch") {
     SendOneTimeWatch(coordinator_interaction_version);
+  } else if (FLAGS_method == "Lock") {
+    SendLock(coordinator_interaction_version);
   }
 
   // debug
