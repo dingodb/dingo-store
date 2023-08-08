@@ -112,6 +112,12 @@ void SendUpdateIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
 void SendDropIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendGetIndexMetrics(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 
+// table index
+void SendGenerateTableIds(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendCreateTables(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendGetTables(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendDropTables(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+
 // auto increment functions
 void SendGetAutoIncrements(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendGetAutoIncrement(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);

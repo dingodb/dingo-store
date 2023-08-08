@@ -386,6 +386,18 @@ bool CoordinatorControl::LoadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapsh
   DINGO_LOG(INFO) << "Snapshot version_kv_rev_map_, count=" << kvs.size();
   kvs.clear();
 
+  // 50.table_index map
+  if (!meta_reader_->Scan(snapshot, table_index_meta_->Prefix(), kvs)) {
+    return false;
+  }
+
+  for (const auto& kv : kvs) {
+    auto* snapshot_file_kv = meta_snapshot_file.add_table_index_map_kvs();
+    snapshot_file_kv->CopyFrom(kv);
+  }
+  DINGO_LOG(INFO) << "Snapshot table_index_meta, count=" << kvs.size();
+  kvs.clear();
+
   return true;
 }
 
@@ -892,6 +904,31 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
     DINGO_LOG(INFO) << "Coordinator put kv_rev_meta_ success in LoadMetaFromSnapshotFile";
   }
   DINGO_LOG(INFO) << "LoadSnapshot version_kv_rev_meta, count=" << kvs.size();
+  kvs.clear();
+
+  // 50.table_index map
+  kvs.reserve(meta_snapshot_file.table_index_map_kvs_size());
+  for (int i = 0; i < meta_snapshot_file.table_index_map_kvs_size(); i++) {
+    kvs.push_back(meta_snapshot_file.table_index_map_kvs(i));
+  }
+  if (!table_index_meta_->Recover(kvs)) {
+    return false;
+  }
+
+  // remove data in rocksdb
+  if (!meta_writer_->DeletePrefix(table_index_meta_->internal_prefix)) {
+    DINGO_LOG(ERROR) << "Coordinator delete table_index_meta_ range failed in LoadMetaFromSnapshotFile";
+    return false;
+  }
+  DINGO_LOG(INFO) << "Coordinator delete range table_index_meta_ success in LoadMetaFromSnapshotFile";
+
+  // write data to rocksdb
+  if (!meta_writer_->Put(kvs)) {
+    DINGO_LOG(ERROR) << "Coordinator write table_index_meta_ failed in LoadMetaFromSnapshotFile";
+    return false;
+  }
+  DINGO_LOG(INFO) << "Coordinator put table_index_meta_ success in LoadMetaFromSnapshotFile";
+  DINGO_LOG(INFO) << "LoadSnapshot table_index_meta, count=" << kvs.size();
   kvs.clear();
 
   // build id_epoch, schema_name, table_name, index_name maps
@@ -2086,6 +2123,50 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
 
         // meta_delete_kv
         meta_delete_to_kv.push_back(kv_rev_meta_->TransformToKvValue(kv_rev.kv_rev()));
+      }
+    }
+  }
+
+  // 50.table_index map
+  {
+    if (meta_increment.table_indexes_size() > 0) {
+      DINGO_LOG(INFO) << "ApplyMetaIncrement table_indexes size=" << meta_increment.table_indexes_size();
+    }
+
+    for (int i = 0; i < meta_increment.table_indexes_size(); i++) {
+      const auto& table_index = meta_increment.table_indexes(i);
+      if (table_index.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
+        int ret = table_index_map_.Put(table_index.id(), table_index.table_indexes());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement table_index CREATE, [id=" << table_index.id() << "] success";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement table_index CREATE, [id=" << table_index.id() << "] failed";
+        }
+
+        // meta_write_kv
+        meta_write_to_kv.push_back(table_index_meta_->TransformToKvValue(table_index.table_indexes()));
+
+      } else if (table_index.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
+        int ret = table_index_map_.Put(table_index.id(), table_index.table_indexes());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement table_index UPDATE, [id=" << table_index.id() << "] success";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement table_index UPDATE, [id=" << table_index.id() << "] failed";
+        }
+
+        // meta_write_kv
+        meta_write_to_kv.push_back(table_index_meta_->TransformToKvValue(table_index.table_indexes()));
+
+      } else if (table_index.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
+        int ret = table_index_map_.Erase(table_index.id());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement table_index DELETE, [id=" << table_index.id() << "] success";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement table_index DELETE, [id=" << table_index.id() << "] failed";
+        }
+
+        // meta_delete_kv
+        meta_delete_to_kv.push_back(table_index_meta_->TransformToKvValue(table_index.table_indexes()));
       }
     }
   }

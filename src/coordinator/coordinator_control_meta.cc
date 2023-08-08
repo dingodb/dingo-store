@@ -35,6 +35,26 @@
 
 namespace dingodb {
 
+void CoordinatorControl::GenerateTableIdAndPartIds(uint64_t schema_id, uint64_t part_count,
+    pb::meta::EntityType entity_type, pb::coordinator_internal::MetaIncrement& meta_increment,
+    pb::meta::TableIdWithPartIds* ids) {
+  uint64_t new_table_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_TABLE, meta_increment);
+
+  auto* table_id = ids->mutable_table_id();
+  table_id->set_entity_id(new_table_id);
+  table_id->set_parent_entity_id(schema_id);
+  table_id->set_entity_type(entity_type);
+
+  for (uint32_t i = 0; i < part_count; i++) {
+    uint64_t new_part_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_TABLE, meta_increment);
+
+    auto* part_id = ids->add_part_ids();
+    part_id->set_entity_id(new_part_id);
+    part_id->set_parent_entity_id(new_table_id);
+    part_id->set_entity_type(pb::meta::EntityType::ENTITY_TYPE_PART);
+  }
+}
+
 // GenerateRootSchemas
 // root schema
 // meta schema
@@ -1000,6 +1020,18 @@ butil::Status CoordinatorControl::ValidateIndexDefinition(const pb::meta::TableD
       return butil::Status(
           pb::error::Errno::EILLEGAL_PARAMTETERS,
           "scalar_index_type is illegal " + std::to_string(scalar_index_parameter.scalar_index_type()));
+    }
+
+    // check scalar index name
+    if (table_definition.name().empty()) {
+      DINGO_LOG(ERROR) << "scalar index name is empty.";
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "scalar index name is empty.");
+    }
+
+	// check colums
+    if (table_definition.columns_size() == 0) {
+      DINGO_LOG(ERROR) << "scalar index cannot find column";
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "scalar index cannot find column.");
     }
   }
 
@@ -2356,23 +2388,57 @@ void CoordinatorControl::CalculateIndexMetrics() {
   }
 }
 
-butil::Status CoordinatorControl::GenerateTableIds(uint64_t schema_id, uint32_t count,
+butil::Status CoordinatorControl::GenerateTableIds(uint64_t schema_id, const pb::meta::TableWithPartCount& count,
                                                    pb::coordinator_internal::MetaIncrement& meta_increment,
                                                    pb::meta::GenerateTableIdsResponse* response) {
-  bool ret = schema_map_.Exists(schema_id);
-  if (!ret) {
+  if (count.index_count() != count.index_part_count_size()) {
+    DINGO_LOG(ERROR) << "index count is illegal: " << count.index_count() << " | " << count.index_part_count_size();
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "index count is illegal");
+  }
+
+  if (!schema_map_.Exists(schema_id)) {
     DINGO_LOG(ERROR) << "schema_id is illegal " << schema_id;
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "schema_id is illegal");
   }
 
-  // for (uint32_t i = 0; i < count; i++) {
-  //   uint64_t new_table_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_TABLE, meta_increment);
-  //   DINGO_LOG(INFO) << "GenerateTableIds new_table_id=" << new_table_id;
-  //   auto* table_id = response->add_table_ids();
-  //   table_id->set_entity_id(new_table_id);
-  //   table_id->set_parent_entity_id(schema_id);
-  //   table_id->set_entity_type(pb::meta::EntityType::ENTITY_TYPE_TABLE);
-  // }
+  if (count.has_table()) {
+    GenerateTableIdAndPartIds(schema_id, count.table_part_count(), pb::meta::EntityType::ENTITY_TYPE_TABLE,
+                              meta_increment, response->add_ids());
+  }
+
+  for (uint32_t i = 0; i < count.index_count(); i++) {
+    GenerateTableIdAndPartIds(schema_id, count.index_part_count(i), pb::meta::EntityType::ENTITY_TYPE_INDEX,
+                              meta_increment, response->add_ids());
+  }
+  return butil::Status::OK();
+}
+
+void CoordinatorControl::CreateTableIndexesMap(pb::coordinator_internal::TableIndexInternal& table_index_internal,
+                                            pb::coordinator_internal::MetaIncrement &meta_increment) {
+  // update meta_increment
+  auto* table_index_increment = meta_increment.add_table_indexes();
+  table_index_increment->set_id(table_index_internal.id());
+  table_index_increment->set_op_type(pb::coordinator_internal::MetaIncrementOpType::CREATE);
+  table_index_increment->mutable_table_indexes()->CopyFrom(table_index_internal);
+}
+
+butil::Status CoordinatorControl::GetTableIndexes(uint64_t schema_id, uint64_t table_id,
+                                                  pb::meta::GetTablesResponse *response) {
+  pb::meta::TableDefinitionWithId definition_with_id;
+  butil::Status ret = GetTable(schema_id, table_id, definition_with_id);
+  if (!ret.ok()) {
+    return ret;
+  }
+
+  pb::coordinator_internal::TableIndexInternal table_index_internal;
+  int result = table_index_map_.Get(table_id, table_index_internal);
+  if (result < 0) {
+    DINGO_LOG(INFO) << "cannot find indexes, schema_id: " << schema_id << ", table_id: " << table_id;
+  } else {
+    response->mutable_table_definition_with_ids()->CopyFrom(table_index_internal.definition_with_ids());
+  }
+
+  response->add_table_definition_with_ids()->CopyFrom(definition_with_id);
 
   return butil::Status::OK();
 }
