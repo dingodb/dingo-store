@@ -309,9 +309,16 @@ class CoordinatorControl : public MetaControl {
                             pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // generate table ids
-  butil::Status GenerateTableIds(uint64_t schema_id, uint32_t count,
+  butil::Status GenerateTableIds(uint64_t schema_id, const pb::meta::TableWithPartCount& count,
                                  pb::coordinator_internal::MetaIncrement &meta_increment,
                                  pb::meta::GenerateTableIdsResponse *response);
+
+  // create table indexes map
+  void CreateTableIndexesMap(pb::coordinator_internal::TableIndexInternal& table_index_internal,
+                             pb::coordinator_internal::MetaIncrement &meta_increment);
+
+  // get table indexes
+  butil::Status GetTableIndexes(uint64_t schema_id, uint64_t table_id, pb::meta::GetTablesResponse *response);
 
   // create store
   // in: cluster_id
@@ -760,6 +767,9 @@ class CoordinatorControl : public MetaControl {
  private:
   butil::Status ValidateTaskListConflict(uint64_t region_id, uint64_t second_region_id);
 
+  void GenerateTableIdAndPartIds(uint64_t schema_id, uint64_t part_count, pb::meta::EntityType entity_type,
+         pb::coordinator_internal::MetaIncrement& meta_increment, pb::meta::TableIdWithPartIds* ids);
+
   // ids_epochs_temp (out of state machine, only for leader use)
   DingoSafeIdEpochMap id_epoch_map_safe_temp_;
 
@@ -865,6 +875,10 @@ class CoordinatorControl : public MetaControl {
   std::map<google::protobuf::Closure *, std::string> one_time_watch_closure_map_;
   bthread_mutex_t one_time_watch_map_mutex_;
   DingoSafeStdMap<google::protobuf::Closure *, bool> one_time_watch_closure_status_map_;
+
+  // 50. table index
+  DingoSafeMap<uint64_t, pb::coordinator_internal::TableIndexInternal> table_index_map_;
+  MetaSafeMapStorage<pb::coordinator_internal::TableIndexInternal> *table_index_meta_;
 
   // root schema write to raft
   bool root_schema_writed_to_raft_;

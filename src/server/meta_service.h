@@ -114,13 +114,13 @@ class MetaServiceImpl : public pb::meta::MetaService {
                   pb::meta::DropSchemaResponse* response, google::protobuf::Closure* done) override;
 
   void GenerateTableIds(google::protobuf::RpcController* controller, const pb::meta::GenerateTableIdsRequest* request,
-                         pb::meta::GenerateTableIdsResponse* response, google::protobuf::Closure* done) override;
+                        pb::meta::GenerateTableIdsResponse* response, google::protobuf::Closure* done) override;
   void CreateTables(google::protobuf::RpcController* controller, const pb::meta::CreateTablesRequest* request,
-                         pb::meta::CreateTablesResponse* response, google::protobuf::Closure* done) override;
+                    pb::meta::CreateTablesResponse* response, google::protobuf::Closure* done) override;
   void GetTables(google::protobuf::RpcController* controller, const pb::meta::GetTablesRequest* request,
-                         pb::meta::GetTablesResponse* response, google::protobuf::Closure* done) override;
+                 pb::meta::GetTablesResponse* response, google::protobuf::Closure* done) override;
   void DropTables(google::protobuf::RpcController* controller, const pb::meta::DropTablesRequest* request,
-                         pb::meta::DropTablesResponse* response, google::protobuf::Closure* done) override;
+                  pb::meta::DropTablesResponse* response, google::protobuf::Closure* done) override;
 
   void GetAutoIncrements(google::protobuf::RpcController* controller, const pb::meta::GetAutoIncrementsRequest* request,
                          pb::meta::GetAutoIncrementsResponse* response, google::protobuf::Closure* done) override;

@@ -611,6 +611,17 @@ int CoordinatorSender() {
   } else if (FLAGS_method == "GetIndexMetrics") {
     SendGetIndexMetrics(coordinator_interaction_meta);
   }
+  // table index
+  else if (FLAGS_method == "GenerateTableIds") {
+    SendGenerateTableIds(coordinator_interaction_meta);
+  } else if (FLAGS_method == "CreateTables") {
+    SendCreateTables(coordinator_interaction_meta);
+  } else if (FLAGS_method == "GetTables") {
+    SendGetTables(coordinator_interaction_meta);
+  } else if (FLAGS_method == "DropTables") {
+    SendDropTables(coordinator_interaction_meta);
+  }
+
 
   // auto increment
   else if (FLAGS_method == "GetAutoIncrements") {  // auto increment

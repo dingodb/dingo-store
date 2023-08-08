@@ -75,6 +75,9 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   kv_index_meta_ = new MetaSafeStringStdMapStorage<pb::coordinator_internal::KvIndexInternal>(&kv_index_map_);
   kv_rev_meta_ = new MetaSafeStringStdMapStorage<pb::coordinator_internal::KvRevInternal>(&kv_rev_map_);
 
+  // table index
+  table_index_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::TableIndexInternal>(&table_index_map_, "table_index_map_");
+
   // init FlatMap
   store_need_push_.init(100, 80);
   executor_need_push_.init(100, 80);
@@ -101,6 +104,9 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   index_metrics_map_.Init(10000);         // index_metrics_map_ is a big map
   // version kv
   lease_map_.Init(10000);
+
+  // table index
+  table_index_map_.Init(10000);
 }
 
 CoordinatorControl::~CoordinatorControl() {
@@ -118,6 +124,7 @@ CoordinatorControl::~CoordinatorControl() {
   delete executor_user_meta_;
   delete index_meta_;
   delete index_metrics_meta_;
+  delete table_index_meta_;
 }
 
 // InitIds
@@ -396,6 +403,18 @@ bool CoordinatorControl::Recover() {
   }
   DINGO_LOG(INFO) << "Recover kv_rev_meta, count=" << kvs.size();
   kvs.clear();
+
+  // 50.table_index map
+  if (!meta_reader_->Scan(table_index_meta_->Prefix(), kvs)) {
+    return false;
+  }
+  if (!table_index_meta_->Recover(kvs)) {
+    return false;
+  }
+
+  DINGO_LOG(INFO) << "Recover table_index_meta, count=" << kvs.size();
+  kvs.clear();
+
 
   // build id_epoch, schema_name, table_name, index_name maps
   BuildTempMaps();

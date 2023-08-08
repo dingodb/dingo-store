@@ -55,6 +55,12 @@ message IndexInternal {
   uint64 schema_id = 4;
 }
 
+// TableIndexInternal is storage structure for table
+message TableIndexInternal {
+  uint64 id = 1;
+  repeated dingodb.pb.meta.TableDefinitionWithId definition_with_ids = 2;
+}
+
 // IndexMetricsInternal is storage structure for index_metrics
 message IndexMetricsInternal {
   uint64 id = 1;
@@ -213,6 +219,12 @@ message MetaIncrementIndex {
   MetaIncrementOpType op_type = 3;
 }
 
+message MetaIncrementTableIndex {
+  uint64 id = 1;
+  TableIndexInternal table_indexes = 2;
+  MetaIncrementOpType op_type = 3;
+}
+
 message MetaIncrementIdEpoch {
   uint64 id = 1;
   IdEpochInternal idepoch = 2;
@@ -349,6 +361,8 @@ message MetaIncrement {
   repeated MetaIncrementLease leases = 40;
   repeated MetaIncrementKvIndex kv_indexes = 41;
   repeated MetaIncrementKvRevision kv_revs = 42;
+
+  repeated MetaIncrementTableIndex table_indexes = 50;
 }
 
 // snapshot pb file message
@@ -370,6 +384,7 @@ message MetaSnapshotFile {
 
   repeated dingodb.pb.common.KeyValue auto_increment_map_kvs = 20;  // now unused, just a placeholder
   AutoIncrementStorage auto_increment_storage = 21;
+  repeated dingodb.pb.common.KeyValue table_index_map_kvs = 22;
 
   repeated dingodb.pb.common.KeyValue deleted_region_map_kvs = 30;
 
