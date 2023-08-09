@@ -184,10 +184,14 @@ butil::Status IndexServiceImpl::ValidateVectorSearchRequest(const dingodb::pb::i
 
   std::vector<uint64_t> vector_ids;
   if (request->vector_with_ids_size() <= 0) {
-    vector_ids.push_back(request->vector().id());
+    if (request->vector().id() > 0) {
+      vector_ids.push_back(request->vector().id());
+    }
   } else {
     for (const auto& vector : request->vector_with_ids()) {
-      vector_ids.push_back(vector.id());
+      if (vector.id() > 0) {
+        vector_ids.push_back(vector.id());
+      }
     }
   }
 

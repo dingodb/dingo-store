@@ -46,6 +46,14 @@
 
 namespace dingodb {
 
+static std::string GenApplyLogIdKey(uint64_t vector_index_id) {
+  return fmt::format("{}_{}", Constant::kVectorIndexApplyLogIdPrefix, vector_index_id);
+}
+
+static std::string GenSnapshotLogIdKey(uint64_t vector_index_id) {
+  return fmt::format("{}_{}", Constant::kVectorIndexSnapshotLogIdPrefix, vector_index_id);
+}
+
 bool VectorIndexManager::Init(std::vector<store::RegionPtr> regions) {
   // Init vector index snapshot
   if (!vector_index_snapshot_manager_->Init(regions)) {
@@ -105,7 +113,8 @@ void VectorIndexManager::DeleteVectorIndex(uint64_t vector_index_id) {
     vector_index->SetStatus(pb::common::VECTOR_INDEX_STATUS_DELETE);
 
     // Delete the vector index metadata from the metadata store.
-    meta_writer_->Delete(GenKey(vector_index_id));
+    meta_writer_->Delete(GenApplyLogIdKey(vector_index_id));
+    meta_writer_->Delete(GenSnapshotLogIdKey(vector_index_id));
   }
 }
 
@@ -128,6 +137,16 @@ std::vector<std::shared_ptr<VectorIndex>> VectorIndexManager::GetAllVectorIndex(
     DINGO_LOG(ERROR) << "Get all vector index failed";
   }
   return vector_indexs;
+}
+
+butil::Status VectorIndexManager::LoadOrBuildVectorIndex(uint64_t region_id) {
+  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+  auto region = store_region_meta->GetRegion(region_id);
+  if (region == nullptr) {
+    return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region %lu", region_id);
+  }
+
+  return LoadOrBuildVectorIndex(region);
 }
 
 // Load vector index for already exist vector index at bootstrap.
@@ -341,20 +360,25 @@ std::shared_ptr<VectorIndex> VectorIndexManager::BuildVectorIndex(store::RegionP
     return nullptr;
   }
 
-  // set snapshot_log_index and apply_log_index
-  uint64_t snapshot_log_index = 0;
-  uint64_t apply_log_index = 0;
-  auto status = GetVectorIndexLogIndex(vector_index_id, snapshot_log_index, apply_log_index);
+  uint64_t apply_log_id = 0;
+  auto status = LoadApplyLogId(vector_index_id, apply_log_id);
   if (!status.ok()) {
     return nullptr;
   }
-  vector_index->SetSnapshotLogIndex(snapshot_log_index);
-  vector_index->SetApplyLogIndex(apply_log_index);
+  vector_index->SetApplyLogIndex(apply_log_id);
+
+  uint64_t snapshot_log_id = 0;
+  status = LoadSnapshotLogId(vector_index_id, snapshot_log_id);
+  if (!status.ok()) {
+    return nullptr;
+  }
+
+  vector_index->SetSnapshotLogIndex(snapshot_log_id);
 
   std::string start_key = VectorCodec::FillVectorDataPrefix(region->RawRange().start_key());
   std::string end_key = VectorCodec::FillVectorDataPrefix(region->RawRange().end_key());
-  DINGO_LOG(INFO) << fmt::format("Build vector index {}, snapshot_log_index({}) apply_log_index({}) range: [{}-{})",
-                                 vector_index_id, snapshot_log_index, apply_log_index, Helper::StringToHex(start_key),
+  DINGO_LOG(INFO) << fmt::format("Build vector index {}, snapshot_log_id({}) apply_log_id({}) range: [{}-{})",
+                                 vector_index_id, snapshot_log_id, apply_log_id, Helper::StringToHex(start_key),
                                  Helper::StringToHex(end_key));
 
   uint64_t start_time = Helper::TimestampMs();
@@ -390,23 +414,53 @@ std::shared_ptr<VectorIndex> VectorIndexManager::BuildVectorIndex(store::RegionP
 
   DINGO_LOG(INFO) << fmt::format(
       "Build vector index {} finish, snapshot_log_index({}) apply_log_index({}) count({}) elapsed time({}ms)",
-      vector_index_id, snapshot_log_index, apply_log_index, count, Helper::TimestampMs() - start_time);
+      vector_index_id, snapshot_log_id, apply_log_id, count, Helper::TimestampMs() - start_time);
 
   return vector_index;
 }
 
-butil::Status VectorIndexManager::CheckRebuildStatus(std::shared_ptr<VectorIndex> vector_index, bool is_initial_build) {
-  assert(region != nullptr);
+butil::Status VectorIndexManager::AsyncRebuildVectorIndex(store::RegionPtr region, bool need_save) {
+  struct Parameter {
+    VectorIndexManager* vector_index_manager;
+    store::RegionPtr region;
+    bool need_save;
+  };
 
+  DINGO_LOG(INFO) << fmt::format("Async rebuild vector index {}", region->Id());
+
+  Parameter* param = new Parameter();
+  param->vector_index_manager = this;
+  param->region = region;
+  param->need_save = need_save;
+
+  bthread_t tid;
+  int ret = bthread_start_background(
+      &tid, nullptr,
+      [](void* arg) -> void* {
+        if (arg == nullptr) {
+          return nullptr;
+        }
+
+        auto* param = static_cast<Parameter*>(arg);
+        auto status = param->vector_index_manager->RebuildVectorIndex(param->region, param->need_save);
+        if (!status.ok()) {
+          LOG(ERROR) << fmt::format("Rebuild vector index {} failed, error: {}", param->region->Id(),
+                                    status.error_str());
+        }
+
+        return nullptr;
+      },
+      param);
+  if (ret != 0) {
+    DINGO_LOG(ERROR) << "Create bthread failed, ret: " << ret;
+  }
+
+  return butil::Status();
+}
+
+static butil::Status CheckRebuildStatus(std::shared_ptr<VectorIndex> vector_index) {
   if (vector_index == nullptr) {
-    if (is_initial_build) {
-      return butil::Status::OK();
-    }
-
-    DINGO_LOG(ERROR) << fmt::format("online_vector_index is not found, this is an illegal rebuild, stop, id {}",
-                                    vector_index->Id());
-    return butil::Status(pb::error::Errno::EINTERNAL,
-                         "online_vector_index is not found, cannot do rebuild, try to set is_initial_build to true");
+    return butil::Status::OK();
   }
 
   if (!vector_index->IsOnline()) {
@@ -427,51 +481,8 @@ butil::Status VectorIndexManager::CheckRebuildStatus(std::shared_ptr<VectorIndex
   return butil::Status::OK();
 }
 
-butil::Status VectorIndexManager::AsyncRebuildVectorIndex(store::RegionPtr region, bool need_save,
-                                                          bool is_initial_build) {
-  struct Parameter {
-    VectorIndexManager* vector_index_manager;
-    store::RegionPtr region;
-    bool need_save;
-    bool is_initial_build;
-  };
-
-  DINGO_LOG(INFO) << fmt::format("Async rebuild vector index {}", region->Id());
-
-  Parameter* param = new Parameter();
-  param->vector_index_manager = this;
-  param->region = region;
-  param->need_save = need_save;
-  param->is_initial_build = is_initial_build;
-
-  bthread_t tid;
-  int ret = bthread_start_background(
-      &tid, nullptr,
-      [](void* arg) -> void* {
-        if (arg == nullptr) {
-          return nullptr;
-        }
-
-        auto* param = static_cast<Parameter*>(arg);
-        auto status =
-            param->vector_index_manager->RebuildVectorIndex(param->region, param->need_save, param->is_initial_build);
-        if (!status.ok()) {
-          LOG(ERROR) << fmt::format("Rebuild vector index {} failed, error: {}", param->region->Id(),
-                                    status.error_str());
-        }
-
-        return nullptr;
-      },
-      param);
-  if (ret != 0) {
-    DINGO_LOG(ERROR) << "Create bthread failed, ret: " << ret;
-  }
-
-  return butil::Status();
-}
-
 // Rebuild vector index
-butil::Status VectorIndexManager::RebuildVectorIndex(store::RegionPtr region, bool need_save, bool is_initial_build) {
+butil::Status VectorIndexManager::RebuildVectorIndex(store::RegionPtr region, bool need_save) {
   assert(region != nullptr);
   uint64_t vector_index_id = region->Id();
 
@@ -479,7 +490,7 @@ butil::Status VectorIndexManager::RebuildVectorIndex(store::RegionPtr region, bo
 
   // check rebuild status
   auto online_vector_index = GetVectorIndex(vector_index_id);
-  auto status = CheckRebuildStatus(online_vector_index, is_initial_build);
+  auto status = CheckRebuildStatus(online_vector_index);
   if (!status.ok()) {
     return status;
   }
@@ -490,11 +501,14 @@ butil::Status VectorIndexManager::RebuildVectorIndex(store::RegionPtr region, bo
   }
 
   uint64_t start_time = Helper::TimestampMs();
-  // Build vector index with original all data.
+  // Build vector index with all original data.
   auto vector_index = BuildVectorIndex(region);
   if (vector_index == nullptr) {
     DINGO_LOG(WARNING) << fmt::format("Build vector index failed, id {}", vector_index_id);
     return butil::Status(pb::error::Errno::EINTERNAL, "Build vector index failed");
+  }
+  if (online_vector_index != nullptr) {
+    vector_index->SetVersion(online_vector_index->Version() + 1);
   }
 
   DINGO_LOG(INFO) << fmt::format("Build vector index success, id {}, log_id {} elapsed time: {}ms", vector_index_id,
@@ -581,7 +595,7 @@ butil::Status VectorIndexManager::SaveVectorIndex(std::shared_ptr<VectorIndex> v
     vector_index->SetStatus(pb::common::VECTOR_INDEX_STATUS_NORMAL);
     return status;
   } else {
-    UpdateSnapshotLogIndex(vector_index, snapshot_log_index);
+    UpdateSnapshotLogId(vector_index, snapshot_log_index);
   }
 
   // update vector index status NORMAL
@@ -598,68 +612,18 @@ butil::Status VectorIndexManager::SaveVectorIndex(std::shared_ptr<VectorIndex> v
   return butil::Status();
 }
 
-void VectorIndexManager::UpdateApplyLogIndex(std::shared_ptr<VectorIndex> vector_index, uint64_t log_index) {
-  assert(vector_index != nullptr);
-
-  vector_index->SetApplyLogIndex(log_index);
-  meta_writer_->Put(TransformToKv(vector_index));
-}
-
-void VectorIndexManager::UpdateApplyLogIndex(uint64_t vector_index_id, uint64_t log_index) {
-  auto vector_index = GetVectorIndex(vector_index_id);
-  if (vector_index != nullptr) {
-    UpdateApplyLogIndex(vector_index, log_index);
-  }
-}
-
-void VectorIndexManager::UpdateSnapshotLogIndex(std::shared_ptr<VectorIndex> vector_index, uint64_t log_index) {
-  assert(vector_index != nullptr);
-
-  vector_index->SetSnapshotLogIndex(log_index);
-  meta_writer_->Put(TransformToKv(vector_index));
-}
-
-void VectorIndexManager::UpdateSnapshotLogIndex(uint64_t vector_index_id, uint64_t log_index) {
-  auto vector_index = GetVectorIndex(vector_index_id);
-  if (vector_index != nullptr) {
-    UpdateSnapshotLogIndex(vector_index, log_index);
-  }
-}
-
-std::shared_ptr<pb::common::KeyValue> VectorIndexManager::TransformToKv(std::any obj) {
-  auto vector_index = std::any_cast<std::shared_ptr<VectorIndex>>(obj);
+void VectorIndexManager::SaveApplyLogId(uint64_t vector_index_id, uint64_t apply_log_id) {
   auto kv = std::make_shared<pb::common::KeyValue>();
-  kv->set_key(GenKey(vector_index->Id()));
-  kv->set_value(
-      VectorCodec::EncodeVectorIndexLogIndex(vector_index->SnapshotLogIndex(), vector_index->ApplyLogIndex()));
+  kv->set_key(GenApplyLogIdKey(vector_index_id));
+  kv->set_value(VectorCodec::EncodeApplyLogId(apply_log_id));
 
-  return kv;
+  meta_writer_->Put(kv);
 }
 
-void VectorIndexManager::TransformFromKv(const std::vector<pb::common::KeyValue>& kvs) {
-  for (const auto& kv : kvs) {
-    uint64_t vector_index_id = ParseRegionId(kv.key());
-    uint64_t snapshot_log_index = 0;
-    uint64_t apply_log_index = 0;
-
-    VectorCodec::DecodeVectorIndexLogIndex(kv.value(), snapshot_log_index, apply_log_index);
-
-    DINGO_LOG(INFO) << fmt::format("TransformFromKv, vector_index_id {}, snapshot_log_index {}, apply_log_index {}",
-                                   vector_index_id, snapshot_log_index, apply_log_index);
-
-    auto vector_index = GetVectorIndex(vector_index_id);
-    if (vector_index != nullptr) {
-      vector_index->SetSnapshotLogIndex(snapshot_log_index);
-      vector_index->SetApplyLogIndex(apply_log_index);
-    }
-  }
-}
-
-butil::Status VectorIndexManager::GetVectorIndexLogIndex(uint64_t vector_index_id, uint64_t& snapshot_log_index,
-                                                         uint64_t& apply_log_index) {
-  auto kv = meta_reader_->Get(GenKey(vector_index_id));
+butil::Status VectorIndexManager::LoadApplyLogId(uint64_t vector_index_id, uint64_t& apply_log_id) {
+  auto kv = meta_reader_->Get(GenApplyLogIdKey(vector_index_id));
   if (kv == nullptr) {
-    DINGO_LOG(ERROR) << fmt::format("Get vector index log id failed, vector_index_id {}", vector_index_id);
+    DINGO_LOG(ERROR) << fmt::format("Get vector index apply log id failed, vector_index_id {}", vector_index_id);
     return butil::Status(pb::error::EINTERNAL, "Get vector index log id failed, vector_index_id %lu", vector_index_id);
   }
 
@@ -667,14 +631,72 @@ butil::Status VectorIndexManager::GetVectorIndexLogIndex(uint64_t vector_index_i
     return butil::Status();
   }
 
-  auto ret = VectorCodec::DecodeVectorIndexLogIndex(kv->value(), snapshot_log_index, apply_log_index);
+  auto ret = VectorCodec::DecodeApplyLogId(kv->value(), apply_log_id);
   if (ret < 0) {
-    DINGO_LOG(ERROR) << fmt::format("Decode vector index log id failed, vector_index_id {}", vector_index_id);
+    DINGO_LOG(ERROR) << fmt::format("Decode vector index apply log id failed, vector_index_id {}", vector_index_id);
     return butil::Status(pb::error::EINTERNAL, "Decode vector index log id failed, vector_index_id %lu",
                          vector_index_id);
   }
 
   return butil::Status();
+}
+
+void VectorIndexManager::SaveSnapshotLogId(uint64_t vector_index_id, uint64_t snapshot_log_id) {
+  auto kv = std::make_shared<pb::common::KeyValue>();
+  kv->set_key(GenSnapshotLogIdKey(vector_index_id));
+  kv->set_value(VectorCodec::EncodeSnapshotLogId(snapshot_log_id));
+
+  meta_writer_->Put(kv);
+}
+
+butil::Status VectorIndexManager::LoadSnapshotLogId(uint64_t vector_index_id, uint64_t& snapshot_log_id) {
+  auto kv = meta_reader_->Get(GenSnapshotLogIdKey(vector_index_id));
+  if (kv == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("Get vector index snapshot log id failed, vector_index_id {}", vector_index_id);
+    return butil::Status(pb::error::EINTERNAL, "Get vector index snapshot log id failed, vector_index_id %lu",
+                         vector_index_id);
+  }
+
+  if (kv->value().empty()) {
+    return butil::Status();
+  }
+
+  auto ret = VectorCodec::DecodeSnapshotLogId(kv->value(), snapshot_log_id);
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << fmt::format("Decode vector index snapshot log id failed, vector_index_id {}", vector_index_id);
+    return butil::Status(pb::error::EINTERNAL, "Decode vector index snapshot log id failed, vector_index_id %lu",
+                         vector_index_id);
+  }
+
+  return butil::Status();
+}
+
+void VectorIndexManager::UpdateApplyLogId(std::shared_ptr<VectorIndex> vector_index, uint64_t log_index) {
+  assert(vector_index != nullptr);
+
+  vector_index->SetApplyLogIndex(log_index);
+  SaveApplyLogId(vector_index->Id(), log_index);
+}
+
+void VectorIndexManager::UpdateApplyLogId(uint64_t vector_index_id, uint64_t log_index) {
+  auto vector_index = GetVectorIndex(vector_index_id);
+  if (vector_index != nullptr) {
+    UpdateApplyLogId(vector_index, log_index);
+  }
+}
+
+void VectorIndexManager::UpdateSnapshotLogId(std::shared_ptr<VectorIndex> vector_index, uint64_t log_index) {
+  assert(vector_index != nullptr);
+
+  vector_index->SetSnapshotLogIndex(log_index);
+  SaveSnapshotLogId(vector_index->Id(), log_index);
+}
+
+void VectorIndexManager::UpdateSnapshotLogId(uint64_t vector_index_id, uint64_t log_index) {
+  auto vector_index = GetVectorIndex(vector_index_id);
+  if (vector_index != nullptr) {
+    UpdateSnapshotLogId(vector_index, log_index);
+  }
 }
 
 butil::Status VectorIndexManager::ScrubVectorIndex() {

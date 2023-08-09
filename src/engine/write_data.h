@@ -37,6 +37,7 @@ enum class DatumType {
   kSplit = 5,
   kCompareAndSet = 6,
   kMetaPut = 7,
+  kRebuildVectorIndex = 8,
 };
 
 class DatumAble {
@@ -266,6 +267,21 @@ struct SplitDatum : public DatumAble {
   std::string split_key;
 };
 
+struct RebuildVectorIndexDatum : public DatumAble {
+  DatumType GetType() override { return DatumType::kRebuildVectorIndex; }
+
+  pb::raft::Request* TransformToRaft() override {
+    auto* request = new pb::raft::Request();
+
+    request->set_cmd_type(pb::raft::CmdType::REBUILD_VECTOR_INDEX);
+    auto* rebuild_request = request->mutable_rebuild_vector_index();
+
+    return request;
+  };
+
+  void TransformFromRaft(pb::raft::Response& resonse) override {}
+};
+
 class WriteData {
  public:
   std::vector<std::shared_ptr<DatumAble>> Datums() const { return datums_; }
@@ -388,6 +404,16 @@ class WriteDataBuilder {
     datum->from_region_id = split_request.split_from_region_id();
     datum->to_region_id = split_request.split_to_region_id();
     datum->split_key = split_request.split_watershed_key();
+
+    auto write_data = std::make_shared<WriteData>();
+    write_data->AddDatums(std::static_pointer_cast<DatumAble>(datum));
+
+    return write_data;
+  }
+
+  // RebuildVectorIndexDatum
+  static std::shared_ptr<WriteData> BuildWrite() {
+    auto datum = std::make_shared<RebuildVectorIndexDatum>();
 
     auto write_data = std::make_shared<WriteData>();
     write_data->AddDatums(std::static_pointer_cast<DatumAble>(datum));

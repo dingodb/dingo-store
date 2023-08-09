@@ -137,6 +137,7 @@ message DebugResponse {
 
   message VectorIndexMetricsEntry {
     uint64 id = 1;
+    uint64 version = 2;
     uint32 dimension = 10;
     uint64 apply_log_index = 20;
     uint64 snapshot_log_index = 30;

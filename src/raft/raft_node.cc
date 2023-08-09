@@ -20,6 +20,7 @@
 #include <utility>
 
 #include "bthread/bthread.h"
+#include "butil/status.h"
 #include "common/failpoint.h"
 #include "common/helper.h"
 #include "common/logging.h"
@@ -121,6 +122,9 @@ void RaftNode::Shutdown(braft::Closure* done) { node_->shutdown(done); }
 void RaftNode::Join() { node_->join(); }
 
 butil::Status RaftNode::ListPeers(std::vector<braft::PeerId>* peers) {
+  if (!IsLeader()) {
+    return butil::Status();
+  }
   auto status = node_->list_peers(peers);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << "List peers failed, error: " << status.error_str();

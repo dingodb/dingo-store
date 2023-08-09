@@ -383,6 +383,7 @@ void RegionControlServiceImpl::Debug(google::protobuf::RpcController* controller
       auto* entry = response->mutable_vector_index_metrics()->add_entries();
 
       entry->set_id(vector_index->Id());
+      entry->set_version(vector_index->Version());
       entry->set_dimension(vector_index->GetDimension());
       entry->set_apply_log_index(vector_index->ApplyLogIndex());
       entry->set_snapshot_log_index(vector_index->SnapshotLogIndex());

@@ -50,7 +50,9 @@ class Constant {
   // Define region controller prefix.
   inline static const std::string kStoreRegionControlCommandPrefix = "CONTROL_CMD";
   // Define vector index apply max log prefix.
-  inline static const std::string kVectorIndexApplyLogPrefix = "VECTOR_INDEX_APPLY_LOG";
+  inline static const std::string kVectorIndexApplyLogIdPrefix = "VECTOR_INDEX_APPLY_LOG";
+  // Define vector index snapshot max log prefix.
+  inline static const std::string kVectorIndexSnapshotLogIdPrefix = "VECTOR_INDEX_SNAPSHOT_LOG";
 
   // Define loading snapshot flag.
   inline static const std::string kIsLoadingSnapshot = "IS_LOADING_SNAPSHOT";

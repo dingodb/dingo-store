@@ -34,11 +34,11 @@ raft:
   snapshot_interval_s: 120
   segmentlog_max_segment_size: 33554432 # 32M
 log:
-  level: DEBUG
+  level: INFO
   path: $BASE_PATH$/log
 vector:
   index_path: $BASE_PATH$/data/index/idx
-  enable_follower_hold_index: true
+  enable_follower_hold_index: false
   # save hnsw vector index snapshot when write key num exceed threshold.
   hnsw_save_threshold_write_key_num: 10000
 store:
