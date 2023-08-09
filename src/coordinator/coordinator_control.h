@@ -222,8 +222,8 @@ class CoordinatorControl : public MetaControl {
   // in:  need_update_table_range
   // return: errno
   butil::Status DropRegion(uint64_t region_id, pb::coordinator_internal::MetaIncrement &meta_increment);
-  butil::Status DropRegion(uint64_t region_id, bool need_update_table_range,
-                           pb::coordinator_internal::MetaIncrement &meta_increment);
+  // butil::Status DropRegion(uint64_t region_id, bool need_update_table_range,
+  //                          pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // drop region permanently
   // in:  region_id

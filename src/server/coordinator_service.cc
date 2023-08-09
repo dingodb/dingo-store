@@ -891,7 +891,8 @@ void CoordinatorServiceImpl::DropRegion(google::protobuf::RpcController *control
 
   auto region_id = request->region_id();
 
-  auto ret = this->coordinator_control_->DropRegion(region_id, true, meta_increment);
+  // auto ret = this->coordinator_control_->DropRegion(region_id, true, meta_increment);
+  auto ret = this->coordinator_control_->DropRegion(region_id, meta_increment);
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << "Drop Region Failed, errno=" << ret << " Request:" << request->DebugString();
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
