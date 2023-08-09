@@ -314,8 +314,8 @@ class CoordinatorControl : public MetaControl {
                                  pb::meta::GenerateTableIdsResponse *response);
 
   // create table indexes map
-  void CreateTableIndexesMap(pb::coordinator_internal::TableIndexInternal &table_index_internal,
-                             pb::coordinator_internal::MetaIncrement &meta_increment);
+  static void CreateTableIndexesMap(pb::coordinator_internal::TableIndexInternal &table_index_internal,
+                                    pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // get table indexes
   butil::Status GetTableIndexes(uint64_t schema_id, uint64_t table_id, pb::meta::GetTablesResponse *response);

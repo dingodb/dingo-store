@@ -1038,31 +1038,32 @@ butil::Status CoordinatorControl::CreateRegion(const std::string& region_name, p
     DINGO_LOG(INFO) << "store_operation_increment = " << store_operation_increment->DebugString();
   }
 
+  // fix: now update table/index range distribution in raft apply
   // need to update table's range distribution
-  if (split_from_region_id > 0 && table_id > 0) {
-    pb::coordinator_internal::TableInternal table_internal;
-    int ret = table_map_.Get(table_id, table_internal);
-    if (ret < 0) {
-      DINGO_LOG(INFO) << "CreateRegionForSplit table_id not exists, id=" << table_id;
-      return butil::Status(pb::error::Errno::ETABLE_NOT_FOUND, "table_id not exists");
-    }
+  // if (split_from_region_id > 0 && table_id > 0) {
+  //   pb::coordinator_internal::TableInternal table_internal;
+  //   int ret = table_map_.Get(table_id, table_internal);
+  //   if (ret < 0) {
+  //     DINGO_LOG(INFO) << "CreateRegionForSplit table_id not exists, id=" << table_id;
+  //     return butil::Status(pb::error::Errno::ETABLE_NOT_FOUND, "table_id not exists");
+  //   }
 
-    // update table's range distribution
-    auto* update_table_internal = meta_increment.add_tables();
-    update_table_internal->set_id(table_id);
-    update_table_internal->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
-    auto* update_table_internal_table = update_table_internal->mutable_table();
-    update_table_internal_table->set_id(table_id);
-    for (const auto& it : table_internal.partitions()) {
-      update_table_internal_table->add_partitions()->CopyFrom(it);
-    }
+  //   // update table's range distribution
+  //   auto* update_table_internal = meta_increment.add_tables();
+  //   update_table_internal->set_id(table_id);
+  //   update_table_internal->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
+  //   auto* update_table_internal_table = update_table_internal->mutable_table();
+  //   update_table_internal_table->set_id(table_id);
+  //   for (const auto& it : table_internal.partitions()) {
+  //     update_table_internal_table->add_partitions()->CopyFrom(it);
+  //   }
 
-    auto* new_partition = update_table_internal_table->add_partitions();
-    // new_partition->mutable_range()->set_start_key(region_range.start_key());
-    // new_partition->mutable_range()->set_end_key(region_range.end_key());
-    new_partition->set_region_id(create_region_id);
-    new_partition->set_part_id(part_id);
-  }
+  //   auto* new_partition = update_table_internal_table->add_partitions();
+  //   // new_partition->mutable_range()->set_start_key(region_range.start_key());
+  //   // new_partition->mutable_range()->set_end_key(region_range.end_key());
+  //   new_partition->set_region_id(create_region_id);
+  //   new_partition->set_part_id(part_id);
+  // }
 
   // on_apply
   // region_map_epoch++;                                               // raft_kv_put
