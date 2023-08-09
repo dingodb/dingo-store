@@ -16,6 +16,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -313,6 +314,21 @@ void DeleteBatchHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
   }
 }
 
+// Launch rebuild vector index through raft state machine
+static void LaunchRebuildVectorIndex(uint64_t region_id) {
+  auto engine = Server::GetInstance()->GetEngine();
+  if (engine != nullptr) {
+    auto ctx = std::make_shared<Context>();
+    ctx->SetRegionId(region_id);
+    auto status = engine->AsyncWrite(ctx, WriteDataBuilder::BuildWrite());
+    if (!status.ok()) {
+      if (status.error_code() != pb::error::ERAFT_NOTLEADER) {
+        DINGO_LOG(ERROR) << fmt::format("Launch rebuild vector index failed, error: {}", status.error_str());
+      }
+    }
+  }
+}
+
 void SplitHandler::SplitClosure::Run() {
   std::unique_ptr<SplitClosure> self_guard(this);
   if (!status().ok()) {
@@ -325,16 +341,19 @@ void SplitHandler::SplitClosure::Run() {
   if (is_child_) {
     if (status().ok()) {
       if (region_->Type() == pb::common::INDEX_REGION) {
-        Server::GetInstance()->GetVectorIndexManager()->AsyncRebuildVectorIndex(region_, true, true);
+        // Server::GetInstance()->GetVectorIndexManager()->AsyncRebuildVectorIndex(region_, true);
+        LaunchRebuildVectorIndex(region_->Id());
       }
 
       store_region_meta->UpdateState(region_, pb::common::StoreRegionState::NORMAL);
     }
 
   } else {
-    // if (region_->Type() == pb::common::INDEX_REGION) {
-    //   Server::GetInstance()->GetVectorIndexManager()->AsyncRebuildVectorIndex(region_, true, false);
-    // }
+    if (region_->Type() == pb::common::INDEX_REGION) {
+      // Server::GetInstance()->GetVectorIndexManager()->AsyncRebuildVectorIndex(region_, true);
+      LaunchRebuildVectorIndex(region_->Id());
+    }
+
     store_region_meta->UpdateState(region_, pb::common::StoreRegionState::NORMAL);
     Heartbeat::TriggerStoreHeartbeat(region_->Id());
   }
@@ -558,7 +577,7 @@ void VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr reg
 
     if (vector_index != nullptr) {
       // Update the ApplyLogIndex of the vector index to the current log_id
-      vector_index_manager->UpdateApplyLogIndex(vector_index, log_id);
+      vector_index_manager->UpdateApplyLogId(vector_index, log_id);
     }
   }
 
@@ -723,7 +742,7 @@ void VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr 
 
     if (vector_index != nullptr) {
       // Update the ApplyLogIndex of the vector index to the current log_id
-      vector_index_manager->UpdateApplyLogIndex(vector_index, log_id);
+      vector_index_manager->UpdateApplyLogId(vector_index, log_id);
     }
   }
 
@@ -745,6 +764,20 @@ void VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr 
   }
 }
 
+void RebuildVectorIndexHandler::Handle(std::shared_ptr<Context>, store::RegionPtr region, std::shared_ptr<RawEngine>,
+                                       const pb::raft::Request &req, store::RegionMetricsPtr, uint64_t,
+                                       uint64_t log_id) {
+  DINGO_LOG(INFO) << fmt::format("Handle rebuild vector index, region_id: {} apply_log_id: {}", region->Id(), log_id);
+  auto vector_index_manager = Server::GetInstance()->GetVectorIndexManager();
+  auto vector_index = vector_index_manager->GetVectorIndex(region->Id());
+  if (vector_index != nullptr) {
+    // Update the ApplyLogId of the vector index to the current log_id
+    vector_index_manager->UpdateApplyLogId(vector_index, log_id);
+  }
+
+  Server::GetInstance()->GetVectorIndexManager()->AsyncRebuildVectorIndex(region, true);
+}
+
 std::shared_ptr<HandlerCollection> RaftApplyHandlerFactory::Build() {
   auto handler_collection = std::make_shared<HandlerCollection>();
   handler_collection->Register(std::make_shared<PutHandler>());
@@ -755,6 +788,7 @@ std::shared_ptr<HandlerCollection> RaftApplyHandlerFactory::Build() {
   handler_collection->Register(std::make_shared<CompareAndSetHandler>());
   handler_collection->Register(std::make_shared<VectorAddHandler>());
   handler_collection->Register(std::make_shared<VectorDeleteHandler>());
+  handler_collection->Register(std::make_shared<RebuildVectorIndexHandler>());
 
   return handler_collection;
 }

@@ -37,6 +37,7 @@ enum CmdType {
   // vector [3000,4000]
   VECTOR_ADD = 3000;
   VECTOR_DELETE = 3001;
+  REBUILD_VECTOR_INDEX = 3010;
 }
 
 message PutRequest {
@@ -44,21 +45,8 @@ message PutRequest {
   repeated dingodb.pb.common.KeyValue kvs = 2;
 }
 
-message PutResponse {}
-
-message VectorAddRequest {
-  string cf_name = 1;
-  repeated dingodb.pb.common.VectorWithId vectors = 2;
+message PutResponse {
 }
-
-message VectorAddResponse {}
-
-message VectorDeleteRequest {
-  string cf_name = 1;
-  repeated uint64 ids = 2;
-}
-
-message VectorDeleteResponse {}
 
 message PutIfAbsentRequest {
   string cf_name = 1;
@@ -95,7 +83,8 @@ message DeleteBatchRequest {
   repeated bytes keys = 2;
 }
 
-message DeleteBatchResponse {}
+message DeleteBatchResponse {
+}
 
 message SplitRequest {
   uint64 from_region_id = 1;  // split from region id
@@ -103,16 +92,43 @@ message SplitRequest {
   bytes split_key = 3;        // split watershed key
 }
 
-message SplitResponse {}
+message SplitResponse {
+}
 
-message RaftCreateSchemaRequest {}
-message RaftCreateSchemaResponse {}
+message RaftCreateSchemaRequest {
+}
+message RaftCreateSchemaResponse {
+}
 
-message RaftCreateTableRequest {}
-message RaftCreateTableResponse {}
+message RaftCreateTableRequest {
+}
+message RaftCreateTableResponse {
+}
 
 message RaftMetaRequest {
   dingodb.pb.coordinator_internal.MetaIncrement meta_increment = 1;
+}
+
+message VectorAddRequest {
+  string cf_name = 1;
+  repeated dingodb.pb.common.VectorWithId vectors = 2;
+}
+
+message VectorAddResponse {
+}
+
+message VectorDeleteRequest {
+  string cf_name = 1;
+  repeated uint64 ids = 2;
+}
+
+message VectorDeleteResponse {
+}
+
+message RebuildVectorIndexRequest {
+}
+
+message RebuildVectorIndexResponse {
 }
 
 message Request {
@@ -133,6 +149,7 @@ message Request {
     // vector [3000,4000]
     VectorAddRequest vector_add = 3000;
     VectorDeleteRequest vector_delete = 3001;
+    RebuildVectorIndexRequest rebuild_vector_index = 3010;
   }
 }
 
@@ -153,6 +170,7 @@ message Response {
     // vector [3000,4000]
     VectorAddResponse vector_add = 3000;
     VectorDeleteResponse vector_delete = 3001;
+    RebuildVectorIndexResponse rebuild_vector_index = 3010;
   }
 }
 
@@ -165,7 +183,8 @@ message RaftCmdRequest {
   repeated Request requests = 2;
 }
 
-message ResponseHeader {}
+message ResponseHeader {
+}
 
 message RaftCmdResponse {
   ResponseHeader header = 1;

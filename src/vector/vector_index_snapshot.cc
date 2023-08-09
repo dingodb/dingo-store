@@ -240,8 +240,8 @@ butil::Status VectorIndexSnapshotManager::LaunchInstallSnapshot(const butil::End
 
 butil::Status VectorIndexSnapshotManager::HandleInstallSnapshot(std::shared_ptr<Context>, const std::string& uri,
                                                                 const pb::node::VectorIndexSnapshotMeta& meta) {
-  auto config = Server::GetInstance()->GetConfig();
-  if (config != nullptr && config->GetBool("vector.enable_follower_hold_index")) {
+  auto vector_index = Server::GetInstance()->GetVectorIndexManager()->GetVectorIndex(meta.vector_index_id());
+  if (vector_index != nullptr) {
     return butil::Status(pb::error::EVECTOR_NOT_NEED_SNAPSHOT, "Not need snapshot, follower own vector index.");
   }
 
@@ -295,8 +295,13 @@ butil::Status VectorIndexSnapshotManager::InstallSnapshotToFollowers(std::shared
     if (peer != self_peer) {
       auto status = LaunchInstallSnapshot(peer.addr, vector_index->Id());
       if (!status.ok()) {
-        DINGO_LOG(ERROR) << fmt::format("Install vector index snapshot {} to {} failed, error: {}", vector_index->Id(),
-                                        Helper::EndPointToStr(peer.addr), status.error_str());
+        if (status.error_code() == pb::error::EVECTOR_NOT_NEED_SNAPSHOT) {
+          DINGO_LOG(INFO) << fmt::format("vetor index {} peer {} {}", vector_index->Id(),
+                                         Helper::EndPointToStr(peer.addr), status.error_str());
+        } else {
+          DINGO_LOG(ERROR) << fmt::format("Install vector index snapshot {} to {} failed, error: {}",
+                                          vector_index->Id(), Helper::EndPointToStr(peer.addr), status.error_str());
+        }
       }
     }
   }
@@ -522,14 +527,13 @@ butil::Status VectorIndexSnapshotManager::SaveVectorIndexSnapshot(std::shared_pt
 
   // If already exist snapshot then give up.
   if (snapshot_manager->IsExistSnapshot(vector_index->Id(), apply_log_index)) {
+    snapshot_log_index = apply_log_index;
     // unlock write
     vector_index->UnlockWrite();
 
-    DINGO_LOG(ERROR) << fmt::format("VectorIndex Snapshot already exist, cannot do save, vector index: {}, log_id: {}",
-                                    vector_index->Id(), apply_log_index);
-    return butil::Status(pb::error::Errno::EVECTOR_SNAPSHOT_EXIST,
-                         "VectorIndex Snapshot already exist, vector index: %lu log_id: %lu", vector_index->Id(),
-                         apply_log_index);
+    DINGO_LOG(INFO) << fmt::format("VectorIndex Snapshot already exist, cannot do save, vector index: {}, log_id: {}",
+                                   vector_index->Id(), apply_log_index);
+    return butil::Status();
   }
 
   // Temp snapshot path for save vector index.

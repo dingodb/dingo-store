@@ -43,6 +43,7 @@ class VectorIndex {
   VectorIndex(uint64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
               uint64_t save_snapshot_threshold_write_key_num)
       : id(id),
+        version(1),
         status(pb::common::VECTOR_INDEX_STATUS_NONE),
         snapshot_doing(false),
         apply_log_index(0),
@@ -112,6 +113,9 @@ class VectorIndex {
 
   uint64_t Id() const { return id; }
 
+  uint64_t Version() const { return version; }
+  void SetVersion(uint64_t version) { this->version = version; }
+
   pb::common::RegionVectorIndexStatus Status() { return status.load(); }
   void SetStatus(pb::common::RegionVectorIndexStatus status) {
     if (this->status.load() != pb::common::VECTOR_INDEX_STATUS_DELETE) {
@@ -131,6 +135,9 @@ class VectorIndex {
  protected:
   // vector index id
   uint64_t id;
+
+  // vector index version
+  uint64_t version;
 
   // status
   std::atomic<pb::common::RegionVectorIndexStatus> status;

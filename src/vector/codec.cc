@@ -104,26 +104,44 @@ std::string VectorCodec::FillVectorTablePrefix(const std::string& value) {
   return buf.GetString();
 }
 
-std::string VectorCodec::EncodeVectorIndexLogIndex(uint64_t snapshot_log_index, uint64_t apply_log_index) {
-  Buf buf(16);
-  buf.WriteLong(snapshot_log_index);
-  buf.WriteLong(apply_log_index);
+std::string VectorCodec::EncodeApplyLogId(uint64_t apply_log_id) {
+  Buf buf(8);
+  buf.WriteLong(apply_log_id);
 
   std::string result;
   buf.GetBytes(result);
   return result;
 }
 
-int VectorCodec::DecodeVectorIndexLogIndex(const std::string& value, uint64_t& snapshot_log_index,
-                                           uint64_t& apply_log_index) {
-  if (value.size() != 16) {
-    DINGO_LOG(ERROR) << "DecodeVectorApplyLogIndex failed, value size is not 16, value:[" << Helper::StringToHex(value)
+int VectorCodec::DecodeApplyLogId(const std::string& value, uint64_t& apply_log_id) {
+  if (value.size() != 8) {
+    DINGO_LOG(ERROR) << "DecodeApplyLogId failed, value size is not 16, value:[" << Helper::StringToHex(value)
                      << "], size=" << value.size();
     return -1;
   }
   Buf buf(value);
-  snapshot_log_index = buf.ReadLong();
-  apply_log_index = buf.ReadLong();
+  apply_log_id = buf.ReadLong();
+
+  return 0;
+}
+
+std::string VectorCodec::EncodeSnapshotLogId(uint64_t snapshot_log_id) {
+  Buf buf(8);
+  buf.WriteLong(snapshot_log_id);
+
+  std::string result;
+  buf.GetBytes(result);
+  return result;
+}
+
+int VectorCodec::DecodeSnapshotLogId(const std::string& value, uint64_t& snapshot_log_id) {
+  if (value.size() != 8) {
+    DINGO_LOG(ERROR) << "DecodeSnapshotLogId failed, value size is not 16, value:[" << Helper::StringToHex(value)
+                     << "], size=" << value.size();
+    return -1;
+  }
+  Buf buf(value);
+  snapshot_log_id = buf.ReadLong();
 
   return 0;
 }

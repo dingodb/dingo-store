@@ -81,8 +81,10 @@ butil::Status ServiceAccess::InstallVectorIndexSnapshot(const pb::node::InstallV
   }
 
   if (response.error().errcode() != pb::error::OK) {
-    DINGO_LOG(ERROR) << fmt::format("InstallVectorIndexSnapshot response failed, error {} {}",
-                                    static_cast<int>(response.error().errcode()), response.error().errmsg());
+    if (response.error().errcode() != pb::error::EVECTOR_NOT_NEED_SNAPSHOT) {
+      DINGO_LOG(ERROR) << fmt::format("InstallVectorIndexSnapshot response failed, error {} {}",
+                                      static_cast<int>(response.error().errcode()), response.error().errmsg());
+    }
     return butil::Status(response.error().errcode(), response.error().errmsg());
   }
 
