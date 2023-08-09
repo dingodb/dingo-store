@@ -73,6 +73,10 @@ public final class CodecUtils {
         return schemas;
     }
 
+    public static DingoSchema createSchemaForTypeName(String typeName) {
+        return createSchemaForTypeName(typeName, null);
+    }
+
     public static DingoSchema createSchemaForTypeName(String typeName, String elementType) {
         DingoSchema schema;
         switch (typeName) {

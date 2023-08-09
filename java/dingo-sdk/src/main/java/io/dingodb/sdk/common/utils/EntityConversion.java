@@ -707,7 +707,7 @@ public class EntityConversion {
         return Parameters.<List<PartitionDetail>>cleanNull(details, Collections::emptyList).stream()
                 .map(PartitionDetail::getOperand)
                 .map(NoBreakFunctions
-                        .<Object[], byte[]>wrap(operand -> codec.encodeKeyPrefix(operand, operand.length)));
+                        .<Object[], byte[]>wrap(operand -> codec.encodeKeyPrefix(operand, operand.length), NoBreakFunctions.throwException()));
     }
 
     public static Meta.ColumnDefinition mapping(Column column) {
