@@ -418,7 +418,8 @@ butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta
 
   // validate part information
   auto const& table_partition = table_definition.table_partition();
-  if (!table_partition.has_range_partition() && !table_partition.has_hash_partition()) {
+  if (!table_partition.has_range_partition() && !table_partition.has_hash_partition() &&
+      (table_partition.partitions_size() == 0)) {
     DINGO_LOG(ERROR) << "no partition provided" << table_definition.ShortDebugString();
     return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "no partition provided");
   }

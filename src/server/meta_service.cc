@@ -1155,7 +1155,7 @@ void MetaServiceImpl::GenerateTableIds(google::protobuf::RpcController *controll
     return RedirectResponse(response);
   }
 
-  DINGO_LOG(INFO) << request->ShortDebugString();
+  DINGO_LOG(INFO) << request->DebugString();
 
   if (!request->has_schema_id() || !request->has_count()) {
     response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
@@ -1277,9 +1277,13 @@ void MetaServiceImpl::CreateTables(google::protobuf::RpcController *controller,
 
 void MetaServiceImpl::GetTables(google::protobuf::RpcController *controller, const pb::meta::GetTablesRequest *request,
                                 pb::meta::GetTablesResponse *response, google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+
   if (!coordinator_control_->IsLeader()) {
     return RedirectResponse(response);
   }
+
+  DINGO_LOG(INFO) << request->DebugString();
 
   if (!request->has_table_id()) {
     response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
