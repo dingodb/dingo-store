@@ -471,6 +471,8 @@ void CoordinatorControl::GetRegionMap(pb::common::RegionMap& region_map) {
       // tmp_region->CopyFrom(elemnt.second);
       tmp_region->set_id(elemnt.second.id());
       tmp_region->mutable_definition()->set_name(elemnt.second.definition().name());
+      tmp_region->mutable_definition()->mutable_range()->set_start_key(elemnt.second.definition().range().start_key());
+      tmp_region->mutable_definition()->mutable_range()->set_end_key(elemnt.second.definition().range().end_key());
       tmp_region->set_state(elemnt.second.state());
       tmp_region->set_raft_status(elemnt.second.raft_status());
       tmp_region->set_replica_status(elemnt.second.replica_status());
@@ -478,6 +480,7 @@ void CoordinatorControl::GetRegionMap(pb::common::RegionMap& region_map) {
       tmp_region->set_leader_store_id(elemnt.second.leader_store_id());
       tmp_region->set_create_timestamp(elemnt.second.create_timestamp());
       tmp_region->set_last_update_timestamp(elemnt.second.last_update_timestamp());
+      tmp_region->set_create_timestamp(elemnt.second.create_timestamp());
     }
   }
 }
