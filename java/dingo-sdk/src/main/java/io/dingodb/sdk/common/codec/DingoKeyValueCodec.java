@@ -82,4 +82,9 @@ public class DingoKeyValueCodec implements KeyValueCodec {
     public byte[] encodeMaxKeyPrefix() {
         return re.encodeMaxKeyPrefix();
     }
+
+    @Override
+    public byte[] resetPrefix(byte[] key, long prefix) {
+        return re.resetKeyPrefix(key, prefix);
+    }
 }

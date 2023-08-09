@@ -122,6 +122,11 @@ public class RecordEncoder {
         return valueBuf.getBytes();
     }
 
+    public byte[] resetKeyPrefix(byte[] key, long prefix) {
+        new BufImpl(key).writeLong(prefix);
+        return key;
+    }
+
     public byte[] updateValueByColumns(byte[] buf, Object[] updateColumn, int[] columnIndexes) {
         return null;
     }

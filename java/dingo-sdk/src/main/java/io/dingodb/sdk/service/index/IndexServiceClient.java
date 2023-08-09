@@ -193,6 +193,8 @@ public class IndexServiceClient {
                 .setWithScalarData(query.getWithScalarData())
                 .addAllSelectedKeys(query.getSelectedKeys())
                 .setWithTableData(query.getWithTableData())
+                .setUseScalarFilter(query.getUseScalarFilter())
+                .setScalarForFilter(mapping(query.getScalarForFilter()))
                 .build();
 
         Index.VectorScanQueryResponse response = exec(stub -> stub.vectorScanQuery(request), retryTimes, indexId,

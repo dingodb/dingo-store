@@ -49,16 +49,24 @@ public class ByteArrayUtils {
         @JsonProperty
         private boolean ignoreLen = false;
 
+        @JsonProperty
+        private int pos = 0;
+
         public ComparableByteArray(byte[] bytes) {
             this.bytes = bytes;
+        }
+
+        public ComparableByteArray(byte[] bytes, int pos) {
+            this.bytes = bytes;
+            this.pos = pos;
         }
 
         @Override
         public int compareTo(@NonNull ComparableByteArray other) {
             if (!ignoreLen) {
-                return compare(bytes, other.bytes);
+                return compare(bytes, other.bytes, pos);
             } else {
-                return compareWithoutLen(bytes, other.bytes);
+                return compareWithoutLen(bytes, other.bytes, pos);
             }
         }
     }
@@ -66,12 +74,14 @@ public class ByteArrayUtils {
     public static final byte[] EMPTY_BYTES = new byte[0];
     public static final byte[] MAX_BYTES = new byte[] {(byte) 0xFF };
 
-    public static int compare(byte[] bytes1, byte[] bytes2, boolean ignoreLen) {
+    public static final int POS = 8;
+
+    public static int compare(byte[] bytes1, byte[] bytes2, boolean ignoreLen, int pos) {
         if (bytes1 == bytes2) {
             return 0;
         }
         int n = Math.min(bytes1.length, bytes2.length);
-        for (int i = 0; i < n; i++) {
+        for (int i = pos; i < n; i++) {
             if (bytes1[i] == bytes2[i]) {
                 continue;
             }
@@ -81,11 +91,19 @@ public class ByteArrayUtils {
     }
 
     public static int compare(byte[] bytes1, byte[] bytes2) {
-        return compare(bytes1, bytes2, false);
+        return compare(bytes1, bytes2, false, 0);
+    }
+
+    public static int compare(byte[] bytes1, byte[] bytes2, int pos) {
+        return compare(bytes1, bytes2, false, pos);
     }
 
     public static int compareWithoutLen(byte[] bytes1, byte[] bytes2) {
-        return compare(bytes1, bytes2, true);
+        return compareWithoutLen(bytes1, bytes2, 0);
+    }
+
+    public static int compareWithoutLen(byte[] bytes1, byte[] bytes2, int pos) {
+        return compare(bytes1, bytes2, true, pos);
     }
 
     public static boolean equal(byte[] bytes1, byte[] bytes2) {
