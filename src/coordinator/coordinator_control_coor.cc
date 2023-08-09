@@ -1074,12 +1074,12 @@ butil::Status CoordinatorControl::CreateRegion(const std::string& region_name, p
   return butil::Status::OK();
 }
 
-butil::Status CoordinatorControl::DropRegion(uint64_t region_id,
-                                             pb::coordinator_internal::MetaIncrement& meta_increment) {
-  return DropRegion(region_id, false, meta_increment);
-}
+// butil::Status CoordinatorControl::DropRegion(uint64_t region_id,
+//                                              pb::coordinator_internal::MetaIncrement& meta_increment) {
+//   return DropRegion(region_id, false, meta_increment);
+// }
 
-butil::Status CoordinatorControl::DropRegion(uint64_t region_id, bool need_update_table_range,
+butil::Status CoordinatorControl::DropRegion(uint64_t region_id,
                                              pb::coordinator_internal::MetaIncrement& meta_increment) {
   // set region state to DELETE
   bool need_update_epoch = false;
@@ -1126,28 +1126,29 @@ butil::Status CoordinatorControl::DropRegion(uint64_t region_id, bool need_updat
           // AddPurgeTask(increment_task_list, peer.store_id(), region_id, meta_increment);
         }
 
+        // fix: update table/index in raft apply
         // need to update table's range distribution if table_id > 0
-        if (need_update_table_range && region_to_delete.definition().table_id() > 0) {
-          pb::coordinator_internal::TableInternal table_internal;
-          int ret = table_map_.Get(region_to_delete.definition().table_id(), table_internal);
-          if (ret < 0) {
-            DINGO_LOG(WARNING) << "DropRegion table_id not exists, region_id=" << region_id
-                               << " region_id=" << region_to_delete.definition().table_id();
-            // return pb::error::Errno::ETABLE_NOT_FOUND;
-          } else {
-            // update table's range distribution
-            auto* update_table_internal = meta_increment.add_tables();
-            update_table_internal->set_id(region_to_delete.definition().table_id());
-            update_table_internal->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
-            auto* update_table_internal_table = update_table_internal->mutable_table();
-            update_table_internal_table->set_id(region_to_delete.definition().table_id());
-            for (const auto& it : table_internal.partitions()) {
-              if (it.region_id() != region_id) {
-                update_table_internal_table->add_partitions()->CopyFrom(it);
-              }
-            }
-          }
-        }
+        // if (need_update_table_range && region_to_delete.definition().table_id() > 0) {
+        //   pb::coordinator_internal::TableInternal table_internal;
+        //   int ret = table_map_.Get(region_to_delete.definition().table_id(), table_internal);
+        //   if (ret < 0) {
+        //     DINGO_LOG(WARNING) << "DropRegion table_id not exists, region_id=" << region_id
+        //                        << " region_id=" << region_to_delete.definition().table_id();
+        //     // return pb::error::Errno::ETABLE_NOT_FOUND;
+        //   } else {
+        //     // update table's range distribution
+        //     auto* update_table_internal = meta_increment.add_tables();
+        //     update_table_internal->set_id(region_to_delete.definition().table_id());
+        //     update_table_internal->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
+        //     auto* update_table_internal_table = update_table_internal->mutable_table();
+        //     update_table_internal_table->set_id(region_to_delete.definition().table_id());
+        //     for (const auto& it : table_internal.partitions()) {
+        //       if (it.region_id() != region_id) {
+        //         update_table_internal_table->add_partitions()->CopyFrom(it);
+        //       }
+        //     }
+        //   }
+        // }
 
         // on_apply
         // region_map_[region_id].set_state(::dingodb::pb::common::RegionState::REGION_DELETE);
@@ -1538,7 +1539,8 @@ butil::Status CoordinatorControl::MergeRegionWithTaskList(uint64_t merge_from_re
 
   // call drop_region to get store_operations
   pb::coordinator_internal::MetaIncrement meta_increment_tmp;
-  DropRegion(merge_from_region_id, true, meta_increment_tmp);
+  // DropRegion(merge_from_region_id, true, meta_increment_tmp);
+  DropRegion(merge_from_region_id, meta_increment_tmp);
   for (const auto& it : meta_increment_tmp.store_operations()) {
     const auto& store_operation = it.store_operation();
     drop_region_task->add_store_operations()->CopyFrom(store_operation);
