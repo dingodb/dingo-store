@@ -16,6 +16,7 @@
 
 package io.dingodb.sdk.common.table;
 
+import io.dingodb.sdk.common.index.IndexParameter;
 import io.dingodb.sdk.common.partition.Partition;
 
 import java.util.Arrays;
@@ -44,6 +45,8 @@ public interface Table {
     long getAutoIncrement();
 
     String getCreateSql();
+
+    IndexParameter getIndexParameter();
 
     default int getPrimaryKeyCount() {
         int count = 0;

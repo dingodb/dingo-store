@@ -35,4 +35,6 @@ public interface KeyValueCodec {
     byte[] encodeMinKeyPrefix();
 
     byte[] encodeMaxKeyPrefix();
+
+    byte[] resetPrefix(byte[] key, long prefix);
 }

@@ -14,37 +14,23 @@
  * limitations under the License.
  */
 
-package io.dingodb.sdk.common.table;
+package io.dingodb.sdk.common.index;
 
-import io.dingodb.sdk.common.index.IndexParameter;
-import io.dingodb.sdk.common.partition.Partition;
 import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Getter;
-import lombok.EqualsAndHashCode;
 import lombok.ToString;
 
-import java.util.List;
-import java.util.Map;
-
 @Getter
-@Builder
 @ToString
-@EqualsAndHashCode
 @AllArgsConstructor
-public class TableDefinition implements Table {
+public class ScalarIndexParameter {
 
-    private String name;
-    private List<Column> columns;
-    private int version;
-    private int ttl;
-    private Partition partition;
-    private String engine;
-    private Map<String, String> properties;
-    private int replica;
-    @Builder.Default
-    private long autoIncrement = 1;
-    private String createSql;
-    private IndexParameter indexParameter;
+    private ScalarIndexType scalarIndexType;
+    private boolean isUnique;
 
+    public enum ScalarIndexType {
+        SCALAR_INDEX_TYPE_NONE,
+        SCALAR_INDEX_TYPE_LSM,
+        SCALAR_INDEX_TYPE_BTREE
+    }
 }

@@ -24,7 +24,7 @@ import io.dingodb.sdk.common.DingoClientException;
 import io.dingodb.sdk.common.DingoCommonId;
 import io.dingodb.sdk.common.codec.DingoKeyValueCodec;
 import io.dingodb.sdk.common.index.Index;
-import io.dingodb.sdk.common.index.IndexDefinition;
+import io.dingodb.sdk.common.index.IndexMetrics;
 import io.dingodb.sdk.common.partition.PartitionDetail;
 import io.dingodb.sdk.common.table.RangeDistribution;
 import io.dingodb.sdk.common.table.Table;
@@ -49,6 +49,7 @@ import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import static io.dingodb.sdk.common.utils.ByteArrayUtils.POS;
 import static io.dingodb.sdk.common.utils.EntityConversion.mapping;
 
 @Slf4j
@@ -124,7 +125,7 @@ public class MetaServiceClient {
         }
         this.getSchemas(parentId).forEach(this::addMetaServiceCache);
         if (!(id == ROOT_SCHEMA_ID)) {
-            this.getTableDefinitions(id).forEach(this::addTableCache);
+            this.getTableDefinitionsBySchema(id).forEach(this::addTableCache);
         }
     }
 
@@ -245,31 +246,53 @@ public class MetaServiceClient {
     }
 
     public boolean createTable(@NonNull String tableName, @NonNull Table table) {
-        tableName = cleanTableName(tableName);
+        return createTables(table, new ArrayList<>());
+    }
+
+    public boolean createTables(@NonNull Table table, List<Table> indexes) {
+        String tableName = cleanTableName(table.getName());
         if (Optional.mapOrNull(getTableId(tableName), this::getTableDefinition) != null) {
             throw new DingoClientException("Table " + tableName + " already exists");
         }
 
-        Meta.CreateTableIdRequest createTableIdRequest = Meta.CreateTableIdRequest.newBuilder()
+        List<Integer> partCount = indexes.stream().map(i -> i.getPartition().getDetails().size() + 1).collect(Collectors.toList());
+        Meta.GenerateTableIdsRequest request = Meta.GenerateTableIdsRequest.newBuilder()
                 .setSchemaId(id)
+                .setCount(Meta.TableWithPartCount.newBuilder()
+                        .setHasTable(true)
+                        .setTablePartCount(Optional.mapOrGet(table.getPartition(), __ -> __.getDetails().size() + 1, () -> 1))
+                        .setIndexCount(indexes.size())
+                        .addAllIndexPartCount(partCount)
+                        .build())
                 .build();
 
-        Meta.DingoCommonId tableId = metaConnector.exec(stub1 -> stub1.createTableId(createTableIdRequest))
-                .getTableId();
+        List<Meta.TableIdWithPartIds> ids = metaConnector.exec(stub -> stub.generateTableIds(request)).getIdsList();
 
-        Meta.TableDefinition definition = mapping(table, tableId);
+        Meta.TableIdWithPartIds tableWithId = ids.stream()
+                .filter(i -> i.getTableId().getEntityType().name().equals(Meta.EntityType.ENTITY_TYPE_TABLE.name()))
+                .findAny().get();
+        List<Meta.TableIdWithPartIds> indexIds = ids.stream()
+                .filter(i -> i.getTableId().getEntityType().name().equals(Meta.EntityType.ENTITY_TYPE_INDEX.name()))
+                .collect(Collectors.toList());
 
-        Meta.CreateTableRequest request = Meta.CreateTableRequest.newBuilder()
-                .setSchemaId(id)
-                .setTableId(tableId)
-                .setTableDefinition(definition)
-                .build();
+        Meta.CreateTablesRequest.Builder builder = Meta.CreateTablesRequest.newBuilder().setSchemaId(id);
+        if (indexIds.size() == partCount.size()) {
+            for (int i = 0; i < indexIds.size(); i++) {
+                Table index = indexes.get(i);
+                Meta.TableIdWithPartIds tableIdWithPartId = indexIds.get(i);
+                Meta.TableDefinition indexDefinition = mapping(index, tableIdWithPartId.getTableId(), tableIdWithPartId.getPartIdsList());
+                builder.addTableDefinitionWithIds(Meta.TableDefinitionWithId.newBuilder()
+                        .setTableId(tableIdWithPartId.getTableId())
+                        .setTableDefinition(indexDefinition)
+                        .build());
+            }
+        }
+        builder.addTableDefinitionWithIds(Meta.TableDefinitionWithId.newBuilder()
+                .setTableId(tableWithId.getTableId())
+                .setTableDefinition(mapping(table, tableWithId.getTableId(), tableWithId.getPartIdsList()))
+                .build());
 
-        Meta.CreateTableResponse response = metaConnector.exec(stub -> stub.createTable(request));
-
-        /* TODO
-        tableIdCache.put(tableName, tableId);
-        tableDefinitionCache.put(mapping(tableId), table);*/
+        Meta.CreateTablesResponse response = metaConnector.exec(stub -> stub.createTables(builder.build()));
 
         return response != null;
     }
@@ -316,9 +339,30 @@ public class MetaServiceClient {
         return Optional.mapOrNull(getTableDefinitionWithId(tableName), __ -> EntityConversion.mapping(__.getTableId()));
     }
 
-    public Map<String, Table> getTableDefinitions() {
+    /**
+     * Get assigned table definition, including vector index and scalar index.
+     * @param tableName table name
+     * @return table definition/vector index/scalar index
+     */
+    public List<Table> getTables(String tableName) {
+        tableName = cleanTableName(tableName);
+        DingoCommonId tableId = getTableId(tableName);
+        if (tableId == null) {
+            throw new DingoClientException("Table " + tableName + " does not exist");
+        }
+
+        Meta.GetTablesRequest request = Meta.GetTablesRequest.newBuilder().setTableId(mapping(tableId)).build();
+
+        Meta.GetTablesResponse response = metaConnector.exec(stub -> stub.getTables(request));
+
+        return response.getTableDefinitionWithIdsList().stream()
+                .map(EntityConversion::mapping)
+                .collect(Collectors.toList());
+    }
+
+    public Map<String, Table> getTableDefinitionsBySchema() {
         if (!(id == ROOT_SCHEMA_ID)) {
-            List<Meta.TableDefinitionWithId> tableDefinitions = getTableDefinitions(id);
+            List<Meta.TableDefinitionWithId> tableDefinitions = getTableDefinitionsBySchema(id);
             return tableDefinitions.stream()
                     .map(EntityConversion::mapping)
                     .collect(Collectors.toMap(Table::getName, Function.identity()));
@@ -332,7 +376,7 @@ public class MetaServiceClient {
                 .collect(Collectors.toMap(Table::getName, Function.identity()));*/
     }
 
-    private List<Meta.TableDefinitionWithId> getTableDefinitions(Meta.DingoCommonId id) {
+    private List<Meta.TableDefinitionWithId> getTableDefinitionsBySchema(Meta.DingoCommonId id) {
         Meta.GetTablesBySchemaRequest request = Meta.GetTablesBySchemaRequest.newBuilder()
                 .setSchemaId(id)
                 .build();
@@ -391,7 +435,7 @@ public class MetaServiceClient {
             Coordinator.SplitRegionRequest request = Coordinator.SplitRegionRequest.newBuilder()
                 .setSplitRequest(Coordinator.SplitRequest.newBuilder()
                     .setSplitFromRegionId(
-                        getRangeDistribution(tableName, new ComparableByteArray(key)).getId().entityId())
+                        getRangeDistribution(tableName, new ComparableByteArray(key, POS)).getId().entityId())
                     .setSplitWatershedKey(ByteString.copyFrom(key))
                     .build())
                 .build();
@@ -438,7 +482,7 @@ public class MetaServiceClient {
 
         for (Meta.RangeDistribution tablePart : response.getTableRange().getRangeDistributionList()) {
             result.put(new ComparableByteArray(
-                            tablePart.getRange().getStartKey().toByteArray()),
+                            tablePart.getRange().getStartKey().toByteArray(), POS),
                     mapping(tablePart));
         }
         return result;
@@ -478,16 +522,25 @@ public class MetaServiceClient {
     }
 
     public boolean createIndex(String name, Index index) {
-        Meta.CreateIndexIdRequest indexIdRequest = Meta.CreateIndexIdRequest.newBuilder()
+        Meta.GenerateTableIdsRequest generateRequest = Meta.GenerateTableIdsRequest.newBuilder()
                 .setSchemaId(id)
+                .setCount(Meta.TableWithPartCount.newBuilder()
+                        .setHasTable(false)
+                        .setIndexCount(1)
+                        .setIndexPartCount(0, index.getIndexPartition().getDetails().size() + 1)
+                        .build())
                 .build();
 
-        Meta.CreateIndexIdResponse idResponse = metaConnector.exec(stub -> stub.createIndexId(indexIdRequest));
+        Meta.GenerateTableIdsResponse generateResponse = metaConnector.exec(stub -> stub.generateTableIds(generateRequest));
 
+        if (generateResponse.getIdsCount() <= 0) {
+            throw new DingoClientException("Index id generation failed");
+        }
+        Meta.TableIdWithPartIds withPartIds = generateResponse.getIdsList().get(0);
         Meta.CreateIndexRequest request = Meta.CreateIndexRequest.newBuilder()
                 .setSchemaId(id)
-                .setIndexId(idResponse.getIndexId())
-                .setIndexDefinition(mapping(idResponse.getIndexId().getEntityId(), index))
+                .setIndexId(withPartIds.getTableId())
+                .setIndexDefinition(mapping(withPartIds.getTableId().getEntityId(), index, withPartIds.getPartIdsList()))
                 .build();
 
         Meta.CreateIndexResponse response = metaConnector.exec(stub -> stub.createIndex(request));
@@ -499,7 +552,7 @@ public class MetaServiceClient {
         DingoCommonId indexId = getIndexId(index);
         Meta.UpdateIndexRequest request = Meta.UpdateIndexRequest.newBuilder()
                 .setIndexId(mapping(indexId))
-                .setNewIndexDefinition(mapping(indexId.entityId(), newIndex))
+                .setNewIndexDefinition(mapping(indexId.entityId(), newIndex, Collections.emptyList()))
                 .build();
 
         Meta.UpdateIndexResponse response = metaConnector.exec(stub -> stub.updateIndex(request));
@@ -588,10 +641,29 @@ public class MetaServiceClient {
 
         for (Meta.RangeDistribution indexPart : response.getIndexRange().getRangeDistributionList()) {
             result.put(new ComparableByteArray(
-                        indexPart.getRange().getStartKey().toByteArray()),
+                        indexPart.getRange().getStartKey().toByteArray(), POS),
                     mapping(indexPart));
         }
         return result;
+    }
+
+    public IndexMetrics getIndexMetrics(String index) {
+        DingoCommonId indexId = getIndexId(index);
+        if (indexId == null) {
+            throw new DingoClientException("Index" + index + " does not exist");
+        }
+
+        return Optional.ofNullable(indexId)
+                .map(__ -> {
+                    Meta.GetIndexMetricsRequest request = Meta.GetIndexMetricsRequest.newBuilder()
+                            .setIndexId(mapping(__))
+                            .build();
+                    return Optional.ofNullable(metaConnector.exec(stub -> stub.getIndexMetrics(request)))
+                            .map(Meta.GetIndexMetricsResponse::getIndexMetrics)
+                            .map(Meta.IndexMetricsWithId::getIndexMetrics)
+                            .orNull();
+                })
+                .mapOrNull(EntityConversion::mapping);
     }
 
     private String cleanTableName(String name) {
