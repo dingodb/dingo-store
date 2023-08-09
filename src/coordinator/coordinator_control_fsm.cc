@@ -1372,6 +1372,9 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
               } else {
                 DINGO_LOG(WARNING) << "ApplyMetaIncrement table UPDATE, [id=" << table_id << "] failed";
               }
+
+              // meta_write_kv
+              meta_write_to_kv.push_back(table_meta_->TransformToKvValue(table_internal));
             }
           }
         } else if (new_region.region_type() == pb::common::RegionType::INDEX_REGION) {
@@ -1407,6 +1410,9 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
               } else {
                 DINGO_LOG(WARNING) << "ApplyMetaIncrement index UPDATE, [id=" << index_id << "] failed";
               }
+
+              // meta_write_kv
+              meta_write_to_kv.push_back(index_meta_->TransformToKvValue(index_internal));
             }
           }
         }

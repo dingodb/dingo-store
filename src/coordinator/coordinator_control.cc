@@ -53,27 +53,32 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   leader_term_.store(-1, butil::memory_order_release);
 
   // the data structure below will write to raft
-  coordinator_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::CoordinatorInternal>(&coordinator_map_);
-  store_meta_ = new MetaSafeMapStorage<pb::common::Store>(&store_map_);
-  schema_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::SchemaInternal>(&schema_map_);
-  region_meta_ = new MetaSafeMapStorage<pb::common::Region>(&region_map_);
+  coordinator_meta_ =
+      new MetaSafeMapStorage<pb::coordinator_internal::CoordinatorInternal>(&coordinator_map_, "coordinator_map_");
+  store_meta_ = new MetaSafeMapStorage<pb::common::Store>(&store_map_, "store_map_");
+  schema_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::SchemaInternal>(&schema_map_, "schema_map_");
+  region_meta_ = new MetaSafeMapStorage<pb::common::Region>(&region_map_, "region_map_");
   deleted_region_meta_ = new MetaSafeMapStorage<pb::common::Region>(&deleted_region_map_, "deleted_region_map_");
-  table_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::TableInternal>(&table_map_);
-  id_epoch_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::IdEpochInternal>(&id_epoch_map_);
-  executor_meta_ = new MetaSafeStringMapStorage<pb::common::Executor>(&executor_map_);
-  store_metrics_meta_ = new MetaMapStorage<pb::common::StoreMetrics>(&store_metrics_map_);
-  table_metrics_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::TableMetricsInternal>(&table_metrics_map_);
-  store_operation_meta_ = new MetaSafeMapStorage<pb::coordinator::StoreOperation>(&store_operation_map_);
-  executor_user_meta_ =
-      new MetaSafeStringMapStorage<pb::coordinator_internal::ExecutorUserInternal>(&executor_user_map_);
-  task_list_meta_ = new MetaSafeMapStorage<pb::coordinator::TaskList>(&task_list_map_);
-  index_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::TableInternal>(&index_map_);
-  index_metrics_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::IndexMetricsInternal>(&index_metrics_map_);
+  table_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::TableInternal>(&table_map_, "table_map_");
+  id_epoch_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::IdEpochInternal>(&id_epoch_map_, "id_epoch_map_");
+  executor_meta_ = new MetaSafeStringMapStorage<pb::common::Executor>(&executor_map_, "executor_map_");
+  store_metrics_meta_ = new MetaMapStorage<pb::common::StoreMetrics>(&store_metrics_map_, "store_metrics_map_");
+  table_metrics_meta_ =
+      new MetaSafeMapStorage<pb::coordinator_internal::TableMetricsInternal>(&table_metrics_map_, "table_metrics_map_");
+  store_operation_meta_ =
+      new MetaSafeMapStorage<pb::coordinator::StoreOperation>(&store_operation_map_, "store_operation_map_");
+  executor_user_meta_ = new MetaSafeStringMapStorage<pb::coordinator_internal::ExecutorUserInternal>(
+      &executor_user_map_, "executor_user_map_");
+  task_list_meta_ = new MetaSafeMapStorage<pb::coordinator::TaskList>(&task_list_map_, "task_list_map_");
+  index_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::TableInternal>(&index_map_, "index_map_");
+  index_metrics_meta_ =
+      new MetaSafeMapStorage<pb::coordinator_internal::IndexMetricsInternal>(&index_metrics_map_, "index_metrics_map_");
 
   // version kv
-  lease_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::LeaseInternal>(&lease_map_);
-  kv_index_meta_ = new MetaSafeStringStdMapStorage<pb::coordinator_internal::KvIndexInternal>(&kv_index_map_);
-  kv_rev_meta_ = new MetaSafeStringStdMapStorage<pb::coordinator_internal::KvRevInternal>(&kv_rev_map_);
+  lease_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::LeaseInternal>(&lease_map_, "lease_map_");
+  kv_index_meta_ =
+      new MetaSafeStringStdMapStorage<pb::coordinator_internal::KvIndexInternal>(&kv_index_map_, "kv_index_map_");
+  kv_rev_meta_ = new MetaSafeStringStdMapStorage<pb::coordinator_internal::KvRevInternal>(&kv_rev_map_, "kv_rev_map_");
 
   // table index
   table_index_meta_ =
