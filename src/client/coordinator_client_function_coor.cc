@@ -471,19 +471,19 @@ void SendGetStoreMap(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
         store.store_type() == dingodb::pb::common::StoreType::NODE_TYPE_INDEX) {
       index_count_available++;
     }
-    DINGO_LOG(INFO) << "store_id=" << store.id() << " type=" << dingodb::pb::common::StoreType_Name(store.store_type())
-                    << " state=" << dingodb::pb::common::StoreState_Name(store.state())
-                    << " in_state=" << dingodb::pb::common::StoreInState_Name(store.in_state())
-                    << " create_timestamp=" << store.create_timestamp()
-                    << " last_seen_timestamp=" << store.last_seen_timestamp();
+    std::cout << "store_id=" << store.id() << " type=" << dingodb::pb::common::StoreType_Name(store.store_type())
+              << " state=" << dingodb::pb::common::StoreState_Name(store.state())
+              << " in_state=" << dingodb::pb::common::StoreInState_Name(store.in_state())
+              << " create_timestamp=" << store.create_timestamp()
+              << " last_seen_timestamp=" << store.last_seen_timestamp() << "\n";
   }
 
   // don't modify this log, it is used by sdk
   if (store_count_available > 0) {
-    DINGO_LOG(INFO) << "DINGODB_HAVE_STORE_AVAILABLE, store_count=" << store_count_available;
+    std::cout << "DINGODB_HAVE_STORE_AVAILABLE, store_count=" << store_count_available << "\n";
   }
   if (index_count_available > 0) {
-    DINGO_LOG(INFO) << "DINGODB_HAVE_INDEX_AVAILABLE, index_count=" << index_count_available;
+    std::cout << "DINGODB_HAVE_INDEX_AVAILABLE, index_count=" << index_count_available << "\n";
   }
 }
 
@@ -522,15 +522,19 @@ void SendGetRegionMap(std::shared_ptr<dingodb::CoordinatorInteraction> coordinat
   //   DINGO_LOG(INFO) << region.DebugString();
   // }
 
+  std::cout << "\n";
   uint64_t normal_region_count = 0;
   uint64_t online_region_count = 0;
   for (const auto& region : response.regionmap().regions()) {
-    DINGO_LOG(INFO) << "Region id=" << region.id() << " name=" << region.definition().name()
-                    << " state=" << dingodb::pb::common::RegionState_Name(region.state())
-                    << " heartbeat_state=" << dingodb::pb::common::RegionHeartbeatState_Name(region.heartbeat_state())
-                    << " replica_state=" << dingodb::pb::common::ReplicaStatus_Name(region.replica_status())
-                    << " raft_status=" << dingodb::pb::common::RegionRaftStatus_Name(region.raft_status())
-                    << " leader_store_id=" << region.leader_store_id();
+    std::cout << "[REGION] id=[" << region.id() << "] name=[" << region.definition().name() << "] state=["
+              << dingodb::pb::common::RegionState_Name(region.state()) << ","
+              << dingodb::pb::common::RegionHeartbeatState_Name(region.heartbeat_state()) << ","
+              << dingodb::pb::common::ReplicaStatus_Name(region.replica_status()) << ","
+              << dingodb::pb::common::RegionRaftStatus_Name(region.raft_status()) << "] leader=["
+              << region.leader_store_id() << "] create_ts=[" << region.create_timestamp() << "] update_ts=["
+              << region.last_update_timestamp() << "] start=[0x"
+              << dingodb::Helper::StringToHex(region.definition().range().start_key()) << "] end=[0x"
+              << dingodb::Helper::StringToHex(region.definition().range().end_key()) << "]\n";
 
     if (region.state() == dingodb::pb::common::RegionState::REGION_NORMAL) {
       normal_region_count++;
@@ -541,8 +545,8 @@ void SendGetRegionMap(std::shared_ptr<dingodb::CoordinatorInteraction> coordinat
     }
   }
 
-  DINGO_LOG(INFO) << "region_count=" << response.regionmap().regions_size()
-                  << ", normal_region_count=" << normal_region_count << ", online_region_count=" << online_region_count;
+  std::cout << "region_count=[" << response.regionmap().regions_size() << "], normal_region_count=["
+            << normal_region_count << "], online_region_count=[" << online_region_count << "]\n\n";
 }
 
 void SendGetDeletedRegionMap(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
