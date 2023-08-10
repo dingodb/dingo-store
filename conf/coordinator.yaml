@@ -16,6 +16,7 @@ coordinator:
   recycle_orphan_interval_s: 60
   lease_interval_s: 1
   compaction_interval_s: 300
+  compaction_retention_rev_count: 1000
 raft:
   host: 127.0.0.1
   port: 8001

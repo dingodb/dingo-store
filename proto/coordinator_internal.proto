@@ -324,8 +324,8 @@ enum KvIndexEventType {
 message MetaIncrementKvIndex {
   bytes id = 1;
   MetaIncrementOpType op_type = 2;
-  KvIndexEventType event_type = 3;
-  RevisionInternal op_revision = 4;
+  KvIndexEventType event_type = 3;   // put / delete / compact
+  RevisionInternal op_revision = 4;  // this is the op_version of put/delete, or compaction_revision of compact
   bool ignore_lease = 5;
   uint64 lease_id = 6;
   bool ignore_value = 7;

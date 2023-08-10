@@ -2213,7 +2213,7 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
           }
         } else if (kv_index.event_type() ==
                    pb::coordinator_internal::KvIndexEventType::KV_INDEX_EVENT_TYPE_COMPACTION) {
-          // call KvLockApply
+          // call KvCompactApply
           auto ret = KvCompactApply(kv_index.id(), kv_index.op_revision());
           if (ret.ok()) {
             DINGO_LOG(INFO) << "ApplyMetaIncrement kv_index UPDATE,COMPACT [id=" << kv_index.id() << "] success";

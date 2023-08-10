@@ -164,6 +164,8 @@ class VersionServiceProtoImpl : public dingodb::pb::version::VersionService {
              pb::version::PutResponse* response, google::protobuf::Closure* done) override;
   void KvDeleteRange(google::protobuf::RpcController* controller, const pb::version::DeleteRangeRequest* request,
                      pb::version::DeleteRangeResponse* response, google::protobuf::Closure* done) override;
+  void KvCompaction(google::protobuf::RpcController* controller, const pb::version::CompactionRequest* request,
+                    pb::version::CompactionResponse* response, google::protobuf::Closure* done) override;
 
   // watch
   void Watch(google::protobuf::RpcController* controller, const pb::version::WatchRequest* request,

@@ -140,6 +140,7 @@ void SendGetRawKvRev(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
 void SendCoorKvRange(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendCoorKvPut(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendCoorKvDeleteRange(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendCoorKvCompaction(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 
 // watch
 void SendOneTimeWatch(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);

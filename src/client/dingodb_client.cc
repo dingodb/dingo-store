@@ -664,6 +664,8 @@ int CoordinatorSender() {
     SendCoorKvPut(coordinator_interaction_version);
   } else if (FLAGS_method == "CoorKvDeleteRange") {
     SendCoorKvDeleteRange(coordinator_interaction_version);
+  } else if (FLAGS_method == "CoorKvCompaction") {
+    SendCoorKvCompaction(coordinator_interaction_version);
   }
 
   // coordinator watch

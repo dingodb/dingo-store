@@ -15,6 +15,7 @@
 #include <sys/types.h>
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -25,22 +26,14 @@
 #include <utility>
 #include <vector>
 
-#include "braft/closure_helper.h"
-#include "braft/configuration.h"
-#include "butil/containers/flat_map.h"
-#include "butil/scoped_lock.h"
+#include "brpc/callback.h"
 #include "butil/status.h"
-#include "butil/time.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "coordinator/coordinator_control.h"
 #include "gflags/gflags.h"
-#include "metrics/coordinator_bvar_metrics.h"
 #include "proto/common.pb.h"
-#include "proto/coordinator.pb.h"
 #include "proto/coordinator_internal.pb.h"
-#include "proto/error.pb.h"
-#include "proto/meta.pb.h"
 #include "proto/version.pb.h"
 #include "serial/buf.h"
 
@@ -48,6 +41,7 @@ namespace dingodb {
 
 DEFINE_uint32(max_kv_key_size, 4096, "max kv put count");
 DEFINE_uint32(max_kv_value_size, 4096, "max kv put count");
+DEFINE_uint32(compaction_retention_rev_count, 1000, "max revision count retention for compaction");
 
 std::string CoordinatorControl::RevisionToString(const pb::coordinator_internal::RevisionInternal &revision) {
   Buf buf(17);
@@ -279,6 +273,43 @@ butil::Status CoordinatorControl::KvRange(const std::string &key, const std::str
   DINGO_LOG(INFO) << "KvRange finish, key: " << key << ", range_end: " << range_end << ", limit: " << limit
                   << ", keys_only: " << keys_only << ", count_only: " << count_only << ", kv size: " << kv.size()
                   << ", total_count_in_range: " << total_count_in_range;
+
+  return butil::Status::OK();
+}
+
+// kv functions for internal use
+// KvRangeRawKeys is the get function for raw keys
+// in:  key
+// in:  range_end
+// out: keys
+// return: errno
+butil::Status CoordinatorControl::KvRangeRawKeys(const std::string &key, const std::string &range_end,
+                                                 std::vector<std::string> &keys) {
+  std::vector<pb::coordinator_internal::KvIndexInternal> kv_index_values;
+
+  if (range_end.empty()) {
+    pb::coordinator_internal::KvIndexInternal kv_index;
+    auto ret = this->GetRawKvIndex(key, kv_index);
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << "KvRange GetRawKvIndex not found, key: " << key << ", error: " << ret.error_str();
+      return butil::Status::OK();
+    }
+    keys.push_back(key);
+  } else {
+    // scan kv_index for legal keys
+    auto ret = RangeRawKvIndex(key, range_end, kv_index_values);
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << "KvRange kv_index_map_.RangeRawKvIndex failed";
+      return ret;
+    }
+
+    for (const auto &kv_index_value : kv_index_values) {
+      keys.push_back(kv_index_value.id());
+    }
+  }
+
+  DINGO_LOG(INFO) << "KvRangeRawKeys finish, key: " << key << ", range_end: " << range_end
+                  << ", keys size: " << keys.size();
 
   return butil::Status::OK();
 }
@@ -771,9 +802,219 @@ butil::Status CoordinatorControl::KvDeleteApply(const std::string &key,
   return butil::Status::OK();
 }
 
-butil::Status CoordinatorControl::KvCompactApply(const std::string &key,  // NOLINT
-                                                 const pb::coordinator_internal::RevisionInternal &op_revision) {
-  DINGO_LOG(INFO) << "KvCompactApply, key: " << key << ", revision: " << op_revision.ShortDebugString();
+void CoordinatorControl::CompactionTask() {
+  DINGO_LOG(INFO) << "compaction task start";
+
+  // get all keys in kv_index_map_
+  std::vector<std::string> keys;
+  auto ret = kv_index_map_.GetAllKeys(keys);
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << "kv_index_map_ GetAllKeys failed";
+    return;
+  }
+
+  // build revision struct
+  pb::coordinator_internal::RevisionInternal compact_revision;
+
+  uint64_t now_revision = GetPresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_REVISION);
+  if (now_revision < FLAGS_compaction_retention_rev_count) {
+    DINGO_LOG(INFO) << "compaction task skip, now_revision: " << now_revision
+                    << ", compaction_retention_rev_count: " << FLAGS_compaction_retention_rev_count;
+    return;
+  } else {
+    compact_revision.set_main(now_revision - FLAGS_compaction_retention_rev_count);
+  }
+
+  compact_revision.set_sub(0);
+
+  // do compaction for each key
+  std::vector<std::string> keys_to_compact;
+  for (const auto &key : keys) {
+    if (keys_to_compact.size() < 50) {
+      keys_to_compact.push_back(key);
+    } else {
+      auto ret = KvCompact(keys_to_compact, compact_revision);
+      if (!ret.ok()) {
+        DINGO_LOG(ERROR) << "KvCompact failed, error: " << ret.error_str() << ", keys size: " << keys_to_compact.size();
+        for (const auto &key : keys_to_compact) {
+          DINGO_LOG(ERROR) << "KvCompact failed, key: " << key;
+        }
+      }
+      keys_to_compact.clear();
+    }
+  }
+  if (!keys_to_compact.empty()) {
+    auto ret = KvCompact(keys_to_compact, compact_revision);
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << "KvCompact failed, error: " << ret.error_str() << ", keys size: " << keys_to_compact.size();
+      for (const auto &key : keys_to_compact) {
+        DINGO_LOG(ERROR) << "KvCompact failed, key: " << key;
+      }
+    }
+  }
+
+  DINGO_LOG(INFO) << "compaction task end, keys_count=" << keys.size();
+}
+
+static void Done(std::atomic<bool> *done) { done->store(true, std::memory_order_release); }
+
+butil::Status CoordinatorControl::KvCompact(const std::vector<std::string> &keys,
+                                            const pb::coordinator_internal::RevisionInternal &compact_revision) {
+  DINGO_LOG(INFO) << "KvCompact, keys size: " << keys.size() << ", revision: " << compact_revision.ShortDebugString();
+
+  if (keys.empty()) {
+    return butil::Status::OK();
+  }
+
+  for (const auto &key : keys) {
+    DINGO_LOG(INFO) << "KvCompact, will compact key: " << key;
+  }
+
+  pb::coordinator_internal::MetaIncrement meta_increment;
+
+  for (auto key : keys) {
+    auto *kv_index_increment = meta_increment.add_kv_indexes();
+    kv_index_increment->set_id(key);
+    kv_index_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
+    kv_index_increment->set_event_type(
+        ::dingodb::pb::coordinator_internal::KvIndexEventType::KV_INDEX_EVENT_TYPE_COMPACTION);
+    kv_index_increment->mutable_op_revision()->CopyFrom(compact_revision);
+  }
+
+  std::atomic<bool> done(false);
+
+  auto *closure = brpc::NewCallback(Done, &done);
+
+  auto ret = this->SubmitMetaIncrement(closure, meta_increment);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "KvCompact SubmitMetaIncrement failed, error: " << ret.error_str();
+    return ret;
+  }
+
+  for (;;) {
+    if (done.load(std::memory_order_acquire)) {
+      break;
+    }
+    bthread_usleep(1000);
+  }
+
+  return butil::Status::OK();
+}
+
+butil::Status CoordinatorControl::KvCompactApply(const std::string &key,
+                                                 const pb::coordinator_internal::RevisionInternal &compact_revision) {
+  DINGO_LOG(INFO) << "KvCompactApply, key: " << key << ", revision: " << compact_revision.ShortDebugString();
+
+  // get kv_index
+  pb::coordinator_internal::KvIndexInternal kv_index;
+  auto ret = this->GetRawKvIndex(key, kv_index);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "KvCompactApply GetRawKvIndex failed, key: " << key << ", error: " << ret.error_str();
+    return ret;
+  }
+
+  // iterate kv_index generations, find revisions less than compact_revision
+  if (kv_index.generations_size() == 0) {
+    DINGO_LOG(INFO) << "KvCompactApply generations_size == 0, no need to compact, key: " << key;
+    return butil::Status::OK();
+  }
+
+  pb::coordinator_internal::KvIndexInternal new_kv_index = kv_index;
+  new_kv_index.clear_generations();
+  std::vector<pb::coordinator_internal::RevisionInternal> revisions_to_delete;
+
+  // for history generations, just filter compaction_revision to delete old revsions
+  for (int i = 0; i < kv_index.generations_size() - 1; ++i) {
+    pb::coordinator_internal::KvIndexInternal::Generation new_generation;
+
+    const auto &old_generation = kv_index.generations(i);
+
+    if (new_kv_index.generations_size() > 0) {
+      new_generation.CopyFrom(old_generation);
+      new_kv_index.mutable_generations()->Add()->CopyFrom(new_generation);
+      continue;
+    }
+
+    if (old_generation.has_create_revision()) {
+      for (const auto &kv_revision : old_generation.revisions()) {
+        if (kv_revision.main() < compact_revision.main()) {
+          revisions_to_delete.push_back(kv_revision);
+        } else {
+          // new_generation.mutable_revisions()->Add()->CopyFrom(kv_revision);
+          new_generation.add_revisions()->CopyFrom(kv_revision);
+        }
+      }
+
+      if (new_generation.revisions_size() > 0) {
+        new_generation.mutable_create_revision()->CopyFrom(old_generation.create_revision());
+        new_generation.set_verison(old_generation.verison());
+        new_kv_index.mutable_generations()->Add()->CopyFrom(new_generation);
+      }
+    }
+  }
+
+  // for latest generation, retent latest revision
+  pb::coordinator_internal::KvIndexInternal::Generation new_generation;
+  const auto &latest_generation = kv_index.generations(kv_index.generations_size() - 1);
+
+  // if this is a delete generation, add it to new_kv_index if new_kv_index has more than 1 generation
+  // else just delete this kv_index
+  if (!latest_generation.has_create_revision()) {
+    if (new_kv_index.generations_size() > 0) {
+      new_kv_index.mutable_generations()->Add()->CopyFrom(latest_generation);
+    }
+  }
+  // if this is a put generation, add it to new_kv_index if new_kv_index has more than 1 generation
+  // else filter revisions of this generation
+  else {
+    if (new_kv_index.generations_size() > 0) {
+      new_kv_index.mutable_generations()->Add()->CopyFrom(latest_generation);
+    } else {
+      for (int j = 0; j < latest_generation.revisions_size(); ++j) {
+        const auto &kv_revision = latest_generation.revisions(j);
+
+        // if this is the latest revision of the latest generation, just copy it
+        if (j == latest_generation.revisions_size() - 1) {
+          new_generation.add_revisions()->CopyFrom(kv_revision);
+        } else {
+          if (kv_revision.main() < compact_revision.main()) {
+            revisions_to_delete.push_back(kv_revision);
+          } else {
+            // new_generation.mutable_revisions()->Add()->CopyFrom(kv_revision);
+            new_generation.add_revisions()->CopyFrom(kv_revision);
+          }
+        }
+      }
+
+      if (new_generation.revisions_size() > 0) {
+        new_generation.mutable_create_revision()->CopyFrom(latest_generation.create_revision());
+        new_generation.set_verison(latest_generation.verison());
+        new_kv_index.mutable_generations()->Add()->CopyFrom(new_generation);
+      }
+    }
+  }
+
+  // if new_kv_index has no generations, delete it
+  // else put new_kv_index
+  if (new_kv_index.generations_size() == 0) {
+    DINGO_LOG(INFO) << "KvCompactApply new_kv_index has no generations, delete it, key: " << key;
+    DeleteRawKvIndex(key, new_kv_index);
+  } else {
+    DINGO_LOG(INFO) << "KvCompactApply new_kv_index has generations, put it, key: " << key
+                    << ", new_kv_index: " << new_kv_index.ShortDebugString();
+    PutRawKvIndex(key, new_kv_index);
+  }
+
+  // delete revisions in kv_rev_map_
+  for (const auto &kv_revision : revisions_to_delete) {
+    pb::coordinator_internal::KvRevInternal kv_rev;
+    kv_rev.set_id(RevisionToString(kv_revision));
+
+    DINGO_LOG(INFO) << "KvCompactApply delete kv_rev, kv_revision: " << kv_revision.ShortDebugString()
+                    << ", kv_rev: " << kv_rev.ShortDebugString();
+    DeleteRawKvRev(kv_revision, kv_rev);
+  }
+
   return butil::Status::OK();
 }
 

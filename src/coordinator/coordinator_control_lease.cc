@@ -25,24 +25,16 @@
 #include <utility>
 #include <vector>
 
-#include "braft/closure_helper.h"
-#include "braft/configuration.h"
 #include "butil/containers/flat_map.h"
 #include "butil/scoped_lock.h"
 #include "butil/status.h"
 #include "butil/time.h"
-#include "common/helper.h"
 #include "common/logging.h"
 #include "coordinator/coordinator_control.h"
 #include "gflags/gflags.h"
-#include "metrics/coordinator_bvar_metrics.h"
-#include "proto/common.pb.h"
-#include "proto/coordinator.pb.h"
 #include "proto/coordinator_internal.pb.h"
 #include "proto/error.pb.h"
-#include "proto/meta.pb.h"
 #include "proto/version.pb.h"
-#include "serial/buf.h"
 
 namespace dingodb {
 
@@ -271,8 +263,6 @@ void CoordinatorControl::LeaseTask() {
     }
   }
 }
-
-void CoordinatorControl::CompactionTask() {}
 
 void CoordinatorControl::BuildLeaseToKeyMap() {
   // build lease_to_key_map_temp_
