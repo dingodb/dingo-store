@@ -53,6 +53,7 @@ DEFINE_string(coor_url, "",
 namespace dingodb {
 
 DECLARE_uint32(compaction_retention_rev_count);
+DECLARE_bool(auto_compaction);
 
 void Server::SetRole(pb::common::ClusterRole role) { role_ = role; }
 
@@ -419,6 +420,9 @@ bool Server::InitCrontabManager() {
     // Add compaction crontab
     std::shared_ptr<Crontab> compaction_crontab = std::make_shared<Crontab>();
     compaction_crontab->name = "compaction";
+    FLAGS_auto_compaction = config->GetBool("coordinator.auto_compaction");
+    DINGO_LOG(INFO) << "coordinator.auto_compaction:" << FLAGS_auto_compaction;
+
     uint64_t compaction_interval_s = config->GetInt("coordinator.compaction_interval_s");
     if (compaction_interval_s <= 0) {
       DINGO_LOG(INFO) << "coordinator.compaction_interval_s illegal";

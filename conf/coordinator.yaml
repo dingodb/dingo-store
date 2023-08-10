@@ -15,6 +15,7 @@ coordinator:
   calc_metrics_interval_s: 60
   recycle_orphan_interval_s: 60
   lease_interval_s: 1
+  auto_compaction: true
   compaction_interval_s: 300
   compaction_retention_rev_count: 1000
 raft:
