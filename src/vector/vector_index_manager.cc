@@ -125,6 +125,7 @@ std::shared_ptr<VectorIndex> VectorIndexManager::GetVectorIndex(uint64_t vector_
 std::shared_ptr<VectorIndex> VectorIndexManager::GetVectorIndex(store::RegionPtr region) {
   auto vector_index = region->ShareVectorIndex();
   if (vector_index != nullptr) {
+    DINGO_LOG(INFO) << "get share vector index: " << region->Id();
     return vector_index;
   }
 

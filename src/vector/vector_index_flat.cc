@@ -45,12 +45,23 @@ namespace dingodb {
 // Filter vecotr id used by region range.
 class FlatRangeFilterFunctor : public faiss::IDSelector {
  public:
-  FlatRangeFilterFunctor(std::shared_ptr<VectorIndex::FilterFunctor> filter) : filter_(filter) {}
+  FlatRangeFilterFunctor(std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters) : filters_(filters) {}
   ~FlatRangeFilterFunctor() override = default;
-  bool is_member(faiss::idx_t id) const override { return filter_ == nullptr || filter_->Check(id); }
+  bool is_member(faiss::idx_t id) const override {  // NOLINT
+    if (filters_.empty()) {
+      return true;
+    }
+    for (const auto& filter : filters_) {
+      if (!filter->Check(id)) {
+        return false;
+      }
+    }
+
+    return true;
+  }
 
  private:
-  std::shared_ptr<VectorIndex::FilterFunctor> filter_;
+  std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters_;
 };
 
 VectorIndexFlat::VectorIndexFlat(uint64_t id, const pb::common::VectorIndexParameter& vector_index_parameter)
@@ -208,7 +219,7 @@ butil::Status VectorIndexFlat::Delete(const std::vector<uint64_t>& delete_ids) {
 }
 
 butil::Status VectorIndexFlat::Search(std::vector<pb::common::VectorWithId> vector_with_ids, uint32_t topk,
-                                      std::shared_ptr<FilterFunctor> filter,
+                                      std::vector<std::shared_ptr<FilterFunctor>> filters,
                                       std::vector<pb::index::VectorWithDistanceResult>& results,
                                       [[maybe_unused]] bool reconstruct, const std::vector<uint64_t>& vector_ids) {
   if (!is_online_.load()) {
@@ -295,9 +306,9 @@ butil::Status VectorIndexFlat::Search(std::vector<pb::common::VectorWithId> vect
 
     BAIDU_SCOPED_LOCK(mutex_);
     faiss::SearchParameters* params = nullptr;
-    if (filter != nullptr) {
+    if (!filters.empty()) {
       params = new faiss::SearchParameters();
-      params->sel = new FlatRangeFilterFunctor(filter);
+      params->sel = new FlatRangeFilterFunctor(filters);
     }
     index_->search(vector_with_ids.size(), vectors.get(), topk, distances.data(), labels.data(), params);
     delete params;

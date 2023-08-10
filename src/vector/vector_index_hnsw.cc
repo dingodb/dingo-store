@@ -48,12 +48,23 @@ DEFINE_uint64(hnsw_need_save_count, 10000, "hnsw need save count");
 // Filter vecotr id used by region range.
 class HnswRangeFilterFunctor : public hnswlib::BaseFilterFunctor {
  public:
-  HnswRangeFilterFunctor(std::shared_ptr<VectorIndex::FilterFunctor> filter) : filter_(filter) {}
+  HnswRangeFilterFunctor(std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters) : filters_(filters) {}
   ~HnswRangeFilterFunctor() = default;
-  bool operator()(hnswlib::labeltype id) override { return filter_ == nullptr || filter_->Check(id); }
+  bool operator()(hnswlib::labeltype id) override {
+    if (filters_.empty()) {
+      return true;
+    }
+    for (const auto& filter : filters_) {
+      if (!filter->Check(id)) {
+        return false;
+      }
+    }
+
+    return true;
+  }
 
  private:
-  std::shared_ptr<VectorIndex::FilterFunctor> filter_;
+  std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters_;
 };
 
 /*
@@ -279,7 +290,7 @@ butil::Status VectorIndexHnsw::Load(const std::string& path) {
 }
 
 butil::Status VectorIndexHnsw::Search(std::vector<pb::common::VectorWithId> vector_with_ids, uint32_t topk,
-                                      std::shared_ptr<FilterFunctor> filter,
+                                      std::vector<std::shared_ptr<FilterFunctor>> filters,
                                       std::vector<pb::index::VectorWithDistanceResult>& results, bool reconstruct) {
   // check is_online
   if (!is_online_.load()) {
@@ -345,7 +356,7 @@ butil::Status VectorIndexHnsw::Search(std::vector<pb::common::VectorWithId> vect
 
     if (!normalize_) {
       ParallelFor(0, vector_with_ids.size(), hnsw_num_threads_, [&](size_t row, size_t /*thread_id*/) {
-        HnswRangeFilterFunctor* hnsw_filter = filter == nullptr ? nullptr : new HnswRangeFilterFunctor(filter);
+        HnswRangeFilterFunctor* hnsw_filter = filters.empty() ? nullptr : new HnswRangeFilterFunctor(filters);
         std::priority_queue<std::pair<float, hnswlib::labeltype>> result =
             hnsw_index_->searchKnn(data.get() + dimension_ * row, topk, hnsw_filter);
         delete hnsw_filter;
@@ -381,7 +392,7 @@ butil::Status VectorIndexHnsw::Search(std::vector<pb::common::VectorWithId> vect
         size_t start_idx = thread_id * dimension_;
         VectorIndexUtils::NormalizeVectorForHnsw((float*)(data.get() + dimension_ * row), dimension_,
                                                  (norm_array.data() + start_idx));
-        HnswRangeFilterFunctor* hnsw_filter = new HnswRangeFilterFunctor(filter);
+        HnswRangeFilterFunctor* hnsw_filter = filters.empty() ? nullptr : new HnswRangeFilterFunctor(filters);
         std::priority_queue<std::pair<float, hnswlib::labeltype>> result =
             hnsw_index_->searchKnn(norm_array.data() + start_idx, topk, hnsw_filter);
         delete hnsw_filter;
