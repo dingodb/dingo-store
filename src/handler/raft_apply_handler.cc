@@ -384,7 +384,6 @@ void SplitHandler::Handle(std::shared_ptr<Context>, store::RegionPtr from_region
       to_region->SetShareVectorIndex(vector_index);
     } else {
       DINGO_LOG(ERROR) << fmt::format("split region get vector index failed, region {}", from_region->Id());
-      return;
     }
   }
 

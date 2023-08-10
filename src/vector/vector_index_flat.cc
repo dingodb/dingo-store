@@ -238,6 +238,11 @@ butil::Status VectorIndexFlat::Search(std::vector<pb::common::VectorWithId> vect
     return butil::Status::OK();
   }
 
+  uint32_t amplify_topk = topk;
+  if (!filters.empty()) {
+    amplify_topk = topk * 4;
+  }
+
   if (vector_with_ids[0].vector().float_values_size() != this->dimension_) {
     std::string s = fmt::format("vector dimension is not match, input = {}, index = {} ",
                                 vector_with_ids[0].vector().float_values_size(), this->dimension_);
@@ -246,9 +251,9 @@ butil::Status VectorIndexFlat::Search(std::vector<pb::common::VectorWithId> vect
   }
 
   std::vector<faiss::Index::distance_t> distances;
-  distances.resize(topk * vector_with_ids.size(), 0.0f);
+  distances.resize(amplify_topk * vector_with_ids.size(), 0.0f);
   std::vector<faiss::idx_t> labels;
-  labels.resize(topk * vector_with_ids.size(), -1);
+  labels.resize(amplify_topk * vector_with_ids.size(), -1);
 
   std::unique_ptr<float[]> vectors;
   try {
@@ -305,36 +310,51 @@ butil::Status VectorIndexFlat::Search(std::vector<pb::common::VectorWithId> vect
     faiss::SearchParameters* param = enable_filter ? search_filter_for_flat_ptr.get() : nullptr;
 
     BAIDU_SCOPED_LOCK(mutex_);
-    faiss::SearchParameters* params = nullptr;
-    if (!filters.empty()) {
-      params = new faiss::SearchParameters();
-      params->sel = new FlatRangeFilterFunctor(filters);
-    }
-    index_->search(vector_with_ids.size(), vectors.get(), topk, distances.data(), labels.data(), params);
-    delete params;
+    index_->search(vector_with_ids.size(), vectors.get(), amplify_topk, distances.data(), labels.data(), nullptr);
   }
 
   for (size_t row = 0; row < vector_with_ids.size(); ++row) {
     auto& result = results.emplace_back();
 
-    for (size_t i = 0; i < topk; i++) {
-      if (labels[i + (row * topk)] < 0) {
+    int count = 0;
+    for (size_t i = 0; i < amplify_topk; i++) {
+      size_t pos = row * amplify_topk + i;
+      if (labels[pos] < 0) {
         continue;
       }
+
+      // filter invalid value
+      if (!filters.empty()) {
+        bool valid = true;
+        for (auto& filter : filters) {
+          if (!filter->Check(labels[pos])) {
+            valid = false;
+            break;
+          }
+        }
+        if (!valid) {
+          continue;
+        }
+      }
+      ++count;
+
       auto* vector_with_distance = result.add_vector_with_distances();
 
       auto* vector_with_id = vector_with_distance->mutable_vector_with_id();
-      vector_with_id->set_id(labels[i + (row * topk)]);
+      vector_with_id->set_id(labels[pos]);
       vector_with_id->mutable_vector()->set_dimension(dimension_);
       vector_with_id->mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
       if (metric_type_ == pb::common::MetricType::METRIC_TYPE_COSINE ||
           metric_type_ == pb::common::MetricType::METRIC_TYPE_INNER_PRODUCT) {
-        vector_with_distance->set_distance(1.0F - distances[i + (row * topk)]);
+        vector_with_distance->set_distance(1.0F - distances[pos]);
       } else {
-        vector_with_distance->set_distance(distances[i + (row * topk)]);
+        vector_with_distance->set_distance(distances[pos]);
       }
 
       vector_with_distance->set_metric_type(metric_type_);
+      if (!filters.empty() && count == topk) {
+        break;
+      }
     }
   }
 
