@@ -63,8 +63,8 @@ class VectorIndexHnsw : public VectorIndex {
   void UnlockWrite() override;
 
   butil::Status Search(std::vector<pb::common::VectorWithId> vector_with_ids, uint32_t topk,
-                       std::shared_ptr<FilterFunctor> filter, std::vector<pb::index::VectorWithDistanceResult>& results,
-                       bool reconstruct = false) override;
+                       std::vector<std::shared_ptr<FilterFunctor>> filters,
+                       std::vector<pb::index::VectorWithDistanceResult>& results, bool reconstruct = false) override;
 
   int32_t GetDimension() override;
   butil::Status GetCount([[maybe_unused]] uint64_t& count) override;

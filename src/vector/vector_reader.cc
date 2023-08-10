@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "common/helper.h"
 #include "fmt/core.h"
@@ -84,8 +85,9 @@ butil::Status VectorReader::SearchVector(
   uint64_t min_vector_id = VectorCodec::DecodeVectorId(region_range.start_key());
   uint64_t max_vector_id = VectorCodec::DecodeVectorId(region_range.end_key());
   DINGO_LOG(INFO) << fmt::format("vector id range [{}-{})", min_vector_id, max_vector_id);
-  auto filter = std::make_shared<VectorIndex::RangeFilterFunctor>(min_vector_id, max_vector_id);
-  vector_index->Search(vector_with_ids, top_n, filter, tmp_results, with_vector_data);
+  std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters;
+  filters.push_back(std::make_shared<VectorIndex::RangeFilterFunctor>(min_vector_id, max_vector_id));
+  vector_index->Search(vector_with_ids, top_n, filters, tmp_results, with_vector_data);
 
   if (use_scalar_filter) {
     // scalar post filter
