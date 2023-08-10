@@ -728,19 +728,28 @@ bool Helper::GetDiskCapacity(const std::string& path, std::map<std::string, uint
 // Not recursion
 std::vector<std::string> Helper::TraverseDirectory(const std::string& path) {
   std::vector<std::string> filenames;
-  for (const auto& fe : std::filesystem::directory_iterator(path)) {
-    filenames.push_back(fe.path().filename().string());
+  try {
+    for (const auto& fe : std::filesystem::directory_iterator(path)) {
+      filenames.push_back(fe.path().filename().string());
+    }
+  } catch (std::filesystem::filesystem_error const& ex) {
+    DINGO_LOG(ERROR) << fmt::format("directory_iterator failed, path: {} error: {}", path, ex.what());
   }
 
   return filenames;
 }
 
 std::string Helper::FindFileInDirectory(const std::string& dirpath, const std::string& prefix) {
-  for (const auto& fe : std::filesystem::directory_iterator(dirpath)) {
-    auto filename = fe.path().filename().string();
-    if (filename.find(prefix) != std::string::npos) {
-      return filename;
+  try {
+    for (const auto& fe : std::filesystem::directory_iterator(dirpath)) {
+      auto filename = fe.path().filename().string();
+      if (filename.find(prefix) != std::string::npos) {
+        return filename;
+      }
     }
+  } catch (std::filesystem::filesystem_error const& ex) {
+    DINGO_LOG(ERROR) << fmt::format("directory_iterator failed, path: {} prefix: {} error: {}", dirpath, prefix,
+                                    ex.what());
   }
 
   return "";
