@@ -108,6 +108,8 @@ class Constant {
   static const uint64_t kVectorIndexSaveSnapshotThresholdWriteKeyNum = 10000;
 
   static const uint32_t kLoadOrBuildVectorIndexConcurrency = 5;
+
+  static const uint32_t kBuildVectorIndexBatchSize = 4096;
 };
 
 }  // namespace dingodb
