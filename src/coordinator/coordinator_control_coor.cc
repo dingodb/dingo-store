@@ -41,7 +41,6 @@
 #include "proto/coordinator_internal.pb.h"
 #include "proto/error.pb.h"
 #include "proto/meta.pb.h"
-#include "serial/buf.h"
 
 namespace dingodb {
 

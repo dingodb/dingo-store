@@ -707,6 +707,14 @@ class CoordinatorControl : public MetaControl {
   butil::Status KvRange(const std::string &key, const std::string &range_end, int64_t limit, bool keys_only,
                         bool count_only, std::vector<pb::version::Kv> &kv, uint64_t &total_count_in_range);
 
+  // kv functions for internal use
+  // KvRange is the get function
+  // in:  key
+  // in:  range_end
+  // out: keys
+  // return: errno
+  butil::Status KvRangeRawKeys(const std::string &key, const std::string &range_end, std::vector<std::string> &keys);
+
   // KvPut is the put function
   // in:  key_value
   // in:  lease_id
@@ -743,8 +751,13 @@ class CoordinatorControl : public MetaControl {
   // KvDeleteRangeApply is the apply function for delete
   butil::Status KvDeleteApply(const std::string &key, const pb::coordinator_internal::RevisionInternal &op_revision);
 
+  // KvCompact is the compact function
+  butil::Status KvCompact(const std::vector<std::string> &keys,
+                          const pb::coordinator_internal::RevisionInternal &compact_revision);
+
   // KvCompactApply is the apply function for delete
-  butil::Status KvCompactApply(const std::string &key, const pb::coordinator_internal::RevisionInternal &op_revision);
+  butil::Status KvCompactApply(const std::string &key,
+                               const pb::coordinator_internal::RevisionInternal &compact_revision);
 
   // watch functions for api
   butil::Status OneTimeWatch(const std::string &watch_key, uint64_t start_revision, bool no_put_event,

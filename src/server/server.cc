@@ -52,6 +52,8 @@ DEFINE_string(coor_url, "",
 
 namespace dingodb {
 
+DECLARE_uint32(compaction_retention_rev_count);
+
 void Server::SetRole(pb::common::ClusterRole role) { role_ = role; }
 
 Server* Server::GetInstance() { return Singleton<Server>::get(); }
@@ -422,6 +424,14 @@ bool Server::InitCrontabManager() {
       DINGO_LOG(INFO) << "coordinator.compaction_interval_s illegal";
       return false;
     }
+    uint32_t compaction_retention_rev_count = config->GetInt("coordinator.compaction_retention_rev_count");
+    if (compaction_retention_rev_count <= 0) {
+      DINGO_LOG(INFO) << "coordinator.compaction_retention_rev_count illegal, use default value :"
+                      << FLAGS_compaction_retention_rev_count;
+    } else {
+      FLAGS_compaction_retention_rev_count = compaction_retention_rev_count;
+    }
+
     compaction_crontab->interval = compaction_interval_s * 1000;
     compaction_crontab->func = Heartbeat::TriggerCompactionTask;
     compaction_crontab->arg = nullptr;

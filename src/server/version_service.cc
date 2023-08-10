@@ -22,6 +22,7 @@
 #include <cstdio>
 #include <future>
 #include <optional>
+#include <string>
 #include <vector>
 
 #include "bthread/condition_variable.h"
@@ -581,6 +582,55 @@ void VersionServiceProtoImpl::KvDeleteRange(google::protobuf::RpcController* /*c
 
   // this is a async operation will be block by closure
   engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+}
+
+void VersionServiceProtoImpl::KvCompaction(google::protobuf::RpcController* /*controller*/,
+                                           const pb::version::CompactionRequest* request,
+                                           pb::version::CompactionResponse* response, google::protobuf::Closure* done) {
+  brpc::ClosureGuard done_guard(done);
+
+  auto is_leader = this->coordinator_control_->IsLeader();
+  DINGO_LOG(WARNING) << "Receive DeleteRange Request: IsLeader:" << is_leader
+                     << ", Request: " << request->DebugString();
+
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  if (request->key().empty()) {
+    response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errmsg("key is empty");
+    return;
+  }
+
+  std::vector<std::string> keys_to_compact;
+  uint64_t total_count_in_range = 0;
+  auto ret = coordinator_control_->KvRangeRawKeys(request->key(), request->range_end(), keys_to_compact);
+  if (!ret.ok()) {
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+  }
+
+  pb::coordinator_internal::RevisionInternal compact_revision;
+
+  if (keys_to_compact.empty()) {
+    DINGO_LOG(INFO) << "No keys to compact: key=" << request->key() << ", end_key=" << request->range_end();
+    return;
+  }
+  response->set_compaction_count(keys_to_compact.size());
+
+  std::vector<pb::version::Kv> prev_kvs;
+
+  compact_revision.set_main(request->compact_revision());
+  ret = coordinator_control_->KvCompact(keys_to_compact, compact_revision);
+  if (!ret.ok()) {
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    DINGO_LOG(ERROR) << "Compaction failed: key=" << request->key() << ", end_key=" << request->range_end();
+    return;
+  }
+
+  DINGO_LOG(INFO) << "Compaction success: key=" << request->key() << ", end_key=" << request->range_end();
 }
 
 void VersionServiceProtoImpl::Watch(google::protobuf::RpcController* controller,

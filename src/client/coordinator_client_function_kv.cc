@@ -134,3 +134,26 @@ void SendCoorKvDeleteRange(std::shared_ptr<dingodb::CoordinatorInteraction> coor
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG_INFO << response.DebugString();
 }
+
+void SendCoorKvCompaction(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  dingodb::pb::version::CompactionRequest request;
+  dingodb::pb::version::CompactionResponse response;
+
+  if (FLAGS_key.empty()) {
+    DINGO_LOG(WARNING) << "key is empty, please input key";
+    return;
+  }
+
+  if (FLAGS_revision == 0) {
+    DINGO_LOG(WARNING) << "revision is empty, please input revision";
+    return;
+  }
+
+  request.set_key(FLAGS_key);
+  request.set_range_end(FLAGS_range_end);
+  request.set_compact_revision(FLAGS_revision);
+
+  auto status = coordinator_interaction->SendRequest("KvCompaction", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG_INFO << response.DebugString();
+}
