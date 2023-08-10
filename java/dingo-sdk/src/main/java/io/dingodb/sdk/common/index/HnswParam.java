@@ -20,6 +20,7 @@ import lombok.*;
 
 @Getter
 @ToString
+@EqualsAndHashCode
 @NoArgsConstructor
 @AllArgsConstructor
 public class HnswParam {

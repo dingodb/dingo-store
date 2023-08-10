@@ -612,11 +612,11 @@ public class EntityConversion {
                 VectorIndexParameter.MetricType.valueOf(distance.getMetricType().name()));
     }
 
-    public static Store.Coprocessor mapping(Coprocessor coprocessor) {
+    public static Store.Coprocessor mapping(Coprocessor coprocessor, DingoCommonId regionId) {
         return Store.Coprocessor.newBuilder()
                 .setSchemaVersion(coprocessor.getSchemaVersion())
-                .setOriginalSchema(mapping(coprocessor.getOriginalSchema()))
-                .setResultSchema(mapping(coprocessor.getResultSchema()))
+                .setOriginalSchema(mapping(coprocessor.getOriginalSchema(), regionId.parentId()))
+                .setResultSchema(mapping(coprocessor.getResultSchema(), coprocessor.getResultSchema().getCommonId()))
                 .addAllSelectionColumns(coprocessor.getSelection())
                 .setExpression(ByteString.copyFrom(coprocessor.getExpression()))
                 .addAllGroupByColumns(coprocessor.getGroupBy())
@@ -626,12 +626,12 @@ public class EntityConversion {
                 .build();
     }
 
-    public static Store.Coprocessor.SchemaWrapper mapping(Coprocessor.SchemaWrapper schemaWrapper) {
+    public static Store.Coprocessor.SchemaWrapper mapping(Coprocessor.SchemaWrapper schemaWrapper, long schemaId) {
         return Store.Coprocessor.SchemaWrapper.newBuilder()
                 .addAllSchema(CodecUtils.createSchemaForColumns(schemaWrapper.getSchemas()).stream()
                         .map(EntityConversion::mapping)
                         .collect(Collectors.toList()))
-                .setCommonId(schemaWrapper.getCommonId())
+                .setCommonId(schemaId)
                 .build();
     }
 

@@ -16,12 +16,14 @@
 
 package io.dingodb.sdk.common.index;
 
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.ToString;
 
 @Getter
 @ToString
+@EqualsAndHashCode
 @NoArgsConstructor
 public class VectorIndexParameter {
 

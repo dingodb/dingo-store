@@ -527,7 +527,7 @@ public class MetaServiceClient {
                 .setCount(Meta.TableWithPartCount.newBuilder()
                         .setHasTable(false)
                         .setIndexCount(1)
-                        .setIndexPartCount(0, index.getIndexPartition().getDetails().size() + 1)
+                        .addAllIndexPartCount(new ArrayList<>(index.getIndexPartition().getDetails().size() + 1))
                         .build())
                 .build();
 
