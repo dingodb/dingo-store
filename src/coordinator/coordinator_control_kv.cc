@@ -42,6 +42,7 @@ namespace dingodb {
 DEFINE_uint32(max_kv_key_size, 4096, "max kv put count");
 DEFINE_uint32(max_kv_value_size, 4096, "max kv put count");
 DEFINE_uint32(compaction_retention_rev_count, 1000, "max revision count retention for compaction");
+DEFINE_bool(auto_compaction, false, "auto compaction on/off");
 
 std::string CoordinatorControl::RevisionToString(const pb::coordinator_internal::RevisionInternal &revision) {
   Buf buf(17);
@@ -804,6 +805,11 @@ butil::Status CoordinatorControl::KvDeleteApply(const std::string &key,
 
 void CoordinatorControl::CompactionTask() {
   DINGO_LOG(INFO) << "compaction task start";
+
+  if (!FLAGS_auto_compaction) {
+    DINGO_LOG(INFO) << "compaction task skip, auto_compaction is false";
+    return;
+  }
 
   // get all keys in kv_index_map_
   std::vector<std::string> keys;
