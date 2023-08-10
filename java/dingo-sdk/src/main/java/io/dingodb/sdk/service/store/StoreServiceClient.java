@@ -157,7 +157,7 @@ public class StoreServiceClient {
         Coprocessor coprocessor
     ) {
         return new ScanIterator(getStoreConnector(tableId, regionId),
-                regionId.entityId(),
+                regionId,
                 Common.RangeWithOptions.newBuilder()
                     .setRange(
                         Common.Range.newBuilder()

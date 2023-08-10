@@ -17,17 +17,20 @@
 package io.dingodb.sdk.common.index;
 
 import lombok.AllArgsConstructor;
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.ToString;
 
 @Getter
 @ToString
+@EqualsAndHashCode
 @AllArgsConstructor
 public class ScalarIndexParameter {
 
     private ScalarIndexType scalarIndexType;
     private boolean isUnique;
 
+    @ToString
     public enum ScalarIndexType {
         SCALAR_INDEX_TYPE_NONE,
         SCALAR_INDEX_TYPE_LSM,
