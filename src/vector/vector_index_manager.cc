@@ -389,8 +389,9 @@ std::shared_ptr<VectorIndex> VectorIndexManager::BuildVectorIndex(store::RegionP
 
   auto iter = raw_engine_->NewIterator(Constant::kStoreDataCF, options);
   uint64_t count = 0;
+  std::vector<pb::common::VectorWithId> vectors;
+  vectors.reserve(Constant::kBuildVectorIndexBatchSize);
   for (iter->Seek(start_key); iter->Valid(); iter->Next()) {
-    ++count;
     pb::common::VectorWithId vector;
 
     std::string key(iter->Key());
@@ -407,9 +408,16 @@ std::shared_ptr<VectorIndex> VectorIndexManager::BuildVectorIndex(store::RegionP
       continue;
     }
 
-    std::vector<pb::common::VectorWithId> vectors;
-    vectors.push_back(vector);
+    ++count;
 
+    vectors.push_back(vector);
+    if (count + 1 % Constant::kBuildVectorIndexBatchSize == 0) {
+      vector_index->Upsert(vectors);
+      vectors.clear();
+    }
+  }
+
+  if (!vectors.empty()) {
     vector_index->Upsert(vectors);
   }
 

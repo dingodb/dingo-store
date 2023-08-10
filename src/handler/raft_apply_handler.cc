@@ -341,7 +341,6 @@ void SplitHandler::SplitClosure::Run() {
   if (is_child_) {
     if (status().ok()) {
       if (region_->Type() == pb::common::INDEX_REGION) {
-        // Server::GetInstance()->GetVectorIndexManager()->AsyncRebuildVectorIndex(region_, true);
         LaunchRebuildVectorIndex(region_->Id());
       }
 
@@ -350,7 +349,6 @@ void SplitHandler::SplitClosure::Run() {
 
   } else {
     if (region_->Type() == pb::common::INDEX_REGION) {
-      // Server::GetInstance()->GetVectorIndexManager()->AsyncRebuildVectorIndex(region_, true);
       LaunchRebuildVectorIndex(region_->Id());
     }
 
@@ -379,6 +377,17 @@ void SplitHandler::Handle(std::shared_ptr<Context>, store::RegionPtr from_region
     return;
   }
 
+  if (to_region->Type() == pb::common::INDEX_REGION) {
+    // Set child share vector index
+    auto vector_index = Server::GetInstance()->GetVectorIndexManager()->GetVectorIndex(from_region->Id());
+    if (vector_index != nullptr) {
+      to_region->SetShareVectorIndex(vector_index);
+    } else {
+      DINGO_LOG(ERROR) << fmt::format("split region get vector index failed, region {}", from_region->Id());
+      return;
+    }
+  }
+
   // Set region state spliting
   store_region_meta->UpdateState(from_region, pb::common::StoreRegionState::SPLITTING);
 
@@ -390,16 +399,6 @@ void SplitHandler::Handle(std::shared_ptr<Context>, store::RegionPtr from_region
     to_range.set_end_key(from_region->RawRange().end_key());
   }
   Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->UpdateRange(to_region, to_range);
-
-  if (to_region->Type() == pb::common::INDEX_REGION) {
-    // Set child share vector index
-    auto vector_index = Server::GetInstance()->GetVectorIndexManager()->GetVectorIndex(from_region->Id());
-    if (vector_index != nullptr) {
-      to_region->SetShareVectorIndex(vector_index);
-    } else {
-      DINGO_LOG(ERROR) << fmt::format("split region get vector index failed, region {}", from_region->Id());
-    }
-  }
 
   // Set parent range
   pb::common::Range from_range;
