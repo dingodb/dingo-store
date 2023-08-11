@@ -25,6 +25,7 @@
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "common/service_access.h"
 #include "config/config_manager.h"
 #include "event/store_state_machine_event.h"
 #include "fmt/core.h"
@@ -313,6 +314,28 @@ butil::Status SplitRegionTask::ValidateSplitRegion(std::shared_ptr<StoreRegionMe
     if (!node->IsLeader()) {
       return butil::Status(pb::error::ERAFT_NOTLEADER, node->GetLeaderId().to_string());
     }
+
+    // Check follower whether hold vector index.
+    auto self_peer = node->GetPeerId();
+    std::vector<braft::PeerId> peers;
+    node->ListPeers(&peers);
+    for (const auto& peer : peers) {
+      if (peer != self_peer) {
+        pb::node::CheckVectorIndexRequest request;
+        request.set_vector_index_id(parent_region_id);
+        pb::node::CheckVectorIndexResponse response;
+        auto status = ServiceAccess::CheckVectorIndex(request, peer.addr, response);
+        if (!status.ok()) {
+          DINGO_LOG(ERROR) << fmt::format("Check peer {} hold vector index {} failed, error: {}",
+                                          Helper::EndPointToStr(peer.addr), parent_region_id, status.error_str());
+        }
+
+        if (!response.is_exist()) {
+          return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "Not found vector index %lu at peer %s",
+                               parent_region_id, Helper::EndPointToStr(peer.addr));
+        }
+      }
+    }
   }
 
   return butil::Status();
@@ -327,7 +350,6 @@ butil::Status SplitRegionTask::SplitRegion() {
   }
 
   // Commit raft log
-
   ctx_->SetRegionId(region_cmd_->split_request().split_from_region_id());
   return Server::GetInstance()->GetEngine()->AsyncWrite(ctx_,
                                                         WriteDataBuilder::BuildWrite(region_cmd_->split_request()),
