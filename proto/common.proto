@@ -594,7 +594,6 @@ message VectorSearchParameter {
 
   // vector id array vector_filter == VECTOR_ID_FILTER enable vector_ids
   repeated uint64 vector_ids = 24;
-
 }
 
 enum ScalarIndexType {
@@ -728,6 +727,7 @@ message RegionMetrics {
   bytes max_key = 13;       // the max key of this region now exist
   uint64 region_size = 14;  // the bytes size of this region
 
+  bool is_hold_vector_index = 29;                // is hold vector index
   VectorIndexMetrics vector_index_metrics = 30;  // vector index  metrics
 }
 
