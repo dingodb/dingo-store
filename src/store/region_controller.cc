@@ -332,7 +332,7 @@ butil::Status SplitRegionTask::ValidateSplitRegion(std::shared_ptr<StoreRegionMe
 
         if (!response.is_exist()) {
           return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "Not found vector index %lu at peer %s",
-                               parent_region_id, Helper::EndPointToStr(peer.addr));
+                               parent_region_id, Helper::EndPointToStr(peer.addr).c_str());
         }
       }
     }

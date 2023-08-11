@@ -131,7 +131,6 @@ VectorIndexHnsw::VectorIndexHnsw(uint64_t id, const pb::common::VectorIndexParam
                                  uint64_t save_snapshot_threshold_write_key_num)
     : VectorIndex(id, vector_index_parameter, save_snapshot_threshold_write_key_num) {
   bthread_mutex_init(&mutex_, nullptr);
-  is_online_.store(true);
   hnsw_num_threads_ = std::thread::hardware_concurrency();
 
   if (vector_index_type == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
@@ -177,13 +176,6 @@ butil::Status VectorIndexHnsw::Add(const std::vector<pb::common::VectorWithId>& 
 }
 
 butil::Status VectorIndexHnsw::Upsert(const std::vector<pb::common::VectorWithId>& vector_with_ids) {
-  // check is_online
-  if (!is_online_.load()) {
-    std::string s = fmt::format("vector index is offline, please wait for online");
-    DINGO_LOG(ERROR) << s;
-    return butil::Status(pb::error::Errno::EVECTOR_INDEX_OFFLINE, s);
-  }
-
   if (vector_with_ids.empty()) {
     DINGO_LOG(WARNING) << "upsert vector empty";
     return butil::Status::OK();
@@ -235,13 +227,6 @@ butil::Status VectorIndexHnsw::Upsert(const std::vector<pb::common::VectorWithId
 }
 
 butil::Status VectorIndexHnsw::Delete(const std::vector<uint64_t>& delete_ids) {
-  // check is_online
-  if (!is_online_.load()) {
-    std::string s = fmt::format("vector index is offline, please wait for online");
-    DINGO_LOG(ERROR) << s;
-    return butil::Status(pb::error::Errno::EVECTOR_INDEX_OFFLINE, s);
-  }
-
   if (delete_ids.empty()) {
     DINGO_LOG(WARNING) << "delete ids is empty";
     return butil::Status::OK();
@@ -292,13 +277,6 @@ butil::Status VectorIndexHnsw::Load(const std::string& path) {
 butil::Status VectorIndexHnsw::Search(std::vector<pb::common::VectorWithId> vector_with_ids, uint32_t topk,
                                       std::vector<std::shared_ptr<FilterFunctor>> filters,
                                       std::vector<pb::index::VectorWithDistanceResult>& results, bool reconstruct) {
-  // check is_online
-  if (!is_online_.load()) {
-    std::string s = fmt::format("vector index is offline, please wait for online");
-    DINGO_LOG(ERROR) << s;
-    return butil::Status(pb::error::Errno::EVECTOR_INDEX_OFFLINE, s);
-  }
-
   if (vector_with_ids.empty()) {
     DINGO_LOG(WARNING) << "vector_with_ids is empty";
     return butil::Status::OK();
@@ -431,18 +409,6 @@ butil::Status VectorIndexHnsw::Search(std::vector<pb::common::VectorWithId> vect
 
   return butil::Status::OK();
 }
-
-butil::Status VectorIndexHnsw::SetOnline() {
-  is_online_.store(true);
-  return butil::Status::OK();
-}
-
-butil::Status VectorIndexHnsw::SetOffline() {
-  is_online_.store(false);
-  return butil::Status::OK();
-}
-
-bool VectorIndexHnsw::IsOnline() { return is_online_.load(); }
 
 void VectorIndexHnsw::LockWrite() { bthread_mutex_lock(&mutex_); }
 
