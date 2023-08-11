@@ -25,8 +25,10 @@
 #include <string>
 #include <vector>
 
+#include "bthread/types.h"
 #include "butil/status.h"
 #include "common/logging.h"
+#include "common/synchronization.h"
 #include "hnswlib/space_ip.h"
 #include "hnswlib/space_l2.h"
 #include "proto/common.pb.h"
@@ -105,10 +107,6 @@ class VectorIndex {
                                std::vector<pb::index::VectorWithDistanceResult>& results,
                                [[maybe_unused]] bool reconstruct = false) = 0;
 
-  virtual butil::Status SetOnline() = 0;
-  virtual butil::Status SetOffline() = 0;
-  virtual bool IsOnline() = 0;
-
   virtual void LockWrite() = 0;
   virtual void UnlockWrite() = 0;
 
@@ -121,6 +119,17 @@ class VectorIndex {
   void SetStatus(pb::common::RegionVectorIndexStatus status) {
     if (this->status.load() != pb::common::VECTOR_INDEX_STATUS_DELETE) {
       this->status.store(status);
+    }
+  }
+
+  uint64_t SwitchingRegionId() { return switching_region_id.load(); }
+
+  void SetSwitchingRegionId(uint64_t expected, uint64_t switching_region_id) {
+    while (!this->switching_region_id.compare_exchange_weak(expected, switching_region_id)) {
+      switching_cond->IncreaseWait();
+    }
+    if (switching_cond->Count() > 0) {
+      switching_cond->DecreaseSignal();
     }
   }
 
@@ -145,6 +154,11 @@ class VectorIndex {
 
   // control do snapshot concurrency
   std::atomic<bool> snapshot_doing;
+
+  // current switching region id
+  std::atomic<uint64_t> switching_region_id;
+  // protect switching_region_id
+  std::shared_ptr<BthreadCond> switching_cond;
 
   // apply max log index
   std::atomic<uint64_t> apply_log_index;

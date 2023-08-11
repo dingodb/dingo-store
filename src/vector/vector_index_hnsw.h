@@ -55,10 +55,6 @@ class VectorIndexHnsw : public VectorIndex {
   butil::Status Save(const std::string& path) override;
   butil::Status Load(const std::string& path) override;
 
-  butil::Status SetOnline() override;
-  butil::Status SetOffline() override;
-  bool IsOnline() override;
-
   void LockWrite() override;
   void UnlockWrite() override;
 
@@ -95,7 +91,6 @@ class VectorIndexHnsw : public VectorIndex {
   uint32_t dimension_;
 
   bthread_mutex_t mutex_;
-  std::atomic<bool> is_online_;
 
   // normalize vector
   bool normalize_;

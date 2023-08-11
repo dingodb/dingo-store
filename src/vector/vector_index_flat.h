@@ -68,10 +68,6 @@ class VectorIndexFlat : public VectorIndex {
                        std::vector<std::shared_ptr<FilterFunctor>> filters,
                        std::vector<pb::index::VectorWithDistanceResult>& results, bool reconstruct = false) override;
 
-  butil::Status SetOnline() override;
-  butil::Status SetOffline() override;
-  bool IsOnline() override;
-
   void LockWrite() override;
   void UnlockWrite() override;
 
@@ -100,7 +96,6 @@ class VectorIndexFlat : public VectorIndex {
   std::unique_ptr<faiss::IndexIDMap2> index_;
 
   bthread_mutex_t mutex_;
-  std::atomic<bool> is_online_;
 
   // normalize vector
   bool normalize_;

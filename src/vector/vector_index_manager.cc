@@ -472,11 +472,6 @@ static butil::Status CheckRebuildStatus(std::shared_ptr<VectorIndex> vector_inde
     return butil::Status::OK();
   }
 
-  if (!vector_index->IsOnline()) {
-    DINGO_LOG(WARNING) << fmt::format("online_vector_index is not online, skip rebuild, id {}", vector_index->Id());
-    return butil::Status(pb::error::Errno::EINTERNAL, "online_vector_index is not online, skip rebuild");
-  }
-
   if (vector_index->Status() != pb::common::VECTOR_INDEX_STATUS_NORMAL &&
       vector_index->Status() != pb::common::VECTOR_INDEX_STATUS_ERROR &&
       vector_index->Status() != pb::common::VECTOR_INDEX_STATUS_NONE) {
@@ -498,7 +493,7 @@ butil::Status VectorIndexManager::RebuildVectorIndex(store::RegionPtr region, bo
   DINGO_LOG(INFO) << fmt::format("Rebuild vector index id {}", vector_index_id);
 
   // check rebuild status
-  auto online_vector_index = GetVectorIndex(vector_index_id);
+  auto online_vector_index = GetVectorIndex(region);
   auto status = CheckRebuildStatus(online_vector_index);
   if (!status.ok()) {
     return status;
@@ -553,34 +548,42 @@ butil::Status VectorIndexManager::RebuildVectorIndex(store::RegionPtr region, bo
 
   // set online_vector_index to offline, so it will reject all vector add/del, raft handler will usleep and try to
   // switch to new vector_index to add/del
-  // if (online_vector_index != nullptr) {
-  //   online_vector_index->SetOffline();
-  // }
-
-  start_time = Helper::TimestampMs();
-  // second ground replay wal
-  status = ReplayWalToVectorIndex(vector_index, vector_index->ApplyLogIndex() + 1, UINT64_MAX);
-  if (!status.ok()) {
-    DINGO_LOG(ERROR) << fmt::format("ReplayWal failed catch-up round, id {}, log_id {}", vector_index_id,
-                                    vector_index->ApplyLogIndex());
-    return status;
+  if (online_vector_index != nullptr) {
+    online_vector_index->SetSwitchingRegionId(0, region->Id());
   }
-  // set the new vector_index's status to NORMAL
-  vector_index->SetStatus(pb::common::VECTOR_INDEX_STATUS_NORMAL);
 
-  DINGO_LOG(INFO) << fmt::format("ReplayWal success catch-up round, id {}, log_id {} elapsed time: {}ms",
-                                 vector_index_id, vector_index->ApplyLogIndex(), Helper::TimestampMs() - start_time);
+  {
+    ON_SCOPE_EXIT([&]() {
+      if (online_vector_index != nullptr) {
+        online_vector_index->SetSwitchingRegionId(region->Id(), 0);
+      }
+    });
 
-  // set vector index to vector index map
-  bool ret = AddVectorIndex(vector_index, false);
-  if (!ret) {
-    DINGO_LOG(ERROR) << fmt::format(
-        "ReplayWal catch-up round finish, but online_vector_index maybe delete by others, so stop to update "
-        "vector_indexes map, id {}, log_id {}",
-        vector_index_id, vector_index->ApplyLogIndex());
-    return butil::Status(pb::error::Errno::EINTERNAL,
-                         "ReplayWal catch-up round finish, but online_vector_index "
-                         "maybe delete by others, so stop to update vector_indexes map");
+    start_time = Helper::TimestampMs();
+    // second ground replay wal
+    status = ReplayWalToVectorIndex(vector_index, vector_index->ApplyLogIndex() + 1, UINT64_MAX);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << fmt::format("ReplayWal failed catch-up round, id {}, log_id {}", vector_index_id,
+                                      vector_index->ApplyLogIndex());
+      return status;
+    }
+    // set the new vector_index's status to NORMAL
+    vector_index->SetStatus(pb::common::VECTOR_INDEX_STATUS_NORMAL);
+
+    DINGO_LOG(INFO) << fmt::format("ReplayWal success catch-up round, id {}, log_id {} elapsed time: {}ms",
+                                   vector_index_id, vector_index->ApplyLogIndex(), Helper::TimestampMs() - start_time);
+
+    // set vector index to vector index map
+    bool ret = AddVectorIndex(vector_index, false);
+    if (!ret) {
+      DINGO_LOG(ERROR) << fmt::format(
+          "ReplayWal catch-up round finish, but online_vector_index maybe delete by others, so stop to update "
+          "vector_indexes map, id {}, log_id {}",
+          vector_index_id, vector_index->ApplyLogIndex());
+      return butil::Status(pb::error::Errno::EINTERNAL,
+                           "ReplayWal catch-up round finish, but online_vector_index "
+                           "maybe delete by others, so stop to update vector_indexes map");
+    }
   }
 
   // Reset region share vector index id.

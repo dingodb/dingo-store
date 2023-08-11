@@ -528,17 +528,8 @@ void VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr reg
       stop_flag = true;
 
       try {
-        auto start = std::chrono::steady_clock::now();
-
-        auto ret = vector_index->Upsert(vector_with_ids);
-
-        auto end = std::chrono::steady_clock::now();
-
-        auto diff = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-        DINGO_LOG(INFO) << fmt::format("vector index {} upsert {} vectors, cost {}us", vector_index_id,
-                                       vector_with_ids.size(), diff);
-
-        if (ret.error_code() == pb::error::Errno::EVECTOR_INDEX_OFFLINE) {
+        uint64_t switching_region_id = vector_index->SwitchingRegionId();
+        if (switching_region_id == region->Id()) {
           // do not stop while, wait for a while and retry full raft log
           stop_flag = false;
 
@@ -550,7 +541,20 @@ void VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr reg
             set_ctx_status(status);
             return;
           }
-        } else if (ret.error_code() == pb::error::Errno::EVECTOR_INDEX_FULL) {
+          continue;
+        }
+
+        auto start = std::chrono::steady_clock::now();
+
+        auto ret = vector_index->Upsert(vector_with_ids);
+
+        auto end = std::chrono::steady_clock::now();
+
+        auto diff = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+        DINGO_LOG(INFO) << fmt::format("vector index {} upsert {} vectors, cost {}us", vector_index_id,
+                                       vector_with_ids.size(), diff);
+
+        if (ret.error_code() == pb::error::Errno::EVECTOR_INDEX_FULL) {
           DINGO_LOG(INFO) << fmt::format("vector index {} is full", vector_index_id);
           status = butil::Status(pb::error::EVECTOR_INDEX_FULL, "Vector index %lu is full", vector_index_id);
         } else if (!ret.ok()) {
@@ -702,8 +706,8 @@ void VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr 
 
       // delete vector from index
       try {
-        auto ret = vector_index->Delete(delete_ids);
-        if (ret.error_code() == pb::error::Errno::EVECTOR_INDEX_OFFLINE) {
+        uint64_t switching_region_id = vector_index->SwitchingRegionId();
+        if (switching_region_id == region->Id()) {
           // do not stop while, wait for a while and retry full raft log
           stop_flag = false;
 
@@ -715,7 +719,11 @@ void VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr 
             set_ctx_status(status);
             return;
           }
-        } else if (ret.error_code() == pb::error::Errno::EVECTOR_NOT_FOUND) {
+          continue;
+        }
+
+        auto ret = vector_index->Delete(delete_ids);
+        if (ret.error_code() == pb::error::Errno::EVECTOR_NOT_FOUND) {
           DINGO_LOG(ERROR) << fmt::format("vector not found at vector index {}, vector_count={}, err={}",
                                           vector_index_id, delete_ids.size(), ret.error_str());
         } else if (!ret.ok()) {
