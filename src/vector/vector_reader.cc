@@ -493,7 +493,8 @@ butil::Status VectorReader::GetBorderId(const pb::common::Range& region_range, b
 
     iter->Seek(start_key);
     if (!iter->Valid()) {
-      return butil::Status(pb::error::Errno::EINTERNAL, "Seek start_key failed");
+      vector_id = 0;
+      return butil::Status();
     }
 
     std::string key(iter->Key());
@@ -510,7 +511,8 @@ butil::Status VectorReader::GetBorderId(const pb::common::Range& region_range, b
     }
     iter->SeekForPrev(end_key);
     if (!iter->Valid()) {
-      return butil::Status(pb::error::Errno::EINTERNAL, "Seek end_key failed");
+      vector_id = 0;
+      return butil::Status();
     }
 
     std::string key(iter->Key());
