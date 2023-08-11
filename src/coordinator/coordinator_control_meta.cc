@@ -29,6 +29,7 @@
 #include "coordinator/auto_increment_control.h"
 #include "coordinator/coordinator_control.h"
 #include "proto/common.pb.h"
+#include "proto/coordinator.pb.h"
 #include "proto/coordinator_internal.pb.h"
 #include "proto/error.pb.h"
 #include "proto/meta.pb.h"
@@ -2519,6 +2520,69 @@ butil::Status CoordinatorControl::RemoveTableIndex(uint64_t table_id, uint64_t i
     table_index_increment->set_op_type(pb::coordinator_internal::MetaIncrementOpType::UPDATE);
   } else {
     DINGO_LOG(WARNING) << "cannot find index, table_id: " << table_id << ", index_id: " << index_id;
+  }
+
+  return butil::Status::OK();
+}
+
+// SwitchAutoSplit
+// in: schema_id
+// in: table_id
+// in: auto_split
+// out: meta_increment
+butil::Status CoordinatorControl::SwitchAutoSplit(uint64_t schema_id, uint64_t table_id, bool auto_split,
+                                                  pb::coordinator_internal::MetaIncrement& meta_increment) {
+  if (schema_id < 0) {
+    DINGO_LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "schema_id illegal");
+  }
+
+  pb::coordinator_internal::TableInternal table_internal;
+  if (!ValidateSchema(schema_id)) {
+    DINGO_LOG(ERROR) << "ERRROR: schema_id not found" << schema_id;
+    return butil::Status(pb::error::Errno::ESCHEMA_NOT_FOUND, "schema_id not found");
+  }
+  {
+    pb::coordinator_internal::TableInternal table_internal_tmp;
+    int ret = table_map_.Get(table_id, table_internal_tmp);
+    if (ret > 0) {
+      table_internal = table_internal_tmp;
+    } else {
+      ret = index_map_.Get(table_id, table_internal_tmp);
+      if (ret > 0) {
+        table_internal = table_internal_tmp;
+      } else {
+        DINGO_LOG(ERROR) << "ERRROR: table_id not found" << table_id;
+        return butil::Status(pb::error::Errno::ETABLE_NOT_FOUND, "table_id not found");
+      }
+    }
+  }
+
+  for (int i = 0; i < table_internal.partitions_size(); i++) {
+    uint64_t region_id = table_internal.partitions(i).region_id();
+
+    // get region
+    pb::common::Region part_region;
+    int ret = region_map_.Get(region_id, part_region);
+    if (ret < 0) {
+      DINGO_LOG(ERROR) << fmt::format("ERROR cannot find region in regionmap_ while GetTable, table_id={} region_id={}",
+                                      table_id, region_id);
+      continue;
+    }
+
+    // send region_cmd to update auto_split
+    auto* store_operation_increment = meta_increment.add_store_operations();
+    store_operation_increment->set_id(part_region.leader_store_id());
+    store_operation_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
+    auto* increment_store_operation = store_operation_increment->mutable_store_operation();
+    increment_store_operation->set_id(part_region.leader_store_id());
+    auto* region_cmd = increment_store_operation->add_region_cmds();
+    region_cmd->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
+    region_cmd->set_region_id(region_id);
+    region_cmd->set_region_cmd_type(pb::coordinator::RegionCmdType::CMD_SWITCH_SPLIT);
+    region_cmd->set_create_timestamp(butil::gettimeofday_ms());
+    region_cmd->mutable_switch_split_request()->set_region_id(region_id);
+    region_cmd->mutable_switch_split_request()->set_disable_split(!auto_split);
   }
 
   return butil::Status::OK();

@@ -107,6 +107,7 @@ DEFINE_bool(is_reverse, false, "is_revers");
 DEFINE_string(scalar_filter_key, "", "Request scalar_filter_key");
 DEFINE_string(scalar_filter_value, "", "Request scalar_filter_value");
 DEFINE_int32(ttl, 0, "ttl");
+DEFINE_bool(auto_split, false, "auto split");
 
 DEFINE_string(alg_type, "faiss", "use alg type. such as faiss or hnsw");
 DEFINE_string(metric_type, "L2", "metric type. such as L2 or IP or cosine");
@@ -592,6 +593,8 @@ int CoordinatorSender() {
     SendGetTableRange(coordinator_interaction_meta);
   } else if (FLAGS_method == "GetTableMetrics") {
     SendGetTableMetrics(coordinator_interaction_meta);
+  } else if (FLAGS_method == "SwitchAutoSplit") {
+    SendSwitchAutoSplit(coordinator_interaction_meta);
   }
 
   // indexes

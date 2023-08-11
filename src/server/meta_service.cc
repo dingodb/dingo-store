@@ -38,7 +38,7 @@ void MetaServiceImpl::TableDefinitionToIndexDefinition(const pb::meta::TableDefi
   index_definition.mutable_index_partition()->CopyFrom(table_definition.table_partition());
   index_definition.set_replica(table_definition.replica());
   index_definition.mutable_index_parameter()->CopyFrom(table_definition.index_parameter());
-  index_definition.set_with_auto_incrment(table_definition.auto_increment() > 0 ? true : false);
+  index_definition.set_with_auto_incrment(table_definition.auto_increment() > 0);
   index_definition.set_auto_increment(table_definition.auto_increment());
 }
 
@@ -1287,8 +1287,9 @@ void MetaServiceImpl::CreateTables(google::protobuf::RpcController *controller,
   DINGO_LOG(INFO) << "CreateTables Success.";
 }
 
-void MetaServiceImpl::GetTables(google::protobuf::RpcController *controller, const pb::meta::GetTablesRequest *request,
-                                pb::meta::GetTablesResponse *response, google::protobuf::Closure *done) {
+void MetaServiceImpl::GetTables(google::protobuf::RpcController * /*controller*/,
+                                const pb::meta::GetTablesRequest *request, pb::meta::GetTablesResponse *response,
+                                google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
 
   if (!coordinator_control_->IsLeader()) {
@@ -1366,6 +1367,44 @@ void MetaServiceImpl::DropTables(google::protobuf::RpcController *controller,
   engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
 
   DINGO_LOG(INFO) << "DropTables Success.";
+}
+
+void MetaServiceImpl::SwitchAutoSplit(google::protobuf::RpcController *controller,
+                                      const ::dingodb::pb::meta::SwitchAutoSplitRequest *request,
+                                      pb::meta::SwitchAutoSplitResponse *response, google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!coordinator_control_->IsLeader()) {
+    return RedirectResponse(response);
+  }
+
+  DINGO_LOG(INFO) << request->DebugString();
+
+  butil::Status ret;
+  pb::coordinator_internal::MetaIncrement meta_increment;
+  ret = coordinator_control_->SwitchAutoSplit(request->table_id().parent_entity_id(), request->table_id().entity_id(),
+                                              request->auto_split(), meta_increment);
+
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "switch auto split failed, auto_split: " << request->auto_split();
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    return;
+  }
+
+  // prepare for raft process
+  CoordinatorClosure<pb::meta::SwitchAutoSplitRequest, pb::meta::SwitchAutoSplitResponse> *meta_put_closure =
+      new CoordinatorClosure<pb::meta::SwitchAutoSplitRequest, pb::meta::SwitchAutoSplitResponse>(request, response,
+                                                                                                  done_guard.release());
+
+  std::shared_ptr<Context> ctx =
+      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
+  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+
+  // this is a async operation will be block by closure
+  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+
+  DINGO_LOG(INFO) << "SwitchAutoSplit Success.";
 }
 
 }  // namespace dingodb

@@ -29,6 +29,7 @@ DECLARE_int32(timeout_ms);
 DECLARE_string(id);
 DECLARE_string(name);
 DECLARE_int64(schema_id);
+DECLARE_int64(table_id);
 DECLARE_int64(replica);
 DECLARE_int64(max_elements);
 DECLARE_int64(dimension);
@@ -36,6 +37,7 @@ DECLARE_int64(efconstruction);
 DECLARE_int64(nlinks);
 DECLARE_bool(with_auto_increment);
 DECLARE_string(vector_index_type);
+DECLARE_bool(auto_split);
 
 void SendGetSchemas(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
   dingodb::pb::meta::GetSchemasRequest request;
@@ -974,6 +976,32 @@ void SendDropTables(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator
   table_id->set_entity_id(std::stol(FLAGS_id));
 
   auto status = coordinator_interaction->SendRequest("DropTables", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG(INFO) << "RESPONSE =" << response.DebugString();
+}
+
+void SendSwitchAutoSplit(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  dingodb::pb::meta::SwitchAutoSplitRequest request;
+  dingodb::pb::meta::SwitchAutoSplitResponse response;
+
+  auto* table_id = request.mutable_table_id();
+  table_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
+  table_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+  if (FLAGS_id.empty()) {
+    DINGO_LOG(WARNING) << "id is empty, please provides --schema-id=xxx --id=xxx and --auto_split=true/false";
+    return;
+  }
+  if (FLAGS_schema_id == 0) {
+    DINGO_LOG(WARNING) << "schema-id is empty, please provides --schema-id=xxx --id=xxx and --auto_split=true/false";
+    return;
+  }
+
+  table_id->set_parent_entity_id(FLAGS_schema_id);
+  table_id->set_entity_id(std::stol(FLAGS_id));
+
+  request.set_auto_split(FLAGS_auto_split);
+
+  auto status = coordinator_interaction->SendRequest("SwitchAutoSplit", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << "RESPONSE =" << response.DebugString();
 }
