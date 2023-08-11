@@ -2398,7 +2398,7 @@ butil::Status CoordinatorControl::GenerateTableIds(uint64_t schema_id, const pb:
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "index count is illegal");
   }
 
-  if (!schema_map_.Exists(schema_id)) {
+  if (!ValidateSchema(schema_id)) {
     DINGO_LOG(ERROR) << "schema_id is illegal " << schema_id;
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "schema_id is illegal");
   }
@@ -2441,6 +2441,85 @@ butil::Status CoordinatorControl::GetTableIndexes(uint64_t schema_id, uint64_t t
   }
 
   response->add_table_definition_with_ids()->CopyFrom(definition_with_id);
+
+  return butil::Status::OK();
+}
+
+butil::Status CoordinatorControl::DropTableIndexes(uint64_t schema_id, uint64_t table_id,
+                                                   pb::coordinator_internal::MetaIncrement& meta_increment) {
+  if (!ValidateSchema(schema_id)) {
+    DINGO_LOG(ERROR) << "ERRROR: schema_id not valid" << schema_id;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "schema_id not valid");
+  }
+
+  // drop indexes of the table
+  pb::coordinator_internal::TableIndexInternal table_index_internal;
+  int result = table_index_map_.Get(table_id, table_index_internal);
+  if (result < 0) {
+    DINGO_LOG(INFO) << "cannot find indexes, schema_id: " << schema_id << ", table_id: " << table_id;
+    return butil::Status::OK();
+  }
+
+  butil::Status ret;
+  for (const auto& definition_with_id : table_index_internal.definition_with_ids()) {
+    ret = DropIndex(schema_id, definition_with_id.table_id().entity_id(), meta_increment);
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << "error while dropping index, schema_id: " << schema_id << ", table_id: " << table_id;
+      return ret;
+    }
+  }
+
+  // delete table indexes relationship map
+  auto* table_index_increment = meta_increment.add_table_indexes();
+  table_index_increment->set_id(table_id);
+  table_index_increment->set_op_type(pb::coordinator_internal::MetaIncrementOpType::DELETE);
+
+  // drop table finally
+  ret = DropTable(schema_id, table_id, meta_increment);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "error while dropping index, schema_id: " << schema_id << ", table_id: " << table_id;
+    return ret;
+  }
+
+  return butil::Status::OK();
+}
+
+butil::Status CoordinatorControl::RemoveTableIndex(uint64_t table_id, uint64_t index_id,
+                                                   pb::coordinator_internal::MetaIncrement& meta_increment) {
+  butil::Status ret = DropIndex(table_id, index_id, meta_increment);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "error while dropping index, table_id: " << table_id << ", index_id: " << index_id;
+    return ret;
+  }
+
+  pb::coordinator_internal::TableIndexInternal table_index_internal;
+  int result = table_index_map_.Get(table_id, table_index_internal);
+  if (result < 0) {
+    DINGO_LOG(WARNING) << "cannot find table_id in table index map: " << table_id << ", index_id: " << index_id;
+    return butil::Status::OK();
+  }
+
+  size_t source_size = table_index_internal.definition_with_ids_size();
+  bool found_index = false;
+  for (size_t i = 0; i < table_index_internal.definition_with_ids_size(); i++) {
+    if (table_index_internal.definition_with_ids(i).table_id().entity_id() == index_id) {
+      found_index = true;
+      table_index_internal.mutable_definition_with_ids()->DeleteSubrange(i, 1);
+      break;
+    }
+  }
+
+  if (found_index) {
+    DINGO_LOG(INFO) << "remove success, table_id: " << table_id << ", index_id: " << index_id
+                    << ", size: " << source_size << " --> " << table_index_internal.definition_with_ids_size();
+
+    auto* table_index_increment = meta_increment.add_table_indexes();
+    table_index_increment->set_id(table_id);
+    table_index_increment->mutable_table_indexes()->CopyFrom(table_index_internal);
+    table_index_increment->set_op_type(pb::coordinator_internal::MetaIncrementOpType::UPDATE);
+  } else {
+    DINGO_LOG(WARNING) << "cannot find index, table_id: " << table_id << ", index_id: " << index_id;
+  }
 
   return butil::Status::OK();
 }

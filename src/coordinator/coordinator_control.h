@@ -320,6 +320,13 @@ class CoordinatorControl : public MetaControl {
   // get table indexes
   butil::Status GetTableIndexes(uint64_t schema_id, uint64_t table_id, pb::meta::GetTablesResponse *response);
 
+  // drop table indexes
+  butil::Status DropTableIndexes(uint64_t schema_id, uint64_t table_id,
+                                 pb::coordinator_internal::MetaIncrement &meta_increment);
+
+  // remove table index
+  butil::Status RemoveTableIndex(uint64_t table_id, uint64_t index_id,
+                                 pb::coordinator_internal::MetaIncrement &meta_increment);
   // create store
   // in: cluster_id
   // out: store_id, keyring

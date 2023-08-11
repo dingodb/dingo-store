@@ -1159,6 +1159,7 @@ void MetaServiceImpl::GenerateTableIds(google::protobuf::RpcController *controll
 
   if (!request->has_schema_id() || !request->has_count()) {
     response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errmsg("schema id or count.");
     return;
   }
 
@@ -1214,6 +1215,7 @@ void MetaServiceImpl::CreateTables(google::protobuf::RpcController *controller,
     const auto &table_id = temp_with_id.table_id();
     const auto &definition = temp_with_id.table_definition();
     uint64_t new_id = table_id.entity_id();
+    uint64_t parent_entity_id = table_id.parent_entity_id();
 
     butil::Status ret;
     if (table_id.entity_type() == pb::meta::EntityType::ENTITY_TYPE_TABLE) {
@@ -1225,9 +1227,19 @@ void MetaServiceImpl::CreateTables(google::protobuf::RpcController *controller,
       }
 
       find_table_type = true;
+      parent_entity_id = request->schema_id().entity_id();
       ret = coordinator_control_->CreateTable(request->schema_id().entity_id(), definition, new_id, meta_increment);
+
     } else if (table_id.entity_type() == pb::meta::EntityType::ENTITY_TYPE_INDEX) {
+      if (definition.columns_size() == 0) {
+        DINGO_LOG(ERROR) << "index column not found.";
+        response->mutable_error()->set_errcode(Errno::EINDEX_COLUMN_NOT_FOUND);
+        response->mutable_error()->set_errmsg("index column not found.");
+        return;
+      }
+
       ret = coordinator_control_->CreateIndex(request->schema_id().entity_id(), definition, new_id, meta_increment);
+
     } else {
       ret = butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "entity type is illegal");
     }
@@ -1241,7 +1253,7 @@ void MetaServiceImpl::CreateTables(google::protobuf::RpcController *controller,
 
     auto *table_id_ptr = response->add_table_ids();
     table_id_ptr->set_entity_id(new_id);
-    table_id_ptr->set_parent_entity_id(request->schema_id().entity_id());
+    table_id_ptr->set_parent_entity_id(parent_entity_id);
     table_id_ptr->set_entity_type(table_id.entity_type());
 
     if (table_id.entity_type() == pb::meta::EntityType::ENTITY_TYPE_INDEX) {
@@ -1287,12 +1299,12 @@ void MetaServiceImpl::GetTables(google::protobuf::RpcController *controller, con
 
   if (!request->has_table_id()) {
     response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errmsg("table id not found.");
     return;
   }
 
   butil::Status ret;
   if (request->table_id().entity_type() == pb::meta::EntityType::ENTITY_TYPE_INDEX) {
-    // pb::meta::TableDefinitionWithId table_definition_with_id;
     auto *definition_with_id = response->add_table_definition_with_ids();
     ret = coordinator_control_->GetIndex(request->table_id().parent_entity_id(), request->table_id().entity_id(),
                                          *definition_with_id);
@@ -1312,6 +1324,48 @@ void MetaServiceImpl::GetTables(google::protobuf::RpcController *controller, con
 
 void MetaServiceImpl::DropTables(google::protobuf::RpcController *controller,
                                  const pb::meta::DropTablesRequest *request, pb::meta::DropTablesResponse *response,
-                                 google::protobuf::Closure *done) {}
+                                 google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!coordinator_control_->IsLeader()) {
+    return RedirectResponse(response);
+  }
+
+  DINGO_LOG(INFO) << request->DebugString();
+
+  butil::Status ret;
+  pb::coordinator_internal::MetaIncrement meta_increment;
+  for (const auto &table_id : request->table_ids()) {
+    if (table_id.entity_type() == pb::meta::EntityType::ENTITY_TYPE_TABLE) {
+      ret = coordinator_control_->DropTableIndexes(table_id.parent_entity_id(), table_id.entity_id(), meta_increment);
+    } else if (table_id.entity_type() == pb::meta::EntityType::ENTITY_TYPE_INDEX) {
+      ret = coordinator_control_->RemoveTableIndex(table_id.parent_entity_id(), table_id.entity_id(), meta_increment);
+    } else {
+      ret = butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "entity type is illegal");
+    }
+
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << "drop failed, parent_entity_id: " << table_id.parent_entity_id()
+                       << ", entity_id: " << table_id.entity_id();
+      response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+      response->mutable_error()->set_errmsg(ret.error_str());
+      return;
+    }
+  }
+
+  // prepare for raft process
+  CoordinatorClosure<pb::meta::DropTablesRequest, pb::meta::DropTablesResponse> *meta_put_closure =
+      new CoordinatorClosure<pb::meta::DropTablesRequest, pb::meta::DropTablesResponse>(request, response,
+                                                                                        done_guard.release());
+
+  std::shared_ptr<Context> ctx =
+      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
+  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+
+  // this is a async operation will be block by closure
+  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+
+  DINGO_LOG(INFO) << "DropTables Success.";
+}
 
 }  // namespace dingodb
