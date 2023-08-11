@@ -564,6 +564,15 @@ message DropTablesResponse {
   dingodb.pb.error.Error error = 1;
 }
 
+message SwitchAutoSplitRequest {
+  DingoCommonId table_id = 1;
+  bool auto_split = 2;
+}
+
+message SwitchAutoSplitResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
 service MetaService {
   // GetSchemas
   // in: schema_id
@@ -735,6 +744,9 @@ service MetaService {
   // in: table_id
   // out: error code
   rpc DeleteAutoIncrement(DeleteAutoIncrementRequest) returns (DeleteAutoIncrementResponse);
+
+  // SwitchAutoSplit for table/index
+  rpc SwitchAutoSplit(SwitchAutoSplitRequest) returns (SwitchAutoSplitResponse);
 
   // TODO
   // Operation about User, such as create/drop/grant.

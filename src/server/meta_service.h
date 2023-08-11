@@ -140,6 +140,10 @@ class MetaServiceImpl : public pb::meta::MetaService {
                            const ::dingodb::pb::meta::DeleteAutoIncrementRequest* request,
                            pb::meta::DeleteAutoIncrementResponse* response, google::protobuf::Closure* done) override;
 
+  void SwitchAutoSplit(google::protobuf::RpcController* controller,
+                       const ::dingodb::pb::meta::SwitchAutoSplitRequest* request,
+                       pb::meta::SwitchAutoSplitResponse* response, google::protobuf::Closure* done) override;
+
  private:
   // table and index definition convertor
   static void TableDefinitionToIndexDefinition(const pb::meta::TableDefinition& table_definition,

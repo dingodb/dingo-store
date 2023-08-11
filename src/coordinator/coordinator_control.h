@@ -558,6 +558,14 @@ class CoordinatorControl : public MetaControl {
   butil::Status DropIndex(uint64_t schema_id, uint64_t index_id,
                           pb::coordinator_internal::MetaIncrement &meta_increment);
 
+  // SwitchAutoSplit
+  // in: schema_id
+  // in: table_id
+  // in: auto_split
+  // out: meta_increment
+  butil::Status SwitchAutoSplit(uint64_t schema_id, uint64_t table_id, bool auto_split,
+                                pb::coordinator_internal::MetaIncrement &meta_increment);
+
   // get coordinator_map
   void GetCoordinatorMap(uint64_t cluster_id, uint64_t &epoch, pb::common::Location &leader_location,
                          std::vector<pb::common::Location> &locations);
