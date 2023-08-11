@@ -557,7 +557,7 @@ message GetTablesResponse {
 
 // drop table, vector index and scalar index
 message DropTablesRequest {
-  repeated DingoCommonId table_id = 1;
+  repeated DingoCommonId table_ids = 1;
 }
 
 message DropTablesResponse {

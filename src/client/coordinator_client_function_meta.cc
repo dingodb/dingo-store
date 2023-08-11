@@ -960,4 +960,20 @@ void SendGetTables(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_
   DINGO_LOG(INFO) << "RESPONSE =" << response.DebugString();
 }
 
-void SendDropTables(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {}
+void SendDropTables(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  dingodb::pb::meta::DropTablesRequest request;
+  dingodb::pb::meta::DropTablesResponse response;
+
+  auto* table_id = request.add_table_ids();
+  table_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
+  table_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+  if (FLAGS_id.empty()) {
+    DINGO_LOG(WARNING) << "id is empty";
+    return;
+  }
+  table_id->set_entity_id(std::stol(FLAGS_id));
+
+  auto status = coordinator_interaction->SendRequest("DropTables", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG(INFO) << "RESPONSE =" << response.DebugString();
+}
