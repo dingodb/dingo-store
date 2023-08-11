@@ -1408,10 +1408,27 @@ butil::Status CoordinatorControl::SplitRegionWithTaskList(uint64_t split_from_re
     meta_increment.add_regions()->CopyFrom(it);
   }
 
+  // fix: now update table/index is done in raft apply, no need to add to meta_increment
   // update table_map for new_region_id
   // CreateRegion will update table_map if region is create for split
-  for (const auto& it : meta_increment_tmp.tables()) {
-    meta_increment.add_tables()->CopyFrom(it);
+  // for (const auto& it : meta_increment_tmp.tables()) {
+  //   meta_increment.add_tables()->CopyFrom(it);
+  // }
+
+  // check if need to send load vector index to store
+  if (split_from_region.region_type() == pb::common::RegionType::INDEX_REGION &&
+      split_from_region.definition().index_parameter().has_vector_index_parameter()) {
+    // send load vector index to store
+    for (const auto& peer : split_from_region.definition().peers()) {
+      AddLoadVectorIndexTask(new_task_list, peer.store_id(), split_from_region_id, meta_increment);
+      AddLoadVectorIndexTask(new_task_list, peer.store_id(), new_region_id, meta_increment);
+    }
+
+    // check vector index is ready
+    for (const auto& peer : split_from_region.definition().peers()) {
+      AddCheckVectorIndexTask(new_task_list, peer.store_id(), split_from_region_id);
+      AddCheckVectorIndexTask(new_task_list, peer.store_id(), new_region_id);
+    }
   }
 
   // build split_region task
@@ -2908,6 +2925,42 @@ void CoordinatorControl::AddSplitTask(pb::coordinator::TaskList* task_list, uint
   region_cmd_to_add->set_is_notify(true);  // notify store to do immediately heartbeat
 }
 
+void CoordinatorControl::AddCheckVectorIndexTask(pb::coordinator::TaskList* task_list, uint64_t store_id,
+                                                 uint64_t region_id) {
+  // build check_vector_index task
+  auto* check_vector_task = task_list->add_tasks();
+  auto* region_check = check_vector_task->mutable_pre_check();
+  region_check->set_type(::dingodb::pb::coordinator::TaskPreCheckType::STORE_REGION_CHECK);
+  region_check->mutable_store_region_check()->set_store_id(store_id);
+  region_check->mutable_store_region_check()->set_region_id(region_id);
+  region_check->mutable_store_region_check()->set_check_vector_index(true);
+  region_check->mutable_store_region_check()->set_is_hold_vector_index(true);
+}
+
+void CoordinatorControl::AddLoadVectorIndexTask(pb::coordinator::TaskList* task_list, uint64_t store_id,
+                                                uint64_t region_id,
+                                                pb::coordinator_internal::MetaIncrement& meta_increment) {
+  // build check_vector_index task
+  auto* load_vector_task = task_list->add_tasks();
+  auto* region_check = load_vector_task->mutable_pre_check();
+  region_check->set_type(::dingodb::pb::coordinator::TaskPreCheckType::STORE_REGION_CHECK);
+  region_check->mutable_store_region_check()->set_store_id(store_id);
+  region_check->mutable_store_region_check()->set_region_id(region_id);
+
+  // generate store operation for stores
+  auto* store_operation = load_vector_task->add_store_operations();
+  store_operation->set_id(store_id);
+  auto* region_cmd_to_add = store_operation->add_region_cmds();
+
+  region_cmd_to_add->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
+  region_cmd_to_add->set_region_id(region_id);
+  region_cmd_to_add->set_region_cmd_type(::dingodb::pb::coordinator::RegionCmdType::CMD_HOLD_VECTOR_INDEX);
+  region_cmd_to_add->mutable_hold_vector_index_request()->set_region_id(region_id);
+  region_cmd_to_add->mutable_hold_vector_index_request()->set_is_hold(true);
+  region_cmd_to_add->set_create_timestamp(butil::gettimeofday_ms());
+  region_cmd_to_add->set_is_notify(true);  // notify store to do immediately heartbeat
+}
+
 bool CoordinatorControl::DoTaskPreCheck(const pb::coordinator::TaskPreCheck& task_pre_check) {
   if (task_pre_check.type() == pb::coordinator::TaskPreCheckType::REGION_CHECK) {
     pb::common::Region region;
@@ -3013,6 +3066,13 @@ bool CoordinatorControl::DoTaskPreCheck(const pb::coordinator::TaskPreCheck& tas
       std::sort(peers_of_region.begin(), peers_of_region.end());
 
       if (!std::equal(peers_to_check.begin(), peers_to_check.end(), peers_of_region.begin(), peers_of_region.end())) {
+        check_passed = false;
+      }
+    }
+
+    // check vector_index
+    if (region_check.check_vector_index()) {
+      if (region_check.is_hold_vector_index() != region.is_hold_vector_index()) {
         check_passed = false;
       }
     }

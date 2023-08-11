@@ -44,6 +44,12 @@ message StoreRegionCheck {
   dingodb.pb.common.StoreRegionState store_region_state = 4;
   dingodb.pb.common.RaftNodeState raft_node_status = 5;
   repeated dingodb.pb.common.Peer peers = 6;
+
+  // check vector index
+  // if check_vector_index is true, check vector index status equal to is_hold_vector_index
+  // else ignore vector index status
+  bool check_vector_index = 7;
+  bool is_hold_vector_index = 8;
 }
 
 message TaskPreCheck {
