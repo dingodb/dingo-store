@@ -940,8 +940,10 @@ bool Helper::GetSystemDiskIoUtil(const std::string& device_name, std::map<std::s
 std::vector<std::string> Helper::TraverseDirectory(const std::string& path) {
   std::vector<std::string> filenames;
   try {
-    for (const auto& fe : std::filesystem::directory_iterator(path)) {
-      filenames.push_back(fe.path().filename().string());
+    if (std::filesystem::exists(path)) {
+      for (const auto& fe : std::filesystem::directory_iterator(path)) {
+        filenames.push_back(fe.path().filename().string());
+      }
     }
   } catch (std::filesystem::filesystem_error const& ex) {
     DINGO_LOG(ERROR) << fmt::format("directory_iterator failed, path: {} error: {}", path, ex.what());
@@ -952,10 +954,12 @@ std::vector<std::string> Helper::TraverseDirectory(const std::string& path) {
 
 std::string Helper::FindFileInDirectory(const std::string& dirpath, const std::string& prefix) {
   try {
-    for (const auto& fe : std::filesystem::directory_iterator(dirpath)) {
-      auto filename = fe.path().filename().string();
-      if (filename.find(prefix) != std::string::npos) {
-        return filename;
+    if (std::filesystem::exists(dirpath)) {
+      for (const auto& fe : std::filesystem::directory_iterator(dirpath)) {
+        auto filename = fe.path().filename().string();
+        if (filename.find(prefix) != std::string::npos) {
+          return filename;
+        }
       }
     }
   } catch (std::filesystem::filesystem_error const& ex) {

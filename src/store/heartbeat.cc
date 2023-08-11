@@ -68,6 +68,8 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
   // setup id for store_metrics here, coordinator need this id to update store_metrics
   mut_store_metrics->set_id(Server::GetInstance()->Id());
 
+  auto vector_index_manager = Server::GetInstance()->GetVectorIndexManager();
+
   auto* mut_region_metrics_map = mut_store_metrics->mutable_region_metrics_map();
   auto region_metrics = metrics_manager->GetStoreRegionMetrics();
   std::vector<store::RegionPtr> region_metas;
@@ -101,6 +103,10 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
       if (raft_node != nullptr) {
         tmp_region_metrics.mutable_braft_status()->CopyFrom(*raft_node->GetStatus());
       }
+    }
+
+    if (vector_index_manager != nullptr) {
+      tmp_region_metrics.set_hold_vector_index(vector_index_manager->GetVectorIndex(region_meta->Id()) != nullptr);
     }
 
     mut_region_metrics_map->insert({region_meta->Id(), tmp_region_metrics});
