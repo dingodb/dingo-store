@@ -17,24 +17,23 @@
 
 #include <stdexcept>
 
-#define DECLARE_INVALID_UNARY_OP(OP, T) \
-  template <>                           \
-  T OP(T v);
+#include "../types.h"
 
-#define IMPLEMENT_INVALID_UNARY_OP(OP, T)                          \
-  template <>                                                      \
-  T OP(T v) {                                                      \
-    throw std::runtime_error("Invalid operation " #OP "(" #T ")"); \
-  }
+#define DECLARE_INVALID_UNARY_OP(OP, T) template <> typename CxxTraits<T>::type OP(typename CxxTraits<T>::type v);
+
+#define IMPLEMENT_INVALID_UNARY_OP(OP, T)                                     \
+    template <> typename CxxTraits<T>::type OP(typename CxxTraits<T>::type v) \
+    {                                                                         \
+        throw std::runtime_error("Invalid operation " #OP "(" #T ")");        \
+    }
 
 #define DECLARE_INVALID_BINARY_OP(OP, T) \
-  template <>                            \
-  T OP(T v0, T v1);
+    template <> typename CxxTraits<T>::type OP(typename CxxTraits<T>::type v0, typename CxxTraits<T>::type v1);
 
-#define IMPLEMENT_INVALID_BINARY_OP(OP, T)                         \
-  template <>                                                      \
-  T OP(T v0, T v1) {                                               \
-    throw std::runtime_error("Invalid operation " #OP "(" #T ")"); \
-  }
+#define IMPLEMENT_INVALID_BINARY_OP(OP, T)                                                                     \
+    template <> typename CxxTraits<T>::type OP(typename CxxTraits<T>::type v0, typename CxxTraits<T>::type v1) \
+    {                                                                                                          \
+        throw std::runtime_error("Invalid operation " #OP "(" #T ")");                                         \
+    }
 
-#endif  // DINGODB_EXPR_CALC_DEFS_H_
+#endif // DINGODB_EXPR_CALC_DEFS_H_

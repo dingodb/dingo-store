@@ -19,15 +19,15 @@
 #include <optional>
 #include <vector>
 
-namespace dingodb::expr {
+namespace dingodb::expr
+{
 
-template <typename T>
-using wrap = std::optional<T>;
+template <typename T> using wrap = std::optional<T>;
 
 typedef std::any Operand;
 
 typedef std::vector<Operand> Tuple;
 
-}  // namespace dingodb::expr
+} // namespace dingodb::expr
 
-#endif  // DINGODB_EXPR_CALC_OPERAND_H_
+#endif // DINGODB_EXPR_CALC_OPERAND_H_

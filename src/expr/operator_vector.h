@@ -20,30 +20,62 @@
 #include "operator.h"
 #include "types.h"
 
-namespace dingodb::expr {
+namespace dingodb::expr
+{
 
-class OperatorVector {
- public:
-  OperatorVector() : m_vector() {}
-  virtual ~OperatorVector() {}
+class OperatorVector
+{
+public:
+    OperatorVector() : m_vector()
+    {
+    }
 
-  void Decode(const byte code[], size_t len);
+    virtual ~OperatorVector()
+    {
+    }
 
-  auto begin() { return m_vector.begin(); }
+    void Decode(const byte code[], size_t len);
 
-  auto end() { return m_vector.end(); }
+    auto begin()
+    {
+        return m_vector.begin();
+    }
 
- private:
-  std::vector<Operator> m_vector;
+    auto end()
+    {
+        return m_vector.end();
+    }
 
-  void Add(const Operator &op) { m_vector.push_back(op); }
+private:
+    std::vector<Operator> m_vector;
 
-  template <template <typename> class OP>
-  void AddOperatorByType(byte b);
+    static std::string ConvertBytesToHex(const byte *data, size_t len);
 
-  void AddCastOperator(byte b);
+    void Add(const Operator &op)
+    {
+        m_vector.push_back(op);
+    }
+
+    /**
+     * @brief Add an operator of the specified type.
+     *
+     * @tparam OP The template of the operator
+     * @param type The type byte
+     * @return true Successful
+     * @return false Failed
+     */
+    template <template <typename> class OP> [[nodiscard]] bool AddOperatorByType(byte type);
+
+    /**
+     * @brief  Add a cast operator of the specified type.
+     *
+     * @param b The byte indicating the source and target type
+     * @return true Successful
+     * @return false Failed
+     */
+    [[nodiscard]] bool AddCastOperator(byte b);
 };
 
-}  // namespace dingodb::expr
+} // namespace dingodb::expr
 
-#endif  // DINGODB_EXPR_OPERATORVECTOR_H_
+#endif // DINGODB_EXPR_OPERATORVECTOR_H_
