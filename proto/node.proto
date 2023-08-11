@@ -144,6 +144,15 @@ message GetVectorIndexSnapshotResponse {
   VectorIndexSnapshotMeta meta = 3;
 }
 
+message CheckVectorIndexRequest {
+  uint64 vector_index_id = 1;
+}
+
+message CheckVectorIndexResponse {
+  dingodb.pb.error.Error error = 1;
+  bool is_exist = 2;
+}
+
 service NodeService {
   // GetNodeInfo
   // in: cluster_id
@@ -170,4 +179,7 @@ service NodeService {
   rpc InstallVectorIndexSnapshot(InstallVectorIndexSnapshotRequest) returns (InstallVectorIndexSnapshotResponse);
   // Get vector index snapshot
   rpc GetVectorIndexSnapshot(GetVectorIndexSnapshotRequest) returns (GetVectorIndexSnapshotResponse);
+
+  // Check region is hold vector index
+  rpc CheckVectorIndex(CheckVectorIndexRequest) returns (CheckVectorIndexResponse);
 }

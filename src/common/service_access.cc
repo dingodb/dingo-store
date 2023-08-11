@@ -121,6 +121,32 @@ butil::Status ServiceAccess::GetVectorIndexSnapshot(const pb::node::GetVectorInd
   return butil::Status();
 }
 
+butil::Status ServiceAccess::CheckVectorIndex(const pb::node::CheckVectorIndexRequest& request,
+                                              const butil::EndPoint& endpoint,
+                                              pb::node::CheckVectorIndexResponse& response) {
+  brpc::Channel channel;
+  if (channel.Init(endpoint, nullptr) != 0) {
+    DINGO_LOG(ERROR) << "Fail to init channel to " << butil::endpoint2str(endpoint).c_str();
+    return {};
+  }
+
+  brpc::Controller cntl;
+  cntl.set_timeout_ms(3000);
+  pb::node::NodeService_Stub stub(&channel);
+
+  stub.CheckVectorIndex(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    DINGO_LOG(ERROR) << fmt::format("Send CheckVectorIndex request failed, error {}", cntl.ErrorText());
+    return butil::Status(pb::error::EINTERNAL, cntl.ErrorText());
+  }
+
+  if (response.error().errcode() != pb::error::OK) {
+    return butil::Status(response.error().errcode(), response.error().errmsg());
+  }
+
+  return butil::Status();
+}
+
 std::shared_ptr<pb::fileservice::CleanFileReaderResponse> ServiceAccess::CleanFileReader(
     const pb::fileservice::CleanFileReaderRequest& request, const butil::EndPoint& endpoint) {
   brpc::Channel channel;

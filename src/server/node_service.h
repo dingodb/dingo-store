@@ -55,6 +55,9 @@ class NodeServiceImpl : public pb::node::NodeService {
                               pb::node::GetVectorIndexSnapshotResponse* response,
                               google::protobuf::Closure* done) override;
 
+  void CheckVectorIndex(google::protobuf::RpcController* controller, const pb::node::CheckVectorIndexRequest* request,
+                        pb::node::CheckVectorIndexResponse* response, google::protobuf::Closure* done) override;
+
   void SetServer(dingodb::Server* server);
 
  private:

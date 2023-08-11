@@ -41,6 +41,9 @@ class ServiceAccess {
                                               const butil::EndPoint& endpoint,
                                               pb::node::GetVectorIndexSnapshotResponse& response);
 
+  static butil::Status CheckVectorIndex(const pb::node::CheckVectorIndexRequest& request,
+                                        const butil::EndPoint& endpoint, pb::node::CheckVectorIndexResponse& response);
+
   // FileService
   static std::shared_ptr<pb::fileservice::CleanFileReaderResponse> CleanFileReader(
       const pb::fileservice::CleanFileReaderRequest& request, const butil::EndPoint& endpoint);

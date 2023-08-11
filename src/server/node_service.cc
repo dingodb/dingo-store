@@ -407,4 +407,16 @@ void NodeServiceImpl::GetVectorIndexSnapshot(google::protobuf::RpcController* co
                                  response->ShortDebugString());
 }
 
+void NodeServiceImpl::CheckVectorIndex(google::protobuf::RpcController* controller,
+                                       const pb::node::CheckVectorIndexRequest* request,
+                                       pb::node::CheckVectorIndexResponse* response, google::protobuf::Closure* done) {
+  brpc::ClosureGuard done_guard(done);
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+
+  auto vector_index_manager = Server::GetInstance()->GetVectorIndexManager();
+  if (vector_index_manager->GetVectorIndex(request->vector_index_id()) != nullptr) {
+    response->set_is_exist(true);
+  }
+}
+
 }  // namespace dingodb
