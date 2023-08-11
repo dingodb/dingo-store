@@ -650,6 +650,9 @@ class CoordinatorControl : public MetaControl {
   void AddSplitTask(pb::coordinator::TaskList *task_list, uint64_t store_id, uint64_t region_id,
                     uint64_t split_to_region_id, const std::string &water_shed_key,
                     pb::coordinator_internal::MetaIncrement &meta_increment);
+  static void AddCheckVectorIndexTask(pb::coordinator::TaskList *task_list, uint64_t store_id, uint64_t region_id);
+  void AddLoadVectorIndexTask(pb::coordinator::TaskList *task_list, uint64_t store_id, uint64_t region_id,
+                              pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // check if task in task_lis can advance
   // if task advance, this function will contruct meta_increment and apply to state_machine
