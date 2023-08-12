@@ -248,7 +248,9 @@ TEST_F(VectorIndexHnswSearchParamTest, Search) {
 
     auto [vector_ids, vector_ids_for_search] = lambda_random_function();
 
-    ok = vector_index_hnsw->Search(vector_with_ids, topk, results, false, vector_ids_for_search);
+    std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters;
+    filters.push_back(std::make_shared<VectorIndex::HnswListFilterFunctor>(vector_ids_for_search));
+    ok = vector_index_hnsw->Search(vector_with_ids, topk, filters, results, false);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     std::vector<uint64_t> result_vector_ids;

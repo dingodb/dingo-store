@@ -81,11 +81,13 @@ class VectorReader {
   butil::Status DoVectorSearchForVectorIdPreFilter(
       std::shared_ptr<VectorIndex> vector_index, const std::vector<pb::common::VectorWithId>& vector_with_ids,
       const pb::common::VectorSearchParameter& parameter,
+      std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters,
       std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results);
 
   butil::Status DoVectorSearchForScalarPreFilter(
-      std::shared_ptr<VectorIndex> vector_index, uint64_t partition_id,
+      std::shared_ptr<VectorIndex> vector_index, pb::common::Range region_range,
       const std::vector<pb::common::VectorWithId>& vector_with_ids, const pb::common::VectorSearchParameter& parameter,
+      std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters,
       std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results);
 
   butil::Status DoVectorSearchForTableCoprocessor(

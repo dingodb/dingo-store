@@ -23,12 +23,15 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #include "bthread/types.h"
 #include "butil/status.h"
 #include "common/logging.h"
 #include "common/synchronization.h"
+#include "faiss/Index.h"
+#include "faiss/impl/IDSelector.h"
 #include "hnswlib/space_ip.h"
 #include "hnswlib/space_l2.h"
 #include "proto/common.pb.h"
@@ -66,9 +69,11 @@ class VectorIndex {
 
   class FilterFunctor {
    public:
+    virtual void Build(std::unordered_map<faiss::idx_t, faiss::idx_t>&) { DINGO_LOG(ERROR) << "Not support..."; }
     virtual bool Check(uint64_t vector_id) = 0;
   };
 
+  // Range filter
   class RangeFilterFunctor : public FilterFunctor {
    public:
     RangeFilterFunctor(uint64_t min_vector_id, uint64_t max_vector_id)
@@ -78,6 +83,79 @@ class VectorIndex {
    private:
     uint64_t min_vector_id_;
     uint64_t max_vector_id_;
+  };
+
+  // Range filter just for flat
+  // Range transform list
+  class FlatRangeFilterFunctor : public FilterFunctor {
+   public:
+    FlatRangeFilterFunctor(uint64_t min_vector_id, uint64_t max_vector_id)
+        : min_vector_id_(min_vector_id), max_vector_id_(max_vector_id) {}
+
+    void Build(std::unordered_map<faiss::idx_t, faiss::idx_t>& rev_map) override {
+      for (auto [vector_id, index] : rev_map) {
+        if (vector_id >= min_vector_id_ && vector_id < max_vector_id_) {
+          array_indexs_.insert(index);
+        }
+      }
+    }
+
+    bool Check(uint64_t index) override { return array_indexs_.find(index) != array_indexs_.end(); }
+
+   private:
+    uint64_t min_vector_id_;
+    uint64_t max_vector_id_;
+    std::unordered_set<uint64_t> array_indexs_;
+  };
+
+  // List filter
+  // be careful not to use the parent class to release,
+  // otherwise there will be memory leaks
+  class HnswListFilterFunctor : public FilterFunctor {
+   public:
+    HnswListFilterFunctor(const HnswListFilterFunctor&) = delete;
+    HnswListFilterFunctor(HnswListFilterFunctor&&) = delete;
+    HnswListFilterFunctor& operator=(const HnswListFilterFunctor&) = delete;
+    HnswListFilterFunctor& operator=(HnswListFilterFunctor&&) = delete;
+
+    explicit HnswListFilterFunctor(const std::vector<uint64_t>& vector_ids) {
+      for (auto vector_id : vector_ids) {
+        vector_ids_.insert(vector_id);
+      }
+    }
+
+    virtual ~HnswListFilterFunctor() = default;
+
+    bool Check(uint64_t vector_id) override { return vector_ids_.find(vector_id) != vector_ids_.end(); }
+
+   private:
+    std::unordered_set<uint64_t> vector_ids_;
+  };
+
+  // List filter just for flat
+  class FlatListFilterFunctor : public FilterFunctor {
+   public:
+    FlatListFilterFunctor(std::vector<uint64_t>&& vector_ids)
+        : vector_ids_(std::forward<std::vector<uint64_t>>(vector_ids)) {}
+    FlatListFilterFunctor(const FlatListFilterFunctor&) = delete;
+    FlatListFilterFunctor(FlatListFilterFunctor&&) = delete;
+    FlatListFilterFunctor& operator=(const FlatListFilterFunctor&) = delete;
+    FlatListFilterFunctor& operator=(FlatListFilterFunctor&&) = delete;
+
+    void Build(std::unordered_map<faiss::idx_t, faiss::idx_t>& rev_map) override {
+      for (auto vector_id : vector_ids_) {
+        auto iter = rev_map.find(static_cast<faiss::idx_t>(vector_id));
+        if (iter != rev_map.end()) {
+          array_indexs_.insert(iter->second);
+        }
+      }
+    }
+
+    bool Check(uint64_t index) override { return array_indexs_.find(index) != array_indexs_.end(); }
+
+   private:
+    std::vector<uint64_t> vector_ids_;
+    std::unordered_set<uint64_t> array_indexs_;
   };
 
   pb::common::VectorIndexType VectorIndexType() const;

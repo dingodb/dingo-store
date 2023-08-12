@@ -106,7 +106,7 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
     }
 
     if (vector_index_manager != nullptr) {
-      tmp_region_metrics.set_hold_vector_index(vector_index_manager->GetVectorIndex(region_meta->Id()) != nullptr);
+      tmp_region_metrics.set_is_hold_vector_index(vector_index_manager->GetVectorIndex(region_meta->Id()) != nullptr);
     }
 
     mut_region_metrics_map->insert({region_meta->Id(), tmp_region_metrics});
