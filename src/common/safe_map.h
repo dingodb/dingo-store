@@ -554,7 +554,7 @@ class DingoSafeStdMap {
       if (it->first >= upper_bound) {
         break;
       }
-      if ((key_filter == nullptr || key_filter(it->first)) & (value_filter == nullptr || value_filter(it->first))) {
+      if ((key_filter == nullptr || key_filter(it->first)) & (value_filter == nullptr || value_filter(it->second))) {
         keys.insert(it->first);
       }
     }
@@ -580,7 +580,7 @@ class DingoSafeStdMap {
       if (it->first >= upper_bound) {
         break;
       }
-      if ((key_filter == nullptr || key_filter(it->first)) & (value_filter == nullptr || value_filter(it->first))) {
+      if ((key_filter == nullptr || key_filter(it->first)) & (value_filter == nullptr || value_filter(it->second))) {
         values.push_back(it->second);
       }
     }
@@ -606,7 +606,7 @@ class DingoSafeStdMap {
       if (it->first >= upper_bound) {
         break;
       }
-      if ((key_filter == nullptr || key_filter(it->first)) & (value_filter == nullptr || value_filter(it->first))) {
+      if ((key_filter == nullptr || key_filter(it->first)) & (value_filter == nullptr || value_filter(it->second))) {
         keys.push_back(it->first);
         values.push_back(it->second);
       }
