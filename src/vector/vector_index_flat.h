@@ -40,6 +40,28 @@
 
 namespace dingodb {
 
+// Filter vector id
+class FlatIDSelector : public faiss::IDSelector {
+ public:
+  FlatIDSelector(std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters) : filters_(filters) {}
+  ~FlatIDSelector() override = default;
+  bool is_member(faiss::idx_t id) const override {  // NOLINT
+    if (filters_.empty()) {
+      return true;
+    }
+    for (const auto& filter : filters_) {
+      if (!filter->Check(id)) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+ private:
+  std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters_;
+};
+
 class VectorIndexFlat : public VectorIndex {
  public:
   explicit VectorIndexFlat(uint64_t id, const pb::common::VectorIndexParameter& vector_index_parameter);
@@ -84,7 +106,7 @@ class VectorIndexFlat : public VectorIndex {
  private:
   void SearchWithParam(faiss::idx_t n, const faiss::Index::component_t* x, faiss::idx_t k,
                        faiss::Index::distance_t* distances, faiss::idx_t* labels,
-                       const faiss::SearchParameters* params);
+                       std::shared_ptr<FlatIDSelector> filters);
   // Dimension of the elements
   faiss::idx_t dimension_;
 

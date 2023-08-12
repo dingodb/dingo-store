@@ -38,7 +38,6 @@
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "vector/vector_index.h"
-#include "vector/vector_index_filter.h"
 #include "vector/vector_index_utils.h"
 
 namespace dingodb {
@@ -327,11 +326,6 @@ butil::Status VectorIndexHnsw::Search(std::vector<pb::common::VectorWithId> vect
   // Search by parallel
   results.resize(vector_with_ids.size());
   try {
-    bool enable_filter = (!vector_ids.empty());
-
-    std::unique_ptr<SearchFilterForHnsw> search_filter_for_hnsw_ptr = std::make_unique<SearchFilterForHnsw>(vector_ids);
-    hnswlib::BaseFilterFunctor* is_id_allowed = enable_filter ? search_filter_for_hnsw_ptr.get() : nullptr;
-
     if (!normalize_) {
       ParallelFor(0, vector_with_ids.size(), hnsw_num_threads_, [&](size_t row, size_t /*thread_id*/) {
         HnswRangeFilterFunctor* hnsw_filter = filters.empty() ? nullptr : new HnswRangeFilterFunctor(filters);
@@ -366,10 +360,11 @@ butil::Status VectorIndexHnsw::Search(std::vector<pb::common::VectorWithId> vect
       });
     } else {
       std::vector<float> norm_array(hnsw_num_threads_ * dimension_);
-      ParallelFor(0, vector_with_ids.size(), hnsw_num_threads_, [&, is_id_allowed](size_t row, size_t thread_id) {
+      ParallelFor(0, vector_with_ids.size(), hnsw_num_threads_, [&](size_t row, size_t thread_id) {
         size_t start_idx = thread_id * dimension_;
         VectorIndexUtils::NormalizeVectorForHnsw((float*)(data.get() + dimension_ * row), dimension_,
                                                  (norm_array.data() + start_idx));
+
         HnswRangeFilterFunctor* hnsw_filter = filters.empty() ? nullptr : new HnswRangeFilterFunctor(filters);
         std::priority_queue<std::pair<float, hnswlib::labeltype>> result =
             hnsw_index_->searchKnn(norm_array.data() + start_idx, topk, hnsw_filter);

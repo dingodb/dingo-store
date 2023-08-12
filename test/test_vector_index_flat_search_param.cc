@@ -215,7 +215,7 @@ TEST_F(VectorIndexFlatSearchParamTest, Search) {
 
     auto [vector_ids, vector_ids_for_search] = lambda_random_function();
 
-    ok = vector_index_flat->Search(vector_with_ids, topk, results, false, vector_ids_for_search);
+    ok = vector_index_flat->Search(vector_with_ids, topk, {}, results, false);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     std::vector<uint64_t> result_vector_ids;

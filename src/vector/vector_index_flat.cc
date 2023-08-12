@@ -37,32 +37,9 @@
 #include "proto/error.pb.h"
 #include "proto/index.pb.h"
 #include "proto/region_control.pb.h"
-#include "vector/vector_index_filter.h"
 #include "vector/vector_index_utils.h"
 
 namespace dingodb {
-
-// Filter vecotr id used by region range.
-class FlatRangeFilterFunctor : public faiss::IDSelector {
- public:
-  FlatRangeFilterFunctor(std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters) : filters_(filters) {}
-  ~FlatRangeFilterFunctor() override = default;
-  bool is_member(faiss::idx_t id) const override {  // NOLINT
-    if (filters_.empty()) {
-      return true;
-    }
-    for (const auto& filter : filters_) {
-      if (!filter->Check(id)) {
-        return false;
-      }
-    }
-
-    return true;
-  }
-
- private:
-  std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters_;
-};
 
 VectorIndexFlat::VectorIndexFlat(uint64_t id, const pb::common::VectorIndexParameter& vector_index_parameter)
     : VectorIndex(id, vector_index_parameter, 0) {
@@ -206,7 +183,7 @@ butil::Status VectorIndexFlat::Delete(const std::vector<uint64_t>& delete_ids) {
 butil::Status VectorIndexFlat::Search(std::vector<pb::common::VectorWithId> vector_with_ids, uint32_t topk,
                                       std::vector<std::shared_ptr<FilterFunctor>> filters,
                                       std::vector<pb::index::VectorWithDistanceResult>& results,
-                                      [[maybe_unused]] bool reconstruct) {
+                                      bool reconstruct) {  // NOLINT
   if (vector_with_ids.empty()) {
     DINGO_LOG(WARNING) << "vector_with_ids is empty";
     return butil::Status::OK();
@@ -217,11 +194,6 @@ butil::Status VectorIndexFlat::Search(std::vector<pb::common::VectorWithId> vect
     return butil::Status::OK();
   }
 
-  uint32_t amplify_topk = topk;
-  if (!filters.empty()) {
-    amplify_topk = topk * 4;
-  }
-
   if (vector_with_ids[0].vector().float_values_size() != this->dimension_) {
     std::string s = fmt::format("vector dimension is not match, input = {}, index = {} ",
                                 vector_with_ids[0].vector().float_values_size(), this->dimension_);
@@ -230,9 +202,9 @@ butil::Status VectorIndexFlat::Search(std::vector<pb::common::VectorWithId> vect
   }
 
   std::vector<faiss::Index::distance_t> distances;
-  distances.resize(amplify_topk * vector_with_ids.size(), 0.0f);
+  distances.resize(topk * vector_with_ids.size(), 0.0f);
   std::vector<faiss::idx_t> labels;
-  labels.resize(amplify_topk * vector_with_ids.size(), -1);
+  labels.resize(topk * vector_with_ids.size(), -1);
 
   std::unique_ptr<float[]> vectors;
   try {
@@ -266,57 +238,27 @@ butil::Status VectorIndexFlat::Search(std::vector<pb::common::VectorWithId> vect
   }
 
   {
-    bool enable_filter = (!vector_ids.empty());
-
-    std::vector<uint64_t> internal_vector_ids;
-    internal_vector_ids.reserve(vector_ids.size());
-    for (auto vector_id : vector_ids) {
-      auto iter = index_->rev_map.find(static_cast<faiss::idx_t>(vector_id));
-      if (iter == index_->rev_map.end()) {
-        DINGO_LOG(WARNING) << fmt::format("vector_id : {} not exist . ignore", vector_id);
-        continue;
-      }
-      internal_vector_ids.push_back(iter->second);
-    }
-
-    // if all original id not found. ignore .result nothing
-    // if (internal_vector_ids.empty()) {
-    //   enable_filter = false;
-    // }
-
-    std::unique_ptr<SearchFilterForFlat> search_filter_for_flat_ptr =
-        std::make_unique<SearchFilterForFlat>(std::move(internal_vector_ids));
-    faiss::SearchParameters* param = enable_filter ? search_filter_for_flat_ptr.get() : nullptr;
-
     BAIDU_SCOPED_LOCK(mutex_);
-    index_->search(vector_with_ids.size(), vectors.get(), amplify_topk, distances.data(), labels.data(), nullptr);
+    if (!filters.empty()) {
+      // Build array index list.
+      for (auto& filter : filters) {
+        filter->Build(index_->rev_map);
+      }
+      auto flat_filter = filters.empty() ? nullptr : std::make_shared<FlatIDSelector>(filters);
+      SearchWithParam(vector_with_ids.size(), vectors.get(), topk, distances.data(), labels.data(), flat_filter);
+    } else {
+      index_->search(vector_with_ids.size(), vectors.get(), topk, distances.data(), labels.data());
+    }
   }
 
   for (size_t row = 0; row < vector_with_ids.size(); ++row) {
     auto& result = results.emplace_back();
 
-    int count = 0;
-    for (size_t i = 0; i < amplify_topk; i++) {
-      size_t pos = row * amplify_topk + i;
+    for (size_t i = 0; i < topk; i++) {
+      size_t pos = row * topk + i;
       if (labels[pos] < 0) {
         continue;
       }
-
-      // filter invalid value
-      if (!filters.empty()) {
-        bool valid = true;
-        for (auto& filter : filters) {
-          if (!filter->Check(labels[pos])) {
-            valid = false;
-            break;
-          }
-        }
-        if (!valid) {
-          continue;
-        }
-      }
-      ++count;
-
       auto* vector_with_distance = result.add_vector_with_distances();
 
       auto* vector_with_id = vector_with_distance->mutable_vector_with_id();
@@ -331,9 +273,6 @@ butil::Status VectorIndexFlat::Search(std::vector<pb::common::VectorWithId> vect
       }
 
       vector_with_distance->set_metric_type(metric_type_);
-      if (!filters.empty() && count == topk) {
-        break;
-      }
     }
   }
 
@@ -390,11 +329,13 @@ butil::Status VectorIndexFlat::NeedToSave(bool& need_to_save, [[maybe_unused]] u
 
 void VectorIndexFlat::SearchWithParam(faiss::idx_t n, const faiss::Index::component_t* x, faiss::idx_t k,
                                       faiss::Index::distance_t* distances, faiss::idx_t* labels,
-                                      const faiss::SearchParameters* params) {
-  raw_index_->search(n, x, k, distances, labels, params);
+                                      std::shared_ptr<FlatIDSelector> filters) {
+  faiss::SearchParameters param;
+  param.sel = filters.get();
+  raw_index_->search(n, x, k, distances, labels, &param);
   faiss::idx_t* li = labels;
 #pragma omp parallel for
-  for (faiss::idx_t i = 0; i < n * k; i++) {
+  for (faiss::idx_t i = 0; i < n * k; ++i) {
     li[i] = li[i] < 0 ? li[i] : index_->id_map[li[i]];
   }
 }
