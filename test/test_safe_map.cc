@@ -23,6 +23,7 @@
 #include <vector>
 
 #include "butil/containers/flat_map.h"
+#include "butil/string_printf.h"
 #include "common/logging.h"
 #include "common/safe_map.h"
 
@@ -102,4 +103,37 @@ TEST(DingoSafeMapTest, DingoSafeMapCopy) {
   map3.init(100);
   safe_map.GetRawMapCopy(map3);
   EXPECT_EQ(map3.size(), 3);
+}
+
+TEST(DingoSafeStdMapTest, DingoSafeStdMapGetRangeValues) {
+  dingodb::DingoSafeStdMap<std::string, std::string> safe_map;
+
+  for (int i = 0; i < 1000; i++) {
+    safe_map.Put(butil::string_printf("%03d", i), std::to_string(i));
+  }
+
+  std::vector<std::string> values;
+  auto ret =
+      safe_map.GetRangeValues(values, "900", "999", [](const std::string& value) { return value.compare("990") > 0; });
+
+  for (auto& value : values) {
+    std::cout << value << std::endl;
+  }
+
+  EXPECT_EQ(ret, 8);
+
+  std::cout << std::string("91").compare("900") << std::endl;
+  std::cout << std::string("900").compare("91") << std::endl;
+  std::cout << std::string("900").compare("910") << std::endl;
+  std::cout << std::string("998").compare("990") << std::endl;
+
+  values.clear();
+  ret = safe_map.GetRangeValues(
+      values, "900", "999", [](const std::string& key) { return key.compare("990") < 0; }, nullptr);
+
+  for (auto& value : values) {
+    std::cout << value << std::endl;
+  }
+
+  EXPECT_EQ(ret, 90);
 }

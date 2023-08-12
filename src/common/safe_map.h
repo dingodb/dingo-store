@@ -536,6 +536,85 @@ class DingoSafeStdMap {
     return keys.size();
   }
 
+  // GetRangeKeys
+  // get keys of range
+  int GetRangeKeys(std::set<T_KEY> &keys, T_KEY lower_bound, T_KEY upper_bound,
+                   std::function<bool(T_KEY)> key_filter = nullptr,
+                   std::function<bool(T_VALUE)> value_filter = nullptr) {
+    TypeScopedPtr ptr;
+    if (safe_map.Read(&ptr) != 0) {
+      return -1;
+    }
+
+    typename TypeRawMap::iterator it = ptr->lower_bound(lower_bound);
+    for (; it != ptr->end(); ++it) {
+      if (it == ptr->end()) {
+        break;
+      }
+      if (it->first >= upper_bound) {
+        break;
+      }
+      if ((key_filter == nullptr || key_filter(it->first)) & (value_filter == nullptr || value_filter(it->first))) {
+        keys.insert(it->first);
+      }
+    }
+
+    return keys.size();
+  }
+
+  // GetRangeValues
+  // get values of range
+  int GetRangeValues(std::vector<T_VALUE> &values, T_KEY lower_bound, T_KEY upper_bound,
+                     std::function<bool(T_KEY)> key_filter = nullptr,
+                     std::function<bool(T_VALUE)> value_filter = nullptr) {
+    TypeScopedPtr ptr;
+    if (safe_map.Read(&ptr) != 0) {
+      return -1;
+    }
+
+    typename TypeRawMap::const_iterator it = ptr->lower_bound(lower_bound);
+    for (; it != ptr->end(); ++it) {
+      if (it == ptr->end()) {
+        break;
+      }
+      if (it->first >= upper_bound) {
+        break;
+      }
+      if ((key_filter == nullptr || key_filter(it->first)) & (value_filter == nullptr || value_filter(it->first))) {
+        values.push_back(it->second);
+      }
+    }
+
+    return values.size();
+  }
+
+  // GetRangeKeyValues
+  // get keys and values of range
+  int GetRangeKeyValues(std::vector<T_KEY> &keys, std::vector<T_VALUE> &values, T_KEY lower_bound, T_KEY upper_bound,
+                        std::function<bool(T_KEY)> key_filter = nullptr,
+                        std::function<bool(T_VALUE)> value_filter = nullptr) {
+    TypeScopedPtr ptr;
+    if (safe_map.Read(&ptr) != 0) {
+      return -1;
+    }
+
+    typename TypeRawMap::iterator it = ptr->lower_bound(lower_bound);
+    for (; it != ptr->end(); ++it) {
+      if (it == ptr->end()) {
+        break;
+      }
+      if (it->first >= upper_bound) {
+        break;
+      }
+      if ((key_filter == nullptr || key_filter(it->first)) & (value_filter == nullptr || value_filter(it->first))) {
+        keys.push_back(it->first);
+        values.push_back(it->second);
+      }
+    }
+
+    return keys.size();
+  }
+
   // Exists
   // check if the key exists in the safe map
   bool Exists(const T_KEY &key) {
