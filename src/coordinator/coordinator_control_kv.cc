@@ -85,8 +85,19 @@ butil::Status CoordinatorControl::RangeRawKvIndex(
     const std::string &key, const std::string &range_end,
     std::vector<pb::coordinator_internal::KvIndexInternal> &kv_index_values) {
   // scan kv_index for legal keys
-  auto ret = this->kv_index_map_.GetAllValues(
-      kv_index_values, [&key, &range_end](pb::coordinator_internal::KvIndexInternal version_kv) -> bool {
+  std::string lower_bound = key;
+  std::string upper_bound = range_end;
+
+  // TODO: implement real infinity range_end in the future
+  if (range_end == std::to_string('\0')) {
+    upper_bound = std::string(4096, '\xff');
+  } else if (range_end.empty()) {
+    upper_bound = std::string(4096, '\xff');
+  }
+
+  auto ret = this->kv_index_map_.GetRangeValues(
+      kv_index_values, lower_bound, upper_bound, nullptr,
+      [&key, &range_end](const pb::coordinator_internal::KvIndexInternal &version_kv) -> bool {
         auto generation_count = version_kv.generations_size();
         if (generation_count == 0) {
           return false;
@@ -105,6 +116,27 @@ butil::Status CoordinatorControl::RangeRawKvIndex(
           return version_kv.id().compare(key) >= 0 && version_kv.id().compare(range_end) < 0;
         }
       });
+
+  // auto ret = this->kv_index_map_.GetAllValues(
+  //     kv_index_values, [&key, &range_end](pb::coordinator_internal::KvIndexInternal version_kv) -> bool {
+  //       auto generation_count = version_kv.generations_size();
+  //       if (generation_count == 0) {
+  //         return false;
+  //       }
+
+  //       const auto &latest_generation = version_kv.generations(generation_count - 1);
+  //       if (!latest_generation.has_create_revision() || latest_generation.revisions_size() == 0) {
+  //         return false;
+  //       }
+
+  //       if (range_end.empty()) {
+  //         return key == version_kv.id();
+  //       } else if (range_end == std::to_string('\0')) {
+  //         return version_kv.id().compare(key) >= 0;
+  //       } else {
+  //         return version_kv.id().compare(key) >= 0 && version_kv.id().compare(range_end) < 0;
+  //       }
+  //     });
 
   if (ret < 0) {
     DINGO_LOG(WARNING) << "RangeRawKvIndex failed, key:[" << key << "]";
