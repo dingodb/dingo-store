@@ -40,7 +40,7 @@
 namespace dingodb {
 
 DEFINE_uint32(max_kv_key_size, 4096, "max kv put count");
-DEFINE_uint32(max_kv_value_size, 4096, "max kv put count");
+DEFINE_uint32(max_kv_value_size, 8192, "max kv put count");
 DEFINE_uint32(compaction_retention_rev_count, 1000, "max revision count retention for compaction");
 DEFINE_bool(auto_compaction, false, "auto compaction on/off");
 
@@ -88,11 +88,10 @@ butil::Status CoordinatorControl::RangeRawKvIndex(
   std::string lower_bound = key;
   std::string upper_bound = range_end;
 
-  // TODO: implement real infinity range_end in the future
   if (range_end == std::to_string('\0')) {
-    upper_bound = std::string(4096, '\xff');
+    upper_bound = std::string(FLAGS_max_kv_key_size, '\xff');
   } else if (range_end.empty()) {
-    upper_bound = std::string(4096, '\xff');
+    upper_bound = std::string(FLAGS_max_kv_key_size, '\xff');
   }
 
   auto ret = this->kv_index_map_.GetRangeValues(
@@ -365,6 +364,32 @@ butil::Status CoordinatorControl::KvPut(const pb::common::KeyValue &key_value_in
                   << ", need_prev_kv: " << need_prev_kv << ", igore_value: " << igore_value
                   << ", ignore_lease: " << ignore_lease;
 
+  // check key
+  if (key_value_in.key().empty()) {
+    DINGO_LOG(ERROR) << "KvPut key is empty";
+    return butil::Status(EINVAL, "KvPut key is empty");
+  }
+
+  // check key length
+  if (key_value_in.key().size() > FLAGS_max_kv_key_size) {
+    DINGO_LOG(ERROR) << "KvPut key is too long, max_kv_key_size: " << FLAGS_max_kv_key_size
+                     << ", key: " << key_value_in.key();
+    return butil::Status(EINVAL, "KvPut key is too long");
+  }
+
+  // check value
+  if (!igore_value && key_value_in.value().empty()) {
+    DINGO_LOG(ERROR) << "KvPut value is empty";
+    return butil::Status(EINVAL, "KvPut value is empty");
+  }
+
+  // check value length
+  if (!igore_value && key_value_in.value().size() > FLAGS_max_kv_value_size) {
+    DINGO_LOG(ERROR) << "KvPut value is too long, max_kv_value_size: " << FLAGS_max_kv_value_size
+                     << ", key: " << key_value_in.key();
+    return butil::Status(EINVAL, "KvPut value is too long");
+  }
+
   // check lease is valid
   if (!ignore_lease && lease_id != 0) {
     std::set<std::string> keys;
@@ -417,32 +442,6 @@ butil::Status CoordinatorControl::KvPut(const pb::common::KeyValue &key_value_in
     }
 
     DINGO_LOG(INFO) << "KvPut LeaseAddKeys success, lease_id: " << lease_grant_id << ", key: " << key_value_in.key();
-  }
-
-  // check key
-  if (key_value_in.key().empty()) {
-    DINGO_LOG(ERROR) << "KvPut key is empty";
-    return butil::Status(EINVAL, "KvPut key is empty");
-  }
-
-  // check value
-  if (!igore_value && key_value_in.value().empty()) {
-    DINGO_LOG(ERROR) << "KvPut value is empty";
-    return butil::Status(EINVAL, "KvPut value is empty");
-  }
-
-  // check key length
-  if (key_value_in.key().size() > FLAGS_max_kv_key_size) {
-    DINGO_LOG(ERROR) << "KvPut key is too long, max_kv_key_size: " << FLAGS_max_kv_key_size
-                     << ", key: " << key_value_in.key();
-    return butil::Status(EINVAL, "KvPut key is too long");
-  }
-
-  // check value length
-  if (!igore_value && key_value_in.value().size() > FLAGS_max_kv_value_size) {
-    DINGO_LOG(ERROR) << "KvPut value is too long, max_kv_value_size: " << FLAGS_max_kv_value_size
-                     << ", key: " << key_value_in.key();
-    return butil::Status(EINVAL, "KvPut value is too long");
   }
 
   // get prev_kvs
