@@ -36,7 +36,7 @@ class StoreController {
   StoreController(const StoreController &) = delete;
   const StoreController &operator=(const StoreController &) = delete;
 
-  bool Init() { return true; }
+  static bool Init() { return true; }
   void Destroy() {}
 };
 

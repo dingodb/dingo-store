@@ -849,8 +849,15 @@ butil::Status CoordinatorControl::SelectStore(pb::common::StoreType store_type, 
     pb::common::Store store;
     uint64_t weight;
     uint64_t region_num;
-    uint64_t free_capacity;
-    uint64_t total_capacity;
+    uint64_t system_total_capacity;  // total capacity of this store
+    uint64_t system_free_capacity;   // free capacity of this store
+    uint64_t system_cpu_usage;       // cpu usage of this store process
+    uint64_t system_total_memory;    // total memory of the host this store process running on
+    uint64_t system_free_memory;     // total free memory of the host this store process running on
+    uint64_t system_io_util;         // io utilization of the host this store process running on
+    uint64_t process_used_cpu;       // cpu usage of this store process
+    uint64_t process_used_memory;    // total used memory of this store process
+    uint64_t process_used_capacity;  // free capacity of this store
   };
 
   // check and sort store by capacity, regions_num
@@ -861,30 +868,46 @@ butil::Status CoordinatorControl::SelectStore(pb::common::StoreType store_type, 
       StoreMore store_more;
       store_more.store = it;
 
+      bool has_metrics = false;
       auto* ptr = store_metrics_map_.seek(it.id());
       if (ptr != nullptr) {
         store_more.region_num = ptr->region_metrics_map_size() > 0 ? ptr->region_metrics_map_size() : 0;
-        store_more.free_capacity = ptr->free_capacity() > 0 ? ptr->free_capacity() : 0;
-        store_more.total_capacity = ptr->total_capacity() > 0 ? ptr->total_capacity() : 0;
-      } else {
-        store_more.region_num = 0;
-        store_more.free_capacity = 0;
-        store_more.total_capacity = 0;
+        store_more.system_free_capacity = ptr->system_free_capacity() > 0 ? ptr->system_free_capacity() : 0;
+        store_more.system_total_capacity = ptr->system_total_capacity() > 0 ? ptr->system_total_capacity() : 0;
+        store_more.system_total_memory = ptr->system_total_memory() > 0 ? ptr->system_free_memory() : 0;
+        store_more.system_free_memory = ptr->system_free_memory() > 0 ? ptr->system_free_memory() : 0;
+        has_metrics = true;
       }
 
-      if (store_more.total_capacity == 0) {
+      if (has_metrics) {
+        if (store_type == pb::common::StoreType::NODE_TYPE_STORE) {
+          store_more.weight = store_more.system_free_capacity * 100 / store_more.system_total_capacity +
+                              (100 / (store_more.region_num + 1));
+        } else if (store_type == pb::common::StoreType::NODE_TYPE_INDEX) {
+          store_more.weight = store_more.system_free_memory * 100 / store_more.system_total_memory +
+                              (100 / (store_more.region_num + 1));
+        }
+
+        if (store_more.system_total_capacity == 0) {
+          store_more.weight = 0;
+        }
+
+        if (store_more.system_free_memory == 0) {
+          store_more.weight = 0;
+        }
+
+        store_more.weight = store_more.weight * Helper::GenerateRealRandomInteger(1, 20);
+      } else {
         store_more.weight = 0;
-      } else {
-        store_more.weight =
-            store_more.free_capacity * 100 / store_more.total_capacity + (100 / (store_more.region_num + 1));
       }
-
-      store_more.weight = Helper::GenerateRandomInteger(0, 20);
 
       store_more_vec.push_back(store_more);
       DINGO_LOG(INFO) << "store_more_vec.push_back store_id=" << store_more.store.id()
-                      << ", region_num=" << store_more.region_num << ", free_capacity=" << store_more.free_capacity
-                      << ", total_capacity=" << store_more.total_capacity << ", weight=" << store_more.weight;
+                      << ", region_num=" << store_more.region_num
+                      << ", free_capacity=" << store_more.system_free_capacity
+                      << ", total_capacity=" << store_more.system_total_capacity
+                      << ", free_memory=" << store_more.system_free_memory
+                      << ", total_memory=" << store_more.system_total_memory << ", weight=" << store_more.weight;
     }
   }
 
@@ -926,7 +949,7 @@ butil::Status CoordinatorControl::CreateRegion(const std::string& region_name, p
 
   // setup store_type
   pb::common::StoreType store_type = pb::common::StoreType::NODE_TYPE_STORE;
-  if (region_type == pb::common::RegionType::INDEX_REGION) {
+  if (region_type == pb::common::RegionType::INDEX_REGION && index_parameter.has_vector_index_parameter()) {
     store_type = pb::common::StoreType::NODE_TYPE_INDEX;
   }
 
@@ -2592,8 +2615,8 @@ uint64_t CoordinatorControl::UpdateStoreMetrics(const pb::common::StoreMetrics& 
   }
 
   // mbvar store
-  coordinator_bvar_metrics_store_.UpdateStoreBvar(store_metrics.id(), store_metrics.total_capacity(),
-                                                  store_metrics.free_capacity());
+  coordinator_bvar_metrics_store_.UpdateStoreBvar(store_metrics.id(), store_metrics.system_total_capacity(),
+                                                  store_metrics.system_free_capacity());
 
   // use region_metrics_map to update region_map and store_operation
   if (store_metrics.region_metrics_map_size() > 0) {

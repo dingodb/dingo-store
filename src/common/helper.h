@@ -166,6 +166,7 @@ class Helper {
 
   // generate random string for keyring
   static std::string GenerateRandomString(int length);
+  static uint64_t GenerateRealRandomInteger(uint64_t min_value, uint64_t max_value);
   static uint64_t GenerateRandomInteger(uint64_t min_value, uint64_t max_value);
   static float GenerateRandomFloat(float min_value, float max_value);
   static uint64_t GenId();
@@ -192,7 +193,11 @@ class Helper {
   // We are based on this assumption. In general, it is rare to see all 0xFF
   static bool KeyIsEndOfAllTable(const std::string& key);
 
-  static bool GetDiskCapacity(const std::string& path, std::map<std::string, uint64_t>& output);
+  static bool GetSystemDiskCapacity(const std::string& path, std::map<std::string, uint64_t>& output);
+  static bool GetSystemMemoryInfo(std::map<std::string, uint64_t>& output);
+  static bool GetSystemCpuUsage(std::map<std::string, uint64_t>& output);
+  static bool GetSystemDiskIoUtil(const std::string& device_name, std::map<std::string, uint64_t>& output);
+  static bool GetProcessMemoryInfo(std::map<std::string, uint64_t>& output);
 
   static void AlignByteArrays(std::string& a, std::string& b);
   // Notice: String will add one element as a prefix of the result, this element is for the carry

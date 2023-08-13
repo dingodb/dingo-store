@@ -381,3 +381,44 @@ TEST_F(HelperTest, TraverseDirectory) {
   std::filesystem::remove_all(path);
   EXPECT_EQ(2, filenames.size());
 }
+
+TEST_F(HelperTest, GetSystemMemoryInfo) {
+  std::map<std::string, uint64_t> output;
+  auto ret = dingodb::Helper::GetSystemMemoryInfo(output);
+  EXPECT_EQ(true, ret);
+
+  for (auto& it : output) {
+    std::cout << it.first << ": " << it.second << '\n';
+  }
+}
+
+TEST_F(HelperTest, GetSystemCpuUsage) {
+  std::map<std::string, uint64_t> output;
+  auto ret = dingodb::Helper::GetSystemCpuUsage(output);
+  EXPECT_EQ(true, ret);
+
+  for (auto& it : output) {
+    std::cout << it.first << ": " << it.second << '\n';
+  }
+}
+
+TEST_F(HelperTest, GetSystemDiskIoUtil) {
+  std::map<std::string, uint64_t> output;
+  std::string device_name = "sda";
+  auto ret = dingodb::Helper::GetSystemDiskIoUtil(device_name, output);
+  EXPECT_EQ(true, ret);
+
+  for (auto& it : output) {
+    std::cout << it.first << ": " << it.second << '\n';
+  }
+}
+
+TEST_F(HelperTest, GetProcessMemoryInfo) {
+  std::map<std::string, uint64_t> output;
+  auto ret = dingodb::Helper::GetProcessMemoryInfo(output);
+  EXPECT_EQ(true, ret);
+
+  for (auto& it : output) {
+    std::cout << it.first << ": " << it.second << '\n';
+  }
+}
