@@ -31,10 +31,10 @@ As an open-source-oriented basic storage + computing platform, Dingo-Store shoul
 |                                        | refactor                                          | Refactoring of existing functionality.                      |
 |                                        | test                                              | Addition of new test-related code.                          |
 |                                        | chore                                             | Integration and deployment-related submissions.             |
-| module（小写）                         | coordinator                                       | Metadata management and storage-related.                    |
+| module（in lowercase）                         | coordinator                                       | Metadata management and storage-related.                    |
 |                                        | store                                             | Distributed storage-related (e.g. rocksdb, raft-kv-engine). |
 |                                        | sdk                                               | Client interface.                                           |
 |                                        | deploy                                            | Script-related.                                             |
 |                                        | common                                            | Basic modules, such as cmake-related changes.               |
-|                                        | proto                                             | Changes related to protobuff                                |
-| description (capitalized first letter) | Description of modifications made in this commit, |                                                             |
+|                                        | proto                                             | Changes related to protobuf.                                |
+| description (capitalized first letter) | Description of modifications made in this commit. |                                                             |
