@@ -84,12 +84,40 @@ bool StoreMetrics::CollectMetrics() {
   auto role = Server::GetInstance()->GetRole();
   auto config = ConfigManager::GetInstance()->GetConfig(role);
 
-  if (!Helper::GetDiskCapacity(config->GetString("store.path"), output)) {
+  // system disk capacity
+  if (!Helper::GetSystemDiskCapacity(config->GetString("store.path"), output)) {
     return false;
   }
 
-  metrics_->set_total_capacity(output["TotalCapacity"]);
-  metrics_->set_free_capacity(output["FreeCcapacity"]);
+  metrics_->set_system_total_capacity(output["system_total_capacity"]);
+  metrics_->set_system_free_capacity(output["system_free_capacity"]);
+
+  // system memory info
+  output.clear();
+  if (!Helper::GetSystemMemoryInfo(output)) {
+    return false;
+  }
+
+  metrics_->set_system_total_memory(output["system_total_memory"]);
+  metrics_->set_system_free_memory(output["system_free_memory"]);
+  metrics_->set_system_total_swap(output["system_total_swap"]);
+  metrics_->set_system_free_swap(output["system_free_swap"]);
+
+  // system cpu usage
+  output.clear();
+  if (!Helper::GetSystemCpuUsage(output)) {
+    return false;
+  }
+
+  metrics_->set_system_cpu_usage(output["system_cpu_usage"]);
+
+  // process memory info
+  output.clear();
+  if (!Helper::GetProcessMemoryInfo(output)) {
+    return false;
+  }
+
+  metrics_->set_process_used_memory(output["process_used_memory"]);
 
   return true;
 }

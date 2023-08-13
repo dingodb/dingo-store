@@ -14,7 +14,10 @@
 
 #include "common/helper.h"
 
+#include <sys/resource.h>
 #include <sys/statvfs.h>
+#include <sys/sysinfo.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 #include <algorithm>
@@ -25,11 +28,13 @@
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <random>
 #include <ratio>
 #include <regex>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -619,6 +624,20 @@ pb::common::Peer Helper::GetPeerInfo(const butil::EndPoint& endpoint) {
   return peer;
 }
 
+uint64_t Helper::GenerateRealRandomInteger(uint64_t min_value, uint64_t max_value) {
+  // Create a random number generator engine
+  std::random_device rd;      // Obtain a random seed from the hardware
+  std::mt19937_64 gen(rd());  // Standard 64-bit mersenne_twister_engine seeded with rd()
+
+  // Create a distribution for the desired range
+  std::uniform_int_distribution<uint64_t> dis(min_value, max_value);
+
+  // Generate and print a random int64 number
+  uint64_t random_number = dis(gen);
+
+  return random_number;
+}
+
 uint64_t Helper::GenerateRandomInteger(uint64_t min_value, uint64_t max_value) {
   std::mt19937 rng;
   std::uniform_real_distribution<> distrib(min_value, max_value);
@@ -710,7 +729,8 @@ bool Helper::KeyIsEndOfAllTable(const std::string& key) {
   return true;
 }
 
-bool Helper::GetDiskCapacity(const std::string& path, std::map<std::string, uint64_t>& output) {
+bool Helper::GetSystemDiskCapacity(const std::string& path, std::map<std::string, uint64_t>& output) {
+  // system capacity
   struct statvfs stat;
   if (statvfs(path.c_str(), &stat) != 0) {
     std::cerr << "Failed to get file system statistics\n";
@@ -720,12 +740,202 @@ bool Helper::GetDiskCapacity(const std::string& path, std::map<std::string, uint
   uint64_t total_space = stat.f_frsize * stat.f_blocks;
   uint64_t free_space = stat.f_frsize * stat.f_bfree;
 
-  output["TotalCapacity"] = total_space;
-  output["FreeCcapacity"] = free_space;
+  output["system_total_capacity"] = total_space;
+  output["system_free_capacity"] = free_space;
+
   return true;
 }
 
-// Not recursion
+bool Helper::GetSystemMemoryInfo(std::map<std::string, uint64_t>& output) {
+  // system memory info
+  struct sysinfo mem_info;
+  if (sysinfo(&mem_info) != -1) {
+    DINGO_LOG(INFO) << fmt::format("Total RAM: {} bytes", mem_info.totalram * mem_info.mem_unit);
+    DINGO_LOG(INFO) << fmt::format("Available RAM: {} bytes", mem_info.freeram * mem_info.mem_unit);
+    DINGO_LOG(INFO) << fmt::format("Total Swap: {} bytes", mem_info.totalswap * mem_info.mem_unit);
+    DINGO_LOG(INFO) << fmt::format("Available Swap: {} bytes", mem_info.freeswap * mem_info.mem_unit);
+
+    output["system_total_memory"] = mem_info.totalram * mem_info.mem_unit;
+    output["system_free_memory"] = mem_info.freeram * mem_info.mem_unit;
+    output["system_total_swap"] = mem_info.totalswap * mem_info.mem_unit;
+    output["system_free_swap"] = mem_info.freeswap * mem_info.mem_unit;
+  } else {
+    DINGO_LOG(WARNING) << "Failed to retrieve memory information using sysinfo.";
+    return false;
+  }
+
+  return true;
+}
+
+bool Helper::GetProcessMemoryInfo(std::map<std::string, uint64_t>& output) {
+  struct rusage usage;
+  if (getrusage(RUSAGE_SELF, &usage) != -1) {
+    DINGO_LOG(INFO) << fmt::format("Memory usage: {} kilobytes", usage.ru_maxrss);
+    output["process_used_memory"] = usage.ru_maxrss;
+    return true;
+  } else {
+    DINGO_LOG(INFO) << "Failed to retrieve memory usage using getrusage.";
+    return false;
+  }
+}
+
+bool Helper::GetSystemCpuUsage(std::map<std::string, uint64_t>& output) {
+  try {
+    std::ifstream file("/proc/stat");
+    if (!file.is_open()) {
+      DINGO_LOG(WARNING) << "Failed to open /proc/stat";
+      return false;
+    }
+
+    std::string line;
+    std::getline(file, line);
+    file.close();
+
+    std::istringstream iss(line);
+    std::vector<std::string> tokens(std::istream_iterator<std::string>{iss}, std::istream_iterator<std::string>());
+
+    // Calculate total CPU time
+    unsigned long long total_cpu_time = 0;
+    for (size_t i = 1; i < tokens.size(); i++) {
+      total_cpu_time += std::stoull(tokens[i]);
+    }
+
+    // Calculate idle CPU time
+    unsigned long long idle_cpu_time = std::stoull(tokens[4]);
+
+    // Calculate CPU usage percentage
+    double cpu_usage = 100.0 * (total_cpu_time - idle_cpu_time) / total_cpu_time;
+
+    DINGO_LOG(INFO) << fmt::format("CPU usage: {}%", cpu_usage);
+
+    output["system_cpu_usage"] = static_cast<uint64_t>(cpu_usage * 100);
+
+    return true;
+  } catch (const std::exception& e) {
+    std::cerr << "Failed to get system cpu usage: " << e.what() << std::endl;
+    DINGO_LOG(INFO) << "Failed to get system cpu usage: " << e.what();
+    return false;
+  }
+}
+
+struct DiskStats {
+  unsigned long long int major_num;
+  unsigned long long int minor_num;
+  std::string device;
+  unsigned long long int reads_completed;
+  unsigned long long int reads_merged;
+  unsigned long long int sectors_read;
+  unsigned long long int read_time;
+  unsigned long long int writes_completed;
+  unsigned long long int writes_merged;
+  unsigned long long int sectors_written;
+  unsigned long long int write_time;
+  unsigned long long int io_in_progress;
+  unsigned long long int io_time;
+  unsigned long long int weighted_io_time;
+  unsigned long long int discards_completed;
+  unsigned long long int discards_merged;
+  unsigned long long int sectors_discarded;
+  unsigned long long int discard_time;
+  unsigned long long int flush_completed;
+  unsigned long long int flush_time;
+  // unsigned long long int io_time_currently_being_weighted;
+};
+
+std::vector<DiskStats> GetDiskStats() {
+  std::ifstream file("/proc/diskstats");
+  std::vector<DiskStats> disk_stats;
+  if (file) {
+    std::string line;
+    while (std::getline(file, line)) {
+      std::istringstream iss(line);
+      DiskStats stats;
+      iss >> stats.major_num >> stats.minor_num >> stats.device >> stats.reads_completed >> stats.reads_merged >>
+          stats.sectors_read >> stats.read_time >> stats.writes_completed >> stats.writes_merged >>
+          stats.sectors_written >> stats.write_time >> stats.io_in_progress >> stats.io_time >>
+          stats.weighted_io_time >> stats.discards_completed >> stats.discards_merged >> stats.sectors_discarded >>
+          stats.discard_time >> stats.flush_completed >> stats.flush_time;
+      disk_stats.push_back(stats);
+
+      DINGO_LOG(INFO) << "Disk stats.device: " << stats.device << " stats.read_completed: " << stats.reads_completed
+                      << " stats.reads_merged: " << stats.reads_merged << " stats.sectors_read: " << stats.sectors_read
+                      << " stats.read_time: " << stats.read_time
+                      << " stats.writes_completed: " << stats.writes_completed
+                      << " stats.writes_merged: " << stats.writes_merged
+                      << " stats.sectors_written: " << stats.sectors_written
+                      << " stats.write_time: " << stats.write_time << " stats.io_in_process: " << stats.io_in_progress
+                      << " stats.io_time: " << stats.io_time << " stats.weighted_io_time: " << stats.weighted_io_time
+                      << " stats.discards_completed: " << stats.discards_completed
+                      << " stats.discards_merged: " << stats.discards_merged
+                      << " stats.sectors_discarded: " << stats.sectors_discarded
+                      << " stats.discard_time: " << stats.discard_time
+                      << " stats.flush_completed: " << stats.flush_completed
+                      << " stats.flush_time: " << stats.flush_time;
+    }
+    file.close();
+  } else {
+    std::cerr << "Failed to open /proc/diskstats." << std::endl;
+  }
+  return disk_stats;
+}
+
+double GetSystemIoUtilization(std::string device) {
+  std::vector<DiskStats> prev_stats = GetDiskStats();
+  usleep(1000000);  // Sleep for 1 second
+  std::vector<DiskStats> cur_stats = GetDiskStats();
+
+  unsigned long long int prev_io_time = 0;
+  unsigned long long int cur_io_time = 0;
+  unsigned long long int prev_weighted_io_time = 0;
+  unsigned long long int cur_weighted_io_time = 0;
+
+  for (const DiskStats& stats : prev_stats) {
+    if (stats.device != device) {
+      continue;
+    }
+    prev_io_time += stats.io_time;
+    prev_weighted_io_time += stats.weighted_io_time;
+  }
+
+  for (const DiskStats& stats : cur_stats) {
+    if (stats.device != device) {
+      continue;
+    }
+    cur_io_time += stats.io_time;
+    cur_weighted_io_time += stats.weighted_io_time;
+  }
+
+  DINGO_LOG(INFO) << "cur_io_time: " << cur_io_time << " prev_io_time: " << prev_io_time
+                  << " cur_weighted_io_time: " << cur_weighted_io_time
+                  << " prev_weighted_io_time: " << prev_weighted_io_time;
+
+  unsigned long long int io_time_diff = cur_io_time - prev_io_time;
+  unsigned long long int weighted_io_time_diff = cur_weighted_io_time - prev_weighted_io_time;
+
+  DINGO_LOG(INFO) << "io_time_diff: " << io_time_diff << " weighted_io_time_diff: " << weighted_io_time_diff;
+
+  double io_utilization = 0.0;
+  if (io_time_diff == 0 || weighted_io_time_diff == 0 || io_time_diff == weighted_io_time_diff) {
+    return io_utilization;
+  }
+  io_utilization = 100.0 * io_time_diff / weighted_io_time_diff;
+
+  return io_utilization;
+}
+
+bool Helper::GetSystemDiskIoUtil(const std::string& device_name, std::map<std::string, uint64_t>& output) {
+  try {
+    double io_utilization = GetSystemIoUtilization(device_name);
+    output["system_total_capacity"] = static_cast<uint64_t>(io_utilization);
+    DINGO_LOG(INFO) << fmt::format("System disk io utilization: {}", io_utilization);
+
+    return true;
+  } catch (std::exception& e) {
+    DINGO_LOG(ERROR) << fmt::format("GetDiskIoUtil failed, error: {}", e.what());
+    return false;
+  }
+}
+
 std::vector<std::string> Helper::TraverseDirectory(const std::string& path) {
   std::vector<std::string> filenames;
   try {
