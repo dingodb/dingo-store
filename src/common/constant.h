@@ -57,6 +57,9 @@ class Constant {
   // Define loading snapshot flag.
   inline static const std::string kIsLoadingSnapshot = "IS_LOADING_SNAPSHOT";
 
+  // Define default raft snapshot policy
+  inline static const std::string kDefaultRaftSnapshotPolicy = "checkpoint";
+
   // flat map init capacity
   static const uint64_t kStoreRegionMetaInitCapacity = 1024;
 

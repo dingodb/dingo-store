@@ -18,6 +18,8 @@
 #include <iostream>
 #include <memory>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "butil/status.h"
 #include "common/constant.h"
@@ -28,6 +30,7 @@
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "server/server.h"
+#include "vector/codec.h"
 
 namespace dingodb {
 
@@ -82,8 +85,9 @@ butil::Status RaftSnapshot::GenSnapshotFileByScan(const std::string& checkpoint_
 }
 
 // Filter sst file by range
-std::vector<pb::store_internal::SstFileInfo> FilterSstFile(std::vector<pb::store_internal::SstFileInfo>& sst_files,
-                                                           const std::string& start_key, const std::string& end_key) {
+std::vector<pb::store_internal::SstFileInfo> FilterSstFile(  // NOLINT
+    std::vector<pb::store_internal::SstFileInfo>& sst_files,
+    const std::vector<std::pair<std::string, std::string>>& ranges) {
   std::vector<pb::store_internal::SstFileInfo> filter_sst_files;
   for (auto& sst_file : sst_files) {
     DINGO_LOG(INFO) << "sst file info: " << sst_file.ShortDebugString();
@@ -92,8 +96,13 @@ std::vector<pb::store_internal::SstFileInfo> FilterSstFile(std::vector<pb::store
       continue;
     }
 
-    if ((end_key.empty() || sst_file.start_key() < end_key) && start_key < sst_file.end_key()) {
-      filter_sst_files.push_back(sst_file);
+    for (const auto& range : ranges) {
+      const std::string& start_key = range.first;
+      const std::string& end_key = range.second;
+      if ((end_key.empty() || sst_file.start_key() < end_key) && start_key < sst_file.end_key()) {
+        filter_sst_files.push_back(sst_file);
+        break;
+      }
     }
   }
   return filter_sst_files;
@@ -113,7 +122,23 @@ butil::Status RaftSnapshot::GenSnapshotFileByCheckpoint(const std::string& check
     return butil::Status();
   }
 
-  sst_files = FilterSstFile(tmp_sst_files, region->RawRange().start_key(), region->RawRange().end_key());
+  // Get region actual range
+  const auto& region_range = region->RawRange();
+  std::vector<std::pair<std::string, std::string>> ranges;
+  if (region->Type() == pb::common::INDEX_REGION) {
+    ranges.push_back(std::make_pair(VectorCodec::FillVectorDataPrefix(region_range.start_key()),
+                                    VectorCodec::FillVectorDataPrefix(region_range.end_key())));
+
+    ranges.push_back(std::make_pair(VectorCodec::FillVectorScalarPrefix(region_range.start_key()),
+                                    VectorCodec::FillVectorScalarPrefix(region_range.end_key())));
+
+    ranges.push_back(std::make_pair(VectorCodec::FillVectorTablePrefix(region_range.start_key()),
+                                    VectorCodec::FillVectorTablePrefix(region_range.end_key())));
+  } else {
+    ranges.push_back(std::make_pair(region_range.start_key(), region_range.end_key()));
+  }
+
+  sst_files = FilterSstFile(tmp_sst_files, ranges);
   return butil::Status();
 }
 
@@ -124,9 +149,9 @@ bool RaftSnapshot::SaveSnapshot(braft::SnapshotWriter* writer, store::RegionPtr 
     return false;
   }
 
-  DINGO_LOG(INFO) << fmt::format("Save snapshot region {} range[{}-{}]", region->Id(),
-                                 Helper::StringToHex(region->RawRange().start_key()),
-                                 Helper::StringToHex(region->RawRange().end_key()));
+  DINGO_LOG(INFO) << fmt::format(
+      "Save snapshot region {} region type {} range[{}-{}]", region->Id(), pb::common::RegionType_Name(region->Type()),
+      Helper::StringToHex(region->RawRange().start_key()), Helper::StringToHex(region->RawRange().end_key()));
 
   std::string region_checkpoint_path =
       fmt::format("{}/{}_{}", Server::GetInstance()->GetCheckpointPath(), region->Id(), Helper::TimestampMs());
@@ -157,6 +182,34 @@ bool RaftSnapshot::SaveSnapshot(braft::SnapshotWriter* writer, store::RegionPtr 
   return true;
 }
 
+// Merge multiple sst file to one sst
+static bool MergeCheckpointFile(std::string path, std::string merge_file_path, const pb::common::Range& range) {
+  // Already exist merge.sst file, remove it.
+  if (std::filesystem::exists(merge_file_path)) {
+    Helper::RemoveFileOrDirectory(merge_file_path);
+  }
+
+  // Merge multiple file to one sst.
+  // Origin checkpoint sst file cant't ingest rocksdb,
+  // Just use rocksdb::SstFileWriter generate sst file can ingest rocksdb.
+  auto status = RawRocksEngine::MergeCheckpointFile(path, range, merge_file_path);
+  if (!status.ok()) {
+    // Clean temp file
+    if (std::filesystem::exists(merge_file_path)) {
+      Helper::RemoveFileOrDirectory(merge_file_path);
+    }
+
+    if (status.error_code() == pb::error::ENO_ENTRIES) {
+      return true;
+    }
+    DINGO_LOG(ERROR) << fmt::format("Merge checkpoint file failed, error: {} {}",
+                                    pb::error::Errno_Name(status.error_code()), status.error_str());
+    return false;
+  }
+
+  return true;
+}
+
 // Load snapshot by ingest sst files
 bool RaftSnapshot::LoadSnapshot(braft::SnapshotReader* reader, store::RegionPtr region) {
   DINGO_LOG(INFO) << fmt::format("LoadSnapshot region {}", region->Id());
@@ -167,65 +220,52 @@ bool RaftSnapshot::LoadSnapshot(braft::SnapshotReader* reader, store::RegionPtr 
   }
 
   // Delete old region data
-  auto status = engine_->NewWriter(Constant::kStoreDataCF)->KvDeleteRange(region->RawRange());
+  const auto& region_range = region->RawRange();
+  auto status = engine_->NewWriter(Constant::kStoreDataCF)->KvBatchDeleteRange(region->PhysicsRange());
   if (!status.ok()) {
     return false;
   }
 
   bool has_temp_file = false;
   // Ingest sst to region
-  if (!files.empty()) {
-    auto raw_engine = std::dynamic_pointer_cast<RawRocksEngine>(engine_);
-    std::vector<std::string> sst_files;
-    std::string current_path = reader->get_path() + "/" + "CURRENT";
-    // The snapshot is generated by use checkpoint.
-    if (std::filesystem::exists(current_path)) {
-      std::string merge_sst_path = fmt::format("{}/merge.sst", reader->get_path());
-      // Already exist merge.sst file, remove it.
-      if (std::filesystem::exists(merge_sst_path)) {
-        Helper::RemoveFileOrDirectory(merge_sst_path);
-      }
+  if (files.empty()) {
+    return true;
+  }
 
-      has_temp_file = true;
-      // Merge multiple file to one sst.
-      // Origin checkpoint sst file cant't ingest rocksdb,
-      // Just use rocksdb::SstFileWriter generate sst file can ingest rocksdb.
-      status = RawRocksEngine::MergeCheckpointFile(reader->get_path(), region->RawRange(), merge_sst_path);
-      if (!status.ok()) {
-        // Clean temp file
-        if (std::filesystem::exists(merge_sst_path)) {
-          Helper::RemoveFileOrDirectory(merge_sst_path);
-        }
+  auto raw_engine = std::dynamic_pointer_cast<RawRocksEngine>(engine_);
+  std::vector<std::string> sst_files;
+  std::string current_path = reader->get_path() + "/" + "CURRENT";
+  // The snapshot is generated by use checkpoint.
+  if (std::filesystem::exists(current_path)) {
+    int count = 0;
+    for (auto& range : region->PhysicsRange()) {
+      std::string merge_sst_path = fmt::format("{}/merge_{}.sst", reader->get_path(), count);
 
-        if (status.error_code() == pb::error::ENO_ENTRIES) {
-          return true;
-        }
-        DINGO_LOG(ERROR) << fmt::format("Merge checkpoint file failed, error: {} {}",
-                                        pb::error::Errno_Name(status.error_code()), status.error_str());
-        return false;
-      }
-
-      sst_files.push_back(merge_sst_path);
-
-    } else {  // The snapshot is generated by use scan.
-      for (auto& file : files) {
-        std::string filepath = reader->get_path() + "/" + file;
-        sst_files.push_back(filepath);
+      if (MergeCheckpointFile(reader->get_path(), merge_sst_path, range)) {
+        sst_files.push_back(merge_sst_path);
       }
     }
 
-    FAIL_POINT("load_snapshot_suspend");
+  } else {  // The snapshot is generated by use scan.
+    for (auto& file : files) {
+      std::string filepath = reader->get_path() + "/" + file;
+      sst_files.push_back(filepath);
+    }
+  }
 
-    if (!sst_files.empty()) {
-      status = raw_engine->IngestExternalFile(Constant::kStoreDataCF, sst_files);
-      if (has_temp_file) {
-        // Clean temp file
+  FAIL_POINT("load_snapshot_suspend");
+
+  if (!sst_files.empty()) {
+    auto status = raw_engine->IngestExternalFile(Constant::kStoreDataCF, sst_files);
+    for (auto& sst_file : sst_files) {
+      if (sst_file.find("merge") != std::string::npos) {
+        // Clean merge temp file
         Helper::RemoveFileOrDirectory(sst_files[0]);
       }
     }
   }
 
-  return status.ok();
+  return true;
 }
 
 // Use scan async save snapshot.
@@ -296,10 +336,15 @@ void SaveSnapshotByCheckpoint(uint64_t region_id, std::shared_ptr<RawEngine> eng
   }
 }
 
+std::string GetSnapshotPolicy(std::shared_ptr<dingodb::Config> config) {
+  std::string policy = config->GetString("raft.snapshot_policy");
+  return policy = policy.empty() ? Constant::kDefaultRaftSnapshotPolicy : policy;
+}
+
 void RaftSaveSnapshotHanler::Handle(uint64_t region_id, std::shared_ptr<RawEngine> engine,
                                     braft::SnapshotWriter* writer, braft::Closure* done) {
   auto config = Server::GetInstance()->GetConfig();
-  std::string policy = config->GetString("raft.snapshot_policy");
+  std::string policy = GetSnapshotPolicy(config);
   if (policy == "checkpoint") {
     SaveSnapshotByCheckpoint(region_id, engine, writer, done);
   } else if (policy == "scan") {

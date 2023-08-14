@@ -64,6 +64,10 @@ class Region {
   const pb::common::Range& Range();
   const pb::common::Range& RawRange();
   void SetRawRange(const pb::common::Range& range);
+  // Get physics range, it's rocksdb data range.
+  // store region raw_range == physics ragne
+  // index region raw_range != physics ragne
+  std::vector<pb::common::Range> PhysicsRange();
 
   void SetIndexParameter(const pb::common::IndexParameter& index_parameter);
 
