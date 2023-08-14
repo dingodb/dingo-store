@@ -155,7 +155,7 @@ VectorIndexHnsw::VectorIndexHnsw(uint64_t id, const pb::common::VectorIndexParam
 
     hnsw_index_ =
         new hnswlib::HierarchicalNSW<float>(hnsw_space_, hnsw_parameter.max_elements(), hnsw_parameter.nlinks(),
-                                            hnsw_parameter.efconstruction(), 100, true);
+                                            hnsw_parameter.efconstruction(), 100, false);
   } else {
     hnsw_index_ = nullptr;
   }
@@ -191,6 +191,22 @@ butil::Status VectorIndexHnsw::Upsert(const std::vector<pb::common::VectorWithId
 
   BAIDU_SCOPED_LOCK(mutex_);
 
+  // delete first
+  // {
+  //   std::vector<uint64_t> delete_ids;
+  //   delete_ids.reserve(vector_with_ids.size());
+  //   for (const auto& v : vector_with_ids) {
+  //     delete_ids.push_back(v.id());
+  //   }
+
+  //   try {
+  //     ParallelFor(0, delete_ids.size(), hnsw_num_threads_,
+  //                 [&](size_t row, size_t /*thread_id*/) { hnsw_index_->markDelete(delete_ids[row]); });
+  //     write_key_count += delete_ids.size();
+  //   } catch (std::runtime_error& e) {
+  //   }
+  // }
+
   // Add data to index
   try {
     size_t real_threads = hnsw_num_threads_;
@@ -204,7 +220,7 @@ butil::Status VectorIndexHnsw::Upsert(const std::vector<pb::common::VectorWithId
     if (!normalize_) {
       ParallelFor(0, vector_with_ids.size(), real_threads, [&](size_t row, size_t /*thread_id*/) {
         this->hnsw_index_->addPoint((void*)vector_with_ids[row].vector().float_values().data(),
-                                    vector_with_ids[row].id(), true);
+                                    vector_with_ids[row].id(), false);
       });
     } else {
       std::vector<float> norm_array(real_threads * dimension_);
@@ -214,7 +230,7 @@ butil::Status VectorIndexHnsw::Upsert(const std::vector<pb::common::VectorWithId
         VectorIndexUtils::NormalizeVectorForHnsw((float*)vector_with_ids[row].vector().float_values().data(),
                                                  dimension_, (norm_array.data() + start_idx));
 
-        this->hnsw_index_->addPoint((void*)(norm_array.data() + start_idx), vector_with_ids[row].id(), true);
+        this->hnsw_index_->addPoint((void*)(norm_array.data() + start_idx), vector_with_ids[row].id(), false);
       });
     }
     write_key_count += vector_with_ids.size();
@@ -511,11 +527,15 @@ hnswlib::HierarchicalNSW<float>* VectorIndexHnsw::GetHnswIndex() { return this->
 int32_t VectorIndexHnsw::GetDimension() { return this->dimension_; }
 
 butil::Status VectorIndexHnsw::GetCount(uint64_t& count) {
+  // std::unique_lock<std::mutex> lock_table(this->hnsw_index_->label_lookup_lock);
+  // count = this->hnsw_index_->label_lookup_.size();
   count = this->hnsw_index_->getCurrentElementCount();
   return butil::Status::OK();
 }
 
 butil::Status VectorIndexHnsw::GetDeletedCount(uint64_t& deleted_count) {
+  // std::unique_lock<std::mutex> lock_deleted_elements(this->hnsw_index_->deleted_elements_lock);
+  // deleted_count = this->hnsw_index_->deleted_elements.size();
   deleted_count = this->hnsw_index_->getDeletedCount();
   return butil::Status::OK();
 }
