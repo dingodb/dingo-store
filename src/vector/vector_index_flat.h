@@ -115,7 +115,7 @@ class VectorIndexFlat : public VectorIndex {
 
   std::unique_ptr<faiss::Index> raw_index_;
 
-  std::unique_ptr<faiss::IndexIDMap2> index_;
+  std::unique_ptr<faiss::IndexIDMap2> index_id_map2_;
 
   bthread_mutex_t mutex_;
 

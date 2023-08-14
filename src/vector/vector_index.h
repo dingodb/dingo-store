@@ -17,6 +17,7 @@
 
 #include <atomic>
 #include <cassert>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <map>
@@ -31,6 +32,7 @@
 #include "common/logging.h"
 #include "common/synchronization.h"
 #include "faiss/Index.h"
+#include "faiss/MetricType.h"
 #include "faiss/impl/IDSelector.h"
 #include "hnswlib/space_ip.h"
 #include "hnswlib/space_l2.h"
@@ -71,7 +73,11 @@ class VectorIndex {
 
   class FilterFunctor {
    public:
-    virtual void Build(std::unordered_map<faiss::idx_t, faiss::idx_t>&) { DINGO_LOG(ERROR) << "Not support..."; }
+    virtual ~FilterFunctor() = default;
+    virtual void Build([[maybe_unused]] std::unordered_map<faiss::idx_t, faiss::idx_t>& rev_map) {
+      DINGO_LOG(ERROR) << "Not support...";
+    }
+    virtual void Build([[maybe_unused]] std::vector<faiss::idx_t>& id_map) { DINGO_LOG(ERROR) << "Not support..."; }
     virtual bool Check(uint64_t vector_id) = 0;
   };
 
@@ -102,12 +108,21 @@ class VectorIndex {
       }
     }
 
-    bool Check(uint64_t index) override { return array_indexs_.find(index) != array_indexs_.end(); }
+    void Build(std::vector<faiss::idx_t>& id_map) override { this->id_map_ = &id_map; }
+
+    bool Check(uint64_t index) override {
+      if (id_map_ != nullptr) {
+        return (*id_map_)[index] >= min_vector_id_ && (*id_map_)[index] < max_vector_id_;
+      } else {
+        return array_indexs_.find(index) != array_indexs_.end();
+      }
+    }
 
    private:
     uint64_t min_vector_id_;
     uint64_t max_vector_id_;
     std::unordered_set<uint64_t> array_indexs_;
+    std::vector<faiss::idx_t>* id_map_{nullptr};
   };
 
   // List filter
@@ -126,7 +141,7 @@ class VectorIndex {
       }
     }
 
-    virtual ~HnswListFilterFunctor() = default;
+    ~HnswListFilterFunctor() override = default;
 
     bool Check(uint64_t vector_id) override { return vector_ids_.find(vector_id) != vector_ids_.end(); }
 

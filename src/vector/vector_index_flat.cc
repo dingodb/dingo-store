@@ -63,11 +63,11 @@ VectorIndexFlat::VectorIndexFlat(uint64_t id, const pb::common::VectorIndexParam
     raw_index_ = std::make_unique<faiss::IndexFlatL2>(dimension_);
   }
 
-  index_ = std::make_unique<faiss::IndexIDMap2>(raw_index_.get());
+  index_id_map2_ = std::make_unique<faiss::IndexIDMap2>(raw_index_.get());
 }
 
 VectorIndexFlat::~VectorIndexFlat() {
-  index_->reset();
+  index_id_map2_->reset();
   bthread_mutex_destroy(&mutex_);
 }
 
@@ -115,7 +115,7 @@ butil::Status VectorIndexFlat::AddOrUpsert(const std::vector<pb::common::VectorW
 
   if (is_upsert) {
     faiss::IDSelectorArray sel(vector_with_ids.size(), ids.get());
-    index_->remove_ids(sel);
+    index_id_map2_->remove_ids(sel);
   }
 
   std::unique_ptr<float[]> vectors;
@@ -137,7 +137,7 @@ butil::Status VectorIndexFlat::AddOrUpsert(const std::vector<pb::common::VectorW
     }
   }
 
-  index_->add_with_ids(vector_with_ids.size(), vectors.get(), ids.get());
+  index_id_map2_->add_with_ids(vector_with_ids.size(), vectors.get(), ids.get());
 
   return butil::Status::OK();
 }
@@ -169,7 +169,7 @@ butil::Status VectorIndexFlat::Delete(const std::vector<uint64_t>& delete_ids) {
   size_t remove_count = 0;
   {
     BAIDU_SCOPED_LOCK(mutex_);
-    remove_count = index_->remove_ids(sel);
+    remove_count = index_id_map2_->remove_ids(sel);
   }
 
   if (0 == remove_count) {
@@ -242,12 +242,13 @@ butil::Status VectorIndexFlat::Search(std::vector<pb::common::VectorWithId> vect
     if (!filters.empty()) {
       // Build array index list.
       for (auto& filter : filters) {
-        filter->Build(index_->rev_map);
+        // filter->Build(index_id_map2_->rev_map);
+        filter->Build(index_id_map2_->id_map);
       }
       auto flat_filter = filters.empty() ? nullptr : std::make_shared<FlatIDSelector>(filters);
       SearchWithParam(vector_with_ids.size(), vectors.get(), topk, distances.data(), labels.data(), flat_filter);
     } else {
-      index_->search(vector_with_ids.size(), vectors.get(), topk, distances.data(), labels.data());
+      index_id_map2_->search(vector_with_ids.size(), vectors.get(), topk, distances.data(), labels.data());
     }
   }
 
@@ -296,7 +297,7 @@ butil::Status VectorIndexFlat::Load(const std::string& /*path*/) {
 int32_t VectorIndexFlat::GetDimension() { return this->dimension_; }
 
 butil::Status VectorIndexFlat::GetCount(uint64_t& count) {
-  count = index_->id_map.size();
+  count = index_id_map2_->id_map.size();
   return butil::Status::OK();
 }
 
@@ -306,14 +307,14 @@ butil::Status VectorIndexFlat::GetDeletedCount(uint64_t& deleted_count) {
 }
 
 butil::Status VectorIndexFlat::GetMemorySize(uint64_t& memory_size) {
-  auto count = index_->ntotal;
+  auto count = index_id_map2_->ntotal;
   if (count == 0) {
     memory_size = 0;
     return butil::Status::OK();
   }
 
   memory_size = count * sizeof(faiss::idx_t) + count * dimension_ * sizeof(faiss::Index::component_t) +
-                (sizeof(faiss::idx_t) + sizeof(faiss::idx_t)) * index_->rev_map.size();
+                (sizeof(faiss::idx_t) + sizeof(faiss::idx_t)) * index_id_map2_->rev_map.size();
   return butil::Status::OK();
 }
 
@@ -336,7 +337,7 @@ void VectorIndexFlat::SearchWithParam(faiss::idx_t n, const faiss::Index::compon
   faiss::idx_t* li = labels;
 #pragma omp parallel for
   for (faiss::idx_t i = 0; i < n * k; ++i) {
-    li[i] = li[i] < 0 ? li[i] : index_->id_map[li[i]];
+    li[i] = li[i] < 0 ? li[i] : index_id_map2_->id_map[li[i]];
   }
 }
 
