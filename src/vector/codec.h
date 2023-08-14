@@ -36,6 +36,8 @@ class VectorCodec {
   static std::string FillVectorScalarPrefix(const std::string& value);
   static std::string FillVectorTablePrefix(const std::string& value);
 
+  static std::string RemoveVectorPrefix(const std::string& value);
+
   static std::string EncodeApplyLogId(uint64_t apply_log_id);
   static int DecodeApplyLogId(const std::string& value, uint64_t& apply_log_id);
 

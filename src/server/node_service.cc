@@ -414,7 +414,7 @@ void NodeServiceImpl::CheckVectorIndex(google::protobuf::RpcController* controll
   brpc::Controller* cntl = (brpc::Controller*)controller;
 
   auto vector_index_manager = Server::GetInstance()->GetVectorIndexManager();
-  if (vector_index_manager->GetVectorIndex(request->vector_index_id()) != nullptr) {
+  if (vector_index_manager != nullptr && vector_index_manager->GetVectorIndex(request->vector_index_id()) != nullptr) {
     response->set_is_exist(true);
   }
 }

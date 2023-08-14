@@ -104,6 +104,8 @@ std::string VectorCodec::FillVectorTablePrefix(const std::string& value) {
   return buf.GetString();
 }
 
+std::string VectorCodec::RemoveVectorPrefix(const std::string& value) { return value.substr(1); }  // NOLINT
+
 std::string VectorCodec::EncodeApplyLogId(uint64_t apply_log_id) {
   Buf buf(8);
   buf.WriteLong(apply_log_id);

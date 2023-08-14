@@ -105,7 +105,7 @@ class Constant {
 
   // File transport chunk size
   static const uint32_t kFileTransportChunkSize = 1024 * 1024;  // 1M
-                                                                //
+
   // vector limitations
   static const uint32_t kVectorMaxDimension = 32768;
   static const uint64_t kVectorIndexSaveSnapshotThresholdWriteKeyNum = 10000;
@@ -113,6 +113,17 @@ class Constant {
   static const uint32_t kLoadOrBuildVectorIndexConcurrency = 5;
 
   static const uint32_t kBuildVectorIndexBatchSize = 4096;
+
+  // split region
+  static const uint32_t kDefaultSplitCheckIntervalS = 60;
+  static const uint32_t kDefaultSplitCheckConcurrency = 5;
+  inline static const std::string kDefaultSplitPolicy = "HALF";
+  static const uint32_t kDefaultRegionMaxSize = 134217728;              // 128M
+  static const uint32_t kDefaultSplitCheckApproximateSize = 134217728;  // 128M
+  static const uint32_t kDefaultSplitChunkSize = 1048576;               // 1M
+  static constexpr float kDefaultSplitRatio = 0.5;
+  static const uint32_t kDefaultSplitKeysNumber = 200000;
+  static constexpr float kDefaultSplitKeysRatio = 0.5;
 };
 
 }  // namespace dingodb

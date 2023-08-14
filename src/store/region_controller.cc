@@ -76,11 +76,13 @@ butil::Status CreateRegionTask::CreateRegion(std::shared_ptr<Context> ctx, store
         Helper::StringToHex(region->Range().end_key()), Helper::StringToHex(region->RawRange().start_key()),
         Helper::StringToHex(region->RawRange().end_key()));
 
-    uint64_t min_vector_id = VectorCodec::DecodeVectorId(region->RawRange().start_key());
-    uint64_t max_vector_id = VectorCodec::DecodeVectorId(region->RawRange().end_key());
-    DINGO_LOG(INFO) << fmt::format("vector id range [{}-{}), raw_range: [{}-{})", min_vector_id, max_vector_id,
-                                   Helper::StringToHex(region->RawRange().start_key()),
-                                   Helper::StringToHex(region->RawRange().end_key()));
+    if (region->Type() == pb::common::INDEX_REGION) {
+      uint64_t min_vector_id = VectorCodec::DecodeVectorId(region->RawRange().start_key());
+      uint64_t max_vector_id = VectorCodec::DecodeVectorId(region->RawRange().end_key());
+      DINGO_LOG(INFO) << fmt::format("vector id range [{}-{}), raw_range: [{}-{})", min_vector_id, max_vector_id,
+                                     Helper::StringToHex(region->RawRange().start_key()),
+                                     Helper::StringToHex(region->RawRange().end_key()));
+    }
   }
 
   // Add region to store region meta manager
@@ -315,24 +317,26 @@ butil::Status SplitRegionTask::ValidateSplitRegion(std::shared_ptr<StoreRegionMe
       return butil::Status(pb::error::ERAFT_NOTLEADER, node->GetLeaderId().to_string());
     }
 
-    // Check follower whether hold vector index.
-    auto self_peer = node->GetPeerId();
-    std::vector<braft::PeerId> peers;
-    node->ListPeers(&peers);
-    for (const auto& peer : peers) {
-      if (peer != self_peer) {
-        pb::node::CheckVectorIndexRequest request;
-        request.set_vector_index_id(parent_region_id);
-        pb::node::CheckVectorIndexResponse response;
-        auto status = ServiceAccess::CheckVectorIndex(request, peer.addr, response);
-        if (!status.ok()) {
-          DINGO_LOG(ERROR) << fmt::format("Check peer {} hold vector index {} failed, error: {}",
-                                          Helper::EndPointToStr(peer.addr), parent_region_id, status.error_str());
-        }
+    if (parent_region->Type() == pb::common::INDEX_REGION) {
+      // Check follower whether hold vector index.
+      auto self_peer = node->GetPeerId();
+      std::vector<braft::PeerId> peers;
+      node->ListPeers(&peers);
+      for (const auto& peer : peers) {
+        if (peer != self_peer) {
+          pb::node::CheckVectorIndexRequest request;
+          request.set_vector_index_id(parent_region_id);
+          pb::node::CheckVectorIndexResponse response;
+          auto status = ServiceAccess::CheckVectorIndex(request, peer.addr, response);
+          if (!status.ok()) {
+            DINGO_LOG(ERROR) << fmt::format("Check peer {} hold vector index {} failed, error: {}",
+                                            Helper::EndPointToStr(peer.addr), parent_region_id, status.error_str());
+          }
 
-        if (!response.is_exist()) {
-          return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "Not found vector index %lu at peer %s",
-                               parent_region_id, Helper::EndPointToStr(peer.addr).c_str());
+          if (!response.is_exist()) {
+            return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "Not found vector index %lu at peer %s",
+                                 parent_region_id, Helper::EndPointToStr(peer.addr).c_str());
+          }
         }
       }
     }

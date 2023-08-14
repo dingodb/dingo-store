@@ -115,6 +115,17 @@ std::vector<pb::common::Range> Region::PhysicsRange() {
   return ranges;
 }
 
+std::string Region::RangeToString() {
+  auto region_range = RawRange();
+  return fmt::format("[{}-{})", Helper::StringToHex(region_range.start_key()),
+                     Helper::StringToHex(region_range.end_key()));
+}
+
+bool Region::CheckKeyInRange(const std::string& key) {
+  auto region_range = RawRange();
+  return key >= region_range.start_key() && key < region_range.end_key();
+}
+
 void Region::SetIndexParameter(const pb::common::IndexParameter& index_parameter) {
   BAIDU_SCOPED_LOCK(mutex_);
   inner_region_.mutable_definition()->mutable_index_parameter()->CopyFrom(index_parameter);
