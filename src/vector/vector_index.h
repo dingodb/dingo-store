@@ -51,6 +51,7 @@ class VectorIndex {
         version(1),
         status(pb::common::VECTOR_INDEX_STATUS_NONE),
         snapshot_doing(false),
+        switching_region_id(0),
         apply_log_index(0),
         snapshot_log_index(0),
         write_key_count(0),
@@ -58,6 +59,7 @@ class VectorIndex {
         save_snapshot_threshold_write_key_num(save_snapshot_threshold_write_key_num),
         vector_index_parameter(vector_index_parameter) {
     vector_index_type = vector_index_parameter.vector_index_type();
+    switching_cond = std::make_shared<BthreadCond>();
   }
 
   virtual ~VectorIndex() = default;

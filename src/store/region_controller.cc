@@ -841,23 +841,6 @@ butil::Status SwitchSplitTask::SwitchSplit(std::shared_ptr<Context>, uint64_t re
   return butil::Status();
 }
 
-static butil::Status CheckFollower(uint64_t region_id) {
-  auto engine = Server::GetInstance()->GetEngine();
-  if (engine->GetID() == pb::common::ENG_RAFT_STORE) {
-    auto raft_kv_engine = std::dynamic_pointer_cast<RaftStoreEngine>(engine);
-    auto node = raft_kv_engine->GetNode(region_id);
-    if (node == nullptr) {
-      return butil::Status(pb::error::ERAFT_NOT_FOUND, "No found raft node %lu.", region_id);
-    }
-
-    if (node->IsLeader()) {
-      return butil::Status(pb::error::ERAFT_NOT_FOLLOWER, "The peer is leader");
-    }
-  }
-
-  return butil::Status();
-}
-
 butil::Status HoldVectorIndexTask::PreValidateHoldVectorIndex(const pb::coordinator::RegionCmd& command) {
   return ValidateHoldVectorIndex(command.hold_vector_index_request().region_id());
 }
@@ -871,7 +854,16 @@ butil::Status HoldVectorIndexTask::ValidateHoldVectorIndex(uint64_t region_id) {
   }
 
   // Validate is follower
-  return CheckFollower(region_id);
+  auto engine = Server::GetInstance()->GetEngine();
+  if (engine->GetID() == pb::common::ENG_RAFT_STORE) {
+    auto raft_kv_engine = std::dynamic_pointer_cast<RaftStoreEngine>(engine);
+    auto node = raft_kv_engine->GetNode(region_id);
+    if (node == nullptr) {
+      return butil::Status(pb::error::ERAFT_NOT_FOUND, "No found raft node %lu.", region_id);
+    }
+  }
+
+  return butil::Status();
 }
 
 butil::Status HoldVectorIndexTask::HoldVectorIndex(std::shared_ptr<Context> ctx, uint64_t region_id, bool is_hold) {

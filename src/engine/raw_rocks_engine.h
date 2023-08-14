@@ -131,6 +131,12 @@ class RawRocksEngine : public RawEngine {
           return false;
         }
       }
+      if (!options_.lower_bound.empty()) {
+        auto lower_bound = rocksdb::Slice(options_.lower_bound);
+        if (lower_bound.compare(iter_->key()) > 0) {
+          return false;
+        }
+      }
 
       return true;
     }
