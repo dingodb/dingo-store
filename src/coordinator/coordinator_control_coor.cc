@@ -1444,13 +1444,11 @@ butil::Status CoordinatorControl::SplitRegionWithTaskList(uint64_t split_from_re
     // send load vector index to store
     for (const auto& peer : split_from_region.definition().peers()) {
       AddLoadVectorIndexTask(new_task_list, peer.store_id(), split_from_region_id, meta_increment);
-      AddLoadVectorIndexTask(new_task_list, peer.store_id(), new_region_id, meta_increment);
     }
 
     // check vector index is ready
     for (const auto& peer : split_from_region.definition().peers()) {
       AddCheckVectorIndexTask(new_task_list, peer.store_id(), split_from_region_id);
-      AddCheckVectorIndexTask(new_task_list, peer.store_id(), new_region_id);
     }
   }
 
