@@ -86,7 +86,7 @@ std::string HalfSplitChecker::SplitKey(store::RegionPtr region, uint32_t& count)
   options.upper_bound = end_key;
   auto iter = raw_engine_->NewIterator(Constant::kStoreDataCF, options);
 
-  DINGO_LOG(INFO) << fmt::format("split check regoin({}) policy(HALF) split_threshold_size({}) split_chunk_size({})",
+  DINGO_LOG(INFO) << fmt::format("[split.check][region({})] policy(HALF) split_threshold_size({}) split_chunk_size({})",
                                  region->Id(), split_threshold_size_, split_chunk_size_);
 
   uint64_t chunk_size = 0;
@@ -124,7 +124,7 @@ std::string SizeSplitChecker::SplitKey(store::RegionPtr region, uint32_t& count)
   options.upper_bound = end_key;
   auto iter = raw_engine_->NewIterator(Constant::kStoreDataCF, options);
 
-  DINGO_LOG(INFO) << fmt::format("split check regoin({}) policy(SIZE) split_size({}) split_ratio({})", region->Id(),
+  DINGO_LOG(INFO) << fmt::format("[split.check][region({})] policy(SIZE) split_size({}) split_ratio({})", region->Id(),
                                  split_size_, split_ratio_);
 
   uint64_t size = 0;
@@ -157,7 +157,7 @@ std::string KeysSplitChecker::SplitKey(store::RegionPtr region, uint32_t& count)
   options.upper_bound = end_key;
   auto iter = raw_engine_->NewIterator(Constant::kStoreDataCF, options);
 
-  DINGO_LOG(INFO) << fmt::format("split check regoin({}) policy(KEYS) split_key_number({}) split_key_ratio({})",
+  DINGO_LOG(INFO) << fmt::format("[split.check][region({})] policy(KEYS) split_key_number({}) split_key_ratio({})",
                                  region->Id(), split_keys_number_, split_keys_ratio_);
 
   uint64_t split_key_count = 0;
@@ -186,6 +186,8 @@ void SplitCheckTask::SplitCheck() {
   }
 
   uint64_t start_time = Helper::TimestampMs();
+  auto region_range = region_->RawRange();
+
   // Get split key.
   uint32_t key_count = 0;
   std::string split_key = split_checker_->SplitKey(region_, key_count);
@@ -202,26 +204,34 @@ void SplitCheckTask::SplitCheck() {
   if (split_key.empty()) {
     return;
   }
+  if (region_->RawRange().start_key() != region_range.start_key() ||
+      region_->RawRange().end_key() != region_range.end_key()) {
+    DINGO_LOG(ERROR) << fmt::format("[split.check][region({})] already splited", region_->Id());
+    return;
+  }
   if (!region_->CheckKeyInRange(split_key)) {
-    DINGO_LOG(ERROR) << fmt::format("Invalid split key {}, not in region range {}", Helper::StringToHex(split_key),
-                                    region_->RangeToString());
+    DINGO_LOG(ERROR) << fmt::format("[split.check][region({})] invalid split key {}, not in region range {}",
+                                    region_->Id(), Helper::StringToHex(split_key), region_->RangeToString());
     return;
   }
   if (region_->DisableSplit()) {
     return;
   }
   if (region_->State() != pb::common::NORMAL) {
-    DINGO_LOG(WARNING) << "Region state it not NORMAL, not launch split.";
+    DINGO_LOG(WARNING) << fmt::format("[split.check][region({})] region state it not NORMAL, not launch split.",
+                                      region_->Id());
     return;
   }
 
   if (region_->Type() == pb::common::INDEX_REGION) {
-    DINGO_LOG(INFO) << fmt::format("Need split region {} split_policy {} split_key {} vector id {} elapsed time {}ms",
-                                   region_->Id(), split_checker_->GetPolicyName(), split_key,
-                                   VectorCodec::DecodeVectorId(split_key), Helper::TimestampMs() - start_time);
+    DINGO_LOG(INFO) << fmt::format(
+        "[split.check][region({})] need split split_policy {} split_key {} vector id {} elapsed time {}ms",
+        region_->Id(), split_checker_->GetPolicyName(), split_key, VectorCodec::DecodeVectorId(split_key),
+        Helper::TimestampMs() - start_time);
   } else {
-    DINGO_LOG(INFO) << fmt::format("Need split region {} split_policy {} split_key {} elapsed time {}ms", region_->Id(),
-                                   split_checker_->GetPolicyName(), split_key, Helper::TimestampMs() - start_time);
+    DINGO_LOG(INFO) << fmt::format(
+        "[split.check][region({})] need split split_policy {} split_key {} elapsed time {}ms", region_->Id(),
+        split_checker_->GetPolicyName(), split_key, Helper::TimestampMs() - start_time);
   }
 
   // Invoke coordinator SplitRegion api.
@@ -232,7 +242,7 @@ void SplitCheckTask::SplitCheck() {
   pb::coordinator::SplitRegionResponse response;
   auto status = coordinator_interaction->SendRequest("SplitRegion", request, response);
   if (!status.ok()) {
-    DINGO_LOG(WARNING) << fmt::format("Send SplitRegion failed, region {} error: {} {}", region_->Id(),
+    DINGO_LOG(WARNING) << fmt::format("[split.check][region({})] send SplitRegion failed, error: {} {}", region_->Id(),
                                       pb::error::Errno_Name(status.error_code()), status.error_str());
     return;
   }
@@ -301,7 +311,7 @@ static std::shared_ptr<SplitChecker> BuildSplitChecker(std::shared_ptr<dingodb::
     return std::make_shared<KeysSplitChecker>(raw_engine, split_key_number, split_keys_ratio);
   }
 
-  DINGO_LOG(ERROR) << fmt::format("Build split checker failed, policy {}", policy);
+  DINGO_LOG(ERROR) << fmt::format("[split.check] build split checker failed, policy {}", policy);
 
   return nullptr;
 }
@@ -350,8 +360,9 @@ void PreSplitCheckTask::PreSplitCheck() {
       continue;
     }
 
-    DINGO_LOG(INFO) << fmt::format("pre split check region {} approximate size {} threshold size {}", region->Id(),
-                                   region_metric->InnerRegionMetrics().region_size(), split_check_approximate_size);
+    DINGO_LOG(INFO) << fmt::format("[split.check][region({})] pre split check approximate size {} threshold size {}",
+                                   region->Id(), region_metric->InnerRegionMetrics().region_size(),
+                                   split_check_approximate_size);
     if (region_metric->InnerRegionMetrics().region_size() < split_check_approximate_size) {
       continue;
     }

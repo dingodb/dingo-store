@@ -332,9 +332,9 @@ static void LaunchRebuildVectorIndex(uint64_t region_id) {
 void SplitHandler::SplitClosure::Run() {
   std::unique_ptr<SplitClosure> self_guard(this);
   if (!status().ok()) {
-    DINGO_LOG(ERROR) << fmt::format("split region {}, finish snapshot failed", region_->Id());
+    DINGO_LOG(ERROR) << fmt::format("[split.spliting][region({})] finish snapshot failed", region_->Id());
   } else {
-    DINGO_LOG(INFO) << fmt::format("split region {}, finish snapshot success", region_->Id());
+    DINGO_LOG(INFO) << fmt::format("[split.spliting][region({})] finish snapshot success", region_->Id());
   }
 
   auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
@@ -365,15 +365,15 @@ void SplitHandler::Handle(std::shared_ptr<Context>, store::RegionPtr from_region
 
   auto to_region = store_region_meta->GetRegion(request.to_region_id());
   if (to_region == nullptr) {
-    DINGO_LOG(ERROR) << fmt::format("split region {} to {}, child region not found", request.from_region_id(),
+    DINGO_LOG(ERROR) << fmt::format("[split.spliting][region({}->{})] child region not found", request.from_region_id(),
                                     request.to_region_id());
     return;
   }
 
-  DINGO_LOG(DEBUG) << fmt::format("split region {} to {}, begin...", from_region->Id(), to_region->Id());
+  DINGO_LOG(DEBUG) << fmt::format("[split.spliting][region({}->{})] begin...", from_region->Id(), to_region->Id());
   if (to_region->State() != pb::common::StoreRegionState::STANDBY) {
-    DINGO_LOG(WARNING) << fmt::format("split region {} to {}, child region state is not standby", from_region->Id(),
-                                      to_region->Id());
+    DINGO_LOG(WARNING) << fmt::format("[split.spliting][region({}->{})] child region state is not standby",
+                                      from_region->Id(), to_region->Id());
     return;
   }
 
@@ -383,7 +383,8 @@ void SplitHandler::Handle(std::shared_ptr<Context>, store::RegionPtr from_region
     if (vector_index != nullptr) {
       to_region->SetShareVectorIndex(vector_index);
     } else {
-      DINGO_LOG(ERROR) << fmt::format("split region get vector index failed, region {}", from_region->Id());
+      DINGO_LOG(ERROR) << fmt::format("[split.spliting][region({}->{})] split region get vector index failed",
+                                      from_region->Id(), to_region->Id());
     }
   }
 
@@ -404,19 +405,21 @@ void SplitHandler::Handle(std::shared_ptr<Context>, store::RegionPtr from_region
   from_range.set_start_key(from_region->RawRange().start_key());
   from_range.set_end_key(request.split_key());
   Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->UpdateRange(from_region, from_range);
-  DINGO_LOG(DEBUG) << fmt::format("split region {} to {}, from region range[{}-{}] to region range[{}-{}]",
+  DINGO_LOG(DEBUG) << fmt::format("[split.spliting][region({}->{})] from region range[{}-{}] to region range[{}-{}]",
                                   from_region->Id(), to_region->Id(), Helper::StringToHex(from_range.start_key()),
                                   Helper::StringToHex(from_range.end_key()), Helper::StringToHex(to_range.start_key()),
                                   Helper::StringToHex(to_range.end_key()));
 
-  DINGO_LOG(DEBUG) << fmt::format("split region {} to {}, parent do snapshot", from_region->Id(), to_region->Id());
+  DINGO_LOG(DEBUG) << fmt::format("[split.spliting][region({}->{})] parent do snapshot", from_region->Id(),
+                                  to_region->Id());
   // Do parent region snapshot
   auto engine = Server::GetInstance()->GetEngine();
   std::shared_ptr<Context> from_ctx = std::make_shared<Context>();
   from_ctx->SetDone(new SplitHandler::SplitClosure(from_region, false));
   engine->DoSnapshot(from_ctx, from_region->Id());
 
-  DINGO_LOG(DEBUG) << fmt::format("split region {} to {}, child do snapshot", from_region->Id(), to_region->Id());
+  DINGO_LOG(DEBUG) << fmt::format("[split.spliting][region({}->{})] child do snapshot", from_region->Id(),
+                                  to_region->Id());
   // Do child region snapshot
   std::shared_ptr<Context> to_ctx = std::make_shared<Context>();
   to_ctx->SetDone(new SplitHandler::SplitClosure(to_region, true));
