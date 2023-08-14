@@ -367,8 +367,9 @@ butil::Status SplitRegionTask::SplitRegion() {
 void SplitRegionTask::Run() {
   auto status = SplitRegion();
   if (!status.ok()) {
-    DINGO_LOG(DEBUG) << fmt::format("Split region {} failed, {}", region_cmd_->split_request().split_from_region_id(),
-                                    status.error_str());
+    DINGO_LOG(DEBUG) << fmt::format("[split.spliting][region({}->{})] Split failed, error: {}",
+                                    region_cmd_->split_request().split_from_region_id(),
+                                    region_cmd_->split_request().split_to_region_id(), status.error_str());
   }
 
   Server::GetInstance()->GetRegionCommandManager()->UpdateCommandStatus(
