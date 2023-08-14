@@ -472,16 +472,7 @@ public class EntityConversion {
                 .setId(withId.getId());
         if (withId.getVector() != null) {
             Vector vector = withId.getVector();
-            builder
-                .setVector(Common.Vector.newBuilder()
-                        .setDimension(vector.getDimension())
-                        .setValueType(Common.ValueType.valueOf(vector.getValueType().name()))
-                        .addAllFloatValues(vector.getFloatValues())
-                        .addAllBinaryValues(vector.getBinaryValues()
-                                .stream()
-                                .map(ByteString::copyFrom)
-                                .collect(Collectors.toList()))
-                        .build());
+            builder.setVector(mapping(vector));
         }
         if (withId.getScalarData() != null) {
             builder.setScalarData(mapping(withId.getScalarData()));
@@ -496,6 +487,26 @@ public class EntityConversion {
         return builder.build();
     }
 
+    public static Common.Vector mapping(Vector vector) {
+        return Common.Vector.newBuilder()
+                .setDimension(vector.getDimension())
+                .setValueType(Common.ValueType.valueOf(vector.getValueType().name()))
+                .addAllFloatValues(vector.getFloatValues())
+                .addAllBinaryValues(vector.getBinaryValues()
+                        .stream()
+                        .map(ByteString::copyFrom)
+                        .collect(Collectors.toList()))
+                .build();
+    }
+
+    public static Vector mapping(Common.Vector vector) {
+        return new Vector(
+            vector.getDimension(),
+            Vector.ValueType.valueOf(vector.getValueType().name()),
+            vector.getFloatValuesList(),
+            vector.getBinaryValuesList().stream().map(ByteString::toByteArray).collect(Collectors.toList()));
+    }
+
     public static Common.VectorScalardata mapping(Map<String, ScalarValue> scalarData) {
         return Common.VectorScalardata.newBuilder().putAllScalarData(scalarData.entrySet().stream()
                     .collect(
@@ -507,11 +518,7 @@ public class EntityConversion {
 
     public static VectorWithId mapping(Common.VectorWithId withId) {
         Common.Vector vector = withId.getVector();
-        return new VectorWithId(withId.getId(), new Vector(
-                vector.getDimension(),
-                Vector.ValueType.valueOf(vector.getValueType().name()),
-                vector.getFloatValuesList(),
-                vector.getBinaryValuesList().stream().map(ByteString::toByteArray).collect(Collectors.toList())),
+        return new VectorWithId(withId.getId(), mapping(vector),
                 withId.getScalarData().getScalarDataMap().entrySet().stream().collect(
                         Maps::newHashMap,
                         (map, entry) -> map.put(entry.getKey(), mapping(entry.getValue())),
@@ -610,6 +617,51 @@ public class EntityConversion {
                 mapping(distance.getVectorWithId()),
                 distance.getDistance(),
                 VectorIndexParameter.MetricType.valueOf(distance.getMetricType().name()));
+    }
+
+    public static Common.VectorCoprocessor mapping(Coprocessor coprocessor, long partId) {
+        Common.VectorCoprocessor.VectorSchemaWrapper schemaWrapper = Common.VectorCoprocessor.VectorSchemaWrapper.newBuilder()
+                .addAllSchema(CodecUtils.createSchemaForColumns(coprocessor.getOriginalSchema().getSchemas()).stream()
+                        .map(schema -> {
+                            Common.VectorSchema.Type vs;
+                            switch (schema.getType()) {
+                                case BOOLEAN:
+                                    vs = Common.VectorSchema.Type.BOOL;
+                                    break;
+                                case INTEGER:
+                                    vs = Common.VectorSchema.Type.INTEGER;
+                                    break;
+                                case FLOAT:
+                                    vs = Common.VectorSchema.Type.FLOAT;
+                                    break;
+                                case LONG:
+                                    vs = Common.VectorSchema.Type.LONG;
+                                    break;
+                                case DOUBLE:
+                                    vs = Common.VectorSchema.Type.DOUBLE;
+                                    break;
+                                case BYTES:
+                                case STRING:
+                                    vs = Common.VectorSchema.Type.STRING;
+                                    break;
+                                default:
+                                    throw new IllegalStateException("Unexpected value: " + schema.getType());
+                            }
+                            return Common.VectorSchema.newBuilder()
+                                    .setType(vs)
+                                    .setIsKey(schema.isKey())
+                                    .setIsNullable(schema.isAllowNull())
+                                    .setIndex(schema.getIndex())
+                                    .build();
+                        }).collect(Collectors.toList()))
+                .setCommonId(partId)
+                .build();
+        return Common.VectorCoprocessor.newBuilder()
+                .setSchemaVersion(coprocessor.getSchemaVersion())
+                .setOriginalSchema(schemaWrapper)
+                .addAllSelectionColumns(coprocessor.getSelection())
+                .setExpression(ByteString.copyFrom(coprocessor.getExpression()))
+                .build();
     }
 
     public static Store.Coprocessor mapping(Coprocessor coprocessor, DingoCommonId regionId) {

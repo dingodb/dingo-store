@@ -24,6 +24,9 @@ import io.dingodb.sdk.common.Location;
 import io.dingodb.sdk.common.SDKCommonId;
 import io.dingodb.sdk.common.utils.EntityConversion;
 import io.dingodb.sdk.common.vector.Search;
+import io.dingodb.sdk.common.vector.VectorCalcDistance;
+import io.dingodb.sdk.common.vector.VectorDistance;
+import io.dingodb.sdk.common.vector.VectorDistanceRes;
 import io.dingodb.sdk.common.vector.VectorIndexMetrics;
 import io.dingodb.sdk.common.vector.VectorScanQuery;
 import io.dingodb.sdk.common.vector.VectorSearchParameter;
@@ -109,7 +112,11 @@ public class IndexServiceClient {
                 .setWithoutVectorData(parameter.isWithoutVectorData())
                 .setWithScalarData(parameter.isWithScalarData())
                 .addAllSelectedKeys(parameter.getSelectedKeys())
-                .setUseScalarFilter(parameter.isUseScalarFilter());
+                .setUseScalarFilter(false)
+                .setVectorFilter(Common.VectorFilter.valueOf(parameter.getVectorFilter().name()))
+                .setVectorFilterType(Common.VectorFilterType.valueOf(parameter.getVectorFilterType().name()))
+                .setVectorCoprocessor(mapping(parameter.getCoprocessor(), regionId.parentId()))
+                .addAllVectorIds(parameter.getVectorIds());
         if (search.getFlat() != null) {
             builder.setFlat(Common.SearchFlatParam.newBuilder()
                     .setParallelOnQueries(search.getFlat().getParallelOnQueries())
@@ -200,6 +207,24 @@ public class IndexServiceClient {
         Index.VectorScanQueryResponse response = exec(stub -> stub.vectorScanQuery(request), retryTimes, indexId,
                 regionId);
         return response.getVectorsList().stream().map(EntityConversion::mapping).collect(Collectors.toList());
+    }
+
+    public VectorDistanceRes vectorCalcDistance(DingoCommonId indexId, DingoCommonId regionId, VectorCalcDistance distance) {
+        Index.VectorCalcDistanceRequest request = Index.VectorCalcDistanceRequest.newBuilder()
+                .setAlgorithmType(Index.AlgorithmType.valueOf(distance.getAlgorithmType().name()))
+                .setMetricType(Common.MetricType.valueOf(distance.getMetricType().name()))
+                .addAllOpLeftVectors(distance.getLeftVectors().stream().map(EntityConversion::mapping).collect(Collectors.toList()))
+                .addAllOpRightVectors(distance.getRightVectors().stream().map(EntityConversion::mapping).collect(Collectors.toList()))
+                .setIsReturnNormlize(distance.getIsReturnNormalize())
+                .build();
+
+        Index.VectorCalcDistanceResponse response = exec(stub -> stub.vectorCalcDistance(request), retryTimes, indexId, regionId);
+
+        return new VectorDistanceRes(
+                response.getOpLeftVectorsList().stream().map(EntityConversion::mapping).collect(Collectors.toList()),
+                response.getOpRightVectorsList().stream().map(EntityConversion::mapping).collect(Collectors.toList()),
+                response.getDistancesList().stream().map(d -> new VectorDistance(d.getInternalDistancesList())).collect(Collectors.toList())
+        );
     }
 
     public VectorIndexMetrics vectorGetRegionMetrics(DingoCommonId indexId, DingoCommonId regionId) {

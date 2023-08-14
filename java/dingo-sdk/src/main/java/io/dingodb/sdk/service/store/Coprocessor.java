@@ -26,15 +26,21 @@ public interface Coprocessor {
 
     SchemaWrapper getOriginalSchema();
 
-    SchemaWrapper getResultSchema();
+    default SchemaWrapper getResultSchema() {
+        throw new UnsupportedOperationException();
+    }
 
     List<Integer> getSelection();
 
     byte[] getExpression();
 
-    List<Integer> getGroupBy();
+    default List<Integer> getGroupBy() {
+        throw new UnsupportedOperationException();
+    }
 
-    List<AggregationOperator> getAggregations();
+    default List<AggregationOperator> getAggregations() {
+        throw new UnsupportedOperationException();
+    }
 
     interface SchemaWrapper {
         List<Column> getSchemas();
