@@ -518,6 +518,11 @@ butil::Status VectorReader::GetBorderId(const pb::common::Range& region_range, b
       return butil::Status();
     }
 
+    std::string tmp(iter->Key());
+    DINGO_LOG(INFO) << fmt::format("key==== {}, region range [{}-{})", Helper::StringToHex(tmp),
+                                   Helper::StringToHex(region_range.start_key()),
+                                   Helper::StringToHex(region_range.end_key()));
+
     std::string key(iter->Key());
     vector_id = VectorCodec::DecodeVectorId(key);
   }

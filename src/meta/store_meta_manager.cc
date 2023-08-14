@@ -26,6 +26,7 @@
 #include "fmt/core.h"
 #include "proto/common.pb.h"
 #include "server/server.h"
+#include "vector/codec.h"
 
 namespace dingodb {
 
@@ -80,6 +81,38 @@ const pb::common::Range& Region::RawRange() {
 void Region::SetRawRange(const pb::common::Range& range) {
   BAIDU_SCOPED_LOCK(mutex_);
   inner_region_.mutable_definition()->mutable_raw_range()->CopyFrom(range);
+}
+
+std::vector<pb::common::Range> Region::PhysicsRange() {
+  auto region_range = RawRange();
+
+  std::vector<pb::common::Range> ranges;
+  if (Type() == pb::common::INDEX_REGION) {
+    {
+      pb::common::Range range;
+      range.set_start_key(VectorCodec::FillVectorDataPrefix(region_range.start_key()));
+      range.set_end_key(VectorCodec::FillVectorDataPrefix(region_range.end_key()));
+      ranges.push_back(range);
+    }
+
+    {
+      pb::common::Range range;
+      range.set_start_key(VectorCodec::FillVectorScalarPrefix(region_range.start_key()));
+      range.set_end_key(VectorCodec::FillVectorScalarPrefix(region_range.end_key()));
+      ranges.push_back(range);
+    }
+
+    {
+      pb::common::Range range;
+      range.set_start_key(VectorCodec::FillVectorTablePrefix(region_range.start_key()));
+      range.set_end_key(VectorCodec::FillVectorTablePrefix(region_range.end_key()));
+      ranges.push_back(range);
+    }
+  } else {
+    ranges.push_back(region_range);
+  }
+
+  return ranges;
 }
 
 void Region::SetIndexParameter(const pb::common::IndexParameter& index_parameter) {

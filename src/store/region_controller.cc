@@ -184,7 +184,7 @@ butil::Status DeleteRegionTask::DeleteRegion(std::shared_ptr<Context> ctx, uint6
   // Delete data
   DINGO_LOG(DEBUG) << fmt::format("Delete region {} delete data", region_id);
   auto writer = engine->GetRawEngine()->NewWriter(Constant::kStoreDataCF);
-  writer->KvDeleteRange(region->RawRange());
+  writer->KvBatchDeleteRange(region->PhysicsRange());
 
   // Raft kv engine
   if (engine->GetID() == pb::common::ENG_RAFT_STORE) {
