@@ -334,6 +334,8 @@ butil::Status IndexServiceImpl::ValidateVectorAddRequest(const dingodb::pb::inde
         }
       }
     }
+  } else {
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "Vector index not found");
   }
 
   std::vector<uint64_t> vector_ids;
