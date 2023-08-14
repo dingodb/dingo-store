@@ -16,40 +16,29 @@
 
 package io.dingodb.sdk.common.vector;
 
-import io.dingodb.sdk.service.store.Coprocessor;
+import io.dingodb.sdk.common.index.VectorIndexParameter;
 import lombok.AllArgsConstructor;
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 import java.util.List;
 
 @Getter
+@NoArgsConstructor
+@EqualsAndHashCode
 @AllArgsConstructor
-public class VectorSearchParameter {
+public class VectorCalcDistance {
 
-    private Integer topN;
-    private boolean withoutVectorData;
-    private boolean withScalarData;
-    private List<String> selectedKeys;
-    private Search search;
+    private AlgorithmType algorithmType;
+    private VectorIndexParameter.MetricType metricType;
+    private List<Vector> leftVectors;
+    private List<Vector> rightVectors;
+    private Boolean isReturnNormalize;
 
-    @Deprecated
-    private boolean useScalarFilter;
-
-    private VectorFilter vectorFilter;
-    private VectorFilterType vectorFilterType;
-    private Coprocessor coprocessor;
-    private List<Long> vectorIds;
-
-    public enum VectorFilter {
-        SCALAR_FILTER,
-        TABLE_FILTER,
-        VECTOR_ID_FILTER
-    }
-
-    public enum VectorFilterType {
-        // first vector search, then filter
-        QUERY_POST,
-        // first search from rocksdb, then search vector
-        QUERY_PRE
+    public enum AlgorithmType {
+        ALGORITHM_NONE,
+        ALGORITHM_FAISS,
+        ALGORITHM_HNSWLIB
     }
 }

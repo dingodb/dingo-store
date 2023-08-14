@@ -25,24 +25,4 @@ public class VectorScanQuery {
     private Boolean useScalarFilter;
     private Map<String, ScalarValue> scalarForFilter;
 
-    @Deprecated
-    public VectorScanQuery(
-            Long startId,
-            Boolean isReverseScan,
-            Long maxScanCount,
-            Boolean withoutVectorData,
-            Boolean withScalarData,
-            List<String> selectedKeys,
-            Boolean withTableData
-    ) {
-        this.startId = startId;
-        this.isReverseScan = isReverseScan;
-        this.maxScanCount = maxScanCount;
-        this.withoutVectorData = withoutVectorData;
-        this.withScalarData = withScalarData;
-        this.selectedKeys = selectedKeys;
-        this.withTableData = withTableData;
-        this.useScalarFilter = false;
-        this.scalarForFilter = new HashMap<>();
-    }
 }
