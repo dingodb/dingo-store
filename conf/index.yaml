@@ -10,6 +10,9 @@ server:
   scrub_vector_index_interval_s: 60
   worker_thread_num: 10 # must >4, worker_thread_num priority worker_thread_ratio
   # worker_thread_ratio: 0.5 # cpu core * ratio
+region:
+  region_max_size: 134217728 # 128M
+  enable_auto_split: true
 raft:
   host: 127.0.0.1
   port: 33100

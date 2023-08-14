@@ -69,6 +69,9 @@ class Region {
   // index region raw_range != physics ragne
   std::vector<pb::common::Range> PhysicsRange();
 
+  std::string RangeToString();
+  bool CheckKeyInRange(const std::string& key);
+
   void SetIndexParameter(const pb::common::IndexParameter& index_parameter);
 
   std::vector<pb::common::Peer> Peers();

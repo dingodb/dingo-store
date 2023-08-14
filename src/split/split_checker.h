@@ -44,6 +44,16 @@ class SplitChecker {
 
   // Get policy of split region.
   Policy GetPolicy() { return policy_; };
+  std::string GetPolicyName() {
+    if (policy_ == Policy::kHalf) {
+      return "HALF";
+    } else if (policy_ == Policy::kSize) {
+      return "SIZE";
+    } else if (policy_ == Policy::kKeys) {
+      return "KEYS";
+    }
+    return "";
+  };
 
   // Calculate region split key.
   virtual std::string SplitKey(store::RegionPtr region, uint32_t& count) = 0;
@@ -95,20 +105,20 @@ class SizeSplitChecker : public SplitChecker {
 // Split region based keys.
 class KeysSplitChecker : public SplitChecker {
  public:
-  KeysSplitChecker(std::shared_ptr<RawEngine> raw_engine, uint32_t split_key_number, float split_key_ratio)
+  KeysSplitChecker(std::shared_ptr<RawEngine> raw_engine, uint32_t split_keys_number, float split_keys_ratio)
       : SplitChecker(SplitChecker::Policy::kKeys),
         raw_engine_(raw_engine),
-        split_key_number_(split_key_number),
-        split_key_ratio_(split_key_ratio) {}
+        split_keys_number_(split_keys_number),
+        split_keys_ratio_(split_keys_ratio) {}
   ~KeysSplitChecker() override = default;
 
   std::string SplitKey(store::RegionPtr region, uint32_t& count) override;
 
  private:
   // Split when region key number exceed split_key_number.
-  uint32_t split_key_number_;
+  uint32_t split_keys_number_;
   // Split key position.
-  float split_key_ratio_;
+  float split_keys_ratio_;
   std::shared_ptr<RawEngine> raw_engine_;
 };
 
