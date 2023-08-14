@@ -48,7 +48,7 @@ DEFINE_uint64(hnsw_need_save_count, 10000, "hnsw need save count");
 class HnswRangeFilterFunctor : public hnswlib::BaseFilterFunctor {
  public:
   HnswRangeFilterFunctor(std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters) : filters_(filters) {}
-  ~HnswRangeFilterFunctor() = default;
+  virtual ~HnswRangeFilterFunctor() = default;
   bool operator()(hnswlib::labeltype id) override {
     if (filters_.empty()) {
       return true;
