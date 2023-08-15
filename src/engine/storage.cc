@@ -414,4 +414,28 @@ butil::Status Storage::VectorCalcDistance([[maybe_unused]] std::shared_ptr<Conte
   return status;
 }
 
+butil::Status Storage::VectorBatchSearchDebug(std::shared_ptr<Engine::VectorReader::Context> ctx,
+                                              std::vector<pb::index::VectorWithDistanceResult>& results,
+                                              int64_t& deserialization_id_time_us, int64_t& scan_scalar_time_us,
+                                              int64_t& search_time_us) {
+  auto status = ValidateLeader(ctx->region_id);
+  if (!status.ok()) {
+    return status;
+  }
+
+  auto reader = engine_->NewVectorReader(Constant::kStoreDataCF);
+  status =
+      reader->VectorBatchSearchDebug(ctx, results, deserialization_id_time_us, scan_scalar_time_us, search_time_us);
+  if (!status.ok()) {
+    if (pb::error::EKEY_NOT_FOUND == status.error_code()) {
+      // return OK if not found
+      return butil::Status::OK();
+    }
+
+    return status;
+  }
+
+  return butil::Status();
+}
+
 }  // namespace dingodb

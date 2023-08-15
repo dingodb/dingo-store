@@ -117,6 +117,12 @@ class Engine {
     virtual butil::Status VectorGetRegionMetrics(uint64_t region_id, const pb::common::Range& region_range,
                                                  std::shared_ptr<VectorIndex> vector_index,
                                                  pb::common::VectorIndexMetrics& region_metrics) = 0;
+
+    // This function is for testing only
+    virtual butil::Status VectorBatchSearchDebug(std::shared_ptr<VectorReader::Context> ctx,
+                                                 std::vector<pb::index::VectorWithDistanceResult>& results,
+                                                 int64_t& deserialization_id_time_us, int64_t& scan_scalar_time_us,
+                                                 int64_t& search_time_us) = 0;
   };
 
   virtual std::shared_ptr<Reader> NewReader(const std::string& cf_name) = 0;

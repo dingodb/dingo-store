@@ -125,6 +125,11 @@ class RaftStoreEngine : public Engine, public RaftControlAble {
                                          std::shared_ptr<VectorIndex> vector_index,                       // NOLINT
                                          pb::common::VectorIndexMetrics& region_metrics) override;        // NOLINT
 
+    butil::Status VectorBatchSearchDebug(std::shared_ptr<VectorReader::Context> ctx,  // NOLINT
+                                         std::vector<pb::index::VectorWithDistanceResult>& results,
+                                         int64_t& deserialization_id_time_us, int64_t& scan_scalar_time_us,
+                                         int64_t& search_time_us) override;  // NOLINT
+
    private:
     std::shared_ptr<RawEngine::Reader> reader_;
   };

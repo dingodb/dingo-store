@@ -738,4 +738,288 @@ butil::Status VectorReader::DoVectorSearchForTableCoprocessor(  // NOLINT(*stati
   return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, s);
 }
 
+butil::Status VectorReader::VectorBatchSearchDebug(std::shared_ptr<Engine::VectorReader::Context> ctx,
+                                                   std::vector<pb::index::VectorWithDistanceResult>& results,
+                                                   int64_t& deserialization_id_time_us, int64_t& scan_scalar_time_us,
+                                                   int64_t& search_time_us) {  // NOLINT
+  // Search vectors by vectors
+  auto status =
+      SearchVectorDebug(ctx->partition_id, ctx->vector_index, ctx->region_range, ctx->vector_with_ids, ctx->parameter,
+                        results, deserialization_id_time_us, scan_scalar_time_us, search_time_us);
+  if (!status.ok()) {
+    return status;
+  }
+
+  if (ctx->parameter.with_scalar_data()) {
+    // Get scalar data by parameter
+    std::vector<std::string> selected_scalar_keys = Helper::PbRepeatedToVector(ctx->parameter.selected_keys());
+    auto status = QueryVectorScalarData(ctx->partition_id, selected_scalar_keys, results);
+    if (!status.ok()) {
+      return status;
+    }
+  }
+
+  if (ctx->parameter.with_table_data()) {
+    // Get table data by parameter
+    auto status = QueryVectorTableData(ctx->partition_id, results);
+    if (!status.ok()) {
+      return status;
+    }
+  }
+
+  return butil::Status();
+}
+
+butil::Status VectorReader::SearchVectorDebug(
+    uint64_t partition_id, std::shared_ptr<VectorIndex> vector_index, pb::common::Range region_range,
+    const std::vector<pb::common::VectorWithId>& vector_with_ids, const pb::common::VectorSearchParameter& parameter,
+    std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results, int64_t& deserialization_id_time_us,
+    int64_t& scan_scalar_time_us, int64_t& search_time_us) {
+  if (vector_with_ids.empty()) {
+    DINGO_LOG(WARNING) << "Empty vector with ids";
+    return butil::Status();
+  }
+
+  auto vector_filter = parameter.vector_filter();
+  auto vector_filter_type = parameter.vector_filter_type();
+
+  bool with_vector_data = !(parameter.without_vector_data());
+  std::vector<pb::index::VectorWithDistanceResult> tmp_results;
+
+  uint64_t min_vector_id = VectorCodec::DecodeVectorId(region_range.start_key());
+  uint64_t max_vector_id = VectorCodec::DecodeVectorId(region_range.end_key());
+  DINGO_LOG(INFO) << fmt::format("vector id range [{}-{})", min_vector_id, max_vector_id);
+
+  std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters;
+  if (vector_index->VectorIndexType() == pb::common::VECTOR_INDEX_TYPE_HNSW) {
+    filters.push_back(std::make_shared<VectorIndex::RangeFilterFunctor>(min_vector_id, max_vector_id));
+  } else if (vector_index->VectorIndexType() == pb::common::VECTOR_INDEX_TYPE_FLAT) {
+    filters.push_back(std::make_shared<VectorIndex::FlatRangeFilterFunctor>(min_vector_id, max_vector_id));
+  }
+
+  auto lambda_time_now_function = []() { return std::chrono::steady_clock::now(); };
+  auto lambda_time_diff_microseconds_function = [](auto start, auto end) {
+    return std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+  };
+
+  // scalar post filter
+  if (dingodb::pb::common::VectorFilter::SCALAR_FILTER == vector_filter &&
+      dingodb::pb::common::VectorFilterType::QUERY_POST == vector_filter_type) {
+    uint32_t top_n = parameter.top_n();
+    if (BAIDU_UNLIKELY(vector_with_ids[0].scalar_data().scalar_data_size() == 0)) {
+      butil::Status status =
+          vector_index->Search(vector_with_ids, top_n, filters, vector_with_distance_results, with_vector_data);
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << fmt::format("vector_index::Search failed ");
+        return status;
+      }
+    } else {
+      top_n *= 10;
+      auto start = lambda_time_now_function();
+      butil::Status status = vector_index->Search(vector_with_ids, top_n, filters, tmp_results, with_vector_data);
+      auto end = lambda_time_now_function();
+      search_time_us = lambda_time_diff_microseconds_function(start, end);
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << fmt::format("vector_index::Search failed ");
+        return status;
+      }
+      for (auto& vector_with_distance_result : tmp_results) {
+        pb::index::VectorWithDistanceResult new_vector_with_distance_result;
+
+        for (auto& temp_vector_with_distance : *vector_with_distance_result.mutable_vector_with_distances()) {
+          uint64_t temp_id = temp_vector_with_distance.vector_with_id().id();
+          bool compare_result = false;
+          butil::Status status =
+              CompareVectorScalarData(partition_id, temp_id, vector_with_ids[0].scalar_data(), compare_result);
+          if (!status.ok()) {
+            return status;
+          }
+          if (!compare_result) {
+            continue;
+          }
+
+          new_vector_with_distance_result.add_vector_with_distances()->Swap(&temp_vector_with_distance);
+          if (new_vector_with_distance_result.vector_with_distances_size() >= parameter.top_n()) {
+            break;
+          }
+        }
+        vector_with_distance_results.emplace_back(std::move(new_vector_with_distance_result));
+      }
+    }
+  } else if (dingodb::pb::common::VectorFilter::VECTOR_ID_FILTER == vector_filter) {  // vector id array search
+    butil::Status status = DoVectorSearchForVectorIdPreFilterDebug(vector_index, vector_with_ids, parameter, filters,
+                                                                   vector_with_distance_results,
+                                                                   deserialization_id_time_us, search_time_us);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << fmt::format("DoVectorSearchForVectorIdPreFilterDebug failed");
+      return status;
+    }
+
+  } else if (dingodb::pb::common::VectorFilter::SCALAR_FILTER == vector_filter &&
+             dingodb::pb::common::VectorFilterType::QUERY_PRE == vector_filter_type) {  // scalar pre filter search
+
+    butil::Status status =
+        DoVectorSearchForScalarPreFilterDebug(vector_index, region_range, vector_with_ids, parameter, filters,
+                                              vector_with_distance_results, scan_scalar_time_us, search_time_us);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << fmt::format("DoVectorSearchForScalarPreFilterDebug failed ");
+      return status;
+    }
+
+  } else if (dingodb::pb::common::VectorFilter::TABLE_FILTER ==
+             vector_filter) {  //  table coprocessor pre filter search. not impl
+    butil::Status status = DoVectorSearchForTableCoprocessor(vector_index, partition_id, vector_with_ids, parameter,
+                                                             vector_with_distance_results);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << fmt::format("DoVectorSearchForTableCoprocessor failed ");
+      return status;
+    }
+  }
+
+  // if vector index does not support restruct vector ,we restruct it using RocksDB
+  if (with_vector_data) {
+    for (auto& result : vector_with_distance_results) {
+      for (auto& vector_with_distance : *result.mutable_vector_with_distances()) {
+        if (vector_with_distance.vector_with_id().vector().float_values_size() > 0 ||
+            vector_with_distance.vector_with_id().vector().binary_values_size() > 0) {
+          continue;
+        }
+
+        pb::common::VectorWithId vector_with_id;
+        auto status = QueryVectorWithId(partition_id, vector_with_distance.vector_with_id().id(), true, vector_with_id);
+        if (!status.ok()) {
+          return status;
+        }
+        vector_with_distance.mutable_vector_with_id()->Swap(&vector_with_id);
+      }
+    }
+  }
+
+  return butil::Status();
+}
+
+butil::Status VectorReader::DoVectorSearchForVectorIdPreFilterDebug(
+    std::shared_ptr<VectorIndex> vector_index, const std::vector<pb::common::VectorWithId>& vector_with_ids,
+    const pb::common::VectorSearchParameter& parameter,
+    std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters,
+    std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results, int64_t& deserialization_id_time_us,
+    int64_t& search_time_us) {
+  auto lambda_time_now_function = []() { return std::chrono::steady_clock::now(); };
+  auto lambda_time_diff_microseconds_function = [](auto start, auto end) {
+    return std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+  };
+
+  auto start_ids = lambda_time_now_function();
+  if (vector_index->VectorIndexType() == pb::common::VECTOR_INDEX_TYPE_HNSW) {
+    filters.push_back(
+        std::make_shared<VectorIndex::HnswListFilterFunctor>(Helper::PbRepeatedToVector(parameter.vector_ids())));
+  } else if (vector_index->VectorIndexType() == pb::common::VECTOR_INDEX_TYPE_FLAT) {
+    filters.push_back(
+        std::make_shared<VectorIndex::FlatListFilterFunctor>(Helper::PbRepeatedToVector(parameter.vector_ids())));
+  }
+  auto end_ids = lambda_time_now_function();
+  deserialization_id_time_us = lambda_time_diff_microseconds_function(start_ids, end_ids);
+
+  auto start_search = lambda_time_now_function();
+  butil::Status status = vector_index->Search(vector_with_ids, parameter.top_n(), filters, vector_with_distance_results,
+                                              !(parameter.without_vector_data()));
+  auto end_search = lambda_time_now_function();
+  search_time_us = lambda_time_diff_microseconds_function(start_search, end_search);
+  if (!status.ok()) {
+    std::string s = fmt::format("DoVectorSearchForVectorIdPreFilter::VectorIndex::Search failed");
+    DINGO_LOG(ERROR) << s;
+    return status;
+  }
+
+  return butil::Status::OK();
+}
+
+butil::Status VectorReader::DoVectorSearchForScalarPreFilterDebug(
+    std::shared_ptr<VectorIndex> vector_index, pb::common::Range region_range,
+    const std::vector<pb::common::VectorWithId>& vector_with_ids, const pb::common::VectorSearchParameter& parameter,
+    std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters,
+    std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results, int64_t& scan_scalar_time_us,
+    int64_t& search_time_us) {
+  // scalar pre filter search
+
+  const auto& std_vector_scalar = vector_with_ids[0].scalar_data();
+  auto lambda_scalar_compare_function =
+      [&std_vector_scalar](const pb::common::VectorScalardata& internal_vector_scalar) {
+        for (const auto& [key, value] : std_vector_scalar.scalar_data()) {
+          auto it = internal_vector_scalar.scalar_data().find(key);
+          if (it == internal_vector_scalar.scalar_data().end()) {
+            return false;
+          }
+
+          bool compare_result = Helper::IsEqualVectorScalarValue(value, it->second);
+          if (!compare_result) {
+            return false;
+          }
+        }
+        return true;
+      };
+
+  std::string start_key = VectorCodec::FillVectorScalarPrefix(region_range.start_key());
+  std::string end_key = VectorCodec::FillVectorScalarPrefix(region_range.end_key());
+
+  IteratorOptions options;
+  options.upper_bound = end_key;
+
+  auto lambda_time_now_function = []() { return std::chrono::steady_clock::now(); };
+  auto lambda_time_diff_microseconds_function = [](auto start, auto end) {
+    return std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+  };
+
+  auto start_iter = lambda_time_now_function();
+  auto iter = reader_->NewIterator(options);
+  if (iter == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("New iterator failed, region range [{}-{})",
+                                    Helper::StringToHex(region_range.start_key()),
+                                    Helper::StringToHex(region_range.end_key()));
+    return butil::Status(pb::error::Errno::EINTERNAL, "New iterator failed");
+  }
+
+  std::vector<uint64_t> vector_ids;
+  vector_ids.reserve(1024);
+  for (iter->Seek(start_key); iter->Valid(); iter->Next()) {
+    pb::common::VectorScalardata internal_vector_scalar;
+    if (!internal_vector_scalar.ParseFromString(std::string(iter->Value()))) {
+      return butil::Status(pb::error::EINTERNAL, "Internal error, decode VectorScalar failed");
+    }
+
+    bool compare_result = lambda_scalar_compare_function(internal_vector_scalar);
+    if (compare_result) {
+      std::string key(iter->Key());
+      uint64_t internal_vector_id = VectorCodec::DecodeVectorId(key);
+      if (0 == internal_vector_id) {
+        std::string s = fmt::format("VectorCodec::DecodeVectorId failed key : {}", Helper::StringToHex(key));
+        DINGO_LOG(ERROR) << s;
+        return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, s);
+      }
+      vector_ids.push_back(internal_vector_id);
+    }
+  }
+  auto end_iter = lambda_time_now_function();
+  scan_scalar_time_us = lambda_time_diff_microseconds_function(start_iter, end_iter);
+
+  if (vector_index->VectorIndexType() == pb::common::VECTOR_INDEX_TYPE_HNSW) {
+    filters.push_back(std::make_shared<VectorIndex::HnswListFilterFunctor>(vector_ids));
+  } else if (vector_index->VectorIndexType() == pb::common::VECTOR_INDEX_TYPE_FLAT) {
+    filters.push_back(std::make_shared<VectorIndex::FlatListFilterFunctor>(std::move(vector_ids)));
+  }
+
+  auto start_search = lambda_time_now_function();
+  butil::Status status = vector_index->Search(vector_with_ids, parameter.top_n(), filters, vector_with_distance_results,
+                                              !(parameter.without_vector_data()));
+  auto end_search = lambda_time_now_function();
+  search_time_us = lambda_time_diff_microseconds_function(start_search, end_search);
+  if (!status.ok()) {
+    std::string s = fmt::format("DoVectorSearchForScalarPreFilter::VectorIndex::Search failed");
+    DINGO_LOG(ERROR) << s;
+    return status;
+  }
+
+  return butil::Status::OK();
+}
+
 }  // namespace dingodb

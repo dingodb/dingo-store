@@ -86,6 +86,12 @@ class Storage {
                                    std::vector<::dingodb::pb::common::Vector>& result_op_left_vectors,    // NOLINT
                                    std::vector<::dingodb::pb::common::Vector>& result_op_right_vectors);  // NOLINT
 
+  // This function is for testing only
+  butil::Status VectorBatchSearchDebug(std::shared_ptr<Engine::VectorReader::Context> ctx,
+                                       std::vector<pb::index::VectorWithDistanceResult>& results,
+                                       int64_t& deserialization_id_time_us, int64_t& scan_scalar_time_us,
+                                       int64_t& search_time_us);
+
   butil::Status ValidateLeader(uint64_t region_id);
 
  private:
