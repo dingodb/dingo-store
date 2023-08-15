@@ -60,7 +60,8 @@ public class MetaServiceConnector extends ServiceConnector<MetaServiceGrpc.MetaS
             .map(Coordinator.GetCoordinatorMapResponse::getLeaderLocation)
             .filter(__ -> !__.getHost().isEmpty())
             .map(__ -> newChannel(__.getHost(), __.getPort()))
-            .orNull();    }
+            .orNull();
+    }
 
     @Override
     public MetaServiceGrpc.MetaServiceBlockingStub newStub(ManagedChannel channel) {
