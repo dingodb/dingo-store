@@ -170,6 +170,30 @@ message VectorCalcDistanceResponse {
   repeated VectorDistance distances = 4;
 }
 
+// vector.id > 0: exact query
+// vector.id == 0: similarity search with vector.vector
+message VectorSearchDebugRequest {
+  uint64 region_id = 1;
+  dingodb.pb.common.VectorWithId vector = 2;
+  dingodb.pb.common.VectorSearchParameter parameter = 3;
+  repeated dingodb.pb.common.VectorWithId vector_with_ids = 4;  // this field is used for batch search
+}
+
+message VectorSearchDebugResponse {
+  dingodb.pb.error.Error error = 1;
+  repeated dingodb.pb.common.VectorWithDistance results = 2;
+  repeated VectorWithDistanceResult batch_results = 3;  // this field is used for batch search
+
+  // scalar scan time unit  microsecond 10 -6 s
+  int64 deserialization_id_time_us = 4;
+
+  // scalar scan time unit  microsecond 10 -6 s
+  int64 scan_scalar_time_us = 5;
+
+  // search  vector unit  microsecond 10 -6 s
+  int64 search_time_us = 6;
+}
+
 service IndexService {
   // vector index
   rpc VectorAdd(VectorAddRequest) returns (VectorAddResponse);
@@ -180,4 +204,8 @@ service IndexService {
   rpc VectorScanQuery(VectorScanQueryRequest) returns (VectorScanQueryResponse);
   rpc VectorGetRegionMetrics(VectorGetRegionMetricsRequest) returns (VectorGetRegionMetricsResponse);
   rpc VectorCalcDistance(VectorCalcDistanceRequest) returns (VectorCalcDistanceResponse);
+
+  // debug
+  // test  vector search performance
+  rpc VectorSearchDebug(VectorSearchDebugRequest) returns (VectorSearchDebugResponse);
 };

@@ -134,6 +134,8 @@ DEFINE_uint32(max_watch_count, 10, "max_watch_count");
 DEFINE_bool(with_vector_ids, false, "Search vector with vector ids list default false");
 DEFINE_bool(with_scalar_pre_filter, false, "Search vector with scalar data pre filter");
 DEFINE_bool(with_scalar_post_filter, false, "Search vector with scalar data post filter");
+DEFINE_uint32(vector_ids_count, 100, "vector ids count");
+
 
 DEFINE_string(lock_name, "", "Request lock_name");
 DEFINE_string(client_uuid, "", "Request client_uuid");
@@ -316,6 +318,9 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
     // Vector operation
     else if (method == "VectorSearch") {
       client::SendVectorSearch(ctx->store_interaction, FLAGS_region_id, FLAGS_dimension, FLAGS_vector_id, FLAGS_topn);
+    } else if (method == "VectorSearchDebug") {
+      client::SendVectorSearchDebug(ctx->store_interaction, FLAGS_region_id, FLAGS_dimension, FLAGS_vector_id,
+                                    FLAGS_topn, FLAGS_batch_count, FLAGS_key, FLAGS_value);
     } else if (method == "VectorBatchSearch") {
       client::SendVectorBatchSearch(ctx->store_interaction, FLAGS_region_id, FLAGS_dimension, FLAGS_vector_id,
                                     FLAGS_topn, FLAGS_batch_count);
@@ -350,6 +355,9 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
     } else if (method == "VectorAddBatch") {
       client::SendVectorAddBatch(ctx->store_interaction, FLAGS_region_id, FLAGS_dimension, FLAGS_count,
                                  FLAGS_step_count, FLAGS_start_id, FLAGS_vector_index_add_cost_file);
+    } else if (method == "VectorAddBatchDebug") {
+      client::SendVectorAddBatchDebug(ctx->store_interaction, FLAGS_region_id, FLAGS_dimension, FLAGS_count,
+                                      FLAGS_step_count, FLAGS_start_id, FLAGS_vector_index_add_cost_file);
     } else if (method == "VectorCalcDistance") {
       client::SendVectorCalcDistance(ctx->store_interaction, FLAGS_region_id, FLAGS_dimension, FLAGS_alg_type,
                                      FLAGS_metric_type, FLAGS_left_vector_size, FLAGS_right_vector_size,

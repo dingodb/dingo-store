@@ -52,6 +52,7 @@ DECLARE_string(scalar_filter_value2);
 DECLARE_bool(with_vector_ids);
 DECLARE_bool(with_scalar_pre_filter);
 DECLARE_bool(with_scalar_post_filter);
+DECLARE_uint32(vector_ids_count);
 
 namespace client {
 
@@ -444,6 +445,228 @@ void SendVectorSearch(ServerInteractionPtr interaction, uint64_t region_id, uint
 
     lambda_print_result_vector_function("after  sort result_vt_ids");
   }
+}
+
+void SendVectorSearchDebug(ServerInteractionPtr interaction, uint64_t region_id, uint32_t dimension,
+                           uint64_t start_vector_id, uint32_t topn, uint32_t batch_count, const std::string& key,
+                           const std::string& value) {
+  dingodb::pb::index::VectorSearchDebugRequest request;
+  dingodb::pb::index::VectorSearchDebugResponse response;
+
+  request.set_region_id(region_id);
+
+  if (region_id == 0) {
+    DINGO_LOG(ERROR) << "region_id is 0";
+    return;
+  }
+
+  if (dimension == 0) {
+    DINGO_LOG(ERROR) << "dimension is 0";
+    return;
+  }
+
+  if (topn == 0) {
+    DINGO_LOG(ERROR) << "topn is 0";
+    return;
+  }
+
+  if (batch_count == 0) {
+    DINGO_LOG(ERROR) << "batch_count is 0";
+    return;
+  }
+
+  if (start_vector_id > 0) {
+    for (int count = 0; count < batch_count; count++) {
+      auto* add_vector_with_id = request.add_vector_with_ids();
+      add_vector_with_id->set_id(start_vector_id + count);
+    }
+  } else {
+    std::random_device seed;
+    std::ranlux48 engine(seed());
+    std::uniform_int_distribution<> distrib(0, 100);
+
+    for (int count = 0; count < batch_count; count++) {
+      auto* vector = request.add_vector_with_ids()->mutable_vector();
+      for (int i = 0; i < dimension; i++) {
+        auto random = static_cast<double>(distrib(engine)) / 10.123;
+        vector->add_float_values(random);
+      }
+    }
+
+    request.mutable_parameter()->set_top_n(topn);
+  }
+
+  if (FLAGS_without_vector) {
+    request.mutable_parameter()->set_without_vector_data(true);
+  }
+
+  if (FLAGS_with_scalar) {
+    request.mutable_parameter()->set_with_scalar_data(true);
+  }
+
+  if (FLAGS_with_table) {
+    request.mutable_parameter()->set_with_table_data(true);
+  }
+
+  if (!FLAGS_key.empty()) {
+    auto* key = request.mutable_parameter()->mutable_selected_keys()->Add();
+    key->assign(FLAGS_key);
+  }
+
+  std::vector<uint64_t> vt_ids;
+  if (FLAGS_with_vector_ids) {
+    request.mutable_parameter()->set_vector_filter(::dingodb::pb::common::VectorFilter::VECTOR_ID_FILTER);
+    request.mutable_parameter()->set_vector_filter_type(::dingodb::pb::common::VectorFilterType::QUERY_PRE);
+
+    for (int i = 0; i < FLAGS_vector_ids_count; i++) {
+      std::random_device seed;
+      std::ranlux48 engine(seed());
+
+      std::uniform_int_distribution<> distrib(1, 1000000ULL);
+      auto random = distrib(engine);
+
+      vt_ids.push_back(random);
+    }
+
+    sort(vt_ids.begin(), vt_ids.end());
+    vt_ids.erase(std::unique(vt_ids.begin(), vt_ids.end()), vt_ids.end());
+
+    for (auto id : vt_ids) {
+      request.mutable_parameter()->add_vector_ids(id);
+    }
+
+    std::cout << "vector_ids : " << request.parameter().vector_ids().size() << " [ ";
+
+    for (auto id : request.parameter().vector_ids()) {
+      std::cout << id << " ";
+    }
+    std::cout << "]";
+    std::cout << std::endl;
+  }
+
+  if (FLAGS_with_scalar_pre_filter) {
+    request.mutable_parameter()->set_vector_filter(::dingodb::pb::common::VectorFilter::SCALAR_FILTER);
+    request.mutable_parameter()->set_vector_filter_type(::dingodb::pb::common::VectorFilterType::QUERY_PRE);
+
+    for (uint32_t m = 0; m < batch_count; m++) {
+      dingodb::pb::common::VectorWithId* vector_with_id = request.mutable_vector_with_ids(m);
+
+      ::dingodb::pb::common::ScalarValue scalar_value;
+      scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::STRING);
+      ::dingodb::pb::common::ScalarField* field = scalar_value.add_fields();
+      field->set_string_data(value);
+
+      vector_with_id->mutable_scalar_data()->mutable_scalar_data()->insert({key, scalar_value});
+    }
+
+  }
+
+  if (FLAGS_with_scalar_post_filter) {
+    request.mutable_parameter()->set_vector_filter(::dingodb::pb::common::VectorFilter::SCALAR_FILTER);
+    request.mutable_parameter()->set_vector_filter_type(::dingodb::pb::common::VectorFilterType::QUERY_POST);
+
+    for (uint32_t m = 0; m < batch_count; m++) {
+      dingodb::pb::common::VectorWithId* vector_with_id = request.mutable_vector_with_ids(m);
+
+      ::dingodb::pb::common::ScalarValue scalar_value;
+      scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::STRING);
+      ::dingodb::pb::common::ScalarField* field = scalar_value.add_fields();
+      field->set_string_data(value);
+
+      vector_with_id->mutable_scalar_data()->mutable_scalar_data()->insert({key, scalar_value});
+    }
+
+  }
+
+  if (FLAGS_print_vector_search_delay) {
+    auto start = std::chrono::steady_clock::now();
+    interaction->SendRequest("IndexService", "VectorSearchDebug", request, response);
+    auto end = std::chrono::steady_clock::now();
+    auto diff = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+
+    DINGO_LOG(INFO) << fmt::format("SendVectorSearchDebug  span: {} (us)", diff);
+
+  } else {
+    interaction->SendRequest("IndexService", "VectorSearchDebug", request, response);
+  }
+
+  DINGO_LOG(INFO) << "VectorSearchDebug response: " << response.DebugString();
+
+  DINGO_LOG(INFO) << "VectorSearchDebug response, batch_result_size: " << response.batch_results_size();
+  for (const auto& batch_result : response.batch_results()) {
+    DINGO_LOG(INFO) << "VectorSearchDebug response, batch_result_dist_size: "
+                    << batch_result.vector_with_distances_size();
+  }
+
+#if 0
+  // match compare
+  if (FLAGS_with_vector_ids) {
+    std::cout << "vector_ids : " << request.parameter().vector_ids().size() << " [ ";
+
+    for (auto id : request.parameter().vector_ids()) {
+      std::cout << id << " ";
+    }
+    std::cout << "]";
+    std::cout << std::endl;
+
+    std::cout << "response.batch_results() size : " << response.batch_results().size() << std::endl;
+
+    for (const auto& vector_with_distance_result : response.batch_results()) {
+      std::vector<uint64_t> result_vt_ids;
+      for (const auto& vector_with_distance : vector_with_distance_result.vector_with_distances()) {
+        auto id = vector_with_distance.vector_with_id().id();
+        result_vt_ids.push_back(id);
+      }
+
+      if (result_vt_ids.empty()) {
+        std::cout << "result_vt_ids : empty" << std::endl;
+      } else {
+        std::cout << "result_vt_ids : " << result_vt_ids.size() << " [ ";
+        for (auto id : result_vt_ids) {
+          std::cout << id << " ";
+        }
+        std::cout << "]";
+        std::cout << std::endl;
+      }
+
+      for (auto id : result_vt_ids) {
+        auto iter = std::find(vt_ids.begin(), vt_ids.end(), id);
+        if (iter == vt_ids.end()) {
+          std::cout << "result_vector_ids not all in vector_ids" << std::endl;
+          return;
+        }
+      }
+      std::cout << "result_vector_ids  all in vector_ids" << std::endl;
+    }
+  }
+
+  if (FLAGS_with_scalar_pre_filter) {
+    for (const auto& vector_with_distance_result : response.batch_results()) {
+      std::vector<uint64_t> result_vt_ids;
+      for (const auto& vector_with_distance : vector_with_distance_result.vector_with_distances()) {
+        auto id = vector_with_distance.vector_with_id().id();
+        result_vt_ids.push_back(id);
+      }
+
+      auto lambda_print_result_vector_function = [&result_vt_ids](const std::string& name) {
+        std::cout << name << ": " << result_vt_ids.size() << " [ ";
+        for (auto id : result_vt_ids) {
+          std::cout << id << " ";
+        }
+        std::cout << "]";
+        std::cout << std::endl;
+      };
+
+      lambda_print_result_vector_function("before sort result_vt_ids");
+
+      std::sort(result_vt_ids.begin(), result_vt_ids.end());
+
+      lambda_print_result_vector_function("after  sort result_vt_ids");
+
+      std::cout << std::endl;
+    }
+  }
+#endif
 }
 
 void SendVectorBatchSearch(ServerInteractionPtr interaction, uint64_t region_id, uint32_t dimension, uint64_t vector_id,
@@ -1062,6 +1285,166 @@ void SendVectorAddBatch(ServerInteractionPtr interaction, uint64_t region_id, ui
 
             vector_with_id->mutable_scalar_data()->mutable_scalar_data()->insert(
                 {"key" + std::to_string(index), scalar_value});
+          }
+        }
+      }
+
+      butil::Status status = interaction->SendRequest("IndexService", "VectorAdd", request, response);
+      int success_count = 0;
+      for (auto key_state : response.key_states()) {
+        if (key_state) {
+          ++success_count;
+        }
+      }
+    }
+
+    auto end = std::chrono::steady_clock::now();
+    auto diff = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+    out << x << " , " << diff << "\n";
+
+    DINGO_LOG(INFO) << "index : " << x << " : " << diff << " us, avg : " << static_cast<long double>(diff) / step_count
+                    << " us";
+
+    total += diff;
+  }
+
+  DINGO_LOG(INFO) << fmt::format("total : {} cost : {} (us) avg : {} us", count, total,
+                                 static_cast<long double>(total) / count);
+
+  out.close();
+}
+
+void SendVectorAddBatchDebug(ServerInteractionPtr interaction, uint64_t region_id, uint32_t dimension, uint32_t count,
+                             uint32_t step_count, int64_t start_id, const std::string& file) {
+  if (step_count == 0) {
+    DINGO_LOG(ERROR) << "step_count must be greater than 0";
+    return;
+  }
+  if (region_id == 0) {
+    DINGO_LOG(ERROR) << "region_id must be greater than 0";
+    return;
+  }
+  if (dimension == 0) {
+    DINGO_LOG(ERROR) << "dimension must be greater than 0";
+    return;
+  }
+  if (count == 0) {
+    DINGO_LOG(ERROR) << "count must be greater than 0";
+    return;
+  }
+  if (start_id < 0) {
+    DINGO_LOG(ERROR) << "start_id must be greater than 0";
+    return;
+  }
+  if (file.empty()) {
+    DINGO_LOG(ERROR) << "vector_index_add_cost_file must not be empty";
+    return;
+  }
+
+  std::filesystem::path url(file);
+  std::fstream out;
+  if (!std::filesystem::exists(url)) {
+    // not exist
+    out.open(file, std::ios::out | std::ios::binary);
+  } else {
+    out.open(file, std::ios::out | std::ios::binary | std::ios::trunc);
+  }
+
+  if (!out.is_open()) {
+    DINGO_LOG(ERROR) << fmt::format("{} open failed", file);
+    out.close();
+    return;
+  }
+
+  out << "index,cost(us)\n";
+  int64_t total = 0;
+
+  if (count % step_count != 0) {
+    DINGO_LOG(ERROR) << fmt::format("count {} must be divisible by step_count {}", count, step_count);
+    return;
+  }
+
+  uint32_t cnt = count / step_count;
+
+  std::mt19937 rng;
+  std::uniform_real_distribution<> distrib(0.0, 10.0);
+
+  std::vector<float> random_seeds;
+  random_seeds.resize(count * dimension);
+  for (uint32_t i = 0; i < count; ++i) {
+    for (uint32_t j = 0; j < dimension; ++j) {
+      random_seeds[i * dimension + j] = distrib(rng);
+    }
+
+    if (i % 10000 == 0) {
+      DINGO_LOG(INFO) << fmt::format("generate random seeds: {}/{}", i, count);
+    }
+  }
+
+  // Add data to index
+  // uint32_t num_threads = std::thread::hardware_concurrency();
+  // try {
+  //   ParallelFor(0, count, num_threads, [&](size_t row, size_t /*thread_id*/) {
+  //     std::mt19937 rng;
+  //     std::uniform_real_distribution<> distrib(0.0, 10.0);
+  //     for (uint32_t i = 0; i < dimension; ++i) {
+  //       random_seeds[row * dimension + i] = distrib(rng);
+  //     }
+  //   });
+  // } catch (std::runtime_error& e) {
+  //   DINGO_LOG(ERROR) << "generate random data failed, error=" << e.what();
+  //   return;
+  // }
+
+  DINGO_LOG(INFO) << fmt::format("generate random seeds: {}/{}", count, count);
+
+  for (uint32_t x = 0; x < cnt; x++) {
+    auto start = std::chrono::steady_clock::now();
+    {
+      dingodb::pb::index::VectorAddRequest request;
+      dingodb::pb::index::VectorAddResponse response;
+
+      request.set_region_id(region_id);
+
+      uint64_t real_start_id = start_id + x * step_count;
+      for (int i = real_start_id; i < real_start_id + step_count; ++i) {
+        auto* vector_with_id = request.add_vectors();
+        vector_with_id->set_id(i);
+        vector_with_id->mutable_vector()->set_dimension(dimension);
+        vector_with_id->mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
+        for (int j = 0; j < dimension; j++) {
+          vector_with_id->mutable_vector()->add_float_values(random_seeds[(i - start_id) * dimension + j]);
+        }
+
+        if (FLAGS_with_scalar) {
+          auto index = (i - start_id);
+          auto left = index % 200;
+
+          auto lambda_insert_scalar_data_function = [&vector_with_id](int tag) {
+            ::dingodb::pb::common::ScalarValue scalar_value;
+
+            scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::STRING);
+            ::dingodb::pb::common::ScalarField* field = scalar_value.add_fields();
+            field->set_string_data("tag" + std::to_string(tag));
+
+            vector_with_id->mutable_scalar_data()->mutable_scalar_data()->insert(
+                {"tag" + std::to_string(tag), scalar_value});
+          };
+
+          if (left >= 0 && left < 99) {  // tag1 [0, 99] total 100
+            lambda_insert_scalar_data_function(1);
+          } else if (left >= 100 && left <= 139) {  // tag2 [100, 139]  total 40
+            lambda_insert_scalar_data_function(2);
+          } else if (left >= 140 && left <= 149) {  // tag3 [140, 149]  total 10
+            lambda_insert_scalar_data_function(3);
+          } else if (left >= 150 && left <= 154) {  // tag4 [150, 154]  total 5
+            lambda_insert_scalar_data_function(4);
+          } else if (left >= 155 && left <= 156) {  // tag5 [155, 156]  total 2
+            lambda_insert_scalar_data_function(5);
+          } else if (left >= 157 && left <= 157) {  // tag6 [157, 157]  total 1
+            lambda_insert_scalar_data_function(6);
+          } else {
+            // do nothing
           }
         }
       }

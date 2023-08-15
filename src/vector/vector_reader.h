@@ -51,6 +51,12 @@ class VectorReader {
                                        std::shared_ptr<VectorIndex> vector_index,
                                        pb::common::VectorIndexMetrics& region_metrics);
 
+  // This function is for testing only
+  butil::Status VectorBatchSearchDebug(std::shared_ptr<Engine::VectorReader::Context> ctx,
+                                       std::vector<pb::index::VectorWithDistanceResult>& results,
+                                       int64_t& deserialization_id_time_us, int64_t& scan_scalar_time_us,
+                                       int64_t& search_time_us);
+
  private:
   butil::Status QueryVectorWithId(uint64_t partition_id, uint64_t vector_id, bool with_vector_data,
                                   pb::common::VectorWithId& vector_with_id);
@@ -95,6 +101,31 @@ class VectorReader {
       [[maybe_unused]] const std::vector<pb::common::VectorWithId>& vector_with_ids,
       [[maybe_unused]] const pb::common::VectorSearchParameter& parameter,
       std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results);
+
+  // This function is for testing only
+  butil::Status SearchVectorDebug(uint64_t partition_id, std::shared_ptr<VectorIndex> vector_index,
+                                  pb::common::Range region_range,
+                                  const std::vector<pb::common::VectorWithId>& vector_with_ids,
+                                  const pb::common::VectorSearchParameter& parameter,
+                                  std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results,
+                                  int64_t& deserialization_id_time_us, int64_t& scan_scalar_time_us,
+                                  int64_t& search_time_us);
+
+  // This function is for testing only
+  butil::Status DoVectorSearchForVectorIdPreFilterDebug(
+      std::shared_ptr<VectorIndex> vector_index, const std::vector<pb::common::VectorWithId>& vector_with_ids,
+      const pb::common::VectorSearchParameter& parameter,
+      std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters,
+      std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results,
+      int64_t& deserialization_id_time_us, int64_t& search_time_us);
+
+  // This function is for testing only
+  butil::Status DoVectorSearchForScalarPreFilterDebug(
+     std::shared_ptr<VectorIndex> vector_index, pb::common::Range region_range,
+      const std::vector<pb::common::VectorWithId>& vector_with_ids, const pb::common::VectorSearchParameter& parameter,
+      std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters,
+      std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results, int64_t& scan_scalar_time_us,
+      int64_t& search_time_us);  // NOLINT
   std::shared_ptr<RawEngine::Reader> reader_;
 };
 
