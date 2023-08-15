@@ -42,9 +42,6 @@ public class ColumnDefinition implements Column {
     private String defaultValue;
     private boolean isAutoIncrement;
 
-    public ColumnDefinition() {
-    }
-
     @Deprecated
     public ColumnDefinition(
         String name,
