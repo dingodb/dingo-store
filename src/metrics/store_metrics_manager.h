@@ -190,7 +190,7 @@ class StoreRegionMetrics : public TransformKvAble {
 
   // Todo: later optimize
   uint64_t GetRegionKeyCount(store::RegionPtr region);
-  std::vector<uint64_t> GetRegionApproximateSize(std::vector<store::RegionPtr> regions);
+  std::vector<std::pair<uint64_t, uint64_t>> GetRegionApproximateSize(std::vector<store::RegionPtr> regions);
 
   // Read meta data from persistence storage.
   std::shared_ptr<MetaReader> meta_reader_;

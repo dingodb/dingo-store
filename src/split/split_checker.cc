@@ -191,9 +191,6 @@ void SplitCheckTask::SplitCheck() {
   // Get split key.
   uint32_t key_count = 0;
   std::string split_key = split_checker_->SplitKey(region_, key_count);
-  if (region_->Type() == pb::common::INDEX_REGION) {
-    split_key = VectorCodec::RemoveVectorPrefix(split_key);
-  }
 
   // Update region key count metrics.
   if (region_metrics_ != nullptr && key_count > 0) {
@@ -203,6 +200,9 @@ void SplitCheckTask::SplitCheck() {
 
   if (split_key.empty()) {
     return;
+  }
+  if (region_->Type() == pb::common::INDEX_REGION) {
+    split_key = VectorCodec::RemoveVectorPrefix(split_key);
   }
   if (region_->RawRange().start_key() != region_range.start_key() ||
       region_->RawRange().end_key() != region_range.end_key()) {
@@ -226,12 +226,12 @@ void SplitCheckTask::SplitCheck() {
   if (region_->Type() == pb::common::INDEX_REGION) {
     DINGO_LOG(INFO) << fmt::format(
         "[split.check][region({})] need split split_policy {} split_key {} vector id {} elapsed time {}ms",
-        region_->Id(), split_checker_->GetPolicyName(), split_key, VectorCodec::DecodeVectorId(split_key),
-        Helper::TimestampMs() - start_time);
+        region_->Id(), split_checker_->GetPolicyName(), Helper::StringToHex(split_key),
+        VectorCodec::DecodeVectorId(split_key), Helper::TimestampMs() - start_time);
   } else {
     DINGO_LOG(INFO) << fmt::format(
         "[split.check][region({})] need split split_policy {} split_key {} elapsed time {}ms", region_->Id(),
-        split_checker_->GetPolicyName(), split_key, Helper::TimestampMs() - start_time);
+        split_checker_->GetPolicyName(), Helper::StringToHex(split_key), Helper::TimestampMs() - start_time);
   }
 
   // Invoke coordinator SplitRegion api.
