@@ -12,39 +12,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "special.h"
+#include "types.h"
 
 namespace dingodb::expr
 {
 
-template <> bool CalcIsTrue(const wrap<bool> &v)
+const char *TypeName(byte type)
 {
-    return v.has_value() && *v;
-}
-
-template <> bool CalcIsTrue(const wrap<int32_t> &v)
-{
-    return v.has_value() && *v != 0;
-}
-
-template <> bool CalcIsTrue(const wrap<int64_t> &v)
-{
-    return v.has_value() && *v != 0;
-}
-
-template <> bool CalcIsFalse(const wrap<bool> &v)
-{
-    return v.has_value() && !*v;
-}
-
-template <> bool CalcIsFalse(const wrap<int32_t> &v)
-{
-    return v.has_value() && *v != 0;
-}
-
-template <> bool CalcIsFalse(const wrap<int64_t> &v)
-{
-    return v.has_value() && *v != 0;
+    switch (type) {
+    case TYPE_INT32:
+        return "INT32";
+    case TYPE_INT64:
+        return "INT64";
+    case TYPE_BOOL:
+        return "BOOL";
+    case TYPE_FLOAT:
+        return "FLOAT";
+    case TYPE_DOUBLE:
+        return "DOUBLE";
+    case TYPE_DECIMAL:
+        return "DECIMAL";
+    case TYPE_STRING:
+        return "STRING";
+    default:
+        return "UNKNOWN";
+    }
 }
 
 } // namespace dingodb::expr

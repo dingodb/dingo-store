@@ -15,38 +15,53 @@
 #ifndef DINGODB_EXPR_CALC_CAMPARISON_H_
 #define DINGODB_EXPR_CALC_CAMPARISON_H_
 
-namespace dingodb::expr {
+#include "../types.h"
 
-template <typename T>
-bool CalcEq(T v0, T v1) {
-  return v0 == v1;
+namespace dingodb::expr
+{
+
+template <typename T> bool CalcEq(T v0, T v1)
+{
+    return v0 == v1;
 }
 
-template <typename T>
-bool CalcGe(T v0, T v1) {
-  return v0 >= v1;
+template <> bool CalcEq(typename CxxTraits<TYPE_STRING>::type v0, typename CxxTraits<TYPE_STRING>::type v1);
+
+template <typename T> bool CalcGe(T v0, T v1)
+{
+    return v0 >= v1;
 }
 
-template <typename T>
-bool CalcGt(T v0, T v1) {
-  return v0 > v1;
+template <> bool CalcGe(typename CxxTraits<TYPE_STRING>::type v0, typename CxxTraits<TYPE_STRING>::type v1);
+
+template <typename T> bool CalcGt(T v0, T v1)
+{
+    return v0 > v1;
 }
 
-template <typename T>
-bool CalcLe(T v0, T v1) {
-  return v0 <= v1;
+template <> bool CalcGt(typename CxxTraits<TYPE_STRING>::type v0, typename CxxTraits<TYPE_STRING>::type v1);
+
+template <typename T> bool CalcLe(T v0, T v1)
+{
+    return v0 <= v1;
 }
 
-template <typename T>
-bool CalcLt(T v0, T v1) {
-  return v0 < v1;
+template <> bool CalcLe(typename CxxTraits<TYPE_STRING>::type v0, typename CxxTraits<TYPE_STRING>::type v1);
+
+template <typename T> bool CalcLt(T v0, T v1)
+{
+    return v0 < v1;
 }
 
-template <typename T>
-bool CalcNe(T v0, T v1) {
-  return v0 != v1;
+template <> bool CalcLt(typename CxxTraits<TYPE_STRING>::type v0, typename CxxTraits<TYPE_STRING>::type v1);
+
+template <typename T> bool CalcNe(T v0, T v1)
+{
+    return v0 != v1;
 }
 
-}  // namespace dingodb::expr
+template <> bool CalcNe(typename CxxTraits<TYPE_STRING>::type v0, typename CxxTraits<TYPE_STRING>::type v1);
 
-#endif  // DINGODB_EXPR_CALC_CAMPARISON_H_
+} // namespace dingodb::expr
+
+#endif // DINGODB_EXPR_CALC_CAMPARISON_H_

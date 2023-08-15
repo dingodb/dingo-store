@@ -15,32 +15,41 @@
 #ifndef DINGODB_EXPR_CODEC_H_
 #define DINGODB_EXPR_CODEC_H_
 
+#include <cstddef>
+
 #include "types.h"
 
-namespace dingodb::expr {
+namespace dingodb::expr
+{
 
 // T can be int32_t or int64_t
-template <typename T>
-const byte *DecodeVarint(T &value, const byte *data) {
-  value = 0;
-  const byte *p;
-  int shift = 0;
-  for (p = data; ((*p) & 0x80) != 0; ++p) {
-    value |= ((T)(*p & 0x7F) << shift);
-    shift += 7;
-  }
-  value |= ((T)(*p) << shift);
-  return p;
+template <typename T> const byte *DecodeVarint(T &value, const byte *data)
+{
+    value = 0;
+    const byte *p;
+    int shift = 0;
+    for (p = data; ((*p) & 0x80) != 0; ++p) {
+        value |= ((T)(*p & 0x7F) << shift);
+        shift += 7;
+    }
+    value |= ((T)(*p) << shift);
+    return p + 1;
 }
 
-float DecodeFloat(const byte *data);
+const byte *DecodeFloat(float &value, const byte *data);
 
-double DecodeDouble(const byte *data);
+const byte *DecodeDouble(double &value, const byte *data);
 
-int HexToInt(const char hex);
+const byte *DecodeString(std::shared_ptr<std::string> &value, const byte *data);
+
+int HexToNibble(const char hex);
+
+char NibbleToHex(int nibble);
 
 void HexToBytes(byte *buf, const char *hex, size_t len);
 
-}  // namespace dingodb::expr
+void BytesToHex(char *hex, const byte *buf, size_t len);
 
-#endif  // DINGODB_EXPR_CODEC_H_
+} // namespace dingodb::expr
+
+#endif // DINGODB_EXPR_CODEC_H_

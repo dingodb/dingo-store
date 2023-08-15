@@ -19,41 +19,36 @@
 
 #include "operand.h"
 
-namespace dingodb::expr {
+namespace dingodb::expr
+{
 
-template <typename T>
-bool CalcIsNull(const wrap<T> &v) {
-  return !v.has_value();
+template <typename T> bool CalcIsNull(const wrap<T> &v)
+{
+    return !v.has_value();
 }
 
-template <typename T>
-bool CalcIsTrue(const wrap<T> &v) {
-  return false;
+template <typename T> bool CalcIsTrue(const wrap<T> &v)
+{
+    return false;
 }
 
-template <>
-bool CalcIsTrue(const wrap<bool> &v);
+template <> bool CalcIsTrue(const wrap<bool> &v);
 
-template <>
-bool CalcIsTrue(const wrap<int32_t> &v);
+template <> bool CalcIsTrue(const wrap<int32_t> &v);
 
-template <>
-bool CalcIsTrue(const wrap<int64_t> &v);
+template <> bool CalcIsTrue(const wrap<int64_t> &v);
 
-template <typename T>
-bool CalcIsFalse(const wrap<T> &v) {
-  return false;
+template <typename T> bool CalcIsFalse(const wrap<T> &v)
+{
+    return false;
 }
 
-template <>
-bool CalcIsFalse(const wrap<bool> &v);
+template <> bool CalcIsFalse(const wrap<bool> &v);
 
-template <>
-bool CalcIsFalse(const wrap<int32_t> &v);
+template <> bool CalcIsFalse(const wrap<int32_t> &v);
 
-template <>
-bool CalcIsFalse(const wrap<int64_t> &v);
+template <> bool CalcIsFalse(const wrap<int64_t> &v);
 
-}  // namespace dingodb::expr
+} // namespace dingodb::expr
 
-#endif  // DINGODB_EXPR_CALC_SPECIAL_H_
+#endif // DINGODB_EXPR_CALC_SPECIAL_H_

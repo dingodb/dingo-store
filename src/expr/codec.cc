@@ -22,33 +22,69 @@
 
 #include "codec.h"
 
-namespace dingodb::expr {
+namespace dingodb::expr
+{
 
-float DecodeFloat(const byte *data) {
-  uint32_t l = be32toh(*(uint32_t *)data);
-  return *(float *)&l;
+const byte *DecodeFloat(float &value, const byte *data)
+{
+    uint32_t l = be32toh(*(uint32_t *)data);
+    value = *(float *)&l;
+    return data + 4;
 }
 
-double DecodeDouble(const byte *data) {
-  uint64_t l = be64toh(*(uint64_t *)data);
-  return *(double *)&l;
+const byte *DecodeDouble(double &value, const byte *data)
+{
+    uint64_t l = be64toh(*(uint64_t *)data);
+    value = *(double *)&l;
+    return data + 8;
 }
 
-int HexToInt(const char hex) {
-  if ('0' <= hex && hex <= '9') {
-    return hex - '0';
-  } else if ('a' <= hex && hex <= 'f') {
-    return hex - 'a' + 10;
-  } else if ('A' <= hex && hex <= 'F') {
-    return hex - 'A' + 10;
-  }
-  return -1;
+const byte *DecodeString(std::shared_ptr<std::string> &value, const byte *data)
+{
+    uint32_t len;
+    const byte *p = DecodeVarint(len, data);
+    value = std::make_shared<std::string>(reinterpret_cast<const char *>(p), len);
+    return p + len;
 }
 
-void HexToBytes(byte *buf, const char *hex, size_t len) {
-  for (int i = 0; i < len / 2; ++i) {
-    buf[i] = (byte)(HexToInt(hex[i + i]) << 4) | HexToInt(hex[i + i + 1]);
-  }
+int HexToNibble(const char hex)
+{
+    if ('0' <= hex && hex <= '9') {
+        return hex - '0';
+    } else if ('a' <= hex && hex <= 'f') {
+        return hex - 'a' + 10;
+    } else if ('A' <= hex && hex <= 'F') {
+        return hex - 'A' + 10;
+    }
+    return -1;
 }
 
-}  // namespace dingodb::expr
+char NibbleToHex(int nibble)
+{
+    if (0 <= nibble && nibble <= 9) {
+        return nibble + '0';
+    } else if (10 <= nibble && nibble <= 15) {
+        return nibble - 10 + 'A';
+    }
+    return (char)-1;
+}
+
+void HexToBytes(byte *buf, const char *hex, size_t len)
+{
+    for (size_t i = 0; i < len / 2; ++i) {
+        buf[i] = (byte)(HexToNibble(hex[i + i]) << 4) | HexToNibble(hex[i + i + 1]);
+    }
+}
+
+void BytesToHex(char *hex, const byte *buf, size_t len)
+{
+    char *p = hex;
+    for (size_t i = 0; i < len; ++i) {
+        *p = NibbleToHex(buf[i] >> 4);
+        ++p;
+        *p = NibbleToHex(buf[i] & 0x0F);
+        ++p;
+    }
+}
+
+} // namespace dingodb::expr
