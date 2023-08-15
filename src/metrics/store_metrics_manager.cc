@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "bthread/bthread.h"
@@ -137,7 +138,7 @@ bool StoreRegionMetrics::Init() {
 }
 
 std::string StoreRegionMetrics::GetRegionMinKey(store::RegionPtr region) {
-  DINGO_LOG(INFO) << fmt::format("GetRegionMinKey... region {} range[{}-{}]", region->Id(),
+  DINGO_LOG(INFO) << fmt::format("[metrics.region][region({})] get region min key, range[{}-{}]", region->Id(),
                                  Helper::StringToHex(region->RawRange().start_key()),
                                  Helper::StringToHex(region->RawRange().end_key()));
   IteratorOptions options;
@@ -154,7 +155,7 @@ std::string StoreRegionMetrics::GetRegionMinKey(store::RegionPtr region) {
 }
 
 std::string StoreRegionMetrics::GetRegionMaxKey(store::RegionPtr region) {
-  DINGO_LOG(INFO) << fmt::format("GetRegionMaxKey... region {} range[{}-{}]", region->Id(),
+  DINGO_LOG(INFO) << fmt::format("[metrics.region][region({})] get region max key, range[{}-{}]", region->Id(),
                                  Helper::StringToHex(region->RawRange().start_key()),
                                  Helper::StringToHex(region->RawRange().end_key()));
   IteratorOptions options;
@@ -179,14 +180,42 @@ uint64_t StoreRegionMetrics::GetRegionKeyCount(store::RegionPtr region) {
   return count;
 }
 
-std::vector<uint64_t> StoreRegionMetrics::GetRegionApproximateSize(std::vector<store::RegionPtr> regions) {
+std::vector<std::pair<uint64_t, uint64_t>> StoreRegionMetrics::GetRegionApproximateSize(
+    std::vector<store::RegionPtr> regions) {
+  std::vector<store::RegionPtr> valid_regions;
   std::vector<pb::common::Range> ranges;
   ranges.reserve(regions.size());
   for (const auto& region : regions) {
-    ranges.push_back(region->RawRange());
+    auto tmp_ranges = region->PhysicsRange();
+    if (!tmp_ranges.empty() && tmp_ranges[0].start_key() < tmp_ranges[0].end_key()) {
+      ranges.insert(ranges.end(), tmp_ranges.begin(), tmp_ranges.end());
+      valid_regions.push_back(region);
+    } else {
+      DINGO_LOG(ERROR) << fmt::format(
+          "[metrics.region][region({})] get region approximate size failed, invalid range [{}-{})", region->Id(),
+          tmp_ranges[0].start_key(), tmp_ranges[0].end_key());
+    }
   }
 
-  return raw_engine_->GetApproximateSizes(Constant::kStoreDataCF, ranges);
+  std::vector<std::pair<uint64_t, uint64_t>> region_sizes;
+  auto sizes = raw_engine_->GetApproximateSizes(Constant::kStoreDataCF, ranges);
+  int i = 0;
+  for (const auto& region : valid_regions) {
+    int size = 0;
+    if (region->Type() == pb::common::INDEX_REGION) {
+      for (int j = 0; j < Constant::kVectorDataCategoryNum; ++j) {
+        size += sizes[i + j];
+      }
+      i += Constant::kVectorDataCategoryNum;
+    } else {
+      size = sizes[i];
+      i += 1;
+    }
+
+    region_sizes.push_back(std::make_pair(region->Id(), size));
+  }
+
+  return region_sizes;
 }
 
 bool StoreRegionMetrics::CollectMetrics() {
@@ -274,7 +303,8 @@ bool StoreRegionMetrics::CollectMetrics() {
 
     if (vector_index_has_data) {
       DINGO_LOG(DEBUG) << fmt::format(
-          "Collect region metrics, region {} min_key[{}] max_key[{}] key_count[true] region_size[true]  "
+          "[metrics.region][region({})] collect region metrics, min_key[{}] max_key[{}] key_count[true] "
+          "region_size[true]  "
           "vector_type[{}] vector_index_count[{}] vector_index_deleted_count[{}] vector_index_max_id[{}] "
           "vector_index_min_id[{}] "
           "vector_index_memory_bytes[{}]"
@@ -285,7 +315,8 @@ bool StoreRegionMetrics::CollectMetrics() {
           region_metrics->GetVectorMemoryBytes(), Helper::TimestampMs() - start_time);
     } else {  //  no vector index data
       DINGO_LOG(DEBUG) << fmt::format(
-          "Collect region metrics, region {} min_key[{}] max_key[{}] key_count[true] region_size[true] elapsed[{} "
+          "[metrics.region][region({})] collect region metrics, min_key[{}] max_key[{}] key_count[true] "
+          "region_size[true] elapsed[{} "
           "ms]",
           region->Id(), is_collect_min_key ? "true" : "false", is_collect_max_key ? "true" : "false",
           Helper::TimestampMs() - start_time);
@@ -296,15 +327,19 @@ bool StoreRegionMetrics::CollectMetrics() {
 
   // Get approximate size
   uint64_t start_time = Helper::TimestampMs();
-  auto sizes = GetRegionApproximateSize(need_collect_regions);
-  for (int i = 0; i < sizes.size(); ++i) {
-    auto region_metrics = GetMetrics(need_collect_regions[i]->Id());
+  auto region_sizes = GetRegionApproximateSize(need_collect_regions);
+  for (auto& item : region_sizes) {
+    uint64_t region_id = item.first;
+    uint64_t size = item.second;
+
+    auto region_metrics = GetMetrics(region_id);
     if (region_metrics != nullptr) {
-      region_metrics->SetRegionSize(sizes[i]);
+      region_metrics->SetRegionSize(size);
     }
   }
 
-  DINGO_LOG(DEBUG) << fmt::format("Get region approximate size elapsed[{} ms]", Helper::TimestampMs() - start_time);
+  DINGO_LOG(DEBUG) << fmt::format("[metrics.region][region(*)] get region approximate size elapsed[{} ms]",
+                                  Helper::TimestampMs() - start_time);
 
   return true;
 }

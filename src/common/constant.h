@@ -98,6 +98,8 @@ class Constant {
   static const bool kSegmentLogSync = true;
   static const uint32_t kSegmentLogSyncPerBytes = INT32_MAX;
 
+  // vector data number, e.g. data/scalar/table
+  static const uint32_t kVectorDataCategoryNum = 3;
   // vector key prefix
   static const uint8_t kVectorDataPrefix = 0x01;
   static const uint8_t kVectorScalarPrefix = 0x02;
