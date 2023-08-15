@@ -73,6 +73,11 @@ const pb::common::Range& Region::Range() {
   return inner_region_.definition().range();
 }
 
+void Region::SetRange(const pb::common::Range& range) {
+  BAIDU_SCOPED_LOCK(mutex_);
+  inner_region_.mutable_definition()->mutable_range()->CopyFrom(range);
+}
+
 const pb::common::Range& Region::RawRange() {
   BAIDU_SCOPED_LOCK(mutex_);
   return inner_region_.definition().raw_range();
@@ -393,6 +398,7 @@ void StoreRegionMeta::UpdateRange(store::RegionPtr region, const pb::common::Ran
   assert(region != nullptr);
 
   region->SetRawRange(range);
+  region->SetRange(range);
 
   meta_writer_->Put(TransformToKv(region));
 }
