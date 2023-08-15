@@ -621,47 +621,54 @@ public class EntityConversion {
 
     public static Common.VectorCoprocessor mapping(Coprocessor coprocessor, long partId) {
         Common.VectorCoprocessor.VectorSchemaWrapper schemaWrapper = Common.VectorCoprocessor.VectorSchemaWrapper.newBuilder()
-                .addAllSchema(CodecUtils.createSchemaForColumns(coprocessor.getOriginalSchema().getSchemas()).stream()
-                        .map(schema -> {
-                            Common.VectorSchema.Type vs;
-                            switch (schema.getType()) {
-                                case BOOLEAN:
-                                    vs = Common.VectorSchema.Type.BOOL;
-                                    break;
-                                case INTEGER:
-                                    vs = Common.VectorSchema.Type.INTEGER;
-                                    break;
-                                case FLOAT:
-                                    vs = Common.VectorSchema.Type.FLOAT;
-                                    break;
-                                case LONG:
-                                    vs = Common.VectorSchema.Type.LONG;
-                                    break;
-                                case DOUBLE:
-                                    vs = Common.VectorSchema.Type.DOUBLE;
-                                    break;
-                                case BYTES:
-                                case STRING:
-                                    vs = Common.VectorSchema.Type.STRING;
-                                    break;
-                                default:
-                                    throw new IllegalStateException("Unexpected value: " + schema.getType());
-                            }
-                            return Common.VectorSchema.newBuilder()
-                                    .setType(vs)
-                                    .setIsKey(schema.isKey())
-                                    .setIsNullable(schema.isAllowNull())
-                                    .setIndex(schema.getIndex())
-                                    .build();
-                        }).collect(Collectors.toList()))
+                .addAllSchema(mapping(coprocessor.getOriginalSchema()))
                 .setCommonId(partId)
                 .build();
         return Common.VectorCoprocessor.newBuilder()
                 .setSchemaVersion(coprocessor.getSchemaVersion())
                 .setOriginalSchema(schemaWrapper)
-                .addAllSelectionColumns(coprocessor.getSelection())
-                .setExpression(ByteString.copyFrom(coprocessor.getExpression()))
+                .addAllSelectionColumns(Parameters.cleanNull(coprocessor.getSelection(), Collections.emptyList()))
+                .setExpression(ByteString.copyFrom(Parameters.cleanNull(coprocessor.getExpression(), ByteArrayUtils.EMPTY_BYTES)))
                 .build();
+    }
+
+    public static List<Common.VectorSchema> mapping(Coprocessor.SchemaWrapper schemaWrapper) {
+        if (schemaWrapper == null) {
+            return Collections.emptyList();
+        }
+        return CodecUtils.createSchemaForColumns(schemaWrapper.getSchemas()).stream()
+                .map(schema -> {
+                    Common.VectorSchema.Type vs;
+                    switch (schema.getType()) {
+                        case BOOLEAN:
+                            vs = Common.VectorSchema.Type.BOOL;
+                            break;
+                        case INTEGER:
+                            vs = Common.VectorSchema.Type.INTEGER;
+                            break;
+                        case FLOAT:
+                            vs = Common.VectorSchema.Type.FLOAT;
+                            break;
+                        case LONG:
+                            vs = Common.VectorSchema.Type.LONG;
+                            break;
+                        case DOUBLE:
+                            vs = Common.VectorSchema.Type.DOUBLE;
+                            break;
+                        case BYTES:
+                        case STRING:
+                            vs = Common.VectorSchema.Type.STRING;
+                            break;
+                        default:
+                            throw new IllegalStateException("Unexpected value: " + schema.getType());
+                    }
+                    return Common.VectorSchema.newBuilder()
+                            .setType(vs)
+                            .setIsKey(schema.isKey())
+                            .setIsNullable(schema.isAllowNull())
+                            .setIndex(schema.getIndex())
+                            .build();
+                }).collect(Collectors.toList());
     }
 
     public static Store.Coprocessor mapping(Coprocessor coprocessor, DingoCommonId regionId) {
