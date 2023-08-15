@@ -62,6 +62,7 @@ class Region {
   void SetLeaderId(uint64_t leader_id);
 
   const pb::common::Range& Range();
+  void SetRange(const pb::common::Range& range);
   const pb::common::Range& RawRange();
   void SetRawRange(const pb::common::Range& range);
   // Get physics range, it's rocksdb data range.
