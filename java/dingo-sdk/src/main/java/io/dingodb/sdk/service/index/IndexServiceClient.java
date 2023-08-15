@@ -23,6 +23,8 @@ import io.dingodb.sdk.common.DingoCommonId;
 import io.dingodb.sdk.common.Location;
 import io.dingodb.sdk.common.SDKCommonId;
 import io.dingodb.sdk.common.utils.EntityConversion;
+import io.dingodb.sdk.common.utils.Optional;
+import io.dingodb.sdk.common.utils.Parameters;
 import io.dingodb.sdk.common.vector.Search;
 import io.dingodb.sdk.common.vector.VectorCalcDistance;
 import io.dingodb.sdk.common.vector.VectorDistance;
@@ -37,6 +39,7 @@ import io.dingodb.sdk.service.connector.IndexServiceConnector;
 import io.dingodb.sdk.service.meta.MetaServiceClient;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -113,10 +116,17 @@ public class IndexServiceClient {
                 .setWithScalarData(parameter.isWithScalarData())
                 .addAllSelectedKeys(parameter.getSelectedKeys())
                 .setUseScalarFilter(false)
-                .setVectorFilter(Common.VectorFilter.valueOf(parameter.getVectorFilter().name()))
-                .setVectorFilterType(Common.VectorFilterType.valueOf(parameter.getVectorFilterType().name()))
-                .setVectorCoprocessor(mapping(parameter.getCoprocessor(), regionId.parentId()))
-                .addAllVectorIds(parameter.getVectorIds());
+                .setVectorCoprocessor(Optional.mapOrGet(
+                        parameter.getCoprocessor(),
+                        __ -> mapping(parameter.getCoprocessor(), regionId.parentId()),
+                        () -> Common.VectorCoprocessor.newBuilder().build()))
+                .addAllVectorIds(Parameters.cleanNull(parameter.getVectorIds(), Collections.emptyList()));
+        if (parameter.getVectorFilter() != null) {
+            builder.setVectorFilter(Common.VectorFilter.valueOf(parameter.getVectorFilter().name()));
+        }
+        if (parameter.getVectorFilterType() != null) {
+            builder.setVectorFilterType(Common.VectorFilterType.valueOf(parameter.getVectorFilterType().name()));
+        }
         if (search.getFlat() != null) {
             builder.setFlat(Common.SearchFlatParam.newBuilder()
                     .setParallelOnQueries(search.getFlat().getParallelOnQueries())
@@ -200,8 +210,11 @@ public class IndexServiceClient {
                 .setWithScalarData(query.getWithScalarData())
                 .addAllSelectedKeys(query.getSelectedKeys())
                 .setWithTableData(query.getWithTableData())
-                .setUseScalarFilter(query.getUseScalarFilter())
-                .setScalarForFilter(mapping(query.getScalarForFilter()))
+                .setUseScalarFilter(Parameters.cleanNull(query.getUseScalarFilter(), false))
+                .setScalarForFilter(Optional.mapOrGet(
+                        query.getScalarForFilter(),
+                        EntityConversion::mapping,
+                        () -> Common.VectorScalardata.newBuilder().build()))
                 .build();
 
         Index.VectorScanQueryResponse response = exec(stub -> stub.vectorScanQuery(request), retryTimes, indexId,
