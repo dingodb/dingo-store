@@ -25,6 +25,7 @@ import io.dingodb.sdk.common.DingoCommonId;
 import io.dingodb.sdk.common.codec.DingoKeyValueCodec;
 import io.dingodb.sdk.common.index.Index;
 import io.dingodb.sdk.common.index.IndexMetrics;
+import io.dingodb.sdk.common.partition.Partition;
 import io.dingodb.sdk.common.partition.PartitionDetail;
 import io.dingodb.sdk.common.table.RangeDistribution;
 import io.dingodb.sdk.common.table.Table;
@@ -255,7 +256,9 @@ public class MetaServiceClient {
             throw new DingoClientException("Table " + tableName + " already exists");
         }
 
-        List<Integer> partCount = indexes.stream().map(i -> i.getPartition().getDetails().size() + 1).collect(Collectors.toList());
+        List<Integer> partCount = indexes.stream()
+            .map(i -> Optional.of(i.getPartition()).map(Partition::getDetails).map(List::size).orElse(0) + 1)
+            .collect(Collectors.toList());
         Meta.GenerateTableIdsRequest request = Meta.GenerateTableIdsRequest.newBuilder()
                 .setSchemaId(id)
                 .setCount(Meta.TableWithPartCount.newBuilder()
@@ -340,10 +343,12 @@ public class MetaServiceClient {
     }
 
     /**
+     * Use {@link MetaServiceClient#getTableDefinition} and {@link MetaServiceClient#getTableIndexes}
      * Get assigned table definition, including vector index and scalar index.
      * @param tableName table name
      * @return table definition/vector index/scalar index
      */
+    @Deprecated
     public List<Table> getTables(String tableName) {
         tableName = cleanTableName(tableName);
         DingoCommonId tableId = getTableId(tableName);
@@ -359,6 +364,28 @@ public class MetaServiceClient {
                 .map(EntityConversion::mapping)
                 .collect(Collectors.toList());
     }
+
+    public Map<DingoCommonId, Table> getTableIndexes(String tableName) {
+        tableName = cleanTableName(tableName);
+        DingoCommonId tableId = getTableId(tableName);
+        if (tableId == null) {
+            throw new DingoClientException("Table " + tableName + " does not exist");
+        }
+
+        return getTableIndexes(tableId);
+    }
+
+    public Map<DingoCommonId, Table> getTableIndexes(DingoCommonId tableId) {
+        Meta.DingoCommonId metaTableId = mapping(tableId);
+        Meta.GetTablesRequest request = Meta.GetTablesRequest.newBuilder().setTableId(metaTableId).build();
+
+        Meta.GetTablesResponse response = metaConnector.exec(stub -> stub.getTables(request));
+
+        return response.getTableDefinitionWithIdsList().stream()
+            .filter(__ -> !__.getTableId().equals(metaTableId))
+            .collect(Collectors.toMap(__ -> mapping(__.getTableId()), EntityConversion::mapping));
+    }
+
 
     public Map<String, Table> getTableDefinitionsBySchema() {
         if (!(id == ROOT_SCHEMA_ID)) {
@@ -549,6 +576,10 @@ public class MetaServiceClient {
     }
 
     public boolean updateIndex(String index, Index newIndex) {
+        // ignore table index
+        if (index.contains(".")) {
+            return false;
+        }
         DingoCommonId indexId = getIndexId(index);
         Meta.UpdateIndexRequest request = Meta.UpdateIndexRequest.newBuilder()
                 .setIndexId(mapping(indexId))
@@ -561,6 +592,10 @@ public class MetaServiceClient {
     }
 
     public boolean dropIndex(String indexName) {
+        // ignore table index
+        if (indexName.contains(".")) {
+            return false;
+        }
         DingoCommonId indexId = getIndexId(indexName);
         return dropIndex(indexId);
     }
@@ -578,10 +613,19 @@ public class MetaServiceClient {
 
         Meta.GetIndexResponse response = metaConnector.exec(stub -> stub.getIndex(request));
 
+        // ignore table index
+        if (response.getIndexDefinitionWithId().getIndexDefinition().getName().contains(".")) {
+            return null;
+        }
+
         return mapping(indexId.entityId(), response.getIndexDefinitionWithId().getIndexDefinition());
     }
 
     public Index getIndex(String name) {
+        // ignore table index
+        if (name.contains(".")) {
+            return null;
+        }
         Meta.GetIndexByNameRequest request = Meta.GetIndexByNameRequest.newBuilder()
                 .setSchemaId(id)
                 .setIndexName(name)
@@ -601,6 +645,10 @@ public class MetaServiceClient {
         Meta.GetIndexesResponse response = metaConnector.exec(stub -> stub.getIndexes(request));
 
         for (Meta.IndexDefinitionWithId withId : response.getIndexDefinitionWithIdsList()) {
+            // ignore table index
+            if (withId.getIndexDefinition().getName().contains(".")) {
+                continue;
+            }
             results.put(mapping(withId.getIndexId()), mapping(withId.getIndexId().getEntityId(), withId.getIndexDefinition()));
         }
 
@@ -612,6 +660,10 @@ public class MetaServiceClient {
     }
 
     private Meta.IndexDefinitionWithId getIndexDefinitionWithId(String indexName) {
+        // ignore table index
+        if (indexName.contains(".")) {
+            return null;
+        }
         Meta.GetIndexByNameRequest request = Meta.GetIndexByNameRequest.newBuilder()
                 .setSchemaId(id)
                 .setIndexName(indexName)
