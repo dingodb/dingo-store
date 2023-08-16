@@ -61,22 +61,8 @@ butil::Status VectorReader::SearchVector(
     return butil::Status();
   }
 
-  uint32_t top_n = parameter.top_n();
-  bool use_scalar_filter = parameter.use_scalar_filter();
-
   auto vector_filter = parameter.vector_filter();
   auto vector_filter_type = parameter.vector_filter_type();
-
-  if (use_scalar_filter) {
-    if (dingodb::pb::common::VectorFilter::SCALAR_FILTER == vector_filter &&
-        dingodb::pb::common::VectorFilterType::QUERY_POST == vector_filter_type) {
-      if (BAIDU_UNLIKELY(vector_with_ids[0].scalar_data().scalar_data_size() == 0)) {
-        return butil::Status(pb::error::EVECTOR_SCALAR_DATA_NOT_FOUND,
-                             fmt::format("Not found vector scalar data, vector id: {}", vector_with_ids[0].id()));
-      }
-      top_n *= 10;
-    }
-  }
 
   bool with_vector_data = !(parameter.without_vector_data());
   std::vector<pb::index::VectorWithDistanceResult> tmp_results;
@@ -92,11 +78,25 @@ butil::Status VectorReader::SearchVector(
     filters.push_back(std::make_shared<VectorIndex::FlatRangeFilterFunctor>(min_vector_id, max_vector_id));
   }
 
-  if (use_scalar_filter) {
-    // scalar post filter
-    if (dingodb::pb::common::VectorFilter::SCALAR_FILTER == vector_filter &&
-        dingodb::pb::common::VectorFilterType::QUERY_POST == vector_filter_type) {
-      vector_index->Search(vector_with_ids, top_n, filters, tmp_results, with_vector_data);
+  // scalar post filter
+  if (dingodb::pb::common::VectorFilter::SCALAR_FILTER == vector_filter &&
+      dingodb::pb::common::VectorFilterType::QUERY_POST == vector_filter_type) {
+    uint32_t top_n = parameter.top_n();
+    if (BAIDU_UNLIKELY(vector_with_ids[0].scalar_data().scalar_data_size() == 0)) {
+      butil::Status status =
+          vector_index->Search(vector_with_ids, top_n, filters, vector_with_distance_results, with_vector_data);
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << fmt::format("vector_index::Search failed ");
+        return status;
+      }
+    } else {
+      top_n *= 10;
+
+      butil::Status status = vector_index->Search(vector_with_ids, top_n, filters, tmp_results, with_vector_data);
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << fmt::format("vector_index::Search failed ");
+        return status;
+      }
       for (auto& vector_with_distance_result : tmp_results) {
         pb::index::VectorWithDistanceResult new_vector_with_distance_result;
 
@@ -113,40 +113,39 @@ butil::Status VectorReader::SearchVector(
           }
 
           new_vector_with_distance_result.add_vector_with_distances()->Swap(&temp_vector_with_distance);
+          if (new_vector_with_distance_result.vector_with_distances_size() >= parameter.top_n()) {
+            break;
+          }
         }
-
         vector_with_distance_results.emplace_back(std::move(new_vector_with_distance_result));
       }
-    } else if (dingodb::pb::common::VectorFilter::VECTOR_ID_FILTER == vector_filter) {  // vector id array search
-      butil::Status status = DoVectorSearchForVectorIdPreFilter(vector_index, vector_with_ids, parameter, filters,
-                                                                vector_with_distance_results);
-      if (!status.ok()) {
-        DINGO_LOG(ERROR) << fmt::format("DoVectorSearchForVectorIdPreFilter failed");
-        return status;
-      }
-
-    } else if (dingodb::pb::common::VectorFilter::SCALAR_FILTER == vector_filter &&
-               dingodb::pb::common::VectorFilterType::QUERY_PRE == vector_filter_type) {  // scalar pre filter search
-
-      butil::Status status = DoVectorSearchForScalarPreFilter(vector_index, region_range, vector_with_ids, parameter,
-                                                              filters, vector_with_distance_results);
-      if (!status.ok()) {
-        DINGO_LOG(ERROR) << fmt::format("DoVectorSearchForScalarPreFilter failed ");
-        return status;
-      }
-
-    } else if (dingodb::pb::common::VectorFilter::TABLE_FILTER ==
-               vector_filter) {  //  table coprocessor pre filter search. not impl
-      butil::Status status = DoVectorSearchForTableCoprocessor(vector_index, partition_id, vector_with_ids, parameter,
-                                                               vector_with_distance_results);
-      if (!status.ok()) {
-        DINGO_LOG(ERROR) << fmt::format("DoVectorSearchForTableCoprocessor failed ");
-        return status;
-      }
     }
-  } else {  // no filter
-    vector_index->Search(vector_with_ids, top_n, filters, tmp_results, with_vector_data);
-    vector_with_distance_results.swap(tmp_results);
+  } else if (dingodb::pb::common::VectorFilter::VECTOR_ID_FILTER == vector_filter) {  // vector id array search
+    butil::Status status = DoVectorSearchForVectorIdPreFilter(vector_index, vector_with_ids, parameter, filters,
+                                                              vector_with_distance_results);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << fmt::format("DoVectorSearchForVectorIdPreFilter failed");
+      return status;
+    }
+
+  } else if (dingodb::pb::common::VectorFilter::SCALAR_FILTER == vector_filter &&
+             dingodb::pb::common::VectorFilterType::QUERY_PRE == vector_filter_type) {  // scalar pre filter search
+
+    butil::Status status = DoVectorSearchForScalarPreFilter(vector_index, region_range, vector_with_ids, parameter,
+                                                            filters, vector_with_distance_results);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << fmt::format("DoVectorSearchForScalarPreFilter failed ");
+      return status;
+    }
+
+  } else if (dingodb::pb::common::VectorFilter::TABLE_FILTER ==
+             vector_filter) {  //  table coprocessor pre filter search. not impl
+    butil::Status status = DoVectorSearchForTableCoprocessor(vector_index, partition_id, vector_with_ids, parameter,
+                                                             vector_with_distance_results);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << fmt::format("DoVectorSearchForTableCoprocessor failed ");
+      return status;
+    }
   }
 
   // if vector index does not support restruct vector ,we restruct it using RocksDB
