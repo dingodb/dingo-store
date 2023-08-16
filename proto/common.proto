@@ -577,12 +577,6 @@ message VectorSearchParameter {
     SearchDiskAnnParam diskann = 15;
   }
 
-  // Whether to use scalar filtering.
-  // This is a switch to enable or disable filtering.
-  // @Deprecated This field will be deprecated in the near future.
-  // @Deprecated Please use vector_filter and vector_query_type instead.
-  bool use_scalar_filter = 20;
-
   // filter source
   VectorFilter vector_filter = 21;
 

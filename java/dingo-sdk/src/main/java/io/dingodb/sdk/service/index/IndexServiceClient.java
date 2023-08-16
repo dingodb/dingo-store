@@ -115,7 +115,6 @@ public class IndexServiceClient {
                 .setWithoutVectorData(parameter.isWithoutVectorData())
                 .setWithScalarData(parameter.isWithScalarData())
                 .addAllSelectedKeys(parameter.getSelectedKeys())
-                .setUseScalarFilter(false)
                 .setVectorCoprocessor(Optional.mapOrGet(
                         parameter.getCoprocessor(),
                         __ -> mapping(parameter.getCoprocessor(), regionId.parentId()),
