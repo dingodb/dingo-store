@@ -16,6 +16,7 @@
 #include <memory>
 #include <string>
 
+#include "client/client_helper.h"
 #include "client/coordinator_client_function.h"
 #include "common/helper.h"
 #include "common/logging.h"
@@ -722,8 +723,8 @@ void SendCreateIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
       part->mutable_id()->set_entity_id(i);
       part->mutable_id()->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_PART);
       part->mutable_id()->set_parent_entity_id(schema_id->entity_id());
-      part->mutable_range()->set_start_key(std::to_string(i * 100));
-      part->mutable_range()->set_end_key(std::to_string(i * 100 + 1));
+      part->mutable_range()->set_start_key(client::Helper::EncodeVectorRegionRange(i * 100, 0));
+      part->mutable_range()->set_end_key(client::Helper::EncodeVectorRegionRange(i * 100 + 1, 0));
     }
   }
 

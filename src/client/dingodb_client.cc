@@ -324,8 +324,20 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
     } else if (method == "VectorGetRegionMetrics") {
       client::SendVectorGetRegionMetrics(ctx->store_interaction, FLAGS_region_id);
     } else if (method == "VectorAdd") {
-      client::SendVectorAdd(ctx->store_interaction, FLAGS_region_id, FLAGS_dimension, FLAGS_start_id, FLAGS_count,
-                            FLAGS_step_count);
+      ctx->table_id = FLAGS_table_id;
+      ctx->region_id = FLAGS_region_id;
+      ctx->dimension = FLAGS_dimension;
+      ctx->start_id = FLAGS_start_id;
+      ctx->count = FLAGS_count;
+      ctx->step_count = FLAGS_step_count;
+      ctx->with_scalar = FLAGS_with_scalar;
+      ctx->with_table = FLAGS_with_table;
+
+      if (ctx->table_id > 0) {
+        client::SendVectorAddRetry(ctx);
+      } else {
+        client::SendVectorAdd(ctx);
+      }
     } else if (method == "VectorDelete") {
       client::SendVectorDelete(ctx->store_interaction, FLAGS_region_id, FLAGS_start_id, FLAGS_count);
     } else if (method == "VectorGetMaxId") {
@@ -339,11 +351,16 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
       client::SendVectorCalcDistance(ctx->store_interaction, FLAGS_region_id, FLAGS_dimension, FLAGS_alg_type,
                                      FLAGS_metric_type, FLAGS_left_vector_size, FLAGS_right_vector_size,
                                      FLAGS_is_return_normlize);
-    }
 
-    // Test
-    else if (method == "TestBatchPut") {
-      client::TestBatchPut(ctx->store_interaction, FLAGS_region_id, FLAGS_thread_num, FLAGS_req_num, FLAGS_prefix);
+      // Test
+    } else if (method == "TestBatchPut") {
+      ctx->table_id = FLAGS_table_id;
+      ctx->region_id = FLAGS_region_id;
+      ctx->thread_num = FLAGS_thread_num;
+      ctx->req_num = FLAGS_req_num;
+      ctx->prefix = FLAGS_prefix;
+
+      client::TestBatchPut(ctx);
     } else if (method == "TestBatchPutGet") {
       client::TestBatchPutGet(ctx->store_interaction, FLAGS_region_id, FLAGS_thread_num, FLAGS_req_num, FLAGS_prefix);
     } else if (method == "TestRegionLifecycle") {
