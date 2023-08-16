@@ -367,6 +367,9 @@ void RegionControlServiceImpl::Debug(google::protobuf::RpcController* controller
     }
   } else if (request->type() == pb::region_control::DebugType::INDEX_VECTOR_INDEX_METRICS) {
     auto vector_index_manager = Server::GetInstance()->GetVectorIndexManager();
+    if (vector_index_manager == nullptr) {
+      return;
+    }
     std::vector<std::shared_ptr<VectorIndex>> vector_indexs;
     if (request->region_ids().empty()) {
       vector_indexs = vector_index_manager->GetAllVectorIndex();
