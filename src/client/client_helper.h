@@ -25,6 +25,7 @@
 
 #include "butil/endpoint.h"
 #include "butil/strings/string_split.h"
+#include "serial/buf.h"
 
 namespace client {
 
@@ -153,6 +154,14 @@ class Helper {
     }
 
     return addrs;
+  }
+
+  static std::string EncodeVectorRegionRange(uint64_t partition_id, uint64_t vector_id) {
+    dingodb::Buf buf(16);
+    buf.WriteLong(partition_id);
+    buf.WriteLong(vector_id);
+
+    return buf.GetString();
   }
 };
 
