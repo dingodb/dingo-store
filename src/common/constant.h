@@ -126,6 +126,10 @@ class Constant {
   static constexpr float kDefaultSplitRatio = 0.5;
   static const uint32_t kDefaultSplitKeysNumber = 200000;
   static constexpr float kDefaultSplitKeysRatio = 0.5;
+
+  // collect metrics
+  static const uint32_t kApproximateSizeMetricsCollectIntervalS = 50;
+  static const uint32_t kMetricsCollectIntervalS = 300;
 };
 
 }  // namespace dingodb

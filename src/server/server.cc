@@ -271,13 +271,10 @@ bool Server::InitCrontabManager() {
     }
 
     // Add store metrics crontab
-    uint64_t metrics_collect_interval_s = config->GetInt("server.metrics_collect_interval_s");
-    if (metrics_collect_interval_s < 0) {
-      DINGO_LOG(ERROR) << "config server.metrics_collect_interval_s illegal";
-      return false;
-    } else if (metrics_collect_interval_s == 0) {
-      DINGO_LOG(WARNING) << "config server.metrics_collect_interval_s is 0, metrics will not be collected";
-    } else if (metrics_collect_interval_s > 0) {
+    int metrics_collect_interval_s = config->GetInt("server.metrics_collect_interval_s");
+    metrics_collect_interval_s =
+        metrics_collect_interval_s > 0 ? metrics_collect_interval_s : Constant::kMetricsCollectIntervalS;
+    if (metrics_collect_interval_s > 0) {
       std::shared_ptr<Crontab> crontab = std::make_shared<Crontab>();
       crontab->name = "METRICS";
       crontab->interval = metrics_collect_interval_s * 1000;
@@ -288,6 +285,32 @@ bool Server::InitCrontabManager() {
             &tid, &attr,
             [](void*) -> void* {
               Server::GetInstance()->GetStoreMetricsManager()->CollectMetrics();
+              return nullptr;
+            },
+            nullptr);
+      };
+      crontab->arg = nullptr;
+
+      crontab_manager_->AddAndRunCrontab(crontab);
+    }
+
+    // Add store approximate size metrics crontab
+    int approimate_size_metrics_collect_interval_s =
+        config->GetInt("server.approximate_size_metrics_collect_interval_s");
+    approimate_size_metrics_collect_interval_s = approimate_size_metrics_collect_interval_s > 0
+                                                     ? approimate_size_metrics_collect_interval_s
+                                                     : Constant::kApproximateSizeMetricsCollectIntervalS;
+    if (approimate_size_metrics_collect_interval_s > 0) {
+      std::shared_ptr<Crontab> crontab = std::make_shared<Crontab>();
+      crontab->name = "APPROXIMATE_SIZE_METRICS";
+      crontab->interval = approimate_size_metrics_collect_interval_s * 1000;
+      crontab->func = [](void*) {
+        bthread_t tid;
+        const bthread_attr_t attr = BTHREAD_ATTR_NORMAL;
+        bthread_start_background(
+            &tid, &attr,
+            [](void*) -> void* {
+              Server::GetInstance()->GetStoreMetricsManager()->CollectApproximateSizeMetrics();
               return nullptr;
             },
             nullptr);
@@ -466,13 +489,10 @@ bool Server::InitCrontabManager() {
     }
 
     // Add store metrics crontab
-    uint64_t metrics_collect_interval_s = config->GetInt("server.metrics_collect_interval_s");
-    if (metrics_collect_interval_s < 0) {
-      DINGO_LOG(ERROR) << "config server.metrics_collect_interval_s illegal";
-      return false;
-    } else if (metrics_collect_interval_s == 0) {
-      DINGO_LOG(WARNING) << "config server.metrics_collect_interval_s is 0, metrics will not be collected";
-    } else if (metrics_collect_interval_s > 0) {
+    int metrics_collect_interval_s = config->GetInt("server.metrics_collect_interval_s");
+    metrics_collect_interval_s =
+        metrics_collect_interval_s > 0 ? metrics_collect_interval_s : Constant::kMetricsCollectIntervalS;
+    if (metrics_collect_interval_s > 0) {
       std::shared_ptr<Crontab> crontab = std::make_shared<Crontab>();
       crontab->name = "METRICS";
       crontab->interval = metrics_collect_interval_s * 1000;
@@ -483,6 +503,32 @@ bool Server::InitCrontabManager() {
             &tid, &attr,
             [](void*) -> void* {
               Server::GetInstance()->GetStoreMetricsManager()->CollectMetrics();
+              return nullptr;
+            },
+            nullptr);
+      };
+      crontab->arg = nullptr;
+
+      crontab_manager_->AddAndRunCrontab(crontab);
+    }
+
+    // Add store approximate size metrics crontab
+    int approimate_size_metrics_collect_interval_s =
+        config->GetInt("server.approximate_size_metrics_collect_interval_s");
+    approimate_size_metrics_collect_interval_s = approimate_size_metrics_collect_interval_s > 0
+                                                     ? approimate_size_metrics_collect_interval_s
+                                                     : Constant::kApproximateSizeMetricsCollectIntervalS;
+    if (approimate_size_metrics_collect_interval_s > 0) {
+      std::shared_ptr<Crontab> crontab = std::make_shared<Crontab>();
+      crontab->name = "APPROXIMATE_SIZE_METRICS";
+      crontab->interval = approimate_size_metrics_collect_interval_s * 1000;
+      crontab->func = [](void*) {
+        bthread_t tid;
+        const bthread_attr_t attr = BTHREAD_ATTR_NORMAL;
+        bthread_start_background(
+            &tid, &attr,
+            [](void*) -> void* {
+              Server::GetInstance()->GetStoreMetricsManager()->CollectApproximateSizeMetrics();
               return nullptr;
             },
             nullptr);

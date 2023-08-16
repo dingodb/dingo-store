@@ -28,6 +28,7 @@
 #include "fmt/core.h"
 #include "proto/common.pb.h"
 #include "server/server.h"
+#include "vector/vector_index_manager.h"
 
 namespace dingodb {
 
@@ -218,6 +219,47 @@ std::vector<std::pair<uint64_t, uint64_t>> StoreRegionMetrics::GetRegionApproxim
   return region_sizes;
 }
 
+bool StoreRegionMetrics::CollectApproximateSizeMetrics() {
+  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+  auto store_raft_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRaftMeta();
+  auto region_metricses = GetAllMetrics();
+
+  std::vector<store::RegionPtr> need_collect_regions;
+  for (const auto& region_metrics : region_metricses) {
+    auto raft_meta = store_raft_meta->GetRaftMeta(region_metrics->Id());
+    if (raft_meta == nullptr) {
+      continue;
+    }
+
+    auto region = store_region_meta->GetRegion(region_metrics->Id());
+    if (region == nullptr) {
+      continue;
+    }
+    need_collect_regions.push_back(region);
+  }
+
+  if (need_collect_regions.empty()) {
+    return false;
+  }
+
+  // Get approximate size
+  uint64_t start_time = Helper::TimestampMs();
+  auto region_sizes = GetRegionApproximateSize(need_collect_regions);
+  for (auto& item : region_sizes) {
+    uint64_t region_id = item.first;
+    uint64_t size = item.second;
+
+    auto region_metrics = GetMetrics(region_id);
+    if (region_metrics != nullptr) {
+      region_metrics->SetRegionSize(size);
+    }
+  }
+
+  DINGO_LOG(INFO) << fmt::format("[metrics.region][region(*)] get region approximate size elapsed[{} ms]",
+                                 Helper::TimestampMs() - start_time);
+  return true;
+}
+
 bool StoreRegionMetrics::CollectMetrics() {
   auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
   auto store_raft_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRaftMeta();
@@ -325,22 +367,6 @@ bool StoreRegionMetrics::CollectMetrics() {
     meta_writer_->Put(TransformToKv(region_metrics));
   }
 
-  // Get approximate size
-  uint64_t start_time = Helper::TimestampMs();
-  auto region_sizes = GetRegionApproximateSize(need_collect_regions);
-  for (auto& item : region_sizes) {
-    uint64_t region_id = item.first;
-    uint64_t size = item.second;
-
-    auto region_metrics = GetMetrics(region_id);
-    if (region_metrics != nullptr) {
-      region_metrics->SetRegionSize(size);
-    }
-  }
-
-  DINGO_LOG(DEBUG) << fmt::format("[metrics.region][region(*)] get region approximate size elapsed[{} ms]",
-                                  Helper::TimestampMs() - start_time);
-
   return true;
 }
 
@@ -420,6 +446,19 @@ bool StoreMetricsManager::Init() {
   }
 
   return true;
+}
+
+void StoreMetricsManager::CollectApproximateSizeMetrics() {
+  if (is_collecting_approximate_size_.load()) {
+    DINGO_LOG(WARNING) << "Already exist collecting approxximate size metrics.";
+    return;
+  }
+
+  is_collecting_approximate_size_.store(true);
+
+  region_metrics_->CollectApproximateSizeMetrics();
+
+  is_collecting_approximate_size_.store(false);
 }
 
 void StoreMetricsManager::CollectMetrics() {
