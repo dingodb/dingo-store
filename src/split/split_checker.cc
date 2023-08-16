@@ -39,9 +39,14 @@
 
 namespace dingodb {
 
+static uint32_t GetRegionMaxSize(std::shared_ptr<Config> config) {  // NOLINT
+  int region_max_size = config->GetInt("region.region_max_size");
+  return region_max_size > 0 ? region_max_size : Constant::kDefaultRegionMaxSize;
+}
+
 static uint32_t GetSplitCheckApproximateSize(std::shared_ptr<Config> config) {  // NOLINT
-  int split_check_approximate_size = config->GetInt("region.split_check_approximate_size");
-  return split_check_approximate_size > 0 ? split_check_approximate_size : Constant::kDefaultSplitCheckApproximateSize;
+  int region_max_size = GetRegionMaxSize(config);
+  return static_cast<uint32_t>(static_cast<double>(region_max_size) * Constant::kDefaultSplitCheckApproximateSizeRatio);
 }
 
 static std::string GetSplitPolicy(std::shared_ptr<Config> config) {  // NOLINT
