@@ -652,8 +652,8 @@ butil::Status VectorReader::DoVectorSearchForScalarPreFilter(
         return true;
       };
 
-  std::string start_key = VectorCodec::FillVectorDataPrefix(region_range.start_key());
-  std::string end_key = VectorCodec::FillVectorDataPrefix(region_range.end_key());
+  std::string start_key = VectorCodec::FillVectorScalarPrefix(region_range.start_key());
+  std::string end_key = VectorCodec::FillVectorScalarPrefix(region_range.end_key());
 
   IteratorOptions options;
   options.upper_bound = end_key;
