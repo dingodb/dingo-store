@@ -1931,10 +1931,11 @@ butil::Status CoordinatorControl::GetIndexRange(uint64_t schema_id, uint64_t ind
 
     // range_distribution id
     uint64_t region_id = table_internal.partitions(i).region_id();
+    uint64_t part_id = table_internal.partitions(i).part_id();
 
     auto* common_id_region = range_distribution->mutable_id();
     common_id_region->set_entity_id(region_id);
-    common_id_region->set_parent_entity_id(index_id);
+    common_id_region->set_parent_entity_id(part_id);
     common_id_region->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_PART);
 
     // get region
