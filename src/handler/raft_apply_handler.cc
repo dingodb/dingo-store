@@ -774,7 +774,7 @@ void VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr 
 }
 
 void RebuildVectorIndexHandler::Handle(std::shared_ptr<Context>, store::RegionPtr region, std::shared_ptr<RawEngine>,
-                                       const pb::raft::Request &req, store::RegionMetricsPtr, uint64_t,
+                                       [[maybe_unused]] const pb::raft::Request &req, store::RegionMetricsPtr, uint64_t,
                                        uint64_t log_id) {
   DINGO_LOG(INFO) << fmt::format("Handle rebuild vector index, region_id: {} apply_log_id: {}", region->Id(), log_id);
   auto vector_index_manager = Server::GetInstance()->GetVectorIndexManager();
