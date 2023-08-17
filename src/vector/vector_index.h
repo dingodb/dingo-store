@@ -74,10 +74,7 @@ class VectorIndex {
   class FilterFunctor {
    public:
     virtual ~FilterFunctor() = default;
-    virtual void Build([[maybe_unused]] std::unordered_map<faiss::idx_t, faiss::idx_t>& rev_map) {
-      DINGO_LOG(ERROR) << "Not support...";
-    }
-    virtual void Build([[maybe_unused]] std::vector<faiss::idx_t>& id_map) { DINGO_LOG(ERROR) << "Not support..."; }
+    virtual void Build([[maybe_unused]] std::vector<faiss::idx_t>& id_map) {}
     virtual bool Check(uint64_t vector_id) = 0;
   };
 
@@ -100,28 +97,15 @@ class VectorIndex {
     FlatRangeFilterFunctor(uint64_t min_vector_id, uint64_t max_vector_id)
         : min_vector_id_(min_vector_id), max_vector_id_(max_vector_id) {}
 
-    void Build(std::unordered_map<faiss::idx_t, faiss::idx_t>& rev_map) override {
-      for (auto [vector_id, index] : rev_map) {
-        if (vector_id >= min_vector_id_ && vector_id < max_vector_id_) {
-          array_indexs_.insert(index);
-        }
-      }
-    }
-
     void Build(std::vector<faiss::idx_t>& id_map) override { this->id_map_ = &id_map; }
 
     bool Check(uint64_t index) override {
-      if (id_map_ != nullptr) {
-        return (*id_map_)[index] >= min_vector_id_ && (*id_map_)[index] < max_vector_id_;
-      } else {
-        return array_indexs_.find(index) != array_indexs_.end();
-      }
+      return (*id_map_)[index] >= min_vector_id_ && (*id_map_)[index] < max_vector_id_;
     }
 
    private:
     uint64_t min_vector_id_;
     uint64_t max_vector_id_;
-    std::unordered_set<uint64_t> array_indexs_;
     std::vector<faiss::idx_t>* id_map_{nullptr};
   };
 
@@ -159,20 +143,27 @@ class VectorIndex {
     FlatListFilterFunctor& operator=(const FlatListFilterFunctor&) = delete;
     FlatListFilterFunctor& operator=(FlatListFilterFunctor&&) = delete;
 
-    void Build(std::unordered_map<faiss::idx_t, faiss::idx_t>& rev_map) override {
+    void Build(std::vector<faiss::idx_t>& id_map) override {
+      this->id_map_ = &id_map;
+
       for (auto vector_id : vector_ids_) {
-        auto iter = rev_map.find(static_cast<faiss::idx_t>(vector_id));
-        if (iter != rev_map.end()) {
-          array_indexs_.insert(iter->second);
-        }
+        array_indexs_.insert(vector_id);
       }
     }
 
-    bool Check(uint64_t index) override { return array_indexs_.find(index) != array_indexs_.end(); }
+    bool Check(uint64_t index) override {
+      if (index >= (*id_map_).size()) {
+        return false;
+      }
+
+      auto vector_id = (*id_map_)[index];
+      return array_indexs_.find(vector_id) != array_indexs_.end();
+    }
 
    private:
     std::vector<uint64_t> vector_ids_;
     std::unordered_set<uint64_t> array_indexs_;
+    std::vector<faiss::idx_t>* id_map_{nullptr};
   };
 
   pb::common::VectorIndexType VectorIndexType() const;

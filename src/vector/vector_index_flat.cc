@@ -242,7 +242,6 @@ butil::Status VectorIndexFlat::Search(std::vector<pb::common::VectorWithId> vect
     if (!filters.empty()) {
       // Build array index list.
       for (auto& filter : filters) {
-        // filter->Build(index_id_map2_->rev_map);
         filter->Build(index_id_map2_->id_map);
       }
       auto flat_filter = filters.empty() ? nullptr : std::make_shared<FlatIDSelector>(filters);
