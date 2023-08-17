@@ -613,6 +613,7 @@ void IndexServiceImpl::VectorScanQuery(google::protobuf::RpcController* controll
   ctx->with_scalar_data = request->with_scalar_data();
   ctx->with_table_data = request->with_table_data();
   ctx->start_id = request->vector_id_start();
+  ctx->end_id = request->vector_id_end();
   ctx->is_reverse = request->is_reverse_scan();
   ctx->limit = request->max_scan_count();
   ctx->use_scalar_filter = request->use_scalar_filter();

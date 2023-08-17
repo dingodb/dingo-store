@@ -545,6 +545,17 @@ butil::Status VectorReader::ScanVectorId(std::shared_ptr<Engine::VectorReader::C
 
       std::string key(iter->Key());
       auto vector_id = VectorCodec::DecodeVectorId(key);
+      if (vector_id == 0 || vector_id == UINT64_MAX) {
+        continue;
+      }
+
+      if (vector_id < ctx->start_id) {
+        break;
+      }
+
+      if (ctx->end_id != 0 && vector_id > ctx->end_id) {
+        break;
+      }
 
       if (ctx->use_scalar_filter) {
         bool compare_result = false;
@@ -579,6 +590,14 @@ butil::Status VectorReader::ScanVectorId(std::shared_ptr<Engine::VectorReader::C
       auto vector_id = VectorCodec::DecodeVectorId(key);
       if (vector_id == 0 || vector_id == UINT64_MAX) {
         continue;
+      }
+
+      if (vector_id > ctx->start_id) {
+        break;
+      }
+
+      if (ctx->end_id != 0 && vector_id < ctx->end_id) {
+        break;
       }
 
       if (ctx->use_scalar_filter) {
@@ -704,7 +723,7 @@ butil::Status VectorReader::DoVectorSearchForScalarPreFilter(
   return butil::Status::OK();
 }
 
-butil::Status VectorReader::DoVectorSearchForTableCoprocessor(
+butil::Status VectorReader::DoVectorSearchForTableCoprocessor(  // NOLINT(*static)
     [[maybe_unused]] std::shared_ptr<VectorIndex> vector_index, [[maybe_unused]] uint64_t partition_id,
     [[maybe_unused]] const std::vector<pb::common::VectorWithId>& vector_with_ids,
     [[maybe_unused]] const pb::common::VectorSearchParameter& parameter,

@@ -674,13 +674,14 @@ void SendVectorBatchQuery(ServerInteractionPtr interaction, uint64_t region_id, 
   DINGO_LOG(INFO) << "VectorBatchQuery response: " << response.DebugString();
 }
 
-void SendVectorScanQuery(ServerInteractionPtr interaction, uint64_t region_id, uint64_t start_id, uint64_t limit,
-                         bool is_reverse) {
+void SendVectorScanQuery(ServerInteractionPtr interaction, uint64_t region_id, uint64_t start_id, uint64_t end_id,
+                         uint64_t limit, bool is_reverse) {
   dingodb::pb::index::VectorScanQueryRequest request;
   dingodb::pb::index::VectorScanQueryResponse response;
 
   request.set_region_id(region_id);
   request.set_vector_id_start(start_id);
+  request.set_vector_id_end(end_id);
 
   if (limit > 0) {
     request.set_max_scan_count(limit);

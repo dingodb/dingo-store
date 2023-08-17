@@ -90,7 +90,8 @@ DEFINE_int32(table_id, 0, "table id");
 DEFINE_string(table_name, "", "table name");
 DEFINE_string(raft_group, "store_default_test", "raft group");
 DEFINE_int32(partition_num, 1, "table partition num");
-DEFINE_int32(start_id, 1, "start id");
+DEFINE_int32(start_id, 0, "start id");
+DEFINE_int32(end_id, 0, "end id");
 DEFINE_int32(count, 50, "count");
 DEFINE_int32(vector_id, 0, "vector_id");
 DEFINE_int32(topn, 10, "top n");
@@ -319,7 +320,7 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
     } else if (method == "VectorBatchQuery") {
       client::SendVectorBatchQuery(ctx->store_interaction, FLAGS_region_id, {static_cast<uint64_t>(FLAGS_vector_id)});
     } else if (method == "VectorScanQuery") {
-      client::SendVectorScanQuery(ctx->store_interaction, FLAGS_region_id, FLAGS_start_id, FLAGS_limit,
+      client::SendVectorScanQuery(ctx->store_interaction, FLAGS_region_id, FLAGS_start_id, FLAGS_end_id, FLAGS_limit,
                                   FLAGS_is_reverse);
     } else if (method == "VectorGetRegionMetrics") {
       client::SendVectorGetRegionMetrics(ctx->store_interaction, FLAGS_region_id);
