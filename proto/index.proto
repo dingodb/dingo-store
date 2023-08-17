@@ -57,6 +57,11 @@ message VectorScanQueryRequest {
   uint64 vector_id_start = 2;
   bool is_reverse_scan = 3;
   uint64 max_scan_count = 4;  // the max count user want to scan
+  uint64 vector_id_end = 5;   // the end id of scan, if is_reverse_scan is true, vector_id_end must be less than
+                              // vector_id_start, if is_reverse_scan is false, vector_id_end must be greater than
+                              // vector_id_start
+                              // the real range is [start, end], include start and end
+                              // if vector_id_end == 0, scan to the end of the region
 
   bool without_vector_data = 11;       // Default false, if true, response without vector data.
   bool with_scalar_data = 12;          // Default false, if true, response with scalar data.

@@ -80,18 +80,8 @@ class Engine {
     virtual ~VectorReader() = default;
 
     struct Context {
-      Context()
-          : partition_id(0),
-            region_id(0),
-            start_id(0),
-            limit(0),
-            with_vector_data(false),
-            with_scalar_data(false),
-            with_table_data(false),
-            is_reverse(false),
-            use_scalar_filter(false) {}
-      uint64_t partition_id;
-      uint64_t region_id;
+      uint64_t partition_id{};
+      uint64_t region_id{};
 
       pb::common::Range region_range;
 
@@ -101,14 +91,15 @@ class Engine {
       std::vector<std::string> selected_scalar_keys;
       pb::common::VectorScalardata scalar_data_for_filter;
 
-      uint64_t start_id;
-      uint64_t limit;
+      uint64_t start_id{};
+      uint64_t end_id{};
+      uint64_t limit{};
 
-      bool with_vector_data;
-      bool with_scalar_data;
-      bool with_table_data;
-      bool is_reverse;
-      bool use_scalar_filter;
+      bool with_vector_data{};
+      bool with_scalar_data{};
+      bool with_table_data{};
+      bool is_reverse{};
+      bool use_scalar_filter{};
 
       std::shared_ptr<VectorIndex> vector_index;
     };

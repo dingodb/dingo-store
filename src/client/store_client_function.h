@@ -87,8 +87,8 @@ void SendVectorGetMaxId(ServerInteractionPtr interaction, uint64_t region_id);
 void SendVectorGetMinId(ServerInteractionPtr interaction, uint64_t region_id);
 void SendVectorAddBatch(ServerInteractionPtr interaction, uint64_t region_id, uint32_t dimension, uint32_t count,
                         uint32_t step_count, int64_t start_id, const std::string& file);
-void SendVectorScanQuery(ServerInteractionPtr interaction, uint64_t region_id, uint64_t start_id, uint64_t limit,
-                         bool is_reverse);
+void SendVectorScanQuery(ServerInteractionPtr interaction, uint64_t region_id, uint64_t start_id, uint64_t end_id,
+                         uint64_t limit, bool is_reverse);
 void SendVectorGetRegionMetrics(ServerInteractionPtr interaction, uint64_t region_id);
 void SendVectorCalcDistance(ServerInteractionPtr interaction, uint64_t region_id, uint32_t dimension,
                             const std::string& alg_type, const std::string& metric_type, int32_t left_vector_size,
