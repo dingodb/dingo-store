@@ -2457,6 +2457,19 @@ void CoordinatorControl::UpdateRegionMapAndStoreOperation(const pb::common::Stor
       need_update_region_definition = true;
     }
 
+    if (region_to_update.definition().raw_range().start_key() !=
+            region_metrics.region_definition().raw_range().start_key() ||
+        region_to_update.definition().raw_range().end_key() !=
+            region_metrics.region_definition().raw_range().end_key()) {
+      DINGO_LOG(INFO) << "region raw_range change region_id = " << region_metrics.id() << " old range = ["
+                      << region_to_update.definition().raw_range().start_key() << ", "
+                      << region_to_update.definition().raw_range().end_key() << ")"
+                      << " new raw_range = [" << region_metrics.region_definition().raw_range().start_key() << ", "
+                      << region_metrics.region_definition().raw_range().end_key() << ")";
+      need_update_region = true;
+      need_update_region_definition = true;
+    }
+
     if (region_to_update.definition().peers_size() != region_metrics.region_definition().peers_size()) {
       DINGO_LOG(INFO) << "region peers size change region_id = " << region_metrics.id()
                       << " old peers size = " << region_to_update.definition().peers_size()
