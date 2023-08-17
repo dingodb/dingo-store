@@ -223,22 +223,29 @@ static pb::common::RegionMetrics GetRegionActualMetrics(uint64_t region_id) {
   if (region == nullptr) {
     return region_metrics;
   }
-  auto raw_engine = Server::GetInstance()->GetRawEngine();
 
-  IteratorOptions options;
-  options.upper_bound = region->RawRange().end_key();
-  auto iter = raw_engine->NewIterator(Constant::kStoreDataCF, options);
+  auto raw_engine = Server::GetInstance()->GetRawEngine();
 
   int32_t size = 0;
   int32_t key_count = 0;
   std::string min_key, max_key;
-  for (iter->Seek(region->RawRange().start_key()); iter->Valid(); iter->Next()) {
-    size += iter->Key().size() + iter->Value().size();
-    ++key_count;
-    if (min_key.empty()) {
-      min_key = iter->Key();
+  auto ranges = region->PhysicsRange();
+  for (int i = 0; i < ranges.size(); ++i) {
+    auto range = ranges[i];
+    IteratorOptions options;
+    options.upper_bound = range.end_key();
+    auto iter = raw_engine->NewIterator(Constant::kStoreDataCF, options);
+
+    for (iter->Seek(range.start_key()); iter->Valid(); iter->Next()) {
+      size += iter->Key().size() + iter->Value().size();
+      if (i == 0) {
+        ++key_count;
+        if (min_key.empty()) {
+          min_key = iter->Key();
+        }
+        max_key = iter->Key();
+      }
     }
-    max_key = iter->Key();
   }
 
   region_metrics.set_min_key(min_key);

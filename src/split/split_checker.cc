@@ -54,11 +54,6 @@ static std::string GetSplitPolicy(std::shared_ptr<Config> config) {  // NOLINT
   return split_policy.empty() ? Constant::kDefaultSplitPolicy : split_policy;
 }
 
-static uint32_t GetSplitThresholdSize(std::shared_ptr<Config> config) {  // NOLINT
-  int split_threshold_size = config->GetInt("region.region_max_size");
-  return split_threshold_size > 0 ? split_threshold_size : Constant::kDefaultRegionMaxSize;
-}
-
 static uint32_t GetSplitChunkSize(std::shared_ptr<Config> config) {  // NOLINT
   int split_chunk_size = config->GetInt("region.split_chunk_size");
   return split_chunk_size > 0 ? split_chunk_size : Constant::kDefaultSplitChunkSize;
@@ -80,36 +75,28 @@ static float GetSplitKeysRatio(std::shared_ptr<Config> config) {  // NOLINT
 }
 
 std::string HalfSplitChecker::SplitKey(store::RegionPtr region, uint32_t& count) {
-  std::string start_key = region->RawRange().start_key();
-  std::string end_key = region->RawRange().end_key();
-  if (region->Type() == pb::common::INDEX_REGION) {
-    start_key = VectorCodec::FillVectorDataPrefix(start_key);
-    end_key = VectorCodec::FillVectorDataPrefix(end_key);
-  }
-
-  IteratorOptions options;
-  options.upper_bound = end_key;
-  auto iter = raw_engine_->NewIterator(Constant::kStoreDataCF, options);
+  auto iter = raw_engine_->NewMultipleRangeIterator(raw_engine_, Constant::kStoreDataCF, region->PhysicsRange());
+  iter->Init();
 
   DINGO_LOG(INFO) << fmt::format("[split.check][region({})] policy(HALF) split_threshold_size({}) split_chunk_size({})",
                                  region->Id(), split_threshold_size_, split_chunk_size_);
-
-  uint64_t chunk_size = 0;
   uint64_t size = 0;
+  uint64_t chunk_size = 0;
   std::vector<std::string> keys;
   bool is_split = false;
-  for (iter->Seek(start_key); iter->Valid(); iter->Next()) {
-    ++count;
-    chunk_size += iter->Key().size() + iter->Value().size();
-    size += iter->Key().size() + iter->Value().size();
-
+  for (; iter->IsValid(); iter->Next()) {
+    uint64_t key_value_size = iter->KeyValueSize();
+    size += key_value_size;
+    chunk_size += key_value_size;
     if (chunk_size >= split_chunk_size_) {
       chunk_size = 0;
-      keys.push_back(std::string(iter->Key()));
+      keys.push_back(iter->FirstRangeKey());
     }
     if (size >= split_threshold_size_) {
       is_split = true;
     }
+
+    ++count;
   }
 
   int mid = keys.size() / 2;
@@ -117,17 +104,8 @@ std::string HalfSplitChecker::SplitKey(store::RegionPtr region, uint32_t& count)
 }
 
 std::string SizeSplitChecker::SplitKey(store::RegionPtr region, uint32_t& count) {
-  std::string start_key = region->RawRange().start_key();
-  std::string end_key = region->RawRange().end_key();
-  if (region->Type() == pb::common::INDEX_REGION) {
-    start_key = VectorCodec::FillVectorDataPrefix(start_key);
-    end_key = VectorCodec::FillVectorDataPrefix(end_key);
-  }
-
-  uint32_t split_pos = split_size_ * split_ratio_;
-  IteratorOptions options;
-  options.upper_bound = end_key;
-  auto iter = raw_engine_->NewIterator(Constant::kStoreDataCF, options);
+  auto iter = raw_engine_->NewMultipleRangeIterator(raw_engine_, Constant::kStoreDataCF, region->PhysicsRange());
+  iter->Init();
 
   DINGO_LOG(INFO) << fmt::format("[split.check][region({})] policy(SIZE) split_size({}) split_ratio({})", region->Id(),
                                  split_size_, split_ratio_);
@@ -135,32 +113,24 @@ std::string SizeSplitChecker::SplitKey(store::RegionPtr region, uint32_t& count)
   uint64_t size = 0;
   std::string split_key;
   bool is_split = false;
-  for (iter->Seek(start_key); iter->Valid(); iter->Next()) {
-    ++count;
-    size += iter->Key().size() + iter->Value().size();
-
+  uint32_t split_pos = split_size_ * split_ratio_;
+  for (; iter->IsValid(); iter->Next()) {
+    size += iter->KeyValueSize();
     if (split_key.empty() && size >= split_pos) {
-      split_key = iter->Key();
+      split_key = iter->FirstRangeKey();
     } else if (size >= split_size_) {
       is_split = true;
     }
+
+    ++count;
   }
 
   return is_split ? split_key : "";
 }
 
 std::string KeysSplitChecker::SplitKey(store::RegionPtr region, uint32_t& count) {
-  std::string start_key = region->RawRange().start_key();
-  std::string end_key = region->RawRange().end_key();
-  if (region->Type() == pb::common::INDEX_REGION) {
-    start_key = VectorCodec::FillVectorDataPrefix(start_key);
-    end_key = VectorCodec::FillVectorDataPrefix(end_key);
-  }
-
-  uint32_t split_key_number = split_keys_number_ * split_keys_ratio_;
-  IteratorOptions options;
-  options.upper_bound = end_key;
-  auto iter = raw_engine_->NewIterator(Constant::kStoreDataCF, options);
+  auto iter = raw_engine_->NewMultipleRangeIterator(raw_engine_, Constant::kStoreDataCF, region->PhysicsRange());
+  iter->Init();
 
   DINGO_LOG(INFO) << fmt::format("[split.check][region({})] policy(KEYS) split_key_number({}) split_key_ratio({})",
                                  region->Id(), split_keys_number_, split_keys_ratio_);
@@ -168,15 +138,17 @@ std::string KeysSplitChecker::SplitKey(store::RegionPtr region, uint32_t& count)
   uint64_t split_key_count = 0;
   std::string split_key;
   bool is_split = false;
-  for (iter->Seek(start_key); iter->Valid(); iter->Next()) {
-    ++count;
+  uint32_t split_key_number = split_keys_number_ * split_keys_ratio_;
+  for (; iter->IsValid(); iter->Next()) {
     ++split_key_count;
 
     if (split_key.empty() && split_key_count >= split_key_number) {
-      split_key = iter->Key();
+      split_key = iter->FirstRangeKey();
     } else if (split_key_count == split_keys_number_) {
       is_split = true;
     }
+
+    ++count;
   }
 
   return is_split ? split_key : "";
@@ -301,12 +273,12 @@ static std::shared_ptr<SplitChecker> BuildSplitChecker(std::shared_ptr<dingodb::
                                                        std::shared_ptr<RawEngine> raw_engine /*NOLINT*/) {
   std::string policy = GetSplitPolicy(config);
   if (policy == "HALF") {
-    uint32_t split_threshold_size = GetSplitThresholdSize(config);
+    uint32_t split_threshold_size = GetRegionMaxSize(config);
     uint32_t split_chunk_size = GetSplitChunkSize(config);
     return std::make_shared<HalfSplitChecker>(raw_engine, split_threshold_size, split_chunk_size);
 
   } else if (policy == "SIZE") {
-    uint32_t split_threshold_size = GetSplitThresholdSize(config);
+    uint32_t split_threshold_size = GetRegionMaxSize(config);
     float split_ratio = GetSplitSizeRatio(config);
     return std::make_shared<SizeSplitChecker>(raw_engine, split_threshold_size, split_ratio);
 
