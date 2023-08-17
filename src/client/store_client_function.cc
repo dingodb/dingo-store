@@ -47,6 +47,8 @@ DECLARE_bool(with_table);
 DECLARE_bool(print_vector_search_delay);
 DECLARE_string(scalar_filter_key);
 DECLARE_string(scalar_filter_value);
+DECLARE_string(scalar_filter_key2);
+DECLARE_string(scalar_filter_value2);
 DECLARE_bool(with_vector_ids);
 DECLARE_bool(with_scalar_pre_filter);
 DECLARE_bool(with_scalar_post_filter);
@@ -719,6 +721,19 @@ void SendVectorScanQuery(ServerInteractionPtr interaction, uint64_t region_id, u
 
     DINGO_LOG(INFO) << "scalar_filter_key: " << FLAGS_scalar_filter_key
                     << " scalar_filter_value: " << FLAGS_scalar_filter_value;
+  }
+
+  if (!FLAGS_scalar_filter_key2.empty()) {
+    auto* scalar_data = request.mutable_scalar_for_filter()->mutable_scalar_data();
+    dingodb::pb::common::ScalarValue scalar_value;
+    scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::STRING);
+    scalar_value.add_fields()->set_string_data(FLAGS_scalar_filter_value2);
+    (*scalar_data)[FLAGS_scalar_filter_key2] = scalar_value;
+
+    request.set_use_scalar_filter(true);
+
+    DINGO_LOG(INFO) << "scalar_filter_key2: " << FLAGS_scalar_filter_key2
+                    << " scalar_filter_value2: " << FLAGS_scalar_filter_value2;
   }
 
   DINGO_LOG(INFO) << "VectorScanQuery response: " << response.DebugString();

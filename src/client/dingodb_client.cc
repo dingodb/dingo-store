@@ -107,6 +107,8 @@ DEFINE_int32(limit, 0, "limit");
 DEFINE_bool(is_reverse, false, "is_revers");
 DEFINE_string(scalar_filter_key, "", "Request scalar_filter_key");
 DEFINE_string(scalar_filter_value, "", "Request scalar_filter_value");
+DEFINE_string(scalar_filter_key2, "", "Request scalar_filter_key");
+DEFINE_string(scalar_filter_value2, "", "Request scalar_filter_value");
 DEFINE_int32(ttl, 0, "ttl");
 DEFINE_bool(auto_split, false, "auto split");
 
