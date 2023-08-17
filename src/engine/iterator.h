@@ -16,6 +16,7 @@
 #define DINGODB_ENGINE_ITERATOR_H_
 
 #include <string_view>
+#include <vector>
 
 #include "common/logging.h"
 
@@ -59,6 +60,24 @@ class Iterator {
 
   virtual std::string_view Key() const = 0;
   virtual std::string_view Value() const = 0;
+};
+
+class MultipleRangeIterator {
+ public:
+  MultipleRangeIterator() = default;
+  virtual ~MultipleRangeIterator() = default;
+
+  MultipleRangeIterator(const MultipleRangeIterator&) = delete;
+  void operator=(const MultipleRangeIterator&) = delete;
+
+  virtual bool Init() = 0;
+  virtual bool IsValid() = 0;
+  virtual void Next() = 0;
+
+  virtual uint64_t KeyValueSize() = 0;
+
+  virtual std::string FirstRangeKey() = 0;
+  virtual std::vector<std::string> AllRangeKeys() = 0;
 };
 
 };  // namespace dingodb

@@ -809,8 +809,9 @@ int SendBatchVectorAdd(ServerInteractionPtr interaction, uint64_t region_id, uin
     DINGO_LOG(ERROR) << "VectorAdd repsonse error: " << response.error().DebugString();
   }
 
-  DINGO_LOG(INFO) << fmt::format("VectorAdd response success count: {} fail count: {} vector count: {}", success_count,
-                                 response.key_states().size() - success_count, request.vectors().size());
+  DINGO_LOG(INFO) << fmt::format("VectorAdd response success region: {} count: {} fail count: {} vector count: {}",
+                                 region_id, success_count, response.key_states().size() - success_count,
+                                 request.vectors().size());
 
   return response.error().errcode();
 }
