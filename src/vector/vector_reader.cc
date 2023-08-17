@@ -275,6 +275,8 @@ butil::Status VectorReader::CompareVectorScalarData(uint64_t partition_id, uint6
 
   auto status = reader_->KvGet(key, value);
   if (!status.ok()) {
+    DINGO_LOG(WARNING) << fmt::format("Get vector scalar data failed, vector_id: {} error: {} ", vector_id,
+                                      status.error_str());
     return status;
   }
 
@@ -286,6 +288,7 @@ butil::Status VectorReader::CompareVectorScalarData(uint64_t partition_id, uint6
   for (const auto& [key, value] : source_scalar_data.scalar_data()) {
     auto it = vector_scalar.scalar_data().find(key);
     if (it == vector_scalar.scalar_data().end()) {
+      compare_result = false;
       return butil::Status();
     }
 
@@ -562,6 +565,8 @@ butil::Status VectorReader::ScanVectorId(std::shared_ptr<Engine::VectorReader::C
         auto status =
             CompareVectorScalarData(ctx->partition_id, vector_id, ctx->scalar_data_for_filter, compare_result);
         if (!status.ok()) {
+          DINGO_LOG(ERROR) << " CompareVectorScalarData failed, vector_id: " << vector_id
+                           << " error: " << status.error_str();
           return status;
         }
         if (!compare_result) {
