@@ -332,7 +332,7 @@ void SendVectorSearch(ServerInteractionPtr interaction, uint64_t region_id, uint
       std::cout << id << " ";
     }
     std::cout << "]";
-    std::cout << std::endl;
+    std::cout << '\n';
   }
 
   if (FLAGS_with_scalar_pre_filter) {
@@ -389,7 +389,7 @@ void SendVectorSearch(ServerInteractionPtr interaction, uint64_t region_id, uint
       std::cout << id << " ";
     }
     std::cout << "]";
-    std::cout << std::endl;
+    std::cout << '\n';
 
     std::vector<uint64_t> result_vt_ids;
     for (const auto& vector_with_distance_result : response.batch_results()) {
@@ -400,24 +400,24 @@ void SendVectorSearch(ServerInteractionPtr interaction, uint64_t region_id, uint
     }
 
     if (result_vt_ids.empty()) {
-      std::cout << "result_vt_ids : empty" << std::endl;
+      std::cout << "result_vt_ids : empty" << '\n';
     } else {
       std::cout << "result_vt_ids : " << result_vt_ids.size() << " [ ";
       for (auto id : result_vt_ids) {
         std::cout << id << " ";
       }
       std::cout << "]";
-      std::cout << std::endl;
+      std::cout << '\n';
     }
 
     for (auto id : result_vt_ids) {
       auto iter = std::find(vt_ids.begin(), vt_ids.end(), id);
       if (iter == vt_ids.end()) {
-        std::cout << "result_vector_ids not all in vector_ids" << std::endl;
+        std::cout << "result_vector_ids not all in vector_ids" << '\n';
         return;
       }
     }
-    std::cout << "result_vector_ids  all in vector_ids" << std::endl;
+    std::cout << "result_vector_ids  all in vector_ids" << '\n';
   }
 
   if (FLAGS_with_scalar_pre_filter || FLAGS_with_scalar_post_filter) {
@@ -435,7 +435,7 @@ void SendVectorSearch(ServerInteractionPtr interaction, uint64_t region_id, uint
         std::cout << id << " ";
       }
       std::cout << "]";
-      std::cout << std::endl;
+      std::cout << '\n';
     };
 
     lambda_print_result_vector_function("before sort result_vt_ids");
@@ -536,7 +536,7 @@ void SendVectorBatchSearch(ServerInteractionPtr interaction, uint64_t region_id,
       std::cout << id << " ";
     }
     std::cout << "]";
-    std::cout << std::endl;
+    std::cout << '\n';
   }
 
   if (FLAGS_with_scalar_pre_filter) {
@@ -584,9 +584,9 @@ void SendVectorBatchSearch(ServerInteractionPtr interaction, uint64_t region_id,
       std::cout << id << " ";
     }
     std::cout << "]";
-    std::cout << std::endl;
+    std::cout << '\n';
 
-    std::cout << "response.batch_results() size : " << response.batch_results().size() << std::endl;
+    std::cout << "response.batch_results() size : " << response.batch_results().size() << '\n';
 
     for (const auto& vector_with_distance_result : response.batch_results()) {
       std::vector<uint64_t> result_vt_ids;
@@ -596,24 +596,24 @@ void SendVectorBatchSearch(ServerInteractionPtr interaction, uint64_t region_id,
       }
 
       if (result_vt_ids.empty()) {
-        std::cout << "result_vt_ids : empty" << std::endl;
+        std::cout << "result_vt_ids : empty" << '\n';
       } else {
         std::cout << "result_vt_ids : " << result_vt_ids.size() << " [ ";
         for (auto id : result_vt_ids) {
           std::cout << id << " ";
         }
         std::cout << "]";
-        std::cout << std::endl;
+        std::cout << '\n';
       }
 
       for (auto id : result_vt_ids) {
         auto iter = std::find(vt_ids.begin(), vt_ids.end(), id);
         if (iter == vt_ids.end()) {
-          std::cout << "result_vector_ids not all in vector_ids" << std::endl;
+          std::cout << "result_vector_ids not all in vector_ids" << '\n';
           return;
         }
       }
-      std::cout << "result_vector_ids  all in vector_ids" << std::endl;
+      std::cout << "result_vector_ids  all in vector_ids" << '\n';
     }
   }
 
@@ -631,7 +631,7 @@ void SendVectorBatchSearch(ServerInteractionPtr interaction, uint64_t region_id,
           std::cout << id << " ";
         }
         std::cout << "]";
-        std::cout << std::endl;
+        std::cout << '\n';
       };
 
       lambda_print_result_vector_function("before sort result_vt_ids");
@@ -640,7 +640,7 @@ void SendVectorBatchSearch(ServerInteractionPtr interaction, uint64_t region_id,
 
       lambda_print_result_vector_function("after  sort result_vt_ids");
 
-      std::cout << std::endl;
+      std::cout << '\n';
     }
   }
 }
@@ -1757,7 +1757,8 @@ void TestRegionLifecycle(ServerInteractionPtr interaction, uint64_t region_id, c
   }
 }
 
-void TestDeleteRangeWhenTransferLeader(std::shared_ptr<Context> ctx, uint64_t region_id, int req_num,
+void TestDeleteRangeWhenTransferLeader(std::shared_ptr<Context> ctx, uint64_t region_id,
+                                       int req_num,  // NOLINT (*unused)
                                        const std::string& prefix) {
   // put data
   DINGO_LOG(INFO) << "batch put...";
