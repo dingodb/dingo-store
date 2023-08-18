@@ -32,9 +32,6 @@ public class VectorSearchParameter {
     private List<String> selectedKeys;
     private Search search;
 
-    @Deprecated
-    private boolean useScalarFilter;
-
     private VectorFilter vectorFilter;
     private VectorFilterType vectorFilterType;
     private Coprocessor coprocessor;

@@ -318,6 +318,24 @@ public class MetaServiceClient {
         return response.getError().getErrcodeValue() == 0;
     }
 
+    public synchronized boolean dropTables(@NonNull List<String> tableNames) {
+        List<Meta.DingoCommonId> tableIds = new ArrayList<>();
+        for (String tableName : tableNames) {
+            tableName = cleanTableName(tableName);
+            DingoCommonId tableId = getTableId(tableName);
+            if (tableId == null) {
+                throw new DingoClientException("Table " + tableName + " does not exist");
+            }
+            tableIds.add(mapping(tableId));
+        }
+
+        Meta.DropTablesRequest request = Meta.DropTablesRequest.newBuilder().addAllTableIds(tableIds).build();
+
+        Meta.DropTablesResponse response = metaConnector.exec(stub -> stub.dropTables(request));
+
+        return response.getError().getErrcodeValue() == 0;
+    }
+
     public DingoCommonId getTableId(@NonNull String tableName) {
         tableName = cleanTableName(tableName);
         /* TODO
@@ -459,11 +477,12 @@ public class MetaServiceClient {
         DingoKeyValueCodec codec = DingoKeyValueCodec.of(tableId.entityId(), table.getKeyColumns());
         try {
             byte[] key = codec.encodeKeyPrefix(partitionDetail.getOperand(), partitionDetail.getOperand().length);
+            RangeDistribution distribution = getRangeDistribution(tableName, new ComparableByteArray(key, POS));
             Coordinator.SplitRegionRequest request = Coordinator.SplitRegionRequest.newBuilder()
                 .setSplitRequest(Coordinator.SplitRequest.newBuilder()
                     .setSplitFromRegionId(
-                        getRangeDistribution(tableName, new ComparableByteArray(key, POS)).getId().entityId())
-                    .setSplitWatershedKey(ByteString.copyFrom(key))
+                        distribution.getId().entityId())
+                    .setSplitWatershedKey(ByteString.copyFrom(codec.resetPrefix(key, POS)))
                     .build())
                 .build();
             metaConnector.getCoordinatorServiceConnector().exec(stub -> stub.splitRegion(request));
@@ -673,6 +692,19 @@ public class MetaServiceClient {
                 .map(Meta.GetIndexByNameResponse::getIndexDefinitionWithId)
                 .filter(__ -> __.getIndexDefinition().getName().equalsIgnoreCase(indexName))
                 .orNull();
+    }
+
+    public RangeDistribution getIndexRangeDistribution(String tableName, ComparableByteArray key) {
+        return getIndexRangeDistribution(cleanTableName(tableName)).floorEntry(key).getValue();
+    }
+
+    public RangeDistribution getIndexRangeDistribution(String tableName, DingoCommonId regionId) {
+        return getIndexRangeDistribution(cleanTableName(tableName)).values().stream().filter(r -> r.getId().equals(regionId))
+                .findAny().orElseThrow(() -> new DingoClientException("Not found region " + tableName + ":" + regionId));
+    }
+
+    public RangeDistribution getIndexRangeDistribution(DingoCommonId id, ComparableByteArray key) {
+        return getIndexRangeDistribution(id).floorEntry(key).getValue();
     }
 
     public NavigableMap<ComparableByteArray, RangeDistribution> getIndexRangeDistribution(String indexName) {

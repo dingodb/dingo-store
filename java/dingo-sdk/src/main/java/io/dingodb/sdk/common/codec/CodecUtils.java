@@ -18,6 +18,7 @@ package io.dingodb.sdk.common.codec;
 
 import io.dingodb.sdk.common.serial.schema.*;
 import io.dingodb.sdk.common.table.Column;
+import io.dingodb.sdk.common.utils.Parameters;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -56,7 +57,8 @@ public final class CodecUtils {
             throw new IllegalArgumentException("Invalid column type: null.");
         }
         typeName = typeName.toUpperCase();
-        schema = CodecUtils.createSchemaForTypeName(typeName, column.getElementType());
+        String elementType = Parameters.cleanNull(column.getElementType(), "");
+        schema = CodecUtils.createSchemaForTypeName(typeName, elementType);
         schema.setAllowNull(column.isNullable());
         schema.setIsKey(column.isPrimary());
         schema.setIndex(index);

@@ -45,7 +45,8 @@ public class ErrorCodeUtils {
         ERAFT_COMMITLOG_VALUE,
         EREGION_UNAVAILABLE_VALUE,
         EREGION_PEER_CHANGEING_VALUE,
-        EREGION_STATE_VALUE
+        EREGION_STATE_VALUE,
+        EVECTOR_INDEX_NOT_READY_VALUE
     );
 
     public static final List<Integer> ignoreCode = Arrays.asList(
