@@ -2456,25 +2456,26 @@ butil::Status CoordinatorControl::DropTableIndexes(uint64_t schema_id, uint64_t 
 
   // drop indexes of the table
   pb::coordinator_internal::TableIndexInternal table_index_internal;
-  int result = table_index_map_.Get(table_id, table_index_internal);
-  if (result < 0) {
-    DINGO_LOG(INFO) << "cannot find indexes, schema_id: " << schema_id << ", table_id: " << table_id;
-    return butil::Status::OK();
-  }
-
   butil::Status ret;
-  for (const auto& definition_with_id : table_index_internal.definition_with_ids()) {
-    ret = DropIndex(schema_id, definition_with_id.table_id().entity_id(), meta_increment);
-    if (!ret.ok()) {
-      DINGO_LOG(ERROR) << "error while dropping index, schema_id: " << schema_id << ", table_id: " << table_id;
-      return ret;
+  int result = table_index_map_.Get(table_id, table_index_internal);
+  if (result >= 0) {
+    // find in map
+    for (const auto& definition_with_id : table_index_internal.definition_with_ids()) {
+      ret = DropIndex(schema_id, definition_with_id.table_id().entity_id(), meta_increment);
+      if (!ret.ok()) {
+        DINGO_LOG(ERROR) << "error while dropping index, schema_id: " << schema_id << ", table_id: " << table_id;
+        return ret;
+      }
     }
-  }
 
-  // delete table indexes relationship map
-  auto* table_index_increment = meta_increment.add_table_indexes();
-  table_index_increment->set_id(table_id);
-  table_index_increment->set_op_type(pb::coordinator_internal::MetaIncrementOpType::DELETE);
+    // delete table indexes relationship map
+    auto* table_index_increment = meta_increment.add_table_indexes();
+    table_index_increment->set_id(table_id);
+    table_index_increment->set_op_type(pb::coordinator_internal::MetaIncrementOpType::DELETE);
+  } else {
+    // not find in map
+    DINGO_LOG(INFO) << "cannot find indexes, schema_id: " << schema_id << ", table_id: " << table_id;
+  }
 
   // drop table finally
   ret = DropTable(schema_id, table_id, meta_increment);
