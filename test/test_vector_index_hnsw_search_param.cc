@@ -327,4 +327,80 @@ TEST_F(VectorIndexHnswSearchParamTest, Search) {
   { lambda_alg_function(vector_index_hnsw_for_cosine, "cosine"); }
 }
 
+
+TEST_F(VectorIndexHnswSearchParamTest, SearchOrder) {
+  butil::Status ok;
+
+  auto lambda_random_function = []() {
+    std::vector<uint64_t> vector_ids;
+    vector_ids.resize(data_base_size);
+
+    for (size_t i = 0, id = vector_id_start; i < data_base_size; i++, id++) {
+      vector_ids[i] = id;
+    }
+
+    auto seed = std::chrono::system_clock::now().time_since_epoch().count();
+    std::shuffle(vector_ids.begin(), vector_ids.end(), std::default_random_engine(seed));
+
+    std::vector<uint64_t> vector_ids_for_search;
+    vector_ids_for_search.resize(vector_ids_search_size);
+    for (size_t i = 0; i < vector_ids_search_size; i++) {
+      vector_ids_for_search[i] = vector_ids[i];
+    }
+
+    return std::tuple<std::vector<uint64_t>, std::vector<uint64_t>>(vector_ids, vector_ids_for_search);
+  };
+
+  auto lambda_alg_function = [&lambda_random_function](std::shared_ptr<VectorIndex> vector_index_hnsw,
+                                                       std::string name) {
+    butil::Status ok;
+    pb::common::VectorWithId vector_with_id;
+    vector_with_id.set_id(0);
+    vector_with_id.mutable_vector()->set_dimension(dimension);
+    vector_with_id.mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
+    for (size_t i = 0; i < dimension; i++) {
+      float value = data_base[i];
+      vector_with_id.mutable_vector()->add_float_values(value);
+    }
+    uint32_t topk = search_topk;
+    std::vector<pb::index::VectorWithDistanceResult> results;
+    std::vector<pb::common::VectorWithId> vector_with_ids;
+    vector_with_ids.push_back(vector_with_id);
+
+    // auto [vector_ids, vector_ids_for_search] = lambda_random_function();
+
+    // std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters;
+    // filters.push_back(std::make_shared<VectorIndex::HnswListFilterFunctor>(vector_ids_for_search));
+    ok = vector_index_hnsw->Search(vector_with_ids, topk, {}, results, false);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    {
+      size_t i = 0;
+      std::cout << "[" << i << "]" << std::endl;
+      for (const auto &result : results) {
+        {
+          size_t j = 0;
+          for (const auto &vector_with_distances : result.vector_with_distances()) {
+            std::cout << "[" << j << "]" << std::endl;
+            std::cout << vector_with_distances.DebugString() << std::endl;
+            j++;
+          }
+        }
+        i++;
+      }
+    }
+
+    std::cout << "..........................................................................." << std::endl;
+  };
+
+  // l2 ok
+  { lambda_alg_function(vector_index_hnsw_for_l2, "L2"); }
+
+  // ip ok
+  { lambda_alg_function(vector_index_hnsw_for_ip, "IP"); }
+
+  // cosine ok
+  { lambda_alg_function(vector_index_hnsw_for_cosine, "cosine"); }
+}
+
 }  // namespace dingodb
