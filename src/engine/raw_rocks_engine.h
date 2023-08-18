@@ -161,6 +161,67 @@ class RawRocksEngine : public RawEngine {
     std::shared_ptr<Snapshot> snapshot_;
   };
 
+  class MultipleRangeIterator : public dingodb::MultipleRangeIterator {
+   public:
+    MultipleRangeIterator(std::shared_ptr<RawEngine> raw_engine, const std::string& cf_name,
+                          std::vector<dingodb::pb::common::Range> ranges)
+        : raw_engine_(raw_engine), cf_name_(cf_name), ranges_(ranges){};
+    ~MultipleRangeIterator() override = default;
+
+    bool Init() override {
+      for (auto& range : ranges_) {
+        IteratorOptions options;
+        options.upper_bound = range.end_key();
+        auto iter = raw_engine_->NewIterator(cf_name_, options);
+        iter->Seek(range.start_key());
+
+        iters_.push_back(iter);
+      }
+
+      return true;
+    }
+
+    bool IsValid() override {
+      for (auto& iter : iters_) {
+        if (!iter->Valid()) {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    void Next() override {
+      for (auto& iter : iters_) {
+        iter->Next();
+      }
+    }
+
+    uint64_t KeyValueSize() override {
+      uint64_t size = 0;
+      for (auto& iter : iters_) {
+        size += iter->Key().size() + iter->Value().size();
+      }
+      return size;
+    }
+
+    std::string FirstRangeKey() override { return !iters_.empty() ? std::string(iters_[0]->Key()) : ""; }
+
+    std::vector<std::string> AllRangeKeys() override {
+      std::vector<std::string> keys;
+      for (auto& iter : iters_) {
+        keys.emplace_back(iter->Key());
+      }
+
+      return keys;
+    }
+
+   private:
+    const std::string& cf_name_;
+    std::vector<dingodb::pb::common::Range> ranges_;
+    std::shared_ptr<RawEngine> raw_engine_;
+    std::vector<std::shared_ptr<dingodb::Iterator>> iters_;
+  };
+
   class Reader : public RawEngine::Reader {
    public:
     Reader(std::shared_ptr<rocksdb::DB> db, std::shared_ptr<ColumnFamily> column_family)
@@ -296,6 +357,10 @@ class RawRocksEngine : public RawEngine {
   std::shared_ptr<dingodb::Iterator> NewIterator(const std::string& cf_name, IteratorOptions options) override;
   std::shared_ptr<dingodb::Iterator> NewIterator(const std::string& cf_name, std::shared_ptr<Snapshot> snapshot,
                                                  IteratorOptions options);
+  std::shared_ptr<dingodb::MultipleRangeIterator> NewMultipleRangeIterator(
+      std::shared_ptr<RawEngine> raw_engine, const std::string& cf_name,
+      std::vector<dingodb::pb::common::Range> ranges) override;
+
   static std::shared_ptr<SstFileWriter> NewSstFileWriter();
   std::shared_ptr<Checkpoint> NewCheckpoint();
 

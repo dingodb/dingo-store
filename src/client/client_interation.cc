@@ -74,7 +74,7 @@ void ServerInteraction::NextLeader(int leader_index) {
 }
 
 void ServerInteraction::NextLeader(const dingodb::pb::common::Location& location) {
-  DINGO_LOG(INFO) << fmt::format("redirect leader {}:{}", location.host(), location.port());
+  // DINGO_LOG(INFO) << fmt::format("redirect leader {}:{}", location.host(), location.port());
   if (location.port() == 0) {
     bthread_usleep(500 * 1000L);
     return;

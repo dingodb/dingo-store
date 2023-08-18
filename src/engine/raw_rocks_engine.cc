@@ -352,6 +352,11 @@ std::shared_ptr<dingodb::Iterator> RawRocksEngine::NewIterator(const std::string
                                                     snapshot);
 }
 
+std::shared_ptr<dingodb::MultipleRangeIterator> RawRocksEngine::NewMultipleRangeIterator(
+    std::shared_ptr<RawEngine> raw_engine, const std::string& cf_name, std::vector<dingodb::pb::common::Range> ranges) {
+  return std::make_shared<MultipleRangeIterator>(raw_engine, cf_name, ranges);
+}
+
 std::shared_ptr<RawRocksEngine::SstFileWriter> RawRocksEngine::NewSstFileWriter() {
   return std::make_shared<RawRocksEngine::SstFileWriter>(rocksdb::Options());
 }

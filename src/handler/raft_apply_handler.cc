@@ -357,6 +357,8 @@ void SplitHandler::SplitClosure::Run() {
   }
 }
 
+// region-100: [start_key,end_key) ->
+// region-101: [start_key, split_key) and region-100: [split_key, end_key)
 void SplitHandler::Handle(std::shared_ptr<Context>, store::RegionPtr from_region, std::shared_ptr<RawEngine>,
                           const pb::raft::Request &req, store::RegionMetricsPtr region_metrics, uint64_t /*term_id*/,
                           uint64_t /*log_id*/) {
@@ -393,17 +395,17 @@ void SplitHandler::Handle(std::shared_ptr<Context>, store::RegionPtr from_region
 
   pb::common::Range to_range;
   // Set child range
-  to_range.set_start_key(request.split_key());
-  to_range.set_end_key(to_region->RawRange().end_key());
-  if (to_range.end_key().compare(request.split_key()) < 0) {
-    to_range.set_end_key(from_region->RawRange().end_key());
+  to_range.set_start_key(to_region->RawRange().start_key());
+  to_range.set_end_key(request.split_key());
+  if (to_range.start_key().compare(request.split_key()) > 0) {
+    to_range.set_start_key(from_region->RawRange().start_key());
   }
   Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->UpdateRange(to_region, to_range);
 
   // Set parent range
   pb::common::Range from_range;
-  from_range.set_start_key(from_region->RawRange().start_key());
-  from_range.set_end_key(request.split_key());
+  from_range.set_start_key(request.split_key());
+  from_range.set_end_key(from_region->RawRange().end_key());
   Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->UpdateRange(from_region, from_range);
   DINGO_LOG(DEBUG) << fmt::format("[split.spliting][region({}->{})] from region range[{}-{}] to region range[{}-{}]",
                                   from_region->Id(), to_region->Id(), Helper::StringToHex(from_range.start_key()),
