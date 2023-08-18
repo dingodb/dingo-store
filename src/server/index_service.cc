@@ -177,11 +177,6 @@ butil::Status IndexServiceImpl::ValidateVectorSearchRequest(const dingodb::pb::i
     return status;
   }
 
-  auto vector_index = Server::GetInstance()->GetVectorIndexManager()->GetVectorIndex(request->region_id());
-  if (!vector_index) {
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id cannot find vector_index");
-  }
-
   std::vector<uint64_t> vector_ids;
   if (request->vector_with_ids_size() <= 0) {
     if (request->vector().id() > 0) {
@@ -237,8 +232,8 @@ void IndexServiceImpl::VectorSearch(google::protobuf::RpcController* controller,
   auto vector_index = Server::GetInstance()->GetVectorIndexManager()->GetVectorIndex(region);
   if (vector_index == nullptr) {
     auto* err = response->mutable_error();
-    err->set_errcode(pb::error::EVECTOR_INDEX_NOT_FOUND);
-    err->set_errmsg(fmt::format("Not found vector index {}", region->Id()));
+    err->set_errcode(pb::error::EVECTOR_INDEX_NOT_READY);
+    err->set_errmsg(fmt::format("Vector index {} not ready, please retry.", region->Id()));
     return;
   }
 
@@ -316,26 +311,27 @@ butil::Status IndexServiceImpl::ValidateVectorAddRequest(const dingodb::pb::inde
   }
 
   auto vector_index = Server::GetInstance()->GetVectorIndexManager()->GetVectorIndex(request->region_id());
-  if (vector_index != nullptr) {
-    auto dimension = vector_index->GetDimension();
-    for (const auto& vector : request->vectors()) {
-      if (vector_index->VectorIndexType() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW ||
-          vector_index->VectorIndexType() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT ||
-          vector_index->VectorIndexType() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT ||
-          vector_index->VectorIndexType() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ) {
-        if (vector.vector().float_values().size() != dimension) {
-          return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
-                               "Param vector dimension is error, correct dimension is " + std::to_string(dimension));
-        }
-      } else {
-        if (vector.vector().binary_values().size() != dimension) {
-          return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
-                               "Param vector dimension is error, correct dimension is " + std::to_string(dimension));
-        }
+  if (vector_index == nullptr) {
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_READY, "Vector index %lu not ready, please retry.",
+                         request->region_id());
+  }
+
+  auto dimension = vector_index->GetDimension();
+  for (const auto& vector : request->vectors()) {
+    if (vector_index->VectorIndexType() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW ||
+        vector_index->VectorIndexType() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT ||
+        vector_index->VectorIndexType() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT ||
+        vector_index->VectorIndexType() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ) {
+      if (vector.vector().float_values().size() != dimension) {
+        return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
+                             "Param vector dimension is error, correct dimension is " + std::to_string(dimension));
+      }
+    } else {
+      if (vector.vector().binary_values().size() != dimension) {
+        return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
+                             "Param vector dimension is error, correct dimension is " + std::to_string(dimension));
       }
     }
-  } else {
-    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "Vector index not found");
   }
 
   std::vector<uint64_t> vector_ids;
@@ -419,6 +415,12 @@ butil::Status IndexServiceImpl::ValidateVectorDeleteRequest(const dingodb::pb::i
   auto status = storage_->ValidateLeader(request->region_id());
   if (!status.ok()) {
     return status;
+  }
+
+  auto vector_index = Server::GetInstance()->GetVectorIndexManager()->GetVectorIndex(request->region_id());
+  if (vector_index == nullptr) {
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_READY, "Vector index %lu not ready, please retry.",
+                         request->region_id());
   }
 
   return ServiceHelper::ValidateIndexRegion(region, Helper::PbRepeatedToVector(request->ids()));
