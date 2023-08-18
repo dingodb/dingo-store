@@ -79,6 +79,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static io.dingodb.common.Common.IndexType.INDEX_TYPE_SCALAR;
 import static io.dingodb.common.Common.IndexType.INDEX_TYPE_VECTOR;
 import static io.dingodb.sdk.common.utils.NoBreakFunctions.wrap;
 import static io.dingodb.sdk.common.utils.Parameters.cleanNull;
@@ -148,8 +149,8 @@ public class EntityConversion {
                 .map(wrap(codec::decodeKeyPrefix))
                 .map(key -> new PartitionDetailDefinition(null, null, key))
                 .collect(Collectors.toList());
-        // The current version only supports the range strategy.
-        return new PartitionRule("RANGE", partition.getColumnsList(), details);
+
+        return new PartitionRule(getStrategy(partition.getStrategy()), partition.getColumnsList(), details);
     }
 
     public static Column mapping(Meta.ColumnDefinition definition) {
@@ -306,7 +307,27 @@ public class EntityConversion {
                 .map(key -> new PartitionDetailDefinition("", "", key))
                 .collect(Collectors.toList());
 
-        return new PartitionRule("RANGE", partition.getColumnsList(), details);
+        return new PartitionRule(getStrategy(partition.getStrategy()), partition.getColumnsList(), details);
+    }
+
+    private static String getStrategy(Meta.PartitionStrategy partitionStrategy) {
+        String strategy;
+        if (partitionStrategy == Meta.PartitionStrategy.PT_STRATEGY_HASH) {
+            strategy = "HASH";
+        } else {
+            strategy = "RANGE";
+        }
+        return strategy;
+    }
+
+    private static void getStrategy(Partition partition, Meta.PartitionRule.Builder builder) {
+        if (partition != null && partition.getFuncName() != null) {
+            if (partition.getFuncName().equalsIgnoreCase("HASH")) {
+                builder.setStrategy(Meta.PartitionStrategy.PT_STRATEGY_HASH);
+            } else {
+                builder.setStrategy(Meta.PartitionStrategy.PT_STRATEGY_RANGE);
+            }
+        }
     }
 
     public static Meta.IndexDefinition mapping(long id, Index index, List<Meta.DingoCommonId> partitionIds) {
@@ -329,6 +350,7 @@ public class EntityConversion {
                     .build());
             start = keys.hasNext() ? keys.next() : start;
         }
+        getStrategy(index.getIndexPartition(), builder);
 
         return Meta.IndexDefinition.newBuilder()
                 .setName(index.getName())
@@ -396,7 +418,8 @@ public class EntityConversion {
                 default:
                     throw new IllegalStateException("Unexpected value: " + vectorParam.getVectorIndexType());
             }
-        } else {
+        }
+        if (parameter.getIndexType() == INDEX_TYPE_SCALAR) {
             // Scalar parameter
             Common.ScalarIndexParameter scalarParam = parameter.getScalarIndexParameter();
             return new IndexParameter(IndexParameter.IndexType.valueOf(parameter.getIndexType().name()),
@@ -405,6 +428,7 @@ public class EntityConversion {
                             scalarParam.getIsUnique()));
 
         }
+        return null;
     }
 
     public static Common.IndexParameter mapping(IndexParameter parameter) {
@@ -758,7 +782,7 @@ public class EntityConversion {
                     .build());
             start = keys.hasNext() ? keys.next() : start;
         }
-
+        getStrategy(table.getPartition(), builder);
         return builder.build();
     }
 

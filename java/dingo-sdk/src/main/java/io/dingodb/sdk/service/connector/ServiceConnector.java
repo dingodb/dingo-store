@@ -163,6 +163,7 @@ public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
                                     "Exec {} failed, code: [{}], message: {}, will refresh...",
                                     function.getClass(), response.error.getErrcode(), response.error.getErrmsg()
                             );
+                            LockSupport.parkNanos(TimeUnit.SECONDS.toNanos(1));
                             throw new DingoClientException.InvalidRouteTableException(response.error.getErrmsg());
                         case IGNORE:
                             if (log.isDebugEnabled()) {

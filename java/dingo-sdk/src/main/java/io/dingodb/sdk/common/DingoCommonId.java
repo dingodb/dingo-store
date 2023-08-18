@@ -28,6 +28,7 @@ public interface DingoCommonId {
         ENTITY_TYPE_SCHEMA,
         ENTITY_TYPE_TABLE,
         ENTITY_TYPE_PART,
-        ENTITY_TYPE_INDEX;
+        ENTITY_TYPE_INDEX,
+        ENTITY_TYPE_REGION;
     }
 }

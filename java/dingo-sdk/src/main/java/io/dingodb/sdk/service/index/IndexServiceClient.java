@@ -203,6 +203,7 @@ public class IndexServiceClient {
         Index.VectorScanQueryRequest request = Index.VectorScanQueryRequest.newBuilder()
                 .setRegionId(regionId.entityId())
                 .setVectorIdStart(query.getStartId())
+                .setVectorIdEnd(query.getEndId())
                 .setIsReverseScan(query.getIsReverseScan())
                 .setMaxScanCount(query.getMaxScanCount())
                 .setWithoutVectorData(query.getWithoutVectorData())

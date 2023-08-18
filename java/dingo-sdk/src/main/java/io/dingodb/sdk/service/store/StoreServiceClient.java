@@ -56,11 +56,21 @@ public class StoreServiceClient {
     }
 
     private Supplier<Location> locationSupplier(DingoCommonId schemaId, DingoCommonId tableId, DingoCommonId regionId) {
-        return () -> rootMetaService.getSubMetaService(schemaId).getRangeDistribution(tableId).values().stream()
-            .filter(rd -> rd.getId().equals(regionId))
-            .findAny()
-            .map(RangeDistribution::getLeader)
-            .orElse(null);
+        if (tableId.type() == DingoCommonId.Type.ENTITY_TYPE_TABLE) {
+            return () -> rootMetaService.getSubMetaService(schemaId).getRangeDistribution(tableId).values().stream()
+                    .filter(rd -> rd.getId().equals(regionId))
+                    .findAny()
+                    .map(RangeDistribution::getLeader)
+                    .orElse(null);
+        }
+        if (tableId.type() == DingoCommonId.Type.ENTITY_TYPE_INDEX) {
+            return () -> rootMetaService.getSubMetaService(schemaId).getIndexRangeDistribution(tableId).values().stream()
+                    .filter(rd -> rd.getId().equals(regionId))
+                    .findAny()
+                    .map(RangeDistribution::getLeader)
+                    .orElse(null);
+        }
+        return null;
     }
 
     /**

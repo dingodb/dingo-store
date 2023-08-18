@@ -16,6 +16,8 @@ public class VectorScanQuery {
     private Long startId;
     private Boolean isReverseScan;
     private Long maxScanCount;
+    private Long endId;
+
     private Boolean withoutVectorData;
     private Boolean withScalarData;
     private List<String> selectedKeys;
