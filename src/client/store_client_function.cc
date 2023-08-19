@@ -2415,4 +2415,45 @@ void AutoDropTable(std::shared_ptr<Context> ctx) {
   }
 }
 
+void CheckTableDistribution(std::shared_ptr<Context> ctx) {
+  auto table_range = SendGetTableRange(ctx->coordinator_interaction, ctx->table_id);
+
+  std::map<std::string, dingodb::pb::meta::RangeDistribution> region_map;
+  for (const auto& region_range : table_range.range_distribution()) {
+    if (region_range.range().start_key() >= region_range.range().end_key()) {
+      DINGO_LOG(ERROR) << fmt::format("Invalid region {} range [{}-{})", region_range.id().entity_id(),
+                                      dingodb::Helper::StringToHex(region_range.range().start_key()),
+                                      dingodb::Helper::StringToHex(region_range.range().end_key()));
+    }
+
+    auto it = region_map.find(region_range.range().start_key());
+    if (it == region_map.end()) {
+      region_map[region_range.range().start_key()] = region_range;
+    } else {
+      auto& tmp_region_range = it->second;
+      DINGO_LOG(ERROR) << fmt::format(
+          "Already exist region {} [{}-{}) curr region {} [{}-{})", tmp_region_range.id().entity_id(),
+          dingodb::Helper::StringToHex(tmp_region_range.range().start_key()),
+          dingodb::Helper::StringToHex(tmp_region_range.range().end_key()), region_range.id().entity_id(),
+          dingodb::Helper::StringToHex(region_range.range().start_key()),
+          dingodb::Helper::StringToHex(region_range.range().end_key()));
+    }
+  }
+
+  std::string key;
+  for (auto& [_, region_range] : region_map) {
+    DINGO_LOG(INFO) << fmt::format("region {} range [{}-{})", region_range.id().entity_id(),
+                                   dingodb::Helper::StringToHex(region_range.range().start_key()),
+                                   dingodb::Helper::StringToHex(region_range.range().end_key()));
+    if (!key.empty()) {
+      if (key != region_range.range().start_key()) {
+        DINGO_LOG(ERROR) << fmt::format("not continuous range, region {} [{}-{})", region_range.id().entity_id(),
+                                        dingodb::Helper::StringToHex(region_range.range().start_key()),
+                                        dingodb::Helper::StringToHex(region_range.range().end_key()));
+      }
+    }
+    key = region_range.range().end_key();
+  }
+}
+
 }  // namespace client

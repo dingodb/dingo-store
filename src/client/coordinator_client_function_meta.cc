@@ -325,6 +325,7 @@ void SendCreateTable(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
     part_range->set_start_key(EncodeUint64(std::stol(FLAGS_id)));
     part_range->set_end_key(EncodeUint64(1 + std::stol(FLAGS_id)));
   } else {
+    int key_index = 5000;
     for (int i = 5000; i < 5000 + 2; i++) {
       // auto* part_range = range_partition->add_ranges();
       // auto* part_range_start = part_range->mutable_start_key();
@@ -336,8 +337,8 @@ void SendCreateTable(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
       part->mutable_id()->set_entity_id(i);
       part->mutable_id()->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_PART);
       part->mutable_id()->set_parent_entity_id(schema_id->entity_id());
-      part->mutable_range()->set_start_key(std::to_string(i * 100));
-      part->mutable_range()->set_end_key(std::to_string((i * 100 + 1)));
+      part->mutable_range()->set_start_key(std::to_string(key_index++));
+      part->mutable_range()->set_end_key(std::to_string((key_index)));
     }
   }
 

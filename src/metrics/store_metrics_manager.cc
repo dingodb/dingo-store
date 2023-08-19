@@ -194,7 +194,7 @@ std::vector<std::pair<uint64_t, uint64_t>> StoreRegionMetrics::GetRegionApproxim
     } else {
       DINGO_LOG(ERROR) << fmt::format(
           "[metrics.region][region({})] get region approximate size failed, invalid range [{}-{})", region->Id(),
-          tmp_ranges[0].start_key(), tmp_ranges[0].end_key());
+          Helper::StringToHex(tmp_ranges[0].start_key()), Helper::StringToHex(tmp_ranges[0].end_key()));
     }
   }
 
