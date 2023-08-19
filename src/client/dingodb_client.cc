@@ -22,6 +22,7 @@
 #include "brpc/channel.h"
 #include "brpc/controller.h"
 #include "bthread/bthread.h"
+#include "bthread/types.h"
 #include "client/client_helper.h"
 #include "client/coordinator_client_function.h"
 #include "client/store_client_function.h"
@@ -394,6 +395,14 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
     else if (method == "AutoDropTable") {
       ctx->req_num = FLAGS_req_num;
       client::AutoDropTable(ctx);
+    }
+    // Check table range
+    else if (method == "CheckTableDistribution") {
+      ctx->table_id = FLAGS_table_id;
+      for (;;) {
+        client::CheckTableDistribution(ctx);
+        bthread_usleep(1000 * 1000);
+      }
     }
 
     // illegal method

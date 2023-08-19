@@ -372,10 +372,26 @@ void SplitHandler::Handle(std::shared_ptr<Context>, store::RegionPtr from_region
     return;
   }
 
-  DINGO_LOG(DEBUG) << fmt::format("[split.spliting][region({}->{})] begin...", from_region->Id(), to_region->Id());
+  DINGO_LOG(INFO) << fmt::format("[split.spliting][region({}->{})] begin...", from_region->Id(), to_region->Id());
   if (to_region->State() != pb::common::StoreRegionState::STANDBY) {
     DINGO_LOG(WARNING) << fmt::format("[split.spliting][region({}->{})] child region state is not standby",
                                       from_region->Id(), to_region->Id());
+    return;
+  }
+  if (from_region->RawRange().start_key() >= from_region->RawRange().end_key()) {
+    DINGO_LOG(ERROR) << fmt::format("[split.spliting][region({}->{})] from region invalid range [{}-{})",
+                                    from_region->Id(), to_region->Id(),
+                                    Helper::StringToHex(from_region->RawRange().start_key()),
+                                    Helper::StringToHex(from_region->RawRange().end_key()));
+    return;
+  }
+  if (request.split_key() < from_region->RawRange().start_key() ||
+      request.split_key() > from_region->RawRange().end_key()) {
+    DINGO_LOG(ERROR) << fmt::format(
+        "[split.spliting][region({}->{})] from region invalid split key {} region range: [{}-{})", from_region->Id(),
+        to_region->Id(), Helper::StringToHex(request.split_key()),
+        Helper::StringToHex(from_region->RawRange().start_key()),
+        Helper::StringToHex(from_region->RawRange().end_key()));
     return;
   }
 
@@ -393,6 +409,12 @@ void SplitHandler::Handle(std::shared_ptr<Context>, store::RegionPtr from_region
   // Set region state spliting
   store_region_meta->UpdateState(from_region, pb::common::StoreRegionState::SPLITTING);
 
+  DINGO_LOG(INFO) << fmt::format(
+      "[split.spliting][region({}->{})] from region range[{}-{}] to region range[{}-{}]", from_region->Id(),
+      to_region->Id(), Helper::StringToHex(from_region->RawRange().start_key()),
+      Helper::StringToHex(from_region->RawRange().end_key()), Helper::StringToHex(to_region->RawRange().start_key()),
+      Helper::StringToHex(to_region->RawRange().end_key()));
+
   pb::common::Range to_range;
   // Set child range
   to_range.set_start_key(to_region->RawRange().start_key());
@@ -407,10 +429,10 @@ void SplitHandler::Handle(std::shared_ptr<Context>, store::RegionPtr from_region
   from_range.set_start_key(request.split_key());
   from_range.set_end_key(from_region->RawRange().end_key());
   Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->UpdateRange(from_region, from_range);
-  DINGO_LOG(DEBUG) << fmt::format("[split.spliting][region({}->{})] from region range[{}-{}] to region range[{}-{}]",
-                                  from_region->Id(), to_region->Id(), Helper::StringToHex(from_range.start_key()),
-                                  Helper::StringToHex(from_range.end_key()), Helper::StringToHex(to_range.start_key()),
-                                  Helper::StringToHex(to_range.end_key()));
+  DINGO_LOG(INFO) << fmt::format("[split.spliting][region({}->{})] from region range[{}-{}] to region range[{}-{}]",
+                                 from_region->Id(), to_region->Id(), Helper::StringToHex(from_range.start_key()),
+                                 Helper::StringToHex(from_range.end_key()), Helper::StringToHex(to_range.start_key()),
+                                 Helper::StringToHex(to_range.end_key()));
 
   DINGO_LOG(DEBUG) << fmt::format("[split.spliting][region({}->{})] parent do snapshot", from_region->Id(),
                                   to_region->Id());

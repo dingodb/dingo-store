@@ -86,8 +86,8 @@ message VectorTableData {
 message VectorWithId {
   uint64 id = 1;
   Vector vector = 2;  // vector data
-  VectorScalardata scalar_data =
-      3;                           // scalar data of this vector, key: scalar key, value: scalar value data. meta data.
+  // scalar data of this vector, key: scalar key, value: scalar value data. meta data.
+  VectorScalardata scalar_data = 3;
   VectorTableData table_data = 4;  // table data of this vector, only SQL can use this field
 }
 
