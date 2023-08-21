@@ -521,6 +521,12 @@ message VectorSchema {
     LONG = 3;
     DOUBLE = 4;
     STRING = 5;
+    BOOLLIST = 6;
+    INTEGERLIST = 7;
+    FLOATLIST = 8;
+    LONGLIST = 9;
+    DOUBLELIST = 10 ;
+    STRINGLIST = 11;
   };
 
   // type of data
