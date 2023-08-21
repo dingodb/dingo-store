@@ -425,6 +425,8 @@ butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta
     return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "no partition provided");
   }
 
+  DINGO_LOG(INFO) << "CreateTable table_definition:" << table_definition.DebugString();
+
   auto const& range_partition = table_partition.range_partition();
   auto const& hash_partition = table_partition.hash_partition();
 
@@ -1081,6 +1083,8 @@ butil::Status CoordinatorControl::CreateIndex(uint64_t schema_id, const pb::meta
     DINGO_LOG(ERROR) << "hash_partiton is not supported, table_definition=" << table_definition.DebugString();
     return butil::Status(pb::error::Errno::EINDEX_DEFINITION_ILLEGAL, "hash_partiton is not supported");
   }
+
+  DINGO_LOG(INFO) << "CreateIndex index_definition=" << table_definition.DebugString();
 
   auto const& range_partition = index_partition.range_partition();
   auto const& hash_partition = index_partition.hash_partition();

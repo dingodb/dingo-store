@@ -371,7 +371,7 @@ void MetaServiceImpl::CreateTable(google::protobuf::RpcController *controller,
   }
 
   DINGO_LOG(INFO) << "CreateTable request:  schema_id = [" << request->schema_id().entity_id() << "]";
-  DINGO_LOG(DEBUG) << request->DebugString();
+  DINGO_LOG(INFO) << request->DebugString();
 
   if (!request->has_schema_id() || !request->has_table_definition()) {
     response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
@@ -1008,7 +1008,7 @@ void MetaServiceImpl::CreateIndex(google::protobuf::RpcController *controller,
   }
 
   DINGO_LOG(INFO) << "CreateIndex request:  schema_id = [" << request->schema_id().entity_id() << "]";
-  DINGO_LOG(DEBUG) << request->DebugString();
+  DINGO_LOG(INFO) << request->DebugString();
 
   if (!request->has_schema_id() || !request->has_index_definition()) {
     response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
