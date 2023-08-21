@@ -823,6 +823,7 @@ butil::Status VectorReader::SearchVectorDebug(
         DINGO_LOG(ERROR) << fmt::format("vector_index::Search failed ");
         return status;
       }
+      auto start_kv_get = lambda_time_now_function();
       for (auto& vector_with_distance_result : tmp_results) {
         pb::index::VectorWithDistanceResult new_vector_with_distance_result;
 
@@ -845,6 +846,8 @@ butil::Status VectorReader::SearchVectorDebug(
         }
         vector_with_distance_results.emplace_back(std::move(new_vector_with_distance_result));
       }
+      auto end_kv_get = lambda_time_now_function();
+      scan_scalar_time_us = lambda_time_diff_microseconds_function(start_kv_get, end_kv_get);
     }
   } else if (dingodb::pb::common::VectorFilter::VECTOR_ID_FILTER == vector_filter) {  // vector id array search
     butil::Status status = DoVectorSearchForVectorIdPreFilterDebug(vector_index, vector_with_ids, parameter, filters,
