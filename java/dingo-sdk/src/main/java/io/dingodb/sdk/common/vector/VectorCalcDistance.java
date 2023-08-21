@@ -30,6 +30,7 @@ import java.util.List;
 @AllArgsConstructor
 public class VectorCalcDistance {
 
+    private Long vectorId;
     private AlgorithmType algorithmType;
     private VectorIndexParameter.MetricType metricType;
     private List<Vector> leftVectors;
