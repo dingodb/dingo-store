@@ -683,6 +683,24 @@ public class EntityConversion {
                         case STRING:
                             vs = Common.VectorSchema.Type.STRING;
                             break;
+                        case BOOLEANLIST:
+                            vs = Common.VectorSchema.Type.BOOLLIST;
+                            break;
+                        case INTEGERLIST:
+                            vs = Common.VectorSchema.Type.INTEGERLIST;
+                            break;
+                        case FLOATLIST:
+                            vs = Common.VectorSchema.Type.FLOATLIST;
+                            break;
+                        case LONGLIST:
+                            vs = Common.VectorSchema.Type.LONGLIST;
+                            break;
+                        case DOUBLELIST:
+                            vs = Common.VectorSchema.Type.DOUBLELIST;
+                            break;
+                        case STRINGLIST:
+                            vs = Common.VectorSchema.Type.STRINGLIST;
+                            break;
                         default:
                             throw new IllegalStateException("Unexpected value: " + schema.getType());
                     }
@@ -749,6 +767,18 @@ public class EntityConversion {
             case BYTES:
             case STRING:
                 return Store.Schema.Type.STRING;
+            case BOOLEANLIST:
+                return Store.Schema.Type.BOOLLIST;
+            case INTEGERLIST:
+                return Store.Schema.Type.INTEGERLIST;
+            case FLOATLIST:
+                return Store.Schema.Type.FLOATLIST;
+            case LONGLIST:
+                return Store.Schema.Type.LONGLIST;
+            case DOUBLELIST:
+                return Store.Schema.Type.DOUBLELIST;
+            case STRINGLIST:
+                return Store.Schema.Type.STRINGLIST;
             default:
                 throw new IllegalStateException("Unexpected value: " + type);
         }
