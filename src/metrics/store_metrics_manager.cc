@@ -235,6 +235,9 @@ bool StoreRegionMetrics::CollectApproximateSizeMetrics() {
     if (region == nullptr) {
       continue;
     }
+    if (region->State() != pb::common::NORMAL) {
+      continue;
+    }
     need_collect_regions.push_back(region);
   }
 

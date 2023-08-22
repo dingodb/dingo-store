@@ -42,7 +42,7 @@ namespace store {
 // Warp pb region for atomic/metux
 class Region {
  public:
-  Region() { bthread_mutex_init(&mutex_, nullptr); };
+  Region() : is_switching_vector_index_(false) { bthread_mutex_init(&mutex_, nullptr); };
   ~Region() { bthread_mutex_destroy(&mutex_); }
 
   Region(const Region&) = delete;
@@ -92,12 +92,18 @@ class Region {
 
   const pb::store_internal::Region& InnerRegion() const { return inner_region_; }
 
+  bool IsSwitchingVectorIndex() { return is_switching_vector_index_.load(); }
+  void SetIsSwitchingVectorIndex(bool is_switching) { is_switching_vector_index_.store(is_switching); }
+
  private:
   bthread_mutex_t mutex_;
   pb::store_internal::Region inner_region_;
   std::atomic<pb::common::StoreRegionState> state_;
   // Share vector index with parent region, when spliting region.
   std::shared_ptr<VectorIndex> share_vector_index_;
+
+  // Indicate switching vector index.
+  std::atomic<bool> is_switching_vector_index_;
 };
 
 using RegionPtr = std::shared_ptr<Region>;

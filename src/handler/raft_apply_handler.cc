@@ -555,8 +555,7 @@ void VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr reg
       stop_flag = true;
 
       try {
-        uint64_t switching_region_id = vector_index->SwitchingRegionId();
-        if (switching_region_id == region->Id()) {
+        if (region->IsSwitchingVectorIndex()) {
           // do not stop while, wait for a while and retry full raft log
           stop_flag = false;
 
@@ -733,8 +732,7 @@ void VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr 
 
       // delete vector from index
       try {
-        uint64_t switching_region_id = vector_index->SwitchingRegionId();
-        if (switching_region_id == region->Id()) {
+        if (region->IsSwitchingVectorIndex()) {
           // do not stop while, wait for a while and retry full raft log
           stop_flag = false;
 
@@ -800,7 +798,8 @@ void VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr 
 void RebuildVectorIndexHandler::Handle(std::shared_ptr<Context>, store::RegionPtr region, std::shared_ptr<RawEngine>,
                                        [[maybe_unused]] const pb::raft::Request &req, store::RegionMetricsPtr, uint64_t,
                                        uint64_t log_id) {
-  DINGO_LOG(INFO) << fmt::format("Handle rebuild vector index, region_id: {} apply_log_id: {}", region->Id(), log_id);
+  DINGO_LOG(INFO) << fmt::format("[vector_index.rebuild][index_id({})] Handle rebuild vector index, apply_log_id: {}",
+                                 region->Id(), log_id);
   auto vector_index_manager = Server::GetInstance()->GetVectorIndexManager();
   auto vector_index = vector_index_manager->GetVectorIndex(region->Id());
   if (vector_index != nullptr) {

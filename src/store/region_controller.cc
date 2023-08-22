@@ -885,13 +885,18 @@ butil::Status HoldVectorIndexTask::HoldVectorIndex(std::shared_ptr<Context> ctx,
     if (vector_index == nullptr) {
       auto status = vector_index_manager->LoadOrBuildVectorIndex(region_id);
       if (!status.ok()) {
-        DINGO_LOG(ERROR) << fmt::format("Load or build vector index failed, region {} error: {}", region_id,
-                                        status.error_str());
+        DINGO_LOG(ERROR) << fmt::format(
+            "[vector_index.hold][index_id({})] load or build vector index failed, error: {}", region_id,
+            status.error_str());
+      } else {
+        DINGO_LOG(ERROR) << fmt::format("[vector_index.hold][index_id({})] load or build vector index finish",
+                                        region_id);
       }
     }
   } else {
     // Delete vector index.
     if (vector_index != nullptr) {
+      DINGO_LOG(INFO) << fmt::format("[vector_index.hold][region({})] delete vector index.", region_id);
       vector_index_manager->DeleteVectorIndex(region_id);
     }
   }
