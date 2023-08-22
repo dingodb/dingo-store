@@ -137,7 +137,6 @@ DEFINE_bool(with_scalar_pre_filter, false, "Search vector with scalar data pre f
 DEFINE_bool(with_scalar_post_filter, false, "Search vector with scalar data post filter");
 DEFINE_uint32(vector_ids_count, 100, "vector ids count");
 
-
 DEFINE_string(lock_name, "", "Request lock_name");
 DEFINE_string(client_uuid, "", "Request client_uuid");
 
@@ -401,6 +400,12 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
       ctx->table_id = FLAGS_table_id;
       for (;;) {
         client::CheckTableDistribution(ctx);
+        bthread_usleep(1000 * 1000);
+      }
+    } else if (method == "CheckIndexDistribution") {
+      ctx->table_id = FLAGS_table_id;
+      for (;;) {
+        client::CheckIndexDistribution(ctx);
         bthread_usleep(1000 * 1000);
       }
     }

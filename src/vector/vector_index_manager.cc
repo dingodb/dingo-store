@@ -597,7 +597,7 @@ butil::Status VectorIndexManager::RebuildVectorIndex(store::RegionPtr region, bo
         vector_index_id, vector_index->ApplyLogIndex(), Helper::TimestampMs() - start_time);
 
     // set vector index to vector index map
-    bool ret = AddVectorIndex(vector_index, false);
+    bool ret = AddVectorIndex(vector_index, true);
     if (!ret) {
       DINGO_LOG(ERROR) << fmt::format(
           "[vector_index.rebuild][index_id({})] ReplayWal catch-up round finish, but online_vector_index maybe delete "

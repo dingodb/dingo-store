@@ -889,8 +889,8 @@ butil::Status HoldVectorIndexTask::HoldVectorIndex(std::shared_ptr<Context> ctx,
             "[vector_index.hold][index_id({})] load or build vector index failed, error: {}", region_id,
             status.error_str());
       } else {
-        DINGO_LOG(ERROR) << fmt::format("[vector_index.hold][index_id({})] load or build vector index finish",
-                                        region_id);
+        DINGO_LOG(INFO) << fmt::format("[vector_index.hold][index_id({})] load or build vector index finish",
+                                       region_id);
       }
     }
   } else {
