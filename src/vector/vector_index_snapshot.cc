@@ -295,7 +295,8 @@ butil::Status VectorIndexSnapshotManager::InstallSnapshotToFollowers(std::shared
     if (peer != self_peer) {
       auto status = LaunchInstallSnapshot(peer.addr, vector_index->Id());
       if (!status.ok()) {
-        if (status.error_code() == pb::error::EVECTOR_NOT_NEED_SNAPSHOT) {
+        if (status.error_code() == pb::error::EVECTOR_NOT_NEED_SNAPSHOT ||
+            status.error_code() == pb::error::EVECTOR_SNAPSHOT_EXIST) {
           DINGO_LOG(INFO) << fmt::format("vetor index {} peer {} {}", vector_index->Id(),
                                          Helper::EndPointToStr(peer.addr), status.error_str());
         } else {
@@ -487,7 +488,7 @@ butil::Status VectorIndexSnapshotManager::DownloadSnapshotFile(const std::string
   }
 
   if (!snapshot_manager->AddSnapshot(new_snapshot)) {
-    return butil::Status(pb::error::EINTERNAL, "Already exist vector index snapshot, path: %s",
+    return butil::Status(pb::error::EVECTOR_SNAPSHOT_EXIST, "Already exist vector index snapshot, path: %s",
                          new_snapshot_path.c_str());
   }
 
@@ -682,7 +683,7 @@ butil::Status VectorIndexSnapshotManager::SaveVectorIndexSnapshot(std::shared_pt
   }
 
   if (!snapshot_manager->AddSnapshot(new_snapshot)) {
-    return butil::Status(pb::error::EINTERNAL, "Already exist vector index snapshot, path: %s",
+    return butil::Status(pb::error::EVECTOR_SNAPSHOT_EXIST, "Already exist vector index snapshot, path: %s",
                          new_snapshot_path.c_str());
   }
 

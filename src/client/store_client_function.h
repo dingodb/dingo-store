@@ -139,6 +139,7 @@ void AutoTest(std::shared_ptr<Context> ctx);
 void AutoDropTable(std::shared_ptr<Context> ctx);
 
 void CheckTableDistribution(std::shared_ptr<Context> ctx);
+void CheckIndexDistribution(std::shared_ptr<Context> ctx);
 
 }  // namespace client
 
