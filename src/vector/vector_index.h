@@ -53,7 +53,6 @@ class VectorIndex {
         version(1),
         status(pb::common::VECTOR_INDEX_STATUS_NONE),
         snapshot_doing(false),
-        switching_region_id(0),
         apply_log_index(0),
         snapshot_log_index(0),
         write_key_count(0),
@@ -61,7 +60,6 @@ class VectorIndex {
         save_snapshot_threshold_write_key_num(save_snapshot_threshold_write_key_num),
         vector_index_parameter(vector_index_parameter) {
     vector_index_type = vector_index_parameter.vector_index_type();
-    switching_cond = std::make_shared<BthreadCond>();
   }
 
   virtual ~VectorIndex() = default;
@@ -208,17 +206,6 @@ class VectorIndex {
     }
   }
 
-  uint64_t SwitchingRegionId() { return switching_region_id.load(); }
-
-  void SetSwitchingRegionId(uint64_t expected, uint64_t switching_region_id) {
-    while (!this->switching_region_id.compare_exchange_weak(expected, switching_region_id)) {
-      switching_cond->IncreaseWait();
-    }
-    if (switching_cond->Count() > 0) {
-      switching_cond->DecreaseSignal();
-    }
-  }
-
   bool SnapshotDoing() { return snapshot_doing.load(std::memory_order_relaxed); }
   void SetSnapshotDoing(bool doing) { snapshot_doing.store(doing, std::memory_order_relaxed); }
 
@@ -240,11 +227,6 @@ class VectorIndex {
 
   // control do snapshot concurrency
   std::atomic<bool> snapshot_doing;
-
-  // current switching region id
-  std::atomic<uint64_t> switching_region_id;
-  // protect switching_region_id
-  std::shared_ptr<BthreadCond> switching_cond;
 
   // apply max log index
   std::atomic<uint64_t> apply_log_index;
