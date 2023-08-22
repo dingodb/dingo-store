@@ -135,7 +135,7 @@ public class EntityConversion {
 
     public static Partition mapping(long id, Meta.TableDefinition tableDefinition, List<Column> columns) {
         Meta.PartitionRule partition = tableDefinition.getTablePartition();
-        if (partition.getPartitionsCount() <= 1) {
+        if (partition.getPartitionsCount() < 1) {
             return null;
         }
         DingoKeyValueCodec codec = DingoKeyValueCodec.of(id, columns);
@@ -291,7 +291,7 @@ public class EntityConversion {
     }
 
     public static PartitionRule mapping(long id, Meta.PartitionRule partition) {
-        if (partition.getPartitionsCount() <= 1) {
+        if (partition.getPartitionsCount() < 1) {
             return null;
         }
         SCHEMA.setIsKey(true);
