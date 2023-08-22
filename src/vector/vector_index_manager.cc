@@ -28,6 +28,7 @@
 #include "butil/status.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "common/synchronization.h"
 #include "config/config_manager.h"
 #include "fmt/core.h"
 #include "log/segment_log_storage.h"
@@ -453,6 +454,24 @@ butil::Status VectorIndexManager::AsyncRebuildVectorIndex(store::RegionPtr regio
         }
 
         auto* param = static_cast<Parameter*>(arg);
+
+        // Wait vector index state ready.
+        for (;;) {
+          auto vector_index = param->vector_index_manager->GetVectorIndex(param->region->Id());
+          if (vector_index->Status() == pb::common::VECTOR_INDEX_STATUS_REBUILDING ||
+              vector_index->Status() == pb::common::VECTOR_INDEX_STATUS_SNAPSHOTTING ||
+              vector_index->Status() == pb::common::VECTOR_INDEX_STATUS_BUILDING ||
+              vector_index->Status() == pb::common::VECTOR_INDEX_STATUS_REPLAYING) {
+            LOG(INFO) << fmt::format("[vector_index.rebuild][index_id({})] Waiting rebuild vector index.",
+                                     param->region->Id());
+            bthread_usleep(2 * 1000 * 1000);
+          } else {
+            LOG(INFO) << fmt::format("[vector_index.rebuild][index_id({})] Vector index status is ok, start rebuild.",
+                                     param->region->Id());
+            break;
+          }
+        }
+
         auto status = param->vector_index_manager->RebuildVectorIndex(param->region, param->need_save);
         if (!status.ok()) {
           LOG(ERROR) << fmt::format("[vector_index.rebuild][index_id({})] Rebuild vector index failed, error: {}",
