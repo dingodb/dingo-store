@@ -345,6 +345,9 @@ butil::Status VectorIndexHnsw::Search(std::vector<pb::common::VectorWithId> vect
   std::vector<butil::Status> statuses;
   statuses.resize(vector_with_ids.size(), butil::Status::OK());
 
+  std::vector<int> real_topks;
+  real_topks.resize(vector_with_ids.size(), 0);
+
   auto rows = vector_with_ids.size();
   std::unique_ptr<hnswlib::labeltype[]> data_label_ptr = std::make_unique<hnswlib::labeltype[]>(rows * topk);
   hnswlib::labeltype* data_label = data_label_ptr.get();
@@ -352,9 +355,9 @@ butil::Status VectorIndexHnsw::Search(std::vector<pb::common::VectorWithId> vect
   std::unique_ptr<float[]> data_distance_ptr = std::make_unique<float[]>(rows * topk);
   float* data_distance = data_distance_ptr.get();
 
-  auto lambda_fill_results_function = [&results, this, data_label, data_distance](size_t row, int topk,
-                                                                                  bool reconstruct) {
-    for (int i = 0; i < topk; i++) {
+  auto lambda_fill_results_function = [&results, this, data_label, data_distance, &real_topks](size_t row, int topk,
+                                                                                               bool reconstruct) {
+    for (int i = 0; i < topk && i < real_topks[row]; i++) {
       auto* vector_with_distance = results[row].add_vector_with_distances();
       vector_with_distance->set_distance(data_distance[row * topk + i]);
       vector_with_distance->set_metric_type(this->vector_index_parameter.hnsw_parameter().metric_type());
@@ -382,25 +385,28 @@ butil::Status VectorIndexHnsw::Search(std::vector<pb::common::VectorWithId> vect
     return butil::Status::OK();
   };
 
-  auto lambda_reverse_rse_result_function = [data_label, data_distance](
+  auto lambda_reverse_rse_result_function = [data_label, data_distance, &real_topks](
                                                 std::priority_queue<std::pair<float, hnswlib::labeltype>>& result,
                                                 size_t row, int topk) {
     if (result.size() != topk) {
-      // set invalid value
-      for (int i = topk - 1; i >= 0; i--) {
-        data_distance[row * topk + i] = std::numeric_limits<float>::infinity();
-        data_label[row * topk + i] = std::numeric_limits<hnswlib::labeltype>::min();
-      }
-      std::string s = "Cannot return the results in a contigious 2D array. Probably ef or M is too small";
-      return butil::Status(pb::error::Errno::EINTERNAL, s);
+      std::string s = fmt::format(
+          "Cannot return the results in a contigious 2D array. Probably ef or M is too small ignore.  topk : {} "
+          "result.size() : "
+          "{}",
+          topk, result.size());
+      LOG(WARNING)  << s;
     }
 
-    for (int i = topk - 1; i >= 0; i--) {
-      const auto& result_tuple = result.top();
-      data_distance[row * topk + i] = result_tuple.first;
-      data_label[row * topk + i] = result_tuple.second;
-      result.pop();
+    real_topks[row] = result.size();
+    if (!result.empty()) {
+      for (int i = std::min(topk, real_topks[row]) - 1; i >= 0; i--) {
+        const auto& result_tuple = result.top();
+        data_distance[row * topk + i] = result_tuple.first;
+        data_label[row * topk + i] = result_tuple.second;
+        result.pop();
+      }
     }
+
     return butil::Status::OK();
   };
 
@@ -417,7 +423,7 @@ butil::Status VectorIndexHnsw::Search(std::vector<pb::common::VectorWithId> vect
         result = hnsw_index_->searchKnn(data.get() + dimension_ * row, topk, hnsw_filter);
       } catch (std::runtime_error& e) {
         std::string s = fmt::format("parallel search vector failed, error= {}", e.what());
-        DINGO_LOG(ERROR) << s;
+        LOG(ERROR)  << s;
         statuses[row] = butil::Status(pb::error::Errno::EINTERNAL, s);
         return;
       }
@@ -440,7 +446,7 @@ butil::Status VectorIndexHnsw::Search(std::vector<pb::common::VectorWithId> vect
         result = hnsw_index_->searchKnn(norm_array.data() + start_idx, topk, hnsw_filter);
       } catch (std::runtime_error& e) {
         std::string s = fmt::format("parallel search vector failed, error= {}", e.what());
-        DINGO_LOG(ERROR) << s;
+        LOG(ERROR)  << s;
         statuses[row] = butil::Status(pb::error::Errno::EINTERNAL, s);
         return;
       }

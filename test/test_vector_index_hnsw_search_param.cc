@@ -83,7 +83,7 @@ class VectorIndexHnswSearchParamTest : public testing::Test {
 
   inline static int vector_ids_search_size = 10;
 
-  inline static int search_topk = 3;
+  inline static int search_topk = 30;
 };
 
 TEST_F(VectorIndexHnswSearchParamTest, Create) {
