@@ -55,7 +55,7 @@ SnapshotMeta::SnapshotMeta(uint64_t vector_index_id, const std::string& path)
 
 SnapshotMeta::~SnapshotMeta() {
   // Delete directory
-  DINGO_LOG(INFO) << "Delete vector index snapshot directory " << path_;
+  DINGO_LOG(INFO) << "Delete vector index snapshot directory" << path_;
   Helper::RemoveAllFileOrDirectory(path_);
 }
 
@@ -418,6 +418,15 @@ butil::Status VectorIndexSnapshotManager::DownloadSnapshotFile(const std::string
     return butil::Status(pb::error::EINTERNAL, "Parse uri to reader_id and endpoint error");
   }
 
+  auto snapshot_manager = Server::GetInstance()->GetVectorIndexManager()->GetVectorIndexSnapshotManager();
+
+  if (snapshot_manager->IsExistSnapshot(meta.vector_index_id(), meta.snapshot_log_index())) {
+    std::string msg = fmt::format("Already exist vector index snapshot vector_index_id: {} snapshot_log_index: {}",
+                                  meta.vector_index_id(), meta.snapshot_log_index());
+    DINGO_LOG(INFO) << msg;
+    return butil::Status(pb::error::EVECTOR_SNAPSHOT_EXIST, msg);
+  }
+
   // temp snapshot path for save vector index.
   std::string tmp_snapshot_path = GetSnapshotTmpPath(meta.vector_index_id());
   if (std::filesystem::exists(tmp_snapshot_path)) {
@@ -469,6 +478,14 @@ butil::Status VectorIndexSnapshotManager::DownloadSnapshotFile(const std::string
     ofile.close();
   }
 
+  if (snapshot_manager->IsExistSnapshot(meta.vector_index_id(), meta.snapshot_log_index())) {
+    std::string msg = fmt::format("Already exist vector index snapshot vector_index_id: {} snapshot_log_index: {}",
+                                  meta.vector_index_id(), meta.snapshot_log_index());
+    DINGO_LOG(INFO) << msg;
+    return butil::Status(pb::error::EVECTOR_SNAPSHOT_EXIST, msg);
+  }
+
+  // Todo: lock rename
   // Rename
   std::string new_snapshot_path = GetSnapshotNewPath(meta.vector_index_id(), meta.snapshot_log_index());
   auto status = Helper::Rename(tmp_snapshot_path, new_snapshot_path);
@@ -479,7 +496,6 @@ butil::Status VectorIndexSnapshotManager::DownloadSnapshotFile(const std::string
   }
 
   // Get stale snapshot
-  auto snapshot_manager = Server::GetInstance()->GetVectorIndexManager()->GetVectorIndexSnapshotManager();
   auto stale_snapshots = snapshot_manager->GetSnapshots(meta.vector_index_id());
 
   auto new_snapshot = vector_index::SnapshotMeta::New(meta.vector_index_id(), new_snapshot_path);
@@ -789,9 +805,11 @@ void VectorIndexSnapshotManager::DeleteSnapshot(vector_index::SnapshotMetaPtr sn
     auto inner_it = inner_snapshots.find(snapshot->SnapshotLogId());
     if (inner_it != inner_snapshots.end()) {
       inner_snapshots.erase(inner_it);
+      DINGO_LOG(INFO) << "delete snapshot...";
     }
   }
 }
+
 void VectorIndexSnapshotManager::DeleteSnapshots(uint64_t vector_index_id) {
   BAIDU_SCOPED_LOCK(mutex_);
 

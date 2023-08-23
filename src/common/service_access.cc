@@ -181,7 +181,7 @@ bool RemoteFileCopier::Init() {
 std::shared_ptr<pb::fileservice::GetFileResponse> RemoteFileCopier::GetFile(
     const pb::fileservice::GetFileRequest& request, butil::IOBuf* buf) {
   brpc::Controller cntl;
-  cntl.set_timeout_ms(1000L);
+  cntl.set_timeout_ms(3000L);
   pb::fileservice::FileService_Stub stub(&channel_);
 
   auto response = std::make_shared<pb::fileservice::GetFileResponse>();
