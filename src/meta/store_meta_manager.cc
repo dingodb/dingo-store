@@ -412,7 +412,6 @@ bool StoreRegionMeta::IsExistRegion(uint64_t region_id) { return GetRegion(regio
 store::RegionPtr StoreRegionMeta::GetRegion(uint64_t region_id) {
   auto region = regions_.Get(region_id);
   if (region == nullptr) {
-    DINGO_LOG(WARNING) << fmt::format("region {} not exist!", region_id);
     return nullptr;
   }
 

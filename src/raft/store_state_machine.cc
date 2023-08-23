@@ -85,6 +85,18 @@ void StoreStateMachine::on_apply(braft::Iterator& iter) {
       continue;
     }
 
+    // region is STANDBY state, don't apply.
+    while (region_->State() == pb::common::StoreRegionState::STANDBY) {
+      DINGO_LOG(WARNING) << fmt::format("Region {} is standby for spliting, waiting...", region_->Id());
+      bthread_usleep(1000 * 1000);
+    }
+
+    if (region_->State() == pb::common::StoreRegionState::DELETING ||
+        region_->State() == pb::common::StoreRegionState::DELETED) {
+      DINGO_LOG(WARNING) << fmt::format("Region {} is deleting/deleted, abandon apply log.", region_->Id());
+      break;
+    }
+
     auto raft_cmd = std::make_shared<pb::raft::RaftCmdRequest>();
     if (iter.done()) {
       StoreClosure* store_closure = dynamic_cast<StoreClosure*>(iter.done());
