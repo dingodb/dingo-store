@@ -321,7 +321,7 @@ butil::Status Storage::VectorScanQuery(std::shared_ptr<Engine::VectorReader::Con
 }
 
 butil::Status Storage::VectorGetRegionMetrics(uint64_t region_id, const pb::common::Range& region_range,
-                                              std::shared_ptr<VectorIndex> vector_index,
+                                              VectorIndexWrapperPtr vector_index_wrapper,
                                               pb::common::VectorIndexMetrics& region_metrics) {
   auto status = ValidateLeader(region_id);
   if (!status.ok()) {
@@ -329,7 +329,7 @@ butil::Status Storage::VectorGetRegionMetrics(uint64_t region_id, const pb::comm
   }
 
   auto reader = engine_->NewVectorReader(Constant::kStoreDataCF);
-  status = reader->VectorGetRegionMetrics(region_id, region_range, vector_index, region_metrics);
+  status = reader->VectorGetRegionMetrics(region_id, region_range, vector_index_wrapper, region_metrics);
   if (!status.ok()) {
     return status;
   }

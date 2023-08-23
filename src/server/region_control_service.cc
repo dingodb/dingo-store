@@ -36,7 +36,7 @@
 #include "proto/region_control.pb.h"
 #include "server/file_service.h"
 #include "server/server.h"
-#include "vector/vector_index_snapshot.h"
+#include "vector/vector_index_snapshot_manager.h"
 
 using dingodb::pb::error::Errno;
 
@@ -198,11 +198,36 @@ void RegionControlServiceImpl::TriggerVectorIndexSnapshot(
   butil::EndPoint endpoint;
   butil::str2endpoint(request->location().host().c_str(), request->location().port(), &endpoint);
 
+  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+  auto region = store_region_meta->GetRegion(request->vector_index_id());
+  if (region == nullptr) {
+    auto* error = response->mutable_error();
+    error->set_errcode(Errno::EREGION_NOT_FOUND);
+    error->set_errmsg(fmt::format("Not found region {}.", request->vector_index_id()));
+    return;
+  }
+  auto vector_index_wrapper = region->VectorIndexWrapper();
+  if (vector_index_wrapper == nullptr) {
+    auto* error = response->mutable_error();
+    error->set_errcode(Errno::EVECTOR_INDEX_NOT_FOUND);
+    error->set_errmsg(fmt::format("Not found vector index {}.", request->vector_index_id()));
+    return;
+  }
+  auto snapshot_set = vector_index_wrapper->SnapshotSet();
+
   butil::Status status;
   if (Helper::ToUpper(request->type()) == "INSTALL") {
-    status = VectorIndexSnapshotManager::LaunchInstallSnapshot(endpoint, request->vector_index_id());
+    auto snapshot = snapshot_set->GetLastSnapshot();
+    if (snapshot == nullptr) {
+      auto* error = response->mutable_error();
+      error->set_errcode(Errno::EVECTOR_SNAPSHOT_NOT_FOUND);
+      error->set_errmsg(fmt::format("Not found vector index snapshot {}.", request->vector_index_id()));
+      return;
+    }
+
+    status = VectorIndexSnapshotManager::LaunchInstallSnapshot(endpoint, snapshot);
   } else if (Helper::ToUpper(request->type()) == "PULL") {
-    status = VectorIndexSnapshotManager::LaunchPullSnapshot(endpoint, request->vector_index_id());
+    status = VectorIndexSnapshotManager::LaunchPullSnapshot(endpoint, snapshot_set);
   } else {
     auto* error = response->mutable_error();
     error->set_errcode(pb::error::EILLEGAL_PARAMTETERS);
@@ -373,38 +398,42 @@ void RegionControlServiceImpl::Debug(google::protobuf::RpcController* controller
       response->mutable_region_actual_metrics()->add_region_metricses()->CopyFrom(GetRegionActualMetrics(region_id));
     }
   } else if (request->type() == pb::region_control::DebugType::INDEX_VECTOR_INDEX_METRICS) {
-    auto vector_index_manager = Server::GetInstance()->GetVectorIndexManager();
-    if (vector_index_manager == nullptr) {
+    auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+    if (store_region_meta == nullptr) {
       return;
     }
-    std::vector<std::shared_ptr<VectorIndex>> vector_indexs;
+    std::vector<store::RegionPtr> regions;
     if (request->region_ids().empty()) {
-      vector_indexs = vector_index_manager->GetAllVectorIndex();
+      regions = store_region_meta->GetAllAliveRegion();
     } else {
       for (auto region_id : request->region_ids()) {
-        auto vector_index = vector_index_manager->GetVectorIndex(region_id);
-        if (vector_index != nullptr) {
-          vector_indexs.push_back(vector_index);
+        auto region = store_region_meta->GetRegion(region_id);
+        if (region != nullptr) {
+          regions.push_back(region);
         }
       }
     }
 
-    for (auto& vector_index : vector_indexs) {
+    for (auto& region : regions) {
+      auto vector_index_wrapper = region->VectorIndexWrapper();
+      if (vector_index_wrapper == nullptr || !vector_index_wrapper->IsReady()) {
+        continue;
+      }
       auto* entry = response->mutable_vector_index_metrics()->add_entries();
 
-      entry->set_id(vector_index->Id());
-      entry->set_version(vector_index->Version());
-      entry->set_dimension(vector_index->GetDimension());
-      entry->set_apply_log_index(vector_index->ApplyLogIndex());
-      entry->set_snapshot_log_index(vector_index->SnapshotLogIndex());
+      entry->set_id(vector_index_wrapper->Id());
+      entry->set_version(vector_index_wrapper->Version());
+      entry->set_dimension(vector_index_wrapper->GetDimension());
+      entry->set_apply_log_index(vector_index_wrapper->ApplyLogId());
+      entry->set_snapshot_log_index(vector_index_wrapper->SnapshotLogId());
       uint64_t key_count = 0;
-      vector_index->GetCount(key_count);
+      vector_index_wrapper->GetCount(key_count);
       entry->set_key_count(key_count);
       uint64_t deleted_key_count = 0;
-      vector_index->GetDeletedCount(deleted_key_count);
+      vector_index_wrapper->GetDeletedCount(deleted_key_count);
       entry->set_deleted_key_count(deleted_key_count);
       uint64_t memory_size = 0;
-      vector_index->GetMemorySize(memory_size);
+      vector_index_wrapper->GetMemorySize(memory_size);
       entry->set_memory_size(memory_size);
     }
   }

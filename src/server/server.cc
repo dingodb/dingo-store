@@ -136,6 +136,9 @@ bool Server::InitRawEngine() {
     return false;
   }
 
+  meta_reader_ = std::make_shared<MetaReader>(raw_engine_);
+  meta_writer_ = std::make_shared<MetaWriter>(raw_engine_);
+
   return true;
 }
 
@@ -628,12 +631,7 @@ bool Server::InitStoreMetricsManager() {
   return store_metrics_manager_->Init();
 }
 
-bool Server::InitVectorIndexManager() {
-  vector_index_manager_ = std::make_shared<VectorIndexManager>(raw_engine_, std::make_shared<MetaReader>(raw_engine_),
-                                                               std::make_shared<MetaWriter>(raw_engine_));
-
-  return vector_index_manager_->Init(store_meta_manager_->GetStoreRegionMeta()->GetAllAliveRegion());
-}
+bool Server::InitVectorIndexManager() { return VectorIndexManager::Init(GetAllAliveRegion()); }
 
 bool Server::InitPreSplitChecker() {
   pre_split_checker_ = std::make_shared<PreSplitChecker>();
@@ -681,6 +679,28 @@ void Server::Destroy() {
   store_controller_->Destroy();
 
   google::ShutdownGoogleLogging();
+}
+
+store::RegionPtr Server::GetRegion(uint64_t region_id) {
+  if (store_meta_manager_ == nullptr) {
+    return nullptr;
+  }
+  auto store_region_meta = store_meta_manager_->GetStoreRegionMeta();
+  if (store_region_meta == nullptr) {
+    return nullptr;
+  }
+  return store_region_meta->GetRegion(region_id);
+}
+
+std::vector<store::RegionPtr> Server::GetAllAliveRegion() {
+  if (store_meta_manager_ == nullptr) {
+    return {};
+  }
+  auto store_region_meta = store_meta_manager_->GetStoreRegionMeta();
+  if (store_region_meta == nullptr) {
+    return {};
+  }
+  return store_region_meta->GetAllAliveRegion();
 }
 
 std::shared_ptr<pb::common::RegionDefinition> Server::CreateCoordinatorRegion(const std::shared_ptr<Config>& /*config*/,

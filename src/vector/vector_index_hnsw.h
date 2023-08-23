@@ -37,8 +37,7 @@ namespace dingodb {
 
 class VectorIndexHnsw : public VectorIndex {
  public:
-  explicit VectorIndexHnsw(uint64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
-                           uint64_t save_snapshot_threshold_write_key_num);
+  explicit VectorIndexHnsw(uint64_t id, const pb::common::VectorIndexParameter& vector_index_parameter);
 
   ~VectorIndexHnsw() override;
 
@@ -67,13 +66,10 @@ class VectorIndexHnsw : public VectorIndex {
   butil::Status GetDeletedCount([[maybe_unused]] uint64_t& deleted_count) override;
   butil::Status GetMemorySize([[maybe_unused]] uint64_t& memory_size) override;
 
-  butil::Status NeedToRebuild([[maybe_unused]] bool& need_to_rebuild,
-                              [[maybe_unused]] uint64_t last_save_log_behind) override;
-  butil::Status NeedToSave([[maybe_unused]] bool& need_to_save,
-                           [[maybe_unused]] uint64_t last_save_log_behind) override;
-
   butil::Status ResizeMaxElements(uint64_t new_max_elements);
   butil::Status GetMaxElements(uint64_t& max_elements);
+
+  bool IsExceedsMaxElements() override;
 
   hnswlib::HierarchicalNSW<float>* GetHnswIndex();
 
@@ -91,6 +87,8 @@ class VectorIndexHnsw : public VectorIndex {
   uint32_t dimension_;
 
   bthread_mutex_t mutex_;
+
+  uint32_t user_max_elements_;
 
   // normalize vector
   bool normalize_;

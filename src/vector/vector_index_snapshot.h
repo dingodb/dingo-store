@@ -25,10 +25,7 @@
 #include "butil/endpoint.h"
 #include "butil/status.h"
 #include "common/context.h"
-#include "engine/snapshot.h"
-#include "meta/store_meta_manager.h"
 #include "proto/node.pb.h"
-#include "vector/vector_index.h"
 
 namespace dingodb {
 
@@ -61,56 +58,37 @@ class SnapshotMeta {
 
 using SnapshotMetaPtr = std::shared_ptr<SnapshotMeta>;
 
-}  // namespace vector_index
-
-class VectorIndexSnapshotManager {
+class SnapshotMetaSet {
  public:
-  VectorIndexSnapshotManager() { bthread_mutex_init(&mutex_, nullptr); }
-  ~VectorIndexSnapshotManager() { bthread_mutex_destroy(&mutex_); }
+  SnapshotMetaSet(uint64_t vector_index_id) : vector_index_id_(vector_index_id) {
+    bthread_mutex_init(&mutex_, nullptr);
+  }
+  ~SnapshotMetaSet() { bthread_mutex_destroy(&mutex_); }
 
-  bool Init(std::vector<store::RegionPtr> regions);
+  static std::shared_ptr<SnapshotMetaSet> New(uint64_t vector_index_id) {
+    return std::make_shared<SnapshotMetaSet>(vector_index_id);
+  }
 
-  // Launch install snapshot at client.
-  static butil::Status LaunchInstallSnapshot(const butil::EndPoint& endpoint, uint64_t vector_index_id);
-  // Handle install snapshot at server.
-  static butil::Status HandleInstallSnapshot(std::shared_ptr<Context> ctx, const std::string& uri,
-                                             const pb::node::VectorIndexSnapshotMeta& meta);
-  // Install snapshot to all followers.
-  static butil::Status InstallSnapshotToFollowers(std::shared_ptr<VectorIndex> vector_index);
+  uint64_t VectorIndexId() const { return vector_index_id_; }
 
-  // Launch pull snapshot at client.
-  static butil::Status LaunchPullSnapshot(const butil::EndPoint& endpoint, uint64_t vector_index_id);
-  // Handle install snapshot at server.
-  static butil::Status HandlePullSnapshot(std::shared_ptr<Context> ctx, uint64_t vector_index_id);
-  // Pull last snapshot from peers.
-  static butil::Status PullLastSnapshotFromPeers(uint64_t region_id);
-
-  bool IsExistVectorIndexSnapshot(uint64_t vector_index_id);
-
-  // Save vecgor index snapshot.
-  static butil::Status SaveVectorIndexSnapshot(std::shared_ptr<VectorIndex> vector_index, uint64_t& snapshot_log_index);
-
-  // Load vector index from snapshot.
-  static std::shared_ptr<VectorIndex> LoadVectorIndexSnapshot(store::RegionPtr region);
-
-  bool AddSnapshot(vector_index::SnapshotMetaPtr snapshot);
-  void DeleteSnapshot(vector_index::SnapshotMetaPtr snapshot);
-  void DeleteSnapshots(uint64_t vector_index_id);
-  vector_index::SnapshotMetaPtr GetLastSnapshot(uint64_t vector_index_id);
-  std::vector<vector_index::SnapshotMetaPtr> GetSnapshots(uint64_t vector_index_id);
-  bool IsExistSnapshot(uint64_t vector_index_id, uint64_t snapshot_log_id);
-
-  static std::string GetSnapshotParentPath(uint64_t vector_index_id);
+  bool AddSnapshot(SnapshotMetaPtr snapshot);
+  void ClearSnapshot();
+  vector_index::SnapshotMetaPtr GetLastSnapshot();
+  std::vector<vector_index::SnapshotMetaPtr> GetSnapshots();
+  bool IsExistSnapshot(uint64_t snapshot_log_id);
+  bool IsExistLastSnapshot();
 
  private:
-  static std::string GetSnapshotTmpPath(uint64_t vector_index_id);
-  static std::string GetSnapshotNewPath(uint64_t vector_index_id, uint64_t snapshot_log_id);
-  static butil::Status DownloadSnapshotFile(const std::string& uri, const pb::node::VectorIndexSnapshotMeta& meta);
+  uint64_t vector_index_id_;
 
   bthread_mutex_t mutex_;
-  // vector_index_id: [snapshot_log_id: snapshot]
-  std::map<uint64_t, std::map<uint64_t, vector_index::SnapshotMetaPtr>> snapshot_maps_;
+  // vector index snapshots, key: log_id
+  std::map<uint64_t, SnapshotMetaPtr> snapshots_;
 };
+
+using SnapshotMetaSetPtr = std::shared_ptr<SnapshotMetaSet>;
+
+}  // namespace vector_index
 
 }  // namespace dingodb
 

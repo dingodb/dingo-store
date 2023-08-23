@@ -37,12 +37,6 @@ class VectorCodec {
   static std::string FillVectorTablePrefix(const std::string& value);
 
   static std::string RemoveVectorPrefix(const std::string& value);
-
-  static std::string EncodeApplyLogId(uint64_t apply_log_id);
-  static int DecodeApplyLogId(const std::string& value, uint64_t& apply_log_id);
-
-  static std::string EncodeSnapshotLogId(uint64_t snapshot_log_id);
-  static int DecodeSnapshotLogId(const std::string& value, uint64_t& snapshot_log_id);
 };
 
 }  // namespace dingodb

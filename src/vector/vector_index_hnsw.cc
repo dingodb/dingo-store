@@ -31,6 +31,7 @@
 #include "bthread/types.h"
 #include "butil/scoped_lock.h"
 #include "butil/status.h"
+#include "common/constant.h"
 #include "common/logging.h"
 #include "fmt/core.h"
 #include "gflags/gflags.h"
@@ -42,8 +43,6 @@
 #include "vector/vector_index_utils.h"
 
 namespace dingodb {
-
-DEFINE_uint64(hnsw_need_save_count, 10000, "hnsw need save count");
 
 // Filter vecotr id used by region range.
 class HnswRangeFilterFunctor : public hnswlib::BaseFilterFunctor {
@@ -127,9 +126,8 @@ inline void ParallelFor(size_t start, size_t end, size_t num_threads, Function f
   }
 }
 
-VectorIndexHnsw::VectorIndexHnsw(uint64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
-                                 uint64_t save_snapshot_threshold_write_key_num)
-    : VectorIndex(id, vector_index_parameter, save_snapshot_threshold_write_key_num) {
+VectorIndexHnsw::VectorIndexHnsw(uint64_t id, const pb::common::VectorIndexParameter& vector_index_parameter)
+    : VectorIndex(id, vector_index_parameter) {
   bthread_mutex_init(&mutex_, nullptr);
   hnsw_num_threads_ = std::thread::hardware_concurrency();
 
@@ -154,9 +152,14 @@ VectorIndexHnsw::VectorIndexHnsw(uint64_t id, const pb::common::VectorIndexParam
       hnsw_space_ = new hnswlib::L2Space(hnsw_parameter.dimension());
     }
 
-    hnsw_index_ =
-        new hnswlib::HierarchicalNSW<float>(hnsw_space_, hnsw_parameter.max_elements(), hnsw_parameter.nlinks(),
-                                            hnsw_parameter.efconstruction(), 100, false);
+    // avoid error write vector index failed cause leader and follower data not consistency.
+    // let user_max_elements_<actual_max_elements.
+    user_max_elements_ = hnsw_parameter.max_elements();
+    uint32_t actual_max_elements =
+        static_cast<uint32_t>(hnsw_parameter.max_elements() * Constant::kHnswMaxElementsAmplificationRatio);
+
+    hnsw_index_ = new hnswlib::HierarchicalNSW<float>(hnsw_space_, actual_max_elements, hnsw_parameter.nlinks(),
+                                                      hnsw_parameter.efconstruction(), 100, false);
   } else {
     hnsw_index_ = nullptr;
   }
@@ -234,7 +237,6 @@ butil::Status VectorIndexHnsw::Upsert(const std::vector<pb::common::VectorWithId
         this->hnsw_index_->addPoint((void*)(norm_array.data() + start_idx), vector_with_ids[row].id(), false);
       });
     }
-    write_key_count += vector_with_ids.size();
     return butil::Status();
   } catch (std::runtime_error& e) {
     DINGO_LOG(ERROR) << "upsert vector failed, error=" << e.what();
@@ -256,7 +258,6 @@ butil::Status VectorIndexHnsw::Delete(const std::vector<uint64_t>& delete_ids) {
   try {
     ParallelFor(0, delete_ids.size(), hnsw_num_threads_,
                 [&](size_t row, size_t /*thread_id*/) { hnsw_index_->markDelete(delete_ids[row]); });
-    write_key_count += delete_ids.size();
   } catch (std::runtime_error& e) {
     DINGO_LOG(ERROR) << "delete vector failed, error=" << e.what();
     ret = butil::Status(pb::error::Errno::EINTERNAL, "delete vector failed, error=" + std::string(e.what()));
@@ -394,7 +395,7 @@ butil::Status VectorIndexHnsw::Search(std::vector<pb::common::VectorWithId> vect
           "result.size() : "
           "{}",
           topk, result.size());
-      LOG(WARNING)  << s;
+      LOG(WARNING) << s;
     }
 
     real_topks[row] = result.size();
@@ -423,7 +424,7 @@ butil::Status VectorIndexHnsw::Search(std::vector<pb::common::VectorWithId> vect
         result = hnsw_index_->searchKnn(data.get() + dimension_ * row, topk, hnsw_filter);
       } catch (std::runtime_error& e) {
         std::string s = fmt::format("parallel search vector failed, error= {}", e.what());
-        LOG(ERROR)  << s;
+        LOG(ERROR) << s;
         statuses[row] = butil::Status(pb::error::Errno::EINTERNAL, s);
         return;
       }
@@ -446,7 +447,7 @@ butil::Status VectorIndexHnsw::Search(std::vector<pb::common::VectorWithId> vect
         result = hnsw_index_->searchKnn(norm_array.data() + start_idx, topk, hnsw_filter);
       } catch (std::runtime_error& e) {
         std::string s = fmt::format("parallel search vector failed, error= {}", e.what());
-        LOG(ERROR)  << s;
+        LOG(ERROR) << s;
         statuses[row] = butil::Status(pb::error::Errno::EINTERNAL, s);
         return;
       }
@@ -475,77 +476,6 @@ void VectorIndexHnsw::LockWrite() { bthread_mutex_lock(&mutex_); }
 
 void VectorIndexHnsw::UnlockWrite() { bthread_mutex_unlock(&mutex_); }
 
-butil::Status VectorIndexHnsw::NeedToRebuild([[maybe_unused]] bool& need_to_rebuild,
-                                             [[maybe_unused]] uint64_t last_save_log_behind) {
-  auto element_count = this->hnsw_index_->getCurrentElementCount();
-  auto deleted_count = this->hnsw_index_->getDeletedCount();
-
-  if (element_count == 0 || deleted_count == 0) {
-    need_to_rebuild = false;
-    return butil::Status::OK();
-  }
-
-  if (deleted_count > 0 && deleted_count > element_count / 2) {
-    need_to_rebuild = true;
-    return butil::Status::OK();
-  }
-
-  return butil::Status::OK();
-}
-
-butil::Status VectorIndexHnsw::NeedToSave([[maybe_unused]] bool& need_to_save,
-                                          [[maybe_unused]] uint64_t last_save_log_behind) {
-  if (this->status != pb::common::RegionVectorIndexStatus::VECTOR_INDEX_STATUS_NORMAL) {
-    DINGO_LOG(INFO) << fmt::format("vector index {} need_to_save=false: vector index status is not normal, status={}",
-                                   Id(), pb::common::RegionVectorIndexStatus_Name(this->status.load()));
-    need_to_save = false;
-    return butil::Status::OK();
-  }
-
-  auto element_count = this->hnsw_index_->getCurrentElementCount();
-  auto deleted_count = this->hnsw_index_->getDeletedCount();
-
-  if (element_count == 0 && deleted_count == 0) {
-    DINGO_LOG(INFO) << fmt::format(
-        "vector index {} need_to_save=false: element count is 0 and deleted count is 0, element_count={} "
-        "deleted_count={}",
-        Id(), element_count, deleted_count);
-    need_to_save = false;
-    return butil::Status::OK();
-  }
-
-  if (snapshot_log_index.load() == 0) {
-    DINGO_LOG(INFO) << fmt::format("vector index {} need_to_save=true: snapshot_log_index is 0", Id());
-    need_to_save = true;
-    last_save_write_key_count = write_key_count;
-    return butil::Status::OK();
-  }
-
-  if (last_save_log_behind > FLAGS_hnsw_need_save_count) {
-    DINGO_LOG(INFO) << fmt::format(
-        "vector index {} need_to_save=true: last_save_log_behind={} FLAGS_hnsw_need_save_count={}", Id(),
-        last_save_log_behind, FLAGS_hnsw_need_save_count);
-    need_to_save = true;
-    last_save_write_key_count = write_key_count;
-    return butil::Status::OK();
-  }
-
-  if ((write_key_count - last_save_write_key_count) >= save_snapshot_threshold_write_key_num) {
-    DINGO_LOG(INFO) << fmt::format("vector index {} need_to_save=true: write_key_count {}/{}/{}", Id(), write_key_count,
-                                   last_save_write_key_count, save_snapshot_threshold_write_key_num);
-    need_to_save = true;
-    last_save_write_key_count = write_key_count;
-    return butil::Status::OK();
-  }
-
-  DINGO_LOG(INFO) << "vector index " << Id() << " need_to_save=false: last_save_log_behind=" << last_save_log_behind
-                  << ", FLAGS_hnsw_need_save_count=" << FLAGS_hnsw_need_save_count
-                  << fmt::format(", write_key_count={}/{}/{}", write_key_count, last_save_write_key_count,
-                                 save_snapshot_threshold_write_key_num);
-
-  return butil::Status::OK();
-}
-
 butil::Status VectorIndexHnsw::ResizeMaxElements(uint64_t new_max_elements) {
   BAIDU_SCOPED_LOCK(mutex_);
 
@@ -570,6 +500,14 @@ butil::Status VectorIndexHnsw::GetMaxElements(uint64_t& max_elements) {
   }
 
   return butil::Status::OK();
+}
+
+bool VectorIndexHnsw::IsExceedsMaxElements() {
+  if (hnsw_index_ == nullptr) {
+    return true;
+  }
+
+  return hnsw_index_->getCurrentElementCount() > user_max_elements_;
 }
 
 hnswlib::HierarchicalNSW<float>* VectorIndexHnsw::GetHnswIndex() { return this->hnsw_index_; }

@@ -28,11 +28,11 @@
 
 #include "butil/status.h"
 #include "faiss/MetricType.h"
+#include "gflags/gflags.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "vector/vector_index_factory.h"
 #include "vector/vector_index_flat.h"
-#include "gflags/gflags.h"
 
 namespace dingodb {
 
@@ -43,14 +43,12 @@ DEFINE_int64(efconstruction, 0, "efconstruction default 40");
 DEFINE_int64(nlinks, 0, "nlinks default 32");
 DEFINE_string(metric_type, "L2", "L2 or IP");
 
-
-
 class VectorIndexMemoryTest : public testing::Test {
  protected:
   static void SetUpTestSuite() {}
 
   static void TearDownTestSuite() {
-    //google::ParseCommandLineFlags(&argc, &argv, false);
+    // google::ParseCommandLineFlags(&argc, &argv, false);
     std::cout << "FLAGS_vector_index_type : " << FLAGS_vector_index_type << std::endl;
     vector_index_.reset();
   }
@@ -69,12 +67,10 @@ TEST_F(VectorIndexMemoryTest, Create) {
   // valid param IP
   {
     uint64_t id = 1;
-    pb::common::IndexParameter index_parameter;
-    index_parameter.set_index_type(::dingodb::pb::common::IndexType::INDEX_TYPE_VECTOR);
-    index_parameter.mutable_vector_index_parameter()->set_vector_index_type(
-        ::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
-    index_parameter.mutable_vector_index_parameter()->mutable_flat_parameter()->set_dimension(dimension_);
-    index_parameter.mutable_vector_index_parameter()->mutable_flat_parameter()->set_metric_type(
+    pb::common::VectorIndexParameter index_parameter;
+    index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
+    index_parameter.mutable_flat_parameter()->set_dimension(dimension_);
+    index_parameter.mutable_flat_parameter()->set_metric_type(
         ::dingodb::pb::common::MetricType::METRIC_TYPE_INNER_PRODUCT);
     vector_index_ = VectorIndexFactory::New(id, index_parameter);
     EXPECT_NE(vector_index_.get(), nullptr);
@@ -83,13 +79,10 @@ TEST_F(VectorIndexMemoryTest, Create) {
   // valid param L2
   {
     uint64_t id = 1;
-    pb::common::IndexParameter index_parameter;
-    index_parameter.set_index_type(::dingodb::pb::common::IndexType::INDEX_TYPE_VECTOR);
-    index_parameter.mutable_vector_index_parameter()->set_vector_index_type(
-        ::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
-    index_parameter.mutable_vector_index_parameter()->mutable_flat_parameter()->set_dimension(dimension_);
-    index_parameter.mutable_vector_index_parameter()->mutable_flat_parameter()->set_metric_type(
-        ::dingodb::pb::common::MetricType::METRIC_TYPE_L2);
+    pb::common::VectorIndexParameter index_parameter;
+    index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
+    index_parameter.mutable_flat_parameter()->set_dimension(dimension_);
+    index_parameter.mutable_flat_parameter()->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_L2);
     vector_index_ = VectorIndexFactory::New(id, index_parameter);
     EXPECT_NE(vector_index_.get(), nullptr);
   }

@@ -39,12 +39,33 @@ std::shared_ptr<Region> Region::New(const pb::common::RegionDefinition& definiti
   region->inner_region_.set_id(definition.id());
   if (definition.index_parameter().index_type() == pb::common::INDEX_TYPE_VECTOR) {
     region->inner_region_.set_region_type(pb::common::INDEX_REGION);
+    auto vector_index_wrapper =
+        VectorIndexWrapper::New(definition.id(), definition.index_parameter().vector_index_parameter());
+    if (vector_index_wrapper == nullptr) {
+      return nullptr;
+    }
+    region->SetVectorIndexWrapper(vector_index_wrapper);
+
   } else {
     region->inner_region_.set_region_type(pb::common::STORE_REGION);
   }
   region->inner_region_.mutable_definition()->CopyFrom(definition);
   region->SetState(pb::common::StoreRegionState::NEW);
   return region;
+}
+
+bool Region::Recover() {
+  if (Type() == pb::common::INDEX_REGION) {
+    auto vector_index_wrapper =
+        VectorIndexWrapper::New(Id(), inner_region_.definition().index_parameter().vector_index_parameter());
+    if (vector_index_wrapper == nullptr) {
+      return false;
+    }
+    SetVectorIndexWrapper(vector_index_wrapper);
+    return vector_index_wapper_->Recover();
+  }
+
+  return true;
 }
 
 std::string Region::Serialize() {
@@ -174,6 +195,22 @@ void Region::SetDisableSplit(bool disable_split) {
   BAIDU_SCOPED_LOCK(mutex_);
   inner_region_.set_disable_split(disable_split);
 }
+
+bool Region::TemporaryDisableSplit() { return temporary_disable_split_.load(); }
+
+void Region::SetTemporaryDisableSplit(bool disable_split) { temporary_disable_split_.store(disable_split); }
+
+uint64_t Region::LastSplitTimestamp() { return inner_region_.last_split_timestamp(); }
+
+void Region::UpdateLastSplitTimestamp() { inner_region_.set_last_split_timestamp(Helper::TimestampMs()); }
+
+uint64_t Region::ParentId() { return inner_region_.parent_id(); }
+void Region::SetParentId(uint64_t region_id) { inner_region_.set_parent_id(region_id); }
+
+std::vector<pb::store_internal::RegionSplitRecord> Region::Childs() {
+  return Helper::PbRepeatedToVector(inner_region_.childs());
+}
+void Region::AddChild(pb::store_internal::RegionSplitRecord& record) { inner_region_.add_childs()->Swap(&record); }
 
 uint64_t Region::PartitionId() { return inner_region_.definition().part_id(); }
 
@@ -474,6 +511,7 @@ void StoreRegionMeta::TransformFromKv(const std::vector<pb::common::KeyValue>& k
     uint64_t region_id = ParseRegionId(kv.key());
     auto region = store::Region::New();
     region->DeSerialize(kv.value());
+    region->Recover();
     regions_.Put(region_id, region);
   }
 }

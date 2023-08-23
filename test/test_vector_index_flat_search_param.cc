@@ -75,13 +75,10 @@ TEST_F(VectorIndexFlatSearchParamTest, Create) {
   // valid param L2
   {
     uint64_t id = id_for_l2;
-    pb::common::IndexParameter index_parameter;
-    index_parameter.set_index_type(::dingodb::pb::common::IndexType::INDEX_TYPE_VECTOR);
-    index_parameter.mutable_vector_index_parameter()->set_vector_index_type(
-        ::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
-    index_parameter.mutable_vector_index_parameter()->mutable_flat_parameter()->set_dimension(dimension);
-    index_parameter.mutable_vector_index_parameter()->mutable_flat_parameter()->set_metric_type(
-        ::dingodb::pb::common::MetricType::METRIC_TYPE_L2);
+    pb::common::VectorIndexParameter index_parameter;
+    index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
+    index_parameter.mutable_flat_parameter()->set_dimension(dimension);
+    index_parameter.mutable_flat_parameter()->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_L2);
     vector_index_flat_for_l2 = VectorIndexFactory::New(id, index_parameter);
     EXPECT_NE(vector_index_flat_for_l2.get(), nullptr);
   }
@@ -89,12 +86,10 @@ TEST_F(VectorIndexFlatSearchParamTest, Create) {
   // valid param IP
   {
     uint64_t id = id_for_ip;
-    pb::common::IndexParameter index_parameter;
-    index_parameter.set_index_type(::dingodb::pb::common::IndexType::INDEX_TYPE_VECTOR);
-    index_parameter.mutable_vector_index_parameter()->set_vector_index_type(
-        ::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
-    index_parameter.mutable_vector_index_parameter()->mutable_flat_parameter()->set_dimension(dimension);
-    index_parameter.mutable_vector_index_parameter()->mutable_flat_parameter()->set_metric_type(
+    pb::common::VectorIndexParameter index_parameter;
+    index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
+    index_parameter.mutable_flat_parameter()->set_dimension(dimension);
+    index_parameter.mutable_flat_parameter()->set_metric_type(
         ::dingodb::pb::common::MetricType::METRIC_TYPE_INNER_PRODUCT);
     vector_index_flat_for_ip = VectorIndexFactory::New(id, index_parameter);
     EXPECT_NE(vector_index_flat_for_ip.get(), nullptr);
@@ -103,13 +98,10 @@ TEST_F(VectorIndexFlatSearchParamTest, Create) {
   // valid param COSINE
   {
     uint64_t id = id_for_cosine;
-    pb::common::IndexParameter index_parameter;
-    index_parameter.set_index_type(::dingodb::pb::common::IndexType::INDEX_TYPE_VECTOR);
-    index_parameter.mutable_vector_index_parameter()->set_vector_index_type(
-        ::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
-    index_parameter.mutable_vector_index_parameter()->mutable_flat_parameter()->set_dimension(dimension);
-    index_parameter.mutable_vector_index_parameter()->mutable_flat_parameter()->set_metric_type(
-        ::dingodb::pb::common::MetricType::METRIC_TYPE_COSINE);
+    pb::common::VectorIndexParameter index_parameter;
+    index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
+    index_parameter.mutable_flat_parameter()->set_dimension(dimension);
+    index_parameter.mutable_flat_parameter()->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_COSINE);
     vector_index_flat_for_cosine = VectorIndexFactory::New(id, index_parameter);
     EXPECT_NE(vector_index_flat_for_cosine.get(), nullptr);
   }

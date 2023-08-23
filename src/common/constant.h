@@ -135,6 +135,9 @@ class Constant {
   // collect metrics
   static const uint32_t kApproximateSizeMetricsCollectIntervalS = 50;
   static const uint32_t kMetricsCollectIntervalS = 300;
+
+  // hnsw max elements amplification ratio
+  static constexpr float kHnswMaxElementsAmplificationRatio = 1.2;
 };
 
 }  // namespace dingodb
