@@ -332,7 +332,8 @@ static void LaunchRebuildVectorIndex(uint64_t region_id) {
 void SplitHandler::SplitClosure::Run() {
   std::unique_ptr<SplitClosure> self_guard(this);
   if (!status().ok()) {
-    DINGO_LOG(ERROR) << fmt::format("[split.spliting][region({})] finish snapshot failed", region_->Id());
+    DINGO_LOG(ERROR) << fmt::format("[split.spliting][region({})] finish snapshot failed, error: {}", region_->Id(),
+                                    status().error_str());
   } else {
     DINGO_LOG(INFO) << fmt::format("[split.spliting][region({})] finish snapshot success", region_->Id());
   }
@@ -805,6 +806,8 @@ void RebuildVectorIndexHandler::Handle(std::shared_ptr<Context>, store::RegionPt
   if (vector_index != nullptr) {
     // Update the ApplyLogId of the vector index to the current log_id
     vector_index_manager->UpdateApplyLogId(vector_index, log_id);
+  } else {
+    vector_index_manager->SaveApplyLogId(region->Id(), log_id);
   }
 
   Server::GetInstance()->GetVectorIndexManager()->AsyncRebuildVectorIndex(region, true);

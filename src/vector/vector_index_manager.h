@@ -75,12 +75,12 @@ class VectorIndexManager {
 
   std::shared_ptr<VectorIndexSnapshotManager> GetVectorIndexSnapshotManager() { return vector_index_snapshot_manager_; }
 
- private:
   void SaveApplyLogId(uint64_t vector_index_id, uint64_t apply_log_id);
   butil::Status LoadApplyLogId(uint64_t vector_index_id, uint64_t& apply_log_id);
   void SaveSnapshotLogId(uint64_t vector_index_id, uint64_t snapshot_log_id);
   butil::Status LoadSnapshotLogId(uint64_t vector_index_id, uint64_t& snapshot_log_id);
 
+ private:
   butil::Status GetVectorIndexLogIndex(uint64_t vector_index_id, uint64_t& snapshot_log_index,
                                        uint64_t& apply_log_index);
 

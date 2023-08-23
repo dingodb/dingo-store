@@ -78,8 +78,6 @@ std::string HalfSplitChecker::SplitKey(store::RegionPtr region, uint32_t& count)
   auto iter = raw_engine_->NewMultipleRangeIterator(raw_engine_, Constant::kStoreDataCF, region->PhysicsRange());
   iter->Init();
 
-  DINGO_LOG(INFO) << fmt::format("[split.check][region({})] policy(HALF) split_threshold_size({}) split_chunk_size({})",
-                                 region->Id(), split_threshold_size_, split_chunk_size_);
   uint64_t size = 0;
   uint64_t chunk_size = 0;
   std::vector<std::string> keys;
@@ -99,6 +97,10 @@ std::string HalfSplitChecker::SplitKey(store::RegionPtr region, uint32_t& count)
     ++count;
   }
 
+  DINGO_LOG(INFO) << fmt::format(
+      "[split.check][region({})] policy(HALF) split_threshold_size({}) split_chunk_size({}) actual_size({}) count({})",
+      region->Id(), split_threshold_size_, split_chunk_size_, size, count);
+
   int mid = keys.size() / 2;
   return !is_split || keys.empty() ? "" : keys[mid];
 }
@@ -106,9 +108,6 @@ std::string HalfSplitChecker::SplitKey(store::RegionPtr region, uint32_t& count)
 std::string SizeSplitChecker::SplitKey(store::RegionPtr region, uint32_t& count) {
   auto iter = raw_engine_->NewMultipleRangeIterator(raw_engine_, Constant::kStoreDataCF, region->PhysicsRange());
   iter->Init();
-
-  DINGO_LOG(INFO) << fmt::format("[split.check][region({})] policy(SIZE) split_size({}) split_ratio({})", region->Id(),
-                                 split_size_, split_ratio_);
 
   uint64_t size = 0;
   std::string split_key;
@@ -125,6 +124,10 @@ std::string SizeSplitChecker::SplitKey(store::RegionPtr region, uint32_t& count)
     ++count;
   }
 
+  DINGO_LOG(INFO) << fmt::format(
+      "[split.check][region({})] policy(SIZE) split_size({}) split_ratio({}) actual_size({}) count({})", region->Id(),
+      split_size_, split_ratio_, size, count);
+
   return is_split ? split_key : "";
 }
 
@@ -132,15 +135,14 @@ std::string KeysSplitChecker::SplitKey(store::RegionPtr region, uint32_t& count)
   auto iter = raw_engine_->NewMultipleRangeIterator(raw_engine_, Constant::kStoreDataCF, region->PhysicsRange());
   iter->Init();
 
-  DINGO_LOG(INFO) << fmt::format("[split.check][region({})] policy(KEYS) split_key_number({}) split_key_ratio({})",
-                                 region->Id(), split_keys_number_, split_keys_ratio_);
-
+  uint64_t size = 0;
   uint64_t split_key_count = 0;
   std::string split_key;
   bool is_split = false;
   uint32_t split_key_number = split_keys_number_ * split_keys_ratio_;
   for (; iter->IsValid(); iter->Next()) {
     ++split_key_count;
+    size += iter->KeyValueSize();
 
     if (split_key.empty() && split_key_count >= split_key_number) {
       split_key = iter->FirstRangeKey();
@@ -150,6 +152,10 @@ std::string KeysSplitChecker::SplitKey(store::RegionPtr region, uint32_t& count)
 
     ++count;
   }
+
+  DINGO_LOG(INFO) << fmt::format(
+      "[split.check][region({})] policy(KEYS) split_key_number({}) split_key_ratio({}) actual_size({}) count({})",
+      region->Id(), split_keys_number_, split_keys_ratio_, size, count);
 
   return is_split ? split_key : "";
 }

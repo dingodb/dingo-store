@@ -110,9 +110,7 @@ std::string VectorCodec::EncodeApplyLogId(uint64_t apply_log_id) {
   Buf buf(8);
   buf.WriteLong(apply_log_id);
 
-  std::string result;
-  buf.GetBytes(result);
-  return result;
+  return buf.GetString();
 }
 
 int VectorCodec::DecodeApplyLogId(const std::string& value, uint64_t& apply_log_id) {
@@ -131,9 +129,7 @@ std::string VectorCodec::EncodeSnapshotLogId(uint64_t snapshot_log_id) {
   Buf buf(8);
   buf.WriteLong(snapshot_log_id);
 
-  std::string result;
-  buf.GetBytes(result);
-  return result;
+  return buf.GetString();
 }
 
 int VectorCodec::DecodeSnapshotLogId(const std::string& value, uint64_t& snapshot_log_id) {

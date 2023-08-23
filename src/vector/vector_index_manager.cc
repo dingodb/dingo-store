@@ -360,7 +360,7 @@ std::shared_ptr<VectorIndex> VectorIndexManager::BuildVectorIndex(store::RegionP
 
   auto vector_index = VectorIndexFactory::New(vector_index_id, region->InnerRegion().definition().index_parameter());
   if (!vector_index) {
-    DINGO_LOG(WARNING) << fmt::format("New vector index failed, vector id {}", vector_index_id);
+    DINGO_LOG(WARNING) << fmt::format("[vector_index.build][index_id({})] New vector index failed.", vector_index_id);
     return nullptr;
   }
 
@@ -381,9 +381,9 @@ std::shared_ptr<VectorIndex> VectorIndexManager::BuildVectorIndex(store::RegionP
 
   std::string start_key = VectorCodec::FillVectorDataPrefix(region->RawRange().start_key());
   std::string end_key = VectorCodec::FillVectorDataPrefix(region->RawRange().end_key());
-  DINGO_LOG(INFO) << fmt::format("Build vector index {}, snapshot_log_id({}) apply_log_id({}) range: [{}-{})",
-                                 vector_index_id, snapshot_log_id, apply_log_id, Helper::StringToHex(start_key),
-                                 Helper::StringToHex(end_key));
+  DINGO_LOG(INFO) << fmt::format(
+      "[vector_index.build][index_id({})] Build vector index, snapshot_log_id({}) apply_log_id({}) range: [{}-{})",
+      vector_index_id, snapshot_log_id, apply_log_id, Helper::StringToHex(start_key), Helper::StringToHex(end_key));
 
   uint64_t start_time = Helper::TimestampMs();
   // load vector data to vector index
@@ -402,12 +402,12 @@ std::shared_ptr<VectorIndex> VectorIndexManager::BuildVectorIndex(store::RegionP
 
     std::string value(iter->Value());
     if (!vector.mutable_vector()->ParseFromString(value)) {
-      DINGO_LOG(WARNING) << fmt::format("vector with id ParseFromString failed, id {}", vector.id());
+      DINGO_LOG(WARNING) << fmt::format("[vector_index.build][index_id({})] vector with id ParseFromString failed.");
       continue;
     }
 
     if (vector.vector().float_values_size() <= 0) {
-      DINGO_LOG(WARNING) << fmt::format("vector values_size error, id {}", vector.id());
+      DINGO_LOG(WARNING) << fmt::format("[vector_index.build][index_id({})] vector values_size error.", vector.id());
       continue;
     }
 
@@ -425,7 +425,8 @@ std::shared_ptr<VectorIndex> VectorIndexManager::BuildVectorIndex(store::RegionP
   }
 
   DINGO_LOG(INFO) << fmt::format(
-      "Build vector index {} finish, snapshot_log_index({}) apply_log_index({}) count({}) elapsed time({}ms)",
+      "[vector_index.build][index_id({})] Build vector index finish, snapshot_log_index({}) apply_log_index({}) "
+      "count({}) elapsed time({}ms)",
       vector_index_id, snapshot_log_id, apply_log_id, count, Helper::TimestampMs() - start_time);
 
   return vector_index;
@@ -458,6 +459,9 @@ butil::Status VectorIndexManager::AsyncRebuildVectorIndex(store::RegionPtr regio
         // Wait vector index state ready.
         for (;;) {
           auto vector_index = param->vector_index_manager->GetVectorIndex(param->region->Id());
+          if (vector_index == nullptr) {
+            break;
+          }
           if (vector_index->Status() == pb::common::VECTOR_INDEX_STATUS_REBUILDING ||
               vector_index->Status() == pb::common::VECTOR_INDEX_STATUS_SNAPSHOTTING ||
               vector_index->Status() == pb::common::VECTOR_INDEX_STATUS_BUILDING ||
@@ -483,7 +487,7 @@ butil::Status VectorIndexManager::AsyncRebuildVectorIndex(store::RegionPtr regio
           return nullptr;
         }
 
-        if (config->GetBool("vector.enable_follower_hold_index")) {
+        if (!config->GetBool("vector.enable_follower_hold_index")) {
           // If follower, delete vector index.
           auto engine = Server::GetInstance()->GetEngine();
           if (engine->GetID() == pb::common::ENG_RAFT_STORE) {
@@ -533,7 +537,7 @@ butil::Status VectorIndexManager::RebuildVectorIndex(store::RegionPtr region, bo
   assert(region != nullptr);
   uint64_t vector_index_id = region->Id();
 
-  DINGO_LOG(INFO) << fmt::format("[vector_index.rebuild][index_id({})] Rebuild vector index.", vector_index_id);
+  DINGO_LOG(INFO) << fmt::format("[vector_index.rebuild][index_id({})] Start rebuild vector index.", vector_index_id);
 
   // check rebuild status
   auto online_vector_index = GetVectorIndex(vector_index_id);

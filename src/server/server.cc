@@ -343,7 +343,7 @@ bool Server::InitCrontabManager() {
     if (enable_auto_split) {
       int split_check_interval_s = config->GetInt("region.split_check_interval_s");
       split_check_interval_s =
-          split_check_interval_s > 0 ? split_check_interval_s : Constant::kDefaultSplitCheckIntervalS;
+          split_check_interval_s > 0 ? split_check_interval_s : Constant::kDefaultStoreSplitCheckIntervalS;
       if (split_check_interval_s < 0) {
         DINGO_LOG(ERROR) << "config region.split_check_interval_s illegal";
         return false;
@@ -561,7 +561,7 @@ bool Server::InitCrontabManager() {
     if (enable_auto_split) {
       int split_check_interval_s = config->GetInt("region.split_check_interval_s");
       split_check_interval_s =
-          split_check_interval_s > 0 ? split_check_interval_s : Constant::kDefaultSplitCheckIntervalS;
+          split_check_interval_s > 0 ? split_check_interval_s : Constant::kDefaultIndexSplitCheckIntervalS;
       if (split_check_interval_s < 0) {
         DINGO_LOG(ERROR) << "config region.split_check_interval_s illegal";
         return false;
