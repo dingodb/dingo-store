@@ -338,24 +338,13 @@ void SplitHandler::SplitClosure::Run() {
     DINGO_LOG(INFO) << fmt::format("[split.spliting][region({})] finish snapshot success", region_->Id());
   }
 
-  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
-  if (is_child_) {
-    if (status().ok()) {
-      if (region_->Type() == pb::common::INDEX_REGION) {
-        LaunchRebuildVectorIndex(region_->Id());
-      }
-
-      store_region_meta->UpdateState(region_, pb::common::StoreRegionState::NORMAL);
-    }
-
-  } else {
-    if (region_->Type() == pb::common::INDEX_REGION) {
-      LaunchRebuildVectorIndex(region_->Id());
-    }
-
-    store_region_meta->UpdateState(region_, pb::common::StoreRegionState::NORMAL);
-    Heartbeat::TriggerStoreHeartbeat(region_->Id());
+  if (region_->Type() == pb::common::INDEX_REGION) {
+    LaunchRebuildVectorIndex(region_->Id());
   }
+
+  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+  store_region_meta->UpdateState(region_, pb::common::StoreRegionState::NORMAL);
+  Heartbeat::TriggerStoreHeartbeat(region_->Id());
 }
 
 // region-100: [start_key,end_key) ->
@@ -398,13 +387,17 @@ void SplitHandler::Handle(std::shared_ptr<Context>, store::RegionPtr from_region
 
   if (to_region->Type() == pb::common::INDEX_REGION) {
     // Set child share vector index
-    auto vector_index = Server::GetInstance()->GetVectorIndexManager()->GetVectorIndex(from_region->Id());
+    auto vector_index = from_region->VectorIndexWrapper()->GetOwnVectorIndex();
     if (vector_index != nullptr) {
-      to_region->SetShareVectorIndex(vector_index);
+      to_region->VectorIndexWrapper()->SetShareVectorIndex(vector_index);
     } else {
       DINGO_LOG(ERROR) << fmt::format("[split.spliting][region({}->{})] split region get vector index failed",
                                       from_region->Id(), to_region->Id());
     }
+
+    // temporary disable split, avoid overlap split.
+    to_region->SetTemporaryDisableSplit(true);
+    from_region->SetTemporaryDisableSplit(true);
   }
 
   // Set region state spliting
@@ -435,21 +428,36 @@ void SplitHandler::Handle(std::shared_ptr<Context>, store::RegionPtr from_region
                                  Helper::StringToHex(from_range.end_key()), Helper::StringToHex(to_range.start_key()),
                                  Helper::StringToHex(to_range.end_key()));
 
-  DINGO_LOG(DEBUG) << fmt::format("[split.spliting][region({}->{})] parent do snapshot", from_region->Id(),
-                                  to_region->Id());
+  // Set split record
+  to_region->SetParentId(from_region->Id());
+  from_region->UpdateLastSplitTimestamp();
+  pb::store_internal::RegionSplitRecord record;
+  record.set_region_id(to_region->Id());
+  record.set_split_time(Helper::NowTime());
+  from_region->AddChild(record);
+
+  DINGO_LOG(INFO) << fmt::format("[split.spliting][region({}->{})] parent do snapshot", from_region->Id(),
+                                 to_region->Id());
   // Do parent region snapshot
   auto engine = Server::GetInstance()->GetEngine();
   std::shared_ptr<Context> from_ctx = std::make_shared<Context>();
   from_ctx->SetDone(new SplitHandler::SplitClosure(from_region, false));
-  engine->DoSnapshot(from_ctx, from_region->Id());
+  auto status = engine->DoSnapshot(from_ctx, from_region->Id());
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("[split.spliting][region({}->{})] do snapshot failed, error: {}", from_region->Id(),
+                                    to_region->Id(), status.error_str());
+  }
 
-  DINGO_LOG(DEBUG) << fmt::format("[split.spliting][region({}->{})] child do snapshot", from_region->Id(),
-                                  to_region->Id());
+  DINGO_LOG(INFO) << fmt::format("[split.spliting][region({}->{})] child do snapshot", from_region->Id(),
+                                 to_region->Id());
   // Do child region snapshot
   std::shared_ptr<Context> to_ctx = std::make_shared<Context>();
   to_ctx->SetDone(new SplitHandler::SplitClosure(to_region, true));
-  engine->DoSnapshot(to_ctx, to_region->Id());
-  Heartbeat::TriggerStoreHeartbeat(to_region->Id());
+  status = engine->DoSnapshot(to_ctx, to_region->Id());
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("[split.spliting][region({}->{})] do snapshot failed, error: {}", from_region->Id(),
+                                    to_region->Id(), status.error_str());
+  }
 
   // Update region metrics min/max key policy
   if (region_metrics != nullptr) {
@@ -528,11 +536,11 @@ void VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr reg
     vector_with_ids.push_back(vector_with_id);
   }
 
-  uint64_t vector_index_id = region->Id();
-  auto vector_index_manager = Server::GetInstance()->GetVectorIndexManager();
-  auto vector_index = vector_index_manager->GetVectorIndex(region);
+  auto vector_index_wrapper = region->VectorIndexWrapper();
+  uint64_t vector_index_id = vector_index_wrapper->Id();
+  bool is_ready = vector_index_wrapper->IsReady();
   // if leadder vector_index is nullptr, return internal error
-  if (ctx != nullptr && vector_index == nullptr) {
+  if (ctx != nullptr && !is_ready) {
     DINGO_LOG(ERROR) << fmt::format("Not found vector index {}", vector_index_id);
     status = butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "Not found vector index %ld", vector_index_id);
     set_ctx_status(status);
@@ -540,40 +548,13 @@ void VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr reg
   }
 
   // Only leader and specific follower write vector index, other follower don't write vector index.
-  if (vector_index != nullptr) {
+  if (is_ready) {
     // Check if the log_id is greater than the ApplyLogIndex of the vector index
-    if (log_id <= vector_index->ApplyLogIndex()) {
-      DINGO_LOG(WARNING) << fmt::format("Vector index {} already applied log index, log_id({}) / apply_log_index({})",
-                                        vector_index_id, log_id, vector_index->ApplyLogIndex());
-      set_ctx_status(status);
-      return;
-    }
-
-    // if vector_index is offline, it may doing snapshot or replay wal, wait for a while and retry full raft log
-    bool stop_flag = true;
-    do {
-      // stop while for default
-      stop_flag = true;
-
+    if (log_id > vector_index_wrapper->ApplyLogId()) {
       try {
-        if (region->IsSwitchingVectorIndex()) {
-          // do not stop while, wait for a while and retry full raft log
-          stop_flag = false;
-
-          bthread_usleep(1000 * 100);
-          vector_index = vector_index_manager->GetVectorIndex(region);
-          if (vector_index == nullptr) {
-            DINGO_LOG(ERROR) << fmt::format("Not found vector index {}", vector_index_id);
-            status = butil::Status(pb::error::EINTERNAL, "Not found vector index %lu", vector_index_id);
-            set_ctx_status(status);
-            return;
-          }
-          continue;
-        }
-
         auto start = std::chrono::steady_clock::now();
 
-        auto ret = vector_index->Upsert(vector_with_ids);
+        auto ret = vector_index_wrapper->Upsert(vector_with_ids);
 
         auto end = std::chrono::steady_clock::now();
 
@@ -596,7 +577,10 @@ void VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr reg
         status =
             butil::Status(pb::error::EINTERNAL, "Vector index %lu add failed, err=[%s]", vector_index_id, e.what());
       }
-    } while (!stop_flag);
+    } else {
+      DINGO_LOG(WARNING) << fmt::format("Vector index {} already applied log index, log_id({}) / apply_log_index({})",
+                                        vector_index_id, log_id, vector_index_wrapper->ApplyLogId());
+    }
   }
 
   // Store vector
@@ -604,9 +588,9 @@ void VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr reg
     auto writer = engine->NewWriter(request.cf_name());
     status = writer->KvBatchPut(kvs);
 
-    if (vector_index != nullptr) {
+    if (is_ready) {
       // Update the ApplyLogIndex of the vector index to the current log_id
-      vector_index_manager->UpdateApplyLogId(vector_index, log_id);
+      vector_index_wrapper->SetApplyLogId(log_id);
     }
   }
 
@@ -705,11 +689,11 @@ void VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr 
     }
   }
 
-  uint64_t vector_index_id = region->Id();
-  auto vector_index_manager = Server::GetInstance()->GetVectorIndexManager();
-  auto vector_index = vector_index_manager->GetVectorIndex(region);
+  auto vector_index_wrapper = region->VectorIndexWrapper();
+  uint64_t vector_index_id = vector_index_wrapper->Id();
+  bool is_ready = vector_index_wrapper->IsReady();
   // if leadder vector_index is nullptr, return internal error
-  if (ctx != nullptr && vector_index == nullptr) {
+  if (ctx != nullptr && !is_ready) {
     DINGO_LOG(ERROR) << fmt::format("Not found vector index {}", vector_index_id);
     status = butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "Not found vector index %ld", vector_index_id);
     set_ctx_status(status);
@@ -717,38 +701,11 @@ void VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr 
   }
 
   // Only leader and specific follower write vector index, other follower don't write vector index.
-  if (vector_index != nullptr) {
-    if (log_id <= vector_index->ApplyLogIndex()) {
-      DINGO_LOG(WARNING) << fmt::format("Vector index {} already applied log index, log_id({}) / apply_log_index({})",
-                                        vector_index_id, log_id, vector_index->ApplyLogIndex());
-      set_ctx_status(status);
-      return;
-    }
-
-    // if vector_index is offline, it may doing snapshot or replay wal, wait for a while and retry full raft log
-    bool stop_flag = true;
-    do {
-      // stop while for default
-      stop_flag = true;
-
+  if (is_ready) {
+    if (log_id > vector_index_wrapper->ApplyLogId()) {
       // delete vector from index
       try {
-        if (region->IsSwitchingVectorIndex()) {
-          // do not stop while, wait for a while and retry full raft log
-          stop_flag = false;
-
-          bthread_usleep(1000 * 100);
-          vector_index = vector_index_manager->GetVectorIndex(region);
-          if (vector_index == nullptr) {
-            DINGO_LOG(ERROR) << fmt::format("Not found vector index {}", vector_index_id);
-            status = butil::Status(pb::error::EINTERNAL, "Not found vector index %lu", vector_index_id);
-            set_ctx_status(status);
-            return;
-          }
-          continue;
-        }
-
-        auto ret = vector_index->Delete(delete_ids);
+        auto ret = vector_index_wrapper->Delete(delete_ids);
         if (ret.error_code() == pb::error::Errno::EVECTOR_NOT_FOUND) {
           DINGO_LOG(ERROR) << fmt::format("vector not found at vector index {}, vector_count={}, err={}",
                                           vector_index_id, delete_ids.size(), ret.error_str());
@@ -764,7 +721,10 @@ void VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr 
         status =
             butil::Status(pb::error::EINTERNAL, "Vector index %lu delete failed, err=[%s]", vector_index_id, e.what());
       }
-    } while (!stop_flag);
+    } else {
+      DINGO_LOG(WARNING) << fmt::format("Vector index {} already applied log index, log_id({}) / apply_log_index({})",
+                                        vector_index_id, log_id, vector_index_wrapper->ApplyLogId());
+    }
   }
 
   // Delete vector and write wal
@@ -772,9 +732,9 @@ void VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr 
     auto writer = engine->NewWriter(request.cf_name());
     status = writer->KvBatchDelete(keys);
 
-    if (vector_index != nullptr) {
+    if (is_ready) {
       // Update the ApplyLogIndex of the vector index to the current log_id
-      vector_index_manager->UpdateApplyLogId(vector_index, log_id);
+      vector_index_wrapper->SetApplyLogId(log_id);
     }
   }
 
@@ -801,16 +761,12 @@ void RebuildVectorIndexHandler::Handle(std::shared_ptr<Context>, store::RegionPt
                                        uint64_t log_id) {
   DINGO_LOG(INFO) << fmt::format("[vector_index.rebuild][index_id({})] Handle rebuild vector index, apply_log_id: {}",
                                  region->Id(), log_id);
-  auto vector_index_manager = Server::GetInstance()->GetVectorIndexManager();
-  auto vector_index = vector_index_manager->GetVectorIndex(region->Id());
-  if (vector_index != nullptr) {
-    // Update the ApplyLogId of the vector index to the current log_id
-    vector_index_manager->UpdateApplyLogId(vector_index, log_id);
-  } else {
-    vector_index_manager->SaveApplyLogId(region->Id(), log_id);
-  }
+  auto vector_index_wrapper = region->VectorIndexWrapper();
+  if (vector_index_wrapper != nullptr) {
+    vector_index_wrapper->SaveApplyLogId(log_id);
 
-  Server::GetInstance()->GetVectorIndexManager()->AsyncRebuildVectorIndex(region, true);
+    VectorIndexManager::LaunchRebuildVectorIndex(vector_index_wrapper, true);
+  }
 }
 
 std::shared_ptr<HandlerCollection> RaftApplyHandlerFactory::Build() {

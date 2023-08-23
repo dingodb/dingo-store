@@ -15,6 +15,7 @@
 #ifndef DINGODB_STORE_SERVER_H_
 #define DINGODB_STORE_SERVER_H_
 
+#include <cstdint>
 #include <memory>
 #include <string>
 
@@ -29,6 +30,7 @@
 #include "engine/raw_engine.h"
 #include "engine/storage.h"
 #include "log/log_storage_manager.h"
+#include "meta/meta_reader.h"
 #include "meta/store_meta_manager.h"
 #include "metrics/store_metrics_manager.h"
 #include "proto/common.pb.h"
@@ -135,10 +137,23 @@ class Server {
   std::shared_ptr<Engine> GetEngine() { return engine_; }
   std::shared_ptr<RawEngine> GetRawEngine() { return raw_engine_; }
 
+  std::shared_ptr<RaftStoreEngine> GetRaftStoreEngine() {
+    auto engine = GetEngine();
+    if (engine->GetID() == pb::common::ENG_RAFT_STORE) {
+      return std::dynamic_pointer_cast<RaftStoreEngine>(engine);
+    }
+    return nullptr;
+  }
+
+  std::shared_ptr<MetaReader> GetMetaReader() { return meta_reader_; }
+  std::shared_ptr<MetaWriter> GetMetaWriter() { return meta_writer_; }
+
   std::shared_ptr<LogStorageManager> GetLogStorageManager() { return log_storage_; }
 
   std::shared_ptr<Storage> GetStorage() { return storage_; }
   std::shared_ptr<StoreMetaManager> GetStoreMetaManager() { return store_meta_manager_; }
+  store::RegionPtr GetRegion(uint64_t region_id);
+  std::vector<store::RegionPtr> GetAllAliveRegion();
   std::shared_ptr<StoreMetricsManager> GetStoreMetricsManager() { return store_metrics_manager_; }
   std::shared_ptr<CrontabManager> GetCrontabManager() { return crontab_manager_; }
 
@@ -176,8 +191,6 @@ class Server {
     auto config = ConfigManager::GetInstance()->GetConfig(role_);
     return config == nullptr ? "" : config->GetString("vector.index_path");
   }
-
-  std::shared_ptr<VectorIndexManager> GetVectorIndexManager() { return vector_index_manager_; }
 
   std::shared_ptr<PreSplitChecker> GetPreSplitChecker() { return pre_split_checker_; }
 
@@ -217,6 +230,11 @@ class Server {
   std::shared_ptr<Engine> engine_;
   std::shared_ptr<RawEngine> raw_engine_;
 
+  // Meta reader
+  std::shared_ptr<MetaReader> meta_reader_;
+  // Meta writer
+  std::shared_ptr<MetaWriter> meta_writer_;
+
   // This is log storage manager
   std::shared_ptr<LogStorageManager> log_storage_;
 
@@ -250,8 +268,6 @@ class Server {
   // checkpoint directory
   std::string checkpoint_path_;
 
-  // vector index manager
-  std::shared_ptr<VectorIndexManager> vector_index_manager_;
   // Pre split checker
   std::shared_ptr<PreSplitChecker> pre_split_checker_;
 };

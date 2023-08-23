@@ -42,7 +42,7 @@
 namespace dingodb {
 
 VectorIndexFlat::VectorIndexFlat(uint64_t id, const pb::common::VectorIndexParameter& vector_index_parameter)
-    : VectorIndex(id, vector_index_parameter, 0) {
+    : VectorIndex(id, vector_index_parameter) {
   bthread_mutex_init(&mutex_, nullptr);
 
   metric_type_ = vector_index_parameter.flat_parameter().metric_type();
@@ -317,15 +317,7 @@ butil::Status VectorIndexFlat::GetMemorySize(uint64_t& memory_size) {
   return butil::Status::OK();
 }
 
-butil::Status VectorIndexFlat::NeedToRebuild(bool& need_to_rebuild, [[maybe_unused]] uint64_t last_save_log_behind) {
-  need_to_rebuild = false;
-  return butil::Status::OK();
-}
-
-butil::Status VectorIndexFlat::NeedToSave(bool& need_to_save, [[maybe_unused]] uint64_t last_save_log_behind) {
-  need_to_save = false;
-  return butil::Status::OK();
-}
+bool VectorIndexFlat::IsExceedsMaxElements() { return false; }
 
 void VectorIndexFlat::SearchWithParam(faiss::idx_t n, const faiss::Index::component_t* x, faiss::idx_t k,
                                       faiss::Index::distance_t* distances, faiss::idx_t* labels,

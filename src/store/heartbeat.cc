@@ -68,8 +68,6 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
   // setup id for store_metrics here, coordinator need this id to update store_metrics
   mut_store_metrics->set_id(Server::GetInstance()->Id());
 
-  auto vector_index_manager = Server::GetInstance()->GetVectorIndexManager();
-
   auto* mut_region_metrics_map = mut_store_metrics->mutable_region_metrics_map();
   auto region_metrics = metrics_manager->GetStoreRegionMetrics();
   std::vector<store::RegionPtr> region_metas;
@@ -105,8 +103,9 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
       }
     }
 
-    if (vector_index_manager != nullptr) {
-      tmp_region_metrics.set_is_hold_vector_index(vector_index_manager->GetVectorIndex(region_meta->Id()) != nullptr);
+    auto vector_index_wrapper = region_meta->VectorIndexWrapper();
+    if (vector_index_wrapper != nullptr) {
+      tmp_region_metrics.set_is_hold_vector_index(vector_index_wrapper->GetOwnVectorIndex() != nullptr);
     }
 
     mut_region_metrics_map->insert({region_meta->Id(), tmp_region_metrics});
@@ -694,13 +693,7 @@ void CompactionTask::ExecCompactionTask(std::shared_ptr<CoordinatorControl> coor
 
 // this is for index
 void VectorIndexScrubTask::ScrubVectorIndex() {
-  auto vector_index_manager = Server::GetInstance()->GetVectorIndexManager();
-  if (vector_index_manager == nullptr) {
-    DINGO_LOG(ERROR) << "vector_index_manager is nullptr";
-    return;
-  }
-
-  auto status = vector_index_manager->ScrubVectorIndex();
+  auto status = VectorIndexManager::ScrubVectorIndex();
   if (!status.ok()) {
     DINGO_LOG(ERROR) << fmt::format("Scrub vector index failed, error: {}", status.error_str());
   }

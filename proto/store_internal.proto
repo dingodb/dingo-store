@@ -35,6 +35,11 @@ message RaftMeta {
   int64 applied_index = 3;
 }
 
+message RegionSplitRecord {
+  uint64 region_id = 1;
+  string split_time = 2;
+}
+
 message Region {
   uint64 id = 1;
   dingodb.pb.common.RegionType region_type = 10;
@@ -44,4 +49,16 @@ message Region {
   repeated dingodb.pb.common.StoreRegionState history_states = 50;
 
   bool disable_split = 70;  // true: forbid region split
+  uint64 last_split_timestamp = 71;
+  uint64 parent_id = 72;
+  repeated RegionSplitRecord childs = 73;
+}
+
+message VectorIndexMeta {
+  uint64 id = 1;
+  uint64 version = 2;
+  int32 type = 3;
+  int32 status = 4;
+  uint64 apply_log_id = 5;
+  uint64 snapshot_log_id = 6;
 }

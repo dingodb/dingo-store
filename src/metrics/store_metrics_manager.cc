@@ -312,37 +312,34 @@ bool StoreRegionMetrics::CollectMetrics() {
 
     // vector index
     bool vector_index_has_data = false;
-    auto vector_index_mgr = Server::GetInstance()->GetVectorIndexManager();
-    if (vector_index_mgr != nullptr) {
-      auto vector_index = vector_index_mgr->GetVectorIndex(region_metrics->Id());
-      if (vector_index != nullptr) {
-        if (pb::common::VectorIndexType::VECTOR_INDEX_TYPE_NONE != vector_index->VectorIndexType()) {
-          region_metrics->SetVectorIndexType(vector_index->VectorIndexType());
+    auto vector_index_wrapper = region->VectorIndexWrapper();
+    if (vector_index_wrapper != nullptr) {
+      if (pb::common::VectorIndexType::VECTOR_INDEX_TYPE_NONE != vector_index_wrapper->Type()) {
+        region_metrics->SetVectorIndexType(vector_index_wrapper->Type());
 
-          uint64_t current_count = 0;
-          vector_index->GetCount(current_count);
-          region_metrics->SetVectorCurrentCount(current_count);
+        uint64_t current_count = 0;
+        vector_index_wrapper->GetCount(current_count);
+        region_metrics->SetVectorCurrentCount(current_count);
 
-          uint64_t deleted_count = 0;
-          vector_index->GetDeletedCount(deleted_count);
-          region_metrics->SetVectorDeletedCount(deleted_count);
+        uint64_t deleted_count = 0;
+        vector_index_wrapper->GetDeletedCount(deleted_count);
+        region_metrics->SetVectorDeletedCount(deleted_count);
 
-          auto reader = engine_->NewVectorReader(Constant::kStoreDataCF);
-          uint64_t max_id = 0;
+        auto reader = engine_->NewVectorReader(Constant::kStoreDataCF);
+        uint64_t max_id = 0;
 
-          reader->VectorGetBorderId(region->RawRange(), false, max_id);
-          region_metrics->SetVectorMaxId(max_id);
+        reader->VectorGetBorderId(region->RawRange(), false, max_id);
+        region_metrics->SetVectorMaxId(max_id);
 
-          uint64_t min_id = 0;
-          reader->VectorGetBorderId(region->RawRange(), true, min_id);
-          region_metrics->SetVectorMinId(min_id);
+        uint64_t min_id = 0;
+        reader->VectorGetBorderId(region->RawRange(), true, min_id);
+        region_metrics->SetVectorMinId(min_id);
 
-          uint64_t total_memory_usage = 0;
-          vector_index->GetMemorySize(total_memory_usage);
-          region_metrics->SetVectorMemoryBytes(total_memory_usage);
+        uint64_t total_memory_usage = 0;
+        vector_index_wrapper->GetMemorySize(total_memory_usage);
+        region_metrics->SetVectorMemoryBytes(total_memory_usage);
 
-          vector_index_has_data = true;
-        }
+        vector_index_has_data = true;
       }
     }
 

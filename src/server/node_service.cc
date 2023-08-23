@@ -32,7 +32,7 @@
 #include "proto/coordinator_internal.pb.h"
 #include "proto/node.pb.h"
 #include "server/server.h"
-#include "vector/vector_index_snapshot.h"
+#include "vector/vector_index_snapshot_manager.h"
 
 namespace dingodb {
 using pb::error::Errno;
@@ -367,8 +367,26 @@ void NodeServiceImpl::InstallVectorIndexSnapshot(google::protobuf::RpcController
     return;
   }
 
+  uint64_t vector_index_id = request->meta().vector_index_id();
+  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+  auto region = store_region_meta->GetRegion(vector_index_id);
+  if (region == nullptr) {
+    auto* error = response->mutable_error();
+    error->set_errcode(Errno::EREGION_NOT_FOUND);
+    error->set_errmsg(fmt::format("Not found region {}.", vector_index_id));
+    return;
+  }
+  auto vector_index_wrapper = region->VectorIndexWrapper();
+  if (vector_index_wrapper == nullptr) {
+    auto* error = response->mutable_error();
+    error->set_errcode(Errno::EVECTOR_INDEX_NOT_FOUND);
+    error->set_errmsg(fmt::format("Not found vector index {}.", vector_index_id));
+    return;
+  }
+
   std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, nullptr, response);
-  status = VectorIndexSnapshotManager::HandleInstallSnapshot(ctx, request->uri(), request->meta());
+  status = VectorIndexSnapshotManager::HandleInstallSnapshot(ctx, request->uri(), request->meta(),
+                                                             vector_index_wrapper->SnapshotSet());
   if (!status.ok()) {
     auto* error = response->mutable_error();
     error->set_errcode(static_cast<Errno>(status.error_code()));
@@ -386,18 +404,31 @@ void NodeServiceImpl::GetVectorIndexSnapshot(google::protobuf::RpcController* co
   brpc::ClosureGuard done_guard(done);
   brpc::Controller* cntl = (brpc::Controller*)controller;
 
-  auto vector_index_manager = Server::GetInstance()->GetVectorIndexManager();
-  if (vector_index_manager->GetVectorIndex(request->vector_index_id()) == nullptr) {
+  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+  auto region = store_region_meta->GetRegion(request->vector_index_id());
+  if (region == nullptr) {
+    auto* error = response->mutable_error();
+    error->set_errcode(Errno::EREGION_NOT_FOUND);
+    error->set_errmsg(fmt::format("Not found region {}.", request->vector_index_id()));
+    return;
+  }
+  auto vector_index_wrapper = region->VectorIndexWrapper();
+  if (vector_index_wrapper == nullptr) {
     auto* error = response->mutable_error();
     error->set_errcode(Errno::EVECTOR_INDEX_NOT_FOUND);
-    error->set_errmsg("Not found vector index.");
-    DINGO_LOG(INFO) << fmt::format("GetVectorIndexSnapshot request: {} response: {}", request->ShortDebugString(),
-                                   response->ShortDebugString());
+    error->set_errmsg(fmt::format("Not found vector index {}.", request->vector_index_id()));
+    return;
+  }
+  auto snapshot = vector_index_wrapper->SnapshotSet()->GetLastSnapshot();
+  if (snapshot == nullptr) {
+    auto* error = response->mutable_error();
+    error->set_errcode(Errno::EVECTOR_SNAPSHOT_NOT_FOUND);
+    error->set_errmsg(fmt::format("Not found vector index snapshot {}.", request->vector_index_id()));
     return;
   }
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, nullptr, response);
-  auto status = VectorIndexSnapshotManager::HandlePullSnapshot(ctx, request->vector_index_id());
+  auto status = VectorIndexSnapshotManager::HandlePullSnapshot(ctx, snapshot);
   if (!status.ok()) {
     auto* error = response->mutable_error();
     error->set_errcode(static_cast<Errno>(status.error_code()));
@@ -413,8 +444,23 @@ void NodeServiceImpl::CheckVectorIndex(google::protobuf::RpcController* controll
   brpc::ClosureGuard done_guard(done);
   brpc::Controller* cntl = (brpc::Controller*)controller;
 
-  auto vector_index_manager = Server::GetInstance()->GetVectorIndexManager();
-  if (vector_index_manager != nullptr && vector_index_manager->GetVectorIndex(request->vector_index_id()) != nullptr) {
+  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+  auto region = store_region_meta->GetRegion(request->vector_index_id());
+  if (region == nullptr) {
+    auto* error = response->mutable_error();
+    error->set_errcode(Errno::EREGION_NOT_FOUND);
+    error->set_errmsg(fmt::format("Not found region {}.", request->vector_index_id()));
+    return;
+  }
+
+  auto vector_index_wrapper = region->VectorIndexWrapper();
+  if (vector_index_wrapper == nullptr) {
+    auto* error = response->mutable_error();
+    error->set_errcode(Errno::EVECTOR_INDEX_NOT_FOUND);
+    error->set_errmsg(fmt::format("Not found vector index {}.", request->vector_index_id()));
+    return;
+  }
+  if (vector_index_wrapper->IsReady() && vector_index_wrapper->GetOwnVectorIndex() != nullptr) {
     response->set_is_exist(true);
   }
 }

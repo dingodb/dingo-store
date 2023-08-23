@@ -177,6 +177,11 @@ butil::Status IndexServiceImpl::ValidateVectorSearchRequest(const dingodb::pb::i
     return status;
   }
 
+  if (!region->VectorIndexWrapper()->IsReady()) {
+    butil::Status(pb::error::EVECTOR_INDEX_NOT_READY,
+                  fmt::format("Vector index {} not ready, please retry.", region->Id()));
+  }
+
   std::vector<uint64_t> vector_ids;
   if (request->vector_with_ids_size() <= 0) {
     if (request->vector().id() > 0) {
@@ -228,20 +233,11 @@ void IndexServiceImpl::VectorSearch(google::protobuf::RpcController* controller,
     return;
   }
 
-  // Get vector index.
-  auto vector_index = Server::GetInstance()->GetVectorIndexManager()->GetVectorIndex(region);
-  if (vector_index == nullptr) {
-    auto* err = response->mutable_error();
-    err->set_errcode(pb::error::EVECTOR_INDEX_NOT_READY);
-    err->set_errmsg(fmt::format("Vector index {} not ready, please retry.", region->Id()));
-    return;
-  }
-
   // Set vector reader context.
   auto ctx = std::make_shared<Engine::VectorReader::Context>();
   ctx->partition_id = region->PartitionId();
   ctx->region_id = region->Id();
-  ctx->vector_index = vector_index;
+  ctx->vector_index = region->VectorIndexWrapper();
   ctx->region_range = region->RawRange();
   ctx->parameter = request->parameter();
 
@@ -300,6 +296,17 @@ butil::Status IndexServiceImpl::ValidateVectorAddRequest(const dingodb::pb::inde
     return status;
   }
 
+  auto vector_index_wrapper = region->VectorIndexWrapper();
+  if (!vector_index_wrapper->IsReady()) {
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_READY,
+                         fmt::format("Vector index {} not ready, please retry.", region->Id()));
+  }
+
+  if (vector_index_wrapper->IsExceedsMaxElements()) {
+    return butil::Status(pb::error::EVECTOR_INDEX_EXCEED_MAX_ELEMENTS,
+                         fmt::format("Vector index {} exceeds max elements.", region->Id()));
+  }
+
   for (const auto& vector : request->vectors()) {
     if (vector.id() == 0 || vector.id() == UINT64_MAX) {
       return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param vector id is not allowed to be zero or UNINT64_MAX");
@@ -310,18 +317,12 @@ butil::Status IndexServiceImpl::ValidateVectorAddRequest(const dingodb::pb::inde
     }
   }
 
-  auto vector_index = Server::GetInstance()->GetVectorIndexManager()->GetVectorIndex(request->region_id());
-  if (vector_index == nullptr) {
-    return butil::Status(pb::error::EVECTOR_INDEX_NOT_READY, "Vector index %lu not ready, please retry.",
-                         request->region_id());
-  }
-
-  auto dimension = vector_index->GetDimension();
+  auto dimension = vector_index_wrapper->GetDimension();
   for (const auto& vector : request->vectors()) {
-    if (vector_index->VectorIndexType() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW ||
-        vector_index->VectorIndexType() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT ||
-        vector_index->VectorIndexType() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT ||
-        vector_index->VectorIndexType() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ) {
+    if (vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW ||
+        vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT ||
+        vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT ||
+        vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ) {
       if (vector.vector().float_values().size() != dimension) {
         return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
                              "Param vector dimension is error, correct dimension is " + std::to_string(dimension));
@@ -370,8 +371,9 @@ void IndexServiceImpl::VectorAdd(google::protobuf::RpcController* controller,
       err->set_errmsg("Not leader, please redirect leader.");
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
-    DINGO_LOG(WARNING) << fmt::format("ValidateRequest failed request: {} response: {}", request->ShortDebugString(),
-                                      response->ShortDebugString());
+    DINGO_LOG(ERROR) << fmt::format("ValidateRequest failed request: {} {} {} {} response: {}", request->region_id(),
+                                    request->vectors().size(), request->replace_deleted(), request->is_update(),
+                                    response->ShortDebugString());
     return;
   }
 
@@ -393,6 +395,9 @@ void IndexServiceImpl::VectorAdd(google::protobuf::RpcController* controller,
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
     brpc::ClosureGuard done_guard(done);
+    DINGO_LOG(ERROR) << fmt::format("ValidateRequest failed request: {} {} {} {} response: {}", request->region_id(),
+                                    request->vectors().size(), request->replace_deleted(), request->is_update(),
+                                    response->ShortDebugString());
   }
 }
 
@@ -417,10 +422,10 @@ butil::Status IndexServiceImpl::ValidateVectorDeleteRequest(const dingodb::pb::i
     return status;
   }
 
-  auto vector_index = Server::GetInstance()->GetVectorIndexManager()->GetVectorIndex(request->region_id());
-  if (vector_index == nullptr) {
-    return butil::Status(pb::error::EVECTOR_INDEX_NOT_READY, "Vector index %lu not ready, please retry.",
-                         request->region_id());
+  auto vector_index_wrapper = region->VectorIndexWrapper();
+  if (!vector_index_wrapper->IsReady()) {
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_READY,
+                         fmt::format("Vector index {} not ready, please retry.", region->Id()));
   }
 
   return ServiceHelper::ValidateIndexRegion(region, Helper::PbRepeatedToVector(request->ids()));
@@ -455,8 +460,8 @@ void IndexServiceImpl::VectorDelete(google::protobuf::RpcController* controller,
       err->set_errmsg("Not leader, please redirect leader.");
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
-    DINGO_LOG(WARNING) << fmt::format("ValidateRequest failed request: {} response: {}", request->ShortDebugString(),
-                                      response->ShortDebugString());
+    DINGO_LOG(ERROR) << fmt::format("ValidateRequest failed request: {} response: {}", request->ShortDebugString(),
+                                    response->ShortDebugString());
     return;
   }
 
@@ -473,6 +478,8 @@ void IndexServiceImpl::VectorDelete(google::protobuf::RpcController* controller,
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
     brpc::ClosureGuard done_guard(done);
+    DINGO_LOG(ERROR) << fmt::format("ValidateRequest failed request: {} response: {}", request->ShortDebugString(),
+                                    response->ShortDebugString());
   }
 }
 
@@ -652,9 +659,10 @@ butil::Status IndexServiceImpl::ValidateVectorGetRegionMetricsRequest(
     return status;
   }
 
-  auto vector_index = Server::GetInstance()->GetVectorIndexManager()->GetVectorIndex(request->region_id());
-  if (!vector_index) {
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id cannot find vector_index");
+  auto vector_index_wrapper = region->VectorIndexWrapper();
+  if (!vector_index_wrapper->IsReady()) {
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_READY,
+                         fmt::format("Vector index {} not ready, please retry.", region->Id()));
   }
 
   return ServiceHelper::ValidateIndexRegion(region, {});
@@ -694,20 +702,8 @@ void IndexServiceImpl::VectorGetRegionMetrics(google::protobuf::RpcController* c
     return;
   }
 
-  // Get vector index.
-  auto vector_index = Server::GetInstance()->GetVectorIndexManager()->GetVectorIndex(region->Id());
-  if (vector_index == nullptr) {
-    vector_index = region->ShareVectorIndex();
-  }
-  if (vector_index == nullptr) {
-    auto* err = response->mutable_error();
-    err->set_errcode(pb::error::EVECTOR_INDEX_NOT_FOUND);
-    err->set_errmsg(fmt::format("Not found vector index {}", region->Id()));
-    return;
-  }
-
   pb::common::VectorIndexMetrics metrics;
-  status = storage_->VectorGetRegionMetrics(region->Id(), region->RawRange(), vector_index, metrics);
+  status = storage_->VectorGetRegionMetrics(region->Id(), region->RawRange(), region->VectorIndexWrapper(), metrics);
   if (!status.ok()) {
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
@@ -807,9 +803,10 @@ butil::Status IndexServiceImpl::ValidateVectorSearchDebugRequest(
     return status;
   }
 
-  auto vector_index = Server::GetInstance()->GetVectorIndexManager()->GetVectorIndex(request->region_id());
-  if (!vector_index) {
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id cannot find vector_index");
+  auto vector_index_wrapper = region->VectorIndexWrapper();
+  if (!vector_index_wrapper->IsReady()) {
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_READY,
+                         fmt::format("Vector index {} not ready, please retry.", region->Id()));
   }
 
   std::vector<uint64_t> vector_ids;
@@ -862,20 +859,11 @@ void IndexServiceImpl::VectorSearchDebug(google::protobuf::RpcController* contro
     return;
   }
 
-  // Get vector index.
-  auto vector_index = Server::GetInstance()->GetVectorIndexManager()->GetVectorIndex(region);
-  if (vector_index == nullptr) {
-    auto* err = response->mutable_error();
-    err->set_errcode(pb::error::EVECTOR_INDEX_NOT_FOUND);
-    err->set_errmsg(fmt::format("Not found vector index {}", region->Id()));
-    return;
-  }
-
   // Set vector reader context.
   auto ctx = std::make_shared<Engine::VectorReader::Context>();
   ctx->partition_id = region->PartitionId();
   ctx->region_id = region->Id();
-  ctx->vector_index = vector_index;
+  ctx->vector_index = region->VectorIndexWrapper();
   ctx->region_range = region->RawRange();
   ctx->parameter = request->parameter();
 

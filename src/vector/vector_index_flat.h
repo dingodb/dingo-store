@@ -97,11 +97,7 @@ class VectorIndexFlat : public VectorIndex {
   butil::Status GetCount([[maybe_unused]] uint64_t& count) override;
   butil::Status GetDeletedCount([[maybe_unused]] uint64_t& deleted_count) override;
   butil::Status GetMemorySize([[maybe_unused]] uint64_t& memory_size) override;
-
-  butil::Status NeedToRebuild([[maybe_unused]] bool& need_to_rebuild,
-                              [[maybe_unused]] uint64_t last_save_log_behind) override;
-  butil::Status NeedToSave([[maybe_unused]] bool& need_to_save,
-                           [[maybe_unused]] uint64_t last_save_log_behind) override;
+  bool IsExceedsMaxElements() override;
 
  private:
   void SearchWithParam(faiss::idx_t n, const faiss::Index::component_t* x, faiss::idx_t k,

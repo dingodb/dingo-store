@@ -690,6 +690,8 @@ uint64_t Helper::Timestamp() {
   return std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 }
 
+std::string Helper::NowTime() { return FormatMsTime(TimestampMs(), "%Y-%m-%d %H:%M:%S"); }
+
 std::string Helper::FormatMsTime(uint64_t timestamp, const std::string& format) {
   std::chrono::time_point<std::chrono::system_clock, std::chrono::milliseconds> tp(
       (std::chrono::milliseconds(timestamp)));

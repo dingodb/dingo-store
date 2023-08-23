@@ -15,27 +15,33 @@
 #include "vector/vector_index.h"
 
 #include <cstdint>
+#include <memory>
 
+#include "bthread/bthread.h"
 #include "butil/status.h"
+#include "common/constant.h"
+#include "common/synchronization.h"
+#include "fmt/core.h"
+#include "gflags/gflags.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "server/server.h"
 
 namespace dingodb {
 
-pb::common::VectorIndexType VectorIndex::VectorIndexType() const { return vector_index_type; }
+DEFINE_uint64(hnsw_need_save_count, 10000, "hnsw need save count");
 
-void VectorIndex::SetSnapshotLogIndex(uint64_t snapshot_log_index) {
-  this->snapshot_log_index.store(snapshot_log_index, std::memory_order_relaxed);
+void VectorIndex::SetSnapshotLogId(uint64_t snapshot_log_id) {
+  this->snapshot_log_id.store(snapshot_log_id, std::memory_order_relaxed);
 }
 
-uint64_t VectorIndex::ApplyLogIndex() const { return apply_log_index.load(std::memory_order_relaxed); }
+uint64_t VectorIndex::ApplyLogId() const { return apply_log_id.load(std::memory_order_relaxed); }
 
-void VectorIndex::SetApplyLogIndex(uint64_t apply_log_index) {
-  this->apply_log_index.store(apply_log_index, std::memory_order_relaxed);
+void VectorIndex::SetApplyLogId(uint64_t apply_log_id) {
+  this->apply_log_id.store(apply_log_id, std::memory_order_relaxed);
 }
 
-uint64_t VectorIndex::SnapshotLogIndex() const { return snapshot_log_index.load(std::memory_order_relaxed); }
+uint64_t VectorIndex::SnapshotLogId() const { return snapshot_log_id.load(std::memory_order_relaxed); }
 
 butil::Status VectorIndex::Save(const std::string& /*path*/) {
   // Save need the caller to do LockWrite() and UnlockWrite()
@@ -58,14 +64,415 @@ butil::Status VectorIndex::GetMemorySize([[maybe_unused]] uint64_t& memory_size)
   return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "this vector index do not implement get memory size");
 }
 
-butil::Status VectorIndex::NeedToRebuild([[maybe_unused]] bool& need_to_rebuild,
-                                         [[maybe_unused]] uint64_t last_save_log_behind) {
-  return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "this vector index do not implement need to rebuild");
+VectorIndexWrapper::~VectorIndexWrapper() {
+  ClearVectorIndex();
+  if (snapshot_set_ != nullptr) {
+    snapshot_set_->ClearSnapshot();
+  }
+  bthread_mutex_destroy(&vector_index_mutex_);
 }
 
-butil::Status VectorIndex::NeedToSave([[maybe_unused]] bool& need_to_save,
-                                      [[maybe_unused]] uint64_t last_save_log_behind) {
-  return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "this vector index do not implement need to rebuild");
+std::shared_ptr<VectorIndexWrapper> VectorIndexWrapper::New(uint64_t id,
+                                                            pb::common::VectorIndexParameter index_parameter) {
+  auto vector_index_wrapper =
+      std::make_shared<VectorIndexWrapper>(id, index_parameter, Constant::kVectorIndexSaveSnapshotThresholdWriteKeyNum);
+  if (vector_index_wrapper != nullptr) {
+    if (!vector_index_wrapper->Init()) {
+      return nullptr;
+    }
+  }
+
+  return vector_index_wrapper;
+}
+
+bool VectorIndexWrapper::Init() {
+  if (!worker_->Init()) {
+    DINGO_LOG(ERROR) << fmt::format("[vector_index.wrapper][index_id({})] Init vector index wrapper failed.", Id());
+    return false;
+  }
+  return true;
+}
+
+void VectorIndexWrapper::Destroy() {
+  DINGO_LOG(INFO) << fmt::format("[vector_index.wrapper][index_id({})] vector index destroy.", Id());
+  stop_.store(true);
+  worker_->Destroy();
+}
+
+bool VectorIndexWrapper::Recover() {
+  auto status = LoadMeta();
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("[vector_index.wrapper][index_id({})] vector index recover failed, error: {}", Id(),
+                                    status.error_str());
+    return false;
+  }
+
+  return true;
+}
+
+static std::string GenMetaKey(uint64_t vector_index_id) {
+  return fmt::format("{}_{}", Constant::kVectorIndexApplyLogIdPrefix, vector_index_id);
+}
+
+butil::Status VectorIndexWrapper::SaveMeta() {
+  auto meta_writer = Server::GetInstance()->GetMetaWriter();
+  if (meta_writer == nullptr) {
+    return butil::Status(pb::error::EINTERNAL, "meta writer is nullptr.");
+  }
+
+  pb::store_internal::VectorIndexMeta meta;
+  meta.set_id(id_);
+  meta.set_version(version_);
+  meta.set_type(static_cast<int>(vector_index_type_));
+  meta.set_apply_log_id(ApplyLogId());
+  meta.set_snapshot_log_id(SnapshotLogId());
+
+  auto kv = std::make_shared<pb::common::KeyValue>();
+  kv->set_key(GenMetaKey(id_));
+  kv->set_value(meta.SerializeAsString());
+  if (!meta_writer->Put(kv)) {
+    return butil::Status(pb::error::EINTERNAL, "Write vector index meta failed.");
+  }
+
+  return butil::Status();
+}
+
+butil::Status VectorIndexWrapper::LoadMeta() {
+  auto meta_reader = Server::GetInstance()->GetMetaReader();
+  if (meta_reader == nullptr) {
+    return butil::Status(pb::error::EINTERNAL, "meta reader is nullptr.");
+  }
+
+  auto kv = meta_reader->Get(GenMetaKey(id_));
+  if (kv == nullptr) {
+    return butil::Status(pb::error::EINTERNAL, "Get vector index meta failed");
+  }
+
+  if (kv->value().empty()) {
+    return butil::Status();
+  }
+
+  pb::store_internal::VectorIndexMeta meta;
+  if (meta.ParsePartialFromArray(kv->value().data(), kv->value().size())) {
+    version_ = meta.version();
+    vector_index_type_ = static_cast<pb::common::VectorIndexType>(meta.type());
+    SetApplyLogId(meta.apply_log_id());
+    SetSnapshotLogId(meta.snapshot_log_id());
+  } else {
+    DINGO_LOG(WARNING) << fmt::format("[vector_index.wrapper][index_id({})] prase vector index meta failed.", Id());
+  }
+
+  return butil::Status();
+}
+
+uint64_t VectorIndexWrapper::ApplyLogId() { return apply_log_id_.load(); }
+
+void VectorIndexWrapper::SetApplyLogId(uint64_t apply_log_id) { apply_log_id_.store(apply_log_id); }
+
+void VectorIndexWrapper::SaveApplyLogId(uint64_t apply_log_id) {
+  SetApplyLogId(apply_log_id);
+  SaveMeta();
+}
+
+uint64_t VectorIndexWrapper::SnapshotLogId() { return snapshot_log_id_.load(); }
+
+void VectorIndexWrapper::SetSnapshotLogId(uint64_t snapshot_log_id) { snapshot_log_id_.store(snapshot_log_id); }
+void VectorIndexWrapper::SaveSnapshotLogId(uint64_t snapshot_log_id) {
+  SetSnapshotLogId(snapshot_log_id);
+  SaveMeta();
+}
+
+bool VectorIndexWrapper::IsSwitchingVectorIndex() { return is_switching_vector_index_.load(); }
+
+void VectorIndexWrapper::SetIsSwitchingVectorIndex(bool is_switching) {
+  is_switching_vector_index_.store(is_switching);
+}
+
+void VectorIndexWrapper::UpdateVectorIndex(VectorIndexPtr vector_index) {
+  // Check vector index is stop
+  if (IsStop()) {
+    DINGO_LOG(WARNING) << fmt::format("[vector_index.wrapper][index_id({})] vector index is stop.", Id());
+    return;
+  }
+
+  {
+    BAIDU_SCOPED_LOCK(vector_index_mutex_);
+
+    int old_active_index = active_index_.load();
+    int new_active_index = old_active_index == 0 ? 1 : 0;
+    vector_indexs_[new_active_index] = vector_index;
+    active_index_.store(new_active_index);
+    share_vector_index_ = nullptr;
+    ready_.store(true);
+    ++version_;
+
+    if (ApplyLogId() < vector_index->ApplyLogId()) {
+      SetApplyLogId(vector_index->ApplyLogId());
+    }
+    if (SnapshotLogId() < vector_index->SnapshotLogId()) {
+      SetSnapshotLogId(vector_index->SnapshotLogId());
+    }
+
+    vector_indexs_[old_active_index] = nullptr;
+
+    SaveMeta();
+  }
+}
+
+void VectorIndexWrapper::ClearVectorIndex() {
+  DINGO_LOG(INFO) << fmt::format("[vector_index.wrapper][index_id({})] Clear all vector index", Id());
+
+  BAIDU_SCOPED_LOCK(vector_index_mutex_);
+
+  ready_.store(false);
+  vector_indexs_[0] = nullptr;
+  vector_indexs_[1] = nullptr;
+}
+
+VectorIndexPtr VectorIndexWrapper::GetOwnVectorIndex() { return vector_indexs_[active_index_.load()]; }
+
+VectorIndexPtr VectorIndexWrapper::GetVectorIndex() {
+  if (share_vector_index_ != nullptr) {
+    return share_vector_index_;
+  }
+
+  return GetOwnVectorIndex();
+}
+
+VectorIndexPtr VectorIndexWrapper::ShareVectorIndex() { return share_vector_index_; }
+
+void VectorIndexWrapper::SetShareVectorIndex(VectorIndexPtr vector_index) { share_vector_index_ = vector_index; }
+
+bool VectorIndexWrapper::ExecuteTask(TaskRunnable* task) {
+  if (worker_ == nullptr) {
+    return false;
+  }
+  return worker_->Execute(task);
+}
+
+int32_t VectorIndexWrapper::GetDimension() {
+  auto vector_index = GetVectorIndex();
+  if (vector_index == nullptr) {
+    return 0;
+  }
+  return vector_index->GetDimension();
+}
+
+butil::Status VectorIndexWrapper::GetCount(uint64_t& count) {
+  auto vector_index = GetVectorIndex();
+  if (vector_index == nullptr) {
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is disable.", Id());
+  }
+
+  return vector_index->GetCount(count);
+}
+
+butil::Status VectorIndexWrapper::GetDeletedCount(uint64_t& deleted_count) {
+  auto vector_index = GetVectorIndex();
+  if (vector_index == nullptr) {
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is disable.", Id());
+  }
+
+  return vector_index->GetDeletedCount(deleted_count);
+}
+
+butil::Status VectorIndexWrapper::GetMemorySize(uint64_t& memory_size) {
+  auto vector_index = GetVectorIndex();
+  if (vector_index == nullptr) {
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is disable.", Id());
+  }
+
+  return vector_index->GetMemorySize(memory_size);
+}
+
+bool VectorIndexWrapper::IsExceedsMaxElements() {
+  auto vector_index = GetVectorIndex();
+  if (vector_index == nullptr) {
+    return true;
+  }
+  return vector_index->IsExceedsMaxElements();
+}
+
+bool VectorIndexWrapper::NeedToRebuild() {
+  if (Type() == pb::common::VECTOR_INDEX_TYPE_FLAT) {
+    return false;
+  }
+  auto vector_index = GetOwnVectorIndex();
+  if (vector_index == nullptr) {
+    return false;
+  }
+  uint64_t element_count = 0, deleted_count = 0;
+  auto status = vector_index->GetCount(element_count);
+  if (!status.ok()) {
+    return false;
+  }
+  status = vector_index->GetDeletedCount(deleted_count);
+  if (!status.ok()) {
+    return false;
+  }
+
+  if (element_count == 0 || deleted_count == 0) {
+    return false;
+  }
+
+  return (deleted_count > 0 && deleted_count > element_count / 2);
+}
+
+bool VectorIndexWrapper::NeedToSave(uint64_t last_save_log_behind) {
+  if (Type() == pb::common::VECTOR_INDEX_TYPE_FLAT) {
+    return false;
+  }
+  auto vector_index = GetOwnVectorIndex();
+  if (vector_index == nullptr) {
+    return false;
+  }
+  uint64_t element_count = 0, deleted_count = 0;
+  auto status = vector_index->GetCount(element_count);
+  if (!status.ok()) {
+    return false;
+  }
+  status = vector_index->GetDeletedCount(deleted_count);
+  if (!status.ok()) {
+    return false;
+  }
+
+  if (element_count == 0 && deleted_count == 0) {
+    DINGO_LOG(INFO) << fmt::format(
+        "[vector_index.wrapper][index_id({})] vector index need_to_save=false: element count is 0 and deleted count is "
+        "0, element_count={} "
+        "deleted_count={}",
+        Id(), element_count, deleted_count);
+    return false;
+  }
+
+  if (SnapshotLogId() == 0) {
+    DINGO_LOG(INFO) << fmt::format(
+        "[vector_index.wrapper][index_id({})] vector index need_to_save=true: snapshot_log_id is 0", Id());
+    last_save_write_key_count_ = write_key_count_;
+    return true;
+  }
+
+  if (last_save_log_behind > FLAGS_hnsw_need_save_count) {
+    DINGO_LOG(INFO) << fmt::format(
+        "[vector_index.wrapper][index_id({})] vector index need_to_save=true: last_save_log_behind={} "
+        "FLAGS_hnsw_need_save_count={}",
+        Id(), last_save_log_behind, FLAGS_hnsw_need_save_count);
+    last_save_write_key_count_ = write_key_count_;
+    return true;
+  }
+
+  if ((write_key_count_ - last_save_write_key_count_) >= save_snapshot_threshold_write_key_num_) {
+    DINGO_LOG(INFO) << fmt::format(
+        "[vector_index.wrapper][index_id({})] vector index need_to_save=true: write_key_count {}/{}/{}", Id(),
+        write_key_count_, last_save_write_key_count_, save_snapshot_threshold_write_key_num_);
+    last_save_write_key_count_ = write_key_count_;
+    return true;
+  }
+
+  DINGO_LOG(INFO) << fmt::format(
+      "[vector_index.wrapper][index_id({})] vector index need_to_save=false: last_save_log_behind={} "
+      "hnsw_need_save_count={} write_key_count={}/{}/{}",
+      Id(), last_save_log_behind, FLAGS_hnsw_need_save_count, write_key_count_, last_save_write_key_count_,
+      save_snapshot_threshold_write_key_num_);
+
+  return false;
+}
+
+butil::Status VectorIndexWrapper::Add(const std::vector<pb::common::VectorWithId>& vector_with_ids) {
+  if (!IsReady()) {
+    DINGO_LOG(WARNING) << fmt::format("[vector_index.wrapper][index_id({})] vector index is disable.", Id());
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is disable.", Id());
+  }
+
+  // Switch vector index wait
+  int count = 0;
+  while (IsSwitchingVectorIndex()) {
+    DINGO_LOG(INFO) << fmt::format("[vector_index.wrapper][index_id({})] vector index switch waiting, count({})", Id(),
+                                   ++count);
+    bthread_usleep(1000 * 100);
+  }
+
+  auto vector_index = GetVectorIndex();
+  if (vector_index == nullptr) {
+    DINGO_LOG(WARNING) << fmt::format("[vector_index.wrapper][index_id({})] vector index is disable.", Id());
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is disable.", Id());
+  }
+
+  auto status = vector_index->Add(vector_with_ids);
+  if (status.ok()) {
+    write_key_count_ += vector_with_ids.size();
+  }
+  return status;
+}
+
+butil::Status VectorIndexWrapper::Upsert(const std::vector<pb::common::VectorWithId>& vector_with_ids) {
+  if (!IsReady()) {
+    DINGO_LOG(WARNING) << fmt::format("[vector_index.wrapper][index_id({})] vector index is disable.", Id());
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is disable.", Id());
+  }
+
+  // Switch vector index wait
+  int count = 0;
+  while (IsSwitchingVectorIndex()) {
+    DINGO_LOG(INFO) << fmt::format("[vector_index.wrapper][index_id({})] vector index switch waiting, count({})", Id(),
+                                   ++count);
+    bthread_usleep(1000 * 100);
+  }
+
+  auto vector_index = GetVectorIndex();
+  if (vector_index == nullptr) {
+    DINGO_LOG(WARNING) << fmt::format("[vector_index.wrapper][index_id({})] vector index is disable.", Id());
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is disable.", Id());
+  }
+
+  auto status = vector_index->Upsert(vector_with_ids);
+  if (status.ok()) {
+    write_key_count_ += vector_with_ids.size();
+  }
+  return status;
+}
+
+butil::Status VectorIndexWrapper::Delete(const std::vector<uint64_t>& delete_ids) {
+  if (!IsReady()) {
+    DINGO_LOG(WARNING) << fmt::format("[vector_index.wrapper][index_id({})] vector index is disable.", Id());
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is disable.", Id());
+  }
+
+  // Switch vector index wait
+  int count = 0;
+  while (IsSwitchingVectorIndex()) {
+    DINGO_LOG(INFO) << fmt::format("[vector_index.wrapper][index_id({})] vector index switch waiting, count({})", Id(),
+                                   ++count);
+    bthread_usleep(1000 * 100);
+  }
+
+  auto vector_index = GetVectorIndex();
+  if (vector_index == nullptr) {
+    DINGO_LOG(WARNING) << fmt::format("[vector_index.wrapper][index_id({})] vector index is disable.", Id());
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is disable.", Id());
+  }
+
+  auto status = vector_index->Delete(delete_ids);
+  if (status.ok()) {
+    write_key_count_ += delete_ids.size();
+  }
+  return status;
+}
+
+butil::Status VectorIndexWrapper::Search(std::vector<pb::common::VectorWithId> vector_with_ids, uint32_t topk,
+                                         std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters,
+                                         std::vector<pb::index::VectorWithDistanceResult>& results, bool reconstruct) {
+  if (!IsReady()) {
+    DINGO_LOG(WARNING) << fmt::format("[vector_index.wrapper][index_id({})] vector index is disable.", Id());
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is disable.", Id());
+  }
+  auto vector_index = GetVectorIndex();
+  if (vector_index == nullptr) {
+    DINGO_LOG(WARNING) << fmt::format("[vector_index.wrapper][index_id({})] vector index is disable.", Id());
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is disable.", Id());
+  }
+
+  return vector_index->Search(vector_with_ids, topk, filters, results, reconstruct);
 }
 
 }  // namespace dingodb

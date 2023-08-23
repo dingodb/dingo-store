@@ -42,7 +42,7 @@ namespace store {
 // Warp pb region for atomic/metux
 class Region {
  public:
-  Region() : is_switching_vector_index_(false) { bthread_mutex_init(&mutex_, nullptr); };
+  Region() : temporary_disable_split_(false) { bthread_mutex_init(&mutex_, nullptr); };
   ~Region() { bthread_mutex_destroy(&mutex_); }
 
   Region(const Region&) = delete;
@@ -50,6 +50,8 @@ class Region {
 
   static std::shared_ptr<Region> New();
   static std::shared_ptr<Region> New(const pb::common::RegionDefinition& definition);
+
+  bool Recover();
 
   std::string Serialize();
   void DeSerialize(const std::string& data);
@@ -85,25 +87,33 @@ class Region {
   bool DisableSplit();
   void SetDisableSplit(bool disable_split);
 
-  std::shared_ptr<VectorIndex> ShareVectorIndex() { return share_vector_index_; }
-  void SetShareVectorIndex(std::shared_ptr<VectorIndex> vector_index) { share_vector_index_ = vector_index; }
+  bool TemporaryDisableSplit();
+  void SetTemporaryDisableSplit(bool disable_split);
+
+  uint64_t LastSplitTimestamp();
+  void UpdateLastSplitTimestamp();
+
+  uint64_t ParentId();
+  void SetParentId(uint64_t region_id);
+
+  std::vector<pb::store_internal::RegionSplitRecord> Childs();
+  void AddChild(pb::store_internal::RegionSplitRecord& record);
 
   uint64_t PartitionId();
 
   const pb::store_internal::Region& InnerRegion() const { return inner_region_; }
 
-  bool IsSwitchingVectorIndex() { return is_switching_vector_index_.load(); }
-  void SetIsSwitchingVectorIndex(bool is_switching) { is_switching_vector_index_.store(is_switching); }
+  VectorIndexWrapperPtr VectorIndexWrapper() { return vector_index_wapper_; }
+  void SetVectorIndexWrapper(VectorIndexWrapperPtr vector_index_wapper) { vector_index_wapper_ = vector_index_wapper; }
 
  private:
   bthread_mutex_t mutex_;
   pb::store_internal::Region inner_region_;
   std::atomic<pb::common::StoreRegionState> state_;
-  // Share vector index with parent region, when spliting region.
-  std::shared_ptr<VectorIndex> share_vector_index_;
 
-  // Indicate switching vector index.
-  std::atomic<bool> is_switching_vector_index_;
+  std::atomic<bool> temporary_disable_split_;
+
+  VectorIndexWrapperPtr vector_index_wapper_;
 };
 
 using RegionPtr = std::shared_ptr<Region>;

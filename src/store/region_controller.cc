@@ -38,7 +38,7 @@
 #include "store/heartbeat.h"
 #include "vector/codec.h"
 #include "vector/vector_index_hnsw.h"
-#include "vector/vector_index_snapshot.h"
+#include "vector/vector_index_snapshot_manager.h"
 
 namespace dingodb {
 
@@ -211,19 +211,9 @@ butil::Status DeleteRegionTask::DeleteRegion(std::shared_ptr<Context> ctx, uint6
 
   // Index region
   if (Server::GetInstance()->GetRole() == pb::common::ClusterRole::INDEX) {
-    auto vector_index_manager = Server::GetInstance()->GetVectorIndexManager();
-    if (vector_index_manager != nullptr) {
-      auto vector_index = vector_index_manager->GetVectorIndex(region_id);
-      if (vector_index != nullptr) {
-        // Delete vector index
-        vector_index_manager->DeleteVectorIndex(vector_index->Id());
-      }
-
-      // Delete vector index snapshot
-      auto snapshot_manager = vector_index_manager->GetVectorIndexSnapshotManager();
-      if (snapshot_manager != nullptr) {
-        snapshot_manager->DeleteSnapshots(region_id);
-      }
+    auto vector_index_wrapper = region->VectorIndexWrapper();
+    if (vector_index_wrapper != nullptr) {
+      vector_index_wrapper->Destroy();
     }
   }
 
@@ -677,22 +667,15 @@ butil::Status SnapshotVectorIndexTask::SaveSnapshot(std::shared_ptr<Context> /*c
     return butil::Status(pb::error::EREGION_NOT_FOUND, fmt::format("Not found region {}", vector_index_id));
   }
 
-  auto vector_index_manager = Server::GetInstance()->GetVectorIndexManager();
-  if (vector_index_manager == nullptr) {
-    return butil::Status(pb::error::EINTERNAL, "Vector index manager is nullptr");
-  }
-
-  auto vector_index = vector_index_manager->GetVectorIndex(vector_index_id);
-  if (vector_index == nullptr) {
+  auto vector_index_wrapper = region->VectorIndexWrapper();
+  if (vector_index_wrapper == nullptr || vector_index_wrapper->GetOwnVectorIndex() == nullptr) {
     return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, fmt::format("Not found vector index {}", vector_index_id));
   }
 
-  uint64_t snapshot_log_index = 0;
-  auto status = VectorIndexSnapshotManager::SaveVectorIndexSnapshot(vector_index, snapshot_log_index);
+  auto status = VectorIndexManager::SaveVectorIndex(vector_index_wrapper);
   if (!status.ok()) {
     return status;
   }
-  vector_index_manager->UpdateSnapshotLogId(vector_index, snapshot_log_index);
 
   return butil::Status();
 }
@@ -751,12 +734,11 @@ butil::Status UpdateDefinitionTask::UpdateDefinition(std::shared_ptr<Context> /*
     return butil::Status(pb::error::EREGION_NOT_FOUND, fmt::format("Not found region {}", region_id));
   }
 
-  auto vector_index_manager = Server::GetInstance()->GetVectorIndexManager();
-  if (vector_index_manager == nullptr) {
-    return butil::Status(pb::error::EINTERNAL, "Vector index manager is nullptr");
+  auto vector_index_wrapper = region->VectorIndexWrapper();
+  if (vector_index_wrapper == nullptr) {
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, fmt::format("Not found vector index {}", region_id));
   }
-
-  auto vector_index = vector_index_manager->GetVectorIndex(region_id);
+  auto vector_index = vector_index_wrapper->GetOwnVectorIndex();
   if (vector_index == nullptr) {
     return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, fmt::format("Not found vector index {}", region_id));
   }
@@ -851,7 +833,6 @@ butil::Status HoldVectorIndexTask::PreValidateHoldVectorIndex(const pb::coordina
 }
 
 butil::Status HoldVectorIndexTask::ValidateHoldVectorIndex(uint64_t region_id) {
-  // Validate region exist.
   auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
   auto region = store_region_meta->GetRegion(region_id);
   if (region == nullptr) {
@@ -872,18 +853,26 @@ butil::Status HoldVectorIndexTask::ValidateHoldVectorIndex(uint64_t region_id) {
 }
 
 butil::Status HoldVectorIndexTask::HoldVectorIndex(std::shared_ptr<Context> ctx, uint64_t region_id, bool is_hold) {
+  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+  auto region = store_region_meta->GetRegion(region_id);
+  if (region == nullptr) {
+    return butil::Status(pb::error::EREGION_NOT_FOUND, fmt::format("Not found region {}", region_id));
+  }
+
   auto status = ValidateHoldVectorIndex(region_id);
   if (!status.ok()) {
     return status;
   }
 
-  auto vector_index_manager = Server::GetInstance()->GetVectorIndexManager();
-  auto vector_index = vector_index_manager->GetVectorIndex(region_id);
+  auto vector_index_wrapper = region->VectorIndexWrapper();
+  if (vector_index_wrapper == nullptr) {
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, fmt::format("Not found vector index {}", region_id));
+  }
 
   if (is_hold) {
     // Load vector index.
-    if (vector_index == nullptr) {
-      auto status = vector_index_manager->LoadOrBuildVectorIndex(region_id);
+    if (!vector_index_wrapper->IsReady()) {
+      auto status = VectorIndexManager::LoadOrBuildVectorIndex(vector_index_wrapper);
       if (!status.ok()) {
         DINGO_LOG(ERROR) << fmt::format(
             "[vector_index.hold][index_id({})] load or build vector index failed, error: {}", region_id,
@@ -895,9 +884,9 @@ butil::Status HoldVectorIndexTask::HoldVectorIndex(std::shared_ptr<Context> ctx,
     }
   } else {
     // Delete vector index.
-    if (vector_index != nullptr) {
+    if (vector_index_wrapper->IsReady()) {
       DINGO_LOG(INFO) << fmt::format("[vector_index.hold][region({})] delete vector index.", region_id);
-      vector_index_manager->DeleteVectorIndex(region_id);
+      vector_index_wrapper->ClearVectorIndex();
     }
   }
 

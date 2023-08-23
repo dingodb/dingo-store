@@ -105,9 +105,9 @@ TEST_F(VectorIndexSnapshotTest, ParseReaderId) {  // NOLINT
 }
 
 TEST_F(VectorIndexSnapshotTest, AddSnapshot) {  // NOLINT
-  auto snapshot_manager = std::make_shared<dingodb::VectorIndexSnapshotManager>();
+  auto snapshot_set = std::make_shared<dingodb::vector_index::SnapshotMetaSet>(100);
 
-  EXPECT_EQ(nullptr, snapshot_manager->GetLastSnapshot(100));
+  EXPECT_EQ(nullptr, snapshot_set->GetLastSnapshot());
 
   {
     uint64_t vector_index_id = 100;
@@ -115,8 +115,8 @@ TEST_F(VectorIndexSnapshotTest, AddSnapshot) {  // NOLINT
     std::string path = fmt::format("/tmp/{}/snapshot_{:020}", vector_index_id, snapshot_log_id);
     auto snapshot = dingodb::vector_index::SnapshotMeta::New(vector_index_id, path);
 
-    snapshot_manager->AddSnapshot(snapshot);
-    EXPECT_EQ(snapshot, snapshot_manager->GetLastSnapshot(vector_index_id));
+    snapshot_set->AddSnapshot(snapshot);
+    EXPECT_EQ(snapshot, snapshot_set->GetLastSnapshot());
   }
 
   {
@@ -125,9 +125,9 @@ TEST_F(VectorIndexSnapshotTest, AddSnapshot) {  // NOLINT
     std::string path = fmt::format("/tmp/{}/snapshot_{:020}", vector_index_id, snapshot_log_id);
     auto snapshot = dingodb::vector_index::SnapshotMeta::New(vector_index_id, path);
 
-    snapshot_manager->AddSnapshot(snapshot);
-    EXPECT_EQ(snapshot, snapshot_manager->GetLastSnapshot(vector_index_id));
-    EXPECT_EQ(2, snapshot_manager->GetSnapshots(vector_index_id).size());
+    snapshot_set->AddSnapshot(snapshot);
+    EXPECT_EQ(snapshot, snapshot_set->GetLastSnapshot());
+    EXPECT_EQ(1, snapshot_set->GetSnapshots().size());
   }
 
   {
@@ -136,8 +136,8 @@ TEST_F(VectorIndexSnapshotTest, AddSnapshot) {  // NOLINT
     std::string path = fmt::format("/tmp/{}/snapshot_{:020}", vector_index_id, snapshot_log_id);
     auto snapshot = dingodb::vector_index::SnapshotMeta::New(vector_index_id, path);
 
-    snapshot_manager->AddSnapshot(snapshot);
-    EXPECT_EQ(snapshot, snapshot_manager->GetLastSnapshot(vector_index_id));
+    snapshot_set->AddSnapshot(snapshot);
+    EXPECT_EQ(snapshot, snapshot_set->GetLastSnapshot());
   }
 
   {
@@ -146,8 +146,8 @@ TEST_F(VectorIndexSnapshotTest, AddSnapshot) {  // NOLINT
     std::string path = fmt::format("/tmp/{}/snapshot_{:020}", vector_index_id, snapshot_log_id);
     auto snapshot = dingodb::vector_index::SnapshotMeta::New(vector_index_id, path);
 
-    snapshot_manager->AddSnapshot(snapshot);
-    EXPECT_EQ(snapshot, snapshot_manager->GetLastSnapshot(vector_index_id));
-    EXPECT_EQ(2, snapshot_manager->GetSnapshots(vector_index_id).size());
+    snapshot_set->AddSnapshot(snapshot);
+    EXPECT_EQ(snapshot, snapshot_set->GetLastSnapshot());
+    EXPECT_EQ(1, snapshot_set->GetSnapshots().size());
   }
 }

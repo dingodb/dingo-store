@@ -30,6 +30,7 @@
 #include "bthread/types.h"
 #include "butil/status.h"
 #include "common/logging.h"
+#include "common/runnable.h"
 #include "common/synchronization.h"
 #include "faiss/Index.h"
 #include "faiss/MetricType.h"
@@ -39,6 +40,7 @@
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "proto/index.pb.h"
+#include "vector/vector_index_snapshot.h"
 
 namespace dingodb {
 
@@ -47,18 +49,8 @@ namespace dingodb {
 // But one region can refer other vector index when region split.
 class VectorIndex {
  public:
-  VectorIndex(uint64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
-              uint64_t save_snapshot_threshold_write_key_num)
-      : id(id),
-        version(1),
-        status(pb::common::VECTOR_INDEX_STATUS_NONE),
-        snapshot_doing(false),
-        apply_log_index(0),
-        snapshot_log_index(0),
-        write_key_count(0),
-        last_save_write_key_count(0),
-        save_snapshot_threshold_write_key_num(save_snapshot_threshold_write_key_num),
-        vector_index_parameter(vector_index_parameter) {
+  VectorIndex(uint64_t id, const pb::common::VectorIndexParameter& vector_index_parameter)
+      : id(id), apply_log_id(0), snapshot_log_id(0), vector_index_parameter(vector_index_parameter) {
     vector_index_type = vector_index_parameter.vector_index_type();
   }
 
@@ -164,16 +156,11 @@ class VectorIndex {
     std::vector<faiss::idx_t>* id_map_{nullptr};
   };
 
-  pb::common::VectorIndexType VectorIndexType() const;
-
   virtual int32_t GetDimension() = 0;
   virtual butil::Status GetCount([[maybe_unused]] uint64_t& count);
   virtual butil::Status GetDeletedCount([[maybe_unused]] uint64_t& deleted_count);
   virtual butil::Status GetMemorySize([[maybe_unused]] uint64_t& memory_size);
-
-  virtual butil::Status NeedToRebuild([[maybe_unused]] bool& need_to_rebuild,
-                                      [[maybe_unused]] uint64_t last_save_log_behind);
-  virtual butil::Status NeedToSave([[maybe_unused]] bool& need_to_save, [[maybe_unused]] uint64_t last_save_log_behind);
+  virtual bool IsExceedsMaxElements() = 0;
 
   virtual butil::Status Add(const std::vector<pb::common::VectorWithId>& vector_with_ids) = 0;
 
@@ -196,53 +183,162 @@ class VectorIndex {
 
   uint64_t Id() const { return id; }
 
-  uint64_t Version() const { return version; }
-  void SetVersion(uint64_t version) { this->version = version; }
+  pb::common::VectorIndexType VectorIndexType() { return vector_index_type; }
 
-  pb::common::RegionVectorIndexStatus Status() { return status.load(); }
-  void SetStatus(pb::common::RegionVectorIndexStatus status) {
-    if (this->status.load() != pb::common::VECTOR_INDEX_STATUS_DELETE) {
-      this->status.store(status);
-    }
-  }
+  uint64_t ApplyLogId() const;
+  void SetApplyLogId(uint64_t apply_log_id);
 
-  bool SnapshotDoing() { return snapshot_doing.load(std::memory_order_relaxed); }
-  void SetSnapshotDoing(bool doing) { snapshot_doing.store(doing, std::memory_order_relaxed); }
-
-  uint64_t ApplyLogIndex() const;
-  void SetApplyLogIndex(uint64_t apply_log_index);
-
-  uint64_t SnapshotLogIndex() const;
-  void SetSnapshotLogIndex(uint64_t snapshot_log_index);
+  uint64_t SnapshotLogId() const;
+  void SetSnapshotLogId(uint64_t snapshot_log_id);
 
  protected:
   // vector index id
   uint64_t id;
-
-  // vector index version
-  uint64_t version;
-
-  // status
-  std::atomic<pb::common::RegionVectorIndexStatus> status;
-
-  // control do snapshot concurrency
-  std::atomic<bool> snapshot_doing;
-
-  // apply max log index
-  std::atomic<uint64_t> apply_log_index;
-  // last snapshot log index
-  std::atomic<uint64_t> snapshot_log_index;
-
-  // write(add/update/delete) key count
-  uint64_t write_key_count;
-  uint64_t last_save_write_key_count;
-  // save snapshot threshold write key num
-  uint64_t save_snapshot_threshold_write_key_num;
-
+  // vector index type, e.g. hnsw/flat
   pb::common::VectorIndexType vector_index_type;
+
+  // apply max log id
+  std::atomic<uint64_t> apply_log_id;
+  // last snapshot log id
+  std::atomic<uint64_t> snapshot_log_id;
 
   pb::common::VectorIndexParameter vector_index_parameter;
 };
+
+using VectorIndexPtr = std::shared_ptr<VectorIndex>;
+
+class VectorIndexWrapper {
+ public:
+  VectorIndexWrapper(uint64_t id, pb::common::VectorIndexParameter index_parameter,
+                     int64_t save_snapshot_threshold_write_key_num)
+      : id_(id),
+        version_(0),
+        vector_index_type_(index_parameter.vector_index_type()),
+        ready_(false),
+        stop_(false),
+        is_switching_vector_index_(false),
+        apply_log_id_(0),
+        snapshot_log_id_(0),
+        active_index_(0),
+        index_parameter_(index_parameter),
+        write_key_count_(0),
+        last_save_write_key_count_(0),
+        save_snapshot_threshold_write_key_num_(save_snapshot_threshold_write_key_num) {
+    worker_ = Worker::New();
+    snapshot_set_ = vector_index::SnapshotMetaSet::New(id);
+    bthread_mutex_init(&vector_index_mutex_, nullptr);
+  }
+  ~VectorIndexWrapper();
+
+  static std::shared_ptr<VectorIndexWrapper> New(uint64_t id, pb::common::VectorIndexParameter index_parameter);
+
+  bool Init();
+  void Destroy();
+  bool Recover();
+
+  butil::Status SaveMeta();
+  butil::Status LoadMeta();
+
+  uint64_t Id() const { return id_; }
+
+  uint64_t Version() const { return version_; }
+  void SetVersion(uint64_t version) { version_ = version; }
+
+  bool IsReady() { return ready_.load(); }
+
+  bool IsStop() { return stop_.load(); }
+
+  pb::common::VectorIndexType Type() { return vector_index_type_; }
+
+  pb::common::VectorIndexParameter IndexParameter() { return index_parameter_; }
+
+  uint64_t ApplyLogId();
+  void SetApplyLogId(uint64_t apply_log_id);
+  void SaveApplyLogId(uint64_t apply_log_id);
+
+  uint64_t SnapshotLogId();
+  void SetSnapshotLogId(uint64_t snapshot_log_id);
+  void SaveSnapshotLogId(uint64_t snapshot_log_id);
+
+  bool IsSwitchingVectorIndex();
+  void SetIsSwitchingVectorIndex(bool is_switching);
+
+  vector_index::SnapshotMetaSetPtr SnapshotSet() { return snapshot_set_; }
+
+  void UpdateVectorIndex(VectorIndexPtr vector_index);
+  void ClearVectorIndex();
+
+  VectorIndexPtr GetOwnVectorIndex();
+  VectorIndexPtr GetVectorIndex();
+
+  VectorIndexPtr ShareVectorIndex();
+  void SetShareVectorIndex(VectorIndexPtr vector_index);
+
+  bool ExecuteTask(TaskRunnable* task);
+
+  int32_t GetDimension();
+  butil::Status GetCount(uint64_t& count);
+  butil::Status GetDeletedCount(uint64_t& deleted_count);
+  butil::Status GetMemorySize(uint64_t& memory_size);
+  bool IsExceedsMaxElements();
+
+  bool NeedToRebuild();
+  bool NeedToSave(uint64_t last_save_log_behind);
+
+  butil::Status Add(const std::vector<pb::common::VectorWithId>& vector_with_ids);
+  butil::Status Upsert(const std::vector<pb::common::VectorWithId>& vector_with_ids);
+  butil::Status Delete(const std::vector<uint64_t>& delete_ids);
+  butil::Status Search(std::vector<pb::common::VectorWithId> vector_with_ids, uint32_t topk,
+                       std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters,
+                       std::vector<pb::index::VectorWithDistanceResult>& results, bool reconstruct = false);
+
+ private:
+  // vector index id
+  uint64_t id_;
+  // vector index version
+  uint64_t version_;
+  // vector index is ready
+  std::atomic<bool> ready_;
+  // stop vector index
+  std::atomic<bool> stop_;
+  // status
+  std::atomic<pb::common::RegionVectorIndexStatus> status_;
+  // vector index type, e.g. hnsw/flat
+  pb::common::VectorIndexType vector_index_type_;
+
+  // vector index definition parameter
+  pb::common::VectorIndexParameter index_parameter_;
+
+  // apply max log id
+  std::atomic<uint64_t> apply_log_id_;
+  // last snapshot log id
+  std::atomic<uint64_t> snapshot_log_id_;
+
+  // Indicate switching vector index.
+  std::atomic<bool> is_switching_vector_index_;
+
+  // Active vector index position
+  std::atomic<int> active_index_;
+  VectorIndexPtr vector_indexs_[2] = {nullptr, nullptr};
+  bthread_mutex_t vector_index_mutex_;
+
+  // Share other vector index.
+  VectorIndexPtr share_vector_index_;
+
+  // Snapshot set
+  vector_index::SnapshotMetaSetPtr snapshot_set_;
+
+  // Run long time task, e.g. rebuild
+  WorkerPtr worker_;
+
+  // write(add/update/delete) key count
+  uint64_t write_key_count_;
+  uint64_t last_save_write_key_count_;
+  // save snapshot threshold write key num
+  uint64_t save_snapshot_threshold_write_key_num_;
+};
+
+using VectorIndexWrapperPtr = std::shared_ptr<VectorIndexWrapper>;
 
 }  // namespace dingodb
 

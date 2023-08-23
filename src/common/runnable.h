@@ -37,6 +37,8 @@ class Worker {
   Worker() = default;
   ~Worker() = default;
 
+  static std::shared_ptr<Worker> New() { return std::make_shared<Worker>(); }
+
   bool Init();
   void Destroy();
 
@@ -47,6 +49,8 @@ class Worker {
   std::atomic<bool> is_available_;
   bthread::ExecutionQueueId<TaskRunnable*> queue_id_;  // NOLINT
 };
+
+using WorkerPtr = std::shared_ptr<Worker>;
 
 }  // namespace dingodb
 

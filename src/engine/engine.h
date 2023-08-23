@@ -101,7 +101,7 @@ class Engine {
       bool is_reverse{};
       bool use_scalar_filter{};
 
-      std::shared_ptr<VectorIndex> vector_index;
+      VectorIndexWrapperPtr vector_index;
     };
 
     virtual butil::Status VectorBatchSearch(std::shared_ptr<VectorReader::Context> ctx,
@@ -115,7 +115,7 @@ class Engine {
     virtual butil::Status VectorScanQuery(std::shared_ptr<VectorReader::Context> ctx,
                                           std::vector<pb::common::VectorWithId>& vector_with_ids) = 0;
     virtual butil::Status VectorGetRegionMetrics(uint64_t region_id, const pb::common::Range& region_range,
-                                                 std::shared_ptr<VectorIndex> vector_index,
+                                                 VectorIndexWrapperPtr vector_index,
                                                  pb::common::VectorIndexMetrics& region_metrics) = 0;
 
     // This function is for testing only

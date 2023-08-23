@@ -180,6 +180,7 @@ class Helper {
   static uint64_t TimestampMs();
   // second timestamp
   static uint64_t Timestamp();
+  static std::string NowTime();
 
   // format millisecond timestamp
   static std::string FormatMsTime(uint64_t timestamp, const std::string& format);

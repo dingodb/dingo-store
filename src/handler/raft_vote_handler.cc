@@ -18,7 +18,7 @@
 #include "meta/store_meta_manager.h"
 #include "proto/common.pb.h"
 #include "server/server.h"
-#include "vector/vector_index_snapshot.h"
+#include "vector/vector_index_snapshot_manager.h"
 
 namespace dingodb {
 
@@ -28,21 +28,20 @@ void VectorIndexLeaderStartHandler::Handle(store::RegionPtr region, uint64_t) {
   }
 
   // Load vector index.
-  auto vector_index_manager = Server::GetInstance()->GetVectorIndexManager();
-  auto vector_index = vector_index_manager->GetVectorIndex(region->Id());
-  if (vector_index != nullptr) {
+  auto vector_index_wrapper = region->VectorIndexWrapper();
+  if (vector_index_wrapper->IsReady()) {
     DINGO_LOG(WARNING) << fmt::format("Vector index {} already exist, don't need load again.", region->Id());
   } else {
-    auto snapshot_manager = vector_index_manager->GetVectorIndexSnapshotManager();
-    if (!snapshot_manager->IsExistVectorIndexSnapshot(region->Id())) {
-      auto status = VectorIndexSnapshotManager::PullLastSnapshotFromPeers(region->Id());
+    auto snapshot_set = vector_index_wrapper->SnapshotSet();
+    if (!snapshot_set->IsExistLastSnapshot()) {
+      auto status = VectorIndexSnapshotManager::PullLastSnapshotFromPeers(snapshot_set);
       if (!status.ok()) {
         DINGO_LOG(ERROR) << fmt::format("Pull vector index {} last snapshot failed, error: {}", region->Id(),
                                         status.error_str());
       }
     }
 
-    auto status = vector_index_manager->LoadOrBuildVectorIndex(region);
+    auto status = VectorIndexManager::LoadOrBuildVectorIndex(vector_index_wrapper);
     if (!status.ok()) {
       DINGO_LOG(ERROR) << fmt::format("Load or build vector index failed, region {} error: {}", region->Id(),
                                       status.error_str());
@@ -63,7 +62,7 @@ void VectorIndexLeaderStopHandler::Handle(store::RegionPtr region, butil::Status
   }
 
   // Delete vector index.
-  Server::GetInstance()->GetVectorIndexManager()->DeleteVectorIndex(region->Id());
+  region->VectorIndexWrapper()->ClearVectorIndex();
 }
 
 void VectorIndexFollowerStartHandler::Handle(store::RegionPtr region, const braft::LeaderChangeContext &) {
@@ -79,12 +78,11 @@ void VectorIndexFollowerStartHandler::Handle(store::RegionPtr region, const braf
   }
 
   // Load vector index.
-  auto vector_index_manager = Server::GetInstance()->GetVectorIndexManager();
-  auto vector_index = vector_index_manager->GetVectorIndex(region->Id());
-  if (vector_index != nullptr) {
+  auto vector_index_wrapper = region->VectorIndexWrapper();
+  if (vector_index_wrapper->IsReady()) {
     DINGO_LOG(WARNING) << fmt::format("Vector index {} already exist, don't need load again.", region->Id());
   } else {
-    auto status = vector_index_manager->LoadOrBuildVectorIndex(region);
+    auto status = VectorIndexManager::LoadOrBuildVectorIndex(vector_index_wrapper);
     if (!status.ok()) {
       DINGO_LOG(ERROR) << fmt::format("Load or build vector index failed, region {} error: {}", region->Id(),
                                       status.error_str());

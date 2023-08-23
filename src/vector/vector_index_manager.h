@@ -29,85 +29,74 @@
 
 namespace dingodb {
 
+// Rebuild vector index task
+class RebuildVectorIndexTask : public TaskRunnable {
+ public:
+  RebuildVectorIndexTask(VectorIndexWrapperPtr vector_index_wrapper, bool force)
+      : vector_index_wrapper_(vector_index_wrapper), force_(force) {}
+  ~RebuildVectorIndexTask() override = default;
+
+  void Run() override;
+
+ private:
+  VectorIndexWrapperPtr vector_index_wrapper_;
+  bool force_;
+};
+
+// Save vector index task
+class SaveVectorIndexTask : public TaskRunnable {
+ public:
+  SaveVectorIndexTask(VectorIndexWrapperPtr vector_index_wrapper) : vector_index_wrapper_(vector_index_wrapper) {}
+  ~SaveVectorIndexTask() override = default;
+
+  void Run() override;
+
+ private:
+  VectorIndexWrapperPtr vector_index_wrapper_;
+};
+
+// Manage vector index, e.g. build/rebuild/save/load vector index.
 class VectorIndexManager {
  public:
   VectorIndexManager(std::shared_ptr<RawEngine> raw_engine, std::shared_ptr<MetaReader> meta_reader,
-                     std::shared_ptr<MetaWriter> meta_writer)
-      : raw_engine_(raw_engine), meta_reader_(meta_reader), meta_writer_(meta_writer) {
-    vector_index_snapshot_manager_ = std::make_shared<VectorIndexSnapshotManager>();
-    vector_indexs_.Init(1000);
-  }
+                     std::shared_ptr<MetaWriter> meta_writer) {}
 
   ~VectorIndexManager() = default;
 
-  bool Init(std::vector<store::RegionPtr> regions);
+  static bool Init(std::vector<store::RegionPtr> regions);
 
-  bool AddVectorIndex(uint64_t vector_index_id, const pb::common::IndexParameter& index_parameter);
-
-  void DeleteVectorIndex(uint64_t vector_index_id);
-
-  std::shared_ptr<VectorIndex> GetVectorIndex(uint64_t vector_index_id);
-  std::shared_ptr<VectorIndex> GetVectorIndex(store::RegionPtr region);
-  std::vector<std::shared_ptr<VectorIndex>> GetAllVectorIndex();
+  // Check whether should hold vector index.
+  static bool NeedHoldVectorIndex(uint64_t region_id);
 
   // Load vector index for already exist vector index at bootstrap.
   // Priority load from snapshot, if snapshot not exist then load from rocksdb.
-  butil::Status LoadOrBuildVectorIndex(uint64_t region_id);
-  butil::Status LoadOrBuildVectorIndex(store::RegionPtr region);
-  butil::Status ParallelLoadOrBuildVectorIndex(std::vector<store::RegionPtr> regions, int concurrency);
+  static butil::Status LoadOrBuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper);
+  // Parallel load or build vector index at server bootstrap.
+  static butil::Status ParallelLoadOrBuildVectorIndex(std::vector<store::RegionPtr> regions, int concurrency);
 
   // Save vector index snapshot.
-  butil::Status SaveVectorIndex(std::shared_ptr<VectorIndex> vector_index);
+  static butil::Status SaveVectorIndex(VectorIndexWrapperPtr vector_index_wrapper);
+  // Launch save vector index at execute queue.
+  static void LaunchSaveVectorIndex(VectorIndexWrapperPtr vector_index_wrapper);
 
   // Invoke when server runing.
-  butil::Status RebuildVectorIndex(store::RegionPtr region, bool need_save = true);
-  butil::Status AsyncRebuildVectorIndex(store::RegionPtr region, bool need_save = true);
+  static butil::Status RebuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper);
+  // Launch rebuild vector index at execute queue.
+  static void LaunchRebuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper, bool force);
 
-  // Update vector index apply log index.
-  void UpdateApplyLogId(std::shared_ptr<VectorIndex> vector_index, uint64_t log_index);
-  void UpdateApplyLogId(uint64_t vector_index_id, uint64_t log_index);
-
-  // Update vector index snapshot log index.
-  void UpdateSnapshotLogId(std::shared_ptr<VectorIndex> vector_index, uint64_t log_index);
-  void UpdateSnapshotLogId(uint64_t vector_index_id, uint64_t log_index);
-
-  butil::Status ScrubVectorIndex();
-
-  std::shared_ptr<VectorIndexSnapshotManager> GetVectorIndexSnapshotManager() { return vector_index_snapshot_manager_; }
-
-  void SaveApplyLogId(uint64_t vector_index_id, uint64_t apply_log_id);
-  butil::Status LoadApplyLogId(uint64_t vector_index_id, uint64_t& apply_log_id);
-  void SaveSnapshotLogId(uint64_t vector_index_id, uint64_t snapshot_log_id);
-  butil::Status LoadSnapshotLogId(uint64_t vector_index_id, uint64_t& snapshot_log_id);
+  static butil::Status ScrubVectorIndex();
 
  private:
-  butil::Status GetVectorIndexLogIndex(uint64_t vector_index_id, uint64_t& snapshot_log_index,
-                                       uint64_t& apply_log_index);
-
-  bool AddVectorIndex(std::shared_ptr<VectorIndex> vector_index, bool force = true);
-
-  // Build vector index with original all data(store rocksdb).
+  // Build vector index with original data(rocksdb).
   // Invoke when server starting.
-  std::shared_ptr<VectorIndex> BuildVectorIndex(store::RegionPtr region);
+  static std::shared_ptr<VectorIndex> BuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper);
 
   // Replay log to vector index.
   static butil::Status ReplayWalToVectorIndex(std::shared_ptr<VectorIndex> vector_index, uint64_t start_log_id,
                                               uint64_t end_log_id);
 
   // Scrub vector index.
-  butil::Status ScrubVectorIndex(store::RegionPtr region, bool need_rebuild, bool need_save);
-
-  // Read meta data from persistence storage.
-  std::shared_ptr<MetaReader> meta_reader_;
-  // Write meta data to persistence storage.
-  std::shared_ptr<MetaWriter> meta_writer_;
-
-  std::shared_ptr<RawEngine> raw_engine_;
-  // vector_index_id: vector_index
-  DingoSafeMap<uint64_t, std::shared_ptr<VectorIndex>> vector_indexs_;
-
-  // vector index snapshot manager
-  std::shared_ptr<VectorIndexSnapshotManager> vector_index_snapshot_manager_;
+  static butil::Status ScrubVectorIndex(store::RegionPtr region, bool need_rebuild, bool need_save);
 };
 
 }  // namespace dingodb

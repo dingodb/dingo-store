@@ -106,42 +106,4 @@ std::string VectorCodec::FillVectorTablePrefix(const std::string& value) {
 
 std::string VectorCodec::RemoveVectorPrefix(const std::string& value) { return value.substr(1); }  // NOLINT
 
-std::string VectorCodec::EncodeApplyLogId(uint64_t apply_log_id) {
-  Buf buf(8);
-  buf.WriteLong(apply_log_id);
-
-  return buf.GetString();
-}
-
-int VectorCodec::DecodeApplyLogId(const std::string& value, uint64_t& apply_log_id) {
-  if (value.size() != 8) {
-    DINGO_LOG(ERROR) << "DecodeApplyLogId failed, value size is not 16, value:[" << Helper::StringToHex(value)
-                     << "], size=" << value.size();
-    return -1;
-  }
-  Buf buf(value);
-  apply_log_id = buf.ReadLong();
-
-  return 0;
-}
-
-std::string VectorCodec::EncodeSnapshotLogId(uint64_t snapshot_log_id) {
-  Buf buf(8);
-  buf.WriteLong(snapshot_log_id);
-
-  return buf.GetString();
-}
-
-int VectorCodec::DecodeSnapshotLogId(const std::string& value, uint64_t& snapshot_log_id) {
-  if (value.size() != 8) {
-    DINGO_LOG(ERROR) << "DecodeSnapshotLogId failed, value size is not 16, value:[" << Helper::StringToHex(value)
-                     << "], size=" << value.size();
-    return -1;
-  }
-  Buf buf(value);
-  snapshot_log_id = buf.ReadLong();
-
-  return 0;
-}
-
 }  // namespace dingodb

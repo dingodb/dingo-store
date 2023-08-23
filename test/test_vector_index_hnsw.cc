@@ -64,18 +64,15 @@ TEST_F(VectorIndexHnswTest, Create) {
   // valid param L2
   {
     uint64_t id = 1;
-    pb::common::IndexParameter index_parameter;
-    index_parameter.set_index_type(::dingodb::pb::common::IndexType::INDEX_TYPE_VECTOR);
-    index_parameter.mutable_vector_index_parameter()->set_vector_index_type(
-        ::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW);
-    index_parameter.mutable_vector_index_parameter()->mutable_hnsw_parameter()->set_dimension(dimension);
-    index_parameter.mutable_vector_index_parameter()->mutable_hnsw_parameter()->set_metric_type(
-        ::dingodb::pb::common::MetricType::METRIC_TYPE_L2);
-    index_parameter.mutable_vector_index_parameter()->mutable_hnsw_parameter()->set_efconstruction(efconstruction);
+    pb::common::VectorIndexParameter index_parameter;
+    index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW);
+    index_parameter.mutable_hnsw_parameter()->set_dimension(dimension);
+    index_parameter.mutable_hnsw_parameter()->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_L2);
+    index_parameter.mutable_hnsw_parameter()->set_efconstruction(efconstruction);
 
-    index_parameter.mutable_vector_index_parameter()->mutable_hnsw_parameter()->set_max_elements(max_elements);
+    index_parameter.mutable_hnsw_parameter()->set_max_elements(max_elements);
 
-    index_parameter.mutable_vector_index_parameter()->mutable_hnsw_parameter()->set_nlinks(nlinks);
+    index_parameter.mutable_hnsw_parameter()->set_nlinks(nlinks);
 
     vector_index_hnsw = VectorIndexFactory::New(id, index_parameter);
     EXPECT_NE(vector_index_hnsw.get(), nullptr);
@@ -85,18 +82,16 @@ TEST_F(VectorIndexHnswTest, Create) {
   // IP
   {
     uint64_t id = 1;
-    pb::common::IndexParameter index_parameter;
-    index_parameter.set_index_type(::dingodb::pb::common::IndexType::INDEX_TYPE_VECTOR);
-    index_parameter.mutable_vector_index_parameter()->set_vector_index_type(
-        ::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW);
-    index_parameter.mutable_vector_index_parameter()->mutable_hnsw_parameter()->set_dimension(dimension);
-    index_parameter.mutable_vector_index_parameter()->mutable_hnsw_parameter()->set_metric_type(
+    pb::common::VectorIndexParameter index_parameter;
+    index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW);
+    index_parameter.mutable_hnsw_parameter()->set_dimension(dimension);
+    index_parameter.mutable_hnsw_parameter()->set_metric_type(
         ::dingodb::pb::common::MetricType::METRIC_TYPE_INNER_PRODUCT);
-    index_parameter.mutable_vector_index_parameter()->mutable_hnsw_parameter()->set_efconstruction(efconstruction);
+    index_parameter.mutable_hnsw_parameter()->set_efconstruction(efconstruction);
 
-    index_parameter.mutable_vector_index_parameter()->mutable_hnsw_parameter()->set_max_elements(max_elements);
+    index_parameter.mutable_hnsw_parameter()->set_max_elements(max_elements);
 
-    index_parameter.mutable_vector_index_parameter()->mutable_hnsw_parameter()->set_nlinks(nlinks);
+    index_parameter.mutable_hnsw_parameter()->set_nlinks(nlinks);
 
     vector_index_hnsw = VectorIndexFactory::New(id, index_parameter);
     EXPECT_NE(vector_index_hnsw.get(), nullptr);
@@ -266,18 +261,15 @@ TEST_F(VectorIndexHnswTest, CreateCosine) {
   // valid param L2
   {
     uint64_t id = 1;
-    pb::common::IndexParameter index_parameter;
-    index_parameter.set_index_type(::dingodb::pb::common::IndexType::INDEX_TYPE_VECTOR);
-    index_parameter.mutable_vector_index_parameter()->set_vector_index_type(
-        ::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW);
-    index_parameter.mutable_vector_index_parameter()->mutable_hnsw_parameter()->set_dimension(dimension);
-    index_parameter.mutable_vector_index_parameter()->mutable_hnsw_parameter()->set_metric_type(
-        ::dingodb::pb::common::MetricType::METRIC_TYPE_L2);
-    index_parameter.mutable_vector_index_parameter()->mutable_hnsw_parameter()->set_efconstruction(efconstruction);
+    pb::common::VectorIndexParameter index_parameter;
+    index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW);
+    index_parameter.mutable_hnsw_parameter()->set_dimension(dimension);
+    index_parameter.mutable_hnsw_parameter()->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_L2);
+    index_parameter.mutable_hnsw_parameter()->set_efconstruction(efconstruction);
 
-    index_parameter.mutable_vector_index_parameter()->mutable_hnsw_parameter()->set_max_elements(max_elements);
+    index_parameter.mutable_hnsw_parameter()->set_max_elements(max_elements);
 
-    index_parameter.mutable_vector_index_parameter()->mutable_hnsw_parameter()->set_nlinks(nlinks);
+    index_parameter.mutable_hnsw_parameter()->set_nlinks(nlinks);
 
     vector_index_hnsw = VectorIndexFactory::New(id, index_parameter);
     EXPECT_NE(vector_index_hnsw.get(), nullptr);
@@ -287,18 +279,15 @@ TEST_F(VectorIndexHnswTest, CreateCosine) {
   // IP
   {
     uint64_t id = 1;
-    pb::common::IndexParameter index_parameter;
-    index_parameter.set_index_type(::dingodb::pb::common::IndexType::INDEX_TYPE_VECTOR);
-    index_parameter.mutable_vector_index_parameter()->set_vector_index_type(
-        ::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW);
-    index_parameter.mutable_vector_index_parameter()->mutable_hnsw_parameter()->set_dimension(dimension);
-    index_parameter.mutable_vector_index_parameter()->mutable_hnsw_parameter()->set_metric_type(
-        ::dingodb::pb::common::MetricType::METRIC_TYPE_COSINE);
-    index_parameter.mutable_vector_index_parameter()->mutable_hnsw_parameter()->set_efconstruction(efconstruction);
+    pb::common::VectorIndexParameter index_parameter;
+    index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW);
+    index_parameter.mutable_hnsw_parameter()->set_dimension(dimension);
+    index_parameter.mutable_hnsw_parameter()->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_COSINE);
+    index_parameter.mutable_hnsw_parameter()->set_efconstruction(efconstruction);
 
-    index_parameter.mutable_vector_index_parameter()->mutable_hnsw_parameter()->set_max_elements(max_elements);
+    index_parameter.mutable_hnsw_parameter()->set_max_elements(max_elements);
 
-    index_parameter.mutable_vector_index_parameter()->mutable_hnsw_parameter()->set_nlinks(nlinks);
+    index_parameter.mutable_hnsw_parameter()->set_nlinks(nlinks);
 
     vector_index_hnsw = VectorIndexFactory::New(id, index_parameter);
     EXPECT_NE(vector_index_hnsw.get(), nullptr);

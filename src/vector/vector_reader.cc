@@ -53,7 +53,7 @@ butil::Status VectorReader::QueryVectorWithId(uint64_t partition_id, uint64_t ve
 }
 
 butil::Status VectorReader::SearchVector(
-    uint64_t partition_id, std::shared_ptr<VectorIndex> vector_index, pb::common::Range region_range,
+    uint64_t partition_id, VectorIndexWrapperPtr vector_index, pb::common::Range region_range,
     const std::vector<pb::common::VectorWithId>& vector_with_ids, const pb::common::VectorSearchParameter& parameter,
     std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results) {
   if (vector_with_ids.empty()) {
@@ -72,9 +72,9 @@ butil::Status VectorReader::SearchVector(
   DINGO_LOG(INFO) << fmt::format("vector id range [{}-{})", min_vector_id, max_vector_id);
 
   std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters;
-  if (vector_index->VectorIndexType() == pb::common::VECTOR_INDEX_TYPE_HNSW) {
+  if (vector_index->Type() == pb::common::VECTOR_INDEX_TYPE_HNSW) {
     filters.push_back(std::make_shared<VectorIndex::RangeFilterFunctor>(min_vector_id, max_vector_id));
-  } else if (vector_index->VectorIndexType() == pb::common::VECTOR_INDEX_TYPE_FLAT) {
+  } else if (vector_index->Type() == pb::common::VECTOR_INDEX_TYPE_FLAT) {
     filters.push_back(std::make_shared<VectorIndex::FlatRangeFilterFunctor>(min_vector_id, max_vector_id));
   }
 
@@ -451,13 +451,8 @@ butil::Status VectorReader::VectorScanQuery(std::shared_ptr<Engine::VectorReader
 }
 
 butil::Status VectorReader::VectorGetRegionMetrics(uint64_t region_id, const pb::common::Range& region_range,
-                                                   std::shared_ptr<VectorIndex> vector_index,
+                                                   VectorIndexWrapperPtr vector_index,
                                                    pb::common::VectorIndexMetrics& region_metrics) {
-  auto vector_index_manager = Server::GetInstance()->GetVectorIndexManager();
-  if (vector_index_manager == nullptr) {
-    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, fmt::format("Not found vector index mgr {}", region_id));
-  }
-
   uint64_t total_vector_count = 0;
   uint64_t total_deleted_count = 0;
   uint64_t total_memory_usage = 0;
@@ -628,14 +623,14 @@ butil::Status VectorReader::ScanVectorId(std::shared_ptr<Engine::VectorReader::C
 }
 
 butil::Status VectorReader::DoVectorSearchForVectorIdPreFilter(  // NOLINT
-    std::shared_ptr<VectorIndex> vector_index, const std::vector<pb::common::VectorWithId>& vector_with_ids,
+    VectorIndexWrapperPtr vector_index, const std::vector<pb::common::VectorWithId>& vector_with_ids,
     const pb::common::VectorSearchParameter& parameter,
     std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters,
     std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results) {
-  if (vector_index->VectorIndexType() == pb::common::VECTOR_INDEX_TYPE_HNSW) {
+  if (vector_index->Type() == pb::common::VECTOR_INDEX_TYPE_HNSW) {
     filters.push_back(
         std::make_shared<VectorIndex::HnswListFilterFunctor>(Helper::PbRepeatedToVector(parameter.vector_ids())));
-  } else if (vector_index->VectorIndexType() == pb::common::VECTOR_INDEX_TYPE_FLAT) {
+  } else if (vector_index->Type() == pb::common::VECTOR_INDEX_TYPE_FLAT) {
     filters.push_back(
         std::make_shared<VectorIndex::FlatListFilterFunctor>(Helper::PbRepeatedToVector(parameter.vector_ids())));
   }
@@ -652,7 +647,7 @@ butil::Status VectorReader::DoVectorSearchForVectorIdPreFilter(  // NOLINT
 }
 
 butil::Status VectorReader::DoVectorSearchForScalarPreFilter(
-    std::shared_ptr<VectorIndex> vector_index, pb::common::Range region_range,
+    VectorIndexWrapperPtr vector_index, pb::common::Range region_range,
     const std::vector<pb::common::VectorWithId>& vector_with_ids, const pb::common::VectorSearchParameter& parameter,
     std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters,
     std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results) {  // NOLINT
@@ -711,9 +706,9 @@ butil::Status VectorReader::DoVectorSearchForScalarPreFilter(
     }
   }
 
-  if (vector_index->VectorIndexType() == pb::common::VECTOR_INDEX_TYPE_HNSW) {
+  if (vector_index->Type() == pb::common::VECTOR_INDEX_TYPE_HNSW) {
     filters.push_back(std::make_shared<VectorIndex::HnswListFilterFunctor>(vector_ids));
-  } else if (vector_index->VectorIndexType() == pb::common::VECTOR_INDEX_TYPE_FLAT) {
+  } else if (vector_index->Type() == pb::common::VECTOR_INDEX_TYPE_FLAT) {
     filters.push_back(std::make_shared<VectorIndex::FlatListFilterFunctor>(std::move(vector_ids)));
   }
 
@@ -729,7 +724,7 @@ butil::Status VectorReader::DoVectorSearchForScalarPreFilter(
 }
 
 butil::Status VectorReader::DoVectorSearchForTableCoprocessor(  // NOLINT(*static)
-    [[maybe_unused]] std::shared_ptr<VectorIndex> vector_index, [[maybe_unused]] uint64_t partition_id,
+    [[maybe_unused]] VectorIndexWrapperPtr vector_index, [[maybe_unused]] uint64_t partition_id,
     [[maybe_unused]] const std::vector<pb::common::VectorWithId>& vector_with_ids,
     [[maybe_unused]] const pb::common::VectorSearchParameter& parameter,
     std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results) {  // NOLINT
@@ -771,7 +766,7 @@ butil::Status VectorReader::VectorBatchSearchDebug(std::shared_ptr<Engine::Vecto
 }
 
 butil::Status VectorReader::SearchVectorDebug(
-    uint64_t partition_id, std::shared_ptr<VectorIndex> vector_index, pb::common::Range region_range,
+    uint64_t partition_id, VectorIndexWrapperPtr vector_index, pb::common::Range region_range,
     const std::vector<pb::common::VectorWithId>& vector_with_ids, const pb::common::VectorSearchParameter& parameter,
     std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results, int64_t& deserialization_id_time_us,
     int64_t& scan_scalar_time_us, int64_t& search_time_us) {
@@ -791,9 +786,9 @@ butil::Status VectorReader::SearchVectorDebug(
   DINGO_LOG(INFO) << fmt::format("vector id range [{}-{})", min_vector_id, max_vector_id);
 
   std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters;
-  if (vector_index->VectorIndexType() == pb::common::VECTOR_INDEX_TYPE_HNSW) {
+  if (vector_index->Type() == pb::common::VECTOR_INDEX_TYPE_HNSW) {
     filters.push_back(std::make_shared<VectorIndex::RangeFilterFunctor>(min_vector_id, max_vector_id));
-  } else if (vector_index->VectorIndexType() == pb::common::VECTOR_INDEX_TYPE_FLAT) {
+  } else if (vector_index->Type() == pb::common::VECTOR_INDEX_TYPE_FLAT) {
     filters.push_back(std::make_shared<VectorIndex::FlatRangeFilterFunctor>(min_vector_id, max_vector_id));
   }
 
@@ -902,7 +897,7 @@ butil::Status VectorReader::SearchVectorDebug(
 }
 
 butil::Status VectorReader::DoVectorSearchForVectorIdPreFilterDebug(
-    std::shared_ptr<VectorIndex> vector_index, const std::vector<pb::common::VectorWithId>& vector_with_ids,
+    VectorIndexWrapperPtr vector_index, const std::vector<pb::common::VectorWithId>& vector_with_ids,
     const pb::common::VectorSearchParameter& parameter,
     std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters,
     std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results, int64_t& deserialization_id_time_us,
@@ -913,10 +908,10 @@ butil::Status VectorReader::DoVectorSearchForVectorIdPreFilterDebug(
   };
 
   auto start_ids = lambda_time_now_function();
-  if (vector_index->VectorIndexType() == pb::common::VECTOR_INDEX_TYPE_HNSW) {
+  if (vector_index->Type() == pb::common::VECTOR_INDEX_TYPE_HNSW) {
     filters.push_back(
         std::make_shared<VectorIndex::HnswListFilterFunctor>(Helper::PbRepeatedToVector(parameter.vector_ids())));
-  } else if (vector_index->VectorIndexType() == pb::common::VECTOR_INDEX_TYPE_FLAT) {
+  } else if (vector_index->Type() == pb::common::VECTOR_INDEX_TYPE_FLAT) {
     filters.push_back(
         std::make_shared<VectorIndex::FlatListFilterFunctor>(Helper::PbRepeatedToVector(parameter.vector_ids())));
   }
@@ -938,7 +933,7 @@ butil::Status VectorReader::DoVectorSearchForVectorIdPreFilterDebug(
 }
 
 butil::Status VectorReader::DoVectorSearchForScalarPreFilterDebug(
-    std::shared_ptr<VectorIndex> vector_index, pb::common::Range region_range,
+    VectorIndexWrapperPtr vector_index, pb::common::Range region_range,
     const std::vector<pb::common::VectorWithId>& vector_with_ids, const pb::common::VectorSearchParameter& parameter,
     std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters,
     std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results, int64_t& scan_scalar_time_us,
@@ -1005,9 +1000,9 @@ butil::Status VectorReader::DoVectorSearchForScalarPreFilterDebug(
   auto end_iter = lambda_time_now_function();
   scan_scalar_time_us = lambda_time_diff_microseconds_function(start_iter, end_iter);
 
-  if (vector_index->VectorIndexType() == pb::common::VECTOR_INDEX_TYPE_HNSW) {
+  if (vector_index->Type() == pb::common::VECTOR_INDEX_TYPE_HNSW) {
     filters.push_back(std::make_shared<VectorIndex::HnswListFilterFunctor>(vector_ids));
-  } else if (vector_index->VectorIndexType() == pb::common::VECTOR_INDEX_TYPE_FLAT) {
+  } else if (vector_index->Type() == pb::common::VECTOR_INDEX_TYPE_FLAT) {
     filters.push_back(std::make_shared<VectorIndex::FlatListFilterFunctor>(std::move(vector_ids)));
   }
 
