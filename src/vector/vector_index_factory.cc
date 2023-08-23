@@ -71,7 +71,27 @@ std::shared_ptr<VectorIndex> VectorIndexFactory::New(uint64_t id, const pb::comm
     save_snapshot_threshold_write_key_num = save_snapshot_threshold_write_key_num > 0
                                                 ? save_snapshot_threshold_write_key_num
                                                 : Constant::kVectorIndexSaveSnapshotThresholdWriteKeyNum;
-    return std::make_shared<VectorIndexHnsw>(id, vector_index_parameter, save_snapshot_threshold_write_key_num);
+
+    // create index may throw exeception, so we need to catch it
+    try {
+      auto new_hnsw_index =
+          std::make_shared<VectorIndexHnsw>(id, vector_index_parameter, save_snapshot_threshold_write_key_num);
+      if (new_hnsw_index == nullptr) {
+        DINGO_LOG(ERROR) << "create hnsw index failed of new_hnsw_index is nullptr, id=" << id
+                         << ", parameter=" << index_parameter.DebugString()
+                         << ", save_snapshot_threshold_write_key_num=" << save_snapshot_threshold_write_key_num;
+        return nullptr;
+      } else {
+        DINGO_LOG(INFO) << "create hnsw index success, id=" << id << ", parameter=" << index_parameter.DebugString()
+                        << ", save_snapshot_threshold_write_key_num=" << save_snapshot_threshold_write_key_num;
+      }
+      return new_hnsw_index;
+    } catch (std::exception& e) {
+      DINGO_LOG(ERROR) << "create hnsw index failed of exception occured, " << e.what() << ", id=" << id
+                       << ", parameter=" << index_parameter.DebugString()
+                       << ", save_snapshot_threshold_write_key_num=" << save_snapshot_threshold_write_key_num;
+      return nullptr;
+    }
   } else if (vector_index_parameter.vector_index_type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT) {
     const auto& flat_parameter = vector_index_parameter.flat_parameter();
 
@@ -83,13 +103,33 @@ std::shared_ptr<VectorIndex> VectorIndexFactory::New(uint64_t id, const pb::comm
       DINGO_LOG(ERROR) << "vector_index_parameter is illegal, METRIC_TYPE_NONE";
       return nullptr;
     }
-    return std::make_shared<VectorIndexFlat>(id, vector_index_parameter);
 
+    // create index may throw exeception, so we need to catch it
+    try {
+      auto new_flat_index = std::make_shared<VectorIndexFlat>(id, vector_index_parameter);
+      if (new_flat_index == nullptr) {
+        DINGO_LOG(ERROR) << "create flat index failed of new_flat_index is nullptr"
+                         << ", id=" << id << ", parameter=" << index_parameter.DebugString();
+        return nullptr;
+      } else {
+        DINGO_LOG(INFO) << "create flat index success, id=" << id << ", parameter=" << index_parameter.DebugString();
+      }
+      return new_flat_index;
+    } catch (std::exception& e) {
+      DINGO_LOG(ERROR) << "create flat index failed of exception occured, " << e.what() << ", id=" << id
+                       << ", parameter=" << index_parameter.DebugString();
+      return nullptr;
+    }
   } else {
     DINGO_LOG(ERROR) << "vector_index_parameter is not hnsw index or flat, type="
-                     << vector_index_parameter.vector_index_type();
+                     << vector_index_parameter.vector_index_type() << ", id=" << id
+                     << ", parameter=" << index_parameter.DebugString();
     return nullptr;
   }
+
+  DINGO_LOG(ERROR) << "create vector index failed of unknown error"
+                   << ", id=" << id << ", parameter=" << index_parameter.DebugString();
+  return nullptr;
 }
 
 }  // namespace dingodb
