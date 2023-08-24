@@ -17,11 +17,13 @@
 package io.dingodb.sdk.service.meta;
 
 import com.google.protobuf.ByteString;
+import io.dingodb.common.Common;
 import io.dingodb.coordinator.Coordinator;
 import io.dingodb.meta.Meta;
 import io.dingodb.meta.MetaServiceGrpc;
 import io.dingodb.sdk.common.DingoClientException;
 import io.dingodb.sdk.common.DingoCommonId;
+import io.dingodb.sdk.common.SDKCommonId;
 import io.dingodb.sdk.common.codec.DingoKeyValueCodec;
 import io.dingodb.sdk.common.index.Index;
 import io.dingodb.sdk.common.index.IndexMetrics;
@@ -41,7 +43,14 @@ import lombok.NonNull;
 import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.NavigableMap;
+import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.ExecutorService;
@@ -50,6 +59,7 @@ import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import static io.dingodb.sdk.common.DingoCommonId.Type.ENTITY_TYPE_TABLE;
 import static io.dingodb.sdk.common.utils.ByteArrayUtils.POS;
 import static io.dingodb.sdk.common.utils.EntityConversion.mapping;
 
@@ -466,6 +476,44 @@ public class MetaServiceClient {
             .orNull();
     }
 
+    public Map<DingoCommonId, Long> getTableCommitCount() {
+        if (!id().equals(ROOT_SCHEMA_ID)) {
+            throw new UnsupportedOperationException("Only supported root meta service.");
+        }
+
+        List<Common.Region> regions = metaConnector.getCoordinatorServiceConnector()
+            .exec(stub -> stub.getRegionMap(Coordinator.GetRegionMapRequest.newBuilder().build()))
+            .getRegionmap()
+            .getRegionsList().stream()
+            .map(Common.Region::getId)
+            .map(__ -> metaConnector.getCoordinatorServiceConnector()
+                .exec(stub -> stub.queryRegion(Coordinator.QueryRegionRequest.newBuilder().setRegionId(__).build()))
+            ).map(Coordinator.QueryRegionResponse::getRegion)
+            .collect(Collectors.toList());
+
+        List<Long> tableIds = getSchemas(ROOT_SCHEMA_ID).stream()
+            .map(Meta.Schema::getTableIdsList)
+            .flatMap(Collection::stream)
+            .map(Meta.DingoCommonId::getEntityId)
+            .collect(Collectors.toList());
+
+
+        Map<DingoCommonId, Long> metrics = new HashMap<>();
+
+        for (Common.Region region : regions) {
+            Common.RegionDefinition definition = region.getDefinition();
+            SDKCommonId tableId = new SDKCommonId(ENTITY_TYPE_TABLE, definition.getSchemaId(), definition.getTableId());
+
+            if (!tableIds.contains(definition.getTableId())) {
+                continue;
+            }
+
+            long committedIndex = region.getMetrics().getBraftStatus().getCommittedIndex();
+            metrics.compute(tableId, (id, c) -> c == null ? committedIndex : c + committedIndex);
+        }
+
+        return metrics;
+    }
 
     public void addDistribution(String tableName, PartitionDetail partitionDetail) {
         tableName = cleanTableName(tableName);
