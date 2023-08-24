@@ -26,13 +26,13 @@ import org.checkerframework.checker.nullness.qual.NonNull;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Comparator;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Condition;
-import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.LockSupport;
+import java.util.function.Consumer;
 
 @Slf4j
 public class LockService {
@@ -45,6 +45,14 @@ public class LockService {
 
     private final VersionServiceConnector connector;
 
+    public LockService(String servers) {
+        this(servers, 30);
+    }
+
+    public LockService(String servers, String resource) {
+        this(servers, resource, 30);
+    }
+
     public LockService(String servers, int leaseTtl) {
         this(UUID.randomUUID().toString(), servers, leaseTtl);
     }
@@ -53,27 +61,49 @@ public class LockService {
         this(resource, new VersionServiceConnector(servers, leaseTtl));
     }
 
-    public LockService(VersionServiceConnector connector) {
-        this(UUID.randomUUID().toString(), connector);
-    }
-
-    public LockService(String resource, VersionServiceConnector connector) {
+    private LockService(String resource, VersionServiceConnector connector) {
         this.resource = resource;
         this.connector = connector;
         this.resourcePrefix = resource + "|0|";
         this.resourceSepIndex = resource.length() + 1;
     }
 
-    public Lock newLock() {
-        return new Lock();
+    public void close() {
+        connector.exec(stub -> stub.kvDeleteRange(deleteAllRangeRequest(resourcePrefix)));
+        connector.close();
     }
 
-    private class Lock implements java.util.concurrent.locks.Lock {
+    public Lock newLock() {
+        return new Lock(null);
+    }
+
+    public Lock newLock(Consumer<Lock> onReset) {
+        return new Lock(onReset);
+    }
+
+    public class Lock implements java.util.concurrent.locks.Lock {
 
         public final String lockId = UUID.randomUUID().toString();
         public final String resourceKey = resource + "|0|" + lockId;
 
+        private final Consumer<Lock> onReset;
+
         private int locked = 0;
+
+        public Lock(Consumer<Lock> onReset) {
+            this.onReset = onReset;
+        }
+
+        private synchronized void reset() {
+            if (locked == 0) {
+                return;
+            }
+            locked = 1;
+            unlock();
+            if (onReset != null) {
+                onReset.accept(this);
+            }
+        }
 
         @Override
         public synchronized void lock() {
@@ -89,13 +119,15 @@ public class LockService {
                     if (rangeResponse.getKvsList().isEmpty()) {
                         throw new RuntimeException("Put " + resourceKey + " success, but range is empty.");
                     }
-                    if (rangeResponse.getKvsList().stream().min(Comparator.comparingLong(Version.Kv::getModRevision)).get()
-                        .getModRevision() == revision
-                    ) {
+                    Version.Kv current = rangeResponse.getKvsList().stream()
+                        .min(Comparator.comparingLong(Version.Kv::getModRevision))
+                        .get();
+                    if (current.getModRevision() == revision) {
                         if (log.isDebugEnabled()) {
                             log.debug("Lock {} success.", resourceKey);
                         }
                         locked++;
+                        watchLock(current);
                         return;
                     }
                     Version.Kv previous = rangeResponse.getKvsList().stream()
@@ -131,16 +163,16 @@ public class LockService {
             long revision = response.getHeader().getRevision();
 
             try {
-                if (connector.exec(stub -> stub.kvRange(rangeRequest())).getKvsList().stream()
-                    .min(Comparator.comparingLong(Version.Kv::getModRevision))
-                    .map(Version.Kv::getModRevision)
-                    .filter(__ -> __ == revision)
-                    .isPresent()) {
+                Optional<Version.Kv> current = connector.exec(stub -> stub.kvRange(rangeRequest()))
+                    .getKvsList().stream()
+                    .min(Comparator.comparingLong(Version.Kv::getModRevision));
+                if (current.map(Version.Kv::getModRevision).filter(__ -> __ == revision).isPresent()) {
                     locked++;
+                    watchLock(current.get());
                     return true;
                 }
             } catch (Exception e) {
-                e.printStackTrace();
+                log.error("Try lock error.", e);
             }
 
             connector.exec(stub -> stub.kvDeleteRange(deleteRangeRequest(resourceKey)));
@@ -158,8 +190,7 @@ public class LockService {
             try {
                 while (time-- > 0) {
                     Version.RangeResponse rangeResponse = connector.exec(stub -> stub.kvRange(rangeRequest()));
-                    Version.Kv current = rangeResponse.getKvsList()
-                        .stream()
+                    Version.Kv current = rangeResponse.getKvsList().stream()
                         .min(Comparator.comparingLong(Version.Kv::getModRevision))
                         .orElseThrow(() -> new RuntimeException("Put " + resourceKey + " success, but range is empty."));
                     if (current.getModRevision() == revision) {
@@ -167,6 +198,7 @@ public class LockService {
                             log.debug("Lock {} wait...", resourceKey);
                         }
                         locked++;
+                        watchLock(current);
                         return true;
                     }
                     LockSupport.parkNanos(unit.toNanos(1));
@@ -185,12 +217,22 @@ public class LockService {
             return false;
         }
 
+        private void watchLock(Version.Kv kv) {
+            CompletableFuture.runAsync(() -> {
+                connector.exec(
+                    stub -> stub.watch(watchRequest(kv.getKv().getKey(), kv.getModRevision())),
+                    __ -> ErrorCodeUtils.InternalCode.IGNORE
+                );
+            }).thenRun(this::reset);
+        }
+
         @Override
         public synchronized void unlock() {
-            if (locked-- > 0) {
-                if (locked == 0) {
-                    connector.exec(stub -> stub.kvDeleteRange(deleteRangeRequest(resourceKey)));
-                }
+            if (locked == 0) {
+                return;
+            }
+            if (--locked == 0) {
+                connector.exec(stub -> stub.kvDeleteRange(deleteRangeRequest(resourceKey)));
             }
         }
 
@@ -223,6 +265,15 @@ public class LockService {
     private Version.DeleteRangeRequest deleteRangeRequest(String resourceKey) {
         return Version.DeleteRangeRequest.newBuilder()
             .setKey(ByteString.copyFrom(resourceKey.getBytes(StandardCharsets.UTF_8)))
+            .build();
+    }
+
+    private Version.DeleteRangeRequest deleteAllRangeRequest(String resourcePrefix) {
+        byte[] end = resourcePrefix.getBytes(StandardCharsets.UTF_8);
+        end[resourceSepIndex]++;
+        return Version.DeleteRangeRequest.newBuilder()
+            .setKey(ByteString.copyFrom(resourcePrefix.getBytes(StandardCharsets.UTF_8)))
+            .setRangeEnd(ByteString.copyFrom(end))
             .build();
     }
 

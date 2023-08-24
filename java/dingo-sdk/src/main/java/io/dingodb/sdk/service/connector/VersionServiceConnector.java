@@ -29,11 +29,12 @@ import java.util.Collections;
 import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 public class VersionServiceConnector extends ServiceConnector<VersionServiceGrpc.VersionServiceBlockingStub> {
 
-    private static final ScheduledExecutorService executors = Executors.newScheduledThreadPool(1);
+    private final ScheduledExecutorService executors = Executors.newScheduledThreadPool(1);
 
     @Getter
     private final CoordinatorServiceConnector coordinatorServiceConnector;
@@ -47,14 +48,18 @@ public class VersionServiceConnector extends ServiceConnector<VersionServiceGrpc
         super(Collections.emptySet());
         this.coordinatorServiceConnector = new CoordinatorServiceConnector(locations);
         this.leaseTtl = leaseTtl;
-        executors.scheduleWithFixedDelay(this::renewLease, leaseTtl, leaseTtl / 2, TimeUnit.SECONDS);
+        executors.scheduleWithFixedDelay(this::renewLease, leaseTtl, leaseTtl / 3, TimeUnit.SECONDS);
     }
 
     public VersionServiceConnector(Set<Location> locations, int leaseTtl) {
         super(Collections.emptySet());
         this.coordinatorServiceConnector = new CoordinatorServiceConnector(locations);
         this.leaseTtl = leaseTtl;
-        executors.scheduleWithFixedDelay(this::renewLease, leaseTtl, leaseTtl / 2, TimeUnit.SECONDS);
+        executors.scheduleWithFixedDelay(this::renewLease, leaseTtl, leaseTtl / 3, TimeUnit.SECONDS);
+    }
+
+    public void close() {
+        executors.shutdown();
     }
 
     @Override
