@@ -38,6 +38,7 @@ message TableInternal {
   dingodb.pb.meta.TableDefinition definition = 2;
   repeated TableRegionInternal partitions = 3;
   uint64 schema_id = 4;
+  uint64 table_id = 5;
 }
 
 // TableMetricsInternal is storage structure for table_metrics
@@ -58,7 +59,7 @@ message IndexInternal {
 // TableIndexInternal is storage structure for table
 message TableIndexInternal {
   uint64 id = 1;
-  repeated dingodb.pb.meta.TableDefinitionWithId definition_with_ids = 2;
+  repeated dingodb.pb.meta.DingoCommonId table_ids = 2;
 }
 
 // IndexMetricsInternal is storage structure for index_metrics

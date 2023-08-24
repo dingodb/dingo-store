@@ -610,6 +610,7 @@ butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta
   pb::coordinator_internal::TableInternal table_internal;
   table_internal.set_id(new_table_id);
   table_internal.set_schema_id(schema_id);
+  table_internal.set_table_id(new_table_id);
   auto* definition = table_internal.mutable_definition();
   definition->CopyFrom(table_definition);
 
@@ -1048,7 +1049,7 @@ butil::Status CoordinatorControl::ValidateIndexDefinition(const pb::meta::TableD
 // out: new_index_id, meta_increment
 // return: 0 success, -1 failed
 butil::Status CoordinatorControl::CreateIndex(uint64_t schema_id, const pb::meta::TableDefinition& table_definition,
-                                              uint64_t& new_index_id,
+                                              uint64_t table_id, uint64_t& new_index_id,
                                               pb::coordinator_internal::MetaIncrement& meta_increment) {
   // validate schema
   // root schema cannot create index
@@ -1269,6 +1270,7 @@ butil::Status CoordinatorControl::CreateIndex(uint64_t schema_id, const pb::meta
   pb::coordinator_internal::TableInternal table_internal;
   table_internal.set_id(new_index_id);
   table_internal.set_schema_id(schema_id);
+  table_internal.set_table_id(table_id);
   auto* definition = table_internal.mutable_definition();
   definition->CopyFrom(table_definition);
 
@@ -1332,6 +1334,12 @@ butil::Status CoordinatorControl::UpdateIndex(uint64_t schema_id, uint64_t index
 
   DINGO_LOG(DEBUG) << fmt::format("UpdateIndex get_index schema_id={} index_id={} table_internal={}", schema_id,
                                   index_id, table_internal.DebugString());
+
+  // this is for interface compatibility, index created by new interface cannot be updated in this function.
+  if (table_internal.table_id() > 0) {
+    DINGO_LOG(ERROR) << "ERRROR: cannot update index created by new interface." << index_id;
+    return butil::Status(pb::error::Errno::EINDEX_COMPATIBILITY, "cannot update index created by new interface.");
+  }
 
   // validate new_table_definition
   auto status = ValidateIndexDefinition(new_table_definition);
@@ -1449,10 +1457,10 @@ butil::Status CoordinatorControl::UpdateIndex(uint64_t schema_id, uint64_t index
 }
 
 // DropIndex
-// in: schema_id, index_id
+// in: schema_id, index_id, check_compatibility
 // out: meta_increment
 // return: errno
-butil::Status CoordinatorControl::DropIndex(uint64_t schema_id, uint64_t index_id,
+butil::Status CoordinatorControl::DropIndex(uint64_t schema_id, uint64_t index_id, bool check_compatibility,
                                             pb::coordinator_internal::MetaIncrement& meta_increment) {
   if (schema_id < 0) {
     DINGO_LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
@@ -1471,6 +1479,12 @@ butil::Status CoordinatorControl::DropIndex(uint64_t schema_id, uint64_t index_i
     if (ret < 0) {
       DINGO_LOG(ERROR) << "ERRROR: index_id not found" << index_id;
       return butil::Status(pb::error::Errno::EINDEX_NOT_FOUND, "index_id not found");
+    }
+
+    // this is for interface compatibility, index created by new interface cannot be dropped in this function.
+    if (check_compatibility && table_internal.table_id() > 0) {
+      DINGO_LOG(ERROR) << "ERRROR: cannot drop index created by new interface." << index_id;
+      return butil::Status(pb::error::Errno::EINDEX_COMPATIBILITY, "cannot drop index created by new interface.");
     }
   }
 
@@ -1595,6 +1609,11 @@ butil::Status CoordinatorControl::GetIndexes(uint64_t schema_id,
         continue;
       }
 
+      if (table_internal.table_id() > 0) {
+        DINGO_LOG(WARNING) << "cannot get index created by new interface." << index_id;
+        continue;
+      }
+
       DINGO_LOG(INFO) << "GetIndexes found index_id=" << index_id;
 
       // construct return value
@@ -1651,16 +1670,27 @@ butil::Status CoordinatorControl::GetIndexesCount(uint64_t schema_id, uint64_t& 
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "schema_id illegal");
   }
 
-  {
-    // BAIDU_SCOPED_LOCK(schema_map_mutex_);
-    pb::coordinator_internal::SchemaInternal schema_internal;
-    int ret = schema_map_.Get(schema_id, schema_internal);
-    if (ret < 0) {
-      DINGO_LOG(ERROR) << "ERRROR: schema_id not found" << schema_id;
-      return butil::Status(pb::error::Errno::ESCHEMA_NOT_FOUND, "schema_id not found");
+  pb::coordinator_internal::SchemaInternal schema_internal;
+  int ret = schema_map_.Get(schema_id, schema_internal);
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << "ERRROR: schema_id not found" << schema_id;
+    return butil::Status(pb::error::Errno::ESCHEMA_NOT_FOUND, "schema_id not found");
+  }
+
+  indexes_count = 0;
+  for (int i = 0; i < schema_internal.index_ids_size(); i++) {
+    uint64_t index_id = schema_internal.index_ids(i);
+
+    pb::coordinator_internal::TableInternal table_internal;
+    if (index_map_.Get(index_id, table_internal) < 0) {
+      continue;
     }
 
-    indexes_count = schema_internal.index_ids_size();
+    if (table_internal.table_id() > 0) {
+      continue;
+    }
+
+    ++indexes_count;
   }
 
   DINGO_LOG(INFO) << "GetIndexesCount schema_id=" << schema_id << " indexes count=" << indexes_count;
@@ -1717,7 +1747,7 @@ butil::Status CoordinatorControl::GetTable(uint64_t schema_id, uint64_t table_id
 }
 
 // get index
-butil::Status CoordinatorControl::GetIndex(uint64_t schema_id, uint64_t index_id,
+butil::Status CoordinatorControl::GetIndex(uint64_t schema_id, uint64_t index_id, bool check_compatibility,
                                            pb::meta::TableDefinitionWithId& table_definition_with_id) {
   DINGO_LOG(INFO) << "GetIndex in control schema_id=" << schema_id;
 
@@ -1745,6 +1775,10 @@ butil::Status CoordinatorControl::GetIndex(uint64_t schema_id, uint64_t index_id
     if (ret < 0) {
       DINGO_LOG(ERROR) << "ERRROR: index_id not found" << index_id;
       return butil::Status(pb::error::Errno::EINDEX_NOT_FOUND, "index_id not found");
+    }
+
+    if (check_compatibility && table_internal.table_id() > 0) {
+      return butil::Status(pb::error::Errno::EINDEX_COMPATIBILITY, "cannot get index created by new interface.");
     }
 
     DINGO_LOG(INFO) << "GetIndex found index_id=" << index_id;
@@ -1826,7 +1860,7 @@ butil::Status CoordinatorControl::GetIndexByName(uint64_t schema_id, const std::
   DINGO_LOG(DEBUG) << fmt::format("GetIndexByName schema_id={} index_name={} table_definition={}", schema_id,
                                   index_name, table_definition.DebugString());
 
-  return GetIndex(schema_id, temp_index_id, table_definition);
+  return GetIndex(schema_id, temp_index_id, true, table_definition);
 }
 
 // get table range
@@ -2438,15 +2472,25 @@ butil::Status CoordinatorControl::GetTableIndexes(uint64_t schema_id, uint64_t t
     return ret;
   }
 
+  response->add_table_definition_with_ids()->CopyFrom(definition_with_id);
+
   pb::coordinator_internal::TableIndexInternal table_index_internal;
   int result = table_index_map_.Get(table_id, table_index_internal);
-  if (result < 0) {
-    DINGO_LOG(INFO) << "cannot find indexes, schema_id: " << schema_id << ", table_id: " << table_id;
-  } else {
-    response->mutable_table_definition_with_ids()->CopyFrom(table_index_internal.definition_with_ids());
-  }
+  if (result >= 0) {
+    // found
+    for (const auto& temp_id : table_index_internal.table_ids()) {
+      pb::meta::TableDefinitionWithId temp_definition_with_id;
+      ret = GetIndex(schema_id, temp_id.entity_id(), false, temp_definition_with_id);
+      if (!ret.ok()) {
+        return ret;
+      }
 
-  response->add_table_definition_with_ids()->CopyFrom(definition_with_id);
+      response->add_table_definition_with_ids()->CopyFrom(temp_definition_with_id);
+    }
+  } else {
+    // not found
+    DINGO_LOG(INFO) << "cannot find indexes, schema_id: " << schema_id << ", table_id: " << table_id;
+  }
 
   return butil::Status::OK();
 }
@@ -2464,8 +2508,8 @@ butil::Status CoordinatorControl::DropTableIndexes(uint64_t schema_id, uint64_t 
   int result = table_index_map_.Get(table_id, table_index_internal);
   if (result >= 0) {
     // find in map
-    for (const auto& definition_with_id : table_index_internal.definition_with_ids()) {
-      ret = DropIndex(schema_id, definition_with_id.table_id().entity_id(), meta_increment);
+    for (const auto& temp_id : table_index_internal.table_ids()) {
+      ret = DropIndex(schema_id, temp_id.entity_id(), false, meta_increment);
       if (!ret.ok()) {
         DINGO_LOG(ERROR) << "error while dropping index, schema_id: " << schema_id << ", table_id: " << table_id;
         return ret;
@@ -2493,7 +2537,7 @@ butil::Status CoordinatorControl::DropTableIndexes(uint64_t schema_id, uint64_t 
 
 butil::Status CoordinatorControl::RemoveTableIndex(uint64_t table_id, uint64_t index_id,
                                                    pb::coordinator_internal::MetaIncrement& meta_increment) {
-  butil::Status ret = DropIndex(table_id, index_id, meta_increment);
+  butil::Status ret = DropIndex(table_id, index_id, false, meta_increment);
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << "error while dropping index, table_id: " << table_id << ", index_id: " << index_id;
     return ret;
@@ -2506,19 +2550,19 @@ butil::Status CoordinatorControl::RemoveTableIndex(uint64_t table_id, uint64_t i
     return butil::Status::OK();
   }
 
-  size_t source_size = table_index_internal.definition_with_ids_size();
+  size_t source_size = table_index_internal.table_ids_size();
   bool found_index = false;
-  for (size_t i = 0; i < table_index_internal.definition_with_ids_size(); i++) {
-    if (table_index_internal.definition_with_ids(i).table_id().entity_id() == index_id) {
+  for (size_t i = 0; i < table_index_internal.table_ids_size(); i++) {
+    if (table_index_internal.table_ids(i).entity_id() == index_id) {
       found_index = true;
-      table_index_internal.mutable_definition_with_ids()->DeleteSubrange(i, 1);
+      table_index_internal.mutable_table_ids()->DeleteSubrange(i, 1);
       break;
     }
   }
 
   if (found_index) {
     DINGO_LOG(INFO) << "remove success, table_id: " << table_id << ", index_id: " << index_id
-                    << ", size: " << source_size << " --> " << table_index_internal.definition_with_ids_size();
+                    << ", size: " << source_size << " --> " << table_index_internal.table_ids_size();
 
     auto* table_index_increment = meta_increment.add_table_indexes();
     table_index_increment->set_id(table_id);

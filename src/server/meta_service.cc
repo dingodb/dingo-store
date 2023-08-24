@@ -855,7 +855,7 @@ void MetaServiceImpl::GetIndex(google::protobuf::RpcController * /*controller*/,
 
   pb::meta::TableDefinitionWithId table_definition_with_id;
   auto ret = this->coordinator_control_->GetIndex(request->index_id().parent_entity_id(),
-                                                  request->index_id().entity_id(), table_definition_with_id);
+                                                  request->index_id().entity_id(), true, table_definition_with_id);
   if (!ret.ok()) {
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
     response->mutable_error()->set_errmsg(ret.error_str());
@@ -1028,8 +1028,8 @@ void MetaServiceImpl::CreateIndex(google::protobuf::RpcController *controller,
 
   pb::meta::TableDefinition table_definition;
   IndexDefinitionToTableDefinition(request->index_definition(), table_definition);
-  auto ret = this->coordinator_control_->CreateIndex(request->schema_id().entity_id(), table_definition, new_index_id,
-                                                     meta_increment);
+  auto ret = this->coordinator_control_->CreateIndex(request->schema_id().entity_id(), table_definition, 0,
+                                                     new_index_id, meta_increment);
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << "CreateIndex failed in meta_service, error code=" << ret;
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
@@ -1125,7 +1125,7 @@ void MetaServiceImpl::DropIndex(google::protobuf::RpcController *controller, con
   pb::coordinator_internal::MetaIncrement meta_increment;
 
   auto ret = this->coordinator_control_->DropIndex(request->index_id().parent_entity_id(),
-                                                   request->index_id().entity_id(), meta_increment);
+                                                   request->index_id().entity_id(), true, meta_increment);
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << "DropIndex failed in meta_service, index_id=" << request->index_id().entity_id();
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
@@ -1210,14 +1210,11 @@ void MetaServiceImpl::CreateTables(google::protobuf::RpcController *controller,
 
   bool find_table_type = false;
   uint64_t new_table_id = 0;
-  pb::coordinator_internal::TableIndexInternal table_index_internal;
+  butil::Status ret;
+
+  // process table type
   for (const auto &temp_with_id : request->table_definition_with_ids()) {
     const auto &table_id = temp_with_id.table_id();
-    const auto &definition = temp_with_id.table_definition();
-    uint64_t new_id = table_id.entity_id();
-    uint64_t parent_entity_id = table_id.parent_entity_id();
-
-    butil::Status ret;
     if (table_id.entity_type() == pb::meta::EntityType::ENTITY_TYPE_TABLE) {
       if (find_table_type) {
         DINGO_LOG(ERROR) << "found more then one table.";
@@ -1227,10 +1224,39 @@ void MetaServiceImpl::CreateTables(google::protobuf::RpcController *controller,
       }
 
       find_table_type = true;
-      parent_entity_id = request->schema_id().entity_id();
-      ret = coordinator_control_->CreateTable(request->schema_id().entity_id(), definition, new_id, meta_increment);
+      new_table_id = table_id.entity_id();
+      const auto &definition = temp_with_id.table_definition();
 
-    } else if (table_id.entity_type() == pb::meta::EntityType::ENTITY_TYPE_INDEX) {
+      ret =
+          coordinator_control_->CreateTable(request->schema_id().entity_id(), definition, new_table_id, meta_increment);
+      if (!ret.ok()) {
+        DINGO_LOG(ERROR) << "CreateTables failed in meta_service, error code=" << ret;
+        response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+        response->mutable_error()->set_errmsg(ret.error_str());
+        return;
+      }
+
+      auto *table_id_ptr = response->add_table_ids();
+      table_id_ptr->set_entity_id(new_table_id);
+      table_id_ptr->set_parent_entity_id(request->schema_id().entity_id());
+      table_id_ptr->set_entity_type(table_id.entity_type());
+
+      DINGO_LOG(INFO) << "type: " << table_id.entity_type() << ", new_id=" << new_table_id;
+    }
+  }
+
+  // process index type
+  pb::coordinator_internal::TableIndexInternal table_index_internal;
+  for (const auto &temp_with_id : request->table_definition_with_ids()) {
+    const auto &table_id = temp_with_id.table_id();
+    if (table_id.entity_type() == pb::meta::EntityType::ENTITY_TYPE_TABLE) {
+      continue;
+    }
+
+    const auto &definition = temp_with_id.table_definition();
+    uint64_t new_index_id = table_id.entity_id();
+
+    if (table_id.entity_type() == pb::meta::EntityType::ENTITY_TYPE_INDEX) {
       if (definition.columns_size() == 0) {
         DINGO_LOG(ERROR) << "index column not found.";
         response->mutable_error()->set_errcode(Errno::EINDEX_COLUMN_NOT_FOUND);
@@ -1238,7 +1264,15 @@ void MetaServiceImpl::CreateTables(google::protobuf::RpcController *controller,
         return;
       }
 
-      ret = coordinator_control_->CreateIndex(request->schema_id().entity_id(), definition, new_id, meta_increment);
+      if (find_table_type && table_id.parent_entity_id() != new_table_id) {
+        DINGO_LOG(ERROR) << "index parent id error.";
+        response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
+        response->mutable_error()->set_errmsg("index parent id error.");
+        return;
+      }
+
+      ret = coordinator_control_->CreateIndex(request->schema_id().entity_id(), definition, new_table_id, new_index_id,
+                                              meta_increment);
 
     } else {
       ret = butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "entity type is illegal");
@@ -1252,22 +1286,18 @@ void MetaServiceImpl::CreateTables(google::protobuf::RpcController *controller,
     }
 
     auto *table_id_ptr = response->add_table_ids();
-    table_id_ptr->set_entity_id(new_id);
-    table_id_ptr->set_parent_entity_id(parent_entity_id);
+    table_id_ptr->set_entity_id(new_index_id);
+    table_id_ptr->set_parent_entity_id(table_id.parent_entity_id());
     table_id_ptr->set_entity_type(table_id.entity_type());
 
-    if (table_id.entity_type() == pb::meta::EntityType::ENTITY_TYPE_INDEX) {
-      auto *result_definition = table_index_internal.add_definition_with_ids();
-      result_definition->mutable_table_id()->CopyFrom(*table_id_ptr);
-      result_definition->mutable_table_definition()->CopyFrom(definition);
-    } else {
-      new_table_id = new_id;
+    if (find_table_type) {
+      table_index_internal.add_table_ids()->CopyFrom(*table_id_ptr);
     }
 
-    DINGO_LOG(INFO) << "type: " << table_id.entity_type() << ", new_id=" << new_id;
+    DINGO_LOG(INFO) << "type: " << table_id.entity_type() << ", new_id=" << new_index_id;
   }
 
-  if (find_table_type && table_index_internal.definition_with_ids_size() > 0) {
+  if (find_table_type) {
     table_index_internal.set_id(new_table_id);
     coordinator_control_->CreateTableIndexesMap(table_index_internal, meta_increment);
   }
@@ -1307,7 +1337,7 @@ void MetaServiceImpl::GetTables(google::protobuf::RpcController * /*controller*/
   butil::Status ret;
   if (request->table_id().entity_type() == pb::meta::EntityType::ENTITY_TYPE_INDEX) {
     auto *definition_with_id = response->add_table_definition_with_ids();
-    ret = coordinator_control_->GetIndex(request->table_id().parent_entity_id(), request->table_id().entity_id(),
+    ret = coordinator_control_->GetIndex(request->table_id().parent_entity_id(), request->table_id().entity_id(), false,
                                          *definition_with_id);
   } else if (request->table_id().entity_type() == pb::meta::EntityType::ENTITY_TYPE_TABLE) {
     ret = coordinator_control_->GetTableIndexes(request->table_id().parent_entity_id(), request->table_id().entity_id(),
