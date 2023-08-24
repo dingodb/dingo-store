@@ -296,7 +296,7 @@ class CoordinatorControl : public MetaControl {
   // in: table_definition
   // out: new index_id
   // return: errno
-  butil::Status CreateIndex(uint64_t schema_id, const pb::meta::TableDefinition &table_definition,
+  butil::Status CreateIndex(uint64_t schema_id, const pb::meta::TableDefinition &table_definition, uint64_t table_id,
                             uint64_t &new_index_id, pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // update index
@@ -515,8 +515,10 @@ class CoordinatorControl : public MetaControl {
   // get index
   // in: schema_id
   // in: index_id
+  // in: check_compatibility
   // out: TableDefinitionWithId
-  butil::Status GetIndex(uint64_t schema_id, uint64_t index_id, pb::meta::TableDefinitionWithId &table_definition);
+  butil::Status GetIndex(uint64_t schema_id, uint64_t index_id, bool check_compatibility,
+                         pb::meta::TableDefinitionWithId &table_definition);
 
   // get index by name
   // in: schema_id
@@ -553,9 +555,10 @@ class CoordinatorControl : public MetaControl {
   // drop index
   // in: schema_id
   // in: index_id
+  // in: check_compatibility
   // out: meta_increment
   // return: errno
-  butil::Status DropIndex(uint64_t schema_id, uint64_t index_id,
+  butil::Status DropIndex(uint64_t schema_id, uint64_t index_id, bool check_compatibility,
                           pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // SwitchAutoSplit

@@ -109,7 +109,7 @@ void ClusterStatImpl::default_method(::google::protobuf::RpcController* controll
       os << "<ul>";
 
       pb::meta::TableDefinitionWithId table_definition;
-      controller_->GetIndex(schema_id, index_id, table_definition);
+      controller_->GetIndex(schema_id, index_id, false, table_definition);
       os << "<li> IndexName:" << table_definition.table_definition().name() << "</li>";
       PrintIndexDefinition(os, table_definition.table_definition());
 
