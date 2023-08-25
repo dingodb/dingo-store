@@ -114,6 +114,7 @@ public class IndexServiceClient {
                 .setTopN(parameter.getTopN())
                 .setWithoutVectorData(parameter.isWithoutVectorData())
                 .setWithScalarData(parameter.isWithScalarData())
+                .setWithTableData(true)
                 .addAllSelectedKeys(parameter.getSelectedKeys())
                 .setVectorCoprocessor(Optional.mapOrGet(
                         parameter.getCoprocessor(),

@@ -267,7 +267,7 @@ public class MetaServiceClient {
         }
 
         List<Integer> partCount = indexes.stream()
-            .map(i -> Optional.of(i.getPartition()).map(Partition::getDetails).map(List::size).orElse(0) + 1)
+            .map(i -> Optional.ofNullable(i.getPartition()).map(Partition::getDetails).map(List::size).orElse(0) + 1)
             .collect(Collectors.toList());
         Meta.GenerateTableIdsRequest request = Meta.GenerateTableIdsRequest.newBuilder()
                 .setSchemaId(id)
