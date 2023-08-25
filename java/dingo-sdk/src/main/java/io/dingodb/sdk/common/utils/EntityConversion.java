@@ -73,6 +73,7 @@ import io.dingodb.store.Store;
 
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -108,6 +109,7 @@ public class EntityConversion {
                 .setReplica(table.getReplica())
                 .addAllColumns(columnDefinitions)
                 .setAutoIncrement(table.getAutoIncrement())
+                .putAllProperties(table.getProperties() == null ? new HashMap() : table.getProperties())
                 .setCreateSql(Parameters.cleanNull(table.getCreateSql(), ""))
                 .setIndexParameter(Optional.mapOrGet(table.getIndexParameter(), EntityConversion::mapping, () -> Common.IndexParameter.newBuilder().build()))
                 .build();
