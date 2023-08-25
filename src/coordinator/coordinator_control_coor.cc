@@ -1411,13 +1411,19 @@ butil::Status CoordinatorControl::SplitRegionWithTaskList(uint64_t split_from_re
                          "SplitRegion split_from_region_id's leader_store_id is 0");
   }
 
-  // create task list
-  auto* new_task_list = CreateTaskList(meta_increment);
-
   // call create_region to get store_operations
   pb::coordinator_internal::MetaIncrement meta_increment_tmp;
   uint64_t new_region_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION, meta_increment);
-  CreateRegionForSplitInternal(split_from_region_id, new_region_id, meta_increment_tmp);
+  auto status_ret = CreateRegionForSplitInternal(split_from_region_id, new_region_id, meta_increment_tmp);
+  if (!status_ret.ok()) {
+    DINGO_LOG(ERROR) << "SplitRegionWithTaskList create region for split failed, split_from_region_id="
+                     << split_from_region_id << ", split_to_region_id=" << split_to_region_id
+                     << ", errcode=" << status_ret.error_code() << ", errmsg=" << status_ret.error_str();
+    return status_ret;
+  }
+
+  // create task list
+  auto* new_task_list = CreateTaskList(meta_increment);
 
   // build create_region task
   auto* create_region_task = new_task_list->add_tasks();
