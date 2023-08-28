@@ -1264,13 +1264,6 @@ void MetaServiceImpl::CreateTables(google::protobuf::RpcController *controller,
         return;
       }
 
-      if (find_table_type && table_id.parent_entity_id() != new_table_id) {
-        DINGO_LOG(ERROR) << "index parent id error.";
-        response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
-        response->mutable_error()->set_errmsg("index parent id error.");
-        return;
-      }
-
       ret = coordinator_control_->CreateIndex(request->schema_id().entity_id(), definition, new_table_id, new_index_id,
                                               meta_increment);
 
