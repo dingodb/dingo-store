@@ -36,6 +36,7 @@ const std::string TsoControl::SNAPSHOT_TSO_FILE = "tso.file";
 const std::string TsoControl::SNAPSHOT_TSO_FILE_WITH_SLASH = "/" + SNAPSHOT_TSO_FILE;
 
 void TsoClosure::Run() {
+  // DINGO_LOG(INFO) << "TsoClosure run";
   if (!status().ok()) {
     if (response) {
       response->mutable_error()->set_errcode(pb::error::Errno::ERAFT_NOTLEADER);
@@ -61,6 +62,8 @@ int TsoTimer::init(TsoControl* tso_control, int timeout_ms) {
 void TsoTimer::run() { this->tso_control->UpdateTimestamp(); }
 
 void TsoControl::UpdateTimestamp() {
+  // DINGO_LOG(INFO) << "update timestamp";
+
   if (!IsLeader()) {
     return;
   }
@@ -105,12 +108,9 @@ int TsoControl::SyncTimestamp(const pb::meta::TsoTimestamp& current_timestamp, i
   auto* timestamp = request.mutable_current_timestamp();
   timestamp->CopyFrom(current_timestamp);
   request.set_save_physical(save_physical);
-  butil::IOBuf data;
-  butil::IOBufAsZeroCopyOutputStream wrapper(&data);
-  if (!request.SerializeToZeroCopyStream(&wrapper)) {
-    DINGO_LOG(WARNING) << "Fail to serialize request";
-    return -1;
-  }
+
+  DINGO_LOG(DEBUG) << "sync timestamp request: " << request.ShortDebugString();
+
   BthreadCond sync_cond;
   TsoClosure* c = new TsoClosure(&sync_cond);
   c->response = &response;
@@ -124,11 +124,16 @@ int TsoControl::SyncTimestamp(const pb::meta::TsoTimestamp& current_timestamp, i
   this->SubmitMetaIncrement(c, &response, meta_increment);
 
   sync_cond.Wait();
+
   if (response.error().errcode() != pb::error::OK) {
     DINGO_LOG(ERROR) << "sync timestamp failed, request: " << request.ShortDebugString()
                      << ", response: " << response.ShortDebugString();
     return -1;
   }
+
+  DINGO_LOG(DEBUG) << "sync timestamp ok, request: " << request.ShortDebugString()
+                   << ", response: " << response.ShortDebugString();
+
   return 0;
 }
 
@@ -371,7 +376,7 @@ bool TsoControl::IsLeader() { return leader_term_.load(butil::memory_order_acqui
 void TsoControl::SetLeaderTerm(int64_t term) { leader_term_.store(term, butil::memory_order_release); }
 
 void TsoControl::OnLeaderStart(int64_t term) {
-  DINGO_LOG(INFO) << "OnLeaderStart, term=" << term;
+  DINGO_LOG(INFO) << "OnLeaderStart_TSO, term=" << term;
   int64_t now = ClockRealtimeMs();
   pb::meta::TsoTimestamp current;
   current.set_physical(now);
@@ -386,6 +391,7 @@ void TsoControl::OnLeaderStart(int64_t term) {
               << ") save:" << last_save;
     int ret = SyncTimestamp(current, last_save);
     if (ret < 0) {
+      LOG(INFO) << "sync timestamp failed";
       is_healty_ = false;
     }
     LOG(INFO) << "sync timestamp ok";
@@ -406,7 +412,6 @@ void TsoControl::SetRaftNode(std::shared_ptr<RaftNode> raft_node) { raft_node_ =
 // on_apply callback
 void TsoControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrement& meta_increment, bool is_leader,
                                     uint64_t /*term*/, uint64_t /*index*/, google::protobuf::Message* response) {
-  BAIDU_SCOPED_LOCK(tso_mutex_);
   for (int i = 0; i < meta_increment.timestamp_oracles_size(); i++) {
     const auto& tso = meta_increment.timestamp_oracles(i);
 
@@ -416,7 +421,7 @@ void TsoControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrement& met
     if (is_leader && response != nullptr) {
       tso_response = static_cast<pb::meta::TsoResponse*>(response);
       tso_response->set_op_type(tso_request.op_type());
-      DINGO_LOG(INFO) << "tso_request: " << tso_request.ShortDebugString();
+      // DINGO_LOG(INFO) << "tso_request: " << tso_request.ShortDebugString();
     }
 
     switch (tso_request.op_type()) {

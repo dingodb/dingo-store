@@ -221,10 +221,10 @@ butil::Status Server::StartAutoIncrementRegion(const std::shared_ptr<Config>& co
 butil::Status Server::StartTsoRegion(const std::shared_ptr<Config>& config, std::shared_ptr<Engine>& kv_engine) {
   // std::shared_ptr<Context> ctx = std::make_shared<Context>();
   std::shared_ptr<pb::common::RegionDefinition> region =
-      CreateCoordinatorRegion(config, Constant::kTsoRegionId, Constant::kMetaRegionName /*, ctx*/);
+      CreateCoordinatorRegion(config, Constant::kTsoRegionId, Constant::kTsoRegionName /*, ctx*/);
 
   auto raft_engine = std::dynamic_pointer_cast<RaftStoreEngine>(kv_engine);
-  return raft_engine->AddNode(region, coordinator_control_, false);
+  return raft_engine->AddNode(region, tso_control_, true);
 }
 
 bool Server::InitCoordinatorInteraction() {

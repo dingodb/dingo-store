@@ -93,8 +93,9 @@ class Constant {
   inline static const std::string kStoreScanMaxFetchCntByServer = "max_fetch_cnt_by_server";
   inline static const std::string kStoreScanScanIntervalMs = "scan_interval_ms";
 
-  inline static const std::string kMetaRegionName = "COORDINATOR";
-  inline static const std::string kAutoIncrementRegionName = "AUTO_INCREMENT";
+  inline static const std::string kMetaRegionName = "0-COORDINATOR";
+  inline static const std::string kAutoIncrementRegionName = "1-AUTO_INCREMENT";
+  inline static const std::string kTsoRegionName = "2-TSO";
 
   // segment log
   static const uint32_t kSegmentLogDefaultMaxSegmentSize = 8 * 1024 * 1024;  // 8M
