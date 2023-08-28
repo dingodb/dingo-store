@@ -1008,3 +1008,15 @@ void SendSwitchAutoSplit(std::shared_ptr<dingodb::CoordinatorInteraction> coordi
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << "RESPONSE =" << response.DebugString();
 }
+
+void SendGenTso(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  dingodb::pb::meta::TsoRequest request;
+  dingodb::pb::meta::TsoResponse response;
+
+  request.set_op_type(::dingodb::pb::meta::TsoOpType::OP_GEN_TSO);
+  request.set_count(10);
+
+  auto status = coordinator_interaction->SendRequest("TsoService", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG(INFO) << "RESPONSE =" << response.DebugString();
+}

@@ -724,6 +724,11 @@ int CoordinatorSender() {
     SendLock(coordinator_interaction_version);
   }
 
+  // tso
+  else if (FLAGS_method == "GenTso") {
+    SendGenTso(coordinator_interaction_meta);
+  }
+
   // debug
   else if (FLAGS_method == "CoordinatorDebug") {
     CoordinatorSendDebug();

@@ -53,6 +53,16 @@ class MetaServiceImpl : public pb::meta::MetaService {
     error_in_response->set_errcode(Errno::ERAFT_NOTLEADER);
   }
 
+  template <typename T>
+  void RedirectResponseTso(T response) {
+    pb::common::Location leader_location;
+    this->tso_control_->GetLeaderLocation(leader_location);
+
+    auto* error_in_response = response->mutable_error();
+    error_in_response->mutable_leader_location()->CopyFrom(leader_location);
+    error_in_response->set_errcode(Errno::ERAFT_NOTLEADER);
+  }
+
   void SetKvEngine(std::shared_ptr<Engine> engine) { engine_ = engine; };
 
   void SetControl(std::shared_ptr<CoordinatorControl> coordinator_control) {

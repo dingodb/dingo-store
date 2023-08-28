@@ -147,6 +147,9 @@ void SendCoorKvCompaction(std::shared_ptr<dingodb::CoordinatorInteraction> coord
 void SendOneTimeWatch(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendLock(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 
+// tso
+void SendGenTso(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+
 // debug
 void SendDebug();
 std::string EncodeUint64(uint64_t value);
