@@ -339,6 +339,10 @@ message MetaIncrementKvRevision {
   MetaIncrementOpType op_type = 3;
 }
 
+message MetaIncrementTso {
+  dingodb.pb.meta.TsoRequest tso_request = 1;
+}
+
 // MetaIncrement stores meta data need to be inserted or updated
 message MetaIncrement {
   repeated MetaIncrementCoordinator coordinators = 1;
@@ -357,6 +361,7 @@ message MetaIncrement {
   repeated MetaIncrementIndexMetrics index_metrics = 14;
 
   repeated MetaIncrementAutoIncrement auto_increment = 20;
+  repeated MetaIncrementTso timestamp_oracles = 21;
   repeated MetaIncrementRegion deleted_regions = 30;
 
   repeated MetaIncrementLease leases = 40;
@@ -364,6 +369,10 @@ message MetaIncrement {
   repeated MetaIncrementKvRevision kv_revs = 42;
 
   repeated MetaIncrementTableIndex table_indexes = 50;
+}
+
+message TsoStorage {
+  int64 physical = 1;
 }
 
 // snapshot pb file message
@@ -386,6 +395,7 @@ message MetaSnapshotFile {
   repeated dingodb.pb.common.KeyValue auto_increment_map_kvs = 20;  // now unused, just a placeholder
   AutoIncrementStorage auto_increment_storage = 21;
   repeated dingodb.pb.common.KeyValue table_index_map_kvs = 22;
+  TsoStorage tso_storage = 23;
 
   repeated dingodb.pb.common.KeyValue deleted_region_map_kvs = 30;
 

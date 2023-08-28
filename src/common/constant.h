@@ -28,6 +28,9 @@ class Constant {
   // Define Global Region Id for auto increment
   static const uint64_t kAutoIncrementRegionId = 1;
 
+  // Define Global Region Id for tso
+  static const uint64_t kTsoRegionId = 2;
+
   // Define Global TableID for Coordinator(As only one)
   static const uint64_t kCoordinatorTableId = 0;
 
