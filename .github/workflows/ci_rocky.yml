@@ -1,4 +1,4 @@
-name: CMake_rocky8.6
+name: CMake_rocky8.8
 
 on:
   push:
@@ -16,7 +16,7 @@ jobs:
     # You can convert this to a matrix build if you need cross-platform coverage.
     # See: https://docs.github.com/en/free-pro-team@latest/actions/learn-github-actions/managing-complex-workflows#using-a-build-matrix
     runs-on: ubuntu-latest
-    container: dingodatabase/dingo-store-rocky-8.6-dev:latest
+    container: dingodatabase/dingo-store-rocky-8.8-dev:latest
 
     steps:
     - uses: actions/checkout@v3
