@@ -1436,7 +1436,7 @@ void MetaServiceImpl::TsoService(google::protobuf::RpcController *controller,
   brpc::ClosureGuard done_guard(done);
 
   if (!tso_control_->IsLeader()) {
-    return RedirectResponse(response);
+    return RedirectResponseTso(response);
   }
   DINGO_LOG(INFO) << request->DebugString();
 
