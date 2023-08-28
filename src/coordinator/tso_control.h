@@ -163,13 +163,10 @@ class TsoControl : public MetaControl {
   void UpdateTimestamp();
   void OnApply(braft::Iterator &iter);
 
-  static const std::string SNAPSHOT_TSO_FILE;             // NOLINT
-  static const std::string SNAPSHOT_TSO_FILE_WITH_SLASH;  // NOLINT
-
  private:
   TsoTimer tso_update_timer_;
   TsoObj tso_obj_;
-  bthread_mutex_t tso_mutex_;  // 保护_tso_obj，C++20 atomic<std::shared_ptr<U>>
+  bthread_mutex_t tso_mutex_;  // for tso_obj_
   bool is_healty_ = true;
 
   // node is leader or not
