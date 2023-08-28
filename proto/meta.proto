@@ -573,6 +573,37 @@ message SwitchAutoSplitResponse {
   dingodb.pb.error.Error error = 1;
 }
 
+enum TsoOpType {
+  OP_NONE = 0;
+  OP_GEN_TSO = 1;         // Get new timestamp oracle
+  OP_RESET_TSO = 2;       // Reset timestamp oracle
+  OP_UPDATE_TSO = 3;      // Update timestamp oracle
+  OP_QUERY_TSO_INFO = 4;  // Query timestamp oracle info
+}
+
+message TsoTimestamp {
+  int64 physical = 1;
+  int64 logical = 2;
+}
+
+message TsoRequest {
+  TsoOpType op_type = 1;
+  int64 count = 2;
+  TsoTimestamp current_timestamp = 3;
+  int64 save_physical = 4;
+  bool force = 5;
+};
+
+message TsoResponse {
+  TsoOpType op_type = 1;
+  dingodb.pb.error.Error error = 2;
+  TsoTimestamp start_timestamp = 3;
+  int64 count = 4;
+  int64 save_physical = 5;
+  int64 system_time = 6;
+  string leader = 7;
+};
+
 service MetaService {
   // GetSchemas
   // in: schema_id
@@ -748,8 +779,9 @@ service MetaService {
   // SwitchAutoSplit for table/index
   rpc SwitchAutoSplit(SwitchAutoSplitRequest) returns (SwitchAutoSplitResponse);
 
-  // TODO
-  // Operation about User, such as create/drop/grant.
+  // Timestamp Oracle
+  // TsoService
+  rpc TsoService(TsoRequest) returns (TsoResponse);
 
   // Operation about Metrics
 }

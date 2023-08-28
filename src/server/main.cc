@@ -522,6 +522,7 @@ int main(int argc, char *argv[]) {
     coordinator_service.SetAutoIncrementControl(dingo_server->GetAutoIncrementControlReference());
     meta_service.SetControl(dingo_server->GetCoordinatorControl());
     meta_service.SetAutoIncrementControl(dingo_server->GetAutoIncrementControlReference());
+    meta_service.SetTsoControl(dingo_server->GetTsoControl());
     version_service.SetControl(dingo_server->GetCoordinatorControl());
 
     // the Engine should be init success
@@ -568,6 +569,12 @@ int main(int argc, char *argv[]) {
     status = dingo_server->StartAutoIncrementRegion(config, engine);
     if (!status.ok()) {
       DINGO_LOG(ERROR) << "Init Auto Increment RaftNode and StateMachine Failed:" << status;
+      return -1;
+    }
+
+    status = dingo_server->StartTsoRegion(config, engine);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << "Init Tso RaftNode and StateMachine Failed:" << status;
       return -1;
     }
 

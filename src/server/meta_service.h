@@ -21,6 +21,7 @@
 #include "brpc/server.h"
 #include "coordinator/auto_increment_control.h"
 #include "coordinator/coordinator_control.h"
+#include "coordinator/tso_control.h"
 #include "engine/engine.h"
 #include "proto/meta.pb.h"
 
@@ -53,13 +54,16 @@ class MetaServiceImpl : public pb::meta::MetaService {
   }
 
   void SetKvEngine(std::shared_ptr<Engine> engine) { engine_ = engine; };
+
   void SetControl(std::shared_ptr<CoordinatorControl> coordinator_control) {
-    this->coordinator_control_ = coordinator_control;
+    coordinator_control_ = coordinator_control;
   };
 
   void SetAutoIncrementControl(std::shared_ptr<AutoIncrementControl>& auto_increment_control) {
     auto_increment_control_ = auto_increment_control;
   };
+
+  void SetTsoControl(std::shared_ptr<TsoControl> tso_control) { tso_control_ = tso_control; };
 
   void GetSchemas(google::protobuf::RpcController* controller, const pb::meta::GetSchemasRequest* request,
                   pb::meta::GetSchemasResponse* response, google::protobuf::Closure* done) override;
@@ -144,6 +148,9 @@ class MetaServiceImpl : public pb::meta::MetaService {
                        const ::dingodb::pb::meta::SwitchAutoSplitRequest* request,
                        pb::meta::SwitchAutoSplitResponse* response, google::protobuf::Closure* done) override;
 
+  void TsoService(google::protobuf::RpcController* controller, const pb::meta::TsoRequest* request,
+                  pb::meta::TsoResponse* response, google::protobuf::Closure* done) override;
+
  private:
   // table and index definition convertor
   static void TableDefinitionToIndexDefinition(const pb::meta::TableDefinition& table_definition,
@@ -153,6 +160,7 @@ class MetaServiceImpl : public pb::meta::MetaService {
 
   std::shared_ptr<CoordinatorControl> coordinator_control_;
   std::shared_ptr<AutoIncrementControl> auto_increment_control_;
+  std::shared_ptr<TsoControl> tso_control_;
   std::shared_ptr<Engine> engine_;
 };
 

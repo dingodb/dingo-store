@@ -24,6 +24,7 @@
 #include "coordinator/auto_increment_control.h"
 #include "coordinator/coordinator_control.h"
 #include "coordinator/coordinator_interaction.h"
+#include "coordinator/tso_control.h"
 #include "crontab/crontab.h"
 #include "engine/raw_engine.h"
 #include "engine/storage.h"
@@ -112,6 +113,8 @@ class Server {
 
   butil::Status StartAutoIncrementRegion(const std::shared_ptr<Config>& config, std::shared_ptr<Engine>& kv_engine);
 
+  butil::Status StartTsoRegion(const std::shared_ptr<Config>& config, std::shared_ptr<Engine>& kv_engine);
+
   // Recover server state, include store/region/raft.
   bool Recover();
 
@@ -144,6 +147,7 @@ class Server {
   std::shared_ptr<RegionCommandManager> GetRegionCommandManager() { return region_command_manager_; }
   std::shared_ptr<CoordinatorControl> GetCoordinatorControl() { return coordinator_control_; }
   std::shared_ptr<AutoIncrementControl>& GetAutoIncrementControlReference() { return auto_increment_control_; }
+  std::shared_ptr<TsoControl> GetTsoControl() { return tso_control_; }
 
   void SetEndpoints(const std::vector<butil::EndPoint> endpoints) { endpoints_ = endpoints; }
 
@@ -237,8 +241,11 @@ class Server {
 
   // This is store and coordinator heartbeat.
   std::shared_ptr<Heartbeat> heartbeat_;
-  // This is manage auto increment meta data,
+  // This is manage auto increment meta data, of table auto increment.
   std::shared_ptr<AutoIncrementControl> auto_increment_control_;
+
+  // This is manage tso meta data, of timestamp oracle.
+  std::shared_ptr<TsoControl> tso_control_;
 
   // checkpoint directory
   std::string checkpoint_path_;

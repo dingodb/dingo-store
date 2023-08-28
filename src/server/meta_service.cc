@@ -1430,4 +1430,23 @@ void MetaServiceImpl::SwitchAutoSplit(google::protobuf::RpcController *controlle
   DINGO_LOG(INFO) << "SwitchAutoSplit Success.";
 }
 
+void MetaServiceImpl::TsoService(google::protobuf::RpcController *controller,
+                                 const ::dingodb::pb::meta::TsoRequest *request, pb::meta::TsoResponse *response,
+                                 google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!tso_control_->IsLeader()) {
+    return RedirectResponse(response);
+  }
+  DINGO_LOG(INFO) << request->DebugString();
+
+  if (request->op_type() == pb::meta::TsoOpType::OP_NONE) {
+    response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errmsg("tso op_type not found.");
+    return;
+  }
+
+  tso_control_->Process(controller, request, response, done_guard.release());
+}
+
 }  // namespace dingodb
