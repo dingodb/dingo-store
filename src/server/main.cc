@@ -565,18 +565,21 @@ int main(int argc, char *argv[]) {
       DINGO_LOG(ERROR) << "Init Meta RaftNode and StateMachine Failed:" << status;
       return -1;
     }
+    DINGO_LOG(INFO) << "Meta region start";
 
     status = dingo_server->StartAutoIncrementRegion(config, engine);
     if (!status.ok()) {
       DINGO_LOG(ERROR) << "Init Auto Increment RaftNode and StateMachine Failed:" << status;
       return -1;
     }
+    DINGO_LOG(INFO) << "Auto Increment region start";
 
     status = dingo_server->StartTsoRegion(config, engine);
     if (!status.ok()) {
       DINGO_LOG(ERROR) << "Init Tso RaftNode and StateMachine Failed:" << status;
       return -1;
     }
+    DINGO_LOG(INFO) << "Tso region start";
 
     // build in-memory meta cache
     // TODO: load data from kv engine into maps
