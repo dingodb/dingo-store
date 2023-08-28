@@ -25,6 +25,15 @@ option(ENABLE_FAILPOINT "Enable failpoint" OFF)
 option(WITH_DISKANN "Build with diskann index" OFF)
 option(WITH_MKL "Build with intel mkl" OFF)
 option(BOOST_SEARCH_PATH "")
+option(BUILD_GOOGLE_SANITIZE "enable google sanitize" OFF)
+
+if(BUILD_GOOGLE_SANITIZE)
+    add_compile_options(-fsanitize=address -fno-omit-frame-pointer)
+    add_link_options(-fsanitize=address -fno-omit-frame-pointer)
+    message(STATUS "enable google sanitize")
+endif()
+
+
 
 # To avoid rocksdb PROTABLE options on old arch machine when build using docker
 set(ROCKSDB_PROTABLE_OPTION "0" CACHE STRING "An option for rocksdb PROTABLE, default 0")
@@ -408,7 +417,15 @@ if(DINGO_BUILD_STATIC)
         # This is only for build some modules for testing, not for the whole project.
         # This project is currently not compatible with MacOS.
     else()
-        set(CMAKE_EXE_LINKER_FLAGS "-static-libgcc -static-libstdc++")
+        if(BUILD_GOOGLE_SANITIZE)
+            set(CMAKE_EXE_LINKER_FLAGS "-static-libgcc -static-libstdc++  -static-libasan")
+        else()
+            set(CMAKE_EXE_LINKER_FLAGS "-static-libgcc -static-libstdc++")
+        endif()
+    endif()
+else ()
+    if(BUILD_GOOGLE_SANITIZE)
+        set(CMAKE_EXE_LINKER_FLAGS "-static-libasan")
     endif()
 endif()
 
