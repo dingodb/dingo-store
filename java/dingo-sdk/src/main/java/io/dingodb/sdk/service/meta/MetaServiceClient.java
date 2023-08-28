@@ -328,6 +328,16 @@ public class MetaServiceClient {
         return response.getError().getErrcodeValue() == 0;
     }
 
+    public synchronized boolean dropTables(@NonNull Collection<DingoCommonId> tableIds) {
+        Meta.DropTablesRequest request = Meta.DropTablesRequest.newBuilder()
+                .addAllTableIds(tableIds.stream().map(EntityConversion::mapping).collect(Collectors.toList()))
+                .build();
+
+        Meta.DropTablesResponse response = metaConnector.exec(stub -> stub.dropTables(request));
+
+        return response.getError().getErrcodeValue() == 0;
+    }
+
     public synchronized boolean dropTables(@NonNull List<String> tableNames) {
         List<Meta.DingoCommonId> tableIds = new ArrayList<>();
         for (String tableName : tableNames) {
