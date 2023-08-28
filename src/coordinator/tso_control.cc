@@ -32,9 +32,6 @@
 
 namespace dingodb {
 
-const std::string TsoControl::SNAPSHOT_TSO_FILE = "tso.file";
-const std::string TsoControl::SNAPSHOT_TSO_FILE_WITH_SLASH = "/" + SNAPSHOT_TSO_FILE;
-
 void TsoClosure::Run() {
   // DINGO_LOG(INFO) << "TsoClosure run";
   if (!status().ok()) {
@@ -190,6 +187,10 @@ void TsoControl::GenTso(const pb::meta::TsoRequest* request, pb::meta::TsoRespon
   response->set_count(count);
 }
 
+// This method is called by the gRPC server.
+// This method is used to process the request from the client.
+// The response is filled by the state machine and sent back to the client.
+// The done callback is used to notify the gRPC server that the request is
 void TsoControl::Process(google::protobuf::RpcController* controller, const pb::meta::TsoRequest* request,
                          pb::meta::TsoResponse* response, google::protobuf::Closure* done) {
   brpc::ClosureGuard done_guard(done);
@@ -243,6 +244,8 @@ void TsoControl::Process(google::protobuf::RpcController* controller, const pb::
   this->SubmitMetaIncrement(closure, response, meta_increment);
 }
 
+// If request.force == false, ResetTso is equal to UpdateTso
+// Else ResetTso will force update tso
 void TsoControl::ResetTso(const pb::meta::TsoRequest& request, pb::meta::TsoResponse* response) {
   if (request.has_current_timestamp() && request.save_physical() > 0) {
     int64_t physical = request.save_physical();
@@ -313,6 +316,9 @@ TsoControl::TsoControl() {
   leader_term_.store(-1, butil::memory_order_release);
 }
 
+// tso_update_timer_ is a timer to update timestamp
+// tso_update_timer_ is started when OnLeaderStart
+// and is stopped in OnLeaderStop
 bool TsoControl::Init() {
   DINGO_LOG(INFO) << "init";
   tso_update_timer_.init(this, kUpdateTimestampIntervalMs);
@@ -401,6 +407,8 @@ void TsoControl::OnLeaderStart(int64_t term) {
   bth.Run(func);
 }
 
+// only leader will update timestamp
+// so follower will stop timer
 void TsoControl::OnLeaderStop() {
   DINGO_LOG(INFO) << "OnLeaderStop";
   tso_update_timer_.stop();
@@ -450,6 +458,8 @@ int TsoControl::GetAppliedTermAndIndex(uint64_t& term, uint64_t& index) {
   return 0;
 }
 
+// tso's snapshot is only a int64_t value
+// just reuse the snapshot logic of coordinator and auto increment controller
 std::shared_ptr<Snapshot> TsoControl::PrepareRaftSnapshot() {
   int64_t* save_physical = new (std::nothrow) int64_t;
   {
