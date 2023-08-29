@@ -37,7 +37,8 @@ namespace dingodb {
 
 class VectorIndexHnsw : public VectorIndex {
  public:
-  explicit VectorIndexHnsw(uint64_t id, const pb::common::VectorIndexParameter& vector_index_parameter);
+  explicit VectorIndexHnsw(uint64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
+                           const pb::common::Range& range);
 
   ~VectorIndexHnsw() override;
 

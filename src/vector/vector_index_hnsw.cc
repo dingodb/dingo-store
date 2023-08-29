@@ -126,8 +126,9 @@ inline void ParallelFor(size_t start, size_t end, size_t num_threads, Function f
   }
 }
 
-VectorIndexHnsw::VectorIndexHnsw(uint64_t id, const pb::common::VectorIndexParameter& vector_index_parameter)
-    : VectorIndex(id, vector_index_parameter) {
+VectorIndexHnsw::VectorIndexHnsw(uint64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
+                                 const pb::common::Range& range)
+    : VectorIndex(id, vector_index_parameter, range) {
   bthread_mutex_init(&mutex_, nullptr);
   hnsw_num_threads_ = std::thread::hardware_concurrency();
 
@@ -155,8 +156,7 @@ VectorIndexHnsw::VectorIndexHnsw(uint64_t id, const pb::common::VectorIndexParam
     // avoid error write vector index failed cause leader and follower data not consistency.
     // let user_max_elements_<actual_max_elements.
     user_max_elements_ = hnsw_parameter.max_elements();
-    uint32_t actual_max_elements =
-        static_cast<uint32_t>(hnsw_parameter.max_elements() * Constant::kHnswMaxElementsAmplificationRatio);
+    uint32_t actual_max_elements = hnsw_parameter.max_elements() + Constant::kHnswMaxElementsExpandNum;
 
     hnsw_index_ = new hnswlib::HierarchicalNSW<float>(hnsw_space_, actual_max_elements, hnsw_parameter.nlinks(),
                                                       hnsw_parameter.efconstruction(), 100, false);

@@ -64,7 +64,8 @@ class FlatIDSelector : public faiss::IDSelector {
 
 class VectorIndexFlat : public VectorIndex {
  public:
-  explicit VectorIndexFlat(uint64_t id, const pb::common::VectorIndexParameter& vector_index_parameter);
+  explicit VectorIndexFlat(uint64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
+                           const pb::common::Range& ranges);
 
   ~VectorIndexFlat() override;
 

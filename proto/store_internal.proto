@@ -62,3 +62,9 @@ message VectorIndexMeta {
   uint64 apply_log_id = 5;
   uint64 snapshot_log_id = 6;
 }
+
+message VectorIndexSnapshotMeta {
+  uint64 vector_index_id = 1;
+  uint64 snapshot_log_id = 2;
+  dingodb.pb.common.Range range = 3;
+}

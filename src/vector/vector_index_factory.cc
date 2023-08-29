@@ -36,7 +36,8 @@
 namespace dingodb {
 
 std::shared_ptr<VectorIndex> VectorIndexFactory::New(uint64_t id,
-                                                     const pb::common::VectorIndexParameter& index_parameter) {
+                                                     const pb::common::VectorIndexParameter& index_parameter,
+                                                     const pb::common::Range& range) {
   if (index_parameter.vector_index_type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
     const auto& hnsw_parameter = index_parameter.hnsw_parameter();
 
@@ -63,7 +64,7 @@ std::shared_ptr<VectorIndex> VectorIndexFactory::New(uint64_t id,
 
     // create index may throw exeception, so we need to catch it
     try {
-      auto new_hnsw_index = std::make_shared<VectorIndexHnsw>(id, index_parameter);
+      auto new_hnsw_index = std::make_shared<VectorIndexHnsw>(id, index_parameter, range);
       if (new_hnsw_index == nullptr) {
         DINGO_LOG(ERROR) << "create hnsw index failed of new_hnsw_index is nullptr, id=" << id
                          << ", parameter=" << index_parameter.DebugString();
@@ -91,7 +92,7 @@ std::shared_ptr<VectorIndex> VectorIndexFactory::New(uint64_t id,
 
     // create index may throw exeception, so we need to catch it
     try {
-      auto new_flat_index = std::make_shared<VectorIndexFlat>(id, index_parameter);
+      auto new_flat_index = std::make_shared<VectorIndexFlat>(id, index_parameter, range);
       if (new_flat_index == nullptr) {
         DINGO_LOG(ERROR) << "create flat index failed of new_flat_index is nullptr"
                          << ", id=" << id << ", parameter=" << index_parameter.DebugString();

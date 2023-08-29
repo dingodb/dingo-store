@@ -42,6 +42,7 @@
 #include "proto/error.pb.h"
 #include "proto/file_service.pb.h"
 #include "proto/node.pb.h"
+#include "proto/store_internal.pb.h"
 #include "server/file_service.h"
 #include "server/server.h"
 #include "vector/vector_index_factory.h"
@@ -612,7 +613,7 @@ butil::Status VectorIndexSnapshotManager::SaveVectorIndexSnapshot(VectorIndexWra
   }
 
   // Write vector index meta
-  std::string meta_filepath = fmt::format("{}/meta", tmp_snapshot_path, vector_index_id);
+  std::string meta_filepath = fmt::format("{}/meta", tmp_snapshot_path);
   std::ofstream meta_file(meta_filepath);
   if (!meta_file.is_open()) {
     DINGO_LOG(ERROR) << fmt::format(
@@ -621,7 +622,12 @@ butil::Status VectorIndexSnapshotManager::SaveVectorIndexSnapshot(VectorIndexWra
     return butil::Status(pb::error::Errno::EINTERNAL, "Open vector index file log_id file failed");
   }
 
-  meta_file << apply_log_index;
+  pb::store_internal::VectorIndexSnapshotMeta meta;
+  meta.set_vector_index_id(vector_index_id);
+  meta.set_snapshot_log_id(apply_log_index);
+  meta.mutable_range()->CopyFrom(vector_index->Range());
+
+  meta_file << meta.SerializeAsString();
   meta_file.close();
 
   // If already exist snapshot then give up.
@@ -687,19 +693,30 @@ std::shared_ptr<VectorIndex> VectorIndexSnapshotManager::LoadVectorIndexSnapshot
   DINGO_LOG(INFO) << fmt::format("[vector_index.load_snapshot][index_id({})] snapshot log id is {}",
                                  last_snapshot->VectorIndexId(), last_snapshot->SnapshotLogId());
 
-  // check if can load from file
-  std::string index_data_path = last_snapshot->IndexDataPath();
+  // check whether index file exist.
+  if (!Helper::IsExistPath(last_snapshot->IndexDataPath())) {
+    DINGO_LOG(ERROR) << fmt::format("[vector_index.load_snapshot][index_id({})] index file {} not exist, can't load.",
+                                    last_snapshot->VectorIndexId(), last_snapshot->IndexDataPath());
+    return nullptr;
+  }
 
-  // check if file vector_index_file_path exists
-  if (!std::filesystem::exists(index_data_path)) {
-    DINGO_LOG(ERROR) << fmt::format(
-        "[vector_index.load_snapshot][index_id({})] file {} not exist, can't load, need to build vector_index",
-        last_snapshot->VectorIndexId(), index_data_path);
+  // check whether meta file exist.
+  if (!Helper::IsExistPath(last_snapshot->MetaPath())) {
+    DINGO_LOG(ERROR) << fmt::format("[vector_index.load_snapshot][index_id({})] meta file {} not exist, can't load.",
+                                    last_snapshot->VectorIndexId(), last_snapshot->MetaPath());
+    return nullptr;
+  }
+
+  pb::store_internal::VectorIndexSnapshotMeta meta;
+  std::ifstream meta_file(last_snapshot->MetaPath());
+  if (!meta.ParseFromIstream(&meta_file)) {
+    DINGO_LOG(WARNING) << fmt::format("[vector_index.load_snapshot][index_id({})] proto ParseFromIstream failed.",
+                                      vector_index_id);
     return nullptr;
   }
 
   // create a new vector_index
-  auto vector_index = VectorIndexFactory::New(vector_index_id, vector_index_wrapper->IndexParameter());
+  auto vector_index = VectorIndexFactory::New(vector_index_id, vector_index_wrapper->IndexParameter(), meta.range());
   if (!vector_index) {
     DINGO_LOG(WARNING) << fmt::format("[vector_index.load_snapshot][index_id({})] New vector index failed.",
                                       vector_index_id);
@@ -707,7 +724,7 @@ std::shared_ptr<VectorIndex> VectorIndexSnapshotManager::LoadVectorIndexSnapshot
   }
 
   // load index from file
-  auto ret = vector_index->Load(index_data_path);
+  auto ret = vector_index->Load(last_snapshot->IndexDataPath());
   if (!ret.ok()) {
     DINGO_LOG(WARNING) << fmt::format("[vector_index.load_snapshot][index_id({})] Load vector index failed.",
                                       vector_index_id);
