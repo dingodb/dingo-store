@@ -45,7 +45,8 @@ struct SaveRaftSnapshotArg {
 butil::Status RaftSnapshot::GenSnapshotFileByScan(const std::string& checkpoint_path, store::RegionPtr region,
                                                   std::vector<pb::store_internal::SstFileInfo>& sst_files) {
   if (!std::filesystem::create_directories(checkpoint_path)) {
-    DINGO_LOG(ERROR) << "Create directory failed: " << checkpoint_path;
+    DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] Create directory failed, path: {} ", region->Id(),
+                                    checkpoint_path);
     return butil::Status(pb::error::EINTERNAL, "Create directory failed");
   }
   auto raw_engine = std::dynamic_pointer_cast<RawRocksEngine>(engine_);
@@ -64,8 +65,8 @@ butil::Status RaftSnapshot::GenSnapshotFileByScan(const std::string& checkpoint_
   auto status = RawRocksEngine::NewSstFileWriter()->SaveFile(iter, sst_path);
   if (!status.ok()) {
     if (status.error_code() != pb::error::ENO_ENTRIES) {
-      DINGO_LOG(ERROR) << fmt::format("save file failed, path: {} error: {} {}", sst_path, status.error_code(),
-                                      status.error_str());
+      DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] save file failed, path: {} error: {} {}",
+                                      region->Id(), sst_path, status.error_code(), status.error_str());
     }
     return status;
   }
@@ -86,20 +87,16 @@ butil::Status RaftSnapshot::GenSnapshotFileByScan(const std::string& checkpoint_
 
 // Filter sst file by range
 std::vector<pb::store_internal::SstFileInfo> FilterSstFile(  // NOLINT
-    std::vector<pb::store_internal::SstFileInfo>& sst_files,
-    const std::vector<std::pair<std::string, std::string>>& ranges) {
+    std::vector<pb::store_internal::SstFileInfo>& sst_files, const std::vector<pb::common::Range>& ranges) {
   std::vector<pb::store_internal::SstFileInfo> filter_sst_files;
   for (auto& sst_file : sst_files) {
-    DINGO_LOG(INFO) << "sst file info: " << sst_file.ShortDebugString();
     if (sst_file.level() == -1) {
       filter_sst_files.push_back(sst_file);
       continue;
     }
 
     for (const auto& range : ranges) {
-      const std::string& start_key = range.first;
-      const std::string& end_key = range.second;
-      if ((end_key.empty() || sst_file.start_key() < end_key) && start_key < sst_file.end_key()) {
+      if (sst_file.start_key() < range.end_key() && range.start_key() < sst_file.end_key()) {
         filter_sst_files.push_back(sst_file);
         break;
       }
@@ -117,41 +114,31 @@ butil::Status RaftSnapshot::GenSnapshotFileByCheckpoint(const std::string& check
   auto checkpoint = raw_engine->NewCheckpoint();
   auto status = checkpoint->Create(checkpoint_path, raw_engine->GetColumnFamily(Constant::kStoreDataCF), tmp_sst_files);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << fmt::format("Create checkpoint failed, path: {} error: {} {}", checkpoint_path,
-                                    status.error_code(), status.error_str());
+    DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] Create checkpoint failed, path: {} error: {} {}",
+                                    region->Id(), checkpoint_path, status.error_code(), status.error_str());
     return butil::Status();
   }
 
   // Get region actual range
-  const auto& region_range = region->RawRange();
-  std::vector<std::pair<std::string, std::string>> ranges;
-  if (region->Type() == pb::common::INDEX_REGION) {
-    ranges.push_back(std::make_pair(VectorCodec::FillVectorDataPrefix(region_range.start_key()),
-                                    VectorCodec::FillVectorDataPrefix(region_range.end_key())));
-
-    ranges.push_back(std::make_pair(VectorCodec::FillVectorScalarPrefix(region_range.start_key()),
-                                    VectorCodec::FillVectorScalarPrefix(region_range.end_key())));
-
-    ranges.push_back(std::make_pair(VectorCodec::FillVectorTablePrefix(region_range.start_key()),
-                                    VectorCodec::FillVectorTablePrefix(region_range.end_key())));
-  } else {
-    ranges.push_back(std::make_pair(region_range.start_key(), region_range.end_key()));
+  sst_files = FilterSstFile(tmp_sst_files, region->PhysicsRange());
+  for (const auto& sst_file : sst_files) {
+    DINGO_LOG(INFO) << fmt::format("[raft.snapshot][region({})] sst file info: {}", region->Id(),
+                                   sst_file.ShortDebugString());
   }
 
-  sst_files = FilterSstFile(tmp_sst_files, ranges);
   return butil::Status();
 }
 
 bool RaftSnapshot::SaveSnapshot(braft::SnapshotWriter* writer, store::RegionPtr region,  // NOLINT
                                 GenSnapshotFileFunc func) {
   if (region->RawRange().start_key().empty() || region->RawRange().end_key().empty()) {
-    DINGO_LOG(ERROR) << fmt::format("Save snapshot region {} failed, range is invalid", region->Id());
+    DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] Save snapshot failed, range is invalid", region->Id());
     return false;
   }
 
-  DINGO_LOG(INFO) << fmt::format(
-      "Save snapshot region {} region type {} range[{}-{}]", region->Id(), pb::common::RegionType_Name(region->Type()),
-      Helper::StringToHex(region->RawRange().start_key()), Helper::StringToHex(region->RawRange().end_key()));
+  DINGO_LOG(INFO) << fmt::format("[raft.snapshot][region({})] Save snapshot range[{}-{})", region->Id(),
+                                 Helper::StringToHex(region->RawRange().start_key()),
+                                 Helper::StringToHex(region->RawRange().end_key()));
 
   std::string region_checkpoint_path =
       fmt::format("{}/{}_{}", Server::GetInstance()->GetCheckpointPath(), region->Id(), Helper::TimestampMs());
@@ -167,7 +154,13 @@ bool RaftSnapshot::SaveSnapshot(braft::SnapshotWriter* writer, store::RegionPtr 
   for (auto& sst_file : sst_files) {
     std::string snapshot_path = writer->get_path() + "/" + sst_file.name();
     DINGO_LOG(DEBUG) << fmt::format("snapshot_path: {} to {}", sst_file.path(), snapshot_path);
-    Helper::Link(sst_file.path(), snapshot_path);
+    if (!Helper::Link(sst_file.path(), snapshot_path) || !Helper::IsExistPath(snapshot_path)) {
+      DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] link file failed, path: {}", region->Id(),
+                                      snapshot_path);
+      // Clean temp checkpoint file
+      Helper::RemoveAllFileOrDirectory(region_checkpoint_path);
+      return false;
+    }
 
     auto filemeta = std::make_unique<braft::LocalFileMeta>();
     filemeta->set_user_meta(sst_file.SerializeAsString());
@@ -202,7 +195,7 @@ static bool MergeCheckpointFile(std::string path, std::string merge_file_path, c
     if (status.error_code() == pb::error::ENO_ENTRIES) {
       return true;
     }
-    DINGO_LOG(ERROR) << fmt::format("Merge checkpoint file failed, error: {} {}",
+    DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region()] Merge checkpoint file failed, error: {} {}",
                                     pb::error::Errno_Name(status.error_code()), status.error_str());
     return false;
   }
@@ -212,11 +205,11 @@ static bool MergeCheckpointFile(std::string path, std::string merge_file_path, c
 
 // Load snapshot by ingest sst files
 bool RaftSnapshot::LoadSnapshot(braft::SnapshotReader* reader, store::RegionPtr region) {
-  DINGO_LOG(INFO) << fmt::format("LoadSnapshot region {}", region->Id());
+  DINGO_LOG(INFO) << fmt::format("[raft.snapshot][region({})] load snapshot...", region->Id());
   std::vector<std::string> files;
   reader->list_files(&files);
   if (files.empty()) {
-    DINGO_LOG(WARNING) << "Snapshot not include file";
+    DINGO_LOG(WARNING) << fmt::format("[raft.snapshot][region({})] snapshot not include file", region->Id());
   }
 
   // Delete old region data
@@ -236,7 +229,7 @@ bool RaftSnapshot::LoadSnapshot(braft::SnapshotReader* reader, store::RegionPtr 
   std::vector<std::string> sst_files;
   std::string current_path = reader->get_path() + "/" + "CURRENT";
   // The snapshot is generated by use checkpoint.
-  if (std::filesystem::exists(current_path)) {
+  if (Helper::IsExistPath(current_path)) {
     int count = 0;
     for (auto& range : region->PhysicsRange()) {
       std::string merge_sst_path = fmt::format("{}/merge_{}.sst", reader->get_path(), count);
@@ -287,7 +280,8 @@ void AsyncSaveSnapshotByScan(uint64_t region_id, std::shared_ptr<RawEngine> engi
         auto region =
             Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(snapshot_arg->region_id);
         if (region == nullptr) {
-          LOG(ERROR) << fmt::format("Save snapshot failed, region {} is null.", snapshot_arg->region_id);
+          LOG(ERROR) << fmt::format("[raft.snapshot][region({})] Save snapshot failed, region is null.",
+                                    snapshot_arg->region_id);
           if (snapshot_arg->done != nullptr) {
             snapshot_arg->done->status().set_error(pb::error::ERAFT_SAVE_SNAPSHOT, "save snapshot failed");
           }
@@ -296,7 +290,7 @@ void AsyncSaveSnapshotByScan(uint64_t region_id, std::shared_ptr<RawEngine> engi
               std::bind(&RaftSnapshot::GenSnapshotFileByScan, snapshot_arg->raft_snapshot,  // NOLINT
                         std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
           if (!snapshot_arg->raft_snapshot->SaveSnapshot(snapshot_arg->writer, region, gen_snapshot_file_func)) {
-            LOG(ERROR) << "Save snapshot failed, region: " << region->Id();
+            LOG(ERROR) << fmt::format("[raft.snapshot][region({})] Save snapshot failed", region->Id());
             if (snapshot_arg->done != nullptr) {
               snapshot_arg->done->status().set_error(pb::error::ERAFT_SAVE_SNAPSHOT, "save snapshot failed");
             }
@@ -318,7 +312,7 @@ void SaveSnapshotByCheckpoint(uint64_t region_id, std::shared_ptr<RawEngine> eng
   brpc::ClosureGuard done_guard(done);
   auto region = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
   if (region == nullptr) {
-    LOG(ERROR) << fmt::format("Save snapshot failed, region {} is null.", region_id);
+    LOG(ERROR) << fmt::format("[raft.snapshot][region({})] Save snapshot failed, region is null.", region_id);
     if (done != nullptr) {
       done->status().set_error(pb::error::ERAFT_SAVE_SNAPSHOT, "save snapshot failed");
     }
@@ -329,7 +323,7 @@ void SaveSnapshotByCheckpoint(uint64_t region_id, std::shared_ptr<RawEngine> eng
   auto gen_snapshot_file_func = std::bind(&RaftSnapshot::GenSnapshotFileByCheckpoint, raft_snapshot,  // NOLINT
                                           std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
   if (!raft_snapshot->SaveSnapshot(writer, region, gen_snapshot_file_func)) {
-    LOG(ERROR) << "Save snapshot failed, region: " << region->Id();
+    LOG(ERROR) << fmt::format("[raft.snapshot][region({})] save snapshot failed.", region->Id());
     if (done != nullptr) {
       done->status().set_error(pb::error::ERAFT_SAVE_SNAPSHOT, "save snapshot failed");
     }
@@ -356,12 +350,12 @@ void RaftLoadSnapshotHanler::Handle(uint64_t region_id, std::shared_ptr<RawEngin
                                     braft::SnapshotReader* reader) {
   auto region = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
   if (region == nullptr) {
-    DINGO_LOG(ERROR) << fmt::format("Load snapshot failed, region {} is null.", region_id);
+    DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] load snapshot failed, region is null.", region_id);
     return;
   }
   auto raft_snapshot = std::make_unique<RaftSnapshot>(engine);
   if (!raft_snapshot->LoadSnapshot(reader, region)) {
-    DINGO_LOG(ERROR) << "Load snapshot failed, region: " << region->Id();
+    DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] load snapshot failed.", region->Id());
   }
 }
 
