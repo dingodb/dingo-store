@@ -260,8 +260,12 @@ butil::Status VectorIndexManager::ReplayWalToVectorIndex(VectorIndexPtr vector_i
     return butil::Status(pb::error::Errno::EINTERNAL, fmt::format("Not found log stroage {}", vector_index->Id()));
   }
 
+  uint64_t min_vector_id = VectorCodec::DecodeVectorId(vector_index->Range().start_key());
+  uint64_t max_vector_id = VectorCodec::DecodeVectorId(vector_index->Range().end_key());
   std::vector<pb::common::VectorWithId> vectors;
-  vectors.reserve(10000);
+  vectors.reserve(Constant::kBuildVectorIndexBatchSize);
+  std::vector<uint64_t> ids;
+  ids.reserve(Constant::kBuildVectorIndexBatchSize);
   uint64_t last_log_id = vector_index->ApplyLogId();
   auto log_entrys = log_stroage->GetEntrys(start_log_id, end_log_id);
   for (const auto& log_entry : log_entrys) {
@@ -271,26 +275,38 @@ butil::Status VectorIndexManager::ReplayWalToVectorIndex(VectorIndexPtr vector_i
     for (auto& request : *raft_cmd->mutable_requests()) {
       switch (request.cmd_type()) {
         case pb::raft::VECTOR_ADD: {
-          for (auto& vector : *request.mutable_vector_add()->mutable_vectors()) {
-            vectors.push_back(vector);
+          if (!ids.empty()) {
+            vector_index->Delete(ids);
+            ids.clear();
           }
 
-          if (vectors.size() == 10000) {
+          for (auto& vector : *request.mutable_vector_add()->mutable_vectors()) {
+            if (vector.id() >= min_vector_id && vector.id() < max_vector_id) {
+              vectors.push_back(vector);
+            }
+          }
+
+          if (vectors.size() >= Constant::kBuildVectorIndexBatchSize) {
             vector_index->Upsert(vectors);
-            vectors.resize(0);
+            vectors.clear();
           }
           break;
         }
         case pb::raft::VECTOR_DELETE: {
           if (!vectors.empty()) {
             vector_index->Upsert(vectors);
-            vectors.resize(0);
+            vectors.clear();
           }
-          std::vector<uint64_t> ids;
+
           for (auto vector_id : request.vector_delete().ids()) {
-            ids.push_back(vector_id);
+            if (vector_id >= min_vector_id && vector_id < max_vector_id) {
+              ids.push_back(vector_id);
+            }
           }
-          vector_index->Delete(ids);
+          if (ids.size() >= Constant::kBuildVectorIndexBatchSize) {
+            vector_index->Delete(ids);
+            ids.clear();
+          }
           break;
         }
         default:
@@ -302,9 +318,13 @@ butil::Status VectorIndexManager::ReplayWalToVectorIndex(VectorIndexPtr vector_i
   }
   if (!vectors.empty()) {
     vector_index->Upsert(vectors);
+  } else if (!ids.empty()) {
+    vector_index->Delete(ids);
   }
 
-  vector_index->SetApplyLogId(last_log_id);
+  if (last_log_id > vector_index->ApplyLogId()) {
+    vector_index->SetApplyLogId(last_log_id);
+  }
 
   DINGO_LOG(INFO) << fmt::format(
       "Replay vector index {} from log id {} to log id {} finish, last_log_id {} elapsed time {}ms", vector_index->Id(),
@@ -318,15 +338,16 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
   assert(vector_index_wrapper != nullptr);
   uint64_t vector_index_id = vector_index_wrapper->Id();
 
-  auto vector_index = VectorIndexFactory::New(vector_index_id, vector_index_wrapper->IndexParameter());
-  if (!vector_index) {
-    DINGO_LOG(WARNING) << fmt::format("[vector_index.build][index_id({})] New vector index failed.", vector_index_id);
-    return nullptr;
-  }
-
   auto region = Server::GetInstance()->GetRegion(vector_index_id);
   if (region == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("[vector_index.build][index_id({})] not found region.", vector_index_id);
+    return nullptr;
+  }
+
+  auto range = region->RawRange();
+  auto vector_index = VectorIndexFactory::New(vector_index_id, vector_index_wrapper->IndexParameter(), range);
+  if (!vector_index) {
+    DINGO_LOG(WARNING) << fmt::format("[vector_index.build][index_id({})] New vector index failed.", vector_index_id);
     return nullptr;
   }
 
@@ -342,8 +363,8 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
     }
   }
 
-  std::string start_key = VectorCodec::FillVectorDataPrefix(region->RawRange().start_key());
-  std::string end_key = VectorCodec::FillVectorDataPrefix(region->RawRange().end_key());
+  std::string start_key = VectorCodec::FillVectorDataPrefix(range.start_key());
+  std::string end_key = VectorCodec::FillVectorDataPrefix(range.end_key());
   DINGO_LOG(INFO) << fmt::format("[vector_index.build][index_id({})] Build vector index, range: [{}-{})",
                                  vector_index_id, Helper::StringToHex(start_key), Helper::StringToHex(end_key));
 

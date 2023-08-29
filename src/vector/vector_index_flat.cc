@@ -41,8 +41,9 @@
 
 namespace dingodb {
 
-VectorIndexFlat::VectorIndexFlat(uint64_t id, const pb::common::VectorIndexParameter& vector_index_parameter)
-    : VectorIndex(id, vector_index_parameter) {
+VectorIndexFlat::VectorIndexFlat(uint64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
+                                 const pb::common::Range& range)
+    : VectorIndex(id, vector_index_parameter, range) {
   bthread_mutex_init(&mutex_, nullptr);
 
   metric_type_ = vector_index_parameter.flat_parameter().metric_type();

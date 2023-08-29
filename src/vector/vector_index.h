@@ -49,8 +49,9 @@ namespace dingodb {
 // But one region can refer other vector index when region split.
 class VectorIndex {
  public:
-  VectorIndex(uint64_t id, const pb::common::VectorIndexParameter& vector_index_parameter)
-      : id(id), apply_log_id(0), snapshot_log_id(0), vector_index_parameter(vector_index_parameter) {
+  VectorIndex(uint64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
+              const pb::common::Range& range)
+      : id(id), apply_log_id(0), snapshot_log_id(0), vector_index_parameter(vector_index_parameter), range(range) {
     vector_index_type = vector_index_parameter.vector_index_type();
   }
 
@@ -191,6 +192,8 @@ class VectorIndex {
   uint64_t SnapshotLogId() const;
   void SetSnapshotLogId(uint64_t snapshot_log_id);
 
+  pb::common::Range Range() { return range; }
+
  protected:
   // vector index id
   uint64_t id;
@@ -201,6 +204,8 @@ class VectorIndex {
   std::atomic<uint64_t> apply_log_id;
   // last snapshot log id
   std::atomic<uint64_t> snapshot_log_id;
+
+  pb::common::Range range;
 
   pb::common::VectorIndexParameter vector_index_parameter;
 };
