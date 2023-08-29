@@ -673,7 +673,12 @@ uint64_t Helper::GenId() {
 }
 
 bool Helper::Link(const std::string& old_path, const std::string& new_path) {
-  return ::link(old_path.c_str(), new_path.c_str()) == 0;
+  int ret = ::link(old_path.c_str(), new_path.c_str());
+  if (ret != 0) {
+    DINGO_LOG(ERROR) << fmt::format("Create hard link failed, old_path: {} new_path: {}", old_path, new_path);
+  }
+
+  return ret == 0;
 }
 
 uint64_t Helper::TimestampNs() {
@@ -1038,6 +1043,8 @@ butil::Status Helper::Rename(const std::string& src_path, const std::string& dst
 
   return butil::Status::OK();
 }
+
+bool Helper::IsExistPath(const std::string& path) { return std::filesystem::exists(path); }
 
 bool Helper::IsEqualVectorScalarValue(const pb::common::ScalarValue& value1, const pb::common::ScalarValue& value2) {
   if (value1.field_type() != value2.field_type()) {
