@@ -172,22 +172,26 @@ butil::Status ServiceHelper::ValidateSystemCapacity() {
 
   uint64_t free_capacity = metrics->system_free_capacity();
   uint64_t total_capacity = metrics->system_total_capacity();
-  double disk_free_capacity_ratio = static_cast<double>(free_capacity) / static_cast<double>(total_capacity);
-  if (disk_free_capacity_ratio < Constant::kSystemDiskCapacityFreeRatio) {
-    std::string s = fmt::format("Disk capacity is not enough, capacity({} / {} / {:.2%})", free_capacity,
-                                total_capacity, disk_free_capacity_ratio);
-    DINGO_LOG(WARNING) << s;
-    return butil::Status(pb::error::ESYSTEM_DISK_CAPACITY_FULL, s);
+  if (free_capacity != 0 && total_capacity != 0) {
+    double disk_free_capacity_ratio = static_cast<double>(free_capacity) / static_cast<double>(total_capacity);
+    if (disk_free_capacity_ratio < Constant::kSystemDiskCapacityFreeRatio) {
+      std::string s = fmt::format("Disk capacity is not enough, capacity({} / {} / {:.2%})", free_capacity,
+                                  total_capacity, disk_free_capacity_ratio);
+      DINGO_LOG(WARNING) << s;
+      return butil::Status(pb::error::ESYSTEM_DISK_CAPACITY_FULL, s);
+    }
   }
 
   uint64_t free_memory = metrics->system_free_memory();
   uint64_t total_memory = metrics->system_total_memory();
-  double memory_free_capacity_ratio = static_cast<double>(free_memory) / static_cast<double>(total_memory);
-  if (memory_free_capacity_ratio < Constant::kSystemMemoryCapacityFreeRatio) {
-    std::string s = fmt::format("Memory capacity is not enough, capacity({} / {} / {:.2%})", free_memory, total_memory,
-                                memory_free_capacity_ratio);
-    DINGO_LOG(WARNING) << s;
-    return butil::Status(pb::error::ESYSTEM_MEMORY_CAPACITY_FULL, s);
+  if (free_memory != 0 && total_memory != 0) {
+    double memory_free_capacity_ratio = static_cast<double>(free_memory) / static_cast<double>(total_memory);
+    if (memory_free_capacity_ratio < Constant::kSystemMemoryCapacityFreeRatio) {
+      std::string s = fmt::format("Memory capacity is not enough, capacity({} / {} / {:.2%})", free_memory,
+                                  total_memory, memory_free_capacity_ratio);
+      DINGO_LOG(WARNING) << s;
+      return butil::Status(pb::error::ESYSTEM_MEMORY_CAPACITY_FULL, s);
+    }
   }
 
   return butil::Status();

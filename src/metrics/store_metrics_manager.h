@@ -212,6 +212,7 @@ class StoreMetricsManager {
   explicit StoreMetricsManager(std::shared_ptr<RawEngine> raw_engine, std::shared_ptr<MetaReader> meta_reader,
                                std::shared_ptr<MetaWriter> meta_writer, std::shared_ptr<Engine> engine)
       : is_collecting_(false),
+        is_collecting_store_(false),
         is_collecting_approximate_size_(false),
         store_metrics_(std::make_shared<StoreMetrics>()),
         region_metrics_(std::make_shared<StoreRegionMetrics>(raw_engine, meta_reader, meta_writer, engine)) {}
@@ -223,7 +224,8 @@ class StoreMetricsManager {
   bool Init();
 
   void CollectApproximateSizeMetrics();
-  void CollectMetrics();
+  void CollectStoreMetrics();
+  void CollectStoreRegionMetrics();
 
   std::shared_ptr<StoreMetrics> GetStoreMetrics() { return store_metrics_; }
   std::shared_ptr<StoreRegionMetrics> GetStoreRegionMetrics() { return region_metrics_; }
@@ -231,6 +233,7 @@ class StoreMetricsManager {
  private:
   // Is collecting metrics, just one collecting at the same time.
   std::atomic<bool> is_collecting_;
+  std::atomic<bool> is_collecting_store_;
   std::atomic<bool> is_collecting_approximate_size_;
   std::shared_ptr<StoreMetrics> store_metrics_;
   std::shared_ptr<StoreRegionMetrics> region_metrics_;

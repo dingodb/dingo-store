@@ -44,10 +44,10 @@ bool ScanManager::Init(std::shared_ptr<Config> config) {
   BAIDU_SCOPED_LOCK(mutex_);
   std::map<std::string, int> conf = config->GetIntMap(Constant::kStoreScan);
 
-  auto iter = conf.find(Constant::kStoreScanTimeoutMs);
+  auto iter = conf.find(Constant::kStoreScanTimeoutS);
   if (iter != conf.end()) {
     if (iter->second != 0) {
-      timeout_ms_ = iter->second;
+      timeout_ms_ = iter->second * 1000;
     }
   }
 
@@ -65,10 +65,10 @@ bool ScanManager::Init(std::shared_ptr<Config> config) {
     }
   }
 
-  iter = conf.find(Constant::kStoreScanScanIntervalMs);
+  iter = conf.find(Constant::kStoreScanScanIntervalS);
   if (iter != conf.end()) {
     if (iter->second != 0) {
-      scan_interval_ms_ = iter->second;
+      scan_interval_ms_ = iter->second * 1000;
     }
   }
 

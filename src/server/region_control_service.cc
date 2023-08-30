@@ -397,6 +397,18 @@ void RegionControlServiceImpl::Debug(google::protobuf::RpcController* controller
     for (auto region_id : request->region_ids()) {
       response->mutable_region_actual_metrics()->add_region_metricses()->CopyFrom(GetRegionActualMetrics(region_id));
     }
+
+  } else if (request->type() == pb::region_control::DebugType::STORE_METRICS) {
+    auto store_metrics_manager = Server::GetInstance()->GetStoreMetricsManager();
+    if (store_metrics_manager == nullptr) {
+      return;
+    }
+    auto store_metrics = store_metrics_manager->GetStoreMetrics()->Metrics();
+    if (store_metrics == nullptr) {
+      return;
+    }
+    response->mutable_store_metrics()->mutable_metrics()->CopyFrom(*store_metrics);
+
   } else if (request->type() == pb::region_control::DebugType::INDEX_VECTOR_INDEX_METRICS) {
     auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
     if (store_region_meta == nullptr) {

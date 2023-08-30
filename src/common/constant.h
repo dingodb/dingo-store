@@ -88,10 +88,10 @@ class Constant {
 
   // scan config
   inline static const std::string kStoreScan = "store.scan";
-  inline static const std::string kStoreScanTimeoutMs = "timeout_ms";
+  inline static const std::string kStoreScanTimeoutS = "timeout_s";
   inline static const std::string kStoreScanMaxBytesRpc = "max_bytes_rpc";
   inline static const std::string kStoreScanMaxFetchCntByServer = "max_fetch_cnt_by_server";
-  inline static const std::string kStoreScanScanIntervalMs = "scan_interval_ms";
+  inline static const std::string kStoreScanScanIntervalS = "scan_interval_s";
 
   inline static const std::string kMetaRegionName = "0-COORDINATOR";
   inline static const std::string kAutoIncrementRegionName = "1-AUTO_INCREMENT";
@@ -121,8 +121,6 @@ class Constant {
   static const uint32_t kBuildVectorIndexBatchSize = 4096;
 
   // split region
-  static const uint32_t kDefaultStoreSplitCheckIntervalS = 60;
-  static const uint32_t kDefaultIndexSplitCheckIntervalS = 120;
   static const uint32_t kDefaultSplitCheckConcurrency = 5;
   inline static const std::string kDefaultSplitPolicy = "HALF";
   static const uint32_t kDefaultRegionMaxSize = 134217728;  // 128M
@@ -132,16 +130,28 @@ class Constant {
   static const uint32_t kDefaultSplitKeysNumber = 200000;
   static constexpr float kDefaultSplitKeysRatio = 0.5;
 
-  // collect metrics
-  static const uint32_t kApproximateSizeMetricsCollectIntervalS = 50;
-  static const uint32_t kMetricsCollectIntervalS = 300;
-
   // hnsw max elements expand number
   static const uint32_t kHnswMaxElementsExpandNum = 10000;
 
   // system resource usage
   static constexpr double kSystemDiskCapacityFreeRatio = 0.05;
   static constexpr double kSystemMemoryCapacityFreeRatio = 0.05;
+
+  // crontab default interval
+  static const int32_t kHeartbeatIntervalS = 10;
+  static const int32_t kScanIntervalS = 30;
+  static const int32_t kPushIntervalS = 1;
+  static const int32_t kUpdateStateIntervalS = 10;
+  static const int32_t kTaskListIntervalS = 1;
+  static const int32_t kCalcMetricsIntervalS = 60;
+  static const int32_t kRecycleOrphanIntervalS = 60;
+  static const int32_t kLeaseIntervalS = 60;
+  static const int32_t kCompactionIntervalS = 300;
+  static const int32_t kScrubVectorIndexIntervalS = 60;
+  static const int32_t kApproximateSizeMetricsCollectIntervalS = 50;
+  static const int32_t kStoreMetricsCollectIntervalS = 30;
+  static const int32_t kRegionMetricsCollectIntervalS = 300;
+  static const int32_t kDefaultSplitCheckIntervalS = 120;
 };
 
 }  // namespace dingodb

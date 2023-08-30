@@ -16,15 +16,26 @@
 #define DINGODB_CRONTAB_CRONTAB_H_
 
 #include <atomic>
+#include <cstdint>
 #include <functional>
 #include <map>
 #include <memory>
 #include <shared_mutex>
+#include <string>
 #include <vector>
 
 #include "bthread/unstable.h"
+#include "proto/common.pb.h"
 
 namespace dingodb {
+
+struct CrontabConfig {
+  std::string name;
+  std::vector<pb::common::ClusterRole> roles;
+  int32_t interval;
+  bool async;
+  std::function<void(void*)> funcer;
+};
 
 class Crontab {
  public:
@@ -69,6 +80,8 @@ class CrontabManager {
   const CrontabManager& operator=(const CrontabManager&) = delete;
 
   static void Run(void* arg);
+
+  void AddCrontab(std::vector<CrontabConfig>& crontab_configs);
 
   uint32_t AddCrontab(std::shared_ptr<Crontab> crontab);
   uint32_t AddAndRunCrontab(std::shared_ptr<Crontab> crontab);
