@@ -87,6 +87,7 @@ class VectorIndexHnswSearchParamTest : public testing::Test {
 };
 
 TEST_F(VectorIndexHnswSearchParamTest, Create) {
+  static const pb::common::Range kRange;
   // valid param L2
   {
     uint64_t id = id_for_l2;
@@ -98,7 +99,7 @@ TEST_F(VectorIndexHnswSearchParamTest, Create) {
     index_parameter.mutable_hnsw_parameter()->set_max_elements(max_elements);
     index_parameter.mutable_hnsw_parameter()->set_nlinks(nlinks);
 
-    vector_index_hnsw_for_l2 = VectorIndexFactory::New(id, index_parameter);
+    vector_index_hnsw_for_l2 = VectorIndexFactory::New(id, index_parameter, kRange);
     EXPECT_NE(vector_index_hnsw_for_l2.get(), nullptr);
   }
 
@@ -114,7 +115,7 @@ TEST_F(VectorIndexHnswSearchParamTest, Create) {
     index_parameter.mutable_hnsw_parameter()->set_max_elements(max_elements);
     index_parameter.mutable_hnsw_parameter()->set_nlinks(nlinks);
 
-    vector_index_hnsw_for_ip = VectorIndexFactory::New(id, index_parameter);
+    vector_index_hnsw_for_ip = VectorIndexFactory::New(id, index_parameter, kRange);
     EXPECT_NE(vector_index_hnsw_for_ip.get(), nullptr);
   }
 
@@ -129,7 +130,7 @@ TEST_F(VectorIndexHnswSearchParamTest, Create) {
     index_parameter.mutable_hnsw_parameter()->set_max_elements(max_elements);
     index_parameter.mutable_hnsw_parameter()->set_nlinks(nlinks);
 
-    vector_index_hnsw_for_cosine = VectorIndexFactory::New(id, index_parameter);
+    vector_index_hnsw_for_cosine = VectorIndexFactory::New(id, index_parameter, kRange);
     EXPECT_NE(vector_index_hnsw_for_cosine.get(), nullptr);
   }
 }
