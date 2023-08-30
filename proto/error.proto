@@ -172,6 +172,10 @@ enum Errno {
   // file [80000, 90000)
   EFILE_NOT_FOUND_READER = 80000;
   EFILE_READ = 80001;
+
+  // system resource
+  ESYSTEM_DISK_CAPACITY_FULL = 90000;
+  ESYSTEM_MEMORY_CAPACITY_FULL = 90001;
 }
 
 message Error {

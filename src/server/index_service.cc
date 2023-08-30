@@ -335,6 +335,11 @@ butil::Status IndexServiceImpl::ValidateVectorAddRequest(const dingodb::pb::inde
     }
   }
 
+  status = ServiceHelper::ValidateSystemCapacity();
+  if (!status.ok()) {
+    return status;
+  }
+
   std::vector<uint64_t> vector_ids;
   for (const auto& vector : request->vectors()) {
     vector_ids.push_back(vector.id());

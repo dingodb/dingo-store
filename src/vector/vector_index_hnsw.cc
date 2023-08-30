@@ -411,17 +411,14 @@ butil::Status VectorIndexHnsw::Search(std::vector<pb::common::VectorWithId> vect
     return butil::Status::OK();
   };
 
-  std::unique_ptr<HnswRangeFilterFunctor> hnsw_filter_ptr;
-  HnswRangeFilterFunctor* hnsw_filter =
-      filters.empty() ? nullptr
-                      : (hnsw_filter_ptr = std::make_unique<HnswRangeFilterFunctor>(filters), hnsw_filter_ptr.get());
+  auto hnsw_filter = filters.empty() ? nullptr : std::make_shared<HnswRangeFilterFunctor>(filters);
 
   if (!normalize_) {
     ParallelFor(0, vector_with_ids.size(), hnsw_num_threads_, [&](size_t row, size_t /*thread_id*/) {
       std::priority_queue<std::pair<float, hnswlib::labeltype>> result;
 
       try {
-        result = hnsw_index_->searchKnn(data.get() + dimension_ * row, topk, hnsw_filter);
+        result = hnsw_index_->searchKnn(data.get() + dimension_ * row, topk, hnsw_filter.get());
       } catch (std::runtime_error& e) {
         std::string s = fmt::format("parallel search vector failed, error= {}", e.what());
         LOG(ERROR) << s;
@@ -444,7 +441,7 @@ butil::Status VectorIndexHnsw::Search(std::vector<pb::common::VectorWithId> vect
       std::priority_queue<std::pair<float, hnswlib::labeltype>> result;
 
       try {
-        result = hnsw_index_->searchKnn(norm_array.data() + start_idx, topk, hnsw_filter);
+        result = hnsw_index_->searchKnn(norm_array.data() + start_idx, topk, hnsw_filter.get());
       } catch (std::runtime_error& e) {
         std::string s = fmt::format("parallel search vector failed, error= {}", e.what());
         LOG(ERROR) << s;
