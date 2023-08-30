@@ -17,6 +17,7 @@
 #include "bthread/bthread.h"
 #include "common/logging.h"
 #include "fmt/core.h"
+#include "server/server.h"
 
 namespace dingodb {
 
@@ -33,7 +34,8 @@ void CrontabManager::Run(void* arg) {
     try {
       crontab->func(crontab->arg);
     } catch (...) {
-      DINGO_LOG(ERROR) << fmt::format("Crontab {} {} happen exception", crontab->id, crontab->name);
+      DINGO_LOG(ERROR) << fmt::format("[crontab.run][id({}).name({})] crontab happen exception", crontab->id,
+                                      crontab->name);
     }
     ++crontab->run_count;
   } else {
@@ -46,6 +48,48 @@ void CrontabManager::Run(void* arg) {
 }
 
 uint32_t CrontabManager::AllocCrontabId() { return auinc_crontab_id_.fetch_add(1); }
+
+void CrontabManager::AddCrontab(std::vector<CrontabConfig>& crontab_configs) {
+  for (auto& crontab_config : crontab_configs) {
+    // Check whether should add crontab.
+    bool should_add_crontab = false;
+    for (auto role : crontab_config.roles) {
+      if (role == Server::GetInstance()->GetRole()) {
+        should_add_crontab = true;
+      }
+    }
+    if (!should_add_crontab) {
+      continue;
+    }
+
+    DINGO_LOG(INFO) << fmt::format("[crontab.add][name({}).interval({}ms).async({})] add crontab task.",
+                                   crontab_config.name, crontab_config.interval, crontab_config.async);
+
+    auto crontab = std::make_shared<Crontab>();
+    crontab->name = crontab_config.name;
+    crontab->interval = crontab_config.interval;
+    if (crontab_config.async) {
+      crontab->func = [&](void*) {
+        bthread_t tid;
+        const bthread_attr_t attr = BTHREAD_ATTR_NORMAL;
+        bthread_start_background(
+            &tid, &attr,
+            [](void* arg) -> void* {
+              CrontabConfig* crontab_config = static_cast<CrontabConfig*>(arg);
+              crontab_config->funcer(nullptr);
+              return nullptr;
+            },
+            &crontab_config);
+      };
+    } else {
+      crontab->func = crontab_config.funcer;
+    }
+
+    crontab->arg = nullptr;
+
+    this->AddAndRunCrontab(crontab);
+  }
+}
 
 uint32_t CrontabManager::AddAndRunCrontab(std::shared_ptr<Crontab> crontab) {
   uint32_t crontab_id = AddCrontab(crontab);
@@ -69,7 +113,7 @@ void CrontabManager::StartCrontab(uint32_t crontab_id) {
 
   auto it = crontabs_.find(crontab_id);
   if (it == crontabs_.end()) {
-    DINGO_LOG(WARNING) << "Not exist crontab " << crontab_id;
+    DINGO_LOG(WARNING) << fmt::format("[crontab.start][id({})] not exist crontab.", crontab_id);
     return;
   }
   auto crontab = it->second;
@@ -89,7 +133,7 @@ void CrontabManager::StartCrontab(uint32_t crontab_id) {
 void CrontabManager::InnerPauseCrontab(uint32_t crontab_id) {
   auto it = crontabs_.find(crontab_id);
   if (it == crontabs_.end()) {
-    DINGO_LOG(WARNING) << "Not exist crontab " << crontab_id;
+    DINGO_LOG(WARNING) << fmt::format("[crontab.pause][id({})] not exist crontab.", crontab_id);
     return;
   }
   auto crontab = it->second;

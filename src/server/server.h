@@ -270,6 +270,9 @@ class Server {
 
   // Pre split checker
   std::shared_ptr<PreSplitChecker> pre_split_checker_;
+
+  // Crontab config
+  std::vector<CrontabConfig> crontab_configs_;
 };
 
 }  // namespace dingodb

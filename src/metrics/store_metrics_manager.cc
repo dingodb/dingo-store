@@ -461,15 +461,27 @@ void StoreMetricsManager::CollectApproximateSizeMetrics() {
   is_collecting_approximate_size_.store(false);
 }
 
-void StoreMetricsManager::CollectMetrics() {
+void StoreMetricsManager::CollectStoreMetrics() {
+  if (is_collecting_store_.load()) {
+    DINGO_LOG(WARNING) << "Already exist collecting store metrics.";
+    return;
+  }
+
+  is_collecting_store_.store(true);
+
+  store_metrics_->CollectMetrics();
+
+  is_collecting_store_.store(false);
+}
+
+void StoreMetricsManager::CollectStoreRegionMetrics() {
   if (is_collecting_.load()) {
-    DINGO_LOG(WARNING) << "Already exist collecting metrics.";
+    DINGO_LOG(WARNING) << "Already exist collecting store region metrics.";
     return;
   }
 
   is_collecting_.store(true);
 
-  store_metrics_->CollectMetrics();
   region_metrics_->CollectMetrics();
 
   is_collecting_.store(false);

@@ -43,7 +43,7 @@ store:
     - default
     - meta
   scan:
-    scan_interval_ms: 30000 # ms
-    timeout_ms: 60000 # ms
+    scan_interval_s: 30
+    timeout_s: 60
     max_bytes_rpc: 4194304
     max_fetch_cnt_by_server: 1000
