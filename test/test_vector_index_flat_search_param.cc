@@ -72,6 +72,7 @@ class VectorIndexFlatSearchParamTest : public testing::Test {
 };
 
 TEST_F(VectorIndexFlatSearchParamTest, Create) {
+  static const pb::common::Range kRange;
   // valid param L2
   {
     uint64_t id = id_for_l2;
@@ -79,7 +80,7 @@ TEST_F(VectorIndexFlatSearchParamTest, Create) {
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
     index_parameter.mutable_flat_parameter()->set_dimension(dimension);
     index_parameter.mutable_flat_parameter()->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_L2);
-    vector_index_flat_for_l2 = VectorIndexFactory::New(id, index_parameter);
+    vector_index_flat_for_l2 = VectorIndexFactory::New(id, index_parameter, kRange);
     EXPECT_NE(vector_index_flat_for_l2.get(), nullptr);
   }
 
@@ -91,7 +92,7 @@ TEST_F(VectorIndexFlatSearchParamTest, Create) {
     index_parameter.mutable_flat_parameter()->set_dimension(dimension);
     index_parameter.mutable_flat_parameter()->set_metric_type(
         ::dingodb::pb::common::MetricType::METRIC_TYPE_INNER_PRODUCT);
-    vector_index_flat_for_ip = VectorIndexFactory::New(id, index_parameter);
+    vector_index_flat_for_ip = VectorIndexFactory::New(id, index_parameter, kRange);
     EXPECT_NE(vector_index_flat_for_ip.get(), nullptr);
   }
 
@@ -102,7 +103,7 @@ TEST_F(VectorIndexFlatSearchParamTest, Create) {
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
     index_parameter.mutable_flat_parameter()->set_dimension(dimension);
     index_parameter.mutable_flat_parameter()->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_COSINE);
-    vector_index_flat_for_cosine = VectorIndexFactory::New(id, index_parameter);
+    vector_index_flat_for_cosine = VectorIndexFactory::New(id, index_parameter, kRange);
     EXPECT_NE(vector_index_flat_for_cosine.get(), nullptr);
   }
 }

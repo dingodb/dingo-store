@@ -61,6 +61,7 @@ class VectorIndexHnswTest : public testing::Test {
 };
 
 TEST_F(VectorIndexHnswTest, Create) {
+  static const pb::common::Range kRange;
   // valid param L2
   {
     uint64_t id = 1;
@@ -74,7 +75,7 @@ TEST_F(VectorIndexHnswTest, Create) {
 
     index_parameter.mutable_hnsw_parameter()->set_nlinks(nlinks);
 
-    vector_index_hnsw = VectorIndexFactory::New(id, index_parameter);
+    vector_index_hnsw = VectorIndexFactory::New(id, index_parameter, kRange);
     EXPECT_NE(vector_index_hnsw.get(), nullptr);
   }
 
@@ -93,10 +94,49 @@ TEST_F(VectorIndexHnswTest, Create) {
 
     index_parameter.mutable_hnsw_parameter()->set_nlinks(nlinks);
 
-    vector_index_hnsw = VectorIndexFactory::New(id, index_parameter);
+    vector_index_hnsw = VectorIndexFactory::New(id, index_parameter, kRange);
     EXPECT_NE(vector_index_hnsw.get(), nullptr);
   }
 #endif
+}
+
+
+TEST_F(VectorIndexHnswTest, DeleteNoData) {
+  butil::Status ok;
+
+  // id not found
+  {
+    uint64_t id = 10000000;
+    std::vector<uint64_t> ids;
+    ids.push_back(id);
+    vector_index_hnsw->Delete(ids);
+  }
+
+  // id exist
+  {
+    uint64_t id = 0;
+    std::vector<uint64_t> ids;
+    ids.push_back(id);
+    vector_index_hnsw->Delete(ids);
+  }
+
+  // id exist batch
+  {
+    std::vector<uint64_t> ids;
+    for (size_t i = 0; i < data_base_size; i++) {
+      ids.push_back(i);
+    }
+    vector_index_hnsw->Delete(ids);
+  }
+
+  // id exist batch again
+  {
+    std::vector<uint64_t> ids;
+    for (size_t i = 0; i < data_base_size; i++) {
+      ids.push_back(i);
+    }
+    vector_index_hnsw->Delete(ids);
+  }
 }
 
 TEST_F(VectorIndexHnswTest, Upsert) {
@@ -258,6 +298,7 @@ TEST_F(VectorIndexHnswTest, Search) {
 }
 
 TEST_F(VectorIndexHnswTest, CreateCosine) {
+  static const pb::common::Range kRange;
   // valid param L2
   {
     uint64_t id = 1;
@@ -271,7 +312,7 @@ TEST_F(VectorIndexHnswTest, CreateCosine) {
 
     index_parameter.mutable_hnsw_parameter()->set_nlinks(nlinks);
 
-    vector_index_hnsw = VectorIndexFactory::New(id, index_parameter);
+    vector_index_hnsw = VectorIndexFactory::New(id, index_parameter, kRange);
     EXPECT_NE(vector_index_hnsw.get(), nullptr);
   }
 
@@ -289,7 +330,7 @@ TEST_F(VectorIndexHnswTest, CreateCosine) {
 
     index_parameter.mutable_hnsw_parameter()->set_nlinks(nlinks);
 
-    vector_index_hnsw = VectorIndexFactory::New(id, index_parameter);
+    vector_index_hnsw = VectorIndexFactory::New(id, index_parameter, kRange);
     EXPECT_NE(vector_index_hnsw.get(), nullptr);
   }
 #endif

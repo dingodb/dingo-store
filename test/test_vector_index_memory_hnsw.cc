@@ -56,6 +56,7 @@ class VectorIndexMemoryTest : public testing::Test {
 };
 
 TEST_F(VectorIndexMemoryTest, Create) {
+  static const pb::common::Range kRange;
   // valid param L2
   {
     uint64_t id = 1;
@@ -69,7 +70,7 @@ TEST_F(VectorIndexMemoryTest, Create) {
 
     index_parameter.mutable_hnsw_parameter()->set_nlinks(nlinks);
 
-    vector_index_hnsw = VectorIndexFactory::New(id, index_parameter);
+    vector_index_hnsw = VectorIndexFactory::New(id, index_parameter, kRange);
     EXPECT_NE(vector_index_hnsw.get(), nullptr);
   }
 }
