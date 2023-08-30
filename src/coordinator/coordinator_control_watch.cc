@@ -88,7 +88,7 @@ butil::Status CoordinatorControl::OneTimeWatch(const std::string& watch_key, uin
   AddOneTimeWatch(watch_key, start_revision, no_put_event, no_delete_event, need_prev_kv, defer_done, response);
 
   // add NotifyOnCancel callback
-  // cntl->NotifyOnCancel(brpc::NewCallback(&WatchCancelCallback, this, defer_done));
+  cntl->NotifyOnCancel(brpc::NewCallback(&WatchCancelCallback, this, defer_done));
 
   return butil::Status::OK();
 }
@@ -240,10 +240,10 @@ butil::Status CoordinatorControl::TriggerOneWatch(const std::string& key, pb::ve
     auto* event = response->add_events();
     event->set_type(event_type);
     auto* kv = event->mutable_kv();
-    kv->Swap(&new_kv);
+    kv->CopyFrom(new_kv);
     if (watch_node.second.need_prev_kv) {
       auto* old_kv = event->mutable_prev_kv();
-      old_kv->Swap(&prev_kv);
+      old_kv->CopyFrom(prev_kv);
     }
 
     DINGO_LOG(INFO) << "TriggerOneWatch will RemoveOneTimeWatch, key:" << key << ", event_type:" << event_type
