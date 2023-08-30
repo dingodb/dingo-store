@@ -422,3 +422,9 @@ TEST_F(HelperTest, GetProcessMemoryInfo) {
     std::cout << it.first << ": " << it.second << '\n';
   }
 }
+
+TEST_F(HelperTest, CleanFirstSlash) {
+  EXPECT_EQ("", dingodb::Helper::CleanFirstSlash(""));
+  EXPECT_EQ("hello.txt", dingodb::Helper::CleanFirstSlash("hello.txt"));
+  EXPECT_EQ("hello.txt", dingodb::Helper::CleanFirstSlash("/hello.txt"));
+}

@@ -883,18 +883,18 @@ TEST_F(ScanTest, max_times) {
   crontab->arg = manager;
 
   auto config = this->GetConfig();
-  auto name = Constant::kStoreScan + "." + Constant::kStoreScanScanIntervalMs;
+  auto name = Constant::kStoreScan + "." + Constant::kStoreScanScanIntervalS;
   int interval = -1;
   try {
-    interval = config->GetInt(Constant::kStoreScan + "." + Constant::kStoreScanScanIntervalMs);
+    interval = config->GetInt(Constant::kStoreScan + "." + Constant::kStoreScanScanIntervalS) * 1000;
   } catch (const std::exception &e) {
-    std::cout << "exception GetInt " << Constant::kStoreScan + "." + Constant::kStoreScanScanIntervalMs
+    std::cout << "exception GetInt " << Constant::kStoreScan + "." + Constant::kStoreScanScanIntervalS
               << " failed. use default" << '\n';
     interval = 60000;
   }
 
   if (interval <= 0) {
-    std::cout << "GetInt " << Constant::kStoreScan + "." + Constant::kStoreScanScanIntervalMs << " failed. use default"
+    std::cout << "GetInt " << Constant::kStoreScan + "." + Constant::kStoreScanScanIntervalS << " failed. use default"
               << '\n';
     interval = 60000;
   }

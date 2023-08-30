@@ -241,6 +241,9 @@ class Helper {
   // Lower string
   static std::string ToLower(const std::string& str);
 
+  // Clean string first slash, e.g. /name.txt -> name.txt
+  static std::string CleanFirstSlash(const std::string& str);
+
   // Parallel run task, e.g. load vector index.
   using TaskFunctor = void* (*)(void*);
   static bool ParallelRunTask(TaskFunctor task, void* arg, int concurrency);

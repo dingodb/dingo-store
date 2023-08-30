@@ -14,6 +14,7 @@
 
 #include "common/helper.h"
 
+#include <errno.h>
 #include <sys/resource.h>
 #include <sys/statvfs.h>
 #include <sys/sysinfo.h>
@@ -675,7 +676,8 @@ uint64_t Helper::GenId() {
 bool Helper::Link(const std::string& old_path, const std::string& new_path) {
   int ret = ::link(old_path.c_str(), new_path.c_str());
   if (ret != 0) {
-    DINGO_LOG(ERROR) << fmt::format("Create hard link failed, old_path: {} new_path: {}", old_path, new_path);
+    DINGO_LOG(ERROR) << fmt::format("Create hard link failed, old_path: {} new_path: {} errno: {}", old_path, new_path,
+                                    errno);
   }
 
   return ret == 0;
@@ -1108,6 +1110,8 @@ std::string Helper::ToLower(const std::string& str) {
   std::transform(str.begin(), str.end(), result.begin(), ::tolower);
   return result;
 }
+
+std::string Helper::CleanFirstSlash(const std::string& str) { return (str.front() == '/') ? str.substr(1) : str; }
 
 bool Helper::ParallelRunTask(TaskFunctor task, void* arg, int concurrency) {
   uint64_t start_time = Helper::TimestampMs();
