@@ -138,6 +138,10 @@ class Constant {
 
   // hnsw max elements expand number
   static const uint32_t kHnswMaxElementsExpandNum = 10000;
+
+  // system resource usage
+  static constexpr double kSystemDiskCapacityFreeRatio = 0.05;
+  static constexpr double kSystemMemoryCapacityFreeRatio = 0.05;
 };
 
 }  // namespace dingodb

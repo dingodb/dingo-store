@@ -525,7 +525,7 @@ message VectorSchema {
     INTEGERLIST = 7;
     FLOATLIST = 8;
     LONGLIST = 9;
-    DOUBLELIST = 10 ;
+    DOUBLELIST = 10;
     STRINGLIST = 11;
   };
 
@@ -752,8 +752,8 @@ message StoreMetrics {
   // the key of the map is region_id,  the value is RegionMetrics
   // this map contains all region's metrics include follower on this store
   map<uint64, dingodb.pb.common.RegionMetrics> region_metrics_map = 40;
-  bool is_partial_region_metrics =
-      41;  // true: region_metrics_map only contain partial region metrics, false: contain full region metrics
+  // true: region_metrics_map only contain partial region metrics, false: contain full region metrics
+  bool is_partial_region_metrics = 41;
 }
 
 // CoordinatorServiceType
