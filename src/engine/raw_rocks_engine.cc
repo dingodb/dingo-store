@@ -1349,13 +1349,14 @@ butil::Status RawRocksEngine::Checkpoint::Create(const std::string& dirpath,
   rocksdb::Checkpoint* checkpoint = nullptr;
   auto status = rocksdb::Checkpoint::Create(db_.get(), &checkpoint);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << "Checkpoint create failed " << status.ToString();
     delete checkpoint;
+    DINGO_LOG(ERROR) << "Checkpoint create failed " << status.ToString();
     return butil::Status(status.code(), status.ToString());
   }
 
   status = db_->DisableFileDeletions();
   if (!status.ok()) {
+    delete checkpoint;
     DINGO_LOG(ERROR) << "Disable file deletion failed " << status.ToString();
     return butil::Status(status.code(), status.ToString());
   }
@@ -1378,10 +1379,16 @@ butil::Status RawRocksEngine::Checkpoint::Create(const std::string& dirpath,
 
   for (auto& level : meta_data.levels) {
     for (const auto& file : level.files) {
+      std::string filepath = dirpath + file.name;
+      if (!Helper::IsExistPath(filepath)) {
+        DINGO_LOG(INFO) << fmt::format("checkpoint not contain sst file: {}", filepath);
+        continue;
+      }
+
       pb::store_internal::SstFileInfo sst_file;
       sst_file.set_level(level.level);
       sst_file.set_name(file.name);
-      sst_file.set_path(dirpath + file.name);
+      sst_file.set_path(filepath);
       sst_file.set_start_key(file.smallestkey);
       sst_file.set_end_key(file.largestkey);
       sst_files.emplace_back(std::move(sst_file));

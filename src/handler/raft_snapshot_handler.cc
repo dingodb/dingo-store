@@ -141,7 +141,7 @@ bool RaftSnapshot::SaveSnapshot(braft::SnapshotWriter* writer, store::RegionPtr 
                                  Helper::StringToHex(region->RawRange().end_key()));
 
   std::string region_checkpoint_path =
-      fmt::format("{}/{}_{}", Server::GetInstance()->GetCheckpointPath(), region->Id(), Helper::TimestampMs());
+      fmt::format("{}/{}_{}", Server::GetInstance()->GetCheckpointPath(), region->Id(), Helper::TimestampNs());
 
   std::vector<pb::store_internal::SstFileInfo> sst_files;
   auto status = func(region_checkpoint_path, region, sst_files);
@@ -152,13 +152,14 @@ bool RaftSnapshot::SaveSnapshot(braft::SnapshotWriter* writer, store::RegionPtr 
   }
 
   for (auto& sst_file : sst_files) {
-    std::string snapshot_path = writer->get_path() + "/" + sst_file.name();
+    std::string filename = Helper::CleanFirstSlash(sst_file.name());
+    std::string snapshot_path = writer->get_path() + "/" + filename;
     DINGO_LOG(DEBUG) << fmt::format("snapshot_path: {} to {}", sst_file.path(), snapshot_path);
     if (!Helper::Link(sst_file.path(), snapshot_path) || !Helper::IsExistPath(snapshot_path)) {
       DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] link file failed, path: {}", region->Id(),
                                       snapshot_path);
       // Clean temp checkpoint file
-      Helper::RemoveAllFileOrDirectory(region_checkpoint_path);
+      // Helper::RemoveAllFileOrDirectory(region_checkpoint_path);
       return false;
     }
 
@@ -166,7 +167,7 @@ bool RaftSnapshot::SaveSnapshot(braft::SnapshotWriter* writer, store::RegionPtr 
     filemeta->set_user_meta(sst_file.SerializeAsString());
     filemeta->set_source(braft::FileSource::FILE_SOURCE_LOCAL);
     // fixup
-    writer->add_file(sst_file.name(), static_cast<google::protobuf::Message*>(filemeta.get()));
+    writer->add_file(filename, static_cast<google::protobuf::Message*>(filemeta.get()));
   }
 
   // Clean temp checkpoint file

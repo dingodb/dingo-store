@@ -281,7 +281,10 @@ butil::Status SplitRegionTask::ValidateSplitRegion(std::shared_ptr<StoreRegionMe
   const auto& split_key = split_request.split_watershed_key();
   auto range = parent_region->RawRange();
   if (range.start_key().compare(split_key) >= 0 || range.end_key().compare(split_key) <= 0) {
-    return butil::Status(pb::error::EKEY_INVALID, "Split key is invalid.");
+    return butil::Status(
+        pb::error::EKEY_INVALID,
+        fmt::format("Split key is invalid, range: [{}-{}) split_key: {}", Helper::StringToHex(range.start_key()),
+                    Helper::StringToHex(range.end_key()), Helper::StringToHex(split_key)));
   }
 
   if (parent_region->State() == pb::common::StoreRegionState::SPLITTING) {
@@ -304,7 +307,7 @@ butil::Status SplitRegionTask::ValidateSplitRegion(std::shared_ptr<StoreRegionMe
     }
 
     if (!node->IsLeader()) {
-      return butil::Status(pb::error::ERAFT_NOTLEADER, node->GetLeaderId().to_string());
+      return butil::Status(pb::error::ERAFT_NOTLEADER, "Not leader %s", node->GetLeaderId().to_string().c_str());
     }
 
     if (parent_region->Type() == pb::common::INDEX_REGION) {
