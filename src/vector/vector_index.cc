@@ -20,7 +20,6 @@
 #include "bthread/bthread.h"
 #include "butil/status.h"
 #include "common/constant.h"
-#include "common/synchronization.h"
 #include "fmt/core.h"
 #include "gflags/gflags.h"
 #include "proto/common.pb.h"

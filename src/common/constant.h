@@ -114,7 +114,7 @@ class Constant {
 
   // vector limitations
   static const uint32_t kVectorMaxDimension = 32768;
-  static const uint64_t kVectorIndexSaveSnapshotThresholdWriteKeyNum = 10000;
+  static constexpr int64_t kVectorIndexSaveSnapshotThresholdWriteKeyNum = 100000;
 
   static const uint32_t kLoadOrBuildVectorIndexConcurrency = 5;
 
@@ -137,7 +137,7 @@ class Constant {
   static const uint32_t kMetricsCollectIntervalS = 300;
 
   // hnsw max elements expand number
-  static constexpr float kHnswMaxElementsExpandNum = 10000;
+  static const uint32_t kHnswMaxElementsExpandNum = 10000;
 };
 
 }  // namespace dingodb
