@@ -85,14 +85,12 @@ class VectorReader {
 
   butil::Status DoVectorSearchForVectorIdPreFilter(
       VectorIndexWrapperPtr vector_index, const std::vector<pb::common::VectorWithId>& vector_with_ids,
-      const pb::common::VectorSearchParameter& parameter,
-      std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters,
+      const pb::common::VectorSearchParameter& parameter, const pb::common::Range& region_range,
       std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results);
 
   butil::Status DoVectorSearchForScalarPreFilter(
       VectorIndexWrapperPtr vector_index, pb::common::Range region_range,
       const std::vector<pb::common::VectorWithId>& vector_with_ids, const pb::common::VectorSearchParameter& parameter,
-      std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters,
       std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results);
 
   butil::Status DoVectorSearchForTableCoprocessor(
@@ -113,8 +111,7 @@ class VectorReader {
   // This function is for testing only
   butil::Status DoVectorSearchForVectorIdPreFilterDebug(
       VectorIndexWrapperPtr vector_index, const std::vector<pb::common::VectorWithId>& vector_with_ids,
-      const pb::common::VectorSearchParameter& parameter,
-      std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters,
+      const pb::common::VectorSearchParameter& parameter, const pb::common::Range& region_range,
       std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results,
       int64_t& deserialization_id_time_us, int64_t& search_time_us);
 
@@ -122,7 +119,6 @@ class VectorReader {
   butil::Status DoVectorSearchForScalarPreFilterDebug(
       VectorIndexWrapperPtr vector_index, pb::common::Range region_range,
       const std::vector<pb::common::VectorWithId>& vector_with_ids, const pb::common::VectorSearchParameter& parameter,
-      std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters,
       std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results, int64_t& scan_scalar_time_us,
       int64_t& search_time_us);  // NOLINT
   std::shared_ptr<RawEngine::Reader> reader_;

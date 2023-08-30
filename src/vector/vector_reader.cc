@@ -67,24 +67,13 @@ butil::Status VectorReader::SearchVector(
   bool with_vector_data = !(parameter.without_vector_data());
   std::vector<pb::index::VectorWithDistanceResult> tmp_results;
 
-  uint64_t min_vector_id = VectorCodec::DecodeVectorId(region_range.start_key());
-  uint64_t max_vector_id = VectorCodec::DecodeVectorId(region_range.end_key());
-  DINGO_LOG(INFO) << fmt::format("vector id range [{}-{})", min_vector_id, max_vector_id);
-
-  std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters;
-  if (vector_index->Type() == pb::common::VECTOR_INDEX_TYPE_HNSW) {
-    filters.push_back(std::make_shared<VectorIndex::RangeFilterFunctor>(min_vector_id, max_vector_id));
-  } else if (vector_index->Type() == pb::common::VECTOR_INDEX_TYPE_FLAT) {
-    filters.push_back(std::make_shared<VectorIndex::FlatRangeFilterFunctor>(min_vector_id, max_vector_id));
-  }
-
   // scalar post filter
   if (dingodb::pb::common::VectorFilter::SCALAR_FILTER == vector_filter &&
       dingodb::pb::common::VectorFilterType::QUERY_POST == vector_filter_type) {
     uint32_t top_n = parameter.top_n();
     if (BAIDU_UNLIKELY(vector_with_ids[0].scalar_data().scalar_data_size() == 0)) {
-      butil::Status status =
-          vector_index->Search(vector_with_ids, top_n, filters, vector_with_distance_results, with_vector_data);
+      butil::Status status = vector_index->Search(vector_with_ids, top_n, region_range, {},
+                                                  vector_with_distance_results, with_vector_data);
       if (!status.ok()) {
         DINGO_LOG(ERROR) << fmt::format("vector_index::Search failed ");
         return status;
@@ -92,7 +81,8 @@ butil::Status VectorReader::SearchVector(
     } else {
       top_n *= 10;
 
-      butil::Status status = vector_index->Search(vector_with_ids, top_n, filters, tmp_results, with_vector_data);
+      butil::Status status =
+          vector_index->Search(vector_with_ids, top_n, region_range, {}, tmp_results, with_vector_data);
       if (!status.ok()) {
         DINGO_LOG(ERROR) << fmt::format("vector_index::Search failed ");
         return status;
@@ -121,7 +111,7 @@ butil::Status VectorReader::SearchVector(
       }
     }
   } else if (dingodb::pb::common::VectorFilter::VECTOR_ID_FILTER == vector_filter) {  // vector id array search
-    butil::Status status = DoVectorSearchForVectorIdPreFilter(vector_index, vector_with_ids, parameter, filters,
+    butil::Status status = DoVectorSearchForVectorIdPreFilter(vector_index, vector_with_ids, parameter, region_range,
                                                               vector_with_distance_results);
     if (!status.ok()) {
       DINGO_LOG(ERROR) << fmt::format("DoVectorSearchForVectorIdPreFilter failed");
@@ -132,7 +122,7 @@ butil::Status VectorReader::SearchVector(
              dingodb::pb::common::VectorFilterType::QUERY_PRE == vector_filter_type) {  // scalar pre filter search
 
     butil::Status status = DoVectorSearchForScalarPreFilter(vector_index, region_range, vector_with_ids, parameter,
-                                                            filters, vector_with_distance_results);
+                                                            vector_with_distance_results);
     if (!status.ok()) {
       DINGO_LOG(ERROR) << fmt::format("DoVectorSearchForScalarPreFilter failed ");
       return status;
@@ -624,9 +614,9 @@ butil::Status VectorReader::ScanVectorId(std::shared_ptr<Engine::VectorReader::C
 
 butil::Status VectorReader::DoVectorSearchForVectorIdPreFilter(  // NOLINT
     VectorIndexWrapperPtr vector_index, const std::vector<pb::common::VectorWithId>& vector_with_ids,
-    const pb::common::VectorSearchParameter& parameter,
-    std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters,
+    const pb::common::VectorSearchParameter& parameter, const pb::common::Range& region_range,
     std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results) {
+  std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters;
   if (vector_index->Type() == pb::common::VECTOR_INDEX_TYPE_HNSW) {
     filters.push_back(
         std::make_shared<VectorIndex::HnswListFilterFunctor>(Helper::PbRepeatedToVector(parameter.vector_ids())));
@@ -635,8 +625,8 @@ butil::Status VectorReader::DoVectorSearchForVectorIdPreFilter(  // NOLINT
         std::make_shared<VectorIndex::FlatListFilterFunctor>(Helper::PbRepeatedToVector(parameter.vector_ids())));
   }
 
-  butil::Status status = vector_index->Search(vector_with_ids, parameter.top_n(), filters, vector_with_distance_results,
-                                              !(parameter.without_vector_data()));
+  butil::Status status = vector_index->Search(vector_with_ids, parameter.top_n(), region_range, filters,
+                                              vector_with_distance_results, !(parameter.without_vector_data()));
   if (!status.ok()) {
     std::string s = fmt::format("DoVectorSearchForVectorIdPreFilter::VectorIndex::Search failed");
     DINGO_LOG(ERROR) << s;
@@ -649,7 +639,6 @@ butil::Status VectorReader::DoVectorSearchForVectorIdPreFilter(  // NOLINT
 butil::Status VectorReader::DoVectorSearchForScalarPreFilter(
     VectorIndexWrapperPtr vector_index, pb::common::Range region_range,
     const std::vector<pb::common::VectorWithId>& vector_with_ids, const pb::common::VectorSearchParameter& parameter,
-    std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters,
     std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results) {  // NOLINT
 
   // scalar pre filter search
@@ -706,14 +695,15 @@ butil::Status VectorReader::DoVectorSearchForScalarPreFilter(
     }
   }
 
+  std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters;
   if (vector_index->Type() == pb::common::VECTOR_INDEX_TYPE_HNSW) {
     filters.push_back(std::make_shared<VectorIndex::HnswListFilterFunctor>(vector_ids));
   } else if (vector_index->Type() == pb::common::VECTOR_INDEX_TYPE_FLAT) {
     filters.push_back(std::make_shared<VectorIndex::FlatListFilterFunctor>(std::move(vector_ids)));
   }
 
-  butil::Status status = vector_index->Search(vector_with_ids, parameter.top_n(), filters, vector_with_distance_results,
-                                              !(parameter.without_vector_data()));
+  butil::Status status = vector_index->Search(vector_with_ids, parameter.top_n(), region_range, filters,
+                                              vector_with_distance_results, !(parameter.without_vector_data()));
   if (!status.ok()) {
     std::string s = fmt::format("DoVectorSearchForScalarPreFilter::VectorIndex::Search failed");
     DINGO_LOG(ERROR) << s;
@@ -781,17 +771,6 @@ butil::Status VectorReader::SearchVectorDebug(
   bool with_vector_data = !(parameter.without_vector_data());
   std::vector<pb::index::VectorWithDistanceResult> tmp_results;
 
-  uint64_t min_vector_id = VectorCodec::DecodeVectorId(region_range.start_key());
-  uint64_t max_vector_id = VectorCodec::DecodeVectorId(region_range.end_key());
-  DINGO_LOG(INFO) << fmt::format("vector id range [{}-{})", min_vector_id, max_vector_id);
-
-  std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters;
-  if (vector_index->Type() == pb::common::VECTOR_INDEX_TYPE_HNSW) {
-    filters.push_back(std::make_shared<VectorIndex::RangeFilterFunctor>(min_vector_id, max_vector_id));
-  } else if (vector_index->Type() == pb::common::VECTOR_INDEX_TYPE_FLAT) {
-    filters.push_back(std::make_shared<VectorIndex::FlatRangeFilterFunctor>(min_vector_id, max_vector_id));
-  }
-
   auto lambda_time_now_function = []() { return std::chrono::steady_clock::now(); };
   auto lambda_time_diff_microseconds_function = [](auto start, auto end) {
     return std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
@@ -802,8 +781,8 @@ butil::Status VectorReader::SearchVectorDebug(
       dingodb::pb::common::VectorFilterType::QUERY_POST == vector_filter_type) {
     uint32_t top_n = parameter.top_n();
     if (BAIDU_UNLIKELY(vector_with_ids[0].scalar_data().scalar_data_size() == 0)) {
-      butil::Status status =
-          vector_index->Search(vector_with_ids, top_n, filters, vector_with_distance_results, with_vector_data);
+      butil::Status status = vector_index->Search(vector_with_ids, top_n, region_range, {},
+                                                  vector_with_distance_results, with_vector_data);
       if (!status.ok()) {
         DINGO_LOG(ERROR) << fmt::format("vector_index::Search failed ");
         return status;
@@ -811,7 +790,8 @@ butil::Status VectorReader::SearchVectorDebug(
     } else {
       top_n *= 10;
       auto start = lambda_time_now_function();
-      butil::Status status = vector_index->Search(vector_with_ids, top_n, filters, tmp_results, with_vector_data);
+      butil::Status status =
+          vector_index->Search(vector_with_ids, top_n, region_range, {}, tmp_results, with_vector_data);
       auto end = lambda_time_now_function();
       search_time_us = lambda_time_diff_microseconds_function(start, end);
       if (!status.ok()) {
@@ -845,8 +825,8 @@ butil::Status VectorReader::SearchVectorDebug(
       scan_scalar_time_us = lambda_time_diff_microseconds_function(start_kv_get, end_kv_get);
     }
   } else if (dingodb::pb::common::VectorFilter::VECTOR_ID_FILTER == vector_filter) {  // vector id array search
-    butil::Status status = DoVectorSearchForVectorIdPreFilterDebug(vector_index, vector_with_ids, parameter, filters,
-                                                                   vector_with_distance_results,
+    butil::Status status = DoVectorSearchForVectorIdPreFilterDebug(vector_index, vector_with_ids, parameter,
+                                                                   region_range, vector_with_distance_results,
                                                                    deserialization_id_time_us, search_time_us);
     if (!status.ok()) {
       DINGO_LOG(ERROR) << fmt::format("DoVectorSearchForVectorIdPreFilterDebug failed");
@@ -857,7 +837,7 @@ butil::Status VectorReader::SearchVectorDebug(
              dingodb::pb::common::VectorFilterType::QUERY_PRE == vector_filter_type) {  // scalar pre filter search
 
     butil::Status status =
-        DoVectorSearchForScalarPreFilterDebug(vector_index, region_range, vector_with_ids, parameter, filters,
+        DoVectorSearchForScalarPreFilterDebug(vector_index, region_range, vector_with_ids, parameter,
                                               vector_with_distance_results, scan_scalar_time_us, search_time_us);
     if (!status.ok()) {
       DINGO_LOG(ERROR) << fmt::format("DoVectorSearchForScalarPreFilterDebug failed ");
@@ -898,8 +878,7 @@ butil::Status VectorReader::SearchVectorDebug(
 
 butil::Status VectorReader::DoVectorSearchForVectorIdPreFilterDebug(
     VectorIndexWrapperPtr vector_index, const std::vector<pb::common::VectorWithId>& vector_with_ids,
-    const pb::common::VectorSearchParameter& parameter,
-    std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters,
+    const pb::common::VectorSearchParameter& parameter, const pb::common::Range& region_range,
     std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results, int64_t& deserialization_id_time_us,
     int64_t& search_time_us) {
   auto lambda_time_now_function = []() { return std::chrono::steady_clock::now(); };
@@ -907,6 +886,7 @@ butil::Status VectorReader::DoVectorSearchForVectorIdPreFilterDebug(
     return std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
   };
 
+  std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters;
   auto start_ids = lambda_time_now_function();
   if (vector_index->Type() == pb::common::VECTOR_INDEX_TYPE_HNSW) {
     filters.push_back(
@@ -919,8 +899,8 @@ butil::Status VectorReader::DoVectorSearchForVectorIdPreFilterDebug(
   deserialization_id_time_us = lambda_time_diff_microseconds_function(start_ids, end_ids);
 
   auto start_search = lambda_time_now_function();
-  butil::Status status = vector_index->Search(vector_with_ids, parameter.top_n(), filters, vector_with_distance_results,
-                                              !(parameter.without_vector_data()));
+  butil::Status status = vector_index->Search(vector_with_ids, parameter.top_n(), region_range, filters,
+                                              vector_with_distance_results, !(parameter.without_vector_data()));
   auto end_search = lambda_time_now_function();
   search_time_us = lambda_time_diff_microseconds_function(start_search, end_search);
   if (!status.ok()) {
@@ -935,7 +915,6 @@ butil::Status VectorReader::DoVectorSearchForVectorIdPreFilterDebug(
 butil::Status VectorReader::DoVectorSearchForScalarPreFilterDebug(
     VectorIndexWrapperPtr vector_index, pb::common::Range region_range,
     const std::vector<pb::common::VectorWithId>& vector_with_ids, const pb::common::VectorSearchParameter& parameter,
-    std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters,
     std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results, int64_t& scan_scalar_time_us,
     int64_t& search_time_us) {
   // scalar pre filter search
@@ -1000,6 +979,7 @@ butil::Status VectorReader::DoVectorSearchForScalarPreFilterDebug(
   auto end_iter = lambda_time_now_function();
   scan_scalar_time_us = lambda_time_diff_microseconds_function(start_iter, end_iter);
 
+  std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters;
   if (vector_index->Type() == pb::common::VECTOR_INDEX_TYPE_HNSW) {
     filters.push_back(std::make_shared<VectorIndex::HnswListFilterFunctor>(vector_ids));
   } else if (vector_index->Type() == pb::common::VECTOR_INDEX_TYPE_FLAT) {
@@ -1007,8 +987,8 @@ butil::Status VectorReader::DoVectorSearchForScalarPreFilterDebug(
   }
 
   auto start_search = lambda_time_now_function();
-  butil::Status status = vector_index->Search(vector_with_ids, parameter.top_n(), filters, vector_with_distance_results,
-                                              !(parameter.without_vector_data()));
+  butil::Status status = vector_index->Search(vector_with_ids, parameter.top_n(), region_range, filters,
+                                              vector_with_distance_results, !(parameter.without_vector_data()));
   auto end_search = lambda_time_now_function();
   search_time_us = lambda_time_diff_microseconds_function(start_search, end_search);
   if (!status.ok()) {
