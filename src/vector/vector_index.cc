@@ -26,6 +26,7 @@
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "server/server.h"
+#include "vector/codec.h"
 
 namespace dingodb {
 
@@ -460,6 +461,7 @@ butil::Status VectorIndexWrapper::Delete(const std::vector<uint64_t>& delete_ids
 }
 
 butil::Status VectorIndexWrapper::Search(std::vector<pb::common::VectorWithId> vector_with_ids, uint32_t topk,
+                                         const pb::common::Range& region_range,
                                          std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters,
                                          std::vector<pb::index::VectorWithDistanceResult>& results, bool reconstruct) {
   if (!IsReady()) {
@@ -470,6 +472,17 @@ butil::Status VectorIndexWrapper::Search(std::vector<pb::common::VectorWithId> v
   if (vector_index == nullptr) {
     DINGO_LOG(WARNING) << fmt::format("[vector_index.wrapper][index_id({})] vector index is disable.", Id());
     return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is disable.", Id());
+  }
+
+  const auto& index_range = vector_index->Range();
+  if (region_range.start_key() != index_range.start_key() || region_range.end_key() != index_range.end_key()) {
+    uint64_t min_vector_id = VectorCodec::DecodeVectorId(region_range.start_key());
+    uint64_t max_vector_id = VectorCodec::DecodeVectorId(region_range.end_key());
+    if (vector_index->VectorIndexType() == pb::common::VECTOR_INDEX_TYPE_HNSW) {
+      filters.push_back(std::make_shared<VectorIndex::RangeFilterFunctor>(min_vector_id, max_vector_id));
+    } else if (vector_index->VectorIndexType() == pb::common::VECTOR_INDEX_TYPE_FLAT) {
+      filters.push_back(std::make_shared<VectorIndex::FlatRangeFilterFunctor>(min_vector_id, max_vector_id));
+    }
   }
 
   return vector_index->Search(vector_with_ids, topk, filters, results, reconstruct);

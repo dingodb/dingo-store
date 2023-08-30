@@ -294,6 +294,7 @@ class VectorIndexWrapper {
   butil::Status Upsert(const std::vector<pb::common::VectorWithId>& vector_with_ids);
   butil::Status Delete(const std::vector<uint64_t>& delete_ids);
   butil::Status Search(std::vector<pb::common::VectorWithId> vector_with_ids, uint32_t topk,
+                       const pb::common::Range& region_range,
                        std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters,
                        std::vector<pb::index::VectorWithDistanceResult>& results, bool reconstruct = false);
 

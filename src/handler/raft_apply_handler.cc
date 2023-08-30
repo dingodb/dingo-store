@@ -701,7 +701,7 @@ void VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr 
   }
 
   // Only leader and specific follower write vector index, other follower don't write vector index.
-  if (is_ready) {
+  if (is_ready && !delete_ids.empty()) {
     if (log_id > vector_index_wrapper->ApplyLogId()) {
       // delete vector from index
       try {
@@ -728,7 +728,7 @@ void VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr 
   }
 
   // Delete vector and write wal
-  if ((!keys.empty()) && status.ok()) {
+  if (!keys.empty() && status.ok()) {
     auto writer = engine->NewWriter(request.cf_name());
     status = writer->KvBatchDelete(keys);
 

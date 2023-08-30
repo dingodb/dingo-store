@@ -152,6 +152,11 @@ butil::Status VectorIndexFlat::Add(const std::vector<pb::common::VectorWithId>& 
 }
 
 butil::Status VectorIndexFlat::Delete(const std::vector<uint64_t>& delete_ids) {
+  if (delete_ids.empty()) {
+    DINGO_LOG(WARNING) << "delete ids is empty";
+    return butil::Status::OK();
+  }
+
   std::unique_ptr<faiss::idx_t[]> ids;
   try {
     ids.reset(new faiss::idx_t[delete_ids.size()]);
