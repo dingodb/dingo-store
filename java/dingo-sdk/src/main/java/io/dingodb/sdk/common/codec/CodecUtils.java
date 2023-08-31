@@ -58,7 +58,7 @@ public final class CodecUtils {
         }
         typeName = typeName.toUpperCase();
         String elementType = Parameters.cleanNull(column.getElementType(), "");
-        schema = CodecUtils.createSchemaForTypeName(typeName, elementType);
+        schema = CodecUtils.createSchemaForTypeName(typeName, elementType.toUpperCase());
         schema.setAllowNull(column.isNullable());
         schema.setIsKey(column.isPrimary());
         schema.setIndex(index);
