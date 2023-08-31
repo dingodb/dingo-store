@@ -116,7 +116,7 @@ public class DoubleListSchema implements DingoSchema<List<Double>> {
                 buf.ensureRemainder(1);
                 buf.write(NULL);
             } else {
-                buf.ensureRemainder(9 + data.size());
+                buf.ensureRemainder(9 + data.size() * 8);
                 buf.write(NOTNULL);
                 buf.writeInt(data.size());
                 for (Double value: data) {
@@ -124,7 +124,7 @@ public class DoubleListSchema implements DingoSchema<List<Double>> {
                 }
             }
         } else {
-            buf.ensureRemainder(8 + data.size());
+            buf.ensureRemainder(8 + data.size() * 8);
             buf.writeInt(data.size());
             for (Double value: data) {
                 internalEncodeValue(buf, value);

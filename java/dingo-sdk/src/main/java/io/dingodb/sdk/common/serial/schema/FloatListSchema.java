@@ -116,7 +116,7 @@ public class FloatListSchema implements DingoSchema<List<Float>> {
                 buf.ensureRemainder(1);
                 buf.write(NULL);
             } else {
-                buf.ensureRemainder(5 + data.size());
+                buf.ensureRemainder(5 + data.size() * 4);
                 buf.write(NOTNULL);
                 buf.writeInt(data.size());
                 for (Float value: data) {
@@ -124,7 +124,7 @@ public class FloatListSchema implements DingoSchema<List<Float>> {
                 }
             }
         } else {
-            buf.ensureRemainder(4 + data.size());
+            buf.ensureRemainder(4 + data.size() * 4);
             buf.writeInt(data.size());
             for (Float value: data) {
                 internalEncodeValue(buf, value);

@@ -19,13 +19,13 @@
 
 namespace dingodb {
 
-int DingoSchema<std::optional<std::shared_ptr<std::vector<std::string>>>>::GetDataLength() { return -1; }
+int DingoSchema<std::optional<std::shared_ptr<std::vector<std::string>>>>::GetDataLength() { return 0; }
 
-int DingoSchema<std::optional<std::shared_ptr<std::vector<std::string>>>>::GetWithNullTagLength() { return -1; }
+int DingoSchema<std::optional<std::shared_ptr<std::vector<std::string>>>>::GetWithNullTagLength() { return 0; }
 
 void DingoSchema<std::optional<std::shared_ptr<std::vector<std::string>>>>::InternalEmlementEncodeValue(Buf* buf,
                                                                                   const std::string &data) {
-  buf->EnsureRemainder(data.length());
+  buf->EnsureRemainder(data.length() + 4);
   buf->WriteInt(data.length());
   buf->Write(data);
 }
@@ -35,7 +35,6 @@ void DingoSchema<std::optional<std::shared_ptr<std::vector<std::string>>>>::Inte
     // vector size 
     buf->EnsureRemainder(4);
     buf->WriteInt(data->size());
-    // 遍历data,并调用InternalEmlementEncodeValue函数，以便序列化vector中的每个元素
     for (const std::string& str : *data) {
         InternalEmlementEncodeValue(buf, str);
     }
@@ -52,7 +51,10 @@ void DingoSchema<std::optional<std::shared_ptr<std::vector<std::string>>>>::SetI
 bool DingoSchema<std::optional<std::shared_ptr<std::vector<std::string>>>>::IsKey() { return this->key_; }
 
 int DingoSchema<std::optional<std::shared_ptr<std::vector<std::string>>>>::GetLength() {
-  return -1;
+  if (this->allow_null_) {
+    return GetWithNullTagLength();
+  }
+  return GetDataLength();
 }
 
 void DingoSchema<std::optional<std::shared_ptr<std::vector<std::string>>>>::SetAllowNull(bool allow_null) {

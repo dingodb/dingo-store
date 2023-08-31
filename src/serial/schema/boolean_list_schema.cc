@@ -16,9 +16,9 @@
 
 namespace dingodb {
 
-int DingoSchema<std::optional<std::shared_ptr<std::vector<bool>>>>::GetDataLength() { return -1; }
+int DingoSchema<std::optional<std::shared_ptr<std::vector<bool>>>>::GetDataLength() { return 1; }
 
-int DingoSchema<std::optional<std::shared_ptr<std::vector<bool>>>>::GetWithNullTagLength() { return -1; }
+int DingoSchema<std::optional<std::shared_ptr<std::vector<bool>>>>::GetWithNullTagLength() { return 2; }
 
 void DingoSchema<std::optional<std::shared_ptr<std::vector<bool>>>>::InternalEncodeValue(Buf* buf, bool data) { buf->Write(data); }
 
@@ -35,7 +35,10 @@ void DingoSchema<std::optional<std::shared_ptr<std::vector<bool>>>>::SetIsKey(bo
 bool DingoSchema<std::optional<std::shared_ptr<std::vector<bool>>>>::IsKey() { return this->key_; }
 
 int DingoSchema<std::optional<std::shared_ptr<std::vector<bool>>>>::GetLength() {
-  return -1;
+  if (this->allow_null_) {
+    return GetWithNullTagLength();
+  }
+  return GetDataLength();
 }
 
 void DingoSchema<std::optional<std::shared_ptr<std::vector<bool>>>>::SetAllowNull(bool allow_null) { this->allow_null_ = allow_null; }

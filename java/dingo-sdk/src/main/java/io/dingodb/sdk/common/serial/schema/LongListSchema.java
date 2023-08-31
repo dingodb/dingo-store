@@ -129,7 +129,7 @@ public class LongListSchema implements DingoSchema<List<Long>> {
                 buf.ensureRemainder(1);
                 buf.write(NULL);
             } else {
-                buf.ensureRemainder(9 + data.size());
+                buf.ensureRemainder(9 + data.size() * 8);
                 buf.write(NOTNULL);
                 buf.writeInt(data.size());
                 for (Long value: data) {
@@ -137,7 +137,7 @@ public class LongListSchema implements DingoSchema<List<Long>> {
                 }
             }
         } else {
-            buf.ensureRemainder(8 + data.size());
+            buf.ensureRemainder(8 + data.size() * 8);
             buf.writeInt(data.size());
             for (Long value: data) {
                 internalEncodeValue(buf, value);

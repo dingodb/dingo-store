@@ -130,7 +130,7 @@ public class IntegerListSchema implements DingoSchema<List<Integer>> {
                 buf.ensureRemainder(1);
                 buf.write(NULL);
             } else {
-                buf.ensureRemainder(5 + data.size());
+                buf.ensureRemainder(5 + data.size() * 4);
                 buf.write(NOTNULL);
                 buf.writeInt(data.size());
                 for (Integer value: data) {
@@ -138,7 +138,7 @@ public class IntegerListSchema implements DingoSchema<List<Integer>> {
                 }
             }
         } else {
-            buf.ensureRemainder(4 + data.size());
+            buf.ensureRemainder(4 + data.size() * 4);
             buf.writeInt(data.size());
             for (Integer value: data) {
                 internalEncodeValue(buf, value);
