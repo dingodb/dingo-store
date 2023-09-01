@@ -983,7 +983,8 @@ butil::Status CoordinatorControl::CreateRegion(const std::string& region_name, p
   auto* region_definition = new_region.mutable_metrics()->mutable_region_definition();
   region_definition->set_id(create_region_id);
   region_definition->set_name(region_name + std::string("_") + std::to_string(create_region_id));
-  region_definition->set_epoch(1);
+  region_definition->mutable_epoch()->set_conf_version(1);
+  region_definition->mutable_epoch()->set_version(1);
   region_definition->set_schema_id(schema_id);
   region_definition->set_table_id(table_id);
   region_definition->set_index_id(index_id);

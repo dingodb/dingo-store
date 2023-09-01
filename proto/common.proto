@@ -275,11 +275,16 @@ message Peer {
   Location raft_location = 4;
 }
 
+message RegionEpoch {
+  uint64 conf_version = 1;  // Member Conf version, auto increment when add or remove peer
+  uint64 version = 2;       // Region version, auto increment when split or merge
+}
+
 // RegionDefinition
 message RegionDefinition {
   // store info
   uint64 id = 1;
-  uint64 epoch = 2;
+  RegionEpoch epoch = 2;
   string name = 3;
   repeated Peer peers = 4;
   Range range = 5;      // this range is provide by user, such as sdk

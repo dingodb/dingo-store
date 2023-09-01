@@ -1762,7 +1762,8 @@ dingodb::pb::common::RegionDefinition BuildRegionDefinition(uint64_t region_id, 
                                                             const std::string& start_key, const std::string& end_key) {
   dingodb::pb::common::RegionDefinition region_definition;
   region_definition.set_id(region_id);
-  region_definition.set_epoch(1);
+  region_definition.mutable_epoch()->set_conf_version(1);
+  region_definition.mutable_epoch()->set_version(1);
   region_definition.set_name(raft_group);
   dingodb::pb::common::Range* range = region_definition.mutable_range();
   range->set_start_key(start_key);
