@@ -85,6 +85,7 @@ message SplitRequest {
   uint64 split_from_region_id = 1;  // split from region id
   uint64 split_to_region_id = 2;    // split to region id
   bytes split_watershed_key = 3;    // split watershed key
+  bool store_create_region = 4;     // if true, store will create region, else coordinator pre-create region
 }
 
 message MergeRequest {

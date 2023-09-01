@@ -57,6 +57,7 @@ DECLARE_int64(index);
 DECLARE_string(state);
 DECLARE_bool(is_force);
 DECLARE_int32(count);
+DECLARE_bool(store_create_region);
 
 // raft control
 void SendRaftAddPeer() {
@@ -1121,8 +1122,12 @@ void SendSplitRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
     }
   }
 
-  DINGO_LOG(INFO) << "split from region " << FLAGS_split_from_id << " to region " << FLAGS_split_to_id
-                  << " with watershed key ["
+  if (FLAGS_store_create_region) {
+    request.mutable_split_request()->set_store_create_region(FLAGS_store_create_region);
+  }
+
+  DINGO_LOG(INFO) << "split from region_id=" << FLAGS_split_from_id << ", to region_id=" << FLAGS_split_to_id
+                  << ", store_create_region=" << FLAGS_store_create_region << ", with watershed key ["
                   << dingodb::Helper::StringToHex(request.split_request().split_watershed_key()) << "] will be sent";
 
   auto status = coordinator_interaction->SendRequest("SplitRegion", request, response);
@@ -1131,14 +1136,14 @@ void SendSplitRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
 
   if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
     DINGO_LOG(INFO) << "split from region " << FLAGS_split_from_id << " to region " << FLAGS_split_to_id
-                    << " with watershed key ["
+                    << " store_create_region=" << FLAGS_store_create_region << " with watershed key ["
                     << dingodb::Helper::StringToHex(request.split_request().split_watershed_key())
                     << "] failed, error: "
                     << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name()
                     << " " << response.error().errmsg();
   } else {
     DINGO_LOG(INFO) << "split from region " << FLAGS_split_from_id << " to region " << FLAGS_split_to_id
-                    << " with watershed key ["
+                    << " store_create_region=" << FLAGS_store_create_region << " with watershed key ["
                     << dingodb::Helper::StringToHex(request.split_request().split_watershed_key()) << "] success";
   }
 }
