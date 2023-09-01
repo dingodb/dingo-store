@@ -87,9 +87,10 @@ message DeleteBatchResponse {
 }
 
 message SplitRequest {
-  uint64 from_region_id = 1;  // split from region id
-  uint64 to_region_id = 2;    // split to region id
-  bytes split_key = 3;        // split watershed key
+  uint64 from_region_id = 1;                // split from region id
+  uint64 to_region_id = 2;                  // split to region id
+  bytes split_key = 3;                      // split watershed key
+  dingodb.pb.common.RegionEpoch epoch = 4;  // current region epoch
 }
 
 message SplitResponse {

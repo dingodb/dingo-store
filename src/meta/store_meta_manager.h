@@ -60,6 +60,10 @@ class Region {
   const std::string& Name() const { return inner_region_.definition().name(); }
   pb::common::RegionType Type() { return inner_region_.region_type(); }
 
+  pb::common::RegionEpoch Epoch();
+  void SetEpochVersion(uint64_t version);
+  void SetEpochConfVersion(uint64_t version);
+
   uint64_t LeaderId();
   void SetLeaderId(uint64_t leader_id);
 
@@ -179,6 +183,11 @@ class StoreRegionMeta : public TransformKvAble {
 
   void UpdateRange(store::RegionPtr region, const pb::common::Range& range);
   void UpdateRange(uint64_t region_id, const pb::common::Range& range);
+
+  void UpdateEpochVersion(store::RegionPtr region, uint64_t version);
+  void UpdateEpochVersion(uint64_t region_id, uint64_t version);
+  void UpdateEpochConfVersion(store::RegionPtr region, uint64_t version);
+  void UpdateEpochConfVersion(uint64_t region_id, uint64_t version);
 
   bool IsExistRegion(uint64_t region_id);
   store::RegionPtr GetRegion(uint64_t region_id);

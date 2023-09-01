@@ -81,8 +81,15 @@ function start_program() {
 
   cd ${root_dir}
 
-  sudo ulimit -c unlimited
-  sudo ulimit -n 1024000
+  user=`whoami`
+  if [ "${user}" == "root" ]; then
+    ulimit -c unlimited
+    ulimit -n 102400
+  else
+    sudo ulimit -c unlimited
+    sudo ulimit -n 102400
+  fi
+
 
   echo "${root_dir}/bin/dingodb_server -role=${role}"
 

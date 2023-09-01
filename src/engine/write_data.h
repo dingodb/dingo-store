@@ -256,6 +256,7 @@ struct SplitDatum : public DatumAble {
     split_request->set_from_region_id(from_region_id);
     split_request->set_to_region_id(to_region_id);
     split_request->set_split_key(split_key);
+    split_request->mutable_epoch()->CopyFrom(epoch);
 
     return request;
   };
@@ -265,6 +266,7 @@ struct SplitDatum : public DatumAble {
   uint64_t from_region_id;
   uint64_t to_region_id;
   std::string split_key;
+  pb::common::RegionEpoch epoch;
 };
 
 struct RebuildVectorIndexDatum : public DatumAble {
@@ -399,11 +401,13 @@ class WriteDataBuilder {
   }
 
   // SplitDatum
-  static std::shared_ptr<WriteData> BuildWrite(const pb::coordinator::SplitRequest& split_request) {
+  static std::shared_ptr<WriteData> BuildWrite(const pb::coordinator::SplitRequest& split_request,
+                                               const pb::common::RegionEpoch& epoch) {
     auto datum = std::make_shared<SplitDatum>();
     datum->from_region_id = split_request.split_from_region_id();
     datum->to_region_id = split_request.split_to_region_id();
     datum->split_key = split_request.split_watershed_key();
+    datum->epoch = epoch;
 
     auto write_data = std::make_shared<WriteData>();
     write_data->AddDatums(std::static_pointer_cast<DatumAble>(datum));
