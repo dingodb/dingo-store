@@ -140,6 +140,8 @@ DEFINE_uint32(vector_ids_count, 100, "vector ids count");
 DEFINE_string(lock_name, "", "Request lock_name");
 DEFINE_string(client_uuid, "", "Request client_uuid");
 
+DEFINE_bool(store_create_region, false, "store create region");
+
 bvar::LatencyRecorder g_latency_recorder("dingo-store");
 
 const std::map<std::string, std::vector<std::string>> kParamConstraint = {

@@ -1043,10 +1043,11 @@ void CoordinatorServiceImpl::SplitRegion(google::protobuf::RpcController *contro
   }
 
   auto split_request = request->split_request();
+  bool store_create_region = request->split_request().store_create_region();
 
-  auto ret = this->coordinator_control_->SplitRegionWithTaskList(split_request.split_from_region_id(),
-                                                                 split_request.split_to_region_id(),
-                                                                 split_request.split_watershed_key(), meta_increment);
+  auto ret = this->coordinator_control_->SplitRegionWithTaskList(
+      split_request.split_from_region_id(), split_request.split_to_region_id(), split_request.split_watershed_key(),
+      store_create_region, meta_increment);
   if (!ret.ok()) {
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
     response->mutable_error()->set_errmsg(ret.error_str());

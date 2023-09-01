@@ -201,6 +201,13 @@ class CoordinatorControl : public MetaControl {
   butil::Status SelectStore(pb::common::StoreType store_type, int32_t replica_num, const std::string &resource_tag,
                             const pb::common::IndexParameter &index_parameter, std::vector<uint64_t> &store_ids,
                             std::vector<pb::common::Store> &selected_stores_for_regions);
+  butil::Status CreateShadowRegion(const std::string &region_name, pb::common::RegionType region_type,
+                                   const std::string &resource_tag, int32_t replica_num, pb::common::Range region_range,
+                                   pb::common::Range region_raw_range, uint64_t schema_id, uint64_t table_id,
+                                   uint64_t index_id, uint64_t part_id,
+                                   const pb::common::IndexParameter &index_parameter, std::vector<uint64_t> &store_ids,
+                                   uint64_t split_from_region_id, uint64_t &new_region_id,
+                                   pb::coordinator_internal::MetaIncrement &meta_increment);
   butil::Status CreateRegion(const std::string &region_name, pb::common::RegionType region_type,
                              const std::string &resource_tag, int32_t replica_num, pb::common::Range region_range,
                              pb::common::Range region_raw_range, uint64_t schema_id, uint64_t table_id,
@@ -219,6 +226,7 @@ class CoordinatorControl : public MetaControl {
                                      const pb::common::IndexParameter &index_parameter, uint64_t split_from_region_id,
                                      uint64_t &new_region_id, pb::coordinator_internal::MetaIncrement &meta_increment);
   butil::Status CreateRegionForSplitInternal(uint64_t split_from_region_id, uint64_t &new_region_id,
+                                             bool is_shadow_create,
                                              pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // drop region
@@ -238,7 +246,7 @@ class CoordinatorControl : public MetaControl {
   butil::Status SplitRegion(uint64_t split_from_region_id, uint64_t split_to_region_id, std::string split_watershed_key,
                             pb::coordinator_internal::MetaIncrement &meta_increment);
   butil::Status SplitRegionWithTaskList(uint64_t split_from_region_id, uint64_t split_to_region_id,
-                                        std::string split_watershed_key,
+                                        std::string split_watershed_key, bool store_create_region,
                                         pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // merge region
@@ -663,7 +671,7 @@ class CoordinatorControl : public MetaControl {
   void AddMergeTask(pb::coordinator::TaskList *task_list, uint64_t store_id, uint64_t region_id,
                     uint64_t merge_to_region_id, pb::coordinator_internal::MetaIncrement &meta_increment);
   void AddSplitTask(pb::coordinator::TaskList *task_list, uint64_t store_id, uint64_t region_id,
-                    uint64_t split_to_region_id, const std::string &water_shed_key,
+                    uint64_t split_to_region_id, const std::string &water_shed_key, bool store_create_region,
                     pb::coordinator_internal::MetaIncrement &meta_increment);
   static void AddCheckVectorIndexTask(pb::coordinator::TaskList *task_list, uint64_t store_id, uint64_t region_id);
   void AddLoadVectorIndexTask(pb::coordinator::TaskList *task_list, uint64_t store_id, uint64_t region_id,

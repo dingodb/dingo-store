@@ -722,8 +722,10 @@ butil::Status CoordinatorControl::QueryRegion(uint64_t region_id, pb::common::Re
 }
 
 butil::Status CoordinatorControl::CreateRegionForSplitInternal(
-    uint64_t split_from_region_id, uint64_t& new_region_id, pb::coordinator_internal::MetaIncrement& meta_increment) {
+    uint64_t split_from_region_id, uint64_t& new_region_id, bool is_shadow_create,
+    pb::coordinator_internal::MetaIncrement& meta_increment) {
   if (split_from_region_id <= 0) {
+    DINGO_LOG(ERROR) << "CreateRegionForSplit region_id not exists, id=" << split_from_region_id;
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "split_from_region_id must be positive");
   }
 
@@ -751,11 +753,20 @@ butil::Status CoordinatorControl::CreateRegionForSplitInternal(
   new_raw_range.set_end_key(split_from_region.definition().raw_range().start_key());
 
   // create region with split_from_region_id & store_ids
-  return CreateRegion(split_from_region.definition().name(), split_from_region.region_type(), "", store_ids.size(),
-                      new_range, new_raw_range, split_from_region.definition().schema_id(),
-                      split_from_region.definition().table_id(), split_from_region.definition().index_id(),
-                      split_from_region.definition().part_id(), split_from_region.definition().index_parameter(),
-                      store_ids, split_from_region_id, new_region_id, meta_increment);
+  if (is_shadow_create) {
+    return CreateShadowRegion(split_from_region.definition().name(), split_from_region.region_type(), "",
+                              store_ids.size(), new_range, new_raw_range, split_from_region.definition().schema_id(),
+                              split_from_region.definition().table_id(), split_from_region.definition().index_id(),
+                              split_from_region.definition().part_id(),
+                              split_from_region.definition().index_parameter(), store_ids, split_from_region_id,
+                              new_region_id, meta_increment);
+  } else {
+    return CreateRegion(split_from_region.definition().name(), split_from_region.region_type(), "", store_ids.size(),
+                        new_range, new_raw_range, split_from_region.definition().schema_id(),
+                        split_from_region.definition().table_id(), split_from_region.definition().index_id(),
+                        split_from_region.definition().part_id(), split_from_region.definition().index_parameter(),
+                        store_ids, split_from_region_id, new_region_id, meta_increment);
+  }
 }
 
 butil::Status CoordinatorControl::CreateRegionForSplit(
@@ -1082,6 +1093,129 @@ butil::Status CoordinatorControl::SelectStore(pb::common::StoreType store_type, 
   return butil::Status::OK();
 }
 
+butil::Status CoordinatorControl::CreateShadowRegion(
+    const std::string& region_name, pb::common::RegionType region_type, const std::string& resource_tag,
+    int32_t replica_num, pb::common::Range region_range, pb::common::Range region_raw_range, uint64_t schema_id,
+    uint64_t table_id, uint64_t index_id, uint64_t part_id, const pb::common::IndexParameter& index_parameter,
+    std::vector<uint64_t>& store_ids, uint64_t split_from_region_id, uint64_t& new_region_id,
+    pb::coordinator_internal::MetaIncrement& meta_increment) {
+  DINGO_LOG(INFO) << "CreateShadowRegion replica_num=" << replica_num << ", region_name=" << region_name
+                  << ", region_type=" << pb::common::RegionType_Name(region_type) << ", resource_tag=" << resource_tag
+                  << ", store_ids.size=" << store_ids.size() << ", region_range=" << region_range.ShortDebugString()
+                  << ", region_raw_range=" << region_raw_range.ShortDebugString() << ", schema_id=" << schema_id
+                  << ", table_id=" << table_id << ", index_id=" << index_id << ", part_id=" << part_id
+                  << ", index_parameter=" << index_parameter.ShortDebugString()
+                  << ", split_from_region_id=" << split_from_region_id;
+
+  std::vector<pb::common::Store> selected_stores_for_regions;
+  pb::common::IndexParameter new_index_parameter = index_parameter;
+
+  // setup store_type
+  pb::common::StoreType store_type = pb::common::StoreType::NODE_TYPE_STORE;
+  if (region_type == pb::common::RegionType::INDEX_REGION && new_index_parameter.has_vector_index_parameter()) {
+    store_type = pb::common::StoreType::NODE_TYPE_INDEX;
+
+    // if vector index is hnsw, need to limit max_elements of each region to less than 512MB / dimenstion / 4
+    if (new_index_parameter.vector_index_parameter().vector_index_type() ==
+        pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
+      int32_t dimension = new_index_parameter.vector_index_parameter().hnsw_parameter().dimension();
+      int32_t max_elements = new_index_parameter.vector_index_parameter().hnsw_parameter().max_elements();
+
+      int32_t max_elements_limit = FLAGS_MAX_HSNW_MEMORY_SIZE_OF_REGION / dimension / 4;
+      if (max_elements > max_elements_limit) {
+        DINGO_LOG(WARNING) << "CreateRegion max_elements is too large, will reduce max_elements, max_elements="
+                           << max_elements << ", max_elements_limit=" << max_elements_limit
+                           << ", dimension=" << dimension;
+        new_index_parameter.mutable_vector_index_parameter()->mutable_hnsw_parameter()->set_max_elements(
+            max_elements_limit);
+      }
+    }
+  }
+
+  // select store for region
+  butil::FlatMap<uint64_t, pb::common::Store> store_map_copy;
+  store_map_copy.init(100);
+  store_map_.GetRawMapCopy(store_map_copy);
+  selected_stores_for_regions.reserve(store_ids.size());
+  for (auto id : store_ids) {
+    if (store_map_copy.seek(id) != nullptr) {
+      selected_stores_for_regions.push_back(store_map_copy[id]);
+    }
+  }
+  if (selected_stores_for_regions.size() != store_ids.size()) {
+    DINGO_LOG(ERROR) << "CreateShadowRegion store_ids not exists, store_ids.size=" << store_ids.size()
+                     << ", selected_stores_for_regions.size=" << selected_stores_for_regions.size();
+    return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE, "Not enough stores for create shadow region");
+  }
+
+  // generate new region
+  if (new_region_id <= 0) {
+    new_region_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION, meta_increment);
+  }
+
+  uint64_t const create_region_id = new_region_id;
+
+  if (region_map_.Exists(create_region_id)) {
+    DINGO_LOG(ERROR) << "create_region_id =" << create_region_id << " is illegal, cannot create region!!";
+    return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE, "create_region_id is illegal");
+  }
+
+  // create new region in memory begin
+  pb::common::Region new_region;
+  new_region.set_id(create_region_id);
+  new_region.set_epoch(1);
+  new_region.set_state(::dingodb::pb::common::RegionState::REGION_NEW);
+  new_region.set_create_timestamp(butil::gettimeofday_ms());
+  new_region.set_region_type(region_type);
+
+  // create region definition begin
+  auto* region_definition = new_region.mutable_metrics()->mutable_region_definition();
+  region_definition->set_id(create_region_id);
+  region_definition->set_name(region_name + std::string("_") + std::to_string(create_region_id));
+  region_definition->mutable_epoch()->set_conf_version(1);
+  region_definition->mutable_epoch()->set_version(1);
+  region_definition->set_schema_id(schema_id);
+  region_definition->set_table_id(table_id);
+  region_definition->set_index_id(index_id);
+  region_definition->set_part_id(part_id);
+  if (new_index_parameter.index_type() != pb::common::IndexType::INDEX_TYPE_NONE) {
+    region_definition->mutable_index_parameter()->CopyFrom(new_index_parameter);
+  }
+
+  // set region range in region definition, this is provided by sdk
+  auto* range_in_definition = region_definition->mutable_range();
+  range_in_definition->CopyFrom(region_range);
+
+  // set raw range in region definition, this is for store/index internal use
+  auto* raw_range_in_definition = region_definition->mutable_raw_range();
+  raw_range_in_definition->CopyFrom(region_raw_range);
+
+  // add store_id and its peer location to region
+  for (int i = 0; i < replica_num; i++) {
+    auto store = selected_stores_for_regions[i];
+    auto* peer = region_definition->add_peers();
+    peer->set_store_id(store.id());
+    peer->set_role(::dingodb::pb::common::PeerRole::VOTER);
+    peer->mutable_server_location()->CopyFrom(store.server_location());
+    peer->mutable_raft_location()->CopyFrom(store.raft_location());
+  }
+
+  new_region.mutable_definition()->CopyFrom(*region_definition);
+  // create region definition end
+  // create new region in memory end
+
+  // update meta_increment
+  auto* region_increment = meta_increment.add_regions();
+  region_increment->set_id(create_region_id);
+  region_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
+  region_increment->set_table_id(table_id);
+
+  auto* region_increment_region = region_increment->mutable_region();
+  region_increment_region->CopyFrom(new_region);
+
+  return butil::Status::OK();
+}
+
 butil::Status CoordinatorControl::CreateRegion(const std::string& region_name, pb::common::RegionType region_type,
                                                const std::string& resource_tag, int32_t replica_num,
                                                pb::common::Range region_range, pb::common::Range region_raw_range,
@@ -1090,6 +1224,14 @@ butil::Status CoordinatorControl::CreateRegion(const std::string& region_name, p
                                                std::vector<uint64_t>& store_ids, uint64_t split_from_region_id,
                                                uint64_t& new_region_id,
                                                pb::coordinator_internal::MetaIncrement& meta_increment) {
+  DINGO_LOG(INFO) << "CreateRegion replica_num=" << replica_num << ", region_name=" << region_name
+                  << ", region_type=" << pb::common::RegionType_Name(region_type) << ", resource_tag=" << resource_tag
+                  << ", store_ids.size=" << store_ids.size() << ", region_range=" << region_range.ShortDebugString()
+                  << ", region_raw_range=" << region_raw_range.ShortDebugString() << ", schema_id=" << schema_id
+                  << ", table_id=" << table_id << ", index_id=" << index_id << ", part_id=" << part_id
+                  << ", index_parameter=" << index_parameter.ShortDebugString()
+                  << ", split_from_region_id=" << split_from_region_id;
+
   std::vector<pb::common::Store> selected_stores_for_regions;
   pb::common::IndexParameter new_index_parameter = index_parameter;
 
@@ -1521,7 +1663,7 @@ butil::Status CoordinatorControl::SplitRegion(uint64_t split_from_region_id, uin
 }
 
 butil::Status CoordinatorControl::SplitRegionWithTaskList(uint64_t split_from_region_id, uint64_t split_to_region_id,
-                                                          std::string split_watershed_key,
+                                                          std::string split_watershed_key, bool store_create_region,
                                                           pb::coordinator_internal::MetaIncrement& meta_increment) {
   auto validate_ret = ValidateTaskListConflict(split_from_region_id, split_to_region_id);
   if (!validate_ret.ok()) {
@@ -1578,7 +1720,8 @@ butil::Status CoordinatorControl::SplitRegionWithTaskList(uint64_t split_from_re
   // call create_region to get store_operations
   pb::coordinator_internal::MetaIncrement meta_increment_tmp;
   uint64_t new_region_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION, meta_increment);
-  auto status_ret = CreateRegionForSplitInternal(split_from_region_id, new_region_id, meta_increment_tmp);
+  auto status_ret =
+      CreateRegionForSplitInternal(split_from_region_id, new_region_id, store_create_region, meta_increment_tmp);
   if (!status_ret.ok()) {
     DINGO_LOG(ERROR) << "SplitRegionWithTaskList create region for split failed, split_from_region_id="
                      << split_from_region_id << ", split_to_region_id=" << split_to_region_id
@@ -1624,7 +1767,7 @@ butil::Status CoordinatorControl::SplitRegionWithTaskList(uint64_t split_from_re
 
   // build split_region task
   AddSplitTask(new_task_list, split_from_region.leader_store_id(), split_from_region_id, new_region_id,
-               split_watershed_key, meta_increment);
+               split_watershed_key, store_create_region, meta_increment);
 
   return butil::Status::OK();
 }
@@ -3106,13 +3249,16 @@ void CoordinatorControl::AddMergeTask(pb::coordinator::TaskList* task_list, uint
 
 void CoordinatorControl::AddSplitTask(pb::coordinator::TaskList* task_list, uint64_t store_id, uint64_t region_id,
                                       uint64_t split_to_region_id, const std::string& water_shed_key,
+                                      bool store_create_region,
                                       pb::coordinator_internal::MetaIncrement& meta_increment) {
   // build split_region task
   auto* split_region_task = task_list->add_tasks();
-  auto* region_check = split_region_task->mutable_pre_check();
-  region_check->set_type(::dingodb::pb::coordinator::TaskPreCheckType::REGION_CHECK);
-  region_check->mutable_region_check()->set_region_id(split_to_region_id);
-  region_check->mutable_region_check()->set_state(::dingodb::pb::common::RegionState::REGION_STANDBY);
+  if (!store_create_region) {
+    auto* region_check = split_region_task->mutable_pre_check();
+    region_check->set_type(::dingodb::pb::coordinator::TaskPreCheckType::REGION_CHECK);
+    region_check->mutable_region_check()->set_region_id(split_to_region_id);
+    region_check->mutable_region_check()->set_state(::dingodb::pb::common::RegionState::REGION_STANDBY);
+  }
 
   // generate store operation for stores
   auto* store_operation_split = split_region_task->add_store_operations();
@@ -3125,6 +3271,7 @@ void CoordinatorControl::AddSplitTask(pb::coordinator::TaskList* task_list, uint
   region_cmd_to_add->mutable_split_request()->set_split_watershed_key(water_shed_key);
   region_cmd_to_add->mutable_split_request()->set_split_from_region_id(region_id);
   region_cmd_to_add->mutable_split_request()->set_split_to_region_id(split_to_region_id);
+  region_cmd_to_add->mutable_split_request()->set_store_create_region(store_create_region);
   region_cmd_to_add->set_create_timestamp(butil::gettimeofday_ms());
   region_cmd_to_add->set_is_notify(true);  // notify store to do immediately heartbeat
 }
