@@ -355,6 +355,13 @@ void SplitHandler::Handle(std::shared_ptr<Context>, store::RegionPtr from_region
   const auto &request = req.split();
   auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
 
+  if (request.epoch().version() != from_region->Epoch().version()) {
+    DINGO_LOG(ERROR) << fmt::format(
+        "[split.spliting][region({}->{})] region version changed, split version({}) region version({})",
+        request.from_region_id(), request.to_region_id(), request.epoch().version(), from_region->Epoch().version());
+    return;
+  }
+
   auto to_region = store_region_meta->GetRegion(request.to_region_id());
   if (to_region == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("[split.spliting][region({}->{})] child region not found", request.from_region_id(),
@@ -435,6 +442,9 @@ void SplitHandler::Handle(std::shared_ptr<Context>, store::RegionPtr from_region
   record.set_region_id(to_region->Id());
   record.set_split_time(Helper::NowTime());
   from_region->AddChild(record);
+
+  // Increase region version
+  store_region_meta->UpdateEpochVersion(from_region, from_region->Epoch().version() + 1);
 
   DINGO_LOG(INFO) << fmt::format("[split.spliting][region({}->{})] parent do snapshot", from_region->Id(),
                                  to_region->Id());

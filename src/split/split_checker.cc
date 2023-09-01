@@ -198,7 +198,7 @@ void SplitCheckTask::SplitCheck() {
   }
 
   uint64_t start_time = Helper::TimestampMs();
-  auto region_range = region_->RawRange();
+  auto epoch = region_->Epoch();
 
   // Get split key.
   uint32_t key_count = 0;
@@ -221,9 +221,8 @@ void SplitCheckTask::SplitCheck() {
     if (region_->Type() == pb::common::INDEX_REGION) {
       split_key = VectorCodec::RemoveVectorPrefix(split_key);
     }
-    if (region_->RawRange().start_key() != region_range.start_key() ||
-        region_->RawRange().end_key() != region_range.end_key()) {
-      reason = "region already splited";
+    if (region_->Epoch().version() != epoch.version()) {
+      reason = "region version change";
       need_split = false;
       break;
     }

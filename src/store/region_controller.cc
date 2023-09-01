@@ -351,15 +351,20 @@ butil::Status SplitRegionTask::SplitRegion() {
     return status;
   }
 
+  auto parent_region = store_region_meta->GetRegion(region_cmd_->split_request().split_from_region_id());
+  if (parent_region == nullptr) {
+    return butil::Status(pb::error::EREGION_NOT_FOUND, "Parent region not exist.");
+  }
+
   // Commit raft log
   ctx_->SetRegionId(region_cmd_->split_request().split_from_region_id());
-  return Server::GetInstance()->GetEngine()->AsyncWrite(ctx_,
-                                                        WriteDataBuilder::BuildWrite(region_cmd_->split_request()),
-                                                        [](std::shared_ptr<Context>, butil::Status status) {
-                                                          if (!status.ok()) {
-                                                            LOG(ERROR) << "Write split failed, " << status.error_str();
-                                                          }
-                                                        });
+  return Server::GetInstance()->GetEngine()->AsyncWrite(
+      ctx_, WriteDataBuilder::BuildWrite(region_cmd_->split_request(), parent_region->Epoch()),
+      [](std::shared_ptr<Context>, butil::Status status) {
+        if (!status.ok()) {
+          LOG(ERROR) << "Write split failed, " << status.error_str();
+        }
+      });
 }
 
 void SplitRegionTask::Run() {

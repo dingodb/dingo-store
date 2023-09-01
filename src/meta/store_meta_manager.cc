@@ -79,6 +79,21 @@ void Region::DeSerialize(const std::string& data) {
   state_.store(inner_region_.state());
 }
 
+pb::common::RegionEpoch Region::Epoch() {
+  BAIDU_SCOPED_LOCK(mutex_);
+  return inner_region_.definition().epoch();
+}
+
+void Region::SetEpochVersion(uint64_t version) {
+  BAIDU_SCOPED_LOCK(mutex_);
+  inner_region_.mutable_definition()->mutable_epoch()->set_version(version);
+}
+
+void Region::SetEpochConfVersion(uint64_t version) {
+  BAIDU_SCOPED_LOCK(mutex_);
+  inner_region_.mutable_definition()->mutable_epoch()->set_conf_version(version);
+}
+
 uint64_t Region::LeaderId() {
   BAIDU_SCOPED_LOCK(mutex_);
   return inner_region_.leader_id();
@@ -441,7 +456,44 @@ void StoreRegionMeta::UpdateRange(store::RegionPtr region, const pb::common::Ran
 }
 
 void StoreRegionMeta::UpdateRange(uint64_t region_id, const pb::common::Range& range) {
-  UpdateRange(GetRegion(region_id), range);
+  auto region = GetRegion(region_id);
+  if (region != nullptr) {
+    UpdateRange(region, range);
+  }
+}
+
+void StoreRegionMeta::UpdateEpochVersion(store::RegionPtr region, uint64_t version) {
+  assert(region != nullptr);
+  if (version <= region->Epoch().version()) {
+    return;
+  }
+
+  region->SetEpochVersion(version);
+  meta_writer_->Put(TransformToKv(region));
+}
+
+void StoreRegionMeta::UpdateEpochVersion(uint64_t region_id, uint64_t version) {
+  auto region = GetRegion(region_id);
+  if (region != nullptr) {
+    UpdateEpochVersion(region, version);
+  }
+}
+
+void StoreRegionMeta::UpdateEpochConfVersion(store::RegionPtr region, uint64_t version) {
+  assert(region != nullptr);
+  if (version <= region->Epoch().conf_version()) {
+    return;
+  }
+
+  region->SetEpochConfVersion(version);
+  meta_writer_->Put(TransformToKv(region));
+}
+
+void StoreRegionMeta::UpdateEpochConfVersion(uint64_t region_id, uint64_t version) {
+  auto region = GetRegion(region_id);
+  if (region != nullptr) {
+    UpdateEpochConfVersion(region, version);
+  }
 }
 
 bool StoreRegionMeta::IsExistRegion(uint64_t region_id) { return GetRegion(region_id) != nullptr; }
