@@ -1247,8 +1247,8 @@ butil::Status CoordinatorControl::CreateIndex(uint64_t schema_id, const pb::meta
     new_region_ids.push_back(new_region_id);
   }
 
-  if (new_region_ids.size() < range_partition.ranges_size()) {
-    DINGO_LOG(ERROR) << "Not enough regions is created, drop residual regions need=" << range_partition.ranges_size()
+  if (new_region_ids.size() < new_part_ranges.size()) {
+    DINGO_LOG(ERROR) << "Not enough regions is created, drop residual regions need=" << new_part_ranges.size()
                      << " created=" << new_region_ids.size();
     for (auto region_id_to_delete : new_region_ids) {
       auto ret = DropRegion(region_id_to_delete, meta_increment);
