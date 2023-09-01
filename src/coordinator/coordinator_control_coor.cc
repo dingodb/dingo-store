@@ -687,6 +687,24 @@ void CoordinatorControl::DeleteRegionBvar(uint64_t region_id) {
   coordinator_bvar_metrics_region_.DeleteRegionBvar(region_id);
 }
 
+// create region ids
+butil::Status CoordinatorControl::CreateRegionId(uint32_t count, std::vector<uint64_t>& region_ids,
+                                                 pb::coordinator_internal::MetaIncrement& meta_increment) {
+  if (count <= 0) {
+    DINGO_LOG(ERROR) << "CreateRegionId count must be positive, count=" << count;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "count must be positive");
+  }
+
+  DINGO_LOG(INFO) << "CreateRegionId count=" << count;
+
+  for (uint32_t i = 0; i < count; i++) {
+    uint64_t region_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION, meta_increment);
+    region_ids.push_back(region_id);
+  }
+
+  return butil::Status::OK();
+}
+
 butil::Status CoordinatorControl::QueryRegion(uint64_t region_id, pb::common::Region& region) {
   if (region_id <= 0) {
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "region_id must be positive");

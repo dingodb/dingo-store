@@ -30,12 +30,15 @@
 #include "common/helper.h"
 #include "common/logging.h"
 #include "coordinator/coordinator_closure.h"
+#include "gflags/gflags.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
 #include "proto/coordinator_internal.pb.h"
 #include "proto/error.pb.h"
 
 namespace dingodb {
+
+DEFINE_uint32(MAX_CREATE_ID_COUNT, 2048, "max create id count");
 
 void CoordinatorServiceImpl::Hello(google::protobuf::RpcController * /*controller*/,
                                    const pb::coordinator::HelloRequest *request,
@@ -777,6 +780,63 @@ void CoordinatorServiceImpl::GetCoordinatorMap(google::protobuf::RpcController *
 }
 
 // Region services
+void CoordinatorServiceImpl::CreateRegionId(google::protobuf::RpcController *controller,
+                                            const pb::coordinator::CreateRegionIdRequest *request,
+                                            pb::coordinator::CreateRegionIdResponse *response,
+                                            google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+  DINGO_LOG(DEBUG) << "Receive Create Region Id Request:" << request->DebugString();
+
+  auto is_leader = this->coordinator_control_->IsLeader();
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  if (request->count() <= 0) {
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(Errno::EILLEGAL_PARAMTETERS));
+    response->mutable_error()->set_errmsg("count must be greater than 0");
+    return;
+  } else if (request->count() > FLAGS_MAX_CREATE_ID_COUNT) {
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(Errno::EILLEGAL_PARAMTETERS));
+    response->mutable_error()->set_errmsg("count must be less than " + std::to_string(FLAGS_MAX_CREATE_ID_COUNT));
+    return;
+  }
+
+  pb::coordinator_internal::MetaIncrement meta_increment;
+  std::vector<uint64_t> region_ids;
+  auto ret = this->coordinator_control_->CreateRegionId(request->count(), region_ids, meta_increment);
+  if (ret.ok()) {
+    // generate response
+    for (int i = 0; i < region_ids.size(); i++) {
+      DINGO_LOG(INFO) << "CreateRegionId Success [i:" << i << " region_id=" << region_ids[i] << "]";
+      response->add_region_ids(region_ids[i]);
+    }
+  } else {
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+  }
+
+  if (meta_increment.ByteSizeLong() == 0) {
+    DINGO_LOG(WARNING) << "CreateRegionId: meta_increment is empty";
+    return;
+  }
+
+  // prepare for raft process
+  CoordinatorClosure<pb::coordinator::CreateRegionIdRequest, pb::coordinator::CreateRegionIdResponse>
+      *meta_put_closure =
+          new CoordinatorClosure<pb::coordinator::CreateRegionIdRequest, pb::coordinator::CreateRegionIdResponse>(
+              request, response, done_guard.release());
+
+  std::shared_ptr<Context> ctx =
+      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
+  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+
+  // this is a async operation will be block by closure
+  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+
+  DINGO_LOG(INFO) << "CreateRegionId Success region_id_count =" << request->count();
+}
+
 void CoordinatorServiceImpl::QueryRegion(google::protobuf::RpcController * /*controller*/,
                                          const pb::coordinator::QueryRegionRequest *request,
                                          pb::coordinator::QueryRegionResponse *response,

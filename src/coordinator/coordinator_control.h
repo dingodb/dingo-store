@@ -187,6 +187,10 @@ class CoordinatorControl : public MetaControl {
   void GetServerLocation(pb::common::Location &raft_location, pb::common::Location &server_location);
   void GetRaftLocation(pb::common::Location &server_location, pb::common::Location &raft_location);
 
+  // create region ids
+  butil::Status CreateRegionId(uint32_t count, std::vector<uint64_t> &region_ids,
+                               pb::coordinator_internal::MetaIncrement &meta_increment);
+
   // query region info
   butil::Status QueryRegion(uint64_t region_id, pb::common::Region &region);
 

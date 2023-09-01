@@ -23,6 +23,7 @@
 #include "common/logging.h"
 #include "coordinator/coordinator_interaction.h"
 #include "gflags/gflags_declare.h"
+#include "glog/logging.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
 #include "proto/error.pb.h"
@@ -55,6 +56,7 @@ DECLARE_string(store_ids);
 DECLARE_int64(index);
 DECLARE_string(state);
 DECLARE_bool(is_force);
+DECLARE_int32(count);
 
 // raft control
 void SendRaftAddPeer() {
@@ -932,6 +934,25 @@ void SendDeleteStoreMetrics(std::shared_ptr<dingodb::CoordinatorInteraction> coo
 }
 
 // region
+void SendCreateRegionId(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  dingodb::pb::coordinator::CreateRegionIdRequest request;
+  dingodb::pb::coordinator::CreateRegionIdResponse response;
+
+  if (FLAGS_count <= 0) {
+    DINGO_LOG(WARNING) << "count must > 0 and < 2048";
+    return;
+  } else if (FLAGS_count > 2048) {
+    DINGO_LOG(WARNING) << "count must > 0 and < 2048";
+    return;
+  }
+
+  request.set_count(FLAGS_count);
+
+  auto status = coordinator_interaction->SendRequest("CreateRegionId", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG(INFO) << "response=" << response.DebugString();
+}
+
 void SendQueryRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
   dingodb::pb::coordinator::QueryRegionRequest request;
   dingodb::pb::coordinator::QueryRegionResponse response;
