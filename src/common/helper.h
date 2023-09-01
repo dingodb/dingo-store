@@ -247,6 +247,9 @@ class Helper {
   // Parallel run task, e.g. load vector index.
   using TaskFunctor = void* (*)(void*);
   static bool ParallelRunTask(TaskFunctor task, void* arg, int concurrency);
+
+  // Validate raft status whether suitable or not region split.
+  static butil::Status ValidateRaftStatusForSplit(std::shared_ptr<pb::common::BRaftStatus> raft_status);
 };
 
 }  // namespace dingodb

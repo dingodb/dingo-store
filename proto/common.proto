@@ -693,10 +693,10 @@ message BRaftStatus {
   int64 last_index = 21;           // the index of the last log entry
   int64 disk_index = 22;           // the index of the last log entry persisted to disk
 
-  map<string, RaftPeerStatus> stable_followers =
-      23;  // a map of stable followers, where the key is the peer ID and the value is the status of the follower
-  map<string, RaftPeerStatus> unstable_followers =
-      24;  // a map of unstable followers, where the key is the peer ID and the value is the status of the follower
+  // a map of stable followers, where the key is the peer ID and the value is the status of the follower
+  map<string, RaftPeerStatus> stable_followers = 23;
+  // a map of unstable followers, where the key is the peer ID and the value is the status of the follower
+  map<string, RaftPeerStatus> unstable_followers = 24;
 }
 
 // vector index metrics

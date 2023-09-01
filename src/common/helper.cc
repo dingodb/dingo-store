@@ -48,6 +48,7 @@
 #include "butil/endpoint.h"
 #include "butil/status.h"
 #include "butil/strings/string_split.h"
+#include "common/constant.h"
 #include "common/logging.h"
 #include "common/service_access.h"
 #include "fmt/core.h"
@@ -1145,6 +1146,29 @@ bool Helper::ParallelRunTask(TaskFunctor task, void* arg, int concurrency) {
   DINGO_LOG(INFO) << fmt::format("parallel run task elapsed time {}ms", Helper::TimestampMs() - start_time);
 
   return true;
+}
+
+butil::Status Helper::ValidateRaftStatusForSplit(std::shared_ptr<pb::common::BRaftStatus> raft_status) {  // NOLINT
+  if (raft_status == nullptr) {
+    return butil::Status(pb::error::EINTERNAL, "Get raft status failed.");
+  }
+
+  if (!raft_status->unstable_followers().empty()) {
+    return butil::Status(pb::error::EINTERNAL, "Has unstable followers.");
+  }
+
+  for (const auto& [peer, follower] : raft_status->stable_followers()) {
+    if (follower.consecutive_error_times() > 0) {
+      return butil::Status(pb::error::EINTERNAL, "follower %s abnormal.", peer.c_str());
+    }
+
+    if (follower.next_index() + Constant::kRaftLogFallBehindThreshold < raft_status->last_index()) {
+      return butil::Status(pb::error::EINTERNAL, "Follower %s log fall behind exceed %d.", peer.c_str(),
+                           Constant::kRaftLogFallBehindThreshold);
+    }
+  }
+
+  return butil::Status();
 }
 
 }  // namespace dingodb

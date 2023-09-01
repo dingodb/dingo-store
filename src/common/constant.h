@@ -130,6 +130,8 @@ class Constant {
   static const uint32_t kDefaultSplitKeysNumber = 200000;
   static constexpr float kDefaultSplitKeysRatio = 0.5;
 
+  static const int32_t kRaftLogFallBehindThreshold = 1000;
+
   // hnsw max elements expand number
   static const uint32_t kHnswMaxElementsExpandNum = 10000;
 
