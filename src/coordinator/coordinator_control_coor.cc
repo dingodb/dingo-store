@@ -54,6 +54,8 @@ DEFINE_int32(
     "region update timeout in seconds, will not update region info if no state change and (now - last_update_time) > "
     "region_update_timeout");
 
+DEFINE_int64(MAX_HSNW_MEMORY_SIZE_OF_REGION, 512 * 1024 * 1024, "max memory size of region in HSNW");
+
 // TODO: add epoch logic
 void CoordinatorControl::GetCoordinatorMap(uint64_t cluster_id, uint64_t& epoch, pb::common::Location& leader_location,
                                            std::vector<pb::common::Location>& locations) {
@@ -797,7 +799,9 @@ butil::Status CoordinatorControl::CreateRegion(const std::string& region_name, p
 }
 
 butil::Status CoordinatorControl::SelectStore(pb::common::StoreType store_type, int32_t replica_num,
-                                              const std::string& resource_tag, std::vector<uint64_t>& store_ids,
+                                              const std::string& resource_tag,
+                                              const pb::common::IndexParameter& index_parameter,
+                                              std::vector<uint64_t>& store_ids,
                                               std::vector<pb::common::Store>& selected_stores_for_regions) {
   DINGO_LOG(INFO) << "SelectStore replica_num=" << replica_num << ", resource_tag=" << resource_tag
                   << ", store_ids.size=" << store_ids.size();
@@ -862,6 +866,129 @@ butil::Status CoordinatorControl::SelectStore(pb::common::StoreType store_type, 
                     << ", selected_store_ids=" << selected_store_ids;
     return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE, "Not enough stores for create region");
   }
+
+  // check store metrics limit
+  // now for all region, if disk/memory is lower then 5%, return -1
+  // now for hnsw, if memory is less than hnsw memory limit, return -1
+  butil::Status status = butil::Status::OK();
+  std::vector<pb::common::Store> tmp_stores_for_regions;
+  // if (store_type == pb::common::StoreType::NODE_TYPE_INDEX) {
+  for (const auto& store : stores_for_regions) {
+    std::vector<pb::common::StoreMetrics> tmp_store_metrics;
+    GetStoreMetrics(store.id(), tmp_store_metrics);
+    if (tmp_store_metrics.empty()) {
+      DINGO_LOG(WARNING) << "Store metrics not found, store_id=" << store.id() << ", just make use of it";
+      tmp_stores_for_regions.push_back(store);
+      continue;
+    }
+
+    auto store_metrics = tmp_store_metrics[0];
+    // if (store_metrics.region_metrics_map_size() == 0) {
+    //   DINGO_LOG(INFO) << "Store metrics region_metrics_map_size is 0, store_id=" << store.id()
+    //                   << ", just make use of it";
+    //   tmp_stores_for_regions.push_back(store);
+    //   continue;
+    // }
+
+    if (store_metrics.system_total_memory() == 0) {
+      DINGO_LOG(WARNING) << "Store metrics system_total_memory is 0, store_id=" << store.id()
+                         << ", just make use of it";
+      tmp_stores_for_regions.push_back(store);
+      continue;
+    }
+
+    if (store_metrics.system_free_memory() < store_metrics.system_total_memory() * 0.05) {
+      DINGO_LOG(ERROR) << "Store metrics system_free_memory < system_total_memory * 0.05, store_id=" << store.id()
+                       << ", system_free_memory=" << store_metrics.system_free_memory()
+                       << ", system_total_memory=" << store_metrics.system_total_memory();
+      status = butil::Status(pb::error::Errno::EREGION_UNAVAILABLE,
+                             "Not enough stores for create region, one store has low memory");
+      continue;
+    }
+
+    if (store_metrics.system_total_capacity() == 0) {
+      DINGO_LOG(WARNING) << "Store metrics system_total_capacity is 0, store_id=" << store.id()
+                         << ", just make use of it";
+      tmp_stores_for_regions.push_back(store);
+      continue;
+    }
+
+    if (store_metrics.system_free_capacity() < store_metrics.system_total_capacity() * 0.05) {
+      DINGO_LOG(ERROR) << "Store metrics system_free_capacity < system_total_capacity * 0.05, store_id=" << store.id()
+                       << ", system_free_capacity=" << store_metrics.system_free_capacity()
+                       << ", system_total_capacity=" << store_metrics.system_total_capacity();
+      status = butil::Status(pb::error::Errno::EREGION_UNAVAILABLE,
+                             "Not enough stores for create region, one store has low capacity");
+      continue;
+    }
+
+    if (index_parameter.vector_index_parameter().vector_index_type() != pb::common::VECTOR_INDEX_TYPE_HNSW) {
+      DINGO_LOG(INFO) << "Store metrics vector_index_type is not hnsw, store_id=" << store.id()
+                      << ", vector_index_type=" << index_parameter.vector_index_parameter().vector_index_type();
+      tmp_stores_for_regions.push_back(store);
+      continue;
+    }
+
+    const auto& hnsw_parameter = index_parameter.vector_index_parameter().hnsw_parameter();
+    uint64_t new_hnsw_index_plan_memory = hnsw_parameter.dimension() * hnsw_parameter.max_elements() * 4;
+    DINGO_LOG(INFO) << "Store metrics new_hnsw_index_plan_memory=" << new_hnsw_index_plan_memory
+                    << ", store_id=" << store.id() << ", region_count=" << store_metrics.region_metrics_map_size();
+    if (new_hnsw_index_plan_memory > store_metrics.system_free_memory() * 0.95) {
+      DINGO_LOG(INFO) << "Store metrics hnsw_memory_plan_used > system_free_memory * 0.95, store_id=" << store.id()
+                      << ", new_hnsw_memory_plan_used=" << new_hnsw_index_plan_memory
+                      << ", system_free_memory=" << store_metrics.system_free_memory();
+      status = butil::Status(pb::error::Errno::EREGION_UNAVAILABLE,
+                             "Not enough stores for create region, one store has low memory for hnsw");
+      continue;
+    }
+
+    // for hnsw calc memory
+    uint64_t vector_index_used_memory = 0;
+    uint64_t hnsw_memory_plan_used = 0;
+    for (const auto& region_metrics : store_metrics.region_metrics_map()) {
+      const auto& vector_index_parameter =
+          region_metrics.second.region_definition().index_parameter().vector_index_parameter();
+      if (vector_index_parameter.vector_index_type() != pb::common::VectorIndexType::VECTOR_INDEX_TYPE_NONE) {
+        vector_index_used_memory += region_metrics.second.vector_index_metrics().memory_bytes();
+      }
+      if (vector_index_parameter.vector_index_type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
+        const auto& hnsw_parameter = vector_index_parameter.hnsw_parameter();
+        hnsw_memory_plan_used += hnsw_parameter.dimension() * hnsw_parameter.max_elements();
+      }
+    }
+    DINGO_LOG(INFO) << "Store metrics vector_index_used_memory=" << vector_index_used_memory
+                    << ", hnsw_memory_plan=" << hnsw_memory_plan_used << ", store_id=" << store.id()
+                    << ", region_count=" << store_metrics.region_metrics_map_size();
+
+    if ((hnsw_memory_plan_used + new_hnsw_index_plan_memory) * 1.05 < store_metrics.system_total_memory()) {
+      DINGO_LOG(INFO) << "Store metrics hnsw_memory_plan_used * 1.05 < system_total_memory, store_id=" << store.id()
+                      << ", hnsw_memory_plan_used=" << hnsw_memory_plan_used
+                      << ", new_hnsw_memory_plan_used=" << new_hnsw_index_plan_memory
+                      << ", system_total_memory=" << store_metrics.system_total_memory();
+      tmp_stores_for_regions.push_back(store);
+      continue;
+    } else {
+      DINGO_LOG(ERROR) << "Store metrics hnsw_memory_plan_used * 1.05 >= system_total_memory, store_id=" << store.id()
+                       << ", hnsw_memory_plan_used=" << hnsw_memory_plan_used
+                       << ", new_hnsw_memory_plan_used=" << new_hnsw_index_plan_memory
+                       << ", system_total_memory=" << store_metrics.system_total_memory();
+      status = butil::Status(pb::error::Errno::EREGION_UNAVAILABLE, "Not enough stores for create region");
+      continue;
+    }
+  }
+
+  // if not enough stores is selected, return -1
+  if (tmp_stores_for_regions.size() < replica_num) {
+    std::string selected_store_ids;
+    for (const auto& store : tmp_stores_for_regions) {
+      selected_store_ids += std::to_string(store.id()) + ",";
+    }
+    DINGO_LOG(INFO) << "Not enough stores STORE_NORMAL for create region after vector index memory check, replica_num="
+                    << replica_num << ", resource_tag=" << resource_tag << ", store_ids.size=" << store_ids.size()
+                    << ", selected_store_ids=" << selected_store_ids;
+    return status;
+  }
+  stores_for_regions.swap(tmp_stores_for_regions);
 
   struct StoreMore {
     pb::common::Store store;
@@ -964,15 +1091,33 @@ butil::Status CoordinatorControl::CreateRegion(const std::string& region_name, p
                                                uint64_t& new_region_id,
                                                pb::coordinator_internal::MetaIncrement& meta_increment) {
   std::vector<pb::common::Store> selected_stores_for_regions;
+  pb::common::IndexParameter new_index_parameter = index_parameter;
 
   // setup store_type
   pb::common::StoreType store_type = pb::common::StoreType::NODE_TYPE_STORE;
-  if (region_type == pb::common::RegionType::INDEX_REGION && index_parameter.has_vector_index_parameter()) {
+  if (region_type == pb::common::RegionType::INDEX_REGION && new_index_parameter.has_vector_index_parameter()) {
     store_type = pb::common::StoreType::NODE_TYPE_INDEX;
+
+    // if vector index is hnsw, need to limit max_elements of each region to less than 512MB / dimenstion / 4
+    if (new_index_parameter.vector_index_parameter().vector_index_type() ==
+        pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
+      int32_t dimension = new_index_parameter.vector_index_parameter().hnsw_parameter().dimension();
+      int32_t max_elements = new_index_parameter.vector_index_parameter().hnsw_parameter().max_elements();
+
+      int32_t max_elements_limit = FLAGS_MAX_HSNW_MEMORY_SIZE_OF_REGION / dimension / 4;
+      if (max_elements > max_elements_limit) {
+        DINGO_LOG(WARNING) << "CreateRegion max_elements is too large, will reduce max_elements, max_elements="
+                           << max_elements << ", max_elements_limit=" << max_elements_limit
+                           << ", dimension=" << dimension;
+        new_index_parameter.mutable_vector_index_parameter()->mutable_hnsw_parameter()->set_max_elements(
+            max_elements_limit);
+      }
+    }
   }
 
   // select store for region
-  auto ret = SelectStore(store_type, replica_num, resource_tag, store_ids, selected_stores_for_regions);
+  auto ret =
+      SelectStore(store_type, replica_num, resource_tag, new_index_parameter, store_ids, selected_stores_for_regions);
   if (!ret.ok()) {
     return ret;
   }
@@ -1007,8 +1152,8 @@ butil::Status CoordinatorControl::CreateRegion(const std::string& region_name, p
   region_definition->set_table_id(table_id);
   region_definition->set_index_id(index_id);
   region_definition->set_part_id(part_id);
-  if (index_parameter.index_type() != pb::common::IndexType::INDEX_TYPE_NONE) {
-    region_definition->mutable_index_parameter()->CopyFrom(index_parameter);
+  if (new_index_parameter.index_type() != pb::common::IndexType::INDEX_TYPE_NONE) {
+    region_definition->mutable_index_parameter()->CopyFrom(new_index_parameter);
   }
 
   // set region range in region definition, this is provided by sdk

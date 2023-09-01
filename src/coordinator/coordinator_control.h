@@ -199,7 +199,7 @@ class CoordinatorControl : public MetaControl {
   // out: new region id
   // return: errno
   butil::Status SelectStore(pb::common::StoreType store_type, int32_t replica_num, const std::string &resource_tag,
-                            std::vector<uint64_t> &store_ids,
+                            const pb::common::IndexParameter &index_parameter, std::vector<uint64_t> &store_ids,
                             std::vector<pb::common::Store> &selected_stores_for_regions);
   butil::Status CreateRegion(const std::string &region_name, pb::common::RegionType region_type,
                              const std::string &resource_tag, int32_t replica_num, pb::common::Range region_range,
