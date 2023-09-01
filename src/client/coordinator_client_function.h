@@ -64,6 +64,7 @@ void SendGetExecutorUserMap(std::shared_ptr<dingodb::CoordinatorInteraction> coo
 void SendExecutorHeartbeat(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 
 // region
+void SendCreateRegionId(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendQueryRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendCreateRegionForSplit(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendDropRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);

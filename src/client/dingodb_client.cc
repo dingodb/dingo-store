@@ -567,6 +567,8 @@ int CoordinatorSender() {
     SendGetRegionCount(coordinator_interaction);
   } else if (FLAGS_method == "GetCoordinatorMap") {
     SendGetCoordinatorMap(coordinator_interaction);
+  } else if (FLAGS_method == "CreateRegionId") {
+    SendCreateRegionId(coordinator_interaction);
   } else if (FLAGS_method == "QueryRegion") {
     SendQueryRegion(coordinator_interaction);
   } else if (FLAGS_method == "CreateRegionForSplit") {

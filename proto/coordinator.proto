@@ -397,6 +397,16 @@ message GetCoordinatorMapResponse {
   dingodb.pb.common.Location auto_increment_leader_location = 5;
 }
 
+message CreateRegionIdRequest {
+  uint64 cluster_id = 1;  // not used now, just a place holder for future
+  uint32 count = 2;       // the count of region-id to create
+}
+
+message CreateRegionIdResponse {
+  dingodb.pb.error.Error error = 1;
+  repeated uint64 region_ids = 2;
+}
+
 message DeleteStoreRequest {
   uint64 cluster_id = 1;
   uint64 store_id = 2;
@@ -689,6 +699,7 @@ service CoordinatorService {
 
   // Coordinator
   rpc GetCoordinatorMap(GetCoordinatorMapRequest) returns (GetCoordinatorMapResponse);
+  rpc CreateRegionId(CreateRegionIdRequest) returns (CreateRegionIdResponse);
 
   // Region
   rpc QueryRegion(QueryRegionRequest) returns (QueryRegionResponse);
