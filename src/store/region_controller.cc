@@ -310,6 +310,11 @@ butil::Status SplitRegionTask::ValidateSplitRegion(std::shared_ptr<StoreRegionMe
       return butil::Status(pb::error::ERAFT_NOTLEADER, "Not leader %s", node->GetLeaderId().to_string().c_str());
     }
 
+    auto status = Helper::ValidateRaftStatusForSplit(node->GetStatus());
+    if (!status.ok()) {
+      return status;
+    }
+
     if (parent_region->Type() == pb::common::INDEX_REGION) {
       // Check follower whether hold vector index.
       auto self_peer = node->GetPeerId();

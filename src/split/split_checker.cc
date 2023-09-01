@@ -25,6 +25,7 @@
 #include <vector>
 
 #include "common/constant.h"
+#include "common/failpoint.h"
 #include "common/helper.h"
 #include "config/config.h"
 #include "config/config_manager.h"
@@ -160,6 +161,34 @@ std::string KeysSplitChecker::SplitKey(store::RegionPtr region, uint32_t& count)
   return is_split ? split_key : "";
 }
 
+static bool CheckLeaderAndFollowerStatus(uint64_t region_id) {
+  auto engine = Server::GetInstance()->GetEngine();
+  if (engine == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("[split.check][region({})] get engine failed.", region_id);
+    return false;
+  }
+  if (engine->GetID() == pb::common::ENG_RAFT_STORE) {
+    auto raft_kv_engine = std::dynamic_pointer_cast<RaftStoreEngine>(engine);
+    auto node = raft_kv_engine->GetNode(region_id);
+    if (node == nullptr) {
+      DINGO_LOG(ERROR) << fmt::format("[split.check][region({})] get raft node failed.", region_id);
+      return false;
+    }
+
+    if (!node->IsLeader()) {
+      return false;
+    }
+
+    auto status = Helper::ValidateRaftStatusForSplit(node->GetStatus());
+    if (!status.ok()) {
+      DINGO_LOG(INFO) << fmt::format("[split.check][region({})] {}", region_id, status.error_str());
+      return false;
+    }
+  }
+
+  return true;
+}
+
 void SplitCheckTask::SplitCheck() {
   if (region_ == nullptr) {
     return;
@@ -181,43 +210,56 @@ void SplitCheckTask::SplitCheck() {
     region_metrics_->SetNeedUpdateKeyCount(false);
   }
 
-  if (split_key.empty()) {
-    return;
-  }
-  if (region_->Type() == pb::common::INDEX_REGION) {
-    split_key = VectorCodec::RemoveVectorPrefix(split_key);
-  }
-  if (region_->RawRange().start_key() != region_range.start_key() ||
-      region_->RawRange().end_key() != region_range.end_key()) {
-    DINGO_LOG(ERROR) << fmt::format("[split.check][region({})] already splited", region_->Id());
-    return;
-  }
-  if (!region_->CheckKeyInRange(split_key)) {
-    DINGO_LOG(ERROR) << fmt::format("[split.check][region({})] invalid split key {}, not in region range {}",
-                                    region_->Id(), Helper::StringToHex(split_key), region_->RangeToString());
-    return;
-  }
-  if (region_->DisableSplit()) {
-    return;
-  }
-  if (region_->TemporaryDisableSplit()) {
-    return;
-  }
-  if (region_->State() != pb::common::NORMAL) {
-    DINGO_LOG(WARNING) << fmt::format("[split.check][region({})] region state it not NORMAL, not launch split.",
-                                      region_->Id());
-    return;
-  }
+  bool need_split = true;
+  std::string reason;
+  do {
+    if (split_key.empty()) {
+      reason = "split key is empty";
+      need_split = false;
+      break;
+    }
+    if (region_->Type() == pb::common::INDEX_REGION) {
+      split_key = VectorCodec::RemoveVectorPrefix(split_key);
+    }
+    if (region_->RawRange().start_key() != region_range.start_key() ||
+        region_->RawRange().end_key() != region_range.end_key()) {
+      reason = "region already splited";
+      need_split = false;
+      break;
+    }
+    if (!region_->CheckKeyInRange(split_key)) {
+      reason = fmt::format("invalid split key, not in region range {}", region_->RangeToString());
+      need_split = false;
+      break;
+    }
+    if (region_->DisableSplit()) {
+      reason = "region disable split";
+      need_split = false;
+      break;
+    }
+    if (region_->TemporaryDisableSplit()) {
+      reason = "region temporary disable split";
+      need_split = false;
+      break;
+    }
+    if (region_->State() != pb::common::NORMAL) {
+      reason = fmt::format("region state is {}, not normal", pb::common::StoreRegionState_Name(region_->State()));
+      need_split = false;
+      break;
+    }
+    if (!CheckLeaderAndFollowerStatus(region_->Id())) {
+      reason = "not leader or follower abnormal";
+      need_split = false;
+      break;
+    }
+  } while (false);
 
-  if (region_->Type() == pb::common::INDEX_REGION) {
-    DINGO_LOG(INFO) << fmt::format(
-        "[split.check][region({})] need split split_policy {} split_key {} vector id {} elapsed time {}ms",
-        region_->Id(), split_checker_->GetPolicyName(), Helper::StringToHex(split_key),
-        VectorCodec::DecodeVectorId(split_key), Helper::TimestampMs() - start_time);
-  } else {
-    DINGO_LOG(INFO) << fmt::format(
-        "[split.check][region({})] need split split_policy {} split_key {} elapsed time {}ms", region_->Id(),
-        split_checker_->GetPolicyName(), Helper::StringToHex(split_key), Helper::TimestampMs() - start_time);
+  DINGO_LOG(INFO) << fmt::format(
+      "[split.check][region({})] split check result({}) reason({}) split_policy({}) split_key({}) elapsed time({}ms)",
+      region_->Id(), need_split, reason, split_checker_->GetPolicyName(), Helper::StringToHex(split_key),
+      Helper::TimestampMs() - start_time);
+  if (!need_split) {
+    return;
   }
 
   // Invoke coordinator SplitRegion api.
@@ -302,57 +344,64 @@ static std::shared_ptr<SplitChecker> BuildSplitChecker(std::shared_ptr<dingodb::
   return nullptr;
 }
 
-bool IsLeader(std::shared_ptr<dingodb::Engine> engine, uint64_t region_id) {  // NOLINT
-  if (engine->GetID() == pb::common::ENG_RAFT_STORE) {
-    auto raft_kv_engine = std::dynamic_pointer_cast<RaftStoreEngine>(engine);
-    auto node = raft_kv_engine->GetNode(region_id);
-    if (node == nullptr) {
-      return false;
-    }
-
-    if (!node->IsLeader()) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
 void PreSplitCheckTask::PreSplitCheck() {
   auto config = Server::GetInstance()->GetConfig();
-  auto engine = Server::GetInstance()->GetEngine();
   auto raw_engine = Server::GetInstance()->GetRawEngine();
   auto metrics = Server::GetInstance()->GetStoreMetricsManager()->GetStoreRegionMetrics();
   auto regions = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetAllAliveRegion();
   uint32_t split_check_approximate_size = GetSplitCheckApproximateSize(config);
   for (auto& region : regions) {
     auto region_metric = metrics->GetMetrics(region->Id());
-    if (region_metric == nullptr) {
-      continue;
-    }
-    if (split_check_workers_ == nullptr) {
-      continue;
-    }
-    if (region->State() != pb::common::NORMAL) {
-      continue;
-    }
-    if (region->DisableSplit()) {
-      continue;
-    }
-    if (region->TemporaryDisableSplit()) {
-      continue;
-    }
-    if (split_check_workers_->IsExistRegionChecking(region->Id())) {
-      continue;
-    }
-    if (!IsLeader(engine, region->Id())) {
-      continue;
-    }
+    bool need_scan_check = true;
+    std::string reason;
+    do {
+      if (region_metric == nullptr) {
+        need_scan_check = false;
+        reason = "region metric is nullptr";
+        break;
+      }
+      if (split_check_workers_ == nullptr) {
+        need_scan_check = false;
+        reason = "split check worker is nullptr";
+        break;
+      }
+      if (region->State() != pb::common::NORMAL) {
+        need_scan_check = false;
+        reason = "region state is not normal";
+        break;
+      }
+      if (region->DisableSplit()) {
+        need_scan_check = false;
+        reason = "region is disable split";
+        break;
+      }
+      if (region->TemporaryDisableSplit()) {
+        need_scan_check = false;
+        reason = "region is temporary disable split";
+        break;
+      }
+      if (split_check_workers_->IsExistRegionChecking(region->Id())) {
+        need_scan_check = false;
+        reason = "region already exist split check";
+        break;
+      }
+      if (!CheckLeaderAndFollowerStatus(region->Id())) {
+        need_scan_check = false;
+        reason = "not leader or follower abnormal";
+        break;
+      }
+      if (region_metric->InnerRegionMetrics().region_size() < split_check_approximate_size) {
+        need_scan_check = false;
+        reason = "region approximate size too small";
+        break;
+      }
+    } while (false);
 
-    DINGO_LOG(INFO) << fmt::format("[split.check][region({})] pre split check approximate size {} threshold size {}",
-                                   region->Id(), region_metric->InnerRegionMetrics().region_size(),
-                                   split_check_approximate_size);
-    if (region_metric->InnerRegionMetrics().region_size() < split_check_approximate_size) {
+    DINGO_LOG(INFO) << fmt::format(
+        "[split.check][region({})] pre split check result({}) reason({}) approximate size({}/{})", region->Id(),
+        need_scan_check, reason, region_metric == nullptr ? 0 : region_metric->InnerRegionMetrics().region_size(),
+        split_check_approximate_size);
+    if (!need_scan_check) {
       continue;
     }
 
