@@ -162,28 +162,26 @@ std::string KeysSplitChecker::SplitKey(store::RegionPtr region, uint32_t& count)
 }
 
 static bool CheckLeaderAndFollowerStatus(uint64_t region_id) {
-  auto engine = Server::GetInstance()->GetEngine();
-  if (engine == nullptr) {
+  auto raft_store_engine = Server::GetInstance()->GetRaftStoreEngine();
+  if (raft_store_engine == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("[split.check][region({})] get engine failed.", region_id);
     return false;
   }
-  if (engine->GetID() == pb::common::ENG_RAFT_STORE) {
-    auto raft_kv_engine = std::dynamic_pointer_cast<RaftStoreEngine>(engine);
-    auto node = raft_kv_engine->GetNode(region_id);
-    if (node == nullptr) {
-      DINGO_LOG(ERROR) << fmt::format("[split.check][region({})] get raft node failed.", region_id);
-      return false;
-    }
 
-    if (!node->IsLeader()) {
-      return false;
-    }
+  auto node = raft_store_engine->GetNode(region_id);
+  if (node == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("[split.check][region({})] get raft node failed.", region_id);
+    return false;
+  }
 
-    auto status = Helper::ValidateRaftStatusForSplit(node->GetStatus());
-    if (!status.ok()) {
-      DINGO_LOG(INFO) << fmt::format("[split.check][region({})] {}", region_id, status.error_str());
-      return false;
-    }
+  if (!node->IsLeader()) {
+    return false;
+  }
+
+  auto status = Helper::ValidateRaftStatusForSplit(node->GetStatus());
+  if (!status.ok()) {
+    DINGO_LOG(INFO) << fmt::format("[split.check][region({})] {}", region_id, status.error_str());
+    return false;
   }
 
   return true;
@@ -266,6 +264,7 @@ void SplitCheckTask::SplitCheck() {
   pb::coordinator::SplitRegionRequest request;
   request.mutable_split_request()->set_split_from_region_id(region_->Id());
   request.mutable_split_request()->set_split_watershed_key(split_key);
+  request.mutable_split_request()->set_store_create_region(!Constant::kPreCreateRegionSplitStrategy);
   pb::coordinator::SplitRegionResponse response;
   auto status = coordinator_interaction->SendRequest("SplitRegion", request, response);
   if (!status.ok()) {

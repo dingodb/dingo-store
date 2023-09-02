@@ -38,6 +38,7 @@ enum class HandlerType {
   kSplit = pb::raft::SPLIT,
   kMetaWrite = pb::raft::META_WRITE,
   kCompareAndSet = pb::raft::COMPAREANDSET,
+  kSaveSnapshotInApply = pb::raft::SAVE_RAFT_SNAPSHOT,
 
   // vector
   kVectorAdd = pb::raft::VECTOR_ADD,

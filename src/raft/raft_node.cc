@@ -44,7 +44,8 @@ RaftNode::RaftNode(uint64_t node_id, const std::string& raft_group_name, braft::
       log_storage_(log_storage) {}
 
 // init_conf: 127.0.0.1:8201:0,127.0.0.1:8202:0,127.0.0.1:8203:0
-int RaftNode::Init(const std::string& init_conf, std::shared_ptr<Config> config) {
+int RaftNode::Init(const std::string& init_conf, const std::string& raft_path, int election_timeout_ms,
+                   int snapshot_interval_s) {
   DINGO_LOG(INFO) << "raft init node_id: " << node_id_ << " init_conf: " << init_conf;
   braft::NodeOptions node_options;
   if (node_options.initial_conf.parse_from(init_conf) != 0) {
@@ -52,12 +53,12 @@ int RaftNode::Init(const std::string& init_conf, std::shared_ptr<Config> config)
     return -1;
   }
 
-  node_options.election_timeout_ms = config->GetInt("raft.election_timeout_s") * 1000;
+  node_options.election_timeout_ms = election_timeout_ms;
   node_options.fsm = fsm_.get();
   node_options.node_owns_fsm = false;
-  node_options.snapshot_interval_s = config->GetInt("raft.snapshot_interval_s");
+  node_options.snapshot_interval_s = snapshot_interval_s;
 
-  path_ = fmt::format("{}/{}", config->GetString("raft.path"), node_id_);
+  path_ = fmt::format("{}/{}", raft_path, node_id_);
   node_options.raft_meta_uri = "local://" + path_ + "/raft_meta";
   node_options.snapshot_uri = "local://" + path_ + "/snapshot";
   node_options.disable_cli = false;
@@ -117,6 +118,10 @@ bool RaftNode::IsLeaderLeaseValid() { return node_->is_leader_lease_valid(); }
 bool RaftNode::HasLeader() { return node_->leader_id().to_string() != "0.0.0.0:0:0"; }
 braft::PeerId RaftNode::GetLeaderId() { return node_->leader_id(); }
 braft::PeerId RaftNode::GetPeerId() { return node_->node_id().peer_id; }
+
+void RaftNode::ResetElectionTimeout(int election_timeout_ms, int max_clock_drift_ms) {
+  node_->reset_election_timeout_ms(election_timeout_ms, max_clock_drift_ms);
+}
 
 void RaftNode::Shutdown(braft::Closure* done) { node_->shutdown(done); }
 void RaftNode::Join() { node_->join(); }

@@ -58,8 +58,9 @@ butil::Status CreateRegionTask::ValidateCreateRegion(std::shared_ptr<StoreMetaMa
   return butil::Status();
 }
 
-butil::Status CreateRegionTask::CreateRegion(std::shared_ptr<Context> ctx, store::RegionPtr region,
-                                             uint64_t split_from_region_id) {
+butil::Status CreateRegionTask::CreateRegion(const pb::common::RegionDefinition& definition,
+                                             uint64_t parent_region_id) {
+  auto region = store::Region::New(definition);
   auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
   DINGO_LOG(DEBUG) << fmt::format("Create region {}, {}", region->Id(), region->InnerRegion().ShortDebugString());
 
@@ -67,22 +68,6 @@ butil::Status CreateRegionTask::CreateRegion(std::shared_ptr<Context> ctx, store
   auto status = ValidateCreateRegion(store_meta_manager, region->Id());
   if (!status.ok()) {
     return status;
-  }
-
-  // Later delete
-  {
-    DINGO_LOG(INFO) << fmt::format(
-        "region {} range [{}-{}), raw_range: [{}-{})", region->Id(), Helper::StringToHex(region->Range().start_key()),
-        Helper::StringToHex(region->Range().end_key()), Helper::StringToHex(region->RawRange().start_key()),
-        Helper::StringToHex(region->RawRange().end_key()));
-
-    if (region->Type() == pb::common::INDEX_REGION) {
-      uint64_t min_vector_id = VectorCodec::DecodeVectorId(region->RawRange().start_key());
-      uint64_t max_vector_id = VectorCodec::DecodeVectorId(region->RawRange().end_key());
-      DINGO_LOG(INFO) << fmt::format("vector id range [{}-{}), raw_range: [{}-{})", min_vector_id, max_vector_id,
-                                     Helper::StringToHex(region->RawRange().start_key()),
-                                     Helper::StringToHex(region->RawRange().end_key()));
-    }
   }
 
   // Add region to store region meta manager
@@ -94,26 +79,42 @@ butil::Status CreateRegionTask::CreateRegion(std::shared_ptr<Context> ctx, store
   // Add region metrics
   DINGO_LOG(DEBUG) << fmt::format("Create region {} add region metrics", region->Id());
   auto region_metrics = StoreRegionMetrics::NewMetrics(region->Id());
-  Server::GetInstance()->GetStoreMetricsManager()->GetStoreRegionMetrics()->AddMetrics(region_metrics);
 
   // Add raft node
   DINGO_LOG(DEBUG) << fmt::format("Create region {} add raft node", region->Id());
-  auto engine = Server::GetInstance()->GetEngine();
-  if (engine->GetID() == pb::common::ENG_RAFT_STORE) {
-    auto raft_meta = StoreRaftMeta::NewRaftMeta(region->Id());
-    Server::GetInstance()->GetStoreMetaManager()->GetStoreRaftMeta()->AddRaftMeta(raft_meta);
-
-    auto listener_factory = std::make_shared<StoreSmEventListenerFactory>();
-
-    auto raft_kv_engine = std::dynamic_pointer_cast<RaftStoreEngine>(engine);
-    status = raft_kv_engine->AddNode(ctx, region, raft_meta, region_metrics, listener_factory->Build(), false);
-    if (!status.ok()) {
-      return status;
-    }
+  auto raft_store_engine = Server::GetInstance()->GetRaftStoreEngine();
+  if (raft_store_engine == nullptr) {
+    return butil::Status(pb::error::EINTERNAL, "Not found raft store engine");
   }
 
+  RaftControlAble::AddNodeParameter parameter;
+  parameter.role = Server::GetInstance()->GetRole();
+  parameter.is_restart = false;
+  parameter.raft_endpoint = Server::GetInstance()->RaftEndpoint();
+
+  auto config = Server::GetInstance()->GetConfig();
+  parameter.raft_path = config->GetString("raft.path");
+  parameter.election_timeout_ms = config->GetInt("raft.election_timeout_s") * 1000;
+  parameter.snapshot_interval_s = config->GetInt("raft.snapshot_interval_s");
+  parameter.log_max_segment_size = config->GetInt64("raft.segmentlog_max_segment_size");
+  parameter.log_path = config->GetString("raft.log_path");
+
+  auto raft_meta = StoreRaftMeta::NewRaftMeta(region->Id());
+  parameter.raft_meta = raft_meta;
+  parameter.region_metrics = region_metrics;
+  auto listener_factory = std::make_shared<StoreSmEventListenerFactory>();
+  parameter.listeners = listener_factory->Build();
+
+  status = raft_store_engine->AddNode(region, parameter);
+  if (!status.ok()) {
+    return status;
+  }
+
+  Server::GetInstance()->GetStoreMetricsManager()->GetStoreRegionMetrics()->AddMetrics(region_metrics);
+  Server::GetInstance()->GetStoreMetaManager()->GetStoreRaftMeta()->AddRaftMeta(raft_meta);
+
   DINGO_LOG(DEBUG) << fmt::format("Create region {} update region state NORMAL", region->Id());
-  if (split_from_region_id == 0) {
+  if (parent_region_id == 0) {
     store_region_meta->UpdateState(region, pb::common::StoreRegionState::NORMAL);
   } else {
     store_region_meta->UpdateState(region, pb::common::StoreRegionState::STANDBY);
@@ -123,11 +124,11 @@ butil::Status CreateRegionTask::CreateRegion(std::shared_ptr<Context> ctx, store
 }
 
 void CreateRegionTask::Run() {
-  auto region = store::Region::New(region_cmd_->create_request().region_definition());
+  auto region_definition = region_cmd_->create_request().region_definition();
 
-  auto status = CreateRegion(ctx_, region, region_cmd_->create_request().split_from_region_id());
+  auto status = CreateRegion(region_definition, region_cmd_->create_request().split_from_region_id());
   if (!status.ok()) {
-    DINGO_LOG(DEBUG) << fmt::format("Create region {} failed, {}", region->Id(), status.error_str());
+    DINGO_LOG(DEBUG) << fmt::format("Create region {} failed, {}", region_definition.id(), status.error_str());
   }
 
   Server::GetInstance()->GetRegionCommandManager()->UpdateCommandStatus(
@@ -189,11 +190,11 @@ butil::Status DeleteRegionTask::DeleteRegion(std::shared_ptr<Context> ctx, uint6
   writer->KvBatchDeleteRange(region->PhysicsRange());
 
   // Raft kv engine
-  if (engine->GetID() == pb::common::ENG_RAFT_STORE) {
-    auto raft_kv_engine = std::dynamic_pointer_cast<RaftStoreEngine>(engine);
+  auto raft_store_engine = Server::GetInstance()->GetRaftStoreEngine();
+  if (raft_store_engine != nullptr) {
     // Delete raft
     DINGO_LOG(DEBUG) << fmt::format("Delete region {} delete raft node", region_id);
-    raft_kv_engine->DestroyNode(ctx, region_id);
+    raft_store_engine->DestroyNode(ctx, region_id);
     Server::GetInstance()->GetLogStorageManager()->DeleteStorage(region_id);
   }
 
@@ -273,9 +274,14 @@ butil::Status SplitRegionTask::ValidateSplitRegion(std::shared_ptr<StoreRegionMe
   if (parent_region == nullptr) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Parent region not exist.");
   }
-  auto child_region = store_region_meta->GetRegion(child_region_id);
-  if (child_region == nullptr) {
-    return butil::Status(pb::error::EREGION_NOT_FOUND, "Child region not exist.");
+  if (Constant::kPreCreateRegionSplitStrategy) {
+    auto child_region = store_region_meta->GetRegion(child_region_id);
+    if (child_region == nullptr) {
+      return butil::Status(pb::error::EREGION_NOT_FOUND, "Child region not exist.");
+    }
+    if (child_region->State() != pb::common::STANDBY) {
+      return butil::Status(pb::error::EREGION_STATE, "Child region state is not STANDBY.");
+    }
   }
 
   const auto& split_key = split_request.split_watershed_key();
@@ -287,54 +293,52 @@ butil::Status SplitRegionTask::ValidateSplitRegion(std::shared_ptr<StoreRegionMe
                     Helper::StringToHex(range.end_key()), Helper::StringToHex(split_key)));
   }
 
-  if (parent_region->State() == pb::common::StoreRegionState::SPLITTING) {
+  if (parent_region->State() == pb::common::SPLITTING) {
     return butil::Status(pb::error::EREGION_SPLITING, "Parent region state is splitting.");
   }
 
-  if (parent_region->State() == pb::common::StoreRegionState::NEW ||
-      parent_region->State() == pb::common::StoreRegionState::MERGING ||
-      parent_region->State() == pb::common::StoreRegionState::DELETING ||
-      parent_region->State() == pb::common::StoreRegionState::DELETED) {
-    return butil::Status(pb::error::EREGION_STATE, "Parent region state not allow split.");
+  if (parent_region->State() != pb::common::NORMAL) {
+    return butil::Status(pb::error::EREGION_STATE, "Parent region state is NORMAL, not allow split.");
   }
 
-  auto engine = Server::GetInstance()->GetEngine();
-  if (engine->GetID() == pb::common::ENG_RAFT_STORE) {
-    auto raft_kv_engine = std::dynamic_pointer_cast<RaftStoreEngine>(engine);
-    auto node = raft_kv_engine->GetNode(parent_region_id);
-    if (node == nullptr) {
-      return butil::Status(pb::error::ERAFT_NOT_FOUND, "No found raft node.");
-    }
+  auto raft_store_engine = Server::GetInstance()->GetRaftStoreEngine();
+  if (raft_store_engine == nullptr) {
+    return butil::Status(pb::error::EINTERNAL, "Not found raft store engine");
+  }
 
-    if (!node->IsLeader()) {
-      return butil::Status(pb::error::ERAFT_NOTLEADER, "Not leader %s", node->GetLeaderId().to_string().c_str());
-    }
+  auto node = raft_store_engine->GetNode(parent_region_id);
+  if (node == nullptr) {
+    return butil::Status(pb::error::ERAFT_NOT_FOUND, "No found raft node.");
+  }
 
-    auto status = Helper::ValidateRaftStatusForSplit(node->GetStatus());
-    if (!status.ok()) {
-      return status;
-    }
+  if (!node->IsLeader()) {
+    return butil::Status(pb::error::ERAFT_NOTLEADER, "Not leader %s", node->GetLeaderId().to_string().c_str());
+  }
 
-    if (parent_region->Type() == pb::common::INDEX_REGION) {
-      // Check follower whether hold vector index.
-      auto self_peer = node->GetPeerId();
-      std::vector<braft::PeerId> peers;
-      node->ListPeers(&peers);
-      for (const auto& peer : peers) {
-        if (peer != self_peer) {
-          pb::node::CheckVectorIndexRequest request;
-          request.set_vector_index_id(parent_region_id);
-          pb::node::CheckVectorIndexResponse response;
-          auto status = ServiceAccess::CheckVectorIndex(request, peer.addr, response);
-          if (!status.ok()) {
-            DINGO_LOG(ERROR) << fmt::format("Check peer {} hold vector index {} failed, error: {}",
-                                            Helper::EndPointToStr(peer.addr), parent_region_id, status.error_str());
-          }
+  auto status = Helper::ValidateRaftStatusForSplit(node->GetStatus());
+  if (!status.ok()) {
+    return status;
+  }
 
-          if (!response.is_exist()) {
-            return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "Not found vector index %lu at peer %s",
-                                 parent_region_id, Helper::EndPointToStr(peer.addr).c_str());
-          }
+  if (parent_region->Type() == pb::common::INDEX_REGION) {
+    // Check follower whether hold vector index.
+    auto self_peer = node->GetPeerId();
+    std::vector<braft::PeerId> peers;
+    node->ListPeers(&peers);
+    for (const auto& peer : peers) {
+      if (peer != self_peer) {
+        pb::node::CheckVectorIndexRequest request;
+        request.set_vector_index_id(parent_region_id);
+        pb::node::CheckVectorIndexResponse response;
+        auto status = ServiceAccess::CheckVectorIndex(request, peer.addr, response);
+        if (!status.ok()) {
+          DINGO_LOG(ERROR) << fmt::format("Check peer {} hold vector index {} failed, error: {}",
+                                          Helper::EndPointToStr(peer.addr), parent_region_id, status.error_str());
+        }
+
+        if (!response.is_exist()) {
+          return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "Not found vector index %lu at peer %s",
+                               parent_region_id, Helper::EndPointToStr(peer.addr).c_str());
         }
       }
     }
@@ -393,17 +397,18 @@ butil::Status ChangeRegionTask::PreValidateChangeRegion(const pb::coordinator::R
 
 // Check region leader
 static butil::Status CheckLeader(uint64_t region_id) {
-  auto engine = Server::GetInstance()->GetEngine();
-  if (engine->GetID() == pb::common::ENG_RAFT_STORE) {
-    auto raft_kv_engine = std::dynamic_pointer_cast<RaftStoreEngine>(engine);
-    auto node = raft_kv_engine->GetNode(region_id);
-    if (node == nullptr) {
-      return butil::Status(pb::error::ERAFT_NOT_FOUND, "No found raft node.");
-    }
+  auto raft_store_engine = Server::GetInstance()->GetRaftStoreEngine();
+  if (raft_store_engine == nullptr) {
+    return butil::Status(pb::error::EINTERNAL, "Not found raft store engine");
+  }
 
-    if (!node->IsLeader()) {
-      return butil::Status(pb::error::ERAFT_NOTLEADER, node->GetLeaderId().to_string());
-    }
+  auto node = raft_store_engine->GetNode(region_id);
+  if (node == nullptr) {
+    return butil::Status(pb::error::ERAFT_NOT_FOUND, "No found raft node.");
+  }
+
+  if (!node->IsLeader()) {
+    return butil::Status(pb::error::ERAFT_NOTLEADER, node->GetLeaderId().to_string());
   }
 
   return butil::Status();
@@ -444,10 +449,9 @@ butil::Status ChangeRegionTask::ChangeRegion(std::shared_ptr<Context> ctx,
     return peers;
   };
 
-  auto engine = Server::GetInstance()->GetEngine();
-  if (engine->GetID() == pb::common::ENG_RAFT_STORE) {
-    auto raft_kv_engine = std::dynamic_pointer_cast<RaftStoreEngine>(engine);
-    return raft_kv_engine->ChangeNode(ctx, region_definition.id(), filter_peers_by_role(pb::common::VOTER));
+  auto raft_store_engine = Server::GetInstance()->GetRaftStoreEngine();
+  if (raft_store_engine != nullptr) {
+    return raft_store_engine->ChangeNode(ctx, region_definition.id(), filter_peers_by_role(pb::common::VOTER));
   }
 
   return butil::Status();
@@ -508,10 +512,9 @@ butil::Status TransferLeaderTask::TransferLeader(std::shared_ptr<Context>, uint6
     return status;
   }
 
-  auto engine = Server::GetInstance()->GetEngine();
-  if (engine->GetID() == pb::common::ENG_RAFT_STORE) {
-    auto raft_kv_engine = std::dynamic_pointer_cast<RaftStoreEngine>(engine);
-    return raft_kv_engine->TransferLeader(region_id, peer);
+  auto raft_store_engine = Server::GetInstance()->GetRaftStoreEngine();
+  if (raft_store_engine != nullptr) {
+    return raft_store_engine->TransferLeader(region_id, peer);
   }
 
   return butil::Status();
@@ -623,12 +626,11 @@ butil::Status StopRegionTask::StopRegion(std::shared_ptr<Context> ctx, uint64_t 
   }
 
   // Shutdown raft node
-  auto engine = Server::GetInstance()->GetEngine();
-  if (engine->GetID() == pb::common::ENG_RAFT_STORE) {
-    auto raft_kv_engine = std::dynamic_pointer_cast<RaftStoreEngine>(engine);
+  auto raft_store_engine = Server::GetInstance()->GetRaftStoreEngine();
+  if (raft_store_engine != nullptr) {
     // Delete raft
     DINGO_LOG(DEBUG) << fmt::format("Delete peer {} delete raft node", region_id);
-    raft_kv_engine->StopNode(ctx, region_id);
+    raft_store_engine->StopNode(ctx, region_id);
   }
 
   return butil::Status();
@@ -853,10 +855,9 @@ butil::Status HoldVectorIndexTask::ValidateHoldVectorIndex(uint64_t region_id) {
   }
 
   // Validate is follower
-  auto engine = Server::GetInstance()->GetEngine();
-  if (engine->GetID() == pb::common::ENG_RAFT_STORE) {
-    auto raft_kv_engine = std::dynamic_pointer_cast<RaftStoreEngine>(engine);
-    auto node = raft_kv_engine->GetNode(region_id);
+  auto raft_store_engine = Server::GetInstance()->GetRaftStoreEngine();
+  if (raft_store_engine != nullptr) {
+    auto node = raft_store_engine->GetNode(region_id);
     if (node == nullptr) {
       return butil::Status(pb::error::ERAFT_NOT_FOUND, "No found raft node %lu.", region_id);
     }

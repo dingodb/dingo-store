@@ -37,7 +37,8 @@ class RaftNode {
            std::shared_ptr<braft::StateMachine> fsm, std::shared_ptr<SegmentLogStorage> log_storage);
   ~RaftNode() = default;
 
-  int Init(const std::string& init_conf, std::shared_ptr<Config> config);
+  int Init(const std::string& init_conf, const std::string& raft_path, int election_timeout_ms,
+           int snapshot_interval_s);
   void Stop();
   void Destroy();
 
@@ -51,6 +52,8 @@ class RaftNode {
   bool HasLeader();
   braft::PeerId GetLeaderId();
   braft::PeerId GetPeerId();
+
+  void ResetElectionTimeout(int election_timeout_ms, int max_clock_drift_ms);
 
   void Shutdown(braft::Closure* done);
   void Join();

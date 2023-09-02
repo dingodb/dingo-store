@@ -150,10 +150,9 @@ void RegionControlServiceImpl::TransferLeader(google::protobuf::RpcController* c
 
   DINGO_LOG(DEBUG) << "TransferLeader request: " << request->ShortDebugString();
 
-  auto engine = Server::GetInstance()->GetEngine();
-  if (engine->GetID() == pb::common::ENG_RAFT_STORE) {
-    auto raft_kv_engine = std::dynamic_pointer_cast<RaftStoreEngine>(engine);
-    auto status = raft_kv_engine->TransferLeader(request->region_id(), request->peer());
+  auto raft_store_engine = Server::GetInstance()->GetRaftStoreEngine();
+  if (raft_store_engine != nullptr) {
+    auto status = raft_store_engine->TransferLeader(request->region_id(), request->peer());
     if (!status.ok()) {
       auto* mut_err = response->mutable_error();
       mut_err->set_errcode(static_cast<Errno>(status.error_code()));

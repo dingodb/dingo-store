@@ -32,6 +32,7 @@
 #include "meta/meta_writer.h"
 #include "meta/transform_kv_able.h"
 #include "proto/common.pb.h"
+#include "proto/raft.pb.h"
 #include "proto/store_internal.pb.h"
 #include "vector/vector_index.h"
 
@@ -42,7 +43,9 @@ namespace store {
 // Warp pb region for atomic/metux
 class Region {
  public:
-  Region() : temporary_disable_split_(false) { bthread_mutex_init(&mutex_, nullptr); };
+  Region() : temporary_disable_split_(false), split_strategy_(pb::raft::PRE_CREATE_REGION) {
+    bthread_mutex_init(&mutex_, nullptr);
+  };
   ~Region() { bthread_mutex_destroy(&mutex_); }
 
   Region(const Region&) = delete;
@@ -94,6 +97,9 @@ class Region {
   bool TemporaryDisableSplit();
   void SetTemporaryDisableSplit(bool disable_split);
 
+  pb::raft::SplitStrategy SplitStrategy();
+  void SetSplitStrategy(pb::raft::SplitStrategy split_strategy);
+
   uint64_t LastSplitTimestamp();
   void UpdateLastSplitTimestamp();
 
@@ -116,6 +122,7 @@ class Region {
   std::atomic<pb::common::StoreRegionState> state_;
 
   std::atomic<bool> temporary_disable_split_;
+  pb::raft::SplitStrategy split_strategy_;
 
   VectorIndexWrapperPtr vector_index_wapper_;
 };
