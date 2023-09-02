@@ -350,8 +350,8 @@ void SplitHandler::SplitClosure::Run() {
 // region-100: [start_key,end_key) ->
 // region-101: [start_key, split_key) and region-100: [split_key, end_key)
 void SplitHandler::Handle(std::shared_ptr<Context>, store::RegionPtr from_region, std::shared_ptr<RawEngine>,
-                          const pb::raft::Request &req, store::RegionMetricsPtr region_metrics, uint64_t /*term_id*/,
-                          uint64_t /*log_id*/) {
+                          const pb::raft::Request &req, store::RegionMetricsPtr region_metrics, uint64_t term_id,
+                          uint64_t log_id) {
   const auto &request = req.split();
   auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
 
@@ -369,7 +369,8 @@ void SplitHandler::Handle(std::shared_ptr<Context>, store::RegionPtr from_region
     return;
   }
 
-  DINGO_LOG(INFO) << fmt::format("[split.spliting][region({}->{})] begin...", from_region->Id(), to_region->Id());
+  DINGO_LOG(INFO) << fmt::format("[split.spliting][region({}->{})] begin split, term({}) log_id({})", from_region->Id(),
+                                 to_region->Id(), term_id, log_id);
   if (to_region->State() != pb::common::StoreRegionState::STANDBY) {
     DINGO_LOG(WARNING) << fmt::format("[split.spliting][region({}->{})] child region state is not standby",
                                       from_region->Id(), to_region->Id());

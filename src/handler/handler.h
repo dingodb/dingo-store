@@ -68,9 +68,9 @@ class Handler {
                       const pb::raft::Request &req, store::RegionMetricsPtr region_metrics, uint64_t term_id,
                       uint64_t log_id) = 0;
 
-  virtual void Handle(uint64_t region_id, std::shared_ptr<RawEngine> engine, braft::SnapshotWriter *writer,
+  virtual void Handle(store::RegionPtr region, std::shared_ptr<RawEngine> engine, braft::SnapshotWriter *writer,
                       braft::Closure *done) = 0;
-  virtual void Handle(uint64_t region_id, std::shared_ptr<RawEngine> engine, braft::SnapshotReader *reader) = 0;
+  virtual void Handle(store::RegionPtr region, std::shared_ptr<RawEngine> engine, braft::SnapshotReader *reader) = 0;
 
   virtual void Handle(store::RegionPtr region, uint64_t term_id) = 0;
   virtual void Handle(store::RegionPtr region, butil::Status status) = 0;
@@ -92,11 +92,11 @@ class BaseHandler : public Handler {
     DINGO_LOG(ERROR) << "Not support handle...";
   }
 
-  void Handle(uint64_t, std::shared_ptr<RawEngine>, braft::SnapshotWriter *, braft::Closure *) override {
+  void Handle(store::RegionPtr, std::shared_ptr<RawEngine>, braft::SnapshotWriter *, braft::Closure *) override {
     DINGO_LOG(ERROR) << "Not support handle...";
   }
 
-  void Handle(uint64_t, std::shared_ptr<RawEngine>, braft::SnapshotReader *) override {
+  void Handle(store::RegionPtr, std::shared_ptr<RawEngine>, braft::SnapshotReader *) override {
     DINGO_LOG(ERROR) << "Not support handle...";
   }
 

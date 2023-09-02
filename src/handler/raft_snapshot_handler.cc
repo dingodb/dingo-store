@@ -15,6 +15,7 @@
 #include "handler/raft_snapshot_handler.h"
 
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -29,13 +30,14 @@
 #include "google/protobuf/message.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
+#include "proto/store_internal.pb.h"
 #include "server/server.h"
 #include "vector/codec.h"
 
 namespace dingodb {
 
 struct SaveRaftSnapshotArg {
-  uint64_t region_id;
+  store::RegionPtr region;
   braft::SnapshotWriter* writer;
   braft::Closure* done;
   RaftSnapshot* raft_snapshot;
@@ -129,6 +131,49 @@ butil::Status RaftSnapshot::GenSnapshotFileByCheckpoint(const std::string& check
   return butil::Status();
 }
 
+// Parse region meta
+butil::Status ParseRaftSnapshotRegionMeta(const std::string& snapshot_path,
+                                          pb::store_internal::RaftSnapshotRegionMeta& meta) {
+  std::string filepath = snapshot_path + "/" + Constant::kRaftSnapshotRegionMetaFileName;
+  if (!Helper::IsExistPath(filepath)) {
+    return butil::Status(pb::error::EINTERNAL, "region meta file not exist, filepath: %s", filepath.c_str());
+  }
+  std::ifstream file(filepath);
+  if (!file.is_open()) {
+    return butil::Status(pb::error::EINTERNAL, "open file failed, filepath: %s", filepath.c_str());
+  }
+  if (!meta.ParseFromIstream(&file)) {
+    return butil::Status(pb::error::EINTERNAL, "parse region meta file failed, filepath: %s", filepath.c_str());
+  }
+
+  return butil::Status();
+}
+
+// Add region meta to snapshot
+bool AddRegionMetaFile(braft::SnapshotWriter* writer, store::RegionPtr region) {
+  std::string filepath = writer->get_path() + "/" + Constant::kRaftSnapshotRegionMetaFileName;
+  std::ofstream file(filepath);
+  if (!file.is_open()) {
+    DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] Open file {} failed", region->Id(), filepath);
+    return false;
+  }
+
+  pb::store_internal::RaftSnapshotRegionMeta meta;
+  meta.mutable_epoch()->CopyFrom(region->Epoch());
+  meta.mutable_range()->CopyFrom(region->RawRange());
+
+  DINGO_LOG(INFO) << fmt::format("[raft.snapshot][region({})] region meta epoch({}_{}) range[{}-{})", region->Id(),
+                                 meta.epoch().conf_version(), meta.epoch().version(),
+                                 Helper::StringToHex(region->RawRange().start_key()),
+                                 Helper::StringToHex(region->RawRange().end_key()));
+
+  file << meta.SerializeAsString();
+  file.close();
+  writer->add_file(Constant::kRaftSnapshotRegionMetaFileName);
+
+  return true;
+}
+
 bool RaftSnapshot::SaveSnapshot(braft::SnapshotWriter* writer, store::RegionPtr region,  // NOLINT
                                 GenSnapshotFileFunc func) {
   if (region->RawRange().start_key().empty() || region->RawRange().end_key().empty()) {
@@ -139,6 +184,11 @@ bool RaftSnapshot::SaveSnapshot(braft::SnapshotWriter* writer, store::RegionPtr 
   DINGO_LOG(INFO) << fmt::format("[raft.snapshot][region({})] Save snapshot range[{}-{})", region->Id(),
                                  Helper::StringToHex(region->RawRange().start_key()),
                                  Helper::StringToHex(region->RawRange().end_key()));
+
+  // Add region meta to snapshot
+  if (!AddRegionMetaFile(writer, region)) {
+    return false;
+  }
 
   std::string region_checkpoint_path =
       fmt::format("{}/{}_{}", Server::GetInstance()->GetCheckpointPath(), region->Id(), Helper::TimestampNs());
@@ -159,14 +209,13 @@ bool RaftSnapshot::SaveSnapshot(braft::SnapshotWriter* writer, store::RegionPtr 
       DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] link file failed, path: {}", region->Id(),
                                       snapshot_path);
       // Clean temp checkpoint file
-      // Helper::RemoveAllFileOrDirectory(region_checkpoint_path);
+      Helper::RemoveAllFileOrDirectory(region_checkpoint_path);
       return false;
     }
 
     auto filemeta = std::make_unique<braft::LocalFileMeta>();
     filemeta->set_user_meta(sst_file.SerializeAsString());
     filemeta->set_source(braft::FileSource::FILE_SOURCE_LOCAL);
-    // fixup
     writer->add_file(filename, static_cast<google::protobuf::Message*>(filemeta.get()));
   }
 
@@ -204,6 +253,20 @@ static bool MergeCheckpointFile(std::string path, std::string merge_file_path, c
   return true;
 }
 
+butil::Status HandleRaftSnapshotRegionMeta(braft::SnapshotReader* reader, store::RegionPtr region) {
+  pb::store_internal::RaftSnapshotRegionMeta meta;
+  auto status = ParseRaftSnapshotRegionMeta(reader->get_path(), meta);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] snapshot not include file", region->Id());
+    return status;
+  }
+
+  DINGO_LOG(INFO) << fmt::format("[raft.snapshot][region({})] current region version({}) snapshot region version({})",
+                                 region->Id(), region->Epoch().version(), meta.epoch().version());
+
+  return butil::Status();
+}
+
 // Load snapshot by ingest sst files
 bool RaftSnapshot::LoadSnapshot(braft::SnapshotReader* reader, store::RegionPtr region) {
   DINGO_LOG(INFO) << fmt::format("[raft.snapshot][region({})] load snapshot...", region->Id());
@@ -213,14 +276,18 @@ bool RaftSnapshot::LoadSnapshot(braft::SnapshotReader* reader, store::RegionPtr 
     DINGO_LOG(WARNING) << fmt::format("[raft.snapshot][region({})] snapshot not include file", region->Id());
   }
 
-  // Delete old region data
-  const auto& region_range = region->RawRange();
-  auto status = engine_->NewWriter(Constant::kStoreDataCF)->KvBatchDeleteRange(region->PhysicsRange());
+  auto status = HandleRaftSnapshotRegionMeta(reader, region);
   if (!status.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] handle region meta failed", region->Id());
     return false;
   }
 
-  bool has_temp_file = false;
+  // Delete old region data
+  const auto& region_range = region->RawRange();
+  status = engine_->NewWriter(Constant::kStoreDataCF)->KvBatchDeleteRange(region->PhysicsRange());
+  if (!status.ok()) {
+    return false;
+  }
   // Ingest sst to region
   if (files.empty()) {
     return true;
@@ -242,6 +309,9 @@ bool RaftSnapshot::LoadSnapshot(braft::SnapshotReader* reader, store::RegionPtr 
 
   } else {  // The snapshot is generated by use scan.
     for (auto& file : files) {
+      if (file == Constant::kRaftSnapshotRegionMetaFileName) {
+        continue;
+      }
       std::string filepath = reader->get_path() + "/" + file;
       sst_files.push_back(filepath);
     }
@@ -263,10 +333,10 @@ bool RaftSnapshot::LoadSnapshot(braft::SnapshotReader* reader, store::RegionPtr 
 }
 
 // Use scan async save snapshot.
-void AsyncSaveSnapshotByScan(uint64_t region_id, std::shared_ptr<RawEngine> engine, braft::SnapshotWriter* writer,
+void AsyncSaveSnapshotByScan(store::RegionPtr region, std::shared_ptr<RawEngine> engine, braft::SnapshotWriter* writer,
                              braft::Closure* done) {
   SaveRaftSnapshotArg* arg = new SaveRaftSnapshotArg();
-  arg->region_id = region_id;
+  arg->region = region;
   arg->writer = writer;
   arg->done = done;
   arg->raft_snapshot = new RaftSnapshot(engine, true);
@@ -278,23 +348,15 @@ void AsyncSaveSnapshotByScan(uint64_t region_id, std::shared_ptr<RawEngine> engi
       [](void* arg) -> void* {
         SaveRaftSnapshotArg* snapshot_arg = static_cast<SaveRaftSnapshotArg*>(arg);
         brpc::ClosureGuard done_guard(snapshot_arg->done);
-        auto region =
-            Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(snapshot_arg->region_id);
-        if (region == nullptr) {
-          LOG(ERROR) << fmt::format("[raft.snapshot][region({})] Save snapshot failed, region is null.",
-                                    snapshot_arg->region_id);
+        auto region = snapshot_arg->region;
+
+        auto gen_snapshot_file_func =
+            std::bind(&RaftSnapshot::GenSnapshotFileByScan, snapshot_arg->raft_snapshot,  // NOLINT
+                      std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
+        if (!snapshot_arg->raft_snapshot->SaveSnapshot(snapshot_arg->writer, region, gen_snapshot_file_func)) {
+          LOG(ERROR) << fmt::format("[raft.snapshot][region({})] Save snapshot failed", region->Id());
           if (snapshot_arg->done != nullptr) {
             snapshot_arg->done->status().set_error(pb::error::ERAFT_SAVE_SNAPSHOT, "save snapshot failed");
-          }
-        } else {
-          auto gen_snapshot_file_func =
-              std::bind(&RaftSnapshot::GenSnapshotFileByScan, snapshot_arg->raft_snapshot,  // NOLINT
-                        std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
-          if (!snapshot_arg->raft_snapshot->SaveSnapshot(snapshot_arg->writer, region, gen_snapshot_file_func)) {
-            LOG(ERROR) << fmt::format("[raft.snapshot][region({})] Save snapshot failed", region->Id());
-            if (snapshot_arg->done != nullptr) {
-              snapshot_arg->done->status().set_error(pb::error::ERAFT_SAVE_SNAPSHOT, "save snapshot failed");
-            }
           }
         }
 
@@ -308,17 +370,9 @@ void AsyncSaveSnapshotByScan(uint64_t region_id, std::shared_ptr<RawEngine> engi
 }
 
 // Use checkpoint save snapshot
-void SaveSnapshotByCheckpoint(uint64_t region_id, std::shared_ptr<RawEngine> engine, braft::SnapshotWriter* writer,
+void SaveSnapshotByCheckpoint(store::RegionPtr region, std::shared_ptr<RawEngine> engine, braft::SnapshotWriter* writer,
                               braft::Closure* done) {
   brpc::ClosureGuard done_guard(done);
-  auto region = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
-  if (region == nullptr) {
-    LOG(ERROR) << fmt::format("[raft.snapshot][region({})] Save snapshot failed, region is null.", region_id);
-    if (done != nullptr) {
-      done->status().set_error(pb::error::ERAFT_SAVE_SNAPSHOT, "save snapshot failed");
-    }
-    return;
-  }
 
   auto raft_snapshot = std::make_shared<RaftSnapshot>(engine, false);
   auto gen_snapshot_file_func = std::bind(&RaftSnapshot::GenSnapshotFileByCheckpoint, raft_snapshot,  // NOLINT
@@ -336,24 +390,19 @@ std::string GetSnapshotPolicy(std::shared_ptr<dingodb::Config> config) {
   return policy = policy.empty() ? Constant::kDefaultRaftSnapshotPolicy : policy;
 }
 
-void RaftSaveSnapshotHanler::Handle(uint64_t region_id, std::shared_ptr<RawEngine> engine,
+void RaftSaveSnapshotHanler::Handle(store::RegionPtr region, std::shared_ptr<RawEngine> engine,
                                     braft::SnapshotWriter* writer, braft::Closure* done) {
   auto config = Server::GetInstance()->GetConfig();
   std::string policy = GetSnapshotPolicy(config);
   if (policy == "checkpoint") {
-    SaveSnapshotByCheckpoint(region_id, engine, writer, done);
+    SaveSnapshotByCheckpoint(region, engine, writer, done);
   } else if (policy == "scan") {
-    AsyncSaveSnapshotByScan(region_id, engine, writer, done);
+    AsyncSaveSnapshotByScan(region, engine, writer, done);
   }
 }
 
-void RaftLoadSnapshotHanler::Handle(uint64_t region_id, std::shared_ptr<RawEngine> engine,
+void RaftLoadSnapshotHanler::Handle(store::RegionPtr region, std::shared_ptr<RawEngine> engine,
                                     braft::SnapshotReader* reader) {
-  auto region = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
-  if (region == nullptr) {
-    DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] load snapshot failed, region is null.", region_id);
-    return;
-  }
   auto raft_snapshot = std::make_unique<RaftSnapshot>(engine);
   if (!raft_snapshot->LoadSnapshot(reader, region)) {
     DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] load snapshot failed.", region->Id());
