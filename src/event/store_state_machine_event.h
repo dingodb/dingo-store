@@ -119,7 +119,6 @@ struct SmLeaderStartEvent : public Event {
   ~SmLeaderStartEvent() override = default;
 
   int64_t term;
-  int64_t node_id;
   store::RegionPtr region;
 };
 
@@ -200,7 +199,6 @@ struct SmStartFollowingEvent : public Event {
   ~SmStartFollowingEvent() override = default;
 
   const braft::LeaderChangeContext& ctx;
-  uint64_t node_id;
   store::RegionPtr region;
 };
 
@@ -224,7 +222,6 @@ struct SmStopFollowingEvent : public Event {
   ~SmStopFollowingEvent() override = default;
 
   const braft::LeaderChangeContext& ctx;
-  uint64_t node_id;
   store::RegionPtr region;
 };
 

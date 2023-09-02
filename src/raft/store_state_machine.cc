@@ -26,6 +26,7 @@
 #include "meta/meta_writer.h"
 #include "meta/store_meta_manager.h"
 #include "metrics/store_bvar_metrics.h"
+#include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "proto/raft.pb.h"
 #include "server/server.h"
@@ -242,7 +243,6 @@ void StoreStateMachine::on_leader_start(int64_t term) {
 
   auto event = std::make_shared<SmLeaderStartEvent>();
   event->term = term;
-  event->node_id = region_->Id();
   event->region = region_;
 
   DispatchEvent(EventType::kSmLeaderStart, event);
@@ -287,7 +287,6 @@ void StoreStateMachine::on_start_following(const braft::LeaderChangeContext& ctx
   DINGO_LOG(INFO) << fmt::format("[raft.sm][region({})] on_start_following, leader_id: {} error: {} {}", region_->Id(),
                                  ctx.leader_id().to_string(), ctx.status().error_code(), ctx.status().error_str());
   auto event = std::make_shared<SmStartFollowingEvent>(ctx);
-  event->node_id = region_->Id();
   event->region = region_;
 
   DispatchEvent(EventType::kSmStartFollowing, event);
@@ -301,7 +300,6 @@ void StoreStateMachine::on_stop_following(const braft::LeaderChangeContext& ctx)
   DINGO_LOG(INFO) << fmt::format("[raft.sm][region({})] on_stop_following, leader_id: {} error: {} {}", region_->Id(),
                                  ctx.leader_id().to_string(), ctx.status().error_code(), ctx.status().error_str());
   auto event = std::make_shared<SmStopFollowingEvent>(ctx);
-  event->node_id = region_->Id();
   event->region = region_;
 
   DispatchEvent(EventType::kSmStopFollowing, event);

@@ -49,8 +49,7 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
                                        uint64_t region_id) {
   auto start_time = Helper::TimestampMs();
   auto engine = Server::GetInstance()->GetEngine();
-  auto raft_kv_engine =
-      (engine->GetID() == pb::common::ENG_RAFT_STORE) ? std::dynamic_pointer_cast<RaftStoreEngine>(engine) : nullptr;
+  auto raft_store_engine = Server::GetInstance()->GetRaftStoreEngine();
 
   pb::coordinator::StoreHeartbeatRequest request;
   auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
@@ -96,8 +95,8 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
          region_meta->State() == pb::common::StoreRegionState::STANDBY ||
          region_meta->State() == pb::common::StoreRegionState::SPLITTING ||
          region_meta->State() == pb::common::StoreRegionState::MERGING) &&
-        raft_kv_engine != nullptr) {
-      auto raft_node = raft_kv_engine->GetNode(region_meta->Id());
+        raft_store_engine != nullptr) {
+      auto raft_node = raft_store_engine->GetNode(region_meta->Id());
       if (raft_node != nullptr) {
         tmp_region_metrics.mutable_braft_status()->CopyFrom(*raft_node->GetStatus());
       }

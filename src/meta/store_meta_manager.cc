@@ -215,6 +215,9 @@ bool Region::TemporaryDisableSplit() { return temporary_disable_split_.load(); }
 
 void Region::SetTemporaryDisableSplit(bool disable_split) { temporary_disable_split_.store(disable_split); }
 
+pb::raft::SplitStrategy Region::SplitStrategy() { return split_strategy_; }
+void Region::SetSplitStrategy(pb::raft::SplitStrategy split_strategy) { split_strategy_ = split_strategy; }
+
 uint64_t Region::LastSplitTimestamp() { return inner_region_.last_split_timestamp(); }
 
 void Region::UpdateLastSplitTimestamp() { inner_region_.set_last_split_timestamp(Helper::TimestampMs()); }
@@ -423,7 +426,10 @@ void StoreRegionMeta::UpdateState(store::RegionPtr region, pb::common::StoreRegi
 }
 
 void StoreRegionMeta::UpdateState(uint64_t region_id, pb::common::StoreRegionState new_state) {
-  UpdateState(GetRegion(region_id), new_state);
+  auto region = GetRegion(region_id);
+  if (region != nullptr) {
+    UpdateState(region, new_state);
+  }
 }
 
 void StoreRegionMeta::UpdateLeaderId(store::RegionPtr region, uint64_t leader_id) {
@@ -433,7 +439,10 @@ void StoreRegionMeta::UpdateLeaderId(store::RegionPtr region, uint64_t leader_id
 }
 
 void StoreRegionMeta::UpdateLeaderId(uint64_t region_id, uint64_t leader_id) {
-  UpdateLeaderId(GetRegion(region_id), leader_id);
+  auto region = GetRegion(region_id);
+  if (region != nullptr) {
+    UpdateLeaderId(region, leader_id);
+  }
 }
 
 void StoreRegionMeta::UpdatePeers(store::RegionPtr region, std::vector<pb::common::Peer>& peers) {
@@ -443,7 +452,10 @@ void StoreRegionMeta::UpdatePeers(store::RegionPtr region, std::vector<pb::commo
 }
 
 void StoreRegionMeta::UpdatePeers(uint64_t region_id, std::vector<pb::common::Peer>& peers) {
-  UpdatePeers(GetRegion(region_id), peers);
+  auto region = GetRegion(region_id);
+  if (region != nullptr) {
+    UpdatePeers(region, peers);
+  }
 }
 
 void StoreRegionMeta::UpdateRange(store::RegionPtr region, const pb::common::Range& range) {

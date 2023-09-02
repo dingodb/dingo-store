@@ -120,10 +120,9 @@ bool VectorIndexManager::NeedHoldVectorIndex(uint64_t region_id) {
 
   if (!config->GetBool("vector.enable_follower_hold_index")) {
     // If follower, delete vector index.
-    auto engine = Server::GetInstance()->GetEngine();
-    if (engine->GetID() == pb::common::ENG_RAFT_STORE) {
-      auto raft_kv_engine = std::dynamic_pointer_cast<RaftStoreEngine>(engine);
-      auto node = raft_kv_engine->GetNode(region_id);
+    auto raft_store_engine = Server::GetInstance()->GetRaftStoreEngine();
+    if (raft_store_engine != nullptr) {
+      auto node = raft_store_engine->GetNode(region_id);
       if (node == nullptr) {
         LOG(ERROR) << fmt::format("No found raft node {}.", region_id);
       }

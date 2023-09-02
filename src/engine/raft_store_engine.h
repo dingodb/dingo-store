@@ -16,6 +16,7 @@
 #define DINGODB_ENGINE_RAFT_KV_ENGINE_H_
 
 #include <memory>
+#include <string>
 
 #include "butil/status.h"
 #include "common/meta_control.h"
@@ -38,10 +39,23 @@ class RaftControlAble {
  public:
   virtual ~RaftControlAble() = default;
 
-  virtual butil::Status AddNode(std::shared_ptr<Context> ctx, store::RegionPtr region,
-                                std::shared_ptr<pb::store_internal::RaftMeta> raft_meta,
-                                store::RegionMetricsPtr region_metrics,
-                                std::shared_ptr<EventListenerCollection> listeners, bool is_restart) = 0;
+  struct AddNodeParameter {
+    pb::common::ClusterRole role;
+    bool is_restart;
+    butil::EndPoint raft_endpoint;
+
+    std::string raft_path;
+    int election_timeout_ms;
+    int snapshot_interval_s;
+    int64_t log_max_segment_size;
+    std::string log_path;
+
+    std::shared_ptr<pb::store_internal::RaftMeta> raft_meta;
+    store::RegionMetricsPtr region_metrics;
+    std::shared_ptr<EventListenerCollection> listeners;
+  };
+
+  virtual butil::Status AddNode(store::RegionPtr region, const AddNodeParameter& parameter) = 0;
   virtual butil::Status AddNode(std::shared_ptr<pb::common::RegionDefinition> region,
                                 std::shared_ptr<MetaControl> meta_control, bool is_volatile) = 0;
   virtual butil::Status StopNode(std::shared_ptr<Context> ctx, uint64_t region_id) = 0;
@@ -69,9 +83,7 @@ class RaftStoreEngine : public Engine, public RaftControlAble {
 
   std::shared_ptr<RawEngine> GetRawEngine() override;
 
-  butil::Status AddNode(std::shared_ptr<Context> ctx, store::RegionPtr region,
-                        std::shared_ptr<pb::store_internal::RaftMeta> raft_meta, store::RegionMetricsPtr region_metrics,
-                        std::shared_ptr<EventListenerCollection> listeners, bool is_restart) override;
+  butil::Status AddNode(store::RegionPtr region, const AddNodeParameter& parameter) override;
   butil::Status AddNode(std::shared_ptr<pb::common::RegionDefinition> region, std::shared_ptr<MetaControl> meta_control,
                         bool is_volatile) override;
   butil::Status ChangeNode(std::shared_ptr<Context> ctx, uint64_t region_id,

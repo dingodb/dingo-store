@@ -59,6 +59,7 @@ bool RaftStoreEngine::Recover() {
   auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
   auto store_raft_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRaftMeta();
   auto store_region_metrics = Server::GetInstance()->GetStoreMetricsManager()->GetStoreRegionMetrics();
+  auto config = Server::GetInstance()->GetConfig();
   auto regions = store_region_meta->GetAllRegion();
 
   int count = 0;
@@ -79,7 +80,22 @@ bool RaftStoreEngine::Recover() {
         DINGO_LOG(WARNING) << "Recover region metrics not found: " << region->Id();
       }
 
-      AddNode(ctx, region, raft_meta, region_metrics, listener_factory->Build(), true);
+      RaftControlAble::AddNodeParameter parameter;
+      parameter.role = Server::GetInstance()->GetRole();
+      parameter.is_restart = true;
+      parameter.raft_endpoint = Server::GetInstance()->RaftEndpoint();
+
+      parameter.raft_path = config->GetString("raft.path");
+      parameter.election_timeout_ms = config->GetInt("raft.election_timeout_s") * 1000;
+      parameter.snapshot_interval_s = config->GetInt("raft.snapshot_interval_s");
+      parameter.log_max_segment_size = config->GetInt64("raft.segmentlog_max_segment_size");
+      parameter.log_path = config->GetString("raft.log_path");
+
+      parameter.raft_meta = raft_meta;
+      parameter.region_metrics = region_metrics;
+      parameter.listeners = listener_factory->Build();
+
+      AddNode(region, parameter);
       ++count;
     }
   }
@@ -95,33 +111,30 @@ pb::common::Engine RaftStoreEngine::GetID() { return pb::common::ENG_RAFT_STORE;
 
 std::shared_ptr<RawEngine> RaftStoreEngine::GetRawEngine() { return engine_; }
 
-butil::Status RaftStoreEngine::AddNode(std::shared_ptr<Context> /*ctx*/, store::RegionPtr region,
-                                       std::shared_ptr<pb::store_internal::RaftMeta> raft_meta,
-                                       store::RegionMetricsPtr region_metrics,
-                                       std::shared_ptr<EventListenerCollection> listeners, bool is_restart) {
+butil::Status RaftStoreEngine::AddNode(store::RegionPtr region, const AddNodeParameter& parameter) {
   DINGO_LOG(INFO) << "RaftkvEngine add region, region_id " << region->Id();
 
   // Build StateMachine
-  auto state_machine =
-      std::make_shared<StoreStateMachine>(engine_, region, raft_meta, region_metrics, listeners, is_restart);
+  auto state_machine = std::make_shared<StoreStateMachine>(
+      engine_, region, parameter.raft_meta, parameter.region_metrics, parameter.listeners, parameter.is_restart);
   if (!state_machine->Init()) {
     return butil::Status(pb::error::ERAFT_INIT, "State machine init failed");
   }
 
   // Build log storage
-  auto config = ConfigManager::GetInstance()->GetConfig(Server::GetInstance()->GetRole());
-  std::string log_path = fmt::format("{}/{}", config->GetString("raft.log_path"), region->Id());
-  int64_t max_segment_size = config->GetInt64("raft.segmentlog_max_segment_size");
-  max_segment_size = max_segment_size > 0 ? max_segment_size : Constant::kSegmentLogDefaultMaxSegmentSize;
+  std::string log_path = fmt::format("{}/{}", parameter.log_path, region->Id());
+  int64_t max_segment_size =
+      parameter.log_max_segment_size > 0 ? parameter.log_max_segment_size : Constant::kSegmentLogDefaultMaxSegmentSize;
   auto log_storage = std::make_shared<SegmentLogStorage>(log_path, region->Id(), max_segment_size,
-                                                         Server::GetInstance()->GetRole() == pb::common::INDEX);
+                                                         parameter.role == pb::common::INDEX);
   Server::GetInstance()->GetLogStorageManager()->AddLogStorage(region->Id(), log_storage);
 
   // Build RaftNode
-  std::shared_ptr<RaftNode> node = std::make_shared<RaftNode>(
-      region->Id(), region->Name(), braft::PeerId(Server::GetInstance()->RaftEndpoint()), state_machine, log_storage);
+  auto node = std::make_shared<RaftNode>(region->Id(), region->Name(), braft::PeerId(parameter.raft_endpoint),
+                                         state_machine, log_storage);
 
-  if (node->Init(Helper::FormatPeers(Helper::ExtractLocations(region->Peers())), config) != 0) {
+  if (node->Init(Helper::FormatPeers(Helper::ExtractLocations(region->Peers())), parameter.raft_path,
+                 parameter.election_timeout_ms, parameter.snapshot_interval_s) != 0) {
     node->Destroy();
     return butil::Status(pb::error::ERAFT_INIT, "Raft init failed");
   }
@@ -138,7 +151,7 @@ butil::Status RaftStoreEngine::AddNode(std::shared_ptr<pb::common::RegionDefinit
   auto state_machine = std::make_shared<MetaStateMachine>(meta_control, is_volatile);
 
   // Build log storage
-  auto config = ConfigManager::GetInstance()->GetConfig(Server::GetInstance()->GetRole());
+  auto config = Server::GetInstance()->GetConfig();
   std::string log_path = fmt::format("{}/{}", config->GetString("raft.log_path"), region->id());
   int64_t max_segment_size = config->GetInt64("raft.segmentlog_max_segment_size");
   max_segment_size = max_segment_size > 0 ? max_segment_size : Constant::kSegmentLogDefaultMaxSegmentSize;
@@ -146,11 +159,12 @@ butil::Status RaftStoreEngine::AddNode(std::shared_ptr<pb::common::RegionDefinit
   Server::GetInstance()->GetLogStorageManager()->AddLogStorage(region->id(), log_storage);
 
   std::string const meta_raft_name = fmt::format("{}-{}", region->name(), region->id());
-  std::shared_ptr<RaftNode> const node = std::make_shared<RaftNode>(
+  auto const node = std::make_shared<RaftNode>(
       region->id(), meta_raft_name, braft::PeerId(Server::GetInstance()->RaftEndpoint()), state_machine, log_storage);
 
   // Build RaftNode
-  if (node->Init(Helper::FormatPeers(Helper::ExtractLocations(region->peers())), config) != 0) {
+  if (node->Init(Helper::FormatPeers(Helper::ExtractLocations(region->peers())), config->GetString("raft.path"),
+                 config->GetInt("raft.election_timeout_s") * 1000, config->GetInt("raft.snapshot_interval_s")) != 0) {
     node->Destroy();
     return butil::Status(pb::error::ERAFT_INIT, "Raft init failed");
   }

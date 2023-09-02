@@ -31,6 +31,8 @@ enum CmdType {
   SPLIT = 5;
   COMPAREANDSET = 6;
 
+  SAVE_RAFT_SNAPSHOT = 100;
+
   // Coordinator State Machine Operator
   META_WRITE = 2000;
 
@@ -86,14 +88,27 @@ message DeleteBatchRequest {
 message DeleteBatchResponse {
 }
 
+enum SplitStrategy {
+  PRE_CREATE_REGION = 0;
+  POST_CREATE_REGION = 1;
+}
+
 message SplitRequest {
   uint64 from_region_id = 1;                // split from region id
   uint64 to_region_id = 2;                  // split to region id
   bytes split_key = 3;                      // split watershed key
   dingodb.pb.common.RegionEpoch epoch = 4;  // current region epoch
+  SplitStrategy split_strategy = 5;
 }
 
 message SplitResponse {
+}
+
+message SaveSnapshotRequest {
+  uint64 region_id = 1;
+}
+
+message SaveSnapshotResponse {
 }
 
 message RaftCreateSchemaRequest {
@@ -144,6 +159,8 @@ message Request {
     SplitRequest split = 1004;
     CompareAndSetRequest compare_and_set = 1005;
 
+    SaveSnapshotRequest save_snapshot = 1100;
+
     // Coordinator Operation[2000, 3000]
     RaftMetaRequest meta_req = 2000;
 
@@ -164,6 +181,8 @@ message Response {
     DeleteBatchResponse delete_batch = 1003;
     SplitResponse split = 1004;
     CompareAndSetResponse compare_and_set = 1005;
+
+    SaveSnapshotResponse save_snapshot = 1100;
 
     RaftCreateSchemaResponse create_schema_req = 2001;
     RaftCreateTableResponse create_table_req = 2002;

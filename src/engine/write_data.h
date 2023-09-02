@@ -38,6 +38,7 @@ enum class DatumType {
   kCompareAndSet = 6,
   kMetaPut = 7,
   kRebuildVectorIndex = 8,
+  kSaveRaftSnapshot = 9,
 };
 
 class DatumAble {
@@ -257,6 +258,7 @@ struct SplitDatum : public DatumAble {
     split_request->set_to_region_id(to_region_id);
     split_request->set_split_key(split_key);
     split_request->mutable_epoch()->CopyFrom(epoch);
+    split_request->set_split_strategy(split_strategy);
 
     return request;
   };
@@ -267,6 +269,7 @@ struct SplitDatum : public DatumAble {
   uint64_t to_region_id;
   std::string split_key;
   pb::common::RegionEpoch epoch;
+  pb::raft::SplitStrategy split_strategy;
 };
 
 struct RebuildVectorIndexDatum : public DatumAble {
@@ -282,6 +285,23 @@ struct RebuildVectorIndexDatum : public DatumAble {
   };
 
   void TransformFromRaft(pb::raft::Response& resonse) override {}
+};
+
+struct SaveRaftSnapshotDatum : public DatumAble {
+  DatumType GetType() override { return DatumType::kSaveRaftSnapshot; }
+
+  pb::raft::Request* TransformToRaft() override {
+    auto* request = new pb::raft::Request();
+
+    request->set_cmd_type(pb::raft::CmdType::SAVE_RAFT_SNAPSHOT);
+    request->mutable_save_snapshot()->set_region_id(region_id);
+
+    return request;
+  };
+
+  void TransformFromRaft(pb::raft::Response& resonse) override {}
+
+  uint64_t region_id;
 };
 
 class WriteData {
@@ -408,6 +428,11 @@ class WriteDataBuilder {
     datum->to_region_id = split_request.split_to_region_id();
     datum->split_key = split_request.split_watershed_key();
     datum->epoch = epoch;
+    if (split_request.store_create_region()) {
+      datum->split_strategy = pb::raft::POST_CREATE_REGION;
+    } else {
+      datum->split_strategy = pb::raft::PRE_CREATE_REGION;
+    }
 
     auto write_data = std::make_shared<WriteData>();
     write_data->AddDatums(std::static_pointer_cast<DatumAble>(datum));
@@ -418,6 +443,17 @@ class WriteDataBuilder {
   // RebuildVectorIndexDatum
   static std::shared_ptr<WriteData> BuildWrite() {
     auto datum = std::make_shared<RebuildVectorIndexDatum>();
+
+    auto write_data = std::make_shared<WriteData>();
+    write_data->AddDatums(std::static_pointer_cast<DatumAble>(datum));
+
+    return write_data;
+  }
+
+  // SaveRaftSnapshotDatum
+  static std::shared_ptr<WriteData> BuildWrite(uint64_t region_id) {
+    auto datum = std::make_shared<SaveRaftSnapshotDatum>();
+    datum->region_id = region_id;
 
     auto write_data = std::make_shared<WriteData>();
     write_data->AddDatums(std::static_pointer_cast<DatumAble>(datum));
