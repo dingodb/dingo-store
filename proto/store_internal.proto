@@ -68,3 +68,9 @@ message VectorIndexSnapshotMeta {
   uint64 snapshot_log_id = 2;
   dingodb.pb.common.Range range = 3;
 }
+
+// raft snapshot carry region meta, e.g. epoch/range
+message RaftSnapshotRegionMeta {
+  dingodb.pb.common.RegionEpoch epoch = 1;
+  dingodb.pb.common.Range range = 2;
+}

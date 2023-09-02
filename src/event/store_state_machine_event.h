@@ -76,7 +76,7 @@ struct SmSnapshotSaveEvent : public Event {
   std::shared_ptr<RawEngine> engine;
   braft::SnapshotWriter* writer;
   braft::Closure* done;
-  uint64_t node_id;
+  store::RegionPtr region;
 };
 
 class SmSnapshotSaveEventListener : public EventListener {
@@ -98,7 +98,7 @@ struct SmSnapshotLoadEvent : public Event {
 
   std::shared_ptr<RawEngine> engine;
   braft::SnapshotReader* reader;
-  uint64_t node_id;
+  store::RegionPtr region;
 };
 
 class SmSnapshotLoadEventListener : public EventListener {
