@@ -31,6 +31,8 @@
 
 namespace dingodb {
 
+DECLARE_uint64(MAX_HNSW_MEMORY_SIZE_OF_REGION);
+
 void MetaServiceImpl::TableDefinitionToIndexDefinition(const pb::meta::TableDefinition &table_definition,
                                                        pb::meta::IndexDefinition &index_definition) {
   index_definition.set_name(table_definition.name());
@@ -1028,6 +1030,22 @@ void MetaServiceImpl::CreateIndex(google::protobuf::RpcController *controller,
 
   pb::meta::TableDefinition table_definition;
   IndexDefinitionToTableDefinition(request->index_definition(), table_definition);
+
+  // check if hnsw max_element is too big
+  if (table_definition.index_parameter().vector_index_parameter().vector_index_type() ==
+      pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
+    auto *hnsw_parameter =
+        table_definition.mutable_index_parameter()->mutable_vector_index_parameter()->mutable_hnsw_parameter();
+    if (hnsw_parameter->max_elements() > FLAGS_MAX_HNSW_MEMORY_SIZE_OF_REGION / 4 / hnsw_parameter->dimension()) {
+      DINGO_LOG(WARNING) << "CreateIndex warning in meta_service, hnsw max_elements is too big, max_elements="
+                         << hnsw_parameter->max_elements() << ", dimension=" << hnsw_parameter->dimension()
+                         << ", max_memory_size_of_region=" << FLAGS_MAX_HNSW_MEMORY_SIZE_OF_REGION
+                         << ", max elements in this dimention="
+                         << FLAGS_MAX_HNSW_MEMORY_SIZE_OF_REGION / 4 / hnsw_parameter->dimension();
+      hnsw_parameter->set_max_elements(FLAGS_MAX_HNSW_MEMORY_SIZE_OF_REGION / 4 / hnsw_parameter->dimension());
+    }
+  }
+
   auto ret = this->coordinator_control_->CreateIndex(request->schema_id().entity_id(), table_definition, 0,
                                                      new_index_id, meta_increment);
   if (!ret.ok()) {
@@ -1079,6 +1097,22 @@ void MetaServiceImpl::UpdateIndex(google::protobuf::RpcController *controller,
   pb::coordinator_internal::MetaIncrement meta_increment;
   pb::meta::TableDefinition table_definition;
   IndexDefinitionToTableDefinition(request->new_index_definition(), table_definition);
+
+  // check if hnsw max_element is too big
+  if (table_definition.index_parameter().vector_index_parameter().vector_index_type() ==
+      pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
+    auto *hnsw_parameter =
+        table_definition.mutable_index_parameter()->mutable_vector_index_parameter()->mutable_hnsw_parameter();
+    if (hnsw_parameter->max_elements() > FLAGS_MAX_HNSW_MEMORY_SIZE_OF_REGION / 4 / hnsw_parameter->dimension()) {
+      DINGO_LOG(ERROR) << "UpdateIndex warning in meta_service, hnsw max_elements is too big, max_elements="
+                       << hnsw_parameter->max_elements() << ", dimension=" << hnsw_parameter->dimension()
+                       << ", max_memory_size_of_region=" << FLAGS_MAX_HNSW_MEMORY_SIZE_OF_REGION
+                       << ", max elements in this dimention="
+                       << FLAGS_MAX_HNSW_MEMORY_SIZE_OF_REGION / 4 / hnsw_parameter->dimension();
+      response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
+      response->mutable_error()->set_errmsg("hnsw max_elements is too big");
+    }
+  }
 
   auto ret = this->coordinator_control_->UpdateIndex(request->index_id().parent_entity_id(),
                                                      request->index_id().entity_id(), table_definition, meta_increment);
