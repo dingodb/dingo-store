@@ -51,6 +51,12 @@ function deploy_store() {
     sed  -i 's,\$BASE_PATH\$,'"$dstpath"',g'                $dstpath/conf/${role}.yaml
 
     sed  -i 's|\$COORDINATOR_RAFT_PEERS\$|'"$coor_raft_peers"'|g'  $dstpath/conf/${role}.yaml
+
+    if [ -f $srcpath/conf/${role}-gflags.conf ]
+    then
+        echo "cp $srcpath/conf/${role}-gflags.conf $dstpath/conf/gflags.conf"
+        cp $srcpath/conf/${role}-gflags.conf $dstpath/conf/gflags.conf
+    fi
   fi
 
   if [ "${FLAGS_clean_db}" == "0" ]; then
@@ -78,7 +84,7 @@ function start_program() {
   sudo ulimit -c unlimited
   sudo ulimit -n 1024000
 
-  echo "${root_dir}/bin/dingodb_server --role ${role}  --conf ./conf/${role}.yaml --coor_url=file://./conf/coor_list"
+  echo "${root_dir}/bin/dingodb_server --role=${role}"
 
-  nohup ${root_dir}/bin/dingodb_server --role ${role}  --conf ./conf/${role}.yaml --coor_url=file://./conf/coor_list 2>&1 >./log/out &
+  nohup ${root_dir}/bin/dingodb_server --role=${role} 2>&1 >./log/out &
 }

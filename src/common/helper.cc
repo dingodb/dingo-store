@@ -14,7 +14,6 @@
 
 #include "common/helper.h"
 
-#include <errno.h>
 #include <sys/resource.h>
 #include <sys/statvfs.h>
 #include <sys/sysinfo.h>
@@ -23,6 +22,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cerrno>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -43,8 +43,6 @@
 #include <utility>
 #include <vector>
 
-#include "brpc/channel.h"
-#include "brpc/controller.h"
 #include "butil/endpoint.h"
 #include "butil/status.h"
 #include "butil/strings/string_split.h"
@@ -823,7 +821,7 @@ bool Helper::GetSystemCpuUsage(std::map<std::string, uint64_t>& output) {
 
     return true;
   } catch (const std::exception& e) {
-    std::cerr << "Failed to get system cpu usage: " << e.what() << std::endl;
+    std::cerr << "Failed to get system cpu usage: " << e.what() << '\n';
     DINGO_LOG(INFO) << "Failed to get system cpu usage: " << e.what();
     return false;
   }
@@ -885,7 +883,7 @@ std::vector<DiskStats> GetDiskStats() {
     }
     file.close();
   } else {
-    std::cerr << "Failed to open /proc/diskstats." << std::endl;
+    std::cerr << "Failed to open /proc/diskstats." << '\n';
   }
   return disk_stats;
 }

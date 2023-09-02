@@ -31,7 +31,7 @@
 
 namespace dingodb {
 
-DECLARE_uint64(MAX_HNSW_MEMORY_SIZE_OF_REGION);
+DECLARE_uint64(max_hnsw_memory_size_of_region);
 
 void MetaServiceImpl::TableDefinitionToIndexDefinition(const pb::meta::TableDefinition &table_definition,
                                                        pb::meta::IndexDefinition &index_definition) {
@@ -1036,13 +1036,20 @@ void MetaServiceImpl::CreateIndex(google::protobuf::RpcController *controller,
       pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
     auto *hnsw_parameter =
         table_definition.mutable_index_parameter()->mutable_vector_index_parameter()->mutable_hnsw_parameter();
-    if (hnsw_parameter->max_elements() > FLAGS_MAX_HNSW_MEMORY_SIZE_OF_REGION / 4 / hnsw_parameter->dimension()) {
+    if (hnsw_parameter->dimension() <= 0) {
+      DINGO_LOG(ERROR) << "CreateIndex failed in meta_service, hnsw dimension is too small, dimension="
+                       << hnsw_parameter->dimension();
+      response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
+      response->mutable_error()->set_errmsg("hnsw dimension is too small");
+      return;
+    }
+    if (hnsw_parameter->max_elements() > FLAGS_max_hnsw_memory_size_of_region / 4 / hnsw_parameter->dimension()) {
       DINGO_LOG(WARNING) << "CreateIndex warning in meta_service, hnsw max_elements is too big, max_elements="
                          << hnsw_parameter->max_elements() << ", dimension=" << hnsw_parameter->dimension()
-                         << ", max_memory_size_of_region=" << FLAGS_MAX_HNSW_MEMORY_SIZE_OF_REGION
+                         << ", max_memory_size_of_region=" << FLAGS_max_hnsw_memory_size_of_region
                          << ", max elements in this dimention="
-                         << FLAGS_MAX_HNSW_MEMORY_SIZE_OF_REGION / 4 / hnsw_parameter->dimension();
-      hnsw_parameter->set_max_elements(FLAGS_MAX_HNSW_MEMORY_SIZE_OF_REGION / 4 / hnsw_parameter->dimension());
+                         << FLAGS_max_hnsw_memory_size_of_region / 4 / hnsw_parameter->dimension();
+      hnsw_parameter->set_max_elements(FLAGS_max_hnsw_memory_size_of_region / 4 / hnsw_parameter->dimension());
     }
   }
 
@@ -1103,12 +1110,18 @@ void MetaServiceImpl::UpdateIndex(google::protobuf::RpcController *controller,
       pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
     auto *hnsw_parameter =
         table_definition.mutable_index_parameter()->mutable_vector_index_parameter()->mutable_hnsw_parameter();
-    if (hnsw_parameter->max_elements() > FLAGS_MAX_HNSW_MEMORY_SIZE_OF_REGION / 4 / hnsw_parameter->dimension()) {
+    if (hnsw_parameter->dimension() <= 0) {
+      DINGO_LOG(ERROR) << "UpdateIndex failed in meta_service, hnsw dimension is too small, dimension="
+                       << hnsw_parameter->dimension();
+      response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
+      response->mutable_error()->set_errmsg("hnsw dimension is too small");
+    }
+    if (hnsw_parameter->max_elements() > FLAGS_max_hnsw_memory_size_of_region / 4 / hnsw_parameter->dimension()) {
       DINGO_LOG(ERROR) << "UpdateIndex warning in meta_service, hnsw max_elements is too big, max_elements="
                        << hnsw_parameter->max_elements() << ", dimension=" << hnsw_parameter->dimension()
-                       << ", max_memory_size_of_region=" << FLAGS_MAX_HNSW_MEMORY_SIZE_OF_REGION
+                       << ", max_memory_size_of_region=" << FLAGS_max_hnsw_memory_size_of_region
                        << ", max elements in this dimention="
-                       << FLAGS_MAX_HNSW_MEMORY_SIZE_OF_REGION / 4 / hnsw_parameter->dimension();
+                       << FLAGS_max_hnsw_memory_size_of_region / 4 / hnsw_parameter->dimension();
       response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
       response->mutable_error()->set_errmsg("hnsw max_elements is too big");
     }
