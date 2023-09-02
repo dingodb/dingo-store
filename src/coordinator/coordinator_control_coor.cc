@@ -54,7 +54,7 @@ DEFINE_int32(
     "region update timeout in seconds, will not update region info if no state change and (now - last_update_time) > "
     "region_update_timeout");
 
-DEFINE_uint64(MAX_HNSW_MEMORY_SIZE_OF_REGION, uint32_t(-1), "max memory size of region in HSNW");
+DEFINE_uint64(max_hnsw_memory_size_of_region, uint32_t(-1), "max memory size of region in HSNW");
 
 // TODO: add epoch logic
 void CoordinatorControl::GetCoordinatorMap(uint64_t cluster_id, uint64_t& epoch, pb::common::Location& leader_location,
@@ -1121,7 +1121,7 @@ butil::Status CoordinatorControl::CreateShadowRegion(
       uint32_t dimension = new_index_parameter.vector_index_parameter().hnsw_parameter().dimension();
       uint32_t max_elements = new_index_parameter.vector_index_parameter().hnsw_parameter().max_elements();
 
-      uint32_t max_elements_limit = FLAGS_MAX_HNSW_MEMORY_SIZE_OF_REGION / dimension / 4;
+      uint32_t max_elements_limit = FLAGS_max_hnsw_memory_size_of_region / dimension / 4;
       if (max_elements > max_elements_limit) {
         DINGO_LOG(WARNING) << "CreateRegion max_elements is too large, will reduce max_elements, max_elements="
                            << max_elements << ", max_elements_limit=" << max_elements_limit
@@ -1246,7 +1246,7 @@ butil::Status CoordinatorControl::CreateRegion(const std::string& region_name, p
       uint32_t dimension = new_index_parameter.vector_index_parameter().hnsw_parameter().dimension();
       uint32_t max_elements = new_index_parameter.vector_index_parameter().hnsw_parameter().max_elements();
 
-      uint32_t max_elements_limit = FLAGS_MAX_HNSW_MEMORY_SIZE_OF_REGION / dimension / 4;
+      uint32_t max_elements_limit = FLAGS_max_hnsw_memory_size_of_region / dimension / 4;
       if (max_elements > max_elements_limit) {
         DINGO_LOG(WARNING) << "CreateRegion max_elements is too large, will reduce max_elements, max_elements="
                            << max_elements << ", max_elements_limit=" << max_elements_limit

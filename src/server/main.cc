@@ -45,8 +45,6 @@
 #include "config/config_manager.h"
 #include "gflags/gflags.h"
 #include "proto/common.pb.h"
-#include "proto/coordinator.pb.h"
-#include "proto/store.pb.h"
 #include "server/cluster_service.h"
 #include "server/coordinator_service.h"
 #include "server/file_service.h"
@@ -384,6 +382,9 @@ bool SetDefaultConfAndCoorList(const dingodb::pb::common::ClusterRole &role) {
 }
 
 int main(int argc, char *argv[]) {
+  if (dingodb::Helper::IsExistPath("conf/gflags.conf")) {
+    google::SetCommandLineOption("flagfile", "conf/gflags.conf");
+  }
   google::ParseCommandLineFlags(&argc, &argv, true);
 
   if (dingodb::FLAGS_show_version || FLAGS_role.empty()) {
@@ -433,6 +434,9 @@ int main(int argc, char *argv[]) {
 
   if (FLAGS_conf.empty()) {
     DINGO_LOG(ERROR) << "Missing server config.";
+    return -1;
+  } else if (!std::filesystem::exists(FLAGS_conf)) {
+    DINGO_LOG(ERROR) << "server config file not exist.";
     return -1;
   }
 

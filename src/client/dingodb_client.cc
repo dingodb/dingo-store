@@ -22,7 +22,6 @@
 #include "brpc/channel.h"
 #include "brpc/controller.h"
 #include "bthread/bthread.h"
-#include "bthread/types.h"
 #include "client/client_helper.h"
 #include "client/coordinator_client_function.h"
 #include "client/store_client_function.h"
@@ -759,7 +758,6 @@ int main(int argc, char* argv[]) {
 
   if (dingodb::FLAGS_show_version || FLAGS_method.empty()) {
     dingodb::DingoShowVerion();
-
     printf("Usage: %s [method] [paramters]\n", argv[0]);
     printf("Example: %s CreateTable --name=test_table_name\n", argv[0]);
     exit(-1);
