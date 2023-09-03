@@ -84,7 +84,7 @@ function start_program() {
   sudo ulimit -c unlimited
   sudo ulimit -n 1024000
 
-  echo "${root_dir}/bin/dingodb_server --role=${role}"
+  echo "${root_dir}/bin/dingodb_server -role=${role}"
 
-  nohup ${root_dir}/bin/dingodb_server --role=${role} 2>&1 >./log/out &
+  nohup ${root_dir}/bin/dingodb_server -role=${role} 2>&1 >./log/out &
 }

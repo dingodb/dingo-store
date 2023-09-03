@@ -82,7 +82,7 @@ void TsoControl::UpdateTimestamp() {
   if (delta > kUpdateTimestampGuardMs) {
     next = now;
   } else if (prev_logical > kMaxLogical / 2) {
-    next = now + kUpdateTimestampGuardMs;
+    next = prev_physical + kUpdateTimestampGuardMs;
   } else {
     DINGO_LOG(WARNING) << "don't need update timestamp prev: " << prev_physical << ", now: " << now
                        << ", save: " << last_save;
