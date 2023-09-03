@@ -303,6 +303,534 @@ message KvScanReleaseResponse {
   dingodb.pb.error.Error error = 1;
 }
 
+enum IsolationLevel {
+  InvalidIsolationLevel = 0;  // this is just a placeholder, not a valid isolation level
+  SnapshotIsolation = 1;
+  ReadCommitted = 2;
+}
+
+enum Action {
+  NoAction = 0;
+  TTLExpireRollback = 1;
+  LockNotExistRollback = 2;
+  MinCommitTSPushed = 3;
+  TTLExpirePessimisticRollback = 4;
+  LockNotExistDoNothing = 5;
+}
+
+message LockInfo {
+  bytes primary_lock = 1;
+  uint64 lock_ts = 2;
+  bytes key = 3;
+  uint64 lock_ttl = 4;
+  uint64 txn_size = 5;
+  Op lock_type = 6;
+}
+
+message Context {
+  uint64 region_id = 1;
+  dingodb.pb.common.RegionEpoch region_epoch = 2;
+  IsolationLevel isolation_level = 7;
+}
+
+enum Op {
+  None = 0;
+  Put = 1;
+  Delete = 2;
+  Lock = 3;
+  Rollback = 4;
+  PutIfAbsent = 5;
+}
+
+message Mutation {
+  Op op = 1;
+  bytes key = 2;
+  bytes value = 3;
+}
+
+message WriteConflict {
+  enum Reason {
+    Unknown = 0;
+    Optimistic = 1;  // in optimistic transactions.
+    // PessimisticRetry = 2;  // a lock acquisition request waits for a lock and awakes, or meets a
+    //                        // newer version of data, let Executor retry.
+    SelfRolledBack = 3;  // the transaction itself has been rolled back when it
+                         // tries to prewrite.
+    RcCheckTs = 4;       // RcCheckTs failure by meeting a newer version, let Executor retry.
+    // LazyUniquenessCheck = 5;  // write conflict found in lazy uniqueness check in
+    //                           // pessimistic transactions.
+  }
+
+  Reason reason = 1;
+  uint64 start_ts = 2;
+  uint64 conflict_ts = 3;         // the lock_ts conflicted with start_ts
+  uint64 conflict_commit_ts = 4;  // the commit_ts of the transaction which meets read conflict
+  bytes key = 5;
+  bytes primary_key = 6;
+}
+
+message TxnNotFound {
+  uint64 start_ts = 1;
+  bytes primary_key = 2;
+}
+
+message PrimaryMismatch {
+  LockInfo lock_info = 1;
+}
+
+message AlreadyExist {
+  bytes key = 1;
+}
+
+message Abort {
+  LockInfo lock_info = 1;
+}
+
+message TxnResultInfo {
+  // Client should backoff or cleanup the lock then retry, this error occurs in get phase.
+  LockInfo locked = 1;
+  // Write conflict with key which is locked by another transaction, this error occurs in prewrite phase.
+  WriteConflict write_conflict = 2;
+  // The transaction is aborted, this error occurs in commit phase of primary_lock.
+  Abort abort = 3;
+  // Txn not found when checking txn status.
+  TxnNotFound txn_not_found = 4;
+  // CheckTxnStatus is sent to a lock that's not the primary.
+  PrimaryMismatch primary_mismatch = 5;
+}
+
+// TxnKvGet do point-lookup a value for key in the transaction with start_ts
+message TxnGetRequest {
+  Context context = 1;
+  // the key client want to do get
+  bytes key = 2;
+  // the start_ts of the get transaction, store will return the value of the key when commit_ts < start_ts
+  uint64 start_ts = 3;
+}
+
+message TxnGetResponse {
+  // error code
+  dingodb.pb.error.Error error = 1;
+  // A value could not be retrieved due to the state of the database for the
+  // requested key.
+  // the txn_result is one of the following:
+  // 1. LockInfo: Read conflict with key which is locked by another transaction. The client should backoff or cleanup
+  // the lock then retry.
+  // 2. otherwise, txn_result is empty
+  TxnResultInfo txn_result = 2;
+  // The value associated with the key, if not found, is empty and error is NOT_FOUND
+  // dingo-store do not accept NULL value, so if value is NULL, it means the key is not exist
+  bytes value = 3;
+  // True if the key does not exist in the database.
+  // bool not_found = 4;
+}
+
+// TxnKvScan fetches values for a range of keys in the transaction with start_ts.
+message TxnScanRequest {
+  Context context = 1;
+  // the real Range is [start_key, end_key) or [end_key, start_key)
+  bytes start_key = 2;
+  bytes end_key = 3;
+  // The maximum number of results to return.
+  uint32 limit = 4;
+  // the start_ts of the get transaction, store will return the value of the key when commit_ts < start_ts
+  uint64 start_ts = 5;
+  // Return only the keys found by scanning, not their values.
+  bool key_only = 6;
+  // For compatibility, when scanning forward, the range to scan is [start_key, end_key), where start_key < end_key;
+  // and when scanning backward, it scans [end_key, start_key) in descending order, where end_key < start_key.
+  bool is_reverse = 7;
+}
+
+// if some key is lock by other txn, the scan will failed with error LOCKED, kvs is empty
+// client must retry the scan request
+message TxnScanResponse {
+  // error code
+  dingodb.pb.error.Error error = 1;
+  // This txn_result exists when some key is locked but we cannot check locks of
+  // all keys. In this case, `kvs` should be empty and the client should redo
+  // scanning all the keys after resolving the lock.
+  // the txn_result is one of the following:
+  // 1. LockInfo: Read conflict with key which is locked by another transaction.
+  // 2. otherwise, txn_result is empty
+  TxnResultInfo txn_result = 2;
+  repeated dingodb.pb.common.KeyValue kvs = 3;
+}
+
+message TxnPrewriteRequest {
+  Context context = 1;
+  // The data to be written to the database.
+  repeated Mutation mutations = 2;
+  // The primary lock of the transaction is setup by client
+  bytes primary_lock = 3;
+  // Identifies the transaction being written.
+  uint64 start_ts = 4;
+  // the lock's time to live in milliseconds
+  uint64 lock_ttl = 5;
+  // the number of keys involved in the transaction
+  uint64 txn_size = 6;
+  // When the transaction involves only one region, it's possible to commit the
+  // transaction directly with 1PC protocol.
+  bool try_one_pc = 7;
+  // The max commit ts is reserved for limiting the commit ts of 1PC, which can be used to avoid inconsistency with
+  // schema change. This field is unused now.
+  uint64 max_commit_ts = 8;
+}
+
+message TxnPrewriteResponse {
+  // error code
+  dingodb.pb.error.Error error = 1;
+  // for prewrite, txn_result will be one of the following:
+  // 1. WriteConflict: Write conflict with key which is locked by another transaction.
+  // 2. otherwise, txn_result is empty
+  // for success prewrite, txn_result is empty
+  // for failure prewrite, txn_result is not empty
+  // if txn_result is AlreadyExist, there will be many txn_result, each txn_result is for one key
+  // if there is a WriteConflict in txn_result, client should backoff or cleanup the lock then retry
+  TxnResultInfo txn_result = 2;
+  // if there is PutIfAbsent in mutation, and if there is key conflict, the conflict key will be returned
+  repeated AlreadyExist keys_already_exist = 3;
+  // When the transaction is successfully committed with 1PC protocol, this
+  // field will be set to the commit ts of the transaction. Otherwise, if dingo-store
+  // failed to commit it with 1PC or the transaction is not 1PC, the value will
+  // be 0.
+  uint64 one_pc_commit_ts = 4;
+}
+
+message TxnCommitRequest {
+  Context context = 1;
+  // The start_ts of the transaction.
+  uint64 start_ts = 2;
+  // The commit_ts of transaction. Must be greater than `start_ts`.
+  uint64 commit_ts = 3;
+  // All keys in the transaction to be committed.
+  repeated bytes keys = 4;
+}
+
+message TxnCommitResponse {
+  // error code
+  dingodb.pb.error.Error error = 1;
+  // the txn_result is one of the following:
+  // 1. Abort: if committing primary with no lock, the txn_result is Abort
+  // 2. otherwise, txn_result is empty
+  TxnResultInfo txn_result = 2;
+  // The commit_ts of the transaction.
+  uint64 commit_ts = 3;
+}
+
+// CheckTxnStatusRequest checks the status of a transaction.
+// If the transaction is rollbacked/committed, return that result.
+// If the TTL of the transaction is exhausted, abort that transaction and inform the caller.
+// Otherwise, returns the TTL information for the transaction.
+message TxnCheckTxnStatusRequest {
+  Context context = 1;
+  // Primary key and lock ts together to locate the primary lock of a transaction.
+  bytes primary_key = 2;
+  // Starting timestamp of the transaction being checked.
+  uint64 lock_ts = 3;
+  // The start timestamp of the transaction which this request is part of.
+  uint64 caller_start_ts = 4;
+  // The client must specify the current time to dingo-store using this timestamp.
+  // It is used to check TTL timeouts. It may be inaccurate.
+  uint64 current_ts = 5;
+}
+
+message TxnCheckTxnStatusResponse {
+  // error code
+  dingodb.pb.error.Error error = 1;
+  // the txn_result is one of the following:
+  // 1. PrimaryMismatch: CheckTxnStatus is sent to a lock that's not the primary.
+  // 2. TxnNotFound: Txn not found when checking txn status.
+  // 3. otherwise, txn_result is empty
+  TxnResultInfo txn_result = 2;
+  // Three kinds of transaction status:
+  //   locked: lock_ttl > 0
+  //   committed: commit_ts > 0
+  //   rollbacked: lock_ttl = 0 && commit_ts = 0
+  uint64 lock_ttl = 3;
+  // if the transaction of the lock is committed, the commit_ts is returned
+  uint64 commit_ts = 4;
+  // The action performed by dingo-store (and why if the action is to rollback).
+  Action action = 5;
+  LockInfo lock_info = 6;
+}
+
+// For all keys locked by the transaction identified by `start_ts`, either
+// commit or rollback the transaction and unlock the key.
+message TxnResolveLockRequest {
+  Context context = 1;
+  uint64 start_ts = 2;
+  // `commit_ts == 0` means the transaction was rolled back.
+  // `commit_ts > 0` means the transaction was committed at the given timestamp.
+  uint64 commit_ts = 3;
+  // Only resolve specified keys.
+  repeated bytes keys = 4;
+}
+
+message TxnResolveLockResponse {
+  // error code
+  dingodb.pb.error.Error error = 1;
+  // now the txn_result is not used, maybe used in the future
+  TxnResultInfo txn_result = 2;
+}
+
+message TxnBatchGetRequest {
+  Context context = 1;
+  repeated bytes keys = 2;
+  uint64 version = 3;
+}
+
+message TxnBatchGetResponse {
+  // error code
+  dingodb.pb.error.Error error = 1;
+  // This txn_result exists when some key is locked but we cannot check locks of
+  // all keys. In this case, `kvs` should be empty and the client should redo
+  // batch get all the keys after resolving the lock.
+  // the txn_result is one of the following:
+  // 1. LockInfo: Read conflict with key which is locked by another transaction. The client should backoff or cleanup
+  // the lock then retry.
+  // 2. otherwise, txn_result is empty
+  TxnResultInfo txn_result = 2;
+  // When some key is locked but we cannot check locks of
+  // all keys. In this case, `kvs` should be empty and the client should redo
+  // batch get all the keys after resolving the lock.
+  repeated dingodb.pb.common.KeyValue kvs = 3;
+}
+
+// Rollback a prewritten transaction. This will remove the preliminary data from
+// the database, unlock locks, and leave a rollback tombstone.
+message TxnBatchRollbackRequest {
+  Context context = 1;
+  // Identify the transaction to be rolled back.
+  uint64 start_ts = 2;
+  // The keys to rollback.
+  repeated bytes keys = 3;
+}
+
+message TxnBatchRollbackResponse {
+  // error code
+  dingodb.pb.error.Error error = 1;
+  TxnResultInfo txn_result = 2;
+}
+
+// Scan the database for locks. Used at the start of the GC process to find all
+// old locks.
+message TxnScanLockRequest {
+  Context context = 1;
+  // Returns all locks with a start timestamp before `max_ts`.
+  uint64 max_ts = 2;
+  // Start scanning from this key.
+  bytes start_key = 3;
+  // The maximum number of locks to return.
+  uint32 limit = 4;
+  // The exclusive upperbound for scanning.
+  bytes end_key = 5;
+}
+
+message TxnScanLockResponse {
+  // error code
+  dingodb.pb.error.Error error = 1;
+  TxnResultInfo txn_result = 2;
+  // Info on all locks found by the scan.
+  repeated LockInfo locks = 3;
+}
+
+// Update the lock_ttl of a large transaction to
+// prevent it from been killed.
+message TxnHeartBeatRequest {
+  Context context = 1;
+  // The key of the lock to update.
+  bytes primary_lock = 2;
+  // Start timestamp of the large transaction.
+  uint64 start_ts = 3;
+  // The new TTL the sender would like.
+  uint64 advise_lock_ttl = 4;
+}
+
+message TxnHeartBeatResponse {
+  // error code
+  dingodb.pb.error.Error error = 1;
+  // the txn_result is one of the following:
+  // 1. PrimaryMismatch: Heartbeat is sent to a lock that's not the primary.
+  // 2. TxnNotFound: Txn not found when heartbeat.
+  // 3. otherwise, txn_result is empty
+  TxnResultInfo txn_result = 2;
+  // The TTL actually set on the requested lock.
+  uint64 lock_ttl = 3;
+}
+
+// Request dingo-store to garbage collect all non-current data older than `safe_point_ts`.
+message TxnGcRequest {
+  Context context = 1;
+  uint64 safe_point_ts = 2;
+}
+
+message TxnGcResponse {
+  // error code
+  dingodb.pb.error.Error error = 1;
+  TxnResultInfo txn_result = 2;
+}
+
+// Delete a range of data from dingo-store.
+// All keys in the range will be deleted permanently regardless of their
+// timestamps. This means that deleted keys will not be retrievable by
+// specifying an older timestamp.
+message DeleteRangeRequest {
+  Context context = 1;
+  bytes start_key = 2;
+  bytes end_key = 3;
+}
+
+message DeleteRangeResponse {
+  // error code
+  dingodb.pb.error.Error error = 1;
+}
+
+message TxnDumpRequest {
+  Context context = 1;
+  // the range is [start_key, end_key)
+  bytes start_key = 2;
+  bytes end_key = 3;
+  // the range is [start_ts, end_ts)
+  // if start_ts == 0, means start from the beginning
+  // if UINT64_MAX, means end to the end
+  uint64 start_ts = 4;
+  uint64 end_ts = 5;
+}
+
+message TxnDumpResponse {
+  // error code
+  dingodb.pb.error.Error error = 1;
+  TxnResultInfo txn_result = 2;
+  repeated TxnWriteKey keys = 3;
+  repeated TxnWriteValue values = 4;
+  repeated TxnLockKey lock_keys = 5;
+  repeated TxnLockValue lock_values = 6;
+  repeated TxnDataKey data_keys = 7;
+  repeated TxnDataValue data_values = 8;
+}
+
+message TxnWriteKey {
+  bytes key = 1;
+  uint64 commit_ts = 2;
+}
+
+message TxnWriteValue {
+  uint64 start_ts = 1;
+  Op op = 2;
+  bytes short_value = 3;
+}
+
+message TxnLockKey {
+  bytes key = 1;
+}
+
+message TxnLockValue {
+  LockInfo lock_info = 1;
+}
+
+message TxnDataKey {
+  bytes key = 1;
+  uint64 start_ts = 2;
+}
+
+message TxnDataValue {
+  bytes value = 1;
+}
+
+message TxnScanBeginRequest {
+  Context context = 1;
+
+  // prefix start_key end_key with mode
+  dingodb.pb.common.RangeWithOptions range = 2;
+
+  // the start_ts of the get transaction, store will return the value of the key when commit_ts < start_ts
+  uint64 start_ts = 3;
+
+  // The maximum number of requests keys per request
+  // limit = 0 means only scan_id is returned and no data is returned
+  // If max_fetch_cnt > 0, it means to return scan_id and data. Note that in this way, the return will be slower because
+  // the data needs to be prepared For example: max_fetch_cnt = 10000, which means that the maximum number of kv items
+  // in this request is 10000, which is just a suggested value. If the maximum number of kv items in the server is 1000,
+  // The data returned each time is only 1000 pieces of data. Note: only the maximum number of kv pairs per request
+  uint64 max_fetch_cnt = 4;
+
+  // is it just to get the key
+  bool key_only = 5;
+
+  // whether to automatically release resources
+  // after reading all the data, the default is false,
+  // and the default is automatically released
+  bool disable_auto_release = 6;
+
+  // Whether to enable operator pushdown, enabled by default (false: means enabled, true: means disabled)
+  bool disable_coprocessor = 7;
+
+  // coprocessor
+  Coprocessor coprocessor = 8;
+}
+
+message TxnScanBeginResponse {
+  // error code
+  dingodb.pb.error.Error error = 1;
+
+  // This txn_result exists when some key is locked but we cannot check locks of
+  // all keys. In this case, `kvs` should be empty and the client should redo
+  // scanning all the keys after resolving the lock.
+  // the txn_result is one of the following:
+  // 1. LockInfo: Read conflict with key which is locked by another transaction.
+  // 2. otherwise, txn_result is empty
+  TxnResultInfo txn_result = 2;
+
+  // uniquely identifies this scan
+  bytes scan_id = 3;
+
+  // return key value pair. if kvs.size == 0 means no data
+  repeated dingodb.pb.common.KeyValue kvs = 4;
+}
+
+message TxnScanContinueRequest {
+  Context context = 1;
+
+  // uniquely identifies this scan
+  bytes scan_id = 2;
+
+  // The maximum number of requests keys per request
+  // If max_fetch_cnt > 0, it means to return scan_id and data. Note that in this way, the return will be slower because
+  // the data needs to be prepared For example: max_fetch_cnt = 10000, which means that the maximum number of kv items
+  // in this request is 10000, which is just a suggested value. If the maximum number of kv items in the server is 1000,
+  // The data returned each time is only 1000 pieces of data. Note: only the maximum number of kv pairs per request
+  uint64 max_fetch_cnt = 3;
+}
+
+message TxnScanContinueResponse {
+  // error code
+  dingodb.pb.error.Error error = 1;
+
+  // This txn_result exists when some key is locked but we cannot check locks of
+  // all keys. In this case, `kvs` should be empty and the client should redo
+  // scanning all the keys after resolving the lock.
+  // the txn_result is one of the following:
+  // 1. LockInfo: Read conflict with key which is locked by another transaction.
+  // 2. otherwise, txn_result is empty
+  TxnResultInfo txn_result = 2;
+
+  // return key value pair. if kvs.size == 0 means no data
+  repeated dingodb.pb.common.KeyValue kvs = 3;
+}
+
+message TxnScanReleaseRequest {
+  Context context = 1;
+
+  // uniquely identifies this scan
+  bytes scan_id = 2;
+}
+
+message TxnScanReleaseResponse {
+  // error code
+  dingodb.pb.error.Error error = 1;
+}
+
 service StoreService {
   // kv
   rpc KvGet(KvGetRequest) returns (KvGetResponse);
@@ -319,4 +847,23 @@ service StoreService {
   rpc KvScanBegin(KvScanBeginRequest) returns (KvScanBeginResponse);
   rpc KvScanContinue(KvScanContinueRequest) returns (KvScanContinueResponse);
   rpc KvScanRelease(KvScanReleaseRequest) returns (KvScanReleaseResponse);
+
+  // txn rpcs
+  rpc TxnGet(TxnGetRequest) returns (TxnGetResponse);
+  rpc TxnScan(TxnScanRequest) returns (TxnScanResponse);
+  rpc TxnPrewrite(TxnPrewriteRequest) returns (TxnPrewriteResponse);
+  rpc TxnCommit(TxnCommitRequest) returns (TxnCommitResponse);
+  rpc TxnCheckTxnStatus(TxnCheckTxnStatusRequest) returns (TxnCheckTxnStatusResponse);
+  rpc TxnResolveLock(TxnResolveLockRequest) returns (TxnResolveLockResponse);
+  rpc TxnBatchGet(TxnBatchGetRequest) returns (TxnBatchGetResponse);
+  rpc TxnBatchRollback(TxnBatchRollbackRequest) returns (TxnBatchRollbackResponse);
+  rpc TxnScanLock(TxnScanRequest) returns (TxnScanResponse);
+  rpc TxnHeartBeat(TxnHeartBeatRequest) returns (TxnHeartBeatResponse);
+  rpc TxnGc(TxnGcRequest) returns (TxnGcResponse);
+  rpc TxnDeleteRange(DeleteRangeRequest) returns (DeleteRangeResponse);
+  rpc TxnDump(TxnDumpRequest) returns (TxnDumpResponse);
+
+  rpc TxnScanBegin(TxnScanBeginRequest) returns (TxnScanBeginResponse);
+  rpc TxnScanContinue(TxnScanContinueRequest) returns (TxnScanContinueResponse);
+  rpc TxnScanRelease(TxnScanReleaseRequest) returns (TxnScanReleaseResponse);
 };
