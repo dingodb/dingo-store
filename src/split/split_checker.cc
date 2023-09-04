@@ -27,53 +27,18 @@
 #include "common/constant.h"
 #include "common/failpoint.h"
 #include "common/helper.h"
-#include "config/config.h"
-#include "config/config_manager.h"
+#include "config/config_helper.h"
 #include "engine/iterator.h"
 #include "fmt/core.h"
 #include "meta/store_meta_manager.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
+#include "proto/raft.pb.h"
 #include "server/server.h"
 #include "vector/codec.h"
 #include "vector/vector_index_manager.h"
 
 namespace dingodb {
-
-static uint32_t GetRegionMaxSize(std::shared_ptr<Config> config) {  // NOLINT
-  int region_max_size = config->GetInt("region.region_max_size");
-  return region_max_size > 0 ? region_max_size : Constant::kDefaultRegionMaxSize;
-}
-
-static uint32_t GetSplitCheckApproximateSize(std::shared_ptr<Config> config) {  // NOLINT
-  int region_max_size = GetRegionMaxSize(config);
-  return static_cast<uint32_t>(static_cast<double>(region_max_size) * Constant::kDefaultSplitCheckApproximateSizeRatio);
-}
-
-static std::string GetSplitPolicy(std::shared_ptr<Config> config) {  // NOLINT
-  std::string split_policy = config->GetString("region.split_policy");
-  return split_policy.empty() ? Constant::kDefaultSplitPolicy : split_policy;
-}
-
-static uint32_t GetSplitChunkSize(std::shared_ptr<Config> config) {  // NOLINT
-  int split_chunk_size = config->GetInt("region.split_chunk_size");
-  return split_chunk_size > 0 ? split_chunk_size : Constant::kDefaultSplitChunkSize;
-}
-
-static float GetSplitSizeRatio(std::shared_ptr<Config> config) {  // NOLINT
-  float split_ratio = static_cast<float>(config->GetDouble("region.split_size_ratio"));
-  return split_ratio > 0 && split_ratio < 1 ? split_ratio : Constant::kDefaultSplitRatio;
-}
-
-static uint32_t GetSplitKeysNumber(std::shared_ptr<Config> config) {  // NOLINT
-  int split_keys_number = config->GetInt("region.split_keys_number");
-  return split_keys_number > 0 ? split_keys_number : Constant::kDefaultSplitKeysNumber;
-}
-
-static float GetSplitKeysRatio(std::shared_ptr<Config> config) {  // NOLINT
-  float split_keys_ratio = static_cast<float>(config->GetDouble("region.split_keys_ratio"));
-  return split_keys_ratio > 0 && split_keys_ratio < 1 ? split_keys_ratio : Constant::kDefaultSplitRatio;
-}
 
 std::string HalfSplitChecker::SplitKey(store::RegionPtr region, uint32_t& count) {
   auto iter = raw_engine_->NewMultipleRangeIterator(raw_engine_, Constant::kStoreDataCF, region->PhysicsRange());
@@ -264,7 +229,8 @@ void SplitCheckTask::SplitCheck() {
   pb::coordinator::SplitRegionRequest request;
   request.mutable_split_request()->set_split_from_region_id(region_->Id());
   request.mutable_split_request()->set_split_watershed_key(split_key);
-  request.mutable_split_request()->set_store_create_region(!Constant::kPreCreateRegionSplitStrategy);
+  request.mutable_split_request()->set_store_create_region(ConfigHelper::GetSplitStrategy() ==
+                                                           pb::raft::POST_CREATE_REGION);
   pb::coordinator::SplitRegionResponse response;
   auto status = coordinator_interaction->SendRequest("SplitRegion", request, response);
   if (!status.ok()) {
@@ -318,22 +284,21 @@ void SplitCheckWorkers::DeleteRegionChecking(uint64_t region_id) {
   checking_regions_.erase(region_id);
 }
 
-static std::shared_ptr<SplitChecker> BuildSplitChecker(std::shared_ptr<dingodb::Config> config /*NOLINT*/,
-                                                       std::shared_ptr<RawEngine> raw_engine /*NOLINT*/) {
-  std::string policy = GetSplitPolicy(config);
+static std::shared_ptr<SplitChecker> BuildSplitChecker(std::shared_ptr<RawEngine> raw_engine) {
+  std::string policy = ConfigHelper::GetSplitPolicy();
   if (policy == "HALF") {
-    uint32_t split_threshold_size = GetRegionMaxSize(config);
-    uint32_t split_chunk_size = GetSplitChunkSize(config);
+    uint32_t split_threshold_size = ConfigHelper::GetRegionMaxSize();
+    uint32_t split_chunk_size = ConfigHelper::GetSplitChunkSize();
     return std::make_shared<HalfSplitChecker>(raw_engine, split_threshold_size, split_chunk_size);
 
   } else if (policy == "SIZE") {
-    uint32_t split_threshold_size = GetRegionMaxSize(config);
-    float split_ratio = GetSplitSizeRatio(config);
+    uint32_t split_threshold_size = ConfigHelper::GetRegionMaxSize();
+    float split_ratio = ConfigHelper::GetSplitSizeRatio();
     return std::make_shared<SizeSplitChecker>(raw_engine, split_threshold_size, split_ratio);
 
   } else if (policy == "KEYS") {
-    uint32_t split_key_number = GetSplitKeysNumber(config);
-    float split_keys_ratio = GetSplitKeysRatio(config);
+    uint32_t split_key_number = ConfigHelper::GetSplitKeysNumber();
+    float split_keys_ratio = ConfigHelper::GetSplitKeysRatio();
     return std::make_shared<KeysSplitChecker>(raw_engine, split_key_number, split_keys_ratio);
   }
 
@@ -343,11 +308,10 @@ static std::shared_ptr<SplitChecker> BuildSplitChecker(std::shared_ptr<dingodb::
 }
 
 void PreSplitCheckTask::PreSplitCheck() {
-  auto config = Server::GetInstance()->GetConfig();
   auto raw_engine = Server::GetInstance()->GetRawEngine();
   auto metrics = Server::GetInstance()->GetStoreMetricsManager()->GetStoreRegionMetrics();
   auto regions = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetAllAliveRegion();
-  uint32_t split_check_approximate_size = GetSplitCheckApproximateSize(config);
+  uint32_t split_check_approximate_size = ConfigHelper::GetSplitCheckApproximateSize();
   for (auto& region : regions) {
     auto region_metric = metrics->GetMetrics(region->Id());
     bool need_scan_check = true;
@@ -403,7 +367,7 @@ void PreSplitCheckTask::PreSplitCheck() {
       continue;
     }
 
-    auto split_checker = BuildSplitChecker(config, raw_engine);
+    auto split_checker = BuildSplitChecker(raw_engine);
     if (split_checker == nullptr) {
       continue;
     }

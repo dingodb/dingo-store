@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DINGODB_CONFIG_MANAGER_H
-#define DINGODB_CONFIG_MANAGER_H
+#ifndef DINGODB_CONFIG_MANAGER_H_
+#define DINGODB_CONFIG_MANAGER_H_
 
 #include <map>
 #include <mutex>
@@ -38,6 +38,7 @@ class ConfigManager {
   bool IsExist(pb::common::ClusterRole role);
   void Register(pb::common::ClusterRole role, std::shared_ptr<Config> config);
   std::shared_ptr<Config> GetConfig(pb::common::ClusterRole role);
+  std::shared_ptr<Config> GetConfig();
 
   ConfigManager(const ConfigManager &) = delete;
   const ConfigManager &operator=(const ConfigManager &) = delete;
