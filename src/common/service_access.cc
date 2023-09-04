@@ -15,6 +15,7 @@
 #include "common/service_access.h"
 
 #include <memory>
+#include <utility>
 
 #include "brpc/channel.h"
 #include "brpc/controller.h"
@@ -26,14 +27,42 @@
 
 namespace dingodb {
 
+ChannelPool::ChannelPool() { bthread_mutex_init(&mutex_, nullptr); }
+ChannelPool::~ChannelPool() { bthread_mutex_destroy(&mutex_); }
+
+ChannelPool& ChannelPool::GetInstance() {
+  static ChannelPool instance;
+  return instance;
+}
+
+std::shared_ptr<brpc::Channel> ChannelPool::GetChannel(const butil::EndPoint& endpoint) {
+  BAIDU_SCOPED_LOCK(mutex_);
+
+  auto it = channels_.find(endpoint);
+  if (it != channels_.end()) {
+    return it->second;
+  }
+
+  // Create new channel
+  auto channel = std::make_shared<brpc::Channel>();
+  brpc::ChannelOptions options;
+  options.connect_timeout_ms = 1000;
+  if (channel->Init(endpoint, nullptr) != 0) {
+    DINGO_LOG(ERROR) << "Init channel failed, endpoint: " << Helper::EndPointToStr(endpoint);
+    return nullptr;
+  }
+
+  channels_.insert(std::make_pair(endpoint, channel));
+  return channel;
+}
+
 pb::node::NodeInfo ServiceAccess::GetNodeInfo(const butil::EndPoint& endpoint) {
-  brpc::Channel channel;
-  if (channel.Init(endpoint, nullptr) != 0) {
-    DINGO_LOG(ERROR) << "Fail to init channel to " << butil::endpoint2str(endpoint).c_str();
+  auto channel = ChannelPool::GetInstance().GetChannel(endpoint);
+  if (channel == nullptr) {
     return {};
   }
 
-  pb::node::NodeService_Stub stub(&channel);
+  pb::node::NodeService_Stub stub(channel.get());
 
   brpc::Controller cntl;
   cntl.set_timeout_ms(1000L);
@@ -65,15 +94,15 @@ pb::node::NodeInfo ServiceAccess::GetNodeInfo(const std::string& host, int port)
 butil::Status ServiceAccess::InstallVectorIndexSnapshot(const pb::node::InstallVectorIndexSnapshotRequest& request,
                                                         const butil::EndPoint& endpoint,
                                                         pb::node::InstallVectorIndexSnapshotResponse& response) {
-  brpc::Channel channel;
-  if (channel.Init(endpoint, nullptr) != 0) {
-    DINGO_LOG(ERROR) << "Fail to init channel to " << butil::endpoint2str(endpoint).c_str();
-    return {};
+  auto channel = ChannelPool::GetInstance().GetChannel(endpoint);
+  if (channel == nullptr) {
+    return butil::Status(pb::error::EINTERNAL, "Get channel failed, endpoint: %s",
+                         Helper::EndPointToStr(endpoint).c_str());
   }
 
   brpc::Controller cntl;
   cntl.set_timeout_ms(600 * 1000);
-  pb::node::NodeService_Stub stub(&channel);
+  pb::node::NodeService_Stub stub(channel.get());
 
   stub.InstallVectorIndexSnapshot(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
@@ -96,15 +125,15 @@ butil::Status ServiceAccess::InstallVectorIndexSnapshot(const pb::node::InstallV
 butil::Status ServiceAccess::GetVectorIndexSnapshot(const pb::node::GetVectorIndexSnapshotRequest& request,
                                                     const butil::EndPoint& endpoint,
                                                     pb::node::GetVectorIndexSnapshotResponse& response) {
-  brpc::Channel channel;
-  if (channel.Init(endpoint, nullptr) != 0) {
-    DINGO_LOG(ERROR) << "Fail to init channel to " << butil::endpoint2str(endpoint).c_str();
-    return {};
+  auto channel = ChannelPool::GetInstance().GetChannel(endpoint);
+  if (channel == nullptr) {
+    return butil::Status(pb::error::EINTERNAL, "Get channel failed, endpoint: %s",
+                         Helper::EndPointToStr(endpoint).c_str());
   }
 
   brpc::Controller cntl;
   cntl.set_timeout_ms(3000);
-  pb::node::NodeService_Stub stub(&channel);
+  pb::node::NodeService_Stub stub(channel.get());
 
   stub.GetVectorIndexSnapshot(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
@@ -127,15 +156,15 @@ butil::Status ServiceAccess::GetVectorIndexSnapshot(const pb::node::GetVectorInd
 butil::Status ServiceAccess::CheckVectorIndex(const pb::node::CheckVectorIndexRequest& request,
                                               const butil::EndPoint& endpoint,
                                               pb::node::CheckVectorIndexResponse& response) {
-  brpc::Channel channel;
-  if (channel.Init(endpoint, nullptr) != 0) {
-    DINGO_LOG(ERROR) << "Fail to init channel to " << butil::endpoint2str(endpoint).c_str();
-    return {};
+  auto channel = ChannelPool::GetInstance().GetChannel(endpoint);
+  if (channel == nullptr) {
+    return butil::Status(pb::error::EINTERNAL, "Get channel failed, endpoint: %s",
+                         Helper::EndPointToStr(endpoint).c_str());
   }
 
   brpc::Controller cntl;
   cntl.set_timeout_ms(3000);
-  pb::node::NodeService_Stub stub(&channel);
+  pb::node::NodeService_Stub stub(channel.get());
 
   stub.CheckVectorIndex(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
@@ -152,15 +181,14 @@ butil::Status ServiceAccess::CheckVectorIndex(const pb::node::CheckVectorIndexRe
 
 std::shared_ptr<pb::fileservice::CleanFileReaderResponse> ServiceAccess::CleanFileReader(
     const pb::fileservice::CleanFileReaderRequest& request, const butil::EndPoint& endpoint) {
-  brpc::Channel channel;
-  if (channel.Init(endpoint, nullptr) != 0) {
-    DINGO_LOG(ERROR) << "Fail to init channel to " << butil::endpoint2str(endpoint).c_str();
-    return {};
+  auto channel = ChannelPool::GetInstance().GetChannel(endpoint);
+  if (channel == nullptr) {
+    return nullptr;
   }
 
   brpc::Controller cntl;
   cntl.set_timeout_ms(1000L);
-  pb::fileservice::FileService_Stub stub(&channel);
+  pb::fileservice::FileService_Stub stub(channel.get());
 
   auto response = std::make_shared<pb::fileservice::CleanFileReaderResponse>();
   stub.CleanFileReader(&cntl, &request, response.get(), nullptr);
@@ -172,27 +200,23 @@ std::shared_ptr<pb::fileservice::CleanFileReaderResponse> ServiceAccess::CleanFi
   return response;
 }
 
-bool RemoteFileCopier::Init() {
-  brpc::ChannelOptions options;
-  options.connect_timeout_ms = 1000;
-  if (channel_.Init(endpoint_, &options) != 0) {
-    DINGO_LOG(ERROR) << "Fail to init channel to " << butil::endpoint2str(endpoint_).c_str();
-    return false;
+std::shared_ptr<pb::fileservice::GetFileResponse> ServiceAccess::GetFile(const pb::fileservice::GetFileRequest& request,
+                                                                         const butil::EndPoint& endpoint,
+                                                                         butil::IOBuf* buf) {
+  auto channel = ChannelPool::GetInstance().GetChannel(endpoint);
+  if (channel == nullptr) {
+    return nullptr;
   }
-  return true;
-}
 
-std::shared_ptr<pb::fileservice::GetFileResponse> RemoteFileCopier::GetFile(
-    const pb::fileservice::GetFileRequest& request, butil::IOBuf* buf) {
   brpc::Controller cntl;
   cntl.set_timeout_ms(5000);
-  pb::fileservice::FileService_Stub stub(&channel_);
+  pb::fileservice::FileService_Stub stub(channel.get());
 
   auto response = std::make_shared<pb::fileservice::GetFileResponse>();
   stub.GetFile(&cntl, &request, response.get(), nullptr);
   if (cntl.Failed()) {
-    DINGO_LOG(ERROR) << fmt::format("Send GetFileRequest failed, endpoint {} error {}",
-                                    Helper::EndPointToStr(endpoint_), cntl.ErrorText());
+    DINGO_LOG(ERROR) << fmt::format("Send GetFileRequest failed, endpoint {} error {}", Helper::EndPointToStr(endpoint),
+                                    cntl.ErrorText());
     return nullptr;
   }
 

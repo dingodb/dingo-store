@@ -96,8 +96,15 @@ void RebuildVectorIndexTask::Run() {
 
 void SaveVectorIndexTask::Run() {
   if (vector_index_wrapper_->IsStop()) {
-    DINGO_LOG(INFO) << fmt::format("[vector_index.rebuild][index_id({})] vector index is stop.",
-                                   vector_index_wrapper_->Id());
+    DINGO_LOG(INFO) << fmt::format(
+        "[vector_index.rebuild][index_id({})] vector index is stop, do not save vector index.",
+        vector_index_wrapper_->Id());
+    return;
+  }
+  if (!vector_index_wrapper_->IsReady()) {
+    DINGO_LOG(INFO) << fmt::format(
+        "[vector_index.rebuild][index_id({})] vector index is not ready, do not save vector index.",
+        vector_index_wrapper_->Id());
     return;
   }
 

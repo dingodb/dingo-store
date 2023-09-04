@@ -394,11 +394,6 @@ butil::Status VectorIndexSnapshotManager::DownloadSnapshotFile(const std::string
     Helper::CreateDirectory(tmp_snapshot_path);
   }
 
-  auto remote_file_copier = RemoteFileCopier::New(endpoint);
-  if (!remote_file_copier->Init()) {
-    return butil::Status(pb::error::EINTERNAL,
-                         fmt::format("Init remote file copier failed, endpoint {}", Helper::EndPointToStr(endpoint)));
-  }
   for (const auto& filename : meta.filenames()) {
     uint64_t offset = 0;
     std::ofstream ofile;
@@ -417,7 +412,7 @@ butil::Status VectorIndexSnapshotManager::DownloadSnapshotFile(const std::string
       DINGO_LOG(DEBUG) << "GetFileRequest: " << request.ShortDebugString();
 
       butil::IOBuf buf;
-      auto response = remote_file_copier->GetFile(request, &buf);
+      auto response = ServiceAccess::GetFile(request, endpoint, &buf);
       if (response == nullptr) {
         return butil::Status(pb::error::EINTERNAL, "Get file failed");
       }
