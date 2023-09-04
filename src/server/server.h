@@ -125,8 +125,12 @@ class Server {
   uint64_t Id() const { return id_; }
   std::string Keyring() const { return keyring_; }
 
+  std::string ServerAddr() { return server_addr_; }
   butil::EndPoint ServerEndpoint() { return server_endpoint_; }
-  void SetServerEndpoint(const butil::EndPoint& endpoint) { server_endpoint_ = endpoint; }
+  void SetServerEndpoint(const butil::EndPoint& endpoint) {
+    server_endpoint_ = endpoint;
+    server_addr_ = Helper::EndPointToStr(endpoint);
+  }
 
   butil::EndPoint RaftEndpoint() { return raft_endpoint_; }
   void SetRaftEndpoint(const butil::EndPoint& endpoint) { raft_endpoint_ = endpoint; }
@@ -218,6 +222,8 @@ class Server {
   pb::common::ClusterRole role_;
   // Service ip and port.
   butil::EndPoint server_endpoint_;
+  // Service ip and port.
+  std::string server_addr_;
   // Raft ip and port.
   butil::EndPoint raft_endpoint_;
   std::vector<butil::EndPoint> endpoints_;
