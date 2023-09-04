@@ -57,4 +57,14 @@ std::shared_ptr<Config> ConfigManager::GetConfig(pb::common::ClusterRole role) {
   return it->second;
 }
 
+std::shared_ptr<Config> ConfigManager::GetConfig() {
+  auto it = configs_.begin();
+  if (it == configs_.end()) {
+    DINGO_LOG(WARNING) << fmt::format("config not exist!");
+    return nullptr;
+  }
+
+  return it->second;
+}
+
 }  // namespace dingodb

@@ -26,6 +26,7 @@
 #include "common/helper.h"
 #include "common/logging.h"
 #include "common/service_access.h"
+#include "config/config_helper.h"
 #include "config/config_manager.h"
 #include "event/store_state_machine_event.h"
 #include "fmt/core.h"
@@ -34,6 +35,7 @@
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
 #include "proto/error.pb.h"
+#include "proto/raft.pb.h"
 #include "server/server.h"
 #include "store/heartbeat.h"
 #include "vector/codec.h"
@@ -274,7 +276,7 @@ butil::Status SplitRegionTask::ValidateSplitRegion(std::shared_ptr<StoreRegionMe
   if (parent_region == nullptr) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Parent region not exist.");
   }
-  if (Constant::kPreCreateRegionSplitStrategy) {
+  if (ConfigHelper::GetSplitStrategy() == pb::raft::PRE_CREATE_REGION) {
     auto child_region = store_region_meta->GetRegion(child_region_id);
     if (child_region == nullptr) {
       return butil::Status(pb::error::EREGION_NOT_FOUND, "Child region not exist.");
