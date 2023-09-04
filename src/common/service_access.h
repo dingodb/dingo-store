@@ -28,6 +28,21 @@
 
 namespace dingodb {
 
+// brpc::Channel pool for rpc request.
+class ChannelPool {
+ public:
+  static ChannelPool& GetInstance();
+
+  std::shared_ptr<brpc::Channel> GetChannel(const butil::EndPoint& endpoint);
+
+ private:
+  ChannelPool();
+  ~ChannelPool();
+
+  bthread_mutex_t mutex_;
+  std::map<butil::EndPoint, std::shared_ptr<brpc::Channel>> channels_;
+};
+
 class ServiceAccess {
  public:
   // NodeService
@@ -48,27 +63,11 @@ class ServiceAccess {
   static std::shared_ptr<pb::fileservice::CleanFileReaderResponse> CleanFileReader(
       const pb::fileservice::CleanFileReaderRequest& request, const butil::EndPoint& endpoint);
 
+  static std::shared_ptr<pb::fileservice::GetFileResponse> GetFile(const pb::fileservice::GetFileRequest& request,
+                                                                   const butil::EndPoint& endpoint, butil::IOBuf* buf);
+
  private:
   ServiceAccess() = default;
-};
-
-class RemoteFileCopier {
- public:
-  RemoteFileCopier(const butil::EndPoint& endpoint) : endpoint_(endpoint) {}
-  ~RemoteFileCopier() = default;
-
-  static std::shared_ptr<RemoteFileCopier> New(const butil::EndPoint& endpoint) {
-    return std::make_shared<RemoteFileCopier>(endpoint);
-  }
-
-  bool Init();
-
-  std::shared_ptr<pb::fileservice::GetFileResponse> GetFile(const pb::fileservice::GetFileRequest& request,
-                                                            butil::IOBuf* buf);
-
- private:
-  butil::EndPoint endpoint_;
-  brpc::Channel channel_;
 };
 
 }  // namespace dingodb
