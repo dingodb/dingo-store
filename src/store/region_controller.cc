@@ -868,7 +868,7 @@ butil::Status HoldVectorIndexTask::ValidateHoldVectorIndex(uint64_t region_id) {
   return butil::Status();
 }
 
-butil::Status HoldVectorIndexTask::HoldVectorIndex(std::shared_ptr<Context> ctx, uint64_t region_id, bool is_hold) {
+butil::Status HoldVectorIndexTask::HoldVectorIndex(std::shared_ptr<Context> /*ctx*/, uint64_t region_id, bool is_hold) {
   auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
   auto region = store_region_meta->GetRegion(region_id);
   if (region == nullptr) {
