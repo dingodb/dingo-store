@@ -234,13 +234,11 @@ butil::Status VectorIndexSnapshotManager::InstallSnapshotToFollowers(vector_inde
   assert(snapshot != nullptr);
 
   uint64_t start_time = Helper::TimestampMs();
-  auto engine = Server::GetInstance()->GetEngine();
-  if (engine->GetID() != pb::common::ENG_RAFT_STORE) {
+  auto raft_raft_engine = Server::GetInstance()->GetRaftStoreEngine();
+  if (raft_raft_engine == nullptr) {
     return butil::Status(pb::error::EINTERNAL, "Not raft store engine.");
   }
-
-  auto raft_kv_engine = std::dynamic_pointer_cast<RaftStoreEngine>(engine);
-  auto raft_node = raft_kv_engine->GetNode(snapshot->VectorIndexId());
+  auto raft_node = raft_raft_engine->GetNode(snapshot->VectorIndexId());
   if (raft_node == nullptr) {
     return butil::Status(pb::error::ERAFT_NOT_FOUND, "Not found raft node.");
   }

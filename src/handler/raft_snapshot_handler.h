@@ -55,6 +55,8 @@ class RaftSnapshot {
 
   bool LoadSnapshot(braft::SnapshotReader* reader, store::RegionPtr region);
 
+  butil::Status HandleRaftSnapshotRegionMeta(braft::SnapshotReader* reader, store::RegionPtr region);
+
  private:
   std::shared_ptr<RawEngine> engine_;
   std::shared_ptr<Snapshot> engine_snapshot_;
