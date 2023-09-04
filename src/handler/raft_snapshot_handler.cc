@@ -253,7 +253,8 @@ static bool MergeCheckpointFile(std::string path, std::string merge_file_path, c
   return true;
 }
 
-butil::Status HandleRaftSnapshotRegionMeta(braft::SnapshotReader* reader, store::RegionPtr region) {
+// Check snapshot region meta, especially region version.
+butil::Status RaftSnapshot::HandleRaftSnapshotRegionMeta(braft::SnapshotReader* reader, store::RegionPtr region) {
   pb::store_internal::RaftSnapshotRegionMeta meta;
   auto status = ParseRaftSnapshotRegionMeta(reader->get_path(), meta);
   if (!status.ok()) {
@@ -263,6 +264,22 @@ butil::Status HandleRaftSnapshotRegionMeta(braft::SnapshotReader* reader, store:
 
   DINGO_LOG(INFO) << fmt::format("[raft.snapshot][region({})] current region version({}) snapshot region version({})",
                                  region->Id(), region->Epoch().version(), meta.epoch().version());
+
+  std::vector<pb::common::Range> physics_ranges = region->PhysicsRange();
+  if (meta.epoch().version() < region->Epoch().version()) {
+    return butil::Status(pb::error::EREGION_VERSION, "snapshot version abnormal, abandon load snapshot");
+
+  } else if (meta.epoch().version() > region->Epoch().version()) {
+    auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+    region->SetRawRange(meta.range());
+    store_region_meta->UpdateEpochVersion(region, meta.epoch().version());
+  }
+
+  // Delete old region data
+  status = engine_->NewWriter(Constant::kStoreDataCF)->KvBatchDeleteRange(region->PhysicsRange());
+  if (!status.ok()) {
+    return status;
+  }
 
   return butil::Status();
 }
@@ -278,16 +295,11 @@ bool RaftSnapshot::LoadSnapshot(braft::SnapshotReader* reader, store::RegionPtr 
 
   auto status = HandleRaftSnapshotRegionMeta(reader, region);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] handle region meta failed", region->Id());
+    DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] handle region meta failed, error: {}", region->Id(),
+                                    status.error_str());
     return false;
   }
 
-  // Delete old region data
-  const auto& region_range = region->RawRange();
-  status = engine_->NewWriter(Constant::kStoreDataCF)->KvBatchDeleteRange(region->PhysicsRange());
-  if (!status.ok()) {
-    return false;
-  }
   // Ingest sst to region
   if (files.empty()) {
     return true;

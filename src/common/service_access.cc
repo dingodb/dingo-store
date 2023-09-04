@@ -19,6 +19,7 @@
 #include "brpc/channel.h"
 #include "brpc/controller.h"
 #include "butil/status.h"
+#include "common/helper.h"
 #include "common/logging.h"
 #include "fmt/core.h"
 #include "proto/error.pb.h"
@@ -172,7 +173,9 @@ std::shared_ptr<pb::fileservice::CleanFileReaderResponse> ServiceAccess::CleanFi
 }
 
 bool RemoteFileCopier::Init() {
-  if (channel_.Init(endpoint_, nullptr) != 0) {
+  brpc::ChannelOptions options;
+  options.connect_timeout_ms = 1000;
+  if (channel_.Init(endpoint_, &options) != 0) {
     DINGO_LOG(ERROR) << "Fail to init channel to " << butil::endpoint2str(endpoint_).c_str();
     return false;
   }
@@ -182,13 +185,14 @@ bool RemoteFileCopier::Init() {
 std::shared_ptr<pb::fileservice::GetFileResponse> RemoteFileCopier::GetFile(
     const pb::fileservice::GetFileRequest& request, butil::IOBuf* buf) {
   brpc::Controller cntl;
-  cntl.set_timeout_ms(3000L);
+  cntl.set_timeout_ms(5000);
   pb::fileservice::FileService_Stub stub(&channel_);
 
   auto response = std::make_shared<pb::fileservice::GetFileResponse>();
   stub.GetFile(&cntl, &request, response.get(), nullptr);
   if (cntl.Failed()) {
-    DINGO_LOG(ERROR) << fmt::format("Send GetFileRequest failed, error {}", cntl.ErrorText());
+    DINGO_LOG(ERROR) << fmt::format("Send GetFileRequest failed, endpoint {} error {}",
+                                    Helper::EndPointToStr(endpoint_), cntl.ErrorText());
     return nullptr;
   }
 
