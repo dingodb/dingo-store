@@ -36,8 +36,10 @@ void VectorIndexLeaderStartHandler::Handle(store::RegionPtr region, uint64_t) {
     if (!snapshot_set->IsExistLastSnapshot()) {
       auto status = VectorIndexSnapshotManager::PullLastSnapshotFromPeers(snapshot_set);
       if (!status.ok()) {
-        DINGO_LOG(ERROR) << fmt::format("Pull vector index {} last snapshot failed, error: {}", region->Id(),
-                                        status.error_str());
+        if (status.error_code() != pb::error::EVECTOR_SNAPSHOT_EXIST) {
+          DINGO_LOG(ERROR) << fmt::format("Pull vector index {} last snapshot failed, error: {}", region->Id(),
+                                          status.error_str());
+        }
       }
     }
 

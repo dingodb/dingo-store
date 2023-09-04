@@ -367,7 +367,8 @@ void IndexServiceImpl::VectorAdd(google::protobuf::RpcController* controller,
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-      err->set_errmsg("Not leader, please redirect leader.");
+      err->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
+                                  Server::GetInstance()->ServerAddr(), region->Id(), status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
     DINGO_LOG(ERROR) << fmt::format("ValidateRequest failed request: {} {} {} {} response: {}", request->region_id(),
@@ -390,7 +391,8 @@ void IndexServiceImpl::VectorAdd(google::protobuf::RpcController* controller,
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-      err->set_errmsg("Not leader, please redirect leader.");
+      err->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
+                                  Server::GetInstance()->ServerAddr(), region->Id(), status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
     brpc::ClosureGuard done_guard(done);
@@ -456,7 +458,8 @@ void IndexServiceImpl::VectorDelete(google::protobuf::RpcController* controller,
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-      err->set_errmsg("Not leader, please redirect leader.");
+      err->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
+                                  Server::GetInstance()->ServerAddr(), region->Id(), status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
     DINGO_LOG(ERROR) << fmt::format("ValidateRequest failed request: {} response: {}", request->ShortDebugString(),
@@ -473,7 +476,8 @@ void IndexServiceImpl::VectorDelete(google::protobuf::RpcController* controller,
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-      err->set_errmsg("Not leader, please redirect leader.");
+      err->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
+                                  Server::GetInstance()->ServerAddr(), region->Id(), status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
     brpc::ClosureGuard done_guard(done);
@@ -522,7 +526,8 @@ void IndexServiceImpl::VectorGetBorderId(google::protobuf::RpcController* contro
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-      err->set_errmsg("Not leader, please redirect leader.");
+      err->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
+                                  Server::GetInstance()->ServerAddr(), region->Id(), status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
     DINGO_LOG(WARNING) << fmt::format("ValidateRequest failed request: {} response: {}", request->ShortDebugString(),
@@ -540,7 +545,8 @@ void IndexServiceImpl::VectorGetBorderId(google::protobuf::RpcController* contro
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-      err->set_errmsg("Not leader, please redirect leader.");
+      err->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
+                                  Server::GetInstance()->ServerAddr(), region->Id(), status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
     DINGO_LOG(ERROR) << fmt::format("VectorGetBorderId request: {} response: {}", request->ShortDebugString(),
@@ -603,7 +609,8 @@ void IndexServiceImpl::VectorScanQuery(google::protobuf::RpcController* controll
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-      err->set_errmsg("Not leader, please redirect leader.");
+      err->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
+                                  Server::GetInstance()->ServerAddr(), region->Id(), status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
     DINGO_LOG(WARNING) << fmt::format("ValidateRequest failed request: {} response: {}", request->ShortDebugString(),
@@ -634,7 +641,8 @@ void IndexServiceImpl::VectorScanQuery(google::protobuf::RpcController* controll
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-      err->set_errmsg("Not leader, please redirect leader.");
+      err->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
+                                  Server::GetInstance()->ServerAddr(), region->Id(), status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
     DINGO_LOG(ERROR) << fmt::format("VectorScanQuery request: {} response: {}", request->ShortDebugString(),
@@ -693,7 +701,8 @@ void IndexServiceImpl::VectorGetRegionMetrics(google::protobuf::RpcController* c
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-      err->set_errmsg("Not leader, please redirect leader.");
+      err->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
+                                  Server::GetInstance()->ServerAddr(), region->Id(), status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
     DINGO_LOG(WARNING) << fmt::format("ValidateRequest failed request: {} response: {}", request->ShortDebugString(),
@@ -708,7 +717,8 @@ void IndexServiceImpl::VectorGetRegionMetrics(google::protobuf::RpcController* c
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-      err->set_errmsg("Not leader, please redirect leader.");
+      err->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
+                                  Server::GetInstance()->ServerAddr(), region->Id(), status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
     DINGO_LOG(ERROR) << fmt::format("VectorGetRegionMetrics request: {} response: {}", request->ShortDebugString(),
@@ -743,7 +753,8 @@ void IndexServiceImpl::VectorCalcDistance(google::protobuf::RpcController* contr
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-      err->set_errmsg("Not leader, please redirect leader.");
+      err->set_errmsg(fmt::format("Not leader({}), please redirect leader({}).", Server::GetInstance()->ServerAddr(),
+                                  status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
     DINGO_LOG(ERROR) << fmt::format("VectorScanQuery request: {} response: {}", request->ShortDebugString(),
@@ -850,7 +861,8 @@ void IndexServiceImpl::VectorSearchDebug(google::protobuf::RpcController* contro
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-      err->set_errmsg("Not leader, please redirect leader.");
+      err->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
+                                  Server::GetInstance()->ServerAddr(), region->Id(), status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
     DINGO_LOG(WARNING) << fmt::format("ValidateRequest failed request: {} response: {}", request->ShortDebugString(),
@@ -885,7 +897,8 @@ void IndexServiceImpl::VectorSearchDebug(google::protobuf::RpcController* contro
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-      err->set_errmsg("Not leader, please redirect leader.");
+      err->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
+                                  Server::GetInstance()->ServerAddr(), region->Id(), status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
     DINGO_LOG(ERROR) << fmt::format("VectorSearch request: {} response: {}", request->ShortDebugString(),

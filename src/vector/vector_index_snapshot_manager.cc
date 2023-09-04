@@ -358,8 +358,10 @@ butil::Status VectorIndexSnapshotManager::PullLastSnapshotFromPeers(vector_index
 
   auto status = LaunchPullSnapshot(endpoint, snapshot_set);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << fmt::format("Pull vector index snapshot {} from {} failed, error: {}", vector_index_id,
-                                    Helper::EndPointToStr(endpoint), status.error_str());
+    if (status.error_code() != pb::error::EVECTOR_SNAPSHOT_EXIST) {
+      DINGO_LOG(ERROR) << fmt::format("Pull vector index snapshot {} from {} failed, error: {}", vector_index_id,
+                                      Helper::EndPointToStr(endpoint), status.error_str());
+    }
     return status;
   }
 
