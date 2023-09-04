@@ -23,7 +23,6 @@
 #include "common/logging.h"
 #include "coordinator/coordinator_interaction.h"
 #include "gflags/gflags_declare.h"
-#include "glog/logging.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
 #include "proto/error.pb.h"
@@ -529,8 +528,9 @@ void SendGetRegionMap(std::shared_ptr<dingodb::CoordinatorInteraction> coordinat
   uint64_t normal_region_count = 0;
   uint64_t online_region_count = 0;
   for (const auto& region : response.regionmap().regions()) {
-    std::cout << "[REGION] id=[" << region.id() << "] name=[" << region.definition().name() << "] state=["
-              << dingodb::pb::common::RegionState_Name(region.state()) << ","
+    std::cout << "[REGION] id=[" << region.id() << "] name=[" << region.definition().name() << "] epoch=["
+              << region.definition().epoch().conf_version() << "," << region.definition().epoch().version()
+              << "] state=[" << dingodb::pb::common::RegionState_Name(region.state()) << ","
               << dingodb::pb::common::RegionHeartbeatState_Name(region.heartbeat_state()) << ","
               << dingodb::pb::common::ReplicaStatus_Name(region.replica_status()) << ","
               << dingodb::pb::common::RegionRaftStatus_Name(region.raft_status()) << "] leader=["

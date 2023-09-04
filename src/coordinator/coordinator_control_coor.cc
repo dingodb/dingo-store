@@ -472,6 +472,10 @@ void CoordinatorControl::GetRegionMap(pb::common::RegionMap& region_map) {
       // tmp_region->CopyFrom(elemnt.second);
       tmp_region->set_id(elemnt.second.id());
       tmp_region->mutable_definition()->set_name(elemnt.second.definition().name());
+      tmp_region->mutable_definition()->mutable_epoch()->set_conf_version(
+          elemnt.second.definition().epoch().conf_version());
+      tmp_region->mutable_definition()->mutable_epoch()->set_version(elemnt.second.definition().epoch().version());
+      tmp_region->mutable_definition()->mutable_range()->set_start_key(elemnt.second.definition().range().start_key());
       tmp_region->mutable_definition()->mutable_range()->set_start_key(elemnt.second.definition().range().start_key());
       tmp_region->mutable_definition()->mutable_range()->set_end_key(elemnt.second.definition().range().end_key());
       tmp_region->set_state(elemnt.second.state());
@@ -2787,6 +2791,16 @@ void CoordinatorControl::UpdateRegionMapAndStoreOperation(const pb::common::Stor
       DINGO_LOG(INFO) << "region peers size change region_id = " << region_metrics.id()
                       << " old peers size = " << region_to_update.definition().peers_size()
                       << " new peers size = " << region_metrics.region_definition().peers_size();
+      need_update_region = true;
+      need_update_region_definition = true;
+    }
+
+    if (region_to_update.definition().epoch().conf_version() !=
+            region_metrics.region_definition().epoch().conf_version() ||
+        region_to_update.definition().epoch().version() != region_metrics.region_definition().epoch().version()) {
+      DINGO_LOG(INFO) << "region epoch change region_id = " << region_metrics.id()
+                      << " old epoch = " << region_to_update.definition().epoch().ShortDebugString()
+                      << " new epoch = " << region_metrics.region_definition().epoch().ShortDebugString();
       need_update_region = true;
       need_update_region_definition = true;
     }
