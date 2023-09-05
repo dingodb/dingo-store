@@ -13,8 +13,8 @@ FLAGS "$@" || exit 1
 eval set -- "${FLAGS_ARGV}"
 
 echo "role: ${FLAGS_role}"
-
-process_no=$(pgrep -f "dingodb_server.*${FLAGS_role}" -U `id -u` | xargs)
+BASE_DIR=$(dirname $(cd $(dirname $0); pwd))
+process_no=$(pgrep -f "${BASE_DIR}.*dingodb_server.*${FLAGS_role}" -U `id -u` | xargs)
 
 if [ "${process_no}" != "" ]; then
   echo "pid to kill: ${process_no}"
