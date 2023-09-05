@@ -42,8 +42,8 @@ const int kBatchSize = 1000;
 
 DECLARE_string(key);
 DECLARE_bool(without_vector);
-DECLARE_bool(with_scalar);
-DECLARE_bool(with_table);
+DECLARE_bool(without_scalar);
+DECLARE_bool(without_table);
 DECLARE_bool(print_vector_search_delay);
 DECLARE_string(scalar_filter_key);
 DECLARE_string(scalar_filter_value);
@@ -255,13 +255,12 @@ uint64_t SendGetTableByName(ServerInteractionPtr interaction, const std::string&
 
 // ============================== meta service ===========================
 
-void SendVectorSearch(ServerInteractionPtr interaction, uint64_t region_id, uint32_t dimension, uint64_t vector_id,
-                      uint32_t topn) {
+void SendVectorSearch(ServerInteractionPtr interaction, uint64_t region_id, uint32_t dimension, uint32_t topn) {
   dingodb::pb::index::VectorSearchRequest request;
   dingodb::pb::index::VectorSearchResponse response;
 
   request.set_region_id(region_id);
-  auto* vector = request.mutable_vector()->mutable_vector();
+  auto* vector = request.add_vector_with_ids();
 
   if (region_id == 0) {
     DINGO_LOG(ERROR) << "region_id is 0";
@@ -278,26 +277,22 @@ void SendVectorSearch(ServerInteractionPtr interaction, uint64_t region_id, uint
     return;
   }
 
-  if (vector_id > 0) {
-    request.mutable_vector()->set_id(vector_id);
-  } else {
-    for (int i = 0; i < dimension; i++) {
-      vector->add_float_values(1.0 * i);
-    }
-
-    request.mutable_parameter()->set_top_n(topn);
+  for (int i = 0; i < dimension; i++) {
+    vector->mutable_vector()->add_float_values(1.0 * i);
   }
+
+  request.mutable_parameter()->set_top_n(topn);
 
   if (FLAGS_without_vector) {
     request.mutable_parameter()->set_without_vector_data(true);
   }
 
-  if (FLAGS_with_scalar) {
-    request.mutable_parameter()->set_with_scalar_data(true);
+  if (FLAGS_without_scalar) {
+    request.mutable_parameter()->set_without_scalar_data(true);
   }
 
-  if (FLAGS_with_table) {
-    request.mutable_parameter()->set_with_table_data(true);
+  if (FLAGS_without_table) {
+    request.mutable_parameter()->set_without_table_data(true);
   }
 
   if (!FLAGS_key.empty()) {
@@ -340,15 +335,13 @@ void SendVectorSearch(ServerInteractionPtr interaction, uint64_t region_id, uint
     request.mutable_parameter()->set_vector_filter(::dingodb::pb::common::VectorFilter::SCALAR_FILTER);
     request.mutable_parameter()->set_vector_filter_type(::dingodb::pb::common::VectorFilterType::QUERY_PRE);
 
-    dingodb::pb::common::VectorWithId* vector_with_id = request.mutable_vector();
-
     for (int k = 0; k < 2; k++) {
       ::dingodb::pb::common::ScalarValue scalar_value;
       scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::STRING);
       ::dingodb::pb::common::ScalarField* field = scalar_value.add_fields();
       field->set_string_data("value" + std::to_string(k));
 
-      vector_with_id->mutable_scalar_data()->mutable_scalar_data()->insert({"key" + std::to_string(k), scalar_value});
+      vector->mutable_scalar_data()->mutable_scalar_data()->insert({"key" + std::to_string(k), scalar_value});
     }
   }
 
@@ -356,15 +349,13 @@ void SendVectorSearch(ServerInteractionPtr interaction, uint64_t region_id, uint
     request.mutable_parameter()->set_vector_filter(::dingodb::pb::common::VectorFilter::SCALAR_FILTER);
     request.mutable_parameter()->set_vector_filter_type(::dingodb::pb::common::VectorFilterType::QUERY_POST);
 
-    dingodb::pb::common::VectorWithId* vector_with_id = request.mutable_vector();
-
     for (int k = 0; k < 2; k++) {
       ::dingodb::pb::common::ScalarValue scalar_value;
       scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::STRING);
       ::dingodb::pb::common::ScalarField* field = scalar_value.add_fields();
       field->set_string_data("value" + std::to_string(k));
 
-      vector_with_id->mutable_scalar_data()->mutable_scalar_data()->insert({"key" + std::to_string(k), scalar_value});
+      vector->mutable_scalar_data()->mutable_scalar_data()->insert({"key" + std::to_string(k), scalar_value});
     }
   }
 
@@ -500,12 +491,12 @@ void SendVectorSearchDebug(ServerInteractionPtr interaction, uint64_t region_id,
     request.mutable_parameter()->set_without_vector_data(true);
   }
 
-  if (FLAGS_with_scalar) {
-    request.mutable_parameter()->set_with_scalar_data(true);
+  if (FLAGS_without_scalar) {
+    request.mutable_parameter()->set_without_scalar_data(true);
   }
 
-  if (FLAGS_with_table) {
-    request.mutable_parameter()->set_with_table_data(true);
+  if (FLAGS_without_table) {
+    request.mutable_parameter()->set_without_table_data(true);
   }
 
   if (!FLAGS_key.empty()) {
@@ -541,7 +532,7 @@ void SendVectorSearchDebug(ServerInteractionPtr interaction, uint64_t region_id,
       std::cout << id << " ";
     }
     std::cout << "]";
-    std::cout << std::endl;
+    std::cout << '\n';
   }
 
   if (FLAGS_with_scalar_pre_filter) {
@@ -596,7 +587,7 @@ void SendVectorSearchDebug(ServerInteractionPtr interaction, uint64_t region_id,
                     << batch_result.vector_with_distances_size();
   }
 
-#if 0
+#if 0  // NOLINT
   // match compare
   if (FLAGS_with_vector_ids) {
     std::cout << "vector_ids : " << request.parameter().vector_ids().size() << " [ ";
@@ -667,8 +658,8 @@ void SendVectorSearchDebug(ServerInteractionPtr interaction, uint64_t region_id,
 #endif
 }
 
-void SendVectorBatchSearch(ServerInteractionPtr interaction, uint64_t region_id, uint32_t dimension, uint64_t vector_id,
-                           uint32_t topn, uint32_t batch_count) {
+void SendVectorBatchSearch(ServerInteractionPtr interaction, uint64_t region_id, uint32_t dimension, uint32_t topn,
+                           uint32_t batch_count) {
   dingodb::pb::index::VectorSearchRequest request;
   dingodb::pb::index::VectorSearchResponse response;
 
@@ -694,34 +685,30 @@ void SendVectorBatchSearch(ServerInteractionPtr interaction, uint64_t region_id,
     return;
   }
 
-  if (vector_id > 0) {
-    request.mutable_vector()->set_id(vector_id);
-  } else {
-    std::random_device seed;
-    std::ranlux48 engine(seed());
-    std::uniform_int_distribution<> distrib(0, 100);
+  std::random_device seed;
+  std::ranlux48 engine(seed());
+  std::uniform_int_distribution<> distrib(0, 100);
 
-    for (int count = 0; count < batch_count; count++) {
-      auto* vector = request.add_vector_with_ids()->mutable_vector();
-      for (int i = 0; i < dimension; i++) {
-        auto random = static_cast<double>(distrib(engine)) / 10.123;
-        vector->add_float_values(random);
-      }
+  for (int count = 0; count < batch_count; count++) {
+    auto* vector = request.add_vector_with_ids()->mutable_vector();
+    for (int i = 0; i < dimension; i++) {
+      auto random = static_cast<double>(distrib(engine)) / 10.123;
+      vector->add_float_values(random);
     }
-
-    request.mutable_parameter()->set_top_n(topn);
   }
+
+  request.mutable_parameter()->set_top_n(topn);
 
   if (FLAGS_without_vector) {
     request.mutable_parameter()->set_without_vector_data(true);
   }
 
-  if (FLAGS_with_scalar) {
-    request.mutable_parameter()->set_with_scalar_data(true);
+  if (FLAGS_without_scalar) {
+    request.mutable_parameter()->set_without_scalar_data(true);
   }
 
-  if (FLAGS_with_table) {
-    request.mutable_parameter()->set_with_table_data(true);
+  if (FLAGS_without_table) {
+    request.mutable_parameter()->set_without_table_data(true);
   }
 
   if (!FLAGS_key.empty()) {
@@ -879,12 +866,12 @@ void SendVectorBatchQuery(ServerInteractionPtr interaction, uint64_t region_id, 
     request.set_without_vector_data(true);
   }
 
-  if (FLAGS_with_scalar) {
-    request.set_with_scalar_data(true);
+  if (FLAGS_without_scalar) {
+    request.set_without_scalar_data(true);
   }
 
-  if (FLAGS_with_table) {
-    request.set_with_table_data(true);
+  if (FLAGS_without_table) {
+    request.set_without_table_data(true);
   }
 
   if (!FLAGS_key.empty()) {
@@ -918,12 +905,12 @@ void SendVectorScanQuery(ServerInteractionPtr interaction, uint64_t region_id, u
     request.set_without_vector_data(true);
   }
 
-  if (FLAGS_with_scalar) {
-    request.set_with_scalar_data(true);
+  if (FLAGS_without_scalar) {
+    request.set_without_scalar_data(true);
   }
 
-  if (FLAGS_with_table) {
-    request.set_with_table_data(true);
+  if (FLAGS_without_table) {
+    request.set_without_table_data(true);
   }
 
   if (!FLAGS_key.empty()) {
@@ -1096,8 +1083,8 @@ void SendVectorAddRetry(std::shared_ptr<Context> ctx) {  // NOLINT
       return;
     }
 
-    int ret = SendBatchVectorAdd(ctx->store_interaction, region_id, ctx->dimension, vector_ids, FLAGS_with_scalar,
-                                 FLAGS_with_table);
+    int ret = SendBatchVectorAdd(ctx->store_interaction, region_id, ctx->dimension, vector_ids, !FLAGS_without_scalar,
+                                 !FLAGS_without_table);
     if (ret == dingodb::pb::error::EKEY_OUT_OF_RANGE || ret == dingodb::pb::error::EREGION_REDIRECT) {
       bthread_usleep(1000 * 500);  // 500ms
       index_range = SendGetIndexRange(ctx->coordinator_interaction, ctx->table_id);
@@ -1119,8 +1106,8 @@ void SendVectorAdd(std::shared_ptr<Context> ctx) {  // NOLINT
       vector_ids.push_back(j);
     }
 
-    int ret = SendBatchVectorAdd(ctx->store_interaction, ctx->region_id, ctx->dimension, vector_ids, FLAGS_with_scalar,
-                                 FLAGS_with_table);
+    int ret = SendBatchVectorAdd(ctx->store_interaction, ctx->region_id, ctx->dimension, vector_ids,
+                                 !FLAGS_without_scalar, !FLAGS_without_table);
 
     vector_ids.clear();
   }
@@ -1274,7 +1261,7 @@ void SendVectorAddBatch(ServerInteractionPtr interaction, uint64_t region_id, ui
           vector_with_id->mutable_vector()->add_float_values(random_seeds[(i - start_id) * dimension + j]);
         }
 
-        if (FLAGS_with_scalar) {
+        if (!FLAGS_without_scalar) {
           for (int k = 0; k < 3; k++) {
             ::dingodb::pb::common::ScalarValue scalar_value;
             int index = k + (i < 30 ? 0 : 1);
@@ -1415,7 +1402,7 @@ void SendVectorAddBatchDebug(ServerInteractionPtr interaction, uint64_t region_i
           vector_with_id->mutable_vector()->add_float_values(random_seeds[(i - start_id) * dimension + j]);
         }
 
-        if (FLAGS_with_scalar) {
+        if (!FLAGS_without_scalar) {
           auto index = (i - start_id);
           auto left = index % 200;
 

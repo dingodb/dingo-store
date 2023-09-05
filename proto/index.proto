@@ -41,10 +41,10 @@ message VectorBatchQueryRequest {
   uint64 region_id = 1;
   repeated uint64 vector_ids = 2;
   bool without_vector_data = 3;       // Default false, if true, response without vector data.
-  bool with_scalar_data = 4;          // Default false, if true, response with scalar data.
-  repeated string selected_keys = 5;  // If with_scalar_data is true, selected_keys is used to select scalar data, if
-                                      // this parameter is null, all scalar data will be returned.
-  bool with_table_data = 6;           // Default false, if true, response with table data.
+  bool without_scalar_data = 4;       // Default false, if true, response without scalar data.
+  repeated string selected_keys = 5;  // If without_scalar_data is false, selected_keys is used to select scalar data,
+                                      // if this parameter is null, all scalar data will be returned.
+  bool without_table_data = 6;        // Default false, if true, response without table data.
 }
 
 message VectorBatchQueryResponse {
@@ -64,10 +64,10 @@ message VectorScanQueryRequest {
                               // if vector_id_end == 0, scan to the end of the region
 
   bool without_vector_data = 11;       // Default false, if true, response without vector data.
-  bool with_scalar_data = 12;          // Default false, if true, response with scalar data.
-  repeated string selected_keys = 13;  // If with_scalar_data is true, selected_keys is used to select scalar data, if
-                                       // this parameter is null, all scalar data will be returned.
-  bool with_table_data = 14;           // Default false, if true, response with table data.
+  bool without_scalar_data = 12;       // Default false, if true, response without scalar data.
+  repeated string selected_keys = 13;  // If without_scalar_data is false, selected_keys is used to select scalar data,
+                                       // if this parameter is null, all scalar data will be returned.
+  bool without_table_data = 14;        // Default false, if true, response without table data.
 
   // Whether to use scalar filtering.
   bool use_scalar_filter = 20;
@@ -88,13 +88,10 @@ message VectorGetRegionMetricsResponse {
   dingodb.pb.common.VectorIndexMetrics metrics = 2;
 }
 
-// vector.id > 0: exact query
-// vector.id == 0: similarity search with vector.vector
 message VectorSearchRequest {
   uint64 region_id = 1;
-  dingodb.pb.common.VectorWithId vector = 2;
-  dingodb.pb.common.VectorSearchParameter parameter = 3;
-  repeated dingodb.pb.common.VectorWithId vector_with_ids = 4;  // this field is used for batch search
+  dingodb.pb.common.VectorSearchParameter parameter = 2;
+  repeated dingodb.pb.common.VectorWithId vector_with_ids = 3;  // this field is used for batch search
 }
 
 message VectorWithDistanceResult {
@@ -103,8 +100,7 @@ message VectorWithDistanceResult {
 
 message VectorSearchResponse {
   dingodb.pb.error.Error error = 1;
-  repeated dingodb.pb.common.VectorWithDistance results = 2;
-  repeated VectorWithDistanceResult batch_results = 3;  // this field is used for batch search
+  repeated VectorWithDistanceResult batch_results = 2;  // this field is used for batch search
 }
 
 message VectorDeleteRequest {

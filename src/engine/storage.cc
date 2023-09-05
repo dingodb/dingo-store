@@ -382,7 +382,7 @@ butil::Status Storage::VectorCalcDistance([[maybe_unused]] std::shared_ptr<Conte
         if (dimension != current_dimension) {
           std::string s = fmt::format("{} index : {}  dimension : {} unequal current_dimension : {}", name, i,
                                       dimension, current_dimension);
-          DINGO_LOG(ERROR) << s;
+          LOG(ERROR) << s;
           return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
         }
         i++;

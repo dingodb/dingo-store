@@ -113,8 +113,8 @@ void IndexServiceImpl::VectorBatchQuery(google::protobuf::RpcController* control
   ctx->vector_ids = Helper::PbRepeatedToVector(request->vector_ids());
   ctx->selected_scalar_keys = Helper::PbRepeatedToVector(request->selected_keys());
   ctx->with_vector_data = !request->without_vector_data();
-  ctx->with_scalar_data = request->with_scalar_data();
-  ctx->with_table_data = request->with_table_data();
+  ctx->with_scalar_data = !request->without_scalar_data();
+  ctx->with_table_data = !request->without_table_data();
 
   std::vector<pb::common::VectorWithId> vector_with_ids;
   status = storage_->VectorBatchQuery(ctx, vector_with_ids);
@@ -140,13 +140,6 @@ butil::Status IndexServiceImpl::ValidateVectorSearchRequest(const dingodb::pb::i
                                                             store::RegionPtr region) {
   if (request->region_id() == 0) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id is error");
-  }
-
-  if (request->vector().id() == 0) {
-    if (request->vector().vector().float_values_size() == 0 && request->vector().vector().binary_values_size() == 0 &&
-        request->vector_with_ids().empty()) {
-      return butil::Status(pb::error::EVECTOR_EMPTY, "Vector is empty");
-    }
   }
 
   if (request->parameter().top_n() > FLAGS_vector_max_bactch_count) {
@@ -184,9 +177,7 @@ butil::Status IndexServiceImpl::ValidateVectorSearchRequest(const dingodb::pb::i
 
   std::vector<uint64_t> vector_ids;
   if (request->vector_with_ids_size() <= 0) {
-    if (request->vector().id() > 0) {
-      vector_ids.push_back(request->vector().id());
-    }
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param vector_with_ids is empty");
   } else {
     for (const auto& vector : request->vector_with_ids()) {
       if (vector.id() > 0) {
@@ -242,7 +233,10 @@ void IndexServiceImpl::VectorSearch(google::protobuf::RpcController* controller,
   ctx->parameter = request->parameter();
 
   if (request->vector_with_ids_size() <= 0) {
-    ctx->vector_with_ids.push_back(request->vector());
+    auto* err = response->mutable_error();
+    err->set_errcode(pb::error::EILLEGAL_PARAMTETERS);
+    err->set_errmsg("Param vector_with_ids is empty");
+    return;
   } else {
     for (const auto& vector : request->vector_with_ids()) {
       ctx->vector_with_ids.push_back(vector);
@@ -624,8 +618,8 @@ void IndexServiceImpl::VectorScanQuery(google::protobuf::RpcController* controll
   ctx->region_range = region->RawRange();
   ctx->selected_scalar_keys = Helper::PbRepeatedToVector(request->selected_keys());
   ctx->with_vector_data = !request->without_vector_data();
-  ctx->with_scalar_data = request->with_scalar_data();
-  ctx->with_table_data = request->with_table_data();
+  ctx->with_scalar_data = !request->without_scalar_data();
+  ctx->with_table_data = !request->without_table_data();
   ctx->start_id = request->vector_id_start();
   ctx->end_id = request->vector_id_end();
   ctx->is_reverse = request->is_reverse_scan();

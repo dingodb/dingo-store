@@ -80,11 +80,11 @@ class Storage {
                                        VectorIndexWrapperPtr vector_index_wrapper,
                                        pb::common::VectorIndexMetrics& region_metrics);
 
-  butil::Status VectorCalcDistance(std::shared_ptr<Context> ctx, uint64_t region_id,
-                                   const ::dingodb::pb::index::VectorCalcDistanceRequest& request,
-                                   std::vector<std::vector<float>>& distances,                            // NOLINT
-                                   std::vector<::dingodb::pb::common::Vector>& result_op_left_vectors,    // NOLINT
-                                   std::vector<::dingodb::pb::common::Vector>& result_op_right_vectors);  // NOLINT
+  static butil::Status VectorCalcDistance(
+      std::shared_ptr<Context> ctx, uint64_t region_id, const ::dingodb::pb::index::VectorCalcDistanceRequest& request,
+      std::vector<std::vector<float>>& distances,                            // NOLINT
+      std::vector<::dingodb::pb::common::Vector>& result_op_left_vectors,    // NOLINT
+      std::vector<::dingodb::pb::common::Vector>& result_op_right_vectors);  // NOLINT
 
   // This function is for testing only
   butil::Status VectorBatchSearchDebug(std::shared_ptr<Engine::VectorReader::Context> ctx,

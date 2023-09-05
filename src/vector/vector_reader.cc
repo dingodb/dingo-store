@@ -301,7 +301,7 @@ butil::Status VectorReader::VectorBatchSearch(std::shared_ptr<Engine::VectorRead
     return status;
   }
 
-  if (ctx->parameter.with_scalar_data()) {
+  if (!ctx->parameter.without_scalar_data()) {
     // Get scalar data by parameter
     std::vector<std::string> selected_scalar_keys = Helper::PbRepeatedToVector(ctx->parameter.selected_keys());
     auto status = QueryVectorScalarData(ctx->partition_id, selected_scalar_keys, results);
@@ -310,7 +310,7 @@ butil::Status VectorReader::VectorBatchSearch(std::shared_ptr<Engine::VectorRead
     }
   }
 
-  if (ctx->parameter.with_table_data()) {
+  if (!ctx->parameter.without_table_data()) {
     // Get table data by parameter
     auto status = QueryVectorTableData(ctx->partition_id, results);
     if (!status.ok()) {
@@ -440,7 +440,7 @@ butil::Status VectorReader::VectorScanQuery(std::shared_ptr<Engine::VectorReader
   return butil::Status::OK();
 }
 
-butil::Status VectorReader::VectorGetRegionMetrics(uint64_t region_id, const pb::common::Range& region_range,
+butil::Status VectorReader::VectorGetRegionMetrics(uint64_t /*region_id*/, const pb::common::Range& region_range,
                                                    VectorIndexWrapperPtr vector_index,
                                                    pb::common::VectorIndexMetrics& region_metrics) {
   uint64_t total_vector_count = 0;
@@ -735,7 +735,7 @@ butil::Status VectorReader::VectorBatchSearchDebug(std::shared_ptr<Engine::Vecto
     return status;
   }
 
-  if (ctx->parameter.with_scalar_data()) {
+  if (!ctx->parameter.without_scalar_data()) {
     // Get scalar data by parameter
     std::vector<std::string> selected_scalar_keys = Helper::PbRepeatedToVector(ctx->parameter.selected_keys());
     auto status = QueryVectorScalarData(ctx->partition_id, selected_scalar_keys, results);
@@ -744,7 +744,7 @@ butil::Status VectorReader::VectorBatchSearchDebug(std::shared_ptr<Engine::Vecto
     }
   }
 
-  if (ctx->parameter.with_table_data()) {
+  if (!ctx->parameter.without_table_data()) {
     // Get table data by parameter
     auto status = QueryVectorTableData(ctx->partition_id, results);
     if (!status.ok()) {
@@ -876,7 +876,7 @@ butil::Status VectorReader::SearchVectorDebug(
   return butil::Status();
 }
 
-butil::Status VectorReader::DoVectorSearchForVectorIdPreFilterDebug(
+butil::Status VectorReader::DoVectorSearchForVectorIdPreFilterDebug(  // NOLINT
     VectorIndexWrapperPtr vector_index, const std::vector<pb::common::VectorWithId>& vector_with_ids,
     const pb::common::VectorSearchParameter& parameter, const pb::common::Range& region_range,
     std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results, int64_t& deserialization_id_time_us,
