@@ -133,7 +133,11 @@ public class IntegerListSchema implements DingoSchema<List<Integer>> {
                 buf.ensureRemainder(5 + data.size() * 4);
                 buf.write(NOTNULL);
                 buf.writeInt(data.size());
+                // 1
                 for (Integer value: data) {
+                    if(value == null) {
+                        throw new IllegalArgumentException("Array type sub-elements do not support null values");
+                    }
                     internalEncodeValue(buf, value);
                 }
             }
@@ -141,6 +145,9 @@ public class IntegerListSchema implements DingoSchema<List<Integer>> {
             buf.ensureRemainder(4 + data.size() * 4);
             buf.writeInt(data.size());
             for (Integer value: data) {
+                if(value == null) {
+                    throw new IllegalArgumentException("Array type sub-elements do not support null values");
+                }
                 internalEncodeValue(buf, value);
             }
         }
