@@ -4,7 +4,6 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -19,9 +18,9 @@ public class VectorScanQuery {
     private Long endId;
 
     private Boolean withoutVectorData;
-    private Boolean withScalarData;
+    private Boolean withoutScalarData;
     private List<String> selectedKeys;
-    private Boolean withTableData;
+    private Boolean withoutTableData;
 
     // Whether to use scalar filtering.
     private Boolean useScalarFilter;

@@ -113,9 +113,9 @@ public class IndexServiceClient {
         Common.VectorSearchParameter.Builder builder = Common.VectorSearchParameter.newBuilder()
                 .setTopN(parameter.getTopN())
                 .setWithoutVectorData(parameter.isWithoutVectorData())
-                .setWithScalarData(parameter.isWithScalarData())
-                .setWithTableData(true)
+                .setWithoutScalarData(parameter.isWithoutScalarData())
                 .addAllSelectedKeys(parameter.getSelectedKeys())
+                .setWithoutTableData(parameter.isWithoutTableData())
                 .setVectorCoprocessor(Optional.mapOrGet(
                         parameter.getCoprocessor(),
                         __ -> mapping(parameter.getCoprocessor(), regionId.parentId()),
@@ -173,13 +173,13 @@ public class IndexServiceClient {
             DingoCommonId regionId,
             List<Long> vectorIds,
             Boolean withOutVectorData,
-            Boolean withScalarData,
+            Boolean withOutScalarData,
             List<String> selectedKeys) {
         Index.VectorBatchQueryRequest request = Index.VectorBatchQueryRequest.newBuilder()
                 .setRegionId(regionId.entityId())
                 .addAllVectorIds(vectorIds)
                 .setWithoutVectorData(withOutVectorData)
-                .setWithScalarData(withScalarData)
+                .setWithoutScalarData(withOutScalarData)
                 .addAllSelectedKeys(selectedKeys)
                 .build();
 
@@ -208,9 +208,9 @@ public class IndexServiceClient {
                 .setIsReverseScan(query.getIsReverseScan())
                 .setMaxScanCount(query.getMaxScanCount())
                 .setWithoutVectorData(query.getWithoutVectorData())
-                .setWithScalarData(query.getWithScalarData())
+                .setWithoutScalarData(query.getWithoutScalarData())
                 .addAllSelectedKeys(query.getSelectedKeys())
-                .setWithTableData(query.getWithTableData())
+                .setWithoutTableData(query.getWithoutTableData())
                 .setUseScalarFilter(Parameters.cleanNull(query.getUseScalarFilter(), false))
                 .setScalarForFilter(Optional.mapOrGet(
                         query.getScalarForFilter(),
