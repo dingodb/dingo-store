@@ -28,8 +28,9 @@ public class VectorSearchParameter {
 
     private Integer topN;
     private boolean withoutVectorData;
-    private boolean withScalarData;
+    private boolean withoutScalarData;
     private List<String> selectedKeys;
+    private boolean withoutTableData;
     private Search search;
 
     private VectorFilter vectorFilter;
