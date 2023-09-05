@@ -150,6 +150,9 @@ public class StringListSchema implements DingoSchema<List<String>> {
                 buf.write(NOTNULL);
                 buf.writeInt(data.size());
                 for (String value: data) {
+                    if(value == null) {
+                        throw new IllegalArgumentException("Array type sub-elements do not support null values");
+                    }
                     byte[] bytes = value.getBytes(StandardCharsets.UTF_8);
                     buf.ensureRemainder(4 + bytes.length);
                     buf.writeInt(bytes.length);
@@ -160,6 +163,9 @@ public class StringListSchema implements DingoSchema<List<String>> {
             buf.ensureRemainder( 4 );
             buf.writeInt(data.size());
             for (String value: data) {
+                if(value == null) {
+                    throw new IllegalArgumentException("Array type sub-elements do not support null values");
+                }
                 byte[] bytes = value.getBytes(StandardCharsets.UTF_8);
                 buf.ensureRemainder(4 + bytes.length);
                 buf.writeInt(bytes.length);

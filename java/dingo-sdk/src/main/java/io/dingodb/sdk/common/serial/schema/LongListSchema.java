@@ -133,6 +133,9 @@ public class LongListSchema implements DingoSchema<List<Long>> {
                 buf.write(NOTNULL);
                 buf.writeInt(data.size());
                 for (Long value: data) {
+                    if(value == null) {
+                        throw new IllegalArgumentException("Array type sub-elements do not support null values");
+                    }
                     internalEncodeValue(buf, value);
                 }
             }
@@ -140,6 +143,9 @@ public class LongListSchema implements DingoSchema<List<Long>> {
             buf.ensureRemainder(8 + data.size() * 8);
             buf.writeInt(data.size());
             for (Long value: data) {
+                if(value == null) {
+                    throw new IllegalArgumentException("Array type sub-elements do not support null values");
+                }
                 internalEncodeValue(buf, value);
             }
         }

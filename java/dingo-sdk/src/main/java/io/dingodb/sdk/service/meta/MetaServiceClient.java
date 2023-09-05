@@ -29,6 +29,7 @@ import io.dingodb.sdk.common.index.Index;
 import io.dingodb.sdk.common.index.IndexMetrics;
 import io.dingodb.sdk.common.partition.Partition;
 import io.dingodb.sdk.common.partition.PartitionDetail;
+import io.dingodb.sdk.common.table.Column;
 import io.dingodb.sdk.common.table.RangeDistribution;
 import io.dingodb.sdk.common.table.Table;
 import io.dingodb.sdk.common.table.metric.TableMetrics;
@@ -36,6 +37,7 @@ import io.dingodb.sdk.common.utils.ByteArrayUtils.ComparableByteArray;
 import io.dingodb.sdk.common.utils.EntityConversion;
 import io.dingodb.sdk.common.utils.Optional;
 import io.dingodb.sdk.common.utils.Parameters;
+import io.dingodb.sdk.common.utils.TypeSchemaMapper;
 import io.dingodb.sdk.service.connector.MetaServiceConnector;
 import io.dingodb.sdk.service.connector.ServiceConnector;
 import lombok.Getter;
@@ -262,6 +264,15 @@ public class MetaServiceClient {
 
     public boolean createTables(@NonNull Table table, List<Table> indexes) {
         String tableName = cleanTableName(table.getName());
+        List<Column> columns = table.getColumns();
+        for (int i = 0; i < columns.size(); i++) {
+            Column column = columns.get(i);
+            String typeName = column.getType();
+            String elementType = column.getElementType();
+            if (!TypeSchemaMapper.checkType(typeName, elementType)) {
+                throw new DingoClientException("There is no schema mapping for "+ typeName + " and " + elementType);
+            }
+        }
         if (Optional.mapOrNull(getTableId(tableName), this::getTableDefinition) != null) {
             throw new DingoClientException("Table " + tableName + " already exists");
         }

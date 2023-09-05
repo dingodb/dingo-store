@@ -120,6 +120,9 @@ public class BooleanListSchema implements DingoSchema<List<Boolean>> {
                 buf.write(NOTNULL);
                 buf.writeInt(data.size());
                 for (Boolean value: data) {
+                    if(value == null) {
+                        throw new IllegalArgumentException("Array type sub-elements do not support null values");
+                    }
                     internalEncodeData(buf, value);
                 }
             }
@@ -127,6 +130,9 @@ public class BooleanListSchema implements DingoSchema<List<Boolean>> {
             buf.ensureRemainder(4 + data.size());
             buf.writeInt(data.size());
             for (Boolean value: data) {
+                if(value == null) {
+                    throw new IllegalArgumentException("Array type sub-elements do not support null values");
+                }
                 internalEncodeData(buf, value);
             }
         }

@@ -19,6 +19,7 @@ package io.dingodb.sdk.common.codec;
 import io.dingodb.sdk.common.serial.schema.*;
 import io.dingodb.sdk.common.table.Column;
 import io.dingodb.sdk.common.utils.Parameters;
+import io.dingodb.sdk.common.utils.TypeSchemaMapper;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -58,7 +59,7 @@ public final class CodecUtils {
         }
         typeName = typeName.toUpperCase();
         String elementType = Parameters.cleanNull(column.getElementType(), "");
-        schema = CodecUtils.createSchemaForTypeName(typeName, elementType.toUpperCase());
+        schema = TypeSchemaMapper.getSchemaForTypeName(typeName, elementType.toUpperCase());
         schema.setAllowNull(column.isNullable());
         schema.setIsKey(column.isPrimary());
         schema.setIndex(index);
@@ -76,100 +77,11 @@ public final class CodecUtils {
     }
 
     public static DingoSchema createSchemaForTypeName(String typeName) {
-        return createSchemaForTypeName(typeName, null);
+        return TypeSchemaMapper.getSchemaForTypeName(typeName, null);
     }
 
     public static DingoSchema createSchemaForTypeName(String typeName, String elementType) {
-        DingoSchema schema;
-        switch (typeName) {
-            case "INT":
-            case "INTEGER":
-            case "TINYINT":
-                schema = new IntegerSchema();
-                break;
-            case "LONG":
-            case "BIGINT":
-                schema =  new LongSchema();
-                break;
-            case "BOOL":
-            case "BOOLEAN":
-                schema = new BooleanSchema();
-                break;
-            case "FLOAT":
-                schema = new FloatSchema();
-                break;
-            case "DOUBLE":
-            case "REAL":
-                schema = new DoubleSchema();
-                break;
-            case "DECIMAL":
-            case "STRING":
-            case "CHAR":
-            case "VARCHAR":
-                schema = new StringSchema();
-                break;
-            case "DATE":
-            case "TIME":
-            case "TIMESTAMP":
-                schema = new LongSchema();
-                break;
-            case "VECTOR":
-                schema = new VectorSchema();
-                break;
-            case "ARRAY":
-            case "LIST":
-            case "MULTISET":
-                switch (elementType) {
-                    case "INT":
-                    case "INTEGER":
-                    case "TINYINT":
-                        schema = new IntegerListSchema();
-                        break;
-                    case "LONG":
-                    case "BIGINT":
-                        schema =  new LongListSchema();
-                        break;
-                    case "BOOL":
-                    case "BOOLEAN":
-                        schema = new BooleanListSchema();
-                        break;
-                    case "FLOAT":
-                        schema = new FloatListSchema();
-                        break;
-                    case "DOUBLE":
-                    case "REAL":
-                        schema = new DoubleListSchema();
-                        break;
-                    case "DECIMAL":
-                    case "STRING":
-                    case "CHAR":
-                    case "VARCHAR":
-                        schema = new StringListSchema();
-                        break;
-                    case "DATE":
-                    case "TIME":
-                    case "TIMESTAMP":
-                        schema = new LongListSchema();
-                        break;
-                    default:
-                    throw new IllegalStateException("Unexpected value: " + typeName);
-                }
-                break;
-            case "BINARY":
-            case "BYTES":
-            case "VARBINARY":
-            case "BLOB":
-            case "MAP":
-            case "TUPLE":
-            case "DICT":
-            case "OBJECT":
-            case "ANY":
-                schema =  new BytesSchema();
-                break;
-            default:
-                throw new IllegalStateException("Unexpected value: " + typeName);
-        }
-        return schema;
+        return TypeSchemaMapper.getSchemaForTypeName(typeName, elementType);
     }
 
 }

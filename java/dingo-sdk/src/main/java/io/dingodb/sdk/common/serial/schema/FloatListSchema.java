@@ -120,6 +120,9 @@ public class FloatListSchema implements DingoSchema<List<Float>> {
                 buf.write(NOTNULL);
                 buf.writeInt(data.size());
                 for (Float value: data) {
+                    if(value == null) {
+                        throw new IllegalArgumentException("Array type sub-elements do not support null values");
+                    }
                     internalEncodeValue(buf, value);
                 }
             }
@@ -127,6 +130,9 @@ public class FloatListSchema implements DingoSchema<List<Float>> {
             buf.ensureRemainder(4 + data.size() * 4);
             buf.writeInt(data.size());
             for (Float value: data) {
+                if(value == null) {
+                    throw new IllegalArgumentException("Array type sub-elements do not support null values");
+                }
                 internalEncodeValue(buf, value);
             }
         }
