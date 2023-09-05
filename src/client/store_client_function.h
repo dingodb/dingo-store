@@ -75,13 +75,12 @@ struct Context {
 dingodb::pb::common::Region SendQueryRegion(ServerInteractionPtr interaction, uint64_t region_id);
 
 // vector
-void SendVectorSearch(ServerInteractionPtr interaction, uint64_t region_id, uint32_t dimension, uint64_t vector_id,
-                      uint32_t topn);
+void SendVectorSearch(ServerInteractionPtr interaction, uint64_t region_id, uint32_t dimension, uint32_t topn);
 void SendVectorSearchDebug(ServerInteractionPtr interaction, uint64_t region_id, uint32_t dimension,
                            uint64_t start_vector_id, uint32_t topn, uint32_t batch_count, const std::string& key,
                            const std::string& value);
-void SendVectorBatchSearch(ServerInteractionPtr interaction, uint64_t region_id, uint32_t dimension, uint64_t vector_id,
-                           uint32_t topn, uint32_t batch_count);
+void SendVectorBatchSearch(ServerInteractionPtr interaction, uint64_t region_id, uint32_t dimension, uint32_t topn,
+                           uint32_t batch_count);
 void SendVectorBatchQuery(ServerInteractionPtr interaction, uint64_t region_id, std::vector<uint64_t> vector_ids);
 void SendVectorAddRetry(std::shared_ptr<Context> ctx);
 void SendVectorAdd(std::shared_ptr<Context> ctx);

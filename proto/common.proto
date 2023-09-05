@@ -36,7 +36,9 @@ enum Engine {
   ENG_BTREE = 5;
 };
 
-enum RawEngine { RAW_ENG_ROCKSDB = 0; };
+enum RawEngine {
+  RAW_ENG_ROCKSDB = 0;
+};
 
 message Location {
   string host = 1;
@@ -574,10 +576,10 @@ message VectorSearchParameter {
   uint32 top_n = 1;
 
   bool without_vector_data = 2;       // Default false, if true, response without vector data.
-  bool with_scalar_data = 3;          // Default false, if true, response with scalar data.
-  repeated string selected_keys = 4;  // If with_scalar_data is true, selected_keys is used to select scalar data, if
-                                      // this parameter is null, all scalar data will be returned.
-  bool with_table_data = 5;           // Default false, if true, response with table data
+  bool without_scalar_data = 3;       // Default false, if true, response without scalar data.
+  repeated string selected_keys = 4;  // If without_scalar_data is false, selected_keys is used to select scalar data,
+                                      // if this parameter is null, all scalar data will be returned.
+  bool without_table_data = 5;        // Default false, if true, response without table data
 
   // The search method to use.
   oneof search {
