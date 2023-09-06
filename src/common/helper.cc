@@ -163,6 +163,19 @@ std::vector<pb::common::Location> Helper::ExtractLocations(const std::vector<pb:
   return locations;
 }
 
+std::string Helper::PeersToString(const std::vector<pb::common::Peer>& peers) {
+  std::string result;
+
+  for (int i = 0; i < peers.size(); ++i) {
+    result += LocationToString(peers[i].raft_location());
+    if (i + 1 < peers.size()) {
+      result += ",";
+    }
+  }
+
+  return result;
+}
+
 // format: 127.0.0.1:8201:0
 std::string Helper::LocationToString(const pb::common::Location& location) {
   return fmt::format("{}:{}:{}", location.host(), location.port(), location.index());
@@ -766,8 +779,12 @@ bool Helper::GetSystemMemoryInfo(std::map<std::string, uint64_t>& output) {
 
     output["system_total_memory"] = mem_info.totalram * mem_info.mem_unit;
     output["system_free_memory"] = mem_info.freeram * mem_info.mem_unit;
+    output["system_shared_memory"] = mem_info.sharedram * mem_info.mem_unit;
+    output["system_buffer_memory"] = mem_info.bufferram * mem_info.mem_unit;
     output["system_total_swap"] = mem_info.totalswap * mem_info.mem_unit;
     output["system_free_swap"] = mem_info.freeswap * mem_info.mem_unit;
+    output["system_total_high"] = mem_info.totalhigh * mem_info.mem_unit;
+    output["system_free_high"] = mem_info.freehigh * mem_info.mem_unit;
   } else {
     DINGO_LOG(WARNING) << "Failed to retrieve memory information using sysinfo.";
     return false;
