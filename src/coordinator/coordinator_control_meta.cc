@@ -419,16 +419,12 @@ butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta
 
   // validate part information
   auto const& table_partition = table_definition.table_partition();
-  if (!table_partition.has_range_partition() && !table_partition.has_hash_partition() &&
-      (table_partition.partitions_size() == 0)) {
+  if (table_partition.partitions_size() == 0) {
     DINGO_LOG(ERROR) << "no partition provided" << table_definition.ShortDebugString();
     return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "no partition provided");
   }
 
   DINGO_LOG(INFO) << "CreateTable table_definition:" << table_definition.DebugString();
-
-  auto const& range_partition = table_partition.range_partition();
-  auto const& hash_partition = table_partition.hash_partition();
 
   // store new_part_id for next usage
   std::vector<uint64_t> new_part_ids;
@@ -448,44 +444,6 @@ butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta
       }
       new_part_ids.push_back(part.id().entity_id());
       new_part_ranges.push_back(part.range());
-    }
-  } else if (range_partition.ranges_size() > 0) {
-    for (const auto& part : range_partition.ranges()) {
-      new_part_ranges.push_back(part);
-    }
-
-    if (range_partition.ids_size() != range_partition.ranges_size()) {
-      DINGO_LOG(WARNING) << "range_partition.ids_size() != range_partition.ranges_size()";
-      // TODO: return error after sdk support part_id
-      // return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "no part_id provided");
-
-      // this is for temporary usage
-      for (const auto& range_part : range_partition.ranges()) {
-        new_part_ids.push_back(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_TABLE, meta_increment));
-      }
-    } else {
-      for (const auto& range_part : range_partition.ids()) {
-        new_part_ids.push_back(range_part.entity_id());
-      }
-    }
-  } else if (hash_partition.ranges_size() > 0) {
-    for (const auto& part : range_partition.ranges()) {
-      new_part_ranges.push_back(part);
-    }
-
-    if (hash_partition.ids_size() != hash_partition.ranges_size()) {
-      DINGO_LOG(WARNING) << "hash_partition.ids_size() != hash_partition.ranges_size()";
-      // TODO: return error after sdk support part_id
-      // return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "no part_id provided");
-
-      // this is for temporary usage
-      for (auto hash_part : hash_partition.ranges()) {
-        new_part_ids.push_back(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_TABLE, meta_increment));
-      }
-    } else {
-      for (const auto& hash_part : hash_partition.ids()) {
-        new_part_ids.push_back(hash_part.entity_id());
-      }
     }
   } else {
     DINGO_LOG(ERROR) << "no range provided " << table_definition.ShortDebugString();
@@ -1087,15 +1045,8 @@ butil::Status CoordinatorControl::CreateIndex(uint64_t schema_id, const pb::meta
   }
 
   auto const& index_partition = table_definition.table_partition();
-  if (index_partition.has_hash_partition() && index_partition.has_range_partition()) {
-    DINGO_LOG(ERROR) << "hash_partiton is not supported, table_definition=" << table_definition.DebugString();
-    return butil::Status(pb::error::Errno::EINDEX_DEFINITION_ILLEGAL, "hash_partiton is not supported");
-  }
 
   DINGO_LOG(INFO) << "CreateIndex index_definition=" << table_definition.DebugString();
-
-  auto const& range_partition = index_partition.range_partition();
-  auto const& hash_partition = index_partition.hash_partition();
 
   // store new_part_id for next usage
   std::vector<uint64_t> new_part_ids;
@@ -1115,44 +1066,6 @@ butil::Status CoordinatorControl::CreateIndex(uint64_t schema_id, const pb::meta
       }
       new_part_ids.push_back(part.id().entity_id());
       new_part_ranges.push_back(part.range());
-    }
-  } else if (range_partition.ranges_size() > 0) {
-    for (const auto& part : range_partition.ranges()) {
-      new_part_ranges.push_back(part);
-    }
-
-    if (range_partition.ids_size() != range_partition.ranges_size()) {
-      DINGO_LOG(WARNING) << "range_partition.ids_size() != range_partition.ranges_size(), table_definition="
-                         << table_definition.DebugString();
-      // return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "no part_id provided");
-
-      // this is for temporary usage
-      for (auto range_part : range_partition.ranges()) {
-        new_part_ids.push_back(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_TABLE, meta_increment));
-      }
-    } else {
-      for (const auto& range_part : range_partition.ids()) {
-        new_part_ids.push_back(range_part.entity_id());
-      }
-    }
-  } else if (hash_partition.ranges_size() > 0) {
-    for (const auto& part : range_partition.ranges()) {
-      new_part_ranges.push_back(part);
-    }
-
-    if (hash_partition.ids_size() != hash_partition.ranges_size()) {
-      DINGO_LOG(WARNING) << "hash_partition.ids_size() != hash_partition.ranges_size(), table_definition="
-                         << table_definition.DebugString();
-      // return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "no part_id provided");
-
-      // this is for temporary usage
-      for (auto hash_part : hash_partition.ranges()) {
-        new_part_ids.push_back(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_TABLE, meta_increment));
-      }
-    } else {
-      for (const auto& hash_part : hash_partition.ids()) {
-        new_part_ids.push_back(hash_part.entity_id());
-      }
     }
   } else {
     DINGO_LOG(ERROR) << "no range provided , table_definition=" << table_definition.DebugString();

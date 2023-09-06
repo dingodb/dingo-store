@@ -166,13 +166,61 @@ std::vector<uint64_t> SendGetTablesBySchema(ServerInteractionPtr interaction) {
   return table_ids;
 }
 
-dingodb::pb::meta::CreateTableRequest BuildCreateTableRequest(const std::string& table_name, int partition_num) {
-  dingodb::pb::meta::CreateTableRequest request;
+int GetCreateTableId(ServerInteractionPtr interaction, uint64_t& table_id) {
+  dingodb::pb::meta::CreateTableIdRequest request;
+  dingodb::pb::meta::CreateTableIdResponse response;
 
   auto* schema_id = request.mutable_schema_id();
   schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
   schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
   schema_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
+
+  auto status = interaction->SendRequest("MetaService", "CreateTableId", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG_INFO << response.DebugString();
+
+  if (response.has_table_id()) {
+    table_id = response.table_id().entity_id();
+    return 0;
+  } else {
+    return -1;
+  }
+}
+
+dingodb::pb::meta::CreateTableRequest BuildCreateTableRequest(ServerInteractionPtr interaction,
+                                                              const std::string& table_name, int partition_num) {
+  dingodb::pb::meta::CreateTableRequest request;
+
+  uint64_t new_table_id = 0;
+  int ret = GetCreateTableId(interaction, new_table_id);
+  if (ret != 0) {
+    DINGO_LOG(WARNING) << "GetCreateTableId failed";
+    return request;
+  }
+
+  uint32_t part_count = partition_num;
+
+  std::vector<uint64_t> part_ids;
+  for (int i = 0; i < part_count; i++) {
+    uint64_t new_part_id = 0;
+    int ret = GetCreateTableId(interaction, new_part_id);
+    if (ret != 0) {
+      DINGO_LOG(WARNING) << "GetCreateTableId failed";
+      return request;
+    }
+    part_ids.push_back(new_part_id);
+  }
+
+  auto* schema_id = request.mutable_schema_id();
+  schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
+  schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+  schema_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
+
+  // setup table_id
+  auto* table_id = request.mutable_table_id();
+  table_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
+  table_id->set_parent_entity_id(schema_id->entity_id());
+  table_id->set_entity_id(new_table_id);
 
   // string name = 1;
   auto* table_definition = request.mutable_table_definition();
@@ -202,21 +250,25 @@ dingodb::pb::meta::CreateTableRequest BuildCreateTableRequest(const std::string&
   auto* partition_rule = table_definition->mutable_table_partition();
   auto* part_column = partition_rule->add_columns();
   part_column->assign("test_part_column");
-  auto* range_partition = partition_rule->mutable_range_partition();
 
   for (int i = 0; i < partition_num; i++) {
-    auto* part_range = range_partition->add_ranges();
-    auto* part_range_start = part_range->mutable_start_key();
-    part_range_start->assign(std::to_string(i * 100));
-    auto* part_range_end = part_range->mutable_end_key();
-    part_range_end->assign(std::to_string((i + 1) * 100));
+    auto* part = partition_rule->add_partitions();
+    part->mutable_id()->set_entity_id(part_ids[i]);
+    part->mutable_id()->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_PART);
+    part->mutable_id()->set_parent_entity_id(new_table_id);
+    part->mutable_range()->set_start_key(client::Helper::EncodeRegionRange(part_ids[i]));
+    part->mutable_range()->set_end_key(client::Helper::EncodeRegionRange(part_ids[i] + 1));
   }
 
   return request;
 }
 
 uint64_t SendCreateTable(ServerInteractionPtr interaction, const std::string& table_name, int partition_num) {
-  auto request = BuildCreateTableRequest(table_name, partition_num);
+  auto request = BuildCreateTableRequest(interaction, table_name, partition_num);
+  if (request.table_id().entity_id() == 0) {
+    DINGO_LOG(WARNING) << "BuildCreateTableRequest failed";
+    return 0;
+  }
 
   dingodb::pb::meta::CreateTableResponse response;
   interaction->SendRequest("MetaService", "CreateTable", request, response);
@@ -2162,6 +2214,10 @@ void* CreateAndPutAndGetAndDestroyTableRoutine(void* arg) {
 
   DINGO_LOG(INFO) << "======= Create table " << ctx->table_name;
   uint64_t table_id = SendCreateTable(ctx->coordinator_interaction, ctx->table_name, ctx->partition_num);
+  if (table_id == 0) {
+    DINGO_LOG(ERROR) << "create table failed";
+    return nullptr;
+  }
 
   DINGO_LOG(INFO) << "======= Put/Get table " << ctx->table_name;
   int batch_count = ctx->req_num / kBatchSize + 1;
