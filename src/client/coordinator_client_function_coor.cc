@@ -474,7 +474,8 @@ void SendGetStoreMap(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
       index_count_available++;
     }
     std::cout << "store_id=" << store.id() << " type=" << dingodb::pb::common::StoreType_Name(store.store_type())
-              << " state=" << dingodb::pb::common::StoreState_Name(store.state())
+              << " addr={" << store.server_location().ShortDebugString()
+              << "} state=" << dingodb::pb::common::StoreState_Name(store.state())
               << " in_state=" << dingodb::pb::common::StoreInState_Name(store.in_state())
               << " create_timestamp=" << store.create_timestamp()
               << " last_seen_timestamp=" << store.last_seen_timestamp() << "\n";
@@ -528,15 +529,15 @@ void SendGetRegionMap(std::shared_ptr<dingodb::CoordinatorInteraction> coordinat
   uint64_t normal_region_count = 0;
   uint64_t online_region_count = 0;
   for (const auto& region : response.regionmap().regions()) {
-    std::cout << "[REGION] id=[" << region.id() << "] name=[" << region.definition().name() << "] epoch=["
-              << region.definition().epoch().conf_version() << "," << region.definition().epoch().version()
-              << "] state=[" << dingodb::pb::common::RegionState_Name(region.state()) << ","
+    std::cout << "id=" << region.id() << " name=" << region.definition().name()
+              << " epoch=" << region.definition().epoch().conf_version() << "," << region.definition().epoch().version()
+              << " state=" << dingodb::pb::common::RegionState_Name(region.state()) << ","
               << dingodb::pb::common::RegionHeartbeatState_Name(region.heartbeat_state()) << ","
               << dingodb::pb::common::ReplicaStatus_Name(region.replica_status()) << ","
-              << dingodb::pb::common::RegionRaftStatus_Name(region.raft_status()) << "] leader=["
-              << region.leader_store_id() << "] create_ts=[" << region.create_timestamp() << "] update_ts=["
-              << region.last_update_timestamp() << "] start=[0x"
-              << dingodb::Helper::StringToHex(region.definition().range().start_key()) << "] end=[0x"
+              << dingodb::pb::common::RegionRaftStatus_Name(region.raft_status())
+              << " leader=" << region.leader_store_id() << " create=" << region.create_timestamp()
+              << " update=" << region.last_update_timestamp() << " range=[0x"
+              << dingodb::Helper::StringToHex(region.definition().range().start_key()) << ",0x"
               << dingodb::Helper::StringToHex(region.definition().range().end_key()) << "]\n";
 
     if (region.state() == dingodb::pb::common::RegionState::REGION_NORMAL) {
@@ -548,7 +549,8 @@ void SendGetRegionMap(std::shared_ptr<dingodb::CoordinatorInteraction> coordinat
     }
   }
 
-  std::cout << "region_count=[" << response.regionmap().regions_size() << "], normal_region_count=["
+  std::cout << '\n'
+            << "region_count=[" << response.regionmap().regions_size() << "], normal_region_count=["
             << normal_region_count << "], online_region_count=[" << online_region_count << "]\n\n";
 }
 
