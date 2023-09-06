@@ -1,4 +1,4 @@
-name: CMake_rocky8.8
+name: CMake_rocky
 
 on:
   push:
