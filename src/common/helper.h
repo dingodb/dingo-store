@@ -242,6 +242,10 @@ class Helper {
   static std::string ToUpper(const std::string& str);
   // Lower string
   static std::string ToLower(const std::string& str);
+  // String trim
+  static std::string Ltrim(const std::string& s, const std::string& delete_str);
+  static std::string Rtrim(const std::string& s, const std::string& delete_str);
+  static std::string Trim(const std::string& s, const std::string& delete_str);
 
   // Clean string first slash, e.g. /name.txt -> name.txt
   static std::string CleanFirstSlash(const std::string& str);

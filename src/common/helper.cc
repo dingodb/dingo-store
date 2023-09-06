@@ -27,6 +27,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -783,10 +784,56 @@ bool Helper::GetSystemMemoryInfo(std::map<std::string, uint64_t>& output) {
     output["system_buffer_memory"] = mem_info.bufferram * mem_info.mem_unit;
     output["system_total_swap"] = mem_info.totalswap * mem_info.mem_unit;
     output["system_free_swap"] = mem_info.freeswap * mem_info.mem_unit;
-    output["system_total_high"] = mem_info.totalhigh * mem_info.mem_unit;
-    output["system_free_high"] = mem_info.freehigh * mem_info.mem_unit;
   } else {
-    DINGO_LOG(WARNING) << "Failed to retrieve memory information using sysinfo.";
+    DINGO_LOG(ERROR) << "Failed to retrieve memory information using sysinfo.";
+    return false;
+  }
+
+  // get cache/available memory
+  try {
+    output["system_available_memory"] = UINT64_MAX;
+    output["system_cached_memory"] = UINT64_MAX;
+    std::ifstream file("/proc/meminfo");
+    if (!file.is_open()) {
+      DINGO_LOG(ERROR) << "Open file /proc/meminfo failed.";
+      return false;
+    }
+
+    auto parse_value = [](std::string& str) -> uint64_t {
+      std::vector<std::string> strs;
+      butil::SplitString(str, ' ', &strs);
+      for (auto s : strs) {
+        if (!s.empty() && std::isdigit(s[0])) {
+          return std::strtol(s.c_str(), nullptr, 10);
+        }
+      }
+      return 0;
+    };
+
+    int get_count = 2;
+    while (!file.eof()) {
+      std::string line;
+      std::getline(file, line);
+
+      if (line.find("MemAvailable") != line.npos) {
+        --get_count;
+        output["system_available_memory"] = parse_value(line) * 1024;
+      } else if (line.find("Cached") != line.npos) {
+        --get_count;
+        output["system_cached_memory"] = parse_value(line) * 1024;
+      }
+      if (get_count <= 0) {
+        break;
+      }
+    }
+    file.close();
+    if (get_count > 0) {
+      return false;
+    }
+  } catch (const std::exception& e) {
+    std::string s = fmt::format("Read /proc/meminfo failed, error: {}", e.what());
+    std::cerr << s << '\n';
+    DINGO_LOG(ERROR) << s;
     return false;
   }
 
@@ -1125,6 +1172,20 @@ std::string Helper::ToLower(const std::string& str) {
   result.resize(str.size());
   std::transform(str.begin(), str.end(), result.begin(), ::tolower);
   return result;
+}
+
+std::string Helper::Ltrim(const std::string& s, const std::string& delete_str) {
+  size_t start = s.find_first_not_of(delete_str);
+  return (start == std::string::npos) ? "" : s.substr(start);
+}
+
+std::string Helper::Rtrim(const std::string& s, const std::string& delete_str) {
+  size_t end = s.find_last_not_of(delete_str);
+  return (end == std::string::npos) ? "" : s.substr(0, end + 1);
+}
+
+std::string Helper::Trim(const std::string& s, const std::string& delete_str) {
+  return Rtrim(Ltrim(s, delete_str), delete_str);
 }
 
 std::string Helper::CleanFirstSlash(const std::string& str) { return (str.front() == '/') ? str.substr(1) : str; }

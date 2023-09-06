@@ -578,8 +578,9 @@ butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta
                      schema_id, new_table_id, 0, new_part_id, index_parameter, new_region_id, meta_increment);
     if (!ret.ok()) {
       DINGO_LOG(ERROR) << "CreateRegion failed in CreateTable table_name=" << table_definition.name()
-                       << ", table_definition:" << table_definition.ShortDebugString();
-      break;
+                       << ", table_definition:" << table_definition.ShortDebugString() << " ret: " << ret.error_str();
+      table_name_map_safe_temp_.Erase(std::to_string(schema_id) + table_definition.name());
+      return ret;
     }
 
     DINGO_LOG(INFO) << "CreateTable create region success, region_id=" << new_region_id;

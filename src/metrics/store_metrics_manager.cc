@@ -102,8 +102,15 @@ bool StoreMetrics::CollectMetrics() {
 
   metrics_->set_system_total_memory(output["system_total_memory"]);
   metrics_->set_system_free_memory(output["system_free_memory"]);
+  metrics_->set_system_shared_memory(output["system_shared_memory"]);
+  metrics_->set_system_buffer_memory(output["system_buffer_memory"]);
+  metrics_->set_system_cached_memory(output["system_cached_memory"]);
+  metrics_->set_system_available_memory(output["system_available_memory"]);
   metrics_->set_system_total_swap(output["system_total_swap"]);
   metrics_->set_system_free_swap(output["system_free_swap"]);
+
+  DINGO_LOG(INFO) << fmt::format("system_cached_memory: {} system_available_memory: {}", output["system_cached_memory"],
+                                 output["system_available_memory"]);
 
   // system cpu usage
   output.clear();
