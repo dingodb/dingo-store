@@ -525,8 +525,14 @@ butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta
 
   // if new_table_id is not given, create a new table_id
   if (new_table_id <= 0) {
-    new_table_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_TABLE, meta_increment);
-    DINGO_LOG(INFO) << "CreateTable new_table_id=" << new_table_id;
+    DINGO_LOG(ERROR) << "CreateTable new_table_id is illegal:" << new_table_id;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "new_table_id is illegal");
+  } else {
+    int ret = table_map_.Exists(new_table_id);
+    if (ret) {
+      DINGO_LOG(ERROR) << "CreateTable new_table_id is already used:" << new_table_id;
+      return butil::Status(pb::error::Errno::ETABLE_EXISTS, "new_table_id is already used by other table");
+    }
   }
 
   // create auto increment
@@ -1185,9 +1191,14 @@ butil::Status CoordinatorControl::CreateIndex(uint64_t schema_id, const pb::meta
 
   // if new_index_id is not given, create a new index_id
   if (new_index_id <= 0) {
-    // new_index_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_INDEX, meta_increment);
-    new_index_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_TABLE, meta_increment);
-    DINGO_LOG(INFO) << "CreateIndex new_index_id=" << new_index_id;
+    DINGO_LOG(ERROR) << "CreateIndex new_index_id is illegal:" << new_index_id;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "new_index_id is illegal");
+  } else {
+    int ret = index_map_.Exists(new_index_id);
+    if (ret) {
+      DINGO_LOG(ERROR) << "CreateIndex new_index_id is already used:" << new_index_id;
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "new_index_id is already used by other index");
+    }
   }
 
   // create auto increment

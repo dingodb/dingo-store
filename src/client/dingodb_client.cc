@@ -77,6 +77,7 @@ DEFINE_int64(max_elements, 0, "max_elements");
 DEFINE_int64(dimension, 0, "dimension");
 DEFINE_int64(efconstruction, 0, "efconstruction");
 DEFINE_int64(nlinks, 0, "nlinks");
+DEFINE_uint32(part_count, 1, "partition count");
 DEFINE_bool(with_auto_increment, true, "with_auto_increment");
 DEFINE_string(vector_index_type, "", "vector_index_type");
 DEFINE_int32(round_num, 1, "Round of requests");
@@ -318,7 +319,7 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
 
     // Vector operation
     else if (method == "VectorSearch") {
-      client::SendVectorSearch(ctx->store_interaction, FLAGS_region_id, FLAGS_dimension,  FLAGS_topn);
+      client::SendVectorSearch(ctx->store_interaction, FLAGS_region_id, FLAGS_dimension, FLAGS_topn);
     } else if (method == "VectorSearchDebug") {
       client::SendVectorSearchDebug(ctx->store_interaction, FLAGS_region_id, FLAGS_dimension, FLAGS_vector_id,
                                     FLAGS_topn, FLAGS_batch_count, FLAGS_key, FLAGS_value);
@@ -648,9 +649,7 @@ int CoordinatorSender() {
   } else if (FLAGS_method == "GetIndexsCount") {
     SendGetIndexesCount(coordinator_interaction_meta);
   } else if (FLAGS_method == "CreateIndex") {
-    SendCreateIndex(coordinator_interaction_meta, false);
-  } else if (FLAGS_method == "CreateIndexWithId") {
-    SendCreateIndex(coordinator_interaction_meta, true);
+    SendCreateIndex(coordinator_interaction_meta);
   } else if (FLAGS_method == "CreateIndexId") {
     SendCreateIndexId(coordinator_interaction_meta);
   } else if (FLAGS_method == "UpdateIndex") {

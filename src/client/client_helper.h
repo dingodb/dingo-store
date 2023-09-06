@@ -156,10 +156,9 @@ class Helper {
     return addrs;
   }
 
-  static std::string EncodeVectorRegionRange(uint64_t partition_id, uint64_t vector_id) {
-    dingodb::Buf buf(16);
+  static std::string EncodeRegionRange(uint64_t partition_id) {
+    dingodb::Buf buf(8);
     buf.WriteLong(partition_id);
-    buf.WriteLong(vector_id);
 
     return buf.GetString();
   }
