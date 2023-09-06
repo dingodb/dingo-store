@@ -138,7 +138,7 @@ class Constant {
 
   // system resource usage
   static constexpr double kSystemDiskCapacityFreeRatio = 0.05;
-  static constexpr double kSystemMemoryCapacityFreeRatio = 0.02;
+  static constexpr double kSystemMemoryCapacityFreeRatio = 0.01;
 
   // crontab default interval
   static const int32_t kHeartbeatIntervalS = 10;

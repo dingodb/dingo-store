@@ -182,12 +182,12 @@ butil::Status ServiceHelper::ValidateSystemCapacity() {
     }
   }
 
-  uint64_t free_memory = metrics->system_free_memory();
+  uint64_t available_memory = metrics->system_available_memory();
   uint64_t total_memory = metrics->system_total_memory();
-  if (total_memory != 0) {
-    double memory_free_capacity_ratio = static_cast<double>(free_memory) / static_cast<double>(total_memory);
+  if (total_memory != 0 && available_memory != UINT64_MAX) {
+    double memory_free_capacity_ratio = static_cast<double>(available_memory) / static_cast<double>(total_memory);
     if (memory_free_capacity_ratio < Constant::kSystemMemoryCapacityFreeRatio) {
-      std::string s = fmt::format("Memory capacity is not enough, capacity({} / {} / {:2.2})", free_memory,
+      std::string s = fmt::format("Memory capacity is not enough, capacity({} / {} / {:2.2})", available_memory,
                                   total_memory, memory_free_capacity_ratio);
       DINGO_LOG(WARNING) << s;
       return butil::Status(pb::error::ESYSTEM_MEMORY_CAPACITY_FULL, s);
