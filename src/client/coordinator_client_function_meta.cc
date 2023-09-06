@@ -23,7 +23,6 @@
 #include "common/logging.h"
 #include "coordinator/coordinator_interaction.h"
 #include "gflags/gflags_declare.h"
-#include "glog/logging.h"
 #include "proto/common.pb.h"
 #include "proto/meta.pb.h"
 
@@ -261,8 +260,7 @@ int GetCreateTableId(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
   }
 }
 
-void SendCreateTable(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction, bool with_table_id,
-                     bool with_increment) {
+void SendCreateTable(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction, bool with_increment) {
   dingodb::pb::meta::CreateTableRequest request;
   dingodb::pb::meta::CreateTableResponse response;
 
@@ -355,21 +353,14 @@ void SendCreateTable(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
   auto* partition_rule = table_definition->mutable_table_partition();
   auto* part_column = partition_rule->add_columns();
   part_column->assign("test_part_column");
-  auto* range_partition = partition_rule->mutable_range_partition();
 
-  if (with_table_id) {
-    auto* part_range = range_partition->add_ranges();
-    part_range->set_start_key(EncodeUint64(std::stol(FLAGS_id)));
-    part_range->set_end_key(EncodeUint64(1 + std::stol(FLAGS_id)));
-  } else {
-    for (int i = 0; i < part_count; i++) {
-      auto* part = partition_rule->add_partitions();
-      part->mutable_id()->set_entity_id(part_ids[i]);
-      part->mutable_id()->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_PART);
-      part->mutable_id()->set_parent_entity_id(new_table_id);
-      part->mutable_range()->set_start_key(client::Helper::EncodeRegionRange(part_ids[i]));
-      part->mutable_range()->set_end_key(client::Helper::EncodeRegionRange(part_ids[i] + 1));
-    }
+  for (int i = 0; i < part_count; i++) {
+    auto* part = partition_rule->add_partitions();
+    part->mutable_id()->set_entity_id(part_ids[i]);
+    part->mutable_id()->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_PART);
+    part->mutable_id()->set_parent_entity_id(new_table_id);
+    part->mutable_range()->set_start_key(client::Helper::EncodeRegionRange(part_ids[i]));
+    part->mutable_range()->set_end_key(client::Helper::EncodeRegionRange(part_ids[i] + 1));
   }
 
   auto status = coordinator_interaction->SendRequest("CreateTable", request, response);
@@ -754,7 +745,6 @@ void SendCreateIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
   auto* partition_rule = index_definition->mutable_index_partition();
   auto* part_column = partition_rule->add_columns();
   part_column->assign("test_part_column");
-  auto* range_partition = partition_rule->mutable_range_partition();
 
   for (int i = 0; i < part_count; i++) {
     auto* part = partition_rule->add_partitions();
@@ -900,17 +890,34 @@ void SendCreateTables(std::shared_ptr<dingodb::CoordinatorInteraction> coordinat
     schema_id->set_entity_id(FLAGS_schema_id);
   }
 
+  uint64_t new_table_id = 0;
+  int ret = GetCreateTableId(coordinator_interaction, new_table_id);
+  if (ret != 0) {
+    DINGO_LOG(WARNING) << "GetCreateTableId failed";
+    return;
+  }
+
+  if (FLAGS_part_count == 0) {
+    FLAGS_part_count = 1;
+  }
+  uint32_t part_count = FLAGS_part_count;
+
+  std::vector<uint64_t> part_ids;
+  for (int i = 0; i < part_count; i++) {
+    uint64_t new_part_id = 0;
+    int ret = GetCreateTableId(coordinator_interaction, new_part_id);
+    if (ret != 0) {
+      DINGO_LOG(WARNING) << "GetCreateTableId failed";
+      return;
+    }
+    part_ids.push_back(new_part_id);
+  }
+
   auto* definition_with_id = request.add_table_definition_with_ids();
   auto* table_id = definition_with_id->mutable_table_id();
   table_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
-  if (with_table_id) {
-    table_id->set_parent_entity_id(schema_id->entity_id());
-    if (FLAGS_id.empty()) {
-      DINGO_LOG(WARNING) << "id is empty";
-      return;
-    }
-    table_id->set_entity_id(std::stol(FLAGS_id));
-  }
+  table_id->set_parent_entity_id(schema_id->entity_id());
+  table_id->set_entity_id(new_table_id);
 
   // string name = 1;
   auto* table_definition = definition_with_id->mutable_table_definition();
@@ -957,25 +964,16 @@ void SendCreateTables(std::shared_ptr<dingodb::CoordinatorInteraction> coordinat
   // add partition_rule
   // repeated string columns = 1;
   // PartitionStrategy strategy = 2;
-  // RangePartition range_partition = 3;
-  // HashPartition hash_partition = 4;
   auto* partition_rule = table_definition->mutable_table_partition();
   auto* part_column = partition_rule->add_columns();
   part_column->assign("test_part_column");
-  auto* range_partition = partition_rule->mutable_range_partition();
-
-  if (with_table_id) {
-    auto* part_range = range_partition->add_ranges();
-    part_range->set_start_key(EncodeUint64(std::stol(FLAGS_id)));
-    part_range->set_end_key(EncodeUint64(1 + std::stol(FLAGS_id)));
-  } else {
-    for (int i = 0; i < 2; i++) {
-      auto* part_range = range_partition->add_ranges();
-      auto* part_range_start = part_range->mutable_start_key();
-      part_range_start->assign(std::to_string(i * 100));
-      auto* part_range_end = part_range->mutable_end_key();
-      part_range_end->assign(std::to_string((i + 1) * 100));
-    }
+  for (int i = 0; i < part_count; i++) {
+    auto* part = partition_rule->add_partitions();
+    part->mutable_id()->set_entity_id(part_ids[i]);
+    part->mutable_id()->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_PART);
+    part->mutable_id()->set_parent_entity_id(new_table_id);
+    part->mutable_range()->set_start_key(client::Helper::EncodeRegionRange(part_ids[i]));
+    part->mutable_range()->set_end_key(client::Helper::EncodeRegionRange(part_ids[i] + 1));
   }
 
   auto status = coordinator_interaction->SendRequest("CreateTables", request, response);
