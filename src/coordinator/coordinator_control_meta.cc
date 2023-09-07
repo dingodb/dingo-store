@@ -1702,9 +1702,9 @@ butil::Status CoordinatorControl::GetIndex(uint64_t schema_id, uint64_t index_id
       return butil::Status(pb::error::Errno::EINDEX_NOT_FOUND, "index_id not found");
     }
 
-    if (check_compatibility && table_internal.table_id() > 0) {
-      return butil::Status(pb::error::Errno::EINDEX_COMPATIBILITY, "cannot get index created by new interface.");
-    }
+    // if (check_compatibility && table_internal.table_id() > 0) {
+    //   return butil::Status(pb::error::Errno::EINDEX_COMPATIBILITY, "cannot get index created by new interface.");
+    // }
 
     DINGO_LOG(INFO) << "GetIndex found index_id=" << index_id;
 
