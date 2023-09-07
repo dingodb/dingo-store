@@ -314,12 +314,12 @@ enum Action {
 }
 
 message LockInfo {
-  bytes primary_lock = 1;
-  uint64 lock_ts = 2;
-  bytes key = 3;
-  uint64 lock_ttl = 4;
-  uint64 txn_size = 5;
-  Op lock_type = 6;
+  bytes primary_lock = 1;  // the primary lock of the transaction
+  uint64 lock_ts = 2;      // the start_ts of the transaction
+  bytes key = 3;           // the key of the lock
+  uint64 lock_ttl = 4;     // the lock ttl timestamp in milisecond
+  uint64 txn_size = 5;     // the number of keys involved in the transaction
+  Op lock_type = 6;        // the type of the lock, it can be put, delete, lock, rollback, putIfAbsent
 }
 
 message Context {
@@ -423,9 +423,9 @@ message TxnGetResponse {
 // TxnKvScan fetches values for a range of keys in the transaction with start_ts.
 message TxnScanRequest {
   Context context = 1;
-  // the real Range is [start_key, end_key) or [end_key, start_key)
-  bytes start_key = 2;
-  bytes end_key = 3;
+  // prefix start_key end_key with mode
+  dingodb.pb.common.RangeWithOptions range = 2;
+
   // The maximum number of results to return.
   uint32 limit = 4;
   // the start_ts of the get transaction, store will return the value of the key when commit_ts < start_ts
@@ -434,11 +434,18 @@ message TxnScanRequest {
   bool key_only = 6;
   // For compatibility, when scanning forward, the range to scan is [start_key, end_key), where start_key < end_key;
   // and when scanning backward, it scans [end_key, start_key) in descending order, where end_key < start_key.
-  bool is_reverse = 7;
+  bool is_reverse = 7;  // NOT_IMPLEMENTED
+
+  // Whether to enable operator pushdown, enabled by default (false: means enabled, true: means disabled)
+  bool disable_coprocessor = 8;
+  // coprocessor
+  Coprocessor coprocessor = 9;
 }
 
-// if some key is lock by other txn, the scan will failed with error LOCKED, kvs is empty
-// client must retry the scan request
+// TxnScan can be partially success
+// if kvs is not null, and has_more is true, means scan is not finished, client should continue to scan from end_key.
+// if txn_result is not null, the kvs may not null, client can use kvs as a partial result, and should continue to scan
+// after resolve lock.
 message TxnScanResponse {
   // error code
   dingodb.pb.error.Error error = 1;
@@ -449,7 +456,13 @@ message TxnScanResponse {
   // 1. LockInfo: Read conflict with key which is locked by another transaction.
   // 2. otherwise, txn_result is empty
   TxnResultInfo txn_result = 2;
+  // kvs is the return value of the scan request
   repeated dingodb.pb.common.KeyValue kvs = 3;
+  // if scan is not finished, has_more is true, otherwise false
+  bool has_more = 4;
+  // the last iteratered key of this scan response.
+  // if end_key is null, means scan do not successfully iterate any key.
+  bytes end_key = 5;
 }
 
 message TxnPrewriteRequest {
@@ -460,7 +473,7 @@ message TxnPrewriteRequest {
   bytes primary_lock = 3;
   // Identifies the transaction being written.
   uint64 start_ts = 4;
-  // the lock's time to live in milliseconds
+  // the lock's ttl is timestamp in milisecond.
   uint64 lock_ttl = 5;
   // the number of keys involved in the transaction
   uint64 txn_size = 6;
@@ -572,7 +585,7 @@ message TxnResolveLockResponse {
 message TxnBatchGetRequest {
   Context context = 1;
   repeated bytes keys = 2;
-  uint64 version = 3;
+  uint64 start_ts = 3;
 }
 
 message TxnBatchGetResponse {
@@ -636,9 +649,10 @@ message TxnHeartBeatRequest {
   Context context = 1;
   // The key of the lock to update.
   bytes primary_lock = 2;
-  // Start timestamp of the large transaction.
+  // Start timestamp oracle of the large transaction.
   uint64 start_ts = 3;
   // The new TTL the sender would like.
+  // The advise_lock_ttl is the timestamp of milisecond.
   uint64 advise_lock_ttl = 4;
 }
 
@@ -733,98 +747,104 @@ message TxnDataValue {
   bytes value = 1;
 }
 
-message TxnScanBeginRequest {
-  Context context = 1;
+// message TxnScanBeginRequest {
+//   Context context = 1;
 
-  // prefix start_key end_key with mode
-  dingodb.pb.common.RangeWithOptions range = 2;
+//   // prefix start_key end_key with mode
+//   dingodb.pb.common.RangeWithOptions range = 2;
 
-  // the start_ts of the get transaction, store will return the value of the key when commit_ts < start_ts
-  uint64 start_ts = 3;
+//   // the start_ts of the get transaction, store will return the value of the key when commit_ts < start_ts
+//   uint64 start_ts = 3;
 
-  // The maximum number of requests keys per request
-  // limit = 0 means only scan_id is returned and no data is returned
-  // If max_fetch_cnt > 0, it means to return scan_id and data. Note that in this way, the return will be slower because
-  // the data needs to be prepared For example: max_fetch_cnt = 10000, which means that the maximum number of kv items
-  // in this request is 10000, which is just a suggested value. If the maximum number of kv items in the server is 1000,
-  // The data returned each time is only 1000 pieces of data. Note: only the maximum number of kv pairs per request
-  uint64 max_fetch_cnt = 4;
+//   // The maximum number of requests keys per request
+//   // limit = 0 means only scan_id is returned and no data is returned
+//   // If max_fetch_cnt > 0, it means to return scan_id and data. Note that in this way, the return will be slower
+//   because
+//   // the data needs to be prepared For example: max_fetch_cnt = 10000, which means that the maximum number of kv
+//   items
+//   // in this request is 10000, which is just a suggested value. If the maximum number of kv items in the server is
+//   1000,
+//   // The data returned each time is only 1000 pieces of data. Note: only the maximum number of kv pairs per request
+//   uint64 max_fetch_cnt = 4;
 
-  // is it just to get the key
-  bool key_only = 5;
+//   // is it just to get the key
+//   bool key_only = 5;
 
-  // whether to automatically release resources
-  // after reading all the data, the default is false,
-  // and the default is automatically released
-  bool disable_auto_release = 6;
+//   // whether to automatically release resources
+//   // after reading all the data, the default is false,
+//   // and the default is automatically released
+//   bool disable_auto_release = 6;
 
-  // Whether to enable operator pushdown, enabled by default (false: means enabled, true: means disabled)
-  bool disable_coprocessor = 7;
+//   // Whether to enable operator pushdown, enabled by default (false: means enabled, true: means disabled)
+//   bool disable_coprocessor = 7;
 
-  // coprocessor
-  Coprocessor coprocessor = 8;
-}
+//   // coprocessor
+//   Coprocessor coprocessor = 8;
+// }
 
-message TxnScanBeginResponse {
-  // error code
-  dingodb.pb.error.Error error = 1;
+// message TxnScanBeginResponse {
+//   // error code
+//   dingodb.pb.error.Error error = 1;
 
-  // This txn_result exists when some key is locked but we cannot check locks of
-  // all keys. In this case, `kvs` should be empty and the client should redo
-  // scanning all the keys after resolving the lock.
-  // the txn_result is one of the following:
-  // 1. LockInfo: Read conflict with key which is locked by another transaction.
-  // 2. otherwise, txn_result is empty
-  TxnResultInfo txn_result = 2;
+//   // This txn_result exists when some key is locked but we cannot check locks of
+//   // all keys. In this case, `kvs` should be empty and the client should redo
+//   // scanning all the keys after resolving the lock.
+//   // the txn_result is one of the following:
+//   // 1. LockInfo: Read conflict with key which is locked by another transaction.
+//   // 2. otherwise, txn_result is empty
+//   TxnResultInfo txn_result = 2;
 
-  // uniquely identifies this scan
-  bytes scan_id = 3;
+//   // uniquely identifies this scan
+//   bytes scan_id = 3;
 
-  // return key value pair. if kvs.size == 0 means no data
-  repeated dingodb.pb.common.KeyValue kvs = 4;
-}
+//   // return key value pair. if kvs.size == 0 means no data
+//   repeated dingodb.pb.common.KeyValue kvs = 4;
+// }
 
-message TxnScanContinueRequest {
-  Context context = 1;
+// message TxnScanContinueRequest {
+//   Context context = 1;
 
-  // uniquely identifies this scan
-  bytes scan_id = 2;
+//   // uniquely identifies this scan
+//   bytes scan_id = 2;
 
-  // The maximum number of requests keys per request
-  // If max_fetch_cnt > 0, it means to return scan_id and data. Note that in this way, the return will be slower because
-  // the data needs to be prepared For example: max_fetch_cnt = 10000, which means that the maximum number of kv items
-  // in this request is 10000, which is just a suggested value. If the maximum number of kv items in the server is 1000,
-  // The data returned each time is only 1000 pieces of data. Note: only the maximum number of kv pairs per request
-  uint64 max_fetch_cnt = 3;
-}
+//   // The maximum number of requests keys per request
+//   // If max_fetch_cnt > 0, it means to return scan_id and data. Note that in this way, the return will be slower
+//   because
+//   // the data needs to be prepared For example: max_fetch_cnt = 10000, which means that the maximum number of kv
+//   items
+//   // in this request is 10000, which is just a suggested value. If the maximum number of kv items in the server is
+//   1000,
+//   // The data returned each time is only 1000 pieces of data. Note: only the maximum number of kv pairs per request
+//   uint64 max_fetch_cnt = 3;
+// }
 
-message TxnScanContinueResponse {
-  // error code
-  dingodb.pb.error.Error error = 1;
+// message TxnScanContinueResponse {
+//   // error code
+//   dingodb.pb.error.Error error = 1;
 
-  // This txn_result exists when some key is locked but we cannot check locks of
-  // all keys. In this case, `kvs` should be empty and the client should redo
-  // scanning all the keys after resolving the lock.
-  // the txn_result is one of the following:
-  // 1. LockInfo: Read conflict with key which is locked by another transaction.
-  // 2. otherwise, txn_result is empty
-  TxnResultInfo txn_result = 2;
+//   // This txn_result exists when some key is locked but we cannot check locks of
+//   // all keys. In this case, `kvs` should be empty and the client should redo
+//   // scanning all the keys after resolving the lock.
+//   // the txn_result is one of the following:
+//   // 1. LockInfo: Read conflict with key which is locked by another transaction.
+//   // 2. otherwise, txn_result is empty
+//   TxnResultInfo txn_result = 2;
 
-  // return key value pair. if kvs.size == 0 means no data
-  repeated dingodb.pb.common.KeyValue kvs = 3;
-}
+//   // return key value pair. if kvs.size == 0 means no data
+//   repeated dingodb.pb.common.KeyValue kvs = 3;
+// }
 
-message TxnScanReleaseRequest {
-  Context context = 1;
+// message TxnScanReleaseRequest {
+//   Context context = 1;
 
-  // uniquely identifies this scan
-  bytes scan_id = 2;
-}
+//   // uniquely identifies this scan
+//   bytes scan_id = 2;
+// }
 
-message TxnScanReleaseResponse {
-  // error code
-  dingodb.pb.error.Error error = 1;
-}
+// message TxnScanReleaseResponse {
+//   // error code
+//   dingodb.pb.error.Error error = 1;
+// }
 
 service StoreService {
   // kv
@@ -852,13 +872,13 @@ service StoreService {
   rpc TxnResolveLock(TxnResolveLockRequest) returns (TxnResolveLockResponse);
   rpc TxnBatchGet(TxnBatchGetRequest) returns (TxnBatchGetResponse);
   rpc TxnBatchRollback(TxnBatchRollbackRequest) returns (TxnBatchRollbackResponse);
-  rpc TxnScanLock(TxnScanRequest) returns (TxnScanResponse);
+  rpc TxnScanLock(TxnScanLockRequest) returns (TxnScanLockResponse);
   rpc TxnHeartBeat(TxnHeartBeatRequest) returns (TxnHeartBeatResponse);
   rpc TxnGc(TxnGcRequest) returns (TxnGcResponse);
   rpc TxnDeleteRange(DeleteRangeRequest) returns (DeleteRangeResponse);
   rpc TxnDump(TxnDumpRequest) returns (TxnDumpResponse);
 
-  rpc TxnScanBegin(TxnScanBeginRequest) returns (TxnScanBeginResponse);
-  rpc TxnScanContinue(TxnScanContinueRequest) returns (TxnScanContinueResponse);
-  rpc TxnScanRelease(TxnScanReleaseRequest) returns (TxnScanReleaseResponse);
+  // rpc TxnScanBegin(TxnScanBeginRequest) returns (TxnScanBeginResponse);
+  // rpc TxnScanContinue(TxnScanContinueRequest) returns (TxnScanContinueResponse);
+  // rpc TxnScanRelease(TxnScanReleaseRequest) returns (TxnScanReleaseResponse);
 };
