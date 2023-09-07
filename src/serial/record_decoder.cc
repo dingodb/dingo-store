@@ -135,7 +135,8 @@ int RecordDecoder::Decode(const std::string& key, const std::string& value, std:
           break;
         }
         case BaseSchema::kStringList: {
-          auto ss = std::dynamic_pointer_cast<DingoSchema<std::optional<std::shared_ptr<std::vector<std::string>>>>>(bs);
+          auto ss =
+              std::dynamic_pointer_cast<DingoSchema<std::optional<std::shared_ptr<std::vector<std::string>>>>>(bs);
           if (ss->IsKey()) {
             record.at(ss->GetIndex()) = ss->DecodeKey(key_buf);
           } else {
@@ -414,8 +415,9 @@ int RecordDecoder::Decode(const std::string& key, const std::string& value, cons
           break;
         }
         case BaseSchema::kStringList: {
-          DecodeOrSkip1(std::dynamic_pointer_cast<DingoSchema<std::optional<std::shared_ptr<std::vector<std::string>>>>>(bs),
-                        key_buf, value_buf, indexed_mapping_index, record, n, m);
+          DecodeOrSkip1(
+              std::dynamic_pointer_cast<DingoSchema<std::optional<std::shared_ptr<std::vector<std::string>>>>>(bs),
+              key_buf, value_buf, indexed_mapping_index, record, n, m);
           break;
         }
         case BaseSchema::kDoubleList: {
@@ -429,13 +431,15 @@ int RecordDecoder::Decode(const std::string& key, const std::string& value, cons
           break;
         }
         case BaseSchema::kIntegerList: {
-          DecodeOrSkip1(std::dynamic_pointer_cast<DingoSchema<std::optional<std::shared_ptr<std::vector<int32_t>>>>>(bs),
-                        key_buf, value_buf, indexed_mapping_index, record, n, m);
+          DecodeOrSkip1(
+              std::dynamic_pointer_cast<DingoSchema<std::optional<std::shared_ptr<std::vector<int32_t>>>>>(bs), key_buf,
+              value_buf, indexed_mapping_index, record, n, m);
           break;
         }
         case BaseSchema::kLongList: {
-          DecodeOrSkip1(std::dynamic_pointer_cast<DingoSchema<std::optional<std::shared_ptr<std::vector<int64_t>>>>>(bs),
-                        key_buf, value_buf, indexed_mapping_index, record, n, m);
+          DecodeOrSkip1(
+              std::dynamic_pointer_cast<DingoSchema<std::optional<std::shared_ptr<std::vector<int64_t>>>>>(bs), key_buf,
+              value_buf, indexed_mapping_index, record, n, m);
           break;
         }
         default: {

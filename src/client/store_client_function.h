@@ -32,6 +32,7 @@ struct Context {
     clone_ctx->partition_num = partition_num;
     clone_ctx->req_num = req_num;
     clone_ctx->table_id = table_id;
+    clone_ctx->index_id = index_id;
     clone_ctx->region_id = region_id;
 
     clone_ctx->thread_num = thread_num;
@@ -45,6 +46,10 @@ struct Context {
     clone_ctx->with_scalar = with_scalar;
     clone_ctx->with_table = with_table;
 
+    clone_ctx->db_path = db_path;
+    clone_ctx->offset = offset;
+    clone_ctx->limit = limit;
+
     return clone_ctx;
   }
 
@@ -56,6 +61,7 @@ struct Context {
   int req_num;
 
   uint64_t table_id;
+  uint64_t index_id;
   uint64_t region_id;
 
   int32_t thread_num;
@@ -69,7 +75,16 @@ struct Context {
 
   bool with_scalar;
   bool with_table;
+
+  std::string db_path;
+  int32_t offset;
+  int32_t limit;
 };
+
+// meta
+dingodb::pb::meta::TableDefinition SendGetIndex(ServerInteractionPtr interaction, uint64_t index_id);
+dingodb::pb::meta::TableDefinition SendGetTable(ServerInteractionPtr interaction, uint64_t table_id);
+dingodb::pb::meta::TableRange SendGetTableRange(ServerInteractionPtr interaction, uint64_t table_id);
 
 // coordinator
 dingodb::pb::common::Region SendQueryRegion(ServerInteractionPtr interaction, uint64_t region_id);
