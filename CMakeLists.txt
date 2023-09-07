@@ -401,6 +401,7 @@ add_executable(dingodb_client
                 src/coordinator/coordinator_interaction.cc
                 src/common/helper.cc
                 src/common/service_access.cc
+                src/coprocessor/utils.cc
                 ${SERIAL1_SRCS}
                 ${SERIAL2_SRCS}
                 ${VERSION_SRCS} $<TARGET_OBJECTS:PROTO_OBJS>)

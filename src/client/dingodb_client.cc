@@ -25,6 +25,7 @@
 #include "client/client_helper.h"
 #include "client/coordinator_client_function.h"
 #include "client/store_client_function.h"
+#include "client/store_tool_dump.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "common/version.h"
@@ -89,6 +90,7 @@ DEFINE_string(prefix, "", "key prefix");
 DEFINE_int32(region_count, 1, "region count");
 DEFINE_int32(table_id, 0, "table id");
 DEFINE_string(table_name, "", "table name");
+DEFINE_int32(index_id, 0, "index id");
 DEFINE_string(raft_group, "store_default_test", "raft group");
 DEFINE_int32(partition_num, 1, "table partition num");
 DEFINE_int32(start_id, 0, "start id");
@@ -104,7 +106,8 @@ DEFINE_int64(vector_index_id, 0, "vector index id unique. default 0");
 DEFINE_string(vector_index_add_cost_file, "./cost.txt", "exec batch vector add. cost time");
 DEFINE_int32(step_count, 1024, "step_count");
 DEFINE_bool(print_vector_search_delay, false, "print vector search delay");
-DEFINE_int32(limit, 0, "limit");
+DEFINE_int32(offset, 0, "offset");
+DEFINE_int32(limit, 50, "limit");
 DEFINE_bool(is_reverse, false, "is_revers");
 DEFINE_string(scalar_filter_key, "", "Request scalar_filter_key");
 DEFINE_string(scalar_filter_value, "", "Request scalar_filter_value");
@@ -141,6 +144,7 @@ DEFINE_string(lock_name, "", "Request lock_name");
 DEFINE_string(client_uuid, "", "Request client_uuid");
 
 DEFINE_bool(store_create_region, false, "store create region");
+DEFINE_string(db_path, "", "rocksdb path");
 
 bvar::LatencyRecorder g_latency_recorder("dingo-store");
 
@@ -155,11 +159,6 @@ const std::map<std::string, std::vector<std::string>> kParamConstraint = {
 };
 
 int ValidateParam() {
-  if (FLAGS_region_id == 0) {
-    DINGO_LOG(ERROR) << "missing param region_id error";
-    return -1;
-  }
-
   if (FLAGS_raft_group.empty()) {
     auto methods = kParamConstraint.find("RaftGroup")->second;
     for (const auto& method : methods) {
@@ -256,7 +255,7 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
   butil::SplitString(FLAGS_raft_addrs, ',', &raft_addrs);
 
   if (FLAGS_store_addrs.empty()) {
-    if (method != "AutoDropTable" && method != "AutoTest") {
+    if (method != "AutoDropTable" && method != "AutoTest" && method != "DumpDb") {
       // Get store addr from coordinator
       auto store_addrs = GetStoreAddrs(ctx->coordinator_interaction, FLAGS_region_id);
       ctx->store_interaction = std::make_shared<client::ServerInteraction>();
@@ -410,6 +409,29 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
         client::CheckIndexDistribution(ctx);
         bthread_usleep(1000 * 1000);
       }
+    } else if (method == "DumpDb") {
+      ctx->table_id = FLAGS_table_id;
+      ctx->index_id = FLAGS_index_id;
+      ctx->db_path = FLAGS_db_path;
+      ctx->offset = FLAGS_offset;
+      ctx->limit = FLAGS_limit;
+      if (ctx->table_id == 0 && ctx->index_id == 0) {
+        DINGO_LOG(ERROR) << "Param table_id|index_id is error.";
+        return;
+      }
+      if (ctx->db_path.empty()) {
+        DINGO_LOG(ERROR) << "Param db_path is error.";
+        return;
+      }
+      if (ctx->offset < 0) {
+        DINGO_LOG(ERROR) << "Param offset is error.";
+        return;
+      }
+      if (ctx->limit < 0) {
+        DINGO_LOG(ERROR) << "Param limit is error.";
+        return;
+      }
+      client::DumpDb(ctx);
     }
 
     // illegal method

@@ -119,6 +119,34 @@ inline void ParallelFor(size_t start, size_t end, size_t num_threads, Function f
 
 // ============================== meta service ===========================
 
+dingodb::pb::meta::TableDefinition SendGetIndex(ServerInteractionPtr interaction, uint64_t index_id) {
+  dingodb::pb::meta::GetTablesRequest request;
+  dingodb::pb::meta::GetTablesResponse response;
+
+  auto* mut_table_id = request.mutable_table_id();
+  mut_table_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_INDEX);
+  mut_table_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+  mut_table_id->set_entity_id(index_id);
+
+  interaction->SendRequest("MetaService", "GetTables", request, response);
+
+  return response.table_definition_with_ids()[0].table_definition();
+}
+
+dingodb::pb::meta::TableDefinition SendGetTable(ServerInteractionPtr interaction, uint64_t table_id) {
+  dingodb::pb::meta::GetTablesRequest request;
+  dingodb::pb::meta::GetTablesResponse response;
+
+  auto* mut_table_id = request.mutable_table_id();
+  mut_table_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
+  mut_table_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+  mut_table_id->set_entity_id(table_id);
+
+  interaction->SendRequest("MetaService", "GetTables", request, response);
+
+  return response.table_definition_with_ids()[0].table_definition();
+}
+
 dingodb::pb::meta::TableRange SendGetTableRange(ServerInteractionPtr interaction, uint64_t table_id) {
   dingodb::pb::meta::GetTableRangeRequest request;
   dingodb::pb::meta::GetTableRangeResponse response;
