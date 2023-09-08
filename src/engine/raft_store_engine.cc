@@ -53,6 +53,34 @@ RaftStoreEngine::~RaftStoreEngine() = default;
 
 bool RaftStoreEngine::Init(std::shared_ptr<Config> /*config*/) { return true; }
 
+// Clean region raft directory
+static bool CleanRaftDirectory(uint64_t region_id, const std::string& raft_path, const std::string& raft_log_path) {
+  std::string region_raft_path = fmt::format("{}/{}", raft_path, region_id);
+  if (!Helper::RemoveAllFileOrDirectory(region_raft_path)) {
+    return false;
+  }
+
+  std::string region_raft_log_path = fmt::format("{}/{}", raft_log_path, region_id);
+  return Helper::RemoveAllFileOrDirectory(region_raft_log_path);
+}
+
+// check region raft complete
+static bool IsCompleteRaftNode(uint64_t region_id, const std::string& raft_path, const std::string& raft_log_path) {
+  std::string raft_meta_path = fmt::format("{}/{}/raft_meta/raft_meta", raft_path, region_id);
+  if (!Helper::IsExistPath(raft_meta_path)) {
+    DINGO_LOG(WARNING) << fmt::format("[raft.engine][region({})] missing raft_meta file.", region_id);
+    return false;
+  }
+
+  std::string region_raft_log_path = fmt::format("{}/{}/log_meta", raft_log_path, region_id);
+  if (!Helper::IsExistPath(region_raft_log_path)) {
+    DINGO_LOG(WARNING) << fmt::format("[raft.engine][region({})] missing raft log file.", region_id);
+    return false;
+  }
+
+  return true;
+}
+
 // Recover raft node from region meta data.
 // Invoke when server starting.
 bool RaftStoreEngine::Recover() {
@@ -72,12 +100,12 @@ bool RaftStoreEngine::Recover() {
         region->State() == pb::common::StoreRegionState::MERGING) {
       auto raft_meta = store_raft_meta->GetRaftMeta(region->Id());
       if (raft_meta == nullptr) {
-        DINGO_LOG(ERROR) << "Recover raft meta not found: " << region->Id();
+        DINGO_LOG(ERROR) << fmt::format("[raft.engine][region({})] recover raft meta not found.", region->Id());
         continue;
       }
       auto region_metrics = store_region_metrics->GetMetrics(region->Id());
       if (region_metrics == nullptr) {
-        DINGO_LOG(WARNING) << "Recover region metrics not found: " << region->Id();
+        DINGO_LOG(WARNING) << fmt::format("[raft.engine][region({})] recover raft metrics not found.", region->Id());
       }
 
       RaftControlAble::AddNodeParameter parameter;
@@ -95,12 +123,26 @@ bool RaftStoreEngine::Recover() {
       parameter.region_metrics = region_metrics;
       parameter.listeners = listener_factory->Build();
 
+      auto is_complete = IsCompleteRaftNode(region->Id(), parameter.raft_path, parameter.log_path);
+      if (!is_complete) {
+        DINGO_LOG(INFO) << fmt::format("[raft.engine][region({})] raft node is not complete.", region->Id());
+        if (!CleanRaftDirectory(region->Id(), parameter.raft_path, parameter.log_path)) {
+          DINGO_LOG(WARNING) << fmt::format("[raft.engine][region({})] clean region raft directory failed.",
+                                            region->Id());
+          continue;
+        }
+        raft_meta = StoreRaftMeta::NewRaftMeta(region->Id());
+        store_raft_meta->UpdateRaftMeta(raft_meta);
+        parameter.raft_meta = raft_meta;
+        parameter.is_restart = false;
+      }
+
       AddNode(region, parameter);
       ++count;
     }
   }
 
-  DINGO_LOG(INFO) << "Recover Raft node num: " << count;
+  DINGO_LOG(INFO) << fmt::format("[raft.engine][region(*)] recover Raft node num({}).", count);
 
   return true;
 }
@@ -112,7 +154,7 @@ pb::common::Engine RaftStoreEngine::GetID() { return pb::common::ENG_RAFT_STORE;
 std::shared_ptr<RawEngine> RaftStoreEngine::GetRawEngine() { return engine_; }
 
 butil::Status RaftStoreEngine::AddNode(store::RegionPtr region, const AddNodeParameter& parameter) {
-  DINGO_LOG(INFO) << "RaftkvEngine add region, region_id " << region->Id();
+  DINGO_LOG(INFO) << fmt::format("[raft.engine][region({})] add region.", region->Id());
 
   // Build StateMachine
   auto state_machine = std::make_shared<StoreStateMachine>(
@@ -145,7 +187,7 @@ butil::Status RaftStoreEngine::AddNode(store::RegionPtr region, const AddNodePar
 
 butil::Status RaftStoreEngine::AddNode(std::shared_ptr<pb::common::RegionDefinition> region,
                                        std::shared_ptr<MetaControl> meta_control, bool is_volatile) {
-  DINGO_LOG(INFO) << "RaftkvEngine add region, region_id " << region->id();
+  DINGO_LOG(INFO) << fmt::format("[raft.engine][region({})] add region.", region->id());
 
   // Build StatMachine
   auto state_machine = std::make_shared<MetaStateMachine>(meta_control, is_volatile);
@@ -266,7 +308,7 @@ std::shared_ptr<pb::raft::RaftCmdRequest> GenRaftCmdRequest(const std::shared_pt
 butil::Status RaftStoreEngine::Write(std::shared_ptr<Context> ctx, std::shared_ptr<WriteData> write_data) {
   auto node = raft_node_manager_->GetNode(ctx->RegionId());
   if (node == nullptr) {
-    DINGO_LOG(ERROR) << "Not found raft node " << ctx->RegionId();
+    DINGO_LOG(ERROR) << fmt::format("[raft.engine][region({})] not found raft node.", ctx->RegionId());
     return butil::Status(pb::error::ERAFT_NOT_FOUND, "Not found raft node");
   }
 
@@ -292,7 +334,7 @@ butil::Status RaftStoreEngine::AsyncWrite(std::shared_ptr<Context> ctx, std::sha
                                           WriteCbFunc cb) {
   auto node = raft_node_manager_->GetNode(ctx->RegionId());
   if (node == nullptr) {
-    DINGO_LOG(ERROR) << "Not found raft node " << ctx->RegionId();
+    DINGO_LOG(ERROR) << fmt::format("[raft.engine][region({})] not found raft node.", ctx->RegionId());
     return butil::Status(pb::error::ERAFT_NOT_FOUND, "Not found raft node");
   }
 

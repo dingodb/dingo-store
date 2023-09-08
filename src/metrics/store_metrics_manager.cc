@@ -109,9 +109,6 @@ bool StoreMetrics::CollectMetrics() {
   metrics_->set_system_total_swap(output["system_total_swap"]);
   metrics_->set_system_free_swap(output["system_free_swap"]);
 
-  DINGO_LOG(INFO) << fmt::format("system_cached_memory: {} system_available_memory: {}", output["system_cached_memory"],
-                                 output["system_available_memory"]);
-
   // system cpu usage
   output.clear();
   if (!Helper::GetSystemCpuUsage(output)) {
