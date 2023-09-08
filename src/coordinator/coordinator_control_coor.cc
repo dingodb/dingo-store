@@ -912,9 +912,10 @@ butil::Status CoordinatorControl::SelectStore(pb::common::StoreType store_type, 
       continue;
     }
 
-    if (store_metrics.system_free_memory() < store_metrics.system_total_memory() * 0.05) {
-      DINGO_LOG(ERROR) << "Store metrics system_free_memory < system_total_memory * 0.05, store_id=" << store.id()
+    if (store_metrics.system_available_memory() < store_metrics.system_total_memory() * 0.05) {
+      DINGO_LOG(ERROR) << "Store metrics system_available_memory < system_total_memory * 0.05, store_id=" << store.id()
                        << ", system_free_memory=" << store_metrics.system_free_memory()
+                       << ", system_available_memory=" << store_metrics.system_available_memory()
                        << ", system_total_memory=" << store_metrics.system_total_memory();
       status = butil::Status(pb::error::Errno::EREGION_UNAVAILABLE,
                              "Not enough stores for create region, one store has low memory");
@@ -948,10 +949,10 @@ butil::Status CoordinatorControl::SelectStore(pb::common::StoreType store_type, 
     uint64_t new_hnsw_index_plan_memory = hnsw_parameter.dimension() * hnsw_parameter.max_elements() * 4;
     DINGO_LOG(INFO) << "Store metrics new_hnsw_index_plan_memory=" << new_hnsw_index_plan_memory
                     << ", store_id=" << store.id() << ", region_count=" << store_metrics.region_metrics_map_size();
-    if (new_hnsw_index_plan_memory > store_metrics.system_free_memory() * 0.95) {
-      DINGO_LOG(INFO) << "Store metrics hnsw_memory_plan_used > system_free_memory * 0.95, store_id=" << store.id()
+    if (new_hnsw_index_plan_memory > store_metrics.system_available_memory() * 0.95) {
+      DINGO_LOG(INFO) << "Store metrics hnsw_memory_plan_used > system_available_memory * 0.95, store_id=" << store.id()
                       << ", new_hnsw_memory_plan_used=" << new_hnsw_index_plan_memory
-                      << ", system_free_memory=" << store_metrics.system_free_memory();
+                      << ", system_available_memory=" << store_metrics.system_available_memory();
       status = butil::Status(pb::error::Errno::EREGION_UNAVAILABLE,
                              "Not enough stores for create region, one store has low memory for hnsw");
       continue;
@@ -1009,15 +1010,16 @@ butil::Status CoordinatorControl::SelectStore(pb::common::StoreType store_type, 
     pb::common::Store store;
     uint64_t weight;
     uint64_t region_num;
-    uint64_t system_total_capacity;  // total capacity of this store
-    uint64_t system_free_capacity;   // free capacity of this store
-    uint64_t system_cpu_usage;       // cpu usage of this store process
-    uint64_t system_total_memory;    // total memory of the host this store process running on
-    uint64_t system_free_memory;     // total free memory of the host this store process running on
-    uint64_t system_io_util;         // io utilization of the host this store process running on
-    uint64_t process_used_cpu;       // cpu usage of this store process
-    uint64_t process_used_memory;    // total used memory of this store process
-    uint64_t process_used_capacity;  // free capacity of this store
+    uint64_t system_total_capacity;    // total capacity of this store
+    uint64_t system_free_capacity;     // free capacity of this store
+    uint64_t system_cpu_usage;         // cpu usage of this store process
+    uint64_t system_total_memory;      // total memory of the host this store process running on
+    uint64_t system_free_memory;       // total free memory of the host this store process running on
+    uint64_t system_available_memory;  // total available memory of the host this store process running on
+    uint64_t system_io_util;           // io utilization of the host this store process running on
+    uint64_t process_used_cpu;         // cpu usage of this store process
+    uint64_t process_used_memory;      // total used memory of this store process
+    uint64_t process_used_capacity;    // free capacity of this store
   };
 
   // check and sort store by capacity, regions_num
@@ -1036,6 +1038,7 @@ butil::Status CoordinatorControl::SelectStore(pb::common::StoreType store_type, 
         store_more.system_total_capacity = ptr->system_total_capacity() > 0 ? ptr->system_total_capacity() : 0;
         store_more.system_total_memory = ptr->system_total_memory() > 0 ? ptr->system_free_memory() : 0;
         store_more.system_free_memory = ptr->system_free_memory() > 0 ? ptr->system_free_memory() : 0;
+        store_more.system_available_memory = ptr->system_available_memory() > 0 ? ptr->system_available_memory() : 0;
         has_metrics = true;
       }
 
@@ -1044,7 +1047,7 @@ butil::Status CoordinatorControl::SelectStore(pb::common::StoreType store_type, 
           store_more.weight = store_more.system_free_capacity * 100 / store_more.system_total_capacity +
                               (100 / (store_more.region_num + 1));
         } else if (store_type == pb::common::StoreType::NODE_TYPE_INDEX) {
-          store_more.weight = store_more.system_free_memory * 100 / store_more.system_total_memory +
+          store_more.weight = store_more.system_available_memory * 100 / store_more.system_total_memory +
                               (100 / (store_more.region_num + 1));
         }
 
@@ -1052,7 +1055,7 @@ butil::Status CoordinatorControl::SelectStore(pb::common::StoreType store_type, 
           store_more.weight = 0;
         }
 
-        if (store_more.system_free_memory == 0) {
+        if (store_more.system_available_memory == 0) {
           store_more.weight = 0;
         }
 
@@ -1067,6 +1070,7 @@ butil::Status CoordinatorControl::SelectStore(pb::common::StoreType store_type, 
                       << ", free_capacity=" << store_more.system_free_capacity
                       << ", total_capacity=" << store_more.system_total_capacity
                       << ", free_memory=" << store_more.system_free_memory
+                      << ", available_memory=" << store_more.system_available_memory
                       << ", total_memory=" << store_more.system_total_memory << ", weight=" << store_more.weight;
     }
   }
