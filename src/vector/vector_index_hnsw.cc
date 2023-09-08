@@ -289,7 +289,8 @@ butil::Status VectorIndexHnsw::Load(const std::string& path) {
 
 butil::Status VectorIndexHnsw::Search(std::vector<pb::common::VectorWithId> vector_with_ids, uint32_t topk,
                                       std::vector<std::shared_ptr<FilterFunctor>> filters,
-                                      std::vector<pb::index::VectorWithDistanceResult>& results, bool reconstruct) {
+                                      std::vector<pb::index::VectorWithDistanceResult>& results, bool reconstruct,
+                                      const pb::common::VectorSearchParameter& /*parameter*/) {
   if (vector_with_ids.empty()) {
     DINGO_LOG(WARNING) << "vector_with_ids is empty";
     return butil::Status::OK();
@@ -543,11 +544,18 @@ butil::Status VectorIndexHnsw::GetMemorySize(uint64_t& memory_size) {
   return butil::Status::OK();
 }
 
-// void VectorIndexHnsw::NormalizeVector(const float* data, float* norm_array) const {
-//   float norm = 0.0f;
-//   for (int i = 0; i < dimension_; i++) norm += data[i] * data[i];
-//   norm = 1.0f / (sqrtf(norm) + 1e-30f);
-//   for (int i = 0; i < dimension_; i++) norm_array[i] = data[i] * norm;
-// }
+bool VectorIndexHnsw::NeedToRebuild() {
+  uint64_t element_count = 0, deleted_count = 0;
+
+  element_count = this->hnsw_index_->getCurrentElementCount();
+
+  deleted_count = this->hnsw_index_->getDeletedCount();
+
+  if (element_count == 0 || deleted_count == 0) {
+    return false;
+  }
+
+  return (deleted_count > 0 && deleted_count > element_count / 2);
+}
 
 }  // namespace dingodb

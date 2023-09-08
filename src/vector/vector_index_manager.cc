@@ -425,6 +425,24 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
 
   auto raw_engine = Server::GetInstance()->GetRawEngine();
   auto iter = raw_engine->NewIterator(Constant::kStoreDataCF, options);
+
+  // Note: This is iterated 2 times for the following reasons:
+  // ivf_flat must train first before adding data
+  // train requires full data. If you just traverse it once, it will consume a huge amount of memory.
+  // This is done here to cancel the use of slower disk speed in exchange for memory usage.
+
+  // build if need
+  if (BAIDU_UNLIKELY(vector_index->NeedTrain())) {
+    if (!vector_index->IsTrained()) {
+      auto status = TrainForBuild(vector_index, iter, start_key, end_key);
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << fmt::format("TrainForBuild failed error_code : {} error_cstr : {}", status.error_code(),
+                                        status.error_cstr());
+        return {};
+      }
+    }
+  }
+
   uint64_t count = 0;
   std::vector<pb::common::VectorWithId> vectors;
   vectors.reserve(Constant::kBuildVectorIndexBatchSize);
@@ -663,6 +681,45 @@ butil::Status VectorIndexManager::ScrubVectorIndex(store::RegionPtr region, bool
     DINGO_LOG(INFO) << fmt::format("[vector_index.scrub][index_id({})] need save, do save vector index.",
                                    vector_index_id);
     LaunchSaveVectorIndex(vector_index_wrapper);
+  }
+
+  return butil::Status::OK();
+}
+
+butil::Status VectorIndexManager::TrainForBuild(std::shared_ptr<VectorIndex> vector_index,
+                                                std::shared_ptr<Iterator> iter, const std::string& start_key,
+                                                [[maybe_unused]] const std::string& end_key) {
+  uint64_t count = 0;
+  std::vector<float> train_vectors;
+  train_vectors.reserve(100000 * vector_index->GetDimension());  // todo opt
+  for (iter->Seek(start_key); iter->Valid(); iter->Next()) {
+    pb::common::VectorWithId vector;
+
+    std::string value(iter->Value());
+    if (!vector.mutable_vector()->ParseFromString(value)) {
+      std::string s = fmt::format("[vector_index.build][index_id({})] vector with id ParseFromString failed.");
+      DINGO_LOG(WARNING) << s;
+      continue;
+    }
+
+    if (vector.vector().float_values_size() <= 0) {
+      std::string s = fmt::format("[vector_index.build][index_id({})] vector values_size error.", vector.id());
+      DINGO_LOG(WARNING) << s;
+      continue;
+    }
+
+    train_vectors.insert(train_vectors.end(), vector.vector().float_values().begin(),
+                         vector.vector().float_values().end());
+  }
+
+  // if empty. ignore
+  if (!train_vectors.empty()) {
+    auto status = vector_index->Train(train_vectors);
+    if (!status.ok()) {
+      std::string s = fmt::format("vector_index::Train failed train_vectors.size() : {}", train_vectors.size());
+      DINGO_LOG(ERROR) << s;
+      return status;
+    }
   }
 
   return butil::Status::OK();

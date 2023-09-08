@@ -188,8 +188,8 @@ butil::Status VectorIndexFlat::Delete(const std::vector<uint64_t>& delete_ids) {
 
 butil::Status VectorIndexFlat::Search(std::vector<pb::common::VectorWithId> vector_with_ids, uint32_t topk,
                                       std::vector<std::shared_ptr<FilterFunctor>> filters,
-                                      std::vector<pb::index::VectorWithDistanceResult>& results,
-                                      bool reconstruct) {  // NOLINT
+                                      std::vector<pb::index::VectorWithDistanceResult>& results, bool /*reconstruct*/,
+                                      const pb::common::VectorSearchParameter& /*parameter*/) {
   if (vector_with_ids.empty()) {
     DINGO_LOG(WARNING) << "vector_with_ids is empty";
     return butil::Status::OK();

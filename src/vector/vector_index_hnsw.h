@@ -60,7 +60,8 @@ class VectorIndexHnsw : public VectorIndex {
 
   butil::Status Search(std::vector<pb::common::VectorWithId> vector_with_ids, uint32_t topk,
                        std::vector<std::shared_ptr<FilterFunctor>> filters,
-                       std::vector<pb::index::VectorWithDistanceResult>& results, bool reconstruct = false) override;
+                       std::vector<pb::index::VectorWithDistanceResult>& results, bool reconstruct = false,
+                       [[maybe_unused]] const pb::common::VectorSearchParameter& parameter = {}) override;
 
   int32_t GetDimension() override;
   butil::Status GetCount([[maybe_unused]] uint64_t& count) override;
@@ -71,6 +72,12 @@ class VectorIndexHnsw : public VectorIndex {
   butil::Status GetMaxElements(uint64_t& max_elements);
 
   bool IsExceedsMaxElements() override;
+
+  butil::Status Train([[maybe_unused]] const std::vector<float>& train_datas) override { return butil::Status::OK(); }
+  butil::Status Train([[maybe_unused]] const std::vector<pb::common::VectorWithId>& vectors) override {
+    return butil::Status::OK();
+  }
+  bool NeedToRebuild() override;
 
   hnswlib::HierarchicalNSW<float>* GetHnswIndex();
 

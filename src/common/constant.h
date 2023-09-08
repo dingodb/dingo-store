@@ -117,6 +117,9 @@ class Constant {
 
   static const uint32_t kBuildVectorIndexBatchSize = 8192;
 
+  static constexpr int32_t kCreateIvfFlatParamNcentroids = 2048;
+  static constexpr int32_t kSearchIvfFlatParamNprobe = 80;
+
   // split region
   static constexpr int kSplitDoSnapshotRetryTimes = 5;
   inline static const std::string kSplitStrategy = "PRE_CREATE_REGION";
