@@ -1672,7 +1672,7 @@ butil::Status CoordinatorControl::GetTable(uint64_t schema_id, uint64_t table_id
 }
 
 // get index
-butil::Status CoordinatorControl::GetIndex(uint64_t schema_id, uint64_t index_id, bool check_compatibility,
+butil::Status CoordinatorControl::GetIndex(uint64_t schema_id, uint64_t index_id, bool /*check_compatibility*/,
                                            pb::meta::TableDefinitionWithId& table_definition_with_id) {
   DINGO_LOG(INFO) << "GetIndex in control schema_id=" << schema_id;
 
@@ -1831,6 +1831,9 @@ butil::Status CoordinatorControl::GetTableRange(uint64_t schema_id, uint64_t tab
       continue;
     }
 
+    // region epoch
+    range_distribution->mutable_region_epoch()->CopyFrom(part_region.definition().epoch());
+
     // range_distribution range
     auto* part_range = range_distribution->mutable_range();
     // part_range->CopyFrom(table_internal.partitions(i).range());
@@ -1909,6 +1912,9 @@ butil::Status CoordinatorControl::GetIndexRange(uint64_t schema_id, uint64_t ind
                                       index_id, region_id);
       continue;
     }
+
+    // region epoch
+    range_distribution->mutable_region_epoch()->CopyFrom(part_region.definition().epoch());
 
     // range_distribution range
     auto* part_range = range_distribution->mutable_range();
