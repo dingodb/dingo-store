@@ -146,15 +146,21 @@ message IndexDefinition {
 
 // This Part is mainly equal to the Part in DingoDB 0.5.x
 message RangeDistribution {
-  DingoCommonId id = 1;                            // this is really region id, its parent entity is part_id
-  dingodb.pb.common.Range range = 2;               // the range of this part
-  dingodb.pb.common.Location leader = 3;           // the leader's store location
-  repeated dingodb.pb.common.Location voters = 4;  // all members of the region that have right to vote, this field is
-                                                   // equal to the old replicates field of Part.
-  repeated dingodb.pb.common.Location learners =
-      5;  // all members of the region that is learners, have no right to vote
+  // this is really region id, its parent entity is part_id
+  DingoCommonId id = 1;
+  // the range of this part
+  dingodb.pb.common.Range range = 2;
+  // the leader's store location
+  dingodb.pb.common.Location leader = 3;
+  // all members of the region that have right to vote, this field is
+  // equal to the old replicates field of Part.
+  repeated dingodb.pb.common.Location voters = 4;
+  // all members of the region that is learners, have no right to vote
+  repeated dingodb.pb.common.Location learners = 5;
   uint64 regionmap_epoch = 6;
   uint64 storemap_epoch = 7;
+  // region_epoch is used to check whether the region info is stale
+  dingodb.pb.common.RegionEpoch region_epoch = 8;
 }
 
 // TableRange is used for sdk to get all range distribution of a table.
