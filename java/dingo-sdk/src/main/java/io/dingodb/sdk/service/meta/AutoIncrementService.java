@@ -4,12 +4,14 @@ import io.dingodb.meta.Meta;
 import io.dingodb.sdk.common.AutoIncrement;
 import io.dingodb.sdk.common.DingoCommonId;
 import io.dingodb.sdk.service.connector.AutoIncrementServiceConnector;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static io.dingodb.sdk.common.utils.EntityConversion.mapping;
 
+@Slf4j
 public class AutoIncrementService {
     
     private static final Map<String, Map<DingoCommonId, AutoIncrement>> cache = new ConcurrentHashMap<>();
@@ -48,6 +50,7 @@ public class AutoIncrementService {
 
     private AutoIncrement.Increment fetcher(DingoCommonId tableId) {
         try {
+            log.info("Generate auto-increment request count:{}, increment:{}, offset:{}", count, increment, offset);
             Meta.GenerateAutoIncrementRequest request = Meta.GenerateAutoIncrementRequest.newBuilder()
                 .setTableId(mapping(tableId))
                 .setCount(count)
@@ -56,6 +59,9 @@ public class AutoIncrementService {
                 .build();
             Meta.GenerateAutoIncrementResponse response = connector.exec(stub -> stub.generateAutoIncrement(request));
 
+            log.info("Generated auto-increment response startId:{}, endId:{}",
+                    response.getStartId(),
+                    response.getEndId());
             return new AutoIncrement.Increment(response.getEndId(), response.getStartId());
         } catch (Exception e) {
             innerCache.remove(tableId);

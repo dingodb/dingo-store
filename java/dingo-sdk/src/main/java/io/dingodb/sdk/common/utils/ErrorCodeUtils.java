@@ -36,7 +36,8 @@ public class ErrorCodeUtils {
         EKEY_OUT_OF_RANGE_VALUE,
         EREGION_REDIRECT_VALUE,
         EREGION_SPLITING_VALUE,
-        EREGION_MERGEING_VALUE
+        EREGION_MERGEING_VALUE,
+        EREGION_NOT_FOUND_VALUE
     );
 
     public static final List<Integer> retryCode = Arrays.asList(
