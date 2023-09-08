@@ -597,7 +597,7 @@ public class MetaServiceClient {
 
         for (Meta.RangeDistribution tablePart : response.getTableRange().getRangeDistributionList()) {
             result.put(new ComparableByteArray(
-                            tablePart.getRange().getStartKey().toByteArray(), POS),
+                            tablePart.getRange().getStartKey().toByteArray()),
                     mapping(tablePart));
         }
         return result;
@@ -794,7 +794,7 @@ public class MetaServiceClient {
 
         for (Meta.RangeDistribution indexPart : response.getIndexRange().getRangeDistributionList()) {
             result.put(new ComparableByteArray(
-                        indexPart.getRange().getStartKey().toByteArray(), POS),
+                        indexPart.getRange().getStartKey().toByteArray()),
                     mapping(indexPart));
         }
         return result;
