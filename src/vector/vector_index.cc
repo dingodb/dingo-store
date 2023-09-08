@@ -18,6 +18,7 @@
 #include <memory>
 
 #include "bthread/bthread.h"
+#include "butil/compiler_specific.h"
 #include "butil/status.h"
 #include "common/constant.h"
 #include "fmt/core.h"
@@ -312,28 +313,12 @@ bool VectorIndexWrapper::IsExceedsMaxElements() {
 }
 
 bool VectorIndexWrapper::NeedToRebuild() {
-  if (Type() == pb::common::VECTOR_INDEX_TYPE_FLAT) {
-    return false;
-  }
   auto vector_index = GetOwnVectorIndex();
   if (vector_index == nullptr) {
     return false;
   }
-  uint64_t element_count = 0, deleted_count = 0;
-  auto status = vector_index->GetCount(element_count);
-  if (!status.ok()) {
-    return false;
-  }
-  status = vector_index->GetDeletedCount(deleted_count);
-  if (!status.ok()) {
-    return false;
-  }
 
-  if (element_count == 0 || deleted_count == 0) {
-    return false;
-  }
-
-  return (deleted_count > 0 && deleted_count > element_count / 2);
+  return vector_index->NeedToRebuild();
 }
 
 bool VectorIndexWrapper::NeedToSave(uint64_t last_save_log_behind) {
@@ -417,6 +402,23 @@ butil::Status VectorIndexWrapper::Add(const std::vector<pb::common::VectorWithId
   }
 
   auto status = vector_index->Add(vector_with_ids);
+  if (BAIDU_UNLIKELY(pb::error::Errno::EVECTOR_NOT_TRAIN == status.error_code())) {
+    std::vector<float> train_datas;
+    train_datas.reserve(vector_index->GetDimension() * vector_with_ids.size());
+    for (const auto& vector_with_id : vector_with_ids) {
+      train_datas.insert(train_datas.end(), vector_with_id.vector().float_values().begin(),
+                         vector_with_id.vector().float_values().end());
+    }
+    status = vector_index->Train(train_datas);
+    if (BAIDU_LIKELY(status.ok())) {
+      // try again
+      status = vector_index->Add(vector_with_ids);
+    } else {
+      DINGO_LOG(ERROR) << fmt::format("[vector_index.wrapper][index_id({})] train failed size : {}", Id(),
+                                      train_datas.size());
+      return status;
+    }
+  }
   if (status.ok()) {
     write_key_count_ += vector_with_ids.size();
   }
@@ -444,6 +446,23 @@ butil::Status VectorIndexWrapper::Upsert(const std::vector<pb::common::VectorWit
   }
 
   auto status = vector_index->Upsert(vector_with_ids);
+  if (BAIDU_UNLIKELY(pb::error::Errno::EVECTOR_NOT_TRAIN == status.error_code())) {
+    std::vector<float> train_datas;
+    train_datas.reserve(vector_index->GetDimension() * vector_with_ids.size());
+    for (const auto& vector_with_id : vector_with_ids) {
+      train_datas.insert(train_datas.end(), vector_with_id.vector().float_values().begin(),
+                         vector_with_id.vector().float_values().end());
+    }
+    status = vector_index->Train(train_datas);
+    if (BAIDU_LIKELY(status.ok())) {
+      // try again
+      status = vector_index->Upsert(vector_with_ids);
+    } else {
+      DINGO_LOG(ERROR) << fmt::format("[vector_index.wrapper][index_id({})] train failed size : {}", Id(),
+                                      train_datas.size());
+      return status;
+    }
+  }
   if (status.ok()) {
     write_key_count_ += vector_with_ids.size();
   }
@@ -480,7 +499,8 @@ butil::Status VectorIndexWrapper::Delete(const std::vector<uint64_t>& delete_ids
 butil::Status VectorIndexWrapper::Search(std::vector<pb::common::VectorWithId> vector_with_ids, uint32_t topk,
                                          const pb::common::Range& region_range,
                                          std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters,
-                                         std::vector<pb::index::VectorWithDistanceResult>& results, bool reconstruct) {
+                                         std::vector<pb::index::VectorWithDistanceResult>& results, bool reconstruct,
+                                         const pb::common::VectorSearchParameter& parameter) {
   if (!IsReady()) {
     DINGO_LOG(WARNING) << fmt::format("[vector_index.wrapper][index_id({})] vector index is not ready.", Id());
     return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is not ready.", Id());
@@ -500,10 +520,12 @@ butil::Status VectorIndexWrapper::Search(std::vector<pb::common::VectorWithId> v
       filters.push_back(std::make_shared<VectorIndex::RangeFilterFunctor>(min_vector_id, max_vector_id));
     } else if (vector_index->VectorIndexType() == pb::common::VECTOR_INDEX_TYPE_FLAT) {
       filters.push_back(std::make_shared<VectorIndex::FlatRangeFilterFunctor>(min_vector_id, max_vector_id));
+    } else if (vector_index->VectorIndexType() == pb::common::VECTOR_INDEX_TYPE_IVF_FLAT) {
+      filters.push_back(std::make_shared<VectorIndex::RangeFilterFunctor>(min_vector_id, max_vector_id));
     }
   }
 
-  return vector_index->Search(vector_with_ids, topk, filters, results, reconstruct);
+  return vector_index->Search(vector_with_ids, topk, filters, results, reconstruct, parameter);
 }
 
 }  // namespace dingodb

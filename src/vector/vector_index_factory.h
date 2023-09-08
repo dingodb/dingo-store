@@ -44,7 +44,17 @@ class VectorIndexFactory {
   VectorIndexFactory& operator=(VectorIndexFactory&& rhs) = delete;
 
   static std::shared_ptr<VectorIndex> New(uint64_t id, const pb::common::VectorIndexParameter& index_parameter,
-                                          const pb::common::Range& ranges);
+                                          const pb::common::Range& range);
+
+ private:
+  static std::shared_ptr<VectorIndex> NewHnsw(uint64_t id, const pb::common::VectorIndexParameter& index_parameter,
+                                              const pb::common::Range& range);
+
+  static std::shared_ptr<VectorIndex> NewFlat(uint64_t id, const pb::common::VectorIndexParameter& index_parameter,
+                                              const pb::common::Range& range);
+
+  static std::shared_ptr<VectorIndex> NewIvfFlat(uint64_t id, const pb::common::VectorIndexParameter& index_parameter,
+                                                 const pb::common::Range& range);
 };
 
 }  // namespace dingodb

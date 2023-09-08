@@ -22,6 +22,7 @@
 
 #include "butil/status.h"
 #include "common/safe_map.h"
+#include "log/segment_log_storage.h"
 #include "meta/store_meta_manager.h"
 #include "proto/common.pb.h"
 #include "vector/vector_index.h"
@@ -98,6 +99,9 @@ class VectorIndexManager {
 
   // Scrub vector index.
   static butil::Status ScrubVectorIndex(store::RegionPtr region, bool need_rebuild, bool need_save);
+
+  static butil::Status TrainForBuild(std::shared_ptr<VectorIndex> vector_index, std::shared_ptr<Iterator> iter,
+                                     const std::string &start_key, [[maybe_unused]] const std::string &end_key);
 };
 
 }  // namespace dingodb

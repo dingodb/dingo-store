@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "common/helper.h"
@@ -73,7 +74,7 @@ butil::Status VectorReader::SearchVector(
     uint32_t top_n = parameter.top_n();
     if (BAIDU_UNLIKELY(vector_with_ids[0].scalar_data().scalar_data_size() == 0)) {
       butil::Status status = vector_index->Search(vector_with_ids, top_n, region_range, {},
-                                                  vector_with_distance_results, with_vector_data);
+                                                  vector_with_distance_results, with_vector_data, parameter);
       if (!status.ok()) {
         DINGO_LOG(ERROR) << fmt::format("vector_index::Search failed ");
         return status;
@@ -82,7 +83,7 @@ butil::Status VectorReader::SearchVector(
       top_n *= 10;
 
       butil::Status status =
-          vector_index->Search(vector_with_ids, top_n, region_range, {}, tmp_results, with_vector_data);
+          vector_index->Search(vector_with_ids, top_n, region_range, {}, tmp_results, with_vector_data, parameter);
       if (!status.ok()) {
         DINGO_LOG(ERROR) << fmt::format("vector_index::Search failed ");
         return status;
@@ -623,10 +624,14 @@ butil::Status VectorReader::DoVectorSearchForVectorIdPreFilter(  // NOLINT
   } else if (vector_index->Type() == pb::common::VECTOR_INDEX_TYPE_FLAT) {
     filters.push_back(
         std::make_shared<VectorIndex::FlatListFilterFunctor>(Helper::PbRepeatedToVector(parameter.vector_ids())));
+  } else if (vector_index->Type() == pb::common::VECTOR_INDEX_TYPE_IVF_FLAT) {
+    filters.push_back(
+        std::make_shared<VectorIndex::IvfFlatListFilterFunctor>(Helper::PbRepeatedToVector(parameter.vector_ids())));
   }
 
-  butil::Status status = vector_index->Search(vector_with_ids, parameter.top_n(), region_range, filters,
-                                              vector_with_distance_results, !(parameter.without_vector_data()));
+  butil::Status status =
+      vector_index->Search(vector_with_ids, parameter.top_n(), region_range, filters, vector_with_distance_results,
+                           !(parameter.without_vector_data()), parameter);
   if (!status.ok()) {
     std::string s = fmt::format("DoVectorSearchForVectorIdPreFilter::VectorIndex::Search failed");
     DINGO_LOG(ERROR) << s;
@@ -700,10 +705,13 @@ butil::Status VectorReader::DoVectorSearchForScalarPreFilter(
     filters.push_back(std::make_shared<VectorIndex::HnswListFilterFunctor>(vector_ids));
   } else if (vector_index->Type() == pb::common::VECTOR_INDEX_TYPE_FLAT) {
     filters.push_back(std::make_shared<VectorIndex::FlatListFilterFunctor>(std::move(vector_ids)));
+  } else if (vector_index->Type() == pb::common::VECTOR_INDEX_TYPE_IVF_FLAT) {
+    filters.push_back(std::make_shared<VectorIndex::IvfFlatListFilterFunctor>(std::move(vector_ids)));
   }
 
-  butil::Status status = vector_index->Search(vector_with_ids, parameter.top_n(), region_range, filters,
-                                              vector_with_distance_results, !(parameter.without_vector_data()));
+  butil::Status status =
+      vector_index->Search(vector_with_ids, parameter.top_n(), region_range, filters, vector_with_distance_results,
+                           !(parameter.without_vector_data()), parameter);
   if (!status.ok()) {
     std::string s = fmt::format("DoVectorSearchForScalarPreFilter::VectorIndex::Search failed");
     DINGO_LOG(ERROR) << s;
@@ -782,7 +790,7 @@ butil::Status VectorReader::SearchVectorDebug(
     uint32_t top_n = parameter.top_n();
     if (BAIDU_UNLIKELY(vector_with_ids[0].scalar_data().scalar_data_size() == 0)) {
       butil::Status status = vector_index->Search(vector_with_ids, top_n, region_range, {},
-                                                  vector_with_distance_results, with_vector_data);
+                                                  vector_with_distance_results, with_vector_data, parameter);
       if (!status.ok()) {
         DINGO_LOG(ERROR) << fmt::format("vector_index::Search failed ");
         return status;
@@ -791,7 +799,7 @@ butil::Status VectorReader::SearchVectorDebug(
       top_n *= 10;
       auto start = lambda_time_now_function();
       butil::Status status =
-          vector_index->Search(vector_with_ids, top_n, region_range, {}, tmp_results, with_vector_data);
+          vector_index->Search(vector_with_ids, top_n, region_range, {}, tmp_results, with_vector_data, parameter);
       auto end = lambda_time_now_function();
       search_time_us = lambda_time_diff_microseconds_function(start, end);
       if (!status.ok()) {
@@ -894,13 +902,17 @@ butil::Status VectorReader::DoVectorSearchForVectorIdPreFilterDebug(  // NOLINT
   } else if (vector_index->Type() == pb::common::VECTOR_INDEX_TYPE_FLAT) {
     filters.push_back(
         std::make_shared<VectorIndex::FlatListFilterFunctor>(Helper::PbRepeatedToVector(parameter.vector_ids())));
+  } else if (vector_index->Type() == pb::common::VECTOR_INDEX_TYPE_IVF_FLAT) {
+    filters.push_back(
+        std::make_shared<VectorIndex::IvfFlatListFilterFunctor>(Helper::PbRepeatedToVector(parameter.vector_ids())));
   }
   auto end_ids = lambda_time_now_function();
   deserialization_id_time_us = lambda_time_diff_microseconds_function(start_ids, end_ids);
 
   auto start_search = lambda_time_now_function();
-  butil::Status status = vector_index->Search(vector_with_ids, parameter.top_n(), region_range, filters,
-                                              vector_with_distance_results, !(parameter.without_vector_data()));
+  butil::Status status =
+      vector_index->Search(vector_with_ids, parameter.top_n(), region_range, filters, vector_with_distance_results,
+                           !(parameter.without_vector_data()), parameter);
   auto end_search = lambda_time_now_function();
   search_time_us = lambda_time_diff_microseconds_function(start_search, end_search);
   if (!status.ok()) {
@@ -984,11 +996,14 @@ butil::Status VectorReader::DoVectorSearchForScalarPreFilterDebug(
     filters.push_back(std::make_shared<VectorIndex::HnswListFilterFunctor>(vector_ids));
   } else if (vector_index->Type() == pb::common::VECTOR_INDEX_TYPE_FLAT) {
     filters.push_back(std::make_shared<VectorIndex::FlatListFilterFunctor>(std::move(vector_ids)));
+  } else if (vector_index->Type() == pb::common::VECTOR_INDEX_TYPE_IVF_FLAT) {
+    filters.push_back(std::make_shared<VectorIndex::IvfFlatListFilterFunctor>(std::move(vector_ids)));
   }
 
   auto start_search = lambda_time_now_function();
-  butil::Status status = vector_index->Search(vector_with_ids, parameter.top_n(), region_range, filters,
-                                              vector_with_distance_results, !(parameter.without_vector_data()));
+  butil::Status status =
+      vector_index->Search(vector_with_ids, parameter.top_n(), region_range, filters, vector_with_distance_results,
+                           !(parameter.without_vector_data()), parameter);
   auto end_search = lambda_time_now_function();
   search_time_us = lambda_time_diff_microseconds_function(start_search, end_search);
   if (!status.ok()) {

@@ -25,6 +25,7 @@
 #include <optional>
 #include <string>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include "bthread/types.h"
@@ -127,7 +128,7 @@ class VectorIndex {
   // List filter just for flat
   class FlatListFilterFunctor : public FilterFunctor {
    public:
-    FlatListFilterFunctor(std::vector<uint64_t>&& vector_ids)
+    explicit FlatListFilterFunctor(std::vector<uint64_t>&& vector_ids)
         : vector_ids_(std::forward<std::vector<uint64_t>>(vector_ids)) {}
     FlatListFilterFunctor(const FlatListFilterFunctor&) = delete;
     FlatListFilterFunctor(FlatListFilterFunctor&&) = delete;
@@ -157,6 +158,27 @@ class VectorIndex {
     std::vector<faiss::idx_t>* id_map_{nullptr};
   };
 
+  // List filter just for ivf flat
+  class IvfFlatListFilterFunctor : public FilterFunctor {
+   public:
+    explicit IvfFlatListFilterFunctor(std::vector<uint64_t>&& vector_ids)
+        : vector_ids_(std::forward<std::vector<uint64_t>>(vector_ids)) {
+      // highly optimized code, do not modify it
+      array_indexs_.rehash(vector_ids_.size());
+      array_indexs_.insert(vector_ids_.begin(), vector_ids_.end());
+    }
+    IvfFlatListFilterFunctor(const IvfFlatListFilterFunctor&) = delete;
+    IvfFlatListFilterFunctor(IvfFlatListFilterFunctor&&) = delete;
+    IvfFlatListFilterFunctor& operator=(const IvfFlatListFilterFunctor&) = delete;
+    IvfFlatListFilterFunctor& operator=(IvfFlatListFilterFunctor&&) = delete;
+
+    bool Check(uint64_t index) override { return array_indexs_.find(index) != array_indexs_.end(); }
+
+   private:
+    std::vector<uint64_t> vector_ids_;
+    std::unordered_set<uint64_t> array_indexs_;
+  };
+
   virtual int32_t GetDimension() = 0;
   virtual butil::Status GetCount([[maybe_unused]] uint64_t& count);
   virtual butil::Status GetDeletedCount([[maybe_unused]] uint64_t& deleted_count);
@@ -176,11 +198,17 @@ class VectorIndex {
   virtual butil::Status Search([[maybe_unused]] std::vector<pb::common::VectorWithId> vector_with_ids,
                                [[maybe_unused]] uint32_t topk,
                                [[maybe_unused]] std::vector<std::shared_ptr<FilterFunctor>> filters,
-                               std::vector<pb::index::VectorWithDistanceResult>& results,
-                               [[maybe_unused]] bool reconstruct = false) = 0;
+                               std::vector<pb::index::VectorWithDistanceResult>& results,  // NOLINT
+                               [[maybe_unused]] bool reconstruct = false,
+                               [[maybe_unused]] const pb::common::VectorSearchParameter& parameter = {}) = 0;
 
   virtual void LockWrite() = 0;
   virtual void UnlockWrite() = 0;
+  virtual butil::Status Train(const std::vector<float>& train_datas) = 0;
+  virtual butil::Status Train(const std::vector<pb::common::VectorWithId>& vectors) = 0;
+  virtual bool NeedToRebuild() = 0;
+  virtual bool NeedTrain() { return false; }
+  virtual bool IsTrained() { return true; }
 
   uint64_t Id() const { return id; }
 
@@ -301,7 +329,8 @@ class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrappe
   butil::Status Search(std::vector<pb::common::VectorWithId> vector_with_ids, uint32_t topk,
                        const pb::common::Range& region_range,
                        std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters,
-                       std::vector<pb::index::VectorWithDistanceResult>& results, bool reconstruct = false);
+                       std::vector<pb::index::VectorWithDistanceResult>& results, bool reconstruct = false,
+                       const pb::common::VectorSearchParameter& parameter = {});
 
  private:
   // vector index id

@@ -44,6 +44,7 @@ cmake-build-release
 .DS_Store
 tags
 .cache
+.run
 
 # eclipse
 .cproject

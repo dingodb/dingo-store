@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DINGODB_VECTOR_INDEX_FLAT_H_  // NOLINT
-#define DINGODB_VECTOR_INDEX_FLAT_H_
+#ifndef DINGODB_VECTOR_INDEX_IVF_FLAT_H_  // NOLINT
+#define DINGODB_VECTOR_INDEX_IVF_FLAT_H_
 
 #include <array>
 #include <atomic>
@@ -30,6 +30,7 @@
 #include "faiss/Index.h"
 #include "faiss/IndexFlat.h"
 #include "faiss/IndexIDMap.h"
+#include "faiss/IndexIVFFlat.h"
 #include "faiss/MetricType.h"
 #include "faiss/impl/IDSelector.h"
 #include "faiss/utils/distances.h"
@@ -41,10 +42,10 @@
 namespace dingodb {
 
 // Filter vector id
-class FlatIDSelector : public faiss::IDSelector {
+class IvfFlatIDSelector : public faiss::IDSelector {
  public:
-  FlatIDSelector(std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters) : filters_(filters) {}
-  ~FlatIDSelector() override = default;
+  explicit IvfFlatIDSelector(std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters) : filters_(filters) {}
+  ~IvfFlatIDSelector() override = default;
   bool is_member(faiss::idx_t id) const override {  // NOLINT
     if (filters_.empty()) {
       return true;
@@ -62,17 +63,17 @@ class FlatIDSelector : public faiss::IDSelector {
   std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters_;
 };
 
-class VectorIndexFlat : public VectorIndex {
+class VectorIndexIvfFlat : public VectorIndex {
  public:
-  explicit VectorIndexFlat(uint64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
-                           const pb::common::Range& ranges);
+  explicit VectorIndexIvfFlat(uint64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
+                              const pb::common::Range& ranges);
 
-  ~VectorIndexFlat() override;
+  ~VectorIndexIvfFlat() override;
 
-  VectorIndexFlat(const VectorIndexFlat& rhs) = delete;
-  VectorIndexFlat& operator=(const VectorIndexFlat& rhs) = delete;
-  VectorIndexFlat(VectorIndexFlat&& rhs) = delete;
-  VectorIndexFlat& operator=(VectorIndexFlat&& rhs) = delete;
+  VectorIndexIvfFlat(const VectorIndexIvfFlat& rhs) = delete;
+  VectorIndexIvfFlat& operator=(const VectorIndexIvfFlat& rhs) = delete;
+  VectorIndexIvfFlat(VectorIndexIvfFlat&& rhs) = delete;
+  VectorIndexIvfFlat& operator=(VectorIndexIvfFlat&& rhs) = delete;
 
   butil::Status Save(const std::string& path) override;
   butil::Status Load(const std::string& path) override;
@@ -100,33 +101,46 @@ class VectorIndexFlat : public VectorIndex {
   butil::Status GetDeletedCount([[maybe_unused]] uint64_t& deleted_count) override;
   butil::Status GetMemorySize([[maybe_unused]] uint64_t& memory_size) override;
   bool IsExceedsMaxElements() override;
-  butil::Status Train([[maybe_unused]] const std::vector<float>& train_datas) override { return butil::Status::OK(); }
-  butil::Status Train([[maybe_unused]] const std::vector<pb::common::VectorWithId>& vectors) override {
-    return butil::Status::OK();
-  }
 
-  bool NeedToRebuild() override { return false; }
+  butil::Status Train(const std::vector<float>& train_datas) override;
+  butil::Status Train([[maybe_unused]] const std::vector<pb::common::VectorWithId>& vectors) override;
+  bool NeedToRebuild() override;
+  bool NeedTrain() override { return true; }
+  bool IsTrained() override;
 
  private:
-  void SearchWithParam(faiss::idx_t n, const faiss::Index::component_t* x, faiss::idx_t k,
-                       faiss::Index::distance_t* distances, faiss::idx_t* labels,
-                       std::shared_ptr<FlatIDSelector> filters);
+  void Init();
+
+  bool DoIsTrained();
+
+  // train failed. reset
+  void Reset();
+
   // Dimension of the elements
   faiss::idx_t dimension_;
 
   // only support L2 and IP
   pb::common::MetricType metric_type_;
 
-  std::unique_ptr<faiss::Index> raw_index_;
-
-  std::unique_ptr<faiss::IndexIDMap2> index_id_map2_;
-
   bthread_mutex_t mutex_;
+
+  // maybe 1 or vector_index_parameter.ivf_flat_parameter().ncentroids()
+  size_t nlist_;
+
+  // from  vector_index_parameter.ivf_flat_parameter().ncentroids()
+  size_t nlist_org_;
+
+  std::unique_ptr<faiss::Index> quantizer_;
+
+  std::unique_ptr<faiss::IndexIVFFlat> index_;
 
   // normalize vector
   bool normalize_;
+
+  // first  train data size
+  faiss::idx_t train_data_size_;
 };
 
 }  // namespace dingodb
 
-#endif  // DINGODB_VECTOR_INDEX_FLAT_H_  // NOLINT
+#endif  // DINGODB_VECTOR_INDEX_IVF_FLAT_H_  // NOLINT
