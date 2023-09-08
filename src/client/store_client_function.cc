@@ -1968,12 +1968,17 @@ void PrintTableRange(dingodb::pb::meta::TableRange& table_range) {
 }
 
 void BatchPutTable(std::shared_ptr<Context> ctx) {
+  // Get table definition
+  auto table_definition = SendGetTable(ctx->coordinator_interaction, ctx->table_id);
+  auto partitions = table_definition.table_partition().partitions();
+  // Get table range distribution
   auto table_range = SendGetTableRange(ctx->coordinator_interaction, ctx->table_id);
   PrintTableRange(table_range);
 
   std::vector<uint64_t> latencys;
   for (int i = 0; i < ctx->req_num; ++i) {
-    std::string key = ctx->prefix + Helper::GenRandomStringV2(32);
+    uint64_t partition_id = partitions.at(i % partitions.size()).id().entity_id();
+    std::string key = client::Helper::EncodeRegionRange(partition_id) + Helper::GenRandomString(32);
     std::string value = Helper::GenRandomString(256);
 
     uint64_t region_id = 0;

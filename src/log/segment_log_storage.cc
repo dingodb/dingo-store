@@ -25,7 +25,8 @@
 #include "braft/log_entry.h"
 #include "braft/protobuf_file.h"
 #include "braft/util.h"
-#include "brpc/reloadable_flags.h"         //
+#include "brpc/reloadable_flags.h"  //
+#include "butil/atomicops.h"
 #include "butil/fd_utility.h"              // butil::make_close_on_exec
 #include "butil/file_util.h"               // butil::CreateDirectory
 #include "butil/files/dir_reader_posix.h"  // butil::DirReaderPosix
@@ -681,10 +682,13 @@ int SegmentLogStorage::AppendEntries(const std::vector<braft::LogEntry*>& entrie
       "append entries region_id: {} last_log_index_: {} log type: {} entry index: {}_{} entry count: {}", region_id_,
       last_log_index_.load(butil::memory_order_relaxed), static_cast<int>(entries.front()->type),
       entries.front()->id.term, entries.front()->id.index, entries.size());
+
   if (last_log_index_.load(butil::memory_order_relaxed) + 1 != entries.front()->id.index) {
     DINGO_LOG(FATAL) << fmt::format(
-        "There's gap between appending entries and last_log_index_ path: {} last_log_index_: {} entry_index: {}", path_,
-        last_log_index_.load(butil::memory_order_relaxed), entries.front()->id.index);
+        "There's gap between appending entries and last_log_index_ path: {} last_log_index_: {} log type: {} "
+        "entry_index: {}_{}",
+        path_, last_log_index_.load(butil::memory_order_relaxed), static_cast<int>(entries.front()->type),
+        entries.front()->id.term, entries.front()->id.index);
     return -1;
   }
   std::shared_ptr<Segment> last_segment;
@@ -941,6 +945,9 @@ int SegmentLogStorage::TruncateSuffix(int64_t last_index_kept) {
 }
 
 int SegmentLogStorage::Reset(int64_t next_log_index) {
+  DINGO_LOG(INFO) << fmt::format("reset log region: {} next_log_index: {} first_log_index_: {} last_log_index_: {}",
+                                 region_id_, next_log_index, first_log_index_.load(butil::memory_order_relaxed),
+                                 last_log_index_.load(butil::memory_order_relaxed));
   if (next_log_index <= 0) {
     DINGO_LOG(ERROR) << "Invalid next_log_index=" << next_log_index << " path: " << path_;
     return EINVAL;

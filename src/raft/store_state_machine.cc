@@ -160,7 +160,7 @@ void StoreStateMachine::on_snapshot_save(braft::SnapshotWriter* writer, braft::C
   DINGO_LOG(INFO) << fmt::format("[raft.sm][region({})] on_snapshot_save done", region_->Id());
 }
 
-// Check last last load snapshot is suspend
+// Check last load snapshot is suspend
 static bool IsLastLoadSnapshotSuspend() {
   auto meta_reader = std::make_shared<MetaReader>(Server::GetInstance()->GetRawEngine());
   auto kv = meta_reader->Get(Constant::kIsLoadingSnapshot);
@@ -197,11 +197,10 @@ static void SetLoadingSnapshotFlag(bool flag) {
 //      2>. load snapshot files
 //      3>. applied_index = max_index
 int StoreStateMachine::on_snapshot_load(braft::SnapshotReader* reader) {
-  DINGO_LOG(INFO) << fmt::format("[raft.sm][region({})] on_snapshot_load", region_->Id());
   braft::SnapshotMeta meta;
   reader->load_meta(&meta);
-  DINGO_LOG(INFO) << fmt::format("[raft.sm][region({})] load snapshot({}-{}) applied_index({})", region_->Id(),
-                                 meta.last_included_term(), meta.last_included_index(), applied_index_);
+  DINGO_LOG(INFO) << fmt::format("[raft.sm][region({})] on_snapshot_load snapshot({}-{}) applied_index({})",
+                                 region_->Id(), meta.last_included_term(), meta.last_included_index(), applied_index_);
 
   // Todo: 1. When loading snapshot panic, need handle the corner case.
   //       2. When restart server, maybe meta.last_included_index() > applied_index_.
@@ -234,6 +233,8 @@ int StoreStateMachine::on_snapshot_load(braft::SnapshotReader* reader) {
   if (is_restart_for_load_snapshot_.load()) {
     is_restart_for_load_snapshot_.store(false);
   }
+
+  DINGO_LOG(INFO) << fmt::format("[raft.sm][region({})] on_snapshot_load done", region_->Id());
 
   return 0;
 }
