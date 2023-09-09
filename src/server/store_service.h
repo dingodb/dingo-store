@@ -73,6 +73,35 @@ class StoreServiceImpl : public pb::store::StoreService {
 
   void SetStorage(std::shared_ptr<Storage> storage);
 
+  // txn api
+  void TxnGet(google::protobuf::RpcController* controller, const pb::store::TxnGetRequest* request,
+              pb::store::TxnGetResponse* response, google::protobuf::Closure* done) override;
+  void TxnScan(google::protobuf::RpcController* controller, const pb::store::TxnScanRequest* request,
+               pb::store::TxnScanResponse* response, google::protobuf::Closure* done) override;
+  void TxnPrewrite(google::protobuf::RpcController* controller, const pb::store::TxnPrewriteRequest* request,
+                   pb::store::TxnPrewriteResponse* response, google::protobuf::Closure* done) override;
+  void TxnCommit(google::protobuf::RpcController* controller, const pb::store::TxnCommitRequest* request,
+                 pb::store::TxnCommitResponse* response, google::protobuf::Closure* done) override;
+  void TxnCheckTxnStatus(google::protobuf::RpcController* controller,
+                         const pb::store::TxnCheckTxnStatusRequest* request,
+                         pb::store::TxnCheckTxnStatusResponse* response, google::protobuf::Closure* done) override;
+  void TxnResolveLock(google::protobuf::RpcController* controller, const pb::store::TxnResolveLockRequest* request,
+                      pb::store::TxnResolveLockResponse* response, google::protobuf::Closure* done) override;
+  void TxnBatchGet(google::protobuf::RpcController* controller, const pb::store::TxnBatchGetRequest* request,
+                   pb::store::TxnBatchGetResponse* response, google::protobuf::Closure* done) override;
+  void TxnBatchRollback(google::protobuf::RpcController* controller, const pb::store::TxnBatchRollbackRequest* request,
+                        pb::store::TxnBatchRollbackResponse* response, google::protobuf::Closure* done) override;
+  void TxnScanLock(google::protobuf::RpcController* controller, const pb::store::TxnScanLockRequest* request,
+                   pb::store::TxnScanLockResponse* response, google::protobuf::Closure* done) override;
+  void TxnHeartBeat(google::protobuf::RpcController* controller, const pb::store::TxnHeartBeatRequest* request,
+                    pb::store::TxnHeartBeatResponse* response, google::protobuf::Closure* done) override;
+  void TxnGc(google::protobuf::RpcController* controller, const pb::store::TxnGcRequest* request,
+             pb::store::TxnGcResponse* response, google::protobuf::Closure* done) override;
+  void TxnDeleteRange(google::protobuf::RpcController* controller, const pb::store::TxnDeleteRangeRequest* request,
+                      pb::store::TxnDeleteRangeResponse* response, google::protobuf::Closure* done) override;
+  void TxnDump(google::protobuf::RpcController* controller, const pb::store::TxnDumpRequest* request,
+               pb::store::TxnDumpResponse* response, google::protobuf::Closure* done) override;
+
  private:
   std::shared_ptr<Storage> storage_;
 };
