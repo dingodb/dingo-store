@@ -43,6 +43,9 @@ store:
   column_families:
     - default
     - meta
+    - data
+    - lock
+    - write
   scan:
     scan_interval_s: 30
     timeout_s: 60

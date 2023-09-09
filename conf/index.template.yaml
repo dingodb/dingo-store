@@ -49,3 +49,6 @@ store:
   column_families:
     - default
     - meta
+    - data
+    - lock
+    - write
