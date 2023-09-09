@@ -689,13 +689,13 @@ message TxnGcResponse {
 // All keys in the range will be deleted permanently regardless of their
 // timestamps. This means that deleted keys will not be retrievable by
 // specifying an older timestamp.
-message DeleteRangeRequest {
+message TxnDeleteRangeRequest {
   Context context = 1;
   bytes start_key = 2;
   bytes end_key = 3;
 }
 
-message DeleteRangeResponse {
+message TxnDeleteRangeResponse {
   // error code
   dingodb.pb.error.Error error = 1;
 }
@@ -880,7 +880,7 @@ service StoreService {
   rpc TxnScanLock(TxnScanLockRequest) returns (TxnScanLockResponse);
   rpc TxnHeartBeat(TxnHeartBeatRequest) returns (TxnHeartBeatResponse);
   rpc TxnGc(TxnGcRequest) returns (TxnGcResponse);
-  rpc TxnDeleteRange(DeleteRangeRequest) returns (DeleteRangeResponse);
+  rpc TxnDeleteRange(TxnDeleteRangeRequest) returns (TxnDeleteRangeResponse);
   rpc TxnDump(TxnDumpRequest) returns (TxnDumpResponse);
 
   // rpc TxnScanBegin(TxnScanBeginRequest) returns (TxnScanBeginResponse);

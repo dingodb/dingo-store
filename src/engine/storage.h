@@ -27,6 +27,7 @@
 #include "memory"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
+#include "proto/store.pb.h"
 
 namespace dingodb {
 
@@ -64,6 +65,49 @@ class Storage {
                                       std::vector<pb::common::KeyValue>* kvs);
 
   static butil::Status KvScanRelease(std::shared_ptr<Context> ctx, const std::string& scan_id);
+
+  // txn
+  butil::Status TxnBatchGet(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys,
+                            pb::store::TxnResultInfo& txn_result_info, std::vector<pb::common::KeyValue>& kvs);
+  butil::Status TxnScan(std::shared_ptr<Context> ctx, uint64_t region_id, const pb::common::Range& range,
+                        uint64_t limit, uint64_t start_ts, bool key_only, bool is_reverse, bool disable_coprocessor,
+                        const pb::store::Coprocessor& coprocessor, pb::store::TxnResultInfo& txn_result_info,
+                        std::vector<pb::common::KeyValue>& kvs, bool& has_more, std::string& end_key);
+  // store prewrite
+  butil::Status TxnPrewrite(std::shared_ptr<Context> ctx, const std::vector<pb::store::Mutation>& mutations,
+                            const std::string& primary_lock, uint64_t start_ts, uint64_t lock_ttl, uint64_t txn_size,
+                            bool try_one_pc, uint64_t max_commit_ts, pb::store::TxnResultInfo& txn_result_info,
+                            std::vector<std::string> already_exist, uint64_t& one_pc_commit_ts);
+  // index prewrite
+  butil::Status TxnPrewrite(std::shared_ptr<Context> ctx, const std::vector<pb::index::Mutation>& mutations,
+                            const std::string& primary_lock, uint64_t start_ts, uint64_t lock_ttl, uint64_t txn_size,
+                            bool try_one_pc, uint64_t max_commit_ts, pb::store::TxnResultInfo& txn_result_info,
+                            std::vector<std::string> already_exist, uint64_t& one_pc_commit_ts);
+  butil::Status TxnCommit(std::shared_ptr<Context> ctx, uint64_t start_ts, uint64_t commit_ts,
+                          const std::vector<std::string>& keys, pb::store::TxnResultInfo& txn_result_info,
+                          uint64_t& committed_ts);
+  butil::Status TxnCheckTxnStatus(std::shared_ptr<Context> ctx, const std::string& primary_key, uint64_t lock_ts,
+                                  uint64_t caller_start_ts, uint64_t current_ts,
+                                  pb::store::TxnResultInfo& txn_result_info, uint64_t& lock_ttl, uint64_t& commit_ts,
+                                  pb::store::Action& action, pb::store::LockInfo& lock_info);
+  butil::Status TxnResolveLock(std::shared_ptr<Context> ctx, uint64_t start_ts, uint64_t commit_ts,
+                               std::vector<std::string>& keys, pb::store::TxnResultInfo& txn_result_info);
+  butil::Status TxnBatchRollback(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys,
+                                 pb::store::TxnResultInfo& txn_result_info, std::vector<pb::common::KeyValue>& kvs);
+  butil::Status TxnScanLock(std::shared_ptr<Context> ctx, uint64_t max_ts, const std::string& start_key, uint64_t limit,
+                            const std::string& end_key, pb::store::TxnResultInfo& txn_result_info,
+                            std::vector<pb::store::LockInfo>& locks);
+  butil::Status TxnHeartBeat(std::shared_ptr<Context> ctx, const std::string& primary_lock, uint64_t start_ts,
+                             uint64_t advise_lock_ttl, pb::store::TxnResultInfo& txn_result_info, uint64_t& lock_ttl);
+  butil::Status TxnGc(std::shared_ptr<Context> ctx, uint64_t safe_point_ts, pb::store::TxnResultInfo& txn_result_info);
+  butil::Status TxnDeleteRange(std::shared_ptr<Context> ctx, const std::string& start_key, const std::string& end_key);
+  butil::Status TxnDump(std::shared_ptr<Context> ctx, const std::string& start_key, const std::string& end_key,
+                        pb::store::TxnResultInfo& txn_result_info, std::vector<pb::store::TxnWriteKey>& txn_write_keys,
+                        std::vector<pb::store::TxnWriteValue>& txn_write_values,
+                        std::vector<pb::store::TxnLockKey>& txn_lock_keys,
+                        std::vector<pb::store::TxnLockValue>& txn_lock_values,
+                        std::vector<pb::store::TxnDataKey>& txn_data_keys,
+                        std::vector<pb::store::TxnDataValue>& txn_data_values);
 
   // vector index
   butil::Status VectorAdd(std::shared_ptr<Context> ctx, const std::vector<pb::common::VectorWithId>& vectors);

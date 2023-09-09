@@ -15,6 +15,7 @@
 #include "engine/storage.h"
 
 #include <cstdint>
+#include <string>
 #include <vector>
 
 #include "butil/compiler_specific.h"
@@ -22,6 +23,7 @@
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "engine/snapshot.h"
 #include "engine/write_data.h"
 #include "fmt/core.h"
 #include "gflags/gflags.h"
@@ -491,5 +493,219 @@ void Storage::IncTaskCount() { this->workers_task_count_ << 1; }
 
 // decrease task count
 void Storage::DecTaskCount() { this->workers_task_count_ << -1; }
+
+// txn
+
+butil::Status Storage::TxnBatchGet(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys,
+                                   pb::store::TxnResultInfo& txn_result_info, std::vector<pb::common::KeyValue>& kvs) {
+  auto status = ValidateLeader(ctx->RegionId());
+  if (!status.ok()) {
+    return status;
+  }
+
+  DINGO_LOG(INFO) << "TxnBatchGet keys size : " << keys.size() << " kvs size : " << kvs.size()
+                  << " txn_result_info : " << txn_result_info.ShortDebugString();
+
+  return butil::Status();
+}
+
+butil::Status Storage::TxnScan(std::shared_ptr<Context> ctx, uint64_t region_id, const pb::common::Range& range,
+                               uint64_t limit, uint64_t start_ts, bool key_only, bool is_reverse,
+                               bool disable_coprocessor, const pb::store::Coprocessor& coprocessor,
+                               pb::store::TxnResultInfo& txn_result_info, std::vector<pb::common::KeyValue>& kvs,
+                               bool& has_more, std::string& end_key) {
+  auto status = ValidateLeader(ctx->RegionId());
+  if (!status.ok()) {
+    return status;
+  }
+
+  DINGO_LOG(INFO) << "TxnScan region_id: " << region_id << " range: " << range.ShortDebugString() << " limit: " << limit
+                  << " start_ts: " << start_ts << " key_only: " << key_only << " is_reverse: " << is_reverse
+                  << " disable_coprocessor: " << disable_coprocessor
+                  << " coprocessor: " << coprocessor.ShortDebugString()
+                  << " txn_result_info: " << txn_result_info.ShortDebugString() << " kvs size: " << kvs.size()
+                  << " has_more: " << has_more << " end_key: " << end_key;
+
+  return butil::Status();
+}
+
+butil::Status Storage::TxnPrewrite(std::shared_ptr<Context> ctx, const std::vector<pb::store::Mutation>& mutations,
+                                   const std::string& primary_lock, uint64_t start_ts, uint64_t lock_ttl,
+                                   uint64_t txn_size, bool try_one_pc, uint64_t max_commit_ts,
+                                   pb::store::TxnResultInfo& txn_result_info, std::vector<std::string> already_exist,
+                                   uint64_t& one_pc_commit_ts) {
+  auto status = ValidateLeader(ctx->RegionId());
+  if (!status.ok()) {
+    return status;
+  }
+
+  DINGO_LOG(INFO) << "TxnPrewrite mutations size : " << mutations.size() << " primary_lock : " << primary_lock
+                  << " start_ts : " << start_ts << " lock_ttl : " << lock_ttl << " txn_size : " << txn_size
+                  << " try_one_pc : " << try_one_pc << " max_commit_ts : " << max_commit_ts
+                  << " txn_result_info : " << txn_result_info.ShortDebugString()
+                  << " already_exist size : " << already_exist.size() << " one_pc_commit_ts : " << one_pc_commit_ts;
+
+  return butil::Status();
+}
+
+butil::Status Storage::TxnPrewrite(std::shared_ptr<Context> ctx, const std::vector<pb::index::Mutation>& mutations,
+                                   const std::string& primary_lock, uint64_t start_ts, uint64_t lock_ttl,
+                                   uint64_t txn_size, bool try_one_pc, uint64_t max_commit_ts,
+                                   pb::store::TxnResultInfo& txn_result_info, std::vector<std::string> already_exist,
+                                   uint64_t& one_pc_commit_ts) {
+  auto status = ValidateLeader(ctx->RegionId());
+  if (!status.ok()) {
+    return status;
+  }
+
+  DINGO_LOG(INFO) << "TxnPrewrite mutations size : " << mutations.size() << " primary_lock : " << primary_lock
+                  << " start_ts : " << start_ts << " lock_ttl : " << lock_ttl << " txn_size : " << txn_size
+                  << " try_one_pc : " << try_one_pc << " max_commit_ts : " << max_commit_ts
+                  << " txn_result_info : " << txn_result_info.ShortDebugString()
+                  << " already_exist size : " << already_exist.size() << " one_pc_commit_ts : " << one_pc_commit_ts;
+
+  return butil::Status();
+}
+
+butil::Status Storage::TxnCommit(std::shared_ptr<Context> ctx, uint64_t start_ts, uint64_t commit_ts,
+                                 const std::vector<std::string>& keys, pb::store::TxnResultInfo& txn_result_info,
+                                 uint64_t& committed_ts) {
+  auto status = ValidateLeader(ctx->RegionId());
+  if (!status.ok()) {
+    return status;
+  }
+
+  DINGO_LOG(INFO) << "TxnCommit start_ts : " << start_ts << " commit_ts : " << commit_ts
+                  << " keys size : " << keys.size() << " txn_result_info : " << txn_result_info.ShortDebugString()
+                  << " committed_ts : " << committed_ts;
+
+  return butil::Status();
+}
+
+butil::Status Storage::TxnCheckTxnStatus(std::shared_ptr<Context> ctx, const std::string& primary_key, uint64_t lock_ts,
+                                         uint64_t caller_start_ts, uint64_t current_ts,
+                                         pb::store::TxnResultInfo& txn_result_info, uint64_t& lock_ttl,
+                                         uint64_t& commit_ts, pb::store::Action& action,
+                                         pb::store::LockInfo& lock_info) {
+  auto status = ValidateLeader(ctx->RegionId());
+  if (!status.ok()) {
+    return status;
+  }
+
+  DINGO_LOG(INFO) << "TxnCheckTxnStatus primary_key : " << primary_key << " lock_ts : " << lock_ts
+                  << " caller_start_ts : " << caller_start_ts << " current_ts : " << current_ts
+                  << " txn_result_info : " << txn_result_info.ShortDebugString() << " lock_ttl : " << lock_ttl
+                  << " commit_ts : " << commit_ts << " action : " << action
+                  << " lock_info : " << lock_info.ShortDebugString();
+
+  return butil::Status();
+}
+
+butil::Status Storage::TxnResolveLock(std::shared_ptr<Context> ctx, uint64_t start_ts, uint64_t commit_ts,
+                                      std::vector<std::string>& keys, pb::store::TxnResultInfo& txn_result_info) {
+  auto status = ValidateLeader(ctx->RegionId());
+  if (!status.ok()) {
+    return status;
+  }
+
+  DINGO_LOG(INFO) << "TxnResolveLock start_ts : " << start_ts << " commit_ts : " << commit_ts
+                  << " keys size : " << keys.size() << " txn_result_info : " << txn_result_info.ShortDebugString();
+
+  return butil::Status();
+}
+
+butil::Status Storage::TxnBatchRollback(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys,
+                                        pb::store::TxnResultInfo& txn_result_info,
+                                        std::vector<pb::common::KeyValue>& kvs) {
+  auto status = ValidateLeader(ctx->RegionId());
+  if (!status.ok()) {
+    return status;
+  }
+
+  DINGO_LOG(INFO) << "TxnBatchRollback keys size : " << keys.size() << " kvs size : " << kvs.size()
+                  << " txn_result_info : " << txn_result_info.ShortDebugString();
+
+  return butil::Status();
+}
+
+butil::Status Storage::TxnScanLock(std::shared_ptr<Context> ctx, uint64_t max_ts, const std::string& start_key,
+                                   uint64_t limit, const std::string& end_key,
+                                   pb::store::TxnResultInfo& txn_result_info, std::vector<pb::store::LockInfo>& locks) {
+  auto status = ValidateLeader(ctx->RegionId());
+  if (!status.ok()) {
+    return status;
+  }
+
+  DINGO_LOG(INFO) << "TxnScanLock max_ts : " << max_ts << " start_key : " << start_key << " limit : " << limit
+                  << " end_key : " << end_key << " txn_result_info : " << txn_result_info.ShortDebugString()
+                  << " locks size : " << locks.size();
+
+  return butil::Status();
+}
+
+butil::Status Storage::TxnHeartBeat(std::shared_ptr<Context> ctx, const std::string& primary_lock, uint64_t start_ts,
+                                    uint64_t advise_lock_ttl, pb::store::TxnResultInfo& txn_result_info,
+                                    uint64_t& lock_ttl) {
+  auto status = ValidateLeader(ctx->RegionId());
+  if (!status.ok()) {
+    return status;
+  }
+
+  DINGO_LOG(INFO) << "TxnHeartBeat primary_lock : " << primary_lock << " start_ts : " << start_ts
+                  << " advise_lock_ttl : " << advise_lock_ttl
+                  << " txn_result_info : " << txn_result_info.ShortDebugString() << " lock_ttl : " << lock_ttl;
+
+  return butil::Status();
+}
+
+butil::Status Storage::TxnGc(std::shared_ptr<Context> ctx, uint64_t safe_point_ts,
+                             pb::store::TxnResultInfo& txn_result_info) {
+  auto status = ValidateLeader(ctx->RegionId());
+  if (!status.ok()) {
+    return status;
+  }
+
+  DINGO_LOG(INFO) << "TxnGc safe_point_ts : " << safe_point_ts
+                  << " txn_result_info : " << txn_result_info.ShortDebugString();
+
+  return butil::Status();
+}
+
+butil::Status Storage::TxnDeleteRange(std::shared_ptr<Context> ctx, const std::string& start_key,
+                                      const std::string& end_key) {
+  auto status = ValidateLeader(ctx->RegionId());
+  if (!status.ok()) {
+    return status;
+  }
+
+  DINGO_LOG(INFO) << "TxnDeleteRange start_key : " << start_key << " end_key : " << end_key;
+
+  return butil::Status();
+}
+
+butil::Status Storage::TxnDump(std::shared_ptr<Context> ctx, const std::string& start_key, const std::string& end_key,
+                               pb::store::TxnResultInfo& txn_result_info,
+                               std::vector<pb::store::TxnWriteKey>& txn_write_keys,
+                               std::vector<pb::store::TxnWriteValue>& txn_write_values,
+                               std::vector<pb::store::TxnLockKey>& txn_lock_keys,
+                               std::vector<pb::store::TxnLockValue>& txn_lock_values,
+                               std::vector<pb::store::TxnDataKey>& txn_data_keys,
+                               std::vector<pb::store::TxnDataValue>& txn_data_values) {
+  auto status = ValidateLeader(ctx->RegionId());
+  if (!status.ok()) {
+    return status;
+  }
+
+  DINGO_LOG(INFO) << "TxnDump start_key : " << start_key << " end_key : " << end_key
+                  << " txn_result_info : " << txn_result_info.ShortDebugString()
+                  << " txn_write_keys size : " << txn_write_keys.size()
+                  << " txn_write_values size : " << txn_write_values.size()
+                  << " txn_lock_keys size : " << txn_lock_keys.size()
+                  << " txn_lock_values size : " << txn_lock_values.size()
+                  << " txn_data_keys size : " << txn_data_keys.size()
+                  << " txn_data_values size : " << txn_data_values.size();
+
+  return butil::Status();
+}
 
 }  // namespace dingodb

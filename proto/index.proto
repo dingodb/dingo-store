@@ -238,7 +238,7 @@ message TxnGetResponse {
   dingodb.pb.store.TxnResultInfo txn_result = 2;
   // The vector value associated with the key, if not found, is empty and error is NOT_FOUND
   // dingo-store do not accept NULL value, so if value is NULL, it means the key is not exist
-  dingodb.pb.common.VectorWithId vectors = 3;
+  dingodb.pb.common.VectorWithId vector = 3;
   // True if the key does not exist in the database.
   // bool not_found = 4;
 }
@@ -530,7 +530,7 @@ message TxnGcResponse {
 // All keys in the range will be deleted permanently regardless of their
 // timestamps. This means that deleted keys will not be retrievable by
 // specifying an older timestamp.
-message DeleteRangeRequest {
+message TxnDeleteRangeRequest {
   dingodb.pb.store.Context context = 1;
   // the key is encoded from two uint64 using big-endian, the first uint64 is the part id, the
   // second uint64 is the vector id. The key MUST be 16 bytes.
@@ -540,7 +540,7 @@ message DeleteRangeRequest {
   bytes end_key = 3;
 }
 
-message DeleteRangeResponse {
+message TxnDeleteRangeResponse {
   // error code
   dingodb.pb.error.Error error = 1;
 }
@@ -698,7 +698,7 @@ service IndexService {
   rpc TxnScanLock(TxnScanLockRequest) returns (TxnScanLockResponse);
   rpc TxnHeartBeat(TxnHeartBeatRequest) returns (TxnHeartBeatResponse);
   rpc TxnGc(TxnGcRequest) returns (TxnGcResponse);
-  rpc TxnDeleteRange(DeleteRangeRequest) returns (DeleteRangeResponse);
+  rpc TxnDeleteRange(TxnDeleteRangeRequest) returns (TxnDeleteRangeResponse);
   rpc TxnDump(TxnDumpRequest) returns (TxnDumpResponse);
 
   // rpc TxnScanBegin(TxnScanBeginRequest) returns (TxnScanBeginResponse);
