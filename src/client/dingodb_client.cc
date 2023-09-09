@@ -14,6 +14,7 @@
 // limitations under the License.
 
 #include <cstdint>
+#include <cstdlib>
 #include <map>
 #include <memory>
 #include <string>
@@ -89,6 +90,7 @@ DEFINE_int32(round_num, 1, "Round of requests");
 DEFINE_string(store_addrs, "", "server addrs");
 DEFINE_string(raft_addrs, "127.0.0.1:10101:0,127.0.0.1:10102:0,127.0.0.1:10103:0", "raft addrs");
 DEFINE_string(key, "", "Request key");
+DEFINE_bool(key_is_hex, false, "Request key is hex");
 DEFINE_string(value, "", "Request values");
 DEFINE_string(prefix, "", "key prefix");
 DEFINE_uint64(region_count, 1, "region count");
@@ -103,6 +105,7 @@ DEFINE_uint64(count, 50, "count");
 DEFINE_uint64(vector_id, 0, "vector_id");
 DEFINE_uint32(topn, 10, "top n");
 DEFINE_uint32(batch_count, 5, "batch count");
+DEFINE_uint64(part_id, 0, "part_id");
 DEFINE_bool(without_vector, false, "Search vector without output vector data");
 DEFINE_bool(without_scalar, false, "Search vector without scalar data");
 DEFINE_bool(without_table, false, "Search vector without table data");
@@ -305,6 +308,35 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
       client::SendKvCompareAndSet(FLAGS_region_id, FLAGS_key);
     } else if (method == "KvBatchCompareAndSet") {
       client::SendKvBatchCompareAndSet(FLAGS_region_id, FLAGS_prefix, 100);
+    }
+
+    // txn
+    else if (method == "TxnGet") {
+      client::SendTxnGet(ctx, FLAGS_region_id);
+    } else if (method == "TxnScan") {
+      client::SendTxnScan(ctx, FLAGS_region_id);
+    } else if (method == "TxnPrewrite") {
+      client::SendTxnPrewrite(ctx, FLAGS_region_id);
+    } else if (method == "TxnCommit") {
+      client::SendTxnCommit(ctx, FLAGS_region_id);
+    } else if (method == "TxnCheckTxnStatus") {
+      client::SendTxnCheckTxnStatus(ctx, FLAGS_region_id);
+    } else if (method == "TxnResolveLock") {
+      client::SendTxnResolveLock(ctx, FLAGS_region_id);
+    } else if (method == "TxnBatchGet") {
+      client::SendTxnBatchGet(ctx, FLAGS_region_id);
+    } else if (method == "TxnBatchRollback") {
+      client::SendTxnBatchRollback(ctx, FLAGS_region_id);
+    } else if (method == "TxnScanLock") {
+      client::SendTxnScanLock(ctx, FLAGS_region_id);
+    } else if (method == "TxnHeartBeat") {
+      client::SendTxnHeartBeat(ctx, FLAGS_region_id);
+    } else if (method == "TxnGC") {
+      client::SendTxnGc(ctx, FLAGS_region_id);
+    } else if (method == "TxnDeleteRange") {
+      client::SendTxnDeleteRange(ctx, FLAGS_region_id);
+    } else if (method == "TxnDump") {
+      client::SendTxnDump(ctx, FLAGS_region_id);
     }
 
     // Vector operation
@@ -545,6 +577,7 @@ void CoordinatorSendDebug() {
 }
 
 int CoordinatorSender() {
+  std::string method = FLAGS_method;
   if (FLAGS_method == "RaftAddPeer") {  // raft control
     SendRaftAddPeer();
   } else if (FLAGS_method == "RaftRemovePeer") {
@@ -775,6 +808,48 @@ int CoordinatorSender() {
   // tso
   else if (FLAGS_method == "GenTso") {
     SendGenTso(coordinator_interaction_meta);
+  }
+
+  // tools
+  else if (method == "KeyToHex") {
+    if (FLAGS_key.empty()) {
+      DINGO_LOG(ERROR) << "key is empty";
+      exit(-1);
+    }
+    auto str = client::StringToHex(FLAGS_key);
+    DINGO_LOG(INFO) << fmt::format("key: {} to hex: {}", FLAGS_key, str);
+  } else if (method == "HexToKey") {
+    if (FLAGS_key.empty()) {
+      DINGO_LOG(ERROR) << "key is empty";
+      exit(-1);
+    }
+    auto str = client::HexToString(FLAGS_key);
+    DINGO_LOG(INFO) << fmt::format("hex: {} to key: {}", FLAGS_key, str);
+  } else if (method == "VectorPrefixToHex") {
+    if (FLAGS_vector_id == 0) {
+      DINGO_LOG(ERROR) << "vector_id is empty";
+      exit(-1);
+    }
+    if (FLAGS_part_id == 0) {
+      DINGO_LOG(ERROR) << "part_id is empty";
+      exit(-1);
+    }
+    auto str = client::VectorPrefixToHex(FLAGS_part_id, FLAGS_vector_id);
+    DINGO_LOG(INFO) << fmt::format("part_id: {}, vector_id {} to key: {}", FLAGS_part_id, FLAGS_vector_id, str);
+  } else if (method == "DecodeVectorPrefix") {
+    if (FLAGS_key.empty()) {
+      DINGO_LOG(ERROR) << "key is empty";
+      exit(-1);
+    }
+    auto str = client::HexToVectorPrefix(FLAGS_key);
+    DINGO_LOG(INFO) << fmt::format("hex: {} to key: {}", FLAGS_key, str);
+  } else if (method == "OctalToHex") {
+    if (FLAGS_key.empty()) {
+      DINGO_LOG(ERROR) << "key is empty";
+      exit(-1);
+    }
+    auto str = client::OctalToHex(FLAGS_key);
+    DINGO_LOG(INFO) << fmt::format("oct: {} to hex: {}", FLAGS_key, str);
   }
 
   // debug
