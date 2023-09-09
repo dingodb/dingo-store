@@ -334,12 +334,12 @@ message Context {
 }
 
 enum Op {
-  None = 0;
-  Put = 1;
-  Delete = 2;
-  Lock = 3;
-  Rollback = 4;
-  PutIfAbsent = 5;
+  None = 0;         // just a placeholder
+  Put = 1;          // do data upsert, like KvPut or VectorAdd
+  Delete = 2;       // do data delete, like KvDelete or VectorDelete
+  Lock = 3;         // not used now
+  Rollback = 4;     // only do rollback
+  PutIfAbsent = 5;  // do insert, if id is exists, return AlreadyExist error
 }
 
 message Mutation {

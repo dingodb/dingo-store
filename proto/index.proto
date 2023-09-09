@@ -292,16 +292,8 @@ message TxnScanResponse {
   bytes end_key = 5;
 }
 
-enum Op {
-  None = 0;      // just a placeholder
-  Put = 1;       // same as VectorAdd, it means upsert
-  Delete = 2;    // same as VectorDelete
-  Lock = 3;      // not used now
-  Rollback = 4;  // only do rollback
-}
-
 message Mutation {
-  Op op = 1;
+  dingodb.pb.store.Op op = 1;
   // the key is encoded from two uint64 using big-endian, the first uint64 is the part id, the second
   // uint64 is the vector id. The key MUST be 16 bytes.
   bytes key = 2;

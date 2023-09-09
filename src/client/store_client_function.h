@@ -130,6 +130,63 @@ void SendKvScan(int64_t region_id, const std::string& prefix);
 void SendKvCompareAndSet(int64_t region_id, const std::string& key);
 void SendKvBatchCompareAndSet(int64_t region_id, const std::string& prefix, int count);
 
+// Txn
+std::string OctalToHex(const std::string& str);
+std::string StringToHex(const std::string& key);
+std::string HexToString(const std::string& hex);
+std::string VectorPrefixToHex(uint64_t part_id, uint64_t vector_id);
+std::string HexToVectorPrefix(const std::string& hex);
+bool TxnGetRegion(ServerInteractionPtr interaction, uint64_t region_id, dingodb::pb::common::Region& region);
+void SendTxnGet(std::shared_ptr<Context> ctx, uint64_t region_id);
+void SendTxnScan(std::shared_ptr<Context> ctx, uint64_t region_id);
+void SendTxnPrewrite(std::shared_ptr<Context> ctx, uint64_t region_id);
+void SendTxnCommit(std::shared_ptr<Context> ctx, uint64_t region_id);
+void SendTxnCheckTxnStatus(std::shared_ptr<Context> ctx, uint64_t region_id);
+void SendTxnResolveLock(std::shared_ptr<Context> ctx, uint64_t region_id);
+void SendTxnBatchGet(std::shared_ptr<Context> ctx, uint64_t region_id);
+void SendTxnBatchRollback(std::shared_ptr<Context> ctx, uint64_t region_id);
+void SendTxnScanLock(std::shared_ptr<Context> ctx, uint64_t region_id);
+void SendTxnHeartBeat(std::shared_ptr<Context> ctx, uint64_t region_id);
+void SendTxnGc(std::shared_ptr<Context> ctx, uint64_t region_id);
+void SendTxnDeleteRange(std::shared_ptr<Context> ctx, uint64_t region_id);
+void SendTxnDump(std::shared_ptr<Context> ctx, uint64_t region_id);
+
+void StoreSendTxnGet(std::shared_ptr<Context> ctx, uint64_t region_id, const dingodb::pb::common::Region& region);
+void StoreSendTxnScan(std::shared_ptr<Context> ctx, uint64_t region_id, const dingodb::pb::common::Region& region);
+void StoreSendTxnPrewrite(std::shared_ptr<Context> ctx, uint64_t region_id, const dingodb::pb::common::Region& region);
+void StoreSendTxnCommit(std::shared_ptr<Context> ctx, uint64_t region_id, const dingodb::pb::common::Region& region);
+void StoreSendTxnCheckTxnStatus(std::shared_ptr<Context> ctx, uint64_t region_id,
+                                const dingodb::pb::common::Region& region);
+void StoreSendTxnResolveLock(std::shared_ptr<Context> ctx, uint64_t region_id,
+                             const dingodb::pb::common::Region& region);
+void StoreSendTxnBatchGet(std::shared_ptr<Context> ctx, uint64_t region_id, const dingodb::pb::common::Region& region);
+void StoreSendTxnBatchRollback(std::shared_ptr<Context> ctx, uint64_t region_id,
+                               const dingodb::pb::common::Region& region);
+void StoreSendTxnScanLock(std::shared_ptr<Context> ctx, uint64_t region_id, const dingodb::pb::common::Region& region);
+void StoreSendTxnHeartBeat(std::shared_ptr<Context> ctx, uint64_t region_id, const dingodb::pb::common::Region& region);
+void StoreSendTxnGc(std::shared_ptr<Context> ctx, uint64_t region_id, const dingodb::pb::common::Region& region);
+void StoreSendTxnDeleteRange(std::shared_ptr<Context> ctx, uint64_t region_id,
+                             const dingodb::pb::common::Region& region);
+void StoreSendTxnDump(std::shared_ptr<Context> ctx, uint64_t region_id, const dingodb::pb::common::Region& region);
+
+void IndexSendTxnGet(std::shared_ptr<Context> ctx, uint64_t region_id, const dingodb::pb::common::Region& region);
+void IndexSendTxnScan(std::shared_ptr<Context> ctx, uint64_t region_id, const dingodb::pb::common::Region& region);
+void IndexSendTxnPrewrite(std::shared_ptr<Context> ctx, uint64_t region_id, const dingodb::pb::common::Region& region);
+void IndexSendTxnCommit(std::shared_ptr<Context> ctx, uint64_t region_id, const dingodb::pb::common::Region& region);
+void IndexSendTxnCheckTxnStatus(std::shared_ptr<Context> ctx, uint64_t region_id,
+                                const dingodb::pb::common::Region& region);
+void IndexSendTxnResolveLock(std::shared_ptr<Context> ctx, uint64_t region_id,
+                             const dingodb::pb::common::Region& region);
+void IndexSendTxnBatchGet(std::shared_ptr<Context> ctx, uint64_t region_id, const dingodb::pb::common::Region& region);
+void IndexSendTxnBatchRollback(std::shared_ptr<Context> ctx, uint64_t region_id,
+                               const dingodb::pb::common::Region& region);
+void IndexSendTxnScanLock(std::shared_ptr<Context> ctx, uint64_t region_id, const dingodb::pb::common::Region& region);
+void IndexSendTxnHeartBeat(std::shared_ptr<Context> ctx, uint64_t region_id, const dingodb::pb::common::Region& region);
+void IndexSendTxnGc(std::shared_ptr<Context> ctx, uint64_t region_id, const dingodb::pb::common::Region& region);
+void IndexSendTxnDeleteRange(std::shared_ptr<Context> ctx, uint64_t region_id,
+                             const dingodb::pb::common::Region& region);
+void IndexSendTxnDump(std::shared_ptr<Context> ctx, uint64_t region_id, const dingodb::pb::common::Region& region);
+
 // region
 void SendAddRegion(int64_t region_id, const std::string& raft_group, std::vector<std::string> raft_addrs);
 void SendChangeRegion(int64_t region_id, const std::string& raft_group, std::vector<std::string> raft_addrs);
