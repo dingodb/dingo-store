@@ -109,9 +109,8 @@ void StoreStateMachine::on_apply(braft::Iterator& iter) {
       CHECK(raft_cmd->ParseFromZeroCopyStream(&wrapper));
     }
 
-    // DINGO_LOG(DEBUG) << fmt::format("raft apply log on region[{}-term:{}-index:{}] applied_index[{}] cmd:[{}]",
-    //                                 raft_cmd->header().region_id(), iter.term(), iter.index(), applied_index_,
-    //                                 raft_cmd->ShortDebugString());
+    // DINGO_LOG(INFO) << fmt::format("raft apply log on region[{}-term:{}-index:{}] applied_index[{}]",
+    //                                raft_cmd->header().region_id(), iter.term(), iter.index(), applied_index_);
     // Build event
     auto event = std::make_shared<SmApplyEvent>();
     event->region = region_;
@@ -160,24 +159,6 @@ void StoreStateMachine::on_snapshot_save(braft::SnapshotWriter* writer, braft::C
   DINGO_LOG(INFO) << fmt::format("[raft.sm][region({})] on_snapshot_save done", region_->Id());
 }
 
-// Check last load snapshot is suspend
-static bool IsLastLoadSnapshotSuspend() {
-  auto meta_reader = std::make_shared<MetaReader>(Server::GetInstance()->GetRawEngine());
-  auto kv = meta_reader->Get(Constant::kIsLoadingSnapshot);
-  return kv != nullptr && kv->value() == "1";
-}
-
-// Set last load snapshot is suspend flag
-static void SetLoadingSnapshotFlag(bool flag) {
-  auto meta_writer = std::make_shared<MetaWriter>(Server::GetInstance()->GetRawEngine());
-  auto kv = std::make_shared<pb::common::KeyValue>();
-  kv->set_key(Constant::kIsLoadingSnapshot);
-  kv->set_value(flag ? "1" : "0");
-  if (!meta_writer->Put(kv)) {
-    DINGO_LOG(ERROR) << "Set loading snapshot flag failed, flag " << flag;
-  }
-}
-
 // Load snapshot timing
 // 1. server restart.
 //    on_snapshot_load:
@@ -205,19 +186,12 @@ int StoreStateMachine::on_snapshot_load(braft::SnapshotReader* reader) {
   // Todo: 1. When loading snapshot panic, need handle the corner case.
   //       2. When restart server, maybe meta.last_included_index() > applied_index_.
   if (meta.last_included_index() > applied_index_) {
-    bool is_last_load_snapshot_suspend = IsLastLoadSnapshotSuspend();
-    if (!is_restart_for_load_snapshot_.load() || is_last_load_snapshot_suspend) {
-      SetLoadingSnapshotFlag(true);
+    auto event = std::make_shared<SmSnapshotLoadEvent>();
+    event->engine = engine_;
+    event->reader = reader;
+    event->region = region_;
 
-      auto event = std::make_shared<SmSnapshotLoadEvent>();
-      event->engine = engine_;
-      event->reader = reader;
-      event->region = region_;
-
-      DispatchEvent(EventType::kSmSnapshotLoad, event);
-
-      SetLoadingSnapshotFlag(false);
-    }
+    DispatchEvent(EventType::kSmSnapshotLoad, event);
 
     // Update applied term and index
     applied_term_ = meta.last_included_term();
@@ -228,10 +202,6 @@ int StoreStateMachine::on_snapshot_load(braft::SnapshotReader* reader) {
       raft_meta_->set_applied_index(applied_index_);
       Server::GetInstance()->GetStoreMetaManager()->GetStoreRaftMeta()->UpdateRaftMeta(raft_meta_);
     }
-  }
-
-  if (is_restart_for_load_snapshot_.load()) {
-    is_restart_for_load_snapshot_.store(false);
   }
 
   DINGO_LOG(INFO) << fmt::format("[raft.sm][region({})] on_snapshot_load done", region_->Id());

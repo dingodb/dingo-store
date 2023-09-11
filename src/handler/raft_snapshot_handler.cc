@@ -312,7 +312,7 @@ bool RaftSnapshot::LoadSnapshot(braft::SnapshotReader* reader, store::RegionPtr 
   if (Helper::IsExistPath(current_path)) {
     int count = 0;
     for (auto& range : region->PhysicsRange()) {
-      std::string merge_sst_path = fmt::format("{}/merge_{}.sst", reader->get_path(), count);
+      std::string merge_sst_path = fmt::format("{}/merge_{}.sst", reader->get_path(), ++count);
 
       if (MergeCheckpointFile(reader->get_path(), merge_sst_path, range)) {
         sst_files.push_back(merge_sst_path);
@@ -336,7 +336,7 @@ bool RaftSnapshot::LoadSnapshot(braft::SnapshotReader* reader, store::RegionPtr 
     for (auto& sst_file : sst_files) {
       if (sst_file.find("merge") != std::string::npos) {
         // Clean merge temp file
-        Helper::RemoveFileOrDirectory(sst_files[0]);
+        Helper::RemoveFileOrDirectory(sst_file);
       }
     }
   }

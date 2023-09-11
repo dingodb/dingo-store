@@ -528,9 +528,9 @@ int Segment::Close(bool will_sync) {
   butil::string_appendf(&new_path, "/" SEGMENT_CLOSED_PATTERN, first_index_, last_index_.load());
 
   // TODO: optimize index memory usage by reconstruct vector
-  DINGO_LOG(INFO) << "[raft.log][region(" << region_id_ << ").index(" << FirstIndex() << "_" << LastIndex()
-                  << ")] close a full segment, raft_sync_segments: " << Constant::kSegmentLogSync
-                  << " will_sync: " << will_sync << " path: " << new_path;
+  DINGO_LOG(INFO) << fmt::format(
+      "[raft.log][region({}).index({}_{})] close a full segment, raft_sync_segments: {} will_sync: {} path: {}",
+      region_id_, FirstIndex(), LastIndex(), Constant::kSegmentLogSync, will_sync, new_path);
   int ret = 0;
   if (last_index_ > first_index_) {
     if (Constant::kSegmentLogSync && will_sync) {

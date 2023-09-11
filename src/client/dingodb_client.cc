@@ -257,7 +257,7 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
   butil::SplitString(FLAGS_raft_addrs, ',', &raft_addrs);
 
   if (FLAGS_store_addrs.empty()) {
-    if (method != "AutoDropTable" && method != "AutoTest" && method != "DumpDb") {
+    if (method != "AutoDropTable" && method != "AutoTest" && method != "DumpDb" && method != "DumpVectorIndexDb") {
       // Get store addr from coordinator
       auto store_addrs = GetStoreAddrs(ctx->coordinator_interaction, FLAGS_region_id);
       ctx->store_interaction = std::make_shared<client::ServerInteraction>();
@@ -433,6 +433,29 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
         return;
       }
       client::DumpDb(ctx);
+    } else if (method == "DumpVectorIndexDb") {
+      ctx->table_id = FLAGS_table_id;
+      ctx->index_id = FLAGS_index_id;
+      ctx->db_path = FLAGS_db_path;
+      ctx->offset = FLAGS_offset;
+      ctx->limit = FLAGS_limit;
+      if (ctx->table_id == 0 && ctx->index_id == 0) {
+        DINGO_LOG(ERROR) << "Param table_id|index_id is error.";
+        return;
+      }
+      if (ctx->db_path.empty()) {
+        DINGO_LOG(ERROR) << "Param db_path is error.";
+        return;
+      }
+      if (ctx->offset < 0) {
+        DINGO_LOG(ERROR) << "Param offset is error.";
+        return;
+      }
+      if (ctx->limit < 0) {
+        DINGO_LOG(ERROR) << "Param limit is error.";
+        return;
+      }
+      client::DumpVectorIndexDb(ctx);
     }
 
     // illegal method
