@@ -385,7 +385,7 @@ bool AutoIncrementControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Me
   auto_increment_map_.clear();
   for (int i = 0; i < storage.elements_size(); i++) {
     const auto& element = storage.elements(i);
-    auto_increment_map_[element.table_id()] = auto_increment_map_[element.start_id()];
+    auto_increment_map_[element.table_id()] = element.start_id();
   }
 
   DINGO_LOG(INFO) << "AutoIncrementControl LoadMetaFromSnapshotFile success, elements_size=" << storage.elements_size();

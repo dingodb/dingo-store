@@ -29,12 +29,12 @@ DECLARE_string(id);
 
 // usage example:
 
-// ./dingodb_client_coordinator -url=file://./coor_list -method=GetCoordinatorMap
-// ./dingodb_client_coordinator -url=file://./coor_list -id=888 -method=CreateAutoIncrement
-// ./dingodb_client_coordinator -url=file://./coor_list -id=888 -method=GetAutoIncrement
-// ./dingodb_client_coordinator -url=file://./coor_list -id=888 -generate_count=10000 -method=GenerateAutoIncrement
-// ./dingodb_client_coordinator -url=file://./coor_list -id=888 -incr_start_id=110000 -method=UpdateAutoIncrement
-// ./dingodb_client_coordinator -url=file://./coor_list -id=888 -method=DeleteAutoIncrement
+// ./dingodb_client -method=GetCoordinatorMap
+// ./dingodb_client -id=888 -method=CreateAutoIncrement
+// ./dingodb_client -id=888 -method=GetAutoIncrement
+// ./dingodb_client -id=888 -generate_count=10000 -method=GenerateAutoIncrement
+// ./dingodb_client -id=888 -incr_start_id=110000 -method=UpdateAutoIncrement
+// ./dingodb_client -id=888 -method=DeleteAutoIncrement
 
 void SendGetAutoIncrements(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
   dingodb::pb::meta::GetAutoIncrementsRequest request;
