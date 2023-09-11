@@ -45,6 +45,9 @@ enum class HandlerType {
   kVectorDelete = pb::raft::VECTOR_DELETE,
   kRebuildVectorIndex = pb::raft::REBUILD_VECTOR_INDEX,
 
+  // txn
+  kTxn = pb::raft::TXN,
+
   // Snapshot
   kSaveSnapshot = 1000,
   kLoadSnapshot = 1001,

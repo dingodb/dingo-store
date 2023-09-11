@@ -92,7 +92,7 @@ class Storage {
                                   pb::store::Action& action, pb::store::LockInfo& lock_info);
   butil::Status TxnResolveLock(std::shared_ptr<Context> ctx, uint64_t start_ts, uint64_t commit_ts,
                                std::vector<std::string>& keys, pb::store::TxnResultInfo& txn_result_info);
-  butil::Status TxnBatchRollback(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys,
+  butil::Status TxnBatchRollback(std::shared_ptr<Context> ctx, uint64_t start_ts, const std::vector<std::string>& keys,
                                  pb::store::TxnResultInfo& txn_result_info, std::vector<pb::common::KeyValue>& kvs);
   butil::Status TxnScanLock(std::shared_ptr<Context> ctx, uint64_t max_ts, const std::string& start_key, uint64_t limit,
                             const std::string& end_key, pb::store::TxnResultInfo& txn_result_info,
@@ -102,7 +102,8 @@ class Storage {
   butil::Status TxnGc(std::shared_ptr<Context> ctx, uint64_t safe_point_ts, pb::store::TxnResultInfo& txn_result_info);
   butil::Status TxnDeleteRange(std::shared_ptr<Context> ctx, const std::string& start_key, const std::string& end_key);
   butil::Status TxnDump(std::shared_ptr<Context> ctx, const std::string& start_key, const std::string& end_key,
-                        pb::store::TxnResultInfo& txn_result_info, std::vector<pb::store::TxnWriteKey>& txn_write_keys,
+                        uint64_t start_ts, uint64_t end_ts, pb::store::TxnResultInfo& txn_result_info,
+                        std::vector<pb::store::TxnWriteKey>& txn_write_keys,
                         std::vector<pb::store::TxnWriteValue>& txn_write_values,
                         std::vector<pb::store::TxnLockKey>& txn_lock_keys,
                         std::vector<pb::store::TxnLockValue>& txn_lock_values,

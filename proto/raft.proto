@@ -16,6 +16,8 @@ syntax = "proto3";
 
 import "common.proto";
 import "coordinator_internal.proto";
+import "store.proto";
+import "error.proto";
 
 package dingodb.pb.raft;
 
@@ -40,6 +42,9 @@ enum CmdType {
   VECTOR_ADD = 3000;
   VECTOR_DELETE = 3001;
   REBUILD_VECTOR_INDEX = 3010;
+
+  // txn
+  TXN = 4000;
 }
 
 message PutRequest {
@@ -135,6 +140,216 @@ message RebuildVectorIndexRequest {}
 
 message RebuildVectorIndexResponse {}
 
+// txn
+message PutsWithCf {
+  bytes cf_name = 1;
+  repeated dingodb.pb.common.KeyValue kvs = 2;
+}
+
+message DeletesWithCf {
+  bytes cf_name = 1;
+  repeated bytes keys = 2;
+}
+
+message MultiCfPutAndDeleteRequest {
+  repeated PutsWithCf puts_with_cf = 1;
+  repeated DeletesWithCf deletes_with_cf = 2;
+}
+
+message MultiCfPutAndDeleteResponse {}
+
+message TxnPrewriteRequest {
+  // The data to be written to the database.
+  repeated dingodb.pb.store.Mutation mutations = 2;
+  // The primary lock of the transaction is setup by client
+  bytes primary_lock = 3;
+  // Identifies the transaction being written.
+  uint64 start_ts = 4;
+  // the lock's ttl is timestamp in milisecond.
+  uint64 lock_ttl = 5;
+  // the number of keys involved in the transaction
+  uint64 txn_size = 6;
+  // When the transaction involves only one region, it's possible to commit the
+  // transaction directly with 1PC protocol.
+  bool try_one_pc = 7;
+  // The max commit ts is reserved for limiting the commit ts of 1PC, which can be used to avoid inconsistency with
+  // schema change. This field is unused now.
+  uint64 max_commit_ts = 8;
+}
+
+message TxnPrewriteResponse {
+  // error code
+  dingodb.pb.error.Error error = 1;
+  // for prewrite, txn_result will be one of the following:
+  // 1. WriteConflict: Write conflict with key which is locked by another transaction.
+  // 2. otherwise, txn_result is empty
+  // for success prewrite, txn_result is empty
+  // for failure prewrite, txn_result is not empty
+  // if txn_result is AlreadyExist, there will be many txn_result, each txn_result is for one key
+  // if there is a WriteConflict in txn_result, client should backoff or cleanup the lock then retry
+  dingodb.pb.store.TxnResultInfo txn_result = 2;
+  // if there is PutIfAbsent in mutation, and if there is key conflict, the conflict key will be returned
+  repeated dingodb.pb.store.AlreadyExist keys_already_exist = 3;
+  // When the transaction is successfully committed with 1PC protocol, this
+  // field will be set to the commit ts of the transaction. Otherwise, if dingo-store
+  // failed to commit it with 1PC or the transaction is not 1PC, the value will
+  // be 0.
+  uint64 one_pc_commit_ts = 4;
+}
+
+message TxnCommitRequest {
+  // The start_ts of the transaction.
+  uint64 start_ts = 2;
+  // The commit_ts of transaction. Must be greater than `start_ts`.
+  uint64 commit_ts = 3;
+  // All keys in the transaction to be committed.
+  repeated bytes keys = 4;
+}
+
+message TxnCommitResponse {
+  // error code
+  dingodb.pb.error.Error error = 1;
+  // the txn_result is one of the following:
+  // 1. Abort: if committing primary with no lock, the txn_result is Abort
+  // 2. otherwise, txn_result is empty
+  dingodb.pb.store.TxnResultInfo txn_result = 2;
+  // The commit_ts of the transaction.
+  uint64 commit_ts = 3;
+}
+
+// CheckTxnStatusRequest checks the status of a transaction.
+// If the transaction is rollbacked/committed, return that result.
+// If the TTL of the transaction is exhausted, abort that transaction and inform the caller.
+// Otherwise, returns the TTL information for the transaction.
+message TxnCheckTxnStatusRequest {
+  // Primary key and lock ts together to locate the primary lock of a transaction.
+  bytes primary_key = 2;
+  // Starting timestamp of the transaction being checked.
+  uint64 lock_ts = 3;
+  // The start timestamp of the transaction which this request is part of.
+  uint64 caller_start_ts = 4;
+  // The client must specify the current time to dingo-store using this timestamp.
+  // It is used to check TTL timeouts. It may be inaccurate.
+  uint64 current_ts = 5;
+}
+
+message TxnCheckTxnStatusResponse {
+  // error code
+  dingodb.pb.error.Error error = 1;
+  // the txn_result is one of the following:
+  // 1. PrimaryMismatch: CheckTxnStatus is sent to a lock that's not the primary.
+  // 2. TxnNotFound: Txn not found when checking txn status.
+  // 3. otherwise, txn_result is empty
+  dingodb.pb.store.TxnResultInfo txn_result = 2;
+  // Three kinds of transaction status:
+  //   locked: lock_ttl > 0
+  //   committed: commit_ts > 0
+  //   rollbacked: lock_ttl = 0 && commit_ts = 0
+  uint64 lock_ttl = 3;
+  // if the transaction of the lock is committed, the commit_ts is returned
+  uint64 commit_ts = 4;
+  // The action performed by dingo-store (and why if the action is to rollback).
+  dingodb.pb.store.Action action = 5;
+  dingodb.pb.store.LockInfo lock_info = 6;
+}
+
+// For all keys locked by the transaction identified by `start_ts`, either
+// commit or rollback the transaction and unlock the key.
+message TxnResolveLockRequest {
+  uint64 start_ts = 2;
+  // `commit_ts == 0` means the transaction was rolled back.
+  // `commit_ts > 0` means the transaction was committed at the given timestamp.
+  uint64 commit_ts = 3;
+  // Only resolve specified keys.
+  repeated bytes keys = 4;
+}
+
+message TxnResolveLockResponse {
+  // error code
+  dingodb.pb.error.Error error = 1;
+  // now the txn_result is not used, maybe used in the future
+  dingodb.pb.store.TxnResultInfo txn_result = 2;
+}
+
+// Rollback a prewritten transaction. This will remove the preliminary data from
+// the database, unlock locks, and leave a rollback tombstone.
+message TxnBatchRollbackRequest {
+  // Identify the transaction to be rolled back.
+  uint64 start_ts = 2;
+  // The keys to rollback.
+  repeated bytes keys = 3;
+}
+
+message TxnBatchRollbackResponse {
+  // error code
+  dingodb.pb.error.Error error = 1;
+  dingodb.pb.store.TxnResultInfo txn_result = 2;
+}
+
+// Update the lock_ttl of a large transaction to
+// prevent it from been killed.
+message TxnHeartBeatRequest {
+  // The key of the lock to update.
+  bytes primary_lock = 2;
+  // Start timestamp oracle of the large transaction.
+  uint64 start_ts = 3;
+  // The new TTL the sender would like.
+  // The advise_lock_ttl is the timestamp of milisecond.
+  uint64 advise_lock_ttl = 4;
+}
+
+message TxnHeartBeatResponse {
+  // error code
+  dingodb.pb.error.Error error = 1;
+  // the txn_result is one of the following:
+  // 1. PrimaryMismatch: Heartbeat is sent to a lock that's not the primary.
+  // 2. TxnNotFound: Txn not found when heartbeat.
+  // 3. otherwise, txn_result is empty
+  dingodb.pb.store.TxnResultInfo txn_result = 2;
+  // The TTL actually set on the requested lock.
+  uint64 lock_ttl = 3;
+}
+
+// Delete a range of data from dingo-store.
+// All keys in the range will be deleted permanently regardless of their
+// timestamps. This means that deleted keys will not be retrievable by
+// specifying an older timestamp.
+message TxnDeleteRangeRequest {
+  bytes start_key = 2;
+  bytes end_key = 3;
+}
+
+message TxnDeleteRangeResponse {
+  // error code
+  dingodb.pb.error.Error error = 1;
+}
+
+message TxnRaftRequest {
+  oneof cmd_body {
+    MultiCfPutAndDeleteRequest multi_cf_put_and_delete = 4000;
+    TxnPrewriteRequest prewrite = 4001;
+    TxnCommitRequest commit = 4002;
+    TxnCheckTxnStatusRequest check_txn_status = 4003;
+    TxnResolveLockRequest resolve_lock = 4004;
+    TxnBatchRollbackRequest rollback = 4005;
+    TxnHeartBeatRequest lock_heartbeat = 4006;
+    TxnDeleteRangeRequest mvcc_delete_range = 4007;
+  }
+}
+
+message TxnRaftResponse {
+  oneof cmd_body {
+    MultiCfPutAndDeleteResponse multi_cf_put_and_delete = 4000;
+    TxnPrewriteResponse prewrite = 4001;
+    TxnCommitResponse commit = 4002;
+    TxnCheckTxnStatusResponse check_txn_status = 4003;
+    TxnResolveLockResponse resolve_lock = 4004;
+    TxnBatchRollbackResponse rollback = 4005;
+    TxnHeartBeatResponse lock_heartbeat = 4006;
+    TxnDeleteRangeResponse mvcc_delete_range = 4007;
+  }
+}
+
 message Request {
   CmdType cmd_type = 1;
 
@@ -156,6 +371,9 @@ message Request {
     VectorAddRequest vector_add = 3000;
     VectorDeleteRequest vector_delete = 3001;
     RebuildVectorIndexRequest rebuild_vector_index = 3010;
+
+    // txn
+    TxnRaftRequest txn_raft_req = 4000;
   }
 }
 
@@ -179,6 +397,9 @@ message Response {
     VectorAddResponse vector_add = 3000;
     VectorDeleteResponse vector_delete = 3001;
     RebuildVectorIndexResponse rebuild_vector_index = 3010;
+
+    // txn
+    TxnRaftResponse txn_raft_resp = 4000;
   }
 }
 

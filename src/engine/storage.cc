@@ -23,6 +23,7 @@
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "engine/iterator.h"
 #include "engine/snapshot.h"
 #include "engine/write_data.h"
 #include "fmt/core.h"
@@ -30,8 +31,11 @@
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "proto/index.pb.h"
+#include "proto/raft.pb.h"
+#include "proto/store.pb.h"
 #include "scan/scan.h"
 #include "scan/scan_manager.h"
+#include "serial/buf.h"
 #include "server/server.h"
 #include "vector/vector_index_utils.h"
 namespace dingodb {
@@ -545,7 +549,24 @@ butil::Status Storage::TxnPrewrite(std::shared_ptr<Context> ctx, const std::vect
                   << " txn_result_info : " << txn_result_info.ShortDebugString()
                   << " already_exist size : " << already_exist.size() << " one_pc_commit_ts : " << one_pc_commit_ts;
 
-  return butil::Status();
+  pb::raft::TxnRaftRequest txn_raft_request;
+  auto* prewrite_request = txn_raft_request.mutable_prewrite();
+  for (const auto& mutation : mutations) {
+    prewrite_request->add_mutations()->CopyFrom(mutation);
+  }
+  prewrite_request->set_primary_lock(primary_lock);
+  prewrite_request->set_start_ts(start_ts);
+  prewrite_request->set_lock_ttl(lock_ttl);
+  prewrite_request->set_txn_size(txn_size);
+  prewrite_request->set_try_one_pc(try_one_pc);
+  prewrite_request->set_max_commit_ts(max_commit_ts);
+
+  return engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(txn_raft_request),
+                             [](std::shared_ptr<Context> ctx, butil::Status status) {
+                               if (!status.ok()) {
+                                 Helper::SetPbMessageError(status, ctx->Response());
+                               }
+                             });
 }
 
 butil::Status Storage::TxnPrewrite(std::shared_ptr<Context> ctx, const std::vector<pb::index::Mutation>& mutations,
@@ -563,8 +584,24 @@ butil::Status Storage::TxnPrewrite(std::shared_ptr<Context> ctx, const std::vect
                   << " try_one_pc : " << try_one_pc << " max_commit_ts : " << max_commit_ts
                   << " txn_result_info : " << txn_result_info.ShortDebugString()
                   << " already_exist size : " << already_exist.size() << " one_pc_commit_ts : " << one_pc_commit_ts;
+  pb::raft::TxnRaftRequest txn_raft_request;
+  auto* prewrite_request = txn_raft_request.mutable_prewrite();
+  for (const auto& mutation : mutations) {
+    prewrite_request->add_mutations()->CopyFrom(mutation);
+  }
+  prewrite_request->set_primary_lock(primary_lock);
+  prewrite_request->set_start_ts(start_ts);
+  prewrite_request->set_lock_ttl(lock_ttl);
+  prewrite_request->set_txn_size(txn_size);
+  prewrite_request->set_try_one_pc(try_one_pc);
+  prewrite_request->set_max_commit_ts(max_commit_ts);
 
-  return butil::Status();
+  return engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(txn_raft_request),
+                             [](std::shared_ptr<Context> ctx, butil::Status status) {
+                               if (!status.ok()) {
+                                 Helper::SetPbMessageError(status, ctx->Response());
+                               }
+                             });
 }
 
 butil::Status Storage::TxnCommit(std::shared_ptr<Context> ctx, uint64_t start_ts, uint64_t commit_ts,
@@ -579,7 +616,20 @@ butil::Status Storage::TxnCommit(std::shared_ptr<Context> ctx, uint64_t start_ts
                   << " keys size : " << keys.size() << " txn_result_info : " << txn_result_info.ShortDebugString()
                   << " committed_ts : " << committed_ts;
 
-  return butil::Status();
+  pb::raft::TxnRaftRequest txn_raft_request;
+  auto* commit_request = txn_raft_request.mutable_commit();
+  for (const auto& key : keys) {
+    commit_request->add_keys(key);
+  }
+  commit_request->set_start_ts(start_ts);
+  commit_request->set_commit_ts(commit_ts);
+
+  return engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(txn_raft_request),
+                             [](std::shared_ptr<Context> ctx, butil::Status status) {
+                               if (!status.ok()) {
+                                 Helper::SetPbMessageError(status, ctx->Response());
+                               }
+                             });
 }
 
 butil::Status Storage::TxnCheckTxnStatus(std::shared_ptr<Context> ctx, const std::string& primary_key, uint64_t lock_ts,
@@ -598,7 +648,19 @@ butil::Status Storage::TxnCheckTxnStatus(std::shared_ptr<Context> ctx, const std
                   << " commit_ts : " << commit_ts << " action : " << action
                   << " lock_info : " << lock_info.ShortDebugString();
 
-  return butil::Status();
+  pb::raft::TxnRaftRequest txn_raft_request;
+  auto* check_txn_status_request = txn_raft_request.mutable_check_txn_status();
+  check_txn_status_request->set_primary_key(primary_key);
+  check_txn_status_request->set_lock_ts(lock_ts);
+  check_txn_status_request->set_caller_start_ts(caller_start_ts);
+  check_txn_status_request->set_current_ts(current_ts);
+
+  return engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(txn_raft_request),
+                             [](std::shared_ptr<Context> ctx, butil::Status status) {
+                               if (!status.ok()) {
+                                 Helper::SetPbMessageError(status, ctx->Response());
+                               }
+                             });
 }
 
 butil::Status Storage::TxnResolveLock(std::shared_ptr<Context> ctx, uint64_t start_ts, uint64_t commit_ts,
@@ -611,11 +673,24 @@ butil::Status Storage::TxnResolveLock(std::shared_ptr<Context> ctx, uint64_t sta
   DINGO_LOG(INFO) << "TxnResolveLock start_ts : " << start_ts << " commit_ts : " << commit_ts
                   << " keys size : " << keys.size() << " txn_result_info : " << txn_result_info.ShortDebugString();
 
-  return butil::Status();
+  pb::raft::TxnRaftRequest txn_raft_request;
+  auto* resolve_lock_request = txn_raft_request.mutable_resolve_lock();
+  for (const auto& key : keys) {
+    resolve_lock_request->add_keys(key);
+  }
+  resolve_lock_request->set_start_ts(start_ts);
+  resolve_lock_request->set_commit_ts(commit_ts);
+
+  return engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(txn_raft_request),
+                             [](std::shared_ptr<Context> ctx, butil::Status status) {
+                               if (!status.ok()) {
+                                 Helper::SetPbMessageError(status, ctx->Response());
+                               }
+                             });
 }
 
-butil::Status Storage::TxnBatchRollback(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys,
-                                        pb::store::TxnResultInfo& txn_result_info,
+butil::Status Storage::TxnBatchRollback(std::shared_ptr<Context> ctx, uint64_t start_ts,
+                                        const std::vector<std::string>& keys, pb::store::TxnResultInfo& txn_result_info,
                                         std::vector<pb::common::KeyValue>& kvs) {
   auto status = ValidateLeader(ctx->RegionId());
   if (!status.ok()) {
@@ -625,7 +700,19 @@ butil::Status Storage::TxnBatchRollback(std::shared_ptr<Context> ctx, const std:
   DINGO_LOG(INFO) << "TxnBatchRollback keys size : " << keys.size() << " kvs size : " << kvs.size()
                   << " txn_result_info : " << txn_result_info.ShortDebugString();
 
-  return butil::Status();
+  pb::raft::TxnRaftRequest txn_raft_request;
+  auto* rollback_request = txn_raft_request.mutable_rollback();
+  for (const auto& key : keys) {
+    rollback_request->add_keys(key);
+  }
+  rollback_request->set_start_ts(start_ts);
+
+  return engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(txn_raft_request),
+                             [](std::shared_ptr<Context> ctx, butil::Status status) {
+                               if (!status.ok()) {
+                                 Helper::SetPbMessageError(status, ctx->Response());
+                               }
+                             });
 }
 
 butil::Status Storage::TxnScanLock(std::shared_ptr<Context> ctx, uint64_t max_ts, const std::string& start_key,
@@ -655,7 +742,18 @@ butil::Status Storage::TxnHeartBeat(std::shared_ptr<Context> ctx, const std::str
                   << " advise_lock_ttl : " << advise_lock_ttl
                   << " txn_result_info : " << txn_result_info.ShortDebugString() << " lock_ttl : " << lock_ttl;
 
-  return butil::Status();
+  pb::raft::TxnRaftRequest txn_raft_request;
+  auto* heartbeat_request = txn_raft_request.mutable_lock_heartbeat();
+  heartbeat_request->set_primary_lock(primary_lock);
+  heartbeat_request->set_start_ts(start_ts);
+  heartbeat_request->set_advise_lock_ttl(advise_lock_ttl);
+
+  return engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(txn_raft_request),
+                             [](std::shared_ptr<Context> ctx, butil::Status status) {
+                               if (!status.ok()) {
+                                 Helper::SetPbMessageError(status, ctx->Response());
+                               }
+                             });
 }
 
 butil::Status Storage::TxnGc(std::shared_ptr<Context> ctx, uint64_t safe_point_ts,
@@ -680,11 +778,21 @@ butil::Status Storage::TxnDeleteRange(std::shared_ptr<Context> ctx, const std::s
 
   DINGO_LOG(INFO) << "TxnDeleteRange start_key : " << start_key << " end_key : " << end_key;
 
-  return butil::Status();
+  pb::raft::TxnRaftRequest txn_raft_request;
+  auto* delete_range_request = txn_raft_request.mutable_mvcc_delete_range();
+  delete_range_request->set_start_key(start_key);
+  delete_range_request->set_end_key(end_key);
+
+  return engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(txn_raft_request),
+                             [](std::shared_ptr<Context> ctx, butil::Status status) {
+                               if (!status.ok()) {
+                                 Helper::SetPbMessageError(status, ctx->Response());
+                               }
+                             });
 }
 
 butil::Status Storage::TxnDump(std::shared_ptr<Context> ctx, const std::string& start_key, const std::string& end_key,
-                               pb::store::TxnResultInfo& txn_result_info,
+                               uint64_t start_ts, uint64_t end_ts, pb::store::TxnResultInfo& txn_result_info,
                                std::vector<pb::store::TxnWriteKey>& txn_write_keys,
                                std::vector<pb::store::TxnWriteValue>& txn_write_values,
                                std::vector<pb::store::TxnLockKey>& txn_lock_keys,
@@ -704,8 +812,108 @@ butil::Status Storage::TxnDump(std::shared_ptr<Context> ctx, const std::string& 
                   << " txn_lock_values size : " << txn_lock_values.size()
                   << " txn_data_keys size : " << txn_data_keys.size()
                   << " txn_data_values size : " << txn_data_values.size();
+  auto snapshot = engine_->GetSnapshot();
+  if (snapshot == nullptr) {
+    return butil::Status(pb::error::EINTERNAL, "get snapshot failed");
+  }
 
-  return butil::Status();
+  auto data_reader = engine_->NewReader(Constant::kStoreTxnDataCF);
+  if (data_reader == nullptr) {
+    return butil::Status(pb::error::EINTERNAL, "get data_reader failed");
+  }
+  auto lock_reader = engine_->NewReader(Constant::kStoreTxnLockCF);
+  if (lock_reader == nullptr) {
+    return butil::Status(pb::error::EINTERNAL, "get lock_reader failed");
+  }
+  auto write_reader = engine_->NewReader(Constant::kStoreTxnWriteCF);
+  if (write_reader == nullptr) {
+    return butil::Status(pb::error::EINTERNAL, "get write_reader failed");
+  }
+
+  // scan [start_key, end_key) for data
+  std::vector<pb::common::KeyValue> data_kvs;
+  Buf buf_start(8);
+  buf_start.WriteLong(start_ts);
+  Buf buf_end(8);
+  buf_end.WriteLong(end_ts);
+
+  auto ret = data_reader->KvScan(ctx, start_key + buf_start.GetString(), end_key + buf_end.GetString(), data_kvs);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("data_reader->KvScan failed : {}", ret.error_cstr());
+    return ret;
+  }
+  for (const auto& kv : data_kvs) {
+    if (kv.key().length() < 16) {
+      DINGO_LOG(ERROR) << fmt::format("data_reader->KvScan read key faild: {}", kv.ShortDebugString());
+      return butil::Status(pb::error::EINTERNAL, "data_reader->KvScan failed");
+    }
+    Buf buf(kv.key().length());
+    buf.Write(kv.key());
+    buf.Skip(kv.key().length() - 8);
+
+    pb::store::TxnDataKey txn_data_key;
+    txn_data_key.set_key(kv.key().substr(kv.key().length() - 8));
+    txn_data_key.set_start_ts(buf.ReadLong());
+
+    txn_data_keys.push_back(txn_data_key);
+
+    pb::store::TxnDataValue txn_data_value;
+    txn_data_value.set_value(kv.value());
+    txn_data_values.push_back(txn_data_value);
+  }
+
+  // scan [start_key, end_key) for lock
+  std::vector<pb::common::KeyValue> lock_kvs;
+  ret = lock_reader->KvScan(ctx, start_key, end_key, lock_kvs);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("lock_reader->KvScan failed : {}", ret.error_cstr());
+    return ret;
+  }
+
+  for (const auto& kv : lock_kvs) {
+    if (kv.key().length() < 16) {
+      DINGO_LOG(ERROR) << fmt::format("lock_reader->KvScan read key faild: {}", kv.ShortDebugString());
+      return butil::Status(pb::error::EINTERNAL, "lock_reader->KvScan failed");
+    }
+    pb::store::TxnLockKey txn_lock_key;
+    txn_lock_key.set_key(kv.key());
+    txn_lock_keys.push_back(txn_lock_key);
+
+    pb::store::TxnLockValue txn_lock_value;
+    txn_lock_value.mutable_lock_info()->ParseFromString(kv.value());
+    txn_lock_values.push_back(txn_lock_value);
+  }
+
+  // scan [start_key, end_key) for write
+  std::vector<pb::common::KeyValue> write_kvs;
+  ret = write_reader->KvScan(ctx, start_key + buf_start.GetString(), end_key + buf_end.GetString(), write_kvs);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("data_reader->KvScan failed : {}", ret.error_cstr());
+    return ret;
+  }
+
+  for (const auto& kv : write_kvs) {
+    if (kv.key().length() < 16) {
+      DINGO_LOG(ERROR) << fmt::format("write_reader->KvScan read key faild: {}", kv.ShortDebugString());
+      return butil::Status(pb::error::EINTERNAL, "write_reader->KvScan failed");
+    }
+    Buf buf(kv.key().length());
+    buf.Write(kv.key());
+    buf.Skip(kv.key().length() - 8);
+
+    pb::store::TxnWriteKey txn_write_key;
+    txn_write_key.set_key(kv.key().substr(kv.key().length() - 8));
+    txn_write_key.set_commit_ts(buf.ReadLong());
+
+    txn_write_keys.push_back(txn_write_key);
+
+    pb::store::TxnWriteValue txn_write_value;
+    txn_write_value.ParseFromString(kv.value());
+
+    txn_write_values.push_back(txn_write_value);
+  }
+
+  return butil::Status::OK();
 }
 
 }  // namespace dingodb

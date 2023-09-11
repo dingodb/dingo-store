@@ -124,6 +124,14 @@ class RebuildVectorIndexHandler : public BaseHandler {
              int64_t log_id) override;
 };
 
+class TxnHandler : public BaseHandler {
+ public:
+  HandlerType GetType() override { return HandlerType::kTxn; }
+  void Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
+              const pb::raft::Request &req, store::RegionMetricsPtr region_metrics, uint64_t term_id,
+              uint64_t log_id) override;
+};
+
 class RaftApplyHandlerFactory : public HandlerFactory {
  public:
   std::shared_ptr<HandlerCollection> Build() override;

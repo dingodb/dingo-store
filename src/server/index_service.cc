@@ -2447,7 +2447,7 @@ void IndexServiceImpl::TxnBatchRollback(google::protobuf::RpcController* control
   pb::store::TxnResultInfo txn_result_info;
 
   std::vector<pb::common::KeyValue> kvs;
-  status = storage_->TxnBatchRollback(ctx, keys, txn_result_info, kvs);
+  status = storage_->TxnBatchRollback(ctx, request->start_ts(), keys, txn_result_info, kvs);
   if (!status.ok()) {
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
@@ -2764,8 +2764,9 @@ void IndexServiceImpl::TxnDump(google::protobuf::RpcController* controller, cons
   std::vector<pb::store::TxnDataKey> txn_data_keys;
   std::vector<pb::store::TxnDataValue> txn_data_values;
 
-  status = storage_->TxnDump(ctx, request->start_key(), request->end_key(), txn_result_info, txn_write_keys,
-                             txn_write_values, txn_lock_keys, txn_lock_values, txn_data_keys, txn_data_values);
+  status = storage_->TxnDump(ctx, request->start_key(), request->end_key(), request->start_ts(), request->end_ts(),
+                             txn_result_info, txn_write_keys, txn_write_values, txn_lock_keys, txn_lock_values,
+                             txn_data_keys, txn_data_values);
   if (!status.ok()) {
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
