@@ -58,14 +58,14 @@ public class TypeSchemaMapper {
       addCompoundTypeSchemaMapping("ARRAY", "TIMESTAMP", LongListSchema::new);
    }
 
-   public static void addScalaTypeSchemaMapping(String typeName, Supplier<DingoSchema> schemaSupplier) {
+   public synchronized static void addScalaTypeSchemaMapping(String typeName, Supplier<DingoSchema> schemaSupplier) {
       if(typeSchemaMap.containsKey(typeName)) {
          throw new IllegalArgumentException("Adding existing "+ typeName +" types is not supported");
       }
       typeSchemaMap.put(typeName, schemaSupplier);
    }
 
-   public static void addCompoundTypeSchemaMapping(String typeName, String elementType, Supplier<DingoSchema> schemaSupplier) {
+   public synchronized static void addCompoundTypeSchemaMapping(String typeName, String elementType, Supplier<DingoSchema> schemaSupplier) {
       String key = getTypeName(typeName);
       String finalKey = getFinalKey(key, elementType);
       if(typeSchemaMap.containsKey(finalKey)) {

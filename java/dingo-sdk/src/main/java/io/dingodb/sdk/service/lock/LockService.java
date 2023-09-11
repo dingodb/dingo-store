@@ -98,17 +98,29 @@ public class LockService {
             if (locked == 0) {
                 return;
             }
-            locked = 1;
-            unlock();
-            if (onReset != null) {
-                onReset.accept(this);
+            CompletableFuture
+                .runAsync(this::unlock)
+                .whenComplete((r, e) -> {
+                    if (onReset != null) {
+                        onReset.accept(this);
+                    }
+                    if (e != null) {
+                        log.error("Delete {} error when reset.", resourceKey, e);
+                    }
+                });
+        }
+
+        private boolean checkLock() {
+            if (locked > 0) {
+                locked++;
+                return true;
             }
+            return false;
         }
 
         @Override
         public synchronized void lock() {
-            if (locked > 0) {
-                locked++;
+            if (checkLock()) {
                 return;
             }
             try {
@@ -155,8 +167,7 @@ public class LockService {
 
         @Override
         public synchronized boolean tryLock() {
-            if (locked > 0) {
-                locked++;
+            if (checkLock()) {
                 return true;
             }
             Version.PutResponse response = connector.exec(stub -> stub.kvPut(putRequest(resourceKey)));
@@ -181,8 +192,7 @@ public class LockService {
 
         @Override
         public synchronized boolean tryLock(long time, @NonNull TimeUnit unit) throws InterruptedException {
-            if (locked > 0) {
-                locked++;
+            if (checkLock()) {
                 return true;
             }
             Version.PutResponse response = connector.exec(stub -> stub.kvPut(putRequest(resourceKey)));
@@ -217,13 +227,20 @@ public class LockService {
             return false;
         }
 
+
         private void watchLock(Version.Kv kv) {
             CompletableFuture.runAsync(() -> {
                 connector.exec(
                     stub -> stub.watch(watchRequest(kv.getKv().getKey(), kv.getModRevision())),
-                    __ -> ErrorCodeUtils.InternalCode.IGNORE
+                    connector.leaseTtl,
+                    __ -> ErrorCodeUtils.InternalCode.RETRY
                 );
-            }).thenRun(this::reset);
+            }).whenComplete((r, e) -> {
+                if (e != null) {
+                    log.error("Watch locked error, or watch retry time great than lease ttl.", e);
+                }
+                this.reset();
+            });
         }
 
         @Override
