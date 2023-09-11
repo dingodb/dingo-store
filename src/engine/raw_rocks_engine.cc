@@ -36,7 +36,6 @@
 
 #include "butil/compiler_specific.h"
 #include "butil/status.h"
-#include "client/coordinator_client_function.h"
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
@@ -50,7 +49,6 @@
 #include "rocksdb/iterator.h"
 #include "rocksdb/table.h"
 #include "rocksdb/write_batch.h"
-#include "server/server.h"
 
 namespace dingodb {
 
@@ -343,6 +341,118 @@ std::shared_ptr<RawEngine::Writer> RawRocksEngine::NewWriter(const std::string& 
     return nullptr;
   }
   return std::make_shared<Writer>(db_, column_family);
+}
+
+std::shared_ptr<RawEngine::MultiCfWriter> RawRocksEngine::NewMultiCfWriter(const std::vector<std::string>& cf_names) {
+  std::vector<std::shared_ptr<ColumnFamily>> column_families;
+  for (const auto& cf_name : cf_names) {
+    auto column_family = GetColumnFamily(cf_name);
+    if (column_family == nullptr) {
+      return nullptr;
+    }
+    column_families.push_back(column_family);
+  }
+  return std::make_shared<MultiCfWriter>(db_, column_families);
+}
+
+butil::Status RawRocksEngine::MultiCfWriter::KvBatchPutAndDelete(
+    const std::map<uint32_t, std::vector<pb::common::KeyValue>>& kv_puts_with_cf,
+    const std::map<uint32_t, std::vector<pb::common::KeyValue>>& kv_deletes_with_cf) {
+  DINGO_LOG(INFO) << "MultiCfWriter::KvBatchPutAndDelete, kv_puts_with_cf size: " << kv_puts_with_cf.size()
+                  << ", kv_deletes_with_cf size: " << kv_deletes_with_cf.size();
+
+  rocksdb::WriteBatch batch;
+  for (const auto& [cf_id, kv_puts] : kv_puts_with_cf) {
+    if (BAIDU_UNLIKELY(kv_puts.empty())) {
+      DINGO_LOG(ERROR) << fmt::format("keys empty not support");
+      return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
+    }
+
+    if (BAIDU_UNLIKELY(cf_id >= column_families_.size() || cf_id < 0)) {
+      DINGO_LOG(ERROR) << "cf_id is invalid, cf_id: " << cf_id;
+      return butil::Status(pb::error::EKEY_EMPTY, "cf_id is invalid");
+    }
+
+    for (const auto& kv : kv_puts) {
+      if (BAIDU_UNLIKELY(kv.key().empty())) {
+        DINGO_LOG(ERROR) << fmt::format("key empty not support");
+        return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
+      } else {
+        rocksdb::Status s = batch.Put(column_families_[cf_id]->GetHandle(), kv.key(), kv.value());
+        if (BAIDU_UNLIKELY(!s.ok())) {
+          DINGO_LOG(ERROR) << fmt::format("rocksdb::WriteBatch::Put failed : {}", s.ToString());
+          return butil::Status(pb::error::EINTERNAL, "Internal put error");
+        }
+      }
+    }
+  }
+
+  for (const auto& [cf_id, kv_deletes] : kv_deletes_with_cf) {
+    if (BAIDU_UNLIKELY(kv_deletes.empty())) {
+      DINGO_LOG(ERROR) << fmt::format("keys empty not support");
+      return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
+    }
+
+    if (BAIDU_UNLIKELY(cf_id >= column_families_.size() || cf_id < 0)) {
+      DINGO_LOG(ERROR) << "cf_id is invalid, cf_id: " << cf_id;
+      return butil::Status(pb::error::EKEY_EMPTY, "cf_id is invalid");
+    }
+
+    for (const auto& kv : kv_deletes) {
+      if (BAIDU_UNLIKELY(kv.key().empty())) {
+        DINGO_LOG(ERROR) << fmt::format("key empty not support");
+        return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
+      } else {
+        rocksdb::Status s = batch.Delete(column_families_[cf_id]->GetHandle(), kv.key());
+        if (BAIDU_UNLIKELY(!s.ok())) {
+          DINGO_LOG(ERROR) << fmt::format("rocksdb::WriteBatch::Put failed : {}", s.ToString());
+          return butil::Status(pb::error::EINTERNAL, "Internal delete error");
+        }
+      }
+    }
+  }
+
+  rocksdb::WriteOptions write_options;
+  rocksdb::Status s = db_->Write(write_options, &batch);
+  if (!s.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Write failed : {}", s.ToString());
+    return butil::Status(pb::error::EINTERNAL, fmt::format("rocksdb::DB::Write failed : {}", s.ToString()));
+  }
+
+  return butil::Status::OK();
+}
+
+butil::Status RawRocksEngine::MultiCfWriter::KvBatchDeleteRange(
+    const std::map<uint32_t, std::vector<pb::common::Range>>& ranges_with_cf) {
+  DINGO_LOG(INFO) << "MultiCfWriter::KvBatchDeleteRange, ranges_with_cf size: " << ranges_with_cf.size();
+
+  for (const auto& [cf_id, ranges] : ranges_with_cf) {
+    if (BAIDU_UNLIKELY(cf_id >= column_families_.size() || cf_id < 0)) {
+      DINGO_LOG(ERROR) << "cf_id is invalid, cf_id: " << cf_id;
+      return butil::Status(pb::error::EKEY_EMPTY, "cf_id is invalid");
+    }
+
+    for (const auto& range : ranges) {
+      if (BAIDU_UNLIKELY(range.start_key().empty() || range.end_key().empty())) {
+        DINGO_LOG(ERROR) << fmt::format("range is empty");
+        return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range is empty");
+      }
+
+      if (BAIDU_UNLIKELY(range.start_key() >= range.end_key())) {
+        DINGO_LOG(ERROR) << fmt::format("range is wrong");
+        return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range is wrong");
+      }
+
+      auto status = db_->DeleteRange(rocksdb::WriteOptions(), column_families_[cf_id]->GetHandle(), range.start_key(),
+                                     range.end_key());
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Write failed : {}", status.ToString());
+        return butil::Status(pb::error::EINTERNAL, "Internal delete range error");
+      }
+    }
+  }
+
+  return butil::Status::OK();
 }
 
 std::shared_ptr<dingodb::Iterator> RawRocksEngine::NewIterator(const std::string& cf_name, IteratorOptions options) {

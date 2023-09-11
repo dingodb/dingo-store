@@ -208,6 +208,7 @@ class RawRocksEngine : public RawEngine {
 
     std::vector<std::string> AllRangeKeys() override {
       std::vector<std::string> keys;
+      keys.reserve(iters_.size());
       for (auto& iter : iters_) {
         keys.emplace_back(iter->Key());
       }
@@ -297,6 +298,23 @@ class RawRocksEngine : public RawEngine {
     std::shared_ptr<rocksdb::DB> db_;
   };
 
+  class MultiCfWriter : public RawEngine::MultiCfWriter {
+   public:
+    MultiCfWriter(std::shared_ptr<rocksdb::DB> db, std::vector<std::shared_ptr<ColumnFamily>> column_families)
+        : db_(db), column_families_(column_families){};
+    ~MultiCfWriter() override = default;
+    // map<cf_index, vector<kvs>>
+    butil::Status KvBatchPutAndDelete(
+        const std::map<uint32_t, std::vector<pb::common::KeyValue>>& kv_puts_with_cf,
+        const std::map<uint32_t, std::vector<pb::common::KeyValue>>& kv_deletes_with_cf) override;
+
+    butil::Status KvBatchDeleteRange(const std::map<uint32_t, std::vector<pb::common::Range>>& ranges_with_cf) override;
+
+   private:
+    std::vector<std::shared_ptr<ColumnFamily>> column_families_;
+    std::shared_ptr<rocksdb::DB> db_;
+  };
+
   class SstFileWriter {
    public:
     SstFileWriter(const rocksdb::Options& options)
@@ -355,6 +373,7 @@ class RawRocksEngine : public RawEngine {
   std::shared_ptr<dingodb::Snapshot> NewSnapshot() override;
   std::shared_ptr<RawEngine::Reader> NewReader(const std::string& cf_name) override;
   std::shared_ptr<RawEngine::Writer> NewWriter(const std::string& cf_name) override;
+  std::shared_ptr<RawEngine::MultiCfWriter> NewMultiCfWriter(const std::vector<std::string>& cf_names) override;
   std::shared_ptr<dingodb::Iterator> NewIterator(const std::string& cf_name, IteratorOptions options) override;
   std::shared_ptr<dingodb::Iterator> NewIterator(const std::string& cf_name, std::shared_ptr<Snapshot> snapshot,
                                                  IteratorOptions options);

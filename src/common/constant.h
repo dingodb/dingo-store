@@ -44,6 +44,10 @@ class Constant {
   inline static const std::string kStoreDataCF = "default";
   // Define Store meta column family.
   inline static const std::string kStoreMetaCF = "meta";
+  // Txn column families.
+  inline static const std::string kStoreTxnDataCF = "data";
+  inline static const std::string kStoreTxnLockCF = "lock";
+  inline static const std::string kStoreTxnWriteCF = "lock";
   // Define store meta prefix.
   inline static const std::string kStoreRegionMetaPrefix = "META_REGION";
   // Define store raft prefix.
