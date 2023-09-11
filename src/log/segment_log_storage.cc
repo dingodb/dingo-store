@@ -14,9 +14,11 @@
 
 #include "log/segment_log_storage.h"
 
+#include <algorithm>
 #include <atomic>
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -27,6 +29,7 @@
 #include "braft/util.h"
 #include "brpc/reloadable_flags.h"  //
 #include "butil/atomicops.h"
+#include "butil/errno.h"
 #include "butil/fd_utility.h"              // butil::make_close_on_exec
 #include "butil/file_util.h"               // butil::CreateDirectory
 #include "butil/files/dir_reader_posix.h"  // butil::DirReaderPosix
@@ -38,6 +41,7 @@
 #include "common/logging.h"
 #include "fmt/core.h"
 #include "gflags/gflags.h"
+#include "proto/store_internal.pb.h"
 
 #define SEGMENT_OPEN_PATTERN "log_inprogress_%020" PRId64
 #define SEGMENT_CLOSED_PATTERN "log_%020" PRId64 "_%020" PRId64
@@ -89,6 +93,11 @@ struct Segment::EntryHeader {
   uint32_t data_len;
   uint32_t data_checksum;
 };
+
+std::string ToString(const Segment::EntryHeader& h) {
+  return fmt::format("(term={}, type={}, data_len={}, checksum_type={}, data_checksum={})", h.term, h.type, h.data_len,
+                     h.checksum_type, h.data_checksum);
+}
 
 std::ostream& operator<<(std::ostream& os, const Segment::EntryHeader& h) {
   os << "{term=" << h.term << ", type=" << h.type << ", data_len=" << h.data_len
@@ -148,7 +157,8 @@ inline uint32_t GetChecksum(int checksum_type, const butil::IOBuf& data) {
 
 int Segment::Create() {
   if (!is_open_) {
-    CHECK(false) << "Create on a closed segment at first_index=" << first_index_ << " in " << path_;
+    CHECK(false) << fmt::format("[raft.log][region({}).index({}_{})] create on a closed segment, path: {}", region_id_,
+                                FirstIndex(), LastIndex(), path_);
     return -1;
   }
 
@@ -158,7 +168,8 @@ int Segment::Create() {
   if (fd_ >= 0) {
     butil::make_close_on_exec(fd_);
   }
-  DINGO_LOG(INFO) << "Created new segment " << path << " with fd=" << fd_;
+  DINGO_LOG(INFO) << fmt::format("[raft.log][region({}).index({}_{})] created new segment, fd:{} path: {}", region_id_,
+                                 FirstIndex(), LastIndex(), fd_, path_);
   return fd_ >= 0 ? 0 : -1;
 }
 
@@ -189,7 +200,9 @@ int Segment::LoadEntry(off_t offset, EntryHeader* head, butil::IOBuf* data, size
   tmp.data_len = data_len;
   tmp.data_checksum = data_checksum;
   if (!VerifyChecksum(tmp.checksum_type, p, kEntryHeaderSize - 4, header_checksum)) {
-    DINGO_LOG(ERROR) << "Found corrupted header at offset=" << offset << ", header=" << tmp << ", path: " << path_;
+    DINGO_LOG(ERROR) << fmt::format(
+        "[raft.log][region({}).index({}_{})] found corrupted header at offset: {}, header: {} path_: {}", region_id_,
+        FirstIndex(), LastIndex(), ToString(tmp), offset, path_);
     return -1;
   }
   if (head != nullptr) {
@@ -208,8 +221,9 @@ int Segment::LoadEntry(off_t offset, EntryHeader* head, butil::IOBuf* data, size
     CHECK_EQ(buf.length(), kEntryHeaderSize + data_len);
     buf.pop_front(kEntryHeaderSize);
     if (!VerifyChecksum(tmp.checksum_type, buf, tmp.data_checksum)) {
-      DINGO_LOG(ERROR) << "Found corrupted data at offset=" << offset + kEntryHeaderSize << " header=" << tmp
-                       << " path: " << path_;
+      DINGO_LOG(ERROR) << fmt::format(
+          "[raft.log][region({}).index({}_{})] found corrupted data at offset: {} header: {} path:{}", region_id_,
+          FirstIndex(), LastIndex(), offset + kEntryHeaderSize, ToString(tmp), path_);
       // TODO: abort()?
       return -1;
     }
@@ -222,12 +236,12 @@ int Segment::GetMeta(int64_t index, LogMeta* meta) const {
   BAIDU_SCOPED_LOCK(mutex_);
   if (index > last_index_.load(butil::memory_order_relaxed) || index < first_index_) {
     // out of range
-    DINGO_LOG(DEBUG) << "last_index_=" << last_index_.load(butil::memory_order_relaxed)
-                     << " first_index_=" << first_index_;
+    DINGO_LOG(DEBUG) << fmt::format("[raft.log][region({}).index({}_{})] index: {}.", region_id_, FirstIndex(),
+                                    LastIndex(), index);
     return -1;
   } else if (last_index_ == first_index_ - 1) {
-    DINGO_LOG(DEBUG) << "last_index_=" << last_index_.load(butil::memory_order_relaxed)
-                     << " first_index_=" << first_index_;
+    DINGO_LOG(DEBUG) << fmt::format("[raft.log][region({}).index({}_{})] get meta.", region_id_, FirstIndex(),
+                                    LastIndex());
     // empty
     return -1;
   }
@@ -254,7 +268,8 @@ int Segment::Load(braft::ConfigurationManager* configuration_manager) {
   }
   fd_ = ::open(path.c_str(), O_RDWR);
   if (fd_ < 0) {
-    DINGO_LOG(ERROR) << "Fail to open " << path << ", " << berror();
+    DINGO_LOG(ERROR) << fmt::format("[raft.log][region({}).index({}_{})] open failed, path: {} error: {}", region_id_,
+                                    FirstIndex(), LastIndex(), path, berror());
     return -1;
   }
   butil::make_close_on_exec(fd_);
@@ -262,7 +277,8 @@ int Segment::Load(braft::ConfigurationManager* configuration_manager) {
   // get file size
   struct stat st_buf;
   if (fstat(fd_, &st_buf) != 0) {
-    DINGO_LOG(ERROR) << "Fail to get the stat of " << path << ", " << berror();
+    DINGO_LOG(ERROR) << fmt::format("[raft.log][region({}).index({}_{})] get file stat failed, path: {} error: {}",
+                                    region_id_, FirstIndex(), LastIndex(), path, berror());
     ::close(fd_);
     fd_ = -1;
     return -1;
@@ -305,7 +321,9 @@ int Segment::Load(braft::ConfigurationManager* configuration_manager) {
         braft::ConfigurationEntry conf_entry(*entry);
         configuration_manager->add(conf_entry);
       } else {
-        DINGO_LOG(ERROR) << "fail to parse configuration meta, path: " << path_ << " entry_off " << entry_off;
+        DINGO_LOG(ERROR) << fmt::format(
+            "[raft.log][region({}).index({}_{})] parse configuration meta failed, path: {} entry_off:{}", region_id_,
+            FirstIndex(), LastIndex(), path_, entry_off);
         ret = -1;
         break;
       }
@@ -318,13 +336,15 @@ int Segment::Load(braft::ConfigurationManager* configuration_manager) {
   const int64_t last_index = last_index_.load(butil::memory_order_relaxed);
   if (ret == 0 && !is_open_) {
     if (actual_last_index < last_index) {
-      DINGO_LOG(ERROR) << "data lost in a full segment, path: " << path_ << " first_index: " << first_index_
-                       << " expect_last_index: " << last_index << " actual_last_index: " << actual_last_index;
+      DINGO_LOG(ERROR) << fmt::format(
+          "[raft.log][region({}).index({}_{})] data lost in a full segment, actual_last_index: {} path: {}", region_id_,
+          FirstIndex(), LastIndex(), actual_last_index, path_);
       ret = -1;
     } else if (actual_last_index > last_index) {
       // FIXME(zhengpengfei): should we ignore garbage entries silently
-      DINGO_LOG(ERROR) << "found garbage in a full segment, path: " << path_ << " first_index: " << first_index_
-                       << " expect_last_index: " << last_index << " actual_last_index: " << actual_last_index;
+      DINGO_LOG(ERROR) << fmt::format(
+          "[raft.log][region({}).index({}_{})] found garbage in a full segment, actual_last_index: {} path: {}",
+          region_id_, FirstIndex(), LastIndex(), actual_last_index, path_);
       ret = -1;
     }
   }
@@ -339,8 +359,9 @@ int Segment::Load(braft::ConfigurationManager* configuration_manager) {
 
   // truncate last uncompleted entry
   if (entry_off != file_size) {
-    DINGO_LOG(INFO) << "truncate last uncompleted write entry, path: " << path_ << " first_index: " << first_index_
-                    << " old_size: " << file_size << " new_size: " << entry_off;
+    DINGO_LOG(INFO) << fmt::format(
+        "[raft.log][region({}).index({}_{})] truncate last uncompleted write entry, old_size: {} new_size:{} path: {}",
+        region_id_, FirstIndex(), LastIndex(), file_size, entry_off, path_);
     ret = FtruncateUninterrupted(fd_, entry_off);
   }
 
@@ -355,8 +376,8 @@ int Segment::Append(const braft::LogEntry* entry) {
   if (BAIDU_UNLIKELY(!entry || !is_open_)) {
     return EINVAL;
   } else if (entry->id.index != last_index_.load(butil::memory_order_consume) + 1) {
-    CHECK(false) << "entry->index=" << entry->id.index << " last_index_=" << last_index_
-                 << " first_index_=" << first_index_;
+    CHECK(false) << fmt::format("[raft.log][region({}).index({}_{})] append entry failed, index: {}, ", region_id_,
+                                FirstIndex(), LastIndex(), entry->id.index);
     return ERANGE;
   }
 
@@ -370,12 +391,15 @@ int Segment::Append(const braft::LogEntry* entry) {
     case braft::ENTRY_TYPE_CONFIGURATION: {
       butil::Status status = serialize_configuration_meta(entry, data);
       if (!status.ok()) {
-        DINGO_LOG(ERROR) << "Fail to serialize ConfigurationPBMeta, path: " << path_;
+        DINGO_LOG(ERROR) << fmt::format(
+            "[raft.log][region({}).index({}_{})] serialize ConfigurationPBMeta failed, path: {}", region_id_,
+            FirstIndex(), LastIndex(), path_);
         return -1;
       }
     } break;
     default:
-      DINGO_LOG(FATAL) << "unknow entry type: " << entry->type << ", path: " << path_;
+      DINGO_LOG(FATAL) << fmt::format("[raft.log][region({}).index({}_{})] unknown entry type: {} path: {}", region_id_,
+                                      FirstIndex(), LastIndex(), static_cast<int>(entry->type), path_);
       return -1;
   }
   CHECK_LE(data.length(), 1ul << 56ul);
@@ -396,8 +420,9 @@ int Segment::Append(const braft::LogEntry* entry) {
   while (written < (ssize_t)to_write) {
     const ssize_t n = butil::IOBuf::cut_multiple_into_file_descriptor(fd_, pieces + start, ARRAY_SIZE(pieces) - start);
     if (n < 0) {
-      DINGO_LOG(ERROR) << fmt::format("Fail to write to fd={}, path: {} first_index: {} error: {}", fd_, path_,
-                                      first_index_, berror());
+      DINGO_LOG(ERROR) << fmt::format(
+          "[raft.log][region({}).index({}_{})] write file failed, fd: {}, path: {} first_index: {} error: {}",
+          region_id_, FirstIndex(), LastIndex(), fd_, path_, first_index_, berror());
       return -1;
     }
     written += n;
@@ -452,18 +477,22 @@ braft::LogEntry* Segment::Get(int64_t index) const {
         entry->data.swap(data);
         break;
       case braft::ENTRY_TYPE_NO_OP:
-        CHECK(data.empty()) << "Data of NO_OP must be empty";
+        CHECK(data.empty()) << fmt::format("[raft.log][region({}).index({}_{})] data of NO_OP must be empty",
+                                           region_id_, FirstIndex(), LastIndex());
         break;
       case braft::ENTRY_TYPE_CONFIGURATION: {
         butil::Status status = parse_configuration_meta(data, entry);
         if (!status.ok()) {
-          DINGO_LOG(WARNING) << "Fail to parse ConfigurationPBMeta, path: " << path_;
+          DINGO_LOG(WARNING) << fmt::format(
+              "[raft.log][region({}).index({}_{})] parse ConfigurationPBMeta failed, path: {}", region_id_,
+              FirstIndex(), LastIndex(), path_);
           ok = false;
           break;
         }
       } break;
       default:
-        CHECK(false) << "Unknown entry type, path: " << path_;
+        CHECK(false) << fmt::format("[raft.log][region({}).index({}_{})] unknown entry type, path: {}", region_id_,
+                                    FirstIndex(), LastIndex(), path_);
         break;
     }
 
@@ -499,9 +528,9 @@ int Segment::Close(bool will_sync) {
   butil::string_appendf(&new_path, "/" SEGMENT_CLOSED_PATTERN, first_index_, last_index_.load());
 
   // TODO: optimize index memory usage by reconstruct vector
-  DINGO_LOG(INFO) << "close a full segment. Current first_index: " << first_index_ << " last_index: " << last_index_
-                  << " raft_sync_segments: " << Constant::kSegmentLogSync << " will_sync: " << will_sync
-                  << " path: " << new_path;
+  DINGO_LOG(INFO) << fmt::format(
+      "[raft.log][region({}).index({}_{})] close a full segment, raft_sync_segments: {} will_sync: {} path: {}",
+      region_id_, FirstIndex(), LastIndex(), Constant::kSegmentLogSync, will_sync, new_path);
   int ret = 0;
   if (last_index_ > first_index_) {
     if (Constant::kSegmentLogSync && will_sync) {
@@ -512,7 +541,9 @@ int Segment::Close(bool will_sync) {
     is_open_ = false;
     const int rc = ::rename(old_path.c_str(), new_path.c_str());
     if (rc != 0) {
-      DINGO_LOG(ERROR) << "Fail to rename `" << old_path << "' to `" << new_path << "\', " << berror();
+      DINGO_LOG(ERROR) << fmt::format(
+          "[raft.log][region({}).index({}_{})] rename failed, old_path: {} new_path: {} error: {}", region_id_,
+          FirstIndex(), LastIndex(), old_path, new_path, berror());
     }
 
     return rc;
@@ -534,7 +565,8 @@ static void* RunUnlink(void* arg) {
   timer.start();
   int ret = ::unlink(file_path->c_str());
   timer.stop();
-  DINGO_LOG(DEBUG) << "unlink " << *file_path << " ret " << ret << " time: " << timer.u_elapsed();
+  DINGO_LOG(DEBUG) << fmt::format("[raft.log][region(*))] unlink file, path: {} ret: {} time: {}us", *file_path, ret,
+                                  timer.u_elapsed());
   delete file_path;
 
   return nullptr;
@@ -554,7 +586,8 @@ int Segment::Unlink() {
     tmp_path.append(".tmp");
     ret = ::rename(path.c_str(), tmp_path.c_str());
     if (ret != 0) {
-      DINGO_LOG(ERROR) << "Fail to rename " << path << " to " << tmp_path;
+      DINGO_LOG(ERROR) << fmt::format("[raft.log][region({}).index({}_{})] rename failed, path: {} tmp_path: {}",
+                                      region_id_, FirstIndex(), LastIndex(), path, tmp_path);
       break;
     }
 
@@ -566,7 +599,8 @@ int Segment::Unlink() {
       RunUnlink(file_path);
     }
 
-    DINGO_LOG(INFO) << "Unlinked segment `" << path << '\'';
+    DINGO_LOG(INFO) << fmt::format("[raft.log][region({}).index({}_{})] unlinked segment, path: {}", region_id_,
+                                   FirstIndex(), LastIndex(), path);
   } while (false);
 
   return ret;
@@ -581,8 +615,9 @@ int Segment::Truncate(int64_t last_index_kept) {
   }
   first_truncate_in_offset = last_index_kept + 1 - first_index_;
   truncate_size = offset_and_term_[first_truncate_in_offset].first;
-  DINGO_LOG(DEBUG) << "Truncating " << path_ << " first_index: " << first_index_ << " last_index from " << last_index_
-                   << " to " << last_index_kept << " truncate size to " << truncate_size;
+  DINGO_LOG(DEBUG) << fmt::format(
+      "[raft.log][region({}).index({}_{})] truncating, last_index_kept:{} truncate_size: {} path: {} ", region_id_,
+      FirstIndex(), LastIndex(), last_index_kept, truncate_size, path_);
   lck.unlock();
 
   // Truncate on a full segment need to rename back to inprogess segment again,
@@ -595,7 +630,9 @@ int Segment::Truncate(int64_t last_index_kept) {
     butil::string_appendf(&new_path, "/" SEGMENT_OPEN_PATTERN, first_index_);
     int ret = ::rename(old_path.c_str(), new_path.c_str());
     if (ret != 0) {
-      DINGO_LOG(ERROR) << "Fail to rename `" << old_path << "' to `" << new_path << "', " << berror();
+      DINGO_LOG(ERROR) << fmt::format(
+          "[raft.log][region({}).index({}_{})] rename failed, old_path: {} new_path: {}, error: {}", region_id_,
+          FirstIndex(), LastIndex(), old_path, new_path, berror());
       return ret;
     }
 
@@ -611,7 +648,8 @@ int Segment::Truncate(int64_t last_index_kept) {
   // seek fd
   off_t ret_off = ::lseek(fd_, truncate_size, SEEK_SET);
   if (ret_off < 0) {
-    DINGO_LOG(ERROR) << "Fail to lseek fd=" << fd_ << " to size=" << truncate_size << " path: " << path_;
+    DINGO_LOG(ERROR) << fmt::format("[raft.log][region({}).index({}_{})] lseek failed, fd: {} size: {} path: {}",
+                                    region_id_, FirstIndex(), LastIndex(), fd_, truncate_size, path_);
     return -1;
   }
 
@@ -629,16 +667,19 @@ int SegmentLogStorage::Init(braft::ConfigurationManager* configuration_manager) 
   butil::FilePath dir_path(path_);
   butil::File::Error e;
   if (!butil::CreateDirectoryAndGetError(dir_path, &e, true)) {
-    DINGO_LOG(ERROR) << "Fail to create " << dir_path.value() << " : " << e;
+    DINGO_LOG(ERROR) << fmt::format("[raft.log][region({})] create directory failed, path: {} error: {}", region_id_,
+                                    dir_path.value(), static_cast<int>(e));
     return -1;
   }
 
   if (butil::crc32c::IsFastCrc32Supported()) {
     checksum_type_ = static_cast<int>(CheckSumType::kCrc32);
-    DINGO_LOG(INFO) << "Use crc32c as the checksum type of appending entries";
+    DINGO_LOG(INFO) << fmt::format("[raft.log][region({})] use crc32c as the checksum type of appending entries",
+                                   region_id_);
   } else {
     checksum_type_ = static_cast<int>(CheckSumType::kMurmurhash32);
-    DINGO_LOG(INFO) << "Use murmurhash32 as the checksum type of appending entries";
+    DINGO_LOG(INFO) << fmt::format("[raft.log][region({})] use murmurhash32 as the checksum type of appending entries",
+                                   region_id_);
   }
 
   int ret = 0;
@@ -646,7 +687,7 @@ int SegmentLogStorage::Init(braft::ConfigurationManager* configuration_manager) 
   do {
     ret = LoadMeta();
     if (ret != 0 && errno == ENOENT) {
-      DINGO_LOG(WARNING) << path_ << " is empty";
+      DINGO_LOG(WARNING) << fmt::format("[raft.log][region({})] path: {}", region_id_, path_);
       is_empty = true;
     } else if (ret != 0) {
       break;
@@ -671,6 +712,12 @@ int SegmentLogStorage::Init(braft::ConfigurationManager* configuration_manager) 
   return ret;
 }
 
+int64_t SegmentLogStorage::FirstLogIndex() { return first_log_index_.load(butil::memory_order_acquire); };
+
+int64_t SegmentLogStorage::VectorIndexFirstLogIndex() {
+  return vector_index_first_log_index_.load(std::memory_order_relaxed);
+}
+
 int64_t SegmentLogStorage::LastLogIndex() { return last_log_index_.load(butil::memory_order_acquire); }
 
 int SegmentLogStorage::AppendEntries(const std::vector<braft::LogEntry*>& entries, braft::IOMetric* metric) {
@@ -679,16 +726,17 @@ int SegmentLogStorage::AppendEntries(const std::vector<braft::LogEntry*>& entrie
   }
 
   DINGO_LOG(DEBUG) << fmt::format(
-      "append entries region_id: {} last_log_index_: {} log type: {} entry index: {}_{} entry count: {}", region_id_,
-      last_log_index_.load(butil::memory_order_relaxed), static_cast<int>(entries.front()->type),
-      entries.front()->id.term, entries.front()->id.index, entries.size());
+      "[raft.log][region({}).index({}_{})] append entries, log type: {} entry index: {}_{} entry count: {}", region_id_,
+      FirstLogIndex(), LastLogIndex(), static_cast<int>(entries.front()->type), entries.front()->id.term,
+      entries.front()->id.index, entries.size());
 
   if (last_log_index_.load(butil::memory_order_relaxed) + 1 != entries.front()->id.index) {
     DINGO_LOG(FATAL) << fmt::format(
-        "There's gap between appending entries and last_log_index_ path: {} last_log_index_: {} log type: {} "
+        "[raft.log][region({})] there's gap between appending entries and last_log_index_ path: {} last_log_index_: {} "
+        "log type: {} "
         "entry_index: {}_{}",
-        path_, last_log_index_.load(butil::memory_order_relaxed), static_cast<int>(entries.front()->type),
-        entries.front()->id.term, entries.front()->id.index);
+        region_id_, path_, LastLogIndex(), static_cast<int>(entries.front()->type), entries.front()->id.term,
+        entries.front()->id.index);
     return -1;
   }
   std::shared_ptr<Segment> last_segment;
@@ -730,8 +778,8 @@ int SegmentLogStorage::AppendEntries(const std::vector<braft::LogEntry*>& entrie
 }
 
 int SegmentLogStorage::AppendEntry(const braft::LogEntry* entry) {
-  DINGO_LOG(DEBUG) << fmt::format("append entry region_id: {} last_log_index_: {} entry index: {}", region_id_,
-                                  last_log_index_.load(butil::memory_order_relaxed), entry->id.index);
+  DINGO_LOG(DEBUG) << fmt::format("[raft.log][region({}).index({}_{})] append entry, entry index: {}", region_id_,
+                                  FirstLogIndex(), LastLogIndex(), entry->id.index);
 
   auto segment = OpenSegment();
   if (nullptr == segment) {
@@ -794,7 +842,7 @@ void SegmentLogStorage::PopSegments(int64_t first_index_kept, std::vector<std::s
   poppeds.clear();
   poppeds.reserve(32);
   BAIDU_SCOPED_LOCK(mutex_);
-  first_log_index_.store(first_index_kept, butil::memory_order_release);
+
   for (SegmentMap::iterator it = segments_.begin(); it != segments_.end();) {
     std::shared_ptr<Segment>& segment = it->second;
     if (segment->LastIndex() < first_index_kept) {
@@ -809,34 +857,31 @@ void SegmentLogStorage::PopSegments(int64_t first_index_kept, std::vector<std::s
     if (open_segment_->LastIndex() < first_index_kept) {
       poppeds.push_back(open_segment_);
       open_segment_ = nullptr;
-      // _log_storage is empty
       last_log_index_.store(first_index_kept - 1);
     } else {
       CHECK(open_segment_->FirstIndex() <= first_index_kept);
     }
   } else {
-    // _log_storage is empty
     last_log_index_.store(first_index_kept - 1);
   }
 }
 
-int SegmentLogStorage::TruncatePrefix(const int64_t first_index_kept) {
+void SegmentLogStorage::SetFirstAndLastLogIndex(int64_t first_index_kept) {
+  BAIDU_SCOPED_LOCK(mutex_);
+
+  first_log_index_.store(first_index_kept, butil::memory_order_release);
+  if (!open_segment_) {
+    last_log_index_.store(first_index_kept - 1);
+  }
+}
+
+int SegmentLogStorage::TruncatePrefix(int64_t first_index_kept) {
   // segment files
   if (first_log_index_.load(butil::memory_order_acquire) >= first_index_kept) {
-    DINGO_LOG(DEBUG) << "Nothing is going to happen since first_log_index_="
-                     << first_log_index_.load(butil::memory_order_relaxed)
-                     << " >= first_index_kept=" << first_index_kept;
+    DINGO_LOG(INFO) << fmt::format(
+        "[raft.log][region({}).index({}_{})] truncate prefix, nothing happen since first_index_kept: {}", region_id_,
+        FirstLogIndex(), LastLogIndex(), first_index_kept);
     return 0;
-  }
-
-  if (enable_truncate_control_) {
-    for (auto& truncate_log_index : truncate_log_indexs_) {
-      if (first_index_kept >= truncate_log_index.second.load(std::memory_order_relaxed)) {
-        DINGO_LOG(DEBUG) << fmt::format("Not allow truncate prefix, first_index_kept({})>=truncate_log_index({})",
-                                        first_index_kept, truncate_log_index.second.load(std::memory_order_relaxed));
-        return 0;
-      }
-    }
   }
 
   // NOTE: truncate_prefix is not important, as it has nothing to do with
@@ -844,19 +889,54 @@ int SegmentLogStorage::TruncatePrefix(const int64_t first_index_kept) {
   // the deleting fails or the process crashes (which is unlikely to happen).
   // The new process would see the latest `first_log_index'
   if (SaveMeta(first_index_kept) != 0) {  // NOTE
-    DINGO_LOG(ERROR) << "Fail to save meta, path: " << path_;
+    DINGO_LOG(ERROR) << fmt::format("[raft.log][region({}).index({}_{})] save meta failed, path: {}", region_id_,
+                                    FirstLogIndex(), LastLogIndex(), path_);
+    return -1;
+  }
+  SetFirstAndLastLogIndex(first_index_kept);
+
+  DINGO_LOG(INFO) << fmt::format("[raft.log][region({}).index({}_{})] truncate prefix, first_index_kept: {}",
+                                 region_id_, FirstLogIndex(), LastLogIndex(), first_index_kept);
+
+  TruncateActualPrefixLog();
+
+  return 0;
+}
+
+int SegmentLogStorage::TruncateVectorIndexPrefix(int64_t first_index_kept) {
+  DINGO_LOG(INFO) << fmt::format(
+      "[raft.log][region({}).index({}_{})] truncate vector index prefix, first_index_kept: {}", region_id_,
+      FirstLogIndex(), LastLogIndex(), first_index_kept);
+
+  vector_index_first_log_index_.store(first_index_kept, std::memory_order_relaxed);
+
+  if (SaveMeta(first_log_index_.load(std::memory_order_relaxed)) != 0) {
     return -1;
   }
 
-  DINGO_LOG(DEBUG) << fmt::format("truncate prefix: region_id: {} first_index_kept: {}", region_id_, first_index_kept);
+  TruncateActualPrefixLog();
+
+  return 0;
+}
+
+int64_t SegmentLogStorage::GetMinFirstLogIndex() {
+  return std::min(first_log_index_.load(butil::memory_order_relaxed),
+                  vector_index_first_log_index_.load(butil::memory_order_relaxed));
+}
+
+void SegmentLogStorage::TruncateActualPrefixLog() {
+  int64_t truncate_log_index = GetMinFirstLogIndex();
 
   std::vector<std::shared_ptr<Segment>> poppeds;
-  PopSegments(first_index_kept, poppeds);
+  PopSegments(truncate_log_index, poppeds);
+  DINGO_LOG(INFO) << fmt::format(
+      "[raft.log][region({}).index({}_{})] truncate prefix log, min_log_index: {} delete file num: {}", region_id_,
+      FirstLogIndex(), LastLogIndex(), truncate_log_index, poppeds.size());
+
   for (auto& popped : poppeds) {
     popped->Unlink();
     popped = nullptr;
   }
-  return 0;
 }
 
 std::shared_ptr<Segment> SegmentLogStorage::PopSegmentsFromBack(int64_t last_index_kept,
@@ -899,7 +979,8 @@ std::shared_ptr<Segment> SegmentLogStorage::PopSegmentsFromBack(int64_t last_ind
 }
 
 int SegmentLogStorage::TruncateSuffix(int64_t last_index_kept) {
-  DINGO_LOG(DEBUG) << fmt::format("truncate suffix: region_id: {} last_index_kept: {}", region_id_, last_index_kept);
+  DINGO_LOG(INFO) << fmt::format("[raft.log][region({}).index({}_{})] truncate suffix last_index_kept: {}", region_id_,
+                                 FirstLogIndex(), LastLogIndex(), last_index_kept);
   // segment files
   std::vector<std::shared_ptr<Segment>> poppeds;
   std::shared_ptr<Segment> last_segment = PopSegmentsFromBack(last_index_kept, poppeds);
@@ -945,11 +1026,11 @@ int SegmentLogStorage::TruncateSuffix(int64_t last_index_kept) {
 }
 
 int SegmentLogStorage::Reset(int64_t next_log_index) {
-  DINGO_LOG(INFO) << fmt::format("reset log region: {} next_log_index: {} first_log_index_: {} last_log_index_: {}",
-                                 region_id_, next_log_index, first_log_index_.load(butil::memory_order_relaxed),
-                                 last_log_index_.load(butil::memory_order_relaxed));
+  DINGO_LOG(INFO) << fmt::format("[raft.log][region({}).index({}_{})] reset log, next_log_index: {}", region_id_,
+                                 FirstLogIndex(), LastLogIndex(), next_log_index);
   if (next_log_index <= 0) {
-    DINGO_LOG(ERROR) << "Invalid next_log_index=" << next_log_index << " path: " << path_;
+    DINGO_LOG(ERROR) << fmt::format("[raft.log][region({}).index({}_{})] invalid next_log_index: {} path: {}",
+                                    region_id_, FirstLogIndex(), LastLogIndex(), next_log_index, path_);
     return EINVAL;
   }
   std::vector<std::shared_ptr<Segment>> poppeds;
@@ -964,11 +1045,13 @@ int SegmentLogStorage::Reset(int64_t next_log_index) {
     open_segment_ = nullptr;
   }
   first_log_index_.store(next_log_index, butil::memory_order_relaxed);
+  vector_index_first_log_index_.store(next_log_index, butil::memory_order_relaxed);
   last_log_index_.store(next_log_index - 1, butil::memory_order_relaxed);
   lck.unlock();
   // NOTE: see the comments in truncate_prefix
   if (SaveMeta(next_log_index) != 0) {
-    DINGO_LOG(ERROR) << "Fail to save meta, path: " << path_;
+    DINGO_LOG(ERROR) << fmt::format("[raft.log][region({}).index({}_{})] save meta failed, path: {}", region_id_,
+                                    FirstLogIndex(), LastLogIndex(), path_);
     return -1;
   }
   for (auto& popped : poppeds) {
@@ -981,8 +1064,9 @@ int SegmentLogStorage::Reset(int64_t next_log_index) {
 int SegmentLogStorage::ListSegments(bool is_empty) {
   butil::DirReaderPosix dir_reader(path_.c_str());
   if (!dir_reader.IsValid()) {
-    DINGO_LOG(WARNING) << "directory reader failed, maybe NOEXIST or PERMISSION."
-                       << " path: " << path_;
+    DINGO_LOG(WARNING) << fmt::format(
+        "[raft.log][region({}).index({}_{})] directory reader failed, maybe NOEXIST or PERMISSION, path: {}.",
+        region_id_, FirstLogIndex(), LastLogIndex(), path_);
     return -1;
   }
 
@@ -996,7 +1080,8 @@ int SegmentLogStorage::ListSegments(bool is_empty) {
       segment_path.append(dir_reader.name());
       ::unlink(segment_path.c_str());
 
-      DINGO_LOG(WARNING) << "unlink unused segment, path: " << segment_path;
+      DINGO_LOG(WARNING) << fmt::format("[raft.log][region({}).index({}_{})] unlink unused segment, path: {}",
+                                        region_id_, FirstLogIndex(), LastLogIndex(), segment_path);
 
       continue;
     }
@@ -1006,20 +1091,22 @@ int SegmentLogStorage::ListSegments(bool is_empty) {
     int64_t last_index = 0;
     match = sscanf(dir_reader.name(), SEGMENT_CLOSED_PATTERN, &first_index, &last_index);
     if (match == 2) {
-      DINGO_LOG(INFO) << "restore closed segment, path: " << path_ << " first_index: " << first_index
-                      << " last_index: " << last_index;
-      segments_[first_index] = std::make_shared<Segment>(path_, first_index, last_index, checksum_type_);
+      DINGO_LOG(INFO) << fmt::format("[raft.log][region({}).index({}_{})] restore closed segment, path: {}", region_id_,
+                                     first_index, last_index, path_);
+      segments_[first_index] = std::make_shared<Segment>(region_id_, path_, first_index, last_index, checksum_type_);
       continue;
     }
 
     match = sscanf(dir_reader.name(), SEGMENT_OPEN_PATTERN, &first_index);
     if (match == 1) {
-      DINGO_LOG(DEBUG) << "restore open segment, path: " << path_ << " first_index: " << first_index;
+      DINGO_LOG(DEBUG) << fmt::format("[raft.log][region({})] restore open segment, first_index: {} path: {}",
+                                      region_id_, first_index, path_);
       if (!open_segment_) {
-        open_segment_ = std::make_shared<Segment>(path_, first_index, checksum_type_);
+        open_segment_ = std::make_shared<Segment>(region_id_, path_, first_index, checksum_type_);
         continue;
       } else {
-        DINGO_LOG(WARNING) << "open segment conflict, path: " << path_ << " first_index: " << first_index;
+        DINGO_LOG(WARNING) << fmt::format("[raft.log][region({})] open segment conflict, first_index: {} path: {}",
+                                          region_id_, first_index, path_);
         return -1;
       }
     }
@@ -1027,26 +1114,27 @@ int SegmentLogStorage::ListSegments(bool is_empty) {
 
   // check segment
   int64_t last_log_index = -1;
+  int64_t min_first_log_index = GetMinFirstLogIndex();
   SegmentMap::iterator it;
   for (it = segments_.begin(); it != segments_.end();) {
     Segment* segment = it->second.get();
     if (segment->FirstIndex() > segment->LastIndex()) {
-      DINGO_LOG(WARNING) << "closed segment is bad, path: " << path_ << " first_index: " << segment->FirstIndex()
-                         << " last_index: " << segment->LastIndex();
+      DINGO_LOG(WARNING) << fmt::format("[raft.log][region({}).index({}_{})] closed segment is bad, path: {}",
+                                        region_id_, segment->FirstIndex(), segment->LastIndex(), path_);
       return -1;
     } else if (last_log_index != -1 && segment->FirstIndex() != last_log_index + 1) {
-      DINGO_LOG(WARNING) << "closed segment not in order, path: " << path_ << " first_index: " << segment->FirstIndex()
-                         << " last_log_index: " << last_log_index;
+      DINGO_LOG(WARNING) << fmt::format("[raft.log][region({}).index({}_{})] closed segment not in order, path: ",
+                                        region_id_, segment->FirstIndex(), last_log_index, path_);
       return -1;
     } else if (last_log_index == -1 && first_log_index_.load(butil::memory_order_acquire) < segment->FirstIndex()) {
-      DINGO_LOG(WARNING) << "closed segment has hole, path: " << path_
-                         << " first_log_index: " << first_log_index_.load(butil::memory_order_relaxed)
-                         << " first_index: " << segment->FirstIndex() << " last_index: " << segment->LastIndex();
+      DINGO_LOG(WARNING) << fmt::format(
+          "[raft.log][region({}).index({}_{})] closed segment has hole, first_log_index: {} path: {}", region_id_,
+          segment->FirstIndex(), segment->LastIndex(), first_log_index_.load(butil::memory_order_relaxed), path_);
       return -1;
-    } else if (last_log_index == -1 && first_log_index_ > segment->LastIndex()) {
-      DINGO_LOG(WARNING) << "closed segment need discard, path: " << path_
-                         << " first_log_index: " << first_log_index_.load(butil::memory_order_relaxed)
-                         << " first_index: " << segment->FirstIndex() << " last_index: " << segment->LastIndex();
+    } else if (last_log_index == -1 && min_first_log_index > segment->LastIndex()) {
+      DINGO_LOG(WARNING) << fmt::format(
+          "[raft.log][region({}).index({}_{})] closed segment need discard, first_log_index: {} path: {}", region_id_,
+          segment->FirstIndex(), segment->LastIndex(), first_log_index_.load(butil::memory_order_relaxed), path_);
       segment->Unlink();
       segments_.erase(it++);
       continue;
@@ -1057,13 +1145,13 @@ int SegmentLogStorage::ListSegments(bool is_empty) {
   }
   if (open_segment_) {
     if (last_log_index == -1 && first_log_index_.load(butil::memory_order_relaxed) < open_segment_->FirstIndex()) {
-      DINGO_LOG(WARNING) << "open segment has hole, path: " << path_
-                         << " first_log_index: " << first_log_index_.load(butil::memory_order_relaxed)
-                         << " first_index: " << open_segment_->FirstIndex();
+      DINGO_LOG(WARNING) << fmt::format(
+          "[raft.log][region({}).index({}_{})] open segment has hole, first_log_index: {} path: {}", region_id_,
+          open_segment_->FirstIndex(), 0, FirstLogIndex(), path_);
     } else if (last_log_index != -1 && open_segment_->FirstIndex() != last_log_index + 1) {
-      DINGO_LOG(WARNING) << "open segment has hole, path: " << path_
-                         << " first_log_index: " << first_log_index_.load(butil::memory_order_relaxed)
-                         << " first_index: " << open_segment_->FirstIndex();
+      DINGO_LOG(WARNING) << fmt::format(
+          "[raft.log][region({}).index({}_{})] open segment has hole, first_log_index: {} path: {}", region_id_,
+          open_segment_->FirstIndex(), 0, FirstLogIndex(), path_);
     }
     CHECK_LE(last_log_index, open_segment_->LastIndex());
   }
@@ -1078,8 +1166,11 @@ int SegmentLogStorage::LoadSegments(braft::ConfigurationManager* configuration_m
   SegmentMap::iterator it;
   for (it = segments_.begin(); it != segments_.end(); ++it) {
     Segment* segment = it->second.get();
-    DINGO_LOG(INFO) << "load closed segment, path: " << path_ << " first_index: " << segment->FirstIndex()
-                    << " last_index: " << segment->LastIndex();
+    if (segment->LastIndex() < first_log_index_.load(std::memory_order_relaxed)) {
+      continue;
+    }
+    DINGO_LOG(INFO) << fmt::format("[raft.log][region({}).index({}_{})] load closed segment, path: {}", region_id_,
+                                   segment->FirstIndex(), segment->LastIndex(), path_);
     ret = segment->Load(configuration_manager);
     if (ret != 0) {
       return ret;
@@ -1089,16 +1180,16 @@ int SegmentLogStorage::LoadSegments(braft::ConfigurationManager* configuration_m
 
   // open segment
   if (open_segment_) {
-    DINGO_LOG(INFO) << "load open segment, path: " << path_ << " first_index: " << open_segment_->FirstIndex();
+    DINGO_LOG(INFO) << fmt::format("[raft.log][region({}).index({}_{})] load open segment, path: {}", region_id_,
+                                   open_segment_->FirstIndex(), open_segment_->LastIndex(), path_);
     ret = open_segment_->Load(configuration_manager);
     if (ret != 0) {
       return ret;
     }
     if (first_log_index_.load() > open_segment_->LastIndex()) {
-      DINGO_LOG(WARNING) << "open segment need discard, path: " << path_
-                         << " first_log_index: " << first_log_index_.load()
-                         << " first_index: " << open_segment_->FirstIndex()
-                         << " last_index: " << open_segment_->LastIndex();
+      DINGO_LOG(WARNING) << fmt::format(
+          "[raft.log][region({}).index({}_{})] open segment need discard, first_log_index: {} path: {}", region_id_,
+          open_segment_->FirstIndex(), open_segment_->LastIndex(), first_log_index_.load(), path_);
       open_segment_->Unlink();
       open_segment_ = nullptr;
     } else {
@@ -1118,17 +1209,22 @@ int SegmentLogStorage::SaveMeta(int64_t log_index) {
   std::string meta_path(path_);
   meta_path.append("/" SEGMENT_META_FILE);
 
-  braft::LogPBMeta meta;
+  pb::store_internal::LogMeta meta;
   meta.set_first_log_index(log_index);
+  meta.set_vector_index_first_log_index(vector_index_first_log_index_.load(std::memory_order_relaxed));
   braft::ProtoBufFile pb_file(meta_path);
   int ret = pb_file.save(&meta, braft::raft_sync_meta());
   if (ret != 0) {
-    DINGO_LOG(ERROR) << "Fail to save meta to " << meta_path;
+    DINGO_LOG(ERROR) << fmt::format("[raft.log][region({}).index({}_{})] save meta failed.", region_id_,
+                                    FirstLogIndex(), LastLogIndex());
   }
 
   timer.stop();
-  DINGO_LOG(INFO) << "log save meta " << meta_path << " first_log_index: " << log_index
-                  << " time: " << timer.u_elapsed();
+
+  DINGO_LOG(INFO) << fmt::format(
+      "[raft.log][region({}).index({}_{})] save meta finish, log_index: {} elapsed time: {}us", region_id_,
+      FirstLogIndex(), LastLogIndex(), log_index, timer.u_elapsed());
+
   return ret;
 }
 
@@ -1140,19 +1236,24 @@ int SegmentLogStorage::LoadMeta() {
   meta_path.append("/" SEGMENT_META_FILE);
 
   braft::ProtoBufFile pb_file(meta_path);
-  braft::LogPBMeta meta;
+  pb::store_internal::LogMeta meta;
   if (0 != pb_file.load(&meta)) {
     if (errno != ENOENT) {
-      DINGO_LOG(ERROR) << "Fail to load meta from " << meta_path;
+      DINGO_LOG(ERROR) << fmt::format("[raft.log][region({}).index({}_{})] load meta failed", region_id_,
+                                      FirstLogIndex(), LastLogIndex());
     }
     return -1;
   }
 
   first_log_index_.store(meta.first_log_index());
+  vector_index_first_log_index_.store(meta.vector_index_first_log_index());
 
   timer.stop();
-  DINGO_LOG(INFO) << "log LoadMeta " << meta_path << " first_log_index: " << meta.first_log_index()
-                  << " time: " << timer.u_elapsed();
+
+  DINGO_LOG(INFO) << fmt::format(
+      "[raft.log][region({}).index({}_{})] load meta finish, vector_index_first_log_index: {} elapsed time: {}us",
+      region_id_, FirstLogIndex(), LastLogIndex(), meta.vector_index_first_log_index(), timer.u_elapsed());
+
   return 0;
 }
 
@@ -1161,7 +1262,7 @@ std::shared_ptr<Segment> SegmentLogStorage::OpenSegment() {
   {
     BAIDU_SCOPED_LOCK(mutex_);
     if (!open_segment_) {
-      open_segment_ = std::make_shared<Segment>(path_, LastLogIndex() + 1, checksum_type_);
+      open_segment_ = std::make_shared<Segment>(region_id_, path_, LastLogIndex() + 1, checksum_type_);
       if (open_segment_->Create() != 0) {
         open_segment_ = nullptr;
         return nullptr;
@@ -1177,14 +1278,15 @@ std::shared_ptr<Segment> SegmentLogStorage::OpenSegment() {
     if (prev_open_segment) {
       if (prev_open_segment->Close(enable_sync_) == 0) {
         BAIDU_SCOPED_LOCK(mutex_);
-        open_segment_ = std::make_shared<Segment>(path_, LastLogIndex() + 1, checksum_type_);
+        open_segment_ = std::make_shared<Segment>(region_id_, path_, LastLogIndex() + 1, checksum_type_);
         if (open_segment_->Create() == 0) {
           // success
           break;
         }
       }
-      DINGO_LOG(ERROR) << "Fail to close old OpenSegment or create new OpenSegment"
-                       << " path: " << path_;
+
+      DINGO_LOG(ERROR) << fmt::format("[raft.log][region({}).index({}_{})] open segment failed, path: {}", region_id_,
+                                      FirstLogIndex(), LastLogIndex(), path_);
       // Failed, revert former changes
       BAIDU_SCOPED_LOCK(mutex_);
       segments_.erase(prev_open_segment->FirstIndex());
@@ -1204,8 +1306,9 @@ std::shared_ptr<Segment> SegmentLogStorage::GetSegment(int64_t index) {
     return nullptr;
   }
   if (index < first_index || index > last_index + 1) {
-    DINGO_LOG(WARNING) << "Attempted to access entry " << index << " outside of log, "
-                       << " first_log_index: " << first_index << " last_log_index: " << last_index;
+    DINGO_LOG(WARNING) << fmt::format(
+        "[raft.log][region({}).index({}_{})] attempted to access entry {} outside of log.", region_id_, FirstLogIndex(),
+        LastLogIndex(), index);
     return nullptr;
   } else if (index == last_index + 1) {
     return nullptr;
@@ -1235,8 +1338,8 @@ std::vector<std::shared_ptr<Segment>> SegmentLogStorage::GetSegments(uint64_t be
 
   if (end_index < first_index || begin_index > last_index) {
     DINGO_LOG(WARNING) << fmt::format(
-        "Attempted to access entry {}-{} outside of log, first_log_index: {} last_log_index: {}", begin_index,
-        end_index, first_index, last_index);
+        "[raft.log][region({}).index({}_{})] attempted to access entry {}-{} outside of log", region_id_, first_index,
+        last_index, begin_index, end_index);
     return {};
   }
 
@@ -1279,14 +1382,16 @@ void SegmentLogStorage::Sync() {
   }
 }
 
-butil::Status SegmentLogStorage::GcInstance(const std::string& uri) const {
+butil::Status SegmentLogStorage::GcInstance(const std::string& uri) {
   butil::Status status;
   if (braft::gc_dir(uri) != 0) {
-    DINGO_LOG(WARNING) << "Failed to gc log storage from path " << path_;
-    status.set_error(EINVAL, "Failed to gc log storage from path %s", uri.c_str());
+    DINGO_LOG(WARNING) << fmt::format("[raft.log][region({}).index({}_{})] gc log storage failed, path: {}", region_id_,
+                                      FirstLogIndex(), LastLogIndex(), uri);
+    status.set_error(EINVAL, "gc log storage failed path %s", uri.c_str());
     return status;
   }
-  DINGO_LOG(INFO) << "Succeed to gc log storage from path " << uri;
+  DINGO_LOG(INFO) << fmt::format("[raft.log][region({}).index({}_{})] gc log storage success, path: {}", region_id_,
+                                 FirstLogIndex(), LastLogIndex(), uri);
   return status;
 }
 

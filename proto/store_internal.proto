@@ -74,3 +74,8 @@ message RaftSnapshotRegionMeta {
   dingodb.pb.common.RegionEpoch epoch = 1;
   dingodb.pb.common.Range range = 2;
 }
+
+message LogMeta {
+  int64 first_log_index = 1;
+  int64 vector_index_first_log_index = 2;
+}

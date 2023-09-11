@@ -41,8 +41,9 @@ struct LogEntry {
 
 class BAIDU_CACHELINE_ALIGNMENT Segment {
  public:
-  Segment(const std::string& path, const int64_t first_index, int checksum_type)
+  Segment(uint64_t region_id, const std::string& path, const int64_t first_index, int checksum_type)
       : path_(path),
+        region_id_(region_id),
         bytes_(0),
         unsynced_bytes_(0),
         fd_(-1),
@@ -50,8 +51,10 @@ class BAIDU_CACHELINE_ALIGNMENT Segment {
         first_index_(first_index),
         last_index_(first_index - 1),
         checksum_type_(checksum_type) {}
-  Segment(const std::string& path, const int64_t first_index, const int64_t last_index, int checksum_type)
+  Segment(uint64_t region_id, const std::string& path, const int64_t first_index, const int64_t last_index,
+          int checksum_type)
       : path_(path),
+        region_id_(region_id),
         bytes_(0),
         unsynced_bytes_(0),
         fd_(-1),
@@ -117,6 +120,8 @@ class BAIDU_CACHELINE_ALIGNMENT Segment {
   int GetMeta(int64_t index, LogMeta* meta) const;
   int TruncateMetaAndGetLast(int64_t last);
 
+  uint64_t region_id_;
+
   std::string path_;
   int64_t bytes_;
   int64_t unsynced_bytes_;
@@ -142,17 +147,15 @@ class SegmentLogStorage {
   using SegmentMap = std::map<int64_t, std::shared_ptr<Segment>>;
 
   explicit SegmentLogStorage(const std::string& path, uint64_t region_id, uint64_t max_segment_size,
-                             bool enable_truncate_control = false, bool enable_sync = true)
+                             bool enable_sync = true)
       : path_(path),
         region_id_(region_id),
         max_segment_size_(max_segment_size),
         first_log_index_(1),
         last_log_index_(0),
+        vector_index_first_log_index_(INT64_MAX),
         checksum_type_(0),
-        enable_truncate_control_(enable_truncate_control),
-        enable_sync_(enable_sync) {
-    truncate_log_indexs_["VectorIndex"] = 1;
-  }
+        enable_sync_(enable_sync) {}
 
   SegmentLogStorage() : first_log_index_(1), last_log_index_(0), checksum_type_(0), enable_sync_(true) {}
 
@@ -164,7 +167,8 @@ class SegmentLogStorage {
   uint64_t RegionId() const { return region_id_; }
 
   // first log index in log
-  int64_t FirstLogIndex() { return first_log_index_.load(butil::memory_order_acquire); }
+  int64_t FirstLogIndex();
+  int64_t VectorIndexFirstLogIndex();
 
   // last log index in log
   int64_t LastLogIndex();
@@ -186,13 +190,14 @@ class SegmentLogStorage {
 
   // delete logs from storage's head, [1, first_index_kept) will be discarded
   int TruncatePrefix(int64_t first_index_kept);
+  int TruncateVectorIndexPrefix(int64_t first_index_kept);
 
   // delete uncommitted logs from storage's tail, (last_index_kept, infinity) will be discarded
   int TruncateSuffix(int64_t last_index_kept);
 
   int Reset(int64_t next_log_index);
 
-  butil::Status GcInstance(const std::string& uri) const;
+  butil::Status GcInstance(const std::string& uri);
 
   SegmentMap Segments() {
     BAIDU_SCOPED_LOCK(mutex_);
@@ -202,15 +207,6 @@ class SegmentLogStorage {
   void ListFiles(std::vector<std::string>* seg_files);
 
   void Sync();
-
-  void SetVectorIndexTruncateLogIndex(int64_t truncate_log_index) {
-    auto it = truncate_log_indexs_.find("VectorIndex");
-    if (it != truncate_log_indexs_.end()) {
-      if (truncate_log_index > it->second.load(std::memory_order_relaxed)) {
-        it->second.store(truncate_log_index, std::memory_order_relaxed);
-      }
-    }
-  }
 
   uint64_t MaxSegmentSize() const { return max_segment_size_; }
 
@@ -225,6 +221,10 @@ class SegmentLogStorage {
   void PopSegments(int64_t first_index_kept, std::vector<std::shared_ptr<Segment>>& poppeds);
   std::shared_ptr<Segment> PopSegmentsFromBack(int64_t last_index_kept, std::vector<std::shared_ptr<Segment>>& poppeds);
 
+  void SetFirstAndLastLogIndex(int64_t first_index_kept);
+  int64_t GetMinFirstLogIndex();
+  void TruncateActualPrefixLog();
+
   std::string path_;
   uint64_t region_id_;
 
@@ -232,8 +232,7 @@ class SegmentLogStorage {
   butil::atomic<int64_t> last_log_index_;
 
   // Control truncate log.
-  bool enable_truncate_control_;
-  std::map<std::string, std::atomic<int64_t>> truncate_log_indexs_;
+  std::atomic<int64_t> vector_index_first_log_index_;
 
   bthread::Mutex mutex_;
   SegmentMap segments_;
