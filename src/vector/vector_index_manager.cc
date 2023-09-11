@@ -268,6 +268,7 @@ butil::Status VectorIndexManager::ReplayWalToVectorIndex(VectorIndexPtr vector_i
 
   uint64_t min_vector_id = VectorCodec::DecodeVectorId(vector_index->Range().start_key());
   uint64_t max_vector_id = VectorCodec::DecodeVectorId(vector_index->Range().end_key());
+  max_vector_id = max_vector_id > 0 ? max_vector_id : UINT64_MAX;
   std::vector<pb::common::VectorWithId> vectors;
   vectors.reserve(Constant::kBuildVectorIndexBatchSize);
   std::vector<uint64_t> ids;

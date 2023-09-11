@@ -114,12 +114,17 @@ butil::Status ServerInteraction::SendRequest(const std::string& service_name, co
     if (cntl.Failed()) {
       DINGO_LOG(ERROR) << fmt::format("{} response failed, {} {} {}", api_name, cntl.log_id(), cntl.ErrorCode(),
                                       cntl.ErrorText());
+      if (cntl.ErrorCode() == 112) {
+        ++retry_count;
+        NextLeader(leader_index);
+        continue;
+      }
       latency_ = cntl.latency_us();
       return butil::Status(cntl.ErrorCode(), cntl.ErrorText());
     }
 
     if (response.error().errcode() != dingodb::pb::error::OK) {
-      if (response.error().errcode() == dingodb::pb::error::ERAFT_NOTLEADER) {
+      if (response.error().errcode() == dingodb::pb::error::ERAFT_NOTLEADER || response.error().errcode() == dingodb::pb::error::EREGION_NOT_FOUND) {
         ++retry_count;
         NextLeader(response.error().leader_location());
 
@@ -153,7 +158,7 @@ butil::Status ServerInteraction::AllSendRequest(const std::string& service_name,
       return status;
     }
 
-    NextLeader(GetLeader() + 1);
+    NextLeader(GetLeader());
   }
 
   return butil::Status();

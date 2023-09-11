@@ -56,6 +56,9 @@ uint64_t VectorCodec::DecodeVectorId(const std::string& value) {
     buf.Skip(9);
   } else if (value.size() == 16) {
     buf.Skip(8);
+  } else if (value.size() == 9) {
+    buf.Skip(1);
+  } else if (value.size() == 8) {
   } else {
     DINGO_LOG(ERROR) << "Decode vector id failed, value size is not 16 or 17, value:[" << Helper::StringToHex(value)
                      << "]";
@@ -70,11 +73,6 @@ uint64_t VectorCodec::DecodePartitionId(const std::string& value) {
 
   if (value.size() == 17) {
     buf.Skip(1);
-  } else if (value.size() == 16) {
-  } else {
-    DINGO_LOG(ERROR) << "Decode partition id failed, value size is not 16 or 17, value:[" << Helper::StringToHex(value)
-                     << "]";
-    return 0;
   }
 
   return buf.ReadLong();

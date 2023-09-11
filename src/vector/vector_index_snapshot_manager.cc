@@ -657,7 +657,7 @@ butil::Status VectorIndexSnapshotManager::SaveVectorIndexSnapshot(VectorIndexWra
   // Set truncate wal log index.
   auto log_storage = Server::GetInstance()->GetLogStorageManager()->GetLogStorage(vector_index_id);
   if (log_storage != nullptr) {
-    log_storage->SetVectorIndexTruncateLogIndex(apply_log_index);
+    log_storage->TruncateVectorIndexPrefix(apply_log_index);
   }
 
   snapshot_log_index = apply_log_index;

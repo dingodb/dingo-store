@@ -477,6 +477,7 @@ butil::Status VectorIndexWrapper::Search(std::vector<pb::common::VectorWithId> v
   if (region_range.start_key() != index_range.start_key() || region_range.end_key() != index_range.end_key()) {
     uint64_t min_vector_id = VectorCodec::DecodeVectorId(region_range.start_key());
     uint64_t max_vector_id = VectorCodec::DecodeVectorId(region_range.end_key());
+    max_vector_id = max_vector_id > 0 ? max_vector_id : UINT64_MAX;
     if (vector_index->VectorIndexType() == pb::common::VECTOR_INDEX_TYPE_HNSW) {
       filters.push_back(std::make_shared<VectorIndex::RangeFilterFunctor>(min_vector_id, max_vector_id));
     } else if (vector_index->VectorIndexType() == pb::common::VECTOR_INDEX_TYPE_FLAT) {
