@@ -62,7 +62,7 @@ message TaskPreCheck {
 
 message Task {
   TaskPreCheck pre_check = 1;
-  repeated dingodb.pb.coordinator.StoreOperation store_operations = 2;
+  repeated StoreOperation store_operations = 2;
 }
 
 message TaskList {
@@ -262,20 +262,29 @@ message CoordinatorMemoryInfo {
   uint64 store_operation_map_count = 28;
   uint64 store_operation_map_size = 29;
 
-  uint64 executor_user_map_count = 30;
-  uint64 executor_user_map_size = 31;
+  uint64 region_cmd_map_count = 30;
+  uint64 region_cmd_map_size = 31;
 
-  uint64 task_list_map_count = 32;
-  uint64 task_list_map_size = 33;
+  uint64 executor_user_map_count = 32;
+  uint64 executor_user_map_size = 33;
 
-  uint64 deleted_region_map_count = 34;
-  uint64 deleted_region_map_size = 35;
+  uint64 task_list_map_count = 34;
+  uint64 task_list_map_size = 35;
 
-  uint64 index_map_count = 36;
-  uint64 index_map_size = 37;
+  uint64 deleted_region_map_count = 36;
+  uint64 deleted_region_map_size = 37;
 
-  uint64 index_metrics_map_count = 38;
-  uint64 index_metrics_map_size = 39;
+  uint64 index_map_count = 38;
+  uint64 index_map_size = 39;
+
+  uint64 index_metrics_map_count = 40;
+  uint64 index_metrics_map_size = 41;
+
+  uint64 kv_index_map_count = 42;
+  uint64 kv_index_map_size = 43;
+
+  uint64 kv_rev_map_count = 44;
+  uint64 kv_rev_map_size = 45;
 
   repeated dingodb.pb.common.KeyValue id_epoch_values = 50;
 }
@@ -524,6 +533,18 @@ message RemoveStoreOperationResponse {
   dingodb.pb.error.Error error = 1;
 }
 
+message GetRegionCmdRequest {
+  uint64 store_id = 1;
+  uint64 start_region_cmd_id = 2;
+  uint64 end_region_cmd_id = 3;
+}
+
+message GetRegionCmdResponse {
+  dingodb.pb.error.Error error = 1;
+  repeated RegionCmd region_cmds = 2;
+  repeated dingodb.pb.error.Error region_cmd_errors = 3;
+}
+
 message GetTaskListRequest {
   uint64 cluster_id = 1;
 }
@@ -718,6 +739,7 @@ service CoordinatorService {
   rpc CleanStoreOperation(CleanStoreOperationRequest) returns (CleanStoreOperationResponse);
   rpc AddStoreOperation(AddStoreOperationRequest) returns (AddStoreOperationResponse);
   rpc RemoveStoreOperation(RemoveStoreOperationRequest) returns (RemoveStoreOperationResponse);
+  rpc GetRegionCmd(GetRegionCmdRequest) returns (GetRegionCmdResponse);
 
   // TaskList
   rpc GetTaskList(GetTaskListRequest) returns (GetTaskListResponse);

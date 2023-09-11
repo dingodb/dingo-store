@@ -431,7 +431,7 @@ class CoordinatorControl : public MetaControl {
 
   // get store operation
   int GetStoreOperation(uint64_t store_id, pb::coordinator::StoreOperation &store_operation);
-  int GetStoreOperations(butil::FlatMap<uint64_t, pb::coordinator::StoreOperation> &store_operations);
+  int GetStoreOperationForSend(uint64_t store_id, pb::coordinator::StoreOperation &store_operation);
 
   // CleanStoreOperation
   // in:  store_id
@@ -440,8 +440,15 @@ class CoordinatorControl : public MetaControl {
 
   butil::Status AddStoreOperation(const pb::coordinator::StoreOperation &store_operation,
                                   pb::coordinator_internal::MetaIncrement &meta_increment);
-  butil::Status RemoveStoreOperation(uint64_t store_id, uint64_t region_cmd_id,
-                                     pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status AddRegionCmd(uint64_t store_id, const pb::coordinator::RegionCmd &region_cmd,
+                             pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status UpdateRegionCmd(uint64_t store_id, const pb::coordinator::RegionCmd &region_cmd,
+                                const pb::error::Error &error, pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status RemoveRegionCmd(uint64_t store_id, uint64_t region_cmd_id,
+                                pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status GetRegionCmd(uint64_t store_id, uint64_t start_region_cmd_id, uint64_t end_region_cmd_id,
+                             std::vector<pb::coordinator::RegionCmd> &region_cmds,
+                             std::vector<pb::error::Error> &region_cmd_errors);
 
   // UpdateRegionMapAndStoreOperation
   void UpdateRegionMapAndStoreOperation(const pb::common::StoreMetrics &store_metrics,
@@ -652,30 +659,23 @@ class CoordinatorControl : public MetaControl {
   void GetTaskList(butil::FlatMap<uint64_t, pb::coordinator::TaskList> &task_lists);
 
   pb::coordinator::TaskList *CreateTaskList(pb::coordinator_internal::MetaIncrement &meta_increment);
-  void AddCreateTask(pb::coordinator::TaskList *task_list, uint64_t store_id, uint64_t region_id,
-                     const pb::common::RegionDefinition &region_definition,
-                     pb::coordinator_internal::MetaIncrement &meta_increment);
-  void AddDeleteTask(pb::coordinator::TaskList *task_list, uint64_t store_id, uint64_t region_id,
-                     pb::coordinator_internal::MetaIncrement &meta_increment);
-  void AddDeleteTaskWithCheck(pb::coordinator::TaskList *task_list, uint64_t store_id, uint64_t region_id,
-                              const ::google::protobuf::RepeatedPtrField<::dingodb::pb::common::Peer> &peers,
-                              pb::coordinator_internal::MetaIncrement &meta_increment);
+  static void AddCreateTask(pb::coordinator::TaskList *task_list, uint64_t store_id, uint64_t region_id,
+                            const pb::common::RegionDefinition &region_definition);
+  static void AddDeleteTask(pb::coordinator::TaskList *task_list, uint64_t store_id, uint64_t region_id);
+  static void AddDeleteTaskWithCheck(pb::coordinator::TaskList *task_list, uint64_t store_id, uint64_t region_id,
+                                     const ::google::protobuf::RepeatedPtrField<::dingodb::pb::common::Peer> &peers);
   // void AddPurgeTask(pb::coordinator::TaskList *task_list, uint64_t store_id, uint64_t region_id,
   //                   pb::coordinator_internal::MetaIncrement &meta_increment);
-  void AddChangePeerTask(pb::coordinator::TaskList *task_list, uint64_t store_id, uint64_t region_id,
-                         const pb::common::RegionDefinition &region_definition,
-                         pb::coordinator_internal::MetaIncrement &meta_increment);
-  void AddTransferLeaderTask(pb::coordinator::TaskList *task_list, uint64_t store_id, uint64_t region_id,
-                             const pb::common::Peer &new_leader_peer,
-                             pb::coordinator_internal::MetaIncrement &meta_increment);
-  void AddMergeTask(pb::coordinator::TaskList *task_list, uint64_t store_id, uint64_t region_id,
-                    uint64_t merge_to_region_id, pb::coordinator_internal::MetaIncrement &meta_increment);
-  void AddSplitTask(pb::coordinator::TaskList *task_list, uint64_t store_id, uint64_t region_id,
-                    uint64_t split_to_region_id, const std::string &water_shed_key, bool store_create_region,
-                    pb::coordinator_internal::MetaIncrement &meta_increment);
+  static void AddChangePeerTask(pb::coordinator::TaskList *task_list, uint64_t store_id, uint64_t region_id,
+                                const pb::common::RegionDefinition &region_definition);
+  static void AddTransferLeaderTask(pb::coordinator::TaskList *task_list, uint64_t store_id, uint64_t region_id,
+                                    const pb::common::Peer &new_leader_peer);
+  static void AddMergeTask(pb::coordinator::TaskList *task_list, uint64_t store_id, uint64_t region_id,
+                           uint64_t merge_to_region_id);
+  static void AddSplitTask(pb::coordinator::TaskList *task_list, uint64_t store_id, uint64_t region_id,
+                           uint64_t split_to_region_id, const std::string &water_shed_key, bool store_create_region);
   static void AddCheckVectorIndexTask(pb::coordinator::TaskList *task_list, uint64_t store_id, uint64_t region_id);
-  void AddLoadVectorIndexTask(pb::coordinator::TaskList *task_list, uint64_t store_id, uint64_t region_id,
-                              pb::coordinator_internal::MetaIncrement &meta_increment);
+  static void AddLoadVectorIndexTask(pb::coordinator::TaskList *task_list, uint64_t store_id, uint64_t region_id);
 
   // check if task in task_lis can advance
   // if task advance, this function will contruct meta_increment and apply to state_machine
@@ -877,8 +877,10 @@ class CoordinatorControl : public MetaControl {
   MetaSafeMapStorage<pb::coordinator_internal::TableMetricsInternal> *table_metrics_meta_;
 
   // 9.store_operation
-  DingoSafeMap<uint64_t, pb::coordinator::StoreOperation> store_operation_map_;
-  MetaSafeMapStorage<pb::coordinator::StoreOperation> *store_operation_meta_;
+  DingoSafeMap<uint64_t, pb::coordinator_internal::StoreOperationInternal> store_operation_map_;
+  MetaSafeMapStorage<pb::coordinator_internal::StoreOperationInternal> *store_operation_meta_;
+  DingoSafeMap<uint64_t, pb::coordinator_internal::RegionCmdInternal> region_cmd_map_;
+  MetaSafeMapStorage<pb::coordinator_internal::RegionCmdInternal> *region_cmd_meta_;
   bthread_mutex_t store_operation_map_mutex_;  // may need a write lock
 
   // 10.executor_user

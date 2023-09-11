@@ -61,6 +61,8 @@ DEFINE_int64(merge_to_id, 0, "merge_to_id");
 DEFINE_int64(peer_add_store_id, 0, "peer_add_store_id");
 DEFINE_int64(peer_del_store_id, 0, "peer_del_store_id");
 DEFINE_int64(store_id, 0, "store_id");
+DEFINE_uint64(start_region_cmd_id, 0, "start_region_cmd_id");
+DEFINE_uint64(end_region_cmd_id, 0, "end_region_cmd_id");
 DEFINE_int64(region_id, 0, "region_id");
 DEFINE_int64(region_cmd_id, 0, "region_cmd_id");
 DEFINE_string(store_ids, "1001,1002,1003", "store_ids splited by ,");
@@ -624,6 +626,8 @@ int CoordinatorSender() {
     SendAddStoreOperation(coordinator_interaction);
   } else if (FLAGS_method == "RemoveStoreOperation") {
     SendRemoveStoreOperation(coordinator_interaction);
+  } else if (FLAGS_method == "GetRegionCmd") {
+    SendGetRegionCmd(coordinator_interaction);
   } else if (FLAGS_method == "GetStoreMetrics") {
     SendGetStoreMetrics(coordinator_interaction);
   } else if (FLAGS_method == "DeleteStoreMetrics") {

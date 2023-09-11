@@ -231,6 +231,8 @@ class CoordinatorServiceImpl : public pb::coordinator::CoordinatorService {
                             const pb::coordinator::RemoveStoreOperationRequest* request,
                             pb::coordinator::RemoveStoreOperationResponse* response,
                             google::protobuf::Closure* done) override;
+  void GetRegionCmd(google::protobuf::RpcController* controller, const pb::coordinator::GetRegionCmdRequest* request,
+                    pb::coordinator::GetRegionCmdResponse* response, google::protobuf::Closure* done) override;
 
   // TaskList
   void GetTaskList(google::protobuf::RpcController* controller, const pb::coordinator::GetTaskListRequest* request,

@@ -301,6 +301,17 @@ bool CoordinatorControl::LoadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapsh
   }
   DINGO_LOG(INFO) << "Snapshot store_operation_meta_, count=" << kvs.size();
   kvs.clear();
+  // 9.1 region_cmd_map_
+  if (!meta_reader_->Scan(snapshot, region_cmd_meta_->Prefix(), kvs)) {
+    return false;
+  }
+
+  for (const auto& kv : kvs) {
+    auto* snapshot_file_kv = meta_snapshot_file.add_region_cmd_map_kvs();
+    snapshot_file_kv->CopyFrom(kv);
+  }
+  DINGO_LOG(INFO) << "Snapshot region_cmd_meta_, count=" << kvs.size();
+  kvs.clear();
 
   // 10.executor_user map
   if (!meta_reader_->Scan(snapshot, executor_user_meta_->Prefix(), kvs)) {
@@ -712,6 +723,34 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
   }
 
   DINGO_LOG(INFO) << "LoadSnapshot store_operation_meta, count=" << kvs.size();
+  kvs.clear();
+
+  // 9.1.region_cmd map
+  kvs.reserve(meta_snapshot_file.region_cmd_map_kvs_size());
+  for (int i = 0; i < meta_snapshot_file.region_cmd_map_kvs_size(); i++) {
+    kvs.push_back(meta_snapshot_file.region_cmd_map_kvs(i));
+  }
+  {
+    if (!region_cmd_meta_->Recover(kvs)) {
+      return false;
+    }
+
+    // remove data in rocksdb
+    if (!meta_writer_->DeletePrefix(region_cmd_meta_->internal_prefix)) {
+      DINGO_LOG(ERROR) << "Coordinator delete region_cmd_meta_ range failed in LoadMetaFromSnapshotFile";
+      return false;
+    }
+    DINGO_LOG(INFO) << "Coordinator delete range region_cmd_meta_ success in LoadMetaFromSnapshotFile";
+
+    // write data to rocksdb
+    if (!meta_writer_->Put(kvs)) {
+      DINGO_LOG(ERROR) << "Coordinator write region_cmd_meta_ failed in LoadMetaFromSnapshotFile";
+      return false;
+    }
+    DINGO_LOG(INFO) << "Coordinator put region_cmd_meta_ success in LoadMetaFromSnapshotFile";
+  }
+
+  DINGO_LOG(INFO) << "LoadSnapshot region_cmd_meta, count=" << kvs.size();
   kvs.clear();
 
   // 10.executor_user map
@@ -1803,12 +1842,14 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
     for (int i = 0; i < meta_increment.store_operations_size(); i++) {
       const auto& store_operation = meta_increment.store_operations(i);
       if (store_operation.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
-        pb::coordinator::StoreOperation store_operation_in_map;
+        pb::coordinator_internal::StoreOperationInternal store_operation_in_map;
         store_operation_in_map.set_id(store_operation.id());
         store_operation_map_.Get(store_operation_in_map.id(), store_operation_in_map);
 
-        for (const auto& region_cmd : store_operation.store_operation().region_cmds()) {
-          store_operation_in_map.add_region_cmds()->CopyFrom(region_cmd);
+        for (const auto& region_cmd_id : store_operation.store_operation().region_cmd_ids()) {
+          store_operation_in_map.add_region_cmd_ids(region_cmd_id);
+          DINGO_LOG(INFO) << "add a region_cmd to store_operation, store_id=" << store_operation.id()
+                          << ", region_cmd_id=" << region_cmd_id;
         }
         int ret = store_operation_map_.Put(store_operation.id(), store_operation_in_map);
         if (ret > 0) {
@@ -1831,30 +1872,27 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
                          << store_operation.ShortDebugString();
 
       } else if (store_operation.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
-        pb::coordinator::StoreOperation store_operation_in_map;
+        pb::coordinator_internal::StoreOperationInternal store_operation_in_map;
         store_operation_in_map.set_id(store_operation.id());
         store_operation_map_.Get(store_operation_in_map.id(), store_operation_in_map);
 
         // delete region_cmd by id
-        pb::coordinator::StoreOperation store_operation_residual;
+        pb::coordinator_internal::StoreOperationInternal store_operation_residual;
         store_operation_residual.set_id(store_operation.id());
 
-        for (int i = 0; i < store_operation_in_map.region_cmds_size(); i++) {
+        for (int i = 0; i < store_operation_in_map.region_cmd_ids_size(); i++) {
           bool is_delete = false;
-          for (const auto& region_cmd : store_operation.store_operation().region_cmds()) {
-            if (store_operation_in_map.region_cmds(i).id() == region_cmd.id()) {
+          for (const auto& region_cmd_id : store_operation.store_operation().region_cmd_ids()) {
+            if (store_operation_in_map.region_cmd_ids(i) == region_cmd_id) {
               is_delete = true;
 
               DINGO_LOG(INFO) << "delete a region_cmd from store_operation, store_id=" << store_operation.id()
-                              << ", region_cmd_id=" << region_cmd.id() << " region_id=" << region_cmd.region_id()
-                              << " region_cmd_type=" << region_cmd.region_cmd_type();
-              DINGO_LOG(DEBUG) << "delete a region_cmd from store_operation, store_id=" << store_operation.id()
-                               << ", region_cmd=" << region_cmd.ShortDebugString();
+                              << ", region_cmd_id=" << region_cmd_id;
               break;
             }
           }
           if (!is_delete) {
-            store_operation_residual.add_region_cmds()->CopyFrom(store_operation_in_map.region_cmds(i));
+            store_operation_residual.add_region_cmd_ids(store_operation_in_map.region_cmd_ids(i));
           }
         }
 
@@ -1869,10 +1907,58 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         meta_write_to_kv.push_back(store_operation_meta_->TransformToKvValue(store_operation_residual));
 
         DINGO_LOG(INFO) << "store_operation_map_.Put in DELETE, store_id=" << store_operation.id()
-                        << " region_cmd count change [" << store_operation_in_map.region_cmds_size() << ", "
-                        << store_operation_residual.region_cmds_size() << "]  orig_store_operation=["
+                        << " region_cmd count change [" << store_operation_in_map.region_cmd_ids_size() << ", "
+                        << store_operation_residual.region_cmd_ids_size() << "]  orig_store_operation=["
                         << store_operation.ShortDebugString() << "] new_store_operation=["
                         << store_operation_residual.ShortDebugString() << "]";
+      }
+    }
+  }
+
+  // 9.1.region_cmd map
+  {
+    if (meta_increment.region_cmds_size() > 0) {
+      DINGO_LOG(INFO) << "ApplyMetaIncrement region_cmd size=" << meta_increment.region_cmds_size();
+    }
+
+    // BAIDU_SCOPED_LOCK(region_cmd_map_mutex_);
+    for (int i = 0; i < meta_increment.region_cmds_size(); i++) {
+      const auto& region_cmd = meta_increment.region_cmds(i);
+      if (region_cmd.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
+        // region_cmd_map_[region_cmd.id()] = region_cmd.region_cmd();
+        int ret = region_cmd_map_.Put(region_cmd.id(), region_cmd.region_cmd());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement region_cmd CREATE, [id=" << region_cmd.id() << "] success";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement region_cmd CREATE, [id=" << region_cmd.id() << "] failed";
+        }
+
+        // meta_write_kv
+        meta_write_to_kv.push_back(region_cmd_meta_->TransformToKvValue(region_cmd.region_cmd()));
+
+      } else if (region_cmd.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
+        // auto& update_table = region_cmd_map_[region_cmd.id()];
+        // update_table.CopyFrom(region_cmd.region_cmd());
+        int ret = region_cmd_map_.PutIfExists(region_cmd.id(), region_cmd.region_cmd());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement region_cmd UPDATE, [id=" << region_cmd.id() << "] success";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement region_cmd UPDATE, [id=" << region_cmd.id() << "] failed";
+        }
+
+        // meta_write_kv
+        meta_write_to_kv.push_back(region_cmd_meta_->TransformToKvValue(region_cmd.region_cmd()));
+
+      } else if (region_cmd.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
+        int ret = region_cmd_map_.Erase(region_cmd.id());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement region_cmd DELETE, [id=" << region_cmd.id() << "] success";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement region_cmd DELETE, [id=" << region_cmd.id() << "] failed";
+        }
+
+        // meta_delete_kv
+        meta_delete_to_kv.push_back(region_cmd_meta_->TransformToKvValue(region_cmd.region_cmd()));
       }
     }
   }

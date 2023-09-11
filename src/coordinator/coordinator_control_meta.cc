@@ -2552,18 +2552,19 @@ butil::Status CoordinatorControl::SwitchAutoSplit(uint64_t schema_id, uint64_t t
     }
 
     // send region_cmd to update auto_split
-    auto* store_operation_increment = meta_increment.add_store_operations();
-    store_operation_increment->set_id(part_region.leader_store_id());
-    store_operation_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
-    auto* increment_store_operation = store_operation_increment->mutable_store_operation();
-    increment_store_operation->set_id(part_region.leader_store_id());
-    auto* region_cmd = increment_store_operation->add_region_cmds();
-    region_cmd->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
-    region_cmd->set_region_id(region_id);
-    region_cmd->set_region_cmd_type(pb::coordinator::RegionCmdType::CMD_SWITCH_SPLIT);
-    region_cmd->set_create_timestamp(butil::gettimeofday_ms());
-    region_cmd->mutable_switch_split_request()->set_region_id(region_id);
-    region_cmd->mutable_switch_split_request()->set_disable_split(!auto_split);
+    pb::coordinator::RegionCmd region_cmd;
+    // region_cmd.set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
+    region_cmd.set_region_id(region_id);
+    region_cmd.set_region_cmd_type(pb::coordinator::RegionCmdType::CMD_SWITCH_SPLIT);
+    region_cmd.set_create_timestamp(butil::gettimeofday_ms());
+    region_cmd.mutable_switch_split_request()->set_region_id(region_id);
+    region_cmd.mutable_switch_split_request()->set_disable_split(!auto_split);
+
+    auto status = AddRegionCmd(part_region.leader_store_id(), region_cmd, meta_increment);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << "ERRROR: AddRegionCmd failed, table_id=" << table_id << " region_id=" << region_id;
+      return status;
+    }
   }
 
   return butil::Status::OK();
