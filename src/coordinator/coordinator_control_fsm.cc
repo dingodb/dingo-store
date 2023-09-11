@@ -267,16 +267,16 @@ bool CoordinatorControl::LoadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapsh
   kvs.clear();
 
   // 7.store_metrics map
-  if (!meta_reader_->Scan(snapshot, store_metrics_meta_->Prefix(), kvs)) {
-    return false;
-  }
+  // if (!meta_reader_->Scan(snapshot, store_metrics_meta_->Prefix(), kvs)) {
+  //   return false;
+  // }
 
-  for (const auto& kv : kvs) {
-    auto* snapshot_file_kv = meta_snapshot_file.add_store_metrics_map_kvs();
-    snapshot_file_kv->CopyFrom(kv);
-  }
-  DINGO_LOG(INFO) << "Snapshot store_metrics_meta, count=" << kvs.size();
-  kvs.clear();
+  // for (const auto& kv : kvs) {
+  //   auto* snapshot_file_kv = meta_snapshot_file.add_store_metrics_map_kvs();
+  //   snapshot_file_kv->CopyFrom(kv);
+  // }
+  // DINGO_LOG(INFO) << "Snapshot store_metrics_meta, count=" << kvs.size();
+  // kvs.clear();
 
   // 8.table_metrics map
   if (!meta_reader_->Scan(snapshot, table_metrics_meta_->Prefix(), kvs)) {
@@ -642,32 +642,32 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
   kvs.clear();
 
   // 7.store_metrics map
-  kvs.reserve(meta_snapshot_file.store_metrics_map_kvs_size());
-  for (int i = 0; i < meta_snapshot_file.store_metrics_map_kvs_size(); i++) {
-    kvs.push_back(meta_snapshot_file.store_metrics_map_kvs(i));
-  }
-  {
-    BAIDU_SCOPED_LOCK(store_metrics_map_mutex_);
-    if (!store_metrics_meta_->Recover(kvs)) {
-      return false;
-    }
-  }
-  {  // remove data in rocksdb
-    if (!meta_writer_->DeletePrefix(store_metrics_meta_->internal_prefix)) {
-      DINGO_LOG(ERROR) << "Coordinator delete store_metrics_meta_ range failed in LoadMetaFromSnapshotFile";
-      return false;
-    }
-    DINGO_LOG(INFO) << "Coordinator delete range store_metrics_meta_ success in LoadMetaFromSnapshotFile";
+  // kvs.reserve(meta_snapshot_file.store_metrics_map_kvs_size());
+  // for (int i = 0; i < meta_snapshot_file.store_metrics_map_kvs_size(); i++) {
+  //   kvs.push_back(meta_snapshot_file.store_metrics_map_kvs(i));
+  // }
+  // {
+  //   BAIDU_SCOPED_LOCK(store_metrics_map_mutex_);
+  //   if (!store_metrics_meta_->Recover(kvs)) {
+  //     return false;
+  //   }
+  // }
+  // {  // remove data in rocksdb
+  //   if (!meta_writer_->DeletePrefix(store_metrics_meta_->internal_prefix)) {
+  //     DINGO_LOG(ERROR) << "Coordinator delete store_metrics_meta_ range failed in LoadMetaFromSnapshotFile";
+  //     return false;
+  //   }
+  //   DINGO_LOG(INFO) << "Coordinator delete range store_metrics_meta_ success in LoadMetaFromSnapshotFile";
 
-    // write data to rocksdb
-    if (!meta_writer_->Put(kvs)) {
-      DINGO_LOG(ERROR) << "Coordinator write store_metrics_meta_ failed in LoadMetaFromSnapshotFile";
-      return false;
-    }
-    DINGO_LOG(INFO) << "Coordinator put store_metrics_meta_ success in LoadMetaFromSnapshotFile";
-  }
-  DINGO_LOG(INFO) << "LoadSnapshot store_metrics_meta, count=" << kvs.size();
-  kvs.clear();
+  //   // write data to rocksdb
+  //   if (!meta_writer_->Put(kvs)) {
+  //     DINGO_LOG(ERROR) << "Coordinator write store_metrics_meta_ failed in LoadMetaFromSnapshotFile";
+  //     return false;
+  //   }
+  //   DINGO_LOG(INFO) << "Coordinator put store_metrics_meta_ success in LoadMetaFromSnapshotFile";
+  // }
+  // DINGO_LOG(INFO) << "LoadSnapshot store_metrics_meta, count=" << kvs.size();
+  // kvs.clear();
 
   // 8.table_metrics map
   kvs.reserve(meta_snapshot_file.table_metrics_map_kvs_size());
@@ -1734,54 +1734,54 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
   }
 
   // 7.store_metrics map
-  {
-    if (meta_increment.store_metrics_size() > 0) {
-      DINGO_LOG(INFO) << "ApplyMetaIncrement store_metrics size=" << meta_increment.store_metrics_size();
-    }
+  // {
+  //   if (meta_increment.store_metrics_size() > 0) {
+  //     DINGO_LOG(INFO) << "ApplyMetaIncrement store_metrics size=" << meta_increment.store_metrics_size();
+  //   }
 
-    BAIDU_SCOPED_LOCK(store_metrics_map_mutex_);
-    for (int i = 0; i < meta_increment.store_metrics_size(); i++) {
-      const auto& store_metrics = meta_increment.store_metrics(i);
-      if (store_metrics.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
-        store_metrics_map_[store_metrics.id()] = store_metrics.store_metrics();
-        DINGO_LOG(INFO) << "ApplyMetaIncrement store_metrics CREATE, [id=" << store_metrics.id() << "] success";
+  //   BAIDU_SCOPED_LOCK(store_metrics_map_mutex_);
+  //   for (int i = 0; i < meta_increment.store_metrics_size(); i++) {
+  //     const auto& store_metrics = meta_increment.store_metrics(i);
+  //     if (store_metrics.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
+  //       store_metrics_map_[store_metrics.id()] = store_metrics.store_metrics();
+  //       DINGO_LOG(INFO) << "ApplyMetaIncrement store_metrics CREATE, [id=" << store_metrics.id() << "] success";
 
-        // meta_write_kv
-        meta_write_to_kv.push_back(store_metrics_meta_->TransformToKvValue(store_metrics.store_metrics()));
+  //       // meta_write_kv
+  //       meta_write_to_kv.push_back(store_metrics_meta_->TransformToKvValue(store_metrics.store_metrics()));
 
-      } else if (store_metrics.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
-        auto& update_store = store_metrics_map_[store_metrics.id()];
-        if (!store_metrics.is_partial_region_metrics()) {
-          update_store.CopyFrom(store_metrics.store_metrics());
-        } else {
-          if (store_metrics.store_metrics().region_metrics_map_size() > 0) {
-            for (const auto& it : store_metrics.store_metrics().region_metrics_map()) {
-              auto region_metrics_to_update = update_store.mutable_region_metrics_map()->find(it.first);
-              if (region_metrics_to_update != update_store.mutable_region_metrics_map()->end()) {
-                region_metrics_to_update->second.CopyFrom(it.second);
-              } else {
-                update_store.mutable_region_metrics_map()->insert(it);
-              }
-            }
-          }
-        }
-        DINGO_LOG(INFO) << "ApplyMetaIncrement store_metrics UPDATE, [id=" << store_metrics.id() << "] success, "
-                        << "region_metrics_map_size=" << store_metrics.store_metrics().region_metrics_map_size()
-                        << ", is_partial_region_metrics=" << store_metrics.is_partial_region_metrics()
-                        << ", store_id=" << store_metrics.id();
+  //     } else if (store_metrics.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
+  //       auto& update_store = store_metrics_map_[store_metrics.id()];
+  //       if (!store_metrics.is_partial_region_metrics()) {
+  //         update_store.CopyFrom(store_metrics.store_metrics());
+  //       } else {
+  //         if (store_metrics.store_metrics().region_metrics_map_size() > 0) {
+  //           for (const auto& it : store_metrics.store_metrics().region_metrics_map()) {
+  //             auto region_metrics_to_update = update_store.mutable_region_metrics_map()->find(it.first);
+  //             if (region_metrics_to_update != update_store.mutable_region_metrics_map()->end()) {
+  //               region_metrics_to_update->second.CopyFrom(it.second);
+  //             } else {
+  //               update_store.mutable_region_metrics_map()->insert(it);
+  //             }
+  //           }
+  //         }
+  //       }
+  //       DINGO_LOG(INFO) << "ApplyMetaIncrement store_metrics UPDATE, [id=" << store_metrics.id() << "] success, "
+  //                       << "region_metrics_map_size=" << store_metrics.store_metrics().region_metrics_map_size()
+  //                       << ", is_partial_region_metrics=" << store_metrics.is_partial_region_metrics()
+  //                       << ", store_id=" << store_metrics.id();
 
-        // meta_write_kv
-        meta_write_to_kv.push_back(store_metrics_meta_->TransformToKvValue(update_store));
+  //       // meta_write_kv
+  //       meta_write_to_kv.push_back(store_metrics_meta_->TransformToKvValue(update_store));
 
-      } else if (store_metrics.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
-        store_metrics_map_.erase(store_metrics.id());
-        DINGO_LOG(INFO) << "ApplyMetaIncrement store_metrics DELETE, [id=" << store_metrics.id() << "] success";
+  //     } else if (store_metrics.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
+  //       store_metrics_map_.erase(store_metrics.id());
+  //       DINGO_LOG(INFO) << "ApplyMetaIncrement store_metrics DELETE, [id=" << store_metrics.id() << "] success";
 
-        // meta_delete_kv
-        meta_delete_to_kv.push_back(store_metrics_meta_->TransformToKvValue(store_metrics.store_metrics()));
-      }
-    }
-  }
+  //       // meta_delete_kv
+  //       meta_delete_to_kv.push_back(store_metrics_meta_->TransformToKvValue(store_metrics.store_metrics()));
+  //     }
+  //   }
+  // }
 
   // 8.table_metrics map
   {
