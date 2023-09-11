@@ -81,6 +81,7 @@ void SendGetStoreOperation(std::shared_ptr<dingodb::CoordinatorInteraction> coor
 void SendCleanStoreOperation(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendAddStoreOperation(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendRemoveStoreOperation(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendGetRegionCmd(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 
 // task list
 void SendGetTaskList(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);

@@ -17,8 +17,21 @@ syntax = "proto3";
 import "common.proto";
 import "coordinator.proto";
 import "meta.proto";
+import "error.proto";
 
 package dingodb.pb.coordinator_internal;
+
+// StoreOperationInternal
+message StoreOperationInternal {
+  uint64 id = 1;  // this is store id
+  repeated uint64 region_cmd_ids = 2;
+}
+
+message RegionCmdInternal {
+  uint64 id = 1;  // this is region_cmd_id
+  dingodb.pb.coordinator.RegionCmd region_cmd = 2;
+  dingodb.pb.error.Error error = 3;  // if region_cmd is not success, this field will be set from store response
+}
 
 // TableRegionInternal is storage structure for coordinator
 // TableRegionInternal is not table partition in SQL, its only use for storage.
@@ -234,7 +247,13 @@ message MetaIncrementIdEpoch {
 
 message MetaIncrementStoreOperation {
   uint64 id = 1;  // this is store id
-  dingodb.pb.coordinator.StoreOperation store_operation = 2;
+  StoreOperationInternal store_operation = 2;
+  MetaIncrementOpType op_type = 3;
+}
+
+message MetaIncrementRegionCmd {
+  uint64 id = 1;  // this is region_cmd id
+  RegionCmdInternal region_cmd = 2;
   MetaIncrementOpType op_type = 3;
 }
 
@@ -355,10 +374,11 @@ message MetaIncrement {
   repeated MetaIncrementStoreMetrics store_metrics = 8;
   repeated MetaIncrementTableMetrics table_metrics = 9;
   repeated MetaIncrementStoreOperation store_operations = 10;
-  repeated MetaIncrementExecutorUser executor_users = 11;
-  repeated MetaIncrementTaskList task_lists = 12;
-  repeated MetaIncrementTable indexes = 13;
-  repeated MetaIncrementIndexMetrics index_metrics = 14;
+  repeated MetaIncrementRegionCmd region_cmds = 11;
+  repeated MetaIncrementExecutorUser executor_users = 12;
+  repeated MetaIncrementTaskList task_lists = 13;
+  repeated MetaIncrementTable indexes = 14;
+  repeated MetaIncrementIndexMetrics index_metrics = 15;
 
   repeated MetaIncrementAutoIncrement auto_increment = 20;
   repeated MetaIncrementTso timestamp_oracles = 21;
@@ -387,10 +407,11 @@ message MetaSnapshotFile {
   repeated dingodb.pb.common.KeyValue store_metrics_map_kvs = 8;
   repeated dingodb.pb.common.KeyValue table_metrics_map_kvs = 9;
   repeated dingodb.pb.common.KeyValue store_operation_map_kvs = 10;
-  repeated dingodb.pb.common.KeyValue executor_user_map_kvs = 11;
-  repeated dingodb.pb.common.KeyValue task_list_map_kvs = 12;
-  repeated dingodb.pb.common.KeyValue index_map_kvs = 13;
-  repeated dingodb.pb.common.KeyValue index_metrics_map_kvs = 14;
+  repeated dingodb.pb.common.KeyValue region_cmd_map_kvs = 11;
+  repeated dingodb.pb.common.KeyValue executor_user_map_kvs = 12;
+  repeated dingodb.pb.common.KeyValue task_list_map_kvs = 13;
+  repeated dingodb.pb.common.KeyValue index_map_kvs = 14;
+  repeated dingodb.pb.common.KeyValue index_metrics_map_kvs = 15;
 
   repeated dingodb.pb.common.KeyValue auto_increment_map_kvs = 20;  // now unused, just a placeholder
   AutoIncrementStorage auto_increment_storage = 21;

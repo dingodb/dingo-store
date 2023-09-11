@@ -30,6 +30,7 @@
 #include "common/helper.h"
 #include "common/logging.h"
 #include "coordinator/coordinator_closure.h"
+#include "coordinator/coordinator_control.h"
 #include "gflags/gflags.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
@@ -1281,13 +1282,12 @@ void CoordinatorServiceImpl::GetStoreOperation(google::protobuf::RpcController *
 
   // if store_id = 0, get all store operation
   if (request->store_id() == 0) {
-    butil::FlatMap<uint64_t, pb::coordinator::StoreOperation> store_operations;
-    store_operations.init(100);
-    coordinator_control_->GetStoreOperations(store_operations);
+    pb::common::StoreMap store_map;
+    coordinator_control_->GetStoreMap(store_map);
 
-    for (const auto &it : store_operations) {
+    for (const auto &store : store_map.stores()) {
       auto *new_store_operation = response->add_store_operations();
-      new_store_operation->CopyFrom(it.second);
+      coordinator_control_->GetStoreOperation(store.id(), *new_store_operation);
     }
     return;
   }
@@ -1400,7 +1400,7 @@ void CoordinatorServiceImpl::RemoveStoreOperation(google::protobuf::RpcControlle
   auto store_id = request->store_id();
   auto region_cmd_id = request->region_cmd_id();
 
-  auto ret = this->coordinator_control_->RemoveStoreOperation(store_id, region_cmd_id, meta_increment);
+  auto ret = this->coordinator_control_->RemoveRegionCmd(store_id, region_cmd_id, meta_increment);
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << "RemoveStoreOperation failed, store_id:" << store_id << ", region_cmd_id:" << region_cmd_id
                      << ", errcode:" << ret.error_code() << ", errmsg:" << ret.error_str();
@@ -1425,6 +1425,43 @@ void CoordinatorServiceImpl::RemoveStoreOperation(google::protobuf::RpcControlle
 
   // this is a async operation will be block by closure
   engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+}
+
+void CoordinatorServiceImpl::GetRegionCmd(google::protobuf::RpcController * /*controller*/,
+                                          const pb::coordinator::GetRegionCmdRequest *request,
+                                          pb::coordinator::GetRegionCmdResponse *response,
+                                          google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+  DINGO_LOG(DEBUG) << "Receive GetRegionCmd Request:" << request->DebugString();
+
+  auto is_leader = this->coordinator_control_->IsLeader();
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  std::vector<pb::coordinator::RegionCmd> region_cmds;
+  std::vector<pb::error::Error> region_cmd_errors;
+  auto ret = coordinator_control_->GetRegionCmd(request->store_id(), request->start_region_cmd_id(),
+                                                request->end_region_cmd_id(), region_cmds, region_cmd_errors);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "GetRegionCmd failed, store_id:" << request->store_id()
+                     << ", start_region_cmd_id:" << request->start_region_cmd_id()
+                     << ", end_region_cmd_id:" << request->end_region_cmd_id() << ", errcode:" << ret.error_code()
+                     << ", errmsg:" << ret.error_str();
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    return;
+  }
+
+  for (const auto &it : region_cmds) {
+    auto *new_region_cmd = response->add_region_cmds();
+    new_region_cmd->CopyFrom(it);
+  }
+
+  for (const auto &it : region_cmd_errors) {
+    auto *new_region_cmd_error = response->add_region_cmd_errors();
+    new_region_cmd_error->CopyFrom(it);
+  }
 }
 
 // task list

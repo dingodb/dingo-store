@@ -57,6 +57,8 @@ DECLARE_string(state);
 DECLARE_bool(is_force);
 DECLARE_int32(count);
 DECLARE_bool(store_create_region);
+DECLARE_uint64(start_region_cmd_id);
+DECLARE_uint64(end_region_cmd_id);
 
 // raft control
 void SendRaftAddPeer() {
@@ -1503,6 +1505,34 @@ void SendCleanTaskList(std::shared_ptr<dingodb::CoordinatorInteraction> coordina
   request.set_task_list_id(std::stoull(FLAGS_id));
 
   auto status = coordinator_interaction->SendRequest("CleanTaskList", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG_INFO << response.DebugString();
+}
+
+void SendGetRegionCmd(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  dingodb::pb::coordinator::GetRegionCmdRequest request;
+  dingodb::pb::coordinator::GetRegionCmdResponse response;
+
+  if (FLAGS_store_id == 0) {
+    DINGO_LOG(ERROR) << "store_id is empty";
+    return;
+  }
+
+  if (FLAGS_start_region_cmd_id == 0) {
+    DINGO_LOG(ERROR) << "start_region_cmd_id is empty";
+    return;
+  }
+
+  if (FLAGS_end_region_cmd_id == 0) {
+    DINGO_LOG(ERROR) << "end_region_cmd_id is empty";
+    return;
+  }
+
+  request.set_store_id(FLAGS_store_id);
+  request.set_start_region_cmd_id(FLAGS_start_region_cmd_id);
+  request.set_end_region_cmd_id(FLAGS_end_region_cmd_id);
+
+  auto status = coordinator_interaction->SendRequest("GetRegionCmd", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG_INFO << response.DebugString();
 }

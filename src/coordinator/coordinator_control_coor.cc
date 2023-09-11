@@ -56,6 +56,8 @@ DEFINE_int32(
 
 DEFINE_uint64(max_hnsw_memory_size_of_region, uint32_t(-1), "max memory size of region in HSNW");
 
+DEFINE_uint32(max_send_region_cmd_per_store, 50, "max send region cmd per store");
+
 // TODO: add epoch logic
 void CoordinatorControl::GetCoordinatorMap(uint64_t cluster_id, uint64_t& epoch, pb::common::Location& leader_location,
                                            std::vector<pb::common::Location>& locations) {
@@ -625,7 +627,7 @@ void CoordinatorControl::RecycleOrphanRegionOnStore() {
     DINGO_LOG(INFO) << "Start to RecycleOrphanRegionOnStore for store_id: " << ids.first
                     << " region_id size: " << ids.second.size();
 
-    pb::coordinator::StoreOperation store_operation;
+    pb::coordinator_internal::StoreOperationInternal store_operation;
     bool is_store_operation_get = false;
 
     for (const auto& region_id : ids.second) {
@@ -637,9 +639,15 @@ void CoordinatorControl::RecycleOrphanRegionOnStore() {
         }
 
         bool region_need_recycle = true;
-        for (const auto& region_cmd : store_operation.region_cmds()) {
-          if (region_cmd.region_id() == region_id &&
-              region_cmd.region_cmd_type() == pb::coordinator::RegionCmdType::CMD_DELETE) {
+        for (auto region_cmd_id : store_operation.region_cmd_ids()) {
+          pb::coordinator_internal::RegionCmdInternal region_cmd;
+          auto ret = region_cmd_map_.Get(region_cmd_id, region_cmd);
+          if (ret < 0) {
+            continue;
+          }
+
+          if (region_cmd.region_cmd().region_id() == region_id &&
+              region_cmd.region_cmd().region_cmd_type() == pb::coordinator::RegionCmdType::CMD_DELETE) {
             region_need_recycle = false;
             break;
           }
@@ -656,7 +664,7 @@ void CoordinatorControl::RecycleOrphanRegionOnStore() {
         auto* increment_task_list = CreateTaskList(meta_increment);
 
         // this is delete_region task
-        AddDeleteTask(increment_task_list, ids.first, region_id, meta_increment);
+        AddDeleteTask(increment_task_list, ids.first, region_id);
 
         // this is purge_region task
         // AddPurgeTask(increment_task_list, ids.first, region_id, meta_increment);
@@ -1345,7 +1353,6 @@ butil::Status CoordinatorControl::CreateRegion(const std::string& region_name, p
 
     store_operation.set_id(store.id());
     auto* region_cmd = store_operation.add_region_cmds();
-    region_cmd->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
     region_cmd->set_create_timestamp(butil::gettimeofday_ms());
     region_cmd->set_region_id(create_region_id);
     region_cmd->set_region_cmd_type(::dingodb::pb::coordinator::RegionCmdType::CMD_CREATE);
@@ -1369,12 +1376,18 @@ butil::Status CoordinatorControl::CreateRegion(const std::string& region_name, p
 
   // add store operations to meta_increment
   for (const auto& store_operation : store_operations) {
-    auto* store_operation_increment = meta_increment.add_store_operations();
-    store_operation_increment->set_id(store_operation.id());
-    store_operation_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
-    store_operation_increment->mutable_store_operation()->CopyFrom(store_operation);
+    for (const auto& region_cmd : store_operation.region_cmds()) {
+      auto ret = AddRegionCmd(store_operation.id(), region_cmd, meta_increment);
+      if (!ret.ok()) {
+        DINGO_LOG(ERROR) << "CreateRegion AddRegionCmd failed, store_id=" << store_operation.id()
+                         << ", region_cmd=" << region_cmd.ShortDebugString();
+        return ret;
+      }
+      DINGO_LOG(INFO) << "AddRegionCmd store_id=" << store_operation.id()
+                      << ", region_cmd=" << region_cmd.ShortDebugString();
+    }
 
-    DINGO_LOG(INFO) << "store_operation_increment = " << store_operation_increment->DebugString();
+    DINGO_LOG(INFO) << "store_operation_increment = " << store_operation.ShortDebugString();
   }
 
   // fix: now update table/index range distribution in raft apply
@@ -1459,7 +1472,7 @@ butil::Status CoordinatorControl::DropRegion(uint64_t region_id,
           auto* increment_task_list = CreateTaskList(meta_increment);
 
           // this is delete_region task
-          AddDeleteTask(increment_task_list, peer.store_id(), region_id, meta_increment);
+          AddDeleteTask(increment_task_list, peer.store_id(), region_id);
 
           // this is purge_region task
           // AddPurgeTask(increment_task_list, peer.store_id(), region_id, meta_increment);
@@ -1658,16 +1671,7 @@ butil::Status CoordinatorControl::SplitRegion(uint64_t split_from_region_id, uin
                          "SplitRegion split_from_region_id's leader_store_id is 0");
   }
 
-  auto* store_operation_increment = meta_increment.add_store_operations();
-  store_operation_increment->set_id(split_from_region.leader_store_id());  // this store id
-  store_operation_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
-  auto* store_operation = store_operation_increment->mutable_store_operation();
-  store_operation->set_id(split_from_region.leader_store_id());
-  auto* region_cmd_to_add = store_operation->add_region_cmds();
-  region_cmd_to_add->CopyFrom(region_cmd);
-  region_cmd_to_add->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
-
-  return butil::Status::OK();
+  return AddRegionCmd(split_from_region.leader_store_id(), region_cmd, meta_increment);
 }
 
 butil::Status CoordinatorControl::SplitRegionWithTaskList(uint64_t split_from_region_id, uint64_t split_to_region_id,
@@ -1764,7 +1768,7 @@ butil::Status CoordinatorControl::SplitRegionWithTaskList(uint64_t split_from_re
       split_from_region.definition().index_parameter().has_vector_index_parameter()) {
     // send load vector index to store
     for (const auto& peer : split_from_region.definition().peers()) {
-      AddLoadVectorIndexTask(new_task_list, peer.store_id(), split_from_region_id, meta_increment);
+      AddLoadVectorIndexTask(new_task_list, peer.store_id(), split_from_region_id);
     }
 
     // check vector index is ready
@@ -1775,7 +1779,7 @@ butil::Status CoordinatorControl::SplitRegionWithTaskList(uint64_t split_from_re
 
   // build split_region task
   AddSplitTask(new_task_list, split_from_region.leader_store_id(), split_from_region_id, new_region_id,
-               split_watershed_key, store_create_region, meta_increment);
+               split_watershed_key, store_create_region);
 
   return butil::Status::OK();
 }
@@ -1885,8 +1889,7 @@ butil::Status CoordinatorControl::MergeRegionWithTaskList(uint64_t merge_from_re
   auto* new_task_list = CreateTaskList(meta_increment);
 
   // build merege task
-  AddMergeTask(new_task_list, merge_from_region.leader_store_id(), merge_from_region_id, merge_to_region_id,
-               meta_increment);
+  AddMergeTask(new_task_list, merge_from_region.leader_store_id(), merge_from_region_id, merge_to_region_id);
 
   // build drop region task
   auto* drop_region_task = new_task_list->add_tasks();
@@ -2011,11 +2014,11 @@ butil::Status CoordinatorControl::ChangePeerRegionWithTaskList(
     auto* increment_task_list = CreateTaskList(meta_increment);
 
     // this is change_peer task
-    AddChangePeerTask(increment_task_list, region.leader_store_id(), region_id, new_region_definition, meta_increment);
+    AddChangePeerTask(increment_task_list, region.leader_store_id(), region_id, new_region_definition);
 
     // this is delete_region task
-    AddDeleteTaskWithCheck(increment_task_list, new_store_ids_diff_less.at(0), region_id, new_region_definition.peers(),
-                           meta_increment);
+    AddDeleteTaskWithCheck(increment_task_list, new_store_ids_diff_less.at(0), region_id,
+                           new_region_definition.peers());
 
     // this is purge_region task
     // AddPurgeTask(increment_task_list, new_store_ids_diff_less.at(0), region_id, meta_increment);
@@ -2054,7 +2057,7 @@ butil::Status CoordinatorControl::ChangePeerRegionWithTaskList(
     auto* increment_task_list = CreateTaskList(meta_increment);
 
     // this create region task
-    AddCreateTask(increment_task_list, new_store_ids_diff_more.at(0), region_id, new_region_definition, meta_increment);
+    AddCreateTask(increment_task_list, new_store_ids_diff_more.at(0), region_id, new_region_definition);
 
     // this change peer check task, no store_operation, only for check
     auto* change_peer_check_task = increment_task_list->add_tasks();
@@ -2064,7 +2067,7 @@ butil::Status CoordinatorControl::ChangePeerRegionWithTaskList(
     region_check->mutable_store_region_check()->set_region_id(region_id);
 
     // this is change peer task
-    AddChangePeerTask(increment_task_list, region.leader_store_id(), region_id, new_region_definition, meta_increment);
+    AddChangePeerTask(increment_task_list, region.leader_store_id(), region_id, new_region_definition);
 
   } else {
     DINGO_LOG(ERROR) << "ChangePeerRegion new_store_ids not match, region_id = " << region_id;
@@ -2138,7 +2141,7 @@ butil::Status CoordinatorControl::TransferLeaderRegionWithTaskList(
   auto* increment_task_list = CreateTaskList(meta_increment);
 
   // this transfer leader task
-  AddTransferLeaderTask(increment_task_list, region.leader_store_id(), region_id, new_leader_peer, meta_increment);
+  AddTransferLeaderTask(increment_task_list, region.leader_store_id(), region_id, new_leader_peer);
 
   return butil::Status::OK();
 }
@@ -2169,7 +2172,7 @@ butil::Status CoordinatorControl::ValidateTaskListConflict(uint64_t region_id, u
   }
 
   // check store operation conflict
-  butil::FlatMap<uint64_t, pb::coordinator::StoreOperation> store_operation_map_temp;
+  butil::FlatMap<uint64_t, pb::coordinator_internal::StoreOperationInternal> store_operation_map_temp;
   store_operation_map_temp.init(1000);
   ret = store_operation_map_.GetRawMapCopy(store_operation_map_temp);
   if (ret < 0) {
@@ -2180,8 +2183,14 @@ butil::Status CoordinatorControl::ValidateTaskListConflict(uint64_t region_id, u
   }
 
   for (const auto& store_operation : store_operation_map_temp) {
-    for (const auto& region_cmd : store_operation.second.region_cmds()) {
-      if (region_cmd.region_id() == region_id || region_cmd.region_id() == second_region_id) {
+    for (auto region_cmd_id : store_operation.second.region_cmd_ids()) {
+      pb::coordinator_internal::RegionCmdInternal region_cmd;
+      auto ret = region_cmd_map_.Get(region_cmd_id, region_cmd);
+      if (ret < 0) {
+        continue;
+      }
+
+      if (region_cmd.region_cmd().region_id() == region_id || region_cmd.region_cmd().region_id() == second_region_id) {
         DINGO_LOG(ERROR) << "ValidateTaskListConflict store_operation conflict, region_id = " << region_id;
         return butil::Status(
             pb::error::Errno::ESTORE_OPERATION_CONFLICT,
@@ -2196,7 +2205,7 @@ butil::Status CoordinatorControl::ValidateTaskListConflict(uint64_t region_id, u
 // CleanStoreOperation
 butil::Status CoordinatorControl::CleanStoreOperation(uint64_t store_id,
                                                       pb::coordinator_internal::MetaIncrement& meta_increment) {
-  pb::coordinator::StoreOperation store_operation;
+  pb::coordinator_internal::StoreOperationInternal store_operation;
   int ret = store_operation_map_.Get(store_id, store_operation);
   if (ret < 0) {
     DINGO_LOG(ERROR) << "CleanStoreOperation store operation not exists, store_id = " << store_id;
@@ -2209,12 +2218,156 @@ butil::Status CoordinatorControl::CleanStoreOperation(uint64_t store_id,
   store_operation_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
   store_operation_increment->mutable_store_operation()->CopyFrom(store_operation);
 
+  // clean region_cmd
+  for (auto region_cmd_id : store_operation.region_cmd_ids()) {
+    auto* region_cmd_increment = meta_increment.add_region_cmds();
+    region_cmd_increment->set_id(region_cmd_id);
+    region_cmd_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
+    region_cmd_increment->mutable_region_cmd()->set_id(region_cmd_id);
+  }
+
+  return butil::Status::OK();
+}
+
+// AddRegionCmd
+butil::Status CoordinatorControl::AddRegionCmd(uint64_t store_id, const pb::coordinator::RegionCmd& region_cmd,
+                                               pb::coordinator_internal::MetaIncrement& meta_increment) {
+  // validate store id
+  int ret = store_map_.Exists(store_id);
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << "AddRegionCmd store not exists, store_id = " << store_id;
+    return butil::Status(pb::error::Errno::ESTORE_NOT_FOUND, "AddStoreOperation store not exists");
+  }
+
+  uint64_t region_cmd_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment);
+  if (region_cmd_id == 0) {
+    DINGO_LOG(ERROR) << "AddRegionCmd GetNextId failed, store_id = " << store_id;
+    return butil::Status(pb::error::Errno::EINTERNAL, "AddRegionCmd GetNextId failed");
+  }
+
+  auto* store_operation_increment = meta_increment.add_store_operations();
+  store_operation_increment->set_id(store_id);  // this store id
+  store_operation_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
+  auto* store_operation = store_operation_increment->mutable_store_operation();
+  store_operation->set_id(store_id);
+  store_operation->add_region_cmd_ids(region_cmd_id);
+
+  auto* region_cmd_increment = meta_increment.add_region_cmds();
+  region_cmd_increment->set_id(region_cmd_id);
+  region_cmd_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
+  region_cmd_increment->mutable_region_cmd()->set_id(region_cmd_id);
+  region_cmd_increment->mutable_region_cmd()->mutable_region_cmd()->CopyFrom(region_cmd);
+  region_cmd_increment->mutable_region_cmd()->mutable_region_cmd()->set_id(region_cmd_id);
+
+  return butil::Status::OK();
+}
+
+// UpdateRegionCmd
+butil::Status CoordinatorControl::UpdateRegionCmd(uint64_t store_id, const pb::coordinator::RegionCmd& region_cmd,
+                                                  const pb::error::Error& error,
+                                                  pb::coordinator_internal::MetaIncrement& meta_increment) {
+  // validate store id
+  int ret = store_map_.Exists(store_id);
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << "UpdateRegionCmd store not exists, store_id = " << store_id;
+    return butil::Status(pb::error::Errno::ESTORE_NOT_FOUND, "AddStoreOperation store not exists");
+  }
+
+  if (region_cmd.id() == 0) {
+    DINGO_LOG(ERROR) << "UpdateRegionCmd GetNextId failed, store_id = " << store_id;
+    return butil::Status(pb::error::Errno::EINTERNAL, "UpdateRegionCmd GetNextId failed");
+  }
+
+  auto* region_cmd_increment = meta_increment.add_region_cmds();
+  region_cmd_increment->set_id(region_cmd.id());
+  region_cmd_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
+  region_cmd_increment->mutable_region_cmd()->set_id(region_cmd.id());
+  region_cmd_increment->mutable_region_cmd()->mutable_region_cmd()->CopyFrom(region_cmd);
+  region_cmd_increment->mutable_region_cmd()->mutable_error()->CopyFrom(error);
+
+  return butil::Status::OK();
+}
+
+// RemoveRegionCmd
+butil::Status CoordinatorControl::RemoveRegionCmd(uint64_t store_id, uint64_t region_cmd_id,
+                                                  pb::coordinator_internal::MetaIncrement& meta_increment) {
+  // validate store id
+  int ret = store_map_.Exists(store_id);
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << "RemoveRegionCmd store not exists, store_id = " << store_id;
+    return butil::Status(pb::error::Errno::ESTORE_NOT_FOUND, "AddStoreOperation store not exists");
+  }
+
+  // validate region_cmd_id
+  ret = region_cmd_map_.Exists(region_cmd_id);
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << "RemoveRegionCmd region_cmd_id not exists, region_cmd_id = " << region_cmd_id;
+    return butil::Status(pb::error::Errno::EREGION_CMD_NOT_FOUND, "RemoveRegionCmd region_cmd_id not exists");
+  }
+
+  auto* store_operation_increment = meta_increment.add_store_operations();
+  store_operation_increment->set_id(store_id);  // this store id
+  store_operation_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
+  auto* store_operation = store_operation_increment->mutable_store_operation();
+  store_operation->set_id(store_id);
+  store_operation->add_region_cmd_ids(region_cmd_id);
+
+  auto* region_cmd_increment = meta_increment.add_region_cmds();
+  region_cmd_increment->set_id(region_cmd_id);
+  region_cmd_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
+  region_cmd_increment->mutable_region_cmd()->set_id(region_cmd_id);
+
+  return butil::Status::OK();
+}
+
+butil::Status CoordinatorControl::GetRegionCmd(uint64_t store_id, uint64_t start_region_cmd_id,
+                                               uint64_t end_region_cmd_id,
+                                               std::vector<pb::coordinator::RegionCmd>& region_cmds,
+                                               std::vector<pb::error::Error>& region_cmd_errors) {
+  // validate store id
+  int ret = store_map_.Exists(store_id);
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << "GetRegionCmd store not exists, store_id = " << store_id;
+    return butil::Status(pb::error::Errno::ESTORE_NOT_FOUND, "GetRegionCmd store not exists");
+  }
+
+  // validate region_cmd_id
+  if (end_region_cmd_id < start_region_cmd_id) {
+    DINGO_LOG(ERROR) << "GetRegionCmd end_region_cmd_id < start_region_cmd_id, end_region_cmd_id = "
+                     << end_region_cmd_id << " start_region_cmd_id = " << start_region_cmd_id;
+    return butil::Status(pb::error::Errno::EREGION_CMD_NOT_FOUND,
+                         "GetRegionCmd end_region_cmd_id < start_region_cmd_id");
+  }
+
+  std::vector<uint64_t> region_cmd_ids;
+  region_cmd_map_.GetAllKeys(region_cmd_ids);
+
+  if (region_cmd_ids.empty()) {
+    DINGO_LOG(INFO) << "GetRegionCmd region_cmd_ids is empty, store_id: " << store_id;
+    return butil::Status::OK();
+  }
+
+  for (auto region_cmd_id : region_cmd_ids) {
+    if (region_cmd_id >= start_region_cmd_id && region_cmd_id < end_region_cmd_id) {
+      pb::coordinator_internal::RegionCmdInternal region_cmd_internal;
+      int ret = region_cmd_map_.Get(region_cmd_id, region_cmd_internal);
+      if (ret < 0) {
+        DINGO_LOG(ERROR) << "GetRegionCmd region_cmd_id not exists, region_cmd_id = " << region_cmd_id;
+        return butil::Status(pb::error::Errno::EREGION_CMD_NOT_FOUND, "GetRegionCmd region_cmd_id not exists");
+      }
+
+      region_cmds.push_back(region_cmd_internal.region_cmd());
+      region_cmd_errors.push_back(region_cmd_internal.error());
+    }
+  }
+
   return butil::Status::OK();
 }
 
 // AddStoreOperation
-butil::Status CoordinatorControl::AddStoreOperation(const pb::coordinator::StoreOperation& store_operation,
-                                                    pb::coordinator_internal::MetaIncrement& meta_increment) {
+butil::Status CoordinatorControl::AddStoreOperation(            // NOLINT
+    const pb::coordinator::StoreOperation& store_operation,     // NOLINT
+    pb::coordinator_internal::MetaIncrement& meta_increment) {  // NOLINT
   // validate store id
   uint64_t store_id = store_operation.id();
   int ret = store_map_.Exists(store_id);
@@ -2230,12 +2383,18 @@ butil::Status CoordinatorControl::AddStoreOperation(const pb::coordinator::Store
   }
 
   // check if region is has ongoing region_cmd
-  pb::coordinator::StoreOperation store_operation_ongoing;
+  pb::coordinator_internal::StoreOperationInternal store_operation_ongoing;
   ret = store_operation_map_.Get(store_id, store_operation_ongoing);
   if (ret > 0) {
     for (const auto& it : store_operation.region_cmds()) {
-      for (const auto& it2 : store_operation_ongoing.region_cmds()) {
-        if (it.region_id() == it2.region_id()) {
+      for (const auto& region_cmd_id : store_operation_ongoing.region_cmd_ids()) {
+        pb::coordinator_internal::RegionCmdInternal region_cmd;
+        ret = region_cmd_map_.Get(region_cmd_id, region_cmd);
+        if (ret < 0) {
+          continue;
+        }
+
+        if (it.region_id() == region_cmd.region_cmd().region_id()) {
           DINGO_LOG(ERROR) << "AddStoreOperation store operation region cmd ongoing conflict, unable to add new "
                               "region_cmd, store_id = "
                            << store_id << ", region_id = " << it.region_id();
@@ -2247,52 +2406,13 @@ butil::Status CoordinatorControl::AddStoreOperation(const pb::coordinator::Store
   }
 
   // add store operation
-  auto* store_operation_increment = meta_increment.add_store_operations();
-  store_operation_increment->set_id(store_id);
-  store_operation_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
-  store_operation_increment->mutable_store_operation()->CopyFrom(store_operation);
-
-  auto* store_operation_to_update_id = store_operation_increment->mutable_store_operation();
-  for (int i = 0; i < store_operation_to_update_id->region_cmds_size(); i++) {
-    store_operation_to_update_id->mutable_region_cmds(i)->set_id(
-        GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
-  }
-  return butil::Status::OK();
-}
-
-butil::Status CoordinatorControl::RemoveStoreOperation(uint64_t store_id, uint64_t region_cmd_id,
-                                                       pb::coordinator_internal::MetaIncrement& meta_increment) {
-  pb::coordinator::StoreOperation store_operation;
-  int ret = store_operation_map_.Get(store_id, store_operation);
-  if (ret < 0) {
-    DINGO_LOG(ERROR) << "RemoveStoreOperation store operation not exists, store_id = " << store_id;
-    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "RemoveStoreOperation store operation not exists");
-  }
-
-  // check if region_cmd_id exists
-  pb::coordinator_internal::MetaIncrementStoreOperation store_operation_increment;
-  store_operation_increment.set_id(store_id);
-  store_operation_increment.set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
-  auto* store_operation_to_delete = store_operation_increment.mutable_store_operation();
-  store_operation_to_delete->set_id(store_id);
-
-  for (const auto& it : store_operation.region_cmds()) {
-    if (it.id() == region_cmd_id) {
-      // remove region_cmd
-      auto* region_cmd_to_delete = store_operation_to_delete->add_region_cmds();
-      region_cmd_to_delete->CopyFrom(it);
+  for (const auto& region_cmd : store_operation.region_cmds()) {
+    auto ret = AddRegionCmd(store_id, region_cmd, meta_increment);
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << "AddStoreOperation AddRegionCmd failed, store_id = " << store_id;
+      return ret;
     }
   }
-
-  if (store_operation_to_delete->region_cmds_size() == 0) {
-    DINGO_LOG(ERROR) << "RemoveStoreOperation region_cmd_id not exists, store_id = " << store_id
-                     << ", region_cmd_id = " << region_cmd_id;
-    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "RemoveStoreOperation region_cmd_id not exists");
-  }
-
-  auto* store_operation_increment_to_delete = meta_increment.add_store_operations();
-  store_operation_increment_to_delete->CopyFrom(store_operation_increment);
-
   return butil::Status::OK();
 }
 
@@ -3090,6 +3210,11 @@ void CoordinatorControl::GetMemoryInfo(pb::coordinator::CoordinatorMemoryInfo& m
     memory_info.set_total_size(memory_info.total_size() + memory_info.store_operation_map_size());
   }
   {
+    memory_info.set_region_cmd_map_count(region_cmd_map_.Size());
+    memory_info.set_region_cmd_map_size(region_cmd_map_.MemorySize());
+    memory_info.set_total_size(memory_info.total_size() + memory_info.region_cmd_map_size());
+  }
+  {
     memory_info.set_executor_user_map_count(executor_user_map_.Size());
     memory_info.set_executor_user_map_size(executor_user_map_.MemorySize());
     memory_info.set_total_size(memory_info.total_size() + memory_info.executor_user_map_size());
@@ -3109,17 +3234,79 @@ void CoordinatorControl::GetMemoryInfo(pb::coordinator::CoordinatorMemoryInfo& m
     memory_info.set_index_metrics_map_size(index_metrics_map_.MemorySize());
     memory_info.set_total_size(memory_info.total_size() + memory_info.index_metrics_map_size());
   }
+  {
+    memory_info.set_kv_index_map_count(kv_index_map_.Size());
+    memory_info.set_kv_index_map_size(kv_index_map_.MemorySize());
+    memory_info.set_total_size(memory_info.total_size() + memory_info.kv_index_map_size());
+  }
+  {
+    memory_info.set_kv_rev_map_count(kv_rev_map_.Size());
+    memory_info.set_kv_rev_map_size(kv_rev_map_.MemorySize());
+    memory_info.set_total_size(memory_info.total_size() + memory_info.kv_rev_map_size());
+  }
 }
 
 int CoordinatorControl::GetStoreOperation(uint64_t store_id, pb::coordinator::StoreOperation& store_operation) {
-  return store_operation_map_.Get(store_id, store_operation);
+  DINGO_LOG(INFO) << "GetStoreOperation store_id = " << store_id;
+
+  store_operation.set_id(store_id);
+  pb::coordinator_internal::StoreOperationInternal store_operation_internal;
+  int ret = store_operation_map_.Get(store_id, store_operation_internal);
+  if (ret < 0) {
+    return ret;
+  }
+
+  for (auto region_cmd_id : store_operation_internal.region_cmd_ids()) {
+    pb::coordinator_internal::RegionCmdInternal region_cmd;
+    ret = region_cmd_map_.Get(region_cmd_id, region_cmd);
+    if (ret < 0) {
+      continue;
+    }
+    auto* region_cmd_add = store_operation.add_region_cmds();
+    region_cmd_add->set_region_cmd_type(region_cmd.region_cmd().region_cmd_type());
+    region_cmd_add->set_region_id(region_cmd.region_cmd().region_id());
+    region_cmd_add->set_create_timestamp(region_cmd.region_cmd().create_timestamp());
+    region_cmd_add->set_id(region_cmd.region_cmd().id());
+
+    if (region_cmd.error().errcode() != pb::error::Errno::OK) {
+      region_cmd_add->set_status(::dingodb::pb::coordinator::RegionCmdStatus::STATUS_FAIL);
+    }
+  }
+
+  return 0;
 }
 
-int CoordinatorControl::GetStoreOperations(
-    butil::FlatMap<uint64_t, pb::coordinator::StoreOperation>& store_operations) {
-  store_operation_map_.GetRawMapCopy(store_operations);
+int CoordinatorControl::GetStoreOperationForSend(uint64_t store_id, pb::coordinator::StoreOperation& store_operation) {
+  pb::coordinator_internal::StoreOperationInternal store_operation_internal;
+  int ret = store_operation_map_.Get(store_id, store_operation_internal);
+  if (ret < 0) {
+    return ret;
+  }
 
-  return store_operations.size();
+  store_operation.set_id(store_operation_internal.id());
+
+  uint32_t region_cmd_count = 0;
+  for (auto region_cmd_id : store_operation_internal.region_cmd_ids()) {
+    pb::coordinator_internal::RegionCmdInternal region_cmd;
+    ret = region_cmd_map_.Get(region_cmd_id, region_cmd);
+    if (ret < 0) {
+      continue;
+    }
+
+    store_operation.add_region_cmds()->CopyFrom(region_cmd.region_cmd());
+
+    region_cmd_count++;
+
+    if (region_cmd_count > FLAGS_max_send_region_cmd_per_store) {
+      DINGO_LOG(WARNING)
+          << "GetStoreOperationForSend region_cmd_count > FLAGS_max_send_region_cmd_per_store, store_id = " << store_id
+          << " send_region_cmd_count = " << region_cmd_count
+          << ", real_region_cmd_count = " << store_operation_internal.region_cmd_ids_size();
+      break;
+    }
+  }
+
+  return 0;
 }
 
 void CoordinatorControl::GetTaskList(butil::FlatMap<uint64_t, pb::coordinator::TaskList>& task_lists) {
@@ -3137,14 +3324,12 @@ pb::coordinator::TaskList* CoordinatorControl::CreateTaskList(pb::coordinator_in
 }
 
 void CoordinatorControl::AddCreateTask(pb::coordinator::TaskList* task_list, uint64_t store_id, uint64_t region_id,
-                                       const pb::common::RegionDefinition& region_definition,
-                                       pb::coordinator_internal::MetaIncrement& meta_increment) {
+                                       const pb::common::RegionDefinition& region_definition) {
   // this create region task
   auto* new_task = task_list->add_tasks();
   auto* store_operation_add = new_task->add_store_operations();
   store_operation_add->set_id(store_id);
   auto* region_cmd_to_add = store_operation_add->add_region_cmds();
-  region_cmd_to_add->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
   region_cmd_to_add->set_region_cmd_type(::dingodb::pb::coordinator::RegionCmdType::CMD_CREATE);
   region_cmd_to_add->set_region_id(region_id);
   region_cmd_to_add->set_create_timestamp(butil::gettimeofday_ms());
@@ -3152,15 +3337,13 @@ void CoordinatorControl::AddCreateTask(pb::coordinator::TaskList* task_list, uin
   region_cmd_to_add->mutable_create_request()->mutable_region_definition()->CopyFrom(region_definition);
 }
 
-void CoordinatorControl::AddDeleteTask(pb::coordinator::TaskList* task_list, uint64_t store_id, uint64_t region_id,
-                                       pb::coordinator_internal::MetaIncrement& meta_increment) {
+void CoordinatorControl::AddDeleteTask(pb::coordinator::TaskList* task_list, uint64_t store_id, uint64_t region_id) {
   // this is delete_region task
   auto* delete_region_task = task_list->add_tasks();
 
   auto* store_operation_delete = delete_region_task->add_store_operations();
   store_operation_delete->set_id(store_id);
   auto* region_cmd_delete = store_operation_delete->add_region_cmds();
-  region_cmd_delete->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
   region_cmd_delete->set_region_id(region_id);
   region_cmd_delete->set_region_cmd_type(::dingodb::pb::coordinator::RegionCmdType::CMD_DELETE);
   region_cmd_delete->set_create_timestamp(butil::gettimeofday_ms());
@@ -3169,8 +3352,7 @@ void CoordinatorControl::AddDeleteTask(pb::coordinator::TaskList* task_list, uin
 
 void CoordinatorControl::AddDeleteTaskWithCheck(
     pb::coordinator::TaskList* task_list, uint64_t store_id, uint64_t region_id,
-    const ::google::protobuf::RepeatedPtrField<::dingodb::pb::common::Peer>& peers,
-    pb::coordinator_internal::MetaIncrement& meta_increment) {
+    const ::google::protobuf::RepeatedPtrField<::dingodb::pb::common::Peer>& peers) {
   // this is delete_region task
   // precheck if region in RegionMap is REGION_NORMAL and REGION_RAFT_HEALTHY
   auto* delete_region_task = task_list->add_tasks();
@@ -3184,7 +3366,6 @@ void CoordinatorControl::AddDeleteTaskWithCheck(
   auto* store_operation_delete = delete_region_task->add_store_operations();
   store_operation_delete->set_id(store_id);
   auto* region_cmd_to_delete = store_operation_delete->add_region_cmds();
-  region_cmd_to_delete->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
   region_cmd_to_delete->set_region_cmd_type(::dingodb::pb::coordinator::RegionCmdType::CMD_DELETE);
   region_cmd_to_delete->set_region_id(region_id);
   region_cmd_to_delete->set_create_timestamp(butil::gettimeofday_ms());
@@ -3207,7 +3388,6 @@ void CoordinatorControl::AddDeleteTaskWithCheck(
 //   auto* store_operation_purge = purge_region_task->add_store_operations();
 //   store_operation_purge->set_id(store_id);
 //   auto* region_cmd_to_purge = store_operation_purge->add_region_cmds();
-//   region_cmd_to_purge->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
 //   region_cmd_to_purge->set_region_cmd_type(::dingodb::pb::coordinator::RegionCmdType::CMD_PURGE);
 //   region_cmd_to_purge->set_region_id(region_id);
 //   region_cmd_to_purge->set_create_timestamp(butil::gettimeofday_ms());
@@ -3215,14 +3395,12 @@ void CoordinatorControl::AddDeleteTaskWithCheck(
 // }
 
 void CoordinatorControl::AddChangePeerTask(pb::coordinator::TaskList* task_list, uint64_t store_id, uint64_t region_id,
-                                           const pb::common::RegionDefinition& region_definition,
-                                           pb::coordinator_internal::MetaIncrement& meta_increment) {
+                                           const pb::common::RegionDefinition& region_definition) {
   // this is change_peer task
   auto* new_task = task_list->add_tasks();
   auto* store_operation_change = new_task->add_store_operations();
   store_operation_change->set_id(store_id);
   auto* region_cmd_to_change = store_operation_change->add_region_cmds();
-  region_cmd_to_change->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
   region_cmd_to_change->set_region_cmd_type(::dingodb::pb::coordinator::RegionCmdType::CMD_CHANGE_PEER);
   region_cmd_to_change->set_region_id(region_id);
   region_cmd_to_change->set_create_timestamp(butil::gettimeofday_ms());
@@ -3231,14 +3409,13 @@ void CoordinatorControl::AddChangePeerTask(pb::coordinator::TaskList* task_list,
 }
 
 void CoordinatorControl::AddTransferLeaderTask(pb::coordinator::TaskList* task_list, uint64_t store_id,
-                                               uint64_t region_id, const pb::common::Peer& new_leader_peer,
-                                               pb::coordinator_internal::MetaIncrement& meta_increment) {
+                                               uint64_t region_id, const pb::common::Peer& new_leader_peer) {
   // this is transfer_leader task
   auto* new_task = task_list->add_tasks();
   auto* store_operation_transfer = new_task->add_store_operations();
   store_operation_transfer->set_id(store_id);
   auto* region_cmd_to_transfer = store_operation_transfer->add_region_cmds();
-  region_cmd_to_transfer->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
+  // meta_increment));
   region_cmd_to_transfer->set_region_cmd_type(::dingodb::pb::coordinator::RegionCmdType::CMD_TRANSFER_LEADER);
   region_cmd_to_transfer->set_region_id(region_id);
   region_cmd_to_transfer->set_create_timestamp(butil::gettimeofday_ms());
@@ -3248,15 +3425,13 @@ void CoordinatorControl::AddTransferLeaderTask(pb::coordinator::TaskList* task_l
 }
 
 void CoordinatorControl::AddMergeTask(pb::coordinator::TaskList* task_list, uint64_t store_id, uint64_t region_id,
-                                      uint64_t merge_to_region_id,
-                                      pb::coordinator_internal::MetaIncrement& meta_increment) {
+                                      uint64_t merge_to_region_id) {
   // build merege task
   auto* merge_task = task_list->add_tasks();
   auto* store_operation_merge = merge_task->add_store_operations();
   store_operation_merge->set_id(store_id);
   auto* region_cmd_to_add = store_operation_merge->add_region_cmds();
 
-  region_cmd_to_add->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
   region_cmd_to_add->set_region_id(region_id);
   region_cmd_to_add->set_region_cmd_type(pb::coordinator::RegionCmdType::CMD_MERGE);
   region_cmd_to_add->mutable_merge_request()->set_merge_from_region_id(store_id);
@@ -3267,8 +3442,7 @@ void CoordinatorControl::AddMergeTask(pb::coordinator::TaskList* task_list, uint
 
 void CoordinatorControl::AddSplitTask(pb::coordinator::TaskList* task_list, uint64_t store_id, uint64_t region_id,
                                       uint64_t split_to_region_id, const std::string& water_shed_key,
-                                      bool store_create_region,
-                                      pb::coordinator_internal::MetaIncrement& meta_increment) {
+                                      bool store_create_region) {
   // build split_region task
   auto* split_region_task = task_list->add_tasks();
   if (!store_create_region) {
@@ -3283,7 +3457,6 @@ void CoordinatorControl::AddSplitTask(pb::coordinator::TaskList* task_list, uint
   store_operation_split->set_id(store_id);
   auto* region_cmd_to_add = store_operation_split->add_region_cmds();
 
-  region_cmd_to_add->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
   region_cmd_to_add->set_region_id(region_id);
   region_cmd_to_add->set_region_cmd_type(::dingodb::pb::coordinator::RegionCmdType::CMD_SPLIT);
   region_cmd_to_add->mutable_split_request()->set_split_watershed_key(water_shed_key);
@@ -3307,8 +3480,7 @@ void CoordinatorControl::AddCheckVectorIndexTask(pb::coordinator::TaskList* task
 }
 
 void CoordinatorControl::AddLoadVectorIndexTask(pb::coordinator::TaskList* task_list, uint64_t store_id,
-                                                uint64_t region_id,
-                                                pb::coordinator_internal::MetaIncrement& meta_increment) {
+                                                uint64_t region_id) {
   // build check_vector_index task
   auto* load_vector_task = task_list->add_tasks();
   auto* region_check = load_vector_task->mutable_pre_check();
@@ -3321,7 +3493,6 @@ void CoordinatorControl::AddLoadVectorIndexTask(pb::coordinator::TaskList* task_
   store_operation->set_id(store_id);
   auto* region_cmd_to_add = store_operation->add_region_cmds();
 
-  region_cmd_to_add->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
   region_cmd_to_add->set_region_id(region_id);
   region_cmd_to_add->set_region_cmd_type(::dingodb::pb::coordinator::RegionCmdType::CMD_HOLD_VECTOR_INDEX);
   region_cmd_to_add->mutable_hold_vector_index_request()->set_region_id(region_id);
@@ -3488,10 +3659,13 @@ butil::Status CoordinatorControl::ProcessSingleTaskList(const pb::coordinator::T
 
   // do task, send all store_operations
   for (const auto& it : task.store_operations()) {
-    auto* store_operation_increment = meta_increment.add_store_operations();
-    store_operation_increment->set_id(it.id());
-    store_operation_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
-    store_operation_increment->mutable_store_operation()->CopyFrom(it);
+    for (const auto& region_cmd : it.region_cmds()) {
+      auto ret = AddRegionCmd(it.id(), region_cmd, meta_increment);
+      if (!ret.ok()) {
+        DINGO_LOG(ERROR) << "AddRegionCmd failed, store_id=" << it.id() << " region_cmd=" << region_cmd.DebugString();
+        return ret;
+      }
+    }
   }
 
   // advance step, update task_list

@@ -37,6 +37,7 @@
 #include "proto/error.pb.h"
 #include "proto/push.pb.h"
 #include "server/server.h"
+#include "store/region_controller.h"
 
 namespace dingodb {
 
@@ -455,7 +456,7 @@ void CoordinatorPushTask::SendCoordinatorPushToStore(std::shared_ptr<Coordinator
 
     // send store_operation
     pb::coordinator::StoreOperation store_operation;
-    int ret = coordinator_control->GetStoreOperation(it.id(), store_operation);
+    int ret = coordinator_control->GetStoreOperationForSend(it.id(), store_operation);
     if (ret < 0) {
       DINGO_LOG(DEBUG) << "... no store_operation for store " << it.id();
       continue;
@@ -487,23 +488,31 @@ void CoordinatorPushTask::SendCoordinatorPushToStore(std::shared_ptr<Coordinator
       continue;
     }
 
-    auto status = Heartbeat::RpcSendPushStoreOperation(it.server_location(), request, response);
-
     pb::coordinator_internal::MetaIncrement meta_increment;
+
+    auto status = Heartbeat::RpcSendPushStoreOperation(it.server_location(), request, response);
+    if (status.error_code() == pb::error::Errno::ESEND_STORE_OPERATION_FAIL) {
+      DINGO_LOG(WARNING) << "... send store_operation to store " << it.id()
+                         << " failed ESEND_STORE_OPERATION_FAIL, will try this store future";
+      continue;
+    }
 
     // check response
     if (status.ok()) {
       DINGO_LOG(INFO) << "... send store_operation to store " << it.id()
                       << " all success, will delete these region_cmds";
-      // delete store_operation
-      auto* store_operation_increment = meta_increment.add_store_operations();
-      store_operation_increment->set_id(it.id());
-      store_operation_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
+      // delete region_cmd
+      for (const auto& region_cmd : store_operation.region_cmds()) {
+        auto ret = coordinator_control->RemoveRegionCmd(store_operation.id(), region_cmd.id(), meta_increment);
+        if (!ret.ok()) {
+          DINGO_LOG(ERROR) << "... remove region_cmd failed, store_id=" << it.id()
+                           << " region_cmd_id=" << region_cmd.id();
+        }
+      }
 
-      auto* store_operation_increment_delete = store_operation_increment->mutable_store_operation();
-      store_operation_increment_delete->CopyFrom(store_operation);
-
-      coordinator_control->SubmitMetaIncrement(meta_increment);
+      if (meta_increment.ByteSizeLong() > 0) {
+        coordinator_control->SubmitMetaIncrement(meta_increment);
+      }
 
       continue;
     }
@@ -526,23 +535,30 @@ void CoordinatorPushTask::SendCoordinatorPushToStore(std::shared_ptr<Coordinator
                         << " region_cmd_id=" << it_cmd.region_cmd_id() << " result=[" << it_cmd.error().errcode()
                         << "][" << pb::error::Errno_descriptor()->FindValueByNumber(it_cmd.error().errcode())->name()
                         << " failed, will try this region_cmd future";
-        continue;
+        // update region_cmd error
+        for (const auto& region_cmd : store_operation.region_cmds()) {
+          if (region_cmd.id() == it_cmd.region_cmd_id()) {
+            auto ret = coordinator_control->UpdateRegionCmd(it.id(), region_cmd, it_cmd.error(), meta_increment);
+            if (!ret.ok()) {
+              DINGO_LOG(ERROR) << "... update region_cmd failed, store_id=" << it.id()
+                               << " region_cmd_id=" << region_cmd.id();
+            }
+            break;
+          }
+        }
+      } else {
+        DINGO_LOG(INFO) << "... send store_operation to store_id=" << it.id()
+                        << " region_cmd_id=" << it_cmd.region_cmd_id() << " result=[" << it_cmd.error().errcode()
+                        << "][" << pb::error::Errno_descriptor()->FindValueByNumber(it_cmd.error().errcode())->name()
+                        << " success, will delete this region_cmd";
+
+        // delete store_operation
+        auto ret = coordinator_control->RemoveRegionCmd(it.id(), it_cmd.region_cmd_id(), meta_increment);
+        if (!ret.ok()) {
+          DINGO_LOG(ERROR) << "... remove store_operation failed, store_id=" << it.id()
+                           << " region_cmd_id=" << it_cmd.region_cmd_id();
+        }
       }
-
-      DINGO_LOG(INFO) << "... send store_operation to store_id=" << it.id()
-                      << " region_cmd_id=" << it_cmd.region_cmd_id() << " result=[" << it_cmd.error().errcode() << "]["
-                      << pb::error::Errno_descriptor()->FindValueByNumber(it_cmd.error().errcode())->name()
-                      << " success, will delete this region_cmd";
-
-      // delete store_operation
-      auto* store_operation_increment = meta_increment.add_store_operations();
-      store_operation_increment->set_id(it.id());
-      store_operation_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
-
-      auto* store_operation_increment_delete = store_operation_increment->mutable_store_operation();
-      store_operation_increment_delete->set_id(it.id());
-      auto* region_cmd = store_operation_increment_delete->add_region_cmds();
-      region_cmd->set_id(it_cmd.region_cmd_id());
     }
 
     if (meta_increment.ByteSizeLong() > 0) {
@@ -605,15 +621,6 @@ void CoordinatorPushTask::SendCoordinatorPushToStore(std::shared_ptr<Coordinator
       DINGO_LOG(ERROR) << "Fail to init channel to " << remote_node;
       return;
     }
-
-    // add StoreOperation
-    // pb::coordinator::StoreOperation store_operation;
-    // coordinator_control->GetStoreOperation(store_need_send.id(), store_operation);
-    // heartbeat_response.mutable_store_operation()->CopyFrom(store_operation);
-    // if (store_operation.region_cmds_size() > 0) {
-    //   DINGO_LOG(INFO) << "SendCoordinatorPushToStore will send to store with store_operation:"
-    //                   << store_operation.ShortDebugString();
-    // }
 
     // start rpc
     pb::push::PushService_Stub stub(&channel);
@@ -866,7 +873,7 @@ butil::Status Heartbeat::RpcSendPushStoreOperation(const pb::common::Location& l
     }
   } while (++retry_times < max_retry_times);
 
-  return butil::Status(pb::error::Errno::EINTERNAL,
+  return butil::Status(pb::error::Errno::ESEND_STORE_OPERATION_FAIL,
                        "connect with store server fail, no leader found or connect timeout, retry count: %d",
                        retry_times);
 }

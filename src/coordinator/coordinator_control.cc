@@ -65,8 +65,10 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   store_metrics_meta_ = new MetaMapStorage<pb::common::StoreMetrics>(&store_metrics_map_, "store_metrics_map_");
   table_metrics_meta_ =
       new MetaSafeMapStorage<pb::coordinator_internal::TableMetricsInternal>(&table_metrics_map_, "table_metrics_map_");
-  store_operation_meta_ =
-      new MetaSafeMapStorage<pb::coordinator::StoreOperation>(&store_operation_map_, "store_operation_map_");
+  store_operation_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::StoreOperationInternal>(
+      &store_operation_map_, "store_operation_map_");
+  region_cmd_meta_ =
+      new MetaSafeMapStorage<pb::coordinator_internal::RegionCmdInternal>(&region_cmd_map_, "region_cmd_map_");
   executor_user_meta_ = new MetaSafeStringMapStorage<pb::coordinator_internal::ExecutorUserInternal>(
       &executor_user_map_, "executor_user_map_");
   task_list_meta_ = new MetaSafeMapStorage<pb::coordinator::TaskList>(&task_list_map_, "task_list_map_");
@@ -94,7 +96,8 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   id_epoch_map_safe_temp_.Init(100);      // id_epoch_map_temp_ is a small map
   schema_name_map_safe_temp_.Init(1000);  // schema_map_ is a big map
   table_name_map_safe_temp_.Init(10000);  // table_map_ is a big map
-  store_operation_map_.Init(1000);        // store_operation_map_ is a big map
+  store_operation_map_.Init(100);         // store_operation_map_ is a small map
+  region_cmd_map_.Init(2000);             // region_cmd_map_ is a big map
   schema_map_.Init(10000);                // schema_map_ is a big map
   table_map_.Init(10000);                 // table_map_ is a big map
   region_map_.Init(30000);                // region_map_ is a big map
@@ -320,6 +323,19 @@ bool CoordinatorControl::Recover() {
     }
   }
   DINGO_LOG(INFO) << "Recover store_operation_meta_, count=" << kvs.size();
+  kvs.clear();
+
+  // 9.1.region_cmd map
+  if (!meta_reader_->Scan(region_cmd_meta_->Prefix(), kvs)) {
+    return false;
+  }
+  {
+    // BAIDU_SCOPED_LOCK(region_cmd_map_mutex_);
+    if (!region_cmd_meta_->Recover(kvs)) {
+      return false;
+    }
+  }
+  DINGO_LOG(INFO) << "Recover region_cmd_meta_, count=" << kvs.size();
   kvs.clear();
 
   // 10.executor_user map
