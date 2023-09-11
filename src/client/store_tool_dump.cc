@@ -36,6 +36,7 @@
 #include "rocksdb/options.h"
 #include "serial/record_decoder.h"
 #include "serial/record_encoder.h"
+#include "vector/codec.h"
 
 namespace client {
 
@@ -340,6 +341,60 @@ void DumpDb(std::shared_ptr<Context> ctx) {
                                    dingodb::Helper::StringToHex(begin_key), dingodb::Helper::StringToHex(end_key));
 
     db->Scan(begin_key, end_key, ctx->offset, ctx->limit, handler);
+  }
+}
+
+void DumpVectorIndexDb(std::shared_ptr<Context> ctx) {
+  auto table_definition = SendGetIndex(ctx->coordinator_interaction, ctx->table_id);
+
+  DINGO_LOG(INFO) << fmt::format("Table|Index {} definition ...", table_definition.name());
+
+  auto vector_data_handler = [&](const std::string& key, const std::string& value) {
+    dingodb::pb::common::Vector vector_data;
+    vector_data.ParseFromString(value);
+  };
+
+  auto scalar_data_handler = [&](const std::string& key, const std::string& value) {
+    dingodb::pb::common::VectorScalardata data;
+    data.ParseFromString(value);
+  };
+
+  auto table_data_handler = [&](const std::string& key, const std::string& value) {
+    dingodb::pb::common::VectorTableData data;
+    data.ParseFromString(value);
+  };
+
+  for (const auto& partition : table_definition.table_partition().partitions()) {
+    uint64_t partition_id = partition.id().entity_id();
+
+    // Read data from db
+    auto db = std::make_shared<RocksDBOperator>(ctx->db_path);
+    if (!db->Init()) {
+      return;
+    }
+
+    {
+      std::string begin_key, end_key;
+      dingodb::VectorCodec::EncodeVectorData(partition_id, 0, begin_key);
+      dingodb::VectorCodec::EncodeVectorData(partition_id, UINT64_MAX, end_key);
+      db->Scan(begin_key, end_key, ctx->offset, ctx->limit, vector_data_handler);
+    }
+
+    {
+      std::string begin_key, end_key;
+      dingodb::VectorCodec::EncodeVectorScalar(partition_id, 0, begin_key);
+      dingodb::VectorCodec::EncodeVectorScalar(partition_id, UINT64_MAX, end_key);
+
+      db->Scan(begin_key, end_key, ctx->offset, ctx->limit, scalar_data_handler);
+    }
+
+    {
+      std::string begin_key, end_key;
+      dingodb::VectorCodec::EncodeVectorTable(partition_id, 0, begin_key);
+      dingodb::VectorCodec::EncodeVectorTable(partition_id, UINT64_MAX, end_key);
+
+      db->Scan(begin_key, end_key, ctx->offset, ctx->limit, table_data_handler);
+    }
   }
 }
 

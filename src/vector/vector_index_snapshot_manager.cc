@@ -224,7 +224,8 @@ butil::Status VectorIndexSnapshotManager::LaunchPullSnapshot(const butil::EndPoi
   if (reader_id > 0) {
     pb::fileservice::CleanFileReaderRequest request;
     request.set_reader_id(reader_id);
-    ServiceAccess::CleanFileReader(request, endpoint);
+    auto node_info = ServiceAccess::GetNodeInfo(endpoint);
+    ServiceAccess::CleanFileReader(request, Helper::LocationToEndPoint(node_info.server_location()));
   }
 
   return butil::Status();

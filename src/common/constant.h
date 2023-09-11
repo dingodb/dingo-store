@@ -57,9 +57,6 @@ class Constant {
   // Define vector index snapshot max log prefix.
   inline static const std::string kVectorIndexSnapshotLogIdPrefix = "VECTOR_INDEX_SNAPSHOT_LOG";
 
-  // Define loading snapshot flag.
-  inline static const std::string kIsLoadingSnapshot = "IS_LOADING_SNAPSHOT";
-
   // Define default raft snapshot policy
   inline static const std::string kDefaultRaftSnapshotPolicy = "checkpoint";
 
@@ -99,7 +96,7 @@ class Constant {
 
   // segment log
   static const uint32_t kSegmentLogDefaultMaxSegmentSize = 8 * 1024 * 1024;  // 8M
-  static const bool kSegmentLogSync = true;
+  static constexpr bool kSegmentLogSync = true;
   static const uint32_t kSegmentLogSyncPerBytes = INT32_MAX;
 
   // vector data number, e.g. data/scalar/table

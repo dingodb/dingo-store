@@ -1024,11 +1024,10 @@ void SendVectorScanQuery(ServerInteractionPtr interaction, uint64_t region_id, u
                     << " scalar_filter_value2: " << FLAGS_scalar_filter_value2;
   }
 
-  DINGO_LOG(INFO) << "VectorScanQuery response: " << response.DebugString();
-
   interaction->SendRequest("IndexService", "VectorScanQuery", request, response);
 
-  DINGO_LOG(INFO) << "VectorScanQuery response: " << response.DebugString();
+  DINGO_LOG(INFO) << "VectorScanQuery response: " << response.DebugString()
+                  << " vector count: " << response.vectors().size();
 }
 
 void SendVectorGetRegionMetrics(ServerInteractionPtr interaction, uint64_t region_id) {
@@ -1110,9 +1109,12 @@ uint64_t DecodeVectorId(const std::string& value) {
     buf.Skip(9);
   } else if (value.size() == 16) {
     buf.Skip(8);
+  } else if (value.size() == 9 || value.size() == 8) {
+    return 0;
   } else {
     DINGO_LOG(ERROR) << "Decode vector id failed, value size is not 16 or 17, value:["
-                     << dingodb::Helper::StringToHex(value) << "]";
+                     << dingodb::Helper::StringToHex(value) << "]"
+                     << " size: " << value.size();
     return 0;
   }
 
