@@ -39,6 +39,7 @@ enum class DatumType {
   kMetaPut = 7,
   kRebuildVectorIndex = 8,
   kSaveRaftSnapshot = 9,
+  kTxn = 7,
 };
 
 class DatumAble {
@@ -134,6 +135,25 @@ struct VectorDeleteDatum : public DatumAble {
 
   std::string cf_name;
   std::vector<int64_t> ids;
+};
+
+// TxnDatum
+struct TxnDatum : public DatumAble {
+  DatumType GetType() override { return DatumType::kTxn; }
+
+  pb::raft::Request* TransformToRaft() override {
+    auto* request = new pb::raft::Request();
+
+    request->set_cmd_type(pb::raft::CmdType::TXN);
+
+    pb::raft::TxnRaftRequest* txn_request = request->mutable_txn_raft_req();
+    txn_request->Swap(&txn_request_to_raft);
+    return request;
+  };
+
+  void TransformFromRaft(pb::raft::Response& resonse) override {}
+
+  pb::raft::TxnRaftRequest txn_request_to_raft;
 };
 
 struct PutIfAbsentDatum : public DatumAble {
@@ -413,6 +433,17 @@ class WriteDataBuilder {
     auto datum = std::make_shared<MetaPutDatum>();
     datum->cf_name = cf_name;
     datum->meta_increment.Swap(&meta_increment);
+
+    auto write_data = std::make_shared<WriteData>();
+    write_data->AddDatums(std::static_pointer_cast<DatumAble>(datum));
+
+    return write_data;
+  }
+
+  // TxnDatum
+  static std::shared_ptr<WriteData> BuildWrite(pb::raft::TxnRaftRequest& txn_raft_request) {
+    auto datum = std::make_shared<TxnDatum>();
+    datum->txn_request_to_raft.Swap(&txn_raft_request);
 
     auto write_data = std::make_shared<WriteData>();
     write_data->AddDatums(std::static_pointer_cast<DatumAble>(datum));
