@@ -124,6 +124,19 @@ class RawEngine {
     virtual butil::Status KvDeleteIfEqual(const pb::common::KeyValue& kv) = 0;
   };
 
+  class MultiCfWriter {
+   public:
+    MultiCfWriter() = default;
+    virtual ~MultiCfWriter() = default;
+    // map<cf_index, vector<kvs>>
+    virtual butil::Status KvBatchPutAndDelete(
+        const std::map<uint32_t, std::vector<pb::common::KeyValue>>& kv_puts_with_cf,
+        const std::map<uint32_t, std::vector<pb::common::KeyValue>>& kv_deletes_with_cf) = 0;
+
+    virtual butil::Status KvBatchDeleteRange(
+        const std::map<uint32_t, std::vector<pb::common::Range>>& ranges_with_cf) = 0;
+  };
+
   virtual bool Init(std::shared_ptr<Config> config) = 0;
   virtual bool Recover() { return true; }
 
@@ -138,6 +151,7 @@ class RawEngine {
   virtual std::shared_ptr<Snapshot> NewSnapshot() = 0;
   virtual std::shared_ptr<Reader> NewReader(const std::string& cf_name) = 0;
   virtual std::shared_ptr<RawEngine::Writer> NewWriter(const std::string& cf_name) = 0;
+  virtual std::shared_ptr<RawEngine::MultiCfWriter> NewMultiCfWriter(const std::vector<std::string>& cf_names) = 0;
   virtual std::shared_ptr<Iterator> NewIterator(const std::string& cf_name, IteratorOptions options) = 0;
   virtual std::shared_ptr<MultipleRangeIterator> NewMultipleRangeIterator(
       std::shared_ptr<RawEngine> raw_engine, const std::string& cf_name,
