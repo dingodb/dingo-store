@@ -155,6 +155,8 @@ class Constant {
 
   // raft snapshot
   inline static const std::string kRaftSnapshotRegionMetaFileName = "region_meta";
+
+  static constexpr uint32_t kCollectApproximateSizeBatchSize = 1024;
 };
 
 }  // namespace dingodb
