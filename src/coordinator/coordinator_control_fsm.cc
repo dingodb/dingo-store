@@ -176,7 +176,7 @@ bool CoordinatorControl::LoadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapsh
 
   for (const auto& kv : kvs) {
     auto* snapshot_file_kv = meta_snapshot_file.add_id_epoch_map_kvs();
-    snapshot_file_kv->CopyFrom(kv);
+    *snapshot_file_kv = kv;
   }
 
   DINGO_LOG(INFO) << "Snapshot id_epoch_meta, count=" << kvs.size();
@@ -189,7 +189,7 @@ bool CoordinatorControl::LoadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapsh
 
   for (const auto& kv : kvs) {
     auto* snapshot_file_kv = meta_snapshot_file.add_coordinator_map_kvs();
-    snapshot_file_kv->CopyFrom(kv);
+    *snapshot_file_kv = kv;
   }
   DINGO_LOG(INFO) << "Snapshot coordinator_meta, count=" << kvs.size();
   kvs.clear();
@@ -201,7 +201,7 @@ bool CoordinatorControl::LoadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapsh
 
   for (const auto& kv : kvs) {
     auto* snapshot_file_kv = meta_snapshot_file.add_store_map_kvs();
-    snapshot_file_kv->CopyFrom(kv);
+    *snapshot_file_kv = kv;
   }
   DINGO_LOG(INFO) << "Snapshot store_meta, count=" << kvs.size();
   kvs.clear();
@@ -213,7 +213,7 @@ bool CoordinatorControl::LoadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapsh
 
   for (const auto& kv : kvs) {
     auto* snapshot_file_kv = meta_snapshot_file.add_executor_map_kvs();
-    snapshot_file_kv->CopyFrom(kv);
+    *snapshot_file_kv = kv;
   }
   DINGO_LOG(INFO) << "Snapshot executor_meta, count=" << kvs.size();
   kvs.clear();
@@ -225,7 +225,7 @@ bool CoordinatorControl::LoadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapsh
 
   for (const auto& kv : kvs) {
     auto* snapshot_file_kv = meta_snapshot_file.add_schema_map_kvs();
-    snapshot_file_kv->CopyFrom(kv);
+    *snapshot_file_kv = kv;
   }
   DINGO_LOG(INFO) << "Snapshot schema_meta, count=" << kvs.size();
   kvs.clear();
@@ -237,7 +237,7 @@ bool CoordinatorControl::LoadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapsh
 
   for (const auto& kv : kvs) {
     auto* snapshot_file_kv = meta_snapshot_file.add_region_map_kvs();
-    snapshot_file_kv->CopyFrom(kv);
+    *snapshot_file_kv = kv;
   }
   DINGO_LOG(INFO) << "Snapshot region_meta, count=" << kvs.size();
   kvs.clear();
@@ -249,7 +249,7 @@ bool CoordinatorControl::LoadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapsh
 
   for (const auto& kv : kvs) {
     auto* snapshot_file_kv = meta_snapshot_file.add_deleted_region_map_kvs();
-    snapshot_file_kv->CopyFrom(kv);
+    *snapshot_file_kv = kv;
   }
   DINGO_LOG(INFO) << "Snapshot deleted_region_meta, count=" << kvs.size();
   kvs.clear();
@@ -261,7 +261,7 @@ bool CoordinatorControl::LoadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapsh
 
   for (const auto& kv : kvs) {
     auto* snapshot_file_kv = meta_snapshot_file.add_table_map_kvs();
-    snapshot_file_kv->CopyFrom(kv);
+    *snapshot_file_kv = kv;
   }
   DINGO_LOG(INFO) << "Snapshot table_meta, count=" << kvs.size();
   kvs.clear();
@@ -273,7 +273,7 @@ bool CoordinatorControl::LoadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapsh
 
   // for (const auto& kv : kvs) {
   //   auto* snapshot_file_kv = meta_snapshot_file.add_store_metrics_map_kvs();
-  //   snapshot_file_kv->CopyFrom(kv);
+  //   *snapshot_file_kv = kv;
   // }
   // DINGO_LOG(INFO) << "Snapshot store_metrics_meta, count=" << kvs.size();
   // kvs.clear();
@@ -285,7 +285,7 @@ bool CoordinatorControl::LoadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapsh
 
   for (const auto& kv : kvs) {
     auto* snapshot_file_kv = meta_snapshot_file.add_table_metrics_map_kvs();
-    snapshot_file_kv->CopyFrom(kv);
+    *snapshot_file_kv = kv;
   }
   DINGO_LOG(INFO) << "Snapshot table_metrics_meta, count=" << kvs.size();
   kvs.clear();
@@ -297,7 +297,7 @@ bool CoordinatorControl::LoadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapsh
 
   for (const auto& kv : kvs) {
     auto* snapshot_file_kv = meta_snapshot_file.add_store_operation_map_kvs();
-    snapshot_file_kv->CopyFrom(kv);
+    *snapshot_file_kv = kv;
   }
   DINGO_LOG(INFO) << "Snapshot store_operation_meta_, count=" << kvs.size();
   kvs.clear();
@@ -308,7 +308,7 @@ bool CoordinatorControl::LoadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapsh
 
   for (const auto& kv : kvs) {
     auto* snapshot_file_kv = meta_snapshot_file.add_region_cmd_map_kvs();
-    snapshot_file_kv->CopyFrom(kv);
+    *snapshot_file_kv = kv;
   }
   DINGO_LOG(INFO) << "Snapshot region_cmd_meta_, count=" << kvs.size();
   kvs.clear();
@@ -320,7 +320,7 @@ bool CoordinatorControl::LoadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapsh
 
   for (const auto& kv : kvs) {
     auto* snapshot_file_kv = meta_snapshot_file.add_executor_user_map_kvs();
-    snapshot_file_kv->CopyFrom(kv);
+    *snapshot_file_kv = kv;
   }
   DINGO_LOG(INFO) << "Snapshot executor_user_meta_, count=" << kvs.size();
   kvs.clear();
@@ -332,7 +332,7 @@ bool CoordinatorControl::LoadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapsh
 
   for (const auto& kv : kvs) {
     auto* snapshot_file_kv = meta_snapshot_file.add_task_list_map_kvs();
-    snapshot_file_kv->CopyFrom(kv);
+    *snapshot_file_kv = kv;
   }
   DINGO_LOG(INFO) << "Snapshot task_list_meta_, count=" << kvs.size();
   kvs.clear();
@@ -344,7 +344,7 @@ bool CoordinatorControl::LoadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapsh
 
   for (const auto& kv : kvs) {
     auto* snapshot_file_kv = meta_snapshot_file.add_index_map_kvs();
-    snapshot_file_kv->CopyFrom(kv);
+    *snapshot_file_kv = kv;
   }
   DINGO_LOG(INFO) << "Snapshot index_meta, count=" << kvs.size();
   kvs.clear();
@@ -356,7 +356,7 @@ bool CoordinatorControl::LoadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapsh
 
   for (const auto& kv : kvs) {
     auto* snapshot_file_kv = meta_snapshot_file.add_index_metrics_map_kvs();
-    snapshot_file_kv->CopyFrom(kv);
+    *snapshot_file_kv = kv;
   }
   DINGO_LOG(INFO) << "Snapshot index_metrics_meta, count=" << kvs.size();
   kvs.clear();
@@ -368,7 +368,7 @@ bool CoordinatorControl::LoadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapsh
 
   for (const auto& kv : kvs) {
     auto* snapshot_file_kv = meta_snapshot_file.add_lease_map_kvs();
-    snapshot_file_kv->CopyFrom(kv);
+    *snapshot_file_kv = kv;
   }
   DINGO_LOG(INFO) << "Snapshot lease_map_, count=" << kvs.size();
   kvs.clear();
@@ -380,7 +380,7 @@ bool CoordinatorControl::LoadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapsh
 
   for (const auto& kv : kvs) {
     auto* snapshot_file_kv = meta_snapshot_file.add_kv_index_map_kvs();
-    snapshot_file_kv->CopyFrom(kv);
+    *snapshot_file_kv = kv;
   }
   DINGO_LOG(INFO) << "Snapshot kv_index_map_, count=" << kvs.size();
   kvs.clear();
@@ -392,7 +392,7 @@ bool CoordinatorControl::LoadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapsh
 
   for (const auto& kv : kvs) {
     auto* snapshot_file_kv = meta_snapshot_file.add_kv_rev_map_kvs();
-    snapshot_file_kv->CopyFrom(kv);
+    *snapshot_file_kv = kv;
   }
   DINGO_LOG(INFO) << "Snapshot version_kv_rev_map_, count=" << kvs.size();
   kvs.clear();
@@ -404,7 +404,7 @@ bool CoordinatorControl::LoadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapsh
 
   for (const auto& kv : kvs) {
     auto* snapshot_file_kv = meta_snapshot_file.add_table_index_map_kvs();
-    snapshot_file_kv->CopyFrom(kv);
+    *snapshot_file_kv = kv;
   }
   DINGO_LOG(INFO) << "Snapshot table_index_meta, count=" << kvs.size();
   kvs.clear();
@@ -1157,8 +1157,6 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         meta_write_to_kv.push_back(coordinator_meta_->TransformToKvValue(coordinator.coordinator()));
 
       } else if (coordinator.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
-        // auto& update_coordinator = coordinator_map_[coordinator.id()];
-        // update_coordinator.CopyFrom(coordinator.coordinator());
         int ret = coordinator_map_.Put(coordinator.id(), coordinator.coordinator());
         if (ret > 0) {
           DINGO_LOG(INFO) << "ApplyMetaIncrement coordinator UPDATE, success [id=" << coordinator.id() << "]";
@@ -1207,8 +1205,6 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         meta_write_to_kv.push_back(store_meta_->TransformToKvValue(store.store()));
 
       } else if (store.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
-        // auto& update_store = store_map_[store.id()];
-        // update_store.CopyFrom(store.store());
         int ret = store_map_.Put(store.id(), store.store());
         if (ret > 0) {
           DINGO_LOG(INFO) << "ApplyMetaIncrement store UPDATE, success [id=" << store.id() << "]";
@@ -1255,8 +1251,6 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         meta_write_to_kv.push_back(executor_meta_->TransformToKvValue(executor.executor()));
 
       } else if (executor.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
-        // auto& update_executor = executor_map_[executor.id()];
-        // update_executor.CopyFrom(executor.executor());
         int ret = executor_map_.Put(executor.id(), executor.executor());
         if (ret > 0) {
           DINGO_LOG(INFO) << "ApplyMetaIncrement executor UPDATE, success [id=" << executor.id() << "]";
@@ -1302,8 +1296,6 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
           DINGO_LOG(WARNING) << "ApplyMetaIncrement schema CREATE, [id=" << schema.id() << "] failed";
         }
       } else if (schema.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
-        // auto& update_schema = schema_map_[schema.id()];
-        // update_schema.CopyFrom(schema.schema_internal());
         int ret = schema_map_.Put(schema.id(), schema.schema_internal());
         if (ret > 0) {
           DINGO_LOG(INFO) << "ApplyMetaIncrement schema UPDATE, [id=" << schema.id() << "] success";
@@ -1458,8 +1450,6 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
 
       } else if (region.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
         // update region to region_map
-        // auto& update_region = region_map_[region.id()];
-        // update_region.CopyFrom(region.region());
         int ret = region_map_.PutIfExists(region.id(), region.region());
         if (ret > 0) {
           DINGO_LOG(INFO) << "ApplyMetaIncrement region UPDATE, [id=" << region.id() << "] success";
@@ -1654,18 +1644,16 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         }
       } else if (table.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
         // update table to table_map
-        // auto& update_table = table_map_[table.id()];
-        // update_table.CopyFrom(table.table());
         pb::coordinator_internal::TableInternal table_internal;
         int ret = table_map_.Get(table.id(), table_internal);
         if (ret > 0) {
           if (table.table().has_definition()) {
-            table_internal.mutable_definition()->CopyFrom(table.table().definition());
+            *(table_internal.mutable_definition()) = table.table().definition();
           }
           if (table.table().partitions_size() > 0) {
             table_internal.clear_partitions();
             for (const auto& it : table.table().partitions()) {
-              table_internal.add_partitions()->CopyFrom(it);
+              *(table_internal.add_partitions()) = it;
             }
           }
           ret = table_map_.Put(table.id(), table_internal);
@@ -1704,7 +1692,7 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         if (ret > 0) {
           // according to the doc, we must use CopyFrom for protobuf message data structure here
           pb::coordinator_internal::SchemaInternal new_schema;
-          new_schema.CopyFrom(schema_to_update);
+          new_schema = schema_to_update;
 
           new_schema.clear_table_ids();
 
@@ -1714,7 +1702,7 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
               new_schema.add_table_ids(x);
             }
           }
-          schema_to_update.CopyFrom(new_schema);
+          schema_to_update = new_schema;
           schema_map_.Put(table.table().schema_id(), schema_to_update);
 
           DINGO_LOG(INFO) << "5.table map DELETE new_sub_table id=" << table.id()
@@ -1752,13 +1740,13 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
   //     } else if (store_metrics.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
   //       auto& update_store = store_metrics_map_[store_metrics.id()];
   //       if (!store_metrics.is_partial_region_metrics()) {
-  //         update_store.CopyFrom(store_metrics.store_metrics());
+  //         update_store = store_metrics.store_metrics();
   //       } else {
   //         if (store_metrics.store_metrics().region_metrics_map_size() > 0) {
   //           for (const auto& it : store_metrics.store_metrics().region_metrics_map()) {
   //             auto region_metrics_to_update = update_store.mutable_region_metrics_map()->find(it.first);
   //             if (region_metrics_to_update != update_store.mutable_region_metrics_map()->end()) {
-  //               region_metrics_to_update->second.CopyFrom(it.second);
+  //               region_metrics_to_update->second = it.second;
   //             } else {
   //               update_store.mutable_region_metrics_map()->insert(it);
   //             }
@@ -1806,7 +1794,6 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
 
       } else if (table_metrics.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
         // auto& update_table = table_metrics_map_[table_metrics.id()];
-        // update_table.CopyFrom(table_metrics.table_metrics());
         int ret = table_metrics_map_.Put(table_metrics.id(), table_metrics.table_metrics());
         if (ret > 0) {
           DINGO_LOG(INFO) << "ApplyMetaIncrement table_metrics UPDATE, [id=" << table_metrics.id() << "] success";
@@ -1938,7 +1925,6 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
 
       } else if (region_cmd.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
         // auto& update_table = region_cmd_map_[region_cmd.id()];
-        // update_table.CopyFrom(region_cmd.region_cmd());
         int ret = region_cmd_map_.PutIfExists(region_cmd.id(), region_cmd.region_cmd());
         if (ret > 0) {
           DINGO_LOG(INFO) << "ApplyMetaIncrement region_cmd UPDATE, [id=" << region_cmd.id() << "] success";
@@ -2096,18 +2082,16 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         }
       } else if (index.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
         // update index to index_map
-        // auto& update_index = index_map_[index.id()];
-        // update_index.CopyFrom(index.index());
         pb::coordinator_internal::TableInternal table_internal;
         int ret = index_map_.Get(index.id(), table_internal);
         if (ret > 0) {
           if (index.table().has_definition()) {
-            table_internal.mutable_definition()->CopyFrom(index.table().definition());
+            *(table_internal.mutable_definition()) = index.table().definition();
           }
           if (index.table().partitions_size() > 0) {
             table_internal.clear_partitions();
             for (const auto& it : index.table().partitions()) {
-              table_internal.add_partitions()->CopyFrom(it);
+              *(table_internal.add_partitions()) = it;
             }
           }
           ret = index_map_.Put(index.id(), table_internal);
@@ -2146,7 +2130,7 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         if (ret > 0) {
           // according to the doc, we must use CopyFrom for protobuf message data structure here
           pb::coordinator_internal::SchemaInternal new_schema;
-          new_schema.CopyFrom(schema_to_update);
+          new_schema = schema_to_update;
 
           new_schema.clear_index_ids();
 
@@ -2156,7 +2140,7 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
               new_schema.add_index_ids(x);
             }
           }
-          schema_to_update.CopyFrom(new_schema);
+          schema_to_update = new_schema;
           schema_map_.Put(index.table().schema_id(), schema_to_update);
 
           DINGO_LOG(INFO) << "5.index map DELETE new_sub_index id=" << index.id()
@@ -2197,8 +2181,6 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         meta_write_to_kv.push_back(index_metrics_meta_->TransformToKvValue(index_metrics.index_metrics()));
 
       } else if (index_metrics.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
-        // auto& update_index = index_metrics_map_[index_metrics.id()];
-        // update_index.CopyFrom(index_metrics.index_metrics());
         int ret = index_metrics_map_.Put(index_metrics.id(), index_metrics.index_metrics());
         if (ret > 0) {
           DINGO_LOG(INFO) << "ApplyMetaIncrement index_metrics UPDATE, [id=" << index_metrics.id() << "] success";
@@ -2245,8 +2227,6 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         meta_write_to_kv.push_back(lease_meta_->TransformToKvValue(version_lease.lease()));
 
       } else if (version_lease.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
-        // auto& update_version_lease = lease_map_[version_lease.id()];
-        // update_version_lease.CopyFrom(version_lease.version_lease());
         int ret = lease_map_.Put(version_lease.id(), version_lease.lease());
         if (ret > 0) {
           DINGO_LOG(INFO) << "ApplyMetaIncrement version_lease UPDATE, [id=" << version_lease.id() << "] success";
@@ -2345,8 +2325,6 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         meta_write_to_kv.push_back(kv_rev_meta_->TransformToKvValue(kv_rev.kv_rev()));
 
       } else if (kv_rev.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
-        // auto& update_kv_rev = kv_rev_map_[kv_rev.id()];
-        // update_kv_rev.CopyFrom(kv_rev.kv_rev());
         int ret = kv_rev_map_.PutIfExists(kv_rev.id(), kv_rev.kv_rev());
         if (ret > 0) {
           DINGO_LOG(INFO) << "ApplyMetaIncrement kv_rev UPDATE, [id=" << kv_rev.id() << "] success";

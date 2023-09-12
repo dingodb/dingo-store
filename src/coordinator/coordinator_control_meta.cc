@@ -170,7 +170,7 @@ butil::Status CoordinatorControl::CreateSchema(uint64_t parent_schema_id, std::s
   schema_increment->set_schema_id(parent_schema_id);
 
   auto* schema_increment_schema = schema_increment->mutable_schema_internal();
-  schema_increment_schema->CopyFrom(new_schema_internal);
+  *schema_increment_schema = new_schema_internal;
 
   // bump up schema map epoch
   GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_SCHEMA, meta_increment);
@@ -225,7 +225,7 @@ butil::Status CoordinatorControl::DropSchema(uint64_t parent_schema_id, uint64_t
   schema_to_delete->set_schema_id(parent_schema_id);
 
   auto* schema_to_delete_schema = schema_to_delete->mutable_schema_internal();
-  schema_to_delete_schema->CopyFrom(schema_internal_to_delete);
+  *schema_to_delete_schema = schema_internal_to_delete;
 
   // delete schema_name from schema_name_map_safe_temp_
   schema_name_map_safe_temp_.Erase(schema_internal_to_delete.name());
@@ -276,7 +276,7 @@ butil::Status CoordinatorControl::GetSchemas(uint64_t schema_id, std::vector<pb:
         table_id.set_parent_entity_id(temp_id->entity_id());
         table_id.set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
 
-        schema.add_table_ids()->CopyFrom(table_id);
+        *(schema.add_table_ids()) = table_id;
       }
 
       // construct index_ids in schema
@@ -286,7 +286,7 @@ butil::Status CoordinatorControl::GetSchemas(uint64_t schema_id, std::vector<pb:
         index_id.set_parent_entity_id(temp_id->entity_id());
         index_id.set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_INDEX);
 
-        schema.add_index_ids()->CopyFrom(index_id);
+        *(schema.add_index_ids()) = index_id;
       }
 
       schemas.push_back(schema);
@@ -330,7 +330,7 @@ butil::Status CoordinatorControl::GetSchema(uint64_t schema_id, pb::meta::Schema
       table_id.set_parent_entity_id(schema_id);
       table_id.set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
 
-      schema.add_table_ids()->CopyFrom(table_id);
+      *(schema.add_table_ids()) = table_id;
     }
   }
 
@@ -537,9 +537,9 @@ butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta
     std::string const region_name = std::string("T_") + std::to_string(schema_id) + std::string("_") +
                                     table_definition.name() + std::string("_part_") + std::to_string(new_part_id);
 
-    auto ret =
-        CreateRegion(region_name, pb::common::RegionType::STORE_REGION, "", replica, new_part_range, new_part_range,
-                     schema_id, new_table_id, 0, new_part_id, index_parameter, new_region_id, meta_increment);
+    auto ret = CreateRegionAutoSelectStore(region_name, pb::common::RegionType::STORE_REGION, "", replica,
+                                           new_part_range, new_part_range, schema_id, new_table_id, 0, new_part_id,
+                                           index_parameter, new_region_id, meta_increment);
     if (!ret.ok()) {
       DINGO_LOG(ERROR) << "CreateRegion failed in CreateTable table_name=" << table_definition.name()
                        << ", table_definition:" << table_definition.ShortDebugString() << " ret: " << ret.error_str();
@@ -577,7 +577,7 @@ butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta
   table_internal.set_schema_id(schema_id);
   table_internal.set_table_id(new_table_id);
   auto* definition = table_internal.mutable_definition();
-  definition->CopyFrom(table_definition);
+  *definition = table_definition;
 
   // set part for table_internal
   for (int i = 0; i < new_region_ids.size(); i++) {
@@ -596,7 +596,7 @@ butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta
   // table_increment->set_schema_id(schema_id);
 
   auto* table_increment_table = table_increment->mutable_table();
-  table_increment_table->CopyFrom(table_internal);
+  *table_increment_table = table_internal;
 
   return butil::Status::OK();
 }
@@ -642,7 +642,7 @@ butil::Status CoordinatorControl::DropTable(uint64_t schema_id, uint64_t table_i
   // table_to_delete->set_schema_id(schema_id);
 
   auto* table_to_delete_table = table_to_delete->mutable_table();
-  table_to_delete_table->CopyFrom(table_internal);
+  *table_to_delete_table = table_internal;
 
   // bump up table map epoch
   GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_TABLE, meta_increment);
@@ -1159,9 +1159,9 @@ butil::Status CoordinatorControl::CreateIndex(uint64_t schema_id, const pb::meta
     raw_range.set_start_key(Helper::EncodeIndexRegionHeader(new_part_id, 0));
     raw_range.set_end_key(Helper::EncodeIndexRegionHeader(new_part_id, UINT64_MAX));
 
-    auto ret = CreateRegion(region_name, pb::common::RegionType::INDEX_REGION, "", replica, new_part_range, raw_range,
-                            schema_id, 0, new_index_id, new_part_id, table_definition.index_parameter(), new_region_id,
-                            meta_increment);
+    auto ret = CreateRegionAutoSelectStore(region_name, pb::common::RegionType::INDEX_REGION, "", replica,
+                                           new_part_range, raw_range, schema_id, 0, new_index_id, new_part_id,
+                                           table_definition.index_parameter(), new_region_id, meta_increment);
     if (!ret.ok()) {
       DINGO_LOG(ERROR) << "CreateRegion failed in CreateIndex index_name=" << table_definition.name();
       break;
@@ -1197,7 +1197,7 @@ butil::Status CoordinatorControl::CreateIndex(uint64_t schema_id, const pb::meta
   table_internal.set_schema_id(schema_id);
   table_internal.set_table_id(table_id);
   auto* definition = table_internal.mutable_definition();
-  definition->CopyFrom(table_definition);
+  *definition = table_definition;
 
   // set part for table_internal
   for (int i = 0; i < new_region_ids.size(); i++) {
@@ -1216,7 +1216,7 @@ butil::Status CoordinatorControl::CreateIndex(uint64_t schema_id, const pb::meta
   // index_increment->set_schema_id(schema_id);
 
   auto* index_increment_index = index_increment->mutable_table();
-  index_increment_index->CopyFrom(table_internal);
+  *index_increment_index = table_internal;
 
   return butil::Status::OK();
 }
@@ -1300,7 +1300,7 @@ butil::Status CoordinatorControl::UpdateIndex(uint64_t schema_id, uint64_t index
           ->mutable_hnsw_parameter()
           ->set_max_elements(
               new_table_definition.index_parameter().vector_index_parameter().hnsw_parameter().max_elements());
-      increment_index->CopyFrom(table_internal);
+      *increment_index = table_internal;
 
       // create store operations
       std::vector<pb::coordinator::StoreOperation> store_operations;
@@ -1339,7 +1339,7 @@ butil::Status CoordinatorControl::UpdateIndex(uint64_t schema_id, uint64_t index
           region_cmd->set_is_notify(false);
 
           auto* update_definition_request = region_cmd->mutable_update_definition_request();
-          update_definition_request->mutable_new_region_definition()->CopyFrom(region_definition);
+          *(update_definition_request->mutable_new_region_definition()) = region_definition;
 
           store_operations.push_back(store_operation);
         }
@@ -1347,12 +1347,9 @@ butil::Status CoordinatorControl::UpdateIndex(uint64_t schema_id, uint64_t index
 
       // add store operations to meta_increment
       for (const auto& store_operation : store_operations) {
-        auto* store_operation_increment = meta_increment.add_store_operations();
-        store_operation_increment->set_id(store_operation.id());
-        store_operation_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
-        store_operation_increment->mutable_store_operation()->CopyFrom(store_operation);
+        AddStoreOperation(store_operation, false, meta_increment);
 
-        DINGO_LOG(INFO) << "store_operation_increment = " << store_operation_increment->DebugString();
+        DINGO_LOG(INFO) << "store_operation_increment = " << meta_increment.ShortDebugString();
       }
 
       DINGO_LOG(INFO)
@@ -1428,7 +1425,7 @@ butil::Status CoordinatorControl::DropIndex(uint64_t schema_id, uint64_t index_i
   // index_to_delete->set_schema_id(schema_id);
 
   auto* index_to_delete_index = index_to_delete->mutable_table();
-  index_to_delete_index->CopyFrom(table_internal);
+  *index_to_delete_index = table_internal;
 
   // bump up index map epoch
   GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_INDEX, meta_increment);
@@ -1483,13 +1480,12 @@ butil::Status CoordinatorControl::GetTables(uint64_t schema_id,
       // construct return value
       pb::meta::TableDefinitionWithId table_def_with_id;
 
-      // table_def_with_id.mutable_table_id()->CopyFrom(schema_internal.schema().table_ids(i));
       auto* table_id_for_response = table_def_with_id.mutable_table_id();
       table_id_for_response->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
       table_id_for_response->set_entity_id(table_id);
       table_id_for_response->set_parent_entity_id(schema_id);
 
-      table_def_with_id.mutable_table_definition()->CopyFrom(table_internal.definition());
+      *(table_def_with_id.mutable_table_definition()) = table_internal.definition();
       table_definition_with_ids.push_back(table_def_with_id);
     }
   }
@@ -1544,13 +1540,12 @@ butil::Status CoordinatorControl::GetIndexes(uint64_t schema_id,
       // construct return value
       pb::meta::TableDefinitionWithId table_def_with_id;
 
-      // table_def_with_id.muindex_index_id()->CopyFrom(schema_internal.schema().index_ids(i));
       auto* index_id_for_response = table_def_with_id.mutable_table_id();
       index_id_for_response->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_INDEX);
       index_id_for_response->set_entity_id(index_id);
       index_id_for_response->set_parent_entity_id(schema_id);
 
-      table_def_with_id.mutable_table_definition()->CopyFrom(table_internal.definition());
+      *(table_def_with_id.mutable_table_definition()) = table_internal.definition();
       table_definition_with_ids.push_back(table_def_with_id);
     }
   }
@@ -1656,13 +1651,12 @@ butil::Status CoordinatorControl::GetTable(uint64_t schema_id, uint64_t table_id
 
     DINGO_LOG(INFO) << "GetTable found table_id=" << table_id;
 
-    // table_def_with_id.mutable_table_id()->CopyFrom(schema_internal.schema().table_ids(i));
     auto* table_id_for_response = table_definition_with_id.mutable_table_id();
     table_id_for_response->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
     table_id_for_response->set_entity_id(table_id);
     table_id_for_response->set_parent_entity_id(schema_id);
 
-    table_definition_with_id.mutable_table_definition()->CopyFrom(table_internal.definition());
+    *(table_definition_with_id.mutable_table_definition()) = table_internal.definition();
   }
 
   DINGO_LOG(DEBUG) << fmt::format("GetTable schema_id={} table_id={} table_definition_with_id={}", schema_id, table_id,
@@ -1713,7 +1707,7 @@ butil::Status CoordinatorControl::GetIndex(uint64_t schema_id, uint64_t index_id
     index_id_for_response->set_entity_id(index_id);
     index_id_for_response->set_parent_entity_id(schema_id);
 
-    table_definition_with_id.mutable_table_definition()->CopyFrom(table_internal.definition());
+    *(table_definition_with_id.mutable_table_definition()) = table_internal.definition();
   }
 
   DINGO_LOG(DEBUG) << fmt::format("GetIndex schema_id={} index_id={} table_definition_with_id={}", schema_id, index_id,
@@ -1832,12 +1826,11 @@ butil::Status CoordinatorControl::GetTableRange(uint64_t schema_id, uint64_t tab
     }
 
     // region epoch
-    range_distribution->mutable_region_epoch()->CopyFrom(part_region.definition().epoch());
+    *(range_distribution->mutable_region_epoch()) = part_region.definition().epoch();
 
     // range_distribution range
     auto* part_range = range_distribution->mutable_range();
-    // part_range->CopyFrom(table_internal.partitions(i).range());
-    part_range->CopyFrom(part_region.definition().range());
+    *part_range = part_region.definition().range();
 
     // range_distribution leader location
     auto* leader_location = range_distribution->mutable_leader();
@@ -1846,15 +1839,15 @@ butil::Status CoordinatorControl::GetTableRange(uint64_t schema_id, uint64_t tab
     for (int j = 0; j < part_region.definition().peers_size(); j++) {
       const auto& part_peer = part_region.definition().peers(j);
       if (part_peer.store_id() == part_region.leader_store_id()) {
-        leader_location->CopyFrom(part_peer.server_location());
+        *leader_location = part_peer.server_location();
       }
 
       if (part_peer.role() == ::dingodb::pb::common::PeerRole::VOTER) {
         auto* voter_location = range_distribution->add_voters();
-        voter_location->CopyFrom(part_peer.server_location());
+        *voter_location = part_peer.server_location();
       } else if (part_peer.role() == ::dingodb::pb::common::PeerRole::LEARNER) {
         auto* learner_location = range_distribution->add_learners();
-        learner_location->CopyFrom(part_peer.server_location());
+        *learner_location = part_peer.server_location();
       }
     }
 
@@ -1914,12 +1907,11 @@ butil::Status CoordinatorControl::GetIndexRange(uint64_t schema_id, uint64_t ind
     }
 
     // region epoch
-    range_distribution->mutable_region_epoch()->CopyFrom(part_region.definition().epoch());
+    *(range_distribution->mutable_region_epoch()) = part_region.definition().epoch();
 
     // range_distribution range
     auto* part_range = range_distribution->mutable_range();
-    // part_range->CopyFrom(table_internal.partitions(i).range());
-    part_range->CopyFrom(part_region.definition().range());
+    *part_range = part_region.definition().range();
 
     // range_distribution leader location
     auto* leader_location = range_distribution->mutable_leader();
@@ -1928,15 +1920,15 @@ butil::Status CoordinatorControl::GetIndexRange(uint64_t schema_id, uint64_t ind
     for (int j = 0; j < part_region.definition().peers_size(); j++) {
       const auto& part_peer = part_region.definition().peers(j);
       if (part_peer.store_id() == part_region.leader_store_id()) {
-        leader_location->CopyFrom(part_peer.server_location());
+        *leader_location = part_peer.server_location();
       }
 
       if (part_peer.role() == ::dingodb::pb::common::PeerRole::VOTER) {
         auto* voter_location = range_distribution->add_voters();
-        voter_location->CopyFrom(part_peer.server_location());
+        *voter_location = part_peer.server_location();
       } else if (part_peer.role() == ::dingodb::pb::common::PeerRole::LEARNER) {
         auto* learner_location = range_distribution->add_learners();
-        learner_location->CopyFrom(part_peer.server_location());
+        *learner_location = part_peer.server_location();
       }
     }
 
@@ -1994,9 +1986,8 @@ butil::Status CoordinatorControl::GetTableMetrics(uint64_t schema_id, uint64_t t
         return butil::Status(pb::error::Errno::ETABLE_METRICS_FAILED, "CalculateTableMetricsSingle failed");
       } else {
         table_metrics_internal.set_id(table_id);
-        table_metrics_internal.mutable_table_metrics()->CopyFrom(*table_metrics_single);
+        *(table_metrics_internal.mutable_table_metrics()) = (*table_metrics_single);
         // table_metrics_map_[table_id] = table_metrics_internal;
-        // temp_table_metrics->CopyFrom(table_metrics_internal);
         table_metrics_map_.Put(table_id, table_metrics_internal);
 
         DINGO_LOG(INFO) << fmt::format(
@@ -2017,7 +2008,7 @@ butil::Status CoordinatorControl::GetTableMetrics(uint64_t schema_id, uint64_t t
   common_id_table->set_parent_entity_id(schema_id);
   common_id_table->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
 
-  table_metrics.mutable_table_metrics()->CopyFrom(table_metrics_internal.table_metrics());
+  *(table_metrics.mutable_table_metrics()) = table_metrics_internal.table_metrics();
 
   return butil::Status::OK();
 }
@@ -2064,9 +2055,8 @@ butil::Status CoordinatorControl::GetIndexMetrics(uint64_t schema_id, uint64_t i
         return butil::Status(pb::error::Errno::EINDEX_METRICS_FAILED, "CalculateIndexMetricsSingle failed");
       } else {
         index_metrics_internal.set_id(index_id);
-        index_metrics_internal.mutable_index_metrics()->CopyFrom(*index_metrics_single);
+        *(index_metrics_internal.mutable_index_metrics()) = (*index_metrics_single);
         // index_metrics_map_[index_id] = index_metrics_internal;
-        // temp_index_metrics->CopyFrom(index_metrics_internal);
         index_metrics_map_.Put(index_id, index_metrics_internal);
 
         DINGO_LOG(INFO) << fmt::format(
@@ -2087,7 +2077,7 @@ butil::Status CoordinatorControl::GetIndexMetrics(uint64_t schema_id, uint64_t i
   common_id_index->set_parent_entity_id(schema_id);
   common_id_index->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_INDEX);
 
-  index_metrics.mutable_index_metrics()->CopyFrom(index_metrics_internal.index_metrics());
+  *(index_metrics.mutable_index_metrics()) = index_metrics_internal.index_metrics();
 
   return butil::Status::OK();
 }
@@ -2317,7 +2307,7 @@ void CoordinatorControl::CalculateTableMetrics() {
       coordinator_bvar_metrics_table_.DeleteTableBvar(table_id);
 
     } else {
-      table_metrics_internal.second.mutable_table_metrics()->CopyFrom(table_metrics);
+      *(table_metrics_internal.second.mutable_table_metrics()) = table_metrics;
 
       // update table_metrics_map_ in memory
       table_metrics_map_.PutIfExists(table_id, table_metrics_internal.second);
@@ -2350,7 +2340,7 @@ void CoordinatorControl::CalculateIndexMetrics() {
       coordinator_bvar_metrics_index_.DeleteIndexBvar(index_id);
 
     } else {
-      index_metrics_internal.second.mutable_index_metrics()->CopyFrom(index_metrics);
+      *(index_metrics_internal.second.mutable_index_metrics()) = index_metrics;
 
       // update index_metrics_map_ in memory
       index_metrics_map_.PutIfExists(index_id, index_metrics_internal.second);
@@ -2392,7 +2382,7 @@ void CoordinatorControl::CreateTableIndexesMap(pb::coordinator_internal::TableIn
   auto* table_index_increment = meta_increment.add_table_indexes();
   table_index_increment->set_id(table_index_internal.id());
   table_index_increment->set_op_type(pb::coordinator_internal::MetaIncrementOpType::CREATE);
-  table_index_increment->mutable_table_indexes()->CopyFrom(table_index_internal);
+  *(table_index_increment->mutable_table_indexes()) = table_index_internal;
 }
 
 butil::Status CoordinatorControl::GetTableIndexes(uint64_t schema_id, uint64_t table_id,
@@ -2403,7 +2393,7 @@ butil::Status CoordinatorControl::GetTableIndexes(uint64_t schema_id, uint64_t t
     return ret;
   }
 
-  response->add_table_definition_with_ids()->CopyFrom(definition_with_id);
+  *(response->add_table_definition_with_ids()) = definition_with_id;
 
   pb::coordinator_internal::TableIndexInternal table_index_internal;
   int result = table_index_map_.Get(table_id, table_index_internal);
@@ -2416,7 +2406,7 @@ butil::Status CoordinatorControl::GetTableIndexes(uint64_t schema_id, uint64_t t
         return ret;
       }
 
-      response->add_table_definition_with_ids()->CopyFrom(temp_definition_with_id);
+      *(response->add_table_definition_with_ids()) = temp_definition_with_id;
     }
   } else {
     // not found
@@ -2497,7 +2487,7 @@ butil::Status CoordinatorControl::RemoveTableIndex(uint64_t table_id, uint64_t i
 
     auto* table_index_increment = meta_increment.add_table_indexes();
     table_index_increment->set_id(table_id);
-    table_index_increment->mutable_table_indexes()->CopyFrom(table_index_internal);
+    *(table_index_increment->mutable_table_indexes()) = table_index_internal;
     table_index_increment->set_op_type(pb::coordinator_internal::MetaIncrementOpType::UPDATE);
   } else {
     DINGO_LOG(WARNING) << "cannot find index, table_id: " << table_id << ", index_id: " << index_id;

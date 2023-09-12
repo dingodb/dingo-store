@@ -59,12 +59,12 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
   // request.set_self_regionmap_epoch(store_meta_manager->GetStoreRegionMeta()->GetEpoch());
 
   // store
-  request.mutable_store()->CopyFrom(*store_meta_manager->GetStoreServerMeta()->GetStore(Server::GetInstance()->Id()));
+  *(request.mutable_store()) = (*store_meta_manager->GetStoreServerMeta()->GetStore(Server::GetInstance()->Id()));
 
   // store_metrics
   auto metrics_manager = Server::GetInstance()->GetStoreMetricsManager();
   auto* mut_store_metrics = request.mutable_store_metrics();
-  mut_store_metrics->CopyFrom(*metrics_manager->GetStoreMetrics()->Metrics());
+  *mut_store_metrics = (*metrics_manager->GetStoreMetrics()->Metrics());
   // setup id for store_metrics here, coordinator need this id to update store_metrics
   mut_store_metrics->set_id(Server::GetInstance()->Id());
 
@@ -84,13 +84,13 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
     pb::common::RegionMetrics tmp_region_metrics;
     auto metrics = region_metrics->GetMetrics(region_meta->Id());
     if (metrics != nullptr) {
-      tmp_region_metrics.CopyFrom(metrics->InnerRegionMetrics());
+      tmp_region_metrics = metrics->InnerRegionMetrics();
     }
 
     tmp_region_metrics.set_id(region_meta->Id());
     tmp_region_metrics.set_leader_store_id(region_meta->LeaderId());
     tmp_region_metrics.set_store_region_state(region_meta->State());
-    tmp_region_metrics.mutable_region_definition()->CopyFrom(region_meta->InnerRegion().definition());
+    *(tmp_region_metrics.mutable_region_definition()) = region_meta->InnerRegion().definition();
 
     if ((region_meta->State() == pb::common::StoreRegionState::NORMAL ||
          region_meta->State() == pb::common::StoreRegionState::STANDBY ||
@@ -99,7 +99,7 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
         raft_store_engine != nullptr) {
       auto raft_node = raft_store_engine->GetNode(region_meta->Id());
       if (raft_node != nullptr) {
-        tmp_region_metrics.mutable_braft_status()->CopyFrom(*raft_node->GetStatus());
+        *(tmp_region_metrics.mutable_braft_status()) = (*raft_node->GetStatus());
       }
     }
 
@@ -310,7 +310,7 @@ void CoordinatorUpdateStateTask::CoordinatorUpdateState(std::shared_ptr<Coordina
       auto* region_delete_increment = meta_increment.add_regions();
       region_delete_increment->set_id(it.id());
       region_delete_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
-      region_delete_increment->mutable_region()->CopyFrom(it);
+      *(region_delete_increment->mutable_region()) = it;
 
       // mbvar
       coordinator_control->DeleteRegionBvar(it.id());
@@ -475,7 +475,7 @@ void CoordinatorPushTask::SendCoordinatorPushToStore(std::shared_ptr<Coordinator
     pb::push::PushStoreOperationRequest request;
     pb::push::PushStoreOperationResponse response;
 
-    request.mutable_store_operation()->CopyFrom(store_operation);
+    *(request.mutable_store_operation()) = store_operation;
 
     // send rpcs
     if (!it.has_server_location()) {
@@ -595,7 +595,7 @@ void CoordinatorPushTask::SendCoordinatorPushToStore(std::shared_ptr<Coordinator
   pb::push::PushHeartbeatResponse response;
 
   auto* heart_response_to_send = request.mutable_heartbeat_response();
-  heart_response_to_send->CopyFrom(heartbeat_response);
+  *heart_response_to_send = heartbeat_response;
 
   // send heartbeat to all stores need to push
   for (const auto& store_pair : store_to_push) {

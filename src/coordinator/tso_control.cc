@@ -103,7 +103,7 @@ int TsoControl::SyncTimestamp(const pb::meta::TsoTimestamp& current_timestamp, i
   pb::meta::TsoResponse response;
   request.set_op_type(pb::meta::OP_UPDATE_TSO);
   auto* timestamp = request.mutable_current_timestamp();
-  timestamp->CopyFrom(current_timestamp);
+  *timestamp = current_timestamp;
   request.set_save_physical(save_physical);
 
   DINGO_LOG(DEBUG) << "sync timestamp request: " << request.ShortDebugString();
@@ -117,7 +117,7 @@ int TsoControl::SyncTimestamp(const pb::meta::TsoTimestamp& current_timestamp, i
 
   pb::coordinator_internal::MetaIncrement meta_increment;
   auto* tso = meta_increment.add_timestamp_oracles();
-  tso->mutable_tso_request()->CopyFrom(request);
+  *(tso->mutable_tso_request()) = request;
   this->SubmitMetaIncrement(c, &response, meta_increment);
 
   sync_cond.Wait();
@@ -157,7 +157,7 @@ void TsoControl::GenTso(const pb::meta::TsoRequest* request, pb::meta::TsoRespon
       if (physical != 0) {
         int64_t new_logical = tso_obj_.current_timestamp.logical() + count;
         if (new_logical < kMaxLogical) {
-          current.CopyFrom(tso_obj_.current_timestamp);
+          current = tso_obj_.current_timestamp;
           tso_obj_.current_timestamp.set_logical(new_logical);
           need_retry = false;
         } else {
@@ -183,7 +183,7 @@ void TsoControl::GenTso(const pb::meta::TsoRequest* request, pb::meta::TsoRespon
   }
   DINGO_LOG(WARNING) << "gen tso current: (" << current.physical() << ", " << current.logical() << ")";
   auto* timestamp = response->mutable_start_timestamp();
-  timestamp->CopyFrom(current);
+  *timestamp = current;
   response->set_count(count);
 }
 
@@ -202,7 +202,7 @@ void TsoControl::Process(google::protobuf::RpcController* controller, const pb::
     response->set_system_time(ClockRealtimeMs());
     response->set_save_physical(tso_obj_.last_save_physical);
     auto* timestamp = response->mutable_start_timestamp();
-    timestamp->CopyFrom(tso_obj_.current_timestamp);
+    *timestamp = tso_obj_.current_timestamp;
     return;
   }
   brpc::Controller* cntl = (brpc::Controller*)controller;
@@ -240,7 +240,7 @@ void TsoControl::Process(google::protobuf::RpcController* controller, const pb::
 
   pb::coordinator_internal::MetaIncrement meta_increment;
   auto* tso = meta_increment.add_timestamp_oracles();
-  tso->mutable_tso_request()->CopyFrom(*request);
+  *(tso->mutable_tso_request()) = (*request);
   this->SubmitMetaIncrement(closure, response, meta_increment);
 }
 
@@ -259,7 +259,7 @@ void TsoControl::ResetTso(const pb::meta::TsoRequest& request, pb::meta::TsoResp
           response->mutable_error()->set_errcode(pb::error::Errno::EINTERNAL);
           response->mutable_error()->set_errmsg("time can't fallback");
           auto* timestamp = response->mutable_start_timestamp();
-          timestamp->CopyFrom(tso_obj_.current_timestamp);
+          *timestamp = tso_obj_.current_timestamp;
           response->set_save_physical(tso_obj_.last_save_physical);
         }
         return;
@@ -271,12 +271,12 @@ void TsoControl::ResetTso(const pb::meta::TsoRequest& request, pb::meta::TsoResp
     {
       BAIDU_SCOPED_LOCK(tso_mutex_);
       tso_obj_.last_save_physical = physical;
-      tso_obj_.current_timestamp.CopyFrom(current);
+      tso_obj_.current_timestamp = current;
     }
     if (response) {
       response->set_save_physical(physical);
       auto* timestamp = response->mutable_start_timestamp();
-      timestamp->CopyFrom(current);
+      *timestamp = current;
       response->mutable_error()->set_errcode(pb::error::Errno::OK);
       response->mutable_error()->set_errmsg("SUCCESS");
     }
@@ -300,7 +300,7 @@ void TsoControl::UpdateTso(const pb::meta::TsoRequest& request, pb::meta::TsoRes
   {
     BAIDU_SCOPED_LOCK(tso_mutex_);
     tso_obj_.last_save_physical = physical;
-    tso_obj_.current_timestamp.CopyFrom(current);
+    tso_obj_.current_timestamp = current;
   }
 
   if (response) {

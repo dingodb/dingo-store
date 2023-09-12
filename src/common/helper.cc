@@ -97,7 +97,7 @@ int Helper::PeerIdToLocation(braft::PeerId peer_id, pb::common::Location& locati
     return -1;
   }
 
-  location.CopyFrom(temp_location);
+  location = temp_location;
   return 0;
 }
 
@@ -610,7 +610,7 @@ void Helper::GetServerLocation(const pb::common::Location& raft_location, pb::co
 
   auto node_info = ServiceAccess::GetNodeInfo(raft_location.host(), raft_location.port());
 
-  server_location.CopyFrom(node_info.server_location());
+  server_location = node_info.server_location();
 }
 
 void Helper::GetRaftLocation(const pb::common::Location& server_location, pb::common::Location& raft_location) {
@@ -624,7 +624,7 @@ void Helper::GetRaftLocation(const pb::common::Location& server_location, pb::co
 
   auto node_info = ServiceAccess::GetNodeInfo(server_location.host(), server_location.port());
 
-  raft_location.CopyFrom(node_info.raft_location());
+  raft_location = node_info.raft_location();
 }
 
 pb::common::Peer Helper::GetPeerInfo(const butil::EndPoint& endpoint) {

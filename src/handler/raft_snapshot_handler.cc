@@ -159,8 +159,8 @@ bool AddRegionMetaFile(braft::SnapshotWriter* writer, store::RegionPtr region) {
   }
 
   pb::store_internal::RaftSnapshotRegionMeta meta;
-  meta.mutable_epoch()->CopyFrom(region->Epoch());
-  meta.mutable_range()->CopyFrom(region->RawRange());
+  *(meta.mutable_epoch()) = region->Epoch();
+  *(meta.mutable_range()) = region->RawRange();
 
   DINGO_LOG(INFO) << fmt::format("[raft.snapshot][region({})] region meta epoch({}_{}) range[{}-{})", region->Id(),
                                  meta.epoch().conf_version(), meta.epoch().version(),

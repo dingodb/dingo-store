@@ -77,10 +77,10 @@ void CoordinatorServiceImpl::CreateExecutor(google::protobuf::RpcController *con
 
   // create executor
   pb::common::Executor executor_to_create;
-  executor_to_create.CopyFrom(request->executor());
+  executor_to_create = request->executor();
   auto ret = coordinator_control_->CreateExecutor(request->cluster_id(), executor_to_create, meta_increment);
   if (ret.ok()) {
-    response->mutable_executor()->CopyFrom(executor_to_create);
+    *(response->mutable_executor()) = executor_to_create;
   } else {
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
     response->mutable_error()->set_errmsg(ret.error_str());
@@ -162,10 +162,10 @@ void CoordinatorServiceImpl::CreateExecutorUser(google::protobuf::RpcController 
 
   // create executor user
   pb::common::ExecutorUser executor_user;
-  executor_user.CopyFrom(request->executor_user());
+  executor_user = request->executor_user();
   auto ret = this->coordinator_control_->CreateExecutorUser(request->cluster_id(), executor_user, meta_increment);
   if (ret.ok()) {
-    response->mutable_executor_user()->CopyFrom(executor_user);
+    *(response->mutable_executor_user()) = executor_user;
   } else {
     auto *error = response->mutable_error();
     error->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
@@ -210,7 +210,7 @@ void CoordinatorServiceImpl::UpdateExecutorUser(google::protobuf::RpcController 
   auto ret = this->coordinator_control_->UpdateExecutorUser(request->cluster_id(), request->executor_user(),
                                                             request->executor_user_update(), meta_increment);
   if (ret.ok()) {
-    response->mutable_executor_user()->CopyFrom(request->executor_user_update());
+    *(response->mutable_executor_user()) = request->executor_user_update();
     response->mutable_executor_user()->set_user(request->executor_user().user());
   } else {
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
@@ -254,7 +254,7 @@ void CoordinatorServiceImpl::DeleteExecutorUser(google::protobuf::RpcController 
 
   // create executor user
   pb::common::ExecutorUser executor_user;
-  executor_user.CopyFrom(request->executor_user());
+  executor_user = request->executor_user();
   auto local_ctl = this->coordinator_control_;
   auto ret = local_ctl->DeleteExecutorUser(request->cluster_id(), executor_user, meta_increment);
   if (!ret.ok()) {
@@ -304,7 +304,7 @@ void CoordinatorServiceImpl::GetExecutorUserMap(google::protobuf::RpcController 
     return;
   }
 
-  response->mutable_executor_user_map()->CopyFrom(executor_user_map);
+  *(response->mutable_executor_user_map()) = executor_user_map;
 }
 
 void CoordinatorServiceImpl::CreateStore(google::protobuf::RpcController *controller,
@@ -590,7 +590,7 @@ void CoordinatorServiceImpl::GetStoreMap(google::protobuf::RpcController * /*con
 
   pb::common::StoreMap storemap;
   this->coordinator_control_->GetStoreMap(storemap);
-  response->mutable_storemap()->CopyFrom(storemap);
+  *(response->mutable_storemap()) = storemap;
   response->set_epoch(storemap.epoch());
 }
 
@@ -614,7 +614,7 @@ void CoordinatorServiceImpl::GetStoreMetrics(google::protobuf::RpcController * /
 
   for (auto &store_metrics : store_metrics_list) {
     auto *new_store_metrics = response->add_store_metrics();
-    new_store_metrics->CopyFrom(store_metrics);
+    *new_store_metrics = store_metrics;
   }
 }
 
@@ -652,7 +652,7 @@ void CoordinatorServiceImpl::GetExecutorMap(google::protobuf::RpcController * /*
 
   pb::common::ExecutorMap executormap;
   this->coordinator_control_->GetExecutorMap(executormap);
-  response->mutable_executormap()->CopyFrom(executormap);
+  *(response->mutable_executormap()) = executormap;
   response->set_epoch(executormap.epoch());
 }
 
@@ -673,7 +673,7 @@ void CoordinatorServiceImpl::GetRegionMap(google::protobuf::RpcController * /*co
   pb::common::RegionMap regionmap;
   this->coordinator_control_->GetRegionMap(regionmap);
 
-  response->mutable_regionmap()->CopyFrom(regionmap);
+  *(response->mutable_regionmap()) = regionmap;
   response->set_epoch(regionmap.epoch());
 }
 
@@ -694,7 +694,7 @@ void CoordinatorServiceImpl::GetDeletedRegionMap(google::protobuf::RpcController
   pb::common::RegionMap regionmap;
   this->coordinator_control_->GetDeletedRegionMap(regionmap);
 
-  response->mutable_regionmap()->CopyFrom(regionmap);
+  *(response->mutable_regionmap()) = regionmap;
   response->set_epoch(regionmap.epoch());
 }
 
@@ -767,17 +767,17 @@ void CoordinatorServiceImpl::GetCoordinatorMap(google::protobuf::RpcController *
   response->set_epoch(epoch);
 
   auto *leader_location_resp = response->mutable_leader_location();
-  leader_location_resp->CopyFrom(leader_location);
+  *leader_location_resp = leader_location;
 
   for (const auto &member_location : locations) {
     auto *location = response->add_coordinator_locations();
-    location->CopyFrom(member_location);
+    *location = member_location;
   }
 
   // get autoincrement leader location
   pb::common::Location auto_increment_leader_location;
   auto_increment_control_->GetLeaderLocation(auto_increment_leader_location);
-  response->mutable_auto_increment_leader_location()->CopyFrom(auto_increment_leader_location);
+  *(response->mutable_auto_increment_leader_location()) = auto_increment_leader_location;
 }
 
 // Region services
@@ -856,7 +856,7 @@ void CoordinatorServiceImpl::QueryRegion(google::protobuf::RpcController * /*con
   auto ret = this->coordinator_control_->QueryRegion(region_id, region);
 
   if (ret.ok()) {
-    response->mutable_region()->CopyFrom(region);
+    *(response->mutable_region()) = region;
   } else {
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
     response->mutable_error()->set_errmsg(ret.error_str());
@@ -900,13 +900,14 @@ void CoordinatorServiceImpl::CreateRegion(google::protobuf::RpcController *contr
     for (auto id : request->store_ids()) {
       store_ids.push_back(id);
     }
-    ret = coordinator_control_->CreateRegion(region_name, region_type, resource_tag, replica_num, range, range,
-                                             schema_id, table_id, index_id, part_id, index_parameter, store_ids, 0,
-                                             new_region_id, meta_increment);
+    std::vector<pb::coordinator::StoreOperation> store_operations;
+    ret = coordinator_control_->CreateRegionFinal(region_name, region_type, resource_tag, replica_num, range, range,
+                                                  schema_id, table_id, index_id, part_id, index_parameter, store_ids, 0,
+                                                  new_region_id, store_operations, meta_increment);
   } else {
-    ret =
-        coordinator_control_->CreateRegion(region_name, region_type, resource_tag, replica_num, range, range, schema_id,
-                                           table_id, index_id, part_id, index_parameter, new_region_id, meta_increment);
+    ret = coordinator_control_->CreateRegionAutoSelectStore(region_name, region_type, resource_tag, replica_num, range,
+                                                            range, schema_id, table_id, index_id, part_id,
+                                                            index_parameter, new_region_id, meta_increment);
   }
 
   if (!ret.ok()) {
@@ -1356,7 +1357,7 @@ void CoordinatorServiceImpl::AddStoreOperation(google::protobuf::RpcController *
 
   auto store_operation = request->store_operation();
 
-  auto ret = this->coordinator_control_->AddStoreOperation(store_operation, meta_increment);
+  auto ret = this->coordinator_control_->AddStoreOperation(store_operation, true, meta_increment);
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << "AddStoreOperation failed, store_id:" << store_operation.id()
                      << ", errcode:" << ret.error_code() << ", errmsg:" << ret.error_str();
@@ -1455,12 +1456,12 @@ void CoordinatorServiceImpl::GetRegionCmd(google::protobuf::RpcController * /*co
 
   for (const auto &it : region_cmds) {
     auto *new_region_cmd = response->add_region_cmds();
-    new_region_cmd->CopyFrom(it);
+    *new_region_cmd = it;
   }
 
   for (const auto &it : region_cmd_errors) {
     auto *new_region_cmd_error = response->add_region_cmd_errors();
-    new_region_cmd_error->CopyFrom(it);
+    *new_region_cmd_error = it;
   }
 }
 
@@ -1484,7 +1485,7 @@ void CoordinatorServiceImpl::GetTaskList(google::protobuf::RpcController * /*con
 
   for (const auto &it : task_lists) {
     auto *new_task_list = response->add_task_lists();
-    new_task_list->CopyFrom(it.second);
+    *new_task_list = it.second;
   }
 }
 

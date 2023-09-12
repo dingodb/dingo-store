@@ -78,7 +78,7 @@ butil::Status CoordinatorControl::OneTimeWatch(const std::string& watch_key, uin
     if (kvs_temp[0].mod_revision() > start_revision) {
       auto* event = response->add_events();
       event->set_type(::dingodb::pb::version::Event_EventType::Event_EventType_PUT);
-      event->mutable_kv()->CopyFrom(kvs_temp[0]);
+      *(event->mutable_kv()) = kvs_temp[0];
       return butil::Status::OK();
     }
   }
@@ -240,10 +240,10 @@ butil::Status CoordinatorControl::TriggerOneWatch(const std::string& key, pb::ve
     auto* event = response->add_events();
     event->set_type(event_type);
     auto* kv = event->mutable_kv();
-    kv->CopyFrom(new_kv);
+    *kv = new_kv;
     if (watch_node.second.need_prev_kv) {
       auto* old_kv = event->mutable_prev_kv();
-      old_kv->CopyFrom(prev_kv);
+      *old_kv = prev_kv;
     }
 
     DINGO_LOG(INFO) << "TriggerOneWatch will RemoveOneTimeWatch, key:" << key << ", event_type:" << event_type

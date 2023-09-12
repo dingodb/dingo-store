@@ -331,7 +331,8 @@ void NodeServiceImpl::GetFailPoints(google::protobuf::RpcController*, const pb::
 
 void NodeServiceImpl::DeleteFailPoints(google::protobuf::RpcController*,
                                        const pb::node::DeleteFailPointRequest* request,
-                                       pb::node::DeleteFailPointResponse* response, google::protobuf::Closure* done) {
+                                       pb::node::DeleteFailPointResponse* /*response*/,
+                                       google::protobuf::Closure* done) {
   brpc::ClosureGuard done_guard(done);
   for (const auto& name : request->names()) {
     FailPointManager::GetInstance().DeleteFailPoint(name);

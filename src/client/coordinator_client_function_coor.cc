@@ -1006,7 +1006,7 @@ void SendCreateRegionForSplit(std::shared_ptr<dingodb::CoordinatorInteraction> c
   }
 
   dingodb::pb::common::RegionDefinition new_region_definition;
-  new_region_definition.CopyFrom(query_response.region().definition());
+  new_region_definition = query_response.region().definition();
   new_region_definition.mutable_range()->set_start_key(query_response.region().definition().range().end_key());
   new_region_definition.mutable_range()->set_end_key(query_response.region().definition().range().start_key());
   new_region_definition.set_name(query_response.region().definition().name() + "_split");
@@ -1022,7 +1022,7 @@ void SendCreateRegionForSplit(std::shared_ptr<dingodb::CoordinatorInteraction> c
 
   request.set_region_name(new_region_definition.name());
   request.set_replica_num(new_region_definition.peers_size());
-  request.mutable_range()->CopyFrom(new_region_definition.range());
+  *(request.mutable_range()) = new_region_definition.range();
   request.set_schema_id(query_response.region().definition().schema_id());
   request.set_table_id(query_response.region().definition().table_id());
   for (auto it : new_region_store_ids) {
@@ -1197,8 +1197,8 @@ void SendAddPeerRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordina
     if (store.id() == store_id) {
       new_peer.set_store_id(store.id());
       new_peer.set_role(dingodb::pb::common::PeerRole::VOTER);
-      new_peer.mutable_server_location()->CopyFrom(store.server_location());
-      new_peer.mutable_raft_location()->CopyFrom(store.raft_location());
+      *(new_peer.mutable_server_location()) = store.server_location();
+      *(new_peer.mutable_raft_location()) = store.raft_location();
     }
   }
 
@@ -1234,9 +1234,9 @@ void SendAddPeerRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordina
   dingodb::pb::coordinator::ChangePeerRegionResponse change_peer_response;
 
   auto* new_definition = change_peer_request.mutable_change_peer_request()->mutable_region_definition();
-  new_definition->CopyFrom(query_response.region().definition());
+  *new_definition = query_response.region().definition();
   auto* new_peer_to_add = new_definition->add_peers();
-  new_peer_to_add->CopyFrom(new_peer);
+  *new_peer_to_add = new_peer;
 
   DINGO_LOG(INFO) << "new_definition: " << new_definition->DebugString();
 
@@ -1292,7 +1292,7 @@ void SendRemovePeerRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coord
   dingodb::pb::coordinator::ChangePeerRegionResponse change_peer_response;
 
   auto* new_definition = change_peer_request.mutable_change_peer_request()->mutable_region_definition();
-  new_definition->CopyFrom(query_response.region().definition());
+  *new_definition = query_response.region().definition();
   for (int i = 0; i < new_definition->peers_size(); i++) {
     if (new_definition->peers(i).store_id() == store_id) {
       new_definition->mutable_peers()->SwapElements(i, new_definition->peers_size() - 1);

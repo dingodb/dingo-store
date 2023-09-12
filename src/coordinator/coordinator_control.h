@@ -208,17 +208,20 @@ class CoordinatorControl : public MetaControl {
                                    const pb::common::IndexParameter &index_parameter, std::vector<uint64_t> &store_ids,
                                    uint64_t split_from_region_id, uint64_t &new_region_id,
                                    pb::coordinator_internal::MetaIncrement &meta_increment);
-  butil::Status CreateRegion(const std::string &region_name, pb::common::RegionType region_type,
-                             const std::string &resource_tag, int32_t replica_num, pb::common::Range region_range,
-                             pb::common::Range region_raw_range, uint64_t schema_id, uint64_t table_id,
-                             uint64_t index_id, uint64_t part_id, const pb::common::IndexParameter &index_parameter,
-                             std::vector<uint64_t> &store_ids, uint64_t split_from_region_id, uint64_t &new_region_id,
-                             pb::coordinator_internal::MetaIncrement &meta_increment);
-  butil::Status CreateRegion(const std::string &region_name, pb::common::RegionType region_type,
-                             const std::string &resource_tag, int32_t replica_num, pb::common::Range region_range,
-                             pb::common::Range region_raw_range, uint64_t schema_id, uint64_t table_id,
-                             uint64_t index_id, uint64_t part_id, const pb::common::IndexParameter &index_parameter,
-                             uint64_t &new_region_id, pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status CreateRegionFinal(const std::string &region_name, pb::common::RegionType region_type,
+                                  const std::string &resource_tag, int32_t replica_num, pb::common::Range region_range,
+                                  pb::common::Range region_raw_range, uint64_t schema_id, uint64_t table_id,
+                                  uint64_t index_id, uint64_t part_id,
+                                  const pb::common::IndexParameter &index_parameter, std::vector<uint64_t> &store_ids,
+                                  uint64_t split_from_region_id, uint64_t &new_region_id,
+                                  std::vector<pb::coordinator::StoreOperation> &store_operations,
+                                  pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status CreateRegionAutoSelectStore(const std::string &region_name, pb::common::RegionType region_type,
+                                            const std::string &resource_tag, int32_t replica_num,
+                                            pb::common::Range region_range, pb::common::Range region_raw_range,
+                                            uint64_t schema_id, uint64_t table_id, uint64_t index_id, uint64_t part_id,
+                                            const pb::common::IndexParameter &index_parameter, uint64_t &new_region_id,
+                                            pb::coordinator_internal::MetaIncrement &meta_increment);
   butil::Status CreateRegionForSplit(const std::string &region_name, pb::common::RegionType region_type,
                                      const std::string &resource_tag, pb::common::Range region_range,
                                      pb::common::Range region_raw_range, uint64_t schema_id, uint64_t table_id,
@@ -227,15 +230,16 @@ class CoordinatorControl : public MetaControl {
                                      uint64_t &new_region_id, pb::coordinator_internal::MetaIncrement &meta_increment);
   butil::Status CreateRegionForSplitInternal(uint64_t split_from_region_id, uint64_t &new_region_id,
                                              bool is_shadow_create,
+                                             std::vector<pb::coordinator::StoreOperation> &store_operations,
                                              pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // drop region
   // in:  region_id
   // in:  need_update_table_range
   // return: errno
+  butil::Status DropRegionFinal(uint64_t region_id, std::vector<pb::coordinator::StoreOperation> &store_operations,
+                                pb::coordinator_internal::MetaIncrement &meta_increment);
   butil::Status DropRegion(uint64_t region_id, pb::coordinator_internal::MetaIncrement &meta_increment);
-  // butil::Status DropRegion(uint64_t region_id, bool need_update_table_range,
-  //                          pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // drop region permanently
   // in:  region_id
@@ -438,7 +442,7 @@ class CoordinatorControl : public MetaControl {
   // return: 0 or -1
   butil::Status CleanStoreOperation(uint64_t store_id, pb::coordinator_internal::MetaIncrement &meta_increment);
 
-  butil::Status AddStoreOperation(const pb::coordinator::StoreOperation &store_operation,
+  butil::Status AddStoreOperation(const pb::coordinator::StoreOperation &store_operation, bool check_conflict,
                                   pb::coordinator_internal::MetaIncrement &meta_increment);
   butil::Status AddRegionCmd(uint64_t store_id, const pb::coordinator::RegionCmd &region_cmd,
                              pb::coordinator_internal::MetaIncrement &meta_increment);
@@ -676,6 +680,9 @@ class CoordinatorControl : public MetaControl {
                            uint64_t split_to_region_id, const std::string &water_shed_key, bool store_create_region);
   static void AddCheckVectorIndexTask(pb::coordinator::TaskList *task_list, uint64_t store_id, uint64_t region_id);
   static void AddLoadVectorIndexTask(pb::coordinator::TaskList *task_list, uint64_t store_id, uint64_t region_id);
+
+  static void GenDeleteRegionStoreOperation(pb::coordinator::StoreOperation &store_operation, uint64_t store_id,
+                                            uint64_t region_id);
 
   // check if task in task_lis can advance
   // if task advance, this function will contruct meta_increment and apply to state_machine

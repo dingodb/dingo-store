@@ -57,7 +57,7 @@ void RegionControlServiceImpl::AddRegion(google::protobuf::RpcController* contro
   command->set_id(Helper::TimestampNs());
   command->set_region_id(request->region().id());
   command->set_region_cmd_type(pb::coordinator::CMD_CREATE);
-  command->mutable_create_request()->mutable_region_definition()->CopyFrom(request->region());
+  *(command->mutable_create_request()->mutable_region_definition()) = request->region();
 
   auto status = region_controller->DispatchRegionControlCommand(std::make_shared<Context>(cntl, done), command);
   if (!status.ok()) {
@@ -82,7 +82,7 @@ void RegionControlServiceImpl::ChangeRegion(google::protobuf::RpcController* con
   command->set_id(Helper::TimestampNs());
   command->set_region_id(request->region().id());
   command->set_region_cmd_type(pb::coordinator::CMD_CHANGE_PEER);
-  command->mutable_change_peer_request()->mutable_region_definition()->CopyFrom(request->region());
+  *(command->mutable_change_peer_request()->mutable_region_definition()) = request->region();
 
   auto status = region_controller->DispatchRegionControlCommand(std::make_shared<Context>(cntl, done), command);
   if (!status.ok()) {
@@ -321,7 +321,7 @@ void RegionControlServiceImpl::Debug(google::protobuf::RpcController* controller
     }
 
     for (auto& region : regions) {
-      response->mutable_region_meta_details()->add_regions()->CopyFrom(region->InnerRegion());
+      *(response->mutable_region_meta_details()->add_regions()) = region->InnerRegion();
     }
 
   } else if (request->type() == pb::region_control::DebugType::STORE_REGION_CONTROL_COMMAND) {
@@ -338,7 +338,7 @@ void RegionControlServiceImpl::Debug(google::protobuf::RpcController* controller
     }
 
     for (auto& command : commands) {
-      response->mutable_region_control_command()->add_region_cmds()->CopyFrom(*command);
+      *(response->mutable_region_control_command()->add_region_cmds()) = (*command);
     }
 
   } else if (request->type() == pb::region_control::DebugType::STORE_RAFT_META) {
@@ -357,7 +357,7 @@ void RegionControlServiceImpl::Debug(google::protobuf::RpcController* controller
     }
 
     for (auto& raft_meta : raft_metas) {
-      response->mutable_raft_meta()->add_raft_metas()->CopyFrom(*raft_meta);
+      *(response->mutable_raft_meta()->add_raft_metas()) = (*raft_meta);
     }
 
   } else if (request->type() == pb::region_control::DebugType::STORE_REGION_EXECUTOR) {
@@ -383,7 +383,7 @@ void RegionControlServiceImpl::Debug(google::protobuf::RpcController* controller
     }
 
     for (auto& region_metrics : region_metricses) {
-      response->mutable_region_metrics()->add_region_metricses()->CopyFrom(region_metrics->InnerRegionMetrics());
+      *(response->mutable_region_metrics()->add_region_metricses()) = region_metrics->InnerRegionMetrics();
     }
   } else if (request->type() == pb::region_control::DebugType::STORE_FILE_READER) {
     auto reader_ids = FileServiceReaderManager::GetInstance().GetAllReaderId();
@@ -394,7 +394,7 @@ void RegionControlServiceImpl::Debug(google::protobuf::RpcController* controller
     }
   } else if (request->type() == pb::region_control::DebugType::STORE_REGION_ACTUAL_METRICS) {
     for (auto region_id : request->region_ids()) {
-      response->mutable_region_actual_metrics()->add_region_metricses()->CopyFrom(GetRegionActualMetrics(region_id));
+      *(response->mutable_region_actual_metrics()->add_region_metricses()) = GetRegionActualMetrics(region_id);
     }
 
   } else if (request->type() == pb::region_control::DebugType::STORE_METRICS) {
@@ -406,7 +406,7 @@ void RegionControlServiceImpl::Debug(google::protobuf::RpcController* controller
     if (store_metrics == nullptr) {
       return;
     }
-    response->mutable_store_metrics()->mutable_metrics()->CopyFrom(*store_metrics);
+    *(response->mutable_store_metrics()->mutable_metrics()) = (*store_metrics);
 
   } else if (request->type() == pb::region_control::DebugType::INDEX_VECTOR_INDEX_METRICS) {
     auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();

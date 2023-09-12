@@ -171,7 +171,7 @@ struct CompareAndSetDatum : public DatumAble {
     compare_and_set_request->set_cf_name(cf_name);
 
     for (auto& kv : kvs) {
-      compare_and_set_request->add_kvs()->CopyFrom(kv);
+      *(compare_and_set_request->add_kvs()) = kv;
     }
 
     for (auto& expect_value : expect_values) {
@@ -226,7 +226,7 @@ struct DeleteRangeDatum : public DatumAble {
     delete_range_request->set_cf_name(cf_name);
 
     for (const auto& range : ranges) {
-      delete_range_request->add_ranges()->CopyFrom(range);
+      *(delete_range_request->add_ranges()) = range;
     }
 
     return request;
@@ -257,7 +257,7 @@ struct SplitDatum : public DatumAble {
     split_request->set_from_region_id(from_region_id);
     split_request->set_to_region_id(to_region_id);
     split_request->set_split_key(split_key);
-    split_request->mutable_epoch()->CopyFrom(epoch);
+    *(split_request->mutable_epoch()) = epoch;
     split_request->set_split_strategy(split_strategy);
 
     return request;

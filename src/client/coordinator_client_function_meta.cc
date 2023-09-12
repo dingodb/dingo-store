@@ -531,8 +531,8 @@ void SendUpdateIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
   dingodb::pb::meta::UpdateIndexRequest update_request;
   dingodb::pb::meta::UpdateIndexResponse update_response;
 
-  update_request.mutable_index_id()->CopyFrom(get_response.index_definition_with_id().index_id());
-  update_request.mutable_new_index_definition()->CopyFrom(get_response.index_definition_with_id().index_definition());
+  *(update_request.mutable_index_id()) = get_response.index_definition_with_id().index_id();
+  *(update_request.mutable_new_index_definition()) = get_response.index_definition_with_id().index_definition();
   update_request.mutable_new_index_definition()
       ->mutable_index_parameter()
       ->mutable_vector_index_parameter()

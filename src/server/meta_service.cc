@@ -37,9 +37,9 @@ void MetaServiceImpl::TableDefinitionToIndexDefinition(const pb::meta::TableDefi
                                                        pb::meta::IndexDefinition &index_definition) {
   index_definition.set_name(table_definition.name());
   index_definition.set_version(table_definition.version());
-  index_definition.mutable_index_partition()->CopyFrom(table_definition.table_partition());
+  *(index_definition.mutable_index_partition()) = table_definition.table_partition();
   index_definition.set_replica(table_definition.replica());
-  index_definition.mutable_index_parameter()->CopyFrom(table_definition.index_parameter());
+  *(index_definition.mutable_index_parameter()) = table_definition.index_parameter();
   index_definition.set_with_auto_incrment(table_definition.auto_increment() > 0);
   index_definition.set_auto_increment(table_definition.auto_increment());
 }
@@ -49,7 +49,7 @@ void MetaServiceImpl::IndexDefinitionToTableDefinition(const pb::meta::IndexDefi
   table_definition.set_name(index_definition.name());
   table_definition.set_version(index_definition.version());
   table_definition.set_auto_increment(index_definition.auto_increment());
-  table_definition.mutable_table_partition()->CopyFrom(index_definition.index_partition());
+  *(table_definition.mutable_table_partition()) = index_definition.index_partition();
   table_definition.set_replica(index_definition.replica());
   if ((index_definition.index_parameter().index_type() == pb::common::IndexType::INDEX_TYPE_SCALAR) &&
       (index_definition.index_parameter().scalar_index_parameter().scalar_index_type() ==
@@ -58,7 +58,7 @@ void MetaServiceImpl::IndexDefinitionToTableDefinition(const pb::meta::IndexDefi
   } else {
     table_definition.set_engine(pb::common::Engine::ENG_ROCKSDB);
   }
-  table_definition.mutable_index_parameter()->CopyFrom(index_definition.index_parameter());
+  *(table_definition.mutable_index_parameter()) = index_definition.index_parameter();
 }
 
 void MetaServiceImpl::GetSchemas(google::protobuf::RpcController * /*controller*/,
@@ -87,7 +87,7 @@ void MetaServiceImpl::GetSchemas(google::protobuf::RpcController * /*controller*
 
   for (auto &schema : schemas) {
     auto *new_schema = response->add_schemas();
-    new_schema->CopyFrom(schema);
+    *new_schema = schema;
   }
 }
 
@@ -206,7 +206,7 @@ void MetaServiceImpl::GetTablesBySchema(google::protobuf::RpcController * /*cont
   // add table_definition_with_id
   for (auto &table_definition_with_id : table_definition_with_ids) {
     auto *table_def_with_id = response->add_table_definition_with_ids();
-    table_def_with_id->CopyFrom(table_definition_with_id);
+    *table_def_with_id = table_definition_with_id;
   }
 }
 
@@ -833,7 +833,7 @@ void MetaServiceImpl::GetIndexes(google::protobuf::RpcController * /*controller*
   // add index_definition_with_id
   for (const auto &temp_definition : table_definition_with_ids) {
     auto *index_def_with_id = response->add_index_definition_with_ids();
-    index_def_with_id->mutable_index_id()->CopyFrom(temp_definition.table_id());
+    *(index_def_with_id->mutable_index_id()) = temp_definition.table_id();
     TableDefinitionToIndexDefinition(temp_definition.table_definition(),
                                      *(index_def_with_id->mutable_index_definition()));
   }
@@ -865,7 +865,7 @@ void MetaServiceImpl::GetIndex(google::protobuf::RpcController * /*controller*/,
   }
 
   auto *index = response->mutable_index_definition_with_id();
-  index->mutable_index_id()->CopyFrom(table_definition_with_id.table_id());
+  *(index->mutable_index_id()) = table_definition_with_id.table_id();
   TableDefinitionToIndexDefinition(table_definition_with_id.table_definition(), *(index->mutable_index_definition()));
 }
 
@@ -896,7 +896,7 @@ void MetaServiceImpl::GetIndexByName(google::protobuf::RpcController * /*control
   }
 
   auto *index = response->mutable_index_definition_with_id();
-  index->mutable_index_id()->CopyFrom(table_definition_with_id.table_id());
+  *(index->mutable_index_id()) = table_definition_with_id.table_id();
   TableDefinitionToIndexDefinition(table_definition_with_id.table_definition(), *(index->mutable_index_definition()));
 }
 
@@ -1331,7 +1331,7 @@ void MetaServiceImpl::CreateTables(google::protobuf::RpcController *controller,
     table_id_ptr->set_entity_type(table_id.entity_type());
 
     if (find_table_type) {
-      table_index_internal.add_table_ids()->CopyFrom(*table_id_ptr);
+      *(table_index_internal.add_table_ids()) = *table_id_ptr;
     }
 
     DINGO_LOG(INFO) << "type: " << table_id.entity_type() << ", new_id=" << new_index_id;

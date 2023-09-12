@@ -1859,7 +1859,7 @@ dingodb::pb::common::RegionDefinition BuildRegionDefinition(uint64_t region_id, 
 void SendAddRegion(ServerInteractionPtr interaction, uint64_t region_id, const std::string& raft_group,
                    std::vector<std::string> raft_addrs) {
   dingodb::pb::region_control::AddRegionRequest request;
-  request.mutable_region()->CopyFrom(BuildRegionDefinition(region_id, raft_group, raft_addrs, "a", "z"));
+  *(request.mutable_region()) = BuildRegionDefinition(region_id, raft_group, raft_addrs, "a", "z");
   dingodb::pb::region_control::AddRegionResponse response;
 
   interaction->SendRequest("RegionControlService", "AddRegion", request, response);
@@ -1870,7 +1870,7 @@ void SendChangeRegion(ServerInteractionPtr interaction, uint64_t region_id, cons
   dingodb::pb::region_control::ChangeRegionRequest request;
   dingodb::pb::region_control::ChangeRegionResponse response;
 
-  request.mutable_region()->CopyFrom(BuildRegionDefinition(region_id, raft_group, raft_addrs, "a", "z"));
+  *(request.mutable_region()) = BuildRegionDefinition(region_id, raft_group, raft_addrs, "a", "z");
   dingodb::pb::common::RegionDefinition* region = request.mutable_region();
 
   interaction->SendRequest("RegionControlService", "ChangeRegion", request, response);
@@ -1908,7 +1908,7 @@ void SendTransferLeader(ServerInteractionPtr interaction, uint64_t region_id, co
   dingodb::pb::region_control::TransferLeaderResponse response;
 
   request.set_region_id(region_id);
-  request.mutable_peer()->CopyFrom(peer);
+  *(request.mutable_peer()) = peer;
 
   interaction->SendRequest("RegionControlService", "TransferLeader", request, response);
 }
@@ -2107,8 +2107,8 @@ void* AdddRegionRoutine(void* arg) {
   auto interaction = param->interaction;
   for (int i = 0; i < param->region_count; ++i) {
     dingodb::pb::region_control::AddRegionRequest request;
-    request.mutable_region()->CopyFrom(
-        BuildRegionDefinition(param->start_region_id + i, param->raft_group, param->raft_addrs, "a", "z"));
+    *(request.mutable_region()) =
+        BuildRegionDefinition(param->start_region_id + i, param->raft_group, param->raft_addrs, "a", "z");
     dingodb::pb::region_control::AddRegionResponse response;
 
     interaction->AllSendRequest("StoreService", "AddRegion", request, response);
@@ -2155,8 +2155,8 @@ void* OperationRegionRoutine(void* arg) {
     {
       DINGO_LOG(INFO) << "======Create region " << region_id;
       dingodb::pb::region_control::AddRegionRequest request;
-      request.mutable_region()->CopyFrom(
-          BuildRegionDefinition(param->start_region_id + i, param->raft_group, param->raft_addrs, "a", "z"));
+      *(request.mutable_region()) =
+          BuildRegionDefinition(param->start_region_id + i, param->raft_group, param->raft_addrs, "a", "z");
       dingodb::pb::region_control::AddRegionResponse response;
 
       interaction->AllSendRequest("StoreService", "AddRegion", request, response);
@@ -2304,7 +2304,7 @@ void SendChangePeer(ServerInteractionPtr interaction, const dingodb::pb::common:
   dingodb::pb::coordinator::ChangePeerRegionResponse response;
 
   auto* mut_definition = request.mutable_change_peer_request()->mutable_region_definition();
-  mut_definition->CopyFrom(region_definition);
+  *mut_definition = region_definition;
 
   interaction->SendRequest("CoordinatorService", "ChangePeerRegion", request, response);
 }
@@ -2399,8 +2399,8 @@ void* AutoExpandAndShrinkAndSplitRegion(void* arg) {
           if (!is_exist && Helper::RandomChoice()) {
             expand_peer.set_store_id(store.id());
             expand_peer.set_role(dingodb::pb::common::PeerRole::VOTER);
-            expand_peer.mutable_server_location()->CopyFrom(store.server_location());
-            expand_peer.mutable_raft_location()->CopyFrom(store.raft_location());
+            *(expand_peer.mutable_server_location()) = store.server_location();
+            *(expand_peer.mutable_raft_location()) = store.raft_location();
             break;
           }
         }
@@ -2408,7 +2408,7 @@ void* AutoExpandAndShrinkAndSplitRegion(void* arg) {
         // Add new peer.
         if (expand_peer.store_id() != 0) {
           dingodb::pb::common::RegionDefinition region_definition;
-          region_definition.CopyFrom(region.definition());
+          region_definition = region.definition();
           *region_definition.add_peers() = expand_peer;
           DINGO_LOG(INFO) << fmt::format("======= Expand region {}/{} region {} peers {}", ctx->table_name, table_id,
                                          region.id(), FormatPeers(region_definition));
@@ -2430,7 +2430,7 @@ void* AutoExpandAndShrinkAndSplitRegion(void* arg) {
 
         if (shrink_peer.store_id() != 0) {
           dingodb::pb::common::RegionDefinition region_definition;
-          region_definition.CopyFrom(region.definition());
+          region_definition = region.definition();
           region_definition.mutable_peers()->Clear();
           for (const auto& peer : region.definition().peers()) {
             if (peer.store_id() != shrink_peer.store_id()) {

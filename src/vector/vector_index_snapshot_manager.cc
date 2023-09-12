@@ -621,7 +621,7 @@ butil::Status VectorIndexSnapshotManager::SaveVectorIndexSnapshot(VectorIndexWra
   pb::store_internal::VectorIndexSnapshotMeta meta;
   meta.set_vector_index_id(vector_index_id);
   meta.set_snapshot_log_id(apply_log_index);
-  meta.mutable_range()->CopyFrom(vector_index->Range());
+  *(meta.mutable_range()) = vector_index->Range();
 
   meta_file << meta.SerializeAsString();
   meta_file.close();
