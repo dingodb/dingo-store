@@ -16,6 +16,7 @@
 #define DINGODB_COMMON_CONSTANT_H_
 
 #include <cstdint>
+#include <map>
 #include <string>
 
 namespace dingodb {
@@ -144,6 +145,14 @@ class Constant {
   static constexpr float kSplitKeysRatioDefaultValue = 0.5;
 
   static const int32_t kRaftLogFallBehindThreshold = 1000;
+
+  // transaction cf names
+  inline static const std::string kTxnDataCF = "data";
+  inline static const std::string kTxnLockCF = "lock";
+  inline static const std::string kTxnWriteCF = "write";
+  static constexpr uint32_t kTxnDataCfId = 0;
+  static constexpr uint32_t kTxnLockCfId = 1;
+  static constexpr uint32_t kTxnWriteCfId = 2;
 
   // hnsw max elements expand number
   static const uint32_t kHnswMaxElementsExpandNum = 10000;

@@ -61,6 +61,10 @@
 
 namespace dingodb {
 
+const std::map<std::string, uint32_t> kTxnCf2Id = {{Constant::kTxnDataCF, Constant::kTxnDataCfId},
+                                                   {Constant::kTxnLockCF, Constant::kTxnLockCfId},
+                                                   {Constant::kTxnWriteCF, Constant::kTxnWriteCfId}};
+
 using Errno = pb::error::Errno;
 using PbError = pb::error::Error;
 
@@ -730,6 +734,17 @@ bool Helper::Link(const std::string& old_path, const std::string& new_path) {
   }
 
   return ret == 0;
+}
+
+std::vector<std::string> Helper::GenMvccCfVector() {
+  std::vector<std::string> cfs;
+
+  // the order of the cf is important, and can not be changed
+  cfs.push_back(Constant::kTxnDataCF);
+  cfs.push_back(Constant::kTxnLockCF);
+  cfs.push_back(Constant::kTxnWriteCF);
+
+  return cfs;
 }
 
 int64_t Helper::TimestampNs() {
