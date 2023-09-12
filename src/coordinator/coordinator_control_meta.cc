@@ -26,6 +26,7 @@
 #include "butil/status.h"
 #include "common/constant.h"
 #include "common/logging.h"
+#include "common/synchronization.h"
 #include "coordinator/auto_increment_control.h"
 #include "coordinator/coordinator_control.h"
 #include "proto/common.pb.h"
@@ -35,6 +36,8 @@
 #include "proto/meta.pb.h"
 
 namespace dingodb {
+
+DEFINE_uint64(max_partition_num_of_table, 1024, "max partition num of table");
 
 void CoordinatorControl::GenerateTableIdAndPartIds(uint64_t schema_id, uint64_t part_count,
                                                    pb::meta::EntityType entity_type,
@@ -426,6 +429,14 @@ butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta
 
   DINGO_LOG(INFO) << "CreateTable table_definition:" << table_definition.DebugString();
 
+  // check max_partition_num_of_table
+  if (table_partition.partitions_size() > FLAGS_max_partition_num_of_table) {
+    DINGO_LOG(ERROR) << "partitions_size is too large, partitions_size=" << table_partition.partitions_size()
+                     << ", max_partition_num_of_table=" << FLAGS_max_partition_num_of_table
+                     << ", table_definition:" << table_definition.DebugString();
+    return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "partitions_size is too large");
+  }
+
   // store new_part_id for next usage
   std::vector<uint64_t> new_part_ids;
   std::vector<pb::common::Range> new_part_ranges;
@@ -473,12 +484,29 @@ butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta
   }
 
   // check if table_name exists
+  std::string new_table_check_name = Helper::GenNewTableCheckName(schema_id, table_definition.name());
+
+  std::atomic<bool> table_create_success(false);
+  ON_SCOPE_EXIT([&]() {
+    if (table_create_success.load() == false) {
+      table_name_map_safe_temp_.Erase(new_table_check_name);
+    }
+  });
+
   uint64_t value = 0;
-  table_name_map_safe_temp_.Get(std::to_string(schema_id) + table_definition.name(), value);
+  table_name_map_safe_temp_.Get(new_table_check_name, value);
   if (value != 0) {
     DINGO_LOG(INFO) << " Createtable table_name is exist " << table_definition.name();
     return butil::Status(pb::error::Errno::ETABLE_EXISTS,
                          fmt::format("table_name[{}] is exist in get", table_definition.name().c_str()));
+  }
+
+  // update table_name_map_safe_temp_
+  if (table_name_map_safe_temp_.PutIfAbsent(new_table_check_name, new_table_id) < 0) {
+    DINGO_LOG(INFO) << " CreateTable table_name" << table_definition.name()
+                    << " is exist, when insert new_table_id=" << new_table_id;
+    return butil::Status(pb::error::Errno::ETABLE_EXISTS,
+                         fmt::format("table_name[{}] is exist in put if absent", table_definition.name().c_str()));
   }
 
   // if new_table_id is not given, create a new table_id
@@ -508,14 +536,6 @@ butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta
     DINGO_LOG(INFO) << "CreateTable AutoIncrement send create auto increment internal success";
   }
 
-  // update table_name_map_safe_temp_
-  if (table_name_map_safe_temp_.PutIfAbsent(std::to_string(schema_id) + table_definition.name(), new_table_id) < 0) {
-    DINGO_LOG(INFO) << " CreateTable table_name" << table_definition.name()
-                    << " is exist, when insert new_table_id=" << new_table_id;
-    return butil::Status(pb::error::Errno::ETABLE_EXISTS,
-                         fmt::format("table_name[{}] is exist in put if absent", table_definition.name().c_str()));
-  }
-
   // create table
   // extract part info, create region for each part
 
@@ -543,7 +563,6 @@ butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta
     if (!ret.ok()) {
       DINGO_LOG(ERROR) << "CreateRegion failed in CreateTable table_name=" << table_definition.name()
                        << ", table_definition:" << table_definition.ShortDebugString() << " ret: " << ret.error_str();
-      table_name_map_safe_temp_.Erase(std::to_string(schema_id) + table_definition.name());
       return ret;
     }
 
@@ -563,8 +582,6 @@ butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta
       }
     }
 
-    // remove table_name from map
-    table_name_map_safe_temp_.Erase(std::to_string(schema_id) + table_definition.name());
     return butil::Status(pb::error::Errno::ETABLE_REGION_CREATE_FAILED, "Not enough regions is created");
   }
 
@@ -597,6 +614,8 @@ butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta
 
   auto* table_increment_table = table_increment->mutable_table();
   *table_increment_table = table_internal;
+
+  table_create_success.store(true);
 
   return butil::Status::OK();
 }
@@ -648,7 +667,8 @@ butil::Status CoordinatorControl::DropTable(uint64_t schema_id, uint64_t table_i
   GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_TABLE, meta_increment);
 
   // delete table_name from table_name_safe_map_temp_
-  table_name_map_safe_temp_.Erase(std::to_string(schema_id) + table_internal.definition().name());
+  std::string new_table_check_name = Helper::GenNewTableCheckName(schema_id, table_internal.definition().name());
+  table_name_map_safe_temp_.Erase(new_table_check_name);
 
   bool has_auto_increment_column = false;
   AutoIncrementControl::CheckAutoIncrementInTableDefinition(table_internal.definition(), has_auto_increment_column);
@@ -1047,6 +1067,14 @@ butil::Status CoordinatorControl::CreateIndex(uint64_t schema_id, const pb::meta
   auto const& index_partition = table_definition.table_partition();
 
   DINGO_LOG(INFO) << "CreateIndex index_definition=" << table_definition.DebugString();
+
+  // check max_partition_num_of_table
+  if (index_partition.partitions_size() > FLAGS_max_partition_num_of_table) {
+    DINGO_LOG(ERROR) << "partitions_size is too large, partitions_size=" << index_partition.partitions_size()
+                     << ", max_partition_num_of_table=" << FLAGS_max_partition_num_of_table
+                     << ", table_definition:" << table_definition.DebugString();
+    return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "partitions_size is too large");
+  }
 
   // store new_part_id for next usage
   std::vector<uint64_t> new_part_ids;
@@ -1736,8 +1764,10 @@ butil::Status CoordinatorControl::GetTableByName(uint64_t schema_id, const std::
     return butil::Status(pb::error::Errno::ESCHEMA_NOT_FOUND, "schema_id not valid");
   }
 
+  std::string new_table_check_name = Helper::GenNewTableCheckName(schema_id, table_name);
+
   uint64_t temp_table_id = 0;
-  auto ret = table_name_map_safe_temp_.Get(std::to_string(schema_id) + table_name, temp_table_id);
+  auto ret = table_name_map_safe_temp_.Get(new_table_check_name, temp_table_id);
   if (ret < 0) {
     DINGO_LOG(WARNING) << "WARNING: table_name not found " << table_name;
     return butil::Status(pb::error::Errno::ETABLE_NOT_FOUND, "table_name not found");

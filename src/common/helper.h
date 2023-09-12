@@ -173,6 +173,9 @@ class Helper {
   static float GenerateRandomFloat(float min_value, float max_value);
   static uint64_t GenId();
 
+  // Gen coordinator new_table_check_name
+  static std::string GenNewTableCheckName(uint64_t schema_id, const std::string& table_name);
+
   // Create hard link
   static bool Link(const std::string& old_path, const std::string& new_path);
 

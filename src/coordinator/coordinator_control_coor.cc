@@ -985,15 +985,15 @@ butil::Status CoordinatorControl::SelectStore(pb::common::StoreType store_type, 
                     << ", hnsw_memory_plan=" << hnsw_memory_plan_used << ", store_id=" << store.id()
                     << ", region_count=" << store_metrics.region_metrics_map_size();
 
-    if ((hnsw_memory_plan_used + new_hnsw_index_plan_memory) * 1.05 < store_metrics.system_total_memory()) {
-      DINGO_LOG(INFO) << "Store metrics hnsw_memory_plan_used * 1.05 < system_total_memory, store_id=" << store.id()
+    if ((hnsw_memory_plan_used + new_hnsw_index_plan_memory) * 0.30 < store_metrics.system_total_memory()) {
+      DINGO_LOG(INFO) << "Store metrics hnsw_memory_plan_used * 0.30 < system_total_memory, store_id=" << store.id()
                       << ", hnsw_memory_plan_used=" << hnsw_memory_plan_used
                       << ", new_hnsw_memory_plan_used=" << new_hnsw_index_plan_memory
                       << ", system_total_memory=" << store_metrics.system_total_memory();
       tmp_stores_for_regions.push_back(store);
       continue;
     } else {
-      DINGO_LOG(ERROR) << "Store metrics hnsw_memory_plan_used * 1.05 >= system_total_memory, store_id=" << store.id()
+      DINGO_LOG(ERROR) << "Store metrics hnsw_memory_plan_used * 0.30 >= system_total_memory, store_id=" << store.id()
                        << ", hnsw_memory_plan_used=" << hnsw_memory_plan_used
                        << ", new_hnsw_memory_plan_used=" << new_hnsw_index_plan_memory
                        << ", system_total_memory=" << store_metrics.system_total_memory();
