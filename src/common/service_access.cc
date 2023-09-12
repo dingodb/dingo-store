@@ -46,7 +46,10 @@ std::shared_ptr<brpc::Channel> ChannelPool::GetChannel(const butil::EndPoint& en
   // Create new channel
   auto channel = std::make_shared<brpc::Channel>();
   brpc::ChannelOptions options;
-  options.connect_timeout_ms = 1000;
+  options.connect_timeout_ms = 4000;
+  options.timeout_ms = 6000;
+  options.backup_request_ms = 5000;
+  options.connection_type = brpc::ConnectionType::CONNECTION_TYPE_SINGLE;
   if (channel->Init(endpoint, nullptr) != 0) {
     DINGO_LOG(ERROR) << "Init channel failed, endpoint: " << Helper::EndPointToStr(endpoint);
     return nullptr;
@@ -132,7 +135,6 @@ butil::Status ServiceAccess::GetVectorIndexSnapshot(const pb::node::GetVectorInd
   }
 
   brpc::Controller cntl;
-  cntl.set_timeout_ms(3000);
   pb::node::NodeService_Stub stub(channel.get());
 
   stub.GetVectorIndexSnapshot(&cntl, &request, &response, nullptr);
@@ -163,7 +165,6 @@ butil::Status ServiceAccess::CheckVectorIndex(const pb::node::CheckVectorIndexRe
   }
 
   brpc::Controller cntl;
-  cntl.set_timeout_ms(3000);
   pb::node::NodeService_Stub stub(channel.get());
 
   stub.CheckVectorIndex(&cntl, &request, &response, nullptr);
@@ -187,7 +188,6 @@ std::shared_ptr<pb::fileservice::CleanFileReaderResponse> ServiceAccess::CleanFi
   }
 
   brpc::Controller cntl;
-  cntl.set_timeout_ms(1000L);
   pb::fileservice::FileService_Stub stub(channel.get());
 
   auto response = std::make_shared<pb::fileservice::CleanFileReaderResponse>();
@@ -209,7 +209,6 @@ std::shared_ptr<pb::fileservice::GetFileResponse> ServiceAccess::GetFile(const p
   }
 
   brpc::Controller cntl;
-  cntl.set_timeout_ms(5000);
   pb::fileservice::FileService_Stub stub(channel.get());
 
   auto response = std::make_shared<pb::fileservice::GetFileResponse>();
