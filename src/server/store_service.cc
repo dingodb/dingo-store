@@ -464,7 +464,7 @@ void StoreServiceImpl::KvBatchDelete(google::protobuf::RpcController* controller
 
 butil::Status ValidateKvDeleteRangeRequest(store::RegionPtr region, const pb::common::Range& req_range) {
   if (region == nullptr) {
-    return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
+    return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region at server %lu", Server::GetInstance()->Id());
   }
 
   auto status = ServiceHelper::ValidateRange(req_range);
@@ -652,7 +652,7 @@ void StoreServiceImpl::KvBatchCompareAndSet(google::protobuf::RpcController* con
 
 butil::Status ValidateKvScanBeginRequest(store::RegionPtr region, const pb::common::Range& req_range) {
   if (region == nullptr) {
-    return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
+    return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region at server %lu", Server::GetInstance()->Id());
   }
 
   auto status = ServiceHelper::ValidateRange(req_range);
@@ -735,7 +735,8 @@ void StoreServiceImpl::KvScanBegin(google::protobuf::RpcController* controller,
 butil::Status ValidateKvScanContinueRequest(const dingodb::pb::store::KvScanContinueRequest* request) {
   // Check is exist region.
   if (!Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->IsExistRegion(request->region_id())) {
-    return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
+    return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region %lu at server %lu", request->region_id(),
+                         Server::GetInstance()->Id());
   }
 
   if (request->scan_id().empty()) {
@@ -797,7 +798,8 @@ void StoreServiceImpl::KvScanContinue(google::protobuf::RpcController* controlle
 butil::Status ValidateKvScanReleaseRequest(const dingodb::pb::store::KvScanReleaseRequest* request) {
   // Check is exist region.
   if (!Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->IsExistRegion(request->region_id())) {
-    return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
+    return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region %lu at server %lu", request->region_id(),
+                         Server::GetInstance()->Id());
   }
 
   if (request->scan_id().empty()) {

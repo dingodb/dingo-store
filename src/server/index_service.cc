@@ -87,7 +87,7 @@ void IndexServiceImpl::VectorBatchQuery(google::protobuf::RpcController* control
   if (region == nullptr) {
     auto* err = response->mutable_error();
     err->set_errcode(pb::error::EREGION_NOT_FOUND);
-    err->set_errmsg(fmt::format("Not found region {}", request->region_id()));
+    err->set_errmsg(fmt::format("Not found region {} at server {}", request->region_id(), Server::GetInstance()->Id()));
     return;
   }
 
@@ -205,7 +205,7 @@ void IndexServiceImpl::VectorSearch(google::protobuf::RpcController* controller,
   if (region == nullptr) {
     auto* err = response->mutable_error();
     err->set_errcode(pb::error::EREGION_NOT_FOUND);
-    err->set_errmsg(fmt::format("Not found region {}", request->region_id()));
+    err->set_errmsg(fmt::format("Not found region {} at server {}", request->region_id(), Server::GetInstance()->Id()));
     return;
   }
 
@@ -356,7 +356,7 @@ void IndexServiceImpl::VectorAdd(google::protobuf::RpcController* controller,
   if (region == nullptr) {
     auto* err = response->mutable_error();
     err->set_errcode(pb::error::EREGION_NOT_FOUND);
-    err->set_errmsg(fmt::format("Not found region {}", request->region_id()));
+    err->set_errmsg(fmt::format("Not found region {} at server {}", request->region_id(), Server::GetInstance()->Id()));
     return;
   }
 
@@ -447,7 +447,7 @@ void IndexServiceImpl::VectorDelete(google::protobuf::RpcController* controller,
   if (region == nullptr) {
     auto* err = response->mutable_error();
     err->set_errcode(pb::error::EREGION_NOT_FOUND);
-    err->set_errmsg(fmt::format("Not found region {}", request->region_id()));
+    err->set_errmsg(fmt::format("Not found region {} at server {}", request->region_id(), Server::GetInstance()->Id()));
     return;
   }
 
@@ -515,7 +515,7 @@ void IndexServiceImpl::VectorGetBorderId(google::protobuf::RpcController* contro
   if (region == nullptr) {
     auto* err = response->mutable_error();
     err->set_errcode(pb::error::EREGION_NOT_FOUND);
-    err->set_errmsg(fmt::format("Not found region {}", request->region_id()));
+    err->set_errmsg(fmt::format("Not found region {} at server {}", request->region_id(), Server::GetInstance()->Id()));
     return;
   }
 
@@ -598,7 +598,7 @@ void IndexServiceImpl::VectorScanQuery(google::protobuf::RpcController* controll
   if (region == nullptr) {
     auto* err = response->mutable_error();
     err->set_errcode(pb::error::EREGION_NOT_FOUND);
-    err->set_errmsg(fmt::format("Not found region {}", request->region_id()));
+    err->set_errmsg(fmt::format("Not found region {} at server {}", request->region_id(), Server::GetInstance()->Id()));
     return;
   }
 
@@ -690,7 +690,7 @@ void IndexServiceImpl::VectorGetRegionMetrics(google::protobuf::RpcController* c
   if (region == nullptr) {
     auto* err = response->mutable_error();
     err->set_errcode(pb::error::EREGION_NOT_FOUND);
-    err->set_errmsg(fmt::format("Not found region {}", request->region_id()));
+    err->set_errmsg(fmt::format("Not found region {} at server {}", request->region_id(), Server::GetInstance()->Id()));
     return;
   }
 
@@ -850,7 +850,7 @@ void IndexServiceImpl::VectorSearchDebug(google::protobuf::RpcController* contro
   if (region == nullptr) {
     auto* err = response->mutable_error();
     err->set_errcode(pb::error::EREGION_NOT_FOUND);
-    err->set_errmsg(fmt::format("Not found region {}", request->region_id()));
+    err->set_errmsg(fmt::format("Not found region {} at server {}", request->region_id(), Server::GetInstance()->Id()));
     return;
   }
 
