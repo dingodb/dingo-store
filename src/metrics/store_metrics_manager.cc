@@ -223,6 +223,29 @@ std::vector<std::pair<uint64_t, uint64_t>> StoreRegionMetrics::GetRegionApproxim
   return region_sizes;
 }
 
+std::vector<std::vector<store::RegionPtr>> GenBatchRegion(std::vector<store::RegionPtr> regions) {
+  if (regions.size() <= Constant::kCollectApproximateSizeBatchSize) {
+    return {regions};
+  }
+
+  std::vector<std::vector<store::RegionPtr>> result;
+  std::vector<store::RegionPtr> batch_regions;
+  batch_regions.reserve(Constant::kCollectApproximateSizeBatchSize);
+  for (auto& region : regions) {
+    batch_regions.push_back(region);
+    if (batch_regions.size() >= Constant::kCollectApproximateSizeBatchSize) {
+      result.push_back(batch_regions);
+      batch_regions.clear();
+    }
+  }
+
+  if (!batch_regions.empty()) {
+    result.push_back(batch_regions);
+  }
+
+  return result;
+}
+
 bool StoreRegionMetrics::CollectApproximateSizeMetrics() {
   auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
   auto store_raft_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRaftMeta();
@@ -251,19 +274,23 @@ bool StoreRegionMetrics::CollectApproximateSizeMetrics() {
 
   // Get approximate size
   uint64_t start_time = Helper::TimestampMs();
-  auto region_sizes = GetRegionApproximateSize(need_collect_regions);
-  for (auto& item : region_sizes) {
-    uint64_t region_id = item.first;
-    uint64_t size = item.second;
+  auto batch_regions = GenBatchRegion(need_collect_regions);
+  for (auto& regions : batch_regions) {
+    auto region_sizes = GetRegionApproximateSize(regions);
+    for (auto& item : region_sizes) {
+      uint64_t region_id = item.first;
+      uint64_t size = item.second;
 
-    auto region_metrics = GetMetrics(region_id);
-    if (region_metrics != nullptr) {
-      region_metrics->SetRegionSize(size);
+      auto region_metrics = GetMetrics(region_id);
+      if (region_metrics != nullptr) {
+        region_metrics->SetRegionSize(size);
+      }
     }
   }
 
-  DINGO_LOG(INFO) << fmt::format("[metrics.region][region(*)] get region approximate size elapsed[{} ms]",
-                                 Helper::TimestampMs() - start_time);
+  DINGO_LOG(INFO) << fmt::format(
+      "[metrics.region][region(*)] get region approximate size tatal size({}) batch size({}) elapsed time[{} ms]",
+      need_collect_regions.size(), batch_regions.size(), Helper::TimestampMs() - start_time);
   return true;
 }
 
