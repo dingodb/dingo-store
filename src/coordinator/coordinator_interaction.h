@@ -64,7 +64,7 @@ class CoordinatorInteraction {
 
   template <typename Request, typename Response>
   butil::Status SendRequest(const std::string& api_name, const Request& request, Response& response,
-                            uint64_t time_out_ms = 5000);
+                            uint64_t time_out_ms = 60000);
 
   const ::google::protobuf::ServiceDescriptor* GetServiceDescriptor() const;
 

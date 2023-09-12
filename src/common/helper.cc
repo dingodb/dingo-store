@@ -686,6 +686,12 @@ uint64_t Helper::GenId() {
   return ++id;
 }
 
+std::string Helper::GenNewTableCheckName(uint64_t schema_id, const std::string& table_name) {
+  Buf buf(8);
+  buf.WriteLong(schema_id);
+  return buf.GetString() + table_name;
+}
+
 bool Helper::Link(const std::string& old_path, const std::string& new_path) {
   int ret = ::link(old_path.c_str(), new_path.c_str());
   if (ret != 0) {

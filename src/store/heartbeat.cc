@@ -838,7 +838,7 @@ butil::Status Heartbeat::RpcSendPushStoreOperation(const pb::common::Location& l
     }
 
     brpc::Controller cntl;
-    cntl.set_timeout_ms(5000L);
+    cntl.set_timeout_ms(30000L);
 
     pb::push::PushService_Stub(&channel).PushStoreOperation(&cntl, &request, &response, nullptr);
 

@@ -32,6 +32,7 @@
 namespace dingodb {
 
 DECLARE_uint64(max_hnsw_memory_size_of_region);
+DECLARE_uint64(max_partition_num_of_table);
 
 void MetaServiceImpl::TableDefinitionToIndexDefinition(const pb::meta::TableDefinition &table_definition,
                                                        pb::meta::IndexDefinition &index_definition) {
