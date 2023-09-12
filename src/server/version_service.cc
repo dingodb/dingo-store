@@ -457,7 +457,7 @@ void VersionServiceProtoImpl::KvRange(google::protobuf::RpcController* /*control
   if (!kvs.empty()) {
     for (const auto& kv : kvs) {
       auto* resp_kv = response->add_kvs();
-      resp_kv->CopyFrom(kv);
+      *resp_kv = kv;
     }
     response->set_count(total_count_in_range);
     response->set_more(total_count_in_range > real_limit);
@@ -506,7 +506,7 @@ void VersionServiceProtoImpl::KvPut(google::protobuf::RpcController* controller,
                   << ", lease_grant_id=" << lease_grant_id << ", revision=" << main_revision << "." << sub_revision;
 
   if (request->need_prev_kv()) {
-    response->mutable_prev_kv()->CopyFrom(prev_kv);
+    *(response->mutable_prev_kv()) = prev_kv;
   }
   response->mutable_header()->set_revision(main_revision);
 
@@ -566,7 +566,7 @@ void VersionServiceProtoImpl::KvDeleteRange(google::protobuf::RpcController* /*c
   if (request->need_prev_kv()) {
     for (const auto& kv : prev_kvs) {
       auto* resp_kv = response->add_prev_kvs();
-      resp_kv->CopyFrom(kv);
+      *resp_kv = kv;
     }
   }
   response->mutable_header()->set_revision(main_revision);

@@ -174,7 +174,7 @@ butil::Status VectorReader::QueryVectorTableData(uint64_t partition_id, pb::comm
     return butil::Status(pb::error::EINTERNAL, "Decode vector table data failed");
   }
 
-  vector_with_id.mutable_table_data()->CopyFrom(vector_table);
+  *(vector_with_id.mutable_table_data()) = vector_table;
 
   return butil::Status();
 }

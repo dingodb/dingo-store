@@ -39,7 +39,7 @@ class MetaServiceImpl : public pb::meta::MetaService {
     this->coordinator_control_->GetLeaderLocation(leader_location);
 
     auto* error_in_response = response->mutable_error();
-    error_in_response->mutable_leader_location()->CopyFrom(leader_location);
+    *(error_in_response->mutable_leader_location()) = leader_location;
     error_in_response->set_errcode(Errno::ERAFT_NOTLEADER);
   }
 
@@ -49,7 +49,7 @@ class MetaServiceImpl : public pb::meta::MetaService {
     this->auto_increment_control_->GetLeaderLocation(leader_location);
 
     auto* error_in_response = response->mutable_error();
-    error_in_response->mutable_leader_location()->CopyFrom(leader_location);
+    *(error_in_response->mutable_leader_location()) = leader_location;
     error_in_response->set_errcode(Errno::ERAFT_NOTLEADER);
   }
 
@@ -59,7 +59,7 @@ class MetaServiceImpl : public pb::meta::MetaService {
     this->tso_control_->GetLeaderLocation(leader_location);
 
     auto* error_in_response = response->mutable_error();
-    error_in_response->mutable_leader_location()->CopyFrom(leader_location);
+    *(error_in_response->mutable_leader_location()) = leader_location;
     error_in_response->set_errcode(Errno::ERAFT_NOTLEADER);
   }
 

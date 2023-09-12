@@ -259,7 +259,7 @@ void IndexServiceImpl::VectorSearch(google::protobuf::RpcController* controller,
   }
 
   for (auto& vector_result : vector_results) {
-    response->add_batch_results()->CopyFrom(vector_result);
+    *(response->add_batch_results()) = vector_result;
   }
 }
 
@@ -726,7 +726,7 @@ void IndexServiceImpl::VectorGetRegionMetrics(google::protobuf::RpcController* c
     return;
   }
 
-  response->mutable_metrics()->CopyFrom(metrics);
+  *(response->mutable_metrics()) = metrics;
 }
 
 void IndexServiceImpl::VectorCalcDistance(google::protobuf::RpcController* controller,
@@ -907,7 +907,7 @@ void IndexServiceImpl::VectorSearchDebug(google::protobuf::RpcController* contro
   }
 
   for (auto& vector_result : vector_results) {
-    response->add_batch_results()->CopyFrom(vector_result);
+    *(response->add_batch_results()) = vector_result;
   }
   response->set_deserialization_id_time_us(deserialization_id_time_us);
   response->set_scan_scalar_time_us(scan_scalar_time_us);

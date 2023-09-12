@@ -79,7 +79,7 @@ class CoordinatorServiceImpl : public pb::coordinator::CoordinatorService {
     this->coordinator_control_->GetLeaderLocation(leader_location);
 
     auto* error_in_response = response->mutable_error();
-    error_in_response->mutable_leader_location()->CopyFrom(leader_location);
+    *(error_in_response->mutable_leader_location()) = leader_location;
     error_in_response->set_errcode(Errno::ERAFT_NOTLEADER);
   }
 
@@ -99,7 +99,7 @@ class CoordinatorServiceImpl : public pb::coordinator::CoordinatorService {
     coordinator_control_->GetServerLocation(leader_raft_location, leader_server_location);
 
     auto* error_in_response = response->mutable_error();
-    error_in_response->mutable_leader_location()->CopyFrom(leader_server_location);
+    *(error_in_response->mutable_leader_location()) = leader_server_location;
     error_in_response->set_errcode(pb::error::Errno::ERAFT_NOTLEADER);
   }
 

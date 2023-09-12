@@ -108,7 +108,7 @@ void PushServiceImpl::PushStoreOperation(google::protobuf::RpcController* contro
   }
 
   if (!response->region_cmd_results().empty()) {
-    response->mutable_error()->CopyFrom(response->region_cmd_results(0).error());
+    *(response->mutable_error()) = response->region_cmd_results(0).error();
     DINGO_LOG(INFO) << "PushStoreOperation response: " << response->ShortDebugString()
                     << " request: " << request->ShortDebugString();
   }

@@ -451,10 +451,10 @@ butil::Status CoordinatorControl::KvPut(const pb::common::KeyValue &key_value_in
       this->KvRange(key_value_in.key(), std::string(), 1, false, false, kvs_temp, total_count_in_range);
     }
     if (!kvs_temp.empty()) {
-      prev_kv.CopyFrom(kvs_temp[0]);
+      prev_kv = kvs_temp[0];
     } else {
       pb::version::Kv kv_temp;
-      prev_kv.CopyFrom(kv_temp);
+      prev_kv = kv_temp;
     }
   }
 
@@ -587,7 +587,7 @@ butil::Status CoordinatorControl::KvPutApply(const std::string &key,
     generation->mutable_create_revision()->set_main(op_revision.main());
     generation->mutable_create_revision()->set_sub(op_revision.sub());
     generation->set_verison(1);
-    generation->add_revisions()->CopyFrom(op_revision);
+    *(generation->add_revisions()) = op_revision;
 
     DINGO_LOG(INFO) << "KvPutApply kv_index create new kv_index: " << generation->ShortDebugString();
   } else {
@@ -600,13 +600,13 @@ butil::Status CoordinatorControl::KvPutApply(const std::string &key,
       generation->mutable_create_revision()->set_main(op_revision.main());
       generation->mutable_create_revision()->set_sub(op_revision.sub());
       generation->set_verison(1);
-      generation->add_revisions()->CopyFrom(op_revision);
+      *(generation->add_revisions()) = op_revision;
       DINGO_LOG(INFO) << "KvPutApply kv_index add generation: " << generation->ShortDebugString();
     } else {
       // auto &latest_generation = *kv_index.mutable_generations()->rbegin();
       auto *latest_generation = kv_index.mutable_generations(kv_index.generations_size() - 1);
       if (latest_generation->has_create_revision()) {
-        latest_generation->add_revisions()->CopyFrom(op_revision);
+        *(latest_generation->add_revisions()) = op_revision;
         latest_generation->set_verison(latest_generation->verison() + 1);
         DINGO_LOG(INFO) << "KvPutApply latest_generation add revsion: " << latest_generation->ShortDebugString();
 
@@ -618,7 +618,7 @@ butil::Status CoordinatorControl::KvPutApply(const std::string &key,
         latest_generation->mutable_create_revision()->set_main(op_revision.main());
         latest_generation->mutable_create_revision()->set_sub(op_revision.sub());
         latest_generation->set_verison(1);
-        latest_generation->add_revisions()->CopyFrom(op_revision);
+        *(latest_generation->add_revisions()) = op_revision;
         DINGO_LOG(INFO) << "KvPutApply latest_generation create revsion: " << latest_generation->ShortDebugString();
       }
 
@@ -629,7 +629,7 @@ butil::Status CoordinatorControl::KvPutApply(const std::string &key,
       // setup new_version
       new_version = latest_generation->verison();
     }
-    kv_index.mutable_mod_revision()->CopyFrom(op_revision);
+    *(kv_index.mutable_mod_revision()) = op_revision;
   }
 
   // generate new kv_rev
@@ -742,7 +742,7 @@ butil::Status CoordinatorControl::KvDeleteApply(const std::string &key,
       auto *latest_generation = kv_index.mutable_generations(kv_index.generations_size() - 1);
       if (latest_generation->has_create_revision()) {
         // add a the delete revision to latest generation
-        latest_generation->add_revisions()->CopyFrom(op_revision);
+        *(latest_generation->add_revisions()) = op_revision;
         latest_generation->set_verison(latest_generation->verison() + 1);
 
         // create a null generator means delete
@@ -767,7 +767,7 @@ butil::Status CoordinatorControl::KvDeleteApply(const std::string &key,
       // setup new_version
       new_version = latest_generation->verison();
     }
-    kv_index.mutable_mod_revision()->CopyFrom(op_revision);
+    *(kv_index.mutable_mod_revision()) = op_revision;
   }
 
   // generate new kv_rev
@@ -915,7 +915,7 @@ butil::Status CoordinatorControl::KvCompact(const std::vector<std::string> &keys
     kv_index_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
     kv_index_increment->set_event_type(
         ::dingodb::pb::coordinator_internal::KvIndexEventType::KV_INDEX_EVENT_TYPE_COMPACTION);
-    kv_index_increment->mutable_op_revision()->CopyFrom(compact_revision);
+    *(kv_index_increment->mutable_op_revision()) = compact_revision;
   }
 
   std::atomic<bool> done(false);
@@ -967,8 +967,8 @@ butil::Status CoordinatorControl::KvCompactApply(const std::string &key,
     const auto &old_generation = kv_index.generations(i);
 
     if (new_kv_index.generations_size() > 0) {
-      new_generation.CopyFrom(old_generation);
-      new_kv_index.mutable_generations()->Add()->CopyFrom(new_generation);
+      new_generation = old_generation;
+      *(new_kv_index.mutable_generations()->Add()) = new_generation;
       continue;
     }
 
@@ -977,15 +977,14 @@ butil::Status CoordinatorControl::KvCompactApply(const std::string &key,
         if (kv_revision.main() < compact_revision.main()) {
           revisions_to_delete.push_back(kv_revision);
         } else {
-          // new_generation.mutable_revisions()->Add()->CopyFrom(kv_revision);
-          new_generation.add_revisions()->CopyFrom(kv_revision);
+          *(new_generation.mutable_revisions()->Add()) = kv_revision;
         }
       }
 
       if (new_generation.revisions_size() > 0) {
-        new_generation.mutable_create_revision()->CopyFrom(old_generation.create_revision());
+        *(new_generation.mutable_create_revision()) = old_generation.create_revision();
         new_generation.set_verison(old_generation.verison());
-        new_kv_index.mutable_generations()->Add()->CopyFrom(new_generation);
+        *(new_kv_index.mutable_generations()->Add()) = new_generation;
       }
     }
   }
@@ -998,35 +997,34 @@ butil::Status CoordinatorControl::KvCompactApply(const std::string &key,
   // else just delete this kv_index
   if (!latest_generation.has_create_revision()) {
     if (new_kv_index.generations_size() > 0) {
-      new_kv_index.mutable_generations()->Add()->CopyFrom(latest_generation);
+      *(new_kv_index.mutable_generations()->Add()) = latest_generation;
     }
   }
   // if this is a put generation, add it to new_kv_index if new_kv_index has more than 1 generation
   // else filter revisions of this generation
   else {
     if (new_kv_index.generations_size() > 0) {
-      new_kv_index.mutable_generations()->Add()->CopyFrom(latest_generation);
+      *(new_kv_index.mutable_generations()->Add()) = latest_generation;
     } else {
       for (int j = 0; j < latest_generation.revisions_size(); ++j) {
         const auto &kv_revision = latest_generation.revisions(j);
 
         // if this is the latest revision of the latest generation, just copy it
         if (j == latest_generation.revisions_size() - 1) {
-          new_generation.add_revisions()->CopyFrom(kv_revision);
+          *(new_generation.add_revisions()) = kv_revision;
         } else {
           if (kv_revision.main() < compact_revision.main()) {
             revisions_to_delete.push_back(kv_revision);
           } else {
-            // new_generation.mutable_revisions()->Add()->CopyFrom(kv_revision);
-            new_generation.add_revisions()->CopyFrom(kv_revision);
+            *(new_generation.mutable_revisions()->Add()) = kv_revision;
           }
         }
       }
 
       if (new_generation.revisions_size() > 0) {
-        new_generation.mutable_create_revision()->CopyFrom(latest_generation.create_revision());
+        *(new_generation.mutable_create_revision()) = latest_generation.create_revision();
         new_generation.set_verison(latest_generation.verison());
-        new_kv_index.mutable_generations()->Add()->CopyFrom(new_generation);
+        *(new_kv_index.mutable_generations()->Add()) = new_generation;
       }
     }
   }

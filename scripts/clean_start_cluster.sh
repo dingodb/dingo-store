@@ -31,3 +31,5 @@ echo "deploy all"
 ./start_server.sh --role index --server_num=${DEPLOY_SERVER_NUM}
 echo "start all"
 
+./check_store.sh
+

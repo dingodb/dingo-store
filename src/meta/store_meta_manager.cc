@@ -49,7 +49,7 @@ std::shared_ptr<Region> Region::New(const pb::common::RegionDefinition& definiti
   } else {
     region->inner_region_.set_region_type(pb::common::STORE_REGION);
   }
-  region->inner_region_.mutable_definition()->CopyFrom(definition);
+  *(region->inner_region_.mutable_definition()) = definition;
   region->SetState(pb::common::StoreRegionState::NEW);
   return region;
 }
@@ -111,7 +111,7 @@ const pb::common::Range& Region::Range() {
 
 void Region::SetRange(const pb::common::Range& range) {
   BAIDU_SCOPED_LOCK(mutex_);
-  inner_region_.mutable_definition()->mutable_range()->CopyFrom(range);
+  *(inner_region_.mutable_definition()->mutable_range()) = range;
 }
 
 const pb::common::Range& Region::RawRange() {
@@ -121,7 +121,7 @@ const pb::common::Range& Region::RawRange() {
 
 void Region::SetRawRange(const pb::common::Range& range) {
   BAIDU_SCOPED_LOCK(mutex_);
-  inner_region_.mutable_definition()->mutable_raw_range()->CopyFrom(range);
+  *(inner_region_.mutable_definition()->mutable_raw_range()) = range;
 }
 
 std::vector<pb::common::Range> Region::PhysicsRange() {
@@ -169,7 +169,7 @@ bool Region::CheckKeyInRange(const std::string& key) {
 
 void Region::SetIndexParameter(const pb::common::IndexParameter& index_parameter) {
   BAIDU_SCOPED_LOCK(mutex_);
-  inner_region_.mutable_definition()->mutable_index_parameter()->CopyFrom(index_parameter);
+  *(inner_region_.mutable_definition()->mutable_index_parameter()) = index_parameter;
 }
 
 std::vector<pb::common::Peer> Region::Peers() {
@@ -186,7 +186,7 @@ void Region::SetPeers(std::vector<pb::common::Peer>& peers) {
 
   {
     BAIDU_SCOPED_LOCK(mutex_);
-    inner_region_.mutable_definition()->mutable_peers()->CopyFrom(tmp_peers);
+    *(inner_region_.mutable_definition()->mutable_peers()) = tmp_peers;
   }
 }
 

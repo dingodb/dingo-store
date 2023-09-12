@@ -64,7 +64,7 @@ void FileServiceImpl::GetFile(google::protobuf::RpcController* controller,
 
 void FileServiceImpl::CleanFileReader(google::protobuf::RpcController* controller,
                                       const pb::fileservice::CleanFileReaderRequest* request,
-                                      pb::fileservice::CleanFileReaderResponse* response,
+                                      pb::fileservice::CleanFileReaderResponse* /*response*/,
                                       google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
@@ -110,6 +110,7 @@ std::vector<uint64_t> FileServiceReaderManager::GetAllReaderId() {
   BAIDU_SCOPED_LOCK(mutex_);
 
   std::vector<uint64_t> reader_ids;
+  reader_ids.reserve(readers_.size());
   for (auto& [reader_id, _] : readers_) {
     reader_ids.push_back(reader_id);
   }

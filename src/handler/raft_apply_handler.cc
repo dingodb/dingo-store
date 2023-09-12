@@ -579,8 +579,8 @@ bool HandlePostCreateRegionSplit(const pb::raft::SplitRequest &request, store::R
   definition.set_name(fmt::format("{}_{}", definition.name(), child_region_id));
   definition.mutable_epoch()->set_conf_version(1);
   definition.mutable_epoch()->set_version(1);
-  definition.mutable_range()->CopyFrom(child_range);
-  definition.mutable_raw_range()->CopyFrom(child_range);
+  *(definition.mutable_range()) = child_range;
+  *(definition.mutable_raw_range()) = child_range;
 
   auto child_region = CreateNewRegion(definition, parent_region->Id());
   if (child_region == nullptr) {
@@ -730,7 +730,7 @@ void VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr reg
 
   for (const auto &vector : request.vectors()) {
     pb::common::VectorWithId vector_with_id;
-    vector_with_id.mutable_vector()->CopyFrom(vector.vector());
+    *(vector_with_id.mutable_vector()) = vector.vector();
     vector_with_id.set_id(vector.id());
     vector_with_ids.push_back(vector_with_id);
   }
