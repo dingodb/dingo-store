@@ -542,15 +542,6 @@ butil::Status VectorIndexManager::SaveVectorIndex(VectorIndexWrapperPtr vector_i
     return butil::Status();
   }
 
-  // Install vector index snapshot to followers.
-  status =
-      VectorIndexSnapshotManager::InstallSnapshotToFollowers(vector_index_wrapper->SnapshotSet()->GetLastSnapshot());
-  if (!status.ok()) {
-    DINGO_LOG(ERROR) << fmt::format(
-        "[vector_index.save][index_id({}_v{})] Install snapshot to followers failed, error {}",
-        vector_index_wrapper->Id(), vector_index_wrapper->Version(), status.error_str());
-  }
-
   return butil::Status();
 }
 

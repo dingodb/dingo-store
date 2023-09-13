@@ -2515,6 +2515,13 @@ void CheckTableDistribution(std::shared_ptr<Context> ctx) {
           dingodb::Helper::StringToHex(region_range.range().start_key()),
           dingodb::Helper::StringToHex(region_range.range().end_key()));
     }
+
+    if (!ctx->key.empty()) {
+      if (ctx->key >= dingodb::Helper::StringToHex(region_range.range().start_key()) &&
+          ctx->key < dingodb::Helper::StringToHex(region_range.range().end_key())) {
+        DINGO_LOG(INFO) << fmt::format("key({}) at region {}", ctx->key, region_range.id().entity_id());
+      }
+    }
   }
 
   std::string key;

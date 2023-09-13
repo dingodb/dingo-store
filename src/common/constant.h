@@ -157,6 +157,7 @@ class Constant {
   inline static const std::string kRaftSnapshotRegionMetaFileName = "region_meta";
 
   static constexpr uint32_t kCollectApproximateSizeBatchSize = 1024;
+  static constexpr uint64_t kVectorIndexSnapshotCatchupMargin = 4000;
 };
 
 }  // namespace dingodb

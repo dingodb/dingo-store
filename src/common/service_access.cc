@@ -68,7 +68,7 @@ pb::node::NodeInfo ServiceAccess::GetNodeInfo(const butil::EndPoint& endpoint) {
   pb::node::NodeService_Stub stub(channel.get());
 
   brpc::Controller cntl;
-  cntl.set_timeout_ms(1000L);
+  cntl.set_timeout_ms(6000);
 
   pb::node::GetNodeInfoRequest request;
   pb::node::GetNodeInfoResponse response;
@@ -135,6 +135,7 @@ butil::Status ServiceAccess::GetVectorIndexSnapshot(const pb::node::GetVectorInd
   }
 
   brpc::Controller cntl;
+  cntl.set_timeout_ms(6000);
   pb::node::NodeService_Stub stub(channel.get());
 
   stub.GetVectorIndexSnapshot(&cntl, &request, &response, nullptr);
@@ -144,7 +145,8 @@ butil::Status ServiceAccess::GetVectorIndexSnapshot(const pb::node::GetVectorInd
   }
 
   if (response.error().errcode() != pb::error::OK) {
-    if (response.error().errcode() != pb::error::EVECTOR_INDEX_NOT_FOUND &&
+    if (response.error().errcode() != pb::error::EREGION_NOT_FOUND &&
+        response.error().errcode() != pb::error::EVECTOR_INDEX_NOT_FOUND &&
         response.error().errcode() != pb::error::EVECTOR_SNAPSHOT_NOT_FOUND) {
       DINGO_LOG(ERROR) << fmt::format("GetVectorIndexSnapshot response failed, error {} {}",
                                       static_cast<int>(response.error().errcode()), response.error().errmsg());
@@ -165,6 +167,7 @@ butil::Status ServiceAccess::CheckVectorIndex(const pb::node::CheckVectorIndexRe
   }
 
   brpc::Controller cntl;
+  cntl.set_timeout_ms(6000);
   pb::node::NodeService_Stub stub(channel.get());
 
   stub.CheckVectorIndex(&cntl, &request, &response, nullptr);
@@ -188,6 +191,7 @@ std::shared_ptr<pb::fileservice::CleanFileReaderResponse> ServiceAccess::CleanFi
   }
 
   brpc::Controller cntl;
+  cntl.set_timeout_ms(6000);
   pb::fileservice::FileService_Stub stub(channel.get());
 
   auto response = std::make_shared<pb::fileservice::CleanFileReaderResponse>();
@@ -209,13 +213,14 @@ std::shared_ptr<pb::fileservice::GetFileResponse> ServiceAccess::GetFile(const p
   }
 
   brpc::Controller cntl;
+  cntl.set_timeout_ms(6000);
   pb::fileservice::FileService_Stub stub(channel.get());
 
   auto response = std::make_shared<pb::fileservice::GetFileResponse>();
   stub.GetFile(&cntl, &request, response.get(), nullptr);
   if (cntl.Failed()) {
-    DINGO_LOG(ERROR) << fmt::format("Send GetFileRequest failed, endpoint {} error {}", Helper::EndPointToStr(endpoint),
-                                    cntl.ErrorText());
+    DINGO_LOG(ERROR) << fmt::format("Send GetFileRequest failed, channel use count {} endpoint {} error {}",
+                                    channel.use_count(), Helper::EndPointToStr(endpoint), cntl.ErrorText());
     return nullptr;
   }
 
