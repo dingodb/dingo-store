@@ -33,17 +33,15 @@ void VectorIndexLeaderStartHandler::Handle(store::RegionPtr region, uint64_t) {
     DINGO_LOG(WARNING) << fmt::format("Vector index {} already exist, don't need load again.", region->Id());
   } else {
     auto snapshot_set = vector_index_wrapper->SnapshotSet();
-    if (!snapshot_set->IsExistLastSnapshot()) {
-      auto status = VectorIndexSnapshotManager::PullLastSnapshotFromPeers(snapshot_set);
-      if (!status.ok()) {
-        if (status.error_code() != pb::error::EVECTOR_SNAPSHOT_EXIST) {
-          DINGO_LOG(ERROR) << fmt::format("Pull vector index {} last snapshot failed, error: {}", region->Id(),
-                                          status.error_str());
-        }
+    auto status = VectorIndexSnapshotManager::PullLastSnapshotFromPeers(snapshot_set);
+    if (!status.ok()) {
+      if (status.error_code() != pb::error::EVECTOR_SNAPSHOT_EXIST) {
+        DINGO_LOG(ERROR) << fmt::format("Pull vector index {} last snapshot failed, error: {}", region->Id(),
+                                        status.error_str());
       }
     }
 
-    auto status = VectorIndexManager::LoadOrBuildVectorIndex(vector_index_wrapper);
+    status = VectorIndexManager::LoadOrBuildVectorIndex(vector_index_wrapper);
     if (!status.ok()) {
       DINGO_LOG(ERROR) << fmt::format("Load or build vector index failed, region {} error: {}", region->Id(),
                                       status.error_str());

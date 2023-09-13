@@ -50,6 +50,8 @@ struct Context {
     clone_ctx->offset = offset;
     clone_ctx->limit = limit;
 
+    clone_ctx->key = key;
+
     return clone_ctx;
   }
 
@@ -79,6 +81,8 @@ struct Context {
   std::string db_path;
   int32_t offset;
   int32_t limit;
+
+  std::string key;
 };
 
 // meta

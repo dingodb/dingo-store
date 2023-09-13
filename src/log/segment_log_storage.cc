@@ -839,7 +839,6 @@ int64_t SegmentLogStorage::GetTerm(const int64_t index) {
 }
 
 void SegmentLogStorage::PopSegments(int64_t first_index_kept, std::vector<std::shared_ptr<Segment>>& poppeds) {
-  poppeds.clear();
   poppeds.reserve(32);
   BAIDU_SCOPED_LOCK(mutex_);
 
@@ -859,7 +858,10 @@ void SegmentLogStorage::PopSegments(int64_t first_index_kept, std::vector<std::s
       open_segment_ = nullptr;
       last_log_index_.store(first_index_kept - 1);
     } else {
-      CHECK(open_segment_->FirstIndex() <= first_index_kept);
+      CHECK(open_segment_->FirstIndex() <= first_index_kept) << fmt::format(
+          "[raft.log][region({}).index({}_{})] pop segment abnormal, open segment: {}_{} first_index_kept: {}",
+          region_id_, FirstLogIndex(), LastLogIndex(), open_segment_->FirstIndex(), open_segment_->LastIndex(),
+          first_index_kept);
     }
   } else {
     last_log_index_.store(first_index_kept - 1);

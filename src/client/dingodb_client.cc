@@ -257,7 +257,8 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
   butil::SplitString(FLAGS_raft_addrs, ',', &raft_addrs);
 
   if (FLAGS_store_addrs.empty()) {
-    if (method != "AutoDropTable" && method != "AutoTest" && method != "DumpDb" && method != "DumpVectorIndexDb") {
+    if (method != "AutoDropTable" && method != "AutoTest" && method != "DumpDb" && method != "DumpVectorIndexDb" &&
+        method != "CheckTableDistribution" && method != "CheckIndexDistribution") {
       // Get store addr from coordinator
       auto store_addrs = GetStoreAddrs(ctx->coordinator_interaction, FLAGS_region_id);
       ctx->store_interaction = std::make_shared<client::ServerInteraction>();
@@ -400,16 +401,13 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
     // Check table range
     else if (method == "CheckTableDistribution") {
       ctx->table_id = FLAGS_table_id;
-      for (;;) {
-        client::CheckTableDistribution(ctx);
-        bthread_usleep(1000 * 1000);
-      }
+      ctx->key = FLAGS_key;
+      client::CheckTableDistribution(ctx);
+
     } else if (method == "CheckIndexDistribution") {
       ctx->table_id = FLAGS_table_id;
-      for (;;) {
-        client::CheckIndexDistribution(ctx);
-        bthread_usleep(1000 * 1000);
-      }
+      client::CheckIndexDistribution(ctx);
+
     } else if (method == "DumpDb") {
       ctx->table_id = FLAGS_table_id;
       ctx->index_id = FLAGS_index_id;
