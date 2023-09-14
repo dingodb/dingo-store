@@ -43,9 +43,11 @@ class Buf {
   void SetForwardPos(int fp);
   void SetReversePos(int rp);
   void Write(uint8_t b);
+  void WriteWithNegation(uint8_t b);
   void Write(const std::string& data);
   void WriteInt(int32_t i);
   void WriteLong(int64_t l);
+  void WriteLongWithNegation(int64_t l);
   void ReverseWrite(uint8_t b);
   void ReverseWriteInt(int32_t i);
   uint8_t Read();

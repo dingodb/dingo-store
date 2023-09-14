@@ -327,6 +327,12 @@ message LockInfo {
   Op lock_type = 6;        // the type of the lock, it can be put, delete, lock, rollback, putIfAbsent
 }
 
+message WriteInfo {
+  uint64 start_ts = 1;
+  Op op = 2;
+  bytes short_value = 3;
+}
+
 message Context {
   uint64 region_id = 1;
   dingodb.pb.common.RegionEpoch region_epoch = 2;
@@ -335,11 +341,11 @@ message Context {
 
 enum Op {
   None = 0;         // just a placeholder
-  Put = 1;          // do data upsert, like KvPut or VectorAdd
-  Delete = 2;       // do data delete, like KvDelete or VectorDelete
-  Lock = 3;         // not used now
-  Rollback = 4;     // only do rollback
-  PutIfAbsent = 5;  // do insert, if id is exists, return AlreadyExist error
+  Put = 1;          // prewrite: do data upsert, like KvPut or VectorAdd
+  Delete = 2;       // prewrite: do data delete, like KvDelete or VectorDelete
+  PutIfAbsent = 3;  // prewrite: do insert, if id is exists, return AlreadyExist error
+  Rollback = 4;     // rollback: only do rollback
+  Lock = 5;         // not used now, for future use
 }
 
 message Mutation {
@@ -366,7 +372,7 @@ message WriteConflict {
   uint64 conflict_ts = 3;         // the lock_ts conflicted with start_ts
   uint64 conflict_commit_ts = 4;  // the commit_ts of the transaction which meets read conflict
   bytes key = 5;
-  bytes primary_key = 6;
+  bytes primary_key = 6;  // the conflict lock's primary key
 }
 
 message TxnNotFound {
@@ -494,8 +500,9 @@ message TxnPrewriteResponse {
   // error code
   dingodb.pb.error.Error error = 1;
   // for prewrite, txn_result will be one of the following:
-  // 1. WriteConflict: Write conflict with key which is locked by another transaction.
-  // 2. otherwise, txn_result is empty
+  // 1. LockInfo: prewrite meet a lock and can't proceed, the lock is returned
+  // 2. WriteConflict: Write conflict with key which is already written after start_ts
+  // 3. otherwise, txn_result is empty
   // for success prewrite, txn_result is empty
   // for failure prewrite, txn_result is not empty
   // if txn_result is AlreadyExist, there will be many txn_result, each txn_result is for one key
@@ -700,6 +707,32 @@ message TxnDeleteRangeResponse {
   dingodb.pb.error.Error error = 1;
 }
 
+message TxnDataKey {
+  bytes key = 1;
+  uint64 start_ts = 2;
+}
+
+message TxnDataValue {
+  bytes value = 1;
+}
+
+message TxnLockKey {
+  bytes key = 1;
+}
+
+message TxnLockValue {
+  LockInfo lock_info = 1;
+}
+
+message TxnWriteKey {
+  bytes key = 1;
+  uint64 commit_ts = 2;
+}
+
+message TxnWriteValue {
+  WriteInfo write_info = 1;
+}
+
 message TxnDumpRequest {
   Context context = 1;
   // the range is [start_key, end_key)
@@ -716,40 +749,19 @@ message TxnDumpResponse {
   // error code
   dingodb.pb.error.Error error = 1;
   TxnResultInfo txn_result = 2;
-  repeated TxnWriteKey keys = 3;
-  repeated TxnWriteValue values = 4;
+
+  // data key: raw_key | start_ts
+  repeated TxnDataKey data_keys = 3;
+  // data value: raw_value
+  repeated TxnDataValue data_values = 4;
+  // lock key: raw_key
   repeated TxnLockKey lock_keys = 5;
+  // lock value: LockInfo
   repeated TxnLockValue lock_values = 6;
-  repeated TxnDataKey data_keys = 7;
-  repeated TxnDataValue data_values = 8;
-}
-
-message TxnWriteKey {
-  bytes key = 1;
-  uint64 commit_ts = 2;
-}
-
-message TxnWriteValue {
-  uint64 start_ts = 1;
-  Op op = 2;
-  bytes short_value = 3;
-}
-
-message TxnLockKey {
-  bytes key = 1;
-}
-
-message TxnLockValue {
-  LockInfo lock_info = 1;
-}
-
-message TxnDataKey {
-  bytes key = 1;
-  uint64 start_ts = 2;
-}
-
-message TxnDataValue {
-  bytes value = 1;
+  // write key: raw_key | commit_ts
+  repeated TxnWriteKey keys = 7;
+  // write value: WriteInfo
+  repeated TxnWriteValue values = 8;
 }
 
 // message TxnScanBeginRequest {

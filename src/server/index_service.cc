@@ -53,6 +53,8 @@ DEFINE_bool(enable_async_vector_operation, true, "enable async vector operation"
 
 static void IndexRpcDone(BthreadCond* cond) { cond->DecreaseSignal(); }
 
+DECLARE_uint32(max_prewrite_count);
+
 IndexServiceImpl::IndexServiceImpl() = default;
 
 void IndexServiceImpl::SetStorage(std::shared_ptr<Storage> storage) { storage_ = storage; }
@@ -1976,6 +1978,10 @@ void IndexServiceImpl::TxnScan(google::protobuf::RpcController* controller, cons
 butil::Status ValidateTxnPrewriteRequest(const dingodb::pb::index::TxnPrewriteRequest* request) {
   if (request->mutations_size() == 0) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "mutations is empty");
+  }
+
+  if (request->mutations_size() > FLAGS_max_prewrite_count) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "mutations size is too large, max=1024");
   }
 
   if (request->primary_lock().empty()) {

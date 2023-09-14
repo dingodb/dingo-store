@@ -1257,6 +1257,52 @@ bool Helper::IsEqualVectorScalarValue(const pb::common::ScalarValue& value1, con
 //   return buf.GetString();
 // }
 
+// for txn, encode start_ts/commit_ts to std::string
+std::string Helper::EncodeTso(uint64_t ts) {
+  Buf buf(8);
+  buf.WriteLongWithNegation(ts);
+
+  return buf.GetString();
+}
+
+// for txn, encode data/write key
+std::string Helper::EncodeTxnKey(const std::string& key, uint64_t ts) {
+  Buf buf(key.length() + 8);
+  buf.Write(key);
+  buf.WriteLongWithNegation(ts);
+
+  return buf.GetString();
+}
+
+// for txn, encode data/write key
+butil::Status Helper::DecodeTxnKey(const std::string& txn_key, std::string& key, uint64_t& ts) {
+  if (txn_key.length() <= 8) {
+    return butil::Status(pb::error::EINTERNAL, "DecodeTxnKey failed, txn_key length <= 8");
+  }
+
+  key = txn_key.substr(0, txn_key.length() - 8);
+  auto ts_str = txn_key.substr(txn_key.length() - 8);
+  Buf buf(ts_str);
+  ts = ~buf.ReadLong();
+
+  return butil::Status::OK();
+}
+
+// for txn, encode data/write key
+butil::Status Helper::DecodeTxnKey(const std::string_view& txn_key, std::string& key, uint64_t& ts) {
+  if (txn_key.length() <= 8) {
+    return butil::Status(pb::error::EINTERNAL, "DecodeTxnKey failed, txn_key length <= 8");
+  }
+
+  key = txn_key.substr(0, txn_key.length() - 8);
+  std::string ts_str;
+  ts_str = txn_key.substr(txn_key.length() - 8);
+  Buf buf(ts_str);
+  ts = ~buf.ReadLong();
+
+  return butil::Status::OK();
+}
+
 std::string Helper::ToUpper(const std::string& str) {
   std::string result;
   result.resize(str.size());

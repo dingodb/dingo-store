@@ -259,6 +259,15 @@ class Helper {
   // for index region, encode raw_range
   // static std::string EncodeIndexRegionHeader(int64_t partition_id, int64_t vector_id);
 
+  // for txn, encode start_ts/commit_ts to std::string
+  static std::string EncodeTso(uint64_t ts);
+  // for txn, encode data/write key
+  static std::string EncodeTxnKey(const std::string& key, uint64_t ts);
+  // for txn, encode data/write key
+  static butil::Status DecodeTxnKey(const std::string& txn_key, std::string& key, uint64_t& ts);
+  // for txn, encode data/write key
+  static butil::Status DecodeTxnKey(const std::string_view& txn_key, std::string& key, uint64_t& ts);
+
   // Upper string
   static std::string ToUpper(const std::string& str);
   // Lower string
