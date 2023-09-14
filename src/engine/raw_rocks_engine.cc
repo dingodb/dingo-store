@@ -357,7 +357,7 @@ std::shared_ptr<RawEngine::MultiCfWriter> RawRocksEngine::NewMultiCfWriter(const
 
 butil::Status RawRocksEngine::MultiCfWriter::KvBatchPutAndDelete(
     const std::map<uint32_t, std::vector<pb::common::KeyValue>>& kv_puts_with_cf,
-    const std::map<uint32_t, std::vector<pb::common::KeyValue>>& kv_deletes_with_cf) {
+    const std::map<uint32_t, std::vector<std::string>>& kv_deletes_with_cf) {
   DINGO_LOG(INFO) << "MultiCfWriter::KvBatchPutAndDelete, kv_puts_with_cf size: " << kv_puts_with_cf.size()
                   << ", kv_deletes_with_cf size: " << kv_deletes_with_cf.size();
 
@@ -398,12 +398,12 @@ butil::Status RawRocksEngine::MultiCfWriter::KvBatchPutAndDelete(
       return butil::Status(pb::error::EKEY_EMPTY, "cf_id is invalid");
     }
 
-    for (const auto& kv : kv_deletes) {
-      if (BAIDU_UNLIKELY(kv.key().empty())) {
+    for (const auto& key : kv_deletes) {
+      if (BAIDU_UNLIKELY(key.empty())) {
         DINGO_LOG(ERROR) << fmt::format("key empty not support");
         return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
       } else {
-        rocksdb::Status s = batch.Delete(column_families_[cf_id]->GetHandle(), kv.key());
+        rocksdb::Status s = batch.Delete(column_families_[cf_id]->GetHandle(), key);
         if (BAIDU_UNLIKELY(!s.ok())) {
           DINGO_LOG(ERROR) << fmt::format("rocksdb::WriteBatch::Put failed : {}", s.ToString());
           return butil::Status(pb::error::EINTERNAL, "Internal delete error");

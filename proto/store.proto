@@ -324,7 +324,7 @@ message LockInfo {
   bytes key = 3;           // the key of the lock
   uint64 lock_ttl = 4;     // the lock ttl timestamp in milisecond
   uint64 txn_size = 5;     // the number of keys involved in the transaction
-  Op lock_type = 6;        // the type of the lock, it can be put, delete, lock, rollback, putIfAbsent
+  Op lock_type = 6;        // the type of the lock, it can be put, delete, lock
 }
 
 message WriteInfo {
@@ -388,21 +388,15 @@ message AlreadyExist {
   bytes key = 1;
 }
 
-message Abort {
-  LockInfo lock_info = 1;
-}
-
 message TxnResultInfo {
   // Client should backoff or cleanup the lock then retry, this error occurs in get phase.
   LockInfo locked = 1;
   // Write conflict with key which is locked by another transaction, this error occurs in prewrite phase.
   WriteConflict write_conflict = 2;
-  // The transaction is aborted, this error occurs in commit phase of primary_lock.
-  Abort abort = 3;
   // Txn not found when checking txn status.
-  TxnNotFound txn_not_found = 4;
+  TxnNotFound txn_not_found = 3;
   // CheckTxnStatus is sent to a lock that's not the primary.
-  PrimaryMismatch primary_mismatch = 5;
+  PrimaryMismatch primary_mismatch = 4;
 }
 
 // TxnKvGet do point-lookup a value for key in the transaction with start_ts
@@ -531,7 +525,9 @@ message TxnCommitResponse {
   // error code
   dingodb.pb.error.Error error = 1;
   // the txn_result is one of the following:
-  // 1. Abort: if committing primary with no lock, the txn_result is Abort
+  // 1. TxnNotFound: if committing a key but not found its lock, the lock may be cleaned up by gc or resolved by. If
+  // committing primary key meet this error, the transaction may be rolled back. If committing secondary key meet this,
+  // Executor can think its lock is resolved, and continue to commit.
   // 2. otherwise, txn_result is empty
   TxnResultInfo txn_result = 2;
   // The commit_ts of the transaction.

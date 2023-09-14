@@ -24,8 +24,9 @@
 #include "common/helper.h"
 #include "common/logging.h"
 #include "engine/iterator.h"
-#include "engine/raw_engine.h"
+#include "engine/txn_engine_helper.h"
 #include "fmt/core.h"
+#include "gflags/gflags.h"
 #include "handler/raft_apply_handler.h"
 #include "meta/store_meta_manager.h"
 #include "proto/common.pb.h"
@@ -34,6 +35,8 @@
 #include "proto/store.pb.h"
 
 namespace dingodb {
+
+DEFINE_uint32(max_short_value_in_write_cf, 1024, "max short value in write cf");
 
 void TxnHandler::HandleMultiCfPutAndDeleteRequest(std::shared_ptr<Context> ctx, store::RegionPtr region,
                                                   std::shared_ptr<RawEngine> engine,
@@ -81,7 +84,7 @@ void TxnHandler::HandleMultiCfPutAndDeleteRequest(std::shared_ptr<Context> ctx, 
     return;
   }
   std::map<uint32_t, std::vector<pb::common::KeyValue>> kv_puts_with_cf;
-  std::map<uint32_t, std::vector<pb::common::KeyValue>> kv_deletes_with_cf;
+  std::map<uint32_t, std::vector<std::string>> kv_deletes_with_cf;
 
   for (const auto &puts : request.puts_with_cf()) {
     if (!kTxnCf2Id.count(puts.cf_name())) {
@@ -109,10 +112,7 @@ void TxnHandler::HandleMultiCfPutAndDeleteRequest(std::shared_ptr<Context> ctx, 
     uint32_t cf_id = kTxnCf2Id.at(dels.cf_name());
 
     for (const auto &key : dels.keys()) {
-      pb::common::KeyValue kv;
-      // kv.mutable_key()->swap(const_cast<std::string &>(key));
-      kv.mutable_key()->assign(key);
-      kv_deletes_with_cf[cf_id].push_back(kv);
+      kv_deletes_with_cf[cf_id].push_back(key);
     }
   }
 
@@ -169,56 +169,32 @@ void TxnHandler::HandleTxnPrewriteRequest([[maybe_unused]] std::shared_ptr<Conte
   for (const auto &mutation : request.mutations()) {
     // 1.check if the key is locked
     //   if the key is locked, return LockInfo
-    std::string lock_value;
-    auto status = lock_reader->KvGet(mutation.key(), lock_value);
-    // if lock_value is not found or it is empty, then the key is not locked
-    // else the key is locked, return WriteConflict
-    if (status.ok()) {
-      if (!lock_value.empty()) {
-        pb::store::LockInfo lock_info;
-        auto ret = lock_info.ParseFromString(lock_value);
-        if (!ret) {
-          DINGO_LOG(FATAL) << fmt::format("[txn][region({})] HandleTxnPrewrite, term: {} apply_log_id: {}",
-                                          region->Id(), term_id, log_id)
-                           << ", parse lock info failed, request: " << request.ShortDebugString()
-                           << ", lock_key: " << mutation.key() << ", lock_value: " << lock_value
-                           << ", start_ts: " << start_ts;
-        }
+    pb::store::LockInfo lock_info;
+    auto ret = TxnEngineHelper::GetLockInfo(lock_reader, mutation.key(), lock_info);
+    if (!ret.ok()) {
+      // TODO: do read before write to raft state machine
+      // Now we need to fatal exit to prevent data inconsistency between raft peers
+      DINGO_LOG(FATAL) << fmt::format("[txn][region({})] HandleTxnPrewrite, term: {} apply_log_id: {}", region->Id(),
+                                      term_id, log_id)
+                       << ", get lock info failed, request: " << request.ShortDebugString()
+                       << ", lock_key: " << mutation.key() << ", start_ts: " << start_ts
+                       << ", status: " << ret.error_str();
+      error->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+      error->set_errmsg(ret.error_str());
 
-        // set txn_result for response
-        // setup lock_info
-        *txn_result->mutable_locked() = lock_info;
+      // need response to client
+      return;
+    }
 
-        // setup write_conflict ( this may not be necessary, when lock_info is set)
-        // auto *write_conflict = txn_result->mutable_write_conflict();
-        // write_conflict->set_reason(::dingodb::pb::store::WriteConflict_Reason::WriteConflict_Reason_Optimistic);
-        // write_conflict->set_start_ts(start_ts);
-        // write_conflict->set_conflict_ts(lock_info.lock_ts());
-        // write_conflict->set_key(mutation.key());
-        // write_conflict->set_primary_key(lock_info.primary_lock());
-
-        // need response to client
-        return;
-      } else {
-        // lock_value is empty, the key is not locked
-        DINGO_LOG(INFO) << fmt::format("[txn][region({})] HandleTxnPrewrite, term: {} apply_log_id: {}", region->Id(),
-                                       term_id, log_id)
-                        << ", key: " << mutation.key() << " is not locked, lock_value is null, start_ts: " << start_ts;
-      }
-    } else if (status.error_code() == pb::error::Errno::EKEY_NOT_FOUND) {
-      // lock_value is empty, the key is not locked
+    if (!lock_info.primary_lock().empty()) {
       DINGO_LOG(INFO) << fmt::format("[txn][region({})] HandleTxnPrewrite, term: {} apply_log_id: {}", region->Id(),
                                      term_id, log_id)
-                      << ", key: " << mutation.key() << " is not locked, lock_key is not exist, start_ts: " << start_ts;
-    } else {
-      // other error, return error
-      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] HandleTxnPrewrite, term: {} apply_log_id: {}", region->Id(),
-                                      term_id, log_id)
-                       << ", read lock_key failed, request: " << request.ShortDebugString()
-                       << ", lock_key: " << mutation.key() << ", start_ts: " << start_ts
-                       << ", status: " << status.error_str();
-      error->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
-      error->set_errmsg(status.error_str());
+                      << ", key: " << mutation.key()
+                      << " is locked conflict, lock_info: " << lock_info.ShortDebugString();
+
+      // set txn_result for response
+      // setup lock_info
+      *txn_result->mutable_locked() = lock_info;
 
       // need response to client
       return;
@@ -388,7 +364,7 @@ void TxnHandler::HandleTxnPrewriteRequest([[maybe_unused]] std::shared_ptr<Conte
 
   // after all mutations is processed, write into raw engine
   std::map<uint32_t, std::vector<pb::common::KeyValue>> kv_puts_with_cf;
-  std::map<uint32_t, std::vector<pb::common::KeyValue>> kv_deletes_with_cf;
+  std::map<uint32_t, std::vector<std::string>> kv_deletes_with_cf;
 
   kv_puts_with_cf.insert_or_assign(Constant::kTxnDataCfId, kv_puts_data);
   kv_puts_with_cf.insert_or_assign(Constant::kTxnLockCfId, kv_puts_lock);
@@ -411,11 +387,122 @@ void TxnHandler::HandleTxnPrewriteRequest([[maybe_unused]] std::shared_ptr<Conte
 
 void TxnHandler::HandleTxnCommitRequest(std::shared_ptr<Context> ctx, store::RegionPtr region,
                                         std::shared_ptr<RawEngine> engine, const pb::raft::TxnCommitRequest &request,
-                                        store::RegionMetricsPtr region_metrics, uint64_t term_id, uint64_t log_id) {
-  // DINGO_LOG(INFO) << fmt::format("[txn][region({})] HandleTxnCommit, term: {} apply_log_id: {}", region->Id(),
-  // term_id,
-  //                                log_id)
-  //                 << ", request: " << request.ShortDebugString();
+                                        store::RegionMetricsPtr /*region_metrics*/, uint64_t term_id, uint64_t log_id) {
+  DINGO_LOG(INFO) << fmt::format("[txn][region({})] HandleTxnCommit, term: {} apply_log_id: {}", region->Id(), term_id,
+                                 log_id)
+                  << ", request: " << request.ShortDebugString();
+
+  // create reader and writer
+  auto lock_reader = engine->NewReader(Constant::kTxnLockCF);
+  if (lock_reader == nullptr) {
+    DINGO_LOG(FATAL) << fmt::format("[txn][region({})] HandleTxnPrewrite, term: {} apply_log_id: {}", region->Id(),
+                                    term_id, log_id)
+                     << ", new reader failed, request: " << request.ShortDebugString();
+  }
+  auto data_reader = engine->NewReader(Constant::kTxnDataCF);
+
+  std::vector<pb::common::KeyValue> kv_puts_write;
+  std::vector<std::string> kv_deletes_lock;
+
+  uint64_t start_ts = request.start_ts();
+  uint64_t commit_ts = request.commit_ts();
+
+  auto *response = dynamic_cast<pb::store::TxnPrewriteResponse *>(ctx->Response());
+  auto *error = response->mutable_error();
+  auto *txn_result = response->mutable_txn_result();
+
+  // for every key, check and do commit, if primary key is failed, the whole commit is failed
+  for (const auto &key : request.keys()) {
+    pb::store::LockInfo lock_info;
+    auto ret = TxnEngineHelper::GetLockInfo(lock_reader, key, lock_info);
+    if (!ret.ok()) {
+      DINGO_LOG(FATAL) << fmt::format("[txn][region({})] HandleTxnCommit, term: {} apply_log_id: {}", region->Id(),
+                                      term_id, log_id)
+                       << ", get lock info failed, request: " << request.ShortDebugString() << ", key: " << key
+                       << ", start_ts: " << start_ts << ", status: " << ret.error_str();
+    }
+
+    // if lock is not exist, return TxnNotFound
+    if (lock_info.primary_lock().empty()) {
+      DINGO_LOG(WARNING) << fmt::format("[txn][region({})] HandleTxnCommit, term: {} apply_log_id: {}", region->Id(),
+                                        term_id, log_id)
+                         << ", txn_not_found with lock_info empty, request: " << request.ShortDebugString()
+                         << ", key: " << key << ", start_ts: " << start_ts;
+
+      auto *txn_not_found = txn_result->mutable_txn_not_found();
+      txn_not_found->set_start_ts(start_ts);
+
+      return;
+    }
+
+    // if lock is exists but start_ts is not equal to lock_ts, return TxnNotFound
+    if (lock_info.lock_ts() != start_ts) {
+      DINGO_LOG(WARNING) << fmt::format("[txn][region({})] HandleTxnCommit, term: {} apply_log_id: {}", region->Id(),
+                                        term_id, log_id)
+                         << ", txn_not_found with lock_info.lock_ts not equal to start_ts, request: "
+                         << request.ShortDebugString() << ", key: " << key << ", start_ts: " << start_ts
+                         << ", lock_info: " << lock_info.ShortDebugString();
+
+      auto *txn_not_found = txn_result->mutable_txn_not_found();
+      txn_not_found->set_start_ts(start_ts);
+
+      return;
+    }
+
+    // now txn is match, prepare to commit
+    // 1.put data to write_cf
+    std::string data_value;
+    if (lock_info.lock_type() == pb::store::Put) {
+      ret = data_reader->KvGet(Helper::EncodeTxnKey(key, start_ts), data_value);
+      if (!ret.ok() && ret.error_code() != pb::error::Errno::EKEY_NOT_FOUND) {
+        DINGO_LOG(FATAL) << fmt::format("[txn][region({})] HandleTxnCommit, term: {} apply_log_id: {}", region->Id(),
+                                        term_id, log_id)
+                         << ", get data failed, request: " << request.ShortDebugString() << ", key: " << key
+                         << ", start_ts: " << start_ts << ", status: " << ret.error_str();
+      }
+    }
+
+    {
+      pb::common::KeyValue kv;
+      std::string write_key = Helper::EncodeTxnKey(key, commit_ts);
+      kv.set_key(write_key);
+
+      pb::store::WriteInfo write_info;
+      write_info.set_start_ts(start_ts);
+      write_info.set_op(lock_info.lock_type());
+      if (!data_value.empty() && data_value.length() < FLAGS_max_short_value_in_write_cf) {
+        write_info.set_short_value(data_value);
+      }
+      kv.set_value(write_info.SerializeAsString());
+
+      kv_puts_write.push_back(kv);
+    }
+
+    // 3.delete lock from lock_cf
+    { kv_deletes_lock.push_back(key); }
+  }
+
+  // after all mutations is processed, write into raw engine
+  std::map<uint32_t, std::vector<pb::common::KeyValue>> kv_puts_with_cf;
+  std::map<uint32_t, std::vector<std::string>> kv_deletes_with_cf;
+
+  kv_puts_with_cf.insert_or_assign(Constant::kTxnWriteCfId, kv_puts_write);
+  kv_deletes_with_cf.insert_or_assign(Constant::kTxnLockCfId, kv_deletes_lock);
+
+  auto writer = engine->NewMultiCfWriter(Helper::GenMvccCfVector());
+  if (writer == nullptr) {
+    DINGO_LOG(FATAL) << fmt::format("[txn][region({})] HandleMultiCfPutAndDelete, term: {} apply_log_id: {}",
+                                    region->Id(), term_id, log_id)
+                     << ", new multi cf writer failed, request: " << request.ShortDebugString();
+    return;
+  }
+
+  auto status = writer->KvBatchPutAndDelete(kv_puts_with_cf, kv_deletes_with_cf);
+  if (!status.ok()) {
+    DINGO_LOG(FATAL) << fmt::format("[txn][region({})] HandleTxnPrewrite, term: {} apply_log_id: {}", region->Id(),
+                                    term_id, log_id)
+                     << ", write failed, request: " << request.ShortDebugString() << ", status: " << status.error_str();
+  }
 }
 
 void TxnHandler::HandleTxnCheckTxnStatusRequest(std::shared_ptr<Context> ctx, store::RegionPtr region,

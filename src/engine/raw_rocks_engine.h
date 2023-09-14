@@ -304,9 +304,8 @@ class RawRocksEngine : public RawEngine {
         : db_(db), column_families_(column_families){};
     ~MultiCfWriter() override = default;
     // map<cf_index, vector<kvs>>
-    butil::Status KvBatchPutAndDelete(
-        const std::map<uint32_t, std::vector<pb::common::KeyValue>>& kv_puts_with_cf,
-        const std::map<uint32_t, std::vector<pb::common::KeyValue>>& kv_deletes_with_cf) override;
+    butil::Status KvBatchPutAndDelete(const std::map<uint32_t, std::vector<pb::common::KeyValue>>& kv_puts_with_cf,
+                                      const std::map<uint32_t, std::vector<std::string>>& kv_deletes_with_cf) override;
 
     butil::Status KvBatchDeleteRange(const std::map<uint32_t, std::vector<pb::common::Range>>& ranges_with_cf) override;
 

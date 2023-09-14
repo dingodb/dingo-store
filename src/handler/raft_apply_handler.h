@@ -15,6 +15,9 @@
 #ifndef DINGODB_HANDLER_RAFT_HANDLER_H_
 #define DINGODB_HANDLER_RAFT_HANDLER_H_
 
+#include <memory>
+
+#include "butil/status.h"
 #include "common/context.h"
 #include "engine/raw_engine.h"
 #include "handler/handler.h"

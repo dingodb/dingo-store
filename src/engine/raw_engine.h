@@ -131,7 +131,7 @@ class RawEngine {
     // map<cf_index, vector<kvs>>
     virtual butil::Status KvBatchPutAndDelete(
         const std::map<uint32_t, std::vector<pb::common::KeyValue>>& kv_puts_with_cf,
-        const std::map<uint32_t, std::vector<pb::common::KeyValue>>& kv_deletes_with_cf) = 0;
+        const std::map<uint32_t, std::vector<std::string>>& kv_deletes_with_cf) = 0;
 
     virtual butil::Status KvBatchDeleteRange(
         const std::map<uint32_t, std::vector<pb::common::Range>>& ranges_with_cf) = 0;
