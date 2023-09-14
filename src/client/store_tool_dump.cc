@@ -17,6 +17,7 @@
 #include <any>
 #include <cstdint>
 #include <functional>
+#include <iostream>
 #include <memory>
 #include <optional>
 #include <sstream>
@@ -124,17 +125,44 @@ dingodb::pb::store::Schema::Type TransformSchemaType(const std::string& name) {
   static std::map<std::string, dingodb::pb::store::Schema::Type> schema_type_map = {
       std::make_pair("CHAR", dingodb::pb::store::Schema::STRING),
       std::make_pair("VARCHAR", dingodb::pb::store::Schema::STRING),
+      std::make_pair("ANY", dingodb::pb::store::Schema::STRING),
+      std::make_pair("BINARY", dingodb::pb::store::Schema::STRING),
       std::make_pair("INTEGER", dingodb::pb::store::Schema::INTEGER),
+      std::make_pair("BIGINT", dingodb::pb::store::Schema::LONG),
+      std::make_pair("DATE", dingodb::pb::store::Schema::LONG),
+      std::make_pair("TIME", dingodb::pb::store::Schema::LONG),
+      std::make_pair("TIMESTAMP", dingodb::pb::store::Schema::LONG),
       std::make_pair("DOUBLE", dingodb::pb::store::Schema::DOUBLE),
       std::make_pair("BOOL", dingodb::pb::store::Schema::BOOL),
+      std::make_pair("BOOLEAN", dingodb::pb::store::Schema::BOOL),
       std::make_pair("FLOAT", dingodb::pb::store::Schema::FLOAT),
       std::make_pair("LONG", dingodb::pb::store::Schema::LONG),
-      std::make_pair("BOOLLIST", dingodb::pb::store::Schema::BOOLLIST),
-      std::make_pair("INTEGERLIST", dingodb::pb::store::Schema::INTEGERLIST),
-      std::make_pair("FLOATLIST", dingodb::pb::store::Schema::FLOATLIST),
-      std::make_pair("LONGLIST", dingodb::pb::store::Schema::LONGLIST),
-      std::make_pair("DOUBLELIST", dingodb::pb::store::Schema::DOUBLELIST),
-      std::make_pair("STRINGLIST", dingodb::pb::store::Schema::STRINGLIST),
+
+      std::make_pair("ARRAY_BOOL", dingodb::pb::store::Schema::BOOLLIST),
+      std::make_pair("ARRAY_BOOLEAN", dingodb::pb::store::Schema::BOOLLIST),
+      std::make_pair("ARRAY_INTEGER", dingodb::pb::store::Schema::INTEGERLIST),
+      std::make_pair("ARRAY_FLOAT", dingodb::pb::store::Schema::FLOATLIST),
+      std::make_pair("ARRAY_DOUBLE", dingodb::pb::store::Schema::DOUBLELIST),
+      std::make_pair("ARRAY_LONG", dingodb::pb::store::Schema::LONGLIST),
+      std::make_pair("ARRAY_BIGINT", dingodb::pb::store::Schema::LONGLIST),
+      std::make_pair("ARRAY_DATE", dingodb::pb::store::Schema::LONGLIST),
+      std::make_pair("ARRAY_TIME", dingodb::pb::store::Schema::LONGLIST),
+      std::make_pair("ARRAY_TIMESTAMP", dingodb::pb::store::Schema::LONGLIST),
+      std::make_pair("ARRAY_CHAR", dingodb::pb::store::Schema::STRINGLIST),
+      std::make_pair("ARRAY_VARCHAR", dingodb::pb::store::Schema::STRINGLIST),
+
+      std::make_pair("MULTISET_BOOL", dingodb::pb::store::Schema::BOOLLIST),
+      std::make_pair("MULTISET_BOOLEAN", dingodb::pb::store::Schema::BOOLLIST),
+      std::make_pair("MULTISET_INTEGER", dingodb::pb::store::Schema::INTEGERLIST),
+      std::make_pair("MULTISET_FLOAT", dingodb::pb::store::Schema::FLOATLIST),
+      std::make_pair("MULTISET_DOUBLE", dingodb::pb::store::Schema::DOUBLELIST),
+      std::make_pair("MULTISET_LONG", dingodb::pb::store::Schema::LONGLIST),
+      std::make_pair("MULTISET_BIGINT", dingodb::pb::store::Schema::LONGLIST),
+      std::make_pair("MULTISET_DATE", dingodb::pb::store::Schema::LONGLIST),
+      std::make_pair("MULTISET_TIME", dingodb::pb::store::Schema::LONGLIST),
+      std::make_pair("MULTISET_TIMESTAMP", dingodb::pb::store::Schema::LONGLIST),
+      std::make_pair("MULTISET_CHAR", dingodb::pb::store::Schema::STRINGLIST),
+      std::make_pair("MULTISET_VARCHAR", dingodb::pb::store::Schema::STRINGLIST),
   };
 
   auto it = schema_type_map.find(name);
@@ -150,7 +178,11 @@ std::vector<dingodb::pb::store::Schema> TransformColumnSchema(const dingodb::pb:
   int i = 0;
   for (const auto& column : definition.columns()) {
     dingodb::pb::store::Schema schema;
-    schema.set_type(TransformSchemaType(column.sql_type()));
+    std::string sql_type = column.sql_type();
+    if (sql_type == "ARRAY" || sql_type == "MULTISET") {
+      sql_type += "_" + column.element_type();
+    }
+    schema.set_type(TransformSchemaType(sql_type));
     schema.set_index(i++);
     if (column.indexofkey() >= 0) {
       schema.set_is_key(true);
@@ -175,7 +207,7 @@ std::string FormatVecotr(std::vector<T>& vec) {
   return str.str();
 }
 
-void PrintValue(const std::any value) {  // NOLINT
+void PrintValue(const dingodb::pb::meta::ColumnDefinition& column_definition, const std::any value) {  // NOLINT
   if (value.type() == typeid(std::optional<std::string>)) {
     auto v = std::any_cast<std::optional<std::string>>(value);
     std::cout << v.value_or("");
@@ -183,7 +215,11 @@ void PrintValue(const std::any value) {  // NOLINT
     auto v = std::any_cast<std::optional<std::shared_ptr<std::string>>>(value);
     auto ptr = v.value_or(nullptr);
     if (ptr != nullptr) {
-      std::cout << *ptr;
+      if (column_definition.sql_type() == "BINARY" || column_definition.sql_type() == "ANY") {
+        std::cout << dingodb::Helper::StringToHex(*ptr);
+      } else {
+        std::cout << *ptr;
+      }
     }
   } else if (value.type() == typeid(std::optional<int32_t>)) {
     auto v = std::any_cast<std::optional<int32_t>>(value);
@@ -254,9 +290,13 @@ void PrintValue(const std::any value) {  // NOLINT
   }
 }
 
-void PrintValues(const std::vector<std::any>& values) {  // NOLINT
+void PrintValues(const dingodb::pb::meta::TableDefinition& table_definition,
+                 const std::vector<std::any>& values) {  // NOLINT
   for (int i = 0; i < values.size(); ++i) {
-    PrintValue(values[i]);
+    const auto& column_definition = table_definition.columns().at(i);
+
+    PrintValue(column_definition, values[i]);
+
     if (i + 1 < values.size()) {
       std::cout << " | ";
     }
@@ -323,7 +363,7 @@ void DumpDb(std::shared_ptr<Context> ctx) {
       if (ret != 0) {
         LOG(INFO) << fmt::format("Decode failed, ret: {} record size: {}", ret, record.size());
       }
-      PrintValues(record);
+      PrintValues(table_definition, record);
     };
 
     // Read data from db
