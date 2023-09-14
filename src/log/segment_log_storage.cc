@@ -857,11 +857,6 @@ void SegmentLogStorage::PopSegments(int64_t first_index_kept, std::vector<std::s
       poppeds.push_back(open_segment_);
       open_segment_ = nullptr;
       last_log_index_.store(first_index_kept - 1);
-    } else {
-      CHECK(open_segment_->FirstIndex() <= first_index_kept) << fmt::format(
-          "[raft.log][region({}).index({}_{})] pop segment abnormal, open segment: {}_{} first_index_kept: {}",
-          region_id_, FirstLogIndex(), LastLogIndex(), open_segment_->FirstIndex(), open_segment_->LastIndex(),
-          first_index_kept);
     }
   } else {
     last_log_index_.store(first_index_kept - 1);
