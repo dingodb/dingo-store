@@ -73,6 +73,8 @@ void Buf::SetReversePos(int rp) { this->reverse_pos_ = rp; }
 
 void Buf::Write(uint8_t b) { buf_.at(forward_pos_++) = b; }
 
+void Buf::WriteWithNegation(uint8_t b) { buf_.at(forward_pos_++) = ~b; }
+
 void Buf::Write(const std::string& data) {
   for (auto it : data) {
     buf_.at(forward_pos_++) = it;
@@ -114,6 +116,29 @@ void Buf::WriteLong(int64_t l) {
     Write(*ll >> 40);
     Write(*ll >> 48);
     Write(*ll >> 56);
+  }
+}
+
+void Buf::WriteLongWithNegation(int64_t l) {
+  uint64_t* ll = (uint64_t*)&l;
+  if (this->le_) {
+    WriteWithNegation(*ll >> 56);
+    WriteWithNegation(*ll >> 48);
+    WriteWithNegation(*ll >> 40);
+    WriteWithNegation(*ll >> 32);
+    WriteWithNegation(*ll >> 24);
+    WriteWithNegation(*ll >> 16);
+    WriteWithNegation(*ll >> 8);
+    WriteWithNegation(*ll);
+  } else {
+    WriteWithNegation(*ll);
+    WriteWithNegation(*ll >> 8);
+    WriteWithNegation(*ll >> 16);
+    WriteWithNegation(*ll >> 24);
+    WriteWithNegation(*ll >> 32);
+    WriteWithNegation(*ll >> 40);
+    WriteWithNegation(*ll >> 48);
+    WriteWithNegation(*ll >> 56);
   }
 }
 

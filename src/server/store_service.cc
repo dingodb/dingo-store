@@ -42,6 +42,7 @@ namespace dingodb {
 
 DEFINE_bool(enable_async_store_kvscan, true, "enable async store kvscan");
 DEFINE_bool(enable_async_store_operation, true, "enable async store operation");
+DECLARE_uint32(max_prewrite_count);
 
 static void StoreRpcDone(BthreadCond* cond) { cond->DecreaseSignal(); }
 
@@ -2228,6 +2229,10 @@ void StoreServiceImpl::TxnScan(google::protobuf::RpcController* controller, cons
 butil::Status ValidateTxnPrewriteRequest(const dingodb::pb::store::TxnPrewriteRequest* request) {
   if (request->mutations_size() == 0) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "mutations is empty");
+  }
+
+  if (request->mutations_size() > FLAGS_max_prewrite_count) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "mutations size is too large, max=1024");
   }
 
   if (request->primary_lock().empty()) {
