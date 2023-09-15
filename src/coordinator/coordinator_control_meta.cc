@@ -1858,6 +1858,16 @@ butil::Status CoordinatorControl::GetTableRange(uint64_t schema_id, uint64_t tab
     // region epoch
     *(range_distribution->mutable_region_epoch()) = part_region.definition().epoch();
 
+    // region status
+    auto* region_status = range_distribution->mutable_status();
+    region_status->set_state(part_region.state());
+    region_status->set_raft_status(part_region.raft_status());
+    region_status->set_replica_status(part_region.replica_status());
+    region_status->set_heartbeat_state(part_region.heartbeat_state());
+    region_status->set_region_type(part_region.region_type());
+    region_status->set_create_timestamp(part_region.create_timestamp());
+    region_status->set_last_update_timestamp(part_region.last_update_timestamp());
+
     // range_distribution range
     auto* part_range = range_distribution->mutable_range();
     *part_range = part_region.definition().range();
@@ -1938,6 +1948,16 @@ butil::Status CoordinatorControl::GetIndexRange(uint64_t schema_id, uint64_t ind
 
     // region epoch
     *(range_distribution->mutable_region_epoch()) = part_region.definition().epoch();
+
+    // region status
+    auto* region_status = range_distribution->mutable_status();
+    region_status->set_state(part_region.state());
+    region_status->set_raft_status(part_region.raft_status());
+    region_status->set_replica_status(part_region.replica_status());
+    region_status->set_heartbeat_state(part_region.heartbeat_state());
+    region_status->set_region_type(part_region.region_type());
+    region_status->set_create_timestamp(part_region.create_timestamp());
+    region_status->set_last_update_timestamp(part_region.last_update_timestamp());
 
     // range_distribution range
     auto* part_range = range_distribution->mutable_range();
