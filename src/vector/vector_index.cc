@@ -261,7 +261,7 @@ int32_t VectorIndexWrapper::GetDimension() {
 butil::Status VectorIndexWrapper::GetCount(uint64_t& count) {
   auto vector_index = GetVectorIndex();
   if (vector_index == nullptr) {
-    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is disable.", Id());
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is not ready.", Id());
   }
 
   return vector_index->GetCount(count);
@@ -270,7 +270,7 @@ butil::Status VectorIndexWrapper::GetCount(uint64_t& count) {
 butil::Status VectorIndexWrapper::GetDeletedCount(uint64_t& deleted_count) {
   auto vector_index = GetVectorIndex();
   if (vector_index == nullptr) {
-    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is disable.", Id());
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is not ready.", Id());
   }
 
   return vector_index->GetDeletedCount(deleted_count);
@@ -279,7 +279,7 @@ butil::Status VectorIndexWrapper::GetDeletedCount(uint64_t& deleted_count) {
 butil::Status VectorIndexWrapper::GetMemorySize(uint64_t& memory_size) {
   auto vector_index = GetVectorIndex();
   if (vector_index == nullptr) {
-    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is disable.", Id());
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is not ready.", Id());
   }
 
   return vector_index->GetMemorySize(memory_size);
@@ -380,8 +380,8 @@ bool VectorIndexWrapper::NeedToSave(uint64_t last_save_log_behind) {
 
 butil::Status VectorIndexWrapper::Add(const std::vector<pb::common::VectorWithId>& vector_with_ids) {
   if (!IsReady()) {
-    DINGO_LOG(WARNING) << fmt::format("[vector_index.wrapper][index_id({})] vector index is disable.", Id());
-    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is disable.", Id());
+    DINGO_LOG(WARNING) << fmt::format("[vector_index.wrapper][index_id({})] vector index is not ready.", Id());
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is not ready.", Id());
   }
 
   // Switch vector index wait
@@ -394,8 +394,8 @@ butil::Status VectorIndexWrapper::Add(const std::vector<pb::common::VectorWithId
 
   auto vector_index = GetVectorIndex();
   if (vector_index == nullptr) {
-    DINGO_LOG(WARNING) << fmt::format("[vector_index.wrapper][index_id({})] vector index is disable.", Id());
-    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is disable.", Id());
+    DINGO_LOG(WARNING) << fmt::format("[vector_index.wrapper][index_id({})] vector index is not ready.", Id());
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is not ready.", Id());
   }
 
   auto status = vector_index->Add(vector_with_ids);
@@ -407,8 +407,8 @@ butil::Status VectorIndexWrapper::Add(const std::vector<pb::common::VectorWithId
 
 butil::Status VectorIndexWrapper::Upsert(const std::vector<pb::common::VectorWithId>& vector_with_ids) {
   if (!IsReady()) {
-    DINGO_LOG(WARNING) << fmt::format("[vector_index.wrapper][index_id({})] vector index is disable.", Id());
-    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is disable.", Id());
+    DINGO_LOG(WARNING) << fmt::format("[vector_index.wrapper][index_id({})] vector index is not ready.", Id());
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is not ready.", Id());
   }
 
   // Switch vector index wait
@@ -421,8 +421,8 @@ butil::Status VectorIndexWrapper::Upsert(const std::vector<pb::common::VectorWit
 
   auto vector_index = GetVectorIndex();
   if (vector_index == nullptr) {
-    DINGO_LOG(WARNING) << fmt::format("[vector_index.wrapper][index_id({})] vector index is disable.", Id());
-    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is disable.", Id());
+    DINGO_LOG(WARNING) << fmt::format("[vector_index.wrapper][index_id({})] vector index is not ready.", Id());
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is not ready.", Id());
   }
 
   auto status = vector_index->Upsert(vector_with_ids);
@@ -434,8 +434,8 @@ butil::Status VectorIndexWrapper::Upsert(const std::vector<pb::common::VectorWit
 
 butil::Status VectorIndexWrapper::Delete(const std::vector<uint64_t>& delete_ids) {
   if (!IsReady()) {
-    DINGO_LOG(WARNING) << fmt::format("[vector_index.wrapper][index_id({})] vector index is disable.", Id());
-    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is disable.", Id());
+    DINGO_LOG(WARNING) << fmt::format("[vector_index.wrapper][index_id({})] vector index is not ready.", Id());
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is not ready.", Id());
   }
 
   // Switch vector index wait
@@ -448,8 +448,8 @@ butil::Status VectorIndexWrapper::Delete(const std::vector<uint64_t>& delete_ids
 
   auto vector_index = GetVectorIndex();
   if (vector_index == nullptr) {
-    DINGO_LOG(WARNING) << fmt::format("[vector_index.wrapper][index_id({})] vector index is disable.", Id());
-    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is disable.", Id());
+    DINGO_LOG(WARNING) << fmt::format("[vector_index.wrapper][index_id({})] vector index is not ready.", Id());
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is not ready.", Id());
   }
 
   auto status = vector_index->Delete(delete_ids);
@@ -464,13 +464,13 @@ butil::Status VectorIndexWrapper::Search(std::vector<pb::common::VectorWithId> v
                                          std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters,
                                          std::vector<pb::index::VectorWithDistanceResult>& results, bool reconstruct) {
   if (!IsReady()) {
-    DINGO_LOG(WARNING) << fmt::format("[vector_index.wrapper][index_id({})] vector index is disable.", Id());
-    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is disable.", Id());
+    DINGO_LOG(WARNING) << fmt::format("[vector_index.wrapper][index_id({})] vector index is not ready.", Id());
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is not ready.", Id());
   }
   auto vector_index = GetVectorIndex();
   if (vector_index == nullptr) {
-    DINGO_LOG(WARNING) << fmt::format("[vector_index.wrapper][index_id({})] vector index is disable.", Id());
-    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is disable.", Id());
+    DINGO_LOG(WARNING) << fmt::format("[vector_index.wrapper][index_id({})] vector index is not ready.", Id());
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is not ready.", Id());
   }
 
   const auto& index_range = vector_index->Range();
