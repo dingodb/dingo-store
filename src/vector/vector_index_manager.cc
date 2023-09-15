@@ -57,7 +57,7 @@ void RebuildVectorIndexTask::Run() {
 
   if (!force_) {
     if (!vector_index_wrapper_->IsReady()) {
-      DINGO_LOG(INFO) << fmt::format("[vector_index.rebuild][index_id({})] vector index is disable.",
+      DINGO_LOG(INFO) << fmt::format("[vector_index.rebuild][index_id({})] vector index is not ready.",
                                      vector_index_wrapper_->Id());
       return;
     }
@@ -579,7 +579,7 @@ butil::Status VectorIndexManager::ScrubVectorIndex() {
     }
     auto vector_index_wrapper = region->VectorIndexWrapper();
     if (!vector_index_wrapper->IsReady()) {
-      DINGO_LOG(INFO) << fmt::format("[vector_index.scrub][index_id({})] vector index is disable, dont't scrub.",
+      DINGO_LOG(INFO) << fmt::format("[vector_index.scrub][index_id({})] vector index is not ready, dont't scrub.",
                                      vector_index_id);
       continue;
     }
