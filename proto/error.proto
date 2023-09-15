@@ -181,9 +181,17 @@ enum Errno {
   ESYSTEM_MEMORY_CAPACITY_FULL = 90001;
 }
 
+message StoreRegionInfo {
+  uint64 region_id = 1;
+  dingodb.pb.common.RegionEpoch current_region_epoch = 2;
+  dingodb.pb.common.Range current_range = 3;
+  repeated dingodb.pb.common.Peer peers = 4;
+}
+
 message Error {
   Errno errcode = 1;
   string errmsg = 2;
 
   dingodb.pb.common.Location leader_location = 3;
+  StoreRegionInfo store_region_info = 4;
 }

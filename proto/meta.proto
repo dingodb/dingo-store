@@ -144,6 +144,34 @@ message IndexDefinition {
   uint64 auto_increment = 7;    // auto increment start id
 }
 
+message RegionStatus {
+  // RegionState
+  // REGION_NEW: the region is creating, wait for store to finish the creation
+  // REGION_NORMAL: the region is normal and can serve all request
+  // other status refer to common.proto
+  dingodb.pb.common.RegionState state = 1;
+  // RegionRaftStatus
+  // this status describe the data constistency of the raft region
+  dingodb.pb.common.RegionRaftStatus raft_status = 2;
+  // ReplicaStatus
+  // this status describe the data safety of the raft region
+  // if this region is degraded, it means one or more replica is down
+  dingodb.pb.common.ReplicaStatus replica_status = 3;
+  // RegionHeartbeatState
+  // REGION_ONLINE: the leader of this region is online
+  // REGION_DOWN: the leader of this region cannot heartbeat to coordinator
+  dingodb.pb.common.RegionHeartbeatState heartbeat_state = 4;
+  // RegionType
+  // describe this region is a store region or index region
+  // for table, the region is store
+  // for index, the region is index (including vector index and scalar index)
+  dingodb.pb.common.RegionType region_type = 5;
+  // the create timestamp in ms of region
+  uint64 create_timestamp = 10;
+  // the last update(heartbeat) timestamp in ms of region
+  uint64 last_update_timestamp = 11;
+}
+
 // This Part is mainly equal to the Part in DingoDB 0.5.x
 message RangeDistribution {
   // this is really region id, its parent entity is part_id
@@ -161,6 +189,8 @@ message RangeDistribution {
   uint64 storemap_epoch = 7;
   // region_epoch is used to check whether the region info is stale
   dingodb.pb.common.RegionEpoch region_epoch = 8;
+  // RegionStatus
+  RegionStatus status = 9;
 }
 
 // TableRange is used for sdk to get all range distribution of a table.
