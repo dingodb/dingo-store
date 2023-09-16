@@ -26,6 +26,9 @@ class TxnEngineHelper {
  public:
   static butil::Status GetLockInfo(std::shared_ptr<RawEngine::Reader> reader, const std::string &key,
                                    pb::store::LockInfo &lock_info);
+  static butil::Status Rollback(std::shared_ptr<RawEngine> engine, std::vector<std::string> &keys, uint64_t start_ts);
+  static butil::Status Commit(std::shared_ptr<RawEngine> engine, std::vector<pb::store::LockInfo> &lock_infos,
+                              uint64_t commit_ts);
 };
 
 }  // namespace dingodb

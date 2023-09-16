@@ -1274,6 +1274,14 @@ std::string Helper::EncodeTxnKey(const std::string& key, uint64_t ts) {
   return buf.GetString();
 }
 
+std::string Helper::EncodeTxnKey(const std::string_view& key, uint64_t ts) {
+  Buf buf(key.length() + 8);
+  buf.Write(std::string(key));
+  buf.WriteLongWithNegation(ts);
+
+  return buf.GetString();
+}
+
 // for txn, encode data/write key
 butil::Status Helper::DecodeTxnKey(const std::string& txn_key, std::string& key, uint64_t& ts) {
   if (txn_key.length() <= 8) {
