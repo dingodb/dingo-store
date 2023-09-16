@@ -692,6 +692,7 @@ message TxnGcResponse {
 // All keys in the range will be deleted permanently regardless of their
 // timestamps. This means that deleted keys will not be retrievable by
 // specifying an older timestamp.
+// the range is [start_key, end_key)
 message TxnDeleteRangeRequest {
   Context context = 1;
   bytes start_key = 2;

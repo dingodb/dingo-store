@@ -2919,6 +2919,14 @@ butil::Status ValidateTxnDeleteRangeRequest(const dingodb::pb::store::TxnDeleteR
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "end_key is empty");
   }
 
+  if (request->start_key() == request->end_key()) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "start_key is equal to end_key");
+  }
+
+  if (request->start_key().compare(request->end_key()) > 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "start_key is greater than end_key");
+  }
+
   return butil::Status();
 }
 
@@ -2968,6 +2976,14 @@ butil::Status ValidateTxnDumpRequest(const dingodb::pb::store::TxnDumpRequest* r
 
   if (request->end_key().empty()) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "end_key is empty");
+  }
+
+  if (request->start_key() == request->end_key()) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "start_key is equal to end_key");
+  }
+
+  if (request->start_key().compare(request->end_key()) > 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "start_key is greater than end_key");
   }
 
   if (request->end_ts() == 0) {
