@@ -508,8 +508,281 @@ void TxnHandler::HandleTxnCommitRequest(std::shared_ptr<Context> ctx, store::Reg
 void TxnHandler::HandleTxnCheckTxnStatusRequest(std::shared_ptr<Context> ctx, store::RegionPtr region,
                                                 std::shared_ptr<RawEngine> engine,
                                                 const pb::raft::TxnCheckTxnStatusRequest &request,
-                                                store::RegionMetricsPtr region_metrics, uint64_t term_id,
-                                                uint64_t log_id) {}
+                                                store::RegionMetricsPtr /*region_metrics*/, uint64_t term_id,
+                                                uint64_t log_id) {
+  DINGO_LOG(INFO) << fmt::format("[txn][region({})] HandleTxnCheckTxnStatus, term: {} apply_log_id: {}", region->Id(),
+                                 term_id, log_id)
+                  << ", request: " << request.ShortDebugString();
+
+  // we need to do if primay_key is in this region'range in service before apply to raft state machine
+  // use reader to get if the lock is exists, if lock is exists, check if the lock is expired its ttl, if expired do
+  // rollback and return if not expired, return conflict if the lock is not exists, return commited the the lock's ts is
+  // matched, but it is not a primary_key, return PrimaryMismatch
+
+  // create reader and writer
+  auto lock_reader = engine->NewReader(Constant::kTxnLockCF);
+  if (lock_reader == nullptr) {
+    DINGO_LOG(FATAL) << fmt::format("[txn][region({})] HandleTxnPrewrite, term: {} apply_log_id: {}", region->Id(),
+                                    term_id, log_id)
+                     << ", new reader failed, request: " << request.ShortDebugString();
+  }
+  auto data_reader = engine->NewReader(Constant::kTxnDataCF);
+  auto write_reader = engine->NewReader(Constant::kTxnWriteCF);
+
+  std::vector<pb::common::KeyValue> kv_puts_write;
+  std::vector<std::string> kv_deletes_lock;
+
+  const std::string &primary_key = request.primary_key();
+  uint64_t lock_ts = request.lock_ts();
+  uint64_t caller_start_ts = request.caller_start_ts();
+  uint64_t current_ts = request.current_ts();
+
+  auto *response = dynamic_cast<pb::store::TxnCheckTxnStatusResponse *>(ctx->Response());
+  auto *error = response->mutable_error();
+  auto *txn_result = response->mutable_txn_result();
+
+  // get lock info
+  pb::store::LockInfo lock_info;
+  auto ret = TxnEngineHelper::GetLockInfo(lock_reader, primary_key, lock_info);
+  if (!ret.ok()) {
+    DINGO_LOG(FATAL) << fmt::format("[txn][region({})] HandleTxnCheckTxnStatus, term: {} apply_log_id: {}",
+                                    region->Id(), term_id, log_id)
+                     << ", get lock info failed, request: " << request.ShortDebugString()
+                     << ", primary_key: " << primary_key << ", lock_ts: " << lock_ts << ", status: " << ret.error_str();
+  }
+
+  // if no lock, the transaction is commitd, try to get the commit_ts
+  uint64_t commit_ts = 0;
+  uint64_t rollback_ts = 0;
+  std::string key;
+  if (lock_info.primary_lock().empty()) {
+    // if there is a rollback, there will be a key | start_ts : WriteInfo| in write_cf
+    std::string write_value;
+    auto ret = write_reader->KvGet(Helper::EncodeTxnKey(primary_key, lock_ts), write_value);
+    if (ret.error_code() == pb::error::Errno::EKEY_NOT_FOUND) {
+      // no rollback, no commit, return committed
+      DINGO_LOG(INFO) << "not find a rollback write line, go on to check if there is commit_ts: "
+                      << request.ShortDebugString();
+    } else if (ret.ok()) {
+      // rollback, return rollback
+      response->set_lock_ttl(0);
+      response->set_commit_ts(0);
+      response->set_action(::dingodb::pb::store::Action::LockNotExistDoNothing);
+      return;
+    } else {
+      DINGO_LOG(FATAL) << fmt::format("[txn][region({})] HandleTxnCheckTxnStatus, term: {} apply_log_id: {}",
+                                      region->Id(), term_id, log_id)
+                       << ", get write info failed, request: " << request.ShortDebugString()
+                       << ", primary_key: " << primary_key << ", lock_ts: " << lock_ts
+                       << ", status: " << ret.error_str();
+    }
+
+    // use write_reader to get commit_ts
+    IteratorOptions iter_options;
+    iter_options.lower_bound = Helper::EncodeTxnKey(primary_key, lock_ts);
+    iter_options.upper_bound = Helper::EncodeTxnKey(primary_key, UINT64_MAX);
+    auto iter = engine->NewIterator(Constant::kTxnWriteCF, iter_options);
+    if (!iter->Valid()) {
+      DINGO_LOG(FATAL) << fmt::format("[txn][region({})] HandleTxnCheckTxnStatus, term: {} apply_log_id: {}",
+                                      region->Id(), term_id, log_id)
+                       << ", invalid iterator to scan for commit_ts, request: " << request.ShortDebugString()
+                       << ", primary_key: " << primary_key << ", lock_ts: " << lock_ts;
+    }
+
+    iter->SeekToFirst();
+    while (iter->Valid()) {
+      auto write_value = iter->Value();
+      if (write_value.length() <= 8) {
+        DINGO_LOG(FATAL) << fmt::format("[txn][region({})] HandleTxnCheckTxnStatus, term: {} apply_log_id: {}",
+                                        region->Id(), term_id, log_id)
+                         << ", invalid write_value, request: " << request.ShortDebugString()
+                         << ", primary_key: " << primary_key << ", lock_ts: " << lock_ts
+                         << ", write_value is less than 8 bytes: " << write_value;
+      }
+
+      pb::store::WriteInfo write_info;
+      auto ret = write_info.ParseFromArray(write_value.data(), write_value.size());
+      if (!ret) {
+        DINGO_LOG(FATAL) << fmt::format("[txn][region({})] HandleTxnCheckTxnStatus, term: {} apply_log_id: {}",
+                                        region->Id(), term_id, log_id)
+                         << ", parse write info failed, request: " << request.ShortDebugString()
+                         << ", primary_key: " << primary_key << ", lock_ts: " << lock_ts
+                         << ", write_info: " << write_value;
+      }
+
+      DINGO_LOG(INFO) << "get start_ts: " << write_info.start_ts() << ", lock_ts: " << lock_ts
+                      << ", write_info: " << write_info.ShortDebugString() << ", write_key: " << iter->Key();
+
+      // if start_ts match lock_ts, mean we get the commit of the transaction
+      // we need to decode the key for commit_ts
+      if (write_info.start_ts() < lock_ts) {
+        // we have scan past the lock_ts, but still not find the commit_ts, no need to continue
+        DINGO_LOG(INFO) << "get start_ts: " << write_info.start_ts() << ", lock_ts: " << lock_ts
+                        << ", write_info: " << write_info.ShortDebugString() << ", write_key: " << iter->Key()
+                        << ", we have scan past the lock_ts, but still not find the commit_ts, no need to continue";
+        break;
+      }
+
+      if (write_info.start_ts() == lock_ts) {
+        if (write_info.op() == pb::store::Rollback) {
+          DINGO_LOG(INFO) << " get rollback ts, write_info: " << write_info.ShortDebugString()
+                          << ", write_key: " << Helper::StringToHex(iter->Key());
+          auto ret = Helper::DecodeTxnKey(iter->Key(), key, commit_ts);
+          if (!ret.ok()) {
+            DINGO_LOG(FATAL) << "decode txn key failed, key: " << Helper::StringToHex(iter->Key())
+                             << ", status: " << ret.error_str();
+          }
+
+          // this is a rollback record, we may have get this record in previous KvGet, so print warning here.
+          DINGO_LOG(WARNING) << " meet rollback write record in Scan, there is something wrong, request: "
+                             << request.ShortDebugString() << ", write_key: " << iter->Key()
+                             << ", write_info: " << write_info.ShortDebugString();
+
+          // rollback, return rollback
+          response->set_lock_ttl(0);
+          response->set_commit_ts(0);
+          response->set_action(::dingodb::pb::store::Action::NoAction);
+          return;
+
+        } else if (write_info.op() == pb::store::Op::Put || write_info.op() == pb::store::Op::Delete) {
+          DINGO_LOG(INFO) << "get commit_ts, write_info: " << write_info.ShortDebugString()
+                          << ", write_key: " << Helper::StringToHex(iter->Key());
+          auto ret = Helper::DecodeTxnKey(iter->Key(), key, commit_ts);
+          if (!ret.ok()) {
+            DINGO_LOG(FATAL) << "decode txn key failed, key: " << Helper::StringToHex(iter->Key())
+                             << ", status: " << ret.error_str();
+          }
+
+          DINGO_LOG(INFO) << " get commit_ts, primary_key: " << request.primary_key() << ", commit_ts: " << commit_ts;
+
+          // commit, return committed
+          response->set_lock_ttl(0);
+          response->set_commit_ts(commit_ts);
+          response->set_action(::dingodb::pb::store::Action::NoAction);
+          return;
+
+        } else {
+          DINGO_LOG(FATAL) << " meet unexpected write value, key: " << iter->Key()
+                           << ", write_info: " << write_info.ShortDebugString();
+        }
+
+        break;
+      }
+
+      iter->Next();
+    }  // end write_cf iter
+
+    // if commit_ts and rollback_ts is all zero, we do not find the write record for a previous transaction, there must
+    // be some error
+    if (commit_ts == 0 && rollback_ts == 0) {
+      DINGO_LOG(WARNING) << "get commit_ts and rollback_ts is all zero, there must be some error, request: "
+                         << request.ShortDebugString() << ", primary_key: " << primary_key << ", lock_ts: " << lock_ts;
+
+      auto *txn_not_found = txn_result->mutable_txn_not_found();
+      txn_not_found->set_primary_key(request.primary_key());
+      txn_not_found->set_start_ts(request.lock_ts());
+      return;
+    } else if (commit_ts > 0 && rollback_ts == 0) {
+      DINGO_LOG(WARNING) << "get commit_ts > 0 and rollback_ts == 0, response committed, request: "
+                         << request.ShortDebugString() << ", primary_key: " << primary_key << ", lock_ts: " << lock_ts
+                         << ", commit_ts: " << commit_ts;
+      response->set_lock_ttl(0);
+      response->set_commit_ts(commit_ts);
+      response->set_action(::dingodb::pb::store::Action::NoAction);
+      return;
+    } else if (rollback_ts > 0 && commit_ts == 0) {
+      DINGO_LOG(WARNING) << "get rollback_ts > 0 and commit_ts == 0, response rollback, request: "
+                         << request.ShortDebugString() << ", primary_key: " << primary_key << ", lock_ts: " << lock_ts
+                         << ", rollback_ts: " << rollback_ts;
+      response->set_lock_ttl(0);
+      response->set_commit_ts(0);
+      response->set_action(::dingodb::pb::store::Action::NoAction);
+      return;
+    } else {
+      DINGO_LOG(FATAL) << "get commit_ts and rollback_ts is all not zero, there must be some error, request: "
+                       << request.ShortDebugString() << ", primary_key: " << primary_key << ", lock_ts: " << lock_ts;
+    }
+  }  // end (lock_info.primary_lock().empty())
+  // lock is exists, check if the lock is expired its ttl, if expired do rollback and return if not expired, return
+  else {
+    // check if this is a primary key
+    if (lock_info.key() != lock_info.primary_lock()) {
+      DINGO_LOG(WARNING) << fmt::format("[txn][region({})] HandleTxnCheckTxnStatus, term: {} apply_log_id: {}",
+                                        region->Id(), term_id, log_id)
+                         << ", primary mismatch, request: " << request.ShortDebugString()
+                         << ", primary_key: " << primary_key << ", lock_ts: " << lock_ts
+                         << ", lock_info: " << lock_info.ShortDebugString();
+
+      auto *primary_mismatch = txn_result->mutable_primary_mismatch();
+      *(primary_mismatch->mutable_lock_info()) = lock_info;
+      return;
+    }
+
+    uint64_t current_ms = request.current_ts() >> 18;
+
+    DINGO_LOG(INFO) << "lock is exists, check ttl, lock_info: " << lock_info.ShortDebugString()
+                    << ", request: " << request.ShortDebugString() << ", current_ms: " << current_ms;
+
+    if (lock_info.lock_ttl() >= current_ms) {
+      DINGO_LOG(INFO) << "lock is not expired, return conflict, lock_info: " << lock_info.ShortDebugString()
+                      << ", request: " << request.ShortDebugString() << ", current_ms: " << current_ms;
+
+      response->set_lock_ttl(lock_info.lock_ttl());
+      response->set_commit_ts(0);
+      response->set_action(::dingodb::pb::store::Action::NoAction);
+      return;
+    }
+
+    DINGO_LOG(INFO) << "lock is expired, do rollback, lock_info: " << lock_info.ShortDebugString()
+                    << ", request: " << request.ShortDebugString() << ", current_ms: " << current_ms;
+
+    // lock is expired, do rollback
+    // 1. delete lock from lock_cf
+    { kv_deletes_lock.push_back(primary_key); }
+
+    // 2. put rollback to write_cf
+    {
+      pb::common::KeyValue kv;
+      std::string write_key = Helper::EncodeTxnKey(primary_key, lock_ts);
+      kv.set_key(write_key);
+
+      pb::store::WriteInfo write_info;
+      write_info.set_start_ts(lock_ts);
+      write_info.set_op(pb::store::Rollback);
+      kv.set_value(write_info.SerializeAsString());
+
+      kv_puts_write.push_back(kv);
+    }
+
+    // after all mutations is processed, write into raw engine
+    std::map<uint32_t, std::vector<pb::common::KeyValue>> kv_puts_with_cf;
+    std::map<uint32_t, std::vector<std::string>> kv_deletes_with_cf;
+
+    kv_puts_with_cf.insert_or_assign(Constant::kTxnWriteCfId, kv_puts_write);
+    kv_deletes_with_cf.insert_or_assign(Constant::kTxnLockCfId, kv_deletes_lock);
+
+    auto writer = engine->NewMultiCfWriter(Helper::GenMvccCfVector());
+    if (writer == nullptr) {
+      DINGO_LOG(FATAL) << fmt::format("[txn][region({})] HandleMultiCfPutAndDelete, term: {} apply_log_id: {}",
+                                      region->Id(), term_id, log_id)
+                       << ", new multi cf writer failed, request: " << request.ShortDebugString();
+      return;
+    }
+
+    auto status = writer->KvBatchPutAndDelete(kv_puts_with_cf, kv_deletes_with_cf);
+    if (!status.ok()) {
+      DINGO_LOG(FATAL) << fmt::format("[txn][region({})] CheckTxnStatus, term: {} apply_log_id: {}", region->Id(),
+                                      term_id, log_id)
+                       << ", write failed, request: " << request.ShortDebugString()
+                       << ", status: " << status.error_str();
+    }
+
+    response->set_lock_ttl(0);
+    response->set_commit_ts(0);
+    response->set_action(::dingodb::pb::store::Action::TTLExpireRollback);
+    return;
+  }
+}
 
 void TxnHandler::HandleTxnResolveLockRequest(std::shared_ptr<Context> ctx, store::RegionPtr region,
                                              std::shared_ptr<RawEngine> engine,
