@@ -263,6 +263,7 @@ class Helper {
   static std::string EncodeTso(uint64_t ts);
   // for txn, encode data/write key
   static std::string EncodeTxnKey(const std::string& key, uint64_t ts);
+  static std::string EncodeTxnKey(const std::string_view& key, uint64_t ts);
   // for txn, encode data/write key
   static butil::Status DecodeTxnKey(const std::string& txn_key, std::string& key, uint64_t& ts);
   // for txn, encode data/write key
