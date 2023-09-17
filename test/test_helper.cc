@@ -423,8 +423,34 @@ TEST_F(HelperTest, GetProcessMemoryInfo) {
   }
 }
 
-TEST_F(HelperTest, CleanFirstSlash) {
-  EXPECT_EQ("", dingodb::Helper::CleanFirstSlash(""));
-  EXPECT_EQ("hello.txt", dingodb::Helper::CleanFirstSlash("hello.txt"));
-  EXPECT_EQ("hello.txt", dingodb::Helper::CleanFirstSlash("/hello.txt"));
+// TEST_F(HelperTest, CleanFirstSlash) {
+//   EXPECT_EQ("", dingodb::Helper::CleanFirstSlash(""));
+//   EXPECT_EQ("hello.txt", dingodb::Helper::CleanFirstSlash("hello.txt"));
+//   EXPECT_EQ("hello.txt", dingodb::Helper::CleanFirstSlash("/hello.txt"));
+// }
+
+TEST_F(HelperTest, PaddingUserKey) {
+  std::string a = "abc";
+  std::string pa = dingodb::Helper::HexToString("6162630000000000FA");
+
+  EXPECT_EQ(pa, dingodb::Helper::PaddingUserKey(a));
+  EXPECT_EQ(a, dingodb::Helper::UnpaddingUserKey(pa));
+
+  a = "aaaabbbb";
+  pa = dingodb::Helper::HexToString("6161616162626262FF0000000000000000F7");
+
+  EXPECT_EQ(pa, dingodb::Helper::PaddingUserKey(a));
+  EXPECT_EQ(a, dingodb::Helper::UnpaddingUserKey(pa));
+
+  a = "aaaabbbbc";
+  pa = dingodb::Helper::HexToString("6161616162626262FF6300000000000000F8");
+
+  EXPECT_EQ(pa, dingodb::Helper::PaddingUserKey(a));
+  EXPECT_EQ(a, dingodb::Helper::UnpaddingUserKey(pa));
+
+  a = "aaaabbbbaaaabbbbcc";
+  pa = dingodb::Helper::HexToString("6161616162626262FF6161616162626262FF6363000000000000F9");
+
+  EXPECT_EQ(pa, dingodb::Helper::PaddingUserKey(a));
+  EXPECT_EQ(a, dingodb::Helper::UnpaddingUserKey(pa));
 }

@@ -1265,18 +1265,72 @@ std::string Helper::EncodeTso(uint64_t ts) {
   return buf.GetString();
 }
 
+std::string Helper::PaddingUserKey(const std::string& key) {
+  uint32_t new_size = ((8 + key.length()) / 8) * 9;
+  char buf[new_size];
+  const auto* data = key.data();
+
+  int i = 0;
+  int j = 0;
+  for (i = 0; i < key.length(); i++) {
+    if ((i + 1) % 8 != 0) {
+      buf[j++] = data[i];
+    } else {
+      buf[j++] = data[i];
+      buf[j++] = '\xff';
+    }
+  }
+
+  int padding_num = 8 - (i % 8);
+
+  for (int k = 0; k < padding_num; k++) {
+    buf[j++] = '\x00';
+  }
+  buf[j] = '\xff' - padding_num;
+
+  return std::string(buf, new_size);
+}
+
+std::string Helper::UnpaddingUserKey(const std::string& padding_key) {
+  if (padding_key.length() % 9 != 0) {
+    return std::string();
+  }
+
+  uint32_t new_size = ((padding_key.length() / 9) * 8);
+  uint32_t padding_num = '\xff' - padding_key.back();
+
+  if (padding_num == 0) {
+    return std::string();
+  }
+
+  char buf[new_size];
+  const auto* data = padding_key.data();
+
+  int i = 0;
+  int j = 0;
+  for (i = 0; i < padding_key.length(); i++) {
+    if ((i + 1) % 9 != 0) {
+      buf[j++] = data[i];
+    }
+  }
+
+  return std::string(buf, new_size - padding_num);
+}
+
 // for txn, encode data/write key
 std::string Helper::EncodeTxnKey(const std::string& key, uint64_t ts) {
-  Buf buf(key.length() + 8);
-  buf.Write(key);
+  std::string padding_key = Helper::PaddingUserKey(key);
+  Buf buf(padding_key.length() + 8);
+  buf.Write(padding_key);
   buf.WriteLongWithNegation(ts);
 
   return buf.GetString();
 }
 
 std::string Helper::EncodeTxnKey(const std::string_view& key, uint64_t ts) {
-  Buf buf(key.length() + 8);
-  buf.Write(std::string(key));
+  std::string padding_key = Helper::PaddingUserKey(std::string(key));
+  Buf buf(padding_key.length() + 8);
+  buf.Write(padding_key);
   buf.WriteLongWithNegation(ts);
 
   return buf.GetString();
@@ -1288,7 +1342,12 @@ butil::Status Helper::DecodeTxnKey(const std::string& txn_key, std::string& key,
     return butil::Status(pb::error::EINTERNAL, "DecodeTxnKey failed, txn_key length <= 8");
   }
 
-  key = txn_key.substr(0, txn_key.length() - 8);
+  auto padding_key = txn_key.substr(0, txn_key.length() - 8);
+  key = Helper::UnpaddingUserKey(padding_key);
+  if (key.empty()) {
+    return butil::Status(pb::error::EINTERNAL, "DecodeTxnKey failed, padding_key is empty");
+  }
+
   auto ts_str = txn_key.substr(txn_key.length() - 8);
   Buf buf(ts_str);
   ts = ~buf.ReadLong();
@@ -1302,7 +1361,12 @@ butil::Status Helper::DecodeTxnKey(const std::string_view& txn_key, std::string&
     return butil::Status(pb::error::EINTERNAL, "DecodeTxnKey failed, txn_key length <= 8");
   }
 
-  key = txn_key.substr(0, txn_key.length() - 8);
+  auto padding_key = txn_key.substr(0, txn_key.length() - 8);
+  key = Helper::UnpaddingUserKey(std::string(padding_key));
+  if (key.empty()) {
+    return butil::Status(pb::error::EINTERNAL, "DecodeTxnKey failed, padding_key is empty");
+  }
+
   std::string ts_str;
   ts_str = txn_key.substr(txn_key.length() - 8);
   Buf buf(ts_str);
