@@ -375,7 +375,7 @@ class RawRocksEngine : public RawEngine {
   std::shared_ptr<RawEngine::MultiCfWriter> NewMultiCfWriter(const std::vector<std::string>& cf_names) override;
   std::shared_ptr<dingodb::Iterator> NewIterator(const std::string& cf_name, IteratorOptions options) override;
   std::shared_ptr<dingodb::Iterator> NewIterator(const std::string& cf_name, std::shared_ptr<Snapshot> snapshot,
-                                                 IteratorOptions options);
+                                                 IteratorOptions options) override;
   std::shared_ptr<dingodb::MultipleRangeIterator> NewMultipleRangeIterator(
       std::shared_ptr<RawEngine> raw_engine, const std::string& cf_name,
       std::vector<dingodb::pb::common::Range> ranges) override;

@@ -67,10 +67,10 @@ class Storage {
   static butil::Status KvScanRelease(std::shared_ptr<Context> ctx, const std::string& scan_id);
 
   // txn
-  butil::Status TxnBatchGet(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys,
+  butil::Status TxnBatchGet(std::shared_ptr<Context> ctx, uint64_t start_ts, const std::vector<std::string>& keys,
                             pb::store::TxnResultInfo& txn_result_info, std::vector<pb::common::KeyValue>& kvs);
-  butil::Status TxnScan(std::shared_ptr<Context> ctx, uint64_t region_id, const pb::common::Range& range,
-                        uint64_t limit, uint64_t start_ts, bool key_only, bool is_reverse, bool disable_coprocessor,
+  butil::Status TxnScan(std::shared_ptr<Context> ctx, uint64_t start_ts, const pb::common::Range& range, uint64_t limit,
+                        bool key_only, bool is_reverse, bool disable_coprocessor,
                         const pb::store::Coprocessor& coprocessor, pb::store::TxnResultInfo& txn_result_info,
                         std::vector<pb::common::KeyValue>& kvs, bool& has_more, std::string& end_key);
   // store prewrite
