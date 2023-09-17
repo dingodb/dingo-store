@@ -33,6 +33,7 @@
 #include "proto/error.pb.h"
 #include "proto/index.pb.h"
 #include "proto/raft.pb.h"
+#include "proto/store.pb.h"
 #include "serial/buf.h"
 #include "vector/vector_index.h"
 
@@ -129,11 +130,27 @@ class Engine {
                                                  int64_t& search_time_us) = 0;
   };
 
+  class TxnReader {
+   public:
+    TxnReader() = default;
+    virtual ~TxnReader() = default;
+
+    virtual butil::Status TxnBatchGet(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys,
+                                      std::vector<pb::common::KeyValue>& kvs,
+                                      pb::store::TxnResultInfo& txn_result_info) = 0;
+    virtual butil::Status TxnScan(std::shared_ptr<Context> ctx, const pb::common::Range& range, uint64_t limit,
+                                  uint64_t start_ts, bool key_only, bool is_reverse, bool disable_coprocessor,
+                                  const pb::store::Coprocessor& coprocessor, pb::store::TxnResultInfo& txn_result_info,
+                                  std::vector<pb::common::KeyValue>& kvs, bool& has_more, std::string& end_key) = 0;
+  };
+
   virtual std::shared_ptr<Reader> NewReader(const std::string& cf_name) = 0;
   virtual std::shared_ptr<VectorReader> NewVectorReader(const std::string&) {
     DINGO_LOG(ERROR) << "Not support NewVectorReader.";
     return nullptr;
   }
+
+  virtual std::shared_ptr<TxnReader> NewTxnReader() = 0;
 
   //  This is used by RaftStoreEngine to Persist Meta
   //  This is a alternative method, will be replace by zihui new Interface.

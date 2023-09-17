@@ -25,11 +25,14 @@
 
 #include "braft/raft.h"
 #include "butil/endpoint.h"
+#include "butil/status.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "common/synchronization.h"
 #include "config/config_manager.h"
+#include "engine/engine.h"
 #include "engine/snapshot.h"
+#include "engine/txn_engine_helper.h"
 #include "engine/write_data.h"
 #include "event/store_state_machine_event.h"
 #include "fmt/core.h"
@@ -433,6 +436,27 @@ butil::Status RaftStoreEngine::VectorReader::VectorBatchSearchDebug(
 
 std::shared_ptr<Engine::VectorReader> RaftStoreEngine::NewVectorReader(const std::string& cf_name) {
   return std::make_shared<RaftStoreEngine::VectorReader>(engine_->NewReader(cf_name));
+}
+
+std::shared_ptr<Engine::TxnReader> RaftStoreEngine::NewTxnReader() {
+  return std::make_shared<RaftStoreEngine::TxnReader>(engine_);
+}
+
+butil::Status RaftStoreEngine::TxnReader::TxnBatchGet(std::shared_ptr<Context> /*ctx*/,
+                                                      const std::vector<std::string>& keys,
+                                                      std::vector<pb::common::KeyValue>& kvs,
+                                                      pb::store::TxnResultInfo& txn_result_info) {
+  return TxnEngineHelper::BatchGet(engine_, keys, kvs, txn_result_info);
+}
+
+butil::Status RaftStoreEngine::TxnReader::TxnScan(std::shared_ptr<Context> /*ctx*/, const pb::common::Range& range,
+                                                  uint64_t limit, uint64_t start_ts, bool key_only, bool is_reverse,
+                                                  bool disable_coprocessor, const pb::store::Coprocessor& coprocessor,
+                                                  pb::store::TxnResultInfo& txn_result_info,
+                                                  std::vector<pb::common::KeyValue>& kvs, bool& has_more,
+                                                  std::string& end_key) {
+  return TxnEngineHelper::Scan(engine_, range, limit, start_ts, key_only, is_reverse, disable_coprocessor, coprocessor,
+                               txn_result_info, kvs, has_more, end_key);
 }
 
 }  // namespace dingodb
