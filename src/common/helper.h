@@ -261,6 +261,9 @@ class Helper {
 
   // for txn, encode start_ts/commit_ts to std::string
   static std::string EncodeTso(uint64_t ts);
+  // for txn, padding user key
+  static std::string PaddingUserKey(const std::string& key);
+  static std::string UnpaddingUserKey(const std::string& padding_key);
   // for txn, encode data/write key
   static std::string EncodeTxnKey(const std::string& key, uint64_t ts);
   static std::string EncodeTxnKey(const std::string_view& key, uint64_t ts);
