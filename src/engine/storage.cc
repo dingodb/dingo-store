@@ -24,6 +24,7 @@
 #include "common/helper.h"
 #include "common/logging.h"
 #include "engine/iterator.h"
+#include "engine/raft_store_engine.h"
 #include "engine/snapshot.h"
 #include "engine/write_data.h"
 #include "fmt/core.h"
@@ -513,6 +514,17 @@ butil::Status Storage::TxnBatchGet(std::shared_ptr<Context> ctx, const std::vect
   DINGO_LOG(INFO) << "TxnBatchGet keys size : " << keys.size() << " kvs size : " << kvs.size()
                   << " txn_result_info : " << txn_result_info.ShortDebugString();
 
+  auto reader = engine_->NewTxnReader();
+  status = reader->TxnBatchGet(ctx, keys, kvs, txn_result_info);
+  if (!status.ok()) {
+    if (pb::error::EKEY_NOT_FOUND == status.error_code()) {
+      // return OK if not found
+      return butil::Status::OK();
+    }
+
+    return status;
+  }
+
   return butil::Status();
 }
 
@@ -532,6 +544,18 @@ butil::Status Storage::TxnScan(std::shared_ptr<Context> ctx, uint64_t region_id,
                   << " coprocessor: " << coprocessor.ShortDebugString()
                   << " txn_result_info: " << txn_result_info.ShortDebugString() << " kvs size: " << kvs.size()
                   << " has_more: " << has_more << " end_key: " << end_key;
+
+  auto reader = engine_->NewTxnReader();
+  status = reader->TxnScan(ctx, range, limit, start_ts, key_only, is_reverse, disable_coprocessor, coprocessor,
+                           txn_result_info, kvs, has_more, end_key);
+  if (!status.ok()) {
+    if (pb::error::EKEY_NOT_FOUND == status.error_code()) {
+      // return OK if not found
+      return butil::Status::OK();
+    }
+
+    return status;
+  }
 
   return butil::Status();
 }

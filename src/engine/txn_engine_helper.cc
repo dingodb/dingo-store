@@ -27,7 +27,6 @@
 #include "common/helper.h"
 #include "common/logging.h"
 #include "engine/raw_engine.h"
-#include "fmt/core.h"
 #include "proto/store.pb.h"
 
 namespace dingodb {
@@ -70,7 +69,7 @@ butil::Status TxnEngineHelper::GetLockInfo(std::shared_ptr<RawEngine::Reader> re
 
 // Rollback
 // This function is not saft, MUST be called in raft apply to make sure the lock_info is not changed during rollback
-butil::Status TxnEngineHelper::Rollback(std::shared_ptr<RawEngine> engine, std::vector<std::string> &keys,
+butil::Status TxnEngineHelper::Rollback(const std::shared_ptr<RawEngine> &engine, std::vector<std::string> &keys,
                                         uint64_t start_ts) {
   DINGO_LOG(INFO) << "[txn]Rollback start_ts: " << start_ts << ", keys_count: " << keys.size()
                   << ", first_key: " << Helper::StringToHex(keys[0])
@@ -117,8 +116,8 @@ butil::Status TxnEngineHelper::Rollback(std::shared_ptr<RawEngine> engine, std::
 
 // Commit
 // This function is not saft, MUST be called in raft apply to make sure the lock_info is not changed during commit
-butil::Status TxnEngineHelper::Commit(std::shared_ptr<RawEngine> engine, std::vector<pb::store::LockInfo> &lock_infos,
-                                      uint64_t commit_ts) {
+butil::Status TxnEngineHelper::Commit(const std::shared_ptr<RawEngine> &engine,
+                                      std::vector<pb::store::LockInfo> &lock_infos, uint64_t commit_ts) {
   DINGO_LOG(INFO) << "[txn]Commit commit_ts: " << commit_ts << ", keys_count: " << lock_infos.size()
                   << ", first_key: " << Helper::StringToHex(lock_infos[0].key())
                   << ", first_lock_ts: " << lock_infos[0].lock_ts()
@@ -179,6 +178,60 @@ butil::Status TxnEngineHelper::Commit(std::shared_ptr<RawEngine> engine, std::ve
   if (!status.ok()) {
     DINGO_LOG(FATAL) << "[txn]Commit KvBatchPutAndDelete failed, commit_ts: " << commit_ts
                      << ", status: " << status.error_str();
+  }
+
+  return butil::Status::OK();
+}
+
+butil::Status TxnEngineHelper::BatchGet(const std::shared_ptr<RawEngine> &engine, const std::vector<std::string> &keys,
+                                        std::vector<pb::common::KeyValue> &kvs,
+                                        pb::store::TxnResultInfo &txn_result_info) {
+  DINGO_LOG(INFO) << "[txn]BatchGet keys_count: " << keys.size() << ", first_key: " << Helper::StringToHex(keys[0])
+                  << ", last_key: " << Helper::StringToHex(keys[keys.size() - 1]);
+
+  if (keys.empty()) {
+    return butil::Status::OK();
+  }
+
+  if (engine == nullptr) {
+    DINGO_LOG(FATAL) << "[txn]BatchGet engine is null";
+  }
+
+  if (!kvs.empty()) {
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "kvs is not empty");
+  }
+
+  if (txn_result_info.ByteSizeLong() > 0) {
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "txn_result_info is not empty");
+  }
+
+  return butil::Status::OK();
+}
+
+butil::Status TxnEngineHelper::Scan(const std::shared_ptr<RawEngine> &engine, const pb::common::Range &range,
+                                    uint64_t limit, uint64_t start_ts, bool key_only, bool is_reverse,
+                                    bool disable_coprocessor, const pb::store::Coprocessor &coprocessor,
+                                    pb::store::TxnResultInfo &txn_result_info, std::vector<pb::common::KeyValue> &kvs,
+                                    bool &has_more, std::string &end_key) {
+  DINGO_LOG(INFO) << "[txn]Scan start_ts: " << start_ts << ", range: " << range.ShortDebugString()
+                  << ", limit: " << limit << ", key_only: " << key_only << ", is_reverse: " << is_reverse
+                  << ", disable_coprocessor: " << disable_coprocessor << ", coprocessor: " << coprocessor.DebugString()
+                  << ", txn_result_info: " << txn_result_info.ShortDebugString();
+
+  if (engine == nullptr) {
+    DINGO_LOG(FATAL) << "[txn]Scan engine is null";
+  }
+
+  if (limit == 0) {
+    return butil::Status::OK();
+  }
+
+  if (!kvs.empty()) {
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "kvs is not empty");
+  }
+
+  if (has_more || !end_key.empty()) {
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "has_more or end_key is not empty");
   }
 
   return butil::Status::OK();

@@ -16,9 +16,11 @@
 #define DINGODB_TXN_ENGINE_HELPER_H_
 
 #include <memory>
+#include <vector>
 
 #include "butil/status.h"
 #include "engine/raw_engine.h"
+#include "proto/store.pb.h"
 
 namespace dingodb {
 
@@ -26,9 +28,18 @@ class TxnEngineHelper {
  public:
   static butil::Status GetLockInfo(std::shared_ptr<RawEngine::Reader> reader, const std::string &key,
                                    pb::store::LockInfo &lock_info);
-  static butil::Status Rollback(std::shared_ptr<RawEngine> engine, std::vector<std::string> &keys, uint64_t start_ts);
-  static butil::Status Commit(std::shared_ptr<RawEngine> engine, std::vector<pb::store::LockInfo> &lock_infos,
+  static butil::Status Rollback(const std::shared_ptr<RawEngine> &engine, std::vector<std::string> &keys,
+                                uint64_t start_ts);
+  static butil::Status Commit(const std::shared_ptr<RawEngine> &engine, std::vector<pb::store::LockInfo> &lock_infos,
                               uint64_t commit_ts);
+
+  static butil::Status BatchGet(const std::shared_ptr<RawEngine> &engine, const std::vector<std::string> &keys,
+                                std::vector<pb::common::KeyValue> &kvs, pb::store::TxnResultInfo &txn_result_info);
+
+  static butil::Status Scan(const std::shared_ptr<RawEngine> &engine, const pb::common::Range &range, uint64_t limit,
+                            uint64_t start_ts, bool key_only, bool is_reverse, bool disable_coprocessor,
+                            const pb::store::Coprocessor &coprocessor, pb::store::TxnResultInfo &txn_result_info,
+                            std::vector<pb::common::KeyValue> &kvs, bool &has_more, std::string &end_key);
 };
 
 }  // namespace dingodb

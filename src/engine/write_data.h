@@ -21,8 +21,6 @@
 #include <string>
 #include <vector>
 
-#include "butil/status.h"
-#include "common/logging.h"
 #include "proto/common.pb.h"
 #include "proto/raft.pb.h"
 

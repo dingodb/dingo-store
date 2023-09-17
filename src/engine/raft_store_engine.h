@@ -148,7 +148,24 @@ class RaftStoreEngine : public Engine, public RaftControlAble {
     std::shared_ptr<RawEngine::Reader> reader_;
   };
 
+  class TxnReader : public Engine::TxnReader {
+   public:
+    TxnReader(std::shared_ptr<RawEngine> engine) : engine_(engine) {}
+
+    butil::Status TxnBatchGet(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys,
+                              std::vector<pb::common::KeyValue>& kvs,
+                              pb::store::TxnResultInfo& txn_result_info) override;
+    butil::Status TxnScan(std::shared_ptr<Context> ctx, const pb::common::Range& range, uint64_t limit,
+                          uint64_t start_ts, bool key_only, bool is_reverse, bool disable_coprocessor,
+                          const pb::store::Coprocessor& coprocessor, pb::store::TxnResultInfo& txn_result_info,
+                          std::vector<pb::common::KeyValue>& kvs, bool& has_more, std::string& end_key) override;
+
+   private:
+    std::shared_ptr<RawEngine> engine_;
+  };
+
   std::shared_ptr<Engine::VectorReader> NewVectorReader(const std::string& cf_name) override;
+  std::shared_ptr<Engine::TxnReader> NewTxnReader() override;
 
  protected:
   std::shared_ptr<RawEngine> engine_;                   // NOLINT
