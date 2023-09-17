@@ -183,10 +183,12 @@ butil::Status TxnEngineHelper::Commit(const std::shared_ptr<RawEngine> &engine,
   return butil::Status::OK();
 }
 
-butil::Status TxnEngineHelper::BatchGet(const std::shared_ptr<RawEngine> &engine, const std::vector<std::string> &keys,
-                                        std::vector<pb::common::KeyValue> &kvs,
+butil::Status TxnEngineHelper::BatchGet(const std::shared_ptr<RawEngine> &engine,
+                                        const pb::store::IsolationLevel &isolation_level, uint64_t start_ts,
+                                        const std::vector<std::string> &keys, std::vector<pb::common::KeyValue> &kvs,
                                         pb::store::TxnResultInfo &txn_result_info) {
-  DINGO_LOG(INFO) << "[txn]BatchGet keys_count: " << keys.size() << ", first_key: " << Helper::StringToHex(keys[0])
+  DINGO_LOG(INFO) << "[txn]BatchGet keys_count: " << keys.size() << ", isolation_level: " << isolation_level
+                  << ", start_ts: " << start_ts << ", first_key: " << Helper::StringToHex(keys[0])
                   << ", last_key: " << Helper::StringToHex(keys[keys.size() - 1]);
 
   if (keys.empty()) {
@@ -205,16 +207,95 @@ butil::Status TxnEngineHelper::BatchGet(const std::shared_ptr<RawEngine> &engine
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "txn_result_info is not empty");
   }
 
+  auto lock_reader = engine->NewReader(Constant::kTxnLockCF);
+  if (lock_reader == nullptr) {
+    DINGO_LOG(FATAL) << "[txn]BatchGet NewReader failed, start_ts: " << start_ts;
+  }
+
+  auto data_reader = engine->NewReader(Constant::kTxnDataCF);
+  if (data_reader == nullptr) {
+    DINGO_LOG(FATAL) << "[txn]BatchGet NewReader failed, start_ts: " << start_ts;
+  }
+
+  // for every key in keys, get lock info, if lock_ts < start_ts, return LockInfo
+  // else find the latest write below our start_ts
+  // then read data from data_cf
+  for (const auto &key : keys) {
+    pb::common::KeyValue kv;
+    kv.set_key(key);
+
+    pb::store::LockInfo lock_info;
+    auto ret = GetLockInfo(lock_reader, key, lock_info);
+    if (!ret.ok()) {
+      DINGO_LOG(FATAL) << "[txn]BatchGet GetLockInfo failed, key: " << key << ", status: " << ret.error_str();
+    }
+
+    // if lock_info is exists, check if lock_ts < start_ts
+    if (lock_info.lock_ts() > 0 && lock_info.lock_ts() < start_ts) {
+      // lock_ts < start_ts, return lock_info
+      *(txn_result_info.mutable_locked()) = lock_info;
+      return butil::Status::OK();
+    }
+
+    IteratorOptions iter_options;
+    iter_options.lower_bound = Helper::EncodeTxnKey(key, start_ts);
+    iter_options.upper_bound = Helper::EncodeTxnKey(key, 0);
+    auto iter = engine->NewIterator(Constant::kTxnWriteCF, iter_options);
+    if (iter == nullptr) {
+      DINGO_LOG(FATAL) << "[txn]BatchGet NewIterator failed, start_ts: " << start_ts;
+    }
+
+    // if the key is committed after start_ts, return WriteConflict
+    while (iter->Valid()) {
+      if (iter->Key().length() <= 8) {
+        DINGO_LOG(FATAL) << ", invalid write_key, key: " << iter->Key() << ", start_ts: " << start_ts
+                         << ", write_key is less than 8 bytes: " << iter->Key();
+      }
+      std::string write_key;
+      uint64_t write_ts;
+      Helper::DecodeTxnKey(iter->Key(), write_key, write_ts);
+
+      if (write_ts < start_ts) {
+        // write_ts < start_ts, return write_info
+        pb::store::WriteInfo write_info;
+        auto ret = write_info.ParseFromArray(iter->Value().data(), iter->Value().size());
+        if (!ret) {
+          DINGO_LOG(FATAL) << "[txn]BatchGet parse write info failed, key: " << key << ", write_key: " << iter->Key()
+                           << ", write_value(hex): " << Helper::StringToHex(iter->Value());
+        }
+
+        auto ret1 = data_reader->KvGet(Helper::EncodeTxnKey(key, write_info.start_ts()), *kv.mutable_value());
+        if (!ret1.ok() && ret1.error_code() != pb::error::Errno::EKEY_NOT_FOUND) {
+          DINGO_LOG(FATAL) << "[txn]BatchGet read data failed, key: " << key << ", status: " << ret1.error_str();
+        } else if (ret1.error_code() == pb::error::Errno::EKEY_NOT_FOUND) {
+          DINGO_LOG(ERROR) << "[txn]BatchGet read data failed, data is illegally not found, key: " << key
+                           << ", status: " << ret1.error_str()
+                           << ", raw_key: " << Helper::EncodeTxnKey(key, write_info.start_ts());
+        }
+        break;
+      } else {
+        DINGO_LOG(ERROR) << "[txn]BatchGet write_ts: " << write_ts << " >= start_ts: " << start_ts << ", key: " << key
+                         << ", write_key: " << iter->Key();
+      }
+
+      iter->Next();
+    }
+
+    kvs.emplace_back(kv);
+  }
+
   return butil::Status::OK();
 }
 
-butil::Status TxnEngineHelper::Scan(const std::shared_ptr<RawEngine> &engine, const pb::common::Range &range,
-                                    uint64_t limit, uint64_t start_ts, bool key_only, bool is_reverse,
+butil::Status TxnEngineHelper::Scan(const std::shared_ptr<RawEngine> &engine,
+                                    const pb::store::IsolationLevel &isolation_level, uint64_t start_ts,
+                                    const pb::common::Range &range, uint64_t limit, bool key_only, bool is_reverse,
                                     bool disable_coprocessor, const pb::store::Coprocessor &coprocessor,
                                     pb::store::TxnResultInfo &txn_result_info, std::vector<pb::common::KeyValue> &kvs,
                                     bool &has_more, std::string &end_key) {
   DINGO_LOG(INFO) << "[txn]Scan start_ts: " << start_ts << ", range: " << range.ShortDebugString()
-                  << ", limit: " << limit << ", key_only: " << key_only << ", is_reverse: " << is_reverse
+                  << ", isolation_level: " << isolation_level << ", start_ts: " << start_ts << ", limit: " << limit
+                  << ", key_only: " << key_only << ", is_reverse: " << is_reverse
                   << ", disable_coprocessor: " << disable_coprocessor << ", coprocessor: " << coprocessor.DebugString()
                   << ", txn_result_info: " << txn_result_info.ShortDebugString();
 
@@ -233,6 +314,38 @@ butil::Status TxnEngineHelper::Scan(const std::shared_ptr<RawEngine> &engine, co
   if (has_more || !end_key.empty()) {
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "has_more or end_key is not empty");
   }
+
+  auto snapshot = engine->NewSnapshot();
+  if (snapshot == nullptr) {
+    DINGO_LOG(FATAL) << "[txn]Scan NewSnapshot failed, start_ts: " << start_ts;
+  }
+
+  auto data_reader = engine->NewReader(Constant::kTxnDataCF);
+  if (data_reader == nullptr) {
+    DINGO_LOG(FATAL) << "[txn]Scan NewReader failed, start_ts: " << start_ts;
+  }
+
+  // construct lock iter
+  IteratorOptions write_iter_options;
+  write_iter_options.lower_bound = Helper::EncodeTxnKey(range.start_key(), start_ts);
+  write_iter_options.upper_bound = Helper::EncodeTxnKey(range.end_key(), 0);
+
+  auto write_iter = engine->NewIterator(Constant::kTxnWriteCF, snapshot, write_iter_options);
+  if (write_iter == nullptr) {
+    DINGO_LOG(FATAL) << "[txn]Scan NewIterator write failed, start_ts: " << start_ts;
+  }
+
+  // construct lock iter
+  IteratorOptions lock_iter_options;
+  lock_iter_options.lower_bound = range.start_key();
+  lock_iter_options.upper_bound = range.end_key();
+
+  auto lock_iter = engine->NewIterator(Constant::kTxnLockCF, snapshot, lock_iter_options);
+  if (lock_iter == nullptr) {
+    DINGO_LOG(FATAL) << "[txn]Scan NewIterator lock failed, start_ts: " << start_ts;
+  }
+
+  // iter write and lock iter, if lock_ts < start_ts, return LockInfo
 
   return butil::Status::OK();
 }

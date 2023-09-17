@@ -100,6 +100,18 @@ class Context {
     return *this;
   }
 
+  pb::common::RegionEpoch RegionEpoch() const { return region_epoch_; }
+  Context& SetRegionEpoch(const pb::common::RegionEpoch& region_epoch) {
+    region_epoch_ = region_epoch;
+    return *this;
+  }
+
+  pb::store::IsolationLevel IsolationLevel() const { return isolation_level_; }
+  Context& SetIsolationLevel(const pb::store::IsolationLevel& isolation_level) {
+    isolation_level_ = isolation_level;
+    return *this;
+  }
+
   void SetCfName(const std::string& cf_name) { cf_name_ = cf_name; }
   const std::string& CfName() const { return cf_name_; }
 
@@ -148,6 +160,9 @@ class Context {
   bool enable_sync_;
   butil::Status status_;
   std::shared_ptr<BthreadCond> cond_;
+
+  pb::common::RegionEpoch region_epoch_;
+  pb::store::IsolationLevel isolation_level_;
 
   WriteCbFunc write_cb_;
 };

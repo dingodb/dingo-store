@@ -504,18 +504,19 @@ void Storage::DecTaskCount() { this->workers_task_count_ << -1; }
 
 // txn
 
-butil::Status Storage::TxnBatchGet(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys,
-                                   pb::store::TxnResultInfo& txn_result_info, std::vector<pb::common::KeyValue>& kvs) {
+butil::Status Storage::TxnBatchGet(std::shared_ptr<Context> ctx, uint64_t start_ts,
+                                   const std::vector<std::string>& keys, pb::store::TxnResultInfo& txn_result_info,
+                                   std::vector<pb::common::KeyValue>& kvs) {
   auto status = ValidateLeader(ctx->RegionId());
   if (!status.ok()) {
     return status;
   }
 
-  DINGO_LOG(INFO) << "TxnBatchGet keys size : " << keys.size() << " kvs size : " << kvs.size()
-                  << " txn_result_info : " << txn_result_info.ShortDebugString();
+  DINGO_LOG(INFO) << "TxnBatchGet keys size : " << keys.size() << ", start_ts: " << start_ts
+                  << ", kvs size : " << kvs.size() << " txn_result_info : " << txn_result_info.ShortDebugString();
 
   auto reader = engine_->NewTxnReader();
-  status = reader->TxnBatchGet(ctx, keys, kvs, txn_result_info);
+  status = reader->TxnBatchGet(ctx, start_ts, keys, kvs, txn_result_info);
   if (!status.ok()) {
     if (pb::error::EKEY_NOT_FOUND == status.error_code()) {
       // return OK if not found
@@ -528,25 +529,24 @@ butil::Status Storage::TxnBatchGet(std::shared_ptr<Context> ctx, const std::vect
   return butil::Status();
 }
 
-butil::Status Storage::TxnScan(std::shared_ptr<Context> ctx, uint64_t region_id, const pb::common::Range& range,
-                               uint64_t limit, uint64_t start_ts, bool key_only, bool is_reverse,
-                               bool disable_coprocessor, const pb::store::Coprocessor& coprocessor,
-                               pb::store::TxnResultInfo& txn_result_info, std::vector<pb::common::KeyValue>& kvs,
-                               bool& has_more, std::string& end_key) {
+butil::Status Storage::TxnScan(std::shared_ptr<Context> ctx, uint64_t start_ts, const pb::common::Range& range,
+                               uint64_t limit, bool key_only, bool is_reverse, bool disable_coprocessor,
+                               const pb::store::Coprocessor& coprocessor, pb::store::TxnResultInfo& txn_result_info,
+                               std::vector<pb::common::KeyValue>& kvs, bool& has_more, std::string& end_key) {
   auto status = ValidateLeader(ctx->RegionId());
   if (!status.ok()) {
     return status;
   }
 
-  DINGO_LOG(INFO) << "TxnScan region_id: " << region_id << " range: " << range.ShortDebugString() << " limit: " << limit
-                  << " start_ts: " << start_ts << " key_only: " << key_only << " is_reverse: " << is_reverse
-                  << " disable_coprocessor: " << disable_coprocessor
+  DINGO_LOG(INFO) << "TxnScan region_id: " << ctx->RegionId() << " range: " << range.ShortDebugString()
+                  << " limit: " << limit << " start_ts: " << start_ts << " key_only: " << key_only
+                  << " is_reverse: " << is_reverse << " disable_coprocessor: " << disable_coprocessor
                   << " coprocessor: " << coprocessor.ShortDebugString()
                   << " txn_result_info: " << txn_result_info.ShortDebugString() << " kvs size: " << kvs.size()
                   << " has_more: " << has_more << " end_key: " << end_key;
 
   auto reader = engine_->NewTxnReader();
-  status = reader->TxnScan(ctx, range, limit, start_ts, key_only, is_reverse, disable_coprocessor, coprocessor,
+  status = reader->TxnScan(ctx, start_ts, range, limit, key_only, is_reverse, disable_coprocessor, coprocessor,
                            txn_result_info, kvs, has_more, end_key);
   if (!status.ok()) {
     if (pb::error::EKEY_NOT_FOUND == status.error_code()) {

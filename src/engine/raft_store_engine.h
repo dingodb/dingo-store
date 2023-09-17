@@ -152,11 +152,11 @@ class RaftStoreEngine : public Engine, public RaftControlAble {
    public:
     TxnReader(std::shared_ptr<RawEngine> engine) : engine_(engine) {}
 
-    butil::Status TxnBatchGet(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys,
+    butil::Status TxnBatchGet(std::shared_ptr<Context> ctx, uint64_t start_ts, const std::vector<std::string>& keys,
                               std::vector<pb::common::KeyValue>& kvs,
                               pb::store::TxnResultInfo& txn_result_info) override;
-    butil::Status TxnScan(std::shared_ptr<Context> ctx, const pb::common::Range& range, uint64_t limit,
-                          uint64_t start_ts, bool key_only, bool is_reverse, bool disable_coprocessor,
+    butil::Status TxnScan(std::shared_ptr<Context> ctx, uint64_t start_ts, const pb::common::Range& range,
+                          uint64_t limit, bool key_only, bool is_reverse, bool disable_coprocessor,
                           const pb::store::Coprocessor& coprocessor, pb::store::TxnResultInfo& txn_result_info,
                           std::vector<pb::common::KeyValue>& kvs, bool& has_more, std::string& end_key) override;
 

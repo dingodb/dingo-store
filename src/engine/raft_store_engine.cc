@@ -442,21 +442,22 @@ std::shared_ptr<Engine::TxnReader> RaftStoreEngine::NewTxnReader() {
   return std::make_shared<RaftStoreEngine::TxnReader>(engine_);
 }
 
-butil::Status RaftStoreEngine::TxnReader::TxnBatchGet(std::shared_ptr<Context> /*ctx*/,
+butil::Status RaftStoreEngine::TxnReader::TxnBatchGet(std::shared_ptr<Context> ctx, uint64_t start_ts,
                                                       const std::vector<std::string>& keys,
                                                       std::vector<pb::common::KeyValue>& kvs,
                                                       pb::store::TxnResultInfo& txn_result_info) {
-  return TxnEngineHelper::BatchGet(engine_, keys, kvs, txn_result_info);
+  return TxnEngineHelper::BatchGet(engine_, ctx->IsolationLevel(), start_ts, keys, kvs, txn_result_info);
 }
 
-butil::Status RaftStoreEngine::TxnReader::TxnScan(std::shared_ptr<Context> /*ctx*/, const pb::common::Range& range,
-                                                  uint64_t limit, uint64_t start_ts, bool key_only, bool is_reverse,
-                                                  bool disable_coprocessor, const pb::store::Coprocessor& coprocessor,
+butil::Status RaftStoreEngine::TxnReader::TxnScan(std::shared_ptr<Context> ctx, uint64_t start_ts,
+                                                  const pb::common::Range& range, uint64_t limit, bool key_only,
+                                                  bool is_reverse, bool disable_coprocessor,
+                                                  const pb::store::Coprocessor& coprocessor,
                                                   pb::store::TxnResultInfo& txn_result_info,
                                                   std::vector<pb::common::KeyValue>& kvs, bool& has_more,
                                                   std::string& end_key) {
-  return TxnEngineHelper::Scan(engine_, range, limit, start_ts, key_only, is_reverse, disable_coprocessor, coprocessor,
-                               txn_result_info, kvs, has_more, end_key);
+  return TxnEngineHelper::Scan(engine_, ctx->IsolationLevel(), start_ts, range, limit, key_only, is_reverse,
+                               disable_coprocessor, coprocessor, txn_result_info, kvs, has_more, end_key);
 }
 
 }  // namespace dingodb
