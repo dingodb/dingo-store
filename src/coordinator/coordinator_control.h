@@ -291,9 +291,11 @@ class CoordinatorControl : public MetaControl {
   // in: schema_id
   // in: table_definition
   // out: new table_id
+  // out: new region_ids
   // return: errno
   butil::Status CreateTable(uint64_t schema_id, const pb::meta::TableDefinition &table_definition,
-                            uint64_t &new_table_id, pb::coordinator_internal::MetaIncrement &meta_increment);
+                            uint64_t &new_table_id, std::vector<uint64_t> &region_ids,
+                            pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // create index_id
   // in: schema_id
@@ -311,9 +313,11 @@ class CoordinatorControl : public MetaControl {
   // in: schema_id
   // in: table_definition
   // out: new index_id
+  // out: new region_ids
   // return: errno
   butil::Status CreateIndex(uint64_t schema_id, const pb::meta::TableDefinition &table_definition, uint64_t table_id,
-                            uint64_t &new_index_id, pb::coordinator_internal::MetaIncrement &meta_increment);
+                            uint64_t &new_index_id, std::vector<uint64_t> &region_ids,
+                            pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // update index
   // in: schema_id

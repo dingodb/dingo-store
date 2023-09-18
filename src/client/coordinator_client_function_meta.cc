@@ -284,6 +284,7 @@ void SendCreateTable(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
     DINGO_LOG(WARNING) << "GetCreateTableId failed";
     return;
   }
+  DINGO_LOG(INFO) << "table_id = " << new_table_id;
 
   if (FLAGS_part_count == 0) {
     FLAGS_part_count = 1;
@@ -299,6 +300,10 @@ void SendCreateTable(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
       return;
     }
     part_ids.push_back(new_part_id);
+  }
+
+  for (const auto& id : part_ids) {
+    DINGO_LOG(INFO) << "part_id = " << id;
   }
 
   // setup table_id
@@ -652,6 +657,7 @@ void SendCreateIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
     DINGO_LOG(WARNING) << "GetCreateTableId failed";
     return;
   }
+  DINGO_LOG(INFO) << "index_id = " << new_index_id;
 
   if (FLAGS_part_count == 0) {
     FLAGS_part_count = 1;
@@ -667,6 +673,10 @@ void SendCreateIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
       return;
     }
     part_ids.push_back(new_part_id);
+  }
+
+  for (const auto& id : part_ids) {
+    DINGO_LOG(INFO) << "part_id = " << id;
   }
 
   // setup index_id
