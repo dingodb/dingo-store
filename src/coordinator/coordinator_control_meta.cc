@@ -96,11 +96,11 @@ void CoordinatorControl::GenerateRootSchemas(pb::coordinator_internal::SchemaInt
   information_schema_internal.set_id(::dingodb::pb::meta::ReservedSchemaIds::INFORMATION_SCHEMA);
   information_schema_internal.set_name("information_schema");
 
-  DINGO_LOG(INFO) << "GenerateRootSchemas 0[" << root_schema_internal.DebugString();
-  DINGO_LOG(INFO) << "GenerateRootSchemas 1[" << meta_schema_internal.DebugString();
-  DINGO_LOG(INFO) << "GenerateRootSchemas 2[" << dingo_schema_internal.DebugString();
-  DINGO_LOG(INFO) << "GenerateRootSchemas 3[" << mysql_schema_internal.DebugString();
-  DINGO_LOG(INFO) << "GenerateRootSchemas 4[" << information_schema_internal.DebugString();
+  DINGO_LOG(INFO) << "GenerateRootSchemas 0[" << root_schema_internal.ShortDebugString();
+  DINGO_LOG(INFO) << "GenerateRootSchemas 1[" << meta_schema_internal.ShortDebugString();
+  DINGO_LOG(INFO) << "GenerateRootSchemas 2[" << dingo_schema_internal.ShortDebugString();
+  DINGO_LOG(INFO) << "GenerateRootSchemas 3[" << mysql_schema_internal.ShortDebugString();
+  DINGO_LOG(INFO) << "GenerateRootSchemas 4[" << information_schema_internal.ShortDebugString();
 }
 
 // ValidateSchema
@@ -406,7 +406,7 @@ butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta
     bool ret = schema_map_.Exists(schema_id);
     if (!ret) {
       DINGO_LOG(ERROR) << "schema_id is illegal " << schema_id
-                       << ", table_definition:" << table_definition.DebugString();
+                       << ", table_definition:" << table_definition.ShortDebugString();
       return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "schema_id is illegal");
     }
   }
@@ -427,13 +427,13 @@ butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta
     return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "no partition provided");
   }
 
-  DINGO_LOG(INFO) << "CreateTable table_definition:" << table_definition.DebugString();
+  DINGO_LOG(INFO) << "CreateTable table_definition:" << table_definition.ShortDebugString();
 
   // check max_partition_num_of_table
   if (table_partition.partitions_size() > FLAGS_max_partition_num_of_table) {
     DINGO_LOG(ERROR) << "partitions_size is too large, partitions_size=" << table_partition.partitions_size()
                      << ", max_partition_num_of_table=" << FLAGS_max_partition_num_of_table
-                     << ", table_definition:" << table_definition.DebugString();
+                     << ", table_definition:" << table_definition.ShortDebugString();
     return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "partitions_size is too large");
   }
 
@@ -445,12 +445,12 @@ butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta
     for (const auto& part : table_partition.partitions()) {
       if (part.id().entity_id() <= 0) {
         DINGO_LOG(ERROR) << "part_id is illegal, part_id=" << part.id().entity_id()
-                         << ", table_definition:" << table_definition.DebugString();
+                         << ", table_definition:" << table_definition.ShortDebugString();
         return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "part_id is illegal");
       }
       if (part.range().start_key().empty() || part.range().end_key().empty()) {
         DINGO_LOG(ERROR) << "part range is illegal, part_id=" << part.id().entity_id()
-                         << ", table_definition:" << table_definition.DebugString();
+                         << ", table_definition:" << table_definition.ShortDebugString();
         return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "part range is illegal");
       }
       new_part_ids.push_back(part.id().entity_id());
@@ -468,7 +468,7 @@ butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta
 
   if (new_part_ranges.size() != new_part_ids.size()) {
     DINGO_LOG(ERROR) << "new_part_ranges.size() != new_part_ids.size(), table_definition:"
-                     << table_definition.DebugString();
+                     << table_definition.ShortDebugString();
     return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "new_part_ranges.size() != new_part_ids.size()");
   }
 
@@ -478,7 +478,7 @@ butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta
     auto ret = part_id_set.insert(id);
     if (!ret.second) {
       DINGO_LOG(ERROR) << "part_id is illegal, part_id=" << id
-                       << ", table_definition:" << table_definition.DebugString();
+                       << ", table_definition:" << table_definition.ShortDebugString();
       return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "part_id is illegal");
     }
   }
@@ -1066,19 +1066,19 @@ butil::Status CoordinatorControl::CreateIndex(uint64_t schema_id, const pb::meta
 
   // validate part information
   if (!table_definition.has_table_partition()) {
-    DINGO_LOG(ERROR) << "no table_partition provided , table_definition=" << table_definition.DebugString();
+    DINGO_LOG(ERROR) << "no table_partition provided , table_definition=" << table_definition.ShortDebugString();
     return butil::Status(pb::error::Errno::EINDEX_DEFINITION_ILLEGAL, "no table_partition provided");
   }
 
   auto const& index_partition = table_definition.table_partition();
 
-  DINGO_LOG(INFO) << "CreateIndex index_definition=" << table_definition.DebugString();
+  DINGO_LOG(INFO) << "CreateIndex index_definition=" << table_definition.ShortDebugString();
 
   // check max_partition_num_of_table
   if (index_partition.partitions_size() > FLAGS_max_partition_num_of_table) {
     DINGO_LOG(ERROR) << "partitions_size is too large, partitions_size=" << index_partition.partitions_size()
                      << ", max_partition_num_of_table=" << FLAGS_max_partition_num_of_table
-                     << ", table_definition:" << table_definition.DebugString();
+                     << ", table_definition:" << table_definition.ShortDebugString();
     return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "partitions_size is too large");
   }
 
@@ -1090,19 +1090,19 @@ butil::Status CoordinatorControl::CreateIndex(uint64_t schema_id, const pb::meta
     for (const auto& part : index_partition.partitions()) {
       if (part.id().entity_id() <= 0) {
         DINGO_LOG(ERROR) << "part_id is illegal, part_id=" << part.id().entity_id()
-                         << ", table_definition:" << table_definition.DebugString();
+                         << ", table_definition:" << table_definition.ShortDebugString();
         return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "part_id is illegal");
       }
       if (part.range().start_key().empty() || part.range().end_key().empty()) {
         DINGO_LOG(ERROR) << "part range is illegal, part_id=" << part.id().entity_id()
-                         << ", table_definition:" << table_definition.DebugString();
+                         << ", table_definition:" << table_definition.ShortDebugString();
         return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "part range is illegal");
       }
       new_part_ids.push_back(part.id().entity_id());
       new_part_ranges.push_back(part.range());
     }
   } else {
-    DINGO_LOG(ERROR) << "no range provided , table_definition=" << table_definition.DebugString();
+    DINGO_LOG(ERROR) << "no range provided , table_definition=" << table_definition.ShortDebugString();
     return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "no partition provided");
   }
 
@@ -1122,7 +1122,7 @@ butil::Status CoordinatorControl::CreateIndex(uint64_t schema_id, const pb::meta
     auto ret = part_id_set.insert(id);
     if (!ret.second) {
       DINGO_LOG(ERROR) << "part_id is illegal, part_id=" << id
-                       << ", table_definition:" << table_definition.DebugString();
+                       << ", table_definition:" << table_definition.ShortDebugString();
       return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "part_id is illegal");
     }
   }
@@ -1155,7 +1155,7 @@ butil::Status CoordinatorControl::CreateIndex(uint64_t schema_id, const pb::meta
     if (!status.ok()) {
       DINGO_LOG(ERROR) << fmt::format("send create auto increment internal error, code: {}, message: {} ",
                                       status.error_code(), status.error_str())
-                       << ", table_definition=" << table_definition.DebugString();
+                       << ", table_definition=" << table_definition.ShortDebugString();
       return butil::Status(pb::error::Errno::EAUTO_INCREMENT_WHILE_CREATING_TABLE,
                            fmt::format("send create auto increment internal error, code: {}, message: {}",
                                        status.error_code(), status.error_str()));
@@ -1297,7 +1297,7 @@ butil::Status CoordinatorControl::UpdateIndex(uint64_t schema_id, uint64_t index
   DINGO_LOG(INFO) << "GetIndex found index_id=" << index_id;
 
   DINGO_LOG(DEBUG) << fmt::format("UpdateIndex get_index schema_id={} index_id={} table_internal={}", schema_id,
-                                  index_id, table_internal.DebugString());
+                                  index_id, table_internal.ShortDebugString());
 
   // this is for interface compatibility, index created by new interface cannot be updated in this function.
   if (table_internal.table_id() > 0) {
@@ -1314,8 +1314,8 @@ butil::Status CoordinatorControl::UpdateIndex(uint64_t schema_id, uint64_t index
   // now only support hnsw max_elements update
   if (new_table_definition.index_parameter().vector_index_parameter().vector_index_type() !=
       table_internal.definition().index_parameter().vector_index_parameter().vector_index_type()) {
-    DINGO_LOG(ERROR) << "ERRROR: index type not match, new_table_definition=" << new_table_definition.DebugString()
-                     << " table_internal.definition()=" << table_internal.definition().DebugString();
+    DINGO_LOG(ERROR) << "ERRROR: index type not match, new_table_definition=" << new_table_definition.ShortDebugString()
+                     << " table_internal.definition()=" << table_internal.definition().ShortDebugString();
     return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "index type not match");
   }
 
@@ -1409,8 +1409,9 @@ butil::Status CoordinatorControl::UpdateIndex(uint64_t schema_id, uint64_t index
       return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "hnsw max_elements only support increase");
     }
   } else {
-    DINGO_LOG(ERROR) << "ERRROR: index type not support, new_table_definition=" << new_table_definition.DebugString()
-                     << " table_internal.definition()=" << table_internal.definition().DebugString();
+    DINGO_LOG(ERROR) << "ERRROR: index type not support, new_table_definition="
+                     << new_table_definition.ShortDebugString()
+                     << " table_internal.definition()=" << table_internal.definition().ShortDebugString();
     return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "index definition update type not support");
   }
 
@@ -1699,7 +1700,7 @@ butil::Status CoordinatorControl::GetTable(uint64_t schema_id, uint64_t table_id
   }
 
   DINGO_LOG(DEBUG) << fmt::format("GetTable schema_id={} table_id={} table_definition_with_id={}", schema_id, table_id,
-                                  table_definition_with_id.DebugString());
+                                  table_definition_with_id.ShortDebugString());
 
   return butil::Status::OK();
 }
@@ -1750,7 +1751,7 @@ butil::Status CoordinatorControl::GetIndex(uint64_t schema_id, uint64_t index_id
   }
 
   DINGO_LOG(DEBUG) << fmt::format("GetIndex schema_id={} index_id={} table_definition_with_id={}", schema_id, index_id,
-                                  table_definition_with_id.DebugString());
+                                  table_definition_with_id.ShortDebugString());
 
   return butil::Status::OK();
 }
@@ -1785,7 +1786,7 @@ butil::Status CoordinatorControl::GetTableByName(uint64_t schema_id, const std::
   }
 
   DINGO_LOG(DEBUG) << fmt::format("GetTableByName schema_id={} table_name={} table_definition={}", schema_id,
-                                  table_name, table_definition.DebugString());
+                                  table_name, table_definition.ShortDebugString());
 
   return GetTable(schema_id, temp_table_id, table_definition);
 }
@@ -1818,7 +1819,7 @@ butil::Status CoordinatorControl::GetIndexByName(uint64_t schema_id, const std::
   }
 
   DINGO_LOG(DEBUG) << fmt::format("GetIndexByName schema_id={} index_name={} table_definition={}", schema_id,
-                                  index_name, table_definition.DebugString());
+                                  index_name, table_definition.ShortDebugString());
 
   return GetIndex(schema_id, temp_index_id, true, table_definition);
 }

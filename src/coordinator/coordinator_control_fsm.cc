@@ -1042,7 +1042,7 @@ void LogMetaIncrementSize(pb::coordinator_internal::MetaIncrement& meta_incremen
     DINGO_LOG(DEBUG) << "16.kv_revs_size=" << meta_increment.kv_revs_size();
   }
 
-  DINGO_LOG(DEBUG) << meta_increment.DebugString();
+  DINGO_LOG(DEBUG) << meta_increment.ShortDebugString();
 }
 
 // ApplyMetaIncrement is on_apply callback
@@ -1378,10 +1378,10 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
           ret = table_map_.Get(table_id, table_internal);
           if (ret < 0) {
             DINGO_LOG(INFO) << "process RegionCreate in fsm table_id not exists, id=" << table_id
-                            << ", region_id=" << new_region.id() << ",region=" << new_region.DebugString();
+                            << ", region_id=" << new_region.id() << ",region=" << new_region.ShortDebugString();
           } else {
             DINGO_LOG(INFO) << "process RegionCreate in fsm table_id exists, id=" << table_id
-                            << ", region_id=" << new_region.id() << ",region=" << new_region.DebugString();
+                            << ", region_id=" << new_region.id() << ",region=" << new_region.ShortDebugString();
 
             bool need_to_add_part = true;
             for (const auto& part : table_internal.partitions()) {
@@ -1416,10 +1416,10 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
           ret = index_map_.Get(index_id, index_internal);
           if (ret < 0) {
             DINGO_LOG(INFO) << "process RegionCreate in fsm index_id not exists, id=" << index_id
-                            << ", region_id=" << new_region.id() << ",region=" << new_region.DebugString();
+                            << ", region_id=" << new_region.id() << ",region=" << new_region.ShortDebugString();
           } else {
             DINGO_LOG(INFO) << "process RegionCreate in fsm index_id exists, id=" << index_id
-                            << ", region_id=" << new_region.id() << ",region=" << new_region.DebugString();
+                            << ", region_id=" << new_region.id() << ",region=" << new_region.ShortDebugString();
 
             bool need_to_add_part = true;
             for (const auto& part : index_internal.partitions()) {
@@ -1481,10 +1481,10 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
           ret = table_map_.Get(table_id, table_internal);
           if (ret < 0) {
             DINGO_LOG(INFO) << "process RegionDrop in fsm table_id not exists, id=" << table_id
-                            << ", region_id=" << new_region.id() << ",region=" << new_region.DebugString();
+                            << ", region_id=" << new_region.id() << ",region=" << new_region.ShortDebugString();
           } else {
             DINGO_LOG(INFO) << "process RegionDrop in fsm table_id exists, id=" << table_id
-                            << ", region_id=" << new_region.id() << ",region=" << new_region.DebugString();
+                            << ", region_id=" << new_region.id() << ",region=" << new_region.ShortDebugString();
 
             pb::coordinator_internal::TableInternal new_table_internal = table_internal;
             new_table_internal.clear_partitions();
@@ -1518,10 +1518,10 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
           ret = index_map_.Get(index_id, index_internal);
           if (ret < 0) {
             DINGO_LOG(INFO) << "process RegionDrop in fsm index_id not exists, id=" << index_id
-                            << ", region_id=" << new_region.id() << ",region=" << new_region.DebugString();
+                            << ", region_id=" << new_region.id() << ",region=" << new_region.ShortDebugString();
           } else {
             DINGO_LOG(INFO) << "process RegionDrop in fsm index_id exists, id=" << index_id
-                            << ", region_id=" << new_region.id() << ",region=" << new_region.DebugString();
+                            << ", region_id=" << new_region.id() << ",region=" << new_region.ShortDebugString();
 
             pb::coordinator_internal::TableInternal new_index_internal = index_internal;
             new_index_internal.clear_partitions();
