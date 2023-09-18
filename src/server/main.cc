@@ -222,6 +222,10 @@ static void SignalHandler(int signo) {
   } else {
     // call abort() to generate core dump
     DINGO_LOG(ERROR) << "call abort() to generate core dump for signo=" << signo << " " << strsignal(signo);
+    auto s = signal(SIGABRT, SIG_DFL);
+    if (s == SIG_ERR) {
+      std::cerr << "Failed to set signal handler to SIG_DFL for SIGABRT" << '\n';
+    }
     abort();
   }
 }
@@ -291,6 +295,10 @@ static void SignalHandlerWithoutLineno(int signo) {
   } else {
     // call abort() to generate core dump
     DINGO_LOG(ERROR) << "call abort() to generate core dump for signo=" << signo << " " << strsignal(signo);
+    auto s = signal(SIGABRT, SIG_DFL);
+    if (s == SIG_ERR) {
+      std::cerr << "Failed to set signal handler to SIG_DFL for SIGABRT" << '\n';
+    }
     abort();
   }
 }
@@ -320,6 +328,11 @@ void SetupSignalHandler() {
   s = signal(SIGILL, SignalHandler);
   if (s == SIG_ERR) {
     printf("Failed to setup signal handler for SIGILL\n");
+    exit(-1);
+  }
+  s = signal(SIGABRT, SignalHandler);
+  if (s == SIG_ERR) {
+    printf("Failed to setup signal handler for SIGABRT\n");
     exit(-1);
   }
 }
