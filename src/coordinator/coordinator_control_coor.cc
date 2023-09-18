@@ -3769,7 +3769,7 @@ butil::Status CoordinatorControl::ProcessSingleTaskList(const pb::coordinator::T
   // process task
   const auto& task = task_list.tasks(task_list.next_step());
 
-  DINGO_LOG(INFO) << "process task=" << task.DebugString();
+  DINGO_LOG(INFO) << "process task=" << task.ShortDebugString();
 
   // do pre check
   bool can_advance_task = DoTaskPreCheck(task.pre_check());
@@ -3785,7 +3785,8 @@ butil::Status CoordinatorControl::ProcessSingleTaskList(const pb::coordinator::T
     for (const auto& region_cmd : it.region_cmds()) {
       auto ret = AddRegionCmd(it.id(), region_cmd, meta_increment);
       if (!ret.ok()) {
-        DINGO_LOG(ERROR) << "AddRegionCmd failed, store_id=" << it.id() << " region_cmd=" << region_cmd.DebugString();
+        DINGO_LOG(ERROR) << "AddRegionCmd failed, store_id=" << it.id()
+                         << " region_cmd=" << region_cmd.ShortDebugString();
         return ret;
       }
     }

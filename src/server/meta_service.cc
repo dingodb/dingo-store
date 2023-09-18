@@ -331,7 +331,7 @@ void MetaServiceImpl::CreateTableId(google::protobuf::RpcController *controller,
   }
 
   DINGO_LOG(INFO) << "CreateTableId request:  schema_id = [" << request->schema_id().entity_id() << "]";
-  DINGO_LOG(DEBUG) << request->DebugString();
+  DINGO_LOG(DEBUG) << request->ShortDebugString();
 
   if (!request->has_schema_id()) {
     response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
@@ -380,7 +380,9 @@ void MetaServiceImpl::CreateTable(google::protobuf::RpcController * /*controller
   }
 
   DINGO_LOG(INFO) << "CreateTable request:  schema_id = [" << request->schema_id().entity_id() << "]";
-  DINGO_LOG(INFO) << request->DebugString();
+  DINGO_LOG(INFO) << request->ShortDebugString();
+
+  uint64_t start_ms = butil::gettimeofday_ms();
 
   if (!request->has_schema_id() || !request->has_table_definition()) {
     response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
@@ -503,7 +505,8 @@ void MetaServiceImpl::CreateTable(google::protobuf::RpcController * /*controller
   // // this is a async operation will be block by closure
   // engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
 
-  DINGO_LOG(INFO) << "CreateTable Success in meta_service table_name =" << request->table_definition().name();
+  DINGO_LOG(INFO) << "CreateTable Success in meta_service table_name: " << request->table_definition().name()
+                  << ", id: " << new_table_id << ", time_cost_ms: " << (butil::gettimeofday_ms() - start_ms);
 }
 
 void MetaServiceImpl::DropSchema(google::protobuf::RpcController *controller,
@@ -516,7 +519,7 @@ void MetaServiceImpl::DropSchema(google::protobuf::RpcController *controller,
   }
 
   DINGO_LOG(WARNING) << "DropSchema request:  parent_schema_id = [" << request->schema_id().entity_id() << "]";
-  DINGO_LOG(INFO) << request->DebugString();
+  DINGO_LOG(INFO) << request->ShortDebugString();
 
   if (!request->has_schema_id()) {
     response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
@@ -558,7 +561,7 @@ void MetaServiceImpl::CreateSchema(google::protobuf::RpcController *controller,
   }
 
   DINGO_LOG(INFO) << "CreatSchema request:  parent_schema_id = [" << request->parent_schema_id().entity_id() << "]";
-  DINGO_LOG(DEBUG) << request->DebugString();
+  DINGO_LOG(DEBUG) << request->ShortDebugString();
 
   if (!request->has_parent_schema_id()) {
     response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
@@ -607,7 +610,7 @@ void MetaServiceImpl::DropTable(google::protobuf::RpcController *controller, con
 
   DINGO_LOG(WARNING) << "DropTable request:  schema_id = [" << request->table_id().parent_entity_id() << "]"
                      << " table_id = [" << request->table_id().entity_id() << "]";
-  DINGO_LOG(DEBUG) << request->DebugString();
+  DINGO_LOG(DEBUG) << request->ShortDebugString();
 
   if (!request->has_table_id()) {
     response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
@@ -648,7 +651,7 @@ void MetaServiceImpl::GetAutoIncrements(google::protobuf::RpcController * /*cont
     return RedirectAutoIncrementResponse(response);
   }
 
-  DINGO_LOG(DEBUG) << request->DebugString();
+  DINGO_LOG(DEBUG) << request->ShortDebugString();
 
   butil::FlatMap<uint64_t, uint64_t> auto_increments;
   auto_increments.init(1024);
@@ -792,7 +795,7 @@ void MetaServiceImpl::GenerateAutoIncrement(google::protobuf::RpcController *con
       auto_increment_control_->GenerateAutoIncrement(table_id, request->count(), request->auto_increment_increment(),
                                                      request->auto_increment_offset(), meta_increment);
   if (!ret.ok()) {
-    DINGO_LOG(ERROR) << "generate auto increment failed, " << ret << " | " << request->DebugString();
+    DINGO_LOG(ERROR) << "generate auto increment failed, " << ret << " | " << request->ShortDebugString();
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
     response->mutable_error()->set_errmsg(ret.error_str());
     return;
@@ -807,7 +810,7 @@ void MetaServiceImpl::GenerateAutoIncrement(google::protobuf::RpcController *con
   // this is a async operation will be block by closure
   auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
   if (!ret2.ok()) {
-    DINGO_LOG(ERROR) << "generate auto increment failed, " << ret << " | " << request->DebugString() << " | "
+    DINGO_LOG(ERROR) << "generate auto increment failed, " << ret << " | " << request->ShortDebugString() << " | "
                      << ret2.error_str();
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret2.error_code()));
     response->mutable_error()->set_errmsg(ret2.error_str());
@@ -1046,7 +1049,7 @@ void MetaServiceImpl::CreateIndexId(google::protobuf::RpcController *controller,
   }
 
   DINGO_LOG(INFO) << "CreateIndexId request:  schema_id = [" << request->schema_id().entity_id() << "]";
-  DINGO_LOG(DEBUG) << request->DebugString();
+  DINGO_LOG(DEBUG) << request->ShortDebugString();
 
   if (!request->has_schema_id()) {
     response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
@@ -1095,7 +1098,9 @@ void MetaServiceImpl::CreateIndex(google::protobuf::RpcController * /*controller
   }
 
   DINGO_LOG(INFO) << "CreateIndex request:  schema_id = [" << request->schema_id().entity_id() << "]";
-  DINGO_LOG(INFO) << request->DebugString();
+  DINGO_LOG(INFO) << request->ShortDebugString();
+
+  uint64_t start_ms = butil::gettimeofday_ms();
 
   if (!request->has_schema_id() || !request->has_index_definition()) {
     response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
@@ -1243,7 +1248,8 @@ void MetaServiceImpl::CreateIndex(google::protobuf::RpcController * /*controller
   // // this is a async operation will be block by closure
   // engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
 
-  DINGO_LOG(INFO) << "CreateIndex Success in meta_service index_name =" << request->index_definition().name();
+  DINGO_LOG(INFO) << "CreateIndex Success in meta_service index_name: " << request->index_definition().name()
+                  << ", id: " << new_index_id << ", time_cost_ms: " << (butil::gettimeofday_ms() - start_ms);
 }
 
 void MetaServiceImpl::UpdateIndex(google::protobuf::RpcController *controller,
@@ -1257,7 +1263,7 @@ void MetaServiceImpl::UpdateIndex(google::protobuf::RpcController *controller,
 
   DINGO_LOG(INFO) << "UpdateIndex request:  schema_id = [" << request->index_id().parent_entity_id() << "]"
                   << " index_id = [" << request->index_id().entity_id() << "]";
-  DINGO_LOG(DEBUG) << request->DebugString();
+  DINGO_LOG(DEBUG) << request->ShortDebugString();
 
   if (!request->has_index_id() || !request->has_new_index_definition()) {
     response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
@@ -1325,7 +1331,7 @@ void MetaServiceImpl::DropIndex(google::protobuf::RpcController *controller, con
 
   DINGO_LOG(WARNING) << "DropIndex request:  schema_id = [" << request->index_id().parent_entity_id() << "]"
                      << " index_id = [" << request->index_id().entity_id() << "]";
-  DINGO_LOG(DEBUG) << request->DebugString();
+  DINGO_LOG(DEBUG) << request->ShortDebugString();
 
   if (!request->has_index_id()) {
     response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
@@ -1365,7 +1371,7 @@ void MetaServiceImpl::GenerateTableIds(google::protobuf::RpcController *controll
     return RedirectResponse(response);
   }
 
-  DINGO_LOG(INFO) << request->DebugString();
+  DINGO_LOG(INFO) << request->ShortDebugString();
 
   if (!request->has_schema_id() || !request->has_count()) {
     response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
@@ -1407,7 +1413,9 @@ void MetaServiceImpl::CreateTables(google::protobuf::RpcController * /*controlle
     return RedirectResponse(response);
   }
 
-  DINGO_LOG(INFO) << request->DebugString();
+  uint64_t start_ms = butil::gettimeofday_ms();
+
+  DINGO_LOG(INFO) << request->ShortDebugString();
 
   if (!request->has_schema_id() || request->table_definition_with_ids_size() == 0) {
     DINGO_LOG(ERROR) << request->has_schema_id() << " | " << request->table_definition_with_ids_size();
@@ -1595,7 +1603,9 @@ void MetaServiceImpl::CreateTables(google::protobuf::RpcController * /*controlle
   // // this is a async operation will be block by closure
   // engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
 
-  DINGO_LOG(INFO) << "CreateTables Success.";
+  DINGO_LOG(INFO) << "CreateTables Success. id: " << new_table_id
+                  << ", name: " << request->table_definition_with_ids(0).table_definition().name()
+                  << ", time_cost_ms: " << (butil::gettimeofday_ms() - start_ms);
 }
 
 void MetaServiceImpl::GetTables(google::protobuf::RpcController * /*controller*/,
@@ -1607,7 +1617,7 @@ void MetaServiceImpl::GetTables(google::protobuf::RpcController * /*controller*/
     return RedirectResponse(response);
   }
 
-  DINGO_LOG(INFO) << request->DebugString();
+  DINGO_LOG(INFO) << request->ShortDebugString();
 
   if (!request->has_table_id()) {
     response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
@@ -1643,7 +1653,7 @@ void MetaServiceImpl::DropTables(google::protobuf::RpcController *controller,
     return RedirectResponse(response);
   }
 
-  DINGO_LOG(INFO) << request->DebugString();
+  DINGO_LOG(INFO) << request->ShortDebugString();
 
   butil::Status ret;
   pb::coordinator_internal::MetaIncrement meta_increment;
@@ -1689,7 +1699,7 @@ void MetaServiceImpl::SwitchAutoSplit(google::protobuf::RpcController *controlle
     return RedirectResponse(response);
   }
 
-  DINGO_LOG(INFO) << request->DebugString();
+  DINGO_LOG(INFO) << request->ShortDebugString();
 
   butil::Status ret;
   pb::coordinator_internal::MetaIncrement meta_increment;
@@ -1726,7 +1736,7 @@ void MetaServiceImpl::TsoService(google::protobuf::RpcController *controller,
   if (!tso_control_->IsLeader()) {
     return RedirectResponseTso(response);
   }
-  DINGO_LOG(INFO) << request->DebugString();
+  DINGO_LOG(INFO) << request->ShortDebugString();
 
   if (request->op_type() == pb::meta::TsoOpType::OP_NONE) {
     response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
