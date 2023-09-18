@@ -29,6 +29,7 @@
 #include "proto/version.pb.h"
 
 DECLARE_string(key);
+DECLARE_bool(key_is_hex);
 DECLARE_uint64(revision);
 DECLARE_uint64(sub_revision);
 DECLARE_string(range_end);

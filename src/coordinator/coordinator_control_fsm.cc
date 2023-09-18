@@ -108,6 +108,17 @@ void CoordinatorControl::BuildTempMaps() {
     }
   }
   DINGO_LOG(INFO) << "index_name_map_safe_temp_ finished, count=" << index_name_map_safe_temp_.Size();
+
+  // copy region_map_ to range_region_map_
+  {
+    range_region_map_.Clear();
+    butil::FlatMap<uint64_t, pb::common::Region> region_map_copy;
+    region_map_copy.init(10000);
+    region_map_.GetRawMapCopy(region_map_copy);
+    for (const auto& it : region_map_copy) {
+      range_region_map_.Put(it.second.definition().range().start_key(), it.second.id());
+    }
+  }
 }
 
 // OnLeaderStart will init id_epoch_map_temp_ from id_epoch_map_ which is in state machine
@@ -1413,8 +1424,13 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
     }
 
     // BAIDU_SCOPED_LOCK(region_map_mutex_);
+    // for region_map_ multiput
     std::vector<int64_t> region_id_to_write;
     std::vector<pb::coordinator_internal::RegionInternal> region_internal_to_write;
+    // for range_region_map_ multiput
+    std::vector<std::string> region_start_key_to_write;
+    std::vector<int64_t> region_start_key_id_to_write;
+
     for (int i = 0; i < meta_increment.regions_size(); i++) {
       const auto& region = meta_increment.regions(i);
       if (region.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
@@ -1428,6 +1444,11 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         // }
         region_id_to_write.push_back(region.id());
         region_internal_to_write.push_back(region.region());
+
+        // update range_region_map_
+        // range_region_map_.Put(region.region().definition().range().start_key(), region.region().id());
+        region_start_key_to_write.push_back(region.region().definition().range().start_key());
+        region_start_key_id_to_write.push_back(region.region().id());
 
         // meta_write_kv
         meta_write_to_kv.push_back(region_meta_->TransformToKvValue(region.region()));
@@ -1552,6 +1573,11 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         region_id_to_write.push_back(region.id());
         region_internal_to_write.push_back(region.region());
 
+        // update range_region_map_
+        // range_region_map_.Put(region.region().definition().range().start_key(), region.region().id());
+        region_start_key_to_write.push_back(region.region().definition().range().start_key());
+        region_start_key_id_to_write.push_back(region.region().id());
+
         // meta_write_kv
         meta_write_to_kv.push_back(region_meta_->TransformToKvValue(region.region()));
 
@@ -1569,6 +1595,9 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
 
         // remove region from region_metrics_map
         region_metrics_map_.Erase(region.id());
+
+        // update range_region_map_
+        range_region_map_.Erase(region.region().definition().range().start_key());
 
         // update table/index if this is a merge region delete
         const auto& new_region = region.region();
@@ -1660,6 +1689,23 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
           DINGO_LOG(WARNING) << "ApplyMetaIncrement region UPDATE, count=[" << region_id_to_write.size() << "] failed";
         } else {
           DINGO_LOG(INFO) << "ApplyMetaIncrement region UPDATE, count=[" << region_id_to_write.size() << "] success";
+        }
+      }
+
+      if (!region_start_key_to_write.empty()) {
+        if (region_start_key_to_write.size() != region_start_key_id_to_write.size()) {
+          DINGO_LOG(FATAL)
+              << "ApplyMetaIncrement region_start_key_id_to_write.size() != region_start_key_to_write.size(), size="
+              << region_start_key_id_to_write.size() << " " << region_start_key_to_write.size();
+        }
+
+        auto ret = range_region_map_.MultiPut(region_start_key_to_write, region_start_key_id_to_write);
+        if (ret < 0) {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement range_region UPDATE, count=[" << region_start_key_id_to_write.size()
+                             << "] failed";
+        } else {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement range_region UPDATE, count=[" << region_start_key_id_to_write.size()
+                          << "] success";
         }
       }
     }

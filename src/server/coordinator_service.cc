@@ -1722,4 +1722,74 @@ void CoordinatorServiceImpl::RaftControl(google::protobuf::RpcController *contro
   }
 }
 
+void CoordinatorServiceImpl::ScanRegions(google::protobuf::RpcController * /*controller*/,
+                                         const pb::coordinator::ScanRegionsRequest *request,
+                                         pb::coordinator::ScanRegionsResponse *response,
+                                         google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+  DINGO_LOG(DEBUG) << "Receive ScanRegions Request:" << request->ShortDebugString();
+
+  if (request->key().empty()) {
+    response->mutable_error()->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errmsg("key is empty");
+    return;
+  }
+
+  auto is_leader = this->coordinator_control_->IsLeader();
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  std::vector<pb::common::Region> regions;
+  auto ret = this->coordinator_control_->ScanRegions(request->key(), request->range_end(), request->limit(), regions);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "ScanRegions failed, start_region_id:" << request->key()
+                     << ", end_region_id:" << request->range_end() << ", limit: " << request->limit()
+                     << ", errcode:" << ret.error_code() << ", errmsg:" << ret.error_str();
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+  }
+
+  for (const auto &part_region : regions) {
+    auto *new_region = response->add_regions();
+    new_region->set_region_id(part_region.definition().id());
+
+    // region epoch
+    *(new_region->mutable_region_epoch()) = part_region.definition().epoch();
+
+    // region status
+    auto *region_status = new_region->mutable_status();
+    region_status->set_state(part_region.state());
+    region_status->set_raft_status(part_region.raft_status());
+    region_status->set_replica_status(part_region.replica_status());
+    region_status->set_heartbeat_state(part_region.heartbeat_state());
+    region_status->set_region_type(part_region.region_type());
+    region_status->set_create_timestamp(part_region.create_timestamp());
+    region_status->set_last_update_timestamp(part_region.last_update_timestamp());
+
+    // new_region range
+    auto *part_range = new_region->mutable_range();
+    *part_range = part_region.definition().range();
+
+    // new_region leader location
+    auto *leader_location = new_region->mutable_leader();
+
+    // new_region voter & learner locations
+    for (int j = 0; j < part_region.definition().peers_size(); j++) {
+      const auto &part_peer = part_region.definition().peers(j);
+      if (part_peer.store_id() == part_region.leader_store_id()) {
+        *leader_location = part_peer.server_location();
+      }
+
+      if (part_peer.role() == ::dingodb::pb::common::PeerRole::VOTER) {
+        auto *voter_location = new_region->add_voters();
+        *voter_location = part_peer.server_location();
+      } else if (part_peer.role() == ::dingodb::pb::common::PeerRole::LEARNER) {
+        auto *learner_location = new_region->add_learners();
+        *learner_location = part_peer.server_location();
+      }
+    }
+  }
+}
+
 }  // namespace dingodb
