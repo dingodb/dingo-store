@@ -88,10 +88,10 @@ butil::Status CoordinatorControl::RangeRawKvIndex(
   std::string lower_bound = key;
   std::string upper_bound = range_end;
 
-  if (range_end == std::to_string('\0')) {
+  if (range_end == std::string(1, '\0')) {
     upper_bound = std::string(FLAGS_max_kv_key_size, '\xff');
   } else if (range_end.empty()) {
-    upper_bound = std::string(FLAGS_max_kv_key_size, '\xff');
+    upper_bound = Helper::PrefixNext(key);
   }
 
   auto ret = this->kv_index_map_.GetRangeValues(
@@ -109,7 +109,7 @@ butil::Status CoordinatorControl::RangeRawKvIndex(
 
         if (range_end.empty()) {
           return key == version_kv.id();
-        } else if (range_end == std::to_string('\0')) {
+        } else if (range_end == std::string(1, '\0')) {
           return version_kv.id().compare(key) >= 0;
         } else {
           return version_kv.id().compare(key) >= 0 && version_kv.id().compare(range_end) < 0;
@@ -130,7 +130,7 @@ butil::Status CoordinatorControl::RangeRawKvIndex(
 
   //       if (range_end.empty()) {
   //         return key == version_kv.id();
-  //       } else if (range_end == std::to_string('\0')) {
+  //       } else if (range_end == std::string(1, '\0')) {
   //         return version_kv.id().compare(key) >= 0;
   //       } else {
   //         return version_kv.id().compare(key) >= 0 && version_kv.id().compare(range_end) < 0;
