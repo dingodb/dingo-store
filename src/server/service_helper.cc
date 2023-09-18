@@ -21,10 +21,27 @@
 #include "butil/status.h"
 #include "common/helper.h"
 #include "fmt/core.h"
+#include "proto/error.pb.h"
 #include "server/server.h"
 #include "vector/codec.h"
 
 namespace dingodb {
+
+butil::Status ServiceHelper::ValidateRegionEpoch(const pb::common::RegionEpoch& req_epoch, uint64_t region_id) {
+  auto region = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
+  if (region == nullptr) {
+    return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
+  }
+  return ServiceHelper::ValidateRegionEpoch(req_epoch, region);
+}
+
+butil::Status ServiceHelper::ValidateRegionEpoch(const pb::common::RegionEpoch& req_epoch, store::RegionPtr region) {
+  if (region->Epoch().conf_version() != req_epoch.conf_version() || region->Epoch().version() != req_epoch.version()) {
+    return butil::Status(pb::error::Errno::EREGION_VERSION, "Region epoch is not match");
+  }
+
+  return butil::Status::OK();
+}
 
 // Validate region state
 butil::Status ServiceHelper::ValidateRegionState(store::RegionPtr region) {

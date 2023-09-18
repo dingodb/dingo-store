@@ -16,6 +16,7 @@ syntax = "proto3";
 
 import "common.proto";
 import "error.proto";
+import "store.proto";
 
 package dingodb.pb.index;
 
@@ -23,6 +24,7 @@ option java_package = "io.dingodb.index";
 option cc_generic_services = true;
 
 message VectorAddRequest {
+  dingodb.pb.store.Context context = 10;
   uint64 region_id = 1;
   repeated dingodb.pb.common.VectorWithId vectors = 2;
   bool replace_deleted = 3;
@@ -38,6 +40,7 @@ message VectorAddResponse {
 }
 
 message VectorBatchQueryRequest {
+  dingodb.pb.store.Context context = 10;
   uint64 region_id = 1;
   repeated uint64 vector_ids = 2;
   bool without_vector_data = 3;       // Default false, if true, response without vector data.
@@ -53,6 +56,7 @@ message VectorBatchQueryResponse {
 }
 
 message VectorScanQueryRequest {
+  dingodb.pb.store.Context context = 10;
   uint64 region_id = 1;
   uint64 vector_id_start = 2;
   bool is_reverse_scan = 3;
@@ -80,6 +84,7 @@ message VectorScanQueryResponse {
 }
 
 message VectorGetRegionMetricsRequest {
+  dingodb.pb.store.Context context = 10;
   uint64 region_id = 1;
 }
 
@@ -89,6 +94,7 @@ message VectorGetRegionMetricsResponse {
 }
 
 message VectorSearchRequest {
+  dingodb.pb.store.Context context = 10;
   uint64 region_id = 1;
   dingodb.pb.common.VectorSearchParameter parameter = 2;
   repeated dingodb.pb.common.VectorWithId vector_with_ids = 3;  // this field is used for batch search
@@ -104,6 +110,7 @@ message VectorSearchResponse {
 }
 
 message VectorDeleteRequest {
+  dingodb.pb.store.Context context = 10;
   uint64 region_id = 1;
   repeated uint64 ids = 2;
 }
@@ -117,6 +124,7 @@ message VectorDeleteResponse {
 }
 
 message VectorGetBorderIdRequest {
+  dingodb.pb.store.Context context = 10;
   uint64 region_id = 1;
   bool get_min = 2;  // if true, get min id, else get max id
 }
@@ -169,6 +177,7 @@ message VectorCalcDistanceResponse {
 // vector.id > 0: exact query
 // vector.id == 0: similarity search with vector.vector
 message VectorSearchDebugRequest {
+  dingodb.pb.store.Context context = 10;
   uint64 region_id = 1;
   dingodb.pb.common.VectorWithId vector = 2;
   dingodb.pb.common.VectorSearchParameter parameter = 3;
