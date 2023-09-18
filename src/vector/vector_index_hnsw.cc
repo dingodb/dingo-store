@@ -504,7 +504,7 @@ bool VectorIndexHnsw::IsExceedsMaxElements() {
     return true;
   }
 
-  return hnsw_index_->getCurrentElementCount() > user_max_elements_;
+  return hnsw_index_->getCurrentElementCount() >= user_max_elements_;
 }
 
 hnswlib::HierarchicalNSW<float>* VectorIndexHnsw::GetHnswIndex() { return this->hnsw_index_; }

@@ -54,7 +54,7 @@ DEFINE_int32(
     "region update timeout in seconds, will not update region info if no state change and (now - last_update_time) > "
     "region_update_timeout");
 
-DEFINE_uint64(max_hnsw_memory_size_of_region, uint32_t(-1), "max memory size of region in HSNW");
+DEFINE_uint64(max_hnsw_memory_size_of_region, 1024L * 1024L * 1024L, "max memory size of region in HSNW");
 
 DEFINE_uint32(max_send_region_cmd_per_store, 50, "max send region cmd per store");
 
