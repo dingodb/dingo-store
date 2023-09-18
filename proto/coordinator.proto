@@ -298,6 +298,9 @@ message CoordinatorMemoryInfo {
   int64 deleted_index_map_count = 50;
   int64 deleted_index_map_size = 51;
 
+  uint64 range_region_map_count = 52;
+  uint64 range_region_map_size = 53;
+
   repeated dingodb.pb.common.KeyValue id_epoch_values = 100;
 }
 
@@ -691,6 +694,71 @@ message GetOrphanRegionResponse {
   map<int64, dingodb.pb.common.RegionMetrics> orphan_regions = 2;
 }
 
+message ScanRegionsRequest {
+  // key is the first key for the range. If range_end is not given, the request only looks up key.
+  bytes key = 1;
+  // range_end is the upper bound on the requested range [key, range_end).
+  // If range_end is '\0', the range is all keys >= key.
+  // If range_end is key plus one (e.g., "aa"+1 == "ab", "a\xff"+1 == "b"),
+  // then the range request gets all keys prefixed with key.
+  // If both key and range_end are '\0', then the range request returns all keys.
+  bytes range_end = 2;
+  // limit is a limit on the number of keys returned for the request. When limit is set to 0,
+  // it is treated as no limit.
+  int64 limit = 3;
+}
+
+message RegionStatus {
+  // RegionState
+  // REGION_NEW: the region is creating, wait for store to finish the creation
+  // REGION_NORMAL: the region is normal and can serve all request
+  // other status refer to common.proto
+  dingodb.pb.common.RegionState state = 1;
+  // RegionRaftStatus
+  // this status describe the data constistency of the raft region
+  dingodb.pb.common.RegionRaftStatus raft_status = 2;
+  // ReplicaStatus
+  // this status describe the data safety of the raft region
+  // if this region is degraded, it means one or more replica is down
+  dingodb.pb.common.ReplicaStatus replica_status = 3;
+  // RegionHeartbeatState
+  // REGION_ONLINE: the leader of this region is online
+  // REGION_DOWN: the leader of this region cannot heartbeat to coordinator
+  dingodb.pb.common.RegionHeartbeatState heartbeat_state = 4;
+  // RegionType
+  // describe this region is a store region or index region
+  // for table, the region is store
+  // for index, the region is index (including vector index and scalar index)
+  dingodb.pb.common.RegionType region_type = 5;
+  // the create timestamp in ms of region
+  uint64 create_timestamp = 10;
+  // the last update(heartbeat) timestamp in ms of region
+  uint64 last_update_timestamp = 11;
+}
+
+message ScanRegionInfo {
+  // this is really region id, its parent entity is part_id
+  uint64 region_id = 1;
+  // the range of this part
+  dingodb.pb.common.Range range = 2;
+  // the leader's store location
+  dingodb.pb.common.Location leader = 3;
+  // all members of the region that have right to vote, this field is
+  // equal to the old replicates field of Part.
+  repeated dingodb.pb.common.Location voters = 4;
+  // all members of the region that is learners, have no right to vote
+  repeated dingodb.pb.common.Location learners = 5;
+  // region_epoch is used to check whether the region info is stale
+  dingodb.pb.common.RegionEpoch region_epoch = 6;
+  // RegionStatus
+  RegionStatus status = 7;
+}
+
+message ScanRegionsResponse {
+  dingodb.pb.error.Error error = 1;
+  repeated ScanRegionInfo regions = 2;
+}
+
 enum RaftControlOp {
   None = 0;            // just a placeholder
   AddPeer = 1;         // only to leader
@@ -771,6 +839,7 @@ service CoordinatorService {
   rpc ChangePeerRegion(ChangePeerRegionRequest) returns (ChangePeerRegionResponse);
   rpc TransferLeaderRegion(TransferLeaderRegionRequest) returns (TransferLeaderRegionResponse);
   rpc GetOrphanRegion(GetOrphanRegionRequest) returns (GetOrphanRegionResponse);
+  rpc ScanRegions(ScanRegionsRequest) returns (ScanRegionsResponse);
 
   // StoreOperation
   rpc GetStoreOperation(GetStoreOperationRequest) returns (GetStoreOperationResponse);

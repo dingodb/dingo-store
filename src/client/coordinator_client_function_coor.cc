@@ -61,6 +61,10 @@ DECLARE_bool(store_create_region);
 DECLARE_uint64(start_region_cmd_id);
 DECLARE_uint64(end_region_cmd_id);
 DECLARE_uint64(vector_id);
+DECLARE_string(key);
+DECLARE_bool(key_is_hex);
+DECLARE_string(range_end);
+DECLARE_int32(limit);
 
 // raft control
 void SendRaftAddPeer() {
@@ -1603,6 +1607,36 @@ void SendGetRegionCmd(std::shared_ptr<dingodb::CoordinatorInteraction> coordinat
   request.set_end_region_cmd_id(FLAGS_end_region_cmd_id);
 
   auto status = coordinator_interaction->SendRequest("GetRegionCmd", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG_INFO << response.DebugString();
+}
+
+void SendScanRegions(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  dingodb::pb::coordinator::ScanRegionsRequest request;
+  dingodb::pb::coordinator::ScanRegionsResponse response;
+
+  if (FLAGS_key.empty()) {
+    DINGO_LOG(WARNING) << "key is empty, please input key";
+    return;
+  }
+
+  if (FLAGS_key_is_hex) {
+    request.set_key(dingodb::Helper::HexToString(FLAGS_key));
+  } else {
+    request.set_key(FLAGS_key);
+  }
+
+  if (FLAGS_key_is_hex) {
+    request.set_range_end(dingodb::Helper::HexToString(FLAGS_range_end));
+  } else {
+    request.set_range_end(FLAGS_range_end);
+  }
+
+  request.set_limit(FLAGS_limit);
+
+  DINGO_LOG(INFO) << "ScanRegions request: " << request.DebugString();
+
+  auto status = coordinator_interaction->SendRequest("ScanRegions", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG_INFO << response.DebugString();
 }

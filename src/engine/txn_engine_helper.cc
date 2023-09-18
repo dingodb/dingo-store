@@ -264,6 +264,11 @@ butil::Status TxnEngineHelper::BatchGet(const std::shared_ptr<RawEngine> &engine
                            << ", write_value(hex): " << Helper::StringToHex(iter->Value());
         }
 
+        if (!write_info.short_value().empty()) {
+          kv.set_value(write_info.short_value());
+          break;
+        }
+
         auto ret1 = data_reader->KvGet(Helper::EncodeTxnKey(key, write_info.start_ts()), *kv.mutable_value());
         if (!ret1.ok() && ret1.error_code() != pb::error::Errno::EKEY_NOT_FOUND) {
           DINGO_LOG(FATAL) << "[txn]BatchGet read data failed, key: " << key << ", status: " << ret1.error_str();

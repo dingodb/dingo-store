@@ -658,6 +658,8 @@ int CoordinatorSender() {
     SendTransferLeaderRegion(coordinator_interaction);
   } else if (FLAGS_method == "GetOrphanRegion") {
     SendGetOrphanRegion(coordinator_interaction);
+  } else if (FLAGS_method == "ScanRegions") {
+    SendScanRegions(coordinator_interaction);
   } else if (FLAGS_method == "GetStoreOperation") {
     SendGetStoreOperation(coordinator_interaction);
   } else if (FLAGS_method == "GetTaskList") {

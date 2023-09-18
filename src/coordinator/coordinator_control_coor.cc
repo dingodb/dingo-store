@@ -4678,4 +4678,50 @@ butil::Status CoordinatorControl::CleanTaskList(int64_t task_list_id,
   return butil::Status::OK();
 }
 
+butil::Status CoordinatorControl::ScanRegions(const std::string& start_key, const std::string& end_key, int64_t limit,
+                                              std::vector<pb::common::Region>& regions) {
+  DINGO_LOG(INFO) << "ScanRegions start_key=" << Helper::StringToHex(start_key)
+                  << " end_key=" << Helper::StringToHex(end_key) << " limit=" << limit;
+
+  const std::string& lower_bound = start_key;
+  std::string upper_bound;
+
+  if (end_key == std::string(1, '\0')) {
+    upper_bound = std::string(8, '\xff');
+  } else if (end_key.empty()) {
+    upper_bound = Helper::PrefixNext(start_key);
+  }
+
+  DINGO_LOG(INFO) << "ScanRegions lower_bound=" << Helper::StringToHex(lower_bound)
+                  << " upper_bound=" << Helper::StringToHex(upper_bound);
+
+  std::vector<uint64_t> region_ids;
+  auto ret = this->range_region_map_.GetRangeValues(region_ids, lower_bound, upper_bound, nullptr, nullptr);
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << "range_region_map_.GetRangeValues failed";
+    return butil::Status(pb::error::EINTERNAL, "range_region_map_.GetRangeValues failed");
+  }
+
+  for (const auto& region_id : region_ids) {
+    pb::common::Region region;
+    ret = region_map_.Get(region_id, region);
+    if (ret < 0) {
+      DINGO_LOG(ERROR) << "region_map_.Get(" << region_id << ") failed";
+      return butil::Status(pb::error::EINTERNAL, "region_map_.Get failed");
+    }
+
+    regions.push_back(region);
+
+    if (limit > 0 && regions.size() >= static_cast<size_t>(limit)) {
+      break;
+    }
+  }
+
+  DINGO_LOG(INFO) << "ScanRegions start_key=" << Helper::StringToHex(start_key)
+                  << " end_key=" << Helper::StringToHex(end_key) << " limit=" << limit
+                  << " regions.size()=" << regions.size();
+
+  return butil::Status::OK();
+}
+
 }  // namespace dingodb

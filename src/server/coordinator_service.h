@@ -255,6 +255,10 @@ class CoordinatorServiceImpl : public pb::coordinator::CoordinatorService {
   void RaftControl(google::protobuf::RpcController* controller, const pb::coordinator::RaftControlRequest* request,
                    pb::coordinator::RaftControlResponse* response, google::protobuf::Closure* done) override;
 
+  // ScanRegions
+  void ScanRegions(google::protobuf::RpcController* controller, const pb::coordinator::ScanRegionsRequest* request,
+                   pb::coordinator::ScanRegionsResponse* response, google::protobuf::Closure* done) override;
+
  private:
   std::shared_ptr<CoordinatorControl> coordinator_control_;
   std::shared_ptr<AutoIncrementControl> auto_increment_control_;
