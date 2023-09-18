@@ -42,12 +42,23 @@ namespace dingodb {
 StoreServiceImpl::StoreServiceImpl() = default;
 
 butil::Status ValidateKvGetRequest(const dingodb::pb::store::KvGetRequest* request) {
+  // check if region_epoch is match
+  if (request->context().region_id() > 0) {
+    auto epoch_ret =
+        ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+    if (!epoch_ret.ok()) {
+      DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
+      return epoch_ret;
+    }
+  }
+
   if (request->key().empty()) {
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
 
   std::vector<std::string_view> keys = {request->key()};
-  auto status = ServiceHelper::ValidateRegion(request->region_id(), keys);
+  auto status = ServiceHelper::ValidateRegion(
+      (request->region_id() > 0 ? request->region_id() : request->context().region_id()), keys);
   if (!status.ok()) {
     return status;
   }
@@ -72,7 +83,8 @@ void StoreServiceImpl::KvGet(google::protobuf::RpcController* controller,
   }
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
-  ctx->SetRegionId(request->region_id()).SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionId((request->region_id() > 0 ? request->region_id() : request->context().region_id()))
+      .SetCfName(Constant::kStoreDataCF);
   std::vector<std::string> keys;
   auto* mut_request = const_cast<dingodb::pb::store::KvGetRequest*>(request);
   keys.emplace_back(std::move(*mut_request->release_key()));
@@ -84,8 +96,9 @@ void StoreServiceImpl::KvGet(google::protobuf::RpcController* controller,
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-      err->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                  Server::GetInstance()->ServerAddr(), request->region_id(), status.error_str()));
+      err->set_errmsg(fmt::format(
+          "Not leader({}) on region {}, please redirect leader({}).", Server::GetInstance()->ServerAddr(),
+          (request->region_id() > 0 ? request->region_id() : request->context().region_id()), status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
     DINGO_LOG(ERROR) << fmt::format("KvGet request: {} response: {}", request->ShortDebugString(),
@@ -101,6 +114,16 @@ void StoreServiceImpl::KvGet(google::protobuf::RpcController* controller,
 }
 
 butil::Status ValidateKvBatchGetRequest(const dingodb::pb::store::KvBatchGetRequest* request) {
+  // check if region_epoch is match
+  if (request->context().region_id() > 0) {
+    auto epoch_ret =
+        ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+    if (!epoch_ret.ok()) {
+      DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
+      return epoch_ret;
+    }
+  }
+
   std::vector<std::string_view> keys;
   for (const auto& key : request->keys()) {
     if (key.empty()) {
@@ -110,7 +133,8 @@ butil::Status ValidateKvBatchGetRequest(const dingodb::pb::store::KvBatchGetRequ
     keys.push_back(key);
   }
 
-  auto status = ServiceHelper::ValidateRegion(request->region_id(), keys);
+  auto status = ServiceHelper::ValidateRegion(
+      (request->region_id() > 0 ? request->region_id() : request->context().region_id()), keys);
   if (!status.ok()) {
     return status;
   }
@@ -139,7 +163,8 @@ void StoreServiceImpl::KvBatchGet(google::protobuf::RpcController* controller,
   }
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
-  ctx->SetRegionId(request->region_id()).SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionId((request->region_id() > 0 ? request->region_id() : request->context().region_id()))
+      .SetCfName(Constant::kStoreDataCF);
 
   std::vector<pb::common::KeyValue> kvs;
   auto* mut_request = const_cast<dingodb::pb::store::KvBatchGetRequest*>(request);
@@ -149,8 +174,9 @@ void StoreServiceImpl::KvBatchGet(google::protobuf::RpcController* controller,
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-      err->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                  Server::GetInstance()->ServerAddr(), request->region_id(), status.error_str()));
+      err->set_errmsg(fmt::format(
+          "Not leader({}) on region {}, please redirect leader({}).", Server::GetInstance()->ServerAddr(),
+          (request->region_id() > 0 ? request->region_id() : request->context().region_id()), status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
     DINGO_LOG(ERROR) << fmt::format("KvBatchGet request: {} response: {}", request->ShortDebugString(),
@@ -165,12 +191,23 @@ void StoreServiceImpl::KvBatchGet(google::protobuf::RpcController* controller,
 }
 
 butil::Status ValidateKvPutRequest(const dingodb::pb::store::KvPutRequest* request) {
+  // check if region_epoch is match
+  if (request->context().region_id() > 0) {
+    auto epoch_ret =
+        ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+    if (!epoch_ret.ok()) {
+      DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
+      return epoch_ret;
+    }
+  }
+
   if (request->kv().key().empty()) {
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
 
   std::vector<std::string_view> keys = {request->kv().key()};
-  auto status = ServiceHelper::ValidateRegion(request->region_id(), keys);
+  auto status = ServiceHelper::ValidateRegion(
+      (request->region_id() > 0 ? request->region_id() : request->context().region_id()), keys);
   if (!status.ok()) {
     return status;
   }
@@ -200,7 +237,8 @@ void StoreServiceImpl::KvPut(google::protobuf::RpcController* controller,
   }
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done_guard.release(), request, response);
-  ctx->SetRegionId(request->region_id()).SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionId((request->region_id() > 0 ? request->region_id() : request->context().region_id()))
+      .SetCfName(Constant::kStoreDataCF);
 
   auto* mut_request = const_cast<dingodb::pb::store::KvPutRequest*>(request);
   std::vector<pb::common::KeyValue> kvs;
@@ -211,8 +249,9 @@ void StoreServiceImpl::KvPut(google::protobuf::RpcController* controller,
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-      err->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                  Server::GetInstance()->ServerAddr(), request->region_id(), status.error_str()));
+      err->set_errmsg(fmt::format(
+          "Not leader({}) on region {}, please redirect leader({}).", Server::GetInstance()->ServerAddr(),
+          (request->region_id() > 0 ? request->region_id() : request->context().region_id()), status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
     brpc::ClosureGuard done_guard(done);
@@ -220,6 +259,16 @@ void StoreServiceImpl::KvPut(google::protobuf::RpcController* controller,
 }
 
 butil::Status ValidateKvBatchPutRequest(const dingodb::pb::store::KvBatchPutRequest* request) {
+  // check if region_epoch is match
+  if (request->context().region_id() > 0) {
+    auto epoch_ret =
+        ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+    if (!epoch_ret.ok()) {
+      DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
+      return epoch_ret;
+    }
+  }
+
   std::vector<std::string_view> keys;
   for (const auto& kv : request->kvs()) {
     if (kv.key().empty()) {
@@ -229,7 +278,8 @@ butil::Status ValidateKvBatchPutRequest(const dingodb::pb::store::KvBatchPutRequ
     keys.push_back(kv.key());
   }
 
-  auto status = ServiceHelper::ValidateRegion(request->region_id(), keys);
+  auto status = ServiceHelper::ValidateRegion(
+      (request->region_id() > 0 ? request->region_id() : request->context().region_id()), keys);
   if (!status.ok()) {
     return status;
   }
@@ -264,7 +314,8 @@ void StoreServiceImpl::KvBatchPut(google::protobuf::RpcController* controller,
   }
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done_guard.release(), request, response);
-  ctx->SetRegionId(request->region_id()).SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionId((request->region_id() > 0 ? request->region_id() : request->context().region_id()))
+      .SetCfName(Constant::kStoreDataCF);
   auto* mut_request = const_cast<dingodb::pb::store::KvBatchPutRequest*>(request);
   status = storage_->KvPut(ctx, Helper::PbRepeatedToVector(mut_request->mutable_kvs()));
   if (!status.ok()) {
@@ -272,8 +323,9 @@ void StoreServiceImpl::KvBatchPut(google::protobuf::RpcController* controller,
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-      err->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                  Server::GetInstance()->ServerAddr(), request->region_id(), status.error_str()));
+      err->set_errmsg(fmt::format(
+          "Not leader({}) on region {}, please redirect leader({}).", Server::GetInstance()->ServerAddr(),
+          (request->region_id() > 0 ? request->region_id() : request->context().region_id()), status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
     brpc::ClosureGuard done_guard(done);
@@ -283,12 +335,23 @@ void StoreServiceImpl::KvBatchPut(google::protobuf::RpcController* controller,
 }
 
 butil::Status ValidateKvPutIfAbsentRequest(const dingodb::pb::store::KvPutIfAbsentRequest* request) {
+  // check if region_epoch is match
+  if (request->context().region_id() > 0) {
+    auto epoch_ret =
+        ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+    if (!epoch_ret.ok()) {
+      DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
+      return epoch_ret;
+    }
+  }
+
   if (request->kv().key().empty()) {
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
 
   std::vector<std::string_view> keys = {request->kv().key()};
-  auto status = ServiceHelper::ValidateRegion(request->region_id(), keys);
+  auto status = ServiceHelper::ValidateRegion(
+      (request->region_id() > 0 ? request->region_id() : request->context().region_id()), keys);
   if (!status.ok()) {
     return status;
   }
@@ -319,7 +382,8 @@ void StoreServiceImpl::KvPutIfAbsent(google::protobuf::RpcController* controller
   }
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done_guard.release(), request, response);
-  ctx->SetRegionId(request->region_id()).SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionId((request->region_id() > 0 ? request->region_id() : request->context().region_id()))
+      .SetCfName(Constant::kStoreDataCF);
   auto* mut_request = const_cast<dingodb::pb::store::KvPutIfAbsentRequest*>(request);
   std::vector<pb::common::KeyValue> kvs;
   kvs.emplace_back(std::move(*mut_request->release_kv()));
@@ -329,8 +393,9 @@ void StoreServiceImpl::KvPutIfAbsent(google::protobuf::RpcController* controller
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-      err->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                  Server::GetInstance()->ServerAddr(), request->region_id(), status.error_str()));
+      err->set_errmsg(fmt::format(
+          "Not leader({}) on region {}, please redirect leader({}).", Server::GetInstance()->ServerAddr(),
+          (request->region_id() > 0 ? request->region_id() : request->context().region_id()), status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
     brpc::ClosureGuard done_guard(done);
@@ -340,6 +405,16 @@ void StoreServiceImpl::KvPutIfAbsent(google::protobuf::RpcController* controller
 }
 
 butil::Status ValidateKvBatchPutIfAbsentRequest(const dingodb::pb::store::KvBatchPutIfAbsentRequest* request) {
+  // check if region_epoch is match
+  if (request->context().region_id() > 0) {
+    auto epoch_ret =
+        ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+    if (!epoch_ret.ok()) {
+      DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
+      return epoch_ret;
+    }
+  }
+
   std::vector<std::string_view> keys;
   for (const auto& kv : request->kvs()) {
     if (kv.key().empty()) {
@@ -349,7 +424,8 @@ butil::Status ValidateKvBatchPutIfAbsentRequest(const dingodb::pb::store::KvBatc
     keys.push_back(kv.key());
   }
 
-  auto status = ServiceHelper::ValidateRegion(request->region_id(), keys);
+  auto status = ServiceHelper::ValidateRegion(
+      (request->region_id() > 0 ? request->region_id() : request->context().region_id()), keys);
   if (!status.ok()) {
     return status;
   }
@@ -385,7 +461,8 @@ void StoreServiceImpl::KvBatchPutIfAbsent(google::protobuf::RpcController* contr
   }
 
   std::shared_ptr<Context> const ctx = std::make_shared<Context>(cntl, done_guard.release(), request, response);
-  ctx->SetRegionId(request->region_id()).SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionId((request->region_id() > 0 ? request->region_id() : request->context().region_id()))
+      .SetCfName(Constant::kStoreDataCF);
 
   auto* mut_request = const_cast<dingodb::pb::store::KvBatchPutIfAbsentRequest*>(request);
   status = storage_->KvPutIfAbsent(ctx, Helper::PbRepeatedToVector(mut_request->mutable_kvs()), request->is_atomic());
@@ -394,8 +471,9 @@ void StoreServiceImpl::KvBatchPutIfAbsent(google::protobuf::RpcController* contr
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-      err->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                  Server::GetInstance()->ServerAddr(), request->region_id(), status.error_str()));
+      err->set_errmsg(fmt::format(
+          "Not leader({}) on region {}, please redirect leader({}).", Server::GetInstance()->ServerAddr(),
+          (request->region_id() > 0 ? request->region_id() : request->context().region_id()), status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
     brpc::ClosureGuard const done_guard(done);
@@ -405,6 +483,16 @@ void StoreServiceImpl::KvBatchPutIfAbsent(google::protobuf::RpcController* contr
 }
 
 butil::Status ValidateKvBatchDeleteRequest(const dingodb::pb::store::KvBatchDeleteRequest* request) {
+  // check if region_epoch is match
+  if (request->context().region_id() > 0) {
+    auto epoch_ret =
+        ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+    if (!epoch_ret.ok()) {
+      DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
+      return epoch_ret;
+    }
+  }
+
   std::vector<std::string_view> keys;
   for (const auto& key : request->keys()) {
     if (key.empty()) {
@@ -414,7 +502,8 @@ butil::Status ValidateKvBatchDeleteRequest(const dingodb::pb::store::KvBatchDele
     keys.push_back(key);
   }
 
-  auto status = ServiceHelper::ValidateRegion(request->region_id(), keys);
+  auto status = ServiceHelper::ValidateRegion(
+      (request->region_id() > 0 ? request->region_id() : request->context().region_id()), keys);
   if (!status.ok()) {
     return status;
   }
@@ -444,7 +533,8 @@ void StoreServiceImpl::KvBatchDelete(google::protobuf::RpcController* controller
   }
 
   std::shared_ptr<Context> const ctx = std::make_shared<Context>(cntl, done_guard.release(), request, response);
-  ctx->SetRegionId(request->region_id()).SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionId((request->region_id() > 0 ? request->region_id() : request->context().region_id()))
+      .SetCfName(Constant::kStoreDataCF);
   auto* mut_request = const_cast<dingodb::pb::store::KvBatchDeleteRequest*>(request);
   status = storage_->KvDelete(ctx, Helper::PbRepeatedToVector(mut_request->mutable_keys()));
   if (!status.ok()) {
@@ -452,8 +542,9 @@ void StoreServiceImpl::KvBatchDelete(google::protobuf::RpcController* controller
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-      err->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                  Server::GetInstance()->ServerAddr(), request->region_id(), status.error_str()));
+      err->set_errmsg(fmt::format(
+          "Not leader({}) on region {}, please redirect leader({}).", Server::GetInstance()->ServerAddr(),
+          (request->region_id() > 0 ? request->region_id() : request->context().region_id()), status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
     brpc::ClosureGuard const done_guard(done);
@@ -493,7 +584,20 @@ void StoreServiceImpl::KvDeleteRange(google::protobuf::RpcController* controller
 
   DINGO_LOG(DEBUG) << "KvDeleteRange request: " << request->ShortDebugString();
 
-  auto region = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(request->region_id());
+  // check if region_epoch is match
+  if (request->context().region_id() > 0) {
+    auto epoch_ret =
+        ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+    if (!epoch_ret.ok()) {
+      DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
+      response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(epoch_ret.error_code()));
+      response->mutable_error()->set_errmsg(epoch_ret.error_str());
+      return;
+    }
+  }
+
+  auto region = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(
+      (request->region_id() > 0 ? request->region_id() : request->context().region_id()));
   auto uniform_range = Helper::TransformRangeWithOptions(request->range());
   butil::Status status = ValidateKvDeleteRangeRequest(region, uniform_range);
   if (!status.ok()) {
@@ -513,7 +617,8 @@ void StoreServiceImpl::KvDeleteRange(google::protobuf::RpcController* controller
   auto correction_range = Helper::IntersectRange(region->RawRange(), uniform_range);
 
   std::shared_ptr<Context> const ctx = std::make_shared<Context>(cntl, done_guard.release(), request, response);
-  ctx->SetRegionId(request->region_id()).SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionId((request->region_id() > 0 ? request->region_id() : request->context().region_id()))
+      .SetCfName(Constant::kStoreDataCF);
   auto* mut_request = const_cast<dingodb::pb::store::KvDeleteRangeRequest*>(request);
   status = storage_->KvDeleteRange(ctx, correction_range);
   if (!status.ok()) {
@@ -532,12 +637,23 @@ void StoreServiceImpl::KvDeleteRange(google::protobuf::RpcController* controller
 }
 
 butil::Status ValidateKvCompareAndSetRequest(const dingodb::pb::store::KvCompareAndSetRequest* request) {
+  // check if region_epoch is match
+  if (request->context().region_id() > 0) {
+    auto epoch_ret =
+        ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+    if (!epoch_ret.ok()) {
+      DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
+      return epoch_ret;
+    }
+  }
+
   if (request->kv().key().empty()) {
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
 
   std::vector<std::string_view> keys = {request->kv().key()};
-  auto status = ServiceHelper::ValidateRegion(request->region_id(), keys);
+  auto status = ServiceHelper::ValidateRegion(
+      (request->region_id() > 0 ? request->region_id() : request->context().region_id()), keys);
   if (!status.ok()) {
     return status;
   }
@@ -564,7 +680,8 @@ void StoreServiceImpl::KvCompareAndSet(google::protobuf::RpcController* controll
   }
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done_guard.release(), request, response);
-  ctx->SetRegionId(request->region_id()).SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionId((request->region_id() > 0 ? request->region_id() : request->context().region_id()))
+      .SetCfName(Constant::kStoreDataCF);
   // auto* mut_request = const_cast<dingodb::pb::store::KvCompareAndSetRequest*>(request);
 
   status = storage_->KvCompareAndSet(ctx, {request->kv()}, {request->expect_value()}, true);
@@ -573,8 +690,9 @@ void StoreServiceImpl::KvCompareAndSet(google::protobuf::RpcController* controll
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-      err->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                  Server::GetInstance()->ServerAddr(), request->region_id(), status.error_str()));
+      err->set_errmsg(fmt::format(
+          "Not leader({}) on region {}, please redirect leader({}).", Server::GetInstance()->ServerAddr(),
+          (request->region_id() > 0 ? request->region_id() : request->context().region_id()), status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
     brpc::ClosureGuard done_guard(done);
@@ -584,6 +702,16 @@ void StoreServiceImpl::KvCompareAndSet(google::protobuf::RpcController* controll
 }
 
 butil::Status ValidateKvBatchCompareAndSetRequest(const dingodb::pb::store::KvBatchCompareAndSetRequest* request) {
+  // check if region_epoch is match
+  if (request->context().region_id() > 0) {
+    auto epoch_ret =
+        ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+    if (!epoch_ret.ok()) {
+      DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
+      return epoch_ret;
+    }
+  }
+
   for (const auto& kv : request->kvs()) {
     if (kv.key().empty()) {
       return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
@@ -598,7 +726,8 @@ butil::Status ValidateKvBatchCompareAndSetRequest(const dingodb::pb::store::KvBa
   for (const auto& kv : request->kvs()) {
     keys.push_back(kv.key());
   }
-  auto status = ServiceHelper::ValidateRegion(request->region_id(), keys);
+  auto status = ServiceHelper::ValidateRegion(
+      (request->region_id() > 0 ? request->region_id() : request->context().region_id()), keys);
   if (!status.ok()) {
     return status;
   }
@@ -630,7 +759,8 @@ void StoreServiceImpl::KvBatchCompareAndSet(google::protobuf::RpcController* con
   }
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done_guard.release(), response);
-  ctx->SetRegionId(request->region_id()).SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionId((request->region_id() > 0 ? request->region_id() : request->context().region_id()))
+      .SetCfName(Constant::kStoreDataCF);
   auto* mut_request = const_cast<dingodb::pb::store::KvBatchCompareAndSetRequest*>(request);
 
   status = storage_->KvCompareAndSet(ctx, Helper::PbRepeatedToVector(mut_request->kvs()),
@@ -640,8 +770,9 @@ void StoreServiceImpl::KvBatchCompareAndSet(google::protobuf::RpcController* con
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-      err->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                  Server::GetInstance()->ServerAddr(), request->region_id(), status.error_str()));
+      err->set_errmsg(fmt::format(
+          "Not leader({}) on region {}, please redirect leader({}).", Server::GetInstance()->ServerAddr(),
+          (request->region_id() > 0 ? request->region_id() : request->context().region_id()), status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
     brpc::ClosureGuard done_guard(done);
@@ -680,7 +811,20 @@ void StoreServiceImpl::KvScanBegin(google::protobuf::RpcController* controller,
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
 
-  auto region = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(request->region_id());
+  // check if region_epoch is match
+  if (request->context().region_id() > 0) {
+    auto epoch_ret =
+        ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+    if (!epoch_ret.ok()) {
+      DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
+      response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(epoch_ret.error_code()));
+      response->mutable_error()->set_errmsg(epoch_ret.error_str());
+      return;
+    }
+  }
+
+  auto region = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(
+      (request->region_id() > 0 ? request->region_id() : request->context().region_id()));
   auto uniform_range = Helper::TransformRangeWithOptions(request->range());
   butil::Status status = ValidateKvScanBeginRequest(region, uniform_range);
   if (!status.ok()) {
@@ -700,21 +844,24 @@ void StoreServiceImpl::KvScanBegin(google::protobuf::RpcController* controller,
   auto correction_range = Helper::IntersectRange(region->RawRange(), uniform_range);
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
-  ctx->SetRegionId(request->region_id()).SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionId((request->region_id() > 0 ? request->region_id() : request->context().region_id()))
+      .SetCfName(Constant::kStoreDataCF);
 
   std::vector<pb::common::KeyValue> kvs;  // NOLINT
   std::string scan_id;                    // NOLINT
 
-  status = storage_->KvScanBegin(ctx, Constant::kStoreDataCF, request->region_id(), correction_range,
-                                 request->max_fetch_cnt(), request->key_only(), request->disable_auto_release(),
-                                 request->disable_coprocessor(), request->coprocessor(), &scan_id, &kvs);
+  status = storage_->KvScanBegin(
+      ctx, Constant::kStoreDataCF, (request->region_id() > 0 ? request->region_id() : request->context().region_id()),
+      correction_range, request->max_fetch_cnt(), request->key_only(), request->disable_auto_release(),
+      request->disable_coprocessor(), request->coprocessor(), &scan_id, &kvs);
   if (!status.ok()) {
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-      err->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                  Server::GetInstance()->ServerAddr(), request->region_id(), status.error_str()));
+      err->set_errmsg(fmt::format(
+          "Not leader({}) on region {}, please redirect leader({}).", Server::GetInstance()->ServerAddr(),
+          (request->region_id() > 0 ? request->region_id() : request->context().region_id()), status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
     DINGO_LOG(ERROR) << fmt::format("KvScanBegin request: {} response: {}", request->ShortDebugString(),
@@ -733,9 +880,21 @@ void StoreServiceImpl::KvScanBegin(google::protobuf::RpcController* controller,
 }
 
 butil::Status ValidateKvScanContinueRequest(const dingodb::pb::store::KvScanContinueRequest* request) {
+  // check if region_epoch is match
+  if (request->context().region_id() > 0) {
+    auto epoch_ret =
+        ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+    if (!epoch_ret.ok()) {
+      DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
+      return epoch_ret;
+    }
+  }
+
   // Check is exist region.
-  if (!Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->IsExistRegion(request->region_id())) {
-    return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region %lu at server %lu", request->region_id(),
+  if (!Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->IsExistRegion(
+          (request->region_id() > 0 ? request->region_id() : request->context().region_id()))) {
+    return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region %lu at server %lu",
+                         (request->region_id() > 0 ? request->region_id() : request->context().region_id()),
                          Server::GetInstance()->Id());
   }
 
@@ -768,7 +927,8 @@ void StoreServiceImpl::KvScanContinue(google::protobuf::RpcController* controlle
   }
 
   std::shared_ptr<Context> const ctx = std::make_shared<Context>(cntl, done);
-  ctx->SetRegionId(request->region_id()).SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionId((request->region_id() > 0 ? request->region_id() : request->context().region_id()))
+      .SetCfName(Constant::kStoreDataCF);
 
   std::vector<pb::common::KeyValue> kvs;  // NOLINT
   status = storage_->KvScanContinue(ctx, request->scan_id(), request->max_fetch_cnt(), &kvs);
@@ -778,8 +938,9 @@ void StoreServiceImpl::KvScanContinue(google::protobuf::RpcController* controlle
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-      err->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                  Server::GetInstance()->ServerAddr(), request->region_id(), status.error_str()));
+      err->set_errmsg(fmt::format(
+          "Not leader({}) on region {}, please redirect leader({}).", Server::GetInstance()->ServerAddr(),
+          (request->region_id() > 0 ? request->region_id() : request->context().region_id()), status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
     DINGO_LOG(ERROR) << fmt::format("KvScanContinue request: {} response: {}", request->ShortDebugString(),
@@ -796,9 +957,21 @@ void StoreServiceImpl::KvScanContinue(google::protobuf::RpcController* controlle
 }
 
 butil::Status ValidateKvScanReleaseRequest(const dingodb::pb::store::KvScanReleaseRequest* request) {
+  // check if region_epoch is match
+  if (request->context().region_id() > 0) {
+    auto epoch_ret =
+        ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+    if (!epoch_ret.ok()) {
+      DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
+      return epoch_ret;
+    }
+  }
+
   // Check is exist region.
-  if (!Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->IsExistRegion(request->region_id())) {
-    return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region %lu at server %lu", request->region_id(),
+  if (!Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->IsExistRegion(
+          (request->region_id() > 0 ? request->region_id() : request->context().region_id()))) {
+    return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region %lu at server %lu",
+                         (request->region_id() > 0 ? request->region_id() : request->context().region_id()),
                          Server::GetInstance()->Id());
   }
 
@@ -827,7 +1000,8 @@ void StoreServiceImpl::KvScanRelease(google::protobuf::RpcController* controller
   }
 
   std::shared_ptr<Context> const ctx = std::make_shared<Context>(cntl, done);
-  ctx->SetRegionId(request->region_id()).SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionId((request->region_id() > 0 ? request->region_id() : request->context().region_id()))
+      .SetCfName(Constant::kStoreDataCF);
 
   std::vector<pb::common::KeyValue> kvs;  // NOLINT
   status = storage_->KvScanRelease(ctx, request->scan_id());
@@ -837,8 +1011,9 @@ void StoreServiceImpl::KvScanRelease(google::protobuf::RpcController* controller
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-      err->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                  Server::GetInstance()->ServerAddr(), request->region_id(), status.error_str()));
+      err->set_errmsg(fmt::format(
+          "Not leader({}) on region {}, please redirect leader({}).", Server::GetInstance()->ServerAddr(),
+          (request->region_id() > 0 ? request->region_id() : request->context().region_id()), status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
     DINGO_LOG(ERROR) << fmt::format("KvScanRelease request: {} response: {}", request->ShortDebugString(),

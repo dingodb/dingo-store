@@ -15,12 +15,14 @@
 #ifndef DINGODB_SERVER_SERVICE_HELPER_H_
 #define DINGODB_SERVER_SERVICE_HELPER_H_
 
+#include <cstdint>
 #include <string>
 
 #include "butil/endpoint.h"
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "meta/store_meta_manager.h"
 #include "proto/error.pb.h"
 #include "proto/store.pb.h"
 #include "server/server.h"
@@ -35,6 +37,8 @@ class ServiceHelper {
   template <typename T>
   static butil::EndPoint RedirectLeader(std::string addr);
 
+  static butil::Status ValidateRegionEpoch(const pb::common::RegionEpoch& req_epoch, uint64_t region_id);
+  static butil::Status ValidateRegionEpoch(const pb::common::RegionEpoch& req_epoch, store::RegionPtr region);
   static butil::Status ValidateRegionState(store::RegionPtr region);
   static butil::Status ValidateRange(const pb::common::Range& range);
   static butil::Status ValidateKeyInRange(const pb::common::Range& range, const std::vector<std::string_view>& keys);
