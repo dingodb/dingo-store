@@ -16,6 +16,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <vector>
 
@@ -24,6 +25,7 @@
 #include "common/constant.h"
 #include "common/logging.h"
 #include "coordinator/coordinator_closure.h"
+#include "gflags/gflags.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator_internal.pb.h"
 #include "proto/error.pb.h"
@@ -33,6 +35,10 @@ namespace dingodb {
 
 DECLARE_uint64(max_hnsw_memory_size_of_region);
 DECLARE_uint64(max_partition_num_of_table);
+
+DEFINE_uint32(max_check_region_state_count, 120, "max check region state count");
+
+static void MetaServiceDone(std::atomic<bool> *done) { done->store(true, std::memory_order_release); }
 
 void MetaServiceImpl::TableDefinitionToIndexDefinition(const pb::meta::TableDefinition &table_definition,
                                                        pb::meta::IndexDefinition &index_definition) {
@@ -364,7 +370,7 @@ void MetaServiceImpl::CreateTableId(google::protobuf::RpcController *controller,
   DINGO_LOG(INFO) << "CreateTableId Success in meta_service table_d =" << new_table_id;
 }
 
-void MetaServiceImpl::CreateTable(google::protobuf::RpcController *controller,
+void MetaServiceImpl::CreateTable(google::protobuf::RpcController * /*controller*/,
                                   const pb::meta::CreateTableRequest *request, pb::meta::CreateTableResponse *response,
                                   google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
@@ -392,8 +398,9 @@ void MetaServiceImpl::CreateTable(google::protobuf::RpcController *controller,
     }
   }
 
+  std::vector<uint64_t> region_ids;
   auto ret = this->coordinator_control_->CreateTable(request->schema_id().entity_id(), request->table_definition(),
-                                                     new_table_id, meta_increment);
+                                                     new_table_id, region_ids, meta_increment);
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << "CreateTable failed in meta_service, error code=" << ret;
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
@@ -407,17 +414,94 @@ void MetaServiceImpl::CreateTable(google::protobuf::RpcController *controller,
   table_id->set_parent_entity_id(request->schema_id().entity_id());
   table_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
 
-  // prepare for raft process
-  CoordinatorClosure<pb::meta::CreateTableRequest, pb::meta::CreateTableResponse> *meta_put_closure =
-      new CoordinatorClosure<pb::meta::CreateTableRequest, pb::meta::CreateTableResponse>(request, response,
-                                                                                          done_guard.release());
+  {
+    std::atomic<bool> inner_done(false);
 
-  std::shared_ptr<Context> ctx =
-      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
-  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+    auto *closure = brpc::NewCallback(MetaServiceDone, &inner_done);
 
-  // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+    auto ret1 = coordinator_control_->SubmitMetaIncrement(closure, meta_increment);
+    if (!ret1.ok()) {
+      DINGO_LOG(ERROR) << "CreateTable failed in meta_service, error code=" << ret1.error_code()
+                       << ", error str=" << ret1.error_str();
+      response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret1.error_code()));
+      response->mutable_error()->set_errmsg(ret1.error_str());
+      return;
+    }
+
+    uint64_t temp_count = 0;
+    for (;;) {
+      if (inner_done.load(std::memory_order_acquire)) {
+        break;
+      }
+      bthread_usleep(10000);
+
+      if (temp_count++ % 100 == 0) {
+        DINGO_LOG(INFO) << "CreateTable wait for raft done. table_id: " << new_table_id;
+      }
+    }
+
+    if (!region_ids.empty()) {
+      std::map<uint64_t, bool> region_status;
+      for (const auto &id : region_ids) {
+        region_status[id] = false;
+      }
+
+      DINGO_LOG(INFO) << "start to check region_status, table_id: " << new_table_id
+                      << ", region_id_count: " << region_ids.size();
+
+      uint32_t max_check_region_state_count = FLAGS_max_check_region_state_count;
+
+      while (!region_status.empty()) {
+        for (const auto &it : region_status) {
+          DINGO_LOG(INFO) << "CreateTable region_id=" << it.first << " status=" << it.second;
+          pb::common::Region region;
+          auto ret2 = coordinator_control_->QueryRegion(it.first, region);
+          if (ret2.ok()) {
+            if (region.state() == pb::common::RegionState::REGION_NORMAL) {
+              DINGO_LOG(INFO) << "region is NORMAL, region_id=" << it.first;
+              region_status.erase(it.first);
+              break;
+            } else {
+              DINGO_LOG(INFO) << "CreateTable region_id=" << it.first << " status=" << it.second
+                              << " region=" << region.ShortDebugString();
+            }
+          } else {
+            DINGO_LOG(INFO) << "CreateTable region_id=" << it.first
+                            << " QueryRegion fail, error_code: " << ret2.error_code()
+                            << ", error_str: " << ret2.error_str();
+          }
+        }
+
+        DINGO_LOG(INFO) << "continue to check region_status, table_id: " << new_table_id
+                        << ", region_id_count: " << region_ids.size()
+                        << ", left max_check_region_state_count: " << max_check_region_state_count;
+
+        if (max_check_region_state_count-- <= 0) {
+          DINGO_LOG(ERROR) << "CreateTable check region state timeout, table_id: " << new_table_id
+                           << ", region_id_count: " << region_ids.size();
+          response->mutable_error()->set_errcode(pb::error::Errno::EINTERNAL);
+          response->mutable_error()->set_errmsg("CreateTable check region state timeout");
+          break;
+        }
+
+        bthread_usleep(500 * 1000);
+      }
+    } else {
+      DINGO_LOG(INFO) << "CreateTable region_ids is empty, table_id: " << new_table_id;
+    }
+  }
+
+  // // prepare for raft process
+  // CoordinatorClosure<pb::meta::CreateTableRequest, pb::meta::CreateTableResponse> *meta_put_closure =
+  //     new CoordinatorClosure<pb::meta::CreateTableRequest, pb::meta::CreateTableResponse>(request, response,
+  //                                                                                         done_guard.release());
+
+  // std::shared_ptr<Context> ctx =
+  //     std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
+  // ctx->SetRegionId(Constant::kCoordinatorRegionId);
+
+  // // this is a async operation will be block by closure
+  // engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
 
   DINGO_LOG(INFO) << "CreateTable Success in meta_service table_name =" << request->table_definition().name();
 }
@@ -1001,7 +1085,7 @@ void MetaServiceImpl::CreateIndexId(google::protobuf::RpcController *controller,
   DINGO_LOG(INFO) << "CreateIndexId Success in meta_service index_d =" << new_index_id;
 }
 
-void MetaServiceImpl::CreateIndex(google::protobuf::RpcController *controller,
+void MetaServiceImpl::CreateIndex(google::protobuf::RpcController * /*controller*/,
                                   const pb::meta::CreateIndexRequest *request, pb::meta::CreateIndexResponse *response,
                                   google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
@@ -1054,8 +1138,9 @@ void MetaServiceImpl::CreateIndex(google::protobuf::RpcController *controller,
     }
   }
 
+  std::vector<uint64_t> region_ids;
   auto ret = this->coordinator_control_->CreateIndex(request->schema_id().entity_id(), table_definition, 0,
-                                                     new_index_id, meta_increment);
+                                                     new_index_id, region_ids, meta_increment);
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << "CreateIndex failed in meta_service, error code=" << ret;
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
@@ -1069,17 +1154,94 @@ void MetaServiceImpl::CreateIndex(google::protobuf::RpcController *controller,
   index_id->set_parent_entity_id(request->schema_id().entity_id());
   index_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_INDEX);
 
-  // prepare for raft process
-  CoordinatorClosure<pb::meta::CreateIndexRequest, pb::meta::CreateIndexResponse> *meta_put_closure =
-      new CoordinatorClosure<pb::meta::CreateIndexRequest, pb::meta::CreateIndexResponse>(request, response,
-                                                                                          done_guard.release());
+  {
+    std::atomic<bool> inner_done(false);
 
-  std::shared_ptr<Context> ctx =
-      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
-  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+    auto *closure = brpc::NewCallback(MetaServiceDone, &inner_done);
 
-  // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+    auto ret1 = coordinator_control_->SubmitMetaIncrement(closure, meta_increment);
+    if (!ret1.ok()) {
+      DINGO_LOG(ERROR) << "CreateIndex failed in meta_service, error code=" << ret1.error_code()
+                       << ", error str=" << ret1.error_str();
+      response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret1.error_code()));
+      response->mutable_error()->set_errmsg(ret1.error_str());
+      return;
+    }
+
+    uint64_t temp_count = 0;
+    for (;;) {
+      if (inner_done.load(std::memory_order_acquire)) {
+        break;
+      }
+      bthread_usleep(10000);
+
+      if (temp_count++ % 100 == 0) {
+        DINGO_LOG(INFO) << "CreateIndex wait for raft done. index_id: " << new_index_id;
+      }
+    }
+
+    if (!region_ids.empty()) {
+      std::map<uint64_t, bool> region_status;
+      for (const auto &id : region_ids) {
+        region_status[id] = false;
+      }
+
+      DINGO_LOG(INFO) << "start to check region_status, index_id: " << new_index_id
+                      << ", region_id_count: " << region_ids.size();
+
+      uint32_t max_check_region_state_count = FLAGS_max_check_region_state_count;
+
+      while (!region_status.empty()) {
+        for (const auto &it : region_status) {
+          DINGO_LOG(INFO) << "CreateIndex region_id=" << it.first << " status=" << it.second;
+          pb::common::Region region;
+          auto ret2 = coordinator_control_->QueryRegion(it.first, region);
+          if (ret2.ok()) {
+            if (region.state() == pb::common::RegionState::REGION_NORMAL) {
+              DINGO_LOG(INFO) << "region is NORMAL, region_id=" << it.first;
+              region_status.erase(it.first);
+              break;
+            } else {
+              DINGO_LOG(INFO) << "CreateIndex region_id=" << it.first << " status=" << it.second
+                              << " region=" << region.ShortDebugString();
+            }
+          } else {
+            DINGO_LOG(INFO) << "CreateIndex region_id=" << it.first
+                            << " QueryRegion fail, error_code: " << ret2.error_code()
+                            << ", error_str: " << ret2.error_str();
+          }
+        }
+
+        DINGO_LOG(INFO) << "continue to check region_status, table_id: " << new_index_id
+                        << ", region_id_count: " << region_ids.size()
+                        << ", left max_check_region_state_count: " << max_check_region_state_count;
+
+        if (max_check_region_state_count-- <= 0) {
+          DINGO_LOG(ERROR) << "CreateIndex check region state timeout, table_id: " << new_index_id
+                           << ", region_id_count: " << region_ids.size();
+          response->mutable_error()->set_errcode(pb::error::Errno::EINTERNAL);
+          response->mutable_error()->set_errmsg("CreateIndex check region state timeout");
+          break;
+        }
+
+        bthread_usleep(500 * 1000);
+      }
+    } else {
+      DINGO_LOG(INFO) << "CreateIndex region_ids is empty, table_id: " << new_index_id;
+    }
+  }
+
+  // // prepare for raft process
+  // CoordinatorClosure<pb::meta::CreateIndexRequest, pb::meta::CreateIndexResponse> *meta_put_closure =
+  //     new CoordinatorClosure<pb::meta::CreateIndexRequest, pb::meta::CreateIndexResponse>(request, response,
+  //                                                                                         done_guard.release());
+
+  // std::shared_ptr<Context> ctx =
+  //     std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
+  // ctx->SetRegionId(Constant::kCoordinatorRegionId);
+
+  // // this is a async operation will be block by closure
+  // engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
 
   DINGO_LOG(INFO) << "CreateIndex Success in meta_service index_name =" << request->index_definition().name();
 }
@@ -1236,7 +1398,7 @@ void MetaServiceImpl::GenerateTableIds(google::protobuf::RpcController *controll
   DINGO_LOG(INFO) << "GenerateTableIds Success.";
 }
 
-void MetaServiceImpl::CreateTables(google::protobuf::RpcController *controller,
+void MetaServiceImpl::CreateTables(google::protobuf::RpcController * /*controller*/,
                                    const pb::meta::CreateTablesRequest *request,
                                    pb::meta::CreateTablesResponse *response, google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
@@ -1259,6 +1421,7 @@ void MetaServiceImpl::CreateTables(google::protobuf::RpcController *controller,
   bool find_table_type = false;
   uint64_t new_table_id = 0;
   butil::Status ret;
+  std::vector<uint64_t> region_ids;
 
   // process table type
   for (const auto &temp_with_id : request->table_definition_with_ids()) {
@@ -1275,8 +1438,8 @@ void MetaServiceImpl::CreateTables(google::protobuf::RpcController *controller,
       new_table_id = table_id.entity_id();
       const auto &definition = temp_with_id.table_definition();
 
-      ret =
-          coordinator_control_->CreateTable(request->schema_id().entity_id(), definition, new_table_id, meta_increment);
+      ret = coordinator_control_->CreateTable(request->schema_id().entity_id(), definition, new_table_id, region_ids,
+                                              meta_increment);
       if (!ret.ok()) {
         DINGO_LOG(ERROR) << "CreateTables failed in meta_service, error code=" << ret;
         response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
@@ -1313,7 +1476,7 @@ void MetaServiceImpl::CreateTables(google::protobuf::RpcController *controller,
       }
 
       ret = coordinator_control_->CreateIndex(request->schema_id().entity_id(), definition, new_table_id, new_index_id,
-                                              meta_increment);
+                                              region_ids, meta_increment);
 
     } else {
       ret = butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "entity type is illegal");
@@ -1343,17 +1506,94 @@ void MetaServiceImpl::CreateTables(google::protobuf::RpcController *controller,
     coordinator_control_->CreateTableIndexesMap(table_index_internal, meta_increment);
   }
 
+  {
+    std::atomic<bool> inner_done(false);
+
+    auto *closure = brpc::NewCallback(MetaServiceDone, &inner_done);
+
+    auto ret1 = coordinator_control_->SubmitMetaIncrement(closure, meta_increment);
+    if (!ret1.ok()) {
+      DINGO_LOG(ERROR) << "CreateTables failed in meta_service, error code=" << ret1.error_code()
+                       << ", error str=" << ret1.error_str();
+      response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret1.error_code()));
+      response->mutable_error()->set_errmsg(ret1.error_str());
+      return;
+    }
+
+    uint64_t temp_count = 0;
+    for (;;) {
+      if (inner_done.load(std::memory_order_acquire)) {
+        break;
+      }
+      bthread_usleep(10000);
+
+      if (temp_count++ % 100 == 0) {
+        DINGO_LOG(INFO) << "CreateTables wait for raft done. table_id: " << new_table_id;
+      }
+    }
+
+    if (!region_ids.empty()) {
+      std::map<uint64_t, bool> region_status;
+      for (const auto &id : region_ids) {
+        region_status[id] = false;
+      }
+
+      DINGO_LOG(INFO) << "start to check region_status, table_id: " << new_table_id
+                      << ", region_id_count: " << region_ids.size();
+
+      uint32_t max_check_region_state_count = FLAGS_max_check_region_state_count;
+
+      while (!region_status.empty()) {
+        for (const auto &it : region_status) {
+          DINGO_LOG(INFO) << "CreateTables region_id=" << it.first << " status=" << it.second;
+          pb::common::Region region;
+          auto ret2 = coordinator_control_->QueryRegion(it.first, region);
+          if (ret2.ok()) {
+            if (region.state() == pb::common::RegionState::REGION_NORMAL) {
+              DINGO_LOG(INFO) << "region is NORMAL, region_id=" << it.first;
+              region_status.erase(it.first);
+              break;
+            } else {
+              DINGO_LOG(INFO) << "CreateTables region_id=" << it.first << " status=" << it.second
+                              << " region=" << region.ShortDebugString();
+            }
+          } else {
+            DINGO_LOG(INFO) << "CreateTables region_id=" << it.first
+                            << " QueryRegion fail, error_code: " << ret2.error_code()
+                            << ", error_str: " << ret2.error_str();
+          }
+        }
+
+        DINGO_LOG(INFO) << "continue to check region_status, table_id: " << new_table_id
+                        << ", region_id_count: " << region_ids.size()
+                        << ", left max_check_region_state_count: " << max_check_region_state_count;
+
+        if (max_check_region_state_count-- <= 0) {
+          DINGO_LOG(ERROR) << "CreateTables check region state timeout, table_id: " << new_table_id
+                           << ", region_id_count: " << region_ids.size();
+          response->mutable_error()->set_errcode(pb::error::Errno::EINTERNAL);
+          response->mutable_error()->set_errmsg("CreateTables check region state timeout");
+          break;
+        }
+
+        bthread_usleep(500 * 1000);
+      }
+    } else {
+      DINGO_LOG(INFO) << "CreateTables region_ids is empty, table_id: " << new_table_id;
+    }
+  }
+
   // prepare for raft process
-  CoordinatorClosure<pb::meta::CreateTablesRequest, pb::meta::CreateTablesResponse> *meta_put_closure =
-      new CoordinatorClosure<pb::meta::CreateTablesRequest, pb::meta::CreateTablesResponse>(request, response,
-                                                                                            done_guard.release());
+  // CoordinatorClosure<pb::meta::CreateTablesRequest, pb::meta::CreateTablesResponse> *meta_put_closure =
+  //     new CoordinatorClosure<pb::meta::CreateTablesRequest, pb::meta::CreateTablesResponse>(request, response,
+  //                                                                                           done_guard.release());
 
-  std::shared_ptr<Context> ctx =
-      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
-  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+  // std::shared_ptr<Context> ctx =
+  //     std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
+  // ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
-  // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  // // this is a async operation will be block by closure
+  // engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
 
   DINGO_LOG(INFO) << "CreateTables Success.";
 }

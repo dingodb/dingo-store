@@ -388,10 +388,10 @@ butil::Status CoordinatorControl::CreateTableId(uint64_t schema_id, uint64_t& ne
 
 // CreateTable
 // in: schema_id, table_definition
-// out: new_table_id, meta_increment
+// out: new_table_id, new_regin_ids meta_increment
 // return: 0 success, -1 failed
 butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta::TableDefinition& table_definition,
-                                              uint64_t& new_table_id,
+                                              uint64_t& new_table_id, std::vector<uint64_t>& region_ids,
                                               pb::coordinator_internal::MetaIncrement& meta_increment) {
   // validate schema
   // root schema cannot create table
@@ -616,6 +616,11 @@ butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta
   *table_increment_table = table_internal;
 
   table_create_success.store(true);
+
+  // return region_ids
+  for (const auto& regin_id : new_region_ids) {
+    region_ids.push_back(regin_id);
+  }
 
   return butil::Status::OK();
 }
@@ -1031,10 +1036,11 @@ butil::Status CoordinatorControl::ValidateIndexDefinition(const pb::meta::TableD
 
 // CreateIndex
 // in: schema_id, table_definition
-// out: new_index_id, meta_increment
+// out: new_index_id, new_region_ids meta_increment
 // return: 0 success, -1 failed
 butil::Status CoordinatorControl::CreateIndex(uint64_t schema_id, const pb::meta::TableDefinition& table_definition,
                                               uint64_t table_id, uint64_t& new_index_id,
+                                              std::vector<uint64_t>& region_ids,
                                               pb::coordinator_internal::MetaIncrement& meta_increment) {
   // validate schema
   // root schema cannot create index
@@ -1245,6 +1251,11 @@ butil::Status CoordinatorControl::CreateIndex(uint64_t schema_id, const pb::meta
 
   auto* index_increment_index = index_increment->mutable_table();
   *index_increment_index = table_internal;
+
+  // return region_ids
+  for (const auto& regin_id : new_region_ids) {
+    region_ids.push_back(regin_id);
+  }
 
   return butil::Status::OK();
 }
