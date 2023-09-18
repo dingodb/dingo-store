@@ -36,7 +36,7 @@ namespace dingodb {
 DECLARE_uint64(max_hnsw_memory_size_of_region);
 DECLARE_uint64(max_partition_num_of_table);
 
-DEFINE_uint32(max_check_region_state_count, 120, "max check region state count");
+DEFINE_uint32(max_check_region_state_count, 600, "max check region state count");
 
 static void MetaServiceDone(std::atomic<bool> *done) { done->store(true, std::memory_order_release); }
 
@@ -454,6 +454,7 @@ void MetaServiceImpl::CreateTable(google::protobuf::RpcController * /*controller
       uint32_t max_check_region_state_count = FLAGS_max_check_region_state_count;
 
       while (!region_status.empty()) {
+        std::vector<uint64_t> id_to_erase;
         for (const auto &it : region_status) {
           DINGO_LOG(INFO) << "CreateTable region_id=" << it.first << " status=" << it.second;
           pb::common::Region region;
@@ -461,8 +462,7 @@ void MetaServiceImpl::CreateTable(google::protobuf::RpcController * /*controller
           if (ret2.ok()) {
             if (region.state() == pb::common::RegionState::REGION_NORMAL) {
               DINGO_LOG(INFO) << "region is NORMAL, region_id=" << it.first;
-              region_status.erase(it.first);
-              break;
+              id_to_erase.push_back(it.first);
             } else {
               DINGO_LOG(INFO) << "CreateTable region_id=" << it.first << " status=" << it.second
                               << " region=" << region.ShortDebugString();
@@ -472,6 +472,10 @@ void MetaServiceImpl::CreateTable(google::protobuf::RpcController * /*controller
                             << " QueryRegion fail, error_code: " << ret2.error_code()
                             << ", error_str: " << ret2.error_str();
           }
+        }
+
+        for (const auto &id : id_to_erase) {
+          region_status.erase(id);
         }
 
         DINGO_LOG(INFO) << "continue to check region_status, table_id: " << new_table_id
@@ -1197,6 +1201,7 @@ void MetaServiceImpl::CreateIndex(google::protobuf::RpcController * /*controller
       uint32_t max_check_region_state_count = FLAGS_max_check_region_state_count;
 
       while (!region_status.empty()) {
+        std::vector<uint64_t> id_to_erase;
         for (const auto &it : region_status) {
           DINGO_LOG(INFO) << "CreateIndex region_id=" << it.first << " status=" << it.second;
           pb::common::Region region;
@@ -1204,8 +1209,7 @@ void MetaServiceImpl::CreateIndex(google::protobuf::RpcController * /*controller
           if (ret2.ok()) {
             if (region.state() == pb::common::RegionState::REGION_NORMAL) {
               DINGO_LOG(INFO) << "region is NORMAL, region_id=" << it.first;
-              region_status.erase(it.first);
-              break;
+              id_to_erase.push_back(it.first);
             } else {
               DINGO_LOG(INFO) << "CreateIndex region_id=" << it.first << " status=" << it.second
                               << " region=" << region.ShortDebugString();
@@ -1215,6 +1219,10 @@ void MetaServiceImpl::CreateIndex(google::protobuf::RpcController * /*controller
                             << " QueryRegion fail, error_code: " << ret2.error_code()
                             << ", error_str: " << ret2.error_str();
           }
+        }
+
+        for (const auto &id : id_to_erase) {
+          region_status.erase(id);
         }
 
         DINGO_LOG(INFO) << "continue to check region_status, table_id: " << new_index_id
@@ -1552,24 +1560,28 @@ void MetaServiceImpl::CreateTables(google::protobuf::RpcController * /*controlle
       uint32_t max_check_region_state_count = FLAGS_max_check_region_state_count;
 
       while (!region_status.empty()) {
+        std::vector<uint64_t> id_to_erase;
         for (const auto &it : region_status) {
-          DINGO_LOG(INFO) << "CreateTables region_id=" << it.first << " status=" << it.second;
+          DINGO_LOG(INFO) << "CreateTable region_id=" << it.first << " status=" << it.second;
           pb::common::Region region;
           auto ret2 = coordinator_control_->QueryRegion(it.first, region);
           if (ret2.ok()) {
             if (region.state() == pb::common::RegionState::REGION_NORMAL) {
               DINGO_LOG(INFO) << "region is NORMAL, region_id=" << it.first;
-              region_status.erase(it.first);
-              break;
+              id_to_erase.push_back(it.first);
             } else {
-              DINGO_LOG(INFO) << "CreateTables region_id=" << it.first << " status=" << it.second
+              DINGO_LOG(INFO) << "CreateTable region_id=" << it.first << " status=" << it.second
                               << " region=" << region.ShortDebugString();
             }
           } else {
-            DINGO_LOG(INFO) << "CreateTables region_id=" << it.first
+            DINGO_LOG(INFO) << "CreateTable region_id=" << it.first
                             << " QueryRegion fail, error_code: " << ret2.error_code()
                             << ", error_str: " << ret2.error_str();
           }
+        }
+
+        for (const auto &id : id_to_erase) {
+          region_status.erase(id);
         }
 
         DINGO_LOG(INFO) << "continue to check region_status, table_id: " << new_table_id
