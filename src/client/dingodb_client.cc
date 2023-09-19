@@ -148,6 +148,8 @@ DEFINE_string(client_uuid, "", "Request client_uuid");
 DEFINE_bool(store_create_region, false, "store create region");
 DEFINE_string(db_path, "", "rocksdb path");
 
+DEFINE_bool(show_vector, false, "show vector data");
+
 bvar::LatencyRecorder g_latency_recorder("dingo-store");
 
 const std::map<std::string, std::vector<std::string>> kParamConstraint = {
@@ -437,6 +439,7 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
       ctx->db_path = FLAGS_db_path;
       ctx->offset = FLAGS_offset;
       ctx->limit = FLAGS_limit;
+      ctx->show_vector = FLAGS_show_vector;
       if (ctx->table_id == 0 && ctx->index_id == 0) {
         DINGO_LOG(ERROR) << "Param table_id|index_id is error.";
         return;

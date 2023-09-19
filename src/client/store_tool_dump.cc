@@ -25,11 +25,13 @@
 #include <utility>
 #include <vector>
 
+#include "client/client_helper.h"
 #include "client/store_client_function.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "coprocessor/utils.h"
 #include "fmt/core.h"
+#include "proto/common.pb.h"
 #include "proto/meta.pb.h"
 #include "proto/store.pb.h"
 #include "rocksdb/db.h"
@@ -384,24 +386,58 @@ void DumpDb(std::shared_ptr<Context> ctx) {
   }
 }
 
+std::string FormatVector(const dingodb::pb::common::Vector& data, int num) {
+  std::string result = "[";
+  int size = std::min(num, data.float_values_size());
+  for (int i = 0; i < size; ++i) {
+    if (data.value_type() == dingodb::pb::common::ValueType::FLOAT) {
+      result += std::to_string(data.float_values(i));
+    } else {
+      result += dingodb::Helper::StringToHex(data.binary_values(i));
+    }
+    result += ",";
+  }
+
+  result += "...]";
+
+  return result;
+}
+
 void DumpVectorIndexDb(std::shared_ptr<Context> ctx) {
-  auto table_definition = SendGetIndex(ctx->coordinator_interaction, ctx->table_id);
+  auto table_definition = SendGetIndex(ctx->coordinator_interaction, ctx->index_id);
 
   DINGO_LOG(INFO) << fmt::format("Table|Index {} definition ...", table_definition.name());
 
   auto vector_data_handler = [&](const std::string& key, const std::string& value) {
-    dingodb::pb::common::Vector vector_data;
-    vector_data.ParseFromString(value);
+    if (ctx->show_vector) {
+      dingodb::pb::common::Vector data;
+      data.ParseFromString(value);
+      std::cout << fmt::format("[vector data] vector_id({}) value: dimension({}) {}",
+                               dingodb::VectorCodec::DecodeVectorId(key), data.dimension(), FormatVector(data, 10))
+                << std::endl;
+    }
   };
 
   auto scalar_data_handler = [&](const std::string& key, const std::string& value) {
-    dingodb::pb::common::VectorScalardata data;
-    data.ParseFromString(value);
+    if (ctx->show_vector) {
+      dingodb::pb::common::VectorScalardata data;
+      data.ParseFromString(value);
+      std::cout << fmt::format("[scalar data] vector_id({}) value: {}", dingodb::VectorCodec::DecodeVectorId(key),
+                               data.ShortDebugString())
+                << std::endl;
+    }
   };
 
   auto table_data_handler = [&](const std::string& key, const std::string& value) {
-    dingodb::pb::common::VectorTableData data;
-    data.ParseFromString(value);
+    if (ctx->show_vector) {
+      dingodb::pb::common::VectorTableData data;
+      data.ParseFromString(value);
+      std::cout << fmt::format("[table data] vector_id({}) table_key: {} table_value: {}",
+                               dingodb::VectorCodec::DecodeVectorId(key),
+                               dingodb::Helper::StringToHex(data.table_key()),
+                               dingodb::Helper::StringToHex(data.table_value()))
+                << std::endl;
+    }
   };
 
   for (const auto& partition : table_definition.table_partition().partitions()) {

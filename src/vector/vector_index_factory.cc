@@ -67,15 +67,16 @@ std::shared_ptr<VectorIndex> VectorIndexFactory::New(uint64_t id,
       auto new_hnsw_index = std::make_shared<VectorIndexHnsw>(id, index_parameter, range);
       if (new_hnsw_index == nullptr) {
         DINGO_LOG(ERROR) << "create hnsw index failed of new_hnsw_index is nullptr, id=" << id
-                         << ", parameter=" << index_parameter.DebugString();
+                         << ", parameter=" << index_parameter.ShortDebugString();
         return nullptr;
       } else {
-        DINGO_LOG(INFO) << "create hnsw index success, id=" << id << ", parameter=" << index_parameter.DebugString();
+        DINGO_LOG(INFO) << "create hnsw index success, id=" << id
+                        << ", parameter=" << index_parameter.ShortDebugString();
       }
       return new_hnsw_index;
     } catch (std::exception& e) {
       DINGO_LOG(ERROR) << "create hnsw index failed of exception occured, " << e.what() << ", id=" << id
-                       << ", parameter=" << index_parameter.DebugString();
+                       << ", parameter=" << index_parameter.ShortDebugString();
       return nullptr;
     }
   } else if (index_parameter.vector_index_type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT) {
@@ -95,25 +96,26 @@ std::shared_ptr<VectorIndex> VectorIndexFactory::New(uint64_t id,
       auto new_flat_index = std::make_shared<VectorIndexFlat>(id, index_parameter, range);
       if (new_flat_index == nullptr) {
         DINGO_LOG(ERROR) << "create flat index failed of new_flat_index is nullptr"
-                         << ", id=" << id << ", parameter=" << index_parameter.DebugString();
+                         << ", id=" << id << ", parameter=" << index_parameter.ShortDebugString();
         return nullptr;
       } else {
-        DINGO_LOG(INFO) << "create flat index success, id=" << id << ", parameter=" << index_parameter.DebugString();
+        DINGO_LOG(INFO) << "create flat index success, id=" << id
+                        << ", parameter=" << index_parameter.ShortDebugString();
       }
       return new_flat_index;
     } catch (std::exception& e) {
       DINGO_LOG(ERROR) << "create flat index failed of exception occured, " << e.what() << ", id=" << id
-                       << ", parameter=" << index_parameter.DebugString();
+                       << ", parameter=" << index_parameter.ShortDebugString();
       return nullptr;
     }
   } else {
     DINGO_LOG(ERROR) << "vector_index_parameter is not hnsw index or flat, type=" << index_parameter.vector_index_type()
-                     << ", id=" << id << ", parameter=" << index_parameter.DebugString();
+                     << ", id=" << id << ", parameter=" << index_parameter.ShortDebugString();
     return nullptr;
   }
 
   DINGO_LOG(ERROR) << "create vector index failed of unknown error"
-                   << ", id=" << id << ", parameter=" << index_parameter.DebugString();
+                   << ", id=" << id << ", parameter=" << index_parameter.ShortDebugString();
   return nullptr;
 }
 
