@@ -154,6 +154,8 @@ class Constant {
   static constexpr uint32_t kTxnLockCfId = 1;
   static constexpr uint32_t kTxnWriteCfId = 2;
 
+  static constexpr uint64_t kLockVer = UINT64_MAX;
+
   // hnsw max elements expand number
   static const uint32_t kHnswMaxElementsExpandNum = 10000;
 
