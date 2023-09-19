@@ -55,6 +55,7 @@
 #include "server/region_control_service.h"
 #include "server/server.h"
 #include "server/store_service.h"
+#include "server/util_service.h"
 #include "server/version_service.h"
 
 DEFINE_string(conf, "", "server config");
@@ -496,6 +497,7 @@ int main(int argc, char *argv[]) {
   dingodb::MetaServiceImpl meta_service;
   dingodb::StoreServiceImpl store_service;
   dingodb::IndexServiceImpl index_service;
+  dingodb::UtilServiceImpl util_service;
   dingodb::RegionControlServiceImpl region_control_service;
   dingodb::NodeServiceImpl node_service;
   dingodb::PushServiceImpl push_service;
@@ -717,6 +719,12 @@ int main(int argc, char *argv[]) {
     index_service.SetStorage(dingo_server->GetStorage());
     if (brpc_server.AddService(&index_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
       DINGO_LOG(ERROR) << "Fail to add index service!";
+      return -1;
+    }
+
+    util_service.SetStorage(dingo_server->GetStorage());
+    if (brpc_server.AddService(&util_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
+      DINGO_LOG(ERROR) << "Fail to add util service!";
       return -1;
     }
 
