@@ -25,6 +25,7 @@ option cc_generic_services = true;
 message Context {
   int64 region_id = 1;
   dingodb.pb.common.RegionEpoch region_epoch = 2;
+  IsolationLevel isolation_level = 7;
 }
 
 message KvGetRequest {
@@ -331,12 +332,6 @@ message WriteInfo {
   uint64 start_ts = 1;
   Op op = 2;
   bytes short_value = 3;
-}
-
-message Context {
-  uint64 region_id = 1;
-  dingodb.pb.common.RegionEpoch region_epoch = 2;
-  IsolationLevel isolation_level = 7;
 }
 
 enum Op {
