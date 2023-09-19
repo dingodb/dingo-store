@@ -45,7 +45,7 @@ bool YamlConfig::GetBool(const std::string& key) {
   try {
     return GetScalar<bool>(key);
   } catch (std::exception& e) {
-    DINGO_LOG(FATAL) << "Config GetBool failed: " << key << " exception: " << e.what();
+    DINGO_LOG(FATAL) << "[config] Config GetBool failed: " << key << " exception: " << e.what();
   }
   return false;
 }
@@ -54,7 +54,7 @@ int YamlConfig::GetInt(const std::string& key) {
   try {
     return GetScalar<int>(key);
   } catch (std::exception& e) {
-    DINGO_LOG(FATAL) << "Config GetInt failed: " << key << " exception: " << e.what();
+    DINGO_LOG(FATAL) << "[config] Config GetInt failed: " << key << " exception: " << e.what();
   }
   return -1;
 }
@@ -63,7 +63,7 @@ int64_t YamlConfig::GetInt64(const std::string& key) {
   try {
     return GetScalar<int64_t>(key);
   } catch (std::exception& e) {
-    DINGO_LOG(FATAL) << "Config GetInt failed: " << key << " exception: " << e.what();
+    DINGO_LOG(FATAL) << "[config] Config GetInt failed: " << key << " exception: " << e.what();
   }
   return -1;
 }
@@ -72,7 +72,7 @@ double YamlConfig::GetDouble(const std::string& key) {
   try {
     return GetScalar<double>(key);
   } catch (std::exception& e) {
-    DINGO_LOG(FATAL) << "Config GetDouble failed: " << key << " exception: " << e.what();
+    DINGO_LOG(FATAL) << "[config] Config GetDouble failed: " << key << " exception: " << e.what();
   }
   return -1.0;
 }
@@ -84,7 +84,7 @@ std::string YamlConfig::GetString(const std::string& key) {
     butil::TrimWhitespaceASCII(s, butil::TrimPositions::TRIM_ALL, &result);
     return result;
   } catch (std::exception& e) {
-    DINGO_LOG(FATAL) << "Config GetString failed: " << key << " exception: " << e.what();
+    DINGO_LOG(FATAL) << "[config] Config GetString failed: " << key << " exception: " << e.what();
   }
   return "";
 }
@@ -93,7 +93,7 @@ std::vector<int> YamlConfig::GetIntList(const std::string& key) {
   try {
     return GetList<int>(key);
   } catch (std::exception& e) {
-    DINGO_LOG(FATAL) << "Config GetIntList failed: " << key << " exception: " << e.what();
+    DINGO_LOG(FATAL) << "[config] Config GetIntList failed: " << key << " exception: " << e.what();
   }
 
   return std::vector<int>{};
@@ -103,7 +103,7 @@ std::vector<std::string> YamlConfig::GetStringList(const std::string& key) {
   try {
     return GetList<std::string>(key);
   } catch (std::exception& e) {
-    DINGO_LOG(FATAL) << "Config GetStringList failed: " << key << " exception: " << e.what();
+    DINGO_LOG(FATAL) << "[config] Config GetStringList failed: " << key << " exception: " << e.what();
   }
 
   return std::vector<std::string>{};
@@ -113,7 +113,7 @@ std::map<std::string, int> YamlConfig::GetIntMap(const std::string& key) {
   try {
     return GetMap<int>(key);
   } catch (std::exception& e) {
-    DINGO_LOG(FATAL) << "Config GetIntMap failed: " << key << " exception: " << e.what();
+    DINGO_LOG(FATAL) << "[config] Config GetIntMap failed: " << key << " exception: " << e.what();
   }
 
   return std::map<std::string, int>{};
@@ -123,7 +123,7 @@ std::map<std::string, std::string> YamlConfig::GetStringMap(const std::string& k
   try {
     return GetMap<std::string>(key);
   } catch (std::exception& e) {
-    DINGO_LOG(FATAL) << "Config GetStringMap failed: " << key << " exception: " << e.what();
+    DINGO_LOG(FATAL) << "[config] Config GetStringMap failed: " << key << " exception: " << e.what();
   }
 
   return std::map<std::string, std::string>{};

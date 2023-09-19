@@ -38,7 +38,7 @@ void ConfigManager::Register(pb::common::ClusterRole role, std::shared_ptr<Confi
   BAIDU_SCOPED_LOCK(mutex_);
   auto name = pb::common::ClusterRole_Name(role);
   if (configs_.find(name) != configs_.end()) {
-    DINGO_LOG(WARNING) << fmt::format("config {} already exist!", name);
+    DINGO_LOG(WARNING) << fmt::format("[config] config {} already exist!", name);
     return;
   }
 
@@ -50,7 +50,7 @@ std::shared_ptr<Config> ConfigManager::GetConfig(pb::common::ClusterRole role) {
   auto name = pb::common::ClusterRole_Name(role);
   auto it = configs_.find(name);
   if (it == configs_.end()) {
-    DINGO_LOG(WARNING) << fmt::format("config {} not exist!", name);
+    DINGO_LOG(WARNING) << fmt::format("[config] config {} not exist!", name);
     return nullptr;
   }
 
@@ -60,7 +60,7 @@ std::shared_ptr<Config> ConfigManager::GetConfig(pb::common::ClusterRole role) {
 std::shared_ptr<Config> ConfigManager::GetConfig() {
   auto it = configs_.begin();
   if (it == configs_.end()) {
-    DINGO_LOG(WARNING) << fmt::format("config not exist!");
+    DINGO_LOG(WARNING) << fmt::format("[config] config not exist!");
     return nullptr;
   }
 

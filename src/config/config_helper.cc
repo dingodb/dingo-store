@@ -18,6 +18,7 @@
 
 #include "common/constant.h"
 #include "config/config_manager.h"
+#include "fmt/core.h"
 
 namespace dingodb {
 
@@ -34,10 +35,15 @@ pb::raft::SplitStrategy ConfigHelper::GetSplitStrategy() {
 uint32_t ConfigHelper::GetRegionMaxSize() {
   auto config = ConfigManager::GetInstance()->GetConfig();
   if (config == nullptr) {
-    return Constant::kDefaultRegionMaxSize;
+    return Constant::kRegionMaxSizeDefaultValue;
   }
   int region_max_size = config->GetInt("region.region_max_size");
-  return region_max_size > 0 ? region_max_size : Constant::kDefaultRegionMaxSize;
+  if (region_max_size < Constant::kRegionMaxSizeDefaultValue) {
+    region_max_size = Constant::kRegionMaxSizeDefaultValue;
+    DINGO_LOG(WARNING) << fmt::format("[config] region_max_size is too small, set default value({})",
+                                      Constant::kRegionMaxSizeDefaultValue);
+  }
+  return region_max_size;
 }
 
 uint32_t ConfigHelper::GetSplitCheckApproximateSize() {
@@ -57,37 +63,57 @@ std::string ConfigHelper::GetSplitPolicy() {
 uint32_t ConfigHelper::GetSplitChunkSize() {
   auto config = ConfigManager::GetInstance()->GetConfig();
   if (config == nullptr) {
-    return Constant::kDefaultSplitChunkSize;
+    return Constant::kSplitChunkSizeDefaultValue;
   }
   int split_chunk_size = config->GetInt("region.split_chunk_size");
-  return split_chunk_size > 0 ? split_chunk_size : Constant::kDefaultSplitChunkSize;
+  if (split_chunk_size < Constant::kSplitChunkSizeDefaultValue) {
+    split_chunk_size = Constant::kSplitChunkSizeDefaultValue;
+    DINGO_LOG(WARNING) << fmt::format("[config] split_chunk_size is too small, set default value({})",
+                                      Constant::kSplitChunkSizeDefaultValue);
+  }
+  return split_chunk_size;
 }
 
 float ConfigHelper::GetSplitSizeRatio() {
   auto config = ConfigManager::GetInstance()->GetConfig();
   if (config == nullptr) {
-    return Constant::kDefaultSplitRatio;
+    return Constant::kSplitRatioDefaultValue;
   }
   float split_ratio = static_cast<float>(config->GetDouble("region.split_size_ratio"));
-  return split_ratio > 0 && split_ratio < 1 ? split_ratio : Constant::kDefaultSplitRatio;
+  if (split_ratio < 0.1 || split_ratio > 0.9) {
+    split_ratio = Constant::kSplitRatioDefaultValue;
+    DINGO_LOG(WARNING) << fmt::format("[config] split_size_ratio out of range, set default value({})",
+                                      Constant::kSplitRatioDefaultValue);
+  }
+  return split_ratio;
 }
 
 uint32_t ConfigHelper::GetSplitKeysNumber() {
   auto config = ConfigManager::GetInstance()->GetConfig();
   if (config == nullptr) {
-    return Constant::kDefaultSplitKeysNumber;
+    return Constant::kSplitKeysNumberDefaultValue;
   }
   int split_keys_number = config->GetInt("region.split_keys_number");
-  return split_keys_number > 0 ? split_keys_number : Constant::kDefaultSplitKeysNumber;
+  if (split_keys_number < Constant::kSplitKeysNumberDefaultValue) {
+    split_keys_number = Constant::kSplitKeysNumberDefaultValue;
+    DINGO_LOG(WARNING) << fmt::format("[config] split_keys_number is too small, set default value({})",
+                                      Constant::kSplitKeysNumberDefaultValue);
+  }
+  return split_keys_number;
 }
 
 float ConfigHelper::GetSplitKeysRatio() {
   auto config = ConfigManager::GetInstance()->GetConfig();
   if (config == nullptr) {
-    return Constant::kDefaultSplitRatio;
+    return Constant::kSplitKeysRatioDefaultValue;
   }
   float split_keys_ratio = static_cast<float>(config->GetDouble("region.split_keys_ratio"));
-  return split_keys_ratio > 0 && split_keys_ratio < 1 ? split_keys_ratio : Constant::kDefaultSplitRatio;
+  if (split_keys_ratio < 0.1 || split_keys_ratio > 0.9) {
+    split_keys_ratio = Constant::kSplitKeysRatioDefaultValue;
+    DINGO_LOG(WARNING) << fmt::format("[config] split_keys_ratio out of range, set default value({})",
+                                      Constant::kSplitKeysRatioDefaultValue);
+  }
+  return split_keys_ratio;
 }
 
 }  // namespace dingodb
