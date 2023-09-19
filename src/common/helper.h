@@ -259,6 +259,9 @@ class Helper {
   // for index region, encode raw_range
   // static std::string EncodeIndexRegionHeader(int64_t partition_id, int64_t vector_id);
 
+  // for index region transaction, decode vector_id from key
+  static uint64_t DecodeVectorId(const std::string& value);
+
   // for txn, encode start_ts/commit_ts to std::string
   static std::string EncodeTso(uint64_t ts);
   // for txn, padding user key

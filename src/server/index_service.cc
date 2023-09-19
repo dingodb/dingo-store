@@ -1784,13 +1784,18 @@ void IndexServiceImpl::VectorSearchDebug(google::protobuf::RpcController* contro
 }
 
 // txn
-butil::Status ValidateTxnGetRequest(const dingodb::pb::index::TxnGetRequest* request) {
+butil::Status IndexServiceImpl::ValidateTxnGetRequest(const dingodb::pb::index::TxnGetRequest* request) {
   if (request->key().empty()) {
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
 
   std::vector<std::string_view> keys = {request->key()};
   auto status = ServiceHelper::ValidateRegion(request->context().region_id(), keys);
+  if (!status.ok()) {
+    return status;
+  }
+
+  status = storage_->ValidateLeader(request->context().region_id());
   if (!status.ok()) {
     return status;
   }
@@ -1868,7 +1873,8 @@ void IndexServiceImpl::TxnGet(google::protobuf::RpcController* controller, const
                                   response->ShortDebugString());
 }
 
-butil::Status ValidateTxnScanRequestIndex(store::RegionPtr region, const pb::common::Range& req_range) {
+butil::Status IndexServiceImpl::ValidateTxnScanRequestIndex(store::RegionPtr region,
+                                                            const pb::common::Range& req_range) {
   if (region == nullptr) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
   }
@@ -1884,6 +1890,11 @@ butil::Status ValidateTxnScanRequestIndex(store::RegionPtr region, const pb::com
   }
 
   status = ServiceHelper::ValidateRegionState(region);
+  if (!status.ok()) {
+    return status;
+  }
+
+  status = storage_->ValidateLeader(region->Id());
   if (!status.ok()) {
     return status;
   }
@@ -1978,7 +1989,7 @@ void IndexServiceImpl::TxnScan(google::protobuf::RpcController* controller, cons
                                   response->ShortDebugString());
 }
 
-butil::Status ValidateTxnPrewriteRequest(const dingodb::pb::index::TxnPrewriteRequest* request) {
+butil::Status IndexServiceImpl::ValidateTxnPrewriteRequest(const dingodb::pb::index::TxnPrewriteRequest* request) {
   if (request->mutations_size() == 0) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "mutations is empty");
   }
@@ -2015,7 +2026,95 @@ butil::Status ValidateTxnPrewriteRequest(const dingodb::pb::index::TxnPrewriteRe
     return status;
   }
 
-  return butil::Status();
+  // Validate region exist.
+  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+  auto region = store_region_meta->GetRegion(request->context().region_id());
+  if (region == nullptr) {
+    return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
+  }
+
+  if (request->mutations_size() > FLAGS_vector_max_bactch_count) {
+    return butil::Status(pb::error::EVECTOR_EXCEED_MAX_BATCH_COUNT,
+                         fmt::format("Param vectors size {} is exceed max batch count {}", request->mutations_size(),
+                                     FLAGS_vector_max_bactch_count));
+  }
+
+  if (request->ByteSizeLong() > FLAGS_vector_max_request_size) {
+    return butil::Status(pb::error::EVECTOR_EXCEED_MAX_REQUEST_SIZE,
+                         fmt::format("Param vectors size {} is exceed max batch size {}", request->ByteSizeLong(),
+                                     FLAGS_vector_max_request_size));
+  }
+
+  status = storage_->ValidateLeader(request->context().region_id());
+  if (!status.ok()) {
+    return status;
+  }
+
+  auto vector_index_wrapper = region->VectorIndexWrapper();
+  if (!vector_index_wrapper->IsReady()) {
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_READY,
+                         fmt::format("Vector index {} not ready, please retry.", region->Id()));
+  }
+
+  if (vector_index_wrapper->IsExceedsMaxElements()) {
+    return butil::Status(pb::error::EVECTOR_INDEX_EXCEED_MAX_ELEMENTS,
+                         fmt::format("Vector index {} exceeds max elements.", region->Id()));
+  }
+
+  for (const auto& mutation : request->mutations()) {
+    const auto& vector = mutation.vector();
+    if (mutation.op() == pb::store::Op::Put) {
+      if (vector.id() == 0 || vector.id() == UINT64_MAX) {
+        return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
+                             "Param vector id is not allowed to be zero or UNINT64_MAX");
+      }
+
+      if (vector.vector().float_values().empty()) {
+        return butil::Status(pb::error::EVECTOR_EMPTY, "Vector is empty");
+      }
+    } else if (mutation.op() == pb::store::Op::Delete) {
+      continue;
+    } else {
+      return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param op is error");
+    }
+  }
+
+  auto dimension = vector_index_wrapper->GetDimension();
+  for (const auto& mutation : request->mutations()) {
+    if (mutation.op() == pb::store::Op::Put) {
+      const auto& vector = mutation.vector();
+      if (vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW ||
+          vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT ||
+          vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT ||
+          vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ) {
+        if (vector.vector().float_values().size() != dimension) {
+          return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
+                               "Param vector dimension is error, correct dimension is " + std::to_string(dimension));
+        }
+      } else {
+        if (vector.vector().binary_values().size() != dimension) {
+          return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
+                               "Param vector dimension is error, correct dimension is " + std::to_string(dimension));
+        }
+      }
+    }
+  }
+
+  status = ServiceHelper::ValidateSystemCapacity();
+  if (!status.ok()) {
+    return status;
+  }
+
+  std::vector<uint64_t> vector_ids;
+  for (const auto& mutation : request->mutations()) {
+    uint64_t vector_id = Helper::DecodeVectorId(mutation.key());
+    if (vector_id == 0) {
+      return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param vector id is error");
+    }
+    vector_ids.push_back(vector_id);
+  }
+
+  return ServiceHelper::ValidateIndexRegion(region, vector_ids);
 }
 
 void IndexServiceImpl::TxnPrewrite(google::protobuf::RpcController* controller,
@@ -2077,7 +2176,7 @@ void IndexServiceImpl::TxnPrewrite(google::protobuf::RpcController* controller,
                                   response->ShortDebugString());
 }
 
-butil::Status ValidateTxnCommitRequest(const dingodb::pb::index::TxnCommitRequest* request) {
+butil::Status IndexServiceImpl::ValidateTxnCommitRequest(const dingodb::pb::index::TxnCommitRequest* request) {
   if (request->start_ts() == 0) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "start_ts is 0");
   }
@@ -2098,6 +2197,11 @@ butil::Status ValidateTxnCommitRequest(const dingodb::pb::index::TxnCommitReques
     keys.push_back(key);
   }
   auto status = ServiceHelper::ValidateRegion(request->context().region_id(), keys);
+  if (!status.ok()) {
+    return status;
+  }
+
+  status = storage_->ValidateLeader(request->context().region_id());
   if (!status.ok()) {
     return status;
   }
@@ -2158,7 +2262,8 @@ void IndexServiceImpl::TxnCommit(google::protobuf::RpcController* controller,
                                   response->ShortDebugString());
 }
 
-butil::Status ValidateTxnCheckTxnStatusRequest(const dingodb::pb::index::TxnCheckTxnStatusRequest* request) {
+butil::Status IndexServiceImpl::ValidateTxnCheckTxnStatusRequest(
+    const dingodb::pb::index::TxnCheckTxnStatusRequest* request) {
   if (request->primary_key().empty()) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "primary_key is empty");
   }
@@ -2178,6 +2283,11 @@ butil::Status ValidateTxnCheckTxnStatusRequest(const dingodb::pb::index::TxnChec
   std::vector<std::string_view> keys;
   keys.push_back(request->primary_key());
   auto status = ServiceHelper::ValidateRegion(request->context().region_id(), keys);
+  if (!status.ok()) {
+    return status;
+  }
+
+  status = storage_->ValidateLeader(request->context().region_id());
   if (!status.ok()) {
     return status;
   }
@@ -2241,7 +2351,8 @@ void IndexServiceImpl::TxnCheckTxnStatus(google::protobuf::RpcController* contro
                                   response->ShortDebugString());
 }
 
-butil::Status ValidateTxnResolveLockRequest(const dingodb::pb::index::TxnResolveLockRequest* request) {
+butil::Status IndexServiceImpl::ValidateTxnResolveLockRequest(
+    const dingodb::pb::index::TxnResolveLockRequest* request) {
   if (request->start_ts() == 0) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "start_ts is 0");
   }
@@ -2262,6 +2373,11 @@ butil::Status ValidateTxnResolveLockRequest(const dingodb::pb::index::TxnResolve
         return status;
       }
     }
+  }
+
+  auto status = storage_->ValidateLeader(request->context().region_id());
+  if (!status.ok()) {
+    return status;
   }
 
   return butil::Status();
@@ -2318,7 +2434,7 @@ void IndexServiceImpl::TxnResolveLock(google::protobuf::RpcController* controlle
                                   response->ShortDebugString());
 }
 
-butil::Status ValidateTxnBatchGetRequest(const dingodb::pb::index::TxnBatchGetRequest* request) {
+butil::Status IndexServiceImpl::ValidateTxnBatchGetRequest(const dingodb::pb::index::TxnBatchGetRequest* request) {
   if (request->keys_size() == 0) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Keys is empty");
   }
@@ -2335,6 +2451,11 @@ butil::Status ValidateTxnBatchGetRequest(const dingodb::pb::index::TxnBatchGetRe
     keys.push_back(key);
   }
   auto status = ServiceHelper::ValidateRegion(request->context().region_id(), keys);
+  if (!status.ok()) {
+    return status;
+  }
+
+  status = storage_->ValidateLeader(request->context().region_id());
   if (!status.ok()) {
     return status;
   }
@@ -2416,7 +2537,8 @@ void IndexServiceImpl::TxnBatchGet(google::protobuf::RpcController* controller,
                                   response->ShortDebugString());
 }
 
-butil::Status ValidateTxnBatchRollbackRequest(const dingodb::pb::index::TxnBatchRollbackRequest* request) {
+butil::Status IndexServiceImpl::ValidateTxnBatchRollbackRequest(
+    const dingodb::pb::index::TxnBatchRollbackRequest* request) {
   if (request->keys_size() == 0) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Keys is empty");
   }
@@ -2433,6 +2555,11 @@ butil::Status ValidateTxnBatchRollbackRequest(const dingodb::pb::index::TxnBatch
     keys.push_back(key);
   }
   auto status = ServiceHelper::ValidateRegion(request->context().region_id(), keys);
+  if (!status.ok()) {
+    return status;
+  }
+
+  status = storage_->ValidateLeader(request->context().region_id());
   if (!status.ok()) {
     return status;
   }
@@ -2492,7 +2619,7 @@ void IndexServiceImpl::TxnBatchRollback(google::protobuf::RpcController* control
                                   response->ShortDebugString());
 }
 
-butil::Status ValidateTxnScanLockRequest(const dingodb::pb::index::TxnScanLockRequest* request) {
+butil::Status IndexServiceImpl::ValidateTxnScanLockRequest(const dingodb::pb::index::TxnScanLockRequest* request) {
   if (request->max_ts() == 0) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "max_ts is 0");
   }
@@ -2518,6 +2645,11 @@ butil::Status ValidateTxnScanLockRequest(const dingodb::pb::index::TxnScanLockRe
   keys.push_back(end_key);
 
   auto status = ServiceHelper::ValidateRegion(request->context().region_id(), keys);
+  if (!status.ok()) {
+    return status;
+  }
+
+  status = storage_->ValidateLeader(request->context().region_id());
   if (!status.ok()) {
     return status;
   }
@@ -2575,7 +2707,7 @@ void IndexServiceImpl::TxnScanLock(google::protobuf::RpcController* controller,
                                   response->ShortDebugString());
 }
 
-butil::Status ValidateTxnHeartBeatRequest(const dingodb::pb::index::TxnHeartBeatRequest* request) {
+butil::Status IndexServiceImpl::ValidateTxnHeartBeatRequest(const dingodb::pb::index::TxnHeartBeatRequest* request) {
   if (request->primary_lock().empty()) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "primary_lock is empty");
   }
@@ -2592,6 +2724,11 @@ butil::Status ValidateTxnHeartBeatRequest(const dingodb::pb::index::TxnHeartBeat
   keys.push_back(request->primary_lock());
 
   auto status = ServiceHelper::ValidateRegion(request->context().region_id(), keys);
+  if (!status.ok()) {
+    return status;
+  }
+
+  status = storage_->ValidateLeader(request->context().region_id());
   if (!status.ok()) {
     return status;
   }
@@ -2647,9 +2784,14 @@ void IndexServiceImpl::TxnHeartBeat(google::protobuf::RpcController* controller,
                                   response->ShortDebugString());
 }
 
-butil::Status ValidateTxnGcRequest(const dingodb::pb::index::TxnGcRequest* request) {
+butil::Status IndexServiceImpl::ValidateTxnGcRequest(const dingodb::pb::index::TxnGcRequest* request) {
   if (request->safe_point_ts() == 0) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "safe_point_ts is 0");
+  }
+
+  auto status = storage_->ValidateLeader(request->context().region_id());
+  if (!status.ok()) {
+    return status;
   }
 
   return butil::Status();
@@ -2700,7 +2842,8 @@ void IndexServiceImpl::TxnGc(google::protobuf::RpcController* controller, const 
                                   response->ShortDebugString());
 }
 
-butil::Status ValidateTxnDeleteRangeRequest(const dingodb::pb::index::TxnDeleteRangeRequest* request) {
+butil::Status IndexServiceImpl::ValidateTxnDeleteRangeRequest(
+    const dingodb::pb::index::TxnDeleteRangeRequest* request) {
   if (request->start_key().empty()) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "start_key is empty");
   }
@@ -2715,6 +2858,11 @@ butil::Status ValidateTxnDeleteRangeRequest(const dingodb::pb::index::TxnDeleteR
 
   if (request->start_key().compare(request->end_key()) > 0) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "start_key is greater than end_key");
+  }
+
+  auto status = storage_->ValidateLeader(request->context().region_id());
+  if (!status.ok()) {
+    return status;
   }
 
   return butil::Status();
@@ -2761,7 +2909,7 @@ void IndexServiceImpl::TxnDeleteRange(google::protobuf::RpcController* controlle
                                   response->ShortDebugString());
 }
 
-butil::Status ValidateTxnDumpRequest(const dingodb::pb::index::TxnDumpRequest* request) {
+butil::Status IndexServiceImpl::ValidateTxnDumpRequest(const dingodb::pb::index::TxnDumpRequest* request) {
   if (request->start_key().empty()) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "start_key is empty");
   }
@@ -2780,6 +2928,11 @@ butil::Status ValidateTxnDumpRequest(const dingodb::pb::index::TxnDumpRequest* r
 
   if (request->end_ts() == 0) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "end_ts is 0");
+  }
+
+  auto status = storage_->ValidateLeader(request->context().region_id());
+  if (!status.ok()) {
+    return status;
   }
 
   return butil::Status();

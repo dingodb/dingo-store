@@ -324,12 +324,13 @@ message TxnPrewriteResponse {
   // error code
   dingodb.pb.error.Error error = 1;
   // for prewrite, txn_result will be one of the following:
-  // 1. WriteConflict: Write conflict with key which is locked by another transaction.
-  // 2. otherwise, txn_result is empty
+  // 1. LockInfo: prewrite meet a lock and can't proceed, the lock is returned
+  // 2. WriteConflict: Write conflict with key which is already written after start_ts
+  // 3. otherwise, txn_result is empty
   // for success prewrite, txn_result is empty
   // for failure prewrite, txn_result is not empty
   // if txn_result is AlreadyExist, there will be many txn_result, each txn_result is for one key
-  // if there is a TxnConflict in txn_result, client should backoff or cleanup the lock then retry
+  // if there is a WriteConflict in txn_result, client should backoff or cleanup the lock then retry
   dingodb.pb.store.TxnResultInfo txn_result = 2;
   // if there is PutIfAbsent in mutation, and if there is key conflict, the conflict key will be returned
   repeated dingodb.pb.store.AlreadyExist keys_already_exist = 3;
