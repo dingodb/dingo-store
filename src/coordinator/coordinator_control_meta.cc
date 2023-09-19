@@ -29,6 +29,7 @@
 #include "common/synchronization.h"
 #include "coordinator/auto_increment_control.h"
 #include "coordinator/coordinator_control.h"
+#include "gflags/gflags.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
 #include "proto/coordinator_internal.pb.h"

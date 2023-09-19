@@ -37,6 +37,7 @@ DECLARE_uint64(max_hnsw_memory_size_of_region);
 DECLARE_uint64(max_partition_num_of_table);
 
 DEFINE_uint32(max_check_region_state_count, 600, "max check region state count");
+DEFINE_bool(async_create_table, false, "async create table");
 
 static void MetaServiceDone(std::atomic<bool> *done) { done->store(true, std::memory_order_release); }
 
@@ -442,7 +443,11 @@ void MetaServiceImpl::CreateTable(google::protobuf::RpcController * /*controller
       }
     }
 
-    if (!region_ids.empty()) {
+    if (!FLAGS_async_create_table) {
+      DINGO_LOG(INFO) << "CreateTable wait for raft done. table_id: " << new_table_id;
+    }
+
+    if ((!region_ids.empty()) && (!FLAGS_async_create_table)) {
       std::map<uint64_t, bool> region_status;
       for (const auto &id : region_ids) {
         region_status[id] = false;
@@ -1189,7 +1194,11 @@ void MetaServiceImpl::CreateIndex(google::protobuf::RpcController * /*controller
       }
     }
 
-    if (!region_ids.empty()) {
+    if (!FLAGS_async_create_table) {
+      DINGO_LOG(INFO) << "CreateIndex wait for raft done. table_id: " << new_index_id;
+    }
+
+    if ((!region_ids.empty()) && (!FLAGS_async_create_table)) {
       std::map<uint64_t, bool> region_status;
       for (const auto &id : region_ids) {
         region_status[id] = false;
@@ -1548,7 +1557,11 @@ void MetaServiceImpl::CreateTables(google::protobuf::RpcController * /*controlle
       }
     }
 
-    if (!region_ids.empty()) {
+    if (!FLAGS_async_create_table) {
+      DINGO_LOG(INFO) << "CreateTables wait for raft done. table_id: " << new_table_id;
+    }
+
+    if ((!region_ids.empty()) && (!FLAGS_async_create_table)) {
       std::map<uint64_t, bool> region_status;
       for (const auto &id : region_ids) {
         region_status[id] = false;
