@@ -52,6 +52,8 @@ struct Context {
 
     clone_ctx->key = key;
 
+    clone_ctx->show_vector = show_vector;
+
     return clone_ctx;
   }
 
@@ -83,6 +85,8 @@ struct Context {
   int32_t limit;
 
   std::string key;
+
+  bool show_vector;
 };
 
 // meta
