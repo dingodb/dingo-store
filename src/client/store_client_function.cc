@@ -1635,7 +1635,7 @@ void SendVectorCalcDistance(ServerInteractionPtr interaction, [[maybe_unused]] u
 
   DINGO_LOG(INFO) << "SendVectorCalcDistance request: " << request.DebugString();
 
-  interaction->SendRequest("IndexService", "VectorCalcDistance", request, response);
+  interaction->SendRequest("UtilService", "VectorCalcDistance", request, response);
 
   DINGO_LOG(INFO) << "SendVectorCalcDistance response: " << response.DebugString();
 }

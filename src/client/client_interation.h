@@ -34,6 +34,7 @@
 #include "proto/meta.pb.h"
 #include "proto/region_control.pb.h"
 #include "proto/store.pb.h"
+#include "proto/util.pb.h"
 
 DECLARE_bool(log_each_request);
 DECLARE_int32(timeout_ms);
@@ -91,6 +92,8 @@ butil::Status ServerInteraction::SendRequest(const std::string& service_name, co
     service_desc = const_cast<google::protobuf::ServiceDescriptor*>(dingodb::pb::store::StoreService::descriptor());
   } else if (service_name == "IndexService") {
     service_desc = const_cast<google::protobuf::ServiceDescriptor*>(dingodb::pb::index::IndexService::descriptor());
+  } else if (service_name == "UtilService") {
+    service_desc = const_cast<google::protobuf::ServiceDescriptor*>(dingodb::pb::util::UtilService::descriptor());
   } else if (service_name == "RegionControlService") {
     service_desc = const_cast<google::protobuf::ServiceDescriptor*>(
         dingodb::pb::region_control::RegionControlService::descriptor());
@@ -124,7 +127,8 @@ butil::Status ServerInteraction::SendRequest(const std::string& service_name, co
     }
 
     if (response.error().errcode() != dingodb::pb::error::OK) {
-      if (response.error().errcode() == dingodb::pb::error::ERAFT_NOTLEADER || response.error().errcode() == dingodb::pb::error::EREGION_NOT_FOUND) {
+      if (response.error().errcode() == dingodb::pb::error::ERAFT_NOTLEADER ||
+          response.error().errcode() == dingodb::pb::error::EREGION_NOT_FOUND) {
         ++retry_count;
         NextLeader(response.error().leader_location());
 
